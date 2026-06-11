@@ -33,7 +33,7 @@ from starlette.routing import Route
 from .. import agencias, marcas, repos
 from .._http_json import leer_json
 from ..db_noticias import _TIPOS_FUENTE
-from ..dominio import fuentes_presets, http_feed
+from ..dominio import fuentes_pesos, fuentes_presets, http_feed
 
 _MARCAS_IDS = {m[0] for m in marcas.opciones()}
 
@@ -227,6 +227,9 @@ async def activar_presets_handler(request: Request) -> Response:
             # Cadencia PROPIA del preset (fuentes que rate-limitan, p. ej. GDELT): el motor
             # la respeta por encima del default de la categoría. 0 = sin override.
             intervalo_min=int(preset.get("intervalo_min") or 0),
+            # Peso editorial: el del preset si lo declara; si no, el seed por host
+            # (Reuters/BBC/… nacen potentes). Ver `dominio/fuentes_pesos.py`.
+            peso=float(preset.get("peso") or 0) or fuentes_pesos.peso_de_url(url_limpia),
         )
         # Añade a las ya activas para que iteraciones posteriores en este mismo request
         # sean idempotentes (misma URL pedida dos veces -> solo se crea una).

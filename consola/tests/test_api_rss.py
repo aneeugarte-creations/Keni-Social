@@ -165,6 +165,44 @@ def test_crear_fuente_categoria_invalida_400(cliente):
     assert r.status_code == 400
 
 
+def test_crear_fuente_con_peso_y_editarlo(cliente):
+    """El peso editorial (pondera la corroboración del ranking) se crea, expone y edita."""
+    r = cliente.post(
+        "/api/rss/fuentes",
+        json={"nombre": "Potente", "url": _URL_OK, "peso": 2.0},
+    )
+    assert r.status_code == 200
+    f = r.json()["fuente"]
+    assert f["peso"] == 2.0
+    assert f["tier"] == "potente"
+
+    r2 = cliente.put(f"/api/rss/fuentes/{f['id']}", json={"peso": 0.5})
+    assert r2.status_code == 200
+    assert r2.json()["fuente"]["peso"] == 0.5
+    assert r2.json()["fuente"]["tier"] == "baja"
+
+
+def test_crear_fuente_sin_peso_nace_normal(cliente):
+    # La URL (IP literal) no está en el seed por host: peso por defecto 1.0.
+    r = cliente.post("/api/rss/fuentes", json={"nombre": "Normal", "url": _URL_OK})
+    assert r.status_code == 200
+    f = r.json()["fuente"]
+    assert f["peso"] == 1.0
+    assert f["tier"] == "normal"
+
+
+def test_crear_fuente_peso_fuera_de_rango_400(cliente):
+    r = cliente.post(
+        "/api/rss/fuentes", json={"nombre": "X", "url": _URL_OK, "peso": 9.0}
+    )
+    assert r.status_code == 400
+    assert "peso" in r.json()["error"].lower()
+    r2 = cliente.post(
+        "/api/rss/fuentes", json={"nombre": "X", "url": _URL_OK, "peso": "potente"}
+    )
+    assert r2.status_code == 400
+
+
 def test_crear_fuente_nombre_obligatorio_400(cliente):
     assert (
         cliente.post("/api/rss/fuentes", json={"url": _URL_OK}).status_code == 400

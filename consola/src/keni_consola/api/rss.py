@@ -46,7 +46,7 @@ from starlette.routing import Route
 
 from .. import marcas, redes, repos
 from .._http_json import leer_json
-from ..dominio import http_feed
+from ..dominio import fuentes_pesos, http_feed
 
 # Re-exportes de la infra de feeds (`dominio.http_feed`): la logica vive alli (sin
 # Starlette), y aqui se re-expone para compatibilidad con quien importe `rss.X`. El
@@ -174,6 +174,9 @@ def _fuente_a_dict(fuente: dict[str, Any]) -> dict[str, Any]:
         "propia": bool(fuente.get("propia", False)),
         # Categoría del feed: manda la CADENCIA de sondeo del motor y la cobertura de /salud.
         "categoria": fuente.get("categoria", ""),
+        # Peso editorial (pondera la corroboración del ranking) + su tier legible.
+        "peso": float(fuente.get("peso") or 1.0),
+        "tier": fuentes_pesos.tier_de_peso(float(fuente.get("peso") or 1.0)),
     }
 
 
@@ -197,6 +200,22 @@ def _validar_categoria(valor: Any) -> tuple[str | None, str | None]:
     if valor and valor not in _categorias_validas():
         return None, "Categoría no permitida."
     return valor, None
+
+
+def _validar_peso(valor: Any) -> tuple[float | None, str | None]:
+    """Valida el peso editorial: numérico y dentro del rango admisible. `(peso, error)`.
+
+    Se exige el rango explícito (no se clampa en silencio): un peso fuera de
+    [PESO_MIN, PESO_MAX] casi siempre es un error de dedo y conviene avisar.
+    """
+    if isinstance(valor, bool) or not isinstance(valor, (int, float)):
+        return None, "El peso de la fuente debe ser un número."
+    peso = float(valor)
+    if not (fuentes_pesos.PESO_MIN <= peso <= fuentes_pesos.PESO_MAX):
+        return None, (
+            f"El peso debe estar entre {fuentes_pesos.PESO_MIN} y {fuentes_pesos.PESO_MAX}."
+        )
+    return peso, None
 
 
 async def listar_fuentes(request: Request) -> Response:
@@ -239,6 +258,14 @@ async def crear_fuente(request: Request) -> Response:
     categoria, error = _validar_categoria(datos.get("categoria"))
     if error is not None:
         return JSONResponse({"error": error}, status_code=400)
+    # Peso editorial: explícito en el cuerpo, o el SEED por host de la url (Reuters/BBC/…
+    # nacen potentes sin que nadie lo configure; el equipo lo puede corregir después).
+    if datos.get("peso") is not None:
+        peso, error = _validar_peso(datos.get("peso"))
+        if error is not None:
+            return JSONResponse({"error": error}, status_code=400)
+    else:
+        peso = fuentes_pesos.peso_de_url(url or "")
 
     fuente = repos.crear_fuente_rss(
         nombre.strip(),
@@ -249,6 +276,7 @@ async def crear_fuente(request: Request) -> Response:
         redes_def=redes_def,
         propia=bool(datos.get("propia")),
         categoria=categoria or "",
+        peso=peso or 1.0,
     )
     return JSONResponse({"fuente": _fuente_a_dict(fuente)})
 
@@ -306,6 +334,11 @@ async def actualizar_fuente(request: Request) -> Response:
         if error is not None:
             return JSONResponse({"error": error}, status_code=400)
         campos["categoria"] = categoria
+    if "peso" in datos:
+        peso, error = _validar_peso(datos.get("peso"))
+        if error is not None:
+            return JSONResponse({"error": error}, status_code=400)
+        campos["peso"] = peso
 
     fuente = repos.actualizar_fuente_rss(fuente_id, campos)
     if fuente is None:

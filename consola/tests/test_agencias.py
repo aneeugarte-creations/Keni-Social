@@ -139,6 +139,8 @@ def test_noticia_item_de_agencia_mapea_campos_y_fuente_estable():
     assert fila["clave"] == "reuters.com/a/1"
     assert fila["publicado_en"]  # fecha ISO parseada
     assert "senal" not in fila  # señal NORMAL (no curado), default 0 en el sink
+    # Las agencias son fuentes POTENTES: pesan el doble en la corroboración del ranking.
+    assert fila["fuente_peso"] == 2.0
 
 
 def test_noticia_item_de_agencia_fuente_nombre_cae_a_agencia_upper():

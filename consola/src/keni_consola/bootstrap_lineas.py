@@ -25,7 +25,7 @@ from __future__ import annotations
 import logging
 
 from . import repos
-from .dominio import fuentes_presets
+from .dominio import fuentes_pesos, fuentes_presets
 
 _log = logging.getLogger(__name__)
 
@@ -256,6 +256,8 @@ def sembrar_fuentes_ingesta() -> int:
                 marca=preset.get("marca_sugerida") or "",
                 categoria=categoria,
                 prioridad=_PRIORIDAD_CATEGORIA.get(categoria, 0),
+                # Peso editorial: el del preset o el seed por host (Reuters/BBC nacen potentes).
+                peso=float(preset.get("peso") or 0) or fuentes_pesos.peso_de_url(url),
             )
             existentes.add(url)
             creadas += 1

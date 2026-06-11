@@ -1159,6 +1159,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         pausado_hasta         TEXT NOT NULL DEFAULT '',
         desactivado_auto      INTEGER NOT NULL DEFAULT 0,
         ultimo_filtrados      INTEGER NOT NULL DEFAULT 0,
+        peso                  REAL NOT NULL DEFAULT 1.0,
         creado                TEXT NOT NULL DEFAULT ''
     )
     """,
@@ -1337,6 +1338,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         geo            TEXT NOT NULL DEFAULT '',
         estado         TEXT NOT NULL DEFAULT 'nuevo',
         contenido_id   TEXT NOT NULL DEFAULT '',
+        fuente_peso    REAL NOT NULL DEFAULT 1.0,
         creado         TEXT NOT NULL DEFAULT ''
     )
     """,
@@ -2857,6 +2859,10 @@ _COLUMNAS_FUENTES_RSS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # FILTRO DE ENTRADA por vocabulario de marca: cuántos items descartó el último sondeo por
     # no casar la agenda de la marca (observabilidad del filtro de la puerta en /salud).
     ("ultimo_filtrados", "INTEGER NOT NULL DEFAULT 0"),
+    # PESO editorial de la fuente: pondera la corroboración del ranking de historias
+    # (potente 2.0 / normal 1.0 / baja 0.5, ver `dominio/fuentes_pesos.py`). Editable
+    # desde la UI de Fuentes; el seed por host lo asigna `0026-backfill-pesos-fuente`.
+    ("peso", "REAL NOT NULL DEFAULT 1.0"),
 )
 
 _COLUMNAS_GRUPOS_HASHTAGS_AMPLIADAS: tuple[tuple[str, str], ...] = ()
@@ -2909,6 +2915,55 @@ def _migrar_columnas_noticias_clusters(con: Any) -> None:
     for columna, tipo in _COLUMNAS_NOTICIAS_CLUSTERS_AMPLIADAS:
         if columna not in columnas:
             con.execute(f"ALTER TABLE noticias_clusters ADD COLUMN IF NOT EXISTS {columna} {tipo}")
+
+
+# Columnas ampliables de `noticias_items` (mismo patrón idempotente). El CREATE TABLE ya las
+# declara para BDs nuevas; esta tupla migra las BDs hosted existentes.
+_COLUMNAS_NOTICIAS_ITEMS_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    # PESO de la fuente del item, DENORMALIZADO al archivar (el clustering es una capa pura
+    # sin BD: la señal viaja en el item, igual que `fuente_nombre`/`categoria`). Pondera la
+    # corroboración del ranking de historias. Ver `dominio/fuentes_pesos.py`.
+    ("fuente_peso", "REAL NOT NULL DEFAULT 1.0"),
+)
+
+
+def _migrar_columnas_noticias_items(con: Any) -> None:
+    """Anade a `noticias_items` columnas ampliadas que una BD vieja no tuviera (idempotente)."""
+    if not _tabla_existe(con, "noticias_items"):
+        return
+    columnas = _columnas_existentes(con, "noticias_items")
+    for columna, tipo in _COLUMNAS_NOTICIAS_ITEMS_AMPLIADAS:
+        if columna not in columnas:
+            con.execute(f"ALTER TABLE noticias_items ADD COLUMN IF NOT EXISTS {columna} {tipo}")
+
+
+def _backfill_pesos_fuente(con: Any) -> None:
+    """Backfill ONE-SHOT del peso editorial: seed por host en `fuentes_rss` + propagación.
+
+    Tres pasos (cada uno idempotente; la migración corre una sola vez por BD):
+      1. A cada fuente existente con peso por defecto (1.0) se le asigna el peso semilla de
+         su HOST (`fuentes_pesos.peso_de_url`); los pesos ya editados a mano no se pisan.
+      2. Los items archivados heredan el peso de su fuente (denormalización retroactiva).
+      3. Los items de AGENCIA (`fuente_id` 'agencia-*': Reuters/AFP, sin fila en
+         `fuentes_rss`) son potentes por definición.
+    """
+    from .dominio import fuentes_pesos  # import local: evitar ciclos en el arranque
+
+    filas = con.execute("SELECT id, url, peso FROM fuentes_rss").fetchall()
+    for fila in filas:
+        if float(fila["peso"] or 1.0) != fuentes_pesos.PESO_NORMAL:
+            continue  # peso ya ajustado (a mano o por un backfill previo): no pisar
+        peso = fuentes_pesos.peso_de_url(fila["url"] or "")
+        if peso != fuentes_pesos.PESO_NORMAL:
+            con.execute("UPDATE fuentes_rss SET peso = ? WHERE id = ?", (peso, fila["id"]))
+    con.execute(
+        "UPDATE noticias_items SET fuente_peso = f.peso FROM fuentes_rss f "
+        "WHERE noticias_items.fuente_id = f.id AND f.peso <> 1.0"
+    )
+    con.execute(
+        "UPDATE noticias_items SET fuente_peso = ? WHERE fuente_id LIKE 'agencia-%'",
+        (fuentes_pesos.PESO_POTENTE,),
+    )
 
 # --------------------------------------------------------------------------- #
 # Normalizacion de TIMESTAMPS TEXT al canon UTC-sin-offset (ver `tiempo.py`)    #
@@ -3259,6 +3314,17 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
         re_aplicar_si_cambia=True,
         datos=_COLUMNAS_TS_CANON,
     ),
+    # Peso editorial de fuentes (ranking ponderado): columna en `noticias_items` para BDs
+    # viejas (re-aplicable: añadir columnas a la tupla cambia la huella)…
+    Migracion(
+        "0025-columnas-noticias-items",
+        _migrar_columnas_noticias_items,
+        re_aplicar_si_cambia=True,
+        datos=_COLUMNAS_NOTICIAS_ITEMS_AMPLIADAS,
+    ),
+    # …y backfill ONE-SHOT del seed por host + propagación a items archivados (corre una
+    # sola vez por BD: los pesos editados a mano después no se vuelven a pisar).
+    Migracion("0026-backfill-pesos-fuente", _backfill_pesos_fuente),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.
@@ -3275,6 +3341,7 @@ __all__ = [
     "_COLUMNAS_FUENTES_RSS_AMPLIADAS",
     "_COLUMNAS_GRUPOS_HASHTAGS_AMPLIADAS",
     "_COLUMNAS_NOTICIAS_CLUSTERS_AMPLIADAS",
+    "_COLUMNAS_NOTICIAS_ITEMS_AMPLIADAS",
     "_COLUMNAS_PIEZA_ROTA_AMPLIADAS",
     "_COLUMNAS_PROGRAMA_AMPLIADAS",
     "_COLUMNAS_SWAP_AMPLIADAS",

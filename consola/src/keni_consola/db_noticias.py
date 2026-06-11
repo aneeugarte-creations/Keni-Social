@@ -38,6 +38,7 @@ _COLS_FUENTE_RSS = (
     "pausado_hasta",
     "desactivado_auto",
     "ultimo_filtrados",
+    "peso",
     "creado",
 )
 _SELECT_FUENTE_RSS = f"SELECT {', '.join(_COLS_FUENTE_RSS)} FROM fuentes_rss"
@@ -46,6 +47,8 @@ _CAMPOS_EDITABLES_FUENTE_RSS: tuple[str, ...] = (
     "intervalo_min", "categoria", "prioridad",
     # Ola D: reactivar un feed auto-desactivado (resetear estado del motor de ingesta).
     "desactivado_auto", "errores_seguidos", "proximo_sondeo", "pausado_hasta",
+    # Peso editorial (ranking ponderado): editable desde la UI de Fuentes.
+    "peso",
 )
 
 
@@ -77,6 +80,8 @@ def _fila_a_fuente_rss(fila: Any) -> dict[str, Any]:
         "desactivado_auto": bool(fila["desactivado_auto"]),
         # Filtro de ENTRADA por vocabulario de marca: items descartados en el último sondeo.
         "ultimo_filtrados": int(fila["ultimo_filtrados"] or 0),
+        # Peso editorial de la fuente (pondera la corroboración del ranking de historias).
+        "peso": float(fila["peso"] or 1.0),
     }
 
 
@@ -166,11 +171,13 @@ def crear_fuente_rss(
     categoria: str = "",
     prioridad: int = 0,
     intervalo_min: int = 0,
+    peso: float = 1.0,
 ) -> dict[str, Any]:
     """Crea una fuente RSS (activa, salud vacia) y la devuelve.
 
     `categoria`/`prioridad`/`intervalo_min` alimentan la planificación del motor de ingesta
     (Ola A); `proximo_sondeo` nace '' para que el primer barrido la sondee de inmediato.
+    `peso` es el peso editorial de la fuente (pondera la corroboración del ranking).
     """
     # Microsegundos (no segundos): el listado ordena por `creado DESC` y dos fuentes creadas
     # en el mismo segundo empataban, dejando el orden al `id` (uuid aleatorio) -> test flaky.
@@ -197,6 +204,7 @@ def crear_fuente_rss(
         "pausado_hasta": "",
         "desactivado_auto": 0,
         "ultimo_filtrados": 0,
+        "peso": float(peso or 1.0),
         "creado": ahora,
     }
     con = _conectar()
@@ -537,6 +545,7 @@ _COLS_NOTICIA_ITEM: tuple[str, ...] = (
     "geo",
     "estado",
     "contenido_id",
+    "fuente_peso",
     "creado",
 )
 _SELECT_NOTICIA_ITEM = f"SELECT {', '.join(_COLS_NOTICIA_ITEM)} FROM noticias_items"
@@ -567,6 +576,8 @@ def _fila_a_noticia_item(fila: Any) -> dict[str, Any]:
         "geo": fila["geo"] or "",
         "estado": fila["estado"] or "nuevo",
         "contenido_id": fila["contenido_id"] or "",
+        # Peso de la fuente del item, denormalizado al archivar (ranking ponderado).
+        "fuente_peso": float(fila["fuente_peso"] or 1.0),
         "creado": fila["creado"] or "",
     }
 
@@ -608,6 +619,7 @@ def crear_noticias_items(items: list[dict[str, Any]]) -> int:
                 "geo": it.get("geo") or "",
                 "estado": it.get("estado") or "nuevo",
                 "contenido_id": it.get("contenido_id") or "",
+                "fuente_peso": float(it.get("fuente_peso") or 1.0),
                 "creado": it.get("creado") or ahora,
             }
             cur = con.execute(

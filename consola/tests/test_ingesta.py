@@ -108,6 +108,22 @@ def test_idioma_heuristico_distingue_es_de_en():
     assert por_clave["The m"] == "en"
 
 
+def test_items_heredan_el_peso_de_la_fuente():
+    # El peso editorial del feed viaja DENORMALIZADO en cada item (el clustering es puro).
+    items, _ = ingesta.items_de_feed(_feed(peso=2.0), fetcher=lambda _u: _FEED_ES)
+    assert all(it["fuente_peso"] == 2.0 for it in items)
+
+
+def test_items_sin_peso_declarado_caen_a_normal():
+    items, _ = ingesta.items_de_feed(_feed(), fetcher=lambda _u: _FEED_ES)
+    assert all(it["fuente_peso"] == 1.0 for it in items)
+
+
+def test_items_con_peso_invalido_caen_a_normal():
+    items, _ = ingesta.items_de_feed(_feed(peso="potente"), fetcher=lambda _u: _FEED_ES)
+    assert all(it["fuente_peso"] == 1.0 for it in items)
+
+
 def test_publicado_en_normaliza_rfc822_a_iso():
     items, _ = ingesta.items_de_feed(_feed(), fetcher=lambda _u: _FEED_ES)
     con_fecha = next(it for it in items if it["url"].endswith("id=9"))

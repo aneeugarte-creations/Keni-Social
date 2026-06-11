@@ -24,7 +24,7 @@ from collections.abc import Callable
 from typing import Any
 
 from ..tiempo import iso_utc
-from . import dedup, http_feed
+from . import dedup, fuentes_pesos, http_feed
 
 # Tope por defecto de artículos por feed en la ingesta (el Radar/RSS usan 30; aquí más, para
 # archivar cobertura newsroom-grade). El daemon pasa `config.ingesta_max_items()` (def 100).
@@ -113,6 +113,12 @@ def items_de_feed(
     marca = str(feed.get("marca") or "")
     geo = str(feed.get("geo") or "")
     idioma_feed = str(feed.get("idioma") or "").strip().lower()
+    # Peso editorial de la fuente, DENORMALIZADO en cada item (el clustering es una capa
+    # pura sin BD: la señal viaja en el item, igual que `fuente_nombre`/`categoria`).
+    try:
+        fuente_peso = float(feed.get("peso") or 1.0)
+    except (TypeError, ValueError):
+        fuente_peso = 1.0
 
     descargador = (lambda url: fetcher(url)) if fetcher is not None else None
     try:
@@ -148,6 +154,7 @@ def items_de_feed(
                 "idioma": idioma,
                 "publicado_en": _publicado_en(crudo.get("fecha") or ""),
                 "clave": clave,
+                "fuente_peso": fuente_peso,
                 "estado": "nuevo",
             }
         )
@@ -265,5 +272,8 @@ def noticia_item_de_agencia(item: dict[str, str], *, agencia: str) -> dict[str, 
         "idioma": "",
         "publicado_en": _publicado_en((item.get("fecha") or "").strip()),
         "clave": clave,
+        # Las agencias (Reuters/AFP) son fuentes POTENTES por definición: pesan el doble
+        # en la corroboración del ranking (ver `fuentes_pesos.PESO_POTENTE`).
+        "fuente_peso": fuentes_pesos.PESO_POTENTE,
         "estado": "nuevo",
     }
