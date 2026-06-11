@@ -1,22 +1,17 @@
 /**
- * Tests de la página Cobertura (flujo continuo de noticias — Motor de ingesta Ola A + Ola B + Ola D).
+ * Tests de la página Cobertura — la MESA DE REDACCIÓN de Noticias.
  *
  * Cubre:
- *   1. Renderiza la barra de cobertura con los datos de salud del motor.
- *   2. Muestra la lista de noticias ingeridas (Artículos).
- *   3. Los filtros (categoría, idioma, estado, q) pasan los parámetros correctos a la API.
- *   4. El botón "Empujar ya" (override del auto-feed) llama a `api.noticias.usar`.
- *   5. El botón "Descartar" llama a `api.noticias.descartar`.
- *   6. La página es marca-aware: pasa `marcaActiva` a la query.
- *   7. Estado vacío cuando no hay ítems.
- *   8. Vista Historias (Ola B): renderiza clusters con badge "N fuentes".
- *   9. Cambiar entre modos Historias/Artículos.
- *  10. Acciones Empujar/Descartar de historias llaman a los endpoints correctos.
- *  11. Historias son marca-aware (incluye marcaActiva en query keys).
- *  12. (Ola D) Pestaña Salud: resumen, huecos y tabla de feeds.
- *  13. (Ola D) Botón Reactivar llama a fuentes.reactivar.
- *  14. (Ola D) Badges verificación y traducido en tarjetas de historias.
- *  15. Ítems en pool muestran badge "En el pool".
+ *   1. Con marca activa, la vista por defecto es la MESA (GET /api/noticias/mesa):
+ *      plan del día (chips + progreso), secciones por línea (última hora primero),
+ *      tarjetas editoriales (frase de corroboración, ÚLTIMA HORA, prioridad).
+ *   2. Acciones de la tarjeta: Empujar/Adelantar → usarHistoria; Descartar → descartarHistoria.
+ *   3. Pestañas: «En marcha» (estado=usado) y «Descartadas» (estado=descartado + Devolver
+ *      al pool → restaurarHistoria).
+ *   4. «Fuera del plan» plegado por defecto; se expande al clic.
+ *   5. AvisoSalud: una línea ámbar SOLO si hay fuentes con error (el detalle vive en Fuentes).
+ *   6. Vista «Todas» (sin marca): lista plana clásica con filtros + selección múltiple +
+ *      borrado hard + pieza_estado sin mentir (en_feed / en_cola / generando).
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -31,7 +26,7 @@ import {
 } from "@/hooks/marca-activa-contexto";
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
 import * as apiMod from "@/lib/api";
-import type { Historia, ResumenCobertura, UsuarioSesion } from "@/types";
+import type { Historia, RespuestaMesa, ResumenCobertura, UsuarioSesion } from "@/types";
 
 import Cobertura from "./Cobertura";
 
@@ -67,7 +62,7 @@ function valorMarcaActiva(marcaActiva: string | null): ValorMarcaActiva {
     esMultiMarca: false,
     puedeTodas: false,
     marcasParaSwitch: [],
-    nombreActiva: marcaActiva,
+    nombreActiva: marcaActiva === "unotv" ? "UnoTV" : marcaActiva,
     cambiarMarca: vi.fn(),
     volverAPrimaria: vi.fn(),
   };
@@ -96,12 +91,13 @@ const RESUMEN_COBERTURA: ResumenCobertura = {
   feeds_activos: 12,
   feeds_con_error: 2,
   items_24h: 340,
-  por_categoria: { mx: 120, deportes: 80, internacional: 140 },
   ultimo_sondeo: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
 };
 
-
-// ── Fixtures: Historias (Ola B) ───────────────────────────────────────────────
+const RESUMEN_COBERTURA_SANO: ResumenCobertura = {
+  ...RESUMEN_COBERTURA,
+  feeds_con_error: 0,
+};
 
 function historiaItem(overrides: Partial<Historia> = {}): Historia {
   return {
@@ -116,7 +112,7 @@ function historiaItem(overrides: Partial<Historia> = {}): Historia {
     n_fuentes: 3,
     idiomas: ["es"],
     senal: 150,
-    score: 0.85,
+    score: 0.55,
     breaking: 0,
     primer_visto: "2026-06-05T09:00:00",
     ultimo_visto: "2026-06-05T10:30:00",
@@ -127,43 +123,69 @@ function historiaItem(overrides: Partial<Historia> = {}): Historia {
       { titulo: "Fuente 2", url: "https://example.com/2", fuente: "El Universal" },
       { titulo: "Fuente 3", url: "https://example.com/3", fuente: "Milenio" },
     ],
+    fuentes: [
+      { fuente: "Reforma", fuente_id: "f1", peso: 1, tier: "normal", primer_visto: "2026-06-05T09:00:00", n_items: 2 },
+      { fuente: "El Universal", fuente_id: "f2", peso: 1, tier: "normal", primer_visto: "2026-06-05T09:40:00", n_items: 2 },
+      { fuente: "Milenio", fuente_id: "f3", peso: 1, tier: "normal", primer_visto: "2026-06-05T10:30:00", n_items: 1 },
+    ],
+    primera_fuente_nombre: "Reforma",
+    peso_fuentes: 3,
+    ...overrides,
+  };
+}
+
+const HISTORIA_BREAKING = historiaItem({
+  id: "h-br",
+  titulo: "Sismo de 6.2 con epicentro en Guerrero",
+  breaking: 1,
+  categoria: "mx",
+  score: 0.72,
+  verificacion: "corroborada",
+  fuentes: [
+    { fuente: "Reuters", fuente_id: "fa", peso: 2, tier: "potente", primer_visto: "2026-06-05T10:00:00", n_items: 1 },
+    { fuente: "AP", fuente_id: "fb", peso: 2, tier: "potente", primer_visto: "2026-06-05T10:10:00", n_items: 1 },
+  ],
+  primera_fuente_nombre: "Reuters",
+  peso_fuentes: 4,
+});
+
+function mesaFixture(overrides: Partial<RespuestaMesa> = {}): RespuestaMesa {
+  return {
+    marca: "unotv",
+    plan: true,
+    lineas: [
+      {
+        linea: "breaking", cupo: 1, generados: 0, publicados: 0, restante: 1,
+        en_pool: 1, historias: [HISTORIA_BREAKING],
+      },
+      {
+        linea: "mx", cupo: 2, generados: 1, publicados: 1, restante: 1,
+        en_pool: 1, historias: [historiaItem()],
+      },
+      {
+        linea: "internacional", cupo: 1, generados: 1, publicados: 0, restante: 0,
+        en_pool: 0, historias: [],
+      },
+    ],
+    fuera_de_plan: {
+      en_pool: 1,
+      historias: [historiaItem({ id: "h-fuera", titulo: "Gaming sin línea", categoria: "gaming" })],
+    },
+    total_objetivo: 4,
+    total_generados: 2,
     ...overrides,
   };
 }
 
 const RESPUESTA_HISTORIAS_VACIA = { historias: [], total: 0 };
 const RESPUESTA_UNA_HISTORIA = { historias: [historiaItem()], total: 1 };
-const RESPUESTA_HISTORIA_USADA = {
-  // Pieza REAL en el feed: el back deriva `pieza_estado='en_feed'` (pieza con copy).
-  historias: [
-    historiaItem({ estado: "usado", contenido_id: "c-hist-99", pieza_estado: "en_feed" }),
-  ],
-  total: 1,
-};
-const RESPUESTA_HISTORIA_EN_COLA = {
-  // Promovida (cluster 'usado') pero SIN pieza en el feed todavía: el badge NO debe mentir.
-  historias: [
-    historiaItem({ estado: "usado", contenido_id: "c-hist-98", pieza_estado: "en_cola" }),
-  ],
-  total: 1,
-};
-const RESPUESTA_HISTORIA_GENERANDO = {
-  historias: [
-    historiaItem({ estado: "usado", contenido_id: "c-hist-97", pieza_estado: "generando" }),
-  ],
-  total: 1,
-};
-const RESPUESTA_HISTORIA_DESCARTADA = {
-  historias: [historiaItem({ estado: "descartado", pieza_estado: "descartada" })],
-  total: 1,
-};
-const RESPUESTA_HISTORIA_BREAKING = {
-  historias: [historiaItem({ breaking: 1, n_fuentes: 6 })],
-  total: 1,
-};
 
 // ── Stubs de API ──────────────────────────────────────────────────────────────
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let mockCobertura: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let mockMesa: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let mockHistorias: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -171,14 +193,17 @@ let mockUsarHistoria: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let mockDescartarHistoria: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+let mockRestaurarHistoria: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let mockDescartarLote: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let mockBorrarLote: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let mockBorrarTodo: any;
 
 beforeEach(() => {
-  vi.spyOn(apiMod.api.noticias, "cobertura").mockResolvedValue(RESUMEN_COBERTURA);
+  mockCobertura = vi
+    .spyOn(apiMod.api.noticias, "cobertura")
+    .mockResolvedValue(RESUMEN_COBERTURA);
+  mockMesa = vi.spyOn(apiMod.api.noticias, "mesa").mockResolvedValue(mesaFixture());
   mockHistorias = vi
     .spyOn(apiMod.api.noticias, "historias")
     .mockResolvedValue(RESPUESTA_HISTORIAS_VACIA);
@@ -188,401 +213,270 @@ beforeEach(() => {
   mockDescartarHistoria = vi
     .spyOn(apiMod.api.noticias, "descartarHistoria")
     .mockResolvedValue({ ok: true });
+  mockRestaurarHistoria = vi
+    .spyOn(apiMod.api.noticias, "restaurarHistoria")
+    .mockResolvedValue({ historia: historiaItem() });
   mockDescartarLote = vi
     .spyOn(apiMod.api.noticias, "descartarHistoriasLote")
     .mockResolvedValue({ descartadas: 1 });
   mockBorrarLote = vi
     .spyOn(apiMod.api.noticias, "borrarHistoriasLote")
     .mockResolvedValue({ borradas: 1 });
-  mockBorrarTodo = vi
-    .spyOn(apiMod.api.noticias, "borrarTodasHistorias")
-    .mockResolvedValue({ borradas: 3 });
+  vi.spyOn(apiMod.api.noticias, "borrarTodasHistorias").mockResolvedValue({ borradas: 3 });
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// ── Tests ─────────────────────────────────────────────────────────────────────
+// ── Tests: la Mesa (vista por defecto con marca activa) ───────────────────────
 
-describe("Cobertura · barra de cobertura", () => {
-  it("renderiza la barra de cobertura con los datos del motor", async () => {
+describe("Cobertura · Mesa — plan del día", () => {
+  it("pide la mesa de la marca activa y pinta el plan del día con sus chips", async () => {
     renderConProviders(<Cobertura />);
-    await waitFor(() => {
-      expect(screen.getByTestId("barra-cobertura")).toBeTruthy();
-    });
-    expect(screen.getByText(/12 feeds activos/i)).toBeTruthy();
-    expect(screen.getByText(/2 con error/i)).toBeTruthy();
-    expect(screen.getByText(/340/)).toBeTruthy();
-  });
-
-  it("muestra el conteo de items 24h y NO el breakdown por categoría", async () => {
-    renderConProviders(<Cobertura />);
-    await waitFor(() => {
-      expect(screen.getByTestId("barra-cobertura")).toBeTruthy();
-    });
-    // El conteo de items 24h sigue (informativo); el eje pasa a marca/línea editorial.
-    expect(screen.getByText(/340/)).toBeTruthy();
-    // El breakdown por categoría se eliminó (ya no se filtra/desglosa por categoría).
-    expect(screen.queryByText(/mx: 120/i)).toBeNull();
-  });
-});
-
-
-describe("Cobertura · marca-aware (query keys)", () => {
-  it("rerenderiza la lista de historias cuando cambia la marca activa", async () => {
-    const { rerender } = render(
-      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-        <SesionContexto.Provider value={sesionValor(usuario())}>
-          <MarcaActivaContexto.Provider value={valorMarcaActiva("unotv")}>
-            <MemoryRouter>
-              <Cobertura />
-            </MemoryRouter>
-          </MarcaActivaContexto.Provider>
-        </SesionContexto.Provider>
-      </QueryClientProvider>,
+    await waitFor(() =>
+      expect(mockMesa).toHaveBeenCalledWith(
+        expect.objectContaining({ marca: "unotv" }),
+        expect.anything(),
+      ),
     );
+    await waitFor(() => expect(screen.getByTestId("barra-plan-dia")).toBeTruthy());
+    expect(screen.getByTestId("barra-plan-dia").textContent).toMatch(/Plan de hoy — UnoTV/);
+    expect(screen.getByTestId("barra-plan-dia").textContent).toMatch(/2 de 4/);
+    expect(screen.getByTestId("chip-linea-mx").textContent).toMatch(/Nacional 1\/2/);
+    // Línea completa: lleva check.
+    expect(screen.getByTestId("chip-linea-internacional").textContent).toMatch(/1\/1 ✓/);
+  });
 
-    // La pestaña por defecto es Historias: verificamos mockHistorias
-    await waitFor(() => expect(mockHistorias).toHaveBeenCalledWith(
-      expect.objectContaining({ marca: "unotv" }),
-      expect.anything(),
-    ));
-
-    rerender(
-      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-        <SesionContexto.Provider value={sesionValor(usuario(["claro-sports"]))}>
-          <MarcaActivaContexto.Provider value={valorMarcaActiva("claro-sports")}>
-            <MemoryRouter>
-              <Cobertura />
-            </MemoryRouter>
-          </MarcaActivaContexto.Provider>
-        </SesionContexto.Provider>
-      </QueryClientProvider>,
+  it("última hora va primero y su tarjeta lleva el tratamiento ÚLTIMA HORA", async () => {
+    renderConProviders(<Cobertura />);
+    await waitFor(() => expect(screen.getByTestId("seccion-breaking")).toBeTruthy());
+    const secciones = screen.getAllByTestId(/^seccion-/);
+    expect(secciones[0].getAttribute("data-testid")).toBe("seccion-breaking");
+    const breaking = within(screen.getByTestId("seccion-breaking"));
+    expect(breaking.getByTestId("badge-ultima-hora")).toBeTruthy();
+    // Frase editorial: 2 fuentes potentes casi a la vez.
+    expect(breaking.getByTestId("frase-corroboracion").textContent).toMatch(
+      /Reuters y AP \(primer nivel\)/,
     );
+  });
 
-    await waitFor(() => expect(mockHistorias).toHaveBeenCalledWith(
-      expect.objectContaining({ marca: "claro-sports" }),
-      expect.anything(),
-    ));
+  it("la tarjeta normal cuenta la corroboración como frase (quién la abrió)", async () => {
+    renderConProviders(<Cobertura />);
+    await waitFor(() => expect(screen.getByTestId("seccion-mx")).toBeTruthy());
+    const mx = within(screen.getByTestId("seccion-mx"));
+    const frase = mx.getByTestId("frase-corroboracion").textContent ?? "";
+    expect(frase).toMatch(/Confirmada por Reforma, El Universal y Milenio/);
+    expect(frase).toMatch(/la abrió Reforma/);
+    // Prioridad legible, nunca el número crudo.
+    expect(mx.getByTestId("punto-prioridad").textContent).toMatch(/Prioridad alta/);
+    expect(mx.queryByText(/0\.55|55/)).toBeNull();
+  });
+
+  it("una línea con cupo pendiente y sin candidatas avisa del hueco", async () => {
+    renderConProviders(<Cobertura />);
+    await waitFor(() => expect(screen.getByTestId("seccion-internacional")).toBeTruthy());
+    // internacional: cupo 1, generados 1 → sin hueco pendiente, no avisa.
+    mockMesa.mockResolvedValue(
+      mesaFixture({
+        lineas: [
+          {
+            linea: "internacional", cupo: 2, generados: 0, publicados: 0, restante: 2,
+            en_pool: 0, historias: [],
+          },
+        ],
+      }),
+    );
+    renderConProviders(<Cobertura />);
+    await waitFor(() =>
+      expect(screen.getByText(/sin candidatas en el pool — faltan 2/i)).toBeTruthy(),
+    );
+  });
+
+  it("«Fuera del plan» está plegado por defecto y se expande al clic", async () => {
+    renderConProviders(<Cobertura />);
+    await waitFor(() => expect(screen.getByTestId("seccion-fuera-de-plan")).toBeTruthy());
+    expect(screen.queryByText("Gaming sin línea")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Fuera del plan/i }));
+    await waitFor(() => expect(screen.getByText("Gaming sin línea")).toBeTruthy());
   });
 });
 
-// ── Tests: Vista Historias (Ola B) ────────────────────────────────────────────
-
-describe("Cobertura · Historias — vista por defecto", () => {
-  it("muestra las historias directamente (sin pestañas de modo)", async () => {
+describe("Cobertura · Mesa — acciones de la tarjeta", () => {
+  it("Empujar/Adelantar llama a usarHistoria", async () => {
     renderConProviders(<Cobertura />);
-    // Ya no hay conmutador Historias/Artículos: Noticias = el pool deduplicado en historias.
-    await waitFor(() => expect(mockHistorias).toHaveBeenCalled());
-    expect(screen.queryByTestId("tabs-cobertura")).toBeNull();
+    await waitFor(() => expect(screen.getByTestId("seccion-mx")).toBeTruthy());
+    const mx = within(screen.getByTestId("seccion-mx"));
+    fireEvent.click(mx.getByTestId("btn-empujar"));
+    await waitFor(() =>
+      expect(mockUsarHistoria).toHaveBeenCalledWith("h-1", { generar: true }),
+    );
   });
 
-  it("llama a api.noticias.historias al cargar con la marca activa", async () => {
-    renderConProviders(<Cobertura />, usuario(), "unotv");
-    await waitFor(() => {
-      expect(mockHistorias).toHaveBeenCalledWith(
-        expect.objectContaining({ marca: "unotv" }),
-        expect.anything(),
-      );
-    });
+  it("Descartar llama a descartarHistoria", async () => {
+    renderConProviders(<Cobertura />);
+    await waitFor(() => expect(screen.getByTestId("seccion-mx")).toBeTruthy());
+    const mx = within(screen.getByTestId("seccion-mx"));
+    fireEvent.click(mx.getByTestId("btn-descartar"));
+    await waitFor(() => expect(mockDescartarHistoria).toHaveBeenCalledWith("h-1"));
   });
 
-  it("muestra estado vacío cuando no hay historias", async () => {
+  it("una promovible anuncia que sale sola al feed y el botón pasa a «Adelantar»", async () => {
+    mockMesa.mockResolvedValue(
+      mesaFixture({
+        lineas: [
+          {
+            linea: "mx", cupo: 2, generados: 0, publicados: 0, restante: 2, en_pool: 1,
+            historias: [historiaItem({ promovible: true, promovible_motivo: "score 0.55 ≥ 0.35" })],
+          },
+        ],
+      }),
+    );
     renderConProviders(<Cobertura />);
-    await waitFor(() => {
-      expect(screen.getByText(/Sin historias por ahora/i)).toBeTruthy();
-    });
+    await waitFor(() => expect(screen.getByTestId("badge-sale-sola")).toBeTruthy());
+    expect(screen.getByTestId("btn-empujar").textContent).toMatch(/Adelantar/);
   });
 });
 
-describe("Cobertura · Historias — renderizado de clusters", () => {
-  it("renderiza una tarjeta de historia con el título y el badge de fuentes", async () => {
-    mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
-    renderConProviders(<Cobertura />);
-    await waitFor(() => {
-      expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy();
-    });
-    // Badge de fuentes prominente
-    const badge = screen.getByTestId("badge-fuentes");
-    expect(badge.textContent).toMatch(/3 fuentes/i);
-  });
+// ── Tests: pestañas En marcha / Descartadas ───────────────────────────────────
 
-  it("muestra el badge 'Breaking' cuando breaking=1", async () => {
-    mockHistorias.mockResolvedValue(RESPUESTA_HISTORIA_BREAKING);
-    renderConProviders(<Cobertura />);
-    await waitFor(() => {
-      expect(screen.getByText(/Breaking/i)).toBeTruthy();
-    });
-    // Badge de 6 fuentes
-    const badge = screen.getByTestId("badge-fuentes");
-    expect(badge.textContent).toMatch(/6 fuentes/i);
-  });
-
-  it("muestra 'En el feed' SOLO cuando hay pieza con copy (pieza_estado='en_feed')", async () => {
-    mockHistorias.mockResolvedValue(RESPUESTA_HISTORIA_USADA);
-    renderConProviders(<Cobertura />);
-    await waitFor(() => {
-      expect(screen.getByText(/En el feed/i)).toBeTruthy();
-    });
-    // El botón "Empujar ya" no debe aparecer para historias ya en el feed
-    expect(screen.queryByRole("button", { name: /Empujar ya/i })).toBeNull();
-  });
-
-  it("muestra 'En cola' (NO 'En el feed') cuando está usada pero sin pieza en el feed", async () => {
-    mockHistorias.mockResolvedValue(RESPUESTA_HISTORIA_EN_COLA);
-    renderConProviders(<Cobertura />);
-    await waitFor(() => {
-      expect(screen.getByText(/En cola/i)).toBeTruthy();
-    });
-    // Transparencia: NO debe decir "En el feed" si la pieza no está en el feed.
-    expect(screen.queryByText(/En el feed/i)).toBeNull();
-    // Ya está en curso: tampoco ofrece "Empujar ya".
-    expect(screen.queryByRole("button", { name: /Empujar ya/i })).toBeNull();
-  });
-
-  it("muestra 'Generando…' cuando la pieza existe pero el copy está en proceso", async () => {
-    mockHistorias.mockResolvedValue(RESPUESTA_HISTORIA_GENERANDO);
-    renderConProviders(<Cobertura />);
-    await waitFor(() => {
-      expect(screen.getByText(/Generando/i)).toBeTruthy();
-    });
-    expect(screen.queryByText(/En el feed/i)).toBeNull();
-  });
-
-  it("muestra 'Descartada' cuando la historia está descartada", async () => {
-    mockHistorias.mockResolvedValue(RESPUESTA_HISTORIA_DESCARTADA);
-    renderConProviders(<Cobertura />);
-    await waitFor(() => {
-      expect(screen.getByText(/Descartada/i)).toBeTruthy();
-    });
-  });
-
-  it("expande la lista de enlaces al hacer clic en 'Ver fuentes'", async () => {
-    mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
-    renderConProviders(<Cobertura />);
-    await waitFor(() => {
-      expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy();
-    });
-    // El RESUMEN de fuentes vive en la propia tarjeta (sin expandir): etiqueta — tema.
-    expect(screen.getByTestId("fuentes-resumen").textContent).toMatch(/Reforma/);
-    const botonExpandir = screen.getByRole("button", { name: /Ver fuentes corroborantes/i });
-    fireEvent.click(botonExpandir);
-    await waitFor(() => {
-      expect(screen.getByTestId("lista-enlaces")).toBeTruthy();
-    });
-    // Dentro de la lista expandida (el resumen de la tarjeta también nombra a Reforma).
-    const lista = within(screen.getByTestId("lista-enlaces"));
-    expect(lista.getByText("Fuente 1")).toBeTruthy();
-    expect(lista.getByText(/Reforma/)).toBeTruthy();
-  });
-});
-
-describe("Cobertura · Historias — acciones Empujar / Descartar", () => {
-  it("el botón 'Empujar ya' de una historia llama a api.noticias.usarHistoria", async () => {
-    mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
-    renderConProviders(<Cobertura />);
-    await waitFor(() => {
-      expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy();
-    });
-    const boton = screen.getByRole("button", { name: /Empujar ya/i });
-    fireEvent.click(boton);
-    await waitFor(() => {
-      expect(mockUsarHistoria).toHaveBeenCalledWith("h-1", { generar: true });
-    });
-  });
-
-  it("el botón 'Descartar' de una historia llama a api.noticias.descartarHistoria", async () => {
-    mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
-    renderConProviders(<Cobertura />);
-    await waitFor(() => {
-      expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy();
-    });
-    const boton = screen.getByRole("button", { name: /Descartar historia/i });
-    fireEvent.click(boton);
-    await waitFor(() => {
-      expect(mockDescartarHistoria).toHaveBeenCalledWith("h-1");
-    });
-  });
-});
-
-describe("Cobertura · Historias — selección múltiple (papelera estilo correo)", () => {
-  it("no muestra la acción de descarte hasta que hay selección", async () => {
-    mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
-    renderConProviders(<Cobertura />);
-    await waitFor(() => {
-      expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy();
-    });
-    expect(screen.queryByTestId("btn-descartar-seleccion")).toBeNull();
-  });
-
-  it("'seleccionar todo' + Descartar llama a descartarHistoriasLote con los ids", async () => {
-    mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
-    renderConProviders(<Cobertura />);
-    await waitFor(() => {
-      expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy();
-    });
-    fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar todas/i }));
-    fireEvent.click(screen.getByTestId("btn-descartar-seleccion"));
-    await waitFor(() => {
-      expect(mockDescartarLote).toHaveBeenCalledWith(["h-1"]);
-    });
-  });
-
-  it("'Borrar' seleccionadas pide confirmación y llama a borrarHistoriasLote", async () => {
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
-    mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
-    renderConProviders(<Cobertura />);
-    await waitFor(() => {
-      expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy();
-    });
-    fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar todas/i }));
-    fireEvent.click(screen.getByTestId("btn-borrar-seleccion"));
-    expect(confirmSpy).toHaveBeenCalled();
-    await waitFor(() => {
-      expect(mockBorrarLote).toHaveBeenCalledWith(["h-1"]);
-    });
-  });
-
-  it("'Borrar' cancelado en el confirm NO llama a la API", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(false);
-    mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
-    renderConProviders(<Cobertura />);
-    await waitFor(() => {
-      expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy();
-    });
-    fireEvent.click(screen.getByRole("checkbox", { name: /Seleccionar todas/i }));
-    fireEvent.click(screen.getByTestId("btn-borrar-seleccion"));
-    expect(mockBorrarLote).not.toHaveBeenCalled();
-  });
-
-  it("'Borrar todo' vacía el pool de la marca activa (con confirmación)", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-    mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
-    renderConProviders(<Cobertura />, usuario(), "unotv");
-    await waitFor(() => {
-      expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy();
-    });
-    // "Borrar todo" es ACCIÓN global de página: vive en el menú "⋮", no en el cuerpo.
-    fireEvent.click(screen.getByRole("button", { name: "Acciones" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Borrar todo" }));
-    await waitFor(() => {
-      expect(mockBorrarTodo).toHaveBeenCalledWith(
-        expect.objectContaining({ marca: "unotv" }),
-      );
-    });
-  });
-});
-
-describe("Cobertura · Historias — marca-aware", () => {
-  it("historias pasa la marca activa a la query", async () => {
-    renderConProviders(<Cobertura />, usuario(), "unotv");
-    await waitFor(() => {
-      expect(mockHistorias).toHaveBeenCalledWith(
-        expect.objectContaining({ marca: "unotv" }),
-        expect.anything(),
-      );
-    });
-  });
-
-  it("historias con marcaActiva=null pasa undefined como marca", async () => {
-    renderConProviders(<Cobertura />, usuario(), null);
-    await waitFor(() => {
-      expect(mockHistorias).toHaveBeenCalledWith(
-        expect.objectContaining({ marca: undefined }),
-        expect.anything(),
-      );
-    });
-  });
-});
-
-// ── Tests: Badges de verificación y traducción (Ola D) ───────────────────────
-
-describe("Cobertura · Historias — badge verificación", () => {
-  it("muestra badge 'Corroborada' cuando verificacion='corroborada'", async () => {
-    mockHistorias.mockResolvedValue({
-      historias: [historiaItem({ verificacion: "corroborada" })],
-      total: 1,
-    });
-    renderConProviders(<Cobertura />);
-    await waitFor(() => {
-      expect(screen.getByTestId("badge-verificacion")).toBeTruthy();
-    });
-    expect(screen.getByTestId("badge-verificacion").textContent).toMatch(/Corroborada/i);
-  });
-
-  it("muestra badge 'Única fuente' cuando verificacion='unica_fuente'", async () => {
-    mockHistorias.mockResolvedValue({
-      historias: [historiaItem({ verificacion: "unica_fuente" })],
-      total: 1,
-    });
-    renderConProviders(<Cobertura />);
-    await waitFor(() => {
-      expect(screen.getByTestId("badge-verificacion")).toBeTruthy();
-    });
-    expect(screen.getByTestId("badge-verificacion").textContent).toMatch(/Única fuente/i);
-  });
-
-  it("muestra badge 'Dudosa' cuando verificacion='dudosa'", async () => {
-    mockHistorias.mockResolvedValue({
-      historias: [historiaItem({ verificacion: "dudosa" })],
-      total: 1,
-    });
-    renderConProviders(<Cobertura />);
-    await waitFor(() => {
-      expect(screen.getByTestId("badge-verificacion")).toBeTruthy();
-    });
-    expect(screen.getByTestId("badge-verificacion").textContent).toMatch(/Dudosa/i);
-  });
-
-  it("no muestra badge de verificación cuando el campo está ausente", async () => {
-    mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
-    renderConProviders(<Cobertura />);
-    await waitFor(() => {
-      expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy();
-    });
-    expect(screen.queryByTestId("badge-verificacion")).toBeNull();
-  });
-});
-
-describe("Cobertura · Historias — badge traducido", () => {
-  it("muestra badge 'traducido de EN' cuando traducido=true e idioma='en'", async () => {
+describe("Cobertura · pestañas de flujo", () => {
+  it("«En marcha» lista las usadas (estado=usado) con su pieza_estado", async () => {
     mockHistorias.mockResolvedValue({
       historias: [
-        historiaItem({
-          traducido: true,
-          idioma: "en",
-          titulo_original: "Original English Title",
-        }),
+        historiaItem({ estado: "usado", contenido_id: "c-1", pieza_estado: "en_feed" }),
       ],
       total: 1,
     });
     renderConProviders(<Cobertura />);
-    await waitFor(() => {
-      expect(screen.getByTestId("badge-traducido")).toBeTruthy();
-    });
-    expect(screen.getByTestId("badge-traducido").textContent).toMatch(/traducido de EN/i);
+    fireEvent.click(screen.getByTestId("tab-en_marcha"));
+    await waitFor(() =>
+      expect(mockHistorias).toHaveBeenCalledWith(
+        expect.objectContaining({ marca: "unotv", estado: "usado" }),
+        expect.anything(),
+      ),
+    );
+    await waitFor(() => expect(screen.getByText(/En el feed/i)).toBeTruthy());
+    // Ya en marcha: no ofrece Empujar.
+    expect(screen.queryByTestId("btn-empujar")).toBeNull();
   });
 
-  it("no muestra badge traducido cuando traducido=false o ausente", async () => {
-    mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
-    renderConProviders(<Cobertura />);
-    await waitFor(() => {
-      expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy();
+  it("«Descartadas» ofrece «Devolver al pool» y llama a restaurarHistoria", async () => {
+    mockHistorias.mockResolvedValue({
+      historias: [
+        historiaItem({ id: "h-desc", estado: "descartado", pieza_estado: "descartada" }),
+      ],
+      total: 1,
     });
-    expect(screen.queryByTestId("badge-traducido")).toBeNull();
+    renderConProviders(<Cobertura />);
+    fireEvent.click(screen.getByTestId("tab-descartadas"));
+    await waitFor(() =>
+      expect(mockHistorias).toHaveBeenCalledWith(
+        expect.objectContaining({ estado: "descartado" }),
+        expect.anything(),
+      ),
+    );
+    const boton = await screen.findByTestId("btn-restaurar");
+    fireEvent.click(boton);
+    await waitFor(() => expect(mockRestaurarHistoria).toHaveBeenCalledWith("h-desc"));
   });
 });
 
-// ── Tests: Badges de estado del pool ─────────────────────────────────────────
+// ── Tests: AvisoSalud ─────────────────────────────────────────────────────────
 
-describe("Cobertura · badge de estado del pool", () => {
-  it("historia nueva muestra badge 'En el pool'", async () => {
-    mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
+describe("Cobertura · aviso de salud (mínimo y condicional)", () => {
+  it("muestra UNA línea ámbar con link a Fuentes cuando hay errores", async () => {
     renderConProviders(<Cobertura />);
-    await waitFor(() => {
-      expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId("aviso-salud")).toBeTruthy());
+    expect(screen.getByTestId("aviso-salud").textContent).toMatch(/2 fuentes con fallas/);
+    expect(screen.getByRole("link", { name: /revisar en Fuentes/i })).toBeTruthy();
+    // Los chips operacionales viejos ya no existen.
+    expect(screen.queryByText(/feeds activos/i)).toBeNull();
+    expect(screen.queryByText(/en 24 h/i)).toBeNull();
+  });
+
+  it("no muestra nada cuando todo está bien", async () => {
+    mockCobertura.mockResolvedValue(RESUMEN_COBERTURA_SANO);
+    renderConProviders(<Cobertura />);
+    await waitFor(() => expect(mockMesa).toHaveBeenCalled());
+    expect(screen.queryByTestId("aviso-salud")).toBeNull();
+  });
+});
+
+// ── Tests: vista «Todas» (sin marca activa) ───────────────────────────────────
+
+describe("Cobertura · vista Todas (lista plana clásica)", () => {
+  it("sin marca activa no hay mesa: lista plana con filtro de estado", async () => {
+    renderConProviders(<Cobertura />, usuario(), null);
+    await waitFor(() =>
+      expect(mockHistorias).toHaveBeenCalledWith(
+        expect.objectContaining({ marca: undefined }),
+        expect.anything(),
+      ),
+    );
+    expect(mockMesa).not.toHaveBeenCalled();
+    expect(screen.getByTestId("filtro-estado-historias")).toBeTruthy();
+  });
+
+  it("muestra estado vacío cuando no hay historias", async () => {
+    renderConProviders(<Cobertura />, usuario(), null);
+    await waitFor(() => expect(screen.getByText(/Sin historias por ahora/i)).toBeTruthy());
+  });
+
+  it("'seleccionar todo' + Descartar llama a descartarHistoriasLote con los ids", async () => {
+    mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
+    renderConProviders(<Cobertura />, usuario(), null);
+    await waitFor(() => expect(screen.getByTestId("barra-seleccion-historias")).toBeTruthy());
+    const barra = within(screen.getByTestId("barra-seleccion-historias"));
+    fireEvent.click(barra.getByRole("checkbox"));
+    fireEvent.click(await screen.findByTestId("btn-descartar-seleccion"));
+    await waitFor(() => expect(mockDescartarLote).toHaveBeenCalledWith(["h-1"]));
+  });
+
+  it("'Borrar' seleccionadas pide confirmación y llama a borrarHistoriasLote", async () => {
+    mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderConProviders(<Cobertura />, usuario(), null);
+    await waitFor(() => expect(screen.getByTestId("barra-seleccion-historias")).toBeTruthy());
+    const barra = within(screen.getByTestId("barra-seleccion-historias"));
+    fireEvent.click(barra.getByRole("checkbox"));
+    fireEvent.click(await screen.findByTestId("btn-borrar-seleccion"));
+    await waitFor(() => expect(mockBorrarLote).toHaveBeenCalledWith(["h-1"]));
+    confirmSpy.mockRestore();
+  });
+
+  it("'Borrar' cancelado en el confirm NO llama a la API", async () => {
+    mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    renderConProviders(<Cobertura />, usuario(), null);
+    await waitFor(() => expect(screen.getByTestId("barra-seleccion-historias")).toBeTruthy());
+    const barra = within(screen.getByTestId("barra-seleccion-historias"));
+    fireEvent.click(barra.getByRole("checkbox"));
+    fireEvent.click(await screen.findByTestId("btn-borrar-seleccion"));
+    expect(mockBorrarLote).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it("la tarjeta dice la verdad de la pieza: 'En cola' cuando aún no hay pieza en el feed", async () => {
+    mockHistorias.mockResolvedValue({
+      historias: [
+        historiaItem({ estado: "usado", contenido_id: "c-98", pieza_estado: "en_cola" }),
+      ],
+      total: 1,
     });
-    expect(screen.getByText("En el pool")).toBeTruthy();
+    renderConProviders(<Cobertura />, usuario(), null);
+    await waitFor(() => expect(screen.getByText(/En cola/i)).toBeTruthy());
+    expect(screen.queryByText(/En el feed/i)).toBeNull();
+  });
+
+  it("expande la lista de enlaces al hacer clic en 'Ver fuentes'", async () => {
+    mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
+    renderConProviders(<Cobertura />, usuario(), null);
+    await waitFor(() => expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /Ver fuentes corroborantes/i }));
+    await waitFor(() => expect(screen.getByTestId("lista-enlaces")).toBeTruthy());
+    const lista = within(screen.getByTestId("lista-enlaces"));
+    expect(lista.getByText("Fuente 1")).toBeTruthy();
+    expect(lista.getByText(/Reforma/)).toBeTruthy();
   });
 });

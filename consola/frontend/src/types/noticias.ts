@@ -70,6 +70,21 @@ export interface RespuestaInvCorrer {
 
 // --- Motor de ingesta: Ola B — Clustering de historias ---
 
+/** Una entrada del TIMELINE de outlets de una historia (quién la abrió, quién se sumó). */
+export interface FuenteHistoria {
+  /** Nombre humano de la fuente (p. ej. "Reuters"). */
+  fuente: string;
+  fuente_id: string;
+  /** Peso editorial de la fuente (potente 2.0 / normal 1.0 / baja 0.5). */
+  peso: number;
+  /** Tier legible del peso. */
+  tier: "potente" | "normal" | "baja" | string;
+  /** ISO de cuándo este outlet se sumó a la historia ('' si sin timestamp). */
+  primer_visto: string;
+  /** Cuántos artículos aportó este outlet. */
+  n_items: number;
+}
+
 /**
  * Un cluster de noticias (misma historia contada por varias fuentes).
  * Espejo de `noticias_clusters` + cálculo de `Ola B`.
@@ -101,10 +116,14 @@ export interface Historia {
    */
   score_desglose?: {
     corroboracion?: number;
+    /** Masa ponderada que se sumó en la ventana actual (señal de última hora; decae sola). */
+    velocidad?: number;
     frescura?: number;
     viralidad?: number;
     marca?: number;
     rendimiento?: number;
+    /** Masa de corroboración ponderada (Σ peso por outlet). */
+    peso_fuentes?: number;
     breaking?: number;
     palabras?: string[];
   };
@@ -133,8 +152,17 @@ export interface Historia {
    *  - 'descartada' → descartada
    */
   pieza_estado?: "en_pool" | "en_cola" | "generando" | "en_feed" | "descartada" | string;
-  /** Hasta ~8 artículos corroborantes del cluster. */
-  enlaces: { titulo: string; url: string; fuente: string }[];
+  /** Hasta ~8 artículos corroborantes del cluster (con su hora y el tier de su fuente). */
+  enlaces: { titulo: string; url: string; fuente: string; publicado_en?: string; tier?: string }[];
+  // ── Tracking de fuentes (ranking ponderado) ───────────────────────────────
+  /** Masa de corroboración PONDERADA (Σ peso editorial por outlet distinto). */
+  peso_fuentes?: number;
+  /** Señal de velocidad [0,1] persistida (masa sumada en la ventana actual). */
+  velocidad?: number;
+  /** Nombre de la fuente que ABRIÓ la historia (publicó primero). */
+  primera_fuente_nombre?: string;
+  /** Timeline cronológico de outlets (el primero abrió la historia). */
+  fuentes?: FuenteHistoria[];
   // ── Ola D: verificación + traducción ─────────────────────────────────────
   /** Nivel de verificación por corroboración (Ola D). */
   verificacion?: "corroborada" | "unica_fuente" | "dudosa";
@@ -150,6 +178,38 @@ export interface Historia {
 export interface RespuestaHistorias {
   historias: Historia[];
   total: number;
+}
+
+// ── Mesa de redacción (GET /api/noticias/mesa) ────────────────────────────────
+
+/** Una línea del plan editorial diario en la Mesa: cupo + progreso + top candidatas. */
+export interface MesaLinea {
+  /** Id de la línea (categoría del plan: mx, internacional, breaking…). */
+  linea: string;
+  /** Objetivo diario de la línea según el plan. */
+  cupo: number;
+  /** Temas generados en 24 h móviles (el mismo conteo que la admisión). */
+  generados: number;
+  publicados: number;
+  /** Cuántos faltan para el objetivo de hoy. */
+  restante: number;
+  /** Candidatas (`estado='nuevo'`) de esta línea en el pool. */
+  en_pool: number;
+  /** Top-N candidatas rankeadas (contrato Historia completo). */
+  historias: Historia[];
+}
+
+/** Respuesta de `GET /api/noticias/mesa?marca=`: el pool segmentado por el plan. */
+export interface RespuestaMesa {
+  marca: string;
+  /** false si la marca no tiene plan configurado (todo va en `fuera_de_plan`). */
+  plan: boolean;
+  lineas: MesaLinea[];
+  fuera_de_plan: { en_pool: number; historias: Historia[] };
+  /** Σ cupos del plan (el objetivo del día, p. ej. 12). */
+  total_objetivo: number;
+  /** Σ generados de las líneas del plan en 24 h. */
+  total_generados: number;
 }
 
 /**

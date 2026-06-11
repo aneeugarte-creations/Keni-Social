@@ -9,16 +9,12 @@ import { Target } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/lib/api";
+import { ETIQUETA_LINEA } from "@/lib/lineas";
 import { cn } from "@/lib/utils";
 
-// Etiquetas legibles de las líneas del plan editorial (fallback: la categoría capitalizada).
-export const ETIQUETA_LINEA: Record<string, string> = {
-  mx: "Nacional",
-  internacional: "Internacional",
-  breaking: "Breaking",
-  entretenimiento: "Entretenimiento",
-  evergreen: "Evergreen",
-};
+// Re-export por compatibilidad: la tabla canónica vive en `lib/lineas.ts` (la comparten
+// Programación, Monitor y la Mesa de redacción de Noticias).
+export { ETIQUETA_LINEA };
 
 /** Producción del día por LÍNEA del plan (producido vs objetivo), para la marca activa. */
 export function PanelLineasPlan({ marca, nombre }: { marca: string; nombre: string }) {

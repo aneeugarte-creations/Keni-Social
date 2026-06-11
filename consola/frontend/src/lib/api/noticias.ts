@@ -4,6 +4,7 @@ import { peticion, query } from "./_core";
 import type {
   Historia,
   RespuestaHistorias,
+  RespuestaMesa,
   RespuestaNoticias,
   ResumenCobertura,
   SaludCobertura,
@@ -106,6 +107,23 @@ export const apiNoticias = {
       ),
 
     /**
+     * La MESA DE REDACCIÓN: el pool segmentado por las líneas del plan editorial diario de
+     * la marca (cupo + progreso 24 h + top-N candidatas por línea) + `fuera_de_plan`.
+     * GET /api/noticias/mesa?marca=&por_linea=
+     */
+    mesa: (
+      params: { marca: string; porLinea?: number },
+      signal?: AbortSignal,
+    ) =>
+      peticion<RespuestaMesa>(
+        `/noticias/mesa${query({
+          marca: params.marca,
+          por_linea: params.porLinea != null ? String(params.porLinea) : undefined,
+        })}`,
+        { signal },
+      ),
+
+    /**
      * Detalle de un cluster: la historia + sus artículos corroborantes.
      * GET /api/noticias/historias/{id}
      */
@@ -136,6 +154,16 @@ export const apiNoticias = {
     descartarHistoria: (id: string) =>
       peticion<{ ok: boolean }>(
         `/noticias/historias/${encodeURIComponent(id)}/descartar`,
+        { metodo: "POST", muestrear: false },
+      ),
+
+    /**
+     * Devuelve una historia DESCARTADA al pool (el deshacer del descarte rápido).
+     * POST /api/noticias/historias/{id}/restaurar
+     */
+    restaurarHistoria: (id: string) =>
+      peticion<{ historia: Historia }>(
+        `/noticias/historias/${encodeURIComponent(id)}/restaurar`,
         { metodo: "POST", muestrear: false },
       ),
 
