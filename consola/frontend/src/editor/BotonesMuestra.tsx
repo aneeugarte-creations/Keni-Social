@@ -94,21 +94,22 @@ function BotonToggle({
 }) {
   return (
     <div className="relative flex items-center">
-      {/* ACTIVO = píldora `--control-activo` (en la barra del editor: negra sólida con glifo
-          blanco, distinta del hover accent; fuera del editor equivale al accent de siempre).
-          El chevron comparte el fondo cuando está activo para que el par toggle+chevron se lea
-          como UNA sola píldora (rounded-l + rounded-r), no como un activo partido por la mitad. */}
+      {/* ACTIVO = lavado SUAVE del color del cromo (`--foreground` al 12%) con glifo a tinta
+          plena, NO la píldora `--control-activo`: estos toggles están encendidos por defecto y
+          una píldora sólida permanente pesaba como otro CTA junto a Exportar. Apagado = glifo
+          atenuado. El chevron comparte el fondo para que el par toggle+chevron se lea como UNA
+          sola píldora (rounded-l + rounded-r), no como un activo partido por la mitad. */}
       <button
         title={titulo}
         aria-label={etiqueta}
         aria-pressed={activo}
         onClick={onToggle}
         className={`flex items-center rounded-l-md py-1.5 pl-1.5 pr-1 ${
-          // El hover accent SOLO en reposo: sobre el control ACTIVO mantendría el fondo naranja
-          // bajo el glifo naranja (ilegible justo tras clicar, con el cursor aún encima).
+          // Encendido: lavado al 12% que se intensifica al hover (sigue legible: glifo a tinta).
+          // Apagado: atenuado, con el hover accent de toda la barra.
           activo
-            ? "bg-[hsl(var(--control-activo))] text-[hsl(var(--control-activo-foreground))]"
-            : "text-muted-foreground hover:bg-accent"
+            ? "bg-[hsl(var(--foreground)/0.12)] text-foreground hover:bg-[hsl(var(--foreground)/0.2)]"
+            : "text-[hsl(var(--muted-foreground)/0.55)] hover:bg-accent hover:text-accent-foreground"
         }`}
       >
         <Icono className="h-4 w-4" />
@@ -119,11 +120,11 @@ function BotonToggle({
         aria-expanded={editando}
         onClick={onEditar}
         className={`rounded-r-md py-1.5 pl-0.5 pr-1 ${
-          // El hover accent SOLO en reposo: sobre el control ACTIVO mantendría el fondo naranja
-          // bajo el glifo naranja (ilegible justo tras clicar, con el cursor aún encima).
+          // Encendido: lavado al 12% que se intensifica al hover (sigue legible: glifo a tinta).
+          // Apagado: atenuado, con el hover accent de toda la barra.
           activo
-            ? "bg-[hsl(var(--control-activo))] text-[hsl(var(--control-activo-foreground))]"
-            : "text-muted-foreground hover:bg-accent"
+            ? "bg-[hsl(var(--foreground)/0.12)] text-foreground hover:bg-[hsl(var(--foreground)/0.2)]"
+            : "text-[hsl(var(--muted-foreground)/0.55)] hover:bg-accent hover:text-accent-foreground"
         }`}
       >
         <ChevronDown className="h-3.5 w-3.5" />
