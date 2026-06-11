@@ -318,39 +318,162 @@ def test_variables_catalogo(entorno_sin_pg):
     assert {"MARCA", "MAX_KEYWORDS", "EDITORIAL", "HISTORIAS", "ITEMS", "PLATAFORMA", "RUTA"} <= nombres
 
 
-def test_maquina_riel_y_capas(entorno_sin_pg):
+def test_maquina_tres_maquinas(entorno_sin_pg):
+    """La forma nueva del riel (ADR 0011): tres máquinas, etapas mecánicas + prompts."""
     c = _cliente()
-    # Una capa editorial propia de la marca, para verla aparecer en `capas`.
-    voz = _crear_doc(c, titulo="Voz", cuerpo="tono", tipo="editorial", clase="voz", marcas=[_MARCA])
-
     r = c.get("/api/texto/maquina", params={"marca": _MARCA})
     assert r.status_code == 200
     cuerpo = r.json()
-    grupos = cuerpo["grupos"]
-    assert [g["id"] for g in grupos] == ["ingesta", "priorizacion", "produccion", "talleres"]
+    # `grupos`/`capas` desaparecieron: el ensamblaje editorial vive en /estrategia.
+    assert "grupos" not in cuerpo and "capas" not in cuerpo
+    maquinas = cuerpo["maquinas"]
+    assert [m["id"] for m in maquinas] == ["investigacion", "produccion", "importacion"]
+    inv, prod, imp = maquinas
+    assert inv["titulo"] == "Investigación" and inv["subtitulo"] == "El motor de noticias"
+    assert prod["titulo"] == "Producción" and prod["subtitulo"] == "La máquina de contenido"
+    assert imp["titulo"] == "Herramientas de importación"
 
-    # Producción en su ORDEN real: qa -> copy -> arte, con los doc_id del registro.
-    produccion = next(g for g in grupos if g["id"] == "produccion")
-    assert [e["id"] for e in produccion["etapas"]] == ["qa", "copy", "arte"]
-    por_id = {e["id"]: e for e in produccion["etapas"]}
-    assert por_id["qa"]["doc_id"] == "prompt/validacion"
-    assert por_id["copy"]["doc_id"] == "prompt/copy"
-    assert por_id["arte"]["doc_id"] == "prompt/arte"
-    # Toda etapa lleva el estado de publicación (degradado sin BD: sin puntero).
-    for g in grupos:
-        for e in g["etapas"]:
-            assert {"id", "titulo", "doc_id", "produccion", "sha_actual", "sin_publicar"} <= set(e)
-            assert e["produccion"] is None
+    # Investigación: el proceso COMPLETO en orden (la frontera del ADR: QA es Investigación),
+    # con las etapas sin prompt de la Biblioteca como `mecanica` (contexto del riel).
+    assert [(e["tipo"], e["id"]) for e in inv["etapas"]] == [
+        ("mecanica", "ingesta"),
+        ("mecanica", "clustering"),
+        ("prompt", "fusion-verificacion"),
+        ("prompt", "fusion"),
+        ("prompt", "traduccion"),
+        ("mecanica", "clasificacion-marca"),
+        ("prompt", "ranking"),
+        ("mecanica", "admision"),
+        ("prompt", "validacion"),
+        ("prompt", "algoritmos"),
+    ]
+    por_id = {e["id"]: e for e in inv["etapas"]}
+    assert por_id["validacion"]["doc_id"] == "prompt/validacion"  # prompt_base_de("qa")
+    assert por_id["ranking"]["doc_id"] == "prompt/editorial"
+    assert por_id["algoritmos"]["doc_id"] == "prompt/sugerencias"
+    # Etapas mecánicas: SOLO contexto (sin doc_id ni estado de publicación).
+    for eid in ("ingesta", "clustering", "clasificacion-marca", "admision"):
+        assert set(por_id[eid]) == {"tipo", "id", "titulo"}
+    assert por_id["clasificacion-marca"]["titulo"] == "Clasificación de marca (IA)"
+    # Etapas prompt: doc + estado de publicación (degradado sin BD: sin puntero).
+    for m in maquinas:
+        for e in m["etapas"]:
+            if e["tipo"] == "prompt":
+                assert {"tipo", "id", "titulo", "doc_id", "produccion", "sha_actual",
+                        "sin_publicar"} <= set(e)
+                assert e["produccion"] is None
 
-    # Ingesta en el orden real del barrido: fusión -> verificación -> traducción.
-    ingesta = next(g for g in grupos if g["id"] == "ingesta")
-    assert [e["doc_id"] for e in ingesta["etapas"]] == [
-        "prompt/fusion", "prompt/fusion-verificacion", "prompt/traduccion",
+    # Producción: copy -> arte -> avance -> publicación, y el taller evergreen al final.
+    assert [(e["tipo"], e["id"]) for e in prod["etapas"]] == [
+        ("prompt", "copy"),
+        ("prompt", "arte"),
+        ("mecanica", "avance"),
+        ("mecanica", "publicacion"),
+        ("prompt", "evergreen"),
+    ]
+    pp = {e["id"]: e for e in prod["etapas"]}
+    assert pp["copy"]["doc_id"] == "prompt/copy"
+    assert pp["arte"]["doc_id"] == "prompt/arte"
+    assert pp["evergreen"]["doc_id"] == "prompt/evergreen"
+    # `seccion` es OPCIONAL: solo el taller la lleva.
+    assert pp["evergreen"]["seccion"] == "taller"
+    assert "seccion" not in pp["copy"] and "seccion" not in pp["arte"]
+
+    # Importación: los 4 buzones de insumos + los 2 importadores, todos `prompt`.
+    assert all(e["tipo"] == "prompt" for e in imp["etapas"])
+    assert [e["doc_id"] for e in imp["etapas"]] == [
+        "prompt/insumos/portal", "prompt/insumos/corresponsales",
+        "prompt/insumos/reporteros", "prompt/insumos/eventos-claro",
+        "prompt/importar/calendario", "prompt/importar/parrilla",
     ]
 
-    # Capas: el ensamblaje editorial de la marca, con orden 1..n y la voz creada dentro.
-    capas = cuerpo["capas"]
-    assert [x["orden"] for x in capas] == list(range(1, len(capas) + 1))
-    la_voz = next(x for x in capas if x["doc_id"] == voz["id"])
-    assert la_voz["clase"] == "voz"
-    assert {"doc_id", "titulo", "clase", "orden", "produccion", "sha_actual", "sin_publicar"} <= set(la_voz)
+
+def test_maquina_respeta_rebindeo_de_copy(entorno_sin_pg):
+    """La etapa de copy se resuelve por el registro: un prompt activo rol=copy la rebindea."""
+    c = _cliente()
+    nuevo = _crear_doc(c, titulo="Copy alterno", cuerpo="X", rol="copy", pipelines=["copy"])
+    r = c.get("/api/texto/maquina")
+    prod = next(m for m in r.json()["maquinas"] if m["id"] == "produccion")
+    etapa = next(e for e in prod["etapas"] if e["id"] == "copy")
+    assert etapa["doc_id"] == nuevo["id"]
+
+
+# --------------------------------------------------------------------------- #
+# Estrategia de marca (GET /api/texto/estrategia)                              #
+# --------------------------------------------------------------------------- #
+
+
+def test_estrategia_pilares_extras_y_orden(entorno_sin_pg):
+    c = _cliente()
+    voz = _crear_doc(c, titulo="Voz", cuerpo="tono cercano", tipo="editorial", clase="voz",
+                     marcas=[_MARCA])
+    en_blanco = _crear_doc(c, titulo="Marca", cuerpo="   ", tipo="editorial", clase="marca",
+                           marcas=[_MARCA])
+    tropi = _crear_doc(c, titulo="Tropicalización", cuerpo="es-MX", tipo="editorial",
+                       clase="tropicalizacion")
+    patrones = _crear_doc(c, titulo="Patrones medidos", cuerpo="bandas", tipo="editorial",
+                          clase="", marcas=[_MARCA])
+
+    r = c.get("/api/texto/estrategia", params={"marca": _MARCA})
+    assert r.status_code == 200
+    cuerpo = r.json()
+    assert cuerpo["marca"] == _MARCA
+
+    # SIEMPRE los 4+1 pilares, en orden fijo y con la forma completa.
+    pilares = cuerpo["pilares"]
+    assert [p["clase"] for p in pilares] == [
+        "marca", "voz", "tropicalizacion", "plataforma", "reglas",
+    ]
+    for p in pilares:
+        assert {"clase", "titulo", "doc_id", "vacio", "global", "produccion",
+                "sha_actual", "sin_publicar", "actualizado"} <= set(p)
+    por = {p["clase"]: p for p in pilares}
+
+    # Pilar de marca con doc y cuerpo: cubierto, no global.
+    assert por["voz"]["doc_id"] == voz["id"]
+    assert por["voz"]["vacio"] is False and por["voz"]["global"] is False
+    assert por["voz"]["titulo"] == "Voz y tono" and por["voz"]["actualizado"]
+    # Doc presente pero con cuerpo EN BLANCO: vacio True (mismo criterio que /validacion).
+    assert por["marca"]["doc_id"] == en_blanco["id"] and por["marca"]["vacio"] is True
+    # Pilar global con doc.
+    assert por["tropicalizacion"]["doc_id"] == tropi["id"]
+    assert por["tropicalizacion"]["global"] is True
+    assert por["tropicalizacion"]["titulo"] == "Tropicalización MX"
+    # Pilares SIN documento: presentes igual, doc_id null y todo degradado.
+    for clase in ("plataforma", "reglas"):
+        p = por[clase]
+        assert p["doc_id"] is None and p["vacio"] is True and p["global"] is True
+        assert p["produccion"] is None and p["sha_actual"] is None
+        assert p["sin_publicar"] is False and p["actualizado"] is None
+
+    # Extras: documentos del auto-adjunto sin clase-pilar, con su PROPIO título.
+    assert [x["doc_id"] for x in cuerpo["extras"]] == [patrones["id"]]
+    assert cuerpo["extras"][0]["titulo"] == "Patrones medidos"
+    assert cuerpo["extras"][0]["global"] is False and cuerpo["extras"][0]["vacio"] is False
+
+    # Completitud: la MISMA lógica que /validacion (marca en blanco y plataforma faltante).
+    comp = cuerpo["completitud"]
+    assert set(comp) == {"completa", "faltan", "recomendacion"}
+    assert comp["completa"] is False
+    assert "marca" in comp["faltan"] and "plataforma" in comp["faltan"]
+    assert "voz" not in comp["faltan"] and "tropicalizacion" not in comp["faltan"]
+    assert comp["recomendacion"]
+
+    # Orden de inyección: EXACTAMENTE los adjuntos reales del copy, en su orden.
+    assert cuerpo["orden_inyeccion"] == [d.id for d in generar.adjuntos_copy(_MARCA)]
+    assert voz["id"] in cuerpo["orden_inyeccion"]
+    assert patrones["id"] in cuerpo["orden_inyeccion"]
+
+
+def test_estrategia_sin_marca(entorno_sin_pg):
+    """Sin marca: los pilares específicos no se cubren y se pide elegir una marca."""
+    c = _cliente()
+    r = c.get("/api/texto/estrategia")
+    assert r.status_code == 200
+    cuerpo = r.json()
+    assert cuerpo["marca"] == ""
+    assert [p["clase"] for p in cuerpo["pilares"]] == [
+        "marca", "voz", "tropicalizacion", "plataforma", "reglas",
+    ]
+    assert cuerpo["completitud"]["completa"] is False
+    assert "marca" in cuerpo["completitud"]["recomendacion"].lower()

@@ -92,6 +92,7 @@ from ._crud import (
 from ._editorial import (
     editoriales_de_marca,
     editoriales_de_pipeline,
+    es_editorial_global,
     previsualizar_pipeline,
     prompt_base_de,
     validacion_editorial,
@@ -207,6 +208,7 @@ __all__ = [
     # editorial / pipelines (_editorial)
     "editoriales_de_marca",
     "editoriales_de_pipeline",
+    "es_editorial_global",
     "prompt_base_de",
     "previsualizar_pipeline",
     "validacion_editorial",

@@ -11,8 +11,8 @@ La app descubre este modulo por su variable `RUTAS` (ver `api/__init__.py`); no 
 central de `app.py` la traduce a 429.
 
 ORDEN DE RUTAS: las estaticas (`/papelera`, `/editoriales`, `/validacion`, `/areas`,
-`/lanzar`, `/lanzar-archivo`) van ANTES que la parametrica `/{doc_id:path}` (que captura
-barras) para que Starlette las case primero.
+`/lanzar`, `/lanzar-archivo`, `/maquina`, `/estrategia`) van ANTES que la parametrica
+`/{doc_id:path}` (que captura barras) para que Starlette las case primero.
 """
 
 from __future__ import annotations
@@ -527,56 +527,137 @@ async def variables(request: Request) -> Response:
     return JSONResponse({"variables": libtexto.catalogo_variables()})
 
 
-# Estructura del RIEL de la máquina de contenido, en el ORDEN REAL de ejecución del código:
-#   - ingesta (ingesta_daemon): fusión de historias (agrupación, `prompt/fusion`) ->
-#     verificación de cada grupo ANTES de fundir (`prompt/fusion-verificacion`) ->
-#     traducción/localización MX (`prompt/traduccion`).
-#   - priorización: perfil de keywords por marca (`prompt/editorial`).
-#   - producción (pipeline de contenido): criba QA de la fuente -> copy -> arte.
-#   - talleres: lo que se ejecuta a demanda/diario sin un orden de pipeline (evergreen,
-#     sugerencias, insumos del día, importadores).
-# El doc_id de qa/copy/evergreen se resuelve por el REGISTRO (`prompt_base_de`): respeta
-# rebindeos hechos en la Biblioteca sin tocar código. None => id por defecto del registro.
-_ETAPAS_MAQUINA: tuple[tuple[str, str, tuple[tuple[str, str, str | None], ...]], ...] = (
-    ("ingesta", "Ingesta", (
-        ("fusion", "Fusión de historias", "prompt/fusion"),
-        ("fusion-verificacion", "Verificación pre-fusión", "prompt/fusion-verificacion"),
-        ("traduccion", "Traducción y localización MX", "prompt/traduccion"),
+# Las TRES MÁQUINAS del riel (ADR 0011): Investigación (el motor de noticias), Producción
+# (la máquina de contenido) y las Herramientas de importación. Cada etapa es:
+#   - `mecanica`: paso del proceso SIN prompt de la Biblioteca (código puro o prompt
+#     hardcodeado, p. ej. el clasificador de marca con Haiku). Da contexto: el riel cuenta
+#     la historia completa del proceso, no solo los prompts editables.
+#   - `prompt` : etapa cuyo prompt vive en la Biblioteca. `doc_id=None` => se resuelve por el
+#     REGISTRO (`prompt_base_de`, ver `_ETAPA_PIPELINE`): respeta rebindeos sin tocar código.
+#
+# El ORDEN sigue el modelo conceptual del ADR 0011 (frontera: la validación QA es
+# Investigación; copy/arte son Producción), apoyado en el orden real de los daemons
+# (`ingesta_daemon.ejecutar_barrido`, `pipeline_contenido._barrido`). Donde difieren hoy
+# manda el ADR: la clasificación de marca corre DENTRO del clustering y la QA corre tras
+# la admisión del lado `contenido` (hasta F3), pero el riel los presenta como etapas del
+# proceso de Investigación. La fusión semántica son DOS prompts: la verificación
+# (`prompt/fusion-verificacion`) corre por grupo propuesto ANTES de fundir.
+# Tupla de etapa: (tipo, id, titulo, doc_id | None, seccion | None).
+_Etapa = tuple[str, str, str, str | None, str | None]
+_MAQUINAS: tuple[tuple[str, str, str, tuple[_Etapa, ...]], ...] = (
+    ("investigacion", "Investigación", "El motor de noticias", (
+        ("mecanica", "ingesta", "Sondeo RSS + agencias", None, None),
+        ("mecanica", "clustering", "Clustering y merge léxico", None, None),
+        ("prompt", "fusion-verificacion", "Verificación pre-fusión", "prompt/fusion-verificacion", None),
+        ("prompt", "fusion", "Fusión semántica", "prompt/fusion", None),
+        ("prompt", "traduccion", "Traducción y localización MX", "prompt/traduccion", None),
+        # El clasificador de marca usa un prompt HARDCODEADO (dominio.clasificador_marca),
+        # no un doc de la Biblioteca: etapa mecánica hasta que ese prompt se externalice.
+        ("mecanica", "clasificacion-marca", "Clasificación de marca (IA)", None, None),
+        ("prompt", "ranking", "Ranking · perfil de relevancia", "prompt/editorial", None),
+        ("mecanica", "admision", "Admisión", None, None),
+        ("prompt", "validacion", "Validación de fuente (QA)", None, None),  # prompt_base_de("qa")
+        ("prompt", "algoritmos", "Algoritmos · digest diario", "prompt/sugerencias", None),
     )),
-    ("priorizacion", "Priorización", (
-        ("editorial", "Perfil editorial (keywords por marca)", "prompt/editorial"),
+    ("produccion", "Producción", "La máquina de contenido", (
+        ("prompt", "copy", "Redacción editorial (copy)", None, None),       # prompt_base_de("copy")
+        ("prompt", "arte", "Arte (imagen de la pieza)", "prompt/arte", None),
+        ("mecanica", "avance", "Avance a revisión", None, None),
+        ("mecanica", "publicacion", "Publicación", None, None),
+        ("prompt", "evergreen", "Taller evergreen", None, "taller"),        # prompt_base_de("evergreen")
     )),
-    ("produccion", "Producción", (
-        ("qa", "Validación de la fuente (QA)", None),     # prompt_base_de("qa")
-        ("copy", "Generación de copy", None),             # prompt_base_de("copy")
-        ("arte", "Arte (imagen de la pieza)", "prompt/arte"),
-    )),
-    ("talleres", "Talleres y herramientas", (
-        ("evergreen", "Taller evergreen", None),          # prompt_base_de("evergreen")
-        ("sugerencias", "Sugerencias editoriales", "prompt/sugerencias"),
-        ("insumos-portal", "Insumos · Portal/SMS", "prompt/insumos/portal"),
-        ("insumos-corresponsales", "Insumos · Corresponsales", "prompt/insumos/corresponsales"),
-        ("insumos-reporteros", "Insumos · Reporteros", "prompt/insumos/reporteros"),
-        ("insumos-eventos-claro", "Insumos · Eventos Claro Sports", "prompt/insumos/eventos-claro"),
-        ("importar-calendario", "Importar calendario", "prompt/importar/calendario"),
-        ("importar-parrilla", "Importar rota/parrilla", "prompt/importar/parrilla"),
+    ("importacion", "Herramientas de importación", "Insumos y documentos del equipo", (
+        ("prompt", "insumos-portal", "Insumos · Portal/SMS", "prompt/insumos/portal", None),
+        ("prompt", "insumos-corresponsales", "Insumos · Corresponsales", "prompt/insumos/corresponsales", None),
+        ("prompt", "insumos-reporteros", "Insumos · Reporteros", "prompt/insumos/reporteros", None),
+        ("prompt", "insumos-eventos-claro", "Insumos · Eventos Claro Sports", "prompt/insumos/eventos-claro", None),
+        ("prompt", "importar-calendario", "Importar calendario", "prompt/importar/calendario", None),
+        ("prompt", "importar-parrilla", "Importar rota/parrilla", "prompt/importar/parrilla", None),
     )),
 )
 
-# id de etapa -> pipeline del registro cuyo prompt base efectivo la alimenta.
-_ETAPA_PIPELINE = {"qa": "qa", "copy": "copy", "evergreen": "evergreen"}
+# id de etapa -> pipeline del registro cuyo prompt base efectivo la alimenta (rebindeable).
+_ETAPA_PIPELINE = {"validacion": "qa", "copy": "copy", "evergreen": "evergreen"}
+
+
+def _doc_id_de_etapa(eid: str, doc_id: str | None) -> str:
+    """Resuelve el doc de una etapa `prompt`: fijo, o el prompt base EFECTIVO del registro."""
+    if doc_id is not None:
+        return doc_id
+    pipeline = _ETAPA_PIPELINE[eid]
+    try:
+        return libtexto.prompt_base_de(pipeline)
+    except libtexto.TextoError:
+        return libtexto.PIPELINES.get(pipeline, {}).get("prompt_defecto", "")
 
 
 async def maquina(request: Request) -> Response:
-    """`GET /api/texto/maquina?marca=` -> el RIEL de la máquina + las CAPAS editoriales.
+    """`GET /api/texto/maquina?marca=` -> `{maquinas}`: las TRES máquinas del ADR 0011.
 
-    Forma (CONTRATO con el frontend del rediseño):
-      - `grupos`: etapas en el ORDEN REAL de ejecución (ver `_ETAPAS_MAQUINA`); cada etapa
-        `{id, titulo, doc_id, produccion, sha_actual, sin_publicar}` (estado de publicación
-        del documento que se inyecta en esa etapa).
-      - `capas`: el ensamblaje editorial para la marca pedida, en el ORDEN real de
-        `adjuntos_copy()` (lo que se adjunta al copy, capa a capa):
-        `{doc_id, titulo, clase, orden, produccion, sha_actual, sin_publicar}`.
+    Forma (CONTRATO con el frontend del rediseño): `maquinas` es la lista
+    Investigación -> Producción -> Importación; cada una `{id, titulo, subtitulo, etapas}`
+    con sus etapas en el orden del proceso (ver `_MAQUINAS`):
+      - etapa `mecanica`: `{tipo, id, titulo}` (sin prompt de la Biblioteca; contexto).
+      - etapa `prompt`  : `{tipo, id, titulo, doc_id, produccion, sha_actual, sin_publicar}`
+        (+ `seccion` opcional, p. ej. `"taller"` para el evergreen) con el estado de
+        publicación del documento que se inyecta en esa etapa.
+
+    Las CAPAS editoriales ya no salen aquí: el ensamblaje por marca vive en
+    `GET /api/texto/estrategia?marca=` (`orden_inyeccion` + pilares). `marca` se acepta
+    por compatibilidad pero el riel es global (no depende de la marca).
+    """
+    punteros = libtexto.producciones()
+    shas = libtexto.shas_actuales()
+
+    def estado(doc_id: str) -> dict[str, object]:
+        return libtexto.estado_publicacion(doc_id, punteros=punteros, shas=shas)
+
+    maquinas = []
+    for mid, titulo, subtitulo, etapas in _MAQUINAS:
+        filas: list[dict[str, object]] = []
+        for tipo, eid, etitulo, doc_id, seccion in etapas:
+            if tipo == "mecanica":
+                filas.append({"tipo": "mecanica", "id": eid, "titulo": etitulo})
+                continue
+            efectivo = _doc_id_de_etapa(eid, doc_id)
+            fila: dict[str, object] = {
+                "tipo": "prompt", "id": eid, "titulo": etitulo,
+                "doc_id": efectivo, **estado(efectivo),
+            }
+            if seccion:
+                fila["seccion"] = seccion
+            filas.append(fila)
+        maquinas.append({"id": mid, "titulo": titulo, "subtitulo": subtitulo, "etapas": filas})
+    return JSONResponse({"maquinas": maquinas})
+
+
+# Los 4+1 pilares de la estrategia de marca, SIEMPRE presentes y en orden fijo: los 4
+# obligatorios (`PILARES_EDITORIALES`) + `reglas` (auxiliar). El bool es el `global` que se
+# etiqueta cuando NO hay documento (con doc manda `es_editorial_global`, el mismo criterio
+# que usa el auto-adjunto).
+_PILARES_ESTRATEGIA: tuple[tuple[str, str, bool], ...] = (
+    ("marca", "Identidad de marca", False),
+    ("voz", "Voz y tono", False),
+    ("tropicalizacion", "Tropicalización MX", True),
+    ("plataforma", "Convenciones de plataforma", True),
+    ("reglas", "Reglas globales", True),
+)
+
+
+async def estrategia(request: Request) -> Response:
+    """`GET /api/texto/estrategia?marca=` -> la estrategia editorial de la marca.
+
+    Forma (CONTRATO con el frontend del rediseño de "Estrategia de marca"):
+      - `marca`: la pedida (puede ser "").
+      - `completitud`: `{completa, faltan, recomendacion}` (misma lógica que `/validacion`).
+      - `pilares`: SIEMPRE los 4+1 en orden fijo (marca, voz, tropicalizacion, plataforma,
+        reglas); cada uno `{clase, titulo, doc_id|null, vacio, global, produccion,
+        sha_actual, sin_publicar, actualizado}`. Sin documento: `doc_id` null y `vacio`
+        true. `vacio` = cuerpo en blanco (mismo criterio que `/validacion`).
+      - `extras`: documentos editoriales del auto-adjunto SIN clase-pilar (p. ej. los
+        patrones medidos), con la misma forma (titulo = el del documento).
+      - `orden_inyeccion`: ids en el ORDEN real de `adjuntos_copy()` para esa marca (lo
+        que se adjunta al copy, capa a capa).
     """
     from ..dominio import generar  # perezoso: generar importa libtexto
 
@@ -584,32 +665,52 @@ async def maquina(request: Request) -> Response:
     punteros = libtexto.producciones()
     shas = libtexto.shas_actuales()
 
-    def estado(doc_id: str) -> dict[str, object]:
-        return libtexto.estado_publicacion(doc_id, punteros=punteros, shas=shas)
-
-    grupos = []
-    for gid, gtitulo, etapas in _ETAPAS_MAQUINA:
-        filas = []
-        for eid, etitulo, doc_id in etapas:
-            if doc_id is None:
-                try:
-                    doc_id = libtexto.prompt_base_de(_ETAPA_PIPELINE[eid])
-                except libtexto.TextoError:
-                    doc_id = libtexto.PIPELINES.get(_ETAPA_PIPELINE[eid], {}).get("prompt_defecto", "")
-            filas.append({"id": eid, "titulo": etitulo, "doc_id": doc_id, **estado(doc_id)})
-        grupos.append({"id": gid, "titulo": gtitulo, "etapas": filas})
-
-    capas = [
-        {
+    def fila_doc(d: libtexto.Documento) -> dict[str, object]:
+        return {
             "doc_id": d.id,
-            "titulo": d.titulo,
-            "clase": d.clase,
-            "orden": i,
-            **estado(d.id),
+            "vacio": not d.cuerpo.strip(),
+            "global": libtexto.es_editorial_global(d),
+            **libtexto.estado_publicacion(d.id, punteros=punteros, shas=shas),
+            "actualizado": d.actualizado,
         }
-        for i, d in enumerate(generar.adjuntos_copy(marca), 1)
+
+    docs = libtexto.editoriales_de_marca(marca)
+    # Primer doc por clase en el orden del auto-adjunto: el que representa al pilar.
+    por_clase: dict[str, libtexto.Documento] = {}
+    for d in docs:
+        por_clase.setdefault(d.clase, d)
+
+    pilares: list[dict[str, object]] = []
+    for clase, titulo, global_defecto in _PILARES_ESTRATEGIA:
+        d = por_clase.get(clase)
+        if d is None:
+            pilares.append({
+                "clase": clase, "titulo": titulo, "doc_id": None, "vacio": True,
+                "global": global_defecto, "produccion": None, "sha_actual": None,
+                "sin_publicar": False, "actualizado": None,
+            })
+        else:
+            pilares.append({"clase": clase, "titulo": titulo, **fila_doc(d)})
+
+    clases_pilar = {clase for clase, _, _ in _PILARES_ESTRATEGIA}
+    extras = [
+        {"clase": d.clase, "titulo": d.titulo, **fila_doc(d)}
+        for d in docs
+        if d.clase not in clases_pilar
     ]
-    return JSONResponse({"grupos": grupos, "capas": capas})
+
+    completitud = {
+        k: v
+        for k, v in libtexto.validacion_editorial(marca).items()
+        if k in ("completa", "faltan", "recomendacion")
+    }
+    return JSONResponse({
+        "marca": marca,
+        "completitud": completitud,
+        "pilares": pilares,
+        "extras": extras,
+        "orden_inyeccion": [d.id for d in generar.adjuntos_copy(marca)],
+    })
 
 
 # --------------------------------------------------------------------------- #
@@ -823,9 +924,11 @@ RUTAS = [
     Route("/api/texto/pipelines/{pid}/preview", pipeline_preview, methods=["GET"]),
     Route("/api/texto/lanzar", lanzar, methods=["POST"]),
     Route("/api/texto/lanzar-archivo", lanzar_archivo, methods=["POST"]),
-    # Publicación (rediseño): catálogo de variables, riel de la máquina y solicitudes.
+    # Publicación (rediseño): catálogo de variables, riel de la máquina (tres máquinas,
+    # ADR 0011), estrategia de marca y solicitudes.
     Route("/api/texto/variables", variables, methods=["GET"]),
     Route("/api/texto/maquina", maquina, methods=["GET"]),
+    Route("/api/texto/estrategia", estrategia, methods=["GET"]),
     Route("/api/texto/solicitudes", solicitudes_listar, methods=["GET"]),
     Route("/api/texto/solicitudes/{sid}/aprobar", solicitud_aprobar, methods=["POST"]),
     Route("/api/texto/solicitudes/{sid}/rechazar", solicitud_rechazar, methods=["POST"]),

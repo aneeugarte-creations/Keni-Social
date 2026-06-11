@@ -20,11 +20,23 @@ from ._semilla import cuerpo_efectivo
 
 __all__ = [
     "editoriales_de_marca",
+    "es_editorial_global",
     "prompt_base_de",
     "editoriales_de_pipeline",
     "previsualizar_pipeline",
     "validacion_editorial",
 ]
+
+
+def es_editorial_global(doc: Documento) -> bool:
+    """True si el documento editorial aplica a TODAS las marcas.
+
+    Un doc es GLOBAL por su clase (`plataforma`/`tropicalizacion`/`reglas`) o por colgar de
+    una carpeta global (`global`, `comun`, ...). Es el MISMO criterio que usa el auto-adjunto
+    (`editoriales_de_marca`); se expone para que la API (estrategia de marca) lo etiquete.
+    """
+    segmentos = doc.carpeta.split("/") if doc.carpeta else []
+    return doc.clase in _CLASES_GLOBALES or any(s in _CARPETAS_GLOBALES for s in segmentos)
 
 
 def editoriales_de_marca(marca: str, *, pipeline: str | None = None) -> list[Documento]:
@@ -54,9 +66,8 @@ def editoriales_de_marca(marca: str, *, pipeline: str | None = None) -> list[Doc
         # `…/<marca>/…` aplica a esa marca; uno bajo `global/` (o comun/general/todas) aplica a
         # TODAS. Se conservan `clase`/`marcas` por retrocompatibilidad con los docs existentes.
         segmentos = doc.carpeta.split("/") if doc.carpeta else []
-        es_global = doc.clase in _CLASES_GLOBALES or any(s in _CARPETAS_GLOBALES for s in segmentos)
         es_de_marca = bool(marca) and (marca in doc.marcas or marca in segmentos)
-        if es_global or es_de_marca:
+        if es_editorial_global(doc) or es_de_marca:
             seleccion.append(doc)
 
     orden = {clase: i for i, clase in enumerate(PILARES_EDITORIALES)}
