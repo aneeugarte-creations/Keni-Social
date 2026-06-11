@@ -154,11 +154,15 @@ def test_previsualizar_pipeline_ensambla_base_y_adjuntos():
 
 def test_previsualizar_pipeline_copy_es_fiel_al_lanzamiento():
     """El preview del pipeline `copy` pasa por la MISMA composición que `lanzar_copy`:
-    instrucción de copy UNIFICADO con el límite más estricto + reglas de imagen adjuntas.
+    instrucción de copy UNIFICADO + reglas de imagen adjuntas.
     Sin `redes_ids` se previsualiza con TODAS las redes (un lanzamiento real siempre las trae)."""
     libtexto.crear("Copy base", tipo="prompt", carpeta="", cuerpo="BASE", rol="copy", pipelines=["copy"])
     prev = libtexto.previsualizar_pipeline("copy", "unotv", "CTX")
-    assert "Este copy se publicará TAL CUAL en estas redes" in prev["prompt_efectivo"]
+    # Con TODAS las redes se mezclan AMPLIAS (Instagram/Facebook) y ESTRECHAS (X): la
+    # instrucción unificada pide DOS versiones del mismo mensaje (`texto` + `texto_corto`),
+    # con la condensada al límite de las estrechas (X = 280).
+    assert "Este copy se publicará en estas redes" in prev["prompt_efectivo"]
+    assert "texto_corto" in prev["prompt_efectivo"]
     assert "280 caracteres" in prev["prompt_efectivo"]  # el más estricto (X) desde el código
     assert any(a["id"] == "editorial/reglas/imagen" for a in prev["adjuntos"])
 
