@@ -541,6 +541,32 @@ def test_alguna_etapa_pipeline_activa_siempre_true(limpio, store_aislado):
     assert config.alguna_etapa_pipeline_activa() is True  # incluso con todas las de IA OFF
 
 
+def test_alguna_etapa_produccion_activa_siempre_true_y_alias(limpio, store_aislado):
+    """El loop de PRODUCCIÓN (ADR 0011 F3) corre siempre bajo la máquina (AVANCE incondicional),
+    y `alguna_etapa_pipeline_activa` es su alias retro (mismo objeto)."""
+    assert config.alguna_etapa_produccion_activa() is True
+    assert config.alguna_etapa_pipeline_activa is config.alguna_etapa_produccion_activa
+    for env in (config.ENV_PIPELINE_COPY, config.ENV_PIPELINE_ARTE):
+        store_aislado.setenv(env, "0")
+    assert config.alguna_etapa_produccion_activa() is True  # Copy/Arte OFF: AVANCE igual barre
+
+
+def test_alguna_etapa_investigacion_activa_gateada_por_seleccion_o_validacion(limpio, store_aislado):
+    """El loop de INVESTIGACIÓN (ADR 0011 F3) solo barre si Selección o Validación están ON; con
+    ambas OFF duerme (nada que admitir ni cribar). Fusión/Ranking viven en el daemon de ingesta."""
+    for env in (
+        config.ENV_PIPELINE_SELECCION, config.ENV_PIPELINE_VALIDACION,
+        config.ENV_PIPELINE_COPY, config.ENV_PIPELINE_ARTE,
+    ):
+        store_aislado.setenv(env, "0")
+    assert config.alguna_etapa_investigacion_activa() is False  # ambas etapas de investigación OFF
+    store_aislado.setenv(config.ENV_PIPELINE_SELECCION, "1")
+    assert config.alguna_etapa_investigacion_activa() is True  # basta Selección ON
+    store_aislado.setenv(config.ENV_PIPELINE_SELECCION, "0")
+    store_aislado.setenv(config.ENV_PIPELINE_VALIDACION, "1")
+    assert config.alguna_etapa_investigacion_activa() is True  # o basta Validación ON
+
+
 # --------------------------------------------------------------------------- #
 # Secretos basados en FICHERO (`*_FILE`, convencion Docker secrets).            #
 # El valor vive en /run/secrets/... (un fichero), NO en la env del contenedor, #

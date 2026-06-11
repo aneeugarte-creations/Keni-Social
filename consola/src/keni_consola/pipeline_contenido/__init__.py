@@ -86,11 +86,17 @@ from ..dominio import qa_editorial as dom_qa
 from ..estados import CLASE_CONTENIDO, ORIGENES_AUTOGEN
 from ._barrido import (
     _ejecutar_barrido,
+    _ejecutar_investigacion,
+    _ejecutar_produccion,
+    _intervalo_investigacion_segundos,
+    _intervalo_produccion_segundos,
     _intervalo_segundos,
     ejecutar_arte,
     ejecutar_avance,
     ejecutar_barrido,
     ejecutar_cd,
+    ejecutar_investigacion,
+    ejecutar_produccion,
     ejecutar_qa,
     iniciar_pipeline,
 )
@@ -280,10 +286,16 @@ __all__ = [
     # barrido / daemon
     "ejecutar_barrido",
     "_ejecutar_barrido",
+    "ejecutar_investigacion",
+    "_ejecutar_investigacion",
+    "ejecutar_produccion",
+    "_ejecutar_produccion",
     "ejecutar_qa",
     "ejecutar_cd",
     "ejecutar_arte",
     "ejecutar_avance",
     "_intervalo_segundos",
+    "_intervalo_investigacion_segundos",
+    "_intervalo_produccion_segundos",
     "iniciar_pipeline",
 ]

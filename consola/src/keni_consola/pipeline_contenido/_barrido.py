@@ -1,8 +1,14 @@
-"""Barrido del pipeline (CI → QA de la fuente → CD → arte) + daemon.
+"""Barrido del pipeline en DOS procesos independientes (ADR 0011 F3) + daemons.
 
-Orquesta las tres fases en orden por marca (rediseño QPC: la criba de la fuente va ANTES del
-copy), bajo un single-flight cross-proceso, y expone el hilo demonio gateado en vivo
-(`iniciar_pipeline`).
+  • INVESTIGACIÓN — caducidad + CI (admisión) → QA de la fuente. Recolecta del pool rankeado,
+    admite por marca y verifica. Loop propio (gate Selección/Validación, lock
+    `pipeline_investigacion`).
+  • PRODUCCIÓN — CD (copy) → arte → avance a revisión. Convierte la historia verificada en
+    pieza. Loop propio (gate siempre-activo bajo la máquina por el AVANCE, lock
+    `pipeline_produccion`).
+
+`iniciar_pipeline` arranca un hilo demonio gateado en vivo por proceso. `ejecutar_barrido`
+(combinado) corre los dos en orden para el disparo a demanda y los tests.
 """
 
 from __future__ import annotations
@@ -31,46 +37,87 @@ from ._qa import lanzar_qa_fuente, temas_sin_qa
 __all__ = [
     "ejecutar_barrido",
     "_ejecutar_barrido",
+    "ejecutar_investigacion",
+    "_ejecutar_investigacion",
+    "ejecutar_produccion",
+    "_ejecutar_produccion",
     "ejecutar_qa",
     "ejecutar_cd",
     "ejecutar_arte",
     "ejecutar_avance",
     "_intervalo_segundos",
+    "_intervalo_investigacion_segundos",
+    "_intervalo_produccion_segundos",
     "iniciar_pipeline",
 ]
 
+# DOS PROCESOS (ADR 0011 F3): el espinazo noticia→pieza son DOS loops independientes, no uno.
+#   • INVESTIGACIÓN — caducidad + CI (admisión) + QA (criba de la fuente). Recolecta, admite y
+#     VERIFICA. Su gate es `alguna_etapa_investigacion_activa` (Selección/Validación) bajo la
+#     máquina; su lock es `pipeline_investigacion`.
+#   • PRODUCCIÓN — CD (copy) + arte + avance a revisión. Convierte la historia verificada en
+#     pieza. Su gate es `alguna_etapa_produccion_activa` (siempre True bajo la máquina: el
+#     AVANCE corre incondicional); su lock es `pipeline_produccion`.
+# Cada loop tiene su propio hilo demonio, cadencia y single-flight, así que se pueden
+# encender/parar y escalar por separado (investigar sin producir, p. ej.). `ejecutar_barrido`
+# (combinado) sigue existiendo para el disparo a demanda y los tests: corre los dos en orden.
+_LOCK_INVESTIGACION = "pipeline_investigacion"
+_LOCK_PRODUCCION = "pipeline_produccion"
 
-def ejecutar_barrido() -> dict[str, Any]:
-    """Un TICK del flujo continuo: CI (admisión) → QA de la fuente → CD (copy de los OK).
 
-    Tres fases EN ORDEN (rediseño QPC), SIN topes por etapa (el volumen lo regula la ADMISIÓN):
-      1) CI: por marca, ADMITE historias solo hasta llenar su cupo en vuelo (gate serial WIP).
-      2) QA: lanza la criba de la FUENTE (`claude -p`) de los temas admitidos sin veredicto.
-         ASÍNCRONA: marca el tema `en_curso` y el `procesar` persiste el veredicto
-         (`no_verificado`/`problema`) al completar; el SIGUIENTE tick (segundos) encadena.
-      3) CD: genera copy SOLO de los temas cuya QA salió `no_verificado` y que aún no tienen copy
-         (`temas_para_copy`). Los `problema` NO generan copy.
+def ejecutar_investigacion() -> dict[str, Any]:
+    """Un TICK del proceso de INVESTIGACIÓN: caducidad + CI (admisión) → QA de la fuente.
 
-    Best-effort: un fallo por marca/tema se loguea y se sigue; si la cola de generación está
-    llena, se corta la fase en curso (el siguiente tick reintenta: backpressure). Devuelve un
-    resumen `{temas, cribados, lanzados}` (para el endpoint/los tests).
+    Recolecta del pool ya fusionado/rankeado, ADMITE por marca solo hasta llenar el cupo en
+    vuelo (gate serial WIP) y lanza la CRIBA de la fuente (`claude -p`) de lo admitido sin
+    veredicto. Best-effort. Devuelve `{temas, cribados}`.
 
-    SINGLE-FLIGHT cross-proceso (advisory lock de Postgres): el daemon y el endpoint a demanda
-    comparten este barrido; su dedup (`_claves_dedup_marca`) es leer-luego-escribir en Python,
-    así que dos barridos solapados podrían ingerir/cribar/generar el MISMO tema dos veces. El
+    SINGLE-FLIGHT cross-proceso (advisory lock): el daemon de investigación y el disparo a
+    demanda comparten este barrido; el dedup (`_claves_dedup_marca`) es leer-luego-escribir en
+    Python, así que dos barridos solapados podrían admitir/cribar el MISMO tema dos veces. El
     lock hace que un segundo barrido concurrente salga de inmediato con un resumen vacío.
     """
     from .. import db
 
-    with db.lock_barrido("pipeline_contenido") as ok:
+    with db.lock_barrido(_LOCK_INVESTIGACION) as ok:
         if not ok:
-            _log.debug("pipeline: otro barrido en curso; se omite este.")
-            return {"temas": [], "cribados": [], "lanzados": [], "artes": [], "avances": []}
-        return _ejecutar_barrido()
+            _log.debug("investigación: otro barrido en curso; se omite este.")
+            return {"temas": [], "cribados": []}
+        return _ejecutar_investigacion()
 
 
-def _ejecutar_barrido() -> dict[str, Any]:
-    """Cuerpo del barrido del pipeline (ya bajo el single-flight de `ejecutar_barrido`)."""
+def ejecutar_produccion() -> dict[str, Any]:
+    """Un TICK del proceso de PRODUCCIÓN: CD (copy) → arte → avance a revisión.
+
+    Genera copy SOLO de los temas verificados (`temas_para_copy`), los ilustra (etapa arte) y
+    avanza los borradores completos a la cola de revisión. Best-effort. Devuelve
+    `{lanzados, artes, avances}`. Single-flight con su propio lock (`pipeline_produccion`):
+    independiente del de investigación, así los dos loops nunca se serializan entre sí.
+    """
+    from .. import db
+
+    with db.lock_barrido(_LOCK_PRODUCCION) as ok:
+        if not ok:
+            _log.debug("producción: otro barrido en curso; se omite este.")
+            return {"lanzados": [], "artes": [], "avances": []}
+        return _ejecutar_produccion()
+
+
+def ejecutar_barrido() -> dict[str, Any]:
+    """Un TICK COMBINADO (investigación + producción) EN ORDEN: para el disparo a demanda y los
+    tests, que esperan el resumen completo `{temas, cribados, lanzados, artes, avances}`.
+
+    En producción real cada proceso corre en su PROPIO hilo (`iniciar_pipeline` arranca los
+    dos); este combinado existe para conservar la entrada única a demanda. Cada mitad toma su
+    propio lock, así que el single-flight sigue siendo por proceso.
+    """
+    inv = ejecutar_investigacion()
+    prod = ejecutar_produccion()
+    return {**inv, **prod}
+
+
+def _ejecutar_investigacion() -> dict[str, Any]:
+    """Cuerpo de INVESTIGACIÓN (ya bajo el single-flight de `ejecutar_investigacion`)."""
     autor = _ref._autor_pipeline()
     maximo = config.pipeline_max()
     # --- Fase 0 · FRESCURA: caduca los temas en vuelo que superaron el TTL. ------------------
@@ -127,8 +174,20 @@ def _ejecutar_barrido() -> dict[str, Any]:
         except Exception:  # noqa: BLE001 -- un fallo de una marca no rompe el barrido
             _log.exception("pipeline: fallo la promoción de historias (CI) de la marca %s", marca)
             continue
-    # --- Fase QA (criba de la fuente) + Fase CD (copy) + Etapa ARTE. -------------------------
+    # --- Fase QA (criba de la fuente). -------------------------------------------------------
     cribados = ejecutar_qa(autor=autor)
+    if temas_nuevos or cribados:
+        _log.info(
+            "investigación: %d tema(s) admitido(s) (CI), %d cribado(s) (QA).",
+            len(temas_nuevos), len(cribados),
+        )
+    return {"temas": temas_nuevos, "cribados": cribados}
+
+
+def _ejecutar_produccion() -> dict[str, Any]:
+    """Cuerpo de PRODUCCIÓN (ya bajo el single-flight de `ejecutar_produccion`)."""
+    autor = _ref._autor_pipeline()
+    # --- Fase CD (copy) + Etapa ARTE + Etapa AVANCE. -----------------------------------------
     lanzados = ejecutar_cd(autor=autor)
     # Etapa de arte (tras copy): ilustra los temas con copy y sin imagen. Gateada por su propio
     # toggle "Generar arte" (KENI_PIPELINE_ARTE) + máquina; si está OFF, devuelve [].
@@ -136,19 +195,20 @@ def _ejecutar_barrido() -> dict[str, Any]:
     # Etapa de AVANCE (tras arte): los borradores COMPLETOS (copy + foto) entran solos a la
     # cola de revisión. Incondicional bajo el maestro KENI_MAQUINA (sin toggle propio).
     avances = ejecutar_avance()
-    if temas_nuevos or cribados or lanzados or artes or avances:
+    if lanzados or artes or avances:
         _log.info(
-            "pipeline: %d tema(s) ingerido(s) (CI), %d cribado(s) (QA), %d copy encolado(s) (CD), "
-            "%d arte(s) (etapa arte), %d avance(s) (a revisión).",
-            len(temas_nuevos), len(cribados), len(lanzados), len(artes), len(avances),
+            "producción: %d copy encolado(s) (CD), %d arte(s) (etapa arte), %d avance(s) (a revisión).",
+            len(lanzados), len(artes), len(avances),
         )
-    return {
-        "temas": temas_nuevos,
-        "cribados": cribados,
-        "lanzados": lanzados,
-        "artes": artes,
-        "avances": avances,
-    }
+    return {"lanzados": lanzados, "artes": artes, "avances": avances}
+
+
+def _ejecutar_barrido() -> dict[str, Any]:
+    """Cuerpo COMBINADO (investigación + producción) SIN locks: para los tests que parchean
+    `_ejecutar_barrido` y esperan el resumen completo en una sola pasada determinista."""
+    inv = _ejecutar_investigacion()
+    prod = _ejecutar_produccion()
+    return {**inv, **prod}
 
 
 def ejecutar_qa(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
@@ -369,45 +429,84 @@ def ejecutar_arte() -> list[dict[str, Any]]:
     return adjuntados
 
 
-# TICK del flujo continuo (constante, NO un ajuste): el pipeline ya no barre "por tandas" cada
-# N minutos; reacciona al ESTADO cada pocos segundos. En cuanto la QA de una pieza termina, el
-# siguiente tick lanza su Copy (latencia entre etapas: segundos, no minutos). El volumen NO lo
-# pone el tick sino la ADMISIÓN (gate serial en vuelo por marca) + el backpressure de la cola;
-# un tick sin trabajo son unas pocas lecturas indexadas a BD.
-_TICK_SEGUNDOS = 15.0
+# TICK del flujo continuo (constante, NO un ajuste): los loops ya no barren "por tandas" cada
+# N minutos; reaccionan al ESTADO cada pocos segundos. En cuanto la QA de una pieza termina, el
+# siguiente tick de producción lanza su Copy (latencia entre etapas: segundos, no minutos). El
+# volumen NO lo pone el tick sino la ADMISIÓN (gate serial en vuelo por marca) + el backpressure
+# de la cola; un tick sin trabajo son unas pocas lecturas indexadas a BD. Cada proceso tiene su
+# propia constante para poder divergir (p. ej. investigar más rápido que producir) sin tocar el
+# otro; hoy ambos son 15 s.
+_TICK_INVESTIGACION_SEGUNDOS = 15.0
+_TICK_PRODUCCION_SEGUNDOS = 15.0
+_TICK_SEGUNDOS = _TICK_INVESTIGACION_SEGUNDOS  # alias retro: cadencia "del pipeline" = investigación.
+
+
+def _intervalo_investigacion_segundos() -> float:
+    """Cadencia del tick de INVESTIGACIÓN (constante; el volumen lo regula la admisión)."""
+    return _TICK_INVESTIGACION_SEGUNDOS
+
+
+def _intervalo_produccion_segundos() -> float:
+    """Cadencia del tick de PRODUCCIÓN (constante; el volumen lo regula la admisión/cola)."""
+    return _TICK_PRODUCCION_SEGUNDOS
 
 
 def _intervalo_segundos() -> float:
-    """Cadencia del tick del flujo continuo (constante; el volumen lo regula la admisión)."""
+    """Alias retro de la cadencia del flujo continuo (= investigación)."""
     return _TICK_SEGUNDOS
 
 
-def iniciar_pipeline(intervalo_segundos: float | None = None) -> threading.Thread:
-    """Arranca el hilo demonio del pipeline de contenido (GATEADO EN VIVO).
+def iniciar_pipeline(
+    intervalo_segundos: float | None = None,
+) -> tuple[threading.Thread, threading.Thread]:
+    """Arranca los DOS hilos demonio del pipeline de contenido (ADR 0011 F3, GATEADOS EN VIVO).
 
     Pensado para el servidor real (`daemons`/`__main__`), NO para `crear_app` (los tests no lo
-    arrancan, igual que el resto de daemons). El hilo arranca SIEMPRE y barre en cada ciclo
-    mientras la máquina (`KENI_MAQUINA`) esté encendida: la etapa de AVANCE (borradores completos
-    → revisión) corre incondicionalmente, así que el daemon nunca se duerme con la máquina ON;
-    cada fase que gasta IA (CI/QA/Copy/Arte) se auto-gatea dentro del barrido por su propio
-    toggle. Apagar/encender en runtime aplica sin reiniciar. El hilo es daemon; un fallo de
-    barrido se loguea y NO lo mata.
+    arrancan, igual que el resto de daemons). Arranca un hilo por proceso:
+      • INVESTIGACIÓN — gate `alguna_etapa_investigacion_activa` (Selección/Validación) bajo la
+        máquina: con ambas etapas OFF el loop duerme (nada que admitir/cribar).
+      • PRODUCCIÓN — gate `alguna_etapa_produccion_activa` (siempre True bajo la máquina: el
+        AVANCE de borradores completos a revisión corre incondicional, así nunca se duerme con
+        la máquina ON). Copy/Arte se auto-gatean dentro del barrido por su propio toggle.
+    Apagar/encender en runtime aplica sin reiniciar. Los hilos son daemon; un fallo de barrido se
+    loguea y NO los mata. Devuelve `(hilo_investigacion, hilo_produccion)`.
     """
-    intervalo = intervalo_segundos if intervalo_segundos is not None else _intervalo_segundos()
+    intervalo_inv = (
+        intervalo_segundos if intervalo_segundos is not None else _intervalo_investigacion_segundos()
+    )
+    intervalo_prod = (
+        intervalo_segundos if intervalo_segundos is not None else _intervalo_produccion_segundos()
+    )
 
-    def bucle() -> None:
+    def bucle_investigacion() -> None:
         daemon_util.bucle_gateado(
-            activo_fn=config.gate_maquina(config.alguna_etapa_pipeline_activa),
-            intervalo_seg_fn=lambda: intervalo,
-            sweep_fn=ejecutar_barrido,
+            activo_fn=config.gate_maquina(config.alguna_etapa_investigacion_activa),
+            intervalo_seg_fn=lambda: intervalo_inv,
+            sweep_fn=ejecutar_investigacion,
             log=_log,
+            nombre="investigacion",
         )
 
-    hilo = threading.Thread(target=bucle, name="pipeline-contenido-daemon", daemon=True)
-    hilo.start()
-    estado = "ACTIVO" if config.maquina_activa() else "EN ESPERA (máquina apagada)"
-    _log.info(
-        "Pipeline de contenido %s, cada %.0f h (max/barrido=%d).",
-        estado, intervalo / 3600.0, config.pipeline_max(),
+    def bucle_produccion() -> None:
+        daemon_util.bucle_gateado(
+            activo_fn=config.gate_maquina(config.alguna_etapa_produccion_activa),
+            intervalo_seg_fn=lambda: intervalo_prod,
+            sweep_fn=ejecutar_produccion,
+            log=_log,
+            nombre="produccion",
+        )
+
+    hilo_inv = threading.Thread(
+        target=bucle_investigacion, name="pipeline-investigacion-daemon", daemon=True
     )
-    return hilo
+    hilo_prod = threading.Thread(
+        target=bucle_produccion, name="pipeline-produccion-daemon", daemon=True
+    )
+    hilo_inv.start()
+    hilo_prod.start()
+    estado = "ACTIVA" if config.maquina_activa() else "EN ESPERA (máquina apagada)"
+    _log.info(
+        "Pipeline de contenido %s — investigación cada %.0fs, producción cada %.0fs (max/barrido=%d).",
+        estado, intervalo_inv, intervalo_prod, config.pipeline_max(),
+    )
+    return hilo_inv, hilo_prod

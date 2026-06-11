@@ -784,17 +784,34 @@ def qa_en_curso_ttl_seg() -> int:
     return _entero(ENV_QA_EN_CURSO_TTL_MIN, QA_EN_CURSO_TTL_MIN_DEF, minimo=5) * 60
 
 
-def alguna_etapa_pipeline_activa() -> bool:
-    """Siempre True bajo el maestro: el daemon del pipeline barre siempre que la máquina
-    (`KENI_MAQUINA`) esté encendida.
+def alguna_etapa_investigacion_activa() -> bool:
+    """Gate del loop de INVESTIGACIÓN (ADR 0011 F3): True si hay trabajo de investigación que
+    considerar bajo la máquina.
+
+    El loop de investigación (caducidad + CI + QA) solo tiene sentido si su admisión o su criba
+    están encendidas: con Selección Y Validación globales OFF no entra nada nuevo ni se criba, y
+    el loop duerme (la caducidad de lo ya en vuelo retoma en cuanto se reactive). El override por
+    marca se aplica DENTRO del barrido (`etapa_activa`), no aquí: basta una marca activa para que
+    el loop barra. Las etapas de Fusión/Ranking viven en el daemon de ingesta, no en este loop.
+    """
+    return etapa_global_activa(ENV_PIPELINE_SELECCION) or etapa_global_activa(ENV_PIPELINE_VALIDACION)
+
+
+def alguna_etapa_produccion_activa() -> bool:
+    """Gate del loop de PRODUCCIÓN (ADR 0011 F3): siempre True bajo la máquina.
 
     La etapa de AVANCE (borradores completos → cola de revisión) corre INCONDICIONALMENTE, así
-    que siempre hay trabajo de pipeline que considerar y el daemon nunca debe quedarse dormido
-    mientras la máquina esté ON. Las fases que sí gastan `claude -p` (CI/QA/Copy/Arte) se
-    auto-gatean DENTRO del barrido por su propio flag global + override por-marca: si están OFF,
-    no hacen nada, pero el barrido igual corre para drenar los borradores completos a revisión.
+    que siempre hay trabajo de producción que considerar y el loop nunca debe quedarse dormido
+    mientras la máquina esté ON. Las fases que sí gastan `claude -p` (Copy/Arte) se auto-gatean
+    DENTRO del barrido por su propio flag global + override por-marca: si están OFF no hacen
+    nada, pero el barrido igual corre para drenar los borradores completos a revisión.
     """
     return True
+
+
+# Alias retro: "alguna etapa del pipeline" = el loop de producción (siempre-activo bajo la
+# máquina). Lo conservan tests y llamadores previos al split en dos procesos (ADR 0011 F3).
+alguna_etapa_pipeline_activa = alguna_etapa_produccion_activa
 
 
 def autogen_arte_activo() -> bool:

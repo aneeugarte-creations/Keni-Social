@@ -854,6 +854,36 @@ def test_solo_noticias_promueve_cluster_qa_saltada_cd_no(entorno, monkeypatch):
     assert repos.obtener_noticia_cluster("c1")["estado"] == "usado"
 
 
+def test_dos_loops_investigacion_y_produccion_separan_fases(entorno, monkeypatch):
+    """ADR 0011 F3: `ejecutar_investigacion` cubre CI+QA y `ejecutar_produccion` CD+arte+avance.
+
+    El barrido combinado (`_ejecutar_barrido`) es la unión exacta de ambos, así el disparo a
+    demanda y los tests siguen viendo el resumen completo aunque en producción cada proceso
+    corra en su propio hilo/lock/cadencia.
+    """
+    monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
+    monkeypatch.delenv("KENI_PIPELINE_VALIDACION", raising=False)  # QA saltada
+    monkeypatch.delenv("KENI_PIPELINE_COPY", raising=False)  # Copy off
+    monkeypatch.setenv("KENI_PIPELINE_MAX", "5")
+    _mock_lanzar_copy(monkeypatch)
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    _sembrar_cluster("c1", titulo="Historia caliente", score=0.8)
+
+    # INVESTIGACIÓN: admite (CI) + criba (QA). Solo expone {temas, cribados}.
+    inv = pc._ejecutar_investigacion()
+    assert set(inv) == {"temas", "cribados"}
+    assert len(inv["temas"]) == 1
+    assert any(t["titulo"] == "Historia caliente" for t in pc.temas_pipeline())
+
+    # PRODUCCIÓN: copy + arte + avance. Solo expone {lanzados, artes, avances}.
+    prod = pc._ejecutar_produccion()
+    assert set(prod) == {"lanzados", "artes", "avances"}
+
+    # El combinado es la unión de las claves de ambos procesos.
+    combinado = pc._ejecutar_barrido()
+    assert set(combinado) == {"temas", "cribados", "lanzados", "artes", "avances"}
+
+
 def test_promover_clusters_top_n_por_score(entorno, monkeypatch):
     """`promover_clusters_marca` promueve las top-N historias por score y las marca usado."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
