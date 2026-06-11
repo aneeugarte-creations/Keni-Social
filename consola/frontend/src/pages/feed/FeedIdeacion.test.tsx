@@ -191,11 +191,11 @@ describe("FeedIdeacion · feed de ideación interno", () => {
       const rejilla = screen.getByRole("feed");
       expect(rejilla.className).toContain("grid-cols-2");
       expect(rejilla.className).not.toContain("grid-cols-5");
-      // El stepper "por fila" vive en el panel lateral de ajustes (reparto canónico de
-      // cabecera) y NO miente: enseña efectivas/preferidas ("2/5"), no un 5 falso.
-      fireEvent.click(screen.getByRole("button", { name: "Ajustes de la página" }));
-      expect(screen.getByRole("group", { name: "Piezas por fila" })).toBeInTheDocument();
-      expect(screen.getByText("2/5")).toBeInTheDocument();
+      // El stepper "por fila" vive directo en la barra (control de vista tipo zoom, no un
+      // ajuste) y enseña la PREFERENCIA a secas ("5"); el acote por ancho va en title/sr-only.
+      const grupo = screen.getByRole("group", { name: "Piezas por fila" });
+      expect(within(grupo).getByText("5")).toBeInTheDocument();
+      expect(within(grupo).queryByText("2/5")).not.toBeInTheDocument();
     } finally {
       if (orig) Object.defineProperty(HTMLElement.prototype, "clientWidth", orig);
       else delete (HTMLElement.prototype as { clientWidth?: unknown }).clientWidth;

@@ -23,14 +23,13 @@
  *  - El alta de material la implementa el Flujo A (acción de alta): este feed NO la duplica.
  */
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Columns3, Minus, Plus, RefreshCw } from "lucide-react";
+import { Minus, Plus, RefreshCw } from "lucide-react";
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
-import { AjustesPagina } from "@/components/layout/AjustesPagina";
 import { AccionesPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Button } from "@/components/ui/button";
@@ -405,9 +404,8 @@ export default function FeedIdeacion() {
     void queryClient.invalidateQueries({ queryKey: [...CLAVE_PUBLICACIONES, "conteo-feed"] });
   };
 
-  // El número del stepper "por fila" NO miente: cuando el ancho real acota la preferencia,
-  // enseña "efectivas/preferidas" (2/5) con la explicación en title + sr-only, en vez de
-  // esconder la verdad en un tooltip sobre un span no enfocable.
+  // El número del stepper "por fila" es la PREFERENCIA, a secas (nada de "2/5"): si el
+  // ancho real acota las columnas efectivas, la explicación va en title + sr-only.
   const topado = colsEfectivas < columnas;
   const valorColumnas = (
     <span
@@ -415,10 +413,10 @@ export default function FeedIdeacion() {
       title={topado ? `Mostrando ${colsEfectivas} de ${columnas} por el ancho disponible` : undefined}
       className="min-w-5 px-0.5 text-center text-xs font-medium tabular-nums"
     >
-      {topado ? `${colsEfectivas}/${columnas}` : columnas}
+      {columnas}
       <span className="sr-only">
         {topado
-          ? ` (mostrando ${colsEfectivas} de ${columnas} por el ancho disponible)`
+          ? ` por fila (mostrando ${colsEfectivas} por el ancho disponible)`
           : " por fila"}
       </span>
     </span>
@@ -438,49 +436,38 @@ export default function FeedIdeacion() {
     <div ref={rootRef}>
       <AccionesPagina>
         <div className="flex items-center gap-1">
-          {/* Reparto canónico de cabecera: AJUSTES (densidad del feed) al panel lateral,
-              ACCIONES (Actualizar) al menú "⋮". */}
-          <AjustesPagina
-            titulo="Ajustes del feed"
-            descripcion="Preferencias de esta vista en este dispositivo."
-          >
-            <div className="space-y-1.5">
-              <div role="group" aria-label="Piezas por fila" className="flex items-center gap-2">
-                <Columns3 className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                <span className="text-sm font-medium">Piezas por fila</span>
-                <span className="ml-auto flex items-center gap-1">
-                  <Tooltip label="Menos por fila">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                      onClick={() => ajustarColumnas(-1)}
-                      disabled={columnas <= COLUMNAS_MIN}
-                      aria-label="Menos por fila"
-                    >
-                      <Minus className="h-4 w-4" />
-                    </Button>
-                  </Tooltip>
-                  {valorColumnas}
-                  <Tooltip label="Más por fila">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                      onClick={() => ajustarColumnas(1)}
-                      disabled={columnas >= COLUMNAS_MAX}
-                      aria-label="Más por fila"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </Tooltip>
-                </span>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Cuántos posts entran en cada fila del feed (se acota al ancho disponible).
-              </p>
-            </div>
-          </AjustesPagina>
+          {/* "Por fila" directo en la barra: no es un ajuste sino un control de vista tipo
+              zoom, de uso constante mientras se lee el feed. Sin icono: el grupo rotulado
+              (aria-label) + los steppers se explican solos. */}
+          <div role="group" aria-label="Piezas por fila" className="flex items-center gap-1">
+            <Tooltip label="Menos por fila">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                onClick={() => ajustarColumnas(-1)}
+                disabled={columnas <= COLUMNAS_MIN}
+                aria-label="Menos por fila"
+              >
+                <Minus className="h-4 w-4" />
+              </Button>
+            </Tooltip>
+            {valorColumnas}
+            <Tooltip label="Más por fila">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                onClick={() => ajustarColumnas(1)}
+                disabled={columnas >= COLUMNAS_MAX}
+                aria-label="Más por fila"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </Tooltip>
+          </div>
+          {/* Frontera con el menú: acción de otra naturaleza (refresco, no densidad). */}
+          <span aria-hidden="true" className="mx-1 h-4 w-px bg-border" />
           {/* Actualizar (el verbo de la casa): se deshabilita SOLO durante un refresco
               real, no en cada página del scroll infinito. */}
           <MenuAcciones>
