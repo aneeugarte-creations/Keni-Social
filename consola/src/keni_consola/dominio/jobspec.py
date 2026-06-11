@@ -89,6 +89,13 @@ PROC_INSUMOS = "insumos"
 # tabular (.xlsx/.csv) sigue siendo SINCRONO en el back (no usa claude); solo el camino IA, que
 # antes ejecutaba `claude -p` en la peticion, se ENCOLA al worker (el back no tiene claude).
 PROC_IMPORT_CALENDARIO = "import-calendario"
+# Crítica IA (post-aprobación, con VISIÓN): tras los dos OK humanos, `claude -p` critica la pieza
+# (arte sintético, coherencia imagen↔texto, sustancia, rigor, hashtags, voz) y VOTA el nivel
+# "Crítica IA" de la cadena. El worker baja el arte de S3 a un dir temporal (`prefetch_s3` +
+# `dir_temporal`, igual que la importación de parrilla) para que claude lo LEA. El post-procesado
+# parsea el veredicto JSON y, vía `repos`, aprueba el nivel IA (→ se programa sola) o lo rechaza
+# con un comentario sin resolver (→ frena y queda en el feed). Solo el `publicacion_id` viaja.
+PROC_CRITICA_IA = "critica-ia"
 
 # ------------------------------------------------------------------------------------------- #
 # Jobs de PROCESO (no-claude): el SEAM del motor de video (Ola VIDEO).                         #
@@ -350,6 +357,16 @@ def construir_import_calendario(
     }
 
 
+def construir_critica_ia(*, publicacion_id: str) -> dict[str, Any]:
+    """Spec del post-procesado de la CRÍTICA IA: parsea el veredicto y vota el nivel IA.
+
+    `publicacion_id` es la pieza (`plataforma_id`) cuyo nivel "Crítica IA" se decide. El worker
+    reconstruye el callback (que toca `repos`) vía `dominio.critica_ia`; no lleva más estado: la
+    pieza, su cadena y su contenido se releen frescos en el worker al aplicar el veredicto.
+    """
+    return {"kind": PROC_CRITICA_IA, "publicacion_id": publicacion_id}
+
+
 def construir(
     *,
     prompt: str,
@@ -516,6 +533,15 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
 
         return importador_calendario.construir_procesar_import(
             marca_defecto=p.get("marca_defecto", "") or "", autor=autor,
+        )
+
+    if kind == PROC_CRITICA_IA:
+        # Import perezoso: el factory toca BD (`repos`, `auto_programar`), no cabe en este modulo
+        # de dominio puro. Vota el nivel "Crítica IA" de la cadena segun el veredicto de claude.
+        from . import critica_ia as dom_critica
+
+        return dom_critica.construir_procesar_critica_ia(
+            publicacion_id=p["publicacion_id"]
         )
 
     if kind == PROC_QA_FUENTE:

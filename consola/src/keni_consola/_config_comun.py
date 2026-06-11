@@ -293,6 +293,16 @@ ENV_AUTOGEN_ARTE_MAX = "KENI_AUTOGEN_ARTE_MAX"
 # aprobado => programado es el flujo deseado. `KENI_AUTO_PROGRAMAR=0` lo apaga (kill switch).
 ENV_AUTO_PROGRAMAR = "KENI_AUTO_PROGRAMAR"
 
+# Crítica IA: un nivel automático "Crítica IA" se AÑADE AL FINAL de la cadena del feed (detrás
+# de los dos OK humanos). Cuando los humanos cierran su parte, un `claude -p` con VISIÓN critica
+# la pieza (arte sintético en marca periodística, coherencia imagen↔texto, sustancia, rigor,
+# hashtags, voz) y vota ese nivel: aprueba → la pieza se programa sola; detecta un problema →
+# DISLIKE de IA + comentario sin resolver, que frena la programación y deja la pieza en el feed
+# para que un humano la corrija. CONSERVADOR por defecto (OFF): sin `KENI_CRITICA_IA` el flujo es
+# el de hoy (dos OK humanos → programado). El humano siempre tiene la última palabra (al editar
+# se reinicia la cadena; un coordinador puede `forzar`).
+ENV_CRITICA_IA = "KENI_CRITICA_IA"
+
 # Reaper de generaciones zombi: una generacion `ejecutando` cuyo proceso murio (reinicio/
 # OOM/cuelgue) queda colgada para siempre. El reaper la cierra como `error` pasada una
 # antigüedad MUY superior al wall-timeout (asi nunca mata una viva). Siempre activo.

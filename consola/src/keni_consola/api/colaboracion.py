@@ -373,7 +373,9 @@ def montar_cadena_aprobacion(
     """
     if solo_si_ausente and repos.existe_cadena_aprobacion(plataforma_id):
         return False
-    cargos = [colaboracion.cargo_requerido_para(e) for e in etiquetas] if con_cargos else None
+    # Cargo por nivel: el organigrama si `con_cargos`; SIEMPRE el cargo reservado del nivel
+    # "Crítica IA" (asi ninguna persona puede decidirlo por el feed, lo vota solo el critico).
+    cargos = [colaboracion.cargo_de_nivel(e, con_cargos=con_cargos) for e in etiquetas]
     repos.crear_cadena_aprobacion(
         plataforma_id=plataforma_id,
         contenido_id=plat.get("contenido_id", "") or "",

@@ -7,15 +7,20 @@
  *   - El desenlace: "Lista para publicar" (cadena aprobada) · "Rechazada" (vuelve a redacción) ·
  *     o cuántos OK faltan.
  *
- * NO se muestra el veredicto de IA (QA Editorial): de cara al equipo, menos IA — el feed enseña
- * solo decisiones humanas y lo que falta. El nivel QA sigue EXISTIENDO en la cadena (lo filtramos
- * de los "humanos"), solo no se pinta como badge.
+ * NO se muestra el veredicto de la PRE-aprobación de IA (QA Editorial): de cara al equipo, menos
+ * IA — el feed enseña solo decisiones humanas y lo que falta. El nivel QA sigue EXISTIENDO en la
+ * cadena (lo filtramos de los "humanos"), solo no se pinta como badge.
+ *
+ * SÍ se muestra, en cambio, el estado de la CRÍTICA IA (nivel automático AL FINAL, tras los dos
+ * OK humanos): "En crítica IA…" mientras el crítico revisa, y un aviso si frenó la pieza. Es la
+ * última red antes de programar; el equipo necesita verla (y su comentario, vía `sinResolver`).
+ * Ambos niveles automáticos se EXCLUYEN del conteo de OK humanos.
  *
  * Componente PURO de presentación: sin estado, sin mutaciones, sin sesión. El gate (no apruebas
  * tu propia pieza, "otro par de ojos") lo resuelven el backend y `elegibilidadOK` (sobre el botón
  * de la fila de acciones). NO crea backend.
  */
-import { Check, MessageSquare, ThumbsDown, ThumbsUp } from "lucide-react";
+import { Bot, Check, MessageSquare, ThumbsDown, ThumbsUp } from "lucide-react";
 
 import { plural } from "@/lib/formato";
 import type { CadenaAprobacion as TCadena, NivelAprobacion } from "@/types";
@@ -23,10 +28,19 @@ import type { CadenaAprobacion as TCadena, NivelAprobacion } from "@/types";
 import { umbralDislikes } from "./aprobacion";
 import { TEXTO_AVISO, TEXTO_ERROR, TEXTO_OK } from "./formato";
 
-/** El nivel automático de IA (QA Editorial) se reconoce por su etiqueta reservada: se EXCLUYE del
- *  conteo de OK humanos (no se pinta su veredicto). */
+/** PRE-aprobación de IA (QA Editorial), por su etiqueta reservada: se EXCLUYE del conteo de OK
+ *  humanos y no se pinta su veredicto (menos IA de cara al equipo). */
 const ETIQUETA_QA = "qa editorial";
-const esNivelIA = (n: NivelAprobacion) => n.etiqueta.trim().toLowerCase() === ETIQUETA_QA;
+const esNivelQA = (n: NivelAprobacion) => n.etiqueta.trim().toLowerCase() === ETIQUETA_QA;
+
+/** CRÍTICA IA (nivel automático AL FINAL): se reconoce por su cargo reservado (espejo del backend
+ *  `colaboracion.CARGO_IA_CRITICO`). Se EXCLUYE del conteo humano, pero SÍ se muestra su estado. */
+const CARGO_IA_CRITICO = "ia-critico";
+const esCriticaIA = (n: NivelAprobacion) =>
+  (n.cargo_requerido ?? "").trim().toLowerCase() === CARGO_IA_CRITICO;
+
+/** Cualquier nivel AUTOMÁTICO (pre-aprobación QA o crítica final): fuera del conteo de OK humanos. */
+const esNivelAutomatico = (n: NivelAprobacion) => esNivelQA(n) || esCriticaIA(n);
 
 export function CadenaAprobacion({
   cadena,
@@ -37,10 +51,16 @@ export function CadenaAprobacion({
   sinResolver?: number;
 }) {
   const niveles = [...cadena.niveles].sort((a, b) => a.nivel - b.nivel);
-  const humanos = niveles.filter((n) => !esNivelIA(n));
+  const humanos = niveles.filter((n) => !esNivelAutomatico(n));
   const okDados = humanos.filter((n) => n.decision === "aprobado");
   const disDados = humanos.filter((n) => n.decision === "rechazado");
   const totalOK = humanos.length || 1;
+  // Crítica IA: existe solo si el flag la añadió. Su estado se enseña cuando los humanos ya
+  // cerraron su parte (entonces el crítico está revisando / ya votó); antes no se anuncia.
+  const ia = niveles.find(esCriticaIA);
+  const humanosOk = humanos.length > 0 && humanos.every((n) => n.decision === "aprobado");
+  const criticaEnCurso = !!ia && humanosOk && ia.decision === "pendiente";
+  const criticaFreno = !!ia && ia.decision === "rechazado";
   // Dos dislikes (de dos personas) rechazan la pieza; la regla vive en `aprobacion.ts`
   // (fuente única, junto a `esDislikeDecisivo`).
   const umbralDislike = umbralDislikes(cadena);
@@ -83,6 +103,21 @@ export function CadenaAprobacion({
             · {disDados.map((n) => n.decisor_nombre || "alguien").join(", ")}
           </span>
         </div>
+      )}
+
+      {/* Crítica IA (última red antes de programar): en curso o frenó la pieza. El detalle del
+          problema llega como comentario sin resolver (línea de abajo). */}
+      {criticaEnCurso && (
+        <p className="mt-2 flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Bot className="h-3.5 w-3.5 animate-pulse" aria-hidden="true" />
+          En crítica IA…
+        </p>
+      )}
+      {criticaFreno && (
+        <p className={`mt-2 flex items-center gap-1.5 text-sm font-medium ${TEXTO_AVISO}`}>
+          <Bot className="h-3.5 w-3.5" aria-hidden="true" />
+          La crítica IA frenó esta pieza; revisa el comentario.
+        </p>
       )}
 
       {/* Desenlace de la cadena. */}

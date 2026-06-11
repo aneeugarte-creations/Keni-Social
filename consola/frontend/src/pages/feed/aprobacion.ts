@@ -8,9 +8,14 @@
  */
 import type { CadenaAprobacion, NivelAprobacion } from "@/types";
 
-/** El nivel automático de IA (QA Editorial) se reconoce por su etiqueta reservada. */
+/** Niveles AUTOMÁTICOS, fuera del flujo del OK humano: la PRE-aprobación QA (por su etiqueta) y la
+ *  CRÍTICA IA final (por su cargo reservado, espejo de `colaboracion.CARGO_IA_CRITICO`). Cuando el
+ *  nivel ACTUAL es uno de estos, el botón de OK humano no aplica (lo decide la máquina). */
 const ETIQUETA_QA = "qa editorial";
-const esNivelIA = (n: NivelAprobacion) => n.etiqueta.trim().toLowerCase() === ETIQUETA_QA;
+const CARGO_IA_CRITICO = "ia-critico";
+const esNivelIA = (n: NivelAprobacion) =>
+  n.etiqueta.trim().toLowerCase() === ETIQUETA_QA ||
+  (n.cargo_requerido ?? "").trim().toLowerCase() === CARGO_IA_CRITICO;
 
 export interface Elegibilidad {
   /** ¿Puede ESTE usuario dar su OK ahora mismo? (habilita el botón "Me gusta"). */

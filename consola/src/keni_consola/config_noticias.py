@@ -15,6 +15,7 @@ from ._config_comun import (
     ENV_AFP_CLIENT_ID,
     ENV_AFP_CLIENT_SECRET,
     ENV_AUTO_PROGRAMAR,
+    ENV_CRITICA_IA,
     ENV_CLASIFICAR_MARCA_IA,
     ENV_MARCAS_ACTIVAS,
     ENV_MARCA_NOTICIAS,
@@ -905,6 +906,17 @@ def auto_programar_activo() -> bool:
     if not crudo:
         return True
     return crudo not in _FALSOS
+
+
+def critica_ia_activa() -> bool:
+    """True si la cadena del feed lleva el nivel "Crítica IA" al final (`KENI_CRITICA_IA`).
+
+    Def OFF (conservador): sin el flag, el flujo es el de hoy (dos OK humanos → programado). Con
+    el flag, `enviar_a_revision` añade un tercer nivel automático tras los humanos; al cerrar los
+    humanos su parte, se encola un `claude -p` con visión que critica la pieza y vota ese nivel.
+    Respeta precedencia store>env>defecto; `KENI_CRITICA_IA=1`/`on`/`sí` lo enciende.
+    """
+    return _crudo(ENV_CRITICA_IA).lower() in _VERDADEROS
 
 
 # --------------------------------------------------------------------------- #

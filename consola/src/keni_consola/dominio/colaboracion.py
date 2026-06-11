@@ -155,7 +155,7 @@ def contar_aprobaciones_humanas(cadena: list[dict[str, Any]]) -> int:
         1
         for n in cadena
         if n.get("decision") == DECISION_APROBADO
-        and (n.get("decisor_id") or "") not in ("", DECISOR_AUTO_ID)
+        and (n.get("decisor_id") or "") not in ("", DECISOR_AUTO_ID, DECISOR_CRITICA_ID)
     )
 
 
@@ -310,6 +310,70 @@ def decidir(
 # Identidad reservada del decisor AUTOMATICO (trazabilidad: la UI puede pintarlo distinto).
 DECISOR_AUTO_ID = "auto"
 DECISOR_AUTO_NOMBRE = "Pre-aprobación automática"
+
+# --------------------------------------------------------------------------- #
+# Nivel "Crítica IA" (post-aprobacion): el critico con vision vota AL FINAL     #
+# --------------------------------------------------------------------------- #
+#
+# A diferencia de la PRE-aprobacion de arriba (auto-aprueba niveles de bajo riesgo ANTES de los
+# humanos), la Critica IA es un nivel que se anade AL FINAL de la cadena (detras de los dos OK
+# humanos), gateado por `KENI_CRITICA_IA`. Cuando los humanos cierran su parte, un `claude -p`
+# con vision critica la pieza y VOTA este nivel: aprueba => la pieza se programa; rechaza =>
+# dislike de IA + comentario sin resolver que frena la programacion. El humano tiene la ultima
+# palabra (al editar se reinicia la cadena; un coordinador puede `forzar`).
+#
+# El nivel se MARCA con un `cargo_requerido` reservado (`CARGO_IA_CRITICO`) que ningun cargo
+# humano satisface: asi la regla de cargos existente (`decidir` + `cargo_satisface`) impide que
+# una persona lo decida por el feed, y el front/worker lo identifican por ese mismo marcador.
+ETIQUETA_CRITICA_IA = "Crítica IA"
+CARGO_IA_CRITICO = "ia-critico"
+DECISOR_CRITICA_ID = "ia-critico"
+DECISOR_CRITICA_NOMBRE = "Crítica IA"
+
+
+def es_nivel_critica_ia(nivel: dict[str, Any]) -> bool:
+    """True si `nivel` es el nivel automatico "Crítica IA" (marcado por su cargo reservado)."""
+    return (nivel.get("cargo_requerido") or "").strip().lower() == CARGO_IA_CRITICO
+
+
+def es_etiqueta_critica_ia(etiqueta: str) -> bool:
+    """True si la etiqueta nombra al nivel automatico "Crítica IA" (comparacion laxa)."""
+    return (etiqueta or "").strip().lower() == ETIQUETA_CRITICA_IA.strip().lower()
+
+
+def cargo_de_nivel(etiqueta: str, *, con_cargos: bool) -> str:
+    """Cargo a sellar en un nivel segun su etiqueta ("" = sin requisito).
+
+    El nivel "Crítica IA" SIEMPRE lleva el cargo reservado `CARGO_IA_CRITICO` (aunque la cadena
+    no exija cargos humanos), para que la regla de cargos impida que una persona lo decida. Los
+    demas niveles llevan el cargo del organigrama solo si `con_cargos` (Coordinación→coordinador…).
+    """
+    if es_etiqueta_critica_ia(etiqueta):
+        return CARGO_IA_CRITICO
+    return cargo_requerido_para(etiqueta) if con_cargos else ""
+
+
+def nivel_critica_ia(cadena: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """El nivel "Crítica IA" de la cadena, o None si la cadena no lo lleva (flag OFF)."""
+    for nivel in cadena:
+        if es_nivel_critica_ia(nivel):
+            return nivel
+    return None
+
+
+def humanos_aprobados_ia_pendiente(cadena: list[dict[str, Any]]) -> bool:
+    """True si TODOS los niveles humanos estan aprobados y el nivel IA sigue PENDIENTE.
+
+    Es la condicion que dispara el encolado del critico: los dos OK humanos ya estan, y solo
+    falta que la Critica IA vote. Si no hay nivel IA (flag OFF) devuelve False (no aplica).
+    """
+    ia = nivel_critica_ia(cadena)
+    if ia is None or ia.get("decision") != DECISION_PENDIENTE:
+        return False
+    humanos = [n for n in cadena if not es_nivel_critica_ia(n)]
+    return bool(humanos) and all(
+        n.get("decision") == DECISION_APROBADO for n in humanos
+    )
 
 # --------------------------------------------------------------------------- #
 # ROLES en la cadena: cargo requerido por nivel (item C)                       #

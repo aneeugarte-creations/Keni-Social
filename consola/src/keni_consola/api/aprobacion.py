@@ -110,6 +110,14 @@ async def _decidir(request: Request, decision: str) -> Response:
         return JSONResponse(
             {"error": "Esta publicación no está en revisión."}, status_code=409
         )
+    # El nivel "Crítica IA" lo vota SOLO el critico automatico: nadie lo decide a mano por el feed
+    # (un coordinador que quiera saltarse el critico usa `forzar`). Mensaje claro en vez del 409
+    # generico de cargo. Pasa la decision humana al SIGUIENTE par de ojos, no a la maquina.
+    if colaboracion.es_nivel_critica_ia(nivel):
+        return JSONResponse(
+            {"error": "La crítica IA decide este paso automáticamente; espera su veredicto."},
+            status_code=409,
+        )
 
     # El autor de la pieza es quien la mando a revision (autor_id de la publicacion).
     autor_pieza_id = pub.get("autor_id", "") or ""
@@ -143,6 +151,9 @@ async def _decidir(request: Request, decision: str) -> Response:
     actualizada = _reflejar_estado_pieza(publicacion_id, nivel_decidido)
     if actualizada is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+    # Si esta decision cerro la parte HUMANA y queda el nivel IA pendiente, encola al critico
+    # (best-effort). La pieza queda `en_revision` hasta que el critico vote; no se programa aun.
+    _encolar_critica_si_corresponde(publicacion_id)
     return _responder_aprobada(publicacion_id, actualizada)
 
 
@@ -238,10 +249,54 @@ async def enviar_a_revision(request: Request) -> Response:
     # re-enviar a revision tras un rechazo debe arrancar limpio, no heredar decisiones viejas.
     # La carrera "dos cadenas" la cierra el CAS de arriba (solo UN envio gana la transicion
     # borrador->en_revision y llega aqui); el `solo_si_ausente` queda para otros llamantes.
-    montar_cadena_aprobacion(
-        publicacion_id, plat or {}, colaboracion.cadena_simple(), con_cargos=False
-    )
+    # Cadena por defecto del feed: los dos OK humanos y, si `KENI_CRITICA_IA` esta on, el nivel
+    # automatico "Crítica IA" AL FINAL (lo vota el critico con vision tras cerrar los humanos).
+    etiquetas = colaboracion.cadena_simple()
+    if config.critica_ia_activa():
+        etiquetas = [*etiquetas, colaboracion.ETIQUETA_CRITICA_IA]
+    montar_cadena_aprobacion(publicacion_id, plat or {}, etiquetas, con_cargos=False)
     return JSONResponse({"publicacion": publicacion_a_dict(actualizada)})
+
+
+def _encolar_critica_si_corresponde(publicacion_id: str) -> None:
+    """Tras una decision humana, encola la Crítica IA si toca (humanos OK, nivel IA pendiente).
+
+    Best-effort y idempotente: solo dispara cuando todos los niveles humanos estan aprobados y el
+    nivel "Crítica IA" sigue pendiente (`humanos_aprobados_ia_pendiente`). El lanzador
+    (`dominio.critica_ia`) usa la idempotencia de `generar.lanzar` para no encolar dos veces si la
+    ruta se reintenta. Nunca rompe la respuesta de aprobacion: la decision humana ya quedo escrita.
+    """
+    if not config.critica_ia_activa():
+        return
+    cadena = repos.listar_aprobaciones(publicacion_id)
+    if not colaboracion.humanos_aprobados_ia_pendiente(cadena):
+        return
+    try:
+        from ..dominio import critica_ia
+
+        critica_ia.lanzar_para_publicacion(publicacion_id)
+    except Exception:  # noqa: BLE001 — encolar la critica es secundario al OK ya registrado.
+        _log.exception("No se pudo encolar la crítica IA para %s.", publicacion_id)
+
+
+def _resolver_comentarios_critica_ia(publicacion_id: str) -> None:
+    """Resuelve los comentarios SIN resolver que dejó la Crítica IA (override de coordinación).
+
+    Best-effort: cierra la objeción del crítico para que el gate B no siga frenando la
+    programación cuando un coordinador FUERZA la pieza a pesar del dislike de IA.
+    """
+    plat = repos.obtener_contenido_plataforma(publicacion_id)
+    contenido_id = (plat or {}).get("contenido_id", "") or ""
+    if not contenido_id:
+        return
+    for c in repos.listar_comentarios(contenido_id):
+        if c.get("resuelto"):
+            continue
+        if (c.get("autor_id") or "") == colaboracion.DECISOR_CRITICA_ID:
+            try:
+                repos.actualizar_comentario(c["id"], {"resuelto": True})
+            except Exception:  # noqa: BLE001 — resolver es best-effort; el override ya se aplicó
+                _log.exception("No se pudo resolver el comentario IA %s.", c.get("id"))
 
 
 async def aprobar(request: Request) -> Response:
@@ -336,7 +391,16 @@ async def forzar(request: Request) -> Response:
     ahora = ahora_iso()
     nivel_decidido: dict[str, Any] | None = None
     for nivel in repos.listar_aprobaciones(publicacion_id):
-        if nivel.get("decision") != DECISION_PENDIENTE:
+        # Aprueba los niveles PENDIENTES y, además, OVERRIDE de un DISLIKE de la Crítica IA
+        # (su nivel rechazado): "publicar a pesar de la IA" es decisión humana de coordinación.
+        # Los dislikes HUMANOS se respetan (no se voltean): el override salta la cadena, no
+        # borra la objeción de una persona.
+        pendiente = nivel.get("decision") == DECISION_PENDIENTE
+        ia_rechazada = (
+            colaboracion.es_nivel_critica_ia(nivel)
+            and nivel.get("decision") == DECISION_RECHAZADO
+        )
+        if not pendiente and not ia_rechazada:
             continue
         nivel_decidido = repos.actualizar_aprobacion(
             nivel["id"],
@@ -348,6 +412,9 @@ async def forzar(request: Request) -> Response:
                 "decidido_en": ahora,
             },
         )
+    # El override de la Crítica IA también CIERRA su objeción: resuelve los comentarios sin
+    # resolver que dejó el crítico, para que el gate B no siga frenando la programación.
+    _resolver_comentarios_critica_ia(publicacion_id)
     sello = nivel_decidido or {
         "decisor_id": decisor_id,
         "decisor_nombre": decisor_nombre,

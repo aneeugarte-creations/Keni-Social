@@ -432,6 +432,7 @@ from .config_noticias import (  # noqa: F401
     alguna_etapa_produccion_activa,
     auto_programar_activo,
     autogen_arte_activo,
+    critica_ia_activa,
     clasificar_marca_ia,
     marca_noticias,
     marcas_activas,

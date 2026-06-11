@@ -396,3 +396,87 @@ def test_decidir_admin_ignora_el_cargo_requerido():
         autor_pieza_id="u1", cargo_decisor="redactor",
     )
     assert error is None and campos is not None
+
+
+# --------------------------------------------------------------------------- #
+# Nivel "Crítica IA" (post-aprobacion): marcador, deteccion y disparo          #
+# --------------------------------------------------------------------------- #
+
+
+def _nivel_ia(decision: str = "pendiente") -> dict[str, object]:
+    return {
+        "id": "ia",
+        "nivel": 3,
+        "decision": decision,
+        "etiqueta": colaboracion.ETIQUETA_CRITICA_IA,
+        "decisor_id": "",
+        "cargo_requerido": colaboracion.CARGO_IA_CRITICO,
+    }
+
+
+def test_es_nivel_critica_ia_por_su_cargo_reservado():
+    assert colaboracion.es_nivel_critica_ia(_nivel_ia()) is True
+    assert colaboracion.es_nivel_critica_ia(_nivel("a", 1)) is False
+
+
+def test_es_etiqueta_critica_ia_laxa():
+    assert colaboracion.es_etiqueta_critica_ia("crítica ia") is True
+    assert colaboracion.es_etiqueta_critica_ia(colaboracion.ETIQUETA_CRITICA_IA) is True
+    assert colaboracion.es_etiqueta_critica_ia("Coordinación") is False
+
+
+def test_nivel_critica_ia_lo_encuentra_o_none():
+    cadena = [_nivel("a", 1, "aprobado"), _nivel_ia()]
+    assert colaboracion.nivel_critica_ia(cadena)["id"] == "ia"
+    assert colaboracion.nivel_critica_ia([_nivel("a", 1)]) is None
+
+
+def test_cargo_de_nivel_ia_siempre_lleva_cargo_reservado():
+    # El nivel IA lleva su cargo reservado AUNQUE la cadena no exija cargos humanos.
+    assert (
+        colaboracion.cargo_de_nivel(colaboracion.ETIQUETA_CRITICA_IA, con_cargos=False)
+        == colaboracion.CARGO_IA_CRITICO
+    )
+    # Un nivel humano sin cargos -> "" ; con cargos -> el del organigrama.
+    assert colaboracion.cargo_de_nivel("Coordinación", con_cargos=False) == ""
+    assert colaboracion.cargo_de_nivel("Coordinación", con_cargos=True) == "coordinador"
+
+
+def test_cargo_reservado_ia_no_lo_satisface_ningun_humano():
+    # La regla de cargos existente impide que una persona decida el nivel IA por el feed.
+    assert colaboracion.cargo_satisface(colaboracion.CARGO_IA_CRITICO, "coordinador") is False
+    assert colaboracion.cargo_satisface(colaboracion.CARGO_IA_CRITICO, "director") is False
+
+
+def test_humanos_aprobados_ia_pendiente_dispara_solo_cuando_toca():
+    # Los dos humanos OK y la IA pendiente -> dispara.
+    cadena = [_nivel("a", 1, "aprobado"), _nivel("b", 2, "aprobado"), _nivel_ia("pendiente")]
+    assert colaboracion.humanos_aprobados_ia_pendiente(cadena) is True
+    # Falta un humano -> no dispara.
+    cadena2 = [_nivel("a", 1, "aprobado"), _nivel("b", 2, "pendiente"), _nivel_ia("pendiente")]
+    assert colaboracion.humanos_aprobados_ia_pendiente(cadena2) is False
+    # La IA ya votó -> no dispara (no re-encola).
+    cadena3 = [_nivel("a", 1, "aprobado"), _nivel("b", 2, "aprobado"), _nivel_ia("rechazado")]
+    assert colaboracion.humanos_aprobados_ia_pendiente(cadena3) is False
+    # Sin nivel IA (flag OFF) -> no aplica.
+    cadena4 = [_nivel("a", 1, "aprobado"), _nivel("b", 2, "aprobado")]
+    assert colaboracion.humanos_aprobados_ia_pendiente(cadena4) is False
+
+
+def test_dislike_de_ia_no_rechaza_la_cadena_de_tres_por_si_solo():
+    # [humano OK, humano OK, IA dislike] -> 1 rechazo < umbral 2 -> sigue "pendiente"
+    # (la pieza queda en revisión con el dislike + comentario; no se marca rechazada de golpe).
+    cadena = [_nivel("a", 1, "aprobado"), _nivel("b", 2, "aprobado"), _nivel_ia("rechazado")]
+    assert colaboracion.estado_cadena(cadena) == "pendiente"
+
+
+def test_aprobaciones_humanas_excluye_al_critico_ia():
+    cadena = [
+        _nivel("a", 1, "aprobado", decisor_id="u1"),
+        _nivel("b", 2, "aprobado", decisor_id="u2"),
+        {"id": "ia", "nivel": 3, "decision": "aprobado",
+         "decisor_id": colaboracion.DECISOR_CRITICA_ID},
+    ]
+    assert colaboracion.contar_aprobaciones_humanas(cadena) == 2
+    # pero cuenta los 3 como aprobaciones totales (gate de minimo).
+    assert colaboracion.contar_aprobados(cadena) == 3
