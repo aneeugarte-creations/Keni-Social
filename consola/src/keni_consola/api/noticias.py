@@ -617,15 +617,17 @@ async def listar_historias(request: Request) -> Response:
         limite=limite,
         desplazamiento=desplazamiento,
     )
-    # Estado REAL de cara al feed + veredicto QA (verificación): dos queries batch (evita N+1)
-    # por los temas enlazados. El QA vive en `contenido` (etapa de Investigación, ADR 0011).
+    # Estado REAL de cara al feed + veredicto QA (verificación). El QA vive en la HISTORIA
+    # (`noticias_clusters.qa_veredicto`, ADR 0011 F3): la criba corre sobre el cluster ANTES de
+    # admitir. Se prefiere el veredicto NATIVO del cluster y se cae al del `contenido` heredado
+    # (batch, evita N+1) solo para historias admitidas ANTES de F3 (cluster sin veredicto propio).
     cids = [c.get("contenido_id") or "" for c in clusters]
     resumen_pieza = repos.estado_pieza_por_contenido(cids)
     qa_map = repos.qa_veredicto_por_contenido(cids)
     vocab_memo: dict[str, frozenset[str]] = {}  # vocabulario por marca, 1 lectura por request
     historias = [
         _historia_a_dict(
-            {**c, "qa_veredicto": qa_map.get(c.get("contenido_id") or "", "")},
+            {**c, "qa_veredicto": (c.get("qa_veredicto") or "") or qa_map.get(c.get("contenido_id") or "", "")},
             repos.items_de_cluster(c["id"], limite=_MAX_ENLACES_HISTORIA),
             pieza_estado=_pieza_estado(
                 c.get("estado") or "nuevo", c.get("contenido_id") or "", resumen_pieza
@@ -696,13 +698,15 @@ async def mesa(request: Request) -> Response:
 
     cids = [c.get("contenido_id") or "" for c in clusters]
     resumen_pieza = repos.estado_pieza_por_contenido(cids)
-    qa_map = repos.qa_veredicto_por_contenido(cids)  # veredicto de verificación por historia
+    # Veredicto de verificación por historia: NATIVO del cluster (ADR 0011 F3), con fallback al
+    # contenido heredado para historias admitidas antes de F3 (cluster sin veredicto propio).
+    qa_map = repos.qa_veredicto_por_contenido(cids)
     vocab_memo: dict[str, frozenset[str]] = {}
 
     def _historias(lote: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return [
             _historia_a_dict(
-                {**c, "qa_veredicto": qa_map.get(c.get("contenido_id") or "", "")},
+                {**c, "qa_veredicto": (c.get("qa_veredicto") or "") or qa_map.get(c.get("contenido_id") or "", "")},
                 repos.items_de_cluster(c["id"], limite=_MAX_ENLACES_HISTORIA),
                 pieza_estado=_pieza_estado(
                     c.get("estado") or "nuevo", c.get("contenido_id") or "", resumen_pieza
@@ -753,7 +757,11 @@ async def detalle_historia(request: Request) -> Response:
         return JSONResponse({"error": "Esa historia ya no existe."}, status_code=404)
     items = repos.items_de_cluster(cluster_id)
     cid = cluster.get("contenido_id") or ""
-    qa_veredicto = repos.qa_veredicto_por_contenido([cid]).get(cid, "") if cid else ""
+    # Veredicto NATIVO del cluster (ADR 0011 F3: la QA corre sobre la historia); fallback al
+    # contenido heredado para historias admitidas antes de F3 (cluster sin veredicto propio).
+    qa_veredicto = (cluster.get("qa_veredicto") or "") or (
+        repos.qa_veredicto_por_contenido([cid]).get(cid, "") if cid else ""
+    )
     historia = _historia_a_dict(
         {**cluster, "qa_veredicto": qa_veredicto}, items, pieza_estado=_pieza_estado_de(cluster),
         liston=_evaluar_liston(cluster, {}),

@@ -564,6 +564,23 @@ def test_historia_sin_contenido_ni_ia_trae_campos_vacios(cliente):
     assert h["marca_clasificada_por_ia"] is False
 
 
+def test_historia_expone_qa_nativo_del_cluster_sin_contenido(cliente):
+    """ADR 0011 F3: la QA vive en la HISTORIA. Una 'problema' SIN contenido (no se materializó)
+    expone su veredicto igual — así la Mesa de Investigación la muestra ❗, no como 'sin QA'."""
+    _sembrar_cluster("h-prob", marca="unotv")
+    repos.marcar_cluster_qa("h-prob", "problema", '{"resumen": "dato falso"}')
+
+    historias = cliente.get(
+        "/api/noticias/historias", params={"marca": "unotv"}
+    ).json()["historias"]
+    h = next(x for x in historias if x["id"] == "h-prob")
+    assert h["qa_veredicto"] == "problema"  # nativo del cluster, sin contenido enlazado
+
+    # El detalle también lo expone (mismo veredicto nativo).
+    det = cliente.get("/api/noticias/historias/h-prob").json()["historia"]
+    assert det["qa_veredicto"] == "problema"
+
+
 def test_marcar_cluster_qa_persiste_y_no_se_pisa_en_recalc(entorno):
     """ADR 0011 F3: `marcar_cluster_qa` sella el veredicto en la historia y un recalc (upsert) sin
     veredicto NO lo borra (`qa_veredicto`/`qa_hallazgos` en `_NO_PISAR`)."""
