@@ -56,7 +56,7 @@ describe("fraseCorroboracion", () => {
     expect(frase).toMatch(/la abrió Reuters/);
   });
 
-  it("última hora con 2 potentes: «la confirmaron casi a la vez»", () => {
+  it("última hora con 2 fuentes de alta relevancia: «la confirmaron casi a la vez»", () => {
     const frase = fraseCorroboracion(
       historia({
         breaking: 1,
@@ -66,7 +66,7 @@ describe("fraseCorroboracion", () => {
         ],
       }),
     );
-    expect(frase).toBe("Reuters y AP (primer nivel) la confirmaron casi a la vez");
+    expect(frase).toBe("Reuters y AP la confirmaron casi a la vez");
   });
 
   it("única fuente: tono de espera de corroboración", () => {
@@ -114,7 +114,7 @@ describe("factoresRanking", () => {
         },
       }),
     );
-    expect(factores.join("\n")).toMatch(/La confirman 3 medios \(1 de primer nivel\)/);
+    expect(factores.join("\n")).toMatch(/La confirman 3 medios/);
     expect(factores.join("\n")).toMatch(/creciendo rápido/);
     expect(factores.join("\n")).toMatch(/Encaja con la marca por: cdmx, sismo/);
   });

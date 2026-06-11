@@ -341,10 +341,7 @@ export function TarjetaHistoria({
                   <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />
                 </a>
                 {enlace.fuente && (
-                  <span className="text-muted-foreground shrink-0">
-                    — {enlace.fuente}
-                    {enlace.tier === "potente" ? " ★" : ""}
-                  </span>
+                  <span className="text-muted-foreground shrink-0">— {enlace.fuente}</span>
                 )}
               </li>
             ))}

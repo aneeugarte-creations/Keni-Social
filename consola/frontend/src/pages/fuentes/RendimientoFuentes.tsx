@@ -4,7 +4,7 @@
  * Tabla por fuente sobre la ventana elegida (7/30 días): artículos aportados, historias en
  * las que participó, cuántas ABRIÓ (publicó primero — la fuente que rompe), cuántas acabaron
  * usadas (promovidas al tablero) y su tasa de uso. Con esto el equipo decide qué fuentes
- * suben de tier, cuáles sobran y dónde faltan. Marca-aware.
+ * sobran y dónde faltan. Marca-aware.
  */
 
 import { useQuery } from "@tanstack/react-query";
@@ -12,7 +12,6 @@ import { TrendingUp } from "lucide-react";
 import * as React from "react";
 
 import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -101,19 +100,6 @@ export function RendimientoFuentes() {
                   <TableRow key={f.fuente_id}>
                     <TableCell className="max-w-64">
                       <span className="truncate font-medium">{f.fuente_nombre || f.fuente_id}</span>
-                      {f.tier === "potente" && (
-                        <Badge
-                          variant="outline"
-                          className="ml-1.5 border-amber-400 text-[10px] font-normal text-amber-700"
-                        >
-                          ★ Potente
-                        </Badge>
-                      )}
-                      {f.tier === "baja" && (
-                        <Badge variant="outline" className="ml-1.5 text-[10px] font-normal text-muted-foreground">
-                          Baja
-                        </Badge>
-                      )}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{f.items}</TableCell>
                     <TableCell className="text-right tabular-nums">{f.historias}</TableCell>
@@ -128,8 +114,7 @@ export function RendimientoFuentes() {
             </Table>
             <p className="mt-2 text-[11px] text-muted-foreground">
               «Abrió» = publicó primero la historia (la fuente que rompe). «% uso» = de las
-              historias en las que participó, cuántas acabaron en el tablero. Con esto se
-              decide qué fuentes suben de potencia y cuáles sobran.
+              historias en las que participó, cuántas acabaron en el tablero.
             </p>
           </>
         )}

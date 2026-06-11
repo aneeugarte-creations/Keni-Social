@@ -21,7 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { FuenteRss, MarcaDisponible, RedPublicacion } from "@/types";
+import type { FuenteRss, MarcaDisponible } from "@/types";
 
 import { formatearFechaHora, tiempoRelativo } from "../publicaciones/meta";
 import { DialogoFuente } from "./DialogoFuente";
@@ -30,13 +30,7 @@ import { CLAVE_FUENTES, CLAVE_ITEMS } from "./lib";
 // --- Feeds (panel izquierdo) -----------------------------------------------
 
 /** Panel izquierdo: alta + lista de feeds con salud, edición y activación. */
-export function GestionFuentes({
-  marcas,
-  redes,
-}: {
-  marcas: MarcaDisponible[];
-  redes: RedPublicacion[];
-}) {
+export function GestionFuentes({ marcas }: { marcas: MarcaDisponible[] }) {
   // Por marca: cada equipo gestiona los feeds de SU marca + los compartidos (sin marca).
   // El radar/plan de la marca lee exactamente este conjunto. Admin (sin marca activa) ve todo.
   const { marcaActiva, nombreActiva } = useMarcaActiva();
@@ -107,7 +101,6 @@ export function GestionFuentes({
         abierto={editando !== null}
         fuente={editando === "nuevo" ? null : editando}
         marcas={marcas}
-        redes={redes}
         onCerrar={() => setEditando(null)}
       />
     </Card>
@@ -207,26 +200,6 @@ function FilaFuente({
               title="Categoría del feed: marca la cadencia con la que el motor lo sondea"
             >
               {fuente.categoria}
-            </Badge>
-          )}
-          {fuente.tier === "potente" && (
-            <Badge
-              variant="outline"
-              className="border-amber-400 font-normal text-amber-700"
-              title="Fuente potente: pesa el doble en la corroboración del ranking"
-              data-testid="badge-tier"
-            >
-              ★ Potente
-            </Badge>
-          )}
-          {fuente.tier === "baja" && (
-            <Badge
-              variant="outline"
-              className="font-normal text-muted-foreground"
-              title="Fuente de baja confiabilidad: pesa la mitad en la corroboración"
-              data-testid="badge-tier"
-            >
-              Baja confiabilidad
             </Badge>
           )}
           {!fuente.activo && (

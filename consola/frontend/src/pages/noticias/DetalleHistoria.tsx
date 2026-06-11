@@ -3,8 +3,8 @@
  *
  * Clic en el título de la tarjeta → este diálogo: resumen completo, «¿Por qué rankea
  * así?» (las señales del motor en frases editoriales) y la LÍNEA DE TIEMPO de fuentes —
- * quién la ABRIÓ, quién se fue sumando y cuándo (con su potencia) — más los enlaces a los
- * artículos originales. Las acciones del pie reutilizan las mismas mutaciones del pool.
+ * quién la ABRIÓ, quién se fue sumando y cuándo — más los enlaces a los artículos
+ * originales. Las acciones del pie reutilizan las mismas mutaciones del pool.
  */
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -47,16 +47,8 @@ export function TimelineFuentes({ fuentes }: { fuentes: FuenteHistoria[] }) {
           <span className="w-12 shrink-0 tabular-nums text-muted-foreground" title={f.primer_visto}>
             {horaLocal(f.primer_visto)}
           </span>
-          <span
-            className={`h-2 w-2 shrink-0 self-center rounded-full ${
-              f.tier === "potente" ? "bg-amber-500" : f.tier === "baja" ? "bg-muted-foreground/40" : "bg-sky-500"
-            }`}
-            title={`Fuente ${f.tier}`}
-          />
+          <span className="h-2 w-2 shrink-0 self-center rounded-full bg-sky-500" />
           <span className="font-medium">{f.fuente || f.fuente_id}</span>
-          {f.tier === "potente" && (
-            <span className="text-[10px] text-amber-700">primer nivel</span>
-          )}
           {i === 0 && (
             <Badge variant="outline" className="text-[10px] font-normal">
               la abrió

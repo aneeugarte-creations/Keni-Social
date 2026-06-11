@@ -1,12 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
-import type { RedPublicacion } from "@/types";
 
-import { ORDEN_REDES } from "./publicaciones/meta";
 import { CatalogoPresets } from "./fuentes/CatalogoPresets";
 import { GestionFuentes } from "./fuentes/GestionFuentes";
 // Salud del motor de ingesta de feeds: estado de los canales externos (feeds activos/
@@ -52,13 +49,6 @@ export default function Fuentes() {
   });
   const marcas = opcionesQuery.data?.marcas ?? [];
 
-  const opcionesRedes = React.useMemo<RedPublicacion[]>(
-    () =>
-      opcionesQuery.data?.redes ??
-      ORDEN_REDES.map((id) => ({ id, nombre: id, limite: null })),
-    [opcionesQuery.data],
-  );
-
   // Deep-link de pestaña: las rutas viejas del hub (cajones/agentes/eventos)
   // redirigen aquí con `?tab=` para abrir directamente su canal.
   const [searchParams] = useSearchParams();
@@ -81,7 +71,7 @@ export default function Fuentes() {
             inline) + catálogo para añadir de un clic + estado del motor de ingesta.
             (Agencias y Google Trends son señales externas; ver nota en el header.) */}
         <TabsContent value="externas" className="space-y-8">
-          <GestionFuentes marcas={marcas} redes={opcionesRedes} />
+          <GestionFuentes marcas={marcas} />
           <CatalogoPresets marcas={marcas} />
           <SaludFeeds />
         </TabsContent>
@@ -93,7 +83,7 @@ export default function Fuentes() {
           <CajonesDia />
         </TabsContent>
         {/* RENDIMIENTO: qué fuentes aportan de verdad (abren historias, se usan). Alimenta
-            la decisión de potencia (tier) de la pestaña Externas. */}
+            la decisión de relevancia de cada fuente (pestaña Externas). */}
         <TabsContent value="rendimiento" className="space-y-8">
           <RendimientoFuentes />
         </TabsContent>

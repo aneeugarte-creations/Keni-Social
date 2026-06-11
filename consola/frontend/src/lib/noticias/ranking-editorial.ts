@@ -54,7 +54,7 @@ function listaNombres(fuentes: FuenteHistoria[], max = 3): string {
 
 /**
  * La FRASE de corroboración de la tarjeta — sustituye a la nube de badges:
- *   - "Reuters y AP (primer nivel) la confirmaron casi a la vez"  (última hora)
+ *   - "Reuters y AP la confirmaron casi a la vez"  (última hora)
  *   - "Confirmada por Reuters, Milenio y El Universal · la abrió Reuters hace 42 min"
  *   - "Única fuente: Récord · hace 1 h — espera corroboración"
  *   - "Señal dudosa: única fuente no confiable o titular sensacionalista"
@@ -71,7 +71,7 @@ export function fraseCorroboracion(h: Historia): string {
   }
   const potentes = fuentes.filter((f) => f.tier === "potente");
   if (h.breaking === 1 && potentes.length >= 2) {
-    return `${listaNombres(potentes)} (primer nivel) la confirmaron casi a la vez`;
+    return `${listaNombres(potentes)} la confirmaron casi a la vez`;
   }
   let frase = `Confirmada por ${listaNombres(fuentes)}`;
   const primera = fuentes[0]?.fuente || h.primera_fuente_nombre;
@@ -89,14 +89,9 @@ export function fraseCorroboracion(h: Historia): string {
  */
 export function factoresRanking(h: Historia): string[] {
   const d = h.score_desglose ?? {};
-  const fuentes = fuentesDe(h);
-  const potentes = fuentes.filter((f) => f.tier === "potente").length;
   const factores: string[] = [];
   if (h.n_fuentes > 1) {
-    factores.push(
-      `La confirman ${h.n_fuentes} medios` +
-        (potentes > 0 ? ` (${potentes} de primer nivel)` : ""),
-    );
+    factores.push(`La confirman ${h.n_fuentes} medios`);
   }
   if ((d.velocidad ?? 0) >= 0.4) {
     factores.push("Está creciendo rápido: varias fuentes se sumaron en poco tiempo");

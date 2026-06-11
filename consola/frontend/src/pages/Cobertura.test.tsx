@@ -255,9 +255,9 @@ describe("Cobertura · Mesa — plan del día", () => {
     expect(secciones[0].getAttribute("data-testid")).toBe("seccion-breaking");
     const breaking = within(screen.getByTestId("seccion-breaking"));
     expect(breaking.getByTestId("badge-ultima-hora")).toBeTruthy();
-    // Frase editorial: 2 fuentes potentes casi a la vez.
+    // Frase editorial de última hora: la confirmaron casi a la vez.
     expect(breaking.getByTestId("frase-corroboracion").textContent).toMatch(
-      /Reuters y AP \(primer nivel\)/,
+      /Reuters y AP la confirmaron casi a la vez/,
     );
   });
 
