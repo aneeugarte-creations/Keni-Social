@@ -268,9 +268,8 @@ describe("Cobertura · Mesa — plan del día", () => {
     const frase = mx.getByTestId("frase-corroboracion").textContent ?? "";
     expect(frase).toMatch(/Confirmada por Reforma, El Universal y Milenio/);
     expect(frase).toMatch(/la abrió Reforma/);
-    // Prioridad legible, nunca el número crudo.
-    expect(mx.getByTestId("punto-prioridad").textContent).toMatch(/Prioridad alta/);
-    expect(mx.queryByText(/0\.55|55/)).toBeNull();
+    // El SCORE es visible (con el cálculo completo en el tooltip/detalle).
+    expect(mx.getByTestId("punto-prioridad").textContent).toMatch(/Score 55/);
   });
 
   it("una línea con cupo pendiente y sin candidatas avisa del hueco", async () => {

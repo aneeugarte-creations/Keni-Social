@@ -161,6 +161,25 @@ def _evaluar_liston(
         return False, "no evaluable"
 
 
+def _pesos_score_publicos() -> dict[str, float]:
+    """Los PESOS vivos de la fórmula del ranking, para que la UI enseñe el cálculo.
+
+    El `score_desglose` persistido trae las señales CRUDAS [0,1]; con los pesos (editables
+    en caliente desde ajustes) la UI reconstruye la fórmula completa: señal × peso = aporte,
+    Σ aportes = score. Sin esto el ranking sería una caja negra de cara al equipo.
+    """
+    p = config.score_pesos()
+    return {
+        "corroboracion": round(p.corroboracion, 3),
+        "velocidad": round(p.velocidad, 3),
+        "frescura": round(p.frescura, 3),
+        "viralidad": round(p.viralidad, 3),
+        "marca": round(p.marca, 3),
+        "rendimiento": round(p.rendimiento, 3),
+        "breaking": round(p.breaking, 3),
+    }
+
+
 def _historia_a_dict(
     cluster: dict[str, Any],
     enlaces: list[dict[str, Any]],
@@ -249,6 +268,9 @@ def _historia_a_dict(
         # pinta el badge con ESTE campo: nunca dice "En el feed" si la pieza no está.
         "pieza_estado": pieza_estado,
         "enlaces": enlaces_pub,
+        # Los PESOS vivos de la fórmula (editables en ajustes): con las señales crudas del
+        # desglose, la UI enseña el cálculo completo (señal × peso = aporte, Σ = score).
+        "score_pesos": _pesos_score_publicos(),
         # TRACKING DE FUENTES (ranking ponderado): masa de corroboración (Σ peso por outlet),
         # quién ABRIÓ la historia y el timeline de outlets (orden cronológico, con peso/tier).
         "peso_fuentes": float(cluster.get("peso_fuentes") or 0.0),

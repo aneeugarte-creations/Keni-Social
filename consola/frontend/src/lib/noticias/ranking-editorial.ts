@@ -110,3 +110,61 @@ export function factoresRanking(h: Historia): string[] {
   }
   return factores;
 }
+
+/** Una línea del cálculo del score: señal cruda × peso = aporte. */
+export interface LineaCalculo {
+  etiqueta: string;
+  senal: number;
+  peso: number;
+  aporte: number;
+}
+
+const SENALES_CALCULO: { clave: string; etiqueta: string }[] = [
+  { clave: "corroboracion", etiqueta: "Corroboración" },
+  { clave: "velocidad", etiqueta: "Velocidad" },
+  { clave: "frescura", etiqueta: "Frescura" },
+  { clave: "viralidad", etiqueta: "Viralidad" },
+  { clave: "marca", etiqueta: "Encaje de marca" },
+  { clave: "rendimiento", etiqueta: "Rendimiento" },
+];
+
+/**
+ * El CÁLCULO del score, línea a línea: señal cruda [0,1] × peso de la fórmula = aporte.
+ * Devuelve las líneas con peso > 0 (las señales que cuentan) y el total (Σ aportes,
+ * + bonus de última hora si está configurado). El score persistido puede diferir unas
+ * centésimas del total (el re-score envejece la frescura entre pasadas).
+ */
+export function calculoScore(h: Historia): { lineas: LineaCalculo[]; total: number } {
+  const d = (h.score_desglose ?? {}) as Record<string, number | string[] | undefined>;
+  const pesos = h.score_pesos ?? {};
+  const lineas: LineaCalculo[] = [];
+  let total = 0;
+  for (const { clave, etiqueta } of SENALES_CALCULO) {
+    const peso = Number(pesos[clave] ?? 0);
+    if (peso <= 0) continue;
+    const senal = Number(d[clave] ?? 0) || 0;
+    const aporte = senal * peso;
+    total += aporte;
+    lineas.push({ etiqueta, senal, peso, aporte });
+  }
+  const bonus = Number(pesos.breaking ?? 0);
+  if (Number(d.breaking ?? 0) === 1 && bonus > 0) {
+    total = Math.min(1, total + bonus);
+    lineas.push({ etiqueta: "Bonus última hora", senal: 1, peso: bonus, aporte: bonus });
+  }
+  return { lineas, total: Math.min(1, total) };
+}
+
+/** El cálculo como texto multilínea (tooltip de la tarjeta). */
+export function calculoScoreTexto(h: Historia): string {
+  const { lineas, total } = calculoScore(h);
+  if (lineas.length === 0) {
+    return h.score_razon || "El motor aún no puntuó esta historia.";
+  }
+  const cuerpo = lineas.map(
+    (l) => `${l.etiqueta}: ${l.senal.toFixed(2)} × ${l.peso.toFixed(2)} = ${l.aporte.toFixed(2)}`,
+  );
+  cuerpo.push(`Score = ${total.toFixed(2)} (guardado: ${h.score.toFixed(2)})`);
+  if (h.score_razon) cuerpo.push(h.score_razon);
+  return cuerpo.join("\n");
+}

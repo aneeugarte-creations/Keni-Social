@@ -23,7 +23,7 @@ import {
 import { api, mensajeError } from "@/lib/api";
 import { tiempoRelativo } from "@/lib/fecha";
 import { etiquetaLinea } from "@/lib/lineas";
-import { factoresRanking, fraseCorroboracion, nivelPrioridad } from "@/lib/noticias/ranking-editorial";
+import { calculoScore, factoresRanking, fraseCorroboracion, nivelPrioridad } from "@/lib/noticias/ranking-editorial";
 import type { FuenteHistoria, Historia } from "@/types";
 
 function horaLocal(iso: string): string {
@@ -141,6 +141,11 @@ export function DetalleHistoria({
           </ul>
         </div>
 
+        {/* El CÁLCULO, sin caja negra: cada señal cruda × su peso = su aporte; la suma es
+            el score. Los pesos son los vivos de ajustes; el guardado puede diferir unas
+            centésimas porque la frescura envejece entre re-scores. */}
+        <CalculoScore historia={historia} />
+
         <div className="space-y-1.5">
           <h4 className="text-sm font-semibold">Línea de tiempo de fuentes</h4>
           <TimelineFuentes fuentes={historia.fuentes ?? []} />
@@ -201,5 +206,37 @@ export function DetalleHistoria({
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** La fórmula del score, línea a línea (señal × peso = aporte; Σ = score). */
+function CalculoScore({ historia }: { historia: Historia }) {
+  const { lineas, total } = calculoScore(historia);
+  if (lineas.length === 0) return null;
+  return (
+    <div className="space-y-1" data-testid="calculo-score">
+      <h4 className="text-sm font-semibold">El cálculo</h4>
+      <div className="rounded-md border bg-muted/30 px-3 py-2 font-mono text-[11px] leading-5">
+        {lineas.map((l) => (
+          <div key={l.etiqueta} className="flex justify-between gap-4 tabular-nums">
+            <span>{l.etiqueta}</span>
+            <span>
+              {l.senal.toFixed(2)} × {l.peso.toFixed(2)} = {l.aporte.toFixed(2)}
+            </span>
+          </div>
+        ))}
+        <div className="mt-1 flex justify-between gap-4 border-t pt-1 font-semibold tabular-nums">
+          <span>Score</span>
+          <span>
+            {total.toFixed(2)} → {Math.round(historia.score * 100)}
+          </span>
+        </div>
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        Señal medida (0 a 1) × peso de la fórmula = aporte; la suma es el score. Los pesos se
+        ajustan en los ajustes del motor; el guardado puede variar unas centésimas porque la
+        frescura envejece entre recálculos.
+      </p>
+    </div>
   );
 }

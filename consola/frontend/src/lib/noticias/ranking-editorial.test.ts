@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Historia } from "@/types";
 
-import { factoresRanking, fraseCorroboracion, nivelPrioridad } from "./ranking-editorial";
+import { calculoScore, factoresRanking, fraseCorroboracion, nivelPrioridad } from "./ranking-editorial";
 
 function historia(overrides: Partial<Historia> = {}): Historia {
   return {
@@ -124,5 +124,26 @@ describe("factoresRanking", () => {
       historia({ n_fuentes: 1, fuentes: [], score_desglose: {}, score_razon: "historia única" }),
     );
     expect(factores).toEqual(["historia única"]);
+  });
+});
+
+describe("calculoScore", () => {
+  it("reconstruye la fórmula: señal × peso = aporte, Σ = score", () => {
+    const { lineas, total } = calculoScore(
+      historia({
+        score_desglose: { corroboracion: 0.5, velocidad: 1.0, frescura: 0.5, viralidad: 0, marca: 0 },
+        score_pesos: { corroboracion: 0.3, velocidad: 0.2, frescura: 0.2, viralidad: 0.1, marca: 0.2, rendimiento: 0, breaking: 0 },
+      }),
+    );
+    const porEtiqueta = Object.fromEntries(lineas.map((l) => [l.etiqueta, l]));
+    expect(porEtiqueta["Corroboración"].aporte).toBeCloseTo(0.15);
+    expect(porEtiqueta["Velocidad"].aporte).toBeCloseTo(0.2);
+    expect(porEtiqueta["Rendimiento"]).toBeUndefined(); // peso 0: no cuenta
+    expect(total).toBeCloseTo(0.45);
+  });
+
+  it("sin pesos del back no inventa cálculo (degradación honesta)", () => {
+    const { lineas } = calculoScore(historia({ score_pesos: undefined }));
+    expect(lineas).toEqual([]);
   });
 });

@@ -127,6 +127,11 @@ export interface Historia {
     breaking?: number;
     palabras?: string[];
   };
+  /**
+   * Los PESOS vivos de la fórmula del ranking (editables en ajustes). Con las señales
+   * crudas del desglose, la UI reconstruye el cálculo: señal × peso = aporte, Σ = score.
+   */
+  score_pesos?: Record<string, number>;
   /** true si supera el LISTÓN de producción automática (la misma evaluación que el pipeline). */
   promovible?: boolean;
   /** Motivo legible del listón (por qué supera, o por qué no). */

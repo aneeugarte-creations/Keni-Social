@@ -35,7 +35,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip } from "@/components/ui/tooltip";
 import { api, mensajeError } from "@/lib/api";
-import { fraseCorroboracion, factoresRanking, nivelPrioridad } from "@/lib/noticias/ranking-editorial";
+import { calculoScoreTexto, factoresRanking, fraseCorroboracion, nivelPrioridad } from "@/lib/noticias/ranking-editorial";
 import type { Historia } from "@/types";
 
 import { DetalleHistoria } from "./DetalleHistoria";
@@ -282,15 +282,17 @@ export function TarjetaHistoria({
         {/* Fila de meta: prioridad explicable + traducción + fuentes expandibles */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <Tooltip
-            label={`Prioridad ${prioridad}\n${factoresRanking(historia).map((f) => `• ${f}`).join("\n")}`}
+            label={`${calculoScoreTexto(historia)}\n${factoresRanking(historia)
+              .map((f) => `• ${f}`)
+              .join("\n")}`}
             side="top"
           >
             <span
-              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground cursor-default"
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground cursor-default tabular-nums"
               data-testid="punto-prioridad"
             >
               <span className={`h-2 w-2 rounded-full ${COLOR_PRIORIDAD[prioridad]}`} />
-              Prioridad {prioridad}
+              Score {Math.round(historia.score * 100)}
             </span>
           </Tooltip>
 

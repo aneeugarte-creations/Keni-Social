@@ -243,6 +243,10 @@ def test_historia_expone_timeline_de_fuentes_y_peso(cliente):
     })
     h = cliente.get("/api/noticias/historias/c1").json()["historia"]
     assert h["peso_fuentes"] == 4.0
+    # Los PESOS vivos de la fórmula viajan con la historia: la UI enseña el cálculo
+    # (señal × peso = aporte) sin caja negra.
+    assert set(h["score_pesos"]) >= {"corroboracion", "velocidad", "frescura", "viralidad", "marca"}
+    assert h["score_pesos"]["corroboracion"] > 0
     assert h["primera_fuente_nombre"] == "Reuters"
     assert [f["fuente"] for f in h["fuentes"]] == ["Reuters", "BBC"]
     assert all(f["tier"] == "potente" for f in h["fuentes"])
