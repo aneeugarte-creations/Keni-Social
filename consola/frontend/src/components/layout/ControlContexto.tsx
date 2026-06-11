@@ -23,6 +23,7 @@ import {
   useFiltrosContenido,
 } from "@/hooks/filtros-contenido-contexto";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
+import { useFuentesDeMarcas } from "@/hooks/use-fuentes-marcas";
 import { cn } from "@/lib/utils";
 
 /** Una fila seleccionable del panel (opción de marca / red / línea). */
@@ -30,10 +31,14 @@ function Fila({
   activo,
   onClick,
   children,
+  fontFamily,
 }: {
   activo: boolean;
   onClick: () => void;
   children: React.ReactNode;
+  // Tipografía de marca para el nombre (las opciones de MARCA se pintan con su fuente real). El
+  // color no cambia: solo la familia.
+  fontFamily?: string;
 }) {
   return (
     <button
@@ -46,7 +51,9 @@ function Fila({
         activo ? "font-medium text-foreground" : "text-muted-foreground",
       )}
     >
-      <span className="truncate">{children}</span>
+      <span className="truncate" style={fontFamily ? { fontFamily } : undefined}>
+        {children}
+      </span>
       {activo && <Check className="h-4 w-4 shrink-0" aria-hidden="true" />}
     </button>
   );
@@ -98,6 +105,17 @@ export function ControlContexto() {
     };
   }, [abierto]);
 
+  // Tipografías de marca: el nombre de cada marca se pinta con su fuente real. Solo descargamos los
+  // binarios de las marcas visibles —la activa siempre (chip/píldora) y, al abrir el panel, todas
+  // las del selector— para no traer todas las fuentes en cada página.
+  const idsFuentes = React.useMemo(() => {
+    const ids = marcaActiva ? [marcaActiva] : [];
+    if (abierto) ids.push(...marcasParaSwitch.map((m) => m.id));
+    return ids;
+  }, [abierto, marcaActiva, marcasParaSwitch]);
+  const fuentesMarca = useFuentesDeMarcas(idsFuentes);
+  const fuenteActiva = marcaActiva ? fuentesMarca.get(marcaActiva) : undefined;
+
   const usaFiltros = rutaUsaFiltrosContenido(pathname);
   const fueraDeCasa = !enMarcaPrimaria && marcaPrimaria !== null;
   const filtrosActivos = usaFiltros && (red !== FILTRO_TODOS || linea !== FILTRO_TODOS);
@@ -109,7 +127,9 @@ export function ControlContexto() {
     return (
       <span className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 text-sm font-medium text-foreground">
         <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <span className="max-w-[140px] truncate">{etiquetaMarca}</span>
+        <span className="max-w-[140px] truncate" style={fuenteActiva ? { fontFamily: fuenteActiva } : undefined}>
+          {etiquetaMarca}
+        </span>
       </span>
     );
   }
@@ -133,7 +153,12 @@ export function ControlContexto() {
         )}
       >
         <Building2 className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden="true" />
-        <span className="max-w-[120px] truncate font-medium">{etiquetaMarca}</span>
+        <span
+          className="max-w-[120px] truncate font-medium"
+          style={fuenteActiva ? { fontFamily: fuenteActiva } : undefined}
+        >
+          {etiquetaMarca}
+        </span>
         {filtrosActivos && (
           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-foreground" aria-hidden="true" />
         )}
@@ -157,6 +182,7 @@ export function ControlContexto() {
                   key={m.id}
                   activo={marcaActiva === m.id}
                   onClick={() => cambiarMarca(m.id)}
+                  fontFamily={fuentesMarca.get(m.id)}
                 >
                   {m.nombre}
                 </Fila>
@@ -175,7 +201,12 @@ export function ControlContexto() {
           ) : (
             marcaActiva && (
               <Grupo titulo="Marca">
-                <p className="px-2 py-1.5 text-sm font-medium text-foreground">{etiquetaMarca}</p>
+                <p
+                  className="px-2 py-1.5 text-sm font-medium text-foreground"
+                  style={fuenteActiva ? { fontFamily: fuenteActiva } : undefined}
+                >
+                  {etiquetaMarca}
+                </p>
               </Grupo>
             )
           )}
