@@ -292,6 +292,14 @@ def marcar_cluster_qa(cluster_id: str, veredicto: str, hallazgos: str = "") -> N
     return db.marcar_cluster_qa(cluster_id, veredicto, hallazgos)
 
 
+def contar_clusters_funnel_qa(marca: str, estados: tuple[str, ...]) -> int:
+    return db.contar_clusters_funnel_qa(marca, estados)
+
+
+def sanear_qa_clusters_en_curso(umbral_iso: str) -> int:
+    return db.sanear_qa_clusters_en_curso(umbral_iso)
+
+
 def marcar_cluster_traducido(
     cluster_id: str,
     *,

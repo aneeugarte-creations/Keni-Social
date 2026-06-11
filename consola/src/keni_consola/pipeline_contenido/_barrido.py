@@ -23,6 +23,7 @@ from ._comun import (
     _MAX_INTENTOS_ETAPA,
     QA_EN_CURSO,
     QA_SALTADA,
+    VERDICTO_NO_VERIFICADO,
     _log,
     anotar_intento,
     en_backoff,
@@ -31,8 +32,8 @@ from ._comun import (
 )
 from ._avance import ejecutar_avance
 from ._copy import lanzar_copy_de_tema, temas_autogen_sin_copy, temas_para_copy
-from ._ingesta import promover_clusters_marca
-from ._qa import lanzar_qa_fuente, temas_sin_qa
+from ._ingesta import clusters_pendientes_qa, promover_clusters_marca
+from ._qa import lanzar_qa_cluster, lanzar_qa_fuente, temas_sin_qa
 
 __all__ = [
     "ejecutar_barrido",
@@ -42,6 +43,7 @@ __all__ = [
     "ejecutar_produccion",
     "_ejecutar_produccion",
     "ejecutar_qa",
+    "ejecutar_qa_clusters",
     "ejecutar_cd",
     "ejecutar_arte",
     "ejecutar_avance",
@@ -116,44 +118,56 @@ def ejecutar_barrido() -> dict[str, Any]:
     return {**inv, **prod}
 
 
+# Estados del EMBUDO de verificación: clusters `nuevo` que ya entraron al circuito de QA y aún
+# no se admitieron (en vuelo, verificados-pendientes o saltados). Acotan cuánta QA se lanza por
+# tick (presupuesto = tope en vuelo − embudo) para que la criba no recorra todo el pool.
+_FUNNEL_QA = (QA_EN_CURSO, VERDICTO_NO_VERIFICADO, QA_SALTADA)
+# Veredictos que SÍ admiten a producción: la historia pasó la criba (o la QA estaba saltada).
+_VERIFICADAS = (VERDICTO_NO_VERIFICADO, QA_SALTADA)
+
+
 def _ejecutar_investigacion() -> dict[str, Any]:
-    """Cuerpo de INVESTIGACIÓN (ya bajo el single-flight de `ejecutar_investigacion`)."""
+    """Cuerpo de INVESTIGACIÓN (ya bajo el single-flight de `ejecutar_investigacion`).
+
+    Rediseño F3 (la frontera "QA = investigación" en los datos): la QA corre sobre la HISTORIA
+    (cluster) ANTES de materializar contenido, y la admisión solo promueve las VERIFICADAS:
+      0) FRESCURA: caduca los temas en vuelo (TTL) y resetea las QA de cluster `en_curso` zombi.
+      1) QA: criba las candidatas sin veredicto (top del ranking que pasan el listón), acotada
+         por el embudo. Asíncrona; persiste el veredicto en el cluster.
+      2) ADMISIÓN: promueve a tema (con copy pendiente) las historias ya verificadas, heredando
+         su veredicto al contenido. Las `problema` no se materializan.
+    """
     autor = _ref._autor_pipeline()
     maximo = config.pipeline_max()
-    # --- Fase 0 · FRESCURA: caduca los temas en vuelo que superaron el TTL. ------------------
-    # El pipeline es VENTANA DESLIZANTE sobre el ranking (sin colas intermedias): lo que no se
-    # completó a tiempo caduca y libera su hueco del gate serial; hoy entra lo de hoy. Sin esto,
-    # un backlog (p. ej. una etapa apagada unos días) bloquea la admisión para siempre.
+    # --- Fase 0 · FRESCURA. ------------------------------------------------------------------
+    # VENTANA DESLIZANTE sobre el ranking: lo que no se completó a tiempo caduca y libera su hueco
+    # (temas en vuelo); y una QA de cluster que murió (en_curso zombi) se resetea para re-cribar.
     try:
         _ingesta.caducar_temas_viejos()
     except Exception:  # noqa: BLE001 -- la caducidad es saneo; nunca rompe el barrido
         _log.exception("pipeline: fallo la caducidad de temas en vuelo.")
-    # --- Fase CI · "Crear noticias": crea los temas (sin copy) por marca. --------------------
-    # Etapa CI = toggle "Crear noticias" (`KENI_PIPELINE_SELECCION`), 1 toggle = 1 etapa: si el maestro está
-    # OFF no entran temas nuevos (aunque el daemon barra por otra etapa, p. ej. Copy de temas ya
-    # ingeridos). Por marca, el override `KENI_PIPELINE_SELECCION::marca=0` excluye esa marca de la ingesta.
-    # CI consume el pool ya FUSIONADO y RANKEADO (Ola B): promueve las top-N historias por marca
-    # (no un tema por item RSS), ordenadas por el score del algoritmo de ponderación. Esto frena el
-    # volumen y respeta la jerarquización. El clustering del pool lo alimenta el daemon de ingesta.
+    try:
+        _ingesta.caducar_qa_clusters_en_curso()
+    except Exception:  # noqa: BLE001 -- el reaper de QA es saneo; nunca rompe el barrido
+        _log.exception("pipeline: fallo el reaper de QA de clusters en curso.")
+    # --- Fase QA (criba de la FUENTE sobre la historia, pre-admisión). -----------------------
+    cribados = ejecutar_qa_clusters(autor=autor)
+    # --- Fase ADMISIÓN · "Crear noticias": materializa las historias YA VERIFICADAS por marca. -
+    # Etapa CI = toggle "Crear noticias" (`KENI_PIPELINE_SELECCION`): si está OFF no entra nada. La
+    # admisión consume el pool RANKEADO restringido a las verificadas (`no_verificado`/`saltada`),
+    # llena el cupo en vuelo (gate serial WIP) y los cupos del plan/diario, y HEREDA el veredicto
+    # del cluster al contenido (la pieza nace verificada y lista para copy).
     temas_nuevos: list[dict[str, Any]] = []
     for marca in marcas.ids():
         # FUENTE ÚNICA de verdad (config.etapa_activa): maestro global ON y marca no excluida.
-        # La misma lectura que pinta la etapa en /api/pipelines y el toggle en el catálogo.
         if not config.etapa_activa(config.ENV_PIPELINE_SELECCION, marca):
             continue
-        # NOTA (frescura): con la etapa Copy apagada para la marca, lo admitido queda "apto sin
-        # copy" (curación manual en el tablero) y, si nadie lo trabaja, CADUCA al TTL — el gate
-        # serial se libera solo y al día siguiente entra lo fresco del ranking, nunca el backlog.
-        # SERIAL POR MARCA: no metas más historias si esta marca ya tiene cola EN VUELO (sin
-        # cribar/sin copy). Promueve solo hasta llenar su cupo; si está lleno, salta. Así cada item
-        # que entró se COMPLETA (QA→copy) antes de meter nuevos, en vez de atascar QA con backlog.
+        # SERIAL POR MARCA: no metas más historias si esta marca ya tiene cola EN VUELO (sin copy).
         cupo = config.pipeline_en_vuelo_max() - _ingesta.temas_en_vuelo(marca)
         if cupo <= 0:
             continue
-        # VOLUMEN: con PLAN EDITORIAL DIARIO, la admisión llena los cupos POR CATEGORÍA que
-        # queden hoy (lo mejor de cada tipo, con slots explícitos para breaking); sin plan,
-        # cae al cupo diario simple (24 h móviles). En ambos casos la admisión es SELECCIÓN,
-        # no goteo: pocas plazas para las mejores historias del ranking en ese momento.
+        # VOLUMEN: con PLAN EDITORIAL DIARIO, llena los cupos POR CATEGORÍA que queden hoy; sin
+        # plan, cae al cupo diario simple. La admisión es SELECCIÓN, no goteo.
         cupos_cat = _ingesta.cupos_categoria_restantes(marca)
         if cupos_cat is not None:
             if not cupos_cat:
@@ -170,18 +184,81 @@ def _ejecutar_investigacion() -> dict[str, Any]:
         try:
             temas_nuevos.extend(promover_clusters_marca(
                 marca, maximo=min(maximo, cupo), cupos_categoria=cupos_cat,
+                qa_estados=_VERIFICADAS,
             ))
         except Exception:  # noqa: BLE001 -- un fallo de una marca no rompe el barrido
-            _log.exception("pipeline: fallo la promoción de historias (CI) de la marca %s", marca)
+            _log.exception("pipeline: fallo la admisión de historias (CI) de la marca %s", marca)
             continue
-    # --- Fase QA (criba de la fuente). -------------------------------------------------------
-    cribados = ejecutar_qa(autor=autor)
     if temas_nuevos or cribados:
         _log.info(
-            "investigación: %d tema(s) admitido(s) (CI), %d cribado(s) (QA).",
-            len(temas_nuevos), len(cribados),
+            "investigación: %d cribado(s) (QA), %d tema(s) admitido(s) (CI).",
+            len(cribados), len(temas_nuevos),
         )
     return {"temas": temas_nuevos, "cribados": cribados}
+
+
+def ejecutar_qa_clusters(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
+    """Fase QA del proceso de INVESTIGACIÓN (ADR 0011 F3): criba la FUENTE de las HISTORIAS
+    candidatas ANTES de materializar contenido.
+
+    Por marca con admisión activa (`KENI_PIPELINE_SELECCION`): toma las candidatas sin veredicto
+    que pasan el listón (`clusters_pendientes_qa`), acotadas por el presupuesto del EMBUDO
+    (`tope en vuelo − embudo`) para no cribar todo el pool. Si la Validación está activa, lanza
+    la criba `claude -p` y marca el cluster `en_curso` (asíncrona: el veredicto lo persiste el
+    `procesar` sobre el cluster). Si la Validación está OFF para la marca, marca el cluster
+    `saltada` (sin `claude -p`) para que la admisión lo promueva igual. Best-effort por historia;
+    `ColaLlenaError` corta la criba de esa marca (el siguiente tick reintenta). Devuelve los
+    cribados (`{id, gen_id, verdicto}`).
+    """
+    if autor is None:
+        autor = _ref._autor_pipeline()
+    cribados: list[dict[str, Any]] = []
+    en_vuelo_max = config.pipeline_en_vuelo_max()
+    for marca in marcas.ids():
+        # La QA solo tiene sentido si la admisión de la marca está activa (solo verificamos lo que
+        # admitiríamos). El override por marca de Selección excluye la marca aquí también.
+        if not config.etapa_activa(config.ENV_PIPELINE_SELECCION, marca):
+            continue
+        # PRESUPUESTO DEL EMBUDO: no cribes más de lo que cabe en vuelo (verificación acotada,
+        # como la admisión). A medida que la admisión drena verificadas (pasan a `usado`), el
+        # embudo encoge y se libera presupuesto para cribar la siguiente tanda.
+        try:
+            embudo = repos.contar_clusters_funnel_qa(marca, _FUNNEL_QA)
+        except Exception:  # noqa: BLE001 -- sin contador fiable, no cribamos esta marca este tick
+            _log.warning("pipeline: no se pudo contar el embudo de QA (%s)", marca, exc_info=True)
+            continue
+        presupuesto = en_vuelo_max - embudo
+        if presupuesto <= 0:
+            continue
+        pendientes = clusters_pendientes_qa(marca, maximo=presupuesto)
+        if not pendientes:
+            continue
+        # Validación OFF para la marca: se SALTA la criba; el cluster se marca `saltada` para que
+        # la admisión lo promueva igual (sin verificar). Misma FUENTE ÚNICA (config.etapa_activa).
+        validacion_on = config.etapa_activa(config.ENV_PIPELINE_VALIDACION, marca)
+        for cluster in pendientes:
+            cid = (cluster.get("id") or "").strip()
+            if not cid:
+                continue
+            if not validacion_on:
+                try:
+                    repos.marcar_cluster_qa(cid, QA_SALTADA)
+                except Exception:  # noqa: BLE001 -- un fallo al marcar saltada no mata la fase
+                    _log.exception("pipeline: fallo al marcar QA de cluster saltada (%s).", cid)
+                else:
+                    cribados.append({"id": cid, "gen_id": "", "verdicto": QA_SALTADA})
+                continue
+            try:
+                gen = lanzar_qa_cluster(cluster, autor=autor)
+            except generaciones.ColaLlenaError as e:
+                _log.info("pipeline: QA en pausa por admisión (%s); el resto entra en el próximo tick.", e)
+                break
+            except Exception:  # noqa: BLE001 -- un fallo por historia no debe matar la fase QA
+                _log.exception("pipeline: fallo la criba de la fuente (QA) de la historia %s (marca %s).", cid, marca)
+                continue
+            if gen is not None:
+                cribados.append({"id": cid, "gen_id": gen.get("id", "") if isinstance(gen, dict) else "", "verdicto": QA_EN_CURSO})
+    return cribados
 
 
 def _ejecutar_produccion() -> dict[str, Any]:

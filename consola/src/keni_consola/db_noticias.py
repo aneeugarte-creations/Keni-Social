@@ -1492,6 +1492,50 @@ def marcar_cluster_qa(cluster_id: str, veredicto: str, hallazgos: str = "") -> N
         con.close()
 
 
+def contar_clusters_funnel_qa(marca: str, estados: tuple[str, ...]) -> int:
+    """Cuántas HISTORIAS `nuevo` de la marca están en el EMBUDO de verificación (ADR 0011 F3).
+
+    El embudo son los clusters aún sin promover (`estado='nuevo'`) cuyo `qa_veredicto` está en
+    `estados` (p. ej. en_curso + verificadas-pendientes). Acota cuánta QA se lanza por tick para
+    que la verificación no recorra todo el pool: el presupuesto de QA = tope en vuelo − embudo.
+    0 ante cualquier fallo o `estados` vacío.
+    """
+    if not estados:
+        return 0
+    marcadores = ",".join("?" for _ in estados)
+    con = _conectar()
+    try:
+        fila = con.execute(  # noqa: S608 -- marcadores parametrizados; estados de allowlist interna
+            f"SELECT COUNT(*) AS n FROM noticias_clusters "
+            f"WHERE marca = ? AND estado = 'nuevo' AND qa_veredicto IN ({marcadores})",
+            (marca, *estados),
+        ).fetchone()
+    finally:
+        con.close()
+    return int(fila["n"]) if fila is not None else 0
+
+
+def sanear_qa_clusters_en_curso(umbral_iso: str) -> int:
+    """Resetea a "" el `qa_veredicto='en_curso'` ZOMBI de los clusters (reaper de verificación).
+
+    Si una QA de la fuente sobre un cluster muere (deploy/OOM/cuelgue), el cluster quedaría
+    `en_curso` para siempre: ni se re-criba ni se admite. Devuelve los `en_curso` más viejos que
+    `umbral_iso` a "" para que el barrido los vuelva a cribar. Mismo patrón que
+    `sanear_qa_en_curso_huerfanos` sobre `contenido`. Devuelve cuántos saneó.
+    """
+    con = _conectar()
+    try:
+        cur = con.execute(
+            "UPDATE noticias_clusters SET qa_veredicto = '', actualizado = ? "
+            "WHERE qa_veredicto = 'en_curso' AND actualizado <> '' AND actualizado < ?",
+            (ahora_iso(), umbral_iso),
+        )
+        con.commit()
+        return cur.rowcount or 0
+    finally:
+        con.close()
+
+
 def items_de_cluster(cluster_id: str, *, limite: int = 200) -> list[dict[str, Any]]:
     """Items de archivo de una historia, MÁS RECIENTES primero (`capturado_en` desc)."""
     con = _conectar()

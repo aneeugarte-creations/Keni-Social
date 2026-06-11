@@ -33,6 +33,7 @@ __all__ = [
     "dom_qa_titulo",
     "_contexto_qa_fuente",
     "lanzar_qa_fuente",
+    "lanzar_qa_cluster",
     "temas_sin_qa",
 ]
 
@@ -219,6 +220,83 @@ def lanzar_qa_fuente(
         marca,
         f"Criba de la fuente (claude) — '{titulo[:120]}'",
         contenido_id=tema_id,
+        gen_id=gen.get("id", "") if isinstance(gen, dict) else "",
+    )
+    return gen
+
+
+def lanzar_qa_cluster(
+    cluster: dict[str, Any], *, autor: dict[str, str] | None
+) -> dict[str, Any] | None:
+    """QA de la FUENTE sobre una HISTORIA (cluster) via `claude -p`, ANTES de materializar
+    contenido de producción (ADR 0011 F3).
+
+    Criba la nota de origen del cluster (título + resumen + bloques de sus fuentes; usa los
+    cuerpos ARCHIVADOS del feed, sin fetch HTTP — la criba es permisiva) y sella el veredicto en
+    `noticias_clusters.qa_veredicto` (no en `contenido`: la pieza aún no existe). El barrido de
+    investigación admite luego solo las `no_verificado` (hereda el veredicto al contenido) y deja
+    fuera las `problema`. ASÍNCRONO: marca el cluster `en_curso` y devuelve la generación; None si
+    no se pudo lanzar (sin doc / sin marca / sin nota). `ColaLlenaError` se PROPAGA (corta la fase
+    QA de esa marca). Mismo runtime barato (Haiku/low/timeout corto) que `lanzar_qa_fuente`.
+    """
+    from . import _ingesta
+
+    cid = (cluster.get("id") or "").strip()
+    if not cid:
+        return None
+    marca = (cluster.get("marca") or "").strip()
+    if not marca or not marcas.es_marca(marca):
+        return None
+    titulo = (cluster.get("titulo_es") or cluster.get("titulo") or "").strip()
+    resumen = (cluster.get("resumen_es") or cluster.get("resumen") or "").strip()
+    try:
+        items = repos.items_de_cluster(cid, limite=_ingesta._MAX_ENLACES_CLUSTER)
+    except Exception:  # noqa: BLE001 -- sin items legibles, cribamos con título+resumen igual
+        items = []
+    cuerpos = dict(repos.cuerpos_de_cluster(cid))  # archivados (gratis); sin fetch HTTP en QA
+    nota = _ingesta._nota_de_cluster(titulo, resumen, items, cuerpos)[: gen_dom.MAX_TEXTO]
+    if not nota.strip():
+        return None
+
+    doc_id = _ref.asegurar_documento_qa()
+    cuerpo = libtexto.cuerpo_efectivo(doc_id) if doc_id else None
+    if not cuerpo:
+        return None  # sin documento de QA no hay criba: el cluster queda sin veredicto.
+
+    titulo = titulo or dom_qa_titulo(nota)
+    prompt = gen_dom.componer(
+        cuerpo,
+        libtexto.editoriales_de_marca(marca, pipeline="qa"),
+        _contexto_qa_fuente(nota),
+    )
+    # Marca el cluster en curso ANTES de lanzar (la fase QA no lo re-lanza). Con el lanzador
+    # SÍNCRONO de los tests el `procesar` corre DURANTE `lanzar` y persiste el veredicto real;
+    # en prod (async) el orden es indiferente. El `procesar` lo sustituye por el real al fin.
+    try:
+        repos.marcar_cluster_qa(cid, QA_EN_CURSO)
+    except Exception:  # noqa: BLE001 -- best-effort; el doble-lanzamiento lo evita el sweep
+        _log.warning("pipeline: no se pudo marcar el cluster en_curso para QA (%s)", cid, exc_info=True)
+    gen = gen_dom.lanzar(
+        tipo=TIPO_PIPELINE,
+        titulo=f"Validación · {titulo}",
+        marca=marca,
+        prompt=prompt,
+        # Sin contenido aún (QA pre-admisión): se correla por cluster vía la spec/procesar.
+        contenido_id="",
+        clave_idem=generaciones.clave_idempotencia(
+            (autor or {}).get("id", ""), TIPO_PIPELINE, marca, "qa-cluster", cid
+        ),
+        procesar=dom_qa.construir_procesar_qa_fuente(marca, titulo, autor, cluster_id=cid),
+        procesar_spec=jobspec.construir_qa_fuente(
+            marca=marca, titulo=titulo, autor=autor, cluster_id=cid,
+        ),
+        autor=autor,
+        endurecer=_endurecer_qa_fuente(),
+    )
+    registrar_etapa(
+        ETAPA_QA,
+        marca,
+        f"Criba de la fuente (claude) — '{titulo[:120]}'",
         gen_id=gen.get("id", "") if isinstance(gen, dict) else "",
     )
     return gen

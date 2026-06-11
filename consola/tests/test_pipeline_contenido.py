@@ -642,6 +642,61 @@ def test_encadenado_cola_llena_no_rompe_la_qa(entorno, monkeypatch):
     assert [t["id"] for t in pc.temas_para_copy()] == [tema["id"]]
 
 
+def test_qa_cluster_problema_no_se_admite(entorno, monkeypatch):
+    """ADR 0011 F3: la QA corre sobre la HISTORIA; una `problema` NO se materializa como contenido."""
+    monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
+    monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")
+    monkeypatch.setenv("KENI_PIPELINE_MAX", "5")
+    cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_QA_PROBLEMA))  # noqa: F841
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    _sembrar_cluster("c-malo", titulo="Historia dudosa", score=0.8)
+
+    # Un tick de investigación: QA (síncrona en test) marca el cluster, la admisión decide.
+    res = pc._ejecutar_investigacion()
+
+    assert repos.obtener_noticia_cluster("c-malo")["qa_veredicto"] == pc.VERDICTO_PROBLEMA
+    assert res["temas"] == []  # 'problema' NO cruza a producción
+    assert pc.temas_pipeline() == []
+    # La historia sigue en el pool (visible con su veredicto), sin promover.
+    assert repos.obtener_noticia_cluster("c-malo")["estado"] == "nuevo"
+
+
+def test_qa_cluster_ok_se_admite_heredando_veredicto(entorno, monkeypatch):
+    """ADR 0011 F3: una historia que pasa la QA se admite y el TEMA HEREDA el veredicto del cluster."""
+    monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
+    monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")
+    monkeypatch.setenv("KENI_PIPELINE_MAX", "5")
+    cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_QA_OK))  # noqa: F841
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    _sembrar_cluster("c-ok", titulo="Historia verificada", score=0.8)
+
+    res = pc._ejecutar_investigacion()
+
+    assert repos.obtener_noticia_cluster("c-ok")["qa_veredicto"] == pc.VERDICTO_NO_VERIFICADO
+    assert len(res["temas"]) == 1
+    tema = res["temas"][0]
+    # El contenido nace VERIFICADO (frontera "QA = investigación" alineada en los datos).
+    assert repos.obtener_contenido(tema["id"])["qa_veredicto"] == pc.VERDICTO_NO_VERIFICADO
+    assert repos.obtener_noticia_cluster("c-ok")["estado"] == "usado"
+
+
+def test_qa_cluster_acotada_por_el_embudo(entorno, monkeypatch):
+    """ADR 0011 F3: la criba se acota al EMBUDO (tope en vuelo) — no recorre todo el pool por tick."""
+    monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
+    monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")
+    monkeypatch.setenv("KENI_PIPELINE_EN_VUELO_MAX", "1")  # embudo de 1
+    cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_QA_OK))  # noqa: F841
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    for i in range(3):
+        _sembrar_cluster(f"c{i}", titulo=f"Historia {i}", score=0.9 - i * 0.1)
+
+    cribados = pc.ejecutar_qa_clusters(autor=None)
+
+    # Con tope en vuelo = 1, solo se criba 1 historia en este tick (la mejor del ranking).
+    assert len(cribados) == 1
+    assert cribados[0]["id"] == "c0"
+
+
 def test_copy_fallido_se_reintenta_tras_el_backoff(entorno, monkeypatch):
     """DEDUP AL ÉXITO + BACKOFF: un copy fallido se RELANZA, pero solo PASADA la espera creciente.
 

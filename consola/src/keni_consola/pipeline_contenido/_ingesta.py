@@ -42,12 +42,14 @@ __all__ = [
     "crear_tema_de",
     "crear_tema_de_cluster",
     "clusters_para_promover",
+    "clusters_pendientes_qa",
     "categoria_efectiva",
     "cupo_produccion_restante",
     "cupos_categoria_restantes",
     "promover_clusters_marca",
     "temas_en_vuelo",
     "caducar_temas_viejos",
+    "caducar_qa_clusters_en_curso",
     "_claves_dedup_marca",
     "_url_fuente_de",
     "_nota_de_item",
@@ -349,9 +351,15 @@ def _nota_de_cluster(
 
 
 def clusters_para_promover(
-    marca: str, *, maximo: int, cupos_categoria: dict[str, int] | None = None
+    marca: str, *, maximo: int, cupos_categoria: dict[str, int] | None = None,
+    qa_estados: tuple[str, ...] | None = None,
 ) -> list[dict[str, Any]]:
     """Top-N historias (`estado='nuevo'`) de la marca por SCORE, con LISTÓN y DIVERSIDAD. Best-effort.
+
+    `qa_estados` (ADR 0011 F3): si se pasa, se restringe a las historias cuyo `qa_veredicto` está
+    en ese conjunto — la ADMISIÓN solo promueve las VERIFICADAS (`no_verificado`/`saltada`), así
+    las `problema` y las aún sin cribar no se materializan como contenido. None = sin filtro de
+    QA (comportamiento previo; lo usan los tests que llaman directo a la promoción).
 
     Reusa el pool ya FUSIONADO y RANKEADO (Ola B): `listar_noticia_clusters` viene ordenado por
     score (mayor primero). Así el pipeline produce las pocas historias más relevantes por marca
@@ -379,6 +387,10 @@ def clusters_para_promover(
     # Con PLAN (cupos por categoría) la muestra crece: las categorías minoritarias del plan
     # pueden vivir lejos del top global del pool.
     limite = max(maximo * 4, maximo + 8) if cupos_categoria is None else max(maximo * 10, 80)
+    # Con filtro de QA las verificadas pueden vivir más abajo en el ranking (solo se cribó el top
+    # del embudo): sobremuestrea más para no quedarte corto al filtrar por veredicto.
+    if qa_estados is not None:
+        limite = max(limite, 80)
     try:
         clusters, _total = repos.listar_noticia_clusters(
             marca=marca, estado="nuevo", limite=limite
@@ -386,6 +398,8 @@ def clusters_para_promover(
     except Exception:  # noqa: BLE001 -- sin pool legible, esta marca no promueve nada
         _log.warning("pipeline: no se pudieron leer historias para promover (%s)", marca, exc_info=True)
         return []
+    if qa_estados is not None:
+        clusters = [c for c in clusters if (c.get("qa_veredicto") or "").strip() in qa_estados]
     aptas: list[dict[str, Any]] = []
     bajo_liston = 0
     for c in clusters:
@@ -436,6 +450,42 @@ def clusters_para_promover(
     if umbral <= 0:
         return aptas[:maximo]
     return clustering.seleccionar_diversos(aptas, maximo=maximo, umbral=umbral)
+
+
+def clusters_pendientes_qa(marca: str, *, maximo: int) -> list[dict[str, Any]]:
+    """Top-N historias (`estado='nuevo'`) de la marca SIN cribar aún (`qa_veredicto`==''), que
+    pasan el LISTÓN — las candidatas a las que lanzar la QA de la fuente (ADR 0011 F3).
+
+    El listón evita gastar `claude -p` cribando historias que jamás se admitirían (score/marca
+    bajo umbral). Las ya `en_curso`/`no_verificado`/`saltada`/`problema` quedan fuera (su QA ya
+    corrió o está en vuelo). Ordenadas por score (el pool ya viene rankeado); se recorta a
+    `maximo` (el presupuesto del embudo de verificación). Best-effort: [] ante fallo o maximo<=0.
+    """
+    if maximo <= 0:
+        return []
+    from .. import noticias_liston
+
+    limite = max(maximo * 4, 80)
+    try:
+        clusters, _total = repos.listar_noticia_clusters(
+            marca=marca, estado="nuevo", limite=limite
+        )
+    except Exception:  # noqa: BLE001 -- sin pool legible, esta marca no criba nada
+        _log.warning("pipeline: no se pudieron leer historias para QA (%s)", marca, exc_info=True)
+        return []
+    pendientes: list[dict[str, Any]] = []
+    for c in clusters:
+        if (c.get("qa_veredicto") or "").strip():
+            continue  # ya cribada / en curso
+        try:
+            supera, _motivo = noticias_liston.evaluar(c)
+        except Exception:  # noqa: BLE001 -- fail-closed: ante fallo del listón no se criba
+            continue
+        if supera:
+            pendientes.append(c)
+        if len(pendientes) >= maximo:
+            break
+    return pendientes
 
 
 def _es_fuente_propia(fuente_id: str, cache: dict[str, bool]) -> bool:
@@ -573,6 +623,11 @@ def crear_tema_de_cluster(
             fecha_objetivo=hoy_utc().isoformat(),
             formato=_FORMATO_PIPELINE,
             copy_pendiente=_copy_pendiente_de(trabajo, nota, redes_ids),
+            # VERIFICACIÓN HEREDADA (ADR 0011 F3): la QA corrió sobre la HISTORIA antes de admitir;
+            # el tema NACE con el veredicto de su cluster (`no_verificado`/`saltada`), así la fase
+            # de copy lo recoge de inmediato y la frontera "QA = investigación" queda en los datos.
+            qa_veredicto=(cluster.get("qa_veredicto") or "").strip(),
+            qa_hallazgos=(cluster.get("qa_hallazgos") or ""),
             # FECHA de la NOTA ORIGINAL: preferimos el `publicado_en` del item más reciente
             # (cuando el medio publicó la nota); si el medio no traía fecha, caemos al
             # `primer_visto` del cluster (cuando el Radar la capturó).
@@ -761,6 +816,26 @@ def caducar_temas_viejos(*, ahora: datetime | None = None) -> int:
     return caducados
 
 
+def caducar_qa_clusters_en_curso(*, ahora: datetime | None = None) -> int:
+    """Reaper de la VERIFICACIÓN: resetea los clusters `qa_veredicto='en_curso'` ZOMBI (ADR 0011 F3).
+
+    Si una QA de la fuente sobre un cluster muere (deploy/OOM/cuelgue), el cluster quedaría
+    `en_curso` para siempre: ni se re-criba ni se admite. Pasado el TTL de `en_curso` (el mismo
+    que el reaper de `contenido`, `config.qa_en_curso_ttl_seg`), vuelve a "" para re-cribar.
+    Corre al inicio del barrido de investigación. Best-effort; devuelve cuántos saneó.
+    """
+    momento = ahora or datetime.now(timezone.utc)
+    umbral = momento - timedelta(seconds=config.qa_en_curso_ttl_seg())
+    try:
+        n = repos.sanear_qa_clusters_en_curso(umbral.astimezone(timezone.utc).isoformat())
+    except Exception:  # noqa: BLE001 -- el saneo es best-effort; nunca rompe el barrido
+        _log.exception("pipeline: fallo el reaper de QA de clusters en curso.")
+        return 0
+    if n:
+        _log.info("pipeline: %d cluster(s) con QA en_curso zombi reseteados a re-criba.", n)
+    return n
+
+
 def _fecha_aware(crudo: str) -> datetime | None:
     """Parsea un ISO del tema a datetime CON tz (naive = UTC); None si no es parseable."""
     try:
@@ -771,14 +846,19 @@ def _fecha_aware(crudo: str) -> datetime | None:
 
 
 def promover_clusters_marca(
-    marca: str, *, maximo: int, cupos_categoria: dict[str, int] | None = None
+    marca: str, *, maximo: int, cupos_categoria: dict[str, int] | None = None,
+    qa_estados: tuple[str, ...] | None = None,
 ) -> list[dict[str, Any]]:
     """CI — promueve a temas las top-N historias rankeadas de una marca. Registra la etapa CI.
 
     Reemplaza la lectura directa de feeds RSS (que creaba un tema por item): ahora consume el pool
-    ya fusionado/rankeado (Ola B). Devuelve los temas creados. Best-effort por historia.
+    ya fusionado/rankeado (Ola B). `qa_estados` (ADR 0011 F3) restringe a las historias con ese
+    veredicto de QA (la admisión solo promueve las VERIFICADAS). Devuelve los temas creados.
+    Best-effort por historia.
     """
-    clusters = clusters_para_promover(marca, maximo=maximo, cupos_categoria=cupos_categoria)
+    clusters = clusters_para_promover(
+        marca, maximo=maximo, cupos_categoria=cupos_categoria, qa_estados=qa_estados
+    )
     claves_vistas = _claves_dedup_marca(marca)
     temas: list[dict[str, Any]] = []
     for cluster in clusters:

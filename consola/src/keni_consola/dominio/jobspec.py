@@ -271,11 +271,13 @@ def construir_qa_fuente(
     titulo: str,
     autor: dict[str, str] | None = None,
     contenido_id: str = "",
+    cluster_id: str = "",
 ) -> dict[str, Any]:
     """Spec del post-procesado de la QA de la FUENTE (pre-copy).
 
-    `contenido_id` es el TEMA cribado: el worker persiste sobre él el veredicto estructurado
-    (`no_verificado`/`problema`) + hallazgos, para que la fase CD genere copy solo de los OK.
+    El destino del veredicto: `cluster_id` (ADR 0011 F3) = QA sobre la HISTORIA antes de
+    materializar contenido (el worker sella `noticias_clusters.qa_veredicto`); `contenido_id`
+    (legado/manual) = QA sobre un TEMA ya materializado. Uno u otro.
     """
     return {
         "kind": PROC_QA_FUENTE,
@@ -283,6 +285,7 @@ def construir_qa_fuente(
         "titulo": titulo,
         "autor": _autor_spec(autor),
         "contenido_id": contenido_id or "",
+        "cluster_id": cluster_id or "",
     }
 
 
@@ -548,6 +551,7 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
         return dom_qa.construir_procesar_qa_fuente(
             p["marca"], p.get("titulo", ""), autor=autor,
             contenido_id=p.get("contenido_id", "") or "",
+            cluster_id=p.get("cluster_id", "") or "",
         )
 
     if kind == PROC_DOCUMENTO:
