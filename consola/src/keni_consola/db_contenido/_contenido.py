@@ -478,7 +478,10 @@ def resumen_plan_por_categoria(marca: str, desde_iso: str) -> dict[str, dict[str
     """GENERADOS y PUBLICADOS por LÍNEA del plan desde `desde_iso`: {cat: {generados, publicados}}.
 
     Cuenta el `contenido` de la marca con `categoria` propia (nacido de una historia del plan
-    o del reciclaje evergreen; '' = alta manual, fuera del plan) creado en la ventana.
+    o del reciclaje evergreen; '' = alta manual, fuera del plan) creado en la ventana Y que
+    tenga AL MENOS UNA pieza publicable (`contenido_plataforma.es_publicacion=1`): un tema sin
+    ningún post —promovido pero con el copy aún sin generar o ya fallido/borrado— NO infla el
+    plan (de ahí que borrar el último post baje el contador y que un tema zombi no cuente).
     PUBLICADOS = de esos, cuántos tienen ya alguna pieza por red en estado 'publicado'.
     Es el contador del plan diario: lo leen la admisión (cupos restantes) y el monitor
     («generados · publicados / objetivo»). `clase='contenido'` excluye tareas.
@@ -496,6 +499,9 @@ def resumen_plan_por_categoria(marca: str, desde_iso: str) -> dict[str, dict[str
             "FROM contenido c "
             "WHERE c.marca = ? AND c.clase = 'contenido' "
             "AND (c.categoria <> '' OR c.flujo = 'evergreen') "
+            # Solo temas con un post REAL: una pieza publicable viva (es_publicacion=1).
+            "AND EXISTS (SELECT 1 FROM contenido_plataforma p "
+            "WHERE p.contenido_id = c.id AND p.es_publicacion = 1) "
             "AND c.creado >= ? GROUP BY 1",
             (marca, desde_iso),
         ).fetchall()

@@ -24,6 +24,24 @@ def _sembrar(cid, *, score=0.5, categoria="mx", breaking=0, estado="nuevo", marc
     return repos.obtener_noticia_cluster(cid)
 
 
+def _contenido_con_post(*, marca="unotv", categoria="mx", titulo="Generada", creado=""):
+    """Un `contenido` del plan CON un post real (pieza `es_publicacion=1`).
+
+    Es lo que el plan cuenta: solo los temas que YA produjeron una publicación. Un
+    `contenido` sin piezas (promovido pero con el copy aún sin generar, o fallido/borrado)
+    NO cuenta — para eso se crea con `repos.crear_contenido` a secas en los tests.
+    """
+    kw = {"clase": "contenido", "titulo": titulo, "marca": marca, "categoria": categoria}
+    if creado:
+        kw["creado"] = creado
+    contenido = repos.crear_contenido(**kw)
+    repos.crear_contenido_plataforma(
+        contenido_id=contenido["id"], red="facebook", marca=marca, copy="Post",
+        es_publicacion=True,
+    )
+    return contenido
+
+
 # --------------------------------------------------------------------------- #
 # GET /api/noticias/mesa                                                       #
 # --------------------------------------------------------------------------- #
@@ -90,11 +108,14 @@ def test_mesa_sin_plan_degrada_a_fuera_de_plan(cliente, monkeypatch):
 
 def test_mesa_descuenta_lo_generado_en_el_progreso(cliente, monkeypatch):
     monkeypatch.setenv("KENI_PLAN_DIA", "mx:2")
-    # Lo generado hoy vive en `contenido.categoria` (igual que la admisión CI lo cuenta).
-    repos.crear_contenido(clase="contenido", titulo="Ya generada", marca="unotv", categoria="mx")
+    # Un tema CON post real cuenta...
+    _contenido_con_post(categoria="mx", titulo="Ya generada")
+    # ...pero un tema SIN ningún post (promovido y con el copy sin generar, o fallido) NO:
+    # es el "fantasma" que antes inflaba el plan (6 en el conteo con 5 posts visibles).
+    repos.crear_contenido(clase="contenido", titulo="Sin post", marca="unotv", categoria="mx")
     datos = cliente.get("/api/noticias/mesa", params={"marca": "unotv"}).json()
     linea = datos["lineas"][0]
-    assert linea["generados"] == 1
+    assert linea["generados"] == 1  # solo el que tiene post; el fantasma no cuenta
     assert linea["restante"] == 1
     assert datos["total_generados"] == 1
 
@@ -107,13 +128,11 @@ def test_mesa_solo_cuenta_la_jornada_mx_no_lo_de_dias_previos(cliente, monkeypat
     siguiente el plan vuelve a 0 aunque la pieza vieja siga viva en el tablero.
     """
     monkeypatch.setenv("KENI_PLAN_DIA", "mx:2")
-    # De otro día (muy anterior a cualquier medianoche MX de hoy): NO debe contar.
-    repos.crear_contenido(
-        clase="contenido", titulo="De ayer", marca="unotv", categoria="mx",
-        creado="2020-01-01T00:00:00",
-    )
+    # Ambos con post real, así que lo ÚNICO que excluye al viejo es la fecha (no la falta
+    # de pieza): de otro día (muy anterior a cualquier medianoche MX de hoy) NO cuenta.
+    _contenido_con_post(categoria="mx", titulo="De ayer", creado="2020-01-01T00:00:00")
     # De hoy (creado=ahora por defecto): SÍ cuenta.
-    repos.crear_contenido(clase="contenido", titulo="De hoy", marca="unotv", categoria="mx")
+    _contenido_con_post(categoria="mx", titulo="De hoy")
     datos = cliente.get("/api/noticias/mesa", params={"marca": "unotv"}).json()
     linea = datos["lineas"][0]
     assert linea["generados"] == 1  # solo la de hoy

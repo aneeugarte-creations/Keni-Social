@@ -73,13 +73,17 @@ def test_produccion_dia_lineas_del_plan(entorno, monkeypatch):
     """
     monkeypatch.setenv("KENI_PLAN_DIA::unotv", "mx:4,breaking:2")
     cli = _cli()
-    # Dos generados de mx; uno llega a PUBLICADO.
-    repos.crear_contenido(clase="contenido", titulo="Nacional 1", marca="unotv", categoria="mx")
+    # Dos generados de mx (cada uno CON post real es_publicacion=1; un tema sin post no
+    # cuenta en el plan); uno llega a PUBLICADO.
+    n1 = repos.crear_contenido(clase="contenido", titulo="Nacional 1", marca="unotv", categoria="mx")
+    repos.crear_contenido_plataforma(
+        contenido_id=n1["id"], red="x", copy="C", es_publicacion=True
+    )
     publicado = repos.crear_contenido(
         clase="contenido", titulo="Nacional 2", marca="unotv", categoria="mx"
     )
     repos.crear_contenido_plataforma(
-        contenido_id=publicado["id"], red="x", copy="C", estado="publicado"
+        contenido_id=publicado["id"], red="x", copy="C", estado="publicado", es_publicacion=True
     )
     # Una manual sin categoría: fuera del plan (no cuenta en ninguna línea).
     _crear(cli, titulo="Manual sin línea")
@@ -100,20 +104,27 @@ def test_evergreen_cuenta_en_su_linea_desde_cualquier_camino(entorno, monkeypatc
     seguridad para filas legadas con flujo evergreen y categoría vacía.
     """
     monkeypatch.setenv("KENI_PLAN_DIA::unotv", "evergreen:1,mx:4")
+    # Cada tema lleva un post real (es_publicacion=1): el plan solo cuenta temas con post.
+    def _con_post(contenido):
+        repos.crear_contenido_plataforma(
+            contenido_id=contenido["id"], red="x", copy="C", marca="unotv", es_publicacion=True
+        )
+        return contenido
+
     # 1) Nace evergreen SIN categoría explícita (el camino del banco evergreen).
-    nacida = repos.crear_contenido(
+    nacida = _con_post(repos.crear_contenido(
         clase="contenido", titulo="RFC: para qué sirve", marca="unotv",
         flujo="evergreen", origen="evergreen",
-    )
+    ))
     assert nacida["categoria"] == "evergreen"
     # 2) Una pieza normal CONVERTIDA a evergreen adopta la línea…
-    convertida = repos.crear_contenido(clase="contenido", titulo="Normal", marca="unotv")
+    convertida = _con_post(repos.crear_contenido(clase="contenido", titulo="Normal", marca="unotv"))
     tras = repos.actualizar_contenido(convertida["id"], {"flujo": "evergreen"})
     assert tras["categoria"] == "evergreen"
     # …pero una con línea propia (mx) la CONSERVA al reconvertirse.
-    mx = repos.crear_contenido(
+    mx = _con_post(repos.crear_contenido(
         clase="contenido", titulo="Nacional", marca="unotv", categoria="mx"
-    )
+    ))
     tras_mx = repos.actualizar_contenido(mx["id"], {"flujo": "evergreen"})
     assert tras_mx["categoria"] == "mx"
 

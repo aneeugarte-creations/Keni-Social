@@ -1205,9 +1205,13 @@ def test_plan_descuenta_lo_ya_generado_hoy(entorno, monkeypatch):
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
     monkeypatch.setenv("KENI_PLAN_DIA", "mx:1")
-    # Generado previo de la línea mx (la categoría vive EN el contenido, no en el cluster).
-    repos.crear_contenido(
+    # Generado previo de la línea mx (la categoría vive EN el contenido, no en el cluster),
+    # CON post real (es_publicacion=1): un tema sin post no consumiría cupo (no cuenta).
+    ya = repos.crear_contenido(
         clase="contenido", titulo="Ya generada", marca="unotv", categoria="mx"
+    )
+    repos.crear_contenido_plataforma(
+        contenido_id=ya["id"], red="facebook", marca="unotv", copy="P", es_publicacion=True
     )
     _sembrar_cluster("hoy", titulo="Nacional nueva", score=0.9, categoria="mx")
 
@@ -1264,9 +1268,13 @@ def test_plan_breaking_excede_su_cupo_con_tope_extra(entorno, monkeypatch):
 
     monkeypatch.setenv("KENI_PLAN_DIA", "breaking:1")
     monkeypatch.setenv("KENI_BREAKING_EXTRA_DIA", "1")
-    # El cupo del plan (1) YA está consumido por una breaking generada hoy.
-    repos.crear_contenido(
+    # El cupo del plan (1) YA está consumido por una breaking generada hoy: tema CON post
+    # real (pieza es_publicacion=1); un tema sin post no consumiría cupo (no cuenta).
+    breaking = repos.crear_contenido(
         clase="contenido", titulo="Breaking previa", marca="unotv", categoria="breaking"
+    )
+    repos.crear_contenido_plataforma(
+        contenido_id=breaking["id"], red="facebook", marca="unotv", copy="P", es_publicacion=True
     )
     # Queda el hueco EXTRA: una nueva última hora aún sale al feed.
     assert _ingesta.cupos_categoria_restantes("unotv") == {"breaking": 1}
@@ -1285,14 +1293,23 @@ def test_cupos_solo_cuentan_la_jornada_mx_no_dias_previos(entorno, monkeypatch):
     from keni_consola.pipeline_contenido import _ingesta
 
     monkeypatch.setenv("KENI_PLAN_DIA", "mx:1")
+    # Ambos con post real (es_publicacion=1): lo ÚNICO que excluye al viejo es la fecha.
     # De otra jornada: NO consume el cupo de hoy -> queda el hueco íntegro.
-    repos.crear_contenido(
+    ayer = repos.crear_contenido(
         clase="contenido", titulo="Nacional de ayer", marca="unotv", categoria="mx",
         creado="2020-01-01T00:00:00",
     )
+    repos.crear_contenido_plataforma(
+        contenido_id=ayer["id"], red="facebook", marca="unotv", copy="P", es_publicacion=True
+    )
     assert _ingesta.cupos_categoria_restantes("unotv") == {"mx": 1}
     # De hoy: consume el cupo -> sin hueco.
-    repos.crear_contenido(clase="contenido", titulo="Nacional de hoy", marca="unotv", categoria="mx")
+    hoy = repos.crear_contenido(
+        clase="contenido", titulo="Nacional de hoy", marca="unotv", categoria="mx"
+    )
+    repos.crear_contenido_plataforma(
+        contenido_id=hoy["id"], red="facebook", marca="unotv", copy="P", es_publicacion=True
+    )
     assert _ingesta.cupos_categoria_restantes("unotv") == {}
 
 
