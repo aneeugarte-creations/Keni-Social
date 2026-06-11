@@ -1027,6 +1027,7 @@ _COLS_NOTICIA_CLUSTER: tuple[str, ...] = (
     "primera_fuente",
     "primera_fuente_nombre",
     "fuentes_detalle",
+    "marca_clasificada_por_ia",
     "creado",
     "actualizado",
 )
@@ -1119,6 +1120,8 @@ def _fila_a_noticia_cluster(fila: Any) -> dict[str, Any]:
         "primera_fuente": fila["primera_fuente"] or "",
         "primera_fuente_nombre": fila["primera_fuente_nombre"] or "",
         "fuentes_detalle": _detalle_fuentes_a_lista(fila["fuentes_detalle"]),
+        # Encaje de marca por IA (ADR 0011): la marca la asignó el clasificador Haiku.
+        "marca_clasificada_por_ia": bool(fila["marca_clasificada_por_ia"]),
         "creado": fila["creado"] or "",
         "actualizado": fila["actualizado"] or "",
     }
@@ -1179,6 +1182,10 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
         "primera_fuente": cluster.get("primera_fuente") or "",
         "primera_fuente_nombre": cluster.get("primera_fuente_nombre") or "",
         "fuentes_detalle": _detalle_fuentes_a_json(cluster.get("fuentes_detalle")),
+        # Encaje de marca por IA (ADR 0011): valor del ALTA; en conflicto NO se pisa (está en
+        # `_NO_PISAR`), lo sella aparte `marcar_cluster_marca_ia` — como `traducido`. Así un
+        # recalc (merge/fusión/rescore) sin el flag no borra el encaje IA ya hecho.
+        "marca_clasificada_por_ia": 1 if cluster.get("marca_clasificada_por_ia") else 0,
         "creado": cluster.get("creado") or ahora,
         "actualizado": ahora,
     }
@@ -1189,7 +1196,7 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
     # 'usado' a 'nuevo' ni borrar su enlace al tema (lo que duplicaba el tema en el tablero).
     _NO_PISAR = (
         "id", "creado", "titulo_es", "resumen_es", "titulo_original", "idioma", "traducido",
-        "estado", "contenido_id",
+        "estado", "contenido_id", "marca_clasificada_por_ia",
     )
     actualizables = [c for c in _COLS_NOTICIA_CLUSTER if c not in _NO_PISAR]
     set_clause = ", ".join(f"{c} = excluded.{c}" for c in actualizables)
@@ -1431,6 +1438,25 @@ def marcar_cluster_traducido(
     finally:
         con.close()
     return obtener_noticia_cluster(cluster_id)
+
+
+def marcar_cluster_marca_ia(cluster_id: str) -> None:
+    """Sella `marca_clasificada_por_ia=1` (ADR 0011): la marca la asignó el clasificador IA.
+
+    Aparte del upsert (la columna está en `_NO_PISAR`) para que un recalc posterior sin el flag
+    no lo borre — mismo patrón que `marcar_cluster_traducido`. Best-effort: si el cluster no
+    existe, no hace nada.
+    """
+    con = _conectar()
+    try:
+        con.execute(
+            "UPDATE noticias_clusters SET marca_clasificada_por_ia = 1, actualizado = ? "
+            "WHERE id = ?",
+            (ahora_iso(), cluster_id),
+        )
+        con.commit()
+    finally:
+        con.close()
 
 
 def items_de_cluster(cluster_id: str, *, limite: int = 200) -> list[dict[str, Any]]:

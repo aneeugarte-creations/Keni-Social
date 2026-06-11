@@ -1390,6 +1390,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         primera_fuente TEXT NOT NULL DEFAULT '',
         primera_fuente_nombre TEXT NOT NULL DEFAULT '',
         fuentes_detalle TEXT NOT NULL DEFAULT '',
+        marca_clasificada_por_ia INTEGER NOT NULL DEFAULT 0,
         creado        TEXT NOT NULL DEFAULT '',
         actualizado   TEXT NOT NULL DEFAULT ''
     )
@@ -2966,6 +2967,9 @@ _COLUMNAS_NOTICIAS_CLUSTERS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("primera_fuente", "TEXT NOT NULL DEFAULT ''"),
     ("primera_fuente_nombre", "TEXT NOT NULL DEFAULT ''"),
     ("fuentes_detalle", "TEXT NOT NULL DEFAULT ''"),
+    # Encaje de marca por IA (ADR 0011): 1 si la marca de la historia la asignó el
+    # clasificador Haiku (breaking sin marca), 0 si vino de los items / vocabulario.
+    ("marca_clasificada_por_ia", "INTEGER NOT NULL DEFAULT 0"),
 )
 
 def _migrar_columnas_noticias_clusters(con: Any) -> None:

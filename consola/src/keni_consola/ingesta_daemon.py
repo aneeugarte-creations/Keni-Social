@@ -362,6 +362,7 @@ def paso_clustering() -> dict[str, Any]:
                 ahora=ahora,
             )
             marca_c = recalc.get("marca") or ""
+            marca_por_ia = False  # ¿la marca la asignó el clasificador IA en este tick?
             if not marca_c:
                 # Encaje por VOCABULARIO: una historia formada SOLO por items sin marca
                 # (Trends/agencias) quedaba con marca='' e INVISIBLE para la promoción por
@@ -385,6 +386,8 @@ def paso_clustering() -> dict[str, Any]:
                     # activas; cae a la de noticias si la IA duda. Así el breaking deja de
                     # estar varado y puede salir al feed de su marca cuando esté activa.
                     marca_c = _clasificar_marca_ia(recalc)
+                    if marca_c:
+                        marca_por_ia = True
                 if marca_c:
                     recalc["marca"] = marca_c
             # Relevancia desde la LÍNEA EDITORIAL (perfil Haiku) si está activa (maestro + por-marca:
@@ -424,6 +427,13 @@ def paso_clustering() -> dict[str, Any]:
             recalc["score_razon"] = razon
             recalc["score_desglose"] = desglose
             indice[cid] = repos.upsert_noticia_cluster(recalc)
+            # Sella el encaje de marca por IA aparte del upsert (la columna está en `_NO_PISAR`):
+            # así un recalc posterior sin el flag no lo borra (mismo patrón que la traducción).
+            if marca_por_ia:
+                try:
+                    repos.marcar_cluster_marca_ia(cid)
+                except Exception:  # noqa: BLE001 -- observabilidad; nunca rompe el barrido
+                    _log.warning("ingesta_daemon: no se pudo sellar marca_clasificada_por_ia (%s)", cid)
         except Exception:  # noqa: BLE001 -- recalcular un cluster no aborta el paso
             _log.exception("ingesta_daemon: fallo al recalcular el cluster %s.", cid)
 

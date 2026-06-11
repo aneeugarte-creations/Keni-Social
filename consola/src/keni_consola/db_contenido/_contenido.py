@@ -413,6 +413,28 @@ def ids_contenido_con_copy(marca: str | None = None) -> set[str]:
     return {f["cid"] for f in filas if f["cid"]}
 
 
+def qa_veredicto_por_contenido(contenido_ids: list[str]) -> dict[str, str]:
+    """Veredicto de VERIFICACIÓN (QA de fuente) por `contenido_id`, en LOTE (sin N+1).
+
+    El QA corre sobre `contenido` (no sobre el cluster), así que la Mesa de Investigación lo
+    trae por el `contenido_id` de cada historia para mostrar «verificada / problema». `{}` si
+    no hay ids; cada id sin fila o con veredicto vacío no aparece (el llamante cae a '').
+    """
+    ids = [i for i in dict.fromkeys(contenido_ids) if i]
+    if not ids:
+        return {}
+    marcadores = ",".join("?" for _ in ids)
+    con = _conectar()
+    try:
+        filas = con.execute(
+            f"SELECT id, qa_veredicto FROM contenido WHERE id IN ({marcadores})",  # noqa: S608 -- marcadores
+            tuple(ids),
+        ).fetchall()
+    finally:
+        con.close()
+    return {f["id"]: (f["qa_veredicto"] or "") for f in filas if (f["qa_veredicto"] or "")}
+
+
 def sanear_qa_en_curso_huerfanos(umbral_iso: str) -> int:
     """Devuelve a re-criba (qa_veredicto='') los temas ZOMBI en 'en_curso' mas viejos que `umbral_iso`.
 

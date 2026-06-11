@@ -529,3 +529,36 @@ def test_historias_liston_no_promovible_explica_por_que(cliente):
     h = next(x for x in datos["historias"] if x["id"] == "sin-encaje")
     assert h["promovible"] is False
     assert "listón de producción" in h["promovible_motivo"]
+
+
+# --------------------------------------------------------------------------- #
+# Etapas de Investigación visibles por historia (ADR 0011): QA + marca por IA  #
+# --------------------------------------------------------------------------- #
+
+
+def test_historia_expone_qa_veredicto_y_marca_por_ia(cliente):
+    """La historia trae el veredicto QA de su contenido (verificación) y si la marca fue IA."""
+    cont = repos.crear_contenido(
+        clase="contenido", titulo="Tema verificado", marca="unotv", categoria="mx",
+        qa_veredicto="no_verificado",
+    )
+    _sembrar_cluster("h-qa", marca="unotv")
+    repos.actualizar_noticia_cluster("h-qa", estado="usado", contenido_id=cont["id"])
+    repos.marcar_cluster_marca_ia("h-qa")
+
+    h = next(
+        x for x in cliente.get("/api/noticias/historias", params={"marca": "unotv"}).json()["historias"]
+        if x["id"] == "h-qa"
+    )
+    assert h["qa_veredicto"] == "no_verificado"  # veredicto QA del contenido asociado (batch)
+    assert h["marca_clasificada_por_ia"] is True
+
+
+def test_historia_sin_contenido_ni_ia_trae_campos_vacios(cliente):
+    _sembrar_cluster("h-plain", marca="unotv")
+    h = next(
+        x for x in cliente.get("/api/noticias/historias", params={"marca": "unotv"}).json()["historias"]
+        if x["id"] == "h-plain"
+    )
+    assert h["qa_veredicto"] == ""
+    assert h["marca_clasificada_por_ia"] is False

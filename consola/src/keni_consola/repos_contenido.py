@@ -132,6 +132,11 @@ def ids_contenido_con_copy(marca: str | None = None) -> set[str]:
     return db.ids_contenido_con_copy(marca)
 
 
+def qa_veredicto_por_contenido(contenido_ids: list[str]) -> dict[str, str]:
+    """Veredicto QA (verificación de fuente) por contenido_id, en lote. Delegado en `db.py`."""
+    return db.qa_veredicto_por_contenido(contenido_ids)
+
+
 def sanear_qa_en_curso_huerfanos(umbral_iso: str) -> int:
     """Resetea a "" los `qa_veredicto='en_curso'` zombi (reaper). Delegado en `db.py`."""
     return db.sanear_qa_en_curso_huerfanos(umbral_iso)

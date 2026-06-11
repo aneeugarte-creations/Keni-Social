@@ -257,6 +257,11 @@ def _historia_a_dict(
         "promovible_motivo": (liston[1] if liston else ""),
         "breaking": int(cluster.get("breaking") or 0),
         "verificacion": cluster.get("verificacion") or "unica_fuente",
+        # Etapas de INVESTIGACIÓN visibles por historia (ADR 0011): el veredicto de
+        # VERIFICACIÓN (QA de la fuente, del contenido asociado; lo inyecta el llamante en
+        # lote) y si la MARCA la asignó el clasificador IA.
+        "qa_veredicto": cluster.get("qa_veredicto") or "",
+        "marca_clasificada_por_ia": bool(cluster.get("marca_clasificada_por_ia")),
         "traducido": traducido,
         "idioma": cluster.get("idioma") or "",
         "titulo_original": titulo_original,
@@ -612,14 +617,15 @@ async def listar_historias(request: Request) -> Response:
         limite=limite,
         desplazamiento=desplazamiento,
     )
-    # Estado REAL de cara al feed: una sola query batch (evita N+1) para los temas enlazados.
-    resumen_pieza = repos.estado_pieza_por_contenido(
-        [c.get("contenido_id") or "" for c in clusters]
-    )
+    # Estado REAL de cara al feed + veredicto QA (verificación): dos queries batch (evita N+1)
+    # por los temas enlazados. El QA vive en `contenido` (etapa de Investigación, ADR 0011).
+    cids = [c.get("contenido_id") or "" for c in clusters]
+    resumen_pieza = repos.estado_pieza_por_contenido(cids)
+    qa_map = repos.qa_veredicto_por_contenido(cids)
     vocab_memo: dict[str, frozenset[str]] = {}  # vocabulario por marca, 1 lectura por request
     historias = [
         _historia_a_dict(
-            c,
+            {**c, "qa_veredicto": qa_map.get(c.get("contenido_id") or "", "")},
             repos.items_de_cluster(c["id"], limite=_MAX_ENLACES_HISTORIA),
             pieza_estado=_pieza_estado(
                 c.get("estado") or "nuevo", c.get("contenido_id") or "", resumen_pieza
@@ -688,15 +694,15 @@ async def mesa(request: Request) -> Response:
         destino = cat if cat in plan else "__fuera__"
         por_linea_pool.setdefault(destino, []).append(c)
 
-    resumen_pieza = repos.estado_pieza_por_contenido(
-        [c.get("contenido_id") or "" for c in clusters]
-    )
+    cids = [c.get("contenido_id") or "" for c in clusters]
+    resumen_pieza = repos.estado_pieza_por_contenido(cids)
+    qa_map = repos.qa_veredicto_por_contenido(cids)  # veredicto de verificación por historia
     vocab_memo: dict[str, frozenset[str]] = {}
 
     def _historias(lote: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return [
             _historia_a_dict(
-                c,
+                {**c, "qa_veredicto": qa_map.get(c.get("contenido_id") or "", "")},
                 repos.items_de_cluster(c["id"], limite=_MAX_ENLACES_HISTORIA),
                 pieza_estado=_pieza_estado(
                     c.get("estado") or "nuevo", c.get("contenido_id") or "", resumen_pieza
@@ -746,8 +752,10 @@ async def detalle_historia(request: Request) -> Response:
     if cluster is None:
         return JSONResponse({"error": "Esa historia ya no existe."}, status_code=404)
     items = repos.items_de_cluster(cluster_id)
+    cid = cluster.get("contenido_id") or ""
+    qa_veredicto = repos.qa_veredicto_por_contenido([cid]).get(cid, "") if cid else ""
     historia = _historia_a_dict(
-        cluster, items, pieza_estado=_pieza_estado_de(cluster),
+        {**cluster, "qa_veredicto": qa_veredicto}, items, pieza_estado=_pieza_estado_de(cluster),
         liston=_evaluar_liston(cluster, {}),
     )
     return JSONResponse({"historia": historia, "items": [_item_a_dict(it) for it in items]})

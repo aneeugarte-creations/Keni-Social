@@ -284,6 +284,10 @@ def clusters_extranjeros_sin_traducir(
     )
 
 
+def marcar_cluster_marca_ia(cluster_id: str) -> None:
+    return db.marcar_cluster_marca_ia(cluster_id)
+
+
 def marcar_cluster_traducido(
     cluster_id: str,
     *,

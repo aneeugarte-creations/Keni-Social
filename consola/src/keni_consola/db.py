@@ -151,6 +151,7 @@ from .db_contenido import (  # noqa: F401
     existe_publicado_similar,
     hashtags_de_contenido,
     ids_contenido_con_copy,
+    qa_veredicto_por_contenido,
     existe_publicado_similar_en_cache,
     listar_contenido,
     listar_contenido_origenes,
@@ -306,6 +307,7 @@ from .db_noticias import (  # noqa: F401
     listar_noticias_algoritmo,
     listar_noticias_items,
     listar_sugerencias_editoriales,
+    marcar_cluster_marca_ia,
     marcar_cluster_traducido,
     marcar_item,
     marcar_items_cluster_usados,
@@ -622,6 +624,7 @@ __all__ = [
     "ESTADOS_NOTICIA_CLUSTER",
     # Traducción + verificación de historias (Ola D).
     "clusters_extranjeros_sin_traducir",
+    "marcar_cluster_marca_ia",
     "marcar_cluster_traducido",
     "VERIFICACIONES_CLUSTER",
     "_conectar",
