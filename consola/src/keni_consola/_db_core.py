@@ -1326,6 +1326,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         marca          TEXT NOT NULL DEFAULT '',
         titulo         TEXT NOT NULL DEFAULT '',
         resumen        TEXT NOT NULL DEFAULT '',
+        cuerpo         TEXT NOT NULL DEFAULT '',
         url            TEXT NOT NULL DEFAULT '',
         url_canonica   TEXT NOT NULL DEFAULT '',
         idioma         TEXT NOT NULL DEFAULT '',
@@ -2948,6 +2949,9 @@ _COLUMNAS_NOTICIAS_ITEMS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # sin BD: la señal viaja en el item, igual que `fuente_nombre`/`categoria`). Pondera la
     # corroboración del ranking de historias. Ver `dominio/fuentes_pesos.py`.
     ("fuente_peso", "REAL NOT NULL DEFAULT 1.0"),
+    # CUERPO completo de la nota (content:encoded del feed). Lo escribe la ingesta y SOLO lo lee
+    # el pipeline al promover (no entra en el SELECT/serializer del listado: path caliente lean).
+    ("cuerpo", "TEXT NOT NULL DEFAULT ''"),
 )
 
 

@@ -19,6 +19,7 @@ dominio (radar/algoritmos) importa de AQUI, no del router (frontera limpia).
 
 from __future__ import annotations
 
+import html as _html
 import ipaddress
 import re
 import socket
@@ -37,6 +38,15 @@ _TIMEOUT = 6.0  # segundos
 _MAX_BYTES = 5 * 1024 * 1024  # 5 MB
 _MAX_ITEMS = 30  # items por feed
 _RESUMEN_MAX = 500  # caracteres del resumen (tras limpiar HTML)
+# Cuerpo COMPLETO del artículo (`<content:encoded>` en RSS, `<content>` en Atom): muchos medios
+# (UnoTV, Claro Sports, Infobae, AS…) mandan la nota entera ahí, no en `<description>`. Lo
+# capturamos para que el copy se redacte sobre el texto real, no sobre el snippet. Cap generoso
+# (la nota cabe de sobra; aguas abajo `gen_dom.MAX_TEXTO` la vuelve a acotar si hiciera falta).
+_CUERPO_MAX = 8000
+# Cola de WordPress en el cuerpo/resumen: "The post <título> appeared first on <medio>." y la
+# marca de truncado "[…]"/"[...]" del excerpt. Se quitan para no ensuciar el material del modelo.
+_RE_WP_BOILER = re.compile(r"\s*The post\b.*?appeared first on\b.*$", re.IGNORECASE | re.DOTALL)
+_RE_ELIPSIS_CORCHETE = re.compile(r"\s*\[\s*(?:…|\.\.\.)\s*\]\s*")
 
 # Concurrencia de descargas por feed/fuente (F0 rendimiento). La descarga es httpx
 # SINCRONA (I/O-bound), asi que un pool de hilos acotado abanica las descargas sin bloquear
@@ -184,6 +194,34 @@ def _limpiar_resumen(crudo: str | None) -> str:
     return texto
 
 
+def _texto_completo(elemento: ET.Element | None) -> str:
+    """Texto crudo de un elemento incluyendo el de sus hijos (`itertext`). '' si es None.
+
+    `content:encoded` suele venir como CDATA con HTML; `itertext` recoge el texto aunque el
+    parser haya interpretado algún hijo. Sin recortar: el recorte lo hacen los limpiadores.
+    """
+    if elemento is None:
+        return ""
+    return "".join(elemento.itertext())
+
+
+def _limpiar_cuerpo(crudo: str | None) -> str:
+    """Cuerpo del artículo a texto plano: decodifica entidades, quita HTML y boilerplate WP.
+
+    Recorta a `_CUERPO_MAX`. '' si no hay contenido. A diferencia de `_limpiar_resumen`, NO
+    recorta a 500 (el cuerpo es el material rico para el copy) y decodifica entidades + retira
+    la cola de WordPress y la marca de truncado del excerpt.
+    """
+    if not crudo:
+        return ""
+    texto = _html.unescape(crudo)
+    texto = _RE_TAGS.sub(" ", texto)
+    texto = _RE_WP_BOILER.sub("", texto)
+    texto = _RE_ELIPSIS_CORCHETE.sub(" ", texto)
+    texto = _RE_ESPACIOS.sub(" ", texto).strip()
+    return texto[:_CUERPO_MAX] if len(texto) > _CUERPO_MAX else texto
+
+
 def _texto_local(elemento: ET.Element | None) -> str:
     """Texto plano de un elemento (o ''). Sin recortar; el recorte lo hace el resumen."""
     if elemento is None or elemento.text is None:
@@ -326,10 +364,12 @@ def item_pasa_filtros(item: dict[str, Any], incluir: str, excluir: str) -> bool:
 def parsear_feed(xml: str, *, max_items: int = _MAX_ITEMS) -> list[dict[str, str]]:
     """Parsea un feed RSS 2.0 o Atom y devuelve hasta `max_items` items.
 
-    Cada item es `{titulo, resumen, enlace, fecha, clave, imagen}`. La `clave` es
+    Cada item es `{titulo, resumen, cuerpo, enlace, fecha, clave, imagen}`. La `clave` es
     estable (`<guid>`/`<id>` del feed, con fallback al enlace) y sirve para dedup /
-    marcar usado. `imagen` es la URL de la imagen del artículo (media:content/
-    thumbnail/enclosure), "" si no la trae. Tolerante: campos ausentes salen como ''.
+    marcar usado. `cuerpo` es la nota COMPLETA del `<content:encoded>` (RSS) / `<content>`
+    (Atom) si el feed la trae (UnoTV, Claro Sports, Infobae, AS…), "" si no. `imagen` es la
+    URL de la imagen del artículo (media:content/thumbnail/enclosure), "" si no la trae.
+    Tolerante: campos ausentes salen como ''.
     Lanza `RSSError` si el XML no se puede parsear.
 
     `max_items` controla cuántos items se devuelven (def `_MAX_ITEMS`=30 para los callers
@@ -361,6 +401,8 @@ def parsear_feed(xml: str, *, max_items: int = _MAX_ITEMS) -> list[dict[str, str
                 {
                     "titulo": titulo,
                     "resumen": _limpiar_resumen(resumen),
+                    # Atom: el cuerpo completo viaja en <content> (el resumen, en <summary>).
+                    "cuerpo": _limpiar_cuerpo(_texto_completo(_buscar_hijo(entrada, "content"))),
                     "enlace": enlace,
                     "fecha": fecha,
                     "clave": _clave_item(clave_feed, enlace),
@@ -386,6 +428,8 @@ def parsear_feed(xml: str, *, max_items: int = _MAX_ITEMS) -> list[dict[str, str
             {
                 "titulo": titulo,
                 "resumen": _limpiar_resumen(resumen),
+                # RSS: la nota completa viaja en <content:encoded> (nombre local "encoded").
+                "cuerpo": _limpiar_cuerpo(_texto_completo(_buscar_hijo(entrada, "encoded"))),
                 "enlace": enlace,
                 "fecha": fecha,
                 "clave": _clave_item(clave_feed, enlace),

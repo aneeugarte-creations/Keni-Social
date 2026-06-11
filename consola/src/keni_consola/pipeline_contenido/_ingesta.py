@@ -248,7 +248,9 @@ def crear_tema_de(
                 _log.warning("pipeline: no se pudo marcar item dup usado (%s)", clave, exc_info=True)
         _log.info("pipeline: omito duplicado «%s» (%s)", titulo[:60], marca)
         return None
-    cuerpo = _fetch_cuerpo((item.get("enlace") or "").strip())
+    # Cuerpo del artículo: PRIMERO el que ya trae el feed (`content:encoded`, gratis); solo si el
+    # feed no lo manda (wires sin cuerpo) se intenta el fetch HTTP (gateado por el flag).
+    cuerpo = (item.get("cuerpo") or "").strip() or _fetch_cuerpo((item.get("enlace") or "").strip())
     nota = _nota_de_item(item, cuerpo)[: gen_dom.MAX_TEXTO]
     redes_ids = _redes_de_fuente(fuente)
     try:
@@ -304,8 +306,9 @@ def _nota_de_cluster(
     PURA. Antes la nota era titulo + UN resumen + una lista de URLs; el modelo no tenía el texto
     de las otras fuentes y no podía cruzar datos. Ahora arma un BLOQUE por fuente (medio · título
     · URL · resumen limpio · cuerpo del artículo si `cuerpos` lo trae) para que `claude -p`
-    sintetice de verdad. `cuerpos` mapea URL del item -> cuerpo descargado (`_fetch_cuerpo`); sin
-    él, cada bloque queda con medio+título+resumen (mejor que solo el link). Tope `_MAX_ENLACES_CLUSTER`.
+    sintetice de verdad. `cuerpos` mapea URL del item -> cuerpo del artículo (el `content:encoded`
+    archivado del feed o, en su defecto, el fetch HTTP); sin él, cada bloque queda con
+    medio+título+resumen (mejor que solo el link). Tope `_MAX_ENLACES_CLUSTER`.
     """
     cuerpos = cuerpos or {}
     partes = [titulo.strip(), _limpiar_snippet(resumen)]
@@ -495,14 +498,15 @@ def crear_tema_de_cluster(
         _log.info("pipeline: omito historia duplicada «%s» (%s)", titulo[:60], marca)
         return None
     resumen = (cluster.get("resumen") or "").strip()
-    # Cuerpo de CADA fuente del cluster (gateado por el flag): así la nota lleva el texto de todas
-    # las fuentes, no solo sus URLs. `_fetch_cuerpo` cae a "" si el flag está off o el fetch falla.
-    cuerpos = {
-        url: cuerpo
-        for it in items[:_MAX_ENLACES_CLUSTER]
-        if (url := (it.get("url") or "").strip())
-        and (cuerpo := _fetch_cuerpo(url))
-    }
+    # Cuerpo de CADA fuente del cluster: PRIMERO el `content:encoded` archivado del feed (gratis,
+    # ya en BD); solo para las fuentes que no lo traían se intenta el fetch HTTP (gateado). Así la
+    # nota lleva el texto real de todas las fuentes, no solo sus URLs.
+    cuerpos = dict(repos.cuerpos_de_cluster(cid))
+    for it in items[:_MAX_ENLACES_CLUSTER]:
+        url = (it.get("url") or "").strip()
+        if url and not cuerpos.get(url):
+            if cuerpo := _fetch_cuerpo(url):
+                cuerpos[url] = cuerpo
     nota = _nota_de_cluster(titulo, resumen, items, cuerpos)[: gen_dom.MAX_TEXTO]
     redes_ids = list(redes.redes_de_formato(_FORMATO_PIPELINE))
     imagen = _imagen_de_cluster(items)

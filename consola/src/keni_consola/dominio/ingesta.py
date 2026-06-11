@@ -147,6 +147,9 @@ def items_de_feed(
                 "geo": geo,
                 "titulo": titulo,
                 "resumen": resumen,
+                # Cuerpo COMPLETO de la nota si el feed lo trae (content:encoded). Da al copy el
+                # texto real, no solo el snippet; "" para feeds que no lo mandan (Google News, wires).
+                "cuerpo": (crudo.get("cuerpo") or "").strip(),
                 "url": url,
                 "url_canonica": url_can,
                 "imagen": (crudo.get("imagen") or "").strip(),

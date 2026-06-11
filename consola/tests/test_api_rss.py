@@ -282,6 +282,47 @@ _ATOM_XML = """<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
+_RSS_CONTENT_ENCODED_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>WP Feed</title>
+    <item>
+      <title>Bloqueo en caseta</title>
+      <link>https://medio.test/nota</link>
+      <description><![CDATA[Resumen corto [&#8230;]]]></description>
+      <content:encoded><![CDATA[<p>Normalistas mantienen cerrada la autopista en ambos sentidos.</p><p>Las autoridades realizaron recorridos para garantizar la circulacion.</p>The post Bloqueo en caseta appeared first on Medio.]]></content:encoded>
+      <pubDate>Mon, 19 May 2026 10:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>
+"""
+
+
+def test_parsear_rss_extrae_cuerpo_de_content_encoded():
+    item = rss.parsear_feed(_RSS_CONTENT_ENCODED_XML)[0]
+    cuerpo = item["cuerpo"]
+    # El cuerpo COMPLETO (content:encoded), no el snippet de <description>.
+    assert "Normalistas mantienen cerrada la autopista" in cuerpo
+    assert "garantizar la circulacion" in cuerpo
+    # Limpio: sin HTML, sin boilerplate de WordPress.
+    assert "<p>" not in cuerpo
+    assert "The post" not in cuerpo and "appeared first on" not in cuerpo
+    # El resumen sigue siendo el snippet corto, con la elipsis de truncado normalizada.
+    assert "Resumen corto" in item["resumen"]
+
+
+def test_parsear_rss_sin_content_encoded_cuerpo_vacio():
+    # Un feed normal (solo <description>) deja `cuerpo` vacío: el fetch HTTP es el fallback.
+    assert rss.parsear_feed(_RSS_XML)[0]["cuerpo"] == ""
+
+
+def test_parsear_atom_cuerpo_de_content():
+    # Atom: el cuerpo sale de <content> (entrada B lo trae; entrada A no).
+    items = rss.parsear_feed(_ATOM_XML)
+    assert "Cuerpo B" in items[1]["cuerpo"]
+    assert items[0]["cuerpo"] == ""
+
+
 def test_parsear_rss():
     items = rss.parsear_feed(_RSS_XML)
     assert len(items) == 2

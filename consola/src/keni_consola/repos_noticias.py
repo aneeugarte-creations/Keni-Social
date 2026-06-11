@@ -264,6 +264,10 @@ def items_de_cluster(cluster_id: str, *, limite: int = 200) -> list[dict[str, An
     return db.items_de_cluster(cluster_id, limite=limite)
 
 
+def cuerpos_de_cluster(cluster_id: str, *, limite: int = 200) -> dict[str, str]:
+    return db.cuerpos_de_cluster(cluster_id, limite=limite)
+
+
 def items_sin_cluster(desde: str, limite: int) -> list[dict[str, Any]]:
     return db.items_sin_cluster(desde, limite)
 

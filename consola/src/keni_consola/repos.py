@@ -240,6 +240,7 @@ from .repos_noticias import (  # noqa: F401
     crear_fuente_rss,
     crear_noticias_items,
     crear_sugerencia_editorial,
+    cuerpos_de_cluster,
     feeds_vencidos,
     guardar_noticia_algoritmo,
     items_de_cluster,

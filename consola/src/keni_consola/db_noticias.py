@@ -593,7 +593,10 @@ def crear_noticias_items(items: list[dict[str, Any]]) -> int:
     if not candidatos:
         return 0
     ahora = ahora_iso()
-    marcadores = ", ".join("?" for _ in _COLS_NOTICIA_ITEM)
+    # `cuerpo` NO está en `_COLS_NOTICIA_ITEM` (queda fuera del SELECT/serializer del listado, que
+    # es path caliente y no necesita el cuerpo): se inserta aparte, solo lo lee el pipeline.
+    cols_insert = (*_COLS_NOTICIA_ITEM, "cuerpo")
+    marcadores = ", ".join("?" for _ in cols_insert)
     insertadas = 0
     con = _conectar()
     try:
@@ -606,6 +609,7 @@ def crear_noticias_items(items: list[dict[str, Any]]) -> int:
                 "marca": it.get("marca") or "",
                 "titulo": it.get("titulo") or "",
                 "resumen": it.get("resumen") or "",
+                "cuerpo": it.get("cuerpo") or "",
                 "url": it.get("url") or "",
                 "url_canonica": it.get("url_canonica") or "",
                 "idioma": it.get("idioma") or "",
@@ -623,10 +627,10 @@ def crear_noticias_items(items: list[dict[str, Any]]) -> int:
                 "creado": it.get("creado") or ahora,
             }
             cur = con.execute(
-                f"INSERT INTO noticias_items ({', '.join(_COLS_NOTICIA_ITEM)}) "
+                f"INSERT INTO noticias_items ({', '.join(cols_insert)}) "
                 f"VALUES ({marcadores}) "
                 "ON CONFLICT (fuente_id, clave) DO NOTHING",
-                tuple(fila[col] for col in _COLS_NOTICIA_ITEM),
+                tuple(fila[col] for col in cols_insert),
             )
             if cur.rowcount and cur.rowcount > 0:
                 insertadas += 1
@@ -1441,6 +1445,28 @@ def items_de_cluster(cluster_id: str, *, limite: int = 200) -> list[dict[str, An
     finally:
         con.close()
     return [_fila_a_noticia_item(f) for f in filas]
+
+
+def cuerpos_de_cluster(cluster_id: str, *, limite: int = 200) -> dict[str, str]:
+    """`{url: cuerpo}` de los items de un cluster que tengan cuerpo (content:encoded archivado).
+
+    Consulta dedicada (NO pasa por `_fila_a_noticia_item`, que excluye el cuerpo del path
+    caliente de listado): el pipeline la usa al promover una historia para redactar sobre el
+    texto real de cada fuente. Solo devuelve los items con `cuerpo` y `url` no vacíos.
+    """
+    if not cluster_id:
+        return {}
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT url, cuerpo FROM noticias_items "
+            "WHERE cluster_id = ? AND cuerpo <> '' AND url <> '' "
+            "ORDER BY capturado_en DESC, creado DESC, id DESC LIMIT ?",
+            (cluster_id, max(1, int(limite))),
+        ).fetchall()
+    finally:
+        con.close()
+    return {(f["url"] or ""): (f["cuerpo"] or "") for f in filas if f["url"] and f["cuerpo"]}
 
 
 def cluster_por_url_canonica(url_recortada: str, desde: str) -> str:
