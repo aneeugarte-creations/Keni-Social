@@ -33,7 +33,12 @@ Módulo SIN dependencias internas (solo stdlib): importable desde db, dominio y 
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta, timezone
+
+# Jornada del equipo AMX (piloto): zona del centro de México, que NO observa DST desde 2022
+# (offset FIJO UTC-6). Se modela como offset fijo a propósito —no `zoneinfo`— para no
+# depender de la base IANA del sistema (las imágenes `python:3.12-slim` no traen `tzdata`).
+_TZ_CDMX = timezone(timedelta(hours=-6))
 
 
 def ahora_iso() -> str:
@@ -67,3 +72,25 @@ def hoy_utc() -> date:
     otra zona elimina el desfase alrededor de la medianoche.
     """
     return datetime.now(UTC).date()
+
+
+def inicio_dia_cdmx_iso_utc(momento: datetime | None = None) -> str:
+    """Medianoche de HOY en CDMX (America/Mexico_City), como timestamp ISO-UTC canónico.
+
+    Corte del PLAN DIARIO: lo «generado/publicado hoy» se mide por la JORNADA LOCAL del
+    equipo (la parrilla del día), no por una ventana móvil de 24 h. Así el contador vuelve
+    a 0 en la medianoche de México y la admisión reabre los cupos del día siguiente.
+
+    Convención de `momento` igual que `iso_utc`: `None` = ahora; un naive se ASUME UTC; un
+    aware se respeta. Se floor-ea a la medianoche en zona MX y se devuelve en el canon (UTC
+    sin offset, segundos) para comparar contra `creado >= ?` (que es UTC naive). Ej.: con MX
+    en UTC-6, la medianoche MX del 2026-06-11 es «2026-06-11T06:00:00».
+    """
+    if momento is None:
+        dt = datetime.now(UTC)
+    elif momento.tzinfo is None:
+        dt = momento.replace(tzinfo=UTC)
+    else:
+        dt = momento
+    medianoche_mx = dt.astimezone(_TZ_CDMX).replace(hour=0, minute=0, second=0, microsecond=0)
+    return medianoche_mx.astimezone(UTC).replace(tzinfo=None).isoformat(timespec="seconds")

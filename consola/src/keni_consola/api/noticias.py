@@ -651,10 +651,8 @@ async def mesa(request: Request) -> Response:
     Sin plan configurado: `plan=false` y todo el pool va en `fuera_de_plan` (la UI degrada a
     lista plana). Orden de líneas: breaking primero, luego el orden del plan.
     """
-    from datetime import timedelta
-
     from ..pipeline_contenido import _ingesta as _pc_ingesta
-    from ..tiempo import iso_utc
+    from ..tiempo import inicio_dia_cdmx_iso_utc
 
     marca, error = _validar_marca(request.query_params.get("marca"))
     if error is not None:
@@ -670,12 +668,12 @@ async def mesa(request: Request) -> Response:
     por_linea = max(1, min(por_linea, _MESA_POR_LINEA_MAX))
 
     plan = config.plan_dia(marca)  # dict ordenado categoria -> cupo ({} sin plan)
-    ahora = datetime.now(UTC)
     resumen_plan: dict[str, dict[str, int]] = {}
     if plan:
         try:
+            # Por JORNADA MX (la parrilla del día): a medianoche de México vuelve a 0.
             resumen_plan = repos.resumen_plan_por_categoria(
-                marca, iso_utc(ahora.replace(tzinfo=None) - timedelta(hours=24))
+                marca, inicio_dia_cdmx_iso_utc()
             )
         except Exception:  # noqa: BLE001 -- sin contador, la mesa muestra progreso 0 (no casca)
             resumen_plan = {}

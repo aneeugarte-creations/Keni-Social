@@ -1275,6 +1275,27 @@ def test_plan_breaking_excede_su_cupo_con_tope_extra(entorno, monkeypatch):
     assert _ingesta.cupos_categoria_restantes("unotv") == {}
 
 
+def test_cupos_solo_cuentan_la_jornada_mx_no_dias_previos(entorno, monkeypatch):
+    """La admisión cuenta por PARRILLA DEL DÍA (jornada MX): lo de días anteriores reabre cupo.
+
+    A medianoche de México los cupos del plan vuelven a 0; una pieza generada en un día
+    anterior (aquí, hace años) ya no consume cupo hoy, así que el auto-feed puede volver a
+    llenar el plan de la nueva jornada.
+    """
+    from keni_consola.pipeline_contenido import _ingesta
+
+    monkeypatch.setenv("KENI_PLAN_DIA", "mx:1")
+    # De otra jornada: NO consume el cupo de hoy -> queda el hueco íntegro.
+    repos.crear_contenido(
+        clase="contenido", titulo="Nacional de ayer", marca="unotv", categoria="mx",
+        creado="2020-01-01T00:00:00",
+    )
+    assert _ingesta.cupos_categoria_restantes("unotv") == {"mx": 1}
+    # De hoy: consume el cupo -> sin hueco.
+    repos.crear_contenido(clase="contenido", titulo="Nacional de hoy", marca="unotv", categoria="mx")
+    assert _ingesta.cupos_categoria_restantes("unotv") == {}
+
+
 def test_plan_sin_linea_breaking_compite_por_su_feed(entorno, monkeypatch):
     """Si el plan no declara 'breaking', la última hora no queda invisible: compite por el
     cupo de su categoría de FEED."""

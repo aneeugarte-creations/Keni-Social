@@ -34,7 +34,7 @@ que tanto el equipo como los agentes monitoricen la generación del día sin sum
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from starlette.requests import Request
@@ -42,7 +42,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from .. import config, marcas, redes, repos
-from ..tiempo import ahora_iso
+from ..tiempo import ahora_iso, inicio_dia_cdmx_iso_utc
 
 _log = logging.getLogger("keni_consola.api.produccion")
 
@@ -87,14 +87,15 @@ def _vertical_de(etiquetas: list[str], verticales: set[str]) -> str:
 
 
 async def dia(request: Request) -> Response:
-    """GET /api/produccion/dia?marca=: producción de la ventana de 24 h de una marca."""
+    """GET /api/produccion/dia?marca=: producción de la JORNADA MX (parrilla del día) de una marca."""
     marca = (request.query_params.get("marca") or "").strip()
     if marca and not marcas.es_marca(marca):
         return JSONResponse({"error": "Marca no permitida."}, status_code=400)
 
     ahora = datetime.fromisoformat(ahora_iso())
-    desde = ahora - timedelta(hours=24)
-    desde_iso = desde.isoformat(timespec="seconds")
+    # JORNADA MX (la parrilla del día), no ventana móvil de 24 h: a medianoche de México
+    # el monitor vuelve a 0, igual que el contador del plan de la Mesa y la admisión.
+    desde_iso = inicio_dia_cdmx_iso_utc(ahora)
 
     # Temas (contenido padre) CREADOS en la ventana + sus filas por red.
     items = [

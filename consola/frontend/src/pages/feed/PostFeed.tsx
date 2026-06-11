@@ -231,6 +231,10 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
       void queryClient.invalidateQueries({ queryKey: ["contenido"] });
+      // Borrar la (última) pieza de un tema baja su `contenido` padre, que es lo que
+      // cuenta el plan del día: refresca el contador de la Mesa y del monitor de Producción.
+      void queryClient.invalidateQueries({ queryKey: ["noticias", "mesa"] });
+      void queryClient.invalidateQueries({ queryKey: ["produccion"] });
       toast.success(`Pieza quitada de ${publicacion.red_nombre}.`);
     },
     onError,

@@ -99,6 +99,28 @@ def test_mesa_descuenta_lo_generado_en_el_progreso(cliente, monkeypatch):
     assert datos["total_generados"] == 1
 
 
+def test_mesa_solo_cuenta_la_jornada_mx_no_lo_de_dias_previos(cliente, monkeypatch):
+    """El contador es la PARRILLA DEL DÍA (jornada MX): lo de días anteriores no suma.
+
+    Es el reset diario que pedía el piloto: una pieza creada antes de la medianoche de
+    México (aquí, hace años) NO cuenta; solo lo generado en la jornada de hoy. Así, al día
+    siguiente el plan vuelve a 0 aunque la pieza vieja siga viva en el tablero.
+    """
+    monkeypatch.setenv("KENI_PLAN_DIA", "mx:2")
+    # De otro día (muy anterior a cualquier medianoche MX de hoy): NO debe contar.
+    repos.crear_contenido(
+        clase="contenido", titulo="De ayer", marca="unotv", categoria="mx",
+        creado="2020-01-01T00:00:00",
+    )
+    # De hoy (creado=ahora por defecto): SÍ cuenta.
+    repos.crear_contenido(clase="contenido", titulo="De hoy", marca="unotv", categoria="mx")
+    datos = cliente.get("/api/noticias/mesa", params={"marca": "unotv"}).json()
+    linea = datos["lineas"][0]
+    assert linea["generados"] == 1  # solo la de hoy
+    assert linea["restante"] == 1
+    assert datos["total_generados"] == 1
+
+
 # --------------------------------------------------------------------------- #
 # POST /api/noticias/historias/{id}/restaurar                                  #
 # --------------------------------------------------------------------------- #

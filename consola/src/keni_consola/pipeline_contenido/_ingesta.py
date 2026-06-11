@@ -642,13 +642,14 @@ def cupo_produccion_restante(
     """Plazas de ADMISIÓN que le quedan a `marca` por su cupo diario simple; None = sin cupo.
 
     Solo aplica a marcas SIN plan editorial (`config.plan_dia`): un techo de temas
-    auto-producidos en 24 h MÓVILES (`KENI_CUPO_DIA`, cuenta temas `origen=pipeline` por
-    `creado`). Con plan, el volumen lo gobiernan los cupos POR CATEGORÍA
+    auto-producidos en la JORNADA MX (parrilla del día, desde la medianoche de México, NO
+    una ventana móvil de 24 h) — `KENI_CUPO_DIA`, cuenta temas `origen=pipeline` por
+    `creado`. Con plan, el volumen lo gobiernan los cupos POR CATEGORÍA
     (`cupos_categoria_restantes`). `None` = cupo desactivado (0): la admisión queda solo con
     el gate serial en vuelo. FAIL-CLOSED ante un contador ilegible: promover gasta tokens,
     así que sin lectura fiable se devuelve 0 (el siguiente tick reintenta).
     """
-    from ..tiempo import iso_utc
+    from ..tiempo import inicio_dia_cdmx_iso_utc
 
     momento = ahora or datetime.now(timezone.utc)
     if momento.tzinfo is not None:
@@ -658,7 +659,7 @@ def cupo_produccion_restante(
         return None
     try:
         usados = repos.contar_contenido_origen_desde(
-            marca, ORIGEN_PIPELINE, iso_utc(momento - timedelta(hours=24))
+            marca, ORIGEN_PIPELINE, inicio_dia_cdmx_iso_utc(momento)
         )
     except Exception:  # noqa: BLE001 -- fail-closed: sin contador fiable no se admite
         _log.warning("pipeline: no se pudo contar el cupo diario (%s)", marca, exc_info=True)
@@ -672,14 +673,15 @@ def cupos_categoria_restantes(
     """Cupos del PLAN EDITORIAL DIARIO que aún quedan por llenar, por categoría; None = sin plan.
 
     El plan (`config.plan_dia`, p. ej. "mx:4,internacional:4,breaking:2,entretenimiento:2,
-    evergreen:1") fija el objetivo del día por categoría. Se descuenta lo ya producido en
-    24 h MÓVILES contando las historias PROMOVIDAS (cluster→contenido), donde una historia
-    breaking consume el cupo 'breaking' sea cual sea la categoría de su feed — los slots de
-    breaking son para la última hora, también la que el equipo empuja a mano desde el panel.
+    evergreen:1") fija el objetivo del día por categoría. Se descuenta lo ya producido en la
+    JORNADA MX (parrilla del día, desde la medianoche de México — NO una ventana móvil de 24 h:
+    a medianoche local los cupos reabren) contando las historias PROMOVIDAS (cluster→contenido),
+    donde una historia breaking consume el cupo 'breaking' sea cual sea la categoría de su feed —
+    los slots de breaking son para la última hora, también la que el equipo empuja a mano.
     Devuelve solo las categorías CON hueco (dict vacío = plan completo: hoy ya no entra más).
     FAIL-CLOSED ante un contador ilegible (dict vacío: no se admite, el tick siguiente
     reintenta)."""
-    from ..tiempo import iso_utc
+    from ..tiempo import inicio_dia_cdmx_iso_utc
 
     plan = config.plan_dia(marca)
     if not plan:
@@ -689,7 +691,7 @@ def cupos_categoria_restantes(
         momento = momento.astimezone(timezone.utc).replace(tzinfo=None)
     try:
         resumen = repos.resumen_plan_por_categoria(
-            marca, iso_utc(momento - timedelta(hours=24))
+            marca, inicio_dia_cdmx_iso_utc(momento)
         )
     except Exception:  # noqa: BLE001 -- fail-closed (promover gasta tokens)
         _log.warning("pipeline: no se pudo contar el plan diario (%s)", marca, exc_info=True)
