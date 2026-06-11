@@ -2982,7 +2982,11 @@ def _backfill_pesos_fuente(con: Any) -> None:
         "WHERE noticias_items.fuente_id = f.id AND f.peso <> 1.0"
     )
     con.execute(
-        "UPDATE noticias_items SET fuente_peso = ? WHERE fuente_id LIKE 'agencia-%'",
+        # `agencia-%%`: el `%` literal va DOBLADO porque la sentencia lleva un parametro
+        # (`?`->`%s`) y psycopg interpretaria un `%` suelto como inicio de placeholder. En
+        # Postgres `%%`->`%` (comodin LIKE); en SQLite `%%` son dos comodines contiguos
+        # (equivalentes a uno). Misma convencion que db_noticias.py (`es%%`).
+        "UPDATE noticias_items SET fuente_peso = ? WHERE fuente_id LIKE 'agencia-%%'",
         (fuentes_pesos.PESO_POTENTE,),
     )
 
