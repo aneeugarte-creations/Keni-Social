@@ -160,7 +160,8 @@ export function AppShell() {
           <Button
             variant="ghost"
             size="icon"
-            className="md:hidden"
+            // h-8 w-8: todo el cromo de la barra mide 32px (size icon por defecto son 36).
+            className="h-8 w-8 md:hidden"
             aria-label={menuAbierto ? "Cerrar menú" : "Abrir menú"}
             onClick={() => setMenuAbierto((v) => !v)}
           >
@@ -187,6 +188,11 @@ export function AppShell() {
               <div ref={setSlotAcciones} className="flex h-full min-w-0 items-center justify-center empty:hidden" />
               <div className="flex flex-1 items-center justify-end gap-2">
                 <div ref={setSlotAccionesFin} className="flex min-w-0 items-center gap-1 empty:hidden" />
+                {/* Hairline entre las acciones del DOCUMENTO (guardado/exportar) y el contexto
+                    GLOBAL (marca + campana): marca el límite de grupo sin añadir otra medida
+                    de gap. Solo en escritorio: en móvil el slot fin va vacío (portaliza a la
+                    fila bajo el header) y el separador quedaría huérfano. */}
+                <div aria-hidden className="hidden h-5 w-px bg-[hsl(var(--foreground)/0.15)] md:block" />
                 <ControlContexto />
                 <CampanaNotificaciones />
               </div>

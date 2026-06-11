@@ -36,7 +36,7 @@ export function BotonesMuestra({
   const [editar, setEditar] = useState<"foto" | "copy" | null>(null);
 
   return (
-    <div className="flex items-center gap-0.5">
+    <div className="flex items-center gap-1">
       <BotonToggle
         icono={ImagePlay}
         etiqueta="Foto"
@@ -98,13 +98,16 @@ function BotonToggle({
           plena, NO la píldora `--control-activo`: estos toggles están encendidos por defecto y
           una píldora sólida permanente pesaba como otro CTA junto a Exportar. Apagado = glifo
           atenuado. El chevron comparte el fondo para que el par toggle+chevron se lea como UNA
-          sola píldora (rounded-l + rounded-r), no como un activo partido por la mitad. */}
+          sola píldora (rounded-l + rounded-r), no como un activo partido por la mitad. Ambas
+          mitades llevan h-8 EXPLÍCITO (la altura no sale del padding): así la píldora es un
+          rectángulo continuo de 32px, sin escalón en la mitad del chevron, con bordes
+          exteriores simétricos (entra pl-2, sale pr-2). */}
       <button
         title={titulo}
         aria-label={etiqueta}
         aria-pressed={activo}
         onClick={onToggle}
-        className={`flex items-center rounded-l-md py-1.5 pl-1.5 pr-1 ${
+        className={`flex h-8 items-center rounded-l-md pl-2 pr-1 ${
           // Encendido: lavado al 12% que se intensifica al hover (sigue legible: glifo a tinta).
           // Apagado: atenuado, con el hover accent de toda la barra.
           activo
@@ -119,7 +122,7 @@ function BotonToggle({
         aria-label={`Editar ${etiqueta.toLowerCase()} de muestra`}
         aria-expanded={editando}
         onClick={onEditar}
-        className={`rounded-r-md py-1.5 pl-0.5 pr-1 ${
+        className={`flex h-8 items-center rounded-r-md pl-0.5 pr-2 ${
           // Encendido: lavado al 12% que se intensifica al hover (sigue legible: glifo a tinta).
           // Apagado: atenuado, con el hover accent de toda la barra.
           activo

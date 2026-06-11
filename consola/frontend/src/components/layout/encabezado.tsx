@@ -62,7 +62,7 @@ export function TituloPagina({ titulo, icono: Icono }: { titulo: string; icono?:
     // `min-w-0` en el contenedor flex: sin él, el span se niega a encoger por debajo de su
     // contenido y el `truncate` del texto nunca actúa (en móvil el control de marca de la
     // topbar acababa pisando el título).
-    <span className="flex min-w-0 items-center gap-2 px-2 py-2 text-sm font-medium text-foreground">
+    <span className="flex h-8 min-w-0 items-center gap-2 px-2 text-sm font-medium text-foreground">
       {Icono && <Icono className="h-4 w-4 shrink-0" aria-hidden="true" />}
       <span className="truncate">{titulo}</span>
     </span>

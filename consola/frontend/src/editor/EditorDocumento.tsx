@@ -413,7 +413,7 @@ export function EditorDocumento({
         title="Deshacer (⌘Z)"
         disabled={!puedeDeshacer}
         onClick={() => store.getState().deshacer()}
-        className="rounded-md p-1.5 text-muted-foreground hover:bg-accent disabled:opacity-40"
+        className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent disabled:opacity-40"
       >
         <Undo2 className="h-4 w-4" />
       </button>
@@ -421,7 +421,7 @@ export function EditorDocumento({
         title="Rehacer (⇧⌘Z)"
         disabled={store.getState().futuro.length === 0}
         onClick={() => store.getState().rehacer()}
-        className="rounded-md p-1.5 text-muted-foreground hover:bg-accent disabled:opacity-40"
+        className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent disabled:opacity-40"
       >
         <Redo2 className="h-4 w-4" />
       </button>
@@ -446,7 +446,7 @@ export function EditorDocumento({
           aria-label="Adaptar a otro formato"
           aria-expanded={menuFormato}
           onClick={() => { setMenuMas(false); setMenuFormato((v) => !v); }}
-          className={`flex items-center gap-1 rounded-md px-1.5 py-1.5 text-xs ${
+          className={`flex h-8 items-center gap-1 rounded-md px-2.5 text-sm ${
             // Hover accent solo CERRADO: abierto conserva la píldora `--control-activo` (glifo legible).
             menuFormato
               ? "bg-[hsl(var(--control-activo))] text-[hsl(var(--control-activo-foreground))]"
@@ -495,7 +495,7 @@ export function EditorDocumento({
           aria-label="Más acciones"
           aria-expanded={menuMas}
           onClick={() => { setMenuFormato(false); setMenuMas((v) => !v); }}
-          className={`flex items-center rounded-md p-1.5 ${
+          className={`flex h-8 w-8 items-center justify-center rounded-md ${
             // Hover accent solo CERRADO: abierto conserva la píldora `--control-activo` (glifo legible).
             menuMas
               ? "bg-[hsl(var(--control-activo))] text-[hsl(var(--control-activo-foreground))]"
@@ -623,10 +623,10 @@ export function EditorDocumento({
           {accionesEnCabecera ? (
             <>
               <AccionesPagina>
-                <div className="flex min-w-0 items-center gap-0.5 sm:gap-1">{botonesHerramientas}</div>
+                <div className="flex min-w-0 items-center gap-1">{botonesHerramientas}</div>
               </AccionesPagina>
               <AccionesPaginaFin>
-                <div className="flex min-w-0 items-center gap-0.5 sm:gap-1">
+                <div className="flex min-w-0 items-center gap-1">
                   {accionesInicio}
                   {exportarYFin}
                 </div>
@@ -634,7 +634,7 @@ export function EditorDocumento({
             </>
           ) : (
             <div className="flex items-center justify-end border-b border-border bg-background px-2 py-1">
-              <div className="flex min-w-0 items-center gap-0.5 sm:gap-1">
+              <div className="flex min-w-0 items-center gap-1">
                 {accionesInicio}
                 {botonesHerramientas}
                 {exportarYFin}

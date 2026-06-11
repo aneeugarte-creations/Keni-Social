@@ -126,7 +126,7 @@ export function ControlContexto() {
     if (!marcaActiva) return null;
     return (
       <span className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 text-sm font-medium text-foreground">
-        <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <span className="max-w-[140px] truncate" style={fuenteActiva ? { fontFamily: fuenteActiva } : undefined}>
           {etiquetaMarca}
         </span>
@@ -163,7 +163,7 @@ export function ControlContexto() {
             "bg-[hsl(var(--control-activo))] text-[hsl(var(--control-activo-foreground))]",
         )}
       >
-        <Building2 className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden="true" />
+        <Building2 className="h-4 w-4 shrink-0 opacity-70" aria-hidden="true" />
         <span
           className="max-w-[120px] truncate font-medium"
           style={fuenteActiva ? { fontFamily: fuenteActiva } : undefined}

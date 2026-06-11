@@ -807,7 +807,7 @@ export default function Imagen() {
                     (el amber-600 sobre el degradado era casi invisible). */}
                 <span
                   aria-live="polite"
-                  className={`mr-0.5 hidden whitespace-nowrap text-xs md:inline ${
+                  className={`hidden whitespace-nowrap text-sm md:inline ${
                     !guardando && sucia ? "text-[hsl(var(--aviso-texto-plano))]" : "text-muted-foreground"
                   }`}
                 >
@@ -835,7 +835,9 @@ export default function Imagen() {
               pestanaActiva.contenido ? (
                 <Button
                   size="sm"
-                  className="ml-1 h-8"
+                  // Misma caja que las píldoras etiquetadas de la barra (marca, Adaptar):
+                  // h-8 px-2.5 text-sm. La separación la pone el gap del contenedor, no ml-*.
+                  className="h-8 px-2.5 text-sm"
                   disabled={guardarEnPieza.isPending}
                   onClick={() => guardarEnPieza.mutate()}
                   title="Guardar en la publicación (render + nueva versión)"
