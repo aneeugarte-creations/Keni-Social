@@ -438,8 +438,8 @@ export function EditorDocumento({
       {/* ADAPTAR A OTRO FORMATO — el «Redimensionar» de Canva: control propio y VISIBLE (icono de
           redimensionar + formato actual), ya no escondido en «Más». Abre el desplegable de presets;
           cada uno reencuadra el documento y lo abre en una pestaña nueva.
-          ABIERTO = píldora `--control-activo` (blanca con glifo naranja en la barra del editor;
-          equivale al accent fuera), distinta del hover transitorio. Mismo lenguaje en «Más». */}
+          ABIERTO = píldora `--control-activo` (albaricoque clara con glifo negro en la barra del
+          editor, como un hover sostenido; el accent normal fuera). Mismo lenguaje en «Más». */}
       <div className="relative">
         <button
           title="Adaptar a otro formato (story, feed, horizontal…)"

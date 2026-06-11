@@ -147,12 +147,14 @@
     SOLO en este scope, así todo el cromo comparte un solo lenguaje sobre el degradado (decisión
     de producto: el negro funciona mejor que el blanco sobre el naranja).
 
-    CONTRATO del esquema (un solo lenguaje sobre el degradado):
+    CONTRATO del esquema (un solo lenguaje sobre el degradado): botones SIMPLES y ALINEADOS, sin
+    bloques negros ni de colores sueltos que "no respeten" el naranja.
       · reposo: texto/iconos NEGROS sobre fondo transparente (nada en blanco suelto);
       · hover / estado transitorio: píldora `--accent` albaricoque CLARA con glifo negro;
-      · toggle ACTIVO / menú ABIERTO: píldora NEGRA SÓLIDA con glifo blanco
-        (`--control-activo*`), inequívoca y distinta del hover;
-      · CTA primaria (Exportar, «Guardar en pieza»): `--primary` negro sólido con texto blanco;
+      · toggle ACTIVO / menú ABIERTO: la MISMA píldora albaricoque clara con glifo negro
+        (`--control-activo*`) — como un hover sostenido, sin píldora negra;
+      · CTA primaria (Exportar, «Guardar en pieza»): `--primary` albaricoque claro con glifo
+        negro, alineada con el resto del cromo (sin píldora negra);
       · deshabilitado: negro a baja opacidad (lo dan las utilidades disabled:opacity-*);
       · avisos (Sin guardar, marca ajena): ámbar legible vía `--aviso-*` (píldora negra con
         texto ámbar claro; texto suelto en ámbar-950 oscuro).
@@ -180,15 +182,18 @@
       foco como un anillo limpio (`--ring`).
     */
     --background: 19 88% 50%;
-    --primary: 0 0% 9%; /* CTA: píldora negra sólida… */
-    --primary-foreground: 0 0% 100%; /* …con texto/icono blanco */
+    /* CTA (Exportar / «Guardar en pieza») y estados activos NO son píldoras negras: serían
+       botones que "no respetan" el naranja. Comparten el lenguaje CLARO del cromo (píldora
+       albaricoque con glifo negro), así toda la barra son botones simples y alineados. */
+    --primary: 28 100% 82%; /* CTA: píldora albaricoque clara… */
+    --primary-foreground: 0 0% 9%; /* …con glifo negro (sin bloques negros sobre el naranja) */
     --ring: 0 0% 9%;
     /* `--secondary` alineado con el accent por si un control futuro lo trae a la barra;
        `--destructive` se deja intacto A PROPÓSITO (rojo sobre naranja no se usa aquí). */
     --secondary: 28 100% 82%;
     --secondary-foreground: 0 0% 9%;
-    --control-activo: 0 0% 9%; /* activo/abierto: píldora negra sólida… */
-    --control-activo-foreground: 0 0% 100%; /* …con glifo blanco */
+    --control-activo: 28 100% 82%; /* activo/abierto: píldora albaricoque clara (como el hover)… */
+    --control-activo-foreground: 0 0% 9%; /* …con glifo negro */
     --aviso-borde: 0 0% 9%;
     --aviso-superficie: 0 0% 9%; /* aviso con superficie = píldora negra sólida… */
     --aviso-texto: 45 96% 64%; /* …con texto ámbar-300, legible sobre negro */
