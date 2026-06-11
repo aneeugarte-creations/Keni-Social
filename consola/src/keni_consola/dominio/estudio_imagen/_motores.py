@@ -1,11 +1,8 @@
-"""Estudio de imagen — motores relocalizados por subproceso (patrón `api/verificaciones`).
+"""Estudio de imagen — motor determinista por subproceso (patrón `api/verificaciones`).
 
 Submódulo de área del paquete `dominio.estudio_imagen`:
-  - EDITAR (determinista)     -> motor `motores/estudio_imagen/editar.py` (Pillow, sin coste:
-                                 recortar/redimensionar/comprimir/extender/placa).
-  - EXPANDIR (outpainting IA) -> motor `motores/estudio_imagen/expandir.py`, con la clave del
-                                 proveedor inyectada via `_entorno_generacion`.
-  - RETOCAR (generativo IA)   -> motor `motores/estudio_imagen/retocar.py`.
+  - EDITAR (determinista) -> motor `motores/estudio_imagen/editar.py` (Pillow, sin coste ni red:
+    recortar/redimensionar/comprimir/extender/placa). Adapta la foto de una pieza a su formato.
 """
 
 from __future__ import annotations
@@ -15,13 +12,9 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from ... import generaciones
 from . import _ref
 from ._comun import (
     _TIMEOUT_EDITAR_S,
-    _TIMEOUT_EXPANDIR_S,
-    _TIMEOUT_RETOCAR_S,
-    FORMATOS,
     OPS_EDITAR,
     EstudioError,
     _importar_salidas,
@@ -30,7 +23,7 @@ from ._comun import (
     _ruta_motor,
 )
 
-__all__ = ["_argv_editar", "editar", "expandir", "retocar"]
+__all__ = ["_argv_editar", "editar"]
 
 
 def _argv_editar(op: str, foto: Path | None, out: Path, params: dict[str, Any]) -> list[str]:
@@ -77,56 +70,4 @@ def editar(imagen: str, op: str, params: dict[str, Any]) -> dict[str, Any]:
         out = carpeta / f"salida{ext}"
         cmd = _argv_editar(op, foto, out, params)
         info = _ref._correr_motor(cmd, timeout=_TIMEOUT_EDITAR_S)
-        return _resultado(_importar_salidas(info), info)
-
-
-def expandir(
-    imagen: str, *, formato: str = "feed", marca: str = "", strength: float | None = None, lado: str = "auto"
-) -> dict[str, Any]:
-    """Outpainting GENERATIVO fiel (el sujeto no se toca) a un formato -> resultado uniforme.
-
-    Requiere proveedor configurado: la clave viaja al subproceso via `_entorno_generacion`.
-    """
-    if not imagen:
-        raise EstudioError("Falta la imagen de entrada para expandir.")
-    formato = formato if formato in FORMATOS else "feed"
-    with tempfile.TemporaryDirectory(prefix="keni-estudio-") as tmp:
-        carpeta = Path(tmp)
-        foto = _materializar(imagen, carpeta)
-        out = carpeta / "salida.png"
-        motor = _ruta_motor("expandir.py")
-        cmd = [sys.executable, str(motor), "--foto", str(foto), "--formato", formato, "--salida", str(out)]
-        if marca:
-            cmd += ["--marca", marca]
-        if strength is not None:
-            cmd += ["--strength", str(strength)]
-        if lado and lado != "auto":
-            cmd += ["--lado", lado]
-        info = _ref._correr_motor(cmd, timeout=_TIMEOUT_EXPANDIR_S, env=generaciones._entorno_generacion())
-        return _resultado(_importar_salidas(info), info)
-
-
-def retocar(imagen: str, instruccion: str, *, strength: float | None = None) -> dict[str, Any]:
-    """Retoque GENERATIVO por INSTRUCCION ("oscurece el cielo") -> resultado uniforme.
-
-    A diferencia de `expandir` (outpainting fiel: solo rellena una banda), `retocar` reinterpreta
-    TODA la imagen segun la instruccion. Es generativo (coste + timeout como expandir); requiere
-    proveedor configurado (la clave viaja al subproceso via `_entorno_generacion`).
-    """
-    if not imagen:
-        raise EstudioError("Falta la imagen de entrada para retocar.")
-    if not (instruccion or "").strip():
-        raise EstudioError("Escribe qué retoque quieres aplicar.")
-    with tempfile.TemporaryDirectory(prefix="keni-estudio-") as tmp:
-        carpeta = Path(tmp)
-        foto = _materializar(imagen, carpeta)
-        out = carpeta / "salida.png"
-        motor = _ruta_motor("retocar.py")
-        cmd = [
-            sys.executable, str(motor), "--foto", str(foto),
-            "--instruccion", instruccion.strip(), "--salida", str(out),
-        ]
-        if strength is not None:
-            cmd += ["--strength", str(strength)]
-        info = _ref._correr_motor(cmd, timeout=_TIMEOUT_RETOCAR_S, env=generaciones._entorno_generacion())
         return _resultado(_importar_salidas(info), info)

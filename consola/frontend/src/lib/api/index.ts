@@ -13,7 +13,6 @@ import { apiTexto } from "./texto";
 import { apiLimites } from "./limites";
 import { apiPublicaciones } from "./publicaciones";
 import { apiMedia } from "./media";
-import { apiImagenes } from "./imagenes";
 import { apiImagen } from "./imagen";
 import { apiVideo } from "./video";
 import { apiMarcaActivos } from "./marcaActivos";
@@ -58,7 +57,6 @@ export const api = {
   ...apiLimites,
   ...apiPublicaciones,
   ...apiMedia,
-  ...apiImagenes,
   ...apiImagen,
   ...apiVideo,
   ...apiMarcaActivos,

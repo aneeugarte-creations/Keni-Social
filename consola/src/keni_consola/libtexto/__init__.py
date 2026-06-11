@@ -110,6 +110,7 @@ from ._semilla import (
     cuerpo_semilla,
     dir_semilla,
     importar_semilla,
+    limpiar_prompts_obsoletos,
     migrar_nombres_biblioteca,
     obtener_semilla,
 )
@@ -196,4 +197,5 @@ __all__ = [
     "cuerpo_semilla",
     "importar_semilla",
     "migrar_nombres_biblioteca",
+    "limpiar_prompts_obsoletos",
 ]

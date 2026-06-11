@@ -279,6 +279,18 @@ def test_sembrar_migra_antes_de_importar_sin_duplicar():
     assert "prompt/qa-fuente" not in ids  # el viejo NO sobrevive (no se duplica)
 
 
+def test_limpiar_prompts_obsoletos_borra_y_es_idempotente():
+    # Prompts retirados (fusionados/borrados) se eliminan del store al desplegar; one-shot.
+    from keni_consola.libtexto._rutas import raiz
+
+    (raiz() / "prompt").mkdir(parents=True, exist_ok=True)
+    (raiz() / "prompt" / "arte-sistema.md").write_text("---\ntitulo: X\n---\nv", encoding="utf-8")
+    n = libtexto.limpiar_prompts_obsoletos()
+    assert n >= 1
+    assert libtexto.obtener("prompt/arte-sistema") is None
+    assert libtexto.limpiar_prompts_obsoletos() == 0  # sentinela: no repite
+
+
 # --------------------------------------------------------------------------- #
 # Renombre del almacén de documentos: …/biblioteca -> …/texto (idempotente)    #
 # --------------------------------------------------------------------------- #

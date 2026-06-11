@@ -23,8 +23,16 @@ from ._rutas import raiz
 
 __all__ = [
     "dir_semilla", "obtener_semilla", "cuerpo_efectivo", "cuerpo_semilla", "importar_semilla",
-    "migrar_nombres_biblioteca",
+    "migrar_nombres_biblioteca", "limpiar_prompts_obsoletos",
 ]
+
+# Prompts del sistema RETIRADOS de la semilla (fusionados/borrados): sus ficheros quedarían
+# huérfanos en el store de la Biblioteca. `limpiar_prompts_obsoletos` los borra al desplegar.
+_PROMPTS_OBSOLETOS_BIBLIOTECA: tuple[str, ...] = (
+    "prompt/arte-sistema",       # fusionado en prompt/arte (directiva única del generador)
+    "prompt/arte-ilustracion",   # Estudio de generación retirado (código muerto)
+)
+_SENTINELA_OBSOLETOS = ".prompts-obsoletos-v1"
 
 # Migración ONE-SHOT del rediseño de nombres/ids de la Biblioteca: el store en vivo ya tiene los
 # docs del sistema con ids/títulos VIEJOS, y `importar_semilla` no pisa lo existente, así que los
@@ -212,6 +220,29 @@ def migrar_nombres_biblioteca(origen: Path | None = None) -> int:
                 carpeta.rmdir()
         except OSError:
             pass
+    sentinela.parent.mkdir(parents=True, exist_ok=True)
+    escribir_atomico(sentinela, "ok\n")
+    return n
+
+
+def limpiar_prompts_obsoletos() -> int:
+    """Borra del store los prompts del sistema RETIRADOS (`_PROMPTS_OBSOLETOS_BIBLIOTECA`).
+
+    ONE-SHOT por sentinela: tras fusionar/borrar prompts (p. ej. `arte-sistema`→`arte`, o el
+    Estudio de generación retirado), sus ficheros quedarían huérfanos en la Biblioteca. Esto los
+    elimina al desplegar (vía `sembrar`). Idempotente; no toca nada más del store. Devuelve cuántos
+    borró. Recuperable: el contenido vive en el historial git de la semilla.
+    """
+    destino_raiz = raiz()
+    sentinela = destino_raiz / _SENTINELA_OBSOLETOS
+    if sentinela.exists():
+        return 0
+    n = 0
+    for pid in _PROMPTS_OBSOLETOS_BIBLIOTECA:
+        ruta = destino_raiz.joinpath(*f"{pid}.md".split("/"))
+        if ruta.is_file():
+            ruta.unlink()
+            n += 1
     sentinela.parent.mkdir(parents=True, exist_ok=True)
     escribir_atomico(sentinela, "ok\n")
     return n

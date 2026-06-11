@@ -6,22 +6,15 @@ responsabilidad en submódulos privados; este `__init__.py` RE-EXPORTA la superf
 quien importe `from ..dominio import estudio_imagen` o haga `estudio_imagen.X` sigue viéndolo todo.
 
 Mapa de submódulos:
-  - `_comun`        : constantes de formato, `EstudioError`, helpers de subproceso/materialización.
-  - `_prompt`       : composición del prompt generativo + `generar_variante` (IA).
-  - `_motores`      : `editar` (Pillow), `expandir` y `retocar` (outpainting/retoque IA).
-  - `_plantilla`    : composición de marca DETERMINISTA por SPEC con el motor Node.
-  - `_documento`    : render del DOCUMENTO de capas (editor pro), plantilla con fotos, fronteras.
-  - `_set_formatos` : set multi-formato "de un tiro" desde UNA imagen aportada (Fase 3).
-  - `_revision`     : revisión legal/editorial con `claude -p` (gate humano).
+  - `_comun`     : constantes de formato, `EstudioError`, helpers de subproceso/materialización.
+  - `_motores`   : `editar` (Pillow) — recorte/adaptación determinista de la imagen de una pieza.
+  - `_plantilla` : composición de marca DETERMINISTA por SPEC con el motor Node.
+  - `_documento` : render del DOCUMENTO de capas (editor pro), plantilla con fotos, fronteras.
 
-Superficie de primera clase que reemplaza a la skill `estudio-imagen` (borrada con el resto del
-sistema de skills). El arte PERTENECE a la pieza: una imagen es un objeto del almacen de media
-(`<uuid>.png`) y se asocia a la publicacion por `publicacion.imagen`.
-
-Tres capacidades, todas reutilizando la infra existente (sin red en tests):
-  - GENERAR variantes (IA)    -> `media.generar_imagen` (un solo punto de red, mockeable).
-  - EDITAR (determinista)     -> motor `motores/estudio_imagen/editar.py` por subproceso.
-  - EXPANDIR (outpainting IA)  -> motor `motores/estudio_imagen/expandir.py` por subproceso.
+El arte PERTENECE a la pieza: una imagen es un objeto del almacen de media (`<uuid>.png`) y se
+asocia a la publicacion por `publicacion.imagen`. La GENERACIÓN por IA NO vive aquí: corre por
+`media.generar_imagen` (auto-arte del pipeline y botón «Generar con IA»); este paquete solo
+COMPONE/RENDERIZA de forma determinista (plantilla de marca + documento de capas) y RECORTA.
 """
 # ruff: noqa: F401  -- BARREL: todo lo importado aquí es re-export intencional de la superficie
 # pública Y privada (consumidores hacen `estudio_imagen.X`, incluido `estudio_imagen._privado`).
@@ -54,18 +47,14 @@ from ...motores.estudio_imagen import spec_plantilla
 from .. import generar, jobspec
 from ._comun import (
     _ENV_NODE_BIN,
-    _ESTILO_MARCA,
     _FORMATO_POR_RED,
     _FORMATOS_COMPONER,
     _MARCAS_VISUALES,
     _TIMEOUT_COMPONER_S,
     _TIMEOUT_EDITAR_S,
-    _TIMEOUT_EXPANDIR_S,
-    _TIMEOUT_RETOCAR_S,
     ASPECTOS,
     FORMATOS,
     OPS_EDITAR,
-    PROMPT_IMAGEN_DEFECTO,
     REGLAS_IMAGEN,
     EstudioError,
     _correr_motor,
@@ -99,7 +88,7 @@ from ._documento import (
     validar_capas,
     validar_documento,
 )
-from ._motores import _argv_editar, editar, expandir, retocar
+from ._motores import _argv_editar, editar
 from ._plantilla import (
     _componer_node,
     _componer_node_bytes,
@@ -107,9 +96,6 @@ from ._plantilla import (
     componer_bytes,
     previsualizar_spec_bytes,
 )
-from ._prompt import componer_prompt, generar_variante
-from ._revision import _instruccion_revision, revisar
-from ._set_formatos import _encajar_a_lienzo, _logo_de_marca, generar_set_formatos
 
 __all__ = [
     # Constantes / error de dominio
@@ -117,17 +103,11 @@ __all__ = [
     "FORMATOS",
     "ASPECTOS",
     "OPS_EDITAR",
-    "PROMPT_IMAGEN_DEFECTO",
     "EstudioError",
     "marca_tiene_plantilla",
     "formato_por_red",
-    # Prompt / generación IA
-    "componer_prompt",
-    "generar_variante",
-    # Motores (editar / expandir / retocar)
+    # Edición determinista (recorte/adaptación de imagen de pieza)
     "editar",
-    "expandir",
-    "retocar",
     # Composición de marca por SPEC (Node)
     "componer",
     "componer_bytes",
@@ -143,8 +123,4 @@ __all__ = [
     "documento_tiene_hueco",
     "validar_capas",
     "documento_desde_plantilla",
-    # Set multi-formato
-    "generar_set_formatos",
-    # Revisión
-    "revisar",
 ]

@@ -108,6 +108,9 @@ def main() -> int:
         m = libtexto.migrar_nombres_biblioteca()
         if m:
             print(f"Texto: {m} documento(s) migrados al nuevo esquema de nombres.")
+        o = libtexto.limpiar_prompts_obsoletos()
+        if o:
+            print(f"Texto: {o} prompt(s) obsoleto(s) eliminados del store.")
         n = libtexto.importar_semilla()
         if n:
             print(f"Texto: {n} documento(s) base importados.")

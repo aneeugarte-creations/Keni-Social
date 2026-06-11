@@ -26,12 +26,8 @@ __all__ = [
     "FORMATOS",
     "ASPECTOS",
     "OPS_EDITAR",
-    "PROMPT_IMAGEN_DEFECTO",
     "_MARCAS_VISUALES",
-    "_ESTILO_MARCA",
     "_TIMEOUT_EDITAR_S",
-    "_TIMEOUT_EXPANDIR_S",
-    "_TIMEOUT_RETOCAR_S",
     "_TIMEOUT_COMPONER_S",
     "_FORMATOS_COMPONER",
     "_FORMATO_POR_RED",
@@ -53,18 +49,17 @@ __all__ = [
     "_correr_render_documento",
 ]
 
-# Reglas de imagen (Texto) que se adjuntan a la revision legal/editorial.
+# Reglas de imagen (Texto): editorial de reglas que `dominio/generar.adjuntos_copy` adjunta al
+# COPY (el modelo redacta el copy-in de la placa) y que el render de marca respeta.
 REGLAS_IMAGEN = "editorial/reglas/imagen"
 
-# Formatos de red soportados (espejo de `motores/estudio_imagen/editar.py:FORMATOS`).
+# Formatos de red soportados (espejo de `motores/estudio_imagen/editar.py:FORMATOS`). FUENTE de
+# identidad de formato compartida con `formatos_red` (matriz red->lienzo).
 FORMATOS = ("vertical", "feed", "cuadrado", "horizontal")
 ASPECTOS = {"vertical": "9:16", "feed": "4:5", "cuadrado": "1:1", "horizontal": "16:9"}
 
 # Operaciones DETERMINISTAS del motor `editar.py` (sin IA, sin coste).
 OPS_EDITAR = ("recortar", "redimensionar", "comprimir", "extender", "placa")
-
-# Prompt base de imagen en la Texto (editable por el equipo; cae a "" si falta).
-PROMPT_IMAGEN_DEFECTO = "prompt/arte-ilustracion"
 
 # Marcas con tokens de diseno PRECARGADOS en `motores/estudio_imagen/marcas.json`
 # (colores/pleca afinados). Es el conjunto que admite la PLACA de texto legacy (`editar.py
@@ -73,18 +68,8 @@ PROMPT_IMAGEN_DEFECTO = "prompt/arte-ilustracion"
 # `marca_tiene_plantilla`).
 _MARCAS_VISUALES = ("unotv", "claro-sports", "fundacion")
 
-# Nota de estilo por marca para el prompt generativo (referencia corta; la guia completa
-# vive como documento editorial en la Texto). Replica `motores/.../generar.ESTILO_MARCA`.
-_ESTILO_MARCA = {
-    "unotv": "Estilo UnoTV: noticias, sobrio, creible, alto contraste, rojo #E30613 como acento puntual.",
-    "claro-sports": "Estilo Claro Sports: deportivo, energia, alto contraste, rojo #CF2E2E de marca.",
-    "fundacion": "Estilo Fundación: social y humano, calido y cercano, esperanzador; tono sensible y respetuoso, acento ambar #D97706.",
-}
-
-# Wall-timeouts: editar es determinista (rapido); expandir/retocar llaman al proveedor (lento).
+# Wall-timeout del motor determinista `editar.py` (rapido; sin red).
 _TIMEOUT_EDITAR_S = 60
-_TIMEOUT_EXPANDIR_S = 240
-_TIMEOUT_RETOCAR_S = 240
 # Componer es determinista (Pillow), como editar: rapido, sin red.
 _TIMEOUT_COMPONER_S = 60
 

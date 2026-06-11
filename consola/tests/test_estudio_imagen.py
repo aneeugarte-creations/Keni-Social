@@ -12,30 +12,6 @@ from keni_consola import media
 from keni_consola.dominio import estudio_imagen as e
 
 # --------------------------------------------------------------------------- #
-# componer_prompt                                                             #
-# --------------------------------------------------------------------------- #
-
-
-def test_componer_prompt_incluye_base_marca_y_aspecto(entorno):
-    """La base viene de la SEMILLA (store vacio), mas la nota de marca y el aspecto del formato."""
-    p = e.componer_prompt("estadio al atardecer", "claro-sports", "feed")
-    assert "estadio al atardecer" in p
-    assert "Claro Sports" in p  # nota de estilo de marca
-    assert "4:5" in p  # aspecto del formato feed
-    assert "director de arte" in p.lower()  # cuerpo de la semilla prompt/arte-ilustracion
-
-
-def test_componer_prompt_formato_desconocido_cae_a_feed(entorno):
-    p = e.componer_prompt("algo", "", "inventado")
-    assert "4:5" in p  # feed por defecto
-
-
-def test_componer_prompt_sin_marca_no_revienta(entorno):
-    p = e.componer_prompt("algo", "", "vertical")
-    assert "9:16" in p
-
-
-# --------------------------------------------------------------------------- #
 # editar (determinista, motor mockeado)                                       #
 # --------------------------------------------------------------------------- #
 
@@ -84,58 +60,6 @@ def test_editar_placa_sin_foto_ok(entorno, monkeypatch):
     res = e.editar("", "placa", {"formato": "feed", "texto": "Gol", "marca": "unotv"})
     assert res["id"] == "placa.png"
     assert "--foto" not in capt["cmd"]  # sin foto de fondo
-
-
-# --------------------------------------------------------------------------- #
-# expandir (outpainting, motor mockeado)                                      #
-# --------------------------------------------------------------------------- #
-
-
-def test_expandir_importa_salida(entorno, monkeypatch):
-    monkeypatch.setattr(media, "leer_media", lambda nombre: b"bytes")
-    monkeypatch.setattr(
-        e, "_correr_motor", lambda cmd, **kw: {"modelo": "x", "salidas": [{"salida": "/tmp/exp.png"}]}
-    )
-    monkeypatch.setattr(media, "importar_imagen", lambda ruta: "exp.png")
-    res = e.expandir("origen.png", formato="feed", marca="claro-sports", strength=0.4)
-    assert res["id"] == "exp.png"
-    assert res["info"]["modelo"] == "x"
-
-
-def test_expandir_sin_imagen(entorno):
-    with pytest.raises(e.EstudioError):
-        e.expandir("", formato="feed")
-
-
-# --------------------------------------------------------------------------- #
-# retocar (instruccion generativa, motor mockeado)                            #
-# --------------------------------------------------------------------------- #
-
-
-def test_retocar_importa_salida(entorno, monkeypatch):
-    monkeypatch.setattr(media, "leer_media", lambda nombre: b"bytes")
-    capt = {}
-
-    def _fake(cmd, **kw):
-        capt["cmd"] = cmd
-        return {"op": "retocar", "modelo": "x", "salidas": [{"salida": "/tmp/ret.png"}]}
-
-    monkeypatch.setattr(e, "_correr_motor", _fake)
-    monkeypatch.setattr(media, "importar_imagen", lambda ruta: "ret.png")
-    res = e.retocar("origen.png", "oscurece el cielo", strength=0.6)
-    assert res["id"] == "ret.png"
-    assert "--instruccion" in capt["cmd"]
-    assert "oscurece el cielo" in capt["cmd"]
-
-
-def test_retocar_sin_imagen(entorno):
-    with pytest.raises(e.EstudioError):
-        e.retocar("", "algo")
-
-
-def test_retocar_sin_instruccion(entorno):
-    with pytest.raises(e.EstudioError):
-        e.retocar("origen.png", "  ")
 
 
 # --------------------------------------------------------------------------- #
@@ -309,79 +233,3 @@ def test_renderizar_documento_bytes_con_logo_de_categoria(tmp_path, monkeypatch)
     assert cap["asset_existe"] is True
     # PLANO: el asset vive DIRECTO en el tmp del documento, no en un subdir `asset-fotos/`.
     assert cap["asset_parent"] == cap["tmp"]
-
-
-# --------------------------------------------------------------------------- #
-# generar_set_formatos (de un tiro: encaje determinista + marca por lienzo)   #
-# --------------------------------------------------------------------------- #
-
-
-def test_set_formatos_marca_desconocida(entorno):
-    with pytest.raises(e.EstudioError):
-        e.generar_set_formatos("foto.png", marca="nope")
-
-
-def test_set_formatos_sin_imagen(entorno):
-    with pytest.raises(e.EstudioError):
-        e.generar_set_formatos("", marca="unotv")
-
-
-def _mock_set(monkeypatch):
-    """Mockea encaje (`editar`), marca (`componer`) y el asset de logo. Captura las llamadas."""
-    llamadas = {"encaje": [], "componer": []}
-
-    def _editar(imagen, op, params):
-        assert op == "extender"
-        llamadas["encaje"].append(params["formato"])
-        return {"id": f"enc-{params['formato']}.png", "url": f"/api/media/enc-{params['formato']}.png"}
-
-    def _componer(imagen, **kw):
-        llamadas["componer"].append(kw["formato"])
-        return {"id": f"marca-{kw['formato']}.png", "url": f"/api/media/marca-{kw['formato']}.png",
-                "imagenes": [], "info": {}}
-
-    monkeypatch.setattr(e, "editar", _editar)
-    monkeypatch.setattr(e, "componer", _componer)
-    monkeypatch.setattr(e, "_logo_de_marca", lambda marca: "/tmp/logo.png")
-    return llamadas
-
-
-def test_set_formatos_por_red_instagram(entorno, monkeypatch):
-    """IG -> feed (marcado) + vertical (marcado); cada lienzo se encaja y luego se marca."""
-    llamadas = _mock_set(monkeypatch)
-    res = e.generar_set_formatos("foto.png", marca="unotv", red="instagram", titular="Gol")
-    lienzos = [f["lienzo"] for f in res["formatos"]]
-    assert lienzos == ["feed", "vertical"]
-    assert llamadas["encaje"] == ["feed", "vertical"]  # encaja ambos
-    assert llamadas["componer"] == ["feed", "vertical"]  # ambos llevan marca (no horizontal)
-    assert all(f["marcado"] for f in res["formatos"])
-    assert res["formatos"][0]["url"] == "/api/media/marca-feed.png"
-    assert len(res["imagenes"]) == 2
-
-
-def test_set_formatos_x_horizontal_con_placa(entorno, monkeypatch):
-    """X -> horizontal: se encaja Y se compone la marca (el compositor por SPEC sí hace 16:9)."""
-    llamadas = _mock_set(monkeypatch)
-    res = e.generar_set_formatos("foto.png", marca="unotv", red="x")
-    assert [f["lienzo"] for f in res["formatos"]] == ["horizontal"]
-    assert llamadas["encaje"] == ["horizontal"]
-    assert llamadas["componer"] == ["horizontal"]  # ahora SÍ se compone la placa 16:9
-    assert res["formatos"][0]["marcado"] is True
-    assert res["formatos"][0]["url"] == "/api/media/marca-horizontal.png"  # el encaje YA marcado
-
-
-def test_set_formatos_sin_red_usa_lienzos_canonicos(entorno, monkeypatch):
-    """Sin red, el set MAXIMO: todos los lienzos canonicos de la matriz."""
-    from keni_consola import formatos_red
-
-    _mock_set(monkeypatch)
-    res = e.generar_set_formatos("foto.png", marca="claro-sports")
-    assert {f["lienzo"] for f in res["formatos"]} == set(formatos_red.lienzos_canonicos())
-
-
-def test_set_formatos_sin_aplicar_marca_solo_encaja(entorno, monkeypatch):
-    """`aplicar_marca=False`: solo encaja a los lienzos, sin estampar marca (ni en feed/cuadrado)."""
-    llamadas = _mock_set(monkeypatch)
-    res = e.generar_set_formatos("foto.png", marca="unotv", red="instagram", aplicar_marca=False)
-    assert llamadas["componer"] == []
-    assert all(not f["marcado"] for f in res["formatos"])
