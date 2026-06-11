@@ -19,10 +19,12 @@ import { PanelAjustes } from "@/pages/configuracion/SeccionFuncionalidad";
 
 import Cobertura from "./Cobertura";
 
-// Los siete grupos del catálogo del motor de noticias (`ajustes_catalogo.GRUPOS_NOTICIAS`)
-// REAGRUPADOS en cuatro ÁREAS colapsables de capa base, por afinidad editorial: entrada →
-// orden/prioridad del pool → producción automática → técnico. Cada área lista sus grupos en
-// este orden; la primera abre desplegada.
+// Los grupos del catálogo del motor de noticias (`ajustes_catalogo.GRUPOS_NOTICIAS`) REAGRUPADOS
+// en cuatro ÁREAS colapsables de capa base, por afinidad editorial: entrada → orden/prioridad del
+// pool → producción automática → técnico. Cada área lista sus grupos en este orden; la primera
+// abre desplegada. El grupo `noticias_produccion_marca` (PLAN diario por marca) NO se pinta aquí:
+// su editor único es el diálogo «Plan y horarios» de Programación (mismas claves `KENI_PLAN_DIA::
+// marca`, pero con cupo + horarios en un formulario, en vez del texto crudo «mx:4,intl:4,…»).
 const AREAS_NOTICIAS = [
   {
     titulo: "Entrada al pool",
@@ -40,8 +42,8 @@ const AREAS_NOTICIAS = [
   {
     titulo: "Producción automática",
     descripcion:
-      "Cuándo una historia dispara copy con IA (listón, maduración, cupos) y el plan editorial diario por marca.",
-    grupos: ["noticias_produccion", "noticias_produccion_marca"],
+      "Cuándo una historia dispara copy con IA: listón, maduración y cupos globales. El plan diario POR MARCA se edita en Programación → «Plan y horarios» (cupo y horarios, con buen formulario).",
+    grupos: ["noticias_produccion"],
     abiertaInicial: false,
   },
   {

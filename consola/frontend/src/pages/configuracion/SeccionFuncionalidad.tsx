@@ -23,8 +23,6 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { AjusteAdmin, RespuestaAjustes } from "@/types";
@@ -211,12 +209,52 @@ function FilaAjuste({
   );
 }
 
-/** Toggles de generación por MARCA (copy + arte), en una pestaña por marca (en vez de lista plana).
+/** Una excepción por marca: el conmutador de UNA etapa de UNA marca, con su etiqueta corta.
+ *  `bloqueado` (el maestro global de esa etapa/publicación está OFF) lo muestra apagado y
+ *  deshabilitado: la excepción no aplica hasta encender el maestro. */
+function ConmutadorMarca({
+  ajuste,
+  etiqueta,
+  onGuardar,
+  guardando,
+  bloqueado,
+}: {
+  ajuste: AjusteAdmin;
+  /** Etiqueta corta del conmutador (la etapa); vacía cuando la marca tiene un único control. */
+  etiqueta: string;
+  onGuardar: (cuerpo: { clave: string; valor?: boolean | number | string }) => void;
+  guardando: boolean;
+  bloqueado: boolean;
+}) {
+  const activo = bloqueado ? false : Boolean(ajuste.valor);
+  return (
+    <label
+      className={cn("flex items-center gap-2", bloqueado && "opacity-50")}
+      title={bloqueado ? "El maestro de esta etapa está apagado: la excepción no aplica." : undefined}
+    >
+      {etiqueta && <span className="text-xs text-muted-foreground">{etiqueta}</span>}
+      <Switch
+        checked={activo}
+        onCheckedChange={(v) => onGuardar({ clave: ajuste.clave, valor: v })}
+        disabled={guardando || bloqueado}
+        aria-label={ajuste.etiqueta}
+      />
+    </label>
+  );
+}
+
+/** EXCEPCIONES POR MARCA — patrón ÚNICO de las desviaciones `::marca` en toda la consola: una
+ *  fila por marca con sus conmutadores a la derecha (TODAS las marcas a la vista, sin pestañas).
+ *  Sin tocar, cada marca SIGUE el valor global; encender/apagar aquí la DESVÍA. Sirve igual para
+ *  las etapas (Generar/Arte, en el Monitor) que para la publicación real (en Programación).
  *
- * Cada ajuste del grupo "Automatización por marca" tiene clave `ENV::marca` y etiqueta
- * "Nombre · Etapa"; agrupamos por marca (orden de aparición) y, dentro de su pestaña, la fila
- * muestra solo la ETAPA (el nombre ya lo da la pestaña). Reutiliza `FilaAjuste`. */
-function AjustesPorMarca({
+ *  Cada ajuste tiene clave `BASE::marca`; agrupamos por marca (orden de aparición). La etiqueta
+ *  "Marca · Etapa" (Generar/Arte) da el nombre y la etiqueta corta del conmutador; si no trae
+ *  " · " (publicación) es un único conmutador sin etiqueta. `maestros` mapea la clave BASE de cada
+ *  ajuste (p. ej. `KENI_GENERAR`, `KENI_PUBLICAR_REAL`) a si su maestro global está ON: con el
+ *  maestro OFF, la excepción se ve apagada y deshabilitada (consistente entre Generar/Arte y
+ *  Publicación; antes Generar/Arte la OCULTABA y publicación la atenuaba — ahora ambas igual). */
+function ExcepcionesPorMarca({
   ajustes,
   onGuardar,
   guardando,
@@ -225,67 +263,47 @@ function AjustesPorMarca({
   ajustes: AjusteAdmin[];
   onGuardar: (cuerpo: { clave: string; valor?: boolean | number | string }) => void;
   guardando: boolean;
-  /** Valor de cada maestro de etapa por su clave ENV (p. ej. `KENI_PIPELINE`). Si el maestro de
-   *  la etapa está OFF, su excepción por marca se OCULTA (no se gestiona hasta encender la etapa). */
   maestros: Record<string, boolean>;
 }) {
   const porMarca = React.useMemo(() => {
     const orden: string[] = [];
-    const mapa = new Map<string, { nombre: string; ajustes: AjusteAdmin[] }>();
+    const mapa = new Map<string, { nombre: string; controles: { ajuste: AjusteAdmin; etapa: string }[] }>();
     for (const a of ajustes) {
       const marcaId = a.clave.split("::")[1] ?? a.clave;
       const [nombre, etapa] = a.etiqueta.split(" · ");
       if (!mapa.has(marcaId)) {
-        mapa.set(marcaId, { nombre: nombre || marcaId, ajustes: [] });
+        mapa.set(marcaId, { nombre: nombre || marcaId, controles: [] });
         orden.push(marcaId);
       }
-      // En la pestaña de la marca, la fila muestra solo la etapa (no repite el nombre).
-      mapa.get(marcaId)!.ajustes.push({ ...a, etiqueta: etapa || a.etiqueta });
+      mapa.get(marcaId)!.controles.push({ ajuste: a, etapa: etapa ?? "" });
     }
     return orden.map((id) => ({ id, ...mapa.get(id)! }));
   }, [ajustes]);
 
-  const { marcaActiva } = useMarcaActiva();
-  const [activa, setActiva] = React.useState(
-    (marcaActiva && porMarca.some((m) => m.id === marcaActiva) ? marcaActiva : porMarca[0]?.id) ?? "",
-  );
-  React.useEffect(() => {
-    if (porMarca.length && !porMarca.some((m) => m.id === activa)) {
-      setActiva(
-        marcaActiva && porMarca.some((m) => m.id === marcaActiva) ? marcaActiva : porMarca[0].id,
-      );
-    }
-  }, [porMarca, activa, marcaActiva]);
-
   if (!porMarca.length) return null;
   return (
-    <Tabs value={activa} onValueChange={setActiva} className="mt-1">
-      <TabsList className="flex-wrap">
-        {porMarca.map((m) => (
-          <TabsTrigger key={m.id} value={m.id}>
-            {m.nombre}
-          </TabsTrigger>
-        ))}
-      </TabsList>
-      {porMarca.map((m) => {
-        // Etapa = clave ENV antes de "::". Solo gestionamos excepciones de etapas ENCENDIDAS:
-        // con el maestro OFF la excepción no aplica, así que ocultamos la fila (no la atenuamos).
-        const visibles = m.ajustes.filter((a) => maestros[a.clave.split("::")[0]] !== false);
-        return (
-          <TabsContent key={m.id} value={m.id}>
-            {visibles.length > 0 ? (
-              visibles.map((a) => (
-                <FilaAjuste key={a.clave} ajuste={a} onGuardar={onGuardar} guardando={guardando} />
-              ))
-            ) : (
-              <p className="py-3 text-xs text-muted-foreground">
-                Enciende el maestro de la etapa para gestionar excepciones por marca.
-              </p>
-            )}
-          </TabsContent>
-        );
-      })}
-    </Tabs>
+    <div>
+      {porMarca.map((m) => (
+        <div
+          key={m.id}
+          className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-b border-border/50 py-2.5 last:border-0"
+        >
+          <span className="text-sm font-medium">{m.nombre}</span>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+            {m.controles.map(({ ajuste, etapa }) => (
+              <ConmutadorMarca
+                key={ajuste.clave}
+                ajuste={ajuste}
+                etiqueta={etapa}
+                onGuardar={onGuardar}
+                guardando={guardando}
+                bloqueado={maestros[ajuste.clave.split("::")[0]] === false}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -373,12 +391,17 @@ function GruposAjustes({
           <FilaAjuste key={ajuste.clave} ajuste={ajuste} onGuardar={onGuardar} guardando={guardando} />
         ));
 
-        // Excepciones por marca: una pestaña por marca; ocultas si su maestro está OFF.
+        // Excepciones por marca (Generar/Arte): patrón único `ExcepcionesPorMarca` (fila por marca,
+        // todas a la vista). Sin tocar, cada marca sigue el maestro global de la etapa.
         if (grupo.id === "automatizacion_marca") {
           return (
-            <div key={grupo.id} className="space-y-1">
+            <div key={grupo.id} className="space-y-1.5">
               {subtitulo(grupo.titulo)}
-              <AjustesPorMarca
+              <p className="text-xs text-muted-foreground">
+                Sin tocar, cada marca sigue el valor global de la etapa; apágala para desviar esa
+                marca. Con el maestro de la etapa apagado, su excepción no aplica.
+              </p>
+              <ExcepcionesPorMarca
                 ajustes={grupo.ajustes}
                 onGuardar={onGuardar}
                 guardando={guardando}
@@ -393,28 +416,31 @@ function GruposAjustes({
         // Su peligrosidad la señala el acento ámbar de la SECCIÓN y el badge «Publica de verdad» de
         // la fila: una franja a la izquierda, NO una caja anidada. `publicacion_marca` se pinta aquí.
         if (grupo.id === "publicacion") {
-          const maestroPubOn = Boolean(grupo.ajustes[0]?.valor);
+          const maestroPub = grupo.ajustes[0];
+          const maestroPubOn = Boolean(maestroPub?.valor);
           const exMarca = grupos.find((g) => g.id === "publicacion_marca")?.ajustes ?? [];
+          // Mismo patrón que las etapas: el maestro de publicación es el «master» de estas
+          // excepciones (clave BASE = `KENI_PUBLICAR_REAL`), así que con él apagado se ven
+          // apagadas/deshabilitadas igual que Generar/Arte.
+          const maestrosPub = maestroPub ? { [maestroPub.clave]: maestroPubOn } : {};
           return (
             <div key={grupo.id} className="space-y-3 border-l-2 border-amber-500/40 pl-3">
               <div>{filas}</div>
               {exMarca.length > 0 && (
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <h4 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                     Excepciones por marca
                   </h4>
-                  <div>
-                    {exMarca.map((a) => (
-                      <FilaAjuste
-                        key={a.clave}
-                        ajuste={a}
-                        onGuardar={onGuardar}
-                        guardando={guardando}
-                        bloqueado={!maestroPubOn}
-                        notaBloqueo="maestro apagado"
-                      />
-                    ))}
-                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Sin tocar, cada marca sigue el maestro; apágala para dejarla en dry-run aunque
+                    el maestro publique de verdad.
+                  </p>
+                  <ExcepcionesPorMarca
+                    ajustes={exMarca}
+                    onGuardar={onGuardar}
+                    guardando={guardando}
+                    maestros={maestrosPub}
+                  />
                 </div>
               )}
             </div>
