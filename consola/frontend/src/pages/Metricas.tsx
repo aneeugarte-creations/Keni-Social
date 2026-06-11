@@ -9,7 +9,6 @@ import {
   marcaMetricasDesdeCanonica,
   marcaParam,
 } from "@/components/comunes/selectores";
-import { AjustesPagina } from "@/components/layout/AjustesPagina";
 import { AccionesPagina } from "@/components/layout/encabezado";
 import { MenuAcciones } from "@/components/layout/MenuAcciones";
 import { SeccionMetricool } from "@/pages/configuracion/SeccionMetricool";
@@ -197,13 +196,11 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
         generadoEn={reporteQuery.data?.generado_en}
       />
       <SelectorTiempo rangos={rangos} valor={rango} onCambio={cambiarRango} />
-      <AjustesPagina
-        titulo="Ajustes de métricas"
-        descripcion="La conexión Metricool por marca que alimenta este dashboard."
+      <MenuAcciones
+        ajustesTitulo="Ajustes de métricas"
+        ajustesDescripcion="La conexión Metricool por marca que alimenta este dashboard."
+        ajustes={<SeccionMetricool />}
       >
-        <SeccionMetricool />
-      </AjustesPagina>
-      <MenuAcciones>
         <ItemActualizarMetricas
           actualizar={refresco.actualizar}
           deshabilitado={refresco.deshabilitado}

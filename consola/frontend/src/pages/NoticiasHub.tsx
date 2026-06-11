@@ -12,8 +12,8 @@
  * galería se genera sola por el pipeline. Las acciones de página que queden las
  * portaliza `Cobertura` a su menú "⋮"; aquí solo viven los AJUSTES del motor (admin).
  */
-import { AjustesPagina } from "@/components/layout/AjustesPagina";
 import { AccionesPagina } from "@/components/layout/encabezado";
+import { MenuAcciones } from "@/components/layout/MenuAcciones";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { PanelAjustes } from "@/pages/configuracion/SeccionFuncionalidad";
 
@@ -60,16 +60,15 @@ export default function NoticiasHub() {
   const esAdmin = usuario === null || usuario.rol === "admin";
   return (
     <div className="space-y-4">
-      {/* Reparto canónico de cabecera: los AJUSTES del motor de noticias al panel lateral
-          (solo admin). Las ACCIONES de página (p. ej. «Borrar todo») las aporta `Cobertura`
-          al mismo hueco, en su menú "⋮". */}
+      {/* Barra superior limpia: UN solo "⋮" con la entrada «Ajustes» del motor de noticias (solo
+          admin). «Borrar todo» (vaciar el pool) ya no es un "⋮" aparte: vive en la barra de
+          selección de la vista, junto a las demás acciones en lote. */}
       {esAdmin && (
         <AccionesPagina>
-          <AjustesPagina
-            titulo="Ajustes del motor de noticias"
-            descripcion="Controlan qué noticias entran al pool, en qué orden se muestran y cuáles disparan producción automática. Los cambios aplican al momento (hasta ~1 minuto)."
-          >
-            {AREAS_NOTICIAS.map((area) => (
+          <MenuAcciones
+            ajustesTitulo="Ajustes del motor de noticias"
+            ajustesDescripcion="Controlan qué noticias entran al pool, en qué orden se muestran y cuáles disparan producción automática. Los cambios aplican al momento (hasta ~1 minuto)."
+            ajustes={AREAS_NOTICIAS.map((area) => (
               <PanelAjustes
                 key={area.titulo}
                 titulo={area.titulo}
@@ -78,7 +77,7 @@ export default function NoticiasHub() {
                 abiertaInicial={area.abiertaInicial}
               />
             ))}
-          </AjustesPagina>
+          />
         </AccionesPagina>
       )}
       <Cobertura />

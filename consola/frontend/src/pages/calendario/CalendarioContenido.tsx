@@ -9,7 +9,6 @@ import { toast } from "sonner";
 
 import { useQuery } from "@tanstack/react-query";
 
-import { AjustesPagina } from "@/components/layout/AjustesPagina";
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
@@ -61,46 +60,46 @@ export default function CalendarioContenido() {
     <>
       <TituloPagina titulo="Programación" icono={CalendarDays} />
       <AccionesPagina>
-        <div className="flex items-center gap-1">
-          {/* Reparto canónico: AJUSTES (plan y horarios + cadencia + publicación real) al
-              panel lateral; ACCIONES (importar) al menú "⋮". */}
-          <AjustesPagina
-            titulo="Ajustes de programación"
-            descripcion="El plan diario por línea, la cadencia por red y el interruptor de publicación real."
-            abiertoInicial={cadenciaDeepLink}
-          >
-            {/* Plan y cadencia INLINE: el formulario vive en la capa base del panel (sección
-                colapsable), no escondido tras un botón que abre un diálogo. */}
-            {marcaActiva && (
+        {/* Barra superior limpia: UN "⋮" con la ACCIÓN (importar) y la entrada «Ajustes»
+            (plan y horarios + cadencia + publicación real). */}
+        <MenuAcciones
+          ajustesTitulo="Ajustes de programación"
+          ajustesDescripcion="El plan diario por línea, la cadencia por red y el interruptor de publicación real."
+          ajustesAbiertoInicial={cadenciaDeepLink}
+          ajustes={
+            <>
+              {/* Plan y cadencia INLINE: el formulario vive en la capa base del panel (sección
+                  colapsable), no escondido tras un botón que abre un diálogo. */}
+              {marcaActiva && (
+                <SeccionColapsable
+                  titulo="Plan y horarios"
+                  descripcion="El objetivo diario por línea de contenido y sus horarios de salida."
+                >
+                  <PanelPlan marca={marcaActiva} nombreMarca={nombreActiva ?? marcaActiva} />
+                </SeccionColapsable>
+              )}
               <SeccionColapsable
-                titulo="Plan y horarios"
-                descripcion="El objetivo diario por línea de contenido y sus horarios de salida."
+                titulo="Cadencia"
+                descripcion="Cada cuántos minutos puede salir un post por red: el reparto que alimenta este calendario."
+                abiertaInicial={cadenciaDeepLink}
               >
-                <PanelPlan marca={marcaActiva} nombreMarca={nombreActiva ?? marcaActiva} />
+                <PanelCadencia marcas={marcas} redes={redes} />
               </SeccionColapsable>
-            )}
-            <SeccionColapsable
-              titulo="Cadencia"
-              descripcion="Cada cuántos minutos puede salir un post por red: el reparto que alimenta este calendario."
-              abiertaInicial={cadenciaDeepLink}
-            >
-              <PanelCadencia marcas={marcas} redes={redes} />
-            </SeccionColapsable>
-            {/* Ajustes CONTEXTUALES (admin): la publicación real (global y por marca) se
-                ajusta AQUÍ, donde se programa lo que sale (reparto: cada ajuste en su página). */}
-            <PanelAjustes
-              grupos={GRUPOS_PUBLICACION}
-              titulo="Ajustes de publicación"
-              acento="amber"
-              descripcion="El interruptor de publicación real y sus excepciones por marca. Peligroso: con esto encendido, lo aprobado SALE a las redes."
-            />
-          </AjustesPagina>
-          <MenuAcciones>
-            <ItemMenu icono={Upload} onClick={() => setImportarAbierto(true)}>
-              Importar calendario…
-            </ItemMenu>
-          </MenuAcciones>
-        </div>
+              {/* Ajustes CONTEXTUALES (admin): la publicación real (global y por marca) se
+                  ajusta AQUÍ, donde se programa lo que sale (reparto: cada ajuste en su página). */}
+              <PanelAjustes
+                grupos={GRUPOS_PUBLICACION}
+                titulo="Ajustes de publicación"
+                acento="amber"
+                descripcion="El interruptor de publicación real y sus excepciones por marca. Peligroso: con esto encendido, lo aprobado SALE a las redes."
+              />
+            </>
+          }
+        >
+          <ItemMenu icono={Upload} onClick={() => setImportarAbierto(true)}>
+            Importar calendario…
+          </ItemMenu>
+        </MenuAcciones>
       </AccionesPagina>
 
       {/* El pulso del plan diario por línea (generados · publicados / objetivo): vive aquí,

@@ -6,7 +6,6 @@ import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { ChipNivelPresupuesto } from "@/components/comunes/ChipEstado";
-import { AjustesPagina } from "@/components/layout/AjustesPagina";
 import { AccionesPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Badge } from "@/components/ui/badge";
@@ -401,53 +400,52 @@ export default function Monitor() {
   return (
     <>
       <AccionesPagina>
-        <div className="flex items-center gap-1">
-          {/* AJUSTES DE LO QUE ESTE MONITOR VIGILA (reparto contextual: cada ajuste vive en
-              la página a la que afecta): la máquina de contenido (etapas/por marca/topes y
-              economía de tokens), el tuning del sistema (jobs, limpieza, alertas) y el
-              esfuerzo de la generación. Lo demás vive en su página (noticias, publicación,
-              conexiones). Antes era una pestaña; ahora es el panel lateral canónico. */}
-          <AjustesPagina
-            titulo="Ajustes de la máquina"
-            descripcion="La máquina de contenido, el proveedor de imagen, el tuning del sistema y el esfuerzo de la generación."
-            abiertoInicial={abrirAjustes}
-          >
-            <PanelMaquinaContenido />
-            {/* El proveedor de imagen IA alimenta la etapa ARTE del pipeline (autogen-arte
-                y el «Generar con IA»): se configura junto a la máquina que lo consume, no
-                en el editor de plantillas. Se oculta solo a un editor. */}
-            <SeccionImagen />
-            <PanelAjustes
-              grupos={GRUPOS_SISTEMA}
-              titulo="Sistema"
-              descripcion="Jobs simultáneos, limpiezas de fondo y alertas. Funcionan bien en sus valores por defecto; aplican en caliente."
-            />
-            <SeccionEsfuerzo />
-          </AjustesPagina>
-          <MenuAcciones>
-            <ItemMenu icono={RefreshCw} onClick={refrescar} disabled={cola.isFetching}>
-              Actualizar
+        {/* Barra superior limpia: UN solo "⋮" con las ACCIONES (actualizar, purgar) y la entrada
+            «Ajustes», que abre el panel de lo que este Monitor gobierna (reparto contextual: la
+            máquina de contenido, el proveedor de imagen, el tuning del sistema y el esfuerzo de la
+            generación). Lo demás vive en su página (noticias, publicación, conexiones). */}
+        <MenuAcciones
+          ajustesTitulo="Ajustes de la máquina"
+          ajustesDescripcion="La máquina de contenido, el proveedor de imagen, el tuning del sistema y el esfuerzo de la generación."
+          ajustesAbiertoInicial={abrirAjustes}
+          ajustes={
+            <>
+              <PanelMaquinaContenido />
+              {/* El proveedor de imagen IA alimenta la etapa ARTE del pipeline (autogen-arte
+                  y el «Generar con IA»): se configura junto a la máquina que lo consume, no
+                  en el editor de plantillas. Se oculta solo a un editor. */}
+              <SeccionImagen />
+              <PanelAjustes
+                grupos={GRUPOS_SISTEMA}
+                titulo="Sistema"
+                descripcion="Jobs simultáneos, limpiezas de fondo y alertas. Funcionan bien en sus valores por defecto; aplican en caliente."
+              />
+              <SeccionEsfuerzo />
+            </>
+          }
+        >
+          <ItemMenu icono={RefreshCw} onClick={refrescar} disabled={cola.isFetching}>
+            Actualizar
+          </ItemMenu>
+          {esAdmin && (
+            <ItemMenu
+              icono={Trash2}
+              className="text-destructive"
+              disabled={purgar.isPending}
+              onClick={() => {
+                if (
+                  window.confirm(
+                    "¿Liberar la cola? Cancela todo lo que esté en vuelo (en curso + esperando) y libera la capacidad.",
+                  )
+                ) {
+                  purgar.mutate();
+                }
+              }}
+            >
+              Purgar cola
             </ItemMenu>
-            {esAdmin && (
-              <ItemMenu
-                icono={Trash2}
-                className="text-destructive"
-                disabled={purgar.isPending}
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      "¿Liberar la cola? Cancela todo lo que esté en vuelo (en curso + esperando) y libera la capacidad.",
-                    )
-                  ) {
-                    purgar.mutate();
-                  }
-                }}
-              >
-                Purgar cola
-              </ItemMenu>
-            )}
-          </MenuAcciones>
-        </div>
+          )}
+        </MenuAcciones>
       </AccionesPagina>
 
       {/* Con la pestaña "Ajustes" movida al panel lateral solo queda conmutar En vivo/Salud,

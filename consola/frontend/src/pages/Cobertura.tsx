@@ -20,8 +20,6 @@ import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
-import { AccionesPagina } from "@/components/layout/encabezado";
-import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -223,23 +221,10 @@ function VistaHistorias({ marcaActiva, estadoFijo }: PropsVistaHistorias) {
         </div>
       </div>
 
-      {/* ACCIÓN global de la página (vaciar el pool, irreversible) → menú "⋮" de la barra. */}
-      {conSeleccion && !query.isError && historias.length > 0 && (
-        <AccionesPagina>
-          <MenuAcciones>
-            <ItemMenu
-              icono={Trash2}
-              className="text-destructive"
-              onClick={confirmarYVaciarPool}
-              disabled={borrarTodoMut.isPending}
-            >
-              Borrar todo
-            </ItemMenu>
-          </MenuAcciones>
-        </AccionesPagina>
-      )}
-
-      {/* Barra de selección (papelera estilo correo) */}
+      {/* Barra de selección (papelera estilo correo). Aquí vive también «Borrar todo» (vaciar el
+          pool, irreversible): es una acción EN LOTE de esta vista, junto a Descartar/Borrar la
+          selección — ya no en un "⋮" propio de la barra superior (la cabecera la posee el "⋮"
+          único de la página, con los Ajustes). */}
       {conSeleccion && !query.isError && historias.length > 0 && (
         <div
           className="mb-3 flex items-center gap-3 rounded-md border bg-muted/30 px-3 py-2"
@@ -255,45 +240,62 @@ function VistaHistorias({ marcaActiva, estadoFijo }: PropsVistaHistorias) {
               ? `${seleccion.size} seleccionada${seleccion.size !== 1 ? "s" : ""}`
               : "Seleccionar todo"}
           </span>
-          {algunaSeleccion && (
-            <div className="ml-auto flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => setSeleccion(new Set())}
-                disabled={descartarLoteMut.isPending}
-              >
-                Cancelar
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 gap-1 text-xs"
-                onClick={() => descartarLoteMut.mutate([...seleccion])}
-                disabled={descartarLoteMut.isPending || borrarLoteMut.isPending}
-                data-testid="btn-descartar-seleccion"
-              >
-                {descartarLoteMut.isPending && <Loader2 className="h-3 w-3 animate-spin" />}
-                Descartar {seleccion.size}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 gap-1 text-xs border-destructive/50 text-destructive hover:text-destructive"
-                onClick={confirmarYBorrarSeleccion}
-                disabled={borrarLoteMut.isPending || descartarLoteMut.isPending}
-                data-testid="btn-borrar-seleccion"
-              >
-                {borrarLoteMut.isPending ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Trash2 className="h-3 w-3" />
-                )}
-                Borrar {seleccion.size}
-              </Button>
-            </div>
-          )}
+          <div className="ml-auto flex items-center gap-2">
+            {algunaSeleccion && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setSeleccion(new Set())}
+                  disabled={descartarLoteMut.isPending}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1 text-xs"
+                  onClick={() => descartarLoteMut.mutate([...seleccion])}
+                  disabled={descartarLoteMut.isPending || borrarLoteMut.isPending}
+                  data-testid="btn-descartar-seleccion"
+                >
+                  {descartarLoteMut.isPending && <Loader2 className="h-3 w-3 animate-spin" />}
+                  Descartar {seleccion.size}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1 text-xs border-destructive/50 text-destructive hover:text-destructive"
+                  onClick={confirmarYBorrarSeleccion}
+                  disabled={borrarLoteMut.isPending || descartarLoteMut.isPending}
+                  data-testid="btn-borrar-seleccion"
+                >
+                  {borrarLoteMut.isPending ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3 w-3" />
+                  )}
+                  Borrar {seleccion.size}
+                </Button>
+              </>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1 text-xs border-destructive/50 text-destructive hover:text-destructive"
+              onClick={confirmarYVaciarPool}
+              disabled={borrarTodoMut.isPending}
+              data-testid="btn-borrar-todo"
+            >
+              {borrarTodoMut.isPending ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <Trash2 className="h-3 w-3" />
+              )}
+              Borrar todo
+            </Button>
+          </div>
         </div>
       )}
 

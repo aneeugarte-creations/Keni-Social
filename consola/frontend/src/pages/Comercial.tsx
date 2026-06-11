@@ -14,7 +14,6 @@ import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
-import { AjustesPagina } from "@/components/layout/AjustesPagina";
 import { AccionesPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Badge } from "@/components/ui/badge";
@@ -119,15 +118,14 @@ export default function Comercial() {
     setDialogoAbierto(true);
   };
 
-  // Reparto canónico de cabecera: el AJUSTE persistente (modo cliente) al panel lateral;
-  // la ACCIÓN de página (nueva campaña) al menú "⋮".
+  // Barra superior limpia: UN "⋮" con la ACCIÓN (nueva campaña) y la entrada «Ajustes»
+  // (el AJUSTE persistente «modo cliente»).
   const acciones = (
-    <div className="flex items-center gap-1">
-      <AjustesPagina
-        titulo="Ajustes de campañas"
-        descripcion="Preferencias persistentes de esta vista."
-      >
-        {/* Fila de capa base (con su divisor), no una caja con borde dentro del panel. */}
+    <MenuAcciones
+      ajustesTitulo="Ajustes de campañas"
+      ajustesDescripcion="Preferencias persistentes de esta vista."
+      ajustes={
+        // Fila de capa base (con su divisor), no una caja con borde dentro del panel.
         <section className="border-t border-border py-3 first:border-t-0">
           <label className="flex items-center justify-between gap-3 text-sm font-medium">
             Modo cliente
@@ -142,13 +140,12 @@ export default function Comercial() {
             enseñar al cliente). Persiste al recargar.
           </p>
         </section>
-      </AjustesPagina>
-      <MenuAcciones>
-        <ItemMenu icono={Plus} onClick={abrirNueva}>
-          Nueva campaña
-        </ItemMenu>
-      </MenuAcciones>
-    </div>
+      }
+    >
+      <ItemMenu icono={Plus} onClick={abrirNueva}>
+        Nueva campaña
+      </ItemMenu>
+    </MenuAcciones>
   );
 
   return (

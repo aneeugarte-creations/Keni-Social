@@ -1,6 +1,7 @@
-import { MoreVertical, type LucideIcon } from "lucide-react";
+import { MoreVertical, SlidersHorizontal, type LucideIcon } from "lucide-react";
 import * as React from "react";
 
+import { PanelAjustesLateral } from "@/components/layout/AjustesPagina";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -10,15 +11,31 @@ import { cn } from "@/lib/utils";
  * pestañas, en la barra superior (vía `<AccionesPagina/>`). Cierra al hacer clic fuera, con
  * Escape o al elegir un comando. Para comandos puntuales; los controles que deban verse siempre
  * (un selector de rango, p. ej.) se portalizan sueltos, no aquí dentro.
+ *
+ * Los AJUSTES de la página también viven AQUÍ (slot `ajustes`): el "⋮" muestra una entrada
+ * «Ajustes» arriba del todo que abre el panel lateral (`PanelAjustesLateral`). Así la barra
+ * superior queda limpia —solo pestañas y "⋮"—, sin un botón de deslizadores aparte. Las acciones
+ * (`children`) son opcionales: una página puede tener solo ajustes, solo acciones, o ambas.
  */
 export function MenuAcciones({
   children,
   etiqueta = "Acciones",
+  ajustes,
+  ajustesTitulo,
+  ajustesDescripcion,
+  ajustesAbiertoInicial = false,
 }: {
-  children: React.ReactNode;
+  children?: React.ReactNode;
   etiqueta?: string;
+  /** Contenido del panel de ajustes. Si se pasa, el "⋮" muestra la entrada «Ajustes». */
+  ajustes?: React.ReactNode;
+  ajustesTitulo?: string;
+  ajustesDescripcion?: string;
+  /** Abre el panel ya desplegado al montar (deep-links, p. ej. `?cadencia=1`). */
+  ajustesAbiertoInicial?: boolean;
 }) {
   const [abierto, setAbierto] = React.useState(false);
+  const [ajustesAbierto, setAjustesAbierto] = React.useState(ajustesAbiertoInicial);
   const ref = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -56,8 +73,26 @@ export function MenuAcciones({
           className="absolute left-0 z-50 mt-1 min-w-44 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
           onClick={() => setAbierto(false)}
         >
+          {ajustes && (
+            <>
+              <ItemMenu icono={SlidersHorizontal} onClick={() => setAjustesAbierto(true)}>
+                Ajustes
+              </ItemMenu>
+              {children && <div role="separator" className="my-1 h-px bg-border" />}
+            </>
+          )}
           {children}
         </div>
+      )}
+      {ajustes && (
+        <PanelAjustesLateral
+          titulo={ajustesTitulo}
+          descripcion={ajustesDescripcion}
+          abierto={ajustesAbierto}
+          onCerrar={() => setAjustesAbierto(false)}
+        >
+          {ajustes}
+        </PanelAjustesLateral>
       )}
     </div>
   );
