@@ -39,6 +39,8 @@ import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
+import { AccionesPagina } from "@/components/layout/encabezado";
+import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -634,7 +636,7 @@ function VistaHistorias({ marcaActiva }: PropsVistaHistorias) {
           </SelectContent>
         </Select>
 
-        {/* Totales + vaciar pool (dejar a 0) */}
+        {/* Totales (la acción "Borrar todo" vive en el menú ⋮ de la página) */}
         <div className="ml-auto flex items-center gap-3 self-center">
           {query.data && (
             <span className="text-xs text-muted-foreground">
@@ -644,26 +646,26 @@ function VistaHistorias({ marcaActiva }: PropsVistaHistorias) {
               )}
             </span>
           )}
-          {!query.isError && historias.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 gap-1 text-xs text-destructive hover:text-destructive"
-              onClick={confirmarYVaciarPool}
-              disabled={borrarTodoMut.isPending}
-              title="Borra TODAS las historias de la marca activa (y sus artículos). Irreversible."
-              data-testid="btn-borrar-todo"
-            >
-              {borrarTodoMut.isPending ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <Trash2 className="h-3 w-3" />
-              )}
-              Borrar todo
-            </Button>
-          )}
         </div>
       </div>
+
+      {/* ACCIÓN global de la página (vaciar el pool, irreversible) → menú "⋮" de la barra.
+          Se portaliza desde aquí porque depende del estado de la vista (filtro de estado,
+          si hay historias); convive en el mismo hueco con el panel de ajustes del hub. */}
+      {!query.isError && historias.length > 0 && (
+        <AccionesPagina>
+          <MenuAcciones>
+            <ItemMenu
+              icono={Trash2}
+              className="text-destructive"
+              onClick={confirmarYVaciarPool}
+              disabled={borrarTodoMut.isPending}
+            >
+              Borrar todo
+            </ItemMenu>
+          </MenuAcciones>
+        </AccionesPagina>
+      )}
 
       {/* Barra de selección (papelera estilo correo): seleccionar todo / descartar lo marcado */}
       {!query.isError && historias.length > 0 && (
@@ -810,9 +812,7 @@ export default function Cobertura() {
 
   return (
     <>
-      {/* Contenido del índice del hub (pestaña Noticias): encabezado ligero, no una página. */}
-      <h2 className="mb-1 text-base font-semibold tracking-tight">Cobertura</h2>
-
+      {/* Sin encabezado propio: la pestaña activa del hub (Noticias) ya dice dónde estás. */}
       {/* Barra de salud del motor */}
       <BarraCobertura />
 
@@ -824,7 +824,7 @@ export default function Cobertura() {
       {/* Noticias = el pool DEDUPLICADO en historias (una historia = la misma noticia
           contada por N fuentes). El crudo por artículo ya no se muestra; la salud de
           feeds se gestiona en Fuentes. Los ajustes del motor que llena y ordena este pool
-          viven en su subpágina (menú ⋮ → «Ajustes del motor»). */}
+          viven en el panel lateral de ajustes de la página (botón de deslizadores). */}
       <VistaHistorias marcaActiva={marcaActiva} />
     </>
   );

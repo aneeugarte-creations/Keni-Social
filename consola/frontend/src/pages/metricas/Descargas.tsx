@@ -1,7 +1,8 @@
 /**
- * Descargas del dashboard de Métricas en CSV / Markdown / JSON.
+ * Descargas del dashboard de Métricas en CSV / Markdown / JSON: comandos del menú "⋮"
+ * de la página (descargar es una ACCIÓN global, no un control del cuerpo).
  *
- * Un único menú con dos grupos (separados):
+ * Dos grupos (separados):
  *   - "Reporte (…)": el reporte agregado del periodo (`api.exportarMetricas`).
  *   - "Top y peores piezas (…)": el Top 5 / Peores 5 de piezas del periodo
  *     (`api.exportarPiezas`, endpoint `/api/metricas/piezas-export`).
@@ -9,13 +10,9 @@
  * Ambos reutilizan el rango y la marca activos del reporte; el cliente API abre la
  * URL de descarga del backend.
  */
-import { ChevronDown, Download } from "lucide-react";
+import { Download } from "lucide-react";
 
-import {
-  MenuContextual,
-  type EntradaMenuContextual,
-} from "@/components/comunes/MenuContextual";
-import { Button } from "@/components/ui/button";
+import { ItemMenu } from "@/components/layout/MenuAcciones";
 import { api } from "@/lib/api";
 
 interface DescargasProps {
@@ -30,30 +27,29 @@ const FORMATOS: Array<{ formato: "csv" | "md" | "json"; etiqueta: string }> = [
   { formato: "json", etiqueta: "JSON" },
 ];
 
-export function Descargas({ rango, marca }: DescargasProps) {
-  const items: EntradaMenuContextual[] = [
-    ...FORMATOS.map(({ formato, etiqueta }) => ({
-      etiqueta: `Reporte (${etiqueta})`,
-      icono: Download,
-      onClick: () => api.exportarMetricas(formato, { rango, marca }),
-    })),
-    { separador: true },
-    ...FORMATOS.map(({ formato, etiqueta }) => ({
-      etiqueta: `Top y peores piezas (${etiqueta})`,
-      icono: Download,
-      onClick: () => api.exportarPiezas(formato, { rango, marca }),
-    })),
-  ];
-
+/** Items de descarga para meter DENTRO de un `<MenuAcciones/>`. */
+export function ItemsDescargas({ rango, marca }: DescargasProps) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <MenuContextual disparador="click" etiqueta="Descargar reporte" items={items}>
-        <Button variant="outline" size="sm">
-          <Download className="h-4 w-4" />
-          Descargar
-          <ChevronDown className="h-4 w-4 opacity-60" />
-        </Button>
-      </MenuContextual>
-    </div>
+    <>
+      {FORMATOS.map(({ formato, etiqueta }) => (
+        <ItemMenu
+          key={`reporte-${formato}`}
+          icono={Download}
+          onClick={() => api.exportarMetricas(formato, { rango, marca })}
+        >
+          {`Reporte (${etiqueta})`}
+        </ItemMenu>
+      ))}
+      <div role="separator" aria-orientation="horizontal" className="my-1 h-px bg-border" />
+      {FORMATOS.map(({ formato, etiqueta }) => (
+        <ItemMenu
+          key={`piezas-${formato}`}
+          icono={Download}
+          onClick={() => api.exportarPiezas(formato, { rango, marca })}
+        >
+          {`Top y peores piezas (${etiqueta})`}
+        </ItemMenu>
+      ))}
+    </>
   );
 }

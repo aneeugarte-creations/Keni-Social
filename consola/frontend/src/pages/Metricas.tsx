@@ -32,7 +32,7 @@ import { CoberturaRedes } from "./metricas/CoberturaRedes";
 import { Correlacion } from "./metricas/Correlacion";
 import { CrecimientoSeguidores } from "./metricas/CrecimientoSeguidores";
 import { Crosstab } from "./metricas/Crosstab";
-import { Descargas } from "./metricas/Descargas";
+import { ItemsDescargas } from "./metricas/Descargas";
 import { DesgloseInteracciones } from "./metricas/DesgloseInteracciones";
 import { DistribucionEngagement } from "./metricas/DistribucionEngagement";
 import { EvolucionRedes } from "./metricas/EvolucionRedes";
@@ -208,6 +208,10 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
           actualizar={refresco.actualizar}
           deshabilitado={refresco.deshabilitado}
         />
+        <div role="separator" aria-orientation="horizontal" className="my-1 h-px bg-border" />
+        {/* Descargar (reporte y top/peores piezas) es una ACCIÓN global de la página:
+            vive aquí, no como botón en el cuerpo del dashboard. */}
+        <ItemsDescargas rango={rango} marca={marca_} />
       </MenuAcciones>
     </div>
   );
@@ -232,13 +236,9 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
           {/* Mientras la fuente sea sintética, el aviso encabeza el dashboard: que
               nadie confunda las cifras de demostración con datos reales del cliente. */}
           {reporteQuery.data.fuente === "muestra" && <AvisoMuestra />}
-          {/* La marca la manda el switch global de la topbar: no se repite aquí. Solo se
-              conserva el rango temporal del corte, como texto sutil junto a las descargas. */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-muted-foreground">{reporteQuery.data.etiqueta_rango}</p>
-            <Descargas rango={rango} marca={marca_} />
-          </div>
-
+          {/* Ni marca ni rango se repiten en el cuerpo: la marca la manda el switch global
+              de la topbar y el corte temporal ya lo enseña el selector de la cabecera. Las
+              descargas viven en el menú "⋮" (acción global de la página). */}
           <AlertaIngesta marcaActual={marca} rangoActual={rango} />
 
           <Kpis total={reporteQuery.data.total} marcaActual={marca} rangoActual={rango} />

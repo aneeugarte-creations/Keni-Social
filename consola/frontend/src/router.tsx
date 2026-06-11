@@ -22,7 +22,6 @@ const EstrategiaMarcas = lazy(() =>
 // ruta-padre se deja sin `element` y react-router renderiza `<Outlet/>` por defecto;
 // la subnav entre sub-rutas vive in-page (SubnavHub, via HUB_TABS).
 const Fuentes = lazy(() => import("@/pages/Fuentes"));
-const Termometro = lazy(() => import("@/pages/Termometro"));
 // Hub Investigación colapsado a 3 PIEZAS (Noticias · Contenidos · Fuentes).
 // NoticiasHub es el índice del hub (compone el pool persistente de cobertura +
 // el descubrimiento del Investigador); ContenidosHub es el banco evergreen (EVERGREEN).
@@ -207,7 +206,9 @@ export const router = createBrowserRouter([
               { index: true, element: <NoticiasHub /> },
               { path: "contenidos", element: <ContenidosHub /> },
               { path: "fuentes", element: <Fuentes /> },
-              { path: "termometro", element: <Termometro /> },
+              // El armado MANUAL del Termómetro (galería internacional) se retiró: la
+              // galería se genera sola (pipeline estructurado). El deep-link cae al hub.
+              { path: "termometro", element: <Navigate to="/datos/investigacion" replace /> },
               // Los ajustes del motor ya no son subpágina: viven en el panel lateral de
               // ajustes de Noticias. El deep-link viejo cae al índice del hub.
               { path: "ajustes", element: <Navigate to="/datos/investigacion" replace /> },
@@ -319,7 +320,7 @@ export const router = createBrowserRouter([
       { path: "activos/plantillas", element: <Navigate to="/contenido/texto/documentos" replace /> },
       // Hojas planas antiguas (pre-hub) y fusiones previas:
       { path: "fuentes", element: <Navigate to="/datos/investigacion/fuentes" replace /> },
-      { path: "termometro", element: <Navigate to="/datos/investigacion/termometro" replace /> },
+      { path: "termometro", element: <Navigate to="/datos/investigacion" replace /> },
       { path: "radar", element: <Navigate to="/datos/investigacion" replace /> },
       // "Revisión" se retiró (obsoleta); estas hojas planas legacy caen en el Feed.
       { path: "revision-editorial", element: <Navigate to="/operacion/feed" replace /> },

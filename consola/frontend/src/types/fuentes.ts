@@ -1,4 +1,4 @@
-import type { MarcaDisponible, Publicacion } from "../types.gen";
+import type { Publicacion } from "../types.gen";
 import type { Veredicto, PiezaGenerada } from "./comun";
 import type { Generacion } from "./generaciones";
 
@@ -40,66 +40,6 @@ export interface CuerpoPreparar {
 export interface RespuestaPreparar {
   contenido_id: string;
   generacion_id: string;
-}
-
-// --- Termómetro mundial (galería diaria de noticias internacionales) ---
-
-/** Config del Termómetro mundial (la comparten la página y el cron de las 7:00). */
-export interface ConfigTermometro {
-  /** Número de slides de noticia (5–8). */
-  numero: number;
-  /** Regiones a cubrir (texto libre, separadas por coma). "" = reparto por defecto. */
-  regiones: string;
-  /** Hora de la generación programada ("HH:MM", 24h). */
-  hora: string;
-  /** Marca por defecto (id canónico). "" = sin fijar. */
-  marca: string;
-}
-
-/** Respuesta de GET /api/termometro. */
-export interface RespuestaTermometro {
-  config: ConfigTermometro;
-  /** `true` si el prompt `termometro-mundial` está instalado en este equipo. */
-  prompt_disponible: boolean;
-  marcas: MarcaDisponible[];
-  regiones_sugeridas: string[];
-  /**
-   * Último termómetro generado (o `null`): el resultado PERSISTENTE de la página, leído del
-   * historial. Sobrevive a navegaciones y recargas; un termómetro nuevo lo reemplaza y
-   * borrarlo del historial lo elimina.
-   */
-  ultimo: UltimoTermometro | null;
-}
-
-/** Último termómetro generado, para repintar el resultado al entrar en la página. */
-export interface UltimoTermometro {
-  historial_id: string;
-  /** Documento Markdown completo de la galería. */
-  documento: string;
-  titulo: string;
-  fecha: string;
-  marca: string;
-}
-
-/** Cuerpo de PUT /api/termometro/config (parcial: solo las claves a cambiar). */
-export type CuerpoGuardarTermometro = Partial<ConfigTermometro>;
-
-/** Respuesta de PUT /api/termometro/config. */
-export interface RespuestaConfigTermometro {
-  config: ConfigTermometro;
-}
-
-/** Cuerpo de POST /api/termometro/generar. */
-export interface CuerpoGenerarTermometro {
-  marca: string;
-  /** Noticias internacionales candidatas (la materia prima de la galería). */
-  noticias: string;
-  /** Número de slides (5–8) como texto; vacío = el de la config/prompt. */
-  numero?: string;
-  /** Regiones a cubrir (CSV); vacío = reparto por defecto. */
-  regiones?: string;
-  /** Fecha de la portada (YYYY-MM-DD); vacío = hoy. */
-  fecha?: string;
 }
 
 // --- Hub genérico de fuentes (item G): RSS + API + galerías + ideas + internas ---

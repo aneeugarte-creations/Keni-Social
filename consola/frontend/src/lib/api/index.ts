@@ -9,7 +9,6 @@ import { apiConfig } from "./config";
 import { apiActividad } from "./actividad";
 import { apiPipelines } from "./pipelines";
 import { apiGeneraciones } from "./generaciones";
-import { apiTermometro } from "./termometro";
 import { apiTexto } from "./texto";
 import { apiLimites } from "./limites";
 import { apiPublicaciones } from "./publicaciones";
@@ -55,7 +54,6 @@ export const api = {
   ...apiActividad,
   ...apiPipelines,
   ...apiGeneraciones,
-  ...apiTermometro,
   ...apiTexto,
   ...apiLimites,
   ...apiPublicaciones,

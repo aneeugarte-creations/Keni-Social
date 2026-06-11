@@ -463,7 +463,9 @@ describe("Cobertura · Historias — selección múltiple (papelera estilo corre
     await waitFor(() => {
       expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy();
     });
-    fireEvent.click(screen.getByTestId("btn-borrar-todo"));
+    // "Borrar todo" es ACCIÓN global de página: vive en el menú "⋮", no en el cuerpo.
+    fireEvent.click(screen.getByRole("button", { name: "Acciones" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Borrar todo" }));
     await waitFor(() => {
       expect(mockBorrarTodo).toHaveBeenCalledWith(
         expect.objectContaining({ marca: "unotv" }),

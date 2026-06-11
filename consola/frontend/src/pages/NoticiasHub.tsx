@@ -8,14 +8,12 @@
  * antiguo "Descubrimiento" en vivo (Radar v1: Google Trends + plan del día) se
  * retiró; el pool persistente es la única fuente de verdad de la ingesta.
  *
- * El Termómetro (galería internacional) se arma desde el botón de receta.
+ * El armado MANUAL del Termómetro (galería internacional) también se retiró: la
+ * galería se genera sola por el pipeline. Las acciones de página que queden las
+ * portaliza `Cobertura` a su menú "⋮"; aquí solo viven los AJUSTES del motor (admin).
  */
-import { Images } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-
 import { AjustesPagina } from "@/components/layout/AjustesPagina";
 import { AccionesPagina } from "@/components/layout/encabezado";
-import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { SeccionesAjustes } from "@/pages/configuracion/SeccionFuncionalidad";
 
@@ -35,31 +33,23 @@ const GRUPOS_NOTICIAS = new Set([
 ]);
 
 export default function NoticiasHub() {
-  const navigate = useNavigate();
   const { usuario } = useSesion();
   const esAdmin = usuario === null || usuario.rol === "admin";
   return (
     <div className="space-y-4">
-      {/* Reparto canónico de cabecera: ACCIONES de hub al menú "⋮" (la receta de Noticias:
-          galería internacional, el antiguo Termómetro) y, para admins, los AJUSTES del motor
-          de noticias al panel lateral (antes una subpágina propia). */}
-      <AccionesPagina>
-        <div className="flex items-center gap-1">
-          {esAdmin && (
-            <AjustesPagina
-              titulo="Ajustes del motor de noticias"
-              descripcion="Controlan qué noticias entran al pool, en qué orden se muestran y cuáles disparan producción automática. Los cambios aplican al momento (hasta ~1 minuto)."
-            >
-              <SeccionesAjustes ids={GRUPOS_NOTICIAS} />
-            </AjustesPagina>
-          )}
-          <MenuAcciones>
-            <ItemMenu icono={Images} onClick={() => navigate("/datos/investigacion/termometro")}>
-              Armar galería internacional
-            </ItemMenu>
-          </MenuAcciones>
-        </div>
-      </AccionesPagina>
+      {/* Reparto canónico de cabecera: los AJUSTES del motor de noticias al panel lateral
+          (solo admin). Las ACCIONES de página (p. ej. «Borrar todo») las aporta `Cobertura`
+          al mismo hueco, en su menú "⋮". */}
+      {esAdmin && (
+        <AccionesPagina>
+          <AjustesPagina
+            titulo="Ajustes del motor de noticias"
+            descripcion="Controlan qué noticias entran al pool, en qué orden se muestran y cuáles disparan producción automática. Los cambios aplican al momento (hasta ~1 minuto)."
+          >
+            <SeccionesAjustes ids={GRUPOS_NOTICIAS} />
+          </AjustesPagina>
+        </AccionesPagina>
+      )}
       <Cobertura />
     </div>
   );
