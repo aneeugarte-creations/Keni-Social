@@ -746,8 +746,9 @@ def calcular_hueco_para(
     tema en redes distintas salen a la MISMA hora.
 
     CATEGORÍA del plan: una pieza BREAKING no espera franja (se programa a ahora+margen, en
-    el primer minuto libre); el resto busca primero las franjas de SU categoría (los horarios
-    del plan) y cae a las genéricas si su categoría no tiene horario.
+    el primer minuto libre); el resto usa PRIMERO los horarios de SU línea (franjas con su
+    categoría — ganan a cualquier cadencia), después la cadencia de la (marca, red) y por
+    último las franjas genéricas.
     """
     if ahora is None:
         ahora = datetime.now()
@@ -771,15 +772,22 @@ def calcular_hueco_para(
                 return clave
             cand += timedelta(minutes=1)
         return None  # parrilla patológicamente saturada
-    # 1) CADENCIA por margen (preferente): si hay una cadencia ACTIVA que aplique a la
-    # (marca, red), reparte por margen dentro de su ventana.
-    cad = dom_cadencia.cadencia_aplicable(repos.listar_cadencias(), pub["marca"], pub["red"])
-    if cad is not None:
-        return dom_cadencia.proximo_hueco_cadencia(cad, ahora, ocupados_mr)
-    # 2) Franjas-caja: los horarios del plan (por categoría) o los genéricos.
+    # 1) HORARIOS DE LA LÍNEA (preferentes): si la pieza tiene categoría y su línea tiene
+    # franjas propias, ESOS son sus horarios — una cadencia general no debe pisarlos (una
+    # cadencia "todas las redes" creada a mano mandó una pieza nacional a las 3 a. m.).
     aplican = api_franjas.franjas_aplicables(
         repos.listar_franjas(), pub["marca"], pub["red"], categoria
     )
+    de_linea = bool(categoria) and any(
+        (f.get("categoria") or "") == categoria for f in aplican
+    )
+    if de_linea:
+        return api_franjas.proximo_hueco(aplican, ahora, ocupados_mr)
+    # 2) CADENCIA por margen: para piezas sin línea (o líneas sin horario propio).
+    cad = dom_cadencia.cadencia_aplicable(repos.listar_cadencias(), pub["marca"], pub["red"])
+    if cad is not None:
+        return dom_cadencia.proximo_hueco_cadencia(cad, ahora, ocupados_mr)
+    # 3) Franjas-caja genéricas.
     if not aplican:
         return None
     return api_franjas.proximo_hueco(aplican, ahora, ocupados_mr)

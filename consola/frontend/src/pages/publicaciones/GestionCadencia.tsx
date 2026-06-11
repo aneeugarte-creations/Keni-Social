@@ -35,6 +35,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { api, mensajeError } from "@/lib/api";
+import { horaCdmxAUtc, horaUtcACdmx } from "@/lib/fecha";
 import type { Cadencia, MarcaDisponible, RedPublicacion } from "@/types";
 
 import { DIAS_SEMANA_CORTO, nombreDiaCorto } from "./franjas";
@@ -89,8 +90,9 @@ function FormularioCadencia({
         marca: marcaParam(marca),
         red: redParam(red),
         margen_min: margenNum,
-        hora_inicio: horaInicio,
-        hora_fin: horaFin,
+        // El equipo escribe hora CDMX; el backend almacena UTC (instantes naive-UTC).
+        hora_inicio: horaCdmxAUtc(horaInicio),
+        hora_fin: horaCdmxAUtc(horaFin),
         dias: [...dias].sort((a, b) => a - b),
         activo,
       }),
@@ -132,7 +134,7 @@ function FormularioCadencia({
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <Label htmlFor="cadencia-inicio">Desde</Label>
+            <Label htmlFor="cadencia-inicio">Desde (hora CDMX)</Label>
             <Input
               id="cadencia-inicio"
               type="time"
@@ -141,7 +143,7 @@ function FormularioCadencia({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="cadencia-fin">Hasta</Label>
+            <Label htmlFor="cadencia-fin">Hasta (hora CDMX)</Label>
             <Input
               id="cadencia-fin"
               type="time"
@@ -244,7 +246,7 @@ function FilaCadencia({ cadencia }: { cadencia: Cadencia }) {
         </span>
         <span className="text-muted-foreground">·</span>
         <span>
-          {cadencia.hora_inicio}–{cadencia.hora_fin}
+          {horaUtcACdmx(cadencia.hora_inicio)}–{horaUtcACdmx(cadencia.hora_fin)}
         </span>
         <span className="text-muted-foreground">·</span>
         <span className="text-muted-foreground">{resumenDias(cadencia.dias)}</span>

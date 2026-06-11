@@ -262,3 +262,24 @@ export function datetimeLocalAIso(valor: string): string | null {
   const off = offsetCdmxMin(new Date(ingenuoUtcMs));
   return new Date(ingenuoUtcMs - off * 60000).toISOString();
 }
+
+
+// --- Horas sueltas "HH:MM" entre CDMX y UTC -----------------------------------
+// CDMX es UTC-6 FIJO (México abolió el horario de verano en 2022): la conversión de una
+// hora sin fecha es un desplazamiento constante. Las usan los editores de horarios (plan
+// por línea, cadencia) y los placeholders del calendario: el backend almacena UTC, el
+// equipo piensa en hora de Ciudad de México.
+
+const OFFSET_CDMX_H = 6;
+
+/** "HH:MM" almacenada (UTC) → "HH:MM" CDMX. */
+export function horaUtcACdmx(hora: string): string {
+  const [h, m] = hora.split(":").map(Number);
+  return `${String((h - OFFSET_CDMX_H + 24) % 24).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+/** "HH:MM" CDMX → "HH:MM" para almacenar (UTC). */
+export function horaCdmxAUtc(hora: string): string {
+  const [h, m] = hora.split(":").map(Number);
+  return `${String((h + OFFSET_CDMX_H) % 24).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}

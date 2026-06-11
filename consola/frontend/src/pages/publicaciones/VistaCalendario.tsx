@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CalendarOff,
   CalendarX,
@@ -15,6 +15,8 @@ import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { api, mensajeError } from "@/lib/api";
+import { horaUtcACdmx } from "@/lib/fecha";
+import { ETIQUETA_LINEA } from "@/pages/publicaciones/PanelLineasPlan";
 import { cn } from "@/lib/utils";
 import type { Publicacion } from "@/types";
 
@@ -177,6 +179,7 @@ function PildoraPub({
 export function VistaCalendario({
   publicaciones,
   onEditar,
+  marca,
 }: {
   publicaciones: Publicacion[];
   onEditar: (p: Publicacion) => void;
@@ -246,6 +249,50 @@ export function VistaCalendario({
     [publicaciones],
   );
   const porDia = React.useMemo(() => indexarPorDia(programadas), [programadas]);
+
+  // SLOTS del plan de la marca activa (franjas con línea), como PLACEHOLDERS en las vistas
+  // semana/día: el equipo ve la programación exacta del día (Nacional 18:45, …) aunque el
+  // hueco siga vacío. El backend guarda (día_semana, hora) en UTC; aquí se proyecta a CDMX
+  // (una hora UTC < 06:00 pertenece al día CDMX anterior).
+  const franjasQuery = useQuery({
+    queryKey: ["franjas"],
+    queryFn: ({ signal }) => api.franjas(signal),
+    enabled: Boolean(marca),
+  });
+  const slotsPorDiaCdmx = React.useMemo(() => {
+    const mapa = new Map<number, { hora: string; categoria: string }[]>();
+    if (!marca) return mapa;
+    const vistos = new Set<string>();
+    for (const f of franjasQuery.data?.franjas ?? []) {
+      if (f.marca !== marca || !(f.categoria ?? "")) continue;
+      const [hUtc] = f.hora.split(":").map(Number);
+      const diaCdmxN = hUtc >= 6 ? f.dia_semana : (f.dia_semana + 6) % 7;
+      const hora = horaUtcACdmx(f.hora);
+      const clave = `${diaCdmxN}|${hora}|${f.categoria}`;
+      if (vistos.has(clave)) continue;
+      vistos.add(clave);
+      const lista = mapa.get(diaCdmxN) ?? [];
+      lista.push({ hora, categoria: f.categoria });
+      mapa.set(diaCdmxN, lista);
+    }
+    for (const lista of mapa.values()) lista.sort((a, b) => a.hora.localeCompare(b.hora));
+    return mapa;
+  }, [franjasQuery.data, marca]);
+
+  /** Huecos LIBRES del plan para un día concreto (slots sin pieza a esa misma hora CDMX). */
+  const huecosDe = React.useCallback(
+    (dia: Date): { hora: string; categoria: string }[] => {
+      // weekday(): 0=lunes..6=domingo, igual que el backend.
+      const diaSemana = (dia.getDay() + 6) % 7;
+      const slots = slotsPorDiaCdmx.get(diaSemana) ?? [];
+      if (slots.length === 0) return [];
+      const ocupadas = new Set(
+        (porDia.get(claveDia(dia)) ?? []).map((p) => hora24Cdmx(p.fecha_programada)),
+      );
+      return slots.filter((sl) => !ocupadas.has(sl.hora));
+    },
+    [slotsPorDiaCdmx, porDia],
+  );
 
   const hoy = claveDia(new Date());
 
@@ -353,6 +400,7 @@ export function VistaCalendario({
           <VistaSemana
             dias={diasSemana}
             porDia={porDia}
+            huecosDe={huecosDe}
             hoy={hoy}
             colActiva={colActiva}
             setColActiva={setColActiva}
@@ -366,6 +414,7 @@ export function VistaCalendario({
         )}
         {vista === "dia" && (
           <VistaDia
+            huecosDe={huecosDe}
             diaClave={diaSel ?? claveDia(ancla)}
             porDia={porDia}
             onAbrir={onEditar}
@@ -464,6 +513,25 @@ function VistaMes({
   );
 }
 
+/** Chips fantasma con los HUECOS LIBRES del plan de un día (hora CDMX + línea). */
+function HuecosPlan({ huecos }: { huecos: { hora: string; categoria: string }[] }) {
+  if (huecos.length === 0) return null;
+  return (
+    <div className="space-y-0.5 px-1 pb-1">
+      {huecos.map((h) => (
+        <div
+          key={`${h.hora}-${h.categoria}`}
+          className="flex items-center gap-1 rounded border border-dashed border-border/70 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+          title={`Hueco del plan: ${ETIQUETA_LINEA[h.categoria] ?? h.categoria} a las ${h.hora}`}
+        >
+          <span className="tabular-nums">{h.hora}</span>
+          <span className="truncate">{ETIQUETA_LINEA[h.categoria] ?? h.categoria}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** Vista SEMANA: 7 columnas; piezas del día listadas; se arrastran entre días (reprograma). */
 function VistaSemana({
   dias,
@@ -477,6 +545,7 @@ function VistaSemana({
   onAbrirDia,
   onSoltarEnDia,
   ocupado,
+  huecosDe,
 }: {
   dias: Date[];
   porDia: Map<string, Publicacion[]>;
@@ -489,6 +558,7 @@ function VistaSemana({
   onAbrirDia: (d: Date) => void;
   onSoltarEnDia: (diaClave: string, id: string) => void;
   ocupado: boolean;
+  huecosDe: (dia: Date) => { hora: string; categoria: string }[];
 }) {
   return (
     // MÓVIL: mismo tratamiento que la vista MES — la semana scrollea en horizontal.
@@ -548,6 +618,8 @@ function VistaSemana({
                   ocupado={ocupado}
                 />
               ))}
+              {/* Huecos LIBRES del plan (placeholders): la programación esperada del día. */}
+              <HuecosPlan huecos={huecosDe(dia)} />
             </div>
           </div>
         );
@@ -559,6 +631,7 @@ function VistaSemana({
 
 /** Detalle de UN día: todas sus piezas (editar/desprogramar). */
 function VistaDia({
+  huecosDe,
   diaClave,
   porDia,
   onAbrir,
@@ -567,6 +640,7 @@ function VistaDia({
   onVolver,
   ocupado,
 }: {
+  huecosDe: (dia: Date) => { hora: string; categoria: string }[];
   diaClave: string;
   porDia: Map<string, Publicacion[]>;
   onAbrir: (p: Publicacion) => void;
@@ -577,6 +651,8 @@ function VistaDia({
 }) {
   const items = porDia.get(diaClave) ?? [];
   const porRed = conteoPorRed(items);
+  // diaClave es "YYYY-MM-DD" (día CDMX): ancla a mediodía para que el weekday no baile.
+  const huecos = huecosDe(new Date(`${diaClave}T12:00:00`));
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -597,7 +673,7 @@ function VistaDia({
           })}
         </div>
       </div>
-      {items.length === 0 ? (
+      {items.length === 0 && huecos.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted-foreground">Nada programado este día.</p>
       ) : (
         <div className="space-y-1">
@@ -611,6 +687,8 @@ function VistaDia({
               ocupado={ocupado}
             />
           ))}
+          {/* Huecos LIBRES del plan: la programación esperada del día (hora CDMX + línea). */}
+          <HuecosPlan huecos={huecos} />
         </div>
       )}
     </div>

@@ -26,24 +26,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api, mensajeError } from "@/lib/api";
+import { horaCdmxAUtc, horaUtcACdmx } from "@/lib/fecha";
 
 import { ETIQUETA_LINEA } from "./PanelLineasPlan";
 
 /** Líneas que el editor ofrece siempre (más las que ya traiga el plan de la marca). */
 const LINEAS_BASE = ["mx", "internacional", "breaking", "entretenimiento", "evergreen"];
-
-/** CDMX es UTC-6 fijo (México abolió el DST). */
-const OFFSET_CDMX = 6;
-
-function utcACdmx(hora: string): string {
-  const [h, m] = hora.split(":").map(Number);
-  return `${String((h - OFFSET_CDMX + 24) % 24).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-}
-
-function cdmxAUtc(hora: string): string {
-  const [h, m] = hora.split(":").map(Number);
-  return `${String((h + OFFSET_CDMX) % 24).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-}
 
 const RE_HORA = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -131,7 +119,7 @@ export function GestionPlan({
     const horasPorLinea = new Map<string, Set<string>>();
     for (const f of franjasMarca) {
       const set = horasPorLinea.get(f.categoria) ?? new Set<string>();
-      set.add(utcACdmx(f.hora));
+      set.add(horaUtcACdmx(f.hora));
       horasPorLinea.set(f.categoria, set);
     }
     const lineas = new Set([...LINEAS_BASE, ...Object.keys(plan), ...horasPorLinea.keys()]);
@@ -168,7 +156,7 @@ export function GestionPlan({
       await api.guardarAjuste({ clave: clavePlan, valor: partes.join(",") });
       // 3) Horarios: sincroniza las franjas de cada línea (7 días por hora, en UTC).
       for (const [linea, horasCdmx] of Object.entries(horasPorLinea)) {
-        const objetivo = new Set(horasCdmx.map(cdmxAUtc));
+        const objetivo = new Set(horasCdmx.map(horaCdmxAUtc));
         const actuales = franjasMarca.filter((f) => f.categoria === linea);
         const sobran = actuales.filter((f) => !objetivo.has(f.hora));
         await Promise.all(sobran.map((f) => api.eliminarFranja(f.id)));
