@@ -5,29 +5,39 @@ import {
   documentoVacio,
   nuevaCapaImagen,
   nuevaCapaTexto,
+  type Capa,
+  type CapaGrupo,
   type CapaImagen,
   type CapaTexto,
 } from "./documento";
-import { PRESETS_FORMATO } from "./formatos";
+import { PRESETS_FORMATO, type Formato } from "./formatos";
 
 const F45 = PRESETS_FORMATO.find((p) => p.etiqueta === "4:5")!.f;
 const F916 = PRESETS_FORMATO.find((p) => p.etiqueta === "9:16")!.f;
 const F11 = PRESETS_FORMATO.find((p) => p.etiqueta === "1:1")!.f;
+const F169 = PRESETS_FORMATO.find((p) => p.etiqueta === "16:9")!.f;
+
+// Factor uniforme que usa el adaptador: min de los ratios del rectángulo de contenido (lienzo menos
+// safe areas) entre destino y origen. Lo recalculamos aquí para asertar la escala sin fijar píxeles.
+function factor(orig: Formato, dest: Formato): number {
+  const cw = (f: Formato) => f.w - (f.safe_left ?? 0) - (f.safe_right ?? 0);
+  const ch = (f: Formato) => f.h - (f.safe_top ?? 0) - (f.safe_bottom ?? 0);
+  return Math.min(cw(dest) / cw(orig), ch(dest) / ch(orig));
+}
+
+const texto = (out: { capas: Capa[] }) => out.capas.find((c) => c.tipo === "texto") as CapaTexto;
 
 describe("adaptarDocumento", () => {
   it("escala el lienzo al formato destino sin mutar el original", () => {
     const doc = documentoVacio(F45, "uno");
     const out = adaptarDocumento(doc, F916);
     expect(out.formato).toEqual({ ...F916 });
-    // El original no cambia.
     expect(doc.formato).toEqual(F45);
     expect(out).not.toBe(doc);
   });
 
   it("re-extiende el hueco de foto a sangre del nuevo lienzo", () => {
     const doc = documentoVacio(F45, "uno");
-    // Un lienzo nuevo ya nace VACÍO (sin hueco de foto por defecto): lo sembramos a sangre del
-    // formato origen para comprobar que `adaptarDocumento` lo re-extiende a sangre del destino.
     doc.capas.push(nuevaCapaImagen("foto", { x: 0, y: 0, w: F45.w, h: F45.h, es_foto: true }));
     const out = adaptarDocumento(doc, F916);
     const foto = out.capas.find((c) => c.tipo === "imagen" && (c as CapaImagen).es_foto) as CapaImagen;
@@ -37,31 +47,80 @@ describe("adaptarDocumento", () => {
     expect(foto.h).toBe(F916.h);
   });
 
-  it("re-centra horizontalmente lo que estaba centrado", () => {
+  it("re-centra horizontalmente lo centrado y escala la fuente por el factor uniforme", () => {
     const doc = documentoVacio(F45, "uno");
-    // Caja centrada en X (1080 ancho, w=600 -> x=240).
     doc.capas.push(nuevaCapaTexto({ x: 240, y: 100, w: 600, h: 120, tamano: 60 }));
-    const out = adaptarDocumento(doc, F11); // 1080x1080: sx=1, sy=0.8, s=min=0.8
-    const txt = out.capas.find((c) => c.tipo === "texto") as CapaTexto;
-    // El texto escala su caja por eje (sx=1 -> ancho 600), pero el TAMAÑO de fuente por s=0.8.
-    // Centrado en X (sx=1) -> sigue centrado: x = (1080-600)/2 = 240.
-    expect(txt.w).toBe(600);
-    expect(txt.x).toBe(240);
-    expect(txt.tamano).toBe(48); // 60*0.8
+    const out = adaptarDocumento(doc, F11);
+    const txt = texto(out);
+    const k = factor(F45, F11);
+    // Centrado en X -> sigue centrado en el destino.
+    expect(Math.abs(txt.x + txt.w / 2 - F11.w / 2)).toBeLessThanOrEqual(1);
+    // Caja y fuente escaladas por el MISMO factor uniforme (no deforma).
+    expect(Math.abs(txt.w - 600 * k)).toBeLessThanOrEqual(1);
+    expect(txt.tamano).toBe(Math.round(60 * k));
   });
 
-  it("mantiene los titulares de la franja inferior pegados al safe_bottom nuevo", () => {
+  it("recoloca el titular al pie DENTRO de la zona segura del formato destino (no bajo la UI de Reels)", () => {
     const doc = documentoVacio(F45, "uno");
-    // Texto al pie: fondo de la caja cerca del borde inferior, dentro del safe_bottom origen (96).
-    // y=1200, h=100 -> fondo=1300, a 50px del borde (1350). Está en la mitad inferior.
-    doc.capas.push(nuevaCapaTexto({ x: 80, y: 1200, w: 600, h: 100, tamano: 50 }));
-    const out = adaptarDocumento(doc, F916); // h destino 1920
-    const txt = out.capas.find((c) => c.tipo === "texto") as CapaTexto;
-    // sx=1, sy=1920/1350=1.422, s=min=1. La caja de texto escala su alto por sy: nh=round(100*1.422)=142.
-    // desdeBorde origen = 50, escalado por s=1 -> ny = 1920-142-50 = 1728. Sigue pegado al pie.
-    expect(txt.y).toBe(1728);
-    // Sigue en la franja inferior del lienzo destino.
-    expect(txt.y + txt.h).toBeGreaterThan(F916.h * 0.6);
+    // Titular al pie, dentro de la zona segura del 4:5 (fondo 1200 < 1350-96=1254).
+    doc.capas.push(nuevaCapaTexto({ x: 80, y: 1100, w: 600, h: 100, tamano: 50 }));
+    const out = adaptarDocumento(doc, F916);
+    const txt = texto(out);
+    // El 9:16 reserva 220px arriba y 420px abajo: el titular NO debe invadir esas franjas…
+    expect(txt.y).toBeGreaterThanOrEqual(F916.safe_top);
+    expect(txt.y + txt.h).toBeLessThanOrEqual(F916.h - F916.safe_bottom);
+    // …y sigue siendo un titular BAJO (mitad inferior), no recolocado al centro.
+    expect(txt.y).toBeGreaterThan(F916.h / 2);
+  });
+
+  it("encoge el contenido para caber en la zona segura, más corta, del horizontal 16:9", () => {
+    const doc = documentoVacio(F45, "uno");
+    doc.capas.push(nuevaCapaTexto({ x: 140, y: 600, w: 800, h: 200, tamano: 80 }));
+    const out = adaptarDocumento(doc, F169);
+    const txt = texto(out);
+    const k = factor(F45, F169); // < 1: el 16:9 tiene mucha menos altura útil
+    expect(k).toBeLessThan(1);
+    expect(txt.tamano).toBe(Math.round(80 * k));
+    // El bloque cabe verticalmente dentro de la zona segura del 16:9.
+    expect(txt.y).toBeGreaterThanOrEqual(F169.safe_top - 1);
+    expect(txt.y + txt.h).toBeLessThanOrEqual(F169.h - F169.safe_bottom + 1);
+  });
+
+  it("escala las propiedades de estilo en px (contorno, interletra) por el factor uniforme", () => {
+    const doc = documentoVacio(F45, "uno");
+    doc.capas.push(
+      nuevaCapaTexto({ x: 80, y: 200, w: 600, h: 160, tamano: 60, interletra: 8, contorno: { color: "#000000", grosor: 12 } }),
+    );
+    const out = adaptarDocumento(doc, F11);
+    const txt = texto(out);
+    const k = factor(F45, F11);
+    expect(txt.tamano).toBe(Math.round(60 * k));
+    expect(txt.interletra).toBe(Math.round(8 * k));
+    expect(txt.contorno?.grosor).toBe(Math.round(12 * k));
+  });
+
+  it("escala los grupos rígidamente: conserva el layout interno (posiciones relativas) escalado por k", () => {
+    const doc = documentoVacio(F45, "uno");
+    const grupo: CapaGrupo = {
+      ...nuevaCapaTexto({ x: 100, y: 100, w: 400, h: 400 }),
+      id: "g1",
+      tipo: "grupo",
+      capas: [
+        nuevaCapaTexto({ x: 120, y: 120, w: 200, h: 80, tamano: 40 }),
+        nuevaCapaTexto({ x: 120, y: 300, w: 200, h: 80, tamano: 40 }),
+      ],
+    } as unknown as CapaGrupo;
+    doc.capas.push(grupo);
+    const out = adaptarDocumento(doc, F11);
+    const g = out.capas.find((c) => c.tipo === "grupo") as CapaGrupo;
+    const k = factor(F45, F11);
+    expect(g.capas).toHaveLength(2);
+    const [a, b] = g.capas as CapaTexto[];
+    // Separación vertical entre hijas escalada por k (layout interno conservado, no aplastado).
+    expect(Math.abs((b.y - a.y) - 180 * k)).toBeLessThanOrEqual(2);
+    // Tamaño de las hijas escalado por k.
+    expect(Math.abs(a.w - 200 * k)).toBeLessThanOrEqual(2);
+    expect(a.tamano).toBe(Math.round(40 * k));
   });
 
   it("es idempotente al adaptar al mismo formato", () => {
@@ -69,7 +128,7 @@ describe("adaptarDocumento", () => {
     doc.capas.push(nuevaCapaTexto({ x: 100, y: 200, w: 500, h: 120, tamano: 64 }));
     const out = adaptarDocumento(doc, F45);
     const a = doc.capas.find((c) => c.tipo === "texto") as CapaTexto;
-    const b = out.capas.find((c) => c.tipo === "texto") as CapaTexto;
+    const b = texto(out);
     expect(b.x).toBe(a.x);
     expect(b.y).toBe(a.y);
     expect(b.w).toBe(a.w);
