@@ -496,7 +496,11 @@ def test_historias_exponen_explicacion_y_liston(cliente):
 
 
 def test_historias_liston_no_promovible_explica_por_que(cliente):
-    """Una historia sin encaje de marca expone promovible=False con el motivo legible."""
+    """Una historia sin encaje de marca expone promovible=False con el motivo legible.
+
+    Sin vocabulario de marca el score RECALCULADO no alcanza el listón de producción, así
+    que la PRIMERA regla que falla es la del score (`evaluar_liston` rules 3<4): el motivo
+    legible lo explica."""
     from datetime import UTC, datetime
 
     _sembrar_cluster(
@@ -506,4 +510,4 @@ def test_historias_liston_no_promovible_explica_por_que(cliente):
     datos = cliente.get("/api/noticias/historias").json()
     h = next(x for x in datos["historias"] if x["id"] == "sin-encaje")
     assert h["promovible"] is False
-    assert "marca" in h["promovible_motivo"]
+    assert "listón de producción" in h["promovible_motivo"]

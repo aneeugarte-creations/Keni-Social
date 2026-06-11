@@ -192,6 +192,7 @@ def test_noticias_reparto_en_secciones(store):
             config.ENV_SCORE_PESO_CORROBORACION,
             config.ENV_SCORE_PESO_MARCA,
             config.ENV_SCORE_PESO_FRESCURA,
+            config.ENV_SCORE_PESO_VELOCIDAD,
             config.ENV_SCORE_PESO_VIRALIDAD,
         },
         "noticias_rendimiento": {

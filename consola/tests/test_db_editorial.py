@@ -46,16 +46,18 @@ def test_crear_listar_obtener_fuente_rss(entorno):
     )
     # Contrato del dict (mismas claves que daba la capa de ficheros; SIN `creado`). Incluye
     # las columnas del scheduling/salud de RSS (categoria, intervalo_min, proximo_sondeo,
-    # prioridad, pausado_hasta, errores_seguidos, desactivado_auto, ultimo_filtrados).
+    # prioridad, pausado_hasta, errores_seguidos, desactivado_auto, ultimo_filtrados) y el
+    # `peso` editorial (pondera la corroboración del ranking; normal=1.0 por defecto).
     assert set(f) == {
         "id", "nombre", "url", "marca", "fecha", "activo", "incluir", "excluir",
         "redes_def", "ultima_actualizacion", "ultimo_error", "ultimo_conteo", "propia",
         "categoria", "intervalo_min", "proximo_sondeo", "prioridad", "pausado_hasta",
-        "errores_seguidos", "desactivado_auto", "ultimo_filtrados",
+        "errores_seguidos", "desactivado_auto", "ultimo_filtrados", "peso",
     }
     assert f["nombre"] == "Diario"
     assert f["activo"] is True
     assert f["propia"] is False
+    assert f["peso"] == 1.0
     assert f["incluir"] == "gol"
     assert f["redes_def"] == "x,facebook"
     assert f["ultimo_conteo"] == 0
