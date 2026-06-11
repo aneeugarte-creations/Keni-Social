@@ -31,7 +31,7 @@ from . import generar
 _log = logging.getLogger("keni_consola.evergreen")
 
 # Prompt semilla que pide N ideas evergreen como JSON. Viaja en la texto semilla.
-PROMPT_BRAINSTORMING = "prompt/brainstorming-evergreen"
+PROMPT_BRAINSTORMING = "prompt/evergreen"
 
 # Topes defensivos: cuantas ideas importamos de una salida y longitudes maximas por campo.
 MAX_IDEAS = 10

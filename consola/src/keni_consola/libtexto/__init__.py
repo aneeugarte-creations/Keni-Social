@@ -110,6 +110,7 @@ from ._semilla import (
     cuerpo_semilla,
     dir_semilla,
     importar_semilla,
+    migrar_nombres_biblioteca,
     obtener_semilla,
 )
 from ._validacion import (
@@ -194,4 +195,5 @@ __all__ = [
     "cuerpo_efectivo",
     "cuerpo_semilla",
     "importar_semilla",
+    "migrar_nombres_biblioteca",
 ]

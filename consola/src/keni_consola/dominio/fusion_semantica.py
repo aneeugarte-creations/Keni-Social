@@ -43,8 +43,8 @@ _MAX_CHARS_ITEM = 240        # recorte de titulo+resumen por historia
 # La plantilla vive en la Biblioteca de Texto como prompt EDITABLE (pestaña «Prompts»). La lista
 # JSON de historias se inserta en `{{HISTORIAS}}`. Si el store fallara, la red es la SEMILLA del
 # paquete (fuente única, sin texto duplicado aquí).
-_PROMPT_ID = "prompt/noticias/fusion-historias"
-_PROMPT_VERIFICACION_ID = "prompt/noticias/fusion-verificacion"
+_PROMPT_ID = "prompt/fusion"
+_PROMPT_VERIFICACION_ID = "prompt/fusion-verificacion"
 _MARCA_HISTORIAS = "{{HISTORIAS}}"
 
 

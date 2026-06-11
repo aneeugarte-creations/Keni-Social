@@ -147,7 +147,7 @@ VERDICTO_PROBLEMA = "problema"
 # (permisivo: ante la duda, deja pasar). Cubre que el prompt use el lenguaje de semáforo.
 _FUENTE_PROBLEMA_DESDE = frozenset({"no_publicar"})
 
-# CONTRATO del prompt de fuente (`prompt/qa-fuente`): el campo JSON `veredicto` va en slug
+# CONTRATO del prompt de fuente (`prompt/validacion`): el campo JSON `veredicto` va en slug
 # ASCII ("apta" | "problema"). Los emojis 🟢/🔴 se aceptan como LEGADO (piezas en vuelo o un
 # prompt editado en producción aún viejo); el semáforo visual queda para la línea humana.
 _FUENTE_SLUG_APTA = "apta"

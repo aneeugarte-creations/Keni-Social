@@ -227,7 +227,7 @@ def test_importar_semilla_puebla_y_es_idempotente():
 def test_semilla_trae_prompt_qa_fuente_editable():
     # La criba pre-copy de la FUENTE se migró de `_DEFAULT_QA_CRITERIOS` a un prompt EDITABLE de
     # la Biblioteca: su cuerpo efectivo lo trae la semilla del paquete (visible en «Prompts»).
-    cuerpo = libtexto.cuerpo_efectivo("prompt/qa-fuente")
+    cuerpo = libtexto.cuerpo_efectivo("prompt/validacion")
     assert cuerpo and "CRIBA PREVIA" in cuerpo
 
 
@@ -238,6 +238,30 @@ def test_importar_semilla_no_pisa_lo_editado():
     libtexto.guardar(prompt.id, cuerpo="EDITADO POR EL EQUIPO")
     libtexto.importar_semilla()  # no debe restaurar el original
     assert libtexto.obtener(prompt.id).cuerpo.strip() == "EDITADO POR EL EQUIPO"
+
+
+def test_migrar_nombres_biblioteca_renombra_refresca_y_preserva():
+    # Simula un store con el ID VIEJO (de antes del rediseño), un patrones (script) y un doc del
+    # equipo que NO está en la semilla (termometro). La migración renombra/refresca sin pisar esos.
+    from keni_consola.libtexto._rutas import raiz
+    (raiz() / "prompt").mkdir(parents=True, exist_ok=True)
+    (raiz() / "prompt" / "qa-fuente.md").write_text("---\ntitulo: QA fuente\n---\nVIEJO", encoding="utf-8")
+    (raiz() / "prompt" / "termometro-mundial.md").write_text("---\ntitulo: Termometro\n---\ndel equipo", encoding="utf-8")
+    (raiz() / "editorial" / "rrss" / "unotv").mkdir(parents=True, exist_ok=True)
+    (raiz() / "editorial" / "rrss" / "unotv" / "patrones.md").write_text(
+        "---\ntitulo: Patrones SCRIPT\n---\nBANDAS DEL SCRIPT", encoding="utf-8")
+
+    n = libtexto.migrar_nombres_biblioteca()
+    assert n > 0
+    # El id viejo desaparece; el nuevo existe con el título nuevo.
+    assert libtexto.obtener("prompt/qa-fuente") is None
+    val = libtexto.obtener("prompt/validacion")
+    assert val is not None and val.titulo == "Validación"
+    # patrones (script) y termometro (equipo) NO se pisan.
+    assert libtexto.obtener("editorial/rrss/unotv/patrones").cuerpo.strip() == "BANDAS DEL SCRIPT"
+    assert libtexto.obtener("prompt/termometro-mundial") is not None
+    # Idempotente: segunda pasada no hace nada (sentinela).
+    assert libtexto.migrar_nombres_biblioteca() == 0
 
 
 # --------------------------------------------------------------------------- #

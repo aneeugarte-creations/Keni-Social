@@ -243,7 +243,7 @@ _ESQUEMA_JSON = (
 # «Prompts»). Los fragmentos calculados (fuente/reglas según el modo, roster, slots, esquema y la
 # cola con el documento embebido) se insertan en sus marcadores `{{...}}`. Si el store fallara,
 # la red es la SEMILLA del paquete (fuente única, sin texto duplicado aquí).
-_PROMPT_ID = "prompt/importacion/parrilla"
+_PROMPT_ID = "prompt/importar/parrilla"
 
 
 def _plantilla() -> str:

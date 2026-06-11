@@ -37,8 +37,8 @@ def test_asegurar_documento_qa_lo_crea_si_falta(entorno):
     doc = libtexto.obtener(pc.PROMPT_QA_ID)
     assert doc is not None
     assert doc.cuerpo.strip()  # tiene criterios
-    # Es la criba de la FUENTE (pre-copy), NO el QA de copy: `PROMPT_QA_ID` = prompt/qa-fuente.
-    assert pc.PROMPT_QA_ID == "prompt/qa-fuente"
+    # Es la criba de la FUENTE (pre-copy), NO el QA de copy: `PROMPT_QA_ID` = prompt/validacion.
+    assert pc.PROMPT_QA_ID == "prompt/validacion"
     assert "CRIBA PREVIA" in doc.cuerpo
     # Idempotente: una segunda llamada no duplica.
     pc.asegurar_documento_qa()

@@ -116,11 +116,11 @@ _ETAPAS_IA = frozenset({"fusion", "editorial", "qa", "cd", "arte"})
 # Prompt de la Biblioteca de Texto que usa cada etapa IA (código de etapa → id editable). Permite
 # enseñar el PROMPT de entrada SIEMPRE, aunque la etapa aún no haya corrido (plantilla).
 _PROMPT_POR_ETAPA = {
-    "FUSION": "prompt/noticias/fusion-historias",
-    "EDITORIAL": "prompt/noticias/perfil-editorial",
-    "QA": "prompt/qa-fuente",
-    "CD": "prompt/copy-desde-nota",
-    "ARTE": "prompt/imagen/arte-noticia",
+    "FUSION": "prompt/fusion",
+    "EDITORIAL": "prompt/editorial",
+    "QA": "prompt/validacion",
+    "CD": "prompt/copy",
+    "ARTE": "prompt/arte",
 }
 # Valores válidos del filtro `?estado=` (el `estado_global` de la run).
 _ESTADOS_GLOBAL = frozenset({"ok", "en_curso", "pendiente", "revisar", "fallo"})

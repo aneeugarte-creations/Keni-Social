@@ -38,17 +38,17 @@ def store_roto(monkeypatch, tmp_path):
 
 # (función _plantilla, id del seed del que debe salir el fallback)
 _CASOS = [
-    (traduccion._plantilla, "prompt/noticias/traduccion"),
-    (fusion_semantica._plantilla, "prompt/noticias/fusion-historias"),
-    (perfil_editorial._plantilla, "prompt/noticias/perfil-editorial"),
-    (parrilla_import_job._plantilla, "prompt/importacion/parrilla"),
-    (importador_calendario._plantilla, "prompt/importacion/calendario"),
-    (sugerencias_editoriales._plantilla_sugerencias, "prompt/editorial/sugerencias-plataforma"),
+    (traduccion._plantilla, "prompt/traduccion"),
+    (fusion_semantica._plantilla, "prompt/fusion"),
+    (perfil_editorial._plantilla, "prompt/editorial"),
+    (parrilla_import_job._plantilla, "prompt/importar/parrilla"),
+    (importador_calendario._plantilla, "prompt/importar/calendario"),
+    (sugerencias_editoriales._plantilla_sugerencias, "prompt/sugerencias"),
 ]
 
 
 def test_cuerpo_semilla_lee_el_paquete_y_nunca_lanza():
-    assert "traducciones" in libtexto.cuerpo_semilla("prompt/noticias/traduccion")
+    assert "traducciones" in libtexto.cuerpo_semilla("prompt/traduccion")
     assert libtexto.cuerpo_semilla("prompt/no-existe") == ""
     assert libtexto.cuerpo_semilla("") == ""
 

@@ -115,13 +115,13 @@ _FORMATO_PIPELINE = redes.FORMATO_FOTO
 # --- QA de la FUENTE por DOCUMENTO de Texto (no skills) ------------------------------
 # El equipo NO usa skills: la criba pre-copy de la FUENTE se hace adjuntando un DOCUMENTO de la
 # Texto con los criterios. Regla del dueño: "si el documento existe, adjúntalo; si no existe,
-# créalo y adjúntalo." Apunta al prompt EDITABLE `prompt/qa-fuente` (pestaña «Prompts»), cuyo
+# créalo y adjúntalo." Apunta al prompt EDITABLE `prompt/validacion` (pestaña «Prompts»), cuyo
 # cuerpo base viaja en la semilla. El título DEBE sluggear al id (`crear` deriva el id del
-# slug del título): "QA fuente" -> "prompt/qa-fuente". DISTINTO del QA de COPY (`prompt/qa-editorial`).
-PROMPT_QA_ID = "prompt/qa-fuente"
-_TITULO_QA = "QA fuente"
+# slug del título): "Validación" -> "prompt/validacion". DISTINTO del QA de COPY (`prompt/qa-editorial`).
+PROMPT_QA_ID = "prompt/validacion"
+_TITULO_QA = "Validación"
 # Etiqueta HUMANA de la generación de la criba (Actividad IA). DISTINTA del título del prompt
-# (`_TITULO_QA`, que NO puede cambiar: sluggea al id `prompt/qa-fuente`): en la vista Pipelines
+# (`_TITULO_QA`="Validación", que sluggea al id `prompt/validacion`): en la vista Pipelines
 # la etapa se llama "Validación", y la actividad debe llamarse igual para no desconcertar.
 _ETIQUETA_QA = "Validación de la fuente"
 
@@ -147,7 +147,7 @@ VERDICTO_NO_VERIFICADO = dom_qa.VERDICTO_NO_VERIFICADO  # ⚠️ OK para seguir 
 VERDICTO_PROBLEMA = dom_qa.VERDICTO_PROBLEMA  # ❗ algo de peso en contra: NO se genera copy
 
 # Criterios por defecto del documento QA que se CREA si aún no existe (idempotente). MISMO
-# cuerpo que la semilla `prompt/qa-fuente` del paquete (último recurso si la semilla no se
+# cuerpo que la semilla `prompt/validacion` del paquete (último recurso si la semilla no se
 # pudiera leer; si tocas uno, toca el otro). REDISEÑO: la QA es PRE-COPY y criba la NOTA DE
 # ORIGEN (no el copy, que aún no existe). Es PERMISIVA: solo levanta `problema` ante algo de
 # PESO (dato falso evidente, problema legal/ético claro); ante la duda, `no_verificado`.

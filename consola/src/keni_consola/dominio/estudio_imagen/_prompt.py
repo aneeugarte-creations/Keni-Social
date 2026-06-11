@@ -20,7 +20,7 @@ def componer_prompt(
     """Arma el prompt de imagen: base de la Texto + lo pedido + estilo de marca + aspecto.
 
     El estilo de marca (hoy una constante) pasa a ser editable: si la Texto tiene el
-    prompt base (`prompt/imagen/...`) gana esa version; la nota de marca es un complemento
+    prompt base (`prompt/arte*`) gana esa version; la nota de marca es un complemento
     corto. NO volcamos la linea editorial de copy (voz) en un prompt de imagen: seria ruido.
     """
     formato = formato if formato in FORMATOS else "feed"

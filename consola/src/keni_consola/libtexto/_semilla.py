@@ -21,7 +21,36 @@ from ._crud import obtener
 from ._io import _parsear
 from ._rutas import raiz
 
-__all__ = ["dir_semilla", "obtener_semilla", "cuerpo_efectivo", "cuerpo_semilla", "importar_semilla"]
+__all__ = [
+    "dir_semilla", "obtener_semilla", "cuerpo_efectivo", "cuerpo_semilla", "importar_semilla",
+    "migrar_nombres_biblioteca",
+]
+
+# Migración ONE-SHOT del rediseño de nombres/ids de la Biblioteca: el store en vivo ya tiene los
+# docs del sistema con ids/títulos VIEJOS, y `importar_semilla` no pisa lo existente, así que los
+# nombres nuevos + descripción + cuerpos limpios no llegarían. Esta migración (a) borra del store
+# las copias con el id viejo de los prompts renombrados y (b) RE-SIEMBRA todos los docs del sistema
+# desde la semilla nueva, EXCEPTO los `patrones.md` (los gestiona `patrones_derivar --store`). One-
+# shot por SENTINELA: tras correr no vuelve a tocar el store, así que las ediciones futuras del
+# equipo se respetan. El contenido viejo es recuperable (historial git de la semilla).
+_RENOMBRES_PROMPT_BIBLIOTECA: tuple[tuple[str, str], ...] = (
+    ("prompt/copy-desde-nota", "prompt/copy"),
+    ("prompt/qa-fuente", "prompt/validacion"),
+    ("prompt/brainstorming-evergreen", "prompt/evergreen"),
+    ("prompt/editorial/sugerencias-plataforma", "prompt/sugerencias"),
+    ("prompt/imagen/arte-noticia", "prompt/arte"),
+    ("prompt/imagen/ilustracion-fondo", "prompt/arte-ilustracion"),
+    ("prompt/imagen/sistema-generador", "prompt/arte-sistema"),
+    ("prompt/noticias/fusion-historias", "prompt/fusion"),
+    ("prompt/noticias/fusion-verificacion", "prompt/fusion-verificacion"),
+    ("prompt/noticias/perfil-editorial", "prompt/editorial"),
+    ("prompt/noticias/traduccion", "prompt/traduccion"),
+    ("prompt/importacion/calendario", "prompt/importar/calendario"),
+    ("prompt/importacion/parrilla", "prompt/importar/parrilla"),
+)
+_SENTINELA_NOMBRES = ".migracion-nombres-v1"
+# Carpetas de prompt que quedan vacías en el store tras aplanar los ids (se limpian al final).
+_CARPETAS_VIEJAS_BIBLIOTECA = ("prompt/imagen", "prompt/noticias", "prompt/importacion", "prompt/editorial")
 
 
 def dir_semilla() -> Path:
@@ -133,4 +162,56 @@ def importar_semilla(origen: Path | None = None) -> int:
         destino.parent.mkdir(parents=True, exist_ok=True)
         escribir_atomico(destino, texto)
         n += 1
+    return n
+
+
+def migrar_nombres_biblioteca(origen: Path | None = None) -> int:
+    """Aplica el rediseño de nombres/ids de la Biblioteca al store (ONE-SHOT por sentinela).
+
+    Pensado para el arranque del servidor, ANTES de `importar_semilla`. Devuelve cuántos
+    documentos tocó (0 si ya se aplicó o no hay semilla). Idempotente: tras la primera pasada
+    deja un sentinela y no vuelve a pisar el store (respeta ediciones futuras del equipo).
+    """
+    base = origen or dir_semilla()
+    if not base.is_dir():
+        return 0
+    destino_raiz = raiz()
+    sentinela = destino_raiz / _SENTINELA_NOMBRES
+    if sentinela.exists():
+        return 0
+    n = 0
+    # (1) Borra del store las copias con el ID VIEJO de los prompts renombrados (el id nuevo se
+    #     siembra en el paso 2). Sin esto quedarían huérfanas en la Biblioteca con el nombre viejo.
+    for viejo, _nuevo in _RENOMBRES_PROMPT_BIBLIOTECA:
+        ruta_vieja = destino_raiz.joinpath(*f"{viejo}.md".split("/"))
+        if ruta_vieja.is_file():
+            ruta_vieja.unlink()
+            n += 1
+    # (2) Re-siembra desde la semilla NUEVA todos los docs del sistema (ids nuevos + editoriales con
+    #     título/descr/cuerpo limpios), EXCEPTO patrones.md (lo gestiona `patrones_derivar --store`).
+    for ruta in sorted(base.rglob("*.md")):
+        rel = ruta.relative_to(base)
+        partes = rel.with_suffix("").as_posix().split("/")
+        if partes[0] not in TIPOS or not _segmentos_validos(partes):
+            continue
+        if rel.name == "patrones.md":
+            continue
+        try:
+            texto = ruta.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        destino = destino_raiz.joinpath(*rel.parts)
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        escribir_atomico(destino, texto)
+        n += 1
+    # (3) Limpia las carpetas viejas de prompt que quedaron vacías tras aplanar los ids.
+    for sub in _CARPETAS_VIEJAS_BIBLIOTECA:
+        carpeta = destino_raiz.joinpath(*sub.split("/"))
+        try:
+            if carpeta.is_dir() and not any(carpeta.iterdir()):
+                carpeta.rmdir()
+        except OSError:
+            pass
+    sentinela.parent.mkdir(parents=True, exist_ok=True)
+    escribir_atomico(sentinela, "ok\n")
     return n

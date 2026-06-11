@@ -165,7 +165,7 @@ def topics_sin_arte(
 # (visible en la pestaña «Prompts»), no hardcodeada. El tema (titulo + descripcion) se inserta
 # donde el equipo ponga el marcador `_MARCA_TEMA`. `_FALLBACK` es la red por si la lectura
 # fallara o el cuerpo viniera vacio.
-_PROMPT_ARTE_ID = "prompt/imagen/arte-noticia"
+_PROMPT_ARTE_ID = "prompt/arte"
 _MARCA_TEMA = "{{TEMA}}"
 _PROMPT_ARTE_FALLBACK = (
     "Genera UNA sola fotografia realista para el feed de una marca de television que "

@@ -22,7 +22,7 @@ def test_componer_prompt_incluye_base_marca_y_aspecto(entorno):
     assert "estadio al atardecer" in p
     assert "Claro Sports" in p  # nota de estilo de marca
     assert "4:5" in p  # aspecto del formato feed
-    assert "director de arte" in p.lower()  # cuerpo de la semilla prompt/imagen/ilustracion-fondo
+    assert "director de arte" in p.lower()  # cuerpo de la semilla prompt/arte-ilustracion
 
 
 def test_componer_prompt_formato_desconocido_cae_a_feed(entorno):

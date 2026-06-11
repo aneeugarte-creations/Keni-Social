@@ -64,7 +64,7 @@ ASPECTOS = {"vertical": "9:16", "feed": "4:5", "cuadrado": "1:1", "horizontal": 
 OPS_EDITAR = ("recortar", "redimensionar", "comprimir", "extender", "placa")
 
 # Prompt base de imagen en la Texto (editable por el equipo; cae a "" si falta).
-PROMPT_IMAGEN_DEFECTO = "prompt/imagen/ilustracion-fondo"
+PROMPT_IMAGEN_DEFECTO = "prompt/arte-ilustracion"
 
 # Marcas con tokens de diseno PRECARGADOS en `motores/estudio_imagen/marcas.json`
 # (colores/pleca afinados). Es el conjunto que admite la PLACA de texto legacy (`editar.py

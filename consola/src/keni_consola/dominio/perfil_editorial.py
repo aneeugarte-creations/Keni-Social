@@ -101,7 +101,7 @@ def _hash(texto: str) -> str:
 # La plantilla vive en la Biblioteca de Texto como prompt EDITABLE (pestaña «Prompts»). Se
 # insertan la MARCA, el tope de keywords y la línea editorial en sus marcadores. Si el store
 # fallara, la red es la SEMILLA del paquete (fuente única, sin texto duplicado aquí).
-_PROMPT_ID = "prompt/noticias/perfil-editorial"
+_PROMPT_ID = "prompt/editorial"
 
 
 def _plantilla() -> str:

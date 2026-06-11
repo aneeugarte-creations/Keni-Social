@@ -503,7 +503,7 @@ _RE_BLOQUE_JSON = re.compile(r"```[ \t]*[jJ][sS][oO][nN][ \t]*\r?\n(.*?)```", re
 # Mapa del simbolo de veredicto (primera linea) a su valor interno estable.
 _VEREDICTO_POR_SIMBOLO = {"✅": "listo", "⚠️": "revisar", "❌": "no_publicar"}
 
-# Veredicto en PALABRAS (el formato que pide `prompt/copy-desde-nota`: la salida abre
+# Veredicto en PALABRAS (el formato que pide `prompt/copy`: la salida abre
 # con "LISTO PARA APROBAR" / "REVISAR ANTES DE PUBLICAR" / "NO PUBLICAR", sin simbolo).
 # Frases COMPLETAS del contrato, no palabras sueltas: un copy cuyo primer renglon diga
 # "...esta LISTO para la final" no debe colar un veredicto.

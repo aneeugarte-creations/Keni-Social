@@ -88,7 +88,7 @@ def seleccionar(noticias: list[dict[str, Any]], *, maximo: int) -> dict[str, lis
 # La plantilla del prompt vive en la Biblioteca de Texto como prompt EDITABLE (pestaña
 # «Prompts»), no hardcodeada. Los 4 datos dinámicos se insertan en sus marcadores. Si el store
 # fallara, la red es la SEMILLA del paquete (fuente única, sin texto duplicado aquí).
-_PROMPT_SUGERENCIAS_ID = "prompt/editorial/sugerencias-plataforma"
+_PROMPT_SUGERENCIAS_ID = "prompt/sugerencias"
 
 
 def _plantilla_sugerencias() -> str:

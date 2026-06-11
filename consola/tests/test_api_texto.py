@@ -65,8 +65,8 @@ def test_doc_incluye_procesos_de_transparencia(cliente):
     # cualquiera lo trae vacío. Y va en TODOS los documentos del listado.
     cualq = cliente.post("/api/texto", json={"titulo": "Mi prompt", "tipo": "prompt"}).json()["documento"]
     assert cualq["procesos"] == []
-    cat = cliente.post("/api/texto", json={"titulo": "QA fuente", "tipo": "prompt"}).json()["documento"]
-    assert cat["id"] == "prompt/qa-fuente"
+    cat = cliente.post("/api/texto", json={"titulo": "Validación", "tipo": "prompt"}).json()["documento"]
+    assert cat["id"] == "prompt/validacion"
     assert cat["procesos"] and any("criba" in p.lower() for p in cat["procesos"])
     docs = cliente.get("/api/texto", params={"tipo": "prompt"}).json()["documentos"]
     assert all("procesos" in d for d in docs)

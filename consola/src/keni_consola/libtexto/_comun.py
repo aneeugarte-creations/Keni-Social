@@ -75,19 +75,19 @@ PIPELINES: dict[str, dict[str, str]] = {
     "copy": {
         "titulo": "Copy",
         "descripcion": "Convierte una nota/clip/tendencia en copy publicable por red.",
-        "prompt_defecto": "prompt/copy-desde-nota",
+        "prompt_defecto": "prompt/copy",
         "rol": "copy",
     },
     "qa": {
         "titulo": "Validación",
         "descripcion": "Verifica la nota de origen antes de generar copy (pipeline de contenido).",
-        "prompt_defecto": "prompt/qa-fuente",
+        "prompt_defecto": "prompt/validacion",
         "rol": "qa",
     },
     "evergreen": {
         "titulo": "Evergreen",
         "descripcion": "Propone ideas de contenido evergreen para la marca.",
-        "prompt_defecto": "prompt/brainstorming-evergreen",
+        "prompt_defecto": "prompt/evergreen",
         "rol": "evergreen",
     },
 }

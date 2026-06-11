@@ -14,13 +14,13 @@ from __future__ import annotations
 
 PROCESOS_POR_PROMPT: dict[str, list[str]] = {
     # Imagen
-    "prompt/imagen/sistema-generador": [
+    "prompt/arte-sistema": [
         "Generación de imagen · directiva de sistema (Estudio, auto-arte y botón «Generar con IA»)",
     ],
-    "prompt/imagen/arte-noticia": [
+    "prompt/arte": [
         "Auto-arte del pipeline · ilustra temas con copy pero sin imagen",
     ],
-    "prompt/imagen/ilustracion-fondo": [
+    "prompt/arte-ilustracion": [
         "Estudio de imagen · prompt base de la variante generada",
     ],
     # Insumos del día (buzón de cajones)
@@ -29,27 +29,24 @@ PROCESOS_POR_PROMPT: dict[str, list[str]] = {
     "prompt/insumos/reporteros": ["Buzón de insumos · cajón Reporteros"],
     "prompt/insumos/eventos-claro": ["Buzón de insumos · cajón Eventos Claro Sports"],
     # Noticias / algoritmo
-    "prompt/editorial/sugerencias-plataforma": [
+    "prompt/sugerencias": [
         "Sugerencias editoriales · digest diario de cambios de algoritmo por plataforma",
     ],
-    "prompt/noticias/traduccion": ["Ingesta de noticias · traducción/localización (MX)"],
-    "prompt/noticias/fusion-historias": [
+    "prompt/traduccion": ["Ingesta de noticias · traducción/localización (MX)"],
+    "prompt/fusion": [
         "Ingesta de noticias · fusión de historias del mismo evento",
     ],
-    "prompt/noticias/fusion-verificacion": [
+    "prompt/fusion-verificacion": [
         "Ingesta de noticias · verificación de cada grupo propuesto antes de fundir",
     ],
-    "prompt/noticias/fusion-verificacion": [
-        "Ingesta de noticias · verificación de cada grupo antes de fundir",
-    ],
-    "prompt/noticias/perfil-editorial": ["Priorización · perfil de keywords por marca"],
+    "prompt/editorial": ["Priorización · perfil de keywords por marca"],
     # Importación de documentos
-    "prompt/importacion/calendario": ["Importar calendario de contenido (documento → parrilla)"],
-    "prompt/importacion/parrilla": ["Importar rota/parrilla (documento → operaciones)"],
+    "prompt/importar/calendario": ["Importar calendario de contenido (documento → parrilla)"],
+    "prompt/importar/parrilla": ["Importar rota/parrilla (documento → operaciones)"],
     # Pipeline de contenido
-    "prompt/qa-fuente": ["Pipeline · criba QA de la fuente (pre-copy)"],
-    "prompt/copy-desde-nota": ["Pipeline · generación de copy desde la nota"],
-    "prompt/brainstorming-evergreen": ["Taller evergreen · brainstorming de ideas"],
+    "prompt/validacion": ["Pipeline · criba QA de la fuente (pre-copy)"],
+    "prompt/copy": ["Pipeline · generación de copy desde la nota"],
+    "prompt/evergreen": ["Taller evergreen · brainstorming de ideas"],
     # De LANZAMIENTO MANUAL (no se inyectan en un proceso de fondo; se ejecutan a demanda).
 }
 

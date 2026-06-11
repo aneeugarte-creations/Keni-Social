@@ -30,7 +30,7 @@ def test_catalogo_no_tiene_ids_fantasma():
 
 
 def test_procesos_de_prompt_conocido():
-    procs = pp.procesos_de("prompt/imagen/sistema-generador")
+    procs = pp.procesos_de("prompt/arte-sistema")
     assert procs and any("imagen" in p.lower() for p in procs)
 
 
@@ -43,19 +43,19 @@ def test_catalogo_cubre_los_prompts_inyectados():
     # Los prompts que migramos a la Biblioteca DEBEN estar catalogados: la transparencia exige ver
     # a qué proceso se inyectan. Si cableas un prompt nuevo, añádelo también a `prompts_procesos`.
     esperados = {
-        "prompt/imagen/sistema-generador",
-        "prompt/imagen/arte-noticia",
+        "prompt/arte-sistema",
+        "prompt/arte",
         "prompt/insumos/portal",
         "prompt/insumos/corresponsales",
         "prompt/insumos/reporteros",
         "prompt/insumos/eventos-claro",
-        "prompt/editorial/sugerencias-plataforma",
-        "prompt/noticias/traduccion",
-        "prompt/noticias/fusion-historias",
-        "prompt/noticias/perfil-editorial",
-        "prompt/importacion/calendario",
-        "prompt/importacion/parrilla",
-        "prompt/qa-fuente",
+        "prompt/sugerencias",
+        "prompt/traduccion",
+        "prompt/fusion",
+        "prompt/editorial",
+        "prompt/importar/calendario",
+        "prompt/importar/parrilla",
+        "prompt/validacion",
     }
     faltan = esperados - set(pp.PROCESOS_POR_PROMPT)
     assert not faltan, f"prompts inyectados sin catalogar: {faltan}"
