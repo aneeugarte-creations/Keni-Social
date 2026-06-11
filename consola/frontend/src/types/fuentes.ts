@@ -244,6 +244,11 @@ export interface FuenteRss {
   /** Categoría del feed (mx | regional | internacional | deportes | ciencia-tech | gaming |
    *  negocios | tendencias | breaking | ""): manda la CADENCIA de sondeo del motor. */
   categoria: string;
+  /** Peso editorial de la fuente: pondera la corroboración del ranking (potente 2.0 /
+   *  normal 1.0 / baja 0.5). */
+  peso: number;
+  /** Tier legible del peso. */
+  tier: "potente" | "normal" | "baja" | string;
 }
 
 export interface RespuestaFuentesRss {
@@ -270,6 +275,8 @@ export interface CuerpoCrearFuenteRss {
   propia?: boolean;
   /** Categoría del feed (opcional): manda la cadencia de sondeo del motor. */
   categoria?: string;
+  /** Peso editorial (opcional; sin él, el back usa el seed por host). */
+  peso?: number;
 }
 
 /** Cuerpo parcial para actualizar una fuente RSS. */
@@ -283,6 +290,7 @@ export interface CuerpoActualizarFuenteRss {
   redes_def?: string[];
   propia?: boolean;
   categoria?: string;
+  peso?: number;
 }
 
 /** Un elemento (item) de un feed RSS. */

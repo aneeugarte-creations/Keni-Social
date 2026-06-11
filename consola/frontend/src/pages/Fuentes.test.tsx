@@ -224,15 +224,17 @@ describe("Fuentes — Catálogo (Ola 4)", () => {
     expect(await screen.findByText("BBC Mundo")).toBeInTheDocument();
   });
 
-  it("solo hay dos clases de fuente: Externas e Internas", async () => {
+  it("tres pestañas: Externas, Internas y Rendimiento", async () => {
     stubFetch();
     renderFuentes();
 
-    // Fuentes se compacta a 2 pestañas: lo externo (RSS/agencias/Trends) y lo interno
-    // (buzones del equipo + aportes a mano). No hay más sub-pestañas.
+    // Fuentes tiene 3 pestañas: lo externo (RSS/agencias/Trends), lo interno (buzones del
+    // equipo) y el RENDIMIENTO editorial por fuente (quién abre historias, % de uso) que
+    // alimenta la decisión de potencia/tier de las fuentes.
     expect(await screen.findByRole("tab", { name: "Externas" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Internas" })).toBeInTheDocument();
-    expect(screen.getAllByRole("tab")).toHaveLength(2);
+    expect(screen.getByRole("tab", { name: "Rendimiento" })).toBeInTheDocument();
+    expect(screen.getAllByRole("tab")).toHaveLength(3);
   });
 
   it("el preset ya activo muestra badge 'Activo' y su checkbox está deshabilitado", async () => {

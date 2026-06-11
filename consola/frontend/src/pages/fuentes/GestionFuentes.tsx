@@ -209,6 +209,26 @@ function FilaFuente({
               {fuente.categoria}
             </Badge>
           )}
+          {fuente.tier === "potente" && (
+            <Badge
+              variant="outline"
+              className="border-amber-400 font-normal text-amber-700"
+              title="Fuente potente: pesa el doble en la corroboración del ranking"
+              data-testid="badge-tier"
+            >
+              ★ Potente
+            </Badge>
+          )}
+          {fuente.tier === "baja" && (
+            <Badge
+              variant="outline"
+              className="font-normal text-muted-foreground"
+              title="Fuente de baja confiabilidad: pesa la mitad en la corroboración"
+              data-testid="badge-tier"
+            >
+              Baja confiabilidad
+            </Badge>
+          )}
           {!fuente.activo && (
             <Badge variant="secondary" className="font-normal">
               Inactivo

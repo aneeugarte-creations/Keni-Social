@@ -271,6 +271,32 @@ export interface ResumenCobertura {
   total_items?: number;
 }
 
+// ── Rendimiento por fuente (GET /api/noticias/fuentes/stats) ─────────────────
+
+/** Rendimiento editorial de una fuente en la ventana: qué aporta de verdad. */
+export interface RendimientoFuente {
+  fuente_id: string;
+  fuente_nombre: string;
+  /** Peso editorial observado (máx de sus items). */
+  peso: number;
+  tier: "potente" | "normal" | "baja" | string;
+  /** Artículos aportados en la ventana. */
+  items: number;
+  /** Historias distintas en las que participó. */
+  historias: number;
+  /** Historias que ABRIÓ (publicó primero). */
+  primeras: number;
+  /** Historias suyas que acabaron usadas (promovidas al tablero). */
+  usadas: number;
+  /** usadas / historias (0..1). */
+  tasa_uso: number;
+}
+
+export interface RespuestaStatsFuentes {
+  fuentes: RendimientoFuente[];
+  dias: number;
+}
+
 // ── Ola D: salud de fuentes (GET /api/noticias/salud) ────────────────────────
 
 /**

@@ -6,6 +6,7 @@ import type {
   RespuestaHistorias,
   RespuestaMesa,
   RespuestaNoticias,
+  RespuestaStatsFuentes,
   ResumenCobertura,
   SaludCobertura,
 } from "@/types";
@@ -196,6 +197,23 @@ export const apiNoticias = {
       peticion<{ borradas: number }>(
         `/noticias/historias/borrar-todo`,
         { metodo: "POST", json: body, muestrear: false },
+      ),
+
+    /**
+     * RENDIMIENTO editorial por fuente: cuántas historias aporta, cuántas abrió, cuántas
+     * acabaron usadas. Para evaluar fuentes. Marca-aware.
+     * GET /api/noticias/fuentes/stats?marca=&dias=
+     */
+    statsFuentes: (
+      params: { marca?: string; dias?: number } = {},
+      signal?: AbortSignal,
+    ) =>
+      peticion<RespuestaStatsFuentes>(
+        `/noticias/fuentes/stats${query({
+          marca: params.marca,
+          dias: params.dias != null ? String(params.dias) : undefined,
+        })}`,
+        { signal },
       ),
 
     // --- Ola D: salud de fuentes ---

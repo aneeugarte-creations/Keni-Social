@@ -34,6 +34,16 @@ import { CLAVE_FUENTES, CLAVE_ITEMS } from "./lib";
  * manda la CADENCIA de sondeo del motor de ingesta — un feed de deportes se sondea cada
  * ~3 min, uno de gaming cada ~30 — y alimenta la cobertura/huecos de Salud.
  */
+/**
+ * Tiers de PESO editorial de una fuente: ponderan la corroboración del ranking de
+ * historias (una nota en dos fuentes potentes a la vez sube al top y sale al feed).
+ */
+const TIERS_FUENTE: { id: string; peso: number; nombre: string; ayuda: string }[] = [
+  { id: "potente", peso: 2.0, nombre: "Potente", ayuda: "agencias y cabeceras de primer nivel (Reuters, AP, BBC…)" },
+  { id: "normal", peso: 1.0, nombre: "Normal", ayuda: "la mayoría de los medios" },
+  { id: "baja", peso: 0.5, nombre: "Baja confiabilidad", ayuda: "agregadores, foros, fuentes sin verificar" },
+];
+
 const CATEGORIAS_FEED: { id: string; nombre: string; cadencia: string }[] = [
   { id: "mx", nombre: "México (nacional)", cadencia: "~10 min" },
   { id: "regional", nombre: "Regional (estados)", cadencia: "~10 min" },
@@ -116,6 +126,9 @@ function FormularioFuente({
   const [activo, setActivo] = React.useState(fuente?.activo ?? true);
   const [propia, setPropia] = React.useState(fuente?.propia ?? false);
   const [categoria, setCategoria] = React.useState(fuente?.categoria ?? "");
+  // Tier de PESO editorial. Alta nueva: "" = que el back decida por el host (Reuters/BBC
+  // nacen potentes solas); al editar se muestra el tier real del feed.
+  const [tier, setTier] = React.useState(fuente?.tier ?? "");
   const [redesDef, setRedesDef] = React.useState<Set<string>>(
     () => new Set(fuente?.redes_def ?? []),
   );
@@ -124,6 +137,7 @@ function FormularioFuente({
     mutationFn: () => {
       const marcaVal = marcaParam(marca) ?? "";
       const redesArr = [...redesDef];
+      const pesoVal = TIERS_FUENTE.find((t) => t.id === tier)?.peso;
       if (fuente) {
         return api.actualizarFuenteRss(fuente.id, {
           nombre: nombre.trim(),
@@ -135,6 +149,7 @@ function FormularioFuente({
           redes_def: redesArr,
           propia,
           categoria,
+          ...(pesoVal != null ? { peso: pesoVal } : {}),
         });
       }
       return api.crearFuenteRss({
@@ -146,6 +161,8 @@ function FormularioFuente({
         redes_def: redesArr.length > 0 ? redesArr : undefined,
         propia: propia || undefined,
         categoria: categoria || undefined,
+        // Sin tier elegido, el back asigna el peso por el host (seed automático).
+        ...(pesoVal != null ? { peso: pesoVal } : {}),
       });
     },
     onSuccess: () => {
@@ -228,6 +245,29 @@ function FormularioFuente({
             Marca la frecuencia con la que el motor sondea este feed.
           </p>
         </div>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="fuente-tier">Potencia de la fuente</Label>
+        <Select
+          value={tier || "__auto__"}
+          onValueChange={(v) => setTier(v === "__auto__" ? "" : v)}
+        >
+          <SelectTrigger id="fuente-tier" aria-label="Potencia de la fuente" data-testid="select-tier">
+            <SelectValue placeholder="Automática" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__auto__">Automática (según el medio)</SelectItem>
+            {TIERS_FUENTE.map((t) => (
+              <SelectItem key={t.id} value={t.id}>
+                {t.nombre} — {t.ayuda}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          Pondera la corroboración del ranking: una nota confirmada por dos fuentes potentes
+          casi a la vez sube al top y sale sola al feed.
+        </p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">

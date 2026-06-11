@@ -38,6 +38,8 @@ import { api, mensajeError } from "@/lib/api";
 import { fraseCorroboracion, factoresRanking, nivelPrioridad } from "@/lib/noticias/ranking-editorial";
 import type { Historia } from "@/types";
 
+import { DetalleHistoria } from "./DetalleHistoria";
+
 export interface PropsTarjetaHistoria {
   historia: Historia;
   /** Query keys a invalidar tras una acción (la lista/mesa que renderiza la tarjeta). */
@@ -64,6 +66,7 @@ export function TarjetaHistoria({
 }: PropsTarjetaHistoria) {
   const queryClient = useQueryClient();
   const [expandida, setExpandida] = React.useState(false);
+  const [detalleAbierto, setDetalleAbierto] = React.useState(false);
 
   const invalidar = () => {
     for (const clave of clavesAInvalidar) {
@@ -137,7 +140,15 @@ export function TarjetaHistoria({
                   ÚLTIMA HORA
                 </Badge>
               )}
-              {historia.titulo || "(sin título)"}
+              <button
+                type="button"
+                className="text-left hover:underline"
+                onClick={() => setDetalleAbierto(true)}
+                aria-label={`Abrir detalle de «${historia.titulo || "sin título"}»`}
+                data-testid="btn-detalle"
+              >
+                {historia.titulo || "(sin título)"}
+              </button>
             </p>
           </div>
 
@@ -340,6 +351,15 @@ export function TarjetaHistoria({
           </ul>
         )}
       </CardContent>
+
+      {detalleAbierto && (
+        <DetalleHistoria
+          historia={historia}
+          abierto={detalleAbierto}
+          onCerrar={() => setDetalleAbierto(false)}
+          clavesAInvalidar={clavesAInvalidar}
+        />
+      )}
     </Card>
   );
 }

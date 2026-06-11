@@ -11,6 +11,7 @@ import { CatalogoPresets } from "./fuentes/CatalogoPresets";
 import { GestionFuentes } from "./fuentes/GestionFuentes";
 // Salud del motor de ingesta de feeds: estado de los canales externos (feeds activos/
 // con error, huecos, reactivar). Vive bajo "Externas".
+import { RendimientoFuentes } from "./fuentes/RendimientoFuentes";
 import { SaludFeeds } from "./fuentes/SaludFeeds";
 // Buzones del equipo (listas tipo portal/WhatsApp/corresponsales y Excel): la fuente
 // INTERNA. Compone la página de Cajones del día.
@@ -33,6 +34,8 @@ type PestanaTipo = {
 const PESTANAS_TIPO: PestanaTipo[] = [
   { valor: "externas", etiqueta: "Externas" },
   { valor: "internas", etiqueta: "Internas" },
+  // Rendimiento: evaluación editorial de las fuentes (quién abre, quién corrobora, % uso).
+  { valor: "rendimiento", etiqueta: "Rendimiento" },
 ];
 
 /**
@@ -88,6 +91,11 @@ export default function Fuentes() {
         <TabsContent value="internas" className="space-y-8">
           <CajonPresidencia />
           <CajonesDia />
+        </TabsContent>
+        {/* RENDIMIENTO: qué fuentes aportan de verdad (abren historias, se usan). Alimenta
+            la decisión de potencia (tier) de la pestaña Externas. */}
+        <TabsContent value="rendimiento" className="space-y-8">
+          <RendimientoFuentes />
         </TabsContent>
       </Tabs>
     </>
