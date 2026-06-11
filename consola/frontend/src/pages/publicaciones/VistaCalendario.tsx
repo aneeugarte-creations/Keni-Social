@@ -390,6 +390,7 @@ export function VistaCalendario({
 
         {vista === "mes" && (
           <VistaMes
+            huecosDe={huecosDe}
             ancla={ancla}
             porDia={porDia}
             hoy={hoy}
@@ -431,11 +432,13 @@ export function VistaCalendario({
 
 /** Rejilla mensual de RESUMEN: por día, total + conteo por red. Clic en un día → detalle. */
 function VistaMes({
+  huecosDe,
   ancla,
   porDia,
   hoy,
   onAbrirDia,
 }: {
+  huecosDe: (dia: Date) => { hora: string; categoria: string }[];
   ancla: Date;
   porDia: Map<string, Publicacion[]>;
   hoy: string;
@@ -505,6 +508,21 @@ function VistaMes({
                 })}
               </div>
             )}
+            {/* Huecos LIBRES del plan, compactos (hora + línea abreviada, CDMX). */}
+            {delMes && (
+              <div className="space-y-px">
+                {huecosDe(dia).map((h) => (
+                  <div
+                    key={`${h.hora}-${h.categoria}`}
+                    className="truncate border-l-2 border-dashed border-border pl-1 text-[9px] leading-tight text-muted-foreground/80"
+                    title={`Hueco del plan: ${ETIQUETA_LINEA[h.categoria] ?? h.categoria} a las ${h.hora}`}
+                  >
+                    <span className="tabular-nums">{h.hora}</span>{" "}
+                    {LINEA_CORTA[h.categoria] ?? h.categoria}
+                  </div>
+                ))}
+              </div>
+            )}
           </button>
         );
       })}
@@ -513,23 +531,42 @@ function VistaMes({
   );
 }
 
-/** Chips fantasma con los HUECOS LIBRES del plan de un día (hora CDMX + línea). */
-function HuecosPlan({ huecos }: { huecos: { hora: string; categoria: string }[] }) {
-  if (huecos.length === 0) return null;
+/** Etiqueta CORTA de línea para las celdas del mes (espacio mínimo). */
+const LINEA_CORTA: Record<string, string> = {
+  mx: "Nac.",
+  internacional: "Intl.",
+  breaking: "Brk.",
+  entretenimiento: "Entret.",
+  evergreen: "Ever.",
+};
+
+/** Chip fantasma de UN hueco libre del plan (hora CDMX + línea). */
+function ChipHueco({ hueco }: { hueco: { hora: string; categoria: string } }) {
   return (
-    <div className="space-y-0.5 px-1 pb-1">
-      {huecos.map((h) => (
-        <div
-          key={`${h.hora}-${h.categoria}`}
-          className="flex items-center gap-1 rounded border border-dashed border-border/70 px-1.5 py-0.5 text-[10px] text-muted-foreground"
-          title={`Hueco del plan: ${ETIQUETA_LINEA[h.categoria] ?? h.categoria} a las ${h.hora}`}
-        >
-          <span className="tabular-nums">{h.hora}</span>
-          <span className="truncate">{ETIQUETA_LINEA[h.categoria] ?? h.categoria}</span>
-        </div>
-      ))}
+    <div
+      className="flex items-center gap-1 rounded border border-dashed border-border/70 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+      title={`Hueco del plan: ${ETIQUETA_LINEA[hueco.categoria] ?? hueco.categoria} a las ${hueco.hora}`}
+    >
+      <span className="tabular-nums">{hueco.hora}</span>
+      <span className="truncate">{ETIQUETA_LINEA[hueco.categoria] ?? hueco.categoria}</span>
     </div>
   );
+}
+
+/** Línea de tiempo del día: PIEZAS y HUECOS libres fusionados y ordenados por hora CDMX —
+ *  cada pieza aparece EN su posición del plan, no apilada arriba. */
+function entradasDelDia(
+  items: Publicacion[],
+  huecos: { hora: string; categoria: string }[],
+): ({ tipo: "pieza"; hora: string; p: Publicacion } | {
+  tipo: "hueco"; hora: string; h: { hora: string; categoria: string };
+})[] {
+  return [
+    ...items.map((p) => ({
+      tipo: "pieza" as const, hora: hora24Cdmx(p.fecha_programada), p,
+    })),
+    ...huecos.map((h) => ({ tipo: "hueco" as const, hora: h.hora, h })),
+  ].sort((a, b) => a.hora.localeCompare(b.hora));
 }
 
 /** Vista SEMANA: 7 columnas; piezas del día listadas; se arrastran entre días (reprograma). */
@@ -608,18 +645,21 @@ function VistaSemana({
               )}
             </button>
             <div className="max-h-[28rem] flex-1 space-y-0.5 overflow-y-auto p-1">
-              {items.map((p) => (
-                <PildoraPub
-                  key={p.id}
-                  publicacion={p}
-                  onAbrir={onAbrir}
-                  onDesprogramar={onDesprogramar}
-                  onPublicarYa={onPublicarYa}
-                  ocupado={ocupado}
-                />
-              ))}
-              {/* Huecos LIBRES del plan (placeholders): la programación esperada del día. */}
-              <HuecosPlan huecos={huecosDe(dia)} />
+              {/* Piezas y huecos del plan FUSIONADOS por hora: cada pieza en su posición. */}
+              {entradasDelDia(items, huecosDe(dia)).map((e) =>
+                e.tipo === "pieza" ? (
+                  <PildoraPub
+                    key={e.p.id}
+                    publicacion={e.p}
+                    onAbrir={onAbrir}
+                    onDesprogramar={onDesprogramar}
+                    onPublicarYa={onPublicarYa}
+                    ocupado={ocupado}
+                  />
+                ) : (
+                  <ChipHueco key={`h-${e.hora}-${e.h.categoria}`} hueco={e.h} />
+                ),
+              )}
             </div>
           </div>
         );
@@ -677,18 +717,21 @@ function VistaDia({
         <p className="py-8 text-center text-sm text-muted-foreground">Nada programado este día.</p>
       ) : (
         <div className="space-y-1">
-          {items.map((p) => (
-            <PildoraPub
-              key={p.id}
-              publicacion={p}
-              onAbrir={onAbrir}
-              onDesprogramar={onDesprogramar}
-              onPublicarYa={onPublicarYa}
-              ocupado={ocupado}
-            />
-          ))}
-          {/* Huecos LIBRES del plan: la programación esperada del día (hora CDMX + línea). */}
-          <HuecosPlan huecos={huecos} />
+          {/* Piezas y huecos del plan FUSIONADOS por hora: cada pieza en su posición. */}
+          {entradasDelDia(items, huecos).map((e) =>
+            e.tipo === "pieza" ? (
+              <PildoraPub
+                key={e.p.id}
+                publicacion={e.p}
+                onAbrir={onAbrir}
+                onDesprogramar={onDesprogramar}
+                onPublicarYa={onPublicarYa}
+                ocupado={ocupado}
+              />
+            ) : (
+              <ChipHueco key={`h-${e.hora}-${e.h.categoria}`} hueco={e.h} />
+            ),
+          )}
         </div>
       )}
     </div>
