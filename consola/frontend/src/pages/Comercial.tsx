@@ -8,16 +8,18 @@
  * la fija el switch global de la barra superior; cada campaña pertenece a una marca.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Eye, EyeOff, Megaphone, Pencil, Plus, Trash2 } from "lucide-react";
+import { Megaphone, Pencil, Plus, Trash2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
+import { AjustesPagina } from "@/components/layout/AjustesPagina";
 import { AccionesPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -117,11 +119,35 @@ export default function Comercial() {
     setDialogoAbierto(true);
   };
 
+  // Reparto canónico de cabecera: el AJUSTE persistente (modo cliente) al panel lateral;
+  // la ACCIÓN de página (nueva campaña) al menú "⋮".
   const acciones = (
-    <Button onClick={abrirNueva}>
-      <Plus className="h-4 w-4" />
-      Nueva campaña
-    </Button>
+    <div className="flex items-center gap-1">
+      <AjustesPagina
+        titulo="Ajustes de campañas"
+        descripcion="Preferencias persistentes de esta vista."
+      >
+        <div className="space-y-1.5 rounded-lg border border-border p-3">
+          <label className="flex items-center justify-between gap-3 text-sm font-medium">
+            Modo cliente
+            <Switch
+              checked={ocultarAds}
+              onCheckedChange={setOcultarAds}
+              aria-label="Modo cliente: ocultar todo lo de Ads"
+            />
+          </label>
+          <p className="text-xs text-muted-foreground">
+            Oculta todo lo de Ads y suma las visualizaciones pagadas a las orgánicas (para
+            enseñar al cliente). Persiste al recargar.
+          </p>
+        </div>
+      </AjustesPagina>
+      <MenuAcciones>
+        <ItemMenu icono={Plus} onClick={abrirNueva}>
+          Nueva campaña
+        </ItemMenu>
+      </MenuAcciones>
+    </div>
   );
 
   return (
@@ -183,19 +209,13 @@ export default function Comercial() {
               )}
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant={ocultarAds ? "secondary" : "outline"}
-                size="sm"
-                onClick={() => setOcultarAds((v) => !v)}
-                title={
-                  ocultarAds
-                    ? "Modo cliente activo: lo de Ads está oculto y sumado a lo orgánico. Clic para mostrarlo."
-                    : "Oculta todo lo de Ads y suma las visualizaciones pagadas a las orgánicas (para enseñar al cliente)."
-                }
-              >
-                {ocultarAds ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                {ocultarAds ? "Ads ocultos" : "Ocultar Ads"}
-              </Button>
+              {/* Aviso visible mientras el modo cliente (panel de ajustes) está activo: que
+                  no se enseñen cifras "sin Ads" creyendo que es la vista completa. */}
+              {ocultarAds && (
+                <Badge variant="secondary" title="Modo cliente activo: lo de Ads está oculto y sumado a lo orgánico. Se cambia en los ajustes de la página.">
+                  Ads ocultos
+                </Badge>
+              )}
               <SelectorTiempo rangos={RANGOS} valor={rango} onCambio={setRango} />
             </div>
           </div>

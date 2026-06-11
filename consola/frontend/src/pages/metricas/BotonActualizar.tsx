@@ -1,5 +1,6 @@
 /**
- * Botón "Actualizar" del dashboard de Métricas + indicador de "última actualización".
+ * "Actualizar" del dashboard de Métricas: comando del menú "⋮" de la página +
+ * indicador de "última actualización".
  *
  * Las métricas se sirven desde una CACHE en el backend (instantáneo) que un daemon
  * refresca cada ~4 h. Este control fuerza un refresco BAJO DEMANDA:
@@ -12,6 +13,8 @@
  *      fresco — y dejamos de pollear (el resto del barrido sigue en el servidor).
  *
  * Idempotente: si ya hay un refresco corriendo, el backend no arranca otro.
+ * El ESTADO vive en `useActualizarMetricas` (a nivel de página): el item del menú se
+ * desmonta al cerrarse el popover y el polling debe sobrevivirle.
  */
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
@@ -19,13 +22,12 @@ import * as React from "react";
 
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
+import { ItemMenu } from "@/components/layout/MenuAcciones";
 import { api, mensajeError } from "@/lib/api";
-import { cn } from "@/lib/utils";
 
 import { tiempoRelativo } from "../publicaciones/meta";
 
-export function BotonActualizar({
+export function useActualizarMetricas({
   rango,
   marca,
   generadoEn,
@@ -69,7 +71,7 @@ export function BotonActualizar({
   // mostrar "Actualizado" con datos viejos.
   const [disparando, setDisparando] = React.useState(false);
 
-  async function actualizar() {
+  const actualizar = React.useCallback(async () => {
     const base = generadoEn ?? "";
     setDisparando(true);
     try {
@@ -84,25 +86,49 @@ export function BotonActualizar({
     } finally {
       setDisparando(false);
     }
-  }
+  }, [generadoEn, rango, marca, queryClient]);
 
+  return {
+    actualizar,
+    refrescando: polling || disparando,
+    deshabilitado: polling || disparando || !rango,
+  };
+}
+
+/**
+ * Indicador "Actualizado hace X / Actualizando…" que acompaña a los controles inline
+ * (junto al selector de rango). `aria-live` para que el cambio se anuncie.
+ */
+export function EstadoActualizacion({
+  refrescando,
+  generadoEn,
+}: {
+  refrescando: boolean;
+  generadoEn?: string;
+}) {
   const relativo = tiempoRelativo(generadoEn);
-
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs text-muted-foreground" aria-live="polite">
-        {polling || disparando ? "Actualizando…" : relativo ? `Actualizado ${relativo}` : null}
-      </span>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => void actualizar()}
-        disabled={polling || disparando || !rango}
-        title="Vuelve a descargar las métricas desde las plataformas"
-      >
-        <RefreshCw className={cn("h-4 w-4", (polling || disparando) && "animate-spin")} />
-        Actualizar
-      </Button>
-    </div>
+    <span className="text-xs text-muted-foreground" aria-live="polite">
+      {refrescando ? "Actualizando…" : relativo ? `Actualizado ${relativo}` : null}
+    </span>
+  );
+}
+
+/** Comando "Actualizar" para el menú "⋮" de Métricas (usa el estado del hook de arriba). */
+export function ItemActualizarMetricas({
+  actualizar,
+  deshabilitado,
+}: {
+  actualizar: () => Promise<void>;
+  deshabilitado: boolean;
+}) {
+  return (
+    <ItemMenu
+      icono={RefreshCw}
+      onClick={() => void actualizar()}
+      disabled={deshabilitado}
+    >
+      Actualizar
+    </ItemMenu>
   );
 }

@@ -9,8 +9,10 @@ import { toast } from "sonner";
 
 import { useQuery } from "@tanstack/react-query";
 
+import { AjustesPagina } from "@/components/layout/AjustesPagina";
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
+import { Button } from "@/components/ui/button";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api } from "@/lib/api";
 import { DialogoImportarCalendario } from "@/pages/publicaciones/DialogoImportarCalendario";
@@ -59,19 +61,54 @@ export default function CalendarioContenido() {
     <>
       <TituloPagina titulo="Programación" icono={CalendarDays} />
       <AccionesPagina>
-        <MenuAcciones>
-          {marcaActiva && (
-            <ItemMenu icono={Target} onClick={() => setPlanAbierto(true)}>
-              Plan y horarios
+        <div className="flex items-center gap-1">
+          {/* Reparto canónico: AJUSTES (plan y horarios + cadencia + publicación real) al
+              panel lateral; ACCIONES (importar) al menú "⋮". */}
+          <AjustesPagina
+            titulo="Ajustes de programación"
+            descripcion="El plan diario por línea, la cadencia por red y el interruptor de publicación real."
+          >
+            {marcaActiva && (
+              <div className="space-y-1.5 rounded-lg border border-border p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-medium">Plan y horarios</span>
+                  <Button variant="outline" size="sm" onClick={() => setPlanAbierto(true)}>
+                    <Target className="h-4 w-4" />
+                    Configurar…
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  El objetivo diario por línea de contenido y sus horarios de salida.
+                </p>
+              </div>
+            )}
+            <div className="space-y-1.5 rounded-lg border border-border p-3">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium">Cadencia</span>
+                <Button variant="outline" size="sm" onClick={() => setCadenciaAbierto(true)}>
+                  <Gauge className="h-4 w-4" />
+                  Configurar…
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Cada cuántos minutos puede salir un post por red: el reparto que alimenta este
+                calendario.
+              </p>
+            </div>
+            {/* Ajustes CONTEXTUALES (admin): la publicación real (global y por marca) se
+                ajusta AQUÍ, donde se programa lo que sale (reparto: cada ajuste en su página). */}
+            <PanelAjustes
+              ids={GRUPOS_PUBLICACION}
+              titulo="Ajustes de publicación"
+              descripcion="El interruptor de publicación real y sus excepciones por marca. Peligroso: con esto encendido, lo aprobado SALE a las redes."
+            />
+          </AjustesPagina>
+          <MenuAcciones>
+            <ItemMenu icono={Upload} onClick={() => setImportarAbierto(true)}>
+              Importar calendario…
             </ItemMenu>
-          )}
-          <ItemMenu icono={Gauge} onClick={() => setCadenciaAbierto(true)}>
-            Cadencia
-          </ItemMenu>
-          <ItemMenu icono={Upload} onClick={() => setImportarAbierto(true)}>
-            Importar calendario…
-          </ItemMenu>
-        </MenuAcciones>
+          </MenuAcciones>
+        </div>
       </AccionesPagina>
 
       {/* El pulso del plan diario por línea (generados · publicados / objetivo): vive aquí,
@@ -113,16 +150,6 @@ export default function CalendarioContenido() {
           void catalogosQuery.refetch();
         }}
       />
-
-      {/* Ajustes CONTEXTUALES (admin): la publicación real (global y por marca) se
-          ajusta AQUÍ, donde se programa lo que sale (reparto: cada ajuste en su página). */}
-      <div className="mt-6">
-        <PanelAjustes
-          ids={GRUPOS_PUBLICACION}
-          titulo="Ajustes de publicación"
-          descripcion="El interruptor de publicación real y sus excepciones por marca. Peligroso: con esto encendido, lo aprobado SALE a las redes."
-        />
-      </div>
     </>
   );
 }

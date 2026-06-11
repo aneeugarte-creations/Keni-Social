@@ -6,7 +6,9 @@ import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { ChipNivelPresupuesto } from "@/components/comunes/ChipEstado";
+import { AjustesPagina } from "@/components/layout/AjustesPagina";
 import { AccionesPagina } from "@/components/layout/encabezado";
+import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -330,8 +332,10 @@ export default function Monitor() {
   // URL (?tab=salud) para que /sistema pueda redirigir y los enlaces profundos funcionen.
   const [searchParams, setSearchParams] = useSearchParams();
   const crudoTab = searchParams.get("tab");
-  const tab =
-    crudoTab === "ajustes" ? "ajustes" : esAdmin && crudoTab === "salud" ? "salud" : "vivo";
+  // La antigua pestaña "Ajustes" vive ahora en el panel lateral de ajustes de la página;
+  // los deep-links `?tab=ajustes` abren el panel directamente (y la vista queda "En vivo").
+  const tab = esAdmin && crudoTab === "salud" ? "salud" : "vivo";
+  const abrirAjustes = crudoTab === "ajustes";
   const qc = useQueryClient();
   // El Monitor respeta el switch GLOBAL de marca (como Pipelines/Actividad): las listas de
   // jobs se acotan a la marca activa (null = "Todas", solo admin). La capacidad es global.
@@ -397,71 +401,74 @@ export default function Monitor() {
   return (
     <>
       <AccionesPagina>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={refrescar}
-          disabled={cola.isFetching}
-        >
-          <RefreshCw className={cn("mr-1 h-4 w-4", cola.isFetching && "animate-spin")} />
-          Actualizar
-        </Button>
-        {esAdmin && (
-          <Button
-            variant="destructive"
-            size="sm"
-            disabled={purgar.isPending}
-            onClick={() => {
-              if (
-                window.confirm(
-                  "¿Liberar la cola? Cancela todo lo que esté en vuelo (en curso + esperando) y libera la capacidad.",
-                )
-              ) {
-                purgar.mutate();
-              }
-            }}
+        <div className="flex items-center gap-1">
+          {/* AJUSTES DE LO QUE ESTE MONITOR VIGILA (reparto contextual: cada ajuste vive en
+              la página a la que afecta): la máquina de contenido (etapas/por marca/topes y
+              economía de tokens), el tuning del sistema (jobs, limpieza, alertas) y el
+              esfuerzo de la generación. Lo demás vive en su página (noticias, publicación,
+              conexiones). Antes era una pestaña; ahora es el panel lateral canónico. */}
+          <AjustesPagina
+            titulo="Ajustes de la máquina"
+            descripcion="La máquina de contenido, el proveedor de imagen, el tuning del sistema y el esfuerzo de la generación."
+            abiertoInicial={abrirAjustes}
           >
-            <Trash2 className="mr-1 h-4 w-4" />
-            Purgar cola
-          </Button>
-        )}
+            <PanelMaquinaContenido />
+            {/* El proveedor de imagen IA alimenta la etapa ARTE del pipeline (autogen-arte
+                y el «Generar con IA»): se configura junto a la máquina que lo consume, no
+                en el editor de plantillas. Se oculta solo a un editor. */}
+            <SeccionImagen />
+            <PanelAjustes
+              ids={GRUPOS_SISTEMA}
+              titulo="Sistema"
+              descripcion="Jobs simultáneos, limpiezas de fondo y alertas. Funcionan bien en sus valores por defecto; aplican en caliente."
+            />
+            <SeccionEsfuerzo />
+          </AjustesPagina>
+          <MenuAcciones>
+            <ItemMenu icono={RefreshCw} onClick={refrescar} disabled={cola.isFetching}>
+              Actualizar
+            </ItemMenu>
+            {esAdmin && (
+              <ItemMenu
+                icono={Trash2}
+                className="text-destructive"
+                disabled={purgar.isPending}
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      "¿Liberar la cola? Cancela todo lo que esté en vuelo (en curso + esperando) y libera la capacidad.",
+                    )
+                  ) {
+                    purgar.mutate();
+                  }
+                }}
+              >
+                Purgar cola
+              </ItemMenu>
+            )}
+          </MenuAcciones>
+        </div>
       </AccionesPagina>
 
-      <Tabs
-        value={tab}
-        onValueChange={(v) =>
-          setSearchParams(v === "vivo" ? {} : { tab: v }, { replace: true })
-        }
-        className="mb-4"
-      >
-        <TabsList>
-          <TabsTrigger value="vivo">En vivo</TabsTrigger>
-          {esAdmin && <TabsTrigger value="salud">Salud</TabsTrigger>}
-          <TabsTrigger value="ajustes">Ajustes</TabsTrigger>
-        </TabsList>
-      </Tabs>
+      {/* Con la pestaña "Ajustes" movida al panel lateral solo queda conmutar En vivo/Salud,
+          y Salud es de admin: a un no-admin no se le pinta una tira de una sola pestaña. */}
+      {esAdmin && (
+        <Tabs
+          value={tab}
+          onValueChange={(v) =>
+            setSearchParams(v === "vivo" ? {} : { tab: v }, { replace: true })
+          }
+          className="mb-4"
+        >
+          <TabsList>
+            <TabsTrigger value="vivo">En vivo</TabsTrigger>
+            <TabsTrigger value="salud">Salud</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
 
       {tab === "salud" ? (
         <PanelSalud />
-      ) : tab === "ajustes" ? (
-        /* AJUSTES DE LO QUE ESTE MONITOR VIGILA (reparto contextual: cada ajuste vive en
-           la página a la que afecta): la máquina de contenido (etapas/por marca/topes y
-           economía de tokens), el tuning del sistema (jobs, limpieza, alertas) y el
-           esfuerzo de la generación. Lo demás vive en su página (noticias, publicación,
-           conexiones). */
-        <div className="space-y-4">
-          <PanelMaquinaContenido />
-          {/* El proveedor de imagen IA alimenta la etapa ARTE del pipeline (autogen-arte
-              y el «Generar con IA»): se configura junto a la máquina que lo consume, no
-              en el editor de plantillas. Se oculta solo a un editor. */}
-          <SeccionImagen />
-          <PanelAjustes
-            ids={GRUPOS_SISTEMA}
-            titulo="Sistema"
-            descripcion="Jobs simultáneos, limpiezas de fondo y alertas. Funcionan bien en sus valores por defecto; aplican en caliente."
-          />
-          <SeccionEsfuerzo />
-        </div>
       ) : cola.isError ? (
         <BloqueError
           titulo="No se pudo leer la cola"

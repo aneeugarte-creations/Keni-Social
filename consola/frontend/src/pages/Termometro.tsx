@@ -7,6 +7,8 @@ import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion
 import { TermometroPreview } from "@/components/generaciones/TermometroPreview";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { MarcaIA } from "@/components/comunes/MarcaIA";
+import { AjustesPagina } from "@/components/layout/AjustesPagina";
+import { AccionesPagina } from "@/components/layout/encabezado";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -60,10 +62,7 @@ export default function Termometro() {
   return (
     <>
       {query.isPending ? (
-        <div className="grid gap-6 lg:grid-cols-[24rem_minmax(0,1fr)]">
-          <Skeleton className="h-72 w-full rounded-md" />
-          <Skeleton className="h-96 w-full rounded-md" />
-        </div>
+        <Skeleton className="mx-auto h-96 w-full max-w-3xl rounded-md" />
       ) : query.isError ? (
         <BloqueError
           titulo="No se pudo cargar el termómetro"
@@ -72,10 +71,22 @@ export default function Termometro() {
           cargando={query.isFetching}
         />
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[24rem_minmax(0,1fr)]">
-          <PanelConfig datos={query.data} />
-          <PanelGenerar datos={query.data} />
-        </div>
+        <>
+          {/* Reparto canónico de cabecera: la CONFIGURACIÓN persistente del termómetro
+              (slides, regiones, hora del cron) vive en el panel lateral de ajustes; el
+              cuerpo de la página es el flujo de generación. */}
+          <AccionesPagina>
+            <AjustesPagina
+              titulo="Configuración del termómetro"
+              descripcion="Los valores por defecto del termómetro y la hora de la generación programada."
+            >
+              <PanelConfig datos={query.data} />
+            </AjustesPagina>
+          </AccionesPagina>
+          <div className="mx-auto w-full max-w-3xl">
+            <PanelGenerar datos={query.data} />
+          </div>
+        </>
       )}
     </>
   );

@@ -191,8 +191,9 @@ describe("FeedIdeacion · feed de ideación interno", () => {
       const rejilla = screen.getByRole("feed");
       expect(rejilla.className).toContain("grid-cols-2");
       expect(rejilla.className).not.toContain("grid-cols-5");
-      // El stepper "por fila" NO miente: enseña efectivas/preferidas ("2/5"), no un 5 falso,
-      // dentro de su grupo rotulado.
+      // El stepper "por fila" vive en el panel lateral de ajustes (reparto canónico de
+      // cabecera) y NO miente: enseña efectivas/preferidas ("2/5"), no un 5 falso.
+      fireEvent.click(screen.getByRole("button", { name: "Ajustes de la página" }));
       expect(screen.getByRole("group", { name: "Piezas por fila" })).toBeInTheDocument();
       expect(screen.getByText("2/5")).toBeInTheDocument();
     } finally {

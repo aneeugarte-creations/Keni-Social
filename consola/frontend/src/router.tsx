@@ -29,7 +29,6 @@ const Termometro = lazy(() => import("@/pages/Termometro"));
 const NoticiasHub = lazy(() => import("@/pages/NoticiasHub"));
 const ContenidosHub = lazy(() => import("@/pages/ContenidosHub"));
 // Ajustes del motor de noticias: subpágina propia (sin pestaña), abierta desde el menú ⋮ de Noticias.
-const AjustesNoticias = lazy(() => import("@/pages/AjustesNoticias"));
 // Las antiguas hojas del hub (Investigador, Cajones, Eventos, Agentes, Cobertura) ya
 // viven COMPUESTAS dentro de NoticiasHub (pool + descubrimiento) y de Fuentes
 // (buzones/agentes/eventos); sus rutas directas redirigen a su nuevo hogar (abajo).
@@ -209,7 +208,9 @@ export const router = createBrowserRouter([
               { path: "contenidos", element: <ContenidosHub /> },
               { path: "fuentes", element: <Fuentes /> },
               { path: "termometro", element: <Termometro /> },
-              { path: "ajustes", element: <AjustesNoticias /> },
+              // Los ajustes del motor ya no son subpágina: viven en el panel lateral de
+              // ajustes de Noticias. El deep-link viejo cae al índice del hub.
+              { path: "ajustes", element: <Navigate to="/datos/investigacion" replace /> },
               // Las hojas del antiguo hub ya viven dentro de Noticias/Fuentes; sus rutas
               // directas redirigen a su nuevo hogar. Fuentes tiene 2 clases (Externas/
               // Internas), deep-linkadas vía ?tab=. Cobertura/Investigador → Noticias.

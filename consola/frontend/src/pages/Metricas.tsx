@@ -9,7 +9,9 @@ import {
   marcaMetricasDesdeCanonica,
   marcaParam,
 } from "@/components/comunes/selectores";
+import { AjustesPagina } from "@/components/layout/AjustesPagina";
 import { AccionesPagina } from "@/components/layout/encabezado";
+import { MenuAcciones } from "@/components/layout/MenuAcciones";
 import { SeccionMetricool } from "@/pages/configuracion/SeccionMetricool";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,7 +21,11 @@ import type { OpcionesMetricas } from "@/types";
 
 import { AlertaIngesta } from "./metricas/AlertaIngesta";
 import { AnalisisNarrativo } from "./metricas/AnalisisNarrativo";
-import { BotonActualizar } from "./metricas/BotonActualizar";
+import {
+  EstadoActualizacion,
+  ItemActualizarMetricas,
+  useActualizarMetricas,
+} from "./metricas/BotonActualizar";
 import { CompararPeriodos } from "./metricas/CompararPeriodos";
 import { MARCA_TODAS, SelectorTiempo } from "./metricas/Controles";
 import { CoberturaRedes } from "./metricas/CoberturaRedes";
@@ -79,16 +85,7 @@ export default function Metricas() {
     );
   }
 
-  return (
-    <>
-      <DashboardMetricas opciones={opcionesQuery.data} />
-      {/* Ajuste CONTEXTUAL (admin): la conexión Metricool por marca alimenta ESTE
-          dashboard, así que se configura aquí (reparto: cada ajuste en su página). */}
-      <div className="mt-6">
-        <SeccionMetricool />
-      </div>
-    </>
-  );
+  return <DashboardMetricas opciones={opcionesQuery.data} />;
 }
 
 /** Cuerpo del dashboard una vez que tenemos las opciones disponibles. */
@@ -171,6 +168,12 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
     staleTime: 5 * 60_000,
   });
 
+  const refresco = useActualizarMetricas({
+    rango,
+    marca: marca_,
+    generadoEn: reporteQuery.data?.generado_en,
+  });
+
   // Sin rangos del backend no hay nada que consultar: error honesto en vez del
   // esqueleto infinito que dejaría la query deshabilitada (enabled: false).
   if (!rango) {
@@ -183,14 +186,29 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
     );
   }
 
+  // Reparto canónico de cabecera: el FILTRO de vista (rango temporal) queda inline con su
+  // indicador de frescura; la ACCIÓN (Actualizar) va al menú "⋮"; el AJUSTE (conexión
+  // Metricool por marca, antes al pie de la página) al panel lateral. El estado del refresco
+  // vive aquí (hook): el item del menú se desmonta al cerrarse y el polling le sobrevive.
   const acciones = (
-    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-      <BotonActualizar
-        rango={rango}
-        marca={marca_}
+    <div className="flex items-center gap-2">
+      <EstadoActualizacion
+        refrescando={refresco.refrescando}
         generadoEn={reporteQuery.data?.generado_en}
       />
       <SelectorTiempo rangos={rangos} valor={rango} onCambio={cambiarRango} />
+      <AjustesPagina
+        titulo="Ajustes de métricas"
+        descripcion="La conexión Metricool por marca que alimenta este dashboard."
+      >
+        <SeccionMetricool />
+      </AjustesPagina>
+      <MenuAcciones>
+        <ItemActualizarMetricas
+          actualizar={refresco.actualizar}
+          deshabilitado={refresco.deshabilitado}
+        />
+      </MenuAcciones>
     </div>
   );
 

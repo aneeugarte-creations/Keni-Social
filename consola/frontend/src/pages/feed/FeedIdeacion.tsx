@@ -30,7 +30,9 @@ import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
+import { AjustesPagina } from "@/components/layout/AjustesPagina";
 import { AccionesPagina } from "@/components/layout/encabezado";
+import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -436,53 +438,56 @@ export default function FeedIdeacion() {
     <div ref={rootRef}>
       <AccionesPagina>
         <div className="flex items-center gap-1">
-          {/* "Por fila" directo en la barra: con el zoom retirado era el único ajuste y un
-              popover no se justificaba. El GRUPO rotulado + icono Columns3 le dan significado
-              sin depender de tooltips de hover (inexistentes en táctil). */}
-          <div role="group" aria-label="Piezas por fila" className="flex items-center gap-1">
-            <Columns3 className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-            <Tooltip label="Menos por fila">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                onClick={() => ajustarColumnas(-1)}
-                disabled={columnas <= COLUMNAS_MIN}
-                aria-label="Menos por fila"
-              >
-                <Minus className="h-4 w-4" />
-              </Button>
-            </Tooltip>
-            {valorColumnas}
-            <Tooltip label="Más por fila">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                onClick={() => ajustarColumnas(1)}
-                disabled={columnas >= COLUMNAS_MAX}
-                aria-label="Más por fila"
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </Tooltip>
-          </div>
-          {/* Frontera con "Actualizar": acción de otra naturaleza (refresco, no densidad). */}
-          <span aria-hidden="true" className="mx-1 h-4 w-px bg-border" />
-          {/* Actualizar (el verbo de la casa): gira y se deshabilita SOLO durante un refresco
+          {/* Reparto canónico de cabecera: AJUSTES (densidad del feed) al panel lateral,
+              ACCIONES (Actualizar) al menú "⋮". */}
+          <AjustesPagina
+            titulo="Ajustes del feed"
+            descripcion="Preferencias de esta vista en este dispositivo."
+          >
+            <div className="space-y-1.5">
+              <div role="group" aria-label="Piezas por fila" className="flex items-center gap-2">
+                <Columns3 className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                <span className="text-sm font-medium">Piezas por fila</span>
+                <span className="ml-auto flex items-center gap-1">
+                  <Tooltip label="Menos por fila">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onClick={() => ajustarColumnas(-1)}
+                      disabled={columnas <= COLUMNAS_MIN}
+                      aria-label="Menos por fila"
+                    >
+                      <Minus className="h-4 w-4" />
+                    </Button>
+                  </Tooltip>
+                  {valorColumnas}
+                  <Tooltip label="Más por fila">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onClick={() => ajustarColumnas(1)}
+                      disabled={columnas >= COLUMNAS_MAX}
+                      aria-label="Más por fila"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </Tooltip>
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Cuántos posts entran en cada fila del feed (se acota al ancho disponible).
+              </p>
+            </div>
+          </AjustesPagina>
+          {/* Actualizar (el verbo de la casa): se deshabilita SOLO durante un refresco
               real, no en cada página del scroll infinito. */}
-          <Tooltip label="Actualizar">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              aria-label="Actualizar"
-              onClick={refrescar}
-              disabled={refrescando}
-            >
-              <RefreshCw className={cn("h-4 w-4", refrescando && "animate-spin")} />
-            </Button>
-          </Tooltip>
+          <MenuAcciones>
+            <ItemMenu icono={RefreshCw} onClick={refrescar} disabled={refrescando}>
+              Actualizar
+            </ItemMenu>
+          </MenuAcciones>
         </div>
       </AccionesPagina>
 
