@@ -264,6 +264,21 @@ def test_migrar_nombres_biblioteca_renombra_refresca_y_preserva():
     assert libtexto.migrar_nombres_biblioteca() == 0
 
 
+def test_sembrar_migra_antes_de_importar_sin_duplicar():
+    # REGRESIÓN del bug de duplicados: el paso de DEPLOY (`sembrar`, que corre bajo uvicorn, no
+    # `__main__`) DEBE migrar los ids ANTES de importar. Si no, `importar_semilla` crea el id NUEVO
+    # junto al VIEJO del store = duplicado.
+    from keni_consola import sembrar
+    from keni_consola.libtexto._rutas import raiz
+
+    (raiz() / "prompt").mkdir(parents=True, exist_ok=True)
+    (raiz() / "prompt" / "qa-fuente.md").write_text("---\ntitulo: QA fuente\n---\nVIEJO", encoding="utf-8")
+    sembrar.main()
+    ids = {d.id for d in libtexto.listar(tipo="prompt")}
+    assert "prompt/validacion" in ids
+    assert "prompt/qa-fuente" not in ids  # el viejo NO sobrevive (no se duplica)
+
+
 # --------------------------------------------------------------------------- #
 # Renombre del almacén de documentos: …/biblioteca -> …/texto (idempotente)    #
 # --------------------------------------------------------------------------- #
