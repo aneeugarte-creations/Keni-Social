@@ -165,7 +165,7 @@ def instruccion_redes(redes_ids: list[str]) -> str:
 UMBRAL_COPY_ESTRECHO = 600
 
 
-def instruccion_copy_unico(redes_ids: list[str]) -> str:
+def instruccion_copy_unico(redes_ids: list[str], *, n_imagenes: int = 0) -> str:
     """Instrucción ADITIVA (copy UNIFICADO): un copy + un texto-en-imagen, SIN encoger IG/FB a X.
 
     El `copy_in` se reutiliza en cada red pedida (así X nunca queda sin él). El copy sale SIN
@@ -174,7 +174,11 @@ def instruccion_copy_unico(redes_ids: list[str]) -> str:
     Cuando se mezclan redes AMPLIAS (Instagram, Facebook…) con ESTRECHAS (X), pide DOS versiones
     del mismo mensaje: `texto` (completa, para las amplias) y `texto_corto` (condensada ≤ límite
     de las estrechas). Antes anclaba TODO al límite más estricto (X=280) y publicaba un tuit en
-    Instagram/Facebook. Si todas las redes son del mismo tipo, pide un único `texto`."""
+    Instagram/Facebook. Si todas las redes son del mismo tipo, pide un único `texto`.
+
+    `n_imagenes` (pipeline, historias con varias fuentes): con 2+, el modelo DECIDE entre DOS
+    tipos de output —`post` (una imagen) o `carrusel` (las fotos de fuente como slides)— y lo
+    declara en el campo `tipo` del json. Con 0/1 no se ofrece (no hay slides que armar)."""
     etiquetas = ", ".join(redes.nombre_por_id(r) for r in redes_ids)
     estrechas = [
         r for r in redes_ids
@@ -186,6 +190,18 @@ def instruccion_copy_unico(redes_ids: list[str]) -> str:
         '\\"\\" si no lleva imagen>"}. El `copy_in` es el texto SOBRE la imagen, distinto del '
         "`texto`; respeta la línea editorial de texto-en-imagen de la marca adjunta."
     )
+    if n_imagenes >= 2:
+        cierre_json_copy_in = (
+            '"copy_in": "<texto que va DENTRO de la imagen: titular/claim corto, sin emojis; '
+            '\\"\\" si no lleva imagen>", "tipo": "<post|carrusel>"}. El `copy_in` es el texto '
+            "SOBRE la imagen (en un carrusel, sobre la PORTADA), distinto del `texto`; respeta "
+            "la línea editorial de texto-en-imagen de la marca adjunta. DECIDE el `tipo` de "
+            f"salida: esta historia trae {n_imagenes} fotos de la fuente original (la primera "
+            'es la portada). Elige "carrusel" SOLO si la historia gana contándose en varias '
+            "imágenes (cobertura con varios ángulos/momentos, lista, comparativa): se publicará "
+            'como carrusel nativo con esas fotos como slides. Si una sola imagen basta, "post". '
+            'Ante la duda, "post".'
+        )
     if estrechas and amplias:
         tope_corto = min(limites_plataforma.limite_de(r) for r in estrechas)
         nom_amplias = ", ".join(redes.nombre_por_id(r) for r in amplias)
@@ -247,6 +263,7 @@ def componer(
     sin_emojis: bool = False,
     redes_ids: list[str] | None = None,
     copy_unico: bool = False,
+    n_imagenes: int = 0,
 ) -> str:
     """Arma el prompt final autocontenido: prompt + editorial adjunta + contexto.
 
@@ -282,7 +299,9 @@ def componer(
             )
     if redes_ids:
         partes.append(
-            instruccion_copy_unico(redes_ids) if copy_unico else instruccion_redes(redes_ids)
+            instruccion_copy_unico(redes_ids, n_imagenes=n_imagenes)
+            if copy_unico
+            else instruccion_redes(redes_ids)
         )
     if bloque_contexto and bloque_contexto.strip():
         # El contexto (nota/transcripción/ítem RSS) es contenido NO confiable: lo envolvemos
@@ -439,14 +458,21 @@ def adjuntos_copy(marca: str) -> list[libtexto.Documento]:
     return adjuntos
 
 
-def componer_copy(cuerpo: str, *, marca: str, contexto: str, redes_ids: list[str]) -> str:
+def componer_copy(
+    cuerpo: str, *, marca: str, contexto: str, redes_ids: list[str], n_imagenes: int = 0
+) -> str:
     """Composición ÚNICA del prompt de copy (la usan `lanzar_copy` y la previsualización).
 
     "Lo que lanzas es lo que previsualizas": la Biblioteca (`libtexto.previsualizar_pipeline`)
     pasa por AQUÍ, así el prompt mostrado es el mismo que recibe `claude -p`. El pipeline de
     copy pide copy UNIFICADO (un texto+copy_in para todas las redes), también en la preview.
+    `n_imagenes` (historias con varias fotos de fuente): con 2+, la instrucción ofrece al
+    modelo decidir entre `post` y `carrusel` (campo `tipo` del json final).
     """
-    return componer(cuerpo, adjuntos_copy(marca), contexto, redes_ids=redes_ids, copy_unico=True)
+    return componer(
+        cuerpo, adjuntos_copy(marca), contexto,
+        redes_ids=redes_ids, copy_unico=True, n_imagenes=n_imagenes,
+    )
 
 
 def lanzar_copy(
@@ -467,6 +493,7 @@ def lanzar_copy(
     tipo: str = "copy",
     contenido_id: str = "",
     imagen_fuente: str = "",
+    imagenes_fuente: list[str] | None = None,
     tipo_contenido: str = "",
     veredicto_inicial: str = "",
     url_fuente: str = "",
@@ -494,6 +521,11 @@ def lanzar_copy(
     `url_fuente` (RSS, trazabilidad): URL CANONICA de la nota de origen. Si viene, el post-
     procesado la PERSISTE en `contenido.url_fuente` del tema padre de cada borrador (dedup por
     URL). "" = no se toca (comportamiento de hoy).
+
+    `imagenes_fuente` (pipeline, historias con varias fuentes): TODAS las fotos de fuente
+    propia de la historia (portada primero). Con 2+, el prompt ofrece al modelo decidir entre
+    `post` y `carrusel` y el post-procesado arma la pieza carrusel si lo elige. None/[] o una
+    sola = comportamiento de hoy (post con `imagen_fuente`).
     """
     # Resolucion por REGISTRO: si el caller no rebindea (usa el id por defecto), el pipeline
     # "copy" decide su prompt base (que puede haberse re-bindeado en la Texto sin tocar
@@ -502,9 +534,12 @@ def lanzar_copy(
     cuerpo = libtexto.cuerpo_efectivo(prompt_efectivo)
     if cuerpo is None:
         raise libtexto.TextoError("No está disponible el prompt de copy. Reinstala la Consola.")
+    imagenes = [i for i in (imagenes_fuente or []) if isinstance(i, str) and i.strip()]
     # Sin `sin_emojis`: la política de emojis del copy vive en el prompt + editorial adjunta
     # (única fuente); el hardcode "No uses emojis" contradecía al prompt de copy.
-    prompt = componer_copy(cuerpo, marca=marca, contexto=contexto, redes_ids=redes_ids)
+    prompt = componer_copy(
+        cuerpo, marca=marca, contexto=contexto, redes_ids=redes_ids, n_imagenes=len(imagenes)
+    )
     # Defensivo: solo propagamos fuente_id/clave si AMBOS vienen (un caso parcial no debe
     # marcar el item del feed). Saneamos y enviamos ambos o ninguno.
     fuente = fuente_id.strip() if isinstance(fuente_id, str) and fuente_id.strip() else None
@@ -514,7 +549,8 @@ def lanzar_copy(
         texto_base=texto_base or contexto, con_imagenes=con_imagenes, autor=autor,
         fuente_id=fuente if clave_item else None, clave=clave_item if fuente else None,
         contenido_id=contenido_id or "",
-        imagen_fuente=imagen_fuente or "", tipo_contenido=tipo_contenido or "",
+        imagen_fuente=imagen_fuente or "", imagenes_fuente=imagenes,
+        tipo_contenido=tipo_contenido or "",
         veredicto_inicial=veredicto_inicial or "",
         url_fuente=url_fuente or "",
         # Dedup AL EXITO (pipeline/autogen): limpiar `copy_pendiente` / etiquetar `autogen`

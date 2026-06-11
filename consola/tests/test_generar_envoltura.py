@@ -12,6 +12,22 @@ import re
 from keni_consola.dominio import generar
 
 
+def test_instruccion_copy_unico_sin_imagenes_no_ofrece_carrusel():
+    # Sin fotos de fuente (o con una sola) NO se ofrece la decisión: no hay slides que armar.
+    assert '"tipo"' not in generar.instruccion_copy_unico(["instagram", "x", "facebook"])
+    assert '"tipo"' not in generar.instruccion_copy_unico(["instagram", "x"], n_imagenes=1)
+
+
+def test_instruccion_copy_unico_con_imagenes_pide_decidir_tipo():
+    # Con 2+ fotos, el modelo DECIDE entre DOS tipos de output y lo declara en `tipo`.
+    instr = generar.instruccion_copy_unico(["instagram", "x", "facebook"], n_imagenes=3)
+    assert '"tipo": "<post|carrusel>"' in instr
+    assert "3 fotos" in instr
+    # Misma decisión en la variante sin redes estrechas (solo amplias).
+    instr2 = generar.instruccion_copy_unico(["instagram", "facebook"], n_imagenes=2)
+    assert '"tipo": "<post|carrusel>"' in instr2
+
+
 def test_envoltura_usa_nonce_por_llamada():
     # Cada llamada usa un tag con nonce DISTINTO (no es predecible por el atacante).
     a = generar.envolver_contenido_usuario("hola")

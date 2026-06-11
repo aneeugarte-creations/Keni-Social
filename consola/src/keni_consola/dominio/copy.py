@@ -299,6 +299,7 @@ def crear_publicaciones_desde_piezas(
     atomico: bool = False,
     imagen_fuente: str = "",
     tipo_contenido: str = "",
+    carrusel_extras: list[str] | None = None,
 ) -> list[dict[str, object]]:
     """Crea UNA publicacion (borrador) por pieza y devuelve sus dicts serializados.
 
@@ -321,6 +322,13 @@ def crear_publicaciones_desde_piezas(
     límite técnico de su red (`limites_plataforma`; en hilos/carruseles, por tramo) NO crea
     borrador. Se descarta SOLO esa pieza (las válidas del lote se crean igual), se loguea
     WARN y, si hay tema (`contenido_id`), se deja una nota en él.
+
+    `carrusel_extras` (pipeline, output CARRUSEL elegido por el modelo): URLs de las fotos de
+    fuente EXTRA (sin la portada, que viaja en `imagen_fuente`). Solo aplica NIDADO bajo un
+    tema (`contenido_id`): se descargan a la Biblioteca, el tema pasa a `formato='carrusel'`,
+    las piezas se acotan a las redes de ese formato (IG/FB) y cada borrador nace con los
+    slides extra en su campo `carrusel`. Degradación honesta: si NINGUNA extra se pudo
+    descargar (o no hay tema), todo sigue como post normal de foto.
     """
     creadas: list[dict[str, object]] = []
     # Imagen ORIGINAL de fuente (RSS de marca propia): la DESCARGAMOS una sola vez, la
@@ -331,6 +339,41 @@ def crear_publicaciones_desde_piezas(
     if imagen_fuente:
         imagen_descargada = _descargar_original_a_biblioteca(
             imagen_fuente, marca=marca, titulo=titulo, autor=autor,
+        )
+    # CARRUSEL (DOS tipos de output del pipeline): el modelo eligió `carrusel` y la historia
+    # trae fotos extra. Cada extra se baja/cataloga como la portada; con 1+ descargada, el
+    # tema FLIP a formato carrusel y los borradores llevan los slides en crudo.
+    carrusel_json = ""
+    if carrusel_extras and contenido_id:
+        objetos = [
+            obj
+            for url in carrusel_extras
+            if (obj := _descargar_original_a_biblioteca(url, marca=marca, titulo=titulo, autor=autor))
+        ]
+        if objetos:
+            import json
+
+            carrusel_json = json.dumps(
+                [{"tipo": "imagen", "objeto": o} for o in objetos], ensure_ascii=False
+            )
+            try:
+                repos.actualizar_contenido(contenido_id, {"formato": redes.FORMATO_CARRUSEL})
+            except Exception:  # noqa: BLE001 -- sin el flip, la pieza sigue valiendo como foto
+                _log.warning(
+                    "copy: no se pudo poner formato carrusel al tema %s", contenido_id, exc_info=True
+                )
+                carrusel_json = ""
+        else:
+            _log.warning(
+                "copy: carrusel degradado a post (ninguna foto extra descargable) — tema %s",
+                contenido_id,
+            )
+    if carrusel_json:
+        # El FORMATO decide las redes (regla del dueño): carrusel -> IG/FB. La pieza de X del
+        # copy unificado se omite (no es inválida: es el flip de formato).
+        permitidas_carrusel = set(redes.redes_de_formato(redes.FORMATO_CARRUSEL))
+        redes_filtro = (
+            permitidas_carrusel if redes_filtro is None else (redes_filtro & permitidas_carrusel)
         )
     # HASHTAGS DE LÍNEA: los hashtags propios de las líneas/estrategias asignadas al tema se
     # inyectan al final del copy de CADA pieza (un único sitio gobierna hashtags + estrategia).
@@ -370,7 +413,7 @@ def crear_publicaciones_desde_piezas(
                 creada = contrato_publicaciones.crear_borrador_en(
                     contenido_id, marca, red, titulo=titulo, contenido=contenido,
                     copy_in=copy_in, veredicto=verdicto, imagen=imagen,
-                    imagen_fuente=imagen_fuente,
+                    imagen_fuente=imagen_fuente, carrusel=carrusel_json,
                 )
             if creada is None:
                 creada = contrato_publicaciones.crear_borrador(
@@ -434,6 +477,7 @@ def construir_procesar_copy(
     autor: dict[str, str] | None = None,
     contenido_id: str = "",
     imagen_fuente: str = "",
+    imagenes_fuente: list[str] | None = None,
     tipo_contenido: str = "",
     veredicto_inicial: str = "",
     url_fuente: str = "",
@@ -451,6 +495,9 @@ def construir_procesar_copy(
     `url_fuente` (RSS, trazabilidad): URL CANONICA de la nota de origen. Si viene, se PERSISTE en
     `contenido.url_fuente` del tema padre de cada borrador creado (dedup por URL). Best-effort:
     un fallo NUNCA rompe el post-procesado (el copy ya esta hecho). "" = no se toca.
+    `imagenes_fuente` (pipeline, DOS tipos de output): TODAS las fotos de fuente propia de la
+    historia (portada primero). Si la salida declara `tipo=carrusel` y hay 2+, las EXTRA
+    (todas menos la portada) arman la pieza CARRUSEL; si no, post de foto como siempre.
     """
 
     def procesar(salida: str, metricas: stream.MetricasRun | None) -> dict[str, object]:
@@ -469,11 +516,18 @@ def construir_procesar_copy(
         verdicto, avisos_voz = verificar_voz(marca, parsed["piezas"], verdicto)
         if avisos_voz:
             _avisar_voz(avisos_voz, contenido_id=contenido_id, marca=marca)
+        # CARRUSEL solo si el MODELO lo eligió (`tipo` del json) Y la historia trae fotos
+        # extra de fuente. La portada sigue viajando como `imagen_fuente`.
+        extras_carrusel: list[str] = []
+        if parsed.get("tipo") == "carrusel":
+            fotos = [f for f in (imagenes_fuente or []) if isinstance(f, str) and f.strip()]
+            extras_carrusel = [f for f in fotos if f != (imagen_fuente or "")][:9]
         publicaciones = crear_publicaciones_desde_piezas(
             parsed["piezas"], marca=marca, titulo=titulo,
             verdicto=verdicto, origen=historial_id, autor=autor,
             contenido_id=contenido_id,
             imagen_fuente=imagen_fuente, tipo_contenido=tipo_contenido,
+            carrusel_extras=extras_carrusel,
         )
         # Trazabilidad de la fuente (RSS): persiste la URL canonica en el `contenido` padre de
         # cada borrador creado. Best-effort: el copy YA esta hecho; un fallo aqui no debe romper

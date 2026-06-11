@@ -771,11 +771,17 @@ def parsear_salida_unificada(salida: str, redes_ids: list[str]) -> dict[str, obj
     `texto_corto`, todas heredan `texto` (comportamiento previo): un copy demasiado largo para X
     lo descartará luego la validación de longitud, no este parser.
 
+    `tipo` (opcional, DOS tipos de output del pipeline): cuando la historia trae varias fotos
+    de fuente, el prompt deja al modelo DECIDIR entre `"post"` (una imagen, lo de siempre) y
+    `"carrusel"` (las fotos como slides). Se valida contra ese par cerrado; ausente, otro
+    valor o sin JSON -> `"post"` (degradación honesta: nunca se arma un carrusel por accidente).
+
     Resiliente: si el modelo emite el array `piezas` (forma vieja), toma la PRIMERA pieza con
     `texto`. Si no hay JSON utilizable, el copy es el texto limpio entero (fallback). `resultado`
     y el `contenido` conservan los emojis que el modelo escribió (la política de emojis vive en
     el prompt + editorial de marca); el `copy_in` (placa) se limpia SIEMPRE con `quitar_emojis`.
-    Devuelve `{"resultado": str, "piezas": [...], "verdicto": str}` (misma forma que `parsear_salida`).
+    Devuelve `{"resultado": str, "piezas": [...], "verdicto": str, "tipo": str}` (misma forma
+    que `parsear_salida` + el `tipo` elegido).
     """
     salida = salida or ""
     verdicto = derivar_verdicto(salida)
@@ -795,7 +801,11 @@ def parsear_salida_unificada(salida: str, redes_ids: list[str]) -> dict[str, obj
     texto_base: str | None = None
     texto_corto = ""
     copy_in_base = ""
+    tipo = "post"
     if isinstance(datos, dict):
+        # Tipo de output (post|carrusel): par CERRADO; cualquier otra cosa cae a "post".
+        if datos.get("tipo") == "carrusel":
+            tipo = "carrusel"
         if isinstance(datos.get("texto"), str):
             texto_base = datos["texto"]
             tc = datos.get("texto_corto")
@@ -830,7 +840,7 @@ def parsear_salida_unificada(salida: str, redes_ids: list[str]) -> dict[str, obj
         piezas.append(
             {"red": r, "contenido": contenido, "caracteres": len(contenido), "copy_in": copy_in_base}
         )
-    return {"resultado": limpio, "piezas": piezas, "verdicto": verdicto}
+    return {"resultado": limpio, "piezas": piezas, "verdicto": verdicto, "tipo": tipo}
 
 
 # --------------------------------------------------------------------------- #

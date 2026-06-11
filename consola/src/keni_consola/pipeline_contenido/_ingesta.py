@@ -152,6 +152,12 @@ def _copy_pendiente_de(trabajo: dict[str, Any], nota: str, redes_ids: list[str])
     fuente = trabajo.get("fuente") or {}
     item = trabajo.get("item") or {}
     imagen = trabajo.get("imagen") or ""
+    # TODAS las imágenes de fuente propia de la historia (portada primero). Con 2+, la fase
+    # CD ofrece a Claude el output CARRUSEL además del post simple. Compat: si el trabajo no
+    # las trae (item RSS suelto), cae a [imagen].
+    imagenes = [i for i in (trabajo.get("imagenes") or []) if isinstance(i, str) and i.strip()]
+    if not imagenes and imagen:
+        imagenes = [imagen]
     try:
         return json.dumps({
             "nota": nota,
@@ -159,6 +165,7 @@ def _copy_pendiente_de(trabajo: dict[str, Any], nota: str, redes_ids: list[str])
             "fuente_id": fuente.get("id") or "",
             "clave": (item.get("clave") or "").strip(),
             "imagen": imagen,
+            "imagenes": imagenes,
             "tipo_contenido": "fuente" if imagen else "",
         }, ensure_ascii=False)
     except (TypeError, ValueError):  # pragma: no cover -- entrada simple, no debería fallar
@@ -440,32 +447,54 @@ def _es_fuente_propia(fuente_id: str, cache: dict[str, bool]) -> bool:
     return cache[fuente_id]
 
 
-def _imagen_de_cluster(items: list[dict[str, Any]]) -> str:
-    """Arte del tema desde los items del cluster, SOLO de fuentes PROPIAS (derechos).
+# Tope de imágenes de fuente por historia: los carruseles nativos de IG/FB admiten 10,
+# pero más allá de unas pocas fotos el carrusel de noticias pierde foco editorial.
+_MAX_IMAGENES_CLUSTER = 5
+
+
+def _imagenes_de_cluster(items: list[dict[str, Any]]) -> list[str]:
+    """Imágenes de los items del cluster, SOLO de fuentes PROPIAS (derechos), sin duplicados.
 
     Para un item de fuente PROPIA (`unotv.com`, `clarosports.com`…) reutilizamos su foto: la
-    `imagen` del feed si la trae o, si no, RESOLVEMOS la `og:image` del artículo (la foto real
-    de la nota) —igual que `ingerir_marca`—. No tenemos derechos sobre la foto de un medio
-    AJENO: si ninguna fuente propia aporta imagen, el tema queda SIN foto ("") y el arte lo
-    pone la etapa de Arte IA (o el equipo). Antes había un fallback a cualquier imagen de los
-    items (media-tag de medios ajenos), que colaba fotos de terceros en las piezas.
+    `imagen` del feed si la trae. No tenemos derechos sobre la foto de un medio AJENO: esos
+    items se saltan. Si NINGÚN item propia traía imagen en el feed, se intenta RESOLVER la
+    `og:image` del primer artículo propia (la foto real de la nota) —igual que `ingerir_marca`—;
+    si tampoco, lista vacía (el arte lo pone la etapa de Arte IA o el equipo). La PRIMERA
+    imagen es la PORTADA; con 2+ se habilita el output CARRUSEL (Claude decide en CD).
+    Tope `_MAX_IMAGENES_CLUSTER`.
     """
     cache: dict[str, bool] = {}
+    imagenes: list[str] = []
+    propias_sin_imagen: list[str] = []
     for it in items:
         if not _es_fuente_propia(it.get("fuente_id") or "", cache):
             continue
         img = (it.get("imagen") or "").strip()
         if img:
-            return img
-        enlace = (it.get("url") or "").strip()
-        if enlace:
+            if img not in imagenes:
+                imagenes.append(img)
+                if len(imagenes) >= _MAX_IMAGENES_CLUSTER:
+                    break
+        else:
+            enlace = (it.get("url") or "").strip()
+            if enlace:
+                propias_sin_imagen.append(enlace)
+    if not imagenes:
+        # og:image SOLO como rescate (un fetch HTTP por historia, no uno por item).
+        for enlace in propias_sin_imagen[:1]:
             try:
                 resuelta = (_ref._FETCH_OG_IMAGE(enlace) or "").strip()
             except Exception:  # noqa: BLE001 -- og:image best-effort; nunca rompe el barrido
                 resuelta = ""
             if resuelta:
-                return resuelta
-    return ""
+                imagenes.append(resuelta)
+    return imagenes
+
+
+def _imagen_de_cluster(items: list[dict[str, Any]]) -> str:
+    """Arte (portada) del tema desde los items del cluster: primera de `_imagenes_de_cluster`."""
+    imagenes = _imagenes_de_cluster(items)
+    return imagenes[0] if imagenes else ""
 
 
 def crear_tema_de_cluster(
@@ -509,9 +538,10 @@ def crear_tema_de_cluster(
                 cuerpos[url] = cuerpo
     nota = _nota_de_cluster(titulo, resumen, items, cuerpos)[: gen_dom.MAX_TEXTO]
     redes_ids = list(redes.redes_de_formato(_FORMATO_PIPELINE))
-    imagen = _imagen_de_cluster(items)
+    imagenes = _imagenes_de_cluster(items)
+    imagen = imagenes[0] if imagenes else ""
     # Reusa el serializador de copy_pendiente con un "trabajo" sintético (sin fuente/clave RSS).
-    trabajo = {"fuente": {}, "item": {"clave": ""}, "imagen": imagen}
+    trabajo = {"fuente": {}, "item": {"clave": ""}, "imagen": imagen, "imagenes": imagenes}
     url_fuente = (items[0].get("url_canonica") if items else "") or ""
     try:
 

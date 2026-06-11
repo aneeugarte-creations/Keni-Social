@@ -177,6 +177,7 @@ def construir_copy(
     clave: str | None = None,
     contenido_id: str = "",
     imagen_fuente: str = "",
+    imagenes_fuente: list[str] | None = None,
     tipo_contenido: str = "",
     veredicto_inicial: str = "",
     url_fuente: str = "",
@@ -191,6 +192,9 @@ def construir_copy(
     reconstruir el post-procesado en el worker; sin el, borrador suelto (back-compat).
     `imagen_fuente`/`tipo_contenido` (RSS de marca propia): si vienen, cada borrador nace con
     la imagen original del articulo (`tipo_contenido='fuente'`) lista para usarse.
+    `imagenes_fuente` (pipeline, historias): TODAS las fotos de fuente propia de la historia
+    (portada primero). Si la salida del copy declara `tipo=carrusel`, el post-procesado arma
+    la pieza CARRUSEL con ellas (portada + slides extra). None/[] = post de siempre.
     `veredicto_inicial` (pipeline QPC): veredicto por DEFECTO de cada borrador cuando la salida
     no trae uno propio (p. ej. `no_verificado` para que la pieza herede el aviso de la criba de
     la fuente). "" = comportamiento de hoy (el veredicto sale de la propia salida del copy).
@@ -217,6 +221,7 @@ def construir_copy(
         "clave": clave or "",
         "contenido_id": contenido_id or "",
         "imagen_fuente": imagen_fuente or "",
+        "imagenes_fuente": list(imagenes_fuente or []),
         "tipo_contenido": tipo_contenido or "",
         "veredicto_inicial": veredicto_inicial or "",
         "url_fuente": url_fuente or "",
@@ -531,6 +536,7 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
             con_imagenes=bool(p.get("con_imagenes")), autor=autor,
             contenido_id=p.get("contenido_id", "") or "",
             imagen_fuente=p.get("imagen_fuente", "") or "",
+            imagenes_fuente=list(p.get("imagenes_fuente") or []),
             tipo_contenido=p.get("tipo_contenido", "") or "",
             veredicto_inicial=p.get("veredicto_inicial", "") or "",
             url_fuente=p.get("url_fuente", "") or "",

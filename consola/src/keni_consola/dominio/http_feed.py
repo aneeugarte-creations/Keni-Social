@@ -288,6 +288,30 @@ def _imagen_item(entrada: ET.Element) -> str:
     return ""
 
 
+# Primer `<img src="...">` del HTML de un cuerpo (`content:encoded`): fallback de imagen
+# para feeds que no traen enclosure/media:content (UnoTV, La Jornada…). Tolerante con el
+# orden de atributos y comillas simples/dobles.
+_RE_IMG_SRC = re.compile(
+    r"""<img\b[^>]*?\bsrc\s*=\s*["']([^"']+)["']""",
+    re.IGNORECASE,
+)
+
+
+def _imagen_de_html(html: str) -> str:
+    """URL del primer `<img>` de un fragmento HTML (PURA); '' si no hay o no es http(s).
+
+    Fallback de `_imagen_item` para feeds cuya foto del artículo viaja DENTRO del
+    `content:encoded` (WordPress: UnoTV, La Jornada…) en vez de en un tag de media.
+    """
+    if not html:
+        return ""
+    m = _RE_IMG_SRC.search(_html.unescape(html))
+    if not m:
+        return ""
+    url = (m.group(1) or "").strip()
+    return url if url.startswith(("http://", "https://")) else ""
+
+
 def _clave_item(clave_feed: str, enlace: str) -> str:
     """Clave estable de un item: el `<guid>`/`<id>` del feed, o el enlace como fallback.
 
@@ -397,16 +421,18 @@ def parsear_feed(xml: str, *, max_items: int = _MAX_ITEMS) -> list[dict[str, str
             enlace = _enlace_atom(entrada)
             fecha = _texto_local(_buscar_hijo(entrada, "updated", "published"))
             clave_feed = _texto_local(_buscar_hijo(entrada, "id"))
+            # Atom: el cuerpo completo viaja en <content> (el resumen, en <summary>).
+            cuerpo_html = _texto_completo(_buscar_hijo(entrada, "content"))
             items.append(
                 {
                     "titulo": titulo,
                     "resumen": _limpiar_resumen(resumen),
-                    # Atom: el cuerpo completo viaja en <content> (el resumen, en <summary>).
-                    "cuerpo": _limpiar_cuerpo(_texto_completo(_buscar_hijo(entrada, "content"))),
+                    "cuerpo": _limpiar_cuerpo(cuerpo_html),
                     "enlace": enlace,
                     "fecha": fecha,
                     "clave": _clave_item(clave_feed, enlace),
-                    "imagen": _imagen_item(entrada),
+                    # Sin tag de media, la foto del artículo se rescata del HTML del cuerpo.
+                    "imagen": _imagen_item(entrada) or _imagen_de_html(cuerpo_html),
                 }
             )
         return items
@@ -424,16 +450,20 @@ def parsear_feed(xml: str, *, max_items: int = _MAX_ITEMS) -> list[dict[str, str
         enlace = _texto_local(_buscar_hijo(entrada, "link"))
         fecha = _texto_local(_buscar_hijo(entrada, "pubDate", "date"))
         clave_feed = _texto_local(_buscar_hijo(entrada, "guid", "id"))
+        # RSS: la nota completa viaja en <content:encoded> (nombre local "encoded").
+        cuerpo_html = _texto_completo(_buscar_hijo(entrada, "encoded"))
         items.append(
             {
                 "titulo": titulo,
                 "resumen": _limpiar_resumen(resumen),
-                # RSS: la nota completa viaja en <content:encoded> (nombre local "encoded").
-                "cuerpo": _limpiar_cuerpo(_texto_completo(_buscar_hijo(entrada, "encoded"))),
+                "cuerpo": _limpiar_cuerpo(cuerpo_html),
                 "enlace": enlace,
                 "fecha": fecha,
                 "clave": _clave_item(clave_feed, enlace),
-                "imagen": _imagen_item(entrada),
+                # Feeds WordPress (UnoTV…) no mandan enclosure/media:content: la foto del
+                # artículo va como primer <img> del content:encoded. Sin ese rescate, los
+                # items de marca PROPIA nacían sin imagen y la pieza no la heredaba.
+                "imagen": _imagen_item(entrada) or _imagen_de_html(cuerpo_html),
             }
         )
     return items

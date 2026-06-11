@@ -345,9 +345,15 @@ def crear_borrador_en(
     veredicto: str = "",
     imagen: str = "",
     imagen_fuente: str = "",
+    carrusel: str = "",
     evergreen: bool = False,
 ) -> dict[str, Any] | None:
     """Adjunta un BORRADOR a un `contenido` (tema) EXISTENTE y lo devuelve serializado.
+
+    `carrusel` (pipeline, output carrusel): JSON de slides EXTRA en crudo
+    (`[{tipo:"imagen",objeto}, …]`, mismo contrato que el cajón presidencia). La portada
+    sigue siendo `imagen`/`imagen_fuente`. "" = pieza de foto normal (no se pisa la media
+    que un placeholder ya traiga).
 
     Variante de `crear_borrador` que NIDA la pieza bajo un tema del tablero en vez de crear
     su propio padre (peticion de Angel: el borrador auto-generado cuelga del tema origen).
@@ -401,6 +407,8 @@ def crear_borrador_en(
         if imagen_fuente:
             campos["imagen_fuente"] = imagen_fuente
             campos["falta_imagen"] = False
+        if carrusel:
+            campos["carrusel"] = carrusel
         plat = repos.actualizar_contenido_plataforma(hueco["id"], campos) or hueco
     else:
         plat = repos.crear_contenido_plataforma(
@@ -416,6 +424,7 @@ def crear_borrador_en(
             copy_in=copy_in,
             imagen=imagen,
             imagen_fuente=imagen_fuente,
+            carrusel=carrusel,
             veredicto=veredicto,
             evergreen=evergreen,
             es_publicacion=True,

@@ -542,6 +542,48 @@ def test_parsear_atom_link_enclosure_se_extrae():
     assert items[0]["imagen"] == "https://example.com/atom-enc.jpg"
 
 
+# Feed WordPress SIN tags de media (UnoTV, La Jornada…): la foto del artículo va como
+# primer <img> DENTRO del <content:encoded>. Es el caso real medido en el piloto: los
+# items de UnoTV nacían con imagen='' y las piezas de sus historias salían sin foto.
+_RSS_IMG_EN_CUERPO_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>WP Feed</title>
+    <item>
+      <title>Marchas hoy</title>
+      <link>https://medio.test/marchas</link>
+      <description><![CDATA[Resumen]]></description>
+      <content:encoded><![CDATA[<figure class="wp-block-image"><img fetchpriority="high" width="1024" src="https://cdn.medio.test/foto-nota.jpg" alt="" srcset="https://cdn.medio.test/foto-nota-480.webp 480w" /><figcaption>Pie</figcaption></figure><p>Cuerpo de la nota.</p>]]></content:encoded>
+    </item>
+  </channel>
+</rss>
+"""
+
+
+def test_parsear_imagen_de_content_encoded():
+    """Sin enclosure/media:content, la imagen se rescata del primer <img> del cuerpo."""
+    item = rss.parsear_feed(_RSS_IMG_EN_CUERPO_XML)[0]
+    assert item["imagen"] == "https://cdn.medio.test/foto-nota.jpg"
+    # El cuerpo sigue saliendo limpio (el rescate no toca el limpiador).
+    assert "Cuerpo de la nota." in item["cuerpo"]
+    assert "<img" not in item["cuerpo"]
+
+
+def test_parsear_imagen_media_tag_manda_sobre_cuerpo():
+    """Con tag de media explícito, ese manda (el <img> del cuerpo es solo fallback)."""
+    xml = _RSS_IMG_EN_CUERPO_XML.replace(
+        "<content:encoded>",
+        '<enclosure url="https://example.com/oficial.jpg" type="image/jpeg"/><content:encoded>',
+    )
+    assert rss.parsear_feed(xml)[0]["imagen"] == "https://example.com/oficial.jpg"
+
+
+def test_parsear_imagen_de_cuerpo_relativa_se_ignora():
+    """Un <img src> relativo (sin http) no vale como imagen del artículo."""
+    xml = _RSS_IMG_EN_CUERPO_XML.replace("https://cdn.medio.test/foto-nota.jpg", "/relativa.jpg")
+    assert rss.parsear_feed(xml)[0]["imagen"] == ""
+
+
 # --------------------------------------------------------------------------- #
 # Helper: alta de una fuente RSS (reutilizado por los tests de CRUD de fuentes)#
 # --------------------------------------------------------------------------- #

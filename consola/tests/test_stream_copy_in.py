@@ -115,6 +115,27 @@ def test_unificada_sin_texto_corto_el_largo_no_se_trunca():
     assert all(p["contenido"] == largo for p in piezas)
 
 
+def test_unificada_tipo_carrusel_se_lee_del_json():
+    # DOS tipos de output (pipeline): el modelo declara `tipo` y el parser lo expone.
+    salida = '```json\n{"texto": "Copy", "copy_in": "T", "tipo": "carrusel"}\n```'
+    assert stream.parsear_salida_unificada(salida, ["x"])["tipo"] == "carrusel"
+
+
+def test_unificada_tipo_defecto_es_post():
+    # Sin `tipo` (o sin JSON), el output es un post normal: nunca un carrusel por accidente.
+    salida = '```json\n{"texto": "Copy", "copy_in": ""}\n```'
+    assert stream.parsear_salida_unificada(salida, ["x"])["tipo"] == "post"
+    assert stream.parsear_salida_unificada("Texto suelto sin json", ["x"])["tipo"] == "post"
+
+
+def test_unificada_tipo_desconocido_cae_a_post():
+    # Par CERRADO post|carrusel: cualquier otro valor (o tipo no-string) cae a "post".
+    salida = '```json\n{"texto": "Copy", "copy_in": "", "tipo": "video"}\n```'
+    assert stream.parsear_salida_unificada(salida, ["x"])["tipo"] == "post"
+    salida2 = '```json\n{"texto": "Copy", "copy_in": "", "tipo": 3}\n```'
+    assert stream.parsear_salida_unificada(salida2, ["x"])["tipo"] == "post"
+
+
 # --------------------------------------------------------------------------- #
 # Politica de emojis del parseo (vive en prompt + editorial, no en limpieza)   #
 # --------------------------------------------------------------------------- #
