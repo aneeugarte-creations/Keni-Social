@@ -183,11 +183,12 @@ def borrar(clave: str) -> None:
 # al arranque. Cubre tambien las variantes por marca (`VIEJO::marca` -> `NUEVO::marca`).
 #
 # ORDEN: ante una CADENA de renames hacia el mismo destino (PERFIL_EDITORIAL -> PIPELINE_RANKING
-# -> PIPELINE_EDITORIAL), va PRIMERO el alias mas RECIENTE (gana la intencion mas nueva; el
-# alias mas viejo solo aplica si el destino sigue ausente tras migrar el reciente).
+# -> PIPELINE_EDITORIAL -> RANKING_PERFIL_IA), va PRIMERO el alias mas RECIENTE (gana la intencion
+# mas nueva; el alias mas viejo solo aplica si el destino sigue ausente tras migrar el reciente).
 CLAVES_LEGADO: tuple[tuple[str, str], ...] = (
-    ("KENI_PIPELINE_RANKING", "KENI_PIPELINE_EDITORIAL"),
-    ("KENI_PERFIL_EDITORIAL", "KENI_PIPELINE_EDITORIAL"),
+    ("KENI_PIPELINE_EDITORIAL", "KENI_RANKING_PERFIL_IA"),
+    ("KENI_PIPELINE_RANKING", "KENI_RANKING_PERFIL_IA"),
+    ("KENI_PERFIL_EDITORIAL", "KENI_RANKING_PERFIL_IA"),
     ("KENI_FUSION_SEMANTICA", "KENI_PIPELINE_FUSION"),
     ("KENI_INGESTA", "KENI_PIPELINE_SELECCION"),
     ("KENI_QA", "KENI_PIPELINE_VALIDACION"),

@@ -185,15 +185,16 @@ def test_migrar_prefijo_pipeline_no_confunde_los_nombres_nuevos(store):
 
 
 def test_migrar_cadena_el_alias_mas_reciente_gana(store):
-    """Cadena PERFIL_EDITORIAL -> PIPELINE_RANKING -> PIPELINE_EDITORIAL: gana el mas nuevo."""
+    """Cadena PERFIL_EDITORIAL -> PIPELINE_RANKING -> PIPELINE_EDITORIAL -> RANKING_PERFIL_IA:
+    gana el mas nuevo (el nombre previo PIPELINE_EDITORIAL)."""
     ajustes.guardar("KENI_PERFIL_EDITORIAL", "0")        # intencion vieja
-    ajustes.guardar("KENI_PIPELINE_RANKING", "1")        # intencion mas reciente
-    ajustes.guardar("KENI_PIPELINE_RANKING::unotv", "1")
+    ajustes.guardar("KENI_PIPELINE_EDITORIAL", "1")      # intencion mas reciente (nombre previo)
+    ajustes.guardar("KENI_PIPELINE_EDITORIAL::unotv", "1")
     assert ajustes.migrar_claves_legado() == 2
-    assert ajustes.obtener("KENI_PIPELINE_EDITORIAL") == "1"
-    assert ajustes.obtener("KENI_PIPELINE_EDITORIAL::unotv") == "1"
+    assert ajustes.obtener("KENI_RANKING_PERFIL_IA") == "1"
+    assert ajustes.obtener("KENI_RANKING_PERFIL_IA::unotv") == "1"
     assert ajustes.obtener("KENI_PERFIL_EDITORIAL") is None
-    assert ajustes.obtener("KENI_PIPELINE_RANKING") is None
+    assert ajustes.obtener("KENI_PIPELINE_EDITORIAL") is None
 
 
 def test_migrar_idempotente_y_sin_store(store):

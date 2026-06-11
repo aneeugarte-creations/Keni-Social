@@ -33,15 +33,15 @@ def palabras_relevancia(marca: str, perfil_activo: bool | None = None) -> frozen
     """Vocabulario EFECTIVO de una marca: perfil editorial (Haiku) si está activo; si no, semilla.
 
     Centraliza la elección perfil-vs-semilla (la misma que usa el daemon de ingesta al puntuar).
-    Respeta el toggle POR MARCA de `KENI_PIPELINE_EDITORIAL`: una marca con el Editorial apagado
-    vuelve al vocabulario SEMILLA aunque tenga un perfil Haiku cacheado. `perfil_activo` admite
-    el valor ya leído (el daemon lo lee una vez por barrido); None = leer de config.
+    Respeta el toggle POR MARCA de `KENI_RANKING_PERFIL_IA`: una marca con el perfil de ranking
+    apagado vuelve al vocabulario SEMILLA aunque tenga un perfil Haiku cacheado. `perfil_activo`
+    admite el valor ya leído (el daemon lo lee una vez por barrido); None = leer de config.
     """
     if perfil_activo is None:
         perfil_activo = config.perfil_editorial_activo()
     if (
         perfil_activo and marca
-        and not config.marca_apagada(config.ENV_PIPELINE_EDITORIAL, marca)
+        and not config.marca_apagada(config.ENV_RANKING_PERFIL_IA, marca)
     ):
         perfil = perfil_editorial.palabras(marca)
         if perfil:

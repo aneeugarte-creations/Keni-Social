@@ -27,7 +27,7 @@ def _etapas_activas(monkeypatch):
     (Arte se deja OFF por defecto; el test de Arte lo enciende a propósito.)
     """
     monkeypatch.setenv(config.ENV_PIPELINE_FUSION, "1")
-    monkeypatch.setenv(config.ENV_PIPELINE_EDITORIAL, "1")
+    monkeypatch.setenv(config.ENV_RANKING_PERFIL_IA, "1")
     monkeypatch.setenv(config.ENV_PIPELINE_SELECCION, "1")
     monkeypatch.setenv(config.ENV_PIPELINE_VALIDACION, "1")
     monkeypatch.setenv(config.ENV_PIPELINE_COPY, "1")
@@ -183,7 +183,7 @@ def test_etapas_ejecutadas_no_se_repintan_con_toggles_off(cliente, monkeypatch):
         contenido_id=tema["id"], red="x", estado="aprobado",
         copy="Copy hecho.", veredicto="no_verificado",
     )
-    for env in (config.ENV_PIPELINE_FUSION, config.ENV_PIPELINE_EDITORIAL,
+    for env in (config.ENV_PIPELINE_FUSION, config.ENV_RANKING_PERFIL_IA,
                 config.ENV_PIPELINE_SELECCION, config.ENV_PIPELINE_VALIDACION,
                 config.ENV_PIPELINE_COPY, config.ENV_PIPELINE_ARTE):
         monkeypatch.delenv(env, raising=False)

@@ -49,7 +49,6 @@ from ._config_comun import (
     ENV_PERFIL_EDITORIAL_TTL_HORAS,
     ENV_PIPELINE_ARTE,
     ENV_PIPELINE_COPY,
-    ENV_PIPELINE_EDITORIAL,
     ENV_PIPELINE_EN_VUELO_MAX,
     ENV_PIPELINE_FETCH_FUENTE,
     ENV_PIPELINE_TEMA_TTL_HORAS,
@@ -61,6 +60,7 @@ from ._config_comun import (
     ENV_QA_FUENTE_ESFUERZO,
     ENV_QA_FUENTE_MODELO,
     ENV_QA_FUENTE_TIMEOUT,
+    ENV_RANKING_PERFIL_IA,
     ENV_RENDIMIENTO_MIN_PIEZAS,
     ENV_RENDIMIENTO_RANKING,
     ENV_RENDIMIENTO_TOP_N,
@@ -578,13 +578,14 @@ def noticias_retencion_horas() -> int:
 
 
 def perfil_editorial_activo() -> bool:
-    """True si el ranking usa el perfil editorial extraído con Haiku (`KENI_PIPELINE_EDITORIAL`).
+    """True si el ranking usa el perfil de relevancia extraído con Haiku (`KENI_RANKING_PERFIL_IA`).
 
     Def OFF (conservador, IA en prod): sin el flag el ranking usa el vocabulario semilla
     (`relevancia_marca`). Con el flag, el daemon refresca el perfil por marca (Haiku, TTL) y el
-    score usa esas keywords derivadas de la línea editorial de la página texto.
+    score usa esas keywords derivadas de la línea editorial de la página texto. (Nombre previo
+    del flag: `KENI_PIPELINE_EDITORIAL`; es ranking, no voz editorial — ADR 0011.)
     """
-    return _crudo(ENV_PIPELINE_EDITORIAL).lower() in _VERDADEROS
+    return _crudo(ENV_RANKING_PERFIL_IA).lower() in _VERDADEROS
 
 
 def perfil_editorial_ttl_horas() -> int:
@@ -831,7 +832,7 @@ ENV_PRODUCCION = "KENI_PRODUCCION"
 ETAPAS_INVESTIGACION: tuple[str, ...] = (
     ENV_PIPELINE_SELECCION,
     ENV_PIPELINE_FUSION,
-    ENV_PIPELINE_EDITORIAL,
+    ENV_RANKING_PERFIL_IA,
     ENV_PIPELINE_VALIDACION,
 )
 ETAPAS_PRODUCCION: tuple[str, ...] = (ENV_PIPELINE_COPY,)
@@ -847,7 +848,7 @@ def _accesor_global_de_etapa(env_flag: str):
     try:
         return {
             ENV_PIPELINE_FUSION: fusion_semantica_activa,
-            ENV_PIPELINE_EDITORIAL: perfil_editorial_activo,
+            ENV_RANKING_PERFIL_IA: perfil_editorial_activo,
             ENV_PIPELINE_SELECCION: ingesta_activa,
             ENV_PIPELINE_VALIDACION: qa_activo,
             ENV_PIPELINE_COPY: pipeline_activo,

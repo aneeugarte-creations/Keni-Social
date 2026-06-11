@@ -391,7 +391,7 @@ def paso_clustering() -> dict[str, Any]:
             # el toggle "Editorial"); si no, semilla.
             if (
                 perfil_activo and marca_c and marca_c not in perfil_refrescadas
-                and not config.marca_apagada(config.ENV_PIPELINE_EDITORIAL, marca_c)
+                and not config.marca_apagada(config.ENV_RANKING_PERFIL_IA, marca_c)
             ):
                 perfil_refrescadas.add(marca_c)
                 perfil_editorial.refrescar_si_corresponde(

@@ -331,9 +331,10 @@ ENV_NOTICIAS_GC_INACTIVIDAD_HORAS = "KENI_NOTICIAS_GC_INACTIVIDAD_HORAS"
 
 # Perfil editorial por marca (Fase 2): un agente Haiku extrae las keywords/temas de la línea
 # editorial (página texto) y el ranking las usa como relevancia de marca (reemplaza el diccionario
-# hardcodeado). GATEADO por `KENI_PIPELINE_EDITORIAL` (def OFF): sin el flag se usa el vocabulario
-# semilla. El refresco (Haiku) corre acotado por marca + TTL en el daemon de ingesta.
-ENV_PIPELINE_EDITORIAL = "KENI_PIPELINE_EDITORIAL"
+# hardcodeado). GATEADO por `KENI_RANKING_PERFIL_IA` (def OFF): sin el flag se usa el vocabulario
+# semilla. El refresco (Haiku) corre acotado por marca + TTL en el daemon de ingesta. (Nombre
+# previo: `KENI_PIPELINE_EDITORIAL`; migrado por alias legado. ADR 0011: es ranking, no voz.)
+ENV_RANKING_PERFIL_IA = "KENI_RANKING_PERFIL_IA"
 ENV_PERFIL_EDITORIAL_TTL_HORAS = "KENI_PERFIL_EDITORIAL_TTL_HORAS"
 
 # Fusión SEMÁNTICA de historias del mismo evento (Fase 2b): un agente Haiku agrupa las historias
@@ -859,7 +860,7 @@ __all__ = [
     'ENV_NOTICIAS_GC_INTERVALO_HORAS',
     'ENV_NOTICIAS_GC_SCORE_UMBRAL',
     'ENV_ORIGENES',
-    'ENV_PIPELINE_EDITORIAL',
+    'ENV_RANKING_PERFIL_IA',
     'ENV_PERFIL_EDITORIAL_TTL_HORAS',
     'ENV_PG_DB',
     'ENV_PG_HOST',

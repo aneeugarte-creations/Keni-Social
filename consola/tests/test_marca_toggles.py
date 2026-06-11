@@ -100,7 +100,7 @@ def test_etapa_global_activa_cubre_las_seis_etapas(monkeypatch):
     # `etapa_global_activa` cubre solo las SEIS que sí se encienden/apagan.
     _store(monkeypatch, {})
     etapas = (
-        config.ENV_PIPELINE_FUSION, config.ENV_PIPELINE_EDITORIAL, config.ENV_PIPELINE_SELECCION,
+        config.ENV_PIPELINE_FUSION, config.ENV_RANKING_PERFIL_IA, config.ENV_PIPELINE_SELECCION,
         config.ENV_PIPELINE_VALIDACION, config.ENV_PIPELINE_COPY, config.ENV_PIPELINE_ARTE,
     )
     for env in etapas:
