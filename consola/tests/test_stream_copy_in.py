@@ -201,3 +201,56 @@ def test_contenido_conserva_emojis_y_copy_in_no():
 def test_resultado_conserva_emojis():
     salida = "Resumen con emoji 🔥\n\n```json\n{\"piezas\": []}\n```"
     assert stream.parsear_salida(salida, ["x"])["resultado"] == "Resumen con emoji 🔥"
+
+
+# --------------------------------------------------------------------------- #
+# Reparación tolerante: comillas SIN ESCAPAR dentro de un valor (cita textual)  #
+# --------------------------------------------------------------------------- #
+
+
+def test_unificada_repara_comillas_sin_escapar_en_texto():
+    # El modelo dejó la cita «"Los mexicanos..."» SIN escapar -> json.loads falla. El parser la
+    # RECUPERA: copy_in correcto y contenido = el `texto` (con su cita), no la salida cruda.
+    salida = (
+        "REVISAR ANTES DE PUBLICAR\n\nAuto-verificación: bla.\n\n```json\n"
+        '{"texto": "Salma tomó el centro. Expresó orgullo. "Los mexicanos estamos honrados", '
+        'declaró Hayek, según Infobae.", "copy_in": "SALMA EN LA INAUGURACIÓN"}\n```'
+    )
+    pieza = stream.parsear_salida_unificada(salida, ["instagram"])["piezas"][0]
+    assert pieza["copy_in"] == "SALMA EN LA INAUGURACIÓN"
+    assert pieza["contenido"].startswith("Salma tomó el centro.")
+    assert '"Los mexicanos estamos honrados"' in pieza["contenido"]
+    # NO se vuelca la salida cruda (preámbulo/auto-verificación) al caption.
+    assert "REVISAR ANTES DE PUBLICAR" not in pieza["contenido"]
+    assert "```json" not in pieza["contenido"]
+
+
+def test_unificada_repara_con_texto_corto_y_recupera_todas_las_claves():
+    salida = (
+        '```json\n{"texto": "Largo con "comillas" internas aquí.", '
+        '"texto_corto": "Corto "citado" también.", "copy_in": "PLACA"}\n```'
+    )
+    res = stream.parsear_salida_unificada(salida, ["instagram", "x"])
+    ig = next(p for p in res["piezas"] if p["red"] == "instagram")
+    assert ig["copy_in"] == "PLACA"
+    assert ig["contenido"] == 'Largo con "comillas" internas aquí.'
+
+
+def test_unificada_reparada_no_arma_carrusel_por_accidente():
+    # Aunque el JSON roto trajera `tipo: carrusel`, la reparación NO recupera slides: degrada a post.
+    salida = (
+        '```json\n{"texto": "Copy con "cita" rota.", "copy_in": "T", "tipo": "carrusel", '
+        '"slides": [{"titular": "A", "foto": 1}]}\n```'
+    )
+    res = stream.parsear_salida_unificada(salida, ["instagram"])
+    assert res["piezas"][0]["contenido"] == 'Copy con "cita" rota.'
+    # Sin slides recuperables, no se arma carrusel (tipo se recupera pero slides queda vacío).
+    assert res["slides"] == []
+
+
+def test_unificada_irreparable_cae_al_texto_plano():
+    # Un bloque json sin `texto` recuperable conserva el fallback de siempre (texto limpio entero).
+    salida = "Contenido plano útil.\n\n```json\n{roto sin comillas ni texto}\n```"
+    pieza = stream.parsear_salida_unificada(salida, ["x"])["piezas"][0]
+    assert "Contenido plano útil." in pieza["contenido"]
+    assert pieza["copy_in"] == ""

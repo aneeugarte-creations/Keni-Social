@@ -797,11 +797,16 @@ def parsear_salida_unificada(salida: str, redes_ids: list[str]) -> dict[str, obj
     limpio = salida.strip()
     if coincidencias:
         ultima = coincidencias[-1]
+        bloque = ultima.group(1)
         try:
-            datos = json.loads(ultima.group(1))
+            datos = json.loads(bloque)
         except (json.JSONDecodeError, ValueError):
-            datos = None
-        else:
+            # El error típico del modelo es dejar comillas SIN ESCAPAR dentro de un valor (una
+            # cita: «..."x"...»), que invalida el JSON. Antes eso tiraba TODA la salida cruda al
+            # caption (con `copy_in` vacío). Como el objeto del copy es PLANO y de claves conocidas,
+            # lo recuperamos de forma tolerante anclando cada valor en la siguiente clave o el `}`.
+            datos = _objeto_copy_tolerante(bloque)
+        if datos is not None:
             limpio = (salida[: ultima.start()] + salida[ultima.end():]).strip()
 
     texto_base: str | None = None
@@ -852,6 +857,46 @@ def parsear_salida_unificada(salida: str, redes_ids: list[str]) -> dict[str, obj
         "resultado": limpio, "piezas": piezas, "verdicto": verdicto, "tipo": tipo,
         "slides": slides,
     }
+
+
+# Claves del OBJETO PLANO del copy unificado. Las usa la reparación tolerante para anclar el FIN
+# de cada valor (la `"` que precede a la siguiente clave o al cierre `}`), de modo que una comilla
+# SIN ESCAPAR dentro de un valor (cita) no rompa la extracción como sí rompe a `json.loads`.
+_CLAVES_COPY: tuple[str, ...] = ("texto", "texto_corto", "copy_in", "tipo", "slides")
+_FRONTERA_VALOR = r'(?=\s*,\s*"(?:' + "|".join(_CLAVES_COPY) + r')"\s*:|\s*\})'
+
+
+def _desescapar_json_str(s: str) -> str:
+    """Deshace los escapes JSON comunes de un valor string extraído a mano (PURA).
+
+    Solo los escapes que un modelo usa de verdad (`\\"`, `\\n`, `\\t`, `\\r`, `\\/`, `\\\\`). NO
+    usa `unicode_escape` (rompería los acentos UTF-8). Las comillas internas que el modelo dejó
+    SIN escapar ya están bien tal cual; esto solo normaliza las que sí escapó."""
+    return re.sub(
+        r'\\(["ntr/\\])',
+        lambda m: {'"': '"', "n": "\n", "t": "\t", "r": "\r", "/": "/", "\\": "\\"}[m.group(1)],
+        s,
+    )
+
+
+def _objeto_copy_tolerante(bloque: str) -> dict[str, str] | None:
+    """Recupera `{texto, texto_corto, copy_in, tipo}` de un bloque JSON que `json.loads` rechazó.
+
+    El fallo habitual del modelo es una comilla SIN ESCAPAR dentro de un valor (una cita textual),
+    que invalida el JSON entero. Como el objeto del copy unificado es PLANO y de claves CONOCIDAS,
+    extraemos cada valor string anclando su cierre en la `"` que precede a la siguiente clave
+    conocida o al `}` final (`_FRONTERA_VALOR`): así las comillas internas (que NO van seguidas de
+    `, "clave":`) no cortan el valor. Devuelve None si ni siquiera encuentra `texto` (entonces el
+    caller cae al fallback de texto plano de siempre). NO recupera `slides` (si el JSON se rompió,
+    el carrusel se degrada a post: nunca se arma uno por accidente con datos a medias)."""
+    obj: dict[str, str] = {}
+    for clave in ("texto", "texto_corto", "copy_in", "tipo"):
+        m = re.search(
+            r'"' + clave + r'"\s*:\s*"(.*?)"' + _FRONTERA_VALOR, bloque, re.DOTALL
+        )
+        if m is not None:
+            obj[clave] = _desescapar_json_str(m.group(1))
+    return obj if obj.get("texto") else None
 
 
 # Tope de SLIDES de un carrusel editorial (10 nativas de IG/FB - 1 de portada). Espejo de
