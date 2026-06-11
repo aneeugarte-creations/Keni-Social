@@ -144,6 +144,41 @@ export interface CuerpoResolverSolicitud {
   comentario?: string;
 }
 
+/** Campos de estado de publicación compartidos por etapas y capas de la máquina. */
+export interface EstadoPublicacionDoc {
+  produccion: ProduccionTexto | null;
+  sha_actual: string | null;
+  sin_publicar: boolean;
+}
+
+/** Una etapa del riel de la máquina (`GET /api/texto/maquina`): el doc que se inyecta. */
+export interface EtapaMaquina extends EstadoPublicacionDoc {
+  id: string;
+  titulo: string;
+  doc_id: string;
+}
+
+/** Un grupo de etapas del riel (ingesta → priorización → producción → talleres). */
+export interface GrupoMaquina {
+  id: string;
+  titulo: string;
+  etapas: EtapaMaquina[];
+}
+
+/** Una capa del ensamblaje editorial de la marca (orden real de `adjuntos_copy`). */
+export interface CapaMaquina extends EstadoPublicacionDoc {
+  doc_id: string;
+  titulo: string;
+  clase: string;
+  orden: number;
+}
+
+/** `GET /api/texto/maquina?marca=`: el riel de pipelines + las capas editoriales. */
+export interface RespuestaMaquinaTexto {
+  grupos: GrupoMaquina[];
+  capas: CapaMaquina[];
+}
+
 /** Una entrada del historial de versiones (git) de un documento. */
 export interface VersionTexto {
   sha: string;

@@ -14,6 +14,7 @@ import type {
   RespuestaEditoriales,
   RespuestaGeneracion,
   RespuestaHistorialTexto,
+  RespuestaMaquinaTexto,
   RespuestaMarcasTexto,
   RespuestaMensaje,
   RespuestaPapelera,
@@ -79,6 +80,9 @@ export const apiTexto = {
       `/texto/pipelines/${pipeline}/preview${query({ marca, contexto })}`,
       { signal },
     ),
+  // --- La máquina: riel de pipelines en orden real + capas editoriales por marca ---
+  maquinaTexto: (marca?: string, signal?: AbortSignal) =>
+    peticion<RespuestaMaquinaTexto>(`/texto/maquina${query({ marca })}`, { signal }),
   // --- Variables del catálogo (`{{NOMBRE}}` que la consola sustituye al inyectar) ---
   variablesTexto: (signal?: AbortSignal) =>
     peticion<RespuestaVariablesTexto>("/texto/variables", { signal }),
