@@ -836,13 +836,13 @@ export default function Imagen() {
                 <Button
                   size="sm"
                   // Misma caja que las píldoras etiquetadas de la barra (marca, Adaptar):
-                  // h-8 px-2.5 text-sm. La separación la pone el gap del contenedor, no ml-*.
-                  className="h-8 px-2.5 text-sm"
+                  // h-8 px-2.5 text-sm, gap interno icono-texto 1.5 único (sin mr-* en el icono).
+                  className="h-8 gap-1.5 px-2.5 text-sm"
                   disabled={guardarEnPieza.isPending}
                   onClick={() => guardarEnPieza.mutate()}
                   title="Guardar en la publicación (render + nueva versión)"
                 >
-                  <FileUp className="h-4 w-4 sm:mr-1" />
+                  <FileUp className="h-4 w-4" />
                   <span className="hidden sm:inline">Guardar en pieza</span>
                 </Button>
               ) : undefined

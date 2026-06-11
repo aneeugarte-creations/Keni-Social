@@ -446,7 +446,7 @@ export function EditorDocumento({
           aria-label="Adaptar a otro formato"
           aria-expanded={menuFormato}
           onClick={() => { setMenuMas(false); setMenuFormato((v) => !v); }}
-          className={`flex h-8 items-center gap-1 rounded-md px-2.5 text-sm ${
+          className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm ${
             // Hover accent solo CERRADO: abierto conserva la píldora `--control-activo` (glifo legible).
             menuFormato
               ? "bg-[hsl(var(--control-activo))] text-[hsl(var(--control-activo-foreground))]"
