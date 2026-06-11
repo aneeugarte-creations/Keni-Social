@@ -12,7 +12,7 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 // Etiquetas legibles de las líneas del plan editorial (fallback: la categoría capitalizada).
-const ETIQUETA_LINEA: Record<string, string> = {
+export const ETIQUETA_LINEA: Record<string, string> = {
   mx: "Nacional",
   internacional: "Internacional",
   breaking: "Breaking",

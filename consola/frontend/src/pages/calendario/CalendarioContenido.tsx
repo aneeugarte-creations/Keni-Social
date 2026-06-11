@@ -2,7 +2,7 @@ import { PanelAjustes } from "@/pages/configuracion/SeccionFuncionalidad";
 
 // Grupos del catálogo que gobiernan la publicación (global + por marca).
 const GRUPOS_PUBLICACION = new Set(["publicacion", "publicacion_marca"]);
-import { CalendarDays, Gauge, Upload } from "lucide-react";
+import { CalendarDays, Gauge, Target, Upload } from "lucide-react";
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -15,6 +15,7 @@ import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api } from "@/lib/api";
 import { DialogoImportarCalendario } from "@/pages/publicaciones/DialogoImportarCalendario";
 import { GestionCadencia } from "@/pages/publicaciones/GestionCadencia";
+import { GestionPlan } from "@/pages/publicaciones/GestionPlan";
 import { GestionPublicaciones } from "@/pages/publicaciones/GestionPublicaciones";
 import { PanelLineasPlan } from "@/pages/publicaciones/PanelLineasPlan";
 
@@ -34,6 +35,7 @@ export default function CalendarioContenido() {
   const [cadenciaAbierto, setCadenciaAbierto] = React.useState(
     () => searchParams.get("cadencia") === "1",
   );
+  const [planAbierto, setPlanAbierto] = React.useState(false);
 
   // Catálogos para poblar los diálogos de importación (marcas) y cadencia (marcas + redes).
   const catalogosQuery = useQuery({
@@ -58,6 +60,11 @@ export default function CalendarioContenido() {
       <TituloPagina titulo="Programación" icono={CalendarDays} />
       <AccionesPagina>
         <MenuAcciones>
+          {marcaActiva && (
+            <ItemMenu icono={Target} onClick={() => setPlanAbierto(true)}>
+              Plan y horarios
+            </ItemMenu>
+          )}
           <ItemMenu icono={Gauge} onClick={() => setCadenciaAbierto(true)}>
             Cadencia
           </ItemMenu>
@@ -76,6 +83,15 @@ export default function CalendarioContenido() {
       )}
 
       <GestionPublicaciones modo="calendario" />
+
+      {marcaActiva && (
+        <GestionPlan
+          abierto={planAbierto}
+          onCerrar={() => setPlanAbierto(false)}
+          marca={marcaActiva}
+          nombreMarca={nombreActiva ?? marcaActiva}
+        />
+      )}
 
       <GestionCadencia
         abierto={cadenciaAbierto}

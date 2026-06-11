@@ -172,8 +172,10 @@ export interface Franja {
   red_nombre: string;
   /** Día de la semana: 0=lunes .. 6=domingo. */
   dia_semana: number;
-  /** Hora en formato "HH:MM". */
+  /** Hora en formato "HH:MM" (UTC: el backend almacena instantes en UTC). */
   hora: string;
+  /** Línea del plan a la que sirve ('' = franja genérica). */
+  categoria: string;
 }
 
 export interface RespuestaFranjas {
@@ -190,6 +192,8 @@ export interface CuerpoCrearFranja {
   hora: string;
   marca?: string;
   red?: string;
+  /** Línea del plan ('' = genérica): la pieza de esa línea usa estos horarios. */
+  categoria?: string;
 }
 
 // --- Cadencia por red (margen entre posts) ---
