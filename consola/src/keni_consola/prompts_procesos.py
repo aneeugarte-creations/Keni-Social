@@ -42,6 +42,20 @@ PROCESOS_POR_PROMPT: dict[str, list[str]] = {
     "prompt/validacion": ["Pipeline · criba QA de la fuente (pre-copy)"],
     "prompt/copy": ["Pipeline · generación de copy desde la nota"],
     "prompt/evergreen": ["Taller evergreen · brainstorming de ideas"],
+    # Envoltorios del copy (instrucciones aditivas que `dominio.generar.componer` concatena
+    # al prompt base; el código decide CUÁNDO se inyectan y rellena sus {{VARIABLES}}).
+    "prompt/envoltorios/redes": [
+        "Pipeline de copy · envoltorio de redes (una pieza por red: Texto manual, galería, termómetro)",
+    ],
+    "prompt/envoltorios/copy-unico": [
+        "Pipeline de copy · copy unificado (un texto + un texto-en-imagen para todas las redes)",
+    ],
+    "prompt/envoltorios/carrusel": [
+        "Pipeline de copy · decisión de carrusel (historias que agrupan 2+ notas)",
+    ],
+    "prompt/envoltorios/sin-emojis": [
+        "Pipeline de copy · sin emojis (aditivo opt-in de flujos cuya salida nunca lleva emojis: evergreen/termómetro)",
+    ],
     # De LANZAMIENTO MANUAL (no se inyectan en un proceso de fondo; se ejecutan a demanda).
     "prompt/hashtags": ["Herramienta · sugerencia de hashtags"],
     "prompt/asistente/variantes": ["Asistente del editor · modo variantes"],

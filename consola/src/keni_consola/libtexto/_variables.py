@@ -19,6 +19,12 @@ en un modulo, se anade aqui su entrada. Origen = el proceso/modulo que la sustit
                                         {{ESQUEMA_JSON}} {{COLA_FUENTE}}
   - `dominio/clasificador_marca.py` -> {{MARCAS}} {{MARCA_FALLBACK}} {{NOTICIA}}
   - `dominio/hashtags.py`          -> {{RED}} {{MARCA}} {{TEXTO}}
+  - `dominio/generar.py`             -> {{ETIQUETAS}} {{LIMITES}} {{IDS_JSON}} (envoltorio
+                                        de redes); {{N_NOTAS}} {{MAX_SLIDES}}
+                                        {{CATALOGO_FOTOS}} (decisión de carrusel);
+                                        {{MODO_PUBLICACION}} {{VERSIONES}} {{CIERRE_JSON}}
+                                        {{REDES_AMPLIAS}} {{REDES_ESTRECHAS}} {{TOPE_CORTO}}
+                                        (copy unificado)
 
 Lo sirve `GET /api/texto/variables` con la forma `{variables: [{nombre, descripcion,
 ejemplo, origen}]}` (contrato con el frontend del rediseno).
@@ -170,6 +176,87 @@ _CATALOGO: tuple[dict[str, str], ...] = (
         "descripcion": "Texto de la pieza a partir del cual se sugieren los hashtags.",
         "ejemplo": "La selección mexicana arranca su gira esta noche…",
         "origen": "Herramienta · sugerencia de hashtags (prompt/hashtags)",
+    },
+    # --- Envoltorios del copy (dominio/generar.py, prompt/envoltorios/*) ---
+    {
+        "nombre": "ETIQUETAS",
+        "descripcion": "Nombres legibles de las redes pedidas para esta generación de copy.",
+        "ejemplo": "Instagram, X, Facebook",
+        "origen": "Pipeline de copy · envoltorios de redes y copy unificado (prompt/envoltorios/redes, "
+        "prompt/envoltorios/copy-unico)",
+    },
+    {
+        "nombre": "LIMITES",
+        "descripcion": "Frase con el límite técnico de caracteres de cada red pedida, desde la fuente única "
+        "del código (keni-shared).",
+        "ejemplo": "X máx 280 caracteres, Facebook sin tope técnico",
+        "origen": "Pipeline de copy · envoltorio de redes (prompt/envoltorios/redes)",
+    },
+    {
+        "nombre": "IDS_JSON",
+        "descripcion": "Ids de red válidos (entre comillas) que el modelo puede usar en el bloque json de piezas.",
+        "ejemplo": '"x", "facebook"',
+        "origen": "Pipeline de copy · envoltorio de redes (prompt/envoltorios/redes)",
+    },
+    {
+        "nombre": "N_NOTAS",
+        "descripcion": "Cuántas notas (sub-historias) agrupa la historia para la decisión post|carrusel.",
+        "ejemplo": "4",
+        "origen": "Pipeline de copy · decisión de carrusel (prompt/envoltorios/carrusel)",
+    },
+    {
+        "nombre": "MAX_SLIDES",
+        "descripcion": "Tope de slides extra de un carrusel editorial (10 nativas de IG/FB menos la portada).",
+        "ejemplo": "9",
+        "origen": "Pipeline de copy · decisión de carrusel (prompt/envoltorios/carrusel)",
+    },
+    {
+        "nombre": "CATALOGO_FOTOS",
+        "descripcion": "Catálogo numerado de fotos de fuente propia (título de su nota por línea), o el aviso "
+        "de que no hay ninguna.",
+        "ejemplo": "FOTOS DISPONIBLES (…):\n  1. Concierto en el Zócalo",
+        "origen": "Pipeline de copy · decisión de carrusel (prompt/envoltorios/carrusel)",
+    },
+    {
+        "nombre": "MODO_PUBLICACION",
+        "descripcion": "Matiz de publicación del copy unificado: vacío con dos versiones, « TAL CUAL» cuando "
+        "un solo copy va igual a todas las redes.",
+        "ejemplo": " TAL CUAL",
+        "origen": "Pipeline de copy · copy unificado (prompt/envoltorios/copy-unico)",
+    },
+    {
+        "nombre": "VERSIONES",
+        "descripcion": "Sub-bloque ya montado por el código con qué versiones escribir: dos (texto + "
+        "texto_corto) si se mezclan redes amplias y estrechas, una si no.",
+        "ejemplo": "Escribe DOS versiones del MISMO mensaje (…) máximo 280 caracteres.",
+        "origen": "Pipeline de copy · copy unificado (prompt/envoltorios/copy-unico)",
+    },
+    {
+        "nombre": "CIERRE_JSON",
+        "descripcion": "Forma exacta del bloque json final, ya montada por el código (claves según la rama, "
+        "y la decisión de carrusel si la historia agrupa 2+ notas).",
+        "ejemplo": '{"texto": "<el copy>", "copy_in": "<…>"}. El `copy_in` es…',
+        "origen": "Pipeline de copy · copy unificado (prompt/envoltorios/copy-unico)",
+    },
+    {
+        "nombre": "REDES_AMPLIAS",
+        "descripcion": "Nombres de las redes sin límite corto (reciben la versión completa `texto`), dentro "
+        "del sub-bloque de versiones.",
+        "ejemplo": "Instagram, Facebook",
+        "origen": "Pipeline de copy · copy unificado (sub-bloque {{VERSIONES}} montado en dominio/generar.py)",
+    },
+    {
+        "nombre": "REDES_ESTRECHAS",
+        "descripcion": "Nombres de las redes con límite corto (reciben `texto_corto`), dentro del sub-bloque "
+        "de versiones.",
+        "ejemplo": "X",
+        "origen": "Pipeline de copy · copy unificado (sub-bloque {{VERSIONES}} montado en dominio/generar.py)",
+    },
+    {
+        "nombre": "TOPE_CORTO",
+        "descripcion": "Límite técnico más estricto (en caracteres) que acota el copy o su versión corta.",
+        "ejemplo": "280",
+        "origen": "Pipeline de copy · copy unificado (sub-bloque {{VERSIONES}} montado en dominio/generar.py)",
     },
 )
 
