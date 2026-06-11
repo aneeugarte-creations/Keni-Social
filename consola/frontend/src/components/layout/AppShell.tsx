@@ -149,10 +149,12 @@ export function AppShell() {
             diálogos z-50, toasts z-[100]). */}
         <header
           className={cn(
-            "relative z-30 flex h-12 shrink-0 items-center gap-3 border-b border-border px-4 lg:px-6",
+            "relative z-30 flex h-12 shrink-0 items-center gap-3 px-4 lg:px-6",
+            // El borde inferior solo FUERA del editor: bajo el degradado naranja el hairline
+            // (oscuro en el esquema en negro) se veía como una línea pegada a la barra.
             enEditor
               ? "topbar-editor"
-              : "bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60",
+              : "border-b border-border bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60",
           )}
         >
           <Button
