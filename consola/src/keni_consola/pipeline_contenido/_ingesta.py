@@ -369,10 +369,16 @@ def clusters_para_promover(
             aptas = clustering.seleccionar_diversos(aptas, maximo=len(aptas), umbral=umbral)
         elegidos: list[dict[str, Any]] = []
         huecos = dict(cupos_categoria)
+        # Si el plan de la marca NO declara línea 'breaking', una última hora no debe quedar
+        # invisible: compite por el cupo de su categoría de FEED (documentado: el plan ideal
+        # incluye breaking:n; este fallback evita el agujero si no lo hace).
+        plan_con_breaking = "breaking" in config.plan_dia(marca)
         for c in aptas:
             if len(elegidos) >= maximo:
                 break
             cat = categoria_efectiva(c)
+            if cat == "breaking" and not plan_con_breaking:
+                cat = str(c.get("categoria") or "").strip().lower()
             if huecos.get(cat, 0) <= 0:
                 continue
             huecos[cat] -= 1
@@ -597,11 +603,17 @@ def cupos_categoria_restantes(
     except Exception:  # noqa: BLE001 -- fail-closed (promover gasta tokens)
         _log.warning("pipeline: no se pudo contar el plan diario (%s)", marca, exc_info=True)
         return {}
-    return {
-        cat: hueco
-        for cat, cupo in plan.items()
-        if (hueco := cupo - resumen.get(cat, {}).get("generados", 0)) > 0
-    }
+    huecos: dict[str, int] = {}
+    for cat, cupo in plan.items():
+        if cat == "breaking":
+            # La ÚLTIMA HORA excede el plan: el cupo es techo para lo normal, no para una
+            # breaking corroborada. Techo efectivo = cupo + KENI_BREAKING_EXTRA_DIA (def 4),
+            # para que un día muy movido tampoco se desboque. Con extra 0, techo duro.
+            cupo += config.breaking_extra_dia()
+        hueco = cupo - resumen.get(cat, {}).get("generados", 0)
+        if hueco > 0:
+            huecos[cat] = hueco
+    return huecos
 
 
 def categoria_efectiva(cluster: dict[str, Any]) -> str:

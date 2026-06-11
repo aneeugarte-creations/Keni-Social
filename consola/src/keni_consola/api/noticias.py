@@ -609,6 +609,116 @@ async def listar_historias(request: Request) -> Response:
     return JSONResponse({"historias": historias, "total": total})
 
 
+# Historias por línea en la respuesta de la Mesa (top-N por sección; "Ver todas" pagina
+# contra /historias con su filtro). Tope defensivo del query param.
+_MESA_POR_LINEA_DEF = 5
+_MESA_POR_LINEA_MAX = 20
+# Muestra del pool que se reparte por línea (el pool viene rankeado por score: con cientos
+# de historias vivas la muestra cubre de sobra el top de cada línea).
+_MESA_MUESTRA = 300
+
+
+async def mesa(request: Request) -> Response:
+    """GET /api/noticias/mesa?marca=&por_linea=: el pool SEGMENTADO por las líneas del plan.
+
+    La vista de trabajo de la Mesa de redacción: para una marca concreta devuelve sus líneas
+    del plan editorial diario (cupo, generados/publicados en 24 h móviles, restante) con las
+    top-N candidatas (`estado='nuevo'`) de cada una, más el bloque `fuera_de_plan` (líneas de
+    feed que el plan no contempla). Una historia compite por la línea de su
+    `categoria_efectiva` ('breaking' si lo es — el MISMO criterio que la admisión CI).
+    Sin plan configurado: `plan=false` y todo el pool va en `fuera_de_plan` (la UI degrada a
+    lista plana). Orden de líneas: breaking primero, luego el orden del plan.
+    """
+    from datetime import timedelta
+
+    from ..pipeline_contenido import _ingesta as _pc_ingesta
+    from ..tiempo import iso_utc
+
+    marca, error = _validar_marca(request.query_params.get("marca"))
+    if error is not None:
+        return JSONResponse({"error": error}, status_code=400)
+    if not marca:
+        return JSONResponse(
+            {"error": "La mesa es por marca: elige una marca concreta."}, status_code=400
+        )
+    try:
+        por_linea = int(request.query_params.get("por_linea") or _MESA_POR_LINEA_DEF)
+    except ValueError:
+        por_linea = _MESA_POR_LINEA_DEF
+    por_linea = max(1, min(por_linea, _MESA_POR_LINEA_MAX))
+
+    plan = config.plan_dia(marca)  # dict ordenado categoria -> cupo ({} sin plan)
+    ahora = datetime.now(UTC)
+    resumen_plan: dict[str, dict[str, int]] = {}
+    if plan:
+        try:
+            resumen_plan = repos.resumen_plan_por_categoria(
+                marca, iso_utc(ahora.replace(tzinfo=None) - timedelta(hours=24))
+            )
+        except Exception:  # noqa: BLE001 -- sin contador, la mesa muestra progreso 0 (no casca)
+            resumen_plan = {}
+
+    clusters, _total = repos.listar_noticia_clusters(
+        marca=marca, estado="nuevo", limite=_MESA_MUESTRA
+    )
+    # Reparto por línea (el pool ya viene ordenado por score: cada lista queda rankeada).
+    por_linea_pool: dict[str, list[dict[str, Any]]] = {}
+    for c in clusters:
+        cat = _pc_ingesta.categoria_efectiva(c)
+        destino = cat if cat in plan else "__fuera__"
+        por_linea_pool.setdefault(destino, []).append(c)
+
+    resumen_pieza = repos.estado_pieza_por_contenido(
+        [c.get("contenido_id") or "" for c in clusters]
+    )
+    vocab_memo: dict[str, frozenset[str]] = {}
+
+    def _historias(lote: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [
+            _historia_a_dict(
+                c,
+                repos.items_de_cluster(c["id"], limite=_MAX_ENLACES_HISTORIA),
+                pieza_estado=_pieza_estado(
+                    c.get("estado") or "nuevo", c.get("contenido_id") or "", resumen_pieza
+                ),
+                liston=_evaluar_liston(c, vocab_memo),
+            )
+            for c in lote[:por_linea]
+        ]
+
+    # Breaking primero (si el plan lo contempla), luego el orden del plan.
+    orden = (["breaking"] if "breaking" in plan else []) + [c for c in plan if c != "breaking"]
+    lineas = []
+    total_generados = 0
+    for cat in orden:
+        contadores = resumen_plan.get(cat, {})
+        generados = int(contadores.get("generados", 0))
+        total_generados += generados
+        pool = por_linea_pool.get(cat, [])
+        lineas.append(
+            {
+                "linea": cat,
+                "cupo": int(plan[cat]),
+                "generados": generados,
+                "publicados": int(contadores.get("publicados", 0)),
+                "restante": max(0, int(plan[cat]) - generados),
+                "en_pool": len(pool),
+                "historias": _historias(pool),
+            }
+        )
+    fuera = por_linea_pool.get("__fuera__", [])
+    return JSONResponse(
+        {
+            "marca": marca,
+            "plan": bool(plan),
+            "lineas": lineas,
+            "fuera_de_plan": {"en_pool": len(fuera), "historias": _historias(fuera)},
+            "total_objetivo": sum(int(v) for v in plan.values()),
+            "total_generados": total_generados,
+        }
+    )
+
+
 async def detalle_historia(request: Request) -> Response:
     """GET /api/noticias/historias/{id}: la historia + TODOS sus items de archivo."""
     cluster_id = request.path_params["cluster_id"]
@@ -720,6 +830,34 @@ async def descartar_historia(request: Request) -> Response:
     return JSONResponse({"historia": historia})
 
 
+async def restaurar_historia(request: Request) -> Response:
+    """POST /api/noticias/historias/{id}/restaurar: devuelve una DESCARTADA al pool.
+
+    El deshacer del flujo rápido de curación (descartar es 1 clic sin confirmación porque
+    existe esto). Solo restaura historias `descartado` sin contenido enlazado; una `usado`
+    ya vive en el tablero (404/400 explicables). Idempotente-amistoso: restaurar una que ya
+    está `nuevo` devuelve la historia tal cual.
+    """
+    cluster_id = request.path_params["cluster_id"]
+    cluster = repos.obtener_noticia_cluster(cluster_id)
+    if cluster is None:
+        return JSONResponse({"error": "Esa historia ya no existe."}, status_code=404)
+    estado = cluster.get("estado") or "nuevo"
+    if estado == "usado" or (cluster.get("contenido_id") or ""):
+        return JSONResponse(
+            {"error": "Esa historia ya se usó: vive en el tablero, no en el pool."},
+            status_code=400,
+        )
+    if estado == "descartado":
+        cluster = repos.actualizar_noticia_cluster(cluster_id, estado="nuevo") or cluster
+    items = repos.items_de_cluster(cluster_id, limite=_MAX_ENLACES_HISTORIA)
+    historia = _historia_a_dict(
+        cluster, items, pieza_estado=_pieza_estado_de(cluster),
+        liston=_evaluar_liston(cluster, {}),
+    )
+    return JSONResponse({"historia": historia})
+
+
 # Tope de ids por lote, para que un cuerpo enorme no dispare un barrido de updates sin control.
 _MAX_LOTE_DESCARTE = 500
 
@@ -791,6 +929,8 @@ RUTAS = [
     # que `fuentes` nunca se interprete como un item_id.
     Route("/api/noticias/fuentes/stats", stats_fuentes_handler, methods=["GET"]),
     Route("/api/noticias/historias", listar_historias, methods=["GET"]),
+    # La Mesa de redacción: pool segmentado por las líneas del plan + progreso del día.
+    Route("/api/noticias/mesa", mesa, methods=["GET"]),
     # Los lotes van ANTES de `/historias/{cluster_id}` para que `descartar-lote`/`borrar-lote`/
     # `borrar-todo` no se confundan con un cluster_id (difieren en método, pero el orden lo deja
     # explícito y a prueba de futuros GET).
@@ -800,6 +940,7 @@ RUTAS = [
     Route("/api/noticias/historias/{cluster_id}", detalle_historia, methods=["GET"]),
     Route("/api/noticias/historias/{cluster_id}/usar", usar_historia, methods=["POST"]),
     Route("/api/noticias/historias/{cluster_id}/descartar", descartar_historia, methods=["POST"]),
+    Route("/api/noticias/historias/{cluster_id}/restaurar", restaurar_historia, methods=["POST"]),
     Route("/api/noticias/{item_id}/usar", usar, methods=["POST"]),
     Route("/api/noticias/{item_id}/descartar", descartar, methods=["POST"]),
 ]

@@ -5,6 +5,7 @@ from ._config_comun import (
     _FALSOS,
     _VERDADEROS,
     CLUSTER_BREAKING_FUENTES_DEF,
+    BREAKING_EXTRA_DIA_DEF,
     CLUSTER_BREAKING_PESO_DEF,
     CLUSTER_BREAKING_VENTANA_H_DEF,
     CLUSTER_UMBRAL_DEF,
@@ -15,6 +16,7 @@ from ._config_comun import (
     ENV_AFP_CLIENT_SECRET,
     ENV_AUTO_PROGRAMAR,
     ENV_CLUSTER_BREAKING_FUENTES,
+    ENV_BREAKING_EXTRA_DIA,
     ENV_CLUSTER_BREAKING_PESO,
     ENV_CLUSTER_BREAKING_VENTANA_H,
     ENV_CLUSTER_UMBRAL,
@@ -261,6 +263,16 @@ def cluster_breaking_peso() -> float:
 def cluster_breaking_ventana_h() -> int:
     """Ventana (horas) para la heurística de breaking (`KENI_CLUSTER_BREAKING_VENTANA_H`, def 6, min 1)."""
     return _entero(ENV_CLUSTER_BREAKING_VENTANA_H, CLUSTER_BREAKING_VENTANA_H_DEF, minimo=1)
+
+
+def breaking_extra_dia() -> int:
+    """Tope EXTRA diario de breaking sobre el plan (`KENI_BREAKING_EXTRA_DIA`, def 4, min 0).
+
+    Una última hora corroborada sale al feed aunque su línea del plan esté llena: el cupo es
+    techo para lo normal, no para la última hora. Este tope acota el exceso (un día muy
+    movido no se desboca); `0` = el plan vuelve a ser techo duro también para breaking.
+    """
+    return _entero(ENV_BREAKING_EXTRA_DIA, BREAKING_EXTRA_DIA_DEF, minimo=0)
 
 
 def _peso01(env_flag: str, defecto: float) -> float:

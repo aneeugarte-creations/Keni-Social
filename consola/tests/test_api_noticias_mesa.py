@@ -1,0 +1,129 @@
+"""Tests de la MESA DE REDACCIÓN (/api/noticias/mesa) y del restaurar. OFFLINE, sin red.
+
+La mesa devuelve el pool segmentado por las líneas del plan editorial diario de la marca
+(cupo + progreso de 24 h + top-N candidatas por línea) y un bloque `fuera_de_plan`. El
+restaurar es el deshacer del descarte rápido (descartada -> pool).
+"""
+
+from __future__ import annotations
+
+from keni_consola import repos
+
+from .conftest import _cliente  # noqa: F401  (usado por la fixture `cliente`)
+
+
+def _sembrar(cid, *, score=0.5, categoria="mx", breaking=0, estado="nuevo", marca="unotv",
+             titulo="Historia de prueba"):
+    repos.upsert_noticia_cluster({
+        "id": cid, "titulo": titulo, "resumen": "Resumen", "marca": marca,
+        "categoria": categoria, "clave": f"t:{cid}", "n_items": 1, "n_fuentes": 2,
+        "senal": 100, "score": score, "breaking": breaking,
+        "primer_visto": "2026-06-01T00:00:00+00:00",
+        "ultimo_visto": "2026-06-05T12:00:00+00:00", "estado": estado,
+    })
+    return repos.obtener_noticia_cluster(cid)
+
+
+# --------------------------------------------------------------------------- #
+# GET /api/noticias/mesa                                                       #
+# --------------------------------------------------------------------------- #
+
+
+def test_mesa_requiere_marca_concreta(cliente):
+    assert cliente.get("/api/noticias/mesa").status_code == 400
+    assert cliente.get("/api/noticias/mesa", params={"marca": "nope"}).status_code == 400
+
+
+def test_mesa_segmenta_por_lineas_del_plan(cliente, monkeypatch):
+    monkeypatch.setenv("KENI_PLAN_DIA", "mx:2,internacional:1,breaking:1")
+    _sembrar("mx-top", score=0.9, categoria="mx", titulo="Nacional top")
+    _sembrar("mx-baja", score=0.3, categoria="mx", titulo="Nacional floja")
+    # Breaking: compite por la línea 'breaking' aunque su feed sea deportes.
+    _sembrar("br1", score=0.8, categoria="deportes", breaking=1, titulo="Última hora")
+    # Sin línea en el plan: va a fuera_de_plan.
+    _sembrar("dep1", score=0.7, categoria="gaming", titulo="Gaming sin línea")
+    # Usada/descartada: no son candidatas (estado != nuevo).
+    _sembrar("usada", estado="usado", categoria="mx")
+
+    datos = cliente.get("/api/noticias/mesa", params={"marca": "unotv"}).json()
+    assert datos["marca"] == "unotv"
+    assert datos["plan"] is True
+    assert datos["total_objetivo"] == 4
+    # Breaking PRIMERO, luego el orden del plan.
+    assert [ln["linea"] for ln in datos["lineas"]] == ["breaking", "mx", "internacional"]
+    por_linea = {ln["linea"]: ln for ln in datos["lineas"]}
+    assert por_linea["mx"]["cupo"] == 2
+    assert por_linea["mx"]["en_pool"] == 2
+    assert [h["id"] for h in por_linea["mx"]["historias"]] == ["mx-top", "mx-baja"]
+    assert por_linea["breaking"]["en_pool"] == 1
+    assert por_linea["breaking"]["historias"][0]["id"] == "br1"
+    assert por_linea["internacional"]["en_pool"] == 0
+    assert datos["fuera_de_plan"]["en_pool"] == 1
+    assert datos["fuera_de_plan"]["historias"][0]["id"] == "dep1"
+    # Cada historia trae el contrato Historia (listón + estado de pieza incluidos).
+    h = por_linea["mx"]["historias"][0]
+    assert "promovible" in h and "pieza_estado" in h and "score_desglose" in h
+
+
+def test_mesa_respeta_top_n_por_linea(cliente, monkeypatch):
+    monkeypatch.setenv("KENI_PLAN_DIA", "mx:2")
+    for i in range(4):
+        _sembrar(f"m{i}", score=0.9 - i * 0.1, categoria="mx", titulo=f"Nacional {i}")
+    datos = cliente.get(
+        "/api/noticias/mesa", params={"marca": "unotv", "por_linea": 2}
+    ).json()
+    linea = datos["lineas"][0]
+    assert linea["en_pool"] == 4  # el conteo es del pool completo de la línea
+    assert [h["id"] for h in linea["historias"]] == ["m0", "m1"]  # top-N rankeado
+
+
+def test_mesa_sin_plan_degrada_a_fuera_de_plan(cliente, monkeypatch):
+    monkeypatch.delenv("KENI_PLAN_DIA", raising=False)
+    monkeypatch.delenv("KENI_PLAN_DIA::unotv", raising=False)
+    _sembrar("c1", categoria="mx")
+    datos = cliente.get("/api/noticias/mesa", params={"marca": "unotv"}).json()
+    assert datos["plan"] is False
+    assert datos["lineas"] == []
+    assert datos["total_objetivo"] == 0
+    assert datos["fuera_de_plan"]["en_pool"] == 1
+
+
+def test_mesa_descuenta_lo_generado_en_el_progreso(cliente, monkeypatch):
+    monkeypatch.setenv("KENI_PLAN_DIA", "mx:2")
+    # Lo generado hoy vive en `contenido.categoria` (igual que la admisión CI lo cuenta).
+    repos.crear_contenido(clase="contenido", titulo="Ya generada", marca="unotv", categoria="mx")
+    datos = cliente.get("/api/noticias/mesa", params={"marca": "unotv"}).json()
+    linea = datos["lineas"][0]
+    assert linea["generados"] == 1
+    assert linea["restante"] == 1
+    assert datos["total_generados"] == 1
+
+
+# --------------------------------------------------------------------------- #
+# POST /api/noticias/historias/{id}/restaurar                                  #
+# --------------------------------------------------------------------------- #
+
+
+def test_restaurar_devuelve_descartada_al_pool(cliente):
+    _sembrar("c1", estado="nuevo")
+    cliente.post("/api/noticias/historias/c1/descartar")
+    assert repos.obtener_noticia_cluster("c1")["estado"] == "descartado"
+    r = cliente.post("/api/noticias/historias/c1/restaurar")
+    assert r.status_code == 200
+    assert r.json()["historia"]["estado"] == "nuevo"
+    assert repos.obtener_noticia_cluster("c1")["estado"] == "nuevo"
+
+
+def test_restaurar_es_idempotente_sobre_una_nueva(cliente):
+    _sembrar("c1", estado="nuevo")
+    r = cliente.post("/api/noticias/historias/c1/restaurar")
+    assert r.status_code == 200
+    assert r.json()["historia"]["estado"] == "nuevo"
+
+
+def test_restaurar_usada_400_e_inexistente_404(cliente):
+    _sembrar("c1", estado="nuevo")
+    cont = repos.crear_contenido(clase="contenido", titulo="Tema", marca="unotv")
+    repos.actualizar_noticia_cluster("c1", estado="usado", contenido_id=cont["id"])
+    assert cliente.post("/api/noticias/historias/c1/restaurar").status_code == 400
+    assert cliente.post("/api/noticias/historias/nope/restaurar").status_code == 404

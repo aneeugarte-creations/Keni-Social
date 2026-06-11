@@ -1061,6 +1061,35 @@ def test_cupo_produccion_restante_none_sin_cupos(entorno, monkeypatch):
     assert _ingesta.cupos_categoria_restantes("unotv") is None  # sin plan
 
 
+def test_plan_breaking_excede_su_cupo_con_tope_extra(entorno, monkeypatch):
+    """La última hora EXCEDE el plan: techo efectivo = cupo + KENI_BREAKING_EXTRA_DIA."""
+    from keni_consola.pipeline_contenido import _ingesta
+
+    monkeypatch.setenv("KENI_PLAN_DIA", "breaking:1")
+    monkeypatch.setenv("KENI_BREAKING_EXTRA_DIA", "1")
+    # El cupo del plan (1) YA está consumido por una breaking generada hoy.
+    repos.crear_contenido(
+        clase="contenido", titulo="Breaking previa", marca="unotv", categoria="breaking"
+    )
+    # Queda el hueco EXTRA: una nueva última hora aún sale al feed.
+    assert _ingesta.cupos_categoria_restantes("unotv") == {"breaking": 1}
+    # Con el extra a 0 el plan vuelve a ser techo duro también para breaking.
+    monkeypatch.setenv("KENI_BREAKING_EXTRA_DIA", "0")
+    assert _ingesta.cupos_categoria_restantes("unotv") == {}
+
+
+def test_plan_sin_linea_breaking_compite_por_su_feed(entorno, monkeypatch):
+    """Si el plan no declara 'breaking', la última hora no queda invisible: compite por el
+    cupo de su categoría de FEED."""
+    monkeypatch.setenv("KENI_PLAN_DIA", "mx:1")
+    _sembrar_cluster("brx", titulo="Ultima hora sin linea propia", score=0.9,
+                     categoria="mx", breaking=1)
+
+    elegidos = pc.clusters_para_promover("unotv", maximo=5, cupos_categoria={"mx": 1})
+
+    assert [c["id"] for c in elegidos] == ["brx"]
+
+
 def test_ejecutar_qa_salta_marca_desactivada(entorno, monkeypatch):
     """QA global ON pero apagada para la marca: ejecutar_qa marca el tema 'saltada' (no criba).
 

@@ -204,6 +204,9 @@ ENV_CLUSTER_UMBRAL_MERGE = "KENI_CLUSTER_UMBRAL_MERGE"
 # conteo) para no romper despliegues configurados. Ver `config.cluster_breaking_peso()`.
 ENV_CLUSTER_BREAKING_FUENTES = "KENI_CLUSTER_BREAKING_FUENTES"
 ENV_CLUSTER_BREAKING_PESO = "KENI_CLUSTER_BREAKING_PESO"
+# Tope EXTRA diario de breaking sobre el plan: una última hora corroborada sale al feed
+# aunque su línea esté llena, hasta este máximo extra en 24 h (techo de seguridad).
+ENV_BREAKING_EXTRA_DIA = "KENI_BREAKING_EXTRA_DIA"
 ENV_CLUSTER_BREAKING_VENTANA_H = "KENI_CLUSTER_BREAKING_VENTANA_H"
 
 # Pesos del ALGORITMO DE PONDERACIÓN del score de cluster (jerarquización de noticias). Editables
@@ -551,6 +554,7 @@ CLUSTER_UMBRAL_DEF = 0.82
 CLUSTER_UMBRAL_MERGE_DEF = 0.86
 CLUSTER_BREAKING_FUENTES_DEF = 3  # LEGADO (conteo); ver CLUSTER_BREAKING_PESO_DEF
 CLUSTER_BREAKING_PESO_DEF = 3.0
+BREAKING_EXTRA_DIA_DEF = 4
 CLUSTER_BREAKING_VENTANA_H_DEF = 6
 
 # Pesos del algoritmo de ponderación del score (defaults; espejan `clustering.PesosScore`).
@@ -738,6 +742,7 @@ __all__ = [
     'QA_EN_CURSO_TTL_MIN_DEF',
     'QA_FUENTE_TIMEOUT_DEF',
     'CLUSTER_BREAKING_FUENTES_DEF',
+    'BREAKING_EXTRA_DIA_DEF',
     'CLUSTER_BREAKING_PESO_DEF',
     'CLUSTER_BREAKING_VENTANA_H_DEF',
     'CLUSTER_UMBRAL_DEF',
@@ -768,6 +773,7 @@ __all__ = [
     'ENV_CLAUDE_SKIP_PERMISSIONS',
     'ENV_CLAUDE_TIMEOUT',
     'ENV_CLUSTER_BREAKING_FUENTES',
+    'ENV_BREAKING_EXTRA_DIA',
     'ENV_CLUSTER_BREAKING_PESO',
     'ENV_CLUSTER_BREAKING_VENTANA_H',
     'ENV_CLUSTER_UMBRAL',
