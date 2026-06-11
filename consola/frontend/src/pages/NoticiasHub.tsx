@@ -18,6 +18,7 @@ import { useSesion } from "@/hooks/sesion-contexto";
 import { PanelAjustes } from "@/pages/configuracion/SeccionFuncionalidad";
 
 import Cobertura from "./Cobertura";
+import { RielInvestigacion } from "./noticias/RielInvestigacion";
 
 // Los grupos del catálogo del motor de noticias (`ajustes_catalogo.GRUPOS_NOTICIAS`) REAGRUPADOS
 // en cuatro ÁREAS colapsables de capa base, por afinidad editorial: entrada → orden/prioridad del
@@ -27,10 +28,17 @@ import Cobertura from "./Cobertura";
 // marca`, pero con cupo + horarios en un formulario, en vez del texto crudo «mx:4,intl:4,…»).
 const AREAS_NOTICIAS = [
   {
+    titulo: "Investigación (interruptor general)",
+    descripcion:
+      "El maestro del proceso de Investigación: enciende/apaga de golpe ingesta, fusión, ranking y verificación para todas las marcas. Deja el pool listo para producir; no escribe copy.",
+    grupos: ["maestros_investigacion"],
+    abiertaInicial: true,
+  },
+  {
     titulo: "Entrada al pool",
     descripcion: "Qué noticias entran (filtro por temas, fuentes caídas) y su traducción.",
     grupos: ["noticias_entrada"],
-    abiertaInicial: true,
+    abiertaInicial: false,
   },
   {
     titulo: "Orden y prioridad del pool",
@@ -80,6 +88,7 @@ export default function NoticiasHub() {
           />
         </AccionesPagina>
       )}
+      <RielInvestigacion />
       <Cobertura />
     </div>
   );

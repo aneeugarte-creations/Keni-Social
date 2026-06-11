@@ -45,6 +45,7 @@ import { api, mensajeError } from "@/lib/api";
 import { fraseCorroboracion, nivelPrioridad } from "@/lib/noticias/ranking-editorial";
 import type { Historia } from "@/types";
 
+import { BadgeVeredictoFuente, ChipMarca } from "./BadgesInvestigacion";
 import { CalculoScore } from "./CalculoScore";
 import { DetalleHistoria } from "./DetalleHistoria";
 
@@ -288,8 +289,12 @@ export function TarjetaHistoria({
           </p>
         )}
 
-        {/* Fila de meta: prioridad explicable + traducción + fuentes expandibles */}
+        {/* Fila de meta: marca + veredicto de verificación + prioridad + traducción + fuentes */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <ChipMarca historia={historia} />
+
+          <BadgeVeredictoFuente veredicto={historia.qa_veredicto} />
+
           <button
             type="button"
             className="inline-flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums hover:text-foreground transition-colors"
