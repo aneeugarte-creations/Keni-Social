@@ -28,6 +28,7 @@
 
 import type Konva from "konva";
 import {
+  ChevronDown,
   DollarSign,
   Eye,
   ImageOff,
@@ -172,8 +173,11 @@ export function EditorDocumento({
   const fuentesExtra = useFuentesMarca(marca);
   // Stage de Konva + escala actual (publicados por el Lienzo) para muestrear píxeles (legibilidad).
   const stageInfo = useRef<{ stage: Konva.Stage | null; escala: number }>({ stage: null, escala: 1 });
-  // Menú «Más…» (acciones secundarias plegadas: adaptar + legibilidad + extras) abierto.
+  // Menú «Más…» (acciones secundarias plegadas: legibilidad + extras) abierto.
   const [menuMas, setMenuMas] = useState(false);
+  // «Adaptar a otro formato» (el «Redimensionar» de Canva): control propio y visible en la barra,
+  // ya no escondido en «Más». Abre un desplegable con los presets de formato.
+  const [menuFormato, setMenuFormato] = useState(false);
   // Sin panel abierto al entrar: el lienzo se ve completo (en móvil un panel tapaba la mitad).
   const [tool, setTool] = useState<Herramienta | null>(null);
   // ¿El panel abierto está FIJADO (clic) o es un overlay de hover sin fijar? El clic siempre fija.
@@ -293,9 +297,12 @@ export function EditorDocumento({
   // siguiente Escape. El menú «Más» sí se cierra siempre (es el overlay más alto).
   const seleccionActiva = !!seleccion || store.getState().seleccionMulti.length > 0;
   useCerrarConEscape(
-    menuMas || ((tool !== null || ajustes) && !seleccionActiva && !reencuadreId && !recorteId),
+    menuMas ||
+      menuFormato ||
+      ((tool !== null || ajustes) && !seleccionActiva && !reencuadreId && !recorteId),
     () => {
       if (menuMas) setMenuMas(false);
+      else if (menuFormato) setMenuFormato(false);
       else if (tool !== null) setTool(null);
       else setAjustes(false);
     },
@@ -332,7 +339,7 @@ export function EditorDocumento({
 
   // ADAPTAR a otro formato/red: genera el documento reencuadrado y lo abre en pestaña nueva.
   const adaptarA = (preset: (typeof PRESETS_FORMATO)[number]) => {
-    setMenuMas(false);
+    setMenuFormato(false);
     const doc = store.getState().documento;
     const adaptado = adaptarDocumento(doc, preset.f);
     if (!onAbrirAdaptado) {
@@ -395,6 +402,11 @@ export function EditorDocumento({
   // herramientas al carril CENTRADO (`AccionesPagina`) y guardado/exportar al flanco DERECHO,
   // junto al contexto de marca (`AccionesPaginaFin`). Sin cabecera (overlay de vídeo) se pinta
   // todo como una sola fila fina propia, en el orden de siempre.
+  // Formato actual del lienzo (para el control «Adaptar»): su etiqueta corta (p. ej. «4:5») o
+  // «Adaptar» si el lienzo no coincide con ningún preset. Se relee en cada render (suscrito al store).
+  const presetActual = PRESETS_FORMATO.find((p) => mismoFormato(p.f, store.getState().documento.formato));
+  const etiquetaFormato = presetActual?.etiqueta ?? "Adaptar";
+
   const botonesHerramientas = (
     <>
       <button
@@ -423,13 +435,61 @@ export function EditorDocumento({
           setVerCopy={setMuestraCopy}
         />
       </div>
+      {/* ADAPTAR A OTRO FORMATO — el «Redimensionar» de Canva: control propio y VISIBLE (icono de
+          redimensionar + formato actual), ya no escondido en «Más». Abre el desplegable de presets;
+          cada uno reencuadra el documento y lo abre en una pestaña nueva. */}
+      <div className="relative">
+        <button
+          title="Adaptar a otro formato (story, feed, horizontal…)"
+          aria-label="Adaptar a otro formato"
+          aria-expanded={menuFormato}
+          onClick={() => { setMenuMas(false); setMenuFormato((v) => !v); }}
+          className={`flex items-center gap-1 rounded-md px-1.5 py-1.5 text-xs hover:bg-accent ${
+            menuFormato ? "bg-accent text-foreground" : "text-muted-foreground"
+          }`}
+        >
+          <Maximize2 className="h-4 w-4" />
+          <span className="hidden sm:inline">{etiquetaFormato}</span>
+          <ChevronDown className="h-3.5 w-3.5" />
+        </button>
+        {menuFormato && (
+          <>
+            <Telon
+              onCerrar={() => setMenuFormato(false)}
+              etiqueta="Cerrar adaptar a otro formato"
+              className="fixed inset-0 z-30"
+            />
+            <div className="absolute right-0 top-full z-40 mt-1 w-56 overflow-hidden rounded-md border border-border bg-popover py-1 shadow-md">
+              <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Adaptar a…
+              </div>
+              {PRESETS_FORMATO.map((p) => {
+                const actual = mismoFormato(p.f, store.getState().documento.formato);
+                return (
+                  <button
+                    key={p.etiqueta}
+                    onClick={() => adaptarA(p)}
+                    disabled={actual}
+                    className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-accent disabled:opacity-40"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Maximize2 className="h-4 w-4 text-muted-foreground" /> {p.nombre}
+                    </span>
+                    {actual && <span className="text-[10px] text-muted-foreground">actual</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
       {/* MÁS — acciones secundarias/terciarias plegadas. */}
       <div className="relative">
         <button
           title="Más acciones"
           aria-label="Más acciones"
           aria-expanded={menuMas}
-          onClick={() => setMenuMas((v) => !v)}
+          onClick={() => { setMenuFormato(false); setMenuMas((v) => !v); }}
           className={`flex items-center rounded-md p-1.5 hover:bg-accent ${
             menuMas ? "bg-accent text-foreground" : "text-muted-foreground"
           }`}
@@ -479,26 +539,6 @@ export function EditorDocumento({
               >
                 <Eye className="h-4 w-4 text-muted-foreground" /> Revisar legibilidad
               </button>
-              <div className="my-1 border-t border-border" />
-              <div className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Adaptar a…
-              </div>
-              {PRESETS_FORMATO.map((p) => {
-                const actual = mismoFormato(p.f, store.getState().documento.formato);
-                return (
-                  <button
-                    key={p.etiqueta}
-                    onClick={() => adaptarA(p)}
-                    disabled={actual}
-                    className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-accent disabled:opacity-40"
-                  >
-                    <span className="flex items-center gap-2">
-                      <Maximize2 className="h-4 w-4 text-muted-foreground" /> {p.nombre}
-                    </span>
-                    {actual && <span className="text-[10px] text-muted-foreground">actual</span>}
-                  </button>
-                );
-              })}
             </div>
           </>
         )}
