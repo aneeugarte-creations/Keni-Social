@@ -3,6 +3,10 @@
 // MÁS usados. SOLO aparece con selección; sin capa seleccionada no pinta nada (los ajustes del
 // lienzo/fondo viven en el Inspector, vía «Ajustes» del rail). Lo profundo (todos los ajustes)
 // vive en el Inspector, que se abre desde el botón «Ajustes». Opera sobre el store vía contexto.
+//
+// COLOR: toda capa con color (texto, marco, overlay, logo wordmark) expone aquí su(s)
+// ColorControl —el selector completo estilo Canva: espectro, hex, cuentagotas y muestras—, para
+// poder recolorear lo seleccionado sin pasar por el Inspector.
 
 import {
   AlignCenter,
@@ -28,7 +32,8 @@ import { createPortal } from "react-dom";
 import { tieneCursiva } from "../lib/placa/dibujar.mjs";
 
 import { familiaReal } from "./capas/tipografia";
-import type { Capa, CapaTexto } from "./documento";
+import { ColorControl } from "./ColorControl";
+import type { Capa, CapaLogo, CapaMarco, CapaOverlay, CapaTexto } from "./documento";
 import { CATALOGO_FUENTES } from "./documento";
 import { useEditor, useStoreEditor } from "./usarEditor";
 
@@ -285,25 +290,6 @@ function FilaSlider({ etiqueta, valor, min, max, paso, decimales = 0, onChange }
   );
 }
 
-function Swatch({ color, onChange, titulo }: { color: string; onChange: (c: string) => void; titulo: string }) {
-  // Extrae #rrggbb del color (puede ser #rrggbb o #rrggbbaa).
-  const hexRgb = color.slice(0, 7);
-  // Preserva el alfa si estaba presente (últimos 2 chars).
-  const alfa = color.length === 9 ? color.slice(7, 9) : "";
-
-  const handleColorChange = (nuevoHex: string) => {
-    // Si había alfa, preservarlo; si no, solo RGB.
-    onChange(alfa ? nuevoHex + alfa : nuevoHex);
-  };
-
-  return (
-    <label title={titulo} className="relative flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md border border-input">
-      <span className="h-4 w-4 rounded-sm border border-border" style={{ background: color }} />
-      <input type="color" value={hexRgb} onChange={(e) => handleColorChange(e.target.value)} className="absolute inset-0 cursor-pointer opacity-0" />
-    </label>
-  );
-}
-
 export function BarraContextual({
   fuentesExtra = [],
   onAbrirAjustes,
@@ -424,7 +410,13 @@ export function BarraContextual({
           >
             <span className="text-[13px] font-semibold leading-none">aA</span>
           </BotonIcono>
-          <Swatch color={(capa as CapaTexto).color} onChange={(c) => set({ color: c } as Partial<Capa>)} titulo="Color del texto" />
+          {/* COLOR del texto con el selector completo. Elegir un sólido LIMPIA el degradado del
+              relleno si lo había (mismo gesto que PanelMarca): es lo que el clic significa. */}
+          <ColorControl
+            valor={(capa as CapaTexto).color}
+            onChange={(c) => set({ color: c, relleno_degradado: null } as Partial<Capa>)}
+            titulo="Color del texto"
+          />
           {(() => {
             const al = (capa as CapaTexto).alineacion;
             const Icono = ALIN_ICONO[al];
@@ -497,11 +489,64 @@ export function BarraContextual({
         </>
       )}
 
-      {/* Marco: Forma, Relleno y Borde viven en el Inspector; la barra solo expone «Ajustes» (abajo). */}
+      {/* Marco: relleno y borde se recolorean desde la barra (selector completo); lo demás
+          —forma, esquinas, degradado…— sigue en el Inspector. */}
+      {capa.tipo === "marco" && (() => {
+        const c = capa as CapaMarco;
+        const borde = c.borde;
+        return (
+          <>
+            {/* La forma «línea» no tiene relleno: solo borde. Elegir un sólido limpia el
+                degradado del relleno, igual que en el texto. */}
+            {c.forma !== "linea" && (
+              <ColorControl
+                valor={c.relleno ?? "#000000"}
+                onChange={(v) => set({ relleno: v, relleno_degradado: null } as Partial<Capa>)}
+                titulo="Color de relleno"
+              />
+            )}
+            {borde && (
+              <ColorControl
+                valor={borde.color}
+                onChange={(v) => set({ borde: { ...borde, color: v } } as Partial<Capa>)}
+                titulo="Color del borde"
+              />
+            )}
+          </>
+        );
+      })()}
 
-      {capa.tipo === "logo" && (
-        <BotonIcono titulo="Reemplazar logo" onClick={onReemplazar}><Replace className="h-4 w-4" /> Reemplazar</BotonIcono>
+      {capa.tipo === "overlay" && (
+        <ColorControl
+          valor={(capa as CapaOverlay).color}
+          onChange={(v) => set({ color: v } as Partial<Capa>)}
+          titulo="Color del overlay"
+        />
       )}
+
+      {capa.tipo === "logo" && (() => {
+        const c = capa as CapaLogo;
+        return (
+          <>
+            {/* Solo el logo WORDMARK (texto) tiene colores; el logo de imagen no. */}
+            {c.tipo_logo === "wordmark" && (
+              <>
+                <ColorControl
+                  valor={c.wordmark.color}
+                  onChange={(v) => set({ wordmark: { ...c.wordmark, color: v } } as Partial<Capa>)}
+                  titulo="Color del wordmark"
+                />
+                <ColorControl
+                  valor={c.wordmark.fondo}
+                  onChange={(v) => set({ wordmark: { ...c.wordmark, fondo: v } } as Partial<Capa>)}
+                  titulo="Fondo del wordmark"
+                />
+              </>
+            )}
+            <BotonIcono titulo="Reemplazar logo" onClick={onReemplazar}><Replace className="h-4 w-4" /> Reemplazar</BotonIcono>
+          </>
+        );
+      })()}
 
       <div className="ml-auto flex items-center gap-1">
         <Sep />
