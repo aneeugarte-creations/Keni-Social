@@ -45,15 +45,15 @@ function agruparPlantillasPorMarca(plantillas: PlantillaDiseno[]): PlantillaDise
   );
 }
 
-/** Badge de tipo: pequeña etiqueta visual sobre la tarjeta de plantilla. */
+/** Badge de tipo: pequeña etiqueta en el pie de la tarjeta, junto al nombre. */
 function BadgeTipo({ tipo }: { tipo: "foto" | "miniatura" }) {
   return tipo === "miniatura" ? (
-    <span className="inline-flex items-center gap-0.5 rounded bg-violet-100 px-1 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
+    <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-violet-100 px-1 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
       <Video className="h-2.5 w-2.5" />
       Miniatura
     </span>
   ) : (
-    <span className="inline-flex items-center gap-0.5 rounded bg-sky-100 px-1 py-0.5 text-[10px] font-medium text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
+    <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-sky-100 px-1 py-0.5 text-[10px] font-medium text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
       <Image className="h-2.5 w-2.5" />
       Foto
     </span>
@@ -187,49 +187,52 @@ export function ContenidoPlantillas({
           )}
         </div>
       </button>
-      {/* Badges de tipo + categoría sobre la tarjeta */}
+      {/* Badge de categoría sobre la tarjeta (el de tipo va abajo, junto al nombre) */}
       <div className="absolute left-1.5 top-1.5 flex max-w-[calc(100%-3.75rem)] flex-wrap items-start gap-1">
-        <BadgeTipo tipo={p.tipo ?? "foto"} />
         <BadgeCategoria
           categoria={p.categoria}
           onCambiar={onCategorizar ? (slug) => onCategorizar(p, slug) : undefined}
         />
       </div>
-      {/* Título: clic para renombrar inline (la miniatura de arriba abre la plantilla). */}
-      {onRenombrar && editId === p.id ? (
-        <input
-          autoFocus
-          value={editVal}
-          onChange={(e) => setEditVal(e.target.value)}
-          onBlur={() => commit(p)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
+      {/* Pie: etiqueta de tipo + título, fuera de la miniatura. Clic en el título
+          renombra inline (la miniatura de arriba abre la plantilla). */}
+      <div className="flex items-center gap-1 px-1.5 py-1">
+        <BadgeTipo tipo={p.tipo ?? "foto"} />
+        {onRenombrar && editId === p.id ? (
+          <input
+            autoFocus
+            value={editVal}
+            onChange={(e) => setEditVal(e.target.value)}
+            onBlur={() => commit(p)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.stopPropagation();
+                commit(p);
+              } else if (e.key === "Escape") {
+                e.stopPropagation();
+                setEditId(null);
+                commitHecho.current = false;
+              }
+            }}
+            className="block min-w-0 flex-1 rounded border border-primary bg-background px-1 py-0.5 text-xs"
+          />
+        ) : onRenombrar ? (
+          <button
+            onClick={(e) => {
               e.stopPropagation();
-              commit(p);
-            } else if (e.key === "Escape") {
-              e.stopPropagation();
-              setEditId(null);
+              setEditId(p.id);
+              setEditVal(p.nombre || "");
               commitHecho.current = false;
-            }
-          }}
-          className="block w-full rounded border border-primary bg-background px-1.5 py-1 text-xs"
-        />
-      ) : onRenombrar ? (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setEditId(p.id);
-            setEditVal(p.nombre || "");
-            commitHecho.current = false;
-          }}
-          title="Clic para renombrar"
-          className="block w-full truncate px-1.5 py-1 text-left text-xs text-muted-foreground hover:text-foreground"
-        >
-          {p.nombre || "(sin nombre)"}
-        </button>
-      ) : (
-        <div className="truncate px-1.5 py-1 text-left text-xs">{p.nombre || "(sin nombre)"}</div>
-      )}
+            }}
+            title="Clic para renombrar"
+            className="min-w-0 flex-1 truncate text-left text-xs text-muted-foreground hover:text-foreground"
+          >
+            {p.nombre || "(sin nombre)"}
+          </button>
+        ) : (
+          <div className="min-w-0 flex-1 truncate text-left text-xs">{p.nombre || "(sin nombre)"}</div>
+        )}
+      </div>
       {/* Rotación: marca la plantilla para entrar en la ROTACIÓN automática de la marca
           (cada post nuevo se lleva la siguiente del grupo; mismo color en todas las redes).
           Necesita ≥2 plantillas marcadas para activarse. */}

@@ -92,14 +92,14 @@ describe("GaleriaPlantillas — filtro de tipo", () => {
     expect(screen.queryByTitle(`Cargar «${FOTO.nombre}»`)).not.toBeInTheDocument();
   });
 
-  it("muestra badge de tipo 'Foto' sobre cada plantilla de foto", () => {
+  it("muestra la etiqueta de tipo 'Foto' junto al nombre, fuera de la miniatura", () => {
     render(
       <GaleriaPlantillas plantillas={[FOTO]} onCargar={vi.fn()} onCerrar={vi.fn()} />,
     );
     expect(screen.getByText("Foto")).toBeInTheDocument();
   });
 
-  it("muestra badge de tipo 'Miniatura' sobre cada plantilla de miniatura (con tipoFijo)", () => {
+  it("muestra la etiqueta de tipo 'Miniatura' junto al nombre (con tipoFijo)", () => {
     render(
       <GaleriaPlantillas
         plantillas={[MINIATURA]}
