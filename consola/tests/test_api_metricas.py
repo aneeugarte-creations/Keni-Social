@@ -288,14 +288,19 @@ def test_refrescar_responde_202_y_completa(cliente):
     assert r.status_code == 202
     cuerpo = r.json()
     assert isinstance(cuerpo["corriendo"], bool)
-    # El barrido (fuente de muestra) termina rápido; esperamos a que acabe para no
-    # dejar un hilo escribiendo durante el teardown del test.
-    for _ in range(100):
+    # El barrido (fuente de muestra) corre en un HILO DE FONDO; en local termina en ms, pero
+    # bajo la carga del CI (host compartido, varios agentes + Postgres) puede tardar bastante
+    # más. Esperamos con un presupuesto AMPLIO (~20 s): el bucle SALE en cuanto `corriendo`
+    # baja, así que el camino feliz sigue siendo instantáneo; el tope solo evita colgar el test
+    # si algo va mal. Antes el presupuesto era de 2 s y bajo contención producía un flake
+    # (`assert True is False`) que tumbaba tests-python sin ser una regresión real.
+    est = cuerpo
+    for _ in range(400):
         est = cliente.get("/api/metricas/estado?rango=mes").json()
         if not est["corriendo"]:
             break
-        time.sleep(0.02)
-    assert est["corriendo"] is False
+        time.sleep(0.05)
+    assert est["corriendo"] is False, "el refresco de métricas no terminó dentro del presupuesto de espera"
     assert est["ultimo_error"] == ""
 
 
