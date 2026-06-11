@@ -202,6 +202,82 @@ describe("AppShell · sidebar siempre presente", () => {
     expect(boton.parentElement?.className).toContain("md:hidden");
   });
 
+  it("en el EDITOR (escritorio) las acciones van al carril CENTRADO de la topbar", async () => {
+    stubFetch();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <SesionContexto.Provider value={sesion}>
+          <MarcaActivaProvider>
+          <FiltrosContenidoProvider>
+          <MemoryRouter initialEntries={["/contenido/imagen"]}>
+            <Routes>
+              <Route path="/" element={<AppShell />}>
+                <Route
+                  path="contenido/imagen"
+                  element={
+                    <div>
+                      editor imagen
+                      <AccionesPagina>
+                        <button type="button">herramienta-editor</button>
+                      </AccionesPagina>
+                    </div>
+                  }
+                />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+          </FiltrosContenidoProvider>
+          </MarcaActivaProvider>
+        </SesionContexto.Provider>
+      </QueryClientProvider>,
+    );
+
+    await screen.findByText("editor imagen");
+    const boton = await screen.findByRole("button", { name: "herramienta-editor" });
+    // En escritorio (jsdom sin matchMedia => escritorio) el portal aterriza DENTRO del header,
+    // en el carril centrado entre los flancos `flex-1` (no en el hueco pegado al título).
+    expect(boton.closest("header")).not.toBeNull();
+    expect(boton.parentElement?.className).toContain("justify-center");
+  });
+
+  it("fuera del editor las acciones siguen junto al título (sin carril centrado)", async () => {
+    stubFetch();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <SesionContexto.Provider value={sesion}>
+          <MarcaActivaProvider>
+          <FiltrosContenidoProvider>
+          <MemoryRouter initialEntries={["/generacion"]}>
+            <Routes>
+              <Route path="/" element={<AppShell />}>
+                <Route
+                  path="generacion"
+                  element={
+                    <div>
+                      contenido app
+                      <AccionesPagina>
+                        <button type="button">accion-plana</button>
+                      </AccionesPagina>
+                    </div>
+                  }
+                />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+          </FiltrosContenidoProvider>
+          </MarcaActivaProvider>
+        </SesionContexto.Provider>
+      </QueryClientProvider>,
+    );
+
+    await screen.findByText("contenido app");
+    const boton = await screen.findByRole("button", { name: "accion-plana" });
+    expect(boton.closest("header")).not.toBeNull();
+    expect(boton.parentElement?.className).not.toContain("justify-center");
+  });
+
   it("persiste el estado colapsado del rail en localStorage", async () => {
     localStorage.setItem("keni:sidebar-colapsado", "1");
     renderShell("/configuracion");

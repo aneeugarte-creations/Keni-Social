@@ -163,15 +163,37 @@ export function AppShell() {
               estaban los breadcrumbs. Recibe los huecos por props (no consume el contexto):
               el Provider solo envuelve al `<Outlet/>`, que es quien portaliza título/acciones
               a estos huecos. */}
-          <EncabezadoSeccion refInicio={setSlotInicio} refAcciones={setSlotAcciones} />
+          {enEditor ? (
+            <>
+              {/* EDITOR (patrón Canva): las HERRAMIENTAS van CENTRADAS en la barra, no
+                  apiladas tras el título. Tres zonas: título a la izquierda y contexto a la
+                  derecha como flancos `flex-1` de base 0 (iguales => el carril central queda
+                  en el centro REAL de la barra y, si falta sitio, ceden antes de solaparse),
+                  y el hueco de acciones entre ambos. En móvil el portal de acciones apunta a
+                  su fila bajo el header (como siempre): el carril queda vacío y `empty:hidden`
+                  lo quita del flujo. */}
+              <div className="flex h-full min-w-0 flex-1 items-center">
+                <EncabezadoSeccion refInicio={setSlotInicio} />
+              </div>
+              <div ref={setSlotAcciones} className="flex h-full min-w-0 items-center justify-center empty:hidden" />
+              <div className="flex flex-1 items-center justify-end gap-2">
+                <ControlContexto />
+                <CampanaNotificaciones />
+              </div>
+            </>
+          ) : (
+            <>
+              <EncabezadoSeccion refInicio={setSlotInicio} refAcciones={setSlotAcciones} />
 
-          {/* A la derecha de la topbar: el control de CONTEXTO unificado (marca + red + línea
-              en un solo dropdown; los filtros de red/línea solo se ofrecen en sus rutas) y las
-              notificaciones. */}
-          <div className="ml-auto flex items-center gap-2">
-            <ControlContexto />
-            <CampanaNotificaciones />
-          </div>
+              {/* A la derecha de la topbar: el control de CONTEXTO unificado (marca + red + línea
+                  en un solo dropdown; los filtros de red/línea solo se ofrecen en sus rutas) y las
+                  notificaciones. */}
+              <div className="ml-auto flex items-center gap-2">
+                <ControlContexto />
+                <CampanaNotificaciones />
+              </div>
+            </>
+          )}
         </header>
 
         {/* Acciones de página en MÓVIL: fila propia bajo el header (el portal de

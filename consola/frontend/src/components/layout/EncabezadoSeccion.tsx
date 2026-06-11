@@ -20,13 +20,16 @@ import { cn } from "@/lib/utils";
  *     a la sección/título.
  *
  * Los huecos los entrega el `AppShell` por contexto (refs `refInicio`/`refAcciones`).
+ * `refAcciones` es OPCIONAL: en las rutas del editor el AppShell coloca el hueco de acciones
+ * en un carril CENTRADO de la barra (patrón Canva) en vez de junto al título; entonces esta
+ * cabecera no pinta su hueco propio.
  */
 export function EncabezadoSeccion({
   refInicio,
   refAcciones,
 }: {
   refInicio: (el: HTMLElement | null) => void;
-  refAcciones: (el: HTMLElement | null) => void;
+  refAcciones?: (el: HTMLElement | null) => void;
 }) {
   const { pathname } = useLocation();
   const { marcaActiva } = useMarcaActiva();
@@ -80,8 +83,9 @@ export function EncabezadoSeccion({
           el control de marca de la derecha lo pisaba). */}
       <div ref={refInicio} className="flex min-w-0 items-center" />
 
-      {/* Hueco de acciones, JUNTO a la sección/título (portal). */}
-      <div ref={refAcciones} className="flex min-w-0 items-center" />
+      {/* Hueco de acciones, JUNTO a la sección/título (portal). En el editor no se pinta:
+          el AppShell ofrece el carril centrado en su lugar. */}
+      {refAcciones && <div ref={refAcciones} className="flex min-w-0 items-center" />}
     </nav>
   );
 }
