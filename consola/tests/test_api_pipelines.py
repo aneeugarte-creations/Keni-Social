@@ -730,3 +730,46 @@ def test_autogen_legacy_correlacionado_se_pliega_en_su_run(cliente):
     assert run["clase"] == "run"
     assert run["metricas"]["tokens"] == 15
     assert all(x["titulo"] != "Auto-copy · UnoTV" for x in items)
+
+
+def test_metricas_de_run_via_marcador_sin_contenido_id(cliente):
+    """Una generación SIN `contenido_id` en el registro (los previos a sellarlo en `lanzar`)
+    se atribuye a su run por el MARCADOR de etapa (`gen_id` -> `contenido_id`): la tarjeta
+    suma sus métricas en vez de salir a cero (el bug visible: runs sin tokens/coste/tiempo)."""
+    tema = _tema_pipeline("Run correlada por marcador")
+    gen = generaciones.crear({
+        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Copy · UnoTV",  # SIN contenido_id
+        "estado": generaciones.ESTADO_COMPLETADO,
+        "metricas": {"tokens_in": 200, "tokens_out": 100, "total_cost_usd": 0.03,
+                     "duration_ms": 5000},
+    })
+    registrar_etapa(
+        ETAPA_CD, "unotv", "Generación de copy", contenido_id=tema["id"], gen_id=gen["id"],
+    )
+    run = _run_por_titulo(cliente, "Run correlada por marcador")
+    assert run["metricas"]["items"] == 1
+    assert run["metricas"]["tokens"] == 300
+    assert run["metricas"]["coste_usd"] == pytest.approx(0.03)
+    assert run["metricas"]["duration_ms"] == 5000
+    # Si ADEMÁS el registro llevara contenido_id, no se duplica (dedup por generación).
+    det = cliente.get(f"/api/pipelines/{tema['id']}").json()["pipeline"]
+    assert det["metricas"] == run["metricas"]
+
+
+def test_lanzar_sella_contenido_id_en_el_registro(cliente, monkeypatch):
+    """`dominio.generar.lanzar` persiste `contenido_id` en el REGISTRO de la generación (no
+    solo en el spec del job): es la correlación que usa Producción para sumar por run."""
+    from keni_consola.dominio import generar as dom_generar
+    from keni_consola.dominio import jobspec
+
+    monkeypatch.setattr(
+        dom_generar.generaciones, "encolar_job_claude", lambda *a, **k: None
+    )
+    spec_proc = jobspec.construir_hashtags()
+    gen = dom_generar.lanzar(
+        tipo="pipeline", titulo="t", marca="unotv", prompt="p",
+        procesar=jobspec.reconstruir_procesar({"procesar": spec_proc}),
+        procesar_spec=spec_proc, clave_idem="k-correlacion",
+        contenido_id="tema-xyz",
+    )
+    assert (generaciones.obtener(gen["id"]) or {}).get("contenido_id") == "tema-xyz"

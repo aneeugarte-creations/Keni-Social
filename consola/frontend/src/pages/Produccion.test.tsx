@@ -115,12 +115,12 @@ describe("Producción (feed unificado: runs del pipeline + actividad suelta)", (
     expect(screen.getByText("7")).toBeInTheDocument();
   });
 
-  it("muestra el SUMATORIO del feed (tokens/coste/duración de lo filtrado) junto al conteo", async () => {
+  it("junto a los filtros solo va el CONTEO (las métricas viven en cada tarjeta)", async () => {
     stubFetch();
     renderConProviders(<Produccion />);
-    // totales.tokens = 17345 -> "17.3 k tok" (compacto es-MX).
-    expect(await screen.findByText(/17.3\s*k tok/i)).toBeInTheDocument();
-    expect(screen.getByText(/2 items/i)).toBeInTheDocument();
+    expect(await screen.findByText(/2 items/i)).toBeInTheDocument();
+    // El sumatorio global (totales.tokens = 17345) ya NO se pinta arriba: sobraba.
+    expect(screen.queryByText(/17.3\s*k tok/i)).toBeNull();
   });
 
   it("pinta una RUN del pipeline como tarjeta con su tira de etapas y sus métricas", async () => {

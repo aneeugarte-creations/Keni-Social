@@ -391,22 +391,10 @@ function ContenidoEtapa({
       : null;
   }
   if (clave === "cd") {
-    return (
-      <div className="space-y-3">
-        <BloqueIA gen={generacion} plantilla={plantilla} />
-        {run.piezas.map((p, i) => (
-          <div key={`${p.red}-${i}`} className="rounded-md border p-2">
-            <div className="mb-1 flex items-center gap-2">
-              <span className="text-xs font-semibold">{p.red_nombre}</span>
-              {p.copy_in && <Badge variant="outline" className="text-[10px]">placa: {p.copy_in}</Badge>}
-            </div>
-            {p.copy
-              ? <Markdown className="text-xs text-foreground/90">{p.copy}</Markdown>
-              : <p className="text-xs italic text-muted-foreground">Sin copy.</p>}
-          </div>
-        ))}
-      </div>
-    );
+    // Solo el bloque IA (prompt | razonamiento + resultado): el copy final por red ya se ve
+    // en la SALIDA del bloque y, sobre todo, en el feed/aprobación (su sitio). Repetir aquí
+    // las tarjetas por red (X/Instagram/Facebook con placa) era ruido duplicado.
+    return <BloqueIA gen={generacion} plantilla={plantilla} />;
   }
   if (clave === "arte") {
     // Solo si el arte IA CORRIÓ (estado ok): una pieza puede traer la FOTO de la nota de una

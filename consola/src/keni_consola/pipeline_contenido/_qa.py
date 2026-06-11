@@ -189,6 +189,8 @@ def lanzar_qa_fuente(
         titulo=f"Validación · {titulo}",
         marca=marca,
         prompt=prompt,
+        # Correlación con el TEMA: Producción suma las métricas de la criba en su run.
+        contenido_id=tema_id,
         # CLAVE ESTABLE por tema: el prompt lleva un nonce por llamada (anti-inyección) y la
         # clave por defecto (hash del prompt) nunca coincidiría. Con esta, un re-lanzamiento de
         # la criba del MISMO tema mientras hay una en vuelo devuelve ese run (cinturón además

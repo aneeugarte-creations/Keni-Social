@@ -40,7 +40,7 @@ import type {
   RespuestaPipelines,
 } from "@/types";
 
-import { ESTADOS_FILTRO, ETAPAS_FILTRO, FilaPipeline, MetricasPipeline } from "./Pipelines";
+import { ESTADOS_FILTRO, ETAPAS_FILTRO, FilaPipeline } from "./Pipelines";
 
 // Tamaño de página del botón «Cargar más» (se pide `limite = páginas * PAGINA`, offset 0).
 const PAGINA = 20;
@@ -209,8 +209,6 @@ export default function Produccion() {
   const datos = listaQuery.data as RespuestaPipelines | undefined;
   const items = datos?.pipelines ?? [];
   const total = datos?.paginacion?.total ?? items.length;
-  // SUMATORIO de métricas de todo lo que casa el filtro (no solo la página cargada).
-  const totales = datos?.totales;
   const hayFiltro = !!(etapa || estado || tipo);
 
   // Catálogo de tipos para el filtro: de los agregados (visión global, no solo lo cargado).
@@ -332,13 +330,9 @@ export default function Produccion() {
           </Button>
         )}
         {!listaQuery.isPending && (
-          <span className="ml-auto flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            {/* Sumatorio del universo filtrado: el coste agregado de TODO lo listado. */}
-            <MetricasPipeline metricas={totales} />
-            <span>
-              {numeroCompleto(total)} {total === 1 ? "item" : "items"}
-              {hayFiltro ? " (filtrado)" : ""}
-            </span>
+          <span className="ml-auto text-xs text-muted-foreground">
+            {numeroCompleto(total)} {total === 1 ? "item" : "items"}
+            {hayFiltro ? " (filtrado)" : ""}
           </span>
         )}
       </div>

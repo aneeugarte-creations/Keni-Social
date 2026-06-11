@@ -282,6 +282,7 @@ def lanzar(
     endurecer: dict[str, Any] | None = None,
     clave_idem: str | None = None,
     urgente: bool = False,
+    contenido_id: str = "",
 ) -> dict[str, Any]:
     """Crea el registro de generación, ENCOLA el trabajo y devuelve el registro (para sondeo).
 
@@ -313,6 +314,10 @@ def lanzar(
         "tipo": tipo,
         "marca": marca,
         "etiqueta": f"{titulo} · {nombre_marca(marca)}",
+        # Correlación con el TEMA del tablero/pipeline (cuando el trabajo nace de uno): el
+        # feed de Producción suma por `contenido_id` las métricas de la run. Antes solo
+        # viajaba en el `procesar_spec` y el registro quedaba sin atar (runs a cero).
+        "contenido_id": contenido_id or "",
         **_autor_campos(autor),
     })
     if not nueva:
@@ -500,7 +505,7 @@ def lanzar_copy(
         tipo=tipo, titulo=titulo or "Copy", marca=marca, prompt=prompt, urgente=urgente,
         procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
         procesar_spec=procesar_spec, dir_temporal=dir_temporal, autor=autor,
-        endurecer=endurecer, clave_idem=clave_estable,
+        endurecer=endurecer, clave_idem=clave_estable, contenido_id=contenido_id or "",
         # Copy = SALIDA ESTRUCTURADA (se parsea a piezas/veredicto; el usuario no ve la salida
         # cruda) y el prompt auto-verifica: puede necesitar la web para corroborar datos. No se
         # veta la web por-callsite; queda la veta global `Bash Write Edit`.
