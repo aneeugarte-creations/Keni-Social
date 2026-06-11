@@ -41,6 +41,9 @@ PROCESOS_POR_PROMPT: dict[str, list[str]] = {
     # Pipeline de contenido
     "prompt/validacion": ["Investigación · verificación de la fuente (antes del copy)"],
     "prompt/copy": ["Producción · generación de copy desde la nota"],
+    "prompt/critica": [
+        "Aprobación · crítica IA con visión (vota el nivel «Crítica IA» antes de programar)",
+    ],
     "prompt/evergreen": ["Taller evergreen · brainstorming de ideas"],
     # Envoltorios del copy (instrucciones aditivas que `dominio.generar.componer` concatena
     # al prompt base; el código decide CUÁNDO se inyectan y rellena sus {{VARIABLES}}).

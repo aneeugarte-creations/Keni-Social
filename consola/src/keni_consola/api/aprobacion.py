@@ -402,6 +402,12 @@ async def forzar(request: Request) -> Response:
         )
         if not pendiente and not ia_rechazada:
             continue
+        # OVERRIDE de un DISLIKE de IA = transición rechazado→aprobado, pero el CAS de
+        # `actualizar_aprobacion` solo deja pendiente→terminal (anti-carrera). Reseteamos el
+        # nivel IA a pendiente PRIMERO (sin guardia) para que el OK forzado de abajo prospere;
+        # sin esto el flip se perdía en silencio y la pieza quedaba `en_revision`.
+        if ia_rechazada:
+            repos.actualizar_aprobacion(nivel["id"], {"decision": DECISION_PENDIENTE})
         nivel_decidido = repos.actualizar_aprobacion(
             nivel["id"],
             {
