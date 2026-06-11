@@ -94,8 +94,8 @@ function BotonToggle({
 }) {
   return (
     <div className="relative flex items-center">
-      {/* ACTIVO = píldora `--control-activo` (en la barra del editor: blanca sólida con glifo
-          naranja, distinta del hover accent; fuera del editor equivale al accent de siempre).
+      {/* ACTIVO = píldora `--control-activo` (en la barra del editor: negra sólida con glifo
+          blanco, distinta del hover accent; fuera del editor equivale al accent de siempre).
           El chevron comparte el fondo cuando está activo para que el par toggle+chevron se lea
           como UNA sola píldora (rounded-l + rounded-r), no como un activo partido por la mitad. */}
       <button

@@ -447,7 +447,7 @@ export function EditorDocumento({
           aria-expanded={menuFormato}
           onClick={() => { setMenuMas(false); setMenuFormato((v) => !v); }}
           className={`flex items-center gap-1 rounded-md px-1.5 py-1.5 text-xs ${
-            // Hover accent solo CERRADO: abierto conserva la píldora blanca (glifo legible).
+            // Hover accent solo CERRADO: abierto conserva la píldora `--control-activo` (glifo legible).
             menuFormato
               ? "bg-[hsl(var(--control-activo))] text-[hsl(var(--control-activo-foreground))]"
               : "text-muted-foreground hover:bg-accent"
@@ -496,7 +496,7 @@ export function EditorDocumento({
           aria-expanded={menuMas}
           onClick={() => { setMenuFormato(false); setMenuMas((v) => !v); }}
           className={`flex items-center rounded-md p-1.5 ${
-            // Hover accent solo CERRADO: abierto conserva la píldora blanca (glifo legible).
+            // Hover accent solo CERRADO: abierto conserva la píldora `--control-activo` (glifo legible).
             menuMas
               ? "bg-[hsl(var(--control-activo))] text-[hsl(var(--control-activo-foreground))]"
               : "text-muted-foreground hover:bg-accent"

@@ -151,7 +151,7 @@ export function ControlContexto() {
             // oscuro sobre el degradado era casi invisible, justo en el aviso de seguridad).
             ? "border-[hsl(var(--aviso-borde))] bg-[hsl(var(--aviso-superficie))] text-[hsl(var(--aviso-texto))]"
             // `hover:bg-accent` (no `bg-muted`): en la barra del editor `--muted` es blanco para la
-            // píldora translúcida; un hover a blanco sólido dejaría el texto (blanco) ilegible. El
+            // píldora translúcida; un hover a muted sólido dejaría el texto ilegible. El
             // token `accent` es el de hover de toda la app (gris idéntico fuera del editor).
             // El hover accent solo CERRADO: abierto conserva la píldora `--control-activo`
             // (un hover naranja bajo el texto naranja la dejaría ilegible justo tras abrir).

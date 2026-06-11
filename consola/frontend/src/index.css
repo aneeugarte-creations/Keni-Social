@@ -143,19 +143,19 @@
     recorre el naranja del logo (favicon): ámbar cálido → naranja → rojo-naranja profundo.
 
     El cromo de la barra (título, selector de marca, campana, deshacer/rehacer, «Más», Exportar…)
-    usa tokens semánticos. En vez de recolorear cada componente, REASIGNAMOS los tokens A BLANCO
-    SOLO en este scope, así todo el texto e iconos se leen sobre el degradado. `--accent` (el hover
-    de toda la app) pasa a un naranja más profundo para que el hover se note sobre el degradado.
+    usa tokens semánticos. En vez de recolorear cada componente, REASIGNAMOS los tokens A NEGRO
+    SOLO en este scope, así todo el cromo comparte un solo lenguaje sobre el degradado (decisión
+    de producto: el negro funciona mejor que el blanco sobre el naranja).
 
-    CONTRATO del esquema (un solo lenguaje sobre el degradado, patrón Canva):
-      · reposo: texto/iconos BLANCOS sobre fondo transparente (nada en negro/gris);
-      · hover / estado transitorio: tinte `--accent` naranja profundo;
-      · toggle ACTIVO / menú ABIERTO: píldora BLANCA SÓLIDA con glifo naranja profundo
+    CONTRATO del esquema (un solo lenguaje sobre el degradado):
+      · reposo: texto/iconos NEGROS sobre fondo transparente (nada en blanco suelto);
+      · hover / estado transitorio: píldora `--accent` albaricoque CLARA con glifo negro;
+      · toggle ACTIVO / menú ABIERTO: píldora NEGRA SÓLIDA con glifo blanco
         (`--control-activo*`), inequívoca y distinta del hover;
-      · CTA primaria (Exportar, «Guardar en pieza»): `--primary` blanco sólido con texto
-        naranja profundo (#dc3c00, el extremo del propio degradado);
-      · deshabilitado: blanco a baja opacidad (lo dan las utilidades disabled:opacity-*);
-      · avisos (Sin guardar, marca ajena): ámbar legible sobre el naranja vía `--aviso-*`.
+      · CTA primaria (Exportar, «Guardar en pieza»): `--primary` negro sólido con texto blanco;
+      · deshabilitado: negro a baja opacidad (lo dan las utilidades disabled:opacity-*);
+      · avisos (Sin guardar, marca ajena): ámbar legible vía `--aviso-*` (píldora negra con
+        texto ámbar claro; texto suelto en ámbar-950 oscuro).
   */
   .topbar-editor {
     background-image: linear-gradient(90deg, #fb7a2a 0%, #f1560f 52%, #dc3c00 100%);
@@ -166,41 +166,41 @@
       (#171717) y salen NEGROS sobre el naranja aunque `--foreground` esté reasignado.
     */
     color: hsl(var(--foreground));
-    --foreground: 0 0% 100%;
-    --muted-foreground: 0 0% 100%;
-    --muted: 0 0% 100%; /* superficies muted en blanco (el texto sigue legible); ver regla de la píldora abajo */
-    --accent: 20 100% 40%; /* hover: tinte naranja profundo, texto blanco legible */
-    --accent-foreground: 0 0% 100%;
-    --border: 28 100% 92%; /* hairline cálido tenue */
-    --input: 28 100% 92%;
+    --foreground: 0 0% 9%;
+    --muted-foreground: 0 0% 9%;
+    --muted: 0 0% 9%; /* superficies muted oscuras (translúcidas vía /40); ver regla de la píldora abajo */
+    --accent: 28 100% 82%; /* hover: píldora albaricoque clara, el glifo negro sigue legible */
+    --accent-foreground: 0 0% 9%;
+    --border: 16 70% 30%; /* hairline oscuro cálido */
+    --input: 16 70% 30%;
     /*
       `--background` pasa al naranja central del degradado: la variante `outline` de Button
       (Exportar secundario) deja de ser un bloque #fafafa y se funde con la barra (queda como
       ghost con hairline), y el `ring-offset-background` del foco se funde también, dejando el
-      foco como un anillo blanco limpio (`--ring`).
+      foco como un anillo limpio (`--ring`).
     */
     --background: 19 88% 50%;
-    --primary: 0 0% 100%; /* CTA: píldora blanca sólida… */
-    --primary-foreground: 16 100% 43%; /* …con texto/icono #dc3c00 */
-    --ring: 0 0% 100%;
+    --primary: 0 0% 9%; /* CTA: píldora negra sólida… */
+    --primary-foreground: 0 0% 100%; /* …con texto/icono blanco */
+    --ring: 0 0% 9%;
     /* `--secondary` alineado con el accent por si un control futuro lo trae a la barra;
        `--destructive` se deja intacto A PROPÓSITO (rojo sobre naranja no se usa aquí). */
-    --secondary: 20 100% 40%;
-    --secondary-foreground: 0 0% 100%;
-    --control-activo: 0 0% 100%; /* activo/abierto: píldora blanca sólida… */
-    --control-activo-foreground: 16 100% 43%; /* …con glifo naranja profundo */
-    --aviso-borde: 0 0% 100%;
-    --aviso-superficie: 0 0% 100%; /* aviso con superficie = píldora blanca sólida… */
-    --aviso-texto: 26 90% 37%; /* …con texto ámbar-700, legible sobre blanco */
-    --aviso-texto-plano: 48 96% 89%; /* texto suelto: ámbar-100, legible sobre el naranja */
+    --secondary: 28 100% 82%;
+    --secondary-foreground: 0 0% 9%;
+    --control-activo: 0 0% 9%; /* activo/abierto: píldora negra sólida… */
+    --control-activo-foreground: 0 0% 100%; /* …con glifo blanco */
+    --aviso-borde: 0 0% 9%;
+    --aviso-superficie: 0 0% 9%; /* aviso con superficie = píldora negra sólida… */
+    --aviso-texto: 45 96% 64%; /* …con texto ámbar-300, legible sobre negro */
+    --aviso-texto-plano: 26 92% 14%; /* texto suelto: ámbar-950, oscuro pero distinto del negro */
   }
   /*
     El badge ROJO de no-leídas de la campana (`bg-red-500`) se funde con el extremo rojo-naranja
-    del degradado (#dc3c00): un anillo blanco le devuelve la silueta de alerta sin cambiar su
-    semántica. Solo aplica dentro de la barra; fuera el badge sigue igual que siempre.
+    del degradado (#dc3c00): un anillo negro (a juego con el cromo) le devuelve la silueta de
+    alerta sin cambiar su semántica. Solo aplica dentro de la barra; fuera el badge sigue igual.
   */
   .topbar-editor :where(.bg-red-500) {
-    box-shadow: 0 0 0 2px hsl(0 0% 100% / 0.9);
+    box-shadow: 0 0 0 2px hsl(0 0% 9% / 0.9);
   }
   /*
     La PÍLDORA de marca (ControlContexto, `bg-muted/40`) quedaba RELLENA de blanco translúcido
