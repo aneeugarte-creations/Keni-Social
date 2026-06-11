@@ -1,6 +1,7 @@
 /**
- * Diálogo «Plan y horarios» de la página Programación: EL sitio donde se configura, por
- * marca, cuántos contenidos salen al día de cada LÍNEA y a qué horas (CDMX).
+ * «Plan y horarios» de la página Programación: EL sitio donde se configura, por marca, cuántos
+ * contenidos salen al día de cada LÍNEA y a qué horas (CDMX). Es una SECCIÓN INLINE del panel de
+ * ajustes (capa base, colapsable), no un diálogo: los ajustes no se esconden tras un botón.
  *
  * Por debajo toca dos cosas que ya existen:
  *   - la CANTIDAD escribe el ajuste `KENI_PLAN_DIA::<marca>` ("linea:n,…", el que lee la
@@ -16,13 +17,6 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api, mensajeError } from "@/lib/api";
@@ -64,32 +58,28 @@ interface FilaLinea {
   horas: string;
 }
 
-export function GestionPlan({
-  abierto,
-  onCerrar,
+export function PanelPlan({
   marca,
   nombreMarca,
 }: {
-  abierto: boolean;
-  onCerrar: () => void;
   marca: string;
   nombreMarca: string;
 }) {
   const queryClient = useQueryClient();
   const clavePlan = `KENI_PLAN_DIA::${marca}`;
 
+  // Sin gate `enabled`: esta sección solo se MONTA cuando el usuario la despliega (la sección
+  // colapsable no pinta su contenido plegada), así que las queries arrancan justo entonces.
   const ajustes = useQuery({
     queryKey: ["ajustes"],
     queryFn: ({ signal }) => api.ajustes(signal),
-    enabled: abierto,
   });
   const franjasQuery = useQuery({
     queryKey: ["franjas"],
     queryFn: ({ signal }) => api.franjas(signal),
-    enabled: abierto,
   });
 
-  // Estado del formulario, sembrado al abrir desde el plan + las franjas actuales.
+  // Estado del formulario, sembrado al montar desde el plan + las franjas actuales.
   const [filas, setFilas] = React.useState<Record<string, FilaLinea>>({});
   const [sembrado, setSembrado] = React.useState(false);
 
@@ -110,10 +100,6 @@ export function GestionPlan({
   );
 
   React.useEffect(() => {
-    if (!abierto) {
-      setSembrado(false);
-      return;
-    }
     if (sembrado || ajustes.isPending || franjasQuery.isPending) return;
     const plan = parsearPlan(valorPlan);
     const horasPorLinea = new Map<string, Set<string>>();
@@ -132,7 +118,7 @@ export function GestionPlan({
     }
     setFilas(sembradas);
     setSembrado(true);
-  }, [abierto, sembrado, ajustes.isPending, franjasQuery.isPending, valorPlan, franjasMarca]);
+  }, [sembrado, ajustes.isPending, franjasQuery.isPending, valorPlan, franjasMarca]);
 
   const guardar = useMutation({
     mutationFn: async () => {
@@ -177,7 +163,6 @@ export function GestionPlan({
       void queryClient.invalidateQueries({ queryKey: ["ajustes"] });
       void queryClient.invalidateQueries({ queryKey: ["produccion"] });
       toast.success("Plan y horarios guardados.");
-      onCerrar();
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : mensajeError(e)),
   });
@@ -188,23 +173,19 @@ export function GestionPlan({
   const total = lineas.reduce((acc, l) => acc + (Number(filas[l]?.cupo) || 0), 0);
 
   return (
-    <Dialog open={abierto} onOpenChange={(v) => !v && onCerrar()}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Plan y horarios · {nombreMarca}</DialogTitle>
-          <DialogDescription>
-            Cuántos contenidos salen al día de cada línea y a qué horas (hora de Ciudad de
-            México). La cantidad gobierna la producción automática; los horarios, la
-            programación. «Breaking» no lleva horario: sale al instante.
-          </DialogDescription>
-        </DialogHeader>
-        {ajustes.isPending || franjasQuery.isPending ? (
-          <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {lineas.map((linea) => (
+    <div>
+      <p className="mb-3 text-xs text-muted-foreground">
+        Para <span className="font-medium text-foreground">{nombreMarca}</span>: cuántos
+        contenidos salen al día de cada línea y a qué horas (hora CDMX). La cantidad gobierna la
+        producción automática; los horarios, la programación. «Breaking» no lleva horario.
+      </p>
+      {ajustes.isPending || franjasQuery.isPending ? (
+        <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {lineas.map((linea) => (
               <div
                 key={linea}
                 className="grid grid-cols-[8rem_5rem_minmax(0,1fr)] items-center gap-3"
@@ -261,7 +242,6 @@ export function GestionPlan({
             </div>
           </div>
         )}
-      </DialogContent>
-    </Dialog>
+    </div>
   );
 }

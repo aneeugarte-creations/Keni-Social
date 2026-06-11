@@ -1,5 +1,6 @@
 /**
- * Diálogo de gestión (CRUD) de cadencias por red.
+ * Gestión (CRUD) de cadencias por red, como SECCIÓN INLINE del panel de ajustes de Programación
+ * (capa base, colapsable), no un diálogo: los ajustes no se esconden tras un botón.
  *
  * Una cadencia es el scheduling por margen mínimo entre publicaciones de una
  * red, dentro de una ventana horaria (hora_inicio–hora_fin) y unos días,
@@ -11,7 +12,7 @@
  * texto es-MX.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Clock, Gauge, Loader2, Save, Trash2 } from "lucide-react";
+import { Clock, Loader2, Save, Trash2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -24,13 +25,6 @@ import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -107,7 +101,7 @@ function FormularioCadencia({
     margenValido && !!horaInicio && !!horaFin && dias.length > 0 && !guardar.isPending;
 
   return (
-    <div className="space-y-3 rounded-md border border-border bg-muted/20 p-3">
+    <div className="space-y-3">
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="cadencia-red">
@@ -277,21 +271,18 @@ function FilaCadencia({ cadencia }: { cadencia: Cadencia }) {
   );
 }
 
-export function GestionCadencia({
-  abierto,
-  onCerrar,
+export function PanelCadencia({
   marcas,
   redes,
 }: {
-  abierto: boolean;
-  onCerrar: () => void;
   marcas: MarcaDisponible[];
   redes: RedPublicacion[];
 }) {
+  // Sin gate `enabled`: la sección colapsable solo monta su contenido al desplegarse, así que la
+  // query arranca justo entonces.
   const query = useQuery({
     queryKey: CLAVE_CADENCIAS,
     queryFn: ({ signal }) => api.cadencias(signal),
-    enabled: abierto,
   });
 
   const cadencias = React.useMemo(() => {
@@ -305,43 +296,28 @@ export function GestionCadencia({
   }, [query.data]);
 
   return (
-    <Dialog open={abierto} onOpenChange={(o) => !o && onCerrar()}>
-      <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Gauge className="h-5 w-5" />
-            Cadencia por red
-          </DialogTitle>
-          <DialogDescription>
-            Define cada cuántos minutos puede salir un post por red, dentro de una ventana
-            horaria y unos días. Guardar con la misma marca y red sobrescribe la cadencia.
-          </DialogDescription>
-        </DialogHeader>
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">
+        Cada cuántos minutos puede salir un post por red, dentro de una ventana horaria y unos
+        días. Guardar con la misma marca y red sobrescribe la cadencia.
+      </p>
+      <FormularioCadencia marcas={marcas} redes={redes} />
 
-        <div className="space-y-3">
-          <FormularioCadencia marcas={marcas} redes={redes} />
-
-          {query.isPending ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              Cargando cadencias…
-            </p>
-          ) : query.isError ? (
-            <p className="py-6 text-center text-sm text-destructive">
-              {mensajeError(query.error)}
-            </p>
-          ) : cadencias.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              Aún no hay cadencias. Define la primera arriba.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {cadencias.map((c) => (
-                <FilaCadencia key={c.id} cadencia={c} />
-              ))}
-            </div>
-          )}
+      {query.isPending ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">Cargando cadencias…</p>
+      ) : query.isError ? (
+        <p className="py-6 text-center text-sm text-destructive">{mensajeError(query.error)}</p>
+      ) : cadencias.length === 0 ? (
+        <p className="py-4 text-center text-sm text-muted-foreground">
+          Aún no hay cadencias. Define la primera arriba.
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {cadencias.map((c) => (
+            <FilaCadencia key={c.id} cadencia={c} />
+          ))}
         </div>
-      </DialogContent>
-    </Dialog>
+      )}
+    </div>
   );
 }
