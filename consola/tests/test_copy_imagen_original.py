@@ -212,18 +212,23 @@ def test_procesar_copy_arma_carrusel_si_el_modelo_lo_elige(entorno, monkeypatch)
     assert len(slides) == 3
 
 
-def test_procesar_copy_un_solo_slide_no_es_panel(entorno, monkeypatch):
-    """Un carrusel de UNA tarjeta no es panel: queda como post de siempre."""
+def test_procesar_copy_carrusel_sin_panel_es_sugerencia_de_formato(entorno, monkeypatch):
+    """`tipo: carrusel` SIN panel horneable (1 slide / tema único) = SUGERENCIA de formato.
+
+    El modelo eligió carrusel pero no hay panel multi-historia que hornear (menos de 2 slides,
+    sin catálogo de fotos): no se hornea ninguna placa, PERO el tema FLIP-ea a formato carrusel
+    como SUGERENCIA (las fotos las pone el equipo después) y se acota a IG/FB. Reusa `formato`
+    (decisión del dueño): la sugerencia no se pierde aunque no se construya el carrusel."""
     from keni_consola import redes
 
     _almacen_disco(monkeypatch)
     monkeypatch.setattr(extraccion_url, "_DESCARGADOR_BYTES", lambda url: _PNG)
     llamadas = _mock_componer_slide(monkeypatch)
-    tema = repos.crear_contenido(clase="contenido", titulo="Panel", marca=_MARCA)
+    tema = repos.crear_contenido(clase="contenido", titulo="Biomas", marca=_MARCA)
 
     procesar = dom_copy.construir_procesar_copy(
         "copy-desde-nota", _MARCA,
-        redes_ids=["instagram", "x"], titulo_dado="Panel", texto_base="nota",
+        redes_ids=["instagram", "x"], titulo_dado="Biomas", texto_base="nota",
         contenido_id=tema["id"], imagen_fuente="https://example.com/portada.png",
         fotos_notas=[], tipo_contenido="fuente",
     )
@@ -233,9 +238,42 @@ def test_procesar_copy_un_solo_slide_no_es_panel(entorno, monkeypatch):
     )
     resultado = procesar(salida, None)
 
+    # Ningún slide horneado (no es panel), pero el formato SÍ flip-ea a carrusel (sugerencia)...
     assert llamadas == []
-    assert sorted(str(p["red"]) for p in resultado["publicaciones"]) == ["instagram", "x"]
-    assert repos.obtener_contenido(tema["id"])["formato"] == redes.FORMATO_FOTO
+    assert repos.obtener_contenido(tema["id"])["formato"] == redes.FORMATO_CARRUSEL
+    # ...y eso acota las redes a IG/FB (la pieza de X se omite por el flip de formato).
+    assert sorted(str(p["red"]) for p in resultado["publicaciones"]) == ["instagram"]
+    # Sin panel horneado, el campo `carrusel` de la pieza queda vacío (las fotos llegan después).
+    assert all(not str(p.get("carrusel") or "") for p in resultado["publicaciones"])
+
+
+def test_procesar_copy_carrusel_de_tema_unico_sin_slides_flip_de_formato(entorno, monkeypatch):
+    """Caso biomas: el copy de un TEMA ÚNICO sugiere `tipo: carrusel` SIN clave `slides`.
+
+    No hay nada que hornear (es un explainer, no un panel multi-historia), pero la SUGERENCIA se
+    registra: el tema pasa a formato carrusel (a la espera de que el equipo suba las fotos) y se
+    acota a IG/FB. Es el cableado que conecta el `tipo` del modelo con el formato de la pieza."""
+    from keni_consola import redes
+
+    _almacen_disco(monkeypatch)
+    monkeypatch.setattr(extraccion_url, "_DESCARGADOR_BYTES", lambda url: _PNG)
+    llamadas = _mock_componer_slide(monkeypatch)
+    tema = repos.crear_contenido(clase="contenido", titulo="Biomas de México", marca=_MARCA)
+
+    procesar = dom_copy.construir_procesar_copy(
+        "copy-desde-nota", _MARCA,
+        redes_ids=["instagram", "x", "facebook"], titulo_dado="Biomas", texto_base="nota",
+        contenido_id=tema["id"], imagen_fuente="https://example.com/portada.png",
+        fotos_notas=[], tipo_contenido="fuente",
+    )
+    # Sugerencia pura: `tipo: carrusel` y NI SIQUIERA clave `slides`.
+    salida = '```json\n{"texto": "Copy", "copy_in": "BIOMAS", "tipo": "carrusel"}\n```'
+    resultado = procesar(salida, None)
+
+    assert llamadas == []  # nada que hornear
+    assert repos.obtener_contenido(tema["id"])["formato"] == redes.FORMATO_CARRUSEL
+    assert sorted(str(p["red"]) for p in resultado["publicaciones"]) == ["facebook", "instagram"]
+    assert all(not str(p.get("carrusel") or "") for p in resultado["publicaciones"])
 
 
 def test_procesar_copy_tipo_post_no_arma_carrusel(entorno, monkeypatch):

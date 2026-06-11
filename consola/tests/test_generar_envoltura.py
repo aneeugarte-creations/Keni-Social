@@ -12,10 +12,18 @@ import re
 from keni_consola.dominio import generar
 
 
-def test_instruccion_copy_unico_con_una_nota_no_ofrece_carrusel():
-    # Una historia de UNA sola nota no es un panel: no se ofrece la decisión post|carrusel.
-    assert '"tipo"' not in generar.instruccion_copy_unico(["instagram", "x", "facebook"])
-    assert '"tipo"' not in generar.instruccion_copy_unico(["instagram", "x"], n_notas=1)
+def test_instruccion_copy_unico_un_tema_sugiere_formato_sin_panel():
+    # TODA generación SUGIERE formato (post|carrusel). Un tema único NO es un panel: ofrece la
+    # decisión `tipo` pero SIN slides/catálogo (las fotos del carrusel las pone el equipo después).
+    for instr in (
+        generar.instruccion_copy_unico(["instagram", "x", "facebook"]),
+        generar.instruccion_copy_unico(["instagram", "x"], n_notas=1),
+    ):
+        assert '"tipo": "<post|carrusel>"' in instr
+        # SIN panel: ni array de slides ni catálogo de fotos (eso es solo para 2+ notas).
+        assert '"slides": [' not in instr
+        assert "FOTOS DISPONIBLES" not in instr
+        assert "explainer" in instr.lower()
 
 
 def test_instruccion_copy_unico_con_varias_notas_pide_decidir_tipo():

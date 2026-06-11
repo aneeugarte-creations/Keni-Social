@@ -308,6 +308,19 @@ _VERSIONES_UNICA_TOPE = (
     "redes: {{TOPE_CORTO}} caracteres."
 )
 
+# Sugerencia de FORMATO para un tema ÚNICO (sin panel multi-historia): el modelo decide si la
+# pieza luce mejor como post de foto o como CARRUSEL (explainer/lista). NO construye slides —solo
+# SUGIERE el formato; las fotos de cada tarjeta las sube el equipo después (o el motor de arte si
+# su toggle está activo)—. El bloque PANEL (`_bloque_decision_carrusel`, con catálogo de fotos y
+# slides) se reserva para historias de 2+ notas; aquí la decisión es solo post vs carrusel.
+_SUGERENCIA_FORMATO_SIMPLE = (
+    'DECIDE además el `tipo` de salida y decláralo en el json: "post" para un único post de foto '
+    '(lo normal), o "carrusel" si el tema es un EXPLAINER o una LISTA de varios elementos (p. ej. '
+    '"cuántos son y dónde están", varias claves, pasos o datos) que luciría mejor repartido en '
+    'varias tarjetas que en una sola foto. Ante la duda, "post". NO incluyas "slides": las fotos '
+    "de cada tarjeta las añade el equipo después."
+)
+
 
 def instruccion_copy_unico(
     redes_ids: list[str],
@@ -325,11 +338,12 @@ def instruccion_copy_unico(
     de las estrechas). Antes anclaba TODO al límite más estricto (X=280) y publicaba un tuit en
     Instagram/Facebook. Si todas las redes son del mismo tipo, pide un único `texto`.
 
-    `n_notas` (pipeline, historias): cuántas SUB-HISTORIAS agrupa la historia. Con 2+, el
-    modelo DECIDE entre DOS tipos de output —`post` (lo de siempre) o `carrusel` EDITORIAL
-    (portada paraguas + un slide con titular por sub-historia)— y lo declara en `tipo`;
-    `fotos_notas` es el catálogo numerado de fotos propias por nota para asignar foto a cada
-    slide. Con 0/1 notas no se ofrece (no hay panel que armar).
+    TODA generación SUGIERE el formato (`tipo`: post|carrusel): el modelo dice si la pieza luce
+    mejor como post de foto o como carrusel (explainer/lista). `n_notas` (pipeline, historias):
+    cuántas SUB-HISTORIAS agrupa la historia. Con 2+, además del `tipo` se pide el PANEL EDITORIAL
+    (portada paraguas + un slide con titular por sub-historia + `fotos_notas`, el catálogo numerado
+    de fotos propias para asignar foto a cada slide). Con 0/1 notas, la sugerencia es solo post vs
+    carrusel (sin slides: las fotos del carrusel las pone el equipo después).
 
     El ESQUELETO del texto vive en la Biblioteca (`PROMPT_ENVOLTORIO_COPY_UNICO`); la rama
     elegida (doble/única, con/sin carrusel) la decide el código y va ya montada en
@@ -341,19 +355,22 @@ def instruccion_copy_unico(
         if (lim := limites_plataforma.limite_de(r)) is not None and lim < UMBRAL_COPY_ESTRECHO
     ]
     amplias = [r for r in redes_ids if r not in set(estrechas)]
+    # TODA generación de copy SUGIERE el formato (`tipo`: post|carrusel). Con 2+ notas, el bloque
+    # PANEL pide además los slides + catálogo de fotos (carrusel multi-historia REAL); con un tema
+    # único, la sugerencia simple (post vs carrusel) basta —las fotos se ponen después—. El prefijo
+    # (copy_in + tipo) es común; solo cambia el bloque que se anexa, así el caso 2+ notas queda
+    # byte-idéntico al de antes.
     cierre_json_copy_in = (
         '"copy_in": "<texto que va DENTRO de la imagen: titular/claim corto, sin emojis; '
-        '\\"\\" si no lleva imagen>"}. El `copy_in` es el texto SOBRE la imagen, distinto del '
-        "`texto`; respeta la línea editorial de texto-en-imagen de la marca adjunta."
-    )
-    if n_notas >= 2:
-        cierre_json_copy_in = (
-            '"copy_in": "<texto que va DENTRO de la imagen: titular/claim corto, sin emojis; '
-            '\\"\\" si no lleva imagen>", "tipo": "<post|carrusel>"}. El `copy_in` es el texto '
-            "SOBRE la imagen (en un carrusel, el titular PARAGUAS de la PORTADA), distinto del "
-            "`texto`; respeta la línea editorial de texto-en-imagen de la marca adjunta. "
-            + _bloque_decision_carrusel(n_notas, list(fotos_notas or []))
+        '\\"\\" si no lleva imagen>", "tipo": "<post|carrusel>"}. El `copy_in` es el texto '
+        "SOBRE la imagen (en un carrusel, el titular PARAGUAS de la PORTADA), distinto del "
+        "`texto`; respeta la línea editorial de texto-en-imagen de la marca adjunta. "
+        + (
+            _bloque_decision_carrusel(n_notas, list(fotos_notas or []))
+            if n_notas >= 2
+            else _SUGERENCIA_FORMATO_SIMPLE
         )
+    )
     if estrechas and amplias:
         tope_corto = min(limites_plataforma.limite_de(r) for r in estrechas)
         modo = ""

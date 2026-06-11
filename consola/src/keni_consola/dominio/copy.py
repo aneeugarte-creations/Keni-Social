@@ -354,6 +354,7 @@ def crear_publicaciones_desde_piezas(
     imagen_fuente: str = "",
     tipo_contenido: str = "",
     slides_carrusel: list[dict[str, str]] | None = None,
+    sugiere_carrusel: bool = False,
 ) -> list[dict[str, object]]:
     """Crea UNA publicacion (borrador) por pieza y devuelve sus dicts serializados.
 
@@ -385,6 +386,11 @@ def crear_publicaciones_desde_piezas(
     cada borrador nace con esos slides en su campo `carrusel` (la PORTADA sigue siendo
     `imagen`/`imagen_fuente` + el `copy_in` paraguas). Degradación honesta: si NINGÚN slide
     se pudo componer (o no hay tema), todo sigue como post normal de foto.
+
+    `sugiere_carrusel` (tema ÚNICO): el modelo eligió `tipo=carrusel` PERO sin slides que hornear
+    (no es un panel multi-historia, no hay catálogo de fotos). Es una SUGERENCIA de formato: con
+    tema, el `contenido` FLIP-ea a formato carrusel (y se acota a IG/FB) y queda esperando que el
+    equipo suba las fotos en diferido; el campo `carrusel` de los borradores queda vacío por ahora.
     """
     creadas: list[dict[str, object]] = []
     # Imagen ORIGINAL de fuente (RSS de marca propia): la DESCARGAMOS una sola vez, la
@@ -396,10 +402,13 @@ def crear_publicaciones_desde_piezas(
         imagen_descargada = _descargar_original_a_biblioteca(
             imagen_fuente, marca=marca, titulo=titulo, autor=autor,
         )
-    # CARRUSEL EDITORIAL (DOS tipos de output del pipeline): el modelo eligió `carrusel` y
-    # emitió un slide por SUB-HISTORIA. Cada slide se hornea como PLACA de la marca (titular
-    # + su foto); con 1+ horneada, el tema FLIP a formato carrusel y los borradores llevan
-    # los slides detrás de la portada.
+    # CARRUSEL: el modelo eligió `tipo=carrusel`. DOS caminos hasta el formato carrusel:
+    #   - PANEL multi-historia (`slides_carrusel`): hornea una placa por sub-historia (titular +
+    #     su foto) y arma el `carrusel` de la pieza; los borradores llevan los slides tras la portada.
+    #   - SUGERENCIA de un tema ÚNICO (`sugiere_carrusel`, sin slides): no hay fotos que hornear, así
+    #     que el tema FLIP a formato carrusel COMO SUGERENCIA y queda esperando que el equipo suba
+    #     las fotos en diferido (o el motor de arte si su toggle está activo).
+    # En AMBOS el formato manda las redes (carrusel -> IG/FB; la pieza de X del copy unificado se omite).
     carrusel_json = ""
     if slides_carrusel and contenido_id:
         objetos = [
@@ -415,21 +424,24 @@ def crear_publicaciones_desde_piezas(
             carrusel_json = json.dumps(
                 [{"tipo": "imagen", "objeto": o} for o in objetos], ensure_ascii=False
             )
-            try:
-                repos.actualizar_contenido(contenido_id, {"formato": redes.FORMATO_CARRUSEL})
-            except Exception:  # noqa: BLE001 -- sin el flip, la pieza sigue valiendo como foto
-                _log.warning(
-                    "copy: no se pudo poner formato carrusel al tema %s", contenido_id, exc_info=True
-                )
-                carrusel_json = ""
         else:
             _log.warning(
-                "copy: carrusel degradado a post (ningún slide componible) — tema %s",
+                "copy: carrusel sin slides componibles; queda como sugerencia de formato — tema %s",
                 contenido_id,
             )
-    if carrusel_json:
-        # El FORMATO decide las redes (regla del dueño): carrusel -> IG/FB. La pieza de X del
-        # copy unificado se omite (no es inválida: es el flip de formato).
+    # FLIP a formato carrusel si hay carrusel HORNEADO o el modelo lo SUGIRIÓ (tema único). Requiere
+    # tema (`contenido_id`): el formato vive en el `contenido` padre, no en la fila por red.
+    quiere_carrusel = bool(contenido_id) and (bool(carrusel_json) or sugiere_carrusel)
+    if quiere_carrusel:
+        try:
+            repos.actualizar_contenido(contenido_id, {"formato": redes.FORMATO_CARRUSEL})
+        except Exception:  # noqa: BLE001 -- sin el flip, la pieza sigue valiendo como foto
+            _log.warning(
+                "copy: no se pudo poner formato carrusel al tema %s", contenido_id, exc_info=True
+            )
+            carrusel_json = ""
+            quiere_carrusel = False
+    if quiere_carrusel:
         permitidas_carrusel = set(redes.redes_de_formato(redes.FORMATO_CARRUSEL))
         redes_filtro = (
             permitidas_carrusel if redes_filtro is None else (redes_filtro & permitidas_carrusel)
@@ -579,8 +591,12 @@ def construir_procesar_copy(
         # CARRUSEL EDITORIAL solo si el MODELO lo eligió (`tipo`) Y emitió 2+ slides (un panel
         # de una tarjeta no es panel). Cada slide resuelve su foto por NÚMERO contra el
         # catálogo que vio en el prompt; la portada sigue viajando como `imagen_fuente`.
+        # `tipo=carrusel` es la SUGERENCIA de formato del modelo (cualquier tema). Con 2+ slides
+        # (panel multi-historia) se resuelven a sus fotos y se hornean; sin slides (tema único) la
+        # sugerencia FLIP-ea el formato igual y las fotos llegan después.
+        sugiere_carrusel = parsed.get("tipo") == "carrusel"
         slides_resueltos: list[dict[str, str]] = []
-        if parsed.get("tipo") == "carrusel":
+        if sugiere_carrusel:
             urls = [str(f.get("imagen") or "") for f in (fotos_notas or [])]
             crudos = parsed.get("slides") or []
             if isinstance(crudos, list) and len(crudos) >= 2:
@@ -595,7 +611,7 @@ def construir_procesar_copy(
             verdicto=verdicto, origen=historial_id, autor=autor,
             contenido_id=contenido_id,
             imagen_fuente=imagen_fuente, tipo_contenido=tipo_contenido,
-            slides_carrusel=slides_resueltos,
+            slides_carrusel=slides_resueltos, sugiere_carrusel=sugiere_carrusel,
         )
         # Trazabilidad de la fuente (RSS): persiste la URL canonica en el `contenido` padre de
         # cada borrador creado. Best-effort: el copy YA esta hecho; un fallo aqui no debe romper
