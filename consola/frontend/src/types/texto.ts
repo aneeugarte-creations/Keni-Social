@@ -38,6 +38,15 @@ export interface DocumentoTexto {
    * catálogo en código (`prompts_procesos`), no del contenido editable. [] = sin catalogar.
    */
   procesos?: string[];
+  /**
+   * Versión PUBLICADA (la que sirven los pipelines), o `null` si nunca se publicó.
+   * Opcionales mientras el backend del flujo de publicación se despliega en paralelo.
+   */
+  produccion?: ProduccionTexto | null;
+  /** SHA del borrador actual (HEAD del historial git), o `null` sin versionado. */
+  sha_actual?: string | null;
+  /** `true` si el borrador actual difiere de lo publicado (hay cambios sin publicar). */
+  sin_publicar?: boolean;
 }
 
 /** Resumen de facetas para poblar los filtros de navegación. */
@@ -67,6 +76,72 @@ export interface PreviewPipeline {
   falta_base: boolean;
   prompt_efectivo: string;
   adjuntos: { id: string; titulo: string; clase: string; prioridad: number }[];
+}
+
+/** Versión PUBLICADA (en producción) de un documento: la que sirven los pipelines. */
+export interface ProduccionTexto {
+  sha: string;
+  autor: string;
+  nota: string;
+  creado: string;
+}
+
+/** Una variable `{{NOMBRE}}` del catálogo (`GET /api/texto/variables`). `nombre` SIN llaves. */
+export interface VariableCatalogo {
+  nombre: string;
+  descripcion: string;
+  ejemplo: string;
+  /** De dónde sale el valor al inyectar (p. ej. "marca activa", "noticia"). */
+  origen: string;
+}
+
+export interface RespuestaVariablesTexto {
+  variables: VariableCatalogo[];
+}
+
+/** Estado de una solicitud de publicación. */
+export type EstadoSolicitud = "abierta" | "aprobada" | "rechazada";
+
+/** Solicitud de publicación de una versión de un documento (flujo no-admin). */
+export interface SolicitudPublicacion {
+  id: string;
+  doc_id: string;
+  titulo: string;
+  sha_propuesto: string;
+  autor: string;
+  nota: string;
+  estado: EstadoSolicitud | string;
+  revisor?: string | null;
+  comentario?: string | null;
+  creado: string;
+  resuelto?: string | null;
+}
+
+export interface RespuestaSolicitudesTexto {
+  solicitudes: SolicitudPublicacion[];
+}
+
+export interface RespuestaSolicitudTexto {
+  solicitud: SolicitudPublicacion;
+}
+
+/** Respuesta de aprobar una solicitud (rechazar no devuelve `documento`). */
+export interface RespuestaResolverSolicitud {
+  solicitud: SolicitudPublicacion;
+  documento?: DocumentoTexto;
+}
+
+/** Cuerpo de `POST /texto/{id}/publicar` y `POST /texto/{id}/solicitar`. */
+export interface CuerpoPublicarTexto {
+  /** Versión a publicar; omitido = la versión actual (HEAD). */
+  sha?: string;
+  /** Nota de cambio (obligatoria en la UI). */
+  nota: string;
+}
+
+/** Cuerpo de aprobar/rechazar una solicitud. */
+export interface CuerpoResolverSolicitud {
+  comentario?: string;
 }
 
 /** Una entrada del historial de versiones (git) de un documento. */

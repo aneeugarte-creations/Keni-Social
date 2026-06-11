@@ -5,6 +5,8 @@ import type {
   CuerpoCrearDocumento,
   CuerpoGuardarDocumento,
   CuerpoLanzarTexto,
+  CuerpoPublicarTexto,
+  CuerpoResolverSolicitud,
   PreviewPipeline,
   RespuestaAreas,
   RespuestaTexto,
@@ -16,6 +18,10 @@ import type {
   RespuestaMensaje,
   RespuestaPapelera,
   RespuestaPipelinesTexto,
+  RespuestaResolverSolicitud,
+  RespuestaSolicitudesTexto,
+  RespuestaSolicitudTexto,
+  RespuestaVariablesTexto,
   ValidacionEditorial,
 } from "@/types";
 
@@ -73,6 +79,26 @@ export const apiTexto = {
       `/texto/pipelines/${pipeline}/preview${query({ marca, contexto })}`,
       { signal },
     ),
+  // --- Variables del catálogo (`{{NOMBRE}}` que la consola sustituye al inyectar) ---
+  variablesTexto: (signal?: AbortSignal) =>
+    peticion<RespuestaVariablesTexto>("/texto/variables", { signal }),
+  // --- Publicación a producción (admin) y solicitudes (no admin) ---
+  publicarTexto: (id: string, cuerpo: CuerpoPublicarTexto) =>
+    peticion<RespuestaDocumento>(`/texto/${id}/publicar`, { metodo: "POST", json: cuerpo }),
+  solicitarPublicacionTexto: (id: string, cuerpo: CuerpoPublicarTexto) =>
+    peticion<RespuestaSolicitudTexto>(`/texto/${id}/solicitar`, { metodo: "POST", json: cuerpo }),
+  solicitudesTexto: (estado?: string, signal?: AbortSignal) =>
+    peticion<RespuestaSolicitudesTexto>(`/texto/solicitudes${query({ estado })}`, { signal }),
+  aprobarSolicitudTexto: (id: string, cuerpo: CuerpoResolverSolicitud = {}) =>
+    peticion<RespuestaResolverSolicitud>(`/texto/solicitudes/${encodeURIComponent(id)}/aprobar`, {
+      metodo: "POST",
+      json: cuerpo,
+    }),
+  rechazarSolicitudTexto: (id: string, cuerpo: CuerpoResolverSolicitud = {}) =>
+    peticion<RespuestaResolverSolicitud>(`/texto/solicitudes/${encodeURIComponent(id)}/rechazar`, {
+      metodo: "POST",
+      json: cuerpo,
+    }),
   // --- Versionado git: historial, una versión y rollback no destructivo ---
   historialTexto: (id: string, signal?: AbortSignal) =>
     peticion<RespuestaHistorialTexto>(`/texto/${id}/historial`, { signal }),

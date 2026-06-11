@@ -134,6 +134,12 @@ export interface UsuarioSesion {
    */
   mfa_habilitado?: boolean;
   mfa_activo?: boolean;
+  /**
+   * `true` => puede PUBLICAR a producción en la Biblioteca de Prompts (los demás solo
+   * solicitan). Lo añade el backend del flujo de publicación; mientras no llegue, la UI
+   * cae al rol clásico (`rol === "admin"`). Ver `useEsAdmin`.
+   */
+  es_admin?: boolean;
 }
 
 /** Respuesta de `POST /api/auth/login` cuando el usuario necesita el segundo factor (MFA). */

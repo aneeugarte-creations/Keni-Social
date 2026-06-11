@@ -20,7 +20,10 @@ import { Markdown } from "tiptap-markdown";
 
 import type { Editor } from "@tiptap/react";
 
+import { ChipVariable } from "@/components/biblioteca/chip-variable";
+import { useVariables } from "@/hooks/use-biblioteca";
 import { cn } from "@/lib/utils";
+import type { VariableCatalogo } from "@/types";
 
 /** tiptap-markdown añade `storage.markdown.getMarkdown()` en runtime pero no lo tipa. */
 function aMarkdown(editor: Editor): string {
@@ -30,7 +33,8 @@ function aMarkdown(editor: Editor): string {
 
 // Estilo del contenido editable (no hay plugin `prose`): mapeo elemento->clases coherente
 // con el tema, vía selectores hijos de Tailwind sobre el área `.tiptap` (contentEditable).
-const ESTILO_CONTENIDO = cn(
+// Exportado: `LectorProsa` (Biblioteca) lo reutiliza para que lectura y edición se vean igual.
+export const ESTILO_CONTENIDO = cn(
   "[&_.tiptap]:min-h-[300px] [&_.tiptap]:outline-none [&_.tiptap]:text-sm [&_.tiptap]:leading-relaxed",
   "[&_h1]:mb-2 [&_h1]:mt-3 [&_h1]:text-xl [&_h1]:font-bold",
   "[&_h2]:mb-2 [&_h2]:mt-3 [&_h2]:text-lg [&_h2]:font-semibold",
@@ -51,11 +55,24 @@ export function EditorWysiwyg({
   value,
   onContenido,
   placeholder,
+  conVariables = false,
 }: {
   value: string;
   onContenido: (markdown: string) => void;
   placeholder?: string;
+  /**
+   * Activa los chips de variables `{{NOMBRE}}` de la Biblioteca (nodo atómico + tooltip
+   * del catálogo + autocompletado al teclear `{{`). Se lee UNA vez al montar (las
+   * extensiones del editor se fijan en la creación): si necesitas alternarlo, re-monta
+   * el componente con `key`. Los demás usos del editor no cargan nada de esto.
+   */
+  conVariables?: boolean;
 }) {
+  // Catálogo para el autocompletado: la extensión se configura una sola vez, así que le
+  // damos un GETTER sobre un ref que se refresca con la query (sin recrear el editor).
+  const { variables } = useVariables(conVariables);
+  const variablesRef = React.useRef<VariableCatalogo[]>([]);
+  variablesRef.current = variables;
   // `null` fuerza la carga inicial (el primer efecto hace setContent). Luego guarda lo último
   // emitido al teclear para no re-cargar (evita bucle setContent->salto de cursor).
   const ultimoEmitido = React.useRef<string | null>(null);
@@ -72,6 +89,9 @@ export function EditorWysiwyg({
     extensions: [
       StarterKit,
       Markdown.configure({ html: false, linkify: true, breaks: true, transformPastedText: true }),
+      ...(conVariables
+        ? [ChipVariable.configure({ obtenerVariables: () => variablesRef.current })]
+        : []),
     ],
     content: "",
     editorProps: {
