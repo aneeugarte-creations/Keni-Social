@@ -67,6 +67,14 @@ export const apiContenido = {
       metodo: "POST",
       json: { responsable_id: responsableId },
     }),
+  /** Tareas: registra la COBERTURA de un evento (de la rota) — find-or-create idempotente de
+   *  su tarea y la coge (self-claim) o, si pasas responsableId siendo manager, la asigna a esa
+   *  persona y le avisa. Es lo que convierte un evento «Por cubrir» en una tarea con dueño. */
+  cubrirEvento: (eventoId: string, responsableId?: string) =>
+    peticion<RespuestaContenidoItem>("/contenido/cubrir-evento", {
+      metodo: "POST",
+      json: { evento_id: eventoId, responsable_id: responsableId },
+    }),
   agregarPlataforma: (contenidoId: string, red: string) =>
     peticion<RespuestaPlataforma>(
       `/contenido/${encodeURIComponent(contenidoId)}/plataformas`,

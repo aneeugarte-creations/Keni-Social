@@ -28,7 +28,7 @@ import { SesionContexto } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { formatearFecha } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
-import type { CatalogosContenido, Contenido } from "@/types";
+import type { CatalogosContenido, Contenido, EventoRota } from "@/types";
 
 import { CLAVE_TAREAS } from "./claves";
 import { DialogoCrearTarea } from "./DialogoCrearTarea";
@@ -41,16 +41,11 @@ const REFRESCO = { refetchInterval: 45_000, refetchOnWindowFocus: true };
 type Lente = "equipo" | "libres" | "mias";
 const LENTES: { id: Lente; etiqueta: string }[] = [
   { id: "equipo", etiqueta: "Todo el equipo" },
-  { id: "libres", etiqueta: "Por coger" },
-  { id: "mias", etiqueta: "Mis tareas" },
+  { id: "libres", etiqueta: "Por cubrir" },
+  { id: "mias", etiqueta: "Lo mío" },
 ];
 
-/** Ciclo de vida de una tarea (estados de keni: pendiente → en_curso → hecha). */
-const ESTADOS: { id: string; etiqueta: string }[] = [
-  { id: "pendiente", etiqueta: "Pendientes" },
-  { id: "en_curso", etiqueta: "En curso" },
-  { id: "hecha", etiqueta: "Hechas" },
-];
+/** Avance de estado de una tarea ya cogida (pendiente → en_curso → hecha). */
 const SIGUIENTE: Record<string, { estado: string; etiqueta: string; icono: typeof Play }> = {
   pendiente: { estado: "en_curso", etiqueta: "Empezar", icono: Play },
   en_curso: { estado: "hecha", etiqueta: "Marcar hecha", icono: Check },
@@ -62,7 +57,160 @@ const PRIORIDAD_CLASE: Record<string, string> = {
   baja: "border-border text-muted-foreground",
 };
 
-/** Una tarjeta de tarea: estado, responsable, prioridad, fecha y evento, con sus acciones. */
+/** Diálogo "Asignar a…" compartido (manager elige a quién encarga). */
+function DialogoAsignar({
+  titulo,
+  abierto,
+  onOpenChange,
+  usuarios,
+  responsableActual,
+  onElegir,
+  enviando,
+}: {
+  titulo: string;
+  abierto: boolean;
+  onOpenChange: (v: boolean) => void;
+  usuarios: { id: string; usuario: string }[];
+  responsableActual: string;
+  onElegir: (personaId: string) => void;
+  enviando: boolean;
+}) {
+  return (
+    <Dialog open={abierto} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Asignar "{titulo}"</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          Elige a quién se la encargas; se le avisa en la app.
+        </p>
+        <div className="max-h-72 space-y-1 overflow-y-auto py-1">
+          {usuarios.length === 0 && (
+            <p className="px-1 text-sm text-muted-foreground">No hay compañeros para asignar.</p>
+          )}
+          {usuarios.map((u) => {
+            const yaEs = u.id === responsableActual;
+            return (
+              <button
+                key={u.id}
+                type="button"
+                disabled={enviando || yaEs}
+                onClick={() => onElegir(u.id)}
+                className={cn(
+                  "flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm disabled:opacity-100",
+                  yaEs
+                    ? "border-primary/50 bg-primary/5 text-primary"
+                    : "border-border hover:border-foreground/30 hover:bg-accent",
+                )}
+              >
+                <span className="truncate">{u.usuario}</span>
+                {yaEs && <span className="ml-2 shrink-0 text-xs">la lleva ahora</span>}
+              </button>
+            );
+          })}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancelar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Un EVENTO «Por cubrir»: un partido/transmisión que nadie ha cogido todavía. No tiene tarea
+ * aún; al coger (o que Elias asigne) se crea su registro de cobertura vía `cubrirEvento`.
+ */
+function TarjetaEventoLibre({
+  evento,
+  catalogos,
+}: {
+  evento: EventoRota;
+  catalogos: CatalogosContenido | undefined;
+}) {
+  const queryClient = useQueryClient();
+  const usuario = React.useContext(SesionContexto)?.usuario ?? null;
+  const esManager = usuario?.rol === "admin";
+  const [asignarAbierto, setAsignarAbierto] = React.useState(false);
+  const usuarios = catalogos?.usuarios ?? [];
+
+  const cubrir = useMutation({
+    mutationFn: (responsableId?: string) => api.cubrirEvento(evento.id, responsableId),
+    onSuccess: (res) => {
+      setAsignarAbierto(false);
+      void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
+      const nombre = res?.contenido?.responsable_nombre || "ti";
+      toast.success(`"${evento.titulo}" la cubre ${nombre}.`);
+    },
+    onError: (e) => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
+      toast.error(mensajeError(e));
+    },
+  });
+
+  return (
+    <div className="rounded-lg border border-dashed border-border bg-card p-3 shadow-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <Trophy className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="font-medium">{evento.titulo}</span>
+        <Badge variant="outline" className="border-dashed text-muted-foreground">
+          Por cubrir
+        </Badge>
+        {evento.cambiado && (
+          <Badge variant="outline" className="border-amber-500/40 text-amber-700 dark:text-amber-300">
+            Cambió de hora
+          </Badge>
+        )}
+        {evento.prioridad && (
+          <Badge variant="outline" className={cn("font-normal", PRIORIDAD_CLASE[evento.prioridad])}>
+            {evento.prioridad}
+          </Badge>
+        )}
+        {evento.fecha && (
+          <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
+            <CalendarClock className="h-3.5 w-3.5" />
+            {formatearFecha(evento.fecha)}
+            {evento.hora ? ` · ${evento.hora}` : ""}
+          </span>
+        )}
+      </div>
+      {evento.contenido && (
+        <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{evento.contenido}</p>
+      )}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => cubrir.mutate(undefined)}
+          disabled={cubrir.isPending}
+        >
+          <Hand className="mr-1 h-3.5 w-3.5" />
+          La cubro yo
+        </Button>
+        {esManager && (
+          <Button variant="outline" size="sm" onClick={() => setAsignarAbierto(true)}>
+            <UserPlus className="mr-1 h-3.5 w-3.5" />
+            Asignar
+          </Button>
+        )}
+      </div>
+
+      <DialogoAsignar
+        titulo={evento.titulo}
+        abierto={asignarAbierto}
+        onOpenChange={setAsignarAbierto}
+        usuarios={usuarios}
+        responsableActual=""
+        onElegir={(id) => cubrir.mutate(id)}
+        enviando={cubrir.isPending}
+      />
+    </div>
+  );
+}
+
+/** Una TAREA ya con dueño (cobertura cogida o encargo del equipo): estado, responsable, acciones. */
 function TarjetaTarea({
   tarea,
   catalogos,
@@ -77,8 +225,6 @@ function TarjetaTarea({
   const esMia = Boolean(usuario && tarea.responsable_id === usuario.id);
   const [asignarAbierto, setAsignarAbierto] = React.useState(false);
   const [confirmarBorrado, setConfirmarBorrado] = React.useState(false);
-
-  const evento = (catalogos?.eventos ?? []).find((e) => e.id === tarea.evento_id);
   const usuarios = catalogos?.usuarios ?? [];
 
   const invalidar = () => queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
@@ -129,10 +275,12 @@ function TarjetaTarea({
   });
 
   const avance = SIGUIENTE[tarea.estado];
+  const esCobertura = Boolean(tarea.evento_id);
 
   return (
     <div className="rounded-lg border border-border bg-card p-3 shadow-sm">
       <div className="flex flex-wrap items-center gap-2">
+        {esCobertura && <Trophy className="h-4 w-4 shrink-0 text-muted-foreground" />}
         <span className="font-medium">{tarea.titulo}</span>
         {libre ? (
           <Badge variant="outline" className="border-dashed text-muted-foreground">
@@ -152,6 +300,16 @@ function TarjetaTarea({
             {esMia ? "Tuya" : tarea.responsable_nombre}
           </Badge>
         )}
+        {tarea.estado === "en_curso" && (
+          <Badge variant="outline" className="border-sky-500/40 text-sky-700 dark:text-sky-300">
+            En curso
+          </Badge>
+        )}
+        {tarea.estado === "hecha" && (
+          <Badge variant="outline" className="border-emerald-500/40 text-emerald-700 dark:text-emerald-300">
+            Hecha
+          </Badge>
+        )}
         {tarea.prioridad && (
           <Badge variant="outline" className={cn("font-normal", PRIORIDAD_CLASE[tarea.prioridad])}>
             {tarea.prioridad}
@@ -166,17 +324,8 @@ function TarjetaTarea({
           >
             <CalendarClock className="h-3.5 w-3.5" />
             {formatearFecha(tarea.fecha_objetivo)}
+            {tarea.hora_objetivo ? ` · ${tarea.hora_objetivo}` : ""}
           </span>
-        )}
-        {evento && (
-          <Badge
-            variant="outline"
-            className="gap-1 border-sky-500/40 font-normal text-sky-700 dark:text-sky-300"
-            title={`Cobertura del evento: ${evento.titulo}`}
-          >
-            <Trophy className="h-3 w-3" />
-            {evento.titulo}
-          </Badge>
         )}
       </div>
 
@@ -188,17 +337,12 @@ function TarjetaTarea({
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {libre && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => coger.mutate()}
-            disabled={coger.isPending}
-          >
+          <Button variant="outline" size="sm" onClick={() => coger.mutate()} disabled={coger.isPending}>
             <Hand className="mr-1 h-3.5 w-3.5" />
-            Coger
+            {esCobertura ? "La cubro yo" : "Coger"}
           </Button>
         )}
-        {avance && (
+        {avance && !libre && (
           <Button
             variant="outline"
             size="sm"
@@ -221,12 +365,7 @@ function TarjetaTarea({
           </Button>
         )}
         {!libre && (esMia || esManager) && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => soltar.mutate()}
-            disabled={soltar.isPending}
-          >
+          <Button variant="outline" size="sm" onClick={() => soltar.mutate()} disabled={soltar.isPending}>
             <Hand className="mr-1 h-3.5 w-3.5" />
             Soltar
           </Button>
@@ -237,7 +376,7 @@ function TarjetaTarea({
             {libre ? "Asignar" : "Reasignar"}
           </Button>
         )}
-        {esManager && (
+        {esManager && !esCobertura && (
           <Button
             variant="ghost"
             size="sm"
@@ -249,49 +388,15 @@ function TarjetaTarea({
         )}
       </div>
 
-      {/* Asignar a una persona (push del manager). Reusa el catálogo del tablero. */}
-      <Dialog open={asignarAbierto} onOpenChange={setAsignarAbierto}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Asignar "{tarea.titulo}"</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            Elige a quién se la encargas; se le avisa en la app.
-          </p>
-          <div className="max-h-72 space-y-1 overflow-y-auto py-1">
-            {usuarios.length === 0 && (
-              <p className="px-1 text-sm text-muted-foreground">
-                No hay compañeros para asignar.
-              </p>
-            )}
-            {usuarios.map((u) => {
-              const yaEs = u.id === tarea.responsable_id;
-              return (
-                <button
-                  key={u.id}
-                  type="button"
-                  disabled={asignar.isPending || yaEs}
-                  onClick={() => asignar.mutate(u.id)}
-                  className={cn(
-                    "flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm disabled:opacity-100",
-                    yaEs
-                      ? "border-primary/50 bg-primary/5 text-primary"
-                      : "border-border hover:border-foreground/30 hover:bg-accent",
-                  )}
-                >
-                  <span className="truncate">{u.usuario}</span>
-                  {yaEs && <span className="ml-2 shrink-0 text-xs">la lleva ahora</span>}
-                </button>
-              );
-            })}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAsignarAbierto(false)}>
-              Cancelar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DialogoAsignar
+        titulo={tarea.titulo}
+        abierto={asignarAbierto}
+        onOpenChange={setAsignarAbierto}
+        usuarios={usuarios}
+        responsableActual={tarea.responsable_id}
+        onElegir={(id) => asignar.mutate(id)}
+        enviando={asignar.isPending}
+      />
 
       <Dialog open={confirmarBorrado} onOpenChange={setConfirmarBorrado}>
         <DialogContent>
@@ -312,14 +417,18 @@ function TarjetaTarea({
   );
 }
 
+/** Un ítem de la lista unificada: o un evento aún por cubrir, o una tarea (cobertura o encargo). */
+type Item =
+  | { kind: "evento"; clave: string; orden: string; evento: EventoRota }
+  | { kind: "tarea"; clave: string; orden: string; tarea: Contenido };
+
 /**
- * Página de TAREAS del equipo (ClaroSports): el tablero compartido que sustituye al WhatsApp.
- * Quién cubre qué — coberturas de partidos/eventos y encargos del equipo. Es un concepto
- * SEPARADO de las piezas de contenido (esto es `clase='tarea'`; el Feed sigue siendo piezas).
+ * Página de TAREAS del equipo (ClaroSports): la lista compartida que sustituye al WhatsApp.
  *
- * Tres lentes sobre la misma lista (pool «Por coger» / «Mis tareas» / «Todo el equipo» para
- * Elias) y tres estados (pendiente → en curso → hecha). El reparto (coger/soltar/asignar) es
- * el mismo primitivo que ya existía, ahora en su sitio correcto: las tareas, no las piezas.
+ * Se LLENA SOLA con los eventos/partidos a cubrir (los que entran por Fuentes o se añaden aquí)
+ * y los muestra ordenados por fecha como «Por cubrir»; el equipo los coge o Elias los reparte.
+ * Conviven los encargos sueltos (tareas sin evento). El dueño de una cobertura se registra como
+ * una tarea (clase='tarea') enlazada al evento: el evento es la unidad canónica, sin duplicar.
  */
 export default function Tareas() {
   const { marcaActiva } = useMarcaActiva();
@@ -327,24 +436,82 @@ export default function Tareas() {
   const [lente, setLente] = React.useState<Lente>("equipo");
   const [crearAbierto, setCrearAbierto] = React.useState(false);
 
-  const marca =
-    marcaActiva && marcaActiva !== MARCA_ACTIVA_TODAS ? marcaActiva : undefined;
+  const marca = marcaActiva && marcaActiva !== MARCA_ACTIVA_TODAS ? marcaActiva : undefined;
+  const hoy = new Date().toISOString().slice(0, 10);
 
-  const query = useQuery({
-    queryKey: [...CLAVE_TAREAS, marca ?? "todas"],
+  const tareasQuery = useQuery({
+    queryKey: [...CLAVE_TAREAS, "tareas", marca ?? "todas"],
     queryFn: ({ signal }) => api.contenido({ clase: "tarea", marca }, signal),
     ...REFRESCO,
   });
-  const tareas = query.data?.contenidos ?? [];
-  const catalogos = query.data?.catalogos;
-
-  const visibles = tareas.filter((t) => {
-    if (lente === "libres") return !t.responsable_id;
-    if (lente === "mias") return Boolean(usuario && t.responsable_id === usuario.id);
-    return true;
+  const eventosQuery = useQuery({
+    queryKey: [...CLAVE_TAREAS, "eventos", marca ?? "todas"],
+    queryFn: ({ signal }) => api.rotaEventos({ desde: hoy, marca }, signal),
+    ...REFRESCO,
   });
-  const porEstado = (estado: string) => visibles.filter((t) => t.estado === estado);
-  const conteoLibres = tareas.filter((t) => !t.responsable_id).length;
+
+  const tareas = tareasQuery.data?.contenidos ?? [];
+  const catalogos = tareasQuery.data?.catalogos;
+  const cargando = tareasQuery.isLoading || eventosQuery.isLoading;
+
+  // Eventos a cubrir = los coverables (no "no_cubrir") que aún NO tienen tarea de cobertura.
+  const eventosConTarea = new Set(tareas.map((t) => t.evento_id).filter(Boolean));
+  const eventosLibres = (eventosQuery.data?.eventos ?? []).filter(
+    (e) => e.tipo_cobertura !== "no_cubrir" && !eventosConTarea.has(e.id),
+  );
+
+  // Lista unificada, ordenada por fecha (las sin fecha, al final).
+  const conOrden = (f: string) => f || "9999-99-99";
+  const items: Item[] = [
+    ...tareas.map((t) => ({
+      kind: "tarea" as const,
+      clave: `t-${t.id}`,
+      orden: conOrden(t.fecha_objetivo),
+      tarea: t,
+    })),
+    ...eventosLibres.map((e) => ({
+      kind: "evento" as const,
+      clave: `e-${e.id}`,
+      orden: conOrden(e.fecha),
+      evento: e,
+    })),
+  ].sort((a, b) => a.orden.localeCompare(b.orden));
+
+  const cumpleLente = (i: Item) => {
+    if (lente === "libres") return i.kind === "evento" || !i.tarea.responsable_id;
+    if (lente === "mias")
+      return i.kind === "tarea" && Boolean(usuario && i.tarea.responsable_id === usuario.id);
+    return true;
+  };
+  const visibles = items.filter(cumpleLente);
+
+  // Tres grupos para que «se organice»: lo que falta por cubrir, lo que está en marcha, lo hecho.
+  const grupos: { etiqueta: string; items: Item[] }[] = [
+    {
+      etiqueta: "Por cubrir",
+      items: visibles.filter((i) => i.kind === "evento" || !i.tarea.responsable_id),
+    },
+    {
+      etiqueta: "En marcha",
+      items: visibles.filter(
+        (i) => i.kind === "tarea" && i.tarea.responsable_id && i.tarea.estado !== "hecha",
+      ),
+    },
+    {
+      etiqueta: "Hechas",
+      items: visibles.filter((i) => i.kind === "tarea" && i.tarea.estado === "hecha"),
+    },
+  ];
+  const conteoPorCubrir = items.filter(
+    (i) => i.kind === "evento" || !i.tarea.responsable_id,
+  ).length;
+
+  const pintar = (i: Item) =>
+    i.kind === "evento" ? (
+      <TarjetaEventoLibre key={i.clave} evento={i.evento} catalogos={catalogos} />
+    ) : (
+      <TarjetaTarea key={i.clave} tarea={i.tarea} catalogos={catalogos} />
+    );
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 p-4">
@@ -352,17 +519,16 @@ export default function Tareas() {
         <div>
           <h1 className="text-xl font-semibold">Tareas del equipo</h1>
           <p className="text-sm text-muted-foreground">
-            Quién cubre qué: coberturas de partidos y encargos. Cógelas del pool o que Elias
-            las reparta.
+            Los partidos y encargos a cubrir, por fecha. Cógelos o que Elias los reparta; lo que
+            entra por Fuentes aparece aquí solo.
           </p>
         </div>
         <Button onClick={() => setCrearAbierto(true)}>
           <Plus className="mr-1 h-4 w-4" />
-          Nueva tarea
+          Añadir
         </Button>
       </div>
 
-      {/* Lentes (segmented). El pool muestra su contador para que «¿qué falta?» sea de un vistazo. */}
       <div className="flex flex-wrap gap-2">
         {LENTES.map((l) => (
           <Button
@@ -372,48 +538,42 @@ export default function Tareas() {
             onClick={() => setLente(l.id)}
           >
             {l.etiqueta}
-            {l.id === "libres" && conteoLibres > 0 && (
+            {l.id === "libres" && conteoPorCubrir > 0 && (
               <Badge variant="outline" className="ml-1.5 bg-background px-1.5 py-0 tabular-nums">
-                {conteoLibres}
+                {conteoPorCubrir}
               </Badge>
             )}
           </Button>
         ))}
       </div>
 
-      {query.isLoading && <p className="text-sm text-muted-foreground">Cargando tareas…</p>}
+      {cargando && <p className="text-sm text-muted-foreground">Cargando…</p>}
 
-      {!query.isLoading && visibles.length === 0 && (
+      {!cargando && visibles.length === 0 && (
         <div className="rounded-lg border border-dashed border-border p-8 text-center">
           <p className="text-sm text-muted-foreground">
             {lente === "mias"
-              ? "No tienes tareas asignadas. Coge alguna de «Por coger»."
+              ? "No tienes nada asignado. Coge algo de «Por cubrir»."
               : lente === "libres"
-                ? "No hay tareas libres ahora mismo."
-                : "Aún no hay tareas. Crea la primera con «Nueva tarea»."}
+                ? "No hay nada por cubrir ahora mismo."
+                : "Aún no hay partidos ni tareas. Súbelos en Fuentes o añádelos aquí."}
           </p>
         </div>
       )}
 
-      {!query.isLoading &&
+      {!cargando &&
         visibles.length > 0 &&
-        ESTADOS.map((est) => {
-          const items = porEstado(est.id);
-          if (items.length === 0) return null;
-          return (
-            <section key={est.id} className="space-y-2">
+        grupos.map((g) =>
+          g.items.length === 0 ? null : (
+            <section key={g.etiqueta} className="space-y-2">
               <h2 className="text-sm font-medium text-muted-foreground">
-                {est.etiqueta}
-                <span className="ml-1.5 tabular-nums">({items.length})</span>
+                {g.etiqueta}
+                <span className="ml-1.5 tabular-nums">({g.items.length})</span>
               </h2>
-              <div className="space-y-2">
-                {items.map((t) => (
-                  <TarjetaTarea key={t.id} tarea={t} catalogos={catalogos} />
-                ))}
-              </div>
+              <div className="space-y-2">{g.items.map(pintar)}</div>
             </section>
-          );
-        })}
+          ),
+        )}
 
       <DialogoCrearTarea
         abierto={crearAbierto}

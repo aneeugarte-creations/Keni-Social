@@ -9,7 +9,7 @@ import {
 } from "@/hooks/marca-activa-contexto";
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
 import * as apiMod from "@/lib/api";
-import type { CatalogosContenido, Contenido, UsuarioSesion } from "@/types";
+import type { CatalogosContenido, Contenido, EventoRota, UsuarioSesion } from "@/types";
 
 import Tareas from "./Tareas";
 
@@ -22,7 +22,7 @@ function tarea(over: Partial<Contenido> = {}): Contenido {
     id: "t1",
     clase: "tarea",
     flujo: "",
-    titulo: "Cubrir el partido",
+    titulo: "Editar el clip",
     descripcion: "",
     marca: "claro-sports",
     marca_nombre: "Claro Sports",
@@ -43,6 +43,25 @@ function tarea(over: Partial<Contenido> = {}): Contenido {
     vencido: false,
     plataformas: [],
     etiquetas: [],
+    ...over,
+  };
+}
+
+function evento(over: Partial<EventoRota> = {}): EventoRota {
+  return {
+    id: "ev1",
+    titulo: "Cruz Azul vs América",
+    fecha: "2026-07-01",
+    hora: "20:00",
+    contenido: "",
+    nota: "",
+    tipo_cobertura: "transmision",
+    prioridad: "media",
+    cambiado: false,
+    actualizado: "",
+    es_sabado: false,
+    marca: "claro-sports",
+    marca_nombre: "Claro Sports",
     ...over,
   };
 }
@@ -95,11 +114,12 @@ function valorMarca(marcaActiva: string | null): ValorMarcaActiva {
   };
 }
 
-function renderTareas(tareas: Contenido[], u = usuario()) {
+function renderTareas(tareas: Contenido[], eventos: EventoRota[] = [], u = usuario()) {
   vi.spyOn(apiMod.api, "contenido").mockResolvedValue({
     contenidos: tareas,
     catalogos: catalogos(),
   });
+  vi.spyOn(apiMod.api, "rotaEventos").mockResolvedValue({ eventos });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
@@ -114,10 +134,28 @@ function renderTareas(tareas: Contenido[], u = usuario()) {
   );
 }
 
-describe("Tareas — tablero compartido del equipo (clase='tarea')", () => {
+describe("Tareas — lista compartida de eventos + encargos", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("una tarea LIBRE ofrece 'Coger' y al pulsarlo llama a cogerContenido", async () => {
+  it("un EVENTO sin tarea sale como «Por cubrir» y «La cubro yo» llama a cubrirEvento", async () => {
+    const cubrir = vi
+      .spyOn(apiMod.api, "cubrirEvento")
+      .mockResolvedValue({ contenido: { responsable_nombre: "yo" } } as never);
+    renderTareas([], [evento({ id: "ev9", titulo: "Cruz Azul vs América" })]);
+
+    expect(await screen.findByText("Cruz Azul vs América")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /La cubro yo/ }));
+    await waitFor(() => expect(cubrir).toHaveBeenCalledTimes(1));
+    expect(cubrir).toHaveBeenCalledWith("ev9", undefined);
+  });
+
+  it("un evento 'no_cubrir' NO aparece en la lista", async () => {
+    renderTareas([], [evento({ id: "ev-x", titulo: "Amistoso sin señal", tipo_cobertura: "no_cubrir" })]);
+    await waitFor(() => expect(apiMod.api.rotaEventos).toHaveBeenCalled());
+    expect(screen.queryByText("Amistoso sin señal")).toBeNull();
+  });
+
+  it("una tarea LIBRE (encargo) ofrece 'Coger' y llama a cogerContenido", async () => {
     const coger = vi
       .spyOn(apiMod.api, "cogerContenido")
       .mockResolvedValue({ contenido: {} } as never);
@@ -128,36 +166,37 @@ describe("Tareas — tablero compartido del equipo (clase='tarea')", () => {
     expect(coger).toHaveBeenCalledWith("t9");
   });
 
-  it("la lente 'Mis tareas' deja solo las del usuario de la sesión", async () => {
+  it("la lente 'Lo mío' deja solo lo del usuario de la sesión", async () => {
     renderTareas(
       [
         tarea({ id: "t1", titulo: "Mía", responsable_id: "u1", responsable_nombre: "yo" }),
         tarea({ id: "t2", titulo: "De Ana", responsable_id: "u-ana", responsable_nombre: "ana" }),
       ],
+      [],
       usuario("editor", "u1"),
     );
     expect(await screen.findByText("Mía")).toBeInTheDocument();
     expect(screen.getByText("De Ana")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Mis tareas" }));
+    fireEvent.click(screen.getByRole("button", { name: "Lo mío" }));
     await waitFor(() => expect(screen.queryByText("De Ana")).toBeNull());
     expect(screen.getByText("Mía")).toBeInTheDocument();
   });
 
   it("un MANAGER (admin) ve 'Asignar'; un editor NO", async () => {
-    const { unmount } = renderTareas([tarea({ titulo: "Reparto" })], usuario("admin", "u-admin"));
+    const { unmount } = renderTareas([tarea({ titulo: "Reparto" })], [], usuario("admin", "u-admin"));
     expect(await screen.findByRole("button", { name: /Asignar/ })).toBeInTheDocument();
     unmount();
 
     vi.restoreAllMocks();
-    renderTareas([tarea({ titulo: "Reparto" })], usuario("editor", "u2"));
+    renderTareas([tarea({ titulo: "Reparto" })], [], usuario("editor", "u2"));
     await screen.findByRole("button", { name: /Coger/ });
     expect(screen.queryByRole("button", { name: /Asignar/ })).toBeNull();
   });
 
-  it("'Nueva tarea' abre el diálogo de crear", async () => {
+  it("'Añadir' abre el diálogo", async () => {
     renderTareas([]);
-    fireEvent.click(await screen.findByRole("button", { name: /Nueva tarea/ }));
-    expect(await screen.findByText("Nueva tarea del equipo")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: /Añadir/ }));
+    expect(await screen.findByText("Añadir a la lista")).toBeInTheDocument();
   });
 });
