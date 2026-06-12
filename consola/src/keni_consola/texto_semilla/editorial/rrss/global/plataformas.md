@@ -1,6 +1,6 @@
 ---
-titulo: "Formato por red (común)"
-descripcion: "Convenciones de formato por red comunes a todas las marcas."
+titulo: "Formato por red · común"
+descripcion: "Base común de formato; cada marca añade sus excepciones."
 tipo: editorial
 clase: plataforma
 marcas: []

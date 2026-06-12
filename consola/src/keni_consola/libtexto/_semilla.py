@@ -14,17 +14,18 @@ from ._comun import (
     ROLES_PROMPT,
     TIPOS,
     Documento,
+    _ahora_iso,
     _lista_str,
     _segmentos_validos,
 )
 from ._crud import obtener
-from ._io import _parsear
+from ._io import _leer, _parsear, _serializar
 from ._publicacion import cuerpo_publicado
 from ._rutas import raiz
 
 __all__ = [
     "dir_semilla", "obtener_semilla", "cuerpo_efectivo", "cuerpo_semilla", "importar_semilla",
-    "migrar_nombres_biblioteca", "limpiar_prompts_obsoletos",
+    "migrar_nombres_biblioteca", "limpiar_prompts_obsoletos", "migrar_descripciones_editorial",
 ]
 
 # Prompts del sistema RETIRADOS de la semilla (fusionados/borrados): sus ficheros quedarían
@@ -60,6 +61,37 @@ _RENOMBRES_PROMPT_BIBLIOTECA: tuple[tuple[str, str], ...] = (
 _SENTINELA_NOMBRES = ".migracion-nombres-v1"
 # Carpetas de prompt que quedan vacías en el store tras aplanar los ids (se limpian al final).
 _CARPETAS_VIEJAS_BIBLIOTECA = ("prompt/imagen", "prompt/noticias", "prompt/importacion", "prompt/editorial")
+
+# Migración ONE-SHOT del recorte de texto de la UI: las descripciones (y dos títulos) que la
+# semilla VIEJA escribió en los editoriales repetían el título y la marca ("Ajustes de formato
+# por red propios de Piso 15…" bajo "Formato por red · Piso 15"). Los stores ya sembrados las
+# conservan, porque `importar_semilla` no pisa. Esto las sustituye SOLO si el valor sigue siendo
+# EXACTAMENTE la plantilla vieja (regex de plantilla, marca comodín): cualquier edición del
+# equipo, por mínima que sea, deja de casar y se respeta. One-shot por sentinela.
+_DESCRIPCIONES_VIEJAS_EDITORIAL: tuple[tuple[str, str], ...] = (
+    (r"Ajustes de formato por red propios de .+, sobre el formato común\.",
+     "Excepciones de la marca sobre el formato común."),
+    (r"Reglas y límites editoriales de .+ al generar copy\.",
+     "Límites editoriales al generar copy."),
+    (r"Cómo escribe .+: registro, tono y estilo\. Se inyecta al generar copy\.",
+     "Registro, tono y estilo; se inyecta al generar copy."),
+    (r"Qué es .+, qué cubre y su posicionamiento\. Referencia para redactar el copy\.",
+     "Qué cubre y su posicionamiento; referencia del copy."),
+    (r"Bandas de rendimiento medidas en Metricool \(longitud, emojis, hashtags\) de .+; "
+     r"se regenera periódicamente\.",
+     "Bandas medidas en Metricool (longitud, emojis, hashtags); se regeneran periódicamente."),
+    (r"Convenciones de formato por red comunes a todas las marcas\.",
+     "Base común de formato; cada marca añade sus excepciones."),
+    (r"Adaptación al español de México \(léxico y giros\)\. Común a todas las marcas\.",
+     "Léxico, giros y registro del español de México."),
+    (r"Reglas legales y éticas comunes a todas las marcas\.",
+     "Líneas rojas comunes a todas las marcas."),
+)
+_TITULOS_VIEJOS_EDITORIAL: tuple[tuple[str, str], ...] = (
+    ("Formato por red (común)", "Formato por red · común"),
+    ("Tropicalización (México)", "Tropicalización MX"),
+)
+_SENTINELA_DESCRIPCIONES = ".descripciones-v1"
 
 
 def dir_semilla() -> Path:
@@ -225,6 +257,49 @@ def migrar_nombres_biblioteca(origen: Path | None = None) -> int:
                 carpeta.rmdir()
         except OSError:
             pass
+    sentinela.parent.mkdir(parents=True, exist_ok=True)
+    escribir_atomico(sentinela, "ok\n")
+    return n
+
+
+def migrar_descripciones_editorial() -> int:
+    """Sustituye en el store las descripciones-plantilla VIEJAS de los editoriales (ONE-SHOT).
+
+    Las semillas viejas escribían descripciones que repetían el título y la marca; los stores
+    ya sembrados las conservan (`importar_semilla` no pisa). Aquí se reemplaza cada descripción
+    (y los dos títulos con paréntesis de los globales) SOLO si su valor actual casa EXACTO con
+    la plantilla vieja — una edición del equipo deja de casar y se respeta. Se escribe IN PLACE
+    (sin `guardar`, que movería el fichero al cambiar el título = id nuevo). Idempotente por
+    sentinela. Devuelve cuántos documentos tocó.
+    """
+    import dataclasses
+    import re
+
+    destino_raiz = raiz()
+    sentinela = destino_raiz / _SENTINELA_DESCRIPCIONES
+    if sentinela.exists():
+        return 0
+    n = 0
+    base_editorial = destino_raiz / "editorial"
+    if base_editorial.is_dir():
+        for ruta in sorted(base_editorial.rglob("*.md")):
+            doc = _leer(ruta)
+            if doc is None:
+                continue
+            cambios: dict[str, str] = {}
+            for patron, nuevo in _DESCRIPCIONES_VIEJAS_EDITORIAL:
+                if re.fullmatch(patron, doc.descripcion.strip()):
+                    cambios["descripcion"] = nuevo
+                    break
+            for viejo, nuevo in _TITULOS_VIEJOS_EDITORIAL:
+                if doc.titulo.strip() == viejo:
+                    cambios["titulo"] = nuevo
+                    break
+            if not cambios:
+                continue
+            nuevo_doc = dataclasses.replace(doc, actualizado=_ahora_iso(), **cambios)
+            escribir_atomico(ruta, _serializar(nuevo_doc))
+            n += 1
     sentinela.parent.mkdir(parents=True, exist_ok=True)
     escribir_atomico(sentinela, "ok\n")
     return n

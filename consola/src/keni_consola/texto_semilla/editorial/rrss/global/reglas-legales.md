@@ -1,6 +1,6 @@
 ---
 titulo: "Reglas legales"
-descripcion: "Reglas legales y éticas comunes a todas las marcas."
+descripcion: "Líneas rojas comunes a todas las marcas."
 tipo: editorial
 clase: reglas
 marcas: []

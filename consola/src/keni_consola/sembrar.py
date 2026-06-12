@@ -24,6 +24,9 @@ def main() -> int:
     o = libtexto.limpiar_prompts_obsoletos()
     if o:
         print(f"Texto: {o} prompt(s) obsoleto(s) eliminados del store.")
+    d = libtexto.migrar_descripciones_editorial()
+    if d:
+        print(f"Texto: {d} editorial(es) con descripcion/titulo de plantilla vieja corregidos.")
     n = libtexto.importar_semilla()
     print(f"Texto: {n} documento(s) base importados.")
     return 0

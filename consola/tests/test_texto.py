@@ -323,6 +323,49 @@ def test_limpiar_prompts_obsoletos_borra_y_es_idempotente():
     assert libtexto.limpiar_prompts_obsoletos() == 0  # sentinela: no repite
 
 
+def test_migrar_descripciones_editorial_corrige_plantillas_y_respeta_ediciones():
+    # Las descripciones-plantilla VIEJAS (repetían título y marca) se corrigen en el store;
+    # cualquier descripción editada por el equipo NO casa con la plantilla y se respeta.
+    # El título de los globales pierde el paréntesis SIN mover el fichero (id estable).
+    from keni_consola.libtexto._rutas import raiz
+
+    base = raiz() / "editorial" / "rrss"
+    (base / "piso-15").mkdir(parents=True, exist_ok=True)
+    (base / "global").mkdir(parents=True, exist_ok=True)
+    (base / "piso-15" / "plataformas.md").write_text(
+        '---\ntitulo: "Formato por red · Piso 15"\n'
+        'descripcion: "Ajustes de formato por red propios de Piso 15, sobre el formato común."\n'
+        "tipo: editorial\nclase: plataforma\nmarcas: [piso-15]\n---\nCUERPO DEL EQUIPO",
+        encoding="utf-8",
+    )
+    (base / "piso-15" / "voz.md").write_text(
+        '---\ntitulo: "Voz y tono · Piso 15"\n'
+        'descripcion: "Nuestra voz, ojo con el sarcasmo."\n'
+        "tipo: editorial\nclase: voz\nmarcas: [piso-15]\n---\nvoz",
+        encoding="utf-8",
+    )
+    (base / "global" / "plataformas.md").write_text(
+        '---\ntitulo: "Formato por red (común)"\n'
+        'descripcion: "Convenciones de formato por red comunes a todas las marcas."\n'
+        "tipo: editorial\nclase: plataforma\nmarcas: []\n---\ncomun",
+        encoding="utf-8",
+    )
+
+    n = libtexto.migrar_descripciones_editorial()
+    assert n == 2
+    doc = libtexto.obtener("editorial/rrss/piso-15/plataformas")
+    assert doc is not None
+    assert doc.descripcion == "Excepciones de la marca sobre el formato común."
+    assert doc.cuerpo.strip() == "CUERPO DEL EQUIPO"  # el cuerpo no se toca
+    editada = libtexto.obtener("editorial/rrss/piso-15/voz")
+    assert editada is not None and editada.descripcion == "Nuestra voz, ojo con el sarcasmo."
+    # El global cambia de título pero conserva su id/ruta (nada se mueve).
+    g = libtexto.obtener("editorial/rrss/global/plataformas")
+    assert g is not None and g.titulo == "Formato por red · común"
+    assert g.descripcion == "Base común de formato; cada marca añade sus excepciones."
+    assert libtexto.migrar_descripciones_editorial() == 0  # sentinela: no repite
+
+
 # --------------------------------------------------------------------------- #
 # Renombre del almacén de documentos: …/biblioteca -> …/texto (idempotente)    #
 # --------------------------------------------------------------------------- #

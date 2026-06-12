@@ -1,6 +1,6 @@
 ---
-titulo: "Tropicalización (México)"
-descripcion: "Adaptación al español de México (léxico y giros). Común a todas las marcas."
+titulo: "Tropicalización MX"
+descripcion: "Léxico, giros y registro del español de México."
 tipo: editorial
 clase: tropicalizacion
 marcas: []
