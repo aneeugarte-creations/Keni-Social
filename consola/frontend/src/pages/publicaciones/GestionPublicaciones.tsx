@@ -25,13 +25,39 @@ const TAM_PAGINA = 30;
 const MARCA_REPARTO = "claro-sports";
 
 /** Lente del reparto: todas las piezas, solo las LIBRES (por coger) o solo las MÍAS. */
-type FiltroReparto = "todas" | "libres" | "mias";
+export type FiltroReparto = "todas" | "libres" | "mias";
 
 const ETIQUETA_REPARTO: Record<FiltroReparto, string> = {
   todas: "Todas",
   libres: "Por coger",
   mias: "Mis tareas",
 };
+
+/**
+ * Filtro `responsable` que corresponde a una lente del reparto: "todas" no filtra,
+ * "libres" pide las piezas SIN responsable (centinela `"sin"` del backend) y "mias"
+ * filtra por el id del usuario de la sesión (sin sesión no puede filtrar: no filtra).
+ * Pura y exportada para testearla sin montar el componente.
+ */
+export function responsableDeLente(
+  reparto: FiltroReparto,
+  usuarioId: string | null,
+): string | undefined {
+  if (reparto === "libres") return "sin";
+  if (reparto === "mias") return usuarioId ?? undefined;
+  return undefined;
+}
+
+/**
+ * Refresco por-query mientras la lente del reparto está activa: el tablero es COMPARTIDO
+ * en vivo (los claims de los compañeros cambian lo que ves), así que no podemos quedarnos
+ * con los defaults globales de main.tsx (staleTime 30s, sin refetch al volver a la
+ * pestaña). Solo aplica con `repartoActivo`; el resto de marcas no paga el sondeo.
+ */
+const REFRESCO_REPARTO = {
+  refetchInterval: 45_000,
+  refetchOnWindowFocus: true,
+} as const;
 
 /**
  * GESTIÓN de publicaciones en dos modos: `lista` (paginada, con duplicar/editar) y
@@ -113,13 +139,14 @@ function Cuerpo({
   const usuario = React.useContext(SesionContexto)?.usuario ?? null;
   const repartoActivo = marcaActiva === MARCA_REPARTO;
   const [reparto, setReparto] = React.useState<FiltroReparto>("todas");
-  const responsable = !repartoActivo
-    ? undefined
-    : reparto === "libres"
-      ? "sin"
-      : reparto === "mias" && usuario
-        ? usuario.id
-        : undefined;
+  const responsable = repartoActivo
+    ? responsableDeLente(reparto, usuario?.id ?? null)
+    : undefined;
+
+  // Usuario (no admin) sin marca asignada: cae a la vista agregada sin saber por qué.
+  // Lo avisamos suave: el arreglo es de datos (un admin le asigna su marca en Usuarios).
+  const sinMarcaAsignada =
+    usuario !== null && usuario.rol !== "admin" && (usuario.marcas ?? []).length === 0;
 
   const filtrosBase = {
     marca: marcaActiva ?? undefined,
@@ -140,12 +167,16 @@ function Cuerpo({
     ],
     queryFn: ({ signal }) => api.publicaciones(filtrosBase, signal),
     enabled: calendario,
+    // REPARTO: ver en vivo los claims de los compañeros (sin tocar defaults globales).
+    ...(repartoActivo ? REFRESCO_REPARTO : {}),
   });
 
-  // LISTA: paginación REAL por limite+desplazamiento. Antes cada "Cargar más" reenviaba la
-  // petición con un límite creciente (30, 60, 90…) y el backend devolvía el acumulado entero;
-  // ahora cada página trae SOLO sus 30 filas y el infinite query las concatena en cliente.
-  // Cambiar los filtros cambia la queryKey, que resetea las páginas sola.
+  // LISTA: paginación KEYSET (modo `feed` del backend). Cada página devuelve
+  // `paginacion.cursor_siguiente` y la siguiente se pide con `cursor=` desde la última fila
+  // vista. El offset (`limite`+`desplazamiento`) saltaba piezas cuando el conjunto encogía
+  // en vivo (lente "Por coger" + claims de compañeros); el cursor es inmune a eso.
+  // `paginacion.total` sigue llegando para el "Mostrando X de Y". Cambiar los filtros
+  // cambia la queryKey, que resetea las páginas sola.
   const listaQuery = useInfiniteQuery({
     queryKey: [
       ...CLAVE_PUBLICACIONES,
@@ -155,25 +186,23 @@ function Cuerpo({
       filtrosBase.linea ?? "",
       responsable ?? "",
     ],
-    initialPageParam: 0,
+    // Primera página: sin cursor (pero con `feed: "1"` para activar el modo keyset).
+    initialPageParam: "",
     queryFn: ({ pageParam, signal }) =>
       api.publicaciones(
         {
           ...filtrosBase,
+          feed: "1",
           limite: String(TAM_PAGINA),
-          desplazamiento: String(pageParam),
+          cursor: pageParam || undefined,
         },
         signal,
       ),
-    getNextPageParam: (ultima, paginas) => {
-      const cargadas = paginas.reduce((n, p) => n + p.publicaciones.length, 0);
-      const total = ultima.paginacion?.total;
-      // Sin total fiable: seguimos mientras la última página venga llena.
-      const hayMas =
-        total != null ? cargadas < total : ultima.publicaciones.length >= TAM_PAGINA;
-      return hayMas && ultima.publicaciones.length > 0 ? cargadas : undefined;
-    },
+    // El backend OMITE `cursor_siguiente` en la última página: undefined = no hay más.
+    getNextPageParam: (ultima) => ultima.paginacion?.cursor_siguiente || undefined,
     enabled: !calendario,
+    // REPARTO: ver en vivo los claims de los compañeros (sin tocar defaults globales).
+    ...(repartoActivo ? REFRESCO_REPARTO : {}),
   });
 
   const query = calendario ? calendarioQuery : listaQuery;
@@ -199,6 +228,12 @@ function Cuerpo({
 
   return (
     <div className="mt-2">
+      {sinMarcaAsignada && (
+        <div className="mb-3 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+          No tienes marca asignada: pide a un admin que te asigne tu marca en Usuarios para
+          ver tu espacio de trabajo.
+        </div>
+      )}
       {repartoActivo && (
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <div className="inline-flex overflow-hidden rounded-md border border-border">
@@ -264,7 +299,7 @@ function Cuerpo({
           texto={
             filtrando
               ? "Prueba a cambiar o limpiar los filtros."
-              : "Genera copy desde Contenido o guárdalo como publicación."
+              : "Vuelca material en Fuentes (cajones y clips) o crea una pieza a mano desde Contenido."
           }
         />
       ) : (

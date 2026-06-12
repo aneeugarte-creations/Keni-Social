@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { SesionContexto } from "@/hooks/sesion-contexto";
 import * as apiMod from "@/lib/api";
 import type { Publicacion } from "@/types";
 
@@ -17,6 +18,7 @@ function pub(over: Partial<Publicacion> = {}): Publicacion {
   return {
     id: "p1",
     contenido_id: "c1",
+    pipeline_id: "",
     titulo: "Tema",
     marca: "piso-15",
     marca_nombre: "Piso 15",
@@ -24,10 +26,12 @@ function pub(over: Partial<Publicacion> = {}): Publicacion {
     red_nombre: "X",
     contenido: "Copy.",
     copy_in: "",
-    estado: "pendiente",
+    estado: "borrador",
     veredicto: "",
     autor_id: "",
     autor_nombre: "",
+    responsable_id: "",
+    responsable_nombre: "",
     enviado_a_revision_en: "",
     revisor_id: "",
     revisor_nombre: "",
@@ -55,12 +59,20 @@ function pub(over: Partial<Publicacion> = {}): Publicacion {
     evergreen: false,
     etapa_ia: "generando_arte",
     ...over,
-  } as Publicacion;
+  };
 }
 
-function renderLista(publicaciones: Publicacion[]) {
+/**
+ * Monta la lista; con `usuario` la envuelve además en un `SesionContexto.Provider`
+ * (la Tarjeta lee la sesión con `useContext` null-safe: sin provider sigue funcionando,
+ * pero "es mía"/rol admin necesitan saber quién mira).
+ */
+function renderLista(
+  publicaciones: Publicacion[],
+  usuario?: { id: string; rol: string },
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const arbol = (
     <QueryClientProvider client={client}>
       <MemoryRouter>
         <VistaLista
@@ -70,7 +82,14 @@ function renderLista(publicaciones: Publicacion[]) {
           onConfigurarCadencia={vi.fn()}
         />
       </MemoryRouter>
-    </QueryClientProvider>,
+    </QueryClientProvider>
+  );
+  return render(
+    usuario ? (
+      <SesionContexto.Provider value={{ usuario } as never}>{arbol}</SesionContexto.Provider>
+    ) : (
+      arbol
+    ),
   );
 }
 
@@ -136,10 +155,73 @@ describe("VistaLista — selección múltiple y borrado en masa", () => {
         marca: "claro-sports",
         responsable_id: "u-mariana",
         responsable_nombre: "Mariana",
-      } as Partial<Publicacion>),
+      }),
     ]);
     expect(screen.getByText("Mariana")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Coger/ })).toBeNull();
+  });
+
+  it("reparto: si otra persona la cogió antes (409), el toast de error trae el motivo", async () => {
+    vi.spyOn(apiMod.api, "cogerContenido").mockRejectedValue(
+      new apiMod.ApiError("Ya la cogió Mariana.", 409),
+    );
+    renderLista([
+      pub({ id: "p1", contenido_id: "c1", titulo: "Gol", marca: "claro-sports" }),
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Coger" }));
+
+    const { toast } = await import("sonner");
+    await waitFor(() =>
+      expect(vi.mocked(toast.error)).toHaveBeenCalledWith("Ya la cogió Mariana."),
+    );
+  });
+
+  it("reparto: una pieza MÍA (sesión u1) lleva el badge 'Tuya' y 'Soltar' libera el tema padre", async () => {
+    const soltar = vi
+      .spyOn(apiMod.api, "soltarContenido")
+      .mockResolvedValue({ contenido: {} } as never);
+    renderLista(
+      [
+        pub({
+          id: "p1",
+          contenido_id: "c1",
+          titulo: "Gol",
+          marca: "claro-sports",
+          responsable_id: "u1",
+          responsable_nombre: "Yustine",
+        }),
+      ],
+      { id: "u1", rol: "editor" },
+    );
+
+    expect(screen.getByText("Tuya")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Soltar" }));
+    await waitFor(() => expect(soltar).toHaveBeenCalledTimes(1));
+    expect(soltar).toHaveBeenCalledWith("c1");
+  });
+
+  it("reparto: un admin ve en el menú contextual 'Soltar (la lleva Mariana)' en una pieza ajena", async () => {
+    renderLista(
+      [
+        pub({
+          id: "p1",
+          contenido_id: "c1",
+          titulo: "Gol",
+          marca: "claro-sports",
+          responsable_id: "u-mariana",
+          responsable_nombre: "Mariana",
+        }),
+      ],
+      { id: "u-admin", rol: "admin" },
+    );
+
+    // No es suya: sin botón inline de Soltar; la vía del admin es el menú (kebab).
+    expect(screen.queryByRole("button", { name: "Soltar" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
+    expect(
+      await screen.findByRole("menuitem", { name: /Soltar \(la lleva Mariana\)/ }),
+    ).toBeInTheDocument();
   });
 
   it("reparto: las piezas de otras marcas NO llevan botón de coger (flujo sin reparto)", () => {
