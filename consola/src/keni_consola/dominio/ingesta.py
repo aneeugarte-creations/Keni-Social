@@ -215,11 +215,12 @@ SENAL_CURADO = 1_000_000
 def noticia_item_de_insumo(insumo: dict[str, Any]) -> dict[str, Any] | None:
     """Fila de `noticias_items` a partir de un `insumo_item` de cajón. None si no se puede.
 
-    Los EVENTOS no entran al pool (son agenda de cobertura, no notas de copy): se omiten
+    Los EVENTOS no entran al pool (son agenda de cobertura, no notas de copy) y las
+    INDICACIONES (`contexto`) tampoco (son guía editorial, nunca se publican): ambos se omiten
     devolviendo None. La `clave` es el hash del título normalizado (los cajones no traen URL);
     sin título útil no hay identidad estable y se omite. `senal` alta (curado por el equipo).
     """
-    if str(insumo.get("tipo") or "").strip().lower() == "evento":
+    if str(insumo.get("tipo") or "").strip().lower() in {"evento", "contexto"}:
         return None
     titulo = str(insumo.get("titulo") or "").strip()
     clave = _clave_dedup("", titulo)

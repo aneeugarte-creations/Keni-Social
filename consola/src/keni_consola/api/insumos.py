@@ -1,10 +1,12 @@
-"""API de Insumos del día (cajones) — cuatro bandejas de material diario.
+"""API de Insumos del día (cajones) — bandejas de material diario.
 
-Los cuatro cajones reciben el material que el equipo de redes de AMX recibe cada día:
-  - portal        : lista numerada Portal/SMS
-  - corresponsales: el "así vamos" por estado
-  - reporteros    : PDF de agenda de coberturas
-  - eventos_claro : Excel/CSV de programación TV Claro Sports
+Los cajones reciben el material que el equipo de redes de AMX recibe cada día:
+  - portal        : lista numerada Portal/SMS                (UnoTV)
+  - corresponsales: el "así vamos" por estado                (UnoTV)
+  - reporteros    : PDF de agenda de coberturas              (UnoTV)
+  - eventos_claro : Excel/CSV de programación TV Claro Sports (Claro Sports)
+  - notas         : volcado de notas/links/tweets/PDFs        (Claro Sports)
+  - contexto      : indicaciones/correcciones — GUÍA EDITORIAL, nunca se publica (Claro Sports)
 
 Contrato completo: docs/maquina-contenido/01-insumos-del-dia.md
 
@@ -41,8 +43,12 @@ from ..tiempo import hoy_utc
 
 _log = logging.getLogger("keni_consola.api.insumos")
 
-# Cajones en el orden del contrato (siempre los 4, incluso vacíos).
-_CAJONES: tuple[str, ...] = ("portal", "corresponsales", "reporteros", "eventos_claro")
+# Cajones en el orden del contrato (siempre todos, incluso vacíos). Los 4 primeros son de
+# UnoTV; "notas" y "contexto" son de Claro Sports. "contexto" es guía editorial: sus ítems
+# NUNCA entran al pool ni al tablero (ver `noticia_item_de_insumo` y los backstops de abajo).
+_CAJONES: tuple[str, ...] = (
+    "portal", "corresponsales", "reporteros", "eventos_claro", "notas", "contexto",
+)
 _MARCAS_IDS = {m[0] for m in marcas.opciones()}
 
 # Límites de texto de entrada.
@@ -111,7 +117,7 @@ def _redes_iniciales(crudo: Any) -> list[str]:
 async def listar(request: Request) -> Response:
     """`GET /api/insumos?fecha=YYYY-MM-DD&cajon=&marca=&solo_frescos=1`
 
-    Devuelve los 4 cajones para la fecha pedida (def hoy), cada uno con sus lotes e ítems.
+    Devuelve todos los cajones para la fecha pedida (def hoy), cada uno con sus lotes e ítems.
 
     Parámetros opcionales:
     - `solo_frescos=1`: filtra (oculta, no borra) los ítems caducados según la TTL de su línea.
@@ -409,7 +415,7 @@ async def editar_item(request: Request) -> Response:
         m = campos["marca"]
         if m and m not in _MARCAS_IDS:
             return JSONResponse({"error": "Marca no válida."}, status_code=400)
-    if "tipo" in campos and campos["tipo"] not in {"nota", "cobertura", "evento"}:
+    if "tipo" in campos and campos["tipo"] not in {"nota", "cobertura", "evento", "contexto"}:
         return JSONResponse({"error": "Tipo no válido."}, status_code=400)
     if "estado_material" in campos and campos["estado_material"] not in {"tengo", "espero", ""}:
         return JSONResponse({"error": "estado_material no válido."}, status_code=400)
@@ -438,6 +444,13 @@ async def usar_item(request: Request) -> Response:
     item = repos.obtener_insumo_item(item_id)
     if item is None:
         return JSONResponse({"error": "Ese ítem no existe."}, status_code=404)
+    # Backstop: las indicaciones (cajón contexto) son guía editorial, NUNCA piezas. Aunque
+    # alguien archive una nota en el cajón equivocado, el `tipo=contexto` la frena aquí.
+    if str(item.get("tipo") or "") == "contexto":
+        return JSONResponse(
+            {"error": "Las indicaciones son guía editorial; no se llevan al tablero."},
+            status_code=400,
+        )
     if item.get("usado"):
         # Ya fue llevado al tablero; devuelve el estado actual.
         return JSONResponse({"item": _item_a_dict(item), "contenido_id": item.get("contenido_id", "")})
@@ -511,6 +524,11 @@ async def crear_evento_item(request: Request) -> Response:
     item = repos.obtener_insumo_item(item_id)
     if item is None:
         return JSONResponse({"error": "Ese ítem no existe."}, status_code=404)
+    if str(item.get("tipo") or "") == "contexto":
+        return JSONResponse(
+            {"error": "Las indicaciones son guía editorial; no generan eventos."},
+            status_code=400,
+        )
     if item.get("usado"):
         # Ya fue convertido en evento (o llevado al tablero); devuelve el estado actual.
         return JSONResponse(

@@ -1,8 +1,8 @@
 /**
  * Cajones del día — insumos diarios del equipo AMX.
  *
- * El equipo vuelca material en 4 cajones (Portal/SMS, Corresponsales,
- * Reporteros y Eventos Claro). Haiku los parsea y produce ítems limpios,
+ * El equipo vuelca material en los cajones del día (UnoTV: Portal/SMS, Corresponsales,
+ * Reporteros, Eventos Claro · Claro Sports: Notas, Indicaciones). Haiku los parsea y produce ítems limpios,
  * ordenados y listos para curar: el auto-feed lleva las historias relevantes
  * al feed automáticamente; aquí se descarta lo que no sirva o se empuja algo
  * de inmediato con "Empujar ya".
@@ -69,8 +69,9 @@ interface DescripcionCajon {
   placeholderTexto: string;
   /**
    * Marca (id canónico) a la que pertenece el cajón: cada buzón es de UNA marca. Portal/SMS,
-   * Corresponsales y Reporteros son de UnoTV; Eventos Claro (la parrilla) es de Claro Sports.
-   * Los cajones visibles se filtran por la marca activa del switch global (en "Todas" se ven todos).
+   * Corresponsales y Reporteros son de UnoTV; Eventos Claro (la parrilla), Notas y las
+   * Indicaciones son de Claro Sports. Los cajones visibles se filtran por la marca activa del
+   * switch global (en "Todas" se ven todos).
    */
   marca: string;
 }
@@ -106,6 +107,22 @@ const CAJONES: DescripcionCajon[] = [
     descripcion: "Excel o CSV de eventos y programación de TV de Claro Sports.",
     aceptaArchivo: ".xlsx,.xls,.csv",
     placeholderTexto: "O pega el contenido del CSV...",
+    marca: "claro-sports",
+  },
+  {
+    id: "notas",
+    titulo: "Notas y links",
+    descripcion: "Volcado de WhatsApp: notas, links, tweets, texto de PDFs. Una pieza por noticia.",
+    aceptaArchivo: ".txt,.pdf",
+    placeholderTexto: "Pega aquí lo del grupo de WhatsApp (notas, links, tweets)...",
+    marca: "claro-sports",
+  },
+  {
+    id: "contexto",
+    titulo: "Indicaciones",
+    descripcion: "Indicaciones, correcciones y prioridades del equipo. Guía editorial: NO se publica.",
+    aceptaArchivo: ".txt",
+    placeholderTexto: "Pega aquí las indicaciones o correcciones (orientan el copy; no se publican)...",
     marca: "claro-sports",
   },
 ];
@@ -267,6 +284,9 @@ function ItemCard({ item, fecha }: PropsItemCard) {
   // la rota (no en piezas del feed): muestran "Crear evento" en vez de "Enviar al feed".
   // El evento creado se gestiona luego en Fuentes › Eventos.
   const esEvento = item.cajon === "eventos_claro" || item.tipo === "evento";
+  // Las indicaciones (cajón contexto) son guía editorial: no van al tablero ni al feed. Se
+  // muestran como referencia, sin acción de publicar (el back las frena con un backstop 400).
+  const esContexto = item.tipo === "contexto";
 
   const usarMut = useMutation({
     mutationFn: () => api.insumos.usarItem(item.id, { generar: true }),
@@ -310,7 +330,11 @@ function ItemCard({ item, fecha }: PropsItemCard) {
                 >
                   <Edit2 className="h-3 w-3" />
                 </Button>
-                {esEvento ? (
+                {esContexto ? (
+                  <Badge variant="outline" className="text-xs" title="Guía editorial; no se publica">
+                    Guía
+                  </Badge>
+                ) : esEvento ? (
                   <Button
                     size="sm"
                     className="h-7 gap-1 px-2 text-xs"

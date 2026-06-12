@@ -221,8 +221,8 @@ const GENERACION_INSUMOS = {
 
 const DIAS_HISTORIAL = {
   dias: [
-    { fecha: "2026-06-05", total: 1, por_cajon: { portal: 1, corresponsales: 0, reporteros: 0, eventos_claro: 0 } },
-    { fecha: "2026-06-04", total: 5, por_cajon: { portal: 2, corresponsales: 2, reporteros: 1, eventos_claro: 0 } },
+    { fecha: "2026-06-05", total: 1, por_cajon: { portal: 1, corresponsales: 0, reporteros: 0, eventos_claro: 0, notas: 0, contexto: 0 } },
+    { fecha: "2026-06-04", total: 5, por_cajon: { portal: 2, corresponsales: 2, reporteros: 1, eventos_claro: 0, notas: 0, contexto: 0 } },
   ],
 };
 
@@ -253,18 +253,20 @@ function mockApiInsumos(
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe("CajonesDia", () => {
-  it("un editor de UnoTV solo ve sus cajones (sin el de Claro Sports)", async () => {
+  it("un editor de UnoTV solo ve sus cajones (sin los de Claro Sports)", async () => {
     mockApiInsumos();
     renderConProviders(<CajonesDia />);
 
     expect(await screen.findByText("Portal / SMS")).toBeInTheDocument();
     expect(screen.getByText("Corresponsales")).toBeInTheDocument();
     expect(screen.getByText("Reporteros (agenda PDF)")).toBeInTheDocument();
-    // Eventos Claro es de Claro Sports: NO debe verse para un editor de UnoTV.
+    // Eventos Claro, Notas e Indicaciones son de Claro Sports: NO para un editor de UnoTV.
     expect(screen.queryByText("Eventos Claro (Excel/CSV)")).not.toBeInTheDocument();
+    expect(screen.queryByText("Notas y links")).not.toBeInTheDocument();
+    expect(screen.queryByText("Indicaciones")).not.toBeInTheDocument();
   });
 
-  it("en 'Todas' (admin) se ven los 4 cajones de todas las marcas", async () => {
+  it("en 'Todas' (admin) se ven los cajones de todas las marcas", async () => {
     mockApiInsumos();
     renderConProviders(<CajonesDia />, usuarioAdmin());
 
@@ -272,6 +274,9 @@ describe("CajonesDia", () => {
     expect(screen.getByText("Corresponsales")).toBeInTheDocument();
     expect(screen.getByText("Reporteros (agenda PDF)")).toBeInTheDocument();
     expect(screen.getByText("Eventos Claro (Excel/CSV)")).toBeInTheDocument();
+    // Cajones de Claro Sports para que Elías vuelque su material de WhatsApp.
+    expect(screen.getByText("Notas y links")).toBeInTheDocument();
+    expect(screen.getByText("Indicaciones")).toBeInTheDocument();
   });
 
   it("muestra el encabezado de página", async () => {

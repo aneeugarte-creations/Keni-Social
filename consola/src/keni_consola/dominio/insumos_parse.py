@@ -9,6 +9,8 @@ Cajones soportados (ver docs/maquina-contenido/01-insumos-del-dia.md):
   - corresponsales: el "así vamos" por estado (VOSOT / VO / FT …)
   - reporteros    : tabla de coberturas del día (PDF de agenda)
   - eventos_claro : Excel/CSV de programación TV Claro Sports
+  - notas         : volcado de notas/links/tweets/PDFs (Claro Sports) -> tipo "nota"
+  - contexto      : indicaciones/correcciones (Claro Sports) -> tipo "contexto" (guía, nunca pieza)
 
 El ejecutor es INYECTABLE (`Ejecutor = Callable[[str, str], str]`) para que los tests
 pasen un fake sin llamar al binario `claude`.
@@ -35,7 +37,9 @@ _log = logging.getLogger("keni_consola.dominio.insumos_parse")
 _CLAUDE_TIMEOUT_S = 180
 
 # Cajones válidos.
-CAJONES: tuple[str, ...] = ("portal", "corresponsales", "reporteros", "eventos_claro")
+CAJONES: tuple[str, ...] = (
+    "portal", "corresponsales", "reporteros", "eventos_claro", "notas", "contexto",
+)
 
 # Tipo de ítem natural de cada cajón (default cuando el modelo no lo entrega o da uno inválido).
 _TIPO_POR_CAJON: dict[str, str] = {
@@ -43,6 +47,8 @@ _TIPO_POR_CAJON: dict[str, str] = {
     "corresponsales": "cobertura",
     "reporteros": "cobertura",
     "eventos_claro": "evento",
+    "notas": "nota",
+    "contexto": "contexto",
 }
 
 # Tipo del ejecutor inyectable: (prompt, dir_permitido) -> texto final.
@@ -64,6 +70,8 @@ _PROMPT_INSUMO_IDS: dict[str, str] = {
     "corresponsales": "prompt/insumos/corresponsales",
     "reporteros": "prompt/insumos/reporteros",
     "eventos_claro": "prompt/insumos/eventos-claro",
+    "notas": "prompt/insumos/notas",
+    "contexto": "prompt/insumos/contexto",
 }
 _MARCA_RUTA = "{{RUTA}}"
 
@@ -211,7 +219,7 @@ def _items_desde_registros(
     cuando la IA no reconoce una marca para el ítem: sin él, esos ítems quedan con marca ""
     y el filtro por marca del cajón los oculta.
     """
-    tipos_validos = {"nota", "cobertura", "evento"}
+    tipos_validos = {"nota", "cobertura", "evento", "contexto"}
     # Tipo por defecto SEGÚN EL CAJÓN cuando el modelo no lo da (o da uno inválido): cada cajón
     # tiene una naturaleza fija (portal=nota, corresponsales/reporteros=cobertura, eventos=evento).
     tipo_default = _TIPO_POR_CAJON.get(cajon, "nota")
@@ -365,7 +373,7 @@ def extraer_insumos(
     Parámetros:
       data      : bytes del archivo o del texto pegado (UTF-8 para texto).
       nombre    : nombre de archivo (extensión usada como pista al modelo).
-      cajon     : uno de los 4 cajones (portal/corresponsales/reporteros/eventos_claro).
+      cajon     : uno de los cajones (portal/corresponsales/reporteros/eventos_claro/notas/contexto).
       fecha     : día editorial ISO (YYYY-MM-DD).
       lote_id   : id del lote al que pertenecerán los ítems.
       ejecutor  : función (prompt, dir) -> str; None = subproceso real `claude`.

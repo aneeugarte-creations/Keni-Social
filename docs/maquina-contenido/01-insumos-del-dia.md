@@ -8,12 +8,15 @@ actualizar este doc.** Marca foco: UnoTV y Claro Sports.
 El equipo de redes de AMX recibe cada día material de otros equipos en formatos
 muy distintos. Necesitan **soltarlos en cajones** y que la consola los **parsee
 con un agente Haiku**, los presente limpios y ordenados, **fechados por día**, y
-permita llevarlos al tablero. Hay **4 cajones**:
+permita llevarlos al tablero. Hay **6 cajones** (los 4 primeros de UnoTV; `notas` y
+`contexto` de Claro Sports):
 
 - `portal` — lista numerada de Portal/SMS (`1.- TITULAR ... cuerpo`).
 - `corresponsales` — el "así vamos" (`VOSOT OAXACA (J. CORTÉS) TITULAR - Tengo/Espero material y guión-`).
 - `reporteros` — PDF de agenda de coberturas (tabla con REPORTERO, HORA Y LUGAR, ASIGNACIÓN, ...).
 - `eventos_claro` — Excel/CSV de eventos y programación de TV de Claro Sports.
+- `notas` — volcado heterogéneo de WhatsApp (notas, links, tweets, texto de PDFs) → una `nota` por unidad.
+- `contexto` — indicaciones/correcciones del equipo → ítems `tipo=contexto`: GUÍA EDITORIAL que **nunca** entra al pool ni al tablero (backstops en `api/insumos.py` e `dominio/ingesta.py`).
 
 Cada item nace **fechado con el día editorial** y hay **historial**: poder ver
 las listas de cualquier día pasado.
@@ -24,7 +27,7 @@ las listas de cualquier día pasado.
 ```
 id            TEXT PRIMARY KEY
 fecha         TEXT NOT NULL DEFAULT ''   -- día editorial ISO YYYY-MM-DD
-cajon         TEXT NOT NULL DEFAULT ''   -- portal|corresponsales|reporteros|eventos_claro
+cajon         TEXT NOT NULL DEFAULT ''   -- portal|corresponsales|reporteros|eventos_claro|notas|contexto
 marca         TEXT NOT NULL DEFAULT ''   -- opcional; eventos_claro => claro-sports
 origen_texto  TEXT NOT NULL DEFAULT ''   -- texto pegado (si lo hubo)
 origen_archivo TEXT NOT NULL DEFAULT ''  -- nombre del archivo (si lo hubo)
@@ -49,7 +52,7 @@ resumen         TEXT NOT NULL DEFAULT ''
 hora            TEXT NOT NULL DEFAULT ''   -- coberturas/eventos
 lugar           TEXT NOT NULL DEFAULT ''   -- coberturas
 estado_material TEXT NOT NULL DEFAULT ''   -- corresponsales: tengo|espero|''
-tipo            TEXT NOT NULL DEFAULT 'nota' -- nota|cobertura|evento
+tipo            TEXT NOT NULL DEFAULT 'nota' -- nota|cobertura|evento|contexto
 idioma          TEXT NOT NULL DEFAULT 'es'
 usado           INTEGER NOT NULL DEFAULT 0
 contenido_id    TEXT NOT NULL DEFAULT ''    -- si se llevó al tablero
@@ -110,7 +113,7 @@ Todas devuelven JSON. Validar antes de tocar repos. Errores: `JSONResponse({"err
   ]
 }
 ```
-Siempre devuelve las 4 entradas de cajón (aunque vacías), en ese orden.
+Siempre devuelve las 6 entradas de cajón (aunque vacías), en ese orden.
 
 ### `GET /api/insumos/dias`
 ```json
@@ -149,7 +152,7 @@ item `usado=1`, guarda `contenido_id`. → `{ "item": {Item}, "contenido_id": ".
 usan snake_case en las claves:
 
 ```ts
-type CajonInsumo = "portal" | "corresponsales" | "reporteros" | "eventos_claro";
+type CajonInsumo = "portal" | "corresponsales" | "reporteros" | "eventos_claro" | "notas" | "contexto";
 
 interface InsumoLote {
   id: string; fecha: string; cajon: CajonInsumo; marca: string;
@@ -162,7 +165,7 @@ interface InsumoItem {
   marca: string; marca_nombre: string; linea: string;
   titulo: string; resumen: string; hora: string; lugar: string;
   estado_material: "tengo" | "espero" | "";
-  tipo: "nota" | "cobertura" | "evento"; idioma: string;
+  tipo: "nota" | "cobertura" | "evento" | "contexto"; idioma: string;
   usado: boolean; contenido_id: string; orden: number;
 }
 interface CajonConItems { cajon: CajonInsumo; lotes: InsumoLote[]; items: InsumoItem[]; }

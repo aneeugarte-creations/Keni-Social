@@ -105,8 +105,17 @@ export interface ResultadoImportCalendario {
 // Contrato compartido con el backend (01-insumos-del-dia.md). Todos los campos
 // usan snake_case tal como los devuelve la API (verificado en el contrato).
 
-/** Los cuatro cajones de insumos diarios. */
-export type CajonInsumo = "portal" | "corresponsales" | "reporteros" | "eventos_claro";
+/**
+ * Los cajones de insumos diarios. Los 4 primeros son de UnoTV; `notas` y `contexto`
+ * son de Claro Sports (`contexto` = guía editorial, nunca se publica).
+ */
+export type CajonInsumo =
+  | "portal"
+  | "corresponsales"
+  | "reporteros"
+  | "eventos_claro"
+  | "notas"
+  | "contexto";
 
 /** Un lote de insumos (un "drop" en un cajón; el parseo Haiku produce los items). */
 export interface InsumoLote {
@@ -138,7 +147,7 @@ export interface InsumoItem {
   hora: string;
   lugar: string;
   estado_material: "tengo" | "espero" | "";
-  tipo: "nota" | "cobertura" | "evento";
+  tipo: "nota" | "cobertura" | "evento" | "contexto";
   idioma: string;
   /** `true` si ya se llevó al tablero. */
   usado: boolean;

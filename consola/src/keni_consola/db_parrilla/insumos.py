@@ -354,10 +354,12 @@ def listar_lotes(
 def dias_con_insumos() -> list[dict[str, Any]]:
     """Fechas distintas con insumos + total de ítems y desglose por cajón.
 
-    Devuelve lista de dicts `{fecha, total, por_cajon:{portal,corresponsales,reporteros,eventos_claro}}`,
+    Devuelve lista de dicts `{fecha, total, por_cajon:{portal,…,eventos_claro,notas,contexto}}`,
     ordenada por fecha desc. Cuenta ítems (no lotes) para reflejar el volumen editorial real.
     """
-    cajones_fijos = ("portal", "corresponsales", "reporteros", "eventos_claro")
+    cajones_fijos = (
+        "portal", "corresponsales", "reporteros", "eventos_claro", "notas", "contexto",
+    )
     con = _conectar()
     try:
         filas = con.execute(

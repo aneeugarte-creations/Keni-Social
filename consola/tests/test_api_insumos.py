@@ -56,13 +56,15 @@ def _cliente_con_items(items: list[dict]):
 # --------------------------------------------------------------------------- #
 
 
-def test_listar_cajones_vacios_devuelve_4_cajones(cliente):
+def test_listar_cajones_vacios_devuelve_todos_los_cajones(cliente):
     r = cliente.get("/api/insumos")
     assert r.status_code == 200, r.text
     data = r.json()
     assert "fecha" in data
     cajones = [c["cajon"] for c in data["cajones"]]
-    assert cajones == ["portal", "corresponsales", "reporteros", "eventos_claro"]
+    assert cajones == [
+        "portal", "corresponsales", "reporteros", "eventos_claro", "notas", "contexto",
+    ]
     for cajon in data["cajones"]:
         assert cajon["lotes"] == []
         assert cajon["items"] == []
@@ -343,6 +345,16 @@ def test_usar_item_doble_es_idempotente():
 def test_usar_item_inexistente_404(cliente):
     r = cliente.post("/api/insumos/item/noexiste/usar", json={})
     assert r.status_code == 404
+
+
+def test_usar_item_contexto_rechazado_400():
+    """Las indicaciones (cajón contexto) son guía editorial: `usar` las frena con 400."""
+    cli = _cliente_con_items([
+        {"titulo": "No llamar 'Tri' a la selección", "tipo": "contexto"},
+    ])
+    _, item_id = _aportar_un_item(cli, cajon="contexto")
+    r = cli.post(f"/api/insumos/item/{item_id}/usar", json={"generar": False})
+    assert r.status_code == 400
 
 
 # --------------------------------------------------------------------------- #

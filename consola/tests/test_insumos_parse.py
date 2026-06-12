@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 
+from keni_consola.dominio import ingesta as dom_ingesta
 from keni_consola.dominio import insumos_parse as ip
 
 # --------------------------------------------------------------------------- #
@@ -164,6 +165,43 @@ def test_parsear_respuesta_haiku_tipo_invalido_cae_a_nota():
         texto, cajon="portal", fecha="2026-06-05", lote_id="l001"
     )
     assert items[0]["tipo"] == "nota"
+
+
+def test_cajon_notas_default_nota():
+    """El cajón `notas` (Claro Sports) produce ítems tipo `nota` por defecto (van al pool)."""
+    texto = json.dumps({"items": [{"titulo": "Gol de México en el último minuto"}]})
+    items, _ = ip.parsear_respuesta_haiku(
+        texto, cajon="notas", fecha="2026-06-05", lote_id="l001"
+    )
+    assert items[0]["tipo"] == "nota"
+
+
+def test_cajon_contexto_default_contexto():
+    """El cajón `contexto` produce ítems tipo `contexto` (guía editorial) por defecto."""
+    texto = json.dumps({"items": [{"titulo": "Transmitimos la final a las 14:00"}]})
+    items, _ = ip.parsear_respuesta_haiku(
+        texto, cajon="contexto", fecha="2026-06-05", lote_id="l001"
+    )
+    assert items[0]["tipo"] == "contexto"
+
+
+def test_contexto_es_tipo_valido_y_se_respeta():
+    """`contexto` es un tipo válido: si la IA lo marca, NO se degrada al default del cajón."""
+    texto = json.dumps({"items": [
+        {"titulo": "No llamar 'Tri' a la selección", "tipo": "contexto"},
+    ]})
+    items, _ = ip.parsear_respuesta_haiku(
+        texto, cajon="notas", fecha="2026-06-05", lote_id="l001"
+    )
+    assert items[0]["tipo"] == "contexto"
+
+
+def test_noticia_item_de_insumo_excluye_eventos_y_contexto():
+    """Eventos e indicaciones (contexto) NUNCA entran al pool de noticias; las notas sí."""
+    base = {"titulo": "Resumen del partido", "marca": "claro-sports", "cajon": "notas"}
+    assert dom_ingesta.noticia_item_de_insumo({**base, "tipo": "nota"}) is not None
+    assert dom_ingesta.noticia_item_de_insumo({**base, "tipo": "evento"}) is None
+    assert dom_ingesta.noticia_item_de_insumo({**base, "tipo": "contexto"}) is None
 
 
 def test_parsear_respuesta_haiku_estado_material_normalizado():

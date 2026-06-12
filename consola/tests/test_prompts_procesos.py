@@ -48,6 +48,8 @@ def test_catalogo_cubre_los_prompts_inyectados():
         "prompt/insumos/corresponsales",
         "prompt/insumos/reporteros",
         "prompt/insumos/eventos-claro",
+        "prompt/insumos/notas",
+        "prompt/insumos/contexto",
         "prompt/sugerencias",
         "prompt/traduccion",
         "prompt/fusion",

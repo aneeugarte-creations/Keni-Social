@@ -22,6 +22,8 @@ PROCESOS_POR_PROMPT: dict[str, list[str]] = {
     "prompt/insumos/corresponsales": ["Buzón de insumos · cajón Corresponsales"],
     "prompt/insumos/reporteros": ["Buzón de insumos · cajón Reporteros"],
     "prompt/insumos/eventos-claro": ["Buzón de insumos · cajón Eventos Claro Sports"],
+    "prompt/insumos/notas": ["Buzón de insumos · cajón Notas y links (Claro Sports)"],
+    "prompt/insumos/contexto": ["Buzón de insumos · cajón Indicaciones (Claro Sports)"],
     # Noticias / algoritmo
     "prompt/sugerencias": [
         "Sugerencias editoriales · digest diario de cambios de algoritmo por plataforma",
