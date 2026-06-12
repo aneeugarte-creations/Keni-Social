@@ -733,14 +733,20 @@ export default function Imagen() {
       {/* TIRA DE PESTAÑAS: única franja entre cabecera y lienzo. Solo pestañas + «+»; las
           acciones del editor viven arriba, en la cabecera (las portaliza EditorDocumento). */}
       {pestanas.length > 0 && (
-        <div className="flex shrink-0 items-center gap-0.5 overflow-x-auto border-b border-border bg-muted/30 px-2">
+        <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-border bg-muted px-2 py-1">
           {pestanas.map((t) => {
             const marca = marcas.find((m) => m.id === t.marca)?.nombre ?? t.marca;
             return (
+              // Pestañas estilo navegador (Chrome): la activa se distingue por una superficie
+              // CLARA que flota sobre el gris de la barra (fondo `--card` + sombra + esquinas
+              // redondeadas), no por un subrayado. Las inactivas se funden con la barra y solo
+              // toman fondo al pasar el ratón.
               <div
                 key={t.id}
-                className={`flex shrink-0 items-center gap-1 border-b-2 px-3 py-1.5 text-sm ${
-                  t.id === activa ? "border-primary font-medium" : "border-transparent text-muted-foreground"
+                className={`flex shrink-0 items-center gap-1 rounded-md px-3 py-1 text-sm transition-colors ${
+                  t.id === activa
+                    ? "bg-card font-medium text-foreground shadow-sm"
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
                 }`}
               >
                 {editTab?.id === t.id ? (
