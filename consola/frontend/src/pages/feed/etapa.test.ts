@@ -87,6 +87,16 @@ describe("etapaDePublicacion · etapa IA derivada (degradación, sin `etapa_ia`)
     ).toBe("generando_arte");
   });
 
+  it("la imagen del ARTÍCULO de origen (imagen_fuente) NO cuenta como foto real → generando_arte", () => {
+    // Pieza de marca con la imagen de la nota original pero sin foto propia inyectada: sigue
+    // en "Falta imagen" (la URL de la nota es referencia, no la foto de la pieza).
+    expect(
+      etapaDePublicacion(
+        pub({ estado: "en_revision", contenido: "copy #x", copy_in: "TITULAR", foto: "", imagen_fuente: "https://nota.test/o.jpg", etapa_ia: undefined }),
+      ),
+    ).toBe("generando_arte");
+  });
+
   it("pieza SIN marca con imagen subida (bespoke), completa → lista_para_revisar", () => {
     // Completa de verdad (copy + imagen propia): el pipeline la mueve sola a la cola de
     // revisión, así que el feed la pinta directa como "Para revisar" (sin etapa intermedia).

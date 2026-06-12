@@ -215,15 +215,15 @@ function Cuerpo({
   // PARTICIÓN por estado (solo en modo lista; el calendario muestra las programadas): las
   // MISMAS pestañas y vocabulario del feed (Pendientes · Publicadas · Todas, ver vistas.tsx),
   // en la URL (`?vista=`) para que sobreviva al refresco y sea compartible. Por defecto
-  // "Todas" (la lista de gestión arranca enseñando todo). El SERVIDOR filtra por el
-  // pseudo-estado, así la paginación keyset y el total siguen exactos.
+  // "Pendientes" (lo que queda por trabajar); el SERVIDOR filtra por el pseudo-estado, así la
+  // paginación keyset y el total siguen exactos.
   const [searchParams, setSearchParams] = useSearchParams();
-  const vista = vistaDesdeParam(searchParams.get("vista"), "todo");
+  const vista = vistaDesdeParam(searchParams.get("vista"), "pendiente");
   const estadoVista = calendario ? undefined : ESTADO_SERVIDOR_DE_VISTA[vista];
   const cambiarVista = (v: Vista) => {
     setSearchParams(
       (prev) => {
-        if (v === "todo") prev.delete("vista");
+        if (v === "pendiente") prev.delete("vista");
         else prev.set("vista", v);
         return prev;
       },

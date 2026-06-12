@@ -452,7 +452,8 @@ describe("FeedIdeacion · feed de ideación interno", () => {
         return new Response("{}", { status: 200 });
       }),
     );
-    renderFeed();
+    // Arranca en 'Todas' (el default ahora es 'Pendientes', que ocultaría la publicada).
+    renderFeed({}, "/?vista=todo");
     // 'Todas' (matriz por idea): ambas tarjetas.
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
     expect(screen.getByText("Ya publicada")).toBeInTheDocument();
@@ -808,7 +809,8 @@ describe("FeedIdeacion · feed de ideación interno", () => {
         return new Response("{}", { status: 200 });
       }),
     );
-    renderFeed();
+    // La franja "Por generar" es de la matriz completa (vista "Todas"), no de las filtradas.
+    renderFeed({}, "/?vista=todo");
     // El post de la red generada (X).
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
     // Franja compacta con SOLO Instagram (TikTok no es red de foto); sin placeholders gigantes.
@@ -873,7 +875,8 @@ describe("FeedIdeacion · feed de ideación interno", () => {
         return new Response("{}", { status: 200 });
       }),
     );
-    renderFeed();
+    // La franja "Por generar" es de la matriz completa (vista "Todas"), no de las filtradas.
+    renderFeed({}, "/?vista=todo");
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
     // El post (X) + UNA franja compacta con las 4 redes pendientes (sin placeholders gigantes).
     expect(screen.getByText("Por generar:")).toBeInTheDocument();

@@ -113,7 +113,9 @@ function faltaHashtags(p: Publicacion): boolean {
  * del equipo que NO bloquean el avance, solo se piden ya en revisión).
  *
  * IMAGEN vs PLANTILLA: la placa (`imagen`) es solo la PLANTILLA, no cuenta como imagen real;
- * necesita FOTO (`foto`/`imagen_fuente`, o imagen bespoke sin marca).
+ * necesita FOTO real (`foto`, o imagen bespoke sin marca). La imagen del ARTÍCULO de origen
+ * (`imagen_fuente`) es solo una URL de referencia, NO una foto inyectada: una pieza sin `foto`
+ * propia sigue en "Falta imagen" aunque traiga `imagen_fuente`.
  *
  * El backend (Flujo C) trae la etapa real en `p.etapa_ia`; `etapaDePublicacion` la PREFIERE
  * cuando llega y es una etapa conocida. Esta derivación queda como degradación (piezas
@@ -144,8 +146,10 @@ function etapaBruta(p: Publicacion): EtapaIa {
     const hayVideo = !p.falta_video || !!(p as { video?: string }).video;
     if (!hayVideo) return "generando_arte";
   } else {
-    // Foto: la foto cruda (`foto`), imagen de fuente (`imagen_fuente`) o imagen bespoke (`imagen` sin marca).
-    const hayImagenReal = !!p.foto || !!p.imagen_fuente || (!p.marca && !!p.imagen);
+    // Foto: la foto cruda propia (`foto`) o —solo en piezas SIN marca— la imagen bespoke
+    // (`imagen`). La imagen del artículo de origen (`imagen_fuente`) NO cuenta: es una URL de
+    // referencia, no la foto inyectada en la pieza.
+    const hayImagenReal = !!p.foto || (!p.marca && !!p.imagen);
     if (!hayImagenReal) return "generando_arte";
   }
   // Acciones de la FASE DE REVISIÓN (placa + hashtags): se piden YA en revisión, no bloquean el avance.

@@ -110,9 +110,10 @@ export default function FeedIdeacion() {
   const [creandoPost, setCreandoPost] = React.useState(false);
 
   // La vista activa vive SOLO en la URL (`?vista=`): derivada, sin useState que se
-  // desincronice. "todo" (el default) va sin parámetro para no ensuciar el enlace.
+  // desincronice. "pendiente" (el default: el trabajo por hacer) va sin parámetro para no
+  // ensuciar el enlace.
   const [searchParams, setSearchParams] = useSearchParams();
-  const vista = vistaDesdeParam(searchParams.get("vista"));
+  const vista = vistaDesdeParam(searchParams.get("vista"), "pendiente");
   // Lotes de búsqueda concedidos a la vista filtrada EN CLIENTE vacía (tope = lotes ×
   // PAGINAS_POR_LOTE páginas); "Seguir buscando" concede otro. Se reinicia al cambiar de vista.
   const [lotesBusqueda, setLotesBusqueda] = React.useState(1);
@@ -120,7 +121,7 @@ export default function FeedIdeacion() {
     (v: Vista) => {
       setSearchParams(
         (prev) => {
-          if (v === "todo") prev.delete("vista");
+          if (v === "pendiente") prev.delete("vista");
           else prev.set("vista", v);
           return prev;
         },

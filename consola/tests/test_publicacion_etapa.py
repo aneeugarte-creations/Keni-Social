@@ -51,6 +51,35 @@ def test_pieza_sin_foto_no_esta_lista_aunque_no_lleve_copy_in():
     assert d["etapa_ia"] == "generando_arte"
 
 
+def test_imagen_de_fuente_no_cuenta_como_foto_real():
+    # Una pieza de MARCA que trae la imagen del ARTÍCULO de origen (`imagen_fuente`) pero NO una
+    # foto propia inyectada sigue en "Falta imagen": la URL de la nota es referencia, no la foto
+    # de la pieza. El equipo debe poner la foto real.
+    d = publicacion_a_dict(
+        _pub(
+            estado="en_revision",
+            contenido="copy",
+            copy_in="TITULAR",
+            imagen="placa.png",
+            imagen_fuente="https://nota.test/orig.jpg",
+            foto="",
+        )
+    )
+    assert d["etapa_ia"] == "generando_arte"
+    # Con la foto propia ya inyectada, la misma pieza SÍ queda lista para revisar.
+    d2 = publicacion_a_dict(
+        _pub(
+            estado="en_revision",
+            contenido="copy",
+            copy_in="TITULAR",
+            imagen="placa.png",
+            imagen_fuente="https://nota.test/orig.jpg",
+            foto="bg.png",
+        )
+    )
+    assert d2["etapa_ia"] == "lista_para_revisar"
+
+
 def test_pipeline_id_enlaza_solo_piezas_del_pipeline():
     # Pieza nacida del pipeline CON `contenido_id`: `pipeline_id` = ese id (la UI enlaza al run).
     d = publicacion_a_dict(_pub(origen="pipeline", contenido_id="c-123"))

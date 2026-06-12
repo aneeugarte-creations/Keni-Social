@@ -91,16 +91,18 @@ def _imagen_url_de(pub: dict[str, Any]) -> str:
 
 
 def _hay_imagen_real(pub: dict[str, Any]) -> bool:
-    """True si la pieza tiene una FOTO real (no la placa): subida (`foto`), de la fuente
-    (`imagen_fuente`) o —en piezas SIN marca— la imagen bespoke (`imagen`). PURA.
+    """True si la pieza tiene una FOTO real (no la placa): subida (`foto`) o —en piezas SIN
+    marca— la imagen bespoke (`imagen`). PURA.
 
-    En piezas de MARCA, `imagen` es solo la placa compuesta (parte del copy-in) y NO cuenta
-    como foto real: lo que vale es `foto`/`imagen_fuente`.
+    La imagen del ARTÍCULO de origen (`imagen_fuente`) NO cuenta: es solo una URL de
+    referencia de la nota, no una foto inyectada en la pieza. Una pieza de marca sin `foto`
+    real sigue necesitando foto (badge "Falta imagen") aunque traiga `imagen_fuente` —el
+    equipo debe poner la foto propia—. En piezas de MARCA, `imagen` es solo la placa compuesta
+    y tampoco cuenta como foto real.
     """
     marca = str(pub.get("marca") or "").strip()
     return (
         bool(str(pub.get("foto") or "").strip())
-        or bool(str(pub.get("imagen_fuente") or "").strip())
         or (not marca and bool(str(pub.get("imagen") or "").strip()))
     )
 
