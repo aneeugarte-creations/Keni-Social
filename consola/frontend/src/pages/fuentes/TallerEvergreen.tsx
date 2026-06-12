@@ -106,15 +106,18 @@ export function TallerEvergreen({
     <div className="grid gap-6 lg:grid-cols-[24rem_minmax(0,1fr)]">
       <ProponerIdeas marcas={marcas} />
 
-      <Card className="h-fit">
-        <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0 pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
+      {/* Lista del banco como SECCIÓN sobre el lienzo (no una Card que envuelva otra Card):
+          así cada ficha de idea flota igual que en la Lista de contenido y en Feedback. La
+          cabecera (título + conteo + filtro) va como fila, con el mismo formato que el resto. */}
+      <div className="space-y-3">
+        <div className="flex flex-row items-center justify-between gap-3">
+          <h2 className="flex items-center gap-2 text-base font-medium">
             <Leaf className="h-4 w-4" />
             Banco de ideas evergreen
             <Badge variant="secondary" className="ml-1">
               {ideas.length}
             </Badge>
-          </CardTitle>
+          </h2>
           <Select value={estadoFiltro} onValueChange={setEstadoFiltro}>
             <SelectTrigger className="w-44" aria-label="Filtrar por estado">
               <SelectValue />
@@ -128,36 +131,34 @@ export function TallerEvergreen({
               ))}
             </SelectContent>
           </Select>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {query.isPending ? (
-            <div className="space-y-2">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-24 w-full rounded-md" />
-              ))}
-            </div>
-          ) : query.isError ? (
-            <BloqueError
-              titulo="No se pudieron cargar las ideas"
-              mensaje={mensajeError(query.error)}
-              onReintentar={() => void query.refetch()}
-              cargando={query.isFetching}
-            />
-          ) : ideas.length === 0 ? (
-            <EstadoVacioTexto
-              texto="No hay ideas para este filtro."
-              className="py-4"
-            />
-          ) : (
-            <ListaIdeas
-              ideas={ideas}
-              marcas={marcas}
-              redes={redes}
-              separarHistorico={estadoFiltro === ESTADO_TODOS}
-            />
-          )}
-        </CardContent>
-      </Card>
+        </div>
+        {query.isPending ? (
+          <div className="space-y-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-24 w-full rounded-lg" />
+            ))}
+          </div>
+        ) : query.isError ? (
+          <BloqueError
+            titulo="No se pudieron cargar las ideas"
+            mensaje={mensajeError(query.error)}
+            onReintentar={() => void query.refetch()}
+            cargando={query.isFetching}
+          />
+        ) : ideas.length === 0 ? (
+          <EstadoVacioTexto
+            texto="No hay ideas para este filtro."
+            className="py-4"
+          />
+        ) : (
+          <ListaIdeas
+            ideas={ideas}
+            marcas={marcas}
+            redes={redes}
+            separarHistorico={estadoFiltro === ESTADO_TODOS}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -262,7 +263,12 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
             />
           </div>
 
-          <Button onClick={() => proponer.mutate()} disabled={!puedeProponer} className="w-full">
+          <Button
+            variant="brand"
+            onClick={() => proponer.mutate()}
+            disabled={!puedeProponer}
+            className="w-full"
+          >
             {proponiendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <MarcaIA />}
             {proponiendo ? "Proponiendo…" : "Proponer"}
           </Button>
@@ -516,7 +522,7 @@ function FilaIdea({
       kebab="hover"
       acciones={acciones}
       className={cn(
-        "space-y-2 rounded-md border border-border p-3 pr-10",
+        "space-y-2 rounded-lg border border-border bg-card p-4 pr-10 text-card-foreground shadow-sm transition-colors hover:border-foreground/20",
         descartada && "opacity-60",
       )}
     >
@@ -583,7 +589,7 @@ function FilaIdea({
         )}
         {aprobada && (
           <Button
-            variant="outline"
+            variant="brand"
             size="sm"
             onClick={() => generar.mutate()}
             disabled={generando}
