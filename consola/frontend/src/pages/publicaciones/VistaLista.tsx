@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   AlertTriangle,
@@ -15,6 +15,7 @@ import {
   Sprout,
   Trash2,
   UserCheck,
+  UserPlus,
 } from "lucide-react";
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
@@ -83,6 +84,7 @@ function TarjetaPublicacion({
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [confirmarBorrado, setConfirmarBorrado] = React.useState(false);
+  const [asignarAbierto, setAsignarAbierto] = React.useState(false);
   const proximo = siguienteEstado(publicacion.estado);
   const imagen = urlMedia(publicacion.imagen_url || publicacion.imagen);
   // TÁCTIL: sin hover el kebab "⋮" era inalcanzable; con puntero grueso lo dejamos fijo.
@@ -97,6 +99,9 @@ function TarjetaPublicacion({
   const responsable = publicacion.responsable_nombre ?? "";
   const esMia = Boolean(usuario && publicacion.responsable_id === usuario.id);
   const libre = !(publicacion.responsable_id ?? "");
+  // El reparto PUSH (Elias asigna a otra persona) es potestad del manager: mismo gate que
+  // "soltar lo ajeno" (admin). El editor reparte JALANDO del pool (coger), no empujando.
+  const esManager = usuario?.rol === "admin";
   // El reparto va POR TEMA: coger una tarjeta arrastra a sus hermanas (misma idea, otras
   // redes). Lo señalamos cuando hay >1 hermana en la lista para que el equipo no vea
   // "desaparecer" varias sin explicación.
@@ -124,6 +129,30 @@ function TarjetaPublicacion({
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
       toast.success(`"${publicacion.titulo}" vuelve a estar libre.`);
+    },
+    onError: (e) => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+      toast.error(mensajeError(e));
+    },
+  });
+
+  // Equipo de la marca para el selector "Asignar a…" (solo se trae al abrir el diálogo y si
+  // eres manager: nada de N consultas por tarjeta). Reusa los candidatos a @mención de la marca.
+  const equipo = useQuery({
+    queryKey: ["equipo-asignable", publicacion.marca],
+    queryFn: ({ signal }) => api.mencionesCandidatos(publicacion.marca, signal),
+    enabled: asignarAbierto && esManager,
+    staleTime: 60_000,
+  });
+
+  const asignar = useMutation({
+    mutationFn: (personaId: string) =>
+      api.asignarContenido(publicacion.contenido_id, personaId),
+    onSuccess: (res) => {
+      setAsignarAbierto(false);
+      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+      const nombre = res?.contenido?.responsable_nombre || "esa persona";
+      toast.success(`"${publicacion.titulo}" asignada a ${nombre}: se le avisa en la app.`);
     },
     onError: (e) => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
@@ -218,13 +247,24 @@ function TarjetaPublicacion({
           },
         ]
       : []),
-    ...(repartible && !libre && (esMia || usuario?.rol === "admin")
+    ...(repartible && !libre && (esMia || esManager)
       ? [
           {
             etiqueta: esMia ? "Soltar (dejarla libre)" : `Soltar (la lleva ${responsable})`,
             icono: Hand,
             onClick: () => soltar.mutate(),
             deshabilitado: soltar.isPending,
+          },
+        ]
+      : []),
+    // PUSH del manager: Elias asigna/reasigna a una persona concreta (la otra puerta del
+    // mismo responsable; el self-claim es "Coger"). Solo manager; visible esté libre o no.
+    ...(repartible && esManager
+      ? [
+          {
+            etiqueta: libre ? "Asignar a…" : "Reasignar a…",
+            icono: UserPlus,
+            onClick: () => setAsignarAbierto(true),
           },
         ]
       : []),
@@ -439,6 +479,68 @@ function TarjetaPublicacion({
             </Button>
             <Button variant="destructive" onClick={() => borrar.mutate()} disabled={borrar.isPending}>
               {borrar.isPending ? "Borrando…" : "Borrar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Asignar a una persona (PUSH del manager): elige a quién encargas la pieza. El
+          asignado recibe aviso in-app, así no hace falta avisarle por WhatsApp. */}
+      <Dialog open={asignarAbierto} onOpenChange={setAsignarAbierto}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Asignar “{publicacion.titulo}”</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Elige a quién se la encargas; se le avisa en la app.
+            {responsable && (
+              <>
+                {" "}
+                Ahora la lleva{" "}
+                <span className="font-medium text-foreground">
+                  {esMia ? "tú" : responsable}
+                </span>
+                .
+              </>
+            )}
+          </p>
+          <div className="max-h-72 space-y-1 overflow-y-auto py-1">
+            {equipo.isLoading && (
+              <p className="px-1 text-sm text-muted-foreground">Cargando equipo…</p>
+            )}
+            {equipo.data?.usuarios.map((u) => {
+              const yaEs = u.id === (publicacion.responsable_id ?? "");
+              return (
+                <button
+                  key={u.id}
+                  type="button"
+                  disabled={asignar.isPending || yaEs}
+                  onClick={() => asignar.mutate(u.id)}
+                  className={cn(
+                    "flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition-colors disabled:opacity-100",
+                    yaEs
+                      ? "border-primary/50 bg-primary/5 text-primary"
+                      : "border-border hover:border-foreground/30 hover:bg-accent",
+                  )}
+                >
+                  <span className="truncate">{u.nombre || u.usuario}</span>
+                  {yaEs && <span className="ml-2 shrink-0 text-xs">la lleva ahora</span>}
+                </button>
+              );
+            })}
+            {equipo.data && equipo.data.usuarios.length === 0 && (
+              <p className="px-1 text-sm text-muted-foreground">
+                No hay compañeros en esta marca para asignar.
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setAsignarAbierto(false)}
+              disabled={asignar.isPending}
+            >
+              Cancelar
             </Button>
           </DialogFooter>
         </DialogContent>

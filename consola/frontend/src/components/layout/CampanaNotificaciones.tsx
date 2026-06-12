@@ -10,7 +10,15 @@
  *   scroll y la resalta). Se cierra al hacer clic fuera o con Escape.
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AtSign, Bell, Megaphone, MessageSquare, ThumbsUp, XCircle } from "lucide-react";
+import {
+  AtSign,
+  Bell,
+  Megaphone,
+  MessageSquare,
+  ThumbsUp,
+  UserPlus,
+  XCircle,
+} from "lucide-react";
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -33,6 +41,7 @@ const ICONO: Record<TipoNotificacion, React.ComponentType<{ className?: string }
   aprobacion: ThumbsUp,
   rechazo: XCircle,
   publicacion: Megaphone,
+  asignacion: UserPlus,
 };
 
 /** Ruta del feed: destino base al pulsar una notificación. */

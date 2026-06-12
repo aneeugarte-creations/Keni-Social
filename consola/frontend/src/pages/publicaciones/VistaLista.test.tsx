@@ -224,6 +224,40 @@ describe("VistaLista — selección múltiple y borrado en masa", () => {
     ).toBeInTheDocument();
   });
 
+  it("reparto: un MANAGER (admin) ve 'Asignar a…' y al elegir persona llama a asignarContenido", async () => {
+    vi.spyOn(apiMod.api, "mencionesCandidatos").mockResolvedValue({
+      usuarios: [
+        { id: "u-luis", nombre: "Luis", usuario: "luis" },
+        { id: "u-ana", nombre: "Ana", usuario: "ana" },
+      ],
+    });
+    const asignar = vi
+      .spyOn(apiMod.api, "asignarContenido")
+      .mockResolvedValue({ contenido: { responsable_nombre: "Ana" } } as never);
+    renderLista(
+      [pub({ id: "p1", contenido_id: "c9", titulo: "Gol", marca: "claro-sports" })],
+      { id: "u-admin", rol: "admin" },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Asignar a/ }));
+    // Diálogo con el equipo de la marca: el manager EMPUJA la pieza a Ana.
+    fireEvent.click(await screen.findByRole("button", { name: /Ana/ }));
+    await waitFor(() => expect(asignar).toHaveBeenCalledTimes(1));
+    expect(asignar).toHaveBeenCalledWith("c9", "u-ana");
+  });
+
+  it("reparto: un EDITOR NO ve 'Asignar a…' (empujar trabajo a otros es del manager)", async () => {
+    renderLista(
+      [pub({ id: "p1", contenido_id: "c9", titulo: "Gol", marca: "claro-sports" })],
+      { id: "u1", rol: "editor" },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
+    // El menú abre (Duplicar está), pero "Asignar a…" no: el editor reparte cogiendo del pool.
+    await screen.findByRole("menuitem", { name: /Duplicar/ });
+    expect(screen.queryByRole("menuitem", { name: /Asignar a/ })).toBeNull();
+  });
+
   it("reparto: las piezas de otras marcas NO llevan botón de coger (flujo sin reparto)", () => {
     renderLista([pub({ id: "p1", titulo: "Nota", marca: "unotv" })]);
     expect(screen.queryByRole("button", { name: /Coger/ })).toBeNull();
