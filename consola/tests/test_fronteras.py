@@ -84,6 +84,12 @@ SEAMS_PERMITIDOS: frozenset[tuple[str, str]] = frozenset(
         # `api/contenido.py` a un PAQUETE `api/contenido/`; el cruce vive hoy en `contenido/_comun.py`
         # (`from ... import generaciones`) y el lint lo escanea recorriendo todos los `.py` del paquete.
         ("contenido", "generaciones"),
+        # Seam (shell lee señales de operación para el DOCTOR de salud): `api/estado.py`
+        # (shell) absorbió los chequeos del banner (cola, presupuesto, daemons, disco…) y
+        # para el de la COLA lee el snapshot de `api.actividad` (produccion) — SOLO LECTURA,
+        # mismo patrón que "produccion lee la agenda de C". El health-check es transversal:
+        # le importa a todo el equipo, no a una app. (ADR 0005 §Seams.)
+        ("estado", "actividad"),
         # NOTA — seams RETIRADOS de la allowlist (T1.1 / T1.2 / borra-panel):
         #   ("reciclaje", "publicaciones")  [T1.1]: `reciclaje` (A) ya NO lee el almacén
         #       de C en su router; pide el universo a la función-contrato de lectura de C
