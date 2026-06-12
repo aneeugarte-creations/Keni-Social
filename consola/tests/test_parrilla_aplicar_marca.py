@@ -26,8 +26,9 @@ def test_aplicar_propuesta_estampa_marca_en_eventos(entorno):
     resumen = repos.aplicar_propuesta_parrilla(
         prop["id"], ops, nombres_miembros={}, marca="claro-sports"
     )
-    assert len(resumen["eventos_creados"]) == 1
-    ev = repos.obtener_evento_rota(resumen["eventos_creados"][0])
+    # `eventos_creados` es el CONTEO; los ids van en `ids.eventos`.
+    assert resumen["eventos_creados"] == 1
+    ev = repos.obtener_evento_rota(resumen["ids"]["eventos"][0])
     assert ev is not None
     assert ev["marca"] == "claro-sports"
     assert ev["titulo"] == "Cruz Azul vs América"
@@ -39,5 +40,5 @@ def test_aplicar_propuesta_sin_marca_no_regresiona_turnos(entorno):
     assert prop["marca"] == ""
     ops = [{"tipo": "crear_evento", "titulo": "Amistoso", "fecha": "2026-07-02"}]
     resumen = repos.aplicar_propuesta_parrilla(prop["id"], ops, nombres_miembros={})
-    ev = repos.obtener_evento_rota(resumen["eventos_creados"][0])
+    ev = repos.obtener_evento_rota(resumen["ids"]["eventos"][0])
     assert (ev or {}).get("marca", "") == ""
