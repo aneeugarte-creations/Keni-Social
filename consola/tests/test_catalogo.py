@@ -19,11 +19,12 @@ from keni_consola.apps import registro
 # Estructura ESPERADA del sidebar: 3 bloques agrupados por MOMENTO DEL FLUJO, en este
 # orden, con encabezado visible. El bloque es VISUAL y se desacopla del dueño de la app.
 _SIDEBAR_BLOQUES = [
-    # "Operación": los checkpoints que el equipo toca cada día — el Feed (red social interna
-    # + lista de contenido), la Programación (calendario de publicaciones, por marca) y los
-    # Turnos (rota de cobertura del equipo, por marca). La página "Revisión" se retiró por
-    # obsoleta (la aprobación vive en línea en el Feed).
-    ["Feed", "Programación", "Turnos"],
+    # "Operación": los checkpoints que el equipo toca cada día — Tareas (el tablero compartido
+    # del equipo, clase='tarea', primero del bloque), el Feed (red social interna + lista de
+    # contenido), la Programación (calendario de publicaciones, por marca) y los Turnos (rota
+    # de cobertura del equipo, por marca). La página "Revisión" se retiró por obsoleta (la
+    # aprobación vive en línea en el Feed).
+    ["Tareas", "Feed", "Programación", "Turnos"],
     # "Contenido": TRES páginas planas por tipo de contenido (sin hub con pestañas) —
     # Imagen (editor de imagen por capas + IA), Video (estudio de video) y Texto (la
     # Texto: prompts + línea editorial + plantillas).
@@ -76,8 +77,9 @@ def test_cada_app_lleva_descripcion_y_nav_para_la_tarjeta():
     # el bloque "contenido" (Imagen), ya que la app dejó de aportar entradas al bloque "operacion".
     assert porid["produccion"]["nav"][0]["ruta"] == "/contenido/imagen"
     assert porid["metricas"]["nav"][0]["ruta"] == "/datos/analiticas"
-    # La app "operacion" aporta TRES entradas (Feed, Programación, Turnos); la 1ª por orden es Feed.
-    assert porid["operacion"]["nav"][0]["ruta"] == "/operacion/feed"
+    # La app "operacion" aporta CUATRO entradas (Tareas, Feed, Programación, Turnos); la 1ª por
+    # orden es Tareas (el tablero del equipo, lo primero que coordina el día).
+    assert porid["operacion"]["nav"][0]["ruta"] == "/operacion/tareas"
 
 
 def test_catalogo_agrupa_la_nav_por_flujo():
@@ -95,6 +97,7 @@ def test_iconos_de_nav_son_strings_lucide():
     assert iconos["/contenido/video"] == "Clapperboard"
     assert iconos["/datos/investigacion"] == "Search"
     assert iconos["/datos/analiticas"] == "BarChart3"
+    assert iconos["/operacion/tareas"] == "ListChecks"
     assert iconos["/operacion/feed"] == "LayoutGrid"
     assert iconos["/operacion/programacion"] == "CalendarDays"
     assert iconos["/operacion/turnos"] == "CalendarClock"
@@ -125,11 +128,11 @@ def test_flag_acepta_varias_formas_de_off():
 
 def test_shell_no_es_app_ni_aporta_nav():
     # El shell no es app de catálogo y (tras retirar el Panel) ya no aporta nav: el
-    # sidebar lo encabeza el Feed del equipo, no una entrada del shell.
+    # sidebar lo encabeza Tareas (el tablero del equipo), no una entrada del shell.
     cat = registro.catalogo(_entorno())
     assert "shell" not in [a["id"] for a in cat["apps"]]
     primer_bloque = cat["navegacion"][0]["items"]
-    assert primer_bloque[0]["ruta"] == "/operacion/feed"
+    assert primer_bloque[0]["ruta"] == "/operacion/tareas"
     rutas = [i["ruta"] for g in cat["navegacion"] for i in g["items"]]
     assert "/panel" not in rutas
 

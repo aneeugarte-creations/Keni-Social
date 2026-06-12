@@ -43,6 +43,7 @@ rutas_frontend = [
   # (publicaciones) y "Turnos" (rota). Las rutas legacy (/parrilla/* y /operacion/calendario/*)
   # se conservan en el scope para que sus redirecciones (ver router.tsx) resuelvan dentro de la app.
   "/publicaciones",
+  "/operacion/tareas",
   "/operacion/parrilla",
   "/operacion/feed",
   "/operacion/feed/feed",
@@ -55,6 +56,17 @@ rutas_frontend = [
   # Webhooks salientes (admin; sin nav, se entra por URL directa). Ver router.tsx.
   "/webhooks",
 ]
+
+# Tareas: el tablero compartido del equipo (clase='tarea') — quién cubre qué. SEPARADO del
+# Feed (que son piezas de contenido). Es lo primero del bloque: la coordinación del día.
+[[nav]]
+ruta = "/operacion/tareas"
+etiqueta = "Tareas"
+icono = "ListChecks"
+descripcion = "Quién cubre qué: coberturas de partidos/eventos y encargos del equipo (coger o asignar)."
+grupo = "operacion"
+grupo_orden = 10
+orden = 15
 
 # Feed: la superficie diaria del equipo (red social interna + lista de contenido).
 [[nav]]
