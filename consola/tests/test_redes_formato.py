@@ -1,9 +1,9 @@
 """Tests del mapeo FORMATO -> REDES (`redes.redes_de_formato`). PURO: sin red ni BD.
 
-Regla del dueño: una pieza FOTO va a 3 redes (instagram, x, facebook), una pieza VIDEO
-a las 5 (instagram, x, facebook, tiktok, youtube) y una pieza CARRUSEL a 2 (instagram,
-facebook: las que publican carruseles nativos via Metricool). El flujo automático crea
-piezas FOTO; los otros mapeos quedan definidos aquí como fuente única.
+Regla del dueño: una pieza de IMAGEN —FOTO o CARRUSEL— va a 3 redes (instagram, x,
+facebook) y NUNCA a YouTube/TikTok; una pieza VIDEO va a las 5 (instagram, x, facebook,
+tiktok, youtube). El flujo automático crea piezas FOTO; los otros mapeos quedan definidos
+aquí como fuente única.
 """
 
 from __future__ import annotations
@@ -34,14 +34,22 @@ def test_foto_es_subconjunto_de_video():
     assert foto < video
 
 
-def test_carrusel_son_instagram_y_facebook():
-    """CARRUSEL -> exactamente instagram y facebook (carruseles nativos), en orden de `REDES`."""
-    assert redes.redes_de_formato(redes.FORMATO_CARRUSEL) == ("instagram", "facebook")
+def test_carrusel_son_x_instagram_facebook():
+    """CARRUSEL -> x, instagram, facebook (mismas que FOTO): pieza de imagen, NUNCA yt/tiktok."""
+    assert redes.redes_de_formato(redes.FORMATO_CARRUSEL) == ("x", "instagram", "facebook")
 
 
-def test_carrusel_es_subconjunto_de_foto():
-    """CARRUSEL ⊂ FOTO: las 2 de carrusel están en las 3 de foto (comparten portada)."""
-    assert set(redes.redes_de_formato("carrusel")) < set(redes.redes_de_formato("foto"))
+def test_imagen_foto_y_carrusel_nunca_van_a_youtube_ni_tiktok():
+    """Las piezas de IMAGEN (foto/carrusel) excluyen YouTube y TikTok (redes de vídeo)."""
+    for fmt in (redes.FORMATO_FOTO, redes.FORMATO_CARRUSEL):
+        destinos = set(redes.redes_de_formato(fmt))
+        assert "youtube" not in destinos and "tiktok" not in destinos
+        assert destinos == {"x", "instagram", "facebook"}
+
+
+def test_carrusel_igual_que_foto():
+    """CARRUSEL == FOTO en destinos (ambos comparten portada de imagen)."""
+    assert set(redes.redes_de_formato("carrusel")) == set(redes.redes_de_formato("foto"))
 
 
 def test_desconocido_y_vacio_caen_a_foto():

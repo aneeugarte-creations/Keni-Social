@@ -92,10 +92,12 @@ FORMATO_CARRUSEL = "carrusel"
 FORMATOS_IMAGEN: tuple[str, ...] = (FORMATO_FOTO, FORMATO_CARRUSEL)
 
 # Subconjunto de redes por formato (ids canónicos; el orden lo fija `REDES`).
+# FOTO y CARRUSEL (asset = imagen) van SOLO a Instagram/X/Facebook; YouTube y TikTok son redes
+# de VÍDEO y NUNCA reciben piezas de imagen. El vídeo va a las cinco.
 _REDES_POR_FORMATO: dict[str, tuple[str, ...]] = {
     FORMATO_FOTO: ("instagram", "x", "facebook"),
     FORMATO_VIDEO: ("instagram", "x", "facebook", "tiktok", "youtube"),
-    FORMATO_CARRUSEL: ("instagram", "facebook"),
+    FORMATO_CARRUSEL: ("instagram", "x", "facebook"),
 }
 
 # Etiquetas humanas del formato para la UI.
@@ -115,8 +117,8 @@ def normalizar_formato(formato: str | None) -> str:
 def redes_de_formato(formato: str | None) -> tuple[str, ...]:
     """Redes destino de un FORMATO de pieza, en el orden de `REDES` (PURO, testeable).
 
-    `foto` -> (instagram, x, facebook); `video` -> las 5; `carrusel` -> (instagram,
-    facebook). Vacío/desconocido -> `foto`.
+    `foto` y `carrusel` -> (instagram, x, facebook); `video` -> las 5. Vacío/desconocido ->
+    `foto`. YouTube/TikTok NUNCA reciben imagen (solo vídeo).
     Filtra por `es_red` (si el catálogo cambiara, las redes inexistentes se omiten).
     """
     pedidas = set(_REDES_POR_FORMATO[normalizar_formato(formato)])

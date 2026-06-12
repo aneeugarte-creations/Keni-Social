@@ -97,8 +97,9 @@ def _redes_de(item: dict[str, Any]) -> list[str]:
     reds = [p.get("red") for p in plataformas if redes.es_red(p.get("red") or "")]
     if reds:
         return list(dict.fromkeys(reds))
-    # Defecto: la lista canonica de redes (la misma que usa el asistente/copy del tablero).
-    return redes.ids()
+    # Defecto: las redes del FORMATO de la pieza (foto -> Instagram/X/Facebook), NO todas: una
+    # pieza de imagen nunca debe ir a YouTube/TikTok (redes de vídeo).
+    return list(redes.redes_de_formato(item.get("formato")))
 
 
 def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:

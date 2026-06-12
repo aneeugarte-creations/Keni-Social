@@ -119,8 +119,9 @@ async def aportar(request: Request) -> Response:
 
     redes_objetivo = _redes_desde_form(form.get("redes"))
     if not redes_objetivo:
-        # Por defecto, todas las redes canonicas (mismo defecto que el auto-copy).
-        redes_objetivo = list(redes.ids())
+        # Por defecto, las redes del FORMATO foto (Instagram/X/Facebook): una galería aportada
+        # es una pieza de imagen, NUNCA va a YouTube/TikTok (redes de vídeo).
+        redes_objetivo = list(redes.redes_de_formato(redes.FORMATO_FOTO))
 
     # Imagen aportada (opcional): el equipo trae la foto de fuera; la subimos al almacen.
     foto = ""
