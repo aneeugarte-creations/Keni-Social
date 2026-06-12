@@ -417,9 +417,21 @@ def establecer_password(
 
 
 def borrar_usuario(usuario_id: str) -> bool:
-    """Borra un usuario y sus sesiones; True si existia. NO aplica guardas (lo hace la API)."""
+    """Borra un usuario y sus sesiones; True si existia. NO aplica guardas (lo hace la API).
+
+    LIBERA además, en la MISMA transacción, las piezas que esa persona tenía COGIDAS
+    (`contenido.responsable_id = su id`): vuelven a «Por coger» (responsable_id=''). Sin esto
+    quedaban pegadas a un id FANTASMA —fuera de «Por coger» y de «Mis tareas» de cualquiera, e
+    irreclamables (`reclamar_contenido` exige responsable_id='')—, perdiendo trabajo del
+    equipo. Es la misma idea de cascada que el borrado de sesiones.
+    """
     con = db.conectar()
     try:
+        con.execute(
+            "UPDATE contenido SET responsable_id = '', responsable_nombre = '', actualizado = ? "
+            "WHERE responsable_id = ?",
+            (_ahora_iso(), usuario_id),
+        )
         con.execute("DELETE FROM sesiones WHERE usuario_id = ?", (usuario_id,))
         cur = con.execute("DELETE FROM usuarios WHERE id = ?", (usuario_id,))
         con.commit()

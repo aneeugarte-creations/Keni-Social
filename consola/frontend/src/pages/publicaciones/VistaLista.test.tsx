@@ -280,15 +280,24 @@ describe("VistaLista — selección múltiple y borrado en masa", () => {
   });
 });
 
-describe("VistaLista — 'Añadir a la cola' es terminal en publicado", () => {
+describe("VistaLista — 'Añadir a la cola' solo en piezas aprobadas/programadas", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("una pieza NO publicada ofrece 'Añadir a la cola' en el menú", async () => {
-    renderLista([pub({ id: "p1", titulo: "Borrador", estado: "aprobado" })]);
+  it("una pieza APROBADA ofrece 'Añadir a la cola' en el menú", async () => {
+    renderLista([pub({ id: "p1", titulo: "Aprobada", estado: "aprobado" })]);
     fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
     expect(
       await screen.findByRole("menuitem", { name: /Añadir a la cola/ }),
     ).toBeInTheDocument();
+  });
+
+  it("un BORRADOR NO ofrece 'Añadir a la cola' (encolar saltaría la revisión)", async () => {
+    renderLista([pub({ id: "p1", titulo: "Borrador", estado: "borrador" })]);
+    fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
+    // El menú abre con otras acciones, pero la de encolar NO está: el camino del borrador es
+    // el flujo de aprobación (que auto-programa al aprobarse), no un encolado a mano.
+    await screen.findByRole("menuitem", { name: /Duplicar/ });
+    expect(screen.queryByRole("menuitem", { name: /Añadir a la cola/ })).toBeNull();
   });
 
   it("una pieza PUBLICADA NO ofrece 'Añadir a la cola' (no se re-encola)", async () => {

@@ -1332,3 +1332,27 @@ def test_cliente_conftest_no_arranca_bootstrap(entorno):
     """El `_cliente` de conftest no crea usuarios (via token); la tabla queda vacia."""
     _cliente()  # crea la app con bootstrap=False
     assert not auth.hay_usuarios()
+
+
+def test_borrar_usuario_libera_sus_piezas_cogidas(entorno):
+    """Dar de baja a un usuario LIBERA las piezas que tenía cogidas (vuelven a «Por coger»).
+
+    Sin esto quedaban con `responsable_id` = un id fantasma: fuera de «Por coger» y de «Mis
+    tareas» de cualquiera, e irreclamables (el claim exige responsable_id='').
+    """
+    from keni_consola import repos
+
+    u = _crear("mariana", CLAVE, "editor")
+    assert u is not None
+    cont = repos.crear_contenido(titulo="Gol del Mundial", marca="claro-sports")
+    repos.reclamar_contenido(
+        cont["id"], responsable_id=u["id"], responsable_nombre="mariana"
+    )
+    assert repos.obtener_contenido(cont["id"])["responsable_id"] == u["id"]
+
+    assert auth.borrar_usuario(u["id"]) is True
+
+    liberada = repos.obtener_contenido(cont["id"])
+    assert liberada is not None  # la pieza NO se borra; solo se suelta
+    assert liberada["responsable_id"] == ""
+    assert liberada["responsable_nombre"] == ""
