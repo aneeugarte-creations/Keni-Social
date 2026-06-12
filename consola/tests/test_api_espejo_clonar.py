@@ -55,6 +55,28 @@ def test_espejo_nace_activado_y_propaga_contenido(cliente):
     assert hermana["foto"] == "f1.webp"
 
 
+def test_espejo_propaga_estado_falta_imagen_a_las_hermanas(cliente):
+    """FIX: al añadir la foto a UNA red, el ESPEJO actualiza la flag ALMACENADA `falta_imagen`
+    de las hermanas (lo que lee la LISTA del feed), sin tener que abrir cada una.
+
+    Antes solo se replicaba el contenido (la foto), pero la flag `falta_imagen` quedaba stale en
+    las hermanas hasta abrirlas (donde se recalculaba al vuelo): la lista seguía marcando
+    «falta imagen». El espejo NO aprueba en las hermanas, pero SÍ refleja el estado de contenido.
+    """
+    from keni_consola import repos
+
+    _cont, por_red = _crear_idea(cliente)
+    # Ambas nacen sin foto: les FALTA imagen (flag almacenada).
+    assert bool(repos.obtener_contenido_plataforma(por_red["instagram"])["falta_imagen"]) is True
+
+    r = cliente.put(f"/api/publicaciones/{por_red['x']}", json={"foto": "f1.webp"})
+    assert r.status_code == 200, r.text
+
+    # La editada Y su espejo tienen la flag ALMACENADA ya a 0 (sin reabrir la hermana).
+    assert bool(repos.obtener_contenido_plataforma(por_red["x"])["falta_imagen"]) is False
+    assert bool(repos.obtener_contenido_plataforma(por_red["instagram"])["falta_imagen"]) is False
+
+
 def test_espejo_off_cada_red_por_separado(cliente):
     _cont, por_red = _crear_idea(cliente)
     r = cliente.put(f"/api/publicaciones/{por_red['x']}", json={"espejo": False})

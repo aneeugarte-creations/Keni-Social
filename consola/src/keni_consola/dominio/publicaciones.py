@@ -90,6 +90,39 @@ def _imagen_url_de(pub: dict[str, Any]) -> str:
     return render_pieza.imagen_url_de(pub)
 
 
+def _hay_imagen_real(pub: dict[str, Any]) -> bool:
+    """True si la pieza tiene una FOTO real (no la placa): subida (`foto`), de la fuente
+    (`imagen_fuente`) o —en piezas SIN marca— la imagen bespoke (`imagen`). PURA.
+
+    En piezas de MARCA, `imagen` es solo la placa compuesta (parte del copy-in) y NO cuenta
+    como foto real: lo que vale es `foto`/`imagen_fuente`.
+    """
+    marca = str(pub.get("marca") or "").strip()
+    return (
+        bool(str(pub.get("foto") or "").strip())
+        or bool(str(pub.get("imagen_fuente") or "").strip())
+        or (not marca and bool(str(pub.get("imagen") or "").strip()))
+    )
+
+
+def flags_falta_de_contenido(pub: dict[str, Any]) -> dict[str, bool]:
+    """Flags `falta_*` DERIVADAS del CONTENIDO real de una pieza (copy + foto), no del flujo.
+
+    FUENTE ÚNICA de "¿qué le falta de contenido?": la misma heurística que pinta la etapa en el
+    feed. Devuelve solo las flags derivadas del contenido (`falta_copy`/`falta_imagen`); las de
+    aprobación/publicación (`falta_revision`/`falta_publicar`) NO se tocan aquí.
+
+    La usan el editor y el ESPEJO para mantener en sync las flags ALMACENADAS en
+    `contenido_plataforma` cuando se edita/replica el contenido: sin esto, la LISTA del feed (que
+    lee las flags almacenadas) seguía mostrando «falta imagen» en las redes espejo hasta abrir
+    cada una (donde `publicacion_a_dict` las recalculaba al vuelo). ADR 0011 / fix espejo.
+    """
+    return {
+        "falta_copy": not str(pub.get("contenido") or "").strip(),
+        "falta_imagen": not _hay_imagen_real(pub),
+    }
+
+
 def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
     """Serializa una publicacion resolviendo nombres legibles de marca y red.
 
@@ -115,12 +148,8 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
     # cruda subida (`foto`), la imagen de la fuente (`imagen_fuente`) o —en piezas SIN marca/placa—
     # la imagen subida bespoke (`imagen`). En piezas de MARCA, `imagen` es solo la placa compuesta y
     # NO cuenta como foto. (Antes una pieza sin copy-in se daba por lista SIN foto; ya no.)
-    marca = str(pub.get("marca") or "").strip()
-    hay_imagen_real = (
-        bool(str(pub.get("foto") or "").strip())
-        or bool(imagen_fuente)
-        or (not marca and bool(str(pub.get("imagen") or "").strip()))
-    )
+    # CONTENIDO real, NO los flags `falta_*` almacenados (fuente única `flags_falta_de_contenido`).
+    falta = flags_falta_de_contenido(pub)
     # El ASSET requerido depende del formato: vídeo -> `falta_video` (no `falta_imagen`).
     hay_video = (not bool(pub.get("falta_video", False))) or bool(str(pub.get("video") or "").strip())
     formato = redes.normalizar_formato(pub.get("formato"))
@@ -128,8 +157,8 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         {
             "estado": pub.get("estado"),
             "formato": formato,
-            "falta_copy": not str(pub.get("contenido") or "").strip(),
-            "falta_imagen": not hay_imagen_real,
+            "falta_copy": falta["falta_copy"],
+            "falta_imagen": falta["falta_imagen"],
             "falta_video": not hay_video,
             # Placa (texto en la imagen) y hashtags: las dos acciones que el feed enseña como
             # «lo que falta» además de copy/foto (la etapa decide cuándo aplica cada una).

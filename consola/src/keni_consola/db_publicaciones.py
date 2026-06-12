@@ -480,6 +480,11 @@ _CAMPOS_PUB_A_PLAT: dict[str, str] = {
     "contenido": "copy",
     "copy_in": "copy_in",
     "veredicto": "veredicto",
+    # Flags de readiness DERIVADAS del contenido (copy/foto): el editor/espejo las recalcula y
+    # persiste al editar para que la LISTA del feed (que las lee) no quede stale. Bool->int abajo.
+    "falta_copy": "falta_copy",
+    "falta_imagen": "falta_imagen",
+    "falta_video": "falta_video",
     "fecha_programada": "fecha_programada",
     "imagen": "imagen",
     "foto": "foto",
@@ -523,7 +528,7 @@ def actualizar_publicacion(
     for clave, columna in _CAMPOS_PUB_A_PLAT.items():
         if clave in campos:
             valor = campos[clave]
-            if clave in ("evergreen", "placa_oculta"):
+            if clave in ("evergreen", "placa_oculta", "falta_copy", "falta_imagen", "falta_video"):
                 valor = 1 if valor else 0
             cambios_plat[columna] = valor
     if "estado" in campos:

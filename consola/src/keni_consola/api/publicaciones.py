@@ -38,7 +38,7 @@ from .._http_json import (
 )
 from ..dominio import cadencia as dom_cadencia
 from ..dominio import colaboracion
-from ..dominio.publicaciones import publicacion_a_dict
+from ..dominio.publicaciones import flags_falta_de_contenido, publicacion_a_dict
 from ..estados import (
     ESTADO_APROBADO,
     ESTADO_BORRADOR,
@@ -374,6 +374,20 @@ _CAMPOS_ESPEJO: tuple[str, ...] = (
     "plantilla_diseno_id", "foto_encuadre", "placa_oculta",
 )
 
+# Campos cuyo cambio altera las flags de readiness DERIVADAS del contenido (copy/foto): si la
+# edición toca alguno, hay que recalcular `falta_copy`/`falta_imagen`.
+_CAMPOS_CONTENIDO_FALTA: tuple[str, ...] = ("contenido", "foto", "imagen")
+
+
+def _inyectar_flags_falta(actual: dict[str, Any], campos: dict[str, Any]) -> None:
+    """Si la edición toca el contenido (copy/foto/imagen), recalcula e INYECTA en `campos` las
+    flags `falta_copy`/`falta_imagen` del estado RESULTANTE (fila + edición), para que la LISTA
+    del feed (que lee las flags ALMACENADAS) refleje el cambio sin abrir cada pieza —incluidas
+    las redes ESPEJO—. NO toca las flags de aprobación/publicación (eso no se espeja)."""
+    if not any(k in campos for k in _CAMPOS_CONTENIDO_FALTA):
+        return
+    campos.update(flags_falta_de_contenido({**actual, **campos}))
+
 # Reset al perder aprobaciones: la pieza vuelve a borrador con la revisión limpia (reentrará
 # sola a revisión cuando se reenvíe, exigiendo OK nuevos).
 _RESET_APROBACIONES: dict[str, Any] = {
@@ -445,6 +459,9 @@ def _propagar_espejo(pub: dict[str, Any], campos: dict[str, Any]) -> None:
         resetear = _pierde_aprobaciones(hermana, campos_h)
         if resetear:
             campos_h.update(_RESET_APROBACIONES)
+        # El estado de readiness (falta copy/imagen) SÍ se actualiza en el espejo aunque la
+        # aprobación no: la hermana hereda el contenido, así que sus flags reflejan lo heredado.
+        _inyectar_flags_falta(hermana, campos_h)
         if repos.actualizar_publicacion(plat["id"], campos_h) is None:
             continue  # borrada en paralelo: nada que espejar
         if resetear:
@@ -602,6 +619,9 @@ async def actualizar(request: Request) -> Response:
     resetear = _pierde_aprobaciones(actual, campos)
     if resetear:
         campos.update(_RESET_APROBACIONES)
+    # Mantén en sync las flags de readiness (falta copy/imagen) con el contenido editado, para
+    # que la lista del feed no quede stale tras añadir la foto/copy (el espejo hace lo mismo).
+    _inyectar_flags_falta(actual, campos)
 
     # CAS de estado: si la peticion mueve el estado (o el reset lo fuerza), la escritura solo
     # aplica si la pieza SIGUE en el estado desde el que se valido la transicion. Cierra el
