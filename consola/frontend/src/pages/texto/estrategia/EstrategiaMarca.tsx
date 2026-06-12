@@ -190,7 +190,7 @@ function TarjetaPilar({
               className="mt-0.5 inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
               title="Capa global: la comparten todas las marcas"
             >
-              global · compartida entre marcas
+              global
             </span>
           ) : null}
         </div>
@@ -250,9 +250,6 @@ function FranjaEnsamblaje({
       <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         <Layers className="h-3.5 w-3.5" aria-hidden /> Cómo se ensambla para la IA
       </h3>
-      <p className="mt-1 text-xs text-muted-foreground">
-        Orden de inyección de capas
-      </p>
       {orden.length === 0 ? (
         <p className="mt-3 text-sm text-muted-foreground">
           Aún no hay capas activas que inyectar para esta marca.
@@ -445,7 +442,7 @@ export function EstrategiaMarca({
           {!datos.completa && (
             <p className="mt-0.5 text-sm text-muted-foreground">
               {datos.recomendacion ||
-                `Faltan ${datos.total - datos.cubiertos} de ${datos.total} pilares obligatorios por definir.`}
+                `Faltan ${datos.total - datos.cubiertos}/${datos.total} pilares por definir.`}
             </p>
           )}
         </div>

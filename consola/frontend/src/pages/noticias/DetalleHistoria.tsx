@@ -40,7 +40,7 @@ function horaLocal(iso: string): string {
 /** La línea de tiempo de outlets: el primero ABRIÓ la historia. */
 export function TimelineFuentes({ fuentes }: { fuentes: FuenteHistoria[] }) {
   if (fuentes.length === 0) {
-    return <p className="text-xs text-muted-foreground">Sin línea de tiempo de fuentes todavía.</p>;
+    return <p className="text-xs text-muted-foreground">Sin fuentes aún.</p>;
   }
   return (
     <ol className="space-y-1.5" data-testid="timeline-fuentes">

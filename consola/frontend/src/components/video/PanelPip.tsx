@@ -36,10 +36,6 @@ export function PanelPip({
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-muted-foreground">
-        Un segundo video sobre el principal (cámara, reacción, marca de agua animada).
-      </p>
-
       <EditorVideo
         video={videoKey}
         videoUrl={videoUrl}

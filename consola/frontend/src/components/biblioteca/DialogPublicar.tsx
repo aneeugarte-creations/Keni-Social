@@ -97,8 +97,8 @@ export function DialogPublicar({
 
         <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
           {esAdmin
-            ? "Esta versión servirá TODAS las generaciones."
-            : "Si un admin la aprueba, esta versión pasará a servir TODAS las generaciones. Hasta entonces, producción no cambia."}
+            ? "Servirá todas las generaciones."
+            : "Si un admin la aprueba, servirá todas las generaciones. Hasta entonces, sin cambios."}
         </p>
 
         {/* Qué cambia respecto a lo que hay en producción. */}

@@ -153,7 +153,7 @@ export function EditorVideo({
           )}
           <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <VideoOff className="h-3.5 w-3.5" />
-            Sin video todavía. El post no se enviará a revisión hasta que lo subas.
+            Sin video
           </p>
         </div>
       )}

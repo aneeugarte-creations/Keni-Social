@@ -103,8 +103,7 @@ function AvisosComparabilidad({ rangoA, rangoB }: { rangoA: string; rangoB: stri
         >
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <span>
-            Los periodos tienen distinta duración ({diasA} vs {diasB} días): la variación
-            de los conteos no es comparable.
+            Periodos con distinta duración ({diasA} vs {diasB} días): variación no comparable.
           </span>
         </p>
       )}

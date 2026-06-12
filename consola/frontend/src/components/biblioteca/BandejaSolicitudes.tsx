@@ -124,7 +124,7 @@ function FilaSolicitud({ solicitud }: { solicitud: SolicitudPublicacion }) {
           value={comentario}
           onChange={(e) => setComentario(e.target.value)}
           rows={1}
-          placeholder="Comentario para quien solicitó (opcional)"
+          placeholder="Opcional: comentario para quien solicitó"
           className="min-h-9 flex-1 text-xs"
         />
         <Button
@@ -174,8 +174,7 @@ export function BandejaSolicitudes({ className }: BandejaSolicitudesProps) {
         </p>
       ) : solicitudes.length === 0 ? (
         <p className="p-3 text-sm text-muted-foreground">
-          No hay solicitudes pendientes. Cuando alguien del equipo proponga publicar un
-          documento, aparecerá aquí.
+          No hay solicitudes.
         </p>
       ) : (
         <ul className="divide-y divide-border">

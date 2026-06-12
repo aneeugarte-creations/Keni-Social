@@ -70,9 +70,7 @@ export function SeccionRendimiento() {
       </CardHeader>
       <CardContent className="p-4 pt-0">
         {filas.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Aún no hay peticiones registradas en este proceso.
-          </p>
+          <p className="text-sm text-muted-foreground">Sin peticiones registradas.</p>
         ) : (
           <Table>
             <TableHeader>

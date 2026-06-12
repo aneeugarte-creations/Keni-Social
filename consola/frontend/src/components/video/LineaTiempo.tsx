@@ -332,9 +332,6 @@ export function LineaTiempo({
           <span className="mt-0.5 block h-2.5 w-2.5 rounded-sm bg-red-500 shadow" />
         </div>
       </div>
-      <p className="mt-1 text-[11px] text-muted-foreground/70">
-        El scrubbing recorre todo el clip; la reproducción respeta el recorte.
-      </p>
     </div>
   );
 }

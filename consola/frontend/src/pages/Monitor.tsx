@@ -278,7 +278,6 @@ function PanelPresupuesto({
                 <> · restan {numeroCompacto(presupuesto.restante_tokens)}</>
               )}
               {pct != null && <> · {pct.toFixed(0)}% usado</>}
-              {" · al agotarse se pausa el automático"}
             </p>
           ) : null}
           {conPresupuesto && pct != null && (
@@ -392,25 +391,17 @@ export default function Monitor() {
   return (
     <>
       <AccionesPagina>
-        {/* Barra superior limpia: UN solo "⋮" con las ACCIONES (actualizar, purgar) y la entrada
-            «Ajustes», que abre el panel de lo que este Monitor gobierna (reparto contextual: la
-            máquina de contenido, el proveedor de imagen, el tuning del sistema y el esfuerzo de la
-            generación). Lo demás vive en su página (noticias, publicación, conexiones). */}
         <MenuAcciones
           ajustesTitulo="Ajustes de la máquina"
-          ajustesDescripcion="La máquina de contenido, el proveedor de imagen, el tuning del sistema y el esfuerzo de la generación."
           ajustesAbiertoInicial={abrirAjustes}
           ajustes={
             <>
               <PanelMaquinaContenido />
-              {/* El proveedor de imagen IA alimenta la etapa ARTE del pipeline (autogen-arte
-                  y el «Generar con IA»): se configura junto a la máquina que lo consume, no
-                  en el editor de plantillas. Se oculta solo a un editor. */}
               <SeccionImagen />
               <PanelAjustes
                 grupos={GRUPOS_SISTEMA}
                 titulo="Sistema"
-                descripcion="Jobs simultáneos, limpiezas de fondo y alertas. Se aplican sin reiniciar."
+                descripcion="Jobs, limpiezas y alertas; sin reinicio."
               />
               <SeccionEsfuerzo />
             </>
@@ -478,10 +469,8 @@ export default function Monitor() {
             <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               <span>
-                La cola está al tope ({cola.data.conteo.activos}/{cola.data.capacidad.tope}). La
-                máquina espera (reintenta sola); los lanzamientos manuales siguen entrando y se
-                despachan primero.
-                {esAdmin && " Puedes purgar la cola para vaciarla."}
+                La cola está al tope ({cola.data.conteo.activos}/{cola.data.capacidad.tope}).
+                {esAdmin && " Puedes purgarla para vaciarla."}
               </span>
             </div>
           )}

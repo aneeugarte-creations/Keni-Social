@@ -89,12 +89,11 @@ describe("PanoramaPiezas", () => {
     // La pieza con 0 vistas no se lee como "1 vista": la leyenda lo aclara.
     expect(await screen.findByText(/con 0 vistas se apoya/)).toBeInTheDocument();
 
-    // Alternativa textual con DATOS: total, redes legibles y clave de lectura.
+    // Alternativa textual con DATOS: total y clave de lectura.
     const img = screen.getByRole("img", { name: /Panorama de 2 piezas del periodo/ });
     expect(img).toHaveAttribute(
       "aria-label",
-      "Panorama de 2 piezas del periodo; redes: Facebook, Instagram; " +
-        "cada punto es una pieza, altura = vistas (escala logarítmica), tamaño = engagement",
+      "Panorama de 2 piezas del periodo; cada punto es una pieza, altura = vistas, tamaño = engagement",
     );
   });
 

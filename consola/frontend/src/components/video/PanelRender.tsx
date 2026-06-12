@@ -44,7 +44,7 @@ export function PanelRender({ composicionId, onAntesDeRenderizar, disabled }: Pa
     onSuccess: (gen) => {
       setUrl("");
       iniciar(gen);
-      toast.info("Render encolado. Sigue su avance en Producción.");
+      toast.info("Render encolado.");
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -75,7 +75,7 @@ export function PanelRender({ composicionId, onAntesDeRenderizar, disabled }: Pa
       URL.revokeObjectURL(objUrl);
     } catch {
       setErrorDescarga(
-        "No se pudo descargar el MP4. Reinténtalo o ábrelo en una pestaña nueva y descárgalo desde ahí.",
+        "No se pudo descargar. Abre en pestaña nueva.",
       );
     } finally {
       setDescargando(false);
@@ -132,7 +132,6 @@ export function PanelRender({ composicionId, onAntesDeRenderizar, disabled }: Pa
               onClick={() => void descargarMp4()}
               disabled={descargando}
               aria-busy={descargando}
-              title="Descarga el MP4 renderizado a tu equipo"
             >
               {descargando ? (
                 <Loader2 className="mr-1 h-4 w-4 animate-spin" />

@@ -16,7 +16,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -72,9 +71,6 @@ export function DialogoClonar({
             <Copy className="h-5 w-5" />
             Clonar a otra red
           </DialogTitle>
-          <DialogDescription>
-            Copia el contenido a otra red
-          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-1.5">

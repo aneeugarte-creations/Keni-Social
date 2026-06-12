@@ -201,7 +201,7 @@ export function EditorImagen({
       <div className="flex items-center justify-between gap-2">
         <Label className="flex items-center gap-1.5">
           <ImagePlus className="h-4 w-4 text-muted-foreground" />
-          Imagen <span className="font-normal text-muted-foreground">(opcional)</span>
+          Imagen
         </Label>
         {publicacionId && (
           <Button
@@ -364,7 +364,7 @@ function FuenteFondo({
           id={`${idPrefijo}-prompt`}
           value={prompt}
           onChange={(e) => onPrompt(e.target.value)}
-          placeholder="Describe la imagen: p. ej. estadio iluminado al atardecer…"
+          placeholder="Ej. estadio iluminado al atardecer"
           disabled={ocupado}
           onKeyDown={(e) => {
             if (e.key === "Enter" && prompt.trim() && !ocupado) {

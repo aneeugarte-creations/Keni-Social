@@ -110,10 +110,9 @@ export function LienzoPlaca({
           {esCollage
             ? "Toca un hueco para elegir su foto o arrastra para encuadrar"
             : titularEditable
-              ? "Toca el titular para reescribirlo · toca la imagen para cambiar la foto."
+              ? "Toca el titular para reescribirlo · toca la imagen para cambiar"
               : "Toca la imagen para añadir o cambiar la foto"}
         </p>
-        {/* Contador "Faltan X de N fotos" (solo útil en collage de varios huecos). */}
         {esCollage && (
           <span
             className={

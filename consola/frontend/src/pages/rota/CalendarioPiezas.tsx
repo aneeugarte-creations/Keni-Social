@@ -526,8 +526,7 @@ export function DropdownAnadirPersona({
               <DialogDescription>{pendienteOverride.mensaje}</DialogDescription>
             </DialogHeader>
             <p className="text-sm text-muted-foreground">
-              Esta persona ya cubrió el sábado anterior. Confirma solo si es una
-              cobertura estratégica intencional.
+              Esta persona cubrió el sábado anterior.
             </p>
             <DialogFooter>
               <Button variant="ghost" onClick={() => setPendienteOverride(null)}>
@@ -1073,27 +1072,22 @@ export function DialogEditarTurno({
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="et-motivo">
-              Motivo <span className="font-normal text-muted-foreground">(opcional)</span>
-            </Label>
+            <Label htmlFor="et-motivo">Motivo</Label>
             <Input
               id="et-motivo"
               value={motivo}
               onChange={(e) => setMotivo(e.target.value)}
-              placeholder="Cobertura forzada por evento crítico…"
+              placeholder="Opcional: cobertura forzada por evento crítico"
               maxLength={200}
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="et-nota">
-              Nota de relevo{" "}
-              <span className="font-normal text-muted-foreground">(opcional)</span>
-            </Label>
+            <Label htmlFor="et-nota">Nota de relevo</Label>
             <Textarea
               id="et-nota"
               value={notaRelevo}
               onChange={(e) => setNotaRelevo(e.target.value)}
-              placeholder="Qué queda pendiente para el siguiente turno…"
+              placeholder="Opcional: qué queda pendiente para el siguiente turno"
               rows={3}
               maxLength={1000}
             />

@@ -64,9 +64,9 @@ export function GestionFuentes({ marcas }: { marcas: MarcaDisponible[] }) {
           Añadir
         </Button>
       </CardHeader>
-      {marcaActiva && (
+      {marcaActiva && compartidas > 0 && (
         <div className="px-6 pb-1 text-xs text-muted-foreground">
-          {compartidas > 0 ? compartidas + ' feed(s) compartida(s)' : ''}
+          {compartidas === 1 ? '1 feed compartida' : `${compartidas} feeds compartidas`}
         </div>
       )}
       <CardContent className="space-y-4">

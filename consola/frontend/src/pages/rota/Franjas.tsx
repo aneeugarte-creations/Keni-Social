@@ -80,7 +80,7 @@ export function DialogFranjasDeSemana({
         <DialogHeader>
           <DialogTitle>Franjas de esta semana ({lunes})</DialogTitle>
           <DialogDescription>
-            Franjas con rangos horarios. La franja Descanso indica no-laboral pero con turno asignado
+            Descanso indica turno no-laboral
           </DialogDescription>
         </DialogHeader>
         {q.isPending ? (
@@ -370,9 +370,6 @@ export function DialogConfigFranjas({ onCerrar }: { onCerrar: () => void }) {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Configurar franjas</DialogTitle>
-          <DialogDescription>
-            Los rangos horarios determinan qué eventos caen en cada franja
-          </DialogDescription>
         </DialogHeader>
         {q.isPending ? (
           <Skeleton className="h-32 w-full rounded-md" />
@@ -432,7 +429,7 @@ export function DialogConfigFranjas({ onCerrar }: { onCerrar: () => void }) {
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              Lo que cae fuera de ambos rangos se asigna a «descanso»; los eventos aparecen como referencia
+              Lo que cae fuera se asigna a «descanso».
             </p>
           </div>
         )}

@@ -312,7 +312,7 @@ export function DialogoMiembro({
                   value={password}
                   autoComplete="new-password"
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder={`Mínimo ${MIN_PASSWORD} caracteres`}
+                  placeholder={`Mín. ${MIN_PASSWORD} caracteres`}
                 />
               </div>
               <Button

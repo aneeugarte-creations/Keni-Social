@@ -112,7 +112,7 @@ export function SelectorArtes({ open, onCerrar, onSeleccionar, marca }: Selector
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar por título o etiqueta…"
+            placeholder="Buscar…"
             className="pl-8"
             aria-label="Buscar artes"
           />
@@ -130,9 +130,7 @@ export function SelectorArtes({ open, onCerrar, onSeleccionar, marca }: Selector
           ) : artes.length === 0 ? (
             <div className="flex h-48 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
               <ImageOff className="h-6 w-6" />
-              <p className="text-sm">
-                No hay artes guardadas{marca ? " para esta marca" : ""} todavía.
-              </p>
+              <p className="text-sm">Sin artes aún.</p>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -145,7 +143,6 @@ export function SelectorArtes({ open, onCerrar, onSeleccionar, marca }: Selector
                       onCerrar();
                     }}
                     className="block w-full overflow-hidden rounded-md border border-border bg-muted/20 transition hover:ring-2 hover:ring-primary focus:outline-none focus:ring-2 focus:ring-primary"
-                    title={arte.titulo || "Usar este arte"}
                   >
                     <img
                       src={urlMedia(arte.objeto)}
@@ -170,8 +167,7 @@ export function SelectorArtes({ open, onCerrar, onSeleccionar, marca }: Selector
                       }
                     }}
                     disabled={borrar.isPending}
-                    aria-label="Quitar arte de la galería"
-                    title="Quitar de la galería"
+                    aria-label="Quitar"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>

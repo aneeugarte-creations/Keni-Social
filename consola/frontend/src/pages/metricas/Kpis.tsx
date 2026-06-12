@@ -63,7 +63,7 @@ export function Kpis({
     // El tooltip explicita CONTRA QUÉ se compara; para un periodo en curso, que la
     // comparación es de los días transcurridos (no del mes completo).
     const title = par?.enCurso
-      ? `Periodo en curso: se comparan los días transcurridos (${data!.etiqueta_b}) con ${data!.etiqueta_a}`
+      ? `Periodo en curso: ${data!.etiqueta_b} vs ${data!.etiqueta_a}`
       : `vs periodo anterior (${data!.etiqueta_a})`;
     return <InsigniaComparativa comp={comp} title={title} />;
   }
@@ -99,9 +99,7 @@ export function Kpis({
           periodo anterior), y aquí se dice de forma visible, no solo en el tooltip. */}
       {par?.enCurso && data && (
         <p className="text-xs text-muted-foreground" role="note">
-          Periodo en curso: las variaciones comparan los días transcurridos (
-          {data.etiqueta_b}) con el tramo equivalente del periodo anterior (
-          {data.etiqueta_a}).
+          Periodo en curso: {data.etiqueta_b} vs {data.etiqueta_a}.
         </p>
       )}
     </div>

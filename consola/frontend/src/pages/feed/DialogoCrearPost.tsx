@@ -111,10 +111,7 @@ export function DialogoCrearPost({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Crear post</DialogTitle>
-          <DialogDescription>
-            Tu copy, tal cual, como borrador en las redes que elijas. El arte y la
-            aprobación siguen el flujo de siempre.
-          </DialogDescription>
+          <DialogDescription>Tu copy tal cual, como borrador en las redes elegidas.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -145,14 +142,12 @@ export function DialogoCrearPost({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="crear-post-titulo">
-              Título <span className="font-normal text-muted-foreground">(opcional)</span>
-            </Label>
+            <Label htmlFor="crear-post-titulo">Título</Label>
             <Input
               id="crear-post-titulo"
               value={titulo}
               onChange={(e) => setTitulo(e.target.value)}
-              placeholder="Rótulo de la idea en el feed; si falta, se toma del copy"
+              placeholder="Opcional: etiqueta de la idea"
               disabled={crear.isPending}
             />
           </div>

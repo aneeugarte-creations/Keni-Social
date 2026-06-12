@@ -28,7 +28,7 @@ describe("DiffProsa", () => {
 
   it("sin diferencias avisa 'Sin cambios'", () => {
     render(<DiffProsa antes="Igual." despues="Igual." />);
-    expect(screen.getByText(/Sin cambios entre las dos versiones/)).toBeInTheDocument();
+    expect(screen.getByText(/Sin cambios/)).toBeInTheDocument();
   });
 
   it("'solo cambios' colapsa los párrafos sin tocar y se despliegan al clic", () => {

@@ -121,8 +121,7 @@ function PanelUso({ doc, maquina }: { doc: DocumentoTexto; maquina?: RespuestaMa
       ) : null}
       {nada ? (
         <p className="text-sm text-muted-foreground">
-          No está cableado a ningún proceso automático: se ejecuta a mano con «Probar» o se
-          adjunta según su clase y marcas.
+          Se ejecuta a mano con «Probar» o se adjunta según su clase y marcas.
         </p>
       ) : null}
     </div>
@@ -141,7 +140,7 @@ function PanelCompilado({ pipelineId }: { pipelineId: string }) {
   if (!marcaActiva) {
     return (
       <p className="text-sm text-muted-foreground">
-        Elige una marca (selector de marca) para ver el prompt ensamblado que verá el modelo.
+        Elige una marca para ver el prompt ensamblado de ese modelo.
       </p>
     );
   }

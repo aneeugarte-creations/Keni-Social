@@ -98,7 +98,7 @@ export function DialogoFuenteFoto({
               <Input
                 value={prompt}
                 onChange={(e) => onPromptCambio(e.target.value)}
-                placeholder="Describe la imagen: p. ej. estadio iluminado al atardecer…"
+                placeholder="Ej: estadio iluminado al atardecer"
                 disabled={ocupado}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && prompt.trim() && !ocupado) {
@@ -115,7 +115,7 @@ export function DialogoFuenteFoto({
                 className="shrink-0"
               >
                 {generandoIA ? <Loader2 className="h-4 w-4 animate-spin" /> : <MarcaIA costo />}
-                {generandoIA ? "Generando…" : "Generar con IA"}
+                {generandoIA ? "Generando…" : "Generar"}
               </Button>
             </div>
           </div>

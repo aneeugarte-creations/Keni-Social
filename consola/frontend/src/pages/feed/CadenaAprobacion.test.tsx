@@ -77,7 +77,7 @@ describe("CadenaAprobacion · panel de estado (solo lectura)", () => {
 
   it("con comentarios sin resolver añade la línea de bloqueo dentro del panel", () => {
     render(<CadenaAprobacion cadena={cadenaOK()} sinResolver={2} />);
-    expect(screen.getByText(/Falta resolver 2 comentarios antes de publicar/)).toBeInTheDocument();
+    expect(screen.getByText(/Resuelve 2 comentarios antes de publicar/)).toBeInTheDocument();
   });
 
   it("cadena RECHAZADA: lo señala", () => {

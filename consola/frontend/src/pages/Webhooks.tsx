@@ -125,7 +125,7 @@ export default function Webhooks() {
         <EstadoVacio
           icono={WebhookIcon}
           titulo="Aún no hay webhooks"
-          texto="Crea uno para que el equipo reciba un aviso cuando se aprueba, publica o vence contenido."
+          texto="Crea uno para avisar al equipo cuando se aprueba, publica o vence contenido."
         />
       ) : (
         <div className="mt-4 grid gap-3">
@@ -330,8 +330,7 @@ function DialogoCrearWebhook({
         <DialogHeader>
           <DialogTitle>Nuevo webhook</DialogTitle>
           <DialogDescription>
-            La Consola hará un POST a esta URL cuando se dispare uno de los eventos. Para
-            Slack, usa la URL de un Incoming Webhook.
+            POST a esta URL en eventos. Usa Incoming Webhook de Slack.
           </DialogDescription>
         </DialogHeader>
 
@@ -372,7 +371,7 @@ function DialogoCrearWebhook({
           <div className="grid gap-1.5">
             <Label>Eventos</Label>
             <p className="text-xs text-muted-foreground">
-              Sin marcar ninguno, el webhook escucha todos.
+              Opcional: déjalo en blanco para escuchar todos.
             </p>
             <div className="grid gap-2">
               {eventos.map((ev) => (

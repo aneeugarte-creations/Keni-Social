@@ -134,9 +134,9 @@ describe("NoticiasHub · proceso de Investigación", () => {
     // Abre el menú «⋮» y luego «Ajustes».
     fireEvent.click(screen.getByRole("button", { name: /Acciones/i }));
     fireEvent.click(await screen.findByRole("menuitem", { name: /Ajustes/i }));
-    // El maestro `maestros_investigacion` (interruptor general) y un grupo del motor de noticias.
+    // El maestro `maestros_investigacion` y un grupo del motor de noticias.
     await waitFor(() =>
-      expect(screen.getByText(/Investigación \(interruptor general\)/i)).toBeTruthy(),
+      expect(screen.getAllByText(/^Investigación$/i).length).toBeGreaterThan(0),
     );
     expect(screen.getByText(/Entrada al pool/i)).toBeTruthy();
   });

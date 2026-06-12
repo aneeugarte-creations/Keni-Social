@@ -42,7 +42,7 @@ export function SelectorFormato({ aspecto, onCambio, disabled }: SelectorFormato
         })}
       </div>
       <p className="text-[11px] text-muted-foreground/70">
-        Mantén contenido dentro de los márgenes punteados del preview
+        Mantén contenido en los márgenes punteados
       </p>
     </div>
   );

@@ -134,7 +134,7 @@ export function FilaLinea({
               />
               <Label htmlFor={`edit-evergreen-${etiqueta.id}`} className="flex items-center gap-1 cursor-pointer">
                 <Leaf className="h-3.5 w-3.5 text-evergreen-600" />
-                Everevergreen
+                Evergreen
               </Label>
             </div>
           </div>
@@ -235,7 +235,7 @@ export function FilaLinea({
         {clase === "vertical" && etiqueta.es_evergreen && (
           <Badge variant="secondary" className="gap-1 font-normal text-evergreen-700">
             <Leaf className="h-3 w-3" />
-            Everevergreen
+            Evergreen
           </Badge>
         )}
         {clase === "vertical" && !etiqueta.es_evergreen && etiqueta.ttl_dias > 0 && (

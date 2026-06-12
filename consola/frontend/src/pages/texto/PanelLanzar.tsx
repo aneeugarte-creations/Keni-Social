@@ -163,7 +163,7 @@ export function PanelLanzar({
         validacion.completa ? (
           <div className="flex items-center gap-2 rounded-md border border-emerald-600/30 bg-emerald-600/5 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
             <CheckCircle2 className="h-4 w-4 shrink-0" />
-            <span>Línea editorial completa: cubre los 4 pilares (marca, voz, tropicalización y plataforma).</span>
+            <span>Línea editorial completa</span>
           </div>
         ) : (
           <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">

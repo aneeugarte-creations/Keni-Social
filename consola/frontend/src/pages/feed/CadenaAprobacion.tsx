@@ -136,7 +136,7 @@ export function CadenaAprobacion({
       {sinResolver > 0 && (
         <p className={`mt-2 flex items-center gap-1.5 text-sm ${TEXTO_AVISO}`}>
           <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
-          Falta resolver {plural(sinResolver, "comentario")} antes de publicar
+          Resuelve {plural(sinResolver, "comentario")} antes de publicar
         </p>
       )}
 

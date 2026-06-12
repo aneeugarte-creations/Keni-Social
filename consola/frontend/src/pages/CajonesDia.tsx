@@ -104,7 +104,7 @@ const CAJONES: DescripcionCajon[] = [
   {
     id: "eventos_claro",
     titulo: "Eventos Claro (Excel/CSV)",
-    descripcion: "Excel o CSV de eventos y programación de TV de Claro Sports.",
+    descripcion: "",
     aceptaArchivo: ".xlsx,.xls,.csv",
     placeholderTexto: "O pega el contenido del CSV...",
     marca: "claro-sports",
@@ -120,9 +120,9 @@ const CAJONES: DescripcionCajon[] = [
   {
     id: "contexto",
     titulo: "Indicaciones",
-    descripcion: "Indicaciones, correcciones y prioridades del equipo. Guía editorial: NO se publica.",
+    descripcion: "",
     aceptaArchivo: ".txt",
-    placeholderTexto: "Pega aquí las indicaciones o correcciones (orientan el copy; no se publican)...",
+    placeholderTexto: "Pega aquí las indicaciones o correcciones (no se publican)...",
     marca: "claro-sports",
   },
 ];
@@ -539,7 +539,9 @@ function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
           <Inbox className="h-4 w-4 text-muted-foreground" />
           {def.titulo}
         </CardTitle>
-        <p className="text-xs text-muted-foreground">{def.descripcion}</p>
+        {def.descripcion && (
+          <p className="text-xs text-muted-foreground">{def.descripcion}</p>
+        )}
       </CardHeader>
       <CardContent className="space-y-3">
         {/* Zona de entrada */}
@@ -741,7 +743,7 @@ export default function CajonesDia() {
 
       {/* Explainer del pool */}
       <p className="mb-4 text-xs text-muted-foreground">
-        Cura el pool: descarta lo que no sirva o empuja historias con Empujar ya.
+        Descarta insumos o empuja historias ya.
       </p>
 
       {/* Controles de fecha e historial */}

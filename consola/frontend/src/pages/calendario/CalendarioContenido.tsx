@@ -78,7 +78,6 @@ export default function CalendarioContenido() {
               )}
               <SeccionColapsable
                 titulo="Cadencia"
-                descripcion="Intervalo mínimo entre posts por red."
                 abiertaInicial={cadenciaDeepLink}
               >
                 <PanelCadencia marcas={marcas} redes={redes} />

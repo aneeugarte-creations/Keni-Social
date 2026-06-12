@@ -368,7 +368,7 @@ export default function Algoritmos() {
                 </CardHeader>
                 <CardContent>
                   <p className="pb-2 text-xs text-muted-foreground">
-                    Estas plataformas no publican un feed RSS oficial. Su cobertura llega vía agregadores.
+                    Sin feed RSS oficial; cobertura vía agregadores.
                   </p>
                   <ul className="space-y-1.5">
                     {data.pendientes.map((p) => (

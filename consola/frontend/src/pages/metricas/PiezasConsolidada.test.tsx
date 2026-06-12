@@ -93,7 +93,7 @@ describe("PiezasConsolidada", () => {
     expect(screen.getByText("Piezas")).toBeInTheDocument();
     expect(screen.getByText("Vistas: promedio · mediana")).toBeInTheDocument();
     expect(screen.getByText("Engagement (agregado)")).toBeInTheDocument();
-    expect(screen.getByText("Engagement (mediana por pieza)")).toBeInTheDocument();
+    expect(screen.getByText("Engagement mediana")).toBeInTheDocument();
   });
 
   it("ordena por vistas (desc por defecto): la más vista va primero", async () => {

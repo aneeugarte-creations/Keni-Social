@@ -143,7 +143,7 @@ export function PanelOverlay({ doc, marca, capas, onCapas }: PanelOverlayProps) 
 
   const abrirGuardarComo = () => {
     if (store.getState().documento.capas.length === 0) {
-      toast.error("El overlay está vacío: añade alguna capa antes de guardarlo como plantilla.");
+      toast.error("El overlay está vacío. Añade una capa.");
       return;
     }
     setDialogo({ nombre: "", tipo: "foto" });

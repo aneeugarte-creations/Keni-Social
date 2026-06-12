@@ -171,7 +171,7 @@ export function RielInvestigacion() {
       </div>
       {esAdmin && (
         <p className="mt-1.5 text-xs text-muted-foreground">
-          Enciende o apaga cada etapa en «Ajustes del motor» (menú «⋮» arriba).
+          Enciende o apaga cada etapa en Ajustes del motor.
         </p>
       )}
     </section>

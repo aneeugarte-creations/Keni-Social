@@ -14,13 +14,11 @@ import { Button } from "@/components/ui/button";
  */
 export function PanelAjustesLateral({
   titulo = "Ajustes",
-  descripcion,
   abierto,
   onCerrar,
   children,
 }: {
   titulo?: string;
-  descripcion?: string;
   abierto: boolean;
   onCerrar: () => void;
   children: React.ReactNode;
@@ -52,7 +50,6 @@ export function PanelAjustesLateral({
         <header className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
           <div className="min-w-0 space-y-0.5">
             <h2 className="text-sm font-semibold tracking-tight">{titulo}</h2>
-            {descripcion && <p className="text-xs text-muted-foreground">{descripcion}</p>}
           </div>
           <Button
             variant="ghost"

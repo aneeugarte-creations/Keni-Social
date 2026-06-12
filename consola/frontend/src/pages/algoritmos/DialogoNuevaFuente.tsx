@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -55,9 +54,6 @@ export function DialogoNuevaFuente({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Nueva fuente de algoritmo</DialogTitle>
-          <DialogDescription>
-            Un feed RSS de un blog oficial o agregador.
-          </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1">

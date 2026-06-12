@@ -92,7 +92,7 @@ export function SeccionS3() {
       <CardContent className="space-y-3 p-4 pt-0">
         {!s3.configurado ? (
           <p className="text-sm text-muted-foreground">
-            S3 no está configurado en este servidor: la media vive en disco local.
+            S3 no configurado: media en disco local.
           </p>
         ) : (
           <>

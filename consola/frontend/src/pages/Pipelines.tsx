@@ -65,7 +65,7 @@ function BadgeQaFuente({ qa, className }: { qa?: PipelineQaFuente; className?: s
       <Badge
         variant="secondary"
         className={cn("gap-1 border border-destructive/30 bg-destructive/10 text-destructive", className)}
-        title={qa.resumen || "La criba encontró un problema de peso; no se generó copy."}
+        title={qa.resumen || "Criba encontró problema; sin copy."}
       >
         <OctagonAlert className="h-3 w-3" aria-hidden="true" />
         Problema

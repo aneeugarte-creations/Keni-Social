@@ -147,7 +147,7 @@ function Historico({ piezaId }: { piezaId: string }) {
       ) : data.puntos.length === 0 ? (
         // Honestidad de cobertura: sin snapshots no inventamos una curva.
         <p className="rounded-md border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
-          Sin histórico todavía (esta pieza aún no se está siguiendo).
+          Sin histórico todavía.
         </p>
       ) : (
         <CurvaHistorica data={data} />

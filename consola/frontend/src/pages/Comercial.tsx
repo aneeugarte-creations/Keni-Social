@@ -135,8 +135,7 @@ export default function Comercial() {
             />
           </label>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Oculta todo lo de Ads y suma las visualizaciones pagadas a las orgánicas (para
-            enseñar al cliente). Persiste al recargar.
+            Oculta Ads; suma visualizaciones pagadas a orgánicas. Persiste al recargar.
           </p>
         </section>
       }
@@ -164,7 +163,7 @@ export default function Comercial() {
         <EstadoVacio
           icono={Megaphone}
           titulo="Aún no hay campañas"
-          texto="Crea una campaña con una o varias marcas y sus hashtags; le daremos seguimiento a las publicaciones que los lleven."
+          texto="Crea una campaña para dar seguimiento a publicaciones con sus hashtags."
           accion={
             <Button onClick={abrirNueva}>
               <Plus className="h-4 w-4" />

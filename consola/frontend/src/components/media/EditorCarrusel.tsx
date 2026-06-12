@@ -135,7 +135,7 @@ export function EditorCarrusel({
 
       {slides.length === 0 ? (
         <p className="rounded-md border border-dashed p-3 text-center text-xs text-muted-foreground">
-          Sube aquí imágenes y videos adicionales
+          Sube imágenes y videos
         </p>
       ) : (
         <ul className="space-y-1.5">
@@ -166,7 +166,6 @@ export function EditorCarrusel({
                 {i === idxPortada && (
                   <span
                     className="inline-flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium text-foreground"
-                    title="Será la portada"
                   >
                     <Star className="h-2.5 w-2.5" aria-hidden="true" />
                     Portada

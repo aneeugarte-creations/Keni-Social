@@ -276,7 +276,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
     const ok = await confirmar({
       titulo: "Saltar la cadena de aprobación",
       mensaje:
-        "Vas a aprobar esta pieza sin el visto bueno del equipo. ¿Continuar?",
+        "¿Aprobar sin el visto bueno del equipo?",
       textoConfirmar: "Forzar aprobación",
     });
     if (ok) forzar.mutate();
@@ -307,7 +307,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         : etapa === "generando_arte"
           ? esVideo
             ? "Falta el video: ábrela y sube el clip."
-            : "Falta la imagen: ábrela y súbela (se le aplicará la plantilla)."
+            : "Falta la imagen: ábrela y súbela."
           : "Aún no está en revisión: entra sola cuando se guarde con todo el contenido.";
   // Tooltip del "me gusta" cuando SÍ puedes; bloqueado, manda `motivoBloqueo` (fuente única).
   const tituloLike = puedeDar ? "Dale tu OK (me gusta) a esta pieza" : motivoBloqueo;
@@ -395,7 +395,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         mensaje:
           etapa === "publicada"
             ? "Esta pieza ya salió a la red. Editarla aquí solo cambia la copia interna y la devuelve a borrador. ¿Continuar?"
-            : "Esta pieza ya tiene el visto bueno del equipo. Si la editas, volverá a borrador y tendrá que aprobarse otra vez desde cero. ¿Quieres continuar?",
+            : "Volverá a borrador y necesitará nuevas aprobaciones. ¿Continuar?",
         textoConfirmar: "Editar de todas formas",
         textoCancelar: "Dejar como está",
       });

@@ -157,7 +157,7 @@ export function DialogoCampania({
               placeholder="#Chihuahua #Turismo"
             />
             <p className="text-xs text-muted-foreground">
-              Separa varios con espacios o comas. Se buscan en el texto de cada publicación.
+              Espacios o comas. Se buscan en cada publicación.
             </p>
             {hashtags.length > 0 && (
               <div className="flex flex-wrap gap-1.5 pt-1">

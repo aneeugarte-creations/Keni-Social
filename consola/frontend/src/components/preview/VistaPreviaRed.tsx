@@ -134,7 +134,7 @@ const TextoRed = React.forwardRef<
   if (!contenido.trim()) {
     return (
       <p ref={ref} className={cn("italic text-muted-foreground", className)}>
-        Sin texto…
+        Sin texto
       </p>
     );
   }
@@ -612,7 +612,7 @@ function PreviaTikTok({ marca, contenido, copyIn, imagen, limpia }: MockupProps)
 }
 
 /** Mockup de YouTube (thumbnail 4:5 + título 2 líneas + canal). */
-function PreviaYouTube({ marca, contenido, copyIn, imagen, limpia }: MockupProps) {
+function PreviaYouTube({ marca, contenido, copyIn, imagen }: MockupProps) {
   // En YouTube el "contenido" hace de título: tomamos la primera línea.
   const titulo = contenido.trim().split("\n")[0] || "Título del video";
   return (
@@ -635,7 +635,6 @@ function PreviaYouTube({ marca, contenido, copyIn, imagen, limpia }: MockupProps
         <div className="min-w-0">
           <p className="line-clamp-2 text-[15px] font-medium leading-snug">{titulo}</p>
           <p className="mt-0.5 text-[13px] text-muted-foreground">{marca}</p>
-          {!limpia && null}
         </div>
       </div>
     </div>
@@ -764,7 +763,7 @@ export function VistaPreviaRed({
         {tam && (
           <span
             className="ml-auto rounded-full border border-border px-2 py-0.5 tabular-nums"
-            title={`Imagen recomendada para ${nombreRed(red)}: relación ${tam.ratio}, ${tam.px} px. Cada red recorta a su formato.`}
+            title={`Recomendado: ${tam.ratio}, ${tam.px} px`}
           >
             {tam.ratio} · {tam.px} px
           </span>

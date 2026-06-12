@@ -20,7 +20,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -97,7 +96,7 @@ function FormularioGrupo({
           id="grupo-hashtags"
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
-          placeholder="#futbol #deportes #unotv — separa por espacios o comas"
+          placeholder="Ej. #futbol #deportes #unotv"
           className="min-h-[5rem]"
         />
       </div>
@@ -214,9 +213,6 @@ export function GestionHashtags({
             <Hash className="h-5 w-5" />
             Grupos de hashtags
           </DialogTitle>
-          <DialogDescription>
-            Crea conjuntos de hashtags reutilizables.
-          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">

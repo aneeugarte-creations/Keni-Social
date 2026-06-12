@@ -94,8 +94,8 @@ export class FronteraError extends React.Component<Props, Estado> {
             </p>
             <p className="max-w-md text-sm text-muted-foreground">
               {chunk
-                ? "Se publicó una actualización mientras tenías la pestaña abierta. Recarga para continuar."
-                : "Esta sección tuvo un problema al mostrarse. Puedes reintentar, recargar la consola o volver al feed del equipo."}
+                ? "Se publicó una actualización. Recarga."
+                : "Algo salió mal aquí. Intenta reintentar, recargar o volver al feed."}
             </p>
           </div>
           {chunk ? (

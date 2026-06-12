@@ -22,7 +22,6 @@ export function MenuAcciones({
   etiqueta = "Acciones",
   ajustes,
   ajustesTitulo,
-  ajustesDescripcion,
   ajustesAbiertoInicial = false,
 }: {
   children?: React.ReactNode;
@@ -30,7 +29,6 @@ export function MenuAcciones({
   /** Contenido del panel de ajustes. Si se pasa, el "⋮" muestra la entrada «Ajustes». */
   ajustes?: React.ReactNode;
   ajustesTitulo?: string;
-  ajustesDescripcion?: string;
   /** Abre el panel ya desplegado al montar (deep-links, p. ej. `?cadencia=1`). */
   ajustesAbiertoInicial?: boolean;
 }) {
@@ -87,7 +85,6 @@ export function MenuAcciones({
       {ajustes && (
         <PanelAjustesLateral
           titulo={ajustesTitulo}
-          descripcion={ajustesDescripcion}
           abierto={ajustesAbierto}
           onCerrar={() => setAjustesAbierto(false)}
         >

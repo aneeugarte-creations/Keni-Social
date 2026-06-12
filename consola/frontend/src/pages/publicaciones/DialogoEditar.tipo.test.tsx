@@ -90,7 +90,7 @@ describe("DialogoEditar — lógica de tipo de plantilla", () => {
 });
 
 // --- Puente al Estudio de video ---
-/** Espejo del destino de navegación del botón "Editar en Estudio de video". */
+/** Espejo del destino de navegación del botón "Estudio de video". */
 function rutaVideo(contenidoId: string): string {
   return `/contenido/video?contenido=${encodeURIComponent(contenidoId)}`;
 }

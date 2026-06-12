@@ -378,7 +378,7 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     );
     renderPost(pub({ estado: "en_revision", etapa_ia: "lista_para_revisar", autor_id: "u1" }));
     // Espera a que la cadena cargue (el aviso de comentarios aparece en el panel).
-    expect(await screen.findByText(/Falta resolver 2 comentarios/)).toBeInTheDocument();
+    expect(await screen.findByText(/Resuelve 2 comentarios/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Me gusta: no disponible" }));
     expect(toast).toHaveBeenCalledWith(expect.stringMatching(/tu propia pieza/i));
     expect(toast).not.toHaveBeenCalledWith(expect.stringMatching(/Resuelve/));

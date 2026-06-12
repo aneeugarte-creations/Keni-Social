@@ -290,7 +290,7 @@ function FilaComposicion({
       <div className="flex shrink-0 items-center gap-2">
         {comp.contenido_id && (
           <Button asChild size="sm" variant="ghost">
-            <Link to="/operacion/feed/lista" title="Ir a la lista de contenido (pieza ligada)">
+            <Link to="/operacion/feed/lista" title="Ir a la lista de contenido">
               <ExternalLink className="mr-1 h-4 w-4" />
               Pieza
             </Link>

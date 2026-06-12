@@ -247,7 +247,6 @@ export function PiezasConsolidada({
       <SeccionColapsable
         titulo="Piezas del periodo"
         icono={ListChecks}
-        descripcion="Todas las piezas del periodo. Filtra, ordena y toca para ver detalles."
         contentClassName="px-0 pb-0"
       >
         <div className="space-y-3 px-6 pb-3">
@@ -310,7 +309,7 @@ export function PiezasConsolidada({
               titulo="Total de interacciones dividido por total de vistas del filtro actual"
             />
             <TarjetaKpi
-              etiqueta="Engagement (mediana por pieza)"
+              etiqueta="Engagement mediana"
               valor={stats.engMediana == null ? "—" : porcentaje(stats.engMediana)}
             />
           </div>

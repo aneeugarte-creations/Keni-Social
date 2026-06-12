@@ -97,7 +97,7 @@ export function TarjetaNoticia({
             size="sm"
             onClick={() => onArchivar(noticia)}
             disabled={archivando}
-            title="Archivar (ocultar de la lista)"
+            title="Archivar"
           >
             <Archive className="h-3.5 w-3.5" aria-hidden="true" />
           </Button>

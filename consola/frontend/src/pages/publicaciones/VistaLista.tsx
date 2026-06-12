@@ -26,7 +26,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -284,10 +283,7 @@ function TarjetaPublicacion({
       <Dialog open={confirmarBorrado} onOpenChange={setConfirmarBorrado}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Borrar publicación</DialogTitle>
-            <DialogDescription>
-              ¿Borrar “{publicacion.titulo}”?
-            </DialogDescription>
+            <DialogTitle>Borrar “{publicacion.titulo}”</DialogTitle>
           </DialogHeader>
           <DialogFooter>
             <Button
@@ -512,9 +508,6 @@ export function VistaLista({
             <DialogTitle>
               Borrar {n} {n === 1 ? "publicación" : "publicaciones"}
             </DialogTitle>
-            <DialogDescription>
-              Se eliminarán {n} pieza(s).
-            </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button

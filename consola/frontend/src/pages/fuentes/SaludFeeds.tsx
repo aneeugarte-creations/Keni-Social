@@ -207,7 +207,7 @@ export function SaludFeeds() {
                 <TableHead>Categoría</TableHead>
                 <TableHead>Marca</TableHead>
                 <TableHead className="text-right">Items 24 h</TableHead>
-                <TableHead className="text-right" title="Artículos descartados por el filtro de entrada (no casan la agenda de la marca) en el último sondeo">
+                <TableHead className="text-right" title="Artículos filtrados (no casan agenda)">
                   Filtrados
                 </TableHead>
                 <TableHead className="text-right">Frescura</TableHead>

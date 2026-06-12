@@ -374,7 +374,7 @@ function DialogImportarParrilla({
               <AlertTriangle className="h-7 w-7 text-destructive" />
               <p className="text-sm font-medium">No se pudo analizar el documento</p>
               <p className="max-w-md text-sm text-muted-foreground">
-                {propuesta.error || "El análisis falló. Vuelve a intentarlo con otro documento."}
+                {propuesta.error || "El análisis falló. Reintenta con otro documento."}
               </p>
             </div>
             {generacion?.prompt && <VerPrompt prompt={generacion.prompt} />}

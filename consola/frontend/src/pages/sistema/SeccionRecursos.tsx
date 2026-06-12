@@ -139,8 +139,7 @@ export function SeccionRecursos() {
       </div>
       {!psutil && (
         <p className="text-xs text-muted-foreground">
-          CPU y memoria no disponibles (psutil no está instalado en este servidor). El
-          disco se mide igualmente.
+          CPU y memoria no disponibles. El disco se mide.
         </p>
       )}
     </div>

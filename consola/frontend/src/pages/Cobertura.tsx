@@ -330,11 +330,7 @@ function VistaHistorias({ marcaActiva, estadoFijo }: PropsVistaHistorias) {
                     ? "Nada en marcha todavía"
                     : "Sin historias por ahora"
               }
-              texto={
-                estadoFijo
-                  ? "Lo que descartes o empujes desde Candidatas aparecerá aquí."
-                  : "Las historias se agrupan conforme llegan artículos de múltiples fuentes."
-              }
+              texto={estadoFijo ? "Lo que descartes o empujes desde Candidatas aparecerá aquí." : undefined}
             />
           ) : (
             <div className="space-y-2">

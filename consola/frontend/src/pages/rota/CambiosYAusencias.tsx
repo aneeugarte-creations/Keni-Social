@@ -492,7 +492,7 @@ export function FormularioNuevoSwap({
   if (turnosMios.length === 0) {
     return (
       <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
-        No tienes turnos para cambiar en este rango (semana actual + siguiente).
+        No tienes turnos en este rango.
       </div>
     );
   }
@@ -502,7 +502,7 @@ export function FormularioNuevoSwap({
       <div className="space-y-1.5">
         <Label>Mi turno</Label>
         <Select value={miTurnoId} onValueChange={setMiTurnoId}>
-          <SelectTrigger aria-label="Mi turno (el que cedo)">
+          <SelectTrigger aria-label="Mi turno">
             <SelectValue placeholder="Elige uno de tus turnos" />
           </SelectTrigger>
           <SelectContent>
@@ -517,7 +517,7 @@ export function FormularioNuevoSwap({
       <div className="space-y-1.5">
         <Label>Turno deseado</Label>
         <Select value={turnoDeseadoId} onValueChange={setTurnoDeseadoId}>
-          <SelectTrigger aria-label="Turno deseado (el que quieres recibir)">
+          <SelectTrigger aria-label="Turno deseado">
             <SelectValue placeholder="Elige el turno con el que quieres cambiar" />
           </SelectTrigger>
           <SelectContent>
@@ -536,14 +536,12 @@ export function FormularioNuevoSwap({
         </Select>
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="swap-motivo">
-          Motivo <span className="font-normal text-muted-foreground">(opcional)</span>
-        </Label>
+        <Label htmlFor="swap-motivo">Motivo</Label>
         <Textarea
           id="swap-motivo"
           value={motivo}
           onChange={(e) => setMotivo(e.target.value)}
-          placeholder="Ej. Cita medica, evento familiar, examen…"
+          placeholder="Opcional: cita médica, evento familiar, examen…"
           rows={2}
           maxLength={500}
         />
@@ -780,7 +778,7 @@ export function DialogAccionSwap({
     },
     rechazar: {
       titulo: "Rechazar el cambio",
-      descripcion: "Rechazas el cambio que te pidió tu compañero. Puedes dejarle el motivo.",
+      descripcion: "Rechazas el cambio. Opcionalmente, explica por qué.",
       botonConfirmar: "Rechazar",
       llamar: (cuerpo) => api.rechazarSwap(swapId, cuerpo),
       toastOk: "Cambio rechazado.",
@@ -797,7 +795,7 @@ export function DialogAccionSwap({
     },
     rechazar_admin: {
       titulo: "Rechazar el cambio",
-      descripcion: "Vas a rechazar el cambio aunque tus compañeros ya lo hubieran acordado.",
+      descripcion: "Rechazarás el cambio acordado por el equipo.",
       botonConfirmar: "Rechazar",
       llamar: (cuerpo) => api.rechazarSwapAdmin(swapId, cuerpo),
       toastOk: "Cambio rechazado.",
@@ -827,9 +825,7 @@ export function DialogAccionSwap({
             <DialogDescription>{meta.descripcion}</DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5">
-            <Label htmlFor={`resp-${swapId}-${accion}`}>
-              Respuesta <span className="font-normal text-muted-foreground">(opcional)</span>
-            </Label>
+            <Label htmlFor={`resp-${swapId}-${accion}`}>Respuesta</Label>
             <Textarea
               id={`resp-${swapId}-${accion}`}
               value={respuesta}

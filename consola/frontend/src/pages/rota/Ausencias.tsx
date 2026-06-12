@@ -117,14 +117,12 @@ export function NuevaAusencia({
         </div>
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="au-motivo">
-          Motivo <span className="font-normal text-muted-foreground">(opcional)</span>
-        </Label>
+        <Label htmlFor="au-motivo">Motivo</Label>
         <Input
           id="au-motivo"
           value={motivo}
           onChange={(e) => setMotivo(e.target.value)}
-          placeholder="Ej. Vacaciones de verano"
+          placeholder="Opcional: vacaciones, evento, etc."
           maxLength={200}
         />
       </div>
@@ -313,13 +311,12 @@ export function DialogoEditarAusencia({
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="au-edit-motivo">
-              Motivo <span className="font-normal text-muted-foreground">(opcional)</span>
-            </Label>
+            <Label htmlFor="au-edit-motivo">Motivo</Label>
             <Input
               id="au-edit-motivo"
               value={motivo}
               onChange={(e) => setMotivo(e.target.value)}
+              placeholder="Opcional: vacaciones, evento, etc."
               maxLength={200}
             />
           </div>

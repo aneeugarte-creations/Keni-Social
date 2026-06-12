@@ -86,10 +86,10 @@ export function RendimientoFuentes() {
                   <TableHead>Fuente</TableHead>
                   <TableHead className="text-right">Artículos</TableHead>
                   <TableHead className="text-right">Historias</TableHead>
-                  <TableHead className="text-right" title="Historias que esta fuente publicó primero">
+                  <TableHead className="text-right" title="Primera publicación">
                     Abrió
                   </TableHead>
-                  <TableHead className="text-right" title="Historias suyas que acabaron en el tablero">
+                  <TableHead className="text-right" title="En tablero">
                     Usadas
                   </TableHead>
                   <TableHead className="text-right">% uso</TableHead>

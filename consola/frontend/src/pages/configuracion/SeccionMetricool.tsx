@@ -348,7 +348,7 @@ function SeccionMetricoolAdmin() {
         <div className="flex items-start gap-3 rounded-lg border border-border bg-primary/5 p-3">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
           <p className="text-sm text-muted-foreground">
-            Cada marca es una cuenta Metricool distinta. El token se almacena localmente. Usa «Probar» para validar.
+            Token local · Usa «Probar» para validar.
           </p>
         </div>
 

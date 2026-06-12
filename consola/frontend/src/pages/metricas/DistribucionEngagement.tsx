@@ -60,7 +60,6 @@ export function DistribucionEngagement({
     <SeccionColapsable
       titulo="Distribución del engagement"
       icono={SigmaSquare}
-      descripcion="Percentiles y rango de todas las piezas."
     >
       {isPending ? (
         <Skeleton className="h-72 w-full rounded-lg" />

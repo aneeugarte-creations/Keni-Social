@@ -381,11 +381,7 @@ export default function Produccion() {
         <EstadoVacio
           icono={Factory}
           titulo={hayFiltro ? "Sin items con ese filtro" : "Aún no hay producción"}
-          texto={
-            hayFiltro
-              ? "No hay items con ese filtro"
-              : "Los trabajos aparecerán aquí cuando la máquina produzca"
-          }
+          texto={!hayFiltro ? "Los trabajos aparecerán aquí cuando la máquina produzca" : undefined}
         />
       ) : (
         <>

@@ -149,7 +149,7 @@ export function DiffProsa({ antes, despues, soloCambios = false, className }: Di
   if (!hayCambios) {
     return (
       <p className={cn("text-sm text-muted-foreground", className)}>
-        Sin cambios entre las dos versiones.
+        Sin cambios.
       </p>
     );
   }

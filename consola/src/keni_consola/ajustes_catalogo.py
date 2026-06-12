@@ -39,9 +39,9 @@ _FALSOS = frozenset({"0", "false", "no", "off", ""})
 # limpieza, alertas) en el Monitor.
 GRUPOS: tuple[tuple[str, str], ...] = (
     ("maquina_global", "Máquina de contenido"),
-    ("maestros_investigacion", "Investigación"),
+    ("maestros_investigacion", "Todas las marcas"),
     ("automatizacion_marca_investigacion", "Excepciones por marca"),
-    ("maestros_produccion", "Producción"),
+    ("maestros_produccion", "Todas las marcas"),
     ("automatizacion_marca_produccion", "Excepciones por marca"),
     ("pipeline_topes", "Admisión del flujo"),
     ("publicacion", "Publicación"),
@@ -100,9 +100,8 @@ def _maestros_etapa() -> list[Ajuste]:
             clave=config.ENV_INVESTIGACION,
             tipo="bool",
             etiqueta="Investigación",
-            ayuda="Para todas las marcas: recolectar, deduplicar, clasificar, rankear y "
-            "verificar noticias (ingesta, fusión, ranking y criba de la fuente). Deja el "
-            "pool listo para producir; no escribe copy.",
+            ayuda="Para todas las marcas: recolecta, deduplica, clasifica, rankea y "
+            "verifica noticias para dejar el pool listo (no escribe copy).",
             grupo="maestros_investigacion",
             defecto=False,
         ),
@@ -110,8 +109,8 @@ def _maestros_etapa() -> list[Ajuste]:
             clave=config.ENV_PRODUCCION,
             tipo="bool",
             etiqueta="Producción",
-            ayuda="Para todas las marcas: convertir una noticia verificada en pieza "
-            "publicable (redacción del copy). El arte tiene su propio interruptor.",
+            ayuda="Para todas las marcas: redacta el copy que convierte una noticia "
+            "verificada en pieza publicable (el arte tiene interruptor propio).",
             grupo="maestros_produccion",
             defecto=False,
         ),
@@ -120,8 +119,7 @@ def _maestros_etapa() -> list[Ajuste]:
             tipo="bool",
             etiqueta="Arte IA",
             ayuda="Para todas las marcas: genera imagen por IA para los temas con copy y sin "
-            "imagen. Es la única etapa con coste externo (proveedor de imagen), por eso "
-            "conserva interruptor propio.",
+            "imagen.",
             grupo="maestros_produccion",
             defecto=False,
         ),
@@ -191,9 +189,8 @@ def _plan_por_marca() -> list[Ajuste]:
             clave=config.clave_por_marca(config.ENV_PLAN_DIA, mid),
             tipo="texto",
             etiqueta=f"{nombre} · plan diario",
-            ayuda="Cupos por categoría, formato «categoria:n» separados por comas (categorías "
-            "= las de sus fuentes RSS, más «breaking» para última hora corroborada y "
-            "«evergreen» que llena solo su automatismo diario). Vacío = sin plan.",
+            ayuda="Cupos por categoría, formato «categoria:n» separados por comas; "
+            "vacío = sin plan.",
             grupo="noticias_produccion_marca",
             defecto="",
         )
@@ -247,7 +244,7 @@ def _construir_catalogo() -> list[Ajuste]:
         Ajuste(
             clave=config.ENV_MAQUINA,
             tipo="bool",
-            etiqueta="Máquina de contenido: encendida/apagada",
+            etiqueta="Encendida/apagada",
             ayuda="Interruptor general de toda la automatización.",
             grupo="maquina_global",
             defecto=False,
@@ -294,9 +291,8 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_NOTICIAS_GC,
             tipo="bool",
             etiqueta="Limpieza del pool de noticias",
-            ayuda="Purga periódicamente el RUIDO del pool: historias no llevadas al tablero, de "
-            "una sola fuente, con score bajo y sin actividad reciente (+ items huérfanos viejos). "
-            "Conserva lo usado, corroborado, de score alto o reciente. No borra por edad sola.",
+            ayuda="Purga periódicamente del pool las historias no llevadas al tablero, de "
+            "una sola fuente, con score bajo y sin actividad reciente (más items huérfanos viejos).",
             grupo="automatismos_generales",
             defecto=False,
         ),
@@ -337,8 +333,7 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_PUBLICAR_REAL,
             tipo="bool",
             etiqueta="Publicación real",
-            ayuda="¡Cuidado! Si se activa, el sistema envía las piezas programadas al scheduler "
-            "real de Metricool. Sin esto opera en dry-run.",
+            ayuda="Envía las piezas programadas al scheduler real de Metricool; apagado = dry-run.",
             grupo="publicacion",
             defecto=False,
             peligroso=True,
@@ -351,8 +346,7 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_PIPELINE_MAX,
             tipo="int",
             etiqueta="Historias admitidas por marca",
-            ayuda="Máximo de historias que la Selección admite de golpe por marca (acotado además "
-            "por el cupo en vuelo: nunca entra más de lo que cabe).",
+            ayuda="Máximo de historias que la Selección admite de golpe por marca.",
             grupo="pipeline_topes",
             defecto=config.PIPELINE_MAX_DEF,
             minimo=1,
@@ -361,9 +355,8 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_PIPELINE_EN_VUELO_MAX,
             tipo="int",
             etiqueta="Piezas en vuelo por marca",
-            ayuda="Tope de piezas sin terminar (Validación pendiente o sin copy) por marca. Es EL "
-            "regulador: no se admite más hasta que algo sale por el otro lado (in=out). Una pieza "
-            "que falla repetidamente sale del cupo marcada como problema.",
+            ayuda="Tope de piezas sin terminar (Validación pendiente o sin copy) por marca; "
+            "no se admite más hasta que algo termina.",
             grupo="pipeline_topes",
             defecto=config.PIPELINE_EN_VUELO_MAX_DEF,
             minimo=1,
@@ -372,8 +365,7 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_AUTOGEN_ARTE_MAX,
             tipo="int",
             etiqueta="Arte: temas ilustrados por ciclo",
-            ayuda="Máximo de temas a ilustrar en cada ciclo de la etapa de Arte (cada uno llama "
-            "al proveedor de imagen; acota el gasto del proveedor).",
+            ayuda="Máximo de temas a ilustrar en cada ciclo de la etapa de Arte.",
             grupo="pipeline_topes",
             defecto=config.AUTOGEN_ARTE_MAX_DEF,
             minimo=1,
@@ -385,9 +377,8 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_GENERACION_PAUSADA,
             tipo="bool",
             etiqueta="Generación con IA: pausada",
-            ayuda="Freno de mano: no se encola nada nuevo y el worker deja de ejecutar jobs "
-            "(lo encolado espera; lo que corre termina). Para emergencias de consumo o "
-            "comportamiento inesperado.",
+            ayuda="No se encola nada nuevo y el worker deja de ejecutar jobs "
+            "(lo encolado espera; lo que corre termina).",
             grupo="maquina_global",
             defecto=False,
         ),
@@ -395,9 +386,8 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_PRESUPUESTO_TOKENS_DIA,
             tipo="int",
             etiqueta="Presupuesto diario de tokens",
-            ayuda="Tokens (entrada+salida) de generación por día UTC; 0 = sin límite. Al agotarse se corta el "
-            "trabajo automático (lo manual sigue hasta el margen). La suscripción es compartida "
-            "con el equipo: este tope protege su cupo.",
+            ayuda="Tokens (entrada+salida) de generación por día UTC; al agotarse se corta el "
+            "trabajo automático (lo manual sigue hasta el margen); 0 = sin límite.",
             grupo="pipeline_topes",
             defecto=config.PRESUPUESTO_TOKENS_DIA_DEF,
             minimo=0,
@@ -417,9 +407,8 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_PROMPT_MAX_CHARS,
             tipo="int",
             etiqueta="Contexto máximo por generación (caracteres)",
-            ayuda="Tope duro del prompt que entra a una generación (~4 caracteres = 1 token; 0 = sin tope). "
-            "Un contexto patológico (feeds sin criba, documentos enormes) se rechaza antes "
-            "de gastar tokens de la suscripción compartida.",
+            ayuda="Tope duro en caracteres del prompt que entra a una generación "
+            "(~4 caracteres = 1 token; 0 = sin tope).",
             grupo="pipeline_topes",
             defecto=config.PROMPT_MAX_CHARS_DEF,
             minimo=0,
@@ -439,7 +428,7 @@ def _construir_catalogo() -> list[Ajuste]:
             tipo="float",
             etiqueta="Alertas: umbral de engagement (%)",
             ayuda="Engagement (%) por debajo del cual una pieza publicada dispara una alerta de bajo "
-            "rendimiento. Debe ser > 0 (un umbral nulo desactivaría la señal; usa el toggle maestro para eso).",
+            "rendimiento.",
             grupo="tuning",
             defecto=config.ALERTAS_UMBRAL_ENGAGEMENT_DEF,
             minimo=0.1,
@@ -466,8 +455,8 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_MEDIA_GC_ANTIGUEDAD_HORAS,
             tipo="int",
             etiqueta="Limpieza media: antigüedad mínima (horas)",
-            ayuda="Un objeto de media más nuevo que esto nunca se borra, aunque parezca "
-            "huérfano (protege las variantes del Estudio que aún se revisan).",
+            ayuda="Un objeto de media más nuevo que esto (horas) nunca se borra, aunque parezca "
+            "huérfano.",
             grupo="tuning",
             defecto=config.MEDIA_GC_ANTIGUEDAD_HORAS_DEF,
             minimo=1,
@@ -485,8 +474,8 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_NOTICIAS_GC_SCORE_UMBRAL,
             tipo="float",
             etiqueta="Limpieza noticias: umbral de score",
-            ayuda="Una historia de UNA sola fuente con score por debajo de esto (y sin actividad "
-            "reciente) se considera ruido y se purga. 0 = no purgar por score. [0-1].",
+            ayuda="Una historia de una sola fuente con score por debajo de esto y sin actividad "
+            "reciente se purga; 0 = no purgar por score (de 0 a 1).",
             grupo="tuning",
             defecto=config.NOTICIAS_GC_SCORE_UMBRAL_DEF,
             minimo=0,
@@ -496,8 +485,8 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_NOTICIAS_GC_INACTIVIDAD_HORAS,
             tipo="int",
             etiqueta="Limpieza noticias: inactividad mínima (horas)",
-            ayuda="Una historia más nueva que esto nunca se purga, aunque sea de baja relevancia "
-            "(protege lo recién visto que aún podría agrupar más fuentes).",
+            ayuda="Una historia más nueva que esto (horas) nunca se purga, aunque sea de baja "
+            "relevancia.",
             grupo="tuning",
             defecto=config.NOTICIAS_GC_INACTIVIDAD_HORAS_DEF,
             minimo=1,
@@ -506,9 +495,8 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_NOTICIAS_TTL_H,
             tipo="int",
             etiqueta="Noticias: caducidad del pool (horas)",
-            ayuda="Una historia nueva sin actividad en estas horas CADUCA sola (pasa a "
-            "descartada: sale del panel y de la producción automática; lo usado nunca caduca). "
-            "El feed es perecedero: lo viejo no debe competir con lo de hoy. 0 = sin caducidad.",
+            ayuda="Una historia sin actividad en estas horas caduca sola (pasa a descartada; "
+            "lo usado nunca caduca); 0 = sin caducidad.",
             grupo="tuning",
             defecto=config.NOTICIAS_TTL_H_DEF,
             minimo=0,
@@ -517,8 +505,8 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_NOTICIAS_RETENCION_H,
             tipo="int",
             etiqueta="Noticias: retención de lo caducado (horas)",
-            ayuda="Lo caducado sin usar se BORRA definitivamente tras estas horas (techo del "
-            "archivo: el pool no crece sin límite). 0 = no borrar nunca (solo caducar).",
+            ayuda="Lo caducado sin usar se borra definitivamente tras estas horas; "
+            "0 = no borrar nunca (solo caducar).",
             grupo="tuning",
             defecto=config.NOTICIAS_RETENCION_H_DEF,
             minimo=0,
@@ -528,7 +516,7 @@ def _construir_catalogo() -> list[Ajuste]:
             tipo="int",
             etiqueta="Refresco del perfil editorial (horas)",
             ayuda="Cada cuántas horas la IA vuelve a leer la línea editorial de cada marca para "
-            "afinar el encaje de las noticias. Si editas la línea, se refresca solo antes.",
+            "afinar el encaje de las noticias.",
             grupo="noticias_tecnico",
             defecto=config.PERFIL_EDITORIAL_TTL_HORAS_DEF,
             minimo=1,
@@ -537,8 +525,8 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_FUSION_SEMANTICA_MAX,
             tipo="int",
             etiqueta="Unión de duplicados: historias por ronda",
-            ayuda="Tope de historias por marca que se mandan a la IA en cada ronda para unir las "
-            "que cuentan el mismo suceso. Más alto = más limpieza por ronda, más coste de IA.",
+            ayuda="Tope de historias por marca que se mandan a la IA en cada ronda para unir "
+            "duplicados; más alto = más limpieza por ronda y más coste de IA.",
             grupo="noticias_tecnico",
             defecto=config.FUSION_SEMANTICA_MAX_DEF,
             minimo=2,
@@ -551,9 +539,8 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_PROMOVER_MIN_SCORE,
             tipo="float",
             etiqueta="Relevancia mínima para producir en automático",
-            ayuda="Una historia solo dispara la producción automática (copy con IA, que gasta "
-            "tokens) si su relevancia llega a este valor. Las que no llegan se quedan en el pool, "
-            "visibles y usables a mano. 0 = sin listón. De 0 a 1.",
+            ayuda="Una historia solo dispara la producción automática si su relevancia llega a "
+            "este valor; 0 = sin listón (de 0 a 1).",
             grupo="noticias_produccion",
             defecto=_LISTON_MIN_SCORE_DEF,
             minimo=0,
@@ -563,9 +550,8 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_PROMOVER_MIN_MARCA,
             tipo="float",
             etiqueta="Encaje mínimo con la marca",
-            ayuda="Segundo listón: cuánto debe encajar la historia con los temas de la marca "
-            "(0.2 ≈ un término de la marca en el título). No aplica a lo que cura el equipo ni a "
-            "la última hora confirmada por varios medios. 0 = sin listón. De 0 a 1.",
+            ayuda="Cuánto debe encajar la historia con los temas de la marca para producirse en "
+            "automático (0.2 ≈ un término de la marca en el título); 0 = sin listón (de 0 a 1).",
             grupo="noticias_produccion",
             defecto=_LISTON_MIN_MARCA_DEF,
             minimo=0,
@@ -579,9 +565,7 @@ def _construir_catalogo() -> list[Ajuste]:
             tipo="int",
             etiqueta="Minutos de maduración antes de producir",
             ayuda="Una historia espera estos minutos en el pool antes de poder producirse en "
-            "automático: da tiempo a que otras fuentes la confirmen y a comparar historias "
-            "maduras entre sí. La última hora confirmada por varios medios y lo curado por el "
-            "equipo no esperan. 0 = sin espera.",
+            "automático; 0 = sin espera.",
             grupo="noticias_produccion",
             defecto=config.PROMOVER_MADURACION_MIN_DEF,
             minimo=0,
@@ -591,8 +575,7 @@ def _construir_catalogo() -> list[Ajuste]:
             tipo="int",
             etiqueta="Cupo diario sin plan",
             ayuda="Techo de temas auto-producidos por marca en las últimas 24 horas cuando la "
-            "marca NO tiene plan diario. Con plan, mandan los cupos por categoría del plan. "
-            "0 = sin cupo.",
+            "marca no tiene plan diario; 0 = sin cupo.",
             grupo="noticias_produccion",
             defecto=config.CUPO_DIA_DEF,
             minimo=0,
@@ -602,9 +585,7 @@ def _construir_catalogo() -> list[Ajuste]:
             tipo="texto",
             etiqueta="Plan diario por defecto",
             ayuda="Cupos por categoría para las marcas sin plan propio, formato «categoria:n» "
-            "separados por comas (p. ej. «mx:4,internacional:4,breaking:2»). La admisión llena "
-            "cada cupo con lo MEJOR de su categoría; «breaking» reserva huecos a la última hora "
-            "corroborada. Vacío = sin plan (manda el cupo diario).",
+            "separados por comas (p. ej. «mx:4,internacional:4,breaking:2»); vacío = sin plan.",
             grupo="noticias_produccion",
             defecto="",
         ),
@@ -615,8 +596,7 @@ def _construir_catalogo() -> list[Ajuste]:
             tipo="bool",
             etiqueta="Dar prioridad a lo que mejor funciona",
             ayuda="Sube en el pool las historias de las líneas editoriales con mejor engagement "
-            "real en redes (medido en Metricool). Los tres ajustes de abajo solo cuentan con esto "
-            "encendido.",
+            "real en redes.",
             grupo="noticias_rendimiento",
             defecto=False,
         ),
@@ -624,8 +604,8 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_SCORE_PESO_RENDIMIENTO,
             tipo="float",
             etiqueta="Fuerza del empujón",
-            ayuda="Cuánto sube una historia por caer en una de las mejores líneas. Si lo dejas "
-            "vacío con la opción encendida, se usa 0.10 automáticamente. De 0 a 1.",
+            ayuda="Cuánto sube una historia por caer en una de las mejores líneas "
+            "(vacío = 0.10; de 0 a 1).",
             grupo="noticias_rendimiento",
             defecto=config.SCORE_PESO_RENDIMIENTO_DEF,
             minimo=0,
@@ -635,8 +615,7 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_RENDIMIENTO_TOP_N,
             tipo="int",
             etiqueta="Cuántas líneas premiar",
-            ayuda="Solo las mejores N líneas editoriales reciben el empujón, para que el pool no "
-            "se vuelva monotemático.",
+            ayuda="Solo las mejores N líneas editoriales reciben el empujón.",
             grupo="noticias_rendimiento",
             defecto=config.RENDIMIENTO_TOP_N_DEF,
             minimo=1,
@@ -646,7 +625,7 @@ def _construir_catalogo() -> list[Ajuste]:
             tipo="int",
             etiqueta="Piezas medidas mínimas por línea",
             ayuda="Una línea solo cuenta como de las mejores si tiene al menos estas piezas con "
-            "métricas. Evita premiar una línea que funcionó una sola vez.",
+            "métricas.",
             grupo="noticias_rendimiento",
             defecto=config.RENDIMIENTO_MIN_PIEZAS_DEF,
             minimo=1,
@@ -657,8 +636,7 @@ def _construir_catalogo() -> list[Ajuste]:
             tipo="bool",
             etiqueta="Solo noticias de los temas de la marca",
             ayuda="Una fuente asignada a una marca solo guarda noticias que mencionan algún tema "
-            "de esa marca; el resto ni entra al pool. Las fuentes propias del equipo y las marcas "
-            "sin temario entran siempre. Lo filtrado se cuenta en la salud de Fuentes.",
+            "de esa marca; el resto ni entra al pool.",
             grupo="noticias_entrada",
             defecto=True,
         ),
@@ -693,8 +671,8 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_INGESTA_MAX_ERRORES,
             tipo="int",
             etiqueta="Apagar una fuente tras estos fallos seguidos",
-            ayuda="Si una fuente falla este número de veces seguidas, se apaga sola para no "
-            "insistir en vano. Se reactiva a mano desde Fuentes; un éxito pone el contador a cero.",
+            ayuda="Si una fuente falla este número de veces seguidas, se apaga sola "
+            "(se reactiva a mano desde Fuentes).",
             grupo="noticias_entrada",
             defecto=config.INGESTA_MAX_ERRORES_DEF,
             minimo=1,
@@ -705,7 +683,7 @@ def _construir_catalogo() -> list[Ajuste]:
             tipo="int",
             etiqueta="Memoria de agrupación (horas)",
             ayuda="Una noticia recién llegada solo se compara con historias con actividad en "
-            "estas últimas horas para decidir si es la misma. Acota el trabajo de cada ronda.",
+            "estas últimas horas para decidir si es la misma.",
             grupo="noticias_tecnico",
             defecto=config.CLUSTER_VENTANA_H_DEF,
             minimo=1,
@@ -715,8 +693,8 @@ def _construir_catalogo() -> list[Ajuste]:
             tipo="float",
             etiqueta="Peso de medios necesario",
             ayuda="Una historia se marca como última hora cuando los medios que la cuentan casi "
-            "a la vez SUMAN este peso (una fuente potente vale 2, una normal 1, una de baja "
-            "confiabilidad 0.5). Con 3: dos potentes, o una potente y una normal, o tres normales.",
+            "a la vez suman este peso (una fuente potente vale 2, una normal 1, una de baja "
+            "confiabilidad 0.5).",
             grupo="noticias_breaking",
             defecto=config.CLUSTER_BREAKING_PESO_DEF,
             minimo=1,
@@ -737,7 +715,7 @@ def _construir_catalogo() -> list[Ajuste]:
             tipo="float",
             etiqueta="La cuentan varios medios",
             ayuda="Cuánto sube una historia cuando varios medios distintos se hacen eco de ella "
-            "(buena señal de que importa). De 0 a 1.",
+            "(de 0 a 1).",
             grupo="noticias_orden",
             defecto=config.SCORE_PESO_CORROBORACION_DEF,
             minimo=0,
@@ -748,7 +726,7 @@ def _construir_catalogo() -> list[Ajuste]:
             tipo="float",
             etiqueta="Encaja con la marca",
             ayuda="Cuánto sube una historia que casa con la línea editorial de la marca "
-            "(p. ej. nacional MX para UnoTV, deporte para Claro Sports). De 0 a 1.",
+            "(de 0 a 1).",
             grupo="noticias_orden",
             defecto=config.SCORE_PESO_MARCA_DEF,
             minimo=0,
@@ -758,8 +736,8 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_SCORE_PESO_FRESCURA,
             tipo="float",
             etiqueta="Es reciente",
-            ayuda="Cuánto sube una historia por ser nueva. Más alto = el pool favorece lo último "
-            "que llega. De 0 a 1.",
+            ayuda="Cuánto sube una historia por ser nueva; más alto = el pool favorece lo último "
+            "que llega (de 0 a 1).",
             grupo="noticias_orden",
             defecto=config.SCORE_PESO_FRESCURA_DEF,
             minimo=0,
@@ -769,8 +747,8 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_SCORE_PESO_VELOCIDAD,
             tipo="float",
             etiqueta="Se corrobora rápido",
-            ayuda="Cuánto sube una historia cuando varios medios se suman en poco tiempo (la "
-            "señal de última hora). Decae sola al envejecer. De 0 a 1.",
+            ayuda="Cuánto sube una historia cuando varios medios se suman en poco tiempo "
+            "(de 0 a 1).",
             grupo="noticias_orden",
             defecto=config.SCORE_PESO_VELOCIDAD_DEF,
             minimo=0,
@@ -780,8 +758,7 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_SCORE_PESO_VIRALIDAD,
             tipo="float",
             etiqueta="Se está moviendo en redes",
-            ayuda="Cuánto sube una historia que llega con señal de viralidad (se comparte mucho). "
-            "De 0 a 1.",
+            ayuda="Cuánto sube una historia que llega con señal de viralidad (de 0 a 1).",
             grupo="noticias_orden",
             defecto=config.SCORE_PESO_VIRALIDAD_DEF,
             minimo=0,
@@ -791,7 +768,7 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_SCORE_BONUS_BREAKING,
             tipo="float",
             etiqueta="Empujón en el pool",
-            ayuda="Cuánto sube de golpe una historia al marcarse como última hora. De 0 a 1.",
+            ayuda="Cuánto sube de golpe una historia al marcarse como última hora (de 0 a 1).",
             grupo="noticias_breaking",
             defecto=config.SCORE_BONUS_BREAKING_DEF,
             minimo=0,
@@ -802,8 +779,8 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_TRAD_MIN_SCORE,
             tipo="float",
             etiqueta="Traducir solo lo relevante",
-            ayuda="Las noticias en otros idiomas se traducen solas al español. Con 0 se traducen "
-            "todas las recientes; sube el valor para traducir solo las más relevantes.",
+            ayuda="Relevancia mínima para traducir al español una noticia en otro idioma; "
+            "0 = se traducen todas las recientes.",
             grupo="noticias_entrada",
             defecto=config.TRAD_MIN_SCORE_DEF,
             minimo=0,
@@ -812,8 +789,7 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_TRAD_LOTE,
             tipo="int",
             etiqueta="Traducciones por ronda",
-            ayuda="Máximo de historias extranjeras que se traducen en cada ronda; lo pendiente "
-            "se hace en las rondas siguientes.",
+            ayuda="Máximo de historias extranjeras que se traducen en cada ronda.",
             grupo="noticias_tecnico",
             defecto=config.TRAD_LOTE_DEF,
             minimo=1,

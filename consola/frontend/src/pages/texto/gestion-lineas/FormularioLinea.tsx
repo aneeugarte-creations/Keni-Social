@@ -117,7 +117,7 @@ export function FormularioLinea({
             />
             <Label htmlFor={`linea-evergreen-${clase}`} className="flex items-center gap-1 cursor-pointer">
               <Leaf className="h-3.5 w-3.5 text-evergreen-600" />
-              Everevergreen
+              Evergreen
             </Label>
           </div>
         </div>

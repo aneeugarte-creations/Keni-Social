@@ -84,7 +84,7 @@ export function DialogoCrearUsuario({
         <DialogHeader>
           <DialogTitle>Nueva persona</DialogTitle>
           <DialogDescription>
-            Crea una cuenta de acceso. Los detalles (cargo, marcas, superior) se asignan tras crearla en el organigrama.
+            Crea una cuenta de acceso. Configura detalles en el organigrama.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -103,11 +103,11 @@ export function DialogoCrearUsuario({
               onChange={(e) => setNombre(e.target.value)}
               autoComplete="off"
               maxLength={120}
-              placeholder="Opcional, p. ej. Diana Ramos"
+              placeholder="Opcional: Diana Ramos"
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="nuevo-usuario">Usuario (login)</Label>
+            <Label htmlFor="nuevo-usuario">Usuario</Label>
             <Input
               id="nuevo-usuario"
               value={usuario}

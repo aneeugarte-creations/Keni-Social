@@ -179,7 +179,7 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
     return (
       <BloqueError
         titulo="No hay periodos disponibles"
-        mensaje="El backend no devolvió periodos de consulta para métricas."
+        mensaje="Sin periodos disponibles en el backend."
         onReintentar={() => window.location.reload()}
       />
     );
@@ -198,7 +198,6 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
       <SelectorTiempo rangos={rangos} valor={rango} onCambio={cambiarRango} />
       <MenuAcciones
         ajustesTitulo="Ajustes de métricas"
-        ajustesDescripcion="La conexión Metricool por marca que alimenta este dashboard."
         ajustes={<SeccionMetricool />}
       >
         <ItemActualizarMetricas

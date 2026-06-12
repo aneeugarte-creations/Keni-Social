@@ -126,9 +126,10 @@ describe("Crosstab (rendimiento por formato)", () => {
     );
     await screen.findAllByText("UnoTV");
 
-    // La descripción de la sección nombra el agregado y su baseline exactos.
-    expect(screen.getByText(/promedio por pieza/)).toBeInTheDocument();
-    expect(screen.getByText(/mediana de vistas de su grupo marca×red/)).toBeInTheDocument();
+    // La descripción de la sección explica cómo se calcula el rendimiento (fórmula) y el código de colores.
+    expect(screen.getByText(/promedio por pieza de.*mediana de vistas de su grupo marca×red/)).toBeInTheDocument();
+    expect(screen.getByText(/Verde.*≥1.05×/)).toBeInTheDocument();
+    expect(screen.getByText(/rojo.*≤0.95×/)).toBeInTheDocument();
 
     // El title de la celda de rendimiento lleva la fórmula completa, fallback incluido.
     expect(

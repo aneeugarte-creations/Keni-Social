@@ -152,8 +152,7 @@ export function SeccionDaemons() {
           <p className="text-sm text-muted-foreground">{error}</p>
         ) : ordenados.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Aún no hay latidos registrados (el proceso de daemons no ha arrancado o
-            acaba de desplegarse).
+            No hay latidos registrados aún (proceso sin iniciar o recién desplegado).
           </p>
         ) : (
           <Table>

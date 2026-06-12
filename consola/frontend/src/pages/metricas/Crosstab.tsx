@@ -80,12 +80,9 @@ export function Crosstab({
       icono={Grid3x3}
       descripcion={
         <>
-          Cruce marca × red × formato. Rendimiento = promedio por pieza de (vistas de la
-          pieza ÷ mediana de vistas de su grupo marca×red); si la mediana del grupo es 0
-          se usa la media.{" "}
-          <span className="text-emerald-700 dark:text-emerald-300">Verde</span> rinde por
-          encima (≥1.05×), <span className="text-red-700 dark:text-red-300">rojo</span> por
-          debajo (≤0.95×); entre medias se considera neutro.
+          Rendimiento = promedio por pieza de (vistas ÷ mediana de vistas de su grupo marca×red); si la mediana es 0 se usa la media.{" "}
+          <span className="text-emerald-700 dark:text-emerald-300">Verde (≥1.05×)</span>,{" "}
+          <span className="text-red-700 dark:text-red-300">rojo (≤0.95×)</span>; neutro entre medias.
         </>
       }
     >

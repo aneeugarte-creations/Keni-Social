@@ -126,10 +126,10 @@ describe("Kpis", () => {
     expect(rango_a).toBe("rango:2026-05-01_2026-05-10");
     // El contexto es visible (leyenda) y accesible (tooltip de la insignia).
     expect(
-      screen.getByText(/Periodo en curso: las variaciones comparan los días transcurridos/),
+      screen.getByText(/Periodo en curso:/),
     ).toBeInTheDocument();
     expect(
-      screen.getAllByTitle(/Periodo en curso: se comparan los días transcurridos/).length,
+      screen.getAllByTitle(/Periodo en curso:/).length,
     ).toBeGreaterThan(0);
   });
 

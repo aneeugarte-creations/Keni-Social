@@ -21,7 +21,7 @@ import { BloqueError } from "@/components/comunes/BloqueError";
 import { TituloPagina } from "@/components/layout/encabezado";
 import { SeccionApariencia } from "@/pages/configuracion/SeccionApariencia";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -134,10 +134,6 @@ function SeccionCambiarPassword() {
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Cambiar contraseña</CardTitle>
-        <CardDescription>
-          Para cambiarla necesitas tu contraseña actual. Al guardar se cerrarán las sesiones de
-          otros dispositivos.
-        </CardDescription>
       </CardHeader>
       <CardContent className="pt-0">
         <form
@@ -291,17 +287,13 @@ function SeccionMfa({ activo }: { activo: boolean }) {
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Llaves de acceso (passkeys)</CardTitle>
-        <CardDescription>
-          Segundo factor con reconocimiento biométrico o dispositivo
-        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 pt-0">
         {/* Códigos de recuperación: solo tras registrar la PRIMERA llave. */}
         {recovery && (
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground">
-              Guarda estos códigos de recuperación en un lugar seguro. Cada uno sirve una sola vez
-              y <span className="font-medium">no volverán a mostrarse</span>.
+              Guarda estos códigos en lugar seguro. <span className="font-medium">No volverán a mostrarse</span>.
             </p>
             <ul className="grid grid-cols-2 gap-1 rounded-lg border border-border p-3 font-mono text-sm">
               {recovery.map((c) => (
@@ -347,10 +339,10 @@ function SeccionMfa({ activo }: { activo: boolean }) {
           noValidate
         >
           <div className="space-y-1.5">
-            <Label htmlFor="mfa-nombre-llave">Nombre de la llave (opcional)</Label>
+            <Label htmlFor="mfa-nombre-llave">Nombre de la llave</Label>
             <Input
               id="mfa-nombre-llave"
-              placeholder="iPhone de Ana, Laptop…"
+              placeholder="Opcional: iPhone, laptop…"
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
               disabled={registrar.isPending}
@@ -377,7 +369,7 @@ function SeccionMfa({ activo }: { activo: boolean }) {
             noValidate
           >
             <div className="space-y-1.5">
-              <Label htmlFor="mfa-disable-pass">Contraseña actual (para desactivar todo)</Label>
+              <Label htmlFor="mfa-disable-pass">Contraseña actual</Label>
               <Input
                 id="mfa-disable-pass"
                 type="password"

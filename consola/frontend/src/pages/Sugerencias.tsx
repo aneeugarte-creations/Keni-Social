@@ -148,7 +148,7 @@ function NuevaSugerencia({ categorias }: { categorias: string[] }) {
             id="sugerencia-detalle"
             value={detalle}
             onChange={(e) => setDetalle(e.target.value)}
-            placeholder="¿Qué problema resuelve? ¿Cómo lo imaginas? Admite Markdown."
+            placeholder="Describe el problema, tu idea…"
             rows={5}
             maxLength={8000}
           />
@@ -177,7 +177,7 @@ function NuevaSugerencia({ categorias }: { categorias: string[] }) {
               id="sugerencia-autor"
               value={autor}
               onChange={(e) => setAutor(e.target.value)}
-              placeholder="Quién sugiere"
+              placeholder="Opcional: tu nombre"
               maxLength={120}
             />
           </div>

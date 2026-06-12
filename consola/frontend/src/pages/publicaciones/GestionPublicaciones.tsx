@@ -202,7 +202,7 @@ function Cuerpo({
           texto={
             filtrando
               ? "Prueba a cambiar o limpiar los filtros."
-              : "Genera un copy y guárdalo como publicación, o créalo desde el contenido."
+              : "Genera copy desde Contenido o guárdalo como publicación."
           }
         />
       ) : (

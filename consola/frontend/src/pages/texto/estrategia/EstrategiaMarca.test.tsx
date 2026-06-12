@@ -2,7 +2,7 @@
  * "Estrategia de marca" (componente autónomo del rediseño de la Biblioteca):
  *   - Cabecera de salud: anillo X/4 + recomendación (o estado positivo si está completa).
  *   - 5 pilares como tarjetas en orden fijo, con estados vacío / sin publicar / publicada
- *     y el badge "global · compartida entre marcas".
+ *     y el badge "global".
  *   - Franja "Cómo se ensambla para la IA": chips numerados clicables (onAbrirDoc).
  *   - CTA "Definir ahora" en pilar sin documento: POST /api/texto con la convención
  *     editorial (carpeta rrss/<marca>, clase, marcas) y abre el doc creado.
@@ -257,7 +257,7 @@ describe("EstrategiaMarca", () => {
     expect(tropi.getByText("vacía")).toBeInTheDocument();
     expect(tropi.getByRole("button", { name: /Definir ahora/ })).toBeInTheDocument();
 
-    expect(screen.getAllByText("global · compartida entre marcas")).toHaveLength(2);
+    expect(screen.getAllByText("global")).toHaveLength(2);
 
     // Material de apoyo (extras): el patrón aparece como tarjeta compacta.
     const apoyo = within(screen.getByRole("region", { name: "Material de apoyo" }));

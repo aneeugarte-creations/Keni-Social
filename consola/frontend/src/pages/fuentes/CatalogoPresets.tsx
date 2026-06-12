@@ -115,15 +115,10 @@ export function CatalogoPresets({ marcas }: { marcas: MarcaDisponible[] }) {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="max-w-2xl space-y-1">
-          <p className="flex items-center gap-2 text-sm font-medium">
-            <BookOpen className="h-4 w-4 text-muted-foreground" />
-            Feeds curados listos para activar
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Activa feeds con un clic.
-          </p>
-        </div>
+        <p className="flex items-center gap-2 text-sm font-medium">
+          <BookOpen className="h-4 w-4 text-muted-foreground" />
+          Feeds curados listos para activar
+        </p>
         <div className="flex shrink-0 items-center gap-2">
           <Select value={categoriaFiltro} onValueChange={setCategoriaFiltro}>
             <SelectTrigger className="w-44" aria-label="Filtrar por categoría">

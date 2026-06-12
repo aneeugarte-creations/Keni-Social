@@ -46,8 +46,7 @@ export function AlertaIngesta({
             La sincronización con Metricool parece estancada
           </p>
           <p className="text-xs text-amber-800/90 dark:text-amber-200/80">
-            Estos canales se quedaron atrás del resto del feed de su marca. Suele ser un fallo
-            de sincronización de Metricool con la red, no que se haya dejado de publicar.
+            Canales con retraso. Suele ser un problema de Metricool, no del equipo.
           </p>
           <ul className="mt-1 space-y-1 text-xs text-amber-900 dark:text-amber-200 tabular-nums">
             {alertas.map((a) => (

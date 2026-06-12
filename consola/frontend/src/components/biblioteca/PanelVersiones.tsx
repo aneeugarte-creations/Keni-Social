@@ -136,8 +136,8 @@ export function PanelVersiones({
         <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-3 py-1.5 text-xs font-medium text-muted-foreground">
           <History className="h-3.5 w-3.5" /> Versiones
           <span className="ml-auto flex gap-3">
-            <span title="Versión vieja de la comparación">Antes</span>
-            <span title="Versión nueva de la comparación">Después</span>
+            <span>Antes</span>
+            <span>Después</span>
           </span>
         </div>
         <ol className="max-h-72 divide-y divide-border overflow-y-auto">

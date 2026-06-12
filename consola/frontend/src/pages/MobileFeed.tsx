@@ -39,7 +39,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -124,9 +123,6 @@ function DialogoCrear({
       <DialogContent className="max-h-dvh h-dvh max-w-full overflow-y-auto rounded-none sm:h-auto sm:max-h-[90vh] sm:max-w-md sm:rounded-lg">
         <DialogHeader>
           <DialogTitle>Nueva pieza</DialogTitle>
-          <DialogDescription>
-            Idea rápida — afina el copy luego en el editor
-          </DialogDescription>
         </DialogHeader>
         {/* <form>: el Enter/«ir» del teclado móvil envía el alta (el flujo que más se repite). */}
         <form

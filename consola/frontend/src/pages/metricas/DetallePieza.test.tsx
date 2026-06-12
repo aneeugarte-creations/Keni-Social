@@ -110,7 +110,7 @@ describe("DetallePieza", () => {
     );
 
     expect(
-      await screen.findByText(/sin histórico todavía \(esta pieza aún no se está siguiendo\)/i),
+      await screen.findByText(/sin histórico todavía/i),
     ).toBeInTheDocument();
     expect(screen.queryByText("% en las primeras 24 h")).not.toBeInTheDocument();
   });

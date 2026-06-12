@@ -204,7 +204,7 @@ export function PanelPlan({
                 />
                 {linea === "breaking" ? (
                   <span className="text-xs text-muted-foreground">
-                    Sin horario: se programa al instante al ocurrir.
+                    Sin horario: sale al instante.
                   </span>
                 ) : (
                   <Input

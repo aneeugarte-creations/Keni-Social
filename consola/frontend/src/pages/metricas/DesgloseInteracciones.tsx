@@ -128,7 +128,6 @@ export function DesgloseInteracciones({
     <SeccionColapsable
       titulo="Desglose de interacciones"
       icono={Activity}
-      descripcion="Componentes: me gusta, comentarios, compartidos, guardados y reproducciones."
       acciones={acciones}
     >
       {isPending ? (
@@ -139,8 +138,7 @@ export function DesgloseInteracciones({
         </p>
       ) : data.celdas.length === 0 ? (
         <p className="py-10 text-center text-sm text-muted-foreground">
-          Aún no hay desglose de interacciones para este periodo (la fuente de métricas no
-          lo entrega).
+          Aún no hay desglose de interacciones para este periodo.
         </p>
       ) : (
         <div className="space-y-4">

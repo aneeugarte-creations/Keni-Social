@@ -148,7 +148,7 @@ export function Comentarios({ contenidoId }: { contenidoId: string }) {
   const comentarios = query.data?.comentarios ?? [];
 
   if (!contenidoId) {
-    return <EstadoVacio titulo="Sin tema" texto="Asigna un tema para comentar" />;
+    return <EstadoVacio titulo="Sin tema" texto="Asigna un tema" />;
   }
 
   return (

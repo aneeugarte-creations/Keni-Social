@@ -44,7 +44,7 @@ export function PistaBase({
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Clock className="h-3.5 w-3.5" />
           <span>
-            Clip base: <span className="tabular-nums">{durClipMs > 0 ? formatearDuracionMs(durClipMs) : "—"}</span>
+            Clip: <span className="tabular-nums">{durClipMs > 0 ? formatearDuracionMs(durClipMs) : "—"}</span>
             {" · "}
             Composición: <span className="tabular-nums">{doc.duracion_ms > 0 ? formatearDuracionMs(doc.duracion_ms) : "—"}</span>
           </span>

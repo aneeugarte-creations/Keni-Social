@@ -104,9 +104,7 @@ function FormularioCadencia({
     <div className="space-y-3">
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label htmlFor="cadencia-red">
-            Red <span className="font-normal text-muted-foreground">(opcional)</span>
-          </Label>
+          <Label htmlFor="cadencia-red">Red</Label>
           <SelectorRed
             id="cadencia-red"
             redes={redes}

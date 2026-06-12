@@ -448,9 +448,7 @@ export function PanoramaPiezas({
         <div
           className="overflow-hidden rounded-xl border border-border bg-card p-6"
           role="img"
-          aria-label={`Panorama de ${plural(total, "pieza")} del periodo; redes: ${redesPresentes
-            .map(nombreRed)
-            .join(", ")}; cada punto es una pieza, altura = vistas (escala logarítmica), tamaño = engagement`}
+          aria-label={`Panorama de ${plural(total, "pieza")} del periodo; cada punto es una pieza, altura = vistas, tamaño = engagement`}
         >
           {/* Leyenda: redes presentes (color + forma) y la clave de lectura de la escala. */}
           <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
@@ -472,7 +470,7 @@ export function PanoramaPiezas({
               <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground" aria-hidden="true" />
               <span className="h-3 w-3 rounded-full bg-muted-foreground" aria-hidden="true" />
               <span className="text-xs text-muted-foreground">
-                Eje vertical: vistas · tamaño del punto = engagement
+                Altura = vistas · tamaño = engagement
               </span>
             </span>
             {sinVistas > 0 && (

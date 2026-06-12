@@ -42,7 +42,7 @@ const ETIQUETA_ESTADO: Record<EstadoSubtitulos, string> = {
   pendiente: "Pendiente",
   transcrito: "Transcrito",
   editado: "Editado",
-  listo: "Listo para quemar",
+  listo: "Listo",
 };
 
 export function EditorSubtitulos({
@@ -163,8 +163,7 @@ export function EditorSubtitulos({
   if (!composicionId) {
     return (
       <p className="rounded-md border border-dashed border-border bg-muted/20 p-3 text-xs text-muted-foreground">
-        Sube primero un video base: la composición se crea al subirlo y entonces podrás transcribir
-        los subtítulos.
+        Sube un video base para crear la composición y transcribir subtítulos.
       </p>
     );
   }
@@ -211,7 +210,7 @@ export function EditorSubtitulos({
             </p>
           )}
           <p className="text-[11px] text-amber-700 dark:text-amber-400">
-            Corrige ortografía y erratas. Los cambios no se usan hasta marcar como listos.
+            Corrige ortografía. Los cambios se usan al marcar como listos.
           </p>
           <ul className="max-h-72 space-y-2 overflow-auto pr-1">
             {segmentos.map((s) => (
@@ -254,8 +253,7 @@ export function EditorSubtitulos({
       ) : (
         !transcribiendo && (
           <p className="text-xs text-muted-foreground">
-            Aún no hay subtítulos. Pulsa «Transcribir» para generarlos con IA y luego corrígelos a
-            mano.
+            Sin subtítulos aún. Transcribe con IA y corrige a mano.
           </p>
         )
       )}

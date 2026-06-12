@@ -197,9 +197,6 @@ function FormularioFuente({
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">
-            Cadencia de sondeo
-          </p>
         </div>
       </div>
       <div className="space-y-1.5">

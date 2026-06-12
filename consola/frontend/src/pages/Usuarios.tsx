@@ -74,7 +74,7 @@ export default function Usuarios() {
         <EstadoVacio
           icono={Users}
           titulo="No hay personas"
-          texto="Crea la primera cuenta con el botón de arriba."
+          texto="Crea la primera cuenta."
         />
       ) : (
         <OrganigramaArbol

@@ -145,7 +145,7 @@ describe("PanelRender", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     await act(async () => rechazar(new Error("red caída")));
     // Error PERSISTENTE en línea (no solo un toast), con el reintento disponible.
-    expect(await screen.findByRole("alert")).toHaveTextContent(/no se pudo descargar el mp4/i);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no se pudo descargar/i);
     expect(screen.getByRole("button", { name: /descargar mp4/i })).not.toBeDisabled();
   });
 });

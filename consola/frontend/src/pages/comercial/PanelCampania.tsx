@@ -383,7 +383,7 @@ function TablaPiezas({ piezas, ocultarAds }: { piezas: PiezaCampania[]; ocultarA
             <h3 className="text-sm font-medium">Piezas del periodo</h3>
             {crossCount > 0 && (
               <p className="text-xs text-muted-foreground">
-                Incluye {crossCount} por cross-post (mismo contenido en otra red).
+                Incluye {crossCount} cross-posts.
               </p>
             )}
           </div>
@@ -438,7 +438,7 @@ function TablaPiezas({ piezas, ocultarAds }: { piezas: PiezaCampania[]; ocultarA
               <TableRow>
                 <TableCell colSpan={ocultarAds ? 8 : 9} className="py-8 text-center text-muted-foreground">
                   {piezas.length === 0
-                    ? "No hay piezas con estos hashtags en el periodo."
+                    ? "Sin piezas para estos hashtags."
                     : "Ninguna pieza coincide con los filtros."}
                 </TableCell>
               </TableRow>
@@ -465,7 +465,7 @@ function TablaPiezas({ piezas, ocultarAds }: { piezas: PiezaCampania[]; ocultarA
                         <Badge
                           variant="secondary"
                           className="shrink-0 text-[10px]"
-                          title="Incluida por cross-post: mismo contenido en otra red, sin el hashtag propio"
+                          title="Cross-post: mismo contenido en otra red"
                         >
                           cross-post
                         </Badge>
@@ -473,7 +473,7 @@ function TablaPiezas({ piezas, ocultarAds }: { piezas: PiezaCampania[]; ocultarA
                       {!ocultarAds && p.es_inorganico && (
                         <Badge
                           className="shrink-0 border-transparent bg-amber-100 text-[10px] text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"
-                          title="Publicación inorgánica: un boost de Meta Ads de este contenido"
+                          title="Incluida en Meta Ads"
                         >
                           Ads
                         </Badge>

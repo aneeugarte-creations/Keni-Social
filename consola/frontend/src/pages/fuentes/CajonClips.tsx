@@ -102,25 +102,21 @@ export default function CajonClips() {
           <Clapperboard className="h-4 w-4 text-muted-foreground" />
           Clips
         </CardTitle>
-        <p className="text-xs text-muted-foreground">
-          Vídeo o fotos de WhatsApp. Un vídeo se publica como pieza de vídeo; varias fotos, como
-          carrusel (la primera es la portada).
-        </p>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="space-y-1">
           <Label htmlFor="clips-titulo" className="text-xs text-muted-foreground">
-            Título (opcional)
+            Título
           </Label>
           <Input
             id="clips-titulo"
             value={titulo}
             onChange={(e) => setTitulo(e.target.value)}
-            placeholder="Título del clip…"
+            placeholder="Opcional: título del clip…"
           />
         </div>
         <Textarea
-          placeholder="Pega el pie o el contexto del clip (lo que llegó con él por WhatsApp)…"
+          placeholder="Pie o contexto del clip (de WhatsApp)…"
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
           rows={4}
@@ -136,8 +132,7 @@ export default function CajonClips() {
         />
         {videoInvalido && (
           <p className="text-xs text-amber-700 dark:text-amber-300">
-            Un clip de vídeo es una sola pieza de vídeo: deja solo el vídeo, o quítalo y sube las
-            fotos como carrusel (las fotos van en un envío aparte).
+            1 vídeo o varios fotos (no ambos).
           </p>
         )}
         {media.length > 0 && !videoInvalido && (

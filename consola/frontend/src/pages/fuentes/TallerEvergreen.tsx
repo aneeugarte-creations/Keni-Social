@@ -235,11 +235,6 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            La IA propone ideas de contenido evergreen. Añade un
-            contexto opcional para enfocarla (temporada, programa, ángulo…).
-          </p>
-
           <div className="space-y-1.5">
             <Label htmlFor="evergreen-marca">Marca</Label>
             <Select value={marca} onValueChange={setMarca}>
@@ -257,21 +252,19 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="evergreen-contexto">
-              Contexto <span className="font-normal text-muted-foreground">(opcional)</span>
-            </Label>
+            <Label htmlFor="evergreen-contexto">Contexto</Label>
             <Textarea
               id="evergreen-contexto"
               value={contexto}
               onChange={(e) => setContexto(e.target.value)}
-              placeholder="Ej. enfoque en efemérides deportivas y datos curiosos para llenar huecos de parrilla…"
+              placeholder="Opcional: temporada, programa, ángulo…"
               rows={4}
             />
           </div>
 
           <Button onClick={() => proponer.mutate()} disabled={!puedeProponer} className="w-full">
             {proponiendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <MarcaIA />}
-            {proponiendo ? "Proponiendo…" : "Proponer con IA"}
+            {proponiendo ? "Proponiendo…" : "Proponer"}
           </Button>
 
           {generacion && (ejecutando || generacion.estado === "error") && (
@@ -331,10 +324,7 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
 
           <div className="space-y-1.5">
             <Label htmlFor="evergreen-desc-manual">
-              {tipoManual === "interna" ? "Contenido interno" : "Nota"}{" "}
-              <span className="font-normal text-muted-foreground">
-                {tipoManual === "interna" ? "" : "(opcional)"}
-              </span>
+              {tipoManual === "interna" ? "Contenido interno" : "Nota"}
             </Label>
             <Textarea
               id="evergreen-desc-manual"
@@ -342,8 +332,8 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
               onChange={(e) => setDescManual(e.target.value)}
               placeholder={
                 tipoManual === "interna"
-                  ? "Pega aquí el contenido interno (brief, material de programa, transcripción)…"
-                  : "Detalle o ángulo de la idea…"
+                  ? "Opcional: brief, material, transcripción…"
+                  : "Opcional: tema, enfoque…"
               }
               rows={3}
             />

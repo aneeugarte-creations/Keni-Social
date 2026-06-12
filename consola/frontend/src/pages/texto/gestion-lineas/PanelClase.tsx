@@ -92,10 +92,8 @@ export function PanelClase({ clase }: { clase: ClaseLinea }) {
           <EstadoVacioTexto
             texto={
               etiquetas.length === 0
-                ? `Aún no hay ${
-                    clase === "vertical" ? "líneas" : "orígenes"
-                  }. Crea el primero con el botón de arriba.`
-                : "No hay nada para esta marca. Cambia de marca en el selector de arriba o crea una."
+                ? `Crea ${clase === "vertical" ? "la primera línea" : "el primer origen"} con el botón de arriba.`
+                : "Cambia de marca o crea una."
             }
             className="py-4"
           />

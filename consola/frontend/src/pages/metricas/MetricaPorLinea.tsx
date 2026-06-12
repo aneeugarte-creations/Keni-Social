@@ -64,7 +64,6 @@ export function MetricaPorLinea({
   return (
     <SeccionColapsable
       titulo="Rendimiento por línea y origen"
-      descripcion="Rendimiento por línea y origen en el periodo."
       icono={GitBranch}
       contentClassName="space-y-8"
     >

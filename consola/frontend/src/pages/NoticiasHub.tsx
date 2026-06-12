@@ -28,9 +28,9 @@ import { RielInvestigacion } from "./noticias/RielInvestigacion";
 // marca`, pero con cupo + horarios en un formulario, en vez del texto crudo «mx:4,intl:4,…»).
 const AREAS_NOTICIAS = [
   {
-    titulo: "Investigación (interruptor general)",
+    titulo: "Investigación",
     descripcion:
-      "Control maestro: ingesta, fusión, ranking y verificación",
+      "Control maestro de ingesta, fusión y ranking",
     grupos: ["maestros_investigacion"],
     abiertaInicial: true,
   },
@@ -43,7 +43,7 @@ const AREAS_NOTICIAS = [
   },
   {
     titulo: "Entrada al pool",
-    descripcion: "Qué noticias entran (filtro por temas, fuentes caídas) y su traducción.",
+    descripcion: "Qué noticias entran y su traducción",
     grupos: ["noticias_entrada"],
     abiertaInicial: false,
   },
@@ -82,7 +82,6 @@ export default function NoticiasHub() {
         <AccionesPagina>
           <MenuAcciones
             ajustesTitulo="Ajustes del motor de noticias"
-            ajustesDescripcion="Qué entra, cómo se ordena y qué se produce"
             ajustes={AREAS_NOTICIAS.map((area) => (
               <PanelAjustes
                 key={area.titulo}

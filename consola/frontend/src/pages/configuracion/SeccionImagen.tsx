@@ -113,7 +113,7 @@ function SeccionImagenAdmin() {
     <SeccionColapsable
       titulo="Imagen con IA"
       contentClassName="space-y-4"
-      descripcion="Activa la generación de imágenes. Configura tu clave de proveedor."
+      descripcion="Configura tu proveedor de imágenes."
     >
         {isPending ? (
           <div className="space-y-3">
@@ -267,10 +267,9 @@ function SeccionImagenAdmin() {
       <Dialog open={confirmarQuitar} onOpenChange={setConfirmarQuitar}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Quitar la clave de imagen IA</DialogTitle>
+            <DialogTitle>Quitar la clave de imagen</DialogTitle>
             <DialogDescription>
-              Se eliminará la clave guardada en esta máquina y «Generar con IA» dejará de estar
-              disponible hasta que configures una nueva. ¿Quieres continuar?
+              «Generar con IA» no estará disponible hasta que configures una nueva.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

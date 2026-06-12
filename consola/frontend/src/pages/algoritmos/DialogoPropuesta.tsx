@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -25,10 +24,7 @@ export function DialogoPropuesta({
     <Dialog open={propuesta !== null} onOpenChange={(v) => !v && onCerrar()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Propuesta para la Texto</DialogTitle>
-          <DialogDescription>
-            Cópialo a la ficha editorial de la Texto.
-          </DialogDescription>
+          <DialogTitle>Propuesta de Texto</DialogTitle>
         </DialogHeader>
         {propuesta && (
           <div className="rounded-md border bg-muted/40 p-3 text-sm">

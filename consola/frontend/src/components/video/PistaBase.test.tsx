@@ -33,7 +33,7 @@ function renderPista(duracionMs: number | null) {
 describe("PistaBase", () => {
   it("muestra la duración del clip base y de la composición (mm:ss)", () => {
     renderPista(30000);
-    expect(screen.getByText(/clip base:/i)).toBeInTheDocument();
+    expect(screen.getByText(/clip:/i)).toBeInTheDocument();
     expect(screen.getByText(/composición:/i)).toBeInTheDocument();
     // Clip de 30 s y composición de 30 s.
     expect(screen.getAllByText("00:30")).toHaveLength(2);
@@ -46,7 +46,7 @@ describe("PistaBase", () => {
 
   it("sin clip base no muestra duraciones ni reencuadre", () => {
     renderPista(null);
-    expect(screen.queryByText(/clip base:/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/clip:/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/reencuadre/i)).not.toBeInTheDocument();
   });
 });

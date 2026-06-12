@@ -30,7 +30,6 @@ export function Autor({
   return (
     <span
       className={cn("inline-flex items-center gap-1 text-muted-foreground", className)}
-      title="Quién creó este registro"
     >
       <User className="h-3.5 w-3.5" />
       {etiqueta}

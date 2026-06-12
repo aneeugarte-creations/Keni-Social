@@ -101,24 +101,20 @@ export default function CajonPresidencia() {
           <Crown className="h-4 w-4 text-muted-foreground" />
           Presidencia
         </CardTitle>
-        <p className="text-xs text-muted-foreground">
-          Nota de WhatsApp con media. La primera imagen es la portada del carrusel.
-        </p>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="space-y-1">
           <Label htmlFor="presidencia-titulo" className="text-xs text-muted-foreground">
-            Título (opcional)
+            Título
           </Label>
           <Input
             id="presidencia-titulo"
             value={titulo}
             onChange={(e) => setTitulo(e.target.value)}
-            placeholder="Título de la nota…"
+            placeholder="Opcional: título de la nota"
           />
         </div>
         <Textarea
-          placeholder="Pega aquí la nota de presidencia tal cual llega por WhatsApp…"
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
           rows={5}
@@ -137,7 +133,7 @@ export default function CajonPresidencia() {
         />
         {!hayImagen && media.length > 0 && (
           <p className="text-xs text-amber-700 dark:text-amber-300">
-            Falta al menos una imagen: la portada del carrusel se compone sobre una foto.
+            Se necesita imagen para portada del carrusel.
           </p>
         )}
         <div className="flex justify-end">

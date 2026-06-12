@@ -12,7 +12,7 @@ export function MarcaIA({
   return (
     <span
       className={cn("inline-flex items-center gap-0.5", className)}
-      title={costo ? "Genera imagen con IA" : "Usa IA"}
+      title={costo ? "Genera imagen" : "Usa IA"}
     >
       <Sparkles className="h-4 w-4" aria-hidden="true" />
       {costo && <DollarSign className="h-3 w-3" aria-hidden="true" />}

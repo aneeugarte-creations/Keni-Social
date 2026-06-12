@@ -80,8 +80,8 @@ export const ETIQUETA_FRANJA: Record<FranjaTurno, string> = {
 // de import para verse idéntica al calendario real).
 
 export const TIPOS_COBERTURA: { valor: TipoCoberturaEvento; etiqueta: string }[] = [
-  { valor: "transmision", etiqueta: "Transmisión (con señal)" },
-  { valor: "imagenes", etiqueta: "Solo imágenes / fotografías" },
+  { valor: "transmision", etiqueta: "Transmisión en vivo" },
+  { valor: "imagenes", etiqueta: "Solo imágenes" },
   { valor: "no_cubrir", etiqueta: "No cubrir" },
 ];
 
@@ -301,13 +301,13 @@ export function MenuMasAcciones({
 
   if (esAdmin) {
     items.push({
-      etiqueta: copiarPendiente ? "Copiando…" : "Copiar semana anterior",
+      etiqueta: copiarPendiente ? "Copiando…" : "Copiar anterior",
       icono: Copy,
       onClick: onCopiarAnterior,
       deshabilitado: copiarPendiente || semanaAprobada,
     });
     items.push({
-      etiqueta: "Configurar franjas de esta semana",
+      etiqueta: "Configurar franjas",
       icono: CalendarDays,
       onClick: onAbrirFranjasSemana,
     });
@@ -368,7 +368,7 @@ export function BadgeEstadoSemana({ aprobada, hayTurnos }: { aprobada: boolean; 
   }
   if (!hayTurnos) return null;
   return (
-    <Tooltip label="Los CMs aún no la ven; queda por aprobar y publicar.">
+    <Tooltip label="Por aprobar y publicar">
       <Badge variant="secondary" className="font-normal">
         Borrador
       </Badge>
@@ -381,7 +381,7 @@ export function BotonMarcarAvisado({ evento, onCambio }: { evento: EventoRota; o
   const marcar = useMutation({
     mutationFn: () => api.actualizarEventoRota(evento.id, { cambiado: false }),
     onSuccess: () => {
-      toast.success("Marcado como avisado.");
+      toast.success("Avisado.");
       onCambio();
     },
     onError: (e) => toast.error(mensajeError(e)),

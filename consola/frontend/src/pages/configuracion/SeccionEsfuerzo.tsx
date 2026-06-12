@@ -46,11 +46,6 @@ export function SeccionEsfuerzo() {
     <SeccionColapsable
       titulo="Esfuerzo de generación"
       contentClassName="space-y-2"
-      descripcion={
-        <>
-          Define la velocidad vs. calidad. Se almacena localmente.
-        </>
-      }
     >
         {isPending ? (
           <div className="space-y-2">
