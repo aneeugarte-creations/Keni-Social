@@ -103,6 +103,22 @@ export function formatearHora(iso: string | null | undefined): string {
   return d ? _fHora.format(d) : "";
 }
 
+/**
+ * ¿Una pieza `programado` ya se pasó de su hora sin publicarse?
+ *
+ * El instante es absoluto (la conversión de zona ya está en `aInstante`/UTC), así que
+ * comparamos contra "ahora" sin más. Solo aplica a `programado`: una `publicado` no está
+ * vencida, y una `borrador`/`aprobado` no tiene compromiso de hora.
+ */
+export function estaVencida(
+  estado: string | null | undefined,
+  fechaProgramada: string | null | undefined,
+): boolean {
+  if (estado !== "programado") return false;
+  const d = aInstante(fechaProgramada);
+  return d != null && d.getTime() < Date.now();
+}
+
 // "YYYY-MM-DD" en CDMX (en-CA formatea ISO). Cacheado como el resto de formateadores.
 const _fDiaIso = new Intl.DateTimeFormat("en-CA", {
   timeZone: ZONA_CDMX,

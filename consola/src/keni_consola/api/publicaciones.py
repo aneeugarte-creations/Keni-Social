@@ -190,12 +190,17 @@ async def opciones(request: Request) -> Response:
         {"id": e["id"], "nombre": e["nombre"], "marca": e.get("marca", "")}
         for e in repos.listar_etiquetas(clase="vertical", solo_activas=True)
     ]
+    from .. import config
+
     return JSONResponse(
         {
             "redes": redes.opciones(),
             "estados": [{"id": e, "nombre": _ESTADO_NOMBRE[e]} for e in repos.ESTADOS_PUBLICACION],
             "marcas": [{"id": mid, "nombre": nombre} for mid, nombre in _MARCAS],
             "lineas": lineas,
+            # Gate maestro de publicacion real (KENI_PUBLICAR_REAL). OFF => las piezas
+            # programadas NO salen solas (dry-run); el SPA avisa si hay programadas en cola.
+            "publicar_real": config.publicar_real(),
         }
     )
 

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   CalendarOff,
   CalendarX,
   ChevronLeft,
@@ -15,7 +16,7 @@ import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { api, mensajeError } from "@/lib/api";
-import { horaUtcACdmx } from "@/lib/fecha";
+import { estaVencida, horaUtcACdmx } from "@/lib/fecha";
 import { ETIQUETA_LINEA } from "@/pages/publicaciones/PanelLineasPlan";
 import { cn } from "@/lib/utils";
 import type { Publicacion } from "@/types";
@@ -113,8 +114,10 @@ function PildoraPub({
   ocupado: boolean;
 }) {
   const Icono = iconoRed(publicacion.red);
-  // Ya publicado → verde; programado (pendiente de salir) → ámbar.
+  // Ya publicado → verde; vencida (programada y pasada de hora sin salir) → rojo;
+  // programado a futuro → ámbar.
   const publicado = publicacion.estado === "publicado";
+  const vencida = estaVencida(publicacion.estado, publicacion.fecha_programada);
   return (
     <MenuContextual
       disparador="contextmenu"
@@ -149,15 +152,25 @@ function PildoraPub({
           e.dataTransfer.effectAllowed = "move";
         }}
         onClick={() => onAbrir(publicacion)}
-        title={`${publicacion.titulo} (${nombreRed(publicacion.red)}) · arrastra para mover · clic derecho para más`}
+        title={
+          vencida
+            ? `${publicacion.titulo} (${nombreRed(publicacion.red)}) · PASADA DE HORA, sin publicar · clic derecho para publicar ya`
+            : `${publicacion.titulo} (${nombreRed(publicacion.red)}) · arrastra para mover · clic derecho para más`
+        }
         className={cn(
           "flex w-full cursor-grab items-center gap-1 truncate rounded px-1.5 py-0.5 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring active:cursor-grabbing",
           publicado
             ? "bg-emerald-500/15 text-emerald-800 hover:bg-emerald-500/25 dark:text-emerald-200"
-            : "bg-amber-500/15 text-amber-800 hover:bg-amber-500/25 dark:text-amber-200",
+            : vencida
+              ? "bg-red-500/15 text-red-800 hover:bg-red-500/25 dark:text-red-200"
+              : "bg-amber-500/15 text-amber-800 hover:bg-amber-500/25 dark:text-amber-200",
         )}
       >
-        <Icono className="h-3 w-3 shrink-0" />
+        {vencida ? (
+          <AlertTriangle className="h-3 w-3 shrink-0" aria-label="Pasada de hora, sin publicar" />
+        ) : (
+          <Icono className="h-3 w-3 shrink-0" />
+        )}
         <span className="shrink-0 tabular-nums">{formatearHora(publicacion.fecha_programada)}</span>
         <span className="truncate">{publicacion.titulo}</span>
       </button>

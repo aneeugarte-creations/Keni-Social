@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+  AlertTriangle,
   ArrowRight,
   BarChart3,
   CalendarClock,
@@ -31,6 +32,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ApiError, api, mensajeError, urlMedia } from "@/lib/api";
+import { estaVencida } from "@/lib/fecha";
+import { cn } from "@/lib/utils";
 import type { Publicacion } from "@/types";
 
 import { CLAVE_PUBLICACIONES } from "./claves";
@@ -215,6 +218,16 @@ function TarjetaPublicacion({
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium">{publicacion.titulo}</span>
               <BadgeEstado estado={publicacion.estado} />
+              {estaVencida(publicacion.estado, publicacion.fecha_programada) && (
+                <Badge
+                  variant="error"
+                  className="gap-1"
+                  title="Pasada de su hora y sin publicar. Publícala ya o revisa por qué no salió."
+                >
+                  <AlertTriangle className="h-3 w-3" />
+                  Sin publicar
+                </Badge>
+              )}
               {publicacion.id_post_metricool && (
                 <Badge
                   variant="outline"
@@ -246,7 +259,14 @@ function TarjetaPublicacion({
               <span>· {publicacion.marca_nombre}</span>
               <Autor nombre={publicacion.autor_nombre} />
               {publicacion.estado === "programado" && publicacion.fecha_programada && (
-                <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1",
+                    estaVencida(publicacion.estado, publicacion.fecha_programada)
+                      ? "text-red-700 dark:text-red-300"
+                      : "text-amber-700 dark:text-amber-300",
+                  )}
+                >
                   <CalendarClock className="h-3.5 w-3.5" />
                   {formatearFechaHora(publicacion.fecha_programada)}
                 </span>

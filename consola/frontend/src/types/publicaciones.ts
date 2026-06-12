@@ -62,6 +62,11 @@ export interface OpcionesPublicaciones {
   marcas: MarcaDisponible[];
   /** Líneas editoriales (etiquetas verticales) para el filtro de Lista/Calendario/Feed. */
   lineas: LineaEditorialOpcion[];
+  /**
+   * Gate maestro `KENI_PUBLICAR_REAL`. Si es `false`, las piezas programadas NO salen
+   * solas (el programador opera en dry-run): el SPA avisa cuando hay programadas en cola.
+   */
+  publicar_real: boolean;
 }
 
 /** Cuerpo para crear una publicación. */

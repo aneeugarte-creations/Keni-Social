@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { Send } from "lucide-react";
+import { AlertTriangle, Send } from "lucide-react";
 import * as React from "react";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
@@ -158,8 +158,28 @@ function Cuerpo({
   const hayMas = !calendario && Boolean(listaQuery.hasNextPage);
   const filtrando = red !== FILTRO_TODOS || linea !== FILTRO_TODOS;
 
+  // Aviso de seguridad: si el posteo real esta APAGADO y hay piezas programadas, NO van a
+  // salir solas (el programador opera en dry-run). Es justo el fallo que dejaba piezas sin
+  // publicar en silencio; lo hacemos visible.
+  const hayProgramadasSinSalir =
+    !opciones.publicar_real && publicaciones.some((p) => p.estado === "programado");
+
   return (
     <div className="mt-2">
+      {hayProgramadasSinSalir && (
+        <div
+          role="alert"
+          className="mb-3 flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>
+            <strong>Publicación automática desactivada.</strong> Hay piezas programadas que{" "}
+            <strong>no saldrán solas</strong>: con el posteo real apagado el sistema solo las
+            previsualiza. Actívalo en el servidor (<code>KENI_PUBLICAR_REAL</code>) o publícalas a
+            mano antes de su hora.
+          </span>
+        </div>
+      )}
       {query.isPending ? (
         <div className="space-y-3">
           {Array.from({ length: 4 }).map((_, i) => (
