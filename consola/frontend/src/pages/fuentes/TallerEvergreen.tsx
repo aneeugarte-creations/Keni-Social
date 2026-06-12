@@ -44,6 +44,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useGeneracion } from "@/hooks/use-generacion";
@@ -289,29 +290,24 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
         </CardHeader>
         <CardContent className="space-y-3">
           {/* Tipo de aportación: una idea suelta del equipo, o contenido interno de AMX
-              (briefs, material de programa). Ambos entran al MISMO banco. */}
-          <div className="flex flex-wrap gap-1">
-            {(
-              [
-                { valor: "idea", etiqueta: "Idea", icono: Lightbulb },
-                { valor: "interna", etiqueta: "Interno AMX", icono: Building2 },
-              ] as const
-            ).map((o) => {
-              const Icono = o.icono;
-              return (
-                <Button
-                  key={o.valor}
-                  type="button"
-                  size="sm"
-                  variant={tipoManual === o.valor ? "default" : "outline"}
-                  onClick={() => setTipoManual(o.valor)}
-                >
-                  <Icono className="h-4 w-4" />
-                  {o.etiqueta}
-                </Button>
-              );
-            })}
-          </div>
+              (briefs, material de programa). Ambos entran al MISMO banco. Control segmentado
+              (Tabs) — el patrón canónico de la consola: segmento activo blanco sobre track
+              gris, sin negro. */}
+          <Tabs
+            value={tipoManual}
+            onValueChange={(v) => setTipoManual(v as "idea" | "interna")}
+          >
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="idea" className="gap-1.5">
+                <Lightbulb className="h-4 w-4" />
+                Idea
+              </TabsTrigger>
+              <TabsTrigger value="interna" className="gap-1.5">
+                <Building2 className="h-4 w-4" />
+                Interno AMX
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
 
           <div className="space-y-1.5">
             <Label htmlFor="evergreen-titulo-manual">Título</Label>
@@ -531,7 +527,7 @@ function FilaIdea({
           {nombreMarca}
         </Badge>
         <Badge
-          variant={aprobada ? "default" : "outline"}
+          variant={aprobada ? "ok" : "outline"}
           className="font-normal"
         >
           {ESTADO_LABEL[idea.estado] ?? idea.estado}
@@ -557,6 +553,7 @@ function FilaIdea({
       <div className="flex flex-wrap items-center gap-2 pt-1">
         {!aprobada && !descartada && (
           <Button
+            variant="brand"
             size="sm"
             onClick={() => cambiarEstado.mutate("aprobada")}
             disabled={cambiarEstado.isPending}
