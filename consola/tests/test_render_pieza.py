@@ -181,6 +181,48 @@ def test_prefiere_plantilla_llamada_placa_de_marca(monkeypatch):
     assert capt["documento"] == "{\"v\":2}"  # la "Placa de marca", no la primera
 
 
+def test_en_rotacion_manda_sobre_la_por_defecto(monkeypatch):
+    # Una pieza SIN `plantilla_diseno_id` (legada, creada antes de marcar la rotación): si la marca
+    # tiene una plantilla EN ROTACIÓN, el render adopta ESA —no la "Placa de marca" ni la primera—.
+    _sin_plantilla_de_marca(monkeypatch, True)
+    monkeypatch.setattr(
+        repos, "listar_plantillas_diseno",
+        lambda **k: [
+            {"id": "placa", "nombre": "Placa de marca", "documento": "{\"v\":1}", "rotar": False, "activo": True},
+            {"id": "rot", "nombre": "Claro - Azul", "documento": "{\"v\":9}", "rotar": True, "activo": True},
+        ],
+    )
+    capt = {}
+    monkeypatch.setattr(
+        estudio_imagen, "componer_desde_plantilla",
+        lambda documento, **k: capt.update(documento=documento) or {"id": "x.png", "url": "/x"},
+    )
+    pub = {"id": "p1", "imagen": "", "marca": "claro-sports", "red": "x", "copy_in": "", "foto": "f.jpg"}
+    render_pieza.imagen_compuesta_id(pub)
+    assert capt["documento"] == "{\"v\":9}"  # la EN ROTACIÓN, no la "Placa de marca"
+
+
+def test_en_rotacion_inactiva_no_cuenta(monkeypatch):
+    # Una plantilla con `rotar=1` pero INACTIVA no se elige como default (igual que la rotación al
+    # crear, que pide `activo=1`): cae a la "Placa de marca" / primera.
+    _sin_plantilla_de_marca(monkeypatch, True)
+    monkeypatch.setattr(
+        repos, "listar_plantillas_diseno",
+        lambda **k: [
+            {"id": "placa", "nombre": "Placa de marca", "documento": "{\"v\":1}", "rotar": False, "activo": True},
+            {"id": "rot", "nombre": "Claro - Azul", "documento": "{\"v\":9}", "rotar": True, "activo": False},
+        ],
+    )
+    capt = {}
+    monkeypatch.setattr(
+        estudio_imagen, "componer_desde_plantilla",
+        lambda documento, **k: capt.update(documento=documento) or {"id": "x.png", "url": "/x"},
+    )
+    pub = {"id": "p1", "imagen": "", "marca": "claro-sports", "red": "x", "copy_in": "", "foto": "f.jpg"}
+    render_pieza.imagen_compuesta_id(pub)
+    assert capt["documento"] == "{\"v\":1}"  # la inactiva se ignora -> "Placa de marca"
+
+
 def test_plantilla_del_estudio_compone_desde_plantilla(monkeypatch):
     monkeypatch.setattr(repos, "obtener_plantilla_diseno", lambda pid: {"documento": "{}"})
     capt = {}

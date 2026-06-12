@@ -1,8 +1,9 @@
 """Rotación automática de plantillas por marca (los 6 colores de UnoTV, p. ej.). OFFLINE.
 
-Cubre la asignación que hace `crear_contenido_plataforma`: cuando la marca tiene un GRUPO de
-plantillas con `rotar=1` (≥2, del `tipo` que toca al formato), cada pieza nueva se lleva la
-SIGUIENTE del grupo (round-robin) y TODAS sus redes comparten color. Dormido si <2.
+Cubre la asignación que hace `crear_contenido_plataforma`: las plantillas que el equipo marca «en
+rotación» (`rotar=1`, del `tipo` que toca al formato) son las que MANDAN. Con UNA, esa se fija en
+cada pieza; con VARIAS, se alternan (round-robin) y TODAS las redes de una pieza comparten color.
+Dormido solo si la marca no tiene NINGUNA plantilla con `rotar=1` del tipo acorde.
 """
 
 from __future__ import annotations
@@ -49,12 +50,14 @@ def test_round_robin_y_mismo_color_en_todas_las_redes(entorno):
     assert _plantillas_de(c3) == [a]
 
 
-def test_dormida_con_menos_de_dos_en_rotacion(entorno):
-    # Una sola plantilla en rotación: no hay grupo, no se asigna nada (comportamiento de siempre).
-    repos.crear_plantilla_diseno(marca="unotv", nombre="solo", tipo="foto", rotar=True)
-    c = _pieza_foto()
-    p = repos.crear_contenido_plataforma(contenido_id=c, red="facebook")
-    assert p["plantilla_diseno_id"] == ""
+def test_una_sola_en_rotacion_se_fija_en_cada_pieza(entorno):
+    # Una sola plantilla en rotación: ES la que manda, se fija en cada pieza nueva (no rota porque
+    # no hay con qué, pero NUNCA cae a otra de fuera de la rotación).
+    solo = repos.crear_plantilla_diseno(marca="unotv", nombre="solo", tipo="foto", rotar=True)
+    for titulo in ("1", "2"):
+        c = _pieza_foto(titulo=titulo)
+        p = repos.crear_contenido_plataforma(contenido_id=c, red="facebook")
+        assert p["plantilla_diseno_id"] == solo["id"]
 
 
 def test_ignora_plantillas_sin_rotar(entorno):

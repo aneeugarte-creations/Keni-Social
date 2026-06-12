@@ -96,9 +96,14 @@ def _plantilla_efectiva(pub: dict[str, Any]) -> dict[str, Any] | None:
     """Plantilla de ESTUDIO con la que se compone la pieza (la MISMA que muestra el editor).
 
     - Si la pieza fija una `plantilla_diseno_id` explícita -> esa.
-    - Si no -> la plantilla de estudio POR DEFECTO de la marca, idéntica a la del editor
-      (`plantilla_diseno_id || idPlacaDeMarca`): la llamada "Placa de marca" si existe, o la
-      PRIMERA (más reciente, `creado DESC`, igual que la lista que ve el editor).
+    - Si no, y la marca tiene plantillas EN ROTACIÓN (`rotar=1`, activas) -> la PRIMERA de ellas
+      (orden estable de la galería). Las plantillas en rotación MANDAN: una pieza sin plantilla nunca
+      se compone con una de fuera de la rotación si la marca tiene alguna marcada. Cubre las piezas
+      legadas (creadas antes de marcar la rotación, sin `plantilla_diseno_id`): al mostrarlas, el feed
+      adopta la plantilla en rotación, no la primera cualquiera de la galería.
+    - Si no hay ninguna en rotación -> la plantilla de estudio POR DEFECTO de la marca, idéntica a la
+      del editor: la llamada "Placa de marca" si existe, o la PRIMERA de la galería (orden manual /
+      más reciente).
 
     Así el feed compone EXACTAMENTE la plantilla que enseña el editor (de ahí el arreglo de la
     "plantilla vieja en el feed"). Devuelve None si la pieza no tiene plantilla explícita y la marca
@@ -116,6 +121,12 @@ def _plantilla_efectiva(pub: dict[str, Any]) -> dict[str, Any] | None:
     plantillas = repos.listar_plantillas_diseno(marca=marca)
     if not plantillas:
         return None
+    # Las plantillas EN ROTACIÓN mandan sobre la por defecto: si la marca tiene alguna marcada
+    # (`rotar`, activa), el default es la primera de ellas (orden estable de la galería), nunca una
+    # de fuera. Sin rotación marcada, cae al comportamiento de siempre (Placa de marca / la primera).
+    en_rotacion = [p for p in plantillas if p.get("rotar") and p.get("activo")]
+    if en_rotacion:
+        return en_rotacion[0]
     for p in plantillas:
         if (p.get("nombre") or "").strip() == "Placa de marca":
             return p

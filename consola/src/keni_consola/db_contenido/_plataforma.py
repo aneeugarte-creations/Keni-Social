@@ -128,12 +128,14 @@ def _fila_a_contenido_plataforma(fila: Any) -> dict[str, Any]:
 
 
 def _plantilla_rotacion(con: Any, marca: str, contenido_id: str) -> str:
-    """Siguiente plantilla del GRUPO en rotación de la marca para esta pieza, o "" si no aplica.
+    """Plantilla EN ROTACIÓN de la marca para esta pieza, o "" si no aplica.
 
-    Rotación automática de plantillas (p. ej. los 6 colores de UnoTV): cada pieza nueva se lleva la
-    SIGUIENTE plantilla del grupo (round-robin), y todas las redes de la MISMA pieza comparten color.
-    Dormido por defecto: si la marca no tiene ≥2 plantillas con `rotar=1` (del `tipo` que toca según
-    el formato de la pieza), devuelve "" y el comportamiento es el de siempre. Reglas:
+    Las plantillas que el equipo marca «en rotación» (`rotar=1`) son las que MANDAN: una pieza nueva
+    SIEMPRE se lleva una de ellas, nunca una de fuera de la rotación. Con UNA sola en rotación, esa se
+    fija en todas las piezas; con VARIAS, se alternan (round-robin) y todas las redes de la MISMA
+    pieza comparten color. Dormido SOLO si la marca no tiene NINGUNA plantilla con `rotar=1` (del
+    `tipo` que toca según el formato): ahí devuelve "" y el render cae a la por defecto de la marca.
+    Reglas:
 
       - El POOL son las plantillas activas de la marca con `rotar=1` y `tipo` acorde al formato de la
         pieza (foto -> "foto"; video -> "miniatura"), en orden estable (`creado ASC`).
@@ -141,7 +143,8 @@ def _plantilla_rotacion(con: Any, marca: str, contenido_id: str) -> str:
         pool, se reutiliza.
       - PRIMERA red de la pieza: round-robin por nº de PIEZAS de la marca ya rotadas
         (`pool[n % len(pool)]`), no por marca de tiempo —`creado` se guarda al segundo y empata
-        entre piezas creadas a la vez, lo que hacía un "última usada" poco fiable—.
+        entre piezas creadas a la vez, lo que hacía un "última usada" poco fiable—. Con un pool de
+        UNA sola plantilla, `n % 1 == 0` siempre: esa misma plantilla en cada pieza.
 
     Stateless (sin contador propio): se deriva del recuento real de piezas ya rotadas, así funciona
     entre contenedores (back/worker/daemons) sin estado compartido y es estable.
@@ -163,7 +166,9 @@ def _plantilla_rotacion(con: Any, marca: str, contenido_id: str) -> str:
         (marca, tipo),
     ).fetchall()
     ids = [r["id"] for r in pool]
-    if len(ids) < 2:
+    # Sin NINGUNA plantilla en rotación del tipo acorde (p. ej. la rotación es de fotos y la pieza es
+    # vídeo): no se fuerza un tipo que no toca; el render cae a la por defecto de la marca.
+    if not ids:
         return ""
     # Mismo color en todas las redes: reutiliza el de una red hermana si ya tiene uno del pool.
     hermanas = con.execute(
@@ -291,9 +296,9 @@ def _insertar_contenido_plataforma(
         ).fetchone()
         if padre is not None:
             fila["marca"] = padre["marca"] or ""
-    # ROTACIÓN de plantillas: si el llamante NO fijó plantilla y la marca tiene un GRUPO en
-    # rotación, asigna la siguiente del grupo (mismo color en todas las redes; round-robin entre
-    # piezas). Dormido salvo que la marca tenga ≥2 plantillas con `rotar=1`.
+    # ROTACIÓN de plantillas: si el llamante NO fijó plantilla y la marca tiene plantillas EN
+    # ROTACIÓN, asigna una de ellas (con varias, round-robin y mismo color en todas las redes; con
+    # una sola, esa fija). Dormido solo si la marca no tiene NINGUNA plantilla con `rotar=1`.
     if not fila["plantilla_diseno_id"] and fila["marca"]:
         fila["plantilla_diseno_id"] = _plantilla_rotacion(con, fila["marca"], contenido_id)
     marcadores = ", ".join("?" for _ in _COLS_CONTENIDO_PLATAFORMA)
