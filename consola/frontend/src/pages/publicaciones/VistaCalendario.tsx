@@ -104,7 +104,15 @@ function diasDeSemana(ancla: Date): Date[] {
   });
 }
 
-/** Una píldora de publicación: arrastrable, click abre el editor, clic-derecho el menú. */
+/**
+ * Una píldora de publicación: arrastrable, click abre el editor, clic-derecho el menú.
+ *
+ * TÁCTIL: el menú contextual no existe en táctil, así que la acción clave del reparto
+ * (COGER una pieza libre) tiene su propio sello visible y tocable dentro de la píldora
+ * («libre», borde punteado). El resto de acciones del menú siguen siendo de escritorio:
+ * `MenuContextual` solo dispara por `contextmenu`/`click`/`ambos`, y aquí el click
+ * primario ya abre el editor, así que no hay disparador adicional sin colisión.
+ */
 function PildoraPub({
   publicacion,
   onAbrir,
@@ -165,7 +173,7 @@ function PildoraPub({
       ? " · la llevas tú"
       : ` · la lleva ${responsable}`
     : repartible
-      ? " · libre (clic derecho para cogerla)"
+      ? " · libre: pulsa el sello «libre» para cogerla"
       : "";
   return (
     <MenuContextual
@@ -223,11 +231,13 @@ function PildoraPub({
         onClick={() => onAbrir(publicacion)}
         title={
           vencida
-            ? `${publicacion.titulo} (${nombreRed(publicacion.red)})${quienLaLleva} · PASADA DE HORA, sin publicar · clic derecho para publicar ya`
-            : `${publicacion.titulo} (${nombreRed(publicacion.red)})${quienLaLleva} · arrastra para mover · clic derecho para más`
+            ? `${publicacion.titulo} (${nombreRed(publicacion.red)})${quienLaLleva} · PASADA DE HORA, sin publicar · "Publicar ya" vive en el menú contextual (clic derecho)`
+            : `${publicacion.titulo} (${nombreRed(publicacion.red)})${quienLaLleva} · arrastra para mover · más acciones en el menú contextual (clic derecho)`
         }
         className={cn(
-          "flex w-full cursor-grab items-center gap-1 truncate rounded px-1.5 py-0.5 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring active:cursor-grabbing",
+          "flex w-full cursor-grab items-center gap-1 truncate rounded border border-transparent px-1.5 py-0.5 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring active:cursor-grabbing",
+          // REPARTO: una pieza LIBRE repartible se distingue de un vistazo (borde punteado).
+          repartible && libre && "border-dashed border-current",
           publicado
             ? "bg-emerald-500/15 text-emerald-800 hover:bg-emerald-500/25 dark:text-emerald-200"
             : vencida
@@ -242,6 +252,32 @@ function PildoraPub({
         )}
         <span className="shrink-0 tabular-nums">{formatearHora(publicacion.fecha_programada)}</span>
         <span className="truncate">{publicacion.titulo}</span>
+        {/* REPARTO: sello «libre» visible y TOCABLE — coger directo con click/tap (también
+            en táctil, donde el menú contextual no existe). stopPropagation: no abre el editor. */}
+        {repartible && libre && (
+          <span
+            role="button"
+            tabIndex={0}
+            aria-label={`Coger "${publicacion.titulo}" (me la asigno)`}
+            title="Pieza libre: púlsala aquí para cogerla (queda asignada a ti)"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!coger.isPending) coger.mutate();
+            }}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter" && e.key !== " ") return;
+              e.preventDefault();
+              e.stopPropagation();
+              if (!coger.isPending) coger.mutate();
+            }}
+            className={cn(
+              "ml-auto shrink-0 rounded border border-dashed border-current px-1 text-[9px] font-semibold uppercase leading-tight transition-colors hover:bg-foreground/10",
+              coger.isPending && "pointer-events-none opacity-50",
+            )}
+          >
+            libre
+          </span>
+        )}
         {repartible && responsable && (
           <span
             className={cn(
@@ -352,6 +388,9 @@ export function VistaCalendario({
     () => publicaciones.filter((p) => !!p.fecha_programada),
     [publicaciones],
   );
+  // Piezas de la lente actual SIN fecha: el calendario solo pinta programadas, así que
+  // con una lente del reparto (p. ej. "Por coger") puede haber trabajo invisible aquí.
+  const sinFecha = publicaciones.length - programadas.length;
   const porDia = React.useMemo(() => indexarPorDia(programadas), [programadas]);
 
   // SLOTS del plan de la marca activa (franjas con línea), como PLACEHOLDERS en las vistas
@@ -454,7 +493,13 @@ export function VistaCalendario({
         {programadas.length === 0 && (
           <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
             <CalendarOff className="h-4 w-4 shrink-0" />
-            No hay piezas programadas.
+            {sinFecha > 0
+              ? `No hay piezas programadas con esta vista. ${sinFecha} ${
+                  sinFecha === 1
+                    ? "pieza de esta lente aún no tiene"
+                    : "piezas de esta lente aún no tienen"
+                } fecha: trabájalas desde la Lista del Feed.`
+              : "No hay piezas programadas."}
           </div>
         )}
         <div className="flex flex-wrap items-center justify-between gap-2">
