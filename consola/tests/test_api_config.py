@@ -189,6 +189,7 @@ def test_post_marca_desconocida_400(cfg_metricas):
     _escribir(cfg_metricas, 'fuente = "muestra"\n')
     r = _cli().post("/api/config", json={"fuente": "metricool", "marcas": ["marca_que_no_existe"]})
     assert r.status_code == 400
+    assert "desconocida" in r.json()["error"].lower()
 
 
 def test_post_fuente_muestra_rechazada_400(cfg_metricas):
@@ -198,7 +199,6 @@ def test_post_fuente_muestra_rechazada_400(cfg_metricas):
     r = _cli().post("/api/config", json={"fuente": "muestra", "marcas": []})
     assert r.status_code == 400
     assert "metricool" in r.json()["error"].lower()
-    assert "desconocida" in r.json()["error"].lower()
 
 
 def test_post_body_invalido_400(cfg_metricas):
