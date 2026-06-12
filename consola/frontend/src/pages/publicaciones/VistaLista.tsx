@@ -11,6 +11,7 @@ import {
   ImageIcon,
   Pencil,
   Send,
+  Share2,
   Sprout,
   Trash2,
   UserCheck,
@@ -33,6 +34,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { SesionContexto } from "@/hooks/sesion-contexto";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { ApiError, api, mensajeError, urlMedia } from "@/lib/api";
 import { estaVencida } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
@@ -47,17 +49,33 @@ import { formatearFechaHora, metaEstado, siguienteEstado } from "./meta";
 const MARCA_REPARTO = "claro-sports";
 
 /**
+ * Visibilidad del kebab "⋮" según el puntero. En TÁCTIL (puntero grueso) no hay hover, así
+ * que las acciones secundarias quedaban inalcanzables: lo dejamos SIEMPRE visible. En puntero
+ * fino (ratón) sigue apareciendo al hover, como hoy. Pura para testearla sin montar la fila.
+ */
+export function kebabSegunPuntero(punteroGrueso: boolean): "siempre" | "hover" {
+  return punteroGrueso ? "siempre" : "hover";
+}
+
+/**
  * Una tarjeta de publicación. Click izquierdo sobre la tarjeta = editar (acción
  * primaria); el resto de operaciones viven en el menú contextual (click derecho) y en
  * el kebab "⋮", sin hilera de botones-icono.
  */
 function TarjetaPublicacion({
   publicacion,
+  hermanas = 1,
   onEditar,
   onDuplicar,
   onConfigurarCadencia,
 }: {
   publicacion: Publicacion;
+  /**
+   * Nº de filas hermanas en la lista que comparten `contenido_id` (una por red). El reparto
+   * es POR TEMA: coger 1 tarjeta se lleva todas sus hermanas. Cuando es >1 la tarjeta lo
+   * AVISA (badge "N redes · se cogen juntas") para que no parezca que "desaparecen" varias.
+   */
+  hermanas?: number;
   onEditar: (p: Publicacion) => void;
   onDuplicar: (p: Publicacion) => void;
   onConfigurarCadencia: () => void;
@@ -67,6 +85,8 @@ function TarjetaPublicacion({
   const [confirmarBorrado, setConfirmarBorrado] = React.useState(false);
   const proximo = siguienteEstado(publicacion.estado);
   const imagen = urlMedia(publicacion.imagen_url || publicacion.imagen);
+  // TÁCTIL: sin hover el kebab "⋮" era inalcanzable; con puntero grueso lo dejamos fijo.
+  const punteroGrueso = useMediaQuery("(pointer: coarse)");
 
   // REPARTO ("la lista", ClaroSports): coger/soltar el TEMA padre (todas sus redes pasan
   // juntas). useContext directo (no useSesion): en tests no hay SesionProvider y el badge
@@ -77,12 +97,20 @@ function TarjetaPublicacion({
   const responsable = publicacion.responsable_nombre ?? "";
   const esMia = Boolean(usuario && publicacion.responsable_id === usuario.id);
   const libre = !(publicacion.responsable_id ?? "");
+  // El reparto va POR TEMA: coger una tarjeta arrastra a sus hermanas (misma idea, otras
+  // redes). Lo señalamos cuando hay >1 hermana en la lista para que el equipo no vea
+  // "desaparecer" varias sin explicación.
+  const multiRed = repartible && hermanas > 1;
 
   const coger = useMutation({
     mutationFn: () => api.cogerContenido(publicacion.contenido_id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
-      toast.success(`"${publicacion.titulo}" es tuya: el equipo ya lo ve.`);
+      toast.success(
+        multiRed
+          ? `"${publicacion.titulo}" y sus ${hermanas} redes son tuyas: el equipo ya lo ve.`
+          : `"${publicacion.titulo}" es tuya: el equipo ya lo ve.`,
+      );
     },
     onError: (e) => {
       // 409 = otra persona la cogió antes: refrescamos para mostrar a quién.
@@ -264,7 +292,7 @@ function TarjetaPublicacion({
         onPrimaria={() => onEditar(publicacion)}
         acciones={acciones}
         etiquetaAcciones={`Acciones de "${publicacion.titulo}"`}
-        kebab="hover"
+        kebab={kebabSegunPuntero(punteroGrueso)}
         className="rounded-lg border border-border bg-card text-card-foreground shadow-sm transition-colors hover:border-foreground/20"
       >
         <div className="flex min-w-0 flex-1 gap-3 py-4 pl-4 pr-10">
@@ -313,6 +341,16 @@ function TarjetaPublicacion({
                   <Hand className="mr-1 h-3 w-3" />
                   {libre ? "Coger" : "Soltar"}
                 </Button>
+              )}
+              {multiRed && (
+                <Badge
+                  variant="outline"
+                  className="gap-1 border-sky-500/40 font-normal text-sky-700 dark:text-sky-300"
+                  title={`Esta idea vive en ${hermanas} redes: cogerla o soltarla las mueve TODAS juntas (el reparto es por tema, no por red).`}
+                >
+                  <Share2 className="h-3 w-3" />
+                  {hermanas} redes · se cogen juntas
+                </Badge>
               )}
               {estaVencida(publicacion.estado, publicacion.fecha_programada) && (
                 <Badge
@@ -458,6 +496,16 @@ export function VistaLista({
     scrollMargin: margenScroll,
   });
 
+  // Hermanas POR TEMA: nº de filas en la lista que comparten `contenido_id` (una por red).
+  // El reparto coge/suelta el TEMA entero, así que la tarjeta avisa cuando hay varias.
+  const hermanasPorContenido = React.useMemo(() => {
+    const m = new Map<string, number>();
+    for (const p of publicaciones) {
+      if (p.contenido_id) m.set(p.contenido_id, (m.get(p.contenido_id) ?? 0) + 1);
+    }
+    return m;
+  }, [publicaciones]);
+
   const fila = (p: Publicacion) => (
     <div className="flex items-start gap-2">
       <Checkbox
@@ -469,6 +517,7 @@ export function VistaLista({
       <div className="min-w-0 flex-1">
         <TarjetaPublicacion
           publicacion={p}
+          hermanas={p.contenido_id ? hermanasPorContenido.get(p.contenido_id) ?? 1 : 1}
           onEditar={onEditar}
           onDuplicar={onDuplicar}
           onConfigurarCadencia={onConfigurarCadencia}

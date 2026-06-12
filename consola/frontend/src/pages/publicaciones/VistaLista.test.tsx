@@ -7,7 +7,7 @@ import { SesionContexto } from "@/hooks/sesion-contexto";
 import * as apiMod from "@/lib/api";
 import type { Publicacion } from "@/types";
 
-import { VistaLista } from "./VistaLista";
+import { VistaLista, kebabSegunPuntero } from "./VistaLista";
 
 vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
@@ -229,6 +229,35 @@ describe("VistaLista — selección múltiple y borrado en masa", () => {
     expect(screen.queryByRole("button", { name: /Coger/ })).toBeNull();
   });
 
+  it("reparto POR TEMA: una pieza con 3 hermanas en la lista avisa 'N redes · se cogen juntas'", async () => {
+    const coger = vi
+      .spyOn(apiMod.api, "cogerContenido")
+      .mockResolvedValue({ contenido: {} } as never);
+    // 3 filas (una por red) que comparten el mismo `contenido_id`: cogerlas se lleva las 3.
+    renderLista([
+      pub({ id: "p1", contenido_id: "c9", red: "x", titulo: "Gol", marca: "claro-sports" }),
+      pub({ id: "p2", contenido_id: "c9", red: "instagram", titulo: "Gol", marca: "claro-sports" }),
+      pub({ id: "p3", contenido_id: "c9", red: "facebook", titulo: "Gol", marca: "claro-sports" }),
+    ]);
+    // El badge aparece en cada una de las 3 hermanas.
+    expect(screen.getAllByText(/3 redes/)).toHaveLength(3);
+
+    // El toast de coger menciona que se llevan las N redes.
+    fireEvent.click(screen.getAllByRole("button", { name: "Coger" })[0]);
+    const { toast } = await import("sonner");
+    await waitFor(() => expect(coger).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(toast.success)).toHaveBeenCalledWith(
+      expect.stringContaining("y sus 3 redes son tuyas"),
+    );
+  });
+
+  it("reparto: una pieza SOLA (sin hermanas) no muestra el aviso de multi-red", () => {
+    renderLista([
+      pub({ id: "p1", contenido_id: "c1", titulo: "Nota", marca: "claro-sports" }),
+    ]);
+    expect(screen.queryByText(/redes · se cogen juntas/)).toBeNull();
+  });
+
   it("reporta los fallos parciales del lote (toast de error con el resumen)", async () => {
     vi.spyOn(apiMod.api, "borrarPublicacionesLote").mockResolvedValue({
       borradas: 1,
@@ -248,5 +277,15 @@ describe("VistaLista — selección múltiple y borrado en masa", () => {
         expect.stringContaining("Borradas 1 de 2"),
       ),
     );
+  });
+});
+
+describe("kebabSegunPuntero — visibilidad del kebab según el puntero (táctil)", () => {
+  it("puntero grueso (táctil, sin hover): kebab SIEMPRE visible", () => {
+    expect(kebabSegunPuntero(true)).toBe("siempre");
+  });
+
+  it("puntero fino (ratón): kebab al hover, como hoy", () => {
+    expect(kebabSegunPuntero(false)).toBe("hover");
   });
 });
