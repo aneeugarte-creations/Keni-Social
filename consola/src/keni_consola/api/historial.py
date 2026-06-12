@@ -63,6 +63,9 @@ def _nombre(prompt_id: str) -> str:
     return (prompt_id or "").replace("-", " ").strip().capitalize() or prompt_id
 
 
+# DEPRECADO(consolidación): el listado del historial ya no lo consume ninguna página del
+# front (la actividad de IA se mira en /api/pipelines y el Monitor); se elimina en fase 4.
+# OJO: POST /api/prompts/historial/{id}/guardar SÍ se usa y NO está deprecado.
 async def historial(request: Request) -> Response:
     """`GET /api/prompts/historial` -> listado (metadatos + preview), recientes primero.
 
@@ -99,6 +102,8 @@ async def historial(request: Request) -> Response:
     )
 
 
+# DEPRECADO(consolidación): el detalle del historial ya no lo consume ninguna página del
+# front; se elimina en fase 4 junto al listado de arriba.
 async def historial_detalle(request: Request) -> Response:
     """`GET /api/prompts/historial/{id}` -> detalle con el resultado completo (404)."""
     entrada = repos.obtener_historial_prompt(request.path_params["historial_id"])

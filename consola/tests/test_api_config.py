@@ -47,6 +47,10 @@ def cfg_metricas(monkeypatch, tmp_path):
     ruta = tmp_path / "config.toml"
     monkeypatch.setenv("KENI_CONSOLA_CONFIG", str(tmp_path / "consola.toml"))
     monkeypatch.setenv("KENI_CONSOLA_PREFERENCIAS", str(tmp_path / "preferencias.toml"))
+    # El esfuerzo vive ya en el store de AJUSTES (KENI_ESFUERZO): aislarlo en tmp para que
+    # el shim /api/config/esfuerzo no escriba el store real del usuario/runner.
+    monkeypatch.setenv("KENI_CONSOLA_AJUSTES", str(tmp_path / "ajustes.toml"))
+    monkeypatch.delenv("KENI_ESFUERZO", raising=False)
     monkeypatch.setenv("KENI_METRICAS_CONFIG", str(ruta))
     monkeypatch.delenv("KENI_METRICAS_FUENTE", raising=False)
     monkeypatch.delenv("KENI_METRICAS_MARCAS", raising=False)
@@ -257,3 +261,62 @@ def test_post_esfuerzo_invalido_400(cfg_metricas):
 def test_post_esfuerzo_no_texto_400(cfg_metricas):
     r = _cli().post("/api/config/esfuerzo", json={"esfuerzo": 5})
     assert r.status_code == 400
+
+
+# --------------------------------------------------------------------------- #
+# Shim deprecado: el esfuerzo vive en el catálogo de ajustes (KENI_ESFUERZO)   #
+# --------------------------------------------------------------------------- #
+
+
+def test_post_esfuerzo_escribe_el_ajuste_del_catalogo(cfg_metricas):
+    """El shim persiste en el store de AJUSTES (fuente única nueva), no en el TOML viejo."""
+    from keni_consola import ajustes, config
+
+    assert _cli().post("/api/config/esfuerzo", json={"esfuerzo": "high"}).status_code == 200
+    assert ajustes.obtener(config.ENV_ESFUERZO) == "high"
+
+
+def test_get_esfuerzo_cae_al_toml_legado_si_no_hay_ajuste(cfg_metricas, tmp_path):
+    """Migración suave: lo guardado con la UI vieja (preferencias.toml) sigue valiendo
+    mientras nadie escriba el ajuste nuevo."""
+    (tmp_path / "preferencias.toml").write_text('esfuerzo = "max"\n', encoding="utf-8")
+    assert _cli().get("/api/config/esfuerzo").json()["esfuerzo"] == "max"
+
+
+def test_post_esfuerzo_vacio_gana_al_toml_legado(cfg_metricas, tmp_path):
+    """Elegir «Predeterminado» en el shim guarda "" explícito: el valor legado no resucita."""
+    (tmp_path / "preferencias.toml").write_text('esfuerzo = "max"\n', encoding="utf-8")
+    c = _cli()
+    assert c.post("/api/config/esfuerzo", json={"esfuerzo": ""}).status_code == 200
+    assert c.get("/api/config/esfuerzo").json()["esfuerzo"] == ""
+    # Y la clave legada se retira del TOML (migración definitiva al primer guardado).
+    assert "esfuerzo" not in (tmp_path / "preferencias.toml").read_text(encoding="utf-8")
+
+
+def test_esfuerzo_editable_tambien_via_api_ajustes(cfg_metricas):
+    """La fuente única: POST /api/ajustes (admin) cambia lo que el shim lee."""
+    from keni_consola import auth
+
+    from .conftest import TOKEN_PRUEBA
+
+    auth.crear_usuario("admin-esfuerzo", "clave-de-prueba", "admin")
+    # Cliente SIN el bearer por defecto: /api/ajustes exige una SESIÓN admin real
+    # (el token de mantenimiento NO es admin, #150).
+    c = TestClient(app_modulo.crear_app(abrir=lambda _r: "ok-mock", token=TOKEN_PRUEBA))
+    r = c.post(
+        "/api/auth/login",
+        json={"usuario": "admin-esfuerzo", "password": "clave-de-prueba"},
+        headers={"Origin": "http://testserver"},
+    )
+    assert r.status_code == 200
+    r = c.post(
+        "/api/ajustes",
+        json={"clave": "KENI_ESFUERZO", "valor": "medium"},
+        headers={"Origin": "http://testserver"},
+    )
+    assert r.status_code == 200
+    assert r.json()["ajuste"]["valor"] == "medium"
+    assert r.json()["ajuste"]["fuente"] == "store"
+    assert c.get("/api/config/esfuerzo").json()["esfuerzo"] == "medium"
+    # Y el shim normal (token) lee lo mismo: una sola fuente de verdad.
+    assert _cli().get("/api/config/esfuerzo").json()["esfuerzo"] == "medium"

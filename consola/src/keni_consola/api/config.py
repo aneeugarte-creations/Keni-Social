@@ -8,6 +8,11 @@ Ya no importa internals (`config`/`asistente`).
 Las credenciales NUNCA se editan ni se muestran por la API: solo se reporta su
 PRESENCIA/AUSENCIA por bloque (meta/youtube/x/tiktok). La ESCRITURA de tokens vive
 en `api/conexiones.py`, no aqui.
+
+DEPRECADO(consolidación): GET/POST /api/config están muertos (ninguna página los
+consume) y GET/POST /api/config/esfuerzo son un SHIM sobre el ajuste `KENI_ESFUERZO`
+del catálogo (`ajustes_catalogo.py`). Todo este módulo se elimina en fase 4 (el front
+migra a /api/ajustes en fase 3).
 """
 
 from __future__ import annotations
@@ -44,6 +49,8 @@ _FUENTES_APP: tuple[str, ...] = ("metricool",)
 # --------------------------------------------------------------------------- #
 
 
+# DEPRECADO(consolidación): GET /api/config no lo consume ninguna página del front (la
+# fuente/alcance se gestionan en Conexiones); se elimina en fase 4 junto a su POST.
 async def obtener_config(request: Request) -> Response:
     try:
         estado = servicio.instantanea_config()
@@ -66,6 +73,8 @@ async def obtener_config(request: Request) -> Response:
     )
 
 
+# DEPRECADO(consolidación): POST /api/config no lo consume ninguna página del front; se
+# elimina en fase 4 junto a su GET.
 async def guardar_config(request: Request) -> Response:
     datos = await leer_json(request)
 
@@ -121,65 +130,65 @@ async def guardar_config(request: Request) -> Response:
 
 
 # --------------------------------------------------------------------------- #
-# Esfuerzo de generacion (claude --effort) — preferencia local del equipo      #
+# Esfuerzo de generacion (claude --effort) — SHIM DEPRECADO sobre el catálogo  #
 # --------------------------------------------------------------------------- #
+#
+# DEPRECADO(consolidación): el esfuerzo es ya un ajuste del catálogo (`KENI_ESFUERZO`,
+# select del grupo `tuning`; GET/POST /api/ajustes). Estos dos endpoints quedan como SHIM
+# de retrocompatibilidad para el front actual (SeccionEsfuerzo) hasta la Fase 3; se
+# eliminan en fase 4. Leen/escriben el ajuste nuevo vía `preferencias` (que además cae al
+# TOML legado en lectura si nadie escribió aún el ajuste — migración suave documentada allí).
 
-# Opciones que pinta la UI. El backend es la fuente de verdad de id/etiqueta/ayuda;
-# el id "" es el predeterminado del modelo (no se pasa `--effort`). Orden estable.
-_ESFUERZO_OPCIONES: tuple[dict[str, str], ...] = (
-    {
-        "id": "",
-        "etiqueta": "Predeterminado",
-        "descripcion": "Usa el esfuerzo por defecto del modelo. Equilibrado y recomendado.",
-    },
-    {
-        "id": "low",
-        "etiqueta": "Bajo",
-        "descripcion": "Responde antes y piensa menos. Para borradores rápidos.",
-    },
-    {
-        "id": "medium",
-        "etiqueta": "Medio",
-        "descripcion": "Equilibrio entre rapidez y calidad.",
-    },
-    {
-        "id": "high",
-        "etiqueta": "Alto",
-        "descripcion": "Piensa más: mejor calidad, algo más lento.",
-    },
-    {
-        "id": "xhigh",
-        "etiqueta": "Muy alto",
-        "descripcion": "Razonamiento extenso para tareas difíciles.",
-    },
-    {
-        "id": "max",
-        "etiqueta": "Máximo",
-        "descripcion": "Máximo razonamiento. El más lento y costoso.",
-    },
-)
+# Descripciones largas de cada nivel (solo las usa este shim; las etiquetas viven en
+# `preferencias.ESFUERZO_ETIQUETAS`, compartidas con el catálogo de ajustes).
+_ESFUERZO_DESCRIPCIONES: dict[str, str] = {
+    "": "Usa el esfuerzo por defecto del modelo. Equilibrado y recomendado.",
+    "low": "Responde antes y piensa menos. Para borradores rápidos.",
+    "medium": "Equilibrio entre rapidez y calidad.",
+    "high": "Piensa más: mejor calidad, algo más lento.",
+    "xhigh": "Razonamiento extenso para tareas difíciles.",
+    "max": "Máximo razonamiento. El más lento y costoso.",
+}
+
+
+def _opciones_esfuerzo() -> list[dict[str, str]]:
+    """Opciones que pinta la UI vieja: id/etiqueta (fuente única) + descripción del shim."""
+    return [
+        {
+            "id": nivel,
+            "etiqueta": preferencias.ESFUERZO_ETIQUETAS[nivel],
+            "descripcion": _ESFUERZO_DESCRIPCIONES[nivel],
+        }
+        for nivel in ("", *preferencias.ESFUERZOS_VALIDOS)
+    ]
 
 
 def _etiqueta_esfuerzo(nivel: str) -> str:
     """Etiqueta humana de un nivel de esfuerzo (cae a «Predeterminado»)."""
-    for opcion in _ESFUERZO_OPCIONES:
-        if opcion["id"] == nivel:
-            return opcion["etiqueta"]
-    return "Predeterminado"
+    return preferencias.ESFUERZO_ETIQUETAS.get(nivel, "Predeterminado")
 
 
 async def obtener_esfuerzo(request: Request) -> Response:
-    """GET: nivel de esfuerzo actual + catálogo de opciones para la UI."""
+    """GET: nivel de esfuerzo actual + catálogo de opciones para la UI.
+
+    SHIM deprecado: lee el ajuste `KENI_ESFUERZO` del catálogo (con fallback al TOML
+    legado, ver `preferencias.obtener_esfuerzo`). Mismo contrato de respuesta de siempre.
+    """
     return JSONResponse(
         {
             "esfuerzo": preferencias.obtener_esfuerzo(),
-            "opciones": [dict(o) for o in _ESFUERZO_OPCIONES],
+            "opciones": _opciones_esfuerzo(),
         }
     )
 
 
 async def guardar_esfuerzo(request: Request) -> Response:
-    """POST `{esfuerzo}`: guarda el nivel (atómico). Vacío => predeterminado del modelo."""
+    """POST `{esfuerzo}`: guarda el nivel. Vacío => predeterminado del modelo.
+
+    SHIM deprecado: escribe el ajuste `KENI_ESFUERZO` en el store de ajustes (la única
+    fuente de verdad nueva) vía `preferencias.guardar_esfuerzo`, que además retira el
+    valor del almacén viejo (migración definitiva). Mismo contrato de respuesta.
+    """
     datos = await leer_json(request)
     nivel = datos.get("esfuerzo", "")
     if not isinstance(nivel, str):

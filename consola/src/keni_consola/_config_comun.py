@@ -84,6 +84,10 @@ ENV_PROMPT_MAX_CHARS = "KENI_PROMPT_MAX_CHARS"
 ENV_PROMPT_AVISO_CHARS = "KENI_PROMPT_AVISO_CHARS"
 
 # Generacion `claude -p`.
+# Esfuerzo de razonamiento (`claude --effort`) de TODA la generacion. Vive en el catalogo
+# de ajustes (select editable en caliente; precedencia STORE > ENV). El TOML local de
+# preferencias queda solo como FALLBACK legado (ver `preferencias.obtener_esfuerzo`).
+ENV_ESFUERZO = "KENI_ESFUERZO"
 ENV_CLAUDE_TIMEOUT = "KENI_CLAUDE_TIMEOUT"
 ENV_CLAUDE_MAX_USD = "KENI_CLAUDE_MAX_USD"
 ENV_CLAUDE_MAX_TURNS = "KENI_CLAUDE_MAX_TURNS"
@@ -818,6 +822,7 @@ __all__ = [
     'ENV_DB_POOL',
     'ENV_DB_POOL_MAX',
     'ENV_DB_POOL_MIN',
+    'ENV_ESFUERZO',
     'ENV_EVENTOS_INTERVALO_SEGUNDOS',
     'ENV_EVENTOS_VENCIMIENTOS',
     'ENV_FEED_SLA_MIN',

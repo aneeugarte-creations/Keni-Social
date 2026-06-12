@@ -90,6 +90,8 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_INGESTA_FILTRO,
         # Caducidad del pool: TTL (lo viejo expira solo) + retención (techo del archivo).
         config.ENV_NOTICIAS_TTL_H, config.ENV_NOTICIAS_RETENCION_H,
+        # Esfuerzo de razonamiento de la generación (consolidado desde /api/config/esfuerzo).
+        config.ENV_ESFUERZO,
     }
     # Los toggles por marca (clave `ENV::marca`) se generan en caliente; el resto del catálogo
     # son exactamente las claves globales esperadas.
@@ -271,8 +273,10 @@ def test_noticias_reparto_en_secciones(store):
 
 
 def test_tuning_solo_operacional(store):
-    """`tuning` queda solo con los finos operacionales (jobs, limpieza GC, alertas), int/float min>=0."""
+    """`tuning` queda con los finos operacionales (jobs, limpieza GC, alertas, int/float
+    min>=0) + el esfuerzo de razonamiento de la generación (select)."""
     claves = [
+        config.ENV_ESFUERZO,
         config.ENV_MAX_JOBS,
         config.ENV_ALERTAS_INTERVALO_HORAS,
         config.ENV_ALERTAS_UMBRAL_ENGAGEMENT,
@@ -337,6 +341,34 @@ def test_generacion_pausada_es_kill_switch_de_maquina(store):
     assert a.defecto is False
     assert a.grupo == "maquina_global"
     assert a.peligroso is False
+
+
+def test_esfuerzo_es_select_del_catalogo(store, monkeypatch):
+    """`KENI_ESFUERZO` (consolidación del esfuerzo): select en `tuning`, defecto "" =
+    predeterminado del modelo, con los mismos niveles que expone `preferencias` y
+    precedencia store > env. NO peligroso (toggle editable normal)."""
+    from keni_consola import preferencias
+
+    a = ajustes_catalogo.por_clave(config.ENV_ESFUERZO)
+    assert a is not None, "falta el ajuste KENI_ESFUERZO"
+    assert a.tipo == "select"
+    assert a.grupo == "tuning"
+    assert a.defecto == ""
+    assert a.peligroso is False
+    assert [o["id"] for o in a.opciones] == ["", *preferencias.ESFUERZOS_VALIDOS]
+    # validación: solo ids del select (el "" incluido); lo demás, error legible.
+    assert ajustes_catalogo.validar_valor(a, "high") == ("high", None)
+    assert ajustes_catalogo.validar_valor(a, "") == ("", None)
+    valor, error = ajustes_catalogo.validar_valor(a, "turbo")
+    assert valor is None and "KENI_ESFUERZO" in error
+    # precedencia: store > env.
+    monkeypatch.setenv(config.ENV_ESFUERZO, "low")
+    assert ajustes_catalogo.valor_y_fuente(a) == ("low", "env")
+    ajustes.guardar(config.ENV_ESFUERZO, "max")
+    assert ajustes_catalogo.valor_y_fuente(a) == ("max", "store")
+    # serialización: el select lleva sus opciones en el dict de API.
+    d = ajustes_catalogo.a_dict(a)
+    assert [o["id"] for o in d["opciones"]] == ["", *preferencias.ESFUERZOS_VALIDOS]
 
 
 def test_grupos_maquina_son_los_del_monitor(store):

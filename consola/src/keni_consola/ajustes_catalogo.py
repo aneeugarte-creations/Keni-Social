@@ -20,7 +20,7 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-from . import ajustes, config, marcas
+from . import ajustes, config, marcas, preferencias
 from .dominio.clustering import (
     LISTON_MIN_MARCA_DEF as _LISTON_MIN_MARCA_DEF,
     LISTON_MIN_SCORE_DEF as _LISTON_MIN_SCORE_DEF,
@@ -414,6 +414,25 @@ def _construir_catalogo() -> list[Ajuste]:
             minimo=0,
         ),
         # --- Tuning (int/float/select) --------------------------------------------- #
+        # Esfuerzo de razonamiento de TODA la generacion (`claude --effort`). Antes vivia
+        # en el almacen aparte de `preferencias.py` (TOML local) detras de
+        # `/api/config/esfuerzo`; consolidado aqui como select del catalogo (fuente unica;
+        # aquel endpoint queda como shim deprecado). Las opciones/etiquetas salen de
+        # `preferencias` (fuente unica de los niveles validos); "" = predeterminado del
+        # modelo (no se pasa `--effort`).
+        Ajuste(
+            clave=config.ENV_ESFUERZO,
+            tipo="select",
+            etiqueta="Esfuerzo de razonamiento",
+            ayuda="Cuánto «piensa» la IA al generar: más esfuerzo = mejor calidad, más lento "
+            "y más caro. «Predeterminado» usa el esfuerzo por defecto del modelo.",
+            grupo="tuning",
+            defecto="",
+            opciones=tuple(
+                {"id": nivel, "etiqueta": preferencias.ESFUERZO_ETIQUETAS[nivel]}
+                for nivel in ("", *preferencias.ESFUERZOS_VALIDOS)
+            ),
+        ),
         Ajuste(
             clave=config.ENV_ALERTAS_INTERVALO_HORAS,
             tipo="int",
