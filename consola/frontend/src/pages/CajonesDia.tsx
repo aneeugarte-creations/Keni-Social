@@ -306,6 +306,17 @@ function ItemCard({ item, fecha }: PropsItemCard) {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  // Descarte por ítem (lo que promete el explainer): borra el apunte y el back
+  // aparta su gemela del pool para que el auto-feed no la convierta en pieza.
+  const descartarMut = useMutation({
+    mutationFn: () => api.insumos.descartarItem(item.id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_INSUMOS_PREFIJO(fecha) });
+      toast.success("Ítem descartado.");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
   function onGuardado() {
     void queryClient.invalidateQueries({ queryKey: CLAVE_INSUMOS_PREFIJO(fecha) });
   }
@@ -330,8 +341,38 @@ function ItemCard({ item, fecha }: PropsItemCard) {
                 >
                   <Edit2 className="h-3 w-3" />
                 </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-destructive"
+                  onClick={async () => {
+                    // Confirmación ligera: el descarte borra el apunte (la gemela del
+                    // pool se aparta en el back para que el auto-feed no la recoja).
+                    if (
+                      await confirmar({
+                        mensaje: `¿Descartar "${item.titulo || "(sin título)"}"?`,
+                        destructivo: true,
+                        textoConfirmar: "Descartar",
+                      })
+                    )
+                      descartarMut.mutate();
+                  }}
+                  disabled={descartarMut.isPending}
+                  aria-label="Descartar ítem"
+                  title="Descartar (no entra al feed)"
+                >
+                  {descartarMut.isPending ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3 w-3" />
+                  )}
+                </Button>
                 {esContexto ? (
-                  <Badge variant="outline" className="text-xs" title="Guía editorial; no se publica">
+                  <Badge
+                    variant="outline"
+                    className="text-xs"
+                    title="Guía para el equipo y para la IA al redactar (no se publica)"
+                  >
                     Guía
                   </Badge>
                 ) : esEvento ? (
@@ -479,7 +520,10 @@ function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
       const form = new FormData();
       form.set("cajon", def.id);
       form.set("fecha", fecha);
-      if (marcaActiva) form.set("marca", marcaActiva);
+      // Marca del lote: la activa del switch global; en "Todas" (null, admin) cae a la
+      // marca DUEÑA del cajón (cada buzón es de una marca), no a un lote sin marca cuyos
+      // ítems quedarían huérfanos del filtro por marca.
+      form.set("marca", marcaActiva ?? def.marca);
       if (texto.trim()) form.set("texto", texto.trim());
       if (archivo) form.set("archivo", archivo);
       return api.insumos.aportar(form);

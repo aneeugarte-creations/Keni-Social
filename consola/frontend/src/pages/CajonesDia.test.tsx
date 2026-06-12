@@ -21,6 +21,12 @@ import type { UsuarioSesion } from "@/types";
 
 import CajonesDia from "./CajonesDia";
 
+// El diálogo real de confirmación vive en main.tsx (no está montado en tests): se
+// sustituye por un "sí" inmediato para poder ejercitar las acciones destructivas.
+vi.mock("@/components/comunes/confirmar", () => ({
+  confirmar: () => Promise.resolve(true),
+}));
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function usuario(): UsuarioSesion {
@@ -164,6 +170,33 @@ const INSUMOS_CON_EVENTO = {
       cajon: "eventos_claro",
       lotes: [{ ...LOTE_PORTAL, cajon: "eventos_claro" }],
       items: [ITEM_EVENTO],
+    },
+  ],
+};
+
+// Ítem del cajón Indicaciones (tipo='contexto'): guía editorial, nunca pieza. Muestra el
+// badge "Guía" (sin "Empujar ya"); la generación de copy lee esas indicaciones hacia adentro.
+const ITEM_CONTEXTO = {
+  ...ITEM_PARSED,
+  id: "item-ctx",
+  cajon: "contexto" as const,
+  tipo: "contexto" as const,
+  titulo: "No llamar 'Tri' a la selección",
+  marca: "claro-sports",
+  marca_nombre: "Claro Sports",
+};
+
+const INSUMOS_CON_CONTEXTO = {
+  fecha: "2026-06-05",
+  cajones: [
+    { cajon: "portal", lotes: [], items: [] },
+    { cajon: "corresponsales", lotes: [], items: [] },
+    { cajon: "reporteros", lotes: [], items: [] },
+    { cajon: "eventos_claro", lotes: [], items: [] },
+    {
+      cajon: "contexto",
+      lotes: [{ ...LOTE_PORTAL, cajon: "contexto" }],
+      items: [ITEM_CONTEXTO],
     },
   ],
 };
@@ -352,6 +385,42 @@ describe("CajonesDia", () => {
     await waitFor(() => {
       expect(usarMock).toHaveBeenCalledWith("item-1", { generar: true });
     });
+  });
+
+  it("el botón 'Descartar' llama a api.insumos.descartarItem tras confirmar", async () => {
+    const descartarMock = vi
+      .spyOn(apiMod.api.insumos, "descartarItem")
+      .mockResolvedValue({ ok: true } as never);
+    vi.spyOn(apiMod.api.insumos, "listar").mockResolvedValue(INSUMOS_CON_ITEM as never);
+    vi.spyOn(apiMod.api.insumos, "dias").mockResolvedValue({ dias: [] } as never);
+
+    renderConProviders(<CajonesDia />);
+
+    await screen.findByText("Sismo en CDMX de 5.4 grados");
+    fireEvent.click(screen.getByRole("button", { name: "Descartar ítem" }));
+
+    await waitFor(() => {
+      expect(descartarMock).toHaveBeenCalledWith("item-1");
+    });
+  });
+
+  it("un ítem usado NO ofrece 'Descartar' (su pieza ya vive en el tablero)", async () => {
+    const itemUsado = { ...ITEM_PARSED, usado: true, contenido_id: "c-99" };
+    vi.spyOn(apiMod.api.insumos, "listar").mockResolvedValue({
+      ...INSUMOS_CON_ITEM,
+      cajones: [
+        { cajon: "portal", lotes: [LOTE_PORTAL], items: [itemUsado] },
+        { cajon: "corresponsales", lotes: [], items: [] },
+        { cajon: "reporteros", lotes: [], items: [] },
+        { cajon: "eventos_claro", lotes: [], items: [] },
+      ],
+    } as never);
+    vi.spyOn(apiMod.api.insumos, "dias").mockResolvedValue({ dias: [] } as never);
+
+    renderConProviders(<CajonesDia />);
+
+    await screen.findByText("Sismo en CDMX de 5.4 grados");
+    expect(screen.queryByRole("button", { name: "Descartar ítem" })).not.toBeInTheDocument();
   });
 
   it("ítem en pool muestra badge 'En el pool'", async () => {
@@ -562,6 +631,47 @@ describe("CajonesDia", () => {
     // Tras encolar, se invalida la query y aparece el ítem ya parseado (segundo listar).
     expect(await screen.findByText("Sismo en CDMX de 5.4 grados")).toBeInTheDocument();
     expect(listarMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("en 'Todas' (admin) el lote hereda la marca DUEÑA del cajón, no queda sin marca", async () => {
+    const aportarMock = vi
+      .spyOn(apiMod.api.insumos, "aportar")
+      .mockResolvedValue({ lote: LOTE_PORTAL, generacion: null } as never);
+    mockApiInsumos();
+
+    renderConProviders(<CajonesDia />, usuarioAdmin());
+
+    await screen.findByText("Portal / SMS");
+    fireEvent.change(screen.getByLabelText("Texto para Portal / SMS"), {
+      target: { value: "1.- Nota" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Procesar Portal / SMS" }));
+
+    await waitFor(() => {
+      expect(aportarMock).toHaveBeenCalled();
+    });
+    // Sin marca activa (vista "Todas") el lote cae a la marca del cajón (Portal → unotv):
+    // sus ítems no quedan huérfanos del filtro por marca.
+    const form = aportarMock.mock.calls[0][0] as FormData;
+    expect(form.get("marca")).toBe("unotv");
+  });
+
+  it("una indicación muestra el badge 'Guía' (tooltip honesto) y no ofrece 'Empujar ya'", async () => {
+    vi.spyOn(apiMod.api.insumos, "listar").mockResolvedValue(INSUMOS_CON_CONTEXTO as never);
+    vi.spyOn(apiMod.api.insumos, "dias").mockResolvedValue({ dias: [] } as never);
+
+    // El cajón Indicaciones es de Claro Sports; lo ve un admin en "Todas".
+    renderConProviders(<CajonesDia />, usuarioAdmin());
+
+    await screen.findByText("No llamar 'Tri' a la selección");
+    const badge = screen.getByText("Guía");
+    expect(badge).toHaveAttribute(
+      "title",
+      "Guía para el equipo y para la IA al redactar (no se publica)",
+    );
+    expect(
+      screen.queryByRole("button", { name: "Empujar ya (fuerza al feed)" }),
+    ).not.toBeInTheDocument();
   });
 
   it("pasa la marca activa del usuario a api.insumos.listar", async () => {

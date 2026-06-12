@@ -61,8 +61,21 @@ export const apiInsumos = {
       }),
 
     /**
+     * Descarta (borra) un ítem NO usado. El back también marca `descartado` su fila
+     * gemela del pool de noticias para que el auto-feed no la convierta en pieza.
+     * Un ítem ya usado devuelve 400 (su pieza/evento vive en el tablero/rota).
+     */
+    descartarItem: (id: string) =>
+      peticion<{ ok: boolean }>(`/insumos/item/${encodeURIComponent(id)}`, {
+        metodo: "DELETE",
+        muestrear: false,
+      }),
+
+    /**
      * Lleva un ítem al tablero: crea contenido con `origen="insumo"` y marca el ítem
      * como `usado`. Acepta `redes` y `generar` (lanza copy si `true` y hay marca).
+     * Guardas del back: 400 si el ítem no tiene marca; 409 si el auto-feed ya
+     * recogió su historia del pool (evita la doble pieza).
      */
     usarItem: (id: string, body: { redes?: string[]; generar?: boolean }) =>
       peticion<{ item: InsumoItem; contenido_id: string }>(
