@@ -3,6 +3,7 @@ import {
   CalendarClock,
   Check,
   Hand,
+  ListChecks,
   Play,
   Plus,
   RotateCcw,
@@ -23,6 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { MARCA_ACTIVA_TODAS, useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { SesionContexto } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
@@ -514,20 +516,20 @@ export default function Tareas() {
     );
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">Tareas del equipo</h1>
-          <p className="text-sm text-muted-foreground">
-            Los partidos y encargos a cubrir, por fecha. Cógelos o que Elias los reparta; lo que
-            entra por Fuentes aparece aquí solo.
-          </p>
-        </div>
-        <Button onClick={() => setCrearAbierto(true)}>
+    <>
+      <TituloPagina titulo="Tareas del equipo" icono={ListChecks} />
+      <AccionesPagina>
+        <Button size="sm" onClick={() => setCrearAbierto(true)}>
           <Plus className="mr-1 h-4 w-4" />
           Añadir
         </Button>
-      </div>
+      </AccionesPagina>
+
+      <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Los partidos y encargos a cubrir, por fecha. Cógelos o que Elias los reparta; lo que
+        entra por Fuentes aparece aquí solo.
+      </p>
 
       <div className="flex flex-wrap gap-2">
         {LENTES.map((l) => (
@@ -581,6 +583,7 @@ export default function Tareas() {
         catalogos={catalogos}
         marca={marca}
       />
-    </div>
+      </div>
+    </>
   );
 }
