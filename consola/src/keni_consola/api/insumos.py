@@ -27,6 +27,7 @@ from __future__ import annotations
 import logging
 import shutil
 import tempfile
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -37,7 +38,7 @@ from starlette.routing import Route
 
 from .. import autogen_copy, config, generaciones, marcas, redes, repos, rutas
 from .._http_json import leer_json
-from ..dominio import ingesta, insumos_parse, jobspec
+from ..dominio import indicaciones, ingesta, insumos_parse, jobspec
 from ..dominio.frescura import estado_frescura, resolver_linea
 from ..seguridad import autor_de_peticion
 from ..tiempo import hoy_utc
@@ -92,11 +93,35 @@ def _item_a_dict(item: dict[str, Any], hoy: str | None = None) -> dict[str, Any]
         es_evergreen,
         hoy=_hoy,
     )
-    return {
+    salida = {
         **item,
         "marca_nombre": marcas.etiqueta_de(item["marca"]) if item.get("marca") else "",
         "frescura": frescura,
     }
+    # Vigencia de las INDICACIONES (cajón `contexto`): caducan a los `VENTANA_DIAS` días
+    # (dominio/indicaciones.py) pero esa vigencia era INVISIBLE. La exponemos SOLO para los
+    # ítems de guía editorial (`tipo=="contexto"`) para que el front pinte "Guía hasta DD/MM" /
+    # "Caducada"; el resto de cajones no llevan el campo (no aplica). Mismo criterio de fecha
+    # que `indicaciones.indicaciones_vigentes` (quien de verdad inyecta las vigentes en el copy),
+    # para no divergir.
+    if str(item.get("tipo") or "") == "contexto":
+        salida["indicacion_vigente"] = _indicacion_vigente(item.get("fecha") or "", _hoy)
+    return salida
+
+
+def _indicacion_vigente(fecha_item: str, hoy_iso: str) -> bool:
+    """¿La indicación (cajón `contexto`) sigue VIGENTE hoy?
+
+    True si la fecha del ítem cae dentro de la ventana de `indicaciones.VENTANA_DIAS` días
+    hasta `hoy_iso` (mismo corte que `indicaciones.indicaciones_vigentes`: vigente ⇔
+    `fecha >= hoy - VENTANA_DIAS`). Sin fecha parseable no hay vigencia que evaluar: caducada.
+    """
+    try:
+        fecha = date.fromisoformat((fecha_item or "").strip())
+        hoy = date.fromisoformat((hoy_iso or "").strip())
+    except ValueError:
+        return False
+    return fecha >= hoy - timedelta(days=indicaciones.VENTANA_DIAS)
 
 
 def _noticia_pool_de_item(item: dict[str, Any]) -> dict[str, Any] | None:
@@ -112,6 +137,75 @@ def _noticia_pool_de_item(item: dict[str, Any]) -> dict[str, Any] | None:
     if fila is None:
         return None
     return repos.noticia_item_por_clave(fila["fuente_id"], fila["clave"])
+
+
+def _descartar_gemela_pool(item: dict[str, Any]) -> None:
+    """Aparta del pool la fila GEMELA de un ítem de cajón (descarte fino y en bloque comparten esto).
+
+    Marca `descartado` la fila de `noticias_items` que el parseo volcó (enlace por
+    `fuente_id`+`clave`) para que el auto-feed NO la convierta en pieza; si su historia quedó
+    SOLO con esa fuente (`n_fuentes<=1`, sin corroboración externa), también la apaga. Una
+    historia corroborada por otras fuentes sigue viva (existe sin el cajón). Solo toca gemelas
+    `nuevo` SIN `contenido_id` (una ya usada/recogida por el auto-feed conserva su rastro).
+
+    Best-effort por diseño: NUNCA lanza. Un fallo aquí no debe frenar el borrado/descarte del
+    ítem que lo invoca (`descartar_item`, `borrar_lote`) — el dedup por título del pipeline es la
+    segunda red.
+    """
+    try:
+        gemela = _noticia_pool_de_item(item)
+        if gemela is None or gemela.get("estado") != "nuevo" or gemela.get("contenido_id"):
+            return
+        repos.actualizar_noticia_item(gemela["id"], estado="descartado")
+        cid = str(gemela.get("cluster_id") or "")
+        if not cid:
+            return
+        cluster = repos.obtener_noticia_cluster(cid)
+        if (
+            cluster is not None
+            and cluster.get("estado") == "nuevo"
+            and not cluster.get("contenido_id")
+            and int(cluster.get("n_fuentes") or 0) <= 1
+        ):
+            repos.actualizar_noticia_cluster(cid, estado="descartado")
+    except Exception:  # noqa: BLE001 -- el descarte del pool es aditivo; nunca frena al llamante
+        _log.warning(
+            "insumos: no se pudo descartar la gemela del pool (%s)",
+            item.get("id", ""), exc_info=True,
+        )
+
+
+def _reenlazar_gemela_pool(item_previo: dict[str, Any], campos: dict[str, Any]) -> None:
+    """Mantiene VIVO el enlace ítem↔gemela-del-pool cuando se EDITA el título.
+
+    El enlace ítem↔gemela se deriva del hash del título (`_noticia_pool_de_item`): si el equipo
+    reescribe el título, la gemela queda HUÉRFANA (Descartar deja viva la vieja y el 409
+    anti-doble-pieza de "Empujar ya" no dispara). No hay enlace ESTABLE persistido en
+    `insumos_item` (haría falta una columna nueva + migración, y el punto que crea AMBAS filas
+    vive en el worker, fuera de este router), así que RE-CALCULAMOS aquí, en el mismo PATCH:
+    apartamos la gemela vieja (por el título anterior) y volcamos una gemela fresca con el título
+    nuevo, de modo que el lookup por título vuelva a encontrarla. Best-effort: nunca rompe la
+    edición. Solo re-enlaza una gemela aún SIN consumir (una usada/recogida conserva su rastro).
+    """
+    try:
+        gemela = _noticia_pool_de_item(item_previo)
+        if gemela is None or gemela.get("estado") != "nuevo" or gemela.get("contenido_id"):
+            return
+        nueva_fila = ingesta.noticia_item_de_insumo({**item_previo, **campos})
+        # Si el título normalizado no cambió de hash, el enlace sigue vivo: nada que hacer.
+        if (nueva_fila or {}).get("clave") == gemela.get("clave"):
+            return
+        # Aparta la gemela vieja (por el título anterior) y vuelca la nueva (idempotente por
+        # UNIQUE(fuente_id, clave)). Si tras editar el ítem dejó de entrar al pool (re-tipado a
+        # evento/contexto o sin título útil), `nueva_fila` es None: solo apartamos la vieja.
+        _descartar_gemela_pool(item_previo)
+        if nueva_fila is not None:
+            repos.crear_noticias_items([nueva_fila])
+    except Exception:  # noqa: BLE001 -- el re-enlace es dedup; nunca rompe la edición del ítem
+        _log.warning(
+            "insumos: no se pudo re-enlazar la gemela del pool al editar el título (%s)",
+            item_previo.get("id", ""), exc_info=True,
+        )
 
 
 def _redes_iniciales(crudo: Any) -> list[str]:
@@ -420,7 +514,8 @@ async def editar_item(request: Request) -> Response:
     Campos editables: titulo, resumen, marca, linea, hora, lugar, estado_material, tipo.
     """
     item_id = request.path_params["item_id"]
-    if repos.obtener_insumo_item(item_id) is None:
+    item_previo = repos.obtener_insumo_item(item_id)
+    if item_previo is None:
         return JSONResponse({"error": "Ese ítem no existe."}, status_code=404)
     datos = await leer_json(request)
     campos: dict[str, Any] = {}
@@ -435,6 +530,12 @@ async def editar_item(request: Request) -> Response:
         return JSONResponse({"error": "Tipo no válido."}, status_code=400)
     if "estado_material" in campos and campos["estado_material"] not in {"tengo", "espero", ""}:
         return JSONResponse({"error": "estado_material no válido."}, status_code=400)
+    # Si cambia el TÍTULO, re-enlaza la gemela del pool (su identidad es el hash del título): sin
+    # esto el enlace ítem↔gemela se pierde y Descartar / el 409 anti-doble-pieza dejan de operar.
+    if "titulo" in campos and str(campos["titulo"] or "").strip() != str(
+        item_previo.get("titulo") or ""
+    ).strip():
+        _reenlazar_gemela_pool(item_previo, campos)
     item = repos.actualizar_insumo_item(item_id, campos)
     if item is None:
         return JSONResponse({"error": "Ese ítem no existe."}, status_code=404)
@@ -650,23 +751,9 @@ async def descartar_item(request: Request) -> Response:
             {"error": "El ítem ya se usó; no se puede descartar."}, status_code=400
         )
     # Gemela del pool: descartarla evita que el auto-feed la promueva después. Best-effort:
-    # si el equipo editó el título tras parsear, el enlace se pierde y solo se borra el ítem.
-    try:
-        gemela = _noticia_pool_de_item(item)
-        if gemela is not None and gemela.get("estado") == "nuevo" and not gemela.get("contenido_id"):
-            repos.actualizar_noticia_item(gemela["id"], estado="descartado")
-            cid = str(gemela.get("cluster_id") or "")
-            if cid:
-                cluster = repos.obtener_noticia_cluster(cid)
-                if (
-                    cluster is not None
-                    and cluster.get("estado") == "nuevo"
-                    and not cluster.get("contenido_id")
-                    and int(cluster.get("n_fuentes") or 0) <= 1
-                ):
-                    repos.actualizar_noticia_cluster(cid, estado="descartado")
-    except Exception:  # noqa: BLE001 -- el descarte del pool es aditivo; nunca frena el del ítem
-        _log.warning("insumos: no se pudo descartar la gemela del pool (%s)", item_id, exc_info=True)
+    # si el equipo editó el título tras parsear, el PATCH ya re-enlazó la gemela
+    # (`_reenlazar_gemela_pool`), así que el lookup por título actual sigue encontrándola.
+    _descartar_gemela_pool(item)
     if not repos.borrar_insumo_item(item_id):
         return JSONResponse({"error": "Ese ítem no existe."}, status_code=404)
     return JSONResponse({"ok": True})
@@ -678,8 +765,17 @@ async def descartar_item(request: Request) -> Response:
 
 
 async def borrar_lote(request: Request) -> Response:
-    """`DELETE /api/insumos/lote/{lote_id}` -> {ok: true}. Borra lote + sus ítems."""
+    """`DELETE /api/insumos/lote/{lote_id}` -> {ok: true}. Borra lote + sus ítems.
+
+    Antes de borrar, aparta del pool las gemelas de los ítems NO usados del lote (igual que el
+    descarte fino de `descartar_item`): sin esto, material borrado EN BLOQUE reaparecía como
+    piezas del auto-feed (la gemela seguía `nuevo` en `noticias_items`). Los ítems ya usados
+    conservan su rastro: su pieza/evento vive en el tablero/rota y su gemela quedó `usado`.
+    """
     lote_id = request.path_params["lote_id"]
+    for item in repos.listar_insumo_items(lote_id=lote_id):
+        if not item.get("usado"):
+            _descartar_gemela_pool(item)
     if not repos.borrar_insumo_lote(lote_id):
         return JSONResponse({"error": "Ese lote no existe."}, status_code=404)
     return JSONResponse({"ok": True})

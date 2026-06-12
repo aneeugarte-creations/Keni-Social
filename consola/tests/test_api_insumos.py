@@ -301,6 +301,34 @@ def test_editar_item_inexistente_404(cliente):
     assert r.status_code == 404
 
 
+def test_editar_titulo_reenlaza_la_gemela_del_pool():
+    """Editar el TÍTULO mantiene VIVO el enlace ítem↔gemela: la gemela del pool sigue al nuevo
+    título (su identidad es el hash del título). Sin esto, tras editar quedaba huérfana y ni
+    Descartar la apartaba ni el 409 anti-doble-pieza disparaba."""
+    from keni_consola import repos
+    from keni_consola.dominio import ingesta
+
+    cli = _cliente_con_items([{"titulo": "Título original", "marca": "unotv"}])
+    _, item_id = _aportar_un_item(cli, cajon="portal")
+
+    r = cli.patch(f"/api/insumos/item/{item_id}", json={"titulo": "Título reescrito a mano"})
+    assert r.status_code == 200, r.text
+
+    # El lookup por el TÍTULO NUEVO encuentra la gemela (el enlace sobrevivió a la edición).
+    item = repos.obtener_insumo_item(item_id)
+    fila = ingesta.noticia_item_de_insumo(item)
+    gemela = repos.noticia_item_por_clave(fila["fuente_id"], fila["clave"])
+    assert gemela is not None
+    assert gemela["estado"] == "nuevo"
+
+    # Y ahora Descartar SÍ la aparta (antes del fix quedaba viva: enlace roto por el hash viejo).
+    r = cli.delete(f"/api/insumos/item/{item_id}")
+    assert r.status_code == 200, r.text
+    gemela = repos.noticia_item_por_clave(fila["fuente_id"], fila["clave"])
+    assert gemela is not None
+    assert gemela["estado"] == "descartado"
+
+
 # --------------------------------------------------------------------------- #
 # POST /api/insumos/item/{id}/usar                                             #
 # --------------------------------------------------------------------------- #
@@ -571,6 +599,61 @@ def test_borrar_lote_inexistente_404(cliente):
     assert r.status_code == 404
 
 
+def test_borrar_lote_descarta_gemelas_de_items_no_usados():
+    """Borrar un lote EN BLOQUE aparta del pool las gemelas de sus ítems NO usados (igual que el
+    descarte fino): el auto-feed ya no las convierte en piezas. Sin esto, material borrado en
+    bloque reaparecía como piezas del feed."""
+    from keni_consola import repos
+    from keni_consola.dominio import ingesta
+
+    cli = _cliente_con_items([
+        {"titulo": "Bloque uno que no sirve", "marca": "unotv"},
+        {"titulo": "Bloque dos que no sirve", "marca": "unotv"},
+    ])
+    data = cli.post(
+        "/api/insumos/aportar",
+        json={"cajon": "portal", "texto": "1.- a\n2.- b", "fecha": "2026-06-05"},
+    ).json()
+    lote_id = data["lote"]["id"]
+    items = cli.get(f"/api/insumos/lote/{lote_id}").json()["items"]
+    assert len(items) == 2
+    claves = []
+    for it in items:
+        fila = ingesta.noticia_item_de_insumo(it)
+        gemela = repos.noticia_item_por_clave(fila["fuente_id"], fila["clave"])
+        assert gemela is not None and gemela["estado"] == "nuevo"
+        claves.append((fila["fuente_id"], fila["clave"]))
+
+    r = cli.delete(f"/api/insumos/lote/{lote_id}")
+    assert r.status_code == 200, r.text
+    for fuente_id, clave in claves:
+        gemela = repos.noticia_item_por_clave(fuente_id, clave)
+        assert gemela is not None
+        assert gemela["estado"] == "descartado"
+
+
+def test_borrar_lote_no_toca_la_gemela_de_un_item_usado():
+    """Un ítem ya usado del lote conserva su rastro: su gemela quedó `usado` (la marcó el
+    empujón) y NO se vuelve a tocar al borrar el lote en bloque."""
+    from keni_consola import repos
+    from keni_consola.dominio import ingesta
+
+    cli = _cliente_con_items([{"titulo": "Empujada a mano antes de borrar", "marca": "unotv"}])
+    lote_id, item_id = _aportar_un_item(cli, cajon="portal")
+    item = repos.obtener_insumo_item(item_id)
+    fila = ingesta.noticia_item_de_insumo(item)
+    # Empujar marca la gemela `usado`.
+    cli.post(f"/api/insumos/item/{item_id}/usar", json={"generar": False})
+    gemela = repos.noticia_item_por_clave(fila["fuente_id"], fila["clave"])
+    assert gemela["estado"] == "usado"
+
+    r = cli.delete(f"/api/insumos/lote/{lote_id}")
+    assert r.status_code == 200, r.text
+    gemela = repos.noticia_item_por_clave(fila["fuente_id"], fila["clave"])
+    assert gemela is not None
+    assert gemela["estado"] == "usado"  # intacta: no la degradamos a 'descartado'
+
+
 # --------------------------------------------------------------------------- #
 # Historial de días (GET /dias después de aportar)                             #
 # --------------------------------------------------------------------------- #
@@ -744,3 +827,54 @@ def test_sanear_no_toca_lotes_recientes_ni_terminales():
     # Umbral en el futuro: solo toca `parseando`; el `listo` se queda como está.
     repos.sanear_lotes_parseando_huerfanos(_FUTURO)
     assert repos.obtener_insumo_lote(listo["id"])["estado"] == "listo"
+
+
+# --------------------------------------------------------------------------- #
+# Vigencia de las indicaciones (cajón contexto): `indicacion_vigente`          #
+# --------------------------------------------------------------------------- #
+
+
+def _fecha_relativa(dias: int) -> str:
+    """ISO de hace `dias` días respecto a HOY (UTC), el reloj que usa la vigencia."""
+    from datetime import timedelta
+
+    from keni_consola.tiempo import hoy_utc
+
+    return (hoy_utc() - timedelta(days=dias)).isoformat()
+
+
+def test_item_contexto_reciente_es_vigente():
+    """Una indicación reciente (dentro de VENTANA_DIAS) expone `indicacion_vigente=True`."""
+    fecha = _fecha_relativa(0)
+    cli = _cliente_con_items([
+        {"titulo": "Hoy prioridad al Mundial", "tipo": "contexto", "marca": "claro-sports"},
+    ])
+    cli.post("/api/insumos/aportar", json={"cajon": "contexto", "texto": "x", "fecha": fecha})
+    datos = cli.get(f"/api/insumos?fecha={fecha}&cajon=contexto").json()
+    ctx = next(c for c in datos["cajones"] if c["cajon"] == "contexto")
+    item = next(i for i in ctx["items"] if i["tipo"] == "contexto")
+    assert item["indicacion_vigente"] is True
+
+
+def test_item_contexto_caducado_no_es_vigente():
+    """Una indicación de hace más de VENTANA_DIAS (7) días → `indicacion_vigente=False`."""
+    fecha = _fecha_relativa(10)
+    cli = _cliente_con_items([
+        {"titulo": "No usar 'Tri' (corrección vieja)", "tipo": "contexto", "marca": "claro-sports"},
+    ])
+    cli.post("/api/insumos/aportar", json={"cajon": "contexto", "texto": "x", "fecha": fecha})
+    datos = cli.get(f"/api/insumos?fecha={fecha}&cajon=contexto").json()
+    ctx = next(c for c in datos["cajones"] if c["cajon"] == "contexto")
+    item = next(i for i in ctx["items"] if i["tipo"] == "contexto")
+    assert item["indicacion_vigente"] is False
+
+
+def test_item_no_contexto_no_lleva_indicacion_vigente():
+    """El campo `indicacion_vigente` es SOLO de las indicaciones (cajón contexto); un ítem de
+    otro cajón (nota) no lo lleva (no aplica)."""
+    cli = _cliente_con_items([{"titulo": "Nota normal", "marca": "unotv", "tipo": "nota"}])
+    cli.post("/api/insumos/aportar", json={"cajon": "portal", "texto": "x", "fecha": "2026-06-05"})
+    datos = cli.get("/api/insumos?fecha=2026-06-05&cajon=portal").json()
+    portal = next(c for c in datos["cajones"] if c["cajon"] == "portal")
+    item = portal["items"][0]
+    assert "indicacion_vigente" not in item
