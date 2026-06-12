@@ -73,19 +73,16 @@ Esto **dockeriza la arquitectura objetivo**, pero el código aún no la consume 
 
 **HECHO.** En el servidor Latitude (`social.kenitech.io`) Traefik es el **ingress único**
 (`network_mode: host`, dueño de `:80/:443`, ACME Let's Encrypt). El Caddy de sistema
-fue **parado y deshabilitado** (`sudo systemctl disable --now caddy`). Traefik sirve,
-además de keni-social:
+fue **retirado** (paquete purgado). Traefik sirve:
 
 - `social.kenitech.io` → front / back (este stack). **LIVE.**
-- `code.kenitech.io`   → `127.0.0.1:9001` (code-launcher), router en `traefik/dynamic/legacy-sites.yml`.
-- `api.kenitech.io`    → `127.0.0.1:8080` (learn-control-plane) + CORS replicado.
 
-`network_mode: host` es necesario porque code/api escuchan **solo en `127.0.0.1`**
-(un Traefik en bridge no los alcanza). `learn.kenitech.io` **no vive en este box**
-(su DNS apunta a `187.124.247.53`), por eso no tiene router aquí.
-
-**Rollback de emergencia** (restaura code/api bajo Caddy):
-`docker compose stop traefik && sudo systemctl start caddy`.
+Los sitios legacy `code.kenitech.io` (code-launcher) y `api.kenitech.io`
+(learn-control-plane / firecracker) fueron **desmantelados por completo**
+(2026-06-12): servicios systemd, binarios, configs, usuarios `code-*`/`learn`,
+container `learn-postgres` y la partición `/var/lib/firecracker` eliminados del
+servidor; el router `traefik/dynamic/legacy-sites.yml` se borró del repo.
+Backup previo en `/home/ubuntu/backups/legacy-code-learn-20260612.tar.gz`.
 
 ---
 
@@ -96,11 +93,9 @@ ssh -i <clave-ssh> <usuario>@<servidor>
 ```
 - El acceso (IP del servidor, usuario sudo NOPASSWD y nombre de la llave SSH) lo conoce el
   equipo; **no se publica aquí** la receta completa para no exponer la combinación exacta. El
-  privado de la llave **no** está en el repo. Origen del acceso: `keni/code-kenitech/infra/deploy.sh`.
+  privado de la llave **no** está en el repo.
 - El stack vive en `/home/ubuntu/keni-social/deploy`. Operar desde ahí:
   `docker compose ps` · `docker compose logs -f back` · `docker compose up -d`.
-- Rollback de emergencia (restaura code/api bajo Caddy):
-  `docker compose stop traefik && sudo systemctl start caddy`.
 
 ## Requisitos en el host
 
@@ -420,8 +415,9 @@ ve en **Fuentes → Todas las fuentes → Agencias de noticias** y en el panel d
       (`ficheros.py`/`indice.py`), fuera de alcance.
 - [x] Extraer el worker de generación (ADR 0002 Fase B) → Node fuera de `back` **(HECHO)**.
       El `back` ENCOLA (tabla `jobs` en Postgres); el servicio `worker` corre `claude -p`.
-      Pendiente fino: aislamiento por usuario del sandbox en `code.kenitech.io` (infra más
-      profunda; ver más abajo) y `--scale worker=N` si el piloto necesita más throughput.
+      Pendiente fino: `--scale worker=N` si el piloto necesita más throughput. (El plan
+      de sandbox por usuario en `code.kenitech.io` quedó descartado: ese entorno se
+      desmanteló el 2026-06-12.)
 - [x] **Hardening: `back` y `worker` corren como usuario no-root (HECHO).** Ver
       "Hardening / contenedor no-root" abajo (implicación de permisos del volumen).
 - [ ] Backups de `pgdata` y `keni-data` (el cutover ya los respalda; falta automatizarlo).
