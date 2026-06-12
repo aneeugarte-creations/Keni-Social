@@ -1620,14 +1620,20 @@ def cluster_por_url_canonica(url_recortada: str, desde: str) -> str:
 def items_sin_cluster(desde: str, limite: int) -> list[dict[str, Any]]:
     """Items de archivo recientes SIN cluster asignado (para el paso de clustering del daemon).
 
-    Filtra `cluster_id = ''` y `capturado_en >= desde` (ventana reciente: clustering acotado,
-    nunca el archivo entero). MÁS ANTIGUOS primero, para agrupar en orden cronológico (el
-    primero de una historia funda el cluster; los siguientes se unen). `limite` acota el trabajo.
+    Filtra `cluster_id = ''`, `capturado_en >= desde` (ventana reciente: clustering acotado,
+    nunca el archivo entero) y `estado <> 'descartado'`. MÁS ANTIGUOS primero, para agrupar en
+    orden cronológico (el primero de una historia funda el cluster; los siguientes se unen).
+    `limite` acota el trabajo.
+
+    El filtro de descartados es COHERENTE con `marcar_items_cluster_usados`: un item apartado
+    (p. ej. la gemela de un cajón que se descartó/borró en bloque) NO debe volver a clusterizar
+    ni alimentar historias vivas; si no, el auto-feed lo convertiría en pieza igualmente.
     """
     con = _conectar()
     try:
         filas = con.execute(
             f"{_SELECT_NOTICIA_ITEM} WHERE cluster_id = '' AND capturado_en >= ? "
+            "AND estado <> 'descartado' "
             "ORDER BY capturado_en ASC, creado ASC, id ASC LIMIT ?",
             (desde, max(1, int(limite))),
         ).fetchall()

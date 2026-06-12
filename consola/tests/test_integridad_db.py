@@ -262,6 +262,31 @@ def test_normalizar_timestamps_cubre_noticias_y_feeds(entorno):
 
 
 # --------------------------------------------------------------------------- #
+# Clustering del pool: items_sin_cluster excluye descartados                   #
+# --------------------------------------------------------------------------- #
+
+
+def test_items_sin_cluster_excluye_descartados(entorno):
+    """Un item del pool en `descartado` NO entra al paso de clustering.
+
+    Si entrara, una gemela de cajón ya apartada (descarte fino o borrado de lote en bloque)
+    se re-clusterizaría y el auto-feed la convertiría en pieza igualmente — el agujero que
+    cierra este filtro, coherente con el de `marcar_items_cluster_usados`.
+    """
+    fuente = db.crear_fuente_rss("F", "https://ej.mx/rss")
+    db.crear_noticias_items([
+        {"clave": "vivo", "fuente_id": fuente["id"], "titulo": "Sigue vivo",
+         "estado": "nuevo", "capturado_en": "2026-06-10T10:00:00"},
+        {"clave": "muerto", "fuente_id": fuente["id"], "titulo": "Ya apartado",
+         "estado": "descartado", "capturado_en": "2026-06-10T10:00:00"},
+    ])
+    sin_cluster = db.items_sin_cluster("2026-06-01T00:00:00", 100)
+    claves = {i["clave"] for i in sin_cluster}
+    assert "vivo" in claves
+    assert "muerto" not in claves
+
+
+# --------------------------------------------------------------------------- #
 # Vencimientos del tablero en SQL                                              #
 # --------------------------------------------------------------------------- #
 
