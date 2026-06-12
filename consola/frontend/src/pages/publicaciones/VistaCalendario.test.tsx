@@ -125,6 +125,44 @@ describe("VistaCalendario — sello «libre» (coger en táctil) y aviso sin fec
     ).toBeInTheDocument();
     expect(screen.getByText(/se trabajan desde\s+la Lista del Feed/)).toBeInTheDocument();
   });
+
+  it("una pieza ya PUBLICADA no es arrastrable (su post ya salió: no se reprograma)", () => {
+    renderCalendario(
+      [pub({ titulo: "Gol", estado: "publicado" })],
+      vi.fn(),
+      new Date(2026, 5, 15),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "semana" }));
+    const pildora = screen.getByText("Gol").closest("button");
+    expect(pildora).toHaveAttribute("draggable", "false");
+  });
+
+  it("una pieza PROGRAMADA sí es arrastrable (se puede reprogramar)", () => {
+    renderCalendario(
+      [pub({ titulo: "Gol", estado: "programado" })],
+      vi.fn(),
+      new Date(2026, 5, 15),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "semana" }));
+    const pildora = screen.getByText("Gol").closest("button");
+    expect(pildora).toHaveAttribute("draggable", "true");
+  });
+});
+
+describe("VistaCalendario — huecos del plan solo sobre la foto completa", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("con mostrarHuecosPlan=false avisa de que los huecos se ocultan por el filtro", () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <VistaCalendario publicaciones={[]} onEditar={vi.fn()} mostrarHuecosPlan={false} />
+      </QueryClientProvider>,
+    );
+    expect(
+      screen.getByText(/Huecos del plan ocultos mientras filtras por red o línea/),
+    ).toBeInTheDocument();
+  });
 });
 
 describe("rangoVisibleCalendario — ventana que pide el calendario (mes ± 1 semana)", () => {

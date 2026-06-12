@@ -216,42 +216,60 @@ function PildoraPub({
               },
             ]
           : []),
-        {
-          // BREAKING: publica YA (salta la parrilla). Real o dry-run según KENI_PUBLICAR_REAL.
-          etiqueta: "Publicar ya",
-          icono: Zap,
-          deshabilitado: ocupado,
-          onClick: () => onPublicarYa(publicacion),
-        },
+        // Una pieza ya PUBLICADA es terminal: solo Editar/ver. No "Publicar ya" (doble post)
+        // ni "Desprogramar" (el post ya salió; cambiar su fecha aquí solo mentiría).
+        ...(!publicado
+          ? [
+              {
+                // BREAKING: publica YA (salta la parrilla). Real o dry-run según KENI_PUBLICAR_REAL.
+                etiqueta: "Publicar ya",
+                icono: Zap,
+                deshabilitado: ocupado,
+                onClick: () => onPublicarYa(publicacion),
+              },
+            ]
+          : []),
         { separador: true },
         {
           etiqueta: "Editar",
           icono: Pencil,
           onClick: () => onAbrir(publicacion),
         },
-        {
-          etiqueta: "Desprogramar",
-          icono: CalendarX,
-          deshabilitado: ocupado,
-          onClick: () => onDesprogramar(publicacion),
-        },
+        ...(!publicado
+          ? [
+              {
+                etiqueta: "Desprogramar",
+                icono: CalendarX,
+                deshabilitado: ocupado,
+                onClick: () => onDesprogramar(publicacion),
+              },
+            ]
+          : []),
       ]}
     >
       <button
         type="button"
-        draggable
+        draggable={!publicado}
         onDragStart={(e) => {
+          // Una pieza ya publicada NO se reprograma arrastrándola: el post ya salió.
+          if (publicado) {
+            e.preventDefault();
+            return;
+          }
           e.dataTransfer.setData("text/plain", publicacion.id);
           e.dataTransfer.effectAllowed = "move";
         }}
         onClick={() => onAbrir(publicacion)}
         title={
-          vencida
-            ? `${publicacion.titulo} (${nombreRed(publicacion.red)})${quienLaLleva} · PASADA DE HORA, sin publicar · "Publicar ya" vive en el menú contextual (clic derecho)`
-            : `${publicacion.titulo} (${nombreRed(publicacion.red)})${quienLaLleva} · arrastra para mover · más acciones en el menú contextual (clic derecho)`
+          publicado
+            ? `${publicacion.titulo} (${nombreRed(publicacion.red)})${quienLaLleva} · ya publicada · abre para ver`
+            : vencida
+              ? `${publicacion.titulo} (${nombreRed(publicacion.red)})${quienLaLleva} · PASADA DE HORA, sin publicar · "Publicar ya" vive en el menú contextual (clic derecho)`
+              : `${publicacion.titulo} (${nombreRed(publicacion.red)})${quienLaLleva} · arrastra para mover · más acciones en el menú contextual (clic derecho)`
         }
         className={cn(
-          "flex w-full cursor-grab items-center gap-1 truncate rounded border border-transparent px-1.5 py-0.5 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring active:cursor-grabbing",
+          "flex w-full items-center gap-1 truncate rounded border border-transparent px-1.5 py-0.5 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+          publicado ? "cursor-pointer" : "cursor-grab active:cursor-grabbing",
           // REPARTO: una pieza LIBRE repartible se distingue de un vistazo (borde punteado).
           repartible && libre && "border-dashed border-current",
           publicado
@@ -338,6 +356,7 @@ export function VistaCalendario({
   marca,
   ancla: anclaProp,
   onAncla,
+  mostrarHuecosPlan = true,
 }: {
   publicaciones: Publicacion[];
   onEditar: (p: Publicacion) => void;
@@ -350,6 +369,12 @@ export function VistaCalendario({
    */
   ancla?: Date;
   onAncla?: React.Dispatch<React.SetStateAction<Date>>;
+  /**
+   * Pintar el overlay de HUECOS LIBRES del plan. Solo es FIABLE sobre la foto completa: si
+   * la rejilla está filtrada por red/línea, un slot ocupado por una pieza filtrada fuera
+   * parecería libre (riesgo de doble-reserva). El padre lo apaga cuando hay filtro activo.
+   */
+  mostrarHuecosPlan?: boolean;
 }) {
   const [vista, setVista] = React.useState<Vista>("mes");
   // Ancla CONTROLADA-O-NO: si el padre la eleva (para acotar la query por rango), manda la
@@ -451,6 +476,9 @@ export function VistaCalendario({
   /** Huecos LIBRES del plan para un día concreto (slots sin pieza a esa misma hora CDMX). */
   const huecosDe = React.useCallback(
     (dia: Date): { hora: string; categoria: string }[] => {
+      // Con la rejilla filtrada por red/línea, `porDia` es un subconjunto: un slot ocupado por
+      // una pieza filtrada fuera saldría como hueco LIBRE (doble-reserva). No los pintamos.
+      if (!mostrarHuecosPlan) return [];
       // weekday(): 0=lunes..6=domingo, igual que el backend.
       const diaSemana = (dia.getDay() + 6) % 7;
       const slots = slotsPorDiaCdmx.get(diaSemana) ?? [];
@@ -460,7 +488,7 @@ export function VistaCalendario({
       );
       return slots.filter((sl) => !ocupadas.has(sl.hora));
     },
-    [slotsPorDiaCdmx, porDia],
+    [slotsPorDiaCdmx, porDia, mostrarHuecosPlan],
   );
 
   const hoy = claveDia(new Date());
@@ -521,6 +549,12 @@ export function VistaCalendario({
             <CalendarOff className="h-4 w-4 shrink-0" />
             No hay piezas programadas en esta ventana. Las piezas sin fecha se trabajan desde
             la Lista del Feed.
+          </div>
+        )}
+        {!mostrarHuecosPlan && (
+          <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+            Huecos del plan ocultos mientras filtras por red o línea: solo son fiables sobre la
+            programación completa. Quita el filtro para verlos.
           </div>
         )}
         <div className="flex flex-wrap items-center justify-between gap-2">

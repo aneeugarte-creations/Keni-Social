@@ -468,6 +468,9 @@ function Cuerpo({
           marca={marcaActiva}
           ancla={anclaCalendario}
           onAncla={setAnclaCalendario}
+          // Los huecos del plan solo son fiables sobre la foto completa: con un filtro de
+          // red/línea activo la rejilla es un subconjunto y un slot ocupado parecería libre.
+          mostrarHuecosPlan={red === FILTRO_TODOS && linea === FILTRO_TODOS}
         />
       ) : publicaciones.length === 0 ? (
         <EstadoVacio

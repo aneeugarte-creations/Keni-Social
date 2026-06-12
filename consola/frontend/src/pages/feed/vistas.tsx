@@ -124,11 +124,19 @@ export const ESTADO_SERVIDOR_DE_VISTA: Record<Vista, "pendiente" | "publicado" |
  * `filtros` lleva los parámetros YA resueltos para la query (ausente = sin filtro); la clave
  * usa los mismos centinelas que las claves históricas de `FeedIdeacion` (caché compartida).
  */
-export function useConteosFeed(filtros: { marca?: string; red?: string; linea?: string }): {
+export function useConteosFeed(filtros: {
+  marca?: string;
+  red?: string;
+  linea?: string;
+  responsable?: string;
+}): {
   totalRevision: number | undefined;
   conteoVista: Record<Vista, number | undefined>;
 } {
-  const { marca, red, linea } = filtros;
+  // `responsable` (lente del reparto "la lista"): cuando está activa, la Lista filtra por
+  // ella, así que los badges deben contar lo MISMO que se lista (si no, el número no cuadra
+  // con las filas). Ausente en los demás feeds (MobileFeed/FeedIdeacion): sin efecto.
+  const { marca, red, linea, responsable } = filtros;
   const claveConteo = (estado?: string) =>
     [
       ...CLAVE_PUBLICACIONES,
@@ -136,24 +144,25 @@ export function useConteosFeed(filtros: { marca?: string; red?: string; linea?: 
       marca ?? MARCA_ACTIVA_TODAS,
       red ?? FILTRO_TODOS,
       linea ?? FILTRO_TODOS,
+      responsable ?? "",
       estado ?? "todos",
     ] as const;
   const conteoPendiente = useQuery({
     queryKey: claveConteo("pendiente"),
     queryFn: ({ signal }) =>
-      api.publicaciones({ marca, red, linea, estado: "pendiente", limite: "1" }, signal),
+      api.publicaciones({ marca, red, linea, responsable, estado: "pendiente", limite: "1" }, signal),
     staleTime: 30_000,
   });
   const conteoPublicado = useQuery({
     queryKey: claveConteo("publicado"),
     queryFn: ({ signal }) =>
-      api.publicaciones({ marca, red, linea, estado: "publicado", limite: "1" }, signal),
+      api.publicaciones({ marca, red, linea, responsable, estado: "publicado", limite: "1" }, signal),
     staleTime: 30_000,
   });
   const conteoRevision = useQuery({
     queryKey: claveConteo("en_revision"),
     queryFn: ({ signal }) =>
-      api.publicaciones({ marca, red, linea, estado: "en_revision", limite: "1" }, signal),
+      api.publicaciones({ marca, red, linea, responsable, estado: "en_revision", limite: "1" }, signal),
     staleTime: 30_000,
   });
   const totalPendiente = conteoPendiente.data?.paginacion?.total;
