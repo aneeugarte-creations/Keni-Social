@@ -20,7 +20,7 @@
  * de la página del enlace, de la 1ª línea del material o, si solo hay foto, un genérico).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link2, Loader2, Paperclip, X } from "lucide-react";
+import { Link2, Loader2, Paperclip, Sparkles, X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -361,7 +361,13 @@ export function DialogoCrearPost({
             Cancelar
           </Button>
           <Button onClick={() => crear.mutate()} disabled={!puedeCrear}>
-            {crear.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+            {/* La estrellita marca que la acción la redacta la IA (mismo signo que MarcaIA /
+                el resto de acciones de IA de la casa); al lanzar, cede al spinner. */}
+            {crear.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
             {crear.isPending ? "Creando…" : "Crear post"}
           </Button>
         </DialogFooter>
