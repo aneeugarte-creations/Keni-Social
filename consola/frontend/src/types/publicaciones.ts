@@ -259,6 +259,11 @@ export interface FiltrosPublicaciones {
   estado?: string;
   /** Id de la línea editorial (etiqueta vertical) por la que filtrar. */
   linea?: string;
+  /**
+   * REPARTO ("la lista" de ClaroSports): id de usuario = piezas COGIDAS por esa persona;
+   * `"sin"` = piezas LIBRES (por coger). El responsable vive en el `contenido` padre.
+   */
+  responsable?: string;
   /** "1" para mostrar solo publicaciones evergreens. */
   evergreen?: string;
   /** Paginacion offset-based (#121): tamaño de pagina; ausente = conjunto completo. */

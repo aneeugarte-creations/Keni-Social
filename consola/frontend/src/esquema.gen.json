@@ -2199,6 +2199,12 @@
         "autor_nombre": {
           "type": "string"
         },
+        "responsable_id": {
+          "type": "string"
+        },
+        "responsable_nombre": {
+          "type": "string"
+        },
         "enviado_a_revision_en": {
           "type": "string"
         },
@@ -2324,6 +2330,8 @@
         "veredicto",
         "autor_id",
         "autor_nombre",
+        "responsable_id",
+        "responsable_nombre",
         "enviado_a_revision_en",
         "revisor_id",
         "revisor_nombre",

@@ -69,7 +69,9 @@ _SELECT_PUBLICACION = (
     "cp.foto_encuadre AS foto_encuadre, cp.fotos AS fotos, cp.carrusel AS carrusel, "
     "cp.qa_auto_hash AS qa_auto_hash, cp.actualizado AS pactualizado, "
     "c.id AS cid, c.titulo AS titulo, c.marca AS marca, c.autor_id AS autor_id, "
-    "c.autor_nombre AS autor_nombre, c.origen AS origen, c.creado AS ccreado, "
+    "c.autor_nombre AS autor_nombre, "
+    "c.responsable_id AS responsable_id, c.responsable_nombre AS responsable_nombre, "
+    "c.origen AS origen, c.creado AS ccreado, "
     "c.fecha_fuente AS fecha_fuente, "
     "c.url_fuente AS url_fuente, c.fuente_nombre AS fuente_nombre, "
     "c.tipo_contenido AS tipo_contenido, "
@@ -96,6 +98,10 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
         "veredicto": f["veredicto"] or "",
         "autor_id": f["autor_id"] or "",
         "autor_nombre": f["autor_nombre"] or "",
+        # REPARTO ("la lista"): quién tiene COGIDA la pieza. Vive en el `contenido` padre
+        # (el reparto es del tema completo, no de cada red); "" = libre, nadie la cogió.
+        "responsable_id": f["responsable_id"] or "",
+        "responsable_nombre": f["responsable_nombre"] or "",
         "enviado_a_revision_en": f["enviado_a_revision_en"] or "",
         "revisor_id": f["revisor_id"] or "",
         "revisor_nombre": f["revisor_nombre"] or "",
@@ -296,6 +302,8 @@ def _publicacion_de_filas(
             "qa_auto_hash": plat["qa_auto_hash"], "pactualizado": plat["actualizado"],
             "cid": padre["id"], "titulo": padre["titulo"], "marca": padre["marca"],
             "autor_id": padre["autor_id"], "autor_nombre": padre["autor_nombre"],
+            "responsable_id": padre.get("responsable_id"),
+            "responsable_nombre": padre.get("responsable_nombre"),
             "origen": padre["origen"], "ccreado": padre["creado"],
             "fecha_fuente": padre["fecha_fuente"],
             "url_fuente": padre["url_fuente"], "fuente_nombre": padre["fuente_nombre"],
@@ -352,6 +360,7 @@ def _filtros_publicacion(
     estado: str | None,
     evergreen: bool | None,
     linea: str | None = None,
+    responsable: str | None = None,
 ) -> tuple[str, list[Any]]:
     """Construye la cláusula WHERE adicional (tras `es_publicacion=1`) y sus parámetros.
 
@@ -392,6 +401,15 @@ def _filtros_publicacion(
     if evergreen is not None:
         clausulas.append("cp.evergreen = ?")
         params.append(1 if evergreen else 0)
+    # REPARTO ("la lista"): el responsable vive en el `contenido` PADRE (el reparto es del
+    # tema, no de cada red). `""` = piezas LIBRES (por coger); otro valor = cogidas por ese
+    # usuario. El IS NULL cubre filas anteriores a la columna (el claim escribe siempre "").
+    if responsable is not None:
+        if responsable == "":
+            clausulas.append("(c.responsable_id = '' OR c.responsable_id IS NULL)")
+        else:
+            clausulas.append("c.responsable_id = ?")
+            params.append(responsable)
     return (" AND " + " AND ".join(clausulas) if clausulas else ""), params
 
 
@@ -401,6 +419,7 @@ def listar_publicaciones(
     estado: str | None = None,
     evergreen: bool | None = None,
     linea: str | None = None,
+    responsable: str | None = None,
     *,
     limite: int | None = None,
     desplazamiento: int | None = None,
@@ -416,7 +435,7 @@ def listar_publicaciones(
         filas ESTRICTAMENTE posteriores en el orden (más antiguas). Inmune a inserciones
         nuevas al principio (no desplaza páginas), ideal para el feed social.
     """
-    extra, params = _filtros_publicacion(marca, red, estado, evergreen, linea)
+    extra, params = _filtros_publicacion(marca, red, estado, evergreen, linea, responsable)
     if cursor is not None:
         # Keyset sobre la tupla (creado, id) en orden DESC: la página siguiente son las filas
         # con (creado, id) ESTRICTAMENTE menor que la última vista. Forma expandida (no
@@ -448,9 +467,10 @@ def contar_publicaciones(
     estado: str | None = None,
     evergreen: bool | None = None,
     linea: str | None = None,
+    responsable: str | None = None,
 ) -> int:
     """Total de publicaciones que casan los filtros (para el `total` de paginación)."""
-    extra, params = _filtros_publicacion(marca, red, estado, evergreen, linea)
+    extra, params = _filtros_publicacion(marca, red, estado, evergreen, linea, responsable)
     sql = (
         "SELECT COUNT(*) AS n FROM contenido_plataforma cp "
         "JOIN contenido c ON cp.contenido_id = c.id WHERE c.clase = 'contenido'" + extra

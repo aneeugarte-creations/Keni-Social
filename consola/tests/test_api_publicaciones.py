@@ -141,6 +141,60 @@ def test_filtro_linea(cliente):
     assert filtrado["paginacion"]["total"] == 1
 
 
+def test_payload_incluye_responsable(cliente):
+    """Toda publicación expone `responsable_id`/`responsable_nombre` ("" = libre)."""
+    pub = _crear(cliente).json()["publicacion"]
+    assert pub["responsable_id"] == ""
+    assert pub["responsable_nombre"] == ""
+    listado = cliente.get("/api/publicaciones").json()["publicaciones"]
+    assert listado[0]["responsable_id"] == ""
+    assert listado[0]["responsable_nombre"] == ""
+
+
+def test_filtro_responsable(cliente):
+    """`?responsable=<id>` = piezas cogidas por ese usuario; `?responsable=sin` = libres.
+
+    El responsable vive en el `contenido` PADRE (el reparto es del tema): cogerlo via
+    `repos.reclamar_contenido` se refleja en TODAS sus piezas por red.
+    """
+    from keni_consola import repos
+
+    cogida = _crear(cliente, titulo="Cogida").json()["publicacion"]
+    _crear(cliente, titulo="Libre")
+    asignada = repos.reclamar_contenido(
+        cogida["contenido_id"], responsable_id="u-elias", responsable_nombre="Elías"
+    )
+    assert asignada is not None
+
+    mias = cliente.get("/api/publicaciones?responsable=u-elias").json()
+    assert [p["titulo"] for p in mias["publicaciones"]] == ["Cogida"]
+    assert mias["publicaciones"][0]["responsable_nombre"] == "Elías"
+    assert mias["paginacion"]["total"] == 1
+
+    libres = cliente.get("/api/publicaciones?responsable=sin").json()
+    assert [p["titulo"] for p in libres["publicaciones"]] == ["Libre"]
+    assert libres["paginacion"]["total"] == 1
+
+    # Sin el filtro se ven TODAS (el reparto no oculta nada por defecto).
+    assert len(cliente.get("/api/publicaciones").json()["publicaciones"]) == 2
+
+
+def test_filtro_responsable_compone_con_marca(cliente):
+    """El filtro de reparto compone con los demás (marca): la vista de ClaroSports."""
+    from keni_consola import repos
+
+    cs = _crear(cliente, marca="claro-sports", titulo="CS cogida").json()["publicacion"]
+    _crear(cliente, marca="claro-sports", titulo="CS libre")
+    uno = _crear(cliente, marca="unotv", titulo="Uno cogida").json()["publicacion"]
+    repos.reclamar_contenido(cs["contenido_id"], responsable_id="u1", responsable_nombre="Ana")
+    repos.reclamar_contenido(uno["contenido_id"], responsable_id="u1", responsable_nombre="Ana")
+
+    r = cliente.get("/api/publicaciones?marca=claro-sports&responsable=u1").json()
+    assert [p["titulo"] for p in r["publicaciones"]] == ["CS cogida"]
+    r = cliente.get("/api/publicaciones?marca=claro-sports&responsable=sin").json()
+    assert [p["titulo"] for p in r["publicaciones"]] == ["CS libre"]
+
+
 # --------------------------------------------------------------------------- #
 # Lote                                                                        #
 # --------------------------------------------------------------------------- #

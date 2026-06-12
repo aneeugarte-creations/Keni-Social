@@ -35,6 +35,8 @@ const PUBLICACION = {
   veredicto: "",
   autor_id: "u9",
   autor_nombre: "Yustine",
+  responsable_id: "",
+  responsable_nombre: "",
   enviado_a_revision_en: "",
   revisor_id: "",
   revisor_nombre: "",

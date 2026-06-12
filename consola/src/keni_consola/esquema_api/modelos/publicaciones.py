@@ -81,6 +81,12 @@ class Publicacion(TypedDict):
     veredicto: Veredicto
     autor_id: str
     autor_nombre: str
+    # REPARTO de trabajo ("la lista" de ClaroSports): quién tiene COGIDA la pieza. Vive en el
+    # `contenido` PADRE (el reparto es del tema, no de cada red): todas las redes hermanas
+    # comparten responsable. "" = libre (nadie la ha cogido). Se coge/suelta vía
+    # `POST /api/contenido/{contenido_id}/coger|soltar` y se filtra con `?responsable=`.
+    responsable_id: str
+    responsable_nombre: str
     enviado_a_revision_en: str
     revisor_id: str
     revisor_nombre: str

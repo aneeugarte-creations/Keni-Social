@@ -660,6 +660,8 @@ export interface Publicacion {
   veredicto: string;
   autor_id: string;
   autor_nombre: string;
+  responsable_id: string;
+  responsable_nombre: string;
   enviado_a_revision_en: string;
   revisor_id: string;
   revisor_nombre: string;

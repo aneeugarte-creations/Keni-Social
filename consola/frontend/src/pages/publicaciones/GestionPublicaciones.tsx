@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FILTRO_TODOS, useFiltrosContenido } from "@/hooks/filtros-contenido-contexto";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
+import { SesionContexto } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
 import { DialogoDuplicar } from "@/pages/publicaciones/DialogoDuplicar";
 import { DialogoEditar } from "@/pages/publicaciones/DialogoEditar";
@@ -17,6 +19,19 @@ import { VistaLista } from "@/pages/publicaciones/VistaLista";
 import type { OpcionesPublicaciones, Publicacion } from "@/types";
 
 const TAM_PAGINA = 30;
+
+// REPARTO ("la lista"): el flujo de coger/soltar tareas es del piloto de ClaroSports;
+// las demás marcas siguen su flujo de siempre (sin chips ni botón de coger).
+const MARCA_REPARTO = "claro-sports";
+
+/** Lente del reparto: todas las piezas, solo las LIBRES (por coger) o solo las MÍAS. */
+type FiltroReparto = "todas" | "libres" | "mias";
+
+const ETIQUETA_REPARTO: Record<FiltroReparto, string> = {
+  todas: "Todas",
+  libres: "Por coger",
+  mias: "Mis tareas",
+};
 
 /**
  * GESTIÓN de publicaciones en dos modos: `lista` (paginada, con duplicar/editar) y
@@ -92,10 +107,25 @@ function Cuerpo({
   const [editando, setEditando] = React.useState<Publicacion | null>(null);
   const [duplicando, setDuplicando] = React.useState<Publicacion | null>(null);
 
+  // REPARTO ("la lista" de ClaroSports): lente Todas / Por coger / Mis tareas sobre el
+  // responsable del `contenido` padre. Solo con la marca del piloto activa; "mias" exige
+  // sesión (el contexto puede ser null en tests: useContext directo, sin throw).
+  const usuario = React.useContext(SesionContexto)?.usuario ?? null;
+  const repartoActivo = marcaActiva === MARCA_REPARTO;
+  const [reparto, setReparto] = React.useState<FiltroReparto>("todas");
+  const responsable = !repartoActivo
+    ? undefined
+    : reparto === "libres"
+      ? "sin"
+      : reparto === "mias" && usuario
+        ? usuario.id
+        : undefined;
+
   const filtrosBase = {
     marca: marcaActiva ?? undefined,
     red: red === FILTRO_TODOS ? undefined : red,
     linea: linea === FILTRO_TODOS ? undefined : linea,
+    responsable,
   };
 
   // CALENDARIO: rejilla mensual; necesita el conjunto completo (sin paginar).
@@ -106,6 +136,7 @@ function Cuerpo({
       filtrosBase.marca ?? "",
       filtrosBase.red ?? "",
       filtrosBase.linea ?? "",
+      responsable ?? "",
     ],
     queryFn: ({ signal }) => api.publicaciones(filtrosBase, signal),
     enabled: calendario,
@@ -122,6 +153,7 @@ function Cuerpo({
       filtrosBase.marca ?? "",
       filtrosBase.red ?? "",
       filtrosBase.linea ?? "",
+      responsable ?? "",
     ],
     initialPageParam: 0,
     queryFn: ({ pageParam, signal }) =>
@@ -156,7 +188,8 @@ function Cuerpo({
     ? publicaciones.length
     : listaQuery.data?.pages.at(-1)?.paginacion?.total ?? publicaciones.length;
   const hayMas = !calendario && Boolean(listaQuery.hasNextPage);
-  const filtrando = red !== FILTRO_TODOS || linea !== FILTRO_TODOS;
+  const filtrando =
+    red !== FILTRO_TODOS || linea !== FILTRO_TODOS || responsable !== undefined;
 
   // Aviso de seguridad: si el posteo real esta APAGADO y hay piezas programadas, NO van a
   // salir solas (el programador opera en dry-run). Es justo el fallo que dejaba piezas sin
@@ -166,6 +199,35 @@ function Cuerpo({
 
   return (
     <div className="mt-2">
+      {repartoActivo && (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <div className="inline-flex overflow-hidden rounded-md border border-border">
+            {(Object.keys(ETIQUETA_REPARTO) as FiltroReparto[]).map((f) => (
+              <button
+                key={f}
+                type="button"
+                onClick={() => setReparto(f)}
+                disabled={f === "mias" && !usuario}
+                className={cn(
+                  "px-3 py-1 text-sm transition-colors",
+                  reparto === f
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-card text-muted-foreground hover:bg-muted",
+                )}
+              >
+                {ETIQUETA_REPARTO[f]}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {reparto === "libres"
+              ? "Piezas que nadie ha cogido todavía: coge una y queda asignada a ti."
+              : reparto === "mias"
+                ? "Las piezas que has cogido tú."
+                : "Coge una pieza para que el resto del equipo vea que ya la llevas tú."}
+          </p>
+        </div>
+      )}
       {hayProgramadasSinSalir && (
         <div
           role="alert"

@@ -113,6 +113,40 @@ describe("VistaLista — selección múltiple y borrado en masa", () => {
     expect([...borrar.mock.calls[0][0]].sort()).toEqual(["p1", "p3"]);
   });
 
+  it("reparto ClaroSports: una pieza libre ofrece 'Coger' y llama al claim del tema padre", async () => {
+    const coger = vi
+      .spyOn(apiMod.api, "cogerContenido")
+      .mockResolvedValue({ contenido: {} } as never);
+    renderLista([
+      pub({ id: "p1", contenido_id: "c9", titulo: "Gol", marca: "claro-sports" }),
+    ]);
+
+    // Nombre EXACTO: el menú contextual también ofrece "Coger (me la asigno)".
+    const boton = screen.getByRole("button", { name: "Coger" });
+    fireEvent.click(boton);
+    await waitFor(() => expect(coger).toHaveBeenCalledTimes(1));
+    expect(coger).toHaveBeenCalledWith("c9");
+  });
+
+  it("reparto ClaroSports: una pieza cogida por otra persona muestra su badge y NO ofrece coger", () => {
+    renderLista([
+      pub({
+        id: "p1",
+        titulo: "Gol",
+        marca: "claro-sports",
+        responsable_id: "u-mariana",
+        responsable_nombre: "Mariana",
+      } as Partial<Publicacion>),
+    ]);
+    expect(screen.getByText("Mariana")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Coger/ })).toBeNull();
+  });
+
+  it("reparto: las piezas de otras marcas NO llevan botón de coger (flujo sin reparto)", () => {
+    renderLista([pub({ id: "p1", titulo: "Nota", marca: "unotv" })]);
+    expect(screen.queryByRole("button", { name: /Coger/ })).toBeNull();
+  });
+
   it("reporta los fallos parciales del lote (toast de error con el resumen)", async () => {
     vi.spyOn(apiMod.api, "borrarPublicacionesLote").mockResolvedValue({
       borradas: 1,

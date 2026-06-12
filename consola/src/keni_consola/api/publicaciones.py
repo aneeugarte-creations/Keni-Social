@@ -257,6 +257,13 @@ async def listar(request: Request) -> Response:
     # `linea` = id de una etiqueta editorial de clase `vertical` (la LÍNEA de contenido):
     # filtra las piezas cuyo `contenido` padre la tiene asignada (ver `opciones`).
     linea = qp.get("linea") or None
+    # REPARTO ("la lista" de ClaroSports): `?responsable=<id>` = piezas COGIDAS por ese
+    # usuario; `?responsable=sin` = piezas LIBRES (por coger). El responsable vive en el
+    # `contenido` PADRE (el reparto es del tema); el filtro junta hijo->padre en SQL.
+    responsable_q = qp.get("responsable") or None
+    responsable: str | None = None
+    if responsable_q is not None:
+        responsable = "" if responsable_q == "sin" else responsable_q
     evergreen = _parsear_bool_query(qp.get("evergreen"))
     limite, desplazamiento = paginacion_query(request)
     cursor = cursor_query(request)
@@ -285,10 +292,12 @@ async def listar(request: Request) -> Response:
     limite = tope if limite is None else min(limite, tope)
     pubs = repos.listar_publicaciones(
         marca=marca_efectiva, red=red, estado=estado, evergreen=evergreen, linea=linea,
+        responsable=responsable,
         limite=limite, desplazamiento=desplazamiento, cursor=cursor,
     )
     total = repos.contar_publicaciones(
-        marca=marca_efectiva, red=red, estado=estado, evergreen=evergreen, linea=linea
+        marca=marca_efectiva, red=red, estado=estado, evergreen=evergreen, linea=linea,
+        responsable=responsable,
     )
     # SEÑAL DE SIGUIENTE PÁGINA (solo modo feed/keyset, incluida la 1ª página): si la página vino
     # LLENA (tantas filas como `limite`), asumimos que puede haber más y emitimos el cursor de la

@@ -7,11 +7,13 @@ import {
   CalendarClock,
   CalendarPlus,
   Copy,
+  Hand,
   ImageIcon,
   Pencil,
   Send,
   Sprout,
   Trash2,
+  UserCheck,
 } from "lucide-react";
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
@@ -30,6 +32,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { SesionContexto } from "@/hooks/sesion-contexto";
 import { ApiError, api, mensajeError, urlMedia } from "@/lib/api";
 import { estaVencida } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
@@ -38,6 +41,10 @@ import type { Publicacion } from "@/types";
 import { CLAVE_PUBLICACIONES } from "./claves";
 import { BadgeEstado, EtiquetaRed } from "./insignias";
 import { formatearFechaHora, metaEstado, siguienteEstado } from "./meta";
+
+// REPARTO ("la lista"): coger/soltar tareas es del piloto de ClaroSports; el resto de
+// marcas no ve el botón ni el badge (su flujo no reparte por persona).
+const MARCA_REPARTO = "claro-sports";
 
 /**
  * Una tarjeta de publicación. Click izquierdo sobre la tarjeta = editar (acción
@@ -60,6 +67,41 @@ function TarjetaPublicacion({
   const [confirmarBorrado, setConfirmarBorrado] = React.useState(false);
   const proximo = siguienteEstado(publicacion.estado);
   const imagen = urlMedia(publicacion.imagen_url || publicacion.imagen);
+
+  // REPARTO ("la lista", ClaroSports): coger/soltar el TEMA padre (todas sus redes pasan
+  // juntas). useContext directo (no useSesion): en tests no hay SesionProvider y el badge
+  // del responsable debe pintarse igual aunque no sepamos quién mira.
+  const usuario = React.useContext(SesionContexto)?.usuario ?? null;
+  const repartible =
+    publicacion.marca === MARCA_REPARTO && Boolean(publicacion.contenido_id);
+  const responsable = publicacion.responsable_nombre ?? "";
+  const esMia = Boolean(usuario && publicacion.responsable_id === usuario.id);
+  const libre = !(publicacion.responsable_id ?? "");
+
+  const coger = useMutation({
+    mutationFn: () => api.cogerContenido(publicacion.contenido_id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+      toast.success(`"${publicacion.titulo}" es tuya: el equipo ya lo ve.`);
+    },
+    onError: (e) => {
+      // 409 = otra persona la cogió antes: refrescamos para mostrar a quién.
+      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+      toast.error(mensajeError(e));
+    },
+  });
+
+  const soltar = useMutation({
+    mutationFn: () => api.soltarContenido(publicacion.contenido_id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+      toast.success(`"${publicacion.titulo}" vuelve a estar libre.`);
+    },
+    onError: (e) => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+      toast.error(mensajeError(e));
+    },
+  });
 
   const avanzar = useMutation({
     mutationFn: () => {
@@ -138,6 +180,26 @@ function TarjetaPublicacion({
   // Acción primaria = editar. Las demás operaciones, condicionadas por estado, en el menú.
   const acciones: EntradaMenuContextual[] = [
     { etiqueta: "Editar", icono: Pencil, onClick: () => onEditar(publicacion) },
+    ...(repartible && libre
+      ? [
+          {
+            etiqueta: "Coger (me la asigno)",
+            icono: Hand,
+            onClick: () => coger.mutate(),
+            deshabilitado: coger.isPending,
+          },
+        ]
+      : []),
+    ...(repartible && !libre && (esMia || usuario?.rol === "admin")
+      ? [
+          {
+            etiqueta: esMia ? "Soltar (dejarla libre)" : `Soltar (la lleva ${responsable})`,
+            icono: Hand,
+            onClick: () => soltar.mutate(),
+            deshabilitado: soltar.isPending,
+          },
+        ]
+      : []),
     ...(proximo
       ? [
           {
@@ -217,6 +279,41 @@ function TarjetaPublicacion({
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium">{publicacion.titulo}</span>
               <BadgeEstado estado={publicacion.estado} />
+              {repartible && responsable && (
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "gap-1 font-normal",
+                    esMia
+                      ? "border-primary/50 text-primary"
+                      : "border-violet-500/40 text-violet-700 dark:text-violet-300",
+                  )}
+                  title={esMia ? "Esta pieza la llevas tú" : `Esta pieza la lleva ${responsable}`}
+                >
+                  <UserCheck className="h-3 w-3" />
+                  {esMia ? "Tuya" : responsable}
+                </Badge>
+              )}
+              {repartible && (libre || esMia) && (
+                <Button
+                  variant={libre ? "outline" : "ghost"}
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  disabled={coger.isPending || soltar.isPending}
+                  title={
+                    libre
+                      ? "Cógela: queda asignada a ti y el equipo lo ve"
+                      : "Suéltala: vuelve a quedar libre para el equipo"
+                  }
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    (libre ? coger : soltar).mutate();
+                  }}
+                >
+                  <Hand className="mr-1 h-3 w-3" />
+                  {libre ? "Coger" : "Soltar"}
+                </Button>
+              )}
               {estaVencida(publicacion.estado, publicacion.fecha_programada) && (
                 <Badge
                   variant="error"

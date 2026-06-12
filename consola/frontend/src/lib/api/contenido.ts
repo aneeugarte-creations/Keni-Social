@@ -47,6 +47,17 @@ export const apiContenido = {
     }),
   eliminarContenido: (id: string) =>
     peticion<RespuestaMensaje>(`/contenido/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+  /** "La lista" (reparto ClaroSports): COGE el tema (claim atómico sobre el `contenido`
+   *  padre: todas sus redes pasan a ser tuyas). 409 si otra persona ya lo cogió. */
+  cogerContenido: (contenidoId: string) =>
+    peticion<RespuestaContenidoItem>(`/contenido/${encodeURIComponent(contenidoId)}/coger`, {
+      metodo: "POST",
+    }),
+  /** Suelta el tema (vuelve a "por coger"). Solo quien lo cogió, o un admin. */
+  soltarContenido: (contenidoId: string) =>
+    peticion<RespuestaContenidoItem>(`/contenido/${encodeURIComponent(contenidoId)}/soltar`, {
+      metodo: "POST",
+    }),
   agregarPlataforma: (contenidoId: string, red: string) =>
     peticion<RespuestaPlataforma>(
       `/contenido/${encodeURIComponent(contenidoId)}/plataformas`,

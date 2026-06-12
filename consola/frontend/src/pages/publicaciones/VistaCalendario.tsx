@@ -5,6 +5,7 @@ import {
   CalendarX,
   ChevronLeft,
   ChevronRight,
+  Hand,
   Pencil,
   Zap,
 } from "lucide-react";
@@ -15,6 +16,7 @@ import { confirmar } from "@/components/comunes/confirmar";
 import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { SesionContexto } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { estaVencida, horaUtcACdmx } from "@/lib/fecha";
 import { ETIQUETA_LINEA } from "@/pages/publicaciones/PanelLineasPlan";
@@ -31,6 +33,9 @@ import {
 } from "./meta";
 
 type Vista = "mes" | "semana" | "dia";
+
+// REPARTO ("la lista"): coger/soltar tareas es del piloto de ClaroSports.
+const MARCA_REPARTO = "claro-sports";
 
 /** Nombres de los días (lunes a domingo), abreviados es-MX. */
 const DIAS_SEMANA = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
@@ -118,11 +123,75 @@ function PildoraPub({
   // programado a futuro → ámbar.
   const publicado = publicacion.estado === "publicado";
   const vencida = estaVencida(publicacion.estado, publicacion.fecha_programada);
+
+  // REPARTO ("la lista", ClaroSports): coger/soltar también desde el calendario, que es
+  // donde el equipo decide qué llevar. useContext directo (sin throw fuera del provider).
+  const usuario = React.useContext(SesionContexto)?.usuario ?? null;
+  const queryClient = useQueryClient();
+  const repartible =
+    publicacion.marca === MARCA_REPARTO && Boolean(publicacion.contenido_id);
+  const responsable = publicacion.responsable_nombre ?? "";
+  const esMia = Boolean(usuario && publicacion.responsable_id === usuario.id);
+  const libre = !(publicacion.responsable_id ?? "");
+  const invalidarReparto = () => {
+    void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+    void queryClient.invalidateQueries({ queryKey: ["contenido"] });
+  };
+  const coger = useMutation({
+    mutationFn: () => api.cogerContenido(publicacion.contenido_id),
+    onSuccess: () => {
+      invalidarReparto();
+      toast.success(`"${publicacion.titulo}" es tuya: el equipo ya lo ve.`);
+    },
+    onError: (e) => {
+      invalidarReparto();
+      toast.error(mensajeError(e));
+    },
+  });
+  const soltar = useMutation({
+    mutationFn: () => api.soltarContenido(publicacion.contenido_id),
+    onSuccess: () => {
+      invalidarReparto();
+      toast.success(`"${publicacion.titulo}" vuelve a estar libre.`);
+    },
+    onError: (e) => {
+      invalidarReparto();
+      toast.error(mensajeError(e));
+    },
+  });
+
+  const quienLaLleva = responsable
+    ? esMia
+      ? " · la llevas tú"
+      : ` · la lleva ${responsable}`
+    : repartible
+      ? " · libre (clic derecho para cogerla)"
+      : "";
   return (
     <MenuContextual
       disparador="contextmenu"
       etiqueta={`Acciones de "${publicacion.titulo}"`}
       items={[
+        ...(repartible && libre
+          ? [
+              {
+                etiqueta: "Coger (me la asigno)",
+                icono: Hand,
+                deshabilitado: coger.isPending,
+                onClick: () => coger.mutate(),
+              },
+            ]
+          : []),
+        ...(repartible && !libre && (esMia || usuario?.rol === "admin")
+          ? [
+              {
+                etiqueta: esMia ? "Soltar (dejarla libre)" : `Soltar (la lleva ${responsable})`,
+                icono: Hand,
+                deshabilitado: soltar.isPending,
+                onClick: () => soltar.mutate(),
+              },
+            ]
+          : []),
         {
           // BREAKING: publica YA (salta la parrilla). Real o dry-run según KENI_PUBLICAR_REAL.
           etiqueta: "Publicar ya",
@@ -154,8 +223,8 @@ function PildoraPub({
         onClick={() => onAbrir(publicacion)}
         title={
           vencida
-            ? `${publicacion.titulo} (${nombreRed(publicacion.red)}) · PASADA DE HORA, sin publicar · clic derecho para publicar ya`
-            : `${publicacion.titulo} (${nombreRed(publicacion.red)}) · arrastra para mover · clic derecho para más`
+            ? `${publicacion.titulo} (${nombreRed(publicacion.red)})${quienLaLleva} · PASADA DE HORA, sin publicar · clic derecho para publicar ya`
+            : `${publicacion.titulo} (${nombreRed(publicacion.red)})${quienLaLleva} · arrastra para mover · clic derecho para más`
         }
         className={cn(
           "flex w-full cursor-grab items-center gap-1 truncate rounded px-1.5 py-0.5 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring active:cursor-grabbing",
@@ -173,9 +242,31 @@ function PildoraPub({
         )}
         <span className="shrink-0 tabular-nums">{formatearHora(publicacion.fecha_programada)}</span>
         <span className="truncate">{publicacion.titulo}</span>
+        {repartible && responsable && (
+          <span
+            className={cn(
+              "ml-auto shrink-0 rounded px-1 text-[9px] font-semibold uppercase leading-tight",
+              esMia ? "bg-primary/25" : "bg-foreground/10",
+            )}
+            aria-label={esMia ? "La llevas tú" : `La lleva ${responsable}`}
+          >
+            {iniciales(responsable)}
+          </span>
+        )}
       </button>
     </MenuContextual>
   );
+}
+
+/** Iniciales (máx. 2) del nombre del responsable, para el sello compacto de la píldora. */
+function iniciales(nombre: string): string {
+  return nombre
+    .trim()
+    .split(/\s+/)
+    .map((w) => w[0] ?? "")
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 }
 
 /**

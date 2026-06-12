@@ -195,6 +195,12 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         # legadas/anonimas (la UI lo muestra como "desconocido").
         "autor_id": pub.get("autor_id") or "",
         "autor_nombre": pub.get("autor_nombre") or "",
+        # REPARTO ("la lista", ClaroSports): quién tiene COGIDA la pieza. Vive en el
+        # `contenido` PADRE (el reparto es del tema completo: todas las redes hermanas
+        # comparten responsable). "" = libre, nadie la ha cogido. Se coge/suelta vía
+        # `POST /api/contenido/{contenido_id}/coger|soltar` (claim atómico).
+        "responsable_id": pub.get("responsable_id") or "",
+        "responsable_nombre": pub.get("responsable_nombre") or "",
         # Flujo de aprobacion de equipo (#9, Fase 3): quien la reviso/aprobo y cuando.
         # "" mientras la pieza no haya pasado por revision (incluidas las legadas).
         "enviado_a_revision_en": pub.get("enviado_a_revision_en") or "",
