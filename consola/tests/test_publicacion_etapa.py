@@ -58,7 +58,7 @@ def test_imagen_de_fuente_no_cuenta_como_foto_real():
     d = publicacion_a_dict(
         _pub(
             estado="en_revision",
-            contenido="copy",
+            contenido="copy #gol",
             copy_in="TITULAR",
             imagen="placa.png",
             imagen_fuente="https://nota.test/orig.jpg",
@@ -66,11 +66,12 @@ def test_imagen_de_fuente_no_cuenta_como_foto_real():
         )
     )
     assert d["etapa_ia"] == "generando_arte"
-    # Con la foto propia ya inyectada, la misma pieza SÍ queda lista para revisar.
+    # Con la foto propia ya inyectada (y el copy con su hashtag), la misma pieza SÍ queda
+    # lista para revisar: lo que la bloqueaba era la foto, no el resto.
     d2 = publicacion_a_dict(
         _pub(
             estado="en_revision",
-            contenido="copy",
+            contenido="copy #gol",
             copy_in="TITULAR",
             imagen="placa.png",
             imagen_fuente="https://nota.test/orig.jpg",
