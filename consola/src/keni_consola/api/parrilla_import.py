@@ -32,8 +32,9 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import auth, generaciones, media, repos
+from .. import auth, generaciones, marcas, media, repos
 from .. import rota as dominio_rota
+from ..dominio import extraccion_url
 from ..dominio import parrilla_import as pi
 from ..dominio import parrilla_import_job as job
 from ..seguridad import autor_de_peticion
@@ -151,37 +152,101 @@ async def importar(request: Request) -> Response:
     except Exception:  # noqa: BLE001 -- multipart malformado => mensaje claro
         return JSONResponse({"error": "Formulario inválido."}, status_code=400)
 
-    archivo = form.get("archivo")
-    if not isinstance(archivo, UploadFile) or not (archivo.filename or ""):
-        return JSONResponse({"error": "Falta el documento a importar."}, status_code=400)
-
     # `semana` es solo una pista opcional: ya no se exige ni ata la propuesta a una semana.
     semana_crudo = str(form.get("semana") or "").strip()
     semana = dominio_rota.lunes_de_semana_iso(semana_crudo) if semana_crudo else ""
-
-    try:
-        doc_nombre, doc_ext = await media.guardar_documento_subido(archivo)
-    except media.MediaError as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
-
+    # MARCA del workspace que importa: se estampa en los eventos creados al aplicar, para que la
+    # lista de Tareas (filtrada por marca) los muestre. Vacío si no es una marca válida.
+    marca_crudo = str(form.get("marca") or "").strip()
+    marca = marca_crudo if marca_crudo and marcas.es_marca(marca_crudo) else ""
     autor = autor_de_peticion(request)
-    propuesta = repos.crear_propuesta_parrilla(
-        semana=semana,
-        doc_nombre=doc_nombre,
-        doc_tipo=doc_ext,
-        autor_id=(autor or {}).get("id", ""),
-        autor_nombre=(autor or {}).get("usuario", ""),
-        estado=pi.ESTADO_GENERANDO,
-    )
+
+    archivo = form.get("archivo")
+    url_crudo = str(form.get("url") or "").strip()
+    texto_pegado = str(form.get("texto") or "").strip()
+
+    # TRES entradas a la MISMA propuesta: fichero, enlace o texto pegado. Se resuelven a un
+    # `doc_nombre`/`doc_tipo` y a una función de encolado; el resto del flujo (propuesta →
+    # job → sondeo → aplicar) es idéntico.
+    if isinstance(archivo, UploadFile) and (archivo.filename or ""):
+        try:
+            doc_nombre, doc_ext = await media.guardar_documento_subido(archivo)
+        except media.MediaError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        propuesta = repos.crear_propuesta_parrilla(
+            semana=semana,
+            doc_nombre=doc_nombre,
+            doc_tipo=doc_ext,
+            marca=marca,
+            autor_id=(autor or {}).get("id", ""),
+            autor_nombre=(autor or {}).get("usuario", ""),
+            estado=pi.ESTADO_GENERANDO,
+        )
+
+        def _encolar() -> dict[str, Any]:
+            return job.lanzar(
+                propuesta_id=propuesta["id"],
+                doc_nombre=doc_nombre,
+                doc_ext=doc_ext,
+                nombres_miembros=_roster(),
+                autor=autor,
+            )
+
+    elif url_crudo:
+        url_limpia, err = extraccion_url.validar_url(url_crudo)
+        if err or url_limpia is None:
+            return JSONResponse({"error": err or "Enlace no válido."}, status_code=400)
+        try:
+            titulo_url, cuerpo_url = extraccion_url.extraer_texto(url_limpia)
+        except extraccion_url.ExtraccionError as e:
+            # Vídeo/streaming o página sin texto: no se puede leer como artículo. Mensaje claro;
+            # el equipo puede teclear el partido a mano o pegar el texto.
+            return JSONResponse({"error": str(e)}, status_code=422)
+        texto = f"{titulo_url}\n\n{cuerpo_url}".strip() if titulo_url else cuerpo_url
+        propuesta = repos.crear_propuesta_parrilla(
+            semana=semana,
+            doc_nombre=url_limpia[:200],
+            doc_tipo="enlace",
+            marca=marca,
+            autor_id=(autor or {}).get("id", ""),
+            autor_nombre=(autor or {}).get("usuario", ""),
+            estado=pi.ESTADO_GENERANDO,
+        )
+
+        def _encolar() -> dict[str, Any]:
+            return job.lanzar_desde_texto(
+                propuesta_id=propuesta["id"],
+                texto=texto,
+                nombres_miembros=_roster(),
+                autor=autor,
+            )
+
+    elif texto_pegado:
+        propuesta = repos.crear_propuesta_parrilla(
+            semana=semana,
+            doc_nombre="Texto pegado",
+            doc_tipo="texto",
+            marca=marca,
+            autor_id=(autor or {}).get("id", ""),
+            autor_nombre=(autor or {}).get("usuario", ""),
+            estado=pi.ESTADO_GENERANDO,
+        )
+
+        def _encolar() -> dict[str, Any]:
+            return job.lanzar_desde_texto(
+                propuesta_id=propuesta["id"],
+                texto=texto_pegado,
+                nombres_miembros=_roster(),
+                autor=autor,
+            )
+
+    else:
+        return JSONResponse(
+            {"error": "Falta el documento, el enlace o el texto a importar."}, status_code=400
+        )
 
     try:
-        gen = job.lanzar(
-            propuesta_id=propuesta["id"],
-            doc_nombre=doc_nombre,
-            doc_ext=doc_ext,
-            nombres_miembros=_roster(),
-            autor=autor,
-        )
+        gen = _encolar()
     except generaciones.ColaLlenaError:
         repos.actualizar_propuesta_parrilla(
             propuesta["id"],

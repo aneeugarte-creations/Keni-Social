@@ -382,6 +382,32 @@ def lanzar(
     )
 
 
+def lanzar_desde_texto(
+    *,
+    propuesta_id: str,
+    texto: str,
+    nombres_miembros: dict[str, str],
+    autor: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Encola el job READ-ONLY a partir de TEXTO ya extraído (un enlace o texto pegado), sin
+    fichero. Es la MISMA rama "texto embebido" de `lanzar` (transformación texto→JSON sin tools
+    de lectura): el texto se EMBEBE en el prompt y `claude -p` propone los eventos/turnos.
+    """
+    ctx = construir_contexto_prompt(nombres_miembros=nombres_miembros)
+    procesar_spec = jobspec.construir_parrilla_import(propuesta_id=propuesta_id)
+    procesar = jobspec.reconstruir_procesar({"procesar": procesar_spec})
+    return generar.lanzar(
+        tipo="parrilla-import",
+        titulo="Importar parrilla",
+        marca="",
+        prompt=componer_prompt(ctx=ctx, texto_documento=texto),
+        procesar=procesar,
+        procesar_spec=procesar_spec,
+        autor=autor,
+        endurecer=_endurecer(lee_fichero=False),
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Post-procesado (corre en el WORKER al terminar el job)                       #
 # --------------------------------------------------------------------------- #
