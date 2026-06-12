@@ -644,6 +644,44 @@ def test_put_fecha_programada_publicado_es_terminal_409(cliente):
     assert ok.json()["publicacion"]["fecha_programada"] == "2026-06-15T18:00"
 
 
+def test_put_mover_fecha_resetea_preparado_en(cliente):
+    """REPROGRAMAR por PUT (arrastre del calendario) limpia `preparado_en`: sin esto el barrido
+    vería la pieza 'ya preparada' y NO la (re)publicaría en la nueva hora (post perdido con
+    KENI_PUBLICAR_REAL on). Espejo de lo que hace `_encolar_en_hueco_libre`."""
+    from keni_consola import repos
+
+    pid = _crear(
+        cliente, estado="programado", fecha_programada="2026-06-15T18:00"
+    ).json()["publicacion"]["id"]
+    # Estampa el claim de preparación (como hace el barrido al preparar la pieza).
+    assert repos.reclamar_preparacion(pid, "2026-06-15T17:50:00")
+    assert repos.obtener_publicacion(pid)["preparado_en"] == "2026-06-15T17:50:00"
+
+    r = cliente.put(
+        f"/api/publicaciones/{pid}", json={"fecha_programada": "2026-06-16T19:00"}
+    )
+    assert r.status_code == 200
+    despues = repos.obtener_publicacion(pid)
+    assert despues["fecha_programada"] == "2026-06-16T19:00"
+    assert despues["preparado_en"] == ""  # claim reseteado: el barrido la volverá a publicar
+
+
+def test_put_misma_fecha_conserva_preparado_en(cliente):
+    """El no-op de fecha (guardar la MISMA hora) NO resetea `preparado_en`: no es reprogramar,
+    así que no se debe re-publicar una pieza ya preparada."""
+    from keni_consola import repos
+
+    pid = _crear(
+        cliente, estado="programado", fecha_programada="2026-06-15T18:00"
+    ).json()["publicacion"]["id"]
+    assert repos.reclamar_preparacion(pid, "2026-06-15T17:50:00")
+    r = cliente.put(
+        f"/api/publicaciones/{pid}", json={"fecha_programada": "2026-06-15T18:00"}
+    )
+    assert r.status_code == 200
+    assert repos.obtener_publicacion(pid)["preparado_en"] == "2026-06-15T17:50:00"
+
+
 # --------------------------------------------------------------------------- #
 # Canon de fecha_programada (minutos, UTC sin offset)                          #
 # --------------------------------------------------------------------------- #

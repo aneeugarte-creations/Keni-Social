@@ -138,6 +138,29 @@ def test_no_programa_si_no_esta_aprobada(cliente, ahora_fijo):
     assert repos.obtener_publicacion(pid)["estado"] == "borrador"
 
 
+def test_no_resucita_si_dejo_de_estar_aprobada(cliente, ahora_fijo, monkeypatch):
+    """CARRERA (CAS): entre que la auto-programación lee la pieza `aprobado` y escribe
+    `programado`, otro flujo la movió (p. ej. una edición la resetea a `borrador`). El CAS sobre
+    `estado` evita RESUCITARLA a `programado` pisando el estado/fecha que dejó el humano."""
+    cliente.post("/api/franjas", json={"dia_semana": 2, "hora": "15:00"})
+    pid = _crear_aprobada(cliente)
+
+    real_hueco = ap.calcular_hueco_para
+
+    def _hueco_con_carrera(pub, ahora=None):  # noqa: ANN001
+        # Simula la carrera: la pieza deja de estar aprobada (vuelve a borrador) JUSTO antes de la
+        # escritura, como si otro flujo la editara entre la lectura y el UPDATE condicional.
+        repos.actualizar_publicacion(pid, {"estado": "borrador", "fecha_programada": ""})
+        return real_hueco(pub, ahora)
+
+    monkeypatch.setattr(ap, "calcular_hueco_para", _hueco_con_carrera)
+    # No la programa (el CAS no aplica) y no lanza: best-effort.
+    assert auto_programar.programar_si_aprobada(pid) is None
+    despues = repos.obtener_publicacion(pid)
+    assert despues["estado"] == "borrador"  # sigue en el estado nuevo, NO resucitada
+    assert despues["fecha_programada"] == ""  # ni le pisó la fecha
+
+
 def test_flag_off_no_programa(cliente, ahora_fijo, monkeypatch):
     # Kill switch: con KENI_AUTO_PROGRAMAR falsy, ni la síncrona ni el barrido programan.
     monkeypatch.setenv("KENI_AUTO_PROGRAMAR", "0")

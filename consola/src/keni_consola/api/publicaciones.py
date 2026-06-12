@@ -549,6 +549,14 @@ async def actualizar(request: Request) -> Response:
             return JSONResponse(
                 {"error": "La fecha programada debe ser texto o nula."}, status_code=400
             )
+        # REPROGRAMAR (mover la fecha a una DISTINTA) resetea el claim de preparación, igual que
+        # `_encolar_en_hueco_libre`: hay que limpiar `preparado_en` para que el barrido NO trate la
+        # pieza como "ya preparada" y la (re)publique a la NUEVA hora —con KENI_PUBLICAR_REAL on, un
+        # arrastre del calendario sin esto perdería el post en silencio—. Solo en el CAMBIO real (el
+        # no-op de misma fecha conserva el claim). Una pieza PUBLICADA con cambio de fecha se rechaza
+        # con 409 más abajo (terminalidad), antes de tocar nada: este reset no la alcanza.
+        if campos["fecha_programada"] != (pieza.get("fecha_programada") or ""):
+            campos["preparado_en"] = ""
     if "imagen" in datos:
         imagen = datos.get("imagen")
         if not isinstance(imagen, str):
@@ -886,7 +894,10 @@ _MAX_REINTENTOS_HUECO = 8
 
 
 def _encolar_en_hueco_libre(
-    pub: dict[str, Any], ahora: datetime | None = None
+    pub: dict[str, Any],
+    ahora: datetime | None = None,
+    *,
+    estado_esperado: str | None = None,
 ) -> tuple[dict[str, Any] | None, bool]:
     """Programa `pub` en el próximo hueco libre, con BACKSTOP de unicidad + reintento.
 
@@ -895,7 +906,16 @@ def _encolar_en_hueco_libre(
     si entre el cálculo del hueco y la escritura otra pieza ya tomó ese slot, el UPDATE lanza
     una IntegrityError (carrera de doble-reserva); aquí RECALCULAMOS el siguiente hueco y
     reintentamos (bucle acotado). `hubo_hueco=False` => no hay cadencia/franja aplicable (None,
-    sin tocar nada). `None` con `hubo_hueco=True` => la pieza se borró en la carrera.
+    sin tocar nada). `None` con `hubo_hueco=True` => la pieza se borró en la carrera (o el CAS de
+    `estado_esperado` no aplicó: ver abajo).
+
+    `estado_esperado` (opcional): CAS sobre el `estado` actual de la pieza. El encolado MANUAL lo
+    deja en None (override deliberado: re-encola venga del estado del que venga). La
+    AUTO-programación pasa `ESTADO_APROBADO`: si entre que leyó la pieza `aprobado` y esta
+    escritura otro flujo la movió (edición que la resetea a borrador, "deshacer aprobación",
+    reprograma manual), el UPDATE condicional NO aplica y `actualizar_publicacion` devuelve None;
+    devolvemos `(None, True)` SIN reintentar (la pieza dejó de ser candidata; reintentar volvería
+    a fallar). Así la auto-programación no RESUCITA a `programado` algo que el humano ya movió.
     """
     for _ in range(_MAX_REINTENTOS_HUECO):
         hueco = calcular_hueco_para(pub, ahora)
@@ -907,6 +927,7 @@ def _encolar_en_hueco_libre(
             actualizada = repos.actualizar_publicacion(
                 pub["id"],
                 {"estado": "programado", "fecha_programada": hueco, "preparado_en": ""},
+                estado_esperado=estado_esperado,
             )
         except IntegrityError:
             # Otra pieza reservó este slot antes que nosotros: recalcula y reintenta.
