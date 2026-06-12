@@ -37,6 +37,7 @@ _COLS_PROPUESTA = (
     "operaciones",
     "resumen",
     "error",
+    "marca",
 )
 _SELECT_PROPUESTA = f"SELECT {', '.join(_COLS_PROPUESTA)} FROM parrilla_propuesta"
 
@@ -81,6 +82,7 @@ def crear_propuesta_parrilla(
     autor_id: str = "",
     autor_nombre: str = "",
     estado: str = "generando",
+    marca: str = "",
 ) -> dict[str, Any]:
     """Crea una propuesta en estado `generando` y la devuelve. NO valida (lo hace la API)."""
     ahora = ahora_iso()
@@ -98,6 +100,7 @@ def crear_propuesta_parrilla(
         "operaciones": "",
         "resumen": "",
         "error": "",
+        "marca": marca or "",
     }
     con = _conectar()
     try:
@@ -187,6 +190,7 @@ def aplicar_propuesta_parrilla(
     *,
     nombres_miembros: dict[str, str],
     origen: str = "import-doc",
+    marca: str = "",
 ) -> dict[str, Any]:
     """Aplica TODAS las `operaciones` (ya validadas) en UNA transaccion y marca aplicada.
 
@@ -259,8 +263,8 @@ def aplicar_propuesta_parrilla(
                 con.execute(
                     "INSERT INTO rota_eventos "
                     "(id, titulo, fecha, hora, contenido, nota, tipo_cobertura, prioridad, "
-                    "cambiado, actualizado, creado, origen, origen_ref) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "cambiado, actualizado, creado, origen, origen_ref, marca) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         eid,
                         str(op.get("titulo", "")),
@@ -275,6 +279,7 @@ def aplicar_propuesta_parrilla(
                         ahora,
                         origen,
                         propuesta_id,
+                        marca or "",
                     ),
                 )
                 eventos_creados.append(eid)

@@ -303,7 +303,13 @@ async def aplicar_propuesta(request: Request) -> Response:
 
     try:
         resumen = repos.aplicar_propuesta_parrilla(
-            propuesta_id, validas, nombres_miembros=nombres, origen=pi.ORIGEN
+            propuesta_id,
+            validas,
+            nombres_miembros=nombres,
+            origen=pi.ORIGEN,
+            # Estampa la marca del workspace que importó en los eventos creados, para que la
+            # lista de Tareas (filtrada por marca) los muestre. Vacío en imports legados.
+            marca=str(propuesta.get("marca") or ""),
         )
     except ValueError as e:
         # Una franja (slot) no resoluble para su semana: el diff entero se descartó (rollback).

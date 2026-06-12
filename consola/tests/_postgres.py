@@ -53,6 +53,7 @@ _TABLAS = (
     "rota_swaps_turno",
     "rota_coordinacion",
     "rota_config_franjas",
+    "parrilla_propuesta",
     # Sub-tablas del tablero de contenido (olas organizacion/colaboracion): se truncan
     # ANTES que sus padres `contenido`/`contenido_plataforma` (CASCADE igual las cubre,
     # pero a la cabeza evita sorpresas de orden).

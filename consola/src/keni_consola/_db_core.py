@@ -815,12 +815,16 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         gen_id        TEXT NOT NULL DEFAULT '',
         operaciones   TEXT NOT NULL DEFAULT '',
         resumen       TEXT NOT NULL DEFAULT '',
-        error         TEXT NOT NULL DEFAULT ''
+        error         TEXT NOT NULL DEFAULT '',
+        marca         TEXT NOT NULL DEFAULT ''
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_parrilla_propuesta_estado ON parrilla_propuesta (estado)",
     "CREATE INDEX IF NOT EXISTS idx_parrilla_propuesta_semana ON parrilla_propuesta (semana)",
     "CREATE INDEX IF NOT EXISTS idx_parrilla_propuesta_gen ON parrilla_propuesta (gen_id)",
+    # Marca del workspace que disparó el import: se estampa en los `rota_eventos` creados al
+    # aplicar, para que la lista de Tareas (filtrada por marca) los muestre. (Import a Tareas.)
+    "ALTER TABLE parrilla_propuesta ADD COLUMN IF NOT EXISTS marca TEXT NOT NULL DEFAULT ''",
     # Cola de jobs de generacion (#130 Fase 2 / ADR 0002 Fase B): el back ENCOLA y un
     # WORKER (in-proceso en local, servicio aparte en hosted) los CLAVA y ejecuta `claude
     # -p`. La fila es el "sobre" de despacho: `gen_id` es el registro de generacion

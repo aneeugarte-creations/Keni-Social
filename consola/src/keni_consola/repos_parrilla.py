@@ -124,6 +124,7 @@ def crear_propuesta_parrilla(
     autor_id: str = "",
     autor_nombre: str = "",
     estado: str = "generando",
+    marca: str = "",
 ) -> dict[str, Any]:
     return db.crear_propuesta_parrilla(
         semana=semana,
@@ -133,6 +134,7 @@ def crear_propuesta_parrilla(
         autor_id=autor_id,
         autor_nombre=autor_nombre,
         estado=estado,
+        marca=marca,
     )
 
 
@@ -158,7 +160,12 @@ def aplicar_propuesta_parrilla(
     *,
     nombres_miembros: dict[str, str],
     origen: str = "import-doc",
+    marca: str = "",
 ) -> dict[str, Any]:
     return db.aplicar_propuesta_parrilla(
-        propuesta_id, operaciones, nombres_miembros=nombres_miembros, origen=origen
+        propuesta_id,
+        operaciones,
+        nombres_miembros=nombres_miembros,
+        origen=origen,
+        marca=marca,
     )
