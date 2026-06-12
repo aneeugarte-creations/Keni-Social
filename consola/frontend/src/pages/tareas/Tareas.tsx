@@ -39,10 +39,11 @@ import { DialogoCrearTarea } from "./DialogoCrearTarea";
 // se vea sin recargar (igual que el reparto del feed que esto sustituye).
 const REFRESCO = { refetchInterval: 45_000, refetchOnWindowFocus: true };
 
-/** Lente sobre la MISMA lista: el pool, lo mío, o todo (la cabina de Elias). */
-type Lente = "equipo" | "libres" | "mias";
+/** Lente sobre la MISMA lista: el panorama por persona, el pool, lo mío, o todo. */
+type Lente = "equipo" | "personas" | "libres" | "mias";
 const LENTES: { id: Lente; etiqueta: string }[] = [
   { id: "equipo", etiqueta: "Todo el equipo" },
+  { id: "personas", etiqueta: "Por persona" },
   { id: "libres", etiqueta: "Por cubrir" },
   { id: "mias", etiqueta: "Lo mío" },
 ];
@@ -433,6 +434,135 @@ type Item =
   | { kind: "evento"; clave: string; orden: string; evento: EventoRota }
   | { kind: "tarea"; clave: string; orden: string; tarea: Contenido };
 
+/** El reparto de una persona en el panorama: lo que lleva activo y cuánto ya cerró. */
+type CargaPersona = {
+  id: string;
+  nombre: string;
+  activas: Contenido[];
+  hechas: number;
+};
+
+/**
+ * Panorama POR PERSONA (la cabina de Elias): quién lleva qué de un vistazo, para repartir y
+ * equilibrar carga. Un carril «Por cubrir» con el pool sin dueño y, debajo, un carril por cada
+ * miembro del equipo con sus tareas activas y su conteo — los libres (sin nada) salen también.
+ */
+function PanoramaPorPersona({
+  tareas,
+  eventosLibres,
+  catalogos,
+}: {
+  tareas: Contenido[];
+  eventosLibres: EventoRota[];
+  catalogos: CatalogosContenido | undefined;
+}) {
+  const usuarios = catalogos?.usuarios ?? [];
+  const conResponsable = tareas.filter((t) => t.responsable_id);
+  const sinResponsable = tareas.filter((t) => !t.responsable_id);
+
+  // Nombre por id: lo del catálogo manda; si falta, el que vino sellado en la tarea.
+  const nombrePorId = new Map<string, string>();
+  for (const u of usuarios) nombrePorId.set(u.id, u.usuario);
+  for (const t of conResponsable) {
+    if (!nombrePorId.has(t.responsable_id) && t.responsable_nombre)
+      nombrePorId.set(t.responsable_id, t.responsable_nombre);
+  }
+
+  // Sembramos con TODO el equipo para que los libres salgan; añadimos responsables externos.
+  const ids = new Set<string>(usuarios.map((u) => u.id));
+  for (const t of conResponsable) ids.add(t.responsable_id);
+
+  const ordenFecha = (a: Contenido, b: Contenido) =>
+    (a.fecha_objetivo || "9999-99-99").localeCompare(b.fecha_objetivo || "9999-99-99");
+
+  const cargas: CargaPersona[] = [...ids]
+    .map((id) => {
+      const suyas = conResponsable.filter((t) => t.responsable_id === id);
+      return {
+        id,
+        nombre: nombrePorId.get(id) || "Sin nombre",
+        activas: suyas.filter((t) => t.estado !== "hecha").sort(ordenFecha),
+        hechas: suyas.filter((t) => t.estado === "hecha").length,
+      };
+    })
+    // Más cargados arriba (Elias ve el cuello de botella); a igualdad, por nombre.
+    .sort((a, b) => b.activas.length - a.activas.length || a.nombre.localeCompare(b.nombre));
+
+  // El pool «Por cubrir»: eventos sin tarea + encargos/coberturas aún sin dueño, por fecha.
+  const porCubrir: Item[] = [
+    ...sinResponsable.map((t) => ({
+      kind: "tarea" as const,
+      clave: `t-${t.id}`,
+      orden: t.fecha_objetivo || "9999-99-99",
+      tarea: t,
+    })),
+    ...eventosLibres.map((e) => ({
+      kind: "evento" as const,
+      clave: `e-${e.id}`,
+      orden: e.fecha || "9999-99-99",
+      evento: e,
+    })),
+  ].sort((a, b) => a.orden.localeCompare(b.orden));
+
+  return (
+    <div className="space-y-5">
+      <section className="space-y-2">
+        <header className="flex items-center gap-2">
+          <Hand className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-medium">Por cubrir</h2>
+          <Badge variant="outline" className="px-1.5 py-0 tabular-nums">
+            {porCubrir.length}
+          </Badge>
+          <span className="text-xs text-muted-foreground">— sin dueño; cógelo o repártelo</span>
+        </header>
+        {porCubrir.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nada por cubrir: todo tiene dueño. 🎉</p>
+        ) : (
+          <div className="space-y-2">
+            {porCubrir.map((i) =>
+              i.kind === "evento" ? (
+                <TarjetaEventoLibre key={i.clave} evento={i.evento} catalogos={catalogos} />
+              ) : (
+                <TarjetaTarea key={i.clave} tarea={i.tarea} catalogos={catalogos} />
+              ),
+            )}
+          </div>
+        )}
+      </section>
+
+      {cargas.map((c) => (
+        <section key={c.id} className="space-y-2">
+          <header className="flex items-center gap-2">
+            <UserCheck className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-sm font-medium">{c.nombre}</h2>
+            <Badge
+              variant="outline"
+              className={cn(
+                "px-1.5 py-0 tabular-nums",
+                c.activas.length === 0 && "text-muted-foreground",
+              )}
+            >
+              {c.activas.length}
+            </Badge>
+            {c.hechas > 0 && (
+              <span className="text-xs text-muted-foreground">· {c.hechas} hechas</span>
+            )}
+          </header>
+          {c.activas.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sin tareas — libre para coger.</p>
+          ) : (
+            <div className="space-y-2">
+              {c.activas.map((t) => (
+                <TarjetaTarea key={t.id} tarea={t} catalogos={catalogos} />
+              ))}
+            </div>
+          )}
+        </section>
+      ))}
+    </div>
+  );
+}
+
 /**
  * Página de TAREAS del equipo (ClaroSports): la lista compartida que sustituye al WhatsApp.
  *
@@ -537,7 +667,7 @@ export default function Tareas() {
       <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
         Los partidos y encargos a cubrir, por fecha. Cógelos o que Elias los reparta; lo que
-        entra por Fuentes aparece aquí solo.
+        entra por Fuentes aparece aquí solo. Mira «Por persona» para ver quién lleva qué.
       </p>
 
       <div className="flex flex-wrap gap-2">
@@ -560,7 +690,15 @@ export default function Tareas() {
 
       {cargando && <p className="text-sm text-muted-foreground">Cargando…</p>}
 
-      {!cargando && visibles.length === 0 && (
+      {!cargando && lente === "personas" && (
+        <PanoramaPorPersona
+          tareas={tareas}
+          eventosLibres={eventosLibres}
+          catalogos={catalogos}
+        />
+      )}
+
+      {!cargando && lente !== "personas" && visibles.length === 0 && (
         <div className="rounded-lg border border-dashed border-border p-8 text-center">
           <p className="text-sm text-muted-foreground">
             {lente === "mias"
@@ -573,6 +711,7 @@ export default function Tareas() {
       )}
 
       {!cargando &&
+        lente !== "personas" &&
         visibles.length > 0 &&
         grupos.map((g) =>
           g.items.length === 0 ? null : (

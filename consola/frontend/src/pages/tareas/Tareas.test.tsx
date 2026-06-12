@@ -194,6 +194,29 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect(screen.queryByRole("button", { name: /Asignar/ })).toBeNull();
   });
 
+  it("la lente 'Por persona' agrupa por dueño y deja un carril «Por cubrir»", async () => {
+    renderTareas(
+      [
+        tarea({ id: "t-luis", titulo: "Clip de Luis", responsable_id: "u-luis", responsable_nombre: "luis" }),
+        tarea({ id: "t-pool", titulo: "Encargo sin dueño", responsable_id: "" }),
+      ],
+      [evento({ id: "ev-pool", titulo: "Partido por cubrir" })],
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Por persona" }));
+
+    // Carril «Por cubrir» con el evento y el encargo sin dueño.
+    expect(await screen.findByRole("heading", { name: "Por cubrir" })).toBeInTheDocument();
+    expect(screen.getByText("Partido por cubrir")).toBeInTheDocument();
+    expect(screen.getByText("Encargo sin dueño")).toBeInTheDocument();
+
+    // Un carril por persona del equipo: el cargado y el libre.
+    expect(screen.getByRole("heading", { name: "luis" })).toBeInTheDocument();
+    expect(screen.getByText("Clip de Luis")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "ana" })).toBeInTheDocument();
+    expect(screen.getAllByText(/Sin tareas — libre/).length).toBeGreaterThan(0);
+  });
+
   it("'Añadir' abre el diálogo", async () => {
     renderTareas([]);
     fireEvent.click(await screen.findByRole("button", { name: /Añadir/ }));
