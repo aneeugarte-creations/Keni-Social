@@ -341,7 +341,7 @@ function SeccionMetricoolAdmin() {
 
   return (
     <SeccionColapsable
-      titulo="Métricas (Metricool)"
+      titulo="Conexiones · Métricas (Metricool)"
       contentClassName="space-y-4"
       descripcion="Conecta cada marca con Metricool."
     >

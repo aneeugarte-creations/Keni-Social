@@ -3,11 +3,9 @@
 import { peticion } from "./_core";
 import type {
   CuerpoGuardarConfig,
-  CuerpoGuardarEsfuerzo,
   RespuestaAjusteGuardado,
   RespuestaAjustes,
   RespuestaConfig,
-  RespuestaEsfuerzo,
   RespuestaMensaje,
 } from "@/types";
 
@@ -16,9 +14,8 @@ export const apiConfig = {
   config: (signal?: AbortSignal) => peticion<RespuestaConfig>("/config", { signal }),
   guardarConfig: (cuerpo: CuerpoGuardarConfig) =>
     peticion<RespuestaMensaje>("/config", { metodo: "POST", json: cuerpo }),
-  esfuerzo: (signal?: AbortSignal) => peticion<RespuestaEsfuerzo>("/config/esfuerzo", { signal }),
-  guardarEsfuerzo: (cuerpo: CuerpoGuardarEsfuerzo) =>
-    peticion<RespuestaMensaje>("/config/esfuerzo", { metodo: "POST", json: cuerpo }),
+  // NOTA: el esfuerzo de razonamiento (`KENI_ESFUERZO`) se lee/escribe vía `/api/ajustes`
+  // (select del grupo `tuning`); el shim deprecado `/api/config/esfuerzo` ya no se llama.
 
   // --- Ajustes de funcionalidad (admin): toggles + tuning, aplican en caliente ---
   ajustes: (signal?: AbortSignal) => peticion<RespuestaAjustes>("/ajustes", { signal }),

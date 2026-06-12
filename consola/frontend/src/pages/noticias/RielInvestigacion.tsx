@@ -10,7 +10,8 @@
  * (`GET /api/ajustes`, solo admin) por la `clave` de cada flag físico, con el maestro
  * «Investigación» (`KENI_INVESTIGACION`) como respaldo —el único interruptor que el catálogo
  * expone para el proceso, y que mantiene sincronizadas sus etapas físicas—. Los toggles reales
- * viven en el panel «Ajustes del motor» del menú «⋮» de la página.
+ * viven en el Monitor (Fase 3): el maestro en la tira «Pipeline en vivo» y el resto en su
+ * drawer de ajustes, sección «Investigación».
  */
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, SquarePen } from "lucide-react";

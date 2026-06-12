@@ -10,7 +10,6 @@ import {
 } from "@/components/comunes/selectores";
 import { AccionesPagina } from "@/components/layout/encabezado";
 import { MenuAcciones } from "@/components/layout/MenuAcciones";
-import { SeccionMetricool } from "@/pages/configuracion/SeccionMetricool";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
@@ -185,9 +184,11 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
   }
 
   // Reparto canónico de cabecera: el FILTRO de vista (rango temporal) queda inline con su
-  // indicador de frescura; la ACCIÓN (Actualizar) va al menú "⋮"; el AJUSTE (conexión
-  // Metricool por marca, antes al pie de la página) al panel lateral. El estado del refresco
-  // vive aquí (hook): el item del menú se desmonta al cerrarse y el polling le sobrevive.
+  // indicador de frescura; la ACCIÓN (Actualizar) va al menú "⋮". Aquí NO se monta ningún
+  // AJUSTE: la conexión Metricool (antes en el panel lateral de esta página) vive en el
+  // drawer único de ajustes del Monitor (sección «Conexiones», Fase 3). El estado del
+  // refresco vive aquí (hook): el item del menú se desmonta al cerrarse y el polling le
+  // sobrevive.
   const acciones = (
     <div className="flex items-center gap-2">
       <EstadoActualizacion
@@ -195,10 +196,7 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
         generadoEn={reporteQuery.data?.generado_en}
       />
       <SelectorTiempo rangos={rangos} valor={rango} onCambio={cambiarRango} />
-      <MenuAcciones
-        ajustesTitulo="Ajustes de métricas"
-        ajustes={<SeccionMetricool />}
-      >
+      <MenuAcciones>
         <ItemActualizarMetricas
           actualizar={refresco.actualizar}
           deshabilitado={refresco.deshabilitado}

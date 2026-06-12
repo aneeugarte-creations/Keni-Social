@@ -30,11 +30,12 @@ import { INTERVALO_SERIE_MS, INTERVALO_VIVO_MS } from "@/lib/refresco";
 import { cn } from "@/lib/utils";
 import {
   PanelAjustes,
+  PanelInvestigacion,
   PanelMaquinaContenido,
   useGuardarAjuste,
 } from "@/pages/configuracion/SeccionFuncionalidad";
-import { SeccionEsfuerzo } from "@/pages/configuracion/SeccionEsfuerzo";
 import { SeccionImagen } from "@/pages/configuracion/SeccionImagen";
+import { SeccionMetricool } from "@/pages/configuracion/SeccionMetricool";
 import {
   DesgloseEconomiaProceso,
   PROC_META,
@@ -377,14 +378,19 @@ export default function Monitor() {
           ajustesAbiertoInicial={abrirAjustes}
           ajustes={
             <>
+              {/* Drawer ÚNICO de los ajustes de la máquina (Fase 3): Máquina de contenido ·
+                  Investigación (el motor de noticias migró aquí desde el ⋮ de Noticias) ·
+                  Conexiones (imagen IA + Metricool) · Sistema (automatismos + tuning; el
+                  esfuerzo de razonamiento se pinta ahí como select del grupo `tuning`). */}
               <PanelMaquinaContenido />
+              <PanelInvestigacion />
               <SeccionImagen />
+              <SeccionMetricool />
               <PanelAjustes
                 grupos={GRUPOS_SISTEMA}
                 titulo="Sistema"
-                descripcion="Jobs, limpiezas y alertas; sin reinicio."
+                descripcion="Automatismos, jobs, limpiezas, alertas y esfuerzo de razonamiento; sin reinicio."
               />
-              <SeccionEsfuerzo />
             </>
           }
         >

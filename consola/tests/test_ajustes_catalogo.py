@@ -206,14 +206,16 @@ def test_grupos_estables(store):
         "noticias_tecnico",
         "tuning",
     }
-    # GRUPOS_NOTICIAS (las secciones de la subpágina de Noticias) referencia grupos reales.
-    assert set(ajustes_catalogo.GRUPOS_NOTICIAS) <= ids
+    # GRUPOS_INVESTIGACION (la sección «Investigación» del drawer del Monitor) referencia
+    # grupos reales.
+    assert set(ajustes_catalogo.GRUPOS_INVESTIGACION) <= ids
 
 
 def test_noticias_reparto_en_secciones(store):
-    """Los ajustes del motor de noticias se reparten EXACTAMENTE en las secciones de la
-    subpágina de Noticias: entrada → orden → rendimiento → última hora → producción → técnico.
-    Lo editorial queda visible y lo de capacidad/ritmo en `noticias_tecnico` (colapsado)."""
+    """Los ajustes del motor de noticias se reparten EXACTAMENTE en los grupos de la sección
+    «Investigación» del drawer del Monitor: entrada → orden → rendimiento → última hora →
+    producción → técnico. Lo editorial queda visible y lo de capacidad/ritmo en
+    `noticias_tecnico` (colapsado)."""
     reparto = {
         "noticias_entrada": {
             config.ENV_INGESTA_FILTRO,
@@ -372,16 +374,28 @@ def test_esfuerzo_es_select_del_catalogo(store, monkeypatch):
 
 
 def test_grupos_maquina_son_los_del_monitor(store):
-    """`GRUPOS_MAQUINA` referencia grupos REALES; son los que el front saca de Configuración y pinta
-    en la sección «Máquina de contenido» del Monitor (master + etapas + por marca + topes)."""
+    """`GRUPOS_MAQUINA` y `GRUPOS_INVESTIGACION` referencian grupos REALES; son las dos secciones
+    de máquina del drawer del Monitor (Fase 3: UN solo sitio para los ajustes de la máquina):
+    «Máquina de contenido» (master + etapas de Producción + por marca + topes) e «Investigación»
+    (maestro + excepciones por marca + el motor de noticias completo)."""
     ids_grupo = {g[0] for g in ajustes_catalogo.GRUPOS}
     assert set(ajustes_catalogo.GRUPOS_MAQUINA) <= ids_grupo
-    # SOLO Producción (ADR 0011, C4): el Monitor ya no pinta el proceso de Investigación
-    # (su maestro y sus excepciones por marca viven en la página Investigación).
+    assert set(ajustes_catalogo.GRUPOS_INVESTIGACION) <= ids_grupo
     assert set(ajustes_catalogo.GRUPOS_MAQUINA) == {
         "maquina_global", "maestros_produccion",
         "automatizacion_marca_produccion", "pipeline_topes",
     }
+    # Investigación: proceso + motor de noticias, SIN `noticias_produccion_marca` (el plan
+    # diario por marca se edita en «Plan y horarios» de Programación) y sin solaparse con
+    # los grupos de la sección «Máquina de contenido».
+    assert set(ajustes_catalogo.GRUPOS_INVESTIGACION) == {
+        "maestros_investigacion", "automatizacion_marca_investigacion",
+        "noticias_entrada", "noticias_orden", "noticias_rendimiento",
+        "noticias_breaking", "noticias_produccion", "noticias_tecnico",
+    }
+    assert not (
+        set(ajustes_catalogo.GRUPOS_MAQUINA) & set(ajustes_catalogo.GRUPOS_INVESTIGACION)
+    )
 
 
 def test_motor_noticias_trad_min_score_float(store):

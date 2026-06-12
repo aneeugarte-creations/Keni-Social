@@ -29,7 +29,7 @@ import type { AjusteAdmin, RespuestaAjustes } from "@/types";
 
 import { useSesion } from "@/hooks/sesion-contexto";
 
-import { CLAVE_AJUSTES, GRUPOS_MAQUINA, mensajeError } from "./lib";
+import { CLAVE_AJUSTES, GRUPOS_INVESTIGACION, GRUPOS_MAQUINA, mensajeError } from "./lib";
 import { SeccionColapsable } from "./SeccionColapsable";
 
 /** Una fila de ajuste: toggle (bool), número (int/float) o selector (select).
@@ -553,6 +553,46 @@ export function PanelAjustes({
  * vivo» del propio Monitor, al lado del estado que gobiernan (Fase 2) — pero SIGUEN gobernando
  * el atenuado de las excepciones por marca (se pasan como `gruposMaestros`). Mismo motor que
  * Configuración (`/api/ajustes`); aplican en caliente. */
+/** Sección «Investigación» del drawer del MONITOR (Fase 3: UN solo sitio para los ajustes de la
+ * máquina): las excepciones por marca del proceso + el motor de noticias completo (entrada al
+ * pool, orden, rendimiento, última hora, producción automática y técnico), antes en el menú ⋮
+ * de Noticias. El MAESTRO «Investigación» (`maestros_investigacion`) NO se pinta aquí: vive en
+ * la tira «Pipeline en vivo» del propio Monitor (switch de Selección), pero SIGUE gobernando el
+ * atenuado de las excepciones por marca (se pasa como `gruposMaestros`), igual que hace
+ * `PanelMaquinaContenido` con Producción. Mismo motor (`/api/ajustes`); aplican en caliente. */
+export function PanelInvestigacion() {
+  const { data, isPending, isError, error, refetch, isFetching, guardar } = useAjustesAdmin();
+  const orden = new Map<string, number>(GRUPOS_INVESTIGACION.map((id, i) => [id, i]));
+  const deInvestigacion = (data?.grupos ?? [])
+    .filter((g) => orden.has(g.id))
+    .sort((a, b) => orden.get(a.id)! - orden.get(b.id)!);
+  const grupos = deInvestigacion.filter((g) => g.id !== "maestros_investigacion");
+
+  return (
+    <SeccionColapsable
+      titulo="Investigación"
+      descripcion={
+        <>
+          Excepciones por marca y el motor de noticias (entrada, orden, última hora, producción
+          automática). El maestro está en la tira «Pipeline en vivo». Los cambios aplican{" "}
+          <strong>en caliente</strong>.
+        </>
+      }
+    >
+      {isPending || isError ? (
+        <EstadoAjustes isError={isError} error={error} refetch={refetch} isFetching={isFetching} />
+      ) : (
+        <GruposAjustes
+          grupos={grupos}
+          gruposMaestros={deInvestigacion}
+          onGuardar={(cuerpo) => guardar.mutate(cuerpo)}
+          guardando={guardar.isPending}
+        />
+      )}
+    </SeccionColapsable>
+  );
+}
+
 export function PanelMaquinaContenido() {
   const { data, isPending, isError, error, refetch, isFetching, guardar } = useAjustesAdmin();
   const deMaquina = (data?.grupos ?? []).filter((g) => GRUPOS_MAQUINA.has(g.id));

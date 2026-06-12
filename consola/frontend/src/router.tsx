@@ -27,7 +27,7 @@ const Fuentes = lazy(() => import("@/pages/Fuentes"));
 // el descubrimiento del Investigador); ContenidosHub es el banco evergreen (EVERGREEN).
 const NoticiasHub = lazy(() => import("@/pages/NoticiasHub"));
 const ContenidosHub = lazy(() => import("@/pages/ContenidosHub"));
-// Ajustes del motor de noticias: subpágina propia (sin pestaña), abierta desde el menú ⋮ de Noticias.
+// Los ajustes del motor de noticias viven en el drawer del Monitor (sección «Investigación», Fase 3).
 // Las antiguas hojas del hub (Investigador, Cajones, Eventos, Agentes, Cobertura) ya
 // viven COMPUESTAS dentro de NoticiasHub (pool + descubrimiento) y de Fuentes
 // (buzones/agentes/eventos); sus rutas directas redirigen a su nuevo hogar (abajo).
@@ -286,10 +286,10 @@ export const router = createBrowserRouter([
 
       // Ajustes (sin entrada en el sidebar; se llega desde el dropdown del avatar).
       { path: "mi-cuenta", element: <MiCuenta /> },
-      // La página Configuración se DISTRIBUYÓ: cada ajuste vive en la página a la que
-      // afecta (máquina/sistema/esfuerzo → Monitor·Ajustes; noticias → Cobertura;
-      // publicación → Programación; Metricool → Métricas; imagen → Estudio; apariencia →
-      // Mi cuenta). La ruta vieja redirige al Monitor·Ajustes.
+      // La página Configuración se DISTRIBUYÓ y la Fase 3 CONSOLIDÓ la máquina: máquina,
+      // investigación/motor de noticias, conexiones (Metricool + imagen IA), sistema y
+      // esfuerzo viven en el drawer Monitor·Ajustes; publicación → Programación;
+      // apariencia → Mi cuenta. La ruta vieja redirige al Monitor·Ajustes.
       { path: "configuracion", element: <Navigate to="/datos/produccion/monitor?tab=ajustes" replace /> },
       { path: "sugerencias", element: <Sugerencias /> },
       // Webhooks salientes: solo admin (el backend devuelve 403 si no; la pagina avisa

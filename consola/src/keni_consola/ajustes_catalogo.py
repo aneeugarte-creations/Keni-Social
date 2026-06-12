@@ -31,12 +31,12 @@ _VERDADEROS = frozenset({"1", "true", "yes", "si", "sí", "on"})
 _FALSOS = frozenset({"0", "false", "no", "off", ""})
 
 # Titulos humanos de cada grupo (orden estable del contrato GET /api/ajustes). El orden manda
-# el de aparición en la UI. Repartidos por OBJETIVO: la MÁQUINA DE CONTENIDO (interruptor general +
-# maestros de etapa + excepciones por marca + cadencia/topes) vive en el Monitor; Publicación y los
-# automatismos de fondo (daemons on/off) en sus páginas; el MOTOR DE NOTICIAS en la subpágina de
-# Ajustes de Noticias, repartido en SECCIONES en lenguaje editorial (qué entra → orden del pool →
-# rendimiento → última hora → producción automática → técnico); los finos operacionales (jobs,
-# limpieza, alertas) en el Monitor.
+# el de aparición en la UI. Reparto (Fase 3: UN solo sitio para los ajustes de la máquina): TODO
+# lo de la máquina de contenido —interruptor general, maestros de etapa, excepciones por marca,
+# topes de admisión, el MOTOR DE NOTICIAS completo y los finos operacionales (jobs, limpieza,
+# alertas)— vive en el drawer de ajustes del MONITOR, repartido en secciones (`GRUPOS_MAQUINA` +
+# `GRUPOS_INVESTIGACION` + sistema). Publicación se edita en Programación, junto a lo que
+# programa; el plan diario por marca, en su diálogo «Plan y horarios» (también Programación).
 GRUPOS: tuple[tuple[str, str], ...] = (
     ("maquina_global", "Máquina de contenido"),
     ("maestros_investigacion", "Todas las marcas"),
@@ -57,25 +57,30 @@ GRUPOS: tuple[tuple[str, str], ...] = (
     ("tuning", "Sistema, limpieza y alertas"),
 )
 
-# Grupos del MOTOR DE NOTICIAS: las secciones de la subpágina «Ajustes del motor de noticias»
-# (hub Investigación → menú ⋮ de Noticias). El front pinta estos grupos ALLÍ y solo allí; el
-# orden de la tupla es el de las secciones en pantalla.
-GRUPOS_NOTICIAS: tuple[str, ...] = (
+# Grupos de la sección «Investigación» del drawer del MONITOR: el proceso de investigación (su
+# maestro y sus excepciones por marca) + el MOTOR DE NOTICIAS en lenguaje editorial (qué entra →
+# orden del pool → rendimiento → última hora → producción automática → técnico). Antes se
+# pintaban en el menú ⋮ de Noticias (`NoticiasHub`); la Fase 3 los consolidó en el drawer del
+# Monitor (UN solo sitio para los ajustes de la máquina). `noticias_produccion_marca` (el plan
+# diario por marca) NO está aquí: su editor único es el diálogo «Plan y horarios» de
+# Programación. El orden de la tupla es el de las secciones en pantalla.
+GRUPOS_INVESTIGACION: tuple[str, ...] = (
+    "maestros_investigacion",
+    "automatizacion_marca_investigacion",
     "noticias_entrada",
     "noticias_orden",
     "noticias_rendimiento",
     "noticias_breaking",
     "noticias_produccion",
-    "noticias_produccion_marca",
     "noticias_tecnico",
 )
 
-# Grupos de la MÁQUINA DE CONTENIDO que pinta el MONITOR (proceso de PRODUCCIÓN, ADR 0011): el
-# interruptor general, el maestro de Producción (Producción/Arte), sus excepciones por marca y los
-# topes de admisión. El proceso de INVESTIGACIÓN (su maestro y sus excepciones por marca) NO vive
-# aquí: se edita en la página Investigación (`NoticiasHub`). Estos grupos NO viven en Configuración
-# (que se queda con lo global/genérico): se editan en el Monitor, junto a la cola que controlan. La
-# fuente de verdad de "qué pinta el Monitor" es esta tupla; el front la usa para repartir grupos.
+# Grupos de la sección «Máquina de contenido» del drawer del MONITOR (proceso de PRODUCCIÓN,
+# ADR 0011): el interruptor general, el maestro de Producción (Producción/Arte), sus excepciones
+# por marca y los topes de admisión. El proceso de INVESTIGACIÓN vive en el MISMO drawer, en su
+# propia sección (`GRUPOS_INVESTIGACION`). Estos grupos se editan en el Monitor, junto a la cola
+# que controlan. La fuente de verdad de "qué pinta el Monitor" son estas tuplas; el front las usa
+# para repartir grupos.
 GRUPOS_MAQUINA: tuple[str, ...] = (
     "maquina_global",
     "maestros_produccion",

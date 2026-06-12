@@ -111,7 +111,7 @@ function SeccionImagenAdmin() {
 
   return (
     <SeccionColapsable
-      titulo="Imagen con IA"
+      titulo="Conexiones · Imagen con IA"
       contentClassName="space-y-4"
       descripcion="Configura tu proveedor de imágenes."
     >

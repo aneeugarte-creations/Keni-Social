@@ -1,10 +1,11 @@
 /**
- * Tests de NoticiasHub (ADR 0011, C3): la página de Investigación muestra el RIEL del proceso
- * encima de Cobertura, y su panel de ajustes (admin) incluye el maestro `maestros_investigacion`
- * ADEMÁS de los grupos del motor de noticias.
+ * Tests de NoticiasHub (ADR 0011, C3 + Fase 3): la página de Investigación muestra el RIEL del
+ * proceso encima de Cobertura y un CHIP compacto del loop (enlace al Monitor prefiltrado). Los
+ * AJUSTES del motor ya NO viven aquí: migraron al drawer del Monitor (sección «Investigación»),
+ * así que la página no monta ningún menú «⋮».
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,7 +15,7 @@ import {
 } from "@/hooks/marca-activa-contexto";
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
 import * as apiMod from "@/lib/api";
-import type { AjusteAdmin, RespuestaAjustes, UsuarioSesion } from "@/types";
+import type { AjusteAdmin, ColaMonitor, RespuestaAjustes, UsuarioSesion } from "@/types";
 
 import NoticiasHub from "./NoticiasHub";
 
@@ -69,25 +70,28 @@ const AJUSTES: RespuestaAjustes = {
       titulo: "Investigación (todas las marcas)",
       ajustes: [bool("KENI_INVESTIGACION", "maestros_investigacion", true, "Investigación")],
     },
-    {
-      id: "automatizacion_marca_investigacion",
-      titulo: "Investigación · excepciones por marca",
-      ajustes: [
-        bool(
-          "KENI_INVESTIGACION::unotv",
-          "automatizacion_marca_investigacion",
-          true,
-          "UnoTV · Investigación",
-        ),
-      ],
-    },
-    {
-      id: "noticias_entrada",
-      titulo: "Entrada al pool",
-      ajustes: [bool("KENI_TRADUCCION", "noticias_entrada", false, "Traducir al español")],
-    },
   ],
 };
+
+/** Snapshot mínimo de la cola con desglose por proceso (lo que consume el chip). */
+function snapshotCola(procesando: number, pendientes: number): ColaMonitor {
+  return {
+    marca: "",
+    capacidad: { max_jobs: 2, max_cola: 4, tope: 6 },
+    conteo: { pendientes, reclamados: procesando, terminados: 0, activos: procesando + pendientes },
+    cola_llena: false,
+    procesando,
+    slots_libres: 2 - procesando,
+    workers_activos: [],
+    por_proceso: {
+      investigacion: { procesando, pendientes },
+      produccion: { procesando: 0, pendientes: 0 },
+    },
+    en_curso: [],
+    esperando: [],
+    daemons: [],
+  };
+}
 
 function renderHub(u: UsuarioSesion) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -106,6 +110,7 @@ function renderHub(u: UsuarioSesion) {
 
 beforeEach(() => {
   vi.spyOn(apiMod.api, "ajustes").mockResolvedValue(AJUSTES);
+  vi.spyOn(apiMod.api, "cola").mockResolvedValue(snapshotCola(2, 3));
   vi.spyOn(apiMod.api.noticias, "cobertura").mockResolvedValue({ feeds_con_error: 0 });
   vi.spyOn(apiMod.api.noticias, "mesa").mockResolvedValue({
     marca: "unotv",
@@ -129,24 +134,20 @@ describe("NoticiasHub · proceso de Investigación", () => {
     expect(screen.getByTestId("etapa-verificación")).toBeTruthy();
   });
 
-  it("admin: el panel de ajustes incluye el maestro de Investigación y un grupo del motor", async () => {
-    renderHub(usuario("admin"));
-    // Abre el menú «⋮» y luego «Ajustes».
-    fireEvent.click(screen.getByRole("button", { name: /Acciones/i }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: /Ajustes/i }));
-    // El maestro `maestros_investigacion` y un grupo del motor de noticias.
-    await waitFor(() =>
-      expect(screen.getAllByText(/^Investigación$/i).length).toBeGreaterThan(0),
-    );
-    expect(screen.getByText(/Entrada al pool/i)).toBeTruthy();
+  it("muestra el chip del loop con sus conteos, enlazando al Monitor prefiltrado (Fase 3)", async () => {
+    renderHub(usuario("editor"));
+    const chip = await screen.findByTestId("chip-investigacion");
+    expect(chip.textContent).toContain("Investigación");
+    expect(chip.textContent).toContain("2");
+    expect(chip.textContent).toContain("en curso");
+    expect(chip.textContent).toContain("3");
+    expect(chip.textContent).toContain("en cola");
+    expect(chip.getAttribute("href")).toBe("/datos/produccion/monitor?proceso=investigacion");
   });
 
-  it("admin: el panel de ajustes incluye las excepciones por marca de Investigación (ADR 0011, C4)", async () => {
+  it("admin: la página ya NO monta el menú «⋮» de ajustes (viven en el drawer del Monitor)", async () => {
     renderHub(usuario("admin"));
-    fireEvent.click(screen.getByRole("button", { name: /Acciones/i }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: /Ajustes/i }));
-    // El área de excepciones por marca de Investigación (grupo `automatizacion_marca_investigacion`)
-    // vive AQUÍ, no en el Monitor (que solo muestra Producción).
-    await waitFor(() => expect(screen.getByText(/Investigación · por marca/i)).toBeTruthy());
+    await screen.findByTestId("riel-investigacion");
+    expect(screen.queryByRole("button", { name: /Acciones/i })).toBeNull();
   });
 });

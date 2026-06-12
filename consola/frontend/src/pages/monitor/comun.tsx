@@ -1,16 +1,17 @@
 /**
- * Piezas COMPARTIDAS del Monitor entre los dos loops (ADR 0011): Producción (página Monitor) e
- * Investigación (su propio monitor en la página de Noticias). La cola y el pool son ÚNICOS; estos
- * componentes leen el MISMO snapshot/serie (`/api/actividad/cola*`) y lo presentan desglosado por
- * proceso, sin inventar dos colas. Un solo origen de verdad para no divergir entre ambas vistas.
+ * Piezas COMPARTIDAS del Monitor para los dos loops (ADR 0011): Investigación y Producción
+ * comparten cola y pool ÚNICOS; estos componentes leen el MISMO snapshot/serie
+ * (`/api/actividad/cola*`) y lo presentan desglosado por proceso, sin inventar dos colas. El
+ * antiguo monitor embebido de Investigación (página de Noticias) es ahora un chip que enlaza
+ * al Monitor prefiltrado (`?proceso=investigacion`).
  */
 import { Coins } from "lucide-react";
 import * as React from "react";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CardTitle } from "@/components/ui/card";
 import { costeUsd, numeroCompacto } from "@/lib/formato";
 import { cn } from "@/lib/utils";
-import type { ColaMonitor, ColaSerie, Proceso, ResultadoDia, ResultadoProceso } from "@/types";
+import type { ColaSerie, Proceso, ResultadoDia, ResultadoProceso } from "@/types";
 
 /** Metadatos de presentación por proceso (color del segmento, etiqueta, tinte del texto). */
 export const PROC_META: Record<Proceso, { etiqueta: string; barra: string; texto: string }> = {
@@ -164,53 +165,6 @@ export function SerieProceso({
         );
       })}
     </div>
-  );
-}
-
-/** Conteo «en curso / en cola» de un proceso (desglose del pool compartido). */
-export function jobsDeProceso(cola: ColaMonitor, proceso: Proceso): { procesando: number; pendientes: number } {
-  return cola.por_proceso?.[proceso] ?? { procesando: 0, pendientes: 0 };
-}
-
-/**
- * Tarjeta de un PROCESO: su parte del pool compartido (en curso / en cola) y, para Investigación,
- * el embudo de QA (lo único que ese loop acota aparte de la cola). Reutilizable en el Monitor
- * (las dos juntas) y en el monitor de Investigación (solo la suya).
- */
-export function TarjetaProceso({ cola, proceso }: { cola: ColaMonitor; proceso: Proceso }) {
-  const { procesando, pendientes } = jobsDeProceso(cola, proceso);
-  const meta = PROC_META[proceso];
-  const embudo = proceso === "investigacion" ? cola.embudo_qa : undefined;
-  return (
-    <Card>
-      <CardHeader className="p-4 pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm">
-          <span className={cn("h-2.5 w-2.5 rounded-full", meta.barra)} aria-hidden="true" />
-          {meta.etiqueta}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2 p-4 pt-0 text-sm">
-        <div className="flex gap-6">
-          <div>
-            <div className="text-2xl font-semibold tabular-nums">{procesando}</div>
-            <div className="text-xs text-muted-foreground">En curso</div>
-          </div>
-          <div>
-            <div className="text-2xl font-semibold tabular-nums">{pendientes}</div>
-            <div className="text-xs text-muted-foreground">En cola</div>
-          </div>
-        </div>
-        {embudo && (
-          <p className="text-xs text-muted-foreground">
-            Embudo de verificación:{" "}
-            <span className="font-medium tabular-nums">{embudo.en_vuelo}</span> en vuelo
-            {embudo.tope_por_marca > 0 && (
-              <> · tope {embudo.tope_por_marca}/marca</>
-            )}
-          </p>
-        )}
-      </CardContent>
-    </Card>
   );
 }
 
