@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CalendarClock,
   Check,
+  ChevronDown,
+  ChevronRight,
   Hand,
   ListChecks,
   Play,
@@ -24,6 +26,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { MARCA_ACTIVA_TODAS, useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { SesionContexto } from "@/hooks/sesion-contexto";
@@ -434,18 +444,122 @@ type Item =
   | { kind: "evento"; clave: string; orden: string; evento: EventoRota }
   | { kind: "tarea"; clave: string; orden: string; tarea: Contenido };
 
-/** El reparto de una persona en el panorama: lo que lleva activo y cuánto ya cerró. */
+/** El reparto de una persona en el panorama: lo que lleva activo, lo empezado y lo cerrado. */
 type CargaPersona = {
   id: string;
   nombre: string;
   activas: Contenido[];
+  enCurso: number;
   hechas: number;
 };
 
+/** Vista previa de «lo que lleva»: cada título es su propio chip (truncado, pero entero en el DOM). */
+function PreviewTitulos({ titulos }: { titulos: string[] }) {
+  if (titulos.length === 0)
+    return <span className="text-sm text-muted-foreground">Sin tareas — libre para coger</span>;
+  const MAX = 3;
+  const visibles = titulos.slice(0, MAX);
+  const resto = titulos.length - visibles.length;
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {visibles.map((t, i) => (
+        <span
+          key={i}
+          className="max-w-[16rem] truncate rounded border border-border bg-muted/40 px-1.5 py-0.5 text-xs"
+        >
+          {t}
+        </span>
+      ))}
+      {resto > 0 && <span className="text-xs text-muted-foreground">+{resto} más</span>}
+    </div>
+  );
+}
+
 /**
- * Panorama POR PERSONA (la cabina de Elias): quién lleva qué de un vistazo, para repartir y
- * equilibrar carga. Un carril «Por cubrir» con el pool sin dueño y, debajo, un carril por cada
- * miembro del equipo con sus tareas activas y su conteo — los libres (sin nada) salen también.
+ * Una fila del panorama (el pool «Por cubrir» o una persona): los conteos de un vistazo y, al
+ * desplegar, las tarjetas reales para coger/reasignar/avanzar sin salir de la tabla.
+ */
+function FilaPanorama({
+  abierta,
+  onToggle,
+  expandible,
+  icono: Icono,
+  nombre,
+  destacar,
+  carga,
+  enCurso,
+  hechas,
+  titulos,
+  detalle,
+}: {
+  abierta: boolean;
+  onToggle: () => void;
+  expandible: boolean;
+  icono: typeof Hand;
+  nombre: string;
+  destacar?: boolean;
+  carga: number;
+  enCurso: number | null;
+  hechas: number | null;
+  titulos: string[];
+  detalle: React.ReactNode;
+}) {
+  return (
+    <>
+      <TableRow
+        className={cn(destacar && "bg-muted/30", expandible && "cursor-pointer")}
+        onClick={expandible ? onToggle : undefined}
+      >
+        <TableCell className="font-medium">
+          <div className="flex items-center gap-2">
+            {expandible ? (
+              abierta ? (
+                <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+              )
+            ) : (
+              <span className="inline-block w-4 shrink-0" />
+            )}
+            <Icono className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="truncate">{nombre}</span>
+          </div>
+        </TableCell>
+        <TableCell className="text-center">
+          <Badge
+            variant="outline"
+            className={cn("px-1.5 py-0 tabular-nums", carga === 0 && "text-muted-foreground")}
+          >
+            {carga}
+          </Badge>
+        </TableCell>
+        <TableCell className="text-center tabular-nums text-muted-foreground">
+          {enCurso === null ? "—" : enCurso}
+        </TableCell>
+        <TableCell className="text-center tabular-nums text-muted-foreground">
+          {hechas === null ? "—" : hechas}
+        </TableCell>
+        <TableCell>
+          <PreviewTitulos titulos={titulos} />
+        </TableCell>
+      </TableRow>
+      {abierta && expandible && (
+        <TableRow className="hover:bg-transparent">
+          <TableCell colSpan={5} className="bg-muted/20">
+            <div className="space-y-2 py-1">{detalle}</div>
+          </TableCell>
+        </TableRow>
+      )}
+    </>
+  );
+}
+
+/**
+ * Panorama POR PERSONA (la cabina de Elias): una TABLA con quién lleva qué de un vistazo, para
+ * repartir y equilibrar carga. Una fila «Por cubrir» con el pool sin dueño y, debajo, una fila por
+ * cada miembro del equipo con su carga (activas / en curso / hechas) y una vista de lo que lleva.
+ * Más cargados arriba (el cuello de botella salta a la vista). Cada fila se despliega para
+ * coger/reasignar sin salir del panorama. Los libres (sin nada) salen también, para repartirles.
  */
 function PanoramaPorPersona({
   tareas,
@@ -456,6 +570,15 @@ function PanoramaPorPersona({
   eventosLibres: EventoRota[];
   catalogos: CatalogosContenido | undefined;
 }) {
+  const [abiertas, setAbiertas] = React.useState<Set<string>>(() => new Set());
+  const alternar = (clave: string) =>
+    setAbiertas((prev) => {
+      const next = new Set(prev);
+      if (next.has(clave)) next.delete(clave);
+      else next.add(clave);
+      return next;
+    });
+
   const usuarios = catalogos?.usuarios ?? [];
   const conResponsable = tareas.filter((t) => t.responsable_id);
   const sinResponsable = tareas.filter((t) => !t.responsable_id);
@@ -478,10 +601,12 @@ function PanoramaPorPersona({
   const cargas: CargaPersona[] = [...ids]
     .map((id) => {
       const suyas = conResponsable.filter((t) => t.responsable_id === id);
+      const activas = suyas.filter((t) => t.estado !== "hecha").sort(ordenFecha);
       return {
         id,
         nombre: nombrePorId.get(id) || "Sin nombre",
-        activas: suyas.filter((t) => t.estado !== "hecha").sort(ordenFecha),
+        activas,
+        enCurso: activas.filter((t) => t.estado === "en_curso").length,
         hechas: suyas.filter((t) => t.estado === "hecha").length,
       };
     })
@@ -503,62 +628,60 @@ function PanoramaPorPersona({
       evento: e,
     })),
   ].sort((a, b) => a.orden.localeCompare(b.orden));
+  const tituloItem = (i: Item) => (i.kind === "evento" ? i.evento.titulo : i.tarea.titulo);
 
   return (
-    <div className="space-y-5">
-      <section className="space-y-2">
-        <header className="flex items-center gap-2">
-          <Hand className="h-4 w-4 text-muted-foreground" />
-          <h2 className="text-sm font-medium">Por cubrir</h2>
-          <Badge variant="outline" className="px-1.5 py-0 tabular-nums">
-            {porCubrir.length}
-          </Badge>
-          <span className="text-xs text-muted-foreground">— sin dueño; cógelo o repártelo</span>
-        </header>
-        {porCubrir.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nada por cubrir: todo tiene dueño. 🎉</p>
-        ) : (
-          <div className="space-y-2">
-            {porCubrir.map((i) =>
+    <div className="overflow-x-auto rounded-lg border border-border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-[30%]">Quién</TableHead>
+            <TableHead className="w-16 text-center">Carga</TableHead>
+            <TableHead className="w-20 text-center">En curso</TableHead>
+            <TableHead className="w-16 text-center">Hechas</TableHead>
+            <TableHead>Lo que lleva</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {/* El pool sin dueño va primero: es lo que urge repartir. */}
+          <FilaPanorama
+            abierta={abiertas.has("__pool__")}
+            onToggle={() => alternar("__pool__")}
+            expandible={porCubrir.length > 0}
+            icono={Hand}
+            nombre="Por cubrir"
+            destacar
+            carga={porCubrir.length}
+            enCurso={null}
+            hechas={null}
+            titulos={porCubrir.map(tituloItem)}
+            detalle={porCubrir.map((i) =>
               i.kind === "evento" ? (
                 <TarjetaEventoLibre key={i.clave} evento={i.evento} catalogos={catalogos} />
               ) : (
                 <TarjetaTarea key={i.clave} tarea={i.tarea} catalogos={catalogos} />
               ),
             )}
-          </div>
-        )}
-      </section>
-
-      {cargas.map((c) => (
-        <section key={c.id} className="space-y-2">
-          <header className="flex items-center gap-2">
-            <UserCheck className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-sm font-medium">{c.nombre}</h2>
-            <Badge
-              variant="outline"
-              className={cn(
-                "px-1.5 py-0 tabular-nums",
-                c.activas.length === 0 && "text-muted-foreground",
-              )}
-            >
-              {c.activas.length}
-            </Badge>
-            {c.hechas > 0 && (
-              <span className="text-xs text-muted-foreground">· {c.hechas} hechas</span>
-            )}
-          </header>
-          {c.activas.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sin tareas — libre para coger.</p>
-          ) : (
-            <div className="space-y-2">
-              {c.activas.map((t) => (
+          />
+          {cargas.map((c) => (
+            <FilaPanorama
+              key={c.id}
+              abierta={abiertas.has(c.id)}
+              onToggle={() => alternar(c.id)}
+              expandible={c.activas.length > 0}
+              icono={UserCheck}
+              nombre={c.nombre}
+              carga={c.activas.length}
+              enCurso={c.enCurso}
+              hechas={c.hechas}
+              titulos={c.activas.map((t) => t.titulo)}
+              detalle={c.activas.map((t) => (
                 <TarjetaTarea key={t.id} tarea={t} catalogos={catalogos} />
               ))}
-            </div>
-          )}
-        </section>
-      ))}
+            />
+          ))}
+        </TableBody>
+      </Table>
     </div>
   );
 }

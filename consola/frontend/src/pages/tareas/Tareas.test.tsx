@@ -194,7 +194,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect(screen.queryByRole("button", { name: /Asignar/ })).toBeNull();
   });
 
-  it("la lente 'Por persona' agrupa por dueño y deja un carril «Por cubrir»", async () => {
+  it("la lente 'Por persona' es una tabla con la carga de cada uno y la fila «Por cubrir»", async () => {
     renderTareas(
       [
         tarea({ id: "t-luis", titulo: "Clip de Luis", responsable_id: "u-luis", responsable_nombre: "luis" }),
@@ -205,16 +205,33 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Por persona" }));
 
-    // Carril «Por cubrir» con el evento y el encargo sin dueño.
-    expect(await screen.findByRole("heading", { name: "Por cubrir" })).toBeInTheDocument();
+    // Es una tabla: cabecera «Lo que lleva».
+    expect(
+      await screen.findByRole("columnheader", { name: "Lo que lleva" }),
+    ).toBeInTheDocument();
+
+    // Fila «Por cubrir» con el evento y el encargo sin dueño en la vista previa.
     expect(screen.getByText("Partido por cubrir")).toBeInTheDocument();
     expect(screen.getByText("Encargo sin dueño")).toBeInTheDocument();
 
-    // Un carril por persona del equipo: el cargado y el libre.
-    expect(screen.getByRole("heading", { name: "luis" })).toBeInTheDocument();
+    // Una fila por persona del equipo: el cargado (con su tarea) y el libre.
+    expect(screen.getByText("luis")).toBeInTheDocument();
     expect(screen.getByText("Clip de Luis")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "ana" })).toBeInTheDocument();
+    expect(screen.getByText("ana")).toBeInTheDocument();
     expect(screen.getAllByText(/Sin tareas — libre/).length).toBeGreaterThan(0);
+  });
+
+  it("'Por persona': al desplegar una fila aparecen las tarjetas para repartir", async () => {
+    renderTareas(
+      [tarea({ id: "t-luis", titulo: "Clip de Luis", responsable_id: "u-luis", responsable_nombre: "luis" })],
+      [],
+      usuario("admin", "u-admin"),
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Por persona" }));
+    // La fila de luis se despliega y muestra la tarjeta accionable (con «Reasignar»).
+    fireEvent.click(screen.getByText("luis"));
+    expect(await screen.findByRole("button", { name: /Reasignar/ })).toBeInTheDocument();
   });
 
   it("'Añadir' abre el diálogo", async () => {
