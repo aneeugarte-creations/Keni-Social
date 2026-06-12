@@ -1,8 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import * as apiMod from "@/lib/api";
 import type { Publicacion } from "@/types";
 
 import { VistaCalendario, rangoVisibleCalendario } from "./VistaCalendario";
@@ -71,49 +70,8 @@ function renderCalendario(publicaciones: Publicacion[], onEditar = vi.fn(), ancl
   return { onEditar };
 }
 
-describe("VistaCalendario — sello «libre» (coger en táctil) y aviso sin fecha", () => {
+describe("VistaCalendario — aviso sin fecha y píldora terminal", () => {
   afterEach(() => vi.restoreAllMocks());
-
-  it("click en el sello «libre» llama a cogerContenido (tema padre) y NO abre el editor", async () => {
-    const coger = vi
-      .spyOn(apiMod.api, "cogerContenido")
-      .mockResolvedValue({ contenido: {} } as never);
-    // La pieza está programada el 2026-06-15 (CDMX): anclamos esa semana para que se pinte.
-    const { onEditar } = renderCalendario(
-      [pub({ contenido_id: "c9", titulo: "Gol" })],
-      vi.fn(),
-      new Date(2026, 5, 15),
-    );
-    // En vista MES solo hay conteos; pasamos a SEMANA, donde la píldora (y su sello) se ven.
-    fireEvent.click(screen.getByRole("button", { name: "semana" }));
-
-    const sello = screen.getByRole("button", { name: 'Coger "Gol" (me la asigno)' });
-    fireEvent.click(sello);
-
-    await waitFor(() => expect(coger).toHaveBeenCalledTimes(1));
-    expect(coger).toHaveBeenCalledWith("c9");
-    // stopPropagation: tocar el sello NO debe abrir el editor de la pieza.
-    expect(onEditar).not.toHaveBeenCalled();
-  });
-
-  it("Enter/Espacio sobre el sello «libre» también cogen la pieza (accesible por teclado)", async () => {
-    const coger = vi
-      .spyOn(apiMod.api, "cogerContenido")
-      .mockResolvedValue({ contenido: {} } as never);
-    const { onEditar } = renderCalendario(
-      [pub({ contenido_id: "c9", titulo: "Gol" })],
-      vi.fn(),
-      new Date(2026, 5, 15),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "semana" }));
-
-    const sello = screen.getByRole("button", { name: 'Coger "Gol" (me la asigno)' });
-    fireEvent.keyDown(sello, { key: "Enter" });
-
-    await waitFor(() => expect(coger).toHaveBeenCalledTimes(1));
-    expect(coger).toHaveBeenCalledWith("c9");
-    expect(onEditar).not.toHaveBeenCalled();
-  });
 
   it("sin piezas programadas avisa y remite a la Lista del Feed para las piezas sin fecha", () => {
     // El calendario solo recibe piezas con fecha (la API lo acota por rango): el vacío

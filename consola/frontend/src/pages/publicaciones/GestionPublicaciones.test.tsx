@@ -4,32 +4,7 @@ import {
   debeAvisarProgramadasSinSalir,
   faltaMarcaAsignada,
   paramsPaginaFeed,
-  responsableDeLente,
 } from "./GestionPublicaciones";
-
-/**
- * Mapeo de los chips del reparto ("la lista" de ClaroSports) al filtro `responsable`
- * de `/api/publicaciones`. Unit puro: la función está exportada para no montar la página.
- */
-describe("responsableDeLente — lente del reparto → filtro `responsable`", () => {
-  it('"todas" no filtra por responsable (con o sin sesión)', () => {
-    expect(responsableDeLente("todas", "u1")).toBeUndefined();
-    expect(responsableDeLente("todas", null)).toBeUndefined();
-  });
-
-  it('"libres" pide las piezas SIN responsable (centinela "sin" del backend)', () => {
-    expect(responsableDeLente("libres", "u1")).toBe("sin");
-    expect(responsableDeLente("libres", null)).toBe("sin");
-  });
-
-  it('"mias" filtra por el id del usuario de la sesión', () => {
-    expect(responsableDeLente("mias", "u1")).toBe("u1");
-  });
-
-  it('"mias" SIN sesión no puede saber quién mira: cae a no filtrar', () => {
-    expect(responsableDeLente("mias", null)).toBeUndefined();
-  });
-});
 
 /**
  * El aviso "no tienes marca asignada" distingue `marcas` DESCONOCIDA (la forma mínima
@@ -58,16 +33,15 @@ describe("faltaMarcaAsignada — aviso de usuario sin marca", () => {
  * el cursor de la última fila vista.
  */
 describe("paramsPaginaFeed — parámetros de una página del feed (keyset)", () => {
-  const base = { marca: "claro-sports", red: undefined, linea: undefined, responsable: "u1" };
+  const base = { marca: "claro-sports", red: undefined, linea: undefined };
 
   it("la 1ª página activa el modo feed (feed:'1') SIN cursor", () => {
     const p = paramsPaginaFeed(base, "");
     expect(p.feed).toBe("1");
     expect(p.cursor).toBeUndefined();
     expect(p.limite).toBe("30");
-    // Arrastra los filtros base (marca/responsable) a la query.
+    // Arrastra los filtros base (marca) a la query.
     expect(p.marca).toBe("claro-sports");
-    expect(p.responsable).toBe("u1");
   });
 
   it("las páginas 2+ llevan el cursor de la última fila vista", () => {

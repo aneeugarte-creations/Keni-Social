@@ -5,7 +5,6 @@ import {
   CalendarX,
   ChevronLeft,
   ChevronRight,
-  Hand,
   Pencil,
   Zap,
 } from "lucide-react";
@@ -16,7 +15,6 @@ import { confirmar } from "@/components/comunes/confirmar";
 import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { SesionContexto } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { estaVencida, horaUtcACdmx } from "@/lib/fecha";
 import { ETIQUETA_LINEA } from "@/pages/publicaciones/PanelLineasPlan";
@@ -33,9 +31,6 @@ import {
 } from "./meta";
 
 type Vista = "mes" | "semana" | "dia";
-
-// REPARTO ("la lista"): coger/soltar tareas es del piloto de ClaroSports.
-const MARCA_REPARTO = "claro-sports";
 
 /** Nombres de los días (lunes a domingo), abreviados es-MX. */
 const DIAS_SEMANA = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
@@ -123,11 +118,8 @@ function diasDeSemana(ancla: Date): Date[] {
 /**
  * Una píldora de publicación: arrastrable, click abre el editor, clic-derecho el menú.
  *
- * TÁCTIL: el menú contextual no existe en táctil, así que la acción clave del reparto
- * (COGER una pieza libre) tiene su propio sello visible y tocable dentro de la píldora
- * («libre», borde punteado). El resto de acciones del menú siguen siendo de escritorio:
- * `MenuContextual` solo dispara por `contextmenu`/`click`/`ambos`, y aquí el click
- * primario ya abre el editor, así que no hay disparador adicional sin colisión.
+ * `MenuContextual` solo dispara por `contextmenu`/`click`/`ambos`, y aquí el click primario
+ * ya abre el editor, así que no hay disparador adicional sin colisión.
  */
 function PildoraPub({
   publicacion,
@@ -148,74 +140,11 @@ function PildoraPub({
   const publicado = publicacion.estado === "publicado";
   const vencida = estaVencida(publicacion.estado, publicacion.fecha_programada);
 
-  // REPARTO ("la lista", ClaroSports): coger/soltar también desde el calendario, que es
-  // donde el equipo decide qué llevar. useContext directo (sin throw fuera del provider).
-  const usuario = React.useContext(SesionContexto)?.usuario ?? null;
-  const queryClient = useQueryClient();
-  const repartible =
-    publicacion.marca === MARCA_REPARTO && Boolean(publicacion.contenido_id);
-  const responsable = publicacion.responsable_nombre ?? "";
-  const esMia = Boolean(usuario && publicacion.responsable_id === usuario.id);
-  const libre = !(publicacion.responsable_id ?? "");
-  const invalidarReparto = () => {
-    void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
-    void queryClient.invalidateQueries({ queryKey: ["contenido"] });
-  };
-  const coger = useMutation({
-    mutationFn: () => api.cogerContenido(publicacion.contenido_id),
-    onSuccess: () => {
-      invalidarReparto();
-      toast.success(`"${publicacion.titulo}" es tuya: el equipo ya lo ve.`);
-    },
-    onError: (e) => {
-      invalidarReparto();
-      toast.error(mensajeError(e));
-    },
-  });
-  const soltar = useMutation({
-    mutationFn: () => api.soltarContenido(publicacion.contenido_id),
-    onSuccess: () => {
-      invalidarReparto();
-      toast.success(`"${publicacion.titulo}" vuelve a estar libre.`);
-    },
-    onError: (e) => {
-      invalidarReparto();
-      toast.error(mensajeError(e));
-    },
-  });
-
-  const quienLaLleva = responsable
-    ? esMia
-      ? " · la llevas tú"
-      : ` · la lleva ${responsable}`
-    : repartible
-      ? " · libre: pulsa el sello «libre» para cogerla"
-      : "";
   return (
     <MenuContextual
       disparador="contextmenu"
       etiqueta={`Acciones de "${publicacion.titulo}"`}
       items={[
-        ...(repartible && libre
-          ? [
-              {
-                etiqueta: "Coger (me la asigno)",
-                icono: Hand,
-                deshabilitado: coger.isPending,
-                onClick: () => coger.mutate(),
-              },
-            ]
-          : []),
-        ...(repartible && !libre && (esMia || usuario?.rol === "admin")
-          ? [
-              {
-                etiqueta: esMia ? "Soltar (dejarla libre)" : `Soltar (la lleva ${responsable})`,
-                icono: Hand,
-                deshabilitado: soltar.isPending,
-                onClick: () => soltar.mutate(),
-              },
-            ]
-          : []),
         // Una pieza ya PUBLICADA es terminal: solo Editar/ver. No "Publicar ya" (doble post)
         // ni "Desprogramar" (el post ya salió; cambiar su fecha aquí solo mentiría).
         ...(!publicado
@@ -262,16 +191,14 @@ function PildoraPub({
         onClick={() => onAbrir(publicacion)}
         title={
           publicado
-            ? `${publicacion.titulo} (${nombreRed(publicacion.red)})${quienLaLleva} · ya publicada · abre para ver`
+            ? `${publicacion.titulo} (${nombreRed(publicacion.red)}) · ya publicada · abre para ver`
             : vencida
-              ? `${publicacion.titulo} (${nombreRed(publicacion.red)})${quienLaLleva} · PASADA DE HORA, sin publicar · "Publicar ya" vive en el menú contextual (clic derecho)`
-              : `${publicacion.titulo} (${nombreRed(publicacion.red)})${quienLaLleva} · arrastra para mover · más acciones en el menú contextual (clic derecho)`
+              ? `${publicacion.titulo} (${nombreRed(publicacion.red)}) · PASADA DE HORA, sin publicar · "Publicar ya" vive en el menú contextual (clic derecho)`
+              : `${publicacion.titulo} (${nombreRed(publicacion.red)}) · arrastra para mover · más acciones en el menú contextual (clic derecho)`
         }
         className={cn(
           "flex w-full items-center gap-1 truncate rounded border border-transparent px-1.5 py-0.5 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
           publicado ? "cursor-pointer" : "cursor-grab active:cursor-grabbing",
-          // REPARTO: una pieza LIBRE repartible se distingue de un vistazo (borde punteado).
-          repartible && libre && "border-dashed border-current",
           publicado
             ? "bg-emerald-500/15 text-emerald-800 hover:bg-emerald-500/25 dark:text-emerald-200"
             : vencida
@@ -286,57 +213,9 @@ function PildoraPub({
         )}
         <span className="shrink-0 tabular-nums">{formatearHora(publicacion.fecha_programada)}</span>
         <span className="truncate">{publicacion.titulo}</span>
-        {/* REPARTO: sello «libre» visible y TOCABLE — coger directo con click/tap (también
-            en táctil, donde el menú contextual no existe). stopPropagation: no abre el editor. */}
-        {repartible && libre && (
-          <span
-            role="button"
-            tabIndex={0}
-            aria-label={`Coger "${publicacion.titulo}" (me la asigno)`}
-            title="Pieza libre: púlsala aquí para cogerla (queda asignada a ti)"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!coger.isPending) coger.mutate();
-            }}
-            onKeyDown={(e) => {
-              if (e.key !== "Enter" && e.key !== " ") return;
-              e.preventDefault();
-              e.stopPropagation();
-              if (!coger.isPending) coger.mutate();
-            }}
-            className={cn(
-              "ml-auto shrink-0 rounded border border-dashed border-current px-1 text-[9px] font-semibold uppercase leading-tight transition-colors hover:bg-foreground/10",
-              coger.isPending && "pointer-events-none opacity-50",
-            )}
-          >
-            libre
-          </span>
-        )}
-        {repartible && responsable && (
-          <span
-            className={cn(
-              "ml-auto shrink-0 rounded px-1 text-[9px] font-semibold uppercase leading-tight",
-              esMia ? "bg-primary/25" : "bg-foreground/10",
-            )}
-            aria-label={esMia ? "La llevas tú" : `La lleva ${responsable}`}
-          >
-            {iniciales(responsable)}
-          </span>
-        )}
       </button>
     </MenuContextual>
   );
-}
-
-/** Iniciales (máx. 2) del nombre del responsable, para el sello compacto de la píldora. */
-function iniciales(nombre: string): string {
-  return nombre
-    .trim()
-    .split(/\s+/)
-    .map((w) => w[0] ?? "")
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
 }
 
 /**

@@ -12,7 +12,6 @@ import { FILTRO_TODOS, useFiltrosContenido } from "@/hooks/filtros-contenido-con
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { SesionContexto } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
-import { cn } from "@/lib/utils";
 import {
   ContenidoPestanaVista,
   ESTADO_SERVIDOR_DE_VISTA,
@@ -30,11 +29,8 @@ import type { FiltrosPublicaciones, OpcionesPublicaciones, Publicacion } from "@
 
 const TAM_PAGINA = 30;
 
-/** Filtros base de la LISTA (sin paginación): marca/red/línea/responsable/estado activos. */
-type FiltrosBase = Pick<
-  FiltrosPublicaciones,
-  "marca" | "red" | "linea" | "responsable" | "estado"
->;
+/** Filtros base de la LISTA (sin paginación): marca/red/línea/estado activos. */
+type FiltrosBase = Pick<FiltrosPublicaciones, "marca" | "red" | "linea" | "estado">;
 
 /**
  * Parámetros de UNA página del FEED (lista, keyset/scroll infinito). La 1ª página llega con
@@ -67,34 +63,6 @@ export function debeAvisarProgramadasSinSalir(
   return !publicarReal && totalProgramadas > 0;
 }
 
-// REPARTO ("la lista"): el flujo de coger/soltar tareas es del piloto de ClaroSports;
-// las demás marcas siguen su flujo de siempre (sin chips ni botón de coger).
-const MARCA_REPARTO = "claro-sports";
-
-/** Lente del reparto: todas las piezas, solo las LIBRES (por coger) o solo las MÍAS. */
-export type FiltroReparto = "todas" | "libres" | "mias";
-
-const ETIQUETA_REPARTO: Record<FiltroReparto, string> = {
-  todas: "Todas",
-  libres: "Por coger",
-  mias: "Mis tareas",
-};
-
-/**
- * Filtro `responsable` que corresponde a una lente del reparto: "todas" no filtra,
- * "libres" pide las piezas SIN responsable (centinela `"sin"` del backend) y "mias"
- * filtra por el id del usuario de la sesión (sin sesión no puede filtrar: no filtra).
- * Pura y exportada para testearla sin montar el componente.
- */
-export function responsableDeLente(
-  reparto: FiltroReparto,
-  usuarioId: string | null,
-): string | undefined {
-  if (reparto === "libres") return "sin";
-  if (reparto === "mias") return usuarioId ?? undefined;
-  return undefined;
-}
-
 /**
  * ¿Avisar de que el usuario no tiene marca asignada? Solo no-admins con la lista de
  * marcas CONOCIDA y vacía. OJO: `marcas` solo viaja en GET /auth/me; el login devuelve
@@ -112,17 +80,6 @@ export function faltaMarcaAsignada(
     usuario.marcas.length === 0
   );
 }
-
-/**
- * Refresco por-query mientras la lente del reparto está activa: el tablero es COMPARTIDO
- * en vivo (los claims de los compañeros cambian lo que ves), así que no podemos quedarnos
- * con los defaults globales de main.tsx (staleTime 30s, sin refetch al volver a la
- * pestaña). Solo aplica con `repartoActivo`; el resto de marcas no paga el sondeo.
- */
-const REFRESCO_REPARTO = {
-  refetchInterval: 45_000,
-  refetchOnWindowFocus: true,
-} as const;
 
 /**
  * GESTIÓN de publicaciones en dos modos: `lista` (paginada, con duplicar/editar) y
@@ -198,15 +155,9 @@ function Cuerpo({
   const [editando, setEditando] = React.useState<Publicacion | null>(null);
   const [duplicando, setDuplicando] = React.useState<Publicacion | null>(null);
 
-  // REPARTO ("la lista" de ClaroSports): lente Todas / Por coger / Mis tareas sobre el
-  // responsable del `contenido` padre. Solo con la marca del piloto activa; "mias" exige
-  // sesión (el contexto puede ser null en tests: useContext directo, sin throw).
+  // `usuario` solo para avisar al editor sin marca asignada (abajo). El reparto de TAREAS
+  // (coger/asignar) se mudó a su propia página (/operacion/tareas): el Feed es SOLO piezas.
   const usuario = React.useContext(SesionContexto)?.usuario ?? null;
-  const repartoActivo = marcaActiva === MARCA_REPARTO;
-  const [reparto, setReparto] = React.useState<FiltroReparto>("todas");
-  const responsable = repartoActivo
-    ? responsableDeLente(reparto, usuario?.id ?? null)
-    : undefined;
 
   // Usuario (no admin) sin marca asignada: cae a la vista agregada sin saber por qué.
   // Lo avisamos suave: el arreglo es de datos (un admin le asigna su marca en Usuarios).
@@ -235,13 +186,10 @@ function Cuerpo({
     marca: marcaActiva ?? undefined,
     red: red === FILTRO_TODOS ? undefined : red,
     linea: linea === FILTRO_TODOS ? undefined : linea,
-    responsable,
     estado: estadoVista,
   };
   // Conteos exactos para los badges de las pestañas (mismos que el feed; ver vistas.tsx).
-  // `enVivo` con el reparto activo: los badges laten al mismo pulso que la lista/calendario
-  // (tablero compartido), para que tras el claim de un compañero no queden rancios.
-  const { conteoVista } = useConteosFeed({ ...filtrosBase, enVivo: repartoActivo });
+  const { conteoVista } = useConteosFeed(filtrosBase);
 
   // CALENDARIO: la ANCLA (mes/semana/día visible) se eleva aquí para pedir a la API SOLO el
   // rango visible (`?desde=&hasta=`) en vez del conjunto completo —que el cap de 1000 filas
@@ -253,12 +201,8 @@ function Cuerpo({
     [anclaCalendario],
   );
 
-  // CALENDARIO: rejilla mensual; pide solo la ventana visible (mes ancla ± 1 semana).
-  // NO se filtra por `responsable`: el calendario es la FOTO COMPLETA de la programación
-  // (lo usa para los huecos del plan y para no doble-reservar una franja). La lente del
-  // reparto (Por coger/Mis tareas) es de la Lista; aquí pintaría huecos fantasma —un slot
-  // ocupado por la pieza de un compañero, filtrada fuera, parecería libre—. El responsable
-  // se sigue viendo por pieza (iniciales/sello en cada píldora), solo no FILTRA la rejilla.
+  // CALENDARIO: rejilla mensual; pide solo la ventana visible (mes ancla ± 1 semana). Es la
+  // FOTO COMPLETA de la programación (los huecos del plan y la no-doble-reserva de franjas).
   const calendarioQuery = useQuery({
     queryKey: [
       ...CLAVE_PUBLICACIONES,
@@ -271,15 +215,13 @@ function Cuerpo({
     ],
     queryFn: ({ signal }) =>
       api.publicaciones(
-        { ...filtrosBase, responsable: undefined, desde: rangoCal.desde, hasta: rangoCal.hasta },
+        { ...filtrosBase, desde: rangoCal.desde, hasta: rangoCal.hasta },
         signal,
       ),
     enabled: calendario,
     // Navegar de mes refetcha el nuevo rango: mantener la rejilla previa visible (en vez de
     // parpadear a skeleton y perder los controles) mientras llega la del mes destino.
     placeholderData: keepPreviousData,
-    // REPARTO: ver en vivo los claims de los compañeros (sin tocar defaults globales).
-    ...(repartoActivo ? REFRESCO_REPARTO : {}),
   });
 
   // LISTA: paginación KEYSET (modo `feed` del backend). Cada página devuelve
@@ -295,7 +237,6 @@ function Cuerpo({
       filtrosBase.marca ?? "",
       filtrosBase.red ?? "",
       filtrosBase.linea ?? "",
-      responsable ?? "",
       estadoVista ?? "todos",
     ],
     // Primera página: sin cursor (pero con `feed: "1"` para activar el modo keyset).
@@ -312,8 +253,6 @@ function Cuerpo({
       return ultima.paginacion?.cursor_siguiente || undefined;
     },
     enabled: !calendario,
-    // REPARTO: ver en vivo los claims de los compañeros (sin tocar defaults globales).
-    ...(repartoActivo ? REFRESCO_REPARTO : {}),
   });
 
   // BANNER de seguridad (posteo real apagado): ¿hay piezas PROGRAMADAS que no saldrán solas?
@@ -332,7 +271,6 @@ function Cuerpo({
         signal,
       ),
     enabled: !opciones.publicar_real,
-    ...(repartoActivo ? REFRESCO_REPARTO : {}),
   });
   const totalProgramadas = programadasQuery.data?.paginacion?.total ?? 0;
 
@@ -354,10 +292,7 @@ function Cuerpo({
   const calendarioTruncado = calendario && totalRangoCalendario > publicaciones.length;
   const hayMas = !calendario && Boolean(listaQuery.hasNextPage);
   const filtrando =
-    red !== FILTRO_TODOS ||
-    linea !== FILTRO_TODOS ||
-    responsable !== undefined ||
-    estadoVista != null;
+    red !== FILTRO_TODOS || linea !== FILTRO_TODOS || estadoVista != null;
 
   // Aviso de seguridad: si el posteo real esta APAGADO y hay piezas programadas, NO van a
   // salir solas (el programador opera en dry-run). Es justo el fallo que dejaba piezas sin
@@ -374,38 +309,6 @@ function Cuerpo({
         <div className="mb-3 rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
           No tienes marca asignada: pide a un admin que te asigne tu marca en Usuarios para
           ver tu espacio de trabajo.
-        </div>
-      )}
-      {/* Chips del reparto SOLO en la Lista: en el calendario filtrar por responsable
-          falsearía los huecos del plan (riesgo de doble-reserva), así que la rejilla
-          siempre muestra la foto completa. El reparto por pieza sigue en cada píldora. */}
-      {repartoActivo && !calendario && (
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <div className="inline-flex overflow-hidden rounded-md border border-border">
-            {(Object.keys(ETIQUETA_REPARTO) as FiltroReparto[]).map((f) => (
-              <button
-                key={f}
-                type="button"
-                onClick={() => setReparto(f)}
-                disabled={f === "mias" && !usuario}
-                className={cn(
-                  "px-3 py-1 text-sm transition-colors",
-                  reparto === f
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-card text-muted-foreground hover:bg-muted",
-                )}
-              >
-                {ETIQUETA_REPARTO[f]}
-              </button>
-            ))}
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {reparto === "libres"
-              ? "Piezas que nadie ha cogido todavía: coge una y queda asignada a ti."
-              : reparto === "mias"
-                ? "Las piezas que has cogido tú."
-                : "Coge una pieza para que el resto del equipo vea que ya la llevas tú."}
-          </p>
         </div>
       )}
       {/* PARTICIÓN por estado: las MISMAS pestañas del feed (Pendientes · Publicadas · Todas),

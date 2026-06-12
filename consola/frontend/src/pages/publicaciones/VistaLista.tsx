@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   AlertTriangle,
@@ -7,15 +7,11 @@ import {
   CalendarClock,
   CalendarPlus,
   Copy,
-  Hand,
   ImageIcon,
   Pencil,
   Send,
-  Share2,
   Sprout,
   Trash2,
-  UserCheck,
-  UserPlus,
 } from "lucide-react";
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
@@ -34,7 +30,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { SesionContexto } from "@/hooks/sesion-contexto";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { ApiError, api, mensajeError, urlMedia } from "@/lib/api";
 import { estaVencida } from "@/lib/fecha";
@@ -44,10 +39,6 @@ import type { Publicacion } from "@/types";
 import { CLAVE_PUBLICACIONES } from "./claves";
 import { BadgeEstado, EtiquetaRed } from "./insignias";
 import { formatearFechaHora, metaEstado, siguienteEstado } from "./meta";
-
-// REPARTO ("la lista"): coger/soltar tareas es del piloto de ClaroSports; el resto de
-// marcas no ve el botón ni el badge (su flujo no reparte por persona).
-const MARCA_REPARTO = "claro-sports";
 
 /**
  * Visibilidad del kebab "⋮" según el puntero. En TÁCTIL (puntero grueso) no hay hover, así
@@ -65,18 +56,11 @@ export function kebabSegunPuntero(punteroGrueso: boolean): "siempre" | "hover" {
  */
 function TarjetaPublicacion({
   publicacion,
-  hermanas = 1,
   onEditar,
   onDuplicar,
   onConfigurarCadencia,
 }: {
   publicacion: Publicacion;
-  /**
-   * Nº de filas hermanas en la lista que comparten `contenido_id` (una por red). El reparto
-   * es POR TEMA: coger 1 tarjeta se lleva todas sus hermanas. Cuando es >1 la tarjeta lo
-   * AVISA (badge "N redes · se cogen juntas") para que no parezca que "desaparecen" varias.
-   */
-  hermanas?: number;
   onEditar: (p: Publicacion) => void;
   onDuplicar: (p: Publicacion) => void;
   onConfigurarCadencia: () => void;
@@ -84,81 +68,10 @@ function TarjetaPublicacion({
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [confirmarBorrado, setConfirmarBorrado] = React.useState(false);
-  const [asignarAbierto, setAsignarAbierto] = React.useState(false);
   const proximo = siguienteEstado(publicacion.estado);
   const imagen = urlMedia(publicacion.imagen_url || publicacion.imagen);
   // TÁCTIL: sin hover el kebab "⋮" era inalcanzable; con puntero grueso lo dejamos fijo.
   const punteroGrueso = useMediaQuery("(pointer: coarse)");
-
-  // REPARTO ("la lista", ClaroSports): coger/soltar el TEMA padre (todas sus redes pasan
-  // juntas). useContext directo (no useSesion): en tests no hay SesionProvider y el badge
-  // del responsable debe pintarse igual aunque no sepamos quién mira.
-  const usuario = React.useContext(SesionContexto)?.usuario ?? null;
-  const repartible =
-    publicacion.marca === MARCA_REPARTO && Boolean(publicacion.contenido_id);
-  const responsable = publicacion.responsable_nombre ?? "";
-  const esMia = Boolean(usuario && publicacion.responsable_id === usuario.id);
-  const libre = !(publicacion.responsable_id ?? "");
-  // El reparto PUSH (Elias asigna a otra persona) es potestad del manager: mismo gate que
-  // "soltar lo ajeno" (admin). El editor reparte JALANDO del pool (coger), no empujando.
-  const esManager = usuario?.rol === "admin";
-  // El reparto va POR TEMA: coger una tarjeta arrastra a sus hermanas (misma idea, otras
-  // redes). Lo señalamos cuando hay >1 hermana en la lista para que el equipo no vea
-  // "desaparecer" varias sin explicación.
-  const multiRed = repartible && hermanas > 1;
-
-  const coger = useMutation({
-    mutationFn: () => api.cogerContenido(publicacion.contenido_id),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
-      toast.success(
-        multiRed
-          ? `"${publicacion.titulo}" y sus ${hermanas} redes son tuyas: el equipo ya lo ve.`
-          : `"${publicacion.titulo}" es tuya: el equipo ya lo ve.`,
-      );
-    },
-    onError: (e) => {
-      // 409 = otra persona la cogió antes: refrescamos para mostrar a quién.
-      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
-      toast.error(mensajeError(e));
-    },
-  });
-
-  const soltar = useMutation({
-    mutationFn: () => api.soltarContenido(publicacion.contenido_id),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
-      toast.success(`"${publicacion.titulo}" vuelve a estar libre.`);
-    },
-    onError: (e) => {
-      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
-      toast.error(mensajeError(e));
-    },
-  });
-
-  // Equipo de la marca para el selector "Asignar a…" (solo se trae al abrir el diálogo y si
-  // eres manager: nada de N consultas por tarjeta). Reusa los candidatos a @mención de la marca.
-  const equipo = useQuery({
-    queryKey: ["equipo-asignable", publicacion.marca],
-    queryFn: ({ signal }) => api.mencionesCandidatos(publicacion.marca, signal),
-    enabled: asignarAbierto && esManager,
-    staleTime: 60_000,
-  });
-
-  const asignar = useMutation({
-    mutationFn: (personaId: string) =>
-      api.asignarContenido(publicacion.contenido_id, personaId),
-    onSuccess: (res) => {
-      setAsignarAbierto(false);
-      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
-      const nombre = res?.contenido?.responsable_nombre || "esa persona";
-      toast.success(`"${publicacion.titulo}" asignada a ${nombre}: se le avisa en la app.`);
-    },
-    onError: (e) => {
-      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
-      toast.error(mensajeError(e));
-    },
-  });
 
   const avanzar = useMutation({
     mutationFn: () => {
@@ -237,37 +150,6 @@ function TarjetaPublicacion({
   // Acción primaria = editar. Las demás operaciones, condicionadas por estado, en el menú.
   const acciones: EntradaMenuContextual[] = [
     { etiqueta: "Editar", icono: Pencil, onClick: () => onEditar(publicacion) },
-    ...(repartible && libre
-      ? [
-          {
-            etiqueta: "Coger (me la asigno)",
-            icono: Hand,
-            onClick: () => coger.mutate(),
-            deshabilitado: coger.isPending,
-          },
-        ]
-      : []),
-    ...(repartible && !libre && (esMia || esManager)
-      ? [
-          {
-            etiqueta: esMia ? "Soltar (dejarla libre)" : `Soltar (la lleva ${responsable})`,
-            icono: Hand,
-            onClick: () => soltar.mutate(),
-            deshabilitado: soltar.isPending,
-          },
-        ]
-      : []),
-    // PUSH del manager: Elias asigna/reasigna a una persona concreta (la otra puerta del
-    // mismo responsable; el self-claim es "Coger"). Solo manager; visible esté libre o no.
-    ...(repartible && esManager
-      ? [
-          {
-            etiqueta: libre ? "Asignar a…" : "Reasignar a…",
-            icono: UserPlus,
-            onClick: () => setAsignarAbierto(true),
-          },
-        ]
-      : []),
     ...(proximo
       ? [
           {
@@ -356,51 +238,6 @@ function TarjetaPublicacion({
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium">{publicacion.titulo}</span>
               <BadgeEstado estado={publicacion.estado} />
-              {repartible && responsable && (
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "gap-1 font-normal",
-                    esMia
-                      ? "border-primary/50 text-primary"
-                      : "border-violet-500/40 text-violet-700 dark:text-violet-300",
-                  )}
-                  title={esMia ? "Esta pieza la llevas tú" : `Esta pieza la lleva ${responsable}`}
-                >
-                  <UserCheck className="h-3 w-3" />
-                  {esMia ? "Tuya" : responsable}
-                </Badge>
-              )}
-              {repartible && (libre || esMia) && (
-                <Button
-                  variant={libre ? "outline" : "ghost"}
-                  size="sm"
-                  className="h-6 px-2 text-xs"
-                  disabled={coger.isPending || soltar.isPending}
-                  title={
-                    libre
-                      ? "Cógela: queda asignada a ti y el equipo lo ve"
-                      : "Suéltala: vuelve a quedar libre para el equipo"
-                  }
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    (libre ? coger : soltar).mutate();
-                  }}
-                >
-                  <Hand className="mr-1 h-3 w-3" />
-                  {libre ? "Coger" : "Soltar"}
-                </Button>
-              )}
-              {multiRed && (
-                <Badge
-                  variant="outline"
-                  className="gap-1 border-sky-500/40 font-normal text-sky-700 dark:text-sky-300"
-                  title={`Esta idea vive en ${hermanas} redes: cogerla o soltarla las mueve TODAS juntas (el reparto es por tema, no por red).`}
-                >
-                  <Share2 className="h-3 w-3" />
-                  {hermanas} redes · se cogen juntas
-                </Badge>
-              )}
               {estaVencida(publicacion.estado, publicacion.fecha_programada) && (
                 <Badge
                   variant="error"
@@ -483,68 +320,6 @@ function TarjetaPublicacion({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Asignar a una persona (PUSH del manager): elige a quién encargas la pieza. El
-          asignado recibe aviso in-app, así no hace falta avisarle por WhatsApp. */}
-      <Dialog open={asignarAbierto} onOpenChange={setAsignarAbierto}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Asignar “{publicacion.titulo}”</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            Elige a quién se la encargas; se le avisa en la app.
-            {responsable && (
-              <>
-                {" "}
-                Ahora la lleva{" "}
-                <span className="font-medium text-foreground">
-                  {esMia ? "tú" : responsable}
-                </span>
-                .
-              </>
-            )}
-          </p>
-          <div className="max-h-72 space-y-1 overflow-y-auto py-1">
-            {equipo.isLoading && (
-              <p className="px-1 text-sm text-muted-foreground">Cargando equipo…</p>
-            )}
-            {equipo.data?.usuarios.map((u) => {
-              const yaEs = u.id === (publicacion.responsable_id ?? "");
-              return (
-                <button
-                  key={u.id}
-                  type="button"
-                  disabled={asignar.isPending || yaEs}
-                  onClick={() => asignar.mutate(u.id)}
-                  className={cn(
-                    "flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition-colors disabled:opacity-100",
-                    yaEs
-                      ? "border-primary/50 bg-primary/5 text-primary"
-                      : "border-border hover:border-foreground/30 hover:bg-accent",
-                  )}
-                >
-                  <span className="truncate">{u.nombre || u.usuario}</span>
-                  {yaEs && <span className="ml-2 shrink-0 text-xs">la lleva ahora</span>}
-                </button>
-              );
-            })}
-            {equipo.data && equipo.data.usuarios.length === 0 && (
-              <p className="px-1 text-sm text-muted-foreground">
-                No hay compañeros en esta marca para asignar.
-              </p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setAsignarAbierto(false)}
-              disabled={asignar.isPending}
-            >
-              Cancelar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }
@@ -607,16 +382,6 @@ export function VistaLista({
     scrollMargin: margenScroll,
   });
 
-  // Hermanas POR TEMA: nº de filas en la lista que comparten `contenido_id` (una por red).
-  // El reparto coge/suelta el TEMA entero, así que la tarjeta avisa cuando hay varias.
-  const hermanasPorContenido = React.useMemo(() => {
-    const m = new Map<string, number>();
-    for (const p of publicaciones) {
-      if (p.contenido_id) m.set(p.contenido_id, (m.get(p.contenido_id) ?? 0) + 1);
-    }
-    return m;
-  }, [publicaciones]);
-
   const fila = (p: Publicacion) => (
     <div className="flex items-start gap-2">
       <Checkbox
@@ -628,7 +393,6 @@ export function VistaLista({
       <div className="min-w-0 flex-1">
         <TarjetaPublicacion
           publicacion={p}
-          hermanas={p.contenido_id ? hermanasPorContenido.get(p.contenido_id) ?? 1 : 1}
           onEditar={onEditar}
           onDuplicar={onDuplicar}
           onConfigurarCadencia={onConfigurarCadencia}
