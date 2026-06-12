@@ -264,6 +264,12 @@ async def listar(request: Request) -> Response:
     responsable: str | None = None
     if responsable_q is not None:
         responsable = "" if responsable_q == "sin" else responsable_q
+    # RANGO de `fecha_programada` (ISO `YYYY-MM-DD`): el CALENDARIO pide solo la ventana
+    # visible (mes ± margen) en vez del conjunto completo, que el cap de 1000 truncaba en
+    # silencio. Sin `desde`/`hasta` el comportamiento es el de hoy (retrocompatible). Las
+    # piezas SIN fecha quedan fuera del rango (ver `_filtros_publicacion`).
+    desde = qp.get("desde") or None
+    hasta = qp.get("hasta") or None
     evergreen = _parsear_bool_query(qp.get("evergreen"))
     limite, desplazamiento = paginacion_query(request)
     cursor = cursor_query(request)
@@ -292,12 +298,12 @@ async def listar(request: Request) -> Response:
     limite = tope if limite is None else min(limite, tope)
     pubs = repos.listar_publicaciones(
         marca=marca_efectiva, red=red, estado=estado, evergreen=evergreen, linea=linea,
-        responsable=responsable,
+        responsable=responsable, desde=desde, hasta=hasta,
         limite=limite, desplazamiento=desplazamiento, cursor=cursor,
     )
     total = repos.contar_publicaciones(
         marca=marca_efectiva, red=red, estado=estado, evergreen=evergreen, linea=linea,
-        responsable=responsable,
+        responsable=responsable, desde=desde, hasta=hasta,
     )
     # SEÑAL DE SIGUIENTE PÁGINA (solo modo feed/keyset, incluida la 1ª página): si la página vino
     # LLENA (tantas filas como `limite`), asumimos que puede haber más y emitimos el cursor de la

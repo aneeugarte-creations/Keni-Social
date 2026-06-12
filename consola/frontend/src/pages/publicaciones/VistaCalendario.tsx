@@ -92,6 +92,22 @@ function celdasDelMes(ancla: Date): Date[] {
   });
 }
 
+/**
+ * Rango `{desde, hasta}` (ISO `YYYY-MM-DD`) que cubre la rejilla de 42 celdas del mes de
+ * `ancla` con ±1 semana de margen. El calendario pide SOLO este rango a `/api/publicaciones`
+ * (`?desde=&hasta=`) en vez del conjunto completo, que el cap de 1000 filas truncaba en
+ * silencio. El margen absorbe el desfase UTC↔CDMX y las vistas semana/día (cuyo ancla cae
+ * siempre dentro de su propia rejilla mensual). Pura y exportada para el query de la página.
+ */
+export function rangoVisibleCalendario(ancla: Date): { desde: string; hasta: string } {
+  const celdas = celdasDelMes(ancla);
+  const primero = new Date(celdas[0]);
+  primero.setDate(primero.getDate() - 7);
+  const ultimo = new Date(celdas[celdas.length - 1]);
+  ultimo.setDate(ultimo.getDate() + 7);
+  return { desde: claveDia(primero), hasta: claveDia(ultimo) };
+}
+
 /** Los 7 días (lunes→domingo) de la semana que contiene a `ancla`. */
 function diasDeSemana(ancla: Date): Date[] {
   const offset = (ancla.getDay() + 6) % 7;
@@ -320,14 +336,27 @@ export function VistaCalendario({
   publicaciones,
   onEditar,
   marca,
+  ancla: anclaProp,
+  onAncla,
 }: {
   publicaciones: Publicacion[];
   onEditar: (p: Publicacion) => void;
   /** Reservado: marca activa (la usará la cadencia por red). */
   marca?: string | null;
+  /**
+   * Ancla del calendario CONTROLADA por el padre (mes/semana/día visible). La página la
+   * eleva para pedir a `/api/publicaciones` solo el rango visible (`rangoVisibleCalendario`).
+   * Si se omite, el calendario gestiona su propia ancla (uso suelto / tests).
+   */
+  ancla?: Date;
+  onAncla?: React.Dispatch<React.SetStateAction<Date>>;
 }) {
   const [vista, setVista] = React.useState<Vista>("mes");
-  const [ancla, setAncla] = React.useState(() => new Date());
+  // Ancla CONTROLADA-O-NO: si el padre la eleva (para acotar la query por rango), manda la
+  // suya; si no, el calendario usa su estado local (no cambia el uso standalone ni los tests).
+  const [anclaLocal, setAnclaLocal] = React.useState(() => new Date());
+  const ancla = anclaProp ?? anclaLocal;
+  const setAncla = onAncla ?? setAnclaLocal;
   const [diaSel, setDiaSel] = React.useState<string | null>(null);
   const [colActiva, setColActiva] = React.useState<string | null>(null);
   const queryClient = useQueryClient();

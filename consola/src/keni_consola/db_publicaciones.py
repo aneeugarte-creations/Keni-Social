@@ -361,12 +361,19 @@ def _filtros_publicacion(
     evergreen: bool | None,
     linea: str | None = None,
     responsable: str | None = None,
+    desde: str | None = None,
+    hasta: str | None = None,
 ) -> tuple[str, list[Any]]:
     """Construye la cláusula WHERE adicional (tras `es_publicacion=1`) y sus parámetros.
 
     `marca` admite UNA marca (str) o VARIAS (secuencia -> `c.marca IN (...)`). El caso
     multi-marca empuja al SQL el foco por marcas preferentes del feed, que antes se
     post-filtraba en memoria y ROMPIA el keyset (página corta + cursor que salta filas).
+
+    `desde`/`hasta` (ISO `YYYY-MM-DD`, ambos opcionales) acotan por `fecha_programada`: el
+    CALENDARIO pide solo la ventana visible en vez del conjunto completo (que el cap de 1000
+    truncaba en silencio). Una pieza SIN fecha (`''`/NULL) NUNCA cae dentro de un rango: se
+    excluye con `fecha_programada != ''` (y los `>=`/`<=` tampoco casan NULL).
     """
     clausulas: list[str] = []
     params: list[Any] = []
@@ -410,6 +417,15 @@ def _filtros_publicacion(
         else:
             clausulas.append("c.responsable_id = ?")
             params.append(responsable)
+    # RANGO de fecha_programada (calendario): las piezas SIN fecha quedan FUERA del rango.
+    if desde or hasta:
+        clausulas.append("cp.fecha_programada != ''")
+        if desde:
+            clausulas.append("cp.fecha_programada >= ?")
+            params.append(desde)
+        if hasta:
+            clausulas.append("cp.fecha_programada <= ?")
+            params.append(hasta)
     return (" AND " + " AND ".join(clausulas) if clausulas else ""), params
 
 
@@ -420,6 +436,8 @@ def listar_publicaciones(
     evergreen: bool | None = None,
     linea: str | None = None,
     responsable: str | None = None,
+    desde: str | None = None,
+    hasta: str | None = None,
     *,
     limite: int | None = None,
     desplazamiento: int | None = None,
@@ -435,7 +453,9 @@ def listar_publicaciones(
         filas ESTRICTAMENTE posteriores en el orden (más antiguas). Inmune a inserciones
         nuevas al principio (no desplaza páginas), ideal para el feed social.
     """
-    extra, params = _filtros_publicacion(marca, red, estado, evergreen, linea, responsable)
+    extra, params = _filtros_publicacion(
+        marca, red, estado, evergreen, linea, responsable, desde, hasta
+    )
     if cursor is not None:
         # Keyset sobre la tupla (creado, id) en orden DESC: la página siguiente son las filas
         # con (creado, id) ESTRICTAMENTE menor que la última vista. Forma expandida (no
@@ -468,9 +488,13 @@ def contar_publicaciones(
     evergreen: bool | None = None,
     linea: str | None = None,
     responsable: str | None = None,
+    desde: str | None = None,
+    hasta: str | None = None,
 ) -> int:
     """Total de publicaciones que casan los filtros (para el `total` de paginación)."""
-    extra, params = _filtros_publicacion(marca, red, estado, evergreen, linea, responsable)
+    extra, params = _filtros_publicacion(
+        marca, red, estado, evergreen, linea, responsable, desde, hasta
+    )
     sql = (
         "SELECT COUNT(*) AS n FROM contenido_plataforma cp "
         "JOIN contenido c ON cp.contenido_id = c.id WHERE c.clase = 'contenido'" + extra

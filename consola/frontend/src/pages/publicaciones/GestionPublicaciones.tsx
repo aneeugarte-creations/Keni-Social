@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Send } from "lucide-react";
 import * as React from "react";
 
@@ -14,11 +14,45 @@ import { cn } from "@/lib/utils";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
 import { DialogoDuplicar } from "@/pages/publicaciones/DialogoDuplicar";
 import { DialogoEditar } from "@/pages/publicaciones/DialogoEditar";
-import { VistaCalendario } from "@/pages/publicaciones/VistaCalendario";
+import { VistaCalendario, rangoVisibleCalendario } from "@/pages/publicaciones/VistaCalendario";
 import { VistaLista } from "@/pages/publicaciones/VistaLista";
-import type { OpcionesPublicaciones, Publicacion } from "@/types";
+import type { FiltrosPublicaciones, OpcionesPublicaciones, Publicacion } from "@/types";
 
 const TAM_PAGINA = 30;
+
+/** Filtros base de la LISTA (sin paginación): marca/red/línea/responsable activos. */
+type FiltrosBase = Pick<FiltrosPublicaciones, "marca" | "red" | "linea" | "responsable">;
+
+/**
+ * Parámetros de UNA página del FEED (lista, keyset/scroll infinito). La 1ª página llega con
+ * `cursor` vacío: `feed:"1"` activa el modo keyset (sin él caería al modo COMPLETO y traería
+ * todo de golpe). Pura y exportada para testear el cableado sin montar la página entera.
+ */
+export function paramsPaginaFeed(
+  filtrosBase: FiltrosBase,
+  cursor: string,
+  tamPagina: number = TAM_PAGINA,
+): FiltrosPublicaciones {
+  return {
+    ...filtrosBase,
+    feed: "1",
+    limite: String(tamPagina),
+    cursor: cursor || undefined,
+  };
+}
+
+/**
+ * ¿Mostrar el banner "Publicación automática desactivada"? Solo con el posteo real APAGADO
+ * y existiendo AL MENOS una pieza programada. Se basa en el TOTAL del servidor (no en las
+ * páginas ya cargadas: con keyset la 1ª página puede no traer ninguna programada aunque las
+ * haya). Pura y exportada para testearla sin montar la página.
+ */
+export function debeAvisarProgramadasSinSalir(
+  publicarReal: boolean,
+  totalProgramadas: number,
+): boolean {
+  return !publicarReal && totalProgramadas > 0;
+}
 
 // REPARTO ("la lista"): el flujo de coger/soltar tareas es del piloto de ClaroSports;
 // las demás marcas siguen su flujo de siempre (sin chips ni botón de coger).
@@ -172,7 +206,17 @@ function Cuerpo({
     responsable,
   };
 
-  // CALENDARIO: rejilla mensual; necesita el conjunto completo (sin paginar).
+  // CALENDARIO: la ANCLA (mes/semana/día visible) se eleva aquí para pedir a la API SOLO el
+  // rango visible (`?desde=&hasta=`) en vez del conjunto completo —que el cap de 1000 filas
+  // truncaba en silencio, haciendo mentir al calendario por omisión—. La navegación dentro
+  // del calendario actualiza esta ancla y, con ella, el rango y el refetch.
+  const [anclaCalendario, setAnclaCalendario] = React.useState(() => new Date());
+  const rangoCal = React.useMemo(
+    () => rangoVisibleCalendario(anclaCalendario),
+    [anclaCalendario],
+  );
+
+  // CALENDARIO: rejilla mensual; pide solo la ventana visible (mes ancla ± 1 semana).
   const calendarioQuery = useQuery({
     queryKey: [
       ...CLAVE_PUBLICACIONES,
@@ -181,9 +225,15 @@ function Cuerpo({
       filtrosBase.red ?? "",
       filtrosBase.linea ?? "",
       responsable ?? "",
+      rangoCal.desde,
+      rangoCal.hasta,
     ],
-    queryFn: ({ signal }) => api.publicaciones(filtrosBase, signal),
+    queryFn: ({ signal }) =>
+      api.publicaciones({ ...filtrosBase, desde: rangoCal.desde, hasta: rangoCal.hasta }, signal),
     enabled: calendario,
+    // Navegar de mes refetcha el nuevo rango: mantener la rejilla previa visible (en vez de
+    // parpadear a skeleton y perder los controles) mientras llega la del mes destino.
+    placeholderData: keepPreviousData,
     // REPARTO: ver en vivo los claims de los compañeros (sin tocar defaults globales).
     ...(repartoActivo ? REFRESCO_REPARTO : {}),
   });
@@ -206,15 +256,7 @@ function Cuerpo({
     // Primera página: sin cursor (pero con `feed: "1"` para activar el modo keyset).
     initialPageParam: "",
     queryFn: ({ pageParam, signal }) =>
-      api.publicaciones(
-        {
-          ...filtrosBase,
-          feed: "1",
-          limite: String(TAM_PAGINA),
-          cursor: pageParam || undefined,
-        },
-        signal,
-      ),
+      api.publicaciones(paramsPaginaFeed(filtrosBase, pageParam), signal),
     // El backend OMITE `cursor_siguiente` en la última página: undefined = no hay más.
     getNextPageParam: (ultima, paginas) => {
       // El backend emite cursor cuando la página viene LLENA, incluida la última si el
@@ -229,6 +271,26 @@ function Cuerpo({
     // REPARTO: ver en vivo los claims de los compañeros (sin tocar defaults globales).
     ...(repartoActivo ? REFRESCO_REPARTO : {}),
   });
+
+  // BANNER de seguridad (posteo real apagado): ¿hay piezas PROGRAMADAS que no saldrán solas?
+  // Conteo LIGERO en el servidor (`limite:"1"`, solo importa `paginacion.total`): basarlo en
+  // las páginas YA cargadas mentía con keyset —la 1ª página podía no traer ninguna programada
+  // aunque las hubiera—. Solo se pide con el posteo real APAGADO (si está ON no hay banner).
+  const programadasQuery = useQuery({
+    queryKey: [
+      ...CLAVE_PUBLICACIONES,
+      "conteo-programadas",
+      filtrosBase.marca ?? "",
+    ],
+    queryFn: ({ signal }) =>
+      api.publicaciones(
+        { marca: filtrosBase.marca, estado: "programado", limite: "1" },
+        signal,
+      ),
+    enabled: !opciones.publicar_real,
+    ...(repartoActivo ? REFRESCO_REPARTO : {}),
+  });
+  const totalProgramadas = programadasQuery.data?.paginacion?.total ?? 0;
 
   const query = calendario ? calendarioQuery : listaQuery;
   const publicaciones = React.useMemo(
@@ -247,9 +309,12 @@ function Cuerpo({
 
   // Aviso de seguridad: si el posteo real esta APAGADO y hay piezas programadas, NO van a
   // salir solas (el programador opera en dry-run). Es justo el fallo que dejaba piezas sin
-  // publicar en silencio; lo hacemos visible.
-  const hayProgramadasSinSalir =
-    !opciones.publicar_real && publicaciones.some((p) => p.estado === "programado");
+  // publicar en silencio; lo hacemos visible. Se basa en el TOTAL del servidor, no en las
+  // páginas cargadas (con keyset la 1ª página podía no traer ninguna programada).
+  const hayProgramadasSinSalir = debeAvisarProgramadasSinSalir(
+    opciones.publicar_real,
+    totalProgramadas,
+  );
 
   return (
     <div className="mt-2">
@@ -316,7 +381,13 @@ function Cuerpo({
           cargando={query.isFetching}
         />
       ) : calendario ? (
-        <VistaCalendario publicaciones={publicaciones} onEditar={setEditando} marca={marcaActiva} />
+        <VistaCalendario
+          publicaciones={publicaciones}
+          onEditar={setEditando}
+          marca={marcaActiva}
+          ancla={anclaCalendario}
+          onAncla={setAnclaCalendario}
+        />
       ) : publicaciones.length === 0 ? (
         <EstadoVacio
           icono={Send}

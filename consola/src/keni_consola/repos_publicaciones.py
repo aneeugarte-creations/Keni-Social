@@ -67,6 +67,8 @@ def listar_publicaciones(
     evergreen: bool | None = None,
     linea: str | None = None,
     responsable: str | None = None,
+    desde: str | None = None,
+    hasta: str | None = None,
     *,
     limite: int | None = None,
     desplazamiento: int | None = None,
@@ -75,6 +77,7 @@ def listar_publicaciones(
     # `marca` admite varias (secuencia -> `IN (...)` en SQL): el foco multi-marca del feed
     # se empuja al repo para que el keyset pagine bien (antes se post-filtraba en memoria).
     # `responsable` ("la lista"): "" = piezas libres (por coger); otro valor = de ese usuario.
+    # `desde`/`hasta` (ISO): rango de `fecha_programada` para el calendario (sin fecha = fuera).
     return db.listar_publicaciones(
         marca=marca,
         red=red,
@@ -82,6 +85,8 @@ def listar_publicaciones(
         evergreen=evergreen,
         linea=linea,
         responsable=responsable,
+        desde=desde,
+        hasta=hasta,
         limite=limite,
         desplazamiento=desplazamiento,
         cursor=cursor,
@@ -95,10 +100,12 @@ def contar_publicaciones(
     evergreen: bool | None = None,
     linea: str | None = None,
     responsable: str | None = None,
+    desde: str | None = None,
+    hasta: str | None = None,
 ) -> int:
     return db.contar_publicaciones(
         marca=marca, red=red, estado=estado, evergreen=evergreen, linea=linea,
-        responsable=responsable,
+        responsable=responsable, desde=desde, hasta=hasta,
     )
 
 

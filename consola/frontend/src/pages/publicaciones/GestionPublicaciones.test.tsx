@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { faltaMarcaAsignada, responsableDeLente } from "./GestionPublicaciones";
+import {
+  debeAvisarProgramadasSinSalir,
+  faltaMarcaAsignada,
+  paramsPaginaFeed,
+  responsableDeLente,
+} from "./GestionPublicaciones";
 
 /**
  * Mapeo de los chips del reparto ("la lista" de ClaroSports) al filtro `responsable`
@@ -44,5 +49,54 @@ describe("faltaMarcaAsignada — aviso de usuario sin marca", () => {
     expect(faltaMarcaAsignada({ rol: "editor", marcas: ["claro-sports"] })).toBe(false);
     expect(faltaMarcaAsignada({ rol: "admin", marcas: [] })).toBe(false);
     expect(faltaMarcaAsignada(null)).toBe(false);
+  });
+});
+
+/**
+ * La LISTA pagina por keyset: la 1ª página llega SIN cursor pero CON `feed:"1"` (sin esa
+ * marca el backend caería al modo COMPLETO y traería todo de golpe). Las páginas 2+ llevan
+ * el cursor de la última fila vista.
+ */
+describe("paramsPaginaFeed — parámetros de una página del feed (keyset)", () => {
+  const base = { marca: "claro-sports", red: undefined, linea: undefined, responsable: "u1" };
+
+  it("la 1ª página activa el modo feed (feed:'1') SIN cursor", () => {
+    const p = paramsPaginaFeed(base, "");
+    expect(p.feed).toBe("1");
+    expect(p.cursor).toBeUndefined();
+    expect(p.limite).toBe("30");
+    // Arrastra los filtros base (marca/responsable) a la query.
+    expect(p.marca).toBe("claro-sports");
+    expect(p.responsable).toBe("u1");
+  });
+
+  it("las páginas 2+ llevan el cursor de la última fila vista", () => {
+    const p = paramsPaginaFeed(base, "2026-06-10T00:00|abc");
+    expect(p.feed).toBe("1");
+    expect(p.cursor).toBe("2026-06-10T00:00|abc");
+  });
+
+  it("respeta un tamaño de página explícito", () => {
+    expect(paramsPaginaFeed(base, "", 10).limite).toBe("10");
+  });
+});
+
+/**
+ * El banner "Publicación automática desactivada" se basa en el TOTAL del servidor (no en las
+ * páginas ya cargadas): con keyset la 1ª página podía no traer ninguna programada aunque las
+ * hubiera. Solo avisa con el posteo real APAGADO y existiendo >=1 pieza programada.
+ */
+describe("debeAvisarProgramadasSinSalir — banner según el total del servidor", () => {
+  it("avisa con el posteo real apagado y al menos una programada", () => {
+    expect(debeAvisarProgramadasSinSalir(false, 1)).toBe(true);
+    expect(debeAvisarProgramadasSinSalir(false, 42)).toBe(true);
+  });
+
+  it("NO avisa si el posteo real está encendido (saldrán solas)", () => {
+    expect(debeAvisarProgramadasSinSalir(true, 5)).toBe(false);
+  });
+
+  it("NO avisa si no hay ninguna programada", () => {
+    expect(debeAvisarProgramadasSinSalir(false, 0)).toBe(false);
   });
 });

@@ -195,6 +195,37 @@ def test_filtro_responsable_compone_con_marca(cliente):
     assert [p["titulo"] for p in r["publicaciones"]] == ["CS libre"]
 
 
+def test_filtro_rango_fecha_programada(cliente):
+    """`?desde=&hasta=` acota por `fecha_programada`; las piezas SIN fecha quedan FUERA.
+
+    El CALENDARIO pide solo la ventana visible (mes ± margen) en vez del conjunto completo
+    que el cap de 1000 truncaba en silencio.
+    """
+    _crear(cliente, titulo="Dentro", estado="programado", fecha_programada="2026-06-15T18:00")
+    _crear(cliente, titulo="Antes", estado="programado", fecha_programada="2026-05-20T18:00")
+    _crear(cliente, titulo="Despues", estado="programado", fecha_programada="2026-08-01T18:00")
+    _crear(cliente, titulo="Sin fecha")  # borrador sin fecha_programada
+
+    r = cliente.get("/api/publicaciones?desde=2026-06-01&hasta=2026-06-30").json()
+    assert [p["titulo"] for p in r["publicaciones"]] == ["Dentro"]
+    # El total respeta el rango (no es el global): la paginación no miente por omisión.
+    assert r["paginacion"]["total"] == 1
+
+    # Sin el rango se ven TODAS (retrocompatible), incluida la pieza sin fecha.
+    todas = cliente.get("/api/publicaciones").json()
+    assert {p["titulo"] for p in todas["publicaciones"]} == {
+        "Dentro", "Antes", "Despues", "Sin fecha",
+    }
+
+
+def test_filtro_solo_hasta_excluye_sin_fecha(cliente):
+    """Con solo `?hasta=` la pieza sin fecha (cadena vacía) NO debe colarse en el rango."""
+    _crear(cliente, titulo="Programada", estado="programado", fecha_programada="2026-06-15T18:00")
+    _crear(cliente, titulo="Sin fecha")
+    r = cliente.get("/api/publicaciones?hasta=2026-12-31").json()
+    assert [p["titulo"] for p in r["publicaciones"]] == ["Programada"]
+
+
 # --------------------------------------------------------------------------- #
 # Lote                                                                        #
 # --------------------------------------------------------------------------- #

@@ -264,6 +264,13 @@ export interface FiltrosPublicaciones {
    * `"sin"` = piezas LIBRES (por coger). El responsable vive en el `contenido` padre.
    */
   responsable?: string;
+  /**
+   * RANGO de `fecha_programada` (ISO `YYYY-MM-DD`): el CALENDARIO pide solo la ventana
+   * visible (mes ± margen) en vez del conjunto completo, que el cap de 1000 filas truncaba
+   * en silencio. Las piezas SIN fecha quedan FUERA del rango. Ambos opcionales.
+   */
+  desde?: string;
+  hasta?: string;
   /** "1" para mostrar solo publicaciones evergreens. */
   evergreen?: string;
   /** Paginacion offset-based (#121): tamaño de pagina; ausente = conjunto completo. */
