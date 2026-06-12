@@ -35,7 +35,6 @@ describe("types.gen.ts (tipos derivados del backend, #101)", () => {
     const nombres = interfacesDe(gen);
     for (const esperado of [
       "RespuestaEstado",
-      "RespuestaConfig",
       "RespuestaLimites",
       "ReporteMetricas",
       "CompararMetricas",

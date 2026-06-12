@@ -1,8 +1,8 @@
-"""Tests PUROS del dominio ACTIVIDAD (normalizacion + combinar + agregados).
+"""Tests PUROS del dominio ACTIVIDAD (normalizacion + agregados).
 
 Sin I/O ni Postgres: `consola.actividad` recibe listas ya leidas (generaciones +
-runs) y las normaliza, combina (filtros + paginacion) y agrega. Aqui pasamos dicts
-con la forma que emiten `generaciones._publico` y `agentes.listar_runs_globales`.
+runs) y las normaliza y agrega. Aqui pasamos dicts con la forma que emiten
+`generaciones._publico` y `agentes.listar_runs_globales`.
 """
 
 from __future__ import annotations
@@ -149,47 +149,6 @@ def test_normalizar_run_sin_prompt_cae_al_nombre_del_agente():
 
 
 # --------------------------------------------------------------------------- #
-# combinar: mezcla, orden, filtros, paginacion                               #
-# --------------------------------------------------------------------------- #
-
-
-def test_combinar_mezcla_y_ordena_por_fecha_desc():
-    items, total = actividad.combinar([_gen()], [_run()], offset=0, limite=50)
-    assert total == 2
-    # El run (2026-05-31) es mas reciente que la generacion (2026-05-30).
-    assert [i["fuente"] for i in items] == ["run", "generacion"]
-
-
-def test_combinar_filtra_por_fuente():
-    items, total = actividad.combinar([_gen()], [_run()], fuente="run")
-    assert total == 1
-    assert items[0]["fuente"] == "run"
-
-
-def test_combinar_filtra_por_tipo():
-    items, total = actividad.combinar(
-        [_gen(tipo="copy"), _gen(id="g2", tipo="rss")], [_run()], tipo="copy"
-    )
-    assert total == 1
-    assert items[0]["tipo"] == "copy"
-
-
-def test_combinar_filtra_tipo_run():
-    items, total = actividad.combinar([_gen()], [_run()], tipo="run")
-    assert total == 1
-    assert items[0]["fuente"] == "run"
-
-
-def test_combinar_pagina_y_total_es_antes_de_paginar():
-    gens = [_gen(id=f"g{i}", fecha_inicio=f"2026-05-{10 + i:02d}T00:00:00") for i in range(5)]
-    items, total = actividad.combinar(gens, [], offset=1, limite=2)
-    assert total == 5  # total tras filtrar, ANTES de paginar
-    assert len(items) == 2
-    # offset=1 salta el mas reciente (g4); orden desc por fecha.
-    assert [i["id"] for i in items] == ["g3", "g2"]
-
-
-# --------------------------------------------------------------------------- #
 # agregados                                                                   #
 # --------------------------------------------------------------------------- #
 
@@ -231,7 +190,7 @@ def test_agregados_vacio():
 
 
 # --------------------------------------------------------------------------- #
-# API `/api/actividad`: filtro por marca (respeta el switch global de marca)  #
+# API `/api/actividad/agregados`: filtro por marca (switch global de marca)   #
 # --------------------------------------------------------------------------- #
 
 
@@ -242,40 +201,26 @@ def _crear_gen(marca: str, etiqueta: str) -> dict:
     )
 
 
-def test_actividad_filtra_por_marca(cliente):
-    """`marca=unotv` deja solo la actividad de UnoTV; otras marcas se excluyen."""
+def test_agregados_filtra_por_marca(cliente):
+    """`marca=unotv` deja solo los agregados de UnoTV; otras marcas se excluyen."""
     _crear_gen("unotv", "Copy UnoTV")
     _crear_gen("claro-sports", "Copy Claro")
 
-    r = cliente.get("/api/actividad?marca=unotv")
-    assert r.status_code == 200
-    datos = r.json()
-    assert datos["total"] == 1
-    assert [it["marca"] for it in datos["items"]] == ["unotv"]
-
-    # Los agregados tambien se acotan a la marca.
     ragg = cliente.get("/api/actividad/agregados?marca=unotv")
     assert ragg.status_code == 200
     assert ragg.json()["total"]["items"] == 1
 
 
-def test_actividad_sin_marca_devuelve_todo(cliente):
-    """Sin `marca` (caso admin "todas"): se devuelve la actividad de TODAS las marcas."""
+def test_agregados_sin_marca_devuelve_todo(cliente):
+    """Sin `marca` (caso admin "todas"): agregados de TODAS las marcas."""
     _crear_gen("unotv", "Copy UnoTV")
     _crear_gen("claro-sports", "Copy Claro")
-
-    r = cliente.get("/api/actividad")
-    assert r.status_code == 200
-    datos = r.json()
-    assert datos["total"] == 2
-    assert {it["marca"] for it in datos["items"]} == {"unotv", "claro-sports"}
 
     ragg = cliente.get("/api/actividad/agregados")
     assert ragg.status_code == 200
     assert ragg.json()["total"]["items"] == 2
 
 
-def test_actividad_marca_invalida_400(cliente):
+def test_agregados_marca_invalida_400(cliente):
     """Una `marca` que no es del catalogo se rechaza con 400 (igual que pipelines)."""
-    assert cliente.get("/api/actividad?marca=inventada").status_code == 400
     assert cliente.get("/api/actividad/agregados?marca=inventada").status_code == 400

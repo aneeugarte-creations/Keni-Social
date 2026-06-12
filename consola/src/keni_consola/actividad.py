@@ -9,7 +9,7 @@ La "verdad" de lo que la IA produce vive en DOS registros SEPARADOS:
     (`<raiz>/<marca>/runs/<id>.yaml`). Traen `prompt`, `estado`, `fecha_inicio` y
     `metricas` (con `tokens_in`/`tokens_out`/`total_cost_usd`/`duration_ms`/`num_turns`).
 
-Este modulo NORMALIZA ambos a un mismo ITEM de actividad y los combina/agrega. Es
+Este modulo NORMALIZA ambos a un mismo ITEM de actividad y los agrega. Es
 DOMINIO PURO: todas las funciones reciben listas ya leidas (no tocan disco ni la BD),
 de modo que se prueban sin Postgres ni ficheros. La capa `api/actividad.py` es la que
 lee `generaciones.listar(...)` y los runs via el dominio `agentes`, y se las pasa.
@@ -189,34 +189,6 @@ def _items(
     items.extend(normalizar_run(r) for r in runs)
     items.sort(key=lambda i: (i["fecha"], i["id"]), reverse=True)
     return items
-
-
-def combinar(
-    generaciones: list[dict[str, Any]],
-    runs: list[dict[str, Any]],
-    *,
-    fuente: str = "",
-    tipo: str = "",
-    offset: int = 0,
-    limite: int = 50,
-) -> tuple[list[dict[str, Any]], int]:
-    """Combina, FILTRA y PAGINA la actividad. Devuelve `(items_pagina, total)`.
-
-    - Normaliza ambas listas, mezcla y ordena por `fecha` desc.
-    - Filtra por `fuente` ("generacion"/"run") y/o por `tipo` (un tipo concreto, p.ej.
-      "copy" o "run"); un filtro vacio no filtra por ese eje.
-    - `total` = nº de items TRAS filtrar (antes de paginar).
-    - Pagina con `offset`/`limite` (offset y limite negativos se saturan a 0).
-    """
-    items = _items(generaciones, runs)
-    if fuente:
-        items = [i for i in items if i["fuente"] == fuente]
-    if tipo:
-        items = [i for i in items if i["tipo"] == tipo]
-    total = len(items)
-    inicio = max(0, int(offset or 0))
-    fin = inicio + max(0, int(limite or 0))
-    return items[inicio:fin], total
 
 
 def _redondear(valor: float) -> float:

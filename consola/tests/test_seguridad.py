@@ -115,8 +115,8 @@ def test_mutacion_con_origin_ajeno_rechazada(entorno):
     """POST con token valido pero `Origin` de otro sitio -> 403 (CSRF)."""
     c = _cli_con_auth()
     r = c.post(
-        "/api/config/esfuerzo",
-        json={"esfuerzo": "high"},
+        "/api/carpetas",
+        json={"nombre": "csrf-prueba"},
         headers={"Origin": "https://sitio-malicioso.example"},
     )
     assert r.status_code == 403
@@ -127,8 +127,8 @@ def test_mutacion_con_referer_ajeno_rechazada(entorno):
     """POST con `Referer` de otro sitio (sin Origin) -> 403 (CSRF)."""
     c = _cli_con_auth()
     r = c.post(
-        "/api/config/esfuerzo",
-        json={"esfuerzo": "high"},
+        "/api/carpetas",
+        json={"nombre": "csrf-prueba"},
         headers={"Referer": "https://otro.example/pagina"},
     )
     assert r.status_code == 403
@@ -138,8 +138,8 @@ def test_mutacion_con_origin_mismo_host_ok(entorno):
     """POST con `Origin` del mismo host (como el SPA propio) pasa el chequeo CSRF."""
     c = _cli_con_auth()
     r = c.post(
-        "/api/config/esfuerzo",
-        json={"esfuerzo": "high"},
+        "/api/carpetas",
+        json={"nombre": "csrf-prueba"},
         headers={"Origin": f"http://{_HOST}"},
     )
     # 200 (guardado) — lo importante es que NO es 403 (no fue rechazado por CSRF).
@@ -154,7 +154,7 @@ def test_mutacion_sin_origin_ni_referer_ok(entorno):
     Origin en cross-site con cuerpo); un cliente legitimo con el token no lo es.
     """
     c = _cli_con_auth()
-    r = c.post("/api/config/esfuerzo", json={"esfuerzo": "high"})
+    r = c.post("/api/carpetas", json={"nombre": "csrf-prueba"})
     assert r.status_code != 403
 
 
@@ -378,8 +378,8 @@ def test_mutacion_desde_origen_externo_configurado_pasa(entorno, monkeypatch):
     monkeypatch.setenv(seguridad.ENV_ORIGENES, _ORIGEN_EXTERNO)
     c = _cli_con_auth()
     r = c.post(
-        "/api/config/esfuerzo",
-        json={"esfuerzo": "high"},
+        "/api/carpetas",
+        json={"nombre": "csrf-prueba"},
         headers={"Origin": _ORIGEN_EXTERNO},
     )
     assert r.status_code != 403
@@ -391,8 +391,8 @@ def test_mutacion_cross_site_rechazada_aunque_haya_allowlist(entorno, monkeypatc
     monkeypatch.setenv(seguridad.ENV_ORIGENES, _ORIGEN_EXTERNO)
     c = _cli_con_auth()
     r = c.post(
-        "/api/config/esfuerzo",
-        json={"esfuerzo": "high"},
+        "/api/carpetas",
+        json={"nombre": "csrf-prueba"},
         headers={"Origin": "https://sitio-malicioso.example"},
     )
     assert r.status_code == 403
@@ -404,8 +404,8 @@ def test_mutacion_referer_externo_configurado_pasa(entorno, monkeypatch):
     monkeypatch.setenv(seguridad.ENV_ORIGENES, "social.kenitech.io")  # host pelado
     c = _cli_con_auth()
     r = c.post(
-        "/api/config/esfuerzo",
-        json={"esfuerzo": "high"},
+        "/api/carpetas",
+        json={"nombre": "csrf-prueba"},
         headers={"Referer": "https://social.kenitech.io/operacion/parrilla"},
     )
     assert r.status_code != 403
@@ -416,8 +416,8 @@ def test_origin_del_host_de_la_peticion_pasa_sin_allowlist(entorno, monkeypatch)
     monkeypatch.delenv(seguridad.ENV_ORIGENES, raising=False)
     c = _cli_con_auth()
     r = c.post(
-        "/api/config/esfuerzo",
-        json={"esfuerzo": "high"},
+        "/api/carpetas",
+        json={"nombre": "csrf-prueba"},
         headers={"Origin": f"http://{_HOST}"},
     )
     assert r.status_code != 403
@@ -429,8 +429,8 @@ def test_origin_externo_sin_allowlist_se_rechaza(entorno, monkeypatch):
     monkeypatch.delenv(seguridad.ENV_ORIGENES, raising=False)
     c = _cli_con_auth()
     r = c.post(
-        "/api/config/esfuerzo",
-        json={"esfuerzo": "high"},
+        "/api/carpetas",
+        json={"nombre": "csrf-prueba"},
         headers={"Origin": _ORIGEN_EXTERNO},
     )
     assert r.status_code == 403
@@ -493,8 +493,8 @@ def test_sin_token_interino_mutacion_sigue_con_csrf(entorno):
         headers={"Origin": f"http://{_HOST}"},
     ).status_code == 200
     r = c.post(
-        "/api/config/esfuerzo",
-        json={"esfuerzo": "high"},
+        "/api/carpetas",
+        json={"nombre": "csrf-prueba"},
         headers={"Origin": "https://sitio-malicioso.example"},
     )
     assert r.status_code == 403

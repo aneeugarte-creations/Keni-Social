@@ -22,23 +22,6 @@ export interface MarcaDisponible {
   id: string;
   nombre: string;
 }
-export interface CredencialesPresentes {
-  meta: boolean;
-  youtube: boolean;
-  x: boolean;
-  tiktok: boolean;
-}
-export interface RespuestaConfig {
-  fuente: string;
-  fuentes_validas: string[];
-  marcas: string[];
-  marcas_disponibles: MarcaDisponible[];
-  credenciales_presentes: CredencialesPresentes;
-}
-export interface CuerpoGuardarConfig {
-  fuente: string;
-  marcas: string[];
-}
 /**
  * Limite de caracteres canonico de una red (fuente unica, `GET /api/limites`).
  *

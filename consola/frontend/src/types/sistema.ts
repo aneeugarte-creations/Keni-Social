@@ -24,51 +24,12 @@ export interface RespuestaDoctor {
   siguiente_paso: string;
 }
 
-// --- Actividad IA unificada (#actividad; hoy la consume la página Producción) ---
+// --- Actividad IA unificada (agregados; hoy la consume la página Producción) ---
 //
-// Sección AD-HOC (a mano): la página /actividad consume el contrato unificado que
-// expone el backend, que fusiona en un solo feed las generaciones de IA en segundo
-// plano (`fuente: "generacion"`) y los runs de agentes (`fuente: "run"`). NO se genera
-// desde `types.gen.ts`; el backend de esta rama lo construye como dict ad-hoc.
-
-/** Origen de un ítem de actividad: una generación en segundo plano o un run de agente. */
-export type FuenteActividad = "generacion" | "run";
-
-/** Métricas (token/coste/duración/turnos) de un ítem de actividad; cualquiera puede faltar. */
-export interface MetricasActividad {
-  tokens: number | null;
-  coste_usd: number | null;
-  duration_ms: number | null;
-  num_turns: number | null;
-}
-
-/** Un ítem del feed unificado de actividad IA. */
-export interface ActividadItem {
-  id: string;
-  fuente: FuenteActividad;
-  tipo: string;
-  etiqueta: string;
-  marca: string;
-  estado: string;
-  fecha: string;
-  metricas: MetricasActividad;
-  /**
-   * Ruta del SPA al resultado (solo generaciones COMPLETADAS con página de resultado:
-   * copy/rss → tablero, imagen → estudio, verificación/qa → su hoja). `null` si no aplica
-   * (en curso, error, tipo sin página, o runs). No es deep-link por id: la página resuelve
-   * su propio estado vacío/404.
-   */
-  resultado_url: string | null;
-  /** Tema del pipeline que originó la generación ("" si fue manual/run): cruce directo a
-   *  `/datos/produccion/pipelines/{contenido_id}` (el id del pipeline ES el contenido). */
-  contenido_id: string;
-}
-
-/** Respuesta paginada del feed de actividad (`GET /api/actividad`). */
-export interface RespuestaActividad {
-  items: ActividadItem[];
-  total: number;
-}
+// Sección AD-HOC (a mano): agregados del registro unificado que expone el backend
+// (generaciones de IA en segundo plano + runs de agentes). NO se genera desde
+// `types.gen.ts`; el backend lo construye como dict ad-hoc. (El feed por items
+// `GET /api/actividad` se retiró: la actividad se mira en Pipelines.)
 
 /** Totales globales del periodo disponible. */
 export interface ActividadTotal {

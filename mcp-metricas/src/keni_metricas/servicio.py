@@ -894,7 +894,7 @@ def guardar_fuente_y_alcance(fuente: str, marcas: list[str]) -> None:
 
     Merge no destructivo + escritura atomica (delega en `asistente`). NO toca
     credenciales. Frontera de GESTION (no de datos de metricas); por eso vive en
-    esta fachada y no obliga a `api/config.py` a importar internals.
+    esta fachada y no obliga a los consumidores a importar internals.
 
     Lanza `ValueError` si la fuente no es valida; `OSError` si falla la escritura.
     """

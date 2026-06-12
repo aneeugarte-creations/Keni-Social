@@ -6,7 +6,7 @@ en silencio. Este paquete define esas formas UNA VEZ en Python (como `TypedDict`
 emite su JSON Schema y de ahi el frontend GENERA el TypeScript (`types.gen.ts`).
 
 Alcance deliberadamente acotado (NO todo el contrato): solo las respuestas mas
-ESTABLES y respaldadas por datos canonicos del backend (estado/doctor, config,
+ESTABLES y respaldadas por datos canonicos del backend (estado/doctor,
 limites/redes, metricas). El resto de `types.ts` sigue a mano: las ~50 rutas
 construyen sus respuestas como dicts ad-hoc (`JSONResponse({...})`), no como
 modelos, asi que forzar una generacion total exigiria reescribir esos handlers

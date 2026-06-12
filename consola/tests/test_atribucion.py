@@ -173,12 +173,12 @@ def test_generacion_atribuye_registro_historial_y_publicaciones(entorno):
     assert sondeo["autor_nombre"] == "ana"
 
     # 2) La entrada de historial creada en el post-procesado se atribuye a `ana`.
+    # (El historial ya no se sirve por HTTP: se lee del registro via `repos`.)
     hid = gen["resultado"]["historial_id"]
-    detalle = c.get(f"/api/prompts/historial/{hid}").json()
-    assert detalle["autor_nombre"] == "ana"
-    assert detalle["autor_id"]
-    lista = c.get("/api/prompts/historial").json()["historial"]
-    assert lista[0]["autor_nombre"] == "ana"
+    entrada = repos.obtener_historial_prompt(hid)
+    assert entrada is not None
+    assert entrada["autor_nombre"] == "ana"
+    assert entrada["autor_id"]
 
     # 3) La publicacion (borrador) auto-creada por pieza tambien.
     pubs = c.get("/api/publicaciones").json()["publicaciones"]
@@ -200,37 +200,13 @@ def test_generacion_por_token_sin_autor(entorno):
     assert gen["autor_id"] == ""
     assert gen["autor_nombre"] == ""
     hid = gen["resultado"]["historial_id"]
-    assert c.get(f"/api/prompts/historial/{hid}").json()["autor_nombre"] == ""
+    assert repos.obtener_historial_prompt(hid)["autor_nombre"] == ""
     assert c.get("/api/publicaciones").json()["publicaciones"][0]["autor_nombre"] == ""
 
 
 def test_historial_legado_sin_autor_se_lee_como_desconocido(entorno):
     """Una entrada de historial registrada SIN autor se lee con autor vacio, sin romper."""
     hid = repos.registrar_historial_prompt("copy-desde-nota", _MARCA, "texto plano")
-    c = _cli_por_token()
-    detalle = c.get(f"/api/prompts/historial/{hid}").json()
-    assert detalle["autor_id"] == ""
-    assert detalle["autor_nombre"] == ""
-
-
-def test_historial_listado_pagina_y_reporta_total(entorno):
-    """`GET /api/prompts/historial` pagina (`?limite=&desplazamiento=`) y reporta el `total`.
-
-    Cada entrada lleva el resultado completo, asi que el listado se acota: con `?limite=`
-    se devuelve solo esa pagina, el envelope `paginacion.total` cuenta TODAS, y la clave
-    `historial` sigue presente (retrocompatible).
-    """
-    c = _cli_por_token()
-    for i in range(5):
-        repos.registrar_historial_prompt("copy-desde-nota", _MARCA, f"texto {i}")
-
-    cuerpo = c.get("/api/prompts/historial?limite=2&desplazamiento=1").json()
-    assert len(cuerpo["historial"]) == 2
-    assert cuerpo["paginacion"]["total"] == 5
-    assert cuerpo["paginacion"]["limite"] == 2
-    assert cuerpo["paginacion"]["desplazamiento"] == 1
-
-    # Sin params hay defaults sensatos (no peta) y la clave `historial` sigue ahi.
-    por_defecto = c.get("/api/prompts/historial").json()
-    assert por_defecto["paginacion"]["total"] == 5
-    assert len(por_defecto["historial"]) == 5
+    entrada = repos.obtener_historial_prompt(hid)
+    assert entrada["autor_id"] == ""
+    assert entrada["autor_nombre"] == ""

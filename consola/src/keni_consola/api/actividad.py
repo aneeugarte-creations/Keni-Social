@@ -1,15 +1,14 @@
-"""API ACTIVIDAD: vista UNIFICADA de la actividad de IA (generaciones + runs).
+"""API ACTIVIDAD: agregados de la actividad de IA + monitor de la cola de generacion.
 
 Reune los DOS registros donde vive la "verdad" de lo que la IA produce —las
 GENERACIONES (`generaciones.py`: copy, rss, autogen, hashtags, imagen, verificacion,
-qa-editorial, prompt) y los RUNS de agente (`agentes.py`)— en una sola lista de
-items normalizados, con filtros, paginacion y agregados. La normalizacion/mezcla/
-agregacion es DOMINIO PURO (`consola.actividad`); aqui solo se LEEN ambos orígenes
-(via `generaciones.listar(...)` y el dominio `agentes`, NUNCA por HTTP) y se sirven.
+qa-editorial, prompt) y los RUNS de agente (`agentes.py`)— y sirve sus AGREGADOS
+(el feed unificado por items se retiro en la consolidacion: la actividad se mira en
+`/api/pipelines`). La normalizacion/mezcla/agregacion es DOMINIO PURO
+(`consola.actividad`); aqui solo se LEEN ambos orígenes (via `generaciones.listar(...)`
+y el dominio `agentes`, NUNCA por HTTP) y se sirven.
 
 Endpoints:
-  - `GET /api/actividad?limite=&offset=&fuente=&tipo=`
-      -> `{"items": [...], "total": <int>}`
   - `GET /api/actividad/agregados`
       -> `{"total": {...}, "por_tipo": [...], "por_dia": [...]}`
   - `GET /api/actividad/cola`
@@ -51,18 +50,6 @@ from ..tiempo import hoy_utc
 
 _MSG_SOLO_ADMIN = "Solo un administrador puede operar la cola de generación."
 
-# Tope por defecto de items por pagina (alineado con el contrato del frontend).
-_LIMITE_DEF = 50
-
-# Fuentes y tipos validos para filtrar (un filtro vacio no filtra por ese eje). El `tipo`
-# admite los tipos de generacion + "run" + "pipeline" (la generación de copy que lanza el
-# pipeline de contenido: trabajo real `claude -p` CON tokens/coste/tiempo). Los MARCADORES
-# de etapa (CI/CD/QA, `tipo='pipeline_etapa'`, SIN coste) NO se listan ni se muestran aquí:
-# son para la pestaña Pipelines y se EXCLUYEN del feed (ver `_es_marcador_pipeline`), para no
-# ensuciar Actividad con filas a 0.
-_FUENTES = frozenset({"generacion", "run"})
-_TIPOS = frozenset({*generaciones.TIPOS, "autogen", "run", "pipeline"})
-
 
 def _es_marcador_pipeline(gen: dict) -> bool:
     """True si la generación es un MARCADOR de etapa del pipeline (CI/CD/QA) — fuera de Actividad.
@@ -78,12 +65,6 @@ def _es_marcador_pipeline(gen: dict) -> bool:
     if tipo == "pipeline":
         return (gen.get("etiqueta", "") or "").startswith(("CI · ", "CD · ", "QA · "))
     return False
-
-
-def _filtro(valor: str | None, validos: frozenset[str]) -> str:
-    """Normaliza un filtro de query: devuelve el valor si es valido, "" si no."""
-    v = (valor or "").strip()
-    return v if v in validos else ""
 
 
 def _origenes(marca: str | None = None) -> tuple[list, list]:
@@ -107,33 +88,6 @@ def _origenes(marca: str | None = None) -> tuple[list, list]:
     if marca:
         runs = [r for r in runs if (r.get("agente") or r.get("marca") or "") == marca]
     return gens, runs
-
-
-# DEPRECADO(consolidación): el feed viejo de actividad fue sustituido por /api/pipelines
-# (y los agregados/series del Monitor); se elimina en fase 4 junto a su página.
-async def listar(request: Request) -> Response:
-    """Actividad unificada (generaciones + runs), filtrada, ordenada y paginada.
-
-    Query: `limite` (def 50), `offset` (def 0), `fuente` (""|generacion|run),
-    `tipo` (""|copy|rss|autogen|hashtags|imagen|verificacion|qa-editorial|prompt|run),
-    `marca` (""=todas, o un id de marca valido — acota la actividad a esa marca).
-    """
-    qp = request.query_params
-    marca = (qp.get("marca") or "").strip()
-    if marca and not marcas.es_marca(marca):
-        return JSONResponse({"error": "Marca no permitida."}, status_code=400)
-    limite = _entero_query(qp.get("limite"), minimo=1)
-    offset = _entero_query(qp.get("offset"), minimo=0) or 0
-    fuente = _filtro(qp.get("fuente"), _FUENTES)
-    tipo = _filtro(qp.get("tipo"), _TIPOS)
-
-    gens, runs = _origenes(marca or None)
-    items, total = actividad.combinar(
-        gens, runs,
-        fuente=fuente, tipo=tipo, offset=offset,
-        limite=_LIMITE_DEF if limite is None else limite,
-    )
-    return JSONResponse({"items": items, "total": total})
 
 
 async def agregados(request: Request) -> Response:
@@ -548,7 +502,6 @@ async def cola_reencolar(request: Request) -> Response:
 
 
 RUTAS = [
-    Route("/api/actividad", listar, methods=["GET"]),
     Route("/api/actividad/agregados", agregados, methods=["GET"]),
     # Mas especificas ANTES que la generica para que Starlette case bien.
     Route("/api/actividad/cola/series", cola_series, methods=["GET"]),

@@ -18,7 +18,7 @@ Cada marca tiene tres campos:
                   unico que ve la persona; identico en TODA la consola.
   - `id_metricas` identificador con `guion_bajo` que necesita `keni_metricas` para
                   hablar con sus cuentas (p.ej. `claro_sports`). Solo se usa en la
-                  FRONTERA con metricas (api/metricas.py, api/config.py); el resto
+                  FRONTERA con metricas (api/metricas.py, api/conexiones.py); el resto
                   de la consola trabaja siempre con el `id` canonico.
 
 El catalogo NO esta hardcodeado: se CARGA de un paquete de cliente declarativo

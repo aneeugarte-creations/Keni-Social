@@ -27,7 +27,7 @@ def test_auto_descubrimiento_monta_todas_las_areas():
     # Una ruta representativa de cada modulo de api/.
     for esperada in (
         "/api/estado",
-        "/api/config",
+        "/api/ajustes",
         "/api/proyectos",
         "/api/carpetas",
         "/api/texto",

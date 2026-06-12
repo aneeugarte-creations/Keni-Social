@@ -250,7 +250,7 @@ def test_historial_prompt_guarda_y_expone_metricas(entorno):
     Tras retirar el motor de skills, el copy se lanza desde la Texto: un prompt con
     `salida: piezas` lanzado con redes usa el post-procesado de COPY (mismo `procesar` que la
     prompt antiguo: parsea piezas, registra historial con sus metricas, crea borradores). El
-    historial sigue vivo en `/api/prompts/historial` (modulo NEUTRO).
+    historial se persiste en su registro duradero (se lee via `repos`).
     """
     from keni_consola import libtexto
 
@@ -270,22 +270,22 @@ def test_historial_prompt_guarda_y_expone_metricas(entorno):
     ).json()
     hid = gen["generacion"]["resultado"]["historial_id"]
 
-    # Listado expone metricas.
-    lista = c.get("/api/prompts/historial").json()["historial"]
-    assert lista[0]["metricas"]["tokens_out"] == 50
-    # Detalle tambien.
-    detalle = c.get(f"/api/prompts/historial/{hid}").json()
-    assert detalle["metricas"]["total_cost_usd"] == pytest.approx(0.0123)
-    assert detalle["metricas"]["modelo"] == "claude-opus-4-7"
+    # El registro persistido lleva las metricas (el historial ya no se sirve por HTTP:
+    # se lee del almacen duradero via `repos`).
+    from keni_consola import repos
+
+    entrada = repos.obtener_historial_prompt(hid)
+    assert entrada["metricas"]["tokens_out"] == 50
+    assert entrada["metricas"]["total_cost_usd"] == pytest.approx(0.0123)
+    assert entrada["metricas"]["modelo"] == "claude-opus-4-7"
 
 
 def test_historial_prompt_sin_metricas_devuelve_none(entorno):
     from keni_consola import repos
 
     hid = repos.registrar_historial_prompt("copy-desde-nota", _MARCA, "texto plano")
-    c = _cliente()
-    detalle = c.get(f"/api/prompts/historial/{hid}").json()
-    assert detalle["metricas"] is None
+    entrada = repos.obtener_historial_prompt(hid)
+    assert entrada["metricas"] is None
 
 
 # --------------------------------------------------------------------------- #

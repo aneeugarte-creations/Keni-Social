@@ -9,8 +9,8 @@ Convencion de campos OPCIONALES: se modelan con `NotRequired[...]` (clave que
 puede no venir). Convencion de NULABLES: `X | None` (la clave viene pero su valor
 puede ser `null`). Las dos cosas son distintas y se respetan tal cual en el TS.
 
-Este paquete agrupa los modelos por DOMINIO en submodulos (`estado`, `config`,
-`limites`, `metricas`, `publicaciones`, `comercial`, mas `_base` para los tipos
+Este paquete agrupa los modelos por DOMINIO en submodulos (`estado`, `limites`,
+`metricas`, `publicaciones`, `comercial`, mas `_base` para los tipos
 compartidos/auxiliares). Este `__init__` es un BARREL: re-exporta todos los modelos
 y mantiene la superficie publica historica (un solo modulo `modelos`).
 
@@ -42,11 +42,6 @@ from .comercial import (
     RespuestaPublicacionesComercial,
     RespuestaRefrescarComercial,
     SnapshotComercial,
-)
-from .config import (
-    CredencialesPresentes,
-    CuerpoGuardarConfig,
-    RespuestaConfig,
 )
 from .estado import (
     NivelEstado,
@@ -118,11 +113,8 @@ __all__ = [
     "NivelEstado",
     "ResultadoEstado",
     "RespuestaEstado",
-    # Config.
+    # Compartidos.
     "MarcaDisponible",
-    "CredencialesPresentes",
-    "RespuestaConfig",
-    "CuerpoGuardarConfig",
     # Limites.
     "LimiteRed",
     "RespuestaLimites",
@@ -204,9 +196,6 @@ MODELOS = [
     ResultadoEstado,
     RespuestaEstado,
     MarcaDisponible,
-    CredencialesPresentes,
-    RespuestaConfig,
-    CuerpoGuardarConfig,
     LimiteRed,
     RespuestaLimites,
     RangoMetrica,

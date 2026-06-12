@@ -70,86 +70,6 @@
         "nombre"
       ]
     },
-    "CredencialesPresentes": {
-      "type": "object",
-      "title": "CredencialesPresentes",
-      "properties": {
-        "meta": {
-          "type": "boolean"
-        },
-        "youtube": {
-          "type": "boolean"
-        },
-        "x": {
-          "type": "boolean"
-        },
-        "tiktok": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "meta",
-        "youtube",
-        "x",
-        "tiktok"
-      ]
-    },
-    "RespuestaConfig": {
-      "type": "object",
-      "title": "RespuestaConfig",
-      "properties": {
-        "fuente": {
-          "type": "string"
-        },
-        "fuentes_validas": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "marcas": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "marcas_disponibles": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/MarcaDisponible"
-          }
-        },
-        "credenciales_presentes": {
-          "$ref": "#/$defs/CredencialesPresentes"
-        }
-      },
-      "required": [
-        "fuente",
-        "fuentes_validas",
-        "marcas",
-        "marcas_disponibles",
-        "credenciales_presentes"
-      ]
-    },
-    "CuerpoGuardarConfig": {
-      "type": "object",
-      "title": "CuerpoGuardarConfig",
-      "properties": {
-        "fuente": {
-          "type": "string"
-        },
-        "marcas": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      },
-      "required": [
-        "fuente",
-        "marcas"
-      ]
-    },
     "LimiteRed": {
       "type": "object",
       "title": "LimiteRed",
@@ -2758,15 +2678,6 @@
     },
     {
       "$ref": "#/$defs/MarcaDisponible"
-    },
-    {
-      "$ref": "#/$defs/CredencialesPresentes"
-    },
-    {
-      "$ref": "#/$defs/RespuestaConfig"
-    },
-    {
-      "$ref": "#/$defs/CuerpoGuardarConfig"
     },
     {
       "$ref": "#/$defs/LimiteRed"

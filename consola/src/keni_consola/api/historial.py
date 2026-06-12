@@ -1,13 +1,15 @@
-"""API HISTORIAL de generaciones: listado, detalle y "guardar como publicación".
+"""API HISTORIAL de generaciones: "guardar como publicación".
 
 El historial es el registro DURADERO de las generaciones de copy/documento (lo escribe el
 post-procesado vía `repos.registrar_historial_prompt`). Lo consumen TODAS las generaciones
 (copy, termómetro, QA…), por eso vive en su propio módulo NEUTRO.
 
-  - `GET  /api/prompts/historial`               -> listado (metadatos + preview).
-  - `GET  /api/prompts/historial/{id}`          -> detalle (resultado completo).
   - `POST /api/prompts/historial/{id}/guardar`  -> crea publicaciones (borradores) desde la
                                                   entrada (una por pieza, o una con `red`).
+
+(El listado y el detalle del historial por HTTP se retiraron en la consolidación: la
+actividad de IA se mira en `/api/pipelines` y el Monitor; el registro se sigue leyendo
+desde el dominio vía `repos`.)
 """
 
 from __future__ import annotations
@@ -16,113 +18,12 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import marcas, redes, repos
-from .._http_json import envoltura_paginacion, leer_json
+from .. import redes, repos
+from .._http_json import leer_json
 from ..dominio import copy as dom_copy
 from ..dominio import publicaciones as dom_publicaciones
 from ..dominio import stream
 from ..seguridad import autor_de_peticion
-
-# Longitud del preview del resultado en el listado (chars).
-_PREVIEW_CHARS = 140
-
-# Paginacion del listado: el historial guarda el RESULTADO COMPLETO por entrada, asi que
-# devolverlo entero crece sin tope. Acotamos por defecto y limitamos el techo por peticion.
-_LIMITE_DEFECTO = 50
-_LIMITE_MAX = 200
-
-
-def _paginacion(request: Request) -> tuple[int, int]:
-    """`(limite, desplazamiento)` del listado; `limite` por defecto 50, acotado a [1, 200]."""
-    qp = request.query_params
-    try:
-        limite = int(qp.get("limite") or _LIMITE_DEFECTO)
-    except (TypeError, ValueError):
-        limite = _LIMITE_DEFECTO
-    limite = max(1, min(limite, _LIMITE_MAX))
-    try:
-        desplazamiento = int(qp.get("desplazamiento") or 0)
-    except (TypeError, ValueError):
-        desplazamiento = 0
-    return limite, max(0, desplazamiento)
-
-# Mapa id->nombre de marca (catálogo único) para enriquecer el listado.
-_MARCA_NOMBRE: dict[str, str] = dict(marcas.opciones())
-
-
-def _preview(resultado: str) -> str:
-    """Primeros ~140 chars del resultado para el listado del historial."""
-    resultado = (resultado or "").strip()
-    if len(resultado) <= _PREVIEW_CHARS:
-        return resultado
-    return resultado[:_PREVIEW_CHARS].rstrip() + "…"
-
-
-def _nombre(prompt_id: str) -> str:
-    """Nombre legible de la generación de origen (sin catálogo: prettify del id)."""
-    return (prompt_id or "").replace("-", " ").strip().capitalize() or prompt_id
-
-
-# DEPRECADO(consolidación): el listado del historial ya no lo consume ninguna página del
-# front (la actividad de IA se mira en /api/pipelines y el Monitor); se elimina en fase 4.
-# OJO: POST /api/prompts/historial/{id}/guardar SÍ se usa y NO está deprecado.
-async def historial(request: Request) -> Response:
-    """`GET /api/prompts/historial` -> listado (metadatos + preview), recientes primero.
-
-    Paginado (`?limite=&desplazamiento=`): cada entrada lleva el resultado completo, asi que
-    sin tope la respuesta crece sin limite. Por defecto se devuelven las 50 mas recientes
-    (`limite` acotado a 200). Envelope RETROCOMPATIBLE: mantiene la clave `historial` y AÑADE
-    `paginacion:{total, limite, desplazamiento}`.
-    """
-    limite, desplazamiento = _paginacion(request)
-    entradas = repos.listar_historial_prompts(limite=limite, desplazamiento=desplazamiento)
-    total = repos.contar_historial_prompts()
-    salida = [
-        {
-            "id": e["id"],
-            "prompt": e["prompt"],
-            "prompt_nombre": _nombre(e["prompt"]),
-            "marca": e["marca"],
-            "marca_nombre": _MARCA_NOMBRE.get(e["marca"], e["marca"]),
-            "fecha": e["fecha"],
-            "titulo": e["titulo"],
-            "preview": _preview(e["resultado"]),
-            "piezas": e["piezas"],
-            "metricas": e.get("metricas"),
-            "autor_id": e.get("autor_id", "") or "",
-            "autor_nombre": e.get("autor_nombre", "") or "",
-        }
-        for e in entradas
-    ]
-    return JSONResponse(
-        {
-            "historial": salida,
-            "paginacion": envoltura_paginacion(total, limite, desplazamiento),
-        }
-    )
-
-
-# DEPRECADO(consolidación): el detalle del historial ya no lo consume ninguna página del
-# front; se elimina en fase 4 junto al listado de arriba.
-async def historial_detalle(request: Request) -> Response:
-    """`GET /api/prompts/historial/{id}` -> detalle con el resultado completo (404)."""
-    entrada = repos.obtener_historial_prompt(request.path_params["historial_id"])
-    if entrada is None:
-        return JSONResponse({"error": "No se encontró ese borrador en el historial."}, status_code=404)
-    return JSONResponse(
-        {
-            "id": entrada["id"],
-            "prompt": entrada["prompt"],
-            "marca": entrada["marca"],
-            "fecha": entrada["fecha"],
-            "titulo": entrada["titulo"],
-            "resultado": entrada["resultado"],
-            "piezas": entrada["piezas"],
-            "metricas": entrada.get("metricas"),
-            "autor_id": entrada.get("autor_id", "") or "",
-            "autor_nombre": entrada.get("autor_nombre", "") or "",
-        }
-    )
 
 
 def _redes_pedidas(datos: dict[str, object]) -> set[str] | None:
@@ -234,7 +135,5 @@ async def historial_guardar(request: Request) -> Response:
 
 
 RUTAS = [
-    Route("/api/prompts/historial", historial, methods=["GET"]),
     Route("/api/prompts/historial/{historial_id}/guardar", historial_guardar, methods=["POST"]),
-    Route("/api/prompts/historial/{historial_id}", historial_detalle, methods=["GET"]),
 ]
