@@ -430,6 +430,7 @@ def componer(
     copy_unico: bool = False,
     n_notas: int = 0,
     fotos_notas: list[dict[str, str]] | None = None,
+    indicaciones: str = "",
 ) -> str:
     """Arma el prompt final autocontenido: prompt + editorial adjunta + contexto.
 
@@ -442,6 +443,9 @@ def componer(
     `copy_unico` (solo copy-desde-nota): cuando es True, en vez de pedir una pieza por red
     (`instruccion_redes`) pide UN SOLO copy + copy_in reutilizado en todas (`instruccion_copy_unico`).
     Lo activa `lanzar_copy`; la galería/termómetro y la Texto manual siguen pidiendo por red.
+
+    `indicaciones` (solo copy, opt-in): bloque YA COMPUESTO con las indicaciones vigentes
+    del equipo (`dominio.indicaciones.bloque_para_marca`). "" (default) = ni un byte extra.
     """
     # ORDEN ESTABLE-PRIMERO (prompt caching): lo que NO cambia entre lanzamientos de la misma
     # marca (cuerpo del prompt + instrucciones fijas + editorial de la marca) va ANTES; lo
@@ -475,6 +479,12 @@ def componer(
             if copy_unico
             else instruccion_redes(redes_ids)
         )
+    if indicaciones and indicaciones.strip():
+        # Indicaciones VIGENTES del equipo (cajón `contexto` de los Insumos): instrucciones
+        # CONFIABLES (las cura el equipo), van fuera del envoltorio anti-inyección. Posición:
+        # en la cola VARIABLE del prompt (cambian a diario; ponerlas en el prefijo estable
+        # rompería el caching por marca) y ANTES del CONTEXTO (que cambia por lanzamiento).
+        partes.append("---\n" + indicaciones.strip())
     if bloque_contexto and bloque_contexto.strip():
         # El contexto (nota/transcripción/ítem RSS) es contenido NO confiable: lo envolvemos
         # en <contenido_usuario>...</contenido_usuario> con un aviso anti-inyección, para que
@@ -647,10 +657,20 @@ def componer_copy(
     `n_notas` (historias que agrupan varias notas): con 2+, la instrucción ofrece al modelo
     decidir entre `post` y `carrusel` EDITORIAL (un slide con titular por sub-historia);
     `fotos_notas` es el catálogo numerado de fotos propias por nota.
+
+    INDICACIONES DEL EQUIPO: aquí (punto ÚNICO de composición del copy) se inyectan las
+    indicaciones VIGENTES del cajón `contexto` de los Insumos (`dominio.indicaciones`),
+    para que los lineamientos del día guíen TODOS los copys de la marca, vengan de donde
+    vengan (nota, RSS, pipeline, autogen, evergreen, asistente, clips) y también la preview.
+    Best-effort: sin ítems vigentes (o sin BD) el prompt no cambia ni un byte.
     """
+    # Perezoso y sin ciclo: `indicaciones` importa `repos` solo al consultar.
+    from . import indicaciones as indicaciones_dom
+
     return componer(
         cuerpo, adjuntos_copy(marca), contexto,
         redes_ids=redes_ids, copy_unico=True, n_notas=n_notas, fotos_notas=fotos_notas,
+        indicaciones=indicaciones_dom.bloque_para_marca(marca),
     )
 
 

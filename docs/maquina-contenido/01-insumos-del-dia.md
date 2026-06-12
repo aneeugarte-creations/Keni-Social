@@ -16,7 +16,7 @@ permita llevarlos al tablero. Hay **6 cajones** (los 4 primeros de UnoTV; `notas
 - `reporteros` — PDF de agenda de coberturas (tabla con REPORTERO, HORA Y LUGAR, ASIGNACIÓN, ...).
 - `eventos_claro` — Excel/CSV de eventos y programación de TV de Claro Sports.
 - `notas` — volcado heterogéneo de WhatsApp (notas, links, tweets, texto de PDFs) → una `nota` por unidad.
-- `contexto` — indicaciones/correcciones del equipo → ítems `tipo=contexto`: GUÍA EDITORIAL que **nunca** entra al pool ni al tablero (backstops en `api/insumos.py` e `dominio/ingesta.py`).
+- `contexto` — indicaciones/correcciones del equipo → ítems `tipo=contexto`: GUÍA EDITORIAL que **nunca** entra al pool ni al tablero (backstops en `api/insumos.py` e `dominio/ingesta.py`). Sí GUÍA la generación: las indicaciones VIGENTES (últimos 7 días, marca de la pieza o sin marca, tope 20) se inyectan como bloque OBLIGATORIO en el prompt de TODOS los copys de la marca (`dominio/indicaciones.py` → `generar.componer_copy`).
 
 Cada item nace **fechado con el día editorial** y hay **historial**: poder ver
 las listas de cualquier día pasado.
