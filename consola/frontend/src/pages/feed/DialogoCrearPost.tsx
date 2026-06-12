@@ -16,8 +16,8 @@
  *
  * Marca y redes salen del MISMO catálogo que el resto del feed (`/publicaciones/opciones`,
  * query ya cacheada por FeedIdeacion). Por defecto: la marca activa de la topbar y las
- * redes del formato foto. El título es OPCIONAL: si no lo das, el backend lo deriva (del
- * titular de la página del enlace, de la 1ª línea del material o de la foto).
+ * redes del formato foto. NO hay campo de título: el backend lo DERIVA siempre (del titular
+ * de la página del enlace, de la 1ª línea del material o, si solo hay foto, un genérico).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link2, Loader2, Paperclip, X } from "lucide-react";
@@ -35,7 +35,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
@@ -87,7 +86,6 @@ export function DialogoCrearPost({
   const [marca, setMarca] = React.useState("");
   // La caja única: nota, enlace o el texto de un doc. La IA lo convierte en post.
   const [texto, setTexto] = React.useState("");
-  const [titulo, setTitulo] = React.useState("");
   // Imagen que el equipo trae de fuera (pegada con Cmd+V o arrastrada): la foto del post.
   const [imagen, setImagen] = React.useState<File | null>(null);
   const [vistaImagen, setVistaImagen] = React.useState("");
@@ -172,7 +170,6 @@ export function DialogoCrearPost({
     if (!abierto) return;
     setMarca(marcaActiva ?? "");
     setTexto("");
-    setTitulo("");
     setRedes(new Set());
     setRedesInicializadas(false);
     setArrastrando(false);
@@ -199,7 +196,8 @@ export function DialogoCrearPost({
       const material = t && t !== url ? t : undefined;
       return api.aportarMaterial({
         marca,
-        titulo: titulo.trim() || undefined,
+        // Sin campo de título: el backend lo deriva (titular del enlace, 1ª línea del
+        // material o, si solo hay foto, un genérico). Un rótulo menos que rellenar.
         material,
         url: url ?? undefined,
         imagen: imagen ?? undefined,
@@ -341,17 +339,6 @@ export function DialogoCrearPost({
             <p className="text-xs text-muted-foreground">
               La IA convierte lo que aportes en un borrador por red. Nada se publica sin tu OK.
             </p>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="crear-post-titulo">Título</Label>
-            <Input
-              id="crear-post-titulo"
-              value={titulo}
-              onChange={(e) => setTitulo(e.target.value)}
-              placeholder="Opcional: etiqueta de la idea (si no, la deduzco del material)"
-              disabled={crear.isPending}
-            />
           </div>
 
           <SelectorRedMultiple
