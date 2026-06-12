@@ -109,6 +109,8 @@ def _origenes(marca: str | None = None) -> tuple[list, list]:
     return gens, runs
 
 
+# DEPRECADO(consolidación): el feed viejo de actividad fue sustituido por /api/pipelines
+# (y los agregados/series del Monitor); se elimina en fase 4 junto a su página.
 async def listar(request: Request) -> Response:
     """Actividad unificada (generaciones + runs), filtrada, ordenada y paginada.
 
@@ -252,6 +254,34 @@ def _daemons_estado() -> list[dict]:
     return items
 
 
+def snapshot_cola() -> dict:
+    """Snapshot PLANO de capacidad y conteo de la cola de jobs (sin listas ni workers).
+
+    Una sola sonda para la regla de `cola_llena` (activos >= tope), compartida por el
+    monitor (`GET /api/actividad/cola`) y el doctor (`GET /api/estado`, chequeo
+    `maquina:cola`): no duplicar el calculo. Forma: `{max_jobs, max_cola, tope,
+    pendientes, reclamados, terminados, activos, cola_llena}`. Puede propagar un fallo
+    de BD: cada consumidor decide como degradar.
+    """
+    estados = repos.contar_jobs_por_estado()
+    pendientes = estados.get(repos.JOB_PENDIENTE, 0)
+    reclamados = estados.get(repos.JOB_RECLAMADO, 0)
+    terminados = estados.get(repos.JOB_TERMINADO, 0)
+    max_jobs, max_cola = config.max_jobs(), config.max_cola()
+    tope = max_jobs + max_cola
+    activos = pendientes + reclamados
+    return {
+        "max_jobs": max_jobs,
+        "max_cola": max_cola,
+        "tope": tope,
+        "pendientes": pendientes,
+        "reclamados": reclamados,
+        "terminados": terminados,
+        "activos": activos,
+        "cola_llena": activos >= tope,
+    }
+
+
 async def cola(request: Request) -> Response:
     """GET /api/actividad/cola?marca=: snapshot EN VIVO de la cola de generacion + workers + daemons.
 
@@ -266,13 +296,13 @@ async def cola(request: Request) -> Response:
     if marca and not marcas.es_marca(marca):
         return JSONResponse({"error": "Marca no permitida."}, status_code=400)
 
-    estados = repos.contar_jobs_por_estado()
-    pendientes = estados.get(repos.JOB_PENDIENTE, 0)
-    reclamados = estados.get(repos.JOB_RECLAMADO, 0)
-    terminados = estados.get(repos.JOB_TERMINADO, 0)
-    max_jobs, max_cola = config.max_jobs(), config.max_cola()
-    tope = max_jobs + max_cola
-    activos = pendientes + reclamados
+    snap = snapshot_cola()
+    pendientes = snap["pendientes"]
+    reclamados = snap["reclamados"]
+    terminados = snap["terminados"]
+    max_jobs, max_cola = snap["max_jobs"], snap["max_cola"]
+    tope = snap["tope"]
+    activos = snap["activos"]
 
     ahora = datetime.now()
     filas = repos.jobs_activos(limite=200)
@@ -321,7 +351,7 @@ async def cola(request: Request) -> Response:
                 "terminados": terminados,
                 "activos": activos,
             },
-            "cola_llena": activos >= tope,
+            "cola_llena": snap["cola_llena"],
             "procesando": reclamados,  # claude -p en vuelo (acotado por max_jobs)
             "slots_libres": max(0, max_jobs - reclamados),
             "workers_activos": workers,

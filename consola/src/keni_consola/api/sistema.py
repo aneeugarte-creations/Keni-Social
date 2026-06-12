@@ -98,6 +98,13 @@ def _rechazo_no_admin() -> Response:
 # Recursos de la maquina (CPU / RAM / disco)                                   #
 # --------------------------------------------------------------------------- #
 
+# Umbrales de USO de disco (%) que consume el doctor (`/api/estado`, chequeo `infra:disco`).
+# AVISO replica el umbral historico del banner del panel Sistema (>= 85% el volumen va
+# justo); ERROR marca un volumen al borde del lleno. Las sondas de este modulo NO los
+# aplican (devuelven el porcentaje crudo y el front/doctor juzgan).
+UMBRAL_DISCO_AVISO_PCT = 85.0
+UMBRAL_DISCO_ERROR_PCT = 95.0
+
 
 def _uso_disco(ruta: str, etiqueta: str) -> dict | None:
     """Uso de disco del volumen que contiene `ruta` (None si no se puede medir).
@@ -288,10 +295,34 @@ async def s3(request: Request) -> Response:
     return JSONResponse(payload)
 
 
+def sonda_s3_salud() -> dict:
+    """SONDA de salud del object storage (head_bucket, SOLO lectura, sin medir uso).
+
+    Devuelve `{configurado, salud, error}`: sin S3 cableado `{False, None, None}`; con S3,
+    `salud` es "ok"/"err" y `error` un mensaje legible solo en fallo. La comparten el test
+    de conexion (`POST /api/sistema/s3/probar`) y el doctor (`/api/estado`, chequeo
+    `infra:s3`): una sola sonda, dos consumidores. Defensiva: nunca propaga.
+    """
+    if not config.s3_configurado():
+        return {"configurado": False, "salud": None, "error": None}
+    try:
+        cliente = _cliente_s3()
+        cliente.head_bucket(Bucket=config.s3_bucket())
+    except Exception as e:  # noqa: BLE001 -- fallo de conexion: salud err, sin traceback
+        _logger.warning("Prueba de conexion S3/Garage fallida: %s", e)
+        return {
+            "configurado": True,
+            "salud": "err",
+            "error": "No se pudo conectar con el almacenamiento.",
+        }
+    return {"configurado": True, "salud": "ok", "error": None}
+
+
 async def probar_s3(request: Request) -> Response:
     """POST /api/sistema/s3/probar: test de conexion (head_bucket). SOLO lectura (admin).
 
-    409 si S3 no esta configurado (no hay nada que probar). Devuelve `salud` ok/err.
+    409 si S3 no esta configurado (no hay nada que probar). Devuelve `salud` ok/err
+    (la misma `sonda_s3_salud` que usa el doctor).
     """
     if not _es_admin(request):
         return _rechazo_no_admin()
@@ -300,15 +331,8 @@ async def probar_s3(request: Request) -> Response:
             {"error": "El almacenamiento S3 no está configurado en este servidor."},
             status_code=409,
         )
-    try:
-        cliente = _cliente_s3()
-        cliente.head_bucket(Bucket=config.s3_bucket())
-    except Exception as e:  # noqa: BLE001 -- fallo de conexion: salud err, sin traceback
-        _logger.warning("Prueba de conexion S3/Garage fallida: %s", e)
-        return JSONResponse(
-            {"salud": "err", "error": "No se pudo conectar con el almacenamiento."}
-        )
-    return JSONResponse({"salud": "ok", "error": None})
+    sonda = sonda_s3_salud()
+    return JSONResponse({"salud": sonda["salud"], "error": sonda["error"]})
 
 
 # --------------------------------------------------------------------------- #
@@ -693,25 +717,23 @@ def _edad_segundos(iso: str, ahora: datetime) -> float | None:
     return max(0.0, (ahora - dt).total_seconds())
 
 
-async def daemons_latidos(request: Request) -> Response:
-    """Estado de los daemons de fondo a partir de sus latidos persistidos (solo admin).
+def sonda_daemons() -> dict:
+    """SONDA del estado de los daemons de fondo a partir de sus latidos persistidos.
 
     Devuelve `{daemons: [...], error}` donde cada entrada agrega al registro crudo de
     `daemon_latidos` la `edad_seg` del ultimo latido, el `umbral_atraso_seg` aplicado y
     un `estado` listo para pintar: "ok" (late y su ultimo barrido fue bien), "error"
     (late pero su ultimo barrido fallo), "inactivo" (late con el gate OFF) o "atrasado"
-    (no late: hilo muerto, proceso daemons caido o BD inaccesible para el). Defensivo:
-    un fallo de BD degrada a lista vacia con `error` legible, nunca 500.
+    (no late: hilo muerto, proceso daemons caido o BD inaccesible para el). Defensiva:
+    un fallo de BD degrada a lista vacia con `error` legible, nunca propaga. La comparten
+    el endpoint admin (`GET /api/sistema/daemons`) y el doctor (`/api/estado`, chequeo
+    `maquina:daemons`).
     """
-    if not _es_admin(request):
-        return _rechazo_no_admin()
     try:
         filas = db.listar_latidos()
     except Exception as e:  # noqa: BLE001 -- sonda defensiva: el panel nunca se cae
         _logger.warning("No se pudieron leer los latidos de daemons: %s", e)
-        return JSONResponse(
-            {"daemons": [], "error": "No se pudieron leer los latidos de los daemons."}
-        )
+        return {"daemons": [], "error": "No se pudieron leer los latidos de los daemons."}
     ahora = datetime.fromisoformat(ahora_iso())
     salida = []
     for f in filas:
@@ -729,7 +751,17 @@ async def daemons_latidos(request: Request) -> Response:
         salida.append(
             {**f, "edad_seg": edad, "umbral_atraso_seg": umbral, "estado": estado}
         )
-    return JSONResponse({"daemons": salida, "error": None})
+    return {"daemons": salida, "error": None}
+
+
+async def daemons_latidos(request: Request) -> Response:
+    """GET /api/sistema/daemons: estado de los daemons de fondo (solo admin).
+
+    Sirve tal cual la `sonda_daemons` compartida (contrato intacto con el frontend).
+    """
+    if not _es_admin(request):
+        return _rechazo_no_admin()
+    return JSONResponse(sonda_daemons())
 
 
 # --------------------------------------------------------------------------- #
@@ -744,17 +776,17 @@ _BACKUP_ATRASO_SEG = 26 * 3600.0
 _ENV_BACKUPS_DIR = "KENI_BACKUPS_DIR"
 
 
-async def backups(request: Request) -> Response:
-    """Estado de los backups locales del host (solo admin; observabilidad pura).
+def sonda_backups() -> dict:
+    """SONDA del estado de los backups locales del host (observabilidad pura).
 
     Lee el `estado.json` que escribe `deploy/backup/keni-backup.sh` en cada run (ok/fallo,
     verificacion, bytes, duracion) y sondea el dump mas reciente de `postgres/` para
     calcular la edad real (robusto aunque estado.json falte o sea de un run fallido).
     `atrasado` = ningun dump en las ultimas 26h (timer diario + margen, igual que
-    keni-alertas). Degradado sin el mount/env (`configurado: false`), nunca 500.
+    keni-alertas). Degradada sin el mount/env (`configurado: false`), nunca propaga. La
+    comparten el endpoint admin (`GET /api/sistema/backups`) y el doctor (`/api/estado`,
+    chequeo `infra:backups`).
     """
-    if not _es_admin(request):
-        return _rechazo_no_admin()
     raiz = os.environ.get(_ENV_BACKUPS_DIR, "")
     base = {
         "configurado": False,
@@ -765,7 +797,7 @@ async def backups(request: Request) -> Response:
         "error": None,
     }
     if not raiz or not os.path.isdir(raiz):
-        return JSONResponse(base)
+        return base
     base["configurado"] = True
 
     import json as _json
@@ -805,7 +837,17 @@ async def backups(request: Request) -> Response:
         base["atrasado"] = True
     except Exception as e:  # noqa: BLE001 -- sonda defensiva: el panel nunca se cae
         base["error"] = base["error"] or f"no se pudo listar postgres/: {e}"
-    return JSONResponse(base)
+    return base
+
+
+async def backups(request: Request) -> Response:
+    """GET /api/sistema/backups: estado de los backups locales (solo admin).
+
+    Sirve tal cual la `sonda_backups` compartida (contrato intacto con el frontend).
+    """
+    if not _es_admin(request):
+        return _rechazo_no_admin()
+    return JSONResponse(sonda_backups())
 
 
 # --------------------------------------------------------------------------- #
