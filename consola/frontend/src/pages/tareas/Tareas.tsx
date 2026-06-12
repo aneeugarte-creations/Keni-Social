@@ -184,12 +184,14 @@ function TarjetaEventoLibre({
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Button
           variant="outline"
-          size="sm"
+          size="icon"
+          className="h-8 w-8"
           onClick={() => cubrir.mutate(undefined)}
           disabled={cubrir.isPending}
+          title="La cubro yo"
+          aria-label="La cubro yo"
         >
-          <Hand className="mr-1 h-3.5 w-3.5" />
-          La cubro yo
+          <Hand className="h-3.5 w-3.5" />
         </Button>
         {esManager && (
           <Button variant="outline" size="sm" onClick={() => setAsignarAbierto(true)}>
@@ -339,9 +341,16 @@ function TarjetaTarea({
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {libre && (
-          <Button variant="outline" size="sm" onClick={() => coger.mutate()} disabled={coger.isPending}>
-            <Hand className="mr-1 h-3.5 w-3.5" />
-            {esCobertura ? "La cubro yo" : "Coger"}
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => coger.mutate()}
+            disabled={coger.isPending}
+            title={esCobertura ? "La cubro yo" : "Coger"}
+            aria-label={esCobertura ? "La cubro yo" : "Coger"}
+          >
+            <Hand className="h-3.5 w-3.5" />
           </Button>
         )}
         {avance && !libre && (
