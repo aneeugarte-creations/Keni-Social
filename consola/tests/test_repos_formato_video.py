@@ -164,8 +164,9 @@ def test_columna_carrusel_se_persiste(entorno):
     assert db.obtener_contenido_plataforma(plat["id"])["carrusel"] == ""
 
 
-def test_flip_foto_a_carrusel_quita_x_y_conserva_portada(entorno):
-    """foto->carrusel: deja IG+FB (x vacía se elimina) y CONSERVA la portada (foto/placa)."""
+def test_flip_foto_a_carrusel_conserva_x_y_portada(entorno):
+    """foto->carrusel: MISMAS redes que foto (X/IG/FB), no se quita ninguna, y CONSERVA la
+    portada (foto/placa). Foto y carrusel comparten destino de imagen; X ya no se elimina."""
     item = db.crear_contenido(titulo="P", formato="foto")
     plat_ig = db.crear_contenido_plataforma(
         contenido_id=item["id"], red="instagram", foto="fotos/portada.jpg"
@@ -174,9 +175,9 @@ def test_flip_foto_a_carrusel_quita_x_y_conserva_portada(entorno):
     db.crear_contenido_plataforma(contenido_id=item["id"], red="facebook")
     res = repos.ajustar_plataformas_por_formato(item["id"], "carrusel")
     assert res["creadas"] == []
-    assert res["eliminadas"] == ["x"]
+    assert res["eliminadas"] == []  # X es destino del carrusel: ya no se quita
     redes_ = {p["red"] for p in db.listar_contenido_plataforma(item["id"])}
-    assert redes_ == {"instagram", "facebook"}
+    assert redes_ == {"instagram", "x", "facebook"}
     p = db.obtener_contenido_plataforma(plat_ig["id"])
     # La portada (foto cruda) sobrevive al flip foto->carrusel: misma parte visual.
     assert p["foto"] == "fotos/portada.jpg"

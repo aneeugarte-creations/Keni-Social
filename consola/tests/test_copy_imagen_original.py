@@ -101,7 +101,7 @@ def _mock_componer_slide(monkeypatch, *, falla=()):
 
 
 def test_slides_carrusel_arman_pieza_carrusel_nidada(entorno, monkeypatch):
-    """Con `slides_carrusel` y tema: placa por slide, flip a carrusel, redes IG/FB."""
+    """Con `slides_carrusel` y tema: placa por slide, flip a carrusel, redes X/IG/FB."""
     import json
 
     from keni_consola import redes
@@ -131,8 +131,8 @@ def test_slides_carrusel_arman_pieza_carrusel_nidada(entorno, monkeypatch):
         (_MARCA, "Concierto A", "https://example.com/a.png"),
         (_MARCA, "Concierto B", ""),
     ]
-    # El FORMATO decide las redes: carrusel -> IG/FB; la pieza de X se omite.
-    assert sorted(str(c["red"]) for c in creadas) == ["facebook", "instagram"]
+    # El FORMATO decide las redes: carrusel -> X/IG/FB (igual que foto; nunca yt/tiktok).
+    assert sorted(str(c["red"]) for c in creadas) == ["facebook", "instagram", "x"]
     assert repos.obtener_contenido(tema["id"])["formato"] == redes.FORMATO_CARRUSEL
     # Cada borrador lleva los slides horneados detrás de la portada (que va en `imagen`).
     for creada in creadas:
@@ -206,7 +206,7 @@ def test_procesar_copy_arma_carrusel_si_el_modelo_lo_elige(entorno, monkeypatch)
         (_MARCA, "Sin foto", ""),
         (_MARCA, "Fuera de rango", ""),
     ]
-    assert sorted(str(p["red"]) for p in resultado["publicaciones"]) == ["facebook", "instagram"]
+    assert sorted(str(p["red"]) for p in resultado["publicaciones"]) == ["facebook", "instagram", "x"]
     assert repos.obtener_contenido(tema["id"])["formato"] == redes.FORMATO_CARRUSEL
     slides = json.loads(str(resultado["publicaciones"][0].get("carrusel") or "[]"))
     assert len(slides) == 3
@@ -217,7 +217,7 @@ def test_procesar_copy_carrusel_sin_panel_es_sugerencia_de_formato(entorno, monk
 
     El modelo eligió carrusel pero no hay panel multi-historia que hornear (menos de 2 slides,
     sin catálogo de fotos): no se hornea ninguna placa, PERO el tema FLIP-ea a formato carrusel
-    como SUGERENCIA (las fotos las pone el equipo después) y se acota a IG/FB. Reusa `formato`
+    como SUGERENCIA (las fotos las pone el equipo después) y fija las redes del carrusel (X/IG/FB). Reusa `formato`
     (decisión del dueño): la sugerencia no se pierde aunque no se construya el carrusel."""
     from keni_consola import redes
 
@@ -241,8 +241,8 @@ def test_procesar_copy_carrusel_sin_panel_es_sugerencia_de_formato(entorno, monk
     # Ningún slide horneado (no es panel), pero el formato SÍ flip-ea a carrusel (sugerencia)...
     assert llamadas == []
     assert repos.obtener_contenido(tema["id"])["formato"] == redes.FORMATO_CARRUSEL
-    # ...y eso acota las redes a IG/FB (la pieza de X se omite por el flip de formato).
-    assert sorted(str(p["red"]) for p in resultado["publicaciones"]) == ["instagram"]
+    # ...y eso fija las redes del carrusel (X/IG; nunca yt/tiktok). X se conserva como en foto.
+    assert sorted(str(p["red"]) for p in resultado["publicaciones"]) == ["instagram", "x"]
     # Sin panel horneado, el campo `carrusel` de la pieza queda vacío (las fotos llegan después).
     assert all(not str(p.get("carrusel") or "") for p in resultado["publicaciones"])
 
@@ -251,8 +251,8 @@ def test_procesar_copy_carrusel_de_tema_unico_sin_slides_flip_de_formato(entorno
     """Caso biomas: el copy de un TEMA ÚNICO sugiere `tipo: carrusel` SIN clave `slides`.
 
     No hay nada que hornear (es un explainer, no un panel multi-historia), pero la SUGERENCIA se
-    registra: el tema pasa a formato carrusel (a la espera de que el equipo suba las fotos) y se
-    acota a IG/FB. Es el cableado que conecta el `tipo` del modelo con el formato de la pieza."""
+    registra: el tema pasa a formato carrusel (a la espera de que el equipo suba las fotos) y fija
+    las redes del carrusel (X/IG/FB). Es el cableado que conecta el `tipo` del modelo con el formato de la pieza."""
     from keni_consola import redes
 
     _almacen_disco(monkeypatch)
@@ -272,7 +272,7 @@ def test_procesar_copy_carrusel_de_tema_unico_sin_slides_flip_de_formato(entorno
 
     assert llamadas == []  # nada que hornear
     assert repos.obtener_contenido(tema["id"])["formato"] == redes.FORMATO_CARRUSEL
-    assert sorted(str(p["red"]) for p in resultado["publicaciones"]) == ["facebook", "instagram"]
+    assert sorted(str(p["red"]) for p in resultado["publicaciones"]) == ["facebook", "instagram", "x"]
     assert all(not str(p.get("carrusel") or "") for p in resultado["publicaciones"])
 
 
