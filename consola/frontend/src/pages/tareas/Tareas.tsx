@@ -665,11 +665,6 @@ export default function Tareas() {
       </AccionesPagina>
 
       <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Los partidos y encargos a cubrir, por fecha. Cógelos o que Elias los reparta; lo que
-        entra por Fuentes aparece aquí solo. Mira «Por persona» para ver quién lleva qué.
-      </p>
-
       <div className="flex flex-wrap gap-2">
         {LENTES.map((l) => (
           <Button
