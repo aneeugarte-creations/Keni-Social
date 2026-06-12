@@ -265,7 +265,7 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
           </div>
 
           <Button
-            variant="brand"
+            variant="outline"
             onClick={() => proponer.mutate()}
             disabled={!puedeProponer}
             className="w-full"
@@ -527,7 +527,7 @@ function FilaIdea({
           {nombreMarca}
         </Badge>
         <Badge
-          variant={aprobada ? "ok" : "outline"}
+          variant={aprobada ? "secondary" : "outline"}
           className="font-normal"
         >
           {ESTADO_LABEL[idea.estado] ?? idea.estado}
@@ -553,7 +553,7 @@ function FilaIdea({
       <div className="flex flex-wrap items-center gap-2 pt-1">
         {!aprobada && !descartada && (
           <Button
-            variant="brand"
+            variant="outline"
             size="sm"
             onClick={() => cambiarEstado.mutate("aprobada")}
             disabled={cambiarEstado.isPending}
@@ -586,7 +586,7 @@ function FilaIdea({
         )}
         {aprobada && (
           <Button
-            variant="brand"
+            variant="outline"
             size="sm"
             onClick={() => generar.mutate()}
             disabled={generando}
