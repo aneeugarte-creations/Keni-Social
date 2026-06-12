@@ -200,6 +200,21 @@
     --aviso-texto-plano: 26 92% 14%; /* texto suelto: ámbar-950, oscuro pero distinto del negro */
   }
   /*
+    Botón EXPORTAR (CTA primaria del editor): a petición de Ane va en NEGRO CÁLIDO con glifo BLANCO,
+    NO en el tinte naranja del resto del cromo activo (`--primary`). Excepción DELIBERADA al contrato
+    de "sin píldoras negras" de la barra: aquí el negro destaca el destino de descarga como la acción
+    principal, y el tinte cálido (hue 22, hacia el naranja) evita que choque con el degradado. Solo
+    cuando es PRIMARIO (en modo pieza el botón pasa a `outline` transparente y esta clase no se monta).
+    `.topbar-editor .clase` (0,2,0) gana a `bg-primary`/`text-primary-foreground` (0,1,0) sin `!important`.
+  */
+  .topbar-editor .boton-exportar-cta {
+    background-color: hsl(22 30% 13%);
+    color: hsl(0 0% 100%);
+  }
+  .topbar-editor .boton-exportar-cta:hover {
+    background-color: hsl(22 28% 19%);
+  }
+  /*
     El badge ROJO de no-leídas de la campana (`bg-red-500`) se funde con el extremo rojo-naranja
     del degradado (#dc3c00): un anillo negro (a juego con el cromo) le devuelve la silueta de
     alerta sin cambiar su semántica. Solo aplica dentro de la barra; fuera el badge sigue igual.
