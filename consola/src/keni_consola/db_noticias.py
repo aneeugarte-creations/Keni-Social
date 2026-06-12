@@ -700,6 +700,26 @@ def obtener_noticia_item(item_id: str) -> dict[str, Any] | None:
     return _fila_a_noticia_item(fila) if fila is not None else None
 
 
+def noticia_item_por_clave(fuente_id: str, clave: str) -> dict[str, Any] | None:
+    """Un item de archivo por su IDENTIDAD de dedup `(fuente_id, clave)`; None si no existe.
+
+    Es el mismo par del UNIQUE del pool: permite a los cajones encontrar la fila
+    gemela que el parseo volcó (`fuente_id="cajon-*"` + hash del título) para
+    descartarla o detectar que el auto-feed ya la recogió.
+    """
+    if not fuente_id or not clave:
+        return None
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_NOTICIA_ITEM} WHERE fuente_id = ? AND clave = ? LIMIT 1",
+            (fuente_id, clave),
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_noticia_item(fila) if fila is not None else None
+
+
 def actualizar_noticia_item(
     item_id: str,
     *,

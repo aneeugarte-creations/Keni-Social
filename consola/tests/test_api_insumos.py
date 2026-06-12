@@ -347,6 +347,69 @@ def test_usar_item_inexistente_404(cliente):
     assert r.status_code == 404
 
 
+def test_usar_item_sin_marca_400_y_no_crea_contenido():
+    """Sin marca NO se empuja: la pieza nacería sin marca (invisible en los feeds por marca)
+    y el copy ni arrancaría — el toast "Copy en marcha" sería falso. 400 accionable."""
+    from keni_consola import repos
+
+    cli = _cliente_con_items([{"titulo": "Nota sin marca asignada"}])
+    _, item_id = _aportar_un_item(cli, cajon="portal")
+    r = cli.post(f"/api/insumos/item/{item_id}/usar", json={"generar": True})
+    assert r.status_code == 400
+    assert "marca" in r.json()["error"].lower()
+    # El ítem sigue SIN usar (re-empujable tras asignarle marca)…
+    item = repos.obtener_insumo_item(item_id)
+    assert item["usado"] is False
+    assert item["contenido_id"] == ""
+    # …y NO quedó ninguna pieza fantasma en el tablero.
+    contenidos = repos.listar_contenido(clase="contenido")
+    assert all(c["titulo"] != "Nota sin marca asignada" for c in contenidos)
+
+
+def test_usar_item_ya_recogido_por_autofeed_409():
+    """Si la historia gemela del pool YA tiene pieza (el auto-feed la recogió y marcó sus
+    items `usado`+`contenido_id`), empujar de nuevo sería una SEGUNDA pieza del tema: 409."""
+    from keni_consola import repos
+    from keni_consola.dominio import ingesta
+
+    cli = _cliente_con_items([{"titulo": "Gol agónico del América", "marca": "claro-sports"}])
+    _, item_id = _aportar_un_item(cli, cajon="notas")
+    # La gemela del pool existe (el parseo la volcó): enlace por fuente_id+clave (hash del título).
+    item = repos.obtener_insumo_item(item_id)
+    fila = ingesta.noticia_item_de_insumo(item)
+    gemela = repos.noticia_item_por_clave(fila["fuente_id"], fila["clave"])
+    assert gemela is not None
+    # Simula el auto-feed: la historia se promovió (marcar_items_cluster_usados).
+    repos.actualizar_noticia_item(gemela["id"], estado="usado", contenido_id="pieza-autofeed")
+
+    r = cli.post(f"/api/insumos/item/{item_id}/usar", json={"generar": False})
+    assert r.status_code == 409
+    assert "auto-feed" in r.json()["error"]
+    # El ítem NO quedó usado y no se creó una segunda pieza.
+    assert repos.obtener_insumo_item(item_id)["usado"] is False
+    contenidos = repos.listar_contenido(clase="contenido")
+    assert all(c["titulo"] != "Gol agónico del América" for c in contenidos)
+
+
+def test_usar_item_marca_la_gemela_del_pool_usada():
+    """El empujón manual también marca la gemela del pool `usado`+`contenido_id`: el
+    auto-feed ya no vuelve a promover el mismo tema después (dedup en ambos sentidos)."""
+    from keni_consola import repos
+    from keni_consola.dominio import ingesta
+
+    cli = _cliente_con_items([{"titulo": "Nota empujada a mano", "marca": "unotv"}])
+    _, item_id = _aportar_un_item(cli, cajon="portal")
+    item = repos.obtener_insumo_item(item_id)
+    fila = ingesta.noticia_item_de_insumo(item)
+
+    r = cli.post(f"/api/insumos/item/{item_id}/usar", json={"generar": False})
+    assert r.status_code == 200, r.text
+    gemela = repos.noticia_item_por_clave(fila["fuente_id"], fila["clave"])
+    assert gemela is not None
+    assert gemela["estado"] == "usado"
+    assert gemela["contenido_id"] == r.json()["contenido_id"]
+
+
 def test_usar_item_contexto_rechazado_400():
     """Las indicaciones (cajón contexto) son guía editorial: `usar` las frena con 400."""
     cli = _cliente_con_items([
@@ -426,6 +489,62 @@ def test_crear_evento_propaga_marca_del_item():
     assert r.status_code == 200, r.text
     evento = r.json()["evento"]
     assert evento["marca"] == "claro-sports"
+
+
+# --------------------------------------------------------------------------- #
+# DELETE /api/insumos/item/{id} (descartar ítem)                               #
+# --------------------------------------------------------------------------- #
+
+
+def test_descartar_item_nuevo_desaparece_del_listado():
+    cli = _cliente_con_items([{"titulo": "Nota descartable", "marca": "unotv"}])
+    _, item_id = _aportar_un_item(cli, cajon="portal")
+    r = cli.delete(f"/api/insumos/item/{item_id}")
+    assert r.status_code == 200, r.text
+    assert r.json()["ok"] is True
+    datos = cli.get("/api/insumos?fecha=2026-06-05").json()
+    portal = next(c for c in datos["cajones"] if c["cajon"] == "portal")
+    assert all(i["id"] != item_id for i in portal["items"])
+
+
+def test_descartar_item_usado_400():
+    """Un ítem ya usado no se descarta: su pieza/evento vive en el tablero/rota."""
+    cli = _cliente_con_items([{"titulo": "Nota ya usada", "marca": "unotv"}])
+    _, item_id = _aportar_un_item(cli, cajon="portal")
+    r_usar = cli.post(f"/api/insumos/item/{item_id}/usar", json={"generar": False})
+    assert r_usar.status_code == 200, r_usar.text
+    r = cli.delete(f"/api/insumos/item/{item_id}")
+    assert r.status_code == 400
+    # Y sigue listado (no se borró).
+    datos = cli.get("/api/insumos?fecha=2026-06-05").json()
+    portal = next(c for c in datos["cajones"] if c["cajon"] == "portal")
+    assert any(i["id"] == item_id for i in portal["items"])
+
+
+def test_descartar_item_inexistente_404(cliente):
+    r = cliente.delete("/api/insumos/item/noexiste")
+    assert r.status_code == 404
+
+
+def test_descartar_item_descarta_la_gemela_del_pool():
+    """El descarte marca `descartado` la fila gemela de `noticias_items` (la que el parseo
+    volcó al pool): el auto-feed ya no puede convertir esa nota en pieza."""
+    from keni_consola import repos
+    from keni_consola.dominio import ingesta
+
+    cli = _cliente_con_items([{"titulo": "Nota que no sirve", "marca": "unotv"}])
+    _, item_id = _aportar_un_item(cli, cajon="portal")
+    item = repos.obtener_insumo_item(item_id)
+    fila = ingesta.noticia_item_de_insumo(item)
+    gemela = repos.noticia_item_por_clave(fila["fuente_id"], fila["clave"])
+    assert gemela is not None
+    assert gemela["estado"] == "nuevo"
+
+    r = cli.delete(f"/api/insumos/item/{item_id}")
+    assert r.status_code == 200, r.text
+    gemela = repos.noticia_item_por_clave(fila["fuente_id"], fila["clave"])
+    assert gemela is not None
+    assert gemela["estado"] == "descartado"
 
 
 # --------------------------------------------------------------------------- #

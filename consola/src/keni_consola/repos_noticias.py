@@ -137,6 +137,10 @@ def obtener_noticia_item(item_id: str) -> dict[str, Any] | None:
     return db.obtener_noticia_item(item_id)
 
 
+def noticia_item_por_clave(fuente_id: str, clave: str) -> dict[str, Any] | None:
+    return db.noticia_item_por_clave(fuente_id, clave)
+
+
 def actualizar_noticia_item(
     item_id: str,
     *,

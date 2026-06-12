@@ -660,6 +660,10 @@ def marcar_insumo_item_usado(item_id: str, *, contenido_id: str) -> dict[str, An
     return db.marcar_insumo_item_usado(item_id, contenido_id=contenido_id)
 
 
+def borrar_insumo_item(item_id: str) -> bool:
+    return db.borrar_insumo_item(item_id)
+
+
 def listar_lotes(
     *,
     fecha: str | None = None,

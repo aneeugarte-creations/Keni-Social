@@ -16,6 +16,7 @@ Endpoints:
   POST /api/insumos/aportar          -> {lote, items}  (multipart/form-data o JSON)
   GET  /api/insumos/lote/{id}        -> {lote, items}
   PATCH /api/insumos/item/{id}       -> {item}
+  DELETE /api/insumos/item/{id}      -> {ok: true}  (descarta un ítem NO usado)
   POST /api/insumos/item/{id}/usar   -> {item, contenido_id}
   POST /api/insumos/item/{id}/crear-evento -> {item, evento}
   DELETE /api/insumos/lote/{id}      -> {ok: true}
@@ -36,7 +37,7 @@ from starlette.routing import Route
 
 from .. import autogen_copy, config, generaciones, marcas, redes, repos, rutas
 from .._http_json import leer_json
-from ..dominio import insumos_parse, jobspec
+from ..dominio import ingesta, insumos_parse, jobspec
 from ..dominio.frescura import estado_frescura, resolver_linea
 from ..seguridad import autor_de_peticion
 from ..tiempo import hoy_utc
@@ -96,6 +97,21 @@ def _item_a_dict(item: dict[str, Any], hoy: str | None = None) -> dict[str, Any]
         "marca_nombre": marcas.etiqueta_de(item["marca"]) if item.get("marca") else "",
         "frescura": frescura,
     }
+
+
+def _noticia_pool_de_item(item: dict[str, Any]) -> dict[str, Any] | None:
+    """Fila GEMELA del pool de noticias creada al parsear el ítem; None si no hay.
+
+    El parseo vuelca cada nota de cajón al pool (`noticias_items`) con identidad
+    `fuente_id="cajon-{cajon}"` + `clave` = hash del TÍTULO normalizado
+    (`ingesta.noticia_item_de_insumo`). Recalculamos esa identidad con el título
+    ACTUAL del ítem: si el equipo lo editó después de parsear, el enlace se pierde
+    y devolvemos None (mejor esfuerzo honesto, sin heurísticas frágiles).
+    """
+    fila = ingesta.noticia_item_de_insumo(item)
+    if fila is None:
+        return None
+    return repos.noticia_item_por_clave(fila["fuente_id"], fila["clave"])
 
 
 def _redes_iniciales(crudo: Any) -> list[str]:
@@ -437,6 +453,9 @@ async def usar_item(request: Request) -> Response:
     flujo="importante"), opcionalmente lanza copy en segundo plano y marca el ítem
     como usado con el `contenido_id` resultante.
 
+    Guardas: 400 si el ítem no tiene marca (la pieza nacería invisible y sin copy);
+    409 si su historia gemela del pool ya tiene pieza (el auto-feed la recogió).
+
     Cuerpo JSON (todo opcional):
       {redes: ["x", ...], generar: bool}
     """
@@ -454,6 +473,21 @@ async def usar_item(request: Request) -> Response:
     if item.get("usado"):
         # Ya fue llevado al tablero; devuelve el estado actual.
         return JSONResponse({"item": _item_a_dict(item), "contenido_id": item.get("contenido_id", "")})
+    # Sin marca NO se empuja: la pieza nacería sin marca (invisible en los feeds por marca)
+    # y el copy ni arrancaría (la generación se gatea por marca) — el toast "Copy en marcha"
+    # sería mentira. Que el equipo asigne marca (editar ítem) y reintente.
+    if not str(item.get("marca") or "").strip():
+        return JSONResponse(
+            {"error": "Asigna marca al ítem antes de empujarlo."}, status_code=400
+        )
+    # Dedup contra el AUTO-FEED: si la historia gemela del pool (la fila de noticias creada
+    # al parsear) ya tiene pieza (el auto-feed la recogió y la marcó usada con su
+    # `contenido_id`), empujar crearía una SEGUNDA pieza del mismo tema. 409 honesto.
+    gemela = _noticia_pool_de_item(item)
+    if gemela is not None and (gemela.get("estado") == "usado" or gemela.get("contenido_id")):
+        return JSONResponse(
+            {"error": "Ya está en el feed: el auto-feed la recogió."}, status_code=409
+        )
 
     datos = await leer_json(request)
     redes_iniciales = _redes_iniciales(datos.get("redes"))
@@ -491,6 +525,24 @@ async def usar_item(request: Request) -> Response:
     item_actualizado = repos.marcar_insumo_item_usado(item_id, contenido_id=contenido["id"])
     if item_actualizado is None:
         item_actualizado = item
+
+    # Y la gemela del pool (y su historia, si la tiene) también: así el auto-feed no vuelve
+    # a promover el mismo tema después del empujón manual. Best-effort: el dedup por título
+    # del pipeline es la segunda red; un fallo aquí no rompe el empujón.
+    try:
+        if gemela is not None:
+            repos.actualizar_noticia_item(
+                gemela["id"], estado="usado", contenido_id=contenido["id"]
+            )
+            cid = str(gemela.get("cluster_id") or "")
+            if cid:
+                cluster = repos.obtener_noticia_cluster(cid)
+                if cluster is not None and cluster.get("estado") == "nuevo":
+                    repos.actualizar_noticia_cluster(
+                        cid, estado="usado", contenido_id=contenido["id"]
+                    )
+    except Exception:  # noqa: BLE001 -- el marcado del pool es dedup, nunca rompe el empujón
+        _log.warning("insumos: no se pudo marcar la gemela del pool usada (%s)", item_id, exc_info=True)
 
     return JSONResponse({
         "item": _item_a_dict(item_actualizado, hoy=hoy_utc().isoformat()),
@@ -572,6 +624,55 @@ async def crear_evento_item(request: Request) -> Response:
 
 
 # --------------------------------------------------------------------------- #
+# DELETE /api/insumos/item/{id}                                                #
+# --------------------------------------------------------------------------- #
+
+
+async def descartar_item(request: Request) -> Response:
+    """`DELETE /api/insumos/item/{item_id}` -> {ok: true}. Descarta un ítem NO usado.
+
+    El descarte fino que promete el explainer del SPA ("Descarta insumos o empuja
+    historias ya"): borra la fila de `insumos_item` y, si existe la gemela del pool
+    de noticias (creada al parsear; enlace por `fuente_id`+`clave`), la marca
+    `descartado` para que el auto-feed no la convierta en pieza. Si su historia del
+    pool quedó SOLO con esa fuente (sin corroboración externa), también se descarta;
+    una historia corroborada por otras fuentes sigue viva (existe sin el cajón).
+
+    Un ítem ya usado NO se descarta (400): su pieza/evento vive en el tablero/rota
+    (borrarlo aquí mentiría sobre lo ya producido).
+    """
+    item_id = request.path_params["item_id"]
+    item = repos.obtener_insumo_item(item_id)
+    if item is None:
+        return JSONResponse({"error": "Ese ítem no existe."}, status_code=404)
+    if item.get("usado"):
+        return JSONResponse(
+            {"error": "El ítem ya se usó; no se puede descartar."}, status_code=400
+        )
+    # Gemela del pool: descartarla evita que el auto-feed la promueva después. Best-effort:
+    # si el equipo editó el título tras parsear, el enlace se pierde y solo se borra el ítem.
+    try:
+        gemela = _noticia_pool_de_item(item)
+        if gemela is not None and gemela.get("estado") == "nuevo" and not gemela.get("contenido_id"):
+            repos.actualizar_noticia_item(gemela["id"], estado="descartado")
+            cid = str(gemela.get("cluster_id") or "")
+            if cid:
+                cluster = repos.obtener_noticia_cluster(cid)
+                if (
+                    cluster is not None
+                    and cluster.get("estado") == "nuevo"
+                    and not cluster.get("contenido_id")
+                    and int(cluster.get("n_fuentes") or 0) <= 1
+                ):
+                    repos.actualizar_noticia_cluster(cid, estado="descartado")
+    except Exception:  # noqa: BLE001 -- el descarte del pool es aditivo; nunca frena el del ítem
+        _log.warning("insumos: no se pudo descartar la gemela del pool (%s)", item_id, exc_info=True)
+    if not repos.borrar_insumo_item(item_id):
+        return JSONResponse({"error": "Ese ítem no existe."}, status_code=404)
+    return JSONResponse({"ok": True})
+
+
+# --------------------------------------------------------------------------- #
 # DELETE /api/insumos/lote/{id}                                                #
 # --------------------------------------------------------------------------- #
 
@@ -595,6 +696,7 @@ RUTAS = [
     Route("/api/insumos/lote/{lote_id}", detalle_lote, methods=["GET"]),
     Route("/api/insumos/lote/{lote_id}", borrar_lote, methods=["DELETE"]),
     Route("/api/insumos/item/{item_id}", editar_item, methods=["PATCH"]),
+    Route("/api/insumos/item/{item_id}", descartar_item, methods=["DELETE"]),
     Route("/api/insumos/item/{item_id}/usar", usar_item, methods=["POST"]),
     Route("/api/insumos/item/{item_id}/crear-evento", crear_evento_item, methods=["POST"]),
 ]

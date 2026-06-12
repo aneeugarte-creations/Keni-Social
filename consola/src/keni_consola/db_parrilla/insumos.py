@@ -307,6 +307,21 @@ def actualizar_insumo_item(item_id: str, campos: dict[str, Any]) -> dict[str, An
     return obtener_insumo_item(item_id)
 
 
+def borrar_insumo_item(item_id: str) -> bool:
+    """Borra UN ítem suelto (descarte por ítem); True si existía, False si no.
+
+    El descarte fino del equipo: quitar una nota concreta del cajón sin arrastrar
+    el lote entero (eso es `borrar_insumo_lote`).
+    """
+    con = _conectar()
+    try:
+        cur = con.execute("DELETE FROM insumos_item WHERE id = ?", (item_id,))
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
 def marcar_insumo_item_usado(
     item_id: str, *, contenido_id: str
 ) -> dict[str, Any] | None:
