@@ -199,4 +199,42 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Añadir/ }));
     expect(await screen.findByText("Añadir a la lista")).toBeInTheDocument();
   });
+
+  it("pega un enlace, analiza, revisa los partidos propuestos y los acepta", async () => {
+    vi.spyOn(apiMod.api, "importarEventos").mockResolvedValue({
+      propuesta_id: "p1",
+      gen_id: "g1",
+    });
+    vi.spyOn(apiMod.api, "propuestaParrilla").mockResolvedValue({
+      id: "p1",
+      estado: "pendiente",
+      semana: "",
+      resumen: "",
+      error: "",
+      operaciones: [
+        {
+          tipo: "crear_evento",
+          conflicto: false,
+          fecha: "2026-07-01",
+          hora: "20:00",
+          titulo: "Cruz Azul vs América",
+        },
+      ],
+    } as never);
+    const aplicar = vi
+      .spyOn(apiMod.api, "aplicarPropuestaParrilla")
+      .mockResolvedValue({ mensaje: "ok" } as never);
+
+    renderTareas([]);
+    fireEvent.click(await screen.findByRole("button", { name: /Añadir/ }));
+    fireEvent.change(screen.getByPlaceholderText(/Pega el enlace/), {
+      target: { value: "https://liga.test/jornada" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Analizar/ }));
+
+    // El partido propuesto aparece para revisar y se acepta.
+    expect(await screen.findByText("Cruz Azul vs América")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Aceptar y añadir/ }));
+    await waitFor(() => expect(aplicar).toHaveBeenCalledWith("p1"));
+  });
 });

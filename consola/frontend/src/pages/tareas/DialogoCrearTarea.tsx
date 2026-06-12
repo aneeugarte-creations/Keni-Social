@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Check, Link2, Loader2, Sparkles, Trophy, Upload } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -20,9 +21,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { usePropuestaParrilla } from "@/hooks/use-propuesta-parrilla";
 import { api, mensajeError } from "@/lib/api";
+import { formatearFecha } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
-import type { CatalogosContenido } from "@/types";
+import type { CatalogosContenido, OperacionCrearEvento } from "@/types";
 
 import { CLAVE_TAREAS } from "./claves";
 
@@ -30,9 +33,14 @@ const SIN_RESPONSABLE = "__libre__";
 
 type Modo = "partido" | "encargo";
 
+const esUrl = (s: string) => /^https?:\/\/\S+/i.test(s.trim());
+
 /**
- * Añadir a la lista de Tareas: un PARTIDO/evento a cubrir (crea un evento de la rota, igual que
- * Fuentes — aparece como «Por cubrir») o un ENCARGO suelto del equipo (tarea sin evento).
+ * Añadir a la lista de Tareas:
+ *  - Partido/evento: pega un ENLACE o el texto de la programación, o sube un DOCUMENTO
+ *    (PDF/Excel/imagen) y la IA propone los partidos → revisas → «Aceptar» los crea. O
+ *    escríbelo a mano (un solo partido).
+ *  - Encargo del equipo: una tarea suelta (sin evento).
  */
 export function DialogoCrearTarea({
   abierto,
@@ -47,15 +55,25 @@ export function DialogoCrearTarea({
 }) {
   const queryClient = useQueryClient();
   const [modo, setModo] = React.useState<Modo>("partido");
+  // Manual.
   const [titulo, setTitulo] = React.useState("");
   const [fecha, setFecha] = React.useState("");
   const [hora, setHora] = React.useState("");
   const [contenido, setContenido] = React.useState("");
   const [prioridad, setPrioridad] = React.useState("media");
   const [responsable, setResponsable] = React.useState(SIN_RESPONSABLE);
+  // Import inteligente.
+  const [pegado, setPegado] = React.useState("");
+  const [archivo, setArchivo] = React.useState<File | null>(null);
+  const [propuestaId, setPropuestaId] = React.useState<string | null>(null);
 
   const usuarios = catalogos?.usuarios ?? [];
   const prioridades = catalogos?.prioridades ?? ["alta", "media", "baja"];
+
+  const { propuesta, generando } = usePropuestaParrilla(propuestaId);
+  const eventosPropuestos = (propuesta?.operaciones ?? []).filter(
+    (o): o is OperacionCrearEvento => o.tipo === "crear_evento",
+  );
 
   const reiniciar = () => {
     setTitulo("");
@@ -64,13 +82,49 @@ export function DialogoCrearTarea({
     setContenido("");
     setPrioridad("media");
     setResponsable(SIN_RESPONSABLE);
+    setPegado("");
+    setArchivo(null);
+    setPropuestaId(null);
   };
-
   const cerrar = () => {
     reiniciar();
     onOpenChange(false);
   };
 
+  // --- Import: analizar (pega enlace/texto o sube documento) → propuesta ---
+  const analizar = useMutation({
+    mutationFn: async () => {
+      const texto = pegado.trim();
+      const res = await api.importarEventos({
+        archivo: archivo ?? undefined,
+        url: !archivo && esUrl(texto) ? texto : undefined,
+        texto: !archivo && texto && !esUrl(texto) ? texto : undefined,
+        marca: marca || undefined,
+      });
+      return res.propuesta_id;
+    },
+    onSuccess: (id) => setPropuestaId(id),
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const aceptar = useMutation({
+    mutationFn: () => api.aplicarPropuestaParrilla(propuestaId!),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
+      toast.success(
+        `${eventosPropuestos.length} ${eventosPropuestos.length === 1 ? "partido añadido" : "partidos añadidos"} a la lista.`,
+      );
+      cerrar();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+  const descartar = useMutation({
+    mutationFn: () => api.descartarPropuestaParrilla(propuestaId!),
+    onSuccess: () => setPropuestaId(null),
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  // --- Manual: crear un partido (evento) o un encargo (tarea) ---
   const crear = useMutation({
     mutationFn: async () => {
       if (modo === "partido") {
@@ -107,148 +161,268 @@ export function DialogoCrearTarea({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  // Para un partido la fecha es obligatoria; para un encargo basta el título.
-  const incompleto = !titulo.trim() || (modo === "partido" && !fecha);
+  const incompletoManual = !titulo.trim() || (modo === "partido" && !fecha);
+  const nadaQueAnalizar = !archivo && !pegado.trim();
+  const enRevision = propuestaId !== null;
 
   return (
-    <Dialog open={abierto} onOpenChange={onOpenChange}>
+    <Dialog open={abierto} onOpenChange={(o) => (o ? onOpenChange(o) : cerrar())}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Añadir a la lista</DialogTitle>
         </DialogHeader>
 
-        {/* Qué se añade: un partido/evento a cubrir, o un encargo suelto del equipo. */}
-        <div className="inline-flex overflow-hidden rounded-md border border-border">
-          {(["partido", "encargo"] as Modo[]).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => setModo(m)}
-              className={cn(
-                "px-3 py-1 text-sm transition-colors",
-                modo === m
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-card text-muted-foreground hover:bg-muted",
-              )}
-            >
-              {m === "partido" ? "Partido / evento" : "Encargo del equipo"}
-            </button>
-          ))}
-        </div>
-
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="tarea-titulo">
-              {modo === "partido" ? "Qué partido / evento" : "Qué hay que hacer"}
-            </Label>
-            <Input
-              id="tarea-titulo"
-              value={titulo}
-              onChange={(e) => setTitulo(e.target.value)}
-              placeholder={
-                modo === "partido"
-                  ? "Cruz Azul vs América, final de la Copa…"
-                  : "Editar el clip del gol, subir fotos del entreno…"
-              }
-              autoFocus
-            />
-          </div>
-
-          {modo === "partido" ? (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="tarea-fecha">Día</Label>
-                <Input
-                  id="tarea-fecha"
-                  type="date"
-                  value={fecha}
-                  onChange={(e) => setFecha(e.target.value)}
-                />
+        {/* Revisión de la propuesta del import (ocupa el diálogo mientras está activa). */}
+        {enRevision ? (
+          <div className="space-y-3">
+            {generando || !propuesta ? (
+              <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Analizando los partidos… esto puede tardar un momento.
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="tarea-hora">Hora</Label>
-                <Input
-                  id="tarea-hora"
-                  type="time"
-                  value={hora}
-                  onChange={(e) => setHora(e.target.value)}
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-1.5">
-              <Label htmlFor="tarea-fecha">Para cuándo (opcional)</Label>
-              <Input
-                id="tarea-fecha"
-                type="date"
-                value={fecha}
-                onChange={(e) => setFecha(e.target.value)}
-              />
-            </div>
-          )}
-
-          <div className="space-y-1.5">
-            <Label htmlFor="tarea-desc">
-              {modo === "partido" ? "Qué sacar (opcional)" : "Detalle (opcional)"}
-            </Label>
-            <Textarea
-              id="tarea-desc"
-              value={contenido}
-              onChange={(e) => setContenido(e.target.value)}
-              placeholder={
-                modo === "partido"
-                  ? "Gol, reacciones, entrada del estadio…"
-                  : "Notas, lugar, qué se espera entregar…"
-              }
-              rows={2}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Prioridad</Label>
-              <Select value={prioridad} onValueChange={setPrioridad}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {prioridades.map((p) => (
-                    <SelectItem key={p} value={p}>
-                      {p.charAt(0).toUpperCase() + p.slice(1)}
-                    </SelectItem>
+            ) : propuesta.estado === "error" ? (
+              <p className="py-4 text-sm text-red-700 dark:text-red-300">
+                No pude leerlo: {propuesta.error || "inténtalo con otro enlace o documento."}
+              </p>
+            ) : eventosPropuestos.length === 0 ? (
+              <p className="py-4 text-sm text-muted-foreground">
+                No encontré partidos ahí. Prueba con otro enlace/documento o escríbelo a mano.
+              </p>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Encontré <span className="font-medium text-foreground">{eventosPropuestos.length}</span>{" "}
+                  {eventosPropuestos.length === 1 ? "partido" : "partidos"}. Revisa y acepta:
+                </p>
+                <div className="max-h-72 space-y-1.5 overflow-y-auto">
+                  {eventosPropuestos.map((ev, i) => (
+                    <div
+                      key={`${ev.titulo}-${ev.fecha}-${i}`}
+                      className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"
+                    >
+                      <Trophy className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <span className="truncate font-medium">{ev.titulo}</span>
+                      <span className="ml-auto shrink-0 text-muted-foreground">
+                        {ev.fecha ? formatearFecha(ev.fecha) : ""}
+                        {ev.hora ? ` · ${ev.hora}` : ""}
+                      </span>
+                    </div>
                   ))}
-                </SelectContent>
-              </Select>
+                </div>
+              </>
+            )}
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => (propuesta && !generando ? descartar.mutate() : setPropuestaId(null))}
+                disabled={aceptar.isPending || descartar.isPending}
+              >
+                Volver
+              </Button>
+              {eventosPropuestos.length > 0 && !generando && (
+                <Button onClick={() => aceptar.mutate()} disabled={aceptar.isPending}>
+                  <Check className="mr-1 h-4 w-4" />
+                  {aceptar.isPending ? "Añadiendo…" : "Aceptar y añadir"}
+                </Button>
+              )}
+            </DialogFooter>
+          </div>
+        ) : (
+          <>
+            {/* Qué se añade. */}
+            <div className="inline-flex overflow-hidden rounded-md border border-border">
+              {(["partido", "encargo"] as Modo[]).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setModo(m)}
+                  className={cn(
+                    "px-3 py-1 text-sm transition-colors",
+                    modo === m
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-card text-muted-foreground hover:bg-muted",
+                  )}
+                >
+                  {m === "partido" ? "Partido / evento" : "Encargo del equipo"}
+                </button>
+              ))}
             </div>
-            {modo === "encargo" && (
-              <div className="space-y-1.5">
-                <Label>Responsable</Label>
-                <Select value={responsable} onValueChange={setResponsable}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={SIN_RESPONSABLE}>Por coger</SelectItem>
-                    {usuarios.map((u) => (
-                      <SelectItem key={u.id} value={u.id}>
-                        {u.usuario}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+
+            {modo === "partido" && (
+              <div className="space-y-2 rounded-lg border border-dashed border-border p-3">
+                <div className="flex items-center gap-1.5 text-sm font-medium">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  Pega un enlace o sube un documento y lo creo solo
+                </div>
+                <Textarea
+                  value={pegado}
+                  onChange={(e) => setPegado(e.target.value)}
+                  placeholder="Pega el enlace de la programación, o el texto con los partidos…"
+                  rows={2}
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm hover:bg-accent">
+                    <Upload className="h-3.5 w-3.5" />
+                    {archivo ? archivo.name : "Subir documento"}
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept=".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.csv,.docx,.txt"
+                      onChange={(e) => setArchivo(e.target.files?.[0] ?? null)}
+                    />
+                  </label>
+                  {archivo && (
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+                      onClick={() => setArchivo(null)}
+                    >
+                      quitar
+                    </button>
+                  )}
+                  <Button
+                    size="sm"
+                    className="ml-auto"
+                    onClick={() => analizar.mutate()}
+                    disabled={nadaQueAnalizar || analizar.isPending}
+                  >
+                    {analizar.isPending ? (
+                      <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                    ) : esUrl(pegado) ? (
+                      <Link2 className="mr-1 h-3.5 w-3.5" />
+                    ) : (
+                      <Sparkles className="mr-1 h-3.5 w-3.5" />
+                    )}
+                    Analizar
+                  </Button>
+                </div>
               </div>
             )}
-          </div>
-        </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={cerrar} disabled={crear.isPending}>
-            Cancelar
-          </Button>
-          <Button onClick={() => crear.mutate()} disabled={crear.isPending || incompleto}>
-            {crear.isPending ? "Añadiendo…" : modo === "partido" ? "Añadir partido" : "Crear encargo"}
-          </Button>
-        </DialogFooter>
+            {modo === "partido" && (
+              <div className="relative py-1 text-center text-xs text-muted-foreground">
+                — o escríbelo a mano —
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="tarea-titulo">
+                  {modo === "partido" ? "Qué partido / evento" : "Qué hay que hacer"}
+                </Label>
+                <Input
+                  id="tarea-titulo"
+                  value={titulo}
+                  onChange={(e) => setTitulo(e.target.value)}
+                  placeholder={
+                    modo === "partido"
+                      ? "Cruz Azul vs América, final de la Copa…"
+                      : "Editar el clip del gol, subir fotos del entreno…"
+                  }
+                />
+              </div>
+
+              {modo === "partido" ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="tarea-fecha">Día</Label>
+                    <Input
+                      id="tarea-fecha"
+                      type="date"
+                      value={fecha}
+                      onChange={(e) => setFecha(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="tarea-hora">Hora</Label>
+                    <Input
+                      id="tarea-hora"
+                      type="time"
+                      value={hora}
+                      onChange={(e) => setHora(e.target.value)}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label htmlFor="tarea-fecha">Para cuándo (opcional)</Label>
+                  <Input
+                    id="tarea-fecha"
+                    type="date"
+                    value={fecha}
+                    onChange={(e) => setFecha(e.target.value)}
+                  />
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <Label htmlFor="tarea-desc">
+                  {modo === "partido" ? "Qué sacar (opcional)" : "Detalle (opcional)"}
+                </Label>
+                <Textarea
+                  id="tarea-desc"
+                  value={contenido}
+                  onChange={(e) => setContenido(e.target.value)}
+                  placeholder={
+                    modo === "partido"
+                      ? "Gol, reacciones, entrada del estadio…"
+                      : "Notas, lugar, qué se espera entregar…"
+                  }
+                  rows={2}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Prioridad</Label>
+                  <Select value={prioridad} onValueChange={setPrioridad}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {prioridades.map((p) => (
+                        <SelectItem key={p} value={p}>
+                          {p.charAt(0).toUpperCase() + p.slice(1)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {modo === "encargo" && (
+                  <div className="space-y-1.5">
+                    <Label>Responsable</Label>
+                    <Select value={responsable} onValueChange={setResponsable}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={SIN_RESPONSABLE}>Por coger</SelectItem>
+                        {usuarios.map((u) => (
+                          <SelectItem key={u.id} value={u.id}>
+                            {u.usuario}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={cerrar} disabled={crear.isPending}>
+                Cancelar
+              </Button>
+              <Button onClick={() => crear.mutate()} disabled={crear.isPending || incompletoManual}>
+                {crear.isPending
+                  ? "Añadiendo…"
+                  : modo === "partido"
+                    ? "Añadir partido"
+                    : "Crear encargo"}
+              </Button>
+            </DialogFooter>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );

@@ -25,6 +25,26 @@ export const apiParrilla = {
       timeoutMs: 120_000,
     });
   },
+  // Import a la lista de TAREAS: además del fichero, acepta un ENLACE o TEXTO pegado, y la
+  // MARCA del workspace (se estampa en los eventos creados para que la lista los muestre).
+  // Mismo endpoint y misma propuesta que `importarParrilla`; se sondea y aplica igual.
+  importarEventos: (entrada: {
+    archivo?: File;
+    url?: string;
+    texto?: string;
+    marca?: string;
+  }) => {
+    const form = new FormData();
+    if (entrada.archivo) form.set("archivo", entrada.archivo);
+    if (entrada.url) form.set("url", entrada.url);
+    if (entrada.texto) form.set("texto", entrada.texto);
+    if (entrada.marca) form.set("marca", entrada.marca);
+    return peticion<RespuestaImportarParrilla>("/parrilla/importar", {
+      metodo: "POST",
+      form,
+      timeoutMs: 120_000,
+    });
+  },
   propuestasParrilla: (
     params: { estado?: EstadoPropuestaParrilla } = {},
     signal?: AbortSignal,
