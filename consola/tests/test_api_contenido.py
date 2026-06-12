@@ -11,7 +11,7 @@ from __future__ import annotations
 from starlette.testclient import TestClient
 
 from keni_consola import app as app_modulo
-from keni_consola import auth
+from keni_consola import auth, repos
 
 from .conftest import TOKEN_PRUEBA
 
@@ -744,3 +744,123 @@ def test_patch_asignar_pieza_libre_sigue_abierto(entorno):
     )
     assert r.status_code == 200, r.text
     assert r.json()["contenido"]["responsable_id"] == luis
+
+
+# --------------------------------------------------------------------------- #
+# POST /asignar: el manager EMPUJA a una persona (2ª puerta del responsable)    #
+# self-claim = `coger` (CAS contra vacío); asignar = override del admin (push). #
+# --------------------------------------------------------------------------- #
+
+
+def test_asignar_admin_empuja_a_persona_libre(entorno):
+    """El admin asigna una pieza LIBRE a un compañero concreto (push, no self-claim)."""
+    _cli("luis")
+    c_admin = _cli_admin()
+    luis = _id_usuario("luis")
+    cont = c_admin.post(
+        "/api/contenido", json={"titulo": "Reparto"}, headers=_ORIGIN
+    ).json()["contenido"]
+    r = c_admin.post(
+        f"/api/contenido/{cont['id']}/asignar",
+        json={"responsable_id": luis},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["contenido"]["responsable_id"] == luis
+    assert r.json()["contenido"]["responsable_nombre"] == "luis"
+
+
+def test_asignar_admin_reasigna_pisando_a_otro(entorno):
+    """Reasignar (override): el admin pasa a OTRA persona una pieza ya cogida, sin 409."""
+    c_luis = _cli("luis")
+    _cli("ana")
+    c_admin = _cli_admin()
+    ana = _id_usuario("ana")
+    cont = c_luis.post(
+        "/api/contenido", json={"titulo": "Cambio de manos"}, headers=_ORIGIN
+    ).json()["contenido"]
+    c_luis.post(f"/api/contenido/{cont['id']}/coger", headers=_ORIGIN)
+    r = c_admin.post(
+        f"/api/contenido/{cont['id']}/asignar",
+        json={"responsable_id": ana},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["contenido"]["responsable_id"] == ana
+
+
+def test_asignar_no_admin_da_403(entorno):
+    """Un editor NO empuja trabajo a otros: reparte cogiendo del pool, no asignando."""
+    c_ana = _cli("ana")
+    _cli("luis")
+    luis = _id_usuario("luis")
+    cont = c_ana.post(
+        "/api/contenido", json={"titulo": "Solo manager"}, headers=_ORIGIN
+    ).json()["contenido"]
+    r = c_ana.post(
+        f"/api/contenido/{cont['id']}/asignar",
+        json={"responsable_id": luis},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 403
+
+
+def test_asignar_persona_invalida_da_400(entorno):
+    c_admin = _cli_admin()
+    cont = c_admin.post(
+        "/api/contenido", json={"titulo": "Fantasma"}, headers=_ORIGIN
+    ).json()["contenido"]
+    r = c_admin.post(
+        f"/api/contenido/{cont['id']}/asignar",
+        json={"responsable_id": "no-existe"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400
+
+
+def test_asignar_sin_persona_da_400(entorno):
+    """`asignar` exige a quién; liberar es `soltar`, no asignar a vacío."""
+    _cli("luis")
+    c_admin = _cli_admin()
+    luis = _id_usuario("luis")
+    cont = c_admin.post(
+        "/api/contenido", json={"titulo": "Vacío"}, headers=_ORIGIN
+    ).json()["contenido"]
+    c_admin.post(
+        f"/api/contenido/{cont['id']}/asignar",
+        json={"responsable_id": luis},
+        headers=_ORIGIN,
+    )
+    r = c_admin.post(
+        f"/api/contenido/{cont['id']}/asignar", json={"responsable_id": ""}, headers=_ORIGIN
+    )
+    assert r.status_code == 400
+
+
+def test_asignar_inexistente_da_404(entorno):
+    c_admin = _cli_admin()
+    r = c_admin.post(
+        "/api/contenido/fantasma/asignar",
+        json={"responsable_id": _id_usuario("jefa")},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 404
+
+
+def test_asignar_notifica_al_asignado(entorno):
+    """La señal que retira el «te paso esto» del chat: el asignado recibe una notificación."""
+    _cli("luis")
+    c_admin = _cli_admin()
+    luis = _id_usuario("luis")
+    cont = c_admin.post(
+        "/api/contenido", json={"titulo": "Avísale"}, headers=_ORIGIN
+    ).json()["contenido"]
+    c_admin.post(
+        f"/api/contenido/{cont['id']}/asignar",
+        json={"responsable_id": luis},
+        headers=_ORIGIN,
+    )
+    notis = repos.listar_notificaciones(luis, None)
+    assert any(
+        n["tipo"] == "asignacion" and n["contenido_id"] == cont["id"] for n in notis
+    )

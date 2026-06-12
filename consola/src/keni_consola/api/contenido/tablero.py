@@ -10,6 +10,7 @@ from __future__ import annotations
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from ...dominio import notificaciones
 from ...permisos import es_admin
 from ...tiempo import hoy_utc
 from ._comun import (
@@ -445,3 +446,51 @@ async def soltar(request: Request) -> Response:
     plataformas = repos.listar_contenido_plataforma(contenido_id)
     etiquetas = repos.etiquetas_por_contenido().get(contenido_id, [])
     return JSONResponse({"contenido": _contenido_a_dict(item or actual, plataformas, etiquetas)})
+
+
+async def asignar(request: Request) -> Response:
+    """POST /api/contenido/{id}/asignar: el MANAGER (admin) EMPUJA la pieza a una persona.
+
+    Es la SEGUNDA puerta de escritura del mismo campo `responsable_id` —el self-claim del
+    empleado es `coger` (CAS contra responsable vacío, no pisa a nadie)—; aquí Elias asigna,
+    o REASIGNA pisando un responsable ya puesto, a quien elija. Solo admin: un editor reparte
+    cogiendo del pool, no empujando a otros. Avisa al asignado (in-app), que es lo que retira
+    el «te paso esto» del WhatsApp. Para LIBERAR una pieza se usa `soltar`, no este endpoint.
+    """
+    contenido_id = request.path_params["contenido_id"]
+    autor = autor_de_peticion(request)
+    if not autor or not autor.get("id"):
+        return JSONResponse({"error": "Necesitas iniciar sesión."}, status_code=401)
+    if not es_admin(request):
+        return JSONResponse(
+            {"error": "Solo el responsable de la lista puede asignar a otra persona."},
+            status_code=403,
+        )
+    actual = repos.obtener_contenido(contenido_id)
+    if actual is None:
+        return JSONResponse({"error": "Ese contenido ya no existe."}, status_code=404)
+    datos = await leer_json(request)
+    responsable, valido = _resolver_responsable(datos.get("responsable_id"))
+    if not valido:
+        return JSONResponse(
+            {"error": "El responsable no es un usuario válido."}, status_code=400
+        )
+    if responsable is None:
+        return JSONResponse(
+            {"error": "Indica a quién asignar la pieza (para liberarla, usa «soltar»)."},
+            status_code=400,
+        )
+    item = (
+        repos.actualizar_contenido(
+            contenido_id,
+            {
+                "responsable_id": responsable["id"],
+                "responsable_nombre": responsable["usuario"],
+            },
+        )
+        or actual
+    )
+    notificaciones.tras_asignacion(item, autor)
+    plataformas = repos.listar_contenido_plataforma(contenido_id)
+    etiquetas = repos.etiquetas_por_contenido().get(contenido_id, [])
+    return JSONResponse({"contenido": _contenido_a_dict(item, plataformas, etiquetas)})

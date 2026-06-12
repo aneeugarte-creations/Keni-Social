@@ -15,7 +15,7 @@ notificar cuando pasa algo en una pieza. Reglas (acordadas con el equipo AMX):
 Todo es BEST-EFFORT: un fallo aqui NUNCA debe tumbar la accion que lo provoco (comentar,
 aprobar, publicar). Cada entrada publica atrapa y loguea.
 
-TIPOS: `mencion` · `comentario` · `aprobacion` · `rechazo` · `publicacion`.
+TIPOS: `mencion` · `comentario` · `aprobacion` · `rechazo` · `publicacion` · `asignacion`.
 """
 
 from __future__ import annotations
@@ -28,7 +28,14 @@ from .. import auth, repos
 
 log = logging.getLogger("keni_consola.notificaciones")
 
-TIPOS: tuple[str, ...] = ("mencion", "comentario", "aprobacion", "rechazo", "publicacion")
+TIPOS: tuple[str, ...] = (
+    "mencion",
+    "comentario",
+    "aprobacion",
+    "rechazo",
+    "publicacion",
+    "asignacion",
+)
 
 
 def _nombre_actor(actor: dict[str, Any] | None) -> str:
@@ -55,6 +62,8 @@ def _resumen(tipo: str, actor_nombre: str, titulo: str, red_nombre: str = "") ->
     if tipo == "publicacion":
         cola = f" en {red_nombre}" if red_nombre else ""
         return f"Se publicó {pieza}{cola}"
+    if tipo == "asignacion":
+        return f"{quien} te asignó {pieza}"
     return f"{quien}: {pieza}"
 
 
@@ -242,3 +251,31 @@ def tras_publicacion(
         )
     except Exception:  # noqa: BLE001 -- notificar nunca rompe la publicacion
         log.exception("Fallo notificando la publicacion de %s.", contenido_id)
+
+
+def tras_asignacion(
+    contenido: dict[str, Any],
+    actor: dict[str, Any] | None,
+) -> None:
+    """El manager EMPUJA una pieza a alguien: avisa SOLO al nuevo responsable (no al actor).
+
+    Es la señal que retira el «oye, te paso esto» del chat: el asignado se entera in-app de
+    que le tocó algo sin que nadie tenga que avisarle por WhatsApp. Si la pieza queda sin
+    responsable (liberada) NO notifica —eso es `soltar`—; y si el manager se la asigna a sí
+    mismo tampoco, porque el actor se excluye. Best-effort: un fallo aquí no frena la asignación.
+    """
+    try:
+        destinatario = (contenido.get("responsable_id") or "").strip()
+        if not destinatario:
+            return
+        _repartir(
+            {destinatario},
+            marca_id=contenido.get("marca", "") or "",
+            tipo="asignacion",
+            resumen=_resumen("asignacion", _nombre_actor(actor), _titulo(contenido)),
+            contenido_id=contenido.get("id", "") or "",
+            actor=actor,
+            excluir={(actor or {}).get("id", "") or ""},
+        )
+    except Exception:  # noqa: BLE001 -- notificar nunca rompe la asignación
+        log.exception("Fallo notificando la asignación de %s.", contenido.get("id"))

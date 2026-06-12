@@ -11,7 +11,14 @@ from keni_consola.dominio import notificaciones as n
 
 
 def test_tipos_canonicos():
-    assert n.TIPOS == ("mencion", "comentario", "aprobacion", "rechazo", "publicacion")
+    assert n.TIPOS == (
+        "mencion",
+        "comentario",
+        "aprobacion",
+        "rechazo",
+        "publicacion",
+        "asignacion",
+    )
 
 
 def test_resumen_por_tipo():
@@ -22,6 +29,8 @@ def test_resumen_por_tipo():
     # La publicación no tiene actor humano; la red entra en el resumen si se pasa.
     resumen_pub = n._resumen("publicacion", "", "Gol de último minuto", "Instagram")
     assert "Se publicó" in resumen_pub and "Instagram" in resumen_pub
+    # Asignación: el manager te empuja una pieza (la señal que retira el "te paso esto").
+    assert "te asignó" in n._resumen("asignacion", "Elías", "Gol de último minuto")
 
 
 def test_resumen_incluye_titulo_entre_comillas():
