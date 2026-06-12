@@ -37,6 +37,7 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Autor } from "@/components/comunes/Autor";
+import { BadgeResponsable } from "@/components/comunes/BadgeResponsable";
 import { confirmar } from "@/components/comunes/confirmar";
 import { DistintivoRed } from "@/components/comunes/DistintivoRed";
 import { Comentarios } from "@/components/contenido/Comentarios";
@@ -436,6 +437,13 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
             className="text-xs font-medium text-foreground"
           />
         )}
+        {/* "La lista" (ClaroSports): quién lleva la pieza, SOLO LECTURA (coger/soltar vive en la
+            Lista). Invisible en otras marcas o si nadie la ha cogido. */}
+        <BadgeResponsable
+          marca={publicacion.marca}
+          responsableId={publicacion.responsable_id}
+          responsableNombre={publicacion.responsable_nombre}
+        />
         <span className="ml-auto inline-flex items-center gap-2">
           {/* Antigüedad de la pieza: cuándo entró a revisión o, si aún no (en preparación),
               cuándo se creó. El `title` aclara QUÉ fecha es al hover; el `sr-only` lleva la

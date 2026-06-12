@@ -4,6 +4,7 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
+import { BadgeResponsable } from "@/components/comunes/BadgeResponsable";
 import { ContadorCaracteres } from "@/components/editor/ContadorCaracteres";
 import { HerramientasHashtags } from "@/components/hashtags/HerramientasHashtags";
 import { EditorCarrusel } from "@/components/media/EditorCarrusel";
@@ -364,6 +365,16 @@ export function DialogoEditar({
             <DialogDescription>
               {publicacion.red_nombre} · {publicacion.marca_nombre}
             </DialogDescription>
+          )}
+          {/* "La lista" (ClaroSports): quién lleva la pieza, SOLO LECTURA. Aquí avisa a quien edita
+              que la pieza ya está cogida por otra persona (antes era invisible en el editor). */}
+          {publicacion && (
+            <BadgeResponsable
+              marca={publicacion.marca}
+              responsableId={publicacion.responsable_id}
+              responsableNombre={publicacion.responsable_nombre}
+              className="self-start"
+            />
           )}
         </DialogHeader>
 

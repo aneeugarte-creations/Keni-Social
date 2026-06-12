@@ -12,6 +12,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { MemoryRouter } from "react-router-dom";
+import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
@@ -25,6 +26,15 @@ import CajonesDia from "./CajonesDia";
 // sustituye por un "sí" inmediato para poder ejercitar las acciones destructivas.
 vi.mock("@/components/comunes/confirmar", () => ({
   confirmar: () => Promise.resolve(true),
+}));
+
+// Los toasts de "Empujar ya" (honesto según `copy_en_proceso`) se asertan: mockeamos sonner.
+vi.mock("sonner", () => ({
+  toast: Object.assign(vi.fn(), {
+    success: vi.fn(),
+    error: vi.fn(),
+    warning: vi.fn(),
+  }),
 }));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -263,6 +273,9 @@ const DIAS_HISTORIAL = {
 
 beforeEach(() => {
   vi.restoreAllMocks();
+  // El mock de sonner es un vi.fn() persistente (no un spyOn): restoreAllMocks no borra su
+  // historial, así que lo limpiamos a mano para que los toasts de un test no contaminen al otro.
+  vi.clearAllMocks();
   const store = new Map<string, string>();
   vi.stubGlobal("localStorage", {
     getItem: (k: string) => store.get(k) ?? null,
@@ -385,6 +398,48 @@ describe("CajonesDia", () => {
     await waitFor(() => {
       expect(usarMock).toHaveBeenCalledWith("item-1", { generar: true });
     });
+  });
+
+  it("«Empujar ya» con copy_en_proceso=false AVISA (no miente con 'Copy en marcha')", async () => {
+    vi.spyOn(apiMod.api.insumos, "usarItem").mockResolvedValue({
+      item: { ...ITEM_PARSED, usado: true },
+      contenido_id: "c-nuevo",
+      copy_en_proceso: false,
+    } as never);
+    vi.spyOn(apiMod.api.insumos, "listar").mockResolvedValue(INSUMOS_CON_ITEM as never);
+    vi.spyOn(apiMod.api.insumos, "dias").mockResolvedValue({ dias: [] } as never);
+
+    renderConProviders(<CajonesDia />);
+
+    await screen.findByText("Sismo en CDMX de 5.4 grados");
+    fireEvent.click(screen.getByRole("button", { name: "Empujar ya (fuerza al feed)" }));
+
+    await waitFor(() => {
+      expect(toast.warning).toHaveBeenCalledWith(
+        expect.stringMatching(/el copy no arrancó/i),
+      );
+    });
+    expect(toast.success).not.toHaveBeenCalledWith("Copy en marcha");
+  });
+
+  it("«Empujar ya» con copy_en_proceso=true confirma 'Copy en marcha'", async () => {
+    vi.spyOn(apiMod.api.insumos, "usarItem").mockResolvedValue({
+      item: { ...ITEM_PARSED, usado: true },
+      contenido_id: "c-nuevo",
+      copy_en_proceso: true,
+    } as never);
+    vi.spyOn(apiMod.api.insumos, "listar").mockResolvedValue(INSUMOS_CON_ITEM as never);
+    vi.spyOn(apiMod.api.insumos, "dias").mockResolvedValue({ dias: [] } as never);
+
+    renderConProviders(<CajonesDia />);
+
+    await screen.findByText("Sismo en CDMX de 5.4 grados");
+    fireEvent.click(screen.getByRole("button", { name: "Empujar ya (fuerza al feed)" }));
+
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith("Copy en marcha");
+    });
+    expect(toast.warning).not.toHaveBeenCalled();
   });
 
   it("el botón 'Descartar' llama a api.insumos.descartarItem tras confirmar", async () => {
@@ -667,11 +722,65 @@ describe("CajonesDia", () => {
     const badge = screen.getByText("Guía");
     expect(badge).toHaveAttribute(
       "title",
-      "Guía para el equipo y para la IA al redactar (no se publica)",
+      "Guía al equipo y a la IA al redactar (no se publica). Caduca a los 7 días.",
     );
     expect(
       screen.queryByRole("button", { name: "Empujar ya (fuerza al feed)" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("una indicación CADUCADA (indicacion_vigente=false) muestra 'Caducada', no 'Guía'", async () => {
+    const ctxCaducada = { ...ITEM_CONTEXTO, indicacion_vigente: false };
+    vi.spyOn(apiMod.api.insumos, "listar").mockResolvedValue({
+      fecha: "2026-06-05",
+      cajones: [
+        { cajon: "portal", lotes: [], items: [] },
+        { cajon: "corresponsales", lotes: [], items: [] },
+        { cajon: "reporteros", lotes: [], items: [] },
+        { cajon: "eventos_claro", lotes: [], items: [] },
+        {
+          cajon: "contexto",
+          lotes: [{ ...LOTE_PORTAL, cajon: "contexto" }],
+          items: [ctxCaducada],
+        },
+      ],
+    } as never);
+    vi.spyOn(apiMod.api.insumos, "dias").mockResolvedValue({ dias: [] } as never);
+
+    renderConProviders(<CajonesDia />, usuarioAdmin());
+
+    await screen.findByText("No llamar 'Tri' a la selección");
+    const badge = screen.getByText("Caducada");
+    expect(badge).toHaveAttribute(
+      "title",
+      "Ya no guía el copy: vuelve a pegarla para reactivarla.",
+    );
+    expect(screen.queryByText("Guía")).not.toBeInTheDocument();
+  });
+
+  it("una indicación VIGENTE (indicacion_vigente=true) sigue mostrando 'Guía'", async () => {
+    const ctxVigente = { ...ITEM_CONTEXTO, indicacion_vigente: true };
+    vi.spyOn(apiMod.api.insumos, "listar").mockResolvedValue({
+      fecha: "2026-06-05",
+      cajones: [
+        { cajon: "portal", lotes: [], items: [] },
+        { cajon: "corresponsales", lotes: [], items: [] },
+        { cajon: "reporteros", lotes: [], items: [] },
+        { cajon: "eventos_claro", lotes: [], items: [] },
+        {
+          cajon: "contexto",
+          lotes: [{ ...LOTE_PORTAL, cajon: "contexto" }],
+          items: [ctxVigente],
+        },
+      ],
+    } as never);
+    vi.spyOn(apiMod.api.insumos, "dias").mockResolvedValue({ dias: [] } as never);
+
+    renderConProviders(<CajonesDia />, usuarioAdmin());
+
+    await screen.findByText("No llamar 'Tri' a la selección");
+    expect(screen.getByText("Guía")).toBeInTheDocument();
+    expect(screen.queryByText("Caducada")).not.toBeInTheDocument();
   });
 
   it("pasa la marca activa del usuario a api.insumos.listar", async () => {

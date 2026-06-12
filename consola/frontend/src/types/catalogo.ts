@@ -162,6 +162,12 @@ export interface InsumoItem {
    * 'en_cola' | 'generando' | 'en_feed'. Ausente = sin información (UI cae al texto genérico).
    */
   pieza_estado?: "en_cola" | "generando" | "en_feed" | string;
+  /**
+   * Vigencia de una Indicación (cajón contexto): el backend marca `false` cuando la guía
+   * superó su ventana de 7 días y ya no orienta el copy. OPCIONAL (puede no venir aún): se
+   * trata `undefined` como vigente para no romper la UI mientras el back se despliega.
+   */
+  indicacion_vigente?: boolean;
 }
 
 /** Un cajón con sus lotes e ítems para un día concreto. */

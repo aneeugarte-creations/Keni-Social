@@ -76,9 +76,13 @@ export const apiInsumos = {
      * como `usado`. Acepta `redes` y `generar` (lanza copy si `true` y hay marca).
      * Guardas del back: 400 si el ítem no tiene marca; 409 si el auto-feed ya
      * recogió su historia del pool (evita la doble pieza).
+     *
+     * `copy_en_proceso`: el back dice si el copy ARRANCÓ de verdad (se encoló el job de
+     * generación). `false` = la pieza se creó pero el copy NO se lanzó (p. ej. sin marca):
+     * el toast debe avisar en vez de prometer "Copy en marcha".
      */
     usarItem: (id: string, body: { redes?: string[]; generar?: boolean }) =>
-      peticion<{ item: InsumoItem; contenido_id: string }>(
+      peticion<{ item: InsumoItem; contenido_id: string; copy_en_proceso: boolean }>(
         `/insumos/item/${encodeURIComponent(id)}/usar`,
         { metodo: "POST", json: body, muestrear: false },
       ),

@@ -290,9 +290,16 @@ function ItemCard({ item, fecha }: PropsItemCard) {
 
   const usarMut = useMutation({
     mutationFn: () => api.insumos.usarItem(item.id, { generar: true }),
-    onSuccess: () => {
+    onSuccess: (resp) => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_INSUMOS_PREFIJO(fecha) });
-      toast.success("Copy en marcha");
+      // Toast HONESTO: solo prometemos "Copy en marcha" si el back confirma que el job
+      // arrancó (`copy_en_proceso`). Si la pieza se creó pero el copy NO se lanzó (p. ej.
+      // ítem sin marca), avisamos para que se relance desde la pieza en vez de mentir.
+      if (resp.copy_en_proceso) {
+        toast.success("Copy en marcha");
+      } else {
+        toast.warning("Pieza creada en el feed; el copy no arrancó: lánzalo desde la pieza.");
+      }
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -368,13 +375,25 @@ function ItemCard({ item, fecha }: PropsItemCard) {
                   )}
                 </Button>
                 {esContexto ? (
-                  <Badge
-                    variant="outline"
-                    className="text-xs"
-                    title="Guía para el equipo y para la IA al redactar (no se publica)"
-                  >
-                    Guía
-                  </Badge>
+                  // Vigencia de 7 días: el back marca `indicacion_vigente=false` cuando la guía
+                  // caducó. `undefined` (campo opcional, aún sin desplegar) cuenta como vigente.
+                  item.indicacion_vigente === false ? (
+                    <Badge
+                      variant="outline"
+                      className="text-xs text-muted-foreground opacity-70"
+                      title="Ya no guía el copy: vuelve a pegarla para reactivarla."
+                    >
+                      Caducada
+                    </Badge>
+                  ) : (
+                    <Badge
+                      variant="outline"
+                      className="text-xs"
+                      title="Guía al equipo y a la IA al redactar (no se publica). Caduca a los 7 días."
+                    >
+                      Guía
+                    </Badge>
+                  )
                 ) : esEvento ? (
                   <Button
                     size="sm"

@@ -784,3 +784,40 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     ).toBe(false);
   });
 });
+
+describe("PostFeed · responsable («la lista» de ClaroSports)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("muestra quién lleva la pieza (badge de solo lectura) en ClaroSports", () => {
+    // u1 mira; la lleva otra persona (u2) → el badge muestra su NOMBRE, no "Tuya".
+    renderPost(
+      pub({ marca: "claro-sports", responsable_id: "u2", responsable_nombre: "Mariana" }),
+    );
+    expect(screen.getByText("Mariana")).toBeInTheDocument();
+    expect(screen.getByTitle("Esta pieza la lleva Mariana")).toBeInTheDocument();
+  });
+
+  it("si la lleva el propio usuario el badge dice «Tuya»", () => {
+    renderPost(
+      pub({ marca: "claro-sports", responsable_id: "u1", responsable_nombre: "Revisor" }),
+    );
+    expect(screen.getByText("Tuya")).toBeInTheDocument();
+    expect(screen.getByTitle("Esta pieza la llevas tú")).toBeInTheDocument();
+  });
+
+  it("sin responsable asignado (pieza libre) NO muestra badge", () => {
+    renderPost(pub({ marca: "claro-sports", responsable_id: "", responsable_nombre: "" }));
+    expect(screen.queryByText("Tuya")).not.toBeInTheDocument();
+    expect(screen.queryByTitle(/la llevas?\b/i)).not.toBeInTheDocument();
+  });
+
+  it("en otra marca (no ClaroSports) nunca pinta el badge de responsable", () => {
+    renderPost(
+      pub({ marca: "piso-15", responsable_id: "u2", responsable_nombre: "Mariana" }),
+    );
+    expect(screen.queryByText("Mariana")).not.toBeInTheDocument();
+    expect(screen.queryByTitle(/la lleva/i)).not.toBeInTheDocument();
+  });
+});
