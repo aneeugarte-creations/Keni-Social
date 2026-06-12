@@ -50,6 +50,9 @@ modulos_backend = [
   # Cajón Presidencia (Fuentes -> Internas): nota de WhatsApp -> pieza carrusel automática.
   # Mismo dominio que insumos/evergreen (fuentes internas que producen piezas).
   "presidencia",
+  # Cajón Clips (Fuentes -> Internas, Claro Sports): vídeo/foto de WhatsApp -> pieza
+  # automática (video o carrusel). Mismo dominio que presidencia (media -> pieza directa).
+  "clips",
   "algoritmos",
   "pipelines",
   # Patrones editoriales medidos + verificación de voz (ADR 0009): api/patrones.py.

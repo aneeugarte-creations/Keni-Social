@@ -39,6 +39,7 @@ import { apiComercial } from "./comercial";
 import { apiNotificaciones } from "./notificaciones";
 import { apiInsumos } from "./insumos";
 import { apiPresidencia } from "./presidencia";
+import { apiClips } from "./clips";
 import { apiBreaking } from "./breaking";
 import { apiNoticias } from "./noticias";
 import { apiFuentesAcciones } from "./fuentesAcciones";
@@ -83,6 +84,7 @@ export const api = {
   ...apiNotificaciones,
   ...apiInsumos,
   ...apiPresidencia,
+  ...apiClips,
   ...apiBreaking,
   ...apiNoticias,
   ...apiFuentesAcciones,

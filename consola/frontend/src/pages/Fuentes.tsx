@@ -17,6 +17,9 @@ import CajonesDia from "./CajonesDia";
 // una pieza CARRUSEL en el feed. Es un buzón aparte de los Cajones del día (no se parsea
 // con IA: la nota va tal cual y el media adjunto ES el carrusel).
 import CajonPresidencia from "./fuentes/CajonPresidencia";
+// Cajón CLIPS (Claro Sports): el vídeo/foto de WhatsApp que genera sola una pieza en el feed
+// (vídeo o carrusel). Hermano de Presidencia, pero para el material visual de Claro Sports.
+import CajonClips from "./fuentes/CajonClips";
 
 /** Una clase de fuente (pestaña): Externas o Internas. */
 type PestanaTipo = {
@@ -80,6 +83,7 @@ export default function Fuentes() {
             ("Idea" e "Interno AMX") se mudaron a Contenidos, fusionadas con el generador de ideas. */}
         <TabsContent value="internas" className="space-y-8">
           <CajonPresidencia />
+          <CajonClips />
           <CajonesDia />
         </TabsContent>
         {/* RENDIMIENTO: qué fuentes aportan de verdad (abren historias, se usan). Alimenta

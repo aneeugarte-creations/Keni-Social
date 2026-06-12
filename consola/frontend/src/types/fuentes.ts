@@ -398,3 +398,41 @@ export interface RespuestaCrearNotaPresidencia {
   contenido_id: string;
   generacion: Generacion;
 }
+
+// --- Cajón CLIPS (Fuentes → Internas, Claro Sports): vídeo/foto -> pieza automática ---
+
+/** Un clip volcado al cajón (el tema `origen='clips'`) + el formato y estado de su pieza. */
+export interface Clip {
+  id: string;
+  titulo: string;
+  texto: string;
+  marca: string;
+  marca_nombre: string;
+  /** 'video' (un clip de vídeo) | 'carrusel' (fotos). */
+  formato: string;
+  autor_nombre: string;
+  creado: string;
+  /** 'generando' (copy en curso) | 'lista' (con copy en el feed) | 'sin_pieza'. */
+  estado_pieza: "generando" | "lista" | "sin_pieza";
+}
+
+/** Cuerpo de `POST /api/clips`. El media reutiliza la forma de Presidencia (imagen/video). */
+export interface CuerpoCrearClip {
+  marca: string;
+  texto: string;
+  titulo?: string;
+  media: MediaNotaPresidencia[];
+}
+
+/** Respuesta de `GET /api/clips`. */
+export interface RespuestaClips {
+  clips: Clip[];
+  marcas: { id: string; nombre: string }[];
+}
+
+/** Respuesta de `POST /api/clips`. */
+export interface RespuestaCrearClip {
+  clip: Clip;
+  contenido_id: string;
+  generacion: Generacion;
+}

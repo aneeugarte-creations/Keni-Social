@@ -295,6 +295,14 @@ ORIGEN_POST_DIRECTO = "post-directo"
 # su copy se lanza directo al crear la nota (como evergreen), no via el daemon de selección.
 ORIGEN_PRESIDENCIA = "presidencia"
 
+# Tema creado desde el cajón CLIPS (`api/clips`): vídeo/foto que llega por WhatsApp a los
+# grupos de Claro Sports (Envíos Mundial, Ramón Mundial, Videos AS Claro, ClaroSports PS…) y
+# que el equipo vuelca tal cual. Genera AUTOMÁTICAMENTE una pieza en el feed: `formato='video'`
+# si es un clip de vídeo, `formato='carrusel'` si son fotos (portada con placa + slides). Como
+# Presidencia, su copy se lanza DIRECTO al crear (no via el daemon de selección); por eso NO
+# está en `ORIGENES_AUTOGEN`.
+ORIGEN_CLIPS = "clips"
+
 # Orígenes de FUENTE que la auto-generación de copy trata como "tema redactable" (un
 # borrador se encola solo). Incluye las fuentes externas históricas + el alta creativa del
 # equipo (`equipo`) + las historias curadas desde el panel (`historia`: sin esto, si su
