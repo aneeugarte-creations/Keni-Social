@@ -346,5 +346,11 @@ class AdaptadorPublicacionMetricool:
 
     def _cliente(self) -> httpx.Client:
         if self._cli is None:
-            self._cli = self._cli_externo or cliente_http()
+            # Publicar hace fan-out a varias redes dentro de Metricool y puede tardar:
+            # el default de 15 s disparaba ReadTimeout dejando el post ENTREGADO sin
+            # confirmar (la respuesta no llegaba a tiempo). Damos margen amplio de
+            # lectura; el connect sigue corto para detectar rapido si la red esta caida.
+            self._cli = self._cli_externo or cliente_http(
+                timeout=httpx.Timeout(60.0, connect=10.0)
+            )
         return self._cli

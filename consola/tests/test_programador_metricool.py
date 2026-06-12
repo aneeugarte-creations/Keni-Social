@@ -22,11 +22,13 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import patch
 
+import httpx
 import respx
 from httpx import Response
 
 from keni_consola import repos
 from keni_consola.programador import (
+    ID_POST_INCIERTO,
     _borrador_de_publicacion,
     _url_media_publica,
     piezas_vencidas,
@@ -568,6 +570,67 @@ def test_error_de_red_se_reintenta_en_el_siguiente_barrido(entorno, monkeypatch)
     assert actualizada["estado"] == "publicado"
     assert actualizada["preparado_en"]
     assert actualizada["id_post_metricool"] == "mc-post-id-001"
+
+
+# --------------------------------------------------------------------------- #
+# Timeout: el post pudo entregarse -> NO reenviar (evitar doble-post)          #
+# --------------------------------------------------------------------------- #
+
+
+def test_timeout_marca_publicado_incierto_y_no_reenvia(entorno, monkeypatch):
+    """Un TIMEOUT del POST de publicacion NO libera el claim: el post pudo entregarse.
+
+    A diferencia de un 5xx (entrega fallida, se reintenta), un ReadTimeout salta tras
+    enviar la peticion entera, asi que Metricool casi seguro la recibio. Reenviar
+    duplicaria el post. La pieza pasa a `publicado` con el marcador incierto y un
+    segundo barrido NO vuelve a postear.
+    """
+    monkeypatch.setenv("KENI_PUBLICAR_REAL", "1")
+    monkeypatch.delenv("KENI_CONSOLA_URL_PUBLICA", raising=False)
+
+    pub = _pub_programada(entorno, red="x", contenido="Tweet timeout", imagen="")
+
+    with patch(
+        "keni_consola.programador._creds_metricool",
+        return_value=_CREDS_PRUEBA,
+    ), respx.mock() as mc:
+        ruta = mc.post(_METRICOOL_URL).mock(
+            side_effect=httpx.ReadTimeout("read timed out")
+        )
+        # Cuenta como preparada (no se libera el claim) y NO se reintenta en el 2o barrido.
+        assert preparar_vencidas(datetime.now()) == 1
+        assert preparar_vencidas(datetime.now()) == 0
+        assert ruta.call_count == 1  # un solo intento real: no hubo doble-envio
+
+    actualizada = repos.obtener_publicacion(pub["id"])
+    assert actualizada["estado"] == "publicado"
+    assert actualizada["preparado_en"]  # claim conservado (no liberado)
+    assert actualizada["id_post_metricool"] == ID_POST_INCIERTO
+
+
+def test_boton_manual_timeout_marca_publicado_incierto(entorno, monkeypatch):
+    """El boton manual, ante timeout, marca `publicado` (incierto) y avisa: no duplica."""
+    monkeypatch.setenv("KENI_PUBLICAR_REAL", "1")
+    monkeypatch.delenv("KENI_CONSOLA_URL_PUBLICA", raising=False)
+
+    pub = _pub_programada(entorno, red="facebook", contenido="Hola timeout", imagen="")
+
+    with patch(
+        "keni_consola.programador._creds_metricool",
+        return_value=_CREDS_PRUEBA,
+    ), respx.mock() as mc:
+        mc.post(_METRICOOL_URL).mock(side_effect=httpx.ReadTimeout("read timed out"))
+        res = programar_pieza_metricool(pub)
+
+    assert res["ok"] is True
+    assert res["incierto"] is True
+    assert res["motivo"]
+    actualizada = repos.obtener_publicacion(pub["id"])
+    assert actualizada["estado"] == "publicado"
+    assert actualizada["id_post_metricool"] == ID_POST_INCIERTO
+    # La guarda de re-publicacion ahora bloquea un segundo click (ya esta publicado).
+    res2 = programar_pieza_metricool(repos.obtener_publicacion(pub["id"]))
+    assert res2["ok"] is False
 
 
 # --------------------------------------------------------------------------- #

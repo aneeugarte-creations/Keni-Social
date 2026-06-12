@@ -48,11 +48,21 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
+import httpx
+
 from . import config, marcas, repos
 from .estados import ESTADO_PROGRAMADO
 from .tiempo import iso_utc
 
 _log = logging.getLogger("keni_consola.programador")
+
+# Marcador de `id_post_metricool` cuando el POST de publicacion se va por TIMEOUT.
+# Un ReadTimeout salta DESPUES de enviar la peticion entera (body incluido): Metricool
+# casi seguro recibio el post, pero la respuesta con el id real no llego. En ese caso
+# marcamos la pieza `publicado` con ESTE marcador en vez de reintentar: reenviar a ciegas
+# es lo que provoca el DOBLE-POST (el barrido y el boton reusan esta misma logica). No es
+# un id real (no enlaza metricas); es deliberadamente legible para auditar y reconciliar.
+ID_POST_INCIERTO = "incierto-timeout"
 
 # Cadencia por defecto del barrido del programador (segundos). Un minuto basta: la
 # granularidad de las fechas programadas es el minuto.
@@ -400,12 +410,27 @@ def _preparar(pub: dict[str, Any], ahora: datetime) -> dict[str, Any] | None:
     try:
         adaptador = AdaptadorPublicacionMetricool(creds=creds)
         resultado = adaptador.programar(borrador, dry_run=False, ahora=ahora)  # type: ignore[arg-type]
+    except httpx.TimeoutException:
+        # TIMEOUT != fallo de entrega. La peticion (con su body) ya viajo entera; el post
+        # casi seguro se ENTREGO en Metricool, solo no llego la respuesta. NO liberamos el
+        # claim: hacerlo haria que el siguiente barrido REENVIE y duplique el post. Marcamos
+        # `publicado` con id incierto (queda fuera de `piezas_vencidas` y nadie reintenta).
+        # El humano verifica en redes; si no salio, re-publica a mano.
+        _log.warning(
+            "Pieza %r: TIMEOUT al enviar a Metricool; el post pudo entregarse. Se marca "
+            "'publicado' (incierto) para NO reenviar y evitar doble-post. Verificar en redes.",
+            pub_id,
+        )
+        return repos.actualizar_publicacion(
+            pub_id,
+            {**campos_base, "estado": "publicado", "id_post_metricool": ID_POST_INCIERTO},
+        )
     except Exception:  # noqa: BLE001 -- cualquier fallo de red/auth no mata el barrido
-        # FALLO DE ENTREGA (transitorio: red caida, 5xx de Metricool, auth rota): LIBERAR el
-        # claim limpiando `preparado_en`, para que el siguiente barrido (cada ~60 s) la vuelva
-        # a intentar. Si quedara estampado, `piezas_vencidas` la excluiria PARA SIEMPRE y la
-        # pieza moriria en `programado` sin publicarse ni avisar. El error queda en el log de
-        # cada intento (visible); no se cuenta como preparada (return None).
+        # FALLO DE ENTREGA CLARO (no-timeout: red caida antes de enviar, 5xx, auth rota):
+        # LIBERAR el claim limpiando `preparado_en`, para que el siguiente barrido (cada
+        # ~60 s) la vuelva a intentar. Si quedara estampado, `piezas_vencidas` la excluiria
+        # PARA SIEMPRE y la pieza moriria en `programado` sin publicarse ni avisar. El error
+        # queda en el log de cada intento (visible); no se cuenta como preparada (return None).
         _log.exception(
             "Pieza %r: fallo al enviar a Metricool; se libera la preparacion y se "
             "reintentara en el proximo barrido.",
@@ -492,6 +517,34 @@ def programar_pieza_metricool(
     try:
         adaptador = AdaptadorPublicacionMetricool(creds=creds)
         resultado = adaptador.programar(borrador, dry_run=dry_run, ahora=ahora)  # type: ignore[arg-type]
+    except httpx.TimeoutException:
+        # TIMEOUT (solo camino real; el dry-run no toca red): el post casi seguro se
+        # ENTREGO (la peticion viajo entera) pero no llego la respuesta. Marcamos
+        # `publicado` con id incierto para NO permitir un re-click que duplique el post,
+        # y avisamos al humano (`incierto`) para que verifique en redes. Mismo criterio
+        # que el barrido automatico (ver `_preparar`).
+        _log.warning(
+            "Pieza %r: TIMEOUT al publicar en Metricool a demanda; se marca 'publicado' "
+            "(incierto) para no duplicar. Verificar en redes.",
+            pub.get("id"),
+        )
+        repos.actualizar_publicacion(
+            pub["id"],
+            {
+                "preparado_en": iso_utc(ahora),
+                "estado": "publicado",
+                "id_post_metricool": ID_POST_INCIERTO,
+            },
+        )
+        return {
+            "ok": True,
+            "dry_run": False,
+            "incierto": True,
+            "motivo": (
+                "La publicación se envió pero Metricool no respondió a tiempo (timeout). "
+                "Se marcó como publicada para no duplicarla; verifica en redes que haya salido."
+            ),
+        }
     except Exception as e:  # noqa: BLE001 -- degrada con mensaje, no rompe el endpoint
         _log.exception("Pieza %r: fallo al programar en Metricool a demanda.", pub.get("id"))
         return {"ok": False, "dry_run": dry_run, "motivo": f"Fallo al contactar Metricool: {e}"}
