@@ -881,9 +881,10 @@ export default function Imagen() {
           />
         ) : (
           // GALERÍA del estado vacío (sin pestañas): el MISMO `ContenidoPlantillas` del rail y de
-          // la modal, a página completa (una sola fuente de verdad): más columnas (no compacto),
+          // la modal, a página completa (una sola fuente de verdad): ocupa TODO el ancho (sin
+          // `max-w` centrado: los lados ya no quedan vacíos), con más columnas en pantallas grandes,
           // gestión completa, agrupación por marca en «Todas» y «Lienzo en blanco» al final.
-          <div className="mx-auto h-full max-w-4xl">
+          <div className="h-full">
             {plantillasQ.isLoading ? (
               <p className="py-8 text-center text-sm text-muted-foreground">Cargando plantillas…</p>
             ) : (

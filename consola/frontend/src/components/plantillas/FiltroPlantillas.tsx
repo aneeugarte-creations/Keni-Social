@@ -133,11 +133,16 @@ export function useLotes(total: number, claveFiltro: string, lote = 24) {
 
 /**
  * Columnas de una galería de plantillas a página completa según el ancho de ventana (2 base,
- * 3 ≥sm, 4 ≥md). El masonry reparte por JS, así que el responsive también va por JS (matchMedia),
- * no por clases.
+ * 3 ≥sm, 4 ≥md, 5 ≥xl, 6 ≥1700px): a página completa la galería ocupa todo el ancho y en pantallas
+ * grandes mete más columnas para que las tarjetas no queden enormes. El masonry reparte por JS, así
+ * que el responsive también va por JS (matchMedia), no por clases. (La modal capa este número con
+ * `maxColumnas` para no amontonar en su ancho fijo.)
  */
+const _MQS_GALERIA = ["(min-width: 1700px)", "(min-width: 1280px)", "(min-width: 768px)", "(min-width: 640px)"];
 function _columnasViewport(): number {
   if (typeof window.matchMedia !== "function") return 2; // jsdom sin matchMedia
+  if (window.matchMedia("(min-width: 1700px)").matches) return 6;
+  if (window.matchMedia("(min-width: 1280px)").matches) return 5;
   if (window.matchMedia("(min-width: 768px)").matches) return 4;
   if (window.matchMedia("(min-width: 640px)").matches) return 3;
   return 2;
@@ -147,7 +152,7 @@ export function useColumnasGaleria(): number {
   const [columnas, setColumnas] = useState(_columnasViewport);
   useEffect(() => {
     if (typeof window.matchMedia !== "function") return;
-    const mqs = ["(min-width: 768px)", "(min-width: 640px)"].map((q) => window.matchMedia(q));
+    const mqs = _MQS_GALERIA.map((q) => window.matchMedia(q));
     const alCambiar = () => setColumnas(_columnasViewport());
     mqs.forEach((m) => m.addEventListener("change", alCambiar));
     return () => mqs.forEach((m) => m.removeEventListener("change", alCambiar));

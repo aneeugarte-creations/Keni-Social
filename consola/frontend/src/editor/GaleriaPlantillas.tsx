@@ -32,7 +32,15 @@ type FiltroTipo = "foto" | "miniatura";
 
 /** Clase Tailwind (estática) de columnas para la rejilla uniforme de reordenación. */
 function claseColumnas(columnas: number): string {
-  return columnas >= 4 ? "grid-cols-4" : columnas === 3 ? "grid-cols-3" : "grid-cols-2";
+  return columnas >= 6
+    ? "grid-cols-6"
+    : columnas === 5
+      ? "grid-cols-5"
+      : columnas >= 4
+        ? "grid-cols-4"
+        : columnas === 3
+          ? "grid-cols-3"
+          : "grid-cols-2";
 }
 
 // Agrupa plantillas por marca (orden alfabético por nombre de marca). Para la vista «Todas»,
@@ -89,6 +97,8 @@ interface PropsContenido {
   tipoFijo?: "foto" | "miniatura";
   /** Modo PANEL estrecho (columna del rail ~350px): rejilla fija de 2 columnas y padding menor. */
   compacto?: boolean;
+  /** Tope de columnas (la modal, de ancho fijo, lo capa para no amontonar en pantallas grandes). */
+  maxColumnas?: number;
   /** Divide la rejilla en secciones por MARCA (vista «Todas»: marca → categoría). */
   agruparPorMarca?: boolean;
   /** Si se pasa, añade la tarjeta «Lienzo en blanco» al FINAL de la galería (CTA para empezar). */
@@ -108,6 +118,7 @@ export function ContenidoPlantillas({
   onRotar,
   onCategorizar,
   onReordenar,
+  maxColumnas,
   tipoFijo,
   compacto,
   agruparPorMarca,
@@ -160,7 +171,7 @@ export function ContenidoPlantillas({
   // En panel estrecho (~350px) el masonry es SIEMPRE de 2 columnas (estilo Canva); en el diálogo
   // ancho acompaña al viewport (2/3/4).
   const columnasGaleria = useColumnasGaleria();
-  const columnas = compacto ? 2 : columnasGaleria;
+  const columnas = compacto ? 2 : Math.min(columnasGaleria, maxColumnas ?? columnasGaleria);
 
   // ── REORDENAR (drag-and-drop) ─────────────────────────────────────────────────────────────────
   // Activo solo en modo gestión (`onReordenar`) y SIN búsqueda (un subconjunto buscado no tiene
@@ -531,7 +542,8 @@ export function GaleriaPlantillas({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <ContenidoPlantillas {...contenido} />
+        {/* La modal es de ancho fijo (max-w-3xl): capa las columnas a 4 para no amontonar. */}
+        <ContenidoPlantillas maxColumnas={4} {...contenido} />
       </div>
     </div>
   );
