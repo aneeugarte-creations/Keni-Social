@@ -6,15 +6,17 @@
  * Es el detalle al que lleva la tarjeta de un item `clase="actividad"` de Producción.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, RefreshCw, Square } from "lucide-react";
+import { ArrowLeft, RefreshCw, RotateCcw, Square } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
+import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { ChipEstado } from "@/components/comunes/ChipEstado";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { api, ApiError } from "@/lib/api";
+import { useSesion } from "@/hooks/sesion-contexto";
+import { api, ApiError, mensajeError } from "@/lib/api";
 import { tiempoRelativo } from "@/lib/fecha";
 import { etiquetaTipoGeneracion } from "@/lib/generaciones";
 import { INTERVALO_DETALLE_MS } from "@/lib/refresco";
@@ -32,6 +34,8 @@ function estadoEtapa(estado: string): string {
 
 export default function GeneracionDetalle() {
   const { id } = useParams<{ id: string }>();
+  const { usuario } = useSesion();
+  const esAdmin = usuario?.rol === "admin";
   const queryClient = useQueryClient();
   const q = useQuery({
     queryKey: ["generaciones", "detalle", id],
@@ -44,6 +48,18 @@ export default function GeneracionDetalle() {
   const cancelar = useMutation({
     mutationFn: () => api.cancelarGeneracion(id as string),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["generaciones", "detalle", id] }),
+  });
+  // Reintentar (admin): devuelve el job del trabajo FALLIDO a `pendiente` y reabre el
+  // registro para que un worker lo vuelva a correr (`POST /api/actividad/cola/reencolar`,
+  // acepta `{gen_id}`). 404 legible si la cola ya no conserva el job (registros podados).
+  const reencolar = useMutation({
+    mutationFn: () => api.colaReencolar(id as string),
+    onSuccess: () => {
+      toast.success("Trabajo reencolado: un worker lo volverá a ejecutar.");
+      void queryClient.invalidateQueries({ queryKey: ["generaciones", "detalle", id] });
+      void queryClient.invalidateQueries({ queryKey: ["actividad", "cola"] });
+    },
+    onError: (e) => toast.error(mensajeError(e)),
   });
 
   const estado = estadoEtapa(gen?.estado ?? "");
@@ -90,6 +106,18 @@ export default function GeneracionDetalle() {
           Producción
         </Link>
         <div className="flex items-center gap-1">
+          {esAdmin && gen?.estado === "error" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1"
+              onClick={() => reencolar.mutate()}
+              disabled={reencolar.isPending}
+            >
+              <RotateCcw className="h-4 w-4" aria-hidden="true" />
+              {reencolar.isPending ? "Reencolando…" : "Reintentar"}
+            </Button>
+          )}
           {gen?.estado === "ejecutando" && (
             <Button
               variant="ghost"

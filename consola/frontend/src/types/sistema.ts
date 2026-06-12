@@ -5,6 +5,25 @@ import type { MetricasRun, Paginacion, ResultadoEstado } from "../types.gen";
 /** Nivel de un chequeo del autodiagnóstico (derivado del tipo generado). */
 export type NivelEstado = ResultadoEstado["estado"];
 
+/** Un chequeo del doctor (`GET /api/estado`): el tipo generado más los campos del contrato
+ *  que el subconjunto estable (`types.gen.ts`) aún no recoge — id estable del chequeo,
+ *  visibilidad por rol y paso accionable cuando no está ok. */
+export interface ChequeoEstado extends ResultadoEstado {
+  /** Id estable "dominio:chequeo" (p. ej. `maquina:cola`, `infra:disco`). */
+  id: string;
+  /** `true` = chequeo de operador (infra/metricas): solo se muestra a admins. */
+  admin: boolean;
+  /** Qué hacer para arreglarlo; null cuando el chequeo está ok. */
+  siguiente_paso: string | null;
+}
+
+/** Respuesta del doctor (`GET /api/estado`) con los chequeos enriquecidos. */
+export interface RespuestaDoctor {
+  resultados: ChequeoEstado[];
+  resumen: string;
+  siguiente_paso: string;
+}
+
 /** Una opción del selector de esfuerzo de generación (`claude --effort`). */
 export interface OpcionEsfuerzo {
   id: string; // "" = predeterminado del modelo
@@ -365,6 +384,32 @@ export interface Pipeline {
   piezas: PipelinePieza[];
   /** Solo items sueltos: ruta del SPA al resultado de la generación (si su tipo tiene página). */
   resultado_url?: string | null;
+}
+
+/** Un tema BLOQUEADO del pipeline (`GET /api/pipelines/problemas`): tras agotar reintentos
+ *  (o una criba de peso) queda con veredicto `problema` y SALE del flujo; esta forma lo hace
+ *  visible para que un humano decida (relanzar a mano / descartar). */
+export interface ProblemaPipeline {
+  id: string;
+  titulo: string;
+  marca: string;
+  marca_nombre: string;
+  /** Etapa donde se bloqueó ("Validación" o el fragmento del último hallazgo de sistema). */
+  etapa: string;
+  /** Reintentos quemados por etapa (criba de la fuente / copy). */
+  intentos: { qa: number; cd: number };
+  /** Motivo legible del bloqueo (explicación del último hallazgo o resumen de la criba). */
+  error: string;
+  resumen: string;
+  hallazgos: PipelineHallazgo[];
+  creado: string;
+  actualizado: string;
+}
+
+/** Respuesta de `GET /api/pipelines/problemas` (recientes primero; `total` sin recortar). */
+export interface RespuestaProblemas {
+  problemas: ProblemaPipeline[];
+  total: number;
 }
 
 /** Un evento del log de actividad de una run (etapa registrada). */

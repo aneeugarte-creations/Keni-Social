@@ -137,12 +137,13 @@ export function SeccionDaemons() {
           <Activity className="h-4 w-4" aria-hidden="true" />
           Daemons de fondo
           {/* Aquí se OBSERVA la salud (latidos persistidos); el encendido/apagado son
-              ajustes y viven en Configuración. Un solo sitio para cada cosa. */}
+              ajustes y viven en el Monitor (tira del pipeline + panel de ajustes).
+              Un solo sitio para cada cosa. */}
           <Link
-            to="/configuracion"
+            to="/datos/produccion/monitor?tab=ajustes"
             className="ml-auto inline-flex items-center gap-1 text-xs font-normal underline-offset-2 hover:text-foreground hover:underline"
           >
-            Configuración
+            Ajustes
             <ExternalLink className="h-3 w-3" aria-hidden="true" />
           </Link>
         </CardTitle>

@@ -61,6 +61,9 @@ const Sugerencias = lazy(() => import("@/pages/Sugerencias"));
 const Webhooks = lazy(() => import("@/pages/Webhooks"));
 const MiCuenta = lazy(() => import("@/pages/MiCuenta"));
 const Usuarios = lazy(() => import("@/pages/Usuarios"));
+// Sistema (admin): la infraestructura que sostiene la consola (recursos, daemons,
+// backups, latencias, S3). Antes pestaña «Salud» del Monitor; página propia de nuevo.
+const Sistema = lazy(() => import("@/pages/sistema/Sistema"));
 
 /**
  * Rutas del SPA. El AppShell es el layout raiz (sidebar + topbar); las paginas
@@ -295,9 +298,10 @@ export const router = createBrowserRouter([
       // Gestion de usuarios: solo admin (el backend devuelve 403 si no, y la
       // propia pagina muestra el aviso al entrar por URL directa).
       { path: "usuarios", element: <Usuarios /> },
-      // La página Sistema se CONSOLIDÓ como pestaña «Salud» del Monitor (una sola
-      // superficie de monitorización); la ruta vieja redirige para enlaces/bookmarks.
-      { path: "sistema", element: <Navigate to="/datos/produccion/monitor?tab=salud" replace /> },
+      // Sistema: solo admin (el backend devuelve 403 si no; la página avisa al entrar por
+      // URL directa). Estuvo consolidada como pestaña «Salud» del Monitor; el Monitor
+      // redirige aquí los deep-links viejos (?tab=salud).
+      { path: "sistema", element: <Sistema /> },
 
       // ===== Redirecciones de rutas legacy =====
       // Rutas planas anteriores → su nuevo path con prefijo de bloque (preservando

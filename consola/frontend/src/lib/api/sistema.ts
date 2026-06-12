@@ -6,7 +6,7 @@ import type {
   RespuestaBorrarLoteS3,
   RespuestaBorrarS3,
   RespuestaDaemons,
-  RespuestaEstado,
+  RespuestaDoctor,
   RespuestaProbarS3,
   RespuestaRecursos,
   RespuestaRendimiento,
@@ -15,8 +15,8 @@ import type {
 } from "@/types";
 
 export const apiSistema = {
-  // --- Estado ---
-  estado: (signal?: AbortSignal) => peticion<RespuestaEstado>("/estado", { signal }),
+  // --- Estado (el «doctor»: autodiagnóstico de máquina + infra) ---
+  estado: (signal?: AbortSignal) => peticion<RespuestaDoctor>("/estado", { signal }),
 
   // --- Sistema (panel de admin; 403 si no) ---
   sistemaRecursos: (signal?: AbortSignal) =>

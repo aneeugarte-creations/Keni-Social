@@ -1,4 +1,4 @@
-import { ChevronsUpDown, Lightbulb, LogOut, UserCog, Users, Webhook } from "lucide-react";
+import { ChevronsUpDown, Lightbulb, LogOut, ServerCog, UserCog, Users, Webhook } from "lucide-react";
 import * as React from "react";
 import { Link } from "react-router-dom";
 
@@ -34,6 +34,8 @@ const OPCIONES: OpcionMenu[] = [
   { ruta: "/sugerencias", etiqueta: "Feedback", icono: Lightbulb },
   { ruta: "/webhooks", etiqueta: "Webhooks", icono: Webhook, soloAdmin: true },
   { ruta: "/usuarios", etiqueta: "Usuarios", icono: Users, soloAdmin: true },
+  // La infraestructura (recursos/daemons/backups/S3): antes pestaña «Salud» del Monitor.
+  { ruta: "/sistema", etiqueta: "Sistema", icono: ServerCog, soloAdmin: true },
 ];
 
 /**

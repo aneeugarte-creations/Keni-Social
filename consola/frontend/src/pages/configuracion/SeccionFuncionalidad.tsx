@@ -361,6 +361,7 @@ function GruposAjustes({
   onGuardar,
   guardando,
   mostrarTitulos = true,
+  gruposMaestros,
 }: {
   grupos: RespuestaAjustes["grupos"];
   onGuardar: (cuerpo: { clave: string; valor?: boolean | number | string }) => void;
@@ -368,12 +369,16 @@ function GruposAjustes({
   /** Pinta el título de cada grupo como sub-cabecera. Se apaga cuando el área envuelve UN solo
    *  grupo: la cabecera de la sección ya lo nombra y repetirlo sobra. */
   mostrarTitulos?: boolean;
+  /** De dónde leer los MAESTROS de etapa para atenuar excepciones. Por defecto, de los propios
+   *  `grupos`; el Monitor lo pasa aparte porque sus maestros se pintan en la tira del pipeline
+   *  (fuera de este render) y aun así gobiernan las excepciones por marca del drawer. */
+  gruposMaestros?: RespuestaAjustes["grupos"];
 }) {
   // Maestros (Investigación/Producción/Arte) por su clave ENV -> bool. Atenúa las excepciones
   // por marca cuyo maestro está OFF.
   const maestros: Record<string, boolean> = {};
   for (const gid of ["maestros_investigacion", "maestros_produccion"])
-    for (const m of grupos.find((g) => g.id === gid)?.ajustes ?? [])
+    for (const m of (gruposMaestros ?? grupos).find((g) => g.id === gid)?.ajustes ?? [])
       maestros[m.clave] = Boolean(m.valor);
 
   // Sub-cabecera de grupo (uppercase fino). Se omite cuando el área tiene un solo grupo: la
@@ -542,12 +547,16 @@ export function PanelAjustes({
   );
 }
 
-/** Controles de la MÁQUINA DE CONTENIDO, para el MONITOR (junto a la cola que gobiernan): el
- * interruptor general, las etapas (Selección→Validación→Copy→Arte), sus excepciones por marca y la
- * admisión del flujo continuo. Mismo motor que Configuración (`/api/ajustes`); aplican en caliente. */
+/** Controles de la MÁQUINA DE CONTENIDO, para el drawer del MONITOR: el interruptor general,
+ * las excepciones por marca y la admisión del flujo continuo. Los MAESTROS de etapa
+ * (`maestros_produccion`: Producción/Arte) ya NO se pintan aquí: viven en la tira «Pipeline en
+ * vivo» del propio Monitor, al lado del estado que gobiernan (Fase 2) — pero SIGUEN gobernando
+ * el atenuado de las excepciones por marca (se pasan como `gruposMaestros`). Mismo motor que
+ * Configuración (`/api/ajustes`); aplican en caliente. */
 export function PanelMaquinaContenido() {
   const { data, isPending, isError, error, refetch, isFetching, guardar } = useAjustesAdmin();
-  const grupos = (data?.grupos ?? []).filter((g) => GRUPOS_MAQUINA.has(g.id));
+  const deMaquina = (data?.grupos ?? []).filter((g) => GRUPOS_MAQUINA.has(g.id));
+  const grupos = deMaquina.filter((g) => g.id !== "maestros_produccion");
 
   return (
     <SeccionColapsable
@@ -555,8 +564,8 @@ export function PanelMaquinaContenido() {
       abiertaInicial
       descripcion={
         <>
-          Enciende/apaga Selección, Validación, Copy, Arte por marca. Los cambios aplican{" "}
-          <strong>en caliente</strong>.
+          Excepciones por marca y admisión del flujo. Los maestros de etapa están en la tira
+          «Pipeline en vivo». Los cambios aplican <strong>en caliente</strong>.
         </>
       }
     >
@@ -565,6 +574,7 @@ export function PanelMaquinaContenido() {
       ) : (
         <GruposAjustes
           grupos={grupos}
+          gruposMaestros={deMaquina}
           onGuardar={(cuerpo) => guardar.mutate(cuerpo)}
           guardando={guardar.isPending}
         />

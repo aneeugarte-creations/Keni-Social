@@ -4,6 +4,7 @@ import { peticion, query } from "./_core";
 import type {
   RespuestaPipelineDetalle,
   RespuestaPipelines,
+  RespuestaProblemas,
 } from "@/types";
 
 export const apiPipelines = {
@@ -29,5 +30,15 @@ export const apiPipelines = {
     ),
   pipelineDetalle: (id: string, signal?: AbortSignal) =>
     peticion<RespuestaPipelineDetalle>(`/pipelines/${encodeURIComponent(id)}`, { signal }),
+  // Temas BLOQUEADOS del pipeline (veredicto `problema`): fuera del flujo hasta que
+  // un humano decida. Los consume la zona de estado del Monitor.
+  pipelinesProblemas: (params: { marca?: string; limite?: number } = {}, signal?: AbortSignal) =>
+    peticion<RespuestaProblemas>(
+      `/pipelines/problemas${query({
+        marca: params.marca,
+        limite: params.limite != null ? String(params.limite) : undefined,
+      })}`,
+      { signal },
+    ),
 
 };

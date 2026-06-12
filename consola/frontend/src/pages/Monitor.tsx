@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, AlertTriangle, ArrowUp, Boxes, Clock, Cpu, Layers, RefreshCw, RotateCcw, Trash2, XCircle } from "lucide-react";
 import * as React from "react";
-import { useSearchParams } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
@@ -13,7 +13,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -38,13 +37,14 @@ import { SeccionEsfuerzo } from "@/pages/configuracion/SeccionEsfuerzo";
 import { SeccionImagen } from "@/pages/configuracion/SeccionImagen";
 import {
   DesgloseEconomiaProceso,
+  PROC_META,
   resultadoDelDia,
   SerieProceso,
-  TarjetaProceso,
   TituloEconomia,
 } from "@/pages/monitor/comun";
-import { PanelSalud } from "@/pages/sistema/PanelSalud";
-import type { ColaJob, PresupuestoIA, ResultadoDia } from "@/types";
+import { PipelineEnVivo } from "@/pages/monitor/PipelineEnVivo";
+import { ZonaEstado } from "@/pages/sistema/Doctor";
+import type { ColaJob, PresupuestoIA, Proceso, ResultadoDia } from "@/types";
 
 /** Tarjeta KPI: icono, valor grande y subtítulo. `tono` colorea el valor ante alerta. */
 function Kpi({
@@ -180,9 +180,11 @@ function TablaJobs({
 }
 
 /**
- * Monitor de la cola de generación (pestaña del hub Producción): qué ocurre AHORA en la
- * cola (workers, claude -p en vuelo, esperando), throughput por día y estado de los daemons,
- * con control de admin (purgar la cola, cancelar un job). Sondeo en vivo cada pocos segundos.
+ * Monitor de la máquina de contenido (hub Producción): arriba la zona de ESTADO (el doctor +
+ * temas bloqueados), después el PIPELINE EN VIVO (la tira de etapas con su toggle y conteos),
+ * la economía de tokens (kill switch), las tablas en curso/esperando y el throughput por día,
+ * con control de admin (purgar la cola, cancelar/priorizar un job). Sondeo en vivo cada pocos
+ * segundos. La INFRA (recursos/daemons/backups/S3, antes pestaña «Salud») vive en /sistema.
  */
 /** ECONOMÍA DE TOKENS de la generación, en el sitio donde se OPERA la cola.
  *
@@ -272,15 +274,17 @@ const GRUPOS_SISTEMA = ["automatismos_generales", "tuning"] as const;
 export default function Monitor() {
   const { usuario } = useSesion();
   const esAdmin = usuario?.rol === "admin";
-  // Pestañas del Monitor: «En vivo» (la cola, para todo el equipo) y «Salud» (la infra,
-  // solo admin: era la página Sistema del avatar, consolidada aquí). El tab viaja en la
-  // URL (?tab=salud) para que /sistema pueda redirigir y los enlaces profundos funcionen.
   const [searchParams, setSearchParams] = useSearchParams();
   const crudoTab = searchParams.get("tab");
   // La antigua pestaña "Ajustes" vive ahora en el panel lateral de ajustes de la página;
-  // los deep-links `?tab=ajustes` abren el panel directamente (y la vista queda "En vivo").
-  const tab = esAdmin && crudoTab === "salud" ? "salud" : "vivo";
+  // los deep-links `?tab=ajustes` abren el panel directamente. La antigua pestaña «Salud»
+  // (la infra) volvió a ser página propia (/sistema): se redirige más abajo, tras los hooks.
   const abrirAjustes = crudoTab === "ajustes";
+  // Prefiltro por PROCESO (`?proceso=investigacion|produccion`, lo enlazará Noticias en
+  // Fase 3): acota las vistas de cola (tablas y tira) al loop pedido. Inválido = sin filtro.
+  const crudoProceso = searchParams.get("proceso");
+  const proceso: Proceso | undefined =
+    crudoProceso === "investigacion" || crudoProceso === "produccion" ? crudoProceso : undefined;
   const qc = useQueryClient();
   // El Monitor respeta el switch GLOBAL de marca (como Pipelines/Actividad): las listas de
   // jobs se acotan a la marca activa (null = "Todas", solo admin). La capacidad es global.
@@ -343,6 +347,28 @@ export default function Monitor() {
   const guardarAjuste = useGuardarAjuste();
   const guardandoClave = guardarAjuste.isPending ? (guardarAjuste.variables?.clave ?? null) : null;
 
+  // La antigua pestaña «Salud» (la infra) es ahora la página /sistema: los deep-links
+  // viejos (?tab=salud, incl. la redirección legacy de /datos/sistema) siguen vivos.
+  // (Tras TODOS los hooks, para no variar su orden entre renders.)
+  if (crudoTab === "salud") return <Navigate to="/sistema" replace />;
+
+  // Listas acotadas al prefiltro de proceso (afecta a las tablas; la capacidad es global).
+  const enCurso = cola.data
+    ? proceso
+      ? cola.data.en_curso.filter((j) => j.proceso === proceso)
+      : cola.data.en_curso
+    : [];
+  const esperando = cola.data
+    ? proceso
+      ? cola.data.esperando.filter((j) => j.proceso === proceso)
+      : cola.data.esperando
+    : [];
+  const quitarProceso = () => {
+    const params = new URLSearchParams(searchParams);
+    params.delete("proceso");
+    setSearchParams(params, { replace: true });
+  };
+
   return (
     <>
       <AccionesPagina>
@@ -386,26 +412,14 @@ export default function Monitor() {
         </MenuAcciones>
       </AccionesPagina>
 
-      {/* Con la pestaña "Ajustes" movida al panel lateral solo queda conmutar En vivo/Salud,
-          y Salud es de admin: a un no-admin no se le pinta una tira de una sola pestaña. */}
-      {esAdmin && (
-        <Tabs
-          value={tab}
-          onValueChange={(v) =>
-            setSearchParams(v === "vivo" ? {} : { tab: v }, { replace: true })
-          }
-          className="mb-4"
-        >
-          <TabsList>
-            <TabsTrigger value="vivo">En vivo</TabsTrigger>
-            <TabsTrigger value="salud">Salud</TabsTrigger>
-          </TabsList>
-        </Tabs>
-      )}
+      {/* ZONA DE ESTADO (el doctor, visible para todos): con todo ok, una línea discreta;
+          con problemas, los chequeos no-ok (admin solo ve además los suyos) + los temas
+          bloqueados del pipeline. Va ARRIBA: es lo primero que responde «¿va bien la máquina?». */}
+      <div className="mb-6">
+        <ZonaEstado esAdmin={esAdmin} marca={marcaActiva ?? undefined} />
+      </div>
 
-      {tab === "salud" ? (
-        <PanelSalud />
-      ) : cola.isError ? (
+      {cola.isError ? (
         <BloqueError
           titulo="No se pudo leer la cola"
           mensaje={mensajeError(cola.error)}
@@ -420,6 +434,20 @@ export default function Monitor() {
         </div>
       ) : (
         <div className="space-y-6">
+          {/* Prefiltro de proceso activo (?proceso=): se señala y se puede quitar. */}
+          {proceso && (
+            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <span>
+                Mostrando solo{" "}
+                <strong className={PROC_META[proceso].texto}>{PROC_META[proceso].etiqueta}</strong>{" "}
+                (tablas de jobs).
+              </span>
+              <Button variant="ghost" size="sm" onClick={quitarProceso}>
+                Quitar filtro
+              </Button>
+            </div>
+          )}
+
           {cola.data.cola_llena && (
             <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -463,14 +491,11 @@ export default function Monitor() {
             />
           </div>
 
-          {/* Desglose del pool por PROCESO (ADR 0011): los dos loops sobre la misma cola. Solo se
-              pinta si el back lo trae (compat con backs anteriores). */}
-          {cola.data.por_proceso && (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <TarjetaProceso cola={cola.data} proceso="investigacion" />
-              <TarjetaProceso cola={cola.data} proceso="produccion" />
-            </div>
-          )}
+          {/* PIPELINE EN VIVO (Fase 2): la tira de etapas de la máquina (Selección →
+              Validación → Copy → Arte) con el toggle maestro de cada etapa AL LADO de sus
+              conteos vivos. Sustituye a las tarjetas por proceso: el mismo desglose del
+              pool, pero al grano de etapa y con su control junto al estado. */}
+          <PipelineEnVivo cola={cola.data} esAdmin={esAdmin} proceso={proceso} />
 
           {/* Economía de tokens: estado vivo + kill switch (los knobs, en Máquina de contenido) */}
           {cola.data.presupuesto && (
@@ -493,7 +518,7 @@ export default function Monitor() {
             <CardHeader className="p-4 pb-2">
               <CardTitle className="flex items-center gap-2 text-sm">
                 <Activity className="h-4 w-4 text-sky-600" />
-                En curso ({cola.data.en_curso.length})
+                En curso ({enCurso.length})
                 {/* Las listas respetan el switch global de marca; la capacidad es global. */}
                 {marcaActiva && (
                   <Badge variant="outline" className="font-normal text-muted-foreground">
@@ -503,14 +528,14 @@ export default function Monitor() {
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              {cola.data.en_curso.length === 0 ? (
+              {enCurso.length === 0 ? (
                 <p className="p-4 pt-0 text-sm text-muted-foreground">
                   Ningún <code>claude -p</code>
                   {marcaActiva ? ` de ${nombreActiva ?? marcaActiva}` : ""} corriendo ahora mismo.
                 </p>
               ) : (
                 <TablaJobs
-                  jobs={cola.data.en_curso}
+                  jobs={enCurso}
                   mostrarWorker
                   esAdmin={esAdmin}
                   onCancelar={(id) => cancelar.mutate(id)}
@@ -521,12 +546,12 @@ export default function Monitor() {
           </Card>
 
           {/* Esperando */}
-          {cola.data.esperando.length > 0 && (
+          {esperando.length > 0 && (
             <Card className="border-amber-500/30">
               <CardHeader className="p-4 pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-500">
                   <Clock className="h-4 w-4 text-amber-600" />
-                  Esperando ({cola.data.esperando.length})
+                  Esperando ({esperando.length})
                   {marcaActiva && (
                     <Badge variant="outline" className="font-normal text-muted-foreground">
                       {nombreActiva ?? marcaActiva}
@@ -538,7 +563,7 @@ export default function Monitor() {
                 <TablaJobs
                   onPriorizar={(id) => priorizar.mutate(id)}
                   priorizandoId={priorizandoId}
-                  jobs={cola.data.esperando}
+                  jobs={esperando}
                   mostrarWorker={false}
                   esAdmin={esAdmin}
                   onCancelar={(id) => cancelar.mutate(id)}
@@ -579,10 +604,10 @@ export default function Monitor() {
             </CardContent>
           </Card>
 
-          {/* SIN formularios aquí: la máquina de contenido y los toggles de daemons se
-              CONFIGURAN en Configuración (pestañas Máquina/Ajustes); la SALUD de los
-              daemons se observa en la pestaña Salud. El Monitor opera: cancelar, purgar
-              y el kill switch de arriba. */}
+          {/* SIN formularios aquí: los maestros de etapa viven en la tira «Pipeline en
+              vivo»; las excepciones por marca, topes y tuning, en el panel lateral de
+              ajustes; la SALUD de la infra (daemons/recursos/backups), en /sistema. El
+              Monitor opera: cancelar, priorizar, purgar y el kill switch de arriba. */}
         </div>
       )}
     </>
