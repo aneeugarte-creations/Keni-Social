@@ -154,7 +154,8 @@ function PaletaDialogo({
             }
             role="combobox"
             aria-expanded
-            className="h-11 w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none"
+            // `text-base md:text-sm`: 16px en móvil para no disparar el auto-zoom de iOS al enfocar.
+            className="h-11 w-full bg-transparent text-base text-foreground placeholder:text-muted-foreground focus-visible:outline-none md:text-sm"
           />
         </div>
 
