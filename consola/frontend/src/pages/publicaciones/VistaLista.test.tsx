@@ -280,6 +280,26 @@ describe("VistaLista — selección múltiple y borrado en masa", () => {
   });
 });
 
+describe("VistaLista — 'Añadir a la cola' es terminal en publicado", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("una pieza NO publicada ofrece 'Añadir a la cola' en el menú", async () => {
+    renderLista([pub({ id: "p1", titulo: "Borrador", estado: "aprobado" })]);
+    fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
+    expect(
+      await screen.findByRole("menuitem", { name: /Añadir a la cola/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("una pieza PUBLICADA NO ofrece 'Añadir a la cola' (no se re-encola)", async () => {
+    renderLista([pub({ id: "p1", titulo: "Salió", estado: "publicado" })]);
+    fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
+    // El menú abre con otras acciones, pero la de encolar NO está.
+    await screen.findByRole("menuitem", { name: /Duplicar/ });
+    expect(screen.queryByRole("menuitem", { name: /Añadir a la cola/ })).toBeNull();
+  });
+});
+
 describe("kebabSegunPuntero — visibilidad del kebab según el puntero (táctil)", () => {
   it("puntero grueso (táctil, sin hover): kebab SIEMPRE visible", () => {
     expect(kebabSegunPuntero(true)).toBe("siempre");

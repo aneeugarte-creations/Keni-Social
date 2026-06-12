@@ -239,12 +239,19 @@ function TarjetaPublicacion({
         ]
       : []),
     { separador: true },
-    {
-      etiqueta: "Añadir a la cola",
-      icono: CalendarPlus,
-      onClick: () => encolar.mutate(),
-      deshabilitado: encolar.isPending,
-    },
+    // Una pieza ya PUBLICADA es terminal: NO se re-encola (su post ya salió). Ocultamos
+    // "Añadir a la cola" igual que el calendario oculta "Publicar ya"/"Desprogramar" por
+    // `!publicado`; el backend además lo rechaza con 409 (defensa en profundidad).
+    ...(publicacion.estado !== "publicado"
+      ? [
+          {
+            etiqueta: "Añadir a la cola",
+            icono: CalendarPlus,
+            onClick: () => encolar.mutate(),
+            deshabilitado: encolar.isPending,
+          },
+        ]
+      : []),
     ...(publicacion.estado === "aprobado" || publicacion.estado === "programado"
       ? [
           {

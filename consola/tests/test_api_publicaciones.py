@@ -601,6 +601,50 @@ def test_put_desprogramar_a_aprobado_permitido(cliente):
 
 
 # --------------------------------------------------------------------------- #
+# PUBLICADO es TERMINAL: ni se re-encola ni se le mueve la fecha               #
+# --------------------------------------------------------------------------- #
+
+
+def test_encolar_publicado_es_terminal_409(cliente):
+    """Una pieza ya publicada NO se re-encola: el endpoint la rechaza ANTES de tocar nada
+    (revertir publicado->programado reseteaba `preparado_en` y arriesgaba un doble-post)."""
+    pub = _crear(
+        cliente, estado="publicado", fecha_programada="2026-06-15T18:00"
+    ).json()["publicacion"]
+    pid = pub["id"]
+    r = cliente.post(f"/api/publicaciones/{pid}/encolar")
+    assert r.status_code == 409
+    assert "publicada" in r.json()["error"].lower()
+    # Sigue publicado, con su fecha intacta.
+    despues = cliente.get(f"/api/publicaciones/{pid}").json()["publicacion"]
+    assert despues["estado"] == "publicado"
+    assert despues["fecha_programada"] == "2026-06-15T18:00"
+
+
+def test_put_fecha_programada_publicado_es_terminal_409(cliente):
+    """Mover la `fecha_programada` de una pieza publicada miente sobre cuándo salió: 409,
+    sin cambio. El no-op (misma fecha, distinto formato) SÍ se permite (guardado inocuo)."""
+    pub = _crear(
+        cliente, estado="publicado", fecha_programada="2026-06-15T18:00"
+    ).json()["publicacion"]
+    pid = pub["id"]
+    r = cliente.put(
+        f"/api/publicaciones/{pid}", json={"fecha_programada": "2026-06-20T12:00"}
+    )
+    assert r.status_code == 409
+    assert "publicada" in r.json()["error"].lower()
+    despues = cliente.get(f"/api/publicaciones/{pid}").json()["publicacion"]
+    assert despues["estado"] == "publicado"
+    assert despues["fecha_programada"] == "2026-06-15T18:00"
+    # No-op: misma fecha con segundos -> tras el canon es idéntica -> 200 (no rompe).
+    ok = cliente.put(
+        f"/api/publicaciones/{pid}", json={"fecha_programada": "2026-06-15T18:00:00"}
+    )
+    assert ok.status_code == 200
+    assert ok.json()["publicacion"]["fecha_programada"] == "2026-06-15T18:00"
+
+
+# --------------------------------------------------------------------------- #
 # Canon de fecha_programada (minutos, UTC sin offset)                          #
 # --------------------------------------------------------------------------- #
 

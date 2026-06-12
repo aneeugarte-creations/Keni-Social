@@ -610,6 +610,22 @@ async def actualizar(request: Request) -> Response:
             )
         campos["espejo"] = espejo
 
+    # PUBLICADO ES TERMINAL para la fecha: el post de una pieza publicada ya salió en su
+    # momento; mover su `fecha_programada` reubicaría su píldora verde y MENTIRÍA sobre cuándo
+    # salió. La máquina de estados (`_TRANSICIONES_PUT`) ya congela el `estado`, pero NO la
+    # fecha; esto cierra ese hueco. Se permite el NO-OP (misma fecha ya normalizada) para no
+    # romper guardados inocuos; cualquier CAMBIO real se rechaza ANTES de tocar nada (sin
+    # disparar el reset de aprobaciones ni el espejo, que vienen después).
+    if (
+        (pieza.get("estado") or "") == ESTADO_PUBLICADO
+        and "fecha_programada" in campos
+        and campos["fecha_programada"] != (pieza.get("fecha_programada") or "")
+    ):
+        return JSONResponse(
+            {"error": "Una pieza ya publicada es terminal: su fecha no se cambia."},
+            status_code=409,
+        )
+
     if not campos:
         return JSONResponse(
             {
@@ -844,6 +860,15 @@ async def encolar(request: Request) -> Response:
     pub = repos.obtener_publicacion(publicacion_id)
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+    # PUBLICADO ES TERMINAL: una pieza cuyo post YA salió no se re-encola. Reprogramarla
+    # revierte publicado->programado y, peor, `_encolar_en_hueco_libre` resetea `preparado_en`
+    # (el claim que el barrido usa para no re-publicar): con KENI_PUBLICAR_REAL on eso abre la
+    # puerta a un DOBLE-POST. Guard en profundidad (la UI ya oculta la acción, ver VistaLista).
+    if (pub.get("estado") or "") == ESTADO_PUBLICADO:
+        return JSONResponse(
+            {"error": "Una pieza ya publicada no se re-encola."},
+            status_code=409,
+        )
     actualizada, hubo_hueco = _encolar_en_hueco_libre(pub)
     if not hubo_hueco:
         return JSONResponse(
