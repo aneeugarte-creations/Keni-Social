@@ -35,6 +35,14 @@ def _cli(usuario: str = "ana", *, cobertura: bool = True) -> TestClient:
     return c
 
 
+def _cli_admin(usuario: str = "jefa") -> TestClient:
+    auth.crear_usuario(usuario, _CLAVE, "admin")
+    c = TestClient(_app())
+    r = c.post("/api/auth/login", json={"usuario": usuario, "password": _CLAVE}, headers=_ORIGIN)
+    assert r.status_code == 200
+    return c
+
+
 def _id_usuario(nombre: str) -> str:
     for u in auth.listar_usuarios():
         if u["usuario"] == nombre:
@@ -621,3 +629,118 @@ def test_soltar_ajeno_da_403(entorno):
 def test_coger_inexistente_404(entorno):
     c = _cli()
     assert c.post("/api/contenido/fantasma/coger", headers=_ORIGIN).status_code == 404
+
+
+def test_soltar_admin_libera_lo_de_otro(entorno):
+    c_luis = _cli("luis")
+    c_admin = _cli_admin()
+    cont = c_luis.post(
+        "/api/contenido", json={"titulo": "Balancear"}, headers=_ORIGIN
+    ).json()["contenido"]
+    c_luis.post(f"/api/contenido/{cont['id']}/coger", headers=_ORIGIN)
+    r = c_admin.post(f"/api/contenido/{cont['id']}/soltar", headers=_ORIGIN)
+    assert r.status_code == 200, r.text
+    assert (r.json()["contenido"].get("responsable_id") or "") == ""
+
+
+def test_soltar_ya_libre_idempotente(entorno):
+    c = _cli("ana")
+    cont = c.post(
+        "/api/contenido", json={"titulo": "Nadie la tiene"}, headers=_ORIGIN
+    ).json()["contenido"]
+    assert (cont.get("responsable_id") or "") == ""
+    r = c.post(f"/api/contenido/{cont['id']}/soltar", headers=_ORIGIN)
+    assert r.status_code == 200, r.text
+    assert (r.json()["contenido"].get("responsable_id") or "") == ""
+
+
+# --------------------------------------------------------------------------- #
+# PATCH responsable_id: el claim no se roba por la puerta de atrás              #
+# --------------------------------------------------------------------------- #
+
+
+def test_patch_no_roba_ni_limpia_el_claim_de_otro(entorno):
+    """Reasignar o limpiar por PATCH una pieza cogida por otra persona -> 409 sin pisar."""
+    c_ana = _cli("ana")
+    c_luis = _cli("luis")
+    cont = c_ana.post(
+        "/api/contenido", json={"titulo": "Cogida"}, headers=_ORIGIN
+    ).json()["contenido"]
+    c_luis.post(f"/api/contenido/{cont['id']}/coger", headers=_ORIGIN)
+    # ana (editor, no admin) intenta robársela para sí misma: 409 con quién la tiene.
+    r = c_ana.patch(
+        f"/api/contenido/{cont['id']}",
+        json={"responsable_id": _id_usuario("ana")},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 409
+    assert r.json()["responsable_nombre"] == "luis"
+    # Tampoco puede liberarla (eso es `soltar`, con su propia guarda).
+    r2 = c_ana.patch(
+        f"/api/contenido/{cont['id']}", json={"responsable_id": ""}, headers=_ORIGIN
+    )
+    assert r2.status_code == 409
+    # No se pisó: sigue siendo de luis.
+    pieza = next(
+        i for i in c_ana.get("/api/contenido").json()["contenidos"] if i["id"] == cont["id"]
+    )
+    assert pieza["responsable_id"] == _id_usuario("luis")
+
+
+def test_patch_holder_reasigna_o_limpia_lo_suyo(entorno):
+    c_ana = _cli("ana")
+    _cli("luis")
+    luis = _id_usuario("luis")
+    # Pasar el testigo: ana reasigna SU pieza a luis.
+    cont = c_ana.post(
+        "/api/contenido", json={"titulo": "Testigo"}, headers=_ORIGIN
+    ).json()["contenido"]
+    c_ana.post(f"/api/contenido/{cont['id']}/coger", headers=_ORIGIN)
+    r = c_ana.patch(
+        f"/api/contenido/{cont['id']}", json={"responsable_id": luis}, headers=_ORIGIN
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["contenido"]["responsable_id"] == luis
+    # Limpiar lo propio (equivalente a soltar) también está permitido.
+    cont2 = c_ana.post(
+        "/api/contenido", json={"titulo": "Para limpiar"}, headers=_ORIGIN
+    ).json()["contenido"]
+    c_ana.post(f"/api/contenido/{cont2['id']}/coger", headers=_ORIGIN)
+    r2 = c_ana.patch(
+        f"/api/contenido/{cont2['id']}", json={"responsable_id": ""}, headers=_ORIGIN
+    )
+    assert r2.status_code == 200, r2.text
+    assert (r2.json()["contenido"].get("responsable_id") or "") == ""
+
+
+def test_patch_admin_reasigna_lo_de_otro(entorno):
+    c_luis = _cli("luis")
+    _cli("ana")
+    c_admin = _cli_admin()
+    cont = c_luis.post(
+        "/api/contenido", json={"titulo": "Balanceo"}, headers=_ORIGIN
+    ).json()["contenido"]
+    c_luis.post(f"/api/contenido/{cont['id']}/coger", headers=_ORIGIN)
+    r = c_admin.patch(
+        f"/api/contenido/{cont['id']}",
+        json={"responsable_id": _id_usuario("ana")},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["contenido"]["responsable_nombre"] == "ana"
+
+
+def test_patch_asignar_pieza_libre_sigue_abierto(entorno):
+    """Asignar una pieza LIBRE vía PATCH lo puede hacer cualquiera (flujo de tareas)."""
+    c_ana = _cli("ana")
+    _cli("luis")
+    luis = _id_usuario("luis")
+    cont = c_ana.post(
+        "/api/contenido", json={"titulo": "Libre"}, headers=_ORIGIN
+    ).json()["contenido"]
+    assert (cont.get("responsable_id") or "") == ""
+    r = c_ana.patch(
+        f"/api/contenido/{cont['id']}", json={"responsable_id": luis}, headers=_ORIGIN
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["contenido"]["responsable_id"] == luis

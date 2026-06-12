@@ -313,7 +313,25 @@ async def actualizar(request: Request) -> Response:
         responsable, valido = _resolver_responsable(datos.get("responsable_id"))
         if not valido:
             return JSONResponse({"error": "El responsable no es un usuario válido."}, status_code=400)
-        campos["responsable_id"] = responsable["id"] if responsable else ""
+        nuevo_responsable = responsable["id"] if responsable else ""
+        responsable_actual = actual.get("responsable_id") or ""
+        # POLÍTICA DE CLAIMS (la lista): una pieza COGIDA solo la reasigna/libera su
+        # responsable o un admin; pisarla por PATCH burlaría el claim atómico de
+        # coger/soltar. Una pieza LIBRE la puede asignar cualquiera (flujo de tareas y
+        # mcp-tablero: el token de mantenimiento no es usuario ni admin, así que puede
+        # asignar piezas libres pero nunca robar un claim).
+        if responsable_actual and nuevo_responsable != responsable_actual and not es_admin(request):
+            autor = autor_de_peticion(request)
+            if autor is None or autor.get("id") != responsable_actual:
+                return JSONResponse(
+                    {
+                        "error": f"Ya la cogió {actual.get('responsable_nombre') or 'otra persona'}.",
+                        "responsable_id": responsable_actual,
+                        "responsable_nombre": actual.get("responsable_nombre") or "",
+                    },
+                    status_code=409,
+                )
+        campos["responsable_id"] = nuevo_responsable
         campos["responsable_nombre"] = responsable["usuario"] if responsable else ""
     for clave in ("titulo", "descripcion", "programa", "fecha_objetivo", "hora_objetivo", "fecha_entrega", "notas"):
         if clave in datos:

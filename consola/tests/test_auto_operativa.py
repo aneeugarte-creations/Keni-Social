@@ -14,12 +14,16 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from keni_consola import metricas_pieza
+from keni_consola import auto_responsable, metricas_pieza
 from keni_consola import rota as r
 from keni_consola.dominio import eventos
 
 # --------------------------------------------------------------------------- #
 # 1. Auto-asignación de responsable desde la rota                              #
+#                                                                              #
+# Los ejemplos usan `unotv`: `claro-sports` es ahora de reparto PULL («la      #
+# lista», `auto_responsable.MARCAS_REPARTO_PULL`) y la capa de I/O ni consulta #
+# la rota para esa marca (tests al final de esta sección).                     #
 # --------------------------------------------------------------------------- #
 
 HOY = "2026-05-30"  # sábado real (irrelevante para esta función, pero estable)
@@ -31,42 +35,70 @@ def _turno(fecha: str, franja: str, miembro: str) -> dict:
 
 def test_responsable_elige_a_quien_cubre_la_marca_hoy():
     turnos = [_turno(HOY, "f1", "u2"), _turno("2026-05-29", "f1", "u1")]
-    marcas = {"u1": ["claro-sports"], "u2": ["claro-sports"]}
-    assert r.responsable_por_marca_hoy("claro-sports", HOY, turnos, marcas) == "u2"
+    marcas = {"u1": ["unotv"], "u2": ["unotv"]}
+    assert r.responsable_por_marca_hoy("unotv", HOY, turnos, marcas) == "u2"
 
 
 def test_responsable_excluye_franja_de_descanso():
     turnos = [_turno(HOY, "fd", "u1")]
-    marcas = {"u1": ["claro-sports"]}
+    marcas = {"u1": ["unotv"]}
     assert (
-        r.responsable_por_marca_hoy("claro-sports", HOY, turnos, marcas, {"fd"}) is None
+        r.responsable_por_marca_hoy("unotv", HOY, turnos, marcas, {"fd"}) is None
     )
 
 
 def test_responsable_solo_de_la_marca_de_la_pieza():
     turnos = [_turno(HOY, "f1", "u1")]
-    marcas = {"u1": ["unotv"]}
-    assert r.responsable_por_marca_hoy("claro-sports", HOY, turnos, marcas) is None
+    marcas = {"u1": ["nacion-gamer"]}
+    assert r.responsable_por_marca_hoy("unotv", HOY, turnos, marcas) is None
 
 
 def test_responsable_determinista_id_menor():
     turnos = [_turno(HOY, "f1", "u9"), _turno(HOY, "f1", "u3"), _turno(HOY, "f1", "u5")]
-    marcas = {m: ["claro-sports"] for m in ("u3", "u5", "u9")}
-    assert r.responsable_por_marca_hoy("claro-sports", HOY, turnos, marcas) == "u3"
+    marcas = {m: ["unotv"] for m in ("u3", "u5", "u9")}
+    assert r.responsable_por_marca_hoy("unotv", HOY, turnos, marcas) == "u3"
 
 
 def test_responsable_sin_marca_o_sin_turnos_es_none():
     turnos = [_turno(HOY, "f1", "u1")]
-    marcas = {"u1": ["claro-sports"]}
+    marcas = {"u1": ["unotv"]}
     assert r.responsable_por_marca_hoy("", HOY, turnos, marcas) is None
-    assert r.responsable_por_marca_hoy("claro-sports", HOY, [], marcas) is None
+    assert r.responsable_por_marca_hoy("unotv", HOY, [], marcas) is None
     # Nadie de turno hoy (turno de otro día).
     assert (
         r.responsable_por_marca_hoy(
-            "claro-sports", HOY, [_turno("2026-05-29", "f1", "u1")], marcas
+            "unotv", HOY, [_turno("2026-05-29", "f1", "u1")], marcas
         )
         is None
     )
+
+
+def test_responsable_automatico_marca_pull_nace_libre(monkeypatch):
+    """claro-sports (reparto PULL, «la lista»): nunca auto-asigna, ni consulta la rota."""
+    llamadas: list[int] = []
+    monkeypatch.setattr(
+        auto_responsable.repos, "listar_turnos_rota", lambda **k: llamadas.append(1) or []
+    )
+    assert "claro-sports" in auto_responsable.MARCAS_REPARTO_PULL
+    assert auto_responsable.responsable_automatico("claro-sports", HOY) is None
+    assert llamadas == []  # la guarda corta ANTES de leer la rota
+
+
+def test_responsable_automatico_sigue_asignando_en_otras_marcas(monkeypatch):
+    """Las marcas fuera de `MARCAS_REPARTO_PULL` siguen con la rota (sin DB: I/O fakeado)."""
+    monkeypatch.setattr(
+        auto_responsable.repos, "listar_turnos_rota", lambda **k: [_turno(HOY, "f1", "u1")]
+    )
+    monkeypatch.setattr(auto_responsable.repos, "listar_franjas_semana", lambda lunes: [])
+    monkeypatch.setattr(
+        auto_responsable.auth,
+        "listar_usuarios",
+        lambda: [{"id": "u1", "usuario": "ana", "cobertura": True, "marcas": ["unotv"]}],
+    )
+    monkeypatch.setattr(
+        auto_responsable.auth, "obtener_usuario_por_id", lambda i: {"id": "u1", "usuario": "ana"}
+    )
+    assert auto_responsable.responsable_automatico("unotv", HOY) == {"id": "u1", "usuario": "ana"}
 
 
 # --------------------------------------------------------------------------- #

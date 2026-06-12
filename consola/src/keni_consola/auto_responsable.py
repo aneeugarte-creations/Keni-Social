@@ -26,6 +26,12 @@ from .tiempo import hoy_utc
 
 _log = logging.getLogger("keni_consola.auto_responsable")
 
+# Marcas con reparto PULL ("la lista"): la gente COGE las tareas, nadie nace asignado.
+# En el piloto de ClaroSports una pieza nacida ya asignada jamás aparece en «Por coger»
+# y el 409 de coger/PATCH mentiría («Ya la cogió X» cuando fue la rota). Para estas
+# marcas `responsable_automatico` devuelve None SIEMPRE; las demás siguen con la rota.
+MARCAS_REPARTO_PULL = frozenset({"claro-sports"})
+
 
 def responsable_automatico(marca: str, fecha_iso: str | None = None) -> dict[str, str] | None:
     """`{"id","usuario"}` del responsable que la rota asigna a `marca` HOY, o None.
@@ -36,12 +42,17 @@ def responsable_automatico(marca: str, fecha_iso: str | None = None) -> dict[str
       - las marcas de cada miembro del equipo (organigrama AMX).
     y delega la eleccion determinista en `rota.responsable_por_marca_hoy`. Devuelve la
     forma `{"id","usuario"}` lista para `repos.crear_contenido(responsable=...)`, o None
-    si la pieza no tiene marca, no hay rota, o nadie cubre la marca hoy.
+    si la pieza no tiene marca, la marca es de reparto PULL (`MARCAS_REPARTO_PULL`),
+    no hay rota, o nadie cubre la marca hoy.
 
     NUNCA lanza: cualquier fallo de lectura se degrada a None (la pieza se crea sin
     responsable, como antes), para no romper la creacion de contenido.
     """
     if not marca:
+        return None
+    # Reparto PULL: en estas marcas las piezas nacen LIBRES y el equipo las coge de
+    # «la lista» (claim atómico vía coger/soltar). No se consulta la rota.
+    if marca in MARCAS_REPARTO_PULL:
         return None
     dia = (fecha_iso or hoy_utc().isoformat()).strip()
     if not dia:
