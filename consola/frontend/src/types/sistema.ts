@@ -101,6 +101,9 @@ export interface ActividadAgregados {
 // --- Monitor de cola (`GET /api/actividad/cola` y `/cola/series`) ---
 
 /** Un job EN VUELO (pendiente o reclamado) enriquecido con su registro de generación. */
+/** Proceso de la máquina (ADR 0011): los dos loops que comparten la misma cola/pool. */
+export type Proceso = "investigacion" | "produccion";
+
 export interface ColaJob {
   job_id: string;
   gen_id: string;
@@ -109,6 +112,8 @@ export interface ColaJob {
   etiqueta: string;
   tipo: string;
   marca: string;
+  /** A qué loop pertenece el job: investigación (criba/QA) o producción (copy/arte). */
+  proceso: Proceso;
   gen_estado: string;
   fase: string;
   /** Prioridad de despacho (mayor = adelanta en la cola; manual > lote del pipeline). */
@@ -156,6 +161,23 @@ export interface PresupuestoIA {
   dia: string;
 }
 
+/** Conteo del pool COMPARTIDO atribuible a un proceso (jobs en vuelo de ese loop). */
+export interface ConteoProceso {
+  /** Jobs reclamados (claude -p corriendo) de este proceso. */
+  procesando: number;
+  /** Jobs pendientes (esperando slot) de este proceso. */
+  pendientes: number;
+}
+
+/** Embudo de QA: el único límite que Investigación acota aparte de la cola compartida. */
+export interface EmbudoQa {
+  /** Clusters en el embudo de verificación (en vuelo + pendientes + saltados), sumados. */
+  en_vuelo: number;
+  /** Tope en vuelo POR MARCA (cuánta criba cabe a la vez por marca). */
+  tope_por_marca: number;
+  marcas: { marca: string; en_vuelo: number; tope: number }[];
+}
+
 /** Snapshot en vivo de la cola de generación + workers + daemons. */
 export interface ColaMonitor {
   /** Eco del filtro de marca aplicado a las listas en_curso/esperando ("" = todas). */
@@ -166,6 +188,10 @@ export interface ColaMonitor {
   procesando: number;
   slots_libres: number;
   workers_activos: string[];
+  /** Desglose del pool compartido por proceso (ADR 0011): los dos loops sobre la misma cola. */
+  por_proceso?: Record<Proceso, ConteoProceso>;
+  /** Estado del embudo de QA (Investigación). */
+  embudo_qa?: EmbudoQa;
   en_curso: ColaJob[];
   esperando: ColaJob[];
   daemons: ColaDaemon[];
@@ -173,11 +199,28 @@ export interface ColaMonitor {
   presupuesto?: PresupuestoIA;
 }
 
+/** Gasto/throughput de un proceso en un día (desde las generaciones reales, sin marcadores). */
+export interface ResultadoProceso {
+  completados: number;
+  errores: number;
+  tokens: number;
+  coste_usd: number;
+}
+
+/** Resultados de un día: totales + desglose por proceso (marcadores de etapa EXCLUIDOS). */
+export interface ResultadoDia {
+  dia: string;
+  completados: number;
+  errores: number;
+  cola_llena: number;
+  por_proceso?: Record<Proceso, ResultadoProceso>;
+}
+
 /** Serie por día de la cola: encolados (entrada) y resultados (salida). */
 export interface ColaSerie {
   dias: number;
   encolados: { dia: string; n: number }[];
-  resultados: { dia: string; completados: number; errores: number; cola_llena: number }[];
+  resultados: ResultadoDia[];
 }
 
 /** Respuesta de purgar la cola (admin). */

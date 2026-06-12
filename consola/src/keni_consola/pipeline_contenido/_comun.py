@@ -61,6 +61,8 @@ __all__ = [
     "_limpiar_snippet",
     # actividad / autor / lecturas compartidas
     "registrar_etapa",
+    "EMBUDO_QA_ESTADOS",
+    "embudo_qa",
     "_autor_pipeline",
     "_copy_pendiente_leido",
     "_tiene_copy",
@@ -444,10 +446,18 @@ def registrar_etapa(
     STREAM del agente (su proceso de pensamiento). CI no lanza `claude`, así que lo deja vacío.
     """
     etiqueta = f"{etapa} · {detalle}".strip()
+    # Frontera ADR 0011: admision (CI) y validacion (QA) son INVESTIGACION; copy (CD) y arte son
+    # PRODUCCION. Se sella en el marcador para clasificarlo sin reparsear la etiqueta.
+    proceso = (
+        generaciones.PROCESO_INVESTIGACION
+        if etapa in (ETAPA_CI, ETAPA_QA)
+        else generaciones.PROCESO_PRODUCCION
+    )
     try:
         gen = generaciones.crear({
             "tipo": TIPO_ACTIVIDAD,
             "marca": marca or "",
+            "proceso": proceso,
             "contenido_id": contenido_id or "",
             "gen_id": gen_id or "",
             "etiqueta": etiqueta[:200],
@@ -458,6 +468,36 @@ def registrar_etapa(
     except Exception:  # noqa: BLE001 -- la traza de actividad no debe romper el pipeline
         _log.warning("pipeline: no se pudo registrar la etapa %s (%s)", etapa, marca, exc_info=True)
         return None
+
+
+# Estados del EMBUDO de verificacion (clusters `nuevo` ya en el circuito QA y aun sin admitir):
+# en vuelo + verificados-pendientes + saltados. Acotan cuanta QA se lanza por tick (el mismo
+# `_FUNNEL_QA` que usa `_barrido`); aqui se exponen para que el Monitor lea el embudo sin
+# importar el barrido (el orquestador) desde la capa API.
+EMBUDO_QA_ESTADOS = (QA_EN_CURSO, VERDICTO_NO_VERIFICADO, QA_SALTADA)
+
+
+def embudo_qa() -> dict[str, Any]:
+    """Estado del EMBUDO de QA (lo unico que Investigacion acota aparte de la cola compartida).
+
+    Por cada marca con admision (Seleccion) activa, cuenta sus clusters en el embudo y lo compara
+    con el tope EN VUELO por marca (`pipeline_en_vuelo_max`). Devuelve el total y el desglose por
+    marca, para que el Monitor muestre "cuanto se esta verificando" sin tocar la cola de jobs.
+    Best-effort: una marca cuyo conteo falle se omite (no tumba el snapshot).
+    """
+    tope = config.pipeline_en_vuelo_max()
+    por_marca: list[dict[str, Any]] = []
+    total = 0
+    for marca in marcas.ids():
+        if not config.etapa_activa(config.ENV_PIPELINE_SELECCION, marca):
+            continue
+        try:
+            n = repos.contar_clusters_funnel_qa(marca, EMBUDO_QA_ESTADOS)
+        except Exception:  # noqa: BLE001 -- un conteo que falle no debe tumbar el Monitor
+            continue
+        total += n
+        por_marca.append({"marca": marca, "en_vuelo": n, "tope": tope})
+    return {"en_vuelo": total, "tope_por_marca": tope, "marcas": por_marca}
 
 
 def _autor_pipeline() -> dict[str, str] | None:

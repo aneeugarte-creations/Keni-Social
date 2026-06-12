@@ -841,3 +841,36 @@ def test_endpoint_cancelar_sin_job_en_vuelo_devuelve_el_registro(entorno):
     r = _cliente().post(f"/api/generaciones/{g['id']}/cancelar")
     assert r.status_code == 200
     assert r.json()["generacion"]["id"] == g["id"]
+
+
+# --------------------------------------------------------------------------- #
+# Proceso de la maquina (ADR 0011): sello + deduccion                          #
+# --------------------------------------------------------------------------- #
+
+
+def test_proceso_se_sella_y_persiste(entorno):
+    """El campo `proceso` se guarda y sobrevive al round-trip (obtener)."""
+    g = generaciones.crear({
+        "tipo": "pipeline", "marca": _MARCA, "etiqueta": "Validación · X",
+        "proceso": generaciones.PROCESO_INVESTIGACION,
+    })
+    leido = generaciones.obtener(g["id"])
+    assert leido["proceso"] == generaciones.PROCESO_INVESTIGACION
+    assert generaciones.proceso_de(leido) == generaciones.PROCESO_INVESTIGACION
+
+
+def test_proceso_de_deduce_sin_sello():
+    """Sin campo `proceso` (registros previos), se deduce de tipo/etiqueta. Funcion pura."""
+    inv, prod = generaciones.PROCESO_INVESTIGACION, generaciones.PROCESO_PRODUCCION
+    # Marcadores de etapa: CI/QA -> investigacion; CD/ARTE -> produccion.
+    assert generaciones.proceso_de({"tipo": "pipeline_etapa", "etiqueta": "QA · criba"}) == inv
+    assert generaciones.proceso_de({"tipo": "pipeline_etapa", "etiqueta": "CI · ingesta"}) == inv
+    assert generaciones.proceso_de({"tipo": "pipeline_etapa", "etiqueta": "CD · copy"}) == prod
+    # Generacion real `pipeline`: la criba QA ("Validación · ...") es investigacion; el resto, no.
+    assert generaciones.proceso_de({"tipo": "pipeline", "etiqueta": "Validación · t"}) == inv
+    assert generaciones.proceso_de({"tipo": "pipeline", "etiqueta": "Titular · UnoTV"}) == prod
+    # Trabajo de produccion (copy/imagen/manual) y lo desconocido -> produccion.
+    assert generaciones.proceso_de({"tipo": "copy", "etiqueta": "Copy"}) == prod
+    assert generaciones.proceso_de({}) == prod
+    # El sello SIEMPRE manda sobre la deduccion.
+    assert generaciones.proceso_de({"tipo": "copy", "proceso": inv}) == inv

@@ -182,6 +182,11 @@ def _publico(datos: dict[str, Any], gen_id: str) -> dict[str, Any]:
         # Ausente en registros legados/normales => "" (lo filtra `_cuerpo`, así no engorda).
         "gen_id": _str("gen_id"),
         "etiqueta": _str("etiqueta"),
+        # Proceso de la maquina (ADR 0011): "investigacion" | "produccion". Se SELLA al lanzar
+        # (QA/Haiku del pool -> investigacion; copy/arte/manual -> produccion) para medir cada
+        # loop por separado en el Monitor. Ausente en registros previos => "" (lo filtra
+        # `_cuerpo`, no engorda; `generaciones.proceso_de` lo deduce de tipo/etiqueta al leer).
+        "proceso": _str("proceso"),
         "estado": _str("estado"),
         # Fase de PROGRESO (en que etapa va; ausente en registros legados => "").
         "fase": _str("fase"),

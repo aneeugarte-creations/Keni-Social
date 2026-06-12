@@ -214,6 +214,9 @@ def lanzar_qa_fuente(
         # modelo rápido (def Haiku), esfuerzo bajo y timeout corto (def 180 s), configurables
         # por env (`KENI_QA_FUENTE_MODELO`/`_ESFUERZO`/`_TIMEOUT`). Solo endurece; vacío = global.
         endurecer=_endurecer_qa_fuente(),
+        # Frontera ADR 0011: la criba/QA de la fuente es INVESTIGACION (motor de noticias), no
+        # produccion. Se sella en el registro para medir el coste de investigar por separado.
+        proceso=generaciones.PROCESO_INVESTIGACION,
     )
     registrar_etapa(
         ETAPA_QA,
@@ -292,6 +295,9 @@ def lanzar_qa_cluster(
         ),
         autor=autor,
         endurecer=_endurecer_qa_fuente(),
+        # Frontera ADR 0011: la criba/QA de la fuente es INVESTIGACION (motor de noticias), no
+        # produccion. Se sella en el registro para medir el coste de investigar por separado.
+        proceso=generaciones.PROCESO_INVESTIGACION,
     )
     registrar_etapa(
         ETAPA_QA,

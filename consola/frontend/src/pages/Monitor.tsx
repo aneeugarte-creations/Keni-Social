@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, AlertTriangle, ArrowUp, Boxes, Clock, Coins, Cpu, Layers, RefreshCw, RotateCcw, Trash2, XCircle } from "lucide-react";
+import { Activity, AlertTriangle, ArrowUp, Boxes, Clock, Cpu, Layers, RefreshCw, RotateCcw, Trash2, XCircle } from "lucide-react";
 import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -36,8 +36,15 @@ import {
 } from "@/pages/configuracion/SeccionFuncionalidad";
 import { SeccionEsfuerzo } from "@/pages/configuracion/SeccionEsfuerzo";
 import { SeccionImagen } from "@/pages/configuracion/SeccionImagen";
+import {
+  DesgloseEconomiaProceso,
+  resultadoDelDia,
+  SerieProceso,
+  TarjetaProceso,
+  TituloEconomia,
+} from "@/pages/monitor/comun";
 import { PanelSalud } from "@/pages/sistema/PanelSalud";
-import type { ColaJob, ColaSerie, PresupuestoIA } from "@/types";
+import type { ColaJob, PresupuestoIA, ResultadoDia } from "@/types";
 
 /** Tarjeta KPI: icono, valor grande y subtítulo. `tono` colorea el valor ante alerta. */
 function Kpi({
@@ -172,62 +179,6 @@ function TablaJobs({
   );
 }
 
-/** Mini-gráfico de barras por día: encolados (entrada) vs completados/errores (salida). */
-function SeriePorDia({ serie }: { serie: ColaSerie }) {
-  // Indexa resultados por día para alinearlos con los encolados.
-  const porDia = new Map<string, { completados: number; errores: number; cola_llena: number }>();
-  for (const r of serie.resultados) porDia.set(r.dia, r);
-  const dias = Array.from(
-    new Set([...serie.encolados.map((e) => e.dia), ...serie.resultados.map((r) => r.dia)]),
-  ).sort();
-  const maximo = Math.max(
-    1,
-    ...serie.encolados.map((e) => e.n),
-    ...serie.resultados.map((r) => r.completados + r.errores),
-  );
-
-  if (dias.length === 0) {
-    return <p className="text-sm text-muted-foreground">Sin actividad en la ventana.</p>;
-  }
-  return (
-    <div className="space-y-2">
-      {dias.map((dia) => {
-        const enc = serie.encolados.find((e) => e.dia === dia)?.n ?? 0;
-        const res = porDia.get(dia) ?? { completados: 0, errores: 0, cola_llena: 0 };
-        return (
-          <div key={dia} className="flex items-center gap-3 text-xs">
-            <span className="w-20 shrink-0 tabular-nums text-muted-foreground">{dia.slice(5)}</span>
-            <div className="flex h-4 flex-1 overflow-hidden rounded bg-muted">
-              <div
-                className="bg-amber-500/70"
-                style={{ width: `${(enc / maximo) * 100}%` }}
-                title={`${enc} encolados`}
-              />
-              <div
-                className="bg-emerald-500/70"
-                style={{ width: `${(res.completados / maximo) * 100}%` }}
-                title={`${res.completados} completados`}
-              />
-              <div
-                className="bg-destructive/70"
-                style={{ width: `${(res.errores / maximo) * 100}%` }}
-                title={`${res.errores} errores`}
-              />
-            </div>
-            <span className="w-28 shrink-0 text-right tabular-nums text-muted-foreground">
-              <span className="text-amber-600">{enc} enc</span> · {res.completados} ok
-              {res.errores > 0 && (
-                <span className="text-destructive"> · {res.errores} err</span>
-              )}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-
 /**
  * Monitor de la cola de generación (pestaña del hub Producción): qué ocurre AHORA en la
  * cola (workers, claude -p en vuelo, esperando), throughput por día y estado de los daemons,
@@ -241,11 +192,14 @@ function SeriePorDia({ serie }: { serie: ColaSerie }) {
  * Configuración → «Máquina de contenido» (grupo `pipeline_topes`). */
 function PanelPresupuesto({
   presupuesto,
+  resHoy,
   esAdmin,
   pausando,
   onPausar,
 }: {
   presupuesto: PresupuestoIA;
+  /** Resultados de HOY de la serie (para el desglose de gasto por proceso). Null si no hay. */
+  resHoy: ResultadoDia | null;
   esAdmin: boolean;
   pausando: boolean;
   onPausar: (valor: boolean) => void;
@@ -255,22 +209,23 @@ function PanelPresupuesto({
   return (
     <Card>
       <CardHeader className="p-4 pb-2">
-        <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
-          <Coins className="h-4 w-4 text-muted-foreground" />
-          Economía de tokens
+        <div className="flex flex-wrap items-center gap-2">
+          <TituloEconomia />
           <ChipNivelPresupuesto nivel={presupuesto.nivel} />
-        </CardTitle>
+        </div>
       </CardHeader>
       <CardContent className="flex flex-wrap items-center justify-between gap-4 p-4 pt-2">
-        <div className="space-y-1 text-sm">
+        <div className="space-y-1.5 text-sm">
           <p>
             Hoy:{" "}
             <span className="font-medium tabular-nums">
               {numeroCompacto(presupuesto.gastado.tokens)}
             </span>{" "}
             tokens · {costeUsd(presupuesto.gastado.coste_usd)} ·{" "}
-            {presupuesto.gastado.generaciones} generación(es)
+            {presupuesto.gastado.generaciones} generación(es) con coste
           </p>
+          {/* Desglose del gasto de HOY por proceso (Investigación vs Producción). */}
+          <DesgloseEconomiaProceso res={resHoy} />
           {conPresupuesto ? (
             <p className="text-xs text-muted-foreground">
               Presupuesto diario {numeroCompacto(presupuesto.presupuesto_tokens_dia)} tokens
@@ -475,39 +430,53 @@ export default function Monitor() {
             </div>
           )}
 
-          {/* KPIs en vivo */}
+          {/* KPIs en vivo del POOL COMPARTIDO. Investigación y Producción usan la MISMA cola y el
+              MISMO pool: estos KPIs son la capacidad total; el desglose por loop va debajo. */}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Kpi
               icono={Cpu}
               titulo="En curso"
               valor={`${cola.data.procesando}/${cola.data.capacidad.max_jobs}`}
+              subtitulo={`claude -p · ${cola.data.workers_activos.length} worker(s)`}
               tono={cola.data.procesando >= cola.data.capacidad.max_jobs ? "alerta" : undefined}
             />
             <Kpi
               icono={Clock}
-              titulo="Esperando"
+              titulo="En cola"
               valor={`${cola.data.conteo.pendientes}/${cola.data.capacidad.max_cola}`}
+              subtitulo="esperando un slot"
               tono={cola.data.conteo.pendientes > 0 ? "espera" : undefined}
             />
             <Kpi
               icono={Layers}
-              titulo="Activos"
+              titulo="Pool compartido"
               valor={`${cola.data.conteo.activos}/${cola.data.capacidad.tope}`}
+              subtitulo="Investigación + Producción"
               tono={cola.data.cola_llena ? "alerta" : undefined}
             />
             <Kpi
               icono={Boxes}
               titulo="Slots libres"
               valor={cola.data.slots_libres}
-              subtitulo={`${cola.data.workers_activos.length} worker(s) activo(s)`}
+              subtitulo={`de ${cola.data.capacidad.max_jobs} de cómputo`}
               tono={cola.data.slots_libres > 0 ? "ok" : undefined}
             />
           </div>
+
+          {/* Desglose del pool por PROCESO (ADR 0011): los dos loops sobre la misma cola. Solo se
+              pinta si el back lo trae (compat con backs anteriores). */}
+          {cola.data.por_proceso && (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <TarjetaProceso cola={cola.data} proceso="investigacion" />
+              <TarjetaProceso cola={cola.data} proceso="produccion" />
+            </div>
+          )}
 
           {/* Economía de tokens: estado vivo + kill switch (los knobs, en Máquina de contenido) */}
           {cola.data.presupuesto && (
             <PanelPresupuesto
               presupuesto={cola.data.presupuesto}
+              resHoy={resultadoDelDia(serie.data, cola.data.presupuesto.dia)}
               esAdmin={esAdmin}
               pausando={
                 guardarAjuste.isPending &&
@@ -579,12 +548,24 @@ export default function Monitor() {
             </Card>
           )}
 
-          {/* Throughput por día */}
+          {/* Throughput por día: encolados (entrada) vs completados por proceso (salida). Los
+              marcadores de etapa (coste 0) ya NO cuentan: «ok» es trabajo real, no auditoría. */}
           <Card>
             <CardHeader className="p-4 pb-2">
-              <CardTitle className="flex items-center gap-2 text-sm">
+              <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
                 <RotateCcw className="h-4 w-4 text-muted-foreground" />
                 Últimos 14 días
+                <span className="ml-1 inline-flex items-center gap-3 text-xs font-normal text-muted-foreground">
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full bg-amber-500/70" /> encolados
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full bg-sky-500/70" /> investigación
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500/70" /> producción
+                  </span>
+                </span>
               </CardTitle>
             </CardHeader>
             <CardContent className="p-4 pt-2">
@@ -593,7 +574,7 @@ export default function Monitor() {
               ) : serie.isError ? (
                 <p className="text-sm text-muted-foreground">{mensajeError(serie.error)}</p>
               ) : (
-                <SeriePorDia serie={serie.data} />
+                <SerieProceso serie={serie.data} />
               )}
             </CardContent>
           </Card>

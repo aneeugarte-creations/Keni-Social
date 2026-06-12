@@ -131,6 +131,9 @@ from ._comun import (
     MOTIVO_COLA_LLENA,
     MOTIVO_INTERRUMPIDO,
     MOTIVO_TIMEOUT,
+    PROCESO_INVESTIGACION,
+    PROCESO_PRODUCCION,
+    PROCESOS,
     TIPOS,
     ColaLlenaError,
     GeneracionPausadaError,
@@ -141,6 +144,7 @@ from ._comun import (
     _timeout,
     ahora_iso,
     nuevo_id,
+    proceso_de,
 )
 from ._lanzadores import (
     _ENV_DENYLIST_EXACTOS,
@@ -167,6 +171,10 @@ __all__ = [
     "MOTIVO_COLA_LLENA",
     "MOTIVO_CANCELADO",
     "MOTIVO_INTERRUMPIDO",
+    "PROCESO_INVESTIGACION",
+    "PROCESO_PRODUCCION",
+    "PROCESOS",
+    "proceso_de",
     "TIPOS",
     "ColaLlenaError",
     "GeneracionPausadaError",

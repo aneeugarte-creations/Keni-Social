@@ -94,6 +94,45 @@ TIPOS = (
     "render-video", "transcribir",
 )
 
+# PROCESO de la maquina (ADR 0011): la frontera entre los DOS loops. INVESTIGACION es el motor
+# de noticias —admision + criba/QA de la fuente + fusion/clasificacion/traduccion (Haiku del
+# pool)—; PRODUCCION es la maquina de contenido —copy/editorial + arte + avance—. Comparten la
+# MISMA cola y el MISMO pool (no hay dos colas): el `proceso` solo CLASIFICA el trabajo para
+# poder medir cada lado por separado en el Monitor. Se SELLA en el registro al lanzar (campo
+# `proceso`); para registros previos a este campo, `proceso_de` lo DEDUCE de tipo/etiqueta.
+PROCESO_INVESTIGACION = "investigacion"
+PROCESO_PRODUCCION = "produccion"
+PROCESOS = frozenset({PROCESO_INVESTIGACION, PROCESO_PRODUCCION})
+
+
+def proceso_de(reg: dict[str, Any]) -> str:
+    """Proceso (investigacion|produccion) de una generacion. Prefiere el campo SELLADO.
+
+    Si el registro trae `proceso` valido (sellado al lanzar tras ADR 0011), lo usa. Para
+    registros PREVIOS al sello, lo deduce: la criba QA de la fuente y los marcadores CI/QA son
+    Investigacion; el copy del pipeline y los marcadores CD/ARTE son Produccion; el resto (copy
+    manual, imagen, hashtags, video, prompt, evergreen...) es Produccion (la maquina de
+    contenido). Defensivo: nunca lanza; default Produccion ante lo desconocido.
+    """
+    if not isinstance(reg, dict):
+        return PROCESO_PRODUCCION
+    sellado = (reg.get("proceso") or "").strip()
+    if sellado in PROCESOS:
+        return sellado
+    tipo = (reg.get("tipo") or "").strip()
+    etiqueta = reg.get("etiqueta") or ""
+    if tipo == "pipeline_etapa":
+        # La etapa viaja en la etiqueta ("CI · ..."/"QA · ..."/"CD · ..."/"ARTE · ...").
+        return PROCESO_INVESTIGACION if etiqueta[:2] in ("CI", "QA") else PROCESO_PRODUCCION
+    if tipo == "pipeline":
+        # La criba QA de la fuente lleva etiqueta "Validacion · ..."; el resto es copy/arte.
+        return (
+            PROCESO_INVESTIGACION
+            if etiqueta.startswith(("Validación", "Validacion"))
+            else PROCESO_PRODUCCION
+        )
+    return PROCESO_PRODUCCION
+
 # Wall-timeout (segundos) de un trabajo de claude en background. Override por
 # `KENI_CLAUDE_TIMEOUT` (centralizado en `config.claude_timeout`). Sustituye al viejo
 # timeout de 180 s de la peticion sincrona.

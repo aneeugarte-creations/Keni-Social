@@ -76,6 +76,15 @@ def test_cola_snapshot_contrato(entorno):
     # El job pendiente aparece en `esperando` con su etiqueta enriquecida desde el registro.
     esperando = data["esperando"]
     assert any(j["gen_id"] == gen_id and j["etiqueta"] == "QA fuente · UnoTV" for j in esperando)
+    # Cada job en vuelo trae su `proceso` (ADR 0011); un `tipo='copy'` es produccion.
+    job = next(j for j in esperando if j["gen_id"] == gen_id)
+    assert job["proceso"] == generaciones.PROCESO_PRODUCCION
+    # Desglose del pool compartido por proceso + embudo de QA (contrato del Monitor de 2 loops).
+    assert set(data["por_proceso"]) == {
+        generaciones.PROCESO_INVESTIGACION, generaciones.PROCESO_PRODUCCION,
+    }
+    assert data["por_proceso"][generaciones.PROCESO_PRODUCCION]["pendientes"] >= 1
+    assert {"en_vuelo", "tope_por_marca", "marcas"} <= set(data["embudo_qa"])
     # Daemons: lista no vacia con el reaper SIEMPRE activo.
     porclave = {d["clave"]: d for d in data["daemons"]}
     assert "reaper" in porclave
@@ -162,6 +171,46 @@ def test_cola_series_contrato(entorno):
     # Hay al menos un dia con un encolado (el de hoy).
     assert sum(d["n"] for d in data["encolados"]) >= 1
     assert isinstance(data["resultados"], list)
+
+
+def test_serie_excluye_marcadores_y_desglosa_por_proceso(entorno):
+    """La serie NO cuenta los marcadores de etapa (coste 0) y separa investigacion/produccion.
+
+    Era el bug del Monitor: `_resultados_por_dia` contaba los miles de `pipeline_etapa` (CI/QA/CD,
+    sin tokens) y "completados" no cuadraba ni con los encolados ni con el gasto. Aqui se sellan
+    tres generaciones COMPLETADAS hoy —un marcador (excluido), una criba QA (investigacion, con
+    tokens) y un copy (produccion, con tokens)— y se comprueba que la serie cuenta SOLO las dos
+    reales, cada una en su proceso y con su gasto.
+    """
+    # Marcador de etapa: completado pero SIN coste -> debe quedar fuera de la serie.
+    generaciones.crear({
+        "tipo": "pipeline_etapa", "marca": _MARCA, "etiqueta": "QA · criba",
+        "estado": generaciones.ESTADO_COMPLETADO, "fecha_fin": generaciones.ahora_iso(),
+    })
+    # Criba QA real (investigacion) con tokens.
+    generaciones.crear({
+        "tipo": "pipeline", "marca": _MARCA, "etiqueta": "Validación · tema",
+        "proceso": generaciones.PROCESO_INVESTIGACION,
+        "estado": generaciones.ESTADO_COMPLETADO, "fecha_fin": generaciones.ahora_iso(),
+        "metricas": {"tokens_in": 100, "tokens_out": 20, "total_cost_usd": 0.01},
+    })
+    # Copy real (produccion) con tokens.
+    generaciones.crear({
+        "tipo": "copy", "marca": _MARCA, "etiqueta": "Copy de nota",
+        "estado": generaciones.ESTADO_COMPLETADO, "fecha_fin": generaciones.ahora_iso(),
+        "metricas": {"tokens_in": 500, "tokens_out": 300, "total_cost_usd": 0.05},
+    })
+
+    data = _cli_token().get("/api/actividad/cola/series?dias=7").json()
+    total_completados = sum(d["completados"] for d in data["resultados"])
+    assert total_completados == 2  # las dos reales; el marcador NO cuenta
+
+    inv = sum(d["por_proceso"]["investigacion"]["completados"] for d in data["resultados"])
+    prod = sum(d["por_proceso"]["produccion"]["completados"] for d in data["resultados"])
+    assert (inv, prod) == (1, 1)
+    # El gasto se acumula del lado correcto (los 120/800 tokens de cada generacion).
+    assert sum(d["por_proceso"]["investigacion"]["tokens"] for d in data["resultados"]) == 120
+    assert sum(d["por_proceso"]["produccion"]["tokens"] for d in data["resultados"]) == 800
 
 
 # --------------------------------------------------------------------------- #

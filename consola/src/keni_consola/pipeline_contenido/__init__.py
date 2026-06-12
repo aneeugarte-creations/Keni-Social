@@ -138,11 +138,13 @@ from ._comun import (
     _log,
     _tiene_copy,
     anotar_intento,
+    embudo_qa,
     en_backoff,
     intentos_de,
     marcar_fallo_etapa,
     registrar_etapa,
     temas_pipeline,
+    EMBUDO_QA_ESTADOS,
 )
 from ._copy import (
     encadenar_arte_tras_copy,
@@ -243,6 +245,8 @@ __all__ = [
     "_limpiar_snippet",
     # actividad / autor / lecturas compartidas
     "registrar_etapa",
+    "embudo_qa",
+    "EMBUDO_QA_ESTADOS",
     "_autor_pipeline",
     "_copy_pendiente_leido",
     "_tiene_copy",

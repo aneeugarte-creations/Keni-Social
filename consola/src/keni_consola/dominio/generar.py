@@ -518,6 +518,7 @@ def lanzar(
     clave_idem: str | None = None,
     urgente: bool = False,
     contenido_id: str = "",
+    proceso: str = generaciones.PROCESO_PRODUCCION,
 ) -> dict[str, Any]:
     """Crea el registro de generación, ENCOLA el trabajo y devuelve el registro (para sondeo).
 
@@ -553,6 +554,9 @@ def lanzar(
         # feed de Producción suma por `contenido_id` las métricas de la run. Antes solo
         # viajaba en el `procesar_spec` y el registro quedaba sin atar (runs a cero).
         "contenido_id": contenido_id or "",
+        # Proceso de la maquina (ADR 0011): por defecto PRODUCCION (la maquina de contenido:
+        # copy/arte/manual). La criba QA de la fuente lo pasa "investigacion" (motor de noticias).
+        "proceso": proceso or generaciones.PROCESO_PRODUCCION,
         **_autor_campos(autor),
     })
     if not nueva:

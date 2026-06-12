@@ -18,6 +18,7 @@ import { useSesion } from "@/hooks/sesion-contexto";
 import { PanelAjustes } from "@/pages/configuracion/SeccionFuncionalidad";
 
 import Cobertura from "./Cobertura";
+import { MonitorInvestigacion } from "./noticias/MonitorInvestigacion";
 import { RielInvestigacion } from "./noticias/RielInvestigacion";
 
 // Los grupos del catálogo del motor de noticias (`ajustes_catalogo.GRUPOS_NOTICIAS`) REAGRUPADOS
@@ -95,6 +96,7 @@ export default function NoticiasHub() {
         </AccionesPagina>
       )}
       <RielInvestigacion />
+      <MonitorInvestigacion />
       <Cobertura />
     </div>
   );

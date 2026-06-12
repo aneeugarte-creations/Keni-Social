@@ -32,6 +32,7 @@ function job(parcial: Partial<ColaJob>): ColaJob {
     etiqueta: "Copy de nota",
     tipo: "copy",
     marca: "claro-sports",
+    proceso: "produccion",
     gen_estado: "ejecutando",
     fase: "",
     prioridad: 0,

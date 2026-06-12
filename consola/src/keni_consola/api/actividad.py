@@ -15,11 +15,14 @@ Endpoints:
   - `GET /api/actividad/cola`
       -> MONITOR EN VIVO de la cola de generacion: capacidad (max_jobs/max_cola/tope), conteo
          (pendientes/reclamados/terminados/activos), `procesando` (claude -p en vuelo), slots
-         libres, workers activos, listas `en_curso`/`esperando` (con etiqueta/tipo/marca/edad) y
-         estado de los daemons de fondo. Para "que ocurre AHORA en la cola".
+         libres, workers activos, listas `en_curso`/`esperando` (con etiqueta/tipo/marca/edad),
+         desglose `por_proceso` (investigacion/produccion sobre la MISMA cola, ADR 0011), el
+         `embudo_qa` (lo unico que Investigacion acota aparte) y el estado de los daemons de
+         fondo. Para "que ocurre AHORA en la cola".
   - `GET /api/actividad/cola/series?dias=`
       -> series por dia: `encolados` (de la tabla de jobs) y `resultados` (completados/errores/
-         cola_llena, de las generaciones). Throughput de entrada vs salida de la cola.
+         cola_llena + desglose por proceso con tokens/coste, de las generaciones REALES; los
+         MARCADORES de etapa quedan excluidos). Throughput de entrada vs salida de la cola.
 
 Solo LECTURA. Errores en espanol; sin tracebacks crudos.
 """
@@ -203,6 +206,9 @@ def _item_job(job: dict, ahora: datetime) -> dict:
         "etiqueta": reg.get("etiqueta") or "",
         "tipo": reg.get("tipo") or "",
         "marca": reg.get("marca") or "",
+        # Proceso (ADR 0011): investigacion (criba/QA) | produccion (copy/arte). La cola es
+        # COMPARTIDA; esto solo clasifica cada job para desglosar el pool por proceso.
+        "proceso": generaciones.proceso_de(reg),
         "gen_estado": reg.get("estado") or "",
         "fase": reg.get("fase") or "",
         # Prioridad de cola (mayor = adelanta): los lanzamientos manuales van por delante
@@ -271,6 +277,33 @@ async def cola(request: Request) -> Response:
     ahora = datetime.now()
     filas = repos.jobs_activos(limite=200)
     en_vuelo = [_item_job(j, ahora) for j in filas]
+    # Desglose del pool COMPARTIDO por proceso (ADR 0011): se calcula sobre TODOS los jobs en
+    # vuelo (global, como los KPIs de capacidad), ANTES de acotar las listas por marca. La cola y
+    # el pool son UNICOS; esto solo dice cuanto del trabajo en vuelo es Investigacion (criba/QA)
+    # y cuanto Produccion (copy/arte), para poder vigilar los dos loops sobre la misma cola.
+    por_proceso = {
+        proc: {
+            "procesando": sum(
+                1 for j in en_vuelo
+                if j["proceso"] == proc and j["estado"] == repos.JOB_RECLAMADO
+            ),
+            "pendientes": sum(
+                1 for j in en_vuelo
+                if j["proceso"] == proc and j["estado"] == repos.JOB_PENDIENTE
+            ),
+        }
+        for proc in (generaciones.PROCESO_INVESTIGACION, generaciones.PROCESO_PRODUCCION)
+    }
+    # EMBUDO de QA: el unico limite que Investigacion acota aparte de la cola compartida (cuanta
+    # criba cabe en vuelo por marca). Lazy import del helper del pipeline (evita acoplar la API al
+    # orquestador) y best-effort: un fallo deja el embudo vacio, nunca tumba el snapshot.
+    try:
+        from ..pipeline_contenido import embudo_qa as _embudo_qa
+
+        embudo = _embudo_qa()
+    except Exception:  # noqa: BLE001 -- el embudo es observabilidad; su fallo no rompe el Monitor
+        embudo = {"en_vuelo": 0, "tope_por_marca": 0, "marcas": []}
+    # Listas para mostrar: respetan el switch GLOBAL de marca (la capacidad/los conteos no).
     if marca:
         en_vuelo = [j for j in en_vuelo if j["marca"] == marca]
     en_curso = [j for j in en_vuelo if j["estado"] == repos.JOB_RECLAMADO]
@@ -292,6 +325,10 @@ async def cola(request: Request) -> Response:
             "procesando": reclamados,  # claude -p en vuelo (acotado por max_jobs)
             "slots_libres": max(0, max_jobs - reclamados),
             "workers_activos": workers,
+            # Desglose del pool compartido por proceso + embudo de QA (Investigacion). La cola es
+            # UNA; estos dos campos dejan ver los dos loops (ADR 0011) sobre esa misma cola.
+            "por_proceso": por_proceso,
+            "embudo_qa": embudo,
             "en_curso": en_curso,
             "esperando": esperando,
             "daemons": _daemons_estado(),
@@ -303,25 +340,68 @@ async def cola(request: Request) -> Response:
     )
 
 
+def _metricas_tokens(g: dict) -> tuple[int, float]:
+    """(tokens, coste_usd) de una generacion desde sus `metricas` (0,0.0 si no las trae)."""
+    m = g.get("metricas")
+    if not isinstance(m, dict):
+        return 0, 0.0
+    try:
+        return int(m.get("tokens_in") or 0) + int(m.get("tokens_out") or 0), float(
+            m.get("total_cost_usd") or 0.0
+        )
+    except (TypeError, ValueError):
+        return 0, 0.0
+
+
+def _bucket_dia() -> dict:
+    """Bucket vacio de un dia: totales + desglose por proceso (ADR 0011)."""
+    return {
+        "completados": 0,
+        "errores": 0,
+        "cola_llena": 0,
+        "por_proceso": {
+            generaciones.PROCESO_INVESTIGACION: {
+                "completados": 0, "errores": 0, "tokens": 0, "coste_usd": 0.0,
+            },
+            generaciones.PROCESO_PRODUCCION: {
+                "completados": 0, "errores": 0, "tokens": 0, "coste_usd": 0.0,
+            },
+        },
+    }
+
+
 def _resultados_por_dia(dias: int) -> list[dict]:
-    """Generaciones por dia clasificadas en completados / errores (y cuantos por cola llena).
+    """Generaciones REALES por dia: completados/errores (+cola_llena) y desglose por proceso.
 
     Escanea el almacen de generaciones (YAML) una vez y agrupa por `fecha_inicio[:10]`. Es el
     lado de SALIDA de la cola; el endpoint que lo usa se sondea con poca frecuencia (no es el
     snapshot en vivo), asi que el escaneo completo es aceptable.
+
+    EXCLUYE los MARCADORES de etapa (`pipeline_etapa`, CI/QA/CD a coste 0): son trazabilidad, no
+    trabajo con tokens, y antes inflaban "completados" a miles (la serie no cuadraba ni con los
+    encolados ni con el gasto). Igual que el feed de Actividad, aqui solo cuentan generaciones
+    REALES. Cada generacion se clasifica en su proceso (investigacion/produccion) con su gasto.
     """
     corte = (hoy_utc() - timedelta(days=max(0, dias - 1))).isoformat()
     buckets: dict[str, dict] = {}
     for g in generaciones.listar(limite=None):
+        if _es_marcador_pipeline(g):
+            continue  # marcador de etapa (coste 0): no es trabajo real, no infla la serie
         dia = (g.get("fecha_inicio") or "")[:10]
         if not dia or dia < corte:
             continue
-        b = buckets.setdefault(dia, {"completados": 0, "errores": 0, "cola_llena": 0})
+        b = buckets.setdefault(dia, _bucket_dia())
+        proc = b["por_proceso"][generaciones.proceso_de(g)]
         est = g.get("estado")
+        tokens, coste = _metricas_tokens(g)
+        proc["tokens"] += tokens
+        proc["coste_usd"] += coste
         if est == generaciones.ESTADO_COMPLETADO:
             b["completados"] += 1
+            proc["completados"] += 1
         elif est == generaciones.ESTADO_ERROR:
             b["errores"] += 1
+            proc["errores"] += 1
             if g.get("motivo") == generaciones.MOTIVO_COLA_LLENA:
                 b["cola_llena"] += 1
     return [{"dia": d, **v} for d, v in sorted(buckets.items())]

@@ -187,6 +187,9 @@ def _registrar_actividad_ia(marca: str, etiqueta: str, salida: str, *, prompt: s
     try:
         registro: dict[str, Any] = {
             "tipo": "pipeline",
+            # Fusion/clasificacion/traduccion del pool = INVESTIGACION (motor de noticias). Corre
+            # INLINE (Haiku, ya completado: no encola), pero su coste cuenta del lado investigacion.
+            "proceso": generaciones.PROCESO_INVESTIGACION,
             "marca": marca,
             "etiqueta": etiqueta,
             "prompt": (prompt or "")[:20000],
