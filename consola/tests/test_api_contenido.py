@@ -931,3 +931,87 @@ def test_asignar_notifica_al_asignado(entorno):
     assert any(
         n["tipo"] == "asignacion" and n["contenido_id"] == cont["id"] for n in notis
     )
+
+
+# --------------------------------------------------------------------------- #
+# POST /cubrir-evento: la lista de Tareas se llena de EVENTOS; cubrir uno =     #
+# find-or-create de su tarea de cobertura (clase='tarea', evento_id) + claim.   #
+# --------------------------------------------------------------------------- #
+
+
+def _crear_evento(titulo: str = "Cruz Azul vs América", fecha: str = "2026-07-01") -> dict:
+    return repos.crear_evento_rota(titulo=titulo, fecha=fecha, hora="20:00", marca="claro-sports")
+
+
+def test_cubrir_evento_self_claim_crea_tarea_de_cobertura(entorno):
+    c = _cli("ana")
+    ev = _crear_evento()
+    r = c.post("/api/contenido/cubrir-evento", json={"evento_id": ev["id"]}, headers=_ORIGIN)
+    assert r.status_code == 200, r.text
+    cont = r.json()["contenido"]
+    assert cont["clase"] == "tarea"
+    assert cont["evento_id"] == ev["id"]
+    assert cont["responsable_id"] == _id_usuario("ana")
+    assert cont["titulo"] == "Cruz Azul vs América"
+
+
+def test_cubrir_evento_idempotente_una_sola_tarea(entorno):
+    """Cubrir el mismo evento dos veces NO crea dos tareas: find-or-create por evento_id."""
+    c = _cli("ana")
+    ev = _crear_evento()
+    r1 = c.post("/api/contenido/cubrir-evento", json={"evento_id": ev["id"]}, headers=_ORIGIN)
+    r2 = c.post("/api/contenido/cubrir-evento", json={"evento_id": ev["id"]}, headers=_ORIGIN)
+    assert r1.status_code == 200 and r2.status_code == 200, r2.text
+    assert r1.json()["contenido"]["id"] == r2.json()["contenido"]["id"]
+    tareas = [
+        x
+        for x in c.get("/api/contenido?clase=tarea").json()["contenidos"]
+        if x["evento_id"] == ev["id"]
+    ]
+    assert len(tareas) == 1
+
+
+def test_cubrir_evento_ya_cogido_por_otro_da_409(entorno):
+    c_luis = _cli("luis")
+    c_ana = _cli("ana")
+    ev = _crear_evento()
+    c_luis.post("/api/contenido/cubrir-evento", json={"evento_id": ev["id"]}, headers=_ORIGIN)
+    r = c_ana.post("/api/contenido/cubrir-evento", json={"evento_id": ev["id"]}, headers=_ORIGIN)
+    assert r.status_code == 409
+    assert r.json()["responsable_nombre"] == "luis"
+
+
+def test_cubrir_evento_admin_asigna_a_otro_y_avisa(entorno):
+    _cli("luis")
+    c_admin = _cli_admin()
+    luis = _id_usuario("luis")
+    ev = _crear_evento()
+    r = c_admin.post(
+        "/api/contenido/cubrir-evento",
+        json={"evento_id": ev["id"], "responsable_id": luis},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["contenido"]["responsable_id"] == luis
+    assert any(n["tipo"] == "asignacion" for n in repos.listar_notificaciones(luis, None))
+
+
+def test_cubrir_evento_editor_no_asigna_a_otro_403(entorno):
+    c_ana = _cli("ana")
+    _cli("luis")
+    luis = _id_usuario("luis")
+    ev = _crear_evento()
+    r = c_ana.post(
+        "/api/contenido/cubrir-evento",
+        json={"evento_id": ev["id"], "responsable_id": luis},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 403
+
+
+def test_cubrir_evento_inexistente_404(entorno):
+    c = _cli("ana")
+    r = c.post(
+        "/api/contenido/cubrir-evento", json={"evento_id": "fantasma"}, headers=_ORIGIN
+    )
+    assert r.status_code == 404

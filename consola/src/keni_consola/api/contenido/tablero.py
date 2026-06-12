@@ -11,6 +11,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from ...dominio import notificaciones
+from ...estados import CLASE_TAREA
 from ...permisos import es_admin
 from ...tiempo import hoy_utc
 from ._comun import (
@@ -493,4 +494,101 @@ async def asignar(request: Request) -> Response:
     notificaciones.tras_asignacion(item, autor)
     plataformas = repos.listar_contenido_plataforma(contenido_id)
     etiquetas = repos.etiquetas_por_contenido().get(contenido_id, [])
+    return JSONResponse({"contenido": _contenido_a_dict(item, plataformas, etiquetas)})
+
+
+async def cubrir_evento(request: Request) -> Response:
+    """POST /api/contenido/cubrir-evento {evento_id, responsable_id?}: registra la COBERTURA
+    de un evento de la rota.
+
+    La lista de Tareas muestra TODOS los eventos a cubrir (auto-rellenados desde Fuentes); un
+    evento «por cubrir» pasa a tener dueño aquí, mediante una tarea (clase='tarea') enlazada
+    por `evento_id`. Idempotente: un evento tiene como mucho UNA tarea de cobertura
+    (find-or-create). Sin `responsable_id` (o el propio) = self-claim atómico del usuario; con
+    otro `responsable_id` (solo admin) = el manager empuja a esa persona y se le avisa in-app.
+    """
+    autor = autor_de_peticion(request)
+    if not autor or not autor.get("id"):
+        return JSONResponse({"error": "Necesitas iniciar sesión."}, status_code=401)
+    datos = await leer_json(request)
+    evento_id = datos.get("evento_id")
+    if not isinstance(evento_id, str) or not evento_id.strip():
+        return JSONResponse({"error": "Falta el evento a cubrir."}, status_code=400)
+    evento = repos.obtener_evento_rota(evento_id)
+    if evento is None:
+        return JSONResponse({"error": "Ese evento ya no existe."}, status_code=404)
+
+    # ¿A quién? Sin responsable_id (o el mío) = me la cojo yo; con OTRO = el manager asigna.
+    destino = datos.get("responsable_id")
+    asignar_a_otro = isinstance(destino, str) and bool(destino) and destino != autor["id"]
+    if asignar_a_otro and not es_admin(request):
+        return JSONResponse(
+            {"error": "Solo el responsable de la lista puede asignar a otra persona."},
+            status_code=403,
+        )
+    if isinstance(destino, str) and destino:
+        responsable, valido = _resolver_responsable(destino)
+        if not valido or responsable is None:
+            return JSONResponse(
+                {"error": "El responsable no es un usuario válido."}, status_code=400
+            )
+    else:
+        responsable = {"id": autor["id"], "usuario": autor.get("usuario", "") or ""}
+
+    # find-or-create la tarea de cobertura (idempotente por evento_id). Nace LIBRE; el dueño
+    # se fija abajo (claim atómico o push), nunca al crear. NO copia título/fecha del evento
+    # como datos muertos: referencia `evento_id` y la UI resuelve los campos vivos del evento.
+    existentes = repos.listar_contenido(clase=CLASE_TAREA, evento_id=evento_id)
+    tarea = (
+        existentes[0]
+        if existentes
+        else repos.crear_contenido(
+            clase=CLASE_TAREA,
+            titulo=evento.get("titulo") or "Cobertura",
+            marca=evento.get("marca") or "",
+            evento_id=evento_id,
+            prioridad=evento.get("prioridad") or "media",
+            fecha_objetivo=evento.get("fecha") or "",
+            hora_objetivo=evento.get("hora") or "",
+            autor=autor,
+        )
+    )
+
+    if asignar_a_otro:
+        item = (
+            repos.actualizar_contenido(
+                tarea["id"],
+                {
+                    "responsable_id": responsable["id"],
+                    "responsable_nombre": responsable["usuario"],
+                },
+            )
+            or tarea
+        )
+        notificaciones.tras_asignacion(item, autor)
+    else:
+        item = repos.reclamar_contenido(
+            tarea["id"],
+            responsable_id=responsable["id"],
+            responsable_nombre=responsable["usuario"],
+        )
+        if item is None:
+            actual = repos.obtener_contenido(tarea["id"])
+            if actual and (actual.get("responsable_id") or "") == responsable["id"]:
+                item = actual  # ya era mía: idempotente
+            else:
+                return JSONResponse(
+                    {
+                        "error": (
+                            f"Ya la cogió {actual.get('responsable_nombre') or 'otra persona'}."
+                            if actual
+                            else "Ese contenido ya no existe."
+                        ),
+                        "responsable_id": (actual or {}).get("responsable_id") or "",
+                        "responsable_nombre": (actual or {}).get("responsable_nombre") or "",
+                    },
+                    status_code=409,
+                )
+    plataformas = repos.listar_contenido_plataforma(item["id"])
+    etiquetas = repos.etiquetas_por_contenido().get(item["id"], [])
     return JSONResponse({"contenido": _contenido_a_dict(item, plataformas, etiquetas)})
