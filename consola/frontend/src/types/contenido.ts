@@ -413,8 +413,9 @@ export type IntencionMaterial = "breaking" | "evergreen" | "hilo";
  *  El equipo sube material ORIGINAL con marca y eso enciende la auto-generación de copy
  *  (origen='equipo'). La marca es OBLIGATORIA (sin voz no hay generación). */
 export interface CuerpoAportarMaterial {
-  /** De qué va la pieza (la auto-generación lo usa como nota base). */
-  titulo: string;
+  /** De qué va la pieza (la auto-generación lo usa como nota base). Opcional: si falta, el
+   *  backend lo deriva (título de la página del enlace > 1ª línea del material > foto). */
+  titulo?: string;
   /** Marca obligatoria (id canónico). */
   marca: string;
   /** Nota / idea / texto crudo -> descripción del tema. */

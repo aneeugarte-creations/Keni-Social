@@ -98,7 +98,8 @@ export const apiContenido = {
   // copy automáticamente. Multipart porque puede llevar la foto que el equipo trae de fuera.
   aportarMaterial: (cuerpo: CuerpoAportarMaterial) => {
     const form = new FormData();
-    form.set("titulo", cuerpo.titulo);
+    // Título OPCIONAL: solo se manda si el equipo lo dio; si no, el backend lo deriva.
+    if (cuerpo.titulo) form.set("titulo", cuerpo.titulo);
     form.set("marca", cuerpo.marca);
     if (cuerpo.material) form.set("material", cuerpo.material);
     if (cuerpo.url) form.set("url", cuerpo.url);

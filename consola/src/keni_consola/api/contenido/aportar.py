@@ -10,6 +10,7 @@ from starlette.datastructures import UploadFile
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from ...dominio import extraccion_url
 from ...tiempo import hoy_utc
 from ._comun import (
     _MAX_TEXTO,
@@ -34,6 +35,17 @@ _INTENCION_A_FLUJO: dict[str, str] = {
     "evergreen": "evergreen",
     "hilo": "importante",
 }
+
+# Rotulo de la idea en el feed cuando el equipo NO da titulo: la 1a linea no vacia del
+# material, acotada (un material entero como titulo gritaria en la cabecera del feed).
+# Mismo criterio que el alta directa (`post_directo._titulo_desde_copy`).
+_MAX_TITULO_DERIVADO = 120
+
+
+def _primera_linea(texto: str) -> str:
+    """Primera linea no vacia de `texto`, acotada, como titulo derivado."""
+    primera = next((ln.strip() for ln in texto.splitlines() if ln.strip()), "")
+    return primera[:_MAX_TITULO_DERIVADO]
 
 
 def _redes_desde_form(valor: object) -> list[str]:
@@ -64,12 +76,20 @@ async def aportar(request: Request) -> Response:
     de revision.
 
     Campos (form multipart):
-      - `titulo` (OBLIGATORIO): de que va la pieza. El auto-copy lo usa como nota base.
+      - `titulo` (opcional): de que va la pieza. El auto-copy lo usa como nota base. Si falta,
+        se DERIVA (titulo de la pagina extraida de `url` > 1a linea del `material` > foto). Se
+        EXIGE titulo O algun contenido (material/url/imagen/clip): un alta vacia no genera nada.
       - `marca` (OBLIGATORIO): sin marca no hay voz/tropicalizacion, asi que la auto-gen no
         arrancaria; aqui se EXIGE (a diferencia de `crear`, donde es opcional).
       - `material` (opcional): texto/nota/idea cruda -> `descripcion` (entra en la nota del
         auto-copy junto al titulo).
-      - `url` (opcional): enlace de la fuente del material -> `imagen_fuente` de cada red.
+      - `url` (opcional): enlace de la fuente. Se VALIDA (SSRF guard) y se EXTRAE su texto
+        legible EN EL SERVIDOR (`dominio.extraccion_url`, mismo camino que «copy desde nota»);
+        ese texto se pliega al `material` como NOTA NO verificada para que el auto-copy redacte
+        desde el contenido real del enlace (la auto-gen lee titulo+descripcion, NO descarga la
+        URL por su cuenta). El enlace queda ademas como `imagen_fuente` de cada red. Si el
+        enlace es de video/streaming o no se puede leer y es lo UNICO aportado, se rechaza con
+        un mensaje claro; si hay otro material/foto, se sigue sin el texto del enlace.
       - `intencion` (opcional): 'breaking'|'evergreen'|'hilo' -> mapea el `flujo`.
       - `redes` (opcional): redes objetivo (lista o "instagram,x"); por defecto, las canonicas.
       - `imagen` (opcional): la FOTO que el equipo trae de fuera (la IA NO la genera). Se sube
@@ -88,9 +108,10 @@ async def aportar(request: Request) -> Response:
     except Exception:  # noqa: BLE001 -- multipart malformado => mensaje claro, sin traza
         return JSONResponse({"error": "Formulario inválido."}, status_code=400)
 
-    titulo = form.get("titulo")
-    if not isinstance(titulo, str) or not titulo.strip():
-        return JSONResponse({"error": "El material necesita un título."}, status_code=400)
+    # El titulo es OPCIONAL: si falta se deriva (de la pagina extraida, del material o de la
+    # foto) mas abajo. Aqui solo acotamos su longitud si vino.
+    titulo_crudo = form.get("titulo")
+    titulo = titulo_crudo.strip() if isinstance(titulo_crudo, str) else ""
     if len(titulo) > _MAX_TITULO:
         return JSONResponse({"error": "El título es demasiado largo."}, status_code=400)
 
@@ -112,10 +133,6 @@ async def aportar(request: Request) -> Response:
         return v.strip()[:_MAX_TEXTO] if isinstance(v, str) else ""
 
     material = _texto("material")
-    url = ""
-    url_crudo = form.get("url")
-    if isinstance(url_crudo, str) and url_crudo.strip():
-        url = url_crudo.strip()[:_MAX_TEXTO]
 
     redes_objetivo = _redes_desde_form(form.get("redes"))
     if not redes_objetivo:
@@ -152,6 +169,44 @@ async def aportar(request: Request) -> Response:
             bloque = f"Transcripción del clip aportado (sin verificar): {texto}"
             material = f"{material}\n\n{bloque}".strip()[:_MAX_TEXTO] if material else bloque[:_MAX_TEXTO]
 
+    # Enlace de la fuente (opcional): se VALIDA (guard SSRF) y se EXTRAE su texto legible EN EL
+    # SERVIDOR, plegandolo al `material` como nota NO verificada (mismo dominio que «copy desde
+    # nota»). Asi el auto-copy redacta desde el contenido REAL del enlace, no desde la URL a
+    # secas (la auto-gen lee titulo+descripcion, NO descarga la pagina). El enlace queda ademas
+    # como `imagen_fuente` de cada red. Si no se puede leer (video/streaming, muro de pago, sin
+    # texto) y es lo UNICO aportado, se rechaza con mensaje claro; si hay otro material/foto, se
+    # sigue sin el texto del enlace (queda como fuente).
+    url = ""
+    titulo_pagina = ""
+    url_crudo = form.get("url")
+    if isinstance(url_crudo, str) and url_crudo.strip():
+        url_limpia, err_url = extraccion_url.validar_url(url_crudo)
+        if err_url is not None or url_limpia is None:
+            return JSONResponse({"error": err_url or "La URL no es válida."}, status_code=400)
+        url = url_limpia
+        try:
+            titulo_pagina, cuerpo = extraccion_url.extraer_texto(url)
+        except extraccion_url.ExtraccionError as e:
+            if not material and not foto:
+                return JSONResponse({"error": str(e)}, status_code=400)
+            titulo_pagina = ""
+        else:
+            nota = extraccion_url.componer_nota_no_verificada(url, titulo_pagina, cuerpo)
+            material = f"{material}\n\n{nota}".strip()[:_MAX_TEXTO] if material else nota[:_MAX_TEXTO]
+
+    # Titulo derivado si el equipo no lo dio: titulo real de la pagina > 1a linea del material
+    # > generico de foto. Exigimos titulo O algun contenido (material/url/imagen/clip): un alta
+    # del todo vacia no tiene de que generar copy.
+    if not titulo:
+        titulo = titulo_pagina.strip()[:_MAX_TITULO_DERIVADO] or _primera_linea(material)
+    if not titulo and foto:
+        titulo = "Foto del equipo"
+    if not titulo:
+        return JSONResponse(
+            {"error": "Aporta un título, un texto, un enlace o una imagen."},
+            status_code=400,
+        )
+
     # Reparto automatico de responsable desde la rota del dia (mismo patron que `crear`):
     # el equipo solo aporta; el reparto es automatico. Degrada a None sin romper.
     responsable = auto_responsable.responsable_automatico(marca)
@@ -159,7 +214,7 @@ async def aportar(request: Request) -> Response:
     item = repos.crear_contenido(
         clase="contenido",
         flujo=flujo,
-        titulo=titulo.strip(),
+        titulo=titulo,
         descripcion=material,
         marca=marca,
         prioridad="media",

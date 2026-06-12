@@ -12,6 +12,7 @@ from starlette.testclient import TestClient
 
 from keni_consola import app as app_modulo
 from keni_consola import auth, repos
+from keni_consola.dominio import extraccion_url
 
 from .conftest import TOKEN_PRUEBA
 
@@ -380,10 +381,76 @@ def test_aportar_exige_marca(entorno):
     assert r2.status_code == 400
 
 
-def test_aportar_sin_titulo_400(entorno):
+def test_aportar_sin_titulo_ni_contenido_400(entorno):
     c = _cli()
+    # El titulo es opcional, pero un alta SIN titulo y SIN nada que aportar (ni material, ni
+    # enlace, ni imagen) no tiene de que generar copy: se rechaza.
     r = c.post(
         "/api/contenido/aportar", data={"marca": "unotv"}, headers=_ORIGIN
+    )
+    assert r.status_code == 400
+
+
+def test_aportar_sin_titulo_deriva_de_material(entorno):
+    c = _cli()
+    # Sin titulo explicito, se DERIVA de la 1a linea no vacia del material (rotulo del feed).
+    r = c.post(
+        "/api/contenido/aportar",
+        data={
+            "marca": "unotv",
+            "material": "Remontada histórica en el clásico\nGanó 3-2 en el descuento.",
+            "redes": "x",
+        },
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    cont = r.json()["contenido"]
+    assert cont["titulo"] == "Remontada histórica en el clásico"
+    assert "Ganó 3-2" in cont["descripcion"]
+    assert cont["origen"] == "equipo"
+
+
+def test_aportar_desde_url_extrae_texto_y_deriva_titulo(entorno, monkeypatch):
+    c = _cli()
+    # Se pega SOLO un enlace: la puerta creativa lo VALIDA, descarga la pagina EN EL SERVIDOR
+    # (descargador inyectable, sin red real) y pliega su texto al material como nota NO
+    # verificada, para que el auto-copy redacte desde el contenido real. El titulo se deriva del
+    # titular de la pagina. Parcheamos `validar_url` (evita DNS/SSRF real) y el `_DESCARGADOR`.
+    html = (
+        "<html><head><title>Gol en el último minuto</title></head>"
+        "<body><article><p>El delantero marcó en el 90+4 y el estadio estalló.</p>"
+        "</article></body></html>"
+    )
+    monkeypatch.setattr(extraccion_url, "validar_url", lambda u: (u, None))
+    monkeypatch.setattr(extraccion_url, "_DESCARGADOR", lambda url: html)
+    r = c.post(
+        "/api/contenido/aportar",
+        data={"marca": "unotv", "url": "https://ejemplo.mx/nota", "redes": "x"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    cont = r.json()["contenido"]
+    # Titulo derivado del titular real de la pagina (no de la URL a secas).
+    assert cont["titulo"] == "Gol en el último minuto"
+    # El texto extraido entra como descripcion (nota base del auto-copy), marcado NO verificado.
+    assert "El delantero marcó" in cont["descripcion"]
+    assert "NO VERIFICADO" in cont["descripcion"]
+    assert cont["origen"] == "equipo"
+
+
+def test_aportar_url_ilegible_y_sin_mas_contenido_400(entorno, monkeypatch):
+    c = _cli()
+    # Si el enlace no se puede leer (aqui forzamos un fallo de extraccion) y es lo UNICO que se
+    # aporto, no hay de que redactar: se rechaza con mensaje claro (no se crea una pieza vacia).
+    def _boom(url):
+        raise extraccion_url.ExtraccionError("No se pudo leer la página.")
+
+    monkeypatch.setattr(extraccion_url, "validar_url", lambda u: (u, None))
+    monkeypatch.setattr(extraccion_url, "extraer_texto", _boom)
+    r = c.post(
+        "/api/contenido/aportar",
+        data={"marca": "unotv", "url": "https://ejemplo.mx/nota"},
+        headers=_ORIGIN,
     )
     assert r.status_code == 400
 
