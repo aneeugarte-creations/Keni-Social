@@ -6,7 +6,7 @@
  * que ambas superficies enseñen el MISMO trabajo con el MISMO vocabulario.
  */
 import { useQuery } from "@tanstack/react-query";
-import { LayoutGrid, Send, ThumbsUp, type LucideIcon } from "lucide-react";
+import { Clock, LayoutGrid, Send, type LucideIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { FILTRO_TODOS } from "@/hooks/filtros-contenido-contexto";
@@ -26,24 +26,28 @@ export const PAGINAS_POR_LOTE = 5;
 export const TOPE_PAGINAS_PIEZA = 3 * PAGINAS_POR_LOTE;
 
 /**
- * Pestañas del feed: una PARTICIÓN del ciclo por ESTADO. "Todo el feed" es la unión; "Por
- * aprobar" mapea 1:1 a `en_revision` y va con consulta DEDICADA (el servidor filtra);
- * "Aprobadas y publicadas" filtra en cliente los tres estados finales. `filtra` mantiene la
- * misma regla en cliente. `etiquetaCorta` es el texto visible en <sm (un sr-only conserva el
- * completo).
+ * Pestañas del feed: una PARTICIÓN BINARIA del ciclo por ESTADO, con "Todas" como unión.
+ * "Pendientes" es TODO lo que aún no salió (cualquier estado salvo `publicado`: borrador,
+ * en_revision, aprobado, programado); "Publicadas" es exactamente lo `publicado`. Ambas van
+ * con consulta DEDICADA al servidor (pseudo-estados `pendiente`/`publicado`, ver
+ * `ESTADO_SERVIDOR_DE_VISTA`), así la paginación y los totales son exactos en las dos
+ * superficies (feed por keyset y lista por offset). `filtra` repite la misma regla en cliente
+ * (idempotente sobre la consulta ya filtrada). `etiquetaCorta` es el texto visible en <sm (un
+ * sr-only conserva el completo). El ORDEN de este array ES el orden de las pestañas:
+ * Pendientes · Publicadas · Todas.
  *
  * NO hay pestaña «En preparación»: «borrador» dejó de ser un estado donde descanse una pieza
- * —el pipeline mueve sola toda pieza completa a la cola de revisión (avance incondicional)—, así
- * que los borradores son transitorios y caen en "Todo el feed" mientras existen.
+ * —el pipeline mueve sola toda pieza completa a la cola de revisión—, así que los borradores
+ * son transitorios y caen en "Pendientes" (no son `publicado`) mientras existen.
  */
-export type Vista = "todo" | "por_aprobar" | "publicado";
+export type Vista = "pendiente" | "publicado" | "todo";
 
 export interface VistaFeed {
   id: Vista;
-  // Vocabulario en FEMENINO donde se nombra a la pieza ("Aprobadas y publicadas"): la unidad
-  // del feed es LA pieza (regla documentada en `etapa.ts`).
+  // Vocabulario en FEMENINO donde se nombra a la pieza ("Pendientes", "Publicadas", "Todas"):
+  // la unidad del feed es LA pieza (regla documentada en `etapa.ts`).
   etiqueta: string;
-  /** Etiqueta corta EXPLÍCITA para <sm: las 4 pestañas caben en una fila a 320px. */
+  /** Etiqueta corta EXPLÍCITA para <sm: las 3 pestañas caben en una fila a 320px. */
   etiquetaCorta: string;
   icono: LucideIcon;
   filtra: (p: Publicacion) => boolean;
@@ -52,9 +56,33 @@ export interface VistaFeed {
 
 export const VISTAS: VistaFeed[] = [
   {
+    id: "pendiente",
+    etiqueta: "Pendientes",
+    etiquetaCorta: "Pendientes",
+    icono: Clock,
+    // Pendiente = TODO lo que aún no salió: cualquier estado que no sea `publicado`
+    // (borrador, en_revision, aprobado, programado). El servidor ya filtra igual.
+    filtra: (p) => p.estado !== "publicado",
+    vacio: {
+      titulo: "Nada pendiente",
+      texto: "No hay piezas en cola; todo lo del equipo ya salió.",
+    },
+  },
+  {
+    id: "publicado",
+    etiqueta: "Publicadas",
+    etiquetaCorta: "Publicadas",
+    icono: Send,
+    filtra: (p) => p.estado === "publicado",
+    vacio: {
+      titulo: "Sin piezas publicadas",
+      texto: "",
+    },
+  },
+  {
     id: "todo",
-    etiqueta: "Todo el feed",
-    etiquetaCorta: "Todo",
+    etiqueta: "Todas",
+    etiquetaCorta: "Todas",
     icono: LayoutGrid,
     filtra: () => true,
     vacio: {
@@ -62,64 +90,41 @@ export const VISTAS: VistaFeed[] = [
       texto: "Esperando piezas del equipo.",
     },
   },
-  {
-    id: "por_aprobar",
-    etiqueta: "Por aprobar",
-    etiquetaCorta: "Aprobar",
-    icono: ThumbsUp,
-    filtra: (p) => p.estado === "en_revision",
-    vacio: {
-      titulo: "Nada por aprobar",
-      // El detalle de cuántos OK lleva cada pieza lo enseña `CadenaAprobacion` pieza a pieza.
-      texto: "Esperando piezas listas para revisar.",
-    },
-  },
-  {
-    id: "publicado",
-    etiqueta: "Aprobadas y publicadas",
-    etiquetaCorta: "Publicadas",
-    icono: Send,
-    filtra: (p) => ["aprobado", "programado", "publicado"].includes(p.estado),
-    vacio: {
-      titulo: "Sin piezas aprobadas ni publicadas",
-      texto: "",
-    },
-  },
 ];
 
 /**
  * Vista válida desde la URL (`?vista=`); ausente o desconocida → `porDefecto` ("todo" en
- * escritorio; el móvil arranca en "por_aprobar", su trabajo).
+ * escritorio; el móvil arranca en "pendiente", su trabajo).
  */
 export function vistaDesdeParam(v: string | null, porDefecto: Vista = "todo"): Vista {
   return VISTAS.some((x) => x.id === v) ? (v as Vista) : porDefecto;
 }
 
 /**
- * CONSULTA DEDICADA por estado: "Por aprobar" mapea 1:1 a `en_revision` y el SERVIDOR filtra.
- * "Todo" y "Aprobadas y publicadas" comparten el listado base (`estado` ausente → misma query
- * cacheada); la vista de 3 estados filtra en cliente (el parámetro `estado` del backend admite UNO).
+ * CONSULTA DEDICADA por estado: el SERVIDOR filtra las dos vistas de partición vía
+ * pseudo-estados (`?estado=pendiente` = todo lo no publicado; `?estado=publicado` = lo
+ * publicado). "Todas" va sin `estado` (listado base). Así cada vista paginada (keyset del
+ * feed y offset de la lista) trae solo SUS filas y el `total` es exacto, sin filtrar en
+ * cliente listas enteras.
  */
-export const ESTADO_SERVIDOR_DE_VISTA: Record<Vista, "en_revision" | undefined> = {
+export const ESTADO_SERVIDOR_DE_VISTA: Record<Vista, "pendiente" | "publicado" | undefined> = {
+  pendiente: "pendiente",
+  publicado: "publicado",
   todo: undefined,
-  por_aprobar: "en_revision",
-  publicado: undefined,
 };
 
 /**
  * CONTEOS para los badges de las pestañas: el total EXACTO del servidor con cualquier filtro
  * (`limite=1` activa el modo offset: 1 fila + `paginacion.total`). Tres consultas ligeras:
- * todos / borrador / en_revision; "Aprobadas y publicadas" es la RESTA exacta (todos − borrador
- * − en_revision). El conteo de borradores ya NO tiene pestaña propia (son transitorios), pero
- * se sigue restando para que "Aprobadas y publicadas" no los cuente. Se cuentan PIEZAS (la
- * unidad canónica del hub), no ideas: deliberado.
+ * pendiente / publicado / en_revision. "Todas" es la SUMA exacta (pendiente + publicado), así
+ * que no se gasta una cuarta consulta. `totalRevision` no tiene pestaña propia (cae dentro de
+ * "Pendientes") pero alimenta el ÉNFASIS de "Pendientes" (el "te toca decidir": hay algo
+ * realmente esperando aprobación). Se cuentan PIEZAS (la unidad canónica del hub), no ideas.
  *
  * `filtros` lleva los parámetros YA resueltos para la query (ausente = sin filtro); la clave
  * usa los mismos centinelas que las claves históricas de `FeedIdeacion` (caché compartida).
  */
 export function useConteosFeed(filtros: { marca?: string; red?: string; linea?: string }): {
-  totalTodos: number | undefined;
-  totalBorrador: number | undefined;
   totalRevision: number | undefined;
   conteoVista: Record<Vista, number | undefined>;
 } {
@@ -133,15 +138,16 @@ export function useConteosFeed(filtros: { marca?: string; red?: string; linea?: 
       linea ?? FILTRO_TODOS,
       estado ?? "todos",
     ] as const;
-  const conteoTodos = useQuery({
-    queryKey: claveConteo(),
-    queryFn: ({ signal }) => api.publicaciones({ marca, red, linea, limite: "1" }, signal),
+  const conteoPendiente = useQuery({
+    queryKey: claveConteo("pendiente"),
+    queryFn: ({ signal }) =>
+      api.publicaciones({ marca, red, linea, estado: "pendiente", limite: "1" }, signal),
     staleTime: 30_000,
   });
-  const conteoBorrador = useQuery({
-    queryKey: claveConteo("borrador"),
+  const conteoPublicado = useQuery({
+    queryKey: claveConteo("publicado"),
     queryFn: ({ signal }) =>
-      api.publicaciones({ marca, red, linea, estado: "borrador", limite: "1" }, signal),
+      api.publicaciones({ marca, red, linea, estado: "publicado", limite: "1" }, signal),
     staleTime: 30_000,
   });
   const conteoRevision = useQuery({
@@ -150,19 +156,19 @@ export function useConteosFeed(filtros: { marca?: string; red?: string; linea?: 
       api.publicaciones({ marca, red, linea, estado: "en_revision", limite: "1" }, signal),
     staleTime: 30_000,
   });
-  const totalTodos = conteoTodos.data?.paginacion?.total;
-  const totalBorrador = conteoBorrador.data?.paginacion?.total;
+  const totalPendiente = conteoPendiente.data?.paginacion?.total;
+  const totalPublicado = conteoPublicado.data?.paginacion?.total;
   const totalRevision = conteoRevision.data?.paginacion?.total;
   // El badge solo se pinta con su número RESUELTO (nada de parpadeos de 0 mientras carga).
   const conteoVista: Record<Vista, number | undefined> = {
-    todo: totalTodos,
-    por_aprobar: totalRevision,
-    publicado:
-      totalTodos != null && totalBorrador != null && totalRevision != null
-        ? Math.max(0, totalTodos - totalBorrador - totalRevision)
+    pendiente: totalPendiente,
+    publicado: totalPublicado,
+    todo:
+      totalPendiente != null && totalPublicado != null
+        ? totalPendiente + totalPublicado
         : undefined,
   };
-  return { totalTodos, totalBorrador, totalRevision, conteoVista };
+  return { totalRevision, conteoVista };
 }
 
 /**
@@ -175,8 +181,8 @@ export function useConteosFeed(filtros: { marca?: string; red?: string; linea?: 
  *
  * Badge `outline` sobre `bg-muted`: discreto sobre el rail muted del TabsList y destacado
  * sobre el trigger activo (fondo background) — la jerarquía correcta en claro y oscuro.
- * `enfasis` (la pestaña "Por aprobar" con pendientes) usa el mismo acento keni del
- * "te toca decidir" de `PostFeed`.
+ * `enfasis` (la pestaña "Pendientes" cuando hay algo realmente esperando aprobación) usa el
+ * mismo acento keni del "te toca decidir" de `PostFeed`.
  */
 export function ContenidoPestanaVista({
   vista,

@@ -205,9 +205,8 @@ export default function FeedIdeacion() {
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),
   });
 
-  // CONSULTA DEDICADA por estado (ver `ESTADO_SERVIDOR_DE_VISTA` en vistas.tsx): "En
-  // preparación" y "Por aprobar" llegan filtradas del servidor; "Todo" y "Aprobadas y
-  // publicadas" comparten el listado base.
+  // CONSULTA DEDICADA por estado (ver `ESTADO_SERVIDOR_DE_VISTA` en vistas.tsx): "Pendientes" y
+  // "Publicadas" llegan filtradas del servidor (pseudo-estados); "Todas" comparte el listado base.
   const estadoServidor = ESTADO_SERVIDOR_DE_VISTA[vista];
 
   // SCROLL INFINITO (feed social): primera página pequeña (instantánea) por keyset `creado DESC`
@@ -220,7 +219,7 @@ export default function FeedIdeacion() {
       marcaActiva ?? MARCA_ACTIVA_TODAS,
       red,
       linea,
-      // "todos" agrupa "Todo el feed" y "Aprobadas y publicadas" en LA MISMA query cacheada.
+      // "todos" identifica la vista "Todas" (sin `estado`); las otras dos van por pseudo-estado.
       estadoServidor ?? "todos",
     ],
     initialPageParam: undefined as string | undefined,
@@ -374,9 +373,9 @@ export default function FeedIdeacion() {
     [grupos, vistaActual],
   );
 
-  // TOPE de la búsqueda encadenada: SOLO en la vista que filtra en cliente ("Aprobadas y
-  // publicadas", `estadoServidor === undefined`); en las dedicadas el servidor filtra y cada
-  // página trae resultados. Con la vista vacía, el sentinel encadena hasta `lotesBusqueda ×
+  // TOPE de la búsqueda encadenada: SOLO en la vista sin `estado` ("Todas",
+  // `estadoServidor === undefined`); en las dedicadas el servidor filtra y cada página trae
+  // resultados. Con la vista vacía, el sentinel encadena hasta `lotesBusqueda ×
   // PAGINAS_POR_LOTE` páginas; después se para y ofrece "Seguir buscando".
   const vistaVacia = gruposVista.length === 0 && !feedQuery.isLoading && !feedQuery.isError;
   const paginasCargadas = feedQuery.data?.pages.length ?? 0;
@@ -428,9 +427,9 @@ export default function FeedIdeacion() {
   );
 
   // SALIDA de los vacíos de las vistas dedicadas/filtradas: un vacío sin acción es un punto
-  // muerto. "Por aprobar" y "Aprobadas y publicadas" mandan al feed completo.
+  // muerto. "Pendientes" y "Publicadas" mandan al feed completo.
   const accionVacio =
-    vista === "por_aprobar" || vista === "publicado" ? (
+    vista === "pendiente" || vista === "publicado" ? (
       <Button variant="outline" size="sm" onClick={() => cambiarVista("todo")}>
         Ver todo el feed
       </Button>
@@ -513,7 +512,7 @@ export default function FeedIdeacion() {
                     conteo={conteoVista[v.id]}
                     // Énfasis pasivo "te toca decidir" (mismo acento keni que el pulgar de
                     // PostFeed) cuando hay piezas esperando OK; en cero, neutro.
-                    enfasis={v.id === "por_aprobar" && (totalRevision ?? 0) > 0}
+                    enfasis={v.id === "pendiente" && (totalRevision ?? 0) > 0}
                   />
                 </TabsTrigger>
               ))}

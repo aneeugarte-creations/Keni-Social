@@ -114,6 +114,24 @@ def test_filtros(cliente):
     )
 
 
+def test_filtro_pendiente_pseudo_estado(cliente):
+    """`?estado=pendiente` = TODO lo que aún no salió (cualquier estado salvo `publicado`);
+    su complementario EXACTO es `?estado=publicado`, de modo que pendiente + publicado = total.
+    Es la partición binaria del feed/lista (Pendientes · Publicadas · Todas)."""
+    for estado in ("borrador", "en_revision", "aprobado", "programado", "publicado"):
+        _crear(cliente, red="x", estado=estado)
+    total = cliente.get("/api/publicaciones?marca=unotv").json()["paginacion"]["total"]
+    pend = cliente.get("/api/publicaciones?marca=unotv&estado=pendiente").json()
+    pub = cliente.get("/api/publicaciones?marca=unotv&estado=publicado").json()
+    assert total == 5
+    # Pendientes = los 4 no publicados; Publicadas = solo el publicado.
+    assert pend["paginacion"]["total"] == 4
+    assert pub["paginacion"]["total"] == 1
+    # Partición exacta: ninguna pieza publicada se cuela en pendientes y la suma cuadra.
+    assert all(p["estado"] != "publicado" for p in pend["publicaciones"])
+    assert pend["paginacion"]["total"] + pub["paginacion"]["total"] == total
+
+
 def test_opciones_incluye_lineas(cliente):
     """`opciones.lineas` expone las etiquetas verticales (líneas editoriales) activas."""
     from keni_consola import repos

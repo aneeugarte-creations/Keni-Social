@@ -67,6 +67,18 @@ const PUBLICACION = {
 };
 
 /**
+ * ¿Casa la pieza con el filtro `estado=` del backend? Modela los PSEUDO-ESTADOS de la
+ * partición del feed: `pendiente` = todo lo que no es `publicado`; `publicado` = solo lo
+ * publicado; sin estado = todo. Cualquier otro estado va por igualdad exacta (conteos).
+ */
+function casaEstado(estado: string | null, piezaEstado: unknown): boolean {
+  if (!estado) return true;
+  if (estado === "pendiente") return piezaEstado !== "publicado";
+  if (estado === "publicado") return piezaEstado === "publicado";
+  return piezaEstado === estado;
+}
+
+/**
  * Stub de fetch: enruta opciones, cadenas (lote e individual), comentarios y el listado.
  * El listado FILTRA por `estado=` como el backend (consultas dedicadas de las vistas y
  * conteos con `limite=1`, que devuelven `paginacion.total` exacto del filtro).
@@ -127,9 +139,7 @@ function stubFetch(publicaciones: Array<Record<string, unknown>> = [PUBLICACION]
       if (ruta.includes("/api/publicaciones")) {
         const params = new URL(ruta, "http://localhost").searchParams;
         const estado = params.get("estado");
-        const lista = estado
-          ? publicaciones.filter((p) => p.estado === estado)
-          : publicaciones;
+        const lista = publicaciones.filter((p) => casaEstado(estado, p.estado));
         return new Response(
           JSON.stringify({
             publicaciones: params.get("limite") === "1" ? lista.slice(0, 1) : lista,
@@ -213,35 +223,36 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     }
   });
 
-  it("muestra 3 pestañas-vista del mismo feed (todo / por aprobar / publicadas), sin 'En preparación'", async () => {
+  it("muestra 3 pestañas-vista del mismo feed EN ORDEN (Pendientes · Publicadas · Todas), sin 'En preparación'", async () => {
     stubFetch();
     renderFeed();
     // 3 vistas-partición por estado. Es un hub: la barra son las PESTAÑAS, sin título de
     // página propio. El nombre accesible se compone del DOM (etiqueta completa + conteo en
     // piezas), no de un aria-label que pise el número: por eso se matchea por regex.
-    expect(await screen.findByRole("tab", { name: /Todo el feed/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Por aprobar/ })).toBeInTheDocument();
-    // Vocabulario en femenino (la unidad es LA pieza): "Aprobadas y publicadas".
-    expect(screen.getByRole("tab", { name: /Aprobadas y publicadas/ })).toBeInTheDocument();
+    const pestanas = await screen.findAllByRole("tab");
+    expect(pestanas.map((t) => t.textContent)).toEqual([
+      expect.stringContaining("Pendientes"),
+      expect.stringContaining("Publicadas"),
+      expect.stringContaining("Todas"),
+    ]);
     // «En preparación» ya no existe: «borrador» dejó de ser un estado donde descanse una pieza
     // (el pipeline la avanza sola a revisión), así que no hay pestaña de borradores.
     expect(screen.queryByRole("tab", { name: /En preparación/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: /En proceso/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: /Aprobado y publicado(?!s)/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /Por aprobar/ })).not.toBeInTheDocument();
   });
 
-  it("arranca en la vista de la URL (?vista=por_aprobar) y la pestaña queda activa", async () => {
+  it("arranca en la vista de la URL (?vista=pendiente) y la pestaña queda activa", async () => {
     stubFetch();
-    renderFeed({}, "/?vista=por_aprobar");
-    const tab = await screen.findByRole("tab", { name: /Por aprobar/ });
+    renderFeed({}, "/?vista=pendiente");
+    const tab = await screen.findByRole("tab", { name: /Pendientes/ });
     expect(tab).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("tab", { name: /Todo el feed/ })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: /Todas/ })).toHaveAttribute(
       "aria-selected",
       "false",
     );
   });
 
-  it("«Por aprobar» va con consulta DEDICADA (estado=en_revision) y pinta tarjetas reales, sin rastreo en cliente", async () => {
+  it("«Pendientes» va con consulta DEDICADA (estado=pendiente) y pinta tarjetas reales, sin rastreo en cliente", async () => {
     // El stub base enruta y filtra por estado; este wrapper solo captura las URLs pedidas.
     stubFetch([
       PUBLICACION,
@@ -254,32 +265,33 @@ describe("FeedIdeacion · feed de ideación interno", () => {
       return base(url);
     });
 
-    renderFeed({}, "/?vista=por_aprobar");
-    // El servidor filtra: la pieza en revisión se pinta como tarjeta REAL directamente.
+    renderFeed({}, "/?vista=pendiente");
+    // El servidor filtra: la pieza en revisión (no publicada) se pinta como tarjeta REAL.
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
+    // La publicada queda fuera de "Pendientes".
     expect(screen.queryByText("Ya salió")).not.toBeInTheDocument();
     // Sin mecánica de rastreo en cliente: ni "Seguir buscando" ni "Buscando piezas…".
     expect(screen.queryByText("Seguir buscando")).not.toBeInTheDocument();
     expect(screen.queryByText("Buscando piezas…")).not.toBeInTheDocument();
-    // La petición del feed lleva el filtro de estado al backend.
-    expect(urls.some((u) => u.includes("feed=1") && u.includes("estado=en_revision"))).toBe(true);
+    // La petición del feed lleva el pseudo-estado de la vista al backend.
+    expect(urls.some((u) => u.includes("feed=1") && u.includes("estado=pendiente"))).toBe(true);
   });
 
-  it("la pestaña filtra el feed en cliente: 'Aprobadas y publicadas' oculta lo que está por aprobar", async () => {
+  it("«Publicadas» (consulta DEDICADA estado=publicado) oculta lo que aún no salió", async () => {
     stubFetch();
     renderFeed();
-    // La única pieza (en_revision) se ve en 'Todo'.
+    // La única pieza (en_revision) se ve en 'Todas'.
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
-    // Al cambiar a 'Aprobadas y publicadas' desaparece (no está aprobada ni publicada). Las
-    // pestañas son Radix Tabs: se activan con mouseDown (no con un click sintético en jsdom).
-    fireEvent.mouseDown(screen.getByRole("tab", { name: /Aprobadas y publicadas/ }), { button: 0 });
+    // Al cambiar a 'Publicadas' el servidor filtra por estado=publicado y no devuelve la
+    // pieza en revisión. Las pestañas son Radix Tabs: se activan con mouseDown.
+    fireEvent.mouseDown(screen.getByRole("tab", { name: /Publicadas/ }), { button: 0 });
     await waitFor(() =>
       expect(screen.queryByText("¡Increíble remontada!")).not.toBeInTheDocument(),
     );
-    expect(await screen.findByText("Sin piezas aprobadas ni publicadas")).toBeInTheDocument();
+    expect(await screen.findByText("Sin piezas publicadas")).toBeInTheDocument();
   });
 
-  it("un borrador COMPLETO cae en 'Todo el feed' con badge 'Para revisar' (sin etapa intermedia) y queda fuera de 'Aprobadas y publicadas'", async () => {
+  it("la partición es binaria por 'publicado': borrador y aprobado caen en 'Pendientes', solo lo publicado en 'Publicadas'", async () => {
     const BORRADOR = {
       ...PUBLICACION,
       id: "p2",
@@ -296,18 +308,31 @@ describe("FeedIdeacion · feed de ideación interno", () => {
       estado: "aprobado",
       etapa_ia: "aprobada",
     };
-    stubFetch([PUBLICACION, BORRADOR, APROBADA]);
+    const PUBLICADA = {
+      ...PUBLICACION,
+      id: "p4",
+      contenido_id: "c4",
+      contenido: "Ya salió",
+      estado: "publicado",
+      etapa_ia: "publicada",
+    };
+    stubFetch([PUBLICACION, BORRADOR, APROBADA, PUBLICADA]);
     renderFeed();
-    // En "Todo el feed" se ve el borrador completo, pintado directo como "Para revisar": el
+    // En "Todas" se ve el borrador completo, pintado directo como "Para revisar": el
     // pipeline lo avanza solo a revisión, así que no hay badge "En borrador" intermedio.
     expect(await screen.findByText("Borrador completo")).toBeInTheDocument();
     expect(screen.getAllByText("Para revisar").length).toBeGreaterThan(0);
     expect(screen.queryByText("En borrador")).not.toBeInTheDocument();
-    // 'Aprobadas y publicadas' (filtro en cliente sobre el listado base) incluye lo aprobado
-    // SIN hueco todavía, pero NO el borrador (no es un estado final).
-    fireEvent.mouseDown(screen.getByRole("tab", { name: /Aprobadas y publicadas/ }), { button: 0 });
+    // 'Pendientes' = TODO lo que aún no salió: borrador y aprobado SÍ, lo publicado NO.
+    fireEvent.mouseDown(screen.getByRole("tab", { name: /Pendientes/ }), { button: 0 });
     expect(await screen.findByText("Aprobada sin hueco")).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByText("Borrador completo")).not.toBeInTheDocument());
+    expect(screen.getByText("Borrador completo")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Ya salió")).not.toBeInTheDocument());
+    // 'Publicadas' = SOLO lo publicado: ni borrador ni aprobado.
+    fireEvent.mouseDown(screen.getByRole("tab", { name: /Publicadas/ }), { button: 0 });
+    expect(await screen.findByText("Ya salió")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Aprobada sin hueco")).not.toBeInTheDocument());
+    expect(screen.queryByText("Borrador completo")).not.toBeInTheDocument();
   });
 
   it("badges de pestañas: el total EXACTO del servidor (piezas), sin esperar a agotar el feed", async () => {
@@ -336,7 +361,9 @@ describe("FeedIdeacion · feed de ideación interno", () => {
           const params = new URL(ruta, "http://localhost").searchParams;
           if (params.get("limite") === "1") {
             const estado = params.get("estado");
-            const total = estado === "borrador" ? 2 : estado === "en_revision" ? 4 : 9;
+            // Conteos por pseudo-estado: pendiente=6 · publicado=3 · en_revision=4 (este último
+            // solo alimenta el énfasis de "Pendientes"). "Todas" = 6+3 = 9 (suma exacta).
+            const total = estado === "pendiente" ? 6 : estado === "publicado" ? 3 : estado === "en_revision" ? 4 : 9;
             return new Response(
               JSON.stringify({
                 publicaciones: [PUBLICACION],
@@ -358,22 +385,21 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     );
     renderFeed();
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
-    // Todo=9 · Por aprobar=4 · Aprobadas y publicadas=9−2−4=3 (los 2 borradores se restan aunque
-    // ya no tengan pestaña propia, para que "Aprobadas y publicadas" no los cuente).
-    expect(await within(screen.getByRole("tab", { name: /Todo el feed/ })).findByText("9")).toBeInTheDocument();
+    // Pendientes=6 · Publicadas=3 · Todas=6+3=9 (suma exacta de la partición binaria).
+    expect(await within(screen.getByRole("tab", { name: /Pendientes/ })).findByText("6")).toBeInTheDocument();
+    expect(within(screen.getByRole("tab", { name: /Publicadas/ })).getByText("3")).toBeInTheDocument();
+    expect(within(screen.getByRole("tab", { name: /Todas/ })).getByText("9")).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /En preparación/ })).not.toBeInTheDocument();
-    expect(within(screen.getByRole("tab", { name: /Por aprobar/ })).getByText("4")).toBeInTheDocument();
-    expect(within(screen.getByRole("tab", { name: /Aprobadas y publicadas/ })).getByText("3")).toBeInTheDocument();
     // El title habla de PIEZAS (unidad canónica), pluralizado de verdad (nada de "1 ideas").
-    expect(within(screen.getByRole("tab", { name: /Por aprobar/ })).getByTitle("4 piezas")).toBeInTheDocument();
-    // El NOMBRE ACCESIBLE incluye el conteo con su unidad ("Por aprobar 4 piezas"): el
+    expect(within(screen.getByRole("tab", { name: /Pendientes/ })).getByTitle("6 piezas")).toBeInTheDocument();
+    // El NOMBRE ACCESIBLE incluye el conteo con su unidad ("Pendientes 6 piezas"): el
     // aria-label que lo pisaba ya no existe.
-    expect(screen.getByRole("tab", { name: /Por aprobar.*4 piezas/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Pendientes.*6 piezas/ })).toBeInTheDocument();
   });
 
-  it("vista filtrada: 'Por aprobar' enseña SOLO las piezas que cumplen (sin tarjetas ajenas ni huecos)", async () => {
+  it("vista filtrada: 'Pendientes' enseña SOLO las piezas que cumplen (sin tarjetas ajenas ni huecos)", async () => {
     // Una IDEA (c1) con dos piezas: en revisión (X) y publicada (Instagram). El stub filtra por
-    // estado= como el backend: la vista dedicada solo recibe la pieza en revisión.
+    // estado= como el backend: la vista dedicada 'Pendientes' solo recibe la pieza no publicada.
     const PUB_PUBLICADA = {
       ...PUBLICACION,
       id: "p2",
@@ -414,7 +440,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
           const params = new URL(ruta, "http://localhost").searchParams;
           const estado = params.get("estado");
           const todas = [PUBLICACION, PUB_PUBLICADA];
-          const lista = estado ? todas.filter((p) => p.estado === estado) : todas;
+          const lista = todas.filter((p) => casaEstado(estado, p.estado));
           return new Response(
             JSON.stringify({
               publicaciones: lista,
@@ -427,17 +453,17 @@ describe("FeedIdeacion · feed de ideación interno", () => {
       }),
     );
     renderFeed();
-    // 'Todo el feed' (matriz por idea): ambas tarjetas.
+    // 'Todas' (matriz por idea): ambas tarjetas.
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
     expect(screen.getByText("Ya publicada")).toBeInTheDocument();
-    // 'Por aprobar': solo la pieza en revisión; la publicada y los huecos no se pintan.
-    fireEvent.mouseDown(screen.getByRole("tab", { name: /Por aprobar/ }), { button: 0 });
+    // 'Pendientes': solo la pieza en revisión; la publicada y los huecos no se pintan.
+    fireEvent.mouseDown(screen.getByRole("tab", { name: /Pendientes/ }), { button: 0 });
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText("Ya publicada")).not.toBeInTheDocument());
     expect(screen.queryByText("No generado")).not.toBeInTheDocument();
   });
 
-  it("vista filtrada EN CLIENTE vacía con más páginas: no afirma el vacío y sigue pidiendo páginas", async () => {
+  it("vista dedicada 'Pendientes': scroll infinito encadenando páginas del servidor por cursor", async () => {
     // IntersectionObserver controlable (jsdom no lo implementa): registra disparadores a mano.
     const disparadores: Array<() => void> = [];
     class IOFalso {
@@ -458,13 +484,14 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     }
     vi.stubGlobal("IntersectionObserver", IOFalso as unknown as typeof IntersectionObserver);
 
-    // 'Aprobadas y publicadas' filtra el listado base EN CLIENTE. Página 1: SOLO una pieza en
-    // revisión + cursor. Página 2: la aprobada, última.
-    const APROBADA = {
+    // 'Pendientes' va con consulta DEDICADA (estado=pendiente): el SERVIDOR pagina por cursor,
+    // sin filtrar listas enteras en cliente. Página 1: una pieza no publicada + cursor. Página
+    // 2: otra, última. Ambas deben verse al encadenar.
+    const SEGUNDA = {
       ...PUBLICACION,
       id: "p2",
       contenido_id: "c2",
-      contenido: "Aprobada sin hueco",
+      contenido: "Segunda en cola",
       estado: "aprobado",
       etapa_ia: "aprobada",
     };
@@ -492,7 +519,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
           urls.push(ruta);
           if (ruta.includes("cursor=")) {
             return new Response(
-              JSON.stringify({ publicaciones: [APROBADA], paginacion: { total: 2, limite: 1, desplazamiento: 0 } }),
+              JSON.stringify({ publicaciones: [SEGUNDA], paginacion: { total: 2, limite: 1, desplazamiento: 0 } }),
               { status: 200 },
             );
           }
@@ -508,17 +535,20 @@ describe("FeedIdeacion · feed de ideación interno", () => {
       }),
     );
 
-    renderFeed();
+    renderFeed({}, "/?vista=pendiente");
+    // El servidor ya filtró: la primera pieza se pinta directa, sin rastreo en cliente.
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
-    // 'Aprobadas y publicadas' queda vacía PERO hay más páginas: nada de afirmar el vacío; se busca.
-    fireEvent.mouseDown(screen.getByRole("tab", { name: /Aprobadas y publicadas/ }), { button: 0 });
-    expect(await screen.findByText("Buscando piezas…")).toBeInTheDocument();
-    expect(screen.queryByText("Sin piezas aprobadas ni publicadas")).not.toBeInTheDocument();
+    expect(screen.queryByText("Buscando piezas…")).not.toBeInTheDocument();
     // El sentinel sigue montado: al intersecar pide la página siguiente (?cursor=) y la pinta.
     await waitFor(() => expect(disparadores.length).toBeGreaterThan(0));
     disparadores[disparadores.length - 1]();
-    expect(await screen.findByText("Aprobada sin hueco")).toBeInTheDocument();
-    expect(urls.some((u) => u.includes("cursor="))).toBe(true);
+    expect(await screen.findByText("Segunda en cola")).toBeInTheDocument();
+    // Las dos peticiones del FEED (feed=1) llevaron el pseudo-estado de la vista; la 2ª, el
+    // cursor. (Las consultas de conteo de badges, con limite=1, van por su lado.)
+    const peticionesFeed = urls.filter((u) => u.includes("feed=1"));
+    expect(peticionesFeed.length).toBeGreaterThanOrEqual(2);
+    expect(peticionesFeed.every((u) => u.includes("estado=pendiente"))).toBe(true);
+    expect(peticionesFeed.some((u) => u.includes("cursor="))).toBe(true);
   });
 
   it("renderiza la pieza como post con etapa IA y el 'me gusta' (OK) en línea", async () => {
@@ -851,114 +881,6 @@ describe("FeedIdeacion · feed de ideación interno", () => {
       expect(screen.getByText(red)).toBeInTheDocument();
     }
     expect(screen.queryByText("No generado")).toBeNull();
-  });
-
-  it("tope de búsqueda (vista en cliente): con 5 páginas y la vista vacía aparece «Seguir buscando» y NO se pide la 6ª sola", async () => {
-    // IntersectionObserver controlable que RESPETA disconnect(): un disparador de un observer
-    // desconectado (sentinel apagado por el tope) no hace nada, como en el navegador.
-    const observers: IOFalso[] = [];
-    class IOFalso {
-      activa = true;
-      private cb: IntersectionObserverCallback;
-      constructor(cb: IntersectionObserverCallback) {
-        this.cb = cb;
-        observers.push(this);
-      }
-      fire() {
-        if (this.activa) {
-          this.cb([{ isIntersecting: true } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
-        }
-      }
-      observe() {}
-      unobserve() {}
-      disconnect() {
-        this.activa = false;
-      }
-      takeRecords() {
-        return [];
-      }
-      root = null;
-      rootMargin = "";
-      thresholds = [];
-    }
-    vi.stubGlobal("IntersectionObserver", IOFalso as unknown as typeof IntersectionObserver);
-
-    // Todas las páginas del feed traen UNA pieza en revisión y SIEMPRE hay cursor: la vista
-    // 'Aprobadas y publicadas' (filtro EN CLIENTE) nunca encuentra nada y el feed nunca se agota
-    // (el peor caso del rastreo encadenado). Solo cuentan las peticiones del FEED (feed=1):
-    // los conteos de los badges (limite=1) van aparte.
-    const urls: string[] = [];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string | URL) => {
-        const ruta = String(url);
-        if (ruta.includes("/api/publicaciones/opciones")) {
-          return new Response(JSON.stringify(OPCIONES), { status: 200 });
-        }
-        if (ruta.includes("/api/publicaciones/cadenas")) {
-          return new Response(JSON.stringify({ cadenas: {} }), { status: 200 });
-        }
-        if (ruta.includes("/aprobacion")) {
-          return new Response(
-            JSON.stringify({ niveles: [], estado: "sin_cadena", nivel_actual: "", aprobados: 0, minimo_aprobaciones: 0, comentarios_sin_resolver: 0 }),
-            { status: 200 },
-          );
-        }
-        if (ruta.includes("/comentarios")) {
-          return new Response(JSON.stringify({ comentarios: [], total: 0 }), { status: 200 });
-        }
-        if (ruta.includes("/api/publicaciones")) {
-          if (!ruta.includes("feed=1")) {
-            // Conteos de badges: total fijo, sin cursor.
-            return new Response(
-              JSON.stringify({ publicaciones: [PUBLICACION], paginacion: { total: 99, limite: 1, desplazamiento: 0 } }),
-              { status: 200 },
-            );
-          }
-          urls.push(ruta);
-          const n = urls.length;
-          return new Response(
-            JSON.stringify({
-              publicaciones: [
-                {
-                  ...PUBLICACION,
-                  id: `p${n}`,
-                  contenido_id: `c${n}`,
-                  contenido: `En revisión ${n}`,
-                },
-              ],
-              paginacion: { total: 99, limite: 1, desplazamiento: 0, cursor_siguiente: `cur-${n}` },
-            }),
-            { status: 200 },
-          );
-        }
-        return new Response("{}", { status: 200 });
-      }),
-    );
-
-    renderFeed({}, "/?vista=publicado");
-    // Página 1 cargada y vista vacía: se busca (no se afirma el vacío).
-    expect(await screen.findByText("Buscando piezas…")).toBeInTheDocument();
-    // El sentinel encadena hasta el tope del lote (5 páginas).
-    for (let pagina = 2; pagina <= 5; pagina++) {
-      const ultimo = observers[observers.length - 1];
-      ultimo.fire();
-      await waitFor(() => expect(urls.length).toBe(pagina));
-    }
-    // Tope alcanzado: el vacío de la casa (EstadoVacio) ofrece reanudar y el rastreo se detiene.
-    expect(await screen.findByRole("button", { name: "Seguir buscando" })).toBeInTheDocument();
-    expect(screen.getByText("Sin piezas aprobadas ni publicadas")).toBeInTheDocument();
-    // Disparar lo que quede registrado no pide la 6ª página (los observers están apagados).
-    observers.forEach((o) => o.fire());
-    await waitFor(() => expect(urls.length).toBe(5));
-    // "Seguir buscando" concede otro lote: el sentinel revive y pide la 6ª.
-    fireEvent.click(screen.getByRole("button", { name: "Seguir buscando" }));
-    await waitFor(() => {
-      const ultimo = observers[observers.length - 1];
-      expect(ultimo.activa).toBe(true);
-    });
-    observers[observers.length - 1].fire();
-    await waitFor(() => expect(urls.length).toBe(6));
   });
 
   it("un fallo al cargar MÁS no tira el feed: las piezas cargadas siguen y el pie ofrece Reintentar", async () => {

@@ -402,6 +402,12 @@ def _filtros_publicacion(
         # `borrador` casa los estados "en progreso" del tablero (pendiente/en_curso).
         if estado == "borrador":
             clausulas.append("cp.estado IN ('pendiente', 'en_curso')")
+        # PSEUDO-ESTADO `pendiente` (no es un estado de publicación: borrador/en_revision/
+        # aprobado/programado/publicado): la partición "Pendientes" del feed = TODO lo que aún
+        # no salió, esto es, cualquier estado que no sea `publicado` (incluido un estado nulo).
+        # Su complementario exacto es `estado=publicado`, así "Pendientes + Publicadas = Todas".
+        elif estado == "pendiente":
+            clausulas.append("(cp.estado IS NULL OR cp.estado != 'publicado')")
         else:
             clausulas.append("cp.estado = ?")
             params.append(_ESTADO_PUB_A_PLAT.get(estado, estado))

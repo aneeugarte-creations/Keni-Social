@@ -1,16 +1,26 @@
 import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Send } from "lucide-react";
 import * as React from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FILTRO_TODOS, useFiltrosContenido } from "@/hooks/filtros-contenido-contexto";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { SesionContexto } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import {
+  ContenidoPestanaVista,
+  ESTADO_SERVIDOR_DE_VISTA,
+  useConteosFeed,
+  VISTAS,
+  vistaDesdeParam,
+  type Vista,
+} from "@/pages/feed/vistas";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
 import { DialogoDuplicar } from "@/pages/publicaciones/DialogoDuplicar";
 import { DialogoEditar } from "@/pages/publicaciones/DialogoEditar";
@@ -20,8 +30,11 @@ import type { FiltrosPublicaciones, OpcionesPublicaciones, Publicacion } from "@
 
 const TAM_PAGINA = 30;
 
-/** Filtros base de la LISTA (sin paginación): marca/red/línea/responsable activos. */
-type FiltrosBase = Pick<FiltrosPublicaciones, "marca" | "red" | "linea" | "responsable">;
+/** Filtros base de la LISTA (sin paginación): marca/red/línea/responsable/estado activos. */
+type FiltrosBase = Pick<
+  FiltrosPublicaciones,
+  "marca" | "red" | "linea" | "responsable" | "estado"
+>;
 
 /**
  * Parámetros de UNA página del FEED (lista, keyset/scroll infinito). La 1ª página llega con
@@ -199,12 +212,34 @@ function Cuerpo({
   // Lo avisamos suave: el arreglo es de datos (un admin le asigna su marca en Usuarios).
   const sinMarcaAsignada = faltaMarcaAsignada(usuario);
 
+  // PARTICIÓN por estado (solo en modo lista; el calendario muestra las programadas): las
+  // MISMAS pestañas y vocabulario del feed (Pendientes · Publicadas · Todas, ver vistas.tsx),
+  // en la URL (`?vista=`) para que sobreviva al refresco y sea compartible. Por defecto
+  // "Todas" (la lista de gestión arranca enseñando todo). El SERVIDOR filtra por el
+  // pseudo-estado, así la paginación keyset y el total siguen exactos.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const vista = vistaDesdeParam(searchParams.get("vista"), "todo");
+  const estadoVista = calendario ? undefined : ESTADO_SERVIDOR_DE_VISTA[vista];
+  const cambiarVista = (v: Vista) => {
+    setSearchParams(
+      (prev) => {
+        if (v === "todo") prev.delete("vista");
+        else prev.set("vista", v);
+        return prev;
+      },
+      { replace: true },
+    );
+  };
+
   const filtrosBase = {
     marca: marcaActiva ?? undefined,
     red: red === FILTRO_TODOS ? undefined : red,
     linea: linea === FILTRO_TODOS ? undefined : linea,
     responsable,
+    estado: estadoVista,
   };
+  // Conteos exactos para los badges de las pestañas (mismos que el feed; ver vistas.tsx).
+  const { conteoVista } = useConteosFeed(filtrosBase);
 
   // CALENDARIO: la ANCLA (mes/semana/día visible) se eleva aquí para pedir a la API SOLO el
   // rango visible (`?desde=&hasta=`) en vez del conjunto completo —que el cap de 1000 filas
@@ -243,7 +278,7 @@ function Cuerpo({
   // vista. El offset (`limite`+`desplazamiento`) saltaba piezas cuando el conjunto encogía
   // en vivo (lente "Por coger" + claims de compañeros); el cursor es inmune a eso.
   // `paginacion.total` sigue llegando para el "Mostrando X de Y". Cambiar los filtros
-  // cambia la queryKey, que resetea las páginas sola.
+  // (incluida la vista de estado) cambia la queryKey, que resetea las páginas sola.
   const listaQuery = useInfiniteQuery({
     queryKey: [
       ...CLAVE_PUBLICACIONES,
@@ -252,12 +287,12 @@ function Cuerpo({
       filtrosBase.red ?? "",
       filtrosBase.linea ?? "",
       responsable ?? "",
+      estadoVista ?? "todos",
     ],
     // Primera página: sin cursor (pero con `feed: "1"` para activar el modo keyset).
     initialPageParam: "",
     queryFn: ({ pageParam, signal }) =>
       api.publicaciones(paramsPaginaFeed(filtrosBase, pageParam), signal),
-    // El backend OMITE `cursor_siguiente` en la última página: undefined = no hay más.
     getNextPageParam: (ultima, paginas) => {
       // El backend emite cursor cuando la página viene LLENA, incluida la última si el
       // total es múltiplo exacto: con el total fresco ya cubierto no hay más que pedir
@@ -305,7 +340,10 @@ function Cuerpo({
     : listaQuery.data?.pages.at(-1)?.paginacion?.total ?? publicaciones.length;
   const hayMas = !calendario && Boolean(listaQuery.hasNextPage);
   const filtrando =
-    red !== FILTRO_TODOS || linea !== FILTRO_TODOS || responsable !== undefined;
+    red !== FILTRO_TODOS ||
+    linea !== FILTRO_TODOS ||
+    responsable !== undefined ||
+    estadoVista != null;
 
   // Aviso de seguridad: si el posteo real esta APAGADO y hay piezas programadas, NO van a
   // salir solas (el programador opera en dry-run). Es justo el fallo que dejaba piezas sin
@@ -351,6 +389,21 @@ function Cuerpo({
                 ? "Las piezas que has cogido tú."
                 : "Coge una pieza para que el resto del equipo vea que ya la llevas tú."}
           </p>
+        </div>
+      )}
+      {/* PARTICIÓN por estado: las MISMAS pestañas del feed (Pendientes · Publicadas · Todas),
+          solo en la lista. El calendario muestra las programadas y no se filtra por estado. */}
+      {!calendario && (
+        <div className="mb-3 overflow-x-auto">
+          <Tabs value={vista} onValueChange={(v) => cambiarVista(v as Vista)}>
+            <TabsList className="w-fit gap-1" aria-label="Vista de la lista">
+              {VISTAS.map((v) => (
+                <TabsTrigger key={v.id} value={v.id} className="gap-1.5">
+                  <ContenidoPestanaVista vista={v} conteo={conteoVista[v.id]} />
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
         </div>
       )}
       {hayProgramadasSinSalir && (

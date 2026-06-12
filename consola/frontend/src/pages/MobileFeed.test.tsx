@@ -152,12 +152,18 @@ describe("MobileFeed · feed móvil de revisión", () => {
     // El título queda solo para lectores de pantalla (sr-only): la cabecera no gasta una fila.
     expect(await screen.findByText("Feed de revisión")).toBeInTheDocument();
     // La partición compartida (vistas.tsx): el móvil ya no es una superficie capada con 2
-    // bandejas; mismo vocabulario que el escritorio. Por defecto manda "Por aprobar".
-    expect(screen.getAllByRole("tab")).toHaveLength(3);
-    expect(screen.getByRole("tab", { name: /Todo el feed/ })).toBeInTheDocument();
+    // bandejas; mismo vocabulario y ORDEN que el escritorio (Pendientes · Publicadas · Todas).
+    // Por defecto manda "Pendientes".
+    const pestanas = screen.getAllByRole("tab");
+    expect(pestanas).toHaveLength(3);
+    expect(pestanas.map((t) => t.textContent)).toEqual([
+      expect.stringContaining("Pendientes"),
+      expect.stringContaining("Publicadas"),
+      expect.stringContaining("Todas"),
+    ]);
     expect(screen.queryByRole("tab", { name: /En preparación/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Aprobadas y publicadas/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Por aprobar/ })).toHaveAttribute(
+    expect(screen.queryByRole("tab", { name: /Por aprobar/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Pendientes/ })).toHaveAttribute(
       "aria-selected",
       "true",
     );
@@ -232,7 +238,7 @@ describe("MobileFeed · feed móvil de revisión", () => {
     expect(screen.getByText("Fin del feed")).toBeInTheDocument();
   });
 
-  it("vacío HONESTO: con la página llena de otras marcas y más por traer, busca en vez de afirmar 'Nada por aprobar'", async () => {
+  it("vacío HONESTO: con la página llena de otras marcas y más por traer, busca en vez de afirmar 'Nada pendiente'", async () => {
     // Usuario multi-marca (filtro en 'todas'): la página 1 trae solo piezas de una marca AJENA
     // (el filtro en cliente las descarta) y hay cursor: el feed debe seguir buscando.
     vi.stubGlobal(
@@ -265,7 +271,7 @@ describe("MobileFeed · feed móvil de revisión", () => {
     );
     renderFeed({ marcas: ["unotv", "claro-sports"] });
     expect(await screen.findByText("Buscando piezas…")).toBeInTheDocument();
-    expect(screen.queryByText("Nada por aprobar")).not.toBeInTheDocument();
+    expect(screen.queryByText("Nada pendiente")).not.toBeInTheDocument();
   });
 
   it("el alta rápida se envía con Enter (form de verdad) y el botón Crear es submit", async () => {
@@ -344,33 +350,32 @@ describe("MobileFeed · feed móvil de revisión", () => {
       urls.push(String(url));
       return base(url);
     });
-    renderFeed({ marcas: ["unotv", "claro-sports"] }, "/?vista=por_aprobar&marca=claro-sports");
+    // Deep-link a una vista NO por defecto ("Publicadas") para probar que la URL manda.
+    renderFeed({ marcas: ["unotv", "claro-sports"] }, "/?vista=publicado&marca=claro-sports");
     await screen.findByText("Feed de revisión");
-    expect(screen.getByRole("tab", { name: /Por aprobar/ })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: /Publicadas/ })).toHaveAttribute(
       "aria-selected",
       "true",
     );
-    // La consulta dedicada va al servidor con el estado de la vista Y la marca de la URL.
+    // La consulta dedicada va al servidor con el pseudo-estado de la vista Y la marca de la URL.
     await waitFor(() =>
       expect(
-        urls.some((u) => u.includes("estado=en_revision") && u.includes("marca=claro-sports")),
+        urls.some((u) => u.includes("estado=publicado") && u.includes("marca=claro-sports")),
       ).toBe(true),
     );
   });
 
-  it("el parámetro LEGADO ?bandeja=aprobado mapea a la vista 'Aprobadas y publicadas'", async () => {
+  it("el parámetro LEGADO ?bandeja=aprobado mapea a la vista 'Publicadas'", async () => {
     stubFetch();
     renderFeed({}, "/?bandeja=aprobado");
     await screen.findByText("Feed de revisión");
     // Los deep-links compartidos antes de unificar las superficies siguen aterrizando bien.
-    expect(screen.getByRole("tab", { name: /Aprobadas y publicadas/ })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: /Publicadas/ })).toHaveAttribute(
       "aria-selected",
       "true",
     );
     // La única pieza del stub está en revisión y el feed está agotado: vacío honesto de la
     // vista, con el MISMO vocabulario que el escritorio.
-    expect(
-      await screen.findByText("Sin piezas aprobadas ni publicadas"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Sin piezas publicadas")).toBeInTheDocument();
   });
 });

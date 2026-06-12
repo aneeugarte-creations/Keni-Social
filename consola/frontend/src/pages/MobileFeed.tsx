@@ -175,20 +175,20 @@ export default function MobileFeed() {
 
   // La vista vive en la URL (`?vista=`), igual que en el feed de escritorio: sobrevive al
   // refresco y es compartible. DEFAULT MÓVIL deliberado: sin parámetro se arranca en
-  // "Por aprobar" (el trabajo del revisor), no en "Todo". El parámetro LEGADO
+  // "Pendientes" (el trabajo del revisor), no en "Todas". El parámetro LEGADO
   // `?bandeja=aprobado` (deep-links compartidos antes de unificar) mapea a "publicado".
   const [searchParams, setSearchParams] = useSearchParams();
   const vista: Vista = vistaDesdeParam(
     searchParams.get("vista") ??
       (searchParams.get("bandeja") === "aprobado" ? "publicado" : null),
-    "por_aprobar",
+    "pendiente",
   );
   const cambiarVista = React.useCallback(
     (v: Vista) => {
       setSearchParams(
         (prev) => {
           prev.delete("bandeja"); // migra el parámetro legado al canónico
-          if (v === "por_aprobar") prev.delete("vista");
+          if (v === "pendiente") prev.delete("vista");
           else prev.set("vista", v);
           return prev;
         },
@@ -233,9 +233,9 @@ export default function MobileFeed() {
       ? catalogoMarcas.filter((m) => marcasUsuario.includes(m.id))
       : catalogoMarcas;
 
-  // CONSULTA DEDICADA por estado (misma mecánica que el escritorio, ver vistas.tsx): "En
-  // preparación" y "Por aprobar" llegan filtradas del servidor; "Todo" y "Aprobadas y
-  // publicadas" comparten la query base sin `estado` y la última filtra en cliente.
+  // CONSULTA DEDICADA por estado (misma mecánica que el escritorio, ver vistas.tsx):
+  // "Pendientes" y "Publicadas" llegan filtradas del servidor (pseudo-estados); "Todas" comparte
+  // la query base sin `estado`. El filtro en cliente de la vista es idempotente sobre ellas.
   const estadoServidor = ESTADO_SERVIDOR_DE_VISTA[vista];
 
   // SCROLL INFINITO (feed tipo red social): primera página pequeña e instantánea por keyset
@@ -259,9 +259,9 @@ export default function MobileFeed() {
   // Conteos exactos de los badges (compartidos con el escritorio; ver vistas.tsx).
   const { totalRevision, conteoVista } = useConteosFeed({ marca: marcaParam(marca) });
 
-  // Aplana todas las páginas cargadas y aplica el filtro de la vista (idempotente en las
-  // dedicadas; el filtro REAL de "Aprobadas y publicadas"). Si el usuario tiene marcas
-  // asignadas y el filtro está en "todas", restringimos a sus marcas (defensa extra).
+  // Aplana todas las páginas cargadas y aplica el filtro de la vista (idempotente: el servidor
+  // ya filtró por el pseudo-estado). Si el usuario tiene marcas asignadas y el filtro está en
+  // "todas", restringimos a sus marcas (defensa extra que puede dejar la página vacía → busca).
   const vistaActual = VISTAS.find((v) => v.id === vista) ?? VISTAS[0];
   const piezas = React.useMemo(() => {
     let todas = (feedQuery.data?.pages ?? []).flatMap((p) => p.publicaciones);
@@ -288,8 +288,8 @@ export default function MobileFeed() {
   // tarjeta más larga scrollea POR DENTRO de su slot.
   const scrollerRef = React.useRef<HTMLDivElement | null>(null);
 
-  // TOPE de la búsqueda encadenada (mismo mecanismo que el escritorio): SOLO en la vista que
-  // filtra en cliente ("Aprobadas y publicadas"). Con la vista vacía, el sentinel encadena
+  // TOPE de la búsqueda encadenada (mismo mecanismo que el escritorio): SOLO cuando se filtra
+  // en cliente (vista "Todas" sin `estado`, o multi-marca acotada). Con la vista vacía, el sentinel encadena
   // hasta `lotesBusqueda × PAGINAS_POR_LOTE` páginas; ahí se para y ofrece "Seguir buscando".
   // Cambio de contexto (vista o marca): el lote se reinicia y se vuelve arriba.
   const [lotesBusqueda, setLotesBusqueda] = React.useState(1);
@@ -372,7 +372,7 @@ export default function MobileFeed() {
   // Con UNA sola marca asignada el selector no es una decisión (dos opciones idénticas): se
   // oculta y las pestañas comparten fila con Actualizar. Con varias (o admin), dos filas.
   const conSelectorMarca = marcasUsuario.length !== 1;
-  // Las MISMAS 4 vistas que el escritorio (vistas.tsx), con sus conteos exactos.
+  // Las MISMAS 3 vistas que el escritorio (vistas.tsx): Pendientes · Publicadas · Todas.
   const tabs = (
     <Tabs
       value={vista}
@@ -385,7 +385,7 @@ export default function MobileFeed() {
             <ContenidoPestanaVista
               vista={v}
               conteo={conteoVista[v.id]}
-              enfasis={v.id === "por_aprobar" && (totalRevision ?? 0) > 0}
+              enfasis={v.id === "pendiente" && (totalRevision ?? 0) > 0}
             />
           </TabsTrigger>
         ))}
