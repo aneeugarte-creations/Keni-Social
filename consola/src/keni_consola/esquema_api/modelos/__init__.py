@@ -265,7 +265,7 @@ MODELOS = [
     # Aprobacion de equipo (#9, Fase 3).
     RespuestaColaAprobacion,
     # Generaciones: DEFERIDAS (ver bloque arriba). Se mantienen a mano en types.ts.
-    # Comercial (#124: fuente/es_muestra).
+    # Comercial (#124: procedencia en `fuente`).
     ActualComercial,
     SnapshotComercial,
     PostSeleccionableComercial,

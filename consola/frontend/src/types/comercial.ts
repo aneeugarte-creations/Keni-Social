@@ -8,7 +8,7 @@ export type MetricaComercial = "interacciones" | "visualizaciones" | "alcance";
 // `SnapshotComercial`, `ActualComercial`, `PublicacionComercial` (`api/comercial._a_dict`)
 // y las respuestas `RespuestaPublicacionesComercial`/`RespuestaPublicacionComercial`/
 // `RespuestaRefrescarComercial` se GENERAN desde el backend y se re-exportan desde el
-// barrel (#101/#120). `fuente`/`es_muestra` (#124) son REQUERIDOS (el backend siempre los
+// barrel (#101/#120). `fuente` (#124, procedencia) es REQUERIDO (el backend siempre lo
 // emite). El reporte (`RespuestaReporteComercial`, unión publicación|campaña) sigue a
 // mano: su forma es polimórfica y aún no se modela en el subconjunto estable.
 
@@ -85,10 +85,8 @@ export interface ObjetivoReporteComercial {
 export interface ReportePublicacionComercial {
   tipo: "publicacion";
   generado: string;
-  /** Procedencia de las cifras (`"muestra"` = sintéticas). */
+  /** Procedencia de las cifras (p. ej. `"metricool"`). */
   fuente?: string;
-  /** `true` mientras las cifras sean de muestra (sintéticas), no reales. */
-  es_muestra?: boolean;
   publicacion: PiezaReporteComercial;
   periodo: { desde: string; hasta: string };
   actual: ActualComercial;
@@ -105,10 +103,8 @@ export interface FilaReporteCampania {
 export interface ReporteCampaniaComercial {
   tipo: "campania";
   generado: string;
-  /** Procedencia de las cifras (`"muestra"` = sintéticas). */
+  /** Procedencia de las cifras (p. ej. `"metricool"`). */
   fuente?: string;
-  /** `true` mientras las cifras sean de muestra (sintéticas), no reales. */
-  es_muestra?: boolean;
   campania: string;
   cliente: string;
   piezas: FilaReporteCampania[];
@@ -147,7 +143,6 @@ export interface CampaniaComercial {
 export interface RespuestaCampanias {
   campanias: CampaniaComercial[];
   fuente: string;
-  es_muestra: boolean;
 }
 
 export interface RespuestaCampania {
@@ -226,7 +221,6 @@ export interface AnaliticaCampania {
   rango: string;
   periodo: { desde: string; hasta: string };
   fuente: string;
-  es_muestra: boolean;
   kpis: KpisCampania;
   comparativa: Record<ClaveKpiCampania, ComparativaKpi>;
   tendencia: { puntos: PuntoTendenciaCampania[] };

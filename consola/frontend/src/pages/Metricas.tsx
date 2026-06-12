@@ -2,7 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
-import { AvisoMuestra } from "@/components/comunes/AvisoMuestra";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import {
   marcaCanonicaDesdeMetricas,
@@ -231,7 +230,6 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
         <div className="space-y-8">
           {/* Mientras la fuente sea sintética, el aviso encabeza el dashboard: que
               nadie confunda las cifras de demostración con datos reales del cliente. */}
-          {reporteQuery.data.fuente === "muestra" && <AvisoMuestra />}
           {/* Ni marca ni rango se repiten en el cuerpo: la marca la manda el switch global
               de la topbar y el corte temporal ya lo enseña el selector de la cabecera. Las
               descargas viven en el menú "⋮" (acción global de la página). */}

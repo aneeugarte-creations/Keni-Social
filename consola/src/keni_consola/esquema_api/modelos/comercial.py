@@ -1,6 +1,6 @@
 """Comercial — api/comercial.py (_a_dict) + comercial.py.
 
-Procedencia (#124): `fuente`/`es_muestra` marcan cifras de muestra (sinteticas) vs
+Procedencia (#124): `fuente` marca de donde salen las cifras vs
 reales.
 """
 
@@ -71,17 +71,16 @@ class PostSeleccionableComercial(TypedDict):
 
 
 class RespuestaPostsComercial(TypedDict):
-    """Listado de posts seleccionables + procedencia (muestra vs real)."""
+    """Listado de posts seleccionables + procedencia de las cifras."""
 
     posts: list[PostSeleccionableComercial]
     fuente: str
-    es_muestra: bool
 
 
 class PublicacionComercial(TypedDict):
     """Una pieza comercial monitoreada (`api/comercial._a_dict`).
 
-    `fuente`/`es_muestra` (#124) marcan la procedencia de las cifras. `serie` solo
+    `fuente` (#124) marca la procedencia de las cifras. `serie` solo
     viene en el detalle / al crear (`con_serie=True`), por eso es `NotRequired`.
     """
 
@@ -108,7 +107,6 @@ class PublicacionComercial(TypedDict):
     progreso_pct: float
     alcanzado: bool
     fuente: str
-    es_muestra: bool
     serie: NotRequired[list[SnapshotComercial]]
 
 
@@ -117,7 +115,6 @@ class RespuestaPublicacionesComercial(TypedDict):
 
     publicaciones: list[PublicacionComercial]
     fuente: str
-    es_muestra: bool
 
 
 class RespuestaPublicacionComercial(TypedDict):

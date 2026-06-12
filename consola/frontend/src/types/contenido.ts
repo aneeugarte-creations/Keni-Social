@@ -69,7 +69,7 @@ export interface MetricaPieza {
   engagement_pct: number;
   url: string | null;
   publicado: string | null;
-  /** "muestra" (demo) o "metricool" (datos reales). */
+  /** Procedencia de las cifras (p. ej. "metricool"). */
   fuente: string;
   /** Cuándo se leyó de Metricool (ISO); "" si no encontrado. */
   generado_en: string;

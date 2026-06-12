@@ -2,11 +2,16 @@
 
 Usa la fixture `cliente` (conftest), que aísla la persistencia en tmp y no toca la
 red. La captura programada NO se arranca aquí (vive en `__main__`, no en `crear_app`).
+AQUÍ NO HAY CIFRAS SINTÉTICAS: cuando un test necesita datos, inyecta la lectura
+"real" monkeypatcheando `comercial.metricas_pieza.recalcular` (frontera Metricool);
+sin lectura, las series quedan vacías y los resúmenes en ceros.
 """
 
 from __future__ import annotations
 
 from datetime import date, timedelta
+
+from keni_consola import comercial
 
 
 def _hace_dias(n: int) -> str:
@@ -21,6 +26,27 @@ def _crear(cli, **campos):
     return cli.post("/api/comercial/publicaciones", json=cuerpo)
 
 
+def _con_lectura(monkeypatch, interacciones=1500, visualizaciones=42000):
+    lectura = {
+        "encontrado": True,
+        "interacciones": interacciones,
+        "visualizaciones": visualizaciones,
+    }
+    monkeypatch.setattr(comercial.metricas_pieza, "recalcular", lambda m, r, i: lectura)
+
+
+def _crear_con_datos(cli, monkeypatch, **campos):
+    """Alta por id de post con una lectura real inyectada (la vía con cifras)."""
+    _con_lectura(monkeypatch)
+    cuerpo = {
+        "id_post_metricool": campos.pop("id_post_metricool", "post-datos"),
+        "marca": "unotv",
+        "red": "instagram",
+        **campos,
+    }
+    return cli.post("/api/comercial/publicaciones", json=cuerpo)
+
+
 def test_opciones(cliente):
     r = cliente.get("/api/comercial/opciones")
     assert r.status_code == 200
@@ -31,12 +57,11 @@ def test_opciones(cliente):
     assert {m["id"] for m in datos["metricas"]} == {"interacciones", "visualizaciones", "alcance"}
 
 
-def test_crear_y_detalle(cliente):
-    r = _crear(
+def test_crear_y_detalle(cliente, monkeypatch):
+    r = _crear_con_datos(
         cliente,
+        monkeypatch,
         titulo="Spot Verano",
-        marca="unotv",
-        red="instagram",
         cliente="ACME",
         campania="Verano",
         publicado=_hace_dias(10),
@@ -47,9 +72,9 @@ def test_crear_y_detalle(cliente):
     pub = r.json()["publicacion"]
     assert pub["marca_nombre"] == "UnoTV"
     assert pub["red_nombre"]  # resuelto en servidor
-    assert pub["actual"]["alcance"] > 0
-    assert pub["serie"]  # historico sembrado
-    assert pub["alcanzado"] is True  # objetivo bajo en pieza de 10 dias
+    assert pub["actual"]["visualizaciones"] > 0
+    assert pub["serie"]  # primer punto real capturado en el alta
+    assert pub["alcanzado"] is True  # la lectura supera el objetivo
 
     # Detalle por id incluye serie.
     d = cliente.get(f"/api/comercial/publicaciones/{pub['id']}")
@@ -64,13 +89,13 @@ def test_crear_url_invalida(cliente):
 
 
 def test_posts_seleccionables(cliente):
-    """El selector de posts responde con estructura y procedencia (muestra en test)."""
+    """El selector de posts responde con estructura y procedencia (`fuente`)."""
     r = cliente.get("/api/comercial/posts?marca=unotv&red=instagram")
     assert r.status_code == 200, r.text
     datos = r.json()
     assert isinstance(datos["posts"], list)
-    assert datos["es_muestra"] is True
-    assert datos["fuente"] == "muestra"
+    assert datos["fuente"]  # procedencia presente
+    assert "es_muestra" not in datos
 
 
 def test_posts_marca_invalida(cliente):
@@ -125,8 +150,10 @@ def test_listar_y_filtro_estado(cliente):
     assert activas[0]["estado"] == "activa"
 
 
-def test_actualizar(cliente):
-    pub = _crear(cliente, publicado=_hace_dias(5), objetivo=0).json()["publicacion"]
+def test_actualizar(cliente, monkeypatch):
+    pub = _crear_con_datos(cliente, monkeypatch, publicado=_hace_dias(5), objetivo=0).json()[
+        "publicacion"
+    ]
     r = cliente.put(
         f"/api/comercial/publicaciones/{pub['id']}",
         json={"estado": "pausada", "objetivo": 50, "metrica_objetivo": "interacciones"},
@@ -135,7 +162,7 @@ def test_actualizar(cliente):
     actualizado = r.json()["publicacion"]
     assert actualizado["estado"] == "pausada"
     assert actualizado["objetivo"] == 50
-    # Bajar el objetivo a 50 en una pieza de 5 dias debe marcar el aviso.
+    # Bajar el objetivo a 50 con una lectura de 1500 interacciones marca el aviso.
     assert actualizado["alcanzado"] is True
 
 
@@ -148,9 +175,10 @@ def test_refrescar_una_y_todas(cliente):
     assert r2.json()["actualizadas"] >= 1
 
 
-def test_reporte_json_y_md(cliente):
-    pub = _crear(
-        cliente, titulo="Pieza KPI", cliente="ACME", publicado=_hace_dias(8), objetivo=100
+def test_reporte_json_y_md(cliente, monkeypatch):
+    pub = _crear_con_datos(
+        cliente, monkeypatch, titulo="Pieza KPI", cliente="ACME",
+        publicado=_hace_dias(8), objetivo=100,
     ).json()["publicacion"]
 
     # JSON para verlo en la UI.
@@ -158,7 +186,7 @@ def test_reporte_json_y_md(cliente):
     assert rj.status_code == 200
     rep = rj.json()["reporte"]
     assert rep["tipo"] == "publicacion"
-    assert rep["actual"]["alcance"] > 0
+    assert rep["actual"]["visualizaciones"] > 0
 
     # Markdown como descarga.
     rm = cliente.get(f"/api/comercial/reporte?publicacion={pub['id']}&formato=md")
@@ -176,41 +204,40 @@ def test_reporte_campania(cliente):
     assert r.json()["reporte"]["total"]["piezas"] == 2
 
 
-def test_cifras_marcadas_como_muestra(cliente):
-    """Mientras no haya APIs reales, todo va marcado como dato de muestra (#124).
+def test_sin_fuente_no_hay_cifras_ni_flags_de_muestra(cliente):
+    """Sin datos en la fuente NO se inventa nada ni existen flags de muestra.
 
-    La cifra sintética no debe confundirse con datos reales: el flag `es_muestra`
-    (y la `fuente` "muestra") tiene que viajar en cada respuesta que expone cifras.
+    El alta por URL (sin `id_post_metricool`) no puede leer de Metricool: la serie
+    queda vacía, el resumen en ceros, y ninguna respuesta lleva `es_muestra` ni el
+    Markdown el viejo aviso de datos sintéticos.
     """
     pub = _crear(cliente, campania="Mundial", publicado=_hace_dias(7), objetivo=100).json()[
         "publicacion"
     ]
 
-    # Alta + detalle: la pieza serializada se marca como muestra.
-    assert pub["es_muestra"] is True
-    assert pub["fuente"] == "muestra"
+    # Alta + detalle: sin cifras inventadas y sin flag.
+    assert "es_muestra" not in pub
+    assert pub["serie"] == []
+    assert pub["actual"]["interacciones"] == 0
+    assert pub["actual"]["visualizaciones"] == 0
     detalle = cliente.get(f"/api/comercial/publicaciones/{pub['id']}").json()["publicacion"]
-    assert detalle["es_muestra"] is True
+    assert "es_muestra" not in detalle
 
-    # Listado: flag común a nivel de respuesta + en cada item.
+    # Listado: procedencia a nivel de respuesta, sin flags.
     lista = cliente.get("/api/comercial/publicaciones").json()
-    assert lista["es_muestra"] is True
-    assert lista["fuente"] == "muestra"
-    assert all(p["es_muestra"] is True for p in lista["publicaciones"])
+    assert "es_muestra" not in lista
+    assert "fuente" in lista
+    assert all("es_muestra" not in p for p in lista["publicaciones"])
 
-    # Reporte de pieza (JSON): el flag viaja en el reporte.
+    # Reportes (pieza y campaña): sin flag.
     rep_pieza = cliente.get(f"/api/comercial/reporte?publicacion={pub['id']}").json()["reporte"]
-    assert rep_pieza["es_muestra"] is True
-    assert rep_pieza["fuente"] == "muestra"
-
-    # Reporte de campaña (JSON): idem.
+    assert "es_muestra" not in rep_pieza
     rep_camp = cliente.get("/api/comercial/reporte?campania=Mundial").json()["reporte"]
-    assert rep_camp["es_muestra"] is True
-    assert rep_camp["fuente"] == "muestra"
+    assert "es_muestra" not in rep_camp
 
-    # Markdown entregable: lleva el aviso visible de procedencia.
+    # Markdown entregable: sin el viejo aviso de datos sintéticos.
     md = cliente.get(f"/api/comercial/reporte?publicacion={pub['id']}&formato=md").text
-    assert "Datos de muestra" in md
+    assert "Datos de muestra" not in md
 
 
 def test_reporte_sin_parametros(cliente):

@@ -734,9 +734,6 @@
         "fuente": {
           "type": "string"
         },
-        "es_muestra": {
-          "type": "boolean"
-        },
         "movimientos": {
           "type": "array",
           "items": {
@@ -769,13 +766,12 @@
           "type": "string"
         }
       },
-      "description": "Respuesta de `GET /api/metricas/analisis`: lectura \"qué cambió y por qué\".\n\nCapa narrativa (F6/#146) sobre las métricas: top movimientos con la(s) pieza(s)\nque los explican y un siguiente paso. `es_muestra`/`fuente` marcan cuando los\ndatos son de muestra y no reales (issue #131).",
+      "description": "Respuesta de `GET /api/metricas/analisis`: lectura \"qué cambió y por qué\".\n\nCapa narrativa (F6/#146) sobre las métricas: top movimientos con la(s) pieza(s)\nque los explican y un siguiente paso. `fuente` marca la procedencia de los\ndatos (issue #131).",
       "required": [
         "rango",
         "etiqueta_rango",
         "marca",
         "fuente",
-        "es_muestra",
         "movimientos",
         "movimientos_resto",
         "marcas_estables",
@@ -2558,16 +2554,12 @@
         },
         "fuente": {
           "type": "string"
-        },
-        "es_muestra": {
-          "type": "boolean"
         }
       },
-      "description": "Listado de posts seleccionables + procedencia (muestra vs real).",
+      "description": "Listado de posts seleccionables + procedencia de las cifras.",
       "required": [
         "posts",
-        "fuente",
-        "es_muestra"
+        "fuente"
       ]
     },
     "PublicacionComercial": {
@@ -2651,9 +2643,6 @@
         "fuente": {
           "type": "string"
         },
-        "es_muestra": {
-          "type": "boolean"
-        },
         "serie": {
           "type": "array",
           "items": {
@@ -2661,7 +2650,7 @@
           }
         }
       },
-      "description": "Una pieza comercial monitoreada (`api/comercial._a_dict`).\n\n`fuente`/`es_muestra` (#124) marcan la procedencia de las cifras. `serie` solo\nviene en el detalle / al crear (`con_serie=True`), por eso es `NotRequired`.",
+      "description": "Una pieza comercial monitoreada (`api/comercial._a_dict`).\n\n`fuente` (#124) marca la procedencia de las cifras. `serie` solo\nviene en el detalle / al crear (`con_serie=True`), por eso es `NotRequired`.",
       "required": [
         "id",
         "url",
@@ -2685,8 +2674,7 @@
         "actual",
         "progreso_pct",
         "alcanzado",
-        "fuente",
-        "es_muestra"
+        "fuente"
       ]
     },
     "RespuestaPublicacionesComercial": {
@@ -2701,16 +2689,12 @@
         },
         "fuente": {
           "type": "string"
-        },
-        "es_muestra": {
-          "type": "boolean"
         }
       },
       "description": "Listado de `GET /api/comercial/publicaciones` con procedencia comun (#124).",
       "required": [
         "publicaciones",
-        "fuente",
-        "es_muestra"
+        "fuente"
       ]
     },
     "RespuestaPublicacionComercial": {

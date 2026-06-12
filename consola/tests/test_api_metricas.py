@@ -219,14 +219,14 @@ def test_comparar_acotado_a_una_marca_sigue_trayendo_fuente(cliente):
     assert r.json()["fuente"] == "muestra"
 
 
-def test_analisis_devuelve_narrativa_y_marca_muestra(cliente):
-    # F6/#146: lectura "qué cambió y por qué" + siguiente paso. Con la fuente
-    # offline marca explícitamente que los datos son de muestra (issue #131).
+def test_analisis_devuelve_narrativa_con_procedencia(cliente):
+    # F6/#146: lectura "qué cambió y por qué" + siguiente paso. La procedencia de los
+    # datos viaja en `fuente` (issue #131; en tests, la fuente offline del paquete).
     r = cliente.get("/api/metricas/analisis?rango=semana")
     assert r.status_code == 200
     data = r.json()
     assert data["fuente"] == "muestra"
-    assert data["es_muestra"] is True
+    assert "es_muestra" not in data
     assert isinstance(data["movimientos"], list)
     # cierra con un siguiente paso accionable (loop a la acción, UX-roadmap #11)
     assert data["siguiente_paso"] is not None

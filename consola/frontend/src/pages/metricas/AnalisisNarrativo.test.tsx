@@ -13,7 +13,6 @@ const RESP: AnalisisDiario = {
   etiqueta_rango: "Últimos 7 días",
   marca: "",
   fuente: "metricool",
-  es_muestra: false,
   movimientos: [
     {
       marca_id: "claro_sports",
@@ -83,13 +82,6 @@ describe("AnalisisNarrativo", () => {
     expect(screen.getByText("Siguiente paso")).toBeInTheDocument();
     const enlace = screen.getByRole("link", { name: /ver la pieza/i });
     expect(enlace).toHaveAttribute("href", "https://www.tiktok.com/@clarosports/video/1");
-  });
-
-  it("marca con un badge cuando los datos son de muestra", async () => {
-    vi.spyOn(api, "metricasAnalisis").mockResolvedValue({ ...RESP, es_muestra: true });
-    renderConProviders(<AnalisisNarrativo marcaActual="__todas__" rangoActual="semana" />);
-
-    expect(await screen.findByText("Datos de muestra")).toBeInTheDocument();
   });
 
   it("redacta el arranque desde cero en castellano natural, con el badge fuera de la frase", async () => {

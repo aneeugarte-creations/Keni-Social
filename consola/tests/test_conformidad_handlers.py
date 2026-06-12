@@ -86,7 +86,7 @@ def test_publicacion_fecha_programada_y_origen_son_cadena(cliente):
 
 
 # --------------------------------------------------------------------------- #
-# Comercial (lista con fuente/es_muestra, detalle con serie, refrescar)       #
+# Comercial (lista con procedencia `fuente`, detalle con serie, refrescar)    #
 # --------------------------------------------------------------------------- #
 
 _URL = "https://www.instagram.com/p/ABC123/"
@@ -110,7 +110,7 @@ def test_respuesta_publicaciones_comercial_conforma(cliente):
     _crear_comercial(cliente)
     resp = cliente.get("/api/comercial/publicaciones").json()
     _conforma(resp, "RespuestaPublicacionesComercial")
-    assert resp["fuente"] and isinstance(resp["es_muestra"], bool)  # #124
+    assert resp["fuente"]  # #124: la procedencia siempre viaja
     for pub in resp["publicaciones"]:
         _conforma(pub, "PublicacionComercial")
 

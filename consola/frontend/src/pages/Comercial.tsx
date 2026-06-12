@@ -85,7 +85,6 @@ export default function Comercial() {
     () => listaQuery.data?.campanias ?? [],
     [listaQuery.data],
   );
-  const esMuestra = Boolean(listaQuery.data?.es_muestra);
 
   // Mantener una campaña seleccionada válida cuando cambia la lista.
   React.useEffect(() => {
@@ -173,8 +172,6 @@ export default function Comercial() {
         />
       ) : (
         <div className="space-y-6">
-          {esMuestra && <AvisoMuestra />}
-
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap items-center gap-2">
               <Select value={seleccionada ?? undefined} onValueChange={setSeleccionada}>
@@ -246,20 +243,6 @@ export default function Comercial() {
         onCerrar={() => setDialogoAbierto(false)}
       />
     </>
-  );
-}
-
-/**
- * Aviso, no alarmante, de que las cifras son de MUESTRA (sintéticas) y no datos
- * reales del cliente. Mientras no haya APIs reales conectadas, todo sale de un
- * modelo determinista; que nadie lo confunda con lo real.
- */
-function AvisoMuestra() {
-  return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
-      <Badge variant="aviso">Datos de muestra (sintéticos)</Badge>
-      <span>Las cifras son de demostración, no datos reales del cliente.</span>
-    </div>
   );
 }
 

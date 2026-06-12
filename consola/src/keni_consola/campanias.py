@@ -10,8 +10,8 @@ campañas son MULTIMARCA: agregan las piezas de todas sus marcas.
 
 No monitoriza piezas sueltas ni guarda snapshots propios (eso era el viejo apartado de
 publicaciones comerciales, retirado): reúsa lo que el dashboard de Métricas ya descarga.
-Las cifras salen de la fuente activa de Métricas (Metricool real en prod; muestra en
-demo) y se marcan con `es_muestra`, igual que el resto de la consola.
+Las cifras salen de la fuente activa de Métricas (Metricool), igual que el resto
+de la consola; la procedencia viaja en `fuente`.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from typing import Any
 from keni_metricas import servicio
 
 from . import marcas, metricas_cache, repos
-from .comercial import es_muestra, fuente_actual
+from .comercial import fuente_actual
 from .tiempo import ahora_iso
 
 _log = logging.getLogger("keni_consola.campanias")
@@ -498,7 +498,6 @@ async def analitica_campania(campania_id: str, rango: str = RANGO_DEF) -> dict[s
         "rango": rango,
         "periodo": {"desde": desde.isoformat(), "hasta": hasta.isoformat()},
         "fuente": fuente_actual(),
-        "es_muestra": es_muestra(),
         "kpis": actual,
         "comparativa": _comparar(actual, anterior),
         "tendencia": {"puntos": _tendencia(piezas, rango)},

@@ -4,7 +4,7 @@
 // `CuentaMetrica`, `ReporteMetricas`, `ComparativaMetrica`, `ComparativaPorMarca`,
 // `CompararMetricas`) se GENERAN desde el backend y se re-exportan desde el barrel
 // (`index.ts`). Ver #101.
-// NOTA: `fuente` ahora es REQUERIDO (el backend siempre lo emite, cae a "muestra").
+// NOTA: `fuente` es REQUERIDO (el backend siempre lo emite; "" si es desconocida).
 
 /** Un grupo (valor de un eje) con su rendimiento agregado. */
 export interface GrupoPorEtiqueta {

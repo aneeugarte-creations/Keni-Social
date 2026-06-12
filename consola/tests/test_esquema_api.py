@@ -99,15 +99,16 @@ def test_paginacion_envelope_requerido_en_listados():
     assert set(defs["Paginacion"]["required"]) == {"total", "limite", "desplazamiento"}
 
 
-def test_comercial_fuente_y_es_muestra_requeridos():
-    """#124: `fuente`/`es_muestra` son REQUERIDOS (el backend siempre los emite)."""
+def test_comercial_fuente_requerida_sin_flags_de_muestra():
+    """#124: `fuente` (procedencia) es REQUERIDA; no existe ningún flag de muestra."""
     defs = esquema_json()["$defs"]
     pub = defs["PublicacionComercial"]
-    assert {"fuente", "es_muestra"} <= set(pub["required"])
+    assert "fuente" in pub["required"]
+    assert "es_muestra" not in pub["properties"]
     # `serie` solo en detalle/alta => opcional.
     assert "serie" not in pub.get("required", [])
     resp = defs["RespuestaPublicacionesComercial"]
-    assert {"publicaciones", "fuente", "es_muestra"} == set(resp["required"])
+    assert {"publicaciones", "fuente"} == set(resp["required"])
 
 
 def test_version_interno_no_aparece_en_ningun_modelo():

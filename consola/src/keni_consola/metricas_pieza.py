@@ -10,7 +10,7 @@ el rendimiento REAL (visualizaciones, interacciones, engagement) desde la **API 
 Metricool** —la fuente PAGADA— y se pinta en cada tarjeta, SIN adaptadores por red.
 
 La lectura unifica sobre `keni_metricas.servicio.construir_metricas_pieza`, que va a la
-fuente activa (Metricool en prod; muestra determinista en demo). No hay un adaptador
+fuente activa (Metricool). No hay un adaptador
 por plataforma: una sola lectura por (marca, red, id_post).
 
 CACHE
@@ -143,7 +143,7 @@ def rendimiento(marca: str, red: str, id_post: str) -> dict[str, Any]:
             "-",
             marca,
             payload,
-            payload.get("fuente") or "muestra",
+            payload.get("fuente") or "",
             generado_en,
         )
     return {**payload, "generado_en": generado_en if payload.get("encontrado") else ""}
@@ -303,7 +303,7 @@ def recalcular(marca: str, red: str, id_post: str) -> dict[str, Any]:
             "-",
             marca,
             payload,
-            payload.get("fuente") or "muestra",
+            payload.get("fuente") or "",
             generado_en,
         )
         # Acumula la serie histórica (best-effort, no rompe el refresco si falla).
@@ -493,7 +493,7 @@ def analitica_por_etiqueta(
         {"series": [{"eje": "tipo", "etiqueta": "Tipo de contenido",
                      "grupos": [{"valor": ..., "n": ..., "visualizaciones": ..., "engagement_pct": ...}]}, ...],
          "total": <piezas del periodo>, "enlazadas": <por id>, "enlazadas_titulo": <por fuzzy>,
-         "sin_enlace": <sin casar>, "fuente": <muestra|real|...>}
+         "sin_enlace": <sin casar>, "fuente": <metricool|...>}
 
     Best-effort y honesto: si nada enlaza, las series salen con todo en "Sin clasificar".
     """

@@ -2,7 +2,7 @@
  * Tests del dashboard de Métricas (página integradora).
  *
  * Cubre:
- *   1. El aviso de datos de muestra aparece SOLO cuando `fuente === "muestra"`.
+ *   1. El cuerpo del dashboard pinta sin avisos de demostración (no existen en la app).
  *   2. Deep-link del periodo: `?periodo=` válido (preset del backend o token
  *      `mes:`/`rango:`) inicializa el rango de la consulta del reporte.
  *   3. `?periodo=` inválido cae al primer rango disponible.
@@ -127,26 +127,13 @@ afterEach(() => {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe("Metricas · aviso de datos de muestra", () => {
-  it("muestra el aviso cuando la fuente del reporte es 'muestra'", async () => {
-    mockReporte.mockResolvedValue(reporte("muestra"));
+describe("Metricas · cuerpo del dashboard", () => {
+  it("pinta el cuerpo sin avisos de datos de muestra (no existen en la app)", async () => {
     renderMetricas();
 
-    expect(await screen.findByText("Datos de muestra")).toBeInTheDocument();
-    expect(
-      screen.getByText("Cifras de demostración, no reales."),
-    ).toBeInTheDocument();
-  });
-
-  it("NO muestra el aviso cuando la fuente es real (metricool)", async () => {
-    renderMetricas();
-
-    // El cuerpo del dashboard ya pintó (la sección "Por marca" es visible; la etiqueta
-    // del corte ya no se repite en el cuerpo: el rango lo enseña el selector)…
     expect(await screen.findByText("Por marca")).toBeInTheDocument();
     expect(screen.queryByText("Corte de prueba (1–7 jun)")).not.toBeInTheDocument();
-    // …y el aviso de muestra no aparece.
-    expect(screen.queryByText("Datos de muestra")).not.toBeInTheDocument();
+    expect(screen.queryByText(/datos de muestra/i)).not.toBeInTheDocument();
   });
 });
 

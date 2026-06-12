@@ -67,7 +67,7 @@ def _a_dict(pub: dict[str, Any], *, con_serie: bool = False) -> dict[str, Any]:
         "red": pub.get("red") or "",
         "red_nombre": redes.nombre_por_id(pub["red"]) if pub.get("red") else "",
         # Formato ESTATICO de la pieza (reel/foto/carrusel/...); se resuelve desde la fuente
-        # en la primera captura real. Vacio hasta entonces (o en modo muestra).
+        # en la primera captura real. Vacio hasta entonces.
         "formato": pub.get("formato") or "",
         "metrica_objetivo": pub.get("metrica_objetivo") or "interacciones",
         "objetivo": objetivo,
@@ -80,10 +80,8 @@ def _a_dict(pub: dict[str, Any], *, con_serie: bool = False) -> dict[str, Any]:
         "actual": actual,
         "progreso_pct": progreso,
         "alcanzado": bool(pub.get("aviso_en")) or (objetivo > 0 and progreso >= 100),
-        # Procedencia de las cifras: de muestra (sinteticas) mientras no haya APIs
-        # reales conectadas. Que el frontend nunca las confunda con datos reales.
+        # Procedencia de las cifras (p. ej. "metricool").
         "fuente": comercial.fuente_actual(),
-        "es_muestra": comercial.es_muestra(),
     }
     if con_serie:
         d["serie"] = comercial.serie(pub["id"])
@@ -220,9 +218,7 @@ async def listar(request: Request) -> Response:
     return JSONResponse(
         {
             "publicaciones": [_a_dict(p) for p in pubs],
-            # Procedencia comun a todas: de muestra mientras no haya APIs reales.
             "fuente": comercial.fuente_actual(),
-            "es_muestra": comercial.es_muestra(),
         }
     )
 
@@ -232,7 +228,7 @@ async def crear(request: Request) -> Response:
 
     Forma preferida (sin enlaces a mano): se selecciona un post real de Metricool, asi
     que llega `id_post_metricool` + `marca` + `red` (la `url` es derivada/opcional). Se
-    mantiene el alta por `url` (sin `id_post_metricool`) para la demo y la compatibilidad.
+    mantiene el alta por `url` (sin `id_post_metricool`) por compatibilidad.
     """
     datos = await leer_json(request)
     cambios, error = _validar_campos(datos, claves=_CLAVES)
@@ -260,7 +256,7 @@ async def crear(request: Request) -> Response:
 async def posts(request: Request) -> Response:
     """Posts reales seleccionables para monitorizar: `?marca=&red=&rango=`.
 
-    Lista en vivo de la fuente activa (Metricool en prod; piezas de muestra en demo) para
+    Lista en vivo de la fuente activa (Metricool) para
     que el alta elija una pieza por su `id_post_metricool` sin pegar enlaces. `marca`/`red`
     se validan contra sus allowlists (vacios = sin filtro); `rango` cae al valor por defecto.
     """
@@ -277,7 +273,6 @@ async def posts(request: Request) -> Response:
         {
             "posts": lista,
             "fuente": comercial.fuente_actual(),
-            "es_muestra": comercial.es_muestra(),
         }
     )
 
@@ -397,7 +392,6 @@ async def listar_campanias(request: Request) -> Response:
         {
             "campanias": campanias.listar_campanias(marca=marca),
             "fuente": comercial.fuente_actual(),
-            "es_muestra": comercial.es_muestra(),
         }
     )
 

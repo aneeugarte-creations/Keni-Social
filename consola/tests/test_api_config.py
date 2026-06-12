@@ -87,7 +87,8 @@ def test_get_config_contrato(cfg_metricas):
         "credenciales_presentes",
     }
     assert datos["fuente"] == "muestra"
-    assert set(datos["fuentes_validas"]) == {"muestra", "metricool", "real"}
+    # Desde la app SOLO es elegible la fuente real de pago: nada sintético/demo.
+    assert datos["fuentes_validas"] == ["metricool"]
     assert datos["marcas"] == ["unotv"]
     # marcas_disponibles: lista de {id, nombre}.
     ids = {m["id"] for m in datos["marcas_disponibles"]}
@@ -155,7 +156,7 @@ def test_post_fuente_real_rechazada_400(cfg_metricas):
 
 def test_post_alcance_vacio_borra_marcas(cfg_metricas):
     _escribir(cfg_metricas, 'fuente = "muestra"\nmarcas = ["unotv"]\n')
-    r = _cli().post("/api/config", json={"fuente": "muestra", "marcas": []})
+    r = _cli().post("/api/config", json={"fuente": "metricool", "marcas": []})
     assert r.status_code == 200
     datos = tomllib.loads(cfg_metricas.read_text(encoding="utf-8"))
     assert "marcas" not in datos
@@ -186,8 +187,17 @@ def test_post_fuente_invalida_400(cfg_metricas):
 
 def test_post_marca_desconocida_400(cfg_metricas):
     _escribir(cfg_metricas, 'fuente = "muestra"\n')
-    r = _cli().post("/api/config", json={"fuente": "muestra", "marcas": ["marca_que_no_existe"]})
+    r = _cli().post("/api/config", json={"fuente": "metricool", "marcas": ["marca_que_no_existe"]})
     assert r.status_code == 400
+
+
+def test_post_fuente_muestra_rechazada_400(cfg_metricas):
+    # Nada sintético ni de demostración elegible desde la app: `muestra` queda como
+    # modo técnico del paquete (tests / TOML a mano), pero la API lo rechaza.
+    _escribir(cfg_metricas, 'fuente = "metricool"\n')
+    r = _cli().post("/api/config", json={"fuente": "muestra", "marcas": []})
+    assert r.status_code == 400
+    assert "metricool" in r.json()["error"].lower()
     assert "desconocida" in r.json()["error"].lower()
 
 

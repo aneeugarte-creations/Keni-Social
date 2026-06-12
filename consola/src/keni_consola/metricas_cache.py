@@ -234,7 +234,7 @@ def _calcular(tipo: str, rango: str, marca: str | None) -> dict:
 def _refrescar(tipo: str, rango: str, marca: str | None) -> tuple[dict, str]:
     """Recalcula un combo (bypass cache), lo guarda y devuelve `(payload, generado_en)`."""
     payload = _calcular(tipo, rango, marca)
-    fuente = payload.get("fuente") or "muestra"
+    fuente = payload.get("fuente") or ""
     generado_en = _ahora()
     repos.guardar_metricas_cache(
         _clave(tipo, rango, marca),

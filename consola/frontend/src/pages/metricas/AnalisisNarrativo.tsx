@@ -197,7 +197,6 @@ export function AnalisisNarrativo({
         <div className="flex flex-wrap items-center gap-2">
           <Sparkles className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <CardTitle className="text-base">Qué cambió y por qué</CardTitle>
-          {data?.es_muestra && <Badge variant="aviso">Datos de muestra</Badge>}
         </div>
         {data && <CardDescription>{data.etiqueta_rango}</CardDescription>}
       </CardHeader>

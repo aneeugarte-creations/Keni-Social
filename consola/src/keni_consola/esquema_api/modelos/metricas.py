@@ -238,16 +238,15 @@ class AnalisisDiario(TypedDict):
     """Respuesta de `GET /api/metricas/analisis`: lectura "qué cambió y por qué".
 
     Capa narrativa (F6/#146) sobre las métricas: top movimientos con la(s) pieza(s)
-    que los explican y un siguiente paso. `es_muestra`/`fuente` marcan cuando los
-    datos son de muestra y no reales (issue #131).
+    que los explican y un siguiente paso. `fuente` marca la procedencia de los
+    datos (issue #131).
     """
 
     rango: str
     etiqueta_rango: str
     marca: str
-    # Procedencia: "muestra" (ficticios) o nombre de la fuente real.
+    # Procedencia: nombre de la fuente de los datos (p. ej. "metricool").
     fuente: str
-    es_muestra: bool
     movimientos: list[MovimientoAnalisis]
     movimientos_resto: int
     marcas_estables: int

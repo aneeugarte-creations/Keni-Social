@@ -208,15 +208,14 @@ export interface SiguientePasoAnalisis {
  * Respuesta de `GET /api/metricas/analisis`: lectura "qué cambió y por qué".
  *
  * Capa narrativa (F6/#146) sobre las métricas: top movimientos con la(s) pieza(s)
- * que los explican y un siguiente paso. `es_muestra`/`fuente` marcan cuando los
- * datos son de muestra y no reales (issue #131).
+ * que los explican y un siguiente paso. `fuente` marca la procedencia de los
+ * datos (issue #131).
  */
 export interface AnalisisDiario {
   rango: string;
   etiqueta_rango: string;
   marca: string;
   fuente: string;
-  es_muestra: boolean;
   movimientos: MovimientoAnalisis[];
   movimientos_resto: number;
   marcas_estables: number;
@@ -772,17 +771,16 @@ export interface PostSeleccionableComercial {
   url?: string | null;
 }
 /**
- * Listado de posts seleccionables + procedencia (muestra vs real).
+ * Listado de posts seleccionables + procedencia de las cifras.
  */
 export interface RespuestaPostsComercial {
   posts: PostSeleccionableComercial[];
   fuente: string;
-  es_muestra: boolean;
 }
 /**
  * Una pieza comercial monitoreada (`api/comercial._a_dict`).
  *
- * `fuente`/`es_muestra` (#124) marcan la procedencia de las cifras. `serie` solo
+ * `fuente` (#124) marca la procedencia de las cifras. `serie` solo
  * viene en el detalle / al crear (`con_serie=True`), por eso es `NotRequired`.
  */
 export interface PublicacionComercial {
@@ -809,7 +807,6 @@ export interface PublicacionComercial {
   progreso_pct: number;
   alcanzado: boolean;
   fuente: string;
-  es_muestra: boolean;
   serie?: SnapshotComercial[];
 }
 /**
@@ -818,7 +815,6 @@ export interface PublicacionComercial {
 export interface RespuestaPublicacionesComercial {
   publicaciones: PublicacionComercial[];
   fuente: string;
-  es_muestra: boolean;
 }
 /**
  * Respuesta de los endpoints que devuelven UNA pieza comercial (`{publicacion}`).

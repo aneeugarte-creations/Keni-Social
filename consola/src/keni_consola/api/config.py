@@ -13,7 +13,7 @@ en `api/conexiones.py`, no aqui.
 from __future__ import annotations
 
 from keni_metricas import servicio
-from keni_metricas.servicio import FUENTES_DISPONIBLES, ConfigInvalida
+from keni_metricas.servicio import ConfigInvalida
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -34,6 +34,11 @@ def _etiqueta_humana(marca_id: str, nombre: str) -> str:
     return nombre or marca_id
 
 
+# Fuentes elegibles DESDE LA APP: solo la real de pago. El paquete de métricas conoce
+# más ("muestra" para tests, "real" como fallback histórico), pero la Consola no las
+# ofrece: nada sintético ni de demostración de cara al equipo.
+_FUENTES_APP: tuple[str, ...] = ("metricool",)
+
 # --------------------------------------------------------------------------- #
 # Endpoints                                                                    #
 # --------------------------------------------------------------------------- #
@@ -50,7 +55,7 @@ async def obtener_config(request: Request) -> Response:
     return JSONResponse(
         {
             "fuente": estado["fuente"],
-            "fuentes_validas": list(FUENTES_DISPONIBLES),
+            "fuentes_validas": list(_FUENTES_APP),
             "marcas": estado["marcas"],
             "marcas_disponibles": [
                 {"id": mid, "nombre": _etiqueta_humana(mid, nombre)}
@@ -64,23 +69,15 @@ async def obtener_config(request: Request) -> Response:
 async def guardar_config(request: Request) -> Response:
     datos = await leer_json(request)
 
+    # Desde la Consola SOLO se acepta `metricool`: `muestra` (datos sintéticos) y `real`
+    # (adaptadores por plataforma, fallback histórico) existen como modos técnicos del
+    # paquete de métricas (tests / opt-in manual en el config), pero la app no debe poder
+    # apuntarse a cifras inventadas ni a una fuente que desfasa el tablero.
     fuente = datos.get("fuente")
-    if not isinstance(fuente, str) or fuente not in FUENTES_DISPONIBLES:
-        validas = ", ".join(FUENTES_DISPONIBLES)
+    if not isinstance(fuente, str) or fuente not in _FUENTES_APP:
+        validas = ", ".join(_FUENTES_APP)
         return JSONResponse(
             {"error": f"Fuente inválida. Usa una de: {validas}."}, status_code=400
-        )
-    # `real` (adaptadores por plataforma) es un fallback histórico desactivado: dejaría
-    # el rendimiento por pieza sin datos (desfase con el tablero). No se ofrece desde la
-    # Consola; quien lo necesite lo activa a propósito en el config + flag. La fuente
-    # única de producción es `metricool` (con `muestra` para demo).
-    if fuente == "real":
-        return JSONResponse(
-            {
-                "error": "La fuente 'real' está desactivada (dejaría el rendimiento por "
-                "pieza sin datos). Usa 'metricool' (fuente única) o 'muestra' (demo)."
-            },
-            status_code=400,
         )
 
     marcas_crudas = datos.get("marcas", [])
@@ -117,7 +114,7 @@ async def guardar_config(request: Request) -> Response:
         if alcance_ids
         else "todas las marcas"
     )
-    legible = {"metricool": "Metricool", "muestra": "Muestra", "real": "Real"}.get(fuente, fuente)
+    legible = {"metricool": "Metricool"}.get(fuente, fuente)
     return JSONResponse(
         {"mensaje": f"Configuración guardada. Fuente: {legible}. Alcance: {alcance}."}
     )

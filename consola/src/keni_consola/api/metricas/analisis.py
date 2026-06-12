@@ -53,9 +53,9 @@ def _analisis_serializable(analisis: dict, rango: str, marca: str | None) -> dic
     """Forma JSON del análisis diario para el SPA: lectura + movimientos + paso.
 
     Resuelve los nombres de marca con el catálogo de la Consola y mantiene
-    `fuente`/`es_muestra` para que la UI marque cuando los datos son de muestra
-    (issue #131). El texto narrativo (render Markdown) NO se incluye: el SPA pinta
-    su propia tarjeta a partir de los campos estructurados.
+    `fuente` (procedencia de las cifras, issue #131). El texto narrativo (render
+    Markdown) NO se incluye: el SPA pinta su propia tarjeta a partir de los
+    campos estructurados.
     """
     nombres = analisis.get("nombres") or {}
     paso = analisis.get("siguiente_paso")
@@ -73,10 +73,8 @@ def _analisis_serializable(analisis: dict, rango: str, marca: str | None) -> dic
         "rango": rango,
         "etiqueta_rango": _etiqueta_rango(rango),
         "marca": marca or "",
-        # Procedencia: "muestra" (ficticios) o nombre de la fuente real. La UI pinta
-        # un badge de advertencia y un aviso con esto (issue #131).
-        "fuente": analisis.get("fuente") or "muestra",
-        "es_muestra": bool(analisis.get("es_muestra")),
+        # Procedencia: nombre de la fuente de los datos (issue #131).
+        "fuente": analisis.get("fuente") or "",
         "movimientos": [
             _movimiento_serializable(m, nombres) for m in analisis.get("movimientos", [])
         ],
