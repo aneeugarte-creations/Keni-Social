@@ -171,7 +171,7 @@
     --foreground: 0 0% 9%;
     --muted-foreground: 0 0% 9%;
     --muted: 0 0% 9%; /* superficies muted oscuras (translúcidas vía /40); ver regla de la píldora abajo */
-    --accent: 28 100% 82%; /* hover: píldora albaricoque clara, el glifo negro sigue legible */
+    --accent: 22 90% 66%; /* hover: tinte naranja claro (realce SUTIL, NO salta a blanco); glifo negro ~7:1 */
     --accent-foreground: 0 0% 9%;
     --border: 16 70% 30%; /* hairline oscuro cálido */
     --input: 16 70% 30%;
@@ -185,14 +185,14 @@
     /* CTA (Exportar / «Guardar en pieza») y estados activos NO son píldoras negras: serían
        botones que "no respetan" el naranja. Comparten el lenguaje CLARO del cromo (píldora
        albaricoque con glifo negro), así toda la barra son botones simples y alineados. */
-    --primary: 28 100% 82%; /* CTA: píldora albaricoque clara… */
+    --primary: 21 89% 62%; /* CTA: mismo tinte naranja del cromo activo (ya no un bloque casi blanco)… */
     --primary-foreground: 0 0% 9%; /* …con glifo negro (sin bloques negros sobre el naranja) */
     --ring: 0 0% 9%;
     /* `--secondary` alineado con el accent por si un control futuro lo trae a la barra;
        `--destructive` se deja intacto A PROPÓSITO (rojo sobre naranja no se usa aquí). */
-    --secondary: 28 100% 82%;
+    --secondary: 21 89% 62%;
     --secondary-foreground: 0 0% 9%;
-    --control-activo: 28 100% 82%; /* activo/abierto: píldora albaricoque clara (como el hover)… */
+    --control-activo: 21 89% 62%; /* activo/abierto: tinte naranja un punto más profundo que el hover (hover sostenido) */
     --control-activo-foreground: 0 0% 9%; /* …con glifo negro */
     --aviso-borde: 0 0% 9%;
     --aviso-superficie: 0 0% 9%; /* aviso con superficie = píldora negra sólida… */
