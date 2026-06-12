@@ -35,6 +35,7 @@ from ._contenido import (
     _fila_contenido_nueva,
     _insertar_contenido,
     actualizar_contenido,
+    reclamar_contenido,
     borrar_contenido,
     contar_contenido_origen_desde,
     resumen_plan_por_categoria,
@@ -113,6 +114,7 @@ __all__ = [
     "existe_publicado_similar_en_cache",
     "obtener_contenido",
     "actualizar_contenido",
+    "reclamar_contenido",
     "borrar_contenido",
     # contenido_plataforma (hijo)
     "_COLS_CONTENIDO_PLATAFORMA",

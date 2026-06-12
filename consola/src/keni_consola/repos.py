@@ -75,6 +75,7 @@ from .repos_comercial import (  # noqa: F401
 )
 from .repos_contenido import (  # noqa: F401
     actualizar_contenido,
+    reclamar_contenido,
     actualizar_contenido_plataforma,
     actualizar_etiqueta,
     actualizar_evergreen_idea,

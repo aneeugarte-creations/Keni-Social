@@ -169,6 +169,14 @@ def actualizar_contenido(
     return db.actualizar_contenido(contenido_id, campos)
 
 
+def reclamar_contenido(
+    contenido_id: str, *, responsable_id: str, responsable_nombre: str
+) -> dict[str, Any] | None:
+    return db.reclamar_contenido(
+        contenido_id, responsable_id=responsable_id, responsable_nombre=responsable_nombre
+    )
+
+
 def borrar_contenido(contenido_id: str) -> bool:
     return db.borrar_contenido(contenido_id)
 

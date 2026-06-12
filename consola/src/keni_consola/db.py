@@ -136,6 +136,7 @@ from .db_comercial import (  # noqa: F401
 )
 from .db_contenido import (  # noqa: F401
     actualizar_contenido,
+    reclamar_contenido,
     actualizar_contenido_plataforma,
     actualizar_etiqueta,
     borrar_contenido,

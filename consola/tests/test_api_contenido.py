@@ -553,3 +553,71 @@ def test_aportar_clip_sin_habla_no_rompe(entorno, monkeypatch):
     )
     assert r.status_code == 200, r.text
     assert r.json()["contenido"]["descripcion"] == ""
+
+
+# --------------------------------------------------------------------------- #
+# "Coger" / "Soltar": reparto de tareas SIN solaparse (la lista de ClaroSports)
+# --------------------------------------------------------------------------- #
+
+
+def test_coger_asigna_al_usuario(entorno):
+    c = _cli("ana")
+    cont = c.post(
+        "/api/contenido", json={"titulo": "Cubrir partido"}, headers=_ORIGIN
+    ).json()["contenido"]
+    assert (cont.get("responsable_id") or "") == ""  # nace libre (sin rota)
+    r = c.post(f"/api/contenido/{cont['id']}/coger", headers=_ORIGIN)
+    assert r.status_code == 200, r.text
+    assert r.json()["contenido"]["responsable_nombre"] == "ana"
+
+
+def test_coger_doble_da_409_sin_pisar(entorno):
+    c_ana = _cli("ana")
+    c_luis = _cli("luis")
+    cont = c_ana.post(
+        "/api/contenido", json={"titulo": "Una sola"}, headers=_ORIGIN
+    ).json()["contenido"]
+    r1 = c_luis.post(f"/api/contenido/{cont['id']}/coger", headers=_ORIGIN)
+    assert r1.status_code == 200
+    assert r1.json()["contenido"]["responsable_nombre"] == "luis"
+    # ana intenta coger lo que ya tiene luis: 409, sin pisar.
+    r2 = c_ana.post(f"/api/contenido/{cont['id']}/coger", headers=_ORIGIN)
+    assert r2.status_code == 409
+    assert r2.json()["responsable_nombre"] == "luis"
+
+
+def test_coger_idempotente_si_ya_es_mia(entorno):
+    c = _cli("ana")
+    cont = c.post("/api/contenido", json={"titulo": "Mía"}, headers=_ORIGIN).json()["contenido"]
+    assert c.post(f"/api/contenido/{cont['id']}/coger", headers=_ORIGIN).status_code == 200
+    assert c.post(f"/api/contenido/{cont['id']}/coger", headers=_ORIGIN).status_code == 200
+
+
+def test_soltar_libera_y_otro_puede_coger(entorno):
+    c_ana = _cli("ana")
+    c_luis = _cli("luis")
+    cont = c_ana.post(
+        "/api/contenido", json={"titulo": "Para soltar"}, headers=_ORIGIN
+    ).json()["contenido"]
+    c_luis.post(f"/api/contenido/{cont['id']}/coger", headers=_ORIGIN)
+    r = c_luis.post(f"/api/contenido/{cont['id']}/soltar", headers=_ORIGIN)
+    assert r.status_code == 200
+    assert (r.json()["contenido"].get("responsable_id") or "") == ""
+    # Liberada: ahora ana sí puede cogerla.
+    assert c_ana.post(f"/api/contenido/{cont['id']}/coger", headers=_ORIGIN).status_code == 200
+
+
+def test_soltar_ajeno_da_403(entorno):
+    c_ana = _cli("ana")
+    c_luis = _cli("luis")
+    cont = c_ana.post(
+        "/api/contenido", json={"titulo": "De luis"}, headers=_ORIGIN
+    ).json()["contenido"]
+    c_luis.post(f"/api/contenido/{cont['id']}/coger", headers=_ORIGIN)
+    # ana (editor, no admin) no puede soltar lo de luis.
+    assert c_ana.post(f"/api/contenido/{cont['id']}/soltar", headers=_ORIGIN).status_code == 403
+
+
+def test_coger_inexistente_404(entorno):
+    c = _cli()
+    assert c.post("/api/contenido/fantasma/coger", headers=_ORIGIN).status_code == 404

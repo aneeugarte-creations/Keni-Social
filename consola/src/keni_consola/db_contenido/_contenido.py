@@ -692,6 +692,36 @@ def actualizar_contenido(
     return _fila_a_contenido(fila) if fila is not None else None
 
 
+def reclamar_contenido(
+    contenido_id: str, *, responsable_id: str, responsable_nombre: str
+) -> dict[str, Any] | None:
+    """Asigna el contenido a un responsable SOLO si está LIBRE (claim atómico = "coger").
+
+    `UPDATE ... WHERE id=? AND responsable_id=''` es un compare-and-set sobre una sola fila: si
+    otra persona ya lo cogió, `rowcount==0` y devolvemos None (NO se pisa al primero, a
+    diferencia del last-write-wins de `actualizar_contenido`). El llamador distingue "ya cogido"
+    de "no existe" releyendo con `obtener_contenido`. Mismo patrón que `reclamar_job` de la cola.
+    Devuelve el contenido ya asignado, o None si no se pudo reclamar.
+    """
+    ahora = ahora_iso()
+    con = _conectar()
+    try:
+        cur = con.execute(
+            "UPDATE contenido SET responsable_id = ?, responsable_nombre = ?, actualizado = ? "
+            "WHERE id = ? AND responsable_id = ''",
+            (responsable_id, responsable_nombre, ahora, contenido_id),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+        fila = con.execute(
+            f"{_SELECT_CONTENIDO} WHERE id = ?", (contenido_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_contenido(fila) if fila is not None else None
+
+
 def borrar_contenido(contenido_id: str) -> bool:
     """Borra un item del tablero, SUS filas por plataforma y etiquetas (cascada). True si existia."""
     con = _conectar()

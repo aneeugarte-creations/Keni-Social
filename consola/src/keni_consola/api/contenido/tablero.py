@@ -10,6 +10,7 @@ from __future__ import annotations
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from ...permisos import es_admin
 from ...tiempo import hoy_utc
 from ._comun import (
     _MAX_TEXTO,
@@ -354,3 +355,75 @@ async def borrar(request: Request) -> Response:
     if not repos.borrar_contenido(contenido_id):
         return JSONResponse({"error": "Ese contenido ya no existe."}, status_code=404)
     return JSONResponse({"mensaje": "Contenido borrado."})
+
+
+# --------------------------------------------------------------------------- #
+# "Coger" / "Soltar": reparto de tareas SIN solaparse (la lista de ClaroSports).#
+# El claim es ATÓMICO (`reclamar_contenido`): si dos personas pulsan a la vez,   #
+# solo una se la lleva; la otra recibe 409 con quién la tiene. UnoTV no usa esto #
+# (su flujo es auto): la UI solo lo expone con Claro Sports activa.              #
+# --------------------------------------------------------------------------- #
+
+
+async def coger(request: Request) -> Response:
+    """POST /api/contenido/{id}/coger: el usuario autenticado RECLAMA la pieza (claim atómico).
+
+    Solo si está LIBRE (sin responsable). Si otra persona ya la cogió, 409 con quién la tiene
+    — no se pisa. Idempotente si ya era mía.
+    """
+    contenido_id = request.path_params["contenido_id"]
+    autor = autor_de_peticion(request)
+    if not autor or not autor.get("id"):
+        return JSONResponse(
+            {"error": "Necesitas iniciar sesión para coger una tarea."}, status_code=401
+        )
+    item = repos.reclamar_contenido(
+        contenido_id,
+        responsable_id=autor["id"],
+        responsable_nombre=autor.get("usuario", "") or "",
+    )
+    if item is None:
+        # No se pudo reclamar: distinguir "no existe" de "ya cogida por otra persona".
+        actual = repos.obtener_contenido(contenido_id)
+        if actual is None:
+            return JSONResponse({"error": "Ese contenido ya no existe."}, status_code=404)
+        if (actual.get("responsable_id") or "") == autor["id"]:
+            item = actual  # ya era mía: idempotente
+        else:
+            return JSONResponse(
+                {
+                    "error": f"Ya la cogió {actual.get('responsable_nombre') or 'otra persona'}.",
+                    "responsable_id": actual.get("responsable_id") or "",
+                    "responsable_nombre": actual.get("responsable_nombre") or "",
+                },
+                status_code=409,
+            )
+    plataformas = repos.listar_contenido_plataforma(contenido_id)
+    etiquetas = repos.etiquetas_por_contenido().get(contenido_id, [])
+    return JSONResponse({"contenido": _contenido_a_dict(item, plataformas, etiquetas)})
+
+
+async def soltar(request: Request) -> Response:
+    """POST /api/contenido/{id}/soltar: libera la pieza (vuelve al backlog «Por coger»).
+
+    Solo puede soltarla quien la tiene, o un admin (para reasignar/balancear). Idempotente si
+    ya estaba libre.
+    """
+    contenido_id = request.path_params["contenido_id"]
+    actual = repos.obtener_contenido(contenido_id)
+    if actual is None:
+        return JSONResponse({"error": "Ese contenido ya no existe."}, status_code=404)
+    autor = autor_de_peticion(request)
+    if not autor or not autor.get("id"):
+        return JSONResponse({"error": "Necesitas iniciar sesión."}, status_code=401)
+    responsable_actual = actual.get("responsable_id") or ""
+    if responsable_actual and responsable_actual != autor["id"] and not es_admin(request):
+        return JSONResponse(
+            {"error": "Solo quien la cogió (o un admin) puede soltarla."}, status_code=403
+        )
+    item = repos.actualizar_contenido(
+        contenido_id, {"responsable_id": "", "responsable_nombre": ""}
+    )
+    plataformas = repos.listar_contenido_plataforma(contenido_id)
+    etiquetas = repos.etiquetas_por_contenido().get(contenido_id, [])
+    return JSONResponse({"contenido": _contenido_a_dict(item or actual, plataformas, etiquetas)})
