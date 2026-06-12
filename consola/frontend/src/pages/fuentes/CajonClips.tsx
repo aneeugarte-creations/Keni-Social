@@ -1,8 +1,8 @@
 /**
- * Cajón CLIPS (Fuentes → Internas, Claro Sports): el vídeo/foto que llega por WhatsApp a los
+ * Cajón CLIPS (Fuentes → Internas, Claro Sports): el video/foto que llega por WhatsApp a los
  * grupos de Claro Sports (Envíos Mundial, Ramón Mundial, Videos AS Claro, ClaroSports PS…) se
  * vuelca aquí TAL CUAL —un pie/contexto + el media— y el sistema genera AUTOMÁTICAMENTE la pieza:
- * un VÍDEO → pieza de vídeo (en las 5 redes); FOTOS → carrusel (portada con placa + slides).
+ * un VIDEO → pieza de video (en las 5 redes); FOTOS → carrusel (portada con placa + slides).
  * El copy se redacta en segundo plano; la pieza fluye por el gate humano normal.
  *
  * Es un cajón de Claro Sports: visible con esa marca activa o en "Todas".
@@ -55,7 +55,7 @@ export default function CajonClips() {
   const { marcaActiva } = useMarcaActiva();
   const [titulo, setTitulo] = React.useState("");
   const [texto, setTexto] = React.useState("");
-  // El media del clip. Un VÍDEO solo → pieza de vídeo; FOTOS → carrusel (1ª imagen = portada).
+  // El media del clip. Un VIDEO solo → pieza de video; FOTOS → carrusel (1ª imagen = portada).
   const [media, setMedia] = React.useState<SlideCarrusel[]>([]);
 
   const clipsQuery = useQuery({
@@ -88,9 +88,9 @@ export default function CajonClips() {
   if (marcaActiva && marcaActiva !== MARCA_CAJON) return null;
 
   const hayVideo = media.some((s) => s.tipo === "video");
-  // Un clip de vídeo es UNA sola pieza de vídeo: si hay vídeo, no puede haber nada más.
+  // Un clip de video es UNA sola pieza de video: si hay video, no puede haber nada más.
   const videoInvalido = hayVideo && media.length > 1;
-  const formato = hayVideo ? "vídeo" : "carrusel";
+  const formato = hayVideo ? "video" : "carrusel";
   const puedeEnviar =
     texto.trim().length > 0 && media.length > 0 && !videoInvalido && !crearMut.isPending;
   const clips = clipsQuery.data?.clips ?? [];
@@ -128,11 +128,11 @@ export default function CajonClips() {
           idPrefijo="clips"
           base={1}
           marcarPortada
-          etiqueta="Vídeo o fotos"
+          etiqueta="Video o fotos"
         />
         {videoInvalido && (
           <p className="text-xs text-amber-700 dark:text-amber-300">
-            1 vídeo o varios fotos (no ambos).
+            1 video o varias fotos (no ambos).
           </p>
         )}
         {media.length > 0 && !videoInvalido && (
@@ -186,7 +186,7 @@ export default function CajonClips() {
                         ) : (
                           <Images className="h-3 w-3" />
                         )}
-                        {c.formato === "video" ? "Vídeo" : "Carrusel"}
+                        {c.formato === "video" ? "Video" : "Carrusel"}
                       </Badge>
                     )}
                     <BadgeEstadoPieza clip={c} />

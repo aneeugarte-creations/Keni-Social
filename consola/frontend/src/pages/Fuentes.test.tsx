@@ -167,6 +167,22 @@ function stubFetch(opts: { rssPayload?: object } = {}) {
         const payload = opts.rssPayload ?? { fuentes: [] };
         return new Response(JSON.stringify(payload), { status: 200 });
       }
+      // Pestaña INTERNAS (la inicial): cajones del día + clips + presidencia montan al abrir.
+      if (ruta.includes("/api/insumos/dias")) {
+        return new Response(JSON.stringify({ dias: [] }), { status: 200 });
+      }
+      if (ruta.includes("/api/insumos")) {
+        return new Response(
+          JSON.stringify({ fecha: "2026-06-05", cajones: [] }),
+          { status: 200 },
+        );
+      }
+      if (ruta.includes("/api/clips")) {
+        return new Response(JSON.stringify({ clips: [] }), { status: 200 });
+      }
+      if (ruta.includes("/api/presidencia/notas")) {
+        return new Response(JSON.stringify({ notas: [] }), { status: 200 });
+      }
       // Fallback silencioso para cualquier otra petición.
       return new Response("{}", { status: 200 });
     }),
@@ -181,13 +197,13 @@ function sesionValor(u: UsuarioSesion | null): ValorSesion {
   return { usuario: u, cargando: false, iniciarSesion: vi.fn(), verificarConPasskey: vi.fn(), verificarConCodigo: vi.fn(), cerrarSesion: vi.fn(), refrescar: vi.fn() };
 }
 
-function renderFuentes() {
+function renderFuentes(rutaInicial = "/fuentes") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
       <SesionContexto.Provider value={sesionValor(usuario())}>
         <MarcaActivaProvider>
-          <MemoryRouter>
+          <MemoryRouter initialEntries={[rutaInicial]}>
             <Fuentes />
           </MemoryRouter>
         </MarcaActivaProvider>
@@ -235,6 +251,34 @@ describe("Fuentes — Catálogo (Ola 4)", () => {
     expect(screen.getByRole("tab", { name: "Internas" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Rendimiento" })).toBeInTheDocument();
     expect(screen.getAllByRole("tab")).toHaveLength(3);
+  });
+
+  it("la pestaña por defecto es Internas (el flujo diario del equipo)", async () => {
+    stubFetch();
+    renderFuentes();
+
+    // Sin ?tab= abre INTERNAS: ahí viven los cajones y clips que Elías vuelca a diario
+    // ("Externas" son ajustes de RSS, no el flujo del día).
+    const tabInternas = await screen.findByRole("tab", { name: "Internas" });
+    expect(tabInternas).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Externas" })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
+    // El contenido interno (cajones del día) está montado.
+    expect(
+      await screen.findByRole("heading", { name: "Cajones del día" }),
+    ).toBeInTheDocument();
+  });
+
+  it("el deep-link ?tab=externas sigue abriendo Externas", async () => {
+    stubFetch();
+    renderFuentes("/fuentes?tab=externas");
+
+    const tabExternas = await screen.findByRole("tab", { name: "Externas" });
+    expect(tabExternas).toHaveAttribute("aria-selected", "true");
+    // El catálogo (contenido de Externas) está montado sin ningún clic.
+    expect(await screen.findByText("Reuters — World")).toBeInTheDocument();
   });
 
   it("el preset ya activo muestra badge 'Activo' y su checkbox está deshabilitado", async () => {

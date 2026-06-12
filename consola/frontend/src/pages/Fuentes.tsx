@@ -17,8 +17,8 @@ import CajonesDia from "./CajonesDia";
 // una pieza CARRUSEL en el feed. Es un buzón aparte de los Cajones del día (no se parsea
 // con IA: la nota va tal cual y el media adjunto ES el carrusel).
 import CajonPresidencia from "./fuentes/CajonPresidencia";
-// Cajón CLIPS (Claro Sports): el vídeo/foto de WhatsApp que genera sola una pieza en el feed
-// (vídeo o carrusel). Hermano de Presidencia, pero para el material visual de Claro Sports.
+// Cajón CLIPS (Claro Sports): el video/foto de WhatsApp que genera sola una pieza en el feed
+// (video o carrusel). Hermano de Presidencia, pero para el material visual de Claro Sports.
 import CajonClips from "./fuentes/CajonClips";
 
 /** Una clase de fuente (pestaña): Externas o Internas. */
@@ -56,9 +56,11 @@ export default function Fuentes() {
   // redirigen aquí con `?tab=` para abrir directamente su canal.
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
+  // Por defecto INTERNAS: el flujo DIARIO del equipo (volcar cajones y clips) vive ahí;
+  // "Externas" son ajustes de RSS que se tocan de pascuas a ramos (deep-link ?tab=externas).
   const tabInicial = PESTANAS_TIPO.some((p) => p.valor === tabParam)
     ? (tabParam as string)
-    : "externas";
+    : "internas";
 
   return (
     <>
