@@ -1,7 +1,7 @@
 # Woodpecker: tests del SHELL · infra transversal (test scoping por ruta, plan §1.5).
 # Espejo del job `tests-shell` de .github/workflows/ci.yml.
 #
-# Cambio en módulos del shell (auth, usuarios, config, estado, conexiones, limites,
+# Cambio en módulos del shell (auth, usuarios, estado, conexiones, limites,
 # media, panel, sugerencias, carpetas, proyectos) -> SOLO los tests del shell +
 # contrato de fronteras + keni-shared. El shell es la base transversal de A/B/C, pero
 # NO es keni-shared: un cambio aquí no obliga a la suite completa (sí lo hace
@@ -10,8 +10,9 @@ when:
   - event: [push, pull_request]
     path:
       include:
-        - "consola/src/keni_consola/api/{auth,usuarios,config,estado,conexiones,limites,media,sugerencias,carpetas,proyectos,catalogo}.py"
+        - "consola/src/keni_consola/api/{auth,usuarios,estado,conexiones,limites,media,sugerencias,carpetas,proyectos,catalogo}.py"
         - "consola/src/keni_consola/apps/shell.toml"
+        - ".woodpecker/tests-shell.yml"
 
 services:
   - name: postgres
@@ -36,7 +37,6 @@ steps:
         python -m pytest -q
         consola/tests/test_auth.py
         consola/tests/test_auth_hardening.py
-        consola/tests/test_api_config.py
         consola/tests/test_config.py
         consola/tests/test_api_estado.py
         consola/tests/test_api_conexiones.py
