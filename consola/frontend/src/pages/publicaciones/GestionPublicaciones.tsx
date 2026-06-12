@@ -239,7 +239,9 @@ function Cuerpo({
     estado: estadoVista,
   };
   // Conteos exactos para los badges de las pestañas (mismos que el feed; ver vistas.tsx).
-  const { conteoVista } = useConteosFeed(filtrosBase);
+  // `enVivo` con el reparto activo: los badges laten al mismo pulso que la lista/calendario
+  // (tablero compartido), para que tras el claim de un compañero no queden rancios.
+  const { conteoVista } = useConteosFeed({ ...filtrosBase, enVivo: repartoActivo });
 
   // CALENDARIO: la ANCLA (mes/semana/día visible) se eleva aquí para pedir a la API SOLO el
   // rango visible (`?desde=&hasta=`) en vez del conjunto completo —que el cap de 1000 filas

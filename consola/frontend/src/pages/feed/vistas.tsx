@@ -129,6 +129,7 @@ export function useConteosFeed(filtros: {
   red?: string;
   linea?: string;
   responsable?: string;
+  enVivo?: boolean;
 }): {
   totalRevision: number | undefined;
   conteoVista: Record<Vista, number | undefined>;
@@ -136,7 +137,13 @@ export function useConteosFeed(filtros: {
   // `responsable` (lente del reparto "la lista"): cuando está activa, la Lista filtra por
   // ella, así que los badges deben contar lo MISMO que se lista (si no, el número no cuadra
   // con las filas). Ausente en los demás feeds (MobileFeed/FeedIdeacion): sin efecto.
-  const { marca, red, linea, responsable } = filtros;
+  const { marca, red, linea, responsable, enVivo } = filtros;
+  // `enVivo` (tablero COMPARTIDO del reparto): los conteos laten al MISMO pulso que la lista
+  // y el calendario (que ya tienen refetchInterval+refetchOnWindowFocus); sin esto, tras el
+  // claim de un compañero el badge se quedaba rancio mientras la lista ya había cambiado.
+  const refrescoEnVivo = enVivo
+    ? { refetchInterval: 45_000, refetchOnWindowFocus: true }
+    : {};
   const claveConteo = (estado?: string) =>
     [
       ...CLAVE_PUBLICACIONES,
@@ -152,18 +159,21 @@ export function useConteosFeed(filtros: {
     queryFn: ({ signal }) =>
       api.publicaciones({ marca, red, linea, responsable, estado: "pendiente", limite: "1" }, signal),
     staleTime: 30_000,
+    ...refrescoEnVivo,
   });
   const conteoPublicado = useQuery({
     queryKey: claveConteo("publicado"),
     queryFn: ({ signal }) =>
       api.publicaciones({ marca, red, linea, responsable, estado: "publicado", limite: "1" }, signal),
     staleTime: 30_000,
+    ...refrescoEnVivo,
   });
   const conteoRevision = useQuery({
     queryKey: claveConteo("en_revision"),
     queryFn: ({ signal }) =>
       api.publicaciones({ marca, red, linea, responsable, estado: "en_revision", limite: "1" }, signal),
     staleTime: 30_000,
+    ...refrescoEnVivo,
   });
   const totalPendiente = conteoPendiente.data?.paginacion?.total;
   const totalPublicado = conteoPublicado.data?.paginacion?.total;
