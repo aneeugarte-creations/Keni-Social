@@ -252,6 +252,11 @@ function Cuerpo({
   );
 
   // CALENDARIO: rejilla mensual; pide solo la ventana visible (mes ancla ± 1 semana).
+  // NO se filtra por `responsable`: el calendario es la FOTO COMPLETA de la programación
+  // (lo usa para los huecos del plan y para no doble-reservar una franja). La lente del
+  // reparto (Por coger/Mis tareas) es de la Lista; aquí pintaría huecos fantasma —un slot
+  // ocupado por la pieza de un compañero, filtrada fuera, parecería libre—. El responsable
+  // se sigue viendo por pieza (iniciales/sello en cada píldora), solo no FILTRA la rejilla.
   const calendarioQuery = useQuery({
     queryKey: [
       ...CLAVE_PUBLICACIONES,
@@ -259,12 +264,14 @@ function Cuerpo({
       filtrosBase.marca ?? "",
       filtrosBase.red ?? "",
       filtrosBase.linea ?? "",
-      responsable ?? "",
       rangoCal.desde,
       rangoCal.hasta,
     ],
     queryFn: ({ signal }) =>
-      api.publicaciones({ ...filtrosBase, desde: rangoCal.desde, hasta: rangoCal.hasta }, signal),
+      api.publicaciones(
+        { ...filtrosBase, responsable: undefined, desde: rangoCal.desde, hasta: rangoCal.hasta },
+        signal,
+      ),
     enabled: calendario,
     // Navegar de mes refetcha el nuevo rango: mantener la rejilla previa visible (en vez de
     // parpadear a skeleton y perder los controles) mientras llega la del mes destino.
@@ -338,6 +345,11 @@ function Cuerpo({
   const total = calendario
     ? publicaciones.length
     : listaQuery.data?.pages.at(-1)?.paginacion?.total ?? publicaciones.length;
+  // CALENDARIO truncado: el backend capa el listado a `tope_listado` (1000) incluso dentro
+  // del rango visible; `paginacion.total` trae el conteo REAL sin cap. Si excede lo cargado,
+  // la rejilla está pintando solo una parte del rango: lo decimos en vez de mentir por omisión.
+  const totalRangoCalendario = calendarioQuery.data?.paginacion?.total ?? 0;
+  const calendarioTruncado = calendario && totalRangoCalendario > publicaciones.length;
   const hayMas = !calendario && Boolean(listaQuery.hasNextPage);
   const filtrando =
     red !== FILTRO_TODOS ||
@@ -362,7 +374,10 @@ function Cuerpo({
           ver tu espacio de trabajo.
         </div>
       )}
-      {repartoActivo && (
+      {/* Chips del reparto SOLO en la Lista: en el calendario filtrar por responsable
+          falsearía los huecos del plan (riesgo de doble-reserva), así que la rejilla
+          siempre muestra la foto completa. El reparto por pieza sigue en cada píldora. */}
+      {repartoActivo && !calendario && (
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <div className="inline-flex overflow-hidden rounded-md border border-border">
             {(Object.keys(ETIQUETA_REPARTO) as FiltroReparto[]).map((f) => (
@@ -404,6 +419,19 @@ function Cuerpo({
               ))}
             </TabsList>
           </Tabs>
+        </div>
+      )}
+      {calendarioTruncado && (
+        <div
+          role="alert"
+          className="mb-3 flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200"
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>
+            <strong>Calendario incompleto.</strong> En este rango hay {totalRangoCalendario}{" "}
+            piezas y se muestran las primeras {publicaciones.length}. Acota por marca, red o
+            línea, o navega a una ventana más corta para verlas todas.
+          </span>
         </div>
       )}
       {hayProgramadasSinSalir && (

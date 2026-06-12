@@ -417,9 +417,6 @@ export function VistaCalendario({
     () => publicaciones.filter((p) => !!p.fecha_programada),
     [publicaciones],
   );
-  // Piezas de la lente actual SIN fecha: el calendario solo pinta programadas, así que
-  // con una lente del reparto (p. ej. "Por coger") puede haber trabajo invisible aquí.
-  const sinFecha = publicaciones.length - programadas.length;
   const porDia = React.useMemo(() => indexarPorDia(programadas), [programadas]);
 
   // SLOTS del plan de la marca activa (franjas con línea), como PLACEHOLDERS en las vistas
@@ -522,13 +519,8 @@ export function VistaCalendario({
         {programadas.length === 0 && (
           <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
             <CalendarOff className="h-4 w-4 shrink-0" />
-            {sinFecha > 0
-              ? `No hay piezas programadas con esta vista. ${sinFecha} ${
-                  sinFecha === 1
-                    ? "pieza de esta lente aún no tiene"
-                    : "piezas de esta lente aún no tienen"
-                } fecha: trabájalas desde la Lista del Feed.`
-              : "No hay piezas programadas."}
+            No hay piezas programadas en esta ventana. Las piezas sin fecha se trabajan desde
+            la Lista del Feed.
           </div>
         )}
         <div className="flex flex-wrap items-center justify-between gap-2">

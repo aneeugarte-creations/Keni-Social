@@ -115,10 +115,15 @@ describe("VistaCalendario — sello «libre» (coger en táctil) y aviso sin fec
     expect(onEditar).not.toHaveBeenCalled();
   });
 
-  it("con una pieza SIN fecha el calendario avisa de las piezas de la lente sin programar", () => {
-    renderCalendario([pub({ contenido_id: "c9", titulo: "Gol", fecha_programada: "" })]);
-    // No hay programadas: el aviso señala el trabajo invisible (sin fecha) de la lente.
-    expect(screen.getByText(/1 pieza de esta lente aún no tiene/)).toBeInTheDocument();
+  it("sin piezas programadas avisa y remite a la Lista del Feed para las piezas sin fecha", () => {
+    // El calendario solo recibe piezas con fecha (la API lo acota por rango): el vacío
+    // remite a la Lista, donde viven las piezas sin programar. No deriva ya un conteo
+    // de "sin fecha" de su propio listado (ese conteo era siempre 0 en producción).
+    renderCalendario([]);
+    expect(
+      screen.getByText(/No hay piezas programadas en esta ventana/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/se trabajan desde\s+la Lista del Feed/)).toBeInTheDocument();
   });
 });
 
