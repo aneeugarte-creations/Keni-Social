@@ -233,6 +233,63 @@ def test_lanzar_piezas_titulo_contenido_titula_los_borradores(encolado):
     assert spec["titulo_dado"] == "Ni volcán ni géiser: expertos de la UNAM"
 
 
+def _prompt_piezas(titulo: str = "Copy desde nota"):
+    """Crea un prompt y lo marca `salida: piezas` (como haría el editor de la Texto)."""
+    doc = libtexto.crear(titulo, tipo="prompt", cuerpo="Convierte la nota en copy por red.")
+    ruta = libtexto._ruta_de_id(doc.id)
+    ruta.write_text(
+        ruta.read_text(encoding="utf-8").replace("tipo: prompt", "tipo: prompt\nsalida: piezas"),
+        encoding="utf-8",
+    )
+    return doc
+
+
+def _sembrar_indicacion(repos, *, fecha: str, marca: str, titulo: str) -> None:
+    """Siembra una indicación en el cajón `contexto` (mismo patrón que test_indicaciones_copy)."""
+    lote = repos.crear_insumo_lote(fecha=fecha, cajon="contexto", estado="listo")
+    repos.crear_insumo_items([
+        {"lote_id": lote["id"], "cajon": "contexto", "tipo": "contexto",
+         "fecha": fecha, "marca": marca, "titulo": titulo},
+    ])
+
+
+def test_lanzar_piezas_inyecta_indicaciones_vigentes_de_la_marca(entorno, encolado):
+    """MODO PIEZAS crea piezas REALES, así que (como el resto del copy, cuyo punto único es
+    `componer_copy`) inyecta las indicaciones VIGENTES del equipo. Con una indicación sembrada
+    para claro-sports el prompt encolado lleva el bloque OBLIGATORIO; una marca sin
+    indicaciones no cambia ni un byte (best-effort)."""
+    from keni_consola import repos
+    from keni_consola.dominio import indicaciones
+    from keni_consola.tiempo import hoy_utc
+
+    _sembrar_indicacion(
+        repos, fecha=hoy_utc().isoformat(), marca="claro-sports",
+        titulo="Hoy prioridad al Mundial",
+    )
+    prompt = _prompt_piezas()
+
+    texto_lanzar.lanzar(
+        prompt_id=prompt.id, marca="claro-sports", redes_ids=["x"],
+        bloque_contexto="Nota: gol en el 90'",
+    )
+    final = encolado["prompt"]
+    assert indicaciones.ENCABEZADO_INDICACIONES in final
+    assert "Hoy prioridad al Mundial" in final
+    # Las indicaciones van FUERA del envoltorio anti-inyección y ANTES del CONTEXTO no confiable.
+    i_indicaciones = final.index(indicaciones.ENCABEZADO_INDICACIONES)
+    i_contexto = final.index("CONTEXTO:")
+    assert i_indicaciones < i_contexto
+    assert "contenido_usuario" not in final[:i_indicaciones]
+
+    # Otra marca SIN indicaciones vigentes: el prompt de MODO PIEZAS no cambia ni un byte.
+    encolado.clear()
+    texto_lanzar.lanzar(
+        prompt_id=prompt.id, marca="unotv", redes_ids=["x"],
+        bloque_contexto="Nota: gol en el 90'",
+    )
+    assert indicaciones.ENCABEZADO_INDICACIONES not in encolado["prompt"]
+
+
 def test_lanzar_prompt_piezas_sin_redes_cae_a_identidad(encolado):
     """Sin redes, un prompt salida=piezas usa el camino IDENTIDAD (no crea borradores)."""
     prompt = libtexto.crear("Copy", tipo="prompt", cuerpo="haz copy")

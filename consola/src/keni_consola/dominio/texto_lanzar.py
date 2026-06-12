@@ -156,7 +156,18 @@ def lanzar(
 
     # MODO PIEZAS: el prompt declara salida=piezas y el lanzamiento trae redes -> copy.
     if salida == "piezas" and redes_ids:
-        prompt_final = generar.componer(cuerpo_prompt, adjuntos, bloque_contexto, redes_ids=redes_ids)
+        # INDICACIONES DEL EQUIPO: MODO PIEZAS crea piezas reales, así que (como el resto del
+        # copy, cuyo punto único es `generar.componer_copy`) inyecta las indicaciones VIGENTES
+        # del cajón `contexto` de los Insumos. No rutamos por `componer_copy`: MODO PIEZAS usa
+        # OTRA composición (adjuntos elegidos en la UI + una pieza POR red, no `adjuntos_copy`
+        # + copy unificado), así que replicamos solo su INYECCIÓN. Import perezoso (igual que
+        # componer_copy) para no acoplar; best-effort: sin ítems / sin BD el prompt no cambia.
+        from . import indicaciones as indicaciones_dom
+
+        prompt_final = generar.componer(
+            cuerpo_prompt, adjuntos, bloque_contexto, redes_ids=redes_ids,
+            indicaciones=indicaciones_dom.bloque_para_marca(marca),
+        )
         # `titulo` es el nombre del PROMPT ("Copy desde nota"), no el título del historial.
         # `titulo_dado` titula los borradores: si el llamante sugiere un título del contenido
         # (titular de la URL) lo usamos; si no, "" para que se DERIVE de la nota (texto_base).
