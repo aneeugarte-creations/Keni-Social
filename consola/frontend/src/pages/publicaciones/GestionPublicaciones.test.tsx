@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { responsableDeLente } from "./GestionPublicaciones";
+import { faltaMarcaAsignada, responsableDeLente } from "./GestionPublicaciones";
 
 /**
  * Mapeo de los chips del reparto ("la lista" de ClaroSports) al filtro `responsable`
@@ -23,5 +23,26 @@ describe("responsableDeLente — lente del reparto → filtro `responsable`", ()
 
   it('"mias" SIN sesión no puede saber quién mira: cae a no filtrar', () => {
     expect(responsableDeLente("mias", null)).toBeUndefined();
+  });
+});
+
+/**
+ * El aviso "no tienes marca asignada" distingue `marcas` DESCONOCIDA (la forma mínima
+ * del login no trae la clave) de VACÍA (el `me` la serializa siempre): solo la segunda
+ * debe avisar. Sin la distinción, todo editor veía el falso aviso toda la sesión.
+ */
+describe("faltaMarcaAsignada — aviso de usuario sin marca", () => {
+  it("avisa solo con la lista de marcas CONOCIDA y vacía (editor)", () => {
+    expect(faltaMarcaAsignada({ rol: "editor", marcas: [] })).toBe(true);
+  });
+
+  it("NO avisa si `marcas` aún no se conoce (forma mínima del login)", () => {
+    expect(faltaMarcaAsignada({ rol: "editor" })).toBe(false);
+  });
+
+  it("NO avisa con marcas asignadas, a admins ni sin sesión", () => {
+    expect(faltaMarcaAsignada({ rol: "editor", marcas: ["claro-sports"] })).toBe(false);
+    expect(faltaMarcaAsignada({ rol: "admin", marcas: [] })).toBe(false);
+    expect(faltaMarcaAsignada(null)).toBe(false);
   });
 });

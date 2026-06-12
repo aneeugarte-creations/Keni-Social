@@ -49,6 +49,24 @@ export function responsableDeLente(
 }
 
 /**
+ * ¿Avisar de que el usuario no tiene marca asignada? Solo no-admins con la lista de
+ * marcas CONOCIDA y vacía. OJO: `marcas` solo viaja en GET /auth/me; el login devuelve
+ * la forma mínima SIN esa clave, así que `undefined` = "aún no lo sé" (sesión recién
+ * creada), NO "sin marcas" — sin esta distinción todo editor veía el falso aviso
+ * durante toda su sesión tras iniciarla. Pura y exportada para testearla sin montar.
+ */
+export function faltaMarcaAsignada(
+  usuario: { rol: string; marcas?: string[] } | null,
+): boolean {
+  return (
+    usuario !== null &&
+    usuario.rol !== "admin" &&
+    usuario.marcas !== undefined &&
+    usuario.marcas.length === 0
+  );
+}
+
+/**
  * Refresco por-query mientras la lente del reparto está activa: el tablero es COMPARTIDO
  * en vivo (los claims de los compañeros cambian lo que ves), así que no podemos quedarnos
  * con los defaults globales de main.tsx (staleTime 30s, sin refetch al volver a la
@@ -145,8 +163,7 @@ function Cuerpo({
 
   // Usuario (no admin) sin marca asignada: cae a la vista agregada sin saber por qué.
   // Lo avisamos suave: el arreglo es de datos (un admin le asigna su marca en Usuarios).
-  const sinMarcaAsignada =
-    usuario !== null && usuario.rol !== "admin" && (usuario.marcas ?? []).length === 0;
+  const sinMarcaAsignada = faltaMarcaAsignada(usuario);
 
   const filtrosBase = {
     marca: marcaActiva ?? undefined,
@@ -199,7 +216,15 @@ function Cuerpo({
         signal,
       ),
     // El backend OMITE `cursor_siguiente` en la última página: undefined = no hay más.
-    getNextPageParam: (ultima) => ultima.paginacion?.cursor_siguiente || undefined,
+    getNextPageParam: (ultima, paginas) => {
+      // El backend emite cursor cuando la página viene LLENA, incluida la última si el
+      // total es múltiplo exacto: con el total fresco ya cubierto no hay más que pedir
+      // (evita el "Cargar más" fantasma junto a "Mostrando 30 de 30").
+      const cargadas = paginas.reduce((n, p) => n + p.publicaciones.length, 0);
+      const total = ultima.paginacion?.total;
+      if (total != null && cargadas >= total) return undefined;
+      return ultima.paginacion?.cursor_siguiente || undefined;
+    },
     enabled: !calendario,
     // REPARTO: ver en vivo los claims de los compañeros (sin tocar defaults globales).
     ...(repartoActivo ? REFRESCO_REPARTO : {}),
