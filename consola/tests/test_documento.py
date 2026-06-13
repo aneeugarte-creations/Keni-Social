@@ -281,6 +281,19 @@ def test_validar_marco_y_overlay_y_grupo():
     assert grupo["tipo"] == "grupo" and grupo["capas"][0]["tipo"] == "texto"
 
 
+def test_capa_overlay_lado_arriba_se_conserva_y_abajo_se_descarta():
+    """`lado:"arriba"` se persiste; ausente o "abajo" NO se guarda (retrocompat: overlay inferior)."""
+    doc = d.validar(_doc(capas=[
+        {"tipo": "overlay", "x": 0, "y": 0, "w": 1080, "h": 1350, "color": "#111315", "lado": "arriba"},
+        {"tipo": "overlay", "x": 0, "y": 0, "w": 1080, "h": 1350, "color": "#111315", "lado": "abajo"},
+        {"tipo": "overlay", "x": 0, "y": 0, "w": 1080, "h": 1350, "color": "#111315"},
+    ]))
+    arriba, abajo, sin = doc["capas"]
+    assert arriba["lado"] == "arriba"
+    assert "lado" not in abajo
+    assert "lado" not in sin
+
+
 def test_validar_tipo_capa_invalido():
     with pytest.raises(d.DocumentoError):
         d.validar(_doc(capas=[{"tipo": "video", "x": 0, "y": 0, "w": 1, "h": 1}]))

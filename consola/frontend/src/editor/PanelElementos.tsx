@@ -2,7 +2,7 @@
 // formas (con vista previa real), bloques compuestos típicos de noticias/deportes (pleca inferior),
 // imagen y degradado. Cada inserción queda seleccionada para editarla al instante.
 
-import { Image as ImageIcon, PanelBottom } from "lucide-react";
+import { Image as ImageIcon, PanelBottom, PanelTop } from "lucide-react";
 
 import type { Capa, CapaMarco, CapaTexto } from "./documento";
 import { nuevaCapaImagen, nuevaCapaMarco, nuevaCapaOverlay, nuevaCapaTexto, zTope } from "./documento";
@@ -55,6 +55,17 @@ export function PanelElementos() {
   const seleccionarUltima = () => {
     const st = store.getState();
     st.seleccionar(st.documento.capas[st.documento.capas.length - 1]?.id ?? null);
+  };
+
+  // Degradado de legibilidad a sangre: banda pegada ABAJO (def) o ARRIBA. Cubre todo el lienzo y la
+  // banda vive en el borde elegido; el alto/color/opacidad se ajustan luego en el inspector.
+  const agregarDegradado = (lado?: "arriba") => {
+    const st = store.getState();
+    const doc = st.documento;
+    st.agregar(
+      nuevaCapaOverlay({ w: doc.formato.w, h: doc.formato.h, z: zTope(doc), ...(lado ? { lado } : {}) }),
+    );
+    seleccionarUltima();
   };
 
   // Bloque compuesto: PLECA INFERIOR de noticia (degradado + etiqueta roja + titular ligado al copy).
@@ -140,16 +151,20 @@ export function PanelElementos() {
             Imagen
           </button>
           <button
-            onClick={() => {
-              const st = store.getState();
-              const doc = st.documento;
-              st.agregar(nuevaCapaOverlay({ w: doc.formato.w, h: doc.formato.h, z: zTope(doc) }));
-              seleccionarUltima();
-            }}
+            onClick={() => agregarDegradado()}
+            title="Degradado pegado abajo"
             className="flex flex-col items-center gap-1 rounded-md border border-border px-2 py-3 text-xs text-muted-foreground hover:border-primary hover:bg-accent/50"
           >
             <PanelBottom className="h-5 w-5" />
-            Degradado
+            Degradado ↓
+          </button>
+          <button
+            onClick={() => agregarDegradado("arriba")}
+            title="Degradado pegado arriba"
+            className="flex flex-col items-center gap-1 rounded-md border border-border px-2 py-3 text-xs text-muted-foreground hover:border-primary hover:bg-accent/50"
+          >
+            <PanelTop className="h-5 w-5" />
+            Degradado ↑
           </button>
         </div>
       </Seccion>

@@ -216,6 +216,10 @@ export interface CapaOverlay extends CapaBase {
   color: string;
   alto_frac: number;
   alpha: number;
+  // Borde al que se pega la banda: "abajo" (def, banda inferior, opaca abajo) o "arriba" (banda
+  // superior, opaca arriba). Solo se persiste si "arriba" (retrocompat: los overlays históricos
+  // no lo llevan y son inferiores).
+  lado?: "arriba" | "abajo";
 }
 
 export interface CapaGrupo extends CapaBase {
@@ -398,7 +402,9 @@ export function bandaOverlay(c: CapaOverlay): number {
 export function cajaVisual(c: Capa): { x: number; y: number; w: number; h: number } {
   if (c.tipo === "overlay") {
     const banda = bandaOverlay(c);
-    return { x: c.x, y: c.y + c.h - banda, w: c.w, h: banda };
+    // La banda se pega ARRIBA (y = c.y) o ABAJO (y = c.y + c.h - banda, def).
+    const y = c.lado === "arriba" ? c.y : c.y + c.h - banda;
+    return { x: c.x, y, w: c.w, h: banda };
   }
   if (c.tipo === "texto" && c.h <= 0) {
     const alto = altoVisual(c);

@@ -499,13 +499,18 @@ def _capa_overlay(c: dict[str, Any]) -> dict[str, Any]:
     # brickearía documentos ya guardados al re-validarlos. Lo no numérico sí lanza DocumentoError
     # (400 en español) como el resto de campos — antes escapaba como ValueError crudo (500).
     alto_frac = _flotante(c.get("alto_frac", _spec._DEGRADADO_ALTO_FRAC), "alto_frac", defecto=_spec._DEGRADADO_ALTO_FRAC)
-    return {
+    overlay = {
         **_base(c),
         "tipo": "overlay",
         "color": c["color"] if _es_hex(c.get("color")) else "#111315",
         "alto_frac": min(1.0, max(0.0, alto_frac)),
         "alpha": _entero(c.get("alpha", _spec._DEGRADADO_ALPHA), "alpha", minimo=0, maximo=255, defecto=_spec._DEGRADADO_ALPHA),
     }
+    # `lado` ("arriba"/"abajo"): la banda se pega al borde superior o al inferior (def). Solo se
+    # persiste si es "arriba" (retrocompat: los overlays históricos no lo llevan y son inferiores).
+    if c.get("lado") == "arriba":
+        overlay["lado"] = "arriba"
+    return overlay
 
 
 def _capa_grupo(c: dict[str, Any]) -> dict[str, Any]:

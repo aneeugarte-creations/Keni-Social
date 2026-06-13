@@ -315,7 +315,13 @@ function dibujarFondo(ctx, fondo, w, h, fondoImg) {
 function dibujarOverlayInferior(ctx, ov, x, y, w, h) {
   if (!ov) return;
   const band = Math.max(1, Math.floor(h * (ov.alto_frac ?? 0.58)));
-  const g = ctx.createLinearGradient(0, y + h - band, 0, y + h);
+  // `lado` "arriba": banda pegada al tope (y..y+band), opaca arriba; "abajo" (def): banda al fondo
+  // (y+h-band..y+h), opaca abajo. El gradiente va transparente -> OPACO hacia el borde pegado.
+  const arriba = ov.lado === "arriba";
+  const top = arriba ? y : y + h - band;
+  const g = arriba
+    ? ctx.createLinearGradient(0, top + band, 0, top)
+    : ctx.createLinearGradient(0, top, 0, top + band);
   // rampa t**1.5 sobre alpha máx (paridad con degradado_inferior de Pillow).
   const aMax = (ov.alpha ?? 238) / 255;
   for (let i = 0; i <= 10; i++) {
@@ -323,7 +329,7 @@ function dibujarOverlayInferior(ctx, ov, x, y, w, h) {
     g.addColorStop(t, hexRGBA(ov.color || "#111315", aMax * Math.pow(t, 1.5)));
   }
   ctx.fillStyle = g;
-  ctx.fillRect(x, y + h - band, w, band);
+  ctx.fillRect(x, top, w, band);
 }
 
 // Dibuja UNA línea de texto a lo largo de un ARCO (texto curvo). El texto se trata como una sola

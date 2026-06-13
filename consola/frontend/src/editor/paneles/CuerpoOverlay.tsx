@@ -10,6 +10,17 @@ import type { PropsCuerpoCapa } from "./tipos";
 export function CuerpoOverlay({ capa, set }: PropsCuerpoCapa<CapaOverlay>) {
   return (
     <div className="flex flex-col gap-2 border-t border-border pt-3">
+      {/* Borde al que se pega la banda: abajo (def) o arriba. Espejo exacto en editor y export. */}
+      <Campo etiqueta="Lado">
+        <select
+          value={capa.lado === "arriba" ? "arriba" : "abajo"}
+          onChange={(e) => set({ lado: e.target.value === "arriba" ? "arriba" : "abajo" } as Partial<Capa>)}
+          className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
+        >
+          <option value="abajo">Abajo</option>
+          <option value="arriba">Arriba</option>
+        </select>
+      </Campo>
       <Campo etiqueta="Color">
         <ColorControl valor={capa.color} onChange={(c) => set({ color: c } as Partial<Capa>)} />
       </Campo>

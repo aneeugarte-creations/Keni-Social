@@ -878,14 +878,18 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
       // no-op) desplazaba la banda +(h-band), deriva acumulativa. Con el Group, origen del nodo ==
       // origen del modelo: onDragEnd/onTransformEnd y su guarda vuelven a ser correctos, el
       // multi-arrastre vuelca coords válidas y la ROTACIÓN pivota en (x,y) como el export.
+      // ARRIBA: la banda se pega al tope (y local 0) y el gradiente se invierte (opaco en el borde
+      // superior -> transparente hacia dentro); ABAJO (def): banda al fondo (y local h-band), opaco
+      // abajo. Las paradas van transparente(0)->opaco(1), así que el punto OPACO es el borde pegado.
+      const arriba = c.lado === "arriba";
       return (
         <Group {...props} listening={interactivo && !capa.bloqueada}>
           <Rect
-            y={c.h - band}
+            y={arriba ? 0 : c.h - band}
             width={c.w}
             height={band}
-            fillLinearGradientStartPoint={{ x: 0, y: 0 }}
-            fillLinearGradientEndPoint={{ x: 0, y: band }}
+            fillLinearGradientStartPoint={arriba ? { x: 0, y: band } : { x: 0, y: 0 }}
+            fillLinearGradientEndPoint={arriba ? { x: 0, y: 0 } : { x: 0, y: band }}
             fillLinearGradientColorStops={stops}
           />
         </Group>

@@ -44,6 +44,12 @@ describe("cajaVisual / bandaOverlay / altoVisual", () => {
     expect(vis).toEqual({ x: 0, y: -700 + 1350 - 607, w: 1080, h: 607 });
   });
 
+  it("cajaVisual del overlay con lado 'arriba' es su BANDA SUPERIOR (y), no la inferior", () => {
+    const ov = nuevaCapaOverlay({ x: 0, y: 0, w: 1080, h: 1350, alto_frac: 0.45, lado: "arriba" });
+    // Banda pegada al tope: y = la del modelo (no y+h-banda); mismo alto que la inferior.
+    expect(cajaVisual(ov)).toEqual({ x: 0, y: 0, w: 1080, h: 607 });
+  });
+
   it("cajaVisual del texto legado (h<=0) con ancla 'abajo' ancla el bloque por su borde INFERIOR", () => {
     const t = nuevaCapaTexto({ x: 80, y: 1254, w: 760, h: 0, tamano: 96, interlineado: 1.14, ancla: "abajo" });
     const alto = Math.round(96 * 1.14);
