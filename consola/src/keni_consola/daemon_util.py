@@ -71,6 +71,14 @@ def bucle_gateado(
     modulo de `sweep_fn` (asi los 10 call sites existentes quedan instrumentados sin
     cambios).
 
+    BARRIDO FORZADO (operacion sin SSH): cada vuelta consulta el flag cross-proceso
+    `barrido_solicitado` (lo escribe `POST /api/sistema/daemons/{daemon}/barrer` desde el
+    contenedor back) y, si esta pedido Y el gate esta ON, ejecuta el sweep YA (consumiendo
+    el flag: un solo barrido por solicitud) y reprograma el siguiente barrido normal a
+    `ahora + intervalo`. Con el gate OFF el flag NO se consume ni se barre (la API ya
+    responde 409 en ese caso; si el gate se apago entre medias, la solicitud espera a la
+    reactivacion, cuyo primer barrido corre de inmediato de todos modos).
+
     `_max_vueltas` (solo para tests) acota el numero de iteraciones del bucle; en
     produccion se deja en None (bucle infinito).
     """
@@ -83,6 +91,12 @@ def bucle_gateado(
         activo = activo_fn()
         intervalo = intervalo_seg_fn()
         correr, proximo = toca_ejecutar(activo, time.monotonic(), proximo, intervalo)
+        # Barrido FORZADO: se consume SIEMPRE que el gate este ON (aunque tocara barrer ya:
+        # ese barrido satisface la solicitud y no debe quedar otro colgado para el tick
+        # siguiente). Best-effort: sin BD, `consumir_solicitud` devuelve False y no pasa nada.
+        if activo and latidos.consumir_solicitud(daemon):
+            correr = True
+            proximo = time.monotonic() + intervalo
         if correr:
             t0 = time.monotonic()
             try:

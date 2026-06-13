@@ -254,6 +254,156 @@ def test_endpoint_daemons_ignora_retirados(entorno):
 
 
 # --------------------------------------------------------------------------- #
+# Barrido FORZADO: flag en BD + consumo en bucle_gateado + endpoint             #
+# --------------------------------------------------------------------------- #
+
+
+def test_solicitar_y_consumir_barrido(entorno):
+    db.latido_barrido("demo", ok=True, intervalo_seg=60.0, tick_seg=60.0)
+    # Sin fila registrada no hay a quien pedirselo.
+    assert db.solicitar_barrido("inexistente") is False
+    assert db.solicitar_barrido("demo") is True
+    (fila,) = [f for f in db.listar_latidos() if f["daemon"] == "demo"]
+    assert fila["barrido_solicitado"] != ""
+    # El consumo es ATOMICO y de un solo uso: el primero la ve, el segundo ya no.
+    assert db.consumir_solicitud_barrido("demo") is True
+    assert db.consumir_solicitud_barrido("demo") is False
+    (fila,) = [f for f in db.listar_latidos() if f["daemon"] == "demo"]
+    assert fila["barrido_solicitado"] == ""
+
+
+def test_consumir_solicitud_sin_bd_devuelve_false(monkeypatch):
+    # Best-effort: un fallo de BD degrada a False (el bucle sigue, sin barrido extra).
+    from keni_consola import db_latidos
+
+    def _explota(daemon):
+        raise RuntimeError("BD caida")
+
+    monkeypatch.setattr(db_latidos, "consumir_solicitud_barrido", _explota)
+    assert latidos.consumir_solicitud("x") is False
+
+
+def test_bucle_gateado_barrido_forzado_corre_ya(monkeypatch):
+    """Con el gate ON y una solicitud pendiente, el sweep corre en ese MISMO tick aunque por
+    intervalo no tocara (y la solicitud se consume: una solicitud = un barrido extra)."""
+    monkeypatch.setattr(latidos, "ciclo", lambda *a, **k: None)
+    monkeypatch.setattr(latidos, "barrido", lambda *a, **k: None)
+    solicitudes = ["pendiente"]  # doble del flag persistido: una solicitud en cola
+    monkeypatch.setattr(
+        latidos, "consumir_solicitud", lambda d: bool(solicitudes and solicitudes.pop())
+    )
+    llamadas: list[int] = []
+    daemon_util.bucle_gateado(
+        activo_fn=lambda: True,
+        intervalo_seg_fn=lambda: 3600.0,  # por intervalo solo tocaria el primer barrido
+        sweep_fn=lambda: llamadas.append(1),
+        tick_seg=0.0,
+        log=_LOG,
+        nombre="forzado",
+        _max_vueltas=3,
+    )
+    # Vuelta 1: barrido normal de arranque + consume la solicitud (el mismo sweep la
+    # satisface). Sin solicitud restante, las vueltas 2-3 no barren (intervalo enorme).
+    assert llamadas == [1]
+
+
+def test_bucle_gateado_barrido_forzado_tras_arranque(monkeypatch):
+    """La solicitud que llega DESPUES del barrido de arranque dispara un sweep extra en el
+    siguiente tick, sin esperar al intervalo."""
+    monkeypatch.setattr(latidos, "ciclo", lambda *a, **k: None)
+    monkeypatch.setattr(latidos, "barrido", lambda *a, **k: None)
+    vueltas = {"n": 0}
+
+    def _consumir(daemon):  # la solicitud "se escribe" tras la primera vuelta
+        vueltas["n"] += 1
+        return vueltas["n"] == 2
+
+    monkeypatch.setattr(latidos, "consumir_solicitud", _consumir)
+    llamadas: list[int] = []
+    daemon_util.bucle_gateado(
+        activo_fn=lambda: True,
+        intervalo_seg_fn=lambda: 3600.0,
+        sweep_fn=lambda: llamadas.append(1),
+        tick_seg=0.0,
+        log=_LOG,
+        nombre="forzado",
+        _max_vueltas=3,
+    )
+    assert llamadas == [1, 1]  # arranque + forzado; la vuelta 3 ya no barre
+
+
+def test_bucle_gateado_apagado_no_consume_solicitud(monkeypatch):
+    """Con el gate OFF la solicitud NI se consume NI se barre: espera a la reactivacion."""
+    monkeypatch.setattr(latidos, "ciclo", lambda *a, **k: None)
+    monkeypatch.setattr(latidos, "barrido", lambda *a, **k: None)
+    consultas: list[str] = []
+
+    def _consumir(daemon):
+        consultas.append(daemon)
+        return True
+
+    monkeypatch.setattr(latidos, "consumir_solicitud", _consumir)
+    llamadas: list[int] = []
+    daemon_util.bucle_gateado(
+        activo_fn=lambda: False,
+        intervalo_seg_fn=lambda: 3600.0,
+        sweep_fn=lambda: llamadas.append(1),
+        tick_seg=0.0,
+        log=_LOG,
+        nombre="apagado",
+        _max_vueltas=3,
+    )
+    assert llamadas == []
+    assert consultas == []
+
+
+def test_endpoint_barrer_solicita_y_devuelve_contrato(entorno):
+    db.latido_barrido("sano", ok=True, intervalo_seg=60.0, tick_seg=60.0)
+    c = _cli_admin()
+    r = c.post("/api/sistema/daemons/sano/barrer", headers=_ORIGIN)
+    assert r.status_code == 200
+    assert r.json() == {"solicitado": True, "daemon": "sano"}
+    (fila,) = [f for f in db.listar_latidos() if f["daemon"] == "sano"]
+    assert fila["barrido_solicitado"] != ""
+
+
+def test_endpoint_barrer_desconocido_404(entorno):
+    c = _cli_admin()
+    r = c.post("/api/sistema/daemons/no-existe/barrer", headers=_ORIGIN)
+    assert r.status_code == 404
+    assert "no-existe" in r.json()["error"]
+
+
+def test_endpoint_barrer_retirado_404(entorno):
+    # La fila huerfana de un daemon RETIRADO no acepta solicitudes: nadie las consumiria.
+    db.latido_barrido("pipeline", ok=True, intervalo_seg=60.0, tick_seg=60.0)
+    c = _cli_admin()
+    assert c.post("/api/sistema/daemons/pipeline/barrer", headers=_ORIGIN).status_code == 404
+
+
+def test_endpoint_barrer_apagado_409(entorno):
+    # Con el gate OFF el bucle ignoraria la solicitud: 409 con mensaje claro, sin encolarla.
+    db.latido_ciclo("dormido", activo=False, intervalo_seg=3600.0, tick_seg=60.0)
+    c = _cli_admin()
+    r = c.post("/api/sistema/daemons/dormido/barrer", headers=_ORIGIN)
+    assert r.status_code == 409
+    assert "apagado" in r.json()["error"]
+    (fila,) = [f for f in db.listar_latidos() if f["daemon"] == "dormido"]
+    assert fila["barrido_solicitado"] == ""
+
+
+def test_endpoint_barrer_solo_admin(entorno):
+    db.latido_barrido("sano", ok=True, intervalo_seg=60.0, tick_seg=60.0)
+    auth.crear_usuario("e", CLAVE, "editor")
+    c = TestClient(app_modulo.crear_app(token=TOKEN_PRUEBA))
+    r = c.post(
+        "/api/auth/login", json={"usuario": "e", "password": CLAVE}, headers=_ORIGIN
+    )
+    assert r.status_code == 200
+    assert c.post("/api/sistema/daemons/sano/barrer", headers=_ORIGIN).status_code == 403
+
+
+# --------------------------------------------------------------------------- #
 # Endpoint /api/sistema/backups                                                #
 # --------------------------------------------------------------------------- #
 

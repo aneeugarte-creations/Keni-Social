@@ -770,6 +770,48 @@ async def daemons_latidos(request: Request) -> Response:
     return JSONResponse(sonda_daemons())
 
 
+async def daemons_barrer(request: Request) -> Response:
+    """POST /api/sistema/daemons/{daemon}/barrer: solicita un barrido INMEDIATO (admin).
+
+    Operacion sin SSH: el back y el servicio `daemons` son contenedores distintos, asi que
+    la solicitud se PERSISTE en `daemon_latidos.barrido_solicitado` y el bucle del daemon
+    (`daemon_util.bucle_gateado`) la consume en su siguiente tick corto (<= ~1 min),
+    ejecutando el barrido YA y limpiando el flag.
+
+    Validacion contra los daemons REGISTRADOS (filas de `daemon_latidos` no retiradas:
+    quien late es quien puede barrer). Codigos: 404 daemon desconocido/retirado; 409 si su
+    gate esta apagado por ajuste (el bucle ignoraria la solicitud: enciendelo primero);
+    200 -> {solicitado: true, daemon}.
+    """
+    if not _es_admin(request):
+        return _rechazo_no_admin()
+    daemon = str(request.path_params.get("daemon") or "").strip()
+    try:
+        filas = {f["daemon"]: f for f in db.listar_latidos()}
+    except Exception as e:  # noqa: BLE001 -- BD caida: degradar legible, no 500 crudo
+        _logger.warning("No se pudieron leer los latidos para forzar un barrido: %s", e)
+        return JSONResponse(
+            {"error": "No se pudo consultar el registro de daemons."}, status_code=503
+        )
+    fila = filas.get(daemon)
+    if fila is None or daemon in latidos.RETIRADOS:
+        return JSONResponse(
+            {"error": f"No hay ningún daemon registrado con el nombre {daemon!r}."},
+            status_code=404,
+        )
+    if not fila["activo"]:
+        return JSONResponse(
+            {
+                "error": f"El daemon {daemon!r} está apagado por su ajuste; "
+                "enciéndelo antes de forzar un barrido."
+            },
+            status_code=409,
+        )
+    db.solicitar_barrido(daemon)
+    _logger.info("Barrido forzado de %r solicitado por un administrador.", daemon)
+    return JSONResponse({"solicitado": True, "daemon": daemon})
+
+
 # --------------------------------------------------------------------------- #
 # Backups locales (estado.json del keni-backup del host, montado :ro)          #
 # --------------------------------------------------------------------------- #
@@ -877,6 +919,7 @@ async def rendimiento_api(request: Request) -> Response:
 RUTAS = [
     Route("/api/sistema/recursos", recursos, methods=["GET"]),
     Route("/api/sistema/daemons", daemons_latidos, methods=["GET"]),
+    Route("/api/sistema/daemons/{daemon}/barrer", daemons_barrer, methods=["POST"]),
     Route("/api/sistema/backups", backups, methods=["GET"]),
     Route("/api/sistema/rendimiento", rendimiento_api, methods=["GET"]),
     Route("/api/sistema/s3", s3, methods=["GET"]),

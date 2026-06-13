@@ -251,9 +251,11 @@ from .db_jobs import (  # noqa: F401
     terminar_job,
 )
 from .db_latidos import (  # noqa: F401
+    consumir_solicitud_barrido,
     latido_barrido,
     latido_ciclo,
     listar_latidos,
+    solicitar_barrido,
 )
 from .db_metricas import (  # noqa: F401
     guardar_metricas_cache,

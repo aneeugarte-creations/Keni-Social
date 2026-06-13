@@ -108,6 +108,24 @@ def barrido(
         _log.debug("Latido de barrido de %s no registrado: %s", daemon, e)
 
 
+def consumir_solicitud(daemon: str) -> bool:
+    """Consume la solicitud de BARRIDO FORZADO pendiente del daemon, si la hay (best-effort).
+
+    La escribe el back (POST /api/sistema/daemons/{daemon}/barrer) y la consulta
+    `bucle_gateado` en cada tick: True => el bucle ejecuta el sweep YA (la solicitud queda
+    limpiada de forma atomica en BD, asi dispara UN solo barrido). Mismo contrato de
+    seguridad que el resto del modulo: un fallo de BD degrada a False (sin barrido extra,
+    sin romper el bucle).
+    """
+    try:
+        from . import db_latidos
+
+        return db_latidos.consumir_solicitud_barrido(daemon)
+    except Exception as e:  # noqa: BLE001 -- la consulta del flag jamás rompe el bucle
+        _log.debug("Solicitud de barrido de %s no consultada: %s", daemon, e)
+        return False
+
+
 def fichero_latido() -> str:
     """Ruta del fichero de latido del proceso daemons (healthcheck del contenedor)."""
     return os.environ.get(ENV_FICHERO_LATIDO) or _FICHERO_LATIDO_DEF

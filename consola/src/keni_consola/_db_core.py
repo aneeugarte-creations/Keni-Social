@@ -1554,7 +1554,10 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # este OFF); `ultimo_barrido`/`ultimo_ok`/`ultimo_error` = ejecucion real del sweep.
     # `intervalo_seg`/`tick_seg` permiten al panel juzgar si un daemon esta ATRASADO sin
     # conocer su configuracion (atrasado ~ edad(visto) >> tick). Timestamps ISO UTC (TEXT),
-    # como el resto del esquema.
+    # como el resto del esquema. `barrido_solicitado` (ISO o '') es el FLAG cross-proceso de
+    # "barre YA": lo escribe el back (POST /api/sistema/daemons/{d}/barrer) y lo consume el
+    # bucle del daemon en su siguiente tick (`daemon_util.bucle_gateado`), que ejecuta el
+    # barrido de inmediato y lo limpia.
     """
     CREATE TABLE IF NOT EXISTS daemon_latidos (
         daemon         TEXT PRIMARY KEY,
@@ -1568,7 +1571,8 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         error_txt      TEXT NOT NULL DEFAULT '',
         duracion_ms    INTEGER NOT NULL DEFAULT 0,
         barridos       INTEGER NOT NULL DEFAULT 0,
-        errores        INTEGER NOT NULL DEFAULT 0
+        errores        INTEGER NOT NULL DEFAULT 0,
+        barrido_solicitado TEXT NOT NULL DEFAULT ''
     )
     """,
 )
@@ -3030,6 +3034,26 @@ def _migrar_columnas_noticias_items(con: Any) -> None:
             con.execute(f"ALTER TABLE noticias_items ADD COLUMN IF NOT EXISTS {columna} {tipo}")
 
 
+# Columnas ampliables de `daemon_latidos` (mismo patrón idempotente). El CREATE TABLE ya las
+# declara para BDs nuevas; esta tupla migra las BDs hosted existentes.
+_COLUMNAS_DAEMON_LATIDOS_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    # FLAG de barrido forzado (ISO de la solicitud o ''): cross-proceso back -> daemons.
+    # Lo escribe POST /api/sistema/daemons/{d}/barrer; lo consume `bucle_gateado` en su
+    # siguiente tick (ejecuta el sweep YA y lo limpia con un UPDATE atomico).
+    ("barrido_solicitado", "TEXT NOT NULL DEFAULT ''"),
+)
+
+
+def _migrar_columnas_daemon_latidos(con: Any) -> None:
+    """Anade a `daemon_latidos` columnas ampliadas que una BD vieja no tuviera (idempotente)."""
+    if not _tabla_existe(con, "daemon_latidos"):
+        return
+    columnas = _columnas_existentes(con, "daemon_latidos")
+    for columna, tipo in _COLUMNAS_DAEMON_LATIDOS_AMPLIADAS:
+        if columna not in columnas:
+            con.execute(f"ALTER TABLE daemon_latidos ADD COLUMN IF NOT EXISTS {columna} {tipo}")
+
+
 def _backfill_pesos_fuente(con: Any) -> None:
     """Backfill ONE-SHOT del peso editorial: seed por host en `fuentes_rss` + propagación.
 
@@ -3422,6 +3446,13 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # …y backfill ONE-SHOT del seed por host + propagación a items archivados (corre una
     # sola vez por BD: los pesos editados a mano después no se vuelven a pisar).
     Migracion("0026-backfill-pesos-fuente", _backfill_pesos_fuente),
+    # Flag de barrido forzado de daemons (`barrido_solicitado`) para BDs hosted existentes.
+    Migracion(
+        "0027-columnas-daemon-latidos",
+        _migrar_columnas_daemon_latidos,
+        re_aplicar_si_cambia=True,
+        datos=_COLUMNAS_DAEMON_LATIDOS_AMPLIADAS,
+    ),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.

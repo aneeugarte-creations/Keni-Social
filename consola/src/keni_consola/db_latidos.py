@@ -92,7 +92,8 @@ def listar_latidos() -> list[dict[str, Any]]:
     try:
         filas = con.execute(
             "SELECT daemon, visto, activo, intervalo_seg, tick_seg, ultimo_barrido, "
-            "ultimo_ok, ultimo_error, error_txt, duracion_ms, barridos, errores "
+            "ultimo_ok, ultimo_error, error_txt, duracion_ms, barridos, errores, "
+            "barrido_solicitado "
             "FROM daemon_latidos ORDER BY daemon"
         ).fetchall()
     finally:
@@ -111,6 +112,52 @@ def listar_latidos() -> list[dict[str, Any]]:
             "duracion_ms": int(f["duracion_ms"]),
             "barridos": int(f["barridos"]),
             "errores": int(f["errores"]),
+            # ISO de la solicitud de barrido forzado pendiente, o '' (el panel puede pintar
+            # "barrido solicitado" hasta que el daemon la consuma en su siguiente tick).
+            "barrido_solicitado": f["barrido_solicitado"],
         }
         for f in filas
     ]
+
+
+# --------------------------------------------------------------------------- #
+# Barrido FORZADO (flag cross-proceso back -> daemons)                         #
+# --------------------------------------------------------------------------- #
+
+
+def solicitar_barrido(daemon: str) -> bool:
+    """Marca la solicitud de barrido inmediato del daemon (escribe el ISO actual).
+
+    Solo sobre filas EXISTENTES (un daemon que nunca latio no esta registrado): devuelve
+    False si no hay fila, True si quedo solicitada (idempotente: re-solicitar refresca el
+    timestamp; el daemon la consumira una sola vez).
+    """
+    con = _conectar()
+    try:
+        cur = con.execute(
+            "UPDATE daemon_latidos SET barrido_solicitado = ? WHERE daemon = ?",
+            (ahora_iso(), daemon),
+        )
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+def consumir_solicitud_barrido(daemon: str) -> bool:
+    """Consume (limpia) la solicitud de barrido pendiente del daemon, si la hay.
+
+    ATOMICO (UPDATE condicionado): si dos consumidores compitieran, solo uno ve
+    `rowcount == 1`; la solicitud dispara EXACTAMENTE un barrido. True si habia solicitud.
+    """
+    con = _conectar()
+    try:
+        cur = con.execute(
+            "UPDATE daemon_latidos SET barrido_solicitado = '' "
+            "WHERE daemon = ? AND barrido_solicitado <> ''",
+            (daemon,),
+        )
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
