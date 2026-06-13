@@ -17,6 +17,33 @@ issue #136). Pipelines en `.woodpecker/` (espejo de `.github/workflows/ci.yml`).
 - `woodpecker-agent` — ejecuta los pipelines (monta `/var/run/docker.sock`).
 - Forge: GitHub OAuth (org `kenitech-io`).
 
+## Aislamiento de recursos — el CI comparte host con PRODUCCION ⚠
+
+Este runner corre en el **mismo VPS** (Latitude, 12 vCPU / 61 GiB) que el stack de
+producción (back interactivo, worker `claude -p`, Postgres, Garage). Sin topes, un
+build pesado (imágenes Docker + `tsc`/`vite` + `pytest`, hasta
+`WOODPECKER_MAX_WORKFLOWS=3` en paralelo) puede **saturar la CPU y degradar la UI de
+prod**. Mitigaciones ya aplicadas en `docker-compose.yml` (topes DUROS):
+
+- `woodpecker-server`: `cpus: 1.0`, `mem_limit: 512m` (UI/API, liviano).
+- `docker-socket-proxy`: `cpus: 0.5`, `mem_limit: 64m`.
+- `woodpecker-agent`: `cpus: 4.0`, `mem_limit: 4g` — pero eso solo acota al **agente**,
+  no a los contenedores de cada *step* (los arranca el daemon Docker como hermanos,
+  fuera del cgroup del agente). Para acotar el cómputo REAL de los steps se fijan
+  límites por step vía backend Docker: `WOODPECKER_BACKEND_DOCKER_LIMIT_CPU_QUOTA=200000`
+  (2 vCPU/step) y `WOODPECKER_BACKEND_DOCKER_LIMIT_MEM=4294967296` (4 GiB/step). Con 3
+  workflows en paralelo el CI no pasa de ~6 vCPU, dejando ≥6 vCPU para prod.
+
+> **Recomendación: mover el runner a un host aparte.** Compartir host es una solución
+> de circunstancia (los servers DevOps están deprovisionados; reusamos el Traefik de la
+> app). Aunque los topes de arriba evitan el peor caso, el aislamiento por cgroups **no
+> es perfecto** (I/O de disco hacia el mismo SSD que Postgres/Garage, page-cache,
+> presión de memoria, contención del propio daemon Docker) y un build aún puede tocar la
+> latencia de prod. Lo correcto es **un VPS dedicado para el `woodpecker-agent`** (o al
+> menos para los steps), apuntando al mismo `woodpecker-server`. Mientras siga aquí:
+> mantén estos límites, NO subas `WOODPECKER_MAX_WORKFLOWS`, y prefiere ejecutar los
+> deploys/builds pesados fuera de las horas punta del equipo.
+
 ## Prerrequisitos (una vez)
 
 1. **DNS:** registro `A` `ci-social.kenitech.io -> <IP-DEL-SERVIDOR>` en modo

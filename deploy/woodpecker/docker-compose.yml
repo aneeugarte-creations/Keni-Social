@@ -37,11 +37,14 @@ services:
     networks:
       - woodpecker
       - edge
-    # Limite REAL de RAM: `deploy.resources` se IGNORA en Compose fuera de Swarm; lo que
-    # aplica en este host single-VPS es `mem_limit` top-level (igual que en el stack
-    # principal). Cambio de FICHERO solamente: se aplica a mano en la siguiente ventana
+    # Limites REALES de RAM y CPU: `deploy.resources` se IGNORA en Compose fuera de Swarm; lo
+    # que aplica en este host single-VPS es `mem_limit`/`cpus` top-level (igual que en el stack
+    # principal). El CI comparte host con PRODUCCION (ver README): estos topes son DUROS para
+    # que un build no pueda asfixiar a prod (back/worker/db). El server es liviano (UI+API);
+    # 1 vCPU sobra. Cambio de FICHERO solamente: se aplica a mano en la siguiente ventana
     # (NO recrear los servicios Woodpecker con pipelines en vuelo).
     mem_limit: 512m
+    cpus: 1.0
     # Sin healthcheck: la imagen es scratch (sin shell/wget/curl).
     labels:
       - traefik.enable=true
@@ -75,8 +78,9 @@ services:
       VERSION: "1"
     networks:
       - proxy
-    # mem_limit top-level: ver nota en woodpecker-server (deploy.resources se ignora sin Swarm).
+    # mem_limit/cpus top-level: ver nota en woodpecker-server (deploy.resources se ignora sin Swarm).
     mem_limit: 64m
+    cpus: 0.5
 
   woodpecker-agent:
     image: woodpeckerci/woodpecker-agent:${WOODPECKER_VERSION:-v3.13.0}
@@ -96,12 +100,33 @@ services:
       WOODPECKER_MAX_WORKFLOWS: "${WOODPECKER_MAX_WORKFLOWS:-3}"
       # Red donde el agente engancha los contenedores de cada step del pipeline.
       WOODPECKER_BACKEND_DOCKER_NETWORK: "keni-ci_woodpecker"
+      # LIMITES POR STEP (lo que de verdad protege a prod). El `cpus`/`mem_limit` de ESTE
+      # contenedor solo acota al agente; los contenedores de cada STEP los arranca el daemon
+      # Docker como hermanos, FUERA del cgroup del agente, asi que NO heredan aquel tope. Estos
+      # WOODPECKER_BACKEND_DOCKER_LIMIT_* SI se aplican a cada step:
+      #   CPU_QUOTA=200000 us / periodo por defecto 100000 us (100 ms) => 2 vCPU de techo POR
+      #     step. Con WOODPECKER_MAX_WORKFLOWS=3 => como mucho ~6 vCPU en steps a la vez, dejando
+      #     >=6 vCPU de las 12 para el stack de prod (back interactivo, worker, Postgres).
+      #   LIMIT_MEM=4294967296 (4 GiB en BYTES) => tope duro de RAM por step.
+      # Son TOPES de CFS (throttle), no reservas: si el CI esta ocioso, prod usa toda la caja.
+      # Subirlos = mas throughput de CI a costa de margen de prod; hazlo a conciencia.
+      WOODPECKER_BACKEND_DOCKER_LIMIT_CPU_QUOTA: "200000"
+      WOODPECKER_BACKEND_DOCKER_LIMIT_MEM: "4294967296"
       WOODPECKER_LOG_LEVEL: "info"
     networks:
       - woodpecker
       - proxy
-    # mem_limit top-level: ver nota en woodpecker-server (deploy.resources se ignora sin Swarm).
+    # mem_limit/cpus top-level: ver nota en woodpecker-server (deploy.resources se ignora sin Swarm).
+    # EL AGENTE ES EL RIESGO: corre los pipelines (hasta WOODPECKER_MAX_WORKFLOWS=3 en paralelo,
+    # con builds de imagen + tsc/vite + pytest), asi que es quien puede saturar las 12 vCPU y
+    # degradar prod (back interactivo, worker, Postgres). TOPE DURO de 4 vCPU: deja >=8 vCPU
+    # libres para el stack principal aunque los 3 workflows tiren a tope. OJO: este `cpus` lo
+    # CONSUME el contenedor AGENTE; los contenedores de cada STEP del pipeline los arranca el
+    # daemon Docker FUERA de este cgroup y NO heredan este limite. Acotar el computo real de
+    # los steps requiere WOODPECKER_BACKEND_DOCKER_* (limites por step) o, mejor, mover el
+    # runner a otro host (ver README). Mientras tanto este tope acota al menos el propio agente.
     mem_limit: 4g
+    cpus: 4.0
 
 volumes:
   # `external: true`: volumenes gestionados FUERA de compose (no los crea/borra). Silencia el
