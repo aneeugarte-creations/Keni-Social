@@ -122,6 +122,8 @@ function FilaAgenda({
         <span className="w-11 shrink-0 text-xs tabular-nums text-muted-foreground">
           {hora || "—"}
         </span>
+        {/* Semáforo a la IZQUIERDA, antes del título: luz de estado al inicio de la fila. */}
+        {cob && <SemaforoCobertura fecha={cob.orden} hora={cob.hora} compacto />}
         {esCobertura && <Trophy className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
         <span className="flex-1 truncate text-sm font-medium">{titulo}</span>
         {tarea?.estado === "en_curso" && (
@@ -145,10 +147,7 @@ function FilaAgenda({
             Por cubrir
           </Badge>
         ) : cob ? (
-          <span className="flex shrink-0 items-center gap-2">
-            <SemaforoCobertura fecha={cob.orden} hora={cob.hora} compacto />
-            <AvataresApilados cubridores={cob.cubridores} />
-          </span>
+          <AvataresApilados cubridores={cob.cubridores} />
         ) : (
           <span className="flex shrink-0 items-center gap-1">
             <AvatarPersona id={tarea!.responsable_id} nombre={tarea!.responsable_nombre} size="sm" />
