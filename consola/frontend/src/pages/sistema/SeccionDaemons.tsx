@@ -168,7 +168,11 @@ export function SeccionDaemons() {
     },
     onError: (e, daemon) => {
       if (e instanceof ApiError && e.status === 409) {
-        toast.error(`«${daemon}» está apagado por su ajuste: enciéndelo antes de barrer.`);
+        // El 409 trae la causa exacta del back (gate apagado o daemon no barrible).
+        const detalle = typeof e.cuerpo?.error === "string" ? e.cuerpo.error : null;
+        toast.error(
+          detalle ?? `«${daemon}» está apagado por su ajuste: enciéndelo antes de barrer.`,
+        );
       } else if (e instanceof ApiError && e.status === 404) {
         toast.error(`No hay ningún daemon registrado con el nombre «${daemon}».`);
         void queryClient.invalidateQueries({ queryKey: ["sistema", "daemons"] });

@@ -788,9 +788,13 @@ async def daemons_barrer(request: Request) -> Response:
     ejecutando el barrido YA y limpiando el flag.
 
     Validacion contra los daemons REGISTRADOS (filas de `daemon_latidos` no retiradas:
-    quien late es quien puede barrer). Codigos: 404 daemon desconocido/retirado; 409 si su
-    gate esta apagado por ajuste (el bucle ignoraria la solicitud: enciendelo primero);
-    200 -> {solicitado: true, daemon}.
+    quien late es quien puede barrer) Y contra `latidos.BARRIBLES`: solo los bucles
+    sobre `bucle_gateado` CONSUMEN el flag; en un legado (programador/metricas/
+    metricas_piezas/comercial) la solicitud quedaria huerfana para siempre, asi que se
+    rechaza en vez de aceptarla y mentir. Codigos: 404 daemon desconocido/retirado;
+    409 si no admite barrido forzado (no barrible) o si su gate esta apagado por ajuste
+    (el bucle ignoraria la solicitud: enciendelo primero); 200 -> {solicitado: true,
+    daemon}.
     """
     if not _es_admin(request):
         return _rechazo_no_admin()
@@ -807,6 +811,15 @@ async def daemons_barrer(request: Request) -> Response:
         return JSONResponse(
             {"error": f"No hay ningún daemon registrado con el nombre {daemon!r}."},
             status_code=404,
+        )
+    if daemon not in latidos.BARRIBLES:
+        # Su bucle NO consume `barrido_solicitado`: aceptar dejaria el flag huerfano.
+        return JSONResponse(
+            {
+                "error": f"El daemon {daemon!r} no admite barrido forzado: su bucle "
+                "no consume la solicitud."
+            },
+            status_code=409,
         )
     if not fila["activo"]:
         return JSONResponse(

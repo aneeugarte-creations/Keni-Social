@@ -370,12 +370,13 @@ def test_bucle_gateado_apagado_no_consume_solicitud(monkeypatch):
 
 
 def test_endpoint_barrer_solicita_y_devuelve_contrato(entorno):
-    db.latido_barrido("sano", ok=True, intervalo_seg=60.0, tick_seg=60.0)
+    # "ingesta" esta en latidos.BARRIBLES: su bucle consume el flag, asi que se acepta.
+    db.latido_barrido("ingesta", ok=True, intervalo_seg=60.0, tick_seg=60.0)
     c = _cli_admin()
-    r = c.post("/api/sistema/daemons/sano/barrer", headers=_ORIGIN)
+    r = c.post("/api/sistema/daemons/ingesta/barrer", headers=_ORIGIN)
     assert r.status_code == 200
-    assert r.json() == {"solicitado": True, "daemon": "sano"}
-    (fila,) = [f for f in db.listar_latidos() if f["daemon"] == "sano"]
+    assert r.json() == {"solicitado": True, "daemon": "ingesta"}
+    (fila,) = [f for f in db.listar_latidos() if f["daemon"] == "ingesta"]
     assert fila["barrido_solicitado"] != ""
 
 
@@ -395,12 +396,25 @@ def test_endpoint_barrer_retirado_404(entorno):
 
 def test_endpoint_barrer_apagado_409(entorno):
     # Con el gate OFF el bucle ignoraria la solicitud: 409 con mensaje claro, sin encolarla.
-    db.latido_ciclo("dormido", activo=False, intervalo_seg=3600.0, tick_seg=60.0)
+    # ("trends" es barrible: lo que se prueba aqui es SOLO el gate apagado.)
+    db.latido_ciclo("trends", activo=False, intervalo_seg=3600.0, tick_seg=60.0)
     c = _cli_admin()
-    r = c.post("/api/sistema/daemons/dormido/barrer", headers=_ORIGIN)
+    r = c.post("/api/sistema/daemons/trends/barrer", headers=_ORIGIN)
     assert r.status_code == 409
     assert "apagado" in r.json()["error"]
-    (fila,) = [f for f in db.listar_latidos() if f["daemon"] == "dormido"]
+    (fila,) = [f for f in db.listar_latidos() if f["daemon"] == "trends"]
+    assert fila["barrido_solicitado"] == ""
+
+
+def test_endpoint_barrer_no_barrible_409(entorno):
+    # Un daemon LEGADO (fuera de latidos.BARRIBLES) late pero su bucle NO consume el
+    # flag: aceptar la solicitud la dejaria huerfana para siempre. 409 sin encolarla.
+    db.latido_barrido("programador", ok=True, intervalo_seg=60.0, tick_seg=60.0)
+    c = _cli_admin()
+    r = c.post("/api/sistema/daemons/programador/barrer", headers=_ORIGIN)
+    assert r.status_code == 409
+    assert "no admite barrido forzado" in r.json()["error"]
+    (fila,) = [f for f in db.listar_latidos() if f["daemon"] == "programador"]
     assert fila["barrido_solicitado"] == ""
 
 
