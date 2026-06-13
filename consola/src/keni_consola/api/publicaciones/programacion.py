@@ -1,0 +1,193 @@
+"""Programacion de piezas: calculo de HUECOS (franjas/cadencias) y encolado.
+
+Reune la categoria de plan de una pieza, el calculo del proximo hueco futuro respetando la
+unicidad de slot, el endpoint `encolar` y el helper de encolado con backstop de unicidad +
+reintento. Extraido TAL CUAL del modulo `publicaciones.py` original (refactor de pura
+reubicacion, sin cambio de comportamiento).
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta
+from typing import Any
+
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
+
+from ... import repos
+from ...dominio import cadencia as dom_cadencia
+from ...estados import ESTADO_PUBLICADO
+from ...motor_db import IntegrityError
+from .. import franjas as api_franjas
+from ._comun import _publicacion_a_dict
+
+
+def categoria_de_pieza(pub: dict[str, Any]) -> str:
+    """Categoría del PLAN con la que programa una pieza. Best-effort ('' si no aplica).
+
+    - 'evergreen' si su tema es de flujo evergreen (reciclaje),
+    - la categoría de la HISTORIA de la que nació ('breaking' si lo era) en el resto,
+    - '' para piezas manuales sin historia: usan las franjas genéricas.
+    """
+    try:
+        plat = repos.obtener_contenido_plataforma(pub.get("id") or "") or {}
+        cid = str(plat.get("contenido_id") or "")
+        if not cid:
+            return ""
+        item = repos.obtener_contenido(cid) or {}
+        # La categoría vive EN el contenido desde que se persiste al crear (promoción,
+        # usar historia, reciclaje). Los fallbacks cubren filas anteriores a la columna.
+        propia = str(item.get("categoria") or "").strip().lower()
+        if propia:
+            return propia
+        if (item.get("flujo") or "") == "evergreen":
+            return "evergreen"
+        return repos.categoria_promovida_de_contenido(cid)
+    except Exception:  # noqa: BLE001 -- la categoría es refinamiento; sin ella, genéricas
+        return ""
+
+
+# Margen (min) con el que se programa una pieza BREAKING: ya, pero con aire para el último
+# vistazo humano en la parrilla. Búsqueda acotada de minuto libre por la unicidad de slot.
+_BREAKING_MARGEN_MIN = 2
+_BREAKING_BUSQUEDA_MIN = 240
+
+
+def calcular_hueco_para(
+    pub: dict[str, Any], ahora: datetime | None = None
+) -> str | None:
+    """Calcula el proximo hueco futuro para `pub` segun cadencias/franjas configuradas.
+
+    Devuelve el datetime ISO ('YYYY-MM-DDTHH:MM') del hueco, o None si no hay NINGUNA
+    cadencia/franja aplicable a la (marca, red) de la publicacion. `ahora` se puede inyectar
+    para tests; por defecto es `datetime.now()`. Los huecos ya ocupados por OTRAS
+    publicaciones `programado` de la MISMA (marca, red) se evitan — espejo del indice de
+    unicidad de slot (`idx_parrilla_slot_uniq`, por marca+red+fecha): las piezas de un MISMO
+    tema en redes distintas salen a la MISMA hora.
+
+    CATEGORÍA del plan: una pieza BREAKING no espera franja (se programa a ahora+margen, en
+    el primer minuto libre); el resto usa PRIMERO los horarios de SU línea (franjas con su
+    categoría — ganan a cualquier cadencia), después la cadencia de la (marca, red) y por
+    último las franjas genéricas.
+    """
+    if ahora is None:
+        ahora = datetime.now()
+    programadas = repos.listar_publicaciones(estado="programado")
+    ocupados_mr = {
+        otra["fecha_programada"]
+        for otra in programadas
+        if otra["id"] != pub["id"]
+        and otra["fecha_programada"]
+        and otra["marca"] == pub["marca"]
+        and otra["red"] == pub["red"]
+    }
+    categoria = categoria_de_pieza(pub)
+    # 0) BREAKING: la última hora no espera al siguiente hueco del plan — sale YA (con un
+    # margen corto), en el primer minuto libre de su (marca, red).
+    if categoria == "breaking":
+        cand = (ahora + timedelta(minutes=_BREAKING_MARGEN_MIN)).replace(second=0, microsecond=0)
+        for _ in range(_BREAKING_BUSQUEDA_MIN):
+            clave = cand.strftime("%Y-%m-%dT%H:%M")
+            if clave not in ocupados_mr:
+                return clave
+            cand += timedelta(minutes=1)
+        return None  # parrilla patológicamente saturada
+    # 1) HORARIOS DE LA LÍNEA (preferentes): si la pieza tiene categoría y su línea tiene
+    # franjas propias, ESOS son sus horarios — una cadencia general no debe pisarlos (una
+    # cadencia "todas las redes" creada a mano mandó una pieza nacional a las 3 a. m.).
+    aplican = api_franjas.franjas_aplicables(
+        repos.listar_franjas(), pub["marca"], pub["red"], categoria
+    )
+    de_linea = bool(categoria) and any(
+        (f.get("categoria") or "") == categoria for f in aplican
+    )
+    if de_linea:
+        return api_franjas.proximo_hueco(aplican, ahora, ocupados_mr)
+    # 2) CADENCIA por margen: para piezas sin línea (o líneas sin horario propio).
+    cad = dom_cadencia.cadencia_aplicable(repos.listar_cadencias(), pub["marca"], pub["red"])
+    if cad is not None:
+        return dom_cadencia.proximo_hueco_cadencia(cad, ahora, ocupados_mr)
+    # 3) Franjas-caja genéricas.
+    if not aplican:
+        return None
+    return api_franjas.proximo_hueco(aplican, ahora, ocupados_mr)
+
+
+async def encolar(request: Request) -> Response:
+    """Programa la publicacion en el proximo hueco futuro de sus franjas.
+
+    `POST /api/publicaciones/{id}/encolar` -> `{publicacion}` (estado=programado y
+    fecha_programada puesta al hueco). 404 si no existe; 400 si no hay franjas
+    aplicables a su (marca, red).
+    """
+    publicacion_id = request.path_params["publicacion_id"]
+    pub = repos.obtener_publicacion(publicacion_id)
+    if pub is None:
+        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+    # PUBLICADO ES TERMINAL: una pieza cuyo post YA salió no se re-encola. Reprogramarla
+    # revierte publicado->programado y, peor, `_encolar_en_hueco_libre` resetea `preparado_en`
+    # (el claim que el barrido usa para no re-publicar): con KENI_PUBLICAR_REAL on eso abre la
+    # puerta a un DOBLE-POST. Guard en profundidad (la UI ya oculta la acción, ver VistaLista).
+    if (pub.get("estado") or "") == ESTADO_PUBLICADO:
+        return JSONResponse(
+            {"error": "Una pieza ya publicada no se re-encola."},
+            status_code=409,
+        )
+    actualizada, hubo_hueco = _encolar_en_hueco_libre(pub)
+    if not hubo_hueco:
+        return JSONResponse(
+            {"error": "No hay cadencia ni franjas configuradas para esta marca/red."},
+            status_code=400,
+        )
+    if actualizada is None:  # carrera: borrada entre el obtener y el actualizar
+        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+    return JSONResponse({"publicacion": _publicacion_a_dict(actualizada)})
+
+
+# Tope de reintentos al programar en un hueco: cada choque significa que OTRA pieza tomo ese
+# slot entre el calculo y la escritura; recalculamos el siguiente hueco libre y reintentamos.
+_MAX_REINTENTOS_HUECO = 8
+
+
+def _encolar_en_hueco_libre(
+    pub: dict[str, Any],
+    ahora: datetime | None = None,
+    *,
+    estado_esperado: str | None = None,
+) -> tuple[dict[str, Any] | None, bool]:
+    """Programa `pub` en el próximo hueco libre, con BACKSTOP de unicidad + reintento.
+
+    Devuelve `(publicacion_actualizada | None, hubo_hueco)`. El índice único parcial
+    `idx_parrilla_slot_uniq` impide que dos piezas queden programadas en el mismo (red, fecha):
+    si entre el cálculo del hueco y la escritura otra pieza ya tomó ese slot, el UPDATE lanza
+    una IntegrityError (carrera de doble-reserva); aquí RECALCULAMOS el siguiente hueco y
+    reintentamos (bucle acotado). `hubo_hueco=False` => no hay cadencia/franja aplicable (None,
+    sin tocar nada). `None` con `hubo_hueco=True` => la pieza se borró en la carrera (o el CAS de
+    `estado_esperado` no aplicó: ver abajo).
+
+    `estado_esperado` (opcional): CAS sobre el `estado` actual de la pieza. El encolado MANUAL lo
+    deja en None (override deliberado: re-encola venga del estado del que venga). La
+    AUTO-programación pasa `ESTADO_APROBADO`: si entre que leyó la pieza `aprobado` y esta
+    escritura otro flujo la movió (edición que la resetea a borrador, "deshacer aprobación",
+    reprograma manual), el UPDATE condicional NO aplica y `actualizar_publicacion` devuelve None;
+    devolvemos `(None, True)` SIN reintentar (la pieza dejó de ser candidata; reintentar volvería
+    a fallar). Así la auto-programación no RESUCITA a `programado` algo que el humano ya movió.
+    """
+    for _ in range(_MAX_REINTENTOS_HUECO):
+        hueco = calcular_hueco_para(pub, ahora)
+        if hueco is None:
+            return None, False
+        try:
+            # `preparado_en=""`: una pieza recién (re)programada aún no se preparó; resetearlo
+            # evita que el programador la trate como ya preparada. Inocuo en el encolado manual.
+            actualizada = repos.actualizar_publicacion(
+                pub["id"],
+                {"estado": "programado", "fecha_programada": hueco, "preparado_en": ""},
+                estado_esperado=estado_esperado,
+            )
+        except IntegrityError:
+            # Otra pieza reservó este slot antes que nosotros: recalcula y reintenta.
+            continue
+        return actualizada, True
+    # Contención patológica: tras varios choques no se consiguió un slot libre estable.
+    return None, True

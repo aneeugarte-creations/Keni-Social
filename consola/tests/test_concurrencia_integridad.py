@@ -278,7 +278,9 @@ def test_encolar_recalcula_hueco_ante_choque(entorno, monkeypatch):
     def _hueco_falso(pub, ahora=None):
         return next(huecos)
 
-    monkeypatch.setattr(api_pub, "calcular_hueco_para", _hueco_falso)
+    # `_encolar_en_hueco_libre` llama a `calcular_hueco_para` del submódulo `programacion`: el
+    # parche debe vivir ahí para que el encolado lo recoja (no en el facade del paquete).
+    monkeypatch.setattr(api_pub.programacion, "calcular_hueco_para", _hueco_falso)
     actualizada, hubo_hueco = api_pub._encolar_en_hueco_libre(nueva)
     assert hubo_hueco is True
     assert actualizada is not None

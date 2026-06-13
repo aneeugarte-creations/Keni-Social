@@ -27,7 +27,9 @@ class _AhoraFijo(datetime):
 @pytest.fixture
 def ahora_fijo(monkeypatch):
     """Ancla `datetime.now()` del módulo de publicaciones (lo usa el cálculo de hueco)."""
-    monkeypatch.setattr(ap, "datetime", _AhoraFijo)
+    # `calcular_hueco_para` (lee `datetime.now()`) vive en el submódulo `programacion`: el ancla
+    # se parchea ahí, no en el facade del paquete.
+    monkeypatch.setattr(ap.programacion, "datetime", _AhoraFijo)
     return _AHORA
 
 
@@ -145,7 +147,7 @@ def test_no_resucita_si_dejo_de_estar_aprobada(cliente, ahora_fijo, monkeypatch)
     cliente.post("/api/franjas", json={"dia_semana": 2, "hora": "15:00"})
     pid = _crear_aprobada(cliente)
 
-    real_hueco = ap.calcular_hueco_para
+    real_hueco = ap.programacion.calcular_hueco_para
 
     def _hueco_con_carrera(pub, ahora=None):  # noqa: ANN001
         # Simula la carrera: la pieza deja de estar aprobada (vuelve a borrador) JUSTO antes de la
@@ -153,7 +155,9 @@ def test_no_resucita_si_dejo_de_estar_aprobada(cliente, ahora_fijo, monkeypatch)
         repos.actualizar_publicacion(pid, {"estado": "borrador", "fecha_programada": ""})
         return real_hueco(pub, ahora)
 
-    monkeypatch.setattr(ap, "calcular_hueco_para", _hueco_con_carrera)
+    # `_encolar_en_hueco_libre` llama a `calcular_hueco_para` del submódulo `programacion`: el
+    # parche debe vivir ahí para que el encolado lo recoja (no en el facade del paquete).
+    monkeypatch.setattr(ap.programacion, "calcular_hueco_para", _hueco_con_carrera)
     # No la programa (el CAS no aplica) y no lanza: best-effort.
     assert auto_programar.programar_si_aprobada(pid) is None
     despues = repos.obtener_publicacion(pid)

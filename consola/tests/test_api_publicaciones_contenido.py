@@ -27,7 +27,9 @@ class _AhoraFijo(datetime):
 @pytest.fixture
 def ahora_fijo(monkeypatch):
     """Ancla `datetime.now()` en el modulo de publicaciones a un instante fijo."""
-    monkeypatch.setattr(ap, "datetime", _AhoraFijo)
+    # El cálculo de hueco (`calcular_hueco_para`) vive en el submódulo `programacion`; ahí lee
+    # `datetime.now()`, así que el ancla se parchea en ESE módulo (no en el facade del paquete).
+    monkeypatch.setattr(ap.programacion, "datetime", _AhoraFijo)
     return _AHORA
 
 

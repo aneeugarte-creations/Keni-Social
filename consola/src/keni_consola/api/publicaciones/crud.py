@@ -1,55 +1,48 @@
-"""API Publicaciones: CRUD de posts a gestionar (titulo, marca, red, estado, fechas).
+"""CRUD de publicaciones: alta (individual y lote), listado/paginacion, detalle, edicion,
+borrado (individual y lote), cadenas batch, duplicar/clonar y programar en Metricool.
 
-El SPA gestiona el ciclo de vida de cada pieza: nace como borrador (a mano o desde
-una generacion por red de Skills), se edita, se aprueba, se programa y se publica.
-Persistencia en SQLite (`consola.db`, via `consola.db`). Nada se publica de verdad
-aqui: solo se administra el estado editorial.
-
-SEGURIDAD / VALIDACION (no duplica logica; reusa las fuentes de verdad):
-  - `marca` SOLO puede ser una marca del catalogo unico (`consola.marcas`), por
-    su `id` canonico (slug-guion), el mismo `value` que usa la generacion de copy.
-  - `red` SOLO puede ser una red canonica (`consola.redes`).
-  - `estado` SOLO puede ser uno de `repos.ESTADOS_PUBLICACION`.
-  - SQL parametrizado en `consola.db`; los errores salen como JSON en espanol, sin
-    tracebacks crudos.
-
-`marca_nombre` y `red_nombre` se resuelven EN SERVIDOR (la UI solo muestra nombres).
+El ciclo de vida editorial de cada pieza (borrador -> en_revision -> aprobado -> programado
+-> publicado), con validacion de marca/red/estado y maquina de transiciones del PUT. Extraido
+TAL CUAL del modulo `publicaciones.py` original (refactor de pura reubicacion, sin cambio de
+comportamiento).
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+import os
+from datetime import datetime
 from typing import Any
 
-from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
-from starlette.routing import Route
 
-from .. import marcas, permisos, redes, repos
-import os
-
-from .._http_json import (
+from ... import marcas, permisos, redes, repos
+from ..._http_json import (
     cursor_query,
     envoltura_paginacion,
     leer_json,
     paginacion_query,
     tope_listado,
 )
-from ..dominio import cadencia as dom_cadencia
-from ..dominio import colaboracion
-from ..dominio.publicaciones import flags_falta_de_contenido, publicacion_a_dict
-from ..estados import (
+from ...estados import (
     ESTADO_APROBADO,
     ESTADO_BORRADOR,
     ESTADO_EN_REVISION,
     ESTADO_PROGRAMADO,
     ESTADO_PUBLICADO,
 )
-from ..motor_db import IntegrityError
-from ..tiempo import iso_utc
-from ..seguridad import autor_de_peticion
-from . import franjas as api_franjas
+from ...motor_db import IntegrityError
+from ...seguridad import autor_de_peticion
+from ...tiempo import iso_utc
+from ._comun import (
+    _CAMPOS_ESPEJO,
+    _RESET_APROBACIONES,
+    _inyectar_flags_falta,
+    _limpiar_cadena,
+    _pierde_aprobaciones,
+    _publicacion_a_dict,
+)
+from .espejo import _propagar_espejo
 
 # Nombres legibles de los estados (para poblar selects de la UI), en orden de flujo.
 # `en_revision` (cola de aprobacion de equipo, #9) se intercala tras el borrador.
@@ -65,12 +58,6 @@ _ESTADO_NOMBRE: dict[str, str] = {
 # interno = id canonico (slug-guion); etiqueta visible = nombre humano con acentos.
 _MARCAS: tuple[tuple[str, str], ...] = tuple(marcas.opciones())
 _MARCAS_IDS = {m[0] for m in _MARCAS}
-
-
-# Alias local para los handlers de este modulo. La serializacion vive en el dominio
-# (`dominio.publicaciones.publicacion_a_dict`): asi `api/skills.py` la consume desde un
-# sitio comun y publico, sin importar un simbolo privado de este handler (H6/N7).
-_publicacion_a_dict = publicacion_a_dict
 
 
 # MAQUINA DE ESTADOS del PUT generico (#estados): transiciones validas desde cada estado.
@@ -190,7 +177,7 @@ async def opciones(request: Request) -> Response:
         {"id": e["id"], "nombre": e["nombre"], "marca": e.get("marca", "")}
         for e in repos.listar_etiquetas(clase="vertical", solo_activas=True)
     ]
-    from .. import config
+    from ... import config
 
     return JSONResponse(
         {
@@ -379,108 +366,6 @@ async def detalle(request: Request) -> Response:
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
     return JSONResponse({"publicacion": _publicacion_a_dict(pub)})
-
-
-# Campos de CONTENIDO que el espejo propaga entre redes hermanas (la "receta" completa de la
-# pieza: copy + copy-in + foto/collage + plantilla). Estado, fechas y flags NO se espejan.
-# También es la lista de campos cuyo cambio invalida aprobaciones (junto con `titulo`).
-_CAMPOS_ESPEJO: tuple[str, ...] = (
-    "contenido", "copy_in", "imagen", "foto", "fotos", "carrusel",
-    "plantilla_diseno_id", "foto_encuadre", "placa_oculta",
-)
-
-# Campos cuyo cambio altera las flags de readiness DERIVADAS del contenido (copy/foto): si la
-# edición toca alguno, hay que recalcular `falta_copy`/`falta_imagen`.
-_CAMPOS_CONTENIDO_FALTA: tuple[str, ...] = ("contenido", "foto", "imagen")
-
-
-def _inyectar_flags_falta(actual: dict[str, Any], campos: dict[str, Any]) -> None:
-    """Si la edición toca el contenido (copy/foto/imagen), recalcula e INYECTA en `campos` las
-    flags `falta_copy`/`falta_imagen` del estado RESULTANTE (fila + edición), para que la LISTA
-    del feed (que lee las flags ALMACENADAS) refleje el cambio sin abrir cada pieza —incluidas
-    las redes ESPEJO—. NO toca las flags de aprobación/publicación (eso no se espeja)."""
-    if not any(k in campos for k in _CAMPOS_CONTENIDO_FALTA):
-        return
-    campos.update(flags_falta_de_contenido({**actual, **campos}))
-
-# Reset al perder aprobaciones: la pieza vuelve a borrador con la revisión limpia (reentrará
-# sola a revisión cuando se reenvíe, exigiendo OK nuevos).
-_RESET_APROBACIONES: dict[str, Any] = {
-    "estado": "borrador",
-    "revisor_id": "",
-    "revisor_nombre": "",
-    "revisado_en": "",
-    "enviado_a_revision_en": "",
-    "fecha_programada": "",
-}
-
-
-def _pierde_aprobaciones(actual: dict[str, Any], campos: dict[str, Any]) -> bool:
-    """True si aplicar `campos` a la pieza `actual` invalida aprobaciones YA dadas.
-
-    Editar el CONTENIDO de una pieza que acumula aprobaciones las invalida (como reescribir
-    un PR aprobado). Solo cuando hay aprobaciones REALES que perder (aprobada/programada, o
-    en revisión con un OK humano). No aplica si la propia petición fija `estado` (el flujo
-    la está moviendo a propósito).
-    """
-    cambia_contenido = any(
-        clave in campos and campos[clave] != actual.get(clave)
-        for clave in ("titulo", *_CAMPOS_ESPEJO)
-    )
-    if not cambia_contenido or "estado" in campos:
-        return False
-    estado_actual = actual.get("estado") or ""
-    if estado_actual in (ESTADO_APROBADO, ESTADO_PROGRAMADO):
-        return True
-    if estado_actual == ESTADO_EN_REVISION:
-        cadena = repos.listar_aprobaciones(actual["id"])
-        return colaboracion.contar_aprobaciones_humanas(cadena) > 0
-    return False
-
-
-def _limpiar_cadena(publicacion_id: str) -> None:
-    """Recrea la cadena de aprobación VACÍA de la pieza (las aprobaciones previas se pierden)."""
-    plat = repos.obtener_contenido_plataforma(publicacion_id)
-    repos.crear_cadena_aprobacion(
-        plataforma_id=publicacion_id,
-        contenido_id=(plat or {}).get("contenido_id", "") or "",
-        etiquetas=[],
-    )
-
-
-def _propagar_espejo(pub: dict[str, Any], campos: dict[str, Any]) -> None:
-    """ESPEJO entre redes: replica los campos de CONTENIDO editados a las redes hermanas.
-
-    Las piezas de una idea normalmente van parejas en todas sus redes, así que el espejo
-    nace ACTIVADO (`contenido.espejo`, toggle por pieza en el editor). `pub` es la pieza ya
-    actualizada (con su `espejo` vigente); solo se propagan los campos de `_CAMPOS_ESPEJO`
-    presentes en la edición. Las hermanas YA PUBLICADAS no se tocan (lo que salió a la red
-    no cambia desde aquí); una hermana con aprobaciones sufre el MISMO reset que la pieza
-    editada (su contenido cambió: exige OK nuevos).
-    """
-    espejo_campos = {k: campos[k] for k in _CAMPOS_ESPEJO if k in campos}
-    if not espejo_campos or not pub.get("espejo", True):
-        return
-    contenido_id = pub.get("contenido_id") or ""
-    if not contenido_id:
-        return
-    for plat in repos.listar_contenido_plataforma(contenido_id):
-        if plat["id"] == pub["id"]:
-            continue
-        hermana = repos.obtener_publicacion(plat["id"])
-        if hermana is None or (hermana.get("estado") or "") == ESTADO_PUBLICADO:
-            continue
-        campos_h: dict[str, Any] = dict(espejo_campos)
-        resetear = _pierde_aprobaciones(hermana, campos_h)
-        if resetear:
-            campos_h.update(_RESET_APROBACIONES)
-        # El estado de readiness (falta copy/imagen) SÍ se actualiza en el espejo aunque la
-        # aprobación no: la hermana hereda el contenido, así que sus flags reflejan lo heredado.
-        _inyectar_flags_falta(hermana, campos_h)
-        if repos.actualizar_publicacion(plat["id"], campos_h) is None:
-            continue  # borrada en paralelo: nada que espejar
-        if resetear:
-            _limpiar_cadena(plat["id"])
 
 
 async def actualizar(request: Request) -> Response:
@@ -754,7 +639,7 @@ async def cadenas_lote(request: Request) -> Response:
     (`estado="sin_cadena"`), de modo que el cliente nunca reitere ids "que faltan".
     El endpoint individual (`GET /api/plataformas/{id}/aprobacion`) sigue intacto.
     """
-    from . import colaboracion as api_colaboracion
+    from .. import colaboracion as api_colaboracion
 
     crudo = request.query_params.get("ids") or ""
     ids = _ids_de_lote(crudo.split(","))
@@ -764,177 +649,6 @@ async def cadenas_lote(request: Request) -> Response:
         )
     cadenas = {pid: api_colaboracion.cadena_publica(pid) for pid in ids}
     return JSONResponse({"cadenas": cadenas})
-
-
-def categoria_de_pieza(pub: dict[str, Any]) -> str:
-    """Categoría del PLAN con la que programa una pieza. Best-effort ('' si no aplica).
-
-    - 'evergreen' si su tema es de flujo evergreen (reciclaje),
-    - la categoría de la HISTORIA de la que nació ('breaking' si lo era) en el resto,
-    - '' para piezas manuales sin historia: usan las franjas genéricas.
-    """
-    try:
-        plat = repos.obtener_contenido_plataforma(pub.get("id") or "") or {}
-        cid = str(plat.get("contenido_id") or "")
-        if not cid:
-            return ""
-        item = repos.obtener_contenido(cid) or {}
-        # La categoría vive EN el contenido desde que se persiste al crear (promoción,
-        # usar historia, reciclaje). Los fallbacks cubren filas anteriores a la columna.
-        propia = str(item.get("categoria") or "").strip().lower()
-        if propia:
-            return propia
-        if (item.get("flujo") or "") == "evergreen":
-            return "evergreen"
-        return repos.categoria_promovida_de_contenido(cid)
-    except Exception:  # noqa: BLE001 -- la categoría es refinamiento; sin ella, genéricas
-        return ""
-
-
-# Margen (min) con el que se programa una pieza BREAKING: ya, pero con aire para el último
-# vistazo humano en la parrilla. Búsqueda acotada de minuto libre por la unicidad de slot.
-_BREAKING_MARGEN_MIN = 2
-_BREAKING_BUSQUEDA_MIN = 240
-
-
-def calcular_hueco_para(
-    pub: dict[str, Any], ahora: datetime | None = None
-) -> str | None:
-    """Calcula el proximo hueco futuro para `pub` segun cadencias/franjas configuradas.
-
-    Devuelve el datetime ISO ('YYYY-MM-DDTHH:MM') del hueco, o None si no hay NINGUNA
-    cadencia/franja aplicable a la (marca, red) de la publicacion. `ahora` se puede inyectar
-    para tests; por defecto es `datetime.now()`. Los huecos ya ocupados por OTRAS
-    publicaciones `programado` de la MISMA (marca, red) se evitan — espejo del indice de
-    unicidad de slot (`idx_parrilla_slot_uniq`, por marca+red+fecha): las piezas de un MISMO
-    tema en redes distintas salen a la MISMA hora.
-
-    CATEGORÍA del plan: una pieza BREAKING no espera franja (se programa a ahora+margen, en
-    el primer minuto libre); el resto usa PRIMERO los horarios de SU línea (franjas con su
-    categoría — ganan a cualquier cadencia), después la cadencia de la (marca, red) y por
-    último las franjas genéricas.
-    """
-    if ahora is None:
-        ahora = datetime.now()
-    programadas = repos.listar_publicaciones(estado="programado")
-    ocupados_mr = {
-        otra["fecha_programada"]
-        for otra in programadas
-        if otra["id"] != pub["id"]
-        and otra["fecha_programada"]
-        and otra["marca"] == pub["marca"]
-        and otra["red"] == pub["red"]
-    }
-    categoria = categoria_de_pieza(pub)
-    # 0) BREAKING: la última hora no espera al siguiente hueco del plan — sale YA (con un
-    # margen corto), en el primer minuto libre de su (marca, red).
-    if categoria == "breaking":
-        cand = (ahora + timedelta(minutes=_BREAKING_MARGEN_MIN)).replace(second=0, microsecond=0)
-        for _ in range(_BREAKING_BUSQUEDA_MIN):
-            clave = cand.strftime("%Y-%m-%dT%H:%M")
-            if clave not in ocupados_mr:
-                return clave
-            cand += timedelta(minutes=1)
-        return None  # parrilla patológicamente saturada
-    # 1) HORARIOS DE LA LÍNEA (preferentes): si la pieza tiene categoría y su línea tiene
-    # franjas propias, ESOS son sus horarios — una cadencia general no debe pisarlos (una
-    # cadencia "todas las redes" creada a mano mandó una pieza nacional a las 3 a. m.).
-    aplican = api_franjas.franjas_aplicables(
-        repos.listar_franjas(), pub["marca"], pub["red"], categoria
-    )
-    de_linea = bool(categoria) and any(
-        (f.get("categoria") or "") == categoria for f in aplican
-    )
-    if de_linea:
-        return api_franjas.proximo_hueco(aplican, ahora, ocupados_mr)
-    # 2) CADENCIA por margen: para piezas sin línea (o líneas sin horario propio).
-    cad = dom_cadencia.cadencia_aplicable(repos.listar_cadencias(), pub["marca"], pub["red"])
-    if cad is not None:
-        return dom_cadencia.proximo_hueco_cadencia(cad, ahora, ocupados_mr)
-    # 3) Franjas-caja genéricas.
-    if not aplican:
-        return None
-    return api_franjas.proximo_hueco(aplican, ahora, ocupados_mr)
-
-
-async def encolar(request: Request) -> Response:
-    """Programa la publicacion en el proximo hueco futuro de sus franjas.
-
-    `POST /api/publicaciones/{id}/encolar` -> `{publicacion}` (estado=programado y
-    fecha_programada puesta al hueco). 404 si no existe; 400 si no hay franjas
-    aplicables a su (marca, red).
-    """
-    publicacion_id = request.path_params["publicacion_id"]
-    pub = repos.obtener_publicacion(publicacion_id)
-    if pub is None:
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    # PUBLICADO ES TERMINAL: una pieza cuyo post YA salió no se re-encola. Reprogramarla
-    # revierte publicado->programado y, peor, `_encolar_en_hueco_libre` resetea `preparado_en`
-    # (el claim que el barrido usa para no re-publicar): con KENI_PUBLICAR_REAL on eso abre la
-    # puerta a un DOBLE-POST. Guard en profundidad (la UI ya oculta la acción, ver VistaLista).
-    if (pub.get("estado") or "") == ESTADO_PUBLICADO:
-        return JSONResponse(
-            {"error": "Una pieza ya publicada no se re-encola."},
-            status_code=409,
-        )
-    actualizada, hubo_hueco = _encolar_en_hueco_libre(pub)
-    if not hubo_hueco:
-        return JSONResponse(
-            {"error": "No hay cadencia ni franjas configuradas para esta marca/red."},
-            status_code=400,
-        )
-    if actualizada is None:  # carrera: borrada entre el obtener y el actualizar
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    return JSONResponse({"publicacion": _publicacion_a_dict(actualizada)})
-
-
-# Tope de reintentos al programar en un hueco: cada choque significa que OTRA pieza tomo ese
-# slot entre el calculo y la escritura; recalculamos el siguiente hueco libre y reintentamos.
-_MAX_REINTENTOS_HUECO = 8
-
-
-def _encolar_en_hueco_libre(
-    pub: dict[str, Any],
-    ahora: datetime | None = None,
-    *,
-    estado_esperado: str | None = None,
-) -> tuple[dict[str, Any] | None, bool]:
-    """Programa `pub` en el próximo hueco libre, con BACKSTOP de unicidad + reintento.
-
-    Devuelve `(publicacion_actualizada | None, hubo_hueco)`. El índice único parcial
-    `idx_parrilla_slot_uniq` impide que dos piezas queden programadas en el mismo (red, fecha):
-    si entre el cálculo del hueco y la escritura otra pieza ya tomó ese slot, el UPDATE lanza
-    una IntegrityError (carrera de doble-reserva); aquí RECALCULAMOS el siguiente hueco y
-    reintentamos (bucle acotado). `hubo_hueco=False` => no hay cadencia/franja aplicable (None,
-    sin tocar nada). `None` con `hubo_hueco=True` => la pieza se borró en la carrera (o el CAS de
-    `estado_esperado` no aplicó: ver abajo).
-
-    `estado_esperado` (opcional): CAS sobre el `estado` actual de la pieza. El encolado MANUAL lo
-    deja en None (override deliberado: re-encola venga del estado del que venga). La
-    AUTO-programación pasa `ESTADO_APROBADO`: si entre que leyó la pieza `aprobado` y esta
-    escritura otro flujo la movió (edición que la resetea a borrador, "deshacer aprobación",
-    reprograma manual), el UPDATE condicional NO aplica y `actualizar_publicacion` devuelve None;
-    devolvemos `(None, True)` SIN reintentar (la pieza dejó de ser candidata; reintentar volvería
-    a fallar). Así la auto-programación no RESUCITA a `programado` algo que el humano ya movió.
-    """
-    for _ in range(_MAX_REINTENTOS_HUECO):
-        hueco = calcular_hueco_para(pub, ahora)
-        if hueco is None:
-            return None, False
-        try:
-            # `preparado_en=""`: una pieza recién (re)programada aún no se preparó; resetearlo
-            # evita que el programador la trate como ya preparada. Inocuo en el encolado manual.
-            actualizada = repos.actualizar_publicacion(
-                pub["id"],
-                {"estado": "programado", "fecha_programada": hueco, "preparado_en": ""},
-                estado_esperado=estado_esperado,
-            )
-        except IntegrityError:
-            # Otra pieza reservó este slot antes que nosotros: recalcula y reintenta.
-            continue
-        return actualizada, True
-    # Contención patológica: tras varios choques no se consiguió un slot libre estable.
-    return None, True
 
 
 async def duplicar(request: Request) -> Response:
@@ -1071,7 +785,7 @@ async def programar_metricool(request: Request) -> Response:
     """
     # Import local: `programador` es infra (no es router de ninguna app); el camino
     # real solo se activa con el gate. Mantiene el módulo de API sin acoplarse a él.
-    from .. import programador
+    from ... import programador
 
     publicacion_id = request.path_params["publicacion_id"]
     pub = repos.obtener_publicacion(publicacion_id)
@@ -1091,174 +805,3 @@ async def programar_metricool(request: Request) -> Response:
             "publicacion": _publicacion_a_dict(actualizada) if actualizada else None,
         }
     )
-
-
-async def integrar_foto(request: Request) -> Response:
-    """Integra una FOTO subida dentro de la plantilla de marca de la publicación.
-
-    `POST /api/publicaciones/{id}/integrar-foto {imagen}` (imagen = id de media de la foto).
-    Si la pieza tiene marca (cualquiera del catálogo) RECOMPONE de forma determinista
-    (síncrona, ~<1s) la foto detrás de la plantilla por SPEC usando el `copy_in` de la pieza
-    como titular; sin marca devuelve la foto tal cual. NO persiste: devuelve la imagen
-    resultante para que el SPA la fije y la guarde con el resto de la edición.
-    -> `{imagen, imagen_url}` | 400 | 404.
-    """
-    from ..dominio import estudio_imagen
-
-    publicacion_id = request.path_params["publicacion_id"]
-    pub = repos.obtener_publicacion(publicacion_id)
-    if pub is None:
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-
-    datos = await leer_json(request)
-    imagen = datos.get("imagen")
-    if not isinstance(imagen, str) or not imagen.strip():
-        return JSONResponse({"error": "Falta la foto a integrar."}, status_code=400)
-    imagen = imagen.strip()
-    # `copy_in` opcional: el SPA puede mandar el texto-en-imagen VIGENTE (aún sin guardar) para
-    # que la placa use ese titular; si no viene, se usa el `copy_in` persistido de la pieza.
-    copy_in = datos.get("copy_in")
-    titular = copy_in if isinstance(copy_in, str) else (pub.get("copy_in") or "")
-
-    marca = pub.get("marca") or ""
-    final = imagen
-    if estudio_imagen.marca_tiene_plantilla(marca):
-        try:
-            resultado = estudio_imagen.componer(
-                imagen,
-                marca=marca,
-                formato=estudio_imagen.formato_por_red(pub.get("red") or ""),
-                titular=titular,
-                etiqueta=None,
-                autor=autor_de_peticion(request),
-            )
-            final = resultado.get("id") or imagen
-        except estudio_imagen.EstudioError as e:
-            return JSONResponse({"error": str(e)}, status_code=400)
-
-    return JSONResponse({"imagen": final, "imagen_url": f"/api/media/{final}"})
-
-
-async def aplicar_plantilla(request: Request) -> Response:
-    """Aplica una PLANTILLA del estudio a la publicación y RECOMPONE su imagen.
-
-    `POST /api/publicaciones/{id}/aplicar-plantilla {plantilla_id}`: renderiza el documento de la
-    plantilla (PlantillaDiseno) con la FOTO y el COPY-IN actuales de la pieza, fija la imagen
-    resultante y recuerda la plantilla elegida (`plantilla_diseno_id`). Persiste. Así el equipo
-    prueba distintas plantillas y compara el resultado real. -> `{publicacion}` | 400 | 404.
-    """
-    from ..dominio import estudio_imagen
-
-    publicacion_id = request.path_params["publicacion_id"]
-    pub = repos.obtener_publicacion(publicacion_id)
-    if pub is None:
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-
-    datos = await leer_json(request)
-    plantilla_id = datos.get("plantilla_id")
-    if not isinstance(plantilla_id, str) or not plantilla_id.strip():
-        return JSONResponse({"error": "Falta la plantilla a aplicar."}, status_code=400)
-    plantilla_id = plantilla_id.strip()
-    plantilla = repos.obtener_plantilla_diseno(plantilla_id)
-    if plantilla is None:
-        return JSONResponse({"error": "Esa plantilla ya no existe."}, status_code=404)
-
-    # `foto`/`copy_in`/`foto_encuadre` opcionales: el SPA manda los valores VIGENTES del editor
-    # (aún sin guardar) para componer con ellos; si no vienen, se usan los persistidos de la pieza.
-    foto_req = datos.get("foto")
-    foto = foto_req if isinstance(foto_req, str) else (pub.get("foto") or "")
-    copy_in_req = datos.get("copy_in")
-    copy_in = copy_in_req if isinstance(copy_in_req, str) else (pub.get("copy_in") or "")
-    enc_req = datos.get("foto_encuadre")
-    foto_encuadre = enc_req if isinstance(enc_req, str) else (pub.get("foto_encuadre") or "")
-    foco, zoom = estudio_imagen.parsear_encuadre(foto_encuadre)
-
-    # Render de VALIDACIÓN (síncrono) a BYTES: confirma que la plantilla compone con esta
-    # foto/copy_in antes de fijarla, SIN persistir nada (no genera huérfanos). La imagen se
-    # renderiza on-demand y efímera desde la receta (`/compuesta`); no se hornea en `imagen`.
-    try:
-        estudio_imagen.componer_desde_plantilla_bytes(
-            plantilla.get("documento") or "{}",
-            copy_in=copy_in,
-            foto=foto,
-            foco=foco,
-            zoom=zoom,
-        )
-    except estudio_imagen.EstudioError as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
-
-    actualizada = repos.actualizar_publicacion(
-        publicacion_id,
-        {
-            # `imagen` vacío: la composición se deriva de la receta y se sirve por `/compuesta`.
-            "imagen": "",
-            "plantilla_diseno_id": plantilla_id,
-            "foto": foto,
-            "foto_encuadre": foto_encuadre,
-        },
-    )
-    if actualizada is None:  # carrera: borrada entre el obtener y el actualizar
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    return JSONResponse({"publicacion": _publicacion_a_dict(actualizada)})
-
-
-async def compuesta(request: Request) -> Response:
-    """Sirve la imagen COMPUESTA de la pieza, renderizada ON-DEMAND y EFÍMERA (sin persistir).
-
-    `GET /api/publicaciones/{id}/compuesta`: deriva la imagen publicable (placa de marca o
-    plantilla del estudio aplicada a la foto + copy_in + encuadre) y devuelve los bytes SIN
-    escribir nada en el almacén — el composite es función pura de la receta, no un objeto que
-    almacenar. La caché vive en la capa HTTP: `ETag = hash(receta)` + `Cache-Control`; si el
-    cliente reenvía `If-None-Match` y la receta no cambió, respondemos 304 SIN recomponer (el
-    ETag se calcula de la receta, barato; no corre Node). Así no se generan huérfanos.
-
-    404 si la pieza no existe o no tiene imagen servible; 422 si el render falla (motivo en
-    español).
-    """
-    from ..dominio import estudio_imagen, render_pieza
-
-    publicacion_id = request.path_params["publicacion_id"]
-    pub = repos.obtener_publicacion(publicacion_id)
-    if pub is None:
-        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-
-    etag = f'"{render_pieza.firma_receta(pub)}"'
-    cache = "private, max-age=300"
-    # 304 sin renderizar si el cliente ya tiene esta versión de la receta.
-    if request.headers.get("if-none-match") == etag:
-        return Response(status_code=304, headers={"ETag": etag, "Cache-Control": cache})
-
-    try:
-        # Render es bloqueante (subprocess.run); ejecutar en threadpool para no bloquear el event loop.
-        resultado = await run_in_threadpool(render_pieza.render_bytes, pub)
-    except estudio_imagen.EstudioError as e:
-        return JSONResponse({"error": str(e)}, status_code=422)
-    if resultado is None:
-        return JSONResponse({"error": "La pieza aún no tiene imagen."}, status_code=404)
-    datos, mime = resultado
-    return Response(
-        datos,
-        media_type=mime,
-        headers={"ETag": etag, "Cache-Control": cache},
-    )
-
-
-RUTAS = [
-    Route("/api/publicaciones/opciones", opciones, methods=["GET"]),
-    # Batch del feed: ANTES de "/{publicacion_id}" para que "cadenas" no matchee como id.
-    Route("/api/publicaciones/cadenas", cadenas_lote, methods=["GET"]),
-    Route("/api/publicaciones/borrar-lote", borrar_lote, methods=["POST"]),
-    Route("/api/publicaciones/{publicacion_id}/compuesta", compuesta, methods=["GET"]),
-    Route("/api/publicaciones", listar, methods=["GET"]),
-    Route("/api/publicaciones", crear, methods=["POST"]),
-    Route("/api/publicaciones/lote", crear_lote, methods=["POST"]),
-    Route("/api/publicaciones/{publicacion_id}/encolar", encolar, methods=["POST"]),
-    Route("/api/publicaciones/{publicacion_id}/duplicar", duplicar, methods=["POST"]),
-    Route("/api/publicaciones/{publicacion_id}/clonar", clonar, methods=["POST"]),
-    Route("/api/publicaciones/{publicacion_id}/metricool", programar_metricool, methods=["POST"]),
-    Route("/api/publicaciones/{publicacion_id}/integrar-foto", integrar_foto, methods=["POST"]),
-    Route("/api/publicaciones/{publicacion_id}/aplicar-plantilla", aplicar_plantilla, methods=["POST"]),
-    Route("/api/publicaciones/{publicacion_id}", detalle, methods=["GET"]),
-    Route("/api/publicaciones/{publicacion_id}", actualizar, methods=["PUT"]),
-    Route("/api/publicaciones/{publicacion_id}", borrar, methods=["DELETE"]),
-]
