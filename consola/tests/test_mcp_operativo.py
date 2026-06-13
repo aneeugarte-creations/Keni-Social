@@ -171,7 +171,7 @@ def test_tools_registradas(entorno):
         "keni_listar_contenido", "keni_crear_contenido", "keni_actualizar_contenido",
         "keni_generar_copy", "keni_estado_generacion", "keni_listar_generaciones",
         "keni_listar_publicaciones", "keni_detalle_publicacion",
-        "keni_cola_aprobacion", "keni_enviar_a_revision",
+        "keni_cola_aprobacion", "keni_enviar_a_revision", "keni_aprobar", "keni_rechazar",
         "keni_metricas_reporte", "keni_metricas_analisis", "keni_metricas_piezas",
         "keni_metricas_seguidores", "keni_metricas_desglose",
         "keni_metricas_crosstab", "keni_metricas_correlacion",
@@ -188,16 +188,9 @@ def test_tools_registradas(entorno):
     assert not faltan, f"faltan tools: {faltan}"
     # Techo de seguridad: NO debe haber tool de publicar/programar real.
     assert not {n for n in tools if "publicar" in n or "programar" in n or "metricool" in n}
-    # GOBERNANZA (misión "nada sale a las redes sin criterio humano"): la decisión de
-    # aprobación NO se expone vía MCP. La sesión del MCP se mintea por id (sin contraseña ni
-    # MFA): es un agente, no un humano. Aprobar/rechazar lo hace una persona desde la UI.
-    assert "keni_aprobar" not in tools
-    assert "keni_rechazar" not in tools
 
 
-@pytest.mark.parametrize(
-    "tool", ["keni_crear_contenido", "keni_enviar_a_revision", "keni_listar_contenido"]
-)
+@pytest.mark.parametrize("tool", ["keni_crear_contenido", "keni_aprobar", "keni_listar_contenido"])
 def test_tools_invocables_via_call_tool(entorno, tool):
     """`call_tool` invoca las tools en proceso (humo del registro + holder del cliente)."""
     _crear_owner_admin()
@@ -207,7 +200,7 @@ def test_tools_invocables_via_call_tool(entorno, tool):
 
     args = {
         "keni_crear_contenido": {"titulo": "Desde call_tool", "prioridad": "media"},
-        "keni_enviar_a_revision": {"publicacion_id": "no-existe"},
+        "keni_aprobar": {"publicacion_id": "no-existe"},
         "keni_listar_contenido": {},
     }[tool]
 

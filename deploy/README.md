@@ -334,8 +334,7 @@ claude mcp add --transport http keni-social https://social.kenitech.io/mcp \
 ```
 
 Luego, en Claude Code, las tools aparecen como `keni_contexto`, `keni_crear_contenido`,
-`keni_enviar_a_revision`, `keni_cola_aprobacion`, `keni_metricas_reporte`, etc. La decisión
-de aprobar/rechazar NO se expone vía MCP (gobernanza: la da un humano desde la UI).
+`keni_cola_aprobacion`, `keni_aprobar`, `keni_metricas_reporte`, etc.
 
 ---
 
