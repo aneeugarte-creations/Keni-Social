@@ -248,6 +248,43 @@ def test_reclama_job_huerfano_de_worker_muerto(entorno):
     assert rereclamado is not None and rereclamado["id"] == primero["id"]
 
 
+def test_reclamar_separa_carriles_proceso_e_inferencia(entorno):
+    """CARRILES: `solo_proceso` separa el trabajo CPU-bound (video/ASR) del de inferencia (claude).
+
+    Un job de PROCESO (kind raiz en `KINDS_PROCESO`) solo lo clava el carril `solo_proceso=True`;
+    un job de INFERENCIA (claude, sin kind raiz) solo el carril `solo_proceso=False`. Asi un video
+    largo no ocupa un slot del copy manual (head-of-line eliminado).
+    """
+    g_inf = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "Inf"})
+    cola.encolar(g_inf["id"], jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags()))
+    g_proc = generaciones.crear({"tipo": "render-video", "marca": _MARCA, "etiqueta": "Vid"})
+    cola.encolar(g_proc["id"], jobspec.construir_proceso(jobspec.PROC_RENDER_VIDEO, {"x": 1}))
+
+    # Carril PROCESO: solo el job CPU-bound (jamas el de inferencia).
+    proc = cola.reclamar("w-proc", solo_proceso=True)
+    assert proc is not None and proc["gen_id"] == g_proc["id"]
+    assert cola.reclamar("w-proc", solo_proceso=True) is None  # no quedan de proceso
+
+    # Carril INFERENCIA: solo el job claude (nunca el de proceso).
+    inf = cola.reclamar("w-inf", solo_proceso=False)
+    assert inf is not None and inf["gen_id"] == g_inf["id"]
+    assert cola.reclamar("w-inf", solo_proceso=False) is None
+
+
+def test_carril_inferencia_no_clava_video_y_legado_si(entorno):
+    """El carril de inferencia IGNORA un job de proceso (no lo deja acaparar su slot)...
+
+    ...mientras que el carril de proceso y el reclamo legado (`solo_proceso=None`) si lo ven.
+    """
+    g_proc = generaciones.crear({"tipo": "transcribir", "marca": _MARCA, "etiqueta": "ASR"})
+    cola.encolar(g_proc["id"], jobspec.construir_proceso(jobspec.PROC_TRANSCRIBIR, {}))
+    # El carril de inferencia no lo clava (head-of-line evitado)...
+    assert cola.reclamar("w-inf", solo_proceso=False) is None
+    # ...pero el carril de proceso si.
+    proc = cola.reclamar("w-proc", solo_proceso=True)
+    assert proc is not None and proc["gen_id"] == g_proc["id"]
+
+
 def test_reclamar_pendiente_no_lee_yaml_de_generacion(entorno, monkeypatch):
     """RENDIMIENTO: clavar un job `pendiente` NO lee el YAML de generacion (cero disco bajo lock).
 

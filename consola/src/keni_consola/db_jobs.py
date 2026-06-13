@@ -169,7 +169,13 @@ def encolados_por_dia(dias: int = 14) -> list[dict[str, Any]]:
     return [{"dia": f["dia"], "n": int(f["n"])} for f in filas]
 
 
-def reclamar_job(worker: str = "", *, prioridad_minima: int | None = None) -> dict[str, Any] | None:
+def reclamar_job(
+    worker: str = "",
+    *,
+    prioridad_minima: int | None = None,
+    solo_proceso: bool | None = None,
+    kinds_proceso: tuple[str, ...] = (),
+) -> dict[str, Any] | None:
     """Clava UN job de forma CONCURRENTE-SEGURA y lo devuelve (None si no hay).
 
     `SELECT ... FOR UPDATE SKIP LOCKED LIMIT 1` dentro de la transaccion + UPDATE a
@@ -179,6 +185,16 @@ def reclamar_job(worker: str = "", *, prioridad_minima: int | None = None) -> di
     `prioridad_minima` (corte del presupuesto, ver `presupuesto_ia`): si viene, solo se
     consideran filas con `prioridad >= prioridad_minima` (el fondo cortado queda `pendiente`
     en la cola, listo para cuando el presupuesto vuelva; lo manual sigue saliendo).
+
+    CARRILES (CPU-bound vs inferencia): `solo_proceso` separa los KINDS de PROCESO (render de
+    video / transcripcion ASR — CPU-bound: ffmpeg/whisper) de los de INFERENCIA (`claude -p` —
+    I/O-bound). `kinds_proceso` es la lista de kinds CPU-bound (de `jobspec.KINDS_PROCESO`, la pasa
+    el llamante para no acoplar la persistencia al dominio). El kind de proceso viaja a NIVEL RAIZ
+    del spec (`spec->>'kind'`); los jobs de inferencia no lo llevan (NULL). Asi:
+      - `solo_proceso=True`  -> solo jobs CPU-bound (su carril/pool propio).
+      - `solo_proceso=False` -> solo jobs de inferencia (el carril de `claude`, que un video largo
+        ya no puede acaparar: head-of-line eliminado).
+      - `solo_proceso=None`  -> cualquiera (back-compat: el pool unico de antes).
 
     RE-RECLAMO DE HUERFANOS: ademas de los `pendiente`, clava los `reclamado` cuyo
     `claimed_at` es mas viejo que `wall-timeout + _RECLAIM_STALE_MARGEN_S` — su worker murio
@@ -218,6 +234,15 @@ def reclamar_job(worker: str = "", *, prioridad_minima: int | None = None) -> di
     )
     filtro_prioridad = "" if prioridad_minima is None else "AND prioridad >= ? "
     params_prio: tuple[int, ...] = () if prioridad_minima is None else (int(prioridad_minima),)
+    # Carril por tipo de trabajo (CPU-bound vs inferencia): filtra por el `kind` raiz del spec.
+    filtro_kind = ""
+    params_kind: tuple[str, ...] = ()
+    if solo_proceso is not None and kinds_proceso:
+        marcadores = ", ".join("?" for _ in kinds_proceso)
+        op = "IN" if solo_proceso else "NOT IN"
+        # `COALESCE(spec->>'kind','')`: los jobs de inferencia no llevan kind raiz (NULL -> '').
+        filtro_kind = f"AND COALESCE(spec->>'kind', '') {op} ({marcadores}) "
+        params_kind = tuple(kinds_proceso)
     con = _conectar()
     try:
         # Acotamos los saltos: descartamos huerfanos ya-terminados (terminando su job) y
@@ -226,10 +251,10 @@ def reclamar_job(worker: str = "", *, prioridad_minima: int | None = None) -> di
             fila = con.execute(
                 "SELECT id, gen_id, spec, estado, intentos FROM jobs "
                 "WHERE (estado = ? OR (estado = ? AND claimed_at IS NOT NULL AND claimed_at < ?)) "
-                + filtro_prioridad +
+                + filtro_prioridad + filtro_kind +
                 # Prioridad primero (manual > pipeline/autogen), luego FIFO por antiguedad.
                 "ORDER BY prioridad DESC, creado ASC, id ASC LIMIT 1 FOR UPDATE SKIP LOCKED",
-                (JOB_PENDIENTE, JOB_RECLAMADO, limite_huerfano, *params_prio),
+                (JOB_PENDIENTE, JOB_RECLAMADO, limite_huerfano, *params_prio, *params_kind),
             ).fetchone()
             if fila is None:
                 con.commit()

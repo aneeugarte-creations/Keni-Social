@@ -45,6 +45,7 @@ el gateway no mata los jobs") lo cumple el modo hosted, que es el del servicio c
 from __future__ import annotations
 
 import logging
+import os
 import signal
 import threading
 import time
@@ -383,18 +384,27 @@ def _esperar_terminal(gen_id: str) -> None:
         generaciones.descartar_evento_terminal(gen_id)
 
 
-def _bucle(parar: threading.Event, worker_id: str) -> None:
+def _bucle(parar: threading.Event, worker_id: str, *, solo_proceso: bool | None = None) -> None:
     """Bucle de UN hilo del pool: clava un job y lo procesa; duerme si la cola esta vacia.
 
-    CONCURRENCIA (KENI_MAX_JOBS): este bucle lo corren EN PARALELO `config.max_jobs()`
-    hilos del pool (ver `_Pool`/`iniciar_worker_inproceso`). Cada hilo reclama,
-    procesa (bloqueando en SU job via `_esperar_terminal`) y reclama el siguiente. La
-    reclamacion concurrente es SEGURA: `cola.reclamar` usa `FOR UPDATE SKIP LOCKED`, asi
-    que dos hilos NUNCA se llevan el mismo job. El paralelismo lo da el POOL: N hilos =>
-    hasta N jobs `claude` en vuelo a la vez (acotado tambien por `runner.slot`).
+    CONCURRENCIA (KENI_MAX_JOBS): este bucle lo corren EN PARALELO los hilos del pool (ver
+    `_Pool`/`iniciar_worker_inproceso`). Cada hilo reclama, procesa (bloqueando en SU job via
+    `_esperar_terminal`) y reclama el siguiente. La reclamacion concurrente es SEGURA:
+    `cola.reclamar` usa `FOR UPDATE SKIP LOCKED`, asi que dos hilos NUNCA se llevan el mismo job.
+
+    CARRIL (`solo_proceso`): separa el trabajo CPU-bound (render de video / transcripcion ASR,
+    `solo_proceso=True`) del de INFERENCIA (`claude -p`, I/O-bound, `solo_proceso=False`), cada
+    uno con su cupo de hilos independiente, para que un video largo no acapare un slot del copy
+    manual prioritario (head-of-line). `None` = cualquiera (pool unico legado). Los jobs de
+    proceso NO gastan tokens de la suscripcion: su carril queda EXENTO del corte por presupuesto
+    (solo lo frena el kill switch PAUSADO), como el gate de encolado (`cola.encolar`).
     """
     sondeo = config.worker_sondeo_segundos()
     espera = sondeo
+    # Un carril CPU-bound (proceso) NO gasta tokens IA: el corte por presupuesto (AGOTADO/
+    # SOLO_MANUAL) no le aplica; solo el kill switch PAUSADO lo frena. El carril de inferencia
+    # (y el pool unico legado, None) si gasta tokens.
+    gasta_tokens = solo_proceso is not True
     while not parar.is_set():
         # GATE DE ECONOMIA (presupuesto_ia): se decide ANTES de reclamar, asi una avalancha
         # YA ENCOLADA tambien se corta (el gate de admision solo frena lo nuevo). Pausado
@@ -409,18 +419,22 @@ def _bucle(parar: threading.Event, worker_id: str) -> None:
         # El gate de reclamo DERIVA del MISMO helper de admisión (`presupuesto_ia.bloqueo_admision`,
         # fuente única de la regla): si ni un job MANUAL que gasta tokens pasaría (PAUSADO/AGOTADO),
         # no reclamamos NADA (lo encolado queda pendiente). Si un job de FONDO no pasaría pero el
-        # manual sí (SOLO_MANUAL), reclamamos solo prioridad >= MANUAL (el fondo espera).
-        if presupuesto_ia.bloqueo_admision(nivel, gasta_tokens=True, es_fondo=False) is not None:
+        # manual sí (SOLO_MANUAL), reclamamos solo prioridad >= MANUAL (el fondo espera). Con
+        # `gasta_tokens=False` (carril proceso) solo PAUSADO bloquea (exento del presupuesto).
+        if presupuesto_ia.bloqueo_admision(nivel, gasta_tokens=gasta_tokens, es_fondo=False) is not None:
             if parar.wait(espera):
                 return
             espera = min(espera * 1.5, max(sondeo, _SONDEO_MAX_S))
             continue
         solo_manual = (
-            presupuesto_ia.bloqueo_admision(nivel, gasta_tokens=True, es_fondo=True) is not None
+            gasta_tokens
+            and presupuesto_ia.bloqueo_admision(nivel, gasta_tokens=True, es_fondo=True) is not None
         )
         prioridad_minima = jobspec.PRIORIDAD_MANUAL if solo_manual else None
         try:
-            job = cola.reclamar(worker_id, prioridad_minima=prioridad_minima)
+            job = cola.reclamar(
+                worker_id, prioridad_minima=prioridad_minima, solo_proceso=solo_proceso
+            )
         except Exception:  # noqa: BLE001 -- un fallo de la cola no debe matar el worker
             _log.exception("worker: fallo al reclamar un job de la cola")
             if parar.wait(espera):
@@ -456,24 +470,62 @@ def _bucle(parar: threading.Event, worker_id: str) -> None:
             _log.exception("worker: fallo al procesar el job %s", job.get("id"))
 
 
-class _Pool:
-    """Pool de N hilos worker (N = `config.max_jobs()`) corriendo el bucle de reclamacion.
+def _max_jobs_proceso() -> int:
+    """Cupo de hilos del CARRIL CPU-bound (render/transcripcion): `KENI_MAX_JOBS_PROCESO`.
 
-    Cada hilo reclama y procesa jobs de forma independiente; el pool da el PARALELISMO
-    real (hasta N jobs `claude` a la vez). Comparten el mismo `parar` (Event): `detener()`
+    Carril SEPARADO del de inferencia (`claude -p`, `config.max_jobs()`): asi un video largo no
+    agota los slots del copy manual. Default 2, minimo 0 (0 = sin carril dedicado: los jobs de
+    proceso esperarian a que el carril de inferencia los tomara, head-of-line de vuelta — por eso
+    el default es >=1). Se lee INLINE de `os.environ` (no por `config.py`, de otro agente).
+    """
+    crudo = os.environ.get("KENI_MAX_JOBS_PROCESO")
+    if crudo is None:
+        return 2
+    try:
+        valor = int(str(crudo).strip())
+    except (TypeError, ValueError):
+        return 2
+    return max(0, valor)
+
+
+class _Pool:
+    """Pool de hilos worker en DOS CARRILES corriendo el bucle de reclamacion.
+
+    - INFERENCIA (`config.max_jobs()` hilos): jobs de `claude -p` (I/O-bound). Da el paralelismo
+      de copy/arte (hasta N jobs `claude` a la vez, acotado tambien por `runner.slot`).
+    - PROCESO (`KENI_MAX_JOBS_PROCESO` hilos): jobs CPU-bound (render de video / transcripcion).
+
+    Separar los carriles evita el HEAD-OF-LINE: un video largo ya no acapara un slot del copy
+    manual prioritario. Cada hilo reclama y procesa de forma independiente, filtrando por su
+    carril (`cola.reclamar(solo_proceso=...)`). Comparten el mismo `parar` (Event): `detener()`
     lo activa, cancela TODOS los jobs en vuelo y hace join con timeout (apagado determinista).
     """
 
-    def __init__(self, n: int, prefijo_id: str) -> None:
+    def __init__(self, n: int, prefijo_id: str, *, n_proceso: int | None = None) -> None:
         self._parar = threading.Event()
         self._hilos: list[threading.Thread] = []
-        for i in range(max(1, n)):
-            worker_id = f"{prefijo_id}-{uuid.uuid4().hex[:8]}"
-            hilo = threading.Thread(
+        n_inferencia = max(1, n)
+        n_proc = _max_jobs_proceso() if n_proceso is None else max(0, n_proceso)
+        # SIN carril de proceso dedicado (n_proc == 0): el de inferencia toma TODO (`None`, pool
+        # unico legado), para no dejar jobs de proceso sin quien los reclame. Con carril dedicado,
+        # el de inferencia EXCLUYE los kinds de proceso (False).
+        carril_inferencia = False if n_proc > 0 else None
+        # INFERENCIA primero (`_hilos[0]` queda como hilo-fachada de inferencia).
+        for i in range(n_inferencia):
+            worker_id = f"{prefijo_id}-inf-{uuid.uuid4().hex[:8]}"
+            self._hilos.append(threading.Thread(
                 target=_bucle, args=(self._parar, worker_id),
-                name=f"worker-generacion-{i}", daemon=True,
-            )
-            self._hilos.append(hilo)
+                kwargs={"solo_proceso": carril_inferencia},
+                name=f"worker-generacion-inf-{i}", daemon=True,
+            ))
+        # PROCESO (CPU-bound): carril aparte para que no compita por los slots de inferencia.
+        for i in range(n_proc):
+            worker_id = f"{prefijo_id}-proc-{uuid.uuid4().hex[:8]}"
+            self._hilos.append(threading.Thread(
+                target=_bucle, args=(self._parar, worker_id),
+                kwargs={"solo_proceso": True},
+                name=f"worker-generacion-proc-{i}", daemon=True,
+            ))
 
     @property
     def parar(self) -> threading.Event:

@@ -105,7 +105,12 @@ def encolar(gen_id: str, spec: dict[str, Any]) -> str:
     return repos.encolar_job(gen_id, jobspec.serializar(spec), prio)
 
 
-def reclamar(worker: str = "", *, prioridad_minima: int | None = None) -> dict[str, Any] | None:
+def reclamar(
+    worker: str = "",
+    *,
+    prioridad_minima: int | None = None,
+    solo_proceso: bool | None = None,
+) -> dict[str, Any] | None:
     """Clava UN job pendiente (concurrente-seguro) y devuelve `{id, gen_id, spec}` o None.
 
     `spec` se devuelve YA DESERIALIZADO (dict). Si el JSON guardado estuviera corrupto, el
@@ -115,8 +120,18 @@ def reclamar(worker: str = "", *, prioridad_minima: int | None = None) -> dict[s
     clavan jobs con `prioridad >= prioridad_minima`. Asi una avalancha de fondo YA ENCOLADA
     deja de ejecutarse al agotarse el presupuesto (queda `pendiente`, no se pierde) mientras
     lo manual sigue saliendo.
+
+    `solo_proceso` (CARRIL CPU-bound vs inferencia): separa los jobs de PROCESO (render de
+    video / transcripcion ASR, CPU-bound) de los de INFERENCIA (`claude -p`, I/O-bound), para
+    que un video largo no acapare un slot del copy manual prioritario (head-of-line). True =
+    solo CPU-bound; False = solo inferencia; None = cualquiera. La lista de kinds CPU-bound sale
+    de `jobspec.KINDS_PROCESO` (aqui, para no acoplar la persistencia al dominio).
     """
-    fila = repos.reclamar_job(worker, prioridad_minima=prioridad_minima)
+    kinds_proceso = () if solo_proceso is None else tuple(jobspec.KINDS_PROCESO)
+    fila = repos.reclamar_job(
+        worker, prioridad_minima=prioridad_minima,
+        solo_proceso=solo_proceso, kinds_proceso=kinds_proceso,
+    )
     if fila is None:
         return None
     try:
