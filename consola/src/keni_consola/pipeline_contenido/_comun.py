@@ -15,6 +15,7 @@ import re
 from typing import Any
 
 from .. import config, generaciones, marcas, redes, repos
+from ..dominio import http_feed
 from ..dominio import qa_editorial as dom_qa
 
 __all__ = [
@@ -53,6 +54,7 @@ __all__ = [
     "_OG_TIMEOUT_S",
     "_FETCH_OG_IMAGE",
     "_fetch_og_image_real",
+    "_fetch_html_validado",
     "_extraer_og_image",
     # cuerpo del artículo + limpieza del snippet (enriquecer la nota de origen)
     "_FETCH_ARTICULO",
@@ -215,37 +217,71 @@ _RE_CONTENT = re.compile(r"""content\s*=\s*["']([^"']+)["']""", re.IGNORECASE)
 _OG_MAX_BYTES = 512 * 1024
 _OG_TIMEOUT_S = 8.0
 
+# User-Agent de los fetches del pipeline (og:image y cuerpo del artículo).
+_UA_PIPELINE = "keni-social/pipeline (+https://social.kenitech.io)"
+# Máximo de saltos de redirección que seguimos REVALIDANDO cada destino. Un enlace de Google News
+# redirige al editor (1-2 saltos); este tope corta cadenas abusivas y bucles de redirección.
+_MAX_REDIRECTS = 5
 
-def _fetch_og_image_real(enlace: str) -> str:
-    """Resuelve la `og:image` de un artículo. "" si falla / no hay. NUNCA lanza.
 
-    Best-effort: GET con redirects (los enlaces de Google News redirigen al editor),
-    timeout corto, lee solo el principio del HTML y parsea la meta og:image con regex. Es el
-    punto INYECTABLE: los tests lo parchean para no tocar la red (`monkeypatch.setattr`).
+def _fetch_html_validado(enlace: str, *, timeout: float, max_bytes: int) -> str:
+    """Descarga el HTML de `enlace` con GUARD SSRF en CADA salto. "" si falla / no permitido. NUNCA lanza.
+
+    ANTI-SSRF: la ingesta resuelve URLs de ARTÍCULOS de TERCEROS (las trae el feed RSS, no
+    confiable). Antes de pedir cada URL la validamos con `http_feed.validar_url` (esquema
+    http/https + rechazo de IPs privadas/loopback/link-local/multicast/reservadas, incl. la
+    metadata 169.254.169.254). Como un editor legítimo puede REDIRIGIR (Google News → medio),
+    seguimos los redirects MANUALMENTE revalidando cada destino —en vez de delegar en el
+    `follow_redirects` de httpx, que NO revalida y abriría SSRF por redirección a una IP interna—.
+    Lee sólo el principio del documento (`max_bytes`). Es la base común de la og:image y del cuerpo.
     """
-    if not isinstance(enlace, str) or not enlace.strip().startswith(("http://", "https://")):
+    if not isinstance(enlace, str) or not enlace.strip():
         return ""
     try:
         import httpx
     except ImportError:  # pragma: no cover -- httpx es dependencia
         return ""
+    cabeceras = {"User-Agent": _UA_PIPELINE}
+    url = enlace.strip()
     try:
-        cabeceras = {"User-Agent": "keni-social/pipeline (+https://social.kenitech.io)"}
-        with httpx.Client(
-            timeout=_OG_TIMEOUT_S, follow_redirects=True, headers=cabeceras
-        ) as cliente:
-            with cliente.stream("GET", enlace.strip()) as respuesta:
-                respuesta.raise_for_status()
-                trozos: list[bytes] = []
-                total = 0
-                for trozo in respuesta.iter_bytes():
-                    trozos.append(trozo)
-                    total += len(trozo)
-                    if total >= _OG_MAX_BYTES:
-                        break
-        html = b"".join(trozos).decode("utf-8", errors="replace")
-    except Exception:  # noqa: BLE001 -- la og:image es un extra; nunca rompe el barrido
+        with httpx.Client(timeout=timeout, follow_redirects=False, headers=cabeceras) as cliente:
+            for _ in range(_MAX_REDIRECTS + 1):
+                limpia, error = http_feed.validar_url(url)
+                if error is not None:
+                    _log.debug("pipeline: fetch bloqueado por guard SSRF (%s): %s", url[:120], error)
+                    return ""
+                with cliente.stream("GET", limpia) as respuesta:
+                    if respuesta.is_redirect:
+                        destino = respuesta.headers.get("location") or ""
+                        if not destino:
+                            return ""
+                        # Resuelve un Location relativo contra la URL actual y revalida en la
+                        # siguiente vuelta (el guard SSRF se aplica también al destino del redirect).
+                        url = str(respuesta.url.join(destino))
+                        continue
+                    respuesta.raise_for_status()
+                    trozos: list[bytes] = []
+                    total = 0
+                    for trozo in respuesta.iter_bytes():
+                        trozos.append(trozo)
+                        total += len(trozo)
+                        if total >= max_bytes:
+                            break
+                    return b"".join(trozos).decode("utf-8", errors="replace")
+            _log.debug("pipeline: demasiadas redirecciones al traer %s", enlace[:120])
+            return ""
+    except Exception:  # noqa: BLE001 -- el fetch es un extra; nunca rompe el barrido
         return ""
+
+
+def _fetch_og_image_real(enlace: str) -> str:
+    """Resuelve la `og:image` de un artículo. "" si falla / no hay. NUNCA lanza.
+
+    Best-effort: GET con redirects VALIDADOS contra SSRF (`_fetch_html_validado`), timeout corto,
+    lee solo el principio del HTML y parsea la meta og:image con regex. Es el punto INYECTABLE:
+    los tests lo parchean para no tocar la red (`monkeypatch.setattr`).
+    """
+    html = _fetch_html_validado(enlace, timeout=_OG_TIMEOUT_S, max_bytes=_OG_MAX_BYTES)
     return _extraer_og_image(html)
 
 
@@ -388,33 +424,11 @@ def _limpiar_snippet(texto: str) -> str:
 def _fetch_articulo_real(enlace: str) -> str:
     """Descarga y extrae el CUERPO del artículo de `enlace`. "" si falla / no hay. NUNCA lanza.
 
-    Best-effort, mismo patrón que `_fetch_og_image_real` (GET con redirects, timeout corto, tope
-    de bytes), pero leyendo más cuerpo y extrayendo texto con `_extraer_texto_articulo`. Es el
-    punto INYECTABLE: los tests lo parchean (`_FETCH_ARTICULO`) para no tocar la red.
+    Best-effort, mismo patrón que `_fetch_og_image_real` (GET con redirects VALIDADOS contra SSRF,
+    timeout corto, tope de bytes), pero leyendo más cuerpo y extrayendo texto con
+    `_extraer_texto_articulo`. Es el punto INYECTABLE: los tests lo parchean (`_FETCH_ARTICULO`).
     """
-    if not isinstance(enlace, str) or not enlace.strip().startswith(("http://", "https://")):
-        return ""
-    try:
-        import httpx
-    except ImportError:  # pragma: no cover -- httpx es dependencia
-        return ""
-    try:
-        cabeceras = {"User-Agent": "keni-social/pipeline (+https://social.kenitech.io)"}
-        with httpx.Client(
-            timeout=_ART_TIMEOUT_S, follow_redirects=True, headers=cabeceras
-        ) as cliente:
-            with cliente.stream("GET", enlace.strip()) as respuesta:
-                respuesta.raise_for_status()
-                trozos: list[bytes] = []
-                total = 0
-                for trozo in respuesta.iter_bytes():
-                    trozos.append(trozo)
-                    total += len(trozo)
-                    if total >= _ART_MAX_BYTES:
-                        break
-        html_doc = b"".join(trozos).decode("utf-8", errors="replace")
-    except Exception:  # noqa: BLE001 -- el cuerpo es un extra; nunca rompe el barrido
-        return ""
+    html_doc = _fetch_html_validado(enlace, timeout=_ART_TIMEOUT_S, max_bytes=_ART_MAX_BYTES)
     return _extraer_texto_articulo(html_doc)
 
 
