@@ -502,6 +502,35 @@ def registrar_gasto_ia(
         con.close()
 
 
+def coste_medio_imagen(modelo: str = "", limite: int = 50) -> dict[str, Any]:
+    """Coste medio por IMAGEN (USD) de las ultimas `limite` generaciones tipo `imagen`.
+
+    Promedia `coste_usd` de las filas `gasto_ia` con `tipo='imagen'` y coste > 0, las mas
+    recientes primero. Con `modelo`, acota a ese modelo (estimacion por modelo); sin el,
+    media GLOBAL de imagen. Devuelve `{por_imagen, muestras, modelo}`: `por_imagen` es None
+    si no hay muestras (el front cae al fallback). La moneda la fija el endpoint (USD).
+    """
+    limite = max(1, min(int(limite or 1), 500))
+    sql = (
+        "SELECT coste_usd FROM gasto_ia "
+        "WHERE tipo = 'imagen' AND coste_usd > 0"
+    )
+    params: list[Any] = []
+    if modelo:
+        sql += " AND modelo = ?"
+        params.append(str(modelo))
+    sql += " ORDER BY actualizado DESC LIMIT ?"
+    params.append(limite)
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()
+    finally:
+        con.close()
+    costes = [float(f["coste_usd"]) for f in filas]
+    por_imagen = (sum(costes) / len(costes)) if costes else None
+    return {"por_imagen": por_imagen, "muestras": len(costes), "modelo": modelo or ""}
+
+
 def gasto_ia_del_dia(dia: str) -> dict[str, Any]:
     """Gasto AGREGADO de un dia UTC: `{tokens, tokens_in, tokens_out, coste_usd, generaciones}`.
 
