@@ -1,0 +1,11 @@
+id: unotv-fb-prohibidos
+descripcion: "Viola la regla editorial de presunción de inocencia de UnoTV: dice 'culpable'/'delincuente' sin sentencia firme."
+marca: unotv
+red: facebook
+espera: falla
+falla_esperada_en: prohibidos
+prohibidos: ["culpable", "delincuente", "el responsable"]
+copy: |
+  El culpable del asalto a la sucursal bancaria fue detenido la noche del miércoles por
+  elementos de la policía estatal, quienes lo trasladaron a las instalaciones del
+  ministerio público para continuar con las investigaciones correspondientes del caso.
