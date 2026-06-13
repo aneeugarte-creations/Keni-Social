@@ -221,11 +221,11 @@ export default function CockpitProduccion() {
                 Feed de revisión (aprobar / rechazar)
               </Link>
               <Link
-                to="/datos/produccion"
+                to="/maquina/cola"
                 className="inline-flex items-center gap-1 font-medium text-foreground underline-offset-4 hover:underline"
               >
                 <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-                Producción (runs y actividad de la máquina)
+                Actividad (runs y trabajos de la máquina) en Workers
               </Link>
             </div>
           </CardContent>

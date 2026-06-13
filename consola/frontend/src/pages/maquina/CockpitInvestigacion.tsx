@@ -13,6 +13,7 @@ import { ApiError, api, mensajeError } from "@/lib/api";
 import { INTERVALO_VIVO_MS } from "@/lib/refresco";
 import Algoritmos from "@/pages/Algoritmos";
 import Cobertura from "@/pages/Cobertura";
+import ContenidosHub from "@/pages/ContenidosHub";
 import Fuentes from "@/pages/Fuentes";
 import { PanelInvestigacion } from "@/pages/configuracion/SeccionFuncionalidad";
 import { PipelineEnVivo } from "@/pages/monitor/PipelineEnVivo";
@@ -33,7 +34,11 @@ import { RielInvestigacion } from "@/pages/noticias/RielInvestigacion";
  *      (`Cobertura`). Es lo que el humano revisa; la ruta vieja `/datos/investigacion` redirige
  *      a esta pestaña.
  *   3. FUENTES (input): los canales que alimentan el pool (`Fuentes`).
- *   4. ALGORITMOS (input): inteligencia de plataforma + trends + sugerencias (`Algoritmos`).
+ *   4. CONTENIDOS (output atemporal): el banco EVERGREEN —piezas educativas/curiosas que no
+ *      caducan— (`ContenidosHub`). Antes era sub-ruta del hub Investigación (`/datos/investigacion/
+ *      contenidos`); al consolidarse la nav, su única casa es esta pestaña del cockpit (la ruta
+ *      vieja sigue viva para deep-links).
+ *   5. ALGORITMOS (input): inteligencia de plataforma + trends + sugerencias (`Algoritmos`).
  *      La ruta vieja `/contenido/texto/algoritmos` redirige aquí (es un input de investigación,
  *      no una herramienta de la Biblioteca).
  *
@@ -43,8 +48,14 @@ import { RielInvestigacion } from "@/pages/noticias/RielInvestigacion";
  */
 
 /** Pestañas del cockpit (clave `?seccion=`). Pipeline es la vista por defecto. */
-type Seccion = "pipeline" | "mesa" | "fuentes" | "algoritmos";
-const SECCIONES: readonly Seccion[] = ["pipeline", "mesa", "fuentes", "algoritmos"];
+type Seccion = "pipeline" | "mesa" | "fuentes" | "contenidos" | "algoritmos";
+const SECCIONES: readonly Seccion[] = [
+  "pipeline",
+  "mesa",
+  "fuentes",
+  "contenidos",
+  "algoritmos",
+];
 
 /** Docs de la Biblioteca por etapa de la tira: el lápiz «Editar prompt» de Validación abre su
  *  doc (`?doc=`). Selección es mecánica (sin prompt propio): no lleva lápiz. */
@@ -150,6 +161,7 @@ export default function CockpitInvestigacion() {
           <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
           <TabsTrigger value="mesa">Mesa de redacción</TabsTrigger>
           <TabsTrigger value="fuentes">Fuentes</TabsTrigger>
+          <TabsTrigger value="contenidos">Contenidos</TabsTrigger>
           <TabsTrigger value="algoritmos">Algoritmos</TabsTrigger>
         </TabsList>
 
@@ -208,7 +220,12 @@ export default function CockpitInvestigacion() {
           <Fuentes />
         </TabsContent>
 
-        {/* 4. ALGORITMOS (input): inteligencia de plataforma + trends + sugerencias. */}
+        {/* 4. CONTENIDOS (output atemporal): el banco EVERGREEN (ContenidosHub). */}
+        <TabsContent value="contenidos">
+          <ContenidosHub />
+        </TabsContent>
+
+        {/* 5. ALGORITMOS (input): inteligencia de plataforma + trends + sugerencias. */}
         <TabsContent value="algoritmos">
           <Algoritmos />
         </TabsContent>

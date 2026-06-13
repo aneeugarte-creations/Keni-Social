@@ -42,7 +42,9 @@ const FeedIdeacion = lazy(() => import("@/pages/feed/FeedIdeacion"));
 const ListaContenido = lazy(() => import("@/pages/feed/ListaContenido"));
 const CalendarioContenido = lazy(() => import("@/pages/calendario/CalendarioContenido"));
 
-const Produccion = lazy(() => import("@/pages/Produccion"));
+// El feed de Producción ya no es una ruta propia: se PLEGÓ en el dashboard de Workers
+// (`/maquina/cola`, sección «Actividad»), que lo importa directamente. El índice
+// `/datos/produccion` redirige a Workers; aquí solo viven sus páginas de detalle.
 const PipelineDetalle = lazy(() => import("@/pages/PipelineDetalle"));
 const GeneracionDetalle = lazy(() => import("@/pages/GeneracionDetalle"));
 
@@ -283,13 +285,14 @@ export const router = createBrowserRouter([
               { path: "comercial", element: <Comercial /> },
             ],
           },
-          // Hub Producción (antes «Actividad IA» con pestañas Feed/Pipelines, hoy FUSIONADAS):
-          // el feed unificado (runs del pipeline + actividad suelta) es el índice; cada run
-          // y cada trabajo suelto tienen su página de detalle entrada/salida.
+          // Producción (antes «Actividad IA»): el FEED unificado (runs del pipeline + actividad
+          // suelta) se PLEGÓ como la sección «Actividad» del dashboard de Workers (`/maquina/cola`);
+          // su índice redirige allí. Cada run y cada trabajo suelto conservan su página de detalle
+          // entrada/salida (las tarjetas del feed enlazan a ellas).
           {
             path: "produccion",
             children: [
-              { index: true, element: <Produccion /> },
+              { index: true, element: <Navigate to="/maquina/cola" replace /> },
               { path: "pipelines/:id", element: <PipelineDetalle /> },
               // Detalle de un trabajo SUELTO (generación fuera del pipeline): mismo in/out.
               { path: "actividad/:id", element: <GeneracionDetalle /> },

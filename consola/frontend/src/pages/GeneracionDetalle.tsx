@@ -99,11 +99,11 @@ export default function GeneracionDetalle() {
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-2">
         <Link
-          to="/datos/produccion"
+          to="/maquina/cola"
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          Producción
+          Actividad
         </Link>
         <div className="flex items-center gap-1">
           {esAdmin && gen?.estado === "error" && (

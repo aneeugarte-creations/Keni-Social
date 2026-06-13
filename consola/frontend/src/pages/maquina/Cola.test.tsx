@@ -116,12 +116,14 @@ describe("Cola (cola de generación)", () => {
     expect(urls.some((u) => u.includes("/api/actividad/cola") && !u.includes("marca="))).toBe(true);
   });
 
-  it("es el dashboard de Workers: monta pool, economía y agentes JUNTOS", async () => {
+  it("es el dashboard de Workers: monta pool, economía, actividad y agentes JUNTOS", async () => {
     stubFetch(snapshot([job({})]));
     renderConProviders(<Cola />);
-    // Las tres secciones colapsables del dashboard, abiertas por defecto.
+    // Las cuatro secciones colapsables del dashboard, abiertas por defecto.
     expect(await screen.findByText("Pool reactivo (claude -p)")).toBeInTheDocument();
     expect(screen.getByText("Economía de tokens")).toBeInTheDocument();
+    // «Actividad»: el feed de Producción plegado aquí (runs del pipeline + actividad suelta).
+    expect(screen.getByText("Actividad")).toBeInTheDocument();
     expect(
       screen.getByText("Agentes (gastan tokens / actúan en el flujo)"),
     ).toBeInTheDocument();

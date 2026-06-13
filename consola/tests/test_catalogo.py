@@ -29,14 +29,16 @@ _SIDEBAR_BLOQUES = [
     # Imagen (editor de imagen por capas + IA), Video (estudio de video) y Texto (la
     # Texto: prompts + línea editorial + plantillas).
     ["Imagen", "Video", "Texto"],
-    # "Máquina": la máquina de generación (fase 2A) — dos cockpits de igual peso
-    # (Investigación: descubre/verifica; Producción: genera copy/arte) + el dashboard de
-    # Workers (el worker/cola compartido + economía de tokens + agentes, TODO JUNTO).
+    # "Máquina": la máquina de generación — dos cockpits de igual peso (Investigación:
+    # descubre/verifica; Producción: genera copy/arte) + el dashboard de Workers (el worker/cola
+    # compartido + economía de tokens + el FEED de actividad + agentes, TODO JUNTO). Tras la
+    # consolidación de navegación, cada motor sale UNA sola vez y vive aquí: las viejas entradas
+    # «datos» de Investigación y Producción (esta última, el feed) se retiraron del menú
+    # (Investigación → cockpit; el feed → sección «Actividad» de Workers).
     ["Investigación", "Producción", "Workers"],
-    # "Datos": lo que alimenta o refleja la automatización — Investigación (fuentes/radar),
-    # Analíticas (medición que cierra el loop) y Producción (el feed unificado de lo que
-    # produce la máquina: runs del pipeline + actividad suelta, antes «Actividad IA»).
-    ["Investigación", "Analíticas", "Producción"],
+    # "Datos": lo que alimenta o refleja la automatización. Solo queda Analíticas (la medición
+    # que cierra el loop); la aporta `metricas.toml`.
+    ["Analíticas"],
 ]
 
 # Encabezados humanos de cada bloque, en el mismo orden.
@@ -99,12 +101,17 @@ def test_iconos_de_nav_son_strings_lucide():
     iconos = {i["ruta"]: i["icono"] for g in cat["navegacion"] for i in g["items"]}
     assert iconos["/contenido/imagen"] == "Image"
     assert iconos["/contenido/video"] == "Clapperboard"
-    assert iconos["/datos/investigacion"] == "Search"
     assert iconos["/datos/analiticas"] == "BarChart3"
     assert iconos["/operacion/feed"] == "LayoutGrid"
     assert iconos["/operacion/programacion"] == "CalendarDays"
     assert iconos["/operacion/turnos"] == "CalendarClock"
-    assert iconos["/datos/produccion"] == "Activity"
+    # Los motores de la máquina viven en el bloque «Máquina» (una sola entrada cada uno);
+    # las viejas entradas «datos» (/datos/investigacion, /datos/produccion) se retiraron del menú.
+    assert iconos["/maquina/investigacion"] == "Search"
+    assert iconos["/maquina/produccion"] == "Sparkles"
+    assert iconos["/maquina/cola"] == "ListChecks"
+    assert "/datos/investigacion" not in iconos
+    assert "/datos/produccion" not in iconos
 
 
 def test_desactivar_flag_oculta_la_app_del_catalogo():

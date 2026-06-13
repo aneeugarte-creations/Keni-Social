@@ -46,6 +46,7 @@ import { costeUsd, duracion, numeroCompacto, numeroCompleto } from "@/lib/format
 import { etiquetaTipoGeneracion } from "@/lib/generaciones";
 import { INTERVALO_SERIE_MS, INTERVALO_VIVO_MS } from "@/lib/refresco";
 import { cn } from "@/lib/utils";
+import Produccion from "@/pages/Produccion";
 import { SeccionColapsable } from "@/pages/configuracion/SeccionColapsable";
 import { useGuardarAjuste } from "@/pages/configuracion/SeccionFuncionalidad";
 import { SeccionMetricool } from "@/pages/configuracion/SeccionMetricool";
@@ -856,7 +857,20 @@ export default function Cola() {
           </div>
         </SeccionColapsable>
 
-        {/* (c) AGENTES: los daemons que gastan tokens / actúan en el flujo, agrupados por motor
+        {/* (c) ACTIVIDAD: el FEED de todo lo que la máquina produce —runs del pipeline + actividad
+            suelta, con coste/tokens/tiempo y detalle entrada/salida—. Es el historial de ejecución,
+            compañero natural del pool en vivo y de la economía de tokens. Reutiliza la página
+            Producción en modo `embebido` (sin su título/menú/enlace propios); cada tarjeta sigue
+            enlazando a su detalle (`/datos/produccion/pipelines/:id` · `/actividad/:id`). */}
+        <SeccionColapsable
+          titulo="Actividad"
+          abiertaInicial
+          descripcion="El feed de lo que produce la máquina: runs del pipeline y actividad suelta de IA, con coste, tokens y tiempo. Cada tarjeta abre su detalle de entrada/salida."
+        >
+          <Produccion embebido />
+        </SeccionColapsable>
+
+        {/* (d) AGENTES: los daemons que gastan tokens / actúan en el flujo, agrupados por motor
             (Investigación / Producción / Flujo). La infra (métricas, GC, reaper…) vive en
             Sistema. Reusa SeccionDaemons con un filtro por `grupo` (sin duplicar). */}
         <SeccionColapsable

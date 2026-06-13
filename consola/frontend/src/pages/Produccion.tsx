@@ -41,8 +41,12 @@ const PAGINA = 20;
  * La ECONOMÍA de tokens (conteos del periodo + desglose por tipo/día) se MOVIÓ al dashboard de
  * Workers (`/maquina/cola`), donde vive JUNTA con el gasto por proceso y el pool reactivo; aquí
  * queda solo el feed. (El catálogo de tipos del filtro sigue saliendo de los mismos agregados.)
+ *
+ * `embebido`: cuando el feed se monta DENTRO del dashboard de Workers (sección «Actividad»,
+ * `/maquina/cola`), no aporta su propio título/menú de página (los pone Workers) ni el enlace
+ * «Economía de tokens → Workers» (sería circular). Como página suelta (default) sí los pinta.
  */
-export default function Produccion() {
+export default function Produccion({ embebido = false }: { embebido?: boolean }) {
   const navigate = useNavigate();
   // La marca la MANDA el switch global de la barra superior (workspace); Producción no
   // tiene selector propio. `marcaActiva` es el id canónico (o null = "Todas", solo admin).
@@ -112,30 +116,35 @@ export default function Produccion() {
 
   return (
     <div className="space-y-6">
-      {/* Página plana (ya no es hub: la pestaña «Monitor» se relocalizó a «Máquina»): su
-          título se portaliza a la cabecera, como las demás páginas planas. */}
-      <TituloPagina titulo="Producción" icono={Factory} />
-      <AccionesPagina>
-        <MenuAcciones>
-          <ItemMenu
-            icono={RefreshCw}
-            onClick={refrescar}
-            disabled={listaQuery.isFetching || agregadosQuery.isFetching}
-          >
-            Actualizar
-          </ItemMenu>
-        </MenuAcciones>
-      </AccionesPagina>
+      {/* Como página suelta porta su título/menú a la cabecera y enlaza a la economía (en Workers).
+          Embebido en Workers (sección «Actividad») no los pinta: el título y el menú son de la Cola
+          y el enlace a la economía sería circular (la economía vive en la misma página). */}
+      {!embebido && (
+        <>
+          <TituloPagina titulo="Producción" icono={Factory} />
+          <AccionesPagina>
+            <MenuAcciones>
+              <ItemMenu
+                icono={RefreshCw}
+                onClick={refrescar}
+                disabled={listaQuery.isFetching || agregadosQuery.isFetching}
+              >
+                Actualizar
+              </ItemMenu>
+            </MenuAcciones>
+          </AccionesPagina>
 
-      {/* La economía de tokens (conteos + desglose por tipo/día) se unificó en el dashboard de
-          Workers, junto al gasto por proceso y el pool. Aquí queda el feed; enlace breve allí. */}
-      <Link
-        to="/maquina/cola"
-        className="flex items-center gap-1.5 text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-      >
-        <Coins className="h-4 w-4" aria-hidden="true" />
-        Economía de tokens → Workers
-      </Link>
+          {/* La economía de tokens (conteos + desglose por tipo/día) se unificó en el dashboard de
+              Workers, junto al gasto por proceso y el pool. Aquí queda el feed; enlace breve allí. */}
+          <Link
+            to="/maquina/cola"
+            className="flex items-center gap-1.5 text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          >
+            <Coins className="h-4 w-4" aria-hidden="true" />
+            Economía de tokens → Workers
+          </Link>
+        </>
+      )}
 
       {/* Filtros del feed: etapa (runs), estado (todo), tipo (trabajos sueltos). */}
       <div className="flex flex-wrap items-center gap-2">

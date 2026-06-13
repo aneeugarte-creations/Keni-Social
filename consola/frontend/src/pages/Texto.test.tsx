@@ -342,10 +342,11 @@ describe("Biblioteca de Prompts (tres máquinas + estrategia)", () => {
     // Salud agregada: el copy tiene cambios sin publicar.
     expect(screen.getByText(/1 etapa sin publicar/)).toBeInTheDocument();
 
-    // Enlace cruzado a la página del proceso (el hub Producción).
+    // Enlace cruzado a la página del proceso: el feed de Producción se plegó en el dashboard
+    // de Workers (sección «Actividad»), así que el proceso «en vivo» de Producción es /maquina/cola.
     expect(
       screen.getByRole("link", { name: /Ver el proceso en vivo/ }).getAttribute("href"),
-    ).toBe("/datos/produccion");
+    ).toBe("/maquina/cola");
 
     // El evergreen (seccion "taller") vive separado del riel principal.
     const taller = screen.getByRole("region", { name: "Taller" });

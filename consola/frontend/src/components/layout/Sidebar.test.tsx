@@ -26,12 +26,15 @@ const CATALOGO = {
       icono: "Sparkles",
       descripcion: "Copy, clips, imágenes y verificación",
       permisos: ["editor", "admin"],
-      rutas_frontend: ["/contenido/imagen", "/datos/investigacion", "/datos/produccion"],
+      rutas_frontend: ["/contenido/imagen", "/maquina/investigacion", "/maquina/cola"],
       nav: [
         { ruta: "/contenido/imagen", etiqueta: "Imagen", icono: "Palette", descripcion: "", grupo: "contenido", grupo_orden: 20, orden: 10 },
         { ruta: "/contenido/texto", etiqueta: "Texto", icono: "Library", descripcion: "", grupo: "contenido", grupo_orden: 20, orden: 20 },
-        { ruta: "/datos/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "", grupo: "datos", grupo_orden: 30, orden: 10 },
-        { ruta: "/datos/produccion", etiqueta: "Producción", icono: "Activity", descripcion: "", grupo: "datos", grupo_orden: 30, orden: 30 },
+        // Bloque «Máquina»: cada motor UNA sola vez (consolidación de nav). Las viejas entradas
+        // «datos» (Investigación /datos/investigacion, Producción /datos/produccion) se retiraron.
+        { ruta: "/maquina/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "", grupo: "maquina", grupo_orden: 25, orden: 10 },
+        { ruta: "/maquina/produccion", etiqueta: "Producción", icono: "Sparkles", descripcion: "", grupo: "maquina", grupo_orden: 25, orden: 20 },
+        { ruta: "/maquina/cola", etiqueta: "Workers", icono: "ListChecks", descripcion: "", grupo: "maquina", grupo_orden: 25, orden: 30 },
       ],
     },
     {
@@ -80,11 +83,19 @@ const CATALOGO = {
       ],
     },
     {
+      etiqueta: "Máquina",
+      items: [
+        { ruta: "/maquina/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "Cockpit de investigación" },
+        { ruta: "/maquina/produccion", etiqueta: "Producción", icono: "Sparkles", descripcion: "Cockpit de producción" },
+        { ruta: "/maquina/cola", etiqueta: "Workers", icono: "ListChecks", descripcion: "Pool, economía, actividad y agentes" },
+      ],
+    },
+    {
       etiqueta: "Datos",
       items: [
-        { ruta: "/datos/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "Fuentes y radar" },
+        // Tras la consolidación de nav, «Datos» queda solo con Analíticas (la medición que cierra
+        // el loop). Investigación vive en su cockpit y el feed de Producción, en Workers.
         { ruta: "/datos/analiticas", etiqueta: "Analíticas", icono: "BarChart3", descripcion: "Medición" },
-        { ruta: "/datos/produccion", etiqueta: "Producción", icono: "Activity", descripcion: "Qué produjo la máquina" },
       ],
     },
   ],
@@ -208,10 +219,11 @@ function renderAvatarMenu(rol: RolUsuario) {
 }
 
 describe("Sidebar · bloques de flujo", () => {
-  it("pinta los 3 bloques de flujo con su encabezado", async () => {
+  it("pinta los bloques de flujo con su encabezado", async () => {
     renderSidebar("editor", "/operacion/feed");
     expect(await screen.findByText("Operación")).toBeInTheDocument();
     expect(screen.getByText("Contenido")).toBeInTheDocument();
+    expect(screen.getByText("Máquina")).toBeInTheDocument();
     expect(screen.getByText("Datos")).toBeInTheDocument();
   });
 
@@ -232,9 +244,12 @@ describe("Sidebar · bloques de flujo", () => {
     // Bloque "Contenido".
     expect(screen.getByRole("link", { name: /imagen/i })).toHaveAttribute("href", "/contenido/imagen");
     expect(screen.getByRole("link", { name: /texto/i })).toHaveAttribute("href", "/contenido/texto");
-    // Bloque "Datos": los hubs son una entrada, no sus pestañas.
-    expect(screen.getByRole("link", { name: /investigación/i })).toHaveAttribute("href", "/datos/investigacion");
-    expect(screen.getByRole("link", { name: /producción/i })).toHaveAttribute("href", "/datos/produccion");
+    // Bloque "Máquina": cada motor UNA sola vez (consolidación de nav).
+    expect(screen.getByRole("link", { name: /investigación/i })).toHaveAttribute("href", "/maquina/investigacion");
+    expect(screen.getByRole("link", { name: /producción/i })).toHaveAttribute("href", "/maquina/produccion");
+    expect(screen.getByRole("link", { name: /workers/i })).toHaveAttribute("href", "/maquina/cola");
+    // Bloque "Datos": solo Analíticas.
+    expect(screen.getByRole("link", { name: /analíticas/i })).toHaveAttribute("href", "/datos/analiticas");
     // Las pestañas internas de un hub NO viven en el sidebar (van in-page).
     expect(screen.queryByRole("link", { name: /^fuentes$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /^termómetro$/i })).not.toBeInTheDocument();
@@ -243,10 +258,11 @@ describe("Sidebar · bloques de flujo", () => {
   });
 
   it("marca activa la entrada del hub aun estando en una de sus sub-rutas", async () => {
-    renderSidebar("editor", "/datos/investigacion/fuentes");
-    const investigacion = await screen.findByRole("link", { name: /investigación/i });
-    // NavLink marca `aria-current=page` por prefijo (/datos/investigacion ⊇ …/fuentes).
-    expect(investigacion).toHaveAttribute("aria-current", "page");
+    // Analíticas sigue siendo un hub del bloque «Datos» (Métricas/Campañas como sub-rutas).
+    renderSidebar("editor", "/datos/analiticas/metricas");
+    const analiticas = await screen.findByRole("link", { name: /analíticas/i });
+    // NavLink marca `aria-current=page` por prefijo (/datos/analiticas ⊇ …/metricas).
+    expect(analiticas).toHaveAttribute("aria-current", "page");
     // Y una entrada de otro bloque NO está activa.
     expect(screen.getByRole("link", { name: /imagen/i })).not.toHaveAttribute("aria-current");
   });
@@ -278,7 +294,7 @@ describe("Sidebar · rail colapsable", () => {
     renderSidebar("editor", "/operacion/feed", { colapsado: true, onToggleColapsar: () => {} });
     // Cada entrada sigue siendo un enlace, ahora solo-icono (nombre por aria-label).
     expect(await screen.findByRole("link", { name: /feed/i })).toHaveAttribute("href", "/operacion/feed");
-    expect(screen.getByRole("link", { name: /investigación/i })).toHaveAttribute("href", "/datos/investigacion");
+    expect(screen.getByRole("link", { name: /investigación/i })).toHaveAttribute("href", "/maquina/investigacion");
     // Botón para volver a expandir la barra.
     expect(screen.getByRole("button", { name: /expandir barra/i })).toBeInTheDocument();
     // En rail no se pintan los encabezados de bloque (solo iconos).
@@ -325,13 +341,11 @@ describe("apps-scope · helpers", () => {
       // /contenido/texto (hub) → sus sub-pestañas (Algoritmos se mudó al cockpit de Investigación)
       "/contenido/texto/documentos",
       "/contenido/texto/estrategia",
-      // /datos/investigacion (hub) → Noticias (índice, redirige al cockpit) + Contenidos + Fuentes
-      "/datos/investigacion",
-      "/datos/investigacion/contenidos",
-      "/datos/investigacion/fuentes",
-      // /datos/produccion → página PLANA (ya no es hub): el feed unificado. Su antigua
-      // pestaña «Monitor» se relocalizó a la sección «Máquina» (/maquina/cola).
-      "/datos/produccion",
+      // Bloque «Máquina»: tres páginas planas (no hubs), una por motor. Investigación y Producción
+      // son cockpits; Workers el dashboard de cola/economía/actividad/agentes.
+      "/maquina/investigacion",
+      "/maquina/produccion",
+      "/maquina/cola",
     ]);
   });
 
@@ -346,13 +360,14 @@ describe("apps-scope · helpers", () => {
   it("gruposDeApp respeta los bloques visuales por orden", () => {
     const grupos = gruposDeApp(apps[0]);
     const rutas = grupos.flatMap((g) => g.items.map((i) => i.ruta));
-    // Tras retirar Revisión, Producción ya no aporta entradas al bloque "operacion".
-    // Ordenado por (grupo_orden, orden): contenido(/imagen,/texto) · datos(/investigacion,/produccion).
+    // Ordenado por (grupo_orden, orden): contenido(20: /imagen,/texto) · maquina(25: /investigacion,
+    // /produccion, /cola). Producción ya no aporta entradas a "operacion" ni a "datos".
     expect(rutas).toEqual([
       "/contenido/imagen",
       "/contenido/texto",
-      "/datos/investigacion",
-      "/datos/produccion",
+      "/maquina/investigacion",
+      "/maquina/produccion",
+      "/maquina/cola",
     ]);
   });
 });

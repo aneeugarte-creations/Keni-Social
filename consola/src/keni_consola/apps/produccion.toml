@@ -124,26 +124,16 @@ grupo = "contenido"
 grupo_orden = 20
 orden = 30
 
-[[nav]]
-ruta = "/datos/investigacion"
-etiqueta = "Investigación"
-icono = "Search"
-descripcion = "El loop diario de la marca: el Plan del día (la lista de contenidos de hoy) a partir del Descubrimiento de tendencias y de las Fuentes de cada marca. Pestañas Plan del día / Descubrimiento / Fuentes."
-grupo = "datos"
-grupo_orden = 30
-orden = 10
-
-[[nav]]
-ruta = "/datos/produccion"
-etiqueta = "Producción"
-icono = "Activity"
-descripcion = "Todo lo que la máquina produce, en una línea temporal: las runs del pipeline (etapa a etapa) y la actividad suelta de IA (copy, imágenes, investigación…), con conteos, coste, tokens y tiempo."
-grupo = "datos"
-grupo_orden = 30
-orden = 30
-# Antes se llamaba «Actividad IA» y tenía pestañas Feed/Pipelines: HOY están fusionadas
-# en este feed único (/datos/produccion); las rutas viejas redirigen en `router.tsx`. La
-# pestaña «Monitor» se relocalizó a la sección «Máquina» (fase 2A).
+# Consolidación de navegación: cada motor sale UNA sola vez, en el bloque «Máquina».
+# Las entradas viejas del bloque «datos» (Investigación `/datos/investigacion` y Producción
+# `/datos/produccion`) se RETIRARON del menú:
+#   - Investigación se absorbió en el cockpit de Investigación (`/maquina/investigacion`); su
+#     ruta vieja redirige allí (Mesa/Fuentes/Algoritmos/Contenidos son sus pestañas).
+#   - Producción (el FEED de actividad: runs del pipeline + actividad suelta) se PLEGÓ como la
+#     sección «Actividad» del dashboard de Workers (`/maquina/cola`); su ruta índice
+#     `/datos/produccion` redirige allí y los detalles (pipelines/:id, actividad/:id) siguen vivos.
+# El bloque «datos» queda solo con Analíticas (lo aporta `metricas.toml`). Las rutas siguen en
+# `rutas_frontend` (los redirects y las sub-rutas vivas pertenecen a esta app).
 
 # (Antes existía una entrada "Activos" propia; se fusionó como pestaña "Plantillas"
 # de la página Texto y dejó de ser una entrada de nav.)
