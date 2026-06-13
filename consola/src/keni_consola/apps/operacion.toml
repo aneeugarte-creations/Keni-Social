@@ -57,17 +57,8 @@ rutas_frontend = [
   "/webhooks",
 ]
 
-# Tareas: el tablero compartido del equipo (clase='tarea') — quién cubre qué. SEPARADO del
-# Feed (que son piezas de contenido). Va justo DEBAJO del Feed (orden 22, entre Feed=20 y
-# Programación=25).
-[[nav]]
-ruta = "/operacion/tareas"
-etiqueta = "Tareas"
-icono = "ListChecks"
-descripcion = "Quién cubre qué: coberturas de partidos/eventos y encargos del equipo (coger o asignar)."
-grupo = "operacion"
-grupo_orden = 10
-orden = 22
+# El tablero de Tareas del equipo (clase='tarea') ya NO tiene entrada propia: vive integrado
+# como pestaña «Cobertura» dentro de Turnos (`/operacion/turnos`). La ruta vieja redirige allí.
 
 # Feed: la superficie diaria del equipo (red social interna + lista de contenido).
 [[nav]]

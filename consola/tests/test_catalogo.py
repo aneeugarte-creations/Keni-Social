@@ -20,11 +20,11 @@ from keni_consola.apps import registro
 # orden, con encabezado visible. El bloque es VISUAL y se desacopla del dueño de la app.
 _SIDEBAR_BLOQUES = [
     # "Operación": los checkpoints que el equipo toca cada día — el Feed (red social interna +
-    # lista de contenido), Tareas (el tablero compartido del equipo, clase='tarea', justo
-    # debajo del Feed), la Programación (calendario de publicaciones, por marca) y los Turnos
-    # (rota de cobertura del equipo, por marca). La página "Revisión" se retiró por obsoleta
-    # (la aprobación vive en línea en el Feed).
-    ["Feed", "Tareas", "Programación", "Turnos"],
+    # lista de contenido), la Programación (calendario de publicaciones, por marca) y los Turnos
+    # (rota de cobertura del equipo, por marca; el tablero de Tareas vive integrado como pestaña
+    # «Cobertura» dentro de Turnos, sin entrada propia de nav). La página "Revisión" se retiró
+    # por obsoleta (la aprobación vive en línea en el Feed).
+    ["Feed", "Programación", "Turnos"],
     # "Contenido": TRES páginas planas por tipo de contenido (sin hub con pestañas) —
     # Imagen (editor de imagen por capas + IA), Video (estudio de video) y Texto (la
     # Texto: prompts + línea editorial + plantillas).
@@ -77,8 +77,8 @@ def test_cada_app_lleva_descripcion_y_nav_para_la_tarjeta():
     # el bloque "contenido" (Imagen), ya que la app dejó de aportar entradas al bloque "operacion".
     assert porid["produccion"]["nav"][0]["ruta"] == "/contenido/imagen"
     assert porid["metricas"]["nav"][0]["ruta"] == "/datos/analiticas"
-    # La app "operacion" aporta CUATRO entradas (Feed, Tareas, Programación, Turnos); la 1ª por
-    # orden es Feed (Tareas va justo debajo).
+    # La app "operacion" aporta TRES entradas (Feed, Programación, Turnos); la 1ª por orden es
+    # Feed (el tablero de Tareas ya no tiene entrada: vive dentro de Turnos como «Cobertura»).
     assert porid["operacion"]["nav"][0]["ruta"] == "/operacion/feed"
 
 
@@ -97,7 +97,6 @@ def test_iconos_de_nav_son_strings_lucide():
     assert iconos["/contenido/video"] == "Clapperboard"
     assert iconos["/datos/investigacion"] == "Search"
     assert iconos["/datos/analiticas"] == "BarChart3"
-    assert iconos["/operacion/tareas"] == "ListChecks"
     assert iconos["/operacion/feed"] == "LayoutGrid"
     assert iconos["/operacion/programacion"] == "CalendarDays"
     assert iconos["/operacion/turnos"] == "CalendarClock"

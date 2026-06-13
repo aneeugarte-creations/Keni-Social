@@ -43,7 +43,6 @@ const FeedIdeacion = lazy(() => import("@/pages/feed/FeedIdeacion"));
 // Lista de contenido (pestaña "Lista" del hub Feed) y calendario de publicaciones
 // (página plana "Programación", `/operacion/programacion`): las dos mitades del antiguo tablero.
 const ListaContenido = lazy(() => import("@/pages/feed/ListaContenido"));
-const Tareas = lazy(() => import("@/pages/tareas/Tareas"));
 const CalendarioContenido = lazy(() => import("@/pages/calendario/CalendarioContenido"));
 
 const Produccion = lazy(() => import("@/pages/Produccion"));
@@ -112,9 +111,9 @@ export const router = createBrowserRouter([
         path: "operacion",
         children: [
           { index: true, element: <Navigate to="/operacion/feed" replace /> },
-          // Tareas del equipo: el tablero compartido (clase='tarea') — quién cubre qué.
-          // SEPARADO del Feed (que son piezas de contenido); aquí vive el reparto del equipo.
-          { path: "tareas", element: <Tareas /> },
+          // El tablero de Tareas se integró como pestaña «Cobertura» dentro de Turnos; la ruta
+          // vieja redirige allí (compat con enlaces/marcadores).
+          { path: "tareas", element: <Navigate to="/operacion/turnos" replace /> },
           // El antiguo hub "Parrilla" se separó en DOS (#cal-feed):
           // Hub Feed: feed de ideación (formato red social) + Lista de contenido.
           {
@@ -335,7 +334,7 @@ export const router = createBrowserRouter([
       { path: "verificacion", element: <Navigate to="/operacion/feed" replace /> },
       { path: "metricas", element: <Navigate to="/datos/analiticas/metricas" replace /> },
       { path: "comercial", element: <Navigate to="/datos/analiticas/comercial" replace /> },
-      { path: "tareas", element: <Navigate to="/operacion/tareas" replace /> },
+      { path: "tareas", element: <Navigate to="/operacion/turnos" replace /> },
       { path: "rota", element: <Navigate to="/operacion/turnos" replace /> },
       // Publicaciones se FUSIONÓ en el contenido (#fase2); ahora vive en la Lista del Feed.
       { path: "publicaciones", element: <Navigate to="/operacion/feed/lista" replace /> },
