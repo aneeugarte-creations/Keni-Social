@@ -66,6 +66,30 @@ __all__ = [
 _LOCK_INVESTIGACION = "pipeline_investigacion"
 _LOCK_PRODUCCION = "pipeline_produccion"
 
+# Nombres de los DOS loops en `daemon_latidos` (= los que `iniciar_pipeline` arranca y que
+# `latidos.BARRIBLES` declara): el destino del barrido FORZADO cross-proceso.
+_DAEMON_INVESTIGACION = "investigacion"
+_DAEMON_PRODUCCION = "produccion"
+
+# Categoría del plan con la que nace una última hora (ver `_ingesta.categoria_efectiva`).
+_CATEGORIA_BREAKING = "breaking"
+
+
+def _despertar_daemon(daemon: str) -> None:
+    """Pide un barrido INMEDIATO del loop `daemon` vía el flag cross-proceso `barrido_solicitado`.
+
+    Reutiliza el mecanismo que ya existe (`POST /api/sistema/daemons/{d}/barrer`): el
+    `daemon_util.bucle_gateado` del loop consulta el flag en cada tick y, si está pedido Y su gate
+    está ON, ejecuta el sweep YA (consumiéndolo: un solo barrido por solicitud). El tick de 15s
+    sigue siendo el FALLBACK. Best-effort: si el daemon nunca latió (sin fila), si la BD no está o
+    si el loop está apagado, no pasa nada. NUNCA lanza (despertar es un extra, no parte del flujo)."""
+    try:
+        from .. import db_latidos
+
+        db_latidos.solicitar_barrido(daemon)
+    except Exception:  # noqa: BLE001 -- despertar es best-effort; el tick de 15s ya recoge igual
+        _log.debug("pipeline: no se pudo solicitar barrido de %s", daemon, exc_info=True)
+
 
 def ejecutar_investigacion() -> dict[str, Any]:
     """Un TICK del proceso de INVESTIGACIÓN: caducidad + CI (admisión) → QA de la fuente.
@@ -192,6 +216,12 @@ def _ejecutar_investigacion() -> dict[str, Any]:
             "investigación: %d cribado(s) (QA), %d tema(s) admitido(s) (CI).",
             len(cribados), len(temas_nuevos),
         )
+    # PRIORIDAD (no sólo polling): una ÚLTIMA HORA recién admitida no debe esperar al siguiente
+    # tick de producción (hasta 15s) para que se le redacte el copy. Despertamos el loop de
+    # PRODUCCIÓN vía el flag cross-proceso `barrido_solicitado` (el tick de 15s sigue de fallback).
+    # El loop de INVESTIGACIÓN es ESTE mismo, así que no hay que despertarlo. Best-effort.
+    if any((t.get("categoria") or "") == _CATEGORIA_BREAKING for t in temas_nuevos):
+        _despertar_daemon(_DAEMON_PRODUCCION)
     return {"temas": temas_nuevos, "cribados": cribados}
 
 
