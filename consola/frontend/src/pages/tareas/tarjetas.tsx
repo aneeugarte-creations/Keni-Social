@@ -47,11 +47,13 @@ const PRIORIDAD_CLASE: Record<string, string> = {
 
 /**
  * Semáforo de cobertura: el equipo NO marca estados a mano (les hace perder tiempo); el estado
- * se deriva de la fecha/hora del evento. Gris = programado (aún no empieza) · ámbar = en vivo
- * (es la hora) · verde = cubierto (ya pasó).
+ * se deriva de la fecha/hora del evento:
+ *   · gris  «Programado» → aún no empieza
+ *   · verde «En vivo»    → mientras transcurre el evento (punto verde)
+ *   · tick  «Cubierto»   → ya pasó (completado → ✓)
  *
  * Por defecto se pinta como ETIQUETA con texto (siempre visible, no se confunde con el color del
- * avatar). En la fila colapsada se usa `compacto` (solo el punto) para no recargar el rundown.
+ * avatar). En la fila colapsada se usa `compacto` (solo el punto/tick) para no recargar el rundown.
  */
 export function SemaforoCobertura({
   fecha,
@@ -63,25 +65,35 @@ export function SemaforoCobertura({
   compacto?: boolean;
 }) {
   const pos = posicionTemporal(fecha, hora);
-  const cfg =
-    pos === "durante"
-      ? { dot: "bg-amber-500", clase: "border-amber-500/50 text-amber-700 dark:text-amber-300", texto: "En vivo" }
-      : pos === "despues"
-        ? { dot: "bg-emerald-500", clase: "border-emerald-500/50 text-emerald-700 dark:text-emerald-300", texto: "Cubierto" }
-        : { dot: "bg-slate-400 dark:bg-slate-500", clase: "text-muted-foreground", texto: "Programado" };
+  const completado = pos === "despues";
+  const texto = pos === "durante" ? "En vivo" : completado ? "Cubierto" : "Programado";
+  const claseBadge =
+    pos === "durante" || completado
+      ? "border-emerald-500/50 text-emerald-700 dark:text-emerald-300"
+      : "text-muted-foreground";
+  const dot = pos === "durante" ? "bg-emerald-500" : "bg-slate-400 dark:bg-slate-500";
+
   if (compacto) {
-    return (
+    return completado ? (
+      <span title={texto} aria-label={texto} className="inline-flex shrink-0">
+        <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden />
+      </span>
+    ) : (
       <span
-        title={cfg.texto}
-        aria-label={cfg.texto}
-        className={cn("inline-block h-2.5 w-2.5 shrink-0 rounded-full", cfg.dot)}
+        title={texto}
+        aria-label={texto}
+        className={cn("inline-block h-2.5 w-2.5 shrink-0 rounded-full", dot)}
       />
     );
   }
   return (
-    <Badge variant="outline" title={cfg.texto} className={cn("gap-1.5 font-normal", cfg.clase)}>
-      <span className={cn("h-2 w-2 shrink-0 rounded-full", cfg.dot)} />
-      {cfg.texto}
+    <Badge variant="outline" title={texto} className={cn("gap-1.5 font-normal", claseBadge)}>
+      {completado ? (
+        <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
+      ) : (
+        <span className={cn("h-2 w-2 shrink-0 rounded-full", dot)} />
+      )}
+      {texto}
     </Badge>
   );
 }
