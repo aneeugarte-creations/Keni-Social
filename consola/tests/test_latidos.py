@@ -314,6 +314,57 @@ def test_endpoint_daemons_expone_grupo_y_gasta_tokens(entorno):
 
 
 # --------------------------------------------------------------------------- #
+# clave_gate: qué clave de ajuste enciende/apaga cada daemon (toggle de fila)   #
+# --------------------------------------------------------------------------- #
+
+
+def test_clave_gate_de_mapea_cada_daemon_gateado():
+    # Mapeo explícito daemon -> clave KENI_* que gobierna su on/off (fuente única en latidos).
+    assert latidos.clave_gate_de("ingesta") == "KENI_PIPELINE_SELECCION"
+    assert latidos.clave_gate_de("trends") == "KENI_TRENDS"
+    assert latidos.clave_gate_de("algoritmos") == "KENI_ALGORITMOS_AUTO"
+    assert latidos.clave_gate_de("sugerencias") == "KENI_SUGERENCIAS_EDITORIALES"
+    assert latidos.clave_gate_de("media_gc") == "KENI_MEDIA_GC"
+    assert latidos.clave_gate_de("noticias_gc") == "KENI_NOTICIAS_GC"
+    assert latidos.clave_gate_de("patrones") == "KENI_PATRONES_AUTO"
+    assert latidos.clave_gate_de("alertas_rendimiento") == "KENI_ALERTAS_RENDIMIENTO"
+    assert latidos.clave_gate_de("vencimientos") == "KENI_EVENTOS_VENCIMIENTOS"
+    # Los loops del pipeline no tienen clave propia (varias etapas): toggle de fila = maestro.
+    assert latidos.clave_gate_de("investigacion") == "KENI_MAQUINA"
+    assert latidos.clave_gate_de("produccion") == "KENI_MAQUINA"
+
+
+def test_clave_gate_de_null_en_siempre_on():
+    # Daemons SIEMPRE-ON sin toggle de ajuste -> None (el front no pinta switch on/off).
+    for d in ("reaper", "programador", "comercial", "metricas", "metricas_piezas"):
+        assert latidos.clave_gate_de(d) is None
+    # Un daemon desconocido tampoco tiene gate.
+    assert latidos.clave_gate_de("daemon_nuevo_sin_clasificar") is None
+
+
+def test_clave_gate_son_claves_reales_del_catalogo():
+    # Cada clave_gate debe ser una clave EDITABLE real del catálogo de ajustes: así el front
+    # puede pasarla tal cual a POST /api/ajustes. Si alguien renombra la env, este test cae.
+    from keni_consola import ajustes_catalogo
+
+    for daemon, clave in latidos.CLAVE_GATE.items():
+        assert ajustes_catalogo.por_clave(clave) is not None, (
+            f"clave_gate de {daemon!r} ({clave!r}) no existe en el catálogo de ajustes"
+        )
+
+
+def test_endpoint_daemons_expone_clave_gate(entorno):
+    # El endpoint añade `clave_gate` a cada daemon (contrato del toggle de fila): el front
+    # lee aquí qué clave conmutar, o null si el daemon es siempre-on.
+    db.latido_barrido("ingesta", ok=True, intervalo_seg=60.0, tick_seg=60.0)
+    db.latido_barrido("reaper", ok=True, intervalo_seg=60.0, tick_seg=60.0)
+    c = _cli_admin()
+    por_nombre = {d["daemon"]: d for d in c.get("/api/sistema/daemons").json()["daemons"]}
+    assert por_nombre["ingesta"]["clave_gate"] == "KENI_PIPELINE_SELECCION"
+    assert por_nombre["reaper"]["clave_gate"] is None
+
+
+# --------------------------------------------------------------------------- #
 # Barrido FORZADO: flag en BD + consumo en bucle_gateado + endpoint             #
 # --------------------------------------------------------------------------- #
 

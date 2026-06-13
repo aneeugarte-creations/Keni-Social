@@ -97,6 +97,58 @@ GRUPO_INFRA = frozenset({
 GASTA_TOKENS = frozenset({"investigacion", "produccion", "sugerencias"})
 
 
+# CLAVE de AJUSTE (KENI_*) que GOBIERNA el on/off de cada daemon: la que el front pasa a
+# POST /api/ajustes para encender/apagar el daemon DESDE SU FILA (toggle in-place del panel
+# Sistema). Fuente única, igual que BARRIBLES/GRUPO_*. Cada valor es una clave REAL del
+# catálogo de ajustes (`ajustes_catalogo`) — un test lo verifica. Verificado contra el
+# `activo_fn` de cada `bucle_gateado` (ver daemons.py + cada módulo):
+#   - ingesta            -> KENI_PIPELINE_SELECCION   (ingesta_daemon/_bucle: ingesta_activa)
+#   - trends             -> KENI_TRENDS               (trends_daemon: trends_activo)
+#   - algoritmos         -> KENI_ALGORITMOS_AUTO      (algoritmos_refresco: algoritmos_auto_activo)
+#   - sugerencias        -> KENI_SUGERENCIAS_EDITORIALES (sugerencias_editoriales_activo)
+#   - media_gc           -> KENI_MEDIA_GC             (media_gc_daemon: media_gc_activo)
+#   - noticias_gc        -> KENI_NOTICIAS_GC          (noticias_gc_daemon: noticias_gc_activo)
+#   - patrones           -> KENI_PATRONES_AUTO        (patrones_refresco: patrones_auto_activo)
+#   - alertas_rendimiento-> KENI_ALERTAS_RENDIMIENTO  (alertas_rendimiento_activas)
+#   - vencimientos       -> KENI_EVENTOS_VENCIMIENTOS (eventos_scanner: eventos_vencimientos_activos)
+#   - investigacion      -> KENI_MAQUINA   (loop pipeline: gate_maquina(alguna_etapa_investigacion_activa);
+#                                           su on/off real son varias claves de etapa —Selección/Validación—
+#                                           sin una clave propia, así que el toggle de fila usa el MAESTRO)
+#   - produccion         -> KENI_MAQUINA   (loop pipeline: gate_maquina(alguna_etapa_produccion_activa),
+#                                           que siempre es True bajo la máquina => su único interruptor es el MAESTRO)
+# Los gateados de máquina (ingesta/trends/algoritmos/sugerencias) corren además bajo
+# KENI_MAQUINA (AND), pero el toggle de SU fila gobierna su flag PROPIO; el maestro es otra fila.
+CLAVE_GATE = {
+    "ingesta": "KENI_PIPELINE_SELECCION",
+    "trends": "KENI_TRENDS",
+    "algoritmos": "KENI_ALGORITMOS_AUTO",
+    "sugerencias": "KENI_SUGERENCIAS_EDITORIALES",
+    "media_gc": "KENI_MEDIA_GC",
+    "noticias_gc": "KENI_NOTICIAS_GC",
+    "patrones": "KENI_PATRONES_AUTO",
+    "alertas_rendimiento": "KENI_ALERTAS_RENDIMIENTO",
+    "vencimientos": "KENI_EVENTOS_VENCIMIENTOS",
+    "investigacion": "KENI_MAQUINA",
+    "produccion": "KENI_MAQUINA",
+}
+
+# Daemons SIEMPRE-ON sin toggle de ajuste: su bucle corre incondicionalmente (legados con
+# `while True`, o `reaper` con `activo_fn=lambda: True`). No tienen fila-toggle => clave_gate
+# null. Nota: `programador` SIEMPRE corre (su gate KENI_PUBLICAR_REAL solo decide publicar de
+# verdad vs dry-run, no apaga el daemon), por eso queda sin gate de encendido.
+SIN_GATE = frozenset({"reaper", "programador", "comercial", "metricas", "metricas_piezas"})
+
+
+def clave_gate_de(daemon: str) -> str | None:
+    """Clave de ajuste (KENI_*) que enciende/apaga el daemon desde su fila, o None.
+
+    None = el daemon es SIEMPRE-ON (sin toggle: legados/reaper) o aún no está clasificado.
+    El front usa esto para pintar (o no) el switch on/off in-place y, si lo hay, qué clave
+    pasar a POST /api/ajustes. Fuente única, igual que `grupo_de`/`gasta_tokens`.
+    """
+    return CLAVE_GATE.get(daemon)
+
+
 def grupo_de(daemon: str) -> str:
     """Grupo ("motor"/papel) de un daemon para el dashboard de Workers; default "infra".
 

@@ -537,6 +537,9 @@ export interface LatidoDaemon {
   grupo: GrupoDaemon;
   /** `true` si el daemon encola/ejecuta `claude -p` (gasta tokens); `false` el resto. */
   gasta_tokens: boolean;
+  /** Clave de ajuste (KENI_*) que enciende/apaga el daemon desde su fila (toggle in-place;
+   *  pásala a `POST /api/ajustes`). `null` = SIEMPRE-ON sin toggle (reaper/programador/…). */
+  clave_gate: string | null;
 }
 
 /** Respuesta de `GET /api/sistema/daemons`. Degradada: lista vacía + error legible. */

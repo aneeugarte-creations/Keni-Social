@@ -88,6 +88,11 @@ def sonda_daemons() -> dict:
                 # asi el front agrupa sin hardcodear nombres.
                 "grupo": latidos.grupo_de(f["daemon"]),
                 "gasta_tokens": latidos.gasta_tokens(f["daemon"]),
+                # `clave_gate`: la clave de ajuste (KENI_*) que enciende/apaga el daemon
+                # desde su fila (toggle in-place; el front la pasa a POST /api/ajustes).
+                # null = SIEMPRE-ON sin toggle (reaper/programador/metricas/...). Fuente
+                # unica en `latidos`, asi el front no hardcodea el mapeo daemon->clave.
+                "clave_gate": latidos.clave_gate_de(f["daemon"]),
             }
         )
     return {"daemons": salida, "error": None}
