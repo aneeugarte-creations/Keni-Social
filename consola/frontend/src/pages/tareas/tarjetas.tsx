@@ -46,32 +46,43 @@ const PRIORIDAD_CLASE: Record<string, string> = {
 };
 
 /**
- * Semáforo de cobertura: el equipo NO marca estados a mano (les hace perder tiempo); el color
- * se deriva de la fecha/hora del evento. Gris = aún no empieza · ámbar = en vivo (es la hora) ·
- * verde = cubierto (ya pasó). `title` para el hover y lectores de pantalla.
+ * Semáforo de cobertura: el equipo NO marca estados a mano (les hace perder tiempo); el estado
+ * se deriva de la fecha/hora del evento. Gris = programado (aún no empieza) · ámbar = en vivo
+ * (es la hora) · verde = cubierto (ya pasó).
+ *
+ * Por defecto se pinta como ETIQUETA con texto (siempre visible, no se confunde con el color del
+ * avatar). En la fila colapsada se usa `compacto` (solo el punto) para no recargar el rundown.
  */
 export function SemaforoCobertura({
   fecha,
   hora,
-  className,
+  compacto = false,
 }: {
   fecha?: string | null;
   hora?: string | null;
-  className?: string;
+  compacto?: boolean;
 }) {
   const pos = posicionTemporal(fecha, hora);
   const cfg =
     pos === "durante"
-      ? { color: "bg-amber-500", titulo: "En vivo" }
+      ? { dot: "bg-amber-500", clase: "border-amber-500/50 text-amber-700 dark:text-amber-300", texto: "En vivo" }
       : pos === "despues"
-        ? { color: "bg-emerald-500", titulo: "Cubierto" }
-        : { color: "bg-muted-foreground/25", titulo: "Aún no empieza" };
+        ? { dot: "bg-emerald-500", clase: "border-emerald-500/50 text-emerald-700 dark:text-emerald-300", texto: "Cubierto" }
+        : { dot: "bg-slate-400 dark:bg-slate-500", clase: "text-muted-foreground", texto: "Programado" };
+  if (compacto) {
+    return (
+      <span
+        title={cfg.texto}
+        aria-label={cfg.texto}
+        className={cn("inline-block h-2.5 w-2.5 shrink-0 rounded-full", cfg.dot)}
+      />
+    );
+  }
   return (
-    <span
-      title={cfg.titulo}
-      aria-label={cfg.titulo}
-      className={cn("inline-block h-2.5 w-2.5 shrink-0 rounded-full", cfg.color, className)}
-    />
+    <Badge variant="outline" title={cfg.texto} className={cn("gap-1.5 font-normal", cfg.clase)}>
+      <span className={cn("h-2 w-2 shrink-0 rounded-full", cfg.dot)} />
+      {cfg.texto}
+    </Badge>
   );
 }
 

@@ -146,7 +146,7 @@ function FilaAgenda({
           </Badge>
         ) : cob ? (
           <span className="flex shrink-0 items-center gap-2">
-            <SemaforoCobertura fecha={cob.orden} hora={cob.hora} />
+            <SemaforoCobertura fecha={cob.orden} hora={cob.hora} compacto />
             <AvataresApilados cubridores={cob.cubridores} />
           </span>
         ) : (
