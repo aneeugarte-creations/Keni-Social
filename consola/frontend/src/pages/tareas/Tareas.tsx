@@ -46,7 +46,7 @@ type Lente = "panorama" | "libres" | "mias";
 const LENTES: { id: Lente; etiqueta: string }[] = [
   { id: "panorama", etiqueta: "Panorama" },
   { id: "libres", etiqueta: "Por cubrir" },
-  { id: "mias", etiqueta: "Lo mío" },
+  { id: "mias", etiqueta: "Mis tareas" },
 ];
 
 /** Avance de estado de una tarea ya cogida (pendiente → en_curso → hecha). */

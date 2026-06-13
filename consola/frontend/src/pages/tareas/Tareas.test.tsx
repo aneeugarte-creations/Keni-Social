@@ -169,7 +169,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect(coger).toHaveBeenCalledWith("t9");
   });
 
-  it("la lente 'Lo mío' deja solo lo del usuario de la sesión", async () => {
+  it("la lente 'Mis tareas' deja solo lo del usuario de la sesión", async () => {
     renderTareas(
       [
         tarea({ id: "t1", titulo: "Mía", responsable_id: "u1", responsable_nombre: "yo" }),
@@ -182,7 +182,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect((await screen.findAllByText("Mía")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("De Ana").length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "Lo mío" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mis tareas" }));
     await waitFor(() => expect(screen.queryByText("De Ana")).toBeNull());
     expect(screen.getByText("Mía")).toBeInTheDocument();
   });
