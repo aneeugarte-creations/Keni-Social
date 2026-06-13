@@ -160,7 +160,7 @@ def test_s3_configurado_mide_bucket(entorno, monkeypatch):
 
     from keni_consola.api import sistema as api_sistema
 
-    monkeypatch.setattr(api_sistema, "_cliente_s3", lambda: _ClienteFake())
+    monkeypatch.setattr(api_sistema.s3, "_cliente_s3", lambda: _ClienteFake())
     c = _cli_como("admin")
     datos = c.get("/api/sistema/s3").json()
     assert datos["configurado"] is True
@@ -182,7 +182,7 @@ def test_s3_configurado_fallo_red_degrada(entorno, monkeypatch):
     def boom():
         raise RuntimeError("sin red")
 
-    monkeypatch.setattr(api_sistema, "_cliente_s3", boom)
+    monkeypatch.setattr(api_sistema.s3, "_cliente_s3", boom)
     c = _cli_como("admin")
     r = c.get("/api/sistema/s3")
     assert r.status_code == 200
@@ -241,7 +241,7 @@ def test_objetos_raiz(entorno, monkeypatch):
 
     from keni_consola.api import sistema as api_sistema
 
-    monkeypatch.setattr(api_sistema, "_cliente_s3", lambda: _ClienteFake())
+    monkeypatch.setattr(api_sistema.s3, "_cliente_s3", lambda: _ClienteFake())
     c = _cli_como("admin")
     r = c.get("/api/sistema/s3/objetos")
     assert r.status_code == 200
@@ -281,7 +281,7 @@ def test_objetos_subprefijo(entorno, monkeypatch):
 
     from keni_consola.api import sistema as api_sistema
 
-    monkeypatch.setattr(api_sistema, "_cliente_s3", lambda: _ClienteFake())
+    monkeypatch.setattr(api_sistema.s3, "_cliente_s3", lambda: _ClienteFake())
     c = _cli_como("admin")
     # El prefijo se puede enviar con o sin barra final; el back lo normaliza.
     r = c.get("/api/sistema/s3/objetos?prefijo=videos")
@@ -310,7 +310,7 @@ def test_objetos_fallo_red_degrada(entorno, monkeypatch):
     def boom():
         raise RuntimeError("sin red")
 
-    monkeypatch.setattr(api_sistema, "_cliente_s3", boom)
+    monkeypatch.setattr(api_sistema.s3, "_cliente_s3", boom)
     c = _cli_como("admin")
     r = c.get("/api/sistema/s3/objetos")
     assert r.status_code == 200
@@ -359,7 +359,7 @@ def test_objeto_key_traversal_rechazada(entorno, monkeypatch):
     def boom():
         raise AssertionError("no debe construirse el cliente para una key invalida")
 
-    monkeypatch.setattr(api_sistema, "_cliente_s3", boom)
+    monkeypatch.setattr(api_sistema.s3, "_cliente_s3", boom)
     c = _cli_como("admin")
     for key in ("../secret", "a/../../b", "/etc/passwd", ""):
         r = c.get(f"/api/sistema/s3/objeto?key={key}")
@@ -385,7 +385,7 @@ def test_objeto_inexistente_404(entorno, monkeypatch):
 
     from keni_consola.api import sistema as api_sistema
 
-    monkeypatch.setattr(api_sistema, "_cliente_s3", lambda: _ClienteFake())
+    monkeypatch.setattr(api_sistema.s3, "_cliente_s3", lambda: _ClienteFake())
     c = _cli_como("admin")
     r = c.get("/api/sistema/s3/objeto?key=no-existe.png")
     assert r.status_code == 404
@@ -430,7 +430,7 @@ def test_objeto_streaming_ok(entorno, monkeypatch):
 
     from keni_consola.api import sistema as api_sistema
 
-    monkeypatch.setattr(api_sistema, "_cliente_s3", lambda: _ClienteFake())
+    monkeypatch.setattr(api_sistema.s3, "_cliente_s3", lambda: _ClienteFake())
     c = _cli_como("admin")
     r = c.get("/api/sistema/s3/objeto?key=logo.png")
     assert r.status_code == 200
@@ -466,7 +466,7 @@ def test_objeto_descarga_attachment(entorno, monkeypatch):
 
     from keni_consola.api import sistema as api_sistema
 
-    monkeypatch.setattr(api_sistema, "_cliente_s3", lambda: _ClienteFake())
+    monkeypatch.setattr(api_sistema.s3, "_cliente_s3", lambda: _ClienteFake())
     c = _cli_como("admin")
     r = c.get("/api/sistema/s3/objeto?key=nota.txt&descargar=1")
     assert r.status_code == 200
@@ -490,7 +490,7 @@ def test_objeto_demasiado_grande_413(entorno, monkeypatch):
                 "ContentLength": api_sistema._MAX_BYTES_OBJETO + 1,
             }
 
-    monkeypatch.setattr(api_sistema, "_cliente_s3", lambda: _ClienteFake())
+    monkeypatch.setattr(api_sistema.s3, "_cliente_s3", lambda: _ClienteFake())
     c = _cli_como("admin")
     r = c.get("/api/sistema/s3/objeto?key=enorme.bin")
     assert r.status_code == 413
@@ -539,7 +539,7 @@ def test_borrar_key_invalida_400(entorno, monkeypatch):
     def boom():
         raise AssertionError("no debe construirse el cliente para una key invalida")
 
-    monkeypatch.setattr(api_sistema, "_cliente_s3", boom)
+    monkeypatch.setattr(api_sistema.s3, "_cliente_s3", boom)
     c = _cli_como("admin")
     for key in ("../secret", "a/../../b", "/etc/passwd", "", "carpeta/"):
         r = c.post("/api/sistema/s3/borrar", json={"key": key}, headers=_ORIGIN)
@@ -564,7 +564,7 @@ def test_borrar_inexistente_404(entorno, monkeypatch):
 
     from keni_consola.api import sistema as api_sistema
 
-    monkeypatch.setattr(api_sistema, "_cliente_s3", lambda: _ClienteFake())
+    monkeypatch.setattr(api_sistema.s3, "_cliente_s3", lambda: _ClienteFake())
     c = _cli_como("admin")
     r = c.post("/api/sistema/s3/borrar", json={"key": "no-existe.png"}, headers=_ORIGIN)
     assert r.status_code == 404
@@ -587,7 +587,7 @@ def test_borrar_ok(entorno, monkeypatch):
 
     from keni_consola.api import sistema as api_sistema
 
-    monkeypatch.setattr(api_sistema, "_cliente_s3", lambda: _ClienteFake())
+    monkeypatch.setattr(api_sistema.s3, "_cliente_s3", lambda: _ClienteFake())
     c = _cli_como("admin")
     r = c.post(
         "/api/sistema/s3/borrar", json={"key": "videos/clip.mp4"}, headers=_ORIGIN
@@ -611,7 +611,7 @@ def test_borrar_fallo_red_502(entorno, monkeypatch):
 
     from keni_consola.api import sistema as api_sistema
 
-    monkeypatch.setattr(api_sistema, "_cliente_s3", lambda: _ClienteFake())
+    monkeypatch.setattr(api_sistema.s3, "_cliente_s3", lambda: _ClienteFake())
     c = _cli_como("admin")
     r = c.post("/api/sistema/s3/borrar", json={"key": "a.png"}, headers=_ORIGIN)
     assert r.status_code == 502
@@ -644,7 +644,7 @@ def test_borrar_lote_sin_keys_validas_400(entorno, monkeypatch):
     def boom():
         raise AssertionError("no debe construirse el cliente sin keys validas")
 
-    monkeypatch.setattr(api_sistema, "_cliente_s3", boom)
+    monkeypatch.setattr(api_sistema.s3, "_cliente_s3", boom)
     c = _cli_como("admin")
     for keys in ([], ["../secret", "carpeta/", "/abs", ""]):
         r = c.post("/api/sistema/s3/borrar-lote", json={"keys": keys}, headers=_ORIGIN)
@@ -667,7 +667,7 @@ def test_borrar_lote_ok(entorno, monkeypatch):
 
     from keni_consola.api import sistema as api_sistema
 
-    monkeypatch.setattr(api_sistema, "_cliente_s3", lambda: _ClienteFake())
+    monkeypatch.setattr(api_sistema.s3, "_cliente_s3", lambda: _ClienteFake())
     c = _cli_como("admin")
     # Mezcla validas, una duplicada y una "carpeta" (se descarta).
     r = c.post(
@@ -697,7 +697,7 @@ def test_borrar_lote_errores_parciales(entorno, monkeypatch):
 
     from keni_consola.api import sistema as api_sistema
 
-    monkeypatch.setattr(api_sistema, "_cliente_s3", lambda: _ClienteFake())
+    monkeypatch.setattr(api_sistema.s3, "_cliente_s3", lambda: _ClienteFake())
     c = _cli_como("admin")
     r = c.post(
         "/api/sistema/s3/borrar-lote",
@@ -720,7 +720,7 @@ def test_borrar_lote_fallo_red_502(entorno, monkeypatch):
 
     from keni_consola.api import sistema as api_sistema
 
-    monkeypatch.setattr(api_sistema, "_cliente_s3", lambda: _ClienteFake())
+    monkeypatch.setattr(api_sistema.s3, "_cliente_s3", lambda: _ClienteFake())
     c = _cli_como("admin")
     r = c.post(
         "/api/sistema/s3/borrar-lote", json={"keys": ["a.png"]}, headers=_ORIGIN
