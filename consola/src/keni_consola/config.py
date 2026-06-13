@@ -364,6 +364,8 @@ from .config_auth import (  # noqa: F401
     mcp_usuario,
     mfa_habilitado,
     mfa_key,
+    mfa_key_presente,
+    mfa_obligatorio_admin,
     origenes_permitidos,
     rp_id,
     rp_nombre,

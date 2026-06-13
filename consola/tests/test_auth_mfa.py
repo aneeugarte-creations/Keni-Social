@@ -404,3 +404,97 @@ def test_unit_failsafe_sin_clave_no_emite_token():
     """Sin clave Fernet, emitir el token de challenge devuelve None (fail-safe), no revienta."""
     with pytest.raises(auth.MfaNoDisponible):
         auth.cifrador(None)
+
+
+# --------------------------------------------------------------------------- #
+# 8) MFA OBLIGATORIO PARA ADMINS (`KENI_CONSOLA_MFA_ADMIN`, def ON)            #
+# --------------------------------------------------------------------------- #
+#
+# A diferencia del flag global (OFF por defecto), los admins quedan sujetos al segundo factor
+# SIEMPRE que la maquinaria pueda operar (hay clave de firma), aunque el flag global este OFF.
+# La condicion de la clave es la red ANTI-LOCKOUT: sin clave NO se fuerza nada.
+
+
+def test_admin_con_passkey_eleva_aunque_flag_global_off(entorno, monkeypatch):
+    """Admin con passkey + clave: el login EXIGE el segundo factor aunque el flag global este OFF."""
+    monkeypatch.delenv("KENI_CONSOLA_MFA", raising=False)
+    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+    jefe = auth.crear_usuario("jefe", CLAVE, "admin")
+    _credencial_falsa(jefe["id"])
+
+    c = _cli()
+    r = _login(c, "jefe", CLAVE)
+    assert r.status_code == 200 and r.json() == {"mfa_required": True}
+    # Aun NO hay sesion: hay que completar la ceremonia.
+    assert c.get("/api/auth/me", headers=_ORIGIN).status_code == 401
+
+
+def test_admin_sin_passkey_entra_en_gracia_y_puede_inscribir(entorno, monkeypatch):
+    """Admin sin passkey + clave: NO se bloquea (no lockout); entra marcado `debe_inscribir_mfa`
+    y puede usar el enrolamiento aunque el flag global este OFF."""
+    monkeypatch.delenv("KENI_CONSOLA_MFA", raising=False)
+    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+    auth.crear_usuario("jefe", CLAVE, "admin")
+
+    c = _cli()
+    r = _login(c, "jefe", CLAVE)
+    assert r.status_code == 200
+    cuerpo = r.json()
+    assert "mfa_required" not in cuerpo  # NO se bloquea el login
+    assert cuerpo["usuario"]["debe_inscribir_mfa"] is True
+    # La sesion ES valida (puede operar) y `me` mantiene el flag de inscripcion.
+    me = c.get("/api/auth/me", headers=_ORIGIN)
+    assert me.status_code == 200
+    assert me.json()["usuario"]["debe_inscribir_mfa"] is True
+    # El enrolamiento esta disponible para el admin aunque el flag global este OFF.
+    assert c.post("/api/auth/mfa/registro/opciones", headers=_ORIGIN).status_code == 200
+
+
+def test_admin_sin_clave_no_se_fuerza_no_hay_lockout(entorno, monkeypatch):
+    """ANTI-LOCKOUT: admin obligatorio ON (def) pero SIN clave de firma -> el login entra como
+    hoy (sin elevar, sin marcar inscripcion). Sin clave no se puede inscribir ni verificar."""
+    monkeypatch.delenv("KENI_CONSOLA_MFA", raising=False)
+    monkeypatch.delenv("KENI_CONSOLA_MFA_KEY", raising=False)
+    auth.crear_usuario("jefe", CLAVE, "admin")
+
+    c = _cli()
+    r = _login(c, "jefe", CLAVE)
+    assert r.status_code == 200
+    cuerpo = r.json()
+    assert "mfa_required" not in cuerpo
+    assert cuerpo["usuario"].get("debe_inscribir_mfa") in (None, False)
+    me = c.get("/api/auth/me", headers=_ORIGIN)
+    assert me.status_code == 200 and me.json()["usuario"]["debe_inscribir_mfa"] is False
+
+
+def test_admin_obligatorio_apagado_es_valvula_de_escape(entorno, monkeypatch):
+    """`KENI_CONSOLA_MFA_ADMIN=0` apaga el forzado: admin con passkey entra SIN elevar (flag
+    global OFF). Es la valvula de escape operativa."""
+    monkeypatch.delenv("KENI_CONSOLA_MFA", raising=False)
+    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+    monkeypatch.setenv("KENI_CONSOLA_MFA_ADMIN", "0")
+    jefe = auth.crear_usuario("jefe", CLAVE, "admin")
+    _credencial_falsa(jefe["id"])
+
+    c = _cli()
+    r = _login(c, "jefe", CLAVE)
+    assert r.status_code == 200 and "mfa_required" not in r.json()
+    assert c.get("/api/auth/me", headers=_ORIGIN).status_code == 200
+
+
+def test_editor_no_le_afecta_el_mfa_de_admin(entorno, monkeypatch):
+    """El MFA obligatorio de admin NO toca a editores: con el flag global OFF entran directo y
+    el enrolamiento sigue cerrado (404), aunque haya clave."""
+    monkeypatch.delenv("KENI_CONSOLA_MFA", raising=False)
+    monkeypatch.setenv("KENI_CONSOLA_MFA_KEY", _MFA_KEY)
+    auth.crear_usuario("ana", CLAVE, "editor")
+
+    c = _cli()
+    r = _login(c, "ana", CLAVE)
+    assert r.status_code == 200
+    cuerpo = r.json()
+    assert "mfa_required" not in cuerpo
+    assert cuerpo["usuario"].get("debe_inscribir_mfa") in (None, False)
+    # Enrolamiento cerrado para el editor con flag global OFF.
+    assert c.post("/api/auth/mfa/registro/opciones", headers=_ORIGIN).status_code == 404
+    assert c.get("/api/auth/me", headers=_ORIGIN).json()["usuario"]["debe_inscribir_mfa"] is False

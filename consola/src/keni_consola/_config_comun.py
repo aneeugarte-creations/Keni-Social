@@ -43,6 +43,14 @@ ENV_ADMIN_PASS = "KENI_CONSOLA_ADMIN_PASS"
 # falta/es invalida, las ceremonias REHUSAN (fail-safe, 503), nunca se media-autentica.
 ENV_MFA = "KENI_CONSOLA_MFA"
 ENV_MFA_KEY = "KENI_CONSOLA_MFA_KEY"
+# MFA OBLIGATORIO PARA ADMINS, default ON. Un admin publica en canales de marca: un
+# password robado sin segundo factor es account-takeover. Por eso, INDEPENDIENTEMENTE del
+# flag global `KENI_CONSOLA_MFA`, los admins quedan sujetos al segundo factor SIEMPRE que la
+# maquinaria pueda operar (hay `KENI_CONSOLA_MFA_KEY`): si ya tienen passkey, el login la
+# EXIGE; si aun no, se les marca para INSCRIBIRLA (flujo de gracia, sin bloquear). Sin clave
+# de firma NO se fuerza nada (no hay lockout). Se puede apagar (`KENI_CONSOLA_MFA_ADMIN=0`)
+# como valvula de escape operativa. NO afecta a editores (siguen gobernados por el flag global).
+ENV_MFA_ADMIN = "KENI_CONSOLA_MFA_ADMIN"
 # WebAuthn Relying Party: identidad del servidor frente al autenticador.
 #   - RP_ID: dominio efectivo (sin esquema ni puerto). Dev: `localhost`. Prod: `social.kenitech.io`.
 #   - RP_ORIGIN: origen(es) esperado(s) de la ceremonia (con esquema y puerto). Dev:
