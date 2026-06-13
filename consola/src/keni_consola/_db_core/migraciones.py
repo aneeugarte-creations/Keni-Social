@@ -61,7 +61,12 @@ from .migraciones_columnas import (
     _migrar_renombre_catalogo_media,
     _normalizar_timestamps_texto,
 )
-from .migraciones_integridad import _FKS, _migrar_checks_dominio, _migrar_fks_hub
+from .migraciones_integridad import (
+    _FKS,
+    _migrar_checks_dominio,
+    _migrar_fks_hub,
+    _migrar_version_optimista,
+)
 from .migraciones_modelo import _migrar_modelo_franjas, _migrar_modelo_turnos
 
 # --------------------------------------------------------------------------- #
@@ -361,6 +366,9 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # normalizacion previa de valores invalidos. Re-aplicable (idempotente): editar una
     # allowlist de dominio cambia la huella y re-normaliza + recrea el CHECK una vez.
     Migracion("0029-checks-dominio", _migrar_checks_dominio, re_aplicar_si_cambia=True),
+    # INTEGRIDAD (ADR 0012): columna `version` para concurrencia optimista en `contenido` y
+    # `contenido_plataforma` (BDs existentes; las nuevas la traen del DDL). One-shot.
+    Migracion("0030-version-optimista", _migrar_version_optimista),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.

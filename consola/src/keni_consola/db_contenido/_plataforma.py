@@ -8,6 +8,7 @@ from .._db_comun import (
     ahora_iso,
     uuid,
 )
+from ._contenido import ConflictoVersion
 
 __all__ = [
     "_COLS_CONTENIDO_PLATAFORMA",
@@ -61,6 +62,8 @@ _COLS_CONTENIDO_PLATAFORMA = (
     "hora_post",
     "creado",
     "actualizado",
+    # CONCURRENCIA OPTIMISTA (ADR 0012): sube en cada `actualizar_contenido_plataforma`/transicion.
+    "version",
 )
 _SELECT_CONTENIDO_PLATAFORMA = (
     f"SELECT {', '.join(_COLS_CONTENIDO_PLATAFORMA)} FROM contenido_plataforma"
@@ -84,7 +87,11 @@ _CAMPOS_EDITABLES_CONTENIDO_PLATAFORMA: tuple[str, ...] = tuple(
     c
     for c in _COLS_CONTENIDO_PLATAFORMA
     if c
-    not in ("id", "contenido_id", "red", "marca", "es_publicacion", "creado", "actualizado")
+    not in (
+        "id", "contenido_id", "red", "marca", "es_publicacion", "creado", "actualizado",
+        # `version` la gestiona el sistema (concurrencia optimista, ADR 0012): nunca editable.
+        "version",
+    )
 )
 
 
@@ -287,6 +294,8 @@ def _insertar_contenido_plataforma(
         "hora_post": hora_post or "",
         "creado": creado or ahora,
         "actualizado": actualizado or ahora,
+        # Concurrencia optimista (ADR 0012): nace en 0; lo sube cada update/transicion.
+        "version": 0,
     }
     # Deriva la marca denormalizada del padre cuando el llamante no la pasa (el caso normal):
     # asi ningun call-site tiene que conocerla y la denormalizacion nace siempre alineada.
@@ -481,9 +490,17 @@ def obtener_contenido_plataforma(plataforma_id: str) -> dict[str, Any] | None:
 
 
 def actualizar_contenido_plataforma(
-    plataforma_id: str, campos: dict[str, Any]
+    plataforma_id: str,
+    campos: dict[str, Any],
+    *,
+    version_esperada: int | None = None,
 ) -> dict[str, Any] | None:
-    """Edita parcialmente una fila por plataforma (estado/checklist/copy/...); None si no existe."""
+    """Edita parcialmente una fila por plataforma (estado/checklist/copy/...); None si no existe.
+
+    CONCURRENCIA OPTIMISTA (ADR 0012): sube `version` en cada actualizacion y, si el llamante
+    pasa `version_esperada` y otra escritura ya la adelanto, levanta `ConflictoVersion` (carrera
+    pipeline↔humano) en vez de pisar. Sin `version_esperada` se conserva el last-write-wins.
+    """
     cambios = {
         k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_CONTENIDO_PLATAFORMA
     }
@@ -495,16 +512,26 @@ def actualizar_contenido_plataforma(
     ahora = ahora_iso()
     asignaciones = [f"{k} = ?" for k in cambios]
     asignaciones.append("actualizado = ?")
+    asignaciones.append("version = version + 1")
     params: list[Any] = [*cambios.values(), ahora, plataforma_id]
+    where = "WHERE id = ?"
+    if version_esperada is not None:
+        where += " AND version = ?"
+        params.append(int(version_esperada))
     con = _conectar()
     try:
         cur = con.execute(
-            f"UPDATE contenido_plataforma SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
+            f"UPDATE contenido_plataforma SET {', '.join(asignaciones)} {where}",  # noqa: S608 -- allowlist
             tuple(params),
         )
-        con.commit()
         if cur.rowcount == 0:
+            con.rollback()
+            if version_esperada is not None and obtener_contenido_plataforma(plataforma_id) is not None:
+                raise ConflictoVersion(
+                    f"contenido_plataforma {plataforma_id}: version {version_esperada} obsoleta."
+                )
             return None
+        con.commit()
         fila = con.execute(
             f"{_SELECT_CONTENIDO_PLATAFORMA} WHERE id = ?", (plataforma_id,)
         ).fetchone()

@@ -164,9 +164,9 @@ def obtener_contenido(contenido_id: str) -> dict[str, Any] | None:
 
 
 def actualizar_contenido(
-    contenido_id: str, campos: dict[str, Any]
+    contenido_id: str, campos: dict[str, Any], *, version_esperada: int | None = None
 ) -> dict[str, Any] | None:
-    return db.actualizar_contenido(contenido_id, campos)
+    return db.actualizar_contenido(contenido_id, campos, version_esperada=version_esperada)
 
 
 def reclamar_contenido(
@@ -280,9 +280,11 @@ def estado_pieza_por_contenido(contenido_ids: list[str]) -> dict[str, str]:
 
 
 def actualizar_contenido_plataforma(
-    plataforma_id: str, campos: dict[str, Any]
+    plataforma_id: str, campos: dict[str, Any], *, version_esperada: int | None = None
 ) -> dict[str, Any] | None:
-    return db.actualizar_contenido_plataforma(plataforma_id, campos)
+    return db.actualizar_contenido_plataforma(
+        plataforma_id, campos, version_esperada=version_esperada
+    )
 
 
 def borrar_contenido_plataforma(plataforma_id: str) -> bool:

@@ -20,6 +20,7 @@ from .._db_comun import (
 from ..tiempo import iso_utc
 
 __all__ = [
+    "ConflictoVersion",
     "_COLS_CONTENIDO",
     "_SELECT_CONTENIDO",
     "_CAMPOS_EDITABLES_CONTENIDO",
@@ -42,6 +43,18 @@ __all__ = [
 # --------------------------------------------------------------------------- #
 # Tablero de CONTENIDO unificado (padre `contenido` + hijos `contenido_plataforma`)  #
 # --------------------------------------------------------------------------- #
+
+
+class ConflictoVersion(Exception):
+    """Una actualizacion optimista llego con una `version` OBSOLETA (carrera detectada).
+
+    La levanta `actualizar_contenido`/`actualizar_contenido_plataforma` cuando el llamante pasa
+    `version_esperada` y otra escritura ya adelanto el contador `version` de la fila: en vez de
+    PISAR ese cambio (last-write-wins), se aborta de forma controlada para que la capa API lo
+    traduzca a un 409 ("el contenido cambio mientras lo editabas; recarga"). Asi el AVANCE del
+    pipeline no sobrescribe una decision humana (ni viceversa). Ver ADR 0012.
+    """
+
 
 _COLS_CONTENIDO = (
     "id",
@@ -96,6 +109,8 @@ _COLS_CONTENIDO = (
     "fuente_nombre",
     "creado",
     "actualizado",
+    # CONCURRENCIA OPTIMISTA (ADR 0012): contador que sube en cada `actualizar_contenido`.
+    "version",
 )
 _SELECT_CONTENIDO = f"SELECT {', '.join(_COLS_CONTENIDO)} FROM contenido"
 
@@ -282,6 +297,8 @@ def _fila_contenido_nueva(**campos: Any) -> dict[str, Any]:
         "fuente_nombre": campos.get("fuente_nombre") or "",
         "creado": campos.get("creado") or ahora,
         "actualizado": campos.get("actualizado") or ahora,
+        # Concurrencia optimista (ADR 0012): nace en 0 y lo sube cada `actualizar_contenido`.
+        "version": 0,
     }
 
 
@@ -649,9 +666,20 @@ def obtener_contenido(contenido_id: str) -> dict[str, Any] | None:
 
 
 def actualizar_contenido(
-    contenido_id: str, campos: dict[str, Any]
+    contenido_id: str,
+    campos: dict[str, Any],
+    *,
+    version_esperada: int | None = None,
 ) -> dict[str, Any] | None:
-    """Edita parcialmente un item; None si el id no existe. Filtra a la lista blanca."""
+    """Edita parcialmente un item; None si el id no existe. Filtra a la lista blanca.
+
+    CONCURRENCIA OPTIMISTA (ADR 0012): cada actualizacion SUBE `version` (contador de la fila).
+    Si el llamante pasa `version_esperada` (la `version` que leyo) y otra escritura ya adelanto
+    el contador, el UPDATE condicional `... AND version = ?` no aplica y se levanta
+    `ConflictoVersion` en vez de pisar el cambio (carrera pipeline↔humano). Sin `version_esperada`
+    (por defecto) se conserva el comportamiento last-write-wins, pero el contador sube igual, de
+    modo que un editor que SI lo pase detecte el cambio.
+    """
     cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_CONTENIDO}
     if not cambios:
         return obtener_contenido(contenido_id)
@@ -665,25 +693,36 @@ def actualizar_contenido(
     ahora = ahora_iso()
     asignaciones = [f"{k} = ?" for k in cambios]
     asignaciones.append("actualizado = ?")
+    asignaciones.append("version = version + 1")  # sube SIEMPRE (token de concurrencia optimista)
     params: list[Any] = [*cambios.values(), ahora, contenido_id]
+    where = "WHERE id = ?"
+    if version_esperada is not None:
+        where += " AND version = ?"
+        params.append(int(version_esperada))
     con = _conectar()
     try:
         cur = con.execute(
-            f"UPDATE contenido SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
+            f"UPDATE contenido SET {', '.join(asignaciones)} {where}",  # noqa: S608 -- allowlist
             tuple(params),
         )
+        if cur.rowcount == 0:
+            # No aplico: o el id no existe, o (con version_esperada) la version era obsoleta.
+            con.rollback()
+            if version_esperada is not None and obtener_contenido(contenido_id) is not None:
+                raise ConflictoVersion(
+                    f"contenido {contenido_id}: version {version_esperada} obsoleta."
+                )
+            return None
         # REASIGNACION DE MARCA: si cambia la marca del padre, hay que PROPAGARLA a la marca
         # denormalizada de sus filas por plataforma; si no, el indice unico de parrilla quedaria
         # mal-scope-ado (una pieza reasignada seguiria contando contra la marca vieja). Mismo
         # connection/commit que el UPDATE del padre -> atomico.
-        if "marca" in cambios and cur.rowcount:
+        if "marca" in cambios:
             con.execute(
                 "UPDATE contenido_plataforma SET marca = ? WHERE contenido_id = ?",
                 (cambios["marca"], contenido_id),
             )
         con.commit()
-        if cur.rowcount == 0:
-            return None
         fila = con.execute(
             f"{_SELECT_CONTENIDO} WHERE id = ?", (contenido_id,)
         ).fetchone()

@@ -159,3 +159,21 @@ def _migrar_checks_dominio(con: Any) -> None:
             f"ALTER TABLE {tabla} ADD CONSTRAINT {nombre} "  # noqa: S608
             f"CHECK ({columna} IN {_en_sql(allowlist)})"
         )
+
+
+# --------------------------------------------------------------------------- #
+# Bloque 3: CONCURRENCIA OPTIMISTA (`version`) en contenido y contenido_plataforma
+# --------------------------------------------------------------------------- #
+
+
+def _migrar_version_optimista(con: Any) -> None:
+    """Anade `version INTEGER NOT NULL DEFAULT 0` a `contenido` y `contenido_plataforma`.
+
+    Para BDs ya creadas por versiones anteriores (el DDL declarativo ya la trae en las nuevas).
+    Idempotente (`ADD COLUMN IF NOT EXISTS`). El cableado (incremento + comprobacion) vive en
+    las funciones de actualizacion del repo (`db_contenido`/`db_publicaciones`).
+    """
+    for tabla in ("contenido", "contenido_plataforma"):
+        con.execute(
+            f"ALTER TABLE {tabla} ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0"  # noqa: S608
+        )

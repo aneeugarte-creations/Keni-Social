@@ -27,6 +27,7 @@ from .._db_comun import (
     uuid,
 )
 from ._contenido import (
+    ConflictoVersion,
     _CAMPOS_EDITABLES_CONTENIDO,
     _COLS_CONTENIDO,
     _SELECT_CONTENIDO,
@@ -82,6 +83,8 @@ from ._plataforma import (
 )
 
 __all__ = [
+    # concurrencia optimista (ADR 0012)
+    "ConflictoVersion",
     # _db_comun (re-export para paridad de superficie)
     "Any",
     "CLASE_CONTENIDO",

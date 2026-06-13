@@ -173,3 +173,55 @@ def test_checks_normalizan_valores_invalidos_preexistentes(pg):
         assert v == "pendiente"
     finally:
         con.close()
+
+
+# --------------------------------------------------------------------------- #
+# Bloque 3: CONCURRENCIA OPTIMISTA (`version`)                                   #
+# --------------------------------------------------------------------------- #
+
+
+def test_version_nace_en_cero_y_sube_en_cada_edicion(pg):
+    c = db.crear_contenido(titulo="t")
+    assert c["version"] == 0
+    u1 = db.actualizar_contenido(c["id"], {"titulo": "a"})
+    assert u1["version"] == 1
+    u2 = db.actualizar_contenido(c["id"], {"titulo": "b"})
+    assert u2["version"] == 2
+    p = db.crear_contenido_plataforma(contenido_id=c["id"], red="x")
+    assert p["version"] == 0
+    pu = db.actualizar_contenido_plataforma(p["id"], {"copy": "hi"})
+    assert pu["version"] == 1
+
+
+def test_version_obsoleta_levanta_conflicto(pg):
+    c = db.crear_contenido(titulo="t")
+    db.actualizar_contenido(c["id"], {"titulo": "a"})  # version -> 1
+    # Un editor con la version vieja (0) choca: NO pisa el cambio.
+    with pytest.raises(db.ConflictoVersion):
+        db.actualizar_contenido(c["id"], {"titulo": "z"}, version_esperada=0)
+    # La version correcta SI aplica.
+    u = db.actualizar_contenido(c["id"], {"titulo": "z"}, version_esperada=1)
+    assert u["titulo"] == "z"
+    assert u["version"] == 2
+
+
+def test_version_esperada_en_inexistente_da_none_no_conflicto(pg):
+    assert db.actualizar_contenido("no-existe", {"titulo": "x"}, version_esperada=0) is None
+
+
+def test_version_plataforma_obsoleta_levanta_conflicto(pg):
+    c = db.crear_contenido(titulo="t")
+    p = db.crear_contenido_plataforma(contenido_id=c["id"], red="x")
+    db.actualizar_contenido_plataforma(p["id"], {"copy": "uno"})  # version -> 1
+    with pytest.raises(db.ConflictoVersion):
+        db.actualizar_contenido_plataforma(p["id"], {"copy": "dos"}, version_esperada=0)
+
+
+def test_transicion_estado_sube_version(pg):
+    """El AVANCE de estado (pipeline) tambien sube la version (carrera pipeline↔humano)."""
+    c = db.crear_contenido(titulo="t")
+    p = db.crear_contenido_plataforma(contenido_id=c["id"], red="x", estado="en_revision")
+    v0 = db.obtener_contenido_plataforma(p["id"])["version"]
+    db.transicionar_estado_publicacion(p["id"], "en_revision", "aprobado")
+    v1 = db.obtener_contenido_plataforma(p["id"])["version"]
+    assert v1 == v0 + 1

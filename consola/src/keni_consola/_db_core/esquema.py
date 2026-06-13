@@ -405,7 +405,13 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         url_fuente          TEXT NOT NULL DEFAULT '',
         fuente_nombre       TEXT NOT NULL DEFAULT '',
         creado              TEXT NOT NULL DEFAULT '',
-        actualizado         TEXT NOT NULL DEFAULT ''
+        actualizado         TEXT NOT NULL DEFAULT '',
+        -- CONCURRENCIA OPTIMISTA (ADR 0012): contador que sube en CADA escritura del repo
+        -- (`actualizar_contenido`/transiciones). El cliente puede pasar la `version` que leyo;
+        -- si llego obsoleta (otra escritura adelanto el contador), la actualizacion se rechaza
+        -- con `ConflictoVersion` en vez de pisar el cambio (p. ej. el pipeline pisando un
+        -- rechazo humano). Para BDs existentes lo anade la migracion 0030.
+        version             INTEGER NOT NULL DEFAULT 0
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_contenido_flujo ON contenido (flujo)",
@@ -466,7 +472,10 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         qa_auto_hash          TEXT NOT NULL DEFAULT '',
         hora_post             TEXT NOT NULL DEFAULT '',
         creado                TEXT NOT NULL DEFAULT '',
-        actualizado           TEXT NOT NULL DEFAULT ''
+        actualizado           TEXT NOT NULL DEFAULT '',
+        -- CONCURRENCIA OPTIMISTA (ADR 0012): ver el comentario en `contenido.version`. Sube en
+        -- cada `actualizar_contenido_plataforma`/`transicionar_estado_publicacion`. Migracion 0030.
+        version               INTEGER NOT NULL DEFAULT 0
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_contenido_plat_contenido ON contenido_plataforma (contenido_id)",
