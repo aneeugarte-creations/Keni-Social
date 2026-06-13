@@ -116,6 +116,17 @@ describe("Cola (cola de generación)", () => {
     expect(urls.some((u) => u.includes("/api/actividad/cola") && !u.includes("marca="))).toBe(true);
   });
 
+  it("es el dashboard de Workers: monta pool, economía y agentes JUNTOS", async () => {
+    stubFetch(snapshot([job({})]));
+    renderConProviders(<Cola />);
+    // Las tres secciones colapsables del dashboard, abiertas por defecto.
+    expect(await screen.findByText("Pool reactivo (claude -p)")).toBeInTheDocument();
+    expect(screen.getByText("Economía de tokens")).toBeInTheDocument();
+    expect(
+      screen.getByText("Agentes (gastan tokens / actúan en el flujo)"),
+    ).toBeInTheDocument();
+  });
+
   it("señala los jobs prioritarios de la lista de espera", async () => {
     stubFetch(snapshot([job({ etiqueta: "Manual urgente", prioridad: 10 })]));
     renderConProviders(<Cola />);

@@ -30,9 +30,9 @@ _SIDEBAR_BLOQUES = [
     # Texto: prompts + línea editorial + plantillas).
     ["Imagen", "Video", "Texto"],
     # "Máquina": la máquina de generación (fase 2A) — dos cockpits de igual peso
-    # (Investigación: descubre/verifica; Producción: genera copy/arte) + la Cola compartida
-    # (la vista global del worker/cola, relocalizada del antiguo Monitor).
-    ["Investigación", "Producción", "Cola"],
+    # (Investigación: descubre/verifica; Producción: genera copy/arte) + el dashboard de
+    # Workers (el worker/cola compartido + economía de tokens + agentes, TODO JUNTO).
+    ["Investigación", "Producción", "Workers"],
     # "Datos": lo que alimenta o refleja la automatización — Investigación (fuentes/radar),
     # Analíticas (medición que cierra el loop) y Producción (el feed unificado de lo que
     # produce la máquina: runs del pipeline + actividad suelta, antes «Actividad IA»).

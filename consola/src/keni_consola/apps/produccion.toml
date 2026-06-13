@@ -174,9 +174,9 @@ orden = 20
 
 [[nav]]
 ruta = "/maquina/cola"
-etiqueta = "Cola"
+etiqueta = "Workers"
 icono = "ListChecks"
-descripcion = "La vista GLOBAL del worker/cola que comparten los dos motores: salud (doctor), capacidad del pool, economía de tokens (presupuesto + parada de emergencia), jobs en curso/esperando y throughput por día."
+descripcion = "El dashboard de workers, TODO JUNTO: el pool reactivo (claude -p) con salud (doctor), capacidad y jobs en curso/esperando; la economía de tokens (gasto por proceso y por tipo + serie); y los agentes (daemons que gastan tokens / actúan en el flujo), agrupados por Investigación, Producción y Flujo."
 grupo = "maquina"
 grupo_orden = 25
 orden = 30

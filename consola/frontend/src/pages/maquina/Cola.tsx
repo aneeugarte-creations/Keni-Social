@@ -5,6 +5,7 @@ import {
   ArrowUp,
   Boxes,
   Clock,
+  Coins,
   Cpu,
   Layers,
   ListChecks,
@@ -20,6 +21,7 @@ import { toast } from "sonner";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { ChipNivelPresupuesto } from "@/components/comunes/ChipEstado";
 import { confirmar } from "@/components/comunes/confirmar";
+import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Badge } from "@/components/ui/badge";
@@ -39,10 +41,12 @@ import {
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
-import { haceSegundos } from "@/lib/fecha";
-import { costeUsd, numeroCompacto } from "@/lib/formato";
+import { formatearDia, haceSegundos } from "@/lib/fecha";
+import { costeUsd, duracion, numeroCompacto, numeroCompleto } from "@/lib/formato";
+import { etiquetaTipoGeneracion } from "@/lib/generaciones";
 import { INTERVALO_SERIE_MS, INTERVALO_VIVO_MS } from "@/lib/refresco";
 import { cn } from "@/lib/utils";
+import { SeccionColapsable } from "@/pages/configuracion/SeccionColapsable";
 import { useGuardarAjuste } from "@/pages/configuracion/SeccionFuncionalidad";
 import { SeccionMetricool } from "@/pages/configuracion/SeccionMetricool";
 import {
@@ -50,10 +54,18 @@ import {
   PROC_META,
   resultadoDelDia,
   SerieProceso,
-  TituloEconomia,
 } from "@/pages/monitor/comun";
 import { ZonaEstado } from "@/pages/sistema/Doctor";
-import type { ColaJob, PresupuestoIA, Proceso, ResultadoDia } from "@/types";
+import { SeccionDaemons } from "@/pages/sistema/SeccionDaemons";
+import type {
+  ActividadPorDia,
+  ActividadPorTipo,
+  ActividadTotal,
+  ColaJob,
+  PresupuestoIA,
+  Proceso,
+  ResultadoDia,
+} from "@/types";
 
 /** Tarjeta KPI: icono, valor grande y subtítulo. `tono` colorea el valor ante alerta. */
 function Kpi({
@@ -254,7 +266,10 @@ function PanelPresupuesto({
     <Card>
       <CardHeader className="p-4 pb-2">
         <div className="flex flex-wrap items-center gap-2">
-          <TituloEconomia />
+          <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
+            <Coins className="h-4 w-4 text-muted-foreground" />
+            Presupuesto y parada de emergencia
+          </CardTitle>
           <ChipNivelPresupuesto nivel={presupuesto.nivel} />
         </div>
       </CardHeader>
@@ -323,6 +338,166 @@ function PanelPresupuesto({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/** Fila de KPIs con los CONTEOS del periodo (toda la actividad de IA: generaciones del
+ *  pipeline, manuales, runs de agente). Movidos aquí desde Producción: la economía de tokens
+ *  vive JUNTA en el dashboard de Workers. */
+function KpisTotales({ total }: { total: ActividadTotal }) {
+  return (
+    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <TarjetaKpi variante="card" etiqueta="Trabajos IA" valor={numeroCompleto(total.items)} />
+      <TarjetaKpi variante="card" etiqueta="Coste total" valor={costeUsd(total.coste_usd)} />
+      <TarjetaKpi
+        variante="card"
+        etiqueta="Tokens"
+        valor={numeroCompacto(total.tokens)}
+        titulo={numeroCompleto(total.tokens)}
+      />
+      <TarjetaKpi
+        variante="card"
+        etiqueta="Tiempo de cómputo"
+        valor={total.duration_ms ? duracion(total.duration_ms) : "—"}
+      />
+    </div>
+  );
+}
+
+/** Mini-tabla de desglose por TIPO de trabajo (movida desde Producción). */
+function DesglosePorTipo({ filas }: { filas: ActividadPorTipo[] }) {
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Por tipo</CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="pl-6">Tipo</TableHead>
+              <TableHead className="text-right">Items</TableHead>
+              <TableHead className="text-right">Tokens</TableHead>
+              <TableHead className="pr-6 text-right">Coste</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filas.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+                  Sin actividad por tipo.
+                </TableCell>
+              </TableRow>
+            ) : (
+              filas.map((f) => (
+                <TableRow key={f.tipo}>
+                  <TableCell className="pl-6 font-medium">
+                    {f.tipo ? etiquetaTipoGeneracion(f.tipo) : "—"}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {numeroCompleto(f.items)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums" title={numeroCompleto(f.tokens)}>
+                    {numeroCompacto(f.tokens)}
+                  </TableCell>
+                  <TableCell className="pr-6 text-right tabular-nums">
+                    {costeUsd(f.coste_usd)}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Mini-tabla de desglose por DÍA, más reciente primero (movida desde Producción). */
+function DesglosePorDia({ filas }: { filas: ActividadPorDia[] }) {
+  const ordenadas = React.useMemo(
+    () => [...filas].sort((a, b) => b.dia.localeCompare(a.dia)),
+    [filas],
+  );
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Por día</CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="pl-6">Día</TableHead>
+              <TableHead className="text-right">Items</TableHead>
+              <TableHead className="pr-6 text-right">Coste</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {ordenadas.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={3} className="py-8 text-center text-muted-foreground">
+                  Sin actividad por día.
+                </TableCell>
+              </TableRow>
+            ) : (
+              ordenadas.map((f) => (
+                <TableRow key={f.dia}>
+                  <TableCell className="pl-6 font-medium">{formatearDia(f.dia)}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {numeroCompleto(f.items)}
+                  </TableCell>
+                  <TableCell className="pr-6 text-right tabular-nums">
+                    {costeUsd(f.coste_usd)}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** TOTALES + desglose por tipo/día de la actividad IA (`GET /api/actividad/agregados`), parte
+ *  del bloque «Economía de tokens». Query PROPIA (se monta solo cuando la sección está abierta),
+ *  acotada por el switch global de marca como el resto. */
+function SeccionEconomiaTotales() {
+  const { marcaActiva } = useMarcaActiva();
+  const agregados = useQuery({
+    queryKey: ["actividad", "agregados", marcaActiva ?? "todas"],
+    queryFn: ({ signal }) => api.actividadAgregados({ marca: marcaActiva ?? undefined }, signal),
+    refetchInterval: INTERVALO_SERIE_MS,
+  });
+  if (agregados.isPending) {
+    return (
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-28 w-full rounded-xl" />
+        ))}
+      </div>
+    );
+  }
+  if (agregados.isError) {
+    return (
+      <BloqueError
+        titulo="No se pudieron cargar los totales de gasto"
+        mensaje={mensajeError(agregados.error)}
+        onReintentar={() => void agregados.refetch()}
+        cargando={agregados.isFetching}
+      />
+    );
+  }
+  const data = agregados.data;
+  return (
+    <div className="space-y-4">
+      {data?.total && <KpisTotales total={data.total} />}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <DesglosePorTipo filas={data?.por_tipo ?? []} />
+        <DesglosePorDia filas={data?.por_dia ?? []} />
+      </div>
+    </div>
   );
 }
 
@@ -428,7 +603,7 @@ export default function Cola() {
 
   return (
     <>
-      <TituloPagina titulo="Cola" icono={ListChecks} />
+      <TituloPagina titulo="Workers" icono={ListChecks} />
       <AccionesPagina>
         <MenuAcciones
           ajustesTitulo="Conexiones de métricas"
@@ -472,36 +647,48 @@ export default function Cola() {
         <ZonaEstado esAdmin={esAdmin} marca={marcaActiva ?? undefined} />
       </div>
 
-      {cola.isError ? (
-        <BloqueError
-          titulo="No se pudo leer la cola"
-          mensaje={mensajeError(cola.error)}
-          onReintentar={() => void cola.refetch()}
-          cargando={cola.isFetching}
-        />
-      ) : cola.isPending ? (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-28 w-full rounded-xl" />
-          ))}
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {/* Prefiltro de proceso activo (?proceso=): se señala y se puede quitar. */}
-          {proceso && (
-            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-              <span>
-                Mostrando solo{" "}
-                <strong className={PROC_META[proceso].texto}>{PROC_META[proceso].etiqueta}</strong>{" "}
-                (tablas de jobs).
-              </span>
-              <Button variant="ghost" size="sm" onClick={quitarProceso}>
-                Quitar filtro
-              </Button>
+      {/* Dashboard de Workers, TODO JUNTO en secciones colapsables: (a) el pool reactivo
+          (claude -p), (b) la economía de tokens y (c) los agentes (daemons que gastan tokens /
+          actúan en el flujo). La infraestructura que NO toca el flujo vive en Sistema. */}
+      <div className="space-y-2">
+        {/* (a) POOL REACTIVO: los workers de claude -p bajo demanda. */}
+        <SeccionColapsable
+          titulo="Pool reactivo (claude -p)"
+          abiertaInicial
+          descripcion="Los workers que ejecutan claude -p bajo demanda: capacidad del pool compartido, jobs en curso/esperando, presupuesto y parada de emergencia."
+        >
+          {cola.isError ? (
+            <BloqueError
+              titulo="No se pudo leer la cola"
+              mensaje={mensajeError(cola.error)}
+              onReintentar={() => void cola.refetch()}
+              cargando={cola.isFetching}
+            />
+          ) : cola.isPending ? (
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-28 w-full rounded-xl" />
+              ))}
             </div>
-          )}
+          ) : (
+            <div className="space-y-6">
+              {/* Prefiltro de proceso activo (?proceso=): se señala y se puede quitar. */}
+              {proceso && (
+                <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                  <span>
+                    Mostrando solo{" "}
+                    <strong className={PROC_META[proceso].texto}>
+                      {PROC_META[proceso].etiqueta}
+                    </strong>{" "}
+                    (tablas de jobs).
+                  </span>
+                  <Button variant="ghost" size="sm" onClick={quitarProceso}>
+                    Quitar filtro
+                  </Button>
+                </div>
+              )}
 
-          {cola.data.cola_llena && (
+              {cola.data.cola_llena && (
             <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               <span>
@@ -621,38 +808,69 @@ export default function Cola() {
             </Card>
           )}
 
-          {/* Throughput por día: encolados (entrada) vs completados por proceso (salida). Los
-              marcadores de etapa (coste 0) ya NO cuentan: «ok» es trabajo real, no auditoría. */}
-          <Card>
-            <CardHeader className="p-4 pb-2">
-              <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
-                <RotateCcw className="h-4 w-4 text-muted-foreground" />
-                Últimos 14 días
-                <span className="ml-1 inline-flex items-center gap-3 text-xs font-normal text-muted-foreground">
-                  <span className="inline-flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full bg-amber-500/70" /> encolados
+            </div>
+          )}
+        </SeccionColapsable>
+
+        {/* (b) ECONOMÍA DE TOKENS, TODO JUNTO: totales + desglose por tipo/día (movidos de
+            Producción) y el throughput por proceso de los últimos 14 días. El gasto de HOY por
+            proceso vive en el panel de presupuesto del pool reactivo. */}
+        <SeccionColapsable
+          titulo="Economía de tokens"
+          abiertaInicial
+          descripcion="Cuánto gasta la máquina, junto: por proceso (Investigación vs Producción) y por tipo de trabajo; hoy y en los últimos 14 días."
+        >
+          <div className="space-y-4">
+            <SeccionEconomiaTotales />
+
+            {/* Throughput por día: encolados (entrada) vs completados por proceso (salida). Los
+                marcadores de etapa (coste 0) ya NO cuentan: «ok» es trabajo real, no auditoría. */}
+            <Card>
+              <CardHeader className="p-4 pb-2">
+                <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
+                  <RotateCcw className="h-4 w-4 text-muted-foreground" />
+                  Últimos 14 días
+                  <span className="ml-1 inline-flex items-center gap-3 text-xs font-normal text-muted-foreground">
+                    <span className="inline-flex items-center gap-1">
+                      <span className="h-2 w-2 rounded-full bg-amber-500/70" /> encolados
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <span className="h-2 w-2 rounded-full bg-sky-500/70" /> investigación
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500/70" /> producción
+                    </span>
                   </span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full bg-sky-500/70" /> investigación
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500/70" /> producción
-                  </span>
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 pt-2">
-              {serie.isPending ? (
-                <Skeleton className="h-40 w-full" />
-              ) : serie.isError ? (
-                <p className="text-sm text-muted-foreground">{mensajeError(serie.error)}</p>
-              ) : (
-                <SerieProceso serie={serie.data} />
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 pt-2">
+                {serie.isPending ? (
+                  <Skeleton className="h-40 w-full" />
+                ) : serie.isError ? (
+                  <p className="text-sm text-muted-foreground">{mensajeError(serie.error)}</p>
+                ) : (
+                  <SerieProceso serie={serie.data} />
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </SeccionColapsable>
+
+        {/* (c) AGENTES: los daemons que gastan tokens / actúan en el flujo, agrupados por motor
+            (Investigación / Producción / Flujo). La infra (métricas, GC, reaper…) vive en
+            Sistema. Reusa SeccionDaemons con un filtro por `grupo` (sin duplicar). */}
+        <SeccionColapsable
+          titulo="Agentes (gastan tokens / actúan en el flujo)"
+          abiertaInicial
+          descripcion="Los daemons de Investigación, Producción y Flujo: estado, último barrido, intervalo y «Barrer ahora». La infraestructura vive en Sistema."
+        >
+          <SeccionDaemons
+            grupos={["investigacion", "produccion", "flujo"]}
+            agrupar
+            titulo="Agentes"
+          />
+        </SeccionColapsable>
+      </div>
     </>
   );
 }

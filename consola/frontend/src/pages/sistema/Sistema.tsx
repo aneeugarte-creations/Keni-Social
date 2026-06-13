@@ -47,7 +47,11 @@ export default function Sistema() {
       <div className="space-y-6">
         <AvisosDoctor />
         <SeccionRecursos />
-        <SeccionDaemons />
+        {/* Solo INFRAESTRUCTURA: los daemons que NO gastan tokens ni actúan en el flujo de
+            contenido (métricas, GC, alertas, reaper…). Los agentes de Investigación/Producción/
+            Flujo viven en el dashboard de Workers (/maquina/cola). Filtro por el campo `grupo`
+            del API, no por nombres hardcodeados. */}
+        <SeccionDaemons grupos={["infra"]} titulo="Daemons de infraestructura" />
         <SeccionBackups />
         <SeccionRendimiento />
         <SeccionS3 />

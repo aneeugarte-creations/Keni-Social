@@ -153,7 +153,7 @@ export default function CockpitProduccion() {
             icono={ListChecks}
             onClick={() => navigate("/maquina/cola?proceso=produccion")}
           >
-            Ver cola (Producción)
+            Ver workers (Producción)
           </ItemMenu>
         </MenuAcciones>
       </AccionesPagina>

@@ -139,7 +139,7 @@ export default function CockpitInvestigacion() {
               icono={ListChecks}
               onClick={() => navigate("/maquina/cola?proceso=investigacion")}
             >
-              Ver cola (Investigación)
+              Ver workers (Investigación)
             </ItemMenu>
           </MenuAcciones>
         </AccionesPagina>

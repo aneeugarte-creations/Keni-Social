@@ -103,19 +103,21 @@ describe("Producción (feed unificado: runs del pipeline + actividad suelta)", (
     vi.unstubAllGlobals();
   });
 
-  it("muestra los CONTEOS arriba (trabajos, coste, tokens, tiempo)", async () => {
+  it("la economía de tokens se movió a Workers: aquí solo queda el feed + un enlace", async () => {
     stubFetch();
     renderConProviders(<Produccion />);
-    expect(await screen.findByText("Trabajos IA")).toBeInTheDocument();
-    expect(screen.getByText("Coste total")).toBeInTheDocument();
-    // "Tokens" aparece como label de KPI y como cabecera de tabla: hay al menos uno.
-    expect(screen.getAllByText("Tokens").length).toBeGreaterThan(0);
-    expect(screen.getByText("Tiempo de cómputo")).toBeInTheDocument();
-    // El total de items (7) aparece como valor del KPI.
-    expect(screen.getByText("7")).toBeInTheDocument();
+    // Espera al feed para asegurar el render completo.
+    expect(await screen.findByText("Cómo gana la FIFA")).toBeInTheDocument();
+    // Los KPIs de economía (Trabajos IA / Coste total / Tiempo de cómputo) ya NO viven aquí.
+    expect(screen.queryByText("Trabajos IA")).toBeNull();
+    expect(screen.queryByText("Coste total")).toBeNull();
+    expect(screen.queryByText("Tiempo de cómputo")).toBeNull();
+    // En su lugar, un enlace breve al dashboard de Workers.
+    const enlace = screen.getByRole("link", { name: /Econom[ií]a de tokens.*Workers/i });
+    expect(enlace).toHaveAttribute("href", "/maquina/cola");
   });
 
-  it("junto a los filtros solo va el CONTEO (las métricas viven en cada tarjeta)", async () => {
+  it("junto a los filtros solo va el CONTEO del feed", async () => {
     stubFetch();
     renderConProviders(<Produccion />);
     expect(await screen.findByText(/2 items/i)).toBeInTheDocument();

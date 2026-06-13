@@ -1,15 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { Factory, RefreshCw, SquarePen } from "lucide-react";
+import { Coins, Factory, RefreshCw, SquarePen } from "lucide-react";
 import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
-import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -18,162 +16,31 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
-import { api, ApiError, mensajeError } from "@/lib/api";
-import { formatearDia } from "@/lib/fecha";
-import { costeUsd, duracion, numeroCompacto, numeroCompleto } from "@/lib/formato";
+import { api, ApiError } from "@/lib/api";
+import { numeroCompleto } from "@/lib/formato";
 import { etiquetaTipoGeneracion } from "@/lib/generaciones";
 import { INTERVALO_SERIE_MS } from "@/lib/refresco";
-import type {
-  ActividadPorDia,
-  ActividadPorTipo,
-  ActividadTotal,
-  Pipeline,
-  RespuestaPipelines,
-} from "@/types";
+import type { Pipeline, RespuestaPipelines } from "@/types";
 
 import { ESTADOS_FILTRO, ETAPAS_FILTRO, FilaPipeline } from "./Pipelines";
 
 // Tamaño de página del botón «Cargar más» (se pide `limite = páginas * PAGINA`, offset 0).
 const PAGINA = 20;
 
-/** Fila de KPIs con los CONTEOS del periodo disponible (toda la actividad de IA:
- *  generaciones del pipeline, manuales, runs de agente). */
-function KpisTotales({ total }: { total: ActividadTotal }) {
-  return (
-    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-      <TarjetaKpi variante="card" etiqueta="Trabajos IA" valor={numeroCompleto(total.items)} />
-      <TarjetaKpi variante="card" etiqueta="Coste total" valor={costeUsd(total.coste_usd)} />
-      <TarjetaKpi
-        variante="card"
-        etiqueta="Tokens"
-        valor={numeroCompacto(total.tokens)}
-        titulo={numeroCompleto(total.tokens)}
-      />
-      <TarjetaKpi
-        variante="card"
-        etiqueta="Tiempo de cómputo"
-        valor={total.duration_ms ? duracion(total.duration_ms) : "—"}
-      />
-    </div>
-  );
-}
-
-/** Mini-tabla de desglose por tipo de trabajo. */
-function DesglosePorTipo({ filas }: { filas: ActividadPorTipo[] }) {
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Por tipo</CardTitle>
-      </CardHeader>
-      <CardContent className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="pl-6">Tipo</TableHead>
-              <TableHead className="text-right">Items</TableHead>
-              <TableHead className="text-right">Tokens</TableHead>
-              <TableHead className="pr-6 text-right">Coste</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filas.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-                  Sin actividad por tipo.
-                </TableCell>
-              </TableRow>
-            ) : (
-              filas.map((f) => (
-                <TableRow key={f.tipo}>
-                  <TableCell className="pl-6 font-medium">
-                    {f.tipo ? etiquetaTipoGeneracion(f.tipo) : "—"}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {numeroCompleto(f.items)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums" title={numeroCompleto(f.tokens)}>
-                    {numeroCompacto(f.tokens)}
-                  </TableCell>
-                  <TableCell className="pr-6 text-right tabular-nums">
-                    {costeUsd(f.coste_usd)}
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
-  );
-}
-
-/** Mini-tabla de desglose por día (más reciente primero). */
-function DesglosePorDia({ filas }: { filas: ActividadPorDia[] }) {
-  // Por si el backend no lo ordena: mostramos del más reciente al más antiguo.
-  const ordenadas = React.useMemo(
-    () => [...filas].sort((a, b) => b.dia.localeCompare(a.dia)),
-    [filas],
-  );
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Por día</CardTitle>
-      </CardHeader>
-      <CardContent className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="pl-6">Día</TableHead>
-              <TableHead className="text-right">Items</TableHead>
-              <TableHead className="pr-6 text-right">Coste</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {ordenadas.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={3} className="py-8 text-center text-muted-foreground">
-                  Sin actividad por día.
-                </TableCell>
-              </TableRow>
-            ) : (
-              ordenadas.map((f) => (
-                <TableRow key={f.dia}>
-                  <TableCell className="pl-6 font-medium">{formatearDia(f.dia)}</TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {numeroCompleto(f.items)}
-                  </TableCell>
-                  <TableCell className="pr-6 text-right tabular-nums">
-                    {costeUsd(f.coste_usd)}
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
-  );
-}
-
 /**
- * Página PRODUCCIÓN (antes «Actividad IA», con pestañas Feed/Pipelines hoy FUSIONADAS):
- * todo lo que la máquina produce, en una sola línea temporal.
+ * Página PRODUCCIÓN (antes «Actividad IA», con pestañas Feed/Pipelines hoy FUSIONADAS): el
+ * FEED de todo lo que la máquina produce, en una sola línea temporal — el drill-down de «qué
+ * hizo la máquina».
  *
- * Arriba, los CONTEOS del periodo (trabajos, coste, tokens, tiempo de cómputo) y los
- * desgloses por tipo/día (`GET /api/actividad/agregados`). Debajo, el feed unificado
- * (`GET /api/pipelines`): las runs del pipeline (tarjeta con su tira de etapas) y la
- * actividad suelta (generación manual/lote, run de agente) como tarjeta de UNA etapa con
- * el nombre de su trabajo — mismo aspecto, mismas métricas (tokens · coste · duración),
- * mismo detalle entrada/salida al abrirla.
+ * El feed unificado (`GET /api/pipelines`): las runs del pipeline (tarjeta con su tira de
+ * etapas) y la actividad suelta (generación manual/lote, run de agente) como tarjeta de UNA
+ * etapa con el nombre de su trabajo — mismo aspecto, mismas métricas (tokens · coste ·
+ * duración), mismo detalle entrada/salida al abrirla.
+ *
+ * La ECONOMÍA de tokens (conteos del periodo + desglose por tipo/día) se MOVIÓ al dashboard de
+ * Workers (`/maquina/cola`), donde vive JUNTA con el gasto por proceso y el pool reactivo; aquí
+ * queda solo el feed. (El catálogo de tipos del filtro sigue saliendo de los mismos agregados.)
  */
 export default function Produccion() {
   const navigate = useNavigate();
@@ -260,29 +127,15 @@ export default function Produccion() {
         </MenuAcciones>
       </AccionesPagina>
 
-      {/* Conteos arriba: totales del periodo + desgloses. */}
-      {agregadosQuery.isPending ? (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-28 w-full rounded-xl" />
-          ))}
-        </div>
-      ) : agregadosQuery.isError ? (
-        <BloqueError
-          titulo="No se pudieron cargar los totales"
-          mensaje={mensajeError(agregadosQuery.error)}
-          onReintentar={refrescar}
-          cargando={agregadosQuery.isFetching}
-        />
-      ) : (
-        <>
-          <KpisTotales total={agregadosQuery.data.total} />
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <DesglosePorTipo filas={agregadosQuery.data.por_tipo} />
-            <DesglosePorDia filas={agregadosQuery.data.por_dia} />
-          </div>
-        </>
-      )}
+      {/* La economía de tokens (conteos + desglose por tipo/día) se unificó en el dashboard de
+          Workers, junto al gasto por proceso y el pool. Aquí queda el feed; enlace breve allí. */}
+      <Link
+        to="/maquina/cola"
+        className="flex items-center gap-1.5 text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+      >
+        <Coins className="h-4 w-4" aria-hidden="true" />
+        Economía de tokens → Workers
+      </Link>
 
       {/* Filtros del feed: etapa (runs), estado (todo), tipo (trabajos sueltos). */}
       <div className="flex flex-wrap items-center gap-2">
