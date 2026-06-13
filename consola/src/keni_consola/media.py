@@ -36,9 +36,25 @@ import logging
 import os
 import re
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 
 from . import almacen_media
+
+
+@dataclass(frozen=True)
+class SalidaImagen:
+    """Resultado de generar UNA imagen: los bytes + su coste real y el modelo usado.
+
+    `coste_usd` es el coste que reporta el proveedor (OpenRouter `usage.cost`, en USD);
+    0.0 si el proveedor no lo devuelve. `modelo` es el id concreto que se usó (resuelta ya
+    la precedencia). Lo consume el lanzador de imagen para dejar el gasto en el ledger
+    `gasto_ia` (tipo `imagen`) y poder estimar el coste medio por imagen y por modelo.
+    """
+
+    datos: bytes
+    coste_usd: float
+    modelo: str
 
 # Logger del módulo (#123): los fallos del proveedor de imagen se LOGUEAN con el motivo
 # real (status + cuerpo recortado) en vez de tragarlo, y el motivo viaja al mensaje de
@@ -651,11 +667,25 @@ def _texto_respuesta(data: dict) -> str:
     return ""
 
 
-def _proveedor_openrouter(prompt: str) -> bytes:
-    """Genera una imagen vía OpenRouter (gateway compatible con OpenAI) y devuelve bytes.
+def _coste_de(data: dict) -> float:
+    """Coste en USD de una respuesta de OpenRouter (`usage.cost`); 0.0 si no viene/inválido."""
+    try:
+        usage = data.get("usage")
+        if isinstance(usage, dict):
+            return max(0.0, float(usage.get("cost") or 0.0))
+    except (TypeError, ValueError):
+        pass
+    return 0.0
+
+
+def _proveedor_openrouter(prompt: str, modelo: str = "") -> SalidaImagen:
+    """Genera una imagen vía OpenRouter (gateway compatible con OpenAI) -> `SalidaImagen`.
 
     Mismo camino que el estudio de imagen: endpoint chat/completions con
-    `modalities:["image","text"]`; el modelo se elige por id (`OPENROUTER_IMAGE_MODEL`).
+    `modalities:["image","text"]`; el modelo se elige por id (`modelo`, o la precedencia
+    de `_modelo()` si viene vacío). Pide `usage.include` para que el gateway devuelva el
+    COSTE real de la llamada (`usage.cost`, USD): así el lanzador puede dejarlo en el
+    ledger y estimar el coste por imagen (0.0 si el proveedor no lo reporta).
     Antepone un mensaje de SISTEMA (`_sistema_imagen()`, editable en la Biblioteca) que fuerza
     salida de imagen y prohibe infografia/texto incrustado: sin el,
     los modelos GPT-5 Image responden TEXTO ante prompts noticiosos en vez de la imagen.
@@ -673,7 +703,7 @@ def _proveedor_openrouter(prompt: str) -> bytes:
     except ImportError as e:  # pragma: no cover -- httpx es dependencia transitiva
         raise MediaError("Falta la librería para generar imágenes en este equipo.") from e
 
-    modelo = _modelo()
+    modelo = modelo or _modelo()
     try:
         respuesta = httpx.post(
             _OPENROUTER_URL,
@@ -685,6 +715,8 @@ def _proveedor_openrouter(prompt: str) -> bytes:
                     {"role": "user", "content": prompt},
                 ],
                 "modalities": ["image", "text"],
+                # Pide el COSTE real de la llamada (OpenRouter lo añade en `usage.cost`, USD).
+                "usage": {"include": True},
             },
             timeout=_TIMEOUT_GEN,
             follow_redirects=False,
@@ -709,7 +741,7 @@ def _proveedor_openrouter(prompt: str) -> bytes:
     try:
         url = data["choices"][0]["message"]["images"][0]["image_url"]["url"]
         b64 = url.split(",", 1)[1] if "," in url else url
-        return base64.b64decode(b64)
+        return SalidaImagen(base64.b64decode(b64), _coste_de(data), modelo)
     except (KeyError, IndexError, ValueError, TypeError) as e:
         # 200 sin imagen: casi siempre el modelo respondió TEXTO (rechazo/aclaración) en
         # vez de imagen. Mostramos ese texto (recortado) para que se vea el PORQUÉ.
@@ -726,21 +758,35 @@ def _proveedor_openrouter(prompt: str) -> bytes:
 _PROVEEDOR = _proveedor_openrouter
 
 
-def generar_imagen(prompt: str) -> bytes:
-    """Genera una imagen a partir de `prompt` con el proveedor configurado.
+def generar_imagen_detallado(prompt: str, *, modelo: str = "") -> SalidaImagen:
+    """Genera una imagen y devuelve `SalidaImagen` (bytes + coste + modelo usado).
 
-    Lanza `MediaError` (en espanol) si no hay proveedor o si el prompt esta vacio.
+    `modelo` opcional: un id de la lista curada (`modelos_disponibles`); vacío => el modelo
+    configurado por defecto (`_modelo()`, con su precedencia). Lanza `MediaError` (en
+    español) si no hay proveedor, si el prompt está vacío o si el modelo no es válido.
     NUNCA toca la red en tests: `_PROVEEDOR` se parchea.
     """
     prompt = (prompt or "").strip()
     if not prompt:
         raise MediaError("Falta el texto (prompt) para generar la imagen.")
+    modelo = (modelo or "").strip()
+    if modelo and not modelo_valido(modelo):
+        raise MediaError("Modelo de imagen no reconocido.")
     if not proveedor_configurado():
         raise MediaError(
             "La generación de imagen no está configurada. Añade una clave de "
             "proveedor de imagen para activarla."
         )
-    datos = _PROVEEDOR(prompt)
-    if not datos:
+    salida = _PROVEEDOR(prompt, modelo or _modelo())
+    if not salida.datos:
         raise MediaError("El proveedor de imagen no devolvió ninguna imagen.")
-    return datos
+    return salida
+
+
+def generar_imagen(prompt: str) -> bytes:
+    """Genera una imagen a partir de `prompt` (bytes) con el modelo por defecto.
+
+    Atajo de `generar_imagen_detallado` para los llamadores que solo quieren los bytes
+    (estudio, auto-arte, pipeline). Lanza `MediaError` igual que aquel.
+    """
+    return generar_imagen_detallado(prompt).datos

@@ -81,3 +81,7 @@ def gasto_ia_del_dia(dia: str) -> dict[str, Any]:
 
 def gasto_ia_por_dia(dias: int = 14) -> list[dict[str, Any]]:
     return db.gasto_ia_por_dia(dias)
+
+
+def coste_medio_imagen(modelo: str = "", limite: int = 50) -> dict[str, Any]:
+    return db.coste_medio_imagen(modelo=modelo, limite=limite)

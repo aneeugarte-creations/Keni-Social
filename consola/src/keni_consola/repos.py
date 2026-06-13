@@ -191,6 +191,7 @@ from .repos_jobs import (  # noqa: F401
     cancelar_job,
     contar_jobs_activos,
     contar_jobs_por_estado,
+    coste_medio_imagen,
     encolados_por_dia,
     encolar_job,
     gasto_ia_del_dia,

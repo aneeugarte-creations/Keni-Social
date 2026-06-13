@@ -742,6 +742,9 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # Economia de CONTEXTO: tamano del prompt (chars) de cada generacion cerrada, para ver
     # la deriva del contexto por dia (prompts cada vez mas gordos). Migracion idempotente.
     "ALTER TABLE gasto_ia ADD COLUMN IF NOT EXISTS prompt_chars BIGINT NOT NULL DEFAULT 0",
+    # Modelo concreto que gastó (id del proveedor). Para imagenes permite estimar el coste
+    # medio por imagen POR MODELO; legados/claude => '' (cae a la media global). Idempotente.
+    "ALTER TABLE gasto_ia ADD COLUMN IF NOT EXISTS modelo TEXT NOT NULL DEFAULT ''",
     # Cache de metricas (lectura instantanea + refresco en 2o plano, ver metricas_cache.py):
     # guarda el dict CRUDO de `keni_metricas.servicio` (reporte/analisis) serializado a JSON,
     # por combo (tipo, rango, marca). La UI lee de aqui en cada apertura (instantaneo) y un

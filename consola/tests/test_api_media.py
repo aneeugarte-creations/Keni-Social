@@ -205,7 +205,9 @@ def test_generar_con_proveedor_mock(entorno, monkeypatch):
     cubre el pipeline generar -> guardar -> servir sin red.
     """
     monkeypatch.setenv("OPENAI_API_KEY", "clave-de-prueba")
-    monkeypatch.setattr(media, "_PROVEEDOR", lambda prompt: _PNG_1x1)
+    monkeypatch.setattr(
+        media, "_PROVEEDOR", lambda prompt, modelo="": media.SalidaImagen(_PNG_1x1, 0.0, modelo)
+    )
     cli = _cliente(lanzar_imagen=lanzador_imagen_ejecuta())
     r = cli.post("/api/media/generar", json={"prompt": "un gato astronauta"})
     assert r.status_code == 200
@@ -217,6 +219,37 @@ def test_generar_con_proveedor_mock(entorno, monkeypatch):
     servida = cli.get(res["url"])
     assert servida.status_code == 200
     assert servida.content == _PNG_1x1
+
+
+def test_generar_imagen_detallado_captura_coste_y_modelo(monkeypatch, entorno):
+    """`generar_imagen_detallado` devuelve bytes + coste + modelo del proveedor."""
+    monkeypatch.setenv("OPENAI_API_KEY", "x")
+    monkeypatch.setattr(
+        media, "_PROVEEDOR",
+        lambda prompt, modelo="": media.SalidaImagen(_PNG_1x1, 0.03, modelo or "def"),
+    )
+    salida = media.generar_imagen_detallado("un gato", modelo="openai/gpt-5-image")
+    assert salida.datos == _PNG_1x1
+    assert salida.coste_usd == 0.03
+    assert salida.modelo == "openai/gpt-5-image"
+    # `generar_imagen` sigue devolviendo SOLO los bytes (compat con los llamadores legados).
+    assert media.generar_imagen("un gato") == _PNG_1x1
+
+
+def test_generar_imagen_detallado_modelo_invalido(monkeypatch, entorno):
+    monkeypatch.setenv("OPENAI_API_KEY", "x")
+    import pytest
+
+    with pytest.raises(media.MediaError):
+        media.generar_imagen_detallado("x", modelo="inventado/xl")
+
+
+def test_coste_de_lee_usage_cost():
+    """`_coste_de` saca `usage.cost` (USD); 0.0 si no viene o es invalido."""
+    assert media._coste_de({"usage": {"cost": 0.07}}) == 0.07
+    assert media._coste_de({"usage": {}}) == 0.0
+    assert media._coste_de({}) == 0.0
+    assert media._coste_de({"usage": {"cost": "nan-no"}}) == 0.0
 
 
 def test_generar_proveedor_configurado_helper(monkeypatch, entorno):

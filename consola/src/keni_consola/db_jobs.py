@@ -428,12 +428,14 @@ def registrar_gasto_ia(
     tokens_out: int = 0,
     coste_usd: float = 0.0,
     prompt_chars: int = 0,
+    modelo: str = "",
 ) -> None:
     """UPSERT del gasto de UNA generacion cerrada (idempotente por `gen_id`).
 
     `dia` es el dia UTC (YYYY-MM-DD) en que se CERRO la generacion (cuando se gasto). Un
     re-cierre sobreescribe tokens/coste con los ultimos valores (nunca suma dos veces).
     `prompt_chars` (economia de contexto): tamano del prompt que entro a `claude -p`.
+    `modelo`: id del modelo que gasto (para el coste medio por imagen POR MODELO).
     """
     if not gen_id:
         return
@@ -442,18 +444,47 @@ def registrar_gasto_ia(
     try:
         con.execute(
             "INSERT INTO gasto_ia (gen_id, dia, tipo, marca, tokens_in, tokens_out, "
-            "coste_usd, prompt_chars, actualizado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "coste_usd, prompt_chars, modelo, actualizado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT (gen_id) DO UPDATE SET "
             "dia = EXCLUDED.dia, tipo = EXCLUDED.tipo, marca = EXCLUDED.marca, "
             "tokens_in = EXCLUDED.tokens_in, tokens_out = EXCLUDED.tokens_out, "
             "coste_usd = EXCLUDED.coste_usd, prompt_chars = EXCLUDED.prompt_chars, "
-            "actualizado = EXCLUDED.actualizado",
+            "modelo = EXCLUDED.modelo, actualizado = EXCLUDED.actualizado",
             (gen_id, dia, tipo, marca, int(tokens_in), int(tokens_out), float(coste_usd),
-             int(prompt_chars), ahora),
+             int(prompt_chars), str(modelo or ""), ahora),
         )
         con.commit()
     finally:
         con.close()
+
+
+def coste_medio_imagen(modelo: str = "", limite: int = 50) -> dict[str, Any]:
+    """Coste medio por IMAGEN (USD) de las ultimas `limite` generaciones tipo `imagen`.
+
+    Promedia `coste_usd` de las filas `gasto_ia` con `tipo='imagen'` y coste > 0, las mas
+    recientes primero. Con `modelo`, acota a ese modelo (estimacion por modelo); sin el,
+    media GLOBAL de imagen. Devuelve `{por_imagen, muestras, modelo}`: `por_imagen` es None
+    si no hay muestras (el front cae al fallback). La moneda la fija el endpoint (USD).
+    """
+    limite = max(1, min(int(limite or 1), 500))
+    sql = (
+        "SELECT coste_usd FROM gasto_ia "
+        "WHERE tipo = 'imagen' AND coste_usd > 0"
+    )
+    params: list[Any] = []
+    if modelo:
+        sql += " AND modelo = ?"
+        params.append(str(modelo))
+    sql += " ORDER BY actualizado DESC LIMIT ?"
+    params.append(limite)
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()
+    finally:
+        con.close()
+    costes = [float(f["coste_usd"]) for f in filas]
+    por_imagen = (sum(costes) / len(costes)) if costes else None
+    return {"por_imagen": por_imagen, "muestras": len(costes), "modelo": modelo or ""}
 
 
 def gasto_ia_del_dia(dia: str) -> dict[str, Any]:
