@@ -103,7 +103,7 @@ describe("Producción (feed unificado: runs del pipeline + actividad suelta)", (
     vi.unstubAllGlobals();
   });
 
-  it("la economía de tokens se movió a Workers: aquí solo queda el feed + un enlace", async () => {
+  it("la economía de tokens se movió a Agentes: aquí solo queda el feed + un enlace", async () => {
     stubFetch();
     renderConProviders(<Produccion />);
     // Espera al feed para asegurar el render completo.
@@ -112,9 +112,9 @@ describe("Producción (feed unificado: runs del pipeline + actividad suelta)", (
     expect(screen.queryByText("Trabajos IA")).toBeNull();
     expect(screen.queryByText("Coste total")).toBeNull();
     expect(screen.queryByText("Tiempo de cómputo")).toBeNull();
-    // En su lugar, un enlace breve al dashboard de Workers.
-    const enlace = screen.getByRole("link", { name: /Econom[ií]a de tokens.*Workers/i });
-    expect(enlace).toHaveAttribute("href", "/maquina/cola");
+    // En su lugar, un enlace breve a la página Agentes.
+    const enlace = screen.getByRole("link", { name: /Econom[ií]a de tokens.*Agentes/i });
+    expect(enlace).toHaveAttribute("href", "/maquina/agentes");
   });
 
   it("junto a los filtros solo va el CONTEO del feed", async () => {

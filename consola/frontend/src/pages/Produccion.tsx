@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Coins, Factory, RefreshCw, SquarePen } from "lucide-react";
+import { Coins, Factory, RefreshCw } from "lucide-react";
 import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -38,13 +38,14 @@ const PAGINA = 20;
  * etapa con el nombre de su trabajo — mismo aspecto, mismas métricas (tokens · coste ·
  * duración), mismo detalle entrada/salida al abrirla.
  *
- * La ECONOMÍA de tokens (conteos del periodo + desglose por tipo/día) se MOVIÓ al dashboard de
- * Workers (`/maquina/cola`), donde vive JUNTA con el gasto por proceso y el pool reactivo; aquí
- * queda solo el feed. (El catálogo de tipos del filtro sigue saliendo de los mismos agregados.)
+ * La ECONOMÍA de tokens (conteos del periodo + desglose por tipo/día) se MOVIÓ a la página
+ * Agentes (`/maquina/agentes`), donde vive JUNTA con el gasto por proceso y el pool reactivo;
+ * aquí queda solo el feed. El catálogo de tipos del filtro se deriva del propio feed (no hay
+ * ya una query aparte de agregados solo para eso).
  *
- * `embebido`: cuando el feed se monta DENTRO del dashboard de Workers (sección «Actividad»,
- * `/maquina/cola`), no aporta su propio título/menú de página (los pone Workers) ni el enlace
- * «Economía de tokens → Workers» (sería circular). Como página suelta (default) sí los pinta.
+ * `embebido`: cuando el feed se monta DENTRO de la página Agentes (sección «Actividad»,
+ * `/maquina/agentes`), no aporta su propio título/menú de página (los pone Agentes) ni el
+ * enlace «Economía de tokens → Agentes» (sería circular). Como página suelta sí los pinta.
  */
 export default function Produccion({ embebido = false }: { embebido?: boolean }) {
   const navigate = useNavigate();
@@ -72,29 +73,29 @@ export default function Produccion({ embebido = false }: { embebido?: boolean })
     refetchInterval: INTERVALO_SERIE_MS,
     placeholderData: (prev) => prev, // no parpadea al «Cargar más» ni al cambiar de filtro
   });
-  const agregadosQuery = useQuery({
-    queryKey: ["actividad", "agregados", marcaParam ?? "todas"],
-    queryFn: ({ signal }) => api.actividadAgregados({ marca: marcaParam }, signal),
-  });
 
   const datos = listaQuery.data as RespuestaPipelines | undefined;
   const items = datos?.pipelines ?? [];
   const total = datos?.paginacion?.total ?? items.length;
   const hayFiltro = !!(etapa || estado || tipo);
 
-  // Catálogo de tipos para el filtro: de los agregados (visión global, no solo lo cargado).
+  // Catálogo de tipos para el filtro: se deriva del PROPIO feed (los trabajos sueltos traen
+  // `tipo`). Antes salía de una query aparte a `/api/actividad/agregados` que ya no se usaba
+  // para nada más; se retiró (una sola fuente, una petición menos).
   const tipos = React.useMemo(
     () =>
-      (agregadosQuery.data?.por_tipo ?? [])
-        .map((t) => t.tipo)
-        .filter((t) => t && t !== "pipeline") // el trabajo del pipeline ya se ve como runs
-        .sort((a, b) => a.localeCompare(b, "es-MX")),
-    [agregadosQuery.data],
+      Array.from(
+        new Set(
+          (datos?.pipelines ?? [])
+            .map((it) => it.tipo)
+            .filter((t): t is string => !!t && t !== "pipeline"), // las runs ya se ven como tales
+        ),
+      ).sort((a, b) => a.localeCompare(b, "es-MX")),
+    [datos],
   );
 
   function refrescar() {
     void listaQuery.refetch();
-    void agregadosQuery.refetch();
   }
 
   // Cada item abre su detalle: una run, su página estilo GitLab; un trabajo suelto, la
@@ -112,7 +113,7 @@ export default function Produccion({ embebido = false }: { embebido?: boolean })
     [navigate],
   );
 
-  const cargandoTodo = listaQuery.isPending || agregadosQuery.isPending;
+  const cargandoTodo = listaQuery.isPending;
 
   return (
     <div className="space-y-6">
@@ -124,24 +125,20 @@ export default function Produccion({ embebido = false }: { embebido?: boolean })
           <TituloPagina titulo="Producción" icono={Factory} />
           <AccionesPagina>
             <MenuAcciones>
-              <ItemMenu
-                icono={RefreshCw}
-                onClick={refrescar}
-                disabled={listaQuery.isFetching || agregadosQuery.isFetching}
-              >
+              <ItemMenu icono={RefreshCw} onClick={refrescar} disabled={listaQuery.isFetching}>
                 Actualizar
               </ItemMenu>
             </MenuAcciones>
           </AccionesPagina>
 
-          {/* La economía de tokens (conteos + desglose por tipo/día) se unificó en el dashboard de
-              Workers, junto al gasto por proceso y el pool. Aquí queda el feed; enlace breve allí. */}
+          {/* La economía de tokens (conteos + desglose por tipo/día) se unificó en la página
+              Agentes, junto al gasto por proceso y el pool. Aquí queda el feed; enlace breve allí. */}
           <Link
-            to="/maquina/cola"
+            to="/maquina/agentes"
             className="flex items-center gap-1.5 text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
           >
             <Coins className="h-4 w-4" aria-hidden="true" />
-            Economía de tokens → Workers
+            Economía de tokens → Agentes
           </Link>
         </>
       )}
@@ -201,28 +198,6 @@ export default function Produccion({ embebido = false }: { embebido?: boolean })
           </span>
         )}
       </div>
-
-      {/* Enlace cruzado proceso → Biblioteca (ADR 0011 F2): las etapas con IA del proceso
-          (Copy, Arte) se editan en la Biblioteca de Prompts; deep-link con el doc abierto. */}
-      <p className="-mt-3 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-        <SquarePen className="h-3 w-3" aria-hidden />
-        Prompts del proceso en la Biblioteca:
-        <Link
-          to="/contenido/texto/documentos?doc=prompt%2Fcopy"
-          className="underline-offset-2 hover:text-foreground hover:underline"
-          title="Editar el prompt de Copy en la Biblioteca"
-        >
-          Copy
-        </Link>
-        ·
-        <Link
-          to="/contenido/texto/documentos?doc=prompt%2Farte"
-          className="underline-offset-2 hover:text-foreground hover:underline"
-          title="Editar el prompt de Arte en la Biblioteca"
-        >
-          Arte
-        </Link>
-      </p>
 
       {/* Feed unificado: runs del pipeline + actividad suelta, recientes primero. */}
       {cargandoTodo && listaQuery.isPending ? (

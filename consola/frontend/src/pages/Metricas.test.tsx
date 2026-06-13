@@ -43,6 +43,14 @@ vi.mock("./metricas/MetricaPorLinea", () => ({ MetricaPorLinea: () => null }));
 vi.mock("./metricas/SeccionAds", () => ({ SeccionAds: () => null }));
 vi.mock("./metricas/GraficaMarcas", () => ({ GraficaMarcas: () => null }));
 
+// La conexión Metricool vive ahora como AJUSTE del "⋮" de Analíticas (solo admin). El panel
+// solo se monta al abrir el menú; lo stubeamos para no arrastrar su query, y damos una sesión
+// admin para que `useSesion` no truene (Metricas no se envuelve en SesionProvider en el test).
+vi.mock("@/pages/configuracion/SeccionMetricool", () => ({ SeccionMetricool: () => null }));
+vi.mock("@/hooks/sesion-contexto", () => ({
+  useSesion: () => ({ usuario: { id: "u1", rol: "admin" } }),
+}));
+
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const OPCIONES: OpcionesMetricas = {
