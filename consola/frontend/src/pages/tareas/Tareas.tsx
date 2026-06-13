@@ -2,7 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import { ListChecks, Plus, Trophy } from "lucide-react";
 import * as React from "react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
@@ -20,11 +19,11 @@ import { agrupar, type Item } from "./tipos";
 // se vea sin recargar (igual que el reparto del feed que esto sustituye).
 const REFRESCO = { refetchInterval: 45_000, refetchOnWindowFocus: true };
 
-/** Lente sobre la MISMA lista: el panorama (agenda de equipo), el pool a coger, o lo mío. */
-type Lente = "panorama" | "libres" | "mias";
+/** Lente sobre la MISMA lista: el panorama (agenda de equipo) o lo mío. «Por cubrir» NO es una
+ * lente: ya vive como el chip ámbar dentro de Panorama (que filtra a lo pendiente, por día). */
+type Lente = "panorama" | "mias";
 const LENTES: { id: Lente; etiqueta: string }[] = [
   { id: "panorama", etiqueta: "Panorama" },
-  { id: "libres", etiqueta: "Por cubrir" },
   { id: "mias", etiqueta: "Mis tareas" },
 ];
 
@@ -104,7 +103,6 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
   };
 
   const cumpleLente = (i: Item) => {
-    if (lente === "libres") return esPorCubrir(i);
     if (lente === "mias") return esMio(i);
     return true;
   };
@@ -126,7 +124,6 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
       items: visibles.filter((i) => i.kind === "tarea" && i.tarea.estado === "hecha"),
     },
   ];
-  const conteoPorCubrir = items.filter(esPorCubrir).length;
 
   const pintar = (i: Item) =>
     i.kind === "evento" ? (
@@ -148,9 +145,7 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
     visibles.length === 0 ? (
       <div className="rounded-lg border border-dashed border-border p-8 text-center">
         <p className="text-sm text-muted-foreground">
-          {lente === "mias"
-            ? "No tienes nada asignado. Coge algo de «Por cubrir»."
-            : "No hay nada por cubrir ahora mismo."}
+          No tienes nada asignado. Coge algo de «Por cubrir» en Panorama.
         </p>
       </div>
     ) : (
@@ -184,14 +179,6 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
             {LENTES.map((l) => (
               <TabsTrigger key={l.id} value={l.id}>
                 {l.etiqueta}
-                {l.id === "libres" && conteoPorCubrir > 0 && (
-                  <Badge
-                    variant="outline"
-                    className="ml-1.5 bg-background px-1.5 py-0 tabular-nums"
-                  >
-                    {conteoPorCubrir}
-                  </Badge>
-                )}
               </TabsTrigger>
             ))}
           </TabsList>
@@ -210,9 +197,6 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
                 marca={marca}
                 esAdmin={usuario?.rol === "admin"}
               />
-            </TabsContent>
-            <TabsContent value="libres" className="space-y-4">
-              {listaAgrupada}
             </TabsContent>
             <TabsContent value="mias" className="space-y-4">
               {listaAgrupada}
