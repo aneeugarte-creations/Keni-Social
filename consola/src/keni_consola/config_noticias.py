@@ -49,6 +49,7 @@ from ._config_comun import (
     ENV_NOTICIAS_GC_SCORE_UMBRAL,
     ENV_PERFIL_EDITORIAL_TTL_HORAS,
     ENV_PIPELINE_ARTE,
+    ENV_PIPELINE_CALIDAD,
     ENV_PIPELINE_COPY,
     ENV_PIPELINE_EN_VUELO_MAX,
     ENV_PIPELINE_FETCH_FUENTE,
@@ -813,6 +814,18 @@ def alguna_etapa_produccion_activa() -> bool:
 # Alias retro: "alguna etapa del pipeline" = el loop de producción (siempre-activo bajo la
 # máquina). Lo conservan tests y llamadores previos al split en dos procesos (ADR 0011 F3).
 alguna_etapa_pipeline_activa = alguna_etapa_produccion_activa
+
+
+def pipeline_calidad_activo() -> bool:
+    """True si la ETAPA de CALIDAD del copy debe cribar antes del avance (`KENI_PIPELINE_CALIDAD`).
+
+    Def OFF (conservador, como el resto de etapas): sin el flag el avance a revisión no cambia.
+    Con el flag, antes de mover un borrador completo a la cola de revisión la IA "hacia adentro"
+    verifica la VOZ del copy contra los patrones medidos de la marca (+ coherencia barata con la
+    nota de origen). ADVISORY/safe-by-default: nunca bloquea ni descarta; si detecta algo, degrada
+    el veredicto (`listo`→`revisar`) y deja una nota para que el humano decida.
+    """
+    return _crudo(ENV_PIPELINE_CALIDAD).lower() in _VERDADEROS
 
 
 def autogen_arte_activo() -> bool:

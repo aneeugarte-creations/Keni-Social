@@ -298,6 +298,16 @@ ENV_PIPELINE_VALIDACION = "KENI_PIPELINE_VALIDACION"
 ENV_PIPELINE_ARTE = "KENI_PIPELINE_ARTE"
 ENV_AUTOGEN_ARTE_MAX = "KENI_AUTOGEN_ARTE_MAX"
 
+# Etapa de CALIDAD del COPY del pipeline: "Validar copy" (`KENI_PIPELINE_CALIDAD`, toggle de etapa).
+# ANTES de que un borrador completo avance solo a la cola de revisión (etapa AVANCE), la IA "hacia
+# adentro" filtra la CALIDAD del copy generado: verificación de VOZ contra los patrones medidos de
+# la marca (`patrones_marca`) + chequeo barato de COHERENCIA con la nota de origen. ADVISORY y
+# SAFE-by-default (mismo patrón que `dominio.copy.verificar_voz`): NUNCA bloquea el avance ni
+# descarta la pieza; si detecta algo, DEGRADA el veredicto (`listo`→`revisar`) y deja una nota para
+# que el humano decida en la revisión. CONSERVADOR por defecto (OFF): sin el flag el avance no
+# cambia. Existe la criba de la FUENTE (QA pre-copy); esto es la criba del COPY ya redactado.
+ENV_PIPELINE_CALIDAD = "KENI_PIPELINE_CALIDAD"
+
 # La etapa de AVANCE (un borrador COMPLETO pasa SOLO a la cola de revisión con la misma cadena
 # que el envío humano) ya NO es configurable: corre incondicionalmente bajo el maestro
 # KENI_MAQUINA. «Borrador» dejó de ser un estado donde descanse una pieza completa, así que no

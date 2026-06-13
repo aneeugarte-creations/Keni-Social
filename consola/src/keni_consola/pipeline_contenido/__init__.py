@@ -145,6 +145,12 @@ from ._comun import (
     temas_pipeline,
     EMBUDO_QA_ESTADOS,
 )
+from ._calidad import (
+    avisos_calidad,
+    avisos_coherencia,
+    avisos_voz,
+    verificar_calidad_pieza,
+)
 from ._copy import (
     encadenar_arte_tras_copy,
     encadenar_copy_tras_qa,
@@ -293,6 +299,11 @@ __all__ = [
     "temas_autogen_sin_copy",
     "encadenar_copy_tras_qa",
     "encadenar_arte_tras_copy",
+    # CALIDAD del copy (criba advisory pre-avance)
+    "avisos_voz",
+    "avisos_coherencia",
+    "avisos_calidad",
+    "verificar_calidad_pieza",
     # barrido / daemon
     "ejecutar_barrido",
     "_ejecutar_barrido",
