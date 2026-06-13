@@ -24,6 +24,7 @@ from ._comun import (
     QA_EN_CURSO,
     QA_SALTADA,
     VERDICTO_NO_VERIFICADO,
+    VERIFICADAS_QA,
     _limpiar_snippet,
     _log,
     registrar_etapa,
@@ -352,14 +353,15 @@ def _nota_de_cluster(
 
 def clusters_para_promover(
     marca: str, *, maximo: int, cupos_categoria: dict[str, int] | None = None,
-    qa_estados: tuple[str, ...] | None = None,
+    qa_estados: tuple[str, ...] = VERIFICADAS_QA,
 ) -> list[dict[str, Any]]:
     """Top-N historias (`estado='nuevo'`) de la marca por SCORE, con LISTÓN y DIVERSIDAD. Best-effort.
 
-    `qa_estados` (ADR 0011 F3): si se pasa, se restringe a las historias cuyo `qa_veredicto` está
-    en ese conjunto — la ADMISIÓN solo promueve las VERIFICADAS (`no_verificado`/`saltada`), así
-    las `problema` y las aún sin cribar no se materializan como contenido. None = sin filtro de
-    QA (comportamiento previo; lo usan los tests que llaman directo a la promoción).
+    `qa_estados` (ADR 0011 F3): el filtro de QA es OBLIGATORIO — por defecto a las VERIFICADAS
+    (`VERIFICADAS_QA` = `no_verificado`/`saltada`), así la admisión SIEMPRE criba: las `problema`
+    y las aún sin cribar nunca se materializan como contenido (no existe un camino que promueva
+    sin filtrar). Se puede ESTRECHAR a un subconjunto, nunca abrir a "todo": un conjunto vacío
+    promueve cero (fail-closed), no todo.
 
     Reusa el pool ya FUSIONADO y RANKEADO (Ola B): `listar_noticia_clusters` viene ordenado por
     score (mayor primero). Así el pipeline produce las pocas historias más relevantes por marca
@@ -387,10 +389,9 @@ def clusters_para_promover(
     # Con PLAN (cupos por categoría) la muestra crece: las categorías minoritarias del plan
     # pueden vivir lejos del top global del pool.
     limite = max(maximo * 4, maximo + 8) if cupos_categoria is None else max(maximo * 10, 80)
-    # Con filtro de QA las verificadas pueden vivir más abajo en el ranking (solo se cribó el top
-    # del embudo): sobremuestrea más para no quedarte corto al filtrar por veredicto.
-    if qa_estados is not None:
-        limite = max(limite, 80)
+    # Con el filtro de QA las verificadas pueden vivir más abajo en el ranking (solo se cribó el
+    # top del embudo): sobremuestrea más para no quedarte corto al filtrar por veredicto.
+    limite = max(limite, 80)
     try:
         clusters, _total = repos.listar_noticia_clusters(
             marca=marca, estado="nuevo", limite=limite
@@ -398,8 +399,8 @@ def clusters_para_promover(
     except Exception:  # noqa: BLE001 -- sin pool legible, esta marca no promueve nada
         _log.warning("pipeline: no se pudieron leer historias para promover (%s)", marca, exc_info=True)
         return []
-    if qa_estados is not None:
-        clusters = [c for c in clusters if (c.get("qa_veredicto") or "").strip() in qa_estados]
+    # Filtro de QA OBLIGATORIO: solo cruzan las historias con un veredicto admitido.
+    clusters = [c for c in clusters if (c.get("qa_veredicto") or "").strip() in qa_estados]
     aptas: list[dict[str, Any]] = []
     bajo_liston = 0
     for c in clusters:
@@ -847,14 +848,14 @@ def _fecha_aware(crudo: str) -> datetime | None:
 
 def promover_clusters_marca(
     marca: str, *, maximo: int, cupos_categoria: dict[str, int] | None = None,
-    qa_estados: tuple[str, ...] | None = None,
+    qa_estados: tuple[str, ...] = VERIFICADAS_QA,
 ) -> list[dict[str, Any]]:
     """CI — promueve a temas las top-N historias rankeadas de una marca. Registra la etapa CI.
 
     Reemplaza la lectura directa de feeds RSS (que creaba un tema por item): ahora consume el pool
-    ya fusionado/rankeado (Ola B). `qa_estados` (ADR 0011 F3) restringe a las historias con ese
-    veredicto de QA (la admisión solo promueve las VERIFICADAS). Devuelve los temas creados.
-    Best-effort por historia.
+    ya fusionado/rankeado (Ola B). El filtro `qa_estados` (ADR 0011 F3) es OBLIGATORIO — por
+    defecto las VERIFICADAS (`VERIFICADAS_QA`): la admisión SIEMPRE criba, no hay camino que
+    promueva sin filtrar por veredicto. Devuelve los temas creados. Best-effort por historia.
     """
     clusters = clusters_para_promover(
         marca, maximo=maximo, cupos_categoria=cupos_categoria, qa_estados=qa_estados

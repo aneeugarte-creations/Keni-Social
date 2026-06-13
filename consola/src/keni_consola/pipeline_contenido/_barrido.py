@@ -24,6 +24,7 @@ from ._comun import (
     QA_EN_CURSO,
     QA_SALTADA,
     VERDICTO_NO_VERIFICADO,
+    VERIFICADAS_QA,
     _log,
     anotar_intento,
     en_backoff,
@@ -33,7 +34,7 @@ from ._comun import (
 from ._avance import ejecutar_avance
 from ._copy import lanzar_copy_de_tema, temas_autogen_sin_copy, temas_para_copy
 from ._ingesta import clusters_pendientes_qa, promover_clusters_marca
-from ._qa import lanzar_qa_cluster, lanzar_qa_fuente, temas_sin_qa
+from ._qa import lanzar_qa_cluster
 
 __all__ = [
     "ejecutar_barrido",
@@ -42,7 +43,6 @@ __all__ = [
     "_ejecutar_investigacion",
     "ejecutar_produccion",
     "_ejecutar_produccion",
-    "ejecutar_qa",
     "ejecutar_qa_clusters",
     "ejecutar_cd",
     "ejecutar_arte",
@@ -122,8 +122,6 @@ def ejecutar_barrido() -> dict[str, Any]:
 # no se admitieron (en vuelo, verificados-pendientes o saltados). Acotan cuánta QA se lanza por
 # tick (presupuesto = tope en vuelo − embudo) para que la criba no recorra todo el pool.
 _FUNNEL_QA = (QA_EN_CURSO, VERDICTO_NO_VERIFICADO, QA_SALTADA)
-# Veredictos que SÍ admiten a producción: la historia pasó la criba (o la QA estaba saltada).
-_VERIFICADAS = (VERDICTO_NO_VERIFICADO, QA_SALTADA)
 
 
 def _ejecutar_investigacion() -> dict[str, Any]:
@@ -184,7 +182,7 @@ def _ejecutar_investigacion() -> dict[str, Any]:
         try:
             temas_nuevos.extend(promover_clusters_marca(
                 marca, maximo=min(maximo, cupo), cupos_categoria=cupos_cat,
-                qa_estados=_VERIFICADAS,
+                qa_estados=VERIFICADAS_QA,
             ))
         except Exception:  # noqa: BLE001 -- un fallo de una marca no rompe el barrido
             _log.exception("pipeline: fallo la admisión de historias (CI) de la marca %s", marca)
@@ -288,63 +286,15 @@ def _ejecutar_barrido() -> dict[str, Any]:
     return {**inv, **prod}
 
 
-def ejecutar_qa(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
-    """Fase QA del tick: lanza la CRIBA de la fuente (`claude -p`) de los temas sin veredicto.
-
-    SIN tope propio (flujo continuo): aquí solo puede haber lo que la ADMISIÓN dejó entrar (gate
-    serial en vuelo por marca); el backpressure real lo pone la cola (`ColaLlenaError` corta la
-    fase y el siguiente tick reintenta). REINTENTOS ACOTADOS: cada lanzamiento anota su intento
-    en el tema; al agotar `_MAX_INTENTOS_ETAPA`, el tema se marca `problema` (sale del cupo en
-    vuelo y el fallo queda visible). Best-effort por tema. Devuelve los temas cuya QA se lanzó.
-    """
-    if autor is None:
-        autor = _ref._autor_pipeline()
-    cribados: list[dict[str, Any]] = []
-    for tema in temas_sin_qa():
-        marca_t = tema.get("marca") or ""
-        # Etapa QA desactivada (`KENI_PIPELINE_VALIDACION` off, global o `::marca`): se SALTA la criba.
-        # No se lanza `claude -p`; se marca el tema `saltada` para que CD lo recoja igual (sin
-        # verificar) y la vista Pipelines pinte QA como "saltada". No cuenta para el cap ni rompe.
-        # Misma FUENTE ÚNICA (config.etapa_activa) que la vista y el catálogo de ajustes.
-        if not config.etapa_activa(config.ENV_PIPELINE_VALIDACION, marca_t):
-            try:
-                repos.actualizar_contenido(tema.get("id", "") or "", {"qa_veredicto": QA_SALTADA})
-            except Exception:  # noqa: BLE001 -- un fallo al marcar saltada no debe matar la fase
-                _log.exception("pipeline: fallo al marcar QA saltada de un tema.")
-            else:
-                cribados.append({"id": tema.get("id", ""), "gen_id": "", "verdicto": QA_SALTADA})
-            continue
-        # Reintentos acotados: una QA que falla vuelve a "sin veredicto" (saneo del worker) y se
-        # relanzaría cada tick para siempre; al agotar los intentos, salida TERMINAL (problema).
-        if intentos_de(tema, "qa_intentos") >= _MAX_INTENTOS_ETAPA:
-            marcar_fallo_etapa(
-                tema.get("id", "") or "", "Validación",
-                f"La criba de la fuente falló {_MAX_INTENTOS_ETAPA} veces.",
-            )
-            continue
-        # Backoff creciente entre intentos (1/4/16 min): un fallo transitorio no quema los 3
-        # intentos en <1 min con el tick corto; se SALTA el tema (el barrido no duerme).
-        if en_backoff(tema, "qa_intentos"):
-            continue
-        try:
-            gen = lanzar_qa_fuente(tema, autor=autor)
-        except generaciones.ColaLlenaError as e:
-            # El mensaje distingue cola llena de pausa/presupuesto (subclases): que el log diga
-            # la verdad ("presupuesto agotado" no es "demasiadas generaciones").
-            _log.info("pipeline: QA en pausa por admisión (%s); el resto entra en el próximo tick.", e)
-            break
-        except Exception:  # noqa: BLE001 -- un fallo por tema no debe matar la fase QA
-            _log.exception(
-                "pipeline: fallo la criba de la fuente (QA) del tema %s (marca %s).",
-                tema.get("id", ""), marca_t,
-            )
-            continue
-        if gen is not None:
-            # El intento se anota TRAS el lanzamiento efectivo: una cola llena o un fallo
-            # previo al lanzamiento no queman intentos (solo los `claude -p` reales cuentan).
-            anotar_intento(tema, "qa_intentos")
-            cribados.append({"id": tema.get("id", ""), "gen_id": gen.get("id", ""), "verdicto": QA_EN_CURSO})
-    return cribados
+# UN SOLO CAMINO DE QA (ADR 0011 F3): la criba corre SOBRE EL CLUSTER, PRE-admisión
+# (`ejecutar_qa_clusters`), nunca sobre el TEMA post-admisión. Aquí vivía `ejecutar_qa` (criba de
+# TEMAS ya materializados, post-frontera): se RETIRÓ por duplicar el camino y por poder dejar un
+# TEMA en `qa_veredicto='en_curso'`. La FRONTERA queda nítida en código: Investigación verifica la
+# fuente ANTES de cruzar (cluster → veredicto) y la admisión solo promueve las VERIFICADAS; ningún
+# barrido pone ya un TEMA en `en_curso` (el único escritor, `_qa.lanzar_qa_fuente`, ya no tiene
+# llamador en los loops — solo lo invoca el `procesar`/encadenado del camino manual/legado). Por
+# eso el reaper de TEMAS `en_curso` (`reaper_generaciones._sanear_qa_en_curso`) queda como mera red
+# para filas legadas, no para un camino vivo.
 
 
 def ejecutar_cd(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:

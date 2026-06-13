@@ -101,12 +101,18 @@ def _sembrar_cluster(
     cid, *, marca="unotv", titulo="Historia X", score=0.5, estado="nuevo",
     resumen="México: el gobierno informa de seguridad en la CDMX", ultimo_visto=None,
     verificacion="corroborada", n_fuentes=2, categoria="mx", breaking=0,
+    qa_veredicto="",
 ):
     """Siembra un cluster del pool (Ola B) para los tests de promoción CI→tema.
 
     Por defecto el cluster SUPERA el listón de producción automática (`noticias_liston`):
     FRESCO (`ultimo_visto` ≈ ahora), corroborado y con encaje de marca unotv por el resumen.
     Los tests del propio listón pasan valores que lo incumplen a propósito.
+
+    `qa_veredicto`: estado de la criba del cluster. Por defecto "" (sin cribar, el estado del que
+    parte la QA de investigación). La ADMISIÓN solo promueve las VERIFICADAS, así que los tests
+    que llaman DIRECTO a la promoción (sin pasar por la fase QA) deben sembrar el cluster ya
+    verificado (`VERDICTO_NO_VERIFICADO`) — es el camino real, no el atajo sin filtro.
     """
     from datetime import UTC, datetime
 
@@ -119,6 +125,8 @@ def _sembrar_cluster(
         or datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="seconds"),
         "estado": estado, "verificacion": verificacion,
     })
+    if qa_veredicto:
+        repos.marcar_cluster_qa(cid, qa_veredicto)
     return repos.obtener_noticia_cluster(cid)
 
 
@@ -562,8 +570,9 @@ def test_qa_problema_no_genera_copy_y_marca_tema(entorno, monkeypatch):
     llamadas = _mock_lanzar_copy(monkeypatch)
     tema = _tema_pipeline(titulo="Tema malo")
 
-    # Fase QA: lanza la criba (síncrona en test) -> el procesar persiste el veredicto en el tema.
-    pc.ejecutar_qa(autor=None)
+    # QA de la fuente (síncrona en test) -> el procesar persiste el veredicto en el tema. El
+    # camino tema-QA es el manual/legado (`lanzar_qa_fuente`); el barrido criba CLUSTERS, no temas.
+    pc.lanzar_qa_fuente(tema, autor=None)
     refrescado = repos.obtener_contenido(tema["id"])
     assert refrescado["qa_veredicto"] == pc.VERDICTO_PROBLEMA
     assert "es falso" in (refrescado["qa_hallazgos"] or "")
@@ -589,7 +598,7 @@ def test_qa_no_verificado_genera_copy_con_aviso(entorno, monkeypatch):
     llamadas = _mock_lanzar_copy(monkeypatch)
     tema = _tema_pipeline(titulo="Tema ok")
 
-    pc.ejecutar_qa(autor=None)
+    pc.lanzar_qa_fuente(tema, autor=None)
     refrescado = repos.obtener_contenido(tema["id"])
     assert refrescado["qa_veredicto"] == pc.VERDICTO_NO_VERIFICADO
 
@@ -617,7 +626,7 @@ def test_encadenado_no_dispara_copy_si_cd_apagada(entorno, monkeypatch):
     llamadas = _mock_lanzar_copy(monkeypatch)
     tema = _tema_pipeline(titulo="Sin CD")
 
-    pc.ejecutar_qa(autor=None)
+    pc.lanzar_qa_fuente(tema, autor=None)
 
     assert repos.obtener_contenido(tema["id"])["qa_veredicto"] == pc.VERDICTO_NO_VERIFICADO
     assert llamadas == []  # el encadenado no salta el toggle de copy
@@ -635,7 +644,7 @@ def test_encadenado_cola_llena_no_rompe_la_qa(entorno, monkeypatch):
     monkeypatch.setattr(pc.gen_dom, "lanzar_copy", _llena)
     tema = _tema_pipeline(titulo="Cola llena")
 
-    pc.ejecutar_qa(autor=None)  # no debe reventar
+    pc.lanzar_qa_fuente(tema, autor=None)  # no debe reventar
 
     # El veredicto SÍ quedó persistido y el tema sigue elegible para el barrido de CD.
     assert repos.obtener_contenido(tema["id"])["qa_veredicto"] == pc.VERDICTO_NO_VERIFICADO
@@ -760,74 +769,6 @@ def test_temas_para_copy_devuelve_todos_los_listos(entorno):
     assert {t["id"] for t in pc.temas_para_copy()} == {"n1", "n2"}
 
 
-def test_qa_sin_tope_lanza_todos_los_admitidos(entorno, monkeypatch):
-    """FLUJO CONTINUO: la fase QA criba TODO lo admitido en un tick (sin cap por etapa)."""
-    monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")
-    cliente = _cliente()  # noqa: F841 -- lanzador noop: deja la QA en `ejecutando` (en_curso)
-    for i in range(4):
-        _tema_pipeline(titulo=f"T{i}", id=f"tqa{i}")
-
-    cribados = pc.ejecutar_qa(autor=None)
-    assert len(cribados) == 4  # todo lo admitido entra; el backpressure lo pone la cola
-
-
-def test_qa_reintentos_agotados_marca_problema_sin_lanzar(entorno, monkeypatch):
-    """REINTENTOS ACOTADOS: una QA que ya agotó sus intentos sale TERMINAL (problema), sin claude.
-
-    Con el tick corto, una QA que falla se relanzaría cada pocos segundos para siempre; al agotar
-    `_MAX_INTENTOS_ETAPA` el tema se marca `problema` (sale del cupo en vuelo, fallo visible).
-    """
-    import json
-
-    monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")
-    cliente = _cliente()  # noqa: F841
-    pend = json.dumps({"nota": "n", "redes_ids": ["x"], "qa_intentos": pc._MAX_INTENTOS_ETAPA})
-    tema = _tema_pipeline(titulo="QA agotada", copy_pendiente=pend)
-
-    cribados = pc.ejecutar_qa(autor=None)
-
-    assert cribados == []  # no se lanzó criba
-    refrescado = repos.obtener_contenido(tema["id"])
-    assert refrescado["qa_veredicto"] == pc.VERDICTO_PROBLEMA
-    assert "falló" in (refrescado["qa_hallazgos"] or "")
-    # Terminal: sale del cupo en vuelo de su marca (la admisión se libera).
-    assert pc.temas_en_vuelo("unotv") == 0
-
-
-def test_qa_lanzamiento_anota_intento_y_timestamp(entorno, monkeypatch):
-    """Cada criba REAL anota su intento + instante en `copy_pendiente` (tope y backoff)."""
-    import json
-
-    monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")
-    cliente = _cliente()  # noqa: F841 -- lanzador noop: la QA queda en_curso
-    tema = _tema_pipeline(titulo="Cuenta intentos")
-
-    pc.ejecutar_qa(autor=None)
-
-    pend = json.loads(repos.obtener_contenido(tema["id"])["copy_pendiente"])
-    assert pend["qa_intentos"] == 1
-    assert (pend.get("qa_intentos_ts") or "").strip()  # base del backoff entre reintentos
-
-
-def test_qa_backoff_salta_y_reintenta_tras_la_espera(entorno, monkeypatch):
-    """BACKOFF en QA: un tema recién fallado se SALTA (sin quemar intento); pasada la espera entra."""
-    from keni_consola.tiempo import ahora_iso
-
-    monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")
-    cliente = _cliente()  # noqa: F841 -- lanzador noop
-    pend = json.dumps({
-        "nota": "n", "redes_ids": ["x"], "qa_intentos": 1, "qa_intentos_ts": ahora_iso(),
-    })
-    tema = _tema_pipeline(titulo="QA en backoff", copy_pendiente=pend)
-
-    assert pc.ejecutar_qa(autor=None) == []  # en espera: ni lanza ni quema intento
-    assert json.loads(repos.obtener_contenido(tema["id"])["copy_pendiente"])["qa_intentos"] == 1
-
-    _envejecer_intento(tema["id"], "qa_intentos")
-    cribados = pc.ejecutar_qa(autor=None)
-    assert [c["id"] for c in cribados] == [tema["id"]]
-
-
 def test_cd_sin_tope_lanza_todos_los_listos(entorno, monkeypatch):
     """FLUJO CONTINUO: la fase CD redacta TODOS los temas listos en un tick (sin cap por etapa)."""
     monkeypatch.setenv("KENI_PIPELINE_COPY", "1")
@@ -942,9 +883,10 @@ def test_dos_loops_investigacion_y_produccion_separan_fases(entorno, monkeypatch
 def test_promover_clusters_top_n_por_score(entorno, monkeypatch):
     """`promover_clusters_marca` promueve las top-N historias por score y las marca usado."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    _sembrar_cluster("baja", titulo="Score bajo", score=0.1)
-    _sembrar_cluster("alta", titulo="Score alto", score=0.9)
-    _sembrar_cluster("media", titulo="Score medio", score=0.5)
+    # Verificadas (estado real tras la QA): la admisión SIEMPRE criba — solo promueve verificadas.
+    _sembrar_cluster("baja", titulo="Score bajo", score=0.1, qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    _sembrar_cluster("alta", titulo="Score alto", score=0.9, qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    _sembrar_cluster("media", titulo="Score medio", score=0.5, qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
 
     temas = pc.promover_clusters_marca("unotv", maximo=2)
 
@@ -954,6 +896,21 @@ def test_promover_clusters_top_n_por_score(entorno, monkeypatch):
     assert all((t.get("copy_pendiente") or "").strip() for t in temas)
     assert repos.obtener_noticia_cluster("alta")["estado"] == "usado"
     assert repos.obtener_noticia_cluster("baja")["estado"] == "nuevo"  # no promovida
+
+
+def test_promover_clusters_marca_filtra_sin_cribar_por_defecto(entorno, monkeypatch):
+    """El filtro de QA es OBLIGATORIO por defecto (ADR 0011 F3): un cluster SIN cribar (veredicto
+    '') NO se promueve aunque gane en score/listón — no existe un camino que promueva sin verificar.
+    """
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    _sembrar_cluster("sin_cribar", titulo="Aún sin QA", score=0.9)  # qa_veredicto='' por defecto
+    _sembrar_cluster("verificada", titulo="Ya verificada", score=0.5,
+                     qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+
+    temas = pc.promover_clusters_marca("unotv", maximo=5)  # SIN qa_estados: cae al filtro por defecto
+
+    assert {t["titulo"] for t in temas} == {"Ya verificada"}  # la sin cribar NO cruza
+    assert repos.obtener_noticia_cluster("sin_cribar")["estado"] == "nuevo"  # se queda en el pool
 
 
 def test_crear_tema_de_cluster_dedup_no_repromueve(entorno, monkeypatch):
@@ -1314,8 +1271,10 @@ def test_promocion_persiste_categoria_en_el_contenido(entorno, monkeypatch):
     # 'breaking' en el plan, una última hora competiría por el cupo 'mx' (ver
     # test_plan_sin_linea_breaking_compite_por_su_feed) y desplazaría a la nacional.
     monkeypatch.setenv("KENI_PLAN_DIA", "mx:1,breaking:1")
-    _sembrar_cluster("cat1", titulo="Nacional persistida", score=0.9, categoria="mx")
-    _sembrar_cluster("cat2", titulo="Urgente persistida", score=0.9, categoria="mx", breaking=1)
+    _sembrar_cluster("cat1", titulo="Nacional persistida", score=0.9, categoria="mx",
+                     qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    _sembrar_cluster("cat2", titulo="Urgente persistida", score=0.9, categoria="mx", breaking=1,
+                     qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
 
     temas = pc.promover_clusters_marca(
         "unotv", maximo=2, cupos_categoria={"mx": 1, "breaking": 1}
@@ -1403,29 +1362,11 @@ def test_plan_sin_linea_breaking_compite_por_su_feed(entorno, monkeypatch):
     cupo de su categoría de FEED."""
     monkeypatch.setenv("KENI_PLAN_DIA", "mx:1")
     _sembrar_cluster("brx", titulo="Ultima hora sin linea propia", score=0.9,
-                     categoria="mx", breaking=1)
+                     categoria="mx", breaking=1, qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
 
     elegidos = pc.clusters_para_promover("unotv", maximo=5, cupos_categoria={"mx": 1})
 
     assert [c["id"] for c in elegidos] == ["brx"]
-
-
-def test_ejecutar_qa_salta_marca_desactivada(entorno, monkeypatch):
-    """QA global ON pero apagada para la marca: ejecutar_qa marca el tema 'saltada' (no criba).
-
-    La exclusión se expresa como el override REAL del store (`KENI_PIPELINE_VALIDACION::unotv=0`),
-    igual que lo escribe la UI: la fase consulta la fuente única `config.etapa_activa`, que lee
-    `marca_apagada` de su módulo de origen (parchear el atributo del barrel ya no intercepta).
-    """
-    monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")
-    overrides = {config.clave_por_marca(config.ENV_PIPELINE_VALIDACION, "unotv"): "0"}
-    monkeypatch.setattr("keni_consola.ajustes.obtener", lambda clave: overrides.get(clave))
-    tema = _tema_pipeline(titulo="Marca sin QA")
-
-    cribados = pc.ejecutar_qa(autor=None)
-
-    assert repos.obtener_contenido(tema["id"])["qa_veredicto"] == pc.QA_SALTADA
-    assert any(c["verdicto"] == pc.QA_SALTADA for c in cribados)
 
 
 def test_temas_para_copy_incluye_qa_saltada(entorno):
@@ -1555,9 +1496,12 @@ def test_ejecutar_arte_sin_proveedor_no_ilustra(entorno, monkeypatch):
 
 def test_clusters_para_promover_diversifica_titulos_casi_identicos(entorno):
     """Un macro-tema (dos historias casi idénticas) no se come todas las plazas del barrido."""
-    _sembrar_cluster("dup1", titulo="Messi gana el premio en París", score=0.9)
-    _sembrar_cluster("dup2", titulo="Messi gana el premio en París hoy", score=0.8)
-    _sembrar_cluster("otra", titulo="Sismo de magnitud en la capital", score=0.5)
+    _sembrar_cluster("dup1", titulo="Messi gana el premio en París", score=0.9,
+                     qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    _sembrar_cluster("dup2", titulo="Messi gana el premio en París hoy", score=0.8,
+                     qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    _sembrar_cluster("otra", titulo="Sismo de magnitud en la capital", score=0.5,
+                     qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
 
     elegidos = pc.clusters_para_promover("unotv", maximo=2)
 
@@ -1566,8 +1510,10 @@ def test_clusters_para_promover_diversifica_titulos_casi_identicos(entorno):
 
 def test_clusters_para_promover_suave_rellena_si_solo_hay_duplicados(entorno):
     """Si todo el pool es el mismo macro-tema, se rellena igual (nunca devuelve menos)."""
-    _sembrar_cluster("dup1", titulo="Messi gana el premio en París", score=0.9)
-    _sembrar_cluster("dup2", titulo="Messi gana el premio en París hoy", score=0.8)
+    _sembrar_cluster("dup1", titulo="Messi gana el premio en París", score=0.9,
+                     qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    _sembrar_cluster("dup2", titulo="Messi gana el premio en París hoy", score=0.8,
+                     qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
     elegidos = pc.clusters_para_promover("unotv", maximo=2)
     assert {c["id"] for c in elegidos} == {"dup1", "dup2"}
 
@@ -1582,20 +1528,23 @@ def test_clusters_para_promover_respeta_el_liston(entorno):
     """Solo las historias que superan el listón compiten por plaza; el ruido queda en el pool."""
     from datetime import UTC, datetime, timedelta
 
-    _sembrar_cluster("apta", titulo="Sismo sacude la CDMX", score=0.9)
+    # Todas VERIFICADAS (pasaron la criba): así el ÚNICO discriminante de la promoción es el
+    # listón, no el filtro de QA (que ya cribó a todas por igual).
+    _sembrar_cluster("apta", titulo="Sismo sacude la CDMX", score=0.9,
+                     qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
     # Sin encaje de marca: ni el título ni el resumen casan el vocabulario unotv.
     _sembrar_cluster(
         "irrelevante", titulo="Gossip de celebridades en Hollywood", score=0.8,
-        resumen="Rumores del espectáculo extranjero",
+        resumen="Rumores del espectáculo extranjero", qa_veredicto=pc.VERDICTO_NO_VERIFICADO,
     )
     # Verificación dudosa: jamás dispara producción automática, puntúe lo que puntúe.
     _sembrar_cluster("dudosa", titulo="Increíble suceso en México hoy", score=0.7,
-                     verificacion="dudosa")
+                     verificacion="dudosa", qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
     # Vieja sin señales: su score persistido era alto, pero el listón recalcula AHORA.
     _sembrar_cluster(
         "vieja", titulo="México: nota de hace una semana", score=0.95, n_fuentes=1,
         ultimo_visto=(datetime.now(UTC) - timedelta(days=7)).replace(tzinfo=None)
-        .isoformat(timespec="seconds"),
+        .isoformat(timespec="seconds"), qa_veredicto=pc.VERDICTO_NO_VERIFICADO,
     )
 
     elegidos = pc.clusters_para_promover("unotv", maximo=4)
@@ -1607,10 +1556,11 @@ def test_clusters_para_promover_respeta_el_liston(entorno):
 def test_promover_clusters_marca_no_promueve_bajo_liston(entorno, monkeypatch):
     """El barrido CI deja en el pool (estado `nuevo`) lo que no supera el listón: ni tema ni copy."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    _sembrar_cluster("apta", titulo="Sismo sacude la CDMX", score=0.9)
+    _sembrar_cluster("apta", titulo="Sismo sacude la CDMX", score=0.9,
+                     qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
     _sembrar_cluster(
         "irrelevante", titulo="Gossip de celebridades en Hollywood", score=0.8,
-        resumen="Rumores del espectáculo extranjero",
+        resumen="Rumores del espectáculo extranjero", qa_veredicto=pc.VERDICTO_NO_VERIFICADO,
     )
 
     temas = pc.promover_clusters_marca("unotv", maximo=2)

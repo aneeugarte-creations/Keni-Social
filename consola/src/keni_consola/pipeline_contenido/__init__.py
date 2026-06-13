@@ -97,7 +97,6 @@ from ._barrido import (
     ejecutar_cd,
     ejecutar_investigacion,
     ejecutar_produccion,
-    ejecutar_qa,
     ejecutar_qa_clusters,
     iniciar_pipeline,
 )
@@ -301,7 +300,6 @@ __all__ = [
     "_ejecutar_investigacion",
     "ejecutar_produccion",
     "_ejecutar_produccion",
-    "ejecutar_qa",
     "ejecutar_qa_clusters",
     "ejecutar_cd",
     "ejecutar_arte",

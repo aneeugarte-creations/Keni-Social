@@ -146,11 +146,15 @@ def temas_autogen_sin_copy() -> list[dict[str, Any]]:
     La etapa de copy del pipeline es el ÚNICO motor de copy: además de los temas que el propio
     pipeline ingiere (origen `pipeline`, vía QA→CD), también redacta los temas que las FUENTES
     de noticias meten al tablero (`estados.ORIGENES_AUTOGEN`: import-calendario, radar-auto,
-    radar, rss, equipo) y que aún no tienen copy. Reglas (espejo de `autogen_copy.topics_pendientes`):
+    radar, rss, equipo) y que aún no tienen copy. FUENTE ÚNICA de la selección del news-pool (ya
+    no hay un `autogen_copy.topics_pendientes` paralelo: aquí vive la selección, en
+    `autogen_copy` solo el LANZADOR `lanzar_para_topic` + el dedup por etiqueta que esta reutiliza).
+    Reglas:
       - clase 'contenido', origen en `ORIGENES_AUTOGEN`, estado != 'hecha',
       - con marca válida y título no vacío,
       - per-marca: salta las marcas apagadas a mano para «Generar copy» (`ENV_PIPELINE_COPY`),
-      - dedup: salta los ya encolados (etiqueta `autogen`) y los que ya tienen copy.
+      - dedup: salta los ya encolados (etiqueta `autogen`, vía `autogen_copy.ids_ya_generados`) y
+        los que ya tienen copy.
     SIN cap propio: el backpressure lo pone la cola de generación (`ColaLlenaError` corta la fase
     en `ejecutar_cd`; el siguiente tick retoma donde quedó gracias al dedup por etiqueta).
     Best-effort: una lectura fallida devuelve []. Import diferido de `autogen_copy` para reusar su

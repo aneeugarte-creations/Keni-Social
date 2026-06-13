@@ -62,6 +62,7 @@ __all__ = [
     # actividad / autor / lecturas compartidas
     "registrar_etapa",
     "EMBUDO_QA_ESTADOS",
+    "VERIFICADAS_QA",
     "embudo_qa",
     "_autor_pipeline",
     "_copy_pendiente_leido",
@@ -475,6 +476,12 @@ def registrar_etapa(
 # `_FUNNEL_QA` que usa `_barrido`); aqui se exponen para que el Monitor lea el embudo sin
 # importar el barrido (el orquestador) desde la capa API.
 EMBUDO_QA_ESTADOS = (QA_EN_CURSO, VERDICTO_NO_VERIFICADO, QA_SALTADA)
+
+# Veredictos que ADMITEN a producción (ADR 0011 F3): la historia pasó la criba (`no_verificado`)
+# o la QA estaba saltada para la marca. FUENTE ÚNICA del filtro OBLIGATORIO de la admisión: la
+# usa `promover_clusters_marca`/`clusters_para_promover` por defecto (no existe ya un camino que
+# promueva SIN cribar) y el barrido de investigación.
+VERIFICADAS_QA = (VERDICTO_NO_VERIFICADO, QA_SALTADA)
 
 
 def embudo_qa() -> dict[str, Any]:
