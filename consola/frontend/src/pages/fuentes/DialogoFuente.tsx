@@ -201,7 +201,7 @@ function FormularioFuente({
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="fuente-relevancia">Relevancia</Label>
-        <Select value={tier || undefined} onValueChange={(v) => setTier(v)}>
+        <Select value={tier} onValueChange={(v) => setTier(v)}>
           <SelectTrigger
             id="fuente-relevancia"
             aria-label="Relevancia de la fuente"

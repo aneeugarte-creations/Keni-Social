@@ -125,7 +125,7 @@ function TarjetaPublicacion({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const alternarEverevergreen = useMutation({
+  const alternarEvergreen = useMutation({
     mutationFn: () =>
       api.actualizarPublicacion(publicacion.id, { evergreen: !publicacion.evergreen }),
     onSuccess: () => {
@@ -202,9 +202,9 @@ function TarjetaPublicacion({
     {
       etiqueta: publicacion.evergreen ? "Quitar de evergreens" : "Marcar como evergreen",
       icono: Sprout,
-      onClick: () => alternarEverevergreen.mutate(),
+      onClick: () => alternarEvergreen.mutate(),
       activo: publicacion.evergreen,
-      deshabilitado: alternarEverevergreen.isPending,
+      deshabilitado: alternarEvergreen.isPending,
     },
     { etiqueta: "Duplicar", icono: Copy, onClick: () => onDuplicar(publicacion) },
     { separador: true },
