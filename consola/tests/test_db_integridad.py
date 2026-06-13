@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from keni_consola import _db_core, db, motor_db
+from keni_consola import db, motor_db
 from keni_consola._db_core.migraciones_integridad import _FKS, _migrar_fks_hub
 
 # La fixture `pg` se autodescubre via `pytest_plugins` en conftest (`tests._postgres`).
