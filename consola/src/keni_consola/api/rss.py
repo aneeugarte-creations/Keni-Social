@@ -180,14 +180,15 @@ def _fuente_a_dict(fuente: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-# Categorías VÁLIDAS de un feed: las del catálogo de presets + 'breaking' (la cadencia más
-# agresiva del motor). La categoría manda la cadencia de sondeo (`config.
-# ingesta_intervalo_categoria`) y la detección de huecos de /salud; '' = sin categoría
-# (cadencia por defecto).
+# Categorías VÁLIDAS de un feed: el vocabulario editorial canónico + 'breaking' (la cadencia
+# más agresiva del motor). DESACOPLADO de lo que traiga la semilla de presets: el equipo puede
+# crear una fuente en cualquier categoría editorial aunque la semilla no incluya ninguna de
+# ella. La categoría manda la cadencia de sondeo (`config.ingesta_intervalo_categoria`) y la
+# detección de huecos de /salud; '' = sin categoría (cadencia por defecto).
 def _categorias_validas() -> frozenset[str]:
     from ..dominio import fuentes_presets
 
-    return frozenset([*fuentes_presets.categorias(), "breaking"])
+    return frozenset([*fuentes_presets.CATEGORIAS_VALIDAS, "breaking"])
 
 
 def _validar_categoria(valor: Any) -> tuple[str | None, str | None]:

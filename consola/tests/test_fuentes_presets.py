@@ -1,10 +1,14 @@
 """Tests del catálogo de presets de fuentes (dominio/fuentes_presets.py). OFFLINE/PURO.
 
-No requiere Postgres ni red: fuentes_presets es un módulo de datos puro.
-Cubre:
-  - listar_presets() y categorias(): conteo, campos obligatorios, ids únicos.
-  - filtro por categoría.
+No requiere Postgres ni red: fuentes_presets es un módulo de datos puro (carga la semilla
+`fuentes_presets.json`). Cubre:
+  - listar_presets() y categorias(): tamaño de la semilla, campos obligatorios, ids únicos.
+  - filtro por categoría y por marca.
   - obtener_preset() por id (existe / no existe).
+  - vocabulario editorial canónico (CATEGORIAS_VALIDAS) DESACOPLADO de la semilla.
+
+La semilla es el conjunto curado que el equipo dejó valioso en producción (marcas del piloto
+UnoTV / Claro Sports / Nación Gamer + externas con tráfico real), NO un catálogo de cientos.
 """
 
 from __future__ import annotations
@@ -16,64 +20,45 @@ from keni_consola.dominio import fuentes_presets
 # --------------------------------------------------------------------------- #
 
 
-def test_listar_todos_devuelve_un_catalogo_grande():
-    """Tras la ampliación (Ola C) el catálogo es de cientos de feeds verificados."""
+def test_listar_todos_devuelve_la_semilla_curada():
+    """La semilla es un conjunto curado y pequeño (no cientos de presets)."""
     todos = fuentes_presets.listar_presets()
-    assert len(todos) >= 120, f"Se esperaban ≥120 presets, hay {len(todos)}"
+    assert 15 <= len(todos) <= 50, f"Semilla fuera de rango esperado: {len(todos)}"
 
 
-def test_categorias_contiene_las_esperadas():
-    cats = fuentes_presets.categorias()
+def test_categorias_son_subconjunto_del_vocabulario_canonico():
+    """Las categorías de la semilla deben pertenecer al vocabulario editorial canónico."""
+    cats = set(fuentes_presets.categorias())
+    assert cats <= set(fuentes_presets.CATEGORIAS_VALIDAS), (
+        f"Categorías fuera del vocabulario: {cats - set(fuentes_presets.CATEGORIAS_VALIDAS)}"
+    )
+    # Las marcas del piloto deben tener cobertura en la semilla.
+    assert {"mx", "internacional", "deportes", "gaming"} <= cats
+
+
+def test_categorias_validas_es_estable_y_no_depende_de_la_semilla():
+    """CATEGORIAS_VALIDAS es el vocabulario editorial completo, traiga lo que traiga la semilla."""
     esperadas = {
         "mx",
         "regional",
         "internacional",
-        "negocios",
         "deportes",
+        "entretenimiento",
         "ciencia-tech",
         "gaming",
+        "negocios",
         "tendencias",
     }
-    assert esperadas <= set(cats), f"Categorías faltantes: {esperadas - set(cats)}"
-
-
-# Mínimos por categoría: garantizan cobertura amplia y que ninguna quede vacía.
-_MINIMOS_POR_CATEGORIA = {
-    "mx": 8,
-    "regional": 10,
-    "internacional": 12,
-    "negocios": 4,
-    "deportes": 20,
-    "ciencia-tech": 15,
-    "gaming": 20,
-    "tendencias": 10,
-}
-
-
-def test_conteo_minimo_por_categoria():
-    for cat, minimo in _MINIMOS_POR_CATEGORIA.items():
-        n = len(fuentes_presets.listar_presets(categoria=cat))
-        assert n >= minimo, f"Categoría '{cat}' tiene {n} presets, se esperaban ≥{minimo}"
+    assert esperadas == set(fuentes_presets.CATEGORIAS_VALIDAS)
 
 
 def test_ids_unicos():
     todos = fuentes_presets.listar_presets()
     ids = [p["id"] for p in todos]
-    assert len(ids) == len(set(ids)), "Hay ids duplicados en el catálogo"
+    assert len(ids) == len(set(ids)), "Hay ids duplicados en la semilla"
 
 
 _IDIOMAS_VALIDOS = {"es", "en", "pt", "fr"}
-_CATEGORIAS_VALIDAS = {
-    "mx",
-    "regional",
-    "internacional",
-    "negocios",
-    "deportes",
-    "ciencia-tech",
-    "gaming",
-    "tendencias",
-    "entretenimiento",
-}
 
 
 def test_campos_obligatorios_presentes():
@@ -87,7 +72,7 @@ def test_campos_obligatorios_presentes():
             f"Preset '{preset['id']}' tiene URL sin esquema: {url!r}"
         )
         # categoría e idioma válidos
-        assert preset["categoria"] in _CATEGORIAS_VALIDAS, (
+        assert preset["categoria"] in fuentes_presets.CATEGORIAS_VALIDAS, (
             f"Preset '{preset['id']}' tiene categoría inválida: {preset['categoria']!r}"
         )
         assert preset["idioma"] in _IDIOMAS_VALIDOS, (
@@ -95,15 +80,13 @@ def test_campos_obligatorios_presentes():
         )
 
 
-def test_presets_no_plantilla_sin_placeholders_en_url():
-    """Los presets que NO son plantilla deben llevar la URL concreta lista para sondear."""
+def test_urls_concretas_sin_placeholders():
+    """La semilla solo trae URLs concretas listas para sondear (sin plantillas)."""
     placeholders = ("TEMA", "SUBREDDIT", "CHANNEL_ID", "<query>", "{")
     for preset in fuentes_presets.listar_presets():
-        if "[PLANTILLA]" in preset["nombre"]:
-            continue
         for ph in placeholders:
             assert ph not in preset["url"], (
-                f"Preset '{preset['id']}' (no plantilla) deja placeholder {ph!r} en la URL"
+                f"Preset '{preset['id']}' deja placeholder {ph!r} en la URL"
             )
 
 
@@ -129,21 +112,19 @@ def test_filtro_marca_oculta_otras_marcas_y_mantiene_genericos():
     sugeridas = {(p.get("marca_sugerida") or "") for p in de_unotv}
     # No aparece ninguna preset sugerida a otra marca.
     assert sugeridas <= {"", "unotv"}
-    # Los genéricos (sin marca sugerida) siguen presentes.
-    assert any(not (p.get("marca_sugerida") or "") for p in de_unotv)
-    # Las presets de unotv que existen en el catálogo se conservan.
+    # Las presets de unotv que existen en la semilla se conservan.
     todas_unotv = {
         p["id"] for p in fuentes_presets.listar_presets() if p.get("marca_sugerida") == "unotv"
     }
     assert todas_unotv <= {p["id"] for p in de_unotv}
-    # Sin marca -> catálogo completo (incluye presets de claro-sports).
+    # Sin marca -> semilla completa (incluye presets de claro-sports).
     todos = fuentes_presets.listar_presets()
     assert any(p.get("marca_sugerida") == "claro-sports" for p in todos)
     assert all(p.get("marca_sugerida") != "claro-sports" for p in de_unotv)
 
 
 def test_listar_devuelve_copia_superficial():
-    """listar_presets devuelve copias: mutar el resultado no altera el catálogo."""
+    """listar_presets devuelve copias: mutar el resultado no altera la semilla."""
     antes = fuentes_presets.listar_presets()
     antes[0]["nombre"] = "MUTADO"
     despues = fuentes_presets.listar_presets()
@@ -168,86 +149,59 @@ def test_obtener_preset_inexistente_devuelve_none():
 
 
 # --------------------------------------------------------------------------- #
-# Ruteo del auto-seed por marca (bootstrap_lineas._preset_va_en_seed). PURO.    #
+# Auto-seed (bootstrap_lineas._preset_va_en_seed). PURO.                        #
 # --------------------------------------------------------------------------- #
 
 
-def test_seed_rutea_categorias_correctas_por_marca():
-    from keni_consola import bootstrap_lineas as bl
-
-    seed = [p for p in fuentes_presets.listar_presets() if bl._preset_va_en_seed(p)]
-    assert seed, "El subset de auto-seed no debería quedar vacío"
-
-    cats_por_marca: dict[str, set[str]] = {}
-    for p in seed:
-        cats_por_marca.setdefault(p["marca_sugerida"], set()).add(p["categoria"])
-
-    # UnoTV: noticias (mx/internacional/negocios/ciencia-tech/tendencias), NUNCA gaming/deportes.
-    # `regional` se sembraba SOLO vía Google News (corresponsalías por estado); excluido el
-    # Google News del auto-seed (snippet sin cuerpo; la tendencia la cubre Google Trends), esa
-    # categoría se queda sin presets y ya no entra al seed.
-    assert "mx" in cats_por_marca["unotv"]
-    assert "internacional" in cats_por_marca["unotv"]
-    assert "ciencia-tech" in cats_por_marca["unotv"]
-    assert "gaming" not in cats_por_marca["unotv"]
-    assert "deportes" not in cats_por_marca["unotv"]
-    # Ningún preset de auto-seed es de Google News (se excluyen por `_es_google_news`).
-    assert all("news.google.com" not in p["url"] for p in seed)
-
-    # Claro Sports: deportes (todas las competiciones).
-    assert cats_por_marca["claro-sports"] == {"deportes"} or "deportes" in cats_por_marca[
-        "claro-sports"
-    ]
-    assert "gaming" not in cats_por_marca.get("claro-sports", set())
-
-    # Nación Gamer: gaming + ciencia-tech.
-    assert "gaming" in cats_por_marca["nacion-gamer"]
-    assert "ciencia-tech" in cats_por_marca["nacion-gamer"]
-    assert "deportes" not in cats_por_marca["nacion-gamer"]
-
-
-def test_seed_excluye_plantillas():
-    from keni_consola import bootstrap_lineas as bl
-
-    plantillas = [p for p in fuentes_presets.listar_presets() if "[PLANTILLA]" in p["nombre"]]
-    assert plantillas, "Debe haber plantillas en el catálogo"
-    for p in plantillas:
-        assert not bl._preset_va_en_seed(p), f"Plantilla '{p['id']}' no debe entrar al auto-seed"
-
-
-def test_seed_excluye_google_news():
-    from keni_consola import bootstrap_lineas as bl
-
-    gn = [p for p in fuentes_presets.listar_presets() if "news.google.com" in (p.get("url") or "")]
-    assert gn, "El catálogo debe seguir teniendo presets de Google News (activables a mano)"
-    for p in gn:
-        assert not bl._preset_va_en_seed(p), f"Google News '{p['id']}' no debe entrar al auto-seed"
-
-
-def test_seed_excluye_presets_sin_marca():
-    from keni_consola import bootstrap_lineas as bl
-
-    preset_sin_marca = {
-        "id": "x",
-        "nombre": "X",
-        "url": "https://e.com/f.xml",
-        "categoria": "mx",
-        "marca_sugerida": "",
-        "idioma": "es",
-        "region": "MX",
-        "descripcion": "",
-    }
-    assert not bl._preset_va_en_seed(preset_sin_marca)
-
-
-def test_seed_subset_es_menor_que_catalogo_completo():
-    """El auto-seed activa un subset, no los cientos de presets (evita ruido)."""
+def test_seed_activa_la_semilla_entera():
+    """La semilla YA es el conjunto curado: el auto-seed la activa entera (no es un subset)."""
     from keni_consola import bootstrap_lineas as bl
 
     todos = fuentes_presets.listar_presets()
     seed = [p for p in todos if bl._preset_va_en_seed(p)]
-    assert 0 < len(seed) <= len(todos)
-    assert len(seed) < len(todos), "El seed debe excluir al menos las plantillas"
+    assert seed, "El auto-seed no debería quedar vacío"
+    assert len(seed) == len(todos), "Toda la semilla curada debe entrar al auto-seed"
+
+
+def test_seed_cubre_las_marcas_del_piloto():
+    from keni_consola import bootstrap_lineas as bl
+
+    seed = [p for p in fuentes_presets.listar_presets() if bl._preset_va_en_seed(p)]
+    cats_por_marca: dict[str, set[str]] = {}
+    for p in seed:
+        cats_por_marca.setdefault(p["marca_sugerida"], set()).add(p["categoria"])
+
+    assert {"mx", "internacional"} <= cats_por_marca["unotv"]
+    assert "deportes" in cats_por_marca["claro-sports"]
+    assert "gaming" in cats_por_marca["nacion-gamer"]
+
+
+def test_seed_excluye_plantillas_sinteticas():
+    """El guarda defensivo `_es_plantilla` sigue vetando plantillas (aunque la semilla no traiga)."""
+    from keni_consola import bootstrap_lineas as bl
+
+    plantilla = {
+        "id": "x",
+        "nombre": "Google News búsqueda [PLANTILLA]",
+        "url": "https://news.google.com/rss/search?q={query}",
+        "categoria": "mx",
+        "marca_sugerida": "unotv",
+    }
+    assert not bl._preset_va_en_seed(plantilla)
+
+
+def test_seed_excluye_google_news_sintetico():
+    """El guarda defensivo `_es_google_news` sigue vetando Google News (snippet sin cuerpo)."""
+    from keni_consola import bootstrap_lineas as bl
+
+    gn = {
+        "id": "x",
+        "nombre": "Google News MX",
+        "url": "https://news.google.com/rss/headlines/section/topic/NATION?hl=es-419&gl=MX",
+        "categoria": "mx",
+        "marca_sugerida": "unotv",
+    }
+    assert not bl._preset_va_en_seed(gn)
 
 
 # --------------------------------------------------------------------------- #
@@ -261,7 +215,7 @@ def test_get_presets_sin_filtro(cliente):
     datos = r.json()
     assert "presets" in datos
     assert "categorias" in datos
-    assert len(datos["presets"]) >= 30
+    assert len(datos["presets"]) >= 15
     assert set(datos["categorias"]) >= {"mx", "internacional", "deportes"}
     # Todos tienen el campo `activa`
     for p in datos["presets"]:
@@ -272,7 +226,7 @@ def test_get_presets_filtro_categoria(cliente):
     r = cliente.get("/api/fuentes/presets?categoria=gaming")
     assert r.status_code == 200
     presets = r.json()["presets"]
-    assert len(presets) >= 3
+    assert len(presets) >= 1
     assert all(p["categoria"] == "gaming" for p in presets)
 
 
@@ -320,7 +274,7 @@ def test_post_activar_presets_crea_fuentes(cliente, monkeypatch):
 
     r = cliente.post(
         "/api/fuentes/presets/activar",
-        json={"ids": ["jornada-mx", "ign-latam"]},
+        json={"ids": ["infobae-mx", "ign-latam"]},
     )
     assert r.status_code == 200, r.text
     datos = r.json()
@@ -330,29 +284,15 @@ def test_post_activar_presets_crea_fuentes(cliente, monkeypatch):
 
     # Las fuentes tienen los campos esperados.
     nombres = {f["nombre"] for f in datos["fuentes"]}
-    assert "La Jornada — Edición" in nombres
+    assert "Infobae — México" in nombres
     assert "IGN — Latinoamérica" in nombres
     # La CATEGORÍA del preset se PERSISTE en la fuente (manda la cadencia del motor y la
     # cobertura de /salud; antes solo viajaba cosmética en la respuesta).
     from keni_consola import repos as _repos
 
     por_nombre = {f["nombre"]: f for f in _repos.listar_fuentes_rss()}
-    assert por_nombre["La Jornada — Edición"]["categoria"] == "mx"
+    assert por_nombre["Infobae — México"]["categoria"] == "mx"
     assert por_nombre["IGN — Latinoamérica"]["categoria"] == "gaming"
-
-
-def test_post_activar_propaga_intervalo_del_preset(cliente, monkeypatch):
-    """Un preset con `intervalo_min` (fuentes que rate-limitan, p. ej. GDELT) lo persiste."""
-    from keni_consola import repos as _repos
-    from keni_consola.dominio import http_feed
-
-    monkeypatch.setattr(http_feed, "validar_url", lambda u: (u, None))
-
-    r = cliente.post("/api/fuentes/presets/activar", json={"ids": ["gdelt-mundo"]})
-    assert r.status_code == 200 and r.json()["creadas"] == 1
-    fuente = next(f for f in _repos.listar_fuentes_rss() if f["nombre"].startswith("GDELT"))
-    assert fuente["intervalo_min"] == 1800  # sondeo espaciado: GDELT castiga ráfagas con 429
-    assert fuente["categoria"] == "internacional"
 
 
 def test_post_activar_idempotente(cliente, monkeypatch):
@@ -361,8 +301,8 @@ def test_post_activar_idempotente(cliente, monkeypatch):
 
     monkeypatch.setattr(http_feed, "validar_url", lambda u: (u, None))
 
-    cliente.post("/api/fuentes/presets/activar", json={"ids": ["jornada-mx"]})
-    r2 = cliente.post("/api/fuentes/presets/activar", json={"ids": ["jornada-mx"]})
+    cliente.post("/api/fuentes/presets/activar", json={"ids": ["infobae-mx"]})
+    r2 = cliente.post("/api/fuentes/presets/activar", json={"ids": ["infobae-mx"]})
     assert r2.status_code == 200
     datos = r2.json()
     assert datos["creadas"] == 0
@@ -402,7 +342,7 @@ def test_post_activar_marca_invalida_400(cliente, monkeypatch):
 
     r = cliente.post(
         "/api/fuentes/presets/activar",
-        json={"ids": ["jornada-mx"], "marca": "noexiste"},
+        json={"ids": ["infobae-mx"], "marca": "noexiste"},
     )
     assert r.status_code == 400
 
@@ -410,8 +350,8 @@ def test_post_activar_marca_invalida_400(cliente, monkeypatch):
 def test_post_activar_ssrf_rechaza_ip_privada(cliente):
     """Un preset con URL de IP privada es rechazado por el guard SSRF."""
     # Forzamos un preset inventado que apunta a loopback: no debe crearse.
-    # (Los presets del catálogo real NO apuntan a IPs privadas; este test verifica
-    # que el guard SSRF se aplica al activar.)
+    # (Los presets reales NO apuntan a IPs privadas; este test verifica que el guard SSRF
+    # se aplica al activar.)
     from keni_consola.dominio import fuentes_presets as fp
 
     # Parche temporal: añadimos un preset con URL interna.

@@ -176,21 +176,6 @@ _PRIORIDAD_CATEGORIA: dict[str, int] = {
     "gaming": 1,
 }
 
-# Subset por DEFECTO que se activa en una instalación nueva (auto-seed). El catálogo completo
-# (cientos de presets) se activa a mano desde la UI; aquí solo sembramos un subconjunto sensato
-# por marca para que el motor de ingesta arranque con cobertura útil SIN ruido:
-#   - UnoTV (noticias): MX + regional + internacional + ciencia-tech + tendencias.
-#   - Claro Sports (deporte): deportes (todas las competiciones) + algo de internacional.
-#   - Nación Gamer (gaming/tech): gaming + ciencia-tech.
-# El ruteo es por `marca_sugerida` del preset y su `categoria`. Un preset sin marca_sugerida
-# (p.ej. plantillas) no entra. Cada marca declara las categorías que le interesan.
-_CATEGORIAS_SEED_POR_MARCA: dict[str, set[str]] = {
-    "unotv": {"mx", "regional", "internacional", "negocios", "ciencia-tech", "tendencias"},
-    "claro-sports": {"deportes", "internacional"},
-    "nacion-gamer": {"gaming", "ciencia-tech"},
-}
-
-
 # Las PLANTILLAS (con `{variable}` sin sustituir, p.ej. Google News búsqueda, GDELT, YouTube,
 # Reddit personalizado) NO se activan en el auto-seed: su URL no es un feed real hasta que el
 # equipo la ajusta. Se reconocen por el sufijo "[PLANTILLA]" en el nombre del preset.
@@ -212,20 +197,13 @@ def _es_google_news(preset: dict) -> bool:
 def _preset_va_en_seed(preset: dict) -> bool:
     """True si el preset debe activarse en el auto-seed por defecto.
 
-    Función PURA (sin red ni BD), reutilizable en tests. Un preset entra si:
-      - NO es plantilla (su URL es un feed real, sondeable directamente), y
-      - NO es Google News (snippet sin cuerpo; la tendencia la cubre Google Trends), y
-      - su `marca_sugerida` tiene categorías de interés declaradas, y
-      - su `categoria` está entre las de interés de esa marca.
+    Función PURA (sin red ni BD), reutilizable en tests. La semilla (`fuentes_presets.json`) YA
+    es el conjunto curado que el equipo dejó valioso en producción, así que se siembra ENTERA,
+    salvo los dos guardas defensivos: NO plantillas (URL con variable sin sustituir) y NO Google
+    News (snippet sin cuerpo; la tendencia la cubre Google Trends). El catálogo de hoy no trae
+    ninguno de los dos, pero los guardas se mantienen por si se reintroducen.
     """
-    if _es_plantilla(preset) or _es_google_news(preset):
-        return False
-    marca = (preset.get("marca_sugerida") or "").strip()
-    categoria = (preset.get("categoria") or "").strip()
-    cats_marca = _CATEGORIAS_SEED_POR_MARCA.get(marca)
-    if not cats_marca:
-        return False
-    return categoria in cats_marca
+    return not _es_plantilla(preset) and not _es_google_news(preset)
 
 
 def sembrar_fuentes_ingesta() -> int:

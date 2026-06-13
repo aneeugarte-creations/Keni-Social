@@ -1,0 +1,211 @@
+[
+  {
+    "id": "unotv-nacional",
+    "nombre": "UnoTV — Portal Nacional",
+    "url": "https://unotv.com/feed/nacional.xml",
+    "categoria": "mx",
+    "marca_sugerida": "unotv",
+    "linea_sugerida": "Noticias México",
+    "idioma": "es",
+    "region": "MX",
+    "descripcion": "Sección nacional del portal de UnoTV (fuente propia)."
+  },
+  {
+    "id": "unotv-internacional",
+    "nombre": "UnoTV — Portal Internacional",
+    "url": "https://unotv.com/feed/internacional.xml",
+    "categoria": "internacional",
+    "marca_sugerida": "unotv",
+    "linea_sugerida": "Internacional",
+    "idioma": "es",
+    "region": "MX",
+    "descripcion": "Sección internacional del portal de UnoTV (fuente propia)."
+  },
+  {
+    "id": "unotv-entretenimiento",
+    "nombre": "UnoTV — Portal Entretenimiento",
+    "url": "https://unotv.com/feed/entretenimiento.xml",
+    "categoria": "entretenimiento",
+    "marca_sugerida": "unotv",
+    "linea_sugerida": "Entretenimiento",
+    "idioma": "es",
+    "region": "MX",
+    "descripcion": "Sección de entretenimiento del portal de UnoTV (fuente propia)."
+  },
+  {
+    "id": "infobae-mx",
+    "nombre": "Infobae — México",
+    "url": "https://www.infobae.com/arc/outboundfeeds/rss/category/mexico/?outputType=xml",
+    "categoria": "mx",
+    "marca_sugerida": "unotv",
+    "linea_sugerida": "Noticias México",
+    "idioma": "es",
+    "region": "MX",
+    "descripcion": "Sección México de Infobae."
+  },
+  {
+    "id": "excelsior-nacional",
+    "nombre": "Excélsior — Nacional",
+    "url": "https://www.excelsior.com.mx/rss/nacional",
+    "categoria": "mx",
+    "marca_sugerida": "unotv",
+    "linea_sugerida": "Noticias México",
+    "idioma": "es",
+    "region": "MX",
+    "descripcion": "Sección nacional de Excélsior, diario nacional mexicano."
+  },
+  {
+    "id": "nyt-world",
+    "nombre": "The New York Times — World",
+    "url": "https://rss.nytimes.com/services/xml/rss/nyt/World.xml",
+    "categoria": "internacional",
+    "marca_sugerida": "unotv",
+    "linea_sugerida": "Internacional",
+    "idioma": "en",
+    "region": "GLOBAL",
+    "descripcion": "Sección World del New York Times (inglés)."
+  },
+  {
+    "id": "guardian-world",
+    "nombre": "The Guardian — World",
+    "url": "https://www.theguardian.com/world/rss",
+    "categoria": "internacional",
+    "marca_sugerida": "unotv",
+    "linea_sugerida": "Internacional",
+    "idioma": "en",
+    "region": "GLOBAL",
+    "descripcion": "Sección World de The Guardian (inglés)."
+  },
+  {
+    "id": "bbc-mundo",
+    "nombre": "BBC — Mundo (español)",
+    "url": "https://feeds.bbci.co.uk/mundo/rss.xml",
+    "categoria": "internacional",
+    "marca_sugerida": "unotv",
+    "linea_sugerida": "Internacional",
+    "idioma": "es",
+    "region": "GLOBAL",
+    "descripcion": "Noticias mundiales de BBC Mundo (español)."
+  },
+  {
+    "id": "bbc-world",
+    "nombre": "BBC — World",
+    "url": "https://feeds.bbci.co.uk/news/world/rss.xml",
+    "categoria": "internacional",
+    "marca_sugerida": "unotv",
+    "linea_sugerida": "Internacional",
+    "idioma": "en",
+    "region": "GLOBAL",
+    "descripcion": "Noticias mundiales de BBC News (inglés)."
+  },
+  {
+    "id": "aljazeera-all",
+    "nombre": "Al Jazeera — English",
+    "url": "https://www.aljazeera.com/xml/rss/all.xml",
+    "categoria": "internacional",
+    "marca_sugerida": "unotv",
+    "linea_sugerida": "Internacional",
+    "idioma": "en",
+    "region": "GLOBAL",
+    "descripcion": "Cobertura global de Al Jazeera English (inglés)."
+  },
+  {
+    "id": "clarosports-video",
+    "nombre": "Claro Sports — Video",
+    "url": "https://www.clarosports.com/feed/video.xml",
+    "categoria": "deportes",
+    "marca_sugerida": "claro-sports",
+    "linea_sugerida": "Deportes",
+    "idioma": "es",
+    "region": "MX",
+    "descripcion": "Feed de video de Claro Sports (fuente propia)."
+  },
+  {
+    "id": "clarosports-futbol",
+    "nombre": "Claro Sports — Fútbol",
+    "url": "https://www.clarosports.com/feed/futbol.xml",
+    "categoria": "deportes",
+    "marca_sugerida": "claro-sports",
+    "linea_sugerida": "Fútbol",
+    "idioma": "es",
+    "region": "MX",
+    "descripcion": "Feed de fútbol de Claro Sports (fuente propia)."
+  },
+  {
+    "id": "clarosports-motor",
+    "nombre": "Claro Sports — Motor",
+    "url": "https://www.clarosports.com/feed/motor.xml",
+    "categoria": "deportes",
+    "marca_sugerida": "claro-sports",
+    "linea_sugerida": "Motor",
+    "idioma": "es",
+    "region": "MX",
+    "descripcion": "Feed de automovilismo de Claro Sports (fuente propia)."
+  },
+  {
+    "id": "clarosports-otros-deportes",
+    "nombre": "Claro Sports — Otros Deportes",
+    "url": "https://www.clarosports.com/feed/otros-deportes.xml",
+    "categoria": "deportes",
+    "marca_sugerida": "claro-sports",
+    "linea_sugerida": "Otros Deportes",
+    "idioma": "es",
+    "region": "MX",
+    "descripcion": "Feed de otros deportes de Claro Sports (fuente propia)."
+  },
+  {
+    "id": "as-mexico",
+    "nombre": "AS — México",
+    "url": "https://mexico.as.com/rss/mexico/portada.xml",
+    "categoria": "deportes",
+    "marca_sugerida": "claro-sports",
+    "linea_sugerida": "Deportes México",
+    "idioma": "es",
+    "region": "MX",
+    "descripcion": "Portada de AS México (deportes, español)."
+  },
+  {
+    "id": "espn-mx",
+    "nombre": "ESPN — México",
+    "url": "https://www.espn.com.mx/espn/rss/news",
+    "categoria": "deportes",
+    "marca_sugerida": "claro-sports",
+    "linea_sugerida": "Deportes México",
+    "idioma": "es",
+    "region": "MX",
+    "descripcion": "Noticias deportivas de ESPN México (español)."
+  },
+  {
+    "id": "espn-news",
+    "nombre": "ESPN — Top News",
+    "url": "https://www.espn.com/espn/rss/news",
+    "categoria": "deportes",
+    "marca_sugerida": "claro-sports",
+    "linea_sugerida": "Deportes",
+    "idioma": "en",
+    "region": "GLOBAL",
+    "descripcion": "Titulares deportivos de ESPN (inglés)."
+  },
+  {
+    "id": "foxsports",
+    "nombre": "FOX Sports — Noticias",
+    "url": "https://api.foxsports.com/v1/rss",
+    "categoria": "deportes",
+    "marca_sugerida": "claro-sports",
+    "linea_sugerida": "Deportes",
+    "idioma": "en",
+    "region": "US",
+    "descripcion": "Feed de noticias de FOX Sports (inglés)."
+  },
+  {
+    "id": "ign-latam",
+    "nombre": "IGN — Latinoamérica",
+    "url": "https://latam.ign.com/feed.xml",
+    "categoria": "gaming",
+    "marca_sugerida": "nacion-gamer",
+    "linea_sugerida": "Gaming",
+    "idioma": "es",
+    "region": "LATAM",
+    "descripcion": "Noticias de videojuegos de IGN Latinoamérica (español)."
+  }
+]
