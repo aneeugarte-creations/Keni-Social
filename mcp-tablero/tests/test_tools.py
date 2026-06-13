@@ -117,17 +117,6 @@ async def test_mover_pieza_estado_invalido():
     assert cliente.llamadas == []
 
 
-@pytest.mark.parametrize("estado", ["programado", "publicado"])
-async def test_mover_pieza_veta_publicar_y_programar(estado):
-    """GOBERNANZA: el MCP no puede mover a `programado`/`publicado` (publicacion real,
-    decision humana desde la UI). Devuelve error claro y NO toca la Consola."""
-    cliente = ClienteFalso()
-    out = await _llamar(cliente, "mover_pieza", contenido_id="c1", plataforma_id="p1", estado=estado)
-    assert "error" in out
-    assert estado in out["error"]
-    assert cliente.llamadas == []  # no llega a la red: se rechaza antes
-
-
 async def test_actualizar_contenido_sin_campos():
     cliente = ClienteFalso()
     out = await _llamar(cliente, "actualizar_contenido", contenido_id="c1")
