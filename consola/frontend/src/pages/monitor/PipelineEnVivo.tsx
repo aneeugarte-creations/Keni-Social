@@ -27,8 +27,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, SquarePen, Users } from "lucide-react";
 import * as React from "react";
-import { Link } from "react-router-dom";
 
+import { EditorPromptOverlay } from "@/components/biblioteca/EditorPromptOverlay";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -221,10 +221,13 @@ export function PipelineEnVivo({
    *  Selección/Validación). A diferencia de `proceso` (que solo atenúa), aquí las etapas del
    *  otro motor NO se pintan: cada cockpit muestra únicamente sus etapas. */
   soloProceso?: Proceso;
-  /** Deep-link «Editar prompt» por etapa (doc de la Biblioteca, p. ej. `prompt/copy`): pinta un
-   *  lápiz junto al nombre de la etapa que abre el doc. Solo admin (la Biblioteca es de admin). */
+  /** «Editar prompt» por etapa (doc de la Biblioteca, p. ej. `prompt/copy`): pinta un lápiz
+   *  junto al nombre de la etapa que abre el editor en un OVERLAY (encima de la página, sin
+   *  navegar). Solo admin (la Biblioteca es de admin). */
   docPorEtapa?: Partial<Record<EtapaId, string>>;
 }) {
+  // Doc abierto en el overlay «Editar prompt» (in-place, sin sacarte del cockpit).
+  const [docEditando, setDocEditando] = React.useState<string | null>(null);
   // Recorte por motor: el cockpit de Producción pide solo Copy/Arte; el de Investigación, solo
   // Selección/Validación. Sin `soloProceso`, la tira completa (las cuatro etapas).
   const etapas = soloProceso ? ETAPAS.filter((e) => e.proceso === soloProceso) : ETAPAS;
@@ -311,22 +314,18 @@ export function PipelineEnVivo({
                       <span className="truncate">{e.etiqueta}</span>
                     </span>
                     <span className="flex shrink-0 items-center gap-1">
-                      {/* «Editar prompt» (admin): deep-link a la Biblioteca con el doc de la
-                          etapa abierto (`?doc=`). In-place, en la propia tarjeta de la etapa. */}
+                      {/* «Editar prompt» (admin): abre el editor del doc de la etapa en un
+                          OVERLAY encima del cockpit, sin navegar a la Biblioteca. */}
                       {esAdmin && doc && (
                         <Button
-                          asChild
                           variant="ghost"
                           size="sm"
                           className="h-6 w-6 p-0 text-muted-foreground"
-                          title={`Editar el prompt de ${e.etiqueta} en la Biblioteca`}
+                          title={`Editar el prompt de ${e.etiqueta}`}
+                          aria-label={`Editar el prompt de ${e.etiqueta}`}
+                          onClick={() => setDocEditando(doc)}
                         >
-                          <Link
-                            to={`/contenido/texto/documentos?doc=${encodeURIComponent(doc)}`}
-                            aria-label={`Editar el prompt de ${e.etiqueta} en la Biblioteca`}
-                          >
-                            <SquarePen className="h-3.5 w-3.5" aria-hidden="true" />
-                          </Link>
+                          <SquarePen className="h-3.5 w-3.5" aria-hidden="true" />
                         </Button>
                       )}
                       {ajuste && (
@@ -373,6 +372,11 @@ export function PipelineEnVivo({
           </p>
         )}
       </CardContent>
+      <EditorPromptOverlay
+        docId={docEditando}
+        abierto={!!docEditando}
+        onCerrar={() => setDocEditando(null)}
+      />
     </Card>
   );
 }
