@@ -61,6 +61,7 @@ from .migraciones_columnas import (
     _migrar_renombre_catalogo_media,
     _normalizar_timestamps_texto,
 )
+from .migraciones_integridad import _FKS, _migrar_fks_hub
 from .migraciones_modelo import _migrar_modelo_franjas, _migrar_modelo_turnos
 
 # --------------------------------------------------------------------------- #
@@ -350,6 +351,11 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
         re_aplicar_si_cambia=True,
         datos=_COLUMNAS_DAEMON_LATIDOS_AMPLIADAS,
     ),
+    # INTEGRIDAD (ADR 0012, apendice de 0004): FKs reales en las relaciones de alto valor del
+    # hub `contenido` y afines, con limpieza previa de huerfanos. Es re-ejecutable e idempotente
+    # (DROP IF EXISTS + ADD), asi que la dejamos `re_aplicar_si_cambia=True`: editar `_FKS`
+    # (anadir/quitar una relacion) cambia la huella y re-aplica la migracion una vez.
+    Migracion("0028-fks-hub-contenido", _migrar_fks_hub, re_aplicar_si_cambia=True, datos=_FKS),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.
