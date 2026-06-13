@@ -272,6 +272,10 @@ export interface Contenido {
   formato: string;
   /** Derivado: deadline pasado y aún sin cerrar. */
   vencido: boolean;
+  /** Marca de tiempo (ISO) de la última modificación; la bump-ea coger/asignar/editar. */
+  actualizado?: string;
+  /** Marca de tiempo (ISO) de creación. */
+  creado?: string;
   plataformas: ContenidoPlataforma[];
   /** Ids de las etiquetas asignadas (resolver contra `catalogos.etiquetas`). */
   etiquetas: string[];

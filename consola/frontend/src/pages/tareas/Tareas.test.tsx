@@ -143,7 +143,8 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
       .mockResolvedValue({ contenido: { responsable_nombre: "yo" } } as never);
     renderTareas([], [evento({ id: "ev9", titulo: "Cruz Azul vs América" })]);
 
-    expect(await screen.findByText("Cruz Azul vs América")).toBeInTheDocument();
+    // En el Panorama (por defecto) el evento es una fila compacta; se despliega para actuar.
+    fireEvent.click(await screen.findByText("Cruz Azul vs América"));
     fireEvent.click(screen.getByRole("button", { name: /La cubro yo/ }));
     await waitFor(() => expect(cubrir).toHaveBeenCalledTimes(1));
     expect(cubrir).toHaveBeenCalledWith("ev9", undefined);
@@ -161,7 +162,9 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
       .mockResolvedValue({ contenido: {} } as never);
     renderTareas([tarea({ id: "t9", titulo: "Grabar el saque" })]);
 
-    fireEvent.click(await screen.findByRole("button", { name: /Coger/ }));
+    // Desplegar la fila del Panorama para llegar a la tarjeta accionable.
+    fireEvent.click(await screen.findByText("Grabar el saque"));
+    fireEvent.click(screen.getByRole("button", { name: /Coger/ }));
     await waitFor(() => expect(coger).toHaveBeenCalledTimes(1));
     expect(coger).toHaveBeenCalledWith("t9");
   });
@@ -175,8 +178,9 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
       [],
       usuario("editor", "u1"),
     );
-    expect(await screen.findByText("Mía")).toBeInTheDocument();
-    expect(screen.getByText("De Ana")).toBeInTheDocument();
+    // En el Panorama el título sale en la fila Y en la banda «lo último cogido», así que hay ≥1.
+    expect((await screen.findAllByText("Mía")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("De Ana").length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Lo mío" }));
     await waitFor(() => expect(screen.queryByText("De Ana")).toBeNull());
@@ -185,52 +189,69 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
 
   it("un MANAGER (admin) ve 'Asignar'; un editor NO", async () => {
     const { unmount } = renderTareas([tarea({ titulo: "Reparto" })], [], usuario("admin", "u-admin"));
+    fireEvent.click(await screen.findByText("Reparto")); // desplegar la fila del Panorama
     expect(await screen.findByRole("button", { name: /Asignar/ })).toBeInTheDocument();
     unmount();
 
     vi.restoreAllMocks();
     renderTareas([tarea({ titulo: "Reparto" })], [], usuario("editor", "u2"));
+    fireEvent.click(await screen.findByText("Reparto"));
     await screen.findByRole("button", { name: /Coger/ });
     expect(screen.queryByRole("button", { name: /Asignar/ })).toBeNull();
   });
 
-  it("la lente 'Por persona' es una tabla con la carga de cada uno y la fila «Por cubrir»", async () => {
+  it("el 'Panorama' (por defecto) mezcla eventos por cubrir y tareas con dueño, y muestra lo último cogido", async () => {
     renderTareas(
       [
-        tarea({ id: "t-luis", titulo: "Clip de Luis", responsable_id: "u-luis", responsable_nombre: "luis" }),
-        tarea({ id: "t-pool", titulo: "Encargo sin dueño", responsable_id: "" }),
+        tarea({
+          id: "t-luis",
+          titulo: "Clip de Luis",
+          responsable_id: "u-luis",
+          responsable_nombre: "luis",
+          fecha_objetivo: "2026-07-01",
+          actualizado: "2026-06-12 10:00:00",
+        }),
       ],
-      [evento({ id: "ev-pool", titulo: "Partido por cubrir" })],
+      [evento({ id: "ev-pool", titulo: "Partido por cubrir", fecha: "2026-07-01" })],
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Por persona" }));
+    // El Panorama es la vista por defecto: no hay que cambiar de pestaña. El evento (sin dueño)
+    // sale una sola vez; «Clip de Luis» sale en su fila Y en la banda de lo recién cogido.
+    expect(await screen.findByText("Partido por cubrir")).toBeInTheDocument();
+    expect(screen.getAllByText("Clip de Luis").length).toBeGreaterThan(0);
 
-    // Es una tabla: cabecera «Lo que lleva».
-    expect(
-      await screen.findByRole("columnheader", { name: "Lo que lleva" }),
-    ).toBeInTheDocument();
+    // El evento sin dueño se marca «Por cubrir» y la banda de lo recién cogido aparece.
+    expect(screen.getAllByText("Por cubrir").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Lo último que ha cogido el equipo/)).toBeInTheDocument();
 
-    // Fila «Por cubrir» con el evento y el encargo sin dueño en la vista previa.
-    expect(screen.getByText("Partido por cubrir")).toBeInTheDocument();
-    expect(screen.getByText("Encargo sin dueño")).toBeInTheDocument();
-
-    // Una fila por persona del equipo: el cargado (con su tarea) y el libre.
-    expect(screen.getByText("luis")).toBeInTheDocument();
-    expect(screen.getByText("Clip de Luis")).toBeInTheDocument();
-    expect(screen.getByText("ana")).toBeInTheDocument();
-    expect(screen.getAllByText(/Sin tareas — libre/).length).toBeGreaterThan(0);
+    // La carga por persona deja filtrar; «luis» aparece como chip.
+    expect(screen.getByRole("button", { name: "Ver solo lo de luis" })).toBeInTheDocument();
   });
 
-  it("'Por persona': al desplegar una fila aparecen las tarjetas para repartir", async () => {
+  it("'Panorama': filtrar por una persona deja solo lo suyo", async () => {
+    renderTareas([
+      tarea({ id: "t-luis", titulo: "Clip de Luis", responsable_id: "u-luis", responsable_nombre: "luis" }),
+      tarea({ id: "t-ana", titulo: "Foto de Ana", responsable_id: "u-ana", responsable_nombre: "ana" }),
+    ]);
+
+    const chip = await screen.findByRole("button", { name: "Ver solo lo de luis" });
+    expect(screen.getAllByText("Foto de Ana").length).toBeGreaterThan(0);
+
+    fireEvent.click(chip);
+    // Al filtrar se oculta la banda y la agenda deja solo lo de luis.
+    await waitFor(() => expect(screen.queryByText("Foto de Ana")).toBeNull());
+    expect(screen.getByText("Clip de Luis")).toBeInTheDocument();
+  });
+
+  it("'Panorama': al desplegar una fila aparece la tarjeta accionable", async () => {
     renderTareas(
       [tarea({ id: "t-luis", titulo: "Clip de Luis", responsable_id: "u-luis", responsable_nombre: "luis" })],
       [],
       usuario("admin", "u-admin"),
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Por persona" }));
-    // La fila de luis se despliega y muestra la tarjeta accionable (con «Reasignar»).
-    fireEvent.click(screen.getByText("luis"));
+    // La fila compacta (un botón) se despliega y muestra la tarjeta con «Reasignar».
+    fireEvent.click(await screen.findByRole("button", { name: /Clip de Luis/ }));
     expect(await screen.findByRole("button", { name: /Reasignar/ })).toBeInTheDocument();
   });
 

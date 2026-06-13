@@ -26,19 +26,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { MARCA_ACTIVA_TODAS, useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { SesionContexto } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
-import { formatearFecha } from "@/lib/fecha";
+import { formatearDia, formatearFecha, hoyCDMX, tiempoRelativo } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
 import type { CatalogosContenido, Contenido, EventoRota } from "@/types";
 
@@ -49,11 +41,10 @@ import { DialogoCrearTarea } from "./DialogoCrearTarea";
 // se vea sin recargar (igual que el reparto del feed que esto sustituye).
 const REFRESCO = { refetchInterval: 45_000, refetchOnWindowFocus: true };
 
-/** Lente sobre la MISMA lista: el panorama por persona, el pool, lo mío, o todo. */
-type Lente = "equipo" | "personas" | "libres" | "mias";
+/** Lente sobre la MISMA lista: el panorama (agenda de equipo), el pool a coger, o lo mío. */
+type Lente = "panorama" | "libres" | "mias";
 const LENTES: { id: Lente; etiqueta: string }[] = [
-  { id: "equipo", etiqueta: "Todo el equipo" },
-  { id: "personas", etiqueta: "Por persona" },
+  { id: "panorama", etiqueta: "Panorama" },
   { id: "libres", etiqueta: "Por cubrir" },
   { id: "mias", etiqueta: "Lo mío" },
 ];
@@ -444,124 +435,191 @@ type Item =
   | { kind: "evento"; clave: string; orden: string; evento: EventoRota }
   | { kind: "tarea"; clave: string; orden: string; tarea: Contenido };
 
-/** El reparto de una persona en el panorama: lo que lleva activo, lo empezado y lo cerrado. */
-type CargaPersona = {
+// Colores fijos por persona: con 5 personas el color se vuelve reconocible de un vistazo
+// (patrón de los calendarios editoriales: identidad por color, no solo por nombre).
+const PALETA_PERSONA = [
+  "bg-sky-500",
+  "bg-violet-500",
+  "bg-amber-500",
+  "bg-emerald-500",
+  "bg-rose-500",
+  "bg-cyan-500",
+] as const;
+
+/** Color estable de una persona por hash de su id (mismo id → mismo color siempre). */
+function colorPersona(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return PALETA_PERSONA[h % PALETA_PERSONA.length];
+}
+
+/** Avatar redondo con la inicial y el color propio de la persona. */
+function AvatarPersona({
+  id,
+  nombre,
+  size = "md",
+}: {
   id: string;
   nombre: string;
-  activas: Contenido[];
-  enCurso: number;
-  hechas: number;
-};
-
-/** Vista previa de «lo que lleva»: cada título es su propio chip (truncado, pero entero en el DOM). */
-function PreviewTitulos({ titulos }: { titulos: string[] }) {
-  if (titulos.length === 0)
-    return <span className="text-sm text-muted-foreground">Sin tareas — libre para coger</span>;
-  const MAX = 3;
-  const visibles = titulos.slice(0, MAX);
-  const resto = titulos.length - visibles.length;
+  size?: "sm" | "md";
+}) {
   return (
-    <div className="flex flex-wrap items-center gap-1">
-      {visibles.map((t, i) => (
-        <span
-          key={i}
-          className="max-w-[16rem] truncate rounded border border-border bg-muted/40 px-1.5 py-0.5 text-xs"
-        >
-          {t}
+    <span
+      title={nombre}
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center rounded-full font-medium text-white",
+        colorPersona(id),
+        size === "sm" ? "h-5 w-5 text-[10px]" : "h-6 w-6 text-xs",
+      )}
+    >
+      {(nombre || "?").slice(0, 1).toUpperCase()}
+    </span>
+  );
+}
+
+/** Etiqueta del encabezado de día: «Hoy» / «Mañana» / día legible / «Sin fecha». */
+function sumarDias(iso: string, n: number): string {
+  const d = new Date(`${iso}T12:00:00`);
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+function etiquetaDia(dia: string, hoy: string): string {
+  if (!dia || dia === "9999-99-99") return "Sin fecha";
+  if (dia === hoy) return "Hoy";
+  if (dia === sumarDias(hoy, 1)) return "Mañana";
+  return formatearDia(dia);
+}
+
+/** Banda superior: lo ÚLTIMO que ha cogido el equipo (por momento de asignación), para ver el pulso. */
+function BandaReciente({ tareas }: { tareas: Contenido[] }) {
+  const recientes = tareas
+    .filter((t) => t.responsable_id)
+    .slice()
+    .sort((a, b) => (b.actualizado || "").localeCompare(a.actualizado || ""))
+    .slice(0, 5);
+  if (recientes.length === 0) return null;
+  return (
+    <section className="space-y-1.5">
+      <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Lo último que ha cogido el equipo
+      </h2>
+      <div className="flex flex-wrap gap-2">
+        {recientes.map((t) => {
+          const rel = t.actualizado ? tiempoRelativo(t.actualizado) : "";
+          return (
+            <div
+              key={t.id}
+              className="flex items-center gap-1.5 rounded-full border border-border bg-card px-2 py-1 text-xs shadow-sm"
+            >
+              <AvatarPersona id={t.responsable_id} nombre={t.responsable_nombre} size="sm" />
+              <span className="font-medium">{t.responsable_nombre}</span>
+              <span className="max-w-[12rem] truncate text-muted-foreground">{t.titulo}</span>
+              {rel && <span className="shrink-0 text-muted-foreground">· {rel}</span>}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Una FILA del agenda: compacta (hora · título · estado · dueño-o-«por cubrir»). Al desplegar
+ * muestra la tarjeta real para coger/reasignar/avanzar sin salir del panorama.
+ */
+function FilaAgenda({
+  item,
+  abierta,
+  onToggle,
+  catalogos,
+}: {
+  item: Item;
+  abierta: boolean;
+  onToggle: () => void;
+  catalogos: CatalogosContenido | undefined;
+}) {
+  const tarea = item.kind === "tarea" ? item.tarea : null;
+  const evento = item.kind === "evento" ? item.evento : null;
+  const titulo = tarea ? tarea.titulo : evento!.titulo;
+  const hora = tarea ? tarea.hora_objetivo : evento!.hora;
+  const sinDueno = !tarea || !tarea.responsable_id;
+  const esCobertura = Boolean(tarea?.evento_id) || item.kind === "evento";
+
+  return (
+    <div
+      className={cn(
+        "rounded-md border",
+        sinDueno
+          ? "border-dashed border-amber-500/40 bg-amber-50/40 dark:bg-amber-950/10"
+          : "border-border bg-card",
+      )}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center gap-2 px-2.5 py-2 text-left"
+      >
+        {abierta ? (
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+        ) : (
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+        )}
+        <span className="w-11 shrink-0 text-xs tabular-nums text-muted-foreground">
+          {hora || "—"}
         </span>
-      ))}
-      {resto > 0 && <span className="text-xs text-muted-foreground">+{resto} más</span>}
+        {esCobertura && <Trophy className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+        <span className="flex-1 truncate text-sm font-medium">{titulo}</span>
+        {tarea?.estado === "en_curso" && (
+          <Badge variant="outline" className="border-sky-500/40 text-sky-700 dark:text-sky-300">
+            En curso
+          </Badge>
+        )}
+        {tarea?.estado === "hecha" && (
+          <Badge
+            variant="outline"
+            className="border-emerald-500/40 text-emerald-700 dark:text-emerald-300"
+          >
+            Hecha
+          </Badge>
+        )}
+        {sinDueno ? (
+          <Badge
+            variant="outline"
+            className="shrink-0 border-amber-500/50 text-amber-700 dark:text-amber-300"
+          >
+            Por cubrir
+          </Badge>
+        ) : (
+          <span className="flex shrink-0 items-center gap-1">
+            <AvatarPersona id={tarea!.responsable_id} nombre={tarea!.responsable_nombre} size="sm" />
+            <span className="hidden text-xs text-muted-foreground sm:inline">
+              {tarea!.responsable_nombre}
+            </span>
+          </span>
+        )}
+      </button>
+      {abierta && (
+        <div className="border-t border-border/60 bg-muted/20 p-2">
+          {tarea ? (
+            <TarjetaTarea tarea={tarea} catalogos={catalogos} />
+          ) : (
+            <TarjetaEventoLibre evento={evento!} catalogos={catalogos} />
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
 /**
- * Una fila del panorama (el pool «Por cubrir» o una persona): los conteos de un vistazo y, al
- * desplegar, las tarjetas reales para coger/reasignar/avanzar sin salir de la tabla.
+ * PANORAMA (la cabina de Elias): una AGENDA por día —como un calendario— de quién cubre qué.
+ *
+ * Arriba, la carga por persona (avatar + conteo) que además FILTRA la agenda, y una banda con
+ * lo último que ha cogido el equipo. Debajo, los partidos/encargos agrupados por día (Hoy /
+ * Mañana / fecha) y ordenados por hora; lo «por cubrir» resalta en ámbar (es lo que pide
+ * decisión). Cada fila se despliega para coger/reasignar. «Cargar más» trae más días.
  */
-function FilaPanorama({
-  abierta,
-  onToggle,
-  expandible,
-  icono: Icono,
-  nombre,
-  destacar,
-  carga,
-  enCurso,
-  hechas,
-  titulos,
-  detalle,
-}: {
-  abierta: boolean;
-  onToggle: () => void;
-  expandible: boolean;
-  icono: typeof Hand;
-  nombre: string;
-  destacar?: boolean;
-  carga: number;
-  enCurso: number | null;
-  hechas: number | null;
-  titulos: string[];
-  detalle: React.ReactNode;
-}) {
-  return (
-    <>
-      <TableRow
-        className={cn(destacar && "bg-muted/30", expandible && "cursor-pointer")}
-        onClick={expandible ? onToggle : undefined}
-      >
-        <TableCell className="font-medium">
-          <div className="flex items-center gap-2">
-            {expandible ? (
-              abierta ? (
-                <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-              ) : (
-                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-              )
-            ) : (
-              <span className="inline-block w-4 shrink-0" />
-            )}
-            <Icono className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="truncate">{nombre}</span>
-          </div>
-        </TableCell>
-        <TableCell className="text-center">
-          <Badge
-            variant="outline"
-            className={cn("px-1.5 py-0 tabular-nums", carga === 0 && "text-muted-foreground")}
-          >
-            {carga}
-          </Badge>
-        </TableCell>
-        <TableCell className="text-center tabular-nums text-muted-foreground">
-          {enCurso === null ? "—" : enCurso}
-        </TableCell>
-        <TableCell className="text-center tabular-nums text-muted-foreground">
-          {hechas === null ? "—" : hechas}
-        </TableCell>
-        <TableCell>
-          <PreviewTitulos titulos={titulos} />
-        </TableCell>
-      </TableRow>
-      {abierta && expandible && (
-        <TableRow className="hover:bg-transparent">
-          <TableCell colSpan={5} className="bg-muted/20">
-            <div className="space-y-2 py-1">{detalle}</div>
-          </TableCell>
-        </TableRow>
-      )}
-    </>
-  );
-}
-
-/**
- * Panorama POR PERSONA (la cabina de Elias): una TABLA con quién lleva qué de un vistazo, para
- * repartir y equilibrar carga. Una fila «Por cubrir» con el pool sin dueño y, debajo, una fila por
- * cada miembro del equipo con su carga (activas / en curso / hechas) y una vista de lo que lleva.
- * Más cargados arriba (el cuello de botella salta a la vista). Cada fila se despliega para
- * coger/reasignar sin salir del panorama. Los libres (sin nada) salen también, para repartirles.
- */
-function PanoramaPorPersona({
+function PanoramaAgenda({
   tareas,
   eventosLibres,
   catalogos,
@@ -571,6 +629,8 @@ function PanoramaPorPersona({
   catalogos: CatalogosContenido | undefined;
 }) {
   const [abiertas, setAbiertas] = React.useState<Set<string>>(() => new Set());
+  const [filtro, setFiltro] = React.useState<string | null>(null); // id de persona, "__pool__", o null
+  const [diasVisibles, setDiasVisibles] = React.useState(5);
   const alternar = (clave: string) =>
     setAbiertas((prev) => {
       const next = new Set(prev);
@@ -581,9 +641,8 @@ function PanoramaPorPersona({
 
   const usuarios = catalogos?.usuarios ?? [];
   const conResponsable = tareas.filter((t) => t.responsable_id);
-  const sinResponsable = tareas.filter((t) => !t.responsable_id);
 
-  // Nombre por id: lo del catálogo manda; si falta, el que vino sellado en la tarea.
+  // Nombre por id: lo del catálogo manda; si falta, lo sellado en la tarea.
   const nombrePorId = new Map<string, string>();
   for (const u of usuarios) nombrePorId.set(u.id, u.usuario);
   for (const t of conResponsable) {
@@ -591,97 +650,155 @@ function PanoramaPorPersona({
       nombrePorId.set(t.responsable_id, t.responsable_nombre);
   }
 
-  // Sembramos con TODO el equipo para que los libres salgan; añadimos responsables externos.
-  const ids = new Set<string>(usuarios.map((u) => u.id));
-  for (const t of conResponsable) ids.add(t.responsable_id);
+  // Carga por persona = nº de tareas activas (no hechas). Más cargados primero (cuello de botella).
+  const idsPersona = new Set<string>(usuarios.map((u) => u.id));
+  for (const t of conResponsable) idsPersona.add(t.responsable_id);
+  const cargas = [...idsPersona]
+    .map((id) => ({
+      id,
+      nombre: nombrePorId.get(id) || "Sin nombre",
+      n: conResponsable.filter((t) => t.responsable_id === id && t.estado !== "hecha").length,
+    }))
+    .sort((a, b) => b.n - a.n || a.nombre.localeCompare(b.nombre));
+  const nPorCubrir = tareas.filter((t) => !t.responsable_id).length + eventosLibres.length;
 
-  const ordenFecha = (a: Contenido, b: Contenido) =>
-    (a.fecha_objetivo || "9999-99-99").localeCompare(b.fecha_objetivo || "9999-99-99");
+  // Agenda, aplicando el filtro de persona/pool si lo hay.
+  const pasaFiltro = (responsable: string | null) => {
+    if (!filtro) return true;
+    if (filtro === "__pool__") return responsable === null;
+    return responsable === filtro;
+  };
+  const verEventos = !filtro || filtro === "__pool__"; // los eventos libres no tienen dueño
+  const items: Item[] = [
+    ...tareas
+      .filter((t) => pasaFiltro(t.responsable_id || null))
+      .map((t) => ({
+        kind: "tarea" as const,
+        clave: `t-${t.id}`,
+        orden: t.fecha_objetivo || "9999-99-99",
+        tarea: t,
+      })),
+    ...(verEventos
+      ? eventosLibres.map((e) => ({
+          kind: "evento" as const,
+          clave: `e-${e.id}`,
+          orden: e.fecha || "9999-99-99",
+          evento: e,
+        }))
+      : []),
+  ];
 
-  const cargas: CargaPersona[] = [...ids]
-    .map((id) => {
-      const suyas = conResponsable.filter((t) => t.responsable_id === id);
-      const activas = suyas.filter((t) => t.estado !== "hecha").sort(ordenFecha);
-      return {
-        id,
-        nombre: nombrePorId.get(id) || "Sin nombre",
-        activas,
-        enCurso: activas.filter((t) => t.estado === "en_curso").length,
-        hechas: suyas.filter((t) => t.estado === "hecha").length,
-      };
-    })
-    // Más cargados arriba (Elias ve el cuello de botella); a igualdad, por nombre.
-    .sort((a, b) => b.activas.length - a.activas.length || a.nombre.localeCompare(b.nombre));
-
-  // El pool «Por cubrir»: eventos sin tarea + encargos/coberturas aún sin dueño, por fecha.
-  const porCubrir: Item[] = [
-    ...sinResponsable.map((t) => ({
-      kind: "tarea" as const,
-      clave: `t-${t.id}`,
-      orden: t.fecha_objetivo || "9999-99-99",
-      tarea: t,
-    })),
-    ...eventosLibres.map((e) => ({
-      kind: "evento" as const,
-      clave: `e-${e.id}`,
-      orden: e.fecha || "9999-99-99",
-      evento: e,
-    })),
-  ].sort((a, b) => a.orden.localeCompare(b.orden));
-  const tituloItem = (i: Item) => (i.kind === "evento" ? i.evento.titulo : i.tarea.titulo);
+  // Agrupar por día y ordenar cada día por hora (estilo rundown).
+  const horaDe = (i: Item) =>
+    i.kind === "tarea" ? i.tarea.hora_objetivo || "99:99" : i.evento.hora || "99:99";
+  const porDia = new Map<string, Item[]>();
+  for (const it of items) {
+    const lista = porDia.get(it.orden) ?? [];
+    lista.push(it);
+    porDia.set(it.orden, lista);
+  }
+  const diasOrdenados = [...porDia.keys()].sort();
+  for (const d of diasOrdenados) porDia.get(d)!.sort((a, b) => horaDe(a).localeCompare(horaDe(b)));
+  const diasMostrados = diasOrdenados.slice(0, diasVisibles);
+  const hayMas = diasOrdenados.length > diasVisibles;
+  const hoy = hoyCDMX();
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-[30%]">Quién</TableHead>
-            <TableHead className="w-16 text-center">Carga</TableHead>
-            <TableHead className="w-20 text-center">En curso</TableHead>
-            <TableHead className="w-16 text-center">Hechas</TableHead>
-            <TableHead>Lo que lleva</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {/* El pool sin dueño va primero: es lo que urge repartir. */}
-          <FilaPanorama
-            abierta={abiertas.has("__pool__")}
-            onToggle={() => alternar("__pool__")}
-            expandible={porCubrir.length > 0}
-            icono={Hand}
-            nombre="Por cubrir"
-            destacar
-            carga={porCubrir.length}
-            enCurso={null}
-            hechas={null}
-            titulos={porCubrir.map(tituloItem)}
-            detalle={porCubrir.map((i) =>
-              i.kind === "evento" ? (
-                <TarjetaEventoLibre key={i.clave} evento={i.evento} catalogos={catalogos} />
-              ) : (
-                <TarjetaTarea key={i.clave} tarea={i.tarea} catalogos={catalogos} />
-              ),
+    <div className="space-y-4">
+      {/* Carga por persona (avatar + conteo) que además filtra la agenda. */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button
+          type="button"
+          aria-label="Ver solo lo por cubrir"
+          onClick={() => setFiltro(filtro === "__pool__" ? null : "__pool__")}
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs",
+            filtro === "__pool__"
+              ? "border-amber-500 bg-amber-100/60 dark:bg-amber-950/30"
+              : "border-amber-500/40 hover:bg-accent",
+          )}
+        >
+          <Hand className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+          Por cubrir
+          <Badge variant="outline" className="px-1.5 py-0 tabular-nums">
+            {nPorCubrir}
+          </Badge>
+        </button>
+        {cargas.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            aria-label={`Ver solo lo de ${c.nombre}`}
+            onClick={() => setFiltro(filtro === c.id ? null : c.id)}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-xs",
+              filtro === c.id ? "border-foreground/40 bg-accent" : "border-border hover:bg-accent",
             )}
-          />
-          {cargas.map((c) => (
-            <FilaPanorama
-              key={c.id}
-              abierta={abiertas.has(c.id)}
-              onToggle={() => alternar(c.id)}
-              expandible={c.activas.length > 0}
-              icono={UserCheck}
-              nombre={c.nombre}
-              carga={c.activas.length}
-              enCurso={c.enCurso}
-              hechas={c.hechas}
-              titulos={c.activas.map((t) => t.titulo)}
-              detalle={c.activas.map((t) => (
-                <TarjetaTarea key={t.id} tarea={t} catalogos={catalogos} />
-              ))}
-            />
+          >
+            <AvatarPersona id={c.id} nombre={c.nombre} size="sm" />
+            <span className="font-medium">{c.nombre}</span>
+            <Badge
+              variant="outline"
+              className={cn("px-1.5 py-0 tabular-nums", c.n === 0 && "text-muted-foreground")}
+            >
+              {c.n}
+            </Badge>
+          </button>
+        ))}
+        {filtro && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs text-muted-foreground"
+            onClick={() => setFiltro(null)}
+          >
+            Ver todo
+          </Button>
+        )}
+      </div>
+
+      {!filtro && <BandaReciente tareas={tareas} />}
+
+      {diasMostrados.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border p-8 text-center">
+          <p className="text-sm text-muted-foreground">
+            {filtro
+              ? "Nada por aquí con este filtro."
+              : "Aún no hay partidos ni tareas. Súbelos en Fuentes o añádelos aquí."}
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {diasMostrados.map((dia) => (
+            <section key={dia} className="space-y-1.5">
+              <h2 className="sticky top-0 z-10 bg-background/95 py-1 text-sm font-semibold backdrop-blur">
+                {etiquetaDia(dia, hoy)}
+                <span className="ml-1.5 font-normal tabular-nums text-muted-foreground">
+                  ({porDia.get(dia)!.length})
+                </span>
+              </h2>
+              <div className="space-y-1.5">
+                {porDia.get(dia)!.map((it) => (
+                  <FilaAgenda
+                    key={it.clave}
+                    item={it}
+                    abierta={abiertas.has(it.clave)}
+                    onToggle={() => alternar(it.clave)}
+                    catalogos={catalogos}
+                  />
+                ))}
+              </div>
+            </section>
           ))}
-        </TableBody>
-      </Table>
+          {hayMas && (
+            <div className="flex justify-center">
+              <Button variant="outline" size="sm" onClick={() => setDiasVisibles((d) => d + 5)}>
+                Cargar más días
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -697,7 +814,7 @@ function PanoramaPorPersona({
 export default function Tareas() {
   const { marcaActiva } = useMarcaActiva();
   const usuario = React.useContext(SesionContexto)?.usuario ?? null;
-  const [lente, setLente] = React.useState<Lente>("equipo");
+  const [lente, setLente] = React.useState<Lente>("panorama");
   const [crearAbierto, setCrearAbierto] = React.useState(false);
 
   const marca = marcaActiva && marcaActiva !== MARCA_ACTIVA_TODAS ? marcaActiva : undefined;
@@ -808,28 +925,26 @@ export default function Tareas() {
 
       {cargando && <p className="text-sm text-muted-foreground">Cargando…</p>}
 
-      {!cargando && lente === "personas" && (
-        <PanoramaPorPersona
+      {!cargando && lente === "panorama" && (
+        <PanoramaAgenda
           tareas={tareas}
           eventosLibres={eventosLibres}
           catalogos={catalogos}
         />
       )}
 
-      {!cargando && lente !== "personas" && visibles.length === 0 && (
+      {!cargando && lente !== "panorama" && visibles.length === 0 && (
         <div className="rounded-lg border border-dashed border-border p-8 text-center">
           <p className="text-sm text-muted-foreground">
             {lente === "mias"
               ? "No tienes nada asignado. Coge algo de «Por cubrir»."
-              : lente === "libres"
-                ? "No hay nada por cubrir ahora mismo."
-                : "Aún no hay partidos ni tareas. Súbelos en Fuentes o añádelos aquí."}
+              : "No hay nada por cubrir ahora mismo."}
           </p>
         </div>
       )}
 
       {!cargando &&
-        lente !== "personas" &&
+        lente !== "panorama" &&
         visibles.length > 0 &&
         grupos.map((g) =>
           g.items.length === 0 ? null : (
