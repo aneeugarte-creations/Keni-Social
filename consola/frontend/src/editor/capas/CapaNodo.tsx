@@ -410,7 +410,13 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
       ? {
           onDragStart: onGesto,
           onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => {
-            onChange({ x: e.target.x(), y: e.target.y() });
+            // `currentTarget` (el nodo al que está atado el handler = el NODO de la capa, el que
+            // Konva arrastra) y NO `target` (la forma bajo el puntero). Importa en las capas
+            // envueltas en Group cuyo contenido visible es un HIJO: al arrastrar el overlay
+            // agarras su Rect-banda hijo (local y = h - banda); `target.y()` horneaba ESE desfase
+            // como y del modelo y la banda salía volando +(h - banda) fuera del lienzo. Para una
+            // capa de UNA sola forma, currentTarget === target (sin cambio).
+            onChange({ x: e.currentTarget.x(), y: e.currentTarget.y() });
           },
         }
       : {}),
