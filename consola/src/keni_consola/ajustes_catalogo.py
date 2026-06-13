@@ -93,14 +93,21 @@ GRUPOS_MAQUINA: tuple[str, ...] = (
 
 
 def _maestros_etapa() -> list[Ajuste]:
-    """Los maestros de la máquina (ADR 0011): «Investigación», «Producción» y «Arte».
+    """Los interruptores de etapa de la máquina + los maestros virtuales (ADR 0011).
+
+    La tira «Pipeline en vivo» del Monitor opera las etapas FÍSICAS una a una: Selección
+    (`KENI_PIPELINE_SELECCION`), Validación (`KENI_PIPELINE_VALIDACION`), Copy
+    (`KENI_PIPELINE_COPY`) y Arte (`KENI_PIPELINE_ARTE`). Cada una es su propia clave del
+    store (sin fan-out): el operador puede apagar una etapa sin tocar las demás.
 
     `KENI_INVESTIGACION` y `KENI_PRODUCCION` son VIRTUALES (no se leen en runtime): al
     guardarlas, la API escribe sus etapas físicas (`config.ETAPAS_INVESTIGACION` /
-    `config.ETAPAS_PRODUCCION`) con el mismo valor — un interruptor por proceso, sin botones
-    por etapa. Su valor mostrado es el de una etapa representativa (ingesta para Investigación,
-    copy para Producción). ARTE conserva interruptor propio (única etapa con coste externo
-    real). «Publicar» vive en su grupo `publicacion`.
+    `config.ETAPAS_PRODUCCION`) con el mismo valor. Su valor mostrado es el de una etapa
+    representativa (ingesta para Investigación, copy para Producción). SIGUEN en el catálogo
+    aunque la tira ya no las pinte: son la base de las excepciones por marca
+    (`KENI_INVESTIGACION::marca` apaga el proceso entero con un toggle), el respaldo de
+    lectura del riel de Noticias (etapas sin flag propio en catálogo: Fusión/Clasificación/
+    Ranking) y el interruptor «de proceso» para API/MCP. «Publicar» vive en `publicacion`.
     """
     return [
         Ajuste(
@@ -108,7 +115,24 @@ def _maestros_etapa() -> list[Ajuste]:
             tipo="bool",
             etiqueta="Investigación",
             ayuda="Para todas las marcas: recolecta, deduplica, clasifica, rankea y "
-            "verifica noticias para dejar el pool listo (no escribe copy).",
+            "verifica noticias para dejar el pool listo (no escribe copy). Virtual: "
+            "enciende/apaga TODAS las etapas del proceso a la vez.",
+            grupo="maestros_investigacion",
+            defecto=False,
+        ),
+        Ajuste(
+            clave=config.ENV_PIPELINE_SELECCION,
+            tipo="bool",
+            etiqueta="Selección",
+            ayuda="Etapa física: recolecta e ingiere noticias de las fuentes al pool.",
+            grupo="maestros_investigacion",
+            defecto=False,
+        ),
+        Ajuste(
+            clave=config.ENV_PIPELINE_VALIDACION,
+            tipo="bool",
+            etiqueta="Validación",
+            ayuda="Etapa física: criba/QA de la fuente antes de escribir copy.",
             grupo="maestros_investigacion",
             defecto=False,
         ),
@@ -117,7 +141,16 @@ def _maestros_etapa() -> list[Ajuste]:
             tipo="bool",
             etiqueta="Producción",
             ayuda="Para todas las marcas: redacta el copy que convierte una noticia "
-            "verificada en pieza publicable (el arte tiene interruptor propio).",
+            "verificada en pieza publicable (el arte tiene interruptor propio). Virtual: "
+            "equivale hoy a la etapa Copy.",
+            grupo="maestros_produccion",
+            defecto=False,
+        ),
+        Ajuste(
+            clave=config.ENV_PIPELINE_COPY,
+            tipo="bool",
+            etiqueta="Copy",
+            ayuda="Etapa física: redacta el copy de los temas admitidos al flujo.",
             grupo="maestros_produccion",
             defecto=False,
         ),

@@ -253,6 +253,18 @@ def test_endpoint_daemons_ignora_retirados(entorno):
     assert "programador" in nombres
 
 
+def test_endpoint_daemons_expone_barrible(entorno):
+    # `barrible` = su bucle corre sobre `bucle_gateado` y CONSUME el flag de barrido forzado
+    # (latidos.BARRIBLES); los bucles legados (programador/metricas/...) no lo miran, asi que
+    # el front solo les ofrece "Barrer ahora" a los primeros.
+    db.latido_barrido("ingesta", ok=True, intervalo_seg=60.0, tick_seg=60.0)
+    db.latido_barrido("programador", ok=True, intervalo_seg=60.0, tick_seg=60.0)
+    c = _cli_admin()
+    por_nombre = {d["daemon"]: d for d in c.get("/api/sistema/daemons").json()["daemons"]}
+    assert por_nombre["ingesta"]["barrible"] is True
+    assert por_nombre["programador"]["barrible"] is False
+
+
 # --------------------------------------------------------------------------- #
 # Barrido FORZADO: flag en BD + consumo en bucle_gateado + endpoint             #
 # --------------------------------------------------------------------------- #

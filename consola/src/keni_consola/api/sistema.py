@@ -755,7 +755,16 @@ def sonda_daemons() -> dict:
         else:
             estado = "ok"
         salida.append(
-            {**f, "edad_seg": edad, "umbral_atraso_seg": umbral, "estado": estado}
+            {
+                **f,
+                "edad_seg": edad,
+                "umbral_atraso_seg": umbral,
+                "estado": estado,
+                # `barrible`: su bucle corre sobre `bucle_gateado` y consume el flag de
+                # barrido forzado; los bucles legados no lo miran, asi que el front solo
+                # ofrece "Barrer ahora" a los barribles.
+                "barrible": f["daemon"] in latidos.BARRIBLES,
+            }
         )
     return {"daemons": salida, "error": None}
 

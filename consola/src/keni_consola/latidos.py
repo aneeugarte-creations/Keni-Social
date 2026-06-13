@@ -48,6 +48,27 @@ _ALIAS = {
 #     (cada loop late con su propio nombre); la fila vieja quedó huérfana.
 RETIRADOS = frozenset({"pipeline"})
 
+# Daemons cuyo bucle corre sobre `daemon_util.bucle_gateado` y por tanto CONSUMEN el flag
+# `barrido_solicitado` (POST /api/sistema/daemons/{daemon}/barrer): para ellos «Barrer ahora»
+# funciona de verdad. Los bucles LEGADOS (programador, metricas, metricas_piezas, comercial)
+# NO miran el flag: ofrecerles el botón sería mentir, así que la sonda del panel expone
+# `barrible` y el front solo lo ofrece a estos. Mantener en sintonía con los call sites de
+# `bucle_gateado` (el nombre sale de `nombre_de_sweep`/`_ALIAS` o del `nombre=` explícito).
+BARRIBLES = frozenset({
+    "ingesta",
+    "media_gc",
+    "noticias_gc",
+    "trends",
+    "algoritmos",
+    "patrones",
+    "reaper",
+    "vencimientos",
+    "sugerencias",
+    "alertas_rendimiento",
+    "investigacion",
+    "produccion",
+})
+
 # Mínimo entre DOS latidos de ciclo del mismo daemon (las de barrido no se throttlean:
 # son una por sweep y traen el resultado). 30s mantiene el panel fresco con coste nulo.
 _MIN_ENTRE_CICLOS_SEG = 30.0

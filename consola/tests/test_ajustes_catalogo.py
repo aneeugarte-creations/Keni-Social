@@ -44,8 +44,11 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         # Interruptor general de la máquina de contenido (kill-switch global).
         config.ENV_MAQUINA,
         # Los maestros de la máquina (ADR 0011): «Investigación» y «Producción» (virtuales,
-        # agrupan sus etapas) y «Arte» (la única etapa con coste externo).
-        config.ENV_INVESTIGACION, config.ENV_PRODUCCION, config.ENV_PIPELINE_ARTE,
+        # agrupan sus etapas) + las etapas FÍSICAS que opera la tira «Pipeline en vivo»
+        # (Selección/Validación/Copy/Arte; Arte siempre tuvo interruptor propio).
+        config.ENV_INVESTIGACION, config.ENV_PRODUCCION,
+        config.ENV_PIPELINE_SELECCION, config.ENV_PIPELINE_VALIDACION,
+        config.ENV_PIPELINE_COPY, config.ENV_PIPELINE_ARTE,
         # Automatismos generales (barridos de mantenimiento; SOLO toggles on/off).
         config.ENV_ALERTAS_ACTIVAS, config.ENV_EVENTOS_VENCIMIENTOS,
         config.ENV_AUTO_PREAPROBACION, config.ENV_MEDIA_GC,
@@ -87,16 +90,22 @@ def test_catalogo_tiene_las_claves_esperadas(store):
     assert por_marca, "deben existir toggles de copy/arte por marca"
 
 
-_MAESTROS_ENV = {config.ENV_INVESTIGACION, config.ENV_PRODUCCION, config.ENV_PIPELINE_ARTE}
+_MAESTROS_ENV = {
+    # Virtuales de proceso (fan-out) + etapas físicas de la tira «Pipeline en vivo».
+    config.ENV_INVESTIGACION, config.ENV_PRODUCCION,
+    config.ENV_PIPELINE_SELECCION, config.ENV_PIPELINE_VALIDACION,
+    config.ENV_PIPELINE_COPY, config.ENV_PIPELINE_ARTE,
+}
 
 
 def test_maestros_son_investigacion_produccion_y_arte(store):
     """Los maestros (grupos `maestros_investigacion`/`maestros_produccion`) son EXACTAMENTE
-    «Investigación», «Producción» y «Arte» (ADR 0011).
+    los dos virtuales de proceso + las cuatro etapas físicas de la tira (ADR 0011).
 
     «Investigación» y «Producción» son claves VIRTUALES (`KENI_INVESTIGACION`/`KENI_PRODUCCION`):
-    agrupan sus etapas internas con fan-out (ver `claves_fisicas`). La única etapa con
-    interruptor propio es Arte (coste externo real)."""
+    agrupan sus etapas internas con fan-out (ver `claves_fisicas`) y se conservan para las
+    excepciones por marca, el respaldo de lectura del riel de Noticias y la API/MCP. La tira
+    «Pipeline en vivo» opera las FÍSICAS: Selección/Validación/Copy/Arte, cada una su clave."""
     maestros = [
         a for a in ajustes_catalogo.catalogo()
         if a.grupo in {"maestros_investigacion", "maestros_produccion"}
@@ -109,6 +118,9 @@ def test_maestros_son_investigacion_produccion_y_arte(store):
     etiquetas = {a.clave: a.etiqueta for a in maestros}
     assert etiquetas[config.ENV_INVESTIGACION] == "Investigación"
     assert etiquetas[config.ENV_PRODUCCION] == "Producción"
+    assert etiquetas[config.ENV_PIPELINE_SELECCION] == "Selección"
+    assert etiquetas[config.ENV_PIPELINE_VALIDACION] == "Validación"
+    assert etiquetas[config.ENV_PIPELINE_COPY] == "Copy"
     assert etiquetas[config.ENV_PIPELINE_ARTE] == "Arte IA"
 
 
