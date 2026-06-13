@@ -248,6 +248,46 @@ def test_reclama_job_huerfano_de_worker_muerto(entorno):
     assert rereclamado is not None and rereclamado["id"] == primero["id"]
 
 
+def test_reclamar_pendiente_no_lee_yaml_de_generacion(entorno, monkeypatch):
+    """RENDIMIENTO: clavar un job `pendiente` NO lee el YAML de generacion (cero disco bajo lock).
+
+    La guardia anti-duplicado (`_gen_ya_terminal`, que parsea un YAML) SOLO aplica a los
+    huerfanos. Un `pendiente` nunca corrio su post-procesado, asi que no debe pagar ese I/O —
+    y, sobre todo, no debe hacerlo mientras retiene el `FOR UPDATE` de la fila.
+    """
+    llamadas = {"n": 0}
+    real = db_jobs._gen_ya_terminal
+    monkeypatch.setattr(
+        db_jobs, "_gen_ya_terminal",
+        lambda gid: (llamadas.__setitem__("n", llamadas["n"] + 1), real(gid))[1],
+    )
+    gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
+    cola.encolar(gen["id"], jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags()))
+    clavado = cola.reclamar("w")
+    assert clavado is not None and clavado["gen_id"] == gen["id"]
+    assert llamadas["n"] == 0, "clavar un pendiente no debe leer el YAML de generacion"
+
+
+def test_huerfano_con_registro_terminal_se_cierra_sin_relanzar(entorno):
+    """La guardia anti-duplicado: un huerfano cuyo registro YA es terminal se cierra sin correr.
+
+    Tras el commit del claim (fuera del lock) se comprueba el estado del registro; si es
+    terminal (su post-procesado ya corrio antes de que el worker muriera), el job se marca
+    `terminado` y `reclamar` pasa al siguiente, SIN devolverlo (evita el borrador duplicado).
+    """
+    gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
+    cola.encolar(gen["id"], jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags()))
+    primero = cola.reclamar("w1")
+    assert primero is not None
+    # El registro alcanza un estado TERMINAL (el post-procesado ya corrio) y el worker MUERE
+    # sin cerrar el job: queda `reclamado` con claimed_at viejo (huerfano).
+    generaciones.actualizar(gen["id"], {"estado": generaciones.ESTADO_COMPLETADO})
+    _envejecer_claim(primero["id"])
+    # El re-reclamo NO lo devuelve (su trabajo ya se hizo) y lo deja cerrado.
+    assert cola.reclamar("w2") is None
+    assert repos.contar_jobs_activos() == 0
+
+
 def _envejecer_claim(job_id: str) -> None:
     """Retrasa `claimed_at` mas alla del umbral de huerfano (simula un worker muerto)."""
     viejo = (

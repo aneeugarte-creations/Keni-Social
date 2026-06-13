@@ -193,12 +193,22 @@ def reclamar_job(worker: str = "", *, prioridad_minima: int | None = None) -> di
     (`completado`/`error`), NO se relanza: se marca el job `terminado` y se pasa al siguiente
     (su trabajo ya se hizo). Solo afecta al re-reclamo de huerfanos; un `pendiente` nunca corrio.
 
+    RENDIMIENTO (la lectura del YAML va FUERA del row-lock): la guardia anti-duplicado lee y
+    parsea un fichero YAML (`_gen_ya_terminal` -> `generaciones.obtener`). Hacer ese I/O de disco
+    mientras se retiene el `FOR UPDATE` alargaba la contencion de la fila (y, con varios workers,
+    de toda la cola). Ahora se CLAVA la fila y se hace COMMIT (suelta el lock) ANTES de tocar el
+    disco; recien entonces, si era un huerfano, se comprueba si su registro ya es terminal y, en
+    ese caso, se cierra el job sin relanzarlo. Tras clavarlo con `claimed_at` fresco, ningun otro
+    worker lo ve como huerfano, asi que cerrarlo fuera del lock es seguro (no hay carrera). El
+    camino normal (un `pendiente`) NO toca el disco en absoluto.
+
     TOPE DE INTENTOS (anti crash-loop): cada reclamo incrementa `jobs.intentos`. Un huerfano
     que ya quemo `KENI_JOBS_MAX_INTENTOS` intentos NO se re-ejecuta: se cierra su job y su
     registro queda en error (motivo `interrumpido`, mensaje claro). Sin esto, un job que MATA
     al worker (OOM por un prompt enorme, bug del runner) se re-reclamaba para siempre, quemando
     tokens de la suscripcion compartida en cada vuelta. `reencolar_job` (reintento admin) y la
-    resurreccion de `encolar_job` resetean el contador (intencion humana/trabajo nuevo).
+    resurreccion de `encolar_job` resetean el contador (intencion humana/trabajo nuevo). Esta
+    comprobacion es DB-pura (columna `intentos`), asi que permanece dentro del lock (sin disco).
     """
     ahora = ahora_iso()
     limite_huerfano = iso_utc(
@@ -223,32 +233,35 @@ def reclamar_job(worker: str = "", *, prioridad_minima: int | None = None) -> di
                 con.commit()
                 return None
             # Solo un HUERFANO (estado `reclamado`) pudo haber corrido ya su post-procesado.
-            if fila["estado"] == JOB_RECLAMADO and _gen_ya_terminal(fila["gen_id"]):
-                # El registro ya alcanzo estado terminal: el trabajo se hizo. Cerramos el job
-                # SIN relanzarlo (evita el borrador duplicado) y buscamos el siguiente.
-                con.execute(
-                    "UPDATE jobs SET estado = ? WHERE id = ?", (JOB_TERMINADO, fila["id"])
-                )
-                con.commit()
-                continue
+            es_huerfano = fila["estado"] == JOB_RECLAMADO
             # TOPE DE INTENTOS (anti crash-loop): un huerfano que ya agoto sus intentos NO se
-            # re-ejecuta. Se cierra el job y el registro queda en error claro (best-effort).
-            if (
-                fila["estado"] == JOB_RECLAMADO
-                and int(fila["intentos"] or 0) >= config.jobs_max_intentos()
-            ):
+            # re-ejecuta. Es DB-puro (sin disco): se decide DENTRO del lock. Se cierra el job y
+            # el registro queda en error claro (best-effort, ya fuera del lock tras el commit).
+            if es_huerfano and int(fila["intentos"] or 0) >= config.jobs_max_intentos():
                 con.execute(
                     "UPDATE jobs SET estado = ? WHERE id = ?", (JOB_TERMINADO, fila["id"])
                 )
                 con.commit()
                 _marcar_error_reintentos(fila["gen_id"], int(fila["intentos"] or 0))
                 continue
+            # CLAVA la fila y COMMIT: suelta el row-lock ANTES de cualquier I/O de disco.
             con.execute(
                 "UPDATE jobs SET estado = ?, worker = ?, claimed_at = ?, "
                 "intentos = intentos + 1 WHERE id = ?",
                 (JOB_RECLAMADO, worker, ahora, fila["id"]),
             )
             con.commit()
+            # GUARDIA ANTI-DUPLICADO, ya FUERA del lock: solo un huerfano pudo haber corrido su
+            # post-procesado. Si su registro ya es terminal, el trabajo se hizo: cerramos el job
+            # SIN relanzarlo (evita el borrador duplicado) y buscamos el siguiente. Con el
+            # `claimed_at` fresco que acabamos de fijar, ningun otro worker lo re-reclama mientras
+            # tanto, asi que esta segunda escritura es segura sin retener el lock.
+            if es_huerfano and _gen_ya_terminal(fila["gen_id"]):
+                con.execute(
+                    "UPDATE jobs SET estado = ? WHERE id = ?", (JOB_TERMINADO, fila["id"])
+                )
+                con.commit()
+                continue
             return {"id": fila["id"], "gen_id": fila["gen_id"], "spec": fila["spec"]}
         con.commit()
         return None
