@@ -567,7 +567,11 @@ export interface RecuadroPersona {
 //
 // `ChipToggle` lo reusan los filtros de la pestaña Cambios y ausencias.
 
-/** Botón toggle de chip (multi-select). Reutiliza `Button` con dos variantes. */
+/**
+ * Botón toggle de chip (single/multi-select). Reutiliza `Button` con dos variantes.
+ * Activo = gris de plataforma (`secondary`), inactivo = `outline`: la misma estetica
+ * neutra del Calendario (sin negro), consistente con los badges "Borrador"/etc.
+ */
 export function ChipToggle({
   activo,
   onClick,
@@ -581,7 +585,7 @@ export function ChipToggle({
     <Button
       type="button"
       size="sm"
-      variant={activo ? "default" : "outline"}
+      variant={activo ? "secondary" : "outline"}
       className="h-7 px-2.5 text-xs"
       onClick={onClick}
       aria-pressed={activo}

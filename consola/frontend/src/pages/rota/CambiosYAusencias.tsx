@@ -19,7 +19,7 @@ import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -207,35 +207,65 @@ export function CambiosYAusencias({ esAdmin }: { esAdmin: boolean }) {
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <ArrowLeftRight className="h-4 w-4" /> Cambios y ausencias
-              </CardTitle>
-            </div>
-            <Button
-              type="button"
-              size="sm"
-              variant={formAbierto ? "outline" : "default"}
-              onClick={() => setFormAbierto((v) => !v)}
-              disabled={sinSesion && !equipo.length}
-            >
-              {formAbierto ? (
-                <>
-                  <X className="h-4 w-4" /> Cerrar
-                </>
-              ) : (
-                <>
-                  <Plus className="h-4 w-4" /> Nueva solicitud
-                </>
-              )}
-            </Button>
-          </div>
-        </CardHeader>
-        {formAbierto && (
-          <CardContent className="space-y-4 border-t pt-4">
+      {/* Cabecera SLIM, misma estetica que las pestañas Calendario / Mis turnos: sin Card de
+          titulo (la pestaña ya rotula "Cambios y ausencias"), los filtros viven a la izquierda
+          y la accion primaria a la derecha. El boton usa el gris de plataforma (secondary), el
+          mismo que "Aprobar y publicar" del Calendario — no el negro de antes. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Tipo
+          </span>
+          <ChipToggle activo={filtroTipo === "todo"} onClick={() => setFiltroTipo("todo")}>
+            Todo
+          </ChipToggle>
+          <ChipToggle activo={filtroTipo === "cambios"} onClick={() => setFiltroTipo("cambios")}>
+            Cambios
+          </ChipToggle>
+          <ChipToggle
+            activo={filtroTipo === "ausencias"}
+            onClick={() => setFiltroTipo("ausencias")}
+          >
+            Ausencias
+          </ChipToggle>
+          <span className="ml-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Estado
+          </span>
+          <ChipToggle
+            activo={filtroEstado === "activos"}
+            onClick={() => setFiltroEstado("activos")}
+          >
+            Activos
+          </ChipToggle>
+          <ChipToggle
+            activo={filtroEstado === "historial"}
+            onClick={() => setFiltroEstado("historial")}
+          >
+            Historial
+          </ChipToggle>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant={formAbierto ? "outline" : "secondary"}
+          onClick={() => setFormAbierto((v) => !v)}
+          disabled={sinSesion && !equipo.length}
+        >
+          {formAbierto ? (
+            <>
+              <X className="h-4 w-4" /> Cerrar
+            </>
+          ) : (
+            <>
+              <Plus className="h-4 w-4" /> Nueva solicitud
+            </>
+          )}
+        </Button>
+      </div>
+
+      {formAbierto && (
+        <Card>
+          <CardContent className="space-y-4 p-6">
             <div className="space-y-1.5">
               <Label className="text-xs uppercase tracking-wide text-muted-foreground">
                 Tipo
@@ -279,41 +309,8 @@ export function CambiosYAusencias({ esAdmin }: { esAdmin: boolean }) {
               />
             )}
           </CardContent>
-        )}
-      </Card>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Tipo
-        </span>
-        <ChipToggle activo={filtroTipo === "todo"} onClick={() => setFiltroTipo("todo")}>
-          Todo
-        </ChipToggle>
-        <ChipToggle activo={filtroTipo === "cambios"} onClick={() => setFiltroTipo("cambios")}>
-          Cambios
-        </ChipToggle>
-        <ChipToggle
-          activo={filtroTipo === "ausencias"}
-          onClick={() => setFiltroTipo("ausencias")}
-        >
-          Ausencias
-        </ChipToggle>
-        <span className="ml-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Estado
-        </span>
-        <ChipToggle
-          activo={filtroEstado === "activos"}
-          onClick={() => setFiltroEstado("activos")}
-        >
-          Activos
-        </ChipToggle>
-        <ChipToggle
-          activo={filtroEstado === "historial"}
-          onClick={() => setFiltroEstado("historial")}
-        >
-          Historial
-        </ChipToggle>
-      </div>
+        </Card>
+      )}
 
       {errorSwaps && (
         <BloqueError
@@ -552,7 +549,7 @@ export function FormularioNuevoSwap({
         )}
       </div>
       <div className="flex justify-end">
-        <Button onClick={() => crear.mutate()} disabled={!puedeCrear}>
+        <Button variant="secondary" onClick={() => crear.mutate()} disabled={!puedeCrear}>
           {crear.isPending ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
@@ -673,7 +670,7 @@ export function TarjetaSwap({
                 accion="aceptar"
                 onCambio={invalidar}
                 trigger={
-                  <Button size="sm">
+                  <Button size="sm" variant="secondary">
                     <Check className="h-4 w-4" /> Aceptar
                   </Button>
                 }
@@ -697,7 +694,7 @@ export function TarjetaSwap({
                 accion="aprobar"
                 onCambio={invalidar}
                 trigger={
-                  <Button size="sm">
+                  <Button size="sm" variant="secondary">
                     <ShieldCheck className="h-4 w-4" /> Aprobar y aplicar
                   </Button>
                 }
@@ -839,7 +836,7 @@ export function DialogAccionSwap({
             <Button variant="ghost" onClick={() => setAbierto(false)}>
               Cancelar
             </Button>
-            <Button onClick={() => mutar.mutate()} disabled={mutar.isPending}>
+            <Button variant="secondary" onClick={() => mutar.mutate()} disabled={mutar.isPending}>
               {mutar.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : null}

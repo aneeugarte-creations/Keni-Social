@@ -127,7 +127,7 @@ export function NuevaAusencia({
         />
       </div>
       <div className="flex justify-end">
-        <Button onClick={() => crear.mutate()} disabled={!puedeCrear}>
+        <Button variant="secondary" onClick={() => crear.mutate()} disabled={!puedeCrear}>
           {crear.isPending ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
@@ -325,7 +325,7 @@ export function DialogoEditarAusencia({
           <Button variant="ghost" onClick={onCerrar}>
             Cancelar
           </Button>
-          <Button onClick={() => guardar.mutate()} disabled={!puedeGuardar}>
+          <Button variant="secondary" onClick={() => guardar.mutate()} disabled={!puedeGuardar}>
             {guardar.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
             Guardar
           </Button>
