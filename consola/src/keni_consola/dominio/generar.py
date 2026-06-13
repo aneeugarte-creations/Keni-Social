@@ -439,18 +439,22 @@ def componer(
                 "---\nLÍNEA EDITORIAL (material de referencia, no lo copies literal):\n\n"
                 + "\n\n".join(bloques)
             )
+    if indicaciones and indicaciones.strip():
+        # Indicaciones VIGENTES del equipo (cajón `contexto` de los Insumos): instrucciones
+        # CONFIABLES (las cura el equipo), van fuera del envoltorio anti-inyección. Posición
+        # (prompt caching): son ESTABLES dentro de una ventana de caché (mismas para toda la
+        # marca el día entero), a diferencia de la instrucción de redes —que VARÍA por tema
+        # cuando hay carrusel (catálogo de fotos/`n_notas`)— y del CONTEXTO (cambia por
+        # lanzamiento). Por eso van en el PREFIJO estable, ANTES de redes y del contexto: así el
+        # prefijo byte-idéntico por marca llega lo más lejos posible. (Antes iban tras `redes`,
+        # lo que rompía el prefijo en los temas de carrusel; el cambio sólo reordena bloques.)
+        partes.append("---\n" + indicaciones.strip())
     if redes_ids:
         partes.append(
             instruccion_copy_unico(redes_ids, n_notas=n_notas, fotos_notas=fotos_notas)
             if copy_unico
             else instruccion_redes(redes_ids)
         )
-    if indicaciones and indicaciones.strip():
-        # Indicaciones VIGENTES del equipo (cajón `contexto` de los Insumos): instrucciones
-        # CONFIABLES (las cura el equipo), van fuera del envoltorio anti-inyección. Posición:
-        # en la cola VARIABLE del prompt (cambian a diario; ponerlas en el prefijo estable
-        # rompería el caching por marca) y ANTES del CONTEXTO (que cambia por lanzamiento).
-        partes.append("---\n" + indicaciones.strip())
     if bloque_contexto and bloque_contexto.strip():
         # El contexto (nota/transcripción/ítem RSS) es contenido NO confiable: lo envolvemos
         # en <contenido_usuario>...</contenido_usuario> con un aviso anti-inyección, para que
