@@ -805,14 +805,19 @@ function PanoramaAgenda({
 }
 
 /**
- * Página de TAREAS del equipo (ClaroSports): la lista compartida que sustituye al WhatsApp.
+ * TABLERO de Tareas del equipo (ClaroSports): la lista compartida que sustituye al WhatsApp.
+ * Es el CUERPO reutilizable —SIN título de página— para montarlo tanto en su página suelta
+ * (`/operacion/tareas`) como dentro de Turnos (pestaña «Cobertura»).
  *
  * Se LLENA SOLA con los eventos/partidos a cubrir (los que entran por Fuentes o se añaden aquí)
  * y los muestra ordenados por fecha como «Por cubrir»; el equipo los coge o Elias los reparte.
  * Conviven los encargos sueltos (tareas sin evento). El dueño de una cobertura se registra como
  * una tarea (clase='tarea') enlazada al evento: el evento es la unidad canónica, sin duplicar.
+ *
+ * `acciones`: dónde va el botón «Añadir». "barra" (default, página suelta) lo portaliza a la
+ * barra superior vía AccionesPagina; "inline" (dentro de Turnos) lo pinta junto a las pestañas.
  */
-export default function Tareas() {
+export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inline" }) {
   const { marcaActiva } = useMarcaActiva();
   const usuario = React.useContext(SesionContexto)?.usuario ?? null;
   const [lente, setLente] = React.useState<Lente>("panorama");
@@ -919,32 +924,36 @@ export default function Tareas() {
       )
     );
 
+  const botonAnadir = (
+    <Button size="sm" onClick={() => setCrearAbierto(true)}>
+      <Plus className="mr-1 h-4 w-4" />
+      Añadir
+    </Button>
+  );
+
   return (
     <>
-      <TituloPagina titulo="Tareas del equipo" icono={ListChecks} />
-      <AccionesPagina>
-        <Button size="sm" onClick={() => setCrearAbierto(true)}>
-          <Plus className="mr-1 h-4 w-4" />
-          Añadir
-        </Button>
-      </AccionesPagina>
+      {acciones === "barra" && <AccionesPagina>{botonAnadir}</AccionesPagina>}
 
       <Tabs value={lente} onValueChange={(v) => setLente(v as Lente)} className="space-y-4">
-        <TabsList>
-          {LENTES.map((l) => (
-            <TabsTrigger key={l.id} value={l.id}>
-              {l.etiqueta}
-              {l.id === "libres" && conteoPorCubrir > 0 && (
-                <Badge
-                  variant="outline"
-                  className="ml-1.5 bg-background px-1.5 py-0 tabular-nums"
-                >
-                  {conteoPorCubrir}
-                </Badge>
-              )}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+        <div className="flex items-center justify-between gap-2">
+          <TabsList>
+            {LENTES.map((l) => (
+              <TabsTrigger key={l.id} value={l.id}>
+                {l.etiqueta}
+                {l.id === "libres" && conteoPorCubrir > 0 && (
+                  <Badge
+                    variant="outline"
+                    className="ml-1.5 bg-background px-1.5 py-0 tabular-nums"
+                  >
+                    {conteoPorCubrir}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {acciones === "inline" && botonAnadir}
+        </div>
 
         {cargando ? (
           <p className="text-sm text-muted-foreground">Cargando…</p>
@@ -969,6 +978,16 @@ export default function Tareas() {
         catalogos={catalogos}
         marca={marca}
       />
+    </>
+  );
+}
+
+/** Página suelta `/operacion/tareas`: el tablero con su título en la barra superior. */
+export default function Tareas() {
+  return (
+    <>
+      <TituloPagina titulo="Tareas del equipo" icono={ListChecks} />
+      <TareasBoard />
     </>
   );
 }

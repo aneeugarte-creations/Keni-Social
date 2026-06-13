@@ -12,6 +12,7 @@ import {
   lunesDeSemana,
   lunesSiguiente,
 } from "@/lib/rota-calendario";
+import { TareasBoard } from "@/pages/tareas/Tareas";
 
 import { Calendario } from "./Calendario";
 import { CambiosYAusencias } from "./CambiosYAusencias";
@@ -36,12 +37,19 @@ export default function Rota() {
       <Tabs value={pestania} onValueChange={setPestania} className="space-y-4">
         <TabsList>
           <TabsTrigger value="calendario">Calendario</TabsTrigger>
+          <TabsTrigger value="cobertura">Cobertura</TabsTrigger>
           <TabsTrigger value="mis-turnos">Mis turnos</TabsTrigger>
           <TabsTrigger value="cambios-ausencias">Cambios y ausencias</TabsTrigger>
         </TabsList>
 
         <TabsContent value="calendario">
           <Calendario lunes={lunes} setLunes={setLunes} esAdmin={esAdmin} />
+        </TabsContent>
+        {/* «Cobertura»: el tablero de Tareas (Panorama/Por cubrir/Mis tareas) embebido,
+            con el botón «Añadir» inline para no colgar acciones en la barra de Turnos.
+            El Calendario de arriba queda intacto; son planos hermanos (capacidad vs cobertura). */}
+        <TabsContent value="cobertura">
+          <TareasBoard acciones="inline" />
         </TabsContent>
         <TabsContent value="mis-turnos">
           <MisTurnos lunes={lunes} setLunes={setLunes} />
