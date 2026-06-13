@@ -211,25 +211,41 @@ export function TarjetaTarea({
   return (
     <div className="rounded-lg border border-border bg-card p-3 shadow-sm">
       <div className="flex flex-wrap items-center gap-2">
-        {esCobertura && <Trophy className="h-4 w-4 shrink-0 text-muted-foreground" />}
-        <span className="font-medium">{tarea.titulo}</span>
-        {libre ? (
-          <Badge variant="outline" className="border-dashed text-muted-foreground">
-            Libre
-          </Badge>
+        {/* Dentro de una cobertura el título del evento ya está en la cabecera de la fila
+            (y la fecha también): cada tarjeta encabeza por la PERSONA para no repetirlo. */}
+        {enCobertura ? (
+          <span className="inline-flex items-center gap-1.5 font-medium">
+            <AvatarPersona
+              id={tarea.responsable_id ?? ""}
+              nombre={tarea.responsable_nombre ?? ""}
+              size="sm"
+            />
+            {tarea.responsable_nombre}
+            {esMia && <span className="font-normal text-muted-foreground">· tú</span>}
+          </span>
         ) : (
-          <Badge
-            variant="outline"
-            className={cn(
-              "gap-1 font-normal",
-              esMia
-                ? "border-primary/50 text-primary"
-                : "border-violet-500/40 text-violet-700 dark:text-violet-300",
+          <>
+            {esCobertura && <Trophy className="h-4 w-4 shrink-0 text-muted-foreground" />}
+            <span className="font-medium">{tarea.titulo}</span>
+            {libre ? (
+              <Badge variant="outline" className="border-dashed text-muted-foreground">
+                Libre
+              </Badge>
+            ) : (
+              <Badge
+                variant="outline"
+                className={cn(
+                  "gap-1 font-normal",
+                  esMia
+                    ? "border-primary/50 text-primary"
+                    : "border-violet-500/40 text-violet-700 dark:text-violet-300",
+                )}
+              >
+                <UserCheck className="h-3 w-3" />
+                {esMia ? "Tuya" : tarea.responsable_nombre}
+              </Badge>
             )}
-          >
-            <UserCheck className="h-3 w-3" />
-            {esMia ? "Tuya" : tarea.responsable_nombre}
-          </Badge>
+          </>
         )}
         {tarea.estado === "en_curso" && (
           <Badge variant="outline" className="border-sky-500/40 text-sky-700 dark:text-sky-300">
@@ -246,7 +262,7 @@ export function TarjetaTarea({
             {tarea.prioridad}
           </Badge>
         )}
-        {tarea.fecha_objetivo && (
+        {!enCobertura && tarea.fecha_objetivo && (
           <span
             className={cn(
               "inline-flex items-center gap-1 text-sm",

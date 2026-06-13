@@ -269,10 +269,16 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     // El evento sale UNA sola vez en la agenda (no una fila por cubridor).
     const filas = await screen.findAllByRole("button", { name: /Cruz Azul vs América/ });
     expect(filas).toHaveLength(1);
+    const titulosAntes = screen.getAllByText("Cruz Azul vs América").length;
 
     // Al desplegar: lo cubren los dos, y yo (no cubridor) puedo apuntarme.
     fireEvent.click(filas[0]);
     expect(await screen.findByText("Cubren:")).toBeInTheDocument();
+    // Las tarjetas de cada cubridor encabezan por la PERSONA, no repiten el título del
+    // evento (antes salía una vez por cubridor): expandir no añade apariciones del título.
+    expect(screen.getAllByText("Cruz Azul vs América")).toHaveLength(titulosAntes);
+    expect(screen.getAllByText("luis").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("ana").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: /Apuntarme/ }));
     await waitFor(() => expect(cubrir).toHaveBeenCalledWith("ev1", undefined));
   });
