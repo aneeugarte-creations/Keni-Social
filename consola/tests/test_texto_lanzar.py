@@ -42,11 +42,13 @@ def encolado(monkeypatch):
 
 
 def test_componer_incluye_solo_secciones_presentes():
-    solo = texto_lanzar.componer("Haz X", [], "")
+    from keni_consola.dominio import generar
+
+    solo = generar.componer("Haz X", [], "")
     assert solo == "Haz X"
 
     ed = libtexto.crear("Voz", tipo="editorial", clase="voz", marcas=[_MARCA], cuerpo="tono cercano")
-    con_todo = texto_lanzar.componer("Haz X", [ed], "una nota")
+    con_todo = generar.componer("Haz X", [ed], "una nota")
     assert "Haz X" in con_todo
     assert "LÍNEA EDITORIAL" in con_todo and "tono cercano" in con_todo
     assert "CONTEXTO" in con_todo and "una nota" in con_todo

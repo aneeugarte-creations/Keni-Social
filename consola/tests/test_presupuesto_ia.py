@@ -154,6 +154,40 @@ def test_nivel_pausado_manda(entorno, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
+# Regla ÚNICA del presupuesto (bloqueo_admision): la comparten ambos gates      #
+# --------------------------------------------------------------------------- #
+
+
+def test_bloqueo_admision_es_la_fuente_unica_de_la_regla():
+    """Matriz completa del helper que comparten `cola.encolar` y `worker._bucle`.
+
+    PAUSADO corta todo; un PROCESO (no gasta tokens) solo lo frena el kill switch; AGOTADO
+    corta todo lo que gasta tokens (manual incluido); SOLO_MANUAL corta solo el fondo.
+    """
+    B = presupuesto_ia.bloqueo_admision
+    N, SM, AG, PA = (
+        presupuesto_ia.NIVEL_NORMAL, presupuesto_ia.NIVEL_SOLO_MANUAL,
+        presupuesto_ia.NIVEL_AGOTADO, presupuesto_ia.NIVEL_PAUSADO,
+    )
+    # NORMAL: nada se bloquea.
+    for fondo in (True, False):
+        assert B(N, gasta_tokens=True, es_fondo=fondo) is None
+        assert B(N, gasta_tokens=False, es_fondo=fondo) is None
+    # SOLO_MANUAL: solo el fondo que gasta tokens.
+    assert B(SM, gasta_tokens=True, es_fondo=True) == SM
+    assert B(SM, gasta_tokens=True, es_fondo=False) is None
+    assert B(SM, gasta_tokens=False, es_fondo=True) is None  # proceso exento
+    # AGOTADO: todo lo que gasta tokens (manual incluido); proceso exento.
+    assert B(AG, gasta_tokens=True, es_fondo=True) == AG
+    assert B(AG, gasta_tokens=True, es_fondo=False) == AG
+    assert B(AG, gasta_tokens=False, es_fondo=True) is None
+    # PAUSADO manda sobre todo, incluso procesos.
+    for gasta in (True, False):
+        for fondo in (True, False):
+            assert B(PA, gasta_tokens=gasta, es_fondo=fondo) == PA
+
+
+# --------------------------------------------------------------------------- #
 # Gate de ADMISION (cola.encolar)                                              #
 # --------------------------------------------------------------------------- #
 

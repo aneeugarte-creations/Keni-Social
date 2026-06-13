@@ -125,6 +125,34 @@ def nivel() -> str:
     return _con_transicion(NIVEL_NORMAL)
 
 
+def bloqueo_admision(nivel_actual: str, *, gasta_tokens: bool, es_fondo: bool) -> str | None:
+    """El nivel de corte que BLOQUEA un job con estas características, o None si pasa.
+
+    FUENTE ÚNICA de la regla del presupuesto: la comparten el gate de ADMISIÓN
+    (`cola.encolar`, que mapea el nivel devuelto a la excepción 429 correspondiente) y el gate
+    de RECLAMO (`worker._bucle`, que la consulta para un job manual y otro de fondo y decide si
+    reclamar y con qué prioridad mínima). Así la política vive en UN solo sitio:
+
+      - PAUSADO (kill switch humano): NADA entra/corre, ni manual ni procesos.
+      - un job de PROCESO (render ffmpeg / ASR) NO gasta tokens de la suscripción: exento del
+        corte por presupuesto (solo lo frena el kill switch).
+      - AGOTADO (presupuesto + margen): no pasa NADA que gaste tokens, ni siquiera lo manual.
+      - SOLO_MANUAL (presupuesto agotado): el FONDO que gasta tokens cede; lo manual sigue.
+
+    `nivel_actual` es el nivel VIGENTE (`nivel()`), que el llamante calcula UNA vez (para no
+    repetir la lectura cacheada del gasto por cada consulta).
+    """
+    if nivel_actual == NIVEL_PAUSADO:
+        return NIVEL_PAUSADO
+    if not gasta_tokens:
+        return None
+    if nivel_actual == NIVEL_AGOTADO:
+        return NIVEL_AGOTADO
+    if es_fondo and nivel_actual == NIVEL_SOLO_MANUAL:
+        return NIVEL_SOLO_MANUAL
+    return None
+
+
 # Severidad creciente de los niveles (para distinguir endurecer de relajar al loguear).
 _SEVERIDAD = {NIVEL_NORMAL: 0, NIVEL_SOLO_MANUAL: 1, NIVEL_AGOTADO: 2, NIVEL_PAUSADO: 3}
 

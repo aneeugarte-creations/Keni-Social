@@ -59,17 +59,22 @@ def encolar(gen_id: str, spec: dict[str, Any]) -> str:
     # suscripcion y queda exento del corte por presupuesto). Solo-manual: el FONDO se corta
     # y lo manual del equipo sigue entrando hasta el margen. Todas las excepciones son
     # subclase de ColaLlenaError -> 429 claro en API y backpressure normal en el pipeline.
-    nivel = presupuesto_ia.nivel()
-    if nivel == presupuesto_ia.NIVEL_PAUSADO:
+    # La REGLA vive en `presupuesto_ia.bloqueo_admision` (fuente única, compartida con el gate
+    # de reclamo del worker). Aquí solo mapeamos el nivel que BLOQUEA a su excepción (todas
+    # subclase de ColaLlenaError -> 429 claro en API y backpressure normal en el pipeline).
+    gasta_tokens = not jobspec.es_kind_proceso(spec)
+    bloqueo = presupuesto_ia.bloqueo_admision(
+        presupuesto_ia.nivel(), gasta_tokens=gasta_tokens, es_fondo=es_fondo
+    )
+    if bloqueo == presupuesto_ia.NIVEL_PAUSADO:
         raise runner.GeneracionPausadaError(
             "La generación con IA está pausada por un administrador."
         )
-    gasta_tokens = not jobspec.es_kind_proceso(spec)
-    if gasta_tokens and nivel == presupuesto_ia.NIVEL_AGOTADO:
+    if bloqueo == presupuesto_ia.NIVEL_AGOTADO:
         raise runner.PresupuestoAgotadoError(
             "El presupuesto diario de IA está agotado; la generación se reanuda al rotar el día."
         )
-    if gasta_tokens and es_fondo and nivel == presupuesto_ia.NIVEL_SOLO_MANUAL:
+    if bloqueo == presupuesto_ia.NIVEL_SOLO_MANUAL:
         raise runner.PresupuestoAgotadoError(
             "El presupuesto diario de IA está agotado para el trabajo automático; "
             "los lanzamientos manuales siguen disponibles."

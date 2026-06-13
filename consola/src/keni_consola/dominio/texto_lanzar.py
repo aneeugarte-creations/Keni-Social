@@ -91,11 +91,6 @@ def area_contexto(area: str, marca: str) -> str:
         return "(No se pudo leer el contexto de esta área.)"
 
 
-def componer(cuerpo_prompt: str, adjuntos: list[libtexto.Documento], bloque_contexto: str) -> str:
-    """Arma el prompt final autocontenido (delega en el lanzador neutro `generar`)."""
-    return generar.componer(cuerpo_prompt, adjuntos, bloque_contexto)
-
-
 def lanzar(
     *,
     prompt_id: str | None = None,

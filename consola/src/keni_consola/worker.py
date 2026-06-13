@@ -378,14 +378,19 @@ def _bucle(parar: threading.Event, worker_id: str) -> None:
         except Exception:  # noqa: BLE001 -- ante un fallo del gate, preferimos NO cortar
             _log.warning("worker: fallo el gate de presupuesto; sigo sin corte", exc_info=True)
             nivel = presupuesto_ia.NIVEL_NORMAL
-        if nivel in (presupuesto_ia.NIVEL_PAUSADO, presupuesto_ia.NIVEL_AGOTADO):
+        # El gate de reclamo DERIVA del MISMO helper de admisión (`presupuesto_ia.bloqueo_admision`,
+        # fuente única de la regla): si ni un job MANUAL que gasta tokens pasaría (PAUSADO/AGOTADO),
+        # no reclamamos NADA (lo encolado queda pendiente). Si un job de FONDO no pasaría pero el
+        # manual sí (SOLO_MANUAL), reclamamos solo prioridad >= MANUAL (el fondo espera).
+        if presupuesto_ia.bloqueo_admision(nivel, gasta_tokens=True, es_fondo=False) is not None:
             if parar.wait(espera):
                 return
             espera = min(espera * 1.5, max(sondeo, _SONDEO_MAX_S))
             continue
-        prioridad_minima = (
-            jobspec.PRIORIDAD_MANUAL if nivel == presupuesto_ia.NIVEL_SOLO_MANUAL else None
+        solo_manual = (
+            presupuesto_ia.bloqueo_admision(nivel, gasta_tokens=True, es_fondo=True) is not None
         )
+        prioridad_minima = jobspec.PRIORIDAD_MANUAL if solo_manual else None
         try:
             job = cola.reclamar(worker_id, prioridad_minima=prioridad_minima)
         except Exception:  # noqa: BLE001 -- un fallo de la cola no debe matar el worker
