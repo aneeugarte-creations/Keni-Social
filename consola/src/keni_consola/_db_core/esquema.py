@@ -789,9 +789,6 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # Filtro por marca (Actividad IA por marca) y por estado (reaper de `ejecutando`).
     "CREATE INDEX IF NOT EXISTS idx_generaciones_indice_marca ON generaciones_indice (marca)",
     "CREATE INDEX IF NOT EXISTS idx_generaciones_indice_estado ON generaciones_indice (estado)",
-    # Modelo concreto que gastó (id del proveedor). Para imagenes permite estimar el coste
-    # medio por imagen POR MODELO; legados/claude => '' (cae a la media global). Idempotente.
-    "ALTER TABLE gasto_ia ADD COLUMN IF NOT EXISTS modelo TEXT NOT NULL DEFAULT ''",
     # Cache de metricas (lectura instantanea + refresco en 2o plano, ver metricas_cache.py):
     # guarda el dict CRUDO de `keni_metricas.servicio` (reporte/analisis) serializado a JSON,
     # por combo (tipo, rango, marca). La UI lee de aqui en cada apertura (instantaneo) y un
