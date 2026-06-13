@@ -10,10 +10,17 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { confirmar } from "@/components/comunes/confirmar";
 import * as apiMod from "@/lib/api";
 import type { ComposicionResumen, Subtitulo } from "@/lib/video";
 
 import { GestorComposiciones } from "./GestorComposiciones";
+
+// La app NO usa el confirm del navegador: el botón borrar pasa por `confirmar()`
+// (Promise<boolean>). Lo mockeamos para controlar la respuesta del usuario.
+vi.mock("@/components/comunes/confirmar", () => ({
+  confirmar: vi.fn(),
+}));
 
 function comp(over: Partial<ComposicionResumen> = {}): ComposicionResumen {
   return {
@@ -173,13 +180,12 @@ describe("GestorComposiciones", () => {
     const eliminar = vi
       .spyOn(apiMod.api.video, "eliminarComposicion")
       .mockResolvedValue({ ok: true });
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.mocked(confirmar).mockResolvedValue(true);
     renderGestor();
     await screen.findByText("Borrar esto");
     fireEvent.click(screen.getByRole("button", { name: /^eliminar$/i }));
-    expect(confirmSpy).toHaveBeenCalled();
+    expect(confirmar).toHaveBeenCalled();
     await waitFor(() => expect(eliminar).toHaveBeenCalledWith("comp-del"));
-    confirmSpy.mockRestore();
   });
 
   it("NO elimina si el usuario cancela la confirmación", async () => {
@@ -187,12 +193,12 @@ describe("GestorComposiciones", () => {
       composiciones: [comp({ id: "comp-keep", titulo: "Conservar" })],
     });
     const eliminar = vi.spyOn(apiMod.api.video, "eliminarComposicion");
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    vi.mocked(confirmar).mockResolvedValue(false);
     renderGestor();
     await screen.findByText("Conservar");
     fireEvent.click(screen.getByRole("button", { name: /^eliminar$/i }));
+    await waitFor(() => expect(confirmar).toHaveBeenCalled());
     expect(eliminar).not.toHaveBeenCalled();
-    confirmSpy.mockRestore();
   });
 
   it("FILTRA por estado (Borradores / Listos)", async () => {

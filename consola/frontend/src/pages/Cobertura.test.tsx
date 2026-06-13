@@ -25,10 +25,17 @@ import {
   type ValorMarcaActiva,
 } from "@/hooks/marca-activa-contexto";
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
+import { confirmar } from "@/components/comunes/confirmar";
 import * as apiMod from "@/lib/api";
 import type { Historia, RespuestaMesa, ResumenCobertura, UsuarioSesion } from "@/types";
 
 import Cobertura from "./Cobertura";
+
+// La app NO usa el confirm del navegador: borrar/vaciar pasa por `confirmar()`
+// (Promise<boolean>). Lo mockeamos para controlar la respuesta del usuario.
+vi.mock("@/components/comunes/confirmar", () => ({
+  confirmar: vi.fn(),
+}));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -436,26 +443,25 @@ describe("Cobertura · vista Todas (lista plana clásica)", () => {
 
   it("'Borrar' seleccionadas pide confirmación y llama a borrarHistoriasLote", async () => {
     mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.mocked(confirmar).mockResolvedValue(true);
     renderConProviders(<Cobertura />, usuario(), null);
     await waitFor(() => expect(screen.getByTestId("barra-seleccion-historias")).toBeTruthy());
     const barra = within(screen.getByTestId("barra-seleccion-historias"));
     fireEvent.click(barra.getByRole("checkbox"));
     fireEvent.click(await screen.findByTestId("btn-borrar-seleccion"));
     await waitFor(() => expect(mockBorrarLote).toHaveBeenCalledWith(["h-1"]));
-    confirmSpy.mockRestore();
   });
 
   it("'Borrar' cancelado en el confirm NO llama a la API", async () => {
     mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    vi.mocked(confirmar).mockResolvedValue(false);
     renderConProviders(<Cobertura />, usuario(), null);
     await waitFor(() => expect(screen.getByTestId("barra-seleccion-historias")).toBeTruthy());
     const barra = within(screen.getByTestId("barra-seleccion-historias"));
     fireEvent.click(barra.getByRole("checkbox"));
     fireEvent.click(await screen.findByTestId("btn-borrar-seleccion"));
+    await waitFor(() => expect(confirmar).toHaveBeenCalled());
     expect(mockBorrarLote).not.toHaveBeenCalled();
-    confirmSpy.mockRestore();
   });
 
   it("la tarjeta dice la verdad de la pieza: 'En cola' cuando aún no hay pieza en el feed", async () => {

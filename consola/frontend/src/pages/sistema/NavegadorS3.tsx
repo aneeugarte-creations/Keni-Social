@@ -13,6 +13,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { confirmar } from "@/components/comunes/confirmar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -226,18 +227,28 @@ export function SeccionNavegadorS3() {
   const borrando = borrar.isPending || borrarLote.isPending;
 
   // CONFIRMACIÓN antes de borrar (individual y en lote): borrar un objeto del bucket es
-  // irreversible. Mismo patrón que el resto del repo (window.confirm, como «Purgar cola»).
-  const confirmarBorrar = (obj: ObjetoS3) => {
-    if (window.confirm(`¿Borrar «${obj.nombre}» del bucket? Esta acción no se puede deshacer.`)) {
+  // irreversible. Mismo patrón que el resto del repo (`confirmar`, como «Purgar cola»).
+  const confirmarBorrar = async (obj: ObjetoS3) => {
+    if (
+      await confirmar({
+        titulo: "Borrar del bucket",
+        mensaje: `¿Borrar «${obj.nombre}» del bucket? Esta acción no se puede deshacer.`,
+        destructivo: true,
+        textoConfirmar: "Borrar",
+      })
+    ) {
       borrar.mutate(obj);
     }
   };
-  const confirmarBorrarLote = (keys: string[]) => {
+  const confirmarBorrarLote = async (keys: string[]) => {
     const n = keys.length;
     if (
-      window.confirm(
-        `¿Borrar ${n} objeto${n === 1 ? "" : "s"} del bucket? Esta acción no se puede deshacer.`,
-      )
+      await confirmar({
+        titulo: "Borrar del bucket",
+        mensaje: `¿Borrar ${n} objeto${n === 1 ? "" : "s"} del bucket? Esta acción no se puede deshacer.`,
+        destructivo: true,
+        textoConfirmar: "Borrar",
+      })
     ) {
       borrarLote.mutate(keys);
     }

@@ -15,6 +15,7 @@ import * as React from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
+import { confirmar } from "@/components/comunes/confirmar";
 import { Button } from "@/components/ui/button";
 import { api, mensajeError } from "@/lib/api";
 import { formatearFechaHora } from "@/lib/fecha";
@@ -211,8 +212,15 @@ function FilaComposicion({
     else setBorrador(comp.titulo ?? "");
   }
 
-  function pedirEliminar() {
-    if (window.confirm(`¿Eliminar «${tituloMostrado}»? Esta acción no se puede deshacer.`)) {
+  async function pedirEliminar() {
+    if (
+      await confirmar({
+        titulo: "Eliminar composición",
+        mensaje: `¿Eliminar «${tituloMostrado}»? Esta acción no se puede deshacer.`,
+        destructivo: true,
+        textoConfirmar: "Eliminar",
+      })
+    ) {
       onEliminar();
     }
   }

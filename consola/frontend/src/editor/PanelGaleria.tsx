@@ -7,6 +7,7 @@ import { Trash2, Upload } from "lucide-react";
 import { useRef } from "react";
 import { toast } from "sonner";
 
+import { confirmar } from "@/components/comunes/confirmar";
 import { Button } from "@/components/ui/button";
 import { api, urlMedia, type ActivoMarca } from "@/lib/api";
 
@@ -231,8 +232,15 @@ export function PanelGaleria({
                     )}
                   </button>
                   <button
-                    onClick={() => {
-                      if (window.confirm(`¿Borrar activo «${a.nombre}»?`)) {
+                    onClick={async () => {
+                      if (
+                        await confirmar({
+                          titulo: "Borrar activo",
+                          mensaje: `¿Borrar activo «${a.nombre}»?`,
+                          destructivo: true,
+                          textoConfirmar: "Borrar",
+                        })
+                      ) {
                         borrar.mutate(a.id);
                       }
                     }}

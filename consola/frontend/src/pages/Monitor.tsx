@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { ChipNivelPresupuesto } from "@/components/comunes/ChipEstado";
+import { confirmar } from "@/components/comunes/confirmar";
 import { AccionesPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Badge } from "@/components/ui/badge";
@@ -453,11 +454,15 @@ export default function Monitor() {
               icono={Trash2}
               className="text-destructive"
               disabled={purgar.isPending}
-              onClick={() => {
+              onClick={async () => {
                 if (
-                  window.confirm(
-                    "¿Liberar la cola? Cancela todo lo que esté en vuelo (en curso + esperando) y libera la capacidad.",
-                  )
+                  await confirmar({
+                    titulo: "Liberar la cola",
+                    mensaje:
+                      "¿Liberar la cola? Cancela todo lo que esté en vuelo (en curso + esperando) y libera la capacidad.",
+                    destructivo: true,
+                    textoConfirmar: "Liberar",
+                  })
                 ) {
                   purgar.mutate();
                 }

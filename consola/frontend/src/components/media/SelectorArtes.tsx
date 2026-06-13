@@ -14,6 +14,7 @@ import * as React from "react";
 import { useEffect } from "react";
 import { toast } from "sonner";
 
+import { confirmar } from "@/components/comunes/confirmar";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -161,8 +162,15 @@ export function SelectorArtes({ open, onCerrar, onSeleccionar, marca }: Selector
                     variant="destructive"
                     size="icon"
                     className="absolute right-1.5 top-1.5 h-7 w-7 opacity-0 transition group-hover:opacity-100"
-                    onClick={() => {
-                      if (window.confirm(`¿Quitar «${arte.titulo || "sin nombre"}» de la galería?`)) {
+                    onClick={async () => {
+                      if (
+                        await confirmar({
+                          titulo: "Quitar de la galería",
+                          mensaje: `¿Quitar «${arte.titulo || "sin nombre"}» de la galería?`,
+                          destructivo: true,
+                          textoConfirmar: "Quitar",
+                        })
+                      ) {
                         borrar.mutate(arte.id);
                       }
                     }}

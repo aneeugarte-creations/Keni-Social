@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BadgeResponsable } from "@/components/comunes/BadgeResponsable";
+import { confirmar } from "@/components/comunes/confirmar";
 import { ContadorCaracteres } from "@/components/editor/ContadorCaracteres";
 import { HerramientasHashtags } from "@/components/hashtags/HerramientasHashtags";
 import { EditorCarrusel } from "@/components/media/EditorCarrusel";
@@ -152,7 +153,7 @@ export function DialogoEditar({
   // a borrador (pierde el «listo para revisar»)—. Confirmamos siempre porque el asset a perder
   // puede estar en otras redes de la pieza (no solo en la que se edita aquí), así que no se
   // puede detectar de forma fiable desde una sola fila.
-  const cambiarFormato = (nuevo: string) => {
+  const cambiarFormato = async (nuevo: string) => {
     if (!publicacion || nuevo === formato) return;
     const etiqueta = nuevo === "video" ? "video" : nuevo === "carrusel" ? "carrusel" : "foto";
     const pierde =
@@ -163,10 +164,14 @@ export function DialogoEditar({
           : formato === "carrusel"
             ? "los slides del carrusel"
             : "nada de la foto (se conserva)";
-    const ok = window.confirm(
-      `Al cambiar a ${etiqueta} se borrará ${pierde} y la plantilla actual, y la ` +
+    const ok = await confirmar({
+      titulo: "Cambiar formato",
+      mensaje:
+        `Al cambiar a ${etiqueta} se borrará ${pierde} y la plantilla actual, y la ` +
         `pieza volverá a borrador (perderá el «listo para revisar»). ¿Continuar?`,
-    );
+      destructivo: true,
+      textoConfirmar: "Cambiar formato",
+    });
     if (!ok) return;
     flipFormato.mutate(nuevo);
   };

@@ -19,6 +19,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { confirmar } from "@/components/comunes/confirmar";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -160,24 +161,30 @@ function VistaHistorias({ marcaActiva, estadoFijo }: PropsVistaHistorias) {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const confirmarYBorrarSeleccion = () => {
+  const confirmarYBorrarSeleccion = async () => {
     const n = seleccion.size;
     if (
-      !window.confirm(
-        `¿Borrar definitivamente ${n} historia${n !== 1 ? "s" : ""} y sus artículos? No se puede deshacer.`,
-      )
+      !(await confirmar({
+        titulo: "Borrar historias",
+        mensaje: `¿Borrar definitivamente ${n} historia${n !== 1 ? "s" : ""} y sus artículos? No se puede deshacer.`,
+        destructivo: true,
+        textoConfirmar: "Borrar",
+      }))
     )
       return;
     borrarLoteMut.mutate([...seleccion]);
   };
 
-  const confirmarYVaciarPool = () => {
+  const confirmarYVaciarPool = async () => {
     const ambito = marcaActiva ? "de esta marca" : "de TODAS las marcas";
     const filtro = estado ? ` en estado «${estado}»` : "";
     if (
-      !window.confirm(
-        `¿Borrar definitivamente TODAS las historias ${ambito}${filtro} y sus artículos? Deja el pool a 0 y no se puede deshacer.`,
-      )
+      !(await confirmar({
+        titulo: "Vaciar el pool",
+        mensaje: `¿Borrar definitivamente TODAS las historias ${ambito}${filtro} y sus artículos? Deja el pool a 0 y no se puede deshacer.`,
+        destructivo: true,
+        textoConfirmar: "Vaciar",
+      }))
     )
       return;
     borrarTodoMut.mutate();
