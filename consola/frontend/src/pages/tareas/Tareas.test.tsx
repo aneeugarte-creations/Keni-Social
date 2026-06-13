@@ -290,6 +290,21 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect(screen.queryByRole("button", { name: "Añadir persona al equipo" })).toBeNull();
   });
 
+  it("RECUPERACIÓN: una cobertura soltada (sin dueño) reaparece como «Por cubrir» y se re-coge", async () => {
+    const coger = vi
+      .spyOn(apiMod.api, "cogerContenido")
+      .mockResolvedValue({ contenido: {} } as never);
+    // Tarea de cobertura HUÉRFANA (evento_id pero sin responsable, como tras «Soltar»): el
+    // partido NO se borró, debe reaparecer como «Por cubrir» y poder re-cogerse.
+    renderTareas([
+      tarea({ id: "t-huerfana", titulo: "Brasil vs Marruecos", evento_id: "ev2", responsable_id: "", responsable_nombre: "", fecha_objetivo: "2026-07-02" }),
+    ]);
+
+    fireEvent.click(await screen.findByText("Brasil vs Marruecos"));
+    fireEvent.click(screen.getByRole("button", { name: /La cubro yo/ }));
+    await waitFor(() => expect(coger).toHaveBeenCalledWith("t-huerfana"));
+  });
+
   it("'Añadir' abre el diálogo", async () => {
     renderTareas([]);
     fireEvent.click(await screen.findByRole("button", { name: /Añadir/ }));

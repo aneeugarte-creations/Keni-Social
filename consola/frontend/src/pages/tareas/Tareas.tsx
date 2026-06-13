@@ -221,9 +221,12 @@ function TarjetaEventoLibre({
 function TarjetaTarea({
   tarea,
   catalogos,
+  enCobertura = false,
 }: {
   tarea: Contenido;
   catalogos: CatalogosContenido | undefined;
+  /** Dentro de una cobertura: oculta «Soltar»/«Reasignar» (se gestionan a nivel de evento). */
+  enCobertura?: boolean;
 }) {
   const queryClient = useQueryClient();
   const usuario = React.useContext(SesionContexto)?.usuario ?? null;
@@ -378,13 +381,13 @@ function TarjetaTarea({
             Reabrir
           </Button>
         )}
-        {!libre && (esMia || esManager) && (
+        {!enCobertura && !libre && (esMia || esManager) && (
           <Button variant="outline" size="sm" onClick={() => soltar.mutate()} disabled={soltar.isPending}>
             <Hand className="mr-1 h-3.5 w-3.5" />
             Soltar
           </Button>
         )}
-        {esManager && (
+        {!enCobertura && esManager && (
           <Button variant="outline" size="sm" onClick={() => setAsignarAbierto(true)}>
             <UserPlus className="mr-1 h-3.5 w-3.5" />
             {libre ? "Asignar" : "Reasignar"}
@@ -452,29 +455,43 @@ type Item =
  *    `evento_id`). MULTI-COBERTURA: varias personas pueden cubrir el mismo evento.
  *  - `encargos`: tareas sueltas (sin `evento_id`), de UN dueño.
  *  - `eventosLibres`: eventos coverables con 0 cubridores → «Por cubrir».
- * Una tarea de cobertura SOLTADA (sin responsable) deja de contar: el evento vuelve a «Por
- * cubrir» y esa tarea huérfana no se pinta.
+ * Una tarea de cobertura SOLTADA (sin responsable) queda HUÉRFANA: su evento vuelve a «Por
+ * cubrir» (se devuelve como `recuperable`, re-cogible) — el partido NUNCA se borra.
  */
 function agrupar(tareas: Contenido[], eventos: EventoRota[]) {
   const encargos = tareas.filter((t) => !t.evento_id);
+  // Todas las tareas de cobertura (con `evento_id`) agrupadas por evento.
   const porEvento = new Map<string, Contenido[]>();
   for (const t of tareas) {
-    if (!t.evento_id || !t.responsable_id) continue;
+    if (!t.evento_id) continue;
     const lista = porEvento.get(t.evento_id) ?? [];
     lista.push(t);
     porEvento.set(t.evento_id, lista);
   }
-  const coberturas: Cobertura[] = [...porEvento.entries()].map(([eventoId, cubridores]) => ({
-    eventoId,
-    titulo: cubridores[0].titulo,
-    hora: cubridores[0].hora_objetivo,
-    orden: cubridores[0].fecha_objetivo || "9999-99-99",
-    cubridores,
-  }));
+  const coberturas: Cobertura[] = [];
+  // `recuperables`: eventos cuya cobertura se SOLTÓ (solo tareas huérfanas, sin dueño). El
+  // partido sigue ahí; se pinta como «Por cubrir» (una tarea, re-cogible) para que no parezca
+  // borrado. Así se recuperan los partidos que se soltaron por error.
+  const recuperables: Contenido[] = [];
+  for (const [eventoId, lista] of porEvento) {
+    const cubridores = lista.filter((t) => t.responsable_id);
+    if (cubridores.length > 0) {
+      coberturas.push({
+        eventoId,
+        titulo: cubridores[0].titulo,
+        hora: cubridores[0].hora_objetivo,
+        orden: cubridores[0].fecha_objetivo || "9999-99-99",
+        cubridores,
+      });
+    } else {
+      recuperables.push(lista[0]);
+    }
+  }
+  // Eventos de la rota SIN ninguna tarea (nunca tocados) → «Por cubrir».
   const eventosLibres = eventos.filter(
     (e) => e.tipo_cobertura !== "no_cubrir" && !porEvento.has(e.id),
   );
-  return { coberturas, encargos, eventosLibres };
+  return { coberturas, encargos, eventosLibres, recuperables };
 }
 
 // Colores fijos por persona: con 5 personas el color se vuelve reconocible de un vistazo
@@ -632,10 +649,10 @@ function TarjetaCobertura({
       </div>
       <div className="space-y-2">
         {cobertura.cubridores.map((t) => (
-          <TarjetaTarea key={t.id} tarea={t} catalogos={catalogos} />
+          <TarjetaTarea key={t.id} tarea={t} catalogos={catalogos} enCobertura />
         ))}
       </div>
-      {/* Acciones a nivel de evento, junto a las de cada cubridor (Empezar/Soltar/Reasignar). */}
+      {/* Acciones a nivel de evento, junto al avance de cada cubridor (Empezar/Marcar hecha). */}
       {(!yaApuntado || esManager) && (
         <div className="flex flex-wrap items-center gap-2">
           {!yaApuntado && (
@@ -871,7 +888,7 @@ function PanoramaAgenda({
       return next;
     });
 
-  const { coberturas, encargos, eventosLibres } = agrupar(tareas, eventos);
+  const { coberturas, encargos, eventosLibres, recuperables } = agrupar(tareas, eventos);
   const usuarios = catalogos?.usuarios ?? [];
   const conResponsable = tareas.filter((t) => t.responsable_id);
 
@@ -893,7 +910,8 @@ function PanoramaAgenda({
       n: conResponsable.filter((t) => t.responsable_id === id && t.estado !== "hecha").length,
     }))
     .sort((a, b) => b.n - a.n || a.nombre.localeCompare(b.nombre));
-  const nPorCubrir = eventosLibres.length + encargos.filter((t) => !t.responsable_id).length;
+  const nPorCubrir =
+    eventosLibres.length + recuperables.length + encargos.filter((t) => !t.responsable_id).length;
 
   // Agenda, aplicando el filtro de persona/pool si lo hay.
   const soloPool = filtro === "__pool__";
@@ -909,8 +927,8 @@ function PanoramaAgenda({
         orden: c.orden,
         cobertura: c,
       })),
-    // Encargos sueltos: por su dueño (o sin dueño con el pool).
-    ...encargos
+    // Encargos sueltos + coberturas soltadas (recuperables): por su dueño (o pool si libre).
+    ...[...encargos, ...recuperables]
       .filter((t) => (!filtro ? true : soloPool ? !t.responsable_id : t.responsable_id === filtro))
       .map((t) => ({
         kind: "tarea" as const,
@@ -1105,7 +1123,7 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
 
   // Reparte en coberturas (evento con ≥1 cubridor), encargos sueltos y eventos por cubrir.
   const eventosCoverables = eventosQuery.data?.eventos ?? [];
-  const { coberturas, encargos, eventosLibres } = agrupar(tareas, eventosCoverables);
+  const { coberturas, encargos, eventosLibres, recuperables } = agrupar(tareas, eventosCoverables);
 
   // Lista unificada, ordenada por fecha (las sin fecha, al final).
   const conOrden = (f: string) => f || "9999-99-99";
@@ -1116,7 +1134,7 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
       orden: conOrden(c.orden),
       cobertura: c,
     })),
-    ...encargos.map((t) => ({
+    ...[...encargos, ...recuperables].map((t) => ({
       kind: "tarea" as const,
       clave: `t-${t.id}`,
       orden: conOrden(t.fecha_objetivo),
