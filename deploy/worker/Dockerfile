@@ -20,6 +20,17 @@ ENV PYTHONUNBUFFERED=1 \
     # Mismo estado que el back: secretos.toml (0600), media, etc. cuelgan de /data.
     XDG_CONFIG_HOME=/data
 
+# VERSION PINEADA de la CLI de Claude Code. ANTES estaba SIN pinear (`npm install -g
+# @anthropic-ai/claude-code` a secas): cada rebuild traia la ULTIMA publicada y un cambio en
+# el formato de `--stream-json` podia ROMPER en prod el parseo del worker sin que nadie lo
+# pidiera. Fijamos una version concreta para builds REPRODUCIBLES; el upgrade debe ser
+# DELIBERADO: sube este valor a conciencia, valida el stream-json del worker contra la nueva
+# version y despliega aparte (no lo mezcles con otro cambio). Overridable por build-arg.
+#   ⚠ 2.1.177 = ultima estable publicada en npm al fijarla (2026-06-13). El HUMANO debe
+#     CONFIRMAR que coincide con la version validada/actual en prod antes de desplegar;
+#     si en prod corre otra, pon ESA aqui (no "la ultima por defecto").
+ARG CLAUDE_CODE_VERSION=2.1.177
+
 # curl: script de nodesource. git: lo usan algunas skills. Node 20 + Claude Code CLI:
 # AQUI SI (el worker es quien corre `claude -p`). ffmpeg: motor de RENDER de video (Ola VIDEO)
 # — el worker tambien ejecuta los jobs de proceso `render-video` (filtergraph: scale/crop/pad,
@@ -30,7 +41,7 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates git ffmpeg \
  && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
  && apt-get install -y --no-install-recommends nodejs \
- && npm install -g @anthropic-ai/claude-code \
+ && npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
  && npm cache clean --force \
  && rm -rf /var/lib/apt/lists/*
 
