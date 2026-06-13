@@ -63,6 +63,7 @@ function renderRota() {
     "rotaEquipoTodos",
     "rotaAusencias",
     "listarCoordinacionSemana",
+    "misTurnos",
   ] as const) {
     vi.spyOn(apiMod.api, m).mockResolvedValue({} as never);
   }
@@ -112,5 +113,22 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
     expect(
       await screen.findByRole("button", { name: "Ver solo lo por cubrir" }),
     ).toBeInTheDocument();
+  });
+
+  it("«Mis turnos» vacío ofrece al admin saltar al Calendario", async () => {
+    renderRota();
+    fireEvent.mouseDown(await screen.findByRole("tab", { name: "Mis turnos" }), {
+      button: 0,
+    });
+    // El admin no está en la rota: el vacío trae un CTA hacia el Calendario.
+    const ir = await screen.findByRole("button", {
+      name: /Ver el calendario del equipo/,
+    });
+    fireEvent.click(ir);
+    // Al pulsarlo, la pestaña Calendario vuelve a estar activa.
+    expect(await screen.findByRole("tab", { name: "Calendario" })).toHaveAttribute(
+      "data-state",
+      "active",
+    );
   });
 });

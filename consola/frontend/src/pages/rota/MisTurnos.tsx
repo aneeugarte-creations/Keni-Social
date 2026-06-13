@@ -1,6 +1,7 @@
 // Pestaña MIS TURNOS de la rota. Partido mecánicamente de pages/Rota.tsx.
 import { useQuery } from "@tanstack/react-query";
 import {
+  ArrowRight,
   CalendarDays,
   User,
 } from "lucide-react";
@@ -9,6 +10,7 @@ import * as React from "react";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
@@ -25,9 +27,14 @@ import { ETIQUETA_FRANJA, NavegadorSemana, formatearFechaCorta } from "./comun";
 export function MisTurnos({
   lunes,
   setLunes,
+  esAdmin = false,
+  onVerCalendario,
 }: {
   lunes: string;
   setLunes: (l: string) => void;
+  /** El admin no suele estar en la rota; el vacío le ofrece saltar al Calendario. */
+  esAdmin?: boolean;
+  onVerCalendario?: () => void;
 }) {
   const { marcaActiva } = useMarcaActiva();
   const q = useQuery({
@@ -69,6 +76,19 @@ export function MisTurnos({
         <EstadoVacio
           icono={CalendarDays}
           titulo="Sin turnos esta semana"
+          texto={
+            esAdmin
+              ? "Si gestionas el equipo, abre el Calendario para ver los turnos de todos."
+              : undefined
+          }
+          accion={
+            esAdmin && onVerCalendario ? (
+              <Button variant="outline" size="sm" onClick={onVerCalendario}>
+                Ver el calendario del equipo
+                <ArrowRight className="ml-1.5 h-4 w-4" />
+              </Button>
+            ) : undefined
+          }
         />
       ) : (
         <>
