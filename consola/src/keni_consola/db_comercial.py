@@ -5,9 +5,9 @@ from ._db_comun import (
     Any,
     _conectar,
     ahora_iso,
-    json,
     uuid,
 )
+from ._db_json import a_json_lista, de_json_lista
 from .tiempo import hoy_utc
 
 # --------------------------------------------------------------------------- #
@@ -348,11 +348,7 @@ _CAMPOS_EDITABLES_CAMPANIA = ("nombre", "marcas", "hashtags", "activa")
 
 def _lista_json(valor: Any) -> list[str]:
     """Parsea un array JSON de strings (defensivo: lista vacía si no es válido)."""
-    try:
-        datos = json.loads(valor or "[]")
-    except (ValueError, TypeError):
-        return []
-    return [str(x) for x in datos] if isinstance(datos, list) else []
+    return [str(x) for x in de_json_lista(valor)]
 
 
 def _fila_a_campania(fila: Any) -> dict[str, Any]:
@@ -375,9 +371,9 @@ def crear_campania_comercial(
     ahora = ahora_iso()
     fila = {
         "id": uuid.uuid4().hex[:12],
-        "marcas": json.dumps(list(marcas), ensure_ascii=False),
+        "marcas": a_json_lista(list(marcas)),
         "nombre": nombre,
-        "hashtags": json.dumps(list(hashtags), ensure_ascii=False),
+        "hashtags": a_json_lista(list(hashtags)),
         "activa": 1 if activa else 0,
         "fecha_creacion": ahora,
         "fecha_actualizacion": ahora,
@@ -437,7 +433,7 @@ def actualizar_campania_comercial(
     cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_CAMPANIA}
     for clave in ("marcas", "hashtags"):
         if clave in cambios:
-            cambios[clave] = json.dumps(list(cambios[clave] or []), ensure_ascii=False)
+            cambios[clave] = a_json_lista(list(cambios[clave] or []))
     if "activa" in cambios:
         cambios["activa"] = 1 if cambios["activa"] else 0
     if not cambios:

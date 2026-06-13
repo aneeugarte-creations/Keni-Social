@@ -11,6 +11,7 @@ from ._db_comun import (
     timedelta,
     uuid,
 )
+from ._db_json import a_json_dict
 from .db_comercial import (
     SELECT_SNAPSHOT as _SELECT_SNAPSHOT,
 )
@@ -363,7 +364,7 @@ def guardar_metricas_cache(
                 tipo,
                 rango,
                 marca,
-                json.dumps(payload, ensure_ascii=False),
+                a_json_dict(payload),
                 fuente,
                 generado_en,
             ),

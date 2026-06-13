@@ -1,48 +1,32 @@
 """Persistencia — dominio noticias: helpers comunes (JSON de columnas, catálogo de tipos)."""
 from __future__ import annotations
 
-from .._db_comun import Any, json
+from .._db_comun import Any
+from .._db_json import a_json_dict, a_json_lista, de_json_dict, de_json_lista
 
 
 # --- JSON de columnas (serializadores compartidos) ------------------------ #
+# Wrappers de dominio sobre `_db_json` (conservan el nombre por sus llamadores en
+# `clusters.py` y el re-export de `__init__.py`). Semántica idéntica: dict/lista ->
+# JSON `ensure_ascii=False`, str passthrough, neutro vacío ante ausente/malformado.
 def _desglose_a_json(valor: Any) -> str:
     """Serializa `score_desglose` para la columna: dict -> JSON; str -> tal cual; resto -> ''."""
-    if isinstance(valor, dict):
-        try:
-            return json.dumps(valor, ensure_ascii=False)
-        except (TypeError, ValueError):
-            return ""
-    return valor if isinstance(valor, str) else ""
+    return a_json_dict(valor)
 
 
 def _desglose_a_dict(crudo: Any) -> dict[str, Any]:
     """Deserializa `score_desglose` (JSON) a dict; {} si está vacío o malformado. Best-effort."""
-    try:
-        datos = json.loads(crudo or "{}")
-    except (ValueError, TypeError):
-        return {}
-    return datos if isinstance(datos, dict) else {}
+    return de_json_dict(crudo)
 
 
 def _detalle_fuentes_a_json(valor: Any) -> str:
     """Serializa `fuentes_detalle` para la columna: lista -> JSON; str -> tal cual; resto -> ''."""
-    if isinstance(valor, list):
-        try:
-            return json.dumps(valor, ensure_ascii=False)
-        except (TypeError, ValueError):
-            return ""
-    return valor if isinstance(valor, str) else ""
+    return a_json_lista(valor)
 
 
 def _detalle_fuentes_a_lista(crudo: Any) -> list[dict[str, Any]]:
     """Deserializa `fuentes_detalle` (JSON) a lista de dicts; [] si vacío o malformado."""
-    try:
-        datos = json.loads(crudo or "[]")
-    except (ValueError, TypeError):
-        return []
-    if not isinstance(datos, list):
-        return []
-    return [d for d in datos if isinstance(d, dict)]
+    return [d for d in de_json_lista(crudo) if isinstance(d, dict)]
 
 
 # --- Tipos de fuente (catálogo) ------------------------------------------- #

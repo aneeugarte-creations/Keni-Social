@@ -4,9 +4,9 @@ from __future__ import annotations
 from ._db_comun import (
     Any,
     _conectar,
-    json,
     uuid,
 )
+from ._db_json import a_json_lista, de_json_lista
 from .tiempo import ahora_iso
 
 # --- Grupos de hashtags ---------------------------------------------------- #
@@ -19,10 +19,7 @@ _SELECT_GRUPO_HASHTAGS = f"SELECT {', '.join(_COLS_GRUPO_HASHTAGS)} FROM grupos_
 def _normalizar_hashtags(valor: Any) -> list[str]:
     """Lista de strings desde una lista o un JSON serializado (degrada a [])."""
     if isinstance(valor, str):
-        try:
-            valor = json.loads(valor) if valor.strip() else []
-        except (ValueError, TypeError):
-            return []
+        valor = de_json_lista(valor)
     if not isinstance(valor, list):
         return []
     return [t for t in valor if isinstance(t, str)]
@@ -99,7 +96,7 @@ def crear_grupo_hashtags(
                 grupo_id,
                 nombre or "",
                 marca or "",
-                json.dumps(tags, ensure_ascii=False),
+                a_json_lista(tags),
                 ahora_iso(),
             ),
         )
@@ -116,9 +113,7 @@ def actualizar_grupo_hashtags(
     editables = ("nombre", "marca", "hashtags")
     cambios = {k: v for k, v in campos.items() if k in editables}
     if "hashtags" in cambios:
-        cambios["hashtags"] = json.dumps(
-            _normalizar_hashtags(cambios["hashtags"]), ensure_ascii=False
-        )
+        cambios["hashtags"] = a_json_lista(_normalizar_hashtags(cambios["hashtags"]))
     if not cambios:
         return obtener_grupo_hashtags(grupo_id)
     asignaciones = [f"{k} = ?" for k in cambios]

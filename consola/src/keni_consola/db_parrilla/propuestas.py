@@ -3,6 +3,7 @@
 Ver barrel `db.py`."""
 from __future__ import annotations
 
+from .._db_json import a_json_lista
 from ..tiempo import ahora_iso
 from ._comun import (
     ESTADO_ROTA_PROPUESTO,
@@ -159,7 +160,7 @@ def actualizar_propuesta_parrilla(
     """
     cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_PROPUESTA}
     if "operaciones" in cambios and not isinstance(cambios["operaciones"], str):
-        cambios["operaciones"] = json.dumps(cambios["operaciones"] or [], ensure_ascii=False)
+        cambios["operaciones"] = a_json_lista(cambios["operaciones"] or [])
     if not cambios:
         return obtener_propuesta_parrilla(propuesta_id)
     asignaciones = [f"{k} = ?" for k in cambios]
