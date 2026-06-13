@@ -44,6 +44,9 @@ _VALORES_OFF = frozenset({"0", "false", "no", "off"})
 ETIQUETAS_BLOQUE: dict[str, str] = {
     "operacion": "Operación",
     "contenido": "Contenido",
+    # `maquina` = la máquina de generación (dos cockpits + la Cola compartida): el motor
+    # automático que convierte señales en contenido; se sitúa entre Contenido y Datos.
+    "maquina": "Máquina",
     "datos": "Datos",
 }
 

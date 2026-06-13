@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate } from "react-router-dom";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { FronteraError } from "@/components/comunes/FronteraError";
+import { RedirigirMonitor } from "@/components/comunes/RedirigirMonitor";
 import { RedirigirPrefijo } from "@/components/comunes/RedirigirPrefijo";
 import Error404 from "@/pages/Error404";
 import { Loader2 } from "lucide-react";
@@ -48,7 +49,13 @@ const CalendarioContenido = lazy(() => import("@/pages/calendario/CalendarioCont
 const Produccion = lazy(() => import("@/pages/Produccion"));
 const PipelineDetalle = lazy(() => import("@/pages/PipelineDetalle"));
 const GeneracionDetalle = lazy(() => import("@/pages/GeneracionDetalle"));
-const Monitor = lazy(() => import("@/pages/Monitor"));
+
+// Sección «Máquina» (fase 2A): la máquina de generación como UNA sección con dos cockpits
+// (Investigación · Producción, esqueletos por ahora) y la Cola compartida (la vista global
+// del worker/cola, relocalizada del antiguo Monitor).
+const CockpitInvestigacion = lazy(() => import("@/pages/maquina/CockpitInvestigacion"));
+const CockpitProduccion = lazy(() => import("@/pages/maquina/CockpitProduccion"));
+const Cola = lazy(() => import("@/pages/maquina/Cola"));
 
 // Feed móvil para revisores (#qa-movil-feed): superficie tipo red social, una
 // columna, SIN sidebar. Vive FUERA del AppShell (layout propio) y se llega por
@@ -268,8 +275,10 @@ export const router = createBrowserRouter([
               { path: "pipelines/:id", element: <PipelineDetalle /> },
               // Detalle de un trabajo SUELTO (generación fuera del pipeline): mismo in/out.
               { path: "actividad/:id", element: <GeneracionDetalle /> },
-              // Monitor: cola en vivo (todo el equipo) + pestaña Salud (infra, admin).
-              { path: "monitor", element: <Monitor /> },
+              // Monitor: RELOCALIZADO a la sección «Máquina» (fase 2A). La vista global del
+              // worker/cola es `/maquina/cola`; la tira de etapas + el drawer de ajustes,
+              // el cockpit de Producción. Redirige preservando `?tab=`/`?proceso=`.
+              { path: "monitor", element: <RedirigirMonitor /> },
             ],
           },
           // Compat: el hub se llamaba «Actividad IA» (/datos/actividad, con Pipelines como
@@ -283,13 +292,28 @@ export const router = createBrowserRouter([
         ],
       },
 
+      // ===== Sección MÁQUINA (la máquina de generación, fase 2A) =====
+      // Una sección con DOS motores/cockpits de igual peso —Investigación (descubre/verifica)
+      // y Producción (genera copy/arte)— y una COLA compartida (la vista global del worker/
+      // cola que ambos motores comparten). Los cockpits son esqueletos en 2A; los rellenan
+      // 2B/2C. La Cola se relocalizó del antiguo Monitor (/datos/produccion/monitor).
+      {
+        path: "maquina",
+        children: [
+          { index: true, element: <Navigate to="/maquina/cola" replace /> },
+          { path: "investigacion", element: <CockpitInvestigacion /> },
+          { path: "produccion", element: <CockpitProduccion /> },
+          { path: "cola", element: <Cola /> },
+        ],
+      },
+
       // Ajustes (sin entrada en el sidebar; se llega desde el dropdown del avatar).
       { path: "mi-cuenta", element: <MiCuenta /> },
-      // La página Configuración se DISTRIBUYÓ y la Fase 3 CONSOLIDÓ la máquina: máquina,
+      // La página Configuración se DISTRIBUYÓ y la máquina se CONSOLIDÓ: máquina,
       // investigación/motor de noticias, conexiones (Metricool + imagen IA), sistema y
-      // esfuerzo viven en el drawer Monitor·Ajustes; publicación → Programación;
-      // apariencia → Mi cuenta. La ruta vieja redirige al Monitor·Ajustes.
-      { path: "configuracion", element: <Navigate to="/datos/produccion/monitor?tab=ajustes" replace /> },
+      // esfuerzo viven en el drawer de ajustes de la máquina; publicación → Programación;
+      // apariencia → Mi cuenta. La ruta vieja redirige al drawer (cockpit de Producción).
+      { path: "configuracion", element: <Navigate to="/maquina/produccion?tab=ajustes" replace /> },
       { path: "sugerencias", element: <Sugerencias /> },
       // Webhooks salientes: solo admin (el backend devuelve 403 si no; la pagina avisa
       // al entrar por URL directa). Gestionar webhooks = abrir la red de salida.
@@ -338,8 +362,9 @@ export const router = createBrowserRouter([
       { path: "rota", element: <Navigate to="/operacion/turnos" replace /> },
       // Publicaciones se FUSIONÓ en el contenido (#fase2); ahora vive en la Lista del Feed.
       { path: "publicaciones", element: <Navigate to="/operacion/feed/lista" replace /> },
-      // El hub Agentes se retiró: su actividad vive ahora en Producción (/datos/produccion).
-      { path: "monitor", element: <Navigate to="/datos/produccion/monitor" replace /> },
+      // El antiguo Monitor se relocalizó a «Máquina»; el deep-link plano `/monitor` cae en la
+      // Cola (preservando `?tab=`/`?proceso=` vía el mismo redirector que la ruta anidada).
+      { path: "monitor", element: <RedirigirMonitor /> },
       { path: "agentes", element: <Navigate to="/datos/produccion" replace /> },
       { path: "agentes/actividad", element: <Navigate to="/datos/produccion" replace /> },
       // El copy se generaba en /generacion (motor antiguo, retirado): ahora vive en

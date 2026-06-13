@@ -142,7 +142,7 @@ describe("NoticiasHub · proceso de Investigación", () => {
     expect(chip.textContent).toContain("en curso");
     expect(chip.textContent).toContain("3");
     expect(chip.textContent).toContain("en cola");
-    expect(chip.getAttribute("href")).toBe("/datos/produccion/monitor?proceso=investigacion");
+    expect(chip.getAttribute("href")).toBe("/maquina/cola?proceso=investigacion");
   });
 
   it("admin: la página ya NO monta el menú «⋮» de ajustes (viven en el drawer del Monitor)", async () => {

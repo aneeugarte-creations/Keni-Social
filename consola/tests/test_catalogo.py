@@ -29,6 +29,10 @@ _SIDEBAR_BLOQUES = [
     # Imagen (editor de imagen por capas + IA), Video (estudio de video) y Texto (la
     # Texto: prompts + línea editorial + plantillas).
     ["Imagen", "Video", "Texto"],
+    # "Máquina": la máquina de generación (fase 2A) — dos cockpits de igual peso
+    # (Investigación: descubre/verifica; Producción: genera copy/arte) + la Cola compartida
+    # (la vista global del worker/cola, relocalizada del antiguo Monitor).
+    ["Investigación", "Producción", "Cola"],
     # "Datos": lo que alimenta o refleja la automatización — Investigación (fuentes/radar),
     # Analíticas (medición que cierra el loop) y Producción (el feed unificado de lo que
     # produce la máquina: runs del pipeline + actividad suelta, antes «Actividad IA»).
@@ -36,7 +40,7 @@ _SIDEBAR_BLOQUES = [
 ]
 
 # Encabezados humanos de cada bloque, en el mismo orden.
-_ETIQUETAS_BLOQUES = ["Operación", "Contenido", "Datos"]
+_ETIQUETAS_BLOQUES = ["Operación", "Contenido", "Máquina", "Datos"]
 
 
 def _entorno(**flags: str) -> dict[str, str]:

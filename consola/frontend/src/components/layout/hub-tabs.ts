@@ -1,8 +1,6 @@
 import {
-  Activity,
   BarChart3,
   BookText,
-  Gauge,
   LayoutGrid,
   ListTodo,
   Megaphone,
@@ -86,16 +84,10 @@ export const TABS_TEXTO: ItemTabHub[] = [
   { ruta: "/contenido/texto/algoritmos", etiqueta: "Algoritmos", icono: Newspaper },
 ];
 
-// Producción (antes «Actividad IA») es un hub de DOS pestañas: Producción (el feed
-// unificado: runs del pipeline + actividad suelta, con conteos y métricas) y Monitor
-// (en vivo + salud de la infra). Las antiguas pestañas Feed/Pipelines se FUSIONARON
-// en el índice; la página Sistema vive dentro del Monitor.
-export const TABS_PRODUCCION: ItemTabHub[] = [
-  // `end: true`: comparte prefijo con las sub-rutas, así que el tab raíz (el feed)
-  // solo se marca activo en la coincidencia exacta del índice.
-  { ruta: "/datos/produccion", etiqueta: "Producción", icono: Activity, end: true },
-  { ruta: "/datos/produccion/monitor", etiqueta: "Monitor", icono: Gauge },
-];
+// Producción (antes «Actividad IA») es ya una PÁGINA PLANA (el feed unificado: runs del
+// pipeline + actividad suelta, con conteos y métricas). Su antigua pestaña «Monitor» se
+// RELOCALIZÓ a la sección «Máquina» (fase 2A): la vista global del worker/cola es
+// `/maquina/cola`. Por eso /datos/produccion ya no es un hub (no figura en HUB_TABS).
 
 /**
  * Mapa `rutaPadre -> sub-pestañas`. La clave es la ruta del hub (la misma que
@@ -107,9 +99,9 @@ export const HUB_TABS: Record<string, ItemTabHub[]> = {
   "/datos/analiticas": TABS_ANALITICAS,
   "/operacion/feed": TABS_FEED,
   // Bajo /operacion, Programación y Turnos son páginas planas (sin pestañas), no hubs;
-  // por eso no figuran aquí. Igual que Imagen/Video bajo /contenido.
+  // por eso no figuran aquí. Igual que Imagen/Video bajo /contenido y la sección «Máquina»
+  // (Investigación/Producción/Cola son tres páginas planas del bloque, no un hub).
   "/contenido/texto": TABS_TEXTO,
-  "/datos/produccion": TABS_PRODUCCION,
 };
 
 /**

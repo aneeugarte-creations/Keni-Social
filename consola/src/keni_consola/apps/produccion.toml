@@ -78,6 +78,11 @@ rutas_frontend = [
   "/datos/investigacion/fuentes",
   "/datos/investigacion/cajones",
   "/datos/produccion",
+  # Sección «Máquina» (la máquina de generación: dos cockpits + la Cola compartida).
+  "/maquina",
+  "/maquina/investigacion",
+  "/maquina/produccion",
+  "/maquina/cola",
 ]
 
 # Entradas de navegación de esta app (mismo orden/aspecto que el sidebar actual).
@@ -132,12 +137,46 @@ orden = 10
 ruta = "/datos/produccion"
 etiqueta = "Producción"
 icono = "Activity"
-descripcion = "Todo lo que la máquina produce, en una línea temporal: las runs del pipeline (etapa a etapa) y la actividad suelta de IA (copy, imágenes, investigación…), con conteos, coste, tokens y tiempo. Pestañas Producción / Monitor."
+descripcion = "Todo lo que la máquina produce, en una línea temporal: las runs del pipeline (etapa a etapa) y la actividad suelta de IA (copy, imágenes, investigación…), con conteos, coste, tokens y tiempo."
 grupo = "datos"
 grupo_orden = 30
 orden = 30
 # Antes se llamaba «Actividad IA» y tenía pestañas Feed/Pipelines: HOY están fusionadas
-# en este feed único (/datos/produccion); las rutas viejas redirigen en `router.tsx`.
+# en este feed único (/datos/produccion); las rutas viejas redirigen en `router.tsx`. La
+# pestaña «Monitor» se relocalizó a la sección «Máquina» (fase 2A).
 
 # (Antes existía una entrada "Activos" propia; se fusionó como pestaña "Plantillas"
 # de la página Texto y dejó de ser una entrada de nav.)
+
+# ===== Sección MÁQUINA (la máquina de generación, fase 2A) =====
+# Bloque VISUAL propio (`maquina`, grupo_orden 25: entre Contenido y Datos): la máquina de
+# generación como UNA sección con dos cockpits de igual peso —Investigación (descubre/verifica)
+# y Producción (genera copy/arte)— y la COLA compartida (la vista global del worker/cola que
+# ambos motores comparten, relocalizada del antiguo Monitor). Los cockpits son esqueletos en
+# 2A; los rellenan 2B/2C.
+[[nav]]
+ruta = "/maquina/investigacion"
+etiqueta = "Investigación"
+icono = "Search"
+descripcion = "Cockpit del motor de INVESTIGACIÓN: descubre y verifica noticias que alimentan la máquina. En construcción (fase siguiente)."
+grupo = "maquina"
+grupo_orden = 25
+orden = 10
+
+[[nav]]
+ruta = "/maquina/produccion"
+etiqueta = "Producción"
+icono = "Sparkles"
+descripcion = "Cockpit del motor de PRODUCCIÓN: genera copy y arte publicable. Aloja la tira de etapas y el drawer de ajustes de la máquina. En construcción (fase siguiente)."
+grupo = "maquina"
+grupo_orden = 25
+orden = 20
+
+[[nav]]
+ruta = "/maquina/cola"
+etiqueta = "Cola"
+icono = "ListChecks"
+descripcion = "La vista GLOBAL del worker/cola que comparten los dos motores: salud (doctor), capacidad del pool, economía de tokens (presupuesto + parada de emergencia), jobs en curso/esperando y throughput por día."
+grupo = "maquina"
+grupo_orden = 25
+orden = 30

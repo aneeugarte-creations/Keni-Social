@@ -1,5 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, AlertTriangle, ArrowUp, Boxes, Clock, Cpu, Layers, RefreshCw, RotateCcw, Trash2, XCircle } from "lucide-react";
+import {
+  Activity,
+  AlertTriangle,
+  ArrowUp,
+  Boxes,
+  Clock,
+  Cpu,
+  Layers,
+  ListChecks,
+  RefreshCw,
+  RotateCcw,
+  Trash2,
+  XCircle,
+} from "lucide-react";
 import * as React from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -7,7 +20,7 @@ import { toast } from "sonner";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { ChipNivelPresupuesto } from "@/components/comunes/ChipEstado";
 import { confirmar } from "@/components/comunes/confirmar";
-import { AccionesPagina } from "@/components/layout/encabezado";
+import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,14 +43,7 @@ import { haceSegundos } from "@/lib/fecha";
 import { costeUsd, numeroCompacto } from "@/lib/formato";
 import { INTERVALO_SERIE_MS, INTERVALO_VIVO_MS } from "@/lib/refresco";
 import { cn } from "@/lib/utils";
-import {
-  PanelAjustes,
-  PanelInvestigacion,
-  PanelMaquinaContenido,
-  useGuardarAjuste,
-} from "@/pages/configuracion/SeccionFuncionalidad";
-import { SeccionImagen } from "@/pages/configuracion/SeccionImagen";
-import { SeccionMetricool } from "@/pages/configuracion/SeccionMetricool";
+import { useGuardarAjuste } from "@/pages/configuracion/SeccionFuncionalidad";
 import {
   DesgloseEconomiaProceso,
   PROC_META,
@@ -45,7 +51,6 @@ import {
   SerieProceso,
   TituloEconomia,
 } from "@/pages/monitor/comun";
-import { PipelineEnVivo } from "@/pages/monitor/PipelineEnVivo";
 import { ZonaEstado } from "@/pages/sistema/Doctor";
 import type { ColaJob, PresupuestoIA, Proceso, ResultadoDia } from "@/types";
 
@@ -182,13 +187,6 @@ function TablaJobs({
   );
 }
 
-/**
- * Monitor de la máquina de contenido (hub Producción): arriba la zona de ESTADO (el doctor +
- * temas bloqueados), después el PIPELINE EN VIVO (la tira de etapas con su toggle y conteos),
- * la economía de tokens (kill switch), las tablas en curso/esperando y el throughput por día,
- * con control de admin (purgar la cola, cancelar/priorizar un job). Sondeo en vivo cada pocos
- * segundos. La INFRA (recursos/daemons/backups/S3, antes pestaña «Salud») vive en /sistema.
- */
 /** PRESUPUESTO DIARIO editable in situ (KENI_PRESUPUESTO_TOKENS_DIA, admin): input compacto
  *  que guarda al salir del campo (blur/Enter) con la mutación compartida. 0 = sin límite
  *  (se muestra como «Sin límite»). El valor efectivo llega en el snapshot de la cola. */
@@ -235,9 +233,9 @@ function PresupuestoEditable({ valor }: { valor: number }) {
  * es la PARADA DE EMERGENCIA (KENI_GENERACION_PAUSADA, en caliente): corta TODA la
  * generación con IA, incluida la manual (no se encola nada y el worker no reclama nada;
  * lo que corre termina y lo encolado espera — `presupuesto_ia.NIVEL_PAUSADO`). El
- * presupuesto diario se edita aquí mismo; el margen manual vive en el drawer
- * («Máquina de contenido», grupo `pipeline_topes`). Mutación PROPIA de este panel (sin
- * compartir el estado «guardando» con la tira: cada control señala solo lo suyo). */
+ * presupuesto diario se edita aquí mismo; el margen manual vive en el drawer de ajustes de
+ * los cockpits («Máquina de contenido», grupo `pipeline_topes`). Mutación PROPIA de este
+ * panel (sin compartir el estado «guardando» con otros controles). */
 function PanelPresupuesto({
   presupuesto,
   resHoy,
@@ -327,26 +325,31 @@ function PanelPresupuesto({
   );
 }
 
-// Grupos del catálogo que son TUNING DE SISTEMA (jobs, limpieza, alertas): se ajustan
-// aquí porque es el Monitor quien vigila sus efectos (cola, daemons, salud).
-const GRUPOS_SISTEMA = ["automatismos_generales", "tuning"] as const;
-
-export default function Monitor() {
+/**
+ * COLA compartida de la máquina (`/maquina/cola`): la vista GLOBAL del worker/cola que
+ * comparten los dos motores (Investigación + Producción · ADR 0011). Arriba la ZONA DE
+ * ESTADO (el doctor), después los KPIs de capacidad del pool ÚNICO, la economía de tokens
+ * (presupuesto editable + parada de emergencia), las tablas en curso/esperando (cancelar/
+ * priorizar, admin) y el throughput por día. Sondeo en vivo cada pocos segundos.
+ *
+ * Relocalizada desde el antiguo Monitor (hub Producción): la TIRA DE ETAPAS (PipelineEnVivo)
+ * y el DRAWER DE AJUSTES por etapa NO viven aquí — pertenecen a los cockpits (Investigación
+ * y Producción, fases 2B/2C); hoy se montan temporalmente en el cockpit de Producción.
+ * El prefiltro `?proceso=investigacion|produccion` acota las tablas al loop pedido (los
+ * cockpits enlazan aquí prefiltrado). La INFRA (recursos/daemons/backups/S3) vive en /sistema.
+ */
+export default function Cola() {
   const { usuario } = useSesion();
   const esAdmin = usuario?.rol === "admin";
   const [searchParams, setSearchParams] = useSearchParams();
   const crudoTab = searchParams.get("tab");
-  // La antigua pestaña "Ajustes" vive ahora en el panel lateral de ajustes de la página;
-  // los deep-links `?tab=ajustes` abren el panel directamente. La antigua pestaña «Salud»
-  // (la infra) volvió a ser página propia (/sistema): se redirige más abajo, tras los hooks.
-  const abrirAjustes = crudoTab === "ajustes";
-  // Prefiltro por PROCESO (`?proceso=investigacion|produccion`, lo enlazará Noticias en
-  // Fase 3): acota las vistas de cola (tablas y tira) al loop pedido. Inválido = sin filtro.
+  // Prefiltro por PROCESO (`?proceso=investigacion|produccion`): acota las vistas de cola
+  // (tablas) al loop pedido. Los cockpits enlazan aquí prefiltrado. Inválido = sin filtro.
   const crudoProceso = searchParams.get("proceso");
   const proceso: Proceso | undefined =
     crudoProceso === "investigacion" || crudoProceso === "produccion" ? crudoProceso : undefined;
   const qc = useQueryClient();
-  // El Monitor respeta el switch GLOBAL de marca (como Pipelines/Actividad): las listas de
+  // La Cola respeta el switch GLOBAL de marca (como Pipelines/Actividad): las listas de
   // jobs se acotan a la marca activa (null = "Todas", solo admin). La capacidad es global.
   const { marcaActiva, nombreActiva } = useMarcaActiva();
   const [cancelandoId, setCancelandoId] = React.useState<string | null>(null);
@@ -401,8 +404,8 @@ export default function Monitor() {
   });
 
   // La antigua pestaña «Salud» (la infra) es ahora la página /sistema: los deep-links
-  // viejos (?tab=salud, incl. la redirección legacy de /datos/sistema) siguen vivos.
-  // (Tras TODOS los hooks, para no variar su orden entre renders.)
+  // viejos (?tab=salud, heredados del Monitor) siguen vivos. (Tras TODOS los hooks, para
+  // no variar su orden entre renders.)
   if (crudoTab === "salud") return <Navigate to="/sistema" replace />;
 
   // Listas acotadas al prefiltro de proceso (afecta a las tablas; la capacidad es global).
@@ -424,28 +427,9 @@ export default function Monitor() {
 
   return (
     <>
+      <TituloPagina titulo="Cola" icono={ListChecks} />
       <AccionesPagina>
-        <MenuAcciones
-          ajustesTitulo="Ajustes de la máquina"
-          ajustesAbiertoInicial={abrirAjustes}
-          ajustes={
-            <>
-              {/* Drawer ÚNICO de los ajustes de la máquina (Fase 3): Máquina de contenido ·
-                  Investigación (el motor de noticias migró aquí desde el ⋮ de Noticias) ·
-                  Conexiones (imagen IA + Metricool) · Sistema (automatismos + tuning; el
-                  esfuerzo de razonamiento se pinta ahí como select del grupo `tuning`). */}
-              <PanelMaquinaContenido />
-              <PanelInvestigacion />
-              <SeccionImagen />
-              <SeccionMetricool />
-              <PanelAjustes
-                grupos={GRUPOS_SISTEMA}
-                titulo="Sistema"
-                descripcion="Automatismos, jobs, limpiezas, alertas y esfuerzo de razonamiento; sin reinicio."
-              />
-            </>
-          }
-        >
+        <MenuAcciones>
           <ItemMenu icono={RefreshCw} onClick={refrescar} disabled={cola.isFetching}>
             Actualizar
           </ItemMenu>
@@ -521,8 +505,8 @@ export default function Monitor() {
           )}
 
           {/* KPIs en vivo del POOL COMPARTIDO. Investigación y Producción usan la MISMA cola y el
-              MISMO pool: estos KPIs son la capacidad total; el desglose por loop va debajo.
-              Con marca activa se avisa: la capacidad no se filtra (las tablas sí). */}
+              MISMO pool: estos KPIs son la capacidad total. Con marca activa se avisa: la
+              capacidad no se filtra (las tablas sí). */}
           {marcaActiva && (
             <p className="text-xs text-muted-foreground">
               Los KPIs de capacidad son globales (no se filtran por{" "}
@@ -560,14 +544,8 @@ export default function Monitor() {
             />
           </div>
 
-          {/* PIPELINE EN VIVO (Fase 2): la tira de etapas de la máquina (Selección →
-              Validación → Copy → Arte) con el toggle maestro de cada etapa AL LADO de sus
-              conteos vivos. Sustituye a las tarjetas por proceso: el mismo desglose del
-              pool, pero al grano de etapa y con su control junto al estado. */}
-          <PipelineEnVivo cola={cola.data} esAdmin={esAdmin} proceso={proceso} />
-
           {/* Economía de tokens: estado vivo + presupuesto editable + parada de emergencia
-              (el margen manual, en el drawer «Máquina de contenido»). */}
+              (el margen manual y los topes por etapa, en el drawer de ajustes de los cockpits). */}
           {cola.data.presupuesto && (
             <PanelPresupuesto
               presupuesto={cola.data.presupuesto}
@@ -666,12 +644,6 @@ export default function Monitor() {
               )}
             </CardContent>
           </Card>
-
-          {/* SIN formularios aquí: el maestro «Máquina», los switches de etapa y sus
-              excepciones por marca viven en la tira «Pipeline en vivo»; topes y tuning, en
-              el panel lateral de ajustes; la SALUD de la infra (daemons/recursos/backups),
-              en /sistema. El Monitor opera: cancelar, priorizar, purgar y la parada de
-              emergencia de arriba. */}
         </div>
       )}
     </>

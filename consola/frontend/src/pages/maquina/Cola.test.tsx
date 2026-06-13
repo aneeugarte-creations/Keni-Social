@@ -4,10 +4,10 @@ import * as React from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import Monitor from "./Monitor";
+import Cola from "./Cola";
 import type { ColaJob } from "@/types";
 
-// El Monitor respeta el switch GLOBAL de marca (igual que Pipelines/Actividad). Stub mutable
+// La Cola respeta el switch GLOBAL de marca (igual que Pipelines/Actividad). Stub mutable
 // para probar tanto la marca concreta como la vista "Todas".
 const marcaActivaStub: { marcaActiva: string | null; nombreActiva: string | null } = {
   marcaActiva: null,
@@ -83,7 +83,7 @@ function renderConProviders(ui: React.ReactElement) {
   );
 }
 
-describe("Monitor (cola de generación)", () => {
+describe("Cola (cola de generación)", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     marcaActivaStub.marcaActiva = null;
@@ -97,7 +97,7 @@ describe("Monitor (cola de generación)", () => {
     marcaActivaStub.marcaActiva = "claro-sports";
     marcaActivaStub.nombreActiva = "Claro Sports";
     const fetchFn = stubFetch(snapshot([job({ etiqueta: "Copy Claro" })], [], "claro-sports"));
-    renderConProviders(<Monitor />);
+    renderConProviders(<Cola />);
     expect(await screen.findByText("Copy Claro")).toBeInTheDocument();
     // La petición del snapshot lleva ?marca= (el backend acota las listas a esa marca).
     await waitFor(() => {
@@ -110,7 +110,7 @@ describe("Monitor (cola de generación)", () => {
 
   it("en la vista «Todas» pide la cola sin marca", async () => {
     const fetchFn = stubFetch(snapshot([job({})]));
-    renderConProviders(<Monitor />);
+    renderConProviders(<Cola />);
     expect(await screen.findByText("Copy de nota")).toBeInTheDocument();
     const urls = fetchFn.mock.calls.map((c) => String(c[0]));
     expect(urls.some((u) => u.includes("/api/actividad/cola") && !u.includes("marca="))).toBe(true);
@@ -118,7 +118,7 @@ describe("Monitor (cola de generación)", () => {
 
   it("señala los jobs prioritarios de la lista de espera", async () => {
     stubFetch(snapshot([job({ etiqueta: "Manual urgente", prioridad: 10 })]));
-    renderConProviders(<Monitor />);
+    renderConProviders(<Cola />);
     expect(await screen.findByText("Manual urgente")).toBeInTheDocument();
     expect(screen.getByText("prioritario")).toBeInTheDocument();
   });

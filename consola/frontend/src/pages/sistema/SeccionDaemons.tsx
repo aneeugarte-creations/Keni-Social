@@ -210,10 +210,10 @@ export function SeccionDaemons() {
           <Activity className="h-4 w-4" aria-hidden="true" />
           Daemons de fondo
           {/* Aquí se OBSERVA la salud (latidos persistidos) y se puede forzar un barrido;
-              el encendido/apagado son ajustes y viven en el Monitor (tira del pipeline +
-              panel de ajustes). Un solo sitio para cada cosa. */}
+              el encendido/apagado son ajustes y viven en la Máquina (tira del pipeline +
+              drawer de ajustes del cockpit de Producción). Un solo sitio para cada cosa. */}
           <Link
-            to="/datos/produccion/monitor?tab=ajustes"
+            to="/maquina/produccion?tab=ajustes"
             className="ml-auto inline-flex items-center gap-1 text-xs font-normal underline-offset-2 hover:text-foreground hover:underline"
           >
             Ajustes

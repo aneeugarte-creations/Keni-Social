@@ -6,7 +6,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
-import { AccionesPagina } from "@/components/layout/encabezado";
+import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -245,6 +245,9 @@ export default function Produccion() {
 
   return (
     <div className="space-y-6">
+      {/* Página plana (ya no es hub: la pestaña «Monitor» se relocalizó a «Máquina»): su
+          título se portaliza a la cabecera, como las demás páginas planas. */}
+      <TituloPagina titulo="Producción" icono={Factory} />
       <AccionesPagina>
         <MenuAcciones>
           <ItemMenu

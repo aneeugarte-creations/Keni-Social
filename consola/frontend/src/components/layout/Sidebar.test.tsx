@@ -330,10 +330,9 @@ describe("apps-scope · helpers", () => {
       "/datos/investigacion",
       "/datos/investigacion/contenidos",
       "/datos/investigacion/fuentes",
-      // /datos/produccion (hub) → el feed unificado (índice) + Monitor (en vivo +
-      // salud). Las antiguas pestañas Feed/Pipelines y la página Sistema viven dentro.
+      // /datos/produccion → página PLANA (ya no es hub): el feed unificado. Su antigua
+      // pestaña «Monitor» se relocalizó a la sección «Máquina» (/maquina/cola).
       "/datos/produccion",
-      "/datos/produccion/monitor",
     ]);
   });
 

@@ -4,8 +4,8 @@
  * Sustituye al antiguo panel «Monitor de investigación» embebido en la página de Noticias
  * (que duplicaba la vista del Monitor): un chip con los jobs del loop en el pool compartido
  * («Investigación: N en curso · M en cola», del MISMO snapshot `GET /api/actividad/cola`)
- * que enlaza al Monitor prefiltrado (`?proceso=investigacion`), donde viven la vista
- * completa (tablas, serie, economía) y la operación de la cola.
+ * que enlaza a la Cola compartida prefiltrada (`/maquina/cola?proceso=investigacion`), donde
+ * viven la vista completa (tablas, serie, economía) y la operación de la cola.
  */
 import { useQuery } from "@tanstack/react-query";
 import { Microscope } from "lucide-react";
@@ -25,10 +25,10 @@ export function ChipInvestigacion() {
   if (!inv) return null;
   return (
     <Link
-      to="/datos/produccion/monitor?proceso=investigacion"
+      to="/maquina/cola?proceso=investigacion"
       data-testid="chip-investigacion"
       className="inline-flex w-fit items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-      title="Abrir el Monitor prefiltrado al loop de investigación"
+      title="Abrir la Cola prefiltrada al loop de investigación"
     >
       <Microscope className="h-3.5 w-3.5 text-sky-600" aria-hidden="true" />
       <span>
