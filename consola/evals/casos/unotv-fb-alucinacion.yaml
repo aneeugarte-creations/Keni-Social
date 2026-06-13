@@ -1,0 +1,16 @@
+id: unotv-fb-alucinacion
+descripcion: "El copy habla de FÚTBOL pero la nota de origen es METEOROLÓGICA: cero términos en común (posible alucinación o pieza cruzada con otra noticia)."
+marca: unotv
+red: facebook
+espera: falla
+falla_esperada_en: coherencia
+fuente: |
+  El Servicio Meteorológico Nacional pronostica precipitaciones intensas y posibles
+  inundaciones repentinas en varios municipios del sureste mexicano durante el próximo
+  periodo vacacional, ante el avance de una onda tropical sobre aguas cálidas del golfo
+  hacia las costas peninsulares según el último boletín hidrometeorológico emitido.
+copy: |
+  El conjunto capitalino consiguió una remontada espectacular en los compases finales del
+  encuentro disputado anoche, con dos anotaciones consecutivas que desataron la euforia
+  entre miles de seguidores presentes en las gradas del recinto deportivo a lo largo de esa
+  vibrante velada futbolística llena de emociones.

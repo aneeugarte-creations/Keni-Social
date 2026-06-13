@@ -1,0 +1,10 @@
+id: claro-sports-fb-sin-gancho
+descripcion: "Crónica deportiva en minúsculas: a Claro Sports en Facebook le falta el gancho en MAYÚSCULAS de apertura (sello medido de la marca)."
+marca: claro-sports
+red: facebook
+espera: falla
+falla_esperada_en: voz
+copy: |
+  el partido fue muy disputado y al final el conjunto local se llevó la victoria por la
+  mínima en un cierre de infarto que mantuvo a la afición sin aliento hasta el silbatazo
+  final del árbitro central.

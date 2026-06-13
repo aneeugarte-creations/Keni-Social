@@ -1,0 +1,8 @@
+id: unotv-fb-telegrama
+descripcion: "Copy telegrama: demasiado corto para Facebook de UnoTV (banda real desde ~187)."
+marca: unotv
+red: facebook
+espera: falla
+falla_esperada_en: voz
+copy: |
+  Detienen a un presunto responsable en Guadalajara.

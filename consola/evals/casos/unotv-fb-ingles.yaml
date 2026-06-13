@@ -1,0 +1,10 @@
+id: unotv-fb-ingles
+descripcion: "Copy de UnoTV generado en INGLÉS, sin tropicalización MX: no debe salir nada que no suene a español."
+marca: unotv
+red: facebook
+espera: falla
+falla_esperada_en: idioma
+copy: |
+  The local authorities confirmed this morning that the new public security operation will
+  start next week across several neighborhoods of the metropolitan area, after weeks of
+  careful planning and close coordination between federal and state police forces.

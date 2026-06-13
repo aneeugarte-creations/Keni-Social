@@ -1,0 +1,10 @@
+id: unotv-tt-pregunta
+descripcion: "Pregunta retórica en TikTok de UnoTV: correlaciona con el cuartil peor (evitar)."
+marca: unotv
+red: tiktok
+espera: falla
+falla_esperada_en: voz
+copy: |
+  ¿Sabías que el nuevo reglamento de tránsito entra en vigor este lunes en la Ciudad de
+  México? Te contamos los cambios principales que debes conocer para evitar multas en tu
+  trayecto diario por las principales avenidas de la capital del país.

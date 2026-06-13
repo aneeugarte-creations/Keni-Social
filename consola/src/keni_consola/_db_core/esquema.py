@@ -760,6 +760,9 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # reutilizado sin re-cobrar). Migracion idempotente (mismo patron que prompt_chars).
     "ALTER TABLE gasto_ia ADD COLUMN IF NOT EXISTS cache_read BIGINT NOT NULL DEFAULT 0",
     "ALTER TABLE gasto_ia ADD COLUMN IF NOT EXISTS cache_creation BIGINT NOT NULL DEFAULT 0",
+    # Modelo concreto que gastó (id del proveedor). Para imagenes permite estimar el coste
+    # medio por imagen POR MODELO; legados/claude => '' (cae a la media global). Idempotente.
+    "ALTER TABLE gasto_ia ADD COLUMN IF NOT EXISTS modelo TEXT NOT NULL DEFAULT ''",
     # INDICE de GENERACIONES (ADR 0012, rendimiento): el registro de cada generacion vive en un
     # YAML (fuente de verdad del DETALLE: prompt/razonamiento/stream). Listar Actividad IA /
     # Pipelines parseaba TODOS los ~2000 YAML por peticion. Este indice replica los campos LIGEROS

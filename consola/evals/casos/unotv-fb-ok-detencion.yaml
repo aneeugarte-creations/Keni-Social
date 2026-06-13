@@ -1,0 +1,15 @@
+id: unotv-fb-ok-detencion
+descripcion: "Nota policial sobria de UnoTV en Facebook, dentro de patrón y fiel a la fuente."
+marca: unotv
+red: facebook
+espera: pasa
+fuente: |
+  La Fiscalía General del Estado de Jalisco informó la detención de un presunto
+  responsable del robo a una tienda departamental en Guadalajara. El operativo se
+  realizó en la zona metropolitana tras varias semanas de seguimiento por parte de
+  las autoridades, de acuerdo con el reporte oficial difundido este viernes.
+copy: |
+  El presunto responsable del robo a una tienda departamental en Guadalajara fue
+  detenido, informó la Fiscalía General del Estado de Jalisco. El operativo se realizó
+  en la zona metropolitana tras varias semanas de seguimiento por parte de las
+  autoridades, según el reporte oficial difundido este viernes por la mañana.
