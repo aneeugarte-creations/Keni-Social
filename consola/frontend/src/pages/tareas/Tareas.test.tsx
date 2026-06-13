@@ -182,7 +182,8 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect((await screen.findAllByText("Mía")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("De Ana").length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole("button", { name: "Mis tareas" }));
+    // Radix Tabs activa en pointer-down (no en click) — patrón del resto de la suite.
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Mis tareas" }), { button: 0 });
     await waitFor(() => expect(screen.queryByText("De Ana")).toBeNull());
     expect(screen.getByText("Mía")).toBeInTheDocument();
   });

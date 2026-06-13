@@ -26,6 +26,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { MARCA_ACTIVA_TODAS, useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { SesionContexto } from "@/hooks/sesion-contexto";
@@ -894,6 +895,30 @@ export default function Tareas() {
       <TarjetaTarea key={i.clave} tarea={i.tarea} catalogos={catalogos} />
     );
 
+  // Lista agrupada (Por cubrir / En marcha / Hechas) que comparten «Por cubrir» y «Mis tareas».
+  const listaAgrupada =
+    visibles.length === 0 ? (
+      <div className="rounded-lg border border-dashed border-border p-8 text-center">
+        <p className="text-sm text-muted-foreground">
+          {lente === "mias"
+            ? "No tienes nada asignado. Coge algo de «Por cubrir»."
+            : "No hay nada por cubrir ahora mismo."}
+        </p>
+      </div>
+    ) : (
+      grupos.map((g) =>
+        g.items.length === 0 ? null : (
+          <section key={g.etiqueta} className="space-y-2">
+            <h2 className="text-sm font-medium text-muted-foreground">
+              {g.etiqueta}
+              <span className="ml-1.5 tabular-nums">({g.items.length})</span>
+            </h2>
+            <div className="space-y-2">{g.items.map(pintar)}</div>
+          </section>
+        ),
+      )
+    );
+
   return (
     <>
       <TituloPagina titulo="Tareas del equipo" icono={ListChecks} />
@@ -904,59 +929,39 @@ export default function Tareas() {
         </Button>
       </AccionesPagina>
 
-      <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        {LENTES.map((l) => (
-          <Button
-            key={l.id}
-            variant={lente === l.id ? "default" : "outline"}
-            size="sm"
-            onClick={() => setLente(l.id)}
-          >
-            {l.etiqueta}
-            {l.id === "libres" && conteoPorCubrir > 0 && (
-              <Badge variant="outline" className="ml-1.5 bg-background px-1.5 py-0 tabular-nums">
-                {conteoPorCubrir}
-              </Badge>
-            )}
-          </Button>
-        ))}
-      </div>
+      <Tabs value={lente} onValueChange={(v) => setLente(v as Lente)} className="space-y-4">
+        <TabsList>
+          {LENTES.map((l) => (
+            <TabsTrigger key={l.id} value={l.id}>
+              {l.etiqueta}
+              {l.id === "libres" && conteoPorCubrir > 0 && (
+                <Badge
+                  variant="outline"
+                  className="ml-1.5 bg-background px-1.5 py-0 tabular-nums"
+                >
+                  {conteoPorCubrir}
+                </Badge>
+              )}
+            </TabsTrigger>
+          ))}
+        </TabsList>
 
-      {cargando && <p className="text-sm text-muted-foreground">Cargando…</p>}
-
-      {!cargando && lente === "panorama" && (
-        <PanoramaAgenda
-          tareas={tareas}
-          eventosLibres={eventosLibres}
-          catalogos={catalogos}
-        />
-      )}
-
-      {!cargando && lente !== "panorama" && visibles.length === 0 && (
-        <div className="rounded-lg border border-dashed border-border p-8 text-center">
-          <p className="text-sm text-muted-foreground">
-            {lente === "mias"
-              ? "No tienes nada asignado. Coge algo de «Por cubrir»."
-              : "No hay nada por cubrir ahora mismo."}
-          </p>
-        </div>
-      )}
-
-      {!cargando &&
-        lente !== "panorama" &&
-        visibles.length > 0 &&
-        grupos.map((g) =>
-          g.items.length === 0 ? null : (
-            <section key={g.etiqueta} className="space-y-2">
-              <h2 className="text-sm font-medium text-muted-foreground">
-                {g.etiqueta}
-                <span className="ml-1.5 tabular-nums">({g.items.length})</span>
-              </h2>
-              <div className="space-y-2">{g.items.map(pintar)}</div>
-            </section>
-          ),
+        {cargando ? (
+          <p className="text-sm text-muted-foreground">Cargando…</p>
+        ) : (
+          <>
+            <TabsContent value="panorama">
+              <PanoramaAgenda tareas={tareas} eventosLibres={eventosLibres} catalogos={catalogos} />
+            </TabsContent>
+            <TabsContent value="libres" className="space-y-4">
+              {listaAgrupada}
+            </TabsContent>
+            <TabsContent value="mias" className="space-y-4">
+              {listaAgrupada}
+            </TabsContent>
+          </>
         )}
+      </Tabs>
 
       <DialogoCrearTarea
         abierto={crearAbierto}
@@ -964,7 +969,6 @@ export default function Tareas() {
         catalogos={catalogos}
         marca={marca}
       />
-      </div>
     </>
   );
 }
