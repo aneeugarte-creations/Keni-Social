@@ -438,9 +438,14 @@ def serializar(spec: dict[str, Any]) -> str:
     return json.dumps(spec, ensure_ascii=False)
 
 
-def deserializar(texto: str) -> dict[str, Any]:
-    """JSON (texto) -> spec. Lanza `ValueError` si no es un objeto JSON valido."""
-    datos = json.loads(texto)
+def deserializar(texto: str | dict[str, Any]) -> dict[str, Any]:
+    """JSON (texto) -> spec. Lanza `ValueError` si no es un objeto JSON valido.
+
+    Acepta tambien un dict YA deserializado: tras migrar `jobs.spec` a `jsonb` (ADR 0012),
+    `dict_row` devuelve la columna como dict, no como str. Asi el call-site (`cola._reclamar`)
+    no cambia y la migracion es transparente.
+    """
+    datos = texto if isinstance(texto, dict) else json.loads(texto)
     if not isinstance(datos, dict):
         raise ValueError("spec de job no es un objeto")
     return datos

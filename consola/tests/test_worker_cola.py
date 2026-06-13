@@ -302,9 +302,11 @@ def test_reencolar_resetea_intentos(entorno, monkeypatch):
 
 
 def test_spec_corrupto_se_reclama_con_spec_none(entorno):
-    # JSON corrupto en la fila: el worker lo recibe con spec=None y lo marca en error.
+    # spec que NO es un objeto job (tras migrar `spec` a jsonb, el JSON sintacticamente roto ya
+    # no puede ni almacenarse; lo que el worker debe tolerar es un JSON valido NO-objeto, p. ej.
+    # un numero): se recibe con spec=None y se marca en error.
     gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
-    repos.encolar_job(gen["id"], "{ no es json valido")
+    repos.encolar_job(gen["id"], "123")
     clavado = cola.reclamar()
     assert clavado is not None and clavado["spec"] is None
 
@@ -656,7 +658,7 @@ def test_worker_spec_corrupto_marca_error_y_libera_cupo(entorno):
     cupo (que ocupaba como `pendiente`) se libera y no satura el gate compartido.
     """
     gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
-    repos.encolar_job(gen["id"], "{ corrupto")
+    repos.encolar_job(gen["id"], "123")  # JSON valido pero NO un objeto job (spec=None)
     job = cola.reclamar()
     worker.procesar_job(job, "w")
     g = generaciones.obtener(gen["id"])

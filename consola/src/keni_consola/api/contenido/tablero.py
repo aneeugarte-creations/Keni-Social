@@ -10,6 +10,7 @@ from __future__ import annotations
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from ...db_contenido import ConflictoVersion
 from ...dominio import notificaciones
 from ...estados import CLASE_TAREA
 from ...permisos import es_admin
@@ -343,8 +344,20 @@ async def actualizar(request: Request) -> Response:
     if not campos:
         return JSONResponse({"error": "Indica algún campo a actualizar."}, status_code=400)
 
+    # CONCURRENCIA OPTIMISTA (ADR 0012): si el cliente manda la `version` que leyó, el repo
+    # rechaza la edición con `ConflictoVersion` si otra escritura adelantó el contador (carrera
+    # pipeline↔humano). Sin `version` en el body se conserva el last-write-wins de siempre.
+    version_esperada = datos.get("version")
+    version_esperada = int(version_esperada) if isinstance(version_esperada, int) else None
+
     formato_anterior = redes.normalizar_formato(actual.get("formato"))
-    item = repos.actualizar_contenido(contenido_id, campos)
+    try:
+        item = repos.actualizar_contenido(contenido_id, campos, version_esperada=version_esperada)
+    except ConflictoVersion:
+        return JSONResponse(
+            {"error": "El contenido cambió mientras lo editabas; recárgalo."},
+            status_code=409,
+        )
     if item is None:
         return JSONResponse({"error": "Ese contenido ya no existe."}, status_code=404)
 

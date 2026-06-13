@@ -1,0 +1,227 @@
+"""Migraciones de INTEGRIDAD del esquema (FKs, CHECK, version optimista, tipos jsonb).
+
+Endurecen el esquema heredado de la era SQLite ("TEXT-para-todo, sin FKs") ahora que el
+unico backend es Postgres (ADR 0004; `motor_db` solo IMITA la API de sqlite3 sobre Postgres).
+Ver `docs/adr/0012` (apendice de 0004).
+
+DISENO comun a todas estas migraciones (CRITICO porque despliegan sobre datos REALES):
+  - Son IDEMPOTENTES: el patron es `DROP ... IF EXISTS` + recrear, o `ADD COLUMN IF NOT EXISTS`,
+    o un cambio de tipo GUARDADO por una consulta a `information_schema`. Pueden correr dos veces
+    sin fallar (y, de hecho, lo hacen en los tests: el journal `schema_migraciones` se trunca
+    entre tests, asi que se re-aplican en cada arranque).
+  - Cada `ADD CONSTRAINT` (FK o CHECK) va PRECEDIDO de una LIMPIEZA idempotente de las filas que
+    lo violarian (huerfanos para las FK; valores fuera de la allowlist para los CHECK). Sin esto,
+    el `ADD CONSTRAINT` tumbaria el arranque del deploy contra una BD con datos sucios.
+
+Se registran como migraciones POST-DDL en `migraciones.py` (corren tras el DDL declarativo, que
+ya garantiza la existencia de TODAS las tablas/columnas que estas tocan).
+"""
+from __future__ import annotations
+
+from typing import Any
+
+from ._comun import _log
+
+
+def _en_sql(valores: tuple[str, ...]) -> str:
+    """`('a', 'b', …)` para un `IN (...)` a partir de una allowlist de slugs.
+
+    Los valores son constantes del codigo (allowlists de dominio), no entran datos de usuario.
+    Aun asi escapamos la comilla simple (defensa en profundidad; hoy ningun slug la lleva).
+    """
+    interior = ", ".join("'" + v.replace("'", "''") + "'" for v in valores)
+    return f"({interior})"
+
+
+# --------------------------------------------------------------------------- #
+# Bloque 1: FOREIGN KEYS reales en las relaciones de alto valor (hub `contenido`)
+# --------------------------------------------------------------------------- #
+#
+# Cada tupla: (tabla_hija, columna, tabla_padre, columna_padre, on_delete).
+#
+# SOLO referencias OBLIGATORIAS (la columna SIEMPRE lleva un id de padre real en la practica:
+# una fila por plataforma SIN su `contenido`, un subtitulo SIN su composicion, etc. no tienen
+# sentido). En esas, el sentinel '' (DEFAULT del esquema heredado) nunca aparece legitimamente,
+# asi que tras BORRAR los huerfanos la FK queda limpia y, en adelante, un '' lo RECHAZA la FK
+# (caza el bug en vez de dejar una fila colgada). Todas con ON DELETE CASCADE: la hija es
+# dependiente (su vida se ata a la del padre).
+#
+# Eleccion del PADRE cuando la hija tiene varias columnas-referencia:
+#   - `contenido_comentarios` -> `contenido_id` (su `plataforma_id` es OPCIONAL: ''=hilo del item).
+#   - `contenido_copy_versiones` / `contenido_aprobaciones` -> `plataforma_id` (SIEMPRE real al
+#     insertar; su `contenido_id` se guarda como `contenido_id or ''`, opcional). El borrado del
+#     `contenido` las arrastra IGUAL por transitividad (contenido -> contenido_plataforma -> …).
+#   - `documento_versiones` -> `contenido_id` (la version pertenece a la pieza del tablero).
+#
+# NO migradas a FK (decisiones documentadas, ver ADR 0012):
+#   - `metricas_pieza_snapshots.pieza_id`: NO es un `contenido_plataforma.id`. Se rellena con el
+#     `id_post_metricool` (id del post en Metricool), ver `metricas_pieza._registrar_historico`.
+#     Una FK a `contenido_plataforma` BORRARIA en cascada/limpieza todo el historico de metricas.
+#   - Referencias OPCIONALES con sentinel '' (`contenido.evento_id`, `noticias_items.contenido_id`,
+#     `noticias_items.cluster_id`): el esquema usa '' (no NULL) para "sin referencia". Una FK de
+#     Postgres exige que CADA valor no-nulo exista en el padre, e '' no es NULL -> requeriria un
+#     padre con id=''. Convertir '' -> NULL implica volver nullable la columna y tocar los muchos
+#     call-sites que comparan/filtran por '' (riesgo alto sobre datos vivos). Se difiere.
+_FKS: tuple[tuple[str, str, str, str, str], ...] = (
+    ("contenido_plataforma", "contenido_id", "contenido", "id", "CASCADE"),
+    ("contenido_comentarios", "contenido_id", "contenido", "id", "CASCADE"),
+    ("contenido_copy_versiones", "plataforma_id", "contenido_plataforma", "id", "CASCADE"),
+    ("contenido_aprobaciones", "plataforma_id", "contenido_plataforma", "id", "CASCADE"),
+    ("documento_versiones", "contenido_id", "contenido", "id", "CASCADE"),
+    ("video_subtitulos", "composicion_id", "video_composiciones", "id", "CASCADE"),
+    ("insumos_item", "lote_id", "insumos_lote", "id", "CASCADE"),
+    ("comercial_snapshots", "publicacion_id", "comercial_publicaciones", "id", "CASCADE"),
+)
+
+
+def _nombre_fk(tabla: str, columna: str) -> str:
+    return f"fk_{tabla}_{columna}"
+
+
+def _migrar_fks_hub(con: Any) -> None:
+    """Crea las FKs reales del hub `contenido` y afines, limpiando huerfanos antes de cada una.
+
+    Idempotente: `DROP CONSTRAINT IF EXISTS` + `ADD CONSTRAINT`. La limpieza previa
+    (`DELETE` de las filas cuya columna-referencia no apunta a un padre existente, incluido el
+    sentinel '') garantiza que el `ADD CONSTRAINT` no falle sobre una BD con huerfanos.
+    """
+    for tabla, columna, padre, col_padre, on_delete in _FKS:
+        nombre = _nombre_fk(tabla, columna)
+        # Limpieza de huerfanos (idempotente): borra las hijas sin padre real. Cubre el
+        # sentinel '' y cualquier referencia rota por borrados que no propagaban (sin FK).
+        borradas = con.execute(
+            f"DELETE FROM {tabla} WHERE {columna} NOT IN (SELECT {col_padre} FROM {padre})"  # noqa: S608
+        ).rowcount
+        if borradas:
+            _log.info(
+                "FK %s: %d fila(s) huerfana(s) de %s borradas antes de crear la FK.",
+                nombre, borradas, tabla,
+            )
+        con.execute(f"ALTER TABLE {tabla} DROP CONSTRAINT IF EXISTS {nombre}")  # noqa: S608
+        con.execute(
+            f"ALTER TABLE {tabla} ADD CONSTRAINT {nombre} "  # noqa: S608
+            f"FOREIGN KEY ({columna}) REFERENCES {padre}({col_padre}) ON DELETE {on_delete}"
+        )
+
+
+# --------------------------------------------------------------------------- #
+# Bloque 2: CHECK constraints en campos de ESTADO (allowlists de dominio)        #
+# --------------------------------------------------------------------------- #
+#
+# Cada tupla: (tabla, columna, allowlist, valor_de_normalizacion). Las allowlists son las
+# CANONICAS del codigo (`keni_shared.estados` / `keni_consola.estados`): se importan dentro de
+# la fn (no a nivel de modulo: `_db_core` es la capa de persistencia y `estados` es de dominio)
+# para que el CHECK y la app validen contra LA MISMA fuente, sin duplicar literales.
+#
+# Antes de cada CHECK, los valores FUERA de la allowlist se NORMALIZAN al valor por defecto
+# (idempotente): asi el `ADD CONSTRAINT` no falla sobre datos heredados sucios. El valor de
+# normalizacion SIEMPRE pertenece a la allowlist.
+
+
+def _migrar_checks_dominio(con: Any) -> None:
+    """Aplica CHECKs de allowlist a los campos de estado, normalizando los valores invalidos.
+
+    Idempotente: normaliza (UPDATE) + `DROP CONSTRAINT IF EXISTS` + `ADD CONSTRAINT CHECK`.
+    """
+    from ..estados import (
+        DECISIONES_APROBACION,
+        ESTADOS_CONTENIDO,
+        ESTADOS_CONTENIDO_PLATAFORMA,
+        ROLES_USUARIO,
+        VEREDICTOS_QA_CONTENIDO,
+    )
+
+    checks: tuple[tuple[str, str, tuple[str, ...], str], ...] = (
+        ("contenido", "estado", ESTADOS_CONTENIDO, "pendiente"),
+        ("contenido_plataforma", "estado", ESTADOS_CONTENIDO_PLATAFORMA, "pendiente"),
+        ("contenido_aprobaciones", "decision", DECISIONES_APROBACION, "pendiente"),
+        ("usuarios", "rol", ROLES_USUARIO, "editor"),
+        # QA de la FUENTE: '' es valido (sin cribar). NO se aplica a `noticias_clusters.qa_veredicto`
+        # a proposito (su set de valores aun no esta centralizado; se difiere a la ola siguiente).
+        ("contenido", "qa_veredicto", VEREDICTOS_QA_CONTENIDO, ""),
+    )
+    for tabla, columna, allowlist, normal in checks:
+        nombre = f"ck_{tabla}_{columna}"
+        # Normaliza los valores fuera de la allowlist al default (idempotente). El default
+        # esta en la allowlist, asi que tras esto ninguna fila viola el CHECK.
+        tocadas = con.execute(
+            f"UPDATE {tabla} SET {columna} = ? "  # noqa: S608 -- tabla/columna son constantes
+            f"WHERE {columna} NOT IN {_en_sql(allowlist)}",
+            (normal,),
+        ).rowcount
+        if tocadas:
+            _log.info(
+                "CHECK %s: %d fila(s) con %s.%s invalido normalizadas a %r.",
+                nombre, tocadas, tabla, columna, normal,
+            )
+        con.execute(f"ALTER TABLE {tabla} DROP CONSTRAINT IF EXISTS {nombre}")  # noqa: S608
+        con.execute(
+            f"ALTER TABLE {tabla} ADD CONSTRAINT {nombre} "  # noqa: S608
+            f"CHECK ({columna} IN {_en_sql(allowlist)})"
+        )
+
+
+# --------------------------------------------------------------------------- #
+# Bloque 3: CONCURRENCIA OPTIMISTA (`version`) en contenido y contenido_plataforma
+# --------------------------------------------------------------------------- #
+
+
+def _migrar_version_optimista(con: Any) -> None:
+    """Anade `version INTEGER NOT NULL DEFAULT 0` a `contenido` y `contenido_plataforma`.
+
+    Para BDs ya creadas por versiones anteriores (el DDL declarativo ya la trae en las nuevas).
+    Idempotente (`ADD COLUMN IF NOT EXISTS`). El cableado (incremento + comprobacion) vive en
+    las funciones de actualizacion del repo (`db_contenido`/`db_publicaciones`).
+    """
+    for tabla in ("contenido", "contenido_plataforma"):
+        con.execute(
+            f"ALTER TABLE {tabla} ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0"  # noqa: S608
+        )
+
+
+# --------------------------------------------------------------------------- #
+# Bloque 4: TIPOS — TEXT-JSON -> jsonb en las columnas que se leen enteras       #
+# --------------------------------------------------------------------------- #
+#
+# Migracion PRAGMATICA (no las 55 tablas): solo `jobs.spec` y `metricas_cache.payload`, ambas
+# TEXT con JSON serializado que se LEE ENTERO (y se querria poder consultar). Con `dict_row`,
+# una columna jsonb vuelve como dict, no str; los call-sites de lectura ya se adaptaron
+# (`jobspec.deserializar` y `db_metricas.leer_metricas_cache` aceptan dict-o-str). La ESCRITURA
+# no cambia: la app sigue pasando el JSON serializado (str) y Postgres lo castea a jsonb.
+#
+# Los TIMESTAMP TEXT (series, cola, contenido.creado/actualizado, gasto_ia.dia…) NO se migran a
+# `timestamptz` en esta ola: ver la nota de RIESGO en la ADR 0012 (sentinel '' incompatible con
+# timestamptz, `substr()` sobre el texto, y un `datetime` no serializa a JSON en las muchas
+# respuestas de API que hoy emiten estos campos como string ISO). El texto ya esta en canon UTC
+# sin offset (ver `tiempo.ahora_iso` + migracion 0024), asi que el orden lexico == cronologico.
+
+# Cada tupla: (tabla, columna). El default de seguridad ante un valor NO-JSON es '{}'.
+_COLUMNAS_JSONB: tuple[tuple[str, str], ...] = (
+    ("jobs", "spec"),
+    ("metricas_cache", "payload"),
+)
+
+
+def _migrar_tipos_jsonb(con: Any) -> None:
+    """Convierte `jobs.spec` y `metricas_cache.payload` de TEXT a `jsonb` (BDs existentes).
+
+    Idempotente: GUARDADA por el tipo actual (si ya es jsonb, no hace nada). El `USING` castea
+    el texto a jsonb cuando empieza por '{'/'[' (todo lo que escribe la app: `json.dumps`/
+    `a_json_dict` de un dict) y degrada a '{}' cualquier valor sucio heredado, para que el
+    cambio de tipo no tumbe el deploy.
+    """
+    for tabla, columna in _COLUMNAS_JSONB:
+        tipo = con.execute(
+            "SELECT data_type FROM information_schema.columns "
+            "WHERE table_name = ? AND column_name = ?",
+            (tabla, columna),
+        ).fetchone()
+        if tipo is not None and tipo["data_type"] == "jsonb":
+            continue  # ya convertida (BD nueva via DDL, o migracion ya aplicada)
+        plantilla = (
+            "ALTER TABLE {tabla} ALTER COLUMN {columna} TYPE jsonb "
+            "USING (CASE WHEN left(btrim({columna}), 1) IN ('{{', '[') "
+            "THEN {columna}::jsonb ELSE '{{}}'::jsonb END)"
+        )
+        con.execute(plantilla.format(tabla=tabla, columna=columna))  # noqa: S608 -- constantes
+        _log.info("Tipo: %s.%s convertida a jsonb.", tabla, columna)

@@ -298,7 +298,8 @@ def test_cola_encolar_resucita_fila_terminada_pg(pg):
     assert j2 == j1  # misma fila (UNIQUE gen_id), revivida
     fila = db.reclamar_job("w2")
     assert fila is not None and fila["gen_id"] == "gen-r"
-    assert fila["spec"] == '{"v": 2}'  # corre el trabajo NUEVO
+    # `spec` es jsonb (ADR 0012): `dict_row` lo devuelve ya como dict, no como el str crudo.
+    assert fila["spec"] == {"v": 2}  # corre el trabajo NUEVO
 
 
 def test_cola_reclama_por_prioridad_desc_pg(pg):

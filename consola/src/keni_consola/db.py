@@ -135,6 +135,7 @@ from .db_comercial import (  # noqa: F401
     registrar_snapshot_comercial,
 )
 from .db_contenido import (  # noqa: F401
+    ConflictoVersion,
     actualizar_contenido,
     reclamar_contenido,
     actualizar_contenido_plataforma,

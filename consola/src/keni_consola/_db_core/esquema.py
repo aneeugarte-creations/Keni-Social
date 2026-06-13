@@ -405,7 +405,13 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         url_fuente          TEXT NOT NULL DEFAULT '',
         fuente_nombre       TEXT NOT NULL DEFAULT '',
         creado              TEXT NOT NULL DEFAULT '',
-        actualizado         TEXT NOT NULL DEFAULT ''
+        actualizado         TEXT NOT NULL DEFAULT '',
+        -- CONCURRENCIA OPTIMISTA (ADR 0012): contador que sube en CADA escritura del repo
+        -- (`actualizar_contenido`/transiciones). El cliente puede pasar la `version` que leyo;
+        -- si llego obsoleta (otra escritura adelanto el contador), la actualizacion se rechaza
+        -- con `ConflictoVersion` en vez de pisar el cambio (p. ej. el pipeline pisando un
+        -- rechazo humano). Para BDs existentes lo anade la migracion 0030.
+        version             INTEGER NOT NULL DEFAULT 0
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_contenido_flujo ON contenido (flujo)",
@@ -466,7 +472,10 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         qa_auto_hash          TEXT NOT NULL DEFAULT '',
         hora_post             TEXT NOT NULL DEFAULT '',
         creado                TEXT NOT NULL DEFAULT '',
-        actualizado           TEXT NOT NULL DEFAULT ''
+        actualizado           TEXT NOT NULL DEFAULT '',
+        -- CONCURRENCIA OPTIMISTA (ADR 0012): ver el comentario en `contenido.version`. Sube en
+        -- cada `actualizar_contenido_plataforma`/`transicionar_estado_publicacion`. Migracion 0030.
+        version               INTEGER NOT NULL DEFAULT 0
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_contenido_plat_contenido ON contenido_plataforma (contenido_id)",
@@ -700,7 +709,11 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     CREATE TABLE IF NOT EXISTS jobs (
         id          TEXT PRIMARY KEY,
         gen_id      TEXT NOT NULL,
-        spec        TEXT NOT NULL,
+        -- `spec`: JSON del job (prompt + post-procesado + cwd). `jsonb` (ADR 0012): se lee ENTERO
+        -- y se querria poder consultar; con `dict_row` vuelve ya como dict. La app sigue pasando
+        -- el JSON serializado (str) al insertar (Postgres lo castea) y `jobspec.deserializar`
+        -- acepta dict-o-str. Para BDs existentes lo convierte la migracion 0031.
+        spec        jsonb NOT NULL,
         estado      TEXT NOT NULL DEFAULT 'pendiente',
         cancelado   INTEGER NOT NULL DEFAULT 0,
         worker      TEXT NOT NULL DEFAULT '',
@@ -755,7 +768,10 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         tipo         TEXT NOT NULL,
         rango        TEXT NOT NULL,
         marca        TEXT NOT NULL DEFAULT '',
-        payload      TEXT NOT NULL,
+        -- `payload`: dict CRUDO de metricas serializado. `jsonb` (ADR 0012): se lee entero y se
+        -- querria consultar; con `dict_row` vuelve como dict (`leer_metricas_cache` acepta
+        -- dict-o-str). El UPSERT sigue pasando el JSON serializado. Migracion 0031 en BDs viejas.
+        payload      jsonb NOT NULL,
         fuente       TEXT NOT NULL DEFAULT 'muestra',
         generado_en  TEXT NOT NULL
     )

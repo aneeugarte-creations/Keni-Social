@@ -10,6 +10,7 @@ from __future__ import annotations
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from ...db_contenido import ConflictoVersion
 from ._comun import (
     _MAX_TEXTO,
     ESTADOS_CONTENIDO_PLATAFORMA,
@@ -95,7 +96,18 @@ async def actualizar_plataforma(request: Request) -> Response:
     previa = repos.obtener_contenido_plataforma(plataforma_id)
     estado_anterior = previa.get("estado") if previa else None
 
-    plat = repos.actualizar_contenido_plataforma(plataforma_id, campos)
+    # CONCURRENCIA OPTIMISTA (ADR 0012): `version` opcional del cliente -> 409 si está obsoleta.
+    version_esperada = datos.get("version")
+    version_esperada = int(version_esperada) if isinstance(version_esperada, int) else None
+
+    try:
+        plat = repos.actualizar_contenido_plataforma(
+            plataforma_id, campos, version_esperada=version_esperada
+        )
+    except ConflictoVersion:
+        return JSONResponse(
+            {"error": "La pieza cambió mientras la editabas; recárgala."}, status_code=409
+        )
     if plat is None:
         return JSONResponse({"error": "Esa plataforma ya no existe."}, status_code=404)
 

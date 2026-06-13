@@ -691,6 +691,9 @@ def transicionar_estado_publicacion(
             continue  # solo columnas de la fila por plataforma; el estado va por el CAS
         asignaciones.append(f"{columna} = ?")
         params.append(valor)
+    # Concurrencia optimista (ADR 0012): el AVANCE de estado tambien sube `version`, de modo que
+    # un editor humano que tenia una `version` previa detecte que el pipeline movio la pieza.
+    asignaciones.append("version = version + 1")
     params.extend([publicacion_id, plat_origen])
     con = _conectar()
     try:

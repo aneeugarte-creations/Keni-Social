@@ -61,6 +61,14 @@ from .migraciones_columnas import (
     _migrar_renombre_catalogo_media,
     _normalizar_timestamps_texto,
 )
+from .migraciones_integridad import (
+    _COLUMNAS_JSONB,
+    _FKS,
+    _migrar_checks_dominio,
+    _migrar_fks_hub,
+    _migrar_tipos_jsonb,
+    _migrar_version_optimista,
+)
 from .migraciones_modelo import _migrar_modelo_franjas, _migrar_modelo_turnos
 
 # --------------------------------------------------------------------------- #
@@ -350,6 +358,23 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
         re_aplicar_si_cambia=True,
         datos=_COLUMNAS_DAEMON_LATIDOS_AMPLIADAS,
     ),
+    # INTEGRIDAD (ADR 0012, apendice de 0004): FKs reales en las relaciones de alto valor del
+    # hub `contenido` y afines, con limpieza previa de huerfanos. Es re-ejecutable e idempotente
+    # (DROP IF EXISTS + ADD), asi que la dejamos `re_aplicar_si_cambia=True`: editar `_FKS`
+    # (anadir/quitar una relacion) cambia la huella y re-aplica la migracion una vez.
+    Migracion("0028-fks-hub-contenido", _migrar_fks_hub, re_aplicar_si_cambia=True, datos=_FKS),
+    # INTEGRIDAD (ADR 0012): CHECK de allowlist en los campos de estado (estado de contenido y
+    # de la fila por plataforma, decision de aprobacion, rol de usuario, qa_veredicto), con
+    # normalizacion previa de valores invalidos. Re-aplicable (idempotente): editar una
+    # allowlist de dominio cambia la huella y re-normaliza + recrea el CHECK una vez.
+    Migracion("0029-checks-dominio", _migrar_checks_dominio, re_aplicar_si_cambia=True),
+    # INTEGRIDAD (ADR 0012): columna `version` para concurrencia optimista en `contenido` y
+    # `contenido_plataforma` (BDs existentes; las nuevas la traen del DDL). One-shot.
+    Migracion("0030-version-optimista", _migrar_version_optimista),
+    # TIPOS (ADR 0012): TEXT-JSON -> jsonb en `jobs.spec` y `metricas_cache.payload` (BDs
+    # existentes; las nuevas ya nacen jsonb por el DDL). Idempotente (guardada por el tipo
+    # actual): editar `_COLUMNAS_JSONB` cambia la huella y re-evalua.
+    Migracion("0031-tipos-jsonb", _migrar_tipos_jsonb, re_aplicar_si_cambia=True, datos=_COLUMNAS_JSONB),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.
