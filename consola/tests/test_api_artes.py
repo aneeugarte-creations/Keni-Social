@@ -8,7 +8,10 @@ REFERENCIA VIVA para el GC de media huerfana (no se borra aunque nadie lo use).
 
 from __future__ import annotations
 
+from keni_consola import media
 from keni_consola.dominio import media_gc
+
+from .conftest import _cliente, lanzador_imagen_ejecuta
 
 # PNG minimo valido (1x1) -> bytes para subir como objeto de media.
 _PNG_1x1 = (
@@ -162,3 +165,132 @@ def test_arte_catalogado_es_referencia_viva(cliente):
     arte = cliente.post("/api/artes", json={"objeto": objeto, "marca": "unotv"}).json()["arte"]
     # El arte se cataloga por su key PROMOVIDA (artes/...): esa es la referencia viva.
     assert arte["objeto"] in media_gc.referencias_vivas()
+
+
+# --------------------------------------------------------------------------- #
+# POST /api/artes/generar (lanzador manual de ARTE: marca + prompt + modelo + N) #
+# --------------------------------------------------------------------------- #
+# Igual que /api/media/generar: OFFLINE, el proveedor se MOCKEA (SalidaImagen) y el
+# lanzador EJECUTA `generar` en el acto, asi se cubre generar -> guardar -> ledger.
+
+
+def _cli_arte(monkeypatch, *, coste=0.0, modelo_dev=None):
+    """Cliente con proveedor de imagen MOCK (SalidaImagen) y lanzador que ejecuta en el acto.
+
+    `coste` es el coste por imagen que reporta el proveedor; `modelo_dev`, si se da, el modelo
+    que devuelve (por defecto, el que pidio el llamador) para verificar la propagacion.
+    """
+    monkeypatch.setenv("OPENAI_API_KEY", "clave-de-prueba")
+
+    def _prov(prompt, modelo=""):  # noqa: ANN001 -- doble del proveedor real
+        return media.SalidaImagen(_PNG_1x1, coste, modelo_dev if modelo_dev is not None else modelo)
+
+    monkeypatch.setattr(media, "_PROVEEDOR", _prov)
+    return _cliente(lanzar_imagen=lanzador_imagen_ejecuta())
+
+
+def test_generar_arte_ok_n_imagenes(entorno, monkeypatch):
+    """Camino feliz: marca + prompt + N -> N generaciones tipo imagen que completan con url."""
+    cli = _cli_arte(monkeypatch, coste=0.02)
+    r = cli.post("/api/artes/generar", json={"marca": "unotv", "prompt": "estadio lleno", "n": 3})
+    assert r.status_code == 200
+    cuerpo = r.json()
+    assert cuerpo["n"] == 3
+    assert cuerpo["modelo"]  # modelo resuelto (el por defecto)
+    assert len(cuerpo["generaciones"]) == 3
+    for gen in cuerpo["generaciones"]:
+        assert gen["tipo"] == "imagen"
+        assert gen["marca"] == "unotv"
+        res = gen["resultado"]
+        assert res["id"].endswith(".png")
+        assert res["url"] == f"/api/media/{res['id']}"
+        # La imagen generada se puede servir.
+        assert cli.get(res["url"]).status_code == 200
+    # El coste medio viaja en la respuesta (USD), ya con muestras de estas 3 generaciones.
+    cm = cuerpo["coste_medio"]
+    assert cm["moneda"] == "USD"
+    assert cm["muestras"] >= 3
+    assert abs(cm["por_imagen"] - 0.02) < 1e-9
+
+
+def test_generar_arte_sin_prompt_usa_biblioteca(entorno, monkeypatch):
+    """Sin `prompt` cae al prompt de arte de la Biblioteca (cuerpo efectivo no vacio)."""
+    cli = _cli_arte(monkeypatch)
+    r = cli.post("/api/artes/generar", json={"marca": "unotv"})
+    assert r.status_code == 200
+    assert r.json()["n"] == 1
+
+
+def test_generar_arte_modelo_explicito_se_propaga(entorno, monkeypatch):
+    """Un `modelo` valido se usa y vuelve en la respuesta y en el resultado de la generacion."""
+    modelo = "openai/gpt-5-image"
+    cli = _cli_arte(monkeypatch, coste=0.05)
+    r = cli.post("/api/artes/generar", json={"marca": "unotv", "prompt": "x", "modelo": modelo})
+    assert r.status_code == 200
+    assert r.json()["modelo"] == modelo
+    assert r.json()["generaciones"][0]["resultado"]["modelo"] == modelo
+
+
+def test_generar_arte_marca_invalida_400(entorno, monkeypatch):
+    cli = _cli_arte(monkeypatch)
+    assert cli.post("/api/artes/generar", json={"marca": "no-existe", "prompt": "x"}).status_code == 400
+    assert cli.post("/api/artes/generar", json={"prompt": "x"}).status_code == 400
+
+
+def test_generar_arte_n_fuera_de_rango_400(entorno, monkeypatch):
+    cli = _cli_arte(monkeypatch)
+    assert cli.post("/api/artes/generar", json={"marca": "unotv", "prompt": "x", "n": 0}).status_code == 400
+    assert cli.post("/api/artes/generar", json={"marca": "unotv", "prompt": "x", "n": 99}).status_code == 400
+    assert cli.post("/api/artes/generar", json={"marca": "unotv", "prompt": "x", "n": "muchas"}).status_code == 400
+
+
+def test_generar_arte_modelo_invalido_400(entorno, monkeypatch):
+    cli = _cli_arte(monkeypatch)
+    r = cli.post("/api/artes/generar", json={"marca": "unotv", "prompt": "x", "modelo": "inventado/xl"})
+    assert r.status_code == 400
+
+
+def test_generar_arte_sin_proveedor_400(entorno, monkeypatch):
+    """Sin clave de proveedor (no configurado) => 400 con mensaje claro, sin lanzar nada."""
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    cli = _cliente(lanzar_imagen=lanzador_imagen_ejecuta())
+    r = cli.post("/api/artes/generar", json={"marca": "unotv", "prompt": "x"})
+    assert r.status_code == 400
+    assert "no está configurada" in r.json()["error"]
+
+
+# --------------------------------------------------------------------------- #
+# GET /api/artes/coste-medio (coste medio por imagen, USD, fallback global)     #
+# --------------------------------------------------------------------------- #
+
+
+def test_coste_medio_sin_datos(cliente):
+    """Sin historial de imagen: por_imagen None y muestras 0 (el front cae al fallback)."""
+    r = cliente.get("/api/artes/coste-medio")
+    assert r.status_code == 200
+    cuerpo = r.json()
+    assert cuerpo["por_imagen"] is None
+    assert cuerpo["muestras"] == 0
+    assert cuerpo["moneda"] == "USD"
+
+
+def test_coste_medio_por_modelo_con_fallback_global(entorno, monkeypatch):
+    """Tras generar con un modelo, su coste medio sale; un modelo sin datos cae a la global."""
+    modelo = "openai/gpt-5-image"
+    cli = _cli_arte(monkeypatch, coste=0.04, modelo_dev=modelo)
+    cli.post("/api/artes/generar", json={"marca": "unotv", "prompt": "x", "modelo": modelo, "n": 2})
+    # El modelo con historial: media de sus generaciones.
+    r = cli.get(f"/api/artes/coste-medio?modelo={modelo}")
+    assert r.status_code == 200
+    propio = r.json()
+    assert propio["muestras"] == 2
+    assert abs(propio["por_imagen"] - 0.04) < 1e-9
+    assert propio["global"] is False
+    # Otro modelo SIN historial propio: cae a la media global (que sí tiene datos).
+    otro = cli.get("/api/artes/coste-medio?modelo=openai/gpt-5-image-mini").json()
+    assert otro["global"] is True
+    assert otro["muestras"] == 2
+
+
+def test_coste_medio_modelo_invalido_400(cliente):
+    assert cliente.get("/api/artes/coste-medio?modelo=inventado/xl").status_code == 400

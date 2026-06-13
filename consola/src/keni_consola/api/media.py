@@ -92,6 +92,71 @@ async def servir(request: Request) -> Response:
     return Response(datos, media_type=media.mime_de(nombre))
 
 
+def lanzar_generacion_imagen(
+    *,
+    prompt: str,
+    modelo: str = "",
+    marca: str = "",
+    contenido_id: str = "",
+    titulo: str = "",
+    autor: dict | None = None,
+) -> dict:
+    """Crea UNA generación de imagen y lanza su job en 2.º plano -> dict público de la generación.
+
+    Camino ÚNICO de imagen reutilizable por todos los lanzadores manuales (botón «Generar con
+    IA» de una pieza y «Generar arte a mano» por marca): `generaciones.crear` + el proveedor
+    (`media.generar_imagen_detallado`, con `modelo` opcional) + `lanzar_job_imagen`. Captura el
+    COSTE real del proveedor y lo sella en `metricas` para que el cierre lo vuelque al ledger
+    `gasto_ia` (tipo `imagen`, con el modelo) y poder estimar el coste medio por imagen. Si la
+    generación está correlada a una pieza (`contenido_id`), deja además la etapa ARTE en su
+    pipeline. El frontend sondea `GET /api/generaciones/{id}` y recoge `resultado={id,url,modelo,coste_usd}`.
+    """
+    autor = autor or {}
+
+    def _generar() -> dict[str, object]:
+        salida = media.generar_imagen_detallado(prompt, modelo=modelo)
+        nombre = media.guardar_bytes(salida.datos, ext="png")
+        # Para una pieza: deja la traza de la etapa ARTE en SU pipeline (prompt + salida reales).
+        if contenido_id:
+            autogen_arte.registrar_arte(
+                contenido_id=contenido_id, marca=marca, titulo=titulo,
+                prompt=prompt, imagen=nombre,
+            )
+        # Sella el gasto en el registro: el cierre lo vuelca al ledger por el embudo único de
+        # `presupuesto_ia.registrar_cierre` (coste real + modelo). Solo si hubo coste medible.
+        if salida.coste_usd > 0:
+            generaciones.actualizar(
+                gen["id"],
+                {"metricas": {"total_cost_usd": salida.coste_usd, "tokens_in": 0,
+                              "tokens_out": 0, "modelo": salida.modelo}},
+            )
+        return {"id": nombre, "url": f"/api/media/{nombre}",
+                "modelo": salida.modelo, "coste_usd": salida.coste_usd}
+
+    gen = generaciones.crear(
+        {
+            # Con pieza, la generación pertenece a su pipeline (correlada por `contenido_id`); el
+            # `prompt` viaja para que el detalle del pipeline lo muestre (no "prompt no disponible").
+            "tipo": "imagen",
+            "marca": marca,
+            "contenido_id": contenido_id,
+            "prompt": prompt if contenido_id else "",
+            "etiqueta": (f"Arte · {titulo[:40]}" if titulo else f"Imagen · {prompt[:40]}"),
+            "autor_id": autor.get("id", ""),
+            "autor_nombre": autor.get("usuario", ""),
+        }
+    )
+    try:
+        generaciones.lanzar_job_imagen(gen["id"], generar=_generar)
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo; reflejamos error en el registro
+        generaciones.actualizar(
+            gen["id"],
+            {"estado": generaciones.ESTADO_ERROR, "error": "No se pudo generar la imagen.",
+             "fecha_fin": generaciones.ahora_iso()},
+        )
+    return generaciones.obtener(gen["id"]) or gen
+
+
 async def generar(request: Request) -> Response:
     """Genera una imagen con IA EN SEGUNDO PLANO -> `{generacion}`.
 
@@ -102,7 +167,7 @@ async def generar(request: Request) -> Response:
     una generación suelta. Sin pieza, es una generación de imagen suelta (caso sin pipeline).
 
     400 inmediato si no hay proveedor configurado. El frontend sondea `GET /api/generaciones/{id}`
-    y, al completarse, recoge `resultado = {id, url}`.
+    y, al completarse, recoge `resultado = {id, url, modelo, coste_usd}`.
     """
     datos = await leer_json(request)
     prompt = datos.get("prompt")
@@ -134,41 +199,12 @@ async def generar(request: Request) -> Response:
             marca = marca or str(cont.get("marca") or "")
             titulo_pieza = str(cont.get("titulo") or "")
 
-    def _generar() -> dict[str, object]:
-        crudos = media.generar_imagen(prompt)
-        nombre = media.guardar_bytes(crudos, ext="png")
-        # Para una pieza: deja la traza de la etapa ARTE en SU pipeline (prompt + salida reales).
-        if contenido_id:
-            autogen_arte.registrar_arte(
-                contenido_id=contenido_id, marca=marca, titulo=titulo_pieza,
-                prompt=prompt, imagen=nombre,
-            )
-        return {"id": nombre, "url": f"/api/media/{nombre}"}
-
     # Atribucion por usuario (#130 Fase 1): la imagen la genera el usuario de la peticion.
-    autor = autor_de_peticion(request) or {}
-    gen = generaciones.crear(
-        {
-            # Con pieza, la generación pertenece a su pipeline (correlada por `contenido_id`); el
-            # `prompt` viaja para que el detalle del pipeline lo muestre (no "prompt no disponible").
-            "tipo": "imagen",
-            "marca": marca,
-            "contenido_id": contenido_id,
-            "prompt": prompt if contenido_id else "",
-            "etiqueta": (f"Arte · {titulo_pieza[:40]}" if contenido_id else f"Imagen · {prompt[:40]}"),
-            "autor_id": autor.get("id", ""),
-            "autor_nombre": autor.get("usuario", ""),
-        }
+    gen = lanzar_generacion_imagen(
+        prompt=prompt, marca=marca, contenido_id=contenido_id,
+        titulo=titulo_pieza, autor=autor_de_peticion(request) or {},
     )
-    try:
-        generaciones.lanzar_job_imagen(gen["id"], generar=_generar)
-    except Exception:  # noqa: BLE001 -- nunca un traceback crudo; reflejamos error en el registro
-        generaciones.actualizar(
-            gen["id"],
-            {"estado": generaciones.ESTADO_ERROR, "error": "No se pudo generar la imagen.",
-             "fecha_fin": generaciones.ahora_iso()},
-        )
-    return JSONResponse({"generacion": generaciones.obtener(gen["id"]) or gen})
+    return JSONResponse({"generacion": gen})
 
 
 async def desde_url(request: Request) -> Response:

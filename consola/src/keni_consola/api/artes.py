@@ -28,11 +28,24 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import almacen_media, marcas, media, repos
+from .. import almacen_media, libtexto, marcas, media, repos
 from .._http_json import leer_json
 from ..seguridad import autor_de_peticion
+from .media import lanzar_generacion_imagen
 
 _log = logging.getLogger("keni_consola.artes")
+
+# Tope de imagenes ALTERNATIVAS por lanzamiento manual de arte: cada una cuesta dinero (una
+# llamada al proveedor), asi que se acota para evitar avalanchas/abuso. 1..4 basta para
+# comparar variaciones de un mismo prompt.
+_MAX_ALTERNATIVAS = 4
+# Prompt base del arte en la Biblioteca (mismo id que la directiva del generador): si el
+# usuario no escribe nada, se usa el cuerpo efectivo de este prompt como tema a ilustrar.
+_PROMPT_ARTE_ID = "prompt/arte"
+# Moneda del coste medio por imagen (el proveedor reporta el coste en USD).
+_MONEDA_COSTE = "USD"
+# Cuantas generaciones recientes de imagen promedia el coste medio por imagen.
+_VENTANA_COSTE = 50
 
 # Origen del arte (de donde salio): trabajado en el Estudio, subido por el usuario, generado
 # con IA o la foto ORIGINAL de la nota (RSS de marca propia, auto-catalogada). Es informativo
@@ -188,8 +201,129 @@ async def borrar(request: Request) -> Response:
     return JSONResponse({"mensaje": "Arte quitado de la galería."})
 
 
+def _prompt_arte_biblioteca() -> str:
+    """Cuerpo efectivo del prompt de arte de la Biblioteca; "" si no hay (nunca lanza)."""
+    try:
+        return (libtexto.cuerpo_efectivo(_PROMPT_ARTE_ID) or "").strip()
+    except Exception:  # noqa: BLE001 -- sin biblioteca no rompemos el lanzamiento
+        _log.warning("No se pudo leer el prompt de arte de la biblioteca.", exc_info=True)
+        return ""
+
+
+def _coste_medio_payload(modelo: str) -> dict:
+    """Coste medio por imagen para `modelo` (fallback a la media GLOBAL si no hay muestras).
+
+    Forma estable para el front ("~$X por imagen × N"): `{por_imagen, moneda, unidad,
+    muestras, modelo, global}`. `por_imagen` es None si no hay ninguna muestra ni global.
+    `global=True` indica que el dato es la media global de imagen (no la del modelo pedido).
+    """
+    dato = repos.coste_medio_imagen(modelo=modelo, limite=_VENTANA_COSTE)
+    es_global = False
+    if dato["muestras"] == 0 and modelo:
+        # Sin historico del modelo: cae a la media global de imagen (cualquier modelo).
+        dato = repos.coste_medio_imagen(modelo="", limite=_VENTANA_COSTE)
+        es_global = True
+    return {
+        "por_imagen": dato["por_imagen"],
+        "moneda": _MONEDA_COSTE,
+        "unidad": "por_imagen",
+        "muestras": dato["muestras"],
+        "modelo": modelo or media._modelo(),
+        "global": es_global or not modelo,
+    }
+
+
+async def generar_arte(request: Request) -> Response:
+    """POST /api/artes/generar: lanza N imágenes de ARTE a mano para una marca -> generaciones.
+
+    Cuerpo JSON:
+      - `marca`   (obligatoria): marca del catálogo único.
+      - `prompt`  (opcional): tema a ilustrar; si falta, se usa el prompt de arte de la
+                   Biblioteca (`prompt/arte`).
+      - `modelo`  (opcional): id de un modelo de `GET /api/conexiones/imagen` (`modelos`);
+                   si falta, el modelo configurado por defecto.
+      - `n`       (opcional, def 1): nº de alternativas, 1..`_MAX_ALTERNATIVAS` (4).
+
+    Reutiliza el camino de imagen (`lanzar_generacion_imagen`): crea N generaciones tipo
+    `imagen` y las ejecuta en 2.º plano. Devuelve `{generaciones:[...], modelo, n, coste_medio}`
+    para que el front sondee cada `GET /api/generaciones/{id}` y, al completarse, lea
+    `resultado={id,url,modelo,coste_usd}` (la imagen se sirve en `/api/media/{id}`).
+    400 si la marca/modelo/n son inválidos, falta prompt utilizable o no hay proveedor.
+    """
+    datos = await leer_json(request)
+
+    marca = datos.get("marca")
+    if not isinstance(marca, str) or not marca.strip() or not marcas.es_marca(marca.strip()):
+        return JSONResponse({"error": "Marca no permitida."}, status_code=400)
+    marca = marca.strip()
+
+    modelo = datos.get("modelo")
+    if modelo in (None, ""):
+        modelo = ""
+    elif not isinstance(modelo, str) or not media.modelo_valido(modelo):
+        return JSONResponse({"error": "Modelo de imagen no reconocido."}, status_code=400)
+
+    n_crudo = datos.get("n", 1)
+    try:
+        n = int(n_crudo)
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "El número de imágenes no es válido."}, status_code=400)
+    if n < 1 or n > _MAX_ALTERNATIVAS:
+        return JSONResponse(
+            {"error": f"El número de imágenes debe estar entre 1 y {_MAX_ALTERNATIVAS}."},
+            status_code=400,
+        )
+
+    prompt = datos.get("prompt")
+    prompt = prompt.strip() if isinstance(prompt, str) and prompt.strip() else _prompt_arte_biblioteca()
+    if not prompt:
+        return JSONResponse(
+            {"error": "Falta el texto (prompt) para generar el arte."}, status_code=400
+        )
+
+    if not media.proveedor_configurado():
+        return JSONResponse(
+            {
+                "error": "La generación de imagen no está configurada. Añade una clave "
+                "de proveedor de imagen para activarla."
+            },
+            status_code=400,
+        )
+
+    autor = autor_de_peticion(request) or {}
+    generaciones = [
+        lanzar_generacion_imagen(prompt=prompt, modelo=modelo, marca=marca, autor=autor)
+        for _ in range(n)
+    ]
+    return JSONResponse(
+        {
+            "generaciones": generaciones,
+            "modelo": modelo or media._modelo(),
+            "n": n,
+            "coste_medio": _coste_medio_payload(modelo),
+        }
+    )
+
+
+async def coste_medio(request: Request) -> Response:
+    """GET /api/artes/coste-medio?modelo=: coste medio por imagen (USD) para estimar el gasto.
+
+    Calcula la media de `coste_usd` de las últimas `_VENTANA_COSTE` (50) generaciones de
+    imagen (ledger `gasto_ia`) del `modelo` pedido (o el configurado por defecto), con
+    fallback a la media global si no hay historial del modelo. -> `{por_imagen, moneda,
+    unidad, muestras, modelo, global}`; `por_imagen` None si aún no hay datos. El front lo
+    multiplica por N.
+    """
+    modelo = request.query_params.get("modelo") or ""
+    if modelo and not media.modelo_valido(modelo):
+        return JSONResponse({"error": "Modelo de imagen no reconocido."}, status_code=400)
+    return JSONResponse(_coste_medio_payload(modelo))
+
+
 RUTAS = [
     Route("/api/artes", listar, methods=["GET"]),
     Route("/api/artes", crear, methods=["POST"]),
+    Route("/api/artes/generar", generar_arte, methods=["POST"]),
+    Route("/api/artes/coste-medio", coste_medio, methods=["GET"]),
     Route("/api/artes/{arte_id}", borrar, methods=["DELETE"]),
 ]
