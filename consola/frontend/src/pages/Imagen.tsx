@@ -504,7 +504,7 @@ export default function Imagen() {
     onSuccess: () => {
       if (activa) marcarLimpia(activa);
       qc.invalidateQueries({ queryKey: ["plantillas-diseno"] });
-      toast.success("Guardado.");
+      toast.success("Plantilla guardada.");
     },
     onError: (e: unknown) => {
       if (e instanceof Error && e.message === "__sin_plantilla__") {

@@ -381,7 +381,7 @@ export function BotonMarcarAvisado({ evento, onCambio }: { evento: EventoRota; o
   const marcar = useMutation({
     mutationFn: () => api.actualizarEventoRota(evento.id, { cambiado: false }),
     onSuccess: () => {
-      toast.success("Avisado.");
+      toast.success("Cambio marcado como avisado.");
       onCambio();
     },
     onError: (e) => toast.error(mensajeError(e)),
