@@ -103,3 +103,73 @@ def test_fks_idempotentes_y_limpian_huerfanos(pg):
     finally:
         con.close()
     assert db.obtener_contenido(c["id"]) is not None
+
+
+# --------------------------------------------------------------------------- #
+# Bloque 2: CHECK de allowlist en campos de estado                              #
+# --------------------------------------------------------------------------- #
+
+
+def test_checks_creados(pg):
+    db.listar_swaps_turno()
+    con = _cruda()
+    try:
+        nombres = {
+            f["conname"]
+            for f in con.execute(
+                "SELECT conname FROM pg_constraint WHERE contype = 'c'"
+            ).fetchall()
+        }
+    finally:
+        con.close()
+    for ck in (
+        "ck_contenido_estado",
+        "ck_contenido_plataforma_estado",
+        "ck_contenido_aprobaciones_decision",
+        "ck_usuarios_rol",
+        "ck_contenido_qa_veredicto",
+    ):
+        assert ck in nombres
+
+
+def test_check_rechaza_estado_invalido(pg):
+    c = db.crear_contenido(titulo="t")
+    con = _cruda()
+    try:
+        with pytest.raises(motor_db.IntegrityError):
+            con.execute("UPDATE contenido SET estado = 'bogus' WHERE id = ?", (c["id"],))
+            con.commit()
+    finally:
+        con.close()
+
+
+def test_check_qa_veredicto_acepta_vacio_y_canonicos(pg):
+    c = db.crear_contenido(titulo="t")
+    con = _cruda()
+    try:
+        for v in ("", "en_curso", "no_verificado", "problema", "caducada", "saltada"):
+            con.execute("UPDATE contenido SET qa_veredicto = ? WHERE id = ?", (v, c["id"]))
+            con.commit()
+        with pytest.raises(motor_db.IntegrityError):
+            con.execute("UPDATE contenido SET qa_veredicto = 'inventado' WHERE id = ?", (c["id"],))
+            con.commit()
+    finally:
+        con.close()
+
+
+def test_checks_normalizan_valores_invalidos_preexistentes(pg):
+    """Re-aplicar la migracion sobre datos sucios normaliza al default antes del CHECK."""
+    from keni_consola._db_core.migraciones_integridad import _migrar_checks_dominio
+
+    c = db.crear_contenido(titulo="t")
+    con = _cruda()
+    try:
+        con.execute("ALTER TABLE contenido DROP CONSTRAINT ck_contenido_estado")
+        con.execute("UPDATE contenido SET estado = 'zzz' WHERE id = ?", (c["id"],))
+        con.commit()
+        _migrar_checks_dominio(con)
+        con.commit()
+        v = con.execute("SELECT estado FROM contenido WHERE id = ?", (c["id"],)).fetchone()["estado"]
+        assert v == "pendiente"
+    finally:
+        con.close()

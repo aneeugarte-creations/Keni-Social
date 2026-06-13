@@ -373,6 +373,25 @@ DECISION_PENDIENTE = "pendiente"
 DECISION_APROBADO = "aprobado"
 DECISION_RECHAZADO = "rechazado"
 
+# Veredictos validos de la QA DE LA FUENTE persistida en `contenido.qa_veredicto` (criba
+# pre-copy). Allowlist CANONICA para el CHECK de esquema (ADR 0012). "" = sin cribar / a
+# re-criba. Los valores NO viven en este modulo dependency-free (son del pipeline/dominio);
+# se enumeran aqui como literales, con su origen, para no acoplar `estados` al pipeline:
+#   - "en_curso":      SENTINEL en vuelo            (`pipeline_contenido._comun.QA_EN_CURSO`)
+#   - "saltada":       QA desactivada para la marca (`pipeline_contenido._comun.QA_SALTADA`)
+#   - "caducada":      tema que supero el TTL       (`pipeline_contenido._comun.QA_CADUCADA`)
+#   - "no_verificado": apta para seguir (⚠️)        (`dominio.qa_editorial.VERDICTO_NO_VERIFICADO`)
+#   - "problema":      algo de peso en contra (❗)   (`dominio.qa_editorial.VERDICTO_PROBLEMA`)
+# Si se anade un veredicto nuevo en el pipeline, anadirlo AQUI (el CHECK lo rechazaria si no).
+VEREDICTOS_QA_CONTENIDO: tuple[str, ...] = (
+    "",
+    "en_curso",
+    "saltada",
+    "caducada",
+    "no_verificado",
+    "problema",
+)
+
 # Cadena de aprobacion POR DEFECTO al pedir revision de una pieza (orden = nivel
 # 1-based). Refleja el organigrama de redes de AMX: redaccion -> coordinacion ->
 # direccion. Es solo la plantilla inicial; quien pide la revision puede mandar su

@@ -102,3 +102,60 @@ def _migrar_fks_hub(con: Any) -> None:
             f"ALTER TABLE {tabla} ADD CONSTRAINT {nombre} "  # noqa: S608
             f"FOREIGN KEY ({columna}) REFERENCES {padre}({col_padre}) ON DELETE {on_delete}"
         )
+
+
+# --------------------------------------------------------------------------- #
+# Bloque 2: CHECK constraints en campos de ESTADO (allowlists de dominio)        #
+# --------------------------------------------------------------------------- #
+#
+# Cada tupla: (tabla, columna, allowlist, valor_de_normalizacion). Las allowlists son las
+# CANONICAS del codigo (`keni_shared.estados` / `keni_consola.estados`): se importan dentro de
+# la fn (no a nivel de modulo: `_db_core` es la capa de persistencia y `estados` es de dominio)
+# para que el CHECK y la app validen contra LA MISMA fuente, sin duplicar literales.
+#
+# Antes de cada CHECK, los valores FUERA de la allowlist se NORMALIZAN al valor por defecto
+# (idempotente): asi el `ADD CONSTRAINT` no falla sobre datos heredados sucios. El valor de
+# normalizacion SIEMPRE pertenece a la allowlist.
+
+
+def _migrar_checks_dominio(con: Any) -> None:
+    """Aplica CHECKs de allowlist a los campos de estado, normalizando los valores invalidos.
+
+    Idempotente: normaliza (UPDATE) + `DROP CONSTRAINT IF EXISTS` + `ADD CONSTRAINT CHECK`.
+    """
+    from ..estados import (
+        DECISIONES_APROBACION,
+        ESTADOS_CONTENIDO,
+        ESTADOS_CONTENIDO_PLATAFORMA,
+        ROLES_USUARIO,
+        VEREDICTOS_QA_CONTENIDO,
+    )
+
+    checks: tuple[tuple[str, str, tuple[str, ...], str], ...] = (
+        ("contenido", "estado", ESTADOS_CONTENIDO, "pendiente"),
+        ("contenido_plataforma", "estado", ESTADOS_CONTENIDO_PLATAFORMA, "pendiente"),
+        ("contenido_aprobaciones", "decision", DECISIONES_APROBACION, "pendiente"),
+        ("usuarios", "rol", ROLES_USUARIO, "editor"),
+        # QA de la FUENTE: '' es valido (sin cribar). NO se aplica a `noticias_clusters.qa_veredicto`
+        # a proposito (su set de valores aun no esta centralizado; se difiere a la ola siguiente).
+        ("contenido", "qa_veredicto", VEREDICTOS_QA_CONTENIDO, ""),
+    )
+    for tabla, columna, allowlist, normal in checks:
+        nombre = f"ck_{tabla}_{columna}"
+        # Normaliza los valores fuera de la allowlist al default (idempotente). El default
+        # esta en la allowlist, asi que tras esto ninguna fila viola el CHECK.
+        tocadas = con.execute(
+            f"UPDATE {tabla} SET {columna} = ? "  # noqa: S608 -- tabla/columna son constantes
+            f"WHERE {columna} NOT IN {_en_sql(allowlist)}",
+            (normal,),
+        ).rowcount
+        if tocadas:
+            _log.info(
+                "CHECK %s: %d fila(s) con %s.%s invalido normalizadas a %r.",
+                nombre, tocadas, tabla, columna, normal,
+            )
+        con.execute(f"ALTER TABLE {tabla} DROP CONSTRAINT IF EXISTS {nombre}")  # noqa: S608
+        con.execute(
+            f"ALTER TABLE {tabla} ADD CONSTRAINT {nombre} "  # noqa: S608
+            f"CHECK ({columna} IN {_en_sql(allowlist)})"
+        )

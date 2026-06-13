@@ -61,7 +61,7 @@ from .migraciones_columnas import (
     _migrar_renombre_catalogo_media,
     _normalizar_timestamps_texto,
 )
-from .migraciones_integridad import _FKS, _migrar_fks_hub
+from .migraciones_integridad import _FKS, _migrar_checks_dominio, _migrar_fks_hub
 from .migraciones_modelo import _migrar_modelo_franjas, _migrar_modelo_turnos
 
 # --------------------------------------------------------------------------- #
@@ -356,6 +356,11 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # (DROP IF EXISTS + ADD), asi que la dejamos `re_aplicar_si_cambia=True`: editar `_FKS`
     # (anadir/quitar una relacion) cambia la huella y re-aplica la migracion una vez.
     Migracion("0028-fks-hub-contenido", _migrar_fks_hub, re_aplicar_si_cambia=True, datos=_FKS),
+    # INTEGRIDAD (ADR 0012): CHECK de allowlist en los campos de estado (estado de contenido y
+    # de la fila por plataforma, decision de aprobacion, rol de usuario, qa_veredicto), con
+    # normalizacion previa de valores invalidos. Re-aplicable (idempotente): editar una
+    # allowlist de dominio cambia la huella y re-normaliza + recrea el CHECK una vez.
+    Migracion("0029-checks-dominio", _migrar_checks_dominio, re_aplicar_si_cambia=True),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.
