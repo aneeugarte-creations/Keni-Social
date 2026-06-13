@@ -1,15 +1,16 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ListChecks, Play, Search, SquarePen } from "lucide-react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
+import { ListChecks, Search, SquarePen } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import * as React from "react";
 
+import { EditorPromptOverlay } from "@/components/biblioteca/EditorPromptOverlay";
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSesion } from "@/hooks/sesion-contexto";
-import { ApiError, api, mensajeError } from "@/lib/api";
+import { api } from "@/lib/api";
 import { INTERVALO_VIVO_MS } from "@/lib/refresco";
 import Algoritmos from "@/pages/Algoritmos";
 import Cobertura from "@/pages/Cobertura";
@@ -17,60 +18,51 @@ import ContenidosHub from "@/pages/ContenidosHub";
 import Fuentes from "@/pages/Fuentes";
 import { PanelInvestigacion } from "@/pages/configuracion/SeccionFuncionalidad";
 import { PipelineEnVivo } from "@/pages/monitor/PipelineEnVivo";
-import { ChipInvestigacion } from "@/pages/noticias/ChipInvestigacion";
 import { RielInvestigacion } from "@/pages/noticias/RielInvestigacion";
 
 /**
- * Cockpit de INVESTIGACIÓN (`/maquina/investigacion`): la ÚNICA CASA del control y el monitor
- * del motor proactivo (descubre y verifica noticias). Una página con cuatro pestañas
- * (`?seccion=`), cada una REUTILIZANDO una superficie ya existente sin reescribirla:
+ * Cockpit de INVESTIGACIÓN (`/maquina/investigacion`): la casa del motor PROACTIVO que descubre
+ * y verifica noticias. A diferencia de Producción (que se lanza a mano), Investigación es un
+ * flujo continuo —descubrir → agrupar → seleccionar → validar → mesa de redacción— y el cockpit
+ * lo ordena de ENTRADA a SALIDA en pestañas agrupadas (`?seccion=`), cada una REUTILIZANDO una
+ * superficie ya existente sin reescribirla:
  *
- *   1. PIPELINE (núcleo): la tira `PipelineEnVivo` recortada a Investigación (`soloProceso`) —
- *      Selección + Validación, cada etapa con su switch físico, sus excepciones por marca y su
- *      «Editar prompt» (Validación → `prompt/validacion`). Debajo, el riel de ingesta en vivo
- *      (`RielInvestigacion`), el chip de la cola del loop (`ChipInvestigacion`) y un panel de
- *      enlaces a TODOS los prompts de investigación (deep-link `?doc=` a la Biblioteca).
- *   2. MESA DE REDACCIÓN (output): el pool segmentado por líneas con usar/descartar in-place
- *      (`Cobertura`). Es lo que el humano revisa; la ruta vieja `/datos/investigacion` redirige
- *      a esta pestaña.
- *   3. FUENTES (input): los canales que alimentan el pool (`Fuentes`).
- *   4. CONTENIDOS (output atemporal): el banco EVERGREEN —piezas educativas/curiosas que no
- *      caducan— (`ContenidosHub`). Antes era sub-ruta del hub Investigación (`/datos/investigacion/
- *      contenidos`); al consolidarse la nav, su única casa es esta pestaña del cockpit (la ruta
- *      vieja sigue viva para deep-links).
- *   5. ALGORITMOS (input): inteligencia de plataforma + trends + sugerencias (`Algoritmos`).
- *      La ruta vieja `/contenido/texto/algoritmos` redirige aquí (es un input de investigación,
- *      no una herramienta de la Biblioteca).
+ *   ENTRADA
+ *     · FUENTES (`Fuentes`): los canales que alimentan el pool.
+ *     · ALGORITMOS (`Algoritmos`): inteligencia de plataforma + trends + sugerencias. La ruta
+ *       vieja `/contenido/texto/algoritmos` redirige aquí.
+ *   PROCESO
+ *     · PIPELINE (núcleo): UN solo proceso en dos tramos. Aguas arriba, el riel INFORMATIVO de
+ *       ingesta (`RielInvestigacion`: la máquina descubre/agrupa/rankea sola). En el control,
+ *       la tira `PipelineEnVivo` recortada a Investigación (`soloProceso`) —Selección + Validación,
+ *       cada etapa con su switch y su «Editar prompt» en overlay—. Debajo, el índice editable de
+ *       TODOS los prompts del motor (también in-place, vía `EditorPromptOverlay`).
+ *   SALIDA
+ *     · MESA DE REDACCIÓN (`Cobertura`): el pool segmentado por líneas con usar/descartar; lo que
+ *       el humano revisa. La ruta vieja `/datos/investigacion` redirige aquí.
+ *     · CONTENIDOS (`ContenidosHub`): el banco EVERGREEN —piezas que no caducan—.
  *
- * El menú «⋮» (no en la pestaña Algoritmos, que aporta el suyo) ofrece: el drawer de ajustes de
- * investigación (`PanelInvestigacion`), «Barrer ahora» de cada daemon del motor (ingesta,
- * tendencias, fusión, algoritmos) y el puente a la Cola compartida prefiltrada.
+ * El menú «⋮» (oculto en Algoritmos, que aporta el suyo) ofrece los ajustes del motor
+ * (`PanelInvestigacion`) y un puente a Agentes prefiltrado. Los daemons (barridos manuales) viven
+ * ahora en la página Agentes, no aquí.
  */
 
-/** Pestañas del cockpit (clave `?seccion=`). Pipeline es la vista por defecto. */
-type Seccion = "pipeline" | "mesa" | "fuentes" | "contenidos" | "algoritmos";
+/** Pestañas del cockpit (clave `?seccion=`), en orden de flujo entrada→proceso→salida. */
+type Seccion = "fuentes" | "algoritmos" | "pipeline" | "mesa" | "contenidos";
 const SECCIONES: readonly Seccion[] = [
+  "fuentes",
+  "algoritmos",
   "pipeline",
   "mesa",
-  "fuentes",
   "contenidos",
-  "algoritmos",
 ];
 
-/** Docs de la Biblioteca por etapa de la tira: el lápiz «Editar prompt» de Validación abre su
- *  doc (`?doc=`). Selección es mecánica (sin prompt propio): no lleva lápiz. */
+/** Docs de la Biblioteca por etapa de la tira de control: el lápiz «Editar prompt» de Validación
+ *  abre su doc en overlay. Selección es mecánica (sin prompt propio): no lleva lápiz. */
 const DOC_POR_ETAPA = { validacion: "prompt/validacion" } as const;
 
-/** Daemons del motor de INVESTIGACIÓN: «Barrer ahora» fuerza un barrido inmediato (admin). */
-const DAEMONS: readonly { id: string; etiqueta: string }[] = [
-  { id: "ingesta", etiqueta: "ingesta" },
-  { id: "trends", etiqueta: "tendencias" },
-  { id: "fusion", etiqueta: "fusión" },
-  { id: "algoritmos", etiqueta: "algoritmos" },
-];
-
-/** Prompts del motor de investigación, accesibles in-place (deep-link a la Biblioteca). El de
- *  Validación vive además en la tira; aquí está el repertorio completo del loop. */
+/** Prompts del motor de investigación, editables IN-PLACE (overlay). El de Validación vive además
+ *  en la tira de control y varios tienen su lápiz en el riel; aquí está el repertorio completo. */
 const PROMPTS: readonly { etiqueta: string; doc: string }[] = [
   { etiqueta: "Validación / verificación", doc: "prompt/validacion" },
   { etiqueta: "Fusión de historias", doc: "prompt/fusion" },
@@ -84,8 +76,10 @@ export default function CockpitInvestigacion() {
   const { usuario } = useSesion();
   const esAdmin = usuario?.rol === "admin";
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  // Prompt abierto en el overlay «Editar prompt» del índice de prompts (in-place).
+  const [docAbierto, setDocAbierto] = React.useState<string | null>(null);
 
   const seccionParam = searchParams.get("seccion");
   const seccion: Seccion = SECCIONES.includes(seccionParam as Seccion)
@@ -107,26 +101,6 @@ export default function CockpitInvestigacion() {
     refetchInterval: INTERVALO_VIVO_MS,
   });
 
-  // ── Barrer ahora: fuerza un barrido del daemon elegido del motor de investigación (admin). ──
-  const barrer = useMutation({
-    mutationFn: (daemon: string) => api.sistemaDaemonBarrer(daemon),
-    onSuccess: (r) => {
-      toast.success(`Barrido de «${r.daemon}» solicitado: correrá en su siguiente tick.`);
-      void queryClient.invalidateQueries({ queryKey: ["actividad", "cola"] });
-    },
-    onError: (e) => {
-      if (e instanceof ApiError && e.status === 409) {
-        const detalle = typeof e.cuerpo?.error === "string" ? e.cuerpo.error : null;
-        toast.error(
-          detalle ??
-            "El motor de investigación está apagado por su ajuste: enciéndelo antes de barrer.",
-        );
-      } else {
-        toast.error(mensajeError(e));
-      }
-    },
-  });
-
   return (
     <>
       <TituloPagina titulo="Investigación" icono={Search} />
@@ -135,101 +109,125 @@ export default function CockpitInvestigacion() {
       {seccion !== "algoritmos" && (
         <AccionesPagina>
           <MenuAcciones ajustesTitulo="Ajustes de investigación" ajustes={<PanelInvestigacion />}>
-            {esAdmin &&
-              DAEMONS.map((d) => (
-                <ItemMenu
-                  key={d.id}
-                  icono={Play}
-                  disabled={barrer.isPending}
-                  onClick={() => barrer.mutate(d.id)}
-                >
-                  Barrer {d.etiqueta}
-                </ItemMenu>
-              ))}
-            <ItemMenu
-              icono={ListChecks}
-              onClick={() => navigate("/maquina/cola?proceso=investigacion")}
-            >
-              Ver workers (Investigación)
+            <ItemMenu icono={ListChecks} onClick={() => navigate("/maquina/cola")}>
+              Ver agentes
             </ItemMenu>
           </MenuAcciones>
         </AccionesPagina>
       )}
 
       <Tabs value={seccion} onValueChange={cambiarSeccion}>
-        <TabsList>
-          <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
-          <TabsTrigger value="mesa">Mesa de redacción</TabsTrigger>
+        {/* Pestañas agrupadas por tramo del flujo: Entrada → Proceso → Salida. */}
+        <TabsList className="h-auto flex-wrap gap-y-1">
+          <span className="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+            Entrada
+          </span>
           <TabsTrigger value="fuentes">Fuentes</TabsTrigger>
-          <TabsTrigger value="contenidos">Contenidos</TabsTrigger>
           <TabsTrigger value="algoritmos">Algoritmos</TabsTrigger>
+          <span className="mx-1 hidden h-4 w-px bg-border sm:block" aria-hidden="true" />
+          <span className="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+            Proceso
+          </span>
+          <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
+          <span className="mx-1 hidden h-4 w-px bg-border sm:block" aria-hidden="true" />
+          <span className="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+            Salida
+          </span>
+          <TabsTrigger value="mesa">Mesa de redacción</TabsTrigger>
+          <TabsTrigger value="contenidos">Contenidos</TabsTrigger>
         </TabsList>
 
-        {/* 1. PIPELINE (núcleo): tira recortada + riel/chip de ingesta + prompts del loop. */}
-        <TabsContent value="pipeline" className="space-y-4">
-          {cola.isPending ? (
-            <Skeleton className="h-40 w-full rounded-xl" />
-          ) : cola.data ? (
-            <PipelineEnVivo
-              cola={cola.data}
-              esAdmin={esAdmin}
-              soloProceso="investigacion"
-              docPorEtapa={DOC_POR_ETAPA}
-            />
-          ) : null}
-
-          <RielInvestigacion />
-          <ChipInvestigacion />
-
-          {/* Prompts in-place: el repertorio completo del motor (deep-link a la Biblioteca). */}
-          <Card>
-            <CardHeader className="p-4 pb-2">
-              <CardTitle className="flex items-center gap-1.5 text-sm">
-                <SquarePen className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                Prompts de investigación
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 pt-2">
-              <p className="mb-2 text-sm text-muted-foreground">
-                Cada etapa del motor se edita en la Biblioteca. Los de Selección/Validación
-                también tienen su lápiz en la tira de arriba.
-              </p>
-              <div className="flex flex-col gap-1.5">
-                {PROMPTS.map((p) => (
-                  <Link
-                    key={p.doc}
-                    to={`/contenido/texto/documentos?doc=${encodeURIComponent(p.doc)}`}
-                    className="inline-flex w-fit items-center gap-1.5 text-sm font-medium text-foreground underline-offset-4 hover:underline"
-                  >
-                    <SquarePen className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-                    {p.etiqueta}
-                  </Link>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* 2. MESA DE REDACCIÓN (output): el pool con usar/descartar (Cobertura). */}
-        <TabsContent value="mesa">
-          <Cobertura />
-        </TabsContent>
-
-        {/* 3. FUENTES (input): los canales que alimentan el pool. */}
+        {/* ENTRADA · FUENTES: los canales que alimentan el pool. */}
         <TabsContent value="fuentes">
           <Fuentes />
         </TabsContent>
 
-        {/* 4. CONTENIDOS (output atemporal): el banco EVERGREEN (ContenidosHub). */}
-        <TabsContent value="contenidos">
-          <ContenidosHub />
-        </TabsContent>
-
-        {/* 5. ALGORITMOS (input): inteligencia de plataforma + trends + sugerencias. */}
+        {/* ENTRADA · ALGORITMOS: inteligencia de plataforma + trends + sugerencias. */}
         <TabsContent value="algoritmos">
           <Algoritmos />
         </TabsContent>
+
+        {/* PROCESO · PIPELINE (núcleo): UN proceso en dos tramos —aguas arriba (informativo) y
+            control (Selección/Validación)— más el índice editable de prompts. */}
+        <TabsContent value="pipeline" className="space-y-6">
+          <p className="text-sm text-muted-foreground">
+            Un solo proceso en dos tramos: <strong className="font-medium text-foreground">aguas
+            arriba</strong> la máquina descubre, agrupa y ordena sola; en el{" "}
+            <strong className="font-medium text-foreground">control</strong> tú decides qué pasa
+            por Selección y Validación.
+          </p>
+
+          {/* Tramo 1 · aguas arriba (automático, informativo). */}
+          <RielInvestigacion />
+
+          {/* Tramo 2 · control (Selección + Validación), con switches y «Editar prompt». */}
+          <section className="space-y-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Control · tú decides
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Selección: qué entra al pool. Validación: el embudo de control de calidad que
+              contrasta fuentes antes de la mesa.
+            </p>
+            {cola.isPending ? (
+              <Skeleton className="h-40 w-full rounded-xl" />
+            ) : cola.data ? (
+              <PipelineEnVivo
+                cola={cola.data}
+                esAdmin={esAdmin}
+                soloProceso="investigacion"
+                docPorEtapa={DOC_POR_ETAPA}
+              />
+            ) : null}
+          </section>
+
+          {/* Índice de prompts del motor, editable IN-PLACE (overlay, sin salir del cockpit). */}
+          {esAdmin && (
+            <Card>
+              <CardHeader className="p-4 pb-2">
+                <CardTitle className="flex items-center gap-1.5 text-sm">
+                  <SquarePen className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  Prompts del motor
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 pt-2">
+                <p className="mb-2 text-sm text-muted-foreground">
+                  Edita cualquier prompt sin salir de aquí.
+                </p>
+                <div className="flex flex-col gap-1.5">
+                  {PROMPTS.map((p) => (
+                    <button
+                      key={p.doc}
+                      type="button"
+                      onClick={() => setDocAbierto(p.doc)}
+                      className="inline-flex w-fit items-center gap-1.5 text-sm font-medium text-foreground underline-offset-4 hover:underline"
+                    >
+                      <SquarePen className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+                      {p.etiqueta}
+                    </button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* SALIDA · MESA DE REDACCIÓN: el pool con usar/descartar (Cobertura). */}
+        <TabsContent value="mesa">
+          <Cobertura />
+        </TabsContent>
+
+        {/* SALIDA · CONTENIDOS: el banco EVERGREEN (ContenidosHub). */}
+        <TabsContent value="contenidos">
+          <ContenidosHub />
+        </TabsContent>
       </Tabs>
+
+      <EditorPromptOverlay
+        docId={docAbierto}
+        abierto={docAbierto !== null}
+        onCerrar={() => setDocAbierto(null)}
+      />
     </>
   );
 }
