@@ -755,9 +755,37 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # Economia de CONTEXTO: tamano del prompt (chars) de cada generacion cerrada, para ver
     # la deriva del contexto por dia (prompts cada vez mas gordos). Migracion idempotente.
     "ALTER TABLE gasto_ia ADD COLUMN IF NOT EXISTS prompt_chars BIGINT NOT NULL DEFAULT 0",
-    # Modelo concreto que gastó (id del proveedor). Para imagenes permite estimar el coste
-    # medio por imagen POR MODELO; legados/claude => '' (cae a la media global). Idempotente.
-    "ALTER TABLE gasto_ia ADD COLUMN IF NOT EXISTS modelo TEXT NOT NULL DEFAULT ''",
+    # PROMPT CACHING: tokens leidos de cache y de creacion de cache de cada generacion cerrada,
+    # para medir si el caching ocurre y el ahorro que produce (un cache_read alto = mucho contexto
+    # reutilizado sin re-cobrar). Migracion idempotente (mismo patron que prompt_chars).
+    "ALTER TABLE gasto_ia ADD COLUMN IF NOT EXISTS cache_read BIGINT NOT NULL DEFAULT 0",
+    "ALTER TABLE gasto_ia ADD COLUMN IF NOT EXISTS cache_creation BIGINT NOT NULL DEFAULT 0",
+    # INDICE de GENERACIONES (ADR 0012, rendimiento): el registro de cada generacion vive en un
+    # YAML (fuente de verdad del DETALLE: prompt/razonamiento/stream). Listar Actividad IA /
+    # Pipelines parseaba TODOS los ~2000 YAML por peticion. Este indice replica los campos LIGEROS
+    # del listado para paginar por SQL sin tocar disco; el YAML se lee solo para el detalle. Lo
+    # mantiene `generaciones._almacen` al crear/actualizar/borrar/podar (best-effort; el YAML
+    # manda) y un backfill idempotente al primer uso. `payload` (jsonb) = el dict publico ligero
+    # (sin prompt/razonamiento) que devuelve `listar`. Migracion 0032 para BDs ya creadas.
+    """
+    CREATE TABLE IF NOT EXISTS generaciones_indice (
+        gen_id        TEXT PRIMARY KEY,
+        fecha_inicio  TEXT NOT NULL DEFAULT '',
+        estado        TEXT NOT NULL DEFAULT '',
+        tipo          TEXT NOT NULL DEFAULT '',
+        marca         TEXT NOT NULL DEFAULT '',
+        proceso       TEXT NOT NULL DEFAULT '',
+        contenido_id  TEXT NOT NULL DEFAULT '',
+        payload       jsonb NOT NULL DEFAULT '{}',
+        actualizado   TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    # Orden del listado (recientes primero, desempate por id) -> paginacion por SQL.
+    "CREATE INDEX IF NOT EXISTS idx_generaciones_indice_orden "
+    "ON generaciones_indice (fecha_inicio DESC, gen_id DESC)",
+    # Filtro por marca (Actividad IA por marca) y por estado (reaper de `ejecutando`).
+    "CREATE INDEX IF NOT EXISTS idx_generaciones_indice_marca ON generaciones_indice (marca)",
+    "CREATE INDEX IF NOT EXISTS idx_generaciones_indice_estado ON generaciones_indice (estado)",
     # Cache de metricas (lectura instantanea + refresco en 2o plano, ver metricas_cache.py):
     # guarda el dict CRUDO de `keni_metricas.servicio` (reporte/analisis) serializado a JSON,
     # por combo (tipo, rango, marca). La UI lee de aqui en cada apertura (instantaneo) y un

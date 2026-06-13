@@ -1,6 +1,8 @@
 """Persistencia — dominio jobs. Implementación de db.py (ver barrel `db.py`)."""
 from __future__ import annotations
 
+import json
+
 from ._db_comun import (
     UTC,
     Any,
@@ -167,7 +169,13 @@ def encolados_por_dia(dias: int = 14) -> list[dict[str, Any]]:
     return [{"dia": f["dia"], "n": int(f["n"])} for f in filas]
 
 
-def reclamar_job(worker: str = "", *, prioridad_minima: int | None = None) -> dict[str, Any] | None:
+def reclamar_job(
+    worker: str = "",
+    *,
+    prioridad_minima: int | None = None,
+    solo_proceso: bool | None = None,
+    kinds_proceso: tuple[str, ...] = (),
+) -> dict[str, Any] | None:
     """Clava UN job de forma CONCURRENTE-SEGURA y lo devuelve (None si no hay).
 
     `SELECT ... FOR UPDATE SKIP LOCKED LIMIT 1` dentro de la transaccion + UPDATE a
@@ -177,6 +185,16 @@ def reclamar_job(worker: str = "", *, prioridad_minima: int | None = None) -> di
     `prioridad_minima` (corte del presupuesto, ver `presupuesto_ia`): si viene, solo se
     consideran filas con `prioridad >= prioridad_minima` (el fondo cortado queda `pendiente`
     en la cola, listo para cuando el presupuesto vuelva; lo manual sigue saliendo).
+
+    CARRILES (CPU-bound vs inferencia): `solo_proceso` separa los KINDS de PROCESO (render de
+    video / transcripcion ASR — CPU-bound: ffmpeg/whisper) de los de INFERENCIA (`claude -p` —
+    I/O-bound). `kinds_proceso` es la lista de kinds CPU-bound (de `jobspec.KINDS_PROCESO`, la pasa
+    el llamante para no acoplar la persistencia al dominio). El kind de proceso viaja a NIVEL RAIZ
+    del spec (`spec->>'kind'`); los jobs de inferencia no lo llevan (NULL). Asi:
+      - `solo_proceso=True`  -> solo jobs CPU-bound (su carril/pool propio).
+      - `solo_proceso=False` -> solo jobs de inferencia (el carril de `claude`, que un video largo
+        ya no puede acaparar: head-of-line eliminado).
+      - `solo_proceso=None`  -> cualquiera (back-compat: el pool unico de antes).
 
     RE-RECLAMO DE HUERFANOS: ademas de los `pendiente`, clava los `reclamado` cuyo
     `claimed_at` es mas viejo que `wall-timeout + _RECLAIM_STALE_MARGEN_S` — su worker murio
@@ -193,12 +211,22 @@ def reclamar_job(worker: str = "", *, prioridad_minima: int | None = None) -> di
     (`completado`/`error`), NO se relanza: se marca el job `terminado` y se pasa al siguiente
     (su trabajo ya se hizo). Solo afecta al re-reclamo de huerfanos; un `pendiente` nunca corrio.
 
+    RENDIMIENTO (la lectura del YAML va FUERA del row-lock): la guardia anti-duplicado lee y
+    parsea un fichero YAML (`_gen_ya_terminal` -> `generaciones.obtener`). Hacer ese I/O de disco
+    mientras se retiene el `FOR UPDATE` alargaba la contencion de la fila (y, con varios workers,
+    de toda la cola). Ahora se CLAVA la fila y se hace COMMIT (suelta el lock) ANTES de tocar el
+    disco; recien entonces, si era un huerfano, se comprueba si su registro ya es terminal y, en
+    ese caso, se cierra el job sin relanzarlo. Tras clavarlo con `claimed_at` fresco, ningun otro
+    worker lo ve como huerfano, asi que cerrarlo fuera del lock es seguro (no hay carrera). El
+    camino normal (un `pendiente`) NO toca el disco en absoluto.
+
     TOPE DE INTENTOS (anti crash-loop): cada reclamo incrementa `jobs.intentos`. Un huerfano
     que ya quemo `KENI_JOBS_MAX_INTENTOS` intentos NO se re-ejecuta: se cierra su job y su
     registro queda en error (motivo `interrumpido`, mensaje claro). Sin esto, un job que MATA
     al worker (OOM por un prompt enorme, bug del runner) se re-reclamaba para siempre, quemando
     tokens de la suscripcion compartida en cada vuelta. `reencolar_job` (reintento admin) y la
-    resurreccion de `encolar_job` resetean el contador (intencion humana/trabajo nuevo).
+    resurreccion de `encolar_job` resetean el contador (intencion humana/trabajo nuevo). Esta
+    comprobacion es DB-pura (columna `intentos`), asi que permanece dentro del lock (sin disco).
     """
     ahora = ahora_iso()
     limite_huerfano = iso_utc(
@@ -206,6 +234,15 @@ def reclamar_job(worker: str = "", *, prioridad_minima: int | None = None) -> di
     )
     filtro_prioridad = "" if prioridad_minima is None else "AND prioridad >= ? "
     params_prio: tuple[int, ...] = () if prioridad_minima is None else (int(prioridad_minima),)
+    # Carril por tipo de trabajo (CPU-bound vs inferencia): filtra por el `kind` raiz del spec.
+    filtro_kind = ""
+    params_kind: tuple[str, ...] = ()
+    if solo_proceso is not None and kinds_proceso:
+        marcadores = ", ".join("?" for _ in kinds_proceso)
+        op = "IN" if solo_proceso else "NOT IN"
+        # `COALESCE(spec->>'kind','')`: los jobs de inferencia no llevan kind raiz (NULL -> '').
+        filtro_kind = f"AND COALESCE(spec->>'kind', '') {op} ({marcadores}) "
+        params_kind = tuple(kinds_proceso)
     con = _conectar()
     try:
         # Acotamos los saltos: descartamos huerfanos ya-terminados (terminando su job) y
@@ -214,41 +251,44 @@ def reclamar_job(worker: str = "", *, prioridad_minima: int | None = None) -> di
             fila = con.execute(
                 "SELECT id, gen_id, spec, estado, intentos FROM jobs "
                 "WHERE (estado = ? OR (estado = ? AND claimed_at IS NOT NULL AND claimed_at < ?)) "
-                + filtro_prioridad +
+                + filtro_prioridad + filtro_kind +
                 # Prioridad primero (manual > pipeline/autogen), luego FIFO por antiguedad.
                 "ORDER BY prioridad DESC, creado ASC, id ASC LIMIT 1 FOR UPDATE SKIP LOCKED",
-                (JOB_PENDIENTE, JOB_RECLAMADO, limite_huerfano, *params_prio),
+                (JOB_PENDIENTE, JOB_RECLAMADO, limite_huerfano, *params_prio, *params_kind),
             ).fetchone()
             if fila is None:
                 con.commit()
                 return None
             # Solo un HUERFANO (estado `reclamado`) pudo haber corrido ya su post-procesado.
-            if fila["estado"] == JOB_RECLAMADO and _gen_ya_terminal(fila["gen_id"]):
-                # El registro ya alcanzo estado terminal: el trabajo se hizo. Cerramos el job
-                # SIN relanzarlo (evita el borrador duplicado) y buscamos el siguiente.
-                con.execute(
-                    "UPDATE jobs SET estado = ? WHERE id = ?", (JOB_TERMINADO, fila["id"])
-                )
-                con.commit()
-                continue
+            es_huerfano = fila["estado"] == JOB_RECLAMADO
             # TOPE DE INTENTOS (anti crash-loop): un huerfano que ya agoto sus intentos NO se
-            # re-ejecuta. Se cierra el job y el registro queda en error claro (best-effort).
-            if (
-                fila["estado"] == JOB_RECLAMADO
-                and int(fila["intentos"] or 0) >= config.jobs_max_intentos()
-            ):
+            # re-ejecuta. Es DB-puro (sin disco): se decide DENTRO del lock. Se cierra el job y
+            # el registro queda en error claro (best-effort, ya fuera del lock tras el commit).
+            if es_huerfano and int(fila["intentos"] or 0) >= config.jobs_max_intentos():
                 con.execute(
                     "UPDATE jobs SET estado = ? WHERE id = ?", (JOB_TERMINADO, fila["id"])
                 )
                 con.commit()
                 _marcar_error_reintentos(fila["gen_id"], int(fila["intentos"] or 0))
                 continue
+            # CLAVA la fila y COMMIT: suelta el row-lock ANTES de cualquier I/O de disco.
             con.execute(
                 "UPDATE jobs SET estado = ?, worker = ?, claimed_at = ?, "
                 "intentos = intentos + 1 WHERE id = ?",
                 (JOB_RECLAMADO, worker, ahora, fila["id"]),
             )
             con.commit()
+            # GUARDIA ANTI-DUPLICADO, ya FUERA del lock: solo un huerfano pudo haber corrido su
+            # post-procesado. Si su registro ya es terminal, el trabajo se hizo: cerramos el job
+            # SIN relanzarlo (evita el borrador duplicado) y buscamos el siguiente. Con el
+            # `claimed_at` fresco que acabamos de fijar, ningun otro worker lo re-reclama mientras
+            # tanto, asi que esta segunda escritura es segura sin retener el lock.
+            if es_huerfano and _gen_ya_terminal(fila["gen_id"]):
+                con.execute(
+                    "UPDATE jobs SET estado = ? WHERE id = ?", (JOB_TERMINADO, fila["id"])
+                )
+                con.commit()
+                continue
             return {"id": fila["id"], "gen_id": fila["gen_id"], "spec": fila["spec"]}
         con.commit()
         return None
@@ -428,14 +468,16 @@ def registrar_gasto_ia(
     tokens_out: int = 0,
     coste_usd: float = 0.0,
     prompt_chars: int = 0,
-    modelo: str = "",
+    cache_read: int = 0,
+    cache_creation: int = 0,
 ) -> None:
     """UPSERT del gasto de UNA generacion cerrada (idempotente por `gen_id`).
 
     `dia` es el dia UTC (YYYY-MM-DD) en que se CERRO la generacion (cuando se gasto). Un
     re-cierre sobreescribe tokens/coste con los ultimos valores (nunca suma dos veces).
     `prompt_chars` (economia de contexto): tamano del prompt que entro a `claude -p`.
-    `modelo`: id del modelo que gasto (para el coste medio por imagen POR MODELO).
+    `cache_read`/`cache_creation` (prompt caching): tokens de cache leidos / creados, para medir
+    si el caching ocurre y el ahorro (run sin caching => 0; no rompe agregados viejos).
     """
     if not gen_id:
         return
@@ -444,47 +486,20 @@ def registrar_gasto_ia(
     try:
         con.execute(
             "INSERT INTO gasto_ia (gen_id, dia, tipo, marca, tokens_in, tokens_out, "
-            "coste_usd, prompt_chars, modelo, actualizado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "coste_usd, prompt_chars, cache_read, cache_creation, actualizado) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT (gen_id) DO UPDATE SET "
             "dia = EXCLUDED.dia, tipo = EXCLUDED.tipo, marca = EXCLUDED.marca, "
             "tokens_in = EXCLUDED.tokens_in, tokens_out = EXCLUDED.tokens_out, "
             "coste_usd = EXCLUDED.coste_usd, prompt_chars = EXCLUDED.prompt_chars, "
-            "modelo = EXCLUDED.modelo, actualizado = EXCLUDED.actualizado",
+            "cache_read = EXCLUDED.cache_read, cache_creation = EXCLUDED.cache_creation, "
+            "actualizado = EXCLUDED.actualizado",
             (gen_id, dia, tipo, marca, int(tokens_in), int(tokens_out), float(coste_usd),
-             int(prompt_chars), str(modelo or ""), ahora),
+             int(prompt_chars), int(cache_read), int(cache_creation), ahora),
         )
         con.commit()
     finally:
         con.close()
-
-
-def coste_medio_imagen(modelo: str = "", limite: int = 50) -> dict[str, Any]:
-    """Coste medio por IMAGEN (USD) de las ultimas `limite` generaciones tipo `imagen`.
-
-    Promedia `coste_usd` de las filas `gasto_ia` con `tipo='imagen'` y coste > 0, las mas
-    recientes primero. Con `modelo`, acota a ese modelo (estimacion por modelo); sin el,
-    media GLOBAL de imagen. Devuelve `{por_imagen, muestras, modelo}`: `por_imagen` es None
-    si no hay muestras (el front cae al fallback). La moneda la fija el endpoint (USD).
-    """
-    limite = max(1, min(int(limite or 1), 500))
-    sql = (
-        "SELECT coste_usd FROM gasto_ia "
-        "WHERE tipo = 'imagen' AND coste_usd > 0"
-    )
-    params: list[Any] = []
-    if modelo:
-        sql += " AND modelo = ?"
-        params.append(str(modelo))
-    sql += " ORDER BY actualizado DESC LIMIT ?"
-    params.append(limite)
-    con = _conectar()
-    try:
-        filas = con.execute(sql, tuple(params)).fetchall()
-    finally:
-        con.close()
-    costes = [float(f["coste_usd"]) for f in filas]
-    por_imagen = (sum(costes) / len(costes)) if costes else None
-    return {"por_imagen": por_imagen, "muestras": len(costes), "modelo": modelo or ""}
 
 
 def gasto_ia_del_dia(dia: str) -> dict[str, Any]:
@@ -513,6 +528,145 @@ def gasto_ia_del_dia(dia: str) -> dict[str, Any]:
     }
 
 
+# --------------------------------------------------------------------------- #
+# Indice de GENERACIONES (rendimiento del listado; ver `generaciones._almacen`) #
+# --------------------------------------------------------------------------- #
+#
+# El registro de cada generacion vive en un YAML (fuente de verdad del DETALLE pesado). Este
+# indice replica los campos LIGEROS del listado para paginar por SQL sin parsear ~2000 YAML por
+# peticion. `payload` (jsonb) guarda el dict publico ligero (sin prompt/razonamiento) que
+# `listar` devuelve. UPSERT por `gen_id`: lo mantiene el almacen al crear/actualizar.
+
+
+def indexar_generacion(
+    gen_id: str,
+    *,
+    fecha_inicio: str = "",
+    estado: str = "",
+    tipo: str = "",
+    marca: str = "",
+    proceso: str = "",
+    contenido_id: str = "",
+    payload: dict[str, Any] | None = None,
+) -> None:
+    """UPSERT de la fila de indice de una generacion (idempotente por `gen_id`).
+
+    `payload` es el dict publico LIGERO (lo que devuelve `listar`); se guarda en la columna
+    jsonb (se pasa serializado, Postgres lo castea, igual que `jobs.spec`). Las columnas sueltas
+    (fecha_inicio/estado/marca/...) son las que el indice consulta/ordena.
+    """
+    if not gen_id:
+        return
+    con = _conectar()
+    try:
+        con.execute(
+            "INSERT INTO generaciones_indice (gen_id, fecha_inicio, estado, tipo, marca, "
+            "proceso, contenido_id, payload, actualizado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT (gen_id) DO UPDATE SET "
+            "fecha_inicio = EXCLUDED.fecha_inicio, estado = EXCLUDED.estado, "
+            "tipo = EXCLUDED.tipo, marca = EXCLUDED.marca, proceso = EXCLUDED.proceso, "
+            "contenido_id = EXCLUDED.contenido_id, payload = EXCLUDED.payload, "
+            "actualizado = EXCLUDED.actualizado",
+            (gen_id, fecha_inicio, estado, tipo, marca, proceso, contenido_id,
+             json.dumps(payload or {}, ensure_ascii=False), ahora_iso()),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+def desindexar_generacion(gen_id: str) -> None:
+    """Borra la fila de indice de una generacion (al borrar/poda el YAML). Idempotente."""
+    if not gen_id:
+        return
+    con = _conectar()
+    try:
+        con.execute("DELETE FROM generaciones_indice WHERE gen_id = ?", (gen_id,))
+        con.commit()
+    finally:
+        con.close()
+
+
+def _payload_indice(fila: dict[str, Any]) -> dict[str, Any]:
+    """Reconstruye el dict publico desde una fila de indice (payload jsonb -> dict; id sellado)."""
+    payload = fila.get("payload")
+    if isinstance(payload, str):  # backend sin jsonb-a-dict: deserializa defensivamente
+        try:
+            payload = json.loads(payload)
+        except (ValueError, TypeError):
+            payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    payload.setdefault("id", fila.get("gen_id", ""))
+    return payload
+
+
+def listar_indice_generaciones(
+    *, marca: str | None = None, limite: int | None = None, desplazamiento: int = 0
+) -> list[dict[str, Any]]:
+    """Listado de generaciones desde el INDICE (recientes primero), paginado por SQL.
+
+    Devuelve los `payload` (dicts publicos ligeros) ordenados por (fecha_inicio DESC, gen_id
+    DESC). `marca` no vacia filtra por marca; `limite=None` no recorta.
+    """
+    filtro = "WHERE marca = ? " if marca else ""
+    params: list[Any] = [marca] if marca else []
+    sql = (
+        "SELECT gen_id, payload FROM generaciones_indice " + filtro +
+        "ORDER BY fecha_inicio DESC, gen_id DESC"
+    )
+    if limite is not None:
+        sql += " LIMIT ? OFFSET ?"
+        params += [max(0, int(limite)), max(0, int(desplazamiento or 0))]
+    elif desplazamiento:
+        sql += " OFFSET ?"
+        params.append(max(0, int(desplazamiento or 0)))
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()
+    finally:
+        con.close()
+    return [_payload_indice(f) for f in filas]
+
+
+def contar_indice_generaciones(*, marca: str | None = None) -> int:
+    """Total de filas del indice de generaciones (filtrado por marca si viene)."""
+    filtro = "WHERE marca = ?" if marca else ""
+    params: tuple[Any, ...] = (marca,) if marca else ()
+    con = _conectar()
+    try:
+        fila = con.execute(
+            "SELECT count(*) AS n FROM generaciones_indice " + filtro, params
+        ).fetchone()
+    finally:
+        con.close()
+    return int(fila["n"]) if fila is not None else 0
+
+
+def indice_generaciones_por_estado(estado: str) -> list[dict[str, Any]]:
+    """Payloads de las generaciones del indice en `estado` (recientes primero). Para el reaper."""
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT gen_id, payload FROM generaciones_indice WHERE estado = ? "
+            "ORDER BY fecha_inicio DESC, gen_id DESC",
+            (estado,),
+        ).fetchall()
+    finally:
+        con.close()
+    return [_payload_indice(f) for f in filas]
+
+
+def indice_generaciones_vacio() -> bool:
+    """True si el indice no tiene filas (para decidir el backfill perezoso desde los YAML)."""
+    con = _conectar()
+    try:
+        fila = con.execute("SELECT 1 FROM generaciones_indice LIMIT 1").fetchone()
+    finally:
+        con.close()
+    return fila is None
+
+
 def gasto_ia_por_dia(dias: int = 14) -> list[dict[str, Any]]:
     """Serie de gasto por dia (ventana `dias`, dia ascendente): tokens/coste/generaciones.
 
@@ -526,6 +680,7 @@ def gasto_ia_por_dia(dias: int = 14) -> list[dict[str, Any]]:
             "SELECT dia, COALESCE(SUM(tokens_in), 0) AS tin, "
             "COALESCE(SUM(tokens_out), 0) AS tout, COALESCE(SUM(coste_usd), 0) AS coste, "
             "COALESCE(SUM(prompt_chars), 0) AS pchars, "
+            "COALESCE(SUM(cache_read), 0) AS cread, COALESCE(SUM(cache_creation), 0) AS ccreac, "
             "COUNT(*) AS n FROM gasto_ia WHERE dia >= ? GROUP BY dia ORDER BY dia ASC",
             (corte,),
         ).fetchall()
@@ -541,6 +696,10 @@ def gasto_ia_por_dia(dias: int = 14) -> list[dict[str, Any]]:
             # Economia de contexto: chars de prompt sumados del dia (la media por generacion
             # se deriva con `generaciones`); delata la deriva de prompts cada vez mas gordos.
             "prompt_chars": int(f["pchars"]),
+            # Prompt caching: tokens de cache leidos/creados del dia (mide si el caching ocurre y
+            # el ahorro: cache_read alto = contexto reutilizado sin re-cobrar).
+            "cache_read": int(f["cread"]),
+            "cache_creation": int(f["ccreac"]),
             "generaciones": int(f["n"]),
         }
         for f in filas

@@ -18,6 +18,7 @@ del worker (con todo el #137).
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import threading
@@ -57,6 +58,85 @@ __all__ = [
     "_entorno_generacion",
     "_es_secreto_infra",
 ]
+
+
+# --------------------------------------------------------------------------- #
+# REINTENTO de fallos TRANSITORIOS del modelo/CLI (529/overloaded, blip, crash) #
+# --------------------------------------------------------------------------- #
+#
+# Un 529/overloaded, un blip de red o un crash de la CLI mandaban el job DIRECTO a `error`, sin
+# reintento (la generacion es `claude -p`, no el SDK; aqui no habia nada que reintentara). Ahora
+# distinguimos el fallo TRANSITORIO (reintentable) del de MODELO/CONTENIDO o de PRESUPUESTO (NO
+# reintentable: reintentar no cambiaria el resultado) y reintentamos los transitorios con backoff
+# corto. Solo se reintentan fallos RAPIDOS (un TIMEOUT no: ya consumio su wall-timeout), asi el
+# total cabe en el margen que el worker espera el terminal (`worker._esperar_terminal`). El tope
+# es independiente del de `jobs.intentos` (anti crash-loop del worker) y se acota por presupuesto.
+
+# Backoff exponencial corto entre reintentos (s). Monkeypatcheable en tests (->0 para no esperar).
+_BACKOFF_BASE_S = 2.0
+_BACKOFF_MAX_S = 10.0
+
+# Señales de error TRANSITORIO en el mensaje del `result` de claude (busqueda en minusculas).
+# El tope de PRESUPUESTO ("tope de presupuesto") NO esta aqui: no es transitorio (no reintentar).
+_SENALES_TRANSITORIAS: tuple[str, ...] = (
+    "overloaded", "rate limit", "rate_limit", "429", "529", "502", "503", "504",
+    "timed out", "timeout", "temporarily unavailable", "service unavailable",
+    "connection", "network", "internal server error", "econnreset",
+)
+
+
+def _reintentos_maximos() -> int:
+    """Reintentos EXTRA ante un fallo transitorio (`KENI_GEN_REINTENTOS`, def 2, min 0).
+
+    Inline de `os.environ` (no por `config.py`, de otro agente). 0 = sin reintento (comportamiento
+    previo: un transitorio va directo a error).
+    """
+    crudo = os.environ.get("KENI_GEN_REINTENTOS")
+    if crudo is None:
+        return 2
+    try:
+        return max(0, int(str(crudo).strip()))
+    except (TypeError, ValueError):
+        return 2
+
+
+def _backoff_s(intento: int) -> float:
+    """Backoff (s) antes del `intento`-esimo reintento (1-indexado): base * 2^(intento-1), topado."""
+    return min(_BACKOFF_MAX_S, _BACKOFF_BASE_S * (2 ** max(0, intento - 1)))
+
+
+def _es_fallo_transitorio(acumulador: Any, returncode: int | None) -> bool:
+    """True si el cierre fue un fallo TRANSITORIO (reintentable): 529/overloaded, blip, crash CLI.
+
+    NO transitorio (no reintentar): exito real; error de MODELO/CONTENIDO o de PRESUPUESTO
+    reportado en el `result` (su mensaje no casa con `_SENALES_TRANSITORIAS`); el `terminó sin
+    resultado` limpio (returncode 0). SI transitorio: un `result` de error con señal transitoria,
+    o la CLI que MURIO sin entregar result (returncode != 0/None: crash/kill/blip).
+    """
+    if acumulador.terminado and not acumulador.error:
+        return False  # exito real
+    if acumulador.error:
+        m = (acumulador.mensaje_error or "").lower()
+        return any(s in m for s in _SENALES_TRANSITORIAS)
+    if returncode not in (0, None):
+        return True  # la CLI murio sin entregar result (crash/blip): reintentable
+    return False
+
+
+def _presupuesto_permite_reintento() -> bool:
+    """True si el presupuesto IA permite gastar otro intento (no AGOTADO/PAUSADO).
+
+    Reusa el helper UNICO de la regla (`presupuesto_ia.bloqueo_admision`). Ante un fallo del gate
+    NO bloqueamos (mismo criterio que el worker: preferir no cortar por un blip de lectura).
+    """
+    try:
+        from .. import presupuesto_ia
+
+        return presupuesto_ia.bloqueo_admision(
+            presupuesto_ia.nivel(), gasta_tokens=True, es_fondo=False
+        ) is None
+    except Exception:  # noqa: BLE001 -- ante un fallo del gate, no bloqueamos el reintento
+        return True
 
 
 # --------------------------------------------------------------------------- #
@@ -468,11 +548,16 @@ def lanzar_job_claude(
     cancelado = threading.Event()
 
     def _ciclo() -> None:
+        # `acumulador` se REASIGNA entre reintentos (estado limpio por intento); `_avance`/
+        # `_finalizar` lo leen del scope de `lanzar_job_claude`, asi que el `nonlocal` hace que
+        # vean siempre el del intento en curso.
+        nonlocal acumulador
         # Concurrencia (#116) + admision/tope de cola (#137): el job YA fue admitido en
         # `lanzar_job_claude` (sincronicamente), asi que aqui solo esperamos un proceso
         # concurrente libre. `slot(ya_admitido=True)` libera el cupo al salir. El spawn
         # ocurre DENTRO del slot para que el tope limite procesos `claude` reales. Cada
-        # job tiene wall-timeout, asi que los slots siempre se liberan.
+        # job tiene wall-timeout, asi que los slots siempre se liberan. El REINTENTO de
+        # transitorios ocurre DENTRO del mismo slot (no re-admite ni re-encola).
         try:
             with runner.slot(ya_admitido=True):
                 if shutil.which("claude") is None:
@@ -487,34 +572,62 @@ def lanzar_job_claude(
                         "fecha_fin": ahora_iso(),
                     })
                     return
-                try:
-                    # Subproceso en SU PROPIO grupo (#137): al timeout/cancel matamos el
-                    # ARBOL entero (`runner.matar_arbol`), no solo el padre.
-                    proc = runner.lanzar_proc(
-                        _argv_claude(
-                            prompt,
-                            [dir_temporal] if dir_temporal else None,
-                            endurecer=endurecer,
-                        ),
-                        cwd=str(cwd),
-                        env=_entorno_generacion(),
-                    )
-                except (OSError, ValueError):
-                    if dir_temporal is not None:
-                        shutil.rmtree(dir_temporal, ignore_errors=True)
-                    actualizar(gen_id, {
-                        "estado": ESTADO_ERROR, "error": "No se pudo iniciar la generación.",
-                        "fecha_fin": ahora_iso(),
-                    })
-                    return
-                with _HANDLES_LOCK:
-                    _HANDLES[gen_id] = {"proc": proc, "cancelado": cancelado}
-                # Si ya pidieron cancelar entre el spawn y registrar el handle, matamos ya.
-                if cancelado.is_set():
-                    runner.matar_arbol(proc)
-                runner.leer_stream(proc, acumulador, _avance)
-                # `runner.esperar` mata el ARBOL si supera el wall-timeout (#137).
-                timed_out = runner.esperar(proc, timeout)
+                max_reintentos = _reintentos_maximos()
+                intento = 0
+                while True:
+                    try:
+                        # Subproceso en SU PROPIO grupo (#137): al timeout/cancel matamos el
+                        # ARBOL entero (`runner.matar_arbol`), no solo el padre.
+                        proc = runner.lanzar_proc(
+                            _argv_claude(
+                                prompt,
+                                [dir_temporal] if dir_temporal else None,
+                                endurecer=endurecer,
+                            ),
+                            cwd=str(cwd),
+                            env=_entorno_generacion(),
+                        )
+                    except (OSError, ValueError):
+                        if dir_temporal is not None:
+                            shutil.rmtree(dir_temporal, ignore_errors=True)
+                        actualizar(gen_id, {
+                            "estado": ESTADO_ERROR, "error": "No se pudo iniciar la generación.",
+                            "fecha_fin": ahora_iso(),
+                        })
+                        return
+                    with _HANDLES_LOCK:
+                        _HANDLES[gen_id] = {"proc": proc, "cancelado": cancelado}
+                    # Si ya pidieron cancelar entre el spawn y registrar el handle, matamos ya.
+                    if cancelado.is_set():
+                        runner.matar_arbol(proc)
+                    runner.leer_stream(proc, acumulador, _avance)
+                    # `runner.esperar` mata el ARBOL si supera el wall-timeout (#137).
+                    timed_out = runner.esperar(proc, timeout)
+                    # ¿REINTENTAR? Solo un fallo TRANSITORIO (529/overloaded, blip, crash de la
+                    # CLI), no cancelado ni timeout (ya gasto su wall-timeout), con reintentos y
+                    # presupuesto disponibles. El error de modelo/contenido/presupuesto NO se
+                    # reintenta (cae al `_finalizar` de error de siempre).
+                    if (
+                        not cancelado.is_set()
+                        and not timed_out
+                        and intento < max_reintentos
+                        and _es_fallo_transitorio(acumulador, proc.returncode)
+                        and _presupuesto_permite_reintento()
+                    ):
+                        intento += 1
+                        espera = _backoff_s(intento)
+                        _log.warning(
+                            "%s: fallo transitorio (%s); reintento %d/%d tras %.1fs",
+                            etq, acumulador.mensaje_error or f"rc={proc.returncode}",
+                            intento, max_reintentos, espera,
+                        )
+                        # Backoff CANCELABLE: si el usuario cancela durante la espera, salimos a
+                        # finalizar (cancelado). `cancelado.wait` devuelve True si se señalo.
+                        if cancelado.wait(espera):
+                            break
+                        acumulador = stream.AcumuladorStream()  # estado limpio para el reintento
+                        continue
+                    break
                 # Estado terminal ANTES de soltar el handle: un sondeo que ya no ve el
                 # handle nunca lee un "ejecutando" obsoleto.
                 _finalizar(timed_out, proc.returncode, cancelado.is_set())

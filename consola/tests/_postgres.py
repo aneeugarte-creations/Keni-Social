@@ -73,6 +73,8 @@ _TABLAS = (
     "webhooks",
     "eventos_internos",
     "jobs",
+    # Indice del listado de generaciones (cache derivado del almacen YAML; rendimiento).
+    "generaciones_indice",
     "metricas_cache",
     # CONTENIDO editorial reutilizable migrado de ficheros a Postgres (ADR 0006).
     "rss_items_vistos",

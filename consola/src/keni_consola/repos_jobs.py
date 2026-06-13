@@ -43,8 +43,17 @@ def reencolar_job(gen_id: str) -> bool:
     return db.reencolar_job(gen_id)
 
 
-def reclamar_job(worker: str = "", *, prioridad_minima: int | None = None) -> dict[str, Any] | None:
-    return db.reclamar_job(worker, prioridad_minima=prioridad_minima)
+def reclamar_job(
+    worker: str = "",
+    *,
+    prioridad_minima: int | None = None,
+    solo_proceso: bool | None = None,
+    kinds_proceso: tuple[str, ...] = (),
+) -> dict[str, Any] | None:
+    return db.reclamar_job(
+        worker, prioridad_minima=prioridad_minima,
+        solo_proceso=solo_proceso, kinds_proceso=kinds_proceso,
+    )
 
 
 def terminar_job(job_id: str) -> None:

@@ -214,9 +214,6 @@ def registrar_cierre(registro: dict[str, Any]) -> None:
         coste = float(metricas.get("total_cost_usd") or 0.0)
     except (TypeError, ValueError):
         return
-    # Modelo concreto que gasto (lo sella el lanzador de imagen en `metricas.modelo`; en
-    # claude viaja por su propia via). Permite estimar el coste medio por imagen POR MODELO.
-    modelo = str(metricas.get("modelo") or "")
     if tokens_in <= 0 and tokens_out <= 0 and coste <= 0:
         return  # sin consumo medible (imagen/proceso/fallo temprano): no ensuciar el ledger
     dia = (str(registro.get("fecha_fin") or "") or ahora_iso())[:10]
@@ -226,6 +223,13 @@ def registrar_cierre(registro: dict[str, Any]) -> None:
         prompt_chars = int(registro.get("prompt_chars") or 0)
     except (TypeError, ValueError):
         prompt_chars = 0
+    # Prompt caching (mide el ahorro): tokens de cache leidos/creados del run. La mayoria no los
+    # trae (=> 0); se vuelcan al ledger para poder agregar el ahorro por dia.
+    try:
+        cache_read = int(metricas.get("cache_read") or 0)
+        cache_creation = int(metricas.get("cache_creation") or 0)
+    except (TypeError, ValueError):
+        cache_read = cache_creation = 0
     try:
         repos.registrar_gasto_ia(
             gen_id,
@@ -236,7 +240,8 @@ def registrar_cierre(registro: dict[str, Any]) -> None:
             tokens_out=tokens_out,
             coste_usd=coste,
             prompt_chars=prompt_chars,
-            modelo=modelo,
+            cache_read=cache_read,
+            cache_creation=cache_creation,
         )
     except Exception:  # noqa: BLE001 -- el ledger nunca debe romper el cierre de un job
         _log.warning("presupuesto_ia: fallo al registrar el gasto de %s", gen_id, exc_info=True)

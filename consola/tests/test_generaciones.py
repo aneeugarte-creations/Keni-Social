@@ -371,6 +371,76 @@ def test_store_crear_obtener_actualizar_listar(entorno):
     assert generaciones.obtener("noexiste") is None
 
 
+def test_listar_pagina_por_indice_sin_parsear_yaml(entorno, monkeypatch):
+    """`listar`/`contar` paginan por el INDICE en Postgres, sin escanear los YAML.
+
+    El detalle pesado (prompt/razonamiento) NO viaja en el listado: solo `obtener` (que lee el
+    YAML) lo expone. Comprobamos ademas que el camino del listado NO toca `_todas_ordenadas`
+    (el escaneo+parse de todos los YAML), que es justo lo que el indice elimina.
+    """
+    from keni_consola.generaciones import _almacen
+
+    ids = []
+    for i in range(3):
+        g = generaciones.crear({"tipo": "copy", "marca": _MARCA, "etiqueta": f"G{i}"})
+        # El prompt es el cuerpo PESADO: solo debe verse en el detalle, no en el listado.
+        generaciones.actualizar(g["id"], {"prompt": "P" * 5000, "razonamiento": "R" * 5000})
+        ids.append(g["id"])
+
+    llamadas = {"n": 0}
+    real = _almacen._todas_ordenadas
+    monkeypatch.setattr(
+        _almacen, "_todas_ordenadas",
+        lambda: (llamadas.__setitem__("n", llamadas["n"] + 1), real())[1],
+    )
+
+    listado = generaciones.listar(limite=None)
+    assert llamadas["n"] == 0, "el listado no debe escanear los YAML (pagina por el indice)"
+    en_lista = {g["id"] for g in listado}
+    assert set(ids) <= en_lista
+    # El cuerpo pesado NO viaja en el listado...
+    g0 = next(g for g in listado if g["id"] == ids[0])
+    assert "prompt" not in g0 and "razonamiento" not in g0
+    # ...pero el DETALLE (obtener, que lee el YAML) sí lo trae.
+    detalle = generaciones.obtener(ids[0])
+    assert detalle["prompt"] == "P" * 5000
+    # Conteo por el indice; orden recientes primero por (fecha_inicio, id) DESC — el MISMO
+    # criterio que el escaneo YAML previo (a igual fecha_inicio, desempata el id DESC).
+    assert generaciones.contar() >= 3
+    orden = [g["id"] for g in listado if g["id"] in ids]
+    esperado = sorted(ids, key=lambda i: (generaciones.obtener(i)["fecha_inicio"], i), reverse=True)
+    assert orden == esperado
+    # Filtro por marca via indice.
+    assert {g["id"] for g in generaciones.listar(limite=None, marca=_MARCA)} >= set(ids)
+    assert generaciones.listar(limite=None, marca="otra-marca-inexistente") == []
+
+
+def test_listar_backfill_desde_yaml_si_indice_vacio(entorno):
+    """Backfill perezoso: con YAML preexistentes y el indice VACIO, `listar` lo repuebla.
+
+    Simula el primer uso tras el deploy (indice recien creado, YAML ya en disco): se purga el
+    indice a mano y el siguiente `listar` lo reconstruye desde los YAML (idempotente).
+    """
+    from keni_consola import db_jobs
+
+    ids = [
+        generaciones.crear({"tipo": "copy", "marca": _MARCA, "etiqueta": f"B{i}"})["id"]
+        for i in range(3)
+    ]
+    # Purga el indice (los YAML siguen en disco): estado "primer uso tras deploy".
+    con = db_jobs._conectar()
+    try:
+        con.execute("DELETE FROM generaciones_indice")
+        con.commit()
+    finally:
+        con.close()
+    assert db_jobs.indice_generaciones_vacio() is True
+    # El listado dispara el backfill desde los YAML y vuelve a verlos todos.
+    en_lista = {g["id"] for g in generaciones.listar(limite=None)}
+    assert set(ids) <= en_lista
+    assert db_jobs.indice_generaciones_vacio() is False
+
+
 def test_store_fase_se_persiste_y_legado_cae_a_vacio(entorno):
     """`fase` se persiste y se expone; un registro legado (sin fase) la trae como "".
 
@@ -600,6 +670,98 @@ def _esperar_terminal(gid: str, timeout: float = 8.0) -> str:
             return g["estado"]
         time.sleep(0.05)
     return (generaciones.obtener(gid) or {}).get("estado", "")
+
+
+def _fake_lanzar_factory_por_intento(scripts: list[list[str]], llamadas: dict):
+    """`runner.lanzar_proc` fake que emite un guion NDJSON DISTINTO por llamada (reintentos)."""
+    import subprocess as _sp
+
+    def _fake(argv, *, cwd, env=None):  # noqa: ANN001
+        i = llamadas["n"]
+        llamadas["n"] = i + 1
+        lineas = scripts[min(i, len(scripts) - 1)]
+        guion = "import sys\n" + "".join(f"print({ln!r}, flush=True)\n" for ln in lineas)
+        return _sp.Popen(
+            [sys.executable, "-c", guion], cwd=cwd, stdout=_sp.PIPE, stderr=_sp.DEVNULL,
+            text=True, bufsize=1, start_new_session=True,
+        )
+
+    return _fake
+
+
+_OK_START = '{"type": "stream_event", "event": {"type": "message_start", "message": {}}}'
+_OK_RESULT = (
+    '{"type": "result", "subtype": "success", "result": "#uno", '
+    '"usage": {"input_tokens": 1, "output_tokens": 1}}'
+)
+_ERR_TRANSITORIO = (
+    '{"type": "result", "subtype": "error", "is_error": true, '
+    '"result": "overloaded: the server is overloaded, please try again"}'
+)
+_ERR_CONTENIDO = (
+    '{"type": "result", "subtype": "error", "is_error": true, '
+    '"result": "el contenido solicitado viola la politica de uso"}'
+)
+
+
+@pytest.mark.timeout(30)
+@pytest.mark.skipif(os.name != "posix", reason="subproceso real")
+def test_reintenta_fallo_transitorio_y_completa(entorno, monkeypatch):
+    """Un 529/overloaded se REINTENTA con backoff y el job acaba COMPLETADO (no error directo)."""
+    from keni_consola.generaciones import _lanzadores
+
+    monkeypatch.setattr(generaciones.shutil, "which", lambda _n: "/usr/bin/claude")
+    monkeypatch.setattr(_lanzadores, "_BACKOFF_BASE_S", 0.01)  # sin esperar de verdad
+    llamadas = {"n": 0}
+    # 1er intento: error transitorio (overloaded). 2do: exito.
+    monkeypatch.setattr(
+        generaciones.runner, "lanzar_proc",
+        _fake_lanzar_factory_por_intento([[_ERR_TRANSITORIO], [_OK_START, _OK_RESULT]], llamadas),
+    )
+    gid = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})["id"]
+    _LANZAR_CLAUDE_REAL(gid, prompt="p", cwd=entorno, procesar=lambda s, m: {"ok": True})
+    assert _esperar_terminal(gid, timeout=15) == generaciones.ESTADO_COMPLETADO
+    assert llamadas["n"] == 2, "debio reintentar UNA vez tras el fallo transitorio"
+
+
+@pytest.mark.timeout(30)
+@pytest.mark.skipif(os.name != "posix", reason="subproceso real")
+def test_no_reintenta_error_de_contenido(entorno, monkeypatch):
+    """Un error de MODELO/CONTENIDO (no transitorio) va a error SIN reintentar (no cambiaria)."""
+    from keni_consola.generaciones import _lanzadores
+
+    monkeypatch.setattr(generaciones.shutil, "which", lambda _n: "/usr/bin/claude")
+    monkeypatch.setattr(_lanzadores, "_BACKOFF_BASE_S", 0.01)
+    llamadas = {"n": 0}
+    monkeypatch.setattr(
+        generaciones.runner, "lanzar_proc",
+        _fake_lanzar_factory_por_intento([[_ERR_CONTENIDO]], llamadas),
+    )
+    gid = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})["id"]
+    _LANZAR_CLAUDE_REAL(gid, prompt="p", cwd=entorno, procesar=lambda s, m: {"ok": True})
+    assert _esperar_terminal(gid, timeout=15) == generaciones.ESTADO_ERROR
+    assert llamadas["n"] == 1, "un error de contenido no debe reintentarse"
+
+
+@pytest.mark.timeout(30)
+@pytest.mark.skipif(os.name != "posix", reason="subproceso real")
+def test_reintento_respeta_el_tope(entorno, monkeypatch):
+    """Tras agotar `KENI_GEN_REINTENTOS` intentos extra de transitorios, queda en error."""
+    from keni_consola.generaciones import _lanzadores
+
+    monkeypatch.setenv("KENI_GEN_REINTENTOS", "2")
+    monkeypatch.setattr(generaciones.shutil, "which", lambda _n: "/usr/bin/claude")
+    monkeypatch.setattr(_lanzadores, "_BACKOFF_BASE_S", 0.01)
+    llamadas = {"n": 0}
+    # SIEMPRE transitorio: nunca completa; se topa en 1 + 2 reintentos = 3 invocaciones.
+    monkeypatch.setattr(
+        generaciones.runner, "lanzar_proc",
+        _fake_lanzar_factory_por_intento([[_ERR_TRANSITORIO]], llamadas),
+    )
+    gid = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})["id"]
+    _LANZAR_CLAUDE_REAL(gid, prompt="p", cwd=entorno, procesar=lambda s, m: {"ok": True})
+    assert _esperar_terminal(gid, timeout=15) == generaciones.ESTADO_ERROR
+    assert llamadas["n"] == 3, "1 intento + 2 reintentos (tope KENI_GEN_REINTENTOS)"
 
 
 @pytest.mark.timeout(20)

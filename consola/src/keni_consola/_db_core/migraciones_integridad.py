@@ -225,3 +225,44 @@ def _migrar_tipos_jsonb(con: Any) -> None:
         )
         con.execute(plantilla.format(tabla=tabla, columna=columna))  # noqa: S608 -- constantes
         _log.info("Tipo: %s.%s convertida a jsonb.", tabla, columna)
+
+
+# --------------------------------------------------------------------------- #
+# Bloque 5: INDICE de GENERACIONES (rendimiento del listado de Actividad IA)     #
+# --------------------------------------------------------------------------- #
+#
+# El registro de cada generacion vive en un YAML (fuente de verdad del DETALLE pesado:
+# prompt/razonamiento/stream). Listar Actividad IA / Pipelines parseaba TODOS los ~2000 YAML por
+# peticion (glob + parse + sort en memoria). Esta tabla replica los campos LIGEROS del listado
+# para paginar por SQL sin tocar disco; el YAML se lee solo para el detalle. La mantiene
+# `generaciones._almacen` (al crear/actualizar/borrar/podar) + un backfill idempotente al primer
+# uso. `payload` (jsonb) guarda el dict publico ligero (sin prompt/razonamiento) que `listar`
+# devuelve, asi la forma del listado es identica con o sin indice.
+
+
+def _migrar_indice_generaciones(con: Any) -> None:
+    """Crea la tabla `generaciones_indice` y sus indices (BDs ya creadas; ADR 0012).
+
+    El DDL declarativo ya la trae para BDs virgenes; esta migracion (0032) la garantiza en las
+    hosted existentes. Idempotente (`CREATE TABLE/INDEX IF NOT EXISTS`). El BACKFILL desde los
+    YAML existentes NO va aqui (la capa de BD no conoce el almacen de ficheros): lo hace
+    `generaciones._almacen` de forma perezosa e idempotente al primer listado tras el arranque.
+    """
+    con.execute(
+        "CREATE TABLE IF NOT EXISTS generaciones_indice ("
+        "gen_id TEXT PRIMARY KEY, fecha_inicio TEXT NOT NULL DEFAULT '', "
+        "estado TEXT NOT NULL DEFAULT '', tipo TEXT NOT NULL DEFAULT '', "
+        "marca TEXT NOT NULL DEFAULT '', proceso TEXT NOT NULL DEFAULT '', "
+        "contenido_id TEXT NOT NULL DEFAULT '', payload jsonb NOT NULL DEFAULT '{}', "
+        "actualizado TEXT NOT NULL DEFAULT '')"
+    )
+    con.execute(
+        "CREATE INDEX IF NOT EXISTS idx_generaciones_indice_orden "
+        "ON generaciones_indice (fecha_inicio DESC, gen_id DESC)"
+    )
+    con.execute(
+        "CREATE INDEX IF NOT EXISTS idx_generaciones_indice_marca ON generaciones_indice (marca)"
+    )
+    con.execute(
+        "CREATE INDEX IF NOT EXISTS idx_generaciones_indice_estado ON generaciones_indice (estado)"
+    )

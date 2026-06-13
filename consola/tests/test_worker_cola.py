@@ -248,6 +248,83 @@ def test_reclama_job_huerfano_de_worker_muerto(entorno):
     assert rereclamado is not None and rereclamado["id"] == primero["id"]
 
 
+def test_reclamar_separa_carriles_proceso_e_inferencia(entorno):
+    """CARRILES: `solo_proceso` separa el trabajo CPU-bound (video/ASR) del de inferencia (claude).
+
+    Un job de PROCESO (kind raiz en `KINDS_PROCESO`) solo lo clava el carril `solo_proceso=True`;
+    un job de INFERENCIA (claude, sin kind raiz) solo el carril `solo_proceso=False`. Asi un video
+    largo no ocupa un slot del copy manual (head-of-line eliminado).
+    """
+    g_inf = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "Inf"})
+    cola.encolar(g_inf["id"], jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags()))
+    g_proc = generaciones.crear({"tipo": "render-video", "marca": _MARCA, "etiqueta": "Vid"})
+    cola.encolar(g_proc["id"], jobspec.construir_proceso(jobspec.PROC_RENDER_VIDEO, {"x": 1}))
+
+    # Carril PROCESO: solo el job CPU-bound (jamas el de inferencia).
+    proc = cola.reclamar("w-proc", solo_proceso=True)
+    assert proc is not None and proc["gen_id"] == g_proc["id"]
+    assert cola.reclamar("w-proc", solo_proceso=True) is None  # no quedan de proceso
+
+    # Carril INFERENCIA: solo el job claude (nunca el de proceso).
+    inf = cola.reclamar("w-inf", solo_proceso=False)
+    assert inf is not None and inf["gen_id"] == g_inf["id"]
+    assert cola.reclamar("w-inf", solo_proceso=False) is None
+
+
+def test_carril_inferencia_no_clava_video_y_legado_si(entorno):
+    """El carril de inferencia IGNORA un job de proceso (no lo deja acaparar su slot)...
+
+    ...mientras que el carril de proceso y el reclamo legado (`solo_proceso=None`) si lo ven.
+    """
+    g_proc = generaciones.crear({"tipo": "transcribir", "marca": _MARCA, "etiqueta": "ASR"})
+    cola.encolar(g_proc["id"], jobspec.construir_proceso(jobspec.PROC_TRANSCRIBIR, {}))
+    # El carril de inferencia no lo clava (head-of-line evitado)...
+    assert cola.reclamar("w-inf", solo_proceso=False) is None
+    # ...pero el carril de proceso si.
+    proc = cola.reclamar("w-proc", solo_proceso=True)
+    assert proc is not None and proc["gen_id"] == g_proc["id"]
+
+
+def test_reclamar_pendiente_no_lee_yaml_de_generacion(entorno, monkeypatch):
+    """RENDIMIENTO: clavar un job `pendiente` NO lee el YAML de generacion (cero disco bajo lock).
+
+    La guardia anti-duplicado (`_gen_ya_terminal`, que parsea un YAML) SOLO aplica a los
+    huerfanos. Un `pendiente` nunca corrio su post-procesado, asi que no debe pagar ese I/O —
+    y, sobre todo, no debe hacerlo mientras retiene el `FOR UPDATE` de la fila.
+    """
+    llamadas = {"n": 0}
+    real = db_jobs._gen_ya_terminal
+    monkeypatch.setattr(
+        db_jobs, "_gen_ya_terminal",
+        lambda gid: (llamadas.__setitem__("n", llamadas["n"] + 1), real(gid))[1],
+    )
+    gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
+    cola.encolar(gen["id"], jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags()))
+    clavado = cola.reclamar("w")
+    assert clavado is not None and clavado["gen_id"] == gen["id"]
+    assert llamadas["n"] == 0, "clavar un pendiente no debe leer el YAML de generacion"
+
+
+def test_huerfano_con_registro_terminal_se_cierra_sin_relanzar(entorno):
+    """La guardia anti-duplicado: un huerfano cuyo registro YA es terminal se cierra sin correr.
+
+    Tras el commit del claim (fuera del lock) se comprueba el estado del registro; si es
+    terminal (su post-procesado ya corrio antes de que el worker muriera), el job se marca
+    `terminado` y `reclamar` pasa al siguiente, SIN devolverlo (evita el borrador duplicado).
+    """
+    gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
+    cola.encolar(gen["id"], jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags()))
+    primero = cola.reclamar("w1")
+    assert primero is not None
+    # El registro alcanza un estado TERMINAL (el post-procesado ya corrio) y el worker MUERE
+    # sin cerrar el job: queda `reclamado` con claimed_at viejo (huerfano).
+    generaciones.actualizar(gen["id"], {"estado": generaciones.ESTADO_COMPLETADO})
+    _envejecer_claim(primero["id"])
+    # El re-reclamo NO lo devuelve (su trabajo ya se hizo) y lo deja cerrado.
+    assert cola.reclamar("w2") is None
+    assert repos.contar_jobs_activos() == 0
+
+
 def _envejecer_claim(job_id: str) -> None:
     """Retrasa `claimed_at` mas alla del umbral de huerfano (simula un worker muerto)."""
     viejo = (
@@ -853,6 +930,37 @@ def test_vigia_cancelacion_sobrevive_errores_transitorios(monkeypatch):
     assert not hilo.is_alive(), "el vigia debio terminar al ver el flag (tras el blip)"
     assert canceladas == ["g1"]
     assert intentos["n"] >= 2  # sobrevivio al primer error y siguio sondeando
+
+
+@pytest.mark.timeout(20)
+def test_esperar_terminal_despierta_por_senal_sin_sondear_disco(entorno, monkeypatch):
+    """`_esperar_terminal` se reactiva por la SEÑAL in-proceso, no re-parseando el YAML cada 200 ms.
+
+    El hilo que fija el estado terminal (`generaciones.actualizar`) despierta al que espera al
+    instante. Comprobamos: (a) el waiter retorna pronto tras el terminal, y (b) NO sondea disco
+    en bucle (pocas lecturas de `obtener`, no decenas).
+    """
+    lecturas = {"n": 0}
+    real_obtener = generaciones.obtener
+
+    def _obtener_contado(gid):
+        lecturas["n"] += 1
+        return real_obtener(gid)
+
+    monkeypatch.setattr(generaciones, "obtener", _obtener_contado)
+
+    gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
+    hilo = threading.Thread(target=worker._esperar_terminal, args=(gen["id"],), daemon=True)
+    hilo.start()
+    # Deja al waiter bloqueado en la señal un tiempo MAYOR que el viejo sondeo de 0.2 s: si
+    # estuviera sondeando disco, acumularia muchas lecturas; con la señal se queda en una.
+    time.sleep(1.0)
+    generaciones.actualizar(gen["id"], {"estado": generaciones.ESTADO_COMPLETADO})
+    hilo.join(timeout=5)
+    assert not hilo.is_alive(), "el waiter no se reactivo con la señal de terminal"
+    # Camino normal: lectura inicial + relectura tras la señal (~2). Muy por debajo de lo que
+    # daria un sondeo a 0.2 s durante >1 s (>=5). Margen amplio para no ser fragil.
+    assert lecturas["n"] <= 3, f"sondeo de disco excesivo ({lecturas['n']} lecturas)"
 
 
 def test_sanear_qa_si_fallo_devuelve_el_tema_a_recriba(entorno):
