@@ -22,7 +22,12 @@ def _render_mock(monkeypatch):
 
 
 def _pieza(entorno, contenido_id="c1"):
-    """Crea una fila por plataforma y devuelve (contenido_id, plataforma_id)."""
+    """Crea el `contenido` padre + una fila por plataforma; devuelve (contenido_id, plataforma_id).
+
+    El padre se crea explicito (con su id) porque `contenido_plataforma.contenido_id` es ahora
+    una FK real a `contenido(id)` (ADR 0012): una fila por plataforma sin padre se rechaza.
+    """
+    repos.crear_contenido(id=contenido_id, titulo="pieza de prueba")
     plat = repos.crear_contenido_plataforma(contenido_id=contenido_id, red="facebook")
     return contenido_id, plat["id"]
 
