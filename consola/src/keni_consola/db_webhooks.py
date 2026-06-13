@@ -8,7 +8,7 @@ from ._db_comun import (
     json,
     uuid,
 )
-from .tiempo import ahora_iso
+from .tiempo import ahora_iso, iso_o_vacio
 
 # --------------------------------------------------------------------------- #
 # Webhooks salientes + bitacora de eventos internos (OPERACIONAL: Postgres)      #
@@ -283,7 +283,9 @@ def listar_eventos_internos(*, limite: int = 50) -> list[dict[str, Any]]:
                 "contenido_id": f["contenido_id"],
                 "plataforma_id": f["plataforma_id"],
                 "payload": payload,
-                "creado": f["creado"],
+                # `creado` es timestamptz (migracion 0033): se re-emite al canon ISO (lo que
+                # `api/alertas` y `api/webhooks` consumen como string).
+                "creado": iso_o_vacio(f["creado"]),
             }
         )
     return salida

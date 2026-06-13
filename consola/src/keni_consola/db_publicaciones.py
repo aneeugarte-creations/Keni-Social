@@ -10,6 +10,7 @@ from ._db_comun import (
     Any,
     _conectar,
     ahora_iso,
+    iso_o_vacio,
 )
 from .db_contenido import (
     _fila_contenido_nueva,
@@ -126,7 +127,9 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
         "falta_imagen": bool(f["falta_imagen"]),
         "falta_revision": bool(f["falta_revision"]),
         "falta_publicar": bool(f["falta_publicar"]),
-        "fecha_creacion": f["ccreado"] or "",
+        # `ccreado` = `contenido.creado`, ahora timestamptz (migracion 0033): se re-emite al
+        # canon ISO. `pactualizado` = `contenido_plataforma.actualizado`, SIGUE siendo TEXT.
+        "fecha_creacion": iso_o_vacio(f["ccreado"]),
         "fecha_actualizacion": f["pactualizado"] or "",
         "fecha_programada": f["fecha_programada"] or "",
         # Fecha de la FUENTE de origen (pipeline): pubDate normalizado a ISO UTC; "" si la
