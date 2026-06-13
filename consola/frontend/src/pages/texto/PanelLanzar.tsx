@@ -44,6 +44,7 @@ export function PanelLanzar({
   areas,
   open,
   onOpenChange,
+  marcaForzada,
 }: {
   promptId: string;
   salida: string;
@@ -51,12 +52,16 @@ export function PanelLanzar({
   areas: { id: string; nombre: string }[];
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  /** Marca LOCAL que prevalece sobre el switch global: el cockpit de Producción puede lanzar
+   *  contra una marca concreta aunque el switch esté en "Todas" (su propio selector). */
+  marcaForzada?: string;
 }) {
-  // La marca la manda el switch GLOBAL: no hay selector de marca propio. Lanzar EXIGE marca
-  // concreta, así que si el switch está en "Todas" (`marcaActiva === null`) el botón se
-  // deshabilita con el tooltip compartido. Solo lanzamos contra marcas del catálogo.
+  // La marca la manda el switch GLOBAL salvo que el contenedor imponga una `marcaForzada`
+  // (selector local del cockpit). Lanzar EXIGE marca concreta, así que si no hay marca válida
+  // (switch en "Todas" sin marca forzada) el botón se deshabilita con el tooltip compartido.
   const { marcaActiva } = useMarcaActiva();
-  const marca = marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : "";
+  const marcaBase = marcaForzada ?? marcaActiva;
+  const marca = marcaBase && marcas.some((m) => m.id === marcaBase) ? marcaBase : "";
   const [adjuntos, setAdjuntos] = React.useState<Set<string>>(new Set());
   const [tipoTarget, setTipoTarget] = React.useState<TipoTarget>("contenido");
   const [valorTarget, setValorTarget] = React.useState("");

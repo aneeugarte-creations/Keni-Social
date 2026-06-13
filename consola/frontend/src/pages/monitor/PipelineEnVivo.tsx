@@ -25,8 +25,9 @@
  * hay jobs de cola de esa etapa (cuando los haya, se añade al mapa).
  */
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Users } from "lucide-react";
+import { ChevronRight, SquarePen, Users } from "lucide-react";
 import * as React from "react";
+import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -209,12 +210,24 @@ export function PipelineEnVivo({
   cola,
   esAdmin,
   proceso,
+  soloProceso,
+  docPorEtapa,
 }: {
   cola: ColaMonitor;
   esAdmin: boolean;
   /** Prefiltro de proceso (`?proceso=`): atenúa las etapas del otro loop. */
   proceso?: Proceso;
+  /** RECORTA la tira a las etapas de UN solo motor (Producción → Copy/Arte; Investigación →
+   *  Selección/Validación). A diferencia de `proceso` (que solo atenúa), aquí las etapas del
+   *  otro motor NO se pintan: cada cockpit muestra únicamente sus etapas. */
+  soloProceso?: Proceso;
+  /** Deep-link «Editar prompt» por etapa (doc de la Biblioteca, p. ej. `prompt/copy`): pinta un
+   *  lápiz junto al nombre de la etapa que abre el doc. Solo admin (la Biblioteca es de admin). */
+  docPorEtapa?: Partial<Record<EtapaId, string>>;
 }) {
+  // Recorte por motor: el cockpit de Producción pide solo Copy/Arte; el de Investigación, solo
+  // Selección/Validación. Sin `soloProceso`, la tira completa (las cuatro etapas).
+  const etapas = soloProceso ? ETAPAS.filter((e) => e.proceso === soloProceso) : ETAPAS;
   const enCurso = contar(cola.en_curso);
   const esperando = contar(cola.esperando);
   const otros = enCurso.otros + esperando.otros;
@@ -270,9 +283,10 @@ export function PipelineEnVivo({
       </CardHeader>
       <CardContent className="p-4 pt-2">
         <div className="flex flex-col gap-2 lg:flex-row lg:items-stretch">
-          {ETAPAS.map((e, i) => {
+          {etapas.map((e, i) => {
             const ajuste = esAdmin ? porClave.get(e.clave) : undefined;
             const fuera = proceso != null && proceso !== e.proceso;
+            const doc = docPorEtapa?.[e.id];
             return (
               <React.Fragment key={e.id}>
                 {i > 0 && (
@@ -296,21 +310,41 @@ export function PipelineEnVivo({
                       />
                       <span className="truncate">{e.etiqueta}</span>
                     </span>
-                    {ajuste && (
-                      <span className="flex shrink-0 items-center gap-1">
-                        <ExcepcionesEtapa
-                          etiqueta={e.etiqueta}
-                          base={e.excepciones.base}
-                          nota={e.excepciones.nota}
-                          ajustes={porMarca}
-                          etapaActiva={Boolean(ajuste.valor)}
-                        />
-                        <SwitchAjuste
-                          ajuste={ajuste}
-                          ariaLabel={`${ajuste.etiqueta} (switch de la etapa ${e.etiqueta})`}
-                        />
-                      </span>
-                    )}
+                    <span className="flex shrink-0 items-center gap-1">
+                      {/* «Editar prompt» (admin): deep-link a la Biblioteca con el doc de la
+                          etapa abierto (`?doc=`). In-place, en la propia tarjeta de la etapa. */}
+                      {esAdmin && doc && (
+                        <Button
+                          asChild
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 text-muted-foreground"
+                          title={`Editar el prompt de ${e.etiqueta} en la Biblioteca`}
+                        >
+                          <Link
+                            to={`/contenido/texto/documentos?doc=${encodeURIComponent(doc)}`}
+                            aria-label={`Editar el prompt de ${e.etiqueta} en la Biblioteca`}
+                          >
+                            <SquarePen className="h-3.5 w-3.5" aria-hidden="true" />
+                          </Link>
+                        </Button>
+                      )}
+                      {ajuste && (
+                        <>
+                          <ExcepcionesEtapa
+                            etiqueta={e.etiqueta}
+                            base={e.excepciones.base}
+                            nota={e.excepciones.nota}
+                            ajustes={porMarca}
+                            etapaActiva={Boolean(ajuste.valor)}
+                          />
+                          <SwitchAjuste
+                            ajuste={ajuste}
+                            ariaLabel={`${ajuste.etiqueta} (switch de la etapa ${e.etiqueta})`}
+                          />
+                        </>
+                      )}
+                    </span>
                   </div>
                   <p className="mt-1.5 text-xs tabular-nums text-muted-foreground">
                     <span className={enCurso[e.id] > 0 ? "font-medium text-foreground" : undefined}>

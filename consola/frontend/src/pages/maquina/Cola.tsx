@@ -44,6 +44,7 @@ import { costeUsd, numeroCompacto } from "@/lib/formato";
 import { INTERVALO_SERIE_MS, INTERVALO_VIVO_MS } from "@/lib/refresco";
 import { cn } from "@/lib/utils";
 import { useGuardarAjuste } from "@/pages/configuracion/SeccionFuncionalidad";
+import { SeccionMetricool } from "@/pages/configuracion/SeccionMetricool";
 import {
   DesgloseEconomiaProceso,
   PROC_META,
@@ -429,7 +430,13 @@ export default function Cola() {
     <>
       <TituloPagina titulo="Cola" icono={ListChecks} />
       <AccionesPagina>
-        <MenuAcciones>
+        <MenuAcciones
+          ajustesTitulo="Conexiones de métricas"
+          // Metricool (conexión de métricas de audiencia) NO gobierna cómo se produce copy/arte:
+          // no es del cockpit de Producción. Vive aquí, en la Cola COMPARTIDA por ambos motores,
+          // como conexión de la máquina. Solo admin (los secretos de conexión lo son).
+          ajustes={esAdmin ? <SeccionMetricool /> : undefined}
+        >
           <ItemMenu icono={RefreshCw} onClick={refrescar} disabled={cola.isFetching}>
             Actualizar
           </ItemMenu>
