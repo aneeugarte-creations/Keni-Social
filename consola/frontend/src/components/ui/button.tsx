@@ -57,7 +57,9 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 );
 Button.displayName = "Button";
 
-// `buttonVariants` se mantiene como const local (lo usa Button y el tipo
-// ButtonProps); no se exporta para que este archivo exporte solo el componente
-// (regla react-refresh/only-export-components) y porque nadie mas lo consume.
-export { Button };
+// `buttonVariants` se exporta para componentes que estilan elementos que NO son
+// `<Button>` pero deben verse como tal (p.ej. `AlertDialogAction`/`Cancel` de
+// `alert-dialog.tsx`, que son primitivos de Radix). Es la convención canónica de
+// shadcn. react-refresh solo avisa (warn) por mezclar export de const+componente;
+// no rompe el build.
+export { Button, buttonVariants };

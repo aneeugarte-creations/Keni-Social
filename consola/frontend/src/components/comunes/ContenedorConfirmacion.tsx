@@ -2,6 +2,11 @@
  * Punto de montaje ÚNICO del diálogo de confirmación de la app. Va una sola vez
  * cerca de la raíz (junto al `<Toaster />`, en `main.tsx`) y se suscribe al store
  * de `confirmar.ts`. Renderiza el diálogo activo, si lo hay.
+ *
+ * Usa `AlertDialog` (no el `Dialog` genérico): es el primitivo dedicado a
+ * confirmaciones (`role="alertdialog"`, botones `Action`/`Cancel`). A diferencia
+ * del `Dialog`, NO se cierra por clic fuera —lo correcto para una confirmación—;
+ * Escape sí cancela (→ `false`).
  */
 import * as React from "react";
 
@@ -9,15 +14,17 @@ import {
   type EstadoConfirmacion,
   suscribirConfirmacion,
 } from "@/components/comunes/confirmar";
-import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { buttonVariants } from "@/components/ui/button";
 
 export function ContenedorConfirmacion() {
   const [estado, setEstado] = React.useState<EstadoConfirmacion | null>(null);
@@ -44,37 +51,41 @@ export function ContenedorConfirmacion() {
   const abierto = estado != null;
 
   return (
-    <Dialog
+    <AlertDialog
       open={abierto}
       onOpenChange={(v) => {
-        // Cerrar por Escape / clic fuera = cancelar.
+        // Cerrar por Escape = cancelar. (AlertDialog no cierra por clic fuera.)
         if (!v) responder(false);
       }}
     >
-      <DialogContent className="max-w-md">
+      <AlertDialogContent className="max-w-md">
         {estado && (
           <>
-            <DialogHeader>
-              <DialogTitle>{estado.titulo ?? "Confirmar acción"}</DialogTitle>
-              <DialogDescription className="text-foreground/80">
+            <AlertDialogHeader>
+              <AlertDialogTitle>{estado.titulo ?? "Confirmar acción"}</AlertDialogTitle>
+              <AlertDialogDescription className="text-foreground/80">
                 {estado.mensaje}
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter className="gap-2 sm:gap-2">
-              <Button variant="outline" onClick={() => responder(false)}>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="gap-2 sm:gap-2">
+              <AlertDialogCancel onClick={() => responder(false)}>
                 {estado.textoCancelar ?? "Cancelar"}
-              </Button>
-              <Button
-                variant={estado.destructivo ? "destructive" : "default"}
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className={
+                  estado.destructivo
+                    ? buttonVariants({ variant: "destructive" })
+                    : undefined
+                }
                 onClick={() => responder(true)}
                 autoFocus
               >
                 {estado.textoConfirmar ?? "Confirmar"}
-              </Button>
-            </DialogFooter>
+              </AlertDialogAction>
+            </AlertDialogFooter>
           </>
         )}
-      </DialogContent>
-    </Dialog>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
