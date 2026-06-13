@@ -1024,3 +1024,20 @@ def test_cubrir_evento_inexistente_404(entorno):
         "/api/contenido/cubrir-evento", json={"evento_id": "fantasma"}, headers=_ORIGIN
     )
     assert r.status_code == 404
+
+
+def test_catalogos_usuarios_se_acotan_por_marca(entorno):
+    """`catalogos.usuarios` = equipo de cobertura de la MARCA activa (cada marca su equipo);
+    sin `?marca` salen todos (vista «Todas» del admin)."""
+    c = _cli("ana")  # cobertura=True
+    _cli("luis")  # cobertura=True, sin marcas → no es del equipo de claro-sports
+    auth.reemplazar_marcas_de_usuario(_id_usuario("ana"), ["claro-sports"])
+
+    con_marca = c.get("/api/contenido?clase=tarea&marca=claro-sports").json()["catalogos"]
+    ids = {u["id"] for u in con_marca["usuarios"]}
+    assert _id_usuario("ana") in ids
+    assert _id_usuario("luis") not in ids
+
+    sin_marca = c.get("/api/contenido?clase=tarea").json()["catalogos"]
+    ids_todas = {u["id"] for u in sin_marca["usuarios"]}
+    assert {_id_usuario("ana"), _id_usuario("luis")} <= ids_todas

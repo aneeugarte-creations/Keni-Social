@@ -277,6 +277,19 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     await waitFor(() => expect(cubrir).toHaveBeenCalledWith("ev1", undefined));
   });
 
+  it("la barra de carga muestra «+» para añadir persona (solo admin y marca concreta)", async () => {
+    const { unmount } = renderTareas([], [], usuario("admin", "u-admin"));
+    expect(
+      await screen.findByRole("button", { name: "Añadir persona al equipo" }),
+    ).toBeInTheDocument();
+    unmount();
+
+    vi.restoreAllMocks();
+    renderTareas([], [], usuario("editor", "u1"));
+    await screen.findByRole("button", { name: "Ver solo lo por cubrir" }); // el panorama ya cargó
+    expect(screen.queryByRole("button", { name: "Añadir persona al equipo" })).toBeNull();
+  });
+
   it("'Añadir' abre el diálogo", async () => {
     renderTareas([]);
     fireEvent.click(await screen.findByRole("button", { name: /Añadir/ }));

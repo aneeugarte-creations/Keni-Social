@@ -33,7 +33,7 @@ import { SesionContexto } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { formatearDia, formatearFecha, hoyCDMX, tiempoRelativo } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
-import type { CatalogosContenido, Contenido, EventoRota } from "@/types";
+import type { CatalogosContenido, Contenido, EventoRota, UsuarioAdmin } from "@/types";
 
 import { CLAVE_TAREAS } from "./claves";
 import { DialogoCrearTarea } from "./DialogoCrearTarea";
@@ -629,29 +629,34 @@ function TarjetaCobertura({
             {t.responsable_nombre}
           </span>
         ))}
-        {!yaApuntado && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => cubrir.mutate(undefined)}
-            disabled={cubrir.isPending}
-          >
-            <UserPlus className="mr-1 h-3.5 w-3.5" />
-            Apuntarme
-          </Button>
-        )}
-        {esManager && (
-          <Button variant="outline" size="sm" onClick={() => setAsignarAbierto(true)}>
-            <UserPlus className="mr-1 h-3.5 w-3.5" />
-            Añadir a alguien
-          </Button>
-        )}
       </div>
       <div className="space-y-2">
         {cobertura.cubridores.map((t) => (
           <TarjetaTarea key={t.id} tarea={t} catalogos={catalogos} />
         ))}
       </div>
+      {/* Acciones a nivel de evento, junto a las de cada cubridor (Empezar/Soltar/Reasignar). */}
+      {(!yaApuntado || esManager) && (
+        <div className="flex flex-wrap items-center gap-2">
+          {!yaApuntado && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => cubrir.mutate(undefined)}
+              disabled={cubrir.isPending}
+            >
+              <UserPlus className="mr-1 h-3.5 w-3.5" />
+              Apuntarme
+            </Button>
+          )}
+          {esManager && (
+            <Button variant="outline" size="sm" onClick={() => setAsignarAbierto(true)}>
+              <UserPlus className="mr-1 h-3.5 w-3.5" />
+              Añadir a alguien
+            </Button>
+          )}
+        </div>
+      )}
 
       <DialogoAsignar
         titulo={cobertura.titulo}
@@ -760,6 +765,80 @@ function FilaAgenda({
 }
 
 /**
+ * Diálogo «Añadir persona al equipo» de la MARCA activa (cada marca tiene su equipo). Lista los
+ * usuarios de cobertura que aún no están en la marca y los suma con un PATCH a sus `marcas`
+ * (sin pisar las otras). Crear personas nuevas vive en Usuarios (organigrama).
+ */
+function DialogoAnadirPersona({
+  marca,
+  abierto,
+  onOpenChange,
+}: {
+  marca: string;
+  abierto: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const usuariosQ = useQuery({
+    queryKey: ["usuarios-admin"],
+    queryFn: ({ signal }) => api.usuarios(signal),
+    enabled: abierto,
+  });
+  const candidatos = (usuariosQ.data?.usuarios ?? []).filter(
+    (u) => u.cobertura && !(u.marcas ?? []).includes(marca),
+  );
+  const anadir = useMutation({
+    mutationFn: (u: UsuarioAdmin) =>
+      api.actualizarUsuario(u.id, { marcas: [...new Set([...(u.marcas ?? []), marca])] }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
+      void queryClient.invalidateQueries({ queryKey: ["usuarios-admin"] });
+      onOpenChange(false);
+      toast.success("Persona añadida al equipo.");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  return (
+    <Dialog open={abierto} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Añadir persona al equipo</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          Suma a quien cubrirá en esta marca. Para crear a alguien nuevo, ve a Usuarios.
+        </p>
+        <div className="max-h-72 space-y-1 overflow-y-auto py-1">
+          {usuariosQ.isLoading && (
+            <p className="px-1 text-sm text-muted-foreground">Cargando…</p>
+          )}
+          {!usuariosQ.isLoading && candidatos.length === 0 && (
+            <p className="px-1 text-sm text-muted-foreground">No hay nadie más que añadir.</p>
+          )}
+          {candidatos.map((u) => (
+            <button
+              key={u.id}
+              type="button"
+              disabled={anadir.isPending}
+              onClick={() => anadir.mutate(u)}
+              className="flex w-full items-center gap-2 rounded-md border border-border px-3 py-2 text-left text-sm hover:border-foreground/30 hover:bg-accent"
+            >
+              <AvatarPersona id={u.id} nombre={u.nombre || u.usuario} size="sm" />
+              <span className="truncate">{u.nombre || u.usuario}</span>
+            </button>
+          ))}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancelar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
  * PANORAMA (la cabina de Elias): una AGENDA por día —como un calendario— de quién cubre qué.
  *
  * Arriba, la carga por persona (avatar + conteo) que además FILTRA la agenda, y una banda con
@@ -771,14 +850,19 @@ function PanoramaAgenda({
   tareas,
   eventos,
   catalogos,
+  marca,
+  esAdmin,
 }: {
   tareas: Contenido[];
   eventos: EventoRota[];
   catalogos: CatalogosContenido | undefined;
+  marca: string | undefined;
+  esAdmin: boolean;
 }) {
   const [abiertas, setAbiertas] = React.useState<Set<string>>(() => new Set());
   const [filtro, setFiltro] = React.useState<string | null>(null); // id de persona, "__pool__", o null
   const [diasVisibles, setDiasVisibles] = React.useState(5);
+  const [anadirAbierto, setAnadirAbierto] = React.useState(false);
   const alternar = (clave: string) =>
     setAbiertas((prev) => {
       const next = new Set(prev);
@@ -906,6 +990,16 @@ function PanoramaAgenda({
             </Badge>
           </button>
         ))}
+        {esAdmin && marca && (
+          <button
+            type="button"
+            aria-label="Añadir persona al equipo"
+            onClick={() => setAnadirAbierto(true)}
+            className="inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+        )}
         {filtro && (
           <Button
             variant="ghost"
@@ -959,6 +1053,14 @@ function PanoramaAgenda({
             </div>
           )}
         </div>
+      )}
+
+      {marca && (
+        <DialogoAnadirPersona
+          marca={marca}
+          abierto={anadirAbierto}
+          onOpenChange={setAnadirAbierto}
+        />
       )}
     </div>
   );
@@ -1139,7 +1241,13 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
         ) : (
           <>
             <TabsContent value="panorama">
-              <PanoramaAgenda tareas={tareas} eventos={eventosCoverables} catalogos={catalogos} />
+              <PanoramaAgenda
+                tareas={tareas}
+                eventos={eventosCoverables}
+                catalogos={catalogos}
+                marca={marca}
+                esAdmin={usuario?.rol === "admin"}
+              />
             </TabsContent>
             <TabsContent value="libres" className="space-y-4">
               {listaAgrupada}

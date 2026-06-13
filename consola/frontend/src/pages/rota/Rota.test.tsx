@@ -98,7 +98,7 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
     );
     expect(screen.getByRole("tab", { name: "Cobertura" })).toBeInTheDocument();
     // No se rompe la barra de Turnos: el «Añadir» de Tareas NO está visible aún (otra pestaña).
-    expect(screen.queryByRole("button", { name: /Añadir/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Añadir" })).toBeNull();
   });
 
   it("al abrir «Cobertura» aparece el tablero (Panorama + «Añadir» inline)", async () => {
@@ -108,7 +108,7 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
 
     // El tablero embebido pinta su botón «Añadir» inline y, al cargar, el filtro «Por cubrir»
     // del Panorama (que vive tras el estado de carga, por eso se espera con findBy).
-    expect(await screen.findByRole("button", { name: /Añadir/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Añadir" })).toBeInTheDocument();
     expect(
       await screen.findByRole("button", { name: "Ver solo lo por cubrir" }),
     ).toBeInTheDocument();

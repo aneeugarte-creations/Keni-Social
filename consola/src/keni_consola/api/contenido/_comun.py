@@ -120,15 +120,16 @@ def _red_nombre(red: str) -> str:
     return "Web" if red == _RED_WEB else redes.nombre_por_id(red)
 
 
-def _usuarios_asignables() -> list[dict[str, str]]:
-    """Usuarios candidatos a RESPONSABLE: solo los que entran en la rota (`cobertura`).
+def _usuarios_asignables(marca: str | None = None) -> list[dict[str, str]]:
+    """Usuarios candidatos a RESPONSABLE: los de cobertura, ACOTADOS a la `marca` activa
+    (cada marca tiene SU equipo; sin marca = todos, p.ej. la vista «Todas» del admin).
 
     Misma regla que el tablero de tareas: un contenido lo asume quien hace coberturas.
     """
     return [
         {"id": u["id"], "usuario": u["usuario"]}
         for u in auth.listar_usuarios()
-        if u.get("cobertura")
+        if u.get("cobertura") and (not marca or marca in (u.get("marcas") or []))
     ]
 
 

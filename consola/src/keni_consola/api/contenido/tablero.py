@@ -66,10 +66,10 @@ def _etiqueta_catalogo(et: dict) -> dict:
     }
 
 
-def _catalogos() -> dict:
-    """Catalogos para los selects del tablero."""
+def _catalogos(marca: str | None = None) -> dict:
+    """Catalogos para los selects del tablero (los `usuarios` se acotan al equipo de la marca)."""
     return {
-        "usuarios": _usuarios_asignables(),
+        "usuarios": _usuarios_asignables(marca),
         "marcas": [{"id": mid, "nombre": nombre} for mid, nombre in marcas.opciones()],
         "redes": [*redes.opciones(), {"id": _RED_WEB, "nombre": "Web", "limite": None}],
         "flujos": list(FLUJOS_CONTENIDO),
@@ -128,7 +128,7 @@ async def listar(request: Request) -> Response:
                 )
                 for it in items
             ],
-            "catalogos": _catalogos(),
+            "catalogos": _catalogos(q.get("marca") or None),
         }
     )
 
