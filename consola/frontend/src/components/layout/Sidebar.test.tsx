@@ -322,11 +322,10 @@ describe("apps-scope · helpers", () => {
     const hojas = hojasDeApp(apps[0]).map((h) => h.ruta);
     expect(hojas).toEqual([
       "/contenido/imagen",
-      // /contenido/texto (hub) → sus sub-pestañas (Algoritmos se mudó aquí)
+      // /contenido/texto (hub) → sus sub-pestañas (Algoritmos se mudó al cockpit de Investigación)
       "/contenido/texto/documentos",
       "/contenido/texto/estrategia",
-      "/contenido/texto/algoritmos",
-      // /datos/investigacion (hub) → sus 3 piezas: Noticias (índice) + Contenidos + Fuentes
+      // /datos/investigacion (hub) → Noticias (índice, redirige al cockpit) + Contenidos + Fuentes
       "/datos/investigacion",
       "/datos/investigacion/contenidos",
       "/datos/investigacion/fuentes",

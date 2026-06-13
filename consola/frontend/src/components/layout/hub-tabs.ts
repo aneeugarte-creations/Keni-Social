@@ -73,15 +73,13 @@ export const TABS_FEED: ItemTabHub[] = [
 // (`/contenido/imagen`) y Video (`/contenido/video`) son páginas sueltas; Texto sigue
 // siendo el hub de la Texto (abajo).
 
-// La página TEXTO (antes "Texto") es un hub: documentos (prompts + línea editorial),
-// estrategia de marcas e inteligencia de plataforma (algoritmos).
+// La página TEXTO (antes "Texto") es un hub: documentos (prompts + línea editorial) y
+// estrategia de marcas. Algoritmos (inteligencia de plataforma) se MUDÓ al cockpit de
+// Investigación: es un INPUT del motor de descubrimiento, no una herramienta de la Biblioteca.
 export const TABS_TEXTO: ItemTabHub[] = [
   // Documentos: prompts + línea editorial + plantillas, con filtros.
   { ruta: "/contenido/texto/documentos", etiqueta: "Documentos", icono: BookText },
   { ruta: "/contenido/texto/estrategia", etiqueta: "Estrategia de marcas", icono: Target },
-  // Algoritmos: inteligencia de plataforma (cambios de algoritmo por red). Vive en
-  // Texto porque su salida son las fichas editoriales de cada plataforma.
-  { ruta: "/contenido/texto/algoritmos", etiqueta: "Algoritmos", icono: Newspaper },
 ];
 
 // Producción (antes «Actividad IA») es ya una PÁGINA PLANA (el feed unificado: runs del

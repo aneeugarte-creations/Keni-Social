@@ -21,7 +21,7 @@ import type { EtapaMaquina, EtapaPrompt, MaquinaTexto } from "@/types";
 /** Enlace cruzado Biblioteca → página de proceso (ADR 0011 F2): cada máquina con página
  *  propia enlaza a su proceso EN VIVO. Importación no tiene página de proceso: sin enlace. */
 const RUTA_PROCESO: Record<string, string> = {
-  investigacion: "/datos/investigacion",
+  investigacion: "/maquina/investigacion",
   produccion: "/datos/produccion",
 };
 

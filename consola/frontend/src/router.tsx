@@ -23,17 +23,13 @@ const EstrategiaMarcas = lazy(() =>
 // ruta-padre se deja sin `element` y react-router renderiza `<Outlet/>` por defecto;
 // la subnav entre sub-rutas vive in-page (SubnavHub, via HUB_TABS).
 const Fuentes = lazy(() => import("@/pages/Fuentes"));
-// Hub Investigación colapsado a 3 PIEZAS (Noticias · Contenidos · Fuentes).
-// NoticiasHub es el índice del hub (compone el pool persistente de cobertura +
-// el descubrimiento del Investigador); ContenidosHub es el banco evergreen (EVERGREEN).
-const NoticiasHub = lazy(() => import("@/pages/NoticiasHub"));
+// Hub Investigación: la pieza «Noticias» (su MESA DE REDACCIÓN, el pool persistente de
+// cobertura) se RELOCALIZÓ al cockpit de Investigación (`/maquina/investigacion`, pestaña «Mesa
+// de redacción»); su ruta vieja `/datos/investigacion` redirige allí (abajo). Queda el banco
+// evergreen (ContenidosHub) + Fuentes como sub-rutas del hub.
 const ContenidosHub = lazy(() => import("@/pages/ContenidosHub"));
-// Los ajustes del motor de noticias viven en el drawer del Monitor (sección «Investigación», Fase 3).
-// Las antiguas hojas del hub (Investigador, Cajones, Eventos, Agentes, Cobertura) ya
-// viven COMPUESTAS dentro de NoticiasHub (pool + descubrimiento) y de Fuentes
-// (buzones/agentes/eventos); sus rutas directas redirigen a su nuevo hogar (abajo).
-// Algoritmos: inteligencia de plataforma; ahora pestaña de la Texto.
-const Algoritmos = lazy(() => import("@/pages/Algoritmos"));
+// Los ajustes del motor de noticias y los algoritmos (inteligencia de plataforma, un INPUT de
+// investigación) viven ahora en el cockpit de Investigación; sus rutas viejas redirigen allí.
 
 const Metricas = lazy(() => import("@/pages/Metricas"));
 const Comercial = lazy(() => import("@/pages/Comercial"));
@@ -190,8 +186,12 @@ export const router = createBrowserRouter([
               { index: true, element: <Navigate to="documentos" replace /> },
               { path: "documentos", element: <Texto /> },
               { path: "estrategia", element: <EstrategiaMarcas /> },
-              // Algoritmos: inteligencia de plataforma (alimenta las fichas editoriales).
-              { path: "algoritmos", element: <Algoritmos /> },
+              // Algoritmos: inteligencia de plataforma. Es un INPUT de investigación, así que se
+              // RELOCALIZÓ al cockpit de Investigación; la ruta vieja redirige a su pestaña.
+              {
+                path: "algoritmos",
+                element: <Navigate to="/maquina/investigacion?seccion=algoritmos" replace />,
+              },
             ],
           },
           // Compatibilidad: los paths antiguos (estudio/editor/texto) redirigen a los nuevos.
@@ -207,29 +207,39 @@ export const router = createBrowserRouter([
         path: "datos",
         children: [
           { index: true, element: <Navigate to="/datos/investigacion" replace /> },
-          // Hub Investigación, colapsado a 3 PIEZAS: Noticias (índice), Contenidos y
-          // Fuentes. El índice (NoticiasHub) compone el pool persistente de cobertura +
-          // el descubrimiento del Investigador. Termómetro, Cajones, Eventos, Agentes,
-          // Cobertura e Investigador siguen vivos como rutas (sin pestaña en la subnav)
-          // para no romper deep-links durante la transición; se fusionarán y redirigirán
-          // en fases posteriores.
+          // Hub Investigación: la pieza «Noticias» (la MESA DE REDACCIÓN: el pool persistente de
+          // cobertura) se RELOCALIZÓ al cockpit de Investigación (`/maquina/investigacion`,
+          // pestaña «Mesa de redacción»). El índice y las hojas que la componían redirigen allí.
+          // Quedan vivas Contenidos (banco evergreen) y Fuentes como sub-rutas del hub.
           {
             path: "investigacion",
             children: [
-              { index: true, element: <NoticiasHub /> },
+              {
+                index: true,
+                element: <Navigate to="/maquina/investigacion?seccion=mesa" replace />,
+              },
               { path: "contenidos", element: <ContenidosHub /> },
               { path: "fuentes", element: <Fuentes /> },
-              // El armado MANUAL del Termómetro (galería internacional) se retiró: la
-              // galería se genera sola (pipeline estructurado). El deep-link cae al hub.
-              { path: "termometro", element: <Navigate to="/datos/investigacion" replace /> },
-              // Los ajustes del motor ya no son subpágina: viven en el panel lateral de
-              // ajustes de Noticias. El deep-link viejo cae al índice del hub.
-              { path: "ajustes", element: <Navigate to="/datos/investigacion" replace /> },
-              // Las hojas del antiguo hub ya viven dentro de Noticias/Fuentes; sus rutas
-              // directas redirigen a su nuevo hogar. Fuentes tiene 2 clases (Externas/
-              // Internas), deep-linkadas vía ?tab=. Cobertura/Investigador → Noticias.
-              { path: "investigador", element: <Navigate to="/datos/investigacion" replace /> },
-              { path: "cobertura", element: <Navigate to="/datos/investigacion" replace /> },
+              // El armado MANUAL del Termómetro (galería internacional) se retiró: la galería se
+              // genera sola. El deep-link cae en la mesa del cockpit.
+              {
+                path: "termometro",
+                element: <Navigate to="/maquina/investigacion?seccion=mesa" replace />,
+              },
+              // Los ajustes del motor viven en el drawer del cockpit de Investigación.
+              {
+                path: "ajustes",
+                element: <Navigate to="/maquina/investigacion?seccion=mesa" replace />,
+              },
+              // Investigador y Cobertura ERAN la mesa de redacción → cockpit (pestaña «Mesa»).
+              {
+                path: "investigador",
+                element: <Navigate to="/maquina/investigacion?seccion=mesa" replace />,
+              },
+              {
+                path: "cobertura",
+                element: <Navigate to="/maquina/investigacion?seccion=mesa" replace />,
+              },
               // Cajones y eventos son fuentes INTERNAS (buzones/Excel del equipo).
               {
                 path: "cajones",
@@ -244,15 +254,23 @@ export const router = createBrowserRouter([
                 path: "agentes",
                 element: <Navigate to="/datos/investigacion/fuentes" replace />,
               },
-              // Compatibilidad con enlaces previos: "plan", "descubrimiento" y "radar"
-              // se fusionaron en el Investigador (ahora dentro de NoticiasHub); "algoritmos"
-              // se mudó a la Texto.
-              { path: "plan", element: <Navigate to="/datos/investigacion" replace /> },
-              { path: "descubrimiento", element: <Navigate to="/datos/investigacion" replace /> },
-              { path: "radar", element: <Navigate to="/datos/investigacion" replace /> },
+              // Compatibilidad con enlaces previos: "plan", "descubrimiento" y "radar" eran el
+              // descubrimiento → mesa del cockpit; "algoritmos" es su pestaña de inputs.
+              {
+                path: "plan",
+                element: <Navigate to="/maquina/investigacion?seccion=mesa" replace />,
+              },
+              {
+                path: "descubrimiento",
+                element: <Navigate to="/maquina/investigacion?seccion=mesa" replace />,
+              },
+              {
+                path: "radar",
+                element: <Navigate to="/maquina/investigacion?seccion=mesa" replace />,
+              },
               {
                 path: "algoritmos",
-                element: <Navigate to="/contenido/texto/algoritmos" replace />,
+                element: <Navigate to="/maquina/investigacion?seccion=algoritmos" replace />,
               },
             ],
           },

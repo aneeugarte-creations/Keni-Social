@@ -320,10 +320,11 @@ describe("Biblioteca de Prompts (tres máquinas + estrategia)", () => {
     expect(mecanica.closest("button")).toBeNull();
     expect(screen.getAllByTitle("Etapa automática sin prompt").length).toBe(3);
 
-    // Enlace cruzado a la página del proceso (ADR 0011 F2).
+    // Enlace cruzado a la página del proceso (ADR 0011 F2): el proceso en vivo de
+    // Investigación vive ahora en su cockpit (`/maquina/investigacion`).
     expect(
       screen.getByRole("link", { name: /Ver el proceso en vivo/ }).getAttribute("href"),
-    ).toBe("/datos/investigacion");
+    ).toBe("/maquina/investigacion");
 
     // Salud agregada: en Investigación no hay cambios pendientes.
     expect(screen.getByText("todo publicado")).toBeInTheDocument();

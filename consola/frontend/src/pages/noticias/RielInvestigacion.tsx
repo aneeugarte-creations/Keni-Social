@@ -131,9 +131,9 @@ export function RielInvestigacion() {
     estado === "on" ? "activa" : estado === "off" ? "apagada" : "estado no disponible";
 
   return (
-    <section aria-label="Proceso de Investigación" data-testid="riel-investigacion">
+    <section aria-label="Pipeline de ingesta en vivo" data-testid="riel-investigacion">
       <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        Proceso de Investigación
+        Pipeline de ingesta · en vivo
       </h3>
       <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center">
         {ETAPAS.map((etapa, i) => {
