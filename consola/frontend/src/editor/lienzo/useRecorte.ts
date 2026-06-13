@@ -1,0 +1,107 @@
+// MODO RECORTE estilo Canva (solo imágenes), extraído como hook. Owns el id de recorte INTERNO (el
+// Lienzo entra por sí mismo con doble clic, además del modo controlado por el padre vía `recorteId`)
+// y la SESIÓN de recorte (instantánea al entrar para que Cancelar/Esc restaure y Hecho/Enter colapse
+// los gestos en UN paso de deshacer). El componente le pasa el documento/store y el modo reencuadre
+// (excluyente) y recibe la capa en recorte + los manejadores de salir/confirmar/cancelar.
+
+import { useEffect, useRef, useState } from "react";
+
+import type { Capa, CapaImagen, Crop, Documento } from "../documento";
+import type { StoreEditor } from "../store";
+
+export function useRecorte({
+  store,
+  documento,
+  recorteId,
+  onSalirRecorte,
+  capaReencuadre,
+  sinRotacion,
+}: {
+  store: StoreEditor;
+  documento: Documento;
+  recorteId: string | null;
+  onSalirRecorte?: () => void;
+  // Capa en modo reencuadre (excluyente con recorte: el reencuadre manda si coinciden).
+  capaReencuadre: Capa | null;
+  sinRotacion: (c: Capa) => boolean;
+}) {
+  // MODO RECORTE estilo Canva (solo imágenes): además del modo controlado por el padre (prop
+  // `recorteId`, p. ej. desde el inspector), el Lienzo entra POR SÍ MISMO con DOBLE CLIC sobre una
+  // capa de imagen (estado interno). Excluyente con reencuadre (el reencuadre manda si coinciden).
+  const [recorteInternoId, setRecorteInternoId] = useState<string | null>(null);
+  const recorteActivoId = recorteId ?? recorteInternoId;
+  const capaRecorte =
+    !capaReencuadre && recorteActivoId
+      ? documento.capas.find((c) => c.id === recorteActivoId && c.tipo === "imagen" && sinRotacion(c)) ?? null
+      : null;
+
+  // SESIÓN de recorte: instantánea al ENTRAR en el modo, para que "Cancelar"/Esc restaure el crop
+  // de entrada y para que "Hecho"/Enter colapse todos los gestos del modo en UN paso de deshacer
+  // (como Canva). `pasadoLen` ancla el historial al estado de entrada.
+  const sesionRecorte = useRef<{ id: string; crop?: Crop; pasadoLen: number } | null>(null);
+  useEffect(() => {
+    if (!capaRecorte) {
+      sesionRecorte.current = null;
+      return;
+    }
+    if (sesionRecorte.current?.id === capaRecorte.id) return;
+    const st = store.getState();
+    const c = st.documento.capas.find((x) => x.id === capaRecorte.id) as CapaImagen | undefined;
+    sesionRecorte.current = {
+      id: capaRecorte.id,
+      crop: c?.crop ? { ...c.crop } : undefined,
+      pasadoLen: st.pasado.length,
+    };
+  }, [capaRecorte, store]);
+  // Si la capa en recorte interno desaparece (deshacer/borrado), el modo se cierra solo.
+  useEffect(() => {
+    if (recorteInternoId && !documento.capas.some((c) => c.id === recorteInternoId && c.tipo === "imagen")) {
+      setRecorteInternoId(null);
+    }
+  }, [recorteInternoId, documento]);
+
+  const salirRecorte = () => {
+    if (recorteInternoId) setRecorteInternoId(null);
+    if (recorteId) onSalirRecorte?.();
+  };
+  // "Hecho"/Enter: confirma el recorte. Colapsa los gestos del modo en UN paso de deshacer
+  // (deshacer tras confirmar devuelve el crop de ENTRADA, no los estados intermedios).
+  const confirmarRecorte = () => {
+    const ses = sesionRecorte.current;
+    if (ses) {
+      store.setState((s) =>
+        s.pasado.length > ses.pasadoLen + 1 ? { pasado: s.pasado.slice(0, ses.pasadoLen + 1) } : {},
+      );
+    }
+    salirRecorte();
+  };
+  // "Cancelar"/Esc: restaura el crop de entrada y DESCARTA los pasos de historial del modo.
+  const cancelarRecorte = () => {
+    const ses = sesionRecorte.current;
+    if (ses) {
+      store.setState((s) => ({
+        documento: {
+          ...s.documento,
+          capas: s.documento.capas.map((c) => {
+            if (c.id !== ses.id || c.tipo !== "imagen") return c;
+            if (ses.crop) return { ...c, crop: { ...ses.crop } } as Capa;
+            const { crop: _omit, ...resto } = c as CapaImagen;
+            return resto as Capa;
+          }),
+        },
+        pasado: s.pasado.slice(0, ses.pasadoLen),
+      }));
+    }
+    salirRecorte();
+  };
+
+  return {
+    recorteInternoId,
+    setRecorteInternoId,
+    recorteActivoId,
+    capaRecorte,
+    salirRecorte,
+    confirmarRecorte,
+    cancelarRecorte,
+  };
+}
