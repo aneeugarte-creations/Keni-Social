@@ -160,9 +160,10 @@ def test_produccion_se_lee_desde_copy_e_investigacion_desde_ingesta(store):
 
 
 def test_toggles_por_marca_repartidos_por_proceso(store):
-    """Las excepciones por marca son los tres maestros, REPARTIDAS por proceso (ADR 0011, C4):
-    Investigación en `automatizacion_marca_investigacion`; Producción y Arte en
-    `automatizacion_marca_produccion`. Juntas siguen siendo los tres maestros."""
+    """Las excepciones por marca son los tres maestros CON fan-out/excepción, REPARTIDAS por
+    proceso (ADR 0011, C4): Investigación en `automatizacion_marca_investigacion`; Producción
+    y Arte en `automatizacion_marca_produccion`. Las etapas físicas de la tira (Selección/
+    Validación/Copy) son ajustes propios SIN excepción por marca: no aparecen ahí."""
     def _bases(grupo: str) -> set[str]:
         return {
             a.clave.split(config.SEP_MARCA, 1)[0]
@@ -176,7 +177,14 @@ def test_toggles_por_marca_repartidos_por_proceso(store):
     assert produccion == {config.ENV_PRODUCCION, config.ENV_PIPELINE_ARTE}
     # El grupo viejo unificado ya no existe.
     assert _bases("automatizacion_marca") == set()
-    assert investigacion | produccion == _MAESTROS_ENV
+    # Por marca solo los virtuales + Arte; las físicas de la tira (sin fan-out) quedan fuera.
+    assert investigacion | produccion == {
+        config.ENV_INVESTIGACION, config.ENV_PRODUCCION, config.ENV_PIPELINE_ARTE
+    }
+    assert not (investigacion | produccion) & {
+        config.ENV_PIPELINE_SELECCION, config.ENV_PIPELINE_VALIDACION,
+        config.ENV_PIPELINE_COPY,
+    }
 
 
 def test_maquina_global_kill_switch(store):
