@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate } from "react-router-dom";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { FronteraError } from "@/components/comunes/FronteraError";
+import { RedirigirCola } from "@/components/comunes/RedirigirCola";
 import { RedirigirMonitor } from "@/components/comunes/RedirigirMonitor";
 import { RedirigirPrefijo } from "@/components/comunes/RedirigirPrefijo";
 import Error404 from "@/pages/Error404";
@@ -53,7 +54,10 @@ const GeneracionDetalle = lazy(() => import("@/pages/GeneracionDetalle"));
 // del worker/cola, relocalizada del antiguo Monitor).
 const CockpitInvestigacion = lazy(() => import("@/pages/maquina/CockpitInvestigacion"));
 const CockpitProduccion = lazy(() => import("@/pages/maquina/CockpitProduccion"));
-const Cola = lazy(() => import("@/pages/maquina/Cola"));
+// «Agentes» (antes «Workers»/Cola): la casa de los dos agentes de ejecución de la máquina
+// —Workers (pool reactivo) y Daemons (proactivos)— + economía y actividad. La ruta vieja
+// `/maquina/cola` redirige a `/maquina/agentes` preservando `?proceso=`.
+const Agentes = lazy(() => import("@/pages/maquina/Agentes"));
 
 // Feed móvil para revisores (#qa-movil-feed): superficie tipo red social, una
 // columna, SIN sidebar. Vive FUERA del AppShell (layout propio) y se llega por
@@ -292,7 +296,7 @@ export const router = createBrowserRouter([
           {
             path: "produccion",
             children: [
-              { index: true, element: <Navigate to="/maquina/cola" replace /> },
+              { index: true, element: <Navigate to="/maquina/agentes" replace /> },
               { path: "pipelines/:id", element: <PipelineDetalle /> },
               // Detalle de un trabajo SUELTO (generación fuera del pipeline): mismo in/out.
               { path: "actividad/:id", element: <GeneracionDetalle /> },
@@ -321,10 +325,13 @@ export const router = createBrowserRouter([
       {
         path: "maquina",
         children: [
-          { index: true, element: <Navigate to="/maquina/cola" replace /> },
+          { index: true, element: <Navigate to="/maquina/agentes" replace /> },
           { path: "investigacion", element: <CockpitInvestigacion /> },
           { path: "produccion", element: <CockpitProduccion /> },
-          { path: "cola", element: <Cola /> },
+          { path: "agentes", element: <Agentes /> },
+          // Compat: la página se llamaba «Workers» (`/maquina/cola`); redirige preservando
+          // `?proceso=` (los cockpits enlazan aquí prefiltrado).
+          { path: "cola", element: <RedirigirCola /> },
         ],
       },
 

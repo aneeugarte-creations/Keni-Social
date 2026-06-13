@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, ExternalLink, Play } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Activity, Play } from "lucide-react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
@@ -8,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -19,6 +19,7 @@ import {
 import { ApiError, api, mensajeError } from "@/lib/api";
 import { tiempoRelativo } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
+import { useGuardarAjuste } from "@/pages/configuracion/SeccionFuncionalidad";
 import type { EstadoDaemon, GrupoDaemon, LatidoDaemon } from "@/types";
 
 import { INTERVALO_RECURSOS_MS } from "./lib";
@@ -50,11 +51,20 @@ const ETIQUETA_ESTADO: Record<EstadoDaemon, string> = {
   atrasado: "Atrasado",
 };
 
+// Leyenda concisa de la jerga de estado (tooltip), para no obligar a saberla de memoria.
+const TITULO_ESTADO: Record<EstadoDaemon, string> = {
+  ok: "Barrió dentro de su intervalo.",
+  error: "Su último barrido falló.",
+  inactivo: "Su gate de ajuste está apagado: no barre.",
+  atrasado: "Lleva más de su intervalo sin barrer.",
+};
+
 /** Chip de estado con color semántico (verde/rojo/gris/ámbar). */
 function ChipEstado({ estado }: { estado: EstadoDaemon }) {
   return (
     <Badge
       variant="outline"
+      title={TITULO_ESTADO[estado]}
       className={cn(
         "border-transparent",
         estado === "ok" && "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
@@ -80,11 +90,17 @@ function FilaDaemon({
   latido,
   onBarrer,
   barriendo,
+  onToggle,
+  guardandoClave,
 }: {
   latido: LatidoDaemon;
   onBarrer: (daemon: string) => void;
   /** Daemon cuya solicitud de barrido está en vuelo (deshabilita SOLO su botón). */
   barriendo: string | null;
+  /** Enciende/apaga el daemon IN-PLACE (POST /api/ajustes con su `clave_gate`). */
+  onToggle: (clave: string, valor: boolean) => void;
+  /** Clave de ajuste cuyo guardado está en vuelo (deshabilita SOLO ese switch). */
+  guardandoClave: string | null;
 }) {
   const barrido = latido.ultimo_barrido
     ? tiempoRelativo(latido.ultimo_barrido)
@@ -141,6 +157,25 @@ function FilaDaemon({
       >
         {latido.estado === "error" || latido.errores > 0 ? latido.error_txt : ""}
       </TableCell>
+      {/* Encendido IN-PLACE: si el daemon tiene un gate (`clave_gate`), un Switch lo
+          enciende/apaga al vuelo (POST /api/ajustes). Si no, es siempre-activo (sin toggle). */}
+      <TableCell>
+        {latido.clave_gate ? (
+          <Switch
+            checked={latido.activo}
+            disabled={guardandoClave === latido.clave_gate}
+            onCheckedChange={(v) => onToggle(latido.clave_gate as string, v)}
+            aria-label={`Encender/apagar el daemon ${latido.daemon}`}
+          />
+        ) : (
+          <span
+            className="text-xs text-muted-foreground"
+            title="Sin interruptor: este daemon corre siempre (no tiene gate de ajuste)."
+          >
+            Siempre activo
+          </span>
+        )}
+      </TableCell>
       <TableCell className="text-right">
         {/* Solo a los daemons BARRIBLES (bucle sobre `bucle_gateado`): los legados
             (programador/metricas/…) no miran el flag y el botón sería mentira. */}
@@ -171,10 +206,14 @@ function TablaDaemons({
   filas,
   onBarrer,
   barriendo,
+  onToggle,
+  guardandoClave,
 }: {
   filas: LatidoDaemon[];
   onBarrer: (daemon: string) => void;
   barriendo: string | null;
+  onToggle: (clave: string, valor: boolean) => void;
+  guardandoClave: string | null;
 }) {
   return (
     <Table>
@@ -186,12 +225,20 @@ function TablaDaemons({
           <TableHead>Intervalo</TableHead>
           <TableHead>Barridos</TableHead>
           <TableHead>Último error</TableHead>
+          <TableHead>Encendido</TableHead>
           <TableHead className="text-right">Acción</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {filas.map((l) => (
-          <FilaDaemon key={l.daemon} latido={l} onBarrer={onBarrer} barriendo={barriendo} />
+          <FilaDaemon
+            key={l.daemon}
+            latido={l}
+            onBarrer={onBarrer}
+            barriendo={barriendo}
+            onToggle={onToggle}
+            guardandoClave={guardandoClave}
+          />
         ))}
       </TableBody>
     </Table>
@@ -199,15 +246,16 @@ function TablaDaemons({
 }
 
 /**
- * Sección de daemons de fondo: estado de cada daemon a partir de sus latidos persistidos
- * (`/api/sistema/daemons`). Lo que requiere atención (atrasado/error) se lista primero.
- * Auto-refresco con la misma cadencia que los recursos. «Barrer ahora» (POST …/barrer) se
- * ofrece a los daemons `barrible` (la página es de admin, 403 si no).
+ * Sección de DAEMONS (agentes proactivos programados): estado de cada uno a partir de sus
+ * latidos persistidos (`/api/sistema/daemons`). Lo que requiere atención (atrasado/error) se
+ * lista primero. Auto-refresco con la misma cadencia que los recursos. Por fila: encendido
+ * IN-PLACE (Switch sobre su `clave_gate`, vía la mutación compartida de ajustes; «Siempre
+ * activo» si no tiene gate) y «Barrer ahora» (POST …/barrer) para los daemons `barrible`. El
+ * endpoint es de admin (403 si no), así que se monta en contextos admin.
  *
- * Reutilizable en dos sitios SIN duplicar (campo `grupo` del API, no nombres hardcodeados):
- * - Sistema: solo infraestructura (`grupos={["infra"]}`), tabla única.
- * - Workers: los agentes que gastan tokens / actúan en el flujo (`grupos` sin "infra" +
- *   `agrupar`), partidos en bloques por grupo (Investigación / Producción / Flujo).
+ * Parametrizable por `grupo` (campo del API, no nombres hardcodeados): la página Agentes la
+ * monta con TODOS los grupos (`agrupar`), partida en bloques por grupo (Investigación /
+ * Producción / Flujo / Infraestructura). Una sola casa para los daemons.
  */
 export function SeccionDaemons({
   grupos,
@@ -227,6 +275,20 @@ export function SeccionDaemons({
     queryFn: ({ signal }) => api.sistemaDaemons(signal),
     refetchInterval: INTERVALO_RECURSOS_MS,
   });
+
+  // Encendido/apagado IN-PLACE de cada daemon: la mutación COMPARTIDA de ajustes (la misma del
+  // presupuesto y los maestros de etapa). Tras guardar, refresca la tabla para que el chip de
+  // estado y el switch reflejen el nuevo gate al instante (no solo en el próximo polling).
+  const guardar = useGuardarAjuste();
+  const onToggle = (clave: string, valor: boolean) =>
+    guardar.mutate(
+      { clave, valor },
+      {
+        onSuccess: () =>
+          void queryClient.invalidateQueries({ queryKey: ["sistema", "daemons"] }),
+      },
+    );
+  const guardandoClave = guardar.isPending ? (guardar.variables?.clave ?? null) : null;
 
   const barrer = useMutation({
     mutationFn: (daemon: string) => api.sistemaDaemonBarrer(daemon),
@@ -290,16 +352,6 @@ export function SeccionDaemons({
         <CardTitle className="flex items-center gap-2 text-sm text-muted-foreground">
           <Activity className="h-4 w-4" aria-hidden="true" />
           {titulo}
-          {/* Aquí se OBSERVA la salud (latidos persistidos) y se puede forzar un barrido;
-              el encendido/apagado son ajustes y viven en la Máquina (tira del pipeline +
-              drawer de ajustes del cockpit de Producción). Un solo sitio para cada cosa. */}
-          <Link
-            to="/maquina/produccion?tab=ajustes"
-            className="ml-auto inline-flex items-center gap-1 text-xs font-normal underline-offset-2 hover:text-foreground hover:underline"
-          >
-            Ajustes
-            <ExternalLink className="h-3 w-3" aria-hidden="true" />
-          </Link>
         </CardTitle>
       </CardHeader>
       <CardContent className="p-4 pt-0">
@@ -317,12 +369,24 @@ export function SeccionDaemons({
                 <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {ETIQUETA_GRUPO[b.grupo]}
                 </h3>
-                <TablaDaemons filas={b.filas} onBarrer={onBarrer} barriendo={barriendo} />
+                <TablaDaemons
+                  filas={b.filas}
+                  onBarrer={onBarrer}
+                  barriendo={barriendo}
+                  onToggle={onToggle}
+                  guardandoClave={guardandoClave}
+                />
               </div>
             ))}
           </div>
         ) : (
-          <TablaDaemons filas={ordenados} onBarrer={onBarrer} barriendo={barriendo} />
+          <TablaDaemons
+            filas={ordenados}
+            onBarrer={onBarrer}
+            barriendo={barriendo}
+            onToggle={onToggle}
+            guardandoClave={guardandoClave}
+          />
         )}
       </CardContent>
     </Card>

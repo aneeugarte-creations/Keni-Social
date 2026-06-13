@@ -30,12 +30,12 @@ _SIDEBAR_BLOQUES = [
     # Texto: prompts + línea editorial + plantillas).
     ["Imagen", "Video", "Texto"],
     # "Máquina": la máquina de generación — dos cockpits de igual peso (Investigación:
-    # descubre/verifica; Producción: genera copy/arte) + el dashboard de Workers (el worker/cola
-    # compartido + economía de tokens + el FEED de actividad + agentes, TODO JUNTO). Tras la
-    # consolidación de navegación, cada motor sale UNA sola vez y vive aquí: las viejas entradas
-    # «datos» de Investigación y Producción (esta última, el feed) se retiraron del menú
-    # (Investigación → cockpit; el feed → sección «Actividad» de Workers).
-    ["Investigación", "Producción", "Workers"],
+    # descubre/verifica; Producción: genera copy/arte) + la página Agentes (los dos agentes de
+    # ejecución: Workers —pool reactivo— y Daemons —proactivos— + economía de tokens + el FEED de
+    # actividad, TODO JUNTO). Tras la consolidación de navegación, cada motor sale UNA sola vez y
+    # vive aquí: las viejas entradas «datos» de Investigación y Producción (esta última, el feed)
+    # se retiraron del menú (Investigación → cockpit; el feed → sección «Actividad» de Agentes).
+    ["Investigación", "Producción", "Agentes"],
     # "Datos": lo que alimenta o refleja la automatización. Solo queda Analíticas (la medición
     # que cierra el loop); la aporta `metricas.toml`.
     ["Analíticas"],
@@ -109,7 +109,7 @@ def test_iconos_de_nav_son_strings_lucide():
     # las viejas entradas «datos» (/datos/investigacion, /datos/produccion) se retiraron del menú.
     assert iconos["/maquina/investigacion"] == "Search"
     assert iconos["/maquina/produccion"] == "Sparkles"
-    assert iconos["/maquina/cola"] == "ListChecks"
+    assert iconos["/maquina/agentes"] == "Bot"
     assert "/datos/investigacion" not in iconos
     assert "/datos/produccion" not in iconos
 

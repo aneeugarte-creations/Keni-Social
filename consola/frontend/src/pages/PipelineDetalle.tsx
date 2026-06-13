@@ -47,7 +47,7 @@ export default function PipelineDetalle() {
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-2">
         <Link
-          to="/maquina/cola"
+          to="/maquina/agentes"
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />

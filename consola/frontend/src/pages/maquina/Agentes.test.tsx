@@ -4,10 +4,10 @@ import * as React from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import Cola from "./Cola";
+import Agentes from "./Agentes";
 import type { ColaJob } from "@/types";
 
-// La Cola respeta el switch GLOBAL de marca (igual que Pipelines/Actividad). Stub mutable
+// Agentes respeta el switch GLOBAL de marca (igual que Pipelines/Actividad). Stub mutable
 // para probar tanto la marca concreta como la vista "Todas".
 const marcaActivaStub: { marcaActiva: string | null; nombreActiva: string | null } = {
   marcaActiva: null,
@@ -17,10 +17,13 @@ vi.mock("@/hooks/marca-activa-contexto", () => ({
   useMarcaActiva: () => marcaActivaStub,
 }));
 
-// Sesión de EDITOR por defecto: el panel admin (máquina de contenido) no se monta y el test
-// se centra en el snapshot de cola. (Los toggles admin se prueban en SeccionFuncionalidad.)
+// Sesión mutable: por defecto EDITOR (Workers/economía/actividad; Daemons es admin y no se
+// monta). Un test la sube a admin para comprobar el gemelo Daemons.
+const sesionStub: { usuario: { id: string; rol: string } } = {
+  usuario: { id: "u1", rol: "editor" },
+};
 vi.mock("@/hooks/sesion-contexto", () => ({
-  useSesion: () => ({ usuario: { id: "u1", rol: "editor" } }),
+  useSesion: () => sesionStub,
 }));
 
 function job(parcial: Partial<ColaJob>): ColaJob {
@@ -59,6 +62,27 @@ function snapshot(esperando: ColaJob[] = [], enCurso: ColaJob[] = [], marca = ""
 
 const SERIE = { dias: 14, encolados: [], resultados: [] };
 
+// Un daemon de cada tipo de toggle: uno con gate (Switch) y uno siempre-activo (sin gate).
+const DAEMONS = {
+  daemons: [
+    {
+      daemon: "ingesta", visto: "", activo: true, intervalo_seg: 90, tick_seg: 60,
+      ultimo_barrido: "", ultimo_ok: "", ultimo_error: "", error_txt: "", duracion_ms: 0,
+      barridos: 3, errores: 0, edad_seg: 10, umbral_atraso_seg: 180, estado: "ok",
+      barrido_solicitado: "", barrible: true, grupo: "investigacion", gasta_tokens: true,
+      clave_gate: "KENI_DAEMON_INGESTA",
+    },
+    {
+      daemon: "reaper", visto: "", activo: true, intervalo_seg: 300, tick_seg: 60,
+      ultimo_barrido: "", ultimo_ok: "", ultimo_error: "", error_txt: "", duracion_ms: 0,
+      barridos: 5, errores: 0, edad_seg: 10, umbral_atraso_seg: 600, estado: "ok",
+      barrido_solicitado: "", barrible: false, grupo: "infra", gasta_tokens: false,
+      clave_gate: null,
+    },
+  ],
+  error: null,
+};
+
 function stubFetch(cola: unknown) {
   const fn = vi.fn(async (url: string | URL) => {
     const s = String(url);
@@ -67,6 +91,9 @@ function stubFetch(cola: unknown) {
     }
     if (s.includes("/api/actividad/cola")) {
       return new Response(JSON.stringify(cola), { status: 200 });
+    }
+    if (s.includes("/api/sistema/daemons")) {
+      return new Response(JSON.stringify(DAEMONS), { status: 200 });
     }
     return new Response("{}", { status: 200 });
   });
@@ -83,11 +110,12 @@ function renderConProviders(ui: React.ReactElement) {
   );
 }
 
-describe("Cola (cola de generación)", () => {
+describe("Agentes (Workers + Daemons)", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     marcaActivaStub.marcaActiva = null;
     marcaActivaStub.nombreActiva = null;
+    sesionStub.usuario = { id: "u1", rol: "editor" };
   });
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -97,7 +125,7 @@ describe("Cola (cola de generación)", () => {
     marcaActivaStub.marcaActiva = "claro-sports";
     marcaActivaStub.nombreActiva = "Claro Sports";
     const fetchFn = stubFetch(snapshot([job({ etiqueta: "Copy Claro" })], [], "claro-sports"));
-    renderConProviders(<Cola />);
+    renderConProviders(<Agentes />);
     expect(await screen.findByText("Copy Claro")).toBeInTheDocument();
     // La petición del snapshot lleva ?marca= (el backend acota las listas a esa marca).
     await waitFor(() => {
@@ -110,28 +138,38 @@ describe("Cola (cola de generación)", () => {
 
   it("en la vista «Todas» pide la cola sin marca", async () => {
     const fetchFn = stubFetch(snapshot([job({})]));
-    renderConProviders(<Cola />);
+    renderConProviders(<Agentes />);
     expect(await screen.findByText("Copy de nota")).toBeInTheDocument();
     const urls = fetchFn.mock.calls.map((c) => String(c[0]));
     expect(urls.some((u) => u.includes("/api/actividad/cola") && !u.includes("marca="))).toBe(true);
   });
 
-  it("es el dashboard de Workers: monta pool, economía, actividad y agentes JUNTOS", async () => {
+  it("monta los gemelos Workers + economía + actividad (editor no ve Daemons)", async () => {
     stubFetch(snapshot([job({})]));
-    renderConProviders(<Cola />);
-    // Las cuatro secciones colapsables del dashboard, abiertas por defecto.
-    expect(await screen.findByText("Pool reactivo (claude -p)")).toBeInTheDocument();
+    renderConProviders(<Agentes />);
+    expect(await screen.findByText("Workers")).toBeInTheDocument();
     expect(screen.getByText("Economía de tokens")).toBeInTheDocument();
-    // «Actividad»: el feed de Producción plegado aquí (runs del pipeline + actividad suelta).
     expect(screen.getByText("Actividad")).toBeInTheDocument();
+    // Daemons es admin (endpoint 403 si no): un editor no ve el gemelo.
+    expect(screen.queryByText("Daemons")).toBeNull();
+  });
+
+  it("admin ve el gemelo Daemons con encendido in-place (Switch con gate, «Siempre activo» sin gate)", async () => {
+    sesionStub.usuario = { id: "u1", rol: "admin" };
+    stubFetch(snapshot([job({})]));
+    renderConProviders(<Agentes />);
+    expect(await screen.findByText("Daemons")).toBeInTheDocument();
+    // El daemon con `clave_gate` pinta un Switch; el de gate null, el texto «Siempre activo».
+    expect(await screen.findByText("ingesta")).toBeInTheDocument();
     expect(
-      screen.getByText("Agentes (gastan tokens / actúan en el flujo)"),
+      screen.getByRole("switch", { name: /Encender\/apagar el daemon ingesta/i }),
     ).toBeInTheDocument();
+    expect(screen.getByText("Siempre activo")).toBeInTheDocument();
   });
 
   it("señala los jobs prioritarios de la lista de espera", async () => {
     stubFetch(snapshot([job({ etiqueta: "Manual urgente", prioridad: 10 })]));
-    renderConProviders(<Cola />);
+    renderConProviders(<Agentes />);
     expect(await screen.findByText("Manual urgente")).toBeInTheDocument();
     expect(screen.getByText("prioritario")).toBeInTheDocument();
   });

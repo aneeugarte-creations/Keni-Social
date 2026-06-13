@@ -8,18 +8,16 @@ import { ApiError, api } from "@/lib/api";
 import { AvisosDoctor } from "./Doctor";
 import { SeccionNavegadorS3 } from "./NavegadorS3";
 import { SeccionBackups } from "./SeccionBackups";
-import { SeccionDaemons } from "./SeccionDaemons";
 import { SeccionRecursos } from "./SeccionRecursos";
 import { SeccionRendimiento } from "./SeccionRendimiento";
 import { SeccionS3 } from "./SeccionS3";
 import { INTERVALO_RECURSOS_MS } from "./lib";
 
 /**
- * Página SISTEMA (admin, dropdown del avatar): la infraestructura que sostiene la consola —
- * recursos del servidor (CPU/RAM/disco), salud de daemons (latidos), backups, latencias de
- * la API y S3/Garage (estado + explorador). Era la pestaña «Salud» del Monitor; vuelve a ser
- * página propia para que el Monitor se quede solo con la MÁQUINA (la cola y sus etapas) y la
- * infra viva con el resto de administración (Usuarios/Webhooks). Arriba, los chequeos de
+ * Página SISTEMA (admin, dropdown del avatar): el HARDWARE y el ALMACENAMIENTO que sostienen
+ * la consola — recursos del servidor (CPU/RAM/disco), backups, latencias de la API y S3/Garage
+ * (estado + explorador). Los daemons (salud + encendido) ya NO viven aquí: se movieron a la
+ * página Agentes (/maquina/agentes), su única casa, junto a los Workers. Arriba, los chequeos de
  * operador del doctor (`/api/estado`) que requieran atención (sustituyen al viejo
  * BannerAlertas: el juicio vive en el back, no en umbrales del front).
  *
@@ -47,11 +45,9 @@ export default function Sistema() {
       <div className="space-y-6">
         <AvisosDoctor />
         <SeccionRecursos />
-        {/* Solo INFRAESTRUCTURA: los daemons que NO gastan tokens ni actúan en el flujo de
-            contenido (métricas, GC, alertas, reaper…). Los agentes de Investigación/Producción/
-            Flujo viven en el dashboard de Workers (/maquina/cola). Filtro por el campo `grupo`
-            del API, no por nombres hardcodeados. */}
-        <SeccionDaemons grupos={["infra"]} titulo="Daemons de infraestructura" />
+        {/* Los daemons (TODOS los grupos, incluida la infraestructura) viven ahora en la página
+            Agentes (/maquina/agentes), su única casa. Sistema se queda con hardware y
+            almacenamiento: recursos, backups, rendimiento y S3. */}
         <SeccionBackups />
         <SeccionRendimiento />
         <SeccionS3 />

@@ -3,12 +3,12 @@ import {
   Activity,
   AlertTriangle,
   ArrowUp,
+  Bot,
   Boxes,
   Clock,
   Coins,
   Cpu,
   Layers,
-  ListChecks,
   RefreshCw,
   RotateCcw,
   Trash2,
@@ -49,7 +49,6 @@ import { cn } from "@/lib/utils";
 import Produccion from "@/pages/Produccion";
 import { SeccionColapsable } from "@/pages/configuracion/SeccionColapsable";
 import { useGuardarAjuste } from "@/pages/configuracion/SeccionFuncionalidad";
-import { SeccionMetricool } from "@/pages/configuracion/SeccionMetricool";
 import {
   DesgloseEconomiaProceso,
   PROC_META,
@@ -241,24 +240,24 @@ function PresupuestoEditable({ valor }: { valor: number }) {
   );
 }
 
-/** ECONOMÍA DE TOKENS de la generación, en el sitio donde se OPERA la cola.
- *
- * El estado (nivel/gasto/restante) viene en el mismo snapshot de la cola. El control rápido
- * es la PARADA DE EMERGENCIA (KENI_GENERACION_PAUSADA, en caliente): corta TODA la
- * generación con IA, incluida la manual (no se encola nada y el worker no reclama nada;
- * lo que corre termina y lo encolado espera — `presupuesto_ia.NIVEL_PAUSADO`). El
- * presupuesto diario se edita aquí mismo; el margen manual vive en el drawer de ajustes de
- * los cockpits («Máquina de contenido», grupo `pipeline_topes`). Mutación PROPIA de este
- * panel (sin compartir el estado «guardando» con otros controles). */
+/** PRESUPUESTO + gasto de HOY + PARADA DE EMERGENCIA: la cabeza del bloque «Economía de
+ *  tokens». El estado (nivel/gasto/restante) viene en el snapshot de la cola; el desglose de
+ *  HOY por proceso, de la serie. El presupuesto diario se edita aquí (admin) y la parada de
+ *  emergencia (KENI_GENERACION_PAUSADA, en caliente) corta TODA la generación con IA —incluida
+ *  la manual—: lo que corre termina y lo encolado espera. `proceso` recorta el desglose de hoy
+ *  al loop pedido (`?proceso=`). Mutación PROPIA del panel (no comparte el «guardando»). */
 function PanelPresupuesto({
   presupuesto,
   resHoy,
   esAdmin,
+  proceso,
 }: {
   presupuesto: PresupuestoIA;
   /** Resultados de HOY de la serie (para el desglose de gasto por proceso). Null si no hay. */
   resHoy: ResultadoDia | null;
   esAdmin: boolean;
+  /** Prefiltro `?proceso=`: si está, el desglose de hoy muestra solo ese loop. */
+  proceso?: Proceso;
 }) {
   const guardar = useGuardarAjuste();
   const conPresupuesto = presupuesto.presupuesto_tokens_dia > 0;
@@ -284,8 +283,9 @@ function PanelPresupuesto({
             tokens · {costeUsd(presupuesto.gastado.coste_usd)} ·{" "}
             {presupuesto.gastado.generaciones} generación(es) con coste
           </p>
-          {/* Desglose del gasto de HOY por proceso (Investigación vs Producción). */}
-          <DesgloseEconomiaProceso res={resHoy} />
+          {/* Desglose del gasto de HOY por proceso (Investigación vs Producción). Única fuente
+              del gasto de hoy: no se repite en el resto del bloque. */}
+          <DesgloseEconomiaProceso res={resHoy} soloProceso={proceso} />
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
             {esAdmin ? (
               <PresupuestoEditable valor={presupuesto.presupuesto_tokens_dia} />
@@ -343,8 +343,7 @@ function PanelPresupuesto({
 }
 
 /** Fila de KPIs con los CONTEOS del periodo (toda la actividad de IA: generaciones del
- *  pipeline, manuales, runs de agente). Movidos aquí desde Producción: la economía de tokens
- *  vive JUNTA en el dashboard de Workers. */
+ *  pipeline, manuales, runs de agente). */
 function KpisTotales({ total }: { total: ActividadTotal }) {
   return (
     <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -365,7 +364,7 @@ function KpisTotales({ total }: { total: ActividadTotal }) {
   );
 }
 
-/** Mini-tabla de desglose por TIPO de trabajo (movida desde Producción). */
+/** Mini-tabla de desglose por TIPO de trabajo. */
 function DesglosePorTipo({ filas }: { filas: ActividadPorTipo[] }) {
   return (
     <Card>
@@ -414,7 +413,7 @@ function DesglosePorTipo({ filas }: { filas: ActividadPorTipo[] }) {
   );
 }
 
-/** Mini-tabla de desglose por DÍA, más reciente primero (movida desde Producción). */
+/** Mini-tabla de desglose por DÍA, más reciente primero (incluye tokens). */
 function DesglosePorDia({ filas }: { filas: ActividadPorDia[] }) {
   const ordenadas = React.useMemo(
     () => [...filas].sort((a, b) => b.dia.localeCompare(a.dia)),
@@ -431,13 +430,14 @@ function DesglosePorDia({ filas }: { filas: ActividadPorDia[] }) {
             <TableRow>
               <TableHead className="pl-6">Día</TableHead>
               <TableHead className="text-right">Items</TableHead>
+              <TableHead className="text-right">Tokens</TableHead>
               <TableHead className="pr-6 text-right">Coste</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {ordenadas.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={3} className="py-8 text-center text-muted-foreground">
+                <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
                   Sin actividad por día.
                 </TableCell>
               </TableRow>
@@ -447,6 +447,9 @@ function DesglosePorDia({ filas }: { filas: ActividadPorDia[] }) {
                   <TableCell className="pl-6 font-medium">{formatearDia(f.dia)}</TableCell>
                   <TableCell className="text-right tabular-nums">
                     {numeroCompleto(f.items)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums" title={numeroCompleto(f.tokens)}>
+                    {numeroCompacto(f.tokens)}
                   </TableCell>
                   <TableCell className="pr-6 text-right tabular-nums">
                     {costeUsd(f.coste_usd)}
@@ -503,31 +506,31 @@ function SeccionEconomiaTotales() {
 }
 
 /**
- * COLA compartida de la máquina (`/maquina/cola`): la vista GLOBAL del worker/cola que
- * comparten los dos motores (Investigación + Producción · ADR 0011). Arriba la ZONA DE
- * ESTADO (el doctor), después los KPIs de capacidad del pool ÚNICO, la economía de tokens
- * (presupuesto editable + parada de emergencia), las tablas en curso/esperando (cancelar/
- * priorizar, admin) y el throughput por día. Sondeo en vivo cada pocos segundos.
+ * Página AGENTES (`/maquina/agentes`): la casa de los dos tipos de agente de ejecución de la
+ * máquina, gemelos en forma (lista + estado + control in-place) pero distintos en naturaleza:
+ *   - WORKERS — el pool REACTIVO de `claude -p` bajo demanda (capacidad, jobs en curso/
+ *     esperando, slots). La cola y el pool son ÚNICOS y los comparten ambos motores (ADR 0011).
+ *   - DAEMONS — los agentes PROACTIVOS programados (barren en su intervalo), de todos los grupos
+ *     (Investigación / Producción / Flujo / Infraestructura), con encendido in-place.
+ * Bajo ellos, la ECONOMÍA de tokens UNIFICADA (presupuesto + gasto + serie + desgloses) y la
+ * ACTIVIDAD (el feed de ejecución). Arriba, la zona de estado (el doctor). Sondeo en vivo.
  *
- * Relocalizada desde el antiguo Monitor (hub Producción): la TIRA DE ETAPAS (PipelineEnVivo)
- * y el DRAWER DE AJUSTES por etapa NO viven aquí — pertenecen a los cockpits (Investigación
- * y Producción, fases 2B/2C); hoy se montan temporalmente en el cockpit de Producción.
- * El prefiltro `?proceso=investigacion|produccion` acota las tablas al loop pedido (los
- * cockpits enlazan aquí prefiltrado). La INFRA (recursos/daemons/backups/S3) vive en /sistema.
+ * El prefiltro `?proceso=investigacion|produccion` acota las tablas de Workers y el desglose de
+ * hoy / la serie de la economía al loop pedido (los cockpits enlazan aquí prefiltrado).
  */
-export default function Cola() {
+export default function Agentes() {
   const { usuario } = useSesion();
   const esAdmin = usuario?.rol === "admin";
   const [searchParams, setSearchParams] = useSearchParams();
   const crudoTab = searchParams.get("tab");
-  // Prefiltro por PROCESO (`?proceso=investigacion|produccion`): acota las vistas de cola
-  // (tablas) al loop pedido. Los cockpits enlazan aquí prefiltrado. Inválido = sin filtro.
+  // Prefiltro por PROCESO (`?proceso=investigacion|produccion`): acota las tablas de Workers y
+  // la economía (desglose de hoy + serie) al loop pedido. Inválido = sin filtro.
   const crudoProceso = searchParams.get("proceso");
   const proceso: Proceso | undefined =
     crudoProceso === "investigacion" || crudoProceso === "produccion" ? crudoProceso : undefined;
   const qc = useQueryClient();
-  // La Cola respeta el switch GLOBAL de marca (como Pipelines/Actividad): las listas de
-  // jobs se acotan a la marca activa (null = "Todas", solo admin). La capacidad es global.
+  // Respeta el switch GLOBAL de marca: las listas de jobs se acotan a la marca activa
+  // (null = "Todas", solo admin). La capacidad del pool es global.
   const { marcaActiva, nombreActiva } = useMarcaActiva();
   const [cancelandoId, setCancelandoId] = React.useState<string | null>(null);
   const [priorizandoId, setPriorizandoId] = React.useState<string | null>(null);
@@ -580,9 +583,8 @@ export default function Cola() {
     onSettled: () => setPriorizandoId(null),
   });
 
-  // La antigua pestaña «Salud» (la infra) es ahora la página /sistema: los deep-links
-  // viejos (?tab=salud, heredados del Monitor) siguen vivos. (Tras TODOS los hooks, para
-  // no variar su orden entre renders.)
+  // Deep-link viejo del Monitor (`?tab=salud` = la infra): la infra es ahora /sistema. (Tras
+  // TODOS los hooks, para no variar su orden entre renders.)
   if (crudoTab === "salud") return <Navigate to="/sistema" replace />;
 
   // Listas acotadas al prefiltro de proceso (afecta a las tablas; la capacidad es global).
@@ -604,15 +606,9 @@ export default function Cola() {
 
   return (
     <>
-      <TituloPagina titulo="Workers" icono={ListChecks} />
+      <TituloPagina titulo="Agentes" icono={Bot} />
       <AccionesPagina>
-        <MenuAcciones
-          ajustesTitulo="Conexiones de métricas"
-          // Metricool (conexión de métricas de audiencia) NO gobierna cómo se produce copy/arte:
-          // no es del cockpit de Producción. Vive aquí, en la Cola COMPARTIDA por ambos motores,
-          // como conexión de la máquina. Solo admin (los secretos de conexión lo son).
-          ajustes={esAdmin ? <SeccionMetricool /> : undefined}
-        >
+        <MenuAcciones>
           <ItemMenu icono={RefreshCw} onClick={refrescar} disabled={cola.isFetching}>
             Actualizar
           </ItemMenu>
@@ -641,22 +637,32 @@ export default function Cola() {
         </MenuAcciones>
       </AccionesPagina>
 
-      {/* ZONA DE ESTADO (el doctor, visible para todos): con todo ok, una línea discreta;
-          con problemas, los chequeos no-ok (admin solo ve además los suyos) + los temas
-          bloqueados del pipeline. Va ARRIBA: es lo primero que responde «¿va bien la máquina?». */}
-      <div className="mb-6">
+      {/* ZONA DE ESTADO (el doctor): con todo ok, una línea discreta; con problemas, los
+          chequeos no-ok + los temas bloqueados. Va ARRIBA: «¿va bien la máquina?». */}
+      <div className="mb-4">
         <ZonaEstado esAdmin={esAdmin} marca={marcaActiva ?? undefined} />
       </div>
 
-      {/* Dashboard de Workers, TODO JUNTO en secciones colapsables: (a) el pool reactivo
-          (claude -p), (b) la economía de tokens y (c) los agentes (daemons que gastan tokens /
-          actúan en el flujo). La infraestructura que NO toca el flujo vive en Sistema. */}
+      {/* Prefiltro de proceso activo (?proceso=): se señala arriba y se puede quitar. Afecta a
+          las tablas de Workers y a la economía (desglose de hoy + serie). */}
+      {proceso && (
+        <div className="mb-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+          <span>
+            Filtrado a{" "}
+            <strong className={PROC_META[proceso].texto}>{PROC_META[proceso].etiqueta}</strong>.
+          </span>
+          <Button variant="ghost" size="sm" onClick={quitarProceso}>
+            Quitar filtro
+          </Button>
+        </div>
+      )}
+
       <div className="space-y-2">
-        {/* (a) POOL REACTIVO: los workers de claude -p bajo demanda. */}
+        {/* ===== GEMELO 1 · WORKERS (pool reactivo) ===== */}
         <SeccionColapsable
-          titulo="Pool reactivo (claude -p)"
+          titulo="Workers"
           abiertaInicial
-          descripcion="Los workers que ejecutan claude -p bajo demanda: capacidad del pool compartido, jobs en curso/esperando, presupuesto y parada de emergencia."
+          descripcion="Pool reactivo: ejecutan claude -p bajo demanda. Capacidad, jobs en curso/esperando y slots."
         >
           {cola.isError ? (
             <BloqueError
@@ -673,174 +679,171 @@ export default function Cola() {
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Prefiltro de proceso activo (?proceso=): se señala y se puede quitar. */}
-              {proceso && (
-                <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              {cola.data.cola_llena && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                   <span>
-                    Mostrando solo{" "}
-                    <strong className={PROC_META[proceso].texto}>
-                      {PROC_META[proceso].etiqueta}
-                    </strong>{" "}
-                    (tablas de jobs).
+                    La cola está al tope ({cola.data.conteo.activos}/{cola.data.capacidad.tope}).
+                    {esAdmin && " Puedes purgarla para vaciarla."}
                   </span>
-                  <Button variant="ghost" size="sm" onClick={quitarProceso}>
-                    Quitar filtro
-                  </Button>
                 </div>
               )}
 
-              {cola.data.cola_llena && (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-              <span>
-                La cola está al tope ({cola.data.conteo.activos}/{cola.data.capacidad.tope}).
-                {esAdmin && " Puedes purgarla para vaciarla."}
-              </span>
-            </div>
-          )}
-
-          {/* KPIs en vivo del POOL COMPARTIDO. Investigación y Producción usan la MISMA cola y el
-              MISMO pool: estos KPIs son la capacidad total. Con marca activa se avisa: la
-              capacidad no se filtra (las tablas sí). */}
-          {marcaActiva && (
-            <p className="text-xs text-muted-foreground">
-              Los KPIs de capacidad son globales (no se filtran por{" "}
-              {nombreActiva ?? marcaActiva}); las tablas de jobs de abajo sí.
-            </p>
-          )}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Kpi
-              icono={Cpu}
-              titulo="En curso"
-              valor={`${cola.data.procesando}/${cola.data.capacidad.max_jobs}`}
-              subtitulo={`claude -p · ${cola.data.workers_activos.length} worker(s)`}
-              tono={cola.data.procesando >= cola.data.capacidad.max_jobs ? "alerta" : undefined}
-            />
-            <Kpi
-              icono={Clock}
-              titulo="En cola"
-              valor={`${cola.data.conteo.pendientes}/${cola.data.capacidad.max_cola}`}
-              subtitulo="esperando un slot"
-              tono={cola.data.conteo.pendientes > 0 ? "espera" : undefined}
-            />
-            <Kpi
-              icono={Layers}
-              titulo="Pool compartido"
-              valor={`${cola.data.conteo.activos}/${cola.data.capacidad.tope}`}
-              subtitulo="Investigación + Producción"
-              tono={cola.data.cola_llena ? "alerta" : undefined}
-            />
-            <Kpi
-              icono={Boxes}
-              titulo="Slots libres"
-              valor={cola.data.slots_libres}
-              subtitulo={`de ${cola.data.capacidad.max_jobs} de cómputo`}
-              tono={cola.data.slots_libres > 0 ? "ok" : undefined}
-            />
-          </div>
-
-          {/* Economía de tokens: estado vivo + presupuesto editable + parada de emergencia
-              (el margen manual y los topes por etapa, en el drawer de ajustes de los cockpits). */}
-          {cola.data.presupuesto && (
-            <PanelPresupuesto
-              presupuesto={cola.data.presupuesto}
-              resHoy={resultadoDelDia(serie.data, cola.data.presupuesto.dia)}
-              esAdmin={esAdmin}
-            />
-          )}
-
-          {/* En curso */}
-          <Card>
-            <CardHeader className="p-4 pb-2">
-              <CardTitle className="flex items-center gap-2 text-sm">
-                <Activity className="h-4 w-4 text-sky-600" />
-                En curso ({enCurso.length})
-                {/* Las listas respetan el switch global de marca; la capacidad es global. */}
-                {marcaActiva && (
-                  <Badge variant="outline" className="font-normal text-muted-foreground">
-                    {nombreActiva ?? marcaActiva}
-                  </Badge>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              {enCurso.length === 0 ? (
-                <p className="p-4 pt-0 text-sm text-muted-foreground">
-                  Ningún <code>claude -p</code>
-                  {marcaActiva ? ` de ${nombreActiva ?? marcaActiva}` : ""} corriendo ahora mismo.
+              {/* KPIs del POOL COMPARTIDO. Investigación y Producción usan la MISMA cola y el
+                  MISMO pool: estos KPIs son la capacidad total (no se filtran por marca; las
+                  tablas sí). */}
+              {marcaActiva && (
+                <p className="text-xs text-muted-foreground">
+                  Los KPIs de capacidad son globales (no se filtran por{" "}
+                  {nombreActiva ?? marcaActiva}); las tablas de jobs de abajo sí.
                 </p>
-              ) : (
-                <TablaJobs
-                  jobs={enCurso}
-                  mostrarWorker
-                  esAdmin={esAdmin}
-                  onCancelar={(id) => cancelar.mutate(id)}
-                  cancelandoId={cancelandoId}
-                />
               )}
-            </CardContent>
-          </Card>
-
-          {/* Esperando */}
-          {esperando.length > 0 && (
-            <Card className="border-amber-500/30">
-              <CardHeader className="p-4 pb-2">
-                <CardTitle className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-500">
-                  <Clock className="h-4 w-4 text-amber-600" />
-                  Esperando ({esperando.length})
-                  {marcaActiva && (
-                    <Badge variant="outline" className="font-normal text-muted-foreground">
-                      {nombreActiva ?? marcaActiva}
-                    </Badge>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <TablaJobs
-                  onPriorizar={(id) => priorizar.mutate(id)}
-                  priorizandoId={priorizandoId}
-                  jobs={esperando}
-                  mostrarWorker={false}
-                  esAdmin={esAdmin}
-                  onCancelar={(id) => cancelar.mutate(id)}
-                  cancelandoId={cancelandoId}
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <Kpi
+                  icono={Cpu}
+                  titulo="En curso"
+                  valor={`${cola.data.procesando}/${cola.data.capacidad.max_jobs}`}
+                  subtitulo={`claude -p · ${cola.data.workers_activos.length} worker(s)`}
+                  tono={cola.data.procesando >= cola.data.capacidad.max_jobs ? "alerta" : undefined}
                 />
-              </CardContent>
-            </Card>
-          )}
+                <Kpi
+                  icono={Clock}
+                  titulo="En cola"
+                  valor={`${cola.data.conteo.pendientes}/${cola.data.capacidad.max_cola}`}
+                  subtitulo="esperando un slot"
+                  tono={cola.data.conteo.pendientes > 0 ? "espera" : undefined}
+                />
+                <Kpi
+                  icono={Layers}
+                  titulo="Pool compartido"
+                  valor={`${cola.data.conteo.activos}/${cola.data.capacidad.tope}`}
+                  subtitulo="Investigación + Producción"
+                  tono={cola.data.cola_llena ? "alerta" : undefined}
+                />
+                <Kpi
+                  icono={Boxes}
+                  titulo="Slots libres"
+                  valor={cola.data.slots_libres}
+                  subtitulo={`de ${cola.data.capacidad.max_jobs} de cómputo`}
+                  tono={cola.data.slots_libres > 0 ? "ok" : undefined}
+                />
+              </div>
 
+              {/* En curso */}
+              <Card>
+                <CardHeader className="p-4 pb-2">
+                  <CardTitle className="flex items-center gap-2 text-sm">
+                    <Activity className="h-4 w-4 text-sky-600" />
+                    En curso ({enCurso.length})
+                    {marcaActiva && (
+                      <Badge variant="outline" className="font-normal text-muted-foreground">
+                        {nombreActiva ?? marcaActiva}
+                      </Badge>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {enCurso.length === 0 ? (
+                    <p className="p-4 pt-0 text-sm text-muted-foreground">
+                      Ningún <code>claude -p</code>
+                      {marcaActiva ? ` de ${nombreActiva ?? marcaActiva}` : ""} corriendo ahora mismo.
+                    </p>
+                  ) : (
+                    <TablaJobs
+                      jobs={enCurso}
+                      mostrarWorker
+                      esAdmin={esAdmin}
+                      onCancelar={(id) => cancelar.mutate(id)}
+                      cancelandoId={cancelandoId}
+                    />
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Esperando */}
+              {esperando.length > 0 && (
+                <Card className="border-amber-500/30">
+                  <CardHeader className="p-4 pb-2">
+                    <CardTitle className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-500">
+                      <Clock className="h-4 w-4 text-amber-600" />
+                      Esperando ({esperando.length})
+                      {marcaActiva && (
+                        <Badge variant="outline" className="font-normal text-muted-foreground">
+                          {nombreActiva ?? marcaActiva}
+                        </Badge>
+                      )}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <TablaJobs
+                      onPriorizar={(id) => priorizar.mutate(id)}
+                      priorizandoId={priorizandoId}
+                      jobs={esperando}
+                      mostrarWorker={false}
+                      esAdmin={esAdmin}
+                      onCancelar={(id) => cancelar.mutate(id)}
+                      cancelandoId={cancelandoId}
+                    />
+                  </CardContent>
+                </Card>
+              )}
             </div>
           )}
         </SeccionColapsable>
 
-        {/* (b) ECONOMÍA DE TOKENS, TODO JUNTO: totales + desglose por tipo/día (movidos de
-            Producción) y el throughput por proceso de los últimos 14 días. El gasto de HOY por
-            proceso vive en el panel de presupuesto del pool reactivo. */}
+        {/* ===== GEMELO 2 · DAEMONS (agentes proactivos programados) ===== */}
+        {/* El endpoint de daemons es de admin (403 si no): la sección solo se monta para admin. */}
+        {esAdmin && (
+          <SeccionColapsable
+            titulo="Daemons"
+            abiertaInicial
+            descripcion="Agentes proactivos programados: barren en su intervalo. Enciende/apaga en su fila y fuerza un barrido con «Barrer ahora»."
+          >
+            <SeccionDaemons agrupar titulo="Daemons por grupo" />
+          </SeccionColapsable>
+        )}
+
+        {/* ===== ECONOMÍA DE TOKENS (unificada) ===== */}
+        {/* Una sola fuente por dato: presupuesto + gasto de HOY por proceso (cabeza), serie de
+            14 días por proceso, y desglose por tipo / por día (con tokens). Respeta `?proceso=`. */}
         <SeccionColapsable
           titulo="Economía de tokens"
           abiertaInicial
-          descripcion="Cuánto gasta la máquina, junto: por proceso (Investigación vs Producción) y por tipo de trabajo; hoy y en los últimos 14 días."
+          descripcion="Cuánto gasta la máquina, junto: presupuesto y gasto de hoy, serie de 14 días y desglose por tipo y por día."
         >
           <div className="space-y-4">
-            <SeccionEconomiaTotales />
+            {cola.data?.presupuesto && (
+              <PanelPresupuesto
+                presupuesto={cola.data.presupuesto}
+                resHoy={resultadoDelDia(serie.data, cola.data.presupuesto.dia)}
+                esAdmin={esAdmin}
+                proceso={proceso}
+              />
+            )}
 
-            {/* Throughput por día: encolados (entrada) vs completados por proceso (salida). Los
-                marcadores de etapa (coste 0) ya NO cuentan: «ok» es trabajo real, no auditoría. */}
+            {/* Serie 14 días: encolados (entrada) vs completados por proceso (salida). Los
+                marcadores de etapa (coste 0) no cuentan: «ok» es trabajo real. */}
             <Card>
               <CardHeader className="p-4 pb-2">
                 <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
                   <RotateCcw className="h-4 w-4 text-muted-foreground" />
                   Últimos 14 días
                   <span className="ml-1 inline-flex items-center gap-3 text-xs font-normal text-muted-foreground">
-                    <span className="inline-flex items-center gap-1">
-                      <span className="h-2 w-2 rounded-full bg-amber-500/70" /> encolados
-                    </span>
-                    <span className="inline-flex items-center gap-1">
-                      <span className="h-2 w-2 rounded-full bg-sky-500/70" /> investigación
-                    </span>
-                    <span className="inline-flex items-center gap-1">
-                      <span className="h-2 w-2 rounded-full bg-emerald-500/70" /> producción
-                    </span>
+                    {!proceso && (
+                      <span className="inline-flex items-center gap-1">
+                        <span className="h-2 w-2 rounded-full bg-amber-500/70" /> encolados
+                      </span>
+                    )}
+                    {(!proceso || proceso === "investigacion") && (
+                      <span className="inline-flex items-center gap-1">
+                        <span className="h-2 w-2 rounded-full bg-sky-500/70" /> investigación
+                      </span>
+                    )}
+                    {(!proceso || proceso === "produccion") && (
+                      <span className="inline-flex items-center gap-1">
+                        <span className="h-2 w-2 rounded-full bg-emerald-500/70" /> producción
+                      </span>
+                    )}
                   </span>
                 </CardTitle>
               </CardHeader>
@@ -850,39 +853,24 @@ export default function Cola() {
                 ) : serie.isError ? (
                   <p className="text-sm text-muted-foreground">{mensajeError(serie.error)}</p>
                 ) : (
-                  <SerieProceso serie={serie.data} />
+                  <SerieProceso serie={serie.data} soloProceso={proceso} />
                 )}
               </CardContent>
             </Card>
+
+            <SeccionEconomiaTotales />
           </div>
         </SeccionColapsable>
 
-        {/* (c) ACTIVIDAD: el FEED de todo lo que la máquina produce —runs del pipeline + actividad
-            suelta, con coste/tokens/tiempo y detalle entrada/salida—. Es el historial de ejecución,
-            compañero natural del pool en vivo y de la economía de tokens. Reutiliza la página
-            Producción en modo `embebido` (sin su título/menú/enlace propios); cada tarjeta sigue
-            enlazando a su detalle (`/datos/produccion/pipelines/:id` · `/actividad/:id`). */}
+        {/* ===== ACTIVIDAD (feed de ejecución) ===== */}
+        {/* El FEED de lo que produce la máquina (runs del pipeline + actividad suelta), con
+            coste/tokens/tiempo y detalle entrada/salida. Reusa Producción en modo `embebido`. */}
         <SeccionColapsable
           titulo="Actividad"
           abiertaInicial
-          descripcion="El feed de lo que produce la máquina: runs del pipeline y actividad suelta de IA, con coste, tokens y tiempo. Cada tarjeta abre su detalle de entrada/salida."
+          descripcion="El historial de ejecución: runs del pipeline y actividad suelta de IA. Cada tarjeta abre su detalle."
         >
           <Produccion embebido />
-        </SeccionColapsable>
-
-        {/* (d) AGENTES: los daemons que gastan tokens / actúan en el flujo, agrupados por motor
-            (Investigación / Producción / Flujo). La infra (métricas, GC, reaper…) vive en
-            Sistema. Reusa SeccionDaemons con un filtro por `grupo` (sin duplicar). */}
-        <SeccionColapsable
-          titulo="Agentes (gastan tokens / actúan en el flujo)"
-          abiertaInicial
-          descripcion="Los daemons de Investigación, Producción y Flujo: estado, último barrido, intervalo y «Barrer ahora». La infraestructura vive en Sistema."
-        >
-          <SeccionDaemons
-            grupos={["investigacion", "produccion", "flujo"]}
-            agrupar
-            titulo="Agentes"
-          />
         </SeccionColapsable>
       </div>
     </>
