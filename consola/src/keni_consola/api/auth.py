@@ -32,6 +32,7 @@ from starlette.routing import Route
 
 from .. import auth, config, permisos, seguridad
 from .._http_json import leer_json
+from ..estados import ROL_ADMIN
 from ..observabilidad import NOMBRE_LOGGER
 
 _logger = logging.getLogger(NOMBRE_LOGGER)
@@ -304,24 +305,76 @@ def _borrar_cookie_pendiente(resp: Response) -> None:
     resp.delete_cookie(COOKIE_MFA_PENDIENTE, path="/")
 
 
-def _respuesta_sesion_creada(usuario_id: str, usuario: dict) -> Response:
-    """Crea la sesion real, siembra su cookie y borra la pre-auth; devuelve la respuesta 200."""
+def _respuesta_sesion_creada(
+    usuario_id: str, usuario: dict, *, debe_inscribir_mfa: bool = False
+) -> Response:
+    """Crea la sesion real, siembra su cookie y borra la pre-auth; devuelve la respuesta 200.
+
+    `debe_inscribir_mfa` (flujo de GRACIA): True cuando es un admin OBLIGADO a tener segundo
+    factor que aun NO tiene passkey. NO bloqueamos el login (no hay lockout): abrimos la sesion
+    pero marcamos al cliente para que la UI lo lleve a inscribir una llave de acceso ya.
+    """
     token = auth.crear_sesion(usuario_id)
-    resp = JSONResponse(
-        {
-            "usuario": {
-                "id": usuario["id"],
-                "usuario": usuario["usuario"],
-                "rol": usuario["rol"],
-                "debe_cambiar_password": usuario["debe_cambiar_password"],
-            }
-        }
-    )
+    cuerpo = {
+        "id": usuario["id"],
+        "usuario": usuario["usuario"],
+        "rol": usuario["rol"],
+        "debe_cambiar_password": usuario["debe_cambiar_password"],
+    }
+    if debe_inscribir_mfa:
+        cuerpo["debe_inscribir_mfa"] = True
+    resp = JSONResponse({"usuario": cuerpo})
     _set_cookie_sesion(resp, token)
     _borrar_cookie_pendiente(resp)
     # Higiene: la ceremonia termino, cerramos la cookie de challenge de login.
     _borrar_cookie_challenge(resp, COOKIE_MFA_CHALLENGE_LOGIN)
     return resp
+
+
+def _elevar_a_segundo_factor(autenticado: dict) -> Response:
+    """Responde {mfa_required:true} + cookie pre-auth, o 503 (fail-safe) si no hay clave.
+
+    El usuario YA superó la contraseña y DEBE pasar el segundo factor (tiene >=1 passkey). NO se
+    abre sesion todavia. Si no hay clave de firma valida (`KENI_CONSOLA_MFA_KEY`), NO podemos
+    emitir la pre-auth NI verificar la ceremonia: rehusamos (503) en vez de media-autenticar.
+    """
+    token_pendiente = _emitir_token_pendiente(autenticado["id"])
+    if token_pendiente is None:
+        _logger.warning(
+            "MFA exigido para un usuario pero KENI_CONSOLA_MFA_KEY falta/es invalida: "
+            "login rechazado (fail-safe). usuario=%s",
+            autenticado["usuario"],
+        )
+        return JSONResponse({"error": _MSG_MFA_NO_DISPONIBLE}, status_code=503)
+    resp = JSONResponse({"mfa_required": True})
+    _set_cookie_pendiente(resp, token_pendiente)
+    return resp
+
+
+def _mfa_admin_aplica(autenticado: dict) -> bool:
+    """True si a ESTE usuario le aplica el MFA OBLIGATORIO de admin Y la maquinaria puede operar.
+
+    Es admin + `KENI_CONSOLA_MFA_ADMIN` (def ON) + hay clave de firma. La condicion de la clave
+    es la red de seguridad ANTI-LOCKOUT: sin clave no se puede correr la ceremonia ni la
+    inscripcion, asi que NO forzamos nada (el admin entra como hoy). NO afecta a editores.
+    """
+    return (
+        autenticado.get("rol") == ROL_ADMIN
+        and seguridad.mfa_obligatorio_admin()
+        and seguridad.mfa_key_presente()
+    )
+
+
+def _mfa_enrolamiento_disponible(usuario: dict | None) -> bool:
+    """¿Puede ESTE usuario (de sesion) usar los endpoints de enrolamiento de passkeys?
+
+    True si el flag global esta ON (cualquiera puede), o si a este usuario le aplica el MFA
+    obligatorio de admin (para que el admin pueda inscribirse aunque el flag global este OFF).
+    Para un editor con el flag OFF -> False (404), comportamiento intacto.
+    """
+    if seguridad.mfa_habilitado():
+        return True
+    return usuario is not None and _mfa_admin_aplica(usuario)
 
 
 async def login(request: Request) -> Response:
@@ -352,24 +405,30 @@ async def login(request: Request) -> Response:
         _login_ip_registrar_fallo(ip)
         return JSONResponse({"error": _MSG_LOGIN_KO}, status_code=401)
 
-    # ELEVACION MFA (gateada): si el flag esta ON y este usuario tiene >=1 passkey (`mfa_activo`),
-    # NO abrimos la sesion todavia. Devolvemos {mfa_required: true} y sembramos la cookie
-    # pre-auth (factor-1 superado, pendiente de la ceremonia WebAuthn). Con el flag OFF o
-    # `mfa_activo=0`, este bloque se salta entero y el login crea la sesion EXACTAMENTE como hoy.
-    if seguridad.mfa_habilitado() and autenticado.get("mfa_activo"):
-        token_pendiente = _emitir_token_pendiente(autenticado["id"])
-        if token_pendiente is None:
-            # FAIL-SAFE: el usuario tiene MFA activo pero no hay clave de cifrado valida. NO
-            # podemos verificar el segundo factor; tampoco abrimos sesion saltandonoslo. Rehusa.
-            _logger.warning(
-                "MFA activo para un usuario pero KENI_CONSOLA_MFA_KEY falta/es invalida: "
-                "login rechazado (fail-safe). usuario=%s",
-                autenticado["usuario"],
-            )
-            return JSONResponse({"error": _MSG_MFA_NO_DISPONIBLE}, status_code=503)
-        resp = JSONResponse({"mfa_required": True})
-        _set_cookie_pendiente(resp, token_pendiente)
-        return resp
+    # ¿Hay que EXIGIR el segundo factor a este usuario?
+    #   - FLAG GLOBAL ON (`KENI_CONSOLA_MFA`) + tiene passkey -> ceremonia (comportamiento de hoy).
+    #   - MFA OBLIGATORIO DE ADMIN (`KENI_CONSOLA_MFA_ADMIN`, def ON) + hay clave de firma: un
+    #     admin queda sujeto al segundo factor AUNQUE el flag global este OFF (riesgo
+    #     account-takeover en canales de marca). Si ya tiene passkey, se le EXIGE; si aun no,
+    #     entra en GRACIA (sesion marcada para inscribir, sin bloquear). La condicion de la
+    #     clave es la red anti-lockout: sin clave no se fuerza nada (entra como hoy).
+    # Editores con el flag global OFF: ambas ramas se saltan -> sesion directa, INTACTO.
+    mfa_activo = bool(autenticado.get("mfa_activo"))
+    admin_aplica = _mfa_admin_aplica(autenticado)
+
+    if mfa_activo and (seguridad.mfa_habilitado() or admin_aplica):
+        return _elevar_a_segundo_factor(autenticado)
+
+    if admin_aplica and not mfa_activo:
+        # GRACIA: admin obligado a MFA pero aun SIN passkey. No lo bloqueamos: abrimos sesion
+        # y marcamos `debe_inscribir_mfa` para que la UI lo lleve a inscribir una llave ya.
+        _logger.info(
+            "Admin sin passkey entra en modo gracia (debe inscribir MFA). usuario=%s",
+            autenticado["usuario"],
+        )
+        return _respuesta_sesion_creada(
+            autenticado["id"], autenticado, debe_inscribir_mfa=True
+        )
 
     return _respuesta_sesion_creada(autenticado["id"], autenticado)
 
@@ -402,6 +461,16 @@ async def me(request: Request) -> Response:
     # no las arrastra (la cookie no carga la tabla N:M). La pagina de Mi cuenta y el filtro
     # de la rota las usan para saber a que verticales pertenece la persona.
     refrescado = auth.obtener_usuario_por_id(usuario["id"]) or {}
+    mfa_activo = bool(refrescado.get("mfa_activo"))
+    # `debe_inscribir_mfa`: admin OBLIGADO a segundo factor (def ON) que aun no tiene passkey y
+    # con la maquinaria operativa (hay clave). La UI lo usa para empujar la inscripcion. No es
+    # un bloqueo de API (no lockout): es el "forzado" a nivel de experiencia.
+    debe_inscribir_mfa = (
+        usuario["rol"] == ROL_ADMIN
+        and seguridad.mfa_obligatorio_admin()
+        and seguridad.mfa_key_presente()
+        and not mfa_activo
+    )
     return JSONResponse(
         {
             "usuario": {
@@ -421,12 +490,15 @@ async def me(request: Request) -> Response:
                     refrescado.get("puede_coordinar") or usuario.get("puede_coordinar")
                 ),
                 "marcas": list(refrescado.get("marcas") or []),
-                # MFA (segundo factor, passkeys): `mfa_habilitado` refleja el flag del servidor
-                # (la UI solo muestra la seccion de llaves en "Mi cuenta" si esta ON);
-                # `mfa_activo` dice si ESTE usuario tiene >=1 passkey. Con el flag OFF, la UI no
-                # pinta nada de MFA.
-                "mfa_habilitado": seguridad.mfa_habilitado(),
-                "mfa_activo": bool(refrescado.get("mfa_activo")),
+                # MFA (segundo factor, passkeys): `mfa_habilitado` refleja la disponibilidad
+                # EFECTIVA de la maquinaria (flag global ON, o MFA de admin obligatorio + hay
+                # clave): la UI muestra la seccion de "Llaves de acceso" cuando esta activa, para
+                # que un admin obligado pueda inscribirse aunque el flag global este OFF.
+                # `mfa_activo` dice si ESTE usuario tiene >=1 passkey. `debe_inscribir_mfa` empuja
+                # al admin sin passkey a registrar una (forzado de experiencia, sin lockout).
+                "mfa_habilitado": seguridad.mfa_maquinaria_activa(),
+                "mfa_activo": mfa_activo,
+                "debe_inscribir_mfa": debe_inscribir_mfa,
             }
         }
     )
@@ -507,7 +579,9 @@ async def mfa_login_opciones(request: Request) -> Response:
     `startAuthentication` y siembra la cookie de challenge (Fernet, 5 min, atada al usuario).
     Si el usuario ya no tiene passkeys (reset admin entre pasos), caduca la pre-auth.
     """
-    if not seguridad.mfa_habilitado():
+    # Maquinaria EFECTIVA (flag global, o MFA de admin obligatorio + clave): si el login elevó,
+    # aquí debe estar activa. (Solo se llega con cookie pre-auth, que solo existe si se elevó.)
+    if not seguridad.mfa_maquinaria_activa():
         return JSONResponse({"error": _MSG_MFA_PENDIENTE_KO}, status_code=401)
     usuario_id = _leer_token_pendiente(request.cookies.get(COOKIE_MFA_PENDIENTE))
     if usuario_id is None:
@@ -545,7 +619,7 @@ async def mfa_verify(request: Request) -> Response:
     cuadra, crea la sesion real, siembra su cookie y borra las pre-auth/challenge. Con el flag OFF
     no deberia recibir trafico; aun asi rehusa limpiamente.
     """
-    if not seguridad.mfa_habilitado():
+    if not seguridad.mfa_maquinaria_activa():
         return JSONResponse({"error": _MSG_MFA_PENDIENTE_KO}, status_code=401)
 
     usuario_id = _leer_token_pendiente(request.cookies.get(COOKIE_MFA_PENDIENTE))
@@ -637,11 +711,11 @@ async def mfa_registro_opciones(request: Request) -> Response:
     Requiere flag ON + sesion completa. Devuelve las opciones spec-JSON para `startRegistration`
     (excluye las passkeys ya enroladas) y siembra la cookie de challenge de registro.
     """
-    if not seguridad.mfa_habilitado():
-        return JSONResponse({"error": "El segundo factor no está habilitado."}, status_code=404)
     usuario = _exige_sesion(request)
     if usuario is None:
         return JSONResponse({"error": "Necesitas una sesión iniciada."}, status_code=401)
+    if not _mfa_enrolamiento_disponible(usuario):
+        return JSONResponse({"error": "El segundo factor no está habilitado."}, status_code=404)
 
     existentes = auth.listar_credenciales_mfa(usuario["id"])
     try:
@@ -667,13 +741,13 @@ async def mfa_registro_verificar(request: Request) -> Response:
     Cuerpo `{credential: {...}, nombre?}`. Verifica la respuesta de `startRegistration` contra la
     cookie de challenge, persiste la credencial (clave publica + sign_count + transports) y marca
     `mfa_activo=1`. Si era la PRIMERA passkey, genera y devuelve los codigos de recuperacion en
-    CLARO UNA sola vez (`{recovery_codes}`). Requiere flag ON + sesion completa.
+    CLARO UNA sola vez (`{recovery_codes}`). Requiere enrolamiento disponible + sesion completa.
     """
-    if not seguridad.mfa_habilitado():
-        return JSONResponse({"error": "El segundo factor no está habilitado."}, status_code=404)
     usuario = _exige_sesion(request)
     if usuario is None:
         return JSONResponse({"error": "Necesitas una sesión iniciada."}, status_code=401)
+    if not _mfa_enrolamiento_disponible(usuario):
+        return JSONResponse({"error": "El segundo factor no está habilitado."}, status_code=404)
 
     datos = await leer_json(request)
     credential = datos.get("credential")
@@ -731,13 +805,14 @@ async def mfa_registro_verificar(request: Request) -> Response:
 async def mfa_credenciales(request: Request) -> Response:
     """GET /api/auth/mfa/credenciales: lista las passkeys del usuario (SIN secretos).
 
-    Devuelve `{credenciales: [{id, nombre, creada, ultimo_uso}]}`. Requiere flag ON + sesion.
+    Devuelve `{credenciales: [{id, nombre, creada, ultimo_uso}]}`. Requiere enrolamiento
+    disponible + sesion.
     """
-    if not seguridad.mfa_habilitado():
-        return JSONResponse({"error": "El segundo factor no está habilitado."}, status_code=404)
     usuario = _exige_sesion(request)
     if usuario is None:
         return JSONResponse({"error": "Necesitas una sesión iniciada."}, status_code=401)
+    if not _mfa_enrolamiento_disponible(usuario):
+        return JSONResponse({"error": "El segundo factor no está habilitado."}, status_code=404)
     credenciales = [
         {
             "id": c["id"],

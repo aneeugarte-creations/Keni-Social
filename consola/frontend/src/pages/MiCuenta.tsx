@@ -214,7 +214,7 @@ const CLAVE_PASSKEYS = ["sesion", "mfa-credenciales"] as const;
  *   - Listar y borrar las llaves existentes.
  *   - Desactivar todo (pide la contraseña actual): borra todas las llaves + recovery.
  */
-function SeccionMfa({ activo }: { activo: boolean }) {
+function SeccionMfa({ activo, debeInscribir }: { activo: boolean; debeInscribir: boolean }) {
   const queryClient = useQueryClient();
   const { refrescar } = useSesion();
 
@@ -289,6 +289,24 @@ function SeccionMfa({ activo }: { activo: boolean }) {
         <CardTitle className="text-base">Llaves de acceso (passkeys)</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 pt-0">
+        {/* Aviso de inscripción OBLIGATORIA (admin sin passkey). No bloquea el acceso, pero
+            empuja a registrar una llave cuanto antes (riesgo de account-takeover sin segundo
+            factor en cuentas que publican a canales de marca). */}
+        {debeInscribir && (
+          <div
+            role="alert"
+            className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400"
+          >
+            <p className="font-medium">Tu cuenta de administrador necesita una llave de acceso.</p>
+            <p className="mt-1 text-muted-foreground">
+              Como administrador, la verificación en dos pasos es obligatoria. Registra una llave
+              de acceso (Face ID, huella o llave de seguridad) ahora para proteger tu cuenta. Si
+              pierdes el dispositivo, podrás entrar con los códigos de recuperación que verás al
+              registrar la primera llave.
+            </p>
+          </div>
+        )}
+
         {/* Códigos de recuperación: solo tras registrar la PRIMERA llave. */}
         {recovery && (
           <div className="space-y-2">
@@ -408,11 +426,12 @@ function ContenidoMiCuenta() {
   const { data } = useQuery({ queryKey: CLAVE_ME, queryFn: ({ signal }) => api.me(signal) });
   const mfaHabilitado = !!data?.usuario.mfa_habilitado;
   const mfaActivo = !!data?.usuario.mfa_activo;
+  const debeInscribir = !!data?.usuario.debe_inscribir_mfa;
   return (
     <div className="space-y-6">
       <SeccionTuCuenta />
       <SeccionCambiarPassword />
-      {mfaHabilitado && <SeccionMfa activo={mfaActivo} />}
+      {mfaHabilitado && <SeccionMfa activo={mfaActivo} debeInscribir={debeInscribir} />}
     </div>
   );
 }

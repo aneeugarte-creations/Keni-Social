@@ -8,8 +8,10 @@ puede mutar el tablero. Toda salida es un dict JSON-serializable; los errores sa
 
 Estados de una fila por plataforma (el "carril" del tablero):
     pendiente -> en_curso -> en_revision -> aprobado -> programado -> publicado
-"mover" una pieza = cambiar el estado de su fila por plataforma. Cruzar a `aprobado`/
-`publicado` dispara los eventos internos/webhooks de la Consola (no hay que hacer nada extra).
+"mover" una pieza = cambiar el estado de su fila por plataforma. GOBERNANZA: el MCP solo
+llega hasta `aprobado`; `programado`/`publicado` disparan publicacion REAL (cola de
+publicacion / webhooks, gated por KENI_PUBLICAR_REAL) y los decide un humano desde la UI
+(mision: «nada sale a las redes sin criterio humano»), asi que `mover_pieza` los rechaza.
 """
 
 from __future__ import annotations
@@ -30,6 +32,12 @@ from .cliente import ClienteConsola, ErrorConsola
 # (`keni_shared.estados`), la MISMA fuente que re-exporta `keni_consola.estados`.
 # Antes eran un espejo a mano que podia desincronizarse en silencio de la Consola.
 # Se valida aqui para dar un error claro ANTES de tocar la red.
+
+# GOBERNANZA: estados que el MCP NO puede asignar via `mover_pieza`. `programado` y
+# `publicado` disparan publicacion REAL (cola de publicacion / webhooks, gated por
+# KENI_PUBLICAR_REAL); ese visto bueno final es decision HUMANA desde la UI, nunca de un
+# agente. El tope del MCP es dejar la pieza en `aprobado`.
+_ESTADOS_VEDADOS_MCP: frozenset[str] = frozenset({"programado", "publicado"})
 
 
 def _resumen_item(item: dict[str, Any]) -> dict[str, Any]:
@@ -146,12 +154,26 @@ def registrar(mcp: FastMCP, cliente: ClienteConsola) -> None:
     @mcp.tool()
     def mover_pieza(contenido_id: str, plataforma_id: str, estado: str) -> dict:
         """Mueve una pieza (una fila por plataforma) a otro estado del carril:
-        pendiente|en_curso|en_revision|aprobado|programado|publicado. Es el equivalente a
-        arrastrar la tarjeta en el tablero. Pasar a `aprobado` o `publicado` dispara los
-        eventos internos/webhooks de la Consola. Usa `listar_tablero` para conocer
-        `contenido_id` y `plataforma_id`."""
+        pendiente|en_curso|en_revision|aprobado. Es el equivalente a arrastrar la tarjeta en
+        el tablero. NO puede mover a `programado` ni `publicado`: esas transiciones disparan
+        publicacion REAL (gated por KENI_PUBLICAR_REAL) y SOLO las hace un humano desde la UI
+        (mision: «nada sale a las redes sin criterio humano»). Usa `listar_tablero` para
+        conocer `contenido_id` y `plataforma_id`."""
         if estado not in ESTADOS_PLATAFORMA:
             return {"error": f"Estado invalido. Usa uno de: {', '.join(ESTADOS_PLATAFORMA)}."}
+        # GOBERNANZA: el MCP NO publica ni programa. `programado` arranca la cola de
+        # publicacion automatica y `publicado` empuja al canal real (ambos via
+        # KENI_PUBLICAR_REAL / webhooks). Ese paso final es decision HUMANA desde la UI, no
+        # de un agente: aqui se rechaza explicitamente, con un error claro en espanol.
+        if estado in _ESTADOS_VEDADOS_MCP:
+            return {
+                "error": (
+                    f"El MCP no puede mover una pieza a «{estado}»: programar y publicar "
+                    "disparan publicacion real y los decide un humano desde la Consola "
+                    "(la mision es que nada salga a las redes sin criterio humano). El "
+                    "tope del MCP es dejarla en «aprobado»."
+                )
+            }
         try:
             datos = cliente.actualizar_plataforma(contenido_id, plataforma_id, {"estado": estado})
         except ErrorConsola as e:

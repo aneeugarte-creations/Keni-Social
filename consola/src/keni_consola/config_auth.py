@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from ._config_comun import (
+    _FALSOS,
     _VERDADEROS,
     ADMIN_USER_DEF,
     ENV_ADMIN_PASS,
@@ -11,6 +12,7 @@ from ._config_comun import (
     ENV_MCP_BEARER,
     ENV_MCP_USUARIO,
     ENV_MFA,
+    ENV_MFA_ADMIN,
     ENV_MFA_KEY,
     ENV_ORIGENES,
     ENV_RP_ID,
@@ -162,6 +164,31 @@ def mfa_habilitado() -> bool:
     usuario+contrasena hasta que enrolen una.
     """
     return _crudo(ENV_MFA).lower() in _VERDADEROS
+
+
+def mfa_obligatorio_admin() -> bool:
+    """¿El segundo factor es OBLIGATORIO para los admins? (`KENI_CONSOLA_MFA_ADMIN`, def ON).
+
+    Default ON (a diferencia del flag global `mfa_habilitado`, que es OFF): un admin publica en
+    canales de marca, así que un password robado SIN segundo factor es account-takeover. Con
+    esto activo y SI la maquinaria puede operar (hay `mfa_key()`), los admins quedan sujetos al
+    factor: con passkey, el login la EXIGE; sin passkey, se les marca para inscribirla (gracia,
+    sin lockout). Se apaga con un valor falsy (`0/false/no/off`) como válvula de escape operativa.
+    NO afecta a editores. Sin clave de firma NO se fuerza nada (lo decide `api/auth`): no hay
+    lockout. Default ON = ausente o cualquier valor no-falsy.
+    """
+    return _crudo(ENV_MFA_ADMIN).lower() not in _FALSOS
+
+
+def mfa_key_presente() -> bool:
+    """True si hay clave de firma WebAuthn configurada (`KENI_CONSOLA_MFA_KEY` no vacía).
+
+    Atajo barato para decidir si la maquinaria MFA puede operar SIN construir el cifrador (eso
+    valida el formato Fernet y lo hace `auth.mfa`). Lo usa `api/auth` para NO forzar el MFA de
+    admin cuando no hay clave (evita lockout): sin clave no se puede firmar la cookie de
+    challenge/pre-auth ni completar una ceremonia/inscripción.
+    """
+    return mfa_key() is not None
 
 
 def mfa_key() -> str | None:

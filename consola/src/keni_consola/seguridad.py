@@ -139,6 +139,40 @@ def mfa_habilitado() -> bool:
     return config.mfa_habilitado()
 
 
+def mfa_obligatorio_admin() -> bool:
+    """¿El segundo factor es OBLIGATORIO para los admins? (`KENI_CONSOLA_MFA_ADMIN`, def ON).
+
+    Wrapper sobre `config.mfa_obligatorio_admin()`. A diferencia del flag global (OFF), aqui el
+    default es ON: un admin que publica en canales de marca sin passkey es riesgo de
+    account-takeover. La ejecucion real (exigir ceremonia / forzar inscripcion) la decide
+    `api/auth`, y SOLO cuando hay clave de firma (`mfa_key_presente`), para no dejar a nadie fuera.
+    """
+    return config.mfa_obligatorio_admin()
+
+
+def mfa_key_presente() -> bool:
+    """True si hay clave de firma WebAuthn (`KENI_CONSOLA_MFA_KEY`). Wrapper sobre `config`.
+
+    `api/auth` lo usa para NO forzar el MFA de admin sin clave (evita lockout): sin clave no se
+    puede firmar la cookie de challenge/pre-auth ni completar la inscripcion.
+    """
+    return config.mfa_key_presente()
+
+
+def mfa_maquinaria_activa() -> bool:
+    """¿Está OPERATIVA la maquinaria MFA (ceremonias + enrolamiento)? Fuente única de la UI/API.
+
+    True si el flag global está ON, O si el MFA de admin es obligatorio Y hay clave de firma.
+    Con esto, los endpoints de enrolamiento y `me.mfa_habilitado` reflejan la disponibilidad
+    EFECTIVA: aunque el flag global esté OFF, si los admins deben tener passkey (y hay clave),
+    la sección de "Llaves de acceso" debe estar disponible para que puedan inscribirse. Sin
+    clave NO está activa (no se puede firmar nada): no se fuerza ni se ofrece enrolar a ciegas.
+    """
+    if config.mfa_habilitado():
+        return True
+    return config.mfa_obligatorio_admin() and config.mfa_key_presente()
+
+
 def generar_token() -> str:
     """Genera un token de sesion aleatorio (url-safe, ~256 bits)."""
     return secrets.token_urlsafe(32)

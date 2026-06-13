@@ -135,6 +135,12 @@ export interface UsuarioSesion {
   mfa_habilitado?: boolean;
   mfa_activo?: boolean;
   /**
+   * `true` => este ADMIN está OBLIGADO a tener segundo factor (`KENI_CONSOLA_MFA_ADMIN`, ON por
+   * defecto) y aún NO ha registrado ninguna llave. NO bloquea el acceso (sin lockout): la UI lo
+   * usa para EMPUJAR la inscripción de una passkey cuanto antes. Solo llega por `GET /api/auth/me`.
+   */
+  debe_inscribir_mfa?: boolean;
+  /**
    * `true` => puede PUBLICAR a producción en la Biblioteca de Prompts (los demás solo
    * solicitan). Lo añade el backend del flujo de publicación; mientras no llegue, la UI
    * cae al rol clásico (`rol === "admin"`). Ver `useEsAdmin`.
