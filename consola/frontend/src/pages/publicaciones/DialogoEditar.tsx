@@ -404,7 +404,7 @@ export function DialogoEditar({
                     key={valor}
                     type="button"
                     size="sm"
-                    variant={formato === valor ? "default" : "ghost"}
+                    variant={formato === valor ? "secondary" : "ghost"}
                     className="h-7 px-2.5 text-xs"
                     onClick={() => cambiarFormato(valor)}
                     disabled={flipFormato.isPending}
