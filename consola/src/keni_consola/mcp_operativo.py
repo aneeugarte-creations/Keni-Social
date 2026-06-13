@@ -25,11 +25,16 @@ Cómo encaja (arquitectura)
   socket ni puerto): el back corre con 1 worker uvicorn y un bucle asyncio reentrante
   sirve la petición anidada sin bloquear.
 
-Techo de capacidad (seguridad)
-==============================
-Las tools llegan HASTA APROBACIÓN: crear/editar/gestionar contenido, generar copy,
-enviar a revisión, aprobar/rechazar y LEER métricas. NO se expone programar/publicar
-real (eso sigue gated por `KENI_PUBLICAR_REAL` y se opera desde la UI).
+Techo de capacidad (seguridad / gobernanza)
+===========================================
+Las tools llegan HASTA DEJAR EN REVISIÓN: crear/editar/gestionar contenido, generar copy,
+enviar a revisión y LEER métricas (incl. la cola de aprobación, solo lectura). NO se expone
+APROBAR/RECHAZAR ni programar/publicar real. La decisión de aprobación (que mueve a
+'aprobado' y habilita la publicación) la toma un HUMANO desde la UI con su sesión real
+(y MFA cuando aplica), NUNCA la identidad MCP: esa sesión se mintea por id sin contraseña
+ni segundo factor (es un agente), y dejarla aprobar cerraría la cadena "IA crea -> IA
+aprueba -> se publica", que contradice la misión ("nada sale a las redes sin criterio
+humano"). Publicar/programar real sigue gated por `KENI_PUBLICAR_REAL` y se opera desde la UI.
 """
 
 from __future__ import annotations
@@ -241,8 +246,9 @@ class ServidorMcp:
                 "Sports). Con estas tools puedes consultar el catálogo de marcas y redes, "
                 "crear y gestionar contenido, trabajar el pool de noticias (usar/descartar), "
                 "generar copy, verificar la voz de un texto contra los patrones medidos de "
-                "su marca, mover piezas por el flujo de aprobación (hasta aprobar/rechazar), "
-                "leer métricas (incl. líneas editoriales, comparativas y Ads) y vigilar la "
+                "su marca, enviar piezas a revisión (la aprobación final la da un humano "
+                "desde la UI, NO el MCP), leer métricas (incl. líneas editoriales, "
+                "comparativas y Ads) y vigilar la "
                 "cola de generación. Empieza por `keni_contexto` para conocer marcas, redes "
                 "y estados válidos."
             ),
@@ -436,12 +442,25 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
             return {"error": _MSG_NO_INIT}
         return await cli.get(f"/api/publicaciones/{publicacion_id}")
 
-    # ---- Aprobación (hasta aprobar/rechazar; NO publica) ---------------- #
+    # ---- Aprobación: solo PREPARAR y dejar EN REVISIÓN (no decidir) ------- #
+    #
+    # GOBERNANZA (misión "nada sale a las redes sin criterio humano"): el MCP NO expone
+    # `keni_aprobar`/`keni_rechazar`. La identidad del MCP es una SESIÓN MINTEADA POR ID
+    # (`ClienteConsola._mintar_sesion` -> `auth.crear_sesion(uid)`), SIN contraseña ni
+    # segundo factor: es la identidad de un AGENTE, no de un humano que se autenticó. Si el
+    # MCP pudiera aprobar, se cerraría la cadena "IA crea -> IA aprueba -> se publica", que
+    # contradice la misión (la aprobación es el "otro par de ojos" HUMANO que habilita la
+    # publicación). El agente SÍ puede preparar contenido, generar copy y dejar la pieza EN
+    # REVISIÓN; el visto bueno que mueve a 'aprobado' lo da una persona desde la UI, con su
+    # sesión real (y MFA cuando aplica). Por eso la decisión final no se registra como tool:
+    # la capacidad simplemente NO existe vía MCP (la opción más robusta: no hay endpoint que
+    # filtrar ni actor que comprobar). La cola de aprobación se expone SOLO en lectura.
 
     @mcp.tool()
     async def keni_cola_aprobacion() -> dict:
         """Cola de publicaciones EN REVISIÓN, pendientes de aprobar o rechazar (con autor y
-        fecha de envío)."""
+        fecha de envío). SOLO LECTURA: la decisión de aprobar/rechazar la toma un humano
+        desde la UI (no se expone vía MCP)."""
         cli = _cli()
         if cli is None:
             return {"error": _MSG_NO_INIT}
@@ -449,28 +468,13 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
 
     @mcp.tool()
     async def keni_enviar_a_revision(publicacion_id: str) -> dict:
-        """Envía una publicación en borrador a revisión (entra en la cola de aprobación)."""
+        """Envía una publicación en borrador a revisión (entra en la cola de aprobación).
+        Es lo MÁXIMO que el agente puede hacer en el flujo de aprobación: deja la pieza
+        lista para que un HUMANO la apruebe o rechace desde la UI."""
         cli = _cli()
         if cli is None:
             return {"error": _MSG_NO_INIT}
         return await cli.post(f"/api/aprobacion/{publicacion_id}/enviar-a-revision")
-
-    @mcp.tool()
-    async def keni_aprobar(publicacion_id: str) -> dict:
-        """Aprueba una publicación que está en revisión (decide el nivel actual de la
-        cadena). NO publica: la deja aprobada, lista para programar desde la UI."""
-        cli = _cli()
-        if cli is None:
-            return {"error": _MSG_NO_INIT}
-        return await cli.post(f"/api/aprobacion/{publicacion_id}/aprobar")
-
-    @mcp.tool()
-    async def keni_rechazar(publicacion_id: str) -> dict:
-        """Rechaza una publicación en revisión: vuelve a borrador para corregirla."""
-        cli = _cli()
-        if cli is None:
-            return {"error": _MSG_NO_INIT}
-        return await cli.post(f"/api/aprobacion/{publicacion_id}/rechazar")
 
     # ---- Métricas (análisis, solo lectura) ----------------------------- #
 
