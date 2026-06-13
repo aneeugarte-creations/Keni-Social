@@ -17,7 +17,7 @@ from .._db_comun import (
     timedelta,
     uuid,
 )
-from ..tiempo import iso_utc
+from ..tiempo import iso_o_vacio, iso_utc
 
 __all__ = [
     "ConflictoVersion",
@@ -158,6 +158,10 @@ _CAMPOS_EDITABLES_CONTENIDO: tuple[str, ...] = (
 def _fila_a_contenido(fila: Any) -> dict[str, Any]:
     """Convierte una fila de `contenido` en un dict (con defaults defensivos)."""
     item: dict[str, Any] = {col: fila[col] for col in _COLS_CONTENIDO}
+    # `creado`/`actualizado` son timestamptz (migracion 0033): se re-emiten al canon ISO
+    # (string), que es lo que consumen Pieza/API y el cursor del keyset del feed.
+    item["creado"] = iso_o_vacio(fila["creado"])
+    item["actualizado"] = iso_o_vacio(fila["actualizado"])
     item["estado"] = fila["estado"] or "pendiente"
     item["prioridad"] = fila["prioridad"] or PRIORIDAD_CONTENIDO_DEFECTO
     item["clase"] = fila["clase"] or CLASE_CONTENIDO
@@ -464,8 +468,11 @@ def sanear_qa_en_curso_huerfanos(umbral_iso: str) -> int:
     con = _conectar()
     try:
         cur = con.execute(
+            # `actualizado` es timestamptz (migracion 0033): `IS NOT NULL` sustituye al viejo
+            # `<> ''` (el repo siempre lo escribe, asi que en la practica nunca es NULL); el
+            # `< ?` compara nativo contra el umbral ISO (casteado a timestamptz).
             "UPDATE contenido SET qa_veredicto = '' "
-            "WHERE qa_veredicto = 'en_curso' AND actualizado <> '' AND actualizado < ?",
+            "WHERE qa_veredicto = 'en_curso' AND actualizado IS NOT NULL AND actualizado < ?",
             (umbral_iso,),
         )
         con.commit()

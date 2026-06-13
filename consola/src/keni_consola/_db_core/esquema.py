@@ -66,7 +66,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     CREATE TABLE IF NOT EXISTS comercial_snapshots (
         id              TEXT PRIMARY KEY,
         publicacion_id  TEXT NOT NULL,
-        ts              TEXT NOT NULL,
+        ts              timestamptz NOT NULL,
         interacciones   INTEGER NOT NULL DEFAULT 0,
         visualizaciones INTEGER NOT NULL DEFAULT 0,
         alcance         INTEGER NOT NULL DEFAULT 0,
@@ -118,7 +118,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         marca                          TEXT NOT NULL DEFAULT '',
         red                            TEXT NOT NULL DEFAULT '',
         formato                        TEXT NOT NULL DEFAULT '',
-        ts                             TEXT NOT NULL,
+        ts                             timestamptz NOT NULL,
         visualizaciones                INTEGER NOT NULL DEFAULT 0,
         interacciones                  INTEGER NOT NULL DEFAULT 0,
         alcance                        INTEGER NOT NULL DEFAULT 0,
@@ -404,8 +404,12 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         fecha_fuente        TEXT NOT NULL DEFAULT '',
         url_fuente          TEXT NOT NULL DEFAULT '',
         fuente_nombre       TEXT NOT NULL DEFAULT '',
-        creado              TEXT NOT NULL DEFAULT '',
-        actualizado         TEXT NOT NULL DEFAULT '',
+        -- FECHAS NATIVAS (migracion 0033): timestamptz, UTC. Vuelven como `datetime` aware con
+        -- `dict_row`; el serializador `_fila_a_contenido` las re-emite al canon ISO via
+        -- `tiempo.iso_o_vacio` (contrato TEXT historico intacto). El keyset del feed compara
+        -- `creado` de forma nativa; el repo siempre escribe un valor (nunca el sentinel vacio).
+        creado              timestamptz,
+        actualizado         timestamptz,
         -- CONCURRENCIA OPTIMISTA (ADR 0012): contador que sube en CADA escritura del repo
         -- (`actualizar_contenido`/transiciones). El cliente puede pasar la `version` que leyo;
         -- si llego obsoleta (otra escritura adelanto el contador), la actualizacion se rechaza
@@ -717,8 +721,11 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         estado      TEXT NOT NULL DEFAULT 'pendiente',
         cancelado   INTEGER NOT NULL DEFAULT 0,
         worker      TEXT NOT NULL DEFAULT '',
-        creado      TEXT NOT NULL DEFAULT '',
-        claimed_at  TEXT NOT NULL DEFAULT ''
+        -- FECHAS NATIVAS (migracion 0033): timestamptz, UTC. `creado` ordena el despacho
+        -- (FIFO por prioridad); `claimed_at` es NULL mientras el job no se ha reclamado (antes
+        -- el sentinel ''). El re-reclamo de huerfanos compara `claimed_at` de forma nativa.
+        creado      timestamptz,
+        claimed_at  timestamptz
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_jobs_estado ON jobs (estado)",
@@ -742,7 +749,10 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     """
     CREATE TABLE IF NOT EXISTS gasto_ia (
         gen_id      TEXT PRIMARY KEY,
-        dia         TEXT NOT NULL DEFAULT '',
+        -- DIA NATIVO (migracion 0033): `date` (YYYY-MM-DD, UTC). Vuelve como `date` con
+        -- `dict_row`; `gasto_ia_por_dia` lo re-emite con `iso_o_vacio`. El SUM del corte de
+        -- presupuesto agrupa/filtra por `dia` de forma nativa (params en formato YYYY-MM-DD).
+        dia         date,
         tipo        TEXT NOT NULL DEFAULT '',
         marca       TEXT NOT NULL DEFAULT '',
         tokens_in   BIGINT NOT NULL DEFAULT 0,
@@ -979,7 +989,9 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         plataforma_id       TEXT NOT NULL DEFAULT '',
         clave_idempotencia  TEXT NOT NULL DEFAULT '',
         payload             TEXT NOT NULL DEFAULT '',
-        creado              TEXT NOT NULL DEFAULT ''
+        -- FECHA NATIVA (migracion 0033): timestamptz, UTC. Ordena la bitacora (recientes
+        -- primero); el serializador de `listar_eventos_internos` la re-emite con `iso_o_vacio`.
+        creado              timestamptz
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_eventos_internos_tipo ON eventos_internos (tipo)",

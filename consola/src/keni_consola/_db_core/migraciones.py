@@ -62,11 +62,13 @@ from .migraciones_columnas import (
     _normalizar_timestamps_texto,
 )
 from .migraciones_integridad import (
+    _COLUMNAS_FECHA_NATIVA,
     _COLUMNAS_JSONB,
     _FKS,
     _migrar_checks_dominio,
     _migrar_fks_hub,
     _migrar_indice_generaciones,
+    _migrar_tipos_fecha,
     _migrar_tipos_jsonb,
     _migrar_version_optimista,
 )
@@ -381,6 +383,18 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # DDL). One-shot e idempotente (CREATE TABLE/INDEX IF NOT EXISTS); el backfill desde los YAML
     # lo hace `generaciones._almacen` perezosamente al primer listado.
     Migracion("0032-indice-generaciones", _migrar_indice_generaciones),
+    # TIPOS (ADR 0012, ola diferida): fechas TEXT de ALTO USO -> tipos NATIVOS de Postgres
+    # (`timestamptz` para contenido.creado/actualizado, jobs.creado/claimed_at, *_snapshots.ts,
+    # eventos_internos.creado; `date` para gasto_ia.dia). One-shot por BD (las nuevas ya nacen
+    # con el tipo nativo via DDL); idempotente (GUARDADA por el tipo actual). Los call-sites
+    # (substr->to_char, serializacion ISO via `tiempo.iso_o_vacio`, claimed_at NULL) se
+    # adaptaron en el mismo commit. Ver `_migrar_tipos_fecha`.
+    Migracion(
+        "0033-tipos-fecha-nativa",
+        _migrar_tipos_fecha,
+        re_aplicar_si_cambia=True,
+        datos=_COLUMNAS_FECHA_NATIVA,
+    ),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.

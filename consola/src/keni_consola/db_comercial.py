@@ -8,7 +8,7 @@ from ._db_comun import (
     uuid,
 )
 from ._db_json import a_json_lista, de_json_lista
-from .tiempo import hoy_utc
+from .tiempo import hoy_utc, iso_o_vacio
 
 # --------------------------------------------------------------------------- #
 # Publicaciones comerciales (seguimiento de UNA pieza por su link)             #
@@ -268,7 +268,9 @@ def fila_a_snapshot(fila: Any) -> dict[str, Any]:
 
     PUBLICA: la consume tambien `db_metricas` (las series comerciales comparten forma).
     """
-    snap: dict[str, Any] = {"ts": fila["ts"]}
+    # `ts` es timestamptz (migracion 0033): se re-emite al canon ISO (lo que grafica el front
+    # y parsea el dominio de metricas; antes era el mismo string TEXT).
+    snap: dict[str, Any] = {"ts": iso_o_vacio(fila["ts"])}
     for col in _COLS_SNAPSHOT_LECTURA[1:]:
         snap[col] = int(fila[col] or 0)
     return snap

@@ -266,3 +266,66 @@ def _migrar_indice_generaciones(con: Any) -> None:
     con.execute(
         "CREATE INDEX IF NOT EXISTS idx_generaciones_indice_estado ON generaciones_indice (estado)"
     )
+
+
+# --------------------------------------------------------------------------- #
+# Bloque 6: TIPOS — fechas TEXT -> tipos NATIVOS de Postgres (timestamptz/date) #
+# --------------------------------------------------------------------------- #
+#
+# Cierra la migracion que la ADR 0012 habia DIFERIDO (ver la nota historica que estaba sobre
+# `_COLUMNAS_JSONB`): los TIMESTAMP TEXT en columnas de ALTO USO pasan a `timestamptz` y el
+# `dia` del ledger de gasto a `date`. Antes se temia (a) el sentinel '' incompatible con
+# timestamptz, (b) `substr()` sobre el texto y (c) que un `datetime` no serializa a JSON en las
+# muchas respuestas de API que emiten estos campos como string ISO. Resuelto:
+#   (a) `USING NULLIF(col,'')::<tipo>` -> '' pasa a NULL en el ALTER; las columnas quedan
+#       NULLABLE (el sentinel "sin valor", p. ej. un job aun sin `claimed_at`, es ahora NULL).
+#       Las dos `*.ts` de snapshots, que nunca son '' y tienen UNIQUE (..., ts), conservan NOT
+#       NULL (no se relajan: ningun '' existe que NULLIF pudiera convertir).
+#   (b) los call-sites con `substr(col,1,10)` pasaron a `to_char(col AT TIME ZONE 'UTC', ...)`.
+#   (c) los serializadores re-emiten el canon ISO con `tiempo.iso_o_vacio` (datetime/date -> el
+#       MISMO string de antes), asi que el contrato de forma de respuesta NO cambia.
+# El cast a timestamptz HONRA un offset explicito si el texto legado lo trae (aware) y, para el
+# texto canonico NAIVE, lo interpreta como UTC porque la sesion fija `timezone=UTC`
+# (`motor_db._OPCIONES_SESION`). Verificado en prod: 0 valores no canonicos y 0 vacios en estas
+# columnas, asi que el ALTER no produce NULLs en las NOT NULL ni pierde informacion.
+#
+# Cada tupla: (tabla, columna, tipo_destino, nullable). El cast `USING` se compone abajo.
+_COLUMNAS_FECHA_NATIVA: tuple[tuple[str, str, str, bool], ...] = (
+    ("contenido", "creado", "timestamptz", True),
+    ("contenido", "actualizado", "timestamptz", True),
+    ("jobs", "creado", "timestamptz", True),
+    ("jobs", "claimed_at", "timestamptz", True),
+    ("metricas_pieza_snapshots", "ts", "timestamptz", False),
+    ("comercial_snapshots", "ts", "timestamptz", False),
+    ("eventos_internos", "creado", "timestamptz", True),
+    ("gasto_ia", "dia", "date", True),
+)
+
+
+def _migrar_tipos_fecha(con: Any) -> None:
+    """Convierte las columnas de fecha de ALTO USO de TEXT a tipos NATIVOS (BDs existentes).
+
+    Idempotente y GUARDADA por el tipo actual: si la columna ya NO es `text` (BD nueva via DDL,
+    o migracion ya aplicada), se salta. En la conversion: se quita el DEFAULT '' (incompatible
+    con timestamptz/date) ANTES del cambio de tipo; el `USING NULLIF(col,'')::<tipo>` deja '' en
+    NULL; y las columnas marcadas `nullable` pierden el NOT NULL (el sentinel "sin valor" es
+    ahora NULL). Ver el bloque de notas sobre `_COLUMNAS_FECHA_NATIVA`.
+    """
+    for tabla, columna, tipo, nullable in _COLUMNAS_FECHA_NATIVA:
+        actual = con.execute(
+            "SELECT data_type FROM information_schema.columns "
+            "WHERE table_name = ? AND column_name = ?",
+            (tabla, columna),
+        ).fetchone()
+        if actual is None or actual["data_type"] != "text":
+            continue  # tabla/columna inexistente (defensivo) o ya migrada (no es text)
+        # DROP DEFAULT primero: un DEFAULT '' (heredado) no castea a timestamptz/date y
+        # reventaria el ALTER TYPE. Idempotente (no-op si no hay default).
+        con.execute(f"ALTER TABLE {tabla} ALTER COLUMN {columna} DROP DEFAULT")  # noqa: S608
+        con.execute(
+            f"ALTER TABLE {tabla} ALTER COLUMN {columna} TYPE {tipo} "  # noqa: S608 -- constantes
+            f"USING NULLIF({columna}, '')::{tipo}"
+        )
+        if nullable:
+            con.execute(f"ALTER TABLE {tabla} ALTER COLUMN {columna} DROP NOT NULL")  # noqa: S608
+        _log.info("Tipo: %s.%s convertida a %s.", tabla, columna, tipo)

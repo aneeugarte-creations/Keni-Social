@@ -277,8 +277,9 @@ def test_jsonb_migracion_idempotente_y_limpia_valor_sucio(pg):
         # Vuelve a TEXT, mete un valor JSON valido y otro sucio, re-migra.
         con.execute("TRUNCATE jobs")
         con.execute("ALTER TABLE jobs ALTER COLUMN spec TYPE text USING spec::text")
-        con.execute("INSERT INTO jobs (id, gen_id, spec, estado, creado) VALUES ('a','ga','{\"p\":1}','pendiente','x')")
-        con.execute("INSERT INTO jobs (id, gen_id, spec, estado, creado) VALUES ('b','gb','basura','pendiente','x')")
+        # `creado` es timestamptz (migracion 0033): un instante ISO valido (ya no '' ni 'x').
+        con.execute("INSERT INTO jobs (id, gen_id, spec, estado, creado) VALUES ('a','ga','{\"p\":1}','pendiente','2026-01-01T00:00:00')")
+        con.execute("INSERT INTO jobs (id, gen_id, spec, estado, creado) VALUES ('b','gb','basura','pendiente','2026-01-01T00:00:00')")
         con.commit()
         _migrar_tipos_jsonb(con)
         con.commit()
@@ -290,3 +291,106 @@ def test_jsonb_migracion_idempotente_y_limpia_valor_sucio(pg):
         con.commit()
     finally:
         con.close()
+
+
+# --------------------------------------------------------------------------- #
+# Bloque 6: TIPOS — fechas TEXT -> nativas (timestamptz/date), migracion 0033    #
+# --------------------------------------------------------------------------- #
+
+
+def _dtype(con, tabla, columna):
+    return con.execute(
+        "SELECT data_type FROM information_schema.columns "
+        "WHERE table_name = ? AND column_name = ?",
+        (tabla, columna),
+    ).fetchone()["data_type"]
+
+
+def test_fecha_nativa_tipos_aplicados(pg):
+    """El DDL/migracion 0033 deja las columnas de fecha de alto uso en su tipo NATIVO."""
+    db.listar_swaps_turno()  # asegura esquema+migraciones
+    con = _cruda()
+    try:
+        assert _dtype(con, "contenido", "creado") == "timestamp with time zone"
+        assert _dtype(con, "contenido", "actualizado") == "timestamp with time zone"
+        assert _dtype(con, "jobs", "creado") == "timestamp with time zone"
+        assert _dtype(con, "jobs", "claimed_at") == "timestamp with time zone"
+        assert _dtype(con, "metricas_pieza_snapshots", "ts") == "timestamp with time zone"
+        assert _dtype(con, "comercial_snapshots", "ts") == "timestamp with time zone"
+        assert _dtype(con, "eventos_internos", "creado") == "timestamp with time zone"
+        assert _dtype(con, "gasto_ia", "dia") == "date"
+    finally:
+        con.close()
+
+
+def test_fecha_nativa_migracion_desde_text_sentinel_a_null_e_idempotente(pg):
+    """Convierte TEXT->timestamptz/date: canon ISO se conserva, '' pasa a NULL, idempotente."""
+    from keni_consola._db_core.migraciones_integridad import _migrar_tipos_fecha
+
+    db.listar_swaps_turno()
+    con = _cruda()
+    try:
+        # Vuelve `jobs` a la FORMA VIEJA (TEXT) y siembra: un job con `claimed_at` real y otro
+        # con el sentinel '' (lo que el esquema heredado escribia para "sin reclamar").
+        con.execute("TRUNCATE jobs")
+        con.execute("ALTER TABLE jobs ALTER COLUMN creado TYPE text USING creado::text")
+        con.execute(
+            "ALTER TABLE jobs ALTER COLUMN claimed_at TYPE text "
+            "USING COALESCE(claimed_at::text, '')"
+        )
+        con.execute("ALTER TABLE jobs ALTER COLUMN claimed_at SET DEFAULT ''")
+        con.execute(
+            "INSERT INTO jobs (id, gen_id, spec, estado, creado, claimed_at) "
+            "VALUES ('a','ga','{}','reclamado','2026-06-13T10:00:00','2026-06-13T10:00:05')"
+        )
+        con.execute(
+            "INSERT INTO jobs (id, gen_id, spec, estado, creado, claimed_at) "
+            "VALUES ('b','gb','{}','pendiente','2026-06-13T11:00:00','')"
+        )
+        con.commit()
+        assert _dtype(con, "jobs", "creado") == "text"
+
+        _migrar_tipos_fecha(con)
+        con.commit()
+        assert _dtype(con, "jobs", "creado") == "timestamp with time zone"
+        assert _dtype(con, "jobs", "claimed_at") == "timestamp with time zone"
+        filas = {
+            r["id"]: r for r in con.execute(
+                "SELECT id, to_char(creado AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS') AS c, "
+                "claimed_at FROM jobs"
+            ).fetchall()
+        }
+        # El instante canonico se conserva exacto (UTC).
+        assert filas["a"]["c"] == "2026-06-13T10:00:00"
+        assert filas["a"]["claimed_at"] is not None
+        # El sentinel '' pasa a NULL en la columna nativa.
+        assert filas["b"]["claimed_at"] is None
+        # Idempotente: re-correr (ya no es text) no toca nada ni falla.
+        _migrar_tipos_fecha(con)
+        con.commit()
+    finally:
+        con.close()
+
+
+def test_claimed_at_null_y_serializacion_iso(pg):
+    """Un job recien encolado tiene claimed_at NULL; `jobs_activos` lo re-emite como '' (canon)."""
+    from keni_consola.dominio import jobspec
+
+    db.encolar_job("genX", jobspec.serializar({"prompt": "h", "kind": "texto"}), 5)
+    activos = {j["gen_id"]: j for j in db.jobs_activos()}
+    assert activos["genX"]["claimed_at"] == ""  # NULL -> '' (contrato TEXT historico)
+    # `creado` vuelve como string ISO canonico (segundos, sin offset), no un datetime.
+    creado = activos["genX"]["creado"]
+    assert isinstance(creado, str) and creado[10] == "T" and len(creado) == 19
+
+
+def test_gasto_ia_dia_date_roundtrip_y_serie(pg):
+    """`gasto_ia.dia` es `date`: agrupacion por dia y serie re-emiten el string YYYY-MM-DD."""
+    from keni_consola import repos
+
+    repos.registrar_gasto_ia("g1", dia="2026-06-13", tokens_in=100, tokens_out=50)
+    serie = repos.gasto_ia_por_dia(30)
+    fila = [d for d in serie if d["dia"] == "2026-06-13"]
+    assert fila and fila[0]["tokens"] == 150
+    assert isinstance(fila[0]["dia"], str)  # date -> string ISO, no objeto date
+    assert db.gasto_ia_del_dia("2026-06-13")["tokens"] == 150

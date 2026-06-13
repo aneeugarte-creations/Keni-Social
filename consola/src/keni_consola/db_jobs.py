@@ -12,7 +12,7 @@ from ._db_comun import (
     timedelta,
     uuid,
 )
-from .tiempo import ahora_iso, iso_utc
+from .tiempo import ahora_iso, iso_o_vacio, iso_utc
 
 # --------------------------------------------------------------------------- #
 # Cola de jobs de generacion (#130 Fase 2 / ADR 0002 Fase B)                    #
@@ -67,7 +67,7 @@ def encolar_job(gen_id: str, spec: str, prioridad: int = 0) -> str:
             "VALUES (?, ?, ?, ?, ?, ?) "
             "ON CONFLICT (gen_id) DO UPDATE SET "
             "spec = EXCLUDED.spec, estado = EXCLUDED.estado, creado = EXCLUDED.creado, "
-            "prioridad = EXCLUDED.prioridad, cancelado = 0, worker = '', claimed_at = '', "
+            "prioridad = EXCLUDED.prioridad, cancelado = 0, worker = '', claimed_at = NULL, "
             "intentos = 0 "
             "WHERE jobs.estado = ? "
             "RETURNING id",
@@ -141,8 +141,10 @@ def jobs_activos(limite: int = 200) -> list[dict[str, Any]]:
             "gen_id": f["gen_id"],
             "estado": f["estado"],
             "worker": f["worker"] or "",
-            "creado": f["creado"],
-            "claimed_at": f["claimed_at"],
+            # `creado`/`claimed_at` son timestamptz (migracion 0033): se re-emiten al canon ISO
+            # ('' si `claimed_at` aun es NULL), tal como los consumia el monitor (`_edad_s`).
+            "creado": iso_o_vacio(f["creado"]),
+            "claimed_at": iso_o_vacio(f["claimed_at"]),
             "prioridad": int(f["prioridad"] or 0),
             "intentos": int(f["intentos"] or 0),
         }
@@ -154,14 +156,16 @@ def encolados_por_dia(dias: int = 14) -> list[dict[str, Any]]:
     """Jobs ENCOLADOS por dia (de `jobs.creado`) en la ventana `dias`, dia ascendente.
 
     Throughput de ENTRADA de la cola: cuanto se pidio cada dia (incluye los ya `terminado`,
-    que se conservan). El dia se deriva con `substr(creado,1,10)` (ISO `YYYY-MM-DD`), portable
-    SQLite/Postgres. El corte se compara lexicograficamente (ISO ordena por texto)."""
+    que se conservan). `creado` es `timestamptz` (migracion 0033): el dia (UTC) se deriva con
+    `to_char(creado AT TIME ZONE 'UTC', 'YYYY-MM-DD')` (devuelve el mismo string `YYYY-MM-DD`
+    de antes). El corte `creado >= ?` compara nativo (el param ISO se castea a timestamptz)."""
     corte = iso_utc(datetime.now(UTC) - timedelta(days=max(0, int(dias))))
     con = _conectar()
     try:
         filas = con.execute(
-            "SELECT substr(creado, 1, 10) AS dia, count(*) AS n FROM jobs "
-            "WHERE creado >= ? GROUP BY substr(creado, 1, 10) ORDER BY dia ASC",
+            "SELECT to_char(creado AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS dia, count(*) AS n "
+            "FROM jobs WHERE creado >= ? "
+            "GROUP BY to_char(creado AT TIME ZONE 'UTC', 'YYYY-MM-DD') ORDER BY dia ASC",
             (corte,),
         ).fetchall()
     finally:
@@ -364,13 +368,14 @@ def reencolar_job(gen_id: str) -> bool:
     registro de generacion a `ejecutando` (si no, el guardia anti-duplicado de `reclamar_job` lo
     cerraria al verlo en estado terminal). Devuelve False si no hay fila para ese `gen_id`.
 
-    "Limpio" aqui es '' (no NULL): ambas columnas son NOT NULL DEFAULT '' en el esquema,
-    el mismo convenio que usa el encolado. `intentos` se RESETEA: el reintento es una
-    decision humana (o un apagado gracioso), no la continuacion de un crash-loop."""
+    "Limpio" aqui: `worker` vuelve a '' (TEXT) y `claimed_at` a NULL (timestamptz, migracion
+    0033: el sentinel "sin reclamar" es ahora NULL, no ''), el mismo convenio que el encolado.
+    `intentos` se RESETEA: el reintento es una decision humana (o un apagado gracioso), no la
+    continuacion de un crash-loop."""
     con = _conectar()
     try:
         cur = con.execute(
-            "UPDATE jobs SET estado = ?, worker = '', claimed_at = '', cancelado = 0, "
+            "UPDATE jobs SET estado = ?, worker = '', claimed_at = NULL, cancelado = 0, "
             "intentos = 0 WHERE gen_id = ?",
             (JOB_PENDIENTE, gen_id),
         )
@@ -702,7 +707,8 @@ def gasto_ia_por_dia(dias: int = 14) -> list[dict[str, Any]]:
     """Serie de gasto por dia (ventana `dias`, dia ascendente): tokens/coste/generaciones.
 
     Para el monitor y el agente de observabilidad (lado de CONSUMO de la cola, en tokens).
-    El corte se compara lexicograficamente (ISO ordena por texto), como `encolados_por_dia`.
+    `dia` es `date` (migracion 0033): el corte `dia >= ?` compara nativo (el param `YYYY-MM-DD`
+    se castea a date) y el `dia` agrupado se re-emite como string ISO `YYYY-MM-DD`.
     """
     corte = iso_utc(datetime.now(UTC) - timedelta(days=max(0, int(dias))))[:10]
     con = _conectar()
@@ -719,7 +725,7 @@ def gasto_ia_por_dia(dias: int = 14) -> list[dict[str, Any]]:
         con.close()
     return [
         {
-            "dia": f["dia"],
+            "dia": iso_o_vacio(f["dia"]),
             "tokens": int(f["tin"]) + int(f["tout"]),
             "tokens_in": int(f["tin"]),
             "tokens_out": int(f["tout"]),

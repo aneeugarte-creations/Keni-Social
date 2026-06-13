@@ -6,6 +6,7 @@ from ._db_comun import (
     _conectar,
     config,
     datetime,
+    iso_o_vacio,
     iso_utc,
     json,
     timedelta,
@@ -145,6 +146,9 @@ def _coaccionar_metrica(valor: Any, tipo: str) -> Any:
 def _fila_a_snapshot_pieza(fila: Any) -> dict[str, Any]:
     """Convierte una fila de `metricas_pieza_snapshots` en un dict (clave texto, metricas tipadas)."""
     snap: dict[str, Any] = {col: fila[col] for col in _COLS_PIEZA_SNAPSHOT_CLAVE}
+    # `ts` es timestamptz (migracion 0033): se re-emite al canon ISO (el resto de la clave es
+    # TEXT). El front grafica la serie y el dominio la parsea con `datetime.fromisoformat`.
+    snap["ts"] = iso_o_vacio(fila["ts"])
     for col, tipo in _METRICAS_PIEZA_SNAPSHOT:
         snap[col] = _coaccionar_metrica(fila[col], tipo)
     return snap

@@ -70,6 +70,15 @@ IntegrityError = sqlite3.IntegrityError
 
 _RE_INSERT_OR_IGNORE = re.compile(r"\bINSERT\s+OR\s+IGNORE\b", re.IGNORECASE)
 
+# Opciones libpq aplicadas a CADA conexion (pool y camino directo) via el startup packet.
+# `timezone=UTC` fija el GUC `TimeZone` de la sesion: las columnas de fecha NATIVAS de Postgres
+# (timestamptz/date, migracion 0033) se leen/escriben en UTC sin depender de la zona por defecto
+# del servidor (contenedor o runner de CI). Asi un string canonico naive ("YYYY-MM-DDTHH:MM:SS",
+# ver `tiempo.ahora_iso`) que la app inserta en un `%s` se interpreta como UTC al castear a
+# timestamptz, y una lectura vuelve como `datetime` aware-UTC -> `tiempo.iso_o_vacio` lo re-emite
+# en el MISMO canon. Las columnas TEXT no se ven afectadas (la zona no toca al texto).
+_OPCIONES_SESION = "-c timezone=UTC"
+
 
 def _sustituir_marcadores(sql: str) -> str:
     """Sustituye `?` -> `%s` SOLO fuera de literales de string (comillas simples).
@@ -338,7 +347,7 @@ def _crear_pool(url: str) -> Any:
         # `max_lifetime`, para no arrastrar conexiones eternas (server reinicia, NAT, etc.).
         max_idle=300.0,
         max_lifetime=3600.0,
-        kwargs={"autocommit": False},
+        kwargs={"autocommit": False, "options": _OPCIONES_SESION},
         configure=_configurar_conexion,
         # `check`: el pool valida la conexion al PRESTARLA y en `putconn`; una conexion rota se
         # DESCARTA y se recrea en vez de devolverse poisoned al call site siguiente.
@@ -420,7 +429,9 @@ def _conectar_directa(url: str, dict_row: Any) -> _ConexionPg:
     """Camino historico (fallback): UNA conexion psycopg por operacion (`close()` cierra el socket)."""
     import psycopg
 
-    con = psycopg.connect(url, autocommit=False)
+    # `timezone=UTC` por sesion (ver `_OPCIONES_SESION`): hace deterministas las columnas de
+    # fecha NATIVAS (timestamptz/date, migracion 0033) con independencia de la zona del servidor.
+    con = psycopg.connect(url, autocommit=False, options=_OPCIONES_SESION)
     return _ConexionPg(con, dict_row, pool=None)
 
 
