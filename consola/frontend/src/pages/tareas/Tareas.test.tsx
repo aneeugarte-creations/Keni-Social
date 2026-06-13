@@ -256,6 +256,27 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect(await screen.findByRole("button", { name: /Reasignar/ })).toBeInTheDocument();
   });
 
+  it("MULTI-COBERTURA: varias personas cubren UN evento → una sola fila, y otra puede apuntarse", async () => {
+    const cubrir = vi
+      .spyOn(apiMod.api, "cubrirEvento")
+      .mockResolvedValue({ contenido: { responsable_nombre: "yo" } } as never);
+    // Dos tareas de cobertura del MISMO evento (evento_id "ev1"), distintos dueños.
+    renderTareas([
+      tarea({ id: "t-luis", titulo: "Cruz Azul vs América", evento_id: "ev1", responsable_id: "u-luis", responsable_nombre: "luis", fecha_objetivo: "2026-07-01" }),
+      tarea({ id: "t-ana", titulo: "Cruz Azul vs América", evento_id: "ev1", responsable_id: "u-ana", responsable_nombre: "ana", fecha_objetivo: "2026-07-01" }),
+    ]);
+
+    // El evento sale UNA sola vez en la agenda (no una fila por cubridor).
+    const filas = await screen.findAllByRole("button", { name: /Cruz Azul vs América/ });
+    expect(filas).toHaveLength(1);
+
+    // Al desplegar: lo cubren los dos, y yo (no cubridor) puedo apuntarme.
+    fireEvent.click(filas[0]);
+    expect(await screen.findByText("Cubren:")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Apuntarme/ }));
+    await waitFor(() => expect(cubrir).toHaveBeenCalledWith("ev1", undefined));
+  });
+
   it("'Añadir' abre el diálogo", async () => {
     renderTareas([]);
     fireEvent.click(await screen.findByRole("button", { name: /Añadir/ }));

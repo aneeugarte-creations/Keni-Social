@@ -431,10 +431,51 @@ function TarjetaTarea({
   );
 }
 
-/** Un ítem de la lista unificada: o un evento aún por cubrir, o una tarea (cobertura o encargo). */
+/** La COBERTURA de un evento: el partido + TODAS las personas que lo cubren (multi-cobertura). */
+type Cobertura = {
+  eventoId: string;
+  titulo: string;
+  hora: string;
+  orden: string;
+  cubridores: Contenido[];
+};
+
+/** Un ítem de la lista: un evento por cubrir, su cobertura (≥1 dueño), o un encargo suelto. */
 type Item =
   | { kind: "evento"; clave: string; orden: string; evento: EventoRota }
+  | { kind: "cobertura"; clave: string; orden: string; cobertura: Cobertura }
   | { kind: "tarea"; clave: string; orden: string; tarea: Contenido };
+
+/**
+ * Reparte tareas + eventos en las tres formas que pinta la lista:
+ *  - `coberturas`: un evento con ≥1 cubridor (cada cubridor = una tarea clase='tarea' con
+ *    `evento_id`). MULTI-COBERTURA: varias personas pueden cubrir el mismo evento.
+ *  - `encargos`: tareas sueltas (sin `evento_id`), de UN dueño.
+ *  - `eventosLibres`: eventos coverables con 0 cubridores → «Por cubrir».
+ * Una tarea de cobertura SOLTADA (sin responsable) deja de contar: el evento vuelve a «Por
+ * cubrir» y esa tarea huérfana no se pinta.
+ */
+function agrupar(tareas: Contenido[], eventos: EventoRota[]) {
+  const encargos = tareas.filter((t) => !t.evento_id);
+  const porEvento = new Map<string, Contenido[]>();
+  for (const t of tareas) {
+    if (!t.evento_id || !t.responsable_id) continue;
+    const lista = porEvento.get(t.evento_id) ?? [];
+    lista.push(t);
+    porEvento.set(t.evento_id, lista);
+  }
+  const coberturas: Cobertura[] = [...porEvento.entries()].map(([eventoId, cubridores]) => ({
+    eventoId,
+    titulo: cubridores[0].titulo,
+    hora: cubridores[0].hora_objetivo,
+    orden: cubridores[0].fecha_objetivo || "9999-99-99",
+    cubridores,
+  }));
+  const eventosLibres = eventos.filter(
+    (e) => e.tipo_cobertura !== "no_cubrir" && !porEvento.has(e.id),
+  );
+  return { coberturas, encargos, eventosLibres };
+}
 
 // Colores fijos por persona: con 5 personas el color se vuelve reconocible de un vistazo
 // (patrón de los calendarios editoriales: identidad por color, no solo por nombre).
@@ -524,9 +565,110 @@ function BandaReciente({ tareas }: { tareas: Contenido[] }) {
   );
 }
 
+/** Avatares de los cubridores, apilados (-space) con «+N» si son muchos. */
+function AvataresApilados({ cubridores }: { cubridores: Contenido[] }) {
+  const MAX = 4;
+  const vis = cubridores.slice(0, MAX);
+  const resto = cubridores.length - vis.length;
+  return (
+    <span className="flex shrink-0 items-center">
+      <span className="flex -space-x-1.5">
+        {vis.map((t) => (
+          <span key={t.id} className="rounded-full ring-2 ring-background">
+            <AvatarPersona id={t.responsable_id} nombre={t.responsable_nombre} size="sm" />
+          </span>
+        ))}
+      </span>
+      {resto > 0 && <span className="ml-1 text-xs text-muted-foreground">+{resto}</span>}
+    </span>
+  );
+}
+
 /**
- * Una FILA del agenda: compacta (hora · título · estado · dueño-o-«por cubrir»). Al desplegar
- * muestra la tarjeta real para coger/reasignar/avanzar sin salir del panorama.
+ * COBERTURA de un evento con uno o VARIOS cubridores. Cabecera con quién lo cubre + acciones
+ * («Apuntarme» yo, «Añadir a alguien» el manager) y, debajo, la tarjeta de cada cubridor para
+ * que cada quien avance o suelte LA SUYA (soltar = dejar de cubrir; los demás siguen).
+ */
+function TarjetaCobertura({
+  cobertura,
+  catalogos,
+}: {
+  cobertura: Cobertura;
+  catalogos: CatalogosContenido | undefined;
+}) {
+  const queryClient = useQueryClient();
+  const usuario = React.useContext(SesionContexto)?.usuario ?? null;
+  const esManager = usuario?.rol === "admin";
+  const [asignarAbierto, setAsignarAbierto] = React.useState(false);
+  const usuarios = catalogos?.usuarios ?? [];
+  const yaApuntado = Boolean(
+    usuario && cobertura.cubridores.some((t) => t.responsable_id === usuario.id),
+  );
+
+  const cubrir = useMutation({
+    mutationFn: (responsableId?: string) => api.cubrirEvento(cobertura.eventoId, responsableId),
+    onSuccess: (res) => {
+      setAsignarAbierto(false);
+      void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
+      const nombre = res?.contenido?.responsable_nombre || "ti";
+      toast.success(`"${cobertura.titulo}" la cubre ${nombre}.`);
+    },
+    onError: (e) => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
+      toast.error(mensajeError(e));
+    },
+  });
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm text-muted-foreground">Cubren:</span>
+        {cobertura.cubridores.map((t) => (
+          <span key={t.id} className="inline-flex items-center gap-1 text-sm">
+            <AvatarPersona id={t.responsable_id} nombre={t.responsable_nombre} size="sm" />
+            {t.responsable_nombre}
+          </span>
+        ))}
+        {!yaApuntado && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => cubrir.mutate(undefined)}
+            disabled={cubrir.isPending}
+          >
+            <UserPlus className="mr-1 h-3.5 w-3.5" />
+            Apuntarme
+          </Button>
+        )}
+        {esManager && (
+          <Button variant="outline" size="sm" onClick={() => setAsignarAbierto(true)}>
+            <UserPlus className="mr-1 h-3.5 w-3.5" />
+            Añadir a alguien
+          </Button>
+        )}
+      </div>
+      <div className="space-y-2">
+        {cobertura.cubridores.map((t) => (
+          <TarjetaTarea key={t.id} tarea={t} catalogos={catalogos} />
+        ))}
+      </div>
+
+      <DialogoAsignar
+        titulo={cobertura.titulo}
+        abierto={asignarAbierto}
+        onOpenChange={setAsignarAbierto}
+        usuarios={usuarios}
+        responsableActual=""
+        onElegir={(id) => cubrir.mutate(id)}
+        enviando={cubrir.isPending}
+      />
+    </div>
+  );
+}
+
+/**
+ * Una FILA del agenda: compacta (hora · título · estado · dueño/es-o-«por cubrir»). Al desplegar
+ * muestra la(s) tarjeta(s) real(es) para coger/apuntarse/reasignar/avanzar sin salir del panorama.
  */
 function FilaAgenda({
   item,
@@ -541,10 +683,11 @@ function FilaAgenda({
 }) {
   const tarea = item.kind === "tarea" ? item.tarea : null;
   const evento = item.kind === "evento" ? item.evento : null;
-  const titulo = tarea ? tarea.titulo : evento!.titulo;
-  const hora = tarea ? tarea.hora_objetivo : evento!.hora;
-  const sinDueno = !tarea || !tarea.responsable_id;
-  const esCobertura = Boolean(tarea?.evento_id) || item.kind === "evento";
+  const cob = item.kind === "cobertura" ? item.cobertura : null;
+  const titulo = cob ? cob.titulo : tarea ? tarea.titulo : evento!.titulo;
+  const hora = cob ? cob.hora : tarea ? tarea.hora_objetivo : evento!.hora;
+  const sinDueno = item.kind === "evento" || (item.kind === "tarea" && !tarea!.responsable_id);
+  const esCobertura = item.kind === "cobertura" || item.kind === "evento" || Boolean(tarea?.evento_id);
 
   return (
     <div
@@ -590,6 +733,8 @@ function FilaAgenda({
           >
             Por cubrir
           </Badge>
+        ) : cob ? (
+          <AvataresApilados cubridores={cob.cubridores} />
         ) : (
           <span className="flex shrink-0 items-center gap-1">
             <AvatarPersona id={tarea!.responsable_id} nombre={tarea!.responsable_nombre} size="sm" />
@@ -601,7 +746,9 @@ function FilaAgenda({
       </button>
       {abierta && (
         <div className="border-t border-border/60 bg-muted/20 p-2">
-          {tarea ? (
+          {cob ? (
+            <TarjetaCobertura cobertura={cob} catalogos={catalogos} />
+          ) : tarea ? (
             <TarjetaTarea tarea={tarea} catalogos={catalogos} />
           ) : (
             <TarjetaEventoLibre evento={evento!} catalogos={catalogos} />
@@ -622,11 +769,11 @@ function FilaAgenda({
  */
 function PanoramaAgenda({
   tareas,
-  eventosLibres,
+  eventos,
   catalogos,
 }: {
   tareas: Contenido[];
-  eventosLibres: EventoRota[];
+  eventos: EventoRota[];
   catalogos: CatalogosContenido | undefined;
 }) {
   const [abiertas, setAbiertas] = React.useState<Set<string>>(() => new Set());
@@ -640,6 +787,7 @@ function PanoramaAgenda({
       return next;
     });
 
+  const { coberturas, encargos, eventosLibres } = agrupar(tareas, eventos);
   const usuarios = catalogos?.usuarios ?? [];
   const conResponsable = tareas.filter((t) => t.responsable_id);
 
@@ -661,25 +809,33 @@ function PanoramaAgenda({
       n: conResponsable.filter((t) => t.responsable_id === id && t.estado !== "hecha").length,
     }))
     .sort((a, b) => b.n - a.n || a.nombre.localeCompare(b.nombre));
-  const nPorCubrir = tareas.filter((t) => !t.responsable_id).length + eventosLibres.length;
+  const nPorCubrir = eventosLibres.length + encargos.filter((t) => !t.responsable_id).length;
 
   // Agenda, aplicando el filtro de persona/pool si lo hay.
-  const pasaFiltro = (responsable: string | null) => {
-    if (!filtro) return true;
-    if (filtro === "__pool__") return responsable === null;
-    return responsable === filtro;
-  };
-  const verEventos = !filtro || filtro === "__pool__"; // los eventos libres no tienen dueño
+  const soloPool = filtro === "__pool__";
   const items: Item[] = [
-    ...tareas
-      .filter((t) => pasaFiltro(t.responsable_id || null))
+    // Coberturas: con filtro-persona, las que esa persona cubre; con pool, ninguna (tienen dueño).
+    ...coberturas
+      .filter((c) =>
+        !filtro ? true : soloPool ? false : c.cubridores.some((t) => t.responsable_id === filtro),
+      )
+      .map((c) => ({
+        kind: "cobertura" as const,
+        clave: `c-${c.eventoId}`,
+        orden: c.orden,
+        cobertura: c,
+      })),
+    // Encargos sueltos: por su dueño (o sin dueño con el pool).
+    ...encargos
+      .filter((t) => (!filtro ? true : soloPool ? !t.responsable_id : t.responsable_id === filtro))
       .map((t) => ({
         kind: "tarea" as const,
         clave: `t-${t.id}`,
         orden: t.fecha_objetivo || "9999-99-99",
         tarea: t,
       })),
-    ...(verEventos
+    // Eventos por cubrir (0 cubridores): solo sin filtro o con el pool.
+    ...(!filtro || soloPool
       ? eventosLibres.map((e) => ({
           kind: "evento" as const,
           clave: `e-${e.id}`,
@@ -691,7 +847,11 @@ function PanoramaAgenda({
 
   // Agrupar por día y ordenar cada día por hora (estilo rundown).
   const horaDe = (i: Item) =>
-    i.kind === "tarea" ? i.tarea.hora_objetivo || "99:99" : i.evento.hora || "99:99";
+    i.kind === "cobertura"
+      ? i.cobertura.hora || "99:99"
+      : i.kind === "tarea"
+        ? i.tarea.hora_objetivo || "99:99"
+        : i.evento.hora || "99:99";
   const porDia = new Map<string, Item[]>();
   for (const it of items) {
     const lista = porDia.get(it.orden) ?? [];
@@ -841,16 +1001,20 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
   const catalogos = tareasQuery.data?.catalogos;
   const cargando = tareasQuery.isLoading || eventosQuery.isLoading;
 
-  // Eventos a cubrir = los coverables (no "no_cubrir") que aún NO tienen tarea de cobertura.
-  const eventosConTarea = new Set(tareas.map((t) => t.evento_id).filter(Boolean));
-  const eventosLibres = (eventosQuery.data?.eventos ?? []).filter(
-    (e) => e.tipo_cobertura !== "no_cubrir" && !eventosConTarea.has(e.id),
-  );
+  // Reparte en coberturas (evento con ≥1 cubridor), encargos sueltos y eventos por cubrir.
+  const eventosCoverables = eventosQuery.data?.eventos ?? [];
+  const { coberturas, encargos, eventosLibres } = agrupar(tareas, eventosCoverables);
 
   // Lista unificada, ordenada por fecha (las sin fecha, al final).
   const conOrden = (f: string) => f || "9999-99-99";
   const items: Item[] = [
-    ...tareas.map((t) => ({
+    ...coberturas.map((c) => ({
+      kind: "cobertura" as const,
+      clave: `c-${c.eventoId}`,
+      orden: conOrden(c.orden),
+      cobertura: c,
+    })),
+    ...encargos.map((t) => ({
       kind: "tarea" as const,
       clave: `t-${t.id}`,
       orden: conOrden(t.fecha_objetivo),
@@ -864,24 +1028,33 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
     })),
   ].sort((a, b) => a.orden.localeCompare(b.orden));
 
+  // ¿«por cubrir»? (evento sin cubridores o encargo sin dueño). ¿«mío»? (cobertura que cubro o
+  // encargo mío) — una cobertura es mía si soy UNO de sus cubridores (multi-cobertura).
+  const esPorCubrir = (i: Item) =>
+    i.kind === "evento" || (i.kind === "tarea" && !i.tarea.responsable_id);
+  const esMio = (i: Item) => {
+    if (!usuario) return false;
+    return i.kind === "cobertura"
+      ? i.cobertura.cubridores.some((t) => t.responsable_id === usuario.id)
+      : i.kind === "tarea" && i.tarea.responsable_id === usuario.id;
+  };
+
   const cumpleLente = (i: Item) => {
-    if (lente === "libres") return i.kind === "evento" || !i.tarea.responsable_id;
-    if (lente === "mias")
-      return i.kind === "tarea" && Boolean(usuario && i.tarea.responsable_id === usuario.id);
+    if (lente === "libres") return esPorCubrir(i);
+    if (lente === "mias") return esMio(i);
     return true;
   };
   const visibles = items.filter(cumpleLente);
 
   // Tres grupos para que «se organice»: lo que falta por cubrir, lo que está en marcha, lo hecho.
   const grupos: { etiqueta: string; items: Item[] }[] = [
-    {
-      etiqueta: "Por cubrir",
-      items: visibles.filter((i) => i.kind === "evento" || !i.tarea.responsable_id),
-    },
+    { etiqueta: "Por cubrir", items: visibles.filter(esPorCubrir) },
     {
       etiqueta: "En marcha",
       items: visibles.filter(
-        (i) => i.kind === "tarea" && i.tarea.responsable_id && i.tarea.estado !== "hecha",
+        (i) =>
+          i.kind === "cobertura" ||
+          (i.kind === "tarea" && i.tarea.responsable_id && i.tarea.estado !== "hecha"),
       ),
     },
     {
@@ -889,13 +1062,19 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
       items: visibles.filter((i) => i.kind === "tarea" && i.tarea.estado === "hecha"),
     },
   ];
-  const conteoPorCubrir = items.filter(
-    (i) => i.kind === "evento" || !i.tarea.responsable_id,
-  ).length;
+  const conteoPorCubrir = items.filter(esPorCubrir).length;
 
   const pintar = (i: Item) =>
     i.kind === "evento" ? (
       <TarjetaEventoLibre key={i.clave} evento={i.evento} catalogos={catalogos} />
+    ) : i.kind === "cobertura" ? (
+      <div key={i.clave} className="rounded-lg border border-border bg-card p-3 shadow-sm">
+        <div className="mb-2 flex items-center gap-2">
+          <Trophy className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="font-medium">{i.cobertura.titulo}</span>
+        </div>
+        <TarjetaCobertura cobertura={i.cobertura} catalogos={catalogos} />
+      </div>
     ) : (
       <TarjetaTarea key={i.clave} tarea={i.tarea} catalogos={catalogos} />
     );
@@ -960,7 +1139,7 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
         ) : (
           <>
             <TabsContent value="panorama">
-              <PanoramaAgenda tareas={tareas} eventosLibres={eventosLibres} catalogos={catalogos} />
+              <PanoramaAgenda tareas={tareas} eventos={eventosCoverables} catalogos={catalogos} />
             </TabsContent>
             <TabsContent value="libres" className="space-y-4">
               {listaAgrupada}

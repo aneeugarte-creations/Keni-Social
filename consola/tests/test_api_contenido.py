@@ -955,8 +955,9 @@ def test_cubrir_evento_self_claim_crea_tarea_de_cobertura(entorno):
     assert cont["titulo"] == "Cruz Azul vs América"
 
 
-def test_cubrir_evento_idempotente_una_sola_tarea(entorno):
-    """Cubrir el mismo evento dos veces NO crea dos tareas: find-or-create por evento_id."""
+def test_cubrir_evento_idempotente_por_persona(entorno):
+    """Cubrir el mismo evento dos veces la MISMA persona NO crea dos tareas: find-or-create
+    por (evento_id, responsable)."""
     c = _cli("ana")
     ev = _crear_evento()
     r1 = c.post("/api/contenido/cubrir-evento", json={"evento_id": ev["id"]}, headers=_ORIGIN)
@@ -971,14 +972,22 @@ def test_cubrir_evento_idempotente_una_sola_tarea(entorno):
     assert len(tareas) == 1
 
 
-def test_cubrir_evento_ya_cogido_por_otro_da_409(entorno):
+def test_cubrir_evento_otro_anade_cubridor(entorno):
+    """Cubrir un evento que YA cubre otra persona AÑADE cubridor (multi-cobertura), no es 409:
+    cada quien tiene su propia tarea de cobertura del mismo evento."""
     c_luis = _cli("luis")
     c_ana = _cli("ana")
     ev = _crear_evento()
-    c_luis.post("/api/contenido/cubrir-evento", json={"evento_id": ev["id"]}, headers=_ORIGIN)
-    r = c_ana.post("/api/contenido/cubrir-evento", json={"evento_id": ev["id"]}, headers=_ORIGIN)
-    assert r.status_code == 409
-    assert r.json()["responsable_nombre"] == "luis"
+    r1 = c_luis.post("/api/contenido/cubrir-evento", json={"evento_id": ev["id"]}, headers=_ORIGIN)
+    r2 = c_ana.post("/api/contenido/cubrir-evento", json={"evento_id": ev["id"]}, headers=_ORIGIN)
+    assert r1.status_code == 200 and r2.status_code == 200, r2.text
+    tareas = [
+        x
+        for x in c_ana.get("/api/contenido?clase=tarea").json()["contenidos"]
+        if x["evento_id"] == ev["id"]
+    ]
+    assert len(tareas) == 2
+    assert {t["responsable_id"] for t in tareas} == {_id_usuario("luis"), _id_usuario("ana")}
 
 
 def test_cubrir_evento_admin_asigna_a_otro_y_avisa(entorno):

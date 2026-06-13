@@ -503,9 +503,10 @@ async def cubrir_evento(request: Request) -> Response:
 
     La lista de Tareas muestra TODOS los eventos a cubrir (auto-rellenados desde Fuentes); un
     evento «por cubrir» pasa a tener dueño aquí, mediante una tarea (clase='tarea') enlazada
-    por `evento_id`. Idempotente: un evento tiene como mucho UNA tarea de cobertura
-    (find-or-create). Sin `responsable_id` (o el propio) = self-claim atómico del usuario; con
-    otro `responsable_id` (solo admin) = el manager empuja a esa persona y se le avisa in-app.
+    por `evento_id`. MULTI-COBERTURA: cada persona que cubre tiene SU PROPIA tarea, así que
+    VARIAS pueden cubrir el mismo evento (find-or-create idempotente por (evento_id, persona);
+    nunca 409). Sin `responsable_id` (o el propio) = me apunto yo; con otro `responsable_id`
+    (solo admin) = el manager apunta a esa persona y se le avisa in-app.
     """
     autor = autor_de_peticion(request)
     if not autor or not autor.get("id"):
@@ -535,13 +536,17 @@ async def cubrir_evento(request: Request) -> Response:
     else:
         responsable = {"id": autor["id"], "usuario": autor.get("usuario", "") or ""}
 
-    # find-or-create la tarea de cobertura (idempotente por evento_id). Nace LIBRE; el dueño
-    # se fija abajo (claim atómico o push), nunca al crear. NO copia título/fecha del evento
-    # como datos muertos: referencia `evento_id` y la UI resuelve los campos vivos del evento.
-    existentes = repos.listar_contenido(clase=CLASE_TAREA, evento_id=evento_id)
-    tarea = (
-        existentes[0]
-        if existentes
+    # find-or-create de la tarea de cobertura de ESTA persona (idempotente por (evento_id,
+    # responsable)). La tarea nace YA con dueño. Varias personas = varias tareas del mismo
+    # evento (multi-cobertura): cubrir un evento que ya cubre otro AÑADE cubridor, no es 409.
+    # NO copia datos muertos del evento más allá de lo mínimo para pintar la fila sin cruzarlo.
+    mias = repos.listar_contenido(
+        clase=CLASE_TAREA, evento_id=evento_id, responsable_id=responsable["id"]
+    )
+    creada = not mias
+    item = (
+        mias[0]
+        if mias
         else repos.crear_contenido(
             clase=CLASE_TAREA,
             titulo=evento.get("titulo") or "Cobertura",
@@ -551,44 +556,13 @@ async def cubrir_evento(request: Request) -> Response:
             fecha_objetivo=evento.get("fecha") or "",
             hora_objetivo=evento.get("hora") or "",
             autor=autor,
+            responsable=responsable,
         )
     )
-
-    if asignar_a_otro:
-        item = (
-            repos.actualizar_contenido(
-                tarea["id"],
-                {
-                    "responsable_id": responsable["id"],
-                    "responsable_nombre": responsable["usuario"],
-                },
-            )
-            or tarea
-        )
+    # Avisar SOLO cuando el manager acaba de apuntar a OTRA persona (no en self-claim ni en el
+    # no-op idempotente de quien ya cubría).
+    if asignar_a_otro and creada:
         notificaciones.tras_asignacion(item, autor)
-    else:
-        item = repos.reclamar_contenido(
-            tarea["id"],
-            responsable_id=responsable["id"],
-            responsable_nombre=responsable["usuario"],
-        )
-        if item is None:
-            actual = repos.obtener_contenido(tarea["id"])
-            if actual and (actual.get("responsable_id") or "") == responsable["id"]:
-                item = actual  # ya era mía: idempotente
-            else:
-                return JSONResponse(
-                    {
-                        "error": (
-                            f"Ya la cogió {actual.get('responsable_nombre') or 'otra persona'}."
-                            if actual
-                            else "Ese contenido ya no existe."
-                        ),
-                        "responsable_id": (actual or {}).get("responsable_id") or "",
-                        "responsable_nombre": (actual or {}).get("responsable_nombre") or "",
-                    },
-                    status_code=409,
-                )
     plataformas = repos.listar_contenido_plataforma(item["id"])
     etiquetas = repos.etiquetas_por_contenido().get(item["id"], [])
     return JSONResponse({"contenido": _contenido_a_dict(item, plataformas, etiquetas)})
