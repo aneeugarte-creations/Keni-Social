@@ -2,7 +2,7 @@
 
 import { Rect } from "react-konva";
 
-import { puntosGradiente } from "../capas/CapaNodo";
+import { colorStopsKonva, puntosGradiente } from "../capas/degradado";
 import type { Documento } from "../documento";
 import { useImagen } from "../useImagen";
 
@@ -13,13 +13,8 @@ export function FondoNodo({ fondo, w, h }: { fondo: Documento["fondo"]; w: numbe
     // Soporta lineal/radial y multi-stop (mismo helper/convención que el render y las capas):
     // default lineal 180 = vertical (↓), sin cambio visual respecto al comportamiento previo.
     const deg = fondo.degradado;
-    const stops: (number | string)[] =
-      deg.stops && deg.stops.length >= 2
-        ? [...deg.stops]
-            .map((s) => ({ pos: Math.max(0, Math.min(1, s.pos || 0)), color: s.color }))
-            .sort((a, b) => a.pos - b.pos)
-            .flatMap((s) => [s.pos, s.color])
-        : [0, deg.desde, 1, deg.hasta];
+    // Mismas paradas (endurecidas) que el render de capas; antes esto se duplicaba aquí.
+    const stops = colorStopsKonva(deg);
     if (deg.tipo === "radial") {
       const r = Math.sqrt(w * w + h * h) / 2;
       return (

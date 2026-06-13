@@ -12,6 +12,7 @@ import { bandaOverlay } from "../documento";
 import { fotoMuestra } from "../muestra";
 import { useImagen } from "../useImagen";
 
+import { colorStopsKonva, puntosGradiente } from "./degradado";
 import { geometriaImagenEnCaja } from "./geometriaImagen";
 import { textoMuestra } from "./textoMuestra";
 import { estiloFuente, familiaReal, medirTexto } from "./tipografia";
@@ -138,32 +139,6 @@ const ALIN: Record<string, string> = {
   derecha: "right",
   justificado: "justify",
 };
-
-// Puntos inicial/final de un degradado lineal sobre una caja w×h según `angulo` (grados), con la
-// MISMA convención que `gradienteLineal` de dibujar.mjs: 0°=↑, 90°=→, 180°=↓ (vertical), 270°=←.
-// Konva usa puntos relativos al nodo (origen 0,0), así que el centro de la caja es (w/2,h/2).
-export function puntosGradiente(w: number, h: number, angulo = 180) {
-  const a = (angulo * Math.PI) / 180;
-  const ux = Math.sin(a), uy = -Math.cos(a);
-  const cx = w / 2, cy = h / 2;
-  const semi = (Math.abs(w * ux) + Math.abs(h * uy)) / 2;
-  return {
-    start: { x: cx - ux * semi, y: cy - uy * semi },
-    end: { x: cx + ux * semi, y: cy + uy * semi },
-  };
-}
-
-// Paradas [pos, color, pos, color, …] de un degradado para Konva (`fill*GradientColorStops`).
-// Usa `stops` (multi-parada) si viene, si no desde/hasta (espejo de `paradasDegradado` del render).
-function colorStopsKonva(deg: RellenoDegradado): (number | string)[] {
-  if (deg.stops && deg.stops.length >= 2) {
-    return [...deg.stops]
-      .map((s) => ({ pos: Math.max(0, Math.min(1, s.pos || 0)), color: s.color }))
-      .sort((a, b) => a.pos - b.pos)
-      .flatMap((s) => [s.pos, s.color]);
-  }
-  return [0, deg.desde, 1, deg.hasta];
-}
 
 // Props de relleno Konva para un degradado (lineal o radial, multi-stop). Espejo de
 // Path SVG de un ARCO para el texto curvo de Konva (`TextPath`), en coords LOCALES de la capa. Es
