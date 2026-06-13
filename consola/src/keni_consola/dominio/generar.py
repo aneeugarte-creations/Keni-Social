@@ -587,6 +587,95 @@ def lanzar(
     return generaciones.obtener(gen["id"]) or gen
 
 
+# Tipo de generación del ARTE de fondo: lo lanza el pipeline/autogen (no una persona), así que
+# es TRABAJO DE FONDO (`autogen` ya está en `_TIPOS_FONDO`) y cede el paso a lo manual en la cola.
+TIPO_ARTE = "autogen"
+
+
+def lanzar_arte(
+    *,
+    contenido_id: str,
+    marca: str,
+    titulo: str,
+    prompt: str,
+    plataforma_id: str = "",
+    autor: dict[str, str] | None = None,
+    urgente: bool = False,
+    clave_idem: str | None = None,
+) -> dict[str, Any]:
+    """Crea el registro y ENCOLA la generación de ARTE como JOB de PROCESO (kind imagen).
+
+    A diferencia de `lanzar` (claude), el arte NO corre `claude -p`: es un job de PROCESO
+    (`jobspec.PROC_IMAGEN`) que el WORKER despacha a su ejecutor (`autogen_arte.ejecutar_arte_job`),
+    el cual llama a `media.generar_imagen`, sube la imagen y la adjunta a la pieza. Antes el arte
+    era SÍNCRONO (corría dentro del barrido con un ThreadPool propio, fuera de la cola); enrutarlo
+    por la cola le da el CARRIL de proceso (no bloquea el copy), los REINTENTOS/huérfanos del reaper
+    y —lo principal— la IDEMPOTENCIA que faltaba.
+
+    IDEMPOTENCIA DE LANZAMIENTO: la clave es ESTABLE `(autor, "arte", marca, contenido_id, prompt)`
+    —tema+marca+prompt-base, el MISMO patrón que el copy (`dominio.generar.lanzar`), SIN nonce—.
+    Mientras un arte del MISMO tema está EN VUELO (registro no terminal), un re-encolado (otro
+    barrido del pipeline, el encadenado copy→arte, o un reaper que reintenta) DEVUELVE ese run y
+    NO encola un segundo job: ni doble gasto del proveedor ni doble subida. Al terminar (el registro
+    pasa a terminal), un re-lanzamiento legítimo vuelve a correr. La convergencia atómica la
+    garantiza `generaciones.crear_idempotente` (creación exclusiva del índice en disco).
+
+    El registro sale en Actividad IA (`tipo='autogen'`). Devuelve el registro de generación (para
+    sondeo/conteo) — o el run en vuelo si ya había uno con esta clave. Propaga `ColaLlenaError`
+    (cola llena / presupuesto / pausa) para que el barrido la trate como backpressure y reintente.
+    """
+    prompt = (prompt or "").strip()
+    clave = clave_idem or generaciones.clave_idempotencia(
+        _autor_campos(autor)["autor_id"], "arte", marca, contenido_id or "", prompt
+    )
+    gen, nueva = generaciones.crear_idempotente(clave, {
+        "tipo": TIPO_ARTE,
+        "marca": marca,
+        "etiqueta": f"Arte — {(titulo or '')[:80]} · {nombre_marca(marca)}",
+        "contenido_id": contenido_id or "",
+        "proceso": generaciones.PROCESO_PRODUCCION,
+        **_autor_campos(autor),
+    })
+    if not nueva:
+        # Ya hay un arte EN VUELO con esta clave (otro barrido lo arrancó): NO encolamos otro.
+        return gen
+    # Spec PLANO del job de proceso (kind a nivel raíz, sin prompt/procesar de claude). La
+    # `prioridad` viaja DENTRO del spec (`jobspec.prioridad`): el arte es FONDO y cede el paso a
+    # lo manual; `urgente` (curación humana) adelanta al lote de fondo sin pisar lo manual.
+    spec = jobspec.construir_proceso(jobspec.PROC_IMAGEN, {
+        "contenido_id": contenido_id or "",
+        "plataforma_id": plataforma_id or "",
+        "marca": marca,
+        "titulo": titulo or "",
+        "prompt": prompt,
+        "prioridad": jobspec.PRIORIDAD_BREAKING if urgente else jobspec.PRIORIDAD_PIPELINE,
+    })
+    from .. import cola
+
+    try:
+        cola.encolar(gen["id"], spec)
+    except generaciones.ColaLlenaError:
+        # No se encoló (cola llena / presupuesto / pausa): BORRAMOS el registro recién creado en
+        # vez de dejar un cadáver "error" en Actividad (mismo criterio que `lanzar`). El barrido
+        # reintenta en el próximo tick. Si el borrado fallara, degradamos a dejarlo en error.
+        if not generaciones.borrar_registro(gen["id"]):
+            generaciones.actualizar(gen["id"], {
+                "estado": generaciones.ESTADO_ERROR,
+                "error": "No se pudo encolar la generación de arte; inténtalo en unos segundos.",
+                "fecha_fin": generaciones.ahora_iso(),
+            })
+        raise
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo; reflejamos el error en el registro
+        _log.exception("no se pudo encolar el arte gen=%s", gen.get("id"))
+        if not generaciones.borrar_registro(gen["id"]):
+            generaciones.actualizar(gen["id"], {
+                "estado": generaciones.ESTADO_ERROR,
+                "error": "No se pudo iniciar la generación de arte.",
+                "fecha_fin": generaciones.ahora_iso(),
+            })
+    return generaciones.obtener(gen["id"]) or gen
+
+
 # Prompt base por defecto para la generación de copy (piezas por red). Viaja en la semilla.
 PROMPT_COPY = "prompt/copy"
 

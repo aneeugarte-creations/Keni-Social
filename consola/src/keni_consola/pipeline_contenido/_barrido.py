@@ -448,18 +448,24 @@ def ejecutar_arte() -> list[dict[str, Any]]:
         hoy=hoy_utc(),
     )
 
-    # EN PARALELO (antes en serie): cada arte es una llamada HTTP sincrona al proveedor de
-    # imagen (segundos por tema); con el cap por barrido (def 3), ilustrarlos a la vez deja
-    # la etapa en ~el tiempo del mas lento. Cada tema es independiente y best-effort.
-    fallidos: list[str] = []  # ids de los temas cuyo arte reventó en ESTE ciclo (append es atómico)
+    # EN PARALELO: `lanzar_para_topic` ya NO genera la imagen en línea (antes era una llamada HTTP
+    # síncrona al proveedor, segundos por tema); ahora solo SELECCIONA y ENCOLA un job de proceso
+    # (el WORKER genera la imagen en su carril, fuera del barrido). El encolado es barato, pero el
+    # pool no estorba y mantiene el cap por barrido. Cada tema es independiente y best-effort.
+    fallidos: list[str] = []  # ids de los temas cuyo ENCOLADO reventó en ESTE ciclo (append es atómico)
 
     def _ilustrar(item: dict[str, Any]) -> dict[str, Any] | None:
         try:
             return autogen_arte.lanzar_para_topic(item)
+        except generaciones.ColaLlenaError:
+            # BACKPRESSURE (cola llena / presupuesto / pausa), NO un fallo del proveedor: el
+            # siguiente tick reintenta. NO lo contamos como `fallido` (no debe disparar la alerta
+            # "¿proveedor de imagen caído?", que es para fallos reales de generación).
+            return None
         except Exception:  # noqa: BLE001 -- un fallo por tema no debe matar la etapa de arte
             fallidos.append(str(item.get("id", "") or ""))
             _log.exception(
-                "pipeline: fallo la generación de arte del tema %s (marca %s).",
+                "pipeline: fallo el encolado de arte del tema %s (marca %s).",
                 item.get("id", ""), item.get("marca", ""),
             )
             return None
