@@ -267,14 +267,13 @@ export function PipelineEnVivo({
               auto-producción. Apagado, ninguna etapa corre en automático aunque sus
               switches estén encendidos (lo manual no depende de él). */}
           {maquina && (
-            <label className="flex items-center gap-2 text-sm">
+            <label
+              className="flex items-center gap-2 text-sm"
+              title="Interruptor general de toda la auto-producción. Apagado, ninguna etapa corre en automático."
+            >
               <span className={cn(maquinaOn ? "text-muted-foreground" : "text-destructive")}>
                 Máquina
-                <span className="ml-1.5 text-xs">
-                  {maquinaOn
-                    ? "· encendida"
-                    : "· apagada: para toda la auto-producción"}
-                </span>
+                <span className="ml-1.5 text-xs">{maquinaOn ? "· encendida" : "· apagada"}</span>
               </span>
               <SwitchAjuste
                 ajuste={maquina}
