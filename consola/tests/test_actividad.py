@@ -178,6 +178,9 @@ def test_agregados_total_por_tipo_y_por_dia():
     dias = {f["dia"]: f for f in agg["por_dia"]}
     assert dias["2026-05-30"]["items"] == 2
     assert dias["2026-05-31"]["items"] == 1
+    # por_dia trae tokens (columna del desglose en la economia unificada): g1 (140) + g2 (15).
+    assert dias["2026-05-30"]["tokens"] == 140 + 15
+    assert dias["2026-05-31"]["tokens"] == 180
     # por_dia recientes primero.
     assert [f["dia"] for f in agg["por_dia"]] == ["2026-05-31", "2026-05-30"]
 

@@ -206,7 +206,7 @@ def agregados(
         (`duration_ms` = tiempo de computo IA sumado; los items sin metrica suman 0).
       - `por_tipo`: una fila por `tipo` (incluye "run" como un tipo mas),
         `{tipo, items, coste_usd, tokens}`, de mayor a menor coste (luego por tipo).
-      - `por_dia`: una fila por dia (`YYYY-MM-DD` de la `fecha`), `{dia, items,
+      - `por_dia`: una fila por dia (`YYYY-MM-DD` de la `fecha`), `{dia, items, tokens,
         coste_usd}`, recientes primero.
     """
     items = _items(generaciones, runs)
@@ -235,9 +235,10 @@ def agregados(
         t["tokens"] += tokens
 
         dia = (it["fecha"] or "")[:10]
-        d = por_dia.setdefault(dia, {"dia": dia, "items": 0, "coste_usd": 0.0})
+        d = por_dia.setdefault(dia, {"dia": dia, "items": 0, "coste_usd": 0.0, "tokens": 0})
         d["items"] += 1
         d["coste_usd"] += coste
+        d["tokens"] += tokens
 
     filas_tipo = [
         {"tipo": f["tipo"], "items": f["items"],
@@ -247,7 +248,8 @@ def agregados(
     filas_tipo.sort(key=lambda f: (-f["coste_usd"], f["tipo"]))
 
     filas_dia = [
-        {"dia": f["dia"], "items": f["items"], "coste_usd": _redondear(f["coste_usd"])}
+        {"dia": f["dia"], "items": f["items"],
+         "coste_usd": _redondear(f["coste_usd"]), "tokens": f["tokens"]}
         for f in por_dia.values()
     ]
     filas_dia.sort(key=lambda f: f["dia"], reverse=True)

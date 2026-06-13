@@ -53,6 +53,8 @@ export interface ActividadPorDia {
   dia: string;
   items: number;
   coste_usd: number;
+  /** Tokens IA del día (sumados de las generaciones + runs). */
+  tokens: number;
 }
 
 /** Agregados de actividad IA (`GET /api/actividad/agregados`): totales + desgloses (los KPIs de Producción). */
