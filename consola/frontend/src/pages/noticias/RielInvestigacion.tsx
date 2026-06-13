@@ -1,29 +1,30 @@
 /**
- * RielInvestigacion — el PROCESO de Investigación hecho visible (ADR 0011).
+ * RielInvestigacion — el tramo AGUAS ARRIBA del proceso de Investigación, hecho visible.
  *
- * Una tira horizontal de las cinco etapas del proceso (Ingesta · Fusión · Clasificación ·
- * Ranking · Verificación) con su estado ON/OFF, calcada del riel de «La máquina» de la
- * Biblioteca (`pages/texto/VistaMaquina`): tarjetas `rounded-md border bg-card` con punto
- * verde (ON) / gris (OFF) y conectores chevron. En estrecho, apilan en vertical.
+ * Es la mitad AUTOMÁTICA e INFORMATIVA del flujo: una tira horizontal de las cinco etapas que
+ * la máquina corre sola (Ingesta · Fusión · Clasificación · Ranking · Verificación) con su
+ * estado ON/OFF. NO es la tira de control (esa es «Pipeline en vivo», con switches por etapa);
+ * aquí solo se LEE qué hace el motor y si está encendido. El nombre evita chocar con el «riel de
+ * la máquina» de la Biblioteca (`pages/texto/RielMaquina`, que son etapas de PROMPT, no de
+ * noticias): este es el riel de INGESTA de noticias.
  *
- * Es INFORMATIVO (no toggles inline): el estado se lee del catálogo de ajustes
- * (`GET /api/ajustes`, solo admin) por la `clave` de cada flag físico, con el maestro
- * VIRTUAL «Investigación» (`KENI_INVESTIGACION`) como respaldo para las etapas sin flag
- * propio en el catálogo (Fusión/Clasificación/Ranking). Ingesta y Verificación resuelven
- * por sus claves físicas (`KENI_PIPELINE_SELECCION`/`_VALIDACION`), que el catálogo ya
- * expone. Los toggles reales viven en el Monitor: los switches físicos en la tira
- * «Pipeline en vivo» y el motor de noticias en su drawer, sección «Investigación».
+ * El estado se lee del catálogo de ajustes (`GET /api/ajustes`, solo admin) por la `clave` de
+ * cada flag físico, con el maestro VIRTUAL «Investigación» (`KENI_INVESTIGACION`) como respaldo
+ * para las etapas sin flag propio (Fusión/Clasificación/Ranking). Los toggles reales viven en
+ * «Pipeline en vivo» (control) y en el drawer de ajustes del motor. El lápiz de cada etapa con
+ * prompt abre su documento de la Biblioteca en un OVERLAY (in-place, sin salir del cockpit).
  */
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, SquarePen } from "lucide-react";
 import * as React from "react";
-import { Link } from "react-router-dom";
 
+import { EditorPromptOverlay } from "@/components/biblioteca/EditorPromptOverlay";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { CLAVE_AJUSTES } from "@/pages/configuracion/lib";
+import { ChipInvestigacion } from "@/pages/noticias/ChipInvestigacion";
 
 /** El maestro VIRTUAL de Investigación: único toggle del proceso que expone el catálogo (y que
  *  mantiene sincronizadas sus etapas físicas). Respaldo cuando la etapa no tiene flag propio
@@ -39,11 +40,11 @@ interface EtapaProceso {
   claves: readonly string[];
   /** Qué hace la etapa (tooltip). */
   ayuda: string;
-  /** Doc de la Biblioteca cuyo prompt alimenta la etapa (enlace «Editar prompt»). */
+  /** Doc de la Biblioteca cuyo prompt alimenta la etapa (lápiz «Editar prompt»). */
   doc?: string;
 }
 
-// Las cinco etapas del proceso Investigación (ADR 0011), en orden de flujo. Cada una resuelve su
+// Las cinco etapas del tramo aguas arriba (ADR 0011), en orden de flujo. Cada una resuelve su
 // estado por su flag físico y, si el catálogo no lo expone, cae al maestro `KENI_INVESTIGACION`.
 const ETAPAS: readonly EtapaProceso[] = [
   {
@@ -54,13 +55,13 @@ const ETAPAS: readonly EtapaProceso[] = [
   {
     nombre: "Fusión",
     claves: ["KENI_PIPELINE_FUSION", MAESTRO_INVESTIGACION],
-    ayuda: "Agrupa notas del mismo evento",
+    ayuda: "Agrupa en un solo cluster las notas del mismo evento",
     doc: "prompt/fusion",
   },
   {
     nombre: "Clasificación",
     claves: ["KENI_CLASIFICAR_MARCA_IA", MAESTRO_INVESTIGACION],
-    ayuda: "Asigna marca a últimas horas",
+    ayuda: "Asigna marca a las notas de últimas horas",
     doc: "prompt/clasificacion-marca",
   },
   {
@@ -72,15 +73,10 @@ const ETAPAS: readonly EtapaProceso[] = [
   {
     nombre: "Verificación",
     claves: ["KENI_PIPELINE_VALIDACION", MAESTRO_INVESTIGACION],
-    ayuda: "Verifica las fuentes",
+    ayuda: "Contrasta las fuentes antes de pasar a la mesa",
     doc: "prompt/validacion",
   },
 ] as const;
-
-/** Deep-link a la Biblioteca con el documento abierto (`?doc=`, ver `pages/Texto.tsx`). */
-function rutaDoc(doc: string): string {
-  return `/contenido/texto/documentos?doc=${encodeURIComponent(doc)}`;
-}
 
 function Punto({ estado }: { estado: EstadoEtapa }) {
   return (
@@ -99,6 +95,9 @@ function Punto({ estado }: { estado: EstadoEtapa }) {
 export function RielInvestigacion() {
   const { usuario } = useSesion();
   const esAdmin = usuario === null || usuario.rol === "admin";
+
+  // Prompt abierto en el overlay «Editar prompt» (in-place, sin sacarte del cockpit).
+  const [docAbierto, setDocAbierto] = React.useState<string | null>(null);
 
   // El estado ON/OFF solo es legible por admin (el endpoint /api/ajustes lo exige). Para el
   // resto la tira sigue siendo informativa (los nombres del proceso), con estado «desconocido».
@@ -131,10 +130,15 @@ export function RielInvestigacion() {
     estado === "on" ? "activa" : estado === "off" ? "apagada" : "estado no disponible";
 
   return (
-    <section aria-label="Pipeline de ingesta en vivo" data-testid="riel-investigacion">
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        Pipeline de ingesta · en vivo
-      </h3>
+    <section aria-label="Aguas arriba: ingesta automática de noticias" data-testid="riel-investigacion">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Aguas arriba · ingesta automática
+        </h3>
+        {/* El estado del loop (jobs en curso/cola) cabe aquí, como indicador del tramo —no como
+            una «vista» aparte—; enlaza a Agentes prefiltrado. */}
+        <ChipInvestigacion />
+      </div>
       <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center">
         {ETAPAS.map((etapa, i) => {
           const estado = estadoDe(etapa.claves);
@@ -154,16 +158,18 @@ export function RielInvestigacion() {
                 >
                   <Punto estado={estado} />
                   <span className="font-medium leading-none">{etapa.nombre}</span>
-                  {/* Enlace cruzado proceso → Biblioteca: la etapa con prompt se edita allí. */}
-                  {etapa.doc ? (
-                    <Link
-                      to={rutaDoc(etapa.doc)}
+                  {/* El prompt de la etapa se edita IN-PLACE (overlay), sin salir del cockpit.
+                      Solo admin (la Biblioteca es de admin). */}
+                  {esAdmin && etapa.doc ? (
+                    <button
+                      type="button"
+                      onClick={() => setDocAbierto(etapa.doc!)}
                       className="ml-0.5 text-muted-foreground/50 transition-colors hover:text-foreground"
-                      aria-label={`Editar el prompt de ${etapa.nombre} en la Biblioteca`}
-                      title="Editar prompt en la Biblioteca"
+                      aria-label={`Editar el prompt de ${etapa.nombre}`}
+                      title="Editar prompt"
                     >
                       <SquarePen className="h-3 w-3" aria-hidden />
-                    </Link>
+                    </button>
                   ) : null}
                 </div>
               </Tooltip>
@@ -173,9 +179,15 @@ export function RielInvestigacion() {
       </div>
       {esAdmin && (
         <p className="mt-1.5 text-xs text-muted-foreground">
-          Enciende o apaga cada etapa en Ajustes del motor.
+          Informativo. Enciende o apaga cada etapa en «Pipeline en vivo» o en los ajustes del motor.
         </p>
       )}
+
+      <EditorPromptOverlay
+        docId={docAbierto}
+        abierto={docAbierto !== null}
+        onCerrar={() => setDocAbierto(null)}
+      />
     </section>
   );
 }

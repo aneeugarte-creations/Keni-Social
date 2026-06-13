@@ -4,7 +4,7 @@
  * catálogo de ajustes. El estado solo es legible por admin; el resto ve la tira informativa.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -100,19 +100,17 @@ describe("RielInvestigacion", () => {
     );
   });
 
-  it("las etapas con prompt enlazan a su documento en la Biblioteca (deep-link ?doc=)", () => {
+  it("el lápiz de una etapa con prompt es un botón (no deep-link) que abre el editor in-place", () => {
     renderRiel(usuario("admin"));
-    const enlace = screen.getByLabelText("Editar el prompt de Verificación en la Biblioteca");
-    expect(enlace.getAttribute("href")).toBe(
-      "/contenido/texto/documentos?doc=prompt%2Fvalidacion",
-    );
-    expect(
-      screen
-        .getByLabelText("Editar el prompt de Ranking en la Biblioteca")
-        .getAttribute("href"),
-    ).toBe("/contenido/texto/documentos?doc=prompt%2Feditorial");
-    // La ingesta es mecánica (sin prompt): no lleva enlace.
+    const lapiz = screen.getByLabelText("Editar el prompt de Verificación");
+    // Ya no navega a la Biblioteca: es un botón que abre el overlay, no un enlace con href.
+    expect(lapiz.tagName).toBe("BUTTON");
+    expect(lapiz.getAttribute("href")).toBeNull();
+    // La ingesta es mecánica (sin prompt): no lleva lápiz.
     expect(screen.queryByLabelText(/Editar el prompt de Ingesta/)).toBeNull();
+    // Al pulsarlo se abre el overlay «Editar prompt» encima del cockpit (sin salir).
+    fireEvent.click(lapiz);
+    expect(screen.getByRole("dialog")).toBeTruthy();
   });
 
   it("no admin: no consulta el catálogo y las etapas quedan «desconocido»", async () => {
