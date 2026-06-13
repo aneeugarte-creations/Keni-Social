@@ -672,6 +672,98 @@ def _esperar_terminal(gid: str, timeout: float = 8.0) -> str:
     return (generaciones.obtener(gid) or {}).get("estado", "")
 
 
+def _fake_lanzar_factory_por_intento(scripts: list[list[str]], llamadas: dict):
+    """`runner.lanzar_proc` fake que emite un guion NDJSON DISTINTO por llamada (reintentos)."""
+    import subprocess as _sp
+
+    def _fake(argv, *, cwd, env=None):  # noqa: ANN001
+        i = llamadas["n"]
+        llamadas["n"] = i + 1
+        lineas = scripts[min(i, len(scripts) - 1)]
+        guion = "import sys\n" + "".join(f"print({ln!r}, flush=True)\n" for ln in lineas)
+        return _sp.Popen(
+            [sys.executable, "-c", guion], cwd=cwd, stdout=_sp.PIPE, stderr=_sp.DEVNULL,
+            text=True, bufsize=1, start_new_session=True,
+        )
+
+    return _fake
+
+
+_OK_START = '{"type": "stream_event", "event": {"type": "message_start", "message": {}}}'
+_OK_RESULT = (
+    '{"type": "result", "subtype": "success", "result": "#uno", '
+    '"usage": {"input_tokens": 1, "output_tokens": 1}}'
+)
+_ERR_TRANSITORIO = (
+    '{"type": "result", "subtype": "error", "is_error": true, '
+    '"result": "overloaded: the server is overloaded, please try again"}'
+)
+_ERR_CONTENIDO = (
+    '{"type": "result", "subtype": "error", "is_error": true, '
+    '"result": "el contenido solicitado viola la politica de uso"}'
+)
+
+
+@pytest.mark.timeout(30)
+@pytest.mark.skipif(os.name != "posix", reason="subproceso real")
+def test_reintenta_fallo_transitorio_y_completa(entorno, monkeypatch):
+    """Un 529/overloaded se REINTENTA con backoff y el job acaba COMPLETADO (no error directo)."""
+    from keni_consola.generaciones import _lanzadores
+
+    monkeypatch.setattr(generaciones.shutil, "which", lambda _n: "/usr/bin/claude")
+    monkeypatch.setattr(_lanzadores, "_BACKOFF_BASE_S", 0.01)  # sin esperar de verdad
+    llamadas = {"n": 0}
+    # 1er intento: error transitorio (overloaded). 2do: exito.
+    monkeypatch.setattr(
+        generaciones.runner, "lanzar_proc",
+        _fake_lanzar_factory_por_intento([[_ERR_TRANSITORIO], [_OK_START, _OK_RESULT]], llamadas),
+    )
+    gid = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})["id"]
+    _LANZAR_CLAUDE_REAL(gid, prompt="p", cwd=entorno, procesar=lambda s, m: {"ok": True})
+    assert _esperar_terminal(gid, timeout=15) == generaciones.ESTADO_COMPLETADO
+    assert llamadas["n"] == 2, "debio reintentar UNA vez tras el fallo transitorio"
+
+
+@pytest.mark.timeout(30)
+@pytest.mark.skipif(os.name != "posix", reason="subproceso real")
+def test_no_reintenta_error_de_contenido(entorno, monkeypatch):
+    """Un error de MODELO/CONTENIDO (no transitorio) va a error SIN reintentar (no cambiaria)."""
+    from keni_consola.generaciones import _lanzadores
+
+    monkeypatch.setattr(generaciones.shutil, "which", lambda _n: "/usr/bin/claude")
+    monkeypatch.setattr(_lanzadores, "_BACKOFF_BASE_S", 0.01)
+    llamadas = {"n": 0}
+    monkeypatch.setattr(
+        generaciones.runner, "lanzar_proc",
+        _fake_lanzar_factory_por_intento([[_ERR_CONTENIDO]], llamadas),
+    )
+    gid = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})["id"]
+    _LANZAR_CLAUDE_REAL(gid, prompt="p", cwd=entorno, procesar=lambda s, m: {"ok": True})
+    assert _esperar_terminal(gid, timeout=15) == generaciones.ESTADO_ERROR
+    assert llamadas["n"] == 1, "un error de contenido no debe reintentarse"
+
+
+@pytest.mark.timeout(30)
+@pytest.mark.skipif(os.name != "posix", reason="subproceso real")
+def test_reintento_respeta_el_tope(entorno, monkeypatch):
+    """Tras agotar `KENI_GEN_REINTENTOS` intentos extra de transitorios, queda en error."""
+    from keni_consola.generaciones import _lanzadores
+
+    monkeypatch.setenv("KENI_GEN_REINTENTOS", "2")
+    monkeypatch.setattr(generaciones.shutil, "which", lambda _n: "/usr/bin/claude")
+    monkeypatch.setattr(_lanzadores, "_BACKOFF_BASE_S", 0.01)
+    llamadas = {"n": 0}
+    # SIEMPRE transitorio: nunca completa; se topa en 1 + 2 reintentos = 3 invocaciones.
+    monkeypatch.setattr(
+        generaciones.runner, "lanzar_proc",
+        _fake_lanzar_factory_por_intento([[_ERR_TRANSITORIO]], llamadas),
+    )
+    gid = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})["id"]
+    _LANZAR_CLAUDE_REAL(gid, prompt="p", cwd=entorno, procesar=lambda s, m: {"ok": True})
+    assert _esperar_terminal(gid, timeout=15) == generaciones.ESTADO_ERROR
+    assert llamadas["n"] == 3, "1 intento + 2 reintentos (tope KENI_GEN_REINTENTOS)"
+
+
 @pytest.mark.timeout(20)
 def test_lanzar_job_claude_rechaza_cuando_la_cola_esta_llena(entorno, monkeypatch):
     """Cola al tope -> `lanzar_job_claude` lanza ColaLlenaError SINCRONAMENTE (-> 429).
