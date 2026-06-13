@@ -1,20 +1,25 @@
 """Tests de la API Estado (/api/estado): el DOCTOR de la consola. Todo OFFLINE.
 
-El doctor real escanea el PATH/rutas; para no depender de la maquina, inyectamos
-`ejecutar_chequeos` con un set determinista (OK + AVISO + ERROR). Los chequeos
-OPERATIVOS (consolidacion del banner del front) reusan las sondas compartidas de
-`api/sistema`, `api/actividad` y `presupuesto_ia`: aqui se parchean por sonda para
-cubrir cada escenario (cola llena, pausa, presupuesto, disco, backups, S3, daemons)
-sin depender del disco real de la maquina/CI.
+Los chequeos OPERATIVOS (consolidacion del banner del front) reusan las sondas
+compartidas de `api/sistema`, `api/actividad` y `presupuesto_ia`; el de METRICAS
+reusa el estado por marca de `api/conexiones` (la misma fuente que
+`GET /api/conexiones/metricool`). Aqui se parchean por sonda para cubrir cada
+escenario (cola llena, pausa, presupuesto, disco, backups, S3, daemons, Metricool)
+sin depender del disco/config real de la maquina o del CI.
+
+HISTORIA: el doctor ya NO serializa los chequeos del doctor CLI de `keni_metricas`
+(Python, "cuentas en el config", "credenciales por plataforma", fuente de muestra):
+describian un modelo de configuracion obsoleto y pintaban avisos falsos en
+produccion. Hay tests que blindan que NO vuelvan.
 """
 
 from __future__ import annotations
 
 import pytest
-from keni_metricas import doctor
 
 from keni_consola import presupuesto_ia
 from keni_consola.api import actividad as api_actividad
+from keni_consola.api import conexiones as api_conexiones
 from keni_consola.api import estado as api_estado
 from keni_consola.api import sistema as api_sistema
 
@@ -23,33 +28,19 @@ from .conftest import _cliente
 # Claves del contrato de CADA chequeo (id estable + estado + mensaje + accion + rol).
 _CLAVES_CHEQUEO = {"id", "estado", "nombre", "detalle", "icono", "admin", "siguiente_paso"}
 
-# Ids de los chequeos operativos nuevos (los del banner consolidado en el doctor).
+# Ids de los chequeos por dominio.
 _IDS_MAQUINA = {"maquina:cola", "maquina:presupuesto", "maquina:pausa", "maquina:daemons"}
 _IDS_INFRA = {"infra:disco", "infra:backups", "infra:s3"}
+_IDS_METRICAS = {"metricas:metricool"}
 
-
-def _resultados_demo() -> list[doctor.Resultado]:
-    """Set determinista que cubre los tres estados DENTRO del dominio consola.
-
-    El error vive en un chequeo del dominio (`Fuente`), no en whisper/ffmpeg: la
-    consola filtra esos chequeos clip-a-copy fuera de su indicador de salud.
-    """
-    return [
-        doctor.Resultado("Python", doctor.Estado.OK, "Python 3.12.1"),
-        doctor.Resultado("Fuente", doctor.Estado.ERROR, "No se pudo construir la fuente"),
-        doctor.Resultado("Configuracion", doctor.Estado.AVISO, "No hay config (se usa muestra)"),
-        doctor.Resultado("Credenciales", doctor.Estado.AVISO, "0/5 plataformas conectadas"),
-    ]
-
-
-def _resultados_con_clip_a_copy() -> list[doctor.Resultado]:
-    """El set del doctor incluye los chequeos clip-a-copy que la consola filtra."""
-    return [
-        *_resultados_demo(),
-        doctor.Resultado("binario whisper-cli", doctor.Estado.ERROR, "whisper-cli no esta en el PATH."),
-        doctor.Resultado("binario ffmpeg", doctor.Estado.ERROR, "ffmpeg no esta en el PATH."),
-        doctor.Resultado("modelo whisper", doctor.Estado.ERROR, "no se encontro modelo de whisper."),
-    ]
+# Ids HEREDADOS del doctor CLI de keni_metricas que NO deben volver a aparecer.
+_IDS_OBSOLETOS = {
+    "metricas:python",
+    "metricas:configuracion",
+    "metricas:fuente",
+    "metricas:cuentas",
+    "metricas:credenciales",
+}
 
 
 def _snapshot_cola_sano() -> dict:
@@ -76,16 +67,20 @@ def _discos_sanos() -> list[dict]:
     ]
 
 
-@pytest.fixture
-def doctor_mockeado(monkeypatch):
-    monkeypatch.setattr(api_estado, "ejecutar_chequeos", lambda *a, **k: _resultados_demo())
+def _metricool_todo_conectado() -> list[dict]:
+    return [
+        {"marca": "unotv", "etiqueta": "UnoTV", "conectado": True,
+         "user_id_pista": "111", "blog_id": "222"},
+        {"marca": "claro_sports", "etiqueta": "Claro Sports", "conectado": True,
+         "user_id_pista": "333", "blog_id": "444"},
+    ]
 
 
 @pytest.fixture
 def sondas_sanas(monkeypatch):
-    """Sondas operativas DETERMINISTAS y sanas: el disco/cola/BD real de la maquina o del
-    runner de CI no debe colarse en los asserts (un runner con el disco al 90% no es un
-    fallo del doctor). Cada test de escenario re-parchea la sonda que le toca."""
+    """Sondas DETERMINISTAS y sanas: el disco/cola/BD/config real de la maquina o del
+    runner de CI no debe colarse en los asserts (un runner con el disco al 90% no es
+    un fallo del doctor). Cada test de escenario re-parchea la sonda que le toca."""
     monkeypatch.setattr(api_actividad, "snapshot_cola", _snapshot_cola_sano)
     monkeypatch.setattr(presupuesto_ia, "estado", _presupuesto_sano)
     monkeypatch.setattr(api_sistema, "_discos", _discos_sanos)
@@ -103,6 +98,9 @@ def sondas_sanas(monkeypatch):
         "sonda_s3_salud",
         lambda: {"configurado": False, "salud": None, "error": None},
     )
+    monkeypatch.setattr(
+        api_conexiones, "estado_marcas_metricool", _metricool_todo_conectado
+    )
 
 
 def _chequeos(datos: dict) -> dict[str, dict]:
@@ -115,7 +113,7 @@ def _chequeos(datos: dict) -> dict[str, dict]:
 # --------------------------------------------------------------------------- #
 
 
-def test_estado_devuelve_json_con_contrato(entorno, doctor_mockeado, sondas_sanas):
+def test_estado_devuelve_json_con_contrato(entorno, sondas_sanas):
     c = _cliente()
     r = c.get("/api/estado")
     assert r.status_code == 200
@@ -126,114 +124,72 @@ def test_estado_devuelve_json_con_contrato(entorno, doctor_mockeado, sondas_sana
     for fila in datos["resultados"]:
         assert set(fila) == _CLAVES_CHEQUEO
         assert isinstance(fila["admin"], bool)
+        assert fila["estado"] in {"ok", "aviso", "error"}
     # Ids estables y UNICOS (el front ancla logica a ellos).
     ids = [f["id"] for f in datos["resultados"]]
     assert len(ids) == len(set(ids))
 
 
-def test_estado_mapea_enum_a_strings(entorno, doctor_mockeado, sondas_sanas):
-    c = _cliente()
-    datos = c.get("/api/estado").json()
-    estados = [r["estado"] for r in datos["resultados"]]
-    assert set(estados) <= {"ok", "aviso", "error"}
-    assert "ok" in estados
-    assert "aviso" in estados
-    assert "error" in estados
-
-
-def test_estado_ids_estables_de_metricas(entorno, doctor_mockeado, sondas_sanas):
+def test_estado_incluye_todos_los_dominios_con_rol(entorno, sondas_sanas):
+    """Maquina (equipo) + infra (admin) + metricas (admin), cada uno con su flag."""
     ch = _chequeos(_cliente().get("/api/estado").json())
-    assert {"metricas:python", "metricas:fuente", "metricas:configuracion",
-            "metricas:credenciales"} <= set(ch)
-    # Los chequeos del doctor de metricas son de operador (admin) y, si no estan ok,
-    # remiten a su detalle como siguiente paso.
-    assert ch["metricas:python"]["admin"] is True
-    assert ch["metricas:python"]["siguiente_paso"] is None
-    assert ch["metricas:fuente"]["estado"] == "error"
-    assert ch["metricas:fuente"]["siguiente_paso"]
-
-
-def test_estado_incluye_chequeos_operativos_con_rol(entorno, doctor_mockeado, sondas_sanas):
-    """Los chequeos del banner viven ahora en el doctor: maquina (equipo) + infra (admin)."""
-    ch = _chequeos(_cliente().get("/api/estado").json())
-    assert _IDS_MAQUINA | _IDS_INFRA <= set(ch)
+    assert _IDS_MAQUINA | _IDS_INFRA | _IDS_METRICAS <= set(ch)
     for id_ in _IDS_MAQUINA:
         assert ch[id_]["admin"] is False, f"{id_} es de la maquina (no admin)"
-    for id_ in _IDS_INFRA:
-        assert ch[id_]["admin"] is True, f"{id_} es de infraestructura (admin)"
-    # Con las sondas sanas, todo lo operativo esta ok y sin siguiente paso.
-    for id_ in _IDS_MAQUINA | _IDS_INFRA:
+    for id_ in _IDS_INFRA | _IDS_METRICAS:
+        assert ch[id_]["admin"] is True, f"{id_} es de operador (admin)"
+    # Con las sondas sanas, todo esta ok y sin siguiente paso.
+    for id_ in _IDS_MAQUINA | _IDS_INFRA | _IDS_METRICAS:
         assert ch[id_]["estado"] == "ok"
         assert ch[id_]["siguiente_paso"] is None
 
 
-def test_estado_incluye_resumen_y_siguiente_paso(entorno, doctor_mockeado, sondas_sanas):
+def test_estado_no_incluye_chequeos_heredados_del_doctor_cli(entorno, sondas_sanas):
+    """Los chequeos del doctor CLI de keni_metricas (Python, cuentas demo, credenciales
+    por plataforma, fuente de muestra) describian un modelo obsoleto: fuera."""
     datos = _cliente().get("/api/estado").json()
-    # El resumen global refleja el ERROR del set demo (Fuente) con las frases del doctor.
-    assert "problema" in datos["resumen"]
+    ids = {f["id"] for f in datos["resultados"]}
+    assert ids & _IDS_OBSOLETOS == set()
+    textos = " ".join(f"{f['nombre']} {f['detalle']}" for f in datos["resultados"])
+    assert "fuente de muestra" not in textos
+    assert "plataformas conectadas" not in textos
+    # El siguiente_paso generico de la era CLI tampoco vuelve.
+    pasos = [f["siguiente_paso"] for f in datos["resultados"] if f["siguiente_paso"]]
+    assert all("comando exacto" not in p for p in pasos)
+
+
+def test_estado_resumen_todo_ok(entorno, sondas_sanas):
+    datos = _cliente().get("/api/estado").json()
+    assert "orden" in datos["resumen"]
     assert datos["siguiente_paso"]
 
 
-def test_estado_no_expone_secretos(entorno, monkeypatch, sondas_sanas):
-    con_token = [doctor.Resultado("Credenciales", doctor.Estado.OK, "5/5 plataformas conectadas")]
-    monkeypatch.setattr(api_estado, "ejecutar_chequeos", lambda *a, **k: con_token)
+def test_estado_resumen_con_error(entorno, sondas_sanas, monkeypatch):
+    sonda = {"daemons": [{"daemon": "programador", "estado": "atrasado"}], "error": None}
+    monkeypatch.setattr(api_sistema, "sonda_daemons", lambda: sonda)
     datos = _cliente().get("/api/estado").json()
-    ch = _chequeos(datos)
-    assert ch["metricas:credenciales"]["detalle"] == "5/5 plataformas conectadas"
+    assert "problema" in datos["resumen"]
+    assert "siguiente paso" in datos["siguiente_paso"]
 
 
-def test_estado_si_el_doctor_lanza_da_500_en_espanol(entorno, monkeypatch, sondas_sanas):
-    def boom(*a, **k):
+def test_estado_si_los_chequeos_lanzan_da_500_en_espanol(entorno, sondas_sanas, monkeypatch):
+    def boom():
         raise RuntimeError("fallo inesperado")
 
-    monkeypatch.setattr(api_estado, "ejecutar_chequeos", boom)
+    monkeypatch.setattr(api_estado, "_chequeos_maquina", boom)
     r = _cliente().get("/api/estado")
     assert r.status_code == 500
     assert "autodiagnóstico" in r.json()["error"]
     assert "Traceback" not in r.json()["error"]
 
 
-def test_estado_filtra_chequeos_clip_a_copy(entorno, monkeypatch, sondas_sanas):
-    """whisper-cli / ffmpeg / modelo whisper NO aparecen en el indicador consola."""
-    monkeypatch.setattr(
-        api_estado, "ejecutar_chequeos", lambda *a, **k: _resultados_con_clip_a_copy()
-    )
-    datos = _cliente().get("/api/estado").json()
-    nombres = {r["nombre"] for r in datos["resultados"]}
-    assert "binario whisper-cli" not in nombres
-    assert "binario ffmpeg" not in nombres
-    assert "modelo whisper" not in nombres
-    # Los chequeos del dominio de la consola SI se conservan.
-    assert {"Python", "Fuente", "Configuracion", "Credenciales"} <= nombres
-
-
-def test_estado_filtrado_no_arrastra_error_ajeno(entorno, monkeypatch, sondas_sanas):
-    """Un error clip-a-copy filtrado no contamina ni los chequeos ni el resumen global."""
-    solo_clip = [
-        doctor.Resultado("Python", doctor.Estado.OK, "Python 3.12.1"),
-        doctor.Resultado("binario whisper-cli", doctor.Estado.ERROR, "no esta"),
-        doctor.Resultado("binario ffmpeg", doctor.Estado.ERROR, "no esta"),
-    ]
-    monkeypatch.setattr(api_estado, "ejecutar_chequeos", lambda *a, **k: solo_clip)
-    datos = _cliente().get("/api/estado").json()
-    estados = {r["estado"] for r in datos["resultados"]}
-    # Todo ok: el unico chequeo de metricas que queda (Python) + operativos sanos.
-    assert estados == {"ok"}
-    assert "problema" not in datos["resumen"]
-
-
-def test_estado_real_offline_no_crashea(entorno, sondas_sanas):
-    """Sin mock del doctor: el doctor real (escaneo de PATH, sin red) responde 200."""
+def test_estado_sondas_reales_no_crashean(entorno):
+    """Sin mock de sondas: cola/presupuesto contra el Postgres de pruebas, disco real,
+    backups/S3/config de metricas sin configurar. El doctor responde 200 con todos
+    los ids."""
     r = _cliente().get("/api/estado")
     assert r.status_code == 200
-    assert "resultados" in r.json()
-
-
-def test_estado_sondas_reales_no_crashean(entorno, doctor_mockeado):
-    """Sin mock de sondas: cola/presupuesto contra el Postgres de pruebas, disco real,
-    backups/S3 sin configurar. El doctor responde 200 con todos los ids operativos."""
-    datos = _cliente().get("/api/estado").json()
-    assert _IDS_MAQUINA | _IDS_INFRA <= set(_chequeos(datos))
+    assert _IDS_MAQUINA | _IDS_INFRA | _IDS_METRICAS <= set(_chequeos(r.json()))
 
 
 # --------------------------------------------------------------------------- #
@@ -241,7 +197,7 @@ def test_estado_sondas_reales_no_crashean(entorno, doctor_mockeado):
 # --------------------------------------------------------------------------- #
 
 
-def test_chequeo_cola_llena_avisa(entorno, doctor_mockeado, sondas_sanas, monkeypatch):
+def test_chequeo_cola_llena_avisa(entorno, sondas_sanas, monkeypatch):
     lleno = {**_snapshot_cola_sano(), "activos": 20, "cola_llena": True}
     monkeypatch.setattr(api_actividad, "snapshot_cola", lambda: lleno)
     ch = _chequeos(_cliente().get("/api/estado").json())["maquina:cola"]
@@ -251,7 +207,7 @@ def test_chequeo_cola_llena_avisa(entorno, doctor_mockeado, sondas_sanas, monkey
     assert ch["siguiente_paso"]
 
 
-def test_chequeo_cola_degrada_si_bd_cae(entorno, doctor_mockeado, sondas_sanas, monkeypatch):
+def test_chequeo_cola_degrada_si_bd_cae(entorno, sondas_sanas, monkeypatch):
     def boom():
         raise RuntimeError("bd caida")
 
@@ -263,7 +219,7 @@ def test_chequeo_cola_degrada_si_bd_cae(entorno, doctor_mockeado, sondas_sanas, 
     assert ch["siguiente_paso"]
 
 
-def test_chequeo_presupuesto_agotado_es_error(entorno, doctor_mockeado, sondas_sanas, monkeypatch):
+def test_chequeo_presupuesto_agotado_es_error(entorno, sondas_sanas, monkeypatch):
     est = {**_presupuesto_sano(), "nivel": presupuesto_ia.NIVEL_AGOTADO}
     monkeypatch.setattr(presupuesto_ia, "estado", lambda: est)
     ch = _chequeos(_cliente().get("/api/estado").json())["maquina:presupuesto"]
@@ -272,7 +228,7 @@ def test_chequeo_presupuesto_agotado_es_error(entorno, doctor_mockeado, sondas_s
     assert ch["siguiente_paso"]
 
 
-def test_chequeo_presupuesto_solo_manual_avisa(entorno, doctor_mockeado, sondas_sanas, monkeypatch):
+def test_chequeo_presupuesto_solo_manual_avisa(entorno, sondas_sanas, monkeypatch):
     est = {**_presupuesto_sano(), "nivel": presupuesto_ia.NIVEL_SOLO_MANUAL}
     monkeypatch.setattr(presupuesto_ia, "estado", lambda: est)
     ch = _chequeos(_cliente().get("/api/estado").json())["maquina:presupuesto"]
@@ -280,7 +236,7 @@ def test_chequeo_presupuesto_solo_manual_avisa(entorno, doctor_mockeado, sondas_
     assert "manual" in ch["detalle"].lower()
 
 
-def test_chequeo_pausa_por_kill_switch(entorno, doctor_mockeado, sondas_sanas, monkeypatch):
+def test_chequeo_pausa_por_kill_switch(entorno, sondas_sanas, monkeypatch):
     est = {**_presupuesto_sano(), "nivel": presupuesto_ia.NIVEL_PAUSADO, "pausada": True}
     monkeypatch.setattr(presupuesto_ia, "estado", lambda: est)
     ch = _chequeos(_cliente().get("/api/estado").json())["maquina:pausa"]
@@ -289,7 +245,7 @@ def test_chequeo_pausa_por_kill_switch(entorno, doctor_mockeado, sondas_sanas, m
     assert ch["siguiente_paso"]
 
 
-def test_chequeo_daemons_atrasado_es_error(entorno, doctor_mockeado, sondas_sanas, monkeypatch):
+def test_chequeo_daemons_atrasado_es_error(entorno, sondas_sanas, monkeypatch):
     sonda = {
         "daemons": [
             {"daemon": "ingesta", "estado": "atrasado"},
@@ -304,7 +260,26 @@ def test_chequeo_daemons_atrasado_es_error(entorno, doctor_mockeado, sondas_sana
     assert ch["siguiente_paso"]
 
 
-def test_chequeo_daemons_barrido_en_error_avisa(entorno, doctor_mockeado, sondas_sanas, monkeypatch):
+def test_chequeo_daemons_inactivo_no_es_problema(entorno, sondas_sanas, monkeypatch):
+    """Un daemon apagado por su toggle/ajuste NO late de barrido y eso es lo esperado:
+    el chequeo queda ok y lo menciona como informacion, no como aviso/error."""
+    sonda = {
+        "daemons": [
+            {"daemon": "investigacion", "estado": "inactivo"},
+            {"daemon": "produccion", "estado": "inactivo"},
+            {"daemon": "programador", "estado": "ok"},
+        ],
+        "error": None,
+    }
+    monkeypatch.setattr(api_sistema, "sonda_daemons", lambda: sonda)
+    ch = _chequeos(_cliente().get("/api/estado").json())["maquina:daemons"]
+    assert ch["estado"] == "ok"
+    assert "apagado" in ch["detalle"]
+    assert "2" in ch["detalle"]
+    assert ch["siguiente_paso"] is None
+
+
+def test_chequeo_daemons_barrido_en_error_avisa(entorno, sondas_sanas, monkeypatch):
     sonda = {"daemons": [{"daemon": "alertas", "estado": "error"}], "error": None}
     monkeypatch.setattr(api_sistema, "sonda_daemons", lambda: sonda)
     ch = _chequeos(_cliente().get("/api/estado").json())["maquina:daemons"]
@@ -317,7 +292,7 @@ def test_chequeo_daemons_barrido_en_error_avisa(entorno, doctor_mockeado, sondas
 # --------------------------------------------------------------------------- #
 
 
-def test_chequeo_disco_sobre_umbral_avisa(entorno, doctor_mockeado, sondas_sanas, monkeypatch):
+def test_chequeo_disco_sobre_umbral_avisa(entorno, sondas_sanas, monkeypatch):
     discos = [{"etiqueta": "Estado", "ruta": "/data", "usado": 91, "total": 100,
                "porcentaje": 91.0}]
     monkeypatch.setattr(api_sistema, "_discos", lambda: discos)
@@ -327,7 +302,7 @@ def test_chequeo_disco_sobre_umbral_avisa(entorno, doctor_mockeado, sondas_sanas
     assert ch["siguiente_paso"]
 
 
-def test_chequeo_disco_critico_es_error(entorno, doctor_mockeado, sondas_sanas, monkeypatch):
+def test_chequeo_disco_critico_es_error(entorno, sondas_sanas, monkeypatch):
     discos = [{"etiqueta": "Sistema", "ruta": "/", "usado": 97, "total": 100,
                "porcentaje": 97.0}]
     monkeypatch.setattr(api_sistema, "_discos", lambda: discos)
@@ -335,7 +310,7 @@ def test_chequeo_disco_critico_es_error(entorno, doctor_mockeado, sondas_sanas, 
     assert ch["estado"] == "error"
 
 
-def test_chequeo_backups_fallido_es_error(entorno, doctor_mockeado, sondas_sanas, monkeypatch):
+def test_chequeo_backups_fallido_es_error(entorno, sondas_sanas, monkeypatch):
     sonda = {"configurado": True, "estado": {"ok": False, "paso": "pg_dump"},
              "dumps": 3, "ultimo_dump": None, "atrasado": False, "error": None}
     monkeypatch.setattr(api_sistema, "sonda_backups", lambda: sonda)
@@ -345,7 +320,7 @@ def test_chequeo_backups_fallido_es_error(entorno, doctor_mockeado, sondas_sanas
     assert ch["siguiente_paso"]
 
 
-def test_chequeo_backups_atrasado_avisa(entorno, doctor_mockeado, sondas_sanas, monkeypatch):
+def test_chequeo_backups_atrasado_avisa(entorno, sondas_sanas, monkeypatch):
     sonda = {"configurado": True, "estado": {"ok": True, "paso": ""},
              "dumps": 3, "ultimo_dump": None, "atrasado": True, "error": None}
     monkeypatch.setattr(api_sistema, "sonda_backups", lambda: sonda)
@@ -354,10 +329,63 @@ def test_chequeo_backups_atrasado_avisa(entorno, doctor_mockeado, sondas_sanas, 
     assert "26 h" in ch["detalle"]
 
 
-def test_chequeo_s3_con_error_de_salud(entorno, doctor_mockeado, sondas_sanas, monkeypatch):
+def test_chequeo_s3_con_error_de_salud(entorno, sondas_sanas, monkeypatch):
     sonda = {"configurado": True, "salud": "err",
              "error": "No se pudo conectar con el almacenamiento."}
     monkeypatch.setattr(api_sistema, "sonda_s3_salud", lambda: sonda)
     ch = _chequeos(_cliente().get("/api/estado").json())["infra:s3"]
     assert ch["estado"] == "error"
     assert ch["siguiente_paso"]
+
+
+# --------------------------------------------------------------------------- #
+# Escenarios de METRICAS (Metricool por marca)                                  #
+# --------------------------------------------------------------------------- #
+
+
+def test_chequeo_metricool_todo_conectado_ok(entorno, sondas_sanas):
+    ch = _chequeos(_cliente().get("/api/estado").json())["metricas:metricool"]
+    assert ch["estado"] == "ok"
+    assert "2 de 2" in ch["detalle"]
+    assert ch["siguiente_paso"] is None
+    # Nunca se filtran credenciales al detalle.
+    assert "111" not in ch["detalle"] and "222" not in ch["detalle"]
+
+
+def test_chequeo_metricool_marca_suelta_avisa(entorno, sondas_sanas, monkeypatch):
+    marcas = [
+        {"marca": "unotv", "etiqueta": "UnoTV", "conectado": True},
+        {"marca": "fundacion", "etiqueta": "Fundación", "conectado": False},
+    ]
+    monkeypatch.setattr(api_conexiones, "estado_marcas_metricool", lambda: marcas)
+    ch = _chequeos(_cliente().get("/api/estado").json())["metricas:metricool"]
+    assert ch["estado"] == "aviso"
+    assert "1 de 2" in ch["detalle"]
+    assert "Fundación" in ch["detalle"]
+    assert "Conexiones" in ch["siguiente_paso"]
+
+
+def test_chequeo_metricool_sin_conexiones_avisa(entorno, sondas_sanas, monkeypatch):
+    marcas = [
+        {"marca": "unotv", "etiqueta": "UnoTV", "conectado": False},
+        {"marca": "claro_sports", "etiqueta": "Claro Sports", "conectado": False},
+    ]
+    monkeypatch.setattr(api_conexiones, "estado_marcas_metricool", lambda: marcas)
+    ch = _chequeos(_cliente().get("/api/estado").json())["metricas:metricool"]
+    assert ch["estado"] == "aviso"
+    assert "Ninguna" in ch["detalle"]
+    assert "Conexiones" in ch["siguiente_paso"]
+
+
+def test_chequeo_metricool_config_ilegible_es_error(entorno, sondas_sanas, monkeypatch):
+    def boom():
+        raise ValueError("toml corrupto")
+
+    monkeypatch.setattr(api_conexiones, "estado_marcas_metricool", boom)
+    r = _cliente().get("/api/estado")
+    assert r.status_code == 200  # degrada a chequeo en error, nunca 500
+    ch = _chequeos(r.json())["metricas:metricool"]
+    assert ch["estado"] == "error"
+    assert "config" in ch["detalle"].lower()
+    assert ch["siguiente_paso"]
+    assert "toml corrupto" not in ch["detalle"]  # sin tracebacks ni detalles crudos

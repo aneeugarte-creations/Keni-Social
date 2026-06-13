@@ -116,7 +116,11 @@ def test_nombre_de_sweep_alias():
         pass
 
     assert latidos.nombre_de_sweep(sweep) == "test_latidos"
-    assert latidos._ALIAS["_barrido"] == "pipeline"
+    assert latidos._ALIAS["ingesta_daemon"] == "ingesta"
+    # "pipeline" se partio en "investigacion"+"produccion": el nombre viejo esta
+    # RETIRADO (la sonda ignora su fila huerfana) y ya no hay alias que lo resucite.
+    assert "pipeline" in latidos.RETIRADOS
+    assert "pipeline" not in latidos._ALIAS.values()
 
 
 # --------------------------------------------------------------------------- #
@@ -202,24 +206,51 @@ def test_endpoint_daemons_contrato_y_estados(entorno):
     assert por_nombre["dormido"]["estado"] == "inactivo"
 
 
-def test_endpoint_daemons_atrasado(entorno):
-    # Un latido con `visto` viejo (mas alla del umbral) debe salir "atrasado".
-    db.latido_barrido("zombi", ok=True, intervalo_seg=60.0, tick_seg=60.0)
+def _envejecer_latido(daemon: str) -> None:
+    """Deja el `visto` del daemon muy atras en el tiempo (mas alla de todo umbral)."""
     from keni_consola._db_comun import _conectar
 
     con = _conectar()
     try:
         con.execute(
             "UPDATE daemon_latidos SET visto = ? WHERE daemon = ?",
-            ("2020-01-01T00:00:00", "zombi"),
+            ("2020-01-01T00:00:00", daemon),
         )
         con.commit()
     finally:
         con.close()
+
+
+def test_endpoint_daemons_atrasado(entorno):
+    # Un latido ACTIVO con `visto` viejo (mas alla del umbral) debe salir "atrasado".
+    db.latido_barrido("zombi", ok=True, intervalo_seg=60.0, tick_seg=60.0)
+    _envejecer_latido("zombi")
     c = _cli_admin()
     r = c.get("/api/sistema/daemons")
     por_nombre = {d["daemon"]: d for d in r.json()["daemons"]}
     assert por_nombre["zombi"]["estado"] == "atrasado"
+
+
+def test_endpoint_daemons_inactivo_viejo_no_es_atrasado(entorno):
+    # Un daemon APAGADO por su toggle (activo=0) que no late es lo ESPERADO: sale
+    # "inactivo" aunque su `visto` sea viejisimo (jamas un falso "atrasado").
+    db.latido_ciclo("apagado", activo=False, intervalo_seg=15.0, tick_seg=60.0)
+    _envejecer_latido("apagado")
+    c = _cli_admin()
+    por_nombre = {d["daemon"]: d for d in c.get("/api/sistema/daemons").json()["daemons"]}
+    assert por_nombre["apagado"]["estado"] == "inactivo"
+
+
+def test_endpoint_daemons_ignora_retirados(entorno):
+    # La fila huerfana de un daemon RETIRADO/renombrado (p. ej. "pipeline", que se
+    # partio en investigacion+produccion) no se pinta nunca: nadie la actualizara.
+    db.latido_barrido("pipeline", ok=True, intervalo_seg=15.0, tick_seg=60.0)
+    _envejecer_latido("pipeline")
+    db.latido_barrido("programador", ok=True, intervalo_seg=60.0, tick_seg=60.0)
+    c = _cli_admin()
+    nombres = {d["daemon"] for d in c.get("/api/sistema/daemons").json()["daemons"]}
+    assert "pipeline" not in nombres
+    assert "programador" in nombres
 
 
 # --------------------------------------------------------------------------- #

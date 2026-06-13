@@ -30,7 +30,6 @@ _log = logging.getLogger("keni_consola.latidos")
 # lo deriva del módulo de su `sweep_fn`); estos alias pulen los casos poco legibles para
 # que el panel muestre nombres cortos y estables aunque el módulo se renombre.
 _ALIAS = {
-    "_barrido": "pipeline",  # pipeline_contenido._barrido (Máquina de Contenido)
     "ingesta_daemon": "ingesta",
     "media_gc_daemon": "media_gc",
     "noticias_gc_daemon": "noticias_gc",
@@ -40,6 +39,13 @@ _ALIAS = {
     "eventos_scanner": "vencimientos",
     "sugerencias_editoriales": "sugerencias",
 }
+
+# Daemons RETIRADOS/renombrados: sus filas viejas pueden seguir en `daemon_latidos`
+# (el upsert nunca borra) pero ya no hay hilo que las actualice; la sonda del panel
+# (`api.sistema.sonda_daemons`) las IGNORA para no pintar falsos "atrasado".
+#   - "pipeline": el hilo único del pipeline se partió en "investigacion" + "produccion"
+#     (cada loop late con su propio nombre); la fila vieja quedó huérfana.
+RETIRADOS = frozenset({"pipeline"})
 
 # Mínimo entre DOS latidos de ciclo del mismo daemon (las de barrido no se throttlean:
 # son una por sweep y traen el resultado). 30s mantiene el panel fresco con coste nulo.

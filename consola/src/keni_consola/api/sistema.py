@@ -54,7 +54,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 
-from .. import config, db, media, permisos, rutas
+from .. import config, db, latidos, media, permisos, rutas
 from ..observabilidad import NOMBRE_LOGGER
 from ..tiempo import ahora_iso
 
@@ -723,11 +723,15 @@ def sonda_daemons() -> dict:
     Devuelve `{daemons: [...], error}` donde cada entrada agrega al registro crudo de
     `daemon_latidos` la `edad_seg` del ultimo latido, el `umbral_atraso_seg` aplicado y
     un `estado` listo para pintar: "ok" (late y su ultimo barrido fue bien), "error"
-    (late pero su ultimo barrido fallo), "inactivo" (late con el gate OFF) o "atrasado"
-    (no late: hilo muerto, proceso daemons caido o BD inaccesible para el). Defensiva:
-    un fallo de BD degrada a lista vacia con `error` legible, nunca propaga. La comparten
-    el endpoint admin (`GET /api/sistema/daemons`) y el doctor (`/api/estado`, chequeo
-    `maquina:daemons`).
+    (late pero su ultimo barrido fallo), "inactivo" (apagado por su toggle/gate) o
+    "atrasado" (deberia estar corriendo y no late: hilo muerto, proceso daemons caido o
+    BD inaccesible para el). CRITERIO: un daemon con el gate OFF (`activo=0` en su ultimo
+    latido) esta APAGADO A PROPOSITO — que no late no es un problema, asi que "inactivo"
+    manda sobre "atrasado"; solo un daemon que deberia estar activo puede salir atrasado.
+    Las filas de daemons RETIRADOS (`latidos.RETIRADOS`, p. ej. renombrados en un deploy)
+    se ignoran: nadie las actualizara jamas. Defensiva: un fallo de BD degrada a lista
+    vacia con `error` legible, nunca propaga. La comparten el endpoint admin
+    (`GET /api/sistema/daemons`) y el doctor (`/api/estado`, chequeo `maquina:daemons`).
     """
     try:
         filas = db.listar_latidos()
@@ -737,12 +741,14 @@ def sonda_daemons() -> dict:
     ahora = datetime.fromisoformat(ahora_iso())
     salida = []
     for f in filas:
+        if f["daemon"] in latidos.RETIRADOS:
+            continue
         edad = _edad_segundos(f["visto"], ahora)
         umbral = max(2.0 * f["tick_seg"], _UMBRAL_ATRASO_MIN_SEG) + _MARGEN_ATRASO_SEG
-        if edad is None or edad > umbral:
-            estado = "atrasado"
-        elif not f["activo"]:
+        if not f["activo"]:
             estado = "inactivo"
+        elif edad is None or edad > umbral:
+            estado = "atrasado"
         elif f["ultimo_error"] and f["ultimo_error"] >= (f["ultimo_ok"] or ""):
             # Canon ISO naive-UTC: comparar como texto respeta el orden temporal.
             estado = "error"

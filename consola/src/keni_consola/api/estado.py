@@ -1,93 +1,55 @@
 """API Estado: autodiagnostico del sistema en JSON (el DOCTOR de la consola).
 
-Dos familias de chequeos en una sola respuesta:
+Chequeos en una sola respuesta, todos calculados AQUI sobre las sondas reales del
+sistema (consolidacion del viejo banner del front + conexion de metricas):
 
-  1. Los del `doctor` de metricas (`keni_metricas.doctor`): entorno, fuente, config,
-     credenciales. Se FILTRAN al dominio de la consola (fuera la cadena clip-a-copy:
-     `whisper-cli`, `ffmpeg`, modelo de whisper — herramientas locales de transcripcion
-     que aqui solo desorientaban) y NO se reimplementan: solo se serializan.
-  2. Los OPERATIVOS que antes sintetizaba el front en su banner de alertas (consolidacion):
-     disco, backups y S3 (infraestructura) + cola, presupuesto de IA, kill switch y daemons
-     (maquina de contenido). NO duplican ninguna sonda: reusan las sondas compartidas de
-     `api/sistema.py` (`_discos`, `sonda_backups`, `sonda_s3_salud`, `sonda_daemons`),
-     `api/actividad.snapshot_cola` y `presupuesto_ia.estado()`.
+  - MAQUINA de contenido (`maquina:*`, admin=False): cola de generacion, presupuesto
+    de IA, kill switch y daemons de fondo. Reusan las sondas compartidas de
+    `api/sistema.py` (`sonda_daemons`), `api/actividad.snapshot_cola` y
+    `presupuesto_ia.estado()` — sin duplicar ningun juicio.
+  - INFRAESTRUCTURA (`infra:*`, admin=True): disco, backups y S3, via las sondas de
+    `api/sistema.py` (`_discos`, `sonda_backups`, `sonda_s3_salud`).
+  - METRICAS (`metricas:metricool`, admin=True): conexion a Metricool POR MARCA, la
+    MISMA fuente y el MISMO juicio que `GET /api/conexiones/metricool`
+    (`api.conexiones.estado_marcas_metricool`). HISTORIA: antes este endpoint
+    serializaba los chequeos del doctor CLI de `keni_metricas` (Python instalado,
+    "cuentas en el config", "credenciales por plataforma", fuente de muestra...);
+    describian un modelo de configuracion que esta app ya no usa (hoy las metricas
+    se conectan via Metricool por marca) y pintaban avisos FALSOS en produccion.
+    Se retiraron por completo; el doctor CLI sigue intacto en `keni_metricas` para
+    quien lo use en local.
 
 CONTRATO de cada chequeo: `{id, estado, nombre, detalle, icono, admin, siguiente_paso}`.
-  - `id`: estable ("metricas:<slug>" para los del doctor; "maquina:*" / "infra:*" para los
-    operativos). El front puede anclar logica a el sin depender del nombre humano.
+  - `id`: estable ("maquina:*" / "infra:*" / "metricas:*"). El front puede anclar
+    logica a el sin depender del nombre humano.
   - `estado`: "ok" | "aviso" | "error". `icono` es el emoji equivalente.
-  - `detalle`: mensaje humano. `siguiente_paso`: accion concreta cuando NO esta ok (None si ok).
-  - `admin`: True para los chequeos de INFRAESTRUCTURA (disco, backups, S3 y los del doctor
-    de metricas: su remedio es de operador) y False para los de la MAQUINA de contenido
-    (cola, presupuesto, pausa, daemons: le importan a todo el equipo). El front filtra por
-    rol con este flag; ningun detalle expone secretos (solo porcentajes/saludes/conteos).
+  - `detalle`: mensaje humano. `siguiente_paso`: accion concreta cuando NO esta ok
+    (None si ok), con la ruta REAL en la UI cuando el remedio vive ahi.
+  - `admin`: True para los chequeos de INFRAESTRUCTURA/METRICAS (su remedio es de
+    operador) y False para los de la MAQUINA de contenido (le importan a todo el
+    equipo). El front filtra por rol con este flag; ningun detalle expone secretos.
 
-Se mantienen el `resumen` global y el `siguiente_paso` del doctor (calculados sobre TODOS
-los chequeos, con las mismas frases de `keni_metricas.doctor`).
+Se mantienen el `resumen` global y el `siguiente_paso` de cabecera (frases propias,
+calculadas sobre TODOS los chequeos).
 
-Los chequeos operativos son DEFENSIVOS: un fallo de BD/disco degrada ese chequeo a "aviso"
-con mensaje legible, nunca tumba el endpoint. `ejecutar_chequeos` se expone como nombre de
-modulo para inyectarlo/mockearlo en tests (igual que siempre); las sondas operativas se
-parchean en sus modulos (`api.sistema`, `api.actividad`, `presupuesto_ia`).
+Los chequeos son DEFENSIVOS: un fallo de BD/disco/config degrada ese chequeo a
+"aviso"/"error" con mensaje legible, nunca tumba el endpoint. Las sondas se parchean
+en sus modulos (`api.sistema`, `api.actividad`, `api.conexiones`, `presupuesto_ia`).
 """
 
 from __future__ import annotations
 
-from keni_metricas import doctor
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from .. import presupuesto_ia
 from . import actividad as api_actividad
+from . import conexiones as api_conexiones
 from . import sistema as api_sistema
 
-# Inyectable: los tests reasignan esto a un stub determinista.
-ejecutar_chequeos = doctor.ejecutar_chequeos
-
-# Mapa Estado del doctor -> cadena que consume el SPA (y su inverso, para reconstruir
-# Resultados equivalentes al calcular el resumen global con las frases del doctor).
-_ESTADO_A_STR = {
-    doctor.Estado.OK: "ok",
-    doctor.Estado.AVISO: "aviso",
-    doctor.Estado.ERROR: "error",
-}
-_STR_A_ESTADO = {v: k for k, v in _ESTADO_A_STR.items()}
-
-# Iconos por estado (los chequeos del doctor traen el suyo en el enum; los operativos
-# usan estos mismos para que la lista sea homogenea).
+# Iconos por estado (mismo lenguaje visual en toda la lista).
 _ICONOS = {"ok": "✅", "aviso": "⚠️", "error": "❌"}
-
-# Chequeos del `doctor` que NO pertenecen al dominio de la consola: son de la
-# cadena clip-a-copy (transcripcion local con whisper.cpp). Se filtran por nombre.
-_NOMBRES_FUERA_DE_DOMINIO = frozenset(
-    {"binario whisper-cli", "binario ffmpeg", "modelo whisper"}
-)
-
-# Siguiente paso de un chequeo del doctor que no esta ok: su detalle ya trae la accion
-# (a menudo el comando exacto); este texto solo remite a el para cumplir el contrato.
-_PASO_DOCTOR = "Revisa el detalle del chequeo: suele incluir el comando exacto a ejecutar."
-
-
-def _estado_str(estado: object) -> str:
-    """Normaliza un Estado del doctor a "ok"/"aviso"/"error" (cae a "aviso")."""
-    return _ESTADO_A_STR.get(estado, "aviso")
-
-
-def _es_dominio_consola(resultado: object) -> bool:
-    """True si el chequeo pertenece al dominio que gobierna la consola.
-
-    Filtra por nombre exacto (`binario whisper-cli`, `binario ffmpeg`,
-    `modelo whisper`). Cualquier chequeo desconocido se conserva: preferimos
-    mostrar de mas a ocultar un problema real de la consola.
-    """
-    return str(getattr(resultado, "nombre", "")) not in _NOMBRES_FUERA_DE_DOMINIO
-
-
-def _slug(nombre: str) -> str:
-    """Slug estable de un nombre de chequeo del doctor ("binario ffmpeg" -> "binario-ffmpeg")."""
-    limpio = "".join(c if c.isalnum() else "-" for c in nombre.lower())
-    return "-".join(p for p in limpio.split("-") if p) or "chequeo"
 
 
 def _chequeo(
@@ -108,21 +70,6 @@ def _chequeo(
         "icono": _ICONOS.get(estado, ""),
         "admin": admin,
         "siguiente_paso": siguiente_paso if estado != "ok" else None,
-    }
-
-
-def _chequeo_doctor(r: object) -> dict:
-    """Serializa un Resultado del doctor de metricas (id `metricas:<slug>`, admin)."""
-    estado = _estado_str(getattr(r, "estado", None))
-    nombre = str(getattr(r, "nombre", ""))
-    return {
-        "id": f"metricas:{_slug(nombre)}",
-        "estado": estado,
-        "nombre": nombre,
-        "detalle": str(getattr(r, "detalle", "")),
-        "icono": str(getattr(getattr(r, "estado", None), "value", "")) or _ICONOS.get(estado, ""),
-        "admin": True,
-        "siguiente_paso": None if estado == "ok" else _PASO_DOCTOR,
     }
 
 
@@ -213,7 +160,13 @@ def _chequeos_presupuesto() -> list[dict]:
 
 
 def _chequeo_daemons() -> dict:
-    """Daemons de fondo: error si alguno no late; aviso si su ultimo barrido fallo."""
+    """Daemons de fondo: error SOLO si uno que deberia correr no late.
+
+    El juicio por daemon es de `api_sistema.sonda_daemons` (fuente unica, la misma
+    del panel Sistema): "inactivo" = apagado por su toggle/ajuste — sin latido de
+    barrido es lo ESPERADO, no un problema (se menciona como informacion en el ok);
+    "atrasado" = deberia estar activo y no late (hilo muerto o proceso caido).
+    """
     try:
         sonda = api_sistema.sonda_daemons()
     except Exception:  # noqa: BLE001 -- sonda defensiva
@@ -228,25 +181,31 @@ def _chequeo_daemons() -> dict:
     daemons = sonda.get("daemons") or []
     atrasados = [str(d.get("daemon", "?")) for d in daemons if d.get("estado") == "atrasado"]
     con_error = [str(d.get("daemon", "?")) for d in daemons if d.get("estado") == "error"]
+    inactivos = sum(1 for d in daemons if d.get("estado") == "inactivo")
     if atrasados:
         return _chequeo(
             "maquina:daemons", "Daemons de fondo", "error",
             f"Sin latido (hilo muerto o proceso caído): {', '.join(atrasados)}.",
             admin=False,
-            siguiente_paso="Revisa el servicio `daemons` (docker compose logs daemons) y reinícialo si no late.",
+            siguiente_paso=(
+                "Revisa los logs del servicio `daemons` en el servidor y reinícialo "
+                "si el proceso está caído."
+            ),
         )
     if con_error:
         return _chequeo(
             "maquina:daemons", "Daemons de fondo", "aviso",
             f"Último barrido en error: {', '.join(con_error)}.",
             admin=False,
-            siguiente_paso="Mira el detalle del barrido en el Monitor (sección Daemons).",
+            siguiente_paso="Mira el detalle del barrido en el panel Sistema (sección Daemons).",
         )
-    detalle = (
-        f"{len(daemons)} daemon(s) latiendo con normalidad."
-        if daemons
-        else "Sin daemons registrados todavía (ninguno ha latido)."
-    )
+    activos = len(daemons) - inactivos
+    if not daemons:
+        detalle = "Sin daemons registrados todavía (ninguno ha latido)."
+    else:
+        detalle = f"{activos} daemon(s) latiendo con normalidad."
+        if inactivos:
+            detalle += f" {inactivos} apagado(s) por ajuste (no es un problema)."
     return _chequeo("maquina:daemons", "Daemons de fondo", "ok", detalle, admin=False)
 
 
@@ -359,40 +318,109 @@ def _chequeos_infra() -> list[dict]:
 
 
 # --------------------------------------------------------------------------- #
-# Endpoint                                                                     #
+# Chequeo de METRICAS (Metricool por marca, admin=True)                        #
+# --------------------------------------------------------------------------- #
+
+# Donde se arregla una conexion de Metricool en la UI (ruta real del drawer).
+_PASO_METRICOOL = (
+    "Conéctala en Monitor → Ajustes → Conexiones (credencial de Metricool por marca)."
+)
+
+
+def _chequeo_metricool() -> dict:
+    """Conexion de metricas: marcas del catalogo conectadas a Metricool.
+
+    MISMA fuente y MISMO juicio que `GET /api/conexiones/metricool`
+    (`api_conexiones.estado_marcas_metricool`): una marca esta conectada si tiene
+    `user_token` + `user_id` + `blog_id` reales en el config de metricas. Sin
+    conexiones es AVISO (las metricas no cargaran); con alguna marca suelta, aviso
+    nombrandola. Un config ilegible es ERROR (hay algo roto que arreglar).
+    """
+    try:
+        marcas = api_conexiones.estado_marcas_metricool()
+    except Exception:  # noqa: BLE001 -- config corrupto/ilegible: chequeo en error, nunca 500
+        return _chequeo(
+            "metricas:metricool", "Métricas (Metricool)", "error",
+            "No se pudo leer la configuración de métricas (config.toml ilegible o corrupto).",
+            admin=True,
+            siguiente_paso=(
+                "Revisa el config.toml de keni-metricas en el volumen de datos o "
+                "re-guarda una conexión en Monitor → Ajustes → Conexiones."
+            ),
+        )
+    total = len(marcas)
+    conectadas = [m for m in marcas if m.get("conectado")]
+    sueltas = [str(m.get("etiqueta") or m.get("marca")) for m in marcas if not m.get("conectado")]
+    if total == 0:
+        return _chequeo(
+            "metricas:metricool", "Métricas (Metricool)", "aviso",
+            "No hay marcas en el catálogo: nada que conectar a Metricool.",
+            admin=True,
+            siguiente_paso="Da de alta las marcas en el catálogo (keni-shared) y reinicia el servicio.",
+        )
+    if not conectadas:
+        return _chequeo(
+            "metricas:metricool", "Métricas (Metricool)", "aviso",
+            f"Ninguna de las {total} marcas del catálogo está conectada a Metricool: las métricas no cargarán.",
+            admin=True,
+            siguiente_paso=_PASO_METRICOOL,
+        )
+    if sueltas:
+        return _chequeo(
+            "metricas:metricool", "Métricas (Metricool)", "aviso",
+            f"{len(conectadas)} de {total} marcas conectadas a Metricool; sin conexión: {', '.join(sueltas)}.",
+            admin=True,
+            siguiente_paso=_PASO_METRICOOL,
+        )
+    return _chequeo(
+        "metricas:metricool", "Métricas (Metricool)", "ok",
+        f"Metricool conectado: {total} de {total} marcas del catálogo.",
+        admin=True,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Resumen global + endpoint                                                    #
 # --------------------------------------------------------------------------- #
 
 
-def _como_resultados(chequeos: list[dict]) -> list[doctor.Resultado]:
-    """Resultados equivalentes del doctor para calcular resumen/cierre con sus frases."""
-    return [
-        doctor.Resultado(
-            c["nombre"],
-            _STR_A_ESTADO.get(c["estado"], doctor.Estado.AVISO),
-            c["detalle"],
+def _resumen_global(chequeos: list[dict]) -> str:
+    """Una frase de cabecera, en lenguaje no tecnico, segun el estado global."""
+    errores = sum(1 for c in chequeos if c["estado"] == "error")
+    avisos = sum(1 for c in chequeos if c["estado"] == "aviso")
+    if errores:
+        return (
+            f"Hay {errores} problema(s) que requieren atención. "
+            "Revisa los chequeos marcados de abajo."
         )
-        for c in chequeos
-    ]
+    if avisos:
+        return f"Sistema operativo, con {avisos} aviso(s) que conviene mirar."
+    return "Todo en orden: la consola opera con normalidad."
+
+
+def _cierre_global(chequeos: list[dict]) -> str:
+    """El "que hacer ahora" de cabecera: remite al paso accionable de cada chequeo."""
+    if any(c["estado"] != "ok" for c in chequeos):
+        return (
+            "Qué hacer ahora: cada chequeo marcado trae su siguiente paso; "
+            "empieza por los errores."
+        )
+    return "Qué hacer ahora: nada, todos los chequeos están en orden."
 
 
 async def estado(request: Request) -> Response:
     try:
-        resultados_doctor = [r for r in ejecutar_chequeos() if _es_dominio_consola(r)]
+        chequeos = _chequeos_maquina() + _chequeos_infra() + [_chequeo_metricool()]
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
         return JSONResponse(
             {"error": "No se pudo ejecutar el autodiagnóstico. Vuelve a intentarlo en un momento."},
             status_code=500,
         )
-
-    chequeos = [_chequeo_doctor(r) for r in resultados_doctor]
-    chequeos += _chequeos_maquina()
-    chequeos += _chequeos_infra()
-    equivalentes = _como_resultados(chequeos)
     return JSONResponse(
         {
             "resultados": chequeos,
-            "resumen": doctor.resumen_humano(equivalentes),
-            "siguiente_paso": doctor.cierre_accionable(equivalentes),
+            "resumen": _resumen_global(chequeos),
+            "siguiente_paso": _cierre_global(chequeos),
         }
     )
 

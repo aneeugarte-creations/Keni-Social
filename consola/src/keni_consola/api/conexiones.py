@@ -267,14 +267,16 @@ def _pista_user_id(user_id: str) -> str:
     return user_id
 
 
-async def metricool_estado(request: Request) -> Response:
-    """GET: estado por marca de Metricool (sin exponer NUNCA el user_token).
+def estado_marcas_metricool() -> list[dict]:
+    """Estado de conexion de Metricool POR MARCA, sin exponer NUNCA el user_token.
 
-    Lista TODAS las marcas del catalogo con su estado conectado/desconectado y, si
-    estan, una pista del user_id (no secreto) y el blog_id. SOLO ADMIN (#153).
+    Una entrada por marca del catalogo (`keni_shared.marcas.opciones_metricas()`):
+    `{marca, etiqueta, conectado}` y, si esta conectada, la pista del user_id (no
+    secreto) y el blog_id. FUENTE UNICA del juicio "conectada": la comparten el
+    endpoint `GET /api/conexiones/metricool` y el doctor (`/api/estado`, chequeo
+    `metricas:metricool`). Propaga errores de lectura del config (el handler los
+    convierte en HTTP; el doctor los degrada a chequeo en error).
     """
-    if not permisos.es_admin(request):
-        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
     cfg = _config_existente()
     marcas = []
     for mid, etiqueta in _marcas_metricool():
@@ -285,7 +287,18 @@ async def metricool_estado(request: Request) -> Response:
             entrada["user_id_pista"] = _pista_user_id(_credencial(tabla, "user_id"))
             entrada["blog_id"] = _credencial(tabla, "blog_id")
         marcas.append(entrada)
-    return JSONResponse({"marcas": marcas})
+    return marcas
+
+
+async def metricool_estado(request: Request) -> Response:
+    """GET: estado por marca de Metricool (sin exponer NUNCA el user_token).
+
+    Lista TODAS las marcas del catalogo con su estado conectado/desconectado y, si
+    estan, una pista del user_id (no secreto) y el blog_id. SOLO ADMIN (#153).
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    return JSONResponse({"marcas": estado_marcas_metricool()})
 
 
 def _escribir_marca_metricool(marca: str, valores: dict[str, str]) -> None:
