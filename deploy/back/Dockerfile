@@ -85,9 +85,21 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 #   cualquier IP ("*"). Traefik puede correr en host-mode, pero alcanza al back por la red
 #   interna del compose, asi que la IP de origen cae en ese rango privado. OJO: si cambia la
 #   topologia de red (otra subred Docker, ingress en otra red, etc.) hay que ajustar este valor.
-# 1 worker uvicorn: el back solo ENCOLA (la cola vive en Postgres compartido). La
-#   ejecucion (`claude -p`) corre en el servicio `worker`. Concurrencia real = KENI_MAX_JOBS
-#   por proceso worker (el tope de admision lo respeta tambien el encolado del back).
+# 2 workers uvicorn: el back NO ejecuta `claude -p` (eso es el servicio `worker`), pero SI
+#   es un proceso interactivo de cara al equipo: sirve /api (UI humana), /mcp (trafico de
+#   agentes Claude Code) y SSE de larga vida (generacion token a token) — todo en el mismo
+#   proceso. Con 1 solo worker eso es un cuello + micro-SPOF: una SSE colgada o un /mcp lento
+#   degrada la UI, y un reciclaje del proceso corta a todos. Subimos a 2 (resiliencia y
+#   concurrencia baratas). Es SEGURO multi-proceso: el back es STATELESS entre peticiones —
+#   sesiones y cola de jobs viven en Postgres compartido, no en memoria; arranca con
+#   KENI_WORKER_EXTERNO=1 (no levanta worker in-proceso) y NO corre daemons/scheduler
+#   in-proc (eso es el servicio `daemons`). El bootstrap y las migraciones del arranque son
+#   idempotentes y best-effort (correr 2 veces es inocuo). El lifespan del MCP (session
+#   manager + cliente in-proc) es por-proceso, asi que cada worker tiene el suyo: correcto.
+#   No subir mas alla de 2 sin re-presupuestar RAM (cada worker reimporta la app entera; el
+#   mem_limit/cpus del back en el compose estan dimensionados para 2). Concurrencia real de
+#   GENERACION = KENI_MAX_JOBS por proceso worker (el tope de admision lo respeta tambien el
+#   encolado del back).
 CMD ["uvicorn", "keni_consola.app:crear_app", "--factory", \
-     "--host", "0.0.0.0", "--port", "8765", \
+     "--host", "0.0.0.0", "--port", "8765", "--workers", "2", \
      "--proxy-headers", "--forwarded-allow-ips=172.16.0.0/12"]

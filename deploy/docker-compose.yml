@@ -264,6 +264,11 @@ services:
       mcp:
         condition: service_started
     # El HEALTHCHECK lo hereda del Dockerfile (curl :8765/healthz). No lo redefinimos.
+    # RECURSOS: el back corre 2 workers uvicorn (ver back/Dockerfile CMD): sirve /api + /mcp +
+    # SSE de larga vida, no genera (eso es el worker). 3.0 CPU = ~1.5 vCPU/worker de techo,
+    # holgado para un proceso interactivo. mem 3g cubre 2 procesos que reimportan la app
+    # (~300–500 MiB c/u en reposo + buffers de SSE); si subes a 2 workers algo pesado, sube
+    # BACK_MEM_LIMIT. Son TOPES, no reservas (ver cabecera).
     mem_limit: ${BACK_MEM_LIMIT:-3g}
     cpus: 3.0
     security_opt:
