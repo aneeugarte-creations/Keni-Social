@@ -2,10 +2,13 @@
 // El objeto compuesto vive en ./index.ts; aquí solo el fragmento + sus imports.
 import { peticion, query } from "./_core";
 import type {
+  CosteMedioArte,
+  CuerpoGenerarArte,
   CuerpoGenerarMedia,
   CuerpoGuardarArte,
   RespuestaArte,
   RespuestaArtes,
+  RespuestaGenerarArte,
   RespuestaGeneracion,
   RespuestaMedia,
   RespuestaMensaje,
@@ -49,5 +52,14 @@ export const apiMedia = {
       `/artes/${encodeURIComponent(id)}${purgar ? "?purgar=1" : ""}`,
       { metodo: "DELETE" },
     ),
+
+  // --- Lanzamiento manual de ARTE (genera N imágenes a mano para una marca) ---
+  // Crea N generaciones de imagen y las ejecuta en 2.º plano; el front sondea cada
+  // `GET /api/generaciones/{id}` y, al completarse, lee `resultado={id,url,modelo,coste_usd}`.
+  generarArte: (cuerpo: CuerpoGenerarArte) =>
+    peticion<RespuestaGenerarArte>("/artes/generar", { metodo: "POST", json: cuerpo }),
+  // Coste medio por imagen (USD) para estimar el gasto ANTES de lanzar (`modelo` opcional).
+  costeMedioArte: (modelo?: string, signal?: AbortSignal) =>
+    peticion<CosteMedioArte>(`/artes/coste-medio${query({ modelo })}`, { signal }),
 
 };

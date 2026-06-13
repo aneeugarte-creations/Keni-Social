@@ -1,3 +1,5 @@
+import type { Generacion } from "./generaciones";
+
 // --- Media (imágenes) ---
 
 /** Respuesta al subir o generar una imagen. */
@@ -103,4 +105,45 @@ export interface RespuestaArtes {
 /** Respuesta de `POST /api/artes`. */
 export interface RespuestaArte {
   arte: Arte;
+}
+
+// --- Lanzamiento manual de ARTE (genera N imágenes a mano para una marca) ---
+
+/** Cuerpo de `POST /api/artes/generar`: lanza N imágenes de arte a mano. */
+export interface CuerpoGenerarArte {
+  /** Marca del catálogo único (obligatoria). */
+  marca: string;
+  /** Tema a ilustrar; si falta, se usa el prompt de arte de la Biblioteca (`prompt/arte`). */
+  prompt?: string;
+  /** Id de un modelo de `GET /api/conexiones/imagen`; si falta, el configurado por defecto. */
+  modelo?: string;
+  /** Nº de alternativas a generar, 1..4. */
+  n?: number;
+}
+
+/**
+ * Coste medio por imagen (USD) para estimar el gasto ANTES de lanzar. El front lo
+ * multiplica por N ("~$X por imagen × N"). `por_imagen` es null si aún no hay muestras.
+ */
+export interface CosteMedioArte {
+  /** Media de coste por imagen; `null` si no hay ninguna muestra ni global. */
+  por_imagen: number | null;
+  moneda: string;
+  unidad: string;
+  /** Cuántas generaciones se promediaron. */
+  muestras: number;
+  modelo: string;
+  /** `true` si el dato es la media GLOBAL de imagen (no la del modelo pedido). */
+  global: boolean;
+}
+
+/**
+ * Respuesta de `POST /api/artes/generar`: N generaciones de imagen (a sondear con
+ * `GET /api/generaciones/{id}`), el modelo efectivo, N y el coste medio por imagen.
+ */
+export interface RespuestaGenerarArte {
+  generaciones: Generacion[];
+  modelo: string;
+  n: number;
+  coste_medio: CosteMedioArte;
 }

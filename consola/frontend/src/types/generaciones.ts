@@ -43,6 +43,10 @@ export interface ResultadoGeneracion {
   // imagen
   id?: string;
   url?: string;
+  /** Modelo de imagen que la produjo (lanzamiento manual de arte). */
+  modelo?: string;
+  /** Coste en USD de esta imagen (lanzamiento manual de arte); 0 si no se reportó. */
+  coste_usd?: number;
   /**
    * Imágenes producidas por el estudio de imagen, ya importadas al
    * almacén de media para previsualizarlas. Cada una trae su `nombre` y la `url`
