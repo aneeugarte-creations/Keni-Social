@@ -26,10 +26,10 @@ ENV PYTHONUNBUFFERED=1 \
 # pidiera. Fijamos una version concreta para builds REPRODUCIBLES; el upgrade debe ser
 # DELIBERADO: sube este valor a conciencia, valida el stream-json del worker contra la nueva
 # version y despliega aparte (no lo mezcles con otro cambio). Overridable por build-arg.
-#   ⚠ 2.1.177 = ultima estable publicada en npm al fijarla (2026-06-13). El HUMANO debe
-#     CONFIRMAR que coincide con la version validada/actual en prod antes de desplegar;
-#     si en prod corre otra, pon ESA aqui (no "la ultima por defecto").
-ARG CLAUDE_CODE_VERSION=2.1.177
+#   ⚠ 2.1.173 = version verificada CORRIENDO en prod (worker container, 2026-06-13).
+#     Se fija a la de prod, NO a "la ultima de npm", para que un rebuild no altere el
+#     comportamiento de stream-json ya validado. Sube a conciencia y valida aparte.
+ARG CLAUDE_CODE_VERSION=2.1.173
 
 # curl: script de nodesource. git: lo usan algunas skills. Node 20 + Claude Code CLI:
 # AQUI SI (el worker es quien corre `claude -p`). ffmpeg: motor de RENDER de video (Ola VIDEO)
