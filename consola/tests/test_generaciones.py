@@ -371,6 +371,76 @@ def test_store_crear_obtener_actualizar_listar(entorno):
     assert generaciones.obtener("noexiste") is None
 
 
+def test_listar_pagina_por_indice_sin_parsear_yaml(entorno, monkeypatch):
+    """`listar`/`contar` paginan por el INDICE en Postgres, sin escanear los YAML.
+
+    El detalle pesado (prompt/razonamiento) NO viaja en el listado: solo `obtener` (que lee el
+    YAML) lo expone. Comprobamos ademas que el camino del listado NO toca `_todas_ordenadas`
+    (el escaneo+parse de todos los YAML), que es justo lo que el indice elimina.
+    """
+    from keni_consola.generaciones import _almacen
+
+    ids = []
+    for i in range(3):
+        g = generaciones.crear({"tipo": "copy", "marca": _MARCA, "etiqueta": f"G{i}"})
+        # El prompt es el cuerpo PESADO: solo debe verse en el detalle, no en el listado.
+        generaciones.actualizar(g["id"], {"prompt": "P" * 5000, "razonamiento": "R" * 5000})
+        ids.append(g["id"])
+
+    llamadas = {"n": 0}
+    real = _almacen._todas_ordenadas
+    monkeypatch.setattr(
+        _almacen, "_todas_ordenadas",
+        lambda: (llamadas.__setitem__("n", llamadas["n"] + 1), real())[1],
+    )
+
+    listado = generaciones.listar(limite=None)
+    assert llamadas["n"] == 0, "el listado no debe escanear los YAML (pagina por el indice)"
+    en_lista = {g["id"] for g in listado}
+    assert set(ids) <= en_lista
+    # El cuerpo pesado NO viaja en el listado...
+    g0 = next(g for g in listado if g["id"] == ids[0])
+    assert "prompt" not in g0 and "razonamiento" not in g0
+    # ...pero el DETALLE (obtener, que lee el YAML) sí lo trae.
+    detalle = generaciones.obtener(ids[0])
+    assert detalle["prompt"] == "P" * 5000
+    # Conteo por el indice; orden recientes primero por (fecha_inicio, id) DESC — el MISMO
+    # criterio que el escaneo YAML previo (a igual fecha_inicio, desempata el id DESC).
+    assert generaciones.contar() >= 3
+    orden = [g["id"] for g in listado if g["id"] in ids]
+    esperado = sorted(ids, key=lambda i: (generaciones.obtener(i)["fecha_inicio"], i), reverse=True)
+    assert orden == esperado
+    # Filtro por marca via indice.
+    assert {g["id"] for g in generaciones.listar(limite=None, marca=_MARCA)} >= set(ids)
+    assert generaciones.listar(limite=None, marca="otra-marca-inexistente") == []
+
+
+def test_listar_backfill_desde_yaml_si_indice_vacio(entorno):
+    """Backfill perezoso: con YAML preexistentes y el indice VACIO, `listar` lo repuebla.
+
+    Simula el primer uso tras el deploy (indice recien creado, YAML ya en disco): se purga el
+    indice a mano y el siguiente `listar` lo reconstruye desde los YAML (idempotente).
+    """
+    from keni_consola import db_jobs
+
+    ids = [
+        generaciones.crear({"tipo": "copy", "marca": _MARCA, "etiqueta": f"B{i}"})["id"]
+        for i in range(3)
+    ]
+    # Purga el indice (los YAML siguen en disco): estado "primer uso tras deploy".
+    con = db_jobs._conectar()
+    try:
+        con.execute("DELETE FROM generaciones_indice")
+        con.commit()
+    finally:
+        con.close()
+    assert db_jobs.indice_generaciones_vacio() is True
+    # El listado dispara el backfill desde los YAML y vuelve a verlos todos.
+    en_lista = {g["id"] for g in generaciones.listar(limite=None)}
+    assert set(ids) <= en_lista
+    assert db_jobs.indice_generaciones_vacio() is False
+
+
 def test_store_fase_se_persiste_y_legado_cae_a_vacio(entorno):
     """`fase` se persiste y se expone; un registro legado (sin fase) la trae como "".
 

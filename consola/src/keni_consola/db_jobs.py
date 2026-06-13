@@ -1,6 +1,8 @@
 """Persistencia — dominio jobs. Implementación de db.py (ver barrel `db.py`)."""
 from __future__ import annotations
 
+import json
+
 from ._db_comun import (
     UTC,
     Any,
@@ -493,6 +495,145 @@ def gasto_ia_del_dia(dia: str) -> dict[str, Any]:
         "coste_usd": float(fila["coste"]) if fila is not None else 0.0,
         "generaciones": int(fila["n"]) if fila is not None else 0,
     }
+
+
+# --------------------------------------------------------------------------- #
+# Indice de GENERACIONES (rendimiento del listado; ver `generaciones._almacen`) #
+# --------------------------------------------------------------------------- #
+#
+# El registro de cada generacion vive en un YAML (fuente de verdad del DETALLE pesado). Este
+# indice replica los campos LIGEROS del listado para paginar por SQL sin parsear ~2000 YAML por
+# peticion. `payload` (jsonb) guarda el dict publico ligero (sin prompt/razonamiento) que
+# `listar` devuelve. UPSERT por `gen_id`: lo mantiene el almacen al crear/actualizar.
+
+
+def indexar_generacion(
+    gen_id: str,
+    *,
+    fecha_inicio: str = "",
+    estado: str = "",
+    tipo: str = "",
+    marca: str = "",
+    proceso: str = "",
+    contenido_id: str = "",
+    payload: dict[str, Any] | None = None,
+) -> None:
+    """UPSERT de la fila de indice de una generacion (idempotente por `gen_id`).
+
+    `payload` es el dict publico LIGERO (lo que devuelve `listar`); se guarda en la columna
+    jsonb (se pasa serializado, Postgres lo castea, igual que `jobs.spec`). Las columnas sueltas
+    (fecha_inicio/estado/marca/...) son las que el indice consulta/ordena.
+    """
+    if not gen_id:
+        return
+    con = _conectar()
+    try:
+        con.execute(
+            "INSERT INTO generaciones_indice (gen_id, fecha_inicio, estado, tipo, marca, "
+            "proceso, contenido_id, payload, actualizado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT (gen_id) DO UPDATE SET "
+            "fecha_inicio = EXCLUDED.fecha_inicio, estado = EXCLUDED.estado, "
+            "tipo = EXCLUDED.tipo, marca = EXCLUDED.marca, proceso = EXCLUDED.proceso, "
+            "contenido_id = EXCLUDED.contenido_id, payload = EXCLUDED.payload, "
+            "actualizado = EXCLUDED.actualizado",
+            (gen_id, fecha_inicio, estado, tipo, marca, proceso, contenido_id,
+             json.dumps(payload or {}, ensure_ascii=False), ahora_iso()),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+def desindexar_generacion(gen_id: str) -> None:
+    """Borra la fila de indice de una generacion (al borrar/poda el YAML). Idempotente."""
+    if not gen_id:
+        return
+    con = _conectar()
+    try:
+        con.execute("DELETE FROM generaciones_indice WHERE gen_id = ?", (gen_id,))
+        con.commit()
+    finally:
+        con.close()
+
+
+def _payload_indice(fila: dict[str, Any]) -> dict[str, Any]:
+    """Reconstruye el dict publico desde una fila de indice (payload jsonb -> dict; id sellado)."""
+    payload = fila.get("payload")
+    if isinstance(payload, str):  # backend sin jsonb-a-dict: deserializa defensivamente
+        try:
+            payload = json.loads(payload)
+        except (ValueError, TypeError):
+            payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    payload.setdefault("id", fila.get("gen_id", ""))
+    return payload
+
+
+def listar_indice_generaciones(
+    *, marca: str | None = None, limite: int | None = None, desplazamiento: int = 0
+) -> list[dict[str, Any]]:
+    """Listado de generaciones desde el INDICE (recientes primero), paginado por SQL.
+
+    Devuelve los `payload` (dicts publicos ligeros) ordenados por (fecha_inicio DESC, gen_id
+    DESC). `marca` no vacia filtra por marca; `limite=None` no recorta.
+    """
+    filtro = "WHERE marca = ? " if marca else ""
+    params: list[Any] = [marca] if marca else []
+    sql = (
+        "SELECT gen_id, payload FROM generaciones_indice " + filtro +
+        "ORDER BY fecha_inicio DESC, gen_id DESC"
+    )
+    if limite is not None:
+        sql += " LIMIT ? OFFSET ?"
+        params += [max(0, int(limite)), max(0, int(desplazamiento or 0))]
+    elif desplazamiento:
+        sql += " OFFSET ?"
+        params.append(max(0, int(desplazamiento or 0)))
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()
+    finally:
+        con.close()
+    return [_payload_indice(f) for f in filas]
+
+
+def contar_indice_generaciones(*, marca: str | None = None) -> int:
+    """Total de filas del indice de generaciones (filtrado por marca si viene)."""
+    filtro = "WHERE marca = ?" if marca else ""
+    params: tuple[Any, ...] = (marca,) if marca else ()
+    con = _conectar()
+    try:
+        fila = con.execute(
+            "SELECT count(*) AS n FROM generaciones_indice " + filtro, params
+        ).fetchone()
+    finally:
+        con.close()
+    return int(fila["n"]) if fila is not None else 0
+
+
+def indice_generaciones_por_estado(estado: str) -> list[dict[str, Any]]:
+    """Payloads de las generaciones del indice en `estado` (recientes primero). Para el reaper."""
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT gen_id, payload FROM generaciones_indice WHERE estado = ? "
+            "ORDER BY fecha_inicio DESC, gen_id DESC",
+            (estado,),
+        ).fetchall()
+    finally:
+        con.close()
+    return [_payload_indice(f) for f in filas]
+
+
+def indice_generaciones_vacio() -> bool:
+    """True si el indice no tiene filas (para decidir el backfill perezoso desde los YAML)."""
+    con = _conectar()
+    try:
+        fila = con.execute("SELECT 1 FROM generaciones_indice LIMIT 1").fetchone()
+    finally:
+        con.close()
+    return fila is None
 
 
 def gasto_ia_por_dia(dias: int = 14) -> list[dict[str, Any]]:

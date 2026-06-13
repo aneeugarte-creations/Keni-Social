@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -37,6 +38,7 @@ from ._comun import (
     ahora_iso,
     notificar_terminal,
     nuevo_id,
+    proceso_de,
 )
 
 # Loader RÁPIDO (libyaml) cuando está disponible. Parsear los ~800 YAML de generaciones con el
@@ -144,6 +146,93 @@ def _leer_yaml(ruta_fichero: Path) -> dict[str, Any] | None:
 
 
 # --------------------------------------------------------------------------- #
+# INDICE en Postgres del listado (rendimiento; ver `db_jobs.indexar_generacion`) #
+# --------------------------------------------------------------------------- #
+#
+# El YAML sigue siendo la FUENTE DE VERDAD del DETALLE (prompt/razonamiento/stream). Pero
+# LISTAR Actividad IA / Pipelines parseaba TODOS los ~2000 YAML por peticion. Ahora `crear`/
+# `actualizar` mantienen una fila de indice en Postgres con los campos LIGEROS del listado, y
+# `listar`/`contar` paginan por SQL sin tocar disco. El indice es un cache DERIVADO: si falla
+# (best-effort) o esta vacio, `listar`/`contar` caen al escaneo YAML, y un backfill perezoso lo
+# repuebla desde los YAML al primer uso (idempotente). Asi el comportamiento nunca depende del
+# indice para su correccion, solo para su rendimiento.
+
+_backfill_indice_lock = threading.Lock()
+
+
+def _pub_ligero(pub: dict[str, Any]) -> dict[str, Any]:
+    """Dict publico SIN el cuerpo pesado (prompt/razonamiento): lo que devuelve el listado."""
+    ligero = dict(pub)
+    ligero.pop("prompt", None)
+    ligero.pop("razonamiento", None)
+    return ligero
+
+
+def _indexar(pub: dict[str, Any]) -> None:
+    """Mantiene la fila de indice de una generacion (best-effort; el YAML manda).
+
+    Lo llaman `crear`/`actualizar` tras escribir el YAML. Un fallo aqui NO debe tumbar la
+    escritura del registro (el indice es un cache; el backfill perezoso lo repuebla).
+    """
+    gen_id = pub.get("id") or ""
+    if not gen_id:
+        return
+    try:
+        from .. import db_jobs
+
+        db_jobs.indexar_generacion(
+            gen_id,
+            fecha_inicio=pub.get("fecha_inicio", "") or "",
+            estado=pub.get("estado", "") or "",
+            tipo=pub.get("tipo", "") or "",
+            marca=pub.get("marca", "") or "",
+            proceso=proceso_de(pub),
+            contenido_id=pub.get("contenido_id", "") or "",
+            payload=_pub_ligero(pub),
+        )
+    except Exception:  # noqa: BLE001 -- el indice es un cache derivado; nunca rompe el registro
+        _log.warning("generacion %s: fallo al indexar (el YAML manda)", gen_id, exc_info=True)
+
+
+def _desindexar(gen_id: str) -> None:
+    """Borra la fila de indice de una generacion (al borrar/podar su YAML). Best-effort."""
+    if not isinstance(gen_id, str) or not gen_id:
+        return
+    try:
+        from .. import db_jobs
+
+        db_jobs.desindexar_generacion(gen_id)
+    except Exception:  # noqa: BLE001 -- best-effort: el YAML ya se borro; el indice se auto-cura
+        _log.warning("generacion %s: fallo al desindexar", gen_id, exc_info=True)
+
+
+def _asegurar_indice_poblado() -> None:
+    """Backfill perezoso del indice desde los YAML si esta VACIO y hay registros en disco.
+
+    Cubre el "primer uso tras el arranque/deploy" (indice recien creado por la migracion 0032,
+    YAML preexistentes): se repuebla UNA vez (idempotente, UPSERT por gen_id). En adelante el
+    indice no esta vacio y `crear`/`actualizar` lo mantienen al dia, asi que no se vuelve a
+    escanear. Sin flag pegajoso (que rompe el aislamiento entre tests): el disparador es el
+    propio estado "indice vacio + hay YAML", de modo que tambien AUTO-CURA un indice purgado.
+    """
+    from .. import db_jobs
+
+    if not db_jobs.indice_generaciones_vacio():
+        return
+    with _backfill_indice_lock:
+        if not db_jobs.indice_generaciones_vacio():
+            return
+        items = _todas_ordenadas()
+        if not items:
+            return
+        for pub in items:
+            _indexar(pub)
+        _log.info(
+            "Indice de generaciones: backfill de %d registro(s) desde los YAML.", len(items)
+        )
+
+
+# --------------------------------------------------------------------------- #
 # Normalizacion + CRUD del registro                                           #
 # --------------------------------------------------------------------------- #
 
@@ -229,6 +318,7 @@ def crear(datos: dict[str, Any]) -> dict[str, Any]:
     }
     pub = _publico(completo, gen_id)
     _escribir_yaml_atomico(_ruta(gen_id), _cuerpo(pub))
+    _indexar(pub)  # mantiene el indice del listado (best-effort; el YAML manda)
     return pub
 
 
@@ -335,6 +425,7 @@ def borrar_registro(gen_id: str) -> bool:
         return False
     try:
         ruta_fichero.unlink(missing_ok=True)
+        _desindexar(gen_id)  # quita la fila de indice (best-effort)
         return True
     except OSError:
         return False
@@ -356,6 +447,7 @@ def actualizar(gen_id: str, cambios: dict[str, Any]) -> dict[str, Any]:
         fusion = {**actual, **cambios}
         pub = _publico(fusion, gen_id)
         _escribir_yaml_atomico(ruta_fichero, _cuerpo(pub))
+    _indexar(pub)  # mantiene el indice del listado (best-effort; el YAML manda)
     if cambios.get("estado") in _ESTADOS_TERMINALES:
         # SEÑAL IN-PROCESO: despierta al worker que espera el fin de este job (mismo proceso),
         # en vez de obligarlo a re-parsear el YAML cada 200 ms (ver `worker._esperar_terminal`).
@@ -446,7 +538,23 @@ def listar(
     (campo `marca` del registro). El default `None` (o "") NO filtra — todos los
     llamantes previos quedan inalterados. El filtro se aplica ANTES de paginar, asi el
     `limite`/`desplazamiento` operan sobre el subconjunto de la marca.
+
+    RENDIMIENTO: pagina por el INDICE en Postgres (SQL), sin parsear los ~2000 YAML. El
+    detalle pesado (prompt/razonamiento) NO viaja en el listado; se lee del YAML en `obtener`.
+    Si el indice no esta disponible (Postgres caido, sin BD en algunos tests), cae al escaneo
+    YAML previo: la correccion nunca depende del indice, solo el rendimiento.
     """
+    try:
+        _asegurar_indice_poblado()
+        from .. import db_jobs
+
+        return db_jobs.listar_indice_generaciones(
+            marca=marca or None, limite=limite, desplazamiento=desplazamiento
+        )
+    except Exception:  # noqa: BLE001 -- el indice es un cache; sin el, escaneo YAML (correcto)
+        _log.warning(
+            "listar generaciones: indice no disponible; caigo al escaneo YAML", exc_info=True
+        )
     items = _todas_ordenadas()
     if marca:
         items = [g for g in items if g.get("marca") == marca]
@@ -457,8 +565,20 @@ def listar(
 
 
 def contar() -> int:
-    """Total de generaciones almacenadas (para el `total` del envelope de paginacion)."""
-    return len(_todas_ordenadas())
+    """Total de generaciones almacenadas (para el `total` del envelope de paginacion).
+
+    Por el INDICE en Postgres (un `count(*)`), con fallback al escaneo YAML si no esta.
+    """
+    try:
+        _asegurar_indice_poblado()
+        from .. import db_jobs
+
+        return db_jobs.contar_indice_generaciones()
+    except Exception:  # noqa: BLE001 -- sin indice, conteo por escaneo YAML (correcto)
+        _log.warning(
+            "contar generaciones: indice no disponible; caigo al escaneo YAML", exc_info=True
+        )
+        return len(_todas_ordenadas())
 
 
 # --------------------------------------------------------------------------- #
@@ -557,6 +677,7 @@ def podar_generaciones(
         except OSError:
             _log.warning("Poda de generaciones: no se pudo borrar %s", ruta_fichero.name, exc_info=True)
             continue
+        _desindexar(ruta_fichero.stem)  # quita su fila de indice (best-effort)
     if podados:
         _log.info("Poda de generaciones: %d registro(s) viejo(s) borrado(s).", podados)
     return podados

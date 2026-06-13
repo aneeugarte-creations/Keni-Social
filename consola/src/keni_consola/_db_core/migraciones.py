@@ -66,6 +66,7 @@ from .migraciones_integridad import (
     _FKS,
     _migrar_checks_dominio,
     _migrar_fks_hub,
+    _migrar_indice_generaciones,
     _migrar_tipos_jsonb,
     _migrar_version_optimista,
 )
@@ -375,6 +376,11 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # existentes; las nuevas ya nacen jsonb por el DDL). Idempotente (guardada por el tipo
     # actual): editar `_COLUMNAS_JSONB` cambia la huella y re-evalua.
     Migracion("0031-tipos-jsonb", _migrar_tipos_jsonb, re_aplicar_si_cambia=True, datos=_COLUMNAS_JSONB),
+    # RENDIMIENTO (ADR 0012): tabla `generaciones_indice` para paginar Actividad IA / Pipelines
+    # por SQL en vez de parsear ~2000 YAML por peticion (BDs existentes; las nuevas la traen del
+    # DDL). One-shot e idempotente (CREATE TABLE/INDEX IF NOT EXISTS); el backfill desde los YAML
+    # lo hace `generaciones._almacen` perezosamente al primer listado.
+    Migracion("0032-indice-generaciones", _migrar_indice_generaciones),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.
