@@ -867,14 +867,15 @@ def _backfill_pesos_fuente(con: Any) -> None:
 # Cada par es (tabla, columna, longitud_canon): 19 = segundos ("...THH:MM:SS"), 16 =
 # minutos ("...THH:MM", el canon de `fecha_programada`, que generan franjas/cadencias/UI).
 _COLUMNAS_TS_CANON: tuple[tuple[str, str, int], ...] = (
-    ("contenido", "creado", 19),
-    ("contenido", "actualizado", 19),
+    # OJO: `contenido.creado`/`actualizado`, `metricas_pieza_snapshots.ts` y
+    # `comercial_snapshots.ts` YA NO van aqui: la migracion 0033 las convirtio a tipos NATIVOS
+    # de Postgres (timestamptz), que ordenan/comparan por valor (no por texto). Normalizar TEXT
+    # sobre ellas (`left()`, `~`) reventaria (ya no son text); su correctitud temporal la
+    # garantiza el tipo nativo. Aqui solo quedan las columnas que SIGUEN siendo TEXT.
     ("contenido_plataforma", "creado", 19),
     ("contenido_plataforma", "actualizado", 19),
     ("contenido_plataforma", "preparado_en", 19),
     ("contenido_plataforma", "fecha_programada", 16),
-    ("metricas_pieza_snapshots", "ts", 19),
-    ("comercial_snapshots", "ts", 19),
     # Motor de noticias: estas columnas se comparan/ordenan como texto (ventanas 24h,
     # GC del pool, `ultimo_visto >= ?`, `capturado_en >= ?`, `proximo_sondeo <= ahora`,
     # `MAX(ultima_actualizacion)`) y se escribian con `datetime.now(UTC).isoformat()`

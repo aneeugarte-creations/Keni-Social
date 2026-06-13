@@ -34,6 +34,7 @@ Módulo SIN dependencias internas (solo stdlib): importable desde db, dominio y 
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta, timezone
+from typing import Any
 
 # Jornada del equipo AMX (piloto): zona del centro de México, que NO observa DST desde 2022
 # (offset FIJO UTC-6). Se modela como offset fijo a propósito —no `zoneinfo`— para no
@@ -61,6 +62,31 @@ def iso_utc(dt: datetime) -> str:
     if dt.tzinfo is not None:
         dt = dt.astimezone(UTC).replace(tzinfo=None)
     return dt.isoformat(timespec="seconds")
+
+
+def iso_o_vacio(valor: Any) -> str:
+    """Serializa un valor de fecha al canon TEXT histórico que la API venía emitiendo.
+
+    Cierra la brecha que abrió la migración de columnas de fecha TEXT → tipos nativos de
+    Postgres (timestamptz/date, ver migración 0033). Con `dict_row`, una columna `timestamptz`
+    vuelve como `datetime` (aware UTC) y una `date` como `date`; los serializadores de la API
+    (`_fila_a_*`, listados de jobs/gasto/eventos) deben volver a emitir EXACTAMENTE el mismo
+    string ISO que antes para no romper el contrato de forma de respuesta (ni el keyset del
+    feed, que compara el `creado` serializado como cursor):
+
+      - `datetime`  -> canon UTC sin offset, segundos (`iso_utc`):  "YYYY-MM-DDTHH:MM:SS".
+      - `date`      -> ISO de fecha:                                "YYYY-MM-DD".
+      - `None`/`''` -> "" (el sentinel "sin valor" del esquema heredado; p. ej. un job aún sin
+                       `claimed_at`, que antes era '' y ahora es NULL).
+      - `str`       -> tal cual (compat: BD aún TEXT, o un valor ya canónico).
+    """
+    if valor is None or valor == "":
+        return ""
+    if isinstance(valor, datetime):
+        return iso_utc(valor)
+    if isinstance(valor, date):
+        return valor.isoformat()
+    return str(valor)
 
 
 def hoy_utc() -> date:
