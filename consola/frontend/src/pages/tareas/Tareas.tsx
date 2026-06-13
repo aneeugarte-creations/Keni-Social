@@ -163,7 +163,7 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
     );
 
   const botonAnadir = (
-    <Button size="sm" onClick={() => setCrearAbierto(true)}>
+    <Button size="sm" variant="outline" onClick={() => setCrearAbierto(true)}>
       <Plus className="mr-1 h-4 w-4" />
       Añadir
     </Button>
