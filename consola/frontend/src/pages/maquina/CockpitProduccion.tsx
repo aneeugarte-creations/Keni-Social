@@ -172,7 +172,7 @@ export default function CockpitProduccion() {
                 <p className="text-xs text-muted-foreground">Texto por red desde una nota.</p>
               </div>
               <div className="flex flex-col items-end gap-1.5">
-                <Button variant="brand" disabled={!marcaLocal} onClick={() => setCopyAbierto(true)}>
+                <Button variant="outline" disabled={!marcaLocal} onClick={() => setCopyAbierto(true)}>
                   <Sparkles className="mr-1 h-4 w-4" aria-hidden="true" />
                   Generar copy
                 </Button>
@@ -192,7 +192,7 @@ export default function CockpitProduccion() {
                 <p className="text-xs text-muted-foreground">Imágenes con IA (tiene coste).</p>
               </div>
               <div className="flex flex-col items-end gap-1.5">
-                <Button variant="brand" disabled={!marcaLocal} onClick={() => setArteAbierto(true)}>
+                <Button variant="outline" disabled={!marcaLocal} onClick={() => setArteAbierto(true)}>
                   <ImageIcon className="mr-1 h-4 w-4" aria-hidden="true" />
                   Generar arte
                 </Button>

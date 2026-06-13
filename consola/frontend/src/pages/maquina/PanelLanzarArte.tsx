@@ -246,7 +246,7 @@ export function PanelLanzarArte({
           className="w-full"
         >
           <Button
-            variant="brand"
+            variant="outline"
             className="w-full"
             onClick={() => lanzar.mutate()}
             disabled={!puedeArrancar}
