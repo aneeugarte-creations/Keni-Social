@@ -46,41 +46,28 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         # Los maestros de la máquina (ADR 0011): «Investigación» y «Producción» (virtuales,
         # agrupan sus etapas) y «Arte» (la única etapa con coste externo).
         config.ENV_INVESTIGACION, config.ENV_PRODUCCION, config.ENV_PIPELINE_ARTE,
-        # Automatismos generales (barridos de mantenimiento).
+        # Automatismos generales (barridos de mantenimiento; SOLO toggles on/off).
         config.ENV_ALERTAS_ACTIVAS, config.ENV_EVENTOS_VENCIMIENTOS,
         config.ENV_AUTO_PREAPROBACION, config.ENV_MEDIA_GC,
         config.ENV_NOTICIAS_GC,
         config.ENV_TRENDS, config.ENV_ALGORITMOS_AUTO, config.ENV_SUGERENCIAS_EDITORIALES,
+        config.ENV_PATRONES_AUTO,
         config.ENV_RENDIMIENTO_RANKING,
         config.ENV_PUBLICAR_REAL,
-        # Admisión del flujo continuo (sin intervalo ni topes por etapa: ya no existen).
+        # Admisión del flujo continuo (topes de volumen por marca).
         config.ENV_PIPELINE_MAX, config.ENV_PIPELINE_EN_VUELO_MAX,
-        # Tuning.
-        config.ENV_AUTOGEN_ARTE_MAX,
-        config.ENV_ALERTAS_INTERVALO_HORAS, config.ENV_ALERTAS_UMBRAL_ENGAGEMENT,
-        config.ENV_MAX_JOBS,
-        config.ENV_MEDIA_GC_INTERVALO_HORAS, config.ENV_MEDIA_GC_ANTIGUEDAD_HORAS,
-        config.ENV_NOTICIAS_GC_INTERVALO_HORAS, config.ENV_NOTICIAS_GC_SCORE_UMBRAL,
+        # Tuning: umbrales de alto nivel de alertas/GC + caducidades editoriales. Los
+        # intervalos de daemons, la concurrencia (KENI_MAX_JOBS) y demás tunables de
+        # ingeniería se DEGRADARON a solo-env (auditoría 2026-06).
+        config.ENV_ALERTAS_UMBRAL_ENGAGEMENT,
+        config.ENV_MEDIA_GC_ANTIGUEDAD_HORAS,
+        config.ENV_NOTICIAS_GC_SCORE_UMBRAL,
         config.ENV_NOTICIAS_GC_INACTIVIDAD_HORAS,
-        config.ENV_PERFIL_EDITORIAL_TTL_HORAS, config.ENV_FUSION_SEMANTICA_MAX,
-        config.ENV_SCORE_PESO_RENDIMIENTO, config.ENV_RENDIMIENTO_TOP_N,
-        config.ENV_RENDIMIENTO_MIN_PIEZAS,
-        config.ENV_INGESTA_BATCH, config.ENV_INGESTA_WORKERS,
-        config.ENV_INGESTA_MAX_ITEMS, config.ENV_INGESTA_MAX_ERRORES,
-        config.ENV_CLUSTER_VENTANA_H, config.ENV_CLUSTER_BREAKING_PESO,
-        config.ENV_CLUSTER_BREAKING_VENTANA_H,
-        # Pesos del algoritmo de ponderación del ranking de noticias.
-        config.ENV_SCORE_PESO_CORROBORACION, config.ENV_SCORE_PESO_MARCA,
-        config.ENV_SCORE_PESO_FRESCURA, config.ENV_SCORE_PESO_VIRALIDAD,
-        config.ENV_SCORE_PESO_VELOCIDAD,
-        config.ENV_SCORE_BONUS_BREAKING,
-        config.ENV_TRAD_MIN_SCORE, config.ENV_TRAD_LOTE,
-        config.ENV_FEED_SLA_MIN,
+        config.ENV_PERFIL_EDITORIAL_TTL_HORAS,
         # Economía de tokens de la generación (presupuesto_ia): kill switch + presupuesto
-        # diario + margen manual + tope de contexto. Editables en caliente desde el Monitor.
+        # diario + margen manual. Editables en caliente desde el Monitor.
         config.ENV_GENERACION_PAUSADA,
         config.ENV_PRESUPUESTO_TOKENS_DIA, config.ENV_PRESUPUESTO_MARGEN_MANUAL,
-        config.ENV_PROMPT_MAX_CHARS,
         # Listón de auto-producción del ranking de noticias (umbrales de promoción a tema)
         # + maduración y cupos de volumen (día móvil / franja horaria).
         config.ENV_PROMOVER_MIN_SCORE, config.ENV_PROMOVER_MIN_MARCA,
@@ -196,13 +183,15 @@ def test_maquina_global_kill_switch(store):
 def test_grupos_estables(store):
     """Los ids de grupo se mantienen (el frontend reparte páginas/secciones por estos ids)."""
     ids = {g[0] for g in ajustes_catalogo.GRUPOS}
+    # `noticias_orden` y `noticias_breaking` se RETIRARON (auditoría 2026-06): solo
+    # contenían pesos/umbrales del algoritmo, degradados a solo-env.
     assert ids == {
         "maquina_global", "maestros_investigacion", "maestros_produccion",
         "automatizacion_marca_investigacion", "automatizacion_marca_produccion",
         "pipeline_topes",
         "publicacion", "publicacion_marca", "automatismos_generales",
-        "noticias_entrada", "noticias_orden", "noticias_rendimiento",
-        "noticias_breaking", "noticias_produccion", "noticias_produccion_marca",
+        "noticias_entrada", "noticias_rendimiento",
+        "noticias_produccion", "noticias_produccion_marca",
         "noticias_tecnico",
         "tuning",
     }
@@ -213,33 +202,17 @@ def test_grupos_estables(store):
 
 def test_noticias_reparto_en_secciones(store):
     """Los ajustes del motor de noticias se reparten EXACTAMENTE en los grupos de la sección
-    «Investigación» del drawer del Monitor: entrada → orden → rendimiento → última hora →
-    producción → técnico. Lo editorial queda visible y lo de capacidad/ritmo en
-    `noticias_tecnico` (colapsado)."""
+    «Investigación» del drawer del Monitor. Tras la auditoría 2026-06 solo quedan los
+    controles de OPERACIÓN: el filtro editorial de entrada, el master de rendimiento, el
+    listón/cupos de producción automática y el TTL del perfil editorial. Los pesos del
+    score, los umbrales de clustering/última hora y el batch/concurrencia de ingesta se
+    degradaron a solo-env (siguen vivos en `config`, fuera de la UI)."""
     reparto = {
         "noticias_entrada": {
             config.ENV_INGESTA_FILTRO,
-            config.ENV_INGESTA_MAX_ERRORES,
-            config.ENV_TRAD_MIN_SCORE,
-            config.ENV_FEED_SLA_MIN,
-        },
-        "noticias_orden": {
-            config.ENV_SCORE_PESO_CORROBORACION,
-            config.ENV_SCORE_PESO_MARCA,
-            config.ENV_SCORE_PESO_FRESCURA,
-            config.ENV_SCORE_PESO_VELOCIDAD,
-            config.ENV_SCORE_PESO_VIRALIDAD,
         },
         "noticias_rendimiento": {
             config.ENV_RENDIMIENTO_RANKING,
-            config.ENV_SCORE_PESO_RENDIMIENTO,
-            config.ENV_RENDIMIENTO_TOP_N,
-            config.ENV_RENDIMIENTO_MIN_PIEZAS,
-        },
-        "noticias_breaking": {
-            config.ENV_CLUSTER_BREAKING_PESO,
-            config.ENV_CLUSTER_BREAKING_VENTANA_H,
-            config.ENV_SCORE_BONUS_BREAKING,
         },
         # Listón de auto-producción (dominio.clustering.evaluar_liston): umbrales que deciden
         # qué historias del pool disparan QA+copy automáticos (coste real de tokens).
@@ -251,13 +224,7 @@ def test_noticias_reparto_en_secciones(store):
             config.ENV_PLAN_DIA,
         },
         "noticias_tecnico": {
-            config.ENV_INGESTA_BATCH,
-            config.ENV_INGESTA_WORKERS,
-            config.ENV_INGESTA_MAX_ITEMS,
-            config.ENV_CLUSTER_VENTANA_H,
-            config.ENV_TRAD_LOTE,
             config.ENV_PERFIL_EDITORIAL_TTL_HORAS,
-            config.ENV_FUSION_SEMANTICA_MAX,
         },
     }
     for gid, esperadas in reparto.items():
@@ -275,16 +242,13 @@ def test_noticias_reparto_en_secciones(store):
 
 
 def test_tuning_solo_operacional(store):
-    """`tuning` queda con los finos operacionales (jobs, limpieza GC, alertas, int/float
-    min>=0) + el esfuerzo de razonamiento de la generación (select)."""
+    """`tuning` queda con los UMBRALES de alto nivel (alertas/GC), las caducidades editoriales
+    del pool y el esfuerzo de razonamiento (select). Los intervalos de daemons y la
+    concurrencia (KENI_MAX_JOBS) se degradaron a solo-env: ritmo de ingeniería, no operación."""
     claves = [
         config.ENV_ESFUERZO,
-        config.ENV_MAX_JOBS,
-        config.ENV_ALERTAS_INTERVALO_HORAS,
         config.ENV_ALERTAS_UMBRAL_ENGAGEMENT,
-        config.ENV_MEDIA_GC_INTERVALO_HORAS,
         config.ENV_MEDIA_GC_ANTIGUEDAD_HORAS,
-        config.ENV_NOTICIAS_GC_INTERVALO_HORAS,
         config.ENV_NOTICIAS_GC_SCORE_UMBRAL,
         config.ENV_NOTICIAS_GC_INACTIVIDAD_HORAS,
         # Caducidad del pool de noticias (TTL + retención): limpieza, vive con el resto de GC.
@@ -296,12 +260,12 @@ def test_tuning_solo_operacional(store):
 
 
 # La admisión del flujo continuo vive en su propio grupo `pipeline_topes` (sección «Máquina de
-# contenido» del Monitor), NO en `tuning` de Configuración. FLUJO CONTINUO: sin intervalo del
-# barrido ni topes por etapa (QA/Copy/autogen/revisar); solo admisión + WIP + cap de Arte.
+# contenido» del Monitor), NO en `tuning` de Configuración. Solo los topes de VOLUMEN por
+# marca: el batch de Arte (KENI_AUTOGEN_ARTE_MAX) y el tope técnico de contexto
+# (KENI_PROMPT_MAX_CHARS) se degradaron a solo-env.
 _PIPELINE_TOPES_INT = {
     config.ENV_PIPELINE_MAX,
     config.ENV_PIPELINE_EN_VUELO_MAX,
-    config.ENV_AUTOGEN_ARTE_MAX,
 }
 
 
@@ -311,7 +275,6 @@ _PIPELINE_TOPES_INT = {
 _PIPELINE_ECONOMIA_INT = {
     config.ENV_PRESUPUESTO_TOKENS_DIA,
     config.ENV_PRESUPUESTO_MARGEN_MANUAL,
-    config.ENV_PROMPT_MAX_CHARS,
 }
 
 
@@ -387,24 +350,67 @@ def test_grupos_maquina_son_los_del_monitor(store):
     }
     # Investigación: proceso + motor de noticias, SIN `noticias_produccion_marca` (el plan
     # diario por marca se edita en «Plan y horarios» de Programación) y sin solaparse con
-    # los grupos de la sección «Máquina de contenido».
+    # los grupos de la sección «Máquina de contenido». `noticias_orden`/`noticias_breaking`
+    # se retiraron (degradados a solo-env).
     assert set(ajustes_catalogo.GRUPOS_INVESTIGACION) == {
         "maestros_investigacion", "automatizacion_marca_investigacion",
-        "noticias_entrada", "noticias_orden", "noticias_rendimiento",
-        "noticias_breaking", "noticias_produccion", "noticias_tecnico",
+        "noticias_entrada", "noticias_rendimiento",
+        "noticias_produccion", "noticias_tecnico",
     }
     assert not (
         set(ajustes_catalogo.GRUPOS_MAQUINA) & set(ajustes_catalogo.GRUPOS_INVESTIGACION)
     )
 
 
-def test_motor_noticias_trad_min_score_float(store):
-    """KENI_TRAD_MIN_SCORE es float en la sección de entrada al pool con minimo 0."""
-    a = ajustes_catalogo.por_clave(config.ENV_TRAD_MIN_SCORE)
-    assert a is not None
-    assert a.tipo == "float"
-    assert a.grupo == "noticias_entrada"
-    assert a.minimo == 0
+def test_claves_degradadas_fuera_del_catalogo_pero_vivas_en_config(store, monkeypatch):
+    """Las claves DEGRADADAS (auditoría 2026-06) ya no son editables (fuera del catálogo:
+    `por_clave` -> None, así POST /api/ajustes las rechaza con 400), pero el código las
+    sigue leyendo: env aplica, y un valor PREEXISTENTE en el store también (config._crudo
+    no consulta el catálogo; degradar solo quita la clave de la UI/escritura)."""
+    degradadas = [
+        config.ENV_AUTOGEN_ARTE_MAX, config.ENV_PROMPT_MAX_CHARS,
+        config.ENV_MAX_JOBS,
+        config.ENV_ALERTAS_INTERVALO_HORAS,
+        config.ENV_MEDIA_GC_INTERVALO_HORAS, config.ENV_NOTICIAS_GC_INTERVALO_HORAS,
+        config.ENV_SCORE_PESO_RENDIMIENTO, config.ENV_RENDIMIENTO_TOP_N,
+        config.ENV_RENDIMIENTO_MIN_PIEZAS,
+        config.ENV_INGESTA_BATCH, config.ENV_INGESTA_WORKERS,
+        config.ENV_INGESTA_MAX_ITEMS, config.ENV_INGESTA_MAX_ERRORES,
+        config.ENV_CLUSTER_VENTANA_H,
+        config.ENV_CLUSTER_BREAKING_PESO, config.ENV_CLUSTER_BREAKING_VENTANA_H,
+        config.ENV_SCORE_PESO_CORROBORACION, config.ENV_SCORE_PESO_MARCA,
+        config.ENV_SCORE_PESO_FRESCURA, config.ENV_SCORE_PESO_VELOCIDAD,
+        config.ENV_SCORE_PESO_VIRALIDAD, config.ENV_SCORE_BONUS_BREAKING,
+        config.ENV_TRAD_MIN_SCORE, config.ENV_TRAD_LOTE,
+        config.ENV_FEED_SLA_MIN,
+        config.ENV_FUSION_SEMANTICA_MAX,
+    ]
+    for clave in degradadas:
+        assert ajustes_catalogo.por_clave(clave) is None, f"{clave} debía estar degradada"
+    # env sigue aplicando para una clave degradada...
+    monkeypatch.setenv(config.ENV_MAX_JOBS, "7")
+    assert config.max_jobs() == 7
+    # ...y un valor preexistente del store TAMBIÉN (caso real: KENI_SCORE_PESO_VELOCIDAD=0.0
+    # quedó escrito en producción antes de la degradación y debe seguir aplicando).
+    ajustes.guardar(config.ENV_SCORE_PESO_VELOCIDAD, "0.0")
+    assert config._crudo(config.ENV_SCORE_PESO_VELOCIDAD) == "0.0"
+
+
+def test_patrones_auto_es_toggle_de_automatismos(store, monkeypatch):
+    """`KENI_PATRONES_AUTO` (antes solo-env) es un bool del grupo `automatismos_generales`,
+    defecto False, y su accesor `config.patrones_auto_activo` respeta store > env."""
+    a = ajustes_catalogo.por_clave(config.ENV_PATRONES_AUTO)
+    assert a is not None, "falta el gate KENI_PATRONES_AUTO"
+    assert a.tipo == "bool"
+    assert a.grupo == "automatismos_generales"
+    assert a.defecto is False
+    assert a.peligroso is False
+    monkeypatch.delenv(config.ENV_PATRONES_AUTO, raising=False)
+    assert config.patrones_auto_activo() is False
+    monkeypatch.setenv(config.ENV_PATRONES_AUTO, "1")
+    assert config.patrones_auto_activo() is True
+    ajustes.guardar(config.ENV_PATRONES_AUTO, "0")  # el store (UI) gana al env
+    assert config.patrones_auto_activo() is False
 
 
 def test_publicar_real_es_peligroso(store):
@@ -423,23 +429,23 @@ def test_por_clave_desconocida(store):
 
 
 def test_valor_defecto_sin_store_ni_env(store, monkeypatch):
-    monkeypatch.delenv(config.ENV_MAX_JOBS, raising=False)
-    a = _ajuste(config.ENV_MAX_JOBS)
+    monkeypatch.delenv(config.ENV_PIPELINE_MAX, raising=False)
+    a = _ajuste(config.ENV_PIPELINE_MAX)
     valor, fuente = ajustes_catalogo.valor_y_fuente(a)
-    assert (valor, fuente) == (config.MAX_JOBS_DEF, "defecto")
+    assert (valor, fuente) == (config.PIPELINE_MAX_DEF, "defecto")
 
 
 def test_valor_desde_env(store, monkeypatch):
-    monkeypatch.setenv(config.ENV_MAX_JOBS, "8")
-    a = _ajuste(config.ENV_MAX_JOBS)
+    monkeypatch.setenv(config.ENV_PIPELINE_MAX, "8")
+    a = _ajuste(config.ENV_PIPELINE_MAX)
     valor, fuente = ajustes_catalogo.valor_y_fuente(a)
     assert (valor, fuente) == (8, "env")
 
 
 def test_valor_desde_store_gana_a_env(store, monkeypatch):
-    monkeypatch.setenv(config.ENV_MAX_JOBS, "8")
-    ajustes.guardar(config.ENV_MAX_JOBS, "2")
-    a = _ajuste(config.ENV_MAX_JOBS)
+    monkeypatch.setenv(config.ENV_PIPELINE_MAX, "8")
+    ajustes.guardar(config.ENV_PIPELINE_MAX, "2")
+    a = _ajuste(config.ENV_PIPELINE_MAX)
     valor, fuente = ajustes_catalogo.valor_y_fuente(a)
     assert (valor, fuente) == (2, "store")
 
@@ -464,7 +470,7 @@ def test_float_efectivo_tipado(store):
 
 
 def test_a_dict_int_tiene_min(store):
-    d = ajustes_catalogo.a_dict(_ajuste(config.ENV_MAX_JOBS))
+    d = ajustes_catalogo.a_dict(_ajuste(config.ENV_PIPELINE_MAX))
     assert d["tipo"] == "int" and d["min"] == 1 and "opciones" not in d
     assert set(d) >= {"clave", "tipo", "etiqueta", "ayuda", "grupo", "peligroso",
                       "valor", "fuente", "defecto"}
@@ -495,27 +501,27 @@ def test_validar_bool_invalido(store):
 
 
 def test_validar_int_ok(store):
-    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_AUTOGEN_ARTE_MAX), 5)
+    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_PIPELINE_MAX), 5)
     assert err is None and val == "5"
 
 
 def test_validar_int_acepta_str(store):
-    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_AUTOGEN_ARTE_MAX), " 7 ")
+    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_PIPELINE_MAX), " 7 ")
     assert err is None and val == "7"
 
 
 def test_validar_int_bajo_minimo(store):
-    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_AUTOGEN_ARTE_MAX), 0)
+    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_PIPELINE_MAX), 0)
     assert val is None and "≥ 1" in err
 
 
 def test_validar_int_rechaza_bool(store):
-    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_AUTOGEN_ARTE_MAX), True)
+    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_PIPELINE_MAX), True)
     assert val is None and err is not None
 
 
 def test_validar_int_no_numerico(store):
-    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_AUTOGEN_ARTE_MAX), "x")
+    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_PIPELINE_MAX), "x")
     assert val is None and err is not None
 
 

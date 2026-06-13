@@ -22,6 +22,7 @@ from ._config_comun import (
     ENV_METRICAS_PIEZAS_REFRESCO_HORAS,
     ENV_METRICAS_REFRESCO_HORAS,
     ENV_MIN_APROBACIONES,
+    ENV_PATRONES_AUTO,
     ENV_PROGRAMADOR_INTERVALO_SEGUNDOS,
     ENV_PUBLICAR_REAL,
     ENV_SUGERENCIAS_EDITORIALES,
@@ -281,6 +282,17 @@ def sugerencias_editoriales_max() -> int:
     Cada plataforma cuesta un `claude -p`: el tope acota el gasto por dia.
     """
     return _entero(ENV_SUGERENCIAS_EDITORIALES_MAX, SUGERENCIAS_EDITORIALES_MAX_DEF, minimo=1)
+
+
+def patrones_auto_activo() -> bool:
+    """True si el daemon de re-derivación de patrones debe correr (`KENI_PATRONES_AUTO`).
+
+    Def OFF (conservador): la re-derivación reescribe los artefactos de patrones por marca
+    (perfil runtime + doc 'patrones'); Voz/Reglas (criterio humano) jamás se tocan. Lee via
+    `_crudo` (precedencia store > env > defecto) para que el toggle del catálogo aplique en
+    caliente, como el resto de gates de daemons.
+    """
+    return _crudo(ENV_PATRONES_AUTO).lower() in _VERDADEROS
 
 
 def trends_activo() -> bool:

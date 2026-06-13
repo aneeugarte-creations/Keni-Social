@@ -33,8 +33,8 @@ _FALSOS = frozenset({"0", "false", "no", "off", ""})
 # Titulos humanos de cada grupo (orden estable del contrato GET /api/ajustes). El orden manda
 # el de aparición en la UI. Reparto (Fase 3: UN solo sitio para los ajustes de la máquina): TODO
 # lo de la máquina de contenido —interruptor general, maestros de etapa, excepciones por marca,
-# topes de admisión, el MOTOR DE NOTICIAS completo y los finos operacionales (jobs, limpieza,
-# alertas)— vive en el drawer de ajustes del MONITOR, repartido en secciones (`GRUPOS_MAQUINA` +
+# topes de admisión, el MOTOR DE NOTICIAS completo y los finos operacionales (limpieza,
+# alertas, caducidades)— vive en el drawer de ajustes del MONITOR, repartido en secciones (`GRUPOS_MAQUINA` +
 # `GRUPOS_INVESTIGACION` + sistema). Publicación se edita en Programación, junto a lo que
 # programa; el plan diario por marca, en su diálogo «Plan y horarios» (también Programación).
 GRUPOS: tuple[tuple[str, str], ...] = (
@@ -48,14 +48,18 @@ GRUPOS: tuple[tuple[str, str], ...] = (
     ("publicacion_marca", "Excepciones por marca"),
     ("automatismos_generales", "Automatismos"),
     ("noticias_entrada", "Qué entra al pool"),
-    ("noticias_orden", "Orden del pool"),
     ("noticias_rendimiento", "Rendimiento en redes"),
-    ("noticias_breaking", "Última hora"),
     ("noticias_produccion", "Producción automática"),
     ("noticias_produccion_marca", "Plan diario por marca"),
-    ("noticias_tecnico", "Capacidad y ritmo"),
+    # `noticias_tecnico` quedó reducido al TTL del perfil editorial (el resto de su contenido
+    # —batch/workers/lotes/ventanas— se degradó a solo-env); el título refleja lo que queda.
+    ("noticias_tecnico", "Perfil editorial"),
     ("tuning", "Sistema, limpieza y alertas"),
 )
+# NOTA (auditoría 2026-06, matar ruido de UI): los grupos `noticias_orden` y `noticias_breaking`
+# se RETIRARON del catálogo: eran solo pesos/umbrales del algoritmo de ranking/clustering
+# (tunables de ingeniería). Sus claves `KENI_SCORE_*`/`KENI_CLUSTER_BREAKING_*` siguen vivas
+# en el código y se leen de env/defecto (`config._crudo`); simplemente ya no se editan en UI.
 
 # Grupos de la sección «Investigación» del drawer del MONITOR: el proceso de investigación (su
 # maestro y sus excepciones por marca) + el MOTOR DE NOTICIAS en lenguaje editorial (qué entra →
@@ -68,9 +72,7 @@ GRUPOS_INVESTIGACION: tuple[str, ...] = (
     "maestros_investigacion",
     "automatizacion_marca_investigacion",
     "noticias_entrada",
-    "noticias_orden",
     "noticias_rendimiento",
-    "noticias_breaking",
     "noticias_produccion",
     "noticias_tecnico",
 )
@@ -328,6 +330,18 @@ def _construir_catalogo() -> list[Ajuste]:
             grupo="automatismos_generales",
             defecto=False,
         ),
+        # Re-derivación periódica de patrones (antes solo-env, el único gate de daemon fuera
+        # de la UI): re-lee Metricool cada N días y refresca los perfiles de patrones por
+        # marca. Voz/Reglas (criterio humano) jamás se tocan.
+        Ajuste(
+            clave=config.ENV_PATRONES_AUTO,
+            tipo="bool",
+            etiqueta="Patrones de marca",
+            ayuda="Re-deriva periódicamente los patrones editoriales de cada marca desde sus "
+            "métricas reales (la voz y las reglas humanas no se tocan).",
+            grupo="automatismos_generales",
+            defecto=False,
+        ),
         # NOTA: las etapas del tramo noticia→copy (Fusión/Editorial/Selección/Validación/Copy/
         # Avance) NO tienen toggle propio: las agrupa el interruptor único «Generar»
         # (`KENI_GENERAR`, virtual con fan-out; ver `claves_fisicas`). El master
@@ -366,15 +380,8 @@ def _construir_catalogo() -> list[Ajuste]:
             defecto=config.PIPELINE_EN_VUELO_MAX_DEF,
             minimo=1,
         ),
-        Ajuste(
-            clave=config.ENV_AUTOGEN_ARTE_MAX,
-            tipo="int",
-            etiqueta="Arte: temas ilustrados por ciclo",
-            ayuda="Máximo de temas a ilustrar en cada ciclo de la etapa de Arte.",
-            grupo="pipeline_topes",
-            defecto=config.AUTOGEN_ARTE_MAX_DEF,
-            minimo=1,
-        ),
+        # (KENI_AUTOGEN_ARTE_MAX —temas ilustrados por ciclo— se DEGRADÓ a solo-env: batch
+        # interno del barrido de Arte, no un control de operación. Sigue leyéndose de env.)
         # --- Economía de tokens (presupuesto diario + kill switch; `presupuesto_ia.py`) --- #
         # La generación usa la MISMA suscripción `claude` que el equipo: estos knobs evitan que
         # una avalancha de fondo agote los tokens de todos. Editables en caliente (Monitor).
@@ -408,16 +415,9 @@ def _construir_catalogo() -> list[Ajuste]:
             minimo=0,
             maximo=100,
         ),
-        Ajuste(
-            clave=config.ENV_PROMPT_MAX_CHARS,
-            tipo="int",
-            etiqueta="Contexto máximo por generación (caracteres)",
-            ayuda="Tope duro en caracteres del prompt que entra a una generación "
-            "(~4 caracteres = 1 token; 0 = sin tope).",
-            grupo="pipeline_topes",
-            defecto=config.PROMPT_MAX_CHARS_DEF,
-            minimo=0,
-        ),
+        # (KENI_PROMPT_MAX_CHARS —tope de contexto por generación— se DEGRADÓ a solo-env:
+        # salvaguarda técnica de tokens, no un control editorial; el presupuesto diario y el
+        # margen manual son los knobs de gasto del operador. Sigue leyéndose de env.)
         # --- Tuning (int/float/select) --------------------------------------------- #
         # Esfuerzo de razonamiento de TODA la generacion (`claude --effort`). Antes vivia
         # en el almacen aparte de `preferencias.py` (TOML local) detras de
@@ -438,15 +438,11 @@ def _construir_catalogo() -> list[Ajuste]:
                 for nivel in ("", *preferencias.ESFUERZOS_VALIDOS)
             ),
         ),
-        Ajuste(
-            clave=config.ENV_ALERTAS_INTERVALO_HORAS,
-            tipo="int",
-            etiqueta="Alertas: intervalo (horas)",
-            ayuda="Cada cuántas horas corre el barrido de alertas de rendimiento.",
-            grupo="tuning",
-            defecto=config.ALERTAS_INTERVALO_HORAS_DEF,
-            minimo=1,
-        ),
+        # (Los INTERVALOS de daemons —KENI_ALERTAS_INTERVALO_HORAS, KENI_MEDIA_GC_INTERVALO_HORAS,
+        # KENI_NOTICIAS_GC_INTERVALO_HORAS— y la concurrencia KENI_MAX_JOBS se DEGRADARON a
+        # solo-env: ritmo/capacidad de ingeniería, no controles de operación. El operador
+        # gobierna QUÉ corre (toggles) y los UMBRALES de alto nivel, no cada cuánto barre
+        # un hilo. Siguen leyéndose de env/defecto.)
         Ajuste(
             clave=config.ENV_ALERTAS_UMBRAL_ENGAGEMENT,
             tipo="float",
@@ -458,24 +454,6 @@ def _construir_catalogo() -> list[Ajuste]:
             minimo=0.1,
         ),
         Ajuste(
-            clave=config.ENV_MAX_JOBS,
-            tipo="int",
-            etiqueta="Jobs simultáneos",
-            ayuda="Máximo de generaciones `claude` ejecutándose a la vez.",
-            grupo="tuning",
-            defecto=config.MAX_JOBS_DEF,
-            minimo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_MEDIA_GC_INTERVALO_HORAS,
-            tipo="int",
-            etiqueta="Limpieza media: intervalo (horas)",
-            ayuda="Cada cuántas horas barre el daemon de limpieza de media huérfana.",
-            grupo="tuning",
-            defecto=config.MEDIA_GC_INTERVALO_HORAS_DEF,
-            minimo=1,
-        ),
-        Ajuste(
             clave=config.ENV_MEDIA_GC_ANTIGUEDAD_HORAS,
             tipo="int",
             etiqueta="Limpieza media: antigüedad mínima (horas)",
@@ -483,15 +461,6 @@ def _construir_catalogo() -> list[Ajuste]:
             "huérfano.",
             grupo="tuning",
             defecto=config.MEDIA_GC_ANTIGUEDAD_HORAS_DEF,
-            minimo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_NOTICIAS_GC_INTERVALO_HORAS,
-            tipo="int",
-            etiqueta="Limpieza noticias: intervalo (horas)",
-            ayuda="Cada cuántas horas barre el daemon de limpieza del pool de noticias.",
-            grupo="tuning",
-            defecto=config.NOTICIAS_GC_INTERVALO_HORAS_DEF,
             minimo=1,
         ),
         Ajuste(
@@ -544,16 +513,6 @@ def _construir_catalogo() -> list[Ajuste]:
             grupo="noticias_tecnico",
             defecto=config.PERFIL_EDITORIAL_TTL_HORAS_DEF,
             minimo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_FUSION_SEMANTICA_MAX,
-            tipo="int",
-            etiqueta="Unión de duplicados: historias por ronda",
-            ayuda="Tope de historias por marca que se mandan a la IA en cada ronda para unir "
-            "duplicados; más alto = más limpieza por ronda y más coste de IA.",
-            grupo="noticias_tecnico",
-            defecto=config.FUSION_SEMANTICA_MAX_DEF,
-            minimo=2,
         ),
         # --- Producción automática (grupo `noticias_produccion`) -------------------------- #
         # LISTÓN de producción automática: el panel lista TODO el pool jerarquizado, pero promover
@@ -614,7 +573,10 @@ def _construir_catalogo() -> list[Ajuste]:
             defecto="",
         ),
         # El master «Priorizar por rendimiento» vive AQUÍ (no en automatismos): no arranca ningún
-        # daemon, modula el ranking. Sus tres parámetros van debajo, en el mismo grupo.
+        # daemon, modula el ranking. Sus tres parámetros (KENI_SCORE_PESO_RENDIMIENTO,
+        # KENI_RENDIMIENTO_TOP_N, KENI_RENDIMIENTO_MIN_PIEZAS) se DEGRADARON a solo-env:
+        # moduladores del algoritmo, no controles de operación. El operador decide SI se
+        # prioriza; cuánto y cómo es tuning de ingeniería (env/defecto).
         Ajuste(
             clave=config.ENV_RENDIMIENTO_RANKING,
             tipo="bool",
@@ -624,37 +586,13 @@ def _construir_catalogo() -> list[Ajuste]:
             grupo="noticias_rendimiento",
             defecto=False,
         ),
-        Ajuste(
-            clave=config.ENV_SCORE_PESO_RENDIMIENTO,
-            tipo="float",
-            etiqueta="Fuerza del empujón",
-            ayuda="Cuánto sube una historia por caer en una de las mejores líneas "
-            "(vacío = 0.10; de 0 a 1).",
-            grupo="noticias_rendimiento",
-            defecto=config.SCORE_PESO_RENDIMIENTO_DEF,
-            minimo=0,
-            maximo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_RENDIMIENTO_TOP_N,
-            tipo="int",
-            etiqueta="Cuántas líneas premiar",
-            ayuda="Solo las mejores N líneas editoriales reciben el empujón.",
-            grupo="noticias_rendimiento",
-            defecto=config.RENDIMIENTO_TOP_N_DEF,
-            minimo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_RENDIMIENTO_MIN_PIEZAS,
-            tipo="int",
-            etiqueta="Piezas medidas mínimas por línea",
-            ayuda="Una línea solo cuenta como de las mejores si tiene al menos estas piezas con "
-            "métricas.",
-            grupo="noticias_rendimiento",
-            defecto=config.RENDIMIENTO_MIN_PIEZAS_DEF,
-            minimo=1,
-        ),
         # --- Qué entra al pool (grupo `noticias_entrada`) -------------------------- #
+        # Solo queda el control EDITORIAL (el filtro por agenda de marca). Los tunables de
+        # ingeniería de la ingesta se DEGRADARON a solo-env: KENI_INGESTA_BATCH/_WORKERS/
+        # _MAX_ITEMS/_MAX_ERRORES (batch/concurrencia/topes/backoff), KENI_TRAD_MIN_SCORE/
+        # _LOTE (umbral y lote de traducción), KENI_FEED_SLA_MIN (SLA técnico de fuentes),
+        # KENI_CLUSTER_VENTANA_H y KENI_CLUSTER_BREAKING_PESO/_VENTANA_H (umbrales de
+        # clustering/última hora). Todas siguen leyéndose de env/defecto.
         Ajuste(
             clave=config.ENV_INGESTA_FILTRO,
             tipo="bool",
@@ -664,170 +602,9 @@ def _construir_catalogo() -> list[Ajuste]:
             grupo="noticias_entrada",
             defecto=True,
         ),
-        Ajuste(
-            clave=config.ENV_INGESTA_BATCH,
-            tipo="int",
-            etiqueta="Fuentes consultadas por ronda",
-            ayuda="Máximo de fuentes RSS que el motor revisa en cada ronda.",
-            grupo="noticias_tecnico",
-            defecto=config.INGESTA_BATCH_DEF,
-            minimo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_INGESTA_WORKERS,
-            tipo="int",
-            etiqueta="Descargas a la vez",
-            ayuda="Cuántas fuentes se descargan en paralelo dentro de una misma ronda.",
-            grupo="noticias_tecnico",
-            defecto=config.INGESTA_WORKERS_DEF,
-            minimo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_INGESTA_MAX_ITEMS,
-            tipo="int",
-            etiqueta="Noticias guardadas por fuente y ronda",
-            ayuda="Tope de artículos que se guardan de cada fuente en cada ronda.",
-            grupo="noticias_tecnico",
-            defecto=config.INGESTA_MAX_ITEMS_DEF,
-            minimo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_INGESTA_MAX_ERRORES,
-            tipo="int",
-            etiqueta="Apagar una fuente tras estos fallos seguidos",
-            ayuda="Si una fuente falla este número de veces seguidas, se apaga sola "
-            "(se reactiva a mano desde Fuentes).",
-            grupo="noticias_entrada",
-            defecto=config.INGESTA_MAX_ERRORES_DEF,
-            minimo=1,
-        ),
-        # --- Agrupación de historias y última hora -------------------------------- #
-        Ajuste(
-            clave=config.ENV_CLUSTER_VENTANA_H,
-            tipo="int",
-            etiqueta="Memoria de agrupación (horas)",
-            ayuda="Una noticia recién llegada solo se compara con historias con actividad en "
-            "estas últimas horas para decidir si es la misma.",
-            grupo="noticias_tecnico",
-            defecto=config.CLUSTER_VENTANA_H_DEF,
-            minimo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_CLUSTER_BREAKING_PESO,
-            tipo="float",
-            etiqueta="Peso de medios necesario",
-            ayuda="Una historia se marca como última hora cuando los medios que la cuentan casi "
-            "a la vez suman este peso (una fuente potente vale 2, una normal 1, una de baja "
-            "confiabilidad 0.5).",
-            grupo="noticias_breaking",
-            defecto=config.CLUSTER_BREAKING_PESO_DEF,
-            minimo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_CLUSTER_BREAKING_VENTANA_H,
-            tipo="int",
-            etiqueta="Plazo para coincidir (horas)",
-            ayuda="Los medios deben coincidir dentro de este plazo para que la historia cuente "
-            "como última hora.",
-            grupo="noticias_breaking",
-            defecto=config.CLUSTER_BREAKING_VENTANA_H_DEF,
-            minimo=1,
-        ),
-        # --- Orden del pool: pesos de las señales del score (suman ~1) ------------- #
-        Ajuste(
-            clave=config.ENV_SCORE_PESO_CORROBORACION,
-            tipo="float",
-            etiqueta="La cuentan varios medios",
-            ayuda="Cuánto sube una historia cuando varios medios distintos se hacen eco de ella "
-            "(de 0 a 1).",
-            grupo="noticias_orden",
-            defecto=config.SCORE_PESO_CORROBORACION_DEF,
-            minimo=0,
-            maximo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_SCORE_PESO_MARCA,
-            tipo="float",
-            etiqueta="Encaja con la marca",
-            ayuda="Cuánto sube una historia que casa con la línea editorial de la marca "
-            "(de 0 a 1).",
-            grupo="noticias_orden",
-            defecto=config.SCORE_PESO_MARCA_DEF,
-            minimo=0,
-            maximo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_SCORE_PESO_FRESCURA,
-            tipo="float",
-            etiqueta="Es reciente",
-            ayuda="Cuánto sube una historia por ser nueva; más alto = el pool favorece lo último "
-            "que llega (de 0 a 1).",
-            grupo="noticias_orden",
-            defecto=config.SCORE_PESO_FRESCURA_DEF,
-            minimo=0,
-            maximo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_SCORE_PESO_VELOCIDAD,
-            tipo="float",
-            etiqueta="Se corrobora rápido",
-            ayuda="Cuánto sube una historia cuando varios medios se suman en poco tiempo "
-            "(de 0 a 1).",
-            grupo="noticias_orden",
-            defecto=config.SCORE_PESO_VELOCIDAD_DEF,
-            minimo=0,
-            maximo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_SCORE_PESO_VIRALIDAD,
-            tipo="float",
-            etiqueta="Se está moviendo en redes",
-            ayuda="Cuánto sube una historia que llega con señal de viralidad (de 0 a 1).",
-            grupo="noticias_orden",
-            defecto=config.SCORE_PESO_VIRALIDAD_DEF,
-            minimo=0,
-            maximo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_SCORE_BONUS_BREAKING,
-            tipo="float",
-            etiqueta="Empujón en el pool",
-            ayuda="Cuánto sube de golpe una historia al marcarse como última hora (de 0 a 1).",
-            grupo="noticias_breaking",
-            defecto=config.SCORE_BONUS_BREAKING_DEF,
-            minimo=0,
-            maximo=1,
-        ),
-        # --- Traducción de noticias extranjeras ----------------------------------- #
-        Ajuste(
-            clave=config.ENV_TRAD_MIN_SCORE,
-            tipo="float",
-            etiqueta="Traducir solo lo relevante",
-            ayuda="Relevancia mínima para traducir al español una noticia en otro idioma; "
-            "0 = se traducen todas las recientes.",
-            grupo="noticias_entrada",
-            defecto=config.TRAD_MIN_SCORE_DEF,
-            minimo=0,
-        ),
-        Ajuste(
-            clave=config.ENV_TRAD_LOTE,
-            tipo="int",
-            etiqueta="Traducciones por ronda",
-            ayuda="Máximo de historias extranjeras que se traducen en cada ronda.",
-            grupo="noticias_tecnico",
-            defecto=config.TRAD_LOTE_DEF,
-            minimo=1,
-        ),
-        Ajuste(
-            clave=config.ENV_FEED_SLA_MIN,
-            tipo="int",
-            etiqueta="Avisar de fuente parada (minutos)",
-            ayuda="Una fuente activa que pasa más de estos minutos sin traer nada nuevo se marca "
-            "como parada en la salud de Fuentes.",
-            grupo="noticias_entrada",
-            defecto=config.FEED_SLA_MIN_DEF,
-            minimo=1,
-        ),
+        # (Los pesos del score del pool —KENI_SCORE_PESO_CORROBORACION/_MARCA/_FRESCURA/
+        # _VELOCIDAD/_VIRALIDAD— y KENI_SCORE_BONUS_BREAKING se DEGRADARON a solo-env junto
+        # con su grupo `noticias_orden`: son el algoritmo de ranking, no operación.)
     ]
 
 

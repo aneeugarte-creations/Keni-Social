@@ -1,5 +1,6 @@
-"""Daemon de re-derivación de patrones: gate OFF por defecto, frescura sin estado extra
-y aplicación best-effort. PURO (extracción de Metricool monkeypatcheada, sin red/DB)."""
+"""Daemon de re-derivación de patrones: gate OFF por defecto (leído EN VIVO por
+`bucle_gateado`), frescura sin estado extra y aplicación best-effort. PURO (extracción
+de Metricool monkeypatcheada, sin red/DB)."""
 
 from __future__ import annotations
 
@@ -8,12 +9,17 @@ from datetime import datetime, timedelta, timezone
 
 from keni_shared import marcas as cat_marcas
 
-from keni_consola import patrones_marca, patrones_refresco
+from keni_consola import config, patrones_marca, patrones_refresco
 
 
-def test_daemon_apagado_por_defecto(monkeypatch):
+def test_gate_apagado_por_defecto_y_en_vivo(monkeypatch):
+    """El gate ya no se lee una vez al arrancar: `iniciar_refresco_patrones` monta un
+    `bucle_gateado` con `config.patrones_auto_activo` como `activo_fn`, así que basta con
+    cubrir el accesor: OFF por defecto, y el env aplica en caliente (cada ciclo lo relee)."""
     monkeypatch.delenv("KENI_PATRONES_AUTO", raising=False)
-    assert patrones_refresco.iniciar_refresco_patrones() is None
+    assert config.patrones_auto_activo() is False
+    monkeypatch.setenv("KENI_PATRONES_AUTO", "1")
+    assert config.patrones_auto_activo() is True
 
 
 def _runtime_fresco(tmp_path, monkeypatch, *, hace_dias: float) -> None:

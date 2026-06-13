@@ -8,7 +8,9 @@ comparan contra la foto reciente, sin tocar git ni esperar un deploy.
 
 SAFE BY DEFAULT: gateado por `KENI_PATRONES_AUTO` (ausente = OFF). Solo LEE de la API
 de Metricool y escribe los artefactos de patrones; jamás toca Voz/Reglas (criterio
-humano) ni publica nada.
+humano) ni publica nada. El gate se lee EN VIVO via `config.patrones_auto_activo`
+(`bucle_gateado`, precedencia store > env > defecto): el toggle del catálogo de ajustes
+enciende/apaga sin reiniciar, igual que el resto de daemons del Monitor.
 
 Frescura SIN estado extra: el campo `generado` del propio perfil runtime es el marcador.
 Al arrancar (y en cada comprobación) se re-deriva solo si el perfil más viejo supera
@@ -16,7 +18,7 @@ Al arrancar (y en cada comprobación) se re-deriva solo si el perfil más viejo 
 con el daemon activo). Reinicios/redeploys frecuentes NO provocan re-derivaciones.
 
 Env:
-  - KENI_PATRONES_AUTO            "1"/"true" activa el daemon (def OFF).
+  - KENI_PATRONES_AUTO            "1"/"true" activa el daemon (def OFF; editable en UI).
   - KENI_PATRONES_REFRESCO_DIAS   edad máxima del perfil antes de re-derivar (def 30).
   - KENI_PATRONES_MESES           ventana de extracción hacia atrás (def 6 meses).
 """
@@ -27,8 +29,9 @@ import json
 import logging
 import os
 import threading
-import time
 from datetime import datetime, timezone
+
+from . import config, daemon_util
 
 _log = logging.getLogger("keni_consola.patrones_refresco")
 
@@ -37,10 +40,6 @@ _COMPROBAR_CADA_S = 6 * 3600.0
 
 _DIAS_DEFECTO = 30
 _MESES_DEFECTO = 6
-
-
-def _activo() -> bool:
-    return os.environ.get("KENI_PATRONES_AUTO", "").strip().lower() in {"1", "true", "yes", "si"}
 
 
 def _dias_refresco() -> int:
@@ -141,19 +140,30 @@ def refrescar_patrones(*, forzar: bool = False) -> int:
     return aplicadas
 
 
-def iniciar_refresco_patrones() -> threading.Thread | None:
-    """Arranca el hilo demonio si `KENI_PATRONES_AUTO` está activo (None si OFF)."""
-    if not _activo():
-        return None
+def iniciar_refresco_patrones() -> threading.Thread:
+    """Arranca el hilo demonio de re-derivación de patrones (GATEADO EN VIVO).
+
+    Espejo de `media_gc_daemon`: el hilo arranca SIEMPRE y comprueba `KENI_PATRONES_AUTO`
+    en cada ciclo (`bucle_gateado`), así el toggle del catálogo aplica sin reiniciar
+    (apagar en <= ~1 min; encender tras estar apagado dispara una comprobación de
+    inmediato — que solo re-deriva si el perfil está viejo, ver `refrescar_patrones`).
+    Antes el flag se leía UNA vez al arrancar (solo-env): encenderlo en runtime no hacía
+    nada hasta el siguiente deploy.
+    """
 
     def bucle() -> None:
-        while True:
-            try:
-                refrescar_patrones()
-            except Exception:  # noqa: BLE001 -- best-effort: el hilo no muere por un barrido
-                _log.exception("patrones: fallo en la re-derivación periódica.")
-            time.sleep(_COMPROBAR_CADA_S)
+        daemon_util.bucle_gateado(
+            activo_fn=config.patrones_auto_activo,
+            intervalo_seg_fn=lambda: _COMPROBAR_CADA_S,
+            sweep_fn=refrescar_patrones,
+            log=_log,
+        )
 
     hilo = threading.Thread(target=bucle, name="patrones-refresco-daemon", daemon=True)
     hilo.start()
+    estado = "ACTIVA" if config.patrones_auto_activo() else "EN ESPERA (KENI_PATRONES_AUTO off)"
+    _log.info(
+        "Re-derivación de patrones %s, comprobación cada %.0f h.",
+        estado, _COMPROBAR_CADA_S / 3600.0,
+    )
     return hilo

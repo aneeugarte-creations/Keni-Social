@@ -35,6 +35,7 @@ _ALIAS = {
     "noticias_gc_daemon": "noticias_gc",
     "trends_daemon": "trends",
     "algoritmos_refresco": "algoritmos",
+    "patrones_refresco": "patrones",
     "reaper_generaciones": "reaper",
     "eventos_scanner": "vencimientos",
     "sugerencias_editoriales": "sugerencias",

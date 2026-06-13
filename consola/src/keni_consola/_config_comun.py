@@ -169,6 +169,11 @@ ENV_SUGERENCIAS_EDITORIALES = "KENI_SUGERENCIAS_EDITORIALES"
 ENV_SUGERENCIAS_EDITORIALES_INTERVALO_HORAS = "KENI_SUGERENCIAS_EDITORIALES_INTERVALO_HORAS"
 ENV_SUGERENCIAS_EDITORIALES_MAX = "KENI_SUGERENCIAS_EDITORIALES_MAX"
 
+# Re-derivación PERIÓDICA de los patrones editoriales por marca (Metricool -> perfil +
+# doc 'patrones'). Gateado OFF por defecto; Voz/Reglas (criterio humano) jamás se tocan.
+# En el catálogo de ajustes (UI) junto al resto de gates de daemons.
+ENV_PATRONES_AUTO = "KENI_PATRONES_AUTO"
+
 # Google Trends como fuente externa: el daemon ingiere las tendencias (con sus noticias) al
 # pool. GATEADO OFF por defecto (KENI_TRENDS). `KENI_TRENDS_GEOS` = CSV de geos (def "MX").
 ENV_TRENDS = "KENI_TRENDS"
@@ -876,6 +881,7 @@ __all__ = [
     'ENV_NOTICIAS_GC_SCORE_UMBRAL',
     'ENV_ORIGENES',
     'ENV_RANKING_PERFIL_IA',
+    'ENV_PATRONES_AUTO',
     'ENV_PERFIL_EDITORIAL_TTL_HORAS',
     'ENV_PG_DB',
     'ENV_PG_HOST',
