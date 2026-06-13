@@ -493,6 +493,9 @@ export interface RespuestaProbarS3 {
 /** Estado agregado de un daemon, calculado por el back. */
 export type EstadoDaemon = "ok" | "error" | "inactivo" | "atrasado";
 
+/** Grupo (motor/papel) de un daemon para el dashboard de Workers, calculado por el back. */
+export type GrupoDaemon = "investigacion" | "produccion" | "flujo" | "infra";
+
 /** Latido de un daemon de fondo (una fila de `daemon_latidos` + campos derivados). */
 export interface LatidoDaemon {
   /** Nombre estable del daemon ("ingesta", "pipeline", "reaper"…). */
@@ -530,6 +533,10 @@ export interface LatidoDaemon {
   /** `true` si su bucle consume el flag de barrido forzado (`bucle_gateado`): solo a esos
    *  se les ofrece «Barrer ahora». Los bucles legados (programador/metricas/…) no lo miran. */
   barrible: boolean;
+  /** Grupo (motor/papel) al que pertenece el daemon; agrupa el dashboard de Workers. */
+  grupo: GrupoDaemon;
+  /** `true` si el daemon encola/ejecuta `claude -p` (gasta tokens); `false` el resto. */
+  gasta_tokens: boolean;
 }
 
 /** Respuesta de `GET /api/sistema/daemons`. Degradada: lista vacía + error legible. */

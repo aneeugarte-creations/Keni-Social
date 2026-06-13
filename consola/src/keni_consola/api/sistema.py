@@ -764,6 +764,11 @@ def sonda_daemons() -> dict:
                 # barrido forzado; los bucles legados no lo miran, asi que el front solo
                 # ofrece "Barrer ahora" a los barribles.
                 "barrible": f["daemon"] in latidos.BARRIBLES,
+                # `grupo` y `gasta_tokens`: clasificacion del daemon (motor/papel + si
+                # consume claude) para el dashboard de Workers. Fuente unica en `latidos`,
+                # asi el front agrupa sin hardcodear nombres.
+                "grupo": latidos.grupo_de(f["daemon"]),
+                "gasta_tokens": latidos.gasta_tokens(f["daemon"]),
             }
         )
     return {"daemons": salida, "error": None}

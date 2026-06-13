@@ -69,6 +69,54 @@ BARRIBLES = frozenset({
     "produccion",
 })
 
+# GRUPO ("motor"/papel) de cada daemon: clasifica los daemons para el dashboard de
+# "Workers" del panel Sistema (el front agrupa por aquí en vez de hardcodear nombres).
+# Fuente única, igual que BARRIBLES. Cuatro grupos:
+#   - "investigacion": alimentan el motor de REUTILIZAR (descubrir/ingerir/validar fuentes).
+#   - "produccion":    el motor de CREAR borradores (copy+arte) y sugerencias editoriales.
+#   - "flujo":         actúan EN el flujo de publicación/comercial; NO gastan tokens claude.
+#   - "infra":         pura infraestructura (métricas, GC, alertas, reaper, patrones).
+# Un daemon registrado que NO esté en ningún conjunto cae a "infra" por defecto (ver
+# `grupo_de`): al añadir un daemon nuevo, clasifícalo aquí o asume que se pinta como infra.
+GRUPO_INVESTIGACION = frozenset({"ingesta", "trends", "algoritmos", "investigacion"})
+GRUPO_PRODUCCION = frozenset({"produccion", "sugerencias"})
+GRUPO_FLUJO = frozenset({"comercial", "programador", "vencimientos"})
+GRUPO_INFRA = frozenset({
+    "metricas",
+    "metricas_piezas",
+    "alertas_rendimiento",
+    "media_gc",
+    "patrones",
+    "noticias_gc",
+    "reaper",
+})
+
+# Daemons que ENCOLAN/EJECUTAN `claude -p` y por tanto GASTAN tokens. El resto opera sin
+# modelo (lee feeds/métricas, mueve piezas, GC). `patrones` deriva de Metricool SIN claude
+# (verificado en patrones_refresco.py) => fuera. Fuente única para `gasta_tokens` en la sonda.
+GASTA_TOKENS = frozenset({"investigacion", "produccion", "sugerencias"})
+
+
+def grupo_de(daemon: str) -> str:
+    """Grupo ("motor"/papel) de un daemon para el dashboard de Workers; default "infra".
+
+    Un daemon no clasificado en ningún conjunto se trata como infraestructura: nunca
+    rompe el panel y, como mucho, sale en el grupo equivocado hasta que se clasifique.
+    """
+    if daemon in GRUPO_INVESTIGACION:
+        return "investigacion"
+    if daemon in GRUPO_PRODUCCION:
+        return "produccion"
+    if daemon in GRUPO_FLUJO:
+        return "flujo"
+    return "infra"  # GRUPO_INFRA + cualquier daemon nuevo sin clasificar
+
+
+def gasta_tokens(daemon: str) -> bool:
+    """True si el daemon encola/ejecuta `claude -p` (gasta tokens); False el resto."""
+    return daemon in GASTA_TOKENS
+
+
 # Mínimo entre DOS latidos de ciclo del mismo daemon (las de barrido no se throttlean:
 # son una por sweep y traen el resultado). 30s mantiene el panel fresco con coste nulo.
 _MIN_ENTRE_CICLOS_SEG = 30.0

@@ -266,6 +266,54 @@ def test_endpoint_daemons_expone_barrible(entorno):
 
 
 # --------------------------------------------------------------------------- #
+# Clasificacion: grupo (motor/papel) + gasta_tokens (constantes y endpoint)     #
+# --------------------------------------------------------------------------- #
+
+
+def test_grupo_de_clasifica_cada_motor():
+    # Mapeo explícito por grupo (fuente única en latidos): un daemon de cada motor.
+    assert latidos.grupo_de("ingesta") == "investigacion"
+    assert latidos.grupo_de("investigacion") == "investigacion"
+    assert latidos.grupo_de("produccion") == "produccion"
+    assert latidos.grupo_de("sugerencias") == "produccion"
+    assert latidos.grupo_de("comercial") == "flujo"
+    assert latidos.grupo_de("programador") == "flujo"
+    assert latidos.grupo_de("vencimientos") == "flujo"
+    assert latidos.grupo_de("metricas") == "infra"
+    assert latidos.grupo_de("reaper") == "infra"
+
+
+def test_grupo_de_default_infra():
+    # Un daemon registrado fuera del mapeo cae a "infra" (nunca rompe el panel).
+    assert latidos.grupo_de("daemon_nuevo_sin_clasificar") == "infra"
+
+
+def test_gasta_tokens_solo_los_que_encolan_claude():
+    # Solo investigacion/produccion/sugerencias corren `claude -p`; el resto no gasta.
+    # patrones deriva de Metricool SIN claude => False.
+    assert latidos.gasta_tokens("investigacion") is True
+    assert latidos.gasta_tokens("produccion") is True
+    assert latidos.gasta_tokens("sugerencias") is True
+    for d in ("ingesta", "trends", "algoritmos", "comercial", "programador",
+              "vencimientos", "metricas", "metricas_piezas", "alertas_rendimiento",
+              "media_gc", "patrones", "noticias_gc", "reaper"):
+        assert latidos.gasta_tokens(d) is False
+
+
+def test_endpoint_daemons_expone_grupo_y_gasta_tokens(entorno):
+    # El endpoint añade `grupo` y `gasta_tokens` a cada daemon (contrato del dashboard
+    # de Workers): el front agrupa por aquí sin hardcodear nombres.
+    db.latido_barrido("investigacion", ok=True, intervalo_seg=60.0, tick_seg=60.0)
+    db.latido_barrido("metricas", ok=True, intervalo_seg=60.0, tick_seg=60.0)
+    c = _cli_admin()
+    por_nombre = {d["daemon"]: d for d in c.get("/api/sistema/daemons").json()["daemons"]}
+    assert por_nombre["investigacion"]["grupo"] == "investigacion"
+    assert por_nombre["investigacion"]["gasta_tokens"] is True
+    assert por_nombre["metricas"]["grupo"] == "infra"
+    assert por_nombre["metricas"]["gasta_tokens"] is False
+
+
+# --------------------------------------------------------------------------- #
 # Barrido FORZADO: flag en BD + consumo en bucle_gateado + endpoint             #
 # --------------------------------------------------------------------------- #
 
