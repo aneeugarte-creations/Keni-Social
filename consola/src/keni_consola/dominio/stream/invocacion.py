@@ -46,9 +46,14 @@ class MetricasRun:
 
 
 # Subconjunto de campos de `MetricasRun` que se persisten (run YAML + historial).
+# `cache_read`/`cache_creation` (tokens de prompt caching) SI se persisten: sin esa señal no se
+# puede medir si el caching ocurre ni el ahorro que produce. Se omiten del dict cuando son None
+# (la mayoria de runs no los traen), asi no ensucian el registro de los que no cachean.
 _CAMPOS_METRICAS_PERSISTIDOS: tuple[str, ...] = (
     "tokens_in",
     "tokens_out",
+    "cache_read",
+    "cache_creation",
     "num_turns",
     "total_cost_usd",
     "duration_ms",

@@ -755,6 +755,11 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # Economia de CONTEXTO: tamano del prompt (chars) de cada generacion cerrada, para ver
     # la deriva del contexto por dia (prompts cada vez mas gordos). Migracion idempotente.
     "ALTER TABLE gasto_ia ADD COLUMN IF NOT EXISTS prompt_chars BIGINT NOT NULL DEFAULT 0",
+    # PROMPT CACHING: tokens leidos de cache y de creacion de cache de cada generacion cerrada,
+    # para medir si el caching ocurre y el ahorro que produce (un cache_read alto = mucho contexto
+    # reutilizado sin re-cobrar). Migracion idempotente (mismo patron que prompt_chars).
+    "ALTER TABLE gasto_ia ADD COLUMN IF NOT EXISTS cache_read BIGINT NOT NULL DEFAULT 0",
+    "ALTER TABLE gasto_ia ADD COLUMN IF NOT EXISTS cache_creation BIGINT NOT NULL DEFAULT 0",
     # INDICE de GENERACIONES (ADR 0012, rendimiento): el registro de cada generacion vive en un
     # YAML (fuente de verdad del DETALLE: prompt/razonamiento/stream). Listar Actividad IA /
     # Pipelines parseaba TODOS los ~2000 YAML por peticion. Este indice replica los campos LIGEROS

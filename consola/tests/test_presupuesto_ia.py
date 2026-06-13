@@ -107,6 +107,33 @@ def test_hook_sin_consumo_no_deja_fila(entorno):
     assert repos.gasto_ia_del_dia(_hoy())["generaciones"] == 0
 
 
+def test_hook_cierre_persiste_cache_de_prompt(entorno):
+    """El cierre vuelca al ledger los tokens de PROMPT CACHING (cache_read/cache_creation).
+
+    Sin esa señal no se puede medir si el caching ocurre ni el ahorro. La serie por dia los suma.
+    """
+    gen_id = _gen()
+    generaciones.actualizar(gen_id, {
+        "estado": "completado",
+        "metricas": {
+            "tokens_in": 100, "tokens_out": 50, "total_cost_usd": 0.1,
+            "cache_read": 4000, "cache_creation": 200,
+        },
+        "fecha_fin": ahora_iso(),
+    })
+    serie = repos.gasto_ia_por_dia(7)
+    hoy = [d for d in serie if d["dia"] == _hoy()][0]
+    assert hoy["cache_read"] == 4000
+    assert hoy["cache_creation"] == 200
+
+
+def test_ledger_cache_default_cero_sin_caching(entorno):
+    """Un run que NO cachea no rompe el ledger: las columnas de cache quedan en 0."""
+    repos.registrar_gasto_ia("nc", dia=_hoy(), tokens_in=10, tokens_out=5)
+    hoy = [d for d in repos.gasto_ia_por_dia(2) if d["dia"] == _hoy()][0]
+    assert hoy["cache_read"] == 0 and hoy["cache_creation"] == 0
+
+
 def test_hook_recierre_no_duplica(entorno):
     """Re-cerrar la misma generacion (reintento tras deploy) actualiza la fila, no la duplica."""
     gen_id = _gen()

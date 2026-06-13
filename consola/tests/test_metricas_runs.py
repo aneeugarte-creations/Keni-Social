@@ -208,15 +208,19 @@ def test_arg_max_turns_invalido_o_ausente_se_ignora(monkeypatch):
 
 def test_metricas_a_dict_omite_none_y_extras():
     m = stream.MetricasRun(
-        tokens_in=10, tokens_out=20, cache_read=5, num_turns=2,
+        tokens_in=10, tokens_out=20, cache_read=5, cache_creation=2, num_turns=2,
         total_cost_usd=0.01, duration_ms=100, session_id="s", modelo="mod",
     )
     d = stream.metricas_a_dict(m)
-    # cache_read/session_id NO se persisten; las claves None se omiten.
+    # cache_read/cache_creation SI se persisten (prompt caching, para medir el ahorro);
+    # session_id NO; las claves None se omiten.
     assert d == {
-        "tokens_in": 10, "tokens_out": 20, "num_turns": 2,
-        "total_cost_usd": 0.01, "duration_ms": 100, "modelo": "mod",
+        "tokens_in": 10, "tokens_out": 20, "cache_read": 5, "cache_creation": 2,
+        "num_turns": 2, "total_cost_usd": 0.01, "duration_ms": 100, "modelo": "mod",
     }
+    # Un run que NO cachea: las claves de cache (None) se omiten, no se fuerzan a 0.
+    sin_cache = stream.MetricasRun(tokens_in=10, tokens_out=20)
+    assert stream.metricas_a_dict(sin_cache) == {"tokens_in": 10, "tokens_out": 20}
     assert stream.metricas_a_dict(None) is None
 
 
