@@ -11,6 +11,7 @@ import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -187,26 +188,66 @@ function TablaJobs({
  * con control de admin (purgar la cola, cancelar/priorizar un job). Sondeo en vivo cada pocos
  * segundos. La INFRA (recursos/daemons/backups/S3, antes pestaña «Salud») vive en /sistema.
  */
+/** PRESUPUESTO DIARIO editable in situ (KENI_PRESUPUESTO_TOKENS_DIA, admin): input compacto
+ *  que guarda al salir del campo (blur/Enter) con la mutación compartida. 0 = sin límite
+ *  (se muestra como «Sin límite»). El valor efectivo llega en el snapshot de la cola. */
+function PresupuestoEditable({ valor }: { valor: number }) {
+  const guardar = useGuardarAjuste();
+  const [num, setNum] = React.useState(String(valor));
+  React.useEffect(() => {
+    setNum(String(valor));
+  }, [valor]);
+  const guardarNumero = () => {
+    const n = Number(num);
+    if (num.trim() !== "" && Number.isFinite(n) && n >= 0 && n !== valor) {
+      guardar.mutate({ clave: "KENI_PRESUPUESTO_TOKENS_DIA", valor: Math.trunc(n) });
+    } else {
+      setNum(String(valor));
+    }
+  };
+  return (
+    <label className="inline-flex items-center gap-1.5">
+      Presupuesto diario
+      <Input
+        type="number"
+        min={0}
+        step="1"
+        value={num}
+        onChange={(e) => setNum(e.target.value)}
+        onBlur={guardarNumero}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        }}
+        disabled={guardar.isPending}
+        className="h-6 w-28 px-2 text-xs tabular-nums"
+        aria-label="Presupuesto diario de tokens (0 = sin límite)"
+      />
+      tokens
+      {valor === 0 && <span className="text-muted-foreground/80">(Sin límite)</span>}
+    </label>
+  );
+}
+
 /** ECONOMÍA DE TOKENS de la generación, en el sitio donde se OPERA la cola.
  *
- * El estado (nivel/gasto/restante) viene en el mismo snapshot de la cola; el control
- * rápido es el kill switch (KENI_GENERACION_PAUSADA, ajuste editable en caliente). Los
- * knobs finos (presupuesto diario, margen manual, tope de contexto) viven en el panel
- * Configuración → «Máquina de contenido» (grupo `pipeline_topes`). */
+ * El estado (nivel/gasto/restante) viene en el mismo snapshot de la cola. El control rápido
+ * es la PARADA DE EMERGENCIA (KENI_GENERACION_PAUSADA, en caliente): corta TODA la
+ * generación con IA, incluida la manual (no se encola nada y el worker no reclama nada;
+ * lo que corre termina y lo encolado espera — `presupuesto_ia.NIVEL_PAUSADO`). El
+ * presupuesto diario se edita aquí mismo; el margen manual vive en el drawer
+ * («Máquina de contenido», grupo `pipeline_topes`). Mutación PROPIA de este panel (sin
+ * compartir el estado «guardando» con la tira: cada control señala solo lo suyo). */
 function PanelPresupuesto({
   presupuesto,
   resHoy,
   esAdmin,
-  pausando,
-  onPausar,
 }: {
   presupuesto: PresupuestoIA;
   /** Resultados de HOY de la serie (para el desglose de gasto por proceso). Null si no hay. */
   resHoy: ResultadoDia | null;
   esAdmin: boolean;
-  pausando: boolean;
-  onPausar: (valor: boolean) => void;
 }) {
+  const guardar = useGuardarAjuste();
   const conPresupuesto = presupuesto.presupuesto_tokens_dia > 0;
   const pct = presupuesto.pct_usado;
   return (
@@ -229,15 +270,22 @@ function PanelPresupuesto({
           </p>
           {/* Desglose del gasto de HOY por proceso (Investigación vs Producción). */}
           <DesgloseEconomiaProceso res={resHoy} />
-          {conPresupuesto ? (
-            <p className="text-xs text-muted-foreground">
-              Presupuesto diario {numeroCompacto(presupuesto.presupuesto_tokens_dia)} tokens
-              {presupuesto.restante_tokens != null && (
-                <> · restan {numeroCompacto(presupuesto.restante_tokens)}</>
-              )}
-              {pct != null && <> · {pct.toFixed(0)}% usado</>}
-            </p>
-          ) : null}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+            {esAdmin ? (
+              <PresupuestoEditable valor={presupuesto.presupuesto_tokens_dia} />
+            ) : (
+              <span>
+                Presupuesto diario{" "}
+                {conPresupuesto
+                  ? `${numeroCompacto(presupuesto.presupuesto_tokens_dia)} tokens`
+                  : "Sin límite"}
+              </span>
+            )}
+            {conPresupuesto && presupuesto.restante_tokens != null && (
+              <span>· restan {numeroCompacto(presupuesto.restante_tokens)}</span>
+            )}
+            {conPresupuesto && pct != null && <span>· {pct.toFixed(0)}% usado</span>}
+          </div>
           {conPresupuesto && pct != null && (
             <div className="h-1.5 w-56 overflow-hidden rounded-full bg-muted">
               <div
@@ -251,17 +299,27 @@ function PanelPresupuesto({
           )}
         </div>
         {esAdmin && (
-          <label className="flex items-center gap-2 text-sm">
-            <span className={cn(presupuesto.pausada ? "text-destructive" : "text-muted-foreground")}>
-              {presupuesto.pausada ? "Generación pausada" : "Pausar generación"}
-            </span>
-            <Switch
-              checked={presupuesto.pausada}
-              disabled={pausando}
-              onCheckedChange={(v) => onPausar(v)}
-              aria-label="Pausar la generación con IA (kill switch)"
-            />
-          </label>
+          <div className="space-y-1 text-right">
+            <label className="flex items-center justify-end gap-2 text-sm">
+              <span
+                className={cn(presupuesto.pausada ? "text-destructive" : "text-muted-foreground")}
+              >
+                {presupuesto.pausada ? "Generación parada" : "Parada de emergencia"}
+              </span>
+              <Switch
+                checked={presupuesto.pausada}
+                disabled={guardar.isPending}
+                onCheckedChange={(v) =>
+                  guardar.mutate({ clave: "KENI_GENERACION_PAUSADA", valor: v })
+                }
+                aria-label="Parada de emergencia: corta toda la generación con IA, incluida la manual"
+              />
+            </label>
+            <p className="max-w-[26ch] text-[11px] leading-snug text-muted-foreground">
+              Corta TODA la generación con IA, incluida la manual; lo que corre termina y lo
+              encolado espera.
+            </p>
+          </div>
         )}
       </CardContent>
     </Card>
@@ -340,13 +398,6 @@ export default function Monitor() {
     onError: (e) => toast.error(mensajeError(e)),
     onSettled: () => setPriorizandoId(null),
   });
-
-  // Toggle REAL de un daemon: la MISMA mutación compartida que Configuración y el panel de la
-  // máquina (una sola implementación del control); su onSuccess ya invalida ajustes + cola +
-  // pipelines, así el estado «Activo/Apagado» y las vistas derivadas reflejan el cambio al
-  // instante. `guardandoClave` se deriva de la mutación en vuelo (sin estado local paralelo).
-  const guardarAjuste = useGuardarAjuste();
-  const guardandoClave = guardarAjuste.isPending ? (guardarAjuste.variables?.clave ?? null) : null;
 
   // La antigua pestaña «Salud» (la infra) es ahora la página /sistema: los deep-links
   // viejos (?tab=salud, incl. la redirección legacy de /datos/sistema) siguen vivos.
@@ -465,7 +516,14 @@ export default function Monitor() {
           )}
 
           {/* KPIs en vivo del POOL COMPARTIDO. Investigación y Producción usan la MISMA cola y el
-              MISMO pool: estos KPIs son la capacidad total; el desglose por loop va debajo. */}
+              MISMO pool: estos KPIs son la capacidad total; el desglose por loop va debajo.
+              Con marca activa se avisa: la capacidad no se filtra (las tablas sí). */}
+          {marcaActiva && (
+            <p className="text-xs text-muted-foreground">
+              Los KPIs de capacidad son globales (no se filtran por{" "}
+              {nombreActiva ?? marcaActiva}); las tablas de jobs de abajo sí.
+            </p>
+          )}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Kpi
               icono={Cpu}
@@ -503,19 +561,13 @@ export default function Monitor() {
               pool, pero al grano de etapa y con su control junto al estado. */}
           <PipelineEnVivo cola={cola.data} esAdmin={esAdmin} proceso={proceso} />
 
-          {/* Economía de tokens: estado vivo + kill switch (los knobs, en Máquina de contenido) */}
+          {/* Economía de tokens: estado vivo + presupuesto editable + parada de emergencia
+              (el margen manual, en el drawer «Máquina de contenido»). */}
           {cola.data.presupuesto && (
             <PanelPresupuesto
               presupuesto={cola.data.presupuesto}
               resHoy={resultadoDelDia(serie.data, cola.data.presupuesto.dia)}
               esAdmin={esAdmin}
-              pausando={
-                guardarAjuste.isPending &&
-                guardandoClave === "KENI_GENERACION_PAUSADA"
-              }
-              onPausar={(valor) =>
-                guardarAjuste.mutate({ clave: "KENI_GENERACION_PAUSADA", valor })
-              }
             />
           )}
 
@@ -610,10 +662,11 @@ export default function Monitor() {
             </CardContent>
           </Card>
 
-          {/* SIN formularios aquí: los maestros de etapa viven en la tira «Pipeline en
-              vivo»; las excepciones por marca, topes y tuning, en el panel lateral de
-              ajustes; la SALUD de la infra (daemons/recursos/backups), en /sistema. El
-              Monitor opera: cancelar, priorizar, purgar y el kill switch de arriba. */}
+          {/* SIN formularios aquí: el maestro «Máquina», los switches de etapa y sus
+              excepciones por marca viven en la tira «Pipeline en vivo»; topes y tuning, en
+              el panel lateral de ajustes; la SALUD de la infra (daemons/recursos/backups),
+              en /sistema. El Monitor opera: cancelar, priorizar, purgar y la parada de
+              emergencia de arriba. */}
         </div>
       )}
     </>

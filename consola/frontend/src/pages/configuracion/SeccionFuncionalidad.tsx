@@ -253,7 +253,7 @@ function ConmutadorMarca({
  *  ajuste (p. ej. `KENI_GENERAR`, `KENI_PUBLICAR_REAL`) a si su maestro global está ON: con el
  *  maestro OFF, la excepción se ve apagada y deshabilitada (consistente entre Generar/Arte y
  *  Publicación; antes Generar/Arte la OCULTABA y publicación la atenuaba — ahora ambas igual). */
-function ExcepcionesPorMarca({
+export function ExcepcionesPorMarca({
   ajustes,
   onGuardar,
   guardando,
@@ -547,34 +547,73 @@ export function PanelAjustes({
   );
 }
 
-/** Controles de la MÁQUINA DE CONTENIDO, para el drawer del MONITOR: el interruptor general,
- * las excepciones por marca y la admisión del flujo continuo. Los MAESTROS de etapa
- * (`maestros_produccion`: Producción/Arte) ya NO se pintan aquí: viven en la tira «Pipeline en
- * vivo» del propio Monitor, al lado del estado que gobiernan (Fase 2) — pero SIGUEN gobernando
- * el atenuado de las excepciones por marca (se pasan como `gruposMaestros`). Mismo motor que
- * Configuración (`/api/ajustes`); aplican en caliente. */
 /** Sección «Investigación» del drawer del MONITOR (Fase 3: UN solo sitio para los ajustes de la
- * máquina): las excepciones por marca del proceso + el motor de noticias completo (entrada al
- * pool, orden, rendimiento, última hora, producción automática y técnico), antes en el menú ⋮
- * de Noticias. El MAESTRO «Investigación» (`maestros_investigacion`) NO se pinta aquí: vive en
- * la tira «Pipeline en vivo» del propio Monitor (switch de Selección), pero SIGUE gobernando el
- * atenuado de las excepciones por marca (se pasa como `gruposMaestros`), igual que hace
- * `PanelMaquinaContenido` con Producción. Mismo motor (`/api/ajustes`); aplican en caliente. */
+ * máquina): el motor de noticias completo (entrada al pool, rendimiento, producción automática
+ * y técnico), antes en el menú ⋮ de Noticias. Ni el MAESTRO «Investigación» ni las EXCEPCIONES
+ * por marca se pintan aquí: los switches de etapa (Selección/Validación) viven en la tira
+ * «Pipeline en vivo» del propio Monitor y las excepciones por marca, en el diálogo de cada
+ * etapa de esa tira (sin duplicar el control). Mismo motor (`/api/ajustes`); aplican en
+ * caliente. */
 export function PanelInvestigacion() {
   const { data, isPending, isError, error, refetch, isFetching, guardar } = useAjustesAdmin();
   const orden = new Map<string, number>(GRUPOS_INVESTIGACION.map((id, i) => [id, i]));
-  const deInvestigacion = (data?.grupos ?? [])
-    .filter((g) => orden.has(g.id))
+  const grupos = (data?.grupos ?? [])
+    .filter(
+      (g) =>
+        orden.has(g.id) &&
+        g.id !== "maestros_investigacion" &&
+        g.id !== "automatizacion_marca_investigacion",
+    )
     .sort((a, b) => orden.get(a.id)! - orden.get(b.id)!);
-  const grupos = deInvestigacion.filter((g) => g.id !== "maestros_investigacion");
 
   return (
     <SeccionColapsable
       titulo="Investigación"
       descripcion={
         <>
-          Excepciones por marca y el motor de noticias (entrada, orden, última hora, producción
-          automática). El maestro está en la tira «Pipeline en vivo». Los cambios aplican{" "}
+          El motor de noticias (entrada, rendimiento, producción automática). Los switches de
+          etapa y sus excepciones por marca están en la tira «Pipeline en vivo». Los cambios
+          aplican <strong>en caliente</strong>.
+        </>
+      }
+    >
+      {isPending || isError ? (
+        <EstadoAjustes isError={isError} error={error} refetch={refetch} isFetching={isFetching} />
+      ) : (
+        <GruposAjustes
+          grupos={grupos}
+          onGuardar={(cuerpo) => guardar.mutate(cuerpo)}
+          guardando={guardar.isPending}
+        />
+      )}
+    </SeccionColapsable>
+  );
+}
+
+/** Controles de la MÁQUINA DE CONTENIDO, para el drawer del MONITOR: la admisión del flujo
+ * continuo y la economía de tokens (`pipeline_topes`). El interruptor general «Máquina»
+ * (`maquina_global`) vive en la cabecera de la tira «Pipeline en vivo»; los maestros de etapa
+ * (`maestros_produccion`), en la propia tira; y las excepciones por marca, en el diálogo de
+ * cada etapa (sin duplicar el control aquí). Mismo motor que Configuración (`/api/ajustes`);
+ * aplican en caliente. */
+export function PanelMaquinaContenido() {
+  const { data, isPending, isError, error, refetch, isFetching, guardar } = useAjustesAdmin();
+  const grupos = (data?.grupos ?? []).filter(
+    (g) =>
+      GRUPOS_MAQUINA.has(g.id) &&
+      g.id !== "maquina_global" &&
+      g.id !== "maestros_produccion" &&
+      g.id !== "automatizacion_marca_produccion",
+  );
+
+  return (
+    <SeccionColapsable
+      titulo="Máquina de contenido"
+      abiertaInicial
+      descripcion={
+        <>
+          Admisión del flujo y economía de tokens. El maestro «Máquina», los switches de etapa y
+          sus excepciones por marca están en la tira «Pipeline en vivo». Los cambios aplican{" "}
           <strong>en caliente</strong>.
         </>
       }
@@ -584,37 +623,6 @@ export function PanelInvestigacion() {
       ) : (
         <GruposAjustes
           grupos={grupos}
-          gruposMaestros={deInvestigacion}
-          onGuardar={(cuerpo) => guardar.mutate(cuerpo)}
-          guardando={guardar.isPending}
-        />
-      )}
-    </SeccionColapsable>
-  );
-}
-
-export function PanelMaquinaContenido() {
-  const { data, isPending, isError, error, refetch, isFetching, guardar } = useAjustesAdmin();
-  const deMaquina = (data?.grupos ?? []).filter((g) => GRUPOS_MAQUINA.has(g.id));
-  const grupos = deMaquina.filter((g) => g.id !== "maestros_produccion");
-
-  return (
-    <SeccionColapsable
-      titulo="Máquina de contenido"
-      abiertaInicial
-      descripcion={
-        <>
-          Excepciones por marca y admisión del flujo. Los maestros de etapa están en la tira
-          «Pipeline en vivo». Los cambios aplican <strong>en caliente</strong>.
-        </>
-      }
-    >
-      {isPending || isError ? (
-        <EstadoAjustes isError={isError} error={error} refetch={refetch} isFetching={isFetching} />
-      ) : (
-        <GruposAjustes
-          grupos={grupos}
-          gruposMaestros={deMaquina}
           onGuardar={(cuerpo) => guardar.mutate(cuerpo)}
           guardando={guardar.isPending}
         />

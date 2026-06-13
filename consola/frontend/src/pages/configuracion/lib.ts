@@ -32,9 +32,7 @@ export const GRUPOS_INVESTIGACION = [
   "maestros_investigacion",
   "automatizacion_marca_investigacion",
   "noticias_entrada",
-  "noticias_orden",
   "noticias_rendimiento",
-  "noticias_breaking",
   "noticias_produccion",
   "noticias_tecnico",
 ] as const;

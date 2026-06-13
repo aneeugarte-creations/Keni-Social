@@ -185,7 +185,7 @@ export function SeccionNavegadorS3() {
     void queryClient.invalidateQueries({ queryKey: ["sistema", "s3"] });
   }
 
-  // Borrado de UN objeto. Sin confirmación: pulsar borrar borra (decisión de producto).
+  // Borrado de UN objeto.
   const borrar = useMutation({
     mutationFn: (obj: ObjetoS3) => api.borrarObjetoS3(obj.key),
     onSuccess: (_data, obj) => {
@@ -224,6 +224,24 @@ export function SeccionNavegadorS3() {
   });
 
   const borrando = borrar.isPending || borrarLote.isPending;
+
+  // CONFIRMACIÓN antes de borrar (individual y en lote): borrar un objeto del bucket es
+  // irreversible. Mismo patrón que el resto del repo (window.confirm, como «Purgar cola»).
+  const confirmarBorrar = (obj: ObjetoS3) => {
+    if (window.confirm(`¿Borrar «${obj.nombre}» del bucket? Esta acción no se puede deshacer.`)) {
+      borrar.mutate(obj);
+    }
+  };
+  const confirmarBorrarLote = (keys: string[]) => {
+    const n = keys.length;
+    if (
+      window.confirm(
+        `¿Borrar ${n} objeto${n === 1 ? "" : "s"} del bucket? Esta acción no se puede deshacer.`,
+      )
+    ) {
+      borrarLote.mutate(keys);
+    }
+  };
 
   // Si S3 no está configurado, no mostramos esta sección en absoluto:
   // SeccionS3 ya lo avisa. Esperamos a tener datos para decidir.
@@ -325,7 +343,7 @@ export function SeccionNavegadorS3() {
           <p className="text-sm text-amber-600 dark:text-amber-400">{datos.error}</p>
         )}
 
-        {/* Barra de acciones en masa: aparece al seleccionar objetos. Borra SIN confirmar. */}
+        {/* Barra de acciones en masa: aparece al seleccionar objetos. Confirma antes de borrar. */}
         {nSeleccionados > 0 && (
           <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/40 px-3 py-2">
             <span className="text-sm text-muted-foreground">
@@ -345,7 +363,7 @@ export function SeccionNavegadorS3() {
                 variant="destructive"
                 size="sm"
                 disabled={borrando}
-                onClick={() => borrarLote.mutate([...seleccion])}
+                onClick={() => confirmarBorrarLote([...seleccion])}
               >
                 {borrarLote.isPending ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
@@ -375,7 +393,7 @@ export function SeccionNavegadorS3() {
             onAlternarUno={alternarUno}
             onAlternarTodos={alternarTodos}
             onPreview={setPreview}
-            onBorrar={(obj) => borrar.mutate(obj)}
+            onBorrar={confirmarBorrar}
             borrando={borrando}
             keyBorrando={borrar.isPending ? (borrar.variables?.key ?? null) : null}
           />
@@ -385,7 +403,7 @@ export function SeccionNavegadorS3() {
       <PreviewObjeto
         objeto={preview}
         onClose={() => setPreview(null)}
-        onBorrar={(obj) => borrar.mutate(obj)}
+        onBorrar={confirmarBorrar}
         borrando={borrar.isPending}
       />
     </Card>

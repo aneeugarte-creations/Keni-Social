@@ -8,10 +8,11 @@
  *
  * Es INFORMATIVO (no toggles inline): el estado se lee del catálogo de ajustes
  * (`GET /api/ajustes`, solo admin) por la `clave` de cada flag físico, con el maestro
- * «Investigación» (`KENI_INVESTIGACION`) como respaldo —el único interruptor que el catálogo
- * expone para el proceso, y que mantiene sincronizadas sus etapas físicas—. Los toggles reales
- * viven en el Monitor (Fase 3): el maestro en la tira «Pipeline en vivo» y el resto en su
- * drawer de ajustes, sección «Investigación».
+ * VIRTUAL «Investigación» (`KENI_INVESTIGACION`) como respaldo para las etapas sin flag
+ * propio en el catálogo (Fusión/Clasificación/Ranking). Ingesta y Verificación resuelven
+ * por sus claves físicas (`KENI_PIPELINE_SELECCION`/`_VALIDACION`), que el catálogo ya
+ * expone. Los toggles reales viven en el Monitor: los switches físicos en la tira
+ * «Pipeline en vivo» y el motor de noticias en su drawer, sección «Investigación».
  */
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, SquarePen } from "lucide-react";

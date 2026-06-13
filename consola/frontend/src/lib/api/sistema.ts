@@ -3,6 +3,7 @@
 import { peticion, query } from "./_core";
 import type {
   RespuestaBackups,
+  RespuestaBarrerDaemon,
   RespuestaBorrarLoteS3,
   RespuestaBorrarS3,
   RespuestaDaemons,
@@ -23,6 +24,11 @@ export const apiSistema = {
     peticion<RespuestaRecursos>("/sistema/recursos", { signal }),
   sistemaDaemons: (signal?: AbortSignal) =>
     peticion<RespuestaDaemons>("/sistema/daemons", { signal }),
+  sistemaDaemonBarrer: (daemon: string) =>
+    peticion<RespuestaBarrerDaemon>(
+      `/sistema/daemons/${encodeURIComponent(daemon)}/barrer`,
+      { metodo: "POST" },
+    ),
   sistemaBackups: (signal?: AbortSignal) =>
     peticion<RespuestaBackups>("/sistema/backups", { signal }),
   sistemaRendimiento: (signal?: AbortSignal) =>

@@ -134,11 +134,15 @@ export function ZonaEstado({ esAdmin, marca }: { esAdmin: boolean; marca?: strin
   const doctor = useDoctor();
   const visibles = (doctor.data?.resultados ?? []).filter((c) => esAdmin || !c.admin);
   const conProblema = visibles.filter((c) => c.estado !== "ok");
-  // Sin datos aún (o el propio doctor caído) no se pinta nada: la zona es diagnóstico,
-  // no debe meter ruido ni romper el Monitor.
+  // Sin datos aún no se pinta nada (la zona es diagnóstico, no debe meter ruido), pero el
+  // DOCTOR CAÍDO no desaparece en silencio: «todo en orden» y «no sé leer el estado» no
+  // pueden verse igual, así que el fallo se avisa con reintento.
   return (
     <div className="space-y-3">
-      {doctor.data &&
+      {doctor.isError ? (
+        <AvisoDoctorCaido doctor={doctor} />
+      ) : (
+        doctor.data &&
         (conProblema.length === 0 ? (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <CircleCheck className="h-4 w-4 text-emerald-500" aria-hidden="true" />
@@ -146,8 +150,32 @@ export function ZonaEstado({ esAdmin, marca }: { esAdmin: boolean; marca?: strin
           </p>
         ) : (
           <ListaChequeos chequeos={conProblema} />
-        ))}
+        ))
+      )}
       <TemasBloqueados marca={marca} />
+    </div>
+  );
+}
+
+/** Aviso de DOCTOR CAÍDO (`GET /api/estado` falló): franja ámbar con reintento, en vez de
+ *  una zona vacía que parezca «todo bien». Compacto: no es un chequeo más, es que no se
+ *  pudo preguntar. */
+function AvisoDoctorCaido({ doctor }: { doctor: ReturnType<typeof useDoctor> }) {
+  return (
+    <div
+      role="alert"
+      className="flex flex-wrap items-center gap-2.5 rounded-xl border border-amber-500/40 bg-amber-500/5 px-3.5 py-2.5 text-sm"
+    >
+      <TriangleAlert className="h-4 w-4 shrink-0 text-amber-500" aria-hidden="true" />
+      <span className="min-w-0 flex-1">No se pudo leer el estado de la máquina.</span>
+      <button
+        type="button"
+        onClick={() => void doctor.refetch()}
+        disabled={doctor.isFetching}
+        className="shrink-0 text-xs font-medium underline-offset-2 hover:underline disabled:opacity-50"
+      >
+        {doctor.isFetching ? "Reintentando…" : "Reintentar"}
+      </button>
     </div>
   );
 }
@@ -159,6 +187,8 @@ export function ZonaEstado({ esAdmin, marca }: { esAdmin: boolean; marca?: strin
  */
 export function AvisosDoctor() {
   const doctor = useDoctor();
+  // El doctor caído tampoco se calla aquí: sin él, Sistema parecería sin avisos.
+  if (doctor.isError) return <AvisoDoctorCaido doctor={doctor} />;
   const avisos = (doctor.data?.resultados ?? []).filter((c) => c.admin && c.estado !== "ok");
   if (avisos.length === 0) return null;
   return <ListaChequeos chequeos={avisos} />;

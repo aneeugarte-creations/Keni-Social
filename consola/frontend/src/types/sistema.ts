@@ -525,12 +525,23 @@ export interface LatidoDaemon {
   umbral_atraso_seg: number;
   /** Estado listo para pintar. */
   estado: EstadoDaemon;
+  /** ISO de la solicitud de barrido forzado pendiente, o "" si no hay ninguna. */
+  barrido_solicitado: string;
+  /** `true` si su bucle consume el flag de barrido forzado (`bucle_gateado`): solo a esos
+   *  se les ofrece «Barrer ahora». Los bucles legados (programador/metricas/…) no lo miran. */
+  barrible: boolean;
 }
 
 /** Respuesta de `GET /api/sistema/daemons`. Degradada: lista vacía + error legible. */
 export interface RespuestaDaemons {
   daemons: LatidoDaemon[];
   error: string | null;
+}
+
+/** Respuesta de `POST /api/sistema/daemons/{daemon}/barrer` (200). */
+export interface RespuestaBarrerDaemon {
+  solicitado: boolean;
+  daemon: string;
 }
 
 // ── Backups locales (GET /api/sistema/backups) ───────────────────────────────

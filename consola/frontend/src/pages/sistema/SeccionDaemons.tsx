@@ -1,9 +1,11 @@
-import { useQuery } from "@tanstack/react-query";
-import { Activity, ExternalLink } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Activity, ExternalLink, Play } from "lucide-react";
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -14,7 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { api, mensajeError } from "@/lib/api";
+import { ApiError, api, mensajeError } from "@/lib/api";
 import { tiempoRelativo } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
 import type { EstadoDaemon, LatidoDaemon } from "@/types";
@@ -32,7 +34,9 @@ const PESO_ESTADO: Record<EstadoDaemon, number> = {
 const ETIQUETA_ESTADO: Record<EstadoDaemon, string> = {
   ok: "OK",
   error: "Error",
-  inactivo: "Inactivo",
+  // «Inactivo» se pinta como lo que ES: el gate del daemon está apagado por su ajuste
+  // (mismo lenguaje que el 409 de «Barrer ahora»), no un fallo.
+  inactivo: "Apagado por ajuste",
   atrasado: "Atrasado",
 };
 
@@ -62,15 +66,38 @@ function formatoIntervalo(seg: number): string {
   return `${Math.round(seg / 3600)} h`;
 }
 
-function FilaDaemon({ latido }: { latido: LatidoDaemon }) {
+function FilaDaemon({
+  latido,
+  onBarrer,
+  barriendo,
+}: {
+  latido: LatidoDaemon;
+  onBarrer: (daemon: string) => void;
+  /** Daemon cuya solicitud de barrido está en vuelo (deshabilita SOLO su botón). */
+  barriendo: string | null;
+}) {
   const barrido = latido.ultimo_barrido
     ? tiempoRelativo(latido.ultimo_barrido)
     : "nunca";
+  const solicitado = latido.barrido_solicitado !== "";
   return (
     <TableRow>
       <TableCell className="font-medium">{latido.daemon}</TableCell>
       <TableCell>
-        <ChipEstado estado={latido.estado} />
+        <span className="inline-flex flex-wrap items-center gap-1.5">
+          <ChipEstado estado={latido.estado} />
+          {/* Solicitud de barrido forzado pendiente (campo `barrido_solicitado`): el bucle
+              del daemon la consume en su siguiente tick (<= ~1 min). */}
+          {solicitado && (
+            <Badge
+              variant="outline"
+              className="border-transparent bg-sky-500/15 text-sky-600 dark:text-sky-400"
+              title="El daemon barrerá en su siguiente tick (≤ ~1 min)."
+            >
+              Barrido solicitado
+            </Badge>
+          )}
+        </span>
       </TableCell>
       <TableCell className="text-muted-foreground">
         {barrido}
@@ -93,6 +120,26 @@ function FilaDaemon({ latido }: { latido: LatidoDaemon }) {
       >
         {latido.estado === "error" || latido.errores > 0 ? latido.error_txt : ""}
       </TableCell>
+      <TableCell className="text-right">
+        {/* Solo a los daemons BARRIBLES (bucle sobre `bucle_gateado`): los legados
+            (programador/metricas/…) no miran el flag y el botón sería mentira. */}
+        {latido.barrible && (
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={barriendo === latido.daemon || solicitado}
+            title={
+              solicitado
+                ? "Ya hay un barrido solicitado pendiente."
+                : "Fuerza un barrido inmediato (sin esperar al intervalo)."
+            }
+            onClick={() => onBarrer(latido.daemon)}
+          >
+            <Play className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+            Barrer ahora
+          </Button>
+        )}
+      </TableCell>
     </TableRow>
   );
 }
@@ -100,13 +147,35 @@ function FilaDaemon({ latido }: { latido: LatidoDaemon }) {
 /**
  * Sección de daemons de fondo del panel Sistema: estado de cada daemon a partir de sus
  * latidos persistidos (`/api/sistema/daemons`). Lo que requiere atención (atrasado/error)
- * se lista primero. Auto-refresco con la misma cadencia que los recursos.
+ * se lista primero. Auto-refresco con la misma cadencia que los recursos. La página entera
+ * es de admin (403 si no), así que «Barrer ahora» (POST …/barrer) se ofrece directamente
+ * a los daemons `barrible`.
  */
 export function SeccionDaemons() {
+  const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["sistema", "daemons"],
     queryFn: ({ signal }) => api.sistemaDaemons(signal),
     refetchInterval: INTERVALO_RECURSOS_MS,
+  });
+
+  const barrer = useMutation({
+    mutationFn: (daemon: string) => api.sistemaDaemonBarrer(daemon),
+    onSuccess: (r) => {
+      toast.success(`Barrido de «${r.daemon}» solicitado: correrá en su siguiente tick.`);
+      // Refresca la tabla para que el chip «Barrido solicitado» aparezca al instante.
+      void queryClient.invalidateQueries({ queryKey: ["sistema", "daemons"] });
+    },
+    onError: (e, daemon) => {
+      if (e instanceof ApiError && e.status === 409) {
+        toast.error(`«${daemon}» está apagado por su ajuste: enciéndelo antes de barrer.`);
+      } else if (e instanceof ApiError && e.status === 404) {
+        toast.error(`No hay ningún daemon registrado con el nombre «${daemon}».`);
+        void queryClient.invalidateQueries({ queryKey: ["sistema", "daemons"] });
+      } else {
+        toast.error(mensajeError(e));
+      }
+    },
   });
 
   if (query.isPending) {
@@ -136,9 +205,9 @@ export function SeccionDaemons() {
         <CardTitle className="flex items-center gap-2 text-sm text-muted-foreground">
           <Activity className="h-4 w-4" aria-hidden="true" />
           Daemons de fondo
-          {/* Aquí se OBSERVA la salud (latidos persistidos); el encendido/apagado son
-              ajustes y viven en el Monitor (tira del pipeline + panel de ajustes).
-              Un solo sitio para cada cosa. */}
+          {/* Aquí se OBSERVA la salud (latidos persistidos) y se puede forzar un barrido;
+              el encendido/apagado son ajustes y viven en el Monitor (tira del pipeline +
+              panel de ajustes). Un solo sitio para cada cosa. */}
           <Link
             to="/datos/produccion/monitor?tab=ajustes"
             className="ml-auto inline-flex items-center gap-1 text-xs font-normal underline-offset-2 hover:text-foreground hover:underline"
@@ -165,11 +234,17 @@ export function SeccionDaemons() {
                 <TableHead>Intervalo</TableHead>
                 <TableHead>Barridos</TableHead>
                 <TableHead>Último error</TableHead>
+                <TableHead className="text-right">Acción</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {ordenados.map((l) => (
-                <FilaDaemon key={l.daemon} latido={l} />
+                <FilaDaemon
+                  key={l.daemon}
+                  latido={l}
+                  onBarrer={(d) => barrer.mutate(d)}
+                  barriendo={barrer.isPending ? (barrer.variables ?? null) : null}
+                />
               ))}
             </TableBody>
           </Table>
