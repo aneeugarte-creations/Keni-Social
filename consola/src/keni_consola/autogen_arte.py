@@ -13,6 +13,19 @@ Antes existía un DAEMON suelto que barría el tablero; se RETIRÓ: la etapa viv
 del barrido del pipeline (`pipeline_contenido.ejecutar_arte`), que reutiliza la SELECCIÓN
 (`topics_sin_arte`) y el LANZAMIENTO (`lanzar_para_topic`) de este módulo.
 
+POR LA COLA (antes SÍNCRONO)
+============================
+La generación del arte ANTES corría SÍNCRONA dentro del barrido (con un ThreadPool propio,
+fuera del sistema de cola/carriles/reintentos/idempotencia). Eso tenía dos problemas: (1) sin
+idempotencia real, un crash entre `media.generar_imagen(prompt)` —que ya gastó el proveedor— y
+el etiquetado de éxito RE-GASTABA el proveedor en el siguiente barrido; (2) mezclaba trabajo de
+imagen (I/O + algo de CPU) fuera de la cola de jobs. AHORA `lanzar_para_topic` solo SELECCIONA
+y ENCOLA un job de PROCESO (`jobspec.PROC_IMAGEN`) vía `dominio.generar.lanzar_arte`, con CLAVE
+DE IDEMPOTENCIA ESTABLE (tema+marca+prompt-base); el WORKER, en su CARRIL de proceso (no bloquea
+el copy), corre `ejecutar_arte_job` —que llama a `media.generar_imagen`, sube la imagen y la
+adjunta a la pieza—. La semántica observable se conserva: NO publica, deja la imagen en el
+borrador, y el dedup por etiqueta `autogen-arte` se asigna AL ÉXITO (en el ejecutor).
+
 SEGURO POR DISENO (CONSERVADOR)
 ===============================
   - GATEADO: la etapa solo ilustra con `KENI_PIPELINE_ARTE=1` (def OFF) + `KENI_MAQUINA=1`.
@@ -179,16 +192,23 @@ def _marca_legible(item: dict[str, Any]) -> str:
     return marca if marca and marcas.es_marca(marca) else ""
 
 
-def lanzar_para_topic(
-    item: dict[str, Any], *, generar=media.generar_imagen
-) -> dict[str, Any] | None:
-    """Genera UN arte para un tema y lo adjunta a su 1a plataforma con copy sin imagen.
+def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
+    """SELECCIONA la plataforma a ilustrar y ENCOLA un job de arte (antes era SÍNCRONO).
 
-    Reutiliza la generacion de imagen existente (`media.generar_imagen`, inyectable para
-    tests via `generar`) + `media.guardar_bytes`, y adjunta el nombre del media a la
-    `contenido_plataforma` (poniendo `falta_imagen=False`). Etiqueta el tema `autogen-arte`
-    para dedup. Devuelve un dict con `{contenido_id, plataforma_id, imagen}` o None si se
-    omite (sin proveedor, sin plataforma candidata, prompt vacio).
+    Localiza la 1a plataforma del tema con copy pero sin imagen y, vía
+    `dominio.generar.lanzar_arte`, ENCOLA un job de PROCESO (`jobspec.PROC_IMAGEN`) con CLAVE DE
+    IDEMPOTENCIA ESTABLE. El WORKER (carril de proceso) genera la imagen y la adjunta a la pieza
+    FUERA del barrido (`ejecutar_arte_job`), heredando idempotencia + reintentos + carril. Antes
+    esta función llamaba a `media.generar_imagen` EN LÍNEA y adjuntaba la imagen aquí mismo.
+
+    Devuelve el REGISTRO de generación encolado (para sondeo/conteo) —o el run en vuelo si ya
+    había uno con esta clave (idempotencia)—, o None si se OMITE (sin proveedor, sin plataforma
+    candidata, prompt vacío). Los gates SAFE se conservan: el cap por barrido y el dedup por
+    etiqueta `autogen-arte` los aplican los llamadores (`topics_sin_arte`/`ids_ya_procesados`);
+    la etiqueta se asigna AL ÉXITO dentro del ejecutor, NO al encolar (dedup-al-éxito, como el
+    copy): un arte que falla NO queda etiquetado y el barrido lo reintenta, mientras la clave de
+    idempotencia evita el doble lanzamiento del que sigue en vuelo. Propaga `ColaLlenaError`
+    (backpressure) para que el barrido la recoja en el próximo tick.
     """
     if not media.proveedor_configurado():
         _log.info("Auto-arte: sin proveedor de imagen configurado; se omite.")
@@ -210,23 +230,122 @@ def lanzar_para_topic(
     prompt = prompt_arte(item)
     if not prompt:
         return None
+    # Import diferido: `dominio.generar` no se acopla en carga (evita ciclos al importar).
+    from .dominio import generar
 
-    crudos = generar(prompt)
-    nombre = media.guardar_bytes(crudos, ext="png")
-    actualizado = repos.actualizar_contenido_plataforma(
-        objetivo["id"], {"imagen": nombre, "falta_imagen": False}
+    return generar.lanzar_arte(
+        contenido_id=str(item_id),
+        plataforma_id=str(objetivo.get("id") or ""),
+        marca=item.get("marca", "") or "",
+        titulo=item.get("titulo", "") or "",
+        prompt=prompt,
     )
-    # Dedup: marca el tema como ya procesado (best-effort; un fallo no debe romper el item).
-    et_id = _id_etiqueta_autogen_arte()
-    if et_id:
-        repos.asignar_etiqueta(item_id, et_id)
-    if actualizado is None:
+
+
+def _resolver_objetivo_arte(
+    contenido_id: str, plataforma_id: str
+) -> dict[str, Any] | None:
+    """Plataforma a ilustrar, RE-RESUELTA fresca en el worker (idempotencia natural).
+
+    Si `plataforma_id` sigue teniendo copy SIN imagen, ésa; si no (la ilustró un humano, o un
+    intento previo del propio job antes de marcar terminal), la PRIMERA plataforma del tema con
+    copy y sin imagen. None si ya no queda candidata: el ejecutor lo trata como un no-op idempotente
+    (no re-genera ni re-sube). Best-effort: una lectura fallida devuelve None (el reaper lo recoge).
+    """
+    if not contenido_id:
         return None
-    registrar_arte(
-        contenido_id=str(item_id), marca=item.get("marca", "") or "",
-        titulo=item.get("titulo", "") or "", prompt=prompt, imagen=nombre,
-    )
-    return {"contenido_id": item_id, "plataforma_id": objetivo["id"], "imagen": nombre}
+    try:
+        plataformas = repos.listar_contenido_plataforma(contenido_id)
+    except Exception:  # noqa: BLE001 -- sin plataformas legibles, no hay donde adjuntar
+        _log.exception("Auto-arte: no se pudieron leer las plataformas del tema %s.", contenido_id)
+        return None
+    if plataforma_id:
+        for p in plataformas:
+            if p.get("id") == plataforma_id and _tiene_copy(p) and _le_falta_imagen(p):
+                return p
+    return next((p for p in plataformas if _tiene_copy(p) and _le_falta_imagen(p)), None)
+
+
+def ejecutar_arte_job(gen_id: str, spec: dict[str, Any]) -> None:
+    """EJECUTOR del job de proceso `imagen` (lo despacha el worker en el carril de proceso).
+
+    Genera UN arte (`media.generar_imagen`), lo sube (`media.guardar_bytes`) y lo adjunta a la
+    pieza objetivo (`falta_imagen=False`), reportando estado a `generaciones` igual que los
+    ejecutores de ASR/vídeo. Etiqueta el tema `autogen-arte` (dedup AL ÉXITO) y deja la traza en
+    Actividad IA + el pipeline de la pieza (`registrar_arte`). NO publica: la imagen queda en el
+    borrador para la revisión humana de siempre.
+
+    IDEMPOTENTE ante re-claim del reaper / re-encolado: si la pieza ya NO tiene plataforma con copy
+    sin imagen (un intento previo del MISMO job ya la adjuntó antes de marcar terminal, o un humano
+    la ilustró), COMPLETA sin volver a llamar al proveedor —ni doble gasto ni doble subida—. El
+    contrato de firma (`ejecutar(gen_id, spec)`) es el de todos los jobs de proceso.
+    """
+    contenido_id = (spec.get("contenido_id") or "").strip()
+    plataforma_id = (spec.get("plataforma_id") or "").strip()
+    marca = spec.get("marca") or ""
+    titulo = spec.get("titulo") or ""
+    prompt = (spec.get("prompt") or "").strip()
+    try:
+        if not prompt:
+            _terminar_error_arte(gen_id, "Falta el tema (prompt) del arte.")
+            return
+        if not media.proveedor_configurado():
+            _terminar_error_arte(
+                gen_id, "No hay proveedor de imagen configurado para generar el arte."
+            )
+            return
+        objetivo = _resolver_objetivo_arte(contenido_id, plataforma_id)
+        if objetivo is None:
+            # Sin candidata: idempotente. Completa SIN gastar el proveedor (la pieza ya está
+            # ilustrada, o un intento previo la adjuntó). El barrido no la re-elige (etiqueta).
+            generaciones.actualizar(gen_id, {
+                "estado": generaciones.ESTADO_COMPLETADO,
+                "resultado": {
+                    "contenido_id": contenido_id,
+                    "omitido": "el tema ya no tiene una plataforma con copy sin imagen",
+                },
+                "fecha_fin": generaciones.ahora_iso(),
+            })
+            return
+        generaciones.actualizar(
+            gen_id, {"estado": generaciones.ESTADO_EJECUTANDO, "fase": "generando imagen"}
+        )
+        crudos = media.generar_imagen(prompt)
+        nombre = media.guardar_bytes(crudos, ext="png")
+        repos.actualizar_contenido_plataforma(
+            objetivo["id"], {"imagen": nombre, "falta_imagen": False}
+        )
+        # Dedup: marca el tema como ya procesado (best-effort; un fallo no debe romper el cierre).
+        et_id = _id_etiqueta_autogen_arte()
+        if et_id and contenido_id:
+            repos.asignar_etiqueta(contenido_id, et_id)
+        registrar_arte(
+            contenido_id=contenido_id, marca=marca, titulo=titulo, prompt=prompt, imagen=nombre,
+        )
+        generaciones.actualizar(gen_id, {
+            "estado": generaciones.ESTADO_COMPLETADO,
+            "resultado": {
+                "contenido_id": contenido_id,
+                "plataforma_id": objetivo["id"],
+                "imagen": nombre,
+            },
+            "fecha_fin": generaciones.ahora_iso(),
+        })
+    except media.MediaError as e:
+        _terminar_error_arte(gen_id, str(e) or "No se pudo generar la imagen del arte.")
+    except Exception as e:  # noqa: BLE001 -- red de seguridad: nunca dejar el job sin terminal
+        _log.exception("autogen_arte.ejecutar_arte_job: fallo inesperado (gen %s)", gen_id)
+        _terminar_error_arte(gen_id, f"Error inesperado al generar el arte: {e}")
+
+
+def _terminar_error_arte(gen_id: str, mensaje: str) -> None:
+    """Marca la generación de arte en error con un mensaje claro en español (para Actividad IA)."""
+    _log.warning("autogen_arte (gen %s): %s", gen_id, mensaje)
+    generaciones.actualizar(gen_id, {
+        "estado": generaciones.ESTADO_ERROR,
+        "error": mensaje,
+        "fecha_fin": generaciones.ahora_iso(),
+    })
 
 
 def registrar_arte(

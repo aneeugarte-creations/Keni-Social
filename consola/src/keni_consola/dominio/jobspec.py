@@ -108,10 +108,19 @@ PROC_CRITICA_IA = "critica-ia"
 #   {"kind": <PROC_*>, ...params}  (sin `prompt`/`procesar`/`cwd`; el ejecutor lee los params).
 PROC_RENDER_VIDEO = "render-video"
 PROC_TRANSCRIBIR = "transcribir"
+# Generacion de ARTE (imagen) del auto-pipeline: ANTES era SINCRONA (corria dentro del barrido
+# con su propio ThreadPool, fuera de la cola). Ahora es un job de PROCESO: la llamada HTTP al
+# proveedor de imagen + la subida a S3 + el adjuntado a la pieza son I/O (y algo de CPU), encajan
+# en el carril de proceso (NO bloquea el copy) y heredan idempotencia (clave estable en
+# `dominio.generar.lanzar_arte`) + reintentos/huerfanos del reaper. Su ejecutor (`autogen_arte.
+# ejecutar_arte_job`) llama a `media.generar_imagen` y reporta estado como ASR/video. NO gasta
+# tokens de la suscripcion claude (proveedor de imagen aparte), asi que —como los demas procesos—
+# queda EXENTO del corte por presupuesto de tokens; solo el kill switch PAUSADO lo frena.
+PROC_IMAGEN = "imagen"
 
 # KINDS de proceso (no-claude). El worker, al reclamar un job, mira si su `spec["kind"]` esta
 # aqui; si lo esta, despacha al ejecutor; si no, sigue el camino `claude` de siempre.
-KINDS_PROCESO = frozenset({PROC_RENDER_VIDEO, PROC_TRANSCRIBIR})
+KINDS_PROCESO = frozenset({PROC_RENDER_VIDEO, PROC_TRANSCRIBIR, PROC_IMAGEN})
 
 # Registro de EJECUTORES por kind de proceso. Valor = "modulo:funcion" (path importable),
 # resuelto por import PEREZOSO en `resolver_ejecutor_proceso` (asi `jobspec` no importa los
@@ -121,6 +130,10 @@ KINDS_PROCESO = frozenset({PROC_RENDER_VIDEO, PROC_TRANSCRIBIR})
 EJECUTORES_PROCESO: dict[str, str] = {
     PROC_RENDER_VIDEO: "keni_consola.motores.estudio_video:ejecutar_render",
     PROC_TRANSCRIBIR: "keni_consola.motores.transcripcion:ejecutar_transcripcion",
+    # El ejecutor del arte vive junto al resto de la logica de auto-arte (seleccion + dedup +
+    # registro), que ya conoce `media`/`repos`/`generaciones`; el worker lo despacha igual que
+    # ASR/video, sin que worker.py tenga que conocer la imagen (dispatch GENERICO de proceso).
+    PROC_IMAGEN: "keni_consola.autogen_arte:ejecutar_arte_job",
 }
 
 

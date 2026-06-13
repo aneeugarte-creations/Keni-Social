@@ -192,63 +192,133 @@ def test_registrar_arte_sin_contenido_es_noop():
 
 
 # --------------------------------------------------------------------------- #
-# lanzar_para_topic: generador y repos PARCHEADOS (sin red ni DB)             #
+# lanzar_para_topic: ahora ENCOLA (antes era SÍNCRONO). Repos/generar PARCHEADOS #
 # --------------------------------------------------------------------------- #
 
 
-def test_lanzar_para_topic_adjunta_imagen(monkeypatch):
+def test_lanzar_para_topic_encola_job(monkeypatch):
+    """`lanzar_para_topic` ya NO genera en línea: SELECCIONA la plataforma y ENCOLA un job de arte
+    vía `dominio.generar.lanzar_arte`, devolviendo el registro de generación encolado."""
+    from keni_consola.dominio import generar as dom_generar
+
     monkeypatch.setattr(aa.media, "proveedor_configurado", lambda: True)
     monkeypatch.setattr(
         aa.repos, "listar_contenido_plataforma", lambda cid: [_plat(id="p1")]
     )
-    monkeypatch.setattr(aa.media, "guardar_bytes", lambda datos, ext="png": "arte.png")
-    cambios = {}
+    llamadas: list[dict] = []
 
-    def _actualizar(pid, campos):
-        cambios["pid"] = pid
-        cambios["campos"] = campos
-        return {"id": pid, **campos}
+    def _fake_lanzar_arte(**kw):
+        llamadas.append(kw)
+        return {"id": "gen-arte-1", "tipo": "autogen"}
 
-    monkeypatch.setattr(aa.repos, "actualizar_contenido_plataforma", _actualizar)
-    monkeypatch.setattr(aa.repos, "listar_etiquetas", lambda: [])
-    monkeypatch.setattr(
-        aa.repos, "crear_etiqueta", lambda *, nombre: {"id": "et1", "nombre": nombre}
-    )
-    asignadas = []
-    monkeypatch.setattr(
-        aa.repos, "asignar_etiqueta", lambda cid, eid: asignadas.append((cid, eid))
-    )
+    monkeypatch.setattr(dom_generar, "lanzar_arte", _fake_lanzar_arte)
 
-    res = aa.lanzar_para_topic(_item(), generar=lambda prompt: b"PNGBYTES")
+    res = aa.lanzar_para_topic(_item(titulo="Final de copa", descripcion="Juega Mexico"))
 
-    assert res == {"contenido_id": "c1", "plataforma_id": "p1", "imagen": "arte.png"}
-    assert cambios["pid"] == "p1"
-    assert cambios["campos"] == {"imagen": "arte.png", "falta_imagen": False}
-    assert asignadas == [("c1", "et1")]
+    assert res == {"id": "gen-arte-1", "tipo": "autogen"}
+    assert len(llamadas) == 1
+    assert llamadas[0]["contenido_id"] == "c1"
+    assert llamadas[0]["plataforma_id"] == "p1"
+    assert llamadas[0]["marca"] == "claro-sports"
+    assert llamadas[0]["prompt"] == "Final de copa. Juega Mexico"  # tema = título + descripción
 
 
-def test_lanzar_para_topic_registra_actividad(monkeypatch):
-    """El arte deja constancia: una generación `tipo='pipeline'` con su PROMPT + la etapa ARTE
-    correlacionada al tema (gen_id), para que sea visible en Actividad IA y el detalle del pipeline."""
+def test_lanzar_para_topic_sin_proveedor_no_encola(monkeypatch):
+    from keni_consola.dominio import generar as dom_generar
+
+    monkeypatch.setattr(aa.media, "proveedor_configurado", lambda: False)
+    llamado: list = []
+    monkeypatch.setattr(dom_generar, "lanzar_arte", lambda **kw: llamado.append(kw))
+    res = aa.lanzar_para_topic(_item())
+    assert res is None
+    assert llamado == []
+
+
+def test_lanzar_para_topic_sin_plataforma_candidata_no_encola(monkeypatch):
+    from keni_consola.dominio import generar as dom_generar
+
     monkeypatch.setattr(aa.media, "proveedor_configurado", lambda: True)
-    monkeypatch.setattr(aa.repos, "listar_contenido_plataforma", lambda cid: [_plat(id="p1")])
-    monkeypatch.setattr(aa.media, "guardar_bytes", lambda datos, ext="png": "arte.png")
     monkeypatch.setattr(
-        aa.repos, "actualizar_contenido_plataforma", lambda pid, campos: {"id": pid, **campos}
+        aa.repos, "listar_contenido_plataforma", lambda cid: [_plat(imagen="ya.png")]
+    )
+    llamado: list = []
+    monkeypatch.setattr(dom_generar, "lanzar_arte", lambda **kw: llamado.append(kw))
+    res = aa.lanzar_para_topic(_item())
+    assert res is None
+    assert llamado == []
+
+
+# --------------------------------------------------------------------------- #
+# ejecutar_arte_job: EJECUTOR del worker (genera + adjunta + registra)         #
+# --------------------------------------------------------------------------- #
+
+
+def _spec_arte(**kw):
+    base = {
+        "kind": "imagen",
+        "contenido_id": "c1",
+        "plataforma_id": "p1",
+        "marca": "claro-sports",
+        "titulo": "Final de copa",
+        "prompt": "Final de copa. Juega Mexico",
+    }
+    base.update(kw)
+    return base
+
+
+def test_ejecutar_arte_job_genera_adjunta_y_completa(monkeypatch):
+    """El ejecutor genera la imagen, la adjunta a la pieza (`falta_imagen=False`), etiqueta el tema
+    y marca la generación `completado` con el resultado."""
+    monkeypatch.setattr(aa.media, "proveedor_configurado", lambda: True)
+    monkeypatch.setattr(aa.media, "generar_imagen", lambda prompt: b"PNGBYTES")
+    monkeypatch.setattr(aa.media, "guardar_bytes", lambda datos, ext="png": "arte.png")
+    monkeypatch.setattr(aa.repos, "listar_contenido_plataforma", lambda cid: [_plat(id="p1")])
+    cambios = {}
+    monkeypatch.setattr(
+        aa.repos, "actualizar_contenido_plataforma",
+        lambda pid, campos: cambios.update({"pid": pid, "campos": campos}) or {"id": pid},
     )
     monkeypatch.setattr(aa.repos, "listar_etiquetas", lambda: [])
     monkeypatch.setattr(aa.repos, "crear_etiqueta", lambda *, nombre: {"id": "et1", "nombre": nombre})
+    asignadas: list = []
+    monkeypatch.setattr(aa.repos, "asignar_etiqueta", lambda cid, eid: asignadas.append((cid, eid)))
+    monkeypatch.setattr(aa, "registrar_arte", lambda **kw: None)
+    estados: list[dict] = []
+    monkeypatch.setattr(aa.generaciones, "actualizar", lambda gid, campos: estados.append(campos))
+
+    aa.ejecutar_arte_job("g1", _spec_arte())
+
+    assert cambios["pid"] == "p1"
+    assert cambios["campos"] == {"imagen": "arte.png", "falta_imagen": False}
+    assert asignadas == [("c1", "et1")]
+    assert estados[-1]["estado"] == aa.generaciones.ESTADO_COMPLETADO
+    assert estados[-1]["resultado"] == {
+        "contenido_id": "c1", "plataforma_id": "p1", "imagen": "arte.png",
+    }
+
+
+def test_ejecutar_arte_job_registra_actividad(monkeypatch):
+    """El arte deja constancia: una generación `tipo='pipeline'` con su PROMPT + la etapa ARTE
+    correlacionada al tema (gen_id), visible en Actividad IA y el detalle del pipeline."""
+    monkeypatch.setattr(aa.media, "proveedor_configurado", lambda: True)
+    monkeypatch.setattr(aa.media, "generar_imagen", lambda prompt: b"PNGBYTES")
+    monkeypatch.setattr(aa.media, "guardar_bytes", lambda datos, ext="png": "arte.png")
+    monkeypatch.setattr(aa.repos, "listar_contenido_plataforma", lambda cid: [_plat(id="p1")])
+    monkeypatch.setattr(aa.repos, "actualizar_contenido_plataforma", lambda pid, campos: {"id": pid})
+    monkeypatch.setattr(aa.repos, "listar_etiquetas", lambda: [])
+    monkeypatch.setattr(aa.repos, "crear_etiqueta", lambda *, nombre: {"id": "et1", "nombre": nombre})
     monkeypatch.setattr(aa.repos, "asignar_etiqueta", lambda cid, eid: None)
+    monkeypatch.setattr(aa.generaciones, "actualizar", lambda gid, campos: None)
     gens: list[dict] = []
     monkeypatch.setattr(aa.generaciones, "crear", lambda d: gens.append(d) or {"id": "g1"})
     import keni_consola.pipeline_contenido as pc
     etapas: list[tuple] = []
     monkeypatch.setattr(pc, "registrar_etapa", lambda *a, **k: etapas.append((a, k)))
 
-    aa.lanzar_para_topic(_item(), generar=lambda prompt: b"PNGBYTES")
+    aa.ejecutar_arte_job("g1", _spec_arte())
 
     assert len(gens) == 1
-    assert gens[0]["tipo"] == "pipeline"  # arte de la máquina: tipo pipeline (la imagen manual sigue "imagen")
+    assert gens[0]["tipo"] == "pipeline"  # arte de la máquina: tipo pipeline
     assert gens[0]["contenido_id"] == "c1"
     assert gens[0]["prompt"]  # el prompt REAL del arte
     assert len(etapas) == 1
@@ -256,22 +326,86 @@ def test_lanzar_para_topic_registra_actividad(monkeypatch):
     assert etapas[0][1]["gen_id"] == "g1"
 
 
-def test_lanzar_para_topic_sin_proveedor_no_genera(monkeypatch):
-    monkeypatch.setattr(aa.media, "proveedor_configurado", lambda: False)
-    llamado = []
-    res = aa.lanzar_para_topic(
-        _item(), generar=lambda prompt: llamado.append(prompt) or b"x"
-    )
-    assert res is None
-    assert llamado == []
-
-
-def test_lanzar_para_topic_sin_plataforma_candidata(monkeypatch):
+def test_ejecutar_arte_job_sin_candidata_no_gasta_proveedor(monkeypatch):
+    """IDEMPOTENCIA ante re-claim: si la pieza ya no tiene plataforma con copy sin imagen (un
+    intento previo la ilustró, o un humano), COMPLETA sin volver a llamar al proveedor."""
     monkeypatch.setattr(aa.media, "proveedor_configurado", lambda: True)
-    monkeypatch.setattr(
-        aa.repos,
-        "listar_contenido_plataforma",
-        lambda cid: [_plat(imagen="ya.png")],
-    )
-    res = aa.lanzar_para_topic(_item(), generar=lambda prompt: b"x")
-    assert res is None
+    llamado: list = []
+    monkeypatch.setattr(aa.media, "generar_imagen", lambda prompt: llamado.append(prompt) or b"x")
+    monkeypatch.setattr(aa.repos, "listar_contenido_plataforma", lambda cid: [_plat(imagen="ya.png")])
+    estados: list[dict] = []
+    monkeypatch.setattr(aa.generaciones, "actualizar", lambda gid, campos: estados.append(campos))
+
+    aa.ejecutar_arte_job("g1", _spec_arte())
+
+    assert llamado == []  # NO se gastó el proveedor
+    assert estados[-1]["estado"] == aa.generaciones.ESTADO_COMPLETADO
+    assert "omitido" in estados[-1]["resultado"]
+
+
+def test_ejecutar_arte_job_error_de_proveedor_marca_error(monkeypatch):
+    """Un fallo del proveedor (MediaError) deja la generación en `error` con mensaje claro,
+    sin etiquetar el tema (el barrido lo reintentará)."""
+    monkeypatch.setattr(aa.media, "proveedor_configurado", lambda: True)
+
+    def _explota(prompt):
+        raise aa.media.MediaError("El proveedor de imagen no respondió.")
+
+    monkeypatch.setattr(aa.media, "generar_imagen", _explota)
+    monkeypatch.setattr(aa.repos, "listar_contenido_plataforma", lambda cid: [_plat(id="p1")])
+    asignadas: list = []
+    monkeypatch.setattr(aa.repos, "asignar_etiqueta", lambda cid, eid: asignadas.append((cid, eid)))
+    estados: list[dict] = []
+    monkeypatch.setattr(aa.generaciones, "actualizar", lambda gid, campos: estados.append(campos))
+
+    aa.ejecutar_arte_job("g1", _spec_arte())
+
+    assert estados[-1]["estado"] == aa.generaciones.ESTADO_ERROR
+    assert "proveedor" in estados[-1]["error"].lower()
+    assert asignadas == []  # NO se etiquetó: el barrido lo reintenta
+
+
+# --------------------------------------------------------------------------- #
+# Idempotencia del ENCOLADO: re-encolar el mismo arte NO duplica (cola + store) #
+# --------------------------------------------------------------------------- #
+
+
+def test_lanzar_arte_idempotente_no_duplica(entorno):
+    """Re-encolar el MISMO arte (mismo tema+marca+prompt) mientras el primero sigue EN VUELO
+    devuelve el MISMO registro y NO encola un segundo job de imagen: ni doble gasto del proveedor
+    ni doble subida. Al COMPLETAR, un re-lanzamiento legítimo vuelve a correr (registro nuevo)."""
+    from keni_consola import cola, generaciones, repos
+    from keni_consola.dominio import generar, jobspec
+
+    args = dict(contenido_id="c1", marca="claro-sports", titulo="Final", prompt="ilustra la final")
+    g1 = generar.lanzar_arte(**args)
+    g2 = generar.lanzar_arte(**args)  # re-encolado en vuelo (otro barrido / encadenado / reaper)
+
+    assert g1["id"] == g2["id"]  # comparte el run en vuelo (clave de idempotencia estable)
+    assert repos.contar_jobs_activos() == 1  # UN solo job para ese arte
+
+    job = cola.reclamar("w")
+    assert job is not None and job["gen_id"] == g1["id"]
+    assert jobspec.es_kind_proceso(job["spec"]) is True
+    assert job["spec"]["kind"] == jobspec.PROC_IMAGEN
+    assert job["spec"]["contenido_id"] == "c1"
+    assert cola.reclamar("w") is None  # NO hay un segundo job encolado
+
+    # Al terminar (registro terminal), un re-lanzamiento legítimo (regenerar) vuelve a correr.
+    cola.terminar(job["id"])
+    generaciones.actualizar(g1["id"], {
+        "estado": generaciones.ESTADO_COMPLETADO, "fecha_fin": generaciones.ahora_iso(),
+    })
+    g3 = generar.lanzar_arte(**args)
+    assert g3["id"] != g1["id"]  # tras completar, la clave se recicla: nuevo run
+
+
+def test_lanzar_arte_distinto_tema_encola_runs_separados(entorno):
+    """Dos artes de temas distintos (claves distintas) corren cada uno su propio job."""
+    from keni_consola import repos
+    from keni_consola.dominio import generar
+
+    g1 = generar.lanzar_arte(contenido_id="c1", marca="claro-sports", titulo="A", prompt="tema a")
+    g2 = generar.lanzar_arte(contenido_id="c2", marca="claro-sports", titulo="B", prompt="tema b")
+    assert g1["id"] != g2["id"]
+    assert repos.contar_jobs_activos() == 2
