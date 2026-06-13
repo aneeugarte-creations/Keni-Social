@@ -57,11 +57,10 @@ def encolar(gen_id: str, spec: dict[str, Any]) -> str:
     # (es el freno de mano de toda la maquinaria IA). Agotado (presupuesto + margen): no
     # entra nada QUE GASTE TOKENS (un job de PROCESO —render ffmpeg/ASR— no toca la
     # suscripcion y queda exento del corte por presupuesto). Solo-manual: el FONDO se corta
-    # y lo manual del equipo sigue entrando hasta el margen. Todas las excepciones son
-    # subclase de ColaLlenaError -> 429 claro en API y backpressure normal en el pipeline.
-    # La REGLA vive en `presupuesto_ia.bloqueo_admision` (fuente única, compartida con el gate
-    # de reclamo del worker). Aquí solo mapeamos el nivel que BLOQUEA a su excepción (todas
-    # subclase de ColaLlenaError -> 429 claro en API y backpressure normal en el pipeline).
+    # y lo manual del equipo sigue entrando hasta el margen. La REGLA vive en
+    # `presupuesto_ia.bloqueo_admision` (fuente única, compartida con el gate de reclamo del
+    # worker); aquí solo mapeamos el nivel que BLOQUEA a su excepción. Todas son subclase de
+    # ColaLlenaError -> 429 claro en API y backpressure normal en el pipeline.
     gasta_tokens = not jobspec.es_kind_proceso(spec)
     bloqueo = presupuesto_ia.bloqueo_admision(
         presupuesto_ia.nivel(), gasta_tokens=gasta_tokens, es_fondo=es_fondo

@@ -11,7 +11,11 @@ import pytest
 
 from keni_consola import importador_calendario, libtexto, sugerencias_editoriales
 from keni_consola.dominio import (
+    asistente,
+    clasificador_marca,
     fusion_semantica,
+    generar,
+    hashtags,
     insumos_parse,
     parrilla_import_job,
     perfil_editorial,
@@ -44,7 +48,43 @@ _CASOS = [
     (parrilla_import_job._plantilla, "prompt/importar/parrilla"),
     (importador_calendario._plantilla, "prompt/importar/calendario"),
     (sugerencias_editoriales._plantilla_sugerencias, "prompt/sugerencias"),
+    (hashtags._plantilla, "prompt/hashtags"),
+    (clasificador_marca._plantilla, "prompt/clasificacion-marca"),
 ]
+
+# Ids de prompt que el CÓDIGO espera encontrar en la semilla tras MATAR los `_FALLBACK_*`
+# duplicados (la semilla es la única fuente). Si alguien borra un .md de `texto_semilla/`, este
+# test lo caza ANTES del deploy: sin la semilla, la generación se quedaría sin ese prompt y, sin
+# fallback en código, degradaría a vacío. CONTRATO semilla↔código.
+_IDS_SEMILLA_OBLIGATORIA = [
+    generar.PROMPT_ENVOLTORIO_SIN_EMOJIS,
+    generar.PROMPT_ENVOLTORIO_REDES,
+    generar.PROMPT_ENVOLTORIO_CARRUSEL,
+    generar.PROMPT_ENVOLTORIO_COPY_UNICO,
+    hashtags._PROMPT_ID,
+    clasificador_marca._PROMPT_ID,
+    "prompt/asistente/variantes",
+    "prompt/asistente/resumir",
+]
+
+
+def test_semilla_cubre_todos_los_prompts_que_el_codigo_espera():
+    """La semilla provee CADA prompt cuyo `_FALLBACK_*` se eliminó (cobertura semilla↔código)."""
+    for pid in _IDS_SEMILLA_OBLIGATORIA:
+        doc = libtexto.obtener_semilla(pid)
+        assert doc is not None and doc.cuerpo.strip(), f"falta o está vacía la semilla {pid}"
+
+
+def test_envoltorios_y_modos_resuelven_desde_la_semilla(store_roto):
+    """Con el store roto, los envoltorios de `generar` y las instrucciones del asistente
+    resuelven su texto desde la SEMILLA del paquete (no de un string duplicado en código)."""
+    for doc_id in (
+        generar.PROMPT_ENVOLTORIO_SIN_EMOJIS, generar.PROMPT_ENVOLTORIO_REDES,
+        generar.PROMPT_ENVOLTORIO_CARRUSEL, generar.PROMPT_ENVOLTORIO_COPY_UNICO,
+    ):
+        assert generar._plantilla_envoltorio(doc_id) == _semilla(doc_id), doc_id
+    for modo in ("variantes", "resumir"):
+        assert asistente._instruccion_modo(modo) == _semilla(f"prompt/asistente/{modo}"), modo
 
 
 def test_cuerpo_semilla_lee_el_paquete_y_nunca_lanza():

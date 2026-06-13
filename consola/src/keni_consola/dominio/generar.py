@@ -30,22 +30,27 @@ _log = logging.getLogger("keni_consola.generar")
 #
 # Regla de producto: TODOS los prompts de IA se gestionan desde la Biblioteca. Los textos de
 # los envoltorios que `componer` concatena al prompt base viven como prompts EDITABLES en
-# `prompt/envoltorios/*` (semilla en `texto_semilla/`); el código conserva la LÓGICA (cuándo
-# se inyecta cada bloque, qué valor lleva cada `{{VARIABLE}}` — límites de red, ids válidos,
-# catálogo de fotos…) y un `_FALLBACK_*` idéntico a la semilla por si el doc falta o está
-# vacío (con warning). El ORDEN de concatenación de `componer` NO cambia (prompt caching:
-# estable-primero); solo cambia de dónde sale el texto.
+# `prompt/envoltorios/*` (SEMILLA en `texto_semilla/`, ÚNICA fuente del texto); el código
+# conserva la LÓGICA (cuándo se inyecta cada bloque, qué valor lleva cada `{{VARIABLE}}` —
+# límites de red, ids válidos, catálogo de fotos…). YA NO hay un `_FALLBACK_*` con el texto
+# duplicado en código: la cobertura de la semilla la garantiza el test semilla↔código
+# (`test_prompts_semilla_fallback`). El ORDEN de concatenación de `componer` NO cambia
+# (prompt caching: estable-primero); solo de dónde sale el texto.
 PROMPT_ENVOLTORIO_SIN_EMOJIS = "prompt/envoltorios/sin-emojis"
 PROMPT_ENVOLTORIO_REDES = "prompt/envoltorios/redes"
 PROMPT_ENVOLTORIO_CARRUSEL = "prompt/envoltorios/carrusel"
 PROMPT_ENVOLTORIO_COPY_UNICO = "prompt/envoltorios/copy-unico"
 
 
-def _plantilla_envoltorio(doc_id: str, fallback: str) -> str:
-    """Cuerpo EFECTIVO del envoltorio: versión publicada > store > semilla > `fallback`.
+def _plantilla_envoltorio(doc_id: str, fallback: str = "") -> str:
+    """Cuerpo EFECTIVO del envoltorio: versión publicada > store > SEMILLA > `fallback`.
 
-    Best-effort SIEMPRE: una generación nunca se rompe por la Biblioteca. Si el doc falta o
-    está vacío en store Y semilla, cae al texto de respaldo del código (con warning)."""
+    La SEMILLA del paquete (`texto_semilla/`) es la fuente del texto; `cuerpo_efectivo` ya cae
+    a ella cuando el doc no está en el store, y `cuerpo_semilla` es la red final si la lectura
+    del store revienta (NUNCA lanza). `fallback` es un respaldo MÍNIMO en código (por defecto
+    "", solo lo usa «sin emojis»): para los envoltorios estructurales (redes/carrusel/copy
+    unificado) NO hay copia en código, así que sin semilla quedan vacíos (con warning). El test
+    de cobertura semilla↔código garantiza que ese camino degradado es inalcanzable en la práctica."""
     try:
         cuerpo = (libtexto.cuerpo_efectivo(doc_id) or "").strip()
     except Exception:  # noqa: BLE001 -- nunca dejar una generación sin envoltorio por un fallo de lectura
@@ -54,8 +59,8 @@ def _plantilla_envoltorio(doc_id: str, fallback: str) -> str:
         cuerpo = libtexto.cuerpo_semilla(doc_id).strip()
     if not cuerpo:
         _log.warning(
-            "envoltorio %s no disponible en la Biblioteca; uso el texto de respaldo del código",
-            doc_id,
+            "envoltorio %s no disponible en la Biblioteca ni en la semilla; uso el respaldo (%r)",
+            doc_id, fallback[:40],
         )
         return fallback
     return cuerpo
@@ -181,32 +186,13 @@ def _limites_redes(redes_ids: list[str]) -> str:
     return ", ".join(partes)
 
 
-# Fallback (== semilla `prompt/envoltorios/redes`) del envoltorio de piezas POR RED.
-_FALLBACK_REDES = (
-    "Genera el copy SOLO para estas redes: {{ETIQUETAS}}. "
-    "Límites técnicos de caracteres (no los excedas): {{LIMITES}}. "
-    "Mantén tu formato y tu auto-verificación habituales. "
-    "Además, al FINAL de toda tu respuesta, añade un único bloque de código "
-    'cercado ```json con esta forma exacta: {"piezas": [{"red": "<id>", '
-    '"texto": "<copy de esa red>", "copy_in": "<texto que va DENTRO de la imagen>"}, '
-    "...]}, usando como <id> únicamente estos valores: {{IDS_JSON}}. Incluye exactamente "
-    "UNA pieza por cada red pedida (nunca dos de la misma red). Si la pieza de una red es "
-    'un HILO o un CARRUSEL, va numerada DENTRO de su "texto": en un hilo, un tuit por '
-    'párrafo con prefijo "1/n ", "2/n "… y cada tuit dentro del límite de la red; en un '
-    'carrusel, las slides separadas por una línea con solo "---". El `copy_in` es el texto '
-    "que va SOBRE la imagen (titular/claim corto), distinto del `texto` que la acompaña; "
-    "respeta la línea editorial de texto-en-imagen de la marca adjunta, sale siempre sin "
-    'emojis y deja "" si la pieza no lleva imagen.'
-)
-
-
 def instruccion_redes(redes_ids: list[str]) -> str:
     """Instrucción ADITIVA: limita las redes, ancla sus límites técnicos (desde el código)
     y pide el bloque json con las piezas por red (contrato, incluidas piezas compuestas).
 
-    El TEXTO vive en la Biblioteca (`PROMPT_ENVOLTORIO_REDES`); los VALORES de las variables
-    los sigue calculando el código desde sus fuentes (`redes`, `limites_plataforma`)."""
-    plantilla = _plantilla_envoltorio(PROMPT_ENVOLTORIO_REDES, _FALLBACK_REDES)
+    El TEXTO vive SOLO en la Biblioteca/semilla (`PROMPT_ENVOLTORIO_REDES`); los VALORES de
+    las variables los sigue calculando el código desde sus fuentes (`redes`, `limites_plataforma`)."""
+    plantilla = _plantilla_envoltorio(PROMPT_ENVOLTORIO_REDES)
     return (
         plantilla
         .replace("{{ETIQUETAS}}", ", ".join(redes.nombre_por_id(r) for r in redes_ids))
@@ -226,20 +212,6 @@ UMBRAL_COPY_ESTRECHO = 600
 
 # Tope de SLIDES extra de un carrusel editorial (10 nativas de IG/FB - 1 de portada).
 MAX_SLIDES_CARRUSEL = 9
-
-
-# Fallback (== semilla `prompt/envoltorios/carrusel`) del bloque de decisión post|carrusel.
-_FALLBACK_CARRUSEL = (
-    "DECIDE además el `tipo` de salida y decláralo en el json: esta HISTORIA agrupa "
-    '{{N_NOTAS}} notas relacionadas. Elige "carrusel" SOLO si gana contándose como PANEL '
-    "(una tarjeta por sub-historia: agenda de conciertos, partidos del día, lista de "
-    "medidas…): la PORTADA lleva el titular paraguas (ese es el `copy_in`) y añades "
-    '"slides": [{"titular": "<titular corto de ESA sub-historia, sin emojis, misma línea '
-    'editorial de texto-en-imagen>", "foto": <número del catálogo o 0 si ninguna>}, …] con '
-    "una entrada por sub-historia (2 a {{MAX_SLIDES}}). Si la historia es UNA sola "
-    'noticia contada por varios medios, elige "post" y NO incluyas "slides". Ante la duda, '
-    '"post". {{CATALOGO_FOTOS}}'
-)
 
 
 def _bloque_decision_carrusel(n_notas: int, fotos_notas: list[dict[str, str]]) -> str:
@@ -266,7 +238,7 @@ def _bloque_decision_carrusel(n_notas: int, fotos_notas: list[dict[str, str]]) -
         )
     else:
         catalogo = "FOTOS DISPONIBLES: ninguna (todos los slides salen como placa de solo texto)."
-    plantilla = _plantilla_envoltorio(PROMPT_ENVOLTORIO_CARRUSEL, _FALLBACK_CARRUSEL)
+    plantilla = _plantilla_envoltorio(PROMPT_ENVOLTORIO_CARRUSEL)
     return (
         plantilla
         .replace("{{N_NOTAS}}", str(n_notas))
@@ -275,17 +247,11 @@ def _bloque_decision_carrusel(n_notas: int, fotos_notas: list[dict[str, str]]) -
     )
 
 
-# Fallback (== semilla `prompt/envoltorios/copy-unico`): ESQUELETO común del copy unificado.
-# Las partes ESTRUCTURALMENTE CONDICIONALES (qué versiones se piden, la forma exacta del
-# bloque json) las monta el código en `{{MODO_PUBLICACION}}`/`{{VERSIONES}}`/`{{CIERRE_JSON}}`
-# desde los sub-bloques de abajo; la Biblioteca aporta el texto, el código decide cuál va.
-_FALLBACK_COPY_UNICO = (
-    "Este copy se publicará{{MODO_PUBLICACION}} en estas redes: {{ETIQUETAS}}. {{VERSIONES}} "
-    "NO añadas hashtags: el equipo los pone aparte por grupos donde corresponde. "
-    "Mantén tu formato y tu auto-verificación habituales. Además, al FINAL de toda tu "
-    "respuesta, añade un único bloque de código cercado ```json con esta forma exacta: "
-    "{{CIERRE_JSON}}"
-)
+# ESQUELETO común del copy unificado: vive en la Biblioteca/semilla
+# (`prompt/envoltorios/copy-unico`). Las partes ESTRUCTURALMENTE CONDICIONALES (qué versiones
+# se piden, la forma exacta del bloque json) las monta el código en
+# `{{MODO_PUBLICACION}}`/`{{VERSIONES}}`/`{{CIERRE_JSON}}` desde los sub-bloques de abajo; la
+# Biblioteca aporta el texto, el código decide cuál va.
 
 # Sub-bloque `{{VERSIONES}}` cuando se MEZCLAN redes amplias y estrechas: DOS versiones del
 # mismo mensaje (`texto` + `texto_corto`).
@@ -394,7 +360,7 @@ def instruccion_copy_unico(
             _VERSIONES_UNICA_TOPE.replace("{{TOPE_CORTO}}", str(min(limites))) if limites else ""
         )
         cierre_json = '{"texto": "<el copy>", ' + cierre_json_copy_in
-    plantilla = _plantilla_envoltorio(PROMPT_ENVOLTORIO_COPY_UNICO, _FALLBACK_COPY_UNICO)
+    plantilla = _plantilla_envoltorio(PROMPT_ENVOLTORIO_COPY_UNICO)
     return (
         plantilla
         .replace("{{MODO_PUBLICACION}}", modo)

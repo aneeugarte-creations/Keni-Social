@@ -1,7 +1,7 @@
 """Instrucciones por MODO del asistente del tablero (`dominio.asistente`). PURO, sin BD.
 
-Las instrucciones aditivas de los modos `variantes`/`resumir` viven en la Biblioteca de
-Texto (`prompt/asistente/<modo>`, editables); el dict del módulo es solo la red defensiva.
+Las instrucciones aditivas de los modos `variantes`/`resumir` viven SOLO en la Biblioteca/
+semilla (`prompt/asistente/<modo>`, editables); ya no hay copia del texto en código.
 Solo se cubre la composición del texto base (el lanzamiento delega en `dominio.generar`,
 cubierto en sus propios tests).
 """
@@ -52,10 +52,12 @@ def test_instruccion_editada_en_biblioteca_gana():
     assert "BREVE" not in base
 
 
-def test_sin_doc_ni_semilla_cae_al_fallback_del_modulo(monkeypatch, tmp_path):
-    # Robustez ante stores sin re-seed: sin doc NI semilla, vale el dict del módulo.
+def test_sin_doc_ni_semilla_degrada_sin_instruccion(monkeypatch, tmp_path):
+    # Ya no hay copia del texto en código (la semilla es la única fuente). Sin doc NI semilla,
+    # el modo degrada a SIN instrucción aditiva. El test de cobertura semilla↔código garantiza
+    # que la semilla SIEMPRE está, así que este camino es inalcanzable en producción.
     monkeypatch.setenv("KENI_TEXTO_SEMILLA", str(tmp_path / "semilla-vacia"))
     base = asistente.construir_texto_base(
         modo="variantes", titulo="T", descripcion="D", notas=""
     )
-    assert "TRES variantes" in base
+    assert base == "T\n\nD"  # sin la instrucción del modo

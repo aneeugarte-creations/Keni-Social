@@ -14,7 +14,13 @@ import json
 
 from . import stream
 
-# Id del prompt que hace el QA editorial.
+# ETIQUETA DE ORIGEN del historial para las runs de QA (columna `origen` de
+# `registrar_historial_prompt`), NO un id de prompt de la Biblioteca. Por eso NO lleva el
+# prefijo `prompt/` ni se cataloga en `prompts_procesos.py` ni se resuelve con
+# `libtexto.cuerpo_efectivo`: es un tipo INTERNO no editable. El prompt REAL de la QA de la
+# fuente vive en la Biblioteca como `prompt/validacion` (lo resuelve `pipeline_contenido`).
+# Es un valor ESTABLE: se persiste como `origen` en filas de historial en producción; cambiarlo
+# partiría los datos históricos. Se conserva el nombre del constante por compatibilidad.
 PROMPT_ID = "qa-editorial"
 
 # Valores permitidos del informe estructurado (defensa: ignoramos cualquier otro).

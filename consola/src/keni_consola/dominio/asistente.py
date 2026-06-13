@@ -35,48 +35,34 @@ PROMPT_COPY = "copy-desde-nota"
 # Modos soportados por el asistente (allowlist; cualquier otro => 400 en el handler).
 MODOS: tuple[str, ...] = ("generar", "variantes", "resumir")
 
-# Instruccion ADITIVA por modo. Se ANEXA al prompt de copy (el prompt mantiene su voz
-# de marca, tropicalizacion y auto-verificacion). `generar` no anade nada extra.
-#
-# El TEXTO de cada instruccion vive en la Biblioteca de Texto como documento EDITABLE
-# (pestaña «Prompts», docs `prompt/asistente/<modo>`): el equipo lo ajusta sin tocar codigo.
-# Este dict es la red defensiva (mismo texto que la semilla) por si un store viejo no
-# tuviera el doc ni la semilla disponible: el asistente NUNCA se queda sin instruccion.
-_INSTRUCCION_MODO: dict[str, str] = {
-    "variantes": (
-        "Además del copy por red, propón TRES variantes alternativas del copy "
-        "(distinto enfoque o gancho) para este contenido, numeradas 1, 2 y 3, antes "
-        "del bloque JSON, para que el community manager elija."
-    ),
-    "resumir": (
-        "Haz el copy lo más BREVE y directo posible: condensa la nota a lo esencial, "
-        "una idea por red, sin relleno."
-    ),
-}
+# Modos que ANEXAN una instruccion aditiva al prompt de copy (el prompt mantiene su voz de
+# marca, tropicalizacion y auto-verificacion). `generar` no anade nada extra. El TEXTO de cada
+# instruccion vive SOLO en la Biblioteca/semilla (docs EDITABLES `prompt/asistente/<modo>`):
+# no hay copia duplicada en codigo (el test semilla↔codigo garantiza que existe).
+_MODOS_CON_INSTRUCCION: frozenset[str] = frozenset({"variantes", "resumir"})
 
 
 def _instruccion_modo(modo: str) -> str:
-    """Instruccion aditiva EFECTIVA del modo (publicado > store > semilla > dict del modulo).
+    """Instruccion aditiva EFECTIVA del modo (publicado > store > SEMILLA del paquete).
 
     Solo los modos con instruccion ("variantes"/"resumir") leen la Biblioteca; "generar" no
-    anade nada. Import diferido de `libtexto` (evita ciclos). Si la lectura fallara o viniera
-    vacia, cae al texto de `_INSTRUCCION_MODO` (con warning).
+    anade nada. Import diferido de `libtexto` (evita ciclos). `cuerpo_efectivo` ya cae a la
+    semilla; `cuerpo_semilla` es la red final si el store revienta (NUNCA lanza). "" solo si
+    faltara la semilla (camino inalcanzable: lo cubre el test semilla↔codigo), y se avisa.
     """
-    if modo not in _INSTRUCCION_MODO:
+    if modo not in _MODOS_CON_INSTRUCCION:
         return ""
     doc_id = f"prompt/asistente/{modo}"
-    try:
-        from .. import libtexto
+    from .. import libtexto
 
+    try:
         cuerpo = (libtexto.cuerpo_efectivo(doc_id) or "").strip()
-    except Exception:  # noqa: BLE001 -- best-effort: nunca dejar el asistente sin instruccion
+    except Exception:  # noqa: BLE001 -- best-effort: caemos a la semilla del paquete
         cuerpo = ""
-    if cuerpo:
-        return cuerpo
-    _log.warning(
-        "asistente: %s no disponible en la Biblioteca; uso el fallback del módulo.", doc_id
-    )
-    return _INSTRUCCION_MODO[modo]
+    cuerpo = cuerpo or libtexto.cuerpo_semilla(doc_id).strip()
+    if not cuerpo:
+        _log.warning("asistente: %s no está en la Biblioteca ni en la semilla.", doc_id)
+    return cuerpo
 
 
 def _brief(titulo: str, descripcion: str, notas: str) -> str:

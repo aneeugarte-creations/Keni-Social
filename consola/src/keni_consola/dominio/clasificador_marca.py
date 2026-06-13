@@ -34,41 +34,30 @@ _MAX_CHARS = 600
 
 # El prompt vive en la Biblioteca de Texto como documento EDITABLE (pestaña «Prompts», doc
 # `prompt/clasificacion-marca`): el equipo lo ajusta sin tocar código. Las variables
-# {{MARCAS}}, {{MARCA_FALLBACK}} y {{NOTICIA}} se sustituyen aquí al componer la llamada.
-# `_PROMPT_FALLBACK` es la red defensiva (mismo texto que la semilla) por si un store viejo
-# no tuviera el doc ni la semilla disponible: la clasificación NUNCA se queda sin prompt.
+# {{MARCAS}}, {{MARCA_FALLBACK}} y {{NOTICIA}} se sustituyen aquí al componer la llamada. La
+# SEMILLA del paquete (`texto_semilla/prompt/clasificacion-marca.md`) es la ÚNICA fuente del
+# texto: no hay copia duplicada en código (el test semilla↔código garantiza que existe).
 _PROMPT_ID = "prompt/clasificacion-marca"
-_PROMPT_FALLBACK = (
-    "Eres el editor que reparte las noticias entrantes entre las marcas de un grupo de "
-    "medios. Clasifica la noticia en la marca que mejor le cuadre por TEMÁTICA.\n"
-    "Marcas disponibles (id — nombre):\n{{MARCAS}}\n"
-    "Si la noticia es de interés general y no encaja claramente en una temática específica "
-    "(p. ej. deportes o videojuegos), elige la marca de noticias generales: «{{MARCA_FALLBACK}}».\n"
-    'Responde SOLO con un JSON: {"marca": "<id>", "confianza": <0..1>}. El id debe ser '
-    "uno de los listados.\n\n"
-    "Noticia:\n{{NOTICIA}}"
-)
 
 
 def _plantilla() -> str:
-    """Cuerpo EFECTIVO del prompt (publicado > store del equipo > semilla del paquete).
+    """Cuerpo EFECTIVO del prompt (publicado > store del equipo > SEMILLA del paquete).
 
-    Import diferido de `libtexto` (evita ciclos). Si la lectura fallara o viniera vacía,
-    cae al `_PROMPT_FALLBACK` del módulo (con warning) para no dejar la ingesta sin prompt.
+    Import diferido de `libtexto` (evita ciclos). `cuerpo_efectivo` ya cae a la semilla cuando
+    el doc no está en el store; `cuerpo_semilla` es la red final si la lectura del store
+    revienta (NUNCA lanza). "" solo si faltara la semilla (camino inalcanzable: lo cubre el
+    test semilla↔código), y se avisa.
     """
-    try:
-        from .. import libtexto
+    from .. import libtexto
 
+    try:
         cuerpo = (libtexto.cuerpo_efectivo(_PROMPT_ID) or "").strip()
-    except Exception:  # noqa: BLE001 -- best-effort: nunca dejar la clasificación sin prompt
+    except Exception:  # noqa: BLE001 -- best-effort: caemos a la semilla del paquete
         cuerpo = ""
-    if cuerpo:
-        return cuerpo
-    _log.warning(
-        "clasificar_marca: %s no disponible en la Biblioteca; uso el fallback del módulo.",
-        _PROMPT_ID,
-    )
-    return _PROMPT_FALLBACK
+    cuerpo = cuerpo or libtexto.cuerpo_semilla(_PROMPT_ID).strip()
+    if not cuerpo:
+        _log.warning("clasificar_marca: %s no está en la Biblioteca ni en la semilla.", _PROMPT_ID)
+    return cuerpo
 
 
 def clasificar_marca(

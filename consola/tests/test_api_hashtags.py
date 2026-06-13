@@ -183,10 +183,11 @@ def test_prompt_sugerencia_editado_en_biblioteca_gana(monkeypatch, tmp_path):
     assert p == "MIO: unotv / TikTok\ncuerpo"
 
 
-def test_prompt_sugerencia_sin_doc_ni_semilla_cae_al_fallback(monkeypatch, tmp_path):
-    # Robustez ante stores sin re-seed: sin doc NI semilla, el módulo usa su respaldo.
+def test_prompt_sugerencia_sin_doc_ni_semilla_degrada(monkeypatch, tmp_path):
+    # Ya no hay copia del prompt en código (la semilla es la única fuente). Sin doc NI semilla
+    # la plantilla queda vacía y la sustitución sobre "" da "". El test de cobertura semilla↔
+    # código garantiza que la semilla SIEMPRE está (camino inalcanzable en producción).
     monkeypatch.setenv("KENI_TEXTO_DIR", str(tmp_path / "texto"))
     monkeypatch.setenv("KENI_TEXTO_SEMILLA", str(tmp_path / "semilla-vacia"))
     p = hashtags.construir_prompt_sugerencia("texto base", "unotv", "instagram")
-    assert "Sugiere entre 8 y 15 hashtags" in p
-    assert "Instagram" in p and "{{TEXTO}}" not in p and "texto base" in p
+    assert p == ""  # sin plantilla no hay prompt; nunca quedan marcadores crudos

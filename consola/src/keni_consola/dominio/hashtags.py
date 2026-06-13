@@ -20,35 +20,30 @@ _RE_TAG = re.compile(r"#?([\wÀ-ɏ]+)", re.UNICODE)
 
 # El prompt vive en la Biblioteca de Texto como documento EDITABLE (pestaña «Prompts», doc
 # `prompt/hashtags`): el equipo lo ajusta sin tocar código. Las variables {{RED}}, {{MARCA}}
-# y {{TEXTO}} se sustituyen aquí al componer la llamada. `_PROMPT_FALLBACK` es la red
-# defensiva (mismo texto que la semilla) por si un store viejo no tuviera el doc ni la
-# semilla disponible: la sugerencia de hashtags NUNCA se queda sin prompt.
+# y {{TEXTO}} se sustituyen aquí al componer la llamada. La SEMILLA del paquete
+# (`texto_semilla/prompt/hashtags.md`) es la ÚNICA fuente del texto: no hay copia duplicada
+# en código (el test de cobertura semilla↔código garantiza que la semilla existe).
 _PROMPT_ID = "prompt/hashtags"
-_PROMPT_FALLBACK = (
-    "Sugiere entre 8 y 15 hashtags relevantes en español para {{RED}} para la marca "
-    "{{MARCA}}, a partir del siguiente texto. Responde SOLO con los hashtags, uno por "
-    "línea, cada uno empezando por #, sin numeración ni explicaciones:\n\n{{TEXTO}}"
-)
 
 
 def _plantilla() -> str:
-    """Cuerpo EFECTIVO del prompt (publicado > store del equipo > semilla del paquete).
+    """Cuerpo EFECTIVO del prompt (publicado > store del equipo > SEMILLA del paquete).
 
-    Import diferido de `libtexto` (evita ciclos). Si la lectura fallara o viniera vacía,
-    cae al `_PROMPT_FALLBACK` del módulo (con warning) para no dejar la herramienta sin prompt.
+    Import diferido de `libtexto` (evita ciclos). `cuerpo_efectivo` ya cae a la semilla cuando
+    el doc no está en el store; `cuerpo_semilla` es la red final si la lectura del store
+    revienta (NUNCA lanza). "" solo si faltara la semilla (camino inalcanzable: lo cubre el
+    test semilla↔código), y se avisa.
     """
-    try:
-        from .. import libtexto
+    from .. import libtexto
 
+    try:
         cuerpo = (libtexto.cuerpo_efectivo(_PROMPT_ID) or "").strip()
-    except Exception:  # noqa: BLE001 -- best-effort: nunca dejar la sugerencia sin prompt
+    except Exception:  # noqa: BLE001 -- best-effort: caemos a la semilla del paquete
         cuerpo = ""
-    if cuerpo:
-        return cuerpo
-    _log.warning(
-        "hashtags: %s no disponible en la Biblioteca; uso el fallback del módulo.", _PROMPT_ID
-    )
-    return _PROMPT_FALLBACK
+    cuerpo = cuerpo or libtexto.cuerpo_semilla(_PROMPT_ID).strip()
+    if not cuerpo:
+        _log.warning("hashtags: %s no está en la Biblioteca ni en la semilla.", _PROMPT_ID)
+    return cuerpo
 
 
 def normalizar_tag(crudo: str) -> str | None:

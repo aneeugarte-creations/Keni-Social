@@ -6,9 +6,11 @@ fijan el contrato de la migración de los bloques de `dominio.generar`:
   - REGRESIÓN DE ORO (byte-idéntico): con la semilla sin editar, cada instrucción compuesta
     es EXACTAMENTE la misma que producía el código hardcodeado previo (literales capturados
     de la versión anterior). Si la semilla o el ensamblaje divergen, esto revienta.
-  - La SEMILLA de cada doc es idéntica a su `_FALLBACK` en código (no hay dos verdades).
+  - La SEMILLA es la ÚNICA fuente del texto: ya no hay `_FALLBACK_*` duplicado en código (solo
+    «sin emojis» conserva un respaldo MÍNIMO, `INSTRUCCION_SIN_EMOJIS`).
   - Un doc EDITADO en el store gana (el texto sale de la Biblioteca, los valores del código).
-  - Sin doc NI semilla, cae al `_FALLBACK` con warning (una generación nunca se rompe).
+  - Sin doc NI semilla, los envoltorios estructurales degradan a vacío con warning (camino
+    inalcanzable: lo cubre el test de cobertura semilla↔código).
 """
 
 from __future__ import annotations
@@ -85,20 +87,18 @@ def test_oro_copy_unico_con_carrusel_byte_identico():
 
 
 # --------------------------------------------------------------------------- #
-# Semilla == fallback (una sola verdad)                                        #
+# La SEMILLA es la ÚNICA fuente del texto (ya no hay _FALLBACK_* duplicado)     #
 # --------------------------------------------------------------------------- #
 
-_PARES_SEMILLA_FALLBACK = [
-    (generar.PROMPT_ENVOLTORIO_SIN_EMOJIS, generar.INSTRUCCION_SIN_EMOJIS),
-    (generar.PROMPT_ENVOLTORIO_REDES, generar._FALLBACK_REDES),
-    (generar.PROMPT_ENVOLTORIO_CARRUSEL, generar._FALLBACK_CARRUSEL),
-    (generar.PROMPT_ENVOLTORIO_COPY_UNICO, generar._FALLBACK_COPY_UNICO),
-]
 
-
-def test_semilla_de_cada_envoltorio_es_identica_al_fallback():
-    for doc_id, fallback in _PARES_SEMILLA_FALLBACK:
-        assert libtexto.cuerpo_semilla(doc_id).strip() == fallback, doc_id
+def test_sin_emojis_semilla_coincide_con_su_fallback_minimo():
+    """«sin emojis» conserva un respaldo MÍNIMO en código (`INSTRUCCION_SIN_EMOJIS`): debe
+    seguir coincidiendo con su semilla. Los envoltorios estructurales (redes/carrusel/copy
+    unificado) ya no tienen copia en código; su byte-exactitud la fijan los tests de ORO."""
+    assert (
+        libtexto.cuerpo_semilla(generar.PROMPT_ENVOLTORIO_SIN_EMOJIS).strip()
+        == generar.INSTRUCCION_SIN_EMOJIS
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -133,7 +133,8 @@ def test_doc_editado_de_carrusel_y_copy_unico(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# Fallback en código si no hay doc NI semilla (con warning)                    #
+# Sin doc NI semilla: degradación (con warning). Camino inalcanzable en la       #
+# práctica (lo cubre el test de cobertura semilla↔código).                       #
 # --------------------------------------------------------------------------- #
 
 
@@ -148,14 +149,12 @@ def biblioteca_rota(monkeypatch, tmp_path):
     monkeypatch.setenv("KENI_TEXTO_SEMILLA", str(tmp_path / "semilla-vacia"))
 
 
-def test_fallback_en_codigo_si_no_hay_doc_ni_semilla(biblioteca_rota, caplog):
-    # El fallback reproduce EXACTAMENTE la salida previa (fallback == semilla == oro).
+def test_sin_doc_ni_semilla_degrada_con_warning(biblioteca_rota, caplog):
+    """«sin emojis» conserva su fallback mínimo en código; los envoltorios estructurales
+    (sin copia en código) degradan a vacío. Todos dejan warning. El test de cobertura
+    semilla↔código garantiza que la semilla SIEMPRE está, así que esto no pasa en producción."""
     with caplog.at_level("WARNING", logger="keni_consola.generar"):
-        assert generar.instruccion_sin_emojis() == _GOLD_SIN_EMOJIS
-        assert generar.instruccion_redes(["x", "facebook"]) == _GOLD_REDES_X_FB
-        assert generar.instruccion_copy_unico(["instagram", "x", "facebook"]) == _GOLD_CU_MIXTO
-        instr = generar.instruccion_copy_unico(
-            ["instagram", "x", "facebook"], n_notas=4, fotos_notas=_FOTOS
-        )
-        assert instr == _GOLD_CU_CARRUSEL
+        assert generar.instruccion_sin_emojis() == _GOLD_SIN_EMOJIS  # respaldo mínimo seguro
+        assert generar.instruccion_redes(["x", "facebook"]) == ""
+        assert generar.instruccion_copy_unico(["instagram", "x", "facebook"]) == ""
     assert any("envoltorio" in r.message for r in caplog.records)
