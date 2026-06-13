@@ -56,6 +56,9 @@ __all__ = [
     "_timeout",
     "ahora_iso",
     "nuevo_id",
+    "evento_terminal",
+    "notificar_terminal",
+    "descartar_evento_terminal",
 ]
 
 # Logger del lanzador de generaciones: cuelga del logger raiz del paquete (#123), asi
@@ -141,6 +144,45 @@ def proceso_de(reg: dict[str, Any]) -> str:
 # verdad para el sondeo; esto solo permite inspeccionar/cancelar localmente.
 _HANDLES: dict[str, dict[str, object]] = {}
 _HANDLES_LOCK = threading.Lock()
+
+# SEÑALIZACION IN-PROCESO del fin de un trabajo (gen_id -> Event). El worker corre el job en
+# el MISMO proceso que lo espera (`worker._esperar_terminal`); el hilo que fija el estado
+# terminal (`_almacen.actualizar`) DESPIERTA al que espera con este Event, en vez de obligarlo
+# a re-stat/re-parsear el YAML cada 200 ms. El Event se crea perezosamente (get-or-create) y se
+# DESCARTA cuando el que espera termina, asi no se acumulan eventos huerfanos. Si el job lo
+# fijara OTRO proceso (no deberia: quien reclama ejecuta), el que espera cae a un sondeo de
+# disco acotado como red de seguridad (ver `worker._esperar_terminal`).
+_TERMINALES: dict[str, threading.Event] = {}
+_TERMINALES_LOCK = threading.Lock()
+
+
+def evento_terminal(gen_id: str) -> threading.Event:
+    """Event (get-or-create) que se señaliza cuando `gen_id` alcanza un estado terminal.
+
+    El que ESPERA lo obtiene ANTES de leer el estado: asi una señal que llegue entre la
+    lectura y el `wait` no se pierde (el Event ya quedo `set`). Debe pareársele un
+    `descartar_evento_terminal(gen_id)` al terminar para no fugar entradas del registro.
+    """
+    with _TERMINALES_LOCK:
+        ev = _TERMINALES.get(gen_id)
+        if ev is None:
+            ev = threading.Event()
+            _TERMINALES[gen_id] = ev
+        return ev
+
+
+def notificar_terminal(gen_id: str) -> None:
+    """Despierta al que espera el fin de `gen_id` (no-op si nadie espera). La llama `actualizar`."""
+    with _TERMINALES_LOCK:
+        ev = _TERMINALES.get(gen_id)
+    if ev is not None:
+        ev.set()
+
+
+def descartar_evento_terminal(gen_id: str) -> None:
+    """Olvida el Event de `gen_id` (lo llama el que esperaba, al terminar). Idempotente."""
+    with _TERMINALES_LOCK:
+        _TERMINALES.pop(gen_id, None)
 
 # Numero de generaciones recientes que devuelve el listado.
 _LISTADO_MAX = 50

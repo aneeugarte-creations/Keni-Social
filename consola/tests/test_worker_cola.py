@@ -895,6 +895,37 @@ def test_vigia_cancelacion_sobrevive_errores_transitorios(monkeypatch):
     assert intentos["n"] >= 2  # sobrevivio al primer error y siguio sondeando
 
 
+@pytest.mark.timeout(20)
+def test_esperar_terminal_despierta_por_senal_sin_sondear_disco(entorno, monkeypatch):
+    """`_esperar_terminal` se reactiva por la SEÑAL in-proceso, no re-parseando el YAML cada 200 ms.
+
+    El hilo que fija el estado terminal (`generaciones.actualizar`) despierta al que espera al
+    instante. Comprobamos: (a) el waiter retorna pronto tras el terminal, y (b) NO sondea disco
+    en bucle (pocas lecturas de `obtener`, no decenas).
+    """
+    lecturas = {"n": 0}
+    real_obtener = generaciones.obtener
+
+    def _obtener_contado(gid):
+        lecturas["n"] += 1
+        return real_obtener(gid)
+
+    monkeypatch.setattr(generaciones, "obtener", _obtener_contado)
+
+    gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
+    hilo = threading.Thread(target=worker._esperar_terminal, args=(gen["id"],), daemon=True)
+    hilo.start()
+    # Deja al waiter bloqueado en la señal un tiempo MAYOR que el viejo sondeo de 0.2 s: si
+    # estuviera sondeando disco, acumularia muchas lecturas; con la señal se queda en una.
+    time.sleep(1.0)
+    generaciones.actualizar(gen["id"], {"estado": generaciones.ESTADO_COMPLETADO})
+    hilo.join(timeout=5)
+    assert not hilo.is_alive(), "el waiter no se reactivo con la señal de terminal"
+    # Camino normal: lectura inicial + relectura tras la señal (~2). Muy por debajo de lo que
+    # daria un sondeo a 0.2 s durante >1 s (>=5). Margen amplio para no ser fragil.
+    assert lecturas["n"] <= 3, f"sondeo de disco excesivo ({lecturas['n']} lecturas)"
+
+
 def test_sanear_qa_si_fallo_devuelve_el_tema_a_recriba(entorno):
     """Un job de QA-FUENTE que termina en ERROR resetea el sentinel `en_curso` del tema.
 

@@ -334,25 +334,53 @@ _MARGEN_TERMINAL_S = 60
 # este maximo; un job lo resetea al ritmo base. Reduce el QPS de fondo del pool contra la BD.
 _SONDEO_MAX_S = 5.0
 
+# FALLBACK acotado del `_esperar_terminal` cuando la señal in-proceso no llega (s). El camino
+# normal NO sondea disco: el hilo que fija el estado terminal (mismo proceso) despierta al que
+# espera via `generaciones.evento_terminal`. Este intervalo es solo la RED DE SEGURIDAD por si
+# la señal no llegara (p.ej. el job lo cerrara otro proceso, o un test que fija el terminal sin
+# pasar por `actualizar`): cada tanto re-leemos el registro para no colgarnos. Mas alto que el
+# viejo 0.2 s a proposito: el evento da la latencia baja; esto solo evita un cuelgue.
+_FALLBACK_TERMINAL_S = 2.0
+
 
 def _esperar_terminal(gen_id: str) -> None:
     """Espera a que el registro `gen_id` alcance un estado terminal (no `ejecutando`).
 
+    SEÑAL IN-PROCESO (no sondeo de disco): el hilo que ejecuta el job corre en ESTE mismo
+    proceso y, al fijar el estado terminal (`generaciones.actualizar`), despierta este Event.
+    El camino normal bloquea en el Event y se reactiva al instante, sin re-parsear el YAML cada
+    200 ms. El Event se obtiene ANTES de la primera lectura para no perder una señal que llegue
+    entre medias. Un `_FALLBACK_TERMINAL_S` acotado re-lee el registro por si la señal no llega.
+
     Si el registro DESAPARECE (obtener -> None) tambien dejamos de esperar: no queda nada
-    que vigilar, y seguir sondeando hasta el timeout retiene la entrada de `_JOBS_EN_CURSO`
+    que vigilar, y seguir esperando hasta el timeout retiene la entrada de `_JOBS_EN_CURSO`
     durante minutos (en la suite, el TRUNCATE entre tests borra la fila y ese hilo fugado
     contaminaba el siguiente test del pool con un job fantasma).
     """
+    ev = generaciones.evento_terminal(gen_id)
     limite = time.monotonic() + config.claude_timeout() + _MARGEN_TERMINAL_S
-    while time.monotonic() < limite:
-        g = generaciones.obtener(gen_id)
-        if g is None:
-            _log.warning("worker: la generacion %s desaparecio del registro; dejo de esperar", gen_id)
-            return
-        if g["estado"] != generaciones.ESTADO_EJECUTANDO:
-            return
-        time.sleep(0.2)
-    _log.warning("worker: el job de la generacion %s no alcanzo estado terminal a tiempo", gen_id)
+    try:
+        while True:
+            g = generaciones.obtener(gen_id)
+            if g is None:
+                _log.warning(
+                    "worker: la generacion %s desaparecio del registro; dejo de esperar", gen_id
+                )
+                return
+            if g["estado"] != generaciones.ESTADO_EJECUTANDO:
+                return
+            restante = limite - time.monotonic()
+            if restante <= 0:
+                break
+            # Bloquea en la señal (latencia baja del camino normal); el fallback acota la espera
+            # por si la señal no llega. `wait` devuelve True si ya esta `set`: si el terminal se
+            # fijo justo tras `obtener`, el Event ya quedo señalizado y re-leemos sin demora.
+            ev.wait(min(_FALLBACK_TERMINAL_S, restante))
+        _log.warning(
+            "worker: el job de la generacion %s no alcanzo estado terminal a tiempo", gen_id
+        )
+    finally:
+        generaciones.descartar_evento_terminal(gen_id)
 
 
 def _bucle(parar: threading.Event, worker_id: str) -> None:

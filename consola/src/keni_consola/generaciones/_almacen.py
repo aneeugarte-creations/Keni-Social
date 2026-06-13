@@ -35,6 +35,7 @@ from ._comun import (
     MOTIVO_INTERRUMPIDO,
     _log,
     ahora_iso,
+    notificar_terminal,
     nuevo_id,
 )
 
@@ -356,6 +357,10 @@ def actualizar(gen_id: str, cambios: dict[str, Any]) -> dict[str, Any]:
         pub = _publico(fusion, gen_id)
         _escribir_yaml_atomico(ruta_fichero, _cuerpo(pub))
     if cambios.get("estado") in _ESTADOS_TERMINALES:
+        # SEÑAL IN-PROCESO: despierta al worker que espera el fin de este job (mismo proceso),
+        # en vez de obligarlo a re-parsear el YAML cada 200 ms (ver `worker._esperar_terminal`).
+        # Va DESPUES de escribir el YAML, asi el que despierta lee ya el estado terminal.
+        notificar_terminal(gen_id)
         try:
             from .. import presupuesto_ia
 

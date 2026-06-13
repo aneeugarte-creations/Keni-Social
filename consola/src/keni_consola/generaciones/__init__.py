@@ -143,6 +143,9 @@ from ._comun import (
     _log,
     _timeout,
     ahora_iso,
+    descartar_evento_terminal,
+    evento_terminal,
+    notificar_terminal,
     nuevo_id,
     proceso_de,
 )
@@ -195,6 +198,10 @@ __all__ = [
     "reclamar_zombis",
     "nuevo_id",
     "ahora_iso",
+    # Señalización in-proceso del fin de un job (la usa `worker._esperar_terminal`).
+    "evento_terminal",
+    "notificar_terminal",
+    "descartar_evento_terminal",
     # Lanzadores (inyectables) + cancelación.
     "encolar_job_claude",
     "encolar_job_proceso",
