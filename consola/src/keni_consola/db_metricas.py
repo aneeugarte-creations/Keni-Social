@@ -329,7 +329,10 @@ def leer_metricas_cache(clave: str) -> dict[str, Any] | None:
     if fila is None:
         return None
     try:
-        payload = json.loads(fila["payload"])
+        bruto = fila["payload"]
+        # Tras migrar `payload` a `jsonb` (ADR 0012), `dict_row` lo devuelve ya como dict/list;
+        # en BDs aun TEXT (o tests con str), se deserializa. Un valor corrupto -> None (= ausencia).
+        payload = bruto if isinstance(bruto, (dict, list)) else json.loads(bruto)
     except (ValueError, TypeError):
         return None
     return {

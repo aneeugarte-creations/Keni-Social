@@ -225,3 +225,68 @@ def test_transicion_estado_sube_version(pg):
     db.transicionar_estado_publicacion(p["id"], "en_revision", "aprobado")
     v1 = db.obtener_contenido_plataforma(p["id"])["version"]
     assert v1 == v0 + 1
+
+
+# --------------------------------------------------------------------------- #
+# Bloque 4: TIPOS — jsonb en jobs.spec y metricas_cache.payload                  #
+# --------------------------------------------------------------------------- #
+
+
+def test_jsonb_tipos_aplicados(pg):
+    db.listar_swaps_turno()
+    con = _cruda()
+    try:
+        def dtype(t, c):
+            return con.execute(
+                "SELECT data_type FROM information_schema.columns "
+                "WHERE table_name = ? AND column_name = ?",
+                (t, c),
+            ).fetchone()["data_type"]
+        assert dtype("jobs", "spec") == "jsonb"
+        assert dtype("metricas_cache", "payload") == "jsonb"
+    finally:
+        con.close()
+
+
+def test_jobs_spec_roundtrip_jsonb(pg):
+    """encolar (str JSON) -> reclamar -> deserializar (dict via jsonb)."""
+    from keni_consola.dominio import jobspec
+
+    db.encolar_job("genJ", jobspec.serializar({"prompt": "hola", "kind": "texto"}), 5)
+    claimed = db.reclamar_job("w1")
+    assert claimed is not None
+    spec = jobspec.deserializar(claimed["spec"])  # acepta dict (jsonb) o str
+    assert spec["prompt"] == "hola"
+
+
+def test_metricas_cache_payload_roundtrip_jsonb(pg):
+    db.guardar_metricas_cache(
+        "k1", "reporte", "7d", "", {"fuente": "muestra", "a": [1, 2, 3]}, "muestra", "2026-01-01"
+    )
+    ent = db.leer_metricas_cache("k1")
+    assert ent is not None
+    assert ent["payload"] == {"fuente": "muestra", "a": [1, 2, 3]}
+
+
+def test_jsonb_migracion_idempotente_y_limpia_valor_sucio(pg):
+    from keni_consola._db_core.migraciones_integridad import _migrar_tipos_jsonb
+
+    db.listar_swaps_turno()
+    con = _cruda()
+    try:
+        # Vuelve a TEXT, mete un valor JSON valido y otro sucio, re-migra.
+        con.execute("TRUNCATE jobs")
+        con.execute("ALTER TABLE jobs ALTER COLUMN spec TYPE text USING spec::text")
+        con.execute("INSERT INTO jobs (id, gen_id, spec, estado, creado) VALUES ('a','ga','{\"p\":1}','pendiente','x')")
+        con.execute("INSERT INTO jobs (id, gen_id, spec, estado, creado) VALUES ('b','gb','basura','pendiente','x')")
+        con.commit()
+        _migrar_tipos_jsonb(con)
+        con.commit()
+        filas = {r["id"]: r["spec"] for r in con.execute("SELECT id, spec FROM jobs").fetchall()}
+        assert filas["a"] == {"p": 1}
+        assert filas["b"] == {}  # valor sucio degradado a '{}'
+        # Idempotente: re-correr no falla.
+        _migrar_tipos_jsonb(con)
+        con.commit()
+    finally:
+        con.close()

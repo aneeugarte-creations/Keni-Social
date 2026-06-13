@@ -177,3 +177,51 @@ def _migrar_version_optimista(con: Any) -> None:
         con.execute(
             f"ALTER TABLE {tabla} ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0"  # noqa: S608
         )
+
+
+# --------------------------------------------------------------------------- #
+# Bloque 4: TIPOS — TEXT-JSON -> jsonb en las columnas que se leen enteras       #
+# --------------------------------------------------------------------------- #
+#
+# Migracion PRAGMATICA (no las 55 tablas): solo `jobs.spec` y `metricas_cache.payload`, ambas
+# TEXT con JSON serializado que se LEE ENTERO (y se querria poder consultar). Con `dict_row`,
+# una columna jsonb vuelve como dict, no str; los call-sites de lectura ya se adaptaron
+# (`jobspec.deserializar` y `db_metricas.leer_metricas_cache` aceptan dict-o-str). La ESCRITURA
+# no cambia: la app sigue pasando el JSON serializado (str) y Postgres lo castea a jsonb.
+#
+# Los TIMESTAMP TEXT (series, cola, contenido.creado/actualizado, gasto_ia.dia…) NO se migran a
+# `timestamptz` en esta ola: ver la nota de RIESGO en la ADR 0012 (sentinel '' incompatible con
+# timestamptz, `substr()` sobre el texto, y un `datetime` no serializa a JSON en las muchas
+# respuestas de API que hoy emiten estos campos como string ISO). El texto ya esta en canon UTC
+# sin offset (ver `tiempo.ahora_iso` + migracion 0024), asi que el orden lexico == cronologico.
+
+# Cada tupla: (tabla, columna). El default de seguridad ante un valor NO-JSON es '{}'.
+_COLUMNAS_JSONB: tuple[tuple[str, str], ...] = (
+    ("jobs", "spec"),
+    ("metricas_cache", "payload"),
+)
+
+
+def _migrar_tipos_jsonb(con: Any) -> None:
+    """Convierte `jobs.spec` y `metricas_cache.payload` de TEXT a `jsonb` (BDs existentes).
+
+    Idempotente: GUARDADA por el tipo actual (si ya es jsonb, no hace nada). El `USING` castea
+    el texto a jsonb cuando empieza por '{'/'[' (todo lo que escribe la app: `json.dumps`/
+    `a_json_dict` de un dict) y degrada a '{}' cualquier valor sucio heredado, para que el
+    cambio de tipo no tumbe el deploy.
+    """
+    for tabla, columna in _COLUMNAS_JSONB:
+        tipo = con.execute(
+            "SELECT data_type FROM information_schema.columns "
+            "WHERE table_name = ? AND column_name = ?",
+            (tabla, columna),
+        ).fetchone()
+        if tipo is not None and tipo["data_type"] == "jsonb":
+            continue  # ya convertida (BD nueva via DDL, o migracion ya aplicada)
+        plantilla = (
+            "ALTER TABLE {tabla} ALTER COLUMN {columna} TYPE jsonb "
+            "USING (CASE WHEN left(btrim({columna}), 1) IN ('{{', '[') "
+            "THEN {columna}::jsonb ELSE '{{}}'::jsonb END)"
+        )
+        con.execute(plantilla.format(tabla=tabla, columna=columna))  # noqa: S608 -- constantes
+        _log.info("Tipo: %s.%s convertida a jsonb.", tabla, columna)

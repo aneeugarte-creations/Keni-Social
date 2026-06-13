@@ -62,9 +62,11 @@ from .migraciones_columnas import (
     _normalizar_timestamps_texto,
 )
 from .migraciones_integridad import (
+    _COLUMNAS_JSONB,
     _FKS,
     _migrar_checks_dominio,
     _migrar_fks_hub,
+    _migrar_tipos_jsonb,
     _migrar_version_optimista,
 )
 from .migraciones_modelo import _migrar_modelo_franjas, _migrar_modelo_turnos
@@ -369,6 +371,10 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # INTEGRIDAD (ADR 0012): columna `version` para concurrencia optimista en `contenido` y
     # `contenido_plataforma` (BDs existentes; las nuevas la traen del DDL). One-shot.
     Migracion("0030-version-optimista", _migrar_version_optimista),
+    # TIPOS (ADR 0012): TEXT-JSON -> jsonb en `jobs.spec` y `metricas_cache.payload` (BDs
+    # existentes; las nuevas ya nacen jsonb por el DDL). Idempotente (guardada por el tipo
+    # actual): editar `_COLUMNAS_JSONB` cambia la huella y re-evalua.
+    Migracion("0031-tipos-jsonb", _migrar_tipos_jsonb, re_aplicar_si_cambia=True, datos=_COLUMNAS_JSONB),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.
