@@ -14,6 +14,7 @@ import {
   formatearHora,
   hoyCDMX,
   isoADatetimeLocal,
+  posicionTemporal,
   ZONA_CDMX,
 } from "./fecha";
 
@@ -104,5 +105,42 @@ describe("hoyCDMX", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("posicionTemporal (semáforo de cobertura)", () => {
+  // AHORA fijo = 2026-06-14 00:00 UTC = 2026-06-13 18:00 CDMX (UTC-6).
+  function conAhora(fn: () => void) {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-06-14T00:00:00Z"));
+      fn();
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+
+  it("día futuro → «antes»; día pasado → «despues»", () => {
+    conAhora(() => {
+      expect(posicionTemporal("2026-06-14")).toBe("antes");
+      expect(posicionTemporal("2026-06-12")).toBe("despues");
+    });
+  });
+
+  it("hoy: antes de la hora → «antes»; dentro de la ventana → «durante»; pasada → «despues»", () => {
+    conAhora(() => {
+      // Son las 18:00 CDMX.
+      expect(posicionTemporal("2026-06-13", "19:00")).toBe("antes"); // aún no es la hora
+      expect(posicionTemporal("2026-06-13", "17:00")).toBe("durante"); // 17:00–20:00 (ventana 180')
+      expect(posicionTemporal("2026-06-13", "14:00")).toBe("despues"); // 14:00+180' = 17:00 < 18:00
+    });
+  });
+
+  it("hoy sin hora concreta → «durante»; sin fecha → null", () => {
+    conAhora(() => {
+      expect(posicionTemporal("2026-06-13")).toBe("durante");
+      expect(posicionTemporal("")).toBeNull();
+      expect(posicionTemporal(null)).toBeNull();
+    });
   });
 });

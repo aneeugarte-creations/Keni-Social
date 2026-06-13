@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { SesionContexto } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
-import { formatearFecha } from "@/lib/fecha";
+import { formatearFecha, posicionTemporal } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
 import type { CatalogosContenido, Contenido, EventoRota } from "@/types";
 
@@ -44,6 +44,36 @@ const PRIORIDAD_CLASE: Record<string, string> = {
   media: "border-amber-500/40 text-amber-700 dark:text-amber-300",
   baja: "border-border text-muted-foreground",
 };
+
+/**
+ * Semáforo de cobertura: el equipo NO marca estados a mano (les hace perder tiempo); el color
+ * se deriva de la fecha/hora del evento. Gris = aún no empieza · ámbar = en vivo (es la hora) ·
+ * verde = cubierto (ya pasó). `title` para el hover y lectores de pantalla.
+ */
+export function SemaforoCobertura({
+  fecha,
+  hora,
+  className,
+}: {
+  fecha?: string | null;
+  hora?: string | null;
+  className?: string;
+}) {
+  const pos = posicionTemporal(fecha, hora);
+  const cfg =
+    pos === "durante"
+      ? { color: "bg-amber-500", titulo: "En vivo" }
+      : pos === "despues"
+        ? { color: "bg-emerald-500", titulo: "Cubierto" }
+        : { color: "bg-muted-foreground/25", titulo: "Aún no empieza" };
+  return (
+    <span
+      title={cfg.titulo}
+      aria-label={cfg.titulo}
+      className={cn("inline-block h-2.5 w-2.5 shrink-0 rounded-full", cfg.color, className)}
+    />
+  );
+}
 
 /**
  * Un EVENTO «Por cubrir»: un partido/transmisión que nadie ha cogido todavía. No tiene tarea
@@ -214,15 +244,19 @@ export function TarjetaTarea({
         {/* Dentro de una cobertura el título del evento ya está en la cabecera de la fila
             (y la fecha también): cada tarjeta encabeza por la PERSONA para no repetirlo. */}
         {enCobertura ? (
-          <span className="inline-flex items-center gap-1.5 font-medium">
-            <AvatarPersona
-              id={tarea.responsable_id ?? ""}
-              nombre={tarea.responsable_nombre ?? ""}
-              size="sm"
-            />
-            {tarea.responsable_nombre}
-            {esMia && <span className="font-normal text-muted-foreground">· tú</span>}
-          </span>
+          <>
+            {/* Semáforo automático por fecha/hora (sin botones de estado). */}
+            <SemaforoCobertura fecha={tarea.fecha_objetivo} hora={tarea.hora_objetivo} />
+            <span className="inline-flex items-center gap-1.5 font-medium">
+              <AvatarPersona
+                id={tarea.responsable_id ?? ""}
+                nombre={tarea.responsable_nombre ?? ""}
+                size="sm"
+              />
+              {tarea.responsable_nombre}
+              {esMia && <span className="font-normal text-muted-foreground">· tú</span>}
+            </span>
+          </>
         ) : (
           <>
             {esCobertura && <Trophy className="h-4 w-4 shrink-0 text-muted-foreground" />}
@@ -247,12 +281,13 @@ export function TarjetaTarea({
             )}
           </>
         )}
-        {tarea.estado === "en_curso" && (
+        {/* Estados manuales solo fuera de cobertura: en cobertura manda el semáforo. */}
+        {!enCobertura && tarea.estado === "en_curso" && (
           <Badge variant="outline" className="border-sky-500/40 text-sky-700 dark:text-sky-300">
             En curso
           </Badge>
         )}
-        {tarea.estado === "hecha" && (
+        {!enCobertura && tarea.estado === "hecha" && (
           <Badge variant="outline" className="border-emerald-500/40 text-emerald-700 dark:text-emerald-300">
             Hecha
           </Badge>
@@ -282,65 +317,68 @@ export function TarjetaTarea({
         </p>
       )}
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        {libre && (
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => coger.mutate()}
-            disabled={coger.isPending}
-            title={esCobertura ? "La cubro yo" : "Coger"}
-            aria-label={esCobertura ? "La cubro yo" : "Coger"}
-          >
-            <Hand className="h-3.5 w-3.5" />
-          </Button>
-        )}
-        {avance && !libre && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => cambiarEstado.mutate(avance.estado)}
-            disabled={cambiarEstado.isPending}
-          >
-            <avance.icono className="mr-1 h-3.5 w-3.5" />
-            {avance.etiqueta}
-          </Button>
-        )}
-        {tarea.estado === "hecha" && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => cambiarEstado.mutate("pendiente")}
-            disabled={cambiarEstado.isPending}
-          >
-            <RotateCcw className="mr-1 h-3.5 w-3.5" />
-            Reabrir
-          </Button>
-        )}
-        {!enCobertura && !libre && (esMia || esManager) && (
-          <Button variant="outline" size="sm" onClick={() => soltar.mutate()} disabled={soltar.isPending}>
-            <Hand className="mr-1 h-3.5 w-3.5" />
-            Soltar
-          </Button>
-        )}
-        {!enCobertura && esManager && (
-          <Button variant="outline" size="sm" onClick={() => setAsignarAbierto(true)}>
-            <UserPlus className="mr-1 h-3.5 w-3.5" />
-            {libre ? "Asignar" : "Reasignar"}
-          </Button>
-        )}
-        {esManager && !esCobertura && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={() => setConfirmarBorrado(true)}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        )}
-      </div>
+      {/* En cobertura no hay botones de avance: el estado lo lleva el semáforo (automático). */}
+      {!enCobertura && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {libre && (
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => coger.mutate()}
+              disabled={coger.isPending}
+              title={esCobertura ? "La cubro yo" : "Coger"}
+              aria-label={esCobertura ? "La cubro yo" : "Coger"}
+            >
+              <Hand className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          {avance && !libre && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => cambiarEstado.mutate(avance.estado)}
+              disabled={cambiarEstado.isPending}
+            >
+              <avance.icono className="mr-1 h-3.5 w-3.5" />
+              {avance.etiqueta}
+            </Button>
+          )}
+          {tarea.estado === "hecha" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => cambiarEstado.mutate("pendiente")}
+              disabled={cambiarEstado.isPending}
+            >
+              <RotateCcw className="mr-1 h-3.5 w-3.5" />
+              Reabrir
+            </Button>
+          )}
+          {!libre && (esMia || esManager) && (
+            <Button variant="outline" size="sm" onClick={() => soltar.mutate()} disabled={soltar.isPending}>
+              <Hand className="mr-1 h-3.5 w-3.5" />
+              Soltar
+            </Button>
+          )}
+          {esManager && (
+            <Button variant="outline" size="sm" onClick={() => setAsignarAbierto(true)}>
+              <UserPlus className="mr-1 h-3.5 w-3.5" />
+              {libre ? "Asignar" : "Reasignar"}
+            </Button>
+          )}
+          {esManager && !esCobertura && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={() => setConfirmarBorrado(true)}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
+      )}
 
       <DialogoAsignar
         titulo={tarea.titulo}

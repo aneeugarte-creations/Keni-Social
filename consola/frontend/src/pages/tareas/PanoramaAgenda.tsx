@@ -9,7 +9,7 @@ import type { CatalogosContenido, Contenido, EventoRota } from "@/types";
 
 import { AvatarPersona } from "./AvatarPersona";
 import { DialogoAnadirPersona } from "./dialogos";
-import { TarjetaCobertura, TarjetaEventoLibre, TarjetaTarea } from "./tarjetas";
+import { SemaforoCobertura, TarjetaCobertura, TarjetaEventoLibre, TarjetaTarea } from "./tarjetas";
 import { agrupar, type Item } from "./tipos";
 
 /** Etiqueta del encabezado de día: «Hoy» / «Mañana» / día legible / «Sin fecha». */
@@ -145,7 +145,10 @@ function FilaAgenda({
             Por cubrir
           </Badge>
         ) : cob ? (
-          <AvataresApilados cubridores={cob.cubridores} />
+          <span className="flex shrink-0 items-center gap-2">
+            <SemaforoCobertura fecha={cob.orden} hora={cob.hora} />
+            <AvataresApilados cubridores={cob.cubridores} />
+          </span>
         ) : (
           <span className="flex shrink-0 items-center gap-1">
             <AvatarPersona id={tarea!.responsable_id} nombre={tarea!.responsable_nombre} size="sm" />

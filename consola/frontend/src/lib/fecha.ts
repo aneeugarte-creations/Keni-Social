@@ -145,6 +145,49 @@ export function hoyCDMX(): string {
   return diaCDMX(new Date());
 }
 
+// "HH:MM" (24h) de AHORA en CDMX. Para situar eventos del día respecto a la hora actual.
+const _fHoraIso = new Intl.DateTimeFormat("en-GB", {
+  timeZone: ZONA_CDMX,
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+function _ahoraHoraCDMX(): string {
+  return _fHoraIso.format(new Date());
+}
+function _aMinutos(hhmm: string | null | undefined): number | null {
+  if (!hhmm) return null;
+  const m = /^(\d{1,2}):(\d{2})/.exec(String(hhmm).trim());
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+}
+
+/** Dónde cae un evento respecto a AHORA (CDMX): antes (futuro) · durante · después. */
+export type PosicionTemporal = "antes" | "durante" | "despues";
+
+/**
+ * Sitúa un evento con `fecha` (YYYY-MM-DD) y `hora` opcional (HH:MM, CDMX) respecto a
+ * AHORA en CDMX. `ventanaMin` = cuánto dura «durante» desde la hora (def. 180 ≈ un partido).
+ * Sin fecha → `null` (no se puede situar). Base del semáforo de cobertura: el equipo no marca
+ * estados a mano; el color se deriva del calendario (gris/ámbar/verde).
+ */
+export function posicionTemporal(
+  fecha: string | null | undefined,
+  hora?: string | null,
+  ventanaMin = 180,
+): PosicionTemporal | null {
+  if (!fecha) return null;
+  const dia = String(fecha).slice(0, 10);
+  const hoy = hoyCDMX();
+  if (dia > hoy) return "antes";
+  if (dia < hoy) return "despues";
+  // Mismo día: depende de la hora. Sin hora concreta → lo tratamos como en curso hoy.
+  const horaMin = _aMinutos(hora);
+  if (horaMin == null) return "durante";
+  const ahoraMin = _aMinutos(_ahoraHoraCDMX()) ?? 0;
+  if (ahoraMin < horaMin) return "antes";
+  return ahoraMin < horaMin + ventanaMin ? "durante" : "despues";
+}
+
 /**
  * Día legible CDMX a partir de `YYYY-MM-DD` (sin componente horario). Se ancla a
  * mediodía UTC para que el día del calendario no se desplace al pasarlo a CDMX.
