@@ -4,6 +4,8 @@ import {
   ArrowLeftRight,
   CalendarOff,
   Check,
+  Circle,
+  Clock,
   Loader2,
   Plus,
   Send,
@@ -102,6 +104,120 @@ export const ESTADOS_TERMINALES_SWAP: ReadonlySet<EstadoSwap> = new Set([
 
 /** Timestamp ISO ("2026-05-25T18:42:11", UTC) como fecha-hora corta en CDMX. */
 export const formatearMomentoCorto = (s: string): string => formatearFechaHoraCorta(s);
+
+/** Estado de cada nodo del progreso de un swap (la cadena solicitante→compañero→Elías). */
+type EstadoPasoSwap = "hecho" | "actual" | "pendiente" | "rechazado";
+
+interface PasoSwap {
+  etiqueta: string;
+  detalle: string;
+  estado: EstadoPasoSwap;
+}
+
+/**
+ * Deriva los 3 nodos del progreso de un swap (solicitante → compañero → Elías) a partir
+ * SOLO de su estado. Hace VISIBLE en qué punto de la cadena está la solicitud sin tocar el
+ * backend: es la misma máquina de estados que `ETIQUETA_ESTADO_SWAP`, vista como recorrido.
+ *
+ * No hay estado "caducado" en el backend; los terminales que sí existen (rechazado del
+ * compañero / del admin / cancelado) se reflejan en el nodo donde la cadena se detuvo.
+ */
+export function pasosSwap(swap: SwapTurno): PasoSwap[] {
+  const e = swap.estado;
+  const companeroRespondio = Boolean(swap.decidido_destinatario);
+
+  // Nodo del compañero (destinatario): acepta o rechaza la propuesta.
+  let compania: EstadoPasoSwap;
+  let detalleCompania: string;
+  if (e === "propuesto") {
+    compania = "actual";
+    detalleCompania = "Pendiente de responder";
+  } else if (e === "rechazado") {
+    compania = "rechazado";
+    detalleCompania = "Rechazó";
+  } else if (e === "cancelado") {
+    compania = companeroRespondio ? "hecho" : "pendiente";
+    detalleCompania = companeroRespondio ? "Aceptó" : "Sin responder";
+  } else {
+    // aceptado / aprobado / aplicado / rechazado_admin: el compañero ya aceptó.
+    compania = "hecho";
+    detalleCompania = "Aceptó";
+  }
+
+  // Nodo de Elías (admin): aprueba (y aplica) o rechaza.
+  let elias: EstadoPasoSwap;
+  let detalleElias: string;
+  if (e === "aprobado" || e === "aplicado") {
+    elias = "hecho";
+    detalleElias = e === "aplicado" ? "Aplicado" : "Aprobó";
+  } else if (e === "rechazado_admin") {
+    elias = "rechazado";
+    detalleElias = "Rechazó";
+  } else if (e === "aceptado") {
+    elias = "actual";
+    detalleElias = "Pendiente de aprobar";
+  } else {
+    elias = "pendiente";
+    detalleElias = e === "cancelado" ? "Cancelado" : "En espera";
+  }
+
+  return [
+    { etiqueta: swap.solicitante_nombre, detalle: "Solicitó", estado: "hecho" },
+    { etiqueta: swap.destinatario_nombre, detalle: detalleCompania, estado: compania },
+    { etiqueta: "Elías", detalle: detalleElias, estado: elias },
+  ];
+}
+
+const ICONO_PASO_SWAP: Record<EstadoPasoSwap, typeof Check> = {
+  hecho: Check,
+  actual: Clock,
+  pendiente: Circle,
+  rechazado: X,
+};
+
+const COLOR_PASO_SWAP: Record<EstadoPasoSwap, string> = {
+  hecho: "text-emerald-600 dark:text-emerald-400",
+  actual: "text-amber-600 dark:text-amber-400",
+  pendiente: "text-muted-foreground/50",
+  rechazado: "text-red-600 dark:text-red-400",
+};
+
+/**
+ * Indicador de progreso legible de un swap: solicitante → compañero → Elías. Cada nodo
+ * lleva icono (hecho ✓ / pendiente ⏳ / en espera ○ / rechazado ✕) + nombre + un detalle
+ * corto, para que de un vistazo se vea en qué eslabón está la cadena.
+ */
+export function ProgresoSwap({ swap }: { swap: SwapTurno }) {
+  const pasos = pasosSwap(swap);
+  return (
+    <ol
+      className="flex flex-wrap items-center gap-x-1 gap-y-2"
+      aria-label="Progreso de la solicitud"
+    >
+      {pasos.map((p, i) => {
+        const Icono = ICONO_PASO_SWAP[p.estado];
+        return (
+          <React.Fragment key={i}>
+            {i > 0 && <span className="h-px w-3 shrink-0 bg-border" aria-hidden="true" />}
+            <li className="flex items-center gap-1">
+              <Icono className={`h-3.5 w-3.5 shrink-0 ${COLOR_PASO_SWAP[p.estado]}`} />
+              <span className="flex flex-col leading-tight">
+                <span
+                  className={`text-xs font-medium ${
+                    p.estado === "pendiente" ? "text-muted-foreground" : ""
+                  }`}
+                >
+                  {p.etiqueta}
+                </span>
+                <span className="text-[10px] text-muted-foreground">{p.detalle}</span>
+              </span>
+            </li>
+          </React.Fragment>
+        );
+      })}
+    </ol>
+  );
+}
 
 /**
  * Vista FUSIONADA de Cambios de turno + Ausencias en una sola lista cronologica.
@@ -622,6 +738,20 @@ export function TarjetaSwap({
           {ETIQUETA_ESTADO_SWAP[swap.estado]}
         </Badge>
       </div>
+
+      {/* Indicador de progreso de la cadena (solicitante → compañero → Elías): hace
+          inequívoco en qué punto está la solicitud, complementando el badge de estado. */}
+      <ProgresoSwap swap={swap} />
+
+      {/* Mientras el swap sigue abierto, el turno NO ha cambiado de manos: lo dejamos claro
+          para que nadie lo confunda con un turno ya cubierto/cedido. */}
+      {!esTerminal && (
+        <p className="rounded-md border border-amber-300/60 bg-amber-50/50 px-2.5 py-1.5 text-xs text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
+          {soySolicitante || soyDestinatario
+            ? "Este turno sigue siendo tuyo hasta que se aplique el cambio."
+            : "Cada quien conserva su turno hasta que se aplique el cambio."}
+        </p>
+      )}
 
       {swap.motivo && (
         <div className="text-sm">
