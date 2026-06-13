@@ -153,14 +153,21 @@ def test_obtener_preset_inexistente_devuelve_none():
 # --------------------------------------------------------------------------- #
 
 
-def test_seed_activa_la_semilla_entera():
-    """La semilla YA es el conjunto curado: el auto-seed la activa entera (no es un subset)."""
+def test_seed_activa_la_semilla_salvo_guardas():
+    """La semilla YA es el conjunto curado: el auto-seed la activa entera, salvo los guardas
+    defensivos (plantillas / Google News, que solo se activan a mano)."""
     from keni_consola import bootstrap_lineas as bl
 
     todos = fuentes_presets.listar_presets()
     seed = [p for p in todos if bl._preset_va_en_seed(p)]
     assert seed, "El auto-seed no debería quedar vacío"
-    assert len(seed) == len(todos), "Toda la semilla curada debe entrar al auto-seed"
+    esperado = {
+        p["id"]
+        for p in todos
+        if "[PLANTILLA]" not in (p.get("nombre") or "")
+        and "news.google.com" not in (p.get("url") or "")
+    }
+    assert {p["id"] for p in seed} == esperado
 
 
 def test_seed_cubre_las_marcas_del_piloto():
