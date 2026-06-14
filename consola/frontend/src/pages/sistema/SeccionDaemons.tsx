@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, ExternalLink, Play } from "lucide-react";
+import { Activity, Play } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -92,8 +92,9 @@ function FilaDaemon({
     : "nunca";
   const solicitado = latido.barrido_solicitado !== "";
 
+  // La fila ENTERA lleva a su detalle (como las tarjetas de agente IA): click izquierdo.
+  // «Barrer ahora» es secundaria → menú (click derecho / long-press), sin kebab visible.
   const acciones: EntradaMenuContextual[] = [];
-
   if (latido.barrible) {
     acciones.push({
       etiqueta: "Barrer ahora",
@@ -103,14 +104,14 @@ function FilaDaemon({
     });
   }
 
-  acciones.push({
-    etiqueta: "Ver detalle",
-    icono: ExternalLink,
-    onClick: () => navigate(`/maquina/agentes/${latido.daemon}`),
-  });
-
   return (
-    <FilaConAcciones como="tr" kebab="hover" acciones={acciones}>
+    <FilaConAcciones
+      como="tr"
+      kebab="nunca"
+      acciones={acciones}
+      onPrimaria={() => navigate(`/maquina/agentes/${latido.daemon}`)}
+      etiquetaAcciones={`Acciones de ${latido.daemon}`}
+    >
       <TableCell className="font-medium">{latido.daemon}</TableCell>
       <TableCell>
         <span className="inline-flex flex-wrap items-center gap-1.5">
@@ -191,7 +192,6 @@ function TablaDaemons({
           <TableHead>Barridos</TableHead>
           <TableHead>Último error</TableHead>
           <TableHead>Encendido</TableHead>
-          <TableHead className="w-10" />
         </TableRow>
       </TableHeader>
       <TableBody>

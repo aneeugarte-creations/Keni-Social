@@ -6,10 +6,12 @@
  */
 import { ArrowUp, Coins, type Cpu, RotateCcw, XCircle } from "lucide-react";
 import * as React from "react";
+import { useNavigate } from "react-router-dom";
 
 import { ChipNivelPresupuesto } from "@/components/comunes/ChipEstado";
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -91,6 +93,7 @@ export function TablaJobs({
   onReintentar?: (genId: string) => void;
   reintentandoId?: string | null;
 }) {
+  const navigate = useNavigate();
   return (
     <Table>
       <TableHeader>
@@ -100,77 +103,78 @@ export function TablaJobs({
           <TableHead className="hidden md:table-cell">Marca</TableHead>
           {mostrarWorker && <TableHead className="hidden lg:table-cell">Worker</TableHead>}
           <TableHead>{mostrarWorker ? "Corriendo" : "En cola"}</TableHead>
-          {esAdmin && <TableHead className="text-right">Acción</TableHead>}
         </TableRow>
       </TableHeader>
       <TableBody>
-        {jobs.map((j) => (
-          <TableRow key={j.job_id}>
-            <TableCell className="font-medium">
-              <span className="inline-flex items-center gap-1.5">
-                {j.etiqueta || j.gen_id}
-                {/* Prioridad de cola (1f3acd7d): un lanzamiento manual adelanta al lote de
-                    fondo del pipeline. Solo se señala lo prioritario (>0). */}
-                {j.prioridad > 0 && (
-                  <Badge
-                    variant="secondary"
-                    className="border border-sky-500/30 bg-sky-500/10 text-[10px] text-sky-600"
-                  >
-                    prioritario
-                  </Badge>
-                )}
-              </span>
-            </TableCell>
-            <TableCell className="hidden sm:table-cell text-muted-foreground">{j.tipo || "—"}</TableCell>
-            <TableCell className="hidden md:table-cell text-muted-foreground">{j.marca || "—"}</TableCell>
-            {mostrarWorker && (
-              <TableCell className="hidden lg:table-cell font-mono text-xs text-muted-foreground">
-                {j.worker || "—"}
-              </TableCell>
-            )}
-            <TableCell className="tabular-nums text-muted-foreground">
-              {haceSegundos(mostrarWorker ? j.corriendo_hace_s : j.encolado_hace_s)}
-            </TableCell>
-            {esAdmin && (
-              <TableCell className="text-right">
-                <span className="inline-flex items-center gap-1">
-                  {onPriorizar && j.prioridad <= 0 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={priorizandoId === j.gen_id}
-                      onClick={() => onPriorizar(j.gen_id)}
+        {jobs.map((j) => {
+          // La fila ENTERA lleva al detalle de la generación (click izquierdo). Las acciones
+          // admin (Priorizar/Reintentar/Cancelar) viven en su menú (click derecho / long-press),
+          // mismo modelo que la tabla de Servicios: sin botones inline ni kebab.
+          const acciones: EntradaMenuContextual[] = [];
+          if (esAdmin) {
+            if (onPriorizar && j.prioridad <= 0) {
+              acciones.push({
+                etiqueta: "Priorizar",
+                icono: ArrowUp,
+                onClick: () => onPriorizar(j.gen_id),
+                deshabilitado: priorizandoId === j.gen_id,
+              });
+            }
+            if (onReintentar && j.gen_estado === "error") {
+              acciones.push({
+                etiqueta: "Reintentar",
+                icono: RotateCcw,
+                onClick: () => onReintentar(j.gen_id),
+                deshabilitado: reintentandoId === j.gen_id,
+              });
+            }
+            acciones.push({
+              etiqueta: "Cancelar",
+              icono: XCircle,
+              destructivo: true,
+              onClick: () => onCancelar(j.gen_id),
+              deshabilitado: cancelandoId === j.gen_id,
+            });
+          }
+          return (
+            <FilaConAcciones
+              key={j.job_id}
+              como="tr"
+              kebab="nunca"
+              acciones={acciones}
+              onPrimaria={() =>
+                navigate(`/datos/produccion/actividad/${encodeURIComponent(j.gen_id)}`)
+              }
+              etiquetaAcciones={`Acciones de ${j.etiqueta || j.gen_id}`}
+            >
+              <TableCell className="font-medium">
+                <span className="inline-flex items-center gap-1.5">
+                  {j.etiqueta || j.gen_id}
+                  {/* Prioridad de cola (1f3acd7d): un lanzamiento manual adelanta al lote de
+                      fondo del pipeline. Solo se señala lo prioritario (>0). */}
+                  {j.prioridad > 0 && (
+                    <Badge
+                      variant="secondary"
+                      className="border border-sky-500/30 bg-sky-500/10 text-[10px] text-sky-600"
                     >
-                      <ArrowUp className="mr-1 h-3.5 w-3.5" />
-                      Priorizar
-                    </Button>
+                      prioritario
+                    </Badge>
                   )}
-                  {onReintentar && j.gen_estado === "error" && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={reintentandoId === j.gen_id}
-                      onClick={() => onReintentar(j.gen_id)}
-                    >
-                      <RotateCcw className="mr-1 h-3.5 w-3.5" />
-                      Reintentar
-                    </Button>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive hover:text-destructive"
-                    disabled={cancelandoId === j.gen_id}
-                    onClick={() => onCancelar(j.gen_id)}
-                  >
-                    <XCircle className="mr-1 h-3.5 w-3.5" />
-                    Cancelar
-                  </Button>
                 </span>
               </TableCell>
-            )}
-          </TableRow>
-        ))}
+              <TableCell className="hidden sm:table-cell text-muted-foreground">{j.tipo || "—"}</TableCell>
+              <TableCell className="hidden md:table-cell text-muted-foreground">{j.marca || "—"}</TableCell>
+              {mostrarWorker && (
+                <TableCell className="hidden lg:table-cell font-mono text-xs text-muted-foreground">
+                  {j.worker || "—"}
+                </TableCell>
+              )}
+              <TableCell className="tabular-nums text-muted-foreground">
+                {haceSegundos(mostrarWorker ? j.corriendo_hace_s : j.encolado_hace_s)}
+              </TableCell>
+            </FilaConAcciones>
+          );
+        })}
       </TableBody>
     </Table>
   );
