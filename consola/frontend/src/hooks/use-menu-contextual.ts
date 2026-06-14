@@ -39,7 +39,11 @@ export function useMenuContextual() {
     [],
   );
 
+  // Apertura directa en una coordenada (sin evento React): la usa el long-press táctil,
+  // que tiene las coordenadas del toque pero no un `MouseEvent`/`KeyboardEvent`.
+  const abrirEnPunto = React.useCallback((x: number, y: number) => setPos({ x, y }), []);
+
   const cerrar = React.useCallback(() => setPos(null), []);
 
-  return { pos, abierto: pos !== null, abrirEn, cerrar };
+  return { pos, abierto: pos !== null, abrirEn, abrirEnPunto, cerrar };
 }

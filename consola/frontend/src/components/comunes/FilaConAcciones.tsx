@@ -33,6 +33,12 @@ interface FilaConAccionesProps {
    * las acciones solo en click derecho/teclado.
    */
   kebab?: "hover" | "siempre" | "nunca";
+  /**
+   * Realce de tarjeta: en hover/foco el borde vira a naranja de marca (señal sutil de que
+   * la tarjeta es accionable). Pensado para hosts `div`/`li` con aspecto de tarjeta; no
+   * aplica a filas de tabla (`tr`). Es la pista de descubribilidad cuando el kebab está oculto.
+   */
+  realce?: boolean;
   className?: string;
   /** Clase aplicada a la celda/contenedor del kebab. */
   claseKebab?: string;
@@ -57,6 +63,7 @@ export function FilaConAcciones({
   etiquetaAcciones = "Acciones",
   como = "div",
   kebab = "hover",
+  realce = false,
   className,
   claseKebab,
   etiquetaKebab = "Más acciones",
@@ -64,24 +71,59 @@ export function FilaConAcciones({
 }: FilaConAccionesProps) {
   const menu = useMenuContextual();
   const kebabRef = React.useRef<HTMLButtonElement>(null);
+  // Long-press táctil: abre el menú secundario tras mantener pulsado (equivale al click
+  // derecho del ratón). Cancela en scroll/levantar; suprime el click "fantasma" posterior.
+  const tempLargo = React.useRef<number | null>(null);
+  const suprimirClick = React.useRef(false);
   const tieneAcciones = acciones.length > 0;
   const esClicable = typeof onPrimaria === "function";
 
   // Si solo hay UNA acción, mostrarla como botón-icono directo en vez de un kebab que
   // abre un menú de un solo item (sobreingeniería). El menú solo aparece con 2+ acciones.
+  // EXCEPCIÓN: con `kebab="nunca"` no hay botón visible, así que incluso una sola acción
+  // DEBE enrutarse por el menú (click derecho / long-press / teclado) o sería inalcanzable.
   const itemsReales = acciones.filter(
     (a): a is ItemMenuContextual => !("separador" in a),
   );
-  const accionUnica = itemsReales.length === 1 ? itemsReales[0] : null;
+  const accionUnica =
+    kebab !== "nunca" && itemsReales.length === 1 ? itemsReales[0] : null;
   const hayMenu = tieneAcciones && !accionUnica;
 
   function alClick(e: React.MouseEvent) {
     if (!esClicable) return;
+    // Tras un long-press que abrió el menú, ignora el click "fantasma" que dispara el toque.
+    if (suprimirClick.current) {
+      suprimirClick.current = false;
+      return;
+    }
     // Ignora clicks originados en controles internos (incluido el kebab) o marcados.
     const objetivo = e.target as HTMLElement;
     if (objetivo.closest("button, a, input, select, textarea, label, [data-no-primaria]"))
       return;
     onPrimaria!();
+  }
+
+  function cancelarLargo() {
+    if (tempLargo.current !== null) {
+      window.clearTimeout(tempLargo.current);
+      tempLargo.current = null;
+    }
+  }
+
+  function alTocarInicio(e: React.TouchEvent) {
+    if (!hayMenu) return;
+    // No abras por long-press si el toque empieza en un control interno.
+    if ((e.target as HTMLElement).closest("button, a, input, select, textarea, label, [data-no-primaria]"))
+      return;
+    const t = e.touches[0];
+    if (!t) return;
+    const x = t.clientX;
+    const y = t.clientY;
+    cancelarLargo();
+    tempLargo.current = window.setTimeout(() => {
+      suprimirClick.current = true;
+      menu.abrirEnPunto(x, y);
+    }, 500);
   }
 
   function alTeclear(e: React.KeyboardEvent) {
@@ -99,10 +141,16 @@ export function FilaConAcciones({
     }
   }
 
+  // Realce naranja de marca al hover/foco: pista de descubribilidad cuando no hay kebab.
+  // Solo en hosts tipo tarjeta (no `tr`) y cuando hay algo que accionar.
+  const usaRealce = realce && como !== "tr" && (esClicable || hayMenu);
+
   const propsHost = {
     className: cn(
       "group",
-      esClicable && "cursor-pointer",
+      esClicable && "cursor-pointer select-none [-webkit-touch-callout:none]",
+      usaRealce &&
+        "transition-colors hover:border-keni-300 focus-visible:border-keni-300 focus-visible:outline-none",
       className,
     ),
     onClick: esClicable ? alClick : undefined,
@@ -110,6 +158,11 @@ export function FilaConAcciones({
     // botón-icono directo ya la ofrece.
     onContextMenu: hayMenu ? (e: React.MouseEvent) => menu.abrirEn(e) : undefined,
     onKeyDown: esClicable || hayMenu ? alTeclear : undefined,
+    // Long-press táctil → menú secundario (equivalente al click derecho).
+    onTouchStart: hayMenu ? alTocarInicio : undefined,
+    onTouchEnd: hayMenu ? cancelarLargo : undefined,
+    onTouchMove: hayMenu ? cancelarLargo : undefined,
+    onTouchCancel: hayMenu ? cancelarLargo : undefined,
     tabIndex: esClicable ? 0 : undefined,
     role: esClicable ? "button" : undefined,
   };

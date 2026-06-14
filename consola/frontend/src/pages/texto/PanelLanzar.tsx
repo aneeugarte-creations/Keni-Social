@@ -5,7 +5,7 @@
  * de comportamiento.
  */
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Loader2, Send, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, Pencil, Send, X } from "lucide-react";
 import * as React from "react";
 
 import { MarcaIA } from "@/components/comunes/MarcaIA";
@@ -45,6 +45,7 @@ export function PanelLanzar({
   open,
   onOpenChange,
   marcaForzada,
+  onEditarPrompt,
 }: {
   promptId: string;
   salida: string;
@@ -55,6 +56,8 @@ export function PanelLanzar({
   /** Marca LOCAL que prevalece sobre el switch global: el cockpit de Producción puede lanzar
    *  contra una marca concreta aunque el switch esté en "Todas" (su propio selector). */
   marcaForzada?: string;
+  /** Si se pasa, el popup muestra un botón "Editar prompt" en la cabecera (edición in-place). */
+  onEditarPrompt?: () => void;
 }) {
   // La marca la manda el switch GLOBAL salvo que el contenedor imponga una `marcaForzada`
   // (selector local del cockpit). Lanzar EXIGE marca concreta, así que si no hay marca válida
@@ -159,9 +162,22 @@ export function PanelLanzar({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[88vh] max-w-2xl flex-col gap-3 overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Send className="h-4 w-4" /> Lanzar prompt
-          </DialogTitle>
+          <div className="flex items-center justify-between gap-2 pr-6">
+            <DialogTitle className="flex items-center gap-2">
+              <Send className="h-4 w-4" /> Lanzar prompt
+            </DialogTitle>
+            {onEditarPrompt ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 text-xs text-muted-foreground"
+                onClick={onEditarPrompt}
+              >
+                <Pencil className="h-3.5 w-3.5" /> Editar prompt
+              </Button>
+            ) : null}
+          </div>
         </DialogHeader>
 
       {marca && validacion ? (

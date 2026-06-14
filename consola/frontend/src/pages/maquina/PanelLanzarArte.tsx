@@ -12,7 +12,7 @@
  * una `marcaForzada` (su selector LOCAL), igual que `PanelLanzar`.
  */
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Coins, ImageOff, Loader2, Sparkles } from "lucide-react";
+import { AlertTriangle, Coins, ImageOff, Loader2, Pencil, Sparkles } from "lucide-react";
 import * as React from "react";
 
 import { AutoTextarea } from "@/components/ui/auto-textarea";
@@ -54,12 +54,15 @@ export function PanelLanzarArte({
   open,
   onOpenChange,
   marcaForzada,
+  onEditarPrompt,
 }: {
   marcas: { id: string; nombre: string }[];
   open: boolean;
   onOpenChange: (v: boolean) => void;
   /** Marca LOCAL que prevalece sobre el switch global (selector propio del cockpit). */
   marcaForzada?: string;
+  /** Si se pasa, el popup muestra un botón "Editar prompt" en la cabecera (edición in-place). */
+  onEditarPrompt?: () => void;
 }) {
   const { marcaActiva } = useMarcaActiva();
   const marcaBase = marcaForzada ?? marcaActiva;
@@ -154,9 +157,22 @@ export function PanelLanzarArte({
     <Dialog open={open} onOpenChange={cerrar}>
       <DialogContent className="flex max-h-[88vh] max-w-2xl flex-col gap-3 overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4" /> Generar arte
-          </DialogTitle>
+          <div className="flex items-center justify-between gap-2 pr-6">
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4" /> Generar arte
+            </DialogTitle>
+            {onEditarPrompt ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 text-xs text-muted-foreground"
+                onClick={onEditarPrompt}
+              >
+                <Pencil className="h-3.5 w-3.5" /> Editar prompt
+              </Button>
+            ) : null}
+          </div>
         </DialogHeader>
 
         {!configurado ? (
