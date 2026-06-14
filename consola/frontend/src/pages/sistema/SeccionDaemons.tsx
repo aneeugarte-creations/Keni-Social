@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Play } from "lucide-react";
+import { Activity, ExternalLink, Play } from "lucide-react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
@@ -20,7 +21,7 @@ import { ApiError, api, mensajeError } from "@/lib/api";
 import { tiempoRelativo } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
 import { useGuardarAjuste } from "@/pages/configuracion/SeccionFuncionalidad";
-import type { EstadoDaemon, GrupoDaemon, LatidoDaemon } from "@/types";
+import type { ClaseDaemon, EstadoDaemon, LatidoDaemon, Proceso } from "@/types";
 
 import { INTERVALO_RECURSOS_MS } from "./lib";
 
@@ -30,16 +31,6 @@ const PESO_ESTADO: Record<EstadoDaemon, number> = {
   error: 1,
   ok: 2,
   inactivo: 3,
-};
-
-/** Orden y etiqueta humana de los grupos (motor/papel) de daemon, para el bloque «Agentes»
- *  del dashboard de Workers (los que gastan tokens / actúan en el flujo) y la infra de Sistema. */
-const ORDEN_GRUPO: GrupoDaemon[] = ["investigacion", "produccion", "flujo", "infra"];
-const ETIQUETA_GRUPO: Record<GrupoDaemon, string> = {
-  investigacion: "Investigación",
-  produccion: "Producción",
-  flujo: "Flujo",
-  infra: "Infraestructura",
 };
 
 const ETIQUETA_ESTADO: Record<EstadoDaemon, string> = {
@@ -59,8 +50,9 @@ const TITULO_ESTADO: Record<EstadoDaemon, string> = {
   atrasado: "Lleva más de su intervalo sin barrer.",
 };
 
-/** Chip de estado con color semántico (verde/rojo/gris/ámbar). */
-function ChipEstado({ estado }: { estado: EstadoDaemon }) {
+/** Chip de estado de daemon con color semántico (verde/rojo/gris/ámbar). Exportado para que
+ *  las tarjetas de agente IA de la página Agentes pinten el mismo estado con el mismo color. */
+export function ChipEstadoDaemon({ estado }: { estado: EstadoDaemon }) {
   return (
     <Badge
       variant="outline"
@@ -78,8 +70,8 @@ function ChipEstado({ estado }: { estado: EstadoDaemon }) {
   );
 }
 
-/** Intervalo legible ("90 s", "15 min", "4 h"). */
-function formatoIntervalo(seg: number): string {
+/** Intervalo legible ("90 s", "15 min", "4 h"). Exportado para las tarjetas de agente IA. */
+export function formatoIntervalo(seg: number): string {
   if (!seg) return "—";
   if (seg < 90) return `${Math.round(seg)} s`;
   if (seg < 5400) return `${Math.round(seg / 60)} min`;
@@ -111,18 +103,7 @@ function FilaDaemon({
       <TableCell className="font-medium">{latido.daemon}</TableCell>
       <TableCell>
         <span className="inline-flex flex-wrap items-center gap-1.5">
-          <ChipEstado estado={latido.estado} />
-          {/* Gasta tokens: el daemon encola/ejecuta `claude -p` (consume del presupuesto).
-              Se señala en el dashboard de Workers para distinguir los agentes que cuestan. */}
-          {latido.gasta_tokens && (
-            <Badge
-              variant="outline"
-              className="border-transparent bg-amber-500/15 text-amber-600 dark:text-amber-400"
-              title="Este agente encola/ejecuta claude -p: consume del presupuesto de tokens."
-            >
-              gasta tokens
-            </Badge>
-          )}
+          <ChipEstadoDaemon estado={latido.estado} />
           {/* Solicitud de barrido forzado pendiente (campo `barrido_solicitado`): el bucle
               del daemon la consume en su siguiente tick (<= ~1 min). */}
           {solicitado && (
@@ -177,31 +158,39 @@ function FilaDaemon({
         )}
       </TableCell>
       <TableCell className="text-right">
-        {/* Solo a los daemons BARRIBLES (bucle sobre `bucle_gateado`): los legados
-            (programador/metricas/…) no miran el flag y el botón sería mentira. */}
-        {latido.barrible && (
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={barriendo === latido.daemon || solicitado}
-            title={
-              solicitado
-                ? "Ya hay un barrido solicitado pendiente."
-                : "Fuerza un barrido inmediato (sin esperar al intervalo)."
-            }
-            onClick={() => onBarrer(latido.daemon)}
-          >
-            <Play className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-            Barrer ahora
+        <span className="inline-flex items-center justify-end gap-1">
+          {/* Solo a los daemons BARRIBLES (bucle sobre `bucle_gateado`): los legados
+              (programador/metricas/…) no miran el flag y el botón sería mentira. */}
+          {latido.barrible && (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={barriendo === latido.daemon || solicitado}
+              title={
+                solicitado
+                  ? "Ya hay un barrido solicitado pendiente."
+                  : "Fuerza un barrido inmediato (sin esperar al intervalo)."
+              }
+              onClick={() => onBarrer(latido.daemon)}
+            >
+              <Play className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+              Barrer ahora
+            </Button>
+          )}
+          {/* Drill-in al log/detalle por barrido de este daemon (la página de detalle). */}
+          <Button asChild variant="ghost" size="sm">
+            <Link to={`/maquina/agentes/${latido.daemon}`} title="Ver el log y el detalle de este servicio">
+              <ExternalLink className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+              Ver detalle
+            </Link>
           </Button>
-        )}
+        </span>
       </TableCell>
     </TableRow>
   );
 }
 
-/** Tabla de daemons (cabecera + filas), reutilizada en el bloque único y en cada bloque
- *  por grupo. `filas` ya viene ordenada por severidad. */
+/** Tabla de daemons (cabecera + filas). `filas` ya viene ordenada por severidad. */
 function TablaDaemons({
   filas,
   onBarrer,
@@ -219,7 +208,7 @@ function TablaDaemons({
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Daemon</TableHead>
+          <TableHead>Servicio</TableHead>
           <TableHead>Estado</TableHead>
           <TableHead>Último barrido</TableHead>
           <TableHead>Intervalo</TableHead>
@@ -246,28 +235,31 @@ function TablaDaemons({
 }
 
 /**
- * Sección de DAEMONS (agentes proactivos programados): estado de cada uno a partir de sus
- * latidos persistidos (`/api/sistema/daemons`). Lo que requiere atención (atrasado/error) se
- * lista primero. Auto-refresco con la misma cadencia que los recursos. Por fila: encendido
- * IN-PLACE (Switch sobre su `clave_gate`, vía la mutación compartida de ajustes; «Siempre
- * activo» si no tiene gate) y «Barrer ahora» (POST …/barrer) para los daemons `barrible`. El
+ * Sección de DAEMONS (servicios de fondo): estado de cada uno a partir de sus latidos
+ * persistidos (`/api/sistema/daemons`). Lo que requiere atención (atrasado/error) se lista
+ * primero. Auto-refresco con la misma cadencia que los recursos. Por fila: encendido IN-PLACE
+ * (Switch sobre su `clave_gate`; «Siempre activo» si no tiene gate), «Barrer ahora» (POST
+ * …/barrer) para los `barrible`, y «Ver detalle» (drill-in a `/maquina/agentes/{daemon}`). El
  * endpoint es de admin (403 si no), así que se monta en contextos admin.
  *
- * Parametrizable por `grupo` (campo del API, no nombres hardcodeados): la página Agentes la
- * monta con TODOS los grupos (`agrupar`), partida en bloques por grupo (Investigación /
- * Producción / Flujo / Infraestructura). Una sola casa para los daemons.
+ * Filtra por `clase`/`motor` (campos del API, no nombres hardcodeados):
+ *   - Página Agentes: servicios NO-IA de cada motor (`clases=["maquina"]`, `motor=…`).
+ *   - Página Sistema: pura infraestructura (`clases=["sistema"]`).
  */
 export function SeccionDaemons({
-  grupos,
-  agrupar = false,
-  titulo = "Daemons de fondo",
+  clases,
+  motor,
+  titulo = "Servicios de fondo",
+  descripcion,
 }: {
-  /** Grupos a incluir (campo `grupo` del API). `undefined` = todos. */
-  grupos?: GrupoDaemon[];
-  /** Si `true`, parte la lista en un bloque (sub-tabla) por grupo. */
-  agrupar?: boolean;
+  /** Clases a incluir (campo `clase` del API). `undefined` = todas. */
+  clases?: ClaseDaemon[];
+  /** Si se pasa, restringe a los daemons de ese motor (campo `motor` del API). */
+  motor?: Proceso;
   /** Título de la tarjeta. */
   titulo?: string;
+  /** Subtítulo opcional bajo el título. */
+  descripcion?: React.ReactNode;
 } = {}) {
   const queryClient = useQueryClient();
   const query = useQuery({
@@ -319,7 +311,7 @@ export function SeccionDaemons({
   if (query.isError) {
     return (
       <BloqueError
-        titulo="No se pudo leer el estado de los daemons"
+        titulo="No se pudo leer el estado de los servicios"
         mensaje={mensajeError(query.error)}
         onReintentar={() => void query.refetch()}
         cargando={query.isFetching}
@@ -328,20 +320,16 @@ export function SeccionDaemons({
   }
 
   const { daemons = [], error } = query.data;
-  // Filtro por GRUPO con el campo `grupo` del API (no nombres hardcodeados en el front).
-  const visibles = grupos ? daemons.filter((d) => grupos.includes(d.grupo)) : daemons;
-  const ordenar = (arr: LatidoDaemon[]) =>
-    [...arr].sort(
-      (a, b) =>
-        PESO_ESTADO[a.estado] - PESO_ESTADO[b.estado] ||
-        a.daemon.localeCompare(b.daemon, "es"),
-    );
-  const ordenados = ordenar(visibles);
-  // Bloques por grupo (solo los que tienen daemons visibles), en orden de flujo.
-  const bloques = ORDEN_GRUPO.map((g) => ({
-    grupo: g,
-    filas: ordenar(visibles.filter((d) => d.grupo === g)),
-  })).filter((b) => b.filas.length > 0);
+  // Filtro por CLASE/MOTOR con los campos del API (no nombres hardcodeados en el front).
+  const visibles = daemons.filter(
+    (d) =>
+      (clases ? clases.includes(d.clase) : true) && (motor ? d.motor === motor : true),
+  );
+  const ordenados = [...visibles].sort(
+    (a, b) =>
+      PESO_ESTADO[a.estado] - PESO_ESTADO[b.estado] ||
+      a.daemon.localeCompare(b.daemon, "es"),
+  );
 
   const barriendo = barrer.isPending ? (barrer.variables ?? null) : null;
   const onBarrer = (d: string) => barrer.mutate(d);
@@ -353,6 +341,7 @@ export function SeccionDaemons({
           <Activity className="h-4 w-4" aria-hidden="true" />
           {titulo}
         </CardTitle>
+        {descripcion && <p className="text-xs text-muted-foreground">{descripcion}</p>}
       </CardHeader>
       <CardContent className="p-4 pt-0">
         {error ? (
@@ -361,24 +350,6 @@ export function SeccionDaemons({
           <p className="text-sm text-muted-foreground">
             No hay latidos registrados aún (proceso sin iniciar o recién desplegado).
           </p>
-        ) : agrupar ? (
-          // Bloques por grupo: cada motor/papel con su sub-cabecera + tabla.
-          <div className="space-y-4">
-            {bloques.map((b) => (
-              <div key={b.grupo}>
-                <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  {ETIQUETA_GRUPO[b.grupo]}
-                </h3>
-                <TablaDaemons
-                  filas={b.filas}
-                  onBarrer={onBarrer}
-                  barriendo={barriendo}
-                  onToggle={onToggle}
-                  guardandoClave={guardandoClave}
-                />
-              </div>
-            ))}
-          </div>
         ) : (
           <TablaDaemons
             filas={ordenados}
