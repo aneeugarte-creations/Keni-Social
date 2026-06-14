@@ -8,6 +8,8 @@ import { useRef } from "react";
 import { toast } from "sonner";
 
 import { confirmar } from "@/components/comunes/confirmar";
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { Button } from "@/components/ui/button";
 import { api, urlMedia, type ActivoMarca } from "@/lib/api";
 
@@ -207,7 +209,32 @@ export function PanelGaleria({
             </div>
             <div className="grid grid-cols-3 gap-1.5">
               {lista.map((a) => (
-                <div key={a.id} className="group relative">
+                <FilaConAcciones
+                  key={a.id}
+                  como="div"
+                  kebab="nunca"
+                  realce
+                  onPrimaria={() => insertar(a)}
+                  acciones={[
+                    {
+                      etiqueta: "Borrar",
+                      icono: Trash2,
+                      destructivo: true,
+                      onClick: async () => {
+                        if (
+                          await confirmar({
+                            titulo: "Borrar activo",
+                            mensaje: `¿Borrar activo «${a.nombre}»?`,
+                            destructivo: true,
+                            textoConfirmar: "Borrar",
+                          })
+                        ) {
+                          borrar.mutate(a.id);
+                        }
+                      },
+                    } as EntradaMenuContextual,
+                  ]}
+                >
                   <button
                     onClick={() => insertar(a)}
                     draggable={a.tipo !== "paleta" && a.tipo !== "tipografia"}
@@ -231,25 +258,7 @@ export function PanelGaleria({
                       </span>
                     )}
                   </button>
-                  <button
-                    onClick={async () => {
-                      if (
-                        await confirmar({
-                          titulo: "Borrar activo",
-                          mensaje: `¿Borrar activo «${a.nombre}»?`,
-                          destructivo: true,
-                          textoConfirmar: "Borrar",
-                        })
-                      ) {
-                        borrar.mutate(a.id);
-                      }
-                    }}
-                    title="Borrar activo"
-                    className="absolute right-0.5 top-0.5 rounded bg-background/80 p-0.5 text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                </div>
+                </FilaConAcciones>
               ))}
             </div>
           </div>

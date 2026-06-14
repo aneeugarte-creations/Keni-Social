@@ -15,7 +15,7 @@
  * prompt abre su documento de la Biblioteca en un OVERLAY (in-place, sin salir del cockpit).
  */
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, SquarePen } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import * as React from "react";
 
 import { EditorPromptOverlay } from "@/components/biblioteca/EditorPromptOverlay";
@@ -151,27 +151,31 @@ export function RielInvestigacion() {
                 </span>
               ) : null}
               <Tooltip label={`${etapa.ayuda} (${etiquetaEstado(estado)})`} side="top">
-                <div
-                  className="flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm shadow-sm"
-                  data-testid={`etapa-${etapa.nombre.toLowerCase()}`}
-                  data-estado={estado}
-                >
-                  <Punto estado={estado} />
-                  <span className="font-medium leading-none">{etapa.nombre}</span>
-                  {/* El prompt de la etapa se edita IN-PLACE (overlay), sin salir del cockpit.
-                      Solo admin (la Biblioteca es de admin). */}
-                  {esAdmin && etapa.doc ? (
-                    <button
-                      type="button"
-                      onClick={() => setDocAbierto(etapa.doc!)}
-                      className="ml-0.5 text-muted-foreground/50 transition-colors hover:text-foreground"
-                      aria-label={`Editar el prompt de ${etapa.nombre}`}
-                      title="Editar prompt"
-                    >
-                      <SquarePen className="h-3 w-3" aria-hidden />
-                    </button>
-                  ) : null}
-                </div>
+                {/* La BURBUJA es el botón: si la etapa tiene prompt (y eres admin), tocarla edita
+                    su documento IN-PLACE (overlay), sin lápiz suelto. El borde vira a naranja al
+                    hover como pista. Las etapas mecánicas (Ingesta) no son clicables. */}
+                {esAdmin && etapa.doc ? (
+                  <button
+                    type="button"
+                    onClick={() => setDocAbierto(etapa.doc!)}
+                    aria-label={`Editar el prompt de ${etapa.nombre}`}
+                    data-testid={`etapa-${etapa.nombre.toLowerCase()}`}
+                    data-estado={estado}
+                    className="flex cursor-pointer items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm shadow-sm transition-colors hover:border-keni-300 focus-visible:border-keni-300 focus-visible:outline-none"
+                  >
+                    <Punto estado={estado} />
+                    <span className="font-medium leading-none">{etapa.nombre}</span>
+                  </button>
+                ) : (
+                  <div
+                    className="flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm shadow-sm"
+                    data-testid={`etapa-${etapa.nombre.toLowerCase()}`}
+                    data-estado={estado}
+                  >
+                    <Punto estado={estado} />
+                    <span className="font-medium leading-none">{etapa.nombre}</span>
+                  </div>
+                )}
               </Tooltip>
             </React.Fragment>
           );

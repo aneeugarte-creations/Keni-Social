@@ -12,7 +12,9 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import {
   Dialog,
   DialogContent,
@@ -161,9 +163,30 @@ export function TarjetaAusencia({
   const etiquetaTipo =
     TIPOS_AUSENCIA.find((t) => t.valor === ausencia.tipo)?.etiqueta ?? ausencia.tipo;
 
+  const acciones: EntradaMenuContextual[] = [
+    {
+      etiqueta: "Editar",
+      icono: Pencil,
+      onClick: () => setEditando(true),
+      deshabilitado: borrar.isPending,
+    },
+    {
+      etiqueta: "Borrar",
+      icono: Trash2,
+      destructivo: true,
+      onClick: () => borrar.mutate(),
+      deshabilitado: borrar.isPending,
+    },
+  ];
+
   return (
     <Card>
-      <CardContent className="flex items-start justify-between gap-3 p-4">
+      <FilaConAcciones
+        como="div"
+        realce
+        onPrimaria={() => setEditando(true)}
+        acciones={acciones}
+      >
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline" className="font-normal">
@@ -181,33 +204,7 @@ export function TarjetaAusencia({
             <div className="text-sm text-muted-foreground">{ausencia.motivo}</div>
           )}
         </div>
-        <div className="flex shrink-0 items-center">
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Editar ausencia"
-            className="text-muted-foreground hover:text-foreground"
-            onClick={() => setEditando(true)}
-            disabled={borrar.isPending}
-          >
-            <Pencil className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Borrar ausencia"
-            className="text-muted-foreground hover:text-destructive"
-            onClick={() => borrar.mutate()}
-            disabled={borrar.isPending}
-          >
-            {borrar.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Trash2 className="h-4 w-4" />
-            )}
-          </Button>
-        </div>
-      </CardContent>
+      </FilaConAcciones>
       <DialogoEditarAusencia
         ausencia={ausencia}
         abierto={editando}

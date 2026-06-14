@@ -493,6 +493,40 @@ function FilaIdea({
   const descartada = idea.estado === "descartada";
 
   const acciones: EntradaMenuContextual[] = [
+    // Aprobar: visible si está propuesta (no aprobada y no descartada)
+    ...(!aprobada && !descartada
+      ? [
+          {
+            etiqueta: "Aprobar",
+            icono: CheckCircle2,
+            deshabilitado: cambiarEstado.isPending,
+            onClick: () => cambiarEstado.mutate("aprobada"),
+          },
+        ]
+      : []),
+    // Descartar: visible si aún no está descartada
+    ...(!descartada
+      ? [
+          {
+            etiqueta: "Descartar",
+            icono: CircleSlash,
+            deshabilitado: cambiarEstado.isPending,
+            onClick: () => cambiarEstado.mutate("descartada"),
+          },
+        ]
+      : []),
+    // Reactivar: visible solo si descartada
+    ...(descartada
+      ? [
+          {
+            etiqueta: "Reactivar",
+            icono: RotateCcw,
+            deshabilitado: cambiarEstado.isPending,
+            onClick: () => cambiarEstado.mutate("propuesta"),
+          },
+        ]
+      : []),
+    // Borrar: siempre visible
     {
       etiqueta: "Borrar",
       icono: Trash2,
@@ -549,42 +583,8 @@ function FilaIdea({
         <p className="line-clamp-3 text-sm text-muted-foreground">{idea.descripcion}</p>
       )}
 
-      {!generada && (
-      <div className="flex flex-wrap items-center gap-2 pt-1">
-        {!aprobada && !descartada && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => cambiarEstado.mutate("aprobada")}
-            disabled={cambiarEstado.isPending}
-          >
-            <CheckCircle2 className="h-4 w-4" />
-            Aprobar
-          </Button>
-        )}
-        {!descartada && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => cambiarEstado.mutate("descartada")}
-            disabled={cambiarEstado.isPending}
-          >
-            <CircleSlash className="h-4 w-4" />
-            Descartar
-          </Button>
-        )}
-        {descartada && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => cambiarEstado.mutate("propuesta")}
-            disabled={cambiarEstado.isPending}
-          >
-            <RotateCcw className="h-4 w-4" />
-            Reactivar
-          </Button>
-        )}
-        {aprobada && (
+      {aprobada && !generada && (
+        <div className="flex flex-wrap items-center gap-2 pt-1">
           <Button
             variant="outline"
             size="sm"
@@ -594,8 +594,7 @@ function FilaIdea({
             {generando ? <Loader2 className="h-4 w-4 animate-spin" /> : <MarcaIA />}
             {generando ? "Generando…" : "Generar contenido"}
           </Button>
-        )}
-      </div>
+        </div>
       )}
 
       {generacion && (ejecutando || generacion.estado === "error") && (

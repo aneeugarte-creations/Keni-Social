@@ -1,13 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { ListChecks, Search, SquarePen } from "lucide-react";
+import { ListChecks, Search } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import * as React from "react";
 
-import { EditorPromptOverlay } from "@/components/biblioteca/EditorPromptOverlay";
-import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSesion } from "@/hooks/sesion-contexto";
@@ -34,10 +30,11 @@ import { RielInvestigacion } from "@/pages/noticias/RielInvestigacion";
  *       vieja `/contenido/texto/algoritmos` redirige aquí.
  *   PROCESO
  *     · PIPELINE (núcleo): UN solo proceso en dos tramos. Aguas arriba, el riel INFORMATIVO de
- *       ingesta (`RielInvestigacion`: la máquina descubre/agrupa/rankea sola). En el control,
- *       la tira `PipelineEnVivo` recortada a Investigación (`soloProceso`) —Selección + Validación,
- *       cada etapa con su switch y su «Editar prompt» en overlay—. Debajo, el índice editable de
- *       TODOS los prompts del motor (también in-place, vía `EditorPromptOverlay`).
+ *       ingesta (`RielInvestigacion`: la máquina descubre/agrupa/rankea sola; cada etapa con
+ *       prompt es una BURBUJA clicable que lo edita in-place). En el control, la tira
+ *       `PipelineEnVivo` recortada a Investigación (`soloProceso`) —Selección + Validación, con
+ *       el switch inline y «Editar prompt»/«Excepciones» en el menú de la etapa—. El repertorio
+ *       completo de prompts vive en la Biblioteca (Texto · Documentos); no se duplica aquí.
  *   SALIDA
  *     · MESA DE REDACCIÓN (`Cobertura`): el pool segmentado por líneas con usar/descartar; lo que
  *       el humano revisa. La ruta vieja `/datos/investigacion` redirige aquí.
@@ -58,28 +55,15 @@ const SECCIONES: readonly Seccion[] = [
   "contenidos",
 ];
 
-/** Docs de la Biblioteca por etapa de la tira de control: el lápiz «Editar prompt» de Validación
- *  abre su doc en overlay. Selección es mecánica (sin prompt propio): no lleva lápiz. */
+/** Docs de la Biblioteca por etapa de la tira de control: la etapa Validación abre su doc en
+ *  overlay desde su menú. Selección es mecánica (sin prompt propio). */
 const DOC_POR_ETAPA = { validacion: "prompt/validacion" } as const;
-
-/** Prompts del motor de investigación, editables IN-PLACE (overlay). El de Validación vive además
- *  en la tira de control y varios tienen su lápiz en el riel; aquí está el repertorio completo. */
-const PROMPTS: readonly { etiqueta: string; doc: string }[] = [
-  { etiqueta: "Validación / verificación", doc: "prompt/validacion" },
-  { etiqueta: "Fusión de historias", doc: "prompt/fusion" },
-  { etiqueta: "Traducción", doc: "prompt/traduccion" },
-  { etiqueta: "Línea editorial", doc: "prompt/editorial" },
-  { etiqueta: "Clasificación por marca", doc: "prompt/clasificacion-marca" },
-];
 
 export default function CockpitInvestigacion() {
   const { usuario } = useSesion();
   const esAdmin = usuario?.rol === "admin";
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-
-  // Prompt abierto en el overlay «Editar prompt» del índice de prompts (in-place).
-  const [docAbierto, setDocAbierto] = React.useState<string | null>(null);
 
   const seccionParam = searchParams.get("seccion");
   const seccion: Seccion = SECCIONES.includes(seccionParam as Seccion)
@@ -169,34 +153,6 @@ export default function CockpitInvestigacion() {
               />
             ) : null}
           </section>
-
-          {/* Índice de prompts del motor, editable IN-PLACE (overlay, sin salir del cockpit). */}
-          {esAdmin && (
-            <Card>
-              <CardHeader className="p-4 pb-2">
-                <CardTitle className="flex items-center gap-1.5 text-sm">
-                  <SquarePen className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                  Prompts del motor
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 pt-2">
-                <ul className="space-y-1">
-                  {PROMPTS.map((p) => (
-                    <FilaConAcciones
-                      key={p.doc}
-                      como="li"
-                      kebab="nunca"
-                      realce
-                      onPrimaria={() => setDocAbierto(p.doc)}
-                      acciones={[]}
-                    >
-                      {p.etiqueta}
-                    </FilaConAcciones>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          )}
         </TabsContent>
 
         {/* SALIDA · MESA DE REDACCIÓN: el pool con usar/descartar (Cobertura). */}
@@ -209,12 +165,6 @@ export default function CockpitInvestigacion() {
           <ContenidosHub />
         </TabsContent>
       </Tabs>
-
-      <EditorPromptOverlay
-        docId={docAbierto}
-        abierto={docAbierto !== null}
-        onCerrar={() => setDocAbierto(null)}
-      />
     </>
   );
 }

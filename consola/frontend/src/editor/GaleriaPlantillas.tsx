@@ -23,6 +23,8 @@ import {
   useFiltroPlantillas,
   useLotes,
 } from "@/components/plantillas/FiltroPlantillas";
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { urlMedia, type PlantillaDiseno } from "@/lib/api";
 import { agruparPorCategoria, normalizarCategoria } from "@/lib/categoriasPlantilla";
 
@@ -212,154 +214,165 @@ export function ContenidoPlantillas({
   // Tarjeta de plantilla: miniatura con la relación de aspecto REAL del documento (la caja
   // reserva el alto exacto antes de cargar la imagen: placeholder sin layout shift y altura
   // variable del masonry) + título/acciones debajo. Hover: elevación + scale sutil (~150ms).
-  const tarjeta = (p: PlantillaDiseno) => (
-    <div
-      key={p.id}
-      data-plantilla-id={p.id}
-      draggable={dndActivo || undefined}
-      onDragStart={
-        dndActivo
-          ? (e) => {
-              setArrastrando(p.id);
-              e.dataTransfer.effectAllowed = "move";
-            }
-          : undefined
-      }
-      onDragEnter={
-        dndActivo
-          ? () => {
-              if (!arrastrando || arrastrando === p.id) return;
-              const o = plantillas.find((x) => x.id === arrastrando);
-              if (o && claveSeccion(o) === claveSeccion(p)) setSobre(p.id);
-            }
-          : undefined
-      }
-      onDragOver={
-        dndActivo
-          ? (e) => {
-              e.preventDefault();
-              e.dataTransfer.dropEffect = "move";
-            }
-          : undefined
-      }
-      onDragLeave={dndActivo ? () => setSobre((s) => (s === p.id ? null : s)) : undefined}
-      onDrop={dndActivo ? (e) => { e.preventDefault(); soltarSobre(p.id); } : undefined}
-      onDragEnd={dndActivo ? () => { setArrastrando(null); setSobre(null); } : undefined}
-      className={`group relative rounded transition-[outline] ${dndActivo ? "cursor-move" : ""} ${
-        arrastrando === p.id ? "opacity-50" : ""
-      } ${
-        sobre === p.id && arrastrando && arrastrando !== p.id
-          ? "outline-dashed outline-2 outline-offset-2 outline-primary"
-          : "outline-none"
-      }`}
-    >
-      <button
-        onClick={() => onCargar(p)}
-        title={`Cargar «${p.nombre}»`}
-        className="block w-full overflow-hidden rounded border border-border bg-muted/40 transition-[transform,box-shadow] duration-150 hover:shadow-lg hover:ring-2 hover:ring-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-safe:hover:scale-[1.02]"
-      >
-        <div className="w-full" style={{ aspectRatio: String(ratioPlantilla(p)) }}>
-          {/* Miniatura guardada (la genera el estudio al guardar) o, si falta —p. ej.
-              plantillas creadas por API/agente—, el render on-demand del documento. */}
-          {imagenRota.has(p.id) ? (
-            <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
-              Sin vista previa
-            </div>
-          ) : (
-            <img
-              src={p.miniatura ? urlMedia(p.miniatura) : `/api/plantillas-diseno/${p.id}/preview`}
-              alt={p.nombre}
-              loading="lazy"
-              draggable={false}
-              onError={() => setImagenRota((prev) => new Set([...prev, p.id]))}
-              className="h-full w-full object-contain"
-            />
-          )}
-        </div>
-      </button>
-      {/* Badge de categoría sobre la tarjeta (el de tipo va abajo, junto al nombre) */}
-      <div className="absolute left-1.5 top-1.5 flex max-w-[calc(100%-3.75rem)] flex-wrap items-start gap-1">
-        <BadgeCategoria
-          categoria={p.categoria}
-          onCambiar={onCategorizar ? (slug) => onCategorizar(p, slug) : undefined}
-        />
-      </div>
-      {/* Pie: etiqueta de tipo + título, fuera de la miniatura. Clic en el título
-          renombra inline (la miniatura de arriba abre la plantilla). */}
-      <div className="flex items-center gap-1 px-1.5 py-1">
-        <BadgeTipo tipo={p.tipo ?? "foto"} />
-        {onRenombrar && editId === p.id ? (
-          <input
-            autoFocus
-            value={editVal}
-            onChange={(e) => setEditVal(e.target.value)}
-            onBlur={() => commit(p)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.stopPropagation();
-                commit(p);
-              } else if (e.key === "Escape") {
-                e.stopPropagation();
-                setEditId(null);
-                commitHecho.current = false;
+  // Acciones secundarias (Duplicar, Borrar) viven en el menú contextual, accesible por click
+  // derecho, long-press, Shift+F10 o teclado (FilaConAcciones).
+  const tarjeta = (p: PlantillaDiseno) => {
+    const accionesMenuContextual: EntradaMenuContextual[] = [];
+    if (onDuplicar) {
+      accionesMenuContextual.push({
+        etiqueta: "Duplicar",
+        icono: Copy,
+        onClick: () => onDuplicar(p),
+      });
+    }
+    if (onBorrar) {
+      accionesMenuContextual.push({
+        etiqueta: "Borrar",
+        icono: Trash2,
+        onClick: () => onBorrar(p),
+        destructivo: true,
+      });
+    }
+
+    return (
+      <div
+        key={p.id}
+        data-plantilla-id={p.id}
+        draggable={dndActivo || undefined}
+        onDragStart={
+          dndActivo
+            ? (e) => {
+                setArrastrando(p.id);
+                e.dataTransfer.effectAllowed = "move";
               }
-            }}
-            className="block min-w-0 flex-1 rounded border border-primary bg-background px-1 py-0.5 text-xs"
-          />
-        ) : onRenombrar ? (
+            : undefined
+        }
+        onDragEnter={
+          dndActivo
+            ? () => {
+                if (!arrastrando || arrastrando === p.id) return;
+                const o = plantillas.find((x) => x.id === arrastrando);
+                if (o && claveSeccion(o) === claveSeccion(p)) setSobre(p.id);
+              }
+            : undefined
+        }
+        onDragOver={
+          dndActivo
+            ? (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+              }
+            : undefined
+        }
+        onDragLeave={dndActivo ? () => setSobre((s) => (s === p.id ? null : s)) : undefined}
+        onDrop={dndActivo ? (e) => { e.preventDefault(); soltarSobre(p.id); } : undefined}
+        onDragEnd={dndActivo ? () => { setArrastrando(null); setSobre(null); } : undefined}
+        className={`group relative rounded transition-[outline] ${dndActivo ? "cursor-move" : ""} ${
+          arrastrando === p.id ? "opacity-50" : ""
+        } ${
+          sobre === p.id && arrastrando && arrastrando !== p.id
+            ? "outline-dashed outline-2 outline-offset-2 outline-primary"
+            : "outline-none"
+        }`}
+      >
+        <FilaConAcciones
+          como="div"
+          kebab="nunca"
+          realce
+          onPrimaria={() => onCargar(p)}
+          acciones={accionesMenuContextual}
+        >
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setEditId(p.id);
-              setEditVal(p.nombre || "");
-              commitHecho.current = false;
-            }}
-            title="Clic para renombrar"
-            className="min-w-0 flex-1 truncate text-left text-xs text-muted-foreground hover:text-foreground"
+            onClick={() => onCargar(p)}
+            title={`Cargar «${p.nombre}»`}
+            className="block w-full overflow-hidden rounded border border-border bg-muted/40 transition-[transform,box-shadow] duration-150 hover:shadow-lg hover:ring-2 hover:ring-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-safe:hover:scale-[1.02]"
           >
-            {p.nombre || "(sin nombre)"}
+            <div className="w-full" style={{ aspectRatio: String(ratioPlantilla(p)) }}>
+              {/* Miniatura guardada (la genera el estudio al guardar) o, si falta —p. ej.
+                  plantillas creadas por API/agente—, el render on-demand del documento. */}
+              {imagenRota.has(p.id) ? (
+                <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">
+                  Sin vista previa
+                </div>
+              ) : (
+                <img
+                  src={p.miniatura ? urlMedia(p.miniatura) : `/api/plantillas-diseno/${p.id}/preview`}
+                  alt={p.nombre}
+                  loading="lazy"
+                  draggable={false}
+                  onError={() => setImagenRota((prev) => new Set([...prev, p.id]))}
+                  className="h-full w-full object-contain"
+                />
+              )}
+            </div>
           </button>
-        ) : (
-          <div className="min-w-0 flex-1 truncate text-left text-xs">{p.nombre || "(sin nombre)"}</div>
-        )}
+          {/* Badge de categoría sobre la tarjeta (el de tipo va abajo, junto al nombre) */}
+          <div className="absolute left-1.5 top-1.5 flex max-w-[calc(100%-3.75rem)] flex-wrap items-start gap-1">
+            <BadgeCategoria
+              categoria={p.categoria}
+              onCambiar={onCategorizar ? (slug) => onCategorizar(p, slug) : undefined}
+            />
+          </div>
+          {/* Pie: etiqueta de tipo + título, fuera de la miniatura. Clic en el título
+              renombra inline (la miniatura de arriba abre la plantilla). */}
+          <div className="flex items-center gap-1 px-1.5 py-1">
+            <BadgeTipo tipo={p.tipo ?? "foto"} />
+            {onRenombrar && editId === p.id ? (
+              <input
+                autoFocus
+                value={editVal}
+                onChange={(e) => setEditVal(e.target.value)}
+                onBlur={() => commit(p)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.stopPropagation();
+                    commit(p);
+                  } else if (e.key === "Escape") {
+                    e.stopPropagation();
+                    setEditId(null);
+                    commitHecho.current = false;
+                  }
+                }}
+                className="block min-w-0 flex-1 rounded border border-primary bg-background px-1 py-0.5 text-xs"
+              />
+            ) : onRenombrar ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditId(p.id);
+                  setEditVal(p.nombre || "");
+                  commitHecho.current = false;
+                }}
+                title="Clic para renombrar"
+                className="min-w-0 flex-1 truncate text-left text-xs text-muted-foreground hover:text-foreground"
+              >
+                {p.nombre || "(sin nombre)"}
+              </button>
+            ) : (
+              <div className="min-w-0 flex-1 truncate text-left text-xs">{p.nombre || "(sin nombre)"}</div>
+            )}
+          </div>
+          {/* Rotación: marca la plantilla para entrar en la ROTACIÓN automática de la marca
+              (cada post nuevo se lleva la siguiente del grupo; mismo color en todas las redes).
+              Necesita ≥2 plantillas marcadas para activarse. */}
+          {onRotar && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onRotar(p, !p.rotar); }}
+              title={p.rotar ? "En rotación: clic para sacarla del grupo" : "Clic para incluirla en la rotación de la marca"}
+              className={`flex w-full items-center justify-center gap-1 px-1.5 py-1 text-[11px] font-medium transition-colors ${
+                p.rotar
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Repeat className="h-3 w-3" />
+              {p.rotar ? "En rotación" : "Rotación"}
+            </button>
+          )}
+        </FilaConAcciones>
       </div>
-      {/* Rotación: marca la plantilla para entrar en la ROTACIÓN automática de la marca
-          (cada post nuevo se lleva la siguiente del grupo; mismo color en todas las redes).
-          Necesita ≥2 plantillas marcadas para activarse. */}
-      {onRotar && (
-        <button
-          onClick={(e) => { e.stopPropagation(); onRotar(p, !p.rotar); }}
-          title={p.rotar ? "En rotación: clic para sacarla del grupo" : "Clic para incluirla en la rotación de la marca"}
-          className={`flex w-full items-center justify-center gap-1 px-1.5 py-1 text-[11px] font-medium transition-colors ${
-            p.rotar
-              ? "text-emerald-600 dark:text-emerald-400"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <Repeat className="h-3 w-3" />
-          {p.rotar ? "En rotación" : "Rotación"}
-        </button>
-      )}
-      {onDuplicar && (
-        <button
-          onClick={(e) => { e.stopPropagation(); onDuplicar(p); }}
-          title="Duplicar plantilla"
-          className="absolute right-8 top-1 rounded bg-background/80 p-1 text-muted-foreground opacity-0 hover:text-foreground group-hover:opacity-100"
-        >
-          <Copy className="h-3.5 w-3.5" />
-        </button>
-      )}
-      {onBorrar && (
-        <button
-          onClick={(e) => { e.stopPropagation(); onBorrar(p); }}
-          title="Borrar plantilla"
-          className="absolute right-1 top-1 rounded bg-background/80 p-1 text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
-      )}
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">

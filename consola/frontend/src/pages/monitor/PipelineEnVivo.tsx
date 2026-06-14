@@ -29,7 +29,8 @@ import { ChevronRight, SquarePen, Users } from "lucide-react";
 import * as React from "react";
 
 import { EditorPromptOverlay } from "@/components/biblioteca/EditorPromptOverlay";
-import { Button } from "@/components/ui/button";
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -152,57 +153,47 @@ function SwitchAjuste({ ajuste, ariaLabel }: { ajuste: AjusteAdmin; ariaLabel: s
   );
 }
 
-/** Acceso (icono → diálogo) a las EXCEPCIONES POR MARCA de una etapa de la tira: los toggles
- *  por-marca existentes del catálogo (clave `base::marca`), con el patrón único
- *  `ExcepcionesPorMarca`. Con el switch físico de la etapa apagado, las excepciones se ven
- *  apagadas/deshabilitadas (no aplican hasta encender la etapa). */
-function ExcepcionesEtapa({
+/** Diálogo CONTROLADO de las EXCEPCIONES POR MARCA de una etapa: los toggles por-marca
+ *  existentes del catálogo (clave `base::marca`), con el patrón único `ExcepcionesPorMarca`.
+ *  Ya no pinta su propio disparador: lo abre la acción «Excepciones por marca» del menú de la
+ *  etapa (click derecho / long-press). Con el switch físico de la etapa apagado, las
+ *  excepciones se ven apagadas/deshabilitadas (no aplican hasta encender la etapa). */
+function DialogoExcepciones({
   etiqueta,
   base,
   nota,
-  ajustes,
+  deEtapa,
   etapaActiva,
+  abierto,
+  onOpenChange,
 }: {
   etiqueta: string;
   base: string;
   nota: string;
-  ajustes: AjusteAdmin[];
+  deEtapa: AjusteAdmin[];
   etapaActiva: boolean;
+  abierto: boolean;
+  onOpenChange: (v: boolean) => void;
 }) {
-  const [abierto, setAbierto] = React.useState(false);
   const guardar = useGuardarAjuste();
-  const deEtapa = ajustes.filter((a) => a.clave.startsWith(`${base}::`));
-  if (deEtapa.length === 0) return null;
   return (
-    <>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-6 w-6 p-0 text-muted-foreground"
-        onClick={() => setAbierto(true)}
-        title={`Excepciones por marca de ${etiqueta}`}
-        aria-label={`Excepciones por marca de ${etiqueta}`}
-      >
-        <Users className="h-3.5 w-3.5" aria-hidden="true" />
-      </Button>
-      <Dialog open={abierto} onOpenChange={setAbierto}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{etiqueta} · excepciones por marca</DialogTitle>
-            <DialogDescription>
-              Sin tocar, cada marca sigue el switch global de la etapa. Apágala para desviarse.{" "}
-              {nota}
-            </DialogDescription>
-          </DialogHeader>
-          <ExcepcionesPorMarca
-            ajustes={deEtapa}
-            onGuardar={(cuerpo) => guardar.mutate(cuerpo)}
-            guardando={guardar.isPending}
-            maestros={{ [base]: etapaActiva }}
-          />
-        </DialogContent>
-      </Dialog>
-    </>
+    <Dialog open={abierto} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{etiqueta} · excepciones por marca</DialogTitle>
+          <DialogDescription>
+            Sin tocar, cada marca sigue el switch global de la etapa. Apágala para desviarse.{" "}
+            {nota}
+          </DialogDescription>
+        </DialogHeader>
+        <ExcepcionesPorMarca
+          ajustes={deEtapa}
+          onGuardar={(cuerpo) => guardar.mutate(cuerpo)}
+          guardando={guardar.isPending}
+          maestros={{ [base]: etapaActiva }}
+        />
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -228,6 +219,8 @@ export function PipelineEnVivo({
 }) {
   // Doc abierto en el overlay «Editar prompt» (in-place, sin sacarte del cockpit).
   const [docEditando, setDocEditando] = React.useState<string | null>(null);
+  // Etapa cuyo diálogo de «Excepciones por marca» está abierto (o null).
+  const [excepEtapa, setExcepEtapa] = React.useState<EtapaId | null>(null);
   // Recorte por motor: el cockpit de Producción pide solo Copy/Arte; el de Investigación, solo
   // Selección/Validación. Sin `soloProceso`, la tira completa (las cuatro etapas).
   const etapas = soloProceso ? ETAPAS.filter((e) => e.proceso === soloProceso) : ETAPAS;
@@ -286,6 +279,24 @@ export function PipelineEnVivo({
             const ajuste = esAdmin ? porClave.get(e.clave) : undefined;
             const fuera = proceso != null && proceso !== e.proceso;
             const doc = docPorEtapa?.[e.id];
+            const deEtapa = porMarca.filter((a) => a.clave.startsWith(`${e.excepciones.base}::`));
+            // Acciones secundarias de la etapa (click derecho / long-press): editar su prompt
+            // y abrir sus excepciones por marca. El switch es el control PRINCIPAL: va inline.
+            const acciones: EntradaMenuContextual[] = [];
+            if (esAdmin && doc) {
+              acciones.push({
+                etiqueta: `Editar el prompt de ${e.etiqueta}`,
+                icono: SquarePen,
+                onClick: () => setDocEditando(doc),
+              });
+            }
+            if (ajuste && deEtapa.length > 0) {
+              acciones.push({
+                etiqueta: `Excepciones por marca de ${e.etiqueta}`,
+                icono: Users,
+                onClick: () => setExcepEtapa(e.id),
+              });
+            }
             return (
               <React.Fragment key={e.id}>
                 {i > 0 && (
@@ -294,12 +305,15 @@ export function PipelineEnVivo({
                     aria-hidden="true"
                   />
                 )}
-                <div
+                <FilaConAcciones
+                  como="div"
+                  acciones={acciones}
+                  realce
+                  etiquetaAcciones={`Acciones de ${e.etiqueta}`}
                   className={cn(
                     "min-w-0 flex-1 rounded-lg border border-border/70 p-3",
                     fuera && "opacity-40",
                   )}
-                  title={e.descripcion}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
@@ -309,37 +323,13 @@ export function PipelineEnVivo({
                       />
                       <span className="truncate">{e.etiqueta}</span>
                     </span>
-                    <span className="flex shrink-0 items-center gap-1">
-                      {/* «Editar prompt» (admin): abre el editor del doc de la etapa en un
-                          OVERLAY encima del cockpit, sin navegar a la Biblioteca. */}
-                      {esAdmin && doc && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0 text-muted-foreground"
-                          title={`Editar el prompt de ${e.etiqueta}`}
-                          aria-label={`Editar el prompt de ${e.etiqueta}`}
-                          onClick={() => setDocEditando(doc)}
-                        >
-                          <SquarePen className="h-3.5 w-3.5" aria-hidden="true" />
-                        </Button>
-                      )}
-                      {ajuste && (
-                        <>
-                          <ExcepcionesEtapa
-                            etiqueta={e.etiqueta}
-                            base={e.excepciones.base}
-                            nota={e.excepciones.nota}
-                            ajustes={porMarca}
-                            etapaActiva={Boolean(ajuste.valor)}
-                          />
-                          <SwitchAjuste
-                            ajuste={ajuste}
-                            ariaLabel={`${ajuste.etiqueta} (switch de la etapa ${e.etiqueta})`}
-                          />
-                        </>
-                      )}
-                    </span>
+                    {/* El switch de la etapa es el control PRINCIPAL: se queda inline. */}
+                    {ajuste && (
+                      <SwitchAjuste
+                        ajuste={ajuste}
+                        ariaLabel={`${ajuste.etiqueta} (switch de la etapa ${e.etiqueta})`}
+                      />
+                    )}
                   </div>
                   <p className="mt-1.5 text-xs tabular-nums text-muted-foreground">
                     <span className={enCurso[e.id] > 0 ? "font-medium text-foreground" : undefined}>
@@ -357,7 +347,18 @@ export function PipelineEnVivo({
                       )}
                     </p>
                   )}
-                </div>
+                  {ajuste && deEtapa.length > 0 && (
+                    <DialogoExcepciones
+                      etiqueta={e.etiqueta}
+                      base={e.excepciones.base}
+                      nota={e.excepciones.nota}
+                      deEtapa={deEtapa}
+                      etapaActiva={Boolean(ajuste.valor)}
+                      abierto={excepEtapa === e.id}
+                      onOpenChange={(v) => setExcepEtapa(v ? e.id : null)}
+                    />
+                  )}
+                </FilaConAcciones>
               </React.Fragment>
             );
           })}
