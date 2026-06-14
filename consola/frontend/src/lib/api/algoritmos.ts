@@ -3,18 +3,14 @@
 import { peticion, query } from "./_core";
 import type {
   CuerpoFuenteAlgoritmo,
-  EstadoSugerenciaEditorial,
   FiltrosAlgoritmos,
   RespuestaATextoAlgoritmo,
   RespuestaAlgoritmos,
-  RespuestaAplicarSugerencia,
   RespuestaArchivarAlgoritmo,
-  RespuestaDescartarSugerencia,
   RespuestaFuenteAlgoritmo,
   RespuestaMensaje,
   RespuestaRefrescarAlgoritmos,
   RespuestaSembrarAlgoritmos,
-  RespuestaSugerenciasAlgoritmo,
 } from "@/types";
 
 export const apiAlgoritmos = {
@@ -59,24 +55,4 @@ export const apiAlgoritmos = {
       metodo: "POST",
       json: { archivada },
     }),
-
-  // --- Sugerencias editoriales (digest diario: cambios a fichas/límites de plataforma) ---
-  sugerenciasAlgoritmo: (estado?: EstadoSugerenciaEditorial, signal?: AbortSignal) =>
-    peticion<RespuestaSugerenciasAlgoritmo>(
-      `/algoritmos/sugerencias${query({ estado })}`,
-      { signal },
-    ),
-  generarSugerenciasAlgoritmo: () =>
-    peticion<RespuestaMensaje>("/algoritmos/sugerencias/generar", { metodo: "POST" }),
-  aplicarSugerenciaAlgoritmo: (id: string) =>
-    peticion<RespuestaAplicarSugerencia>(
-      `/algoritmos/sugerencias/${encodeURIComponent(id)}/aplicar`,
-      { metodo: "POST" },
-    ),
-  descartarSugerenciaAlgoritmo: (id: string) =>
-    peticion<RespuestaDescartarSugerencia>(
-      `/algoritmos/sugerencias/${encodeURIComponent(id)}/descartar`,
-      { metodo: "POST" },
-    ),
-
 };

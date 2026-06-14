@@ -29,7 +29,7 @@ import { RielInvestigacion } from "@/pages/noticias/RielInvestigacion";
  *
  *   ENTRADA
  *     · FUENTES (`Fuentes`): los canales que alimentan el pool.
- *     · ALGORITMOS (`Algoritmos`): inteligencia de plataforma + trends + sugerencias. La ruta
+ *     · ALGORITMOS (`Algoritmos`): inteligencia de plataforma + trends. La ruta
  *       vieja `/contenido/texto/algoritmos` redirige aquí.
  *   PROCESO
  *     · PIPELINE (núcleo): UN solo proceso en dos tramos. Aguas arriba, el riel INFORMATIVO de
@@ -69,7 +69,6 @@ const PROMPTS: readonly { etiqueta: string; doc: string }[] = [
   { etiqueta: "Traducción", doc: "prompt/traduccion" },
   { etiqueta: "Línea editorial", doc: "prompt/editorial" },
   { etiqueta: "Clasificación por marca", doc: "prompt/clasificacion-marca" },
-  { etiqueta: "Sugerencias editoriales", doc: "prompt/sugerencias" },
 ];
 
 export default function CockpitInvestigacion() {
@@ -105,7 +104,7 @@ export default function CockpitInvestigacion() {
     <>
       <TituloPagina titulo="Investigación" icono={Search} />
       {/* El menú propio del cockpit se oculta en la pestaña Algoritmos, que aporta el suyo
-          (Nueva fuente, Sugerencias…): así no se solapan dos «⋮» en la barra. */}
+          (Refrescar…): así no se solapan dos «⋮» en la barra. */}
       {seccion !== "algoritmos" && (
         <AccionesPagina>
           <MenuAcciones ajustesTitulo="Ajustes de investigación" ajustes={<PanelInvestigacion />}>
@@ -142,7 +141,7 @@ export default function CockpitInvestigacion() {
           <Fuentes />
         </TabsContent>
 
-        {/* ENTRADA · ALGORITMOS: inteligencia de plataforma + trends + sugerencias. */}
+        {/* ENTRADA · ALGORITMOS: inteligencia de plataforma + trends. */}
         <TabsContent value="algoritmos">
           <Algoritmos />
         </TabsContent>

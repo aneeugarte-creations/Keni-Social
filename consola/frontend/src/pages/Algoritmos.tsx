@@ -1,12 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Lightbulb,
-  Newspaper,
-  Plus,
-  RefreshCw,
-  Sparkles,
-  Wand2,
-} from "lucide-react";
+import { Newspaper, Plus, RefreshCw, Sparkles } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -14,7 +7,6 @@ import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { AccionesPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -32,7 +24,6 @@ import type {
   FuenteAlgoritmo,
   NivelAlgoritmo,
   NoticiaAlgoritmo,
-  SugerenciaEditorial,
 } from "@/types";
 
 import { DialogoNuevaFuente } from "./algoritmos/DialogoNuevaFuente";
@@ -40,7 +31,6 @@ import { DialogoPropuesta } from "./algoritmos/DialogoPropuesta";
 import { FilaFuente } from "./algoritmos/FilaFuente";
 import { badgeNivel, TODAS } from "./algoritmos/lib";
 import { TarjetaNoticia } from "./algoritmos/TarjetaNoticia";
-import { TarjetaSugerencia } from "./algoritmos/TarjetaSugerencia";
 
 export default function Algoritmos() {
   const queryClient = useQueryClient();
@@ -129,54 +119,13 @@ export default function Algoritmos() {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  // Sugerencias editoriales (digest diario): query independiente de las noticias.
-  const sugerencias = useQuery({
-    queryKey: ["algoritmos", "sugerencias"],
-    queryFn: ({ signal }) => api.sugerenciasAlgoritmo("nueva", signal),
-  });
-  const invalidarSugerencias = () =>
-    queryClient.invalidateQueries({ queryKey: ["algoritmos", "sugerencias"] });
-
-  const generarSugerencias = useMutation({
-    mutationFn: () => api.generarSugerenciasAlgoritmo(),
-    onSuccess: (r) => toast.success(r.mensaje),
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  const aplicarSugerencia = useMutation({
-    mutationFn: (s: SugerenciaEditorial) => api.aplicarSugerenciaAlgoritmo(s.id),
-    onSuccess: (r) => {
-      toast.success(r.nota || "Aplicada a la ficha editorial.");
-      void invalidarSugerencias();
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  const descartarSugerencia = useMutation({
-    mutationFn: (s: SugerenciaEditorial) => api.descartarSugerenciaAlgoritmo(s.id),
-    onSuccess: () => {
-      toast.success("Sugerencia descartada.");
-      void invalidarSugerencias();
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
   const fuentes = data?.fuentes ?? [];
   const fuenteOcupada = toggleFuente.isPending || borrarFuente.isPending;
-  const sugerenciaOcupada = aplicarSugerencia.isPending || descartarSugerencia.isPending;
-  const listaSugerencias = sugerencias.data?.sugerencias ?? [];
 
   return (
     <div>
       <AccionesPagina>
         <MenuAcciones>
-          <ItemMenu
-            icono={Wand2}
-            onClick={() => generarSugerencias.mutate()}
-            disabled={generarSugerencias.isPending}
-          >
-            Generar sugerencias
-          </ItemMenu>
           <ItemMenu
             icono={RefreshCw}
             onClick={() => refrescar.mutate()}
@@ -207,35 +156,6 @@ export default function Algoritmos() {
         <div className="grid gap-4 lg:grid-cols-3">
           {/* Columna principal: noticias */}
           <div className="space-y-3 lg:col-span-2">
-            {/* Sugerencias editoriales (digest diario): solo se muestra si hay nuevas. */}
-            {listaSugerencias.length > 0 && (
-              <Card className="border-amber-500/30 bg-amber-500/[0.03]">
-                <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Lightbulb className="h-4 w-4 text-amber-500" aria-hidden="true" />
-                    Sugerencias editoriales
-                    <Badge variant="secondary">{listaSugerencias.length}</Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="pb-2 text-xs text-muted-foreground">
-                    Cambios sugeridos a la ficha de plataforma. Aplica o descarta.
-                  </p>
-                  <ul className="space-y-2">
-                    {listaSugerencias.map((s) => (
-                      <TarjetaSugerencia
-                        key={s.id}
-                        sugerencia={s}
-                        onAplicar={(sug) => aplicarSugerencia.mutate(sug)}
-                        onDescartar={(sug) => descartarSugerencia.mutate(sug)}
-                        ocupada={sugerenciaOcupada}
-                      />
-                    ))}
-                  </ul>
-                </CardContent>
-              </Card>
-            )}
-
             {/* Filtros */}
             <div className="flex flex-wrap items-center gap-2">
               <Select value={plataforma} onValueChange={setPlataforma}>
