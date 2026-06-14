@@ -97,9 +97,15 @@ export function FilaConAcciones({
       return;
     }
     // Ignora clicks originados en controles internos (incluido el kebab) o marcados.
-    const objetivo = e.target as HTMLElement;
-    if (objetivo.closest("button, a, input, select, textarea, label, [data-no-primaria]"))
-      return;
+    // Recorre desde e.target hasta este host (sin incluirlo): así un [data-no-primaria]
+    // que esté por ENCIMA del host (en un FilaConAcciones padre) no suprime la acción
+    // primaria de este hijo (ej. TarjetaTarea esMia dentro de TarjetaCobertura).
+    const host = e.currentTarget as HTMLElement;
+    let nodo: HTMLElement | null = e.target as HTMLElement;
+    while (nodo && nodo !== host) {
+      if (nodo.matches("button, a, input, select, textarea, label, [data-no-primaria]")) return;
+      nodo = nodo.parentElement;
+    }
     onPrimaria!();
   }
 

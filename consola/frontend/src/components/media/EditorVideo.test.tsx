@@ -84,8 +84,14 @@ describe("EditorVideo · Ola F", () => {
   it("botón quitar llama a onCambio('', '')", () => {
     const onCambio = vi.fn();
     renderEditor({ video: "clip.mp4", videoUrl: "/api/media/clip.mp4", onCambio });
-    const btnQuitar = screen.getByRole("button", { name: /quitar video/i });
-    fireEvent.click(btnQuitar);
+
+    // Con kebab="nunca" las acciones viven en el menú contextual de la preview.
+    const preview = screen.getByLabelText(/previsualización del video/i);
+    fireEvent.contextMenu(preview);
+
+    const menuItemQuitar = screen.getByRole("menuitem", { name: /quitar video/i });
+    fireEvent.click(menuItemQuitar);
+
     expect(onCambio).toHaveBeenCalledWith("", "");
   });
 

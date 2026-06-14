@@ -275,9 +275,11 @@ describe("Cobertura · Mesa — plan del día", () => {
     const frase = mx.getByTestId("frase-corroboracion").textContent ?? "";
     expect(frase).toMatch(/Confirmada por Reforma, El Universal y Milenio/);
     expect(frase).toMatch(/la abrió Reforma/);
-    // El SCORE es visible; el cálculo completo vive en su pop-up (clic), no en un tooltip.
+    // El SCORE es visible; el cálculo completo vive en su pop-up (menú contextual → Ver score).
     expect(mx.getByTestId("punto-prioridad").textContent).toMatch(/Score 55/);
-    fireEvent.click(mx.getByTestId("punto-prioridad"));
+    const hostMx = mx.getByTestId("historia-item").closest('[role="button"]');
+    fireEvent.contextMenu(hostMx!);
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Ver score/i }));
     await waitFor(() => expect(screen.getByTestId("popup-calculo")).toBeTruthy());
     expect(screen.getByTestId("calculo-score")).toBeTruthy();
   });
@@ -315,7 +317,8 @@ describe("Cobertura · Mesa — acciones de la tarjeta", () => {
     renderConProviders(<Cobertura />);
     await waitFor(() => expect(screen.getByTestId("seccion-mx")).toBeTruthy());
     const mx = within(screen.getByTestId("seccion-mx"));
-    fireEvent.click(mx.getByTestId("btn-empujar"));
+    const host = mx.getByTestId("historia-item").closest('[role="button"]');
+    fireEvent.click(host!);
     await waitFor(() =>
       expect(mockUsarHistoria).toHaveBeenCalledWith("h-1", { generar: true }),
     );
@@ -325,7 +328,9 @@ describe("Cobertura · Mesa — acciones de la tarjeta", () => {
     renderConProviders(<Cobertura />);
     await waitFor(() => expect(screen.getByTestId("seccion-mx")).toBeTruthy());
     const mx = within(screen.getByTestId("seccion-mx"));
-    fireEvent.click(mx.getByTestId("btn-descartar"));
+    const host = mx.getByTestId("historia-item").closest('[role="button"]');
+    fireEvent.contextMenu(host!);
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Descartar/ }));
     await waitFor(() => expect(mockDescartarHistoria).toHaveBeenCalledWith("h-1"));
   });
 
@@ -342,7 +347,9 @@ describe("Cobertura · Mesa — acciones de la tarjeta", () => {
     );
     renderConProviders(<Cobertura />);
     await waitFor(() => expect(screen.getByTestId("badge-sale-sola")).toBeTruthy());
-    expect(screen.getByTestId("btn-empujar").textContent).toMatch(/Adelantar/);
+    const host = screen.getByTestId("historia-item").closest('[role="button"]');
+    fireEvent.contextMenu(host!);
+    expect(await screen.findByRole("menuitem", { name: /Adelantar/i })).toBeTruthy();
   });
 });
 
@@ -384,8 +391,10 @@ describe("Cobertura · pestañas de flujo", () => {
         expect.anything(),
       ),
     );
-    const boton = await screen.findByTestId("btn-restaurar");
-    fireEvent.click(boton);
+    const card = await screen.findByTestId("historia-item");
+    const host = card.closest('[role="button"]');
+    fireEvent.contextMenu(host!);
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Devolver al pool/i }));
     await waitFor(() => expect(mockRestaurarHistoria).toHaveBeenCalledWith("h-desc"));
   });
 });
@@ -480,7 +489,10 @@ describe("Cobertura · vista Todas (lista plana clásica)", () => {
     mockHistorias.mockResolvedValue(RESPUESTA_UNA_HISTORIA);
     renderConProviders(<Cobertura />, usuario(), null);
     await waitFor(() => expect(screen.getByText("Historia de prueba multi-fuente")).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: /Ver fuentes corroborantes/i }));
+    const card = screen.getByTestId("historia-item");
+    const host = card.closest('[role="button"]');
+    fireEvent.contextMenu(host!);
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Ver.*fuentes/i }));
     await waitFor(() => expect(screen.getByTestId("lista-enlaces")).toBeTruthy());
     const lista = within(screen.getByTestId("lista-enlaces"));
     expect(lista.getByText("Fuente 1")).toBeTruthy();

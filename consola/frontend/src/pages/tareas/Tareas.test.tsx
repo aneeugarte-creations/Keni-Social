@@ -150,7 +150,9 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
 
     // En el Panorama (por defecto) el evento es una fila compacta; se despliega para actuar.
     fireEvent.click(await screen.findByText("Cruz Azul vs América"));
-    fireEvent.click(screen.getByRole("button", { name: /La cubro yo/ }));
+    // Item-first: click en la tarjeta (FilaConAcciones host) dispara cubrirEvento.
+    const grupo1 = screen.getByRole("group", { name: "Rol de cobertura" });
+    fireEvent.click(grupo1.closest("[role='button']")!);
     await waitFor(() => expect(cubrir).toHaveBeenCalledTimes(1));
     // El rol por defecto (Foto) viaja como `formato`: la cobertura es por rol.
     expect(cubrir).toHaveBeenCalledWith("ev9", undefined, "foto");
@@ -170,7 +172,9 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
 
     // Desplegar la fila del Panorama para llegar a la tarjeta accionable.
     fireEvent.click(await screen.findByText("Grabar el saque"));
-    fireEvent.click(screen.getByRole("button", { name: /Coger/ }));
+    // Item-first: click en la tarjeta «Libre» → acción primaria = coger.
+    const libreEl3 = await screen.findByText("Libre");
+    fireEvent.click(libreEl3.closest("[role='button']")!);
     await waitFor(() => expect(coger).toHaveBeenCalledTimes(1));
     expect(coger).toHaveBeenCalledWith("t9");
   });
@@ -197,14 +201,19 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
   it("un MANAGER (admin) ve 'Asignar'; un editor NO", async () => {
     const { unmount } = renderTareas([tarea({ titulo: "Reparto" })], [], usuario("admin", "u-admin"));
     fireEvent.click(await screen.findByText("Reparto")); // desplegar la fila del Panorama
-    expect(await screen.findByRole("button", { name: /Asignar/ })).toBeInTheDocument();
+    // Asignar está en el menú contextual (kebab="nunca"), no como botón visible.
+    const libreAdm = await screen.findByText("Libre");
+    fireEvent.contextMenu(libreAdm.closest("[role='button']")!);
+    expect(await screen.findByRole("menuitem", { name: /Asignar/ })).toBeInTheDocument();
     unmount();
 
     vi.restoreAllMocks();
     renderTareas([tarea({ titulo: "Reparto" })], [], usuario("editor", "u2"));
     fireEvent.click(await screen.findByText("Reparto"));
-    await screen.findByRole("button", { name: /Coger/ });
-    expect(screen.queryByRole("button", { name: /Asignar/ })).toBeNull();
+    const libreEd = await screen.findByText("Libre");
+    // El editor no tiene acciones secundarias: el menú no abre y Asignar no aparece.
+    fireEvent.contextMenu(libreEd.closest("[role='button']")!);
+    expect(screen.queryByRole("menuitem", { name: /Asignar/ })).toBeNull();
   });
 
   it("el 'Panorama' (por defecto) mezcla eventos por cubrir y tareas con dueño, y muestra lo último cogido", async () => {
@@ -257,9 +266,13 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
       usuario("admin", "u-admin"),
     );
 
-    // La fila compacta (un botón) se despliega y muestra la tarjeta con «Reasignar».
+    // La fila compacta (un botón) se despliega y muestra la tarjeta accionable.
     fireEvent.click(await screen.findByRole("button", { name: /Clip de Luis/ }));
-    expect(await screen.findByRole("button", { name: /Reasignar/ })).toBeInTheDocument();
+    // Reasignar está en el menú contextual; se accede con click derecho sobre la tarjeta.
+    const luisEls = await screen.findAllByText("luis");
+    const cardHostLuis = luisEls.map(el => el.closest("[role='button']")).find(Boolean)!;
+    fireEvent.contextMenu(cardHostLuis);
+    expect(await screen.findByRole("menuitem", { name: /Reasignar/ })).toBeInTheDocument();
   });
 
   it("MULTI-COBERTURA: varias personas cubren UN evento → una sola fila, y otra puede apuntarse", async () => {
@@ -285,7 +298,9 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect(screen.getAllByText("Cruz Azul vs América")).toHaveLength(titulosAntes);
     expect(screen.getAllByText("luis").length).toBeGreaterThan(0);
     expect(screen.getAllByText("ana").length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole("button", { name: /Apuntarme/ }));
+    // Item-first: click en el host de TarjetaCobertura (acción primaria = Apuntarme).
+    const grupoApuntar = screen.getByRole("group", { name: "Rol de cobertura" });
+    fireEvent.click(grupoApuntar.closest("[role='button']")!);
     await waitFor(() => expect(cubrir).toHaveBeenCalledWith("ev1", undefined, "foto"));
   });
 
@@ -334,7 +349,9 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     ]);
 
     fireEvent.click(await screen.findByText("Brasil vs Marruecos"));
-    fireEvent.click(screen.getByRole("button", { name: /La cubro yo/ }));
+    // Item-first: la cobertura huérfana muestra badge «Libre»; click en la tarjeta = coger.
+    const libreHuerfana = await screen.findByText("Libre");
+    fireEvent.click(libreHuerfana.closest("[role='button']")!);
     await waitFor(() => expect(coger).toHaveBeenCalledWith("t-huerfana"));
   });
 
@@ -355,8 +372,10 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     renderTareas([], [evento({ id: "ev9", titulo: "Cruz Azul vs América" })]);
 
     fireEvent.click(await screen.findByText("Cruz Azul vs América")); // desplegar la fila
-    fireEvent.click(screen.getByRole("button", { name: "Video" })); // elegir rol Video
-    fireEvent.click(screen.getByRole("button", { name: /La cubro yo/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Video" })); // elegir rol Video en SelectorRol
+    // Item-first: click en el host de la tarjeta (no en el botón Video) dispara cubrirEvento con el rol elegido.
+    const grupoRol = screen.getByRole("group", { name: "Rol de cobertura" });
+    fireEvent.click(grupoRol.closest("[role='button']")!);
     await waitFor(() => expect(cubrir).toHaveBeenCalledWith("ev9", undefined, "video"));
   });
 
@@ -372,7 +391,10 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     );
 
     fireEvent.click(await screen.findByRole("button", { name: /Cruz Azul vs América/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /Quitarme/ }));
+    // Item-first: la TarjetaTarea (enCobertura, esMia) tiene primaria=soltar.
+    // Se identifica por «· tú» que solo aparece cuando esMia=true.
+    const tuEl = await screen.findByText(/· tú/);
+    fireEvent.click(tuEl.closest("[role='button']")!);
     await waitFor(() => expect(soltar).toHaveBeenCalledWith("t-mia"));
   });
 

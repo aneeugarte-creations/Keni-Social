@@ -437,7 +437,10 @@ describe("Biblioteca de Prompts (tres máquinas + estrategia)", () => {
     fireEvent.click(await screen.findByText(/1 solicitud/));
     expect(await screen.findByText("Bandeja de solicitudes")).toBeInTheDocument();
     expect(await screen.findByText("Mejora el gancho")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Aprobar y publicar/ })).toBeInTheDocument();
+    // Las acciones (Aprobar/Rechazar) viven en menú contextual (item-first, kebab="nunca").
+    const host = screen.getByText("Mejora el gancho").closest("[role='button']")!;
+    fireEvent.contextMenu(host);
+    expect(screen.getByRole("menuitem", { name: /Aprobar y publicar/ })).toBeInTheDocument();
   });
 
   it("la búsqueda global salta a Documentos y filtra en cliente", async () => {

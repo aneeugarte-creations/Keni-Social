@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -101,10 +101,11 @@ describe("AgenteDetalle", () => {
     // Log por barrido: el resumen de la primera fila y, en la segunda (sin resumen), el error.
     expect(await screen.findByText("Validó 3 notas, descartó 1")).toBeInTheDocument();
     expect(screen.getByText("timeout")).toBeInTheDocument();
-    // Controles de IA: botón de editar prompt.
-    expect(screen.getByText(/Editar prompt/)).toBeInTheDocument();
-    // Barrer ahora (barrible).
-    expect(screen.getByText("Barrer ahora")).toBeInTheDocument();
+    // Controles: abre el menú contextual de la tarjeta y verifica las acciones secundarias.
+    const hostControles = screen.getByText("Controles").closest("[class*='rounded-lg']")!;
+    fireEvent.contextMenu(hostControles);
+    expect(screen.getByRole("menuitem", { name: /Editar prompt/ })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Barrer ahora" })).toBeInTheDocument();
   });
 
   it("muestra el estado vacío cuando no hay barridos", async () => {
