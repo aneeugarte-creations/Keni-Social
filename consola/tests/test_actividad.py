@@ -71,7 +71,17 @@ def test_normalizar_generacion():
         },
         "resultado_url": "/operacion/feed/lista",
         "contenido_id": "",
+        "proceso": "produccion",
     }
+
+
+def test_normalizar_generacion_proceso_sellado_y_default():
+    # Prefiere el proceso ya sellado en la generacion; sin sellar (no valido) -> produccion.
+    assert actividad.normalizar_generacion(_gen(proceso="investigacion"))["proceso"] == (
+        "investigacion"
+    )
+    assert actividad.normalizar_generacion(_gen())["proceso"] == "produccion"
+    assert actividad.normalizar_generacion(_gen(proceso="basura"))["proceso"] == "produccion"
 
 
 def test_normalizar_generacion_lleva_contenido_id():
@@ -190,6 +200,57 @@ def test_agregados_vacio():
     assert agg["total"] == {"items": 0, "coste_usd": 0, "tokens": 0, "duration_ms": 0}
     assert agg["por_tipo"] == []
     assert agg["por_dia"] == []
+    # por_proceso siempre presente, ambos procesos con bloques vacios.
+    assert set(agg["por_proceso"]) == {"investigacion", "produccion"}
+    for proc in ("investigacion", "produccion"):
+        bloque = agg["por_proceso"][proc]
+        assert bloque["total"] == {"items": 0, "coste_usd": 0, "tokens": 0, "duration_ms": 0}
+        assert bloque["por_tipo"] == [] and bloque["por_dia"] == []
+
+
+def test_agregados_por_proceso_split():
+    """`por_proceso` desglosa SOLO generaciones por loop; los runs quedan fuera."""
+    gens = [
+        _gen(id="g1", tipo="pipeline", proceso="investigacion",
+             fecha_inicio="2026-05-30T10:00:00",
+             metricas={"tokens_in": 100, "tokens_out": 40, "total_cost_usd": 0.01}),
+        _gen(id="g2", tipo="copy", proceso="produccion",
+             fecha_inicio="2026-05-30T11:00:00",
+             metricas={"tokens_in": 10, "tokens_out": 5, "total_cost_usd": 0.002}),
+        _gen(id="g3", tipo="imagen", proceso="produccion",
+             fecha_inicio="2026-05-31T08:00:00",
+             metricas={"tokens_in": 0, "tokens_out": 0, "total_cost_usd": 0.05}),
+    ]
+    runs = [_run(id="r1", fecha_inicio="2026-05-31T09:00:00")]
+    agg = actividad.agregados(gens, runs)
+
+    # El total global SIGUE incluyendo los runs (contrato existente intacto).
+    assert agg["total"]["items"] == 4
+
+    inv = agg["por_proceso"]["investigacion"]
+    assert inv["total"]["items"] == 1
+    assert inv["total"]["tokens"] == 140
+    assert [f["tipo"] for f in inv["por_tipo"]] == ["pipeline"]
+    assert {f["dia"] for f in inv["por_dia"]} == {"2026-05-30"}
+
+    prod = agg["por_proceso"]["produccion"]
+    # g2 + g3 (los runs NO entran en por_proceso).
+    assert prod["total"]["items"] == 2
+    assert prod["total"]["tokens"] == 15
+    assert prod["total"]["coste_usd"] == pytest.approx(0.002 + 0.05)
+    # por_dia trae tokens por proceso (g2=15 el 30; g3=0 el 31), recientes primero.
+    dias = {f["dia"]: f for f in prod["por_dia"]}
+    assert dias["2026-05-30"]["tokens"] == 15
+    assert dias["2026-05-31"]["tokens"] == 0
+    assert [f["dia"] for f in prod["por_dia"]] == ["2026-05-31", "2026-05-30"]
+
+
+def test_agregados_proceso_default_produccion():
+    """Una generacion sin proceso sellado cae en produccion (default del dominio)."""
+    gens = [_gen(id="g1", tipo="copy")]  # _gen no trae `proceso`
+    agg = actividad.agregados(gens, [])
+    assert agg["por_proceso"]["produccion"]["total"]["items"] == 1
+    assert agg["por_proceso"]["investigacion"]["total"]["items"] == 0
 
 
 # --------------------------------------------------------------------------- #
@@ -227,3 +288,16 @@ def test_agregados_sin_marca_devuelve_todo(cliente):
 def test_agregados_marca_invalida_400(cliente):
     """Una `marca` que no es del catalogo se rechaza con 400 (igual que pipelines)."""
     assert cliente.get("/api/actividad/agregados?marca=inventada").status_code == 400
+
+
+def test_agregados_api_sella_proceso_y_desglosa(cliente):
+    """La API sella el proceso de cada generacion y abre `por_proceso` (copy->produccion;
+    una criba 'Validación · …' del pipeline -> investigacion)."""
+    _crear_gen("unotv", "Copy UnoTV")  # tipo copy -> produccion
+    generaciones.crear({
+        "tipo": "pipeline", "marca": "unotv",
+        "etiqueta": "Validación · fuente", "estado": "completado",
+    })
+    pp = cliente.get("/api/actividad/agregados").json()["por_proceso"]
+    assert pp["produccion"]["total"]["items"] == 1
+    assert pp["investigacion"]["total"]["items"] == 1

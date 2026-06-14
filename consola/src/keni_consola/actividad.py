@@ -29,6 +29,9 @@ FORMA del ITEM (congelada; el frontend depende de ella):
       "resultado_url": str|None,  # ruta del SPA al resultado (solo generaciones COMPLETADAS)
       "contenido_id": str,    # tema del pipeline que la origino ("" si no nacio de uno):
                               # el front enlaza /datos/actividad/pipelines/{contenido_id}
+      "proceso": str,         # SOLO generaciones: "investigacion"|"produccion" (loop de la
+                              # maquina, ADR 0011). El llamante lo sella con `proceso_de` antes
+                              # de agregar; default "produccion" si no viene. Los runs no lo traen.
     }
 """
 
@@ -38,6 +41,18 @@ from typing import Any
 
 # Longitud maxima de la `etiqueta` derivada del prompt de un run (recorte legible).
 _ETIQUETA_RUN_MAX = 80
+
+# Procesos de la maquina (ADR 0011) que abren los desgloses `por_proceso` de los agregados.
+# El dominio es PURO: el llamante (api/actividad) SELLA `proceso` en cada generacion con
+# `generaciones.proceso_de` antes de agregar; aqui solo se lee, con default a produccion.
+_PROCESOS = ("investigacion", "produccion")
+_PROCESO_DEFAULT = "produccion"
+
+
+def _proceso_de_gen(g: dict[str, Any]) -> str:
+    """Proceso de una generacion ya normalizada/sellada; default "produccion" si no es valido."""
+    p = str(g.get("proceso", "") or "").strip()
+    return p if p in _PROCESOS else _PROCESO_DEFAULT
 
 
 def _entero_o_none(valor: Any) -> int | None:
@@ -141,6 +156,9 @@ def normalizar_generacion(g: dict[str, Any]) -> dict[str, Any]:
         # Cruce con la vista Pipelines: una generacion nacida del pipeline lleva el tema
         # que la origino (el id del pipeline ES el contenido_id). "" en las manuales.
         "contenido_id": str(g.get("contenido_id", "") or ""),
+        # Proceso de la maquina (ADR 0011): lo sella el llamante con `proceso_de`; default
+        # produccion. Alimenta el desglose `por_proceso` de los agregados.
+        "proceso": _proceso_de_gen(g),
     }
 
 
@@ -196,21 +214,15 @@ def _redondear(valor: float) -> float:
     return round(valor, 6)
 
 
-def agregados(
-    generaciones: list[dict[str, Any]], runs: list[dict[str, Any]]
-) -> dict[str, Any]:
-    """Agrega coste/tokens/items sobre generaciones + runs (sin paginar ni filtrar).
+def _agrega_items(items: list[dict[str, Any]]) -> dict[str, Any]:
+    """Agrega un conjunto de ITEMS ya normalizados a `{total, por_tipo, por_dia}`.
 
-    Devuelve:
-      - `total`: `{items, coste_usd, tokens, duration_ms}` sobre TODA la actividad
-        (`duration_ms` = tiempo de computo IA sumado; los items sin metrica suman 0).
-      - `por_tipo`: una fila por `tipo` (incluye "run" como un tipo mas),
-        `{tipo, items, coste_usd, tokens}`, de mayor a menor coste (luego por tipo).
-      - `por_dia`: una fila por dia (`YYYY-MM-DD` de la `fecha`), `{dia, items, tokens,
-        coste_usd}`, recientes primero.
+    Lo comparten el agregado GLOBAL (generaciones + runs) y cada desglose `por_proceso`
+    (solo generaciones de ese proceso): misma FORMA exacta para que el front pinte ambos
+    igual. `total` = `{items, coste_usd, tokens, duration_ms}`; `por_tipo` =
+    `{tipo, items, coste_usd, tokens}` por coste desc (luego tipo); `por_dia` =
+    `{dia, items, tokens, coste_usd}` recientes primero.
     """
-    items = _items(generaciones, runs)
-
     total_items = len(items)
     total_coste = 0.0
     total_tokens = 0
@@ -264,3 +276,32 @@ def agregados(
         "por_tipo": filas_tipo,
         "por_dia": filas_dia,
     }
+
+
+def agregados(
+    generaciones: list[dict[str, Any]], runs: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Agrega coste/tokens/items sobre generaciones + runs (sin paginar ni filtrar).
+
+    FORMA EXACTA (contrato con el frontend):
+      - `total`: `{items, coste_usd, tokens, duration_ms}` sobre TODA la actividad
+        (`duration_ms` = tiempo de computo IA sumado; los items sin metrica suman 0).
+      - `por_tipo`: una fila por `tipo` (incluye "run" como un tipo mas),
+        `{tipo, items, coste_usd, tokens}`, de mayor a menor coste (luego por tipo).
+      - `por_dia`: una fila por dia (`YYYY-MM-DD` de la `fecha`), `{dia, items, tokens,
+        coste_usd}`, recientes primero.
+      - `por_proceso`: desglose ADITIVO por loop de la maquina (ADR 0011), SOLO sobre las
+        GENERACIONES (los runs de agente no pertenecen a un motor y se excluyen aqui):
+        `{"investigacion": {total, por_tipo, por_dia}, "produccion": {total, por_tipo,
+        por_dia}}`, donde cada bloque tiene la MISMA forma que `total`/`por_tipo`/`por_dia`
+        de arriba (incl. `tokens` por dia). Un proceso sin actividad sale con bloques vacios
+        (`total` a cero, listas vacias). El `proceso` de cada generacion lo sella el llamante.
+    """
+    items = _items(generaciones, runs)
+    base = _agrega_items(items)
+    gen_items = [it for it in items if it["fuente"] == "generacion"]
+    por_proceso = {
+        proc: _agrega_items([it for it in gen_items if it["proceso"] == proc])
+        for proc in _PROCESOS
+    }
+    return {**base, "por_proceso": por_proceso}

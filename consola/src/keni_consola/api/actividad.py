@@ -100,6 +100,11 @@ async def agregados(request: Request) -> Response:
     if marca and not marcas.es_marca(marca):
         return JSONResponse({"error": "Marca no permitida."}, status_code=400)
     gens, runs = _origenes(marca or None)
+    # SELLA el proceso (ADR 0011) de cada generacion (prefiere el sellado, deduce de
+    # tipo/etiqueta) antes de agregar: el dominio `actividad` es PURO y solo LEE el campo
+    # para abrir el desglose `por_proceso`. Los runs no llevan proceso (no son de la maquina).
+    for g in gens:
+        g["proceso"] = generaciones.proceso_de(g)
     return JSONResponse(actividad.agregados(gens, runs))
 
 

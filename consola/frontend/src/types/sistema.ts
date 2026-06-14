@@ -57,11 +57,22 @@ export interface ActividadPorDia {
   tokens: number;
 }
 
+/** Desglose de actividad de UN proceso (loop de la máquina, ADR 0011): misma forma que el
+ * agregado global, pero SOLO generaciones de ese proceso (los runs de agente quedan fuera). */
+export interface ActividadProcesoBloque {
+  total: ActividadTotal;
+  por_tipo: ActividadPorTipo[];
+  por_dia: ActividadPorDia[];
+}
+
 /** Agregados de actividad IA (`GET /api/actividad/agregados`): totales + desgloses (los KPIs de Producción). */
 export interface ActividadAgregados {
   total: ActividadTotal;
   por_tipo: ActividadPorTipo[];
   por_dia: ActividadPorDia[];
+  /** Desglose ADITIVO por proceso (SOLO generaciones; investigación/producción). Opcional
+   * para compatibilidad con backs anteriores. Cada bloque tiene la misma forma que el global. */
+  por_proceso?: Record<Proceso, ActividadProcesoBloque>;
 }
 
 // --- Monitor de cola (`GET /api/actividad/cola` y `/cola/series`) ---
