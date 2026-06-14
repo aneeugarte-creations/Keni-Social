@@ -20,17 +20,19 @@ from __future__ import annotations
 
 import logging
 import threading
+from typing import Any
 
 from . import algoritmos, config, daemon_util, repos
 
 _log = logging.getLogger("keni_consola.algoritmos_refresco")
 
 
-def ejecutar_barrido() -> None:
+def ejecutar_barrido() -> dict[str, Any]:
     """Un barrido de ingesta: siembra si hace falta y refresca todas las fuentes activas.
 
     Best-effort: cualquier fallo se loguea dentro de `refrescar` (degradacion honesta por
-    fuente); aqui solo registramos el resultado agregado.
+    fuente); aqui solo registramos el resultado agregado. Devuelve el resumen de `refrescar`
+    (`{fuentes, insertadas, actualizadas, errores}`) para el historial del daemon.
     """
     if repos.contar_fuentes_algoritmo() == 0:
         creadas = algoritmos.sembrar()
@@ -44,6 +46,16 @@ def ejecutar_barrido() -> None:
         resumen.get("actualizadas", 0),
         len(resumen.get("errores", [])),
     )
+    return resumen
+
+
+def _resumen_barrido(res: dict[str, Any]) -> str:
+    """Resumen corto del barrido de algoritmos para el historial."""
+    nuevas = (res or {}).get("insertadas", 0)
+    actualizadas = (res or {}).get("actualizadas", 0)
+    if not (nuevas or actualizadas):
+        return "sin novedad"
+    return f"{nuevas} noticia(s) de algoritmo nueva(s) · {actualizadas} actualizada(s)"
 
 
 def _intervalo_segundos() -> float:
@@ -66,6 +78,7 @@ def iniciar_refresco_algoritmos(intervalo_segundos: float | None = None) -> thre
             intervalo_seg_fn=lambda: intervalo,
             sweep_fn=ejecutar_barrido,
             log=_log,
+            resumen_fn=_resumen_barrido,
         )
 
     hilo = threading.Thread(target=bucle, name="algoritmos-refresco-daemon", daemon=True)

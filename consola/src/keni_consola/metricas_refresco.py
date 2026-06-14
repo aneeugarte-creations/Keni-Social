@@ -50,6 +50,7 @@ def iniciar_refresco_metricas(intervalo_segundos: float | None = None) -> thread
                 latidos.barrido(
                     "metricas", ok=True, intervalo_seg=intervalo, tick_seg=intervalo,
                     duracion_ms=int((time.monotonic() - t0) * 1000),
+                    resumen=f"caché refrescada · {n} combo(s) actualizado(s)",
                 )
             except Exception as e:  # noqa: BLE001 -- un fallo de barrido no debe matar el hilo
                 _log.exception("Fallo en el barrido de refresco de metricas.")

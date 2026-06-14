@@ -55,6 +55,7 @@ def bucle_gateado(
     tick_seg: float = 60.0,
     log: logging.Logger,
     nombre: str | None = None,
+    resumen_fn: Callable[[Any], str] | None = None,
     _max_vueltas: int | None = None,
 ) -> None:
     """Bucle GATEADO y responsivo: corre `sweep_fn` solo mientras `activo_fn()` sea True.
@@ -70,6 +71,14 @@ def bucle_gateado(
     el bucle). `nombre` identifica al daemon en la tabla; si no se pasa, se deriva del
     modulo de `sweep_fn` (asi los 10 call sites existentes quedan instrumentados sin
     cambios).
+
+    RESUMEN POR BARRIDO (qué hizo el daemon): el historial guarda un texto corto por barrido.
+    De donde sale, por orden: (1) si se pasa `resumen_fn`, se le aplica al resultado del sweep
+    para derivar el str (asi un sweep puede DEVOLVER su dict/int de conteos —contrato que
+    consumen tests y disparo a demanda— sin tener que mutarlo a str); (2) si no, y el sweep ya
+    devuelve un str, ese str es el resumen; (3) en otro caso, vacio. Formatear el resumen es
+    BEST-EFFORT: un fallo de `resumen_fn` degrada a "" y NUNCA marca el barrido como fallido
+    (el `ok`/`error_txt` los manda solo el sweep).
 
     BARRIDO FORZADO (operacion sin SSH): cada vuelta consulta el flag cross-proceso
     `barrido_solicitado` (lo escribe `POST /api/sistema/daemons/{daemon}/barrer` desde el
@@ -100,10 +109,19 @@ def bucle_gateado(
         if correr:
             t0 = time.monotonic()
             try:
-                # Un sweep puede devolver un str corto (qué hizo / nº items) que se guarda como
-                # `resumen` en el historial; si devuelve None/otra cosa, el resumen queda vacio.
+                # El sweep corre y deja su `resumen` en el historial (ver docstring): `resumen_fn`
+                # deriva el str de su resultado (conteos), o el propio str que devuelva el sweep, o
+                # vacio. Formatear NUNCA tumba el barrido (best-effort): un fallo de `resumen_fn`
+                # degrada a "" sin tocar el `ok`.
                 resultado = sweep_fn()
-                resumen = resultado if isinstance(resultado, str) else ""
+                if resumen_fn is not None:
+                    try:
+                        resumen = resumen_fn(resultado) or ""
+                    except Exception:  # noqa: BLE001 -- formatear nunca marca el barrido fallido
+                        log.debug("No se pudo formatear el resumen del barrido.", exc_info=True)
+                        resumen = ""
+                else:
+                    resumen = resultado if isinstance(resultado, str) else ""
                 latidos.barrido(
                     daemon, ok=True, intervalo_seg=intervalo, tick_seg=tick_seg,
                     duracion_ms=int((time.monotonic() - t0) * 1000), resumen=resumen,

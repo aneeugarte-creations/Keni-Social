@@ -140,6 +140,11 @@ def refrescar_patrones(*, forzar: bool = False) -> int:
     return aplicadas
 
 
+def _resumen_barrido(n: int) -> str:
+    """Resumen corto del barrido de patrones para el historial (perfiles re-derivados)."""
+    return f"{n} marca(s) re-derivada(s)" if n else "sin novedad"
+
+
 def iniciar_refresco_patrones() -> threading.Thread:
     """Arranca el hilo demonio de re-derivación de patrones (GATEADO EN VIVO).
 
@@ -157,6 +162,7 @@ def iniciar_refresco_patrones() -> threading.Thread:
             intervalo_seg_fn=lambda: _COMPROBAR_CADA_S,
             sweep_fn=refrescar_patrones,
             log=_log,
+            resumen_fn=_resumen_barrido,
         )
 
     hilo = threading.Thread(target=bucle, name="patrones-refresco-daemon", daemon=True)

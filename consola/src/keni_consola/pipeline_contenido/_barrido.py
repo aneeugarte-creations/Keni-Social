@@ -519,6 +519,25 @@ def _intervalo_segundos() -> float:
     return _TICK_SEGUNDOS
 
 
+def _resumen_investigacion(res: dict[str, Any]) -> str:
+    """Resumen corto del barrido de INVESTIGACIÓN para el historial (qué cribó/admitió)."""
+    cribados = len(res.get("cribados") or [])
+    temas = len(res.get("temas") or [])
+    if not cribados and not temas:
+        return "sin novedad"
+    return f"{cribados} cluster(s) cribado(s) · {temas} tema(s) admitido(s)"
+
+
+def _resumen_produccion(res: dict[str, Any]) -> str:
+    """Resumen corto del barrido de PRODUCCIÓN para el historial (copy/arte/avances)."""
+    copys = len(res.get("lanzados") or [])
+    artes = len(res.get("artes") or [])
+    avances = len(res.get("avances") or [])
+    if not (copys or artes or avances):
+        return "sin novedad"
+    return f"{copys} copy · {artes} arte(s) · {avances} avance(s) a revisión"
+
+
 def iniciar_pipeline(
     intervalo_segundos: float | None = None,
 ) -> tuple[threading.Thread, threading.Thread]:
@@ -548,6 +567,7 @@ def iniciar_pipeline(
             sweep_fn=ejecutar_investigacion,
             log=_log,
             nombre="investigacion",
+            resumen_fn=_resumen_investigacion,
         )
 
     def bucle_produccion() -> None:
@@ -557,6 +577,7 @@ def iniciar_pipeline(
             sweep_fn=ejecutar_produccion,
             log=_log,
             nombre="produccion",
+            resumen_fn=_resumen_produccion,
         )
 
     hilo_inv = threading.Thread(

@@ -641,6 +641,86 @@ def test_bucle_gateado_escribe_historial_con_resumen(entorno):
     assert barridos[0]["resumen"] == "ok 5 items"
 
 
+def test_resumen_fn_formatea_dict_de_conteos():
+    # Los formateadores de resumen son PUROS: derivan un str humano de los conteos del sweep
+    # (dict que consumen tests/disparo a demanda) sin tocar ese contrato. Vacio => "sin novedad".
+    from keni_consola.ingesta_daemon import _bucle as ingesta_bucle
+    from keni_consola.pipeline_contenido import _barrido as pc_barrido
+
+    assert ingesta_bucle._resumen_barrido(
+        {"feeds": 3, "items_nuevos": 7, "clustering": {"clusters_nuevos": 2}}
+    ) == "3 feed(s) sondeado(s) · 7 item(s) nuevo(s) · 2 historia(s)"
+    assert ingesta_bucle._resumen_barrido(
+        {"feeds": 0, "items_nuevos": 0, "clustering": {"clusters_nuevos": 0}}
+    ) == "sin novedad"
+    assert pc_barrido._resumen_produccion(
+        {"lanzados": [1, 2], "artes": [1], "avances": []}
+    ) == "2 copy · 1 arte(s) · 0 avance(s) a revisión"
+    assert pc_barrido._resumen_produccion(
+        {"lanzados": [], "artes": [], "avances": []}
+    ) == "sin novedad"
+
+
+def test_bucle_gateado_resumen_fn_escribe_historial(entorno):
+    # Daemon GATEADO con dict de conteos: el `resumen_fn` deriva el str del resultado del sweep
+    # y ese texto aterriza NO VACIO en `daemon_barridos` (lo que pinta la pagina de detalle).
+    from keni_consola.ingesta_daemon import _bucle as ingesta_bucle
+
+    daemon_util.bucle_gateado(
+        activo_fn=lambda: True,
+        intervalo_seg_fn=lambda: 0.0,
+        sweep_fn=lambda: {"feeds": 4, "items_nuevos": 9, "clustering": {"clusters_nuevos": 1}},
+        tick_seg=0.001,
+        log=_LOG,
+        nombre="ingesta-hist",
+        resumen_fn=ingesta_bucle._resumen_barrido,
+        _max_vueltas=1,
+    )
+    barridos = db.listar_barridos("ingesta-hist")
+    assert len(barridos) == 1
+    assert barridos[0]["ok"] is True
+    assert barridos[0]["resumen"] == "4 feed(s) sondeado(s) · 9 item(s) nuevo(s) · 1 historia(s)"
+
+
+def test_bucle_gateado_resumen_fn_falla_degrada_sin_romper(monkeypatch):
+    # Formatear el resumen es BEST-EFFORT: si `resumen_fn` revienta, el barrido sigue OK con
+    # resumen vacio (el `ok`/`error` los manda solo el sweep, jamas el formateo).
+    registros: list[tuple[bool, str]] = []
+
+    def _falso_barrido(daemon, *, ok, intervalo_seg, tick_seg, duracion_ms=0, error="", resumen=""):
+        registros.append((ok, resumen))
+
+    monkeypatch.setattr(latidos, "barrido", _falso_barrido)
+    monkeypatch.setattr(latidos, "ciclo", lambda *a, **k: None)
+
+    def _resumen_que_explota(_res):
+        raise ValueError("boom")
+
+    daemon_util.bucle_gateado(
+        activo_fn=lambda: True,
+        intervalo_seg_fn=lambda: 0.0,
+        sweep_fn=lambda: {"x": 1},
+        tick_seg=0.001,
+        log=_LOG,
+        nombre="resumen-roto",
+        resumen_fn=_resumen_que_explota,
+        _max_vueltas=1,
+    )
+    assert registros == [(True, "")]
+
+
+def test_latido_barrido_resumen_llega_a_daemon_barridos(entorno):
+    # Camino LEGADO (programador/metricas/comercial): su bucle llama `latidos.barrido` directo
+    # con `resumen=`; ese texto debe aterrizar en `daemon_barridos`.
+    latidos.barrido(
+        "comercial", ok=True, intervalo_seg=60.0, tick_seg=60.0,
+        duracion_ms=5, resumen="3 snapshot(s) capturado(s)",
+    )
+    (b,) = db.listar_barridos("comercial")
+    assert b["ok"] is True
+    assert b["resumen"] == "3 snapshot(s) capturado(s)"
+
+
 def test_endpoint_barridos_contrato(entorno):
     db.latido_barrido("ingesta", ok=True, intervalo_seg=60.0, tick_seg=60.0)  # registra el daemon
     db.registrar_barrido("ingesta", ok=True, ts_inicio="2026-06-01T00:00:01", resumen="3 items")

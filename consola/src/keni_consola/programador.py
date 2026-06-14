@@ -650,9 +650,11 @@ def iniciar_programador(intervalo_segundos: float | None = None) -> threading.Th
                         "Programador: %d pieza(s) preparada(s) (KENI_PUBLICAR_REAL=%s).",
                         n, config.publicar_real(),
                     )
+                modo = "real" if config.publicar_real() else "dry-run"
+                resumen = f"{n} pieza(s) preparada(s) ({modo})" if n else "sin novedad"
                 latidos.barrido(
                     "programador", ok=True, intervalo_seg=intervalo, tick_seg=intervalo,
-                    duracion_ms=int((time.monotonic() - t0) * 1000),
+                    duracion_ms=int((time.monotonic() - t0) * 1000), resumen=resumen,
                 )
             except Exception as e:  # noqa: BLE001 -- un fallo de barrido no debe matar el hilo
                 _log.exception("Fallo en el barrido del programador.")

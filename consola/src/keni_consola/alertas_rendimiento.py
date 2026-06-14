@@ -110,10 +110,14 @@ def iniciar_alertas_rendimiento(
         else config.alertas_rendimiento_horas() * 3600.0
     )
 
-    def barrido() -> None:
+    def barrido() -> int:
         bajo = emitir_alertas()
         if bajo:
             _log.info("Alertas: %d pieza(s) de bajo rendimiento.", bajo)
+        return bajo
+
+    def _resumen(n: int) -> str:
+        return f"{n} alerta(s) de bajo rendimiento emitida(s)" if n else "sin novedad"
 
     def bucle() -> None:
         daemon_util.bucle_gateado(
@@ -121,6 +125,7 @@ def iniciar_alertas_rendimiento(
             intervalo_seg_fn=lambda: intervalo,
             sweep_fn=barrido,
             log=_log,
+            resumen_fn=_resumen,
         )
 
     hilo = threading.Thread(target=bucle, name="alertas-rendimiento-daemon", daemon=True)

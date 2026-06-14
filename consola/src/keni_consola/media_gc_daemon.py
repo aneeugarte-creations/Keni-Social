@@ -31,6 +31,15 @@ def ejecutar_barrido() -> dict[str, Any]:
     return media_gc.limpiar(antiguedad_horas=config.media_gc_antiguedad_horas())
 
 
+def _resumen_barrido(res: dict[str, Any]) -> str:
+    """Resumen corto del barrido de GC de media para el historial."""
+    borrados = (res or {}).get("borrados", 0)
+    if not borrados:
+        return "sin novedad"
+    seco = " (dry-run)" if (res or {}).get("dry_run") else ""
+    return f"{borrados} media huérfana(s) borrada(s){seco}"
+
+
 def _intervalo_segundos() -> float:
     """Intervalo del barrido en segundos (a partir de `KENI_MEDIA_GC_INTERVALO_HORAS`)."""
     return config.media_gc_intervalo_horas() * 3600.0
@@ -53,6 +62,7 @@ def iniciar_media_gc(intervalo_segundos: float | None = None) -> threading.Threa
             intervalo_seg_fn=lambda: intervalo,
             sweep_fn=ejecutar_barrido,
             log=_log,
+            resumen_fn=_resumen_barrido,
         )
 
     hilo = threading.Thread(target=bucle, name="media-gc-daemon", daemon=True)

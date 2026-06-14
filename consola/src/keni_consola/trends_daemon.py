@@ -66,6 +66,11 @@ def ejecutar_barrido() -> int:
     return total
 
 
+def _resumen_barrido(total: int) -> str:
+    """Resumen corto del barrido de trends para el historial."""
+    return f"{total} tendencia(s) ingerida(s)" if total else "sin novedad"
+
+
 def _intervalo_segundos() -> float:
     return config.trends_intervalo_min() * 60.0
 
@@ -85,6 +90,7 @@ def iniciar_trends(intervalo_segundos: float | None = None) -> threading.Thread:
             intervalo_seg_fn=lambda: intervalo,
             sweep_fn=ejecutar_barrido,
             log=_log,
+            resumen_fn=_resumen_barrido,
         )
 
     hilo = threading.Thread(target=bucle, name="trends-daemon", daemon=True)

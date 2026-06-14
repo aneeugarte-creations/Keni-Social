@@ -104,10 +104,14 @@ def iniciar_scanner_vencimientos(
         else config.eventos_intervalo_segundos()
     )
 
-    def barrido() -> None:
+    def barrido() -> int:
         n = emitir_vencimientos()
         if n:
             _log.info("Vencimientos: %d contenido(s) notificado(s).", n)
+        return n
+
+    def _resumen(n: int) -> str:
+        return f"{n} evento(s) de vencimiento emitido(s)" if n else "sin novedad"
 
     def bucle() -> None:
         daemon_util.bucle_gateado(
@@ -115,6 +119,7 @@ def iniciar_scanner_vencimientos(
             intervalo_seg_fn=lambda: intervalo,
             sweep_fn=barrido,
             log=_log,
+            resumen_fn=_resumen,
         )
 
     hilo = threading.Thread(target=bucle, name="eventos-vencimientos", daemon=True)

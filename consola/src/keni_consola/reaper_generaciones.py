@@ -147,6 +147,11 @@ def ejecutar_barrido() -> int:
     return n
 
 
+def _resumen_barrido(n: int) -> str:
+    """Resumen corto del barrido del reaper para el historial (zombis cerradas)."""
+    return f"{n} generación(es) zombi cerrada(s)" if n else "sin novedad"
+
+
 def iniciar_reaper(intervalo_segundos: float | None = None) -> threading.Thread:
     """Arranca el hilo demonio del reaper (SIEMPRE activo). Barre al arrancar y cada N min.
 
@@ -163,6 +168,7 @@ def iniciar_reaper(intervalo_segundos: float | None = None) -> threading.Thread:
             intervalo_seg_fn=lambda: intervalo,
             sweep_fn=ejecutar_barrido,
             log=_log,
+            resumen_fn=_resumen_barrido,
         )
 
     hilo = threading.Thread(target=bucle, name="reaper-generaciones-daemon", daemon=True)

@@ -45,6 +45,15 @@ def ejecutar_barrido() -> dict[str, Any]:
     return resumen
 
 
+def _resumen_barrido(res: dict[str, Any]) -> str:
+    """Resumen corto del barrido de GC del pool de noticias para el historial."""
+    clusters = (res or {}).get("clusters", 0)
+    items = (res or {}).get("items", 0)
+    if not (clusters or items):
+        return "sin novedad"
+    return f"{clusters} historia(s) · {items} item(s) purgado(s) por baja relevancia"
+
+
 def _intervalo_segundos() -> float:
     """Intervalo del barrido en segundos (a partir de `KENI_NOTICIAS_GC_INTERVALO_HORAS`)."""
     return config.noticias_gc_intervalo_horas() * 3600.0
@@ -66,6 +75,7 @@ def iniciar_noticias_gc(intervalo_segundos: float | None = None) -> threading.Th
             intervalo_seg_fn=lambda: intervalo,
             sweep_fn=ejecutar_barrido,
             log=_log,
+            resumen_fn=_resumen_barrido,
         )
 
     hilo = threading.Thread(target=bucle, name="noticias-gc-daemon", daemon=True)

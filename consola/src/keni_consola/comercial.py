@@ -536,6 +536,7 @@ def iniciar_captura_programada(
                 latidos.barrido(
                     "comercial", ok=True, intervalo_seg=intervalo, tick_seg=intervalo,
                     duracion_ms=int((time.monotonic() - t0) * 1000),
+                    resumen=(f"{n} snapshot(s) capturado(s)" if n else "sin novedad"),
                 )
             except Exception as e:  # noqa: BLE001 -- un fallo de captura no debe matar el hilo
                 _log.exception("Fallo en la captura comercial programada.")

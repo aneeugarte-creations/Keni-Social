@@ -252,6 +252,15 @@ def ejecutar_barrido() -> dict[str, Any]:
     return {"plataformas": len(grupos), "sugerencias": total}
 
 
+def _resumen_barrido(res: dict[str, Any]) -> str:
+    """Resumen corto del digest editorial para el historial."""
+    sugerencias = (res or {}).get("sugerencias", 0)
+    plataformas = (res or {}).get("plataformas", 0)
+    if not sugerencias:
+        return "sin novedad"
+    return f"{sugerencias} sugerencia(s) en {plataformas} plataforma(s)"
+
+
 def _intervalo_segundos() -> float:
     """Intervalo del digest en segundos (a partir de `KENI_SUGERENCIAS_EDITORIALES_INTERVALO_HORAS`)."""
     return config.sugerencias_editoriales_intervalo_horas() * 3600.0
@@ -272,6 +281,7 @@ def iniciar_sugerencias_editoriales(intervalo_segundos: float | None = None) -> 
             intervalo_seg_fn=lambda: intervalo,
             sweep_fn=ejecutar_barrido,
             log=_log,
+            resumen_fn=_resumen_barrido,
         )
 
     hilo = threading.Thread(target=bucle, name="sugerencias-editoriales-daemon", daemon=True)

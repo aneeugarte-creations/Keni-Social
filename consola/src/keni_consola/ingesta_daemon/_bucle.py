@@ -322,6 +322,16 @@ def ejecutar_barrido() -> dict[str, Any]:
         }
 
 
+def _resumen_barrido(res: dict[str, Any]) -> str:
+    """Resumen corto del barrido de ingesta para el historial (feeds/items/historias)."""
+    feeds = res.get("feeds", 0)
+    nuevos = res.get("items_nuevos", 0)
+    clusters = (res.get("clustering") or {}).get("clusters_nuevos", 0)
+    if not (feeds or nuevos or clusters):
+        return "sin novedad"
+    return f"{feeds} feed(s) sondeado(s) · {nuevos} item(s) nuevo(s) · {clusters} historia(s)"
+
+
 def iniciar_ingesta() -> threading.Thread:
     """Arranca el hilo daemon del motor de ingesta (GATEADO EN VIVO).
 
@@ -337,6 +347,7 @@ def iniciar_ingesta() -> threading.Thread:
             sweep_fn=ejecutar_barrido,
             tick_seg=_TICK_SEG,
             log=_log,
+            resumen_fn=_resumen_barrido,
         )
 
     hilo = threading.Thread(target=bucle, name="ingesta-daemon", daemon=True)
