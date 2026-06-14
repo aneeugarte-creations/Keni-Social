@@ -58,6 +58,9 @@ const CockpitProduccion = lazy(() => import("@/pages/maquina/CockpitProduccion")
 // —Workers (pool reactivo) y Daemons (proactivos)— + economía y actividad. La ruta vieja
 // `/maquina/cola` redirige a `/maquina/agentes` preservando `?proceso=`.
 const Agentes = lazy(() => import("@/pages/maquina/Agentes"));
+// Detalle de UN agente/daemon (`/maquina/agentes/:agente`): su estado, log por barrido y
+// controles in-place (encendido, barrer, editar prompt). Filtra la lista de daemons por nombre.
+const AgenteDetalle = lazy(() => import("@/pages/maquina/AgenteDetalle"));
 
 // Feed móvil para revisores (#qa-movil-feed): superficie tipo red social, una
 // columna, SIN sidebar. Vive FUERA del AppShell (layout propio) y se llega por
@@ -329,6 +332,8 @@ export const router = createBrowserRouter([
           { path: "investigacion", element: <CockpitInvestigacion /> },
           { path: "produccion", element: <CockpitProduccion /> },
           { path: "agentes", element: <Agentes /> },
+          // Detalle de UN agente/daemon (`:agente` = nombre del daemon).
+          { path: "agentes/:agente", element: <AgenteDetalle /> },
           // Compat: la página se llamaba «Workers» (`/maquina/cola`); redirige preservando
           // `?proceso=` (los cockpits enlazan aquí prefiltrado).
           { path: "cola", element: <RedirigirCola /> },

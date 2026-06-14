@@ -509,6 +509,13 @@ export type EstadoDaemon = "ok" | "error" | "inactivo" | "atrasado";
 /** Grupo (motor/papel) de un daemon para el dashboard de Workers, calculado por el back. */
 export type GrupoDaemon = "investigacion" | "produccion" | "flujo" | "infra";
 
+/** Clase AFINADA de un daemon (cuánta IA de cara adentro): `ia` corre `claude -p`, `maquina`
+ *  es máquina NO-IA del loop de contenido, `sistema` es pura infraestructura. */
+export type ClaseDaemon = "ia" | "maquina" | "sistema";
+
+/** Motor (loop de la máquina, ADR 0011) al que pertenece el daemon, o `null` si es infra. */
+export type MotorDaemon = "investigacion" | "produccion" | null;
+
 /** Latido de un daemon de fondo (una fila de `daemon_latidos` + campos derivados). */
 export interface LatidoDaemon {
   /** Nombre estable del daemon ("ingesta", "pipeline", "reaper"…). */
@@ -548,6 +555,10 @@ export interface LatidoDaemon {
   barrible: boolean;
   /** Grupo (motor/papel) al que pertenece el daemon; agrupa el dashboard de Workers. */
   grupo: GrupoDaemon;
+  /** Clase afinada del daemon (`ia`|`maquina`|`sistema`); contrato ADITIVO sobre `grupo`. */
+  clase: ClaseDaemon;
+  /** Motor de la máquina al que pertenece (`investigacion`|`produccion`) o `null` si es infra. */
+  motor: MotorDaemon;
   /** `true` si el daemon encola/ejecuta `claude -p` (gasta tokens); `false` el resto. */
   gasta_tokens: boolean;
   /** Clave de ajuste (KENI_*) que enciende/apaga el daemon desde su fila (toggle in-place;
@@ -565,6 +576,34 @@ export interface RespuestaDaemons {
 export interface RespuestaBarrerDaemon {
   solicitado: boolean;
   daemon: string;
+}
+
+// ── Historial de barridos de un daemon (GET /api/sistema/daemons/{daemon}/barridos) ──────
+// Una fila de `daemon_barridos`: el LOG por barrido (nuevo primero). El bucle deja un registro
+// cada vez que barre (con su duración, si fue OK, un resumen y el error si lo hubo).
+
+/** Un barrido registrado de un daemon (una fila de `daemon_barridos`). */
+export interface BarridoDaemon {
+  /** Id del registro. */
+  id: string;
+  /** Daemon al que pertenece el barrido. */
+  daemon: string;
+  /** Inicio del barrido (ISO). */
+  ts_inicio: string;
+  /** Duración del barrido (ms). */
+  duracion_ms: number;
+  /** `true` si el barrido terminó bien. */
+  ok: boolean;
+  /** Resumen de lo que hizo el barrido (puede venir vacío). */
+  resumen: string;
+  /** Texto del error si el barrido falló, o "". */
+  error_txt: string;
+}
+
+/** Respuesta de `GET /api/sistema/daemons/{daemon}/barridos?limite=`. */
+export interface RespuestaBarridosDaemon {
+  daemon: string;
+  barridos: BarridoDaemon[];
 }
 
 // ── Backups locales (GET /api/sistema/backups) ───────────────────────────────

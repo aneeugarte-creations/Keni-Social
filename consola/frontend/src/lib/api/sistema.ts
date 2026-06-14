@@ -4,6 +4,7 @@ import { peticion, query } from "./_core";
 import type {
   RespuestaBackups,
   RespuestaBarrerDaemon,
+  RespuestaBarridosDaemon,
   RespuestaBorrarLoteS3,
   RespuestaBorrarS3,
   RespuestaDaemons,
@@ -28,6 +29,14 @@ export const apiSistema = {
     peticion<RespuestaBarrerDaemon>(
       `/sistema/daemons/${encodeURIComponent(daemon)}/barrer`,
       { metodo: "POST" },
+    ),
+  // Historial de barridos de un daemon (LOG por barrido, nuevo primero). 404 si no existe.
+  sistemaDaemonBarridos: (daemon: string, limite?: number, signal?: AbortSignal) =>
+    peticion<RespuestaBarridosDaemon>(
+      `/sistema/daemons/${encodeURIComponent(daemon)}/barridos${query({
+        limite: limite ? String(limite) : undefined,
+      })}`,
+      { signal },
     ),
   sistemaBackups: (signal?: AbortSignal) =>
     peticion<RespuestaBackups>("/sistema/backups", { signal }),
