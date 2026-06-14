@@ -88,6 +88,12 @@ def sonda_daemons() -> dict:
                 # asi el front agrupa sin hardcodear nombres.
                 "grupo": latidos.grupo_de(f["daemon"]),
                 "gasta_tokens": latidos.gasta_tokens(f["daemon"]),
+                # `clase` ("ia"|"maquina"|"sistema") y `motor` ("investigacion"|"produccion"|null):
+                # clasificacion AFINADA del daemon para el dashboard de Workers (cuanta IA de cara
+                # adentro vs maquina NO-IA vs infraestructura). Fuente unica en `latidos`, contrato
+                # ADITIVO (no toca grupo/gasta_tokens/clave_gate/barrible).
+                "clase": latidos.clase_de(f["daemon"]),
+                "motor": latidos.motor_de(f["daemon"]),
                 # `clave_gate`: la clave de ajuste (KENI_*) que enciende/apaga el daemon
                 # desde su fila (toggle in-place; el front la pasa a POST /api/ajustes).
                 # null = SIEMPRE-ON sin toggle (reaper/programador/metricas/...). Fuente

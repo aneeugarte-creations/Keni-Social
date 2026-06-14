@@ -97,6 +97,58 @@ GRUPO_INFRA = frozenset({
 GASTA_TOKENS = frozenset({"investigacion", "produccion", "sugerencias"})
 
 
+# CLASE + MOTOR de cada daemon (dashboard de Workers, contrato ADITIVO con el de `grupo_de`).
+# Mapeo EXPLÍCITO (fuente única, igual que GRUPO_*/GASTA_TOKENS), pensado para clasificar a mano
+# cada daemon nuevo al añadirlo. Es una vista mas afilada que `grupo`:
+#   - `clase`:  "ia"      -> gasta tokens Y tiene prompt (corre `claude -p`).
+#               "maquina" -> parte de la MAQUINA de contenido pero NO-IA (alimenta/opera los
+#                            motores sin modelo: feeds, scheduler, GC del pool de noticias).
+#               "sistema" -> pura infraestructura (métricas, GC de media, alertas, reaper,
+#                            patrones, comercial).
+#   - `motor`:  "investigacion" | "produccion" | None. El loop de la máquina (ADR 0011) al que
+#               sirve el daemon; None para los de `sistema` (no pertenecen a ningún motor).
+# Verificado contra cada módulo (punto de partida editable; reclasifica aquí al añadir un daemon):
+#   - ia:  investigacion (loop de criba/QA -> motor investigacion), produccion (loop de copy/arte
+#          -> motor produccion), sugerencias (digest editorial con `claude -p` -> motor produccion).
+#   - maquina/investigacion:  ingesta (admisión RSS), trends (Google Trends), algoritmos (feeds
+#          de algoritmo), noticias_gc (poda el POOL de noticias que alimenta reutilizar).
+#   - maquina/produccion:     programador (publica la parrilla), vencimientos (escáner de eventos
+#          que dispara producción por caducidad).
+#   - sistema/None:  reaper, media_gc, metricas, metricas_piezas, alertas_rendimiento, patrones
+#          (deriva de Metricool SIN claude), comercial.
+# Cualquier daemon NO mapeado cae a ("sistema", None) (ver `clase_de`/`motor_de`): nunca rompe el
+# panel y, como mucho, sale como infraestructura hasta que se clasifique aquí.
+_CLASE_MOTOR: dict[str, tuple[str, str | None]] = {
+    "investigacion": ("ia", "investigacion"),
+    "produccion": ("ia", "produccion"),
+    "sugerencias": ("ia", "produccion"),
+    "ingesta": ("maquina", "investigacion"),
+    "trends": ("maquina", "investigacion"),
+    "algoritmos": ("maquina", "investigacion"),
+    "noticias_gc": ("maquina", "investigacion"),
+    "programador": ("maquina", "produccion"),
+    "vencimientos": ("maquina", "produccion"),
+    "reaper": ("sistema", None),
+    "media_gc": ("sistema", None),
+    "metricas": ("sistema", None),
+    "metricas_piezas": ("sistema", None),
+    "alertas_rendimiento": ("sistema", None),
+    "patrones": ("sistema", None),
+    "comercial": ("sistema", None),
+}
+_CLASE_MOTOR_DEFAULT: tuple[str, str | None] = ("sistema", None)
+
+
+def clase_de(daemon: str) -> str:
+    """Clase del daemon ("ia"|"maquina"|"sistema"); default "sistema" si no está mapeado."""
+    return _CLASE_MOTOR.get(daemon, _CLASE_MOTOR_DEFAULT)[0]
+
+
+def motor_de(daemon: str) -> str | None:
+    """Motor del daemon ("investigacion"|"produccion") o None (sistema / no mapeado)."""
+    return _CLASE_MOTOR.get(daemon, _CLASE_MOTOR_DEFAULT)[1]
+
+
 # CLAVE de AJUSTE (KENI_*) que GOBIERNA el on/off de cada daemon: la que el front pasa a
 # POST /api/ajustes para encender/apagar el daemon DESDE SU FILA (toggle in-place del panel
 # Sistema). Fuente única, igual que BARRIBLES/GRUPO_*. Cada valor es una clave REAL del

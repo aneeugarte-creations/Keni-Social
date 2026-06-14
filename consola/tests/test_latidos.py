@@ -314,6 +314,59 @@ def test_endpoint_daemons_expone_grupo_y_gasta_tokens(entorno):
 
 
 # --------------------------------------------------------------------------- #
+# clase + motor: clasificacion afinada (ia/maquina/sistema + motor del loop)    #
+# --------------------------------------------------------------------------- #
+
+
+def test_clase_de_clasifica_ia_maquina_sistema():
+    # IA: gasta tokens + tiene prompt.
+    for d in ("investigacion", "produccion", "sugerencias"):
+        assert latidos.clase_de(d) == "ia"
+    # MAQUINA: parte de la maquina de contenido NO-IA.
+    for d in ("ingesta", "trends", "algoritmos", "noticias_gc", "programador", "vencimientos"):
+        assert latidos.clase_de(d) == "maquina"
+    # SISTEMA: infraestructura (incl. patrones, comercial, media_gc).
+    for d in ("reaper", "media_gc", "metricas", "metricas_piezas", "alertas_rendimiento",
+              "patrones", "comercial"):
+        assert latidos.clase_de(d) == "sistema"
+
+
+def test_motor_de_mapea_el_loop_o_none():
+    assert latidos.motor_de("investigacion") == "investigacion"
+    assert latidos.motor_de("produccion") == "produccion"
+    assert latidos.motor_de("sugerencias") == "produccion"
+    # La maquina sirve a un motor concreto.
+    assert latidos.motor_de("ingesta") == "investigacion"
+    assert latidos.motor_de("noticias_gc") == "investigacion"
+    assert latidos.motor_de("programador") == "produccion"
+    assert latidos.motor_de("vencimientos") == "produccion"
+    # Sistema no pertenece a ningun motor.
+    for d in ("reaper", "metricas", "patrones", "comercial"):
+        assert latidos.motor_de(d) is None
+
+
+def test_clase_motor_default_sistema_none():
+    # Un daemon no mapeado cae a sistema/None (nunca rompe el panel).
+    assert latidos.clase_de("daemon_nuevo_sin_clasificar") == "sistema"
+    assert latidos.motor_de("daemon_nuevo_sin_clasificar") is None
+
+
+def test_endpoint_daemons_expone_clase_y_motor(entorno):
+    # El endpoint añade `clase` y `motor` a cada daemon (contrato ADITIVO del dashboard).
+    db.latido_barrido("investigacion", ok=True, intervalo_seg=60.0, tick_seg=60.0)
+    db.latido_barrido("ingesta", ok=True, intervalo_seg=60.0, tick_seg=60.0)
+    db.latido_barrido("metricas", ok=True, intervalo_seg=60.0, tick_seg=60.0)
+    c = _cli_admin()
+    por_nombre = {d["daemon"]: d for d in c.get("/api/sistema/daemons").json()["daemons"]}
+    assert por_nombre["investigacion"]["clase"] == "ia"
+    assert por_nombre["investigacion"]["motor"] == "investigacion"
+    assert por_nombre["ingesta"]["clase"] == "maquina"
+    assert por_nombre["ingesta"]["motor"] == "investigacion"
+    assert por_nombre["metricas"]["clase"] == "sistema"
+    assert por_nombre["metricas"]["motor"] is None
+
+
+# --------------------------------------------------------------------------- #
 # clave_gate: qué clave de ajuste enciende/apaga cada daemon (toggle de fila)   #
 # --------------------------------------------------------------------------- #
 
