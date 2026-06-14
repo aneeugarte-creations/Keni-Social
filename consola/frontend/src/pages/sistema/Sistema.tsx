@@ -6,6 +6,7 @@ import { TituloPagina } from "@/components/layout/encabezado";
 import { ApiError, api } from "@/lib/api";
 
 import { AvisosDoctor } from "./Doctor";
+import { SeccionDaemons } from "./SeccionDaemons";
 import { SeccionNavegadorS3 } from "./NavegadorS3";
 import { SeccionBackups } from "./SeccionBackups";
 import { SeccionRecursos } from "./SeccionRecursos";
@@ -14,12 +15,14 @@ import { SeccionS3 } from "./SeccionS3";
 import { INTERVALO_RECURSOS_MS } from "./lib";
 
 /**
- * Página SISTEMA (admin, dropdown del avatar): el HARDWARE y el ALMACENAMIENTO que sostienen
- * la consola — recursos del servidor (CPU/RAM/disco), backups, latencias de la API y S3/Garage
- * (estado + explorador). Los daemons (salud + encendido) ya NO viven aquí: se movieron a la
- * página Agentes (/maquina/agentes), su única casa, junto a los Workers. Arriba, los chequeos de
- * operador del doctor (`/api/estado`) que requieran atención (sustituyen al viejo
- * BannerAlertas: el juicio vive en el back, no en umbrales del front).
+ * Página SISTEMA (admin, dropdown del avatar): el HARDWARE, el ALMACENAMIENTO y los SERVICIOS DE
+ * SISTEMA que sostienen la consola — recursos del servidor (CPU/RAM/disco), backups, latencias de
+ * la API y S3/Garage (estado + explorador) y los daemons de pura infraestructura (clase=sistema:
+ * reaper, GC de media, métricas, alertas, patrones, comercial). Los agentes IA y los servicios de
+ * la máquina de contenido (ingesta/trends/programador/…) viven en la página Agentes
+ * (/maquina/agentes), junto a los Workers. Arriba, los chequeos de operador del doctor
+ * (`/api/estado`) que requieran atención (sustituyen al viejo BannerAlertas: el juicio vive en el
+ * back, no en umbrales del front).
  *
  * El backend devuelve 403 si quien entra no es admin; se avisa de forma unificada
  * (la entrada del avatar ya se oculta a un editor, esto cubre la URL directa /sistema).
@@ -45,9 +48,10 @@ export default function Sistema() {
       <div className="space-y-6">
         <AvisosDoctor />
         <SeccionRecursos />
-        {/* Los daemons (TODOS los grupos, incluida la infraestructura) viven ahora en la página
-            Agentes (/maquina/agentes), su única casa. Sistema se queda con hardware y
-            almacenamiento: recursos, backups, rendimiento y S3. */}
+        {/* SERVICIOS DE SISTEMA (clase=sistema): pura infraestructura (reaper, GC de media,
+            métricas, alertas, patrones, comercial). Los agentes IA y los servicios de la máquina
+            de contenido (clase ia/maquina) viven en la página Agentes (/maquina/agentes). */}
+        <SeccionDaemons clases={["sistema"]} titulo="Servicios de sistema" />
         <SeccionBackups />
         <SeccionRendimiento />
         <SeccionS3 />
