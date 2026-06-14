@@ -8,6 +8,7 @@ import {
   Trash2,
   Trophy,
   UserCheck,
+  UserMinus,
   UserPlus,
 } from "lucide-react";
 import * as React from "react";
@@ -31,6 +32,7 @@ import type { CatalogosContenido, Contenido, EventoRota } from "@/types";
 import { AvatarPersona } from "./AvatarPersona";
 import { CLAVE_TAREAS } from "./claves";
 import { DialogoAsignar } from "./dialogos";
+import { etiquetaRol, type RolCobertura, ROLES_COBERTURA, rolesCubiertos } from "./roles";
 import type { Cobertura } from "./tipos";
 
 /** Avance de estado de una tarea ya cogida (pendiente → en_curso → hecha). */
@@ -99,6 +101,92 @@ export function SemaforoCobertura({
 }
 
 /**
+ * Selector pequeño de ROL de cobertura (Foto/Video/Texto/Live), estilo plataforma (outline gris):
+ * cuatro botones segmentados, uno marcado. Decide el `formato` con que se cubre/apunta a alguien.
+ */
+function SelectorRol({
+  rol,
+  onRol,
+  disabled,
+}: {
+  rol: RolCobertura;
+  onRol: (r: RolCobertura) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div role="group" aria-label="Rol de cobertura" className="inline-flex items-center gap-1">
+      {ROLES_COBERTURA.map((r) => (
+        <button
+          key={r}
+          type="button"
+          disabled={disabled}
+          aria-pressed={rol === r}
+          onClick={() => onRol(r)}
+          className={cn(
+            "rounded-md border px-2 py-1 text-xs transition-colors disabled:opacity-60",
+            rol === r
+              ? "border-foreground/40 bg-accent text-foreground"
+              : "border-border text-muted-foreground hover:bg-accent hover:text-foreground",
+          )}
+        >
+          {etiquetaRol(r)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Semáforo AGREGADO por rol: qué roles del evento están cubiertos ("Foto · Video" / "N roles"). */
+export function RolesCubiertos({ cubridores }: { cubridores: Contenido[] }) {
+  const roles = rolesCubiertos(cubridores);
+  if (roles.length === 0) return null;
+  const texto = roles.length <= 2 ? roles.map(etiquetaRol).join(" · ") : `${roles.length} roles`;
+  return (
+    <span className="shrink-0 truncate text-xs text-muted-foreground" title={roles.map(etiquetaRol).join(" · ")}>
+      {texto}
+    </span>
+  );
+}
+
+/**
+ * Un ROL soltado dentro de una cobertura aún viva: tarea de cobertura HUÉRFANA (sin dueño) que
+ * conserva su `formato`. Resurge como «Por cubrir · <rol>» re-cogible (coger = retoma ESE rol).
+ */
+function RolLibre({ tarea }: { tarea: Contenido }) {
+  const queryClient = useQueryClient();
+  const coger = useMutation({
+    mutationFn: () => api.cogerContenido(tarea.id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
+      toast.success(`Cubres "${tarea.titulo}" (${etiquetaRol(tarea.formato)}).`);
+    },
+    onError: (e) => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
+      toast.error(mensajeError(e));
+    },
+  });
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-amber-500/40 bg-amber-50/40 px-2.5 py-1.5 dark:bg-amber-950/10">
+      <Badge variant="outline" className="border-amber-500/50 text-amber-700 dark:text-amber-300">
+        Por cubrir
+      </Badge>
+      <span className="text-sm text-muted-foreground">{etiquetaRol(tarea.formato)}</span>
+      <Button
+        variant="outline"
+        size="sm"
+        className="ml-auto h-7"
+        onClick={() => coger.mutate()}
+        disabled={coger.isPending}
+        title="La cubro yo"
+      >
+        <Hand className="mr-1 h-3.5 w-3.5" />
+        La cubro yo
+      </Button>
+    </div>
+  );
+}
+
+/**
  * Un EVENTO «Por cubrir»: un partido/transmisión que nadie ha cogido todavía. No tiene tarea
  * aún; al coger (o que Elias asigne) se crea su registro de cobertura vía `cubrirEvento`.
  */
@@ -113,15 +201,16 @@ export function TarjetaEventoLibre({
   const usuario = React.useContext(SesionContexto)?.usuario ?? null;
   const esManager = usuario?.rol === "admin";
   const [asignarAbierto, setAsignarAbierto] = React.useState(false);
+  const [rol, setRol] = React.useState<RolCobertura>("foto");
   const usuarios = catalogos?.usuarios ?? [];
 
   const cubrir = useMutation({
-    mutationFn: (responsableId?: string) => api.cubrirEvento(evento.id, responsableId),
+    mutationFn: (responsableId?: string) => api.cubrirEvento(evento.id, responsableId, rol),
     onSuccess: (res) => {
       setAsignarAbierto(false);
       void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
       const nombre = res?.contenido?.responsable_nombre || "ti";
-      toast.success(`"${evento.titulo}" la cubre ${nombre}.`);
+      toast.success(`"${evento.titulo}" la cubre ${nombre} (${etiquetaRol(rol)}).`);
     },
     onError: (e) => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
@@ -159,6 +248,8 @@ export function TarjetaEventoLibre({
         <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{evento.contenido}</p>
       )}
       <div className="mt-3 flex flex-wrap items-center gap-2">
+        {/* Rol con que se cubre/asigna (Foto/Video/Texto/Live): el reparto es por rol. */}
+        <SelectorRol rol={rol} onRol={setRol} disabled={cubrir.isPending} />
         <Button
           variant="outline"
           size="icon"
@@ -229,7 +320,15 @@ export function TarjetaTarea({
     mutationFn: () => api.soltarContenido(tarea.id),
     onSuccess: () => {
       void invalidar();
-      toast.success(`"${tarea.titulo}" vuelve a estar libre.`);
+      // En cobertura «Quitarme» SOLO libera mi rol: el partido SIGUE (reaparece como «Por
+      // cubrir» y se puede re-coger). NO borra nada — se deja MUY claro para no asustar.
+      if (enCobertura) {
+        toast.success(
+          `Te quitaste de "${tarea.titulo}". El partido sigue: vuelve como «Por cubrir».`,
+        );
+      } else {
+        toast.success(`"${tarea.titulo}" vuelve a estar libre.`);
+      }
     },
     onError: conError,
   });
@@ -277,6 +376,8 @@ export function TarjetaTarea({
                 size="sm"
               />
               {tarea.responsable_nombre}
+              {/* Persona + SU rol: "[avatar] roger · Video". */}
+              <span className="font-normal text-muted-foreground">· {etiquetaRol(tarea.formato)}</span>
               {esMia && <span className="font-normal text-muted-foreground">· tú</span>}
             </span>
           </>
@@ -284,6 +385,12 @@ export function TarjetaTarea({
           <>
             {esCobertura && <Trophy className="h-4 w-4 shrink-0 text-muted-foreground" />}
             <span className="font-medium">{tarea.titulo}</span>
+            {/* Rol de la cobertura: en un recuperable («Por cubrir») deja claro qué rol resurge. */}
+            {esCobertura && (
+              <Badge variant="outline" className="font-normal text-muted-foreground">
+                {etiquetaRol(tarea.formato)}
+              </Badge>
+            )}
             {libre ? (
               <Badge variant="outline" className="border-dashed text-muted-foreground">
                 Libre
@@ -403,6 +510,23 @@ export function TarjetaTarea({
         </div>
       )}
 
+      {/* En cobertura: «Quitarme» de MI rol (acción segura). NO borra el partido — solo libera
+          mi responsable_id: la tarea queda huérfana y resurge como «Por cubrir» re-cogible. */}
+      {enCobertura && esMia && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => soltar.mutate()}
+            disabled={soltar.isPending}
+            title="Quitarme de este rol (el partido sigue, vuelve como «Por cubrir»)"
+          >
+            <UserMinus className="mr-1 h-3.5 w-3.5" />
+            Quitarme
+          </Button>
+        </div>
+      )}
+
       <DialogoAsignar
         titulo={tarea.titulo}
         abierto={asignarAbierto}
@@ -448,18 +572,20 @@ export function TarjetaCobertura({
   const usuario = React.useContext(SesionContexto)?.usuario ?? null;
   const esManager = usuario?.rol === "admin";
   const [asignarAbierto, setAsignarAbierto] = React.useState(false);
+  const [rol, setRol] = React.useState<RolCobertura>("foto");
   const usuarios = catalogos?.usuarios ?? [];
   const yaApuntado = Boolean(
     usuario && cobertura.cubridores.some((t) => t.responsable_id === usuario.id),
   );
 
   const cubrir = useMutation({
-    mutationFn: (responsableId?: string) => api.cubrirEvento(cobertura.eventoId, responsableId),
+    mutationFn: (responsableId?: string) =>
+      api.cubrirEvento(cobertura.eventoId, responsableId, rol),
     onSuccess: (res) => {
       setAsignarAbierto(false);
       void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
       const nombre = res?.contenido?.responsable_nombre || "ti";
-      toast.success(`"${cobertura.titulo}" la cubre ${nombre}.`);
+      toast.success(`"${cobertura.titulo}" la cubre ${nombre} (${etiquetaRol(rol)}).`);
     },
     onError: (e) => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
@@ -475,17 +601,30 @@ export function TarjetaCobertura({
           <span key={t.id} className="inline-flex items-center gap-1 text-sm">
             <AvatarPersona id={t.responsable_id} nombre={t.responsable_nombre} size="sm" />
             {t.responsable_nombre}
+            <span className="text-muted-foreground">· {etiquetaRol(t.formato)}</span>
           </span>
         ))}
+        {/* Semáforo agregado por rol del evento (qué roles están cubiertos). */}
+        <RolesCubiertos cubridores={cobertura.cubridores} />
       </div>
       <div className="space-y-2">
         {cobertura.cubridores.map((t) => (
           <TarjetaTarea key={t.id} tarea={t} catalogos={catalogos} enCobertura />
         ))}
       </div>
+      {/* Roles SOLTADOS (huérfanos) de este evento aún vivo: «Por cubrir · <rol>» re-cogibles. */}
+      {cobertura.libres.length > 0 && (
+        <div className="space-y-1.5">
+          {cobertura.libres.map((t) => (
+            <RolLibre key={t.id} tarea={t} />
+          ))}
+        </div>
+      )}
       {/* Acciones a nivel de evento, junto al avance de cada cubridor (Empezar/Marcar hecha). */}
       {(!yaApuntado || esManager) && (
         <div className="flex flex-wrap items-center gap-2">
+          {/* Rol con que me apunto / añaden a alguien. */}
+          <SelectorRol rol={rol} onRol={setRol} disabled={cubrir.isPending} />
           {!yaApuntado && (
             <Button
               variant="outline"

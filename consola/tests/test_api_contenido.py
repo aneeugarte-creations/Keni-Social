@@ -1026,6 +1026,114 @@ def test_cubrir_evento_inexistente_404(entorno):
     assert r.status_code == 404
 
 
+def test_cubrir_evento_con_rol_persiste_el_formato(entorno):
+    """El `formato` (ROL de cobertura) se PERSISTE en la tarea. 'video' (formato del catálogo)
+    y 'live' (rol de TEXTO LIBRE, fuera del catálogo de publicación) sobreviven SIN coaccionarse
+    a 'foto': la columna es `TEXT` y la cobertura no toca el pipeline formato->redes."""
+    c = _cli("ana")
+    ev = _crear_evento()
+    r = c.post(
+        "/api/contenido/cubrir-evento",
+        json={"evento_id": ev["id"], "formato": "video"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["contenido"]["formato"] == "video"
+
+    r2 = c.post(
+        "/api/contenido/cubrir-evento",
+        json={"evento_id": ev["id"], "formato": "live"},
+        headers=_ORIGIN,
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["contenido"]["formato"] == "live"  # NO coaccionado a 'foto'
+
+
+def test_cubrir_evento_mismo_rol_idempotente(entorno):
+    """Misma persona + MISMO rol dos veces = find-or-create por (evento, persona, rol): 1 tarea."""
+    c = _cli("ana")
+    ev = _crear_evento()
+    r1 = c.post(
+        "/api/contenido/cubrir-evento",
+        json={"evento_id": ev["id"], "formato": "foto"},
+        headers=_ORIGIN,
+    )
+    r2 = c.post(
+        "/api/contenido/cubrir-evento",
+        json={"evento_id": ev["id"], "formato": "foto"},
+        headers=_ORIGIN,
+    )
+    assert r1.status_code == 200 and r2.status_code == 200, r2.text
+    assert r1.json()["contenido"]["id"] == r2.json()["contenido"]["id"]
+    tareas = [
+        x
+        for x in c.get("/api/contenido?clase=tarea").json()["contenidos"]
+        if x["evento_id"] == ev["id"]
+    ]
+    assert len(tareas) == 1
+
+
+def test_cubrir_evento_dos_roles_misma_persona_dos_tareas(entorno):
+    """Una persona puede llevar VARIOS roles del mismo evento: foto y video = 2 tareas suyas
+    (no se pisan: la clave find-or-create incluye el rol)."""
+    c = _cli("ana")
+    ev = _crear_evento()
+    r1 = c.post(
+        "/api/contenido/cubrir-evento",
+        json={"evento_id": ev["id"], "formato": "foto"},
+        headers=_ORIGIN,
+    )
+    r2 = c.post(
+        "/api/contenido/cubrir-evento",
+        json={"evento_id": ev["id"], "formato": "video"},
+        headers=_ORIGIN,
+    )
+    assert r1.status_code == 200 and r2.status_code == 200, r2.text
+    assert r1.json()["contenido"]["id"] != r2.json()["contenido"]["id"]
+    tareas = [
+        x
+        for x in c.get("/api/contenido?clase=tarea").json()["contenidos"]
+        if x["evento_id"] == ev["id"]
+    ]
+    assert len(tareas) == 2
+    assert {t["formato"] for t in tareas} == {"foto", "video"}
+    assert {t["responsable_id"] for t in tareas} == {_id_usuario("ana")}
+
+
+def test_cubrir_evento_rol_invalido_400(entorno):
+    c = _cli("ana")
+    ev = _crear_evento()
+    r = c.post(
+        "/api/contenido/cubrir-evento",
+        json={"evento_id": ev["id"], "formato": "basura"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400
+
+
+def test_cubrir_evento_sin_rol_casa_cualquier_cobertura(entorno):
+    """Retrocompat: cubrir SIN `formato` casa con CUALQUIER cobertura previa de la persona
+    (no crea una segunda), aunque la previa tuviera un rol concreto."""
+    c = _cli("ana")
+    ev = _crear_evento()
+    r1 = c.post(
+        "/api/contenido/cubrir-evento",
+        json={"evento_id": ev["id"], "formato": "video"},
+        headers=_ORIGIN,
+    )
+    r2 = c.post(
+        "/api/contenido/cubrir-evento", json={"evento_id": ev["id"]}, headers=_ORIGIN
+    )
+    assert r1.status_code == 200 and r2.status_code == 200, r2.text
+    assert r1.json()["contenido"]["id"] == r2.json()["contenido"]["id"]
+    tareas = [
+        x
+        for x in c.get("/api/contenido?clase=tarea").json()["contenidos"]
+        if x["evento_id"] == ev["id"]
+    ]
+    assert len(tareas) == 1
+
+
 def test_catalogos_usuarios_se_acotan_por_marca(entorno):
     """`catalogos.usuarios` = equipo de cobertura de la MARCA activa (cada marca su equipo);
     sin `?marca` salen todos (vista «Todas» del admin)."""

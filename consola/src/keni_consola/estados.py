@@ -223,6 +223,15 @@ CLASES_CONTENIDO: tuple[str, ...] = _estados_compartidos.CLASES_CONTENIDO
 CLASE_CONTENIDO = "contenido"
 CLASE_TAREA = "tarea"
 
+# ROLES de cobertura de un evento (Ola 2: «cobertura por roles tipados»). Cada cubridor cubre
+# UN rol del evento; el reparto find-or-create es por (evento, persona, ROL), así una persona
+# puede llevar VARIOS roles y dos personas roles distintos SIN solaparse. Los roles REUSAN el
+# campo `formato` del contenido (NO hay migración): 'foto'/'video' ya son formatos del catálogo
+# de publicación; 'texto'/'live' son texto libre que la columna admite (es `TEXT`, sin CHECK).
+# Viven SOLO en tareas de cobertura (clase='tarea'), que NUNCA tocan el mapeo formato->redes del
+# pipeline de publicación (`redes.redes_de_formato`, que no conoce 'texto'/'live').
+ROLES_COBERTURA: tuple[str, ...] = ("foto", "video", "texto", "live")
+
 # `flujo` editorial de un contenido: lo importante del dia, evergreen (always-on) o
 # cobertura de un evento previsto. "" para tareas libres (clase=tarea). Canonica en
 # keni-shared (re-exportada aqui, ver CLASES_CONTENIDO).
