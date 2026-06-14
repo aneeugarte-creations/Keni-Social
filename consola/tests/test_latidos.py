@@ -131,7 +131,7 @@ def test_nombre_de_sweep_alias():
 def test_bucle_gateado_registra_barrido_ok_y_error(monkeypatch):
     registros: list[tuple[str, bool, str]] = []
 
-    def _falso_barrido(daemon, *, ok, intervalo_seg, tick_seg, duracion_ms=0, error=""):
+    def _falso_barrido(daemon, *, ok, intervalo_seg, tick_seg, duracion_ms=0, error="", resumen=""):
         registros.append((daemon, ok, error))
 
     monkeypatch.setattr(latidos, "barrido", _falso_barrido)
