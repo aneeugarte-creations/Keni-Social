@@ -645,4 +645,57 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     fireEvent.click(screen.getByRole("button", { name: /Aceptar y añadir/ }));
     await waitFor(() => expect(aplicar).toHaveBeenCalledWith("p1"));
   });
+
+  it("FETCH: pide los eventos «desde» el día CDMX, no el UTC (no pierde los partidos de la tarde-noche)", async () => {
+    // 23:30 CDMX del 13-jun = 05:30 UTC del 14-jun. En UTC «hoy» ya es el 14 (mañana): el bug
+    // filtraba `desde: 2026-06-14` y se caían del fetch los partidos de HOY (el horario de partidos).
+    // Falseamos SOLO `Date` (no los timers) para que `waitFor`/react-query corran con relojes reales.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-06-14T05:30:00Z"));
+    renderTareas([], []);
+    await waitFor(() => expect(apiMod.api.rotaEventos).toHaveBeenCalled());
+    // Día CDMX = 13; día UTC = 14. El fetch debe arrancar en el 13, nunca en el 14.
+    expect(apiMod.api.rotaEventos).toHaveBeenCalledWith(
+      expect.objectContaining({ desde: "2026-06-13" }),
+      expect.anything(),
+    );
+    expect(apiMod.api.rotaEventos).not.toHaveBeenCalledWith(
+      expect.objectContaining({ desde: "2026-06-14" }),
+      expect.anything(),
+    );
+  });
+
+  it("ERROR: si el fetch falla sin caché, pinta error+reintento (no «todo cubierto» en blanco)", async () => {
+    const contenido = vi
+      .spyOn(apiMod.api, "contenido")
+      .mockRejectedValue(new Error("caída de red"));
+    const rotaEventos = vi
+      .spyOn(apiMod.api, "rotaEventos")
+      .mockRejectedValue(new Error("caída de red"));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <SesionContexto.Provider value={sesionValor(usuario())}>
+          <MarcaActivaContexto.Provider value={valorMarca("claro-sports")}>
+            <MemoryRouter>
+              <Tareas />
+            </MemoryRouter>
+          </MarcaActivaContexto.Provider>
+        </SesionContexto.Provider>
+      </QueryClientProvider>,
+    );
+
+    // En vez de listas vacías («No tienes nada asignado»), sale el bloque de error con su reintento.
+    expect(await screen.findByText("No se pudo cargar el tablero")).toBeInTheDocument();
+    expect(screen.queryByText(/No tienes nada asignado/)).toBeNull();
+
+    // «Reintentar» relanza AMBAS queries (tareas y eventos), no solo una.
+    const antesContenido = contenido.mock.calls.length;
+    const antesEventos = rotaEventos.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: /Reintentar/ }));
+    await waitFor(() => {
+      expect(contenido.mock.calls.length).toBeGreaterThan(antesContenido);
+      expect(rotaEventos.mock.calls.length).toBeGreaterThan(antesEventos);
+    });
+  });
 });

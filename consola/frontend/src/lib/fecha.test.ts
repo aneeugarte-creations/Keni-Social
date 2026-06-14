@@ -144,6 +144,23 @@ describe("posicionTemporal (semáforo de cobertura)", () => {
       expect(posicionTemporal(null)).toBeNull();
     });
   });
+
+  it("partido NOCTURNO pasada la medianoche sigue «durante» (no salta a «despues» por el día)", () => {
+    vi.useFakeTimers();
+    try {
+      // AHORA = 2026-06-14 00:30 CDMX = 06:30 UTC. El saque fue AYER (2026-06-13) a las 23:00 CDMX:
+      // hace 90 min, dentro de la ventana de 180'. El bug comparaba el STRING de día (ayer < hoy) y
+      // lo mandaba a «despues»/«Cubierto» a las 00:00 aunque el partido siguiera EN VIVO.
+      vi.setSystemTime(new Date("2026-06-14T06:30:00Z"));
+      expect(posicionTemporal("2026-06-13", "23:00")).toBe("durante");
+      // Ya fuera de la ventana (saque 20:00 = hace 4.5 h) sí es «despues», cruzando la medianoche.
+      expect(posicionTemporal("2026-06-13", "20:00")).toBe("despues");
+      // Y un partido aún por empezar más tarde hoy sigue «antes».
+      expect(posicionTemporal("2026-06-14", "21:00")).toBe("antes");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("minutosHastaEvento (cuenta atrás al pitido)", () => {

@@ -2,12 +2,14 @@ import { useQuery } from "@tanstack/react-query";
 import { ListChecks, Plus, Trophy } from "lucide-react";
 import * as React from "react";
 
+import { BloqueError } from "@/components/comunes/BloqueError";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { MARCA_ACTIVA_TODAS, useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { SesionContexto } from "@/hooks/sesion-contexto";
-import { api } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
+import { hoyCDMX } from "@/lib/fecha";
 
 import { CLAVE_TAREAS } from "./claves";
 import { DialogoCrearTarea } from "./DialogoCrearTarea";
@@ -47,7 +49,10 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
   const [crearAbierto, setCrearAbierto] = React.useState(false);
 
   const marca = marcaActiva && marcaActiva !== MARCA_ACTIVA_TODAS ? marcaActiva : undefined;
-  const hoy = new Date().toISOString().slice(0, 10);
+  // El día de HOY en CDMX (no el UTC): `new Date().toISOString()` da el día UTC, que de 18:00 a
+  // medianoche CDMX (UTC-6) ya es MAÑANA — justo el horario de partidos — y filtraría `desde` a
+  // mañana, perdiendo los eventos de hoy del fetch.
+  const hoy = hoyCDMX();
 
   const tareasQuery = useQuery({
     queryKey: [...CLAVE_TAREAS, "tareas", marca ?? "todas"],
@@ -63,6 +68,16 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
   const tareas = tareasQuery.data?.contenidos ?? [];
   const catalogos = tareasQuery.data?.catalogos;
   const cargando = tareasQuery.isLoading || eventosQuery.isLoading;
+
+  // Este tablero SUSTITUYE al WhatsApp: un fetch fallido NO puede disfrazarse de «todo cubierto»
+  // (las listas caen a [] y se pinta «no hay nada que cubrir»). Si alguna query falla y aún no hay
+  // datos cacheados que mostrar, pintamos error + reintento en vez de un tablero engañosamente vacío.
+  const hayError = tareasQuery.isError || eventosQuery.isError;
+  const sinDatos = !tareasQuery.data || !eventosQuery.data;
+  const reintentar = () => {
+    void tareasQuery.refetch();
+    void eventosQuery.refetch();
+  };
 
   // Reparte en coberturas (evento con ≥1 cubridor), encargos sueltos y eventos por cubrir.
   const eventosCoverables = eventosQuery.data?.eventos ?? [];
@@ -185,7 +200,14 @@ export function TareasBoard({ acciones = "barra" }: { acciones?: "barra" | "inli
           {acciones === "inline" && botonAnadir}
         </div>
 
-        {cargando ? (
+        {hayError && sinDatos ? (
+          <BloqueError
+            titulo="No se pudo cargar el tablero"
+            mensaje={mensajeError(tareasQuery.error ?? eventosQuery.error)}
+            onReintentar={reintentar}
+            cargando={tareasQuery.isFetching || eventosQuery.isFetching}
+          />
+        ) : cargando ? (
           <p className="text-sm text-muted-foreground">Cargando…</p>
         ) : (
           <>

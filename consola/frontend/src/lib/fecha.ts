@@ -145,16 +145,7 @@ export function hoyCDMX(): string {
   return diaCDMX(new Date());
 }
 
-// "HH:MM" (24h) de AHORA en CDMX. Para situar eventos del día respecto a la hora actual.
-const _fHoraIso = new Intl.DateTimeFormat("en-GB", {
-  timeZone: ZONA_CDMX,
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
-function _ahoraHoraCDMX(): string {
-  return _fHoraIso.format(new Date());
-}
+// "HH:MM" → minutos del día. Normaliza la hora «de pared» CDMX antes de anclarla a un instante.
 function _aMinutos(hhmm: string | null | undefined): number | null {
   if (!hhmm) return null;
   const m = /^(\d{1,2}):(\d{2})/.exec(String(hhmm).trim());
@@ -169,6 +160,10 @@ export type PosicionTemporal = "antes" | "durante" | "despues";
  * AHORA en CDMX. `ventanaMin` = cuánto dura «durante» desde la hora (def. 180 ≈ un partido).
  * Sin fecha → `null` (no se puede situar). Base del semáforo de cobertura: el equipo no marca
  * estados a mano; el color se deriva del calendario (gris/ámbar/verde).
+ *
+ * Con hora concreta la fase se calcula con INSTANTES reales (vía `minutosHastaEvento`), NO
+ * comparando el string de día: un partido nocturno (saque >21:00) seguía «en vivo» pasada la
+ * medianoche, pero la vieja comparación `dia < hoy` lo mandaba a «después»/«Cubierto» a las 00:00.
  */
 export function posicionTemporal(
   fecha: string | null | undefined,
@@ -176,16 +171,22 @@ export function posicionTemporal(
   ventanaMin = 180,
 ): PosicionTemporal | null {
   if (!fecha) return null;
-  const dia = String(fecha).slice(0, 10);
-  const hoy = hoyCDMX();
-  if (dia > hoy) return "antes";
-  if (dia < hoy) return "despues";
-  // Mismo día: depende de la hora. Sin hora concreta → lo tratamos como en curso hoy.
-  const horaMin = _aMinutos(hora);
-  if (horaMin == null) return "durante";
-  const ahoraMin = _aMinutos(_ahoraHoraCDMX()) ?? 0;
-  if (ahoraMin < horaMin) return "antes";
-  return ahoraMin < horaMin + ventanaMin ? "durante" : "despues";
+  // Sin hora concreta NO hay instante de saque al que anclar una ventana: se sitúa por DÍA CDMX
+  // (futuro → antes, hoy → en curso todo el día, pasado → después). Aquí no hay bug de medianoche.
+  if (_aMinutos(hora) == null) {
+    const dia = String(fecha).slice(0, 10);
+    const hoy = hoyCDMX();
+    if (dia > hoy) return "antes";
+    if (dia < hoy) return "despues";
+    return "durante";
+  }
+  // Con hora: fase por instantes reales. `min` = minutos desde AHORA hasta el saque; positivo aún
+  // no empieza, 0/negativo ya arrancó. Dura «durante» mientras no se rebase la ventana (cruza la
+  // medianoche sin saltar a «después»).
+  const min = minutosHastaEvento(fecha, hora);
+  if (min == null) return null;
+  if (min > 0) return "antes";
+  return min > -ventanaMin ? "durante" : "despues";
 }
 
 /**
