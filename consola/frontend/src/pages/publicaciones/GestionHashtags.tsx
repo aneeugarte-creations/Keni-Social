@@ -156,7 +156,8 @@ function FilaGrupo({
       onPrimaria={() => onEditar(grupo)}
       acciones={acciones}
       etiquetaAcciones={`Acciones de "${grupo.nombre}"`}
-      kebab="hover"
+      kebab="nunca"
+      realce
       className="rounded-md border border-border"
     >
       <div className="min-w-0 space-y-1.5 p-3 pr-10">

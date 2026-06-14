@@ -220,6 +220,7 @@ export function TablaDocumentos({
                 <FilaConAcciones
                   key={d.id}
                   como="tr"
+                  kebab="nunca"
                   onPrimaria={() => onAbrir(d.id)}
                   etiquetaAcciones={`Acciones de ${d.titulo}`}
                   acciones={[

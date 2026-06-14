@@ -95,16 +95,13 @@ export function TablaCuentas({
                   {m.etiqueta}
                 </CabeceraOrdenable>
               ))}
-              <TableHead className="w-10 pr-6">
-                <span className="sr-only">Acciones</span>
-              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {cuentas.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={METRICAS.length + 2}
+                  colSpan={METRICAS.length + 1}
                   className="py-8 text-center text-muted-foreground"
                 >
                   No hay marcas para mostrar en este periodo.
@@ -129,8 +126,7 @@ export function TablaCuentas({
                       como="tr"
                       acciones={acciones}
                       etiquetaAcciones={`Acciones de ${c.marca}`}
-                      kebab="siempre"
-                      claseKebab="pr-6"
+                      kebab="nunca"
                     >
                       <TableCell className="pl-6 font-medium">
                         {onVerPiezas ? (

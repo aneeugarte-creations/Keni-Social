@@ -95,7 +95,7 @@ export function EditorVideo({
           <FilaConAcciones
             como="div"
             kebab="nunca"
-            realce={false}
+            realce
             acciones={[
               {
                 etiqueta: "Reemplazar video",

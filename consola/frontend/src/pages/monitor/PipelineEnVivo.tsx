@@ -30,7 +30,7 @@ import * as React from "react";
 
 import { EditorPromptOverlay } from "@/components/biblioteca/EditorPromptOverlay";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
-import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
+import type { ItemMenuContextual } from "@/components/comunes/MenuContextual";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -280,9 +280,11 @@ export function PipelineEnVivo({
             const fuera = proceso != null && proceso !== e.proceso;
             const doc = docPorEtapa?.[e.id];
             const deEtapa = porMarca.filter((a) => a.clave.startsWith(`${e.excepciones.base}::`));
-            // Acciones secundarias de la etapa (click derecho / long-press): editar su prompt
-            // y abrir sus excepciones por marca. El switch es el control PRINCIPAL: va inline.
-            const acciones: EntradaMenuContextual[] = [];
+            // Acciones de la etapa. El switch (on/off) es el control PRINCIPAL y va inline.
+            // De las acciones de CONFIG: la primera es el click izquierdo (acción primaria) y
+            // TODAS viven en el menú (click derecho / long-press). Sin iconos sueltos: la pista
+            // es el realce naranja del borde al hover.
+            const acciones: ItemMenuContextual[] = [];
             if (esAdmin && doc) {
               acciones.push({
                 etiqueta: `Editar el prompt de ${e.etiqueta}`,
@@ -297,6 +299,7 @@ export function PipelineEnVivo({
                 onClick: () => setExcepEtapa(e.id),
               });
             }
+            const accionPrimaria = acciones[0]?.onClick;
             return (
               <React.Fragment key={e.id}>
                 {i > 0 && (
@@ -308,6 +311,8 @@ export function PipelineEnVivo({
                 <FilaConAcciones
                   como="div"
                   acciones={acciones}
+                  onPrimaria={accionPrimaria}
+                  kebab="nunca"
                   realce
                   etiquetaAcciones={`Acciones de ${e.etiqueta}`}
                   className={cn(

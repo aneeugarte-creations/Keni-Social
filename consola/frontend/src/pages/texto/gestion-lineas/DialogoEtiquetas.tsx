@@ -263,8 +263,8 @@ export function DialogoEtiquetas({
                     como="div"
                     onPrimaria={() => empezarEdicion(e)}
                     etiquetaAcciones={`Acciones de la etiqueta ${e.nombre}`}
-                    kebab="hover"
-                    claseKebab="top-1.5"
+                    kebab="nunca"
+                    realce
                     acciones={[
                       {
                         etiqueta: "Editar",

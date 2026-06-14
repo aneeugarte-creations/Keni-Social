@@ -338,7 +338,7 @@ export function TarjetaEventoLibre({
   return (
     <FilaConAcciones
       como="div"
-      kebab="siempre"
+      kebab="nunca"
       realce
       onPrimaria={() => cubrir.mutate(undefined)}
       acciones={accionesEvento}
@@ -505,7 +505,7 @@ export function TarjetaTarea({
   return (
     <FilaConAcciones
       como="div"
-      kebab="siempre"
+      kebab="nunca"
       realce
       onPrimaria={primaria}
       acciones={accionesTarea}
@@ -674,7 +674,7 @@ export function TarjetaCobertura({
   return (
     <FilaConAcciones
       como="div"
-      kebab="siempre"
+      kebab="nunca"
       realce
       onPrimaria={!yaApuntado ? () => cubrir.mutate(undefined) : undefined}
       acciones={accionesCobertura}

@@ -228,7 +228,8 @@ function FilaCadencia({ cadencia }: { cadencia: Cadencia }) {
       como="div"
       acciones={acciones}
       etiquetaAcciones={`Acciones de la cadencia "${etiquetaCadencia}"`}
-      kebab="hover"
+      kebab="nunca"
+      realce
       className="rounded-md border border-border"
     >
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 pr-10 text-sm">

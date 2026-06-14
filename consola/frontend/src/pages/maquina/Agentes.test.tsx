@@ -176,7 +176,10 @@ describe("Agentes (dos columnas por motor)", () => {
     renderConProviders(<Agentes />);
     // Banda global: presupuesto/parada de emergencia + KPIs de cómputo + enlace a la cola.
     expect(await screen.findByText("Presupuesto y parada de emergencia")).toBeInTheDocument();
-    expect(screen.getByText("Ver cola y cómputo")).toBeInTheDocument();
+    // Los contadores de cómputo son clicables (llevan a «Cómputo y cola»): el contador ES el botón.
+    expect(screen.getByRole("link", { name: /En curso/ }).getAttribute("href")).toContain(
+      "/maquina/computo",
+    );
     // Columnas por motor: Workers + economía de cada motor.
     expect(screen.getAllByText("Workers (reactivos)").length).toBe(2);
     expect(screen.getByText("Economía (tokens) de Investigación")).toBeInTheDocument();

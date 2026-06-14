@@ -549,10 +549,11 @@ function FilaIdea({
     <FilaConAcciones
       como="div"
       etiquetaAcciones={`Acciones de la idea "${idea.titulo}"`}
-      kebab="hover"
+      kebab="nunca"
+      realce
       acciones={acciones}
       className={cn(
-        "space-y-2 rounded-lg border border-border bg-card p-4 pr-10 text-card-foreground shadow-sm transition-colors hover:border-foreground/20",
+        "space-y-2 rounded-lg border border-border bg-card p-4 pr-10 text-card-foreground shadow-sm",
         descartada && "opacity-60",
       )}
     >

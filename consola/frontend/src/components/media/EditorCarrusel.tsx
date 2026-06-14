@@ -176,7 +176,7 @@ export function EditorCarrusel({
                 key={`${s.objeto}-${i}`}
                 como="li"
                 kebab="nunca"
-                realce={false}
+                realce
                 acciones={acciones}
                 etiquetaAcciones={`Acciones del slide ${i + base}`}
               >

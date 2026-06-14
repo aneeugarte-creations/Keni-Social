@@ -30,7 +30,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useMediaQuery } from "@/hooks/use-media-query";
 import { ApiError, api, mensajeError, urlMedia } from "@/lib/api";
 import { estaVencida } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
@@ -70,8 +69,6 @@ function TarjetaPublicacion({
   const [confirmarBorrado, setConfirmarBorrado] = React.useState(false);
   const proximo = siguienteEstado(publicacion.estado);
   const imagen = urlMedia(publicacion.imagen_url || publicacion.imagen);
-  // TÁCTIL: sin hover el kebab "⋮" era inalcanzable; con puntero grueso lo dejamos fijo.
-  const punteroGrueso = useMediaQuery("(pointer: coarse)");
 
   const avanzar = useMutation({
     mutationFn: () => {
@@ -223,7 +220,7 @@ function TarjetaPublicacion({
         onPrimaria={() => onEditar(publicacion)}
         acciones={acciones}
         etiquetaAcciones={`Acciones de "${publicacion.titulo}"`}
-        kebab={kebabSegunPuntero(punteroGrueso)}
+        kebab="nunca"
         realce
         className="rounded-lg border border-border bg-card text-card-foreground shadow-sm"
       >

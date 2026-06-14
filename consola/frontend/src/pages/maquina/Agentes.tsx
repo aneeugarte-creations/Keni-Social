@@ -4,7 +4,6 @@ import {
   Bot,
   Clock,
   Cpu,
-  ListTree,
   RefreshCw,
   RotateCcw,
   Trash2,
@@ -719,28 +718,22 @@ export default function Agentes() {
             )}
 
             {/* Cómputo de la máquina: el ÚNICO límite real son los slots (concurrencia de
-                `claude -p`); la cola que espera un slot no tiene tope. Detalle y control de la
-                cola por dentro, en «Cómputo y cola». */}
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <Button asChild variant="outline" size="sm">
-                <Link to={`/maquina/computo${proceso ? `?proceso=${proceso}` : ""}`}>
-                  <ListTree className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-                  Ver cola y cómputo
-                </Link>
-              </Button>
-            </div>
+                `claude -p`); la cola que espera un slot no tiene tope. Cada contador es
+                clicable: lleva a «Cómputo y cola» (detalle y control de la cola por dentro). */}
             <div className="grid grid-cols-2 gap-3">
               <Kpi
                 icono={Cpu}
                 titulo="En curso"
                 valor={`${cola.data.procesando} / ${cola.data.capacidad.max_jobs}`}
                 tono={cola.data.procesando >= cola.data.capacidad.max_jobs ? "alerta" : undefined}
+                href={`/maquina/computo${proceso ? `?proceso=${proceso}` : ""}`}
               />
               <Kpi
                 icono={Clock}
                 titulo="En cola"
                 valor={cola.data.conteo.pendientes}
                 tono={cola.data.conteo.pendientes > 0 ? "espera" : undefined}
+                href={`/maquina/computo${proceso ? `?proceso=${proceso}` : ""}`}
               />
             </div>
           </>

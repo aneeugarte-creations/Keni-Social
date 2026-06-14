@@ -204,7 +204,8 @@ export function FilaLinea({
       como="div"
       onPrimaria={empezar}
       etiquetaAcciones={`Acciones de "${etiqueta.nombre}"`}
-      kebab="hover"
+      kebab="nunca"
+      realce
       acciones={[
         { etiqueta: "Editar", icono: Pencil, onClick: empezar },
         { separador: true },

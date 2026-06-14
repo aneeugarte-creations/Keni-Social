@@ -75,19 +75,30 @@ afterEach(() => {
 });
 
 describe("PipelineEnVivo · «Editar prompt» (overlay)", () => {
-  it("el lápiz es un botón (no un deep-link con href)", () => {
+  it("la etapa con prompt es accionable y NO es un enlace (no navega)", () => {
     renderTira();
-    const lapiz = screen.getByLabelText("Editar el prompt de Copy");
-    expect(lapiz.tagName).toBe("BUTTON");
-    expect(lapiz.getAttribute("href")).toBeNull();
+    const etapa = screen.getByText("Copy").closest('[role="button"]') as HTMLElement;
+    expect(etapa).toBeTruthy();
+    expect(etapa.tagName).not.toBe("A");
+    expect(etapa.getAttribute("href")).toBeNull();
   });
 
-  it("al pulsar el lápiz abre el editor en un overlay, sin navegar", async () => {
+  it("al pulsar la etapa (acción primaria) abre el editor en un overlay, sin navegar", async () => {
     renderTira();
     expect(screen.queryByRole("dialog")).toBeNull();
-    fireEvent.click(screen.getByLabelText("Editar el prompt de Copy"));
+    const etapa = screen.getByText("Copy").closest('[role="button"]') as HTMLElement;
+    fireEvent.click(etapa);
     await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy());
     // El editor se monta dentro del overlay (esqueleto mientras carga el doc).
     expect(screen.getByTestId("detalle-cargando")).toBeTruthy();
+  });
+
+  it("el menú (click derecho) ofrece «Editar el prompt de Copy»", async () => {
+    renderTira();
+    const etapa = screen.getByText("Copy").closest('[role="button"]') as HTMLElement;
+    fireEvent.contextMenu(etapa);
+    expect(
+      await screen.findByRole("menuitem", { name: "Editar el prompt de Copy" }),
+    ).toBeInTheDocument();
   });
 });

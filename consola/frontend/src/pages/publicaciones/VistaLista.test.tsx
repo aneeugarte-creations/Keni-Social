@@ -159,7 +159,7 @@ describe("VistaLista — 'Añadir a la cola' solo en piezas aprobadas/programada
 
   it("una pieza APROBADA ofrece 'Añadir a la cola' en el menú", async () => {
     renderLista([pub({ id: "p1", titulo: "Aprobada", estado: "aprobado" })]);
-    fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
+    fireEvent.contextMenu(screen.getByText("Aprobada").closest('[role="button"]')!);
     expect(
       await screen.findByRole("menuitem", { name: /Añadir a la cola/ }),
     ).toBeInTheDocument();
@@ -167,7 +167,8 @@ describe("VistaLista — 'Añadir a la cola' solo en piezas aprobadas/programada
 
   it("un BORRADOR NO ofrece 'Añadir a la cola' (encolar saltaría la revisión)", async () => {
     renderLista([pub({ id: "p1", titulo: "Borrador", estado: "borrador" })]);
-    fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
+    // "Borrador" aparece como título y como badge de estado: toma el primero (el título).
+    fireEvent.contextMenu(screen.getAllByText("Borrador")[0].closest('[role="button"]')!);
     // El menú abre con otras acciones, pero la de encolar NO está: el camino del borrador es
     // el flujo de aprobación (que auto-programa al aprobarse), no un encolado a mano.
     await screen.findByRole("menuitem", { name: /Duplicar/ });
@@ -176,7 +177,7 @@ describe("VistaLista — 'Añadir a la cola' solo en piezas aprobadas/programada
 
   it("una pieza PUBLICADA NO ofrece 'Añadir a la cola' (no se re-encola)", async () => {
     renderLista([pub({ id: "p1", titulo: "Salió", estado: "publicado" })]);
-    fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
+    fireEvent.contextMenu(screen.getByText("Salió").closest('[role="button"]')!);
     // El menú abre con otras acciones, pero la de encolar NO está.
     await screen.findByRole("menuitem", { name: /Duplicar/ });
     expect(screen.queryByRole("menuitem", { name: /Añadir a la cola/ })).toBeNull();

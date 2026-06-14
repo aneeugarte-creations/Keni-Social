@@ -6,7 +6,7 @@
  */
 import { ArrowUp, Coins, type Cpu, RotateCcw, XCircle } from "lucide-react";
 import * as React from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { ChipNivelPresupuesto } from "@/components/comunes/ChipEstado";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
@@ -30,22 +30,27 @@ import { useGuardarAjuste } from "@/pages/configuracion/SeccionFuncionalidad";
 import { DesgloseEconomiaProceso } from "@/pages/monitor/comun";
 import type { ColaJob, PresupuestoIA, ResultadoDia } from "@/types";
 
-/** Tarjeta KPI: icono, valor grande y subtítulo. `tono` colorea el valor ante alerta. */
+/** Tarjeta KPI: icono, valor grande y subtítulo. `tono` colorea el valor ante alerta. Si se
+ *  pasa `href`, la tarjeta ENTERA es un enlace (el contador es el botón) con realce naranja al
+ *  hover, en vez de un botón aparte. */
 export function Kpi({
   icono: Icono,
   titulo,
   valor,
   subtitulo,
   tono,
+  href,
 }: {
   icono: typeof Cpu;
   titulo: string;
   valor: React.ReactNode;
   subtitulo?: React.ReactNode;
   tono?: "alerta" | "ok" | "espera";
+  /** Si se pasa, la tarjeta navega aquí al hacer click (con realce de borde naranja). */
+  href?: string;
 }) {
-  return (
-    <Card>
+  const cuerpo = (
+    <Card className={cn("h-full", href && "transition-colors hover:border-keni-300")}>
       <CardHeader className="p-4 pb-2">
         <CardTitle className="flex items-center gap-2 text-sm text-muted-foreground">
           <Icono className="h-4 w-4" aria-hidden="true" />
@@ -67,6 +72,17 @@ export function Kpi({
       </CardContent>
     </Card>
   );
+  if (href) {
+    return (
+      <Link
+        to={href}
+        className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      >
+        {cuerpo}
+      </Link>
+    );
+  }
+  return cuerpo;
 }
 
 /** Tabla de jobs en vuelo (en curso o esperando), con acciones admin in-place. */
