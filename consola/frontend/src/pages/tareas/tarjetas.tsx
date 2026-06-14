@@ -2,6 +2,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   CalendarClock,
   Check,
+  ChevronDown,
+  ChevronRight,
+  ClipboardList,
   Hand,
   Play,
   RotateCcw,
@@ -25,15 +28,28 @@ import {
 } from "@/components/ui/dialog";
 import { SesionContexto } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
-import { formatearFecha, posicionTemporal } from "@/lib/fecha";
+import { formatearFecha, minutosHastaEvento, posicionTemporal } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
-import type { CatalogosContenido, Contenido, EventoRota } from "@/types";
+import type {
+  CatalogosContenido,
+  Contenido,
+  EventoRota,
+  TipoCoberturaEvento,
+} from "@/types";
 
 import { AvatarPersona } from "./AvatarPersona";
 import { CLAVE_TAREAS } from "./claves";
 import { DialogoAsignar } from "./dialogos";
+import { PLANTILLA_DEFECTO, type PlantillaGuion } from "./guion";
 import { etiquetaRol, type RolCobertura, ROLES_COBERTURA, rolesCubiertos } from "./roles";
 import type { Cobertura } from "./tipos";
+
+/**
+ * Umbral (minutos) de la fase PRE-LIVE del semáforo: cuando falta ≤ esto para el pitido, el evento
+ * deja de ser un «Programado» plano y pasa a «Empieza en X min» (ámbar). 120' ≈ la antesala típica
+ * (precalentamiento + previa) en que el equipo ya debería estar moviéndose.
+ */
+const UMBRAL_PRELIVE_MIN = 120;
 
 /** Avance de estado de una tarea ya cogida (pendiente → en_curso → hecha). */
 const SIGUIENTE: Record<string, { estado: string; etiqueta: string; icono: typeof Play }> = {
@@ -49,13 +65,15 @@ const PRIORIDAD_CLASE: Record<string, string> = {
 
 /**
  * Semáforo de cobertura: el equipo NO marca estados a mano (les hace perder tiempo); el estado
- * se deriva de la fecha/hora del evento:
- *   · gris  «Programado» → aún no empieza
- *   · verde «En vivo»    → mientras transcurre el evento (punto verde)
- *   · tick  «Cubierto»   → ya pasó (completado → ✓)
+ * se deriva de la fecha/hora del evento (su reloj maestro es la hora de inicio del partido):
+ *   · gris  «Programado»     → aún falta mucho
+ *   · ámbar «Empieza en X min» → PRE-LIVE: el pitido está cerca (≤ 2 h) → la antesala, a moverse
+ *   · verde «En vivo»        → mientras transcurre el evento (punto verde)
+ *   · tick  «Cubierto»       → ya pasó (completado → ✓)
  *
  * Por defecto se pinta como ETIQUETA con texto (siempre visible, no se confunde con el color del
- * avatar). En la fila colapsada se usa `compacto` (solo el punto/tick) para no recargar el rundown.
+ * avatar). En la fila colapsada se usa `compacto` (solo el punto/tick) para no recargar el rundown:
+ * el punto se tiñe de ámbar en PRE-LIVE para que la cuenta atrás se note de un vistazo.
  */
 export function SemaforoCobertura({
   fecha,
@@ -68,22 +86,40 @@ export function SemaforoCobertura({
 }) {
   const pos = posicionTemporal(fecha, hora);
   const completado = pos === "despues";
-  const texto = pos === "durante" ? "En vivo" : completado ? "Cubierto" : "Programado";
+  const envivo = pos === "durante";
+  // PRE-LIVE: aún no empieza (pos "antes") pero el pitido está a ≤ 2 h → cuenta atrás en ámbar.
+  const min = minutosHastaEvento(fecha, hora);
+  const preLive = pos === "antes" && min != null && min > 0 && min <= UMBRAL_PRELIVE_MIN;
+  // `titulo`: estado corto (tooltip del punto compacto). `texto`: etiqueta del badge (con la cuenta).
+  const titulo = envivo
+    ? "En vivo"
+    : completado
+      ? "Cubierto"
+      : preLive
+        ? "Empieza pronto"
+        : "Programado";
+  const texto = preLive ? `Empieza en ${min} min` : titulo;
   const claseBadge =
-    pos === "durante" || completado
+    envivo || completado
       ? "border-emerald-500/50 text-emerald-700 dark:text-emerald-300"
-      : "text-muted-foreground";
-  const dot = pos === "durante" ? "bg-emerald-500" : "bg-slate-400 dark:bg-slate-500";
+      : preLive
+        ? "border-amber-500/50 text-amber-700 dark:text-amber-300"
+        : "text-muted-foreground";
+  const dot = envivo
+    ? "bg-emerald-500"
+    : preLive
+      ? "bg-amber-500"
+      : "bg-slate-400 dark:bg-slate-500";
 
   if (compacto) {
     return completado ? (
-      <span title={texto} aria-label={texto} className="inline-flex shrink-0">
+      <span title={titulo} aria-label={titulo} className="inline-flex shrink-0">
         <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden />
       </span>
     ) : (
       <span
-        title={texto}
-        aria-label={texto}
+        title={titulo}
+        aria-label={titulo}
         className={cn("inline-block h-2.5 w-2.5 shrink-0 rounded-full", dot)}
       />
     );
@@ -97,6 +133,80 @@ export function SemaforoCobertura({
       )}
       {texto}
     </Badge>
+  );
+}
+
+/**
+ * GUION DEL PARTIDO dentro de la cobertura: el run-of-show por fases (Antes / Durante / Después)
+ * como CHECKLIST DE REFERENCIA NEUTRA (mismo idioma visual del tablero: outline gris). NO es un
+ * tablero de estado ni duplica la cobertura: cada entregable es un bullet NEUTRO con su etiqueta de
+ * rol (Foto/Video/Texto/Live) que solo RECUERDA qué suele producirse en cada fase. El ÚNICO
+ * indicador de qué roles están cubiertos es `RolesCubiertos` (el semáforo agregado), no el guion.
+ *
+ * Va COLAPSADO por defecto (toggle con chevron, estilo plataforma) para no separar el resumen
+ * «Cubren:» de las tarjetas accionables. Respeta el `tipo_cobertura` del evento: en «solo imágenes»
+ * (sin señal) oculta la fase «Durante» (entregables de directo: Live/Video) que no aplican; en
+ * «transmisión»/desconocido pinta el guion completo. La plantilla por TAMAÑO de partido es un dial
+ * preparado (`plantillaParaTipo`); hoy siempre usa el default ("Partido normal").
+ */
+export function GuionPartido({
+  tipoCobertura,
+  plantilla = PLANTILLA_DEFECTO,
+}: {
+  tipoCobertura?: TipoCoberturaEvento | null;
+  plantilla?: PlantillaGuion;
+}) {
+  const [abierto, setAbierto] = React.useState(false);
+  // «Solo imágenes»: sin señal de directo → la fase «Durante» (Live/Video) no aplica; se oculta.
+  const fases =
+    tipoCobertura === "imagenes" ? plantilla.fases.filter((f) => f.id !== "vivo") : plantilla.fases;
+  return (
+    <section aria-label="Guion del partido" className="rounded-md border border-border bg-card/40">
+      <button
+        type="button"
+        onClick={() => setAbierto((v) => !v)}
+        aria-expanded={abierto}
+        className="flex w-full items-center gap-1.5 p-2.5 text-left"
+      >
+        {abierto ? (
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+        ) : (
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+        )}
+        <ClipboardList className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+        <span className="text-xs font-medium text-muted-foreground">Guion del partido</span>
+        <Badge variant="outline" className="ml-auto font-normal text-muted-foreground">
+          {plantilla.etiqueta}
+        </Badge>
+      </button>
+      {abierto && (
+        <div className="grid gap-2.5 px-2.5 pb-2.5 sm:grid-cols-3">
+          {fases.map((fase) => (
+            <div key={fase.id} className="space-y-1">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {fase.etiqueta}
+              </p>
+              <ul className="space-y-0.5">
+                {fase.entregables.map((e) => (
+                  <li key={e.titulo} className="flex items-center gap-1.5 text-xs">
+                    <span
+                      className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/40"
+                      aria-hidden
+                    />
+                    <span className="truncate text-muted-foreground">{e.titulo}</span>
+                    {e.rol && (
+                      <span className="shrink-0 text-[10px] text-muted-foreground">
+                        · {etiquetaRol(e.rol)}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -607,6 +717,8 @@ export function TarjetaCobertura({
         {/* Semáforo agregado por rol del evento (qué roles están cubiertos). */}
         <RolesCubiertos cubridores={cobertura.cubridores} />
       </div>
+      {/* Guion del partido (run-of-show por fases): checklist de referencia neutra, colapsable. */}
+      <GuionPartido tipoCobertura={cobertura.tipoCobertura} />
       <div className="space-y-2">
         {cobertura.cubridores.map((t) => (
           <TarjetaTarea key={t.id} tarea={t} catalogos={catalogos} enCobertura />

@@ -1,4 +1,4 @@
-import type { Contenido, EventoRota } from "@/types";
+import type { Contenido, EventoRota, TipoCoberturaEvento } from "@/types";
 
 /** La COBERTURA de un evento: el partido + TODAS las personas que lo cubren (multi-cobertura). */
 export type Cobertura = {
@@ -6,6 +6,12 @@ export type Cobertura = {
   titulo: string;
   hora: string;
   orden: string;
+  /**
+   * Cómo se cubre el evento (transmisión con señal / solo imágenes), copiado del EVENTO de la rota.
+   * El guion del partido lo respeta: en «solo imágenes» recorta los entregables de directo (la fase
+   * «Durante»). `undefined` si el evento no se encuentra → guion completo (trato como transmisión).
+   */
+  tipoCobertura?: TipoCoberturaEvento;
   cubridores: Contenido[];
   /**
    * ROLES soltados de un evento que SIGUE cubierto por otros: tareas de cobertura HUÉRFANAS
@@ -33,6 +39,8 @@ export type Item =
  */
 export function agrupar(tareas: Contenido[], eventos: EventoRota[]) {
   const encargos = tareas.filter((t) => !t.evento_id);
+  // EVENTO por id: para resolver `tipo_cobertura` de cada cobertura (vive en el evento, no en la tarea).
+  const eventoPorId = new Map(eventos.map((e) => [e.id, e]));
   // Todas las tareas de cobertura (con `evento_id`) agrupadas por evento.
   const porEvento = new Map<string, Contenido[]>();
   for (const t of tareas) {
@@ -56,6 +64,7 @@ export function agrupar(tareas: Contenido[], eventos: EventoRota[]) {
         titulo: cubridores[0].titulo,
         hora: cubridores[0].hora_objetivo,
         orden: cubridores[0].fecha_objetivo || "9999-99-99",
+        tipoCobertura: eventoPorId.get(eventoId)?.tipo_cobertura,
         cubridores,
         libres: lista.filter((t) => !t.responsable_id),
       });
