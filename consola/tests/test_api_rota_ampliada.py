@@ -55,6 +55,29 @@ def test_duplicar_evento_y_cambiado_reset(cliente):
     assert clon["cambiado"] is False
 
 
+def test_duplicar_evento_propaga_marca(cliente):
+    """El clon HEREDA la marca del original (regresion auditoria-turnos hallazgo A).
+
+    Sin esto el clon nacia con marca="" e INVISIBLE en toda vista filtrada por marca
+    (la rejilla y el export de Claro Sports): el caso estrella "Jornada 17 -> 18" se
+    duplicaba y "desaparecia", obligando a recrear el partido a mano.
+    """
+    original = _crear_evento(cliente, titulo="Pumas vs America J17", marca="claro_sports")
+    assert original["marca"] == "claro_sports"
+    r = cliente.post(
+        f"/api/rota/eventos/{original['id']}/duplicar",
+        json={"fecha": "2026-06-06", "titulo": "Pumas vs America J18"},
+    )
+    assert r.status_code == 201, r.text
+    clon = r.json()["evento"]
+    assert clon["marca"] == "claro_sports"
+    # Y aparece en la vista scopeada por marca (no solo en el agregado "Todas").
+    visibles = cliente.get(
+        f"/api/rota/eventos?desde=2026-06-06&hasta=2026-06-06&marca=claro_sports"
+    ).json()["eventos"]
+    assert any(e["id"] == clon["id"] for e in visibles)
+
+
 def test_duplicar_evento_inexistente_404(cliente):
     r = cliente.post("/api/rota/eventos/no-existe/duplicar", json={})
     assert r.status_code == 404

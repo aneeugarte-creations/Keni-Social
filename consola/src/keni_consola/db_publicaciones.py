@@ -807,4 +807,5 @@ def duplicar_evento_rota(
         nota=original.get("nota", ""),
         tipo_cobertura=original.get("tipo_cobertura", TIPO_COBERTURA_TRANSMISION),
         prioridad=original.get("prioridad", PRIORIDAD_EVENTO_DEFECTO),
+        marca=original.get("marca", ""),
     )
