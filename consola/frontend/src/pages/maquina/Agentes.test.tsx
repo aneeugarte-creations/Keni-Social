@@ -17,8 +17,9 @@ vi.mock("@/hooks/marca-activa-contexto", () => ({
   useMarcaActiva: () => marcaActivaStub,
 }));
 
-// Sesión mutable: por defecto EDITOR (Workers/economía/actividad; Daemons es admin y no se
-// monta). Un test la sube a admin para comprobar el gemelo Daemons.
+// Sesión mutable: por defecto EDITOR (ve banda global + Workers + economía por motor; los agentes
+// IA y los servicios NO-IA son admin —endpoint de daemons— y no se montan). Un test la sube a
+// admin para comprobar las tarjetas de agente IA y los servicios no-IA por motor.
 const sesionStub: { usuario: { id: string; rol: string } } = {
   usuario: { id: "u1", rol: "editor" },
 };
@@ -54,31 +55,57 @@ function snapshot(esperando: ColaJob[] = [], enCurso: ColaJob[] = [], marca = ""
     procesando: enCurso.length,
     slots_libres: 2 - enCurso.length,
     workers_activos: [],
+    por_proceso: {
+      investigacion: { procesando: 0, pendientes: 0 },
+      produccion: { procesando: enCurso.length, pendientes: esperando.length },
+    },
     en_curso: enCurso,
     esperando,
     daemons: [],
+    presupuesto: {
+      nivel: "normal",
+      pausada: false,
+      presupuesto_tokens_dia: 0,
+      margen_manual_pct: 0,
+      gastado: { tokens: 0, tokens_in: 0, tokens_out: 0, coste_usd: 0, generaciones: 0 },
+      restante_tokens: null,
+      pct_usado: null,
+      dia: "2026-06-13",
+    },
   };
 }
 
 const SERIE = { dias: 14, encolados: [], resultados: [] };
 
-// Un daemon de cada tipo de toggle: uno con gate (Switch) y uno siempre-activo (sin gate).
+const AGG = {
+  total: { items: 0, coste_usd: 0, tokens: 0 },
+  por_tipo: [],
+  por_dia: [],
+  por_proceso: {
+    investigacion: { total: { items: 1, coste_usd: 0.1, tokens: 100 }, por_tipo: [], por_dia: [] },
+    produccion: { total: { items: 2, coste_usd: 0.2, tokens: 200 }, por_tipo: [], por_dia: [] },
+  },
+};
+
+// Un daemon por clase/motor: agente IA de cada motor (clase ia), un servicio NO-IA por motor
+// (clase maquina) y uno de sistema (clase sistema, que NO debe salir en las columnas).
+function daemon(parcial: Record<string, unknown>) {
+  return {
+    visto: "", activo: true, intervalo_seg: 90, tick_seg: 60, ultimo_barrido: "", ultimo_ok: "",
+    ultimo_error: "", error_txt: "", duracion_ms: 0, barridos: 3, errores: 0, edad_seg: 10,
+    umbral_atraso_seg: 180, estado: "ok", barrido_solicitado: "", barrible: false,
+    grupo: "infra", gasta_tokens: false, clase: "sistema", motor: null, clave_gate: null,
+    ...parcial,
+  };
+}
 const DAEMONS = {
   daemons: [
-    {
-      daemon: "ingesta", visto: "", activo: true, intervalo_seg: 90, tick_seg: 60,
-      ultimo_barrido: "", ultimo_ok: "", ultimo_error: "", error_txt: "", duracion_ms: 0,
-      barridos: 3, errores: 0, edad_seg: 10, umbral_atraso_seg: 180, estado: "ok",
-      barrido_solicitado: "", barrible: true, grupo: "investigacion", gasta_tokens: true,
-      clave_gate: "KENI_DAEMON_INGESTA",
-    },
-    {
-      daemon: "reaper", visto: "", activo: true, intervalo_seg: 300, tick_seg: 60,
-      ultimo_barrido: "", ultimo_ok: "", ultimo_error: "", error_txt: "", duracion_ms: 0,
-      barridos: 5, errores: 0, edad_seg: 10, umbral_atraso_seg: 600, estado: "ok",
-      barrido_solicitado: "", barrible: false, grupo: "infra", gasta_tokens: false,
-      clave_gate: null,
-    },
+    daemon({ daemon: "investigacion", clase: "ia", motor: "investigacion", barrible: true, clave_gate: "KENI_MAQUINA" }),
+    daemon({ daemon: "produccion", clase: "ia", motor: "produccion", clave_gate: "KENI_MAQUINA" }),
+    daemon({ daemon: "sugerencias", clase: "ia", motor: "produccion", clave_gate: "KENI_SUGERENCIAS_EDITORIALES" }),
+    daemon({ daemon: "ingesta", clase: "maquina", motor: "investigacion", barrible: true, clave_gate: "KENI_PIPELINE_SELECCION" }),
+    daemon({ daemon: "programador", clase: "maquina", motor: "produccion", clave_gate: null }),
+    daemon({ daemon: "reaper", clase: "sistema", motor: null, clave_gate: null }),
   ],
   error: null,
 };
@@ -88,6 +115,9 @@ function stubFetch(cola: unknown) {
     const s = String(url);
     if (s.includes("/api/actividad/cola/series")) {
       return new Response(JSON.stringify(SERIE), { status: 200 });
+    }
+    if (s.includes("/api/actividad/agregados")) {
+      return new Response(JSON.stringify(AGG), { status: 200 });
     }
     if (s.includes("/api/actividad/cola")) {
       return new Response(JSON.stringify(cola), { status: 200 });
@@ -110,7 +140,7 @@ function renderConProviders(ui: React.ReactElement) {
   );
 }
 
-describe("Agentes (Workers + Daemons)", () => {
+describe("Agentes (dos columnas por motor)", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     marcaActivaStub.marcaActiva = null;
@@ -132,8 +162,6 @@ describe("Agentes (Workers + Daemons)", () => {
       const urls = fetchFn.mock.calls.map((c) => String(c[0]));
       expect(urls.some((u) => u.includes("/api/actividad/cola?marca=claro-sports"))).toBe(true);
     });
-    // Y las tarjetas señalan la marca filtrada.
-    expect(screen.getAllByText("Claro Sports").length).toBeGreaterThan(0);
   });
 
   it("en la vista «Todas» pide la cola sin marca", async () => {
@@ -144,27 +172,52 @@ describe("Agentes (Workers + Daemons)", () => {
     expect(urls.some((u) => u.includes("/api/actividad/cola") && !u.includes("marca="))).toBe(true);
   });
 
-  it("monta los gemelos Workers + economía + actividad (editor no ve Daemons)", async () => {
+  it("monta la banda global + las dos columnas por motor (editor no ve agentes IA ni servicios)", async () => {
     stubFetch(snapshot([job({})]));
     renderConProviders(<Agentes />);
-    expect(await screen.findByText("Workers")).toBeInTheDocument();
-    expect(screen.getByText("Economía de tokens")).toBeInTheDocument();
+    // Banda global: presupuesto/parada de emergencia + capacidad del pool.
+    expect(await screen.findByText("Presupuesto y parada de emergencia")).toBeInTheDocument();
+    expect(screen.getByText("Pool compartido")).toBeInTheDocument();
+    // Columnas por motor: Workers + economía de cada motor.
+    expect(screen.getAllByText("Workers (reactivos)").length).toBe(2);
+    expect(screen.getByText("Economía (tokens) de Investigación")).toBeInTheDocument();
+    expect(screen.getByText("Economía (tokens) de Producción")).toBeInTheDocument();
+    // Actividad (feed cross-motor) al final.
     expect(screen.getByText("Actividad")).toBeInTheDocument();
-    // Daemons es admin (endpoint 403 si no): un editor no ve el gemelo.
-    expect(screen.queryByText("Daemons")).toBeNull();
+    // Los agentes IA y los servicios NO-IA son admin (endpoint de daemons): un editor no los ve.
+    expect(screen.queryByText("Agentes IA (proactivos)")).toBeNull();
+    expect(screen.queryByText("Servicios (no consumen IA)")).toBeNull();
   });
 
-  it("admin ve el gemelo Daemons con encendido in-place (Switch con gate, «Siempre activo» sin gate)", async () => {
+  it("admin ve las tarjetas de agente IA por motor (toggle in-place) y los servicios NO-IA", async () => {
     sesionStub.usuario = { id: "u1", rol: "admin" };
     stubFetch(snapshot([job({})]));
     renderConProviders(<Agentes />);
-    expect(await screen.findByText("Daemons")).toBeInTheDocument();
-    // El daemon con `clave_gate` pinta un Switch; el de gate null, el texto «Siempre activo».
-    expect(await screen.findByText("ingesta")).toBeInTheDocument();
+    // Tarjeta del agente IA de cada motor, con su toggle on/off in-place (clave_gate).
+    expect(await screen.findByText("Sugerencias editoriales")).toBeInTheDocument();
+    expect(screen.getAllByText("Agentes IA (proactivos)").length).toBe(2);
     expect(
-      screen.getByRole("switch", { name: /Encender\/apagar el daemon ingesta/i }),
+      screen.getByRole("switch", { name: /Encender\/apagar el agente investigacion/i }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Siempre activo")).toBeInTheDocument();
+    // Servicios NO-IA (clase=maquina) por motor, sección aparte.
+    expect(screen.getAllByText("Servicios (no consumen IA)").length).toBe(2);
+    // El de clase=sistema (reaper) NO aparece en las columnas de la máquina.
+    expect(screen.queryByText("reaper")).toBeNull();
+  });
+
+  it("?proceso= enfoca la página a un solo motor", async () => {
+    sesionStub.usuario = { id: "u1", rol: "admin" };
+    stubFetch(snapshot([job({})]));
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter initialEntries={["/maquina/agentes?proceso=investigacion"]}>
+          <Agentes />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText("Economía (tokens) de Investigación")).toBeInTheDocument();
+    // La columna de Producción no se monta cuando está enfocado a Investigación.
+    expect(screen.queryByText("Economía (tokens) de Producción")).toBeNull();
   });
 
   it("señala los jobs prioritarios de la lista de espera", async () => {
