@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -9,8 +9,10 @@ import {
 } from "@/hooks/marca-activa-contexto";
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
 import * as apiMod from "@/lib/api";
+import { hoyCDMX } from "@/lib/fecha";
 import type { CatalogosContenido, Contenido, EventoRota, UsuarioSesion } from "@/types";
 
+import { PanoramaAgenda } from "./PanoramaAgenda";
 import Tareas from "./Tareas";
 
 vi.mock("sonner", () => ({
@@ -135,7 +137,10 @@ function renderTareas(tareas: Contenido[], eventos: EventoRota[] = [], u = usuar
 }
 
 describe("Tareas — lista compartida de eventos + encargos", () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
 
   it("un EVENTO sin tarea sale como «Por cubrir» y «La cubro yo» llama a cubrirEvento", async () => {
     const cubrir = vi
@@ -371,10 +376,69 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     await waitFor(() => expect(soltar).toHaveBeenCalledWith("t-mia"));
   });
 
-  it("'Añadir' abre el diálogo", async () => {
+  it("'Añadir' (barra) abre el diálogo grande de la lista", async () => {
     renderTareas([]);
-    fireEvent.click(await screen.findByRole("button", { name: /Añadir/ }));
+    // Hay dos «Añadir»: el atajo inline del Panorama (dentro de su <form>) y el de la barra.
+    // El de la barra (fuera del form) abre el diálogo rico (import por enlace/documento, encargos).
+    const botones = await screen.findAllByRole("button", { name: /Añadir/ });
+    const barra = botones.find((b) => !b.closest("form"))!;
+    fireEvent.click(barra);
     expect(await screen.findByText("Añadir a la lista")).toBeInTheDocument();
+  });
+
+  it("AÑADIR-RÁPIDO: el atajo del Panorama crea un ítem «por cubrir» HOY (CDMX) con crearEventoRota", async () => {
+    const crear = vi.spyOn(apiMod.api, "crearEventoRota").mockResolvedValue({} as never);
+    renderTareas([]);
+
+    const input = await screen.findByPlaceholderText("¿Qué hay que cubrir?");
+    fireEvent.change(input, { target: { value: "Reacciones del Toluca" } });
+    // El botón del atajo vive en el MISMO <form> que el input (lo separa del «Añadir» de la barra).
+    const form = input.closest("form")!;
+    fireEvent.click(within(form).getByRole("button", { name: /Añadir/ }));
+
+    await waitFor(() => expect(crear).toHaveBeenCalledTimes(1));
+    expect(crear).toHaveBeenCalledWith(
+      expect.objectContaining({
+        titulo: "Reacciones del Toluca",
+        fecha: hoyCDMX(),
+        tipo_cobertura: "transmision",
+        marca: "claro-sports",
+      }),
+    );
+    // Tras crear, limpia el input para el siguiente atajo.
+    await waitFor(() => expect((input as HTMLInputElement).value).toBe(""));
+  });
+
+  it("URGENCIA: en HOY, lo «en vivo» flota por encima de un evento más temprano ya pasado", () => {
+    // Reloj fijo: 23:30 CDMX del 13-jun (= 05:30 UTC del 14-jun). Sin async (render directo).
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-14T05:30:00Z"));
+    const hoy = hoyCDMX(); // "2026-06-13" en CDMX
+
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <PanoramaAgenda
+            tareas={[]}
+            eventos={[
+              // Más temprano (00:00) y YA pasado → «por cubrir», pero baja en urgencia.
+              evento({ id: "ev-temprano", titulo: "Empezó temprano", fecha: hoy, hora: "00:00" }),
+              // En curso ahora (23:00, ventana 180') → «en vivo», debe flotar arriba.
+              evento({ id: "ev-vivo", titulo: "En vivo ahora", fecha: hoy, hora: "23:00" }),
+            ]}
+            catalogos={catalogos()}
+            marca="claro-sports"
+            esAdmin={false}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    const vivo = screen.getByText("En vivo ahora");
+    const temprano = screen.getByText("Empezó temprano");
+    // «En vivo» va ANTES en el DOM que el evento más temprano ya pasado (urgencia > hora).
+    expect(vivo.compareDocumentPosition(temprano) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("pega un enlace, analiza, revisa los partidos propuestos y los acepta", async () => {

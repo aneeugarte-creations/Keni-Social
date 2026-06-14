@@ -107,9 +107,9 @@ describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»",
     // Radix Tabs activa en pointer-down (patrón de la suite).
     fireEvent.mouseDown(await screen.findByRole("tab", { name: "Cobertura" }), { button: 0 });
 
-    // El tablero embebido pinta su botón «Añadir» inline y, al cargar, el filtro «Por cubrir»
-    // del Panorama (que vive tras el estado de carga, por eso se espera con findBy).
-    expect(await screen.findByRole("button", { name: "Añadir" })).toBeInTheDocument();
+    // El tablero embebido pinta su botón «Añadir» inline (barra) y, al cargar, el atajo «Añadir»
+    // del Panorama: dos botones «Añadir». Basta con que aparezca alguno (el tablero ya montó).
+    expect((await screen.findAllByRole("button", { name: "Añadir" })).length).toBeGreaterThan(0);
     expect(
       await screen.findByRole("button", { name: "Ver solo lo por cubrir" }),
     ).toBeInTheDocument();

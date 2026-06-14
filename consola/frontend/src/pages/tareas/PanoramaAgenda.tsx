@@ -1,13 +1,24 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Hand, Plus, Trophy } from "lucide-react";
 import * as React from "react";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatearDia, hoyCDMX, tiempoRelativo } from "@/lib/fecha";
+import { Input } from "@/components/ui/input";
+import { api, mensajeError } from "@/lib/api";
+import {
+  formatearDia,
+  hoyCDMX,
+  minutosHastaEvento,
+  posicionTemporal,
+  tiempoRelativo,
+} from "@/lib/fecha";
 import { cn } from "@/lib/utils";
 import type { CatalogosContenido, Contenido, EventoRota } from "@/types";
 
 import { AvatarPersona } from "./AvatarPersona";
+import { CLAVE_TAREAS } from "./claves";
 import { DialogoAnadirPersona } from "./dialogos";
 import { etiquetaRol } from "./roles";
 import {
@@ -30,6 +41,107 @@ function etiquetaDia(dia: string, hoy: string): string {
   if (dia === hoy) return "Hoy";
   if (dia === sumarDias(hoy, 1)) return "Mañana";
   return formatearDia(dia);
+}
+
+/**
+ * AÑADIR-RÁPIDO: el atajo de 5 segundos, SIEMPRE visible y para TODOS (no solo admin). Crea un
+ * ítem coverable que cae directo en «Por cubrir» (un evento de la rota sin cubridores): título +
+ * hora opcional, HOY en CDMX por defecto, marca del tablero. Etiqueta GENÉRICA (vale para clip,
+ * foto, reacción… no solo «partido»). El diálogo «Añadir» de la barra queda para el caso rico
+ * (import por enlace/documento, encargos con dueño).
+ */
+function AnadirRapido({ marca }: { marca: string }) {
+  const queryClient = useQueryClient();
+  const [titulo, setTitulo] = React.useState("");
+  const [hora, setHora] = React.useState("");
+
+  const crear = useMutation({
+    mutationFn: () =>
+      api.crearEventoRota({
+        titulo: titulo.trim(),
+        fecha: hoyCDMX(), // HOY en CDMX (no el día UTC): cae en el cajón «Hoy».
+        hora: hora || undefined,
+        tipo_cobertura: "transmision",
+        marca: marca || undefined,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
+      toast.success(`«${titulo.trim()}» está en «Por cubrir».`);
+      setTitulo("");
+      setHora("");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const enviar = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!titulo.trim() || crear.isPending) return;
+    crear.mutate();
+  };
+
+  return (
+    <form
+      onSubmit={enviar}
+      className="flex items-center gap-1.5 rounded-lg border border-border bg-card p-1.5 shadow-sm"
+    >
+      {/* `Input` ya fuerza text-base (16px) en móvil → sin auto-zoom de iOS al enfocar. */}
+      <Input
+        value={titulo}
+        onChange={(e) => setTitulo(e.target.value)}
+        placeholder="¿Qué hay que cubrir?"
+        aria-label="¿Qué hay que cubrir?"
+        className="min-w-0 flex-1 border-0 bg-transparent shadow-none focus-visible:ring-0"
+      />
+      <Input
+        type="time"
+        value={hora}
+        onChange={(e) => setHora(e.target.value)}
+        aria-label="Hora (opcional)"
+        className="w-[7rem] shrink-0 border-0 bg-transparent shadow-none focus-visible:ring-0"
+      />
+      <Button
+        type="submit"
+        variant="outline"
+        size="sm"
+        className="shrink-0"
+        aria-label="Añadir a Por cubrir"
+        disabled={!titulo.trim() || crear.isPending}
+      >
+        <Plus className="mr-1 h-4 w-4" />
+        {crear.isPending ? "Añadiendo…" : "Añadir"}
+      </Button>
+    </form>
+  );
+}
+
+/** ¿El ítem está SIN dueño? (evento por cubrir, o encargo/cobertura-soltada sin responsable). */
+function itemSinDueno(i: Item): boolean {
+  return i.kind === "evento" || (i.kind === "tarea" && !i.tarea.responsable_id);
+}
+
+/** Hora «de pared» (HH:MM) del ítem, o "" si no la tiene. */
+function horaItem(i: Item): string {
+  return i.kind === "cobertura"
+    ? i.cobertura.hora
+    : i.kind === "tarea"
+      ? i.tarea.hora_objetivo
+      : i.evento.hora;
+}
+
+/**
+ * Rango de URGENCIA de un ítem DENTRO de HOY (menor = más arriba): 0 en vivo (durante) · 1 empieza
+ * pronto (0<min≤120) · 2 por cubrir (sin dueño) · 3 el resto. La hora desempata fuera. Solo se
+ * aplica al cajón de HOY; los demás días siguen ordenados por hora (sin cambiar el agrupado).
+ */
+function rangoUrgenciaHoy(i: Item, dia: string): number {
+  const hora = horaItem(i) || null;
+  // «En vivo» exige hora concreta: sin hora, posicionTemporal devuelve "durante" por diseño y
+  // colaría un ítem sin hora por encima de los que empiezan pronto. Sin hora → cae a «por cubrir».
+  if (hora && posicionTemporal(dia, hora) === "durante") return 0;
+  const min = minutosHastaEvento(dia, hora);
+  if (min != null && min > 0 && min <= 120) return 1;
+  if (itemSinDueno(i)) return 2;
+  return 3;
 }
 
 /** Banda superior: lo ÚLTIMO que ha cogido el equipo (por momento de asignación), para ver el pulso. */
@@ -298,14 +410,30 @@ export function PanoramaAgenda({
     lista.push(it);
     porDia.set(it.orden, lista);
   }
+  const hoy = hoyCDMX();
   const diasOrdenados = [...porDia.keys()].sort();
-  for (const d of diasOrdenados) porDia.get(d)!.sort((a, b) => horaDe(a).localeCompare(horaDe(b)));
+  for (const d of diasOrdenados) {
+    const lista = porDia.get(d)!;
+    if (d === hoy) {
+      // HOY ordena por URGENCIA (en vivo → empieza pronto → por cubrir → resto); la hora desempata.
+      lista.sort(
+        (a, b) =>
+          rangoUrgenciaHoy(a, d) - rangoUrgenciaHoy(b, d) || horaDe(a).localeCompare(horaDe(b)),
+      );
+    } else {
+      // El resto de días, como siempre: por hora (estilo rundown).
+      lista.sort((a, b) => horaDe(a).localeCompare(horaDe(b)));
+    }
+  }
   const diasMostrados = diasOrdenados.slice(0, diasVisibles);
   const hayMas = diasOrdenados.length > diasVisibles;
-  const hoy = hoyCDMX();
 
   return (
     <div className="space-y-4">
+      {/* Atajo de 5 segundos para meter algo a cubrir (todos), antes de la agenda. Solo con marca
+          concreta: sin ella crearía eventos sin marca que se pierden de las vistas por marca. */}
+      {marca && <AnadirRapido marca={marca} />}
+
       {/* Carga por persona (avatar + conteo) que además filtra la agenda. */}
       <div className="flex flex-wrap items-center gap-1.5">
         <button
