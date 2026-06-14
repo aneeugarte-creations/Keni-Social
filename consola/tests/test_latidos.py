@@ -582,6 +582,104 @@ def test_endpoint_barrer_solo_admin(entorno):
 
 
 # --------------------------------------------------------------------------- #
+# Historial por barrido: daemon_barridos (insercion + poda + listado + endpoint) #
+# --------------------------------------------------------------------------- #
+
+
+def test_registrar_barrido_inserta_y_lista_nuevo_primero(entorno):
+    db.registrar_barrido(
+        "demo", ok=True, ts_inicio="2026-06-01T00:00:01", duracion_ms=10, resumen="3 items"
+    )
+    db.registrar_barrido(
+        "demo", ok=False, ts_inicio="2026-06-01T00:00:02", error_txt="boom"
+    )
+    barridos = db.listar_barridos("demo")
+    assert len(barridos) == 2
+    # Nuevo primero (orden por ts desc).
+    assert barridos[0]["ok"] is False
+    assert barridos[0]["error_txt"] == "boom"
+    assert barridos[1]["ok"] is True
+    assert barridos[1]["resumen"] == "3 items"
+    assert barridos[1]["duracion_ms"] == 10
+
+
+def test_registrar_barrido_poda_cota_dura(entorno, monkeypatch):
+    from keni_consola import db_latidos
+
+    monkeypatch.setattr(db_latidos, "_MAX_BARRIDOS_POR_DAEMON", 3)
+    for i in range(6):
+        db.registrar_barrido("demo", ok=True, ts_inicio=f"2026-06-01T00:00:0{i}")
+    barridos = db.listar_barridos("demo", limite=50)
+    # Solo quedan los 3 mas recientes (poda en cada insercion).
+    assert [b["ts_inicio"] for b in barridos] == [
+        "2026-06-01T00:00:05", "2026-06-01T00:00:04", "2026-06-01T00:00:03",
+    ]
+
+
+def test_registrar_barrido_trunca_resumen_y_error(entorno):
+    db.registrar_barrido("demo", ok=False, resumen="r" * 1000, error_txt="e" * 1000)
+    (b,) = db.listar_barridos("demo")
+    assert len(b["resumen"]) == 300
+    assert len(b["error_txt"]) == 500
+
+
+def test_bucle_gateado_escribe_historial_con_resumen(entorno):
+    # El hook comun `latidos.barrido` (via bucle_gateado) deja una fila de historial; el str
+    # que devuelve el sweep viaja como `resumen`.
+    daemon_util.bucle_gateado(
+        activo_fn=lambda: True,
+        intervalo_seg_fn=lambda: 0.0,
+        sweep_fn=lambda: "ok 5 items",
+        tick_seg=0.001,
+        log=_LOG,
+        nombre="histdemo",
+        _max_vueltas=1,
+    )
+    barridos = db.listar_barridos("histdemo")
+    assert len(barridos) == 1
+    assert barridos[0]["ok"] is True
+    assert barridos[0]["resumen"] == "ok 5 items"
+
+
+def test_endpoint_barridos_contrato(entorno):
+    db.latido_barrido("ingesta", ok=True, intervalo_seg=60.0, tick_seg=60.0)  # registra el daemon
+    db.registrar_barrido("ingesta", ok=True, ts_inicio="2026-06-01T00:00:01", resumen="3 items")
+    c = _cli_admin()
+    r = c.get("/api/sistema/daemons/ingesta/barridos")
+    assert r.status_code == 200
+    cuerpo = r.json()
+    assert cuerpo["daemon"] == "ingesta"
+    assert len(cuerpo["barridos"]) == 1
+    assert cuerpo["barridos"][0]["resumen"] == "3 items"
+    assert cuerpo["barridos"][0]["ok"] is True
+
+
+def test_endpoint_barridos_desconocido_404(entorno):
+    c = _cli_admin()
+    assert c.get("/api/sistema/daemons/no-existe/barridos").status_code == 404
+
+
+def test_endpoint_barridos_retirado_404(entorno):
+    # La fila huerfana de un daemon RETIRADO no tiene historial consultable.
+    db.latido_barrido("pipeline", ok=True, intervalo_seg=60.0, tick_seg=60.0)
+    c = _cli_admin()
+    assert c.get("/api/sistema/daemons/pipeline/barridos").status_code == 404
+
+
+def test_endpoint_barridos_solo_admin(entorno):
+    db.latido_barrido("ingesta", ok=True, intervalo_seg=60.0, tick_seg=60.0)
+    auth.crear_usuario("e", CLAVE, "editor")
+    c = TestClient(app_modulo.crear_app(token=TOKEN_PRUEBA))
+    assert (
+        c.post(
+            "/api/auth/login", json={"usuario": "e", "password": CLAVE}, headers=_ORIGIN
+        ).status_code
+        == 200
+    )
+    assert c.get("/api/sistema/daemons/ingesta/barridos").status_code == 403
+
+
+# --------------------------------------------------------------------------- #
 # Endpoint /api/sistema/backups                                                #
 # --------------------------------------------------------------------------- #
 

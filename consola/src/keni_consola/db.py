@@ -256,7 +256,9 @@ from .db_latidos import (  # noqa: F401
     consumir_solicitud_barrido,
     latido_barrido,
     latido_ciclo,
+    listar_barridos,
     listar_latidos,
+    registrar_barrido,
     solicitar_barrido,
 )
 from .db_metricas import (  # noqa: F401

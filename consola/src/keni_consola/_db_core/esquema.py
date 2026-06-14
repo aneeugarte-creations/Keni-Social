@@ -1500,6 +1500,27 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         barrido_solicitado TEXT NOT NULL DEFAULT ''
     )
     """,
+    # HISTORIAL por barrido (observabilidad): `daemon_latidos` solo guarda el RESUMEN acumulado
+    # (ultimo ok/error + contadores); esta tabla deja una fila POR BARRIDO ejecutado para poder
+    # ver la traza reciente de cada daemon (que hizo / cuanto tardo / si fallo). La escribe el
+    # hook comun `latidos.barrido` (best-effort) y se PODA con cota dura por daemon (los
+    # `_MAX_BARRIDOS_POR_DAEMON` mas recientes; ver `db_latidos.registrar_barrido`). `id` TEXT
+    # (uuid) como el resto del esquema; `ok` 1/0; `resumen` texto corto (qué hizo / nº items,
+    # lo aporta el sweep si devuelve un str). Migracion 0034 para BDs ya creadas.
+    """
+    CREATE TABLE IF NOT EXISTS daemon_barridos (
+        id          TEXT PRIMARY KEY,
+        daemon      TEXT NOT NULL,
+        ts_inicio   TEXT NOT NULL DEFAULT '',
+        duracion_ms INTEGER NOT NULL DEFAULT 0,
+        ok          INTEGER NOT NULL DEFAULT 1,
+        resumen     TEXT NOT NULL DEFAULT '',
+        error_txt   TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    # Listado/poda por daemon, recientes primero (desempate por id para orden estable).
+    "CREATE INDEX IF NOT EXISTS idx_daemon_barridos_daemon_ts "
+    "ON daemon_barridos (daemon, ts_inicio DESC, id DESC)",
 )
 
 

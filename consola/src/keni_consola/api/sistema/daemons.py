@@ -1,7 +1,8 @@
 """Daemons de fondo del panel de ADMIN (latidos persistidos por `latidos.py`).
 
-  - GET  /api/sistema/daemons                  -> estado de los daemons de fondo.
-  - POST /api/sistema/daemons/{daemon}/barrer  -> solicita un barrido INMEDIATO.
+  - GET  /api/sistema/daemons                   -> estado de los daemons de fondo.
+  - GET  /api/sistema/daemons/{daemon}/barridos -> historial de barridos recientes del daemon.
+  - POST /api/sistema/daemons/{daemon}/barrer   -> solicita un barrido INMEDIATO.
 
 La sonda `sonda_daemons` la comparten el endpoint admin y el doctor (`/api/estado`).
 """
@@ -14,6 +15,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from ... import db, latidos
+from ..._http_json import _entero_query
 from ...tiempo import ahora_iso
 from ._comun import _es_admin, _logger, _rechazo_no_admin
 
@@ -112,6 +114,33 @@ async def daemons_latidos(request: Request) -> Response:
     if not _es_admin(request):
         return _rechazo_no_admin()
     return JSONResponse(sonda_daemons())
+
+
+async def daemons_barridos(request: Request) -> Response:
+    """GET /api/sistema/daemons/{daemon}/barridos?limite=: historial de barridos (admin).
+
+    Devuelve los barridos recientes (nuevo primero) del daemon desde `daemon_barridos`:
+    `{daemon, barridos: [{id, daemon, ts_inicio, duracion_ms, ok, resumen, error_txt}, ...]}`.
+    404 si el daemon no existe (no esta registrado en `daemon_latidos` o esta retirado): solo
+    quien late tiene historial. `limite` se acota a la cota dura del historial por daemon.
+    """
+    if not _es_admin(request):
+        return _rechazo_no_admin()
+    daemon = str(request.path_params.get("daemon") or "").strip()
+    try:
+        registrados = {f["daemon"] for f in db.listar_latidos()}
+    except Exception as e:  # noqa: BLE001 -- BD caida: degradar legible, no 500 crudo
+        _logger.warning("No se pudieron leer los latidos para el historial de barridos: %s", e)
+        return JSONResponse(
+            {"error": "No se pudo consultar el registro de daemons."}, status_code=503
+        )
+    if daemon not in registrados or daemon in latidos.RETIRADOS:
+        return JSONResponse(
+            {"error": f"No hay ningún daemon registrado con el nombre {daemon!r}."},
+            status_code=404,
+        )
+    limite = _entero_query(request.query_params.get("limite"), minimo=1) or 50
+    return JSONResponse({"daemon": daemon, "barridos": db.listar_barridos(daemon, limite)})
 
 
 async def daemons_barrer(request: Request) -> Response:

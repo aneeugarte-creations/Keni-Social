@@ -105,6 +105,9 @@ _TABLAS = (
     # Latidos de daemons (observabilidad): sin truncar, un latido de un test contamina las
     # aserciones de estado/contadores del siguiente.
     "daemon_latidos",
+    # Historial por barrido de daemons (observabilidad): sin truncar, las filas de un test
+    # contaminan el listado/poda del siguiente.
+    "daemon_barridos",
     # Publicaciones y solicitudes de la Biblioteca de Texto (modelo "versión publicada").
     # Sin truncar, un puntero de producción de un test contaminaría el `produccion`/
     # `sin_publicar` (y el ensamblaje) del siguiente.

@@ -263,8 +263,15 @@ def barrido(
     tick_seg: float,
     duracion_ms: int = 0,
     error: str = "",
+    resumen: str = "",
 ) -> None:
-    """Latido de BARRIDO (el sweep corrió, bien o mal), best-effort."""
+    """Latido de BARRIDO (el sweep corrió, bien o mal), best-effort.
+
+    Hace DOS cosas, cada una best-effort e independiente: (1) actualiza el RESUMEN acumulado
+    del daemon en `daemon_latidos` (ultimo ok/error + contadores) y (2) deja una fila de
+    HISTORIAL en `daemon_barridos` (una por barrido, podada con cota dura). `resumen` es un
+    texto corto opcional (qué hizo / nº items) que aporta el bucle si el sweep devuelve un str.
+    """
     try:
         from . import db_latidos
 
@@ -279,6 +286,15 @@ def barrido(
         _ultimo_ciclo[daemon] = time.monotonic()
     except Exception as e:  # noqa: BLE001 -- un latido jamás rompe un barrido
         _log.debug("Latido de barrido de %s no registrado: %s", daemon, e)
+    # Historial por barrido (independiente del resumen acumulado: un fallo de uno no toca el otro).
+    try:
+        from . import db_latidos
+
+        db_latidos.registrar_barrido(
+            daemon, ok=ok, duracion_ms=duracion_ms, resumen=resumen, error_txt=error
+        )
+    except Exception as e:  # noqa: BLE001 -- el historial jamás rompe un barrido
+        _log.debug("Historial de barrido de %s no registrado: %s", daemon, e)
 
 
 def consumir_solicitud(daemon: str) -> bool:

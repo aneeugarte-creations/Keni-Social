@@ -7,6 +7,7 @@ normales (propagan excepciones), como el resto de `db_<dominio>`.
 """
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
 from ._db_comun import _conectar
@@ -14,6 +15,11 @@ from .tiempo import ahora_iso
 
 # Tope defensivo del texto de error persistido (un traceback entero no aporta en el panel).
 _MAX_ERROR_TXT = 500
+# Tope del `resumen` (texto corto de qué hizo el barrido / nº items): el panel muestra una línea.
+_MAX_RESUMEN = 300
+# COTA dura del historial por daemon (`daemon_barridos`): se poda a los N barridos mas recientes
+# en cada insercion, asi la tabla no crece sin limite (un daemon barre cada pocos minutos).
+_MAX_BARRIDOS_POR_DAEMON = 50
 
 
 def latido_ciclo(daemon: str, *, activo: bool, intervalo_seg: float, tick_seg: float) -> None:
@@ -84,6 +90,77 @@ def latido_barrido(
         con.commit()
     finally:
         con.close()
+
+
+# --------------------------------------------------------------------------- #
+# Historial por barrido (`daemon_barridos`): una fila por sweep + poda con cota #
+# --------------------------------------------------------------------------- #
+
+
+def registrar_barrido(
+    daemon: str,
+    *,
+    ok: bool,
+    ts_inicio: str = "",
+    duracion_ms: int = 0,
+    resumen: str = "",
+    error_txt: str = "",
+) -> None:
+    """Inserta UNA fila de historial por el barrido de `daemon` y poda el exceso.
+
+    `ts_inicio` es el instante (ISO canon) del barrido; por defecto el actual (los sweeps son
+    cortos, asi que `ahora` ≈ inicio). Tras insertar se PODA el daemon a sus
+    `_MAX_BARRIDOS_POR_DAEMON` barridos mas recientes (cota dura, en la misma conexion). `id`
+    es un uuid (como el resto del esquema); `resumen`/`error_txt` se truncan defensivamente.
+    """
+    bid = uuid.uuid4().hex
+    ts = ts_inicio or ahora_iso()
+    res = (resumen or "")[:_MAX_RESUMEN]
+    err = (error_txt or "")[:_MAX_ERROR_TXT]
+    con = _conectar()
+    try:
+        con.execute(
+            "INSERT INTO daemon_barridos (id, daemon, ts_inicio, duracion_ms, ok, resumen, "
+            "error_txt) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (bid, daemon, ts, int(duracion_ms), 1 if ok else 0, res, err),
+        )
+        # Poda: conserva solo los N mas recientes de ESTE daemon (recientes primero, desempate
+        # por id para un orden estable cuando el ts coincide al segundo).
+        con.execute(
+            "DELETE FROM daemon_barridos WHERE daemon = ? AND id NOT IN ("
+            "SELECT id FROM daemon_barridos WHERE daemon = ? "
+            "ORDER BY ts_inicio DESC, id DESC LIMIT ?)",
+            (daemon, daemon, _MAX_BARRIDOS_POR_DAEMON),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+def listar_barridos(daemon: str, limite: int = _MAX_BARRIDOS_POR_DAEMON) -> list[dict[str, Any]]:
+    """Barridos recientes de `daemon` (nuevo primero), acotado a `limite` (tope = la cota dura)."""
+    limite = max(1, min(int(limite or _MAX_BARRIDOS_POR_DAEMON), _MAX_BARRIDOS_POR_DAEMON))
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT id, daemon, ts_inicio, duracion_ms, ok, resumen, error_txt "
+            "FROM daemon_barridos WHERE daemon = ? ORDER BY ts_inicio DESC, id DESC LIMIT ?",
+            (daemon, limite),
+        ).fetchall()
+    finally:
+        con.close()
+    return [
+        {
+            "id": f["id"],
+            "daemon": f["daemon"],
+            "ts_inicio": f["ts_inicio"],
+            "duracion_ms": int(f["duracion_ms"]),
+            "ok": bool(f["ok"]),
+            "resumen": f["resumen"],
+            "error_txt": f["error_txt"],
+        }
+        for f in filas
+    ]
 
 
 def listar_latidos() -> list[dict[str, Any]]:

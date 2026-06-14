@@ -268,6 +268,26 @@ def _migrar_indice_generaciones(con: Any) -> None:
     )
 
 
+def _migrar_tabla_daemon_barridos(con: Any) -> None:
+    """Crea la tabla `daemon_barridos` y su indice (BDs ya creadas; observabilidad).
+
+    HISTORIAL por barrido de daemon (una fila por sweep): el DDL declarativo ya la trae para
+    BDs virgenes; esta migracion (0034) la garantiza en las hosted existentes. Idempotente
+    (`CREATE TABLE/INDEX IF NOT EXISTS`). No hay backfill: el historial es prospectivo (lo
+    llena el hook `latidos.barrido` a partir de aqui; lo viejo no existia).
+    """
+    con.execute(
+        "CREATE TABLE IF NOT EXISTS daemon_barridos ("
+        "id TEXT PRIMARY KEY, daemon TEXT NOT NULL, ts_inicio TEXT NOT NULL DEFAULT '', "
+        "duracion_ms INTEGER NOT NULL DEFAULT 0, ok INTEGER NOT NULL DEFAULT 1, "
+        "resumen TEXT NOT NULL DEFAULT '', error_txt TEXT NOT NULL DEFAULT '')"
+    )
+    con.execute(
+        "CREATE INDEX IF NOT EXISTS idx_daemon_barridos_daemon_ts "
+        "ON daemon_barridos (daemon, ts_inicio DESC, id DESC)"
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Bloque 6: TIPOS — fechas TEXT -> tipos NATIVOS de Postgres (timestamptz/date) #
 # --------------------------------------------------------------------------- #

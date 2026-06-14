@@ -99,6 +99,7 @@ __all__ = [
 RUTAS = [
     Route("/api/sistema/recursos", recursos.recursos, methods=["GET"]),
     Route("/api/sistema/daemons", daemons.daemons_latidos, methods=["GET"]),
+    Route("/api/sistema/daemons/{daemon}/barridos", daemons.daemons_barridos, methods=["GET"]),
     Route("/api/sistema/daemons/{daemon}/barrer", daemons.daemons_barrer, methods=["POST"]),
     Route("/api/sistema/backups", backups.backups, methods=["GET"]),
     Route("/api/sistema/rendimiento", rendimiento.rendimiento_api, methods=["GET"]),

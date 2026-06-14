@@ -68,6 +68,7 @@ from .migraciones_integridad import (
     _migrar_checks_dominio,
     _migrar_fks_hub,
     _migrar_indice_generaciones,
+    _migrar_tabla_daemon_barridos,
     _migrar_tipos_fecha,
     _migrar_tipos_jsonb,
     _migrar_version_optimista,
@@ -395,6 +396,10 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
         re_aplicar_si_cambia=True,
         datos=_COLUMNAS_FECHA_NATIVA,
     ),
+    # OBSERVABILIDAD: tabla `daemon_barridos` (historial por barrido de cada daemon) para BDs
+    # existentes (las nuevas la traen del DDL). One-shot e idempotente (CREATE TABLE/INDEX IF
+    # NOT EXISTS); sin backfill (el historial es prospectivo). Ver `db_latidos.registrar_barrido`.
+    Migracion("0034-tabla-daemon-barridos", _migrar_tabla_daemon_barridos),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.

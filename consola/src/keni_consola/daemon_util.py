@@ -100,10 +100,13 @@ def bucle_gateado(
         if correr:
             t0 = time.monotonic()
             try:
-                sweep_fn()
+                # Un sweep puede devolver un str corto (qué hizo / nº items) que se guarda como
+                # `resumen` en el historial; si devuelve None/otra cosa, el resumen queda vacio.
+                resultado = sweep_fn()
+                resumen = resultado if isinstance(resultado, str) else ""
                 latidos.barrido(
                     daemon, ok=True, intervalo_seg=intervalo, tick_seg=tick_seg,
-                    duracion_ms=int((time.monotonic() - t0) * 1000),
+                    duracion_ms=int((time.monotonic() - t0) * 1000), resumen=resumen,
                 )
             except Exception as e:  # noqa: BLE001 -- un fallo de barrido no debe matar el hilo
                 log.exception("Fallo en el barrido del daemon gateado.")
