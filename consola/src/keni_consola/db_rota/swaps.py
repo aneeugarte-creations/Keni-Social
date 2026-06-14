@@ -4,6 +4,7 @@ from __future__ import annotations
 from ._comun import (
     ESTADO_SWAP_PROPUESTO,
     Any,
+    IntegrityError,
     _conectar,
     ahora_iso,
     uuid,
@@ -251,6 +252,9 @@ def aplicar_swap_turno(
       - dict del swap (claves de `_COLS_SWAP_TURNO`) si se aplico,
       - {"error": "no_coinciden", "esperado": ..., "actual": ...} si las franjas no
         coinciden con lo solicitado en este momento,
+      - {"error": "conflicto_destino"} si el intercambio chocaria con el indice unico
+        `idx_rota_turnos_uniq` (el destinatario ya ocupa la celda de origen, o el
+        solicitante la de destino): nada se aplica, el swap queda intacto,
       - None si el `swap_id` no existe.
     """
     ahora = ahora_iso()
@@ -333,26 +337,39 @@ def aplicar_swap_turno(
         #    el swap como `aplicado`. Todo bajo la misma conexion (Postgres autocommit
         #    desactivado por defecto en nuestro driver -> la `con.commit()` final lo encierra
         #    como una transaccion).
-        con.execute(
-            "UPDATE rota_turnos SET miembro_id = ?, miembro_nombre = ?, "
-            "actualizado = ? WHERE id = ?",
-            (destinatario_id, destinatario_nombre, ahora, fila_a["id"]),
-        )
-        con.execute(
-            "UPDATE rota_turnos SET miembro_id = ?, miembro_nombre = ?, "
-            "actualizado = ? WHERE id = ?",
-            (solicitante_id, solicitante_nombre, ahora, fila_b["id"]),
-        )
-        # Guardia de estado (defensa en profundidad, ademas del FOR UPDATE): el swap solo se
-        # marca `aplicado` si AUN no lo estaba. Bajo el lock esto siempre prospera; el guard
-        # protege ante cualquier via que entrara sin pasar por el lock.
-        con.execute(
-            "UPDATE rota_swaps_turno SET estado = ?, respuesta_admin = ?, "
-            "decidido_admin = ?, aplicado = ?, actualizado = ? "
-            "WHERE id = ? AND estado <> ?",
-            ("aplicado", respuesta_admin or "", ahora, ahora, ahora, swap_id, "aplicado"),
-        )
-        con.commit()
+        # Envolvemos los UPDATE en try/except: si el destinatario YA tiene un turno en la celda
+        # de origen `(fecha_a, franja_a)` (o el solicitante en la de destino), el intercambio
+        # dejaria dos filas con la misma clave `(marca, semana, fecha, miembro_id, franja_id)` y
+        # choca con el indice unico parcial `idx_rota_turnos_uniq` -> `IntegrityError`. Sin captura
+        # eso era un 500 opaco; aqui lo convertimos en un sentinel que la API traduce a 409.
+        try:
+            con.execute(
+                "UPDATE rota_turnos SET miembro_id = ?, miembro_nombre = ?, "
+                "actualizado = ? WHERE id = ?",
+                (destinatario_id, destinatario_nombre, ahora, fila_a["id"]),
+            )
+            con.execute(
+                "UPDATE rota_turnos SET miembro_id = ?, miembro_nombre = ?, "
+                "actualizado = ? WHERE id = ?",
+                (solicitante_id, solicitante_nombre, ahora, fila_b["id"]),
+            )
+            # Guardia de estado (defensa en profundidad, ademas del FOR UPDATE): el swap solo se
+            # marca `aplicado` si AUN no lo estaba. Bajo el lock esto siempre prospera; el guard
+            # protege ante cualquier via que entrara sin pasar por el lock.
+            con.execute(
+                "UPDATE rota_swaps_turno SET estado = ?, respuesta_admin = ?, "
+                "decidido_admin = ?, aplicado = ?, actualizado = ? "
+                "WHERE id = ? AND estado <> ?",
+                ("aplicado", respuesta_admin or "", ahora, ahora, ahora, swap_id, "aplicado"),
+            )
+            con.commit()
+        except IntegrityError:
+            # Colision con `idx_rota_turnos_uniq`: el intercambio dejaria al destinatario (o al
+            # solicitante) con dos turnos en la misma celda. El wrapper de la conexion ya hizo
+            # rollback al mapear la violacion; lo repetimos por defensa (no-op si ya esta
+            # deshecha). NADA se aplico: el swap sigue `aceptado` y los turnos quedan intactos.
+            con.rollback()
+            return {"error": "conflicto_destino"}
         fila = con.execute(
             f"{_SELECT_SWAP_TURNO} WHERE id = ?", (swap_id,)
         ).fetchone()

@@ -529,3 +529,75 @@ def test_aceptar_swap_inexistente_404(entorno):
     app, _, _, _, cli_beto = _setup_basico(entorno)
     r = cli_beto.post("/api/rota/swaps/no-existe/aceptar", headers=_ORIGIN)
     assert r.status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# BUG J: aprobar cuando el destinatario YA ocupa la celda de origen (409, no 500)
+# --------------------------------------------------------------------------- #
+
+
+def test_aprobar_swap_destino_ya_ocupa_celda_origen_409(entorno):
+    """Si el destinatario YA tiene un turno en la celda de origen del swap, ejecutar el
+    intercambio chocaria con el indice unico `idx_rota_turnos_uniq`. Antes era un 500 opaco;
+    ahora el endpoint responde 409 accionable y NADA se aplica (swap y turnos intactos)."""
+    app, ana, beto, cli_ana, cli_beto, cli_admin = _setup_con_admin(entorno)
+    cuerpo = _payload_swap(ana, beto, app)
+    # beto, ademas de su turno (DIA_B, Tarde), tiene un turno en la MISMA celda que el turno A de
+    # ana: (DIA_A, Mañana). Al aprobar, el swap intentaria poner a beto OTRA VEZ en esa celda
+    # (ana->beto) -> dos filas con la misma clave unica -> UniqueViolation.
+    repos.crear_turno_rota(
+        LUNES,
+        DIA_A,
+        miembro_id=beto["id"],
+        miembro_nombre=beto["usuario"],
+        franja="matutino",
+    )
+    r = cli_ana.post("/api/rota/swaps", json=cuerpo, headers=_ORIGIN)
+    swap_id = r.json()["swap"]["id"]
+    cli_beto.post(f"/api/rota/swaps/{swap_id}/aceptar", headers=_ORIGIN)
+
+    ra = cli_admin.post(f"/api/rota/swaps/{swap_id}/aprobar", headers=_ORIGIN)
+    assert ra.status_code == 409, ra.text
+    # Mensaje accionable para el admin (no un 500 sin contexto).
+    assert ra.json()["error"] == "Ese compañero ya tiene un turno en ese hueco."
+
+    # NADA se aplico: el swap sigue `aceptado`...
+    swap = repos.obtener_swap_turno(swap_id)
+    assert swap["estado"] == "aceptado"
+    # ...y los turnos originales quedan intactos (la celda de origen sigue teniendo a ana; el
+    # turno B sigue siendo de beto).
+    token_cli = TestClient(app, headers={"Authorization": f"Bearer {TOKEN_PRUEBA}"})
+    turnos = token_cli.get(f"/api/rota/turnos?lunes={LUNES}").json()["turnos"]
+    en_a = [
+        t for t in turnos
+        if t["fecha"] == cuerpo["fecha_a"] and t["franja_id"] == cuerpo["franja_a"]
+    ]
+    assert any(t["miembro_id"] == ana["id"] for t in en_a)
+    en_b = next(
+        t for t in turnos
+        if t["fecha"] == cuerpo["fecha_b"] and t["franja_id"] == cuerpo["franja_b"]
+    )
+    assert en_b["miembro_id"] == beto["id"]
+
+
+# --------------------------------------------------------------------------- #
+# BUG O: la respuesta del swap emite el NOMBRE legible de cada franja            #
+# --------------------------------------------------------------------------- #
+
+
+def test_swap_incluye_nombre_legible_de_franjas(entorno):
+    """El swap serializado expone `franja_a_nombre`/`franja_b_nombre` con el nombre legible
+    de cada franja (no el uuid), tanto al crear como al listar. El front lo pinta en la
+    tarjeta de cambio (antes mapeaba el uuid contra literales y salia en blanco)."""
+    app, ana, beto, cli_ana, _ = _setup_basico(entorno)
+    cuerpo = _payload_swap(ana, beto, app)  # A=ana (DIA_A, Mañana) <-> B=beto (DIA_B, Tarde)
+    r = cli_ana.post("/api/rota/swaps", json=cuerpo, headers=_ORIGIN)
+    assert r.status_code == 201, r.text
+    swap = r.json()["swap"]
+    assert swap["franja_a_nombre"] == "Mañana"
+    assert swap["franja_b_nombre"] == "Tarde"
+
+    # Mismo serializador al LISTAR: las claves y los nombres deben venir igual.
+    swaps = cli_ana.get("/api/rota/swaps?mio=true").json()["swaps"]
+    assert swaps[0]["franja_a_nombre"] == "Mañana"
+    assert swaps[0]["franja_b_nombre"] == "Tarde"

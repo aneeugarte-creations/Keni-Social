@@ -23,8 +23,21 @@ _MSG_SOLO_ADMIN_SWAP = (
 )
 
 
+def _nombre_franja(franja_id: str) -> str:
+    """Nombre legible de una franja de semana por su `franja_id` ("" si no resuelve).
+
+    Reusa `repos.obtener_franja_semana` (igual que `_turno_a_dict` resuelve `franja_nombre`):
+    así la tarjeta de cambio pinta "Mañana"/"Tarde" en vez del uuid de la franja. Devuelve ""
+    (cadena vacía, NUNCA None) cuando el id está vacío o la franja ya no existe.
+    """
+    if not franja_id:
+        return ""
+    franja = repos.obtener_franja_semana(franja_id)
+    return franja["nombre"] if franja else ""
+
+
 def _swap_a_dict(swap: dict[str, Any], nombres: dict[str, str]) -> dict[str, Any]:
-    """Serializa un swap (resolviendo el nombre vivo de cada miembro)."""
+    """Serializa un swap (resolviendo el nombre vivo de cada miembro y de cada franja)."""
     return {
         "id": swap["id"],
         "solicitante_id": swap["solicitante_id"],
@@ -38,8 +51,11 @@ def _swap_a_dict(swap: dict[str, Any], nombres: dict[str, str]) -> dict[str, Any
         ),
         "fecha_a": swap["fecha_a"],
         "franja_a": swap["franja_a"],
+        # Nombre legible de la franja (el front mapea esto, no el uuid `franja_a`).
+        "franja_a_nombre": _nombre_franja(swap["franja_a"]),
         "fecha_b": swap["fecha_b"],
         "franja_b": swap["franja_b"],
+        "franja_b_nombre": _nombre_franja(swap["franja_b"]),
         "motivo": swap["motivo"],
         "estado": swap["estado"],
         "respuesta_destinatario": swap["respuesta_destinatario"],
@@ -352,6 +368,13 @@ async def aprobar_swap(request: Request) -> Response:
                     "actual": resultado["actual"],
                 },
             },
+            status_code=409,
+        )
+    if "error" in resultado and resultado["error"] == "conflicto_destino":
+        # El intercambio chocaria con el indice unico de `rota_turnos`: el compañero ya ocupa
+        # la celda de origen (o tú la de destino). 409 accionable, no un 500 opaco.
+        return JSONResponse(
+            {"error": "Ese compañero ya tiene un turno en ese hueco."},
             status_code=409,
         )
     return JSONResponse({"swap": _swap_a_dict(resultado, nombres)})
