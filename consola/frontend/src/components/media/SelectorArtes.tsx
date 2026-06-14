@@ -14,6 +14,8 @@ import * as React from "react";
 import { useEffect } from "react";
 import { toast } from "sonner";
 
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { confirmar } from "@/components/comunes/confirmar";
 import { Button } from "@/components/ui/button";
 import {
@@ -135,34 +137,13 @@ export function SelectorArtes({ open, onCerrar, onSeleccionar, marca }: Selector
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {artes.map((arte) => (
-                <div key={arte.id} className="group relative">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onSeleccionar(arte);
-                      onCerrar();
-                    }}
-                    className="block w-full overflow-hidden rounded-md border border-border bg-muted/20 transition hover:ring-2 hover:ring-primary focus:outline-none focus:ring-2 focus:ring-primary"
-                  >
-                    <img
-                      src={urlMedia(arte.objeto)}
-                      alt={arte.titulo || "Arte de la galería"}
-                      loading="lazy"
-                      className="aspect-square w-full object-cover"
-                    />
-                    {arte.titulo && (
-                      <span className="block truncate px-2 py-1 text-left text-xs text-muted-foreground">
-                        {arte.titulo}
-                      </span>
-                    )}
-                  </button>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="icon"
-                    className="absolute right-1.5 top-1.5 h-7 w-7 opacity-0 transition group-hover:opacity-100"
-                    onClick={async () => {
+              {artes.map((arte) => {
+                const acciones: EntradaMenuContextual[] = [
+                  {
+                    etiqueta: "Quitar",
+                    icono: Trash2,
+                    destructivo: true,
+                    onClick: async () => {
                       if (
                         await confirmar({
                           titulo: "Quitar de la galería",
@@ -173,14 +154,38 @@ export function SelectorArtes({ open, onCerrar, onSeleccionar, marca }: Selector
                       ) {
                         borrar.mutate(arte.id);
                       }
+                    },
+                    deshabilitado: borrar.isPending,
+                  },
+                ];
+                return (
+                  <FilaConAcciones
+                    key={arte.id}
+                    como="div"
+                    kebab="nunca"
+                    realce
+                    onPrimaria={() => {
+                      onSeleccionar(arte);
+                      onCerrar();
                     }}
-                    disabled={borrar.isPending}
-                    aria-label="Quitar"
+                    acciones={acciones}
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              ))}
+                    <div className="block w-full overflow-hidden rounded-md border border-border bg-muted/20">
+                      <img
+                        src={urlMedia(arte.objeto)}
+                        alt={arte.titulo || "Arte de la galería"}
+                        loading="lazy"
+                        className="aspect-square w-full object-cover"
+                      />
+                      {arte.titulo && (
+                        <span className="block truncate px-2 py-1 text-left text-xs text-muted-foreground">
+                          {arte.titulo}
+                        </span>
+                      )}
+                    </div>
+                  </FilaConAcciones>
+                );
+              })}
             </div>
           )}
         </div>

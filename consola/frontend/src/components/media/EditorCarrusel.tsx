@@ -20,6 +20,8 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { api, mensajeError, urlMedia } from "@/lib/api";
 import type { SlideCarrusel } from "@/lib/carrusel";
 
@@ -139,77 +141,74 @@ export function EditorCarrusel({
         </p>
       ) : (
         <ul className="space-y-1.5">
-          {slides.map((s, i) => (
-            <li
-              key={`${s.objeto}-${i}`}
-              className="flex items-center gap-2 rounded-md border bg-card p-1.5"
-              data-testid="slide-carrusel"
-            >
-              <span className="w-5 shrink-0 text-center text-xs text-muted-foreground">
-                {/* Posición en el carrusel publicado (con base 2, la portada es el 1). */}
-                {i + base}
-              </span>
-              {s.tipo === "video" ? (
-                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded bg-muted">
-                  <Film className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
-                </span>
-              ) : (
-                <img
-                  src={urlMedia(s.objeto)}
-                  alt={`Slide ${i + base}`}
-                  className="h-12 w-12 shrink-0 rounded object-cover"
-                />
-              )}
-              <span className="flex min-w-0 flex-1 items-center gap-1 text-xs text-muted-foreground">
-                {s.tipo === "video" && <Video className="h-3 w-3 shrink-0" aria-hidden="true" />}
-                <span className="truncate">{s.objeto}</span>
-                {i === idxPortada && (
-                  <span
-                    className="inline-flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium text-foreground"
-                  >
-                    <Star className="h-2.5 w-2.5" aria-hidden="true" />
-                    Portada
+          {slides.map((s, i) => {
+            const acciones: EntradaMenuContextual[] = [];
+            if (onPortada && s.tipo === "imagen") {
+              acciones.push({
+                etiqueta: "Marcar portada",
+                icono: Star,
+                onClick: () => onPortada(i),
+                deshabilitado: disabled,
+              });
+            }
+            acciones.push({
+              etiqueta: "Subir",
+              icono: ArrowUp,
+              onClick: () => mover(i, -1),
+              deshabilitado: disabled || i === 0,
+            });
+            acciones.push({
+              etiqueta: "Bajar",
+              icono: ArrowDown,
+              onClick: () => mover(i, 1),
+              deshabilitado: disabled || i === slides.length - 1,
+            });
+            acciones.push({
+              etiqueta: "Quitar",
+              icono: Trash2,
+              onClick: () => quitar(i),
+              destructivo: true,
+              deshabilitado: disabled,
+            });
+
+            return (
+              <FilaConAcciones
+                key={`${s.objeto}-${i}`}
+                como="li"
+                kebab="nunca"
+                realce={false}
+                acciones={acciones}
+                etiquetaAcciones={`Acciones del slide ${i + base}`}
+              >
+                <div className="flex items-center gap-2 rounded-md border bg-card p-1.5" data-testid="slide-carrusel">
+                  <span className="w-5 shrink-0 text-center text-xs text-muted-foreground">
+                    {i + base}
                   </span>
-                )}
-              </span>
-              <div className="flex shrink-0 items-center gap-0.5">
-                {onPortada && s.tipo === "imagen" && (
-                  <Button
-                    type="button" size="sm" variant="ghost"
-                    className="h-7 gap-1 px-1.5 text-xs text-muted-foreground"
-                    onClick={() => onPortada(i)} disabled={disabled}
-                    aria-label={`Hacer portada el slide ${i + base}`}
-                    title="Usar como portada"
-                  >
-                    <Star className="h-3.5 w-3.5" />
-                    Portada
-                  </Button>
-                )}
-                <Button
-                  type="button" size="sm" variant="ghost" className="h-7 w-7 p-0"
-                  onClick={() => mover(i, -1)} disabled={disabled || i === 0}
-                  aria-label={`Subir slide ${i + base}`}
-                >
-                  <ArrowUp className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  type="button" size="sm" variant="ghost" className="h-7 w-7 p-0"
-                  onClick={() => mover(i, 1)} disabled={disabled || i === slides.length - 1}
-                  aria-label={`Bajar slide ${i + base}`}
-                >
-                  <ArrowDown className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  type="button" size="sm" variant="ghost"
-                  className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                  onClick={() => quitar(i)} disabled={disabled}
-                  aria-label={`Quitar slide ${i + base}`}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </li>
-          ))}
+                  {s.tipo === "video" ? (
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded bg-muted">
+                      <Film className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+                    </span>
+                  ) : (
+                    <img
+                      src={urlMedia(s.objeto)}
+                      alt={`Slide ${i + base}`}
+                      className="h-12 w-12 shrink-0 rounded object-cover"
+                    />
+                  )}
+                  <span className="flex min-w-0 flex-1 items-center gap-1 text-xs text-muted-foreground">
+                    {s.tipo === "video" && <Video className="h-3 w-3 shrink-0" aria-hidden="true" />}
+                    <span className="truncate">{s.objeto}</span>
+                    {i === idxPortada && (
+                      <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-medium text-foreground">
+                        <Star className="h-2.5 w-2.5" aria-hidden="true" />
+                        Portada
+                      </span>
+                    )}
+                  </span>
+                </div>
+              </FilaConAcciones>
+            );
+          })}
         </ul>
       )}
     </div>

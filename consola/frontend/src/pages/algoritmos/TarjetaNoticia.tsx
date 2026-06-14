@@ -1,7 +1,8 @@
-import { Archive, ExternalLink, Library } from "lucide-react";
+import { Archive, ExternalLink } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import type { NoticiaAlgoritmo } from "@/types";
 
 import { badgeNivel } from "./lib";
@@ -19,8 +20,34 @@ export function TarjetaNoticia({
   archivando: boolean;
 }) {
   const nivel = badgeNivel(noticia.nivel);
+
+  const acciones: EntradaMenuContextual[] = [
+    {
+      etiqueta: "Archivar",
+      icono: Archive,
+      onClick: () => onArchivar(noticia),
+      destructivo: true,
+      deshabilitado: archivando,
+    },
+  ];
+
+  if (noticia.enlace) {
+    acciones.push({
+      etiqueta: "Abrir enlace",
+      icono: ExternalLink,
+      onClick: () => window.open(noticia.enlace, "_blank"),
+    });
+  }
+
   return (
-    <li className="rounded-lg border border-border/60 p-3">
+    <FilaConAcciones
+      como="li"
+      onPrimaria={() => onProponer(noticia)}
+      acciones={acciones}
+      kebab="nunca"
+      realce
+      className="rounded-lg border border-border/60 p-3"
+    >
       <div className="flex flex-wrap items-center gap-1.5 pb-1">
         <Badge variant="outline">{noticia.plataforma_nombre || noticia.plataforma}</Badge>
         <Badge variant={nivel.variante}>{nivel.texto}</Badge>
@@ -46,19 +73,7 @@ export function TarjetaNoticia({
       </div>
 
       <p className="text-sm font-medium">
-        {noticia.enlace ? (
-          <a
-            href={noticia.enlace}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-start gap-1 hover:underline"
-          >
-            {noticia.titulo || "(sin título)"}
-            <ExternalLink className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
-          </a>
-        ) : (
-          noticia.titulo || "(sin título)"
-        )}
+        {noticia.titulo || "(sin título)"}
       </p>
 
       {noticia.resumen && (
@@ -82,27 +97,7 @@ export function TarjetaNoticia({
         <span className="truncate text-xs text-muted-foreground">
           {[noticia.fuente_nombre, noticia.fecha].filter(Boolean).join(" · ")}
         </span>
-        <div className="flex shrink-0 items-center gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onProponer(noticia)}
-            title="Proponer a la Texto"
-          >
-            <Library className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-            A texto
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onArchivar(noticia)}
-            disabled={archivando}
-            title="Archivar"
-          >
-            <Archive className="h-3.5 w-3.5" aria-hidden="true" />
-          </Button>
-        </div>
       </div>
-    </li>
+    </FilaConAcciones>
   );
 }

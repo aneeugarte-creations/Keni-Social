@@ -8,15 +8,16 @@
  * Restaurar (POST revertir, no destructivo: se guarda como cambio nuevo).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Eye, History, RotateCcw } from "lucide-react";
+import { Eye, RotateCcw } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { DiffProsa } from "@/components/biblioteca/DiffProsa";
 import { LectorProsa } from "@/components/biblioteca/LectorProsa";
 import { confirmar } from "@/components/comunes/confirmar";
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -134,7 +135,6 @@ export function PanelVersiones({
       {/* ───────── Timeline ───────── */}
       <div className="overflow-hidden rounded-md border border-border">
         <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-3 py-1.5 text-xs font-medium text-muted-foreground">
-          <History className="h-3.5 w-3.5" /> Versiones
           <span className="ml-auto flex gap-3">
             <span>Antes</span>
             <span>Después</span>
@@ -144,8 +144,24 @@ export function PanelVersiones({
           {historial.map((v) => {
             const esProduccion = !!produccionSha && v.sha === produccionSha;
             const esActual = v.sha === shaCabeza;
+            const acciones: EntradaMenuContextual[] = [];
+            if (!esActual) {
+              acciones.push({
+                etiqueta: "Restaurar",
+                icono: RotateCcw,
+                onClick: () => void onRestaurar(v.sha),
+                deshabilitado: revertirMut.isPending,
+              });
+            }
             return (
-              <li key={v.sha} className="flex items-start gap-2 px-3 py-2 text-sm">
+              <FilaConAcciones
+                key={v.sha}
+                como="li"
+                kebab="nunca"
+                realce
+                onPrimaria={() => setVerSha(v.sha)}
+                acciones={acciones}
+              >
                 <span className="mt-1 block h-2 w-2 shrink-0 rounded-full bg-border" aria-hidden />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -165,27 +181,6 @@ export function PanelVersiones({
                     <span>{v.autor}</span>
                     <span title={v.fecha}>{tiempoRelativo(v.fecha) || v.fecha.slice(0, 16).replace("T", " ")}</span>
                     <span className="font-mono">{v.sha_corto}</span>
-                  </div>
-                  <div className="mt-1 flex items-center gap-1">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-6 px-1.5 text-xs text-muted-foreground"
-                      onClick={() => setVerSha(v.sha)}
-                    >
-                      <Eye className="mr-1 h-3 w-3" /> Ver
-                    </Button>
-                    {!esActual ? (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-6 px-1.5 text-xs text-muted-foreground"
-                        disabled={revertirMut.isPending}
-                        onClick={() => void onRestaurar(v.sha)}
-                      >
-                        <RotateCcw className="mr-1 h-3 w-3" /> Restaurar
-                      </Button>
-                    ) : null}
                   </div>
                 </div>
                 {/* Radios del par a comparar (antes / después). */}
@@ -209,7 +204,7 @@ export function PanelVersiones({
                     className="h-3.5 w-3.5 accent-foreground"
                   />
                 </span>
-              </li>
+              </FilaConAcciones>
             );
           })}
         </ol>

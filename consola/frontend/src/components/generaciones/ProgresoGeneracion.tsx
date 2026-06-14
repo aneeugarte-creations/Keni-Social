@@ -152,7 +152,7 @@ export function ProgresoGeneracion({
     <Card className={className}>
       <CardHeader className="space-y-2 pb-3">
         <div className="flex flex-wrap items-center gap-2">
-          <CardTitle className="text-base">{generacion.etiqueta || "Generación"}</CardTitle>
+          <CardTitle className="text-base">{generacion.etiqueta || ""}</CardTitle>
           {ejecutando ? (
             <Badge variant="aviso" className="gap-1">
               <Loader2 className="h-3 w-3 animate-spin" aria-hidden />

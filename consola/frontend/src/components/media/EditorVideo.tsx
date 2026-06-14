@@ -8,12 +8,14 @@
  * Notifica cada cambio vía `onCambio(clave, url)`.
  */
 import { useMutation } from "@tanstack/react-query";
-import { Loader2, Upload, Video, VideoOff, X } from "lucide-react";
+import { Loader2, Trash2, Upload, Video, VideoOff } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { api, mensajeError, urlMedia } from "@/lib/api";
 
 /** Límites orientativos por red (para el aviso bajo el reproductor). */
@@ -90,47 +92,40 @@ export function EditorVideo({
 
       {src ? (
         <div className="space-y-2">
-          <div className="relative inline-block w-full max-w-sm">
-            <video
-              src={src}
-              controls
-              muted
-              className="w-full rounded-md border border-border"
-              aria-label="Previsualización del video"
-            />
-            <Button
-              type="button"
-              variant="destructive"
-              size="icon"
-              className="absolute right-1.5 top-1.5 h-7 w-7"
-              onClick={quitar}
-              disabled={ocupado}
-              aria-label="Quitar video"
-              title="Quitar video"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
+          <FilaConAcciones
+            como="div"
+            kebab="nunca"
+            realce={false}
+            acciones={[
+              {
+                etiqueta: "Reemplazar video",
+                icono: subir.isPending ? undefined : Upload,
+                onClick: () => inputRef.current?.click(),
+                deshabilitado: ocupado,
+              } as EntradaMenuContextual,
+              {
+                etiqueta: "Quitar video",
+                icono: Trash2,
+                onClick: quitar,
+                destructivo: true,
+                deshabilitado: ocupado,
+              } as EntradaMenuContextual,
+            ]}
+          >
+            <div className="relative inline-block w-full max-w-sm">
+              <video
+                src={src}
+                controls
+                muted
+                className="w-full rounded-md border border-border"
+                aria-label="Previsualización del video"
+              />
+            </div>
+          </FilaConAcciones>
 
           {limiteRed && (
             <p className="text-xs text-muted-foreground">{limiteRed}</p>
           )}
-
-          {/* Reemplazar video desde la propia preview */}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => inputRef.current?.click()}
-            disabled={ocupado}
-          >
-            {subir.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Upload className="h-4 w-4" />
-            )}
-            Reemplazar video
-          </Button>
         </div>
       ) : (
         <div className="space-y-2.5 rounded-md border border-dashed border-border bg-muted/20 p-3">

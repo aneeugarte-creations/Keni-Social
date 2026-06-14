@@ -17,14 +17,16 @@ import {
   Library,
   Loader2,
   Save,
+  Trash2,
   Upload,
   Wand2,
-  X,
 } from "lucide-react";
 import * as React from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { MarcaIA } from "@/components/comunes/MarcaIA";
 import { SelectorArtes } from "@/components/media/SelectorArtes";
 import { Button } from "@/components/ui/button";
@@ -245,28 +247,39 @@ export function EditorImagen({
 
       {src ? (
         <div className="space-y-2">
-          <div className="relative inline-block">
-            <img
-              src={src}
-              alt="Imagen de la publicación"
-              onLoad={(e) =>
-                setRatioReal(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight)
-              }
-              className="max-h-56 w-auto rounded-md border border-border object-contain"
-            />
-            <Button
-              type="button"
-              variant="destructive"
-              size="icon"
-              className="absolute right-1.5 top-1.5 h-7 w-7"
-              onClick={quitar}
-              disabled={ocupado}
-              aria-label="Quitar imagen"
-              title="Quitar imagen"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
+          <FilaConAcciones
+            como="div"
+            kebab="nunca"
+            realce
+            acciones={
+              [
+                fondo && {
+                  etiqueta: "Guardar en la galería",
+                  icono: Save,
+                  onClick: () => guardar.mutate(),
+                  deshabilitado: ocupado || guardar.isPending,
+                },
+                {
+                  etiqueta: "Quitar imagen",
+                  icono: Trash2,
+                  onClick: quitar,
+                  destructivo: true,
+                  deshabilitado: ocupado,
+                },
+              ].filter(Boolean) as EntradaMenuContextual[]
+            }
+          >
+            <div className="relative inline-block">
+              <img
+                src={src}
+                alt="Imagen de la publicación"
+                onLoad={(e) =>
+                  setRatioReal(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight)
+                }
+                className="max-h-56 w-auto rounded-md border border-border object-contain"
+              />
+            </div>
+          </FilaConAcciones>
 
           {aspectoFueraDeEstandar && tamRed && red && (
             <p className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400">
@@ -276,24 +289,6 @@ export function EditorImagen({
                 recortará. {publicacionId ? "Adáptala en el Estudio" : "Recórtala"} a {tamRed.px} px.
               </span>
             </p>
-          )}
-
-          {/* Guardar el fondo para reutilizarlo en la galería. */}
-          {fondo && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => guardar.mutate()}
-              disabled={ocupado || guardar.isPending}
-            >
-              {guardar.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Save className="h-3.5 w-3.5" />
-              )}
-              Guardar en la galería
-            </Button>
           )}
 
           {/* Cambiar de fondo desde la propia preview. */}

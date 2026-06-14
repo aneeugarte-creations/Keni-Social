@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, ExternalLink, Play } from "lucide-react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
@@ -94,12 +95,31 @@ function FilaDaemon({
   /** Clave de ajuste cuyo guardado está en vuelo (deshabilita SOLO ese switch). */
   guardandoClave: string | null;
 }) {
+  const navigate = useNavigate();
   const barrido = latido.ultimo_barrido
     ? tiempoRelativo(latido.ultimo_barrido)
     : "nunca";
   const solicitado = latido.barrido_solicitado !== "";
+
+  const acciones: EntradaMenuContextual[] = [];
+
+  if (latido.barrible) {
+    acciones.push({
+      etiqueta: "Barrer ahora",
+      icono: Play,
+      onClick: () => onBarrer(latido.daemon),
+      deshabilitado: barriendo === latido.daemon || solicitado,
+    });
+  }
+
+  acciones.push({
+    etiqueta: "Ver detalle",
+    icono: ExternalLink,
+    onClick: () => navigate(`/maquina/agentes/${latido.daemon}`),
+  });
+
   return (
-    <TableRow>
+    <FilaConAcciones como="tr" kebab="hover" acciones={acciones}>
       <TableCell className="font-medium">{latido.daemon}</TableCell>
       <TableCell>
         <span className="inline-flex flex-wrap items-center gap-1.5">
@@ -157,36 +177,7 @@ function FilaDaemon({
           </span>
         )}
       </TableCell>
-      <TableCell className="text-right">
-        <span className="inline-flex items-center justify-end gap-1">
-          {/* Solo a los daemons BARRIBLES (bucle sobre `bucle_gateado`): los legados
-              (programador/metricas/…) no miran el flag y el botón sería mentira. */}
-          {latido.barrible && (
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={barriendo === latido.daemon || solicitado}
-              title={
-                solicitado
-                  ? "Ya hay un barrido solicitado pendiente."
-                  : "Fuerza un barrido inmediato (sin esperar al intervalo)."
-              }
-              onClick={() => onBarrer(latido.daemon)}
-            >
-              <Play className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-              Barrer ahora
-            </Button>
-          )}
-          {/* Drill-in al log/detalle por barrido de este daemon (la página de detalle). */}
-          <Button asChild variant="ghost" size="sm">
-            <Link to={`/maquina/agentes/${latido.daemon}`} title="Ver el log y el detalle de este servicio">
-              <ExternalLink className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-              Ver detalle
-            </Link>
-          </Button>
-        </span>
-      </TableCell>
-    </TableRow>
+    </FilaConAcciones>
   );
 }
 
@@ -215,7 +206,7 @@ function TablaDaemons({
           <TableHead>Barridos</TableHead>
           <TableHead>Último error</TableHead>
           <TableHead>Encendido</TableHead>
-          <TableHead className="text-right">Acción</TableHead>
+          <TableHead className="w-10" />
         </TableRow>
       </TableHeader>
       <TableBody>
