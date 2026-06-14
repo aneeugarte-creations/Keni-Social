@@ -1,8 +1,8 @@
 """Extracción TOLERANTE de JSON de la salida de un modelo (`claude -p`) + truncado avisado.
 
 FUENTE ÚNICA del patrón "saca el JSON de lo que dijo el modelo", antes duplicado en
-`insumos_parse`, `fusion_semantica`, `traduccion`, `parrilla_import`, `perfil_editorial`,
-`sugerencias_editoriales` e `importador_calendario`. Cadena de intentos:
+`insumos_parse`, `fusion_semantica`, `traduccion`, `parrilla_import`, `perfil_editorial`
+e `importador_calendario`. Cadena de intentos:
 
   1. `json.loads` directo (la salida ES el JSON).
   2. Bloques cercados ```json ... ``` del ÚLTIMO al primero (el modelo a veces razona antes

@@ -1342,26 +1342,6 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_noticias_clusters_ultimo ON noticias_clusters (ultimo_visto)",
     "CREATE INDEX IF NOT EXISTS idx_noticias_clusters_estado ON noticias_clusters (estado)",
     "CREATE INDEX IF NOT EXISTS idx_noticias_clusters_clave ON noticias_clusters (clave)",
-    # Sugerencias editoriales GENERADAS por el job diario a partir de las noticias importantes:
-    # propuestas de cambio a la ficha editorial de una plataforma (`tipo='editorial'`) o a sus
-    # limites (`tipo='limite'`). PROPUESTAS, no aplicadas: el equipo revisa y decide (estado
-    # nueva/aplicada/descartada). `noticia_ids` (JSON) son las noticias que la motivaron;
-    # `ficha_id` el doc de texto destino (p. ej. `editorial/plataformas/instagram`).
-    """
-    CREATE TABLE IF NOT EXISTS sugerencias_editoriales (
-        id           TEXT PRIMARY KEY,
-        plataforma   TEXT NOT NULL DEFAULT 'general',
-        tipo         TEXT NOT NULL DEFAULT 'editorial',
-        titulo       TEXT NOT NULL DEFAULT '',
-        detalle      TEXT NOT NULL DEFAULT '',
-        ficha_id     TEXT NOT NULL DEFAULT '',
-        noticia_ids  TEXT NOT NULL DEFAULT '[]',
-        estado       TEXT NOT NULL DEFAULT 'nueva',
-        creado       TEXT NOT NULL DEFAULT ''
-    )
-    """,
-    "CREATE INDEX IF NOT EXISTS idx_sugerencias_editoriales_estado ON sugerencias_editoriales (estado)",
-    "CREATE INDEX IF NOT EXISTS idx_sugerencias_editoriales_creado ON sugerencias_editoriales (creado)",
     # INSUMOS DEL DÍA (cajones): material diario del equipo de AMX procesado con Haiku.
     # `insumos_lote` = un "drop" (pegada o archivo) en uno de los 4 cajones del día.
     # `insumos_item` = cada ítem extraído por el parser. El par modela el historial por

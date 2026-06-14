@@ -63,7 +63,6 @@ def main() -> int:
     from .pipeline_contenido import iniciar_pipeline
     from .programador import iniciar_programador
     from .reaper_generaciones import iniciar_reaper
-    from .sugerencias_editoriales import iniciar_sugerencias_editoriales
     from .trends_daemon import iniciar_trends
 
     iniciar_captura_programada()
@@ -79,7 +78,6 @@ def main() -> int:
     # borradores en revisión. SAFE BY DEFAULT: no barre salvo su toggle ON; nunca publica.
     iniciar_pipeline()
     iniciar_refresco_algoritmos()  # ingesta de feeds de algoritmo; solo lee si KENI_ALGORITMOS_AUTO=1.
-    iniciar_sugerencias_editoriales()  # digest diario de sugerencias; encola solo si KENI_SUGERENCIAS_EDITORIALES=1.
     iniciar_media_gc()  # GC de media huerfana; no borra salvo KENI_MEDIA_GC=1 (def OFF).
     # Re-derivación de PATRONES editoriales por marca (Metricool -> perfil + doc 'patrones'):
     # solo lee métricas y reescribe los artefactos de patrones cada N días. GATEADO: no corre

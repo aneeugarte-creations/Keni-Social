@@ -25,9 +25,6 @@ PROCESOS_POR_PROMPT: dict[str, list[str]] = {
     "prompt/insumos/notas": ["Buzón de insumos · cajón Notas y links (Claro Sports)"],
     "prompt/insumos/contexto": ["Buzón de insumos · cajón Indicaciones (Claro Sports)"],
     # Noticias / algoritmo
-    "prompt/sugerencias": [
-        "Sugerencias editoriales · digest diario de cambios de algoritmo por plataforma",
-    ],
     "prompt/traduccion": ["Ingesta de noticias · traducción/localización (MX)"],
     "prompt/fusion": [
         "Ingesta de noticias · fusión de historias del mismo evento",

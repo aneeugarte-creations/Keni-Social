@@ -22,7 +22,7 @@ EXCEPCIONES documentadas:
     formato que generan las franjas/cadencias y el picker de la UI; su canon vive en
     `api/publicaciones._normalizar_fecha_programada`.
   - Algunas columnas `creado` de DESEMPATE (fuentes_rss/fuentes_algoritmo/
-    sugerencias_editoriales/evergreen_ideas/lotes e items de insumos) usan naive-UTC
+    evergreen_ideas/lotes e items de insumos) usan naive-UTC
     con MICROSEGUNDOS a propósito: el listado ordena `creado DESC` y dos altas en el
     mismo segundo quedaban en orden indefinido. El formato es COMPATIBLE con el canon
     para el orden lexicográfico (la fracción extiende al mismo prefijo, sin offset),

@@ -192,15 +192,6 @@ def main() -> int:
 
     iniciar_refresco_algoritmos()
 
-    # Digest DIARIO de sugerencias editoriales: un hilo demonio que, si
-    # `KENI_SUGERENCIAS_EDITORIALES` esta activo (def OFF), convierte 1 vez al dia las noticias
-    # de algoritmo importantes en PROPUESTAS de cambio a las fichas de plataforma y limites
-    # (encola un claude -p por plataforma; el worker lo ejecuta). Las propuestas son revisables;
-    # nunca se aplican solas. SAFE BY DEFAULT: sin el flag no encola nada.
-    from .sugerencias_editoriales import iniciar_sugerencias_editoriales
-
-    iniciar_sugerencias_editoriales()
-
     # MÁQUINA DE CONTENIDO (Flujo C): el pipeline es el espinazo de la auto-producción. Si está
     # activo (`KENI_PIPELINE_COPY`, bajo el maestro `KENI_MAQUINA`), cada N horas ingiere del news-pool,
     # genera copy (etapa de copy) y arte (etapa de arte, `KENI_PIPELINE_ARTE`) y valida los

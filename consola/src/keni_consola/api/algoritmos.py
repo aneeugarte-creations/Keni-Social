@@ -14,10 +14,6 @@ las mas importantes.
   - `DELETE /api/algoritmos/fuentes/{id}`  -> baja (borra tambien sus noticias).
   - `POST /api/algoritmos/{id}/texto` -> marca aplicada + devuelve el borrador de ficha.
   - `POST /api/algoritmos/{id}/archivar`   -> archiva/desarchiva una noticia.
-  - `GET  /api/algoritmos/sugerencias`     -> sugerencias editoriales del digest + nº nuevas.
-  - `POST /api/algoritmos/sugerencias/generar`          -> lanza el digest AHORA (background).
-  - `POST /api/algoritmos/sugerencias/{id}/aplicar`     -> aplica a la ficha + marca aplicada.
-  - `POST /api/algoritmos/sugerencias/{id}/descartar`   -> descarta la sugerencia.
 
 SEGURIDAD: la URL de la fuente pasa por el MISMO guard SSRF que el RSS (`rss.validar_url`).
 `plataforma`/`tipo` se validan contra el vocabulario controlado. SQL parametrizado en `db`;
@@ -26,16 +22,14 @@ errores en español, sin tracebacks.
 
 from __future__ import annotations
 
-import threading
 from typing import Any
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import algoritmos, libtexto, repos, sugerencias_editoriales
+from .. import algoritmos, repos
 from .._http_json import leer_json
-from ..tiempo import hoy_utc
 from . import rss
 
 # Cuantas noticias devolver por defecto en el listado de la pagina (las mas importantes).
@@ -249,124 +243,10 @@ async def archivar(request: Request) -> Response:
     return JSONResponse({"noticia": _noticia_a_dict(noticia) if noticia else None})
 
 
-# --------------------------------------------------------------------------- #
-# Sugerencias editoriales (generadas por el digest diario)                      #
-# --------------------------------------------------------------------------- #
-
-
-async def listar_sugerencias(request: Request) -> Response:
-    """GET /api/algoritmos/sugerencias?estado=: propuestas editoriales + contador de nuevas."""
-    estado = request.query_params.get("estado") or None
-    if estado is not None and estado not in repos.ESTADOS_SUGERENCIA_EDITORIAL:
-        return JSONResponse({"error": "Estado no permitido."}, status_code=400)
-    sugerencias = repos.listar_sugerencias_editoriales(estado=estado, limite=200)
-    return JSONResponse(
-        {
-            "sugerencias": [_sugerencia_a_dict(s) for s in sugerencias],
-            "total": len(sugerencias),
-            "nuevas": repos.contar_sugerencias_editoriales(estado="nueva"),
-        }
-    )
-
-
-def _sugerencia_a_dict(s: dict[str, Any]) -> dict[str, Any]:
-    """Serializa una sugerencia con la etiqueta humana de la plataforma."""
-    return {
-        **s,
-        "plataforma_nombre": algoritmos.PLATAFORMAS.get(s.get("plataforma", "general"), ""),
-    }
-
-
-def _aplicar_a_ficha(plataforma: str, detalle: str) -> str:
-    """Anade el detalle de la sugerencia a la ficha editorial de la plataforma (crea si falta).
-
-    Devuelve el id del documento de texto afectado. La escritura es la MISMA que hace el
-    editor a mano (modulo `texto`): un humano la dispara con su clic; nunca el sistema solo.
-    """
-    fid = sugerencias_editoriales.ficha_id_de(plataforma)
-    seccion = (
-        f"## Actualización editorial ({hoy_utc().isoformat()}) — desde noticias de algoritmo\n\n"
-        f"{detalle.strip()}\n"
-    )
-    doc = libtexto.obtener(fid)
-    if doc is not None:
-        cuerpo = (doc.cuerpo or "").rstrip()
-        nuevo = f"{cuerpo}\n\n{seccion}" if cuerpo else seccion
-        libtexto.guardar(fid, cuerpo=nuevo)
-        return fid
-    creado = libtexto.crear(
-        titulo=plataforma.capitalize(), tipo="editorial", carpeta="plataformas",
-        clase="plataforma", cuerpo=seccion,
-    )
-    return creado.id
-
-
-async def aplicar_sugerencia(request: Request) -> Response:
-    """POST /api/algoritmos/sugerencias/{id}/aplicar: aplica a la ficha (editorial) y marca aplicada.
-
-    Para `tipo='editorial'` ANADE el detalle a la ficha editorial de la plataforma (la crea si
-    no existe). Para `tipo='limite'` NO toca codigo (los limites son constantes): solo marca la
-    sugerencia como atendida y devuelve una nota. Idempotente: una sugerencia ya resuelta no se
-    re-aplica.
-    """
-    sug_id = request.path_params["sugerencia_id"]
-    sug = repos.obtener_sugerencia_editorial(sug_id)
-    if sug is None:
-        return JSONResponse({"error": "Esa sugerencia ya no existe."}, status_code=404)
-    if sug["estado"] != "nueva":
-        return JSONResponse({"error": "Esa sugerencia ya estaba resuelta."}, status_code=400)
-
-    ficha_id = ""
-    nota = ""
-    if sug["tipo"] == "editorial":
-        try:
-            ficha_id = _aplicar_a_ficha(sug["plataforma"], sug["detalle"])
-        except libtexto.TextoError as e:
-            return JSONResponse({"error": str(e)}, status_code=400)
-    else:
-        nota = (
-            "El límite de caracteres es una constante del sistema: aplica el cambio en el "
-            "código (keni_shared/limites_plataforma.py). La sugerencia queda marcada como atendida."
-        )
-    actualizada = repos.actualizar_estado_sugerencia_editorial(sug_id, "aplicada")
-    return JSONResponse(
-        {"sugerencia": _sugerencia_a_dict(actualizada or sug), "ficha_id": ficha_id, "nota": nota}
-    )
-
-
-async def descartar_sugerencia(request: Request) -> Response:
-    """POST /api/algoritmos/sugerencias/{id}/descartar: marca la sugerencia como descartada."""
-    sug_id = request.path_params["sugerencia_id"]
-    if repos.obtener_sugerencia_editorial(sug_id) is None:
-        return JSONResponse({"error": "Esa sugerencia ya no existe."}, status_code=404)
-    actualizada = repos.actualizar_estado_sugerencia_editorial(sug_id, "descartada")
-    return JSONResponse({"sugerencia": _sugerencia_a_dict(actualizada) if actualizada else None})
-
-
-async def generar_sugerencias(request: Request) -> Response:
-    """POST /api/algoritmos/sugerencias/generar: lanza el digest AHORA en segundo plano.
-
-    Encola un `claude -p` por plataforma con noticias importantes pendientes (el worker lo
-    ejecuta) y persiste las propuestas. Responde de inmediato; el front refresca para verlas.
-    """
-    threading.Thread(
-        target=sugerencias_editoriales.ejecutar_barrido,
-        name="sugerencias-editoriales-manual",
-        daemon=True,
-    ).start()
-    return JSONResponse(
-        {"mensaje": "Generando sugerencias en segundo plano; aparecerán en unos minutos."}
-    )
-
-
 RUTAS = [
     Route("/api/algoritmos", listar, methods=["GET"]),
     Route("/api/algoritmos/refrescar", refrescar, methods=["POST"]),
     Route("/api/algoritmos/sembrar", sembrar, methods=["POST"]),
-    Route("/api/algoritmos/sugerencias", listar_sugerencias, methods=["GET"]),
-    Route("/api/algoritmos/sugerencias/generar", generar_sugerencias, methods=["POST"]),
-    Route("/api/algoritmos/sugerencias/{sugerencia_id}/aplicar", aplicar_sugerencia, methods=["POST"]),
-    Route("/api/algoritmos/sugerencias/{sugerencia_id}/descartar", descartar_sugerencia, methods=["POST"]),
     Route("/api/algoritmos/fuentes", crear_fuente, methods=["POST"]),
     Route("/api/algoritmos/fuentes/{fuente_id}", actualizar_fuente, methods=["PUT"]),
     Route("/api/algoritmos/fuentes/{fuente_id}", borrar_fuente, methods=["DELETE"]),

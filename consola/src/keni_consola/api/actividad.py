@@ -130,8 +130,6 @@ _DAEMONS: list[tuple[str, str, str | None, str, str]] = [
      "Ingiere tendencias (con sus noticias) al pool.", config.ENV_TRENDS),
     ("algoritmos", "Feeds de algoritmo", "algoritmos_auto_activo",
      "Refresca los feeds de algoritmo por marca.", config.ENV_ALGORITMOS_AUTO),
-    ("sugerencias", "Sugerencias editoriales", "sugerencias_editoriales_activo",
-     "Digest diario de sugerencias editoriales.", config.ENV_SUGERENCIAS_EDITORIALES),
     ("media_gc", "GC de media", "media_gc_activo",
      "Recoge media huérfana (no borra salvo toggle).", config.ENV_MEDIA_GC),
     ("noticias_gc", "GC de noticias", "noticias_gc_activo",

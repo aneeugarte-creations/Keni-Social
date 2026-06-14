@@ -442,7 +442,6 @@ _APP_POR_STEM: dict[str, str] = {
     "test_api_rss": "app_produccion",
     "test_api_algoritmos": "app_produccion",
     "test_algoritmos": "app_produccion",
-    "test_sugerencias_editoriales": "app_produccion",
     "test_metricas_runs": "app_produccion",
     "test_patrones_marca": "app_produccion",
     "test_verdicto_voz": "app_produccion",

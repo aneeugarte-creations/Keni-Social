@@ -709,16 +709,6 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
             "/api/algoritmos", plataforma=plataforma, nivel=nivel, limite=limite
         )
 
-    @mcp.tool()
-    async def keni_sugerencias_editoriales(estado: str = "") -> dict:
-        """Propuestas de cambio a la línea editorial generadas a partir de las noticias de
-        algoritmo (digest diario): qué ficha de plataforma tocar y por qué. `estado` ∈
-        {nueva,aplicada,descartada}. Las aplica/descarta un humano desde la Consola."""
-        cli = _cli()
-        if cli is None:
-            return {"error": _MSG_NO_INIT}
-        return await cli.get("/api/algoritmos/sugerencias", estado=estado)
-
     # ---- Observabilidad de la generación --------------------------------- #
 
     @mcp.tool()

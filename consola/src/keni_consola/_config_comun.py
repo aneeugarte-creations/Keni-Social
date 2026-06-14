@@ -171,11 +171,6 @@ ENV_INVESTIGADOR_INTERVALO_HORAS = "KENI_INVESTIGADOR_INTERVALO_HORAS"
 # un boton "Refrescar" manual); con el flag ON, un daemon ingiere cada N horas.
 ENV_ALGORITMOS_AUTO = "KENI_ALGORITMOS_AUTO"
 ENV_ALGORITMOS_INTERVALO_HORAS = "KENI_ALGORITMOS_INTERVALO_HORAS"
-# Digest DIARIO de sugerencias editoriales a partir de las noticias importantes (encola un
-# claude -p por plataforma afectada). Gateado OFF por defecto.
-ENV_SUGERENCIAS_EDITORIALES = "KENI_SUGERENCIAS_EDITORIALES"
-ENV_SUGERENCIAS_EDITORIALES_INTERVALO_HORAS = "KENI_SUGERENCIAS_EDITORIALES_INTERVALO_HORAS"
-ENV_SUGERENCIAS_EDITORIALES_MAX = "KENI_SUGERENCIAS_EDITORIALES_MAX"
 
 # Re-derivación PERIÓDICA de los patrones editoriales por marca (Metricool -> perfil +
 # doc 'patrones'). Gateado OFF por defecto; Voz/Reglas (criterio humano) jamás se tocan.
@@ -571,11 +566,6 @@ INVESTIGADOR_INTERVALO_HORAS_DEF = 6
 # cambian a cada minuto y no conviene martillear los feeds.
 ALGORITMOS_INTERVALO_HORAS_DEF = 6
 
-# Digest de sugerencias editoriales: 1 vez al dia, pocas plataformas por barrido (cada una
-# cuesta un claude -p). Conservador a proposito.
-SUGERENCIAS_EDITORIALES_INTERVALO_HORAS_DEF = 24
-SUGERENCIAS_EDITORIALES_MAX_DEF = 3
-
 # Google Trends: cadencia holgada (def 30 min; las tendencias no cambian al segundo).
 TRENDS_INTERVALO_MIN_DEF = 30
 TRENDS_GEOS_DEF = ("MX",)
@@ -951,9 +941,6 @@ __all__ = [
     'ENV_SESION_HORAS',
     'ENV_SESION_MAX_HORAS',
     'ENV_SUGERENCIAS',
-    'ENV_SUGERENCIAS_EDITORIALES',
-    'ENV_SUGERENCIAS_EDITORIALES_INTERVALO_HORAS',
-    'ENV_SUGERENCIAS_EDITORIALES_MAX',
     'ENV_TOKEN',
     'ENV_TRADUCCION_MAX',
     'ENV_TRAD_LOTE',
@@ -1024,8 +1011,6 @@ __all__ = [
     'SCORE_PESO_VIRALIDAD_DEF',
     'SESION_HORAS_DEF',
     'SESION_MAX_HORAS_DEF',
-    'SUGERENCIAS_EDITORIALES_INTERVALO_HORAS_DEF',
-    'SUGERENCIAS_EDITORIALES_MAX_DEF',
     'TRAD_LOTE_DEF',
     'TRAD_MIN_SCORE_DEF',
     'TRENDS_GEOS_DEF',

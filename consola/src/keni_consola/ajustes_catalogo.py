@@ -355,14 +355,6 @@ def _construir_catalogo() -> list[Ajuste]:
             grupo="automatismos_generales",
             defecto=False,
         ),
-        Ajuste(
-            clave=config.ENV_SUGERENCIAS_EDITORIALES,
-            tipo="bool",
-            etiqueta="Sugerencias editoriales",
-            ayuda="Digest diario de sugerencias editoriales por marca.",
-            grupo="automatismos_generales",
-            defecto=False,
-        ),
         # Re-derivación periódica de patrones (antes solo-env, el único gate de daemon fuera
         # de la UI): re-lee Metricool cada N días y refresca los perfiles de patrones por
         # marca. Voz/Reglas (criterio humano) jamás se tocan.

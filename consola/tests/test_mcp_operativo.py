@@ -181,7 +181,7 @@ def test_tools_registradas(entorno):
         "keni_listar_noticias", "keni_usar_noticia", "keni_descartar_noticia",
         "keni_noticias_cobertura",
         "keni_hashtags", "keni_franjas", "keni_evergreen_ideas",
-        "keni_algoritmos", "keni_sugerencias_editoriales",
+        "keni_algoritmos",
         "keni_cola_estado", "keni_verificar_video",
     }
     faltan = esperadas - tools

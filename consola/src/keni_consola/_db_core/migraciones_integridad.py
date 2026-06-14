@@ -288,6 +288,16 @@ def _migrar_tabla_daemon_barridos(con: Any) -> None:
     )
 
 
+def _drop_tabla_sugerencias_editoriales(con: Any) -> None:
+    """Elimina la tabla `sugerencias_editoriales` (feature retirada: agente de sugerencias).
+
+    El daemon del digest editorial y toda su superficie (API, repos, MCP, semilla) se
+    borraron; la tabla queda huerfana. Idempotente (`DROP TABLE IF EXISTS`); los indices
+    caen con la tabla. One-shot por BD: el DDL declarativo ya no la crea.
+    """
+    con.execute("DROP TABLE IF EXISTS sugerencias_editoriales")
+
+
 # --------------------------------------------------------------------------- #
 # Bloque 6: TIPOS — fechas TEXT -> tipos NATIVOS de Postgres (timestamptz/date) #
 # --------------------------------------------------------------------------- #

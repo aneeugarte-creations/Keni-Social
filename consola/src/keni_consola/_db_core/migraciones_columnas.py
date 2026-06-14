@@ -900,7 +900,7 @@ _COLUMNAS_TS_CANON: tuple[tuple[str, str, int], ...] = (
     # GC del pool, `ultimo_visto >= ?`, `capturado_en >= ?`, `proximo_sondeo <= ahora`,
     # `MAX(ultima_actualizacion)`) y se escribian con `datetime.now(UTC).isoformat()`
     # (aware + microsegundos) hasta la unificacion al canon. OJO: los `creado` de
-    # DESEMPATE (fuentes_rss/fuentes_algoritmo/sugerencias_editoriales/...) NO van aqui:
+    # DESEMPATE (fuentes_rss/fuentes_algoritmo/...) NO van aqui:
     # sus microsegundos naive son intencionales y compatibles con el orden (ver tiempo.py).
     ("noticias_items", "capturado_en", 19),
     ("noticias_items", "creado", 19),

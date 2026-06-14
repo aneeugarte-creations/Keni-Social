@@ -38,7 +38,6 @@ _ALIAS = {
     "patrones_refresco": "patrones",
     "reaper_generaciones": "reaper",
     "eventos_scanner": "vencimientos",
-    "sugerencias_editoriales": "sugerencias",
 }
 
 # Daemons RETIRADOS/renombrados: sus filas viejas pueden seguir en `daemon_latidos`
@@ -63,7 +62,6 @@ BARRIBLES = frozenset({
     "patrones",
     "reaper",
     "vencimientos",
-    "sugerencias",
     "alertas_rendimiento",
     "investigacion",
     "produccion",
@@ -73,13 +71,13 @@ BARRIBLES = frozenset({
 # "Workers" del panel Sistema (el front agrupa por aquí en vez de hardcodear nombres).
 # Fuente única, igual que BARRIBLES. Cuatro grupos:
 #   - "investigacion": alimentan el motor de REUTILIZAR (descubrir/ingerir/validar fuentes).
-#   - "produccion":    el motor de CREAR borradores (copy+arte) y sugerencias editoriales.
+#   - "produccion":    el motor de CREAR borradores (copy+arte).
 #   - "flujo":         actúan EN el flujo de publicación/comercial; NO gastan tokens claude.
 #   - "infra":         pura infraestructura (métricas, GC, alertas, reaper, patrones).
 # Un daemon registrado que NO esté en ningún conjunto cae a "infra" por defecto (ver
 # `grupo_de`): al añadir un daemon nuevo, clasifícalo aquí o asume que se pinta como infra.
 GRUPO_INVESTIGACION = frozenset({"ingesta", "trends", "algoritmos", "investigacion"})
-GRUPO_PRODUCCION = frozenset({"produccion", "sugerencias"})
+GRUPO_PRODUCCION = frozenset({"produccion"})
 GRUPO_FLUJO = frozenset({"comercial", "programador", "vencimientos"})
 GRUPO_INFRA = frozenset({
     "metricas",
@@ -94,7 +92,7 @@ GRUPO_INFRA = frozenset({
 # Daemons que ENCOLAN/EJECUTAN `claude -p` y por tanto GASTAN tokens. El resto opera sin
 # modelo (lee feeds/métricas, mueve piezas, GC). `patrones` deriva de Metricool SIN claude
 # (verificado en patrones_refresco.py) => fuera. Fuente única para `gasta_tokens` en la sonda.
-GASTA_TOKENS = frozenset({"investigacion", "produccion", "sugerencias"})
+GASTA_TOKENS = frozenset({"investigacion", "produccion"})
 
 
 # CLASE + MOTOR de cada daemon (dashboard de Workers, contrato ADITIVO con el de `grupo_de`).
@@ -109,7 +107,7 @@ GASTA_TOKENS = frozenset({"investigacion", "produccion", "sugerencias"})
 #               sirve el daemon; None para los de `sistema` (no pertenecen a ningún motor).
 # Verificado contra cada módulo (punto de partida editable; reclasifica aquí al añadir un daemon):
 #   - ia:  investigacion (loop de criba/QA -> motor investigacion), produccion (loop de copy/arte
-#          -> motor produccion), sugerencias (digest editorial con `claude -p` -> motor produccion).
+#          -> motor produccion).
 #   - maquina/investigacion:  ingesta (admisión RSS), trends (Google Trends), algoritmos (feeds
 #          de algoritmo), noticias_gc (poda el POOL de noticias que alimenta reutilizar).
 #   - maquina/produccion:     programador (publica la parrilla), vencimientos (escáner de eventos
@@ -121,7 +119,6 @@ GASTA_TOKENS = frozenset({"investigacion", "produccion", "sugerencias"})
 _CLASE_MOTOR: dict[str, tuple[str, str | None]] = {
     "investigacion": ("ia", "investigacion"),
     "produccion": ("ia", "produccion"),
-    "sugerencias": ("ia", "produccion"),
     "ingesta": ("maquina", "investigacion"),
     "trends": ("maquina", "investigacion"),
     "algoritmos": ("maquina", "investigacion"),
@@ -157,7 +154,6 @@ def motor_de(daemon: str) -> str | None:
 #   - ingesta            -> KENI_PIPELINE_SELECCION   (ingesta_daemon/_bucle: ingesta_activa)
 #   - trends             -> KENI_TRENDS               (trends_daemon: trends_activo)
 #   - algoritmos         -> KENI_ALGORITMOS_AUTO      (algoritmos_refresco: algoritmos_auto_activo)
-#   - sugerencias        -> KENI_SUGERENCIAS_EDITORIALES (sugerencias_editoriales_activo)
 #   - media_gc           -> KENI_MEDIA_GC             (media_gc_daemon: media_gc_activo)
 #   - noticias_gc        -> KENI_NOTICIAS_GC          (noticias_gc_daemon: noticias_gc_activo)
 #   - patrones           -> KENI_PATRONES_AUTO        (patrones_refresco: patrones_auto_activo)
@@ -168,13 +164,12 @@ def motor_de(daemon: str) -> str | None:
 #                                           sin una clave propia, así que el toggle de fila usa el MAESTRO)
 #   - produccion         -> KENI_MAQUINA   (loop pipeline: gate_maquina(alguna_etapa_produccion_activa),
 #                                           que siempre es True bajo la máquina => su único interruptor es el MAESTRO)
-# Los gateados de máquina (ingesta/trends/algoritmos/sugerencias) corren además bajo
+# Los gateados de máquina (ingesta/trends/algoritmos) corren además bajo
 # KENI_MAQUINA (AND), pero el toggle de SU fila gobierna su flag PROPIO; el maestro es otra fila.
 CLAVE_GATE = {
     "ingesta": "KENI_PIPELINE_SELECCION",
     "trends": "KENI_TRENDS",
     "algoritmos": "KENI_ALGORITMOS_AUTO",
-    "sugerencias": "KENI_SUGERENCIAS_EDITORIALES",
     "media_gc": "KENI_MEDIA_GC",
     "noticias_gc": "KENI_NOTICIAS_GC",
     "patrones": "KENI_PATRONES_AUTO",

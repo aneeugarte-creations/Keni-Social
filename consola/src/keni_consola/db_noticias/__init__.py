@@ -85,20 +85,11 @@ from .noticias_algoritmo import (
     marcar_noticia_algoritmo,
     obtener_noticia_algoritmo,
 )
-from .sugerencias import (
-    ESTADOS_SUGERENCIA_EDITORIAL,
-    actualizar_estado_sugerencia_editorial,
-    contar_sugerencias_editoriales,
-    crear_sugerencia_editorial,
-    listar_sugerencias_editoriales,
-    obtener_sugerencia_editorial,
-)
 
 __all__ = [
     # Constantes / catálogos
     "ESTADOS_NOTICIA_CLUSTER",
     "ESTADOS_NOTICIA_ITEM",
-    "ESTADOS_SUGERENCIA_EDITORIAL",
     "VERIFICACIONES_CLUSTER",
     "_TIPOS_FUENTE",
     # Helpers JSON de columnas (compartidos)
@@ -170,10 +161,4 @@ __all__ = [
     "listar_noticias_algoritmo",
     "marcar_noticia_algoritmo",
     "obtener_noticia_algoritmo",
-    # Sugerencias editoriales
-    "actualizar_estado_sugerencia_editorial",
-    "contar_sugerencias_editoriales",
-    "crear_sugerencia_editorial",
-    "listar_sugerencias_editoriales",
-    "obtener_sugerencia_editorial",
 ]

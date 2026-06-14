@@ -275,7 +275,6 @@ def test_grupo_de_clasifica_cada_motor():
     assert latidos.grupo_de("ingesta") == "investigacion"
     assert latidos.grupo_de("investigacion") == "investigacion"
     assert latidos.grupo_de("produccion") == "produccion"
-    assert latidos.grupo_de("sugerencias") == "produccion"
     assert latidos.grupo_de("comercial") == "flujo"
     assert latidos.grupo_de("programador") == "flujo"
     assert latidos.grupo_de("vencimientos") == "flujo"
@@ -289,11 +288,10 @@ def test_grupo_de_default_infra():
 
 
 def test_gasta_tokens_solo_los_que_encolan_claude():
-    # Solo investigacion/produccion/sugerencias corren `claude -p`; el resto no gasta.
+    # Solo investigacion/produccion corren `claude -p`; el resto no gasta.
     # patrones deriva de Metricool SIN claude => False.
     assert latidos.gasta_tokens("investigacion") is True
     assert latidos.gasta_tokens("produccion") is True
-    assert latidos.gasta_tokens("sugerencias") is True
     for d in ("ingesta", "trends", "algoritmos", "comercial", "programador",
               "vencimientos", "metricas", "metricas_piezas", "alertas_rendimiento",
               "media_gc", "patrones", "noticias_gc", "reaper"):
@@ -320,7 +318,7 @@ def test_endpoint_daemons_expone_grupo_y_gasta_tokens(entorno):
 
 def test_clase_de_clasifica_ia_maquina_sistema():
     # IA: gasta tokens + tiene prompt.
-    for d in ("investigacion", "produccion", "sugerencias"):
+    for d in ("investigacion", "produccion"):
         assert latidos.clase_de(d) == "ia"
     # MAQUINA: parte de la maquina de contenido NO-IA.
     for d in ("ingesta", "trends", "algoritmos", "noticias_gc", "programador", "vencimientos"):
@@ -334,7 +332,6 @@ def test_clase_de_clasifica_ia_maquina_sistema():
 def test_motor_de_mapea_el_loop_o_none():
     assert latidos.motor_de("investigacion") == "investigacion"
     assert latidos.motor_de("produccion") == "produccion"
-    assert latidos.motor_de("sugerencias") == "produccion"
     # La maquina sirve a un motor concreto.
     assert latidos.motor_de("ingesta") == "investigacion"
     assert latidos.motor_de("noticias_gc") == "investigacion"
@@ -376,7 +373,6 @@ def test_clave_gate_de_mapea_cada_daemon_gateado():
     assert latidos.clave_gate_de("ingesta") == "KENI_PIPELINE_SELECCION"
     assert latidos.clave_gate_de("trends") == "KENI_TRENDS"
     assert latidos.clave_gate_de("algoritmos") == "KENI_ALGORITMOS_AUTO"
-    assert latidos.clave_gate_de("sugerencias") == "KENI_SUGERENCIAS_EDITORIALES"
     assert latidos.clave_gate_de("media_gc") == "KENI_MEDIA_GC"
     assert latidos.clave_gate_de("noticias_gc") == "KENI_NOTICIAS_GC"
     assert latidos.clave_gate_de("patrones") == "KENI_PATRONES_AUTO"

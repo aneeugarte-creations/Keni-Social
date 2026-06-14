@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from keni_consola import importador_calendario, libtexto, sugerencias_editoriales
+from keni_consola import importador_calendario, libtexto
 from keni_consola.dominio import (
     asistente,
     clasificador_marca,
@@ -47,7 +47,6 @@ _CASOS = [
     (perfil_editorial._plantilla, "prompt/editorial"),
     (parrilla_import_job._plantilla, "prompt/importar/parrilla"),
     (importador_calendario._plantilla, "prompt/importar/calendario"),
-    (sugerencias_editoriales._plantilla_sugerencias, "prompt/sugerencias"),
     (hashtags._plantilla, "prompt/hashtags"),
     (clasificador_marca._plantilla, "prompt/clasificacion-marca"),
 ]

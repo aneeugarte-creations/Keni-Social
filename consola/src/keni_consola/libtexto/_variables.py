@@ -12,7 +12,6 @@ en un modulo, se anade aqui su entrada. Origen = el proceso/modulo que la sustit
   - `dominio/perfil_editorial.py`  -> {{MARCA}} {{MAX_KEYWORDS}} {{EDITORIAL}}
   - `dominio/fusion_semantica.py`  -> {{HISTORIAS}}        (fusion Y fusion-verificacion)
   - `dominio/traduccion.py`        -> {{ITEMS}}
-  - `sugerencias_editoriales.py`   -> {{PLATAFORMA}} {{FICHA}} {{LIMITE}} {{NOTICIAS}}
   - `dominio/insumos_parse.py`     -> {{RUTA}}
   - `importador_calendario.py`     -> {{RUTA}} {{MARCAS}} {{REDES}}
   - `dominio/parrilla_import_job.py` -> {{FUENTE}} {{MIEMBROS}} {{SLOTS}} {{REGLA_FUENTE}}
@@ -82,31 +81,6 @@ _CATALOGO: tuple[dict[str, str], ...] = (
         "descripcion": "Lista JSON de titulares/resúmenes en otro idioma que hay que traducir y localizar a MX.",
         "ejemplo": '[{"id": "n7", "titulo": "Real Madrid clinch title…"}]',
         "origen": "Ingesta de noticias · traducción/localización MX (prompt/traduccion)",
-    },
-    # --- Sugerencias editoriales: digest por plataforma (prompt/sugerencias) ---
-    {
-        "nombre": "PLATAFORMA",
-        "descripcion": "Nombre de la plataforma para la que se generan las sugerencias del digest.",
-        "ejemplo": "Instagram",
-        "origen": "Sugerencias editoriales · digest diario por plataforma (prompt/sugerencias)",
-    },
-    {
-        "nombre": "FICHA",
-        "descripcion": "Ficha editorial vigente de esa plataforma (convenciones y hábitos medidos).",
-        "ejemplo": "Reels < 60s rinden mejor; carruseles para listas…",
-        "origen": "Sugerencias editoriales · digest diario por plataforma (prompt/sugerencias)",
-    },
-    {
-        "nombre": "LIMITE",
-        "descripcion": "Límite técnico de caracteres de la plataforma, en texto legible.",
-        "ejemplo": "2200 caracteres",
-        "origen": "Sugerencias editoriales · digest diario por plataforma (prompt/sugerencias)",
-    },
-    {
-        "nombre": "NOTICIAS",
-        "descripcion": "Digest de noticias de cambios de algoritmo (título, resumen y fuente por línea).",
-        "ejemplo": "- Instagram prioriza originales\n  fuente: https://…",
-        "origen": "Sugerencias editoriales · digest diario por plataforma (prompt/sugerencias)",
     },
     # --- Archivos subidos: insumos del dia + importar calendario ---
     {

@@ -25,9 +25,6 @@ from ._config_comun import (
     ENV_PATRONES_AUTO,
     ENV_PROGRAMADOR_INTERVALO_SEGUNDOS,
     ENV_PUBLICAR_REAL,
-    ENV_SUGERENCIAS_EDITORIALES,
-    ENV_SUGERENCIAS_EDITORIALES_INTERVALO_HORAS,
-    ENV_SUGERENCIAS_EDITORIALES_MAX,
     ENV_TRENDS,
     ENV_TRENDS_GEOS,
     ENV_TRENDS_INTERVALO_MIN,
@@ -37,8 +34,6 @@ from ._config_comun import (
     METRICAS_PIEZAS_REFRESCO_HORAS_DEF,
     METRICAS_REFRESCO_HORAS_DEF,
     MIN_APROBACIONES_DEF,
-    SUGERENCIAS_EDITORIALES_INTERVALO_HORAS_DEF,
-    SUGERENCIAS_EDITORIALES_MAX_DEF,
     TRENDS_GEOS_DEF,
     TRENDS_INTERVALO_MIN_DEF,
     _crudo,
@@ -255,33 +250,6 @@ def algoritmos_auto_activo() -> bool:
 def algoritmos_intervalo_horas() -> int:
     """Cada cuantas horas ingiere el daemon de Algoritmos (`KENI_ALGORITMOS_INTERVALO_HORAS`, def 6, min 1)."""
     return _entero(ENV_ALGORITMOS_INTERVALO_HORAS, ALGORITMOS_INTERVALO_HORAS_DEF, minimo=1)
-
-
-def sugerencias_editoriales_activo() -> bool:
-    """True si el digest diario de sugerencias editoriales debe correr (`KENI_SUGERENCIAS_EDITORIALES`).
-
-    Def OFF (conservador): cada barrido encola uno o varios `claude -p` (coste). Con el flag a
-    un valor afirmativo, un hilo demonio propone 1 vez/dia cambios a las fichas/limites a partir
-    de las noticias importantes. Las propuestas son REVISABLES; nunca se aplican solas.
-    """
-    return _crudo(ENV_SUGERENCIAS_EDITORIALES).lower() in _VERDADEROS
-
-
-def sugerencias_editoriales_intervalo_horas() -> int:
-    """Cada cuantas horas corre el digest (`KENI_SUGERENCIAS_EDITORIALES_INTERVALO_HORAS`, def 24, min 1)."""
-    return _entero(
-        ENV_SUGERENCIAS_EDITORIALES_INTERVALO_HORAS,
-        SUGERENCIAS_EDITORIALES_INTERVALO_HORAS_DEF,
-        minimo=1,
-    )
-
-
-def sugerencias_editoriales_max() -> int:
-    """Maximo de plataformas a procesar por barrido (`KENI_SUGERENCIAS_EDITORIALES_MAX`, def 3, min 1).
-
-    Cada plataforma cuesta un `claude -p`: el tope acota el gasto por dia.
-    """
-    return _entero(ENV_SUGERENCIAS_EDITORIALES_MAX, SUGERENCIAS_EDITORIALES_MAX_DEF, minimo=1)
 
 
 def patrones_auto_activo() -> bool:

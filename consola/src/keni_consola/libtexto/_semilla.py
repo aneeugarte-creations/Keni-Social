@@ -33,6 +33,8 @@ __all__ = [
 _PROMPTS_OBSOLETOS_BIBLIOTECA: tuple[str, ...] = (
     "prompt/arte-sistema",       # fusionado en prompt/arte (directiva única del generador)
     "prompt/arte-ilustracion",   # Estudio de generación retirado (código muerto)
+    "prompt/sugerencias",        # agente de sugerencias editoriales retirado (feature borrada)
+    "prompt/editorial/sugerencias-plataforma",  # id viejo del mismo prompt retirado
 )
 _SENTINELA_OBSOLETOS = ".prompts-obsoletos-v1"
 
@@ -47,7 +49,6 @@ _RENOMBRES_PROMPT_BIBLIOTECA: tuple[tuple[str, str], ...] = (
     ("prompt/copy-desde-nota", "prompt/copy"),
     ("prompt/qa-fuente", "prompt/validacion"),
     ("prompt/brainstorming-evergreen", "prompt/evergreen"),
-    ("prompt/editorial/sugerencias-plataforma", "prompt/sugerencias"),
     ("prompt/imagen/arte-noticia", "prompt/arte"),
     ("prompt/imagen/ilustracion-fondo", "prompt/arte-ilustracion"),
     ("prompt/imagen/sistema-generador", "prompt/arte-sistema"),

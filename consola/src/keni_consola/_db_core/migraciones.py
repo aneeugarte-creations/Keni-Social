@@ -66,6 +66,7 @@ from .migraciones_integridad import (
     _COLUMNAS_FECHA_NATIVA,
     _COLUMNAS_JSONB,
     _FKS,
+    _drop_tabla_sugerencias_editoriales,
     _migrar_checks_dominio,
     _migrar_fks_hub,
     _migrar_indice_generaciones,
@@ -405,6 +406,10 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # 'produccion'). Refina las filas de INVESTIGACION desde `generaciones_indice`; lo demas
     # queda en 'produccion'. One-shot e idempotente. Ver `_backfill_gasto_ia_proceso`.
     Migracion("0035-backfill-gasto-ia-proceso", _backfill_gasto_ia_proceso),
+    # LIMPIEZA: la feature "agente de sugerencias editoriales" (daemon del digest diario) se
+    # retiro por completo (API, repos, MCP, semilla, DDL). Esta migracion elimina su tabla
+    # huerfana en BDs ya creadas. One-shot e idempotente (`DROP TABLE IF EXISTS`).
+    Migracion("0036-drop-sugerencias-editoriales", _drop_tabla_sugerencias_editoriales),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.

@@ -89,8 +89,6 @@ _TABLAS = (
     # acumulaban filas entre tests y reventaban counts de test_api_noticias/historias.
     "noticias_items",
     "noticias_clusters",
-    # Sugerencias editoriales generadas por el job diario.
-    "sugerencias_editoriales",
     # Taller Evergreen: ideas de contenido evergreen (propuesta/aprobada/descartada). Sin esto,
     # las ideas se acumulan entre tests del mismo worker y rompen el aislamiento.
     "evergreen_ideas",
