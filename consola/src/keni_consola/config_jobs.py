@@ -5,7 +5,6 @@ from ._config_comun import (
     _VERDADEROS,
     ENV_GENERACION_PAUSADA,
     ENV_JOBS_MAX_INTENTOS,
-    ENV_MAX_COLA,
     ENV_MAX_JOBS,
     ENV_PRESUPUESTO_MARGEN_MANUAL,
     ENV_PRESUPUESTO_TOKENS_DIA,
@@ -14,7 +13,6 @@ from ._config_comun import (
     ENV_WORKER_EXTERNO,
     ENV_WORKER_SONDEO_SEGUNDOS,
     JOBS_MAX_INTENTOS_DEF,
-    MAX_COLA_DEF,
     MAX_JOBS_DEF,
     PRESUPUESTO_MARGEN_MANUAL_DEF,
     PRESUPUESTO_TOKENS_DIA_DEF,
@@ -31,13 +29,13 @@ from ._config_comun import (
 
 
 def max_jobs() -> int:
-    """Maximo de jobs `claude` simultaneos (`KENI_MAX_JOBS`, def 4, minimo 1)."""
+    """Maximo de jobs `claude` simultaneos (`KENI_MAX_JOBS`, def 4, minimo 1).
+
+    Es el UNICO limite de la cola: cuantos `claude -p` corren a la vez. La cola NO tiene
+    tope (R-NO-LIMIT); los jobs que no caben simplemente ESPERAN un slot, nada se rechaza
+    por tamano de cola. El freno voluntario de presupuesto/pausa vive aparte (`presupuesto_ia`).
+    """
     return _entero(ENV_MAX_JOBS, MAX_JOBS_DEF, minimo=1)
-
-
-def max_cola() -> int:
-    """Maximo de jobs ESPERANDO un slot (`KENI_MAX_COLA`, def 16, minimo 0)."""
-    return _entero(ENV_MAX_COLA, MAX_COLA_DEF, minimo=0)
 
 
 # --------------------------------------------------------------------------- #

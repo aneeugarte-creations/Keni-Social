@@ -12,8 +12,8 @@ Endpoints:
   - `GET /api/actividad/agregados`
       -> `{"total": {...}, "por_tipo": [...], "por_dia": [...]}`
   - `GET /api/actividad/cola`
-      -> MONITOR EN VIVO de la cola de generacion: capacidad (max_jobs/max_cola/tope), conteo
-         (pendientes/reclamados/terminados/activos), `procesando` (claude -p en vuelo), slots
+      -> MONITOR EN VIVO de la cola de generacion: capacidad (`max_jobs`: la cola NO tiene tope,
+         R-NO-LIMIT), conteo (pendientes/reclamados/terminados/activos), `procesando` (claude -p en vuelo), slots
          libres, workers activos, listas `en_curso`/`esperando` (con etiqueta/tipo/marca/edad),
          desglose `por_proceso` (investigacion/produccion sobre la MISMA cola, ADR 0011), el
          `embudo_qa` (lo unico que Investigacion acota aparte) y el estado de los daemons de
@@ -216,28 +216,22 @@ def _daemons_estado() -> list[dict]:
 def snapshot_cola() -> dict:
     """Snapshot PLANO de capacidad y conteo de la cola de jobs (sin listas ni workers).
 
-    Una sola sonda para la regla de `cola_llena` (activos >= tope), compartida por el
-    monitor (`GET /api/actividad/cola`) y el doctor (`GET /api/estado`, chequeo
-    `maquina:cola`): no duplicar el calculo. Forma: `{max_jobs, max_cola, tope,
-    pendientes, reclamados, terminados, activos, cola_llena}`. Puede propagar un fallo
-    de BD: cada consumidor decide como degradar.
+    Una sola sonda compartida por el monitor (`GET /api/actividad/cola`) y el doctor
+    (`GET /api/estado`, chequeo `maquina:cola`): no duplicar el calculo. Forma:
+    `{max_jobs, pendientes, reclamados, terminados, activos}`. La cola NO tiene tope
+    (R-NO-LIMIT): el unico limite es la concurrencia (`max_jobs`); el exceso ESPERA, nada
+    se rechaza por tamano de cola. Puede propagar un fallo de BD: cada consumidor degrada.
     """
     estados = repos.contar_jobs_por_estado()
     pendientes = estados.get(repos.JOB_PENDIENTE, 0)
     reclamados = estados.get(repos.JOB_RECLAMADO, 0)
     terminados = estados.get(repos.JOB_TERMINADO, 0)
-    max_jobs, max_cola = config.max_jobs(), config.max_cola()
-    tope = max_jobs + max_cola
-    activos = pendientes + reclamados
     return {
-        "max_jobs": max_jobs,
-        "max_cola": max_cola,
-        "tope": tope,
+        "max_jobs": config.max_jobs(),
         "pendientes": pendientes,
         "reclamados": reclamados,
         "terminados": terminados,
-        "activos": activos,
-        "cola_llena": activos >= tope,
+        "activos": pendientes + reclamados,
     }
 
 
@@ -259,8 +253,7 @@ async def cola(request: Request) -> Response:
     pendientes = snap["pendientes"]
     reclamados = snap["reclamados"]
     terminados = snap["terminados"]
-    max_jobs, max_cola = snap["max_jobs"], snap["max_cola"]
-    tope = snap["tope"]
+    max_jobs = snap["max_jobs"]
     activos = snap["activos"]
 
     ahora = datetime.now()
@@ -303,14 +296,14 @@ async def cola(request: Request) -> Response:
         {
             # Eco del filtro aplicado a las listas ("" = todas): la UI lo usa para etiquetar.
             "marca": marca,
-            "capacidad": {"max_jobs": max_jobs, "max_cola": max_cola, "tope": tope},
+            # La cola NO tiene tope (R-NO-LIMIT): la capacidad es solo la CONCURRENCIA.
+            "capacidad": {"max_jobs": max_jobs},
             "conteo": {
                 "pendientes": pendientes,
                 "reclamados": reclamados,
                 "terminados": terminados,
                 "activos": activos,
             },
-            "cola_llena": snap["cola_llena"],
             "procesando": reclamados,  # claude -p en vuelo (acotado por max_jobs)
             "slots_libres": max(0, max_jobs - reclamados),
             "workers_activos": workers,

@@ -72,9 +72,8 @@ ENV_MCP_USUARIO = "KENI_MCP_USUARIO"
 # Observabilidad.
 ENV_LOG_LEVEL = "KENI_CONSOLA_LOG_LEVEL"
 
-# Concurrencia de jobs.
+# Concurrencia de jobs (la cola NO tiene tope: el exceso ESPERA, ver R-NO-LIMIT).
 ENV_MAX_JOBS = "KENI_MAX_JOBS"
-ENV_MAX_COLA = "KENI_MAX_COLA"
 
 # Cola + worker de generacion (#130 Fase 2 / ADR 0002 Fase B).
 ENV_WORKER_EXTERNO = "KENI_WORKER_EXTERNO"
@@ -507,7 +506,6 @@ SESION_MAX_HORAS_DEF = 720
 ADMIN_USER_DEF = "admin"
 LOG_LEVEL_DEF = "INFO"
 MAX_JOBS_DEF = 4
-MAX_COLA_DEF = 16
 # Pool Postgres: arranca pequeño (la mayoria de ops son cortas) y crece hasta el MAX. El MAX
 # (12) cubre con holgura los ~4 `lock_barrido` simultaneos (cada uno retiene una conexion
 # entera) + las leases por request del threadpool del back + los daemons. Subir si Postgres
@@ -869,7 +867,6 @@ __all__ = [
     'ENV_INVESTIGADOR_INTERVALO_HORAS',
     'ENV_LOG_LEVEL',
     'ENV_MAQUINA',
-    'ENV_MAX_COLA',
     'ENV_MAX_JOBS',
     'ENV_MCP_BEARER',
     'ENV_MCP_USUARIO',
@@ -978,7 +975,6 @@ __all__ = [
     'JOBS_MAX_INTENTOS_DEF',
     'PROMPT_MAX_CHARS_DEF',
     'PROMPT_AVISO_CHARS_DEF',
-    'MAX_COLA_DEF',
     'MAX_JOBS_DEF',
     'PRESUPUESTO_MARGEN_MANUAL_DEF',
     'PRESUPUESTO_TOKENS_DIA_DEF',

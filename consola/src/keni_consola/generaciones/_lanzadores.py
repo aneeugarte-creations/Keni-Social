@@ -2,7 +2,8 @@
 PROCESO (render/transcripción), más la cancelación del árbol de subprocesos.
 
 Submódulo interno del paquete `generaciones`. Aquí vive TODO el endurecimiento #137: grupo de
-procesos + kill del árbol, tope de cola (`ColaLlenaError`), cancelación y logging correlacionado
+procesos + kill del árbol, backpressure de admisión por presupuesto/pausa (`ColaLlenaError`; la
+cola NO tiene tope, R-NO-LIMIT), cancelación y logging correlacionado
 por job-id. El `__init__.py` re-exporta los lanzadores INYECTABLES (`encolar_job_claude`,
 `encolar_job_proceso`, `lanzar_job_claude`, `lanzar_job_imagen`) y `cancelar`.
 
@@ -322,12 +323,10 @@ def encolar_job_claude(
     fakes que NO tocan `claude` ni la cola (ejecutan `procesar` sincronicamente o dejan el
     registro `ejecutando`). En produccion, el default encola el `spec`.
 
-    TOPE DE COLA (PERMANENTE): el backpressure lo decide `cola.encolar`, SINCRONAMENTE y contra
-    el conteo REAL de la cola en Postgres (`repos.contar_jobs_activos`): si ya hay
-    `max_jobs+max_cola` jobs en vuelo, lanza `ColaLlenaError` (-> 429) ANTES de insertar. El tope
-    es COMPARTIDO entre procesos y se autolibera al marcar un job `terminado`. (Antes el gate era
-    un contador en memoria de `runner.admitir()`, roto en hosted: back y worker en contenedores
-    distintos, asi que solo subia y nunca bajaba; ver `cola.encolar`.)
+    SIN TOPE DE COLA (R-NO-LIMIT): `cola.encolar` SIEMPRE acepta; nada se rechaza por tamano de
+    cola. El unico limite es la concurrencia (`max_jobs`), que el worker/`runner.slot` aplican
+    aguas abajo (el exceso ESPERA). `cola.encolar` aun puede rechazar por el freno VOLUNTARIO de
+    presupuesto/pausa (subclases de `ColaLlenaError` -> 429), que se conserva.
     """
     if spec is None:
         # Defensa: sin spec no se puede reconstruir el job en el worker. El llamante real
@@ -335,7 +334,7 @@ def encolar_job_claude(
         raise ValueError("encolar_job_claude requiere un spec serializable")
     from .. import cola
 
-    cola.encolar(gen_id, spec)  # gate de cola COMPARTIDO: puede lanzar ColaLlenaError (-> 429)
+    cola.encolar(gen_id, spec)  # SIEMPRE encola (sin tope); solo presupuesto/pausa rechaza (ColaLlenaError -> 429)
     # Visibilidad/control: persistimos el prompt EXACTO que recibirá `claude -p` y su TAMAÑO
     # (`prompt_chars`, economía de contexto: lo vuelca el ledger `gasto_ia` al cerrar, para
     # ver la deriva del contexto por día). El prompt se expone SOLO en el detalle
@@ -365,8 +364,9 @@ def encolar_job_proceso(
     en vez de correr `claude` (ver `worker.procesar_job`). El ejecutor reporta progreso/estado/
     errores via `actualizar(...)`.
 
-    Reutiliza el MISMO gate de cola COMPARTIDO que el camino claude (`cola.encolar` -> 429 si la
-    cola esta al tope, contra `repos.contar_jobs_activos`). Si `gen_id` no se pasa, se crea uno.
+    Reutiliza el MISMO camino de admision que el camino claude (`cola.encolar`): la cola NO tiene
+    tope (R-NO-LIMIT), asi que SIEMPRE encola; solo el freno voluntario de presupuesto/pausa puede
+    rechazar (subclase de `ColaLlenaError` -> 429). Si `gen_id` no se pasa, se crea uno.
     Devuelve el registro publico de la generacion (incluye su `id`).
     """
     from ..dominio import jobspec
@@ -382,7 +382,7 @@ def encolar_job_proceso(
     spec = jobspec.construir_proceso(kind, params or {})
     from .. import cola
 
-    cola.encolar(reg["id"], spec)  # gate de cola COMPARTIDO: puede lanzar ColaLlenaError (-> 429)
+    cola.encolar(reg["id"], spec)  # SIEMPRE encola (sin tope); solo presupuesto/pausa rechaza (ColaLlenaError -> 429)
     return reg
 
 
@@ -409,10 +409,10 @@ def lanzar_job_claude(
     es True cuando el cupo de admision ya lo tomo `encolar_job_claude` (el caso normal del
     worker): asi NO se vuelve a admitir (evita doble cuenta), pero `slot` SIGUE liberandolo.
 
-    TOPE DE COLA (#137, PERMANENTE): la admision se decide SINCRONAMENTE; si el sistema esta
-    saturado (`runner.admitir()` lanza `ColaLlenaError`) se propaga al llamante (429). Con
-    `ya_admitido` la admision la hizo ya el encolado (el worker no re-admite). El hilo
-    hereda la admision (`slot(ya_admitido=True)`) y la libera al terminar.
+    SIN TOPE DE COLA (R-NO-LIMIT): `runner.admitir()` SIEMPRE acepta (solo lleva la cuenta de
+    jobs en vuelo); nada se rechaza por tamano de cola. Con `ya_admitido` la admision la hizo ya
+    el encolado (el worker no re-admite). El hilo hereda la admision (`slot(ya_admitido=True)`) y
+    la libera al terminar. La concurrencia (`max_jobs`) la impone `slot` haciendo ESPERAR.
     """
     acumulador = stream.AcumuladorStream()
     # Wall-timeout del run: el global (`KENI_CLAUDE_TIMEOUT`, def 600 s) salvo que el job
@@ -435,9 +435,8 @@ def lanzar_job_claude(
     rid = request_id_actual()
     etq = f"generacion {gen_id}" + (f" (req {rid})" if rid else "")
 
-    # Admision SINCRONA: si la cola esta al tope, NO lanzamos el hilo; el llamante recibe
-    # ColaLlenaError y responde 429 (#137; PERMANENTE: la generacion sigue siendo `claude
-    # -p`, ADR 0001). El hilo, ya admitido, libera el cupo al terminar via `slot`. Si el
+    # Admision: la cola NO tiene tope (R-NO-LIMIT), asi que `admitir()` SIEMPRE acepta (solo
+    # cuenta el job en vuelo). El hilo, ya admitido, libera el cupo al terminar via `slot`. Si el
     # cupo ya lo tomo `encolar_job_claude` (worker, #130 Fase 2), NO re-admitimos.
     if not ya_admitido:
         runner.admitir()

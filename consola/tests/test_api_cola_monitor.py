@@ -68,11 +68,13 @@ def test_cola_snapshot_contrato(entorno):
     r = _cli_token().get("/api/actividad/cola")
     assert r.status_code == 200
     data = r.json()
-    # Capacidad y conteo.
-    assert data["capacidad"]["tope"] == data["capacidad"]["max_jobs"] + data["capacidad"]["max_cola"]
+    # Capacidad y conteo. La cola NO tiene tope (R-NO-LIMIT): la capacidad es solo la concurrencia.
+    assert set(data["capacidad"]) == {"max_jobs"}
+    assert data["capacidad"]["max_jobs"] >= 1
+    assert "max_cola" not in data["capacidad"] and "tope" not in data["capacidad"]
+    assert "cola_llena" not in data  # ya no existe el concepto de cola llena
     assert data["conteo"]["pendientes"] >= 1
     assert data["conteo"]["activos"] == data["conteo"]["pendientes"] + data["conteo"]["reclamados"]
-    assert data["cola_llena"] is False
     # El job pendiente aparece en `esperando` con su etiqueta enriquecida desde el registro.
     esperando = data["esperando"]
     assert any(j["gen_id"] == gen_id and j["etiqueta"] == "QA fuente · UnoTV" for j in esperando)

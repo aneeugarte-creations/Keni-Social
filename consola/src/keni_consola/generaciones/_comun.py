@@ -6,7 +6,8 @@ helpers triviales (`nuevo_id`, `ahora_iso`, `_timeout`), el logger del dominio, 
 EN MEMORIA de trabajos en vuelo (`_HANDLES`/`_HANDLES_LOCK`) y el alias de tipo `Procesar`.
 Sin estado de negocio: solo cimientos compartidos por `_almacen` y `_lanzadores`.
 
-`ColaLlenaError` se RE-EXPORTA aquí (tope de cola, #137): los endpoints capturan
+`ColaLlenaError` se RE-EXPORTA aquí (clase BASE del backpressure de admisión —
+presupuesto/pausa/prompt; la cola ya no tiene tope, R-NO-LIMIT): los endpoints capturan
 `generaciones.ColaLlenaError` sin acoplarse al módulo `dominio.runner`. Lo usan otros
 módulos, no este, de ahí el `noqa: F401` en el import.
 """

@@ -79,16 +79,14 @@ def test_encolar_idempotente_por_gen_id(entorno):
     assert cola.reclamar() is None  # no habia un segundo job
 
 
-def test_gate_cola_rechaza_fondo_al_tope_y_se_libera(entorno, monkeypatch):
-    """`cola.encolar` rechaza con ColaLlenaError SOLO al trabajo de FONDO al llegar al tope.
+def test_gate_cola_fondo_siempre_encola_sin_tope(entorno, monkeypatch):
+    """La cola NO tiene tope (R-NO-LIMIT): el FONDO encola sin limite, nada se rechaza.
 
-    El gate cuenta los jobs EN VUELO en la cola compartida; al terminar uno, vuelve a haber
-    sitio. El backpressure es para la MAQUINA (su tick reintenta solo); ver el test del bypass
-    manual debajo.
+    Antes `cola.encolar` rechazaba el fondo con `ColaLlenaError` al pasar `max_jobs+max_cola`.
+    Ahora la cola crece sin tope: el unico limite es la CONCURRENCIA (`max_jobs`), el exceso
+    espera. Encolar muchos jobs de fondo con un solo slot NUNCA rechaza.
     """
-    monkeypatch.setenv("KENI_MAX_JOBS", "1")
-    monkeypatch.setenv("KENI_MAX_COLA", "1")  # tope = 2
-    assert cola.tope_cola() == 2
+    monkeypatch.setenv("KENI_MAX_JOBS", "1")  # solo 1 corre a la vez; el resto ESPERA en cola
 
     def _encolar_fondo():
         gen = generaciones.crear({"tipo": "pipeline", "marca": _MARCA, "etiqueta": "X"})
@@ -96,29 +94,23 @@ def test_gate_cola_rechaza_fondo_al_tope_y_se_libera(entorno, monkeypatch):
             prompt="p", procesar=jobspec.construir_hashtags(),
             prioridad=jobspec.PRIORIDAD_PIPELINE,
         )
-        return cola.encolar(gen["id"], spec)
+        return cola.encolar(gen["id"], spec)  # no debe lanzar ColaLlenaError jamas
 
-    j1 = _encolar_fondo()
-    _encolar_fondo()  # 2do: la cola queda al tope
-    # 3ro (fondo): rechazo SINCRONO -> el tick del pipeline lo trata como backpressure.
-    with pytest.raises(generaciones.ColaLlenaError):
-        _encolar_fondo()
-    # Al terminar un job, se libera capacidad y vuelve a admitir.
-    cola.terminar(j1)
-    assert _encolar_fondo()  # ya cabe de nuevo
+    n = 10  # muy por encima de la concurrencia: todos entran y esperan
+    for _ in range(n):
+        assert _encolar_fondo()
+    assert repos.contar_jobs_activos() == n  # los N quedan EN VUELO (pendientes), ninguno rechazado
 
 
 def test_gate_cola_manual_siempre_encola_y_va_primero(entorno, monkeypatch):
-    """Un lanzamiento MANUAL nunca recibe 429: encola aunque la cola este al tope... y VA PRIMERO.
+    """Un lanzamiento MANUAL nunca recibe 429: encola con la cola cargada... y VA PRIMERO.
 
-    La cola existe para que una persona espere EN COLA, no para pedirle que reintente mientras
-    la maquina (flujo continuo) la mantiene llena. `reclamar` ademas despacha el manual ANTES
-    que el lote de fondo ya encolado (orden por `jobs.prioridad`).
+    La cola existe para que el trabajo espere EN COLA, no para pedir reintentos. `reclamar`
+    ademas despacha el manual ANTES que el lote de fondo ya encolado (orden por `jobs.prioridad`).
     """
     monkeypatch.setenv("KENI_MAX_JOBS", "1")
-    monkeypatch.setenv("KENI_MAX_COLA", "1")  # tope = 2
-    # Llena la cola con trabajo de FONDO hasta el tope.
-    for i in range(cola.tope_cola()):
+    # Carga la cola con trabajo de FONDO (sin tope: cabe todo, espera por concurrencia).
+    for i in range(5):
         gen = generaciones.crear({"tipo": "pipeline", "marca": _MARCA, "etiqueta": f"F{i}"})
         spec = jobspec.construir(
             prompt="p", procesar=jobspec.construir_hashtags(),
@@ -126,7 +118,7 @@ def test_gate_cola_manual_siempre_encola_y_va_primero(entorno, monkeypatch):
         )
         cola.encolar(gen["id"], spec)
 
-    # Manual con la cola al tope: ENTRA igual (sin ColaLlenaError)...
+    # Manual con la cola cargada: ENTRA igual (sin ColaLlenaError)...
     gen_manual = generaciones.crear({"tipo": "copy", "marca": _MARCA, "etiqueta": "Manual"})
     spec_manual = jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags())
     assert cola.encolar(gen_manual["id"], spec_manual)
@@ -141,18 +133,16 @@ def test_gate_cola_no_satura_tras_muchos_ciclos(entorno, monkeypatch):
 
     El gate de admision vivia en un contador EN MEMORIA por-proceso (`runner.admitir`): en hosted
     el back sumaba al encolar y el worker restaba al terminar, en memorias SEPARADAS, asi que el
-    contador del back solo subia y nunca bajaba — tras `max_jobs+max_cola` generaciones rechazaba
-    TODO para siempre aunque la cola real estuviera vacia. Ahora el gate cuenta la cola REAL
-    (Postgres, compartida) y se autolibera: tras N >> tope ciclos completos seguimos pudiendo
-    encolar. Antes, este bucle reventaba con ColaLlenaError pasada la vuelta `tope`.
+    contador del back solo subia y nunca bajaba — saturando el back para siempre. Hoy la cola NO
+    tiene tope (R-NO-LIMIT) y `cola.encolar` SIEMPRE acepta: tras N ciclos completos seguimos
+    pudiendo encolar y la cuenta de jobs en vuelo vuelve a 0.
     """
     monkeypatch.setenv("KENI_MAX_JOBS", "1")
-    monkeypatch.setenv("KENI_MAX_COLA", "1")  # tope = 2
-    for i in range(2 * cola.tope_cola() + 3):  # 7 ciclos completos, muy por encima del tope
+    for i in range(20):  # muchos ciclos, muy por encima de cualquier antiguo tope
         gen = generaciones.crear({"tipo": "pipeline", "marca": _MARCA, "etiqueta": f"X{i}"})
         spec = jobspec.construir(
             prompt="p", procesar=jobspec.construir_hashtags(),
-            prioridad=jobspec.PRIORIDAD_PIPELINE,  # FONDO: el unico que pasa por el gate
+            prioridad=jobspec.PRIORIDAD_PIPELINE,
         )
         job_id = cola.encolar(gen["id"], spec)  # no debe lanzar ColaLlenaError nunca
         clavado = cola.reclamar(f"w{i}")

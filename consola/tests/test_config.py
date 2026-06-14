@@ -30,7 +30,6 @@ _TODAS = (
     config.ENV_ADMIN_PASS,
     config.ENV_LOG_LEVEL,
     config.ENV_MAX_JOBS,
-    config.ENV_MAX_COLA,
     config.ENV_CLAUDE_TIMEOUT,
     config.ENV_CLAUDE_MAX_USD,
     config.ENV_CLAUDE_MAX_TURNS,
@@ -75,7 +74,6 @@ def test_nombres_son_la_fuente_unica():
     assert config.ENV_ADMIN_USER == "KENI_CONSOLA_ADMIN_USER"
     assert config.ENV_ADMIN_PASS == "KENI_CONSOLA_ADMIN_PASS"
     assert config.ENV_MAX_JOBS == "KENI_MAX_JOBS"
-    assert config.ENV_MAX_COLA == "KENI_MAX_COLA"
     assert config.ENV_CLAUDE_TIMEOUT == "KENI_CLAUDE_TIMEOUT"
     assert config.ENV_CLAUDE_MAX_USD == "KENI_CLAUDE_MAX_USD"
     assert config.ENV_CLAUDE_MAX_TURNS == "KENI_CLAUDE_MAX_TURNS"
@@ -212,7 +210,6 @@ def test_defaults_cuando_no_hay_env(limpio):
     assert config.admin_pass() == ""
     assert config.log_level() == "INFO"
     assert config.max_jobs() == 4
-    assert config.max_cola() == 16
     assert config.claude_timeout() == 600
     assert config.claude_max_usd() is None
     assert config.claude_max_turns() is None
@@ -241,15 +238,6 @@ def test_max_jobs_minimo_1(limpio):
     assert config.max_jobs() == 1  # clamp al minimo 1
     limpio.setenv(config.ENV_MAX_JOBS, "basura")
     assert config.max_jobs() == 4  # default
-
-
-def test_max_cola_minimo_0(limpio):
-    limpio.setenv(config.ENV_MAX_COLA, "3")
-    assert config.max_cola() == 3
-    limpio.setenv(config.ENV_MAX_COLA, "-5")
-    assert config.max_cola() == 0  # clamp al minimo 0
-    limpio.setenv(config.ENV_MAX_COLA, "x")
-    assert config.max_cola() == 16  # default
 
 
 def test_sesion_horas(limpio):

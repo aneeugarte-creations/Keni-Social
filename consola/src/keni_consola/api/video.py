@@ -25,8 +25,8 @@ CONTRATO
   - El encolado usa `generaciones.encolar_job_proceso(kind=..., params=..., marca=...)` con los
     kinds del seam (`dominio.jobspec.PROC_RENDER_VIDEO` / `PROC_TRANSCRIBIR`). Render (ffmpeg) y
     ASR (faster-whisper) son LOCALES, gratuitos y BAJO DEMANDA (los dispara un humano, no un
-    daemon, y no consumen tokens), asi que NO tienen kill-switch ni gateo por maquina. Si la
-    cola esta saturada, `ColaLlenaError` => 429.
+    daemon, y no consumen tokens), asi que NO tienen kill-switch ni gateo por maquina. La cola NO
+    tiene tope (R-NO-LIMIT): solo el freno de presupuesto/pausa puede dar `ColaLlenaError` => 429.
   - Multi-tenant por marca: igual que el resto de la app, la marca de una peticion se valida
     contra el catalogo unico (`consola.marcas`) y el listado se filtra por ella.
 

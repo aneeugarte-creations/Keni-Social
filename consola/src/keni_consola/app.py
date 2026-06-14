@@ -167,13 +167,13 @@ async def _healthz(request: Request) -> Response:
 
 
 async def _manejar_cola_llena(request: Request, exc: ColaLlenaError) -> Response:
-    """Cola de generaciones al tope -> 429 JSON claro (#137).
+    """Backpressure de admision -> 429 JSON claro.
 
     Manejador CENTRAL por TIPO: cualquier endpoint que deje propagar `ColaLlenaError`
     (en vez de tragarla) responde un 429 consistente con un mensaje en espanol y la
-    cabecera `Retry-After`. Asi un pico de peticiones se rechaza con backpressure en
-    vez de apilar hilos. Es deuda PERMANENTE: la generacion sigue siendo subprocess
-    `claude -p` (ADR 0001), por lo que el tope de cola no desaparece."""
+    cabecera `Retry-After`. La cola NO tiene tope (R-NO-LIMIT): esto YA NO se dispara por
+    tamano de cola, solo por el freno VOLUNTARIO de presupuesto/pausa (subclases de
+    `ColaLlenaError`). El mensaje real (`str(exc)`) precisa el porque."""
     return JSONResponse(
         {"error": str(exc) or "Hay demasiadas generaciones en curso; inténtalo en unos segundos."},
         status_code=429,

@@ -95,65 +95,50 @@ def test_on_encolado_se_llama_si_hay_cola(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# Tope de COLA (#137): cuando la cola esta al tope, se RECHAZA con ColaLlena.  #
+# Admision SIN tope de cola (R-NO-LIMIT): admitir SIEMPRE acepta; solo limita   #
+# la CONCURRENCIA (`max_jobs`), el exceso ESPERA.                               #
 # --------------------------------------------------------------------------- #
 
 
 @pytest.mark.timeout(20)
-def test_cola_al_tope_rechaza_con_cola_llena(monkeypatch):
-    """Con 1 slot + 1 de cola (tope total = 2), el 3o NO se encola: ColaLlenaError.
+def test_admitir_siempre_acepta_sin_tope_de_cola(monkeypatch):
+    """La cola NO tiene tope: con 1 slot ocupado, admitir N excedentes NUNCA rechaza.
 
-    Antes `slot()` solo limitaba CONCURRENTES: N peticiones = N hilos daemon esperando
-    sin limite. Ahora la admision (running + en cola) tiene tope y rechaza el exceso.
+    Antes `admitir()` rechazaba con `ColaLlenaError` pasado `max_jobs+max_cola`. Ahora la
+    cola no tiene tope: el exceso simplemente queda admitido (esperando un slot), nada se
+    rechaza por tamano de cola. El unico limite real lo impone el semaforo de `slot()`.
     """
     monkeypatch.setenv("KENI_MAX_JOBS", "1")
-    monkeypatch.setenv("KENI_MAX_COLA", "1")
     suelta = threading.Event()
     corriendo = threading.Event()
-    en_cola_ev = threading.Event()
 
     def corre():  # ocupa el unico slot
         with runner.slot():
             corriendo.set()
             assert suelta.wait(timeout=10)
 
-    def encola():  # admitido, pero ESPERA el slot (ocupa el unico hueco de cola)
-        with runner.slot(on_encolado=en_cola_ev.set):
-            pass
-
     a = threading.Thread(target=corre)
     a.start()
     assert corriendo.wait(timeout=5)
-    b = threading.Thread(target=encola)
-    b.start()
-    assert en_cola_ev.wait(timeout=5), "el 2o debia quedar en cola"
-    # Margen para que `b` incremente el contador de admision antes de medir.
-    time.sleep(0.2)
-    assert runner.admitidos() == 2, f"esperaba 2 admitidos (1 corre + 1 en cola), hay {runner.admitidos()}"
 
-    # El 3o: la cola esta al tope -> RECHAZO sincrono.
-    with pytest.raises(runner.ColaLlenaError):
-        runner.admitir()
-    # `slot()` (que admite por dentro) tambien debe rechazar.
-    with pytest.raises(runner.ColaLlenaError):
-        with runner.slot():
-            pass
+    # Muchos excedentes admitidos por encima de la concurrencia: NINGUNO rechaza.
+    n = 20
+    for _ in range(n):
+        runner.admitir()  # no debe lanzar ColaLlenaError jamas
+    assert runner.admitidos() >= n  # 1 corriendo + n admitidos (esperarian un slot)
+    for _ in range(n):
+        runner.liberar_admision()
 
-    suelta.set()  # liberamos: ambos hilos terminan y se libera la admision
+    suelta.set()
     a.join(timeout=5)
-    b.join(timeout=5)
-    assert not a.is_alive() and not b.is_alive()
-    # Tras drenar, vuelve a haber sitio.
+    assert not a.is_alive()
     assert runner.admitidos() == 0
-    runner.admitir()
-    runner.liberar_admision()
 
 
 @pytest.mark.timeout(15)
 def test_admitir_se_libera_en_finally_del_slot(monkeypatch):
     """`slot()` libera SIEMPRE la admision al salir (no se fuga el cupo)."""
     monkeypatch.setenv("KENI_MAX_JOBS", "1")
-    monkeypatch.setenv("KENI_MAX_COLA", "0")
     assert runner.admitidos() == 0
     with runner.slot():
         assert runner.admitidos() == 1

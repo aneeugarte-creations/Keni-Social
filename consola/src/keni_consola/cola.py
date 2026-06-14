@@ -22,29 +22,20 @@ from .dominio import jobspec, runner
 _log = logging.getLogger("keni_consola.cola")
 
 
-def tope_cola() -> int:
-    """Tope TOTAL de jobs en vuelo admitidos: `max_jobs` (corriendo) + `max_cola` (esperando)."""
-    return config.max_jobs() + config.max_cola()
-
-
 def encolar(gen_id: str, spec: dict[str, Any]) -> str:
     """Encola el job de `gen_id` con su `spec` (dict). Devuelve el job id. NO bloquea.
 
-    BACKPRESSURE SOLO PARA EL TRABAJO DE FONDO: el gate de admision se decide contra el conteo
-    REAL de la cola en Postgres (`repos.contar_jobs_activos`), compartido por todos los procesos
-    que encolan (back, daemons) y autoliberado cuando un worker marca un job `terminado`. Pero el
-    tope SOLO frena a los jobs de FONDO (prioridad pipeline: la maquina): su llamante (el tick del
-    pipeline) trata `ColaLlenaError` como backpressure y reintenta solo en unos segundos.
+    LA COLA NO TIENE TOPE (R-NO-LIMIT): la admision NUNCA rechaza por tamano de cola. Un pico de
+    trabajo (manual o de fondo) simplemente SE ENCOLA y ESPERA; el unico limite real es la
+    CONCURRENCIA (`max_jobs`: cuantos `claude -p` corren a la vez), que el worker/`runner.slot`
+    aplican aguas abajo. Rechazar y reencolar por "cola llena" era trabajo inutil por un limite
+    inutil. La prioridad de despacho (manual > pipeline) decide QUE sale antes, no QUE entra: los
+    manuales van PRIMERO (`jobs.prioridad`, `reclamar_job` ordena por ella).
 
-    Un lanzamiento MANUAL (una persona pulsando un boton) SIEMPRE encola: para eso existe la
-    cola. Rechazarlo con "intentalo en unos segundos" era pedirle a un humano que hiciera de
-    reintentador del sistema mientras la maquina (flujo continuo) mantenia la cola llena. Ademas
-    los manuales van PRIMERO (`jobs.prioridad`, `reclamar_job` ordena por ella): aunque la cola
-    este cargada de pipeline, lo manual se despacha en cuanto un worker queda libre.
-
-    POR QUE el gate vive aqui (y no en `runner.admitir`): el contador en memoria solo funcionaba
-    en el perfil LOCAL (back y worker en el MISMO proceso). En hosted son contenedores distintos
-    y el contador del back solo subia — rechazaba TODO para siempre con la cola real vacia.
+    LO QUE SI FRENA LA ADMISION (freno VOLUNTARIO, se conserva): el kill switch humano y el corte
+    automatico por presupuesto (`presupuesto_ia`). No son tope de cola: son economia de la
+    suscripcion compartida. Se mapean a subclases de `ColaLlenaError` (429 + backpressure del
+    pipeline). Igual la economia de CONTEXTO: un prompt patologico se rechaza ANTES de gastar.
     """
     # La PRIORIDAD de despacho viaja DENTRO del spec (`jobspec.prioridad`): manual > pipeline.
     # Asi los seams inyectables de encolado no cambian de firma y `reclamar_job` puede ordenar
@@ -98,10 +89,6 @@ def encolar(gen_id: str, spec: dict[str, Any]) -> str:
             gen_id, prompt_chars, aviso,
         )
 
-    if es_fondo and repos.contar_jobs_activos() >= tope_cola():
-        raise runner.ColaLlenaError(
-            "Hay demasiadas generaciones en curso; inténtalo en unos segundos."
-        )
     return repos.encolar_job(gen_id, jobspec.serializar(spec), prio)
 
 

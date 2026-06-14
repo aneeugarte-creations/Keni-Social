@@ -79,7 +79,12 @@ def _chequeo(
 
 
 def _chequeo_cola() -> dict:
-    """Cola de generacion: aviso si esta LLENA (rechaza trabajo nuevo)."""
+    """Cola de generacion: profundidad. La cola NO tiene tope (R-NO-LIMIT): nunca "llena".
+
+    El unico limite es la CONCURRENCIA (`max_jobs`); el exceso ESPERA, nada se rechaza por
+    tamano de cola. El chequeo informa cuanto hay en vuelo (corriendo + esperando), no avisa
+    de saturacion (no existe). Sigue degradando a `aviso` si la BD no responde.
+    """
     try:
         snap = api_actividad.snapshot_cola()
     except Exception:  # noqa: BLE001 -- sonda defensiva: un blip de BD no tumba el doctor
@@ -89,16 +94,10 @@ def _chequeo_cola() -> dict:
             admin=False,
             siguiente_paso="Comprueba que la base de datos responde y recarga el diagnóstico.",
         )
-    if snap["cola_llena"]:
-        return _chequeo(
-            "maquina:cola", "Cola de generación", "aviso",
-            f"Cola LLENA ({snap['activos']}/{snap['tope']}): se rechaza trabajo nuevo.",
-            admin=False,
-            siguiente_paso="Espera a que termine lo que está en vuelo o purga/prioriza la cola desde el Monitor.",
-        )
     return _chequeo(
         "maquina:cola", "Cola de generación", "ok",
-        f"Cola con hueco: {snap['activos']} de {snap['tope']} en uso.",
+        f"{snap['reclamados']} en curso y {snap['pendientes']} esperando "
+        f"(concurrencia máx {snap['max_jobs']}; el exceso espera, sin rechazo).",
         admin=False,
     )
 

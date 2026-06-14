@@ -44,10 +44,10 @@ _IDS_OBSOLETOS = {
 
 
 def _snapshot_cola_sano() -> dict:
+    # La cola NO tiene tope (R-NO-LIMIT): solo max_jobs (concurrencia) + conteo.
     return {
-        "max_jobs": 4, "max_cola": 16, "tope": 20,
+        "max_jobs": 4,
         "pendientes": 0, "reclamados": 0, "terminados": 0, "activos": 0,
-        "cola_llena": False,
     }
 
 
@@ -197,14 +197,15 @@ def test_estado_sondas_reales_no_crashean(entorno):
 # --------------------------------------------------------------------------- #
 
 
-def test_chequeo_cola_llena_avisa(entorno, sondas_sanas, monkeypatch):
-    lleno = {**_snapshot_cola_sano(), "activos": 20, "cola_llena": True}
-    monkeypatch.setattr(api_actividad, "snapshot_cola", lambda: lleno)
+def test_chequeo_cola_ok_sin_concepto_de_llena(entorno, sondas_sanas, monkeypatch):
+    """La cola NO tiene tope (R-NO-LIMIT): aunque haya mucho en vuelo, el chequeo es OK (no avisa
+    de "llena", que ya no existe); el exceso simplemente espera por concurrencia."""
+    cargada = {**_snapshot_cola_sano(), "reclamados": 4, "pendientes": 50, "activos": 54}
+    monkeypatch.setattr(api_actividad, "snapshot_cola", lambda: cargada)
     ch = _chequeos(_cliente().get("/api/estado").json())["maquina:cola"]
-    assert ch["estado"] == "aviso"
-    assert "LLENA" in ch["detalle"]
-    assert "20/20" in ch["detalle"]
-    assert ch["siguiente_paso"]
+    assert ch["estado"] == "ok"
+    assert "LLENA" not in ch["detalle"]
+    assert "50 esperando" in ch["detalle"]
 
 
 def test_chequeo_cola_degrada_si_bd_cae(entorno, sondas_sanas, monkeypatch):

@@ -44,8 +44,9 @@ subprocess `claude -p` (ahora en sandbox por usuario; ver ADR 0001), NO con la A
 Claude. Por eso este lanzador NO es transitorio: su robustez es deuda PERMANENTE:
   - GRUPO DE PROCESOS: el subprocess arranca con su propio grupo (`runner.lanzar_proc`)
     y al timeout/cancel se mata el ARBOL entero (`runner.matar_arbol`), no solo el padre.
-  - TOPE DE COLA: `runner.slot()` rechaza con `ColaLlenaError` si la cola esta al tope;
-    aqui se refleja como `error`/`motivo="cola_llena"` y el llamante lo traduce a 429.
+  - ADMISION SIN TOPE DE COLA (R-NO-LIMIT): la cola SIEMPRE admite; el unico limite es la
+    concurrencia (`max_jobs`), el exceso ESPERA. El freno VOLUNTARIO de presupuesto/pausa sí
+    rechaza (subclases de `ColaLlenaError` -> 429), reflejado como `error`/`motivo="cola_llena"`.
   - CANCELACION: `cancelar(gen_id)` mata el arbol del job y lo marca cancelado; el usuario
     la dispara desde la SPA (`POST /api/generaciones/{id}/cancelar`).
   - SIN TRAGAR EXCEPCIONES: los fallos del hilo se LOGUEAN correlacionados por job-id (y

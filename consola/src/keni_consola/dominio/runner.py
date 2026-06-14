@@ -18,10 +18,11 @@ ENDURECIMIENTO PERMANENTE (#137): la generacion se hace —y se SEGUIRA haciendo
 subprocess `claude -p` (ahora en un sandbox por usuario; ver ADR 0001), NO con la API de
 Claude. Por tanto este runner de subprocesos NO desaparece: las medidas de robustez son
 deuda PERMANENTE, no contencion transitoria. Hay que tenerlas bien:
-  - Cola con TOPE (`KENI_MAX_COLA`): antes `slot()` solo limitaba procesos CONCURRENTES,
-    no la COLA. N peticiones = N hilos daemon bloqueados en `sem.acquire()` sin limite
-    superior. Ahora `slot()` rechaza con `ColaLlenaError` cuando ya hay demasiados jobs
-    esperando (el llamante lo traduce a 429) en vez de apilar hilos indefinidamente.
+  - CONCURRENCIA, no tope de cola (R-NO-LIMIT): la cola NO tiene tope. `slot()` aplica un
+    semaforo (`KENI_MAX_JOBS`): los jobs que no caben simplemente ESPERAN un hueco; NADA se
+    rechaza por tamano de cola. La espera no es infinita: cada job tiene wall-timeout, asi
+    que los slots SIEMPRE se liberan. (El freno voluntario por presupuesto/pausa vive en
+    `presupuesto_ia` y entra por `cola.encolar`, no aqui.)
   - GRUPO DE PROCESOS: `lanzar_proc()` arranca `claude` con `start_new_session=True`
     (lider de su propio grupo). Al timeout/cancel `matar_arbol()` mata el GRUPO entero,
     no solo el padre: evita herramientas hijas zombis que `claude` haya lanzado.
@@ -80,11 +81,13 @@ class _DrenadorStderr:
 
 
 class ColaLlenaError(RuntimeError):
-    """La cola de jobs `claude` esta al tope: rechazar (429) en vez de encolar mas.
+    """Backpressure de admision: el job se rechaza (429) en vez de admitirse AHORA.
 
-    PERMANENTE (#137): como la generacion es subprocess `claude -p` (ADR 0001), un pico
-    de peticiones no debe traducirse en una pila ilimitada de hilos bloqueados. El
-    llamante captura esta excepcion y devuelve una respuesta clara (429) al cliente.
+    Ya NO se lanza por tamano de cola (la cola no tiene tope, R-NO-LIMIT): queda como CLASE
+    BASE de los frenos VOLUNTARIOS de admision —`GeneracionPausadaError`,
+    `PresupuestoAgotadoError`, `PromptExcesivoError`— que `cola.encolar` sigue aplicando. Los
+    llamantes (manejador central 429 de la app, backpressure del pipeline) la capturan por el
+    tipo base y la tratan como "ahora no; reintenta luego"; el mensaje (`str(exc)`) precisa el porque.
     """
 
 
@@ -309,28 +312,16 @@ def max_jobs() -> int:
     return config.max_jobs()
 
 
-def max_cola() -> int:
-    """Maximo de jobs ESPERANDO un slot (`KENI_MAX_COLA`, def 16, minimo 0).
-
-    PERMANENTE (#137): TOPE de la cola, distinto del de concurrencia. Cuando hay este
-    numero de jobs ya en espera, `slot()` rechaza el siguiente con `ColaLlenaError` en
-    vez de apilar otro hilo bloqueado. 0 = no se admite NINGUN job en cola (solo los
-    que entran sin esperar). El default (16) deja holgura para picos del piloto.
-    """
-    return config.max_cola()
-
-
 # Un semaforo por VALOR de limite: en produccion el limite es constante (1 semaforo);
 # en tests, cambiar `KENI_MAX_JOBS` da un semaforo distinto -> aislamiento sin estado
 # global pegajoso. BoundedSemaphore: un release de mas es un bug y revienta (lo veriamos).
 _sems: dict[int, threading.BoundedSemaphore] = {}
 _sems_lock = threading.Lock()
 
-# ADMISION (#137): contador de jobs ADMITIDOS (esperando un slot + corriendo). Es la
-# cuenta autoritativa para el tope total = max_jobs() + max_cola(). `admitir()` lo sube
-# de forma ATOMICA (rechaza si se pasaria del tope) y cada job lo baja al terminar. Asi
-# el rechazo por cola llena es SINCRONO (el llamante responde 429) y NO se apilan hilos
-# daemon bloqueados sin limite, que era el bug original.
+# ADMISION: contador de jobs ADMITIDOS ahora mismo (esperando un slot + corriendo). YA NO
+# es un tope (la cola no tiene limite, R-NO-LIMIT): `admitir()` solo lo sube y cada job lo
+# baja al terminar, para inspeccion/tests. La concurrencia real la impone el semaforo de
+# `slot()` (`max_jobs`); el exceso ESPERA, no se rechaza.
 _admitidos = 0
 _admision_lock = threading.Lock()
 
@@ -346,21 +337,16 @@ def _semaforo() -> threading.BoundedSemaphore:
 
 
 def admitir() -> None:
-    """Admite SINCRONAMENTE un job en el sistema, o lo rechaza con `ColaLlenaError`.
+    """Registra un job admitido (esperando un slot + corriendo). SIEMPRE admite.
 
-    PERMANENTE (#137): se llama ANTES de lanzar el hilo del job. El tope total es
-    `max_jobs()` (procesos concurrentes) + `max_cola()` (espera). Si admitir este job
-    superaria ese tope, lanza `ColaLlenaError` (-> 429) y NO se encola otro hilo. Si
-    admite, incrementa el contador; el job DEBE llamar a `liberar_admision()` al
-    terminar (lo hace `slot()` por el, ver abajo).
+    R-NO-LIMIT: la cola no tiene tope, asi que admitir NUNCA rechaza por tamano de cola; solo
+    incrementa el contador. El unico limite real es la CONCURRENCIA (`max_jobs`), que aplica
+    `slot()` haciendo ESPERAR a los excedentes. El job DEBE llamar a `liberar_admision()` al
+    terminar (lo hace `slot()` por el, ver abajo). El gating VOLUNTARIO (presupuesto/pausa)
+    vive en `cola.encolar`, no aqui.
     """
     global _admitidos
-    tope = max_jobs() + max_cola()
     with _admision_lock:
-        if _admitidos >= tope:
-            raise ColaLlenaError(
-                "La cola de generaciones está llena; inténtalo de nuevo en unos segundos."
-            )
         _admitidos += 1
 
 
@@ -390,15 +376,14 @@ def slot(
     cola en el estado). La espera no es infinita: cada job tiene wall-timeout, asi que
     los slots siempre acaban liberandose.
 
-    TOPE DE COLA PERMANENTE (#137): la admision se decide ANTES en `admitir()` (rechazo
-    sincrono -> 429). Aqui `slot()` solo bloquea hasta tener un proceso concurrente
-    libre. `ya_admitido=True` indica que el llamante YA pidio `admitir()` (asi `slot()`
-    se encarga de `liberar_admision()` al salir, pase lo que pase). Si `ya_admitido` es
-    False (camino legado/tests del semaforo puro), `slot()` admite el job el mismo: si
-    la cola esta al tope, rechaza con `ColaLlenaError`.
+    SIN TOPE DE COLA (R-NO-LIMIT): aqui `slot()` solo bloquea hasta tener un proceso
+    concurrente libre (`max_jobs`); el exceso ESPERA, nada se rechaza por tamano de cola.
+    `ya_admitido=True` indica que el llamante YA pidio `admitir()` (asi `slot()` se encarga
+    de `liberar_admision()` al salir, pase lo que pase). Si `ya_admitido` es False, `slot()`
+    admite el job el mismo (admitir siempre acepta).
     """
     if not ya_admitido:
-        admitir()  # puede lanzar ColaLlenaError
+        admitir()
     sem = _semaforo()
     try:
         if not sem.acquire(blocking=False):

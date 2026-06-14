@@ -764,28 +764,32 @@ def test_reintento_respeta_el_tope(entorno, monkeypatch):
     assert llamadas["n"] == 3, "1 intento + 2 reintentos (tope KENI_GEN_REINTENTOS)"
 
 
-@pytest.mark.timeout(20)
-def test_lanzar_job_claude_rechaza_cuando_la_cola_esta_llena(entorno, monkeypatch):
-    """Cola al tope -> `lanzar_job_claude` lanza ColaLlenaError SINCRONAMENTE (-> 429).
+@pytest.mark.timeout(30)
+@pytest.mark.skipif(os.name != "posix", reason="subproceso real")
+def test_lanzar_job_claude_no_rechaza_por_tope_de_cola(entorno, monkeypatch):
+    """La cola NO tiene tope (R-NO-LIMIT): `lanzar_job_claude` admite aunque ya haya muchos en vuelo.
 
-    La admision se decide ANTES de arrancar el hilo: con el cupo agotado, el llamante
-    recibe la excepcion (que la API traduce a 429) en vez de apilar otro hilo daemon.
+    Antes la admision rechazaba con `ColaLlenaError` al pasar `max_jobs+max_cola`. Hoy nada se
+    rechaza por tamano de cola: con varios cupos ya admitidos, lanzar otro job se ADMITE (arranca
+    su hilo) y completa, en vez de reventar.
     """
     monkeypatch.setenv("KENI_MAX_JOBS", "1")
-    monkeypatch.setenv("KENI_MAX_COLA", "0")
-    # Saturamos la admision manualmente (1 slot, 0 cola -> tope 1).
-    runner.admitir()
+    monkeypatch.setattr(generaciones.shutil, "which", lambda _n: "/usr/bin/claude")
+    monkeypatch.setattr(
+        generaciones.runner, "lanzar_proc",
+        _fake_lanzar_factory_por_intento([[_OK_START, _OK_RESULT]], {"n": 0}),
+    )
+    # Saturamos la admision a mano muy por encima de la concurrencia: ANTES esto rechazaba.
+    for _ in range(5):
+        runner.admitir()
     try:
-        gid = generaciones.crear({"tipo": "copy", "marca": _MARCA, "etiqueta": "X"})["id"]
-        with pytest.raises(runner.ColaLlenaError):
-            _LANZAR_CLAUDE_REAL(
-                gid, prompt="hola", cwd=entorno, procesar=lambda s, m: {"ok": True}
-            )
-        # NO se creo ningun hilo de job extra para este gid (no se encolo).
-        with generaciones._HANDLES_LOCK:
-            assert gid not in generaciones._HANDLES
+        gid = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})["id"]
+        # NO debe lanzar ColaLlenaError: la cola no tiene tope; el job arranca y completa.
+        _LANZAR_CLAUDE_REAL(gid, prompt="hola", cwd=entorno, procesar=lambda s, m: {"ok": True})
+        assert _esperar_terminal(gid, timeout=15) == generaciones.ESTADO_COMPLETADO
     finally:
-        runner.liberar_admision()
+        for _ in range(5):
+            runner.liberar_admision()
 
 
 @pytest.mark.timeout(30)

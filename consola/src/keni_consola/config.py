@@ -43,7 +43,7 @@ CATALOGO de variables (todas opcionales salvo que se diga). Agrupadas por area:
 
   Concurrencia de jobs (`dominio.runner`):
     - KENI_MAX_JOBS               jobs `claude` simultaneos          def 4   (min 1)
-    - KENI_MAX_COLA               jobs esperando un slot             def 16  (min 0)
+                                  (la cola NO tiene tope: el exceso ESPERA un slot)
 
   Cola + worker de generacion (#130 Fase 2 / ADR 0002 Fase B; `cola`, `worker`):
     - KENI_WORKER_EXTERNO         hay un servicio `worker` aparte    def OFF (worker in-proceso)
@@ -185,7 +185,6 @@ from ._config_comun import (  # noqa: F401
     ENV_INVESTIGADOR_INTERVALO_HORAS,
     ENV_LOG_LEVEL,
     ENV_MAQUINA,
-    ENV_MAX_COLA,
     ENV_MAX_JOBS,
     ENV_MCP_BEARER,
     ENV_MCP_USUARIO,
@@ -297,7 +296,6 @@ from ._config_comun import (  # noqa: F401
     JOBS_MAX_INTENTOS_DEF,
     PROMPT_AVISO_CHARS_DEF,
     PROMPT_MAX_CHARS_DEF,
-    MAX_COLA_DEF,
     MAX_JOBS_DEF,
     PRESUPUESTO_MARGEN_MANUAL_DEF,
     PRESUPUESTO_TOKENS_DIA_DEF,
@@ -401,7 +399,6 @@ from .config_jobs import (  # noqa: F401
     jobs_max_intentos,
     prompt_aviso_chars,
     prompt_max_chars,
-    max_cola,
     max_jobs,
     presupuesto_margen_manual_pct,
     presupuesto_tokens_dia,
