@@ -2,12 +2,16 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   CalendarClock,
   Check,
+  ChevronDown,
+  ChevronRight,
+  ClipboardList,
   Hand,
   Play,
   RotateCcw,
   Trash2,
   Trophy,
   UserCheck,
+  UserMinus,
   UserPlus,
 } from "lucide-react";
 import * as React from "react";
@@ -24,14 +28,28 @@ import {
 } from "@/components/ui/dialog";
 import { SesionContexto } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
-import { formatearFecha, posicionTemporal } from "@/lib/fecha";
+import { formatearFecha, minutosHastaEvento, posicionTemporal } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
-import type { CatalogosContenido, Contenido, EventoRota } from "@/types";
+import type {
+  CatalogosContenido,
+  Contenido,
+  EventoRota,
+  TipoCoberturaEvento,
+} from "@/types";
 
 import { AvatarPersona } from "./AvatarPersona";
 import { CLAVE_TAREAS } from "./claves";
 import { DialogoAsignar } from "./dialogos";
+import { PLANTILLA_DEFECTO, type PlantillaGuion } from "./guion";
+import { etiquetaRol, type RolCobertura, ROLES_COBERTURA, rolesCubiertos } from "./roles";
 import type { Cobertura } from "./tipos";
+
+/**
+ * Umbral (minutos) de la fase PRE-LIVE del semáforo: cuando falta ≤ esto para el pitido, el evento
+ * deja de ser un «Programado» plano y pasa a «Empieza en X min» (ámbar). 120' ≈ la antesala típica
+ * (precalentamiento + previa) en que el equipo ya debería estar moviéndose.
+ */
+const UMBRAL_PRELIVE_MIN = 120;
 
 /** Avance de estado de una tarea ya cogida (pendiente → en_curso → hecha). */
 const SIGUIENTE: Record<string, { estado: string; etiqueta: string; icono: typeof Play }> = {
@@ -47,13 +65,15 @@ const PRIORIDAD_CLASE: Record<string, string> = {
 
 /**
  * Semáforo de cobertura: el equipo NO marca estados a mano (les hace perder tiempo); el estado
- * se deriva de la fecha/hora del evento:
- *   · gris  «Programado» → aún no empieza
- *   · verde «En vivo»    → mientras transcurre el evento (punto verde)
- *   · tick  «Cubierto»   → ya pasó (completado → ✓)
+ * se deriva de la fecha/hora del evento (su reloj maestro es la hora de inicio del partido):
+ *   · gris  «Programado»     → aún falta mucho
+ *   · ámbar «Empieza en X min» → PRE-LIVE: el pitido está cerca (≤ 2 h) → la antesala, a moverse
+ *   · verde «En vivo»        → mientras transcurre el evento (punto verde)
+ *   · tick  «Cubierto»       → ya pasó (completado → ✓)
  *
  * Por defecto se pinta como ETIQUETA con texto (siempre visible, no se confunde con el color del
- * avatar). En la fila colapsada se usa `compacto` (solo el punto/tick) para no recargar el rundown.
+ * avatar). En la fila colapsada se usa `compacto` (solo el punto/tick) para no recargar el rundown:
+ * el punto se tiñe de ámbar en PRE-LIVE para que la cuenta atrás se note de un vistazo.
  */
 export function SemaforoCobertura({
   fecha,
@@ -66,22 +86,40 @@ export function SemaforoCobertura({
 }) {
   const pos = posicionTemporal(fecha, hora);
   const completado = pos === "despues";
-  const texto = pos === "durante" ? "En vivo" : completado ? "Cubierto" : "Programado";
+  const envivo = pos === "durante";
+  // PRE-LIVE: aún no empieza (pos "antes") pero el pitido está a ≤ 2 h → cuenta atrás en ámbar.
+  const min = minutosHastaEvento(fecha, hora);
+  const preLive = pos === "antes" && min != null && min > 0 && min <= UMBRAL_PRELIVE_MIN;
+  // `titulo`: estado corto (tooltip del punto compacto). `texto`: etiqueta del badge (con la cuenta).
+  const titulo = envivo
+    ? "En vivo"
+    : completado
+      ? "Cubierto"
+      : preLive
+        ? "Empieza pronto"
+        : "Programado";
+  const texto = preLive ? `Empieza en ${min} min` : titulo;
   const claseBadge =
-    pos === "durante" || completado
+    envivo || completado
       ? "border-emerald-500/50 text-emerald-700 dark:text-emerald-300"
-      : "text-muted-foreground";
-  const dot = pos === "durante" ? "bg-emerald-500" : "bg-slate-400 dark:bg-slate-500";
+      : preLive
+        ? "border-amber-500/50 text-amber-700 dark:text-amber-300"
+        : "text-muted-foreground";
+  const dot = envivo
+    ? "bg-emerald-500"
+    : preLive
+      ? "bg-amber-500"
+      : "bg-slate-400 dark:bg-slate-500";
 
   if (compacto) {
     return completado ? (
-      <span title={texto} aria-label={texto} className="inline-flex shrink-0">
+      <span title={titulo} aria-label={titulo} className="inline-flex shrink-0">
         <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden />
       </span>
     ) : (
       <span
-        title={texto}
-        aria-label={texto}
+        title={titulo}
+        aria-label={titulo}
         className={cn("inline-block h-2.5 w-2.5 shrink-0 rounded-full", dot)}
       />
     );
@@ -95,6 +133,166 @@ export function SemaforoCobertura({
       )}
       {texto}
     </Badge>
+  );
+}
+
+/**
+ * GUION DEL PARTIDO dentro de la cobertura: el run-of-show por fases (Antes / Durante / Después)
+ * como CHECKLIST DE REFERENCIA NEUTRA (mismo idioma visual del tablero: outline gris). NO es un
+ * tablero de estado ni duplica la cobertura: cada entregable es un bullet NEUTRO con su etiqueta de
+ * rol (Foto/Video/Texto/Live) que solo RECUERDA qué suele producirse en cada fase. El ÚNICO
+ * indicador de qué roles están cubiertos es `RolesCubiertos` (el semáforo agregado), no el guion.
+ *
+ * Va COLAPSADO por defecto (toggle con chevron, estilo plataforma) para no separar el resumen
+ * «Cubren:» de las tarjetas accionables. Respeta el `tipo_cobertura` del evento: en «solo imágenes»
+ * (sin señal) oculta la fase «Durante» (entregables de directo: Live/Video) que no aplican; en
+ * «transmisión»/desconocido pinta el guion completo. La plantilla por TAMAÑO de partido es un dial
+ * preparado (`plantillaParaTipo`); hoy siempre usa el default ("Partido normal").
+ */
+export function GuionPartido({
+  tipoCobertura,
+  plantilla = PLANTILLA_DEFECTO,
+}: {
+  tipoCobertura?: TipoCoberturaEvento | null;
+  plantilla?: PlantillaGuion;
+}) {
+  const [abierto, setAbierto] = React.useState(false);
+  // «Solo imágenes»: sin señal de directo → la fase «Durante» (Live/Video) no aplica; se oculta.
+  const fases =
+    tipoCobertura === "imagenes" ? plantilla.fases.filter((f) => f.id !== "vivo") : plantilla.fases;
+  return (
+    <section aria-label="Guion del partido" className="rounded-md border border-border bg-card/40">
+      <button
+        type="button"
+        onClick={() => setAbierto((v) => !v)}
+        aria-expanded={abierto}
+        className="flex w-full items-center gap-1.5 p-2.5 text-left"
+      >
+        {abierto ? (
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+        ) : (
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+        )}
+        <ClipboardList className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+        <span className="text-xs font-medium text-muted-foreground">Guion del partido</span>
+        <Badge variant="outline" className="ml-auto font-normal text-muted-foreground">
+          {plantilla.etiqueta}
+        </Badge>
+      </button>
+      {abierto && (
+        <div className="grid gap-2.5 px-2.5 pb-2.5 sm:grid-cols-3">
+          {fases.map((fase) => (
+            <div key={fase.id} className="space-y-1">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {fase.etiqueta}
+              </p>
+              <ul className="space-y-0.5">
+                {fase.entregables.map((e) => (
+                  <li key={e.titulo} className="flex items-center gap-1.5 text-xs">
+                    <span
+                      className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/40"
+                      aria-hidden
+                    />
+                    <span className="truncate text-muted-foreground">{e.titulo}</span>
+                    {e.rol && (
+                      <span className="shrink-0 text-[10px] text-muted-foreground">
+                        · {etiquetaRol(e.rol)}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Selector pequeño de ROL de cobertura (Foto/Video/Texto/Live), estilo plataforma (outline gris):
+ * cuatro botones segmentados, uno marcado. Decide el `formato` con que se cubre/apunta a alguien.
+ */
+function SelectorRol({
+  rol,
+  onRol,
+  disabled,
+}: {
+  rol: RolCobertura;
+  onRol: (r: RolCobertura) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div role="group" aria-label="Rol de cobertura" className="inline-flex items-center gap-1">
+      {ROLES_COBERTURA.map((r) => (
+        <button
+          key={r}
+          type="button"
+          disabled={disabled}
+          aria-pressed={rol === r}
+          onClick={() => onRol(r)}
+          className={cn(
+            "rounded-md border px-2 py-1 text-xs transition-colors disabled:opacity-60",
+            rol === r
+              ? "border-foreground/40 bg-accent text-foreground"
+              : "border-border text-muted-foreground hover:bg-accent hover:text-foreground",
+          )}
+        >
+          {etiquetaRol(r)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Semáforo AGREGADO por rol: qué roles del evento están cubiertos ("Foto · Video" / "N roles"). */
+export function RolesCubiertos({ cubridores }: { cubridores: Contenido[] }) {
+  const roles = rolesCubiertos(cubridores);
+  if (roles.length === 0) return null;
+  const texto = roles.length <= 2 ? roles.map(etiquetaRol).join(" · ") : `${roles.length} roles`;
+  return (
+    <span className="shrink-0 truncate text-xs text-muted-foreground" title={roles.map(etiquetaRol).join(" · ")}>
+      {texto}
+    </span>
+  );
+}
+
+/**
+ * Un ROL soltado dentro de una cobertura aún viva: tarea de cobertura HUÉRFANA (sin dueño) que
+ * conserva su `formato`. Resurge como «Por cubrir · <rol>» re-cogible (coger = retoma ESE rol).
+ */
+function RolLibre({ tarea }: { tarea: Contenido }) {
+  const queryClient = useQueryClient();
+  const coger = useMutation({
+    mutationFn: () => api.cogerContenido(tarea.id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
+      toast.success(`Cubres "${tarea.titulo}" (${etiquetaRol(tarea.formato)}).`);
+    },
+    onError: (e) => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
+      toast.error(mensajeError(e));
+    },
+  });
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-amber-500/40 bg-amber-50/40 px-2.5 py-1.5 dark:bg-amber-950/10">
+      <Badge variant="outline" className="border-amber-500/50 text-amber-700 dark:text-amber-300">
+        Por cubrir
+      </Badge>
+      <span className="text-sm text-muted-foreground">{etiquetaRol(tarea.formato)}</span>
+      <Button
+        variant="outline"
+        size="sm"
+        className="ml-auto h-7"
+        onClick={() => coger.mutate()}
+        disabled={coger.isPending}
+        title="La cubro yo"
+      >
+        <Hand className="mr-1 h-3.5 w-3.5" />
+        La cubro yo
+      </Button>
+    </div>
   );
 }
 
@@ -113,15 +311,16 @@ export function TarjetaEventoLibre({
   const usuario = React.useContext(SesionContexto)?.usuario ?? null;
   const esManager = usuario?.rol === "admin";
   const [asignarAbierto, setAsignarAbierto] = React.useState(false);
+  const [rol, setRol] = React.useState<RolCobertura>("foto");
   const usuarios = catalogos?.usuarios ?? [];
 
   const cubrir = useMutation({
-    mutationFn: (responsableId?: string) => api.cubrirEvento(evento.id, responsableId),
+    mutationFn: (responsableId?: string) => api.cubrirEvento(evento.id, responsableId, rol),
     onSuccess: (res) => {
       setAsignarAbierto(false);
       void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
       const nombre = res?.contenido?.responsable_nombre || "ti";
-      toast.success(`"${evento.titulo}" la cubre ${nombre}.`);
+      toast.success(`"${evento.titulo}" la cubre ${nombre} (${etiquetaRol(rol)}).`);
     },
     onError: (e) => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
@@ -159,6 +358,8 @@ export function TarjetaEventoLibre({
         <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{evento.contenido}</p>
       )}
       <div className="mt-3 flex flex-wrap items-center gap-2">
+        {/* Rol con que se cubre/asigna (Foto/Video/Texto/Live): el reparto es por rol. */}
+        <SelectorRol rol={rol} onRol={setRol} disabled={cubrir.isPending} />
         <Button
           variant="outline"
           size="icon"
@@ -229,7 +430,15 @@ export function TarjetaTarea({
     mutationFn: () => api.soltarContenido(tarea.id),
     onSuccess: () => {
       void invalidar();
-      toast.success(`"${tarea.titulo}" vuelve a estar libre.`);
+      // En cobertura «Quitarme» SOLO libera mi rol: el partido SIGUE (reaparece como «Por
+      // cubrir» y se puede re-coger). NO borra nada — se deja MUY claro para no asustar.
+      if (enCobertura) {
+        toast.success(
+          `Te quitaste de "${tarea.titulo}". El partido sigue: vuelve como «Por cubrir».`,
+        );
+      } else {
+        toast.success(`"${tarea.titulo}" vuelve a estar libre.`);
+      }
     },
     onError: conError,
   });
@@ -277,6 +486,8 @@ export function TarjetaTarea({
                 size="sm"
               />
               {tarea.responsable_nombre}
+              {/* Persona + SU rol: "[avatar] roger · Video". */}
+              <span className="font-normal text-muted-foreground">· {etiquetaRol(tarea.formato)}</span>
               {esMia && <span className="font-normal text-muted-foreground">· tú</span>}
             </span>
           </>
@@ -284,6 +495,12 @@ export function TarjetaTarea({
           <>
             {esCobertura && <Trophy className="h-4 w-4 shrink-0 text-muted-foreground" />}
             <span className="font-medium">{tarea.titulo}</span>
+            {/* Rol de la cobertura: en un recuperable («Por cubrir») deja claro qué rol resurge. */}
+            {esCobertura && (
+              <Badge variant="outline" className="font-normal text-muted-foreground">
+                {etiquetaRol(tarea.formato)}
+              </Badge>
+            )}
             {libre ? (
               <Badge variant="outline" className="border-dashed text-muted-foreground">
                 Libre
@@ -403,6 +620,23 @@ export function TarjetaTarea({
         </div>
       )}
 
+      {/* En cobertura: «Quitarme» de MI rol (acción segura). NO borra el partido — solo libera
+          mi responsable_id: la tarea queda huérfana y resurge como «Por cubrir» re-cogible. */}
+      {enCobertura && esMia && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => soltar.mutate()}
+            disabled={soltar.isPending}
+            title="Quitarme de este rol (el partido sigue, vuelve como «Por cubrir»)"
+          >
+            <UserMinus className="mr-1 h-3.5 w-3.5" />
+            Quitarme
+          </Button>
+        </div>
+      )}
+
       <DialogoAsignar
         titulo={tarea.titulo}
         abierto={asignarAbierto}
@@ -448,18 +682,20 @@ export function TarjetaCobertura({
   const usuario = React.useContext(SesionContexto)?.usuario ?? null;
   const esManager = usuario?.rol === "admin";
   const [asignarAbierto, setAsignarAbierto] = React.useState(false);
+  const [rol, setRol] = React.useState<RolCobertura>("foto");
   const usuarios = catalogos?.usuarios ?? [];
   const yaApuntado = Boolean(
     usuario && cobertura.cubridores.some((t) => t.responsable_id === usuario.id),
   );
 
   const cubrir = useMutation({
-    mutationFn: (responsableId?: string) => api.cubrirEvento(cobertura.eventoId, responsableId),
+    mutationFn: (responsableId?: string) =>
+      api.cubrirEvento(cobertura.eventoId, responsableId, rol),
     onSuccess: (res) => {
       setAsignarAbierto(false);
       void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
       const nombre = res?.contenido?.responsable_nombre || "ti";
-      toast.success(`"${cobertura.titulo}" la cubre ${nombre}.`);
+      toast.success(`"${cobertura.titulo}" la cubre ${nombre} (${etiquetaRol(rol)}).`);
     },
     onError: (e) => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
@@ -475,17 +711,32 @@ export function TarjetaCobertura({
           <span key={t.id} className="inline-flex items-center gap-1 text-sm">
             <AvatarPersona id={t.responsable_id} nombre={t.responsable_nombre} size="sm" />
             {t.responsable_nombre}
+            <span className="text-muted-foreground">· {etiquetaRol(t.formato)}</span>
           </span>
         ))}
+        {/* Semáforo agregado por rol del evento (qué roles están cubiertos). */}
+        <RolesCubiertos cubridores={cobertura.cubridores} />
       </div>
+      {/* Guion del partido (run-of-show por fases): checklist de referencia neutra, colapsable. */}
+      <GuionPartido tipoCobertura={cobertura.tipoCobertura} />
       <div className="space-y-2">
         {cobertura.cubridores.map((t) => (
           <TarjetaTarea key={t.id} tarea={t} catalogos={catalogos} enCobertura />
         ))}
       </div>
+      {/* Roles SOLTADOS (huérfanos) de este evento aún vivo: «Por cubrir · <rol>» re-cogibles. */}
+      {cobertura.libres.length > 0 && (
+        <div className="space-y-1.5">
+          {cobertura.libres.map((t) => (
+            <RolLibre key={t.id} tarea={t} />
+          ))}
+        </div>
+      )}
       {/* Acciones a nivel de evento, junto al avance de cada cubridor (Empezar/Marcar hecha). */}
       {(!yaApuntado || esManager) && (
         <div className="flex flex-wrap items-center gap-2">
+          {/* Rol con que me apunto / añaden a alguien. */}
+          <SelectorRol rol={rol} onRol={setRol} disabled={cubrir.isPending} />
           {!yaApuntado && (
             <Button
               variant="outline"

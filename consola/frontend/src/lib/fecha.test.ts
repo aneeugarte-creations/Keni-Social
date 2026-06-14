@@ -14,6 +14,7 @@ import {
   formatearHora,
   hoyCDMX,
   isoADatetimeLocal,
+  minutosHastaEvento,
   posicionTemporal,
   ZONA_CDMX,
 } from "./fecha";
@@ -142,5 +143,59 @@ describe("posicionTemporal (semáforo de cobertura)", () => {
       expect(posicionTemporal("")).toBeNull();
       expect(posicionTemporal(null)).toBeNull();
     });
+  });
+});
+
+describe("minutosHastaEvento (cuenta atrás al pitido)", () => {
+  // AHORA fijo = 2026-06-14 00:00 UTC = 2026-06-13 18:00 CDMX (UTC-6).
+  function conAhora(fn: () => void) {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-06-14T00:00:00Z"));
+      fn();
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+
+  it("futuro lejano → minutos grandes y positivos (fuera de la ventana PRE-LIVE)", () => {
+    conAhora(() => {
+      // 2026-06-14 18:00 CDMX = 2026-06-15 00:00 UTC: 24 h desde ahora.
+      expect(minutosHastaEvento("2026-06-14", "18:00")).toBe(1440);
+    });
+  });
+
+  it("«empieza en X»: dentro de la ventana, positivo y pequeño", () => {
+    conAhora(() => {
+      // Son las 18:00 CDMX; el partido es a las 19:00 / 18:30 CDMX de hoy.
+      expect(minutosHastaEvento("2026-06-13", "19:00")).toBe(60);
+      expect(minutosHastaEvento("2026-06-13", "18:30")).toBe(30);
+    });
+  });
+
+  it("en vivo (ya arrancó) → negativo pequeño", () => {
+    conAhora(() => {
+      // Arrancó a las 17:30 CDMX: hace 30 min.
+      expect(minutosHastaEvento("2026-06-13", "17:30")).toBe(-30);
+    });
+  });
+
+  it("pasado → negativo grande", () => {
+    conAhora(() => {
+      expect(minutosHastaEvento("2026-06-12", "20:00")).toBeLessThan(0);
+    });
+  });
+
+  it("sin hora concreta → ancla al inicio del día CDMX (00:00)", () => {
+    conAhora(() => {
+      // 2026-06-14 00:00 CDMX = 2026-06-14 06:00 UTC; ahora 00:00 UTC → 360 min.
+      expect(minutosHastaEvento("2026-06-14")).toBe(360);
+    });
+  });
+
+  it("sin fecha → null", () => {
+    expect(minutosHastaEvento("")).toBeNull();
+    expect(minutosHastaEvento(null)).toBeNull();
+    expect(minutosHastaEvento(undefined)).toBeNull();
   });
 });

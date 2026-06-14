@@ -32,6 +32,7 @@ import type {
   AusenciaRota,
   CoordinacionTurno,
   EventoRota,
+  FranjaSemana,
   TurnoRota,
 } from "@/types";
 
@@ -46,7 +47,9 @@ import {
   ausenciaTocaDia,
   filtrarEquipoPorMarca,
   franjaIdParaHoraEvento,
+  franjasSolapan,
   presentacionFranja,
+  type ConflictoCandidato,
   type RecuadroPersona,
 } from "./comun";
 import { DialogConfigFranjas, DialogFranjasDeSemana } from "./Franjas";
@@ -255,13 +258,51 @@ export function Calendario({
     [ausenciasPorMiembro],
   );
 
+  // Turnos indexados por (miembro_id, fecha): base para detectar SOLAPES (la misma
+  // persona ya con un turno ese día en otra franja que comparte horas con la candidata).
+  const turnosPorMiembroFecha = React.useMemo(() => {
+    const m = new Map<string, TurnoRota[]>();
+    for (const t of turnos) {
+      const k = `${t.miembro_id}|${t.fecha}`;
+      const lista = m.get(k) ?? [];
+      lista.push(t);
+      m.set(k, lista);
+    }
+    return m;
+  }, [turnos]);
+  const franjaPorId = React.useMemo(() => {
+    const m = new Map<string, FranjaSemana>();
+    for (const f of franjasSemana) m.set(f.id, f);
+    return m;
+  }, [franjasSemana]);
+
+  // Aviso inline NO bloqueante al asignar: ¿la persona está de ausencia ese día, o ya
+  // tiene un turno que solapa? El admin lo ve en el dropdown y puede forzar igualmente.
+  const conflictoCandidato = React.useCallback(
+    (miembroId: string, fecha: string, franja: FranjaSemana): ConflictoCandidato => {
+      const ausencia = ausenciaDe(miembroId, fecha);
+      let solapa = false;
+      if (!franja.es_descanso) {
+        const susTurnos = turnosPorMiembroFecha.get(`${miembroId}|${fecha}`) ?? [];
+        solapa = susTurnos.some((t) => {
+          if (t.franja_id === franja.id) return false; // misma celda: no es un solape nuevo
+          const otra = franjaPorId.get(t.franja_id);
+          return Boolean(otra && !otra.es_descanso && franjasSolapan(franja, otra));
+        });
+      }
+      return { ausencia, solapa };
+    },
+    [ausenciaDe, turnosPorMiembroFecha, franjaPorId],
+  );
+
   // Itera los eventos y los reparte en su (franja_id, fecha) → persona/sin-cubrir.
   // - Con cobertura: cada cubridor entra en el recuadro de su persona (su `franja_id`
   //   ya viene resuelto por el backend, así que la asignación es directa).
-  // - Sin cobertura: el evento cae en un recuadro "Sin cubrir" en la franja que su
-  //   hora resuelve contra las franjas vivas de la semana. Si la semana aún no tiene
-  //   franjas (race), el evento se pierde de la rejilla — caso raro, sin franjas no
-  //   hay rejilla que pintar.
+  // - Sin turno a esa hora: el evento cae en un recuadro etiquetado "Sin turno a esa
+  //   hora" en la franja que su hora resuelve contra las franjas vivas de la semana.
+  //   Mide CAPACIDAD (nadie trabaja esa franja), NO es el "Por cubrir" del tablero
+  //   Cobertura (evento que nadie ha reclamado). Si la semana aún no tiene franjas
+  //   (race), el evento se pierde de la rejilla — caso raro, sin franjas no hay rejilla.
   const recuadrosPorCelda = React.useMemo(() => {
     const m = new Map<string, RecuadroPersona[]>(); // clave: `${franja_id}|${fecha}`
     // Primero las personas que trabajan cada celda (aunque no tengan eventos).
@@ -289,7 +330,9 @@ export function Calendario({
         if (!recuadroSin) {
           recuadroSin = {
             miembro_id: "",
-            miembro_nombre: "Sin cubrir",
+            // Etiqueta no mostrada (el render usa copy fijo "Sin turno a esa hora"); se
+            // deja coherente para no reintroducir el ambiguo "Sin cubrir" por grep.
+            miembro_nombre: "Sin turno a esa hora",
             turno: null,
             sinCubrir: true,
             eventos: [],
@@ -337,7 +380,7 @@ export function Calendario({
   const nCambiados = eventosCobertura.filter((e) => e.cambiado).length;
   // `editable` requiere admin + semana no aprobada. Los CMs no admin siempre ven la vista
   // en solo-lectura. La edición es inline: click en el chip abre el menú (Editar/Duplicar/
-  // Eliminar); click en "Sin turno asignado" o "Sin cubrir" abre el dropdown.
+  // Eliminar); click en "Sin turno asignado" o "Sin turno a esa hora" abre el dropdown.
   const editable = esAdmin && !semana?.aprobada;
   const cargando =
     coberturaQ.isPending ||
@@ -577,6 +620,7 @@ export function Calendario({
                               editable={editable}
                               finde={esFinDeSemana(fecha)}
                               ausenciaDe={ausenciaDe}
+                              conflictoCandidato={conflictoCandidato}
                               coordinacion={coordinacionCelda}
                               candidatosCoordinador={candidatosCoordinador}
                               coordinacionEditable={esAdmin && !semana?.aprobada}

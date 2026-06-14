@@ -1,4 +1,4 @@
-import type { Contenido, EventoRota } from "@/types";
+import type { Contenido, EventoRota, TipoCoberturaEvento } from "@/types";
 
 /** La COBERTURA de un evento: el partido + TODAS las personas que lo cubren (multi-cobertura). */
 export type Cobertura = {
@@ -6,7 +6,20 @@ export type Cobertura = {
   titulo: string;
   hora: string;
   orden: string;
+  /**
+   * Cómo se cubre el evento (transmisión con señal / solo imágenes), copiado del EVENTO de la rota.
+   * El guion del partido lo respeta: en «solo imágenes» recorta los entregables de directo (la fase
+   * «Durante»). `undefined` si el evento no se encuentra → guion completo (trato como transmisión).
+   */
+  tipoCobertura?: TipoCoberturaEvento;
   cubridores: Contenido[];
+  /**
+   * ROLES soltados de un evento que SIGUE cubierto por otros: tareas de cobertura HUÉRFANAS
+   * (sin responsable, su `formato` conserva el rol). Resurgen como «Por cubrir · <rol>»
+   * re-cogibles DENTRO de la cobertura — el partido nunca desaparece (lo sostienen los demás
+   * cubridores) y el rol liberado no se pierde de vista.
+   */
+  libres: Contenido[];
 };
 
 /** Un ítem de la lista: un evento por cubrir, su cobertura (≥1 dueño), o un encargo suelto. */
@@ -26,6 +39,8 @@ export type Item =
  */
 export function agrupar(tareas: Contenido[], eventos: EventoRota[]) {
   const encargos = tareas.filter((t) => !t.evento_id);
+  // EVENTO por id: para resolver `tipo_cobertura` de cada cobertura (vive en el evento, no en la tarea).
+  const eventoPorId = new Map(eventos.map((e) => [e.id, e]));
   // Todas las tareas de cobertura (con `evento_id`) agrupadas por evento.
   const porEvento = new Map<string, Contenido[]>();
   for (const t of tareas) {
@@ -42,15 +57,28 @@ export function agrupar(tareas: Contenido[], eventos: EventoRota[]) {
   for (const [eventoId, lista] of porEvento) {
     const cubridores = lista.filter((t) => t.responsable_id);
     if (cubridores.length > 0) {
+      // El evento sigue cubierto por ≥1 persona; las tareas HUÉRFANAS (roles soltados) viajan
+      // como `libres` para resurgir como «Por cubrir · <rol>» dentro de la misma cobertura.
       coberturas.push({
         eventoId,
         titulo: cubridores[0].titulo,
         hora: cubridores[0].hora_objetivo,
         orden: cubridores[0].fecha_objetivo || "9999-99-99",
+        tipoCobertura: eventoPorId.get(eventoId)?.tipo_cobertura,
         cubridores,
+        libres: lista.filter((t) => !t.responsable_id),
       });
     } else {
-      recuperables.push(lista[0]);
+      // Sin cubridores: el partido sigue y resurge como «Por cubrir». Si quedaron varios ROLES
+      // soltados (distinto `formato`), resurge UNO por rol para no perder ninguno de vista
+      // (dedupe por rol: si hay varias huérfanas del mismo rol, basta una re-cogible).
+      const rolesVistos = new Set<string>();
+      for (const t of lista) {
+        const rol = t.formato || "";
+        if (rolesVistos.has(rol)) continue;
+        rolesVistos.add(rol);
+        recuperables.push(t);
+      }
     }
   }
   // Eventos de la rota SIN ninguna tarea (nunca tocados) → «Por cubrir».

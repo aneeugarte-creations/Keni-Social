@@ -38,8 +38,17 @@ import type {
   MiembroRota,
 } from "@/types";
 
-import type { RecuadroPersona } from "../comun";
+import type { ConflictoCandidato, RecuadroPersona } from "../comun";
 import { BadgeCoordinador, ChipEventoCalendario, ChipTurnoCM } from "./chips";
+
+
+// Copy del recuadro de eventos cuya franja NO tiene ningún turno asignado a esa hora.
+// Mide CAPACIDAD (nadie trabaja esa franja ese día). Es DISTINTO del "Por cubrir" del
+// tablero Cobertura (un evento que nadie ha reclamado): el copy inequívoco evita que se
+// confundan los dos planos (capacidad vs titularidad).
+const ETIQUETA_SIN_TURNO = "Sin turno a esa hora";
+const TITULO_SIN_TURNO =
+  "Ningún turno cubre esta franja a esta hora (capacidad). No es lo mismo que «Por cubrir» en Cobertura.";
 
 
 /**
@@ -58,6 +67,7 @@ export function CeldaDeRejilla({
   editable,
   finde,
   ausenciaDe,
+  conflictoCandidato,
   coordinacion,
   candidatosCoordinador,
   coordinacionEditable,
@@ -73,6 +83,12 @@ export function CeldaDeRejilla({
   editable: boolean;
   finde: boolean;
   ausenciaDe: (miembroId: string, fecha: string) => AusenciaRota | undefined;
+  /** Avisos inline al asignar (ausencia / solape) para cada candidato del dropdown. */
+  conflictoCandidato: (
+    miembroId: string,
+    fecha: string,
+    franja: FranjaSemana,
+  ) => ConflictoCandidato;
   /** Coordinador asignado a esta celda (si lo hay). Ola "coord". */
   coordinacion?: CoordinacionTurno;
   /** Candidatos a coordinador (usuarios con `puede_coordinar=true`). */
@@ -139,6 +155,7 @@ export function CeldaDeRejilla({
           fecha={fecha}
           franja={franja}
           cmsDisponibles={cmsDisponibles}
+          conflictoCandidato={conflictoCandidato}
           onCambio={onCambio}
           placeholder={placeholderDropdown}
           pedidoAbrir={pedidoAbrir}
@@ -195,13 +212,16 @@ export function RecuadroPersonaCalendario({
               type="button"
               onClick={onClickHeaderSinCubrir}
               className="truncate text-left font-medium text-amber-700 hover:underline dark:text-amber-400"
-              title="Asignar una persona a esta franja"
+              title={`${TITULO_SIN_TURNO} Pulsa para asignar a alguien.`}
             >
-              Sin cubrir
+              {ETIQUETA_SIN_TURNO}
             </button>
           ) : (
-            <span className="truncate font-medium text-amber-700 dark:text-amber-400">
-              Sin cubrir
+            <span
+              className="truncate font-medium text-amber-700 dark:text-amber-400"
+              title={TITULO_SIN_TURNO}
+            >
+              {ETIQUETA_SIN_TURNO}
             </span>
           )
         ) : recuadro.turno ? (
@@ -261,6 +281,7 @@ export function DropdownAnadirPersona({
   fecha,
   franja,
   cmsDisponibles,
+  conflictoCandidato,
   onCambio,
   placeholder = "Añadir persona",
   pedidoAbrir = 0,
@@ -269,6 +290,12 @@ export function DropdownAnadirPersona({
   fecha: string;
   franja: FranjaSemana;
   cmsDisponibles: MiembroRota[];
+  /** Aviso inline (ausencia/solape) por candidato. Por defecto: sin conflicto. */
+  conflictoCandidato?: (
+    miembroId: string,
+    fecha: string,
+    franja: FranjaSemana,
+  ) => ConflictoCandidato;
   onCambio: () => void;
   /** Texto del trigger cuando no hay persona seleccionada. Por defecto "Añadir persona". */
   placeholder?: string;
@@ -343,11 +370,32 @@ export function DropdownAnadirPersona({
           </span>
         </SelectTrigger>
         <SelectContent>
-          {cmsDisponibles.map((m) => (
-            <SelectItem key={m.id} value={m.id}>
-              {m.nombre}
-            </SelectItem>
-          ))}
+          {cmsDisponibles.map((m) => {
+            const conflicto = conflictoCandidato?.(m.id, fecha, franja);
+            return (
+              <SelectItem key={m.id} value={m.id}>
+                <span className="flex flex-wrap items-center gap-1.5">
+                  <span>{m.nombre}</span>
+                  {conflicto?.ausencia && (
+                    <span
+                      className="inline-flex items-center gap-0.5 rounded border border-amber-300 bg-amber-50 px-1 text-[10px] font-normal leading-tight text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+                      title={`Ausencia (${conflicto.ausencia.tipo}) ese día`}
+                    >
+                      <AlertTriangle className="h-2.5 w-2.5 shrink-0" /> De ausencia ese día
+                    </span>
+                  )}
+                  {conflicto?.solapa && (
+                    <span
+                      className="inline-flex items-center gap-0.5 rounded border border-amber-300 bg-amber-50 px-1 text-[10px] font-normal leading-tight text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+                      title="Ya tiene otro turno que se solapa ese día"
+                    >
+                      <AlertTriangle className="h-2.5 w-2.5 shrink-0" /> Ya tiene turno
+                    </span>
+                  )}
+                </span>
+              </SelectItem>
+            );
+          })}
         </SelectContent>
       </Select>
       {pendienteOverride && (

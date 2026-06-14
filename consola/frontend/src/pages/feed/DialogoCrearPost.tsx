@@ -360,7 +360,7 @@ export function DialogoCrearPost({
           <Button variant="outline" onClick={onCerrar} disabled={crear.isPending}>
             Cancelar
           </Button>
-          <Button onClick={() => crear.mutate()} disabled={!puedeCrear}>
+          <Button variant="outline" onClick={() => crear.mutate()} disabled={!puedeCrear}>
             {/* La estrellita marca que la acción la redacta la IA (mismo signo que MarcaIA /
                 el resto de acciones de IA de la casa); al lanzar, cede al spinner. */}
             {crear.isPending ? (

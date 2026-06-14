@@ -488,6 +488,34 @@ export function horaEnRangoFranja(hora: string, inicio: string, fin: string): bo
 }
 
 /**
+ * ¿Dos franjas comparten algún minuto del día? Sirve para AVISAR de doble-asignación
+ * (la misma persona en dos franjas que se solapan el mismo día). El modelo "franjas por
+ * semana" permite solapes, así que esto es una posibilidad real, no un imposible.
+ *
+ * Soporta franjas que cruzan medianoche (`fin <= inicio`) descomponiéndolas en intervalos
+ * sobre `[0, 1440)`. Una franja degenerada (`inicio === fin`, p. ej. Descanso "00:00"–
+ * "00:00") no contiene minutos y no solapa con nada.
+ */
+export function franjasSolapan(
+  a: { inicio: string; fin: string },
+  b: { inicio: string; fin: string },
+): boolean {
+  const intervalos = (f: { inicio: string; fin: string }): [number, number][] => {
+    const ini = horaAMinutos(f.inicio);
+    const fin = horaAMinutos(f.fin);
+    if (ini === null || fin === null || ini === fin) return [];
+    if (ini < fin) return [[ini, fin]];
+    return [
+      [ini, 1440],
+      [0, fin],
+    ]; // cruza medianoche
+  };
+  const ia = intervalos(a);
+  const ib = intervalos(b);
+  return ia.some(([a1, a2]) => ib.some(([b1, b2]) => a1 < b2 && b1 < a2));
+}
+
+/**
  * Devuelve el `id` de la franja de `semana.franjas` que contiene la hora del evento.
  * Para eventos sin coverage (no podemos leer `cobertura[].franja_id`): probamos las
  * franjas NO descanso por `orden`; si ninguna contiene, caemos en la franja de descanso
@@ -549,6 +577,19 @@ export interface RecuadroPersona {
   /** `true` si el recuadro es "Sin cubrir" (eventos sin cobertura derivada). */
   sinCubrir: boolean;
   eventos: ItemEventoCalendario[];
+}
+
+/**
+ * Conflicto detectado al considerar asignar a una persona a una (fecha, franja). Es un
+ * AVISO no bloqueante en el punto de decisión (el dropdown "+ Añadir persona"): el admin
+ * puede forzar igualmente. Lo calcula el Calendario (tiene turnos + ausencias de la semana)
+ * y lo consumen las celdas.
+ */
+export interface ConflictoCandidato {
+  /** Ausencia que cubre ese día (vacaciones/baja/…), si la hay. */
+  ausencia?: AusenciaRota;
+  /** `true` si ya tiene OTRO turno ese día en una franja que solapa en horas. */
+  solapa: boolean;
 }
 
 /**

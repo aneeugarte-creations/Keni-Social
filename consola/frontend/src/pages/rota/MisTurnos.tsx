@@ -3,6 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
   CalendarDays,
+  Coffee,
+  Sunrise,
+  Sunset,
   User,
 } from "lucide-react";
 import * as React from "react";
@@ -104,6 +107,14 @@ export function MisTurnos({
   );
 }
 
+// Icono por franja para escanear la lista de un vistazo (móvil-first). Mismo criterio que
+// la rejilla del Calendario: amanecer = mañana, atardecer = tarde, café = descanso.
+const ICONO_FRANJA: Record<string, typeof Sunrise> = {
+  matutino: Sunrise,
+  vespertino: Sunset,
+  descanso: Coffee,
+};
+
 export function ListaMisTurnos({ turnos }: { turnos: TurnoRota[] }) {
   // Orden cronológico (fecha, franja).
   const ordenados = React.useMemo(
@@ -113,43 +124,59 @@ export function ListaMisTurnos({ turnos }: { turnos: TurnoRota[] }) {
       ),
     [turnos],
   );
+  // Móvil-first: una tarjeta por turno, apilada en vertical. El dato primario (franja +
+  // día) manda con tipografía grande y un icono de franja; los matices (sábado / override /
+  // motivo / relevo) van debajo, legibles sin disparar el auto-zoom de iOS (nada < 16px en
+  // los textos de acción; los matices son secundarios y deliberadamente pequeños).
   return (
-    <div className="space-y-3">
-      {ordenados.map((t) => (
-        <Card key={t.id}>
-          <CardContent className="space-y-1.5 p-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium">{ETIQUETA_FRANJA[t.franja]}</span>
-              {t.es_sabado && (
-                <Badge variant="outline" className="font-normal">
-                  Sábado
-                </Badge>
-              )}
-              {t.override && (
-                <Badge variant="aviso" className="font-normal">
-                  Override
-                </Badge>
-              )}
-            </div>
-            <div className="text-sm text-muted-foreground">
-              {formatearFechaCorta(t.fecha)}
-            </div>
-            {t.motivo && (
-              <div className="text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">Motivo: </span>
-                {t.motivo}
-              </div>
-            )}
-            {t.nota_relevo && (
-              <div className="rounded-md bg-muted/50 px-2.5 py-1.5 text-sm">
-                <span className="font-medium">Relevo: </span>
-                {t.nota_relevo}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      ))}
-    </div>
+    <ul className="space-y-3">
+      {ordenados.map((t) => {
+        const IconoFranja = ICONO_FRANJA[t.franja] ?? Sunset;
+        return (
+          <li key={t.id}>
+            <Card>
+              <CardContent className="space-y-2 p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="flex items-center gap-1.5 text-base font-semibold">
+                    <IconoFranja
+                      className="h-4 w-4 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                    {ETIQUETA_FRANJA[t.franja]}
+                  </span>
+                  {t.es_sabado && (
+                    <Badge variant="outline" className="font-normal">
+                      Sábado
+                    </Badge>
+                  )}
+                  {t.override && (
+                    <Badge variant="aviso" className="font-normal">
+                      Override
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <CalendarDays className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <span className="capitalize">{formatearFechaCorta(t.fecha)}</span>
+                </div>
+                {t.motivo && (
+                  <div className="text-sm text-muted-foreground">
+                    <span className="font-medium text-foreground">Motivo: </span>
+                    {t.motivo}
+                  </div>
+                )}
+                {t.nota_relevo && (
+                  <div className="rounded-md bg-muted/50 px-2.5 py-1.5 text-sm">
+                    <span className="font-medium">Relevo: </span>
+                    {t.nota_relevo}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

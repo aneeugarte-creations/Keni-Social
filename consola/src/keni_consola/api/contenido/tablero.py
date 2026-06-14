@@ -12,7 +12,7 @@ from starlette.responses import JSONResponse, Response
 
 from ...db_contenido import ConflictoVersion
 from ...dominio import notificaciones
-from ...estados import CLASE_TAREA
+from ...estados import CLASE_TAREA, ROLES_COBERTURA
 from ...permisos import es_admin
 from ...tiempo import hoy_utc
 from ._comun import (
@@ -510,16 +510,33 @@ async def asignar(request: Request) -> Response:
     return JSONResponse({"contenido": _contenido_a_dict(item, plataformas, etiquetas)})
 
 
+def _rol_cobertura(valor: object) -> tuple[str | None, bool]:
+    """Valida el ROL de cobertura (campo `formato`) que manda el cliente en cubrir-evento.
+
+    Ausente/"" -> (None, True): sin rol explícito (RETROCOMPATIBLE; comportamiento previo).
+    Un rol de `ROLES_COBERTURA` (foto/video/texto/live) -> (rol_normalizado, True). Cualquier
+    otra cosa -> (None, False) = 400. No se pasa por `redes.normalizar_formato` a propósito:
+    ese normalizador es del pipeline de publicación y coaccionaría 'texto'/'live' a 'foto'.
+    """
+    if valor in (None, ""):
+        return None, True
+    if isinstance(valor, str) and valor.strip().lower() in ROLES_COBERTURA:
+        return valor.strip().lower(), True
+    return None, False
+
+
 async def cubrir_evento(request: Request) -> Response:
-    """POST /api/contenido/cubrir-evento {evento_id, responsable_id?}: registra la COBERTURA
-    de un evento de la rota.
+    """POST /api/contenido/cubrir-evento {evento_id, responsable_id?, formato?}: registra la
+    COBERTURA de un evento de la rota, opcionalmente en un ROL concreto.
 
     La lista de Tareas muestra TODOS los eventos a cubrir (auto-rellenados desde Fuentes); un
     evento «por cubrir» pasa a tener dueño aquí, mediante una tarea (clase='tarea') enlazada
-    por `evento_id`. MULTI-COBERTURA: cada persona que cubre tiene SU PROPIA tarea, así que
-    VARIAS pueden cubrir el mismo evento (find-or-create idempotente por (evento_id, persona);
-    nunca 409). Sin `responsable_id` (o el propio) = me apunto yo; con otro `responsable_id`
-    (solo admin) = el manager apunta a esa persona y se le avisa in-app.
+    por `evento_id`. MULTI-COBERTURA por ROLES: el `formato` opcional es el rol del cubridor
+    (foto/video/texto/live; reusa el campo existente, sin migración). La clave find-or-create
+    es (evento_id, persona, ROL): con rol, una persona puede llevar VARIOS roles y dos personas
+    roles distintos sin solaparse; SIN rol (retrocompat) casa con CUALQUIER cobertura suya del
+    evento. Nunca 409. Sin `responsable_id` (o el propio) = me apunto yo; con otro
+    `responsable_id` (solo admin) = el manager apunta a esa persona y se le avisa in-app.
     """
     autor = autor_de_peticion(request)
     if not autor or not autor.get("id"):
@@ -531,6 +548,10 @@ async def cubrir_evento(request: Request) -> Response:
     evento = repos.obtener_evento_rota(evento_id)
     if evento is None:
         return JSONResponse({"error": "Ese evento ya no existe."}, status_code=404)
+
+    rol, rol_ok = _rol_cobertura(datos.get("formato"))
+    if not rol_ok:
+        return JSONResponse({"error": "Rol de cobertura inválido."}, status_code=400)
 
     # ¿A quién? Sin responsable_id (o el mío) = me la cojo yo; con OTRO = el manager asigna.
     destino = datos.get("responsable_id")
@@ -549,18 +570,23 @@ async def cubrir_evento(request: Request) -> Response:
     else:
         responsable = {"id": autor["id"], "usuario": autor.get("usuario", "") or ""}
 
-    # find-or-create de la tarea de cobertura de ESTA persona (idempotente por (evento_id,
-    # responsable)). La tarea nace YA con dueño. Varias personas = varias tareas del mismo
-    # evento (multi-cobertura): cubrir un evento que ya cubre otro AÑADE cubridor, no es 409.
-    # NO copia datos muertos del evento más allá de lo mínimo para pintar la fila sin cruzarlo.
+    # find-or-create de la tarea de cobertura de ESTA persona en ESTE rol (idempotente por
+    # (evento_id, responsable, formato/ROL)). Con rol explícito casa solo con la cobertura suya
+    # del MISMO rol (así puede sumar otro rol distinto sin pisar el anterior); sin rol casa con
+    # CUALQUIER cobertura suya del evento (retrocompat). La tarea nace YA con dueño. Varias
+    # tareas del mismo evento = multi-cobertura: cubrir un evento que ya cubre otro AÑADE
+    # cubridor, no es 409. No copia datos muertos del evento más allá de lo mínimo.
     mias = repos.listar_contenido(
         clase=CLASE_TAREA, evento_id=evento_id, responsable_id=responsable["id"]
     )
-    creada = not mias
-    item = (
-        mias[0]
-        if mias
-        else repos.crear_contenido(
+    coincidentes = (
+        [m for m in mias if (m.get("formato") or "") == rol] if rol is not None else mias
+    )
+    creada = not coincidentes
+    if coincidentes:
+        item = coincidentes[0]
+    else:
+        item = repos.crear_contenido(
             clase=CLASE_TAREA,
             titulo=evento.get("titulo") or "Cobertura",
             marca=evento.get("marca") or "",
@@ -570,8 +596,14 @@ async def cubrir_evento(request: Request) -> Response:
             hora_objetivo=evento.get("hora") or "",
             autor=autor,
             responsable=responsable,
+            formato=rol or redes.FORMATO_FOTO,
         )
-    )
+        # `db.crear_contenido` NORMALIZA el formato al catálogo de publicación (foto/video/
+        # carrusel), así que 'texto'/'live' caerían a 'foto'. Aquí son ROLES de cobertura
+        # (texto libre, columna `TEXT` sin CHECK): si la normalización los cambió, los re-fijamos
+        # crudos con `actualizar_contenido` (que NO normaliza). Solo afecta tareas de cobertura.
+        if rol is not None and (item.get("formato") or "") != rol:
+            item = repos.actualizar_contenido(item["id"], {"formato": rol}) or item
     # Avisar SOLO cuando el manager acaba de apuntar a OTRA persona (no en self-claim ni en el
     # no-op idempotente de quien ya cubría).
     if asignar_a_otro and creada:

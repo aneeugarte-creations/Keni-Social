@@ -9,7 +9,14 @@ import type { CatalogosContenido, Contenido, EventoRota } from "@/types";
 
 import { AvatarPersona } from "./AvatarPersona";
 import { DialogoAnadirPersona } from "./dialogos";
-import { SemaforoCobertura, TarjetaCobertura, TarjetaEventoLibre, TarjetaTarea } from "./tarjetas";
+import { etiquetaRol } from "./roles";
+import {
+  RolesCubiertos,
+  SemaforoCobertura,
+  TarjetaCobertura,
+  TarjetaEventoLibre,
+  TarjetaTarea,
+} from "./tarjetas";
 import { agrupar, type Item } from "./tipos";
 
 /** Etiqueta del encabezado de día: «Hoy» / «Mañana» / día legible / «Sin fecha». */
@@ -140,14 +147,28 @@ function FilaAgenda({
           </Badge>
         )}
         {sinDueno ? (
-          <Badge
-            variant="outline"
-            className="shrink-0 border-amber-500/50 text-amber-700 dark:text-amber-300"
-          >
-            Por cubrir
-          </Badge>
+          <span className="flex shrink-0 items-center gap-1.5">
+            {/* Un recuperable (cobertura soltada) conserva su rol: deja claro QUÉ rol resurge. */}
+            {tarea?.evento_id && (
+              <span className="hidden text-xs text-muted-foreground sm:inline">
+                {etiquetaRol(tarea.formato)}
+              </span>
+            )}
+            <Badge
+              variant="outline"
+              className="border-amber-500/50 text-amber-700 dark:text-amber-300"
+            >
+              Por cubrir
+            </Badge>
+          </span>
         ) : cob ? (
-          <AvataresApilados cubridores={cob.cubridores} />
+          <span className="flex shrink-0 items-center gap-1.5">
+            {/* Semáforo agregado por rol: qué roles del evento están cubiertos. */}
+            <span className="hidden sm:inline">
+              <RolesCubiertos cubridores={cob.cubridores} />
+            </span>
+            <AvataresApilados cubridores={cob.cubridores} />
+          </span>
         ) : (
           <span className="flex shrink-0 items-center gap-1">
             <AvatarPersona id={tarea!.responsable_id} nombre={tarea!.responsable_nombre} size="sm" />

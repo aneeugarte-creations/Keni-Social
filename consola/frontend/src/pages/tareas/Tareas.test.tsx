@@ -147,7 +147,8 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     fireEvent.click(await screen.findByText("Cruz Azul vs América"));
     fireEvent.click(screen.getByRole("button", { name: /La cubro yo/ }));
     await waitFor(() => expect(cubrir).toHaveBeenCalledTimes(1));
-    expect(cubrir).toHaveBeenCalledWith("ev9", undefined);
+    // El rol por defecto (Foto) viaja como `formato`: la cobertura es por rol.
+    expect(cubrir).toHaveBeenCalledWith("ev9", undefined, "foto");
   });
 
   it("un evento 'no_cubrir' NO aparece en la lista", async () => {
@@ -280,7 +281,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect(screen.getAllByText("luis").length).toBeGreaterThan(0);
     expect(screen.getAllByText("ana").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: /Apuntarme/ }));
-    await waitFor(() => expect(cubrir).toHaveBeenCalledWith("ev1", undefined));
+    await waitFor(() => expect(cubrir).toHaveBeenCalledWith("ev1", undefined, "foto"));
   });
 
   it("SEMÁFORO: la cobertura se pinta sola por fecha/hora, sin botones de estado", async () => {
@@ -330,6 +331,44 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     fireEvent.click(await screen.findByText("Brasil vs Marruecos"));
     fireEvent.click(screen.getByRole("button", { name: /La cubro yo/ }));
     await waitFor(() => expect(coger).toHaveBeenCalledWith("t-huerfana"));
+  });
+
+  it("SEMÁFORO POR ROLES: la fila del evento muestra qué roles están cubiertos (Foto · Video)", async () => {
+    // Dos cubridores del MISMO evento con roles distintos (formato foto y video): el indicador
+    // agregado del evento resume los roles cubiertos.
+    renderTareas([
+      tarea({ id: "t-f", titulo: "Cruz Azul vs América", evento_id: "ev1", responsable_id: "u-luis", responsable_nombre: "luis", formato: "foto", fecha_objetivo: "2026-07-01" }),
+      tarea({ id: "t-v", titulo: "Cruz Azul vs América", evento_id: "ev1", responsable_id: "u-ana", responsable_nombre: "ana", formato: "video", fecha_objetivo: "2026-07-01" }),
+    ]);
+    expect((await screen.findAllByText("Foto · Video")).length).toBeGreaterThan(0);
+  });
+
+  it("ELEGIR ROL: al cubrir un evento se manda el rol elegido en el selector", async () => {
+    const cubrir = vi
+      .spyOn(apiMod.api, "cubrirEvento")
+      .mockResolvedValue({ contenido: { responsable_nombre: "yo" } } as never);
+    renderTareas([], [evento({ id: "ev9", titulo: "Cruz Azul vs América" })]);
+
+    fireEvent.click(await screen.findByText("Cruz Azul vs América")); // desplegar la fila
+    fireEvent.click(screen.getByRole("button", { name: "Video" })); // elegir rol Video
+    fireEvent.click(screen.getByRole("button", { name: /La cubro yo/ }));
+    await waitFor(() => expect(cubrir).toHaveBeenCalledWith("ev9", undefined, "video"));
+  });
+
+  it("QUITARME: en MI cobertura libera mi rol con soltarContenido (NO borra el partido)", async () => {
+    const soltar = vi
+      .spyOn(apiMod.api, "soltarContenido")
+      .mockResolvedValue({ contenido: {} } as never);
+    // Soy la cubridora (responsable_id == id de mi sesión): mi tarjeta ofrece «Quitarme».
+    renderTareas(
+      [tarea({ id: "t-mia", titulo: "Cruz Azul vs América", evento_id: "ev1", responsable_id: "u-yo", responsable_nombre: "yo", formato: "video", fecha_objetivo: "2026-07-01" })],
+      [],
+      usuario("editor", "u-yo"),
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /Cruz Azul vs América/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Quitarme/ }));
+    await waitFor(() => expect(soltar).toHaveBeenCalledWith("t-mia"));
   });
 
   it("'Añadir' abre el diálogo", async () => {

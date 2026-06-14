@@ -189,6 +189,27 @@ export function posicionTemporal(
 }
 
 /**
+ * Minutos (CDMX) desde AHORA hasta el INICIO de un evento con `fecha` (YYYY-MM-DD) y `hora`
+ * opcional (HH:MM, CDMX). Positivo = aún no empieza; negativo = ya arrancó/pasó; `null` sin
+ * fecha. Reusa la maquinaria CDMX: normaliza la hora con `_aMinutos` y convierte la hora de
+ * pared CDMX a un INSTANTE con `datetimeLocalAIso`, así el cómputo es de instantes reales (cruza
+ * medianoche/meses sin líos de pared). Sin hora concreta se ancla al inicio del día CDMX (00:00).
+ * Es el reloj maestro del aviso «empieza en X» (cuenta atrás al pitido), hermano de
+ * `posicionTemporal`: ésta dice EN QUÉ FASE cae el evento (antes/durante/después); ésta, CUÁNTO falta.
+ */
+export function minutosHastaEvento(
+  fecha: string | null | undefined,
+  hora?: string | null,
+): number | null {
+  if (!fecha) return null;
+  const dia = String(fecha).slice(0, 10);
+  const min = _aMinutos(hora) ?? 0; // sin hora → arranque del día (00:00)
+  const hhmm = `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
+  const inicio = aInstante(datetimeLocalAIso(`${dia}T${hhmm}`));
+  return inicio ? Math.round((inicio.getTime() - Date.now()) / 60000) : null;
+}
+
+/**
  * Día legible CDMX a partir de `YYYY-MM-DD` (sin componente horario). Se ancla a
  * mediodía UTC para que el día del calendario no se desplace al pasarlo a CDMX.
  * Ej.: "2026-06-03" → "03 jun 2026". Tolera valores inesperados.
