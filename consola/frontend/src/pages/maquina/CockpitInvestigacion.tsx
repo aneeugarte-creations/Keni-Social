@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import * as React from "react";
 
 import { EditorPromptOverlay } from "@/components/biblioteca/EditorPromptOverlay";
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -190,22 +191,20 @@ export default function CockpitInvestigacion() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4 pt-2">
-                <p className="mb-2 text-sm text-muted-foreground">
-                  Edita cualquier prompt sin salir de aquí.
-                </p>
-                <div className="flex flex-col gap-1.5">
+                <ul className="space-y-1">
                   {PROMPTS.map((p) => (
-                    <button
+                    <FilaConAcciones
                       key={p.doc}
-                      type="button"
-                      onClick={() => setDocAbierto(p.doc)}
-                      className="inline-flex w-fit items-center gap-1.5 text-sm font-medium text-foreground underline-offset-4 hover:underline"
+                      como="li"
+                      kebab="nunca"
+                      realce
+                      onPrimaria={() => setDocAbierto(p.doc)}
+                      acciones={[]}
                     >
-                      <SquarePen className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
                       {p.etiqueta}
-                    </button>
+                    </FilaConAcciones>
                   ))}
-                </div>
+                </ul>
               </CardContent>
             </Card>
           )}

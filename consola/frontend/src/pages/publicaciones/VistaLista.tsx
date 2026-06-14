@@ -224,7 +224,8 @@ function TarjetaPublicacion({
         acciones={acciones}
         etiquetaAcciones={`Acciones de "${publicacion.titulo}"`}
         kebab={kebabSegunPuntero(punteroGrueso)}
-        className="rounded-lg border border-border bg-card text-card-foreground shadow-sm transition-colors hover:border-foreground/20"
+        realce
+        className="rounded-lg border border-border bg-card text-card-foreground shadow-sm"
       >
         <div className="flex min-w-0 flex-1 gap-3 py-4 pl-4 pr-10">
           {imagen && (

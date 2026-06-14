@@ -33,10 +33,12 @@ import {
   Trash2,
 } from "lucide-react";
 import * as React from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Autor } from "@/components/comunes/Autor";
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { BadgeResponsable } from "@/components/comunes/BadgeResponsable";
 import { confirmar } from "@/components/comunes/confirmar";
 import { DistintivoRed } from "@/components/comunes/DistintivoRed";
@@ -62,13 +64,14 @@ import type { Publicacion, RespuestaPublicacion } from "@/types";
 import { elegibilidadOK, esDislikeDecisivo } from "./aprobacion";
 import { CadenaAprobacion } from "./CadenaAprobacion";
 import { etapaDePublicacion } from "./etapa";
-import { TEXTO_AVISO, TEXTO_ERROR, TEXTO_OK } from "./formato";
+import { TEXTO_ERROR, TEXTO_OK } from "./formato";
 import { BadgeEtapa } from "./TarjetaEtapa";
 import { CadenasLoteContexto } from "./use-cadenas-lote";
 
 export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   const queryClient = useQueryClient();
   const { usuario } = useSesion();
+  const navigate = useNavigate();
   const [comentariosAbierto, setComentariosAbierto] = React.useState(false);
   const [editando, setEditando] = React.useState(false);
   const [clonando, setClonando] = React.useState(false);
@@ -410,11 +413,70 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   const cuerpo = publicacion.contenido || publicacion.titulo;
   const imagen = publicacion.imagen_url || publicacion.imagen || publicacion.imagen_fuente;
 
+  // Acciones del menú contextual (modelo item-first): click-der / long-press / teclado.
+  // Inline solo los toggles emocionales (Me gusta / No me gusta).
+  const accionesNav: EntradaMenuContextual[] = [
+    ...(publicacion.pipeline_id
+      ? [
+          {
+            etiqueta: "Ir al proceso IA",
+            icono: GitBranch,
+            onClick: () =>
+              navigate(
+                `/datos/produccion/pipelines/${encodeURIComponent(publicacion.pipeline_id!)}`,
+              ),
+          },
+        ]
+      : []),
+    ...(etapa === "programada" && publicacion.fecha_programada
+      ? [
+          {
+            etiqueta: "Ir a Programación",
+            icono: CalendarClock,
+            onClick: () => navigate("/operacion/programacion"),
+          },
+        ]
+      : []),
+  ];
+  const acciones: EntradaMenuContextual[] = [
+    {
+      etiqueta: !publicacion.contenido_id
+        ? "Comentar (sin hilo)"
+        : comentariosAbierto
+          ? "Ocultar comentarios"
+          : sinResolver > 0
+            ? `Comentar · ${plural(sinResolver, "comentario")} sin resolver`
+            : "Comentar",
+      icono: MessageSquare,
+      onClick: () => {
+        if (publicacion.contenido_id) setComentariosAbierto((v) => !v);
+      },
+      deshabilitado: !publicacion.contenido_id,
+    },
+    {
+      etiqueta: "Clonar a otra red",
+      icono: Copy,
+      onClick: () => setClonando(true),
+      deshabilitado: !publicacion.contenido_id,
+    },
+    { separador: true },
+    {
+      etiqueta: `Quitar de ${publicacion.red_nombre}`,
+      icono: Trash2,
+      onClick: () => void onBorrar(),
+      destructivo: true,
+    },
+    ...(accionesNav.length > 0 ? [{ separador: true as const }, ...accionesNav] : []),
+  ];
+
   return (
-    // El editor se abre SOLO al pulsar la imagen (área interactiva de la pieza). La cabecera, el
-    // copy (con su "leer más"), las acciones y los comentarios NO abren el editor.
-    <article
-      aria-label={publicacion.titulo}
+    <FilaConAcciones
+      como="div"
+      kebab="nunca"
+      realce
+      onPrimaria={() => void abrirEditor()}
+      acciones={acciones}
+      etiquetaAcciones={`Acciones de ${publicacion.titulo}`}
       className="rounded-xl border border-border bg-card text-left text-card-foreground shadow-sm"
     >
       {/* Cabecera EN UNA SOLA LÍNEA (orden del rediseño aprobado): distintivo de FORMATO + RED
@@ -444,13 +506,12 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           responsableId={publicacion.responsable_id}
           responsableNombre={publicacion.responsable_nombre}
         />
-        <span className="ml-auto inline-flex items-center gap-2">
+        <span className="ml-auto tabular-nums">
           {/* Antigüedad de la pieza: cuándo entró a revisión o, si aún no (en preparación),
               cuándo se creó. El `title` aclara QUÉ fecha es al hover; el `sr-only` lleva la
               misma aclaración a lectores de pantalla (patrón de `DistintivoRed`). */}
           {publicacion.enviado_a_revision_en ? (
             <span
-              className="tabular-nums"
               title={`Enviada a revisión: ${formatearFechaHoraCorta(publicacion.enviado_a_revision_en)}`}
             >
               {tiempoRelativo(publicacion.enviado_a_revision_en)}
@@ -460,7 +521,6 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
             </span>
           ) : publicacion.fecha_creacion ? (
             <span
-              className="tabular-nums"
               title={`Creada: ${formatearFechaHoraCorta(publicacion.fecha_creacion)}`}
             >
               {tiempoRelativo(publicacion.fecha_creacion)}
@@ -469,29 +529,15 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
               </span>
             </span>
           ) : null}
-          {/* Trazabilidad del PROCESO IA (su run del pipeline): consulta rara → icono discreto
-              en la cabecera. GitBranch es el icono canónico del destino (pestaña Pipelines);
-              Sparkles ya significa "usa IA" en esta misma tarjeta. La caja h-8/w-8 con márgenes
-              negativos da target táctil sin mover el layout. */}
-          {publicacion.pipeline_id && (
-            <Tooltip label="Ver proceso de generación">
-              <Link
-                to={`/datos/produccion/pipelines/${encodeURIComponent(publicacion.pipeline_id)}`}
-                onClick={(e) => e.stopPropagation()}
-                className="-my-2 -mr-2 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
-                aria-label="Ver proceso IA"
-              >
-                <GitBranch className="h-3.5 w-3.5" aria-hidden="true" />
-              </Link>
-            </Tooltip>
-          )}
+          {/* "Ir al proceso IA" y "Ir a Programación" viven en el menú contextual. */}
         </span>
       </header>
 
       {/* El post tal como se verá en la red: variante LIMPIA = tarjeta uniforme (imagen 4:5 a
           ancho completo con distintivo de plataforma + copy debajo), igual para toda red. La
           imagen va a sangre (sin gutter); el copy ya trae su propio padding interno. (El título
-          del material original NO se pinta: es el tema que "posteó" el equipo, no el copy.) */}
+          del material original NO se pinta: es el tema que "posteó" el equipo, no el copy.)
+          La acción primaria (abrir editor) la gestiona FilaConAcciones al nivel de tarjeta. */}
       <VistaPreviaRed
         red={publicacion.red}
         marca={publicacion.marca_nombre}
@@ -500,54 +546,34 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         imagen_url={imagen || undefined}
         carrusel={publicacion.carrusel}
         titulo={publicacion.titulo}
-        onAbrir={() => void abrirEditor()}
         variante="limpia"
       />
 
-      {/* Acciones: badge de ETAPA (izq) + iconos me gusta / no me gusta / comentar (der). Esta
-          zona NO abre el editor (para la propagación). Like y dislike son un TOGGLE de tu
-          reacción; marcar OK / marcar dislike solo cuando te toca, quitar tu reacción siempre. */}
+      {/* Acciones: badge de ETAPA (izq) + metadatos · inline solo los toggles emocionales
+          (Me gusta / No me gusta). El resto (Comentar, Clonar, Quitar, navegación) va al
+          menú contextual (click-der / long-press / teclado). Esta zona NO dispara onPrimaria
+          (stopPropagation + botones excluidos por FilaConAcciones). */}
       <div
         className="flex flex-wrap items-center gap-2 gap-y-1 px-4 pb-2 pt-1"
         onClick={(e) => e.stopPropagation()}
       >
         <BadgeEtapa etapa={etapa} formato={publicacion.formato} />
-        {/* Cuándo sale/salió: la fecha de salida con CalendarClock, SIEMPRE en gris neutro (el
-            ámbar semántico de "programada" ya lo porta el badge de etapa: dos señales cromáticas
-            idénticas del mismo dato eran doble codificación). El hover (`title`/tooltip) da la
-            fecha COMPLETA con año. En piezas programadas la fecha es el PUENTE a Programación
-            (mismo tratamiento discreto que el enlace del proceso IA de la cabecera). */}
-        {(etapa === "programada" || etapa === "publicada") &&
-          publicacion.fecha_programada &&
-          (etapa === "programada" ? (
-            <Tooltip label="Ver en Programación">
-              <Link
-                to="/operacion/programacion"
-                onClick={(e) => e.stopPropagation()}
-                className="inline-flex items-center gap-1 rounded-md text-xs tabular-nums text-muted-foreground hover:text-foreground"
-                aria-label={`Programada para ${formatearFechaHora(publicacion.fecha_programada)} — ver en Programación`}
-              >
-                <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
-                {formatearFechaHoraCorta(publicacion.fecha_programada)}
-              </Link>
-            </Tooltip>
-          ) : (
-            <span
-              className="inline-flex items-center gap-1 text-xs tabular-nums text-muted-foreground"
-              title={`Publicada el ${formatearFechaHora(publicacion.fecha_programada)}`}
-            >
-              <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
-              <span aria-hidden="true">
-                {formatearFechaHoraCorta(publicacion.fecha_programada)}
-              </span>
-              <span className="sr-only">
-                {`Publicada el ${formatearFechaHora(publicacion.fecha_programada)}`}
-              </span>
+        {/* Cuándo sale/salió: la fecha de salida con CalendarClock como metadato en gris neutro.
+            El ámbar semántico de "programada" ya lo porta el badge de etapa; el enlace a
+            Programación vive en el menú contextual. */}
+        {(etapa === "programada" || etapa === "publicada") && publicacion.fecha_programada && (
+          <span
+            className="inline-flex items-center gap-1 text-xs tabular-nums text-muted-foreground"
+            title={`${etapa === "publicada" ? "Publicada" : "Programada para"}: ${formatearFechaHora(publicacion.fecha_programada)}`}
+          >
+            <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
+            <span aria-hidden="true">{formatearFechaHoraCorta(publicacion.fecha_programada)}</span>
+            <span className="sr-only">
+              {`${etapa === "publicada" ? "Publicada" : "Programada para"} el ${formatearFechaHora(publicacion.fecha_programada)}`}
             </span>
-          ))}
-        {/* En estados cerrados el botón de like NO se pinta (sería un falso affordance): el
-            dato del último OK se conserva aquí, como metadato legible (truncado: en celdas
-            estrechas un nombre largo no debe desbordar la tarjeta). */}
+          </span>
+        )}
+        {/* En estados cerrados el dato del último OK se conserva como metadato legible. */}
         {yaAprobada && publicacion.revisor_nombre && (
           <span
             className="min-w-0 max-w-[12rem] truncate text-xs text-muted-foreground"
@@ -557,6 +583,9 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           </span>
         )}
         <div className="ml-auto flex items-center gap-1">
+          {/* Me gusta (ThumbsUp): toggle del OK humano. Inline como acción emocional rápida del
+              revisor; VERDE solo cuando TÚ ya diste tu OK (el color queda reservado al estado
+              pulsado). */}
           {!yaAprobada && (
             <Tooltip
               label={
@@ -572,9 +601,6 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
               <Button
                 variant="ghost"
                 size="icon"
-                // VERDE solo cuando TÚ ya diste tu OK; gris de reposo en el resto. (El acento
-                // keni para "te toca decidir" se leía como ROJO en un botón sin pulsar y
-                // confundía: el color queda reservado al estado pulsado.)
                 className={cn(
                   "h-10 w-10 text-muted-foreground hover:text-foreground sm:h-8 sm:w-8",
                   miReaccion === "like" &&
@@ -582,8 +608,6 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
                 )}
                 onClick={onLike}
                 disabled={ocupado}
-                // Nombre accesible derivado del ESTADO REAL del toggle (fuente única:
-                // `motivoBloqueo` cuando no puedes; nada de "pulsa para forzar" aquí).
                 aria-label={
                   miReaccion === "like"
                     ? "Quitar tu OK"
@@ -603,9 +627,9 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
               </Button>
             </Tooltip>
           )}
-          {/* Dislike: SIEMPRE visible en piezas en revisión (fila estable, no baila entre
-              tarjetas); cuando no te toca, onDislike explica con un toast, igual que el like.
-              Dos dislikes de dos personas rechazan la pieza. */}
+          {/* No me gusta (ThumbsDown): toggle del dislike. Inline como acción emocional rápida.
+              SIEMPRE visible en piezas en revisión (fila estable). Dos dislikes rechazan la
+              pieza. Cuando no te toca, onDislike explica con un toast. */}
           {enRevision && (
             <Tooltip
               label={
@@ -619,7 +643,6 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
               <Button
                 variant="ghost"
                 size="icon"
-                // Igual que el OK pero en ROJO: solo cuando TÚ ya marcaste tu dislike; si no, reposo.
                 className={cn(
                   "h-10 w-10 text-muted-foreground hover:text-foreground sm:h-8 sm:w-8",
                   miReaccion === "dislike" &&
@@ -638,91 +661,6 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
               </Button>
             </Tooltip>
           )}
-          {/* El OVERRIDE de forzar (admin/coordinador) vive como botón discreto al pie del panel
-              de estado (`CadenaAprobacion`), no aquí ni escondido en un toast. */}
-          {/* Comentar: SIEMPRE el mismo icono (identidad estable del botón). Con hilos SIN
-              RESOLVER se tiñe de ámbar y muestra la burbuja con el conteo: conversación
-              pendiente que bloquea publicar (como en un PR). Abierto, queda marcado con
-              `bg-accent` (el hilo puede abrirse fuera del viewport en tarjetas altas). Sin
-              `contenido_id` no hay hilo donde escribir: visible pero DESHABILITADO (la fila
-              se mantiene estable, mismo criterio que el dislike) y el rótulo lo explica. */}
-          <Tooltip
-            label={
-              !publicacion.contenido_id
-                ? "Esta pieza no tiene hilo de comentarios"
-                : sinResolver > 0
-                  ? `Comentar (${plural(sinResolver, "comentario")} sin resolver)`
-                  : comentariosAbierto
-                    ? "Ocultar comentarios"
-                    : "Comentar"
-            }
-          >
-            <Button
-              variant="ghost"
-              size="icon"
-              className={cn(
-                "relative h-10 w-10 text-muted-foreground hover:text-foreground sm:h-8 sm:w-8",
-                sinResolver > 0 && TEXTO_AVISO,
-                comentariosAbierto && "bg-accent text-foreground",
-              )}
-              onClick={() => setComentariosAbierto((v) => !v)}
-              disabled={!publicacion.contenido_id}
-              aria-expanded={comentariosAbierto}
-              aria-label={
-                !publicacion.contenido_id
-                  ? "Esta pieza no tiene hilo de comentarios"
-                  : sinResolver > 0
-                    ? `Comentar (${plural(sinResolver, "comentario")} sin resolver)`
-                    : "Comentar"
-              }
-            >
-              <MessageSquare className="h-4 w-4" />
-              {sinResolver > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold leading-none tabular-nums text-amber-950">
-                  {sinResolver}
-                </span>
-              )}
-            </Button>
-          </Tooltip>
-          {/* Clonar a OTRA RED de la misma idea (copy + copy-in + foto): abre el diálogo con
-              el selector de red destino. Sin `contenido_id` no hay idea padre de la que
-              colgar la copia: deshabilitado (fila estable, mismo criterio que Comentar). */}
-          <Tooltip
-            label={
-              !publicacion.contenido_id
-                ? "Esta pieza no tiene idea padre: no se puede clonar entre redes"
-                : "Clonar a otra red (copy, texto en imagen y foto)"
-            }
-          >
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-10 w-10 text-muted-foreground hover:text-foreground sm:h-8 sm:w-8"
-              onClick={() => setClonando(true)}
-              disabled={!publicacion.contenido_id}
-              aria-label="Clonar a otra red"
-            >
-              <Copy className="h-4 w-4" />
-            </Button>
-          </Tooltip>
-          {/* Quitar de ESTA red: borra solo la pieza de esta red (con confirmación); la idea
-              y sus demás redes se conservan. Así una idea sale solo en las redes que quieras. */}
-          <Tooltip label={`Quitar de ${publicacion.red_nombre}`}>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-10 w-10 text-muted-foreground hover:text-red-600 dark:hover:text-red-400 sm:h-8 sm:w-8"
-              onClick={() => void onBorrar()}
-              disabled={borrar.isPending}
-              aria-label={`Quitar de ${publicacion.red_nombre}`}
-            >
-              {borrar.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Trash2 className="h-4 w-4" />
-              )}
-            </Button>
-          </Tooltip>
         </div>
       </div>
 
@@ -782,6 +720,6 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           <Comentarios contenidoId={publicacion.contenido_id} />
         </div>
       )}
-    </article>
+    </FilaConAcciones>
   );
 }

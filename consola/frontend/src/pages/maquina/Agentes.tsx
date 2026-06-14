@@ -210,7 +210,7 @@ function TarjetaAgenteIA({
       to={`/maquina/agentes/${meta.daemon}`}
       className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
-      <Card className="cursor-pointer border-sky-500/20 transition-colors hover:border-sky-500/40">
+      <Card className="cursor-pointer border-border transition-colors hover:border-keni-300">
         <CardHeader className="p-4 pb-2">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">

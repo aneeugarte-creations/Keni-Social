@@ -18,7 +18,6 @@ import {
   CheckCircle2,
   Clock,
   Coins,
-  ExternalLink,
   FileText,
   Hash,
   Pencil,
@@ -26,10 +25,11 @@ import {
   XCircle,
 } from "lucide-react";
 import * as React from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import { EditorPromptOverlay } from "@/components/biblioteca/EditorPromptOverlay";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -153,7 +153,7 @@ function Dato({
   );
 }
 
-/** Controles in-place del agente: toggle de encendido + «Barrer ahora» + editar prompt. */
+/** Controles in-place del agente: toggle de encendido inline + acciones secundarias en menú. */
 function Controles({ latido }: { latido: LatidoDaemon }) {
   const queryClient = useQueryClient();
   const [promptAbierto, setPromptAbierto] = React.useState<string | null>(null);
@@ -194,72 +194,64 @@ function Controles({ latido }: { latido: LatidoDaemon }) {
   const barriendo = barrer.isPending;
   const prompts = latido.clase === "ia" ? (PROMPTS_POR_DAEMON[latido.daemon] ?? []) : [];
 
+  const acciones = [
+    ...(latido.barrible
+      ? [
+          {
+            etiqueta: "Barrer ahora",
+            icono: Play,
+            onClick: () => barrer.mutate(latido.daemon),
+            deshabilitado: barriendo || solicitado,
+          },
+        ]
+      : []),
+    ...prompts.map((p) => ({
+      etiqueta: `Editar prompt: ${p.etiqueta}`,
+      icono: Pencil,
+      onClick: () => setPromptAbierto(p.doc),
+    })),
+  ];
+
   return (
-    <Card>
-      <CardHeader className="p-4 pb-2">
-        <CardTitle className="text-sm text-muted-foreground">Controles</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-wrap items-center gap-x-6 gap-y-3 p-4 pt-0">
-        {/* Encendido IN-PLACE: Switch sobre la `clave_gate` (POST /api/ajustes), o «siempre
-            activo» si el daemon no tiene gate. */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Encendido:</span>
-          {latido.clave_gate ? (
-            <Switch
-              checked={latido.activo}
-              disabled={guardandoClave === latido.clave_gate}
-              onCheckedChange={(v) => onToggle(latido.clave_gate as string, v)}
-              aria-label={`Encender/apagar el daemon ${latido.daemon}`}
-            />
-          ) : (
-            <span
-              className="text-xs text-muted-foreground"
-              title="Sin interruptor: este daemon corre siempre (no tiene gate de ajuste)."
-            >
-              Siempre activo
-            </span>
-          )}
+    <>
+      <FilaConAcciones
+        como="div"
+        kebab="nunca"
+        realce
+        acciones={acciones}
+        className="rounded-lg border bg-card text-card-foreground shadow-sm"
+      >
+        <div className="p-4">
+          <div className="pb-2 text-sm font-semibold text-muted-foreground">Controles</div>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+            {/* Encendido IN-PLACE: Switch inline sobre la `clave_gate` */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Encendido:</span>
+              {latido.clave_gate ? (
+                <Switch
+                  checked={latido.activo}
+                  disabled={guardandoClave === latido.clave_gate}
+                  onCheckedChange={(v) => onToggle(latido.clave_gate as string, v)}
+                  aria-label={`Encender/apagar el daemon ${latido.daemon}`}
+                />
+              ) : (
+                <span
+                  className="text-xs text-muted-foreground"
+                  title="Sin interruptor: este daemon corre siempre (no tiene gate de ajuste)."
+                >
+                  Siempre activo
+                </span>
+              )}
+            </div>
+          </div>
         </div>
-
-        {/* «Barrer ahora» solo a los daemons BARRIBLES (su bucle consume el flag forzado). */}
-        {latido.barrible && (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={barriendo || solicitado}
-            title={
-              solicitado
-                ? "Ya hay un barrido solicitado pendiente."
-                : "Fuerza un barrido inmediato (sin esperar al intervalo)."
-            }
-            onClick={() => barrer.mutate(latido.daemon)}
-          >
-            <Play className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-            Barrer ahora
-          </Button>
-        )}
-
-        {/* Editar prompt (solo agentes de IA): abre el editor de la Biblioteca en un overlay. */}
-        {prompts.map((p) => (
-          <Button
-            key={p.doc}
-            variant="ghost"
-            size="sm"
-            onClick={() => setPromptAbierto(p.doc)}
-            title={`Editar el prompt «${p.doc}» de este agente.`}
-          >
-            <Pencil className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-            Editar prompt: {p.etiqueta}
-          </Button>
-        ))}
-
-        <EditorPromptOverlay
-          docId={promptAbierto}
-          abierto={promptAbierto !== null}
-          onCerrar={() => setPromptAbierto(null)}
-        />
-      </CardContent>
-    </Card>
+      </FilaConAcciones>
+      <EditorPromptOverlay
+        docId={promptAbierto}
+        abierto={promptAbierto !== null}
+        onCerrar={() => setPromptAbierto(null)}
+      />
+    </>
   );
 }
 
@@ -354,54 +346,62 @@ function LogBarridos({ daemon }: { daemon: string }) {
   );
 }
 
-/** Sección «Analizar»: conteos del agente + enlace a su actividad filtrada (cuando aplica). */
+/** Sección «Analizar»: conteos + tarjeta clicable a actividad del proceso (si aplica). */
 function Analizar({ latido }: { latido: LatidoDaemon }) {
+  const navigate = useNavigate();
+
   return (
-    <Card>
-      <CardHeader className="p-4 pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm text-muted-foreground">
+    <FilaConAcciones
+      como="div"
+      kebab="nunca"
+      realce
+      onPrimaria={
+        latido.motor
+          ? () => navigate(`/maquina/agentes?proceso=${latido.motor}`)
+          : undefined
+      }
+      acciones={[]}
+      className="rounded-lg border bg-card text-card-foreground shadow-sm"
+    >
+      <div className="p-4">
+        <div className="flex items-center gap-2 pb-2 text-sm font-semibold text-muted-foreground">
           <Activity className="h-4 w-4" aria-hidden="true" />
           Analizar
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-wrap items-center gap-x-6 gap-y-3 p-4 pt-0">
-        <Dato icono={Hash} etiqueta="Barridos totales">
-          <span className="tabular-nums">{latido.barridos}</span>
-        </Dato>
-        <Dato icono={AlertTriangle} etiqueta="Errores">
-          <span
-            className={cn("tabular-nums", latido.errores > 0 && "text-red-500")}
-          >
-            {latido.errores}
-          </span>
-        </Dato>
-        {latido.gasta_tokens && (
-          <Badge
-            variant="outline"
-            className="border-transparent bg-amber-500/15 text-amber-600 dark:text-amber-400"
-            title="Este agente encola/ejecuta claude -p: consume del presupuesto de tokens."
-          >
-            <Coins className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-            gasta tokens
-          </Badge>
-        )}
-        {/* Para los agentes de IA con motor, enlace a la ACTIVIDAD del proceso (las tablas de
-            Agentes prefiltradas por `?proceso=`), donde se ven sus runs/trabajos uno a uno. */}
-        {latido.motor && (
-          <Button variant="link" size="sm" asChild className="h-auto p-0">
-            <Link to={`/maquina/agentes?proceso=${latido.motor}`}>
-              Ver actividad del proceso
-              <ExternalLink className="ml-1 h-3.5 w-3.5" aria-hidden="true" />
-            </Link>
-          </Button>
-        )}
-        {latido.error_txt && (
-          <p className="w-full text-xs text-red-600 dark:text-red-400">
-            Último error: {latido.error_txt}
-          </p>
-        )}
-      </CardContent>
-    </Card>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+          <Dato icono={Hash} etiqueta="Barridos totales">
+            <span className="tabular-nums">{latido.barridos}</span>
+          </Dato>
+          <Dato icono={AlertTriangle} etiqueta="Errores">
+            <span
+              className={cn("tabular-nums", latido.errores > 0 && "text-red-500")}
+            >
+              {latido.errores}
+            </span>
+          </Dato>
+          {latido.gasta_tokens && (
+            <Badge
+              variant="outline"
+              className="border-transparent bg-amber-500/15 text-amber-600 dark:text-amber-400"
+              title="Este agente encola/ejecuta claude -p: consume del presupuesto de tokens."
+            >
+              <Coins className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+              gasta tokens
+            </Badge>
+          )}
+          {latido.motor && (
+            <span className="text-xs text-muted-foreground">
+              Click para ver actividad del proceso
+            </span>
+          )}
+          {latido.error_txt && (
+            <p className="w-full text-xs text-red-600 dark:text-red-400">
+              Último error: {latido.error_txt}
+            </p>
+          )}
+        </div>
+      </div>
+    </FilaConAcciones>
   );
 }
 

@@ -7,7 +7,6 @@ import {
   ClipboardList,
   Hand,
   Play,
-  RotateCcw,
   Trash2,
   Trophy,
   UserCheck,
@@ -43,6 +42,9 @@ import { DialogoAsignar } from "./dialogos";
 import { PLANTILLA_DEFECTO, type PlantillaGuion } from "./guion";
 import { etiquetaRol, type RolCobertura, ROLES_COBERTURA, rolesCubiertos } from "./roles";
 import type { Cobertura } from "./tipos";
+
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 
 /**
  * Umbral (minutos) de la fase PRE-LIVE del semáforo: cuando falta ≤ esto para el pitido, el evento
@@ -328,8 +330,20 @@ export function TarjetaEventoLibre({
     },
   });
 
+  const accionesEvento: EntradaMenuContextual[] = [];
+  if (esManager) {
+    accionesEvento.push({ etiqueta: "Asignar", icono: UserPlus, onClick: () => setAsignarAbierto(true) });
+  }
+
   return (
-    <div className="rounded-lg border border-dashed border-border bg-card p-3 shadow-sm">
+    <FilaConAcciones
+      como="div"
+      kebab="nunca"
+      realce
+      onPrimaria={() => cubrir.mutate(undefined)}
+      acciones={accionesEvento}
+      className="rounded-lg border border-dashed border-border bg-card p-3 shadow-sm"
+    >
       <div className="flex flex-wrap items-center gap-2">
         <Trophy className="h-4 w-4 shrink-0 text-muted-foreground" />
         <span className="font-medium">{evento.titulo}</span>
@@ -357,26 +371,9 @@ export function TarjetaEventoLibre({
       {evento.contenido && (
         <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{evento.contenido}</p>
       )}
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        {/* Rol con que se cubre/asigna (Foto/Video/Texto/Live): el reparto es por rol. */}
+      {/* Rol con que se cubre (Foto/Video/Texto/Live): el reparto es por rol. */}
+      <div className="mt-3">
         <SelectorRol rol={rol} onRol={setRol} disabled={cubrir.isPending} />
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-8 w-8"
-          onClick={() => cubrir.mutate(undefined)}
-          disabled={cubrir.isPending}
-          title="La cubro yo"
-          aria-label="La cubro yo"
-        >
-          <Hand className="h-3.5 w-3.5" />
-        </Button>
-        {esManager && (
-          <Button variant="outline" size="sm" onClick={() => setAsignarAbierto(true)}>
-            <UserPlus className="mr-1 h-3.5 w-3.5" />
-            Asignar
-          </Button>
-        )}
       </div>
 
       <DialogoAsignar
@@ -388,7 +385,7 @@ export function TarjetaEventoLibre({
         onElegir={(id) => cubrir.mutate(id)}
         enviando={cubrir.isPending}
       />
-    </div>
+    </FilaConAcciones>
   );
 }
 
@@ -470,8 +467,50 @@ export function TarjetaTarea({
   const avance = SIGUIENTE[tarea.estado];
   const esCobertura = Boolean(tarea.evento_id);
 
+  // Acción primaria: avance de estado más prominente según el estado actual.
+  const primaria: (() => void) | undefined = enCobertura
+    ? (esMia ? () => soltar.mutate() : undefined)
+    : libre
+      ? () => coger.mutate()
+      : avance
+        ? () => cambiarEstado.mutate(avance.estado)
+        : tarea.estado === "hecha"
+          ? () => cambiarEstado.mutate("pendiente")
+          : undefined;
+
+  // Acciones del menú contextual (el resto de acciones disponibles en este estado).
+  const accionesTarea: EntradaMenuContextual[] = [];
+  if (!enCobertura) {
+    if (esManager) {
+      accionesTarea.push({
+        etiqueta: libre ? "Asignar" : "Reasignar",
+        icono: UserPlus,
+        onClick: () => setAsignarAbierto(true),
+      });
+    }
+    if (!libre && (esMia || esManager)) {
+      accionesTarea.push({ etiqueta: "Soltar", icono: UserMinus, onClick: () => soltar.mutate() });
+    }
+    if (esManager && !esCobertura) {
+      if (accionesTarea.length > 0) accionesTarea.push({ separador: true });
+      accionesTarea.push({
+        etiqueta: "Borrar",
+        icono: Trash2,
+        destructivo: true,
+        onClick: () => setConfirmarBorrado(true),
+      });
+    }
+  }
+
   return (
-    <div className="rounded-lg border border-border bg-card p-3 shadow-sm">
+    <FilaConAcciones
+      como="div"
+      kebab="nunca"
+      realce
+      onPrimaria={primaria}
+      acciones={accionesTarea}
+      className="rounded-lg border border-border bg-card p-3 shadow-sm"
+    >
       <div className="flex flex-wrap items-center gap-2">
         {/* Dentro de una cobertura el título del evento ya está en la cabecera de la fila
             (y la fecha también): cada tarjeta encabeza por la PERSONA para no repetirlo. */}
@@ -557,86 +596,6 @@ export function TarjetaTarea({
         </p>
       )}
 
-      {/* En cobertura no hay botones de avance: el estado lo lleva el semáforo (automático). */}
-      {!enCobertura && (
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          {libre && (
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => coger.mutate()}
-              disabled={coger.isPending}
-              title={esCobertura ? "La cubro yo" : "Coger"}
-              aria-label={esCobertura ? "La cubro yo" : "Coger"}
-            >
-              <Hand className="h-3.5 w-3.5" />
-            </Button>
-          )}
-          {avance && !libre && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => cambiarEstado.mutate(avance.estado)}
-              disabled={cambiarEstado.isPending}
-            >
-              <avance.icono className="mr-1 h-3.5 w-3.5" />
-              {avance.etiqueta}
-            </Button>
-          )}
-          {tarea.estado === "hecha" && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => cambiarEstado.mutate("pendiente")}
-              disabled={cambiarEstado.isPending}
-            >
-              <RotateCcw className="mr-1 h-3.5 w-3.5" />
-              Reabrir
-            </Button>
-          )}
-          {!libre && (esMia || esManager) && (
-            <Button variant="outline" size="sm" onClick={() => soltar.mutate()} disabled={soltar.isPending}>
-              <Hand className="mr-1 h-3.5 w-3.5" />
-              Soltar
-            </Button>
-          )}
-          {esManager && (
-            <Button variant="outline" size="sm" onClick={() => setAsignarAbierto(true)}>
-              <UserPlus className="mr-1 h-3.5 w-3.5" />
-              {libre ? "Asignar" : "Reasignar"}
-            </Button>
-          )}
-          {esManager && !esCobertura && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground"
-              onClick={() => setConfirmarBorrado(true)}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          )}
-        </div>
-      )}
-
-      {/* En cobertura: «Quitarme» de MI rol (acción segura). NO borra el partido — solo libera
-          mi responsable_id: la tarea queda huérfana y resurge como «Por cubrir» re-cogible. */}
-      {enCobertura && esMia && (
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => soltar.mutate()}
-            disabled={soltar.isPending}
-            title="Quitarme de este rol (el partido sigue, vuelve como «Por cubrir»)"
-          >
-            <UserMinus className="mr-1 h-3.5 w-3.5" />
-            Quitarme
-          </Button>
-        </div>
-      )}
-
       <DialogoAsignar
         titulo={tarea.titulo}
         abierto={asignarAbierto}
@@ -662,7 +621,7 @@ export function TarjetaTarea({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </FilaConAcciones>
   );
 }
 
@@ -703,8 +662,24 @@ export function TarjetaCobertura({
     },
   });
 
+  const accionesCobertura: EntradaMenuContextual[] = [];
+  if (esManager) {
+    accionesCobertura.push({
+      etiqueta: "Añadir a alguien",
+      icono: UserPlus,
+      onClick: () => setAsignarAbierto(true),
+    });
+  }
+
   return (
-    <div className="space-y-2">
+    <FilaConAcciones
+      como="div"
+      kebab="nunca"
+      realce
+      onPrimaria={!yaApuntado ? () => cubrir.mutate(undefined) : undefined}
+      acciones={accionesCobertura}
+      className="space-y-2"
+    >
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm text-muted-foreground">Cubren:</span>
         {cobertura.cubridores.map((t) => (
@@ -719,41 +694,23 @@ export function TarjetaCobertura({
       </div>
       {/* Guion del partido (run-of-show por fases): checklist de referencia neutra, colapsable. */}
       <GuionPartido tipoCobertura={cobertura.tipoCobertura} />
-      <div className="space-y-2">
+      <div className="space-y-2" data-no-primaria>
         {cobertura.cubridores.map((t) => (
           <TarjetaTarea key={t.id} tarea={t} catalogos={catalogos} enCobertura />
         ))}
       </div>
       {/* Roles SOLTADOS (huérfanos) de este evento aún vivo: «Por cubrir · <rol>» re-cogibles. */}
       {cobertura.libres.length > 0 && (
-        <div className="space-y-1.5">
+        <div className="space-y-1.5" data-no-primaria>
           {cobertura.libres.map((t) => (
             <RolLibre key={t.id} tarea={t} />
           ))}
         </div>
       )}
-      {/* Acciones a nivel de evento, junto al avance de cada cubridor (Empezar/Marcar hecha). */}
+      {/* Rol con que me apunto / añaden a alguien (selector inline; la acción va al menú). */}
       {(!yaApuntado || esManager) && (
         <div className="flex flex-wrap items-center gap-2">
-          {/* Rol con que me apunto / añaden a alguien. */}
           <SelectorRol rol={rol} onRol={setRol} disabled={cubrir.isPending} />
-          {!yaApuntado && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => cubrir.mutate(undefined)}
-              disabled={cubrir.isPending}
-            >
-              <UserPlus className="mr-1 h-3.5 w-3.5" />
-              Apuntarme
-            </Button>
-          )}
-          {esManager && (
-            <Button variant="outline" size="sm" onClick={() => setAsignarAbierto(true)}>
-              <UserPlus className="mr-1 h-3.5 w-3.5" />
-              Añadir a alguien
-            </Button>
-          )}
         </div>
       )}
 
@@ -766,6 +723,6 @@ export function TarjetaCobertura({
         onElegir={(id) => cubrir.mutate(id)}
         enviando={cubrir.isPending}
       />
-    </div>
+    </FilaConAcciones>
   );
 }

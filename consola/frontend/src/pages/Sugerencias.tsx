@@ -310,7 +310,8 @@ function TarjetaSugerencia({
       como="div"
       acciones={acciones}
       etiquetaAcciones={`Acciones de “${sugerencia.titulo}”`}
-      kebab="hover"
+      kebab="nunca"
+      realce
       className={cn(
         "rounded-lg border border-border bg-card text-card-foreground shadow-sm",
         sugerencia.estado === "descartada" && "opacity-60",

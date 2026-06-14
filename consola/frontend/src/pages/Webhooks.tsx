@@ -235,7 +235,8 @@ function TarjetaWebhook({ webhook }: { webhook: Webhook }) {
       como="div"
       acciones={acciones}
       etiquetaAcciones={`Acciones del webhook “${webhook.nombre || webhook.url}”`}
-      kebab="hover"
+      kebab="nunca"
+      realce
       className="rounded-lg border border-border bg-card text-card-foreground shadow-sm"
     >
       <CardHeader className="pb-3 pr-10">

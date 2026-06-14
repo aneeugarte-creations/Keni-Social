@@ -229,7 +229,8 @@ export function Comentarios({ contenidoId }: { contenidoId: string }) {
                 como="li"
                 acciones={acciones}
                 etiquetaAcciones="Acciones"
-                kebab="hover"
+                kebab="nunca"
+                realce
                 className={cn(
                   "rounded-md border p-2 pr-10 text-sm",
                   c.resuelto && "bg-muted/40 opacity-70",

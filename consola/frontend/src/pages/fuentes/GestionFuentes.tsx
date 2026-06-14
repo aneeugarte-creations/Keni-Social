@@ -178,7 +178,8 @@ function FilaFuente({
       onPrimaria={onEditar}
       acciones={acciones}
       etiquetaAcciones={`Acciones de "${fuente.nombre}"`}
-      kebab="hover"
+      kebab="nunca"
+      realce
       className={cn(
         "space-y-2 rounded-md border border-border p-3 pr-10",
         !fuente.activo && "opacity-60",
