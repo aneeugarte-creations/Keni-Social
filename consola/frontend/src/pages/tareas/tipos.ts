@@ -1,4 +1,4 @@
-import type { Contenido, EventoRota, TipoCoberturaEvento } from "@/types";
+import type { Contenido, EventoRota, PrioridadEvento, TipoCoberturaEvento } from "@/types";
 
 /** La COBERTURA de un evento: el partido + TODAS las personas que lo cubren (multi-cobertura). */
 export type Cobertura = {
@@ -12,6 +12,13 @@ export type Cobertura = {
    * «Durante»). `undefined` si el evento no se encuentra → guion completo (trato como transmisión).
    */
   tipoCobertura?: TipoCoberturaEvento;
+  /**
+   * Prioridad HEREDADA del EVENTO de la rota (las tareas de cobertura no la llevan): así una
+   * cobertura «alta» puede saltar a la banda «Urgente ahora» del Panorama. `undefined` si el
+   * evento no se encuentra (se trata como «media»). Resuelta vía el Map de eventos por id,
+   * igual que `tipoCobertura`.
+   */
+  prioridad?: PrioridadEvento;
   cubridores: Contenido[];
   /**
    * ROLES soltados de un evento que SIGUE cubierto por otros: tareas de cobertura HUÉRFANAS
@@ -65,6 +72,7 @@ export function agrupar(tareas: Contenido[], eventos: EventoRota[]) {
         hora: cubridores[0].hora_objetivo,
         orden: cubridores[0].fecha_objetivo || "9999-99-99",
         tipoCobertura: eventoPorId.get(eventoId)?.tipo_cobertura,
+        prioridad: eventoPorId.get(eventoId)?.prioridad,
         cubridores,
         libres: lista.filter((t) => !t.responsable_id),
       });

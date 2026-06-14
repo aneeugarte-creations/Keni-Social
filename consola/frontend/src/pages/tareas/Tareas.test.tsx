@@ -441,6 +441,151 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect(vivo.compareDocumentPosition(temprano) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("AÑADIR-RÁPIDO + ⚡ Urgente: crea el ítem con prioridad «alta»", async () => {
+    const crear = vi.spyOn(apiMod.api, "crearEventoRota").mockResolvedValue({} as never);
+    renderTareas([]);
+
+    const input = await screen.findByPlaceholderText("¿Qué hay que cubrir?");
+    fireEvent.change(input, { target: { value: "Gol de último minuto" } });
+    fireEvent.click(screen.getByRole("button", { name: "Urgente" })); // activa el toggle
+    const form = input.closest("form")!;
+    fireEvent.click(within(form).getByRole("button", { name: /Añadir/ }));
+
+    await waitFor(() => expect(crear).toHaveBeenCalledTimes(1));
+    expect(crear).toHaveBeenCalledWith(
+      expect.objectContaining({
+        titulo: "Gol de último minuto",
+        fecha: hoyCDMX(),
+        prioridad: "alta",
+      }),
+    );
+  });
+
+  // Helper: renderiza el Panorama AISLADO (síncrono, sin react-query fetch) para probar el ⚡.
+  function renderPanorama(props: {
+    tareas?: Contenido[];
+    eventos?: EventoRota[];
+  }) {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <PanoramaAgenda
+            tareas={props.tareas ?? []}
+            eventos={props.eventos ?? []}
+            catalogos={catalogos()}
+            marca="claro-sports"
+            esAdmin={false}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  it("ESCALAR evento: el ⚡ de un evento por cubrir lo marca urgente vía actualizarEventoRota", async () => {
+    const actualizar = vi
+      .spyOn(apiMod.api, "actualizarEventoRota")
+      .mockResolvedValue({} as never);
+    renderPanorama({
+      eventos: [evento({ id: "ev9", titulo: "Reacciones del Toluca", fecha: "2026-07-01" })],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Marcar urgente" }));
+    await waitFor(() =>
+      expect(actualizar).toHaveBeenCalledWith("ev9", { prioridad: "alta" }),
+    );
+  });
+
+  it("ESCALAR cobertura: el ⚡ escala el EVENTO subyacente, no la tarea de cobertura", async () => {
+    const actualizar = vi
+      .spyOn(apiMod.api, "actualizarEventoRota")
+      .mockResolvedValue({} as never);
+    renderPanorama({
+      tareas: [
+        tarea({
+          id: "t-cob",
+          titulo: "Cruz Azul vs América",
+          evento_id: "ev1",
+          responsable_id: "u-luis",
+          responsable_nombre: "luis",
+          fecha_objetivo: "2026-07-01",
+        }),
+      ],
+      eventos: [evento({ id: "ev1", fecha: "2026-07-01" })],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Marcar urgente" }));
+    await waitFor(() =>
+      expect(actualizar).toHaveBeenCalledWith("ev1", { prioridad: "alta" }),
+    );
+  });
+
+  it("ESCALAR encargo: el ⚡ de una tarea la marca urgente vía actualizarContenido", async () => {
+    const actualizar = vi
+      .spyOn(apiMod.api, "actualizarContenido")
+      .mockResolvedValue({} as never);
+    renderPanorama({
+      tareas: [
+        tarea({
+          id: "t9",
+          titulo: "Editar el clip",
+          responsable_id: "u-luis",
+          responsable_nombre: "luis",
+          fecha_objetivo: "2026-07-01",
+        }),
+      ],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Marcar urgente" }));
+    await waitFor(() =>
+      expect(actualizar).toHaveBeenCalledWith("t9", { prioridad: "alta" }),
+    );
+  });
+
+  it("DES-ESCALAR: un ítem ya urgente ofrece «Quitar urgente» (→ media)", async () => {
+    const actualizar = vi
+      .spyOn(apiMod.api, "actualizarEventoRota")
+      .mockResolvedValue({} as never);
+    // Futuro + «alta» → NO es breaking (no salta a la banda), se queda en su día con su ⚡ encendido.
+    renderPanorama({
+      eventos: [
+        evento({ id: "ev-alta", titulo: "Final de copa", fecha: "2026-07-01", prioridad: "alta" }),
+      ],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Quitar urgente" }));
+    await waitFor(() =>
+      expect(actualizar).toHaveBeenCalledWith("ev-alta", { prioridad: "media" }),
+    );
+  });
+
+  it("BANDA «URGENTE AHORA»: lo urgente de HOY salta al tope; lo de otro día se queda en su día", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-14T18:00:00Z")); // 12:00 CDMX del 14-jun
+    const hoy = hoyCDMX(); // "2026-06-14"
+
+    renderPanorama({
+      eventos: [
+        evento({ id: "ev-hoy", titulo: "Breaking ahora", fecha: hoy, hora: "20:00", prioridad: "alta" }),
+        evento({
+          id: "ev-prox",
+          titulo: "Urgente la próxima semana",
+          fecha: "2026-06-21",
+          hora: "20:00",
+          prioridad: "alta",
+        }),
+      ],
+    });
+
+    const banda = screen.getByRole("region", { name: "Urgente ahora" });
+    // Lo urgente de HOY está DENTRO de la banda (salió de su cajón de día).
+    expect(within(banda).getByText("Breaking ahora")).toBeInTheDocument();
+    // Lo urgente de otro día NO está en la banda…
+    expect(within(banda).queryByText("Urgente la próxima semana")).toBeNull();
+    // …pero sigue en la página, en su cajón de día (con su badge rojo).
+    expect(screen.getByText("Urgente la próxima semana")).toBeInTheDocument();
+  });
+
   it("pega un enlace, analiza, revisa los partidos propuestos y los acepta", async () => {
     vi.spyOn(apiMod.api, "importarEventos").mockResolvedValue({
       propuesta_id: "p1",

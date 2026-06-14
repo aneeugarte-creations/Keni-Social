@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Hand, Plus, Trophy } from "lucide-react";
+import { ChevronDown, ChevronRight, Hand, Plus, Trophy, Zap } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -15,7 +15,7 @@ import {
   tiempoRelativo,
 } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
-import type { CatalogosContenido, Contenido, EventoRota } from "@/types";
+import type { CatalogosContenido, Contenido, EventoRota, PrioridadEvento } from "@/types";
 
 import { AvatarPersona } from "./AvatarPersona";
 import { CLAVE_TAREAS } from "./claves";
@@ -54,6 +54,9 @@ function AnadirRapido({ marca }: { marca: string }) {
   const queryClient = useQueryClient();
   const [titulo, setTitulo] = React.useState("");
   const [hora, setHora] = React.useState("");
+  // «⚡ Urgente» = nace con prioridad «alta» (sin campo nuevo: reusa la prioridad del evento).
+  // Por defecto OFF: lo normal no es breaking. Si ON, salta a la banda «Urgente ahora».
+  const [urgente, setUrgente] = React.useState(false);
 
   const crear = useMutation({
     mutationFn: () =>
@@ -62,13 +65,19 @@ function AnadirRapido({ marca }: { marca: string }) {
         fecha: hoyCDMX(), // HOY en CDMX (no el día UTC): cae en el cajón «Hoy».
         hora: hora || undefined,
         tipo_cobertura: "transmision",
+        prioridad: urgente ? "alta" : undefined,
         marca: marca || undefined,
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
-      toast.success(`«${titulo.trim()}» está en «Por cubrir».`);
+      toast.success(
+        urgente
+          ? `«${titulo.trim()}» es URGENTE: salta al tope.`
+          : `«${titulo.trim()}» está en «Por cubrir».`,
+      );
       setTitulo("");
       setHora("");
+      setUrgente(false);
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -99,6 +108,23 @@ function AnadirRapido({ marca }: { marca: string }) {
         aria-label="Hora (opcional)"
         className="w-[7rem] shrink-0 border-0 bg-transparent shadow-none focus-visible:ring-0"
       />
+      {/* Toggle «Urgente»: estilo plataforma (outline gris) y, activo, teñido en rojo sutil. */}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className={cn(
+          "shrink-0",
+          urgente && "border-red-500/50 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300",
+        )}
+        aria-label="Urgente"
+        aria-pressed={urgente}
+        title={urgente ? "Nace como urgente (salta al tope)" : "Marcar como urgente"}
+        onClick={() => setUrgente((v) => !v)}
+      >
+        <Zap className="mr-1 h-4 w-4" />
+        Urgente
+      </Button>
       <Button
         type="submit"
         variant="outline"
@@ -142,6 +168,88 @@ function rangoUrgenciaHoy(i: Item, dia: string): number {
   if (min != null && min > 0 && min <= 120) return 1;
   if (itemSinDueno(i)) return 2;
   return 3;
+}
+
+/** Título del ítem (para toasts/etiquetas), sea cobertura, tarea o evento. */
+function tituloItem(i: Item): string {
+  return i.kind === "cobertura" ? i.cobertura.titulo : i.kind === "tarea" ? i.tarea.titulo : i.evento.titulo;
+}
+
+/**
+ * Prioridad EFECTIVA del ítem: eventos y tareas la traen; la COBERTURA la HEREDA del evento
+ * (propagada en `agrupar`). `undefined` de la cobertura → «media» (sin urgencia).
+ */
+function prioridadItem(i: Item): PrioridadEvento {
+  return i.kind === "evento"
+    ? i.evento.prioridad
+    : i.kind === "cobertura"
+      ? i.cobertura.prioridad ?? "media"
+      : i.tarea.prioridad;
+}
+
+/**
+ * ¿Es URGENTE-DE-AHORA (breaking)? = prioridad «alta» Y de HOY o SIN FECHA. Un partido urgente
+ * de la semana que viene NO es breaking (se queda en su día con su badge rojo); solo lo de ahora
+ * salta al tope. `i.orden` ya es el día («AAAA-MM-DD» o «9999-99-99» para «sin fecha»).
+ */
+function esUrgenteAhora(i: Item, hoy: string): boolean {
+  if (prioridadItem(i) !== "alta") return false;
+  return i.orden === hoy || i.orden === "9999-99-99";
+}
+
+/**
+ * Escalar / des-escalar un ítem del tablero: ⚡ que mueve su prioridad alta↔media reusando la API
+ * que toque (sin backend nuevo). Evento por cubrir → PATCH del evento; cobertura → PATCH del EVENTO
+ * subyacente (las tareas de cobertura no llevan prioridad propia); tarea/encargo → PATCH del
+ * contenido. Tras escalar invalida CLAVE_TAREAS para que la banda «Urgente ahora» se rehaga.
+ */
+function AccionUrgente({ item }: { item: Item }) {
+  const queryClient = useQueryClient();
+  const esUrgente = prioridadItem(item) === "alta";
+  const objetivo: PrioridadEvento = esUrgente ? "media" : "alta";
+
+  const escalar = useMutation({
+    mutationFn: async (): Promise<void> => {
+      // Cada tipo de ítem escala por la API que toque (sin backend nuevo). Normalizamos a `void`:
+      // las respuestas difieren (evento vs contenido) y solo nos interesa el efecto, no el cuerpo.
+      if (item.kind === "evento") {
+        await api.actualizarEventoRota(item.evento.id, { prioridad: objetivo });
+      } else if (item.kind === "cobertura") {
+        await api.actualizarEventoRota(item.cobertura.eventoId, { prioridad: objetivo });
+      } else {
+        await api.actualizarContenido(item.tarea.id, { prioridad: objetivo });
+      }
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
+      toast.success(
+        esUrgente
+          ? `«${tituloItem(item)}» ya no es urgente.`
+          : `«${tituloItem(item)}» es URGENTE: salta al tope.`,
+      );
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="icon"
+      className={cn(
+        "h-7 w-7 shrink-0",
+        esUrgente &&
+          "border-red-500/50 bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300",
+      )}
+      aria-label={esUrgente ? "Quitar urgente" : "Marcar urgente"}
+      aria-pressed={esUrgente}
+      title={esUrgente ? "Quitar urgente" : "Marcar urgente"}
+      disabled={escalar.isPending}
+      onClick={() => escalar.mutate()}
+    >
+      <Zap className="h-3.5 w-3.5" />
+    </Button>
+  );
 }
 
 /** Banda superior: lo ÚLTIMO que ha cogido el equipo (por momento de asignación), para ver el pulso. */
@@ -205,11 +313,14 @@ function FilaAgenda({
   abierta,
   onToggle,
   catalogos,
+  urgente = false,
 }: {
   item: Item;
   abierta: boolean;
   onToggle: () => void;
   catalogos: CatalogosContenido | undefined;
+  /** En la banda «Urgente ahora»: acento ROJO en la fila (breaking), no el ámbar de «por cubrir». */
+  urgente?: boolean;
 }) {
   const tarea = item.kind === "tarea" ? item.tarea : null;
   const evento = item.kind === "evento" ? item.evento : null;
@@ -223,15 +334,18 @@ function FilaAgenda({
     <div
       className={cn(
         "rounded-md border",
-        sinDueno
-          ? "border-dashed border-amber-500/40 bg-amber-50/40 dark:bg-amber-950/10"
-          : "border-border bg-card",
+        urgente
+          ? "border-red-500/50 bg-red-50/50 dark:bg-red-950/20"
+          : sinDueno
+            ? "border-dashed border-amber-500/40 bg-amber-50/40 dark:bg-amber-950/10"
+            : "border-border bg-card",
       )}
     >
+      <div className="flex items-center">
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-center gap-2 px-2.5 py-2 text-left"
+        className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-left"
       >
         {abierta ? (
           <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -290,6 +404,11 @@ function FilaAgenda({
           </span>
         )}
       </button>
+        {/* ⚡ Escalar/des-escalar: salta al tope (banda «Urgente ahora») o vuelve a su día. */}
+        <span className="px-1.5">
+          <AccionUrgente item={item} />
+        </span>
+      </div>
       {abierta && (
         <div className="border-t border-border/60 bg-muted/20 p-2">
           {cob ? (
@@ -404,13 +523,25 @@ export function PanoramaAgenda({
       : i.kind === "tarea"
         ? i.tarea.hora_objetivo || "99:99"
         : i.evento.hora || "99:99";
+  const hoy = hoyCDMX();
+
+  // BANDA «URGENTE AHORA» (breaking): los ítems prioridad «alta» de HOY o SIN FECHA SALEN de los
+  // cajones de día y saltan al tope. Lo urgente de otro día se queda en su día (con su badge rojo).
+  const urgentes: Item[] = [];
+  const enAgenda: Item[] = [];
+  for (const it of items) (esUrgenteAhora(it, hoy) ? urgentes : enAgenda).push(it);
+  urgentes.sort(
+    (a, b) =>
+      rangoUrgenciaHoy(a, a.orden) - rangoUrgenciaHoy(b, b.orden) ||
+      horaDe(a).localeCompare(horaDe(b)),
+  );
+
   const porDia = new Map<string, Item[]>();
-  for (const it of items) {
+  for (const it of enAgenda) {
     const lista = porDia.get(it.orden) ?? [];
     lista.push(it);
     porDia.set(it.orden, lista);
   }
-  const hoy = hoyCDMX();
   const diasOrdenados = [...porDia.keys()].sort();
   for (const d of diasOrdenados) {
     const lista = porDia.get(d)!;
@@ -496,9 +627,36 @@ export function PanoramaAgenda({
         )}
       </div>
 
+      {/* BANDA «URGENTE AHORA» (breaking): por ENCIMA de la agenda por día. Solo si hay urgentes
+          de ahora (alta + hoy/sin fecha); si no, no se muestra. Estas filas salieron de los cajones. */}
+      {urgentes.length > 0 && (
+        <section
+          aria-label="Urgente ahora"
+          className="space-y-1.5 rounded-lg border border-red-500/50 bg-red-50/60 p-2.5 shadow-sm dark:bg-red-950/20"
+        >
+          <h2 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-300">
+            <Zap className="h-3.5 w-3.5" />
+            Urgente ahora
+            <span className="tabular-nums">({urgentes.length})</span>
+          </h2>
+          <div className="space-y-1.5">
+            {urgentes.map((it) => (
+              <FilaAgenda
+                key={it.clave}
+                item={it}
+                abierta={abiertas.has(it.clave)}
+                onToggle={() => alternar(it.clave)}
+                catalogos={catalogos}
+                urgente
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
       {!filtro && <BandaReciente tareas={tareas} />}
 
-      {diasMostrados.length === 0 ? (
+      {urgentes.length === 0 && diasMostrados.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border p-8 text-center">
           <p className="text-sm text-muted-foreground">
             {filtro
@@ -506,7 +664,7 @@ export function PanoramaAgenda({
               : "Aún no hay partidos ni tareas. Súbelos en Fuentes o añádelos aquí."}
           </p>
         </div>
-      ) : (
+      ) : diasMostrados.length === 0 ? null : (
         <div className="space-y-4">
           {diasMostrados.map((dia) => (
             <section key={dia} className="space-y-1.5">

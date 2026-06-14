@@ -84,4 +84,32 @@ describe("agrupar — coberturas, roles soltados y recuperables", () => {
     const { eventosLibres } = agrupar([], [ev]);
     expect(eventosLibres.map((e) => e.id)).toEqual(["ev9"]);
   });
+
+  it("la cobertura HEREDA la prioridad de su evento (las tareas de cobertura no la llevan)", () => {
+    // El evento es «alta»; su tarea de cobertura no lleva prioridad propia relevante: la
+    // cobertura debe heredar «alta» del evento (vía el Map por id) para poder ser breaking.
+    const ev: EventoRota = {
+      id: "ev1",
+      titulo: "Cruz Azul vs América",
+      fecha: "2026-07-01",
+      hora: "20:00",
+      tipo_cobertura: "transmision",
+      prioridad: "alta",
+    } as unknown as EventoRota;
+    const { coberturas } = agrupar(
+      [t({ id: "a", responsable_id: "u1", responsable_nombre: "luis" })],
+      [ev],
+    );
+    expect(coberturas).toHaveLength(1);
+    expect(coberturas[0].prioridad).toBe("alta");
+  });
+
+  it("sin evento que la respalde, la cobertura deja la prioridad en undefined (se trata como media)", () => {
+    const { coberturas } = agrupar(
+      [t({ id: "a", responsable_id: "u1", responsable_nombre: "luis" })],
+      [],
+    );
+    expect(coberturas).toHaveLength(1);
+    expect(coberturas[0].prioridad).toBeUndefined();
+  });
 });
