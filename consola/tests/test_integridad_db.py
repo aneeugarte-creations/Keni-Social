@@ -14,6 +14,8 @@ Usa el Postgres de pruebas via la fixture `entorno` (skip si no hay).
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pytest
 
 from keni_consola import _db_core, db
@@ -170,15 +172,23 @@ def test_turno_rota_sin_miembro_no_choca(entorno):
 
 
 def test_normalizar_timestamps_texto_idempotente(entorno):
+    """`_normalizar_timestamps_texto` lleva al canon (UTC sin offset) las columnas que SIGUEN
+    siendo TEXT, de forma idempotente. Tras la migracion 0033, `contenido.creado` es
+    `timestamptz` y esta funcion YA NO la toca (su instante lo garantiza el tipo nativo y el
+    cast de entrada normaliza el offset); aqui se cubren las TEXT que quedan en `contenido`:
+    `contenido_plataforma.preparado_en` (canon segundos) y `fecha_programada` (canon minutos).
+    """
     c = db.crear_contenido(titulo="TS", marca="unotv")
     plat = db.crear_contenido_plataforma(contenido_id=c["id"], red="x")
     con = db._conectar()
     try:
-        # Simula los formatos LEGADOS que convivian en las mismas columnas:
+        # Columna NATIVA (timestamptz, 0033): un literal aware UTC entra por el cast del driver.
         con.execute(
             "UPDATE contenido SET creado = ? WHERE id = ?",
             ("2026-01-01T10:00:00+00:00", c["id"]),  # aware UTC
         )
+        # Columnas que SIGUEN siendo TEXT: formatos legados (naive con microsegundos / segundos)
+        # que la normalizacion debe recortar al canon.
         con.execute(
             "UPDATE contenido_plataforma SET preparado_en = ?, fecha_programada = ? WHERE id = ?",
             ("2026-01-01T10:00:00.123456", "2026-01-02T18:00:00", plat["id"]),
@@ -186,10 +196,12 @@ def test_normalizar_timestamps_texto_idempotente(entorno):
         con.commit()
         _db_core._normalizar_timestamps_texto(con)
         _db_core._normalizar_timestamps_texto(con)  # idempotente: segunda pasada no rompe
-        fila = con.execute(
+        # `contenido.creado` es timestamptz: vuelve como `datetime` aware UTC (no string).
+        creado = con.execute(
             "SELECT creado FROM contenido WHERE id = ?", (c["id"],)
-        ).fetchone()
-        assert fila["creado"] == "2026-01-01T10:00:00"  # sin offset
+        ).fetchone()["creado"]
+        assert creado == datetime(2026, 1, 1, 10, 0, 0, tzinfo=timezone.utc)
+        # Columnas TEXT: canon UTC-sin-offset, idempotente.
         fila_p = con.execute(
             "SELECT preparado_en, fecha_programada FROM contenido_plataforma WHERE id = ?",
             (plat["id"],),
@@ -200,7 +212,12 @@ def test_normalizar_timestamps_texto_idempotente(entorno):
         con.close()
 
 
-def test_normalizar_timestamps_convierte_offsets_no_utc(entorno):
+def test_contenido_actualizado_timestamptz_convierte_offsets_no_utc(entorno):
+    """`contenido.actualizado` es `timestamptz` (migracion 0033): un literal con offset NO-UTC
+    se convierte al INSTANTE UTC por el cast de entrada del driver/Postgres (no por la
+    normalizacion TEXT, que ya no toca esta columna). Vuelve como `datetime` aware: la igualdad
+    de datetimes aware compara por instante, asi que -06:00 a las 10:00 equivale a 16:00 UTC.
+    """
     c = db.crear_contenido(titulo="TS2", marca="unotv")
     con = db._conectar()
     try:
@@ -209,11 +226,11 @@ def test_normalizar_timestamps_convierte_offsets_no_utc(entorno):
             ("2026-01-01T10:00:00-06:00", c["id"]),  # CDMX -> 16:00 UTC
         )
         con.commit()
-        _db_core._normalizar_timestamps_texto(con)
-        fila = con.execute(
+        _db_core._normalizar_timestamps_texto(con)  # no-op para esta columna nativa
+        actualizado = con.execute(
             "SELECT actualizado FROM contenido WHERE id = ?", (c["id"],)
-        ).fetchone()
-        assert fila["actualizado"] == "2026-01-01T16:00:00"
+        ).fetchone()["actualizado"]
+        assert actualizado == datetime(2026, 1, 1, 16, 0, 0, tzinfo=timezone.utc)
     finally:
         con.close()
 
