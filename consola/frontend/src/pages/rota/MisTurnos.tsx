@@ -22,7 +22,7 @@ import type {
   TurnoRota,
 } from "@/types";
 
-import { ETIQUETA_FRANJA, NavegadorSemana, formatearFechaCorta } from "./comun";
+import { NavegadorSemana, formatearFechaCorta } from "./comun";
 
 
 // --- Pestaña: Mis turnos ----------------------------------------------------
@@ -131,7 +131,12 @@ export function ListaMisTurnos({ turnos }: { turnos: TurnoRota[] }) {
   return (
     <ul className="space-y-3">
       {ordenados.map((t) => {
-        const IconoFranja = ICONO_FRANJA[t.franja] ?? Sunset;
+        // El icono se elige por si es descanso (café) o trabajo (sol). `TurnoRota` no trae
+        // `es_descanso`, pero el backend mapea de forma fiable las franjas de descanso al
+        // literal legacy `franja === "descanso"`; para el resto reusamos el literal cuando lo
+        // hay (mañana/tarde) y caemos a Sunset para franjas custom (p. ej. "Cobertura nocturna").
+        const esDescanso = t.franja === "descanso";
+        const IconoFranja = esDescanso ? Coffee : ICONO_FRANJA[t.franja] ?? Sunset;
         return (
           <li key={t.id}>
             <Card>
@@ -142,7 +147,10 @@ export function ListaMisTurnos({ turnos }: { turnos: TurnoRota[] }) {
                       className="h-4 w-4 text-muted-foreground"
                       aria-hidden="true"
                     />
-                    {ETIQUETA_FRANJA[t.franja]}
+                    {/* Nombre REAL de la franja (siempre emitido por el backend). Antes se
+                        indexaba `ETIQUETA_FRANJA[t.franja]` con el literal legacy, que queda
+                        `undefined` (título en blanco) para franjas custom como "Cobertura nocturna". */}
+                    {t.franja_nombre}
                   </span>
                   {t.es_sabado && (
                     <Badge variant="outline" className="font-normal">

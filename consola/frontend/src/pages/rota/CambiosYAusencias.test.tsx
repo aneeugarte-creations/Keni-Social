@@ -17,10 +17,14 @@ function swap(over: Partial<SwapTurno> = {}): SwapTurno {
     solicitante_nombre: "Ana",
     destinatario_id: "u2",
     destinatario_nombre: "Bruno",
+    // `franja_a`/`franja_b` son `franja_id` reales (uuid, no literales legacy): el backend
+    // emite el nombre legible aparte, en `franja_a_nombre`/`franja_b_nombre`.
     fecha_a: "2026-06-15",
-    franja_a: "matutino",
+    franja_a: "a1b2c3d4e5f6",
+    franja_a_nombre: "Mañana",
     fecha_b: "2026-06-16",
-    franja_b: "vespertino",
+    franja_b: "0f1e2d3c4b5a",
+    franja_b_nombre: "Tarde",
     motivo: "",
     estado: "propuesto",
     respuesta_destinatario: "",
@@ -86,6 +90,30 @@ describe("TarjetaSwap — progreso visible y «sigue siendo tuyo»", () => {
     expect(within(progreso).getByText("Bruno")).toBeInTheDocument();
     // Reusa la etiqueta de estado existente.
     expect(screen.getByText(ETIQUETA_ESTADO_SWAP.propuesto)).toBeInTheDocument();
+  });
+
+  it("renderiza el NOMBRE de la franja del swap (no el franja_id en blanco)", () => {
+    // `franja_a`/`franja_b` son `franja_id` (uuid); el nombre legible viene en
+    // `franja_a_nombre`/`franja_b_nombre`. Antes se indexaba `ETIQUETA_FRANJA[franja_id]`
+    // → `undefined` → franja en blanco; esto lo bloquea.
+    renderTarjeta(swap(), "u1");
+    expect(screen.getByText(/Mañana/)).toBeInTheDocument();
+    expect(screen.getByText(/Tarde/)).toBeInTheDocument();
+  });
+
+  it("cae al literal legacy (ETIQUETA_FRANJA) si el swap no trae nombre de franja", () => {
+    // Swap antiguo: sin `franja_*_nombre`, con literal en `franja_a`/`franja_b`.
+    renderTarjeta(
+      swap({
+        franja_a: "matutino",
+        franja_a_nombre: undefined,
+        franja_b: "vespertino",
+        franja_b_nombre: undefined,
+      }),
+      "u1",
+    );
+    expect(screen.getByText(/Mañana/)).toBeInTheDocument();
+    expect(screen.getByText(/Tarde/)).toBeInTheDocument();
   });
 
   it("mientras está abierto, avisa que el turno sigue siendo tuyo (solicitante)", () => {

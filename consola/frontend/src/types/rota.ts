@@ -433,10 +433,16 @@ export interface SwapTurno {
   fecha_a: string;
   /** `franja_id` del turno del solicitante. */
   franja_a: string;
+  /** Nombre legible de la franja del solicitante (lo emite el backend). Opcional: datos
+   *  legacy traían solo el literal en `franja_a`, sin este campo. */
+  franja_a_nombre?: string;
   /** ISO (AAAA-MM-DD): día del turno del destinatario. */
   fecha_b: string;
   /** `franja_id` del turno del destinatario. */
   franja_b: string;
+  /** Nombre legible de la franja del destinatario (lo emite el backend). Opcional: datos
+   *  legacy traían solo el literal en `franja_b`, sin este campo. */
+  franja_b_nombre?: string;
   motivo: string;
   estado: EstadoSwap;
   respuesta_destinatario: string;

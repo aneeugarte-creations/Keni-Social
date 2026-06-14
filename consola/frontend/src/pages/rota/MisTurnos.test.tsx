@@ -37,6 +37,18 @@ describe("ListaMisTurnos — tarjetas móvil-first", () => {
     expect(screen.getByText(/jun/i)).toBeInTheDocument();
   });
 
+  it("muestra el NOMBRE real de una franja custom (no se queda en blanco)", () => {
+    // Franja custom: el backend no la mapea al literal legacy (`franja` sin mapear), pero
+    // SIEMPRE emite `franja_nombre`. Antes se indexaba `ETIQUETA_FRANJA[t.franja]` → undefined
+    // → título en blanco. Ahora se renderiza `franja_nombre`.
+    render(
+      <ListaMisTurnos
+        turnos={[turno({ franja: "", franja_nombre: "Cobertura nocturna" })]}
+      />,
+    );
+    expect(screen.getByText("Cobertura nocturna")).toBeInTheDocument();
+  });
+
   it("muestra los matices del turno (sábado, override, motivo y relevo)", () => {
     render(
       <ListaMisTurnos

@@ -491,13 +491,18 @@ export function Calendario({
         <BloqueError
           titulo="No se pudo cargar el calendario"
           mensaje={mensajeError(error)}
-          onReintentar={() => {
-            void coberturaQ.refetch();
-            void turnosQ.refetch();
-            void ausenciasQ.refetch();
-            void equipoQ.refetch();
-          }}
-          cargando={coberturaQ.isFetching}
+          // `error` incluye `coordinacionQ.error`, así que el reintento debe recargar TODA la
+          // familia de queries de la rota (incl. coordinación): refetchear solo cobertura/
+          // turnos/ausencias/equipo dejaba el error de coordinación atascado. `invalidar`
+          // invalida la clave `["rota"]` -> refetch de todas las queries activas.
+          onReintentar={invalidar}
+          cargando={
+            coberturaQ.isFetching ||
+            turnosQ.isFetching ||
+            ausenciasQ.isFetching ||
+            equipoQ.isFetching ||
+            coordinacionQ.isFetching
+          }
         />
       ) : (
         <Card className="overflow-hidden">

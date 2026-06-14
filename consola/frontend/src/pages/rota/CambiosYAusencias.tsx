@@ -725,12 +725,18 @@ export function TarjetaSwap({
             <span className="font-medium">{swap.destinatario_nombre}</span>
           </div>
           <div className="text-xs text-muted-foreground">
+            {/* `franja_a`/`franja_b` ahora son `franja_id` (uuid), no literales: el backend
+                emite el nombre legible en `franja_a_nombre`/`franja_b_nombre`. Indexar
+                `ETIQUETA_FRANJA[franja_id]` daba `undefined` (franja en blanco); se mantiene
+                como FALLBACK solo para swaps legacy que aún traen el literal en `franja_a`. */}
             <span>
-              {formatearFechaCorta(swap.fecha_a)} · {ETIQUETA_FRANJA[swap.franja_a]}
+              {formatearFechaCorta(swap.fecha_a)} ·{" "}
+              {swap.franja_a_nombre ?? ETIQUETA_FRANJA[swap.franja_a]}
             </span>
             <span className="mx-1.5">↔</span>
             <span>
-              {formatearFechaCorta(swap.fecha_b)} · {ETIQUETA_FRANJA[swap.franja_b]}
+              {formatearFechaCorta(swap.fecha_b)} ·{" "}
+              {swap.franja_b_nombre ?? ETIQUETA_FRANJA[swap.franja_b]}
             </span>
           </div>
         </div>
