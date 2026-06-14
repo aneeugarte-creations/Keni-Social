@@ -61,6 +61,10 @@ const Agentes = lazy(() => import("@/pages/maquina/Agentes"));
 // Detalle de UN agente/daemon (`/maquina/agentes/:agente`): su estado, log por barrido y
 // controles in-place (encendido, barrer, editar prompt). Filtra la lista de daemons por nombre.
 const AgenteDetalle = lazy(() => import("@/pages/maquina/AgenteDetalle"));
+// «Cómputo y cola» (`/maquina/computo`): la cola por dentro (en curso + esperando) con su control
+// admin (priorizar/cancelar/reintentar/purgar) + estado de slots y presupuesto. Al mismo nivel
+// que las páginas de detalle de agente; la banda de Agentes enlaza aquí.
+const Computo = lazy(() => import("@/pages/maquina/Computo"));
 
 // Feed móvil para revisores (#qa-movil-feed): superficie tipo red social, una
 // columna, SIN sidebar. Vive FUERA del AppShell (layout propio) y se llega por
@@ -334,6 +338,8 @@ export const router = createBrowserRouter([
           { path: "agentes", element: <Agentes /> },
           // Detalle de UN agente/daemon (`:agente` = nombre del daemon).
           { path: "agentes/:agente", element: <AgenteDetalle /> },
+          // Cómputo y cola (estática; no choca con la dinámica `agentes/:agente`).
+          { path: "computo", element: <Computo /> },
           // Compat: la página se llamaba «Workers» (`/maquina/cola`); redirige preservando
           // `?proceso=` (los cockpits enlazan aquí prefiltrado).
           { path: "cola", element: <RedirigirCola /> },

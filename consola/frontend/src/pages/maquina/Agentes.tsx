@@ -1,30 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
-  AlertTriangle,
-  ArrowUp,
   Bot,
-  Boxes,
-  ChevronDown,
   Clock,
-  Coins,
   Cpu,
-  ExternalLink,
-  FileText,
-  Layers,
-  Play,
+  ListTree,
   RefreshCw,
   RotateCcw,
   Trash2,
-  XCircle,
 } from "lucide-react";
 import * as React from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
-import { EditorPromptOverlay } from "@/components/biblioteca/EditorPromptOverlay";
 import { BloqueError } from "@/components/comunes/BloqueError";
-import { ChipNivelPresupuesto } from "@/components/comunes/ChipEstado";
 import { confirmar } from "@/components/comunes/confirmar";
 import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
@@ -32,7 +21,6 @@ import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -46,50 +34,39 @@ import {
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
-import { formatearDia, haceSegundos, tiempoRelativo } from "@/lib/fecha";
+import { formatearDia, tiempoRelativo } from "@/lib/fecha";
 import { costeUsd, numeroCompacto, numeroCompleto } from "@/lib/formato";
 import { etiquetaTipoGeneracion } from "@/lib/generaciones";
 import { INTERVALO_SERIE_MS, INTERVALO_VIVO_MS } from "@/lib/refresco";
 import { cn } from "@/lib/utils";
 import Produccion from "@/pages/Produccion";
+import { Kpi, PanelPresupuesto, TablaJobs } from "@/pages/maquina/cola-comun";
 import { SeccionColapsable } from "@/pages/configuracion/SeccionColapsable";
 import { useGuardarAjuste } from "@/pages/configuracion/SeccionFuncionalidad";
-import {
-  DesgloseEconomiaProceso,
-  PROC_META,
-  resultadoDelDia,
-  SerieProceso,
-} from "@/pages/monitor/comun";
+import { PROC_META, resultadoDelDia, SerieProceso } from "@/pages/monitor/comun";
 import { ZonaEstado } from "@/pages/sistema/Doctor";
-import {
-  ChipEstadoDaemon,
-  formatoIntervalo,
-  SeccionDaemons,
-} from "@/pages/sistema/SeccionDaemons";
+import { ChipEstadoDaemon, SeccionDaemons } from "@/pages/sistema/SeccionDaemons";
 import type {
   ActividadPorDia,
   ActividadPorTipo,
   ActividadProcesoBloque,
-  ColaJob,
   ColaMonitor,
   ColaSerie,
   LatidoDaemon,
-  PresupuestoIA,
   Proceso,
-  ResultadoDia,
 } from "@/types";
 
 /** Los dos motores de la máquina (ADR 0011), en orden de flujo. */
 const MOTORES: Proceso[] = ["investigacion", "produccion"];
 
-/** Agente(s) IA (clase=ia) de cada motor: etiqueta humana + prompt(s) de la Biblioteca que
- *  editan in-place desde su tarjeta (el back NO expone el docId del prompt: vive aquí). El
- *  on/off, estado y barrido vienen del latido del daemon (campo `clase`/`motor`), no de aquí. */
+/** Agente(s) IA (clase=ia) de cada motor: etiqueta humana + subtítulo. El on/off, estado y
+ *  barrido vienen del latido del daemon (campo `clase`/`motor`); el resto del control (editar
+ *  prompt, barrer, log) vive en la página de detalle del agente (`/maquina/agentes/{daemon}`),
+ *  a la que la tarjeta enlaza entera. */
 type AgenteMeta = {
   daemon: string;
   etiqueta: string;
   sub: string;
-  prompts: { etiqueta: string; docId: string }[];
 };
 const AGENTES_IA: Record<Proceso, AgenteMeta[]> = {
   investigacion: [
@@ -97,7 +74,6 @@ const AGENTES_IA: Record<Proceso, AgenteMeta[]> = {
       daemon: "investigacion",
       etiqueta: "Investigación",
       sub: "Criba y verifica las fuentes que alimentan el motor de reutilizar.",
-      prompts: [{ etiqueta: "Prompt de validación", docId: "prompt/validacion" }],
     },
   ],
   produccion: [
@@ -105,288 +81,9 @@ const AGENTES_IA: Record<Proceso, AgenteMeta[]> = {
       daemon: "produccion",
       etiqueta: "Producción",
       sub: "Redacta el copy y genera el arte de los borradores.",
-      prompts: [
-        { etiqueta: "Prompt de copy", docId: "prompt/copy" },
-        { etiqueta: "Prompt de arte", docId: "prompt/arte" },
-      ],
-    },
-    {
-      daemon: "sugerencias",
-      etiqueta: "Sugerencias editoriales",
-      sub: "Digest editorial con IA: ideas y ángulos para el equipo.",
-      prompts: [{ etiqueta: "Prompt de sugerencias", docId: "prompt/sugerencias" }],
     },
   ],
 };
-
-/** Tarjeta KPI: icono, valor grande y subtítulo. `tono` colorea el valor ante alerta. */
-function Kpi({
-  icono: Icono,
-  titulo,
-  valor,
-  subtitulo,
-  tono,
-}: {
-  icono: typeof Cpu;
-  titulo: string;
-  valor: React.ReactNode;
-  subtitulo?: React.ReactNode;
-  tono?: "alerta" | "ok" | "espera";
-}) {
-  return (
-    <Card>
-      <CardHeader className="p-4 pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Icono className="h-4 w-4" aria-hidden="true" />
-          {titulo}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-1 p-4 pt-0">
-        <div
-          className={cn(
-            "text-2xl font-semibold tabular-nums",
-            tono === "alerta" && "text-destructive",
-            tono === "ok" && "text-emerald-600",
-            tono === "espera" && "text-amber-600",
-          )}
-        >
-          {valor}
-        </div>
-        {subtitulo && <div className="text-xs text-muted-foreground">{subtitulo}</div>}
-      </CardContent>
-    </Card>
-  );
-}
-
-/** Tabla de jobs en vuelo (en curso o esperando), con acción de cancelar para admin. */
-function TablaJobs({
-  jobs,
-  mostrarWorker,
-  esAdmin,
-  onCancelar,
-  cancelandoId,
-  onPriorizar,
-  priorizandoId,
-}: {
-  jobs: ColaJob[];
-  mostrarWorker: boolean;
-  esAdmin: boolean;
-  onCancelar: (genId: string) => void;
-  cancelandoId: string | null;
-  /** Solo la tabla «Esperando»: adelanta el job al lote de fondo (prioridad manual). */
-  onPriorizar?: (genId: string) => void;
-  priorizandoId?: string | null;
-}) {
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Generación</TableHead>
-          <TableHead className="hidden sm:table-cell">Tipo</TableHead>
-          <TableHead className="hidden md:table-cell">Marca</TableHead>
-          {mostrarWorker && <TableHead className="hidden lg:table-cell">Worker</TableHead>}
-          <TableHead>{mostrarWorker ? "Corriendo" : "En cola"}</TableHead>
-          {esAdmin && <TableHead className="text-right">Acción</TableHead>}
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {jobs.map((j) => (
-          <TableRow key={j.job_id}>
-            <TableCell className="font-medium">
-              <span className="inline-flex items-center gap-1.5">
-                {j.etiqueta || j.gen_id}
-                {/* Prioridad de cola (1f3acd7d): un lanzamiento manual adelanta al lote de
-                    fondo del pipeline. Solo se señala lo prioritario (>0). */}
-                {j.prioridad > 0 && (
-                  <Badge
-                    variant="secondary"
-                    className="border border-sky-500/30 bg-sky-500/10 text-[10px] text-sky-600"
-                    title={`Prioridad ${j.prioridad}: adelanta en la cola al lote de fondo.`}
-                  >
-                    prioritario
-                  </Badge>
-                )}
-              </span>
-            </TableCell>
-            <TableCell className="hidden sm:table-cell text-muted-foreground">{j.tipo || "—"}</TableCell>
-            <TableCell className="hidden md:table-cell text-muted-foreground">{j.marca || "—"}</TableCell>
-            {mostrarWorker && (
-              <TableCell className="hidden lg:table-cell font-mono text-xs text-muted-foreground">
-                {j.worker || "—"}
-              </TableCell>
-            )}
-            <TableCell className="tabular-nums text-muted-foreground">
-              {haceSegundos(mostrarWorker ? j.corriendo_hace_s : j.encolado_hace_s)}
-            </TableCell>
-            {esAdmin && (
-              <TableCell className="text-right">
-                <span className="inline-flex items-center gap-1">
-                  {onPriorizar && j.prioridad <= 0 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={priorizandoId === j.gen_id}
-                      onClick={() => onPriorizar(j.gen_id)}
-                    >
-                      <ArrowUp className="mr-1 h-3.5 w-3.5" />
-                      Priorizar
-                    </Button>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive hover:text-destructive"
-                    disabled={cancelandoId === j.gen_id}
-                    onClick={() => onCancelar(j.gen_id)}
-                  >
-                    <XCircle className="mr-1 h-3.5 w-3.5" />
-                    Cancelar
-                  </Button>
-                </span>
-              </TableCell>
-            )}
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
-}
-
-/** PRESUPUESTO DIARIO editable in situ (KENI_PRESUPUESTO_TOKENS_DIA, admin): input compacto
- *  que guarda al salir del campo (blur/Enter). 0 = sin límite. */
-function PresupuestoEditable({ valor }: { valor: number }) {
-  const guardar = useGuardarAjuste();
-  const [num, setNum] = React.useState(String(valor));
-  React.useEffect(() => {
-    setNum(String(valor));
-  }, [valor]);
-  const guardarNumero = () => {
-    const n = Number(num);
-    if (num.trim() !== "" && Number.isFinite(n) && n >= 0 && n !== valor) {
-      guardar.mutate({ clave: "KENI_PRESUPUESTO_TOKENS_DIA", valor: Math.trunc(n) });
-    } else {
-      setNum(String(valor));
-    }
-  };
-  return (
-    <label className="inline-flex items-center gap-1.5">
-      Presupuesto diario
-      <Input
-        type="number"
-        min={0}
-        step="1"
-        value={num}
-        onChange={(e) => setNum(e.target.value)}
-        onBlur={guardarNumero}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-        }}
-        disabled={guardar.isPending}
-        className="h-6 w-28 px-2 text-xs tabular-nums"
-        aria-label="Presupuesto diario de tokens (0 = sin límite)"
-      />
-      tokens
-      {valor === 0 && <span className="text-muted-foreground/80">(Sin límite)</span>}
-    </label>
-  );
-}
-
-/** PRESUPUESTO + gasto de HOY + PARADA DE EMERGENCIA: cabeza GLOBAL de la economía (ambos
- *  motores comparten presupuesto y kill switch). El gasto de hoy se desglosa por proceso
- *  (Investigación vs Producción). El presupuesto diario se edita aquí (admin) y la parada de
- *  emergencia (KENI_GENERACION_PAUSADA, en caliente) corta TODA la generación con IA. */
-function PanelPresupuesto({
-  presupuesto,
-  resHoy,
-  esAdmin,
-}: {
-  presupuesto: PresupuestoIA;
-  /** Resultados de HOY de la serie (para el desglose de gasto por proceso). Null si no hay. */
-  resHoy: ResultadoDia | null;
-  esAdmin: boolean;
-}) {
-  const guardar = useGuardarAjuste();
-  const conPresupuesto = presupuesto.presupuesto_tokens_dia > 0;
-  const pct = presupuesto.pct_usado;
-  return (
-    <Card>
-      <CardHeader className="p-4 pb-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
-            <Coins className="h-4 w-4 text-muted-foreground" />
-            Presupuesto y parada de emergencia
-          </CardTitle>
-          <ChipNivelPresupuesto nivel={presupuesto.nivel} />
-          <span className="text-xs text-muted-foreground">· global, compartido por ambos motores</span>
-        </div>
-      </CardHeader>
-      <CardContent className="flex flex-wrap items-center justify-between gap-4 p-4 pt-2">
-        <div className="space-y-1.5 text-sm">
-          <p>
-            Hoy:{" "}
-            <span className="font-medium tabular-nums">
-              {numeroCompacto(presupuesto.gastado.tokens)}
-            </span>{" "}
-            tokens · {costeUsd(presupuesto.gastado.coste_usd)} ·{" "}
-            {presupuesto.gastado.generaciones} generación(es) con coste
-          </p>
-          {/* Desglose del gasto de HOY por proceso (Investigación vs Producción). */}
-          <DesgloseEconomiaProceso res={resHoy} />
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-            {esAdmin ? (
-              <PresupuestoEditable valor={presupuesto.presupuesto_tokens_dia} />
-            ) : (
-              <span>
-                Presupuesto diario{" "}
-                {conPresupuesto
-                  ? `${numeroCompacto(presupuesto.presupuesto_tokens_dia)} tokens`
-                  : "Sin límite"}
-              </span>
-            )}
-            {conPresupuesto && presupuesto.restante_tokens != null && (
-              <span>· restan {numeroCompacto(presupuesto.restante_tokens)}</span>
-            )}
-            {conPresupuesto && pct != null && <span>· {pct.toFixed(0)}% usado</span>}
-          </div>
-          {conPresupuesto && pct != null && (
-            <div className="h-1.5 w-56 overflow-hidden rounded-full bg-muted">
-              <div
-                className={cn(
-                  "h-full rounded-full",
-                  pct >= 100 ? "bg-red-500" : pct >= 80 ? "bg-amber-500" : "bg-emerald-500",
-                )}
-                style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
-              />
-            </div>
-          )}
-        </div>
-        {esAdmin && (
-          <div className="space-y-1 text-right">
-            <label className="flex items-center justify-end gap-2 text-sm">
-              <span
-                className={cn(presupuesto.pausada ? "text-destructive" : "text-muted-foreground")}
-              >
-                {presupuesto.pausada ? "Generación parada" : "Parada de emergencia"}
-              </span>
-              <Switch
-                checked={presupuesto.pausada}
-                disabled={guardar.isPending}
-                onCheckedChange={(v) =>
-                  guardar.mutate({ clave: "KENI_GENERACION_PAUSADA", valor: v })
-                }
-                aria-label="Parada de emergencia: corta toda la generación con IA, incluida la manual"
-              />
-            </label>
-            <p className="max-w-[26ch] text-[11px] leading-snug text-muted-foreground">
-              Corta TODA la generación con IA, incluida la manual; lo que corre termina y lo
-              encolado espera.
-            </p>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
 
 /** Mini-tabla de desglose por TIPO de trabajo (de un motor). */
 function DesglosePorTipo({ filas }: { filas: ActividadPorTipo[] }) {
@@ -489,166 +186,95 @@ function DesglosePorDia({ filas }: { filas: ActividadPorDia[] }) {
 }
 
 /** TARJETA de un AGENTE IA (clase=ia) de un motor: el agente PROACTIVO que corre `claude -p`.
- *  Cabecera siempre visible (estado, último barrido, toggle on/off in-place); al CLICAR la
- *  tarjeta se EXPANDE y deja ajustar el resto AHÍ MISMO (editar su prompt, forzar un barrido) y
- *  un enlace «Ver log / detalle» a su página de detalle. Nada de drawer escondido. */
+ *  La tarjeta ENTERA es un enlace a su página de detalle (`/maquina/agentes/{daemon}`), donde
+ *  vive todo el control (editar prompt, barrer, log). Aquí queda limpia: icono, nombre, badge IA,
+ *  estado, último barrido y el toggle on/off in-place (con stopPropagation para no navegar al
+ *  togglear). Nada de expand ni botones internos. */
 function TarjetaAgenteIA({
   latido,
   meta,
   onToggle,
   guardandoClave,
-  onBarrer,
-  barriendo,
-  onAbrirPrompt,
 }: {
   latido: LatidoDaemon;
   meta: AgenteMeta;
   onToggle: (clave: string, valor: boolean) => void;
   guardandoClave: string | null;
-  onBarrer: (daemon: string) => void;
-  barriendo: string | null;
-  onAbrirPrompt: (docId: string) => void;
 }) {
-  const [abierta, setAbierta] = React.useState(false);
   const solicitado = latido.barrido_solicitado !== "";
   const barrido = latido.ultimo_barrido ? tiempoRelativo(latido.ultimo_barrido) : "nunca";
-  // Detiene la propagación para que interactuar con los controles NO pliegue la tarjeta.
-  const noPlegar = (e: React.SyntheticEvent) => e.stopPropagation();
+  // El toggle no debe navegar al detalle: corta la propagación del clic/teclado del enlace.
+  const noNavegar = (e: React.SyntheticEvent) => e.stopPropagation();
   return (
-    <Card
-      role="button"
-      tabIndex={0}
-      aria-expanded={abierta}
-      onClick={() => setAbierta((v) => !v)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          setAbierta((v) => !v);
-        }
-      }}
-      className="cursor-pointer border-sky-500/20 transition-colors hover:border-sky-500/40"
+    <Link
+      to={`/maquina/agentes/${meta.daemon}`}
+      className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
-      <CardHeader className="p-4 pb-2">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <Bot className="h-4 w-4 text-sky-600" aria-hidden="true" />
-              {meta.etiqueta}
+      <Card className="cursor-pointer border-sky-500/20 transition-colors hover:border-sky-500/40">
+        <CardHeader className="p-4 pb-2">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <Bot className="h-4 w-4 text-sky-600" aria-hidden="true" />
+                {meta.etiqueta}
+                <Badge
+                  variant="outline"
+                  className="border-transparent bg-sky-500/15 text-[10px] text-sky-600 dark:text-sky-400"
+                >
+                  IA
+                </Badge>
+              </CardTitle>
+              <p className="mt-0.5 text-xs text-muted-foreground">{meta.sub}</p>
+            </div>
+            {/* Toggle on/off IN-PLACE (clave_gate); no debe navegar al detalle al clicarlo. */}
+            <div onClick={noNavegar} onKeyDown={noNavegar}>
+              {latido.clave_gate ? (
+                <Switch
+                  checked={latido.activo}
+                  disabled={guardandoClave === latido.clave_gate}
+                  onCheckedChange={(v) => onToggle(latido.clave_gate as string, v)}
+                  aria-label={`Encender/apagar el agente ${meta.daemon}`}
+                />
+              ) : (
+                <span className="text-xs text-muted-foreground" title="Sin interruptor: corre siempre.">
+                  Siempre activo
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+            <ChipEstadoDaemon estado={latido.estado} />
+            {solicitado && (
               <Badge
                 variant="outline"
-                className="border-transparent bg-sky-500/15 text-[10px] text-sky-600 dark:text-sky-400"
+                className="border-transparent bg-sky-500/15 text-sky-600 dark:text-sky-400"
+                title="El agente barrerá en su siguiente tick (≤ ~1 min)."
               >
-                IA
+                Barrido solicitado
               </Badge>
-            </CardTitle>
-            <p className="mt-0.5 text-xs text-muted-foreground">{meta.sub}</p>
-          </div>
-          {/* Toggle on/off IN-PLACE (clave_gate); no debe plegar la tarjeta al clicarlo. */}
-          <div onClick={noPlegar} onKeyDown={noPlegar}>
-            {latido.clave_gate ? (
-              <Switch
-                checked={latido.activo}
-                disabled={guardandoClave === latido.clave_gate}
-                onCheckedChange={(v) => onToggle(latido.clave_gate as string, v)}
-                aria-label={`Encender/apagar el agente ${meta.daemon}`}
-              />
-            ) : (
-              <span className="text-xs text-muted-foreground" title="Sin interruptor: corre siempre.">
-                Siempre activo
-              </span>
             )}
+            <span>· último barrido {barrido}</span>
           </div>
-        </div>
-        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-          <ChipEstadoDaemon estado={latido.estado} />
-          {solicitado && (
-            <Badge
-              variant="outline"
-              className="border-transparent bg-sky-500/15 text-sky-600 dark:text-sky-400"
-              title="El agente barrerá en su siguiente tick (≤ ~1 min)."
-            >
-              Barrido solicitado
-            </Badge>
-          )}
-          <span>· último barrido {barrido}</span>
-          <ChevronDown
-            aria-hidden
-            className={cn("ml-auto h-4 w-4 transition-transform", abierta && "rotate-180")}
-          />
-        </div>
-      </CardHeader>
-      {abierta && (
-        <CardContent className="space-y-3 p-4 pt-0" onClick={noPlegar} onKeyDown={noPlegar}>
-          <div className="text-xs text-muted-foreground">
-            Intervalo {formatoIntervalo(latido.intervalo_seg)} · {latido.barridos} barridos
-            {latido.errores > 0 && <span className="text-red-500"> · {latido.errores} err</span>}
-            {latido.error_txt && latido.estado === "error" && (
-              <span className="block truncate" title={latido.error_txt}>
-                {latido.error_txt}
-              </span>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {meta.prompts.map((p) => (
-              <Button
-                key={p.docId}
-                variant="outline"
-                size="sm"
-                onClick={() => onAbrirPrompt(p.docId)}
-              >
-                <FileText className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-                {p.etiqueta}
-              </Button>
-            ))}
-            {latido.barrible && (
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={barriendo === meta.daemon || solicitado}
-                title={
-                  solicitado
-                    ? "Ya hay un barrido solicitado pendiente."
-                    : "Fuerza un barrido inmediato (sin esperar al intervalo)."
-                }
-                onClick={() => onBarrer(meta.daemon)}
-              >
-                <Play className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-                Barrer ahora
-              </Button>
-            )}
-            <Button asChild variant="ghost" size="sm">
-              <Link to={`/maquina/agentes/${meta.daemon}`}>
-                <ExternalLink className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
-                Ver log / detalle
-              </Link>
-            </Button>
-          </div>
-        </CardContent>
-      )}
-    </Card>
+        </CardHeader>
+      </Card>
+    </Link>
   );
 }
 
 /** Bloque «Agentes IA» de un motor: las tarjetas de los daemons clase=ia de ese motor (desde el
- *  latido del API; el meta —prompt/etiqueta— se cruza por nombre). Solo admin (endpoint admin). */
+ *  latido del API; el meta —etiqueta/subtítulo— se cruza por nombre). Solo admin (endpoint admin). */
 function AgentesIaMotor({
   motor,
   daemons,
   onToggle,
   guardandoClave,
-  onBarrer,
-  barriendo,
-  onAbrirPrompt,
 }: {
   motor: Proceso;
   daemons: LatidoDaemon[];
   onToggle: (clave: string, valor: boolean) => void;
   guardandoClave: string | null;
-  onBarrer: (daemon: string) => void;
-  barriendo: string | null;
-  onAbrirPrompt: (docId: string) => void;
 }) {
-  // Cruza el meta (prompt/etiqueta) con el latido real; el orden lo fija AGENTES_IA.
+  // Cruza el meta (etiqueta) con el latido real; el orden lo fija AGENTES_IA.
   const porNombre = new Map(daemons.map((d) => [d.daemon, d]));
   const tarjetas = AGENTES_IA[motor]
     .map((meta) => ({ meta, latido: porNombre.get(meta.daemon) }))
@@ -670,9 +296,6 @@ function AgentesIaMotor({
             meta={meta}
             onToggle={onToggle}
             guardandoClave={guardandoClave}
-            onBarrer={onBarrer}
-            barriendo={barriendo}
-            onAbrirPrompt={onAbrirPrompt}
           />
         ))
       )}
@@ -852,9 +475,6 @@ function ColumnaMotor({
   economiaCargando,
   onToggleDaemon,
   guardandoClave,
-  onBarrerDaemon,
-  barriendoDaemon,
-  onAbrirPrompt,
   onCancelar,
   cancelandoId,
   onPriorizar,
@@ -870,9 +490,6 @@ function ColumnaMotor({
   economiaCargando: boolean;
   onToggleDaemon: (clave: string, valor: boolean) => void;
   guardandoClave: string | null;
-  onBarrerDaemon: (daemon: string) => void;
-  barriendoDaemon: string | null;
-  onAbrirPrompt: (docId: string) => void;
   onCancelar: (genId: string) => void;
   cancelandoId: string | null;
   onPriorizar: (genId: string) => void;
@@ -898,9 +515,6 @@ function ColumnaMotor({
             daemons={daemons}
             onToggle={onToggleDaemon}
             guardandoClave={guardandoClave}
-            onBarrer={onBarrerDaemon}
-            barriendo={barriendoDaemon}
-            onAbrirPrompt={onAbrirPrompt}
           />
         ))}
 
@@ -942,9 +556,10 @@ function ColumnaMotor({
  * Página AGENTES (`/maquina/agentes`): SOLO los procesos de IA de la máquina de contenido,
  * organizados en DOS COLUMNAS POR MOTOR (Investigación | Producción). Arriba, una BANDA GLOBAL
  * con lo compartido entre ambos motores una sola vez: la zona de estado (el doctor), el
- * presupuesto editable + la parada de emergencia (globales) y la capacidad del pool. Cada
- * columna trae sus agentes IA proactivos (control + prompt in-place), sus Workers reactivos, su
- * economía de tokens desglosada y, aparte, sus servicios NO-IA. Sondeo en vivo.
+ * presupuesto editable + la parada de emergencia (globales) y los dos KPIs de cómputo (en
+ * curso / en cola), con enlace a «Cómputo y cola» para verla por dentro. Cada columna trae sus
+ * tarjetas de agente IA (toggle in-place, clic = su detalle), sus Workers reactivos, su economía
+ * de tokens desglosada y, aparte, sus servicios NO-IA. Sondeo en vivo.
  *
  * El prefiltro `?proceso=investigacion|produccion` (los cockpits enlazan aquí) ENFOCA la página
  * a un solo motor: muestra su columna a ancho completo. La actividad (feed cross-motor) vive
@@ -966,8 +581,6 @@ export default function Agentes() {
   const { marcaActiva, nombreActiva } = useMarcaActiva();
   const [cancelandoId, setCancelandoId] = React.useState<string | null>(null);
   const [priorizandoId, setPriorizandoId] = React.useState<string | null>(null);
-  // Overlay «editar prompt» ÚNICO para toda la página (lo abren las tarjetas de agente IA).
-  const [promptDoc, setPromptDoc] = React.useState<string | null>(null);
 
   const cola = useQuery({
     queryKey: ["actividad", "cola", marcaActiva ?? "todas"],
@@ -1003,16 +616,6 @@ export default function Agentes() {
       { onSuccess: () => void qc.invalidateQueries({ queryKey: ["sistema", "daemons"] }) },
     );
   const guardandoClave = guardarAjuste.isPending ? (guardarAjuste.variables?.clave ?? null) : null;
-
-  const barrerDaemon = useMutation({
-    mutationFn: (daemon: string) => api.sistemaDaemonBarrer(daemon),
-    onSuccess: (r) => {
-      toast.success(`Barrido de «${r.daemon}» solicitado: correrá en su siguiente tick.`);
-      void qc.invalidateQueries({ queryKey: ["sistema", "daemons"] });
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-  const barriendoDaemon = barrerDaemon.isPending ? (barrerDaemon.variables ?? null) : null;
 
   const refrescar = () => {
     void qc.invalidateQueries({ queryKey: ["actividad", "cola"] });
@@ -1143,50 +746,36 @@ export default function Agentes() {
               />
             )}
 
-            {/* Capacidad del POOL GLOBAL (compartido por ambos motores). */}
-            {cola.data.cola_llena && (
-              <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>
-                  La cola está al tope ({cola.data.conteo.activos}/{cola.data.capacidad.tope}).
-                  {esAdmin && " Puedes purgarla para vaciarla."}
-                </span>
-              </div>
-            )}
-            {marcaActiva && (
+            {/* Cómputo de la máquina: el ÚNICO límite real son los slots (concurrencia de
+                `claude -p`); la cola que espera un slot no tiene tope. Detalle y control de la
+                cola por dentro, en «Cómputo y cola». */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">
-                La capacidad del pool es global (no se filtra por {nombreActiva ?? marcaActiva});
-                las listas de jobs de cada motor sí.
+                {marcaActiva
+                  ? `Los slots de cómputo son globales (no se filtran por ${nombreActiva ?? marcaActiva}); las listas de trabajos de cada motor sí.`
+                  : "Los slots son la concurrencia de la máquina; la cola que espera un slot no tiene tope."}
               </p>
-            )}
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <Button asChild variant="outline" size="sm">
+                <Link to={`/maquina/computo${proceso ? `?proceso=${proceso}` : ""}`}>
+                  <ListTree className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+                  Ver cola y cómputo
+                </Link>
+              </Button>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
               <Kpi
                 icono={Cpu}
                 titulo="En curso"
-                valor={`${cola.data.procesando}/${cola.data.capacidad.max_jobs}`}
-                subtitulo={`claude -p · ${cola.data.workers_activos.length} worker(s)`}
+                valor={`${cola.data.procesando} / ${cola.data.capacidad.max_jobs}`}
+                subtitulo="trabajos IA corriendo (slots de cómputo)"
                 tono={cola.data.procesando >= cola.data.capacidad.max_jobs ? "alerta" : undefined}
               />
               <Kpi
                 icono={Clock}
                 titulo="En cola"
-                valor={`${cola.data.conteo.pendientes}/${cola.data.capacidad.max_cola}`}
+                valor={cola.data.conteo.pendientes}
                 subtitulo="esperando un slot"
                 tono={cola.data.conteo.pendientes > 0 ? "espera" : undefined}
-              />
-              <Kpi
-                icono={Layers}
-                titulo="Pool compartido"
-                valor={`${cola.data.conteo.activos}/${cola.data.capacidad.tope}`}
-                subtitulo="Investigación + Producción"
-                tono={cola.data.cola_llena ? "alerta" : undefined}
-              />
-              <Kpi
-                icono={Boxes}
-                titulo="Slots libres"
-                valor={cola.data.slots_libres}
-                subtitulo={`de ${cola.data.capacidad.max_jobs} de cómputo`}
-                tono={cola.data.slots_libres > 0 ? "ok" : undefined}
               />
             </div>
           </>
@@ -1214,9 +803,6 @@ export default function Agentes() {
               economiaCargando={agregados.isPending}
               onToggleDaemon={onToggleDaemon}
               guardandoClave={guardandoClave}
-              onBarrerDaemon={(d) => barrerDaemon.mutate(d)}
-              barriendoDaemon={barriendoDaemon}
-              onAbrirPrompt={setPromptDoc}
               onCancelar={(id) => cancelar.mutate(id)}
               cancelandoId={cancelandoId}
               onPriorizar={(id) => priorizar.mutate(id)}
@@ -1235,13 +821,6 @@ export default function Agentes() {
           <Produccion embebido />
         </SeccionColapsable>
       </div>
-
-      {/* Overlay «editar prompt» de las tarjetas de agente IA (in-place, sin navegar). */}
-      <EditorPromptOverlay
-        docId={promptDoc}
-        abierto={promptDoc !== null}
-        onCerrar={() => setPromptDoc(null)}
-      />
     </>
   );
 }

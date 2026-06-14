@@ -1,0 +1,313 @@
+/**
+ * Página CÓMPUTO Y COLA (`/maquina/computo`): la cola de generación POR DENTRO, al mismo nivel
+ * que las páginas de detalle de agente. Explica en lenguaje llano qué son los slots (cuántos
+ * `claude -p` corren a la vez) y la cola (lo que espera un slot, SIN tope), enseña el estado en
+ * vivo (en curso / en cola / workers + presupuesto y parada de emergencia) y deja al humano
+ * PRIORIZAR, cancelar, reintentar y purgar la cola in-place. `?proceso=` enfoca a un motor.
+ */
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Activity, ArrowLeft, Clock, Cpu, RefreshCw, Trash2, Users } from "lucide-react";
+import * as React from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
+
+import { BloqueError } from "@/components/comunes/BloqueError";
+import { confirmar } from "@/components/comunes/confirmar";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
+import { useSesion } from "@/hooks/sesion-contexto";
+import { api, mensajeError } from "@/lib/api";
+import { INTERVALO_SERIE_MS, INTERVALO_VIVO_MS } from "@/lib/refresco";
+import { Kpi, PanelPresupuesto, TablaJobs } from "@/pages/maquina/cola-comun";
+import { PROC_META, resultadoDelDia } from "@/pages/monitor/comun";
+import type { ColaJob, Proceso } from "@/types";
+
+/** Card con la lista de jobs de un estado (en curso / esperando), o un vacío amable. */
+function ColaCard({
+  titulo,
+  icono: Icono,
+  jobs,
+  vacio,
+  borde,
+  children,
+}: {
+  titulo: React.ReactNode;
+  icono: typeof Activity;
+  jobs: ColaJob[];
+  vacio: string;
+  borde?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card className={borde}>
+      <CardHeader className="p-4 pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <Icono className="h-4 w-4 text-sky-600" aria-hidden="true" />
+          {titulo} ({jobs.length})
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        {jobs.length === 0 ? (
+          <p className="p-4 pt-0 text-sm text-muted-foreground">{vacio}</p>
+        ) : (
+          children
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function Computo() {
+  const { usuario } = useSesion();
+  const esAdmin = usuario?.rol === "admin";
+  const { marcaActiva, nombreActiva } = useMarcaActiva();
+  const [searchParams] = useSearchParams();
+  const crudoProceso = searchParams.get("proceso");
+  const proceso: Proceso | undefined =
+    crudoProceso === "investigacion" || crudoProceso === "produccion" ? crudoProceso : undefined;
+  const qc = useQueryClient();
+  const [cancelandoId, setCancelandoId] = React.useState<string | null>(null);
+  const [priorizandoId, setPriorizandoId] = React.useState<string | null>(null);
+  const [reintentandoId, setReintentandoId] = React.useState<string | null>(null);
+
+  const cola = useQuery({
+    queryKey: ["actividad", "cola", marcaActiva ?? "todas"],
+    queryFn: ({ signal }) => api.cola({ marca: marcaActiva ?? undefined }, signal),
+    refetchInterval: INTERVALO_VIVO_MS,
+  });
+  const serie = useQuery({
+    queryKey: ["actividad", "cola", "series"],
+    queryFn: ({ signal }) => api.colaSeries(14, signal),
+    refetchInterval: INTERVALO_SERIE_MS,
+  });
+
+  const refrescar = () => void qc.invalidateQueries({ queryKey: ["actividad", "cola"] });
+
+  const cancelar = useMutation({
+    mutationFn: (genId: string) => api.cancelarGeneracion(genId),
+    onMutate: (genId: string) => setCancelandoId(genId),
+    onSuccess: () => {
+      toast.success("Generación cancelada.");
+      refrescar();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+    onSettled: () => setCancelandoId(null),
+  });
+  const priorizar = useMutation({
+    mutationFn: (genId: string) => api.colaPriorizar(genId),
+    onMutate: (genId: string) => setPriorizandoId(genId),
+    onSuccess: () => {
+      toast.success("Job priorizado: adelanta al lote de fondo.");
+      refrescar();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+    onSettled: () => setPriorizandoId(null),
+  });
+  const reintentar = useMutation({
+    mutationFn: (genId: string) => api.colaReencolar(genId),
+    onMutate: (genId: string) => setReintentandoId(genId),
+    onSuccess: (r) => {
+      toast.success(r.reencolado ? "Job reencolado: vuelve a la cola." : "El job ya no se podía reencolar.");
+      refrescar();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+    onSettled: () => setReintentandoId(null),
+  });
+  const purgar = useMutation({
+    mutationFn: () => api.colaPurgar(),
+    onSuccess: (r) => {
+      toast.success(
+        r.purgados > 0 ? `Cola liberada (${r.purgados} en vuelo).` : "La cola ya estaba libre.",
+      );
+      refrescar();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const volver = (
+    <Button variant="ghost" size="sm" asChild className="mb-2 -ml-2 w-fit">
+      <Link to={`/maquina/agentes${proceso ? `?proceso=${proceso}` : ""}`}>
+        <ArrowLeft className="mr-1 h-4 w-4" aria-hidden="true" />
+        Agentes
+      </Link>
+    </Button>
+  );
+
+  if (cola.isError) {
+    return (
+      <div className="space-y-4 p-4">
+        {volver}
+        <BloqueError
+          titulo="No se pudo leer la cola"
+          mensaje={mensajeError(cola.error)}
+          onReintentar={() => void cola.refetch()}
+          cargando={cola.isFetching}
+        />
+      </div>
+    );
+  }
+  if (cola.isPending) {
+    return (
+      <div className="space-y-4 p-4">
+        {volver}
+        <Skeleton className="h-24 w-full rounded-xl" />
+        <Skeleton className="h-48 w-full rounded-xl" />
+      </div>
+    );
+  }
+
+  const snap = cola.data;
+  const enCurso = proceso ? snap.en_curso.filter((j) => j.proceso === proceso) : snap.en_curso;
+  const esperando = proceso ? snap.esperando.filter((j) => j.proceso === proceso) : snap.esperando;
+
+  return (
+    <div className="space-y-4 p-4">
+      {volver}
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-lg font-semibold">Cómputo y cola</h1>
+        <div className="flex items-center gap-1">
+          <Button variant="outline" size="sm" onClick={refrescar} disabled={cola.isFetching}>
+            <RefreshCw className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+            Actualizar
+          </Button>
+          {esAdmin && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              disabled={purgar.isPending}
+              onClick={async () => {
+                if (
+                  await confirmar({
+                    titulo: "Liberar la cola",
+                    mensaje:
+                      "¿Liberar la cola? Cancela todo lo que esté en vuelo (en curso + esperando) y libera la capacidad.",
+                    destructivo: true,
+                    textoConfirmar: "Liberar",
+                  })
+                ) {
+                  purgar.mutate();
+                }
+              }}
+            >
+              <Trash2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+              Purgar cola
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Enfoque a un motor (?proceso=). */}
+      {proceso && (
+        <p className="text-sm text-muted-foreground">
+          Enfocado a{" "}
+          <strong className={PROC_META[proceso].texto}>{PROC_META[proceso].etiqueta}</strong>.{" "}
+          <Link to="/maquina/computo" className="underline-offset-2 hover:underline">
+            Ver ambos motores
+          </Link>
+        </p>
+      )}
+
+      {/* Explicación en lenguaje llano. */}
+      <Card>
+        <CardContent className="space-y-1.5 p-4 text-sm text-muted-foreground">
+          <p>
+            Los <strong className="text-foreground">slots</strong> son cuántos trabajos de IA
+            (<code>claude -p</code>) corren a la vez: es el único límite real de la máquina.
+          </p>
+          <p>
+            La <strong className="text-foreground">cola</strong> es lo que espera a que se libere
+            un slot. No tiene tope: todo lo que encoles entra y se irá despachando.
+          </p>
+          <p>
+            Tú decides el orden:{" "}
+            <strong className="text-foreground">prioriza</strong> lo que deba salir antes, cancela
+            lo que sobre y purga la cola si quieres empezar de cero.
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Presupuesto + parada de emergencia (globales). */}
+      {snap.presupuesto && (
+        <PanelPresupuesto
+          presupuesto={snap.presupuesto}
+          resHoy={resultadoDelDia(serie.data, snap.presupuesto.dia)}
+          esAdmin={esAdmin}
+        />
+      )}
+
+      {/* Estado en vivo. */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+        <Kpi
+          icono={Cpu}
+          titulo="En curso"
+          valor={`${snap.procesando} / ${snap.capacidad.max_jobs}`}
+          subtitulo="trabajos IA corriendo (slots de cómputo)"
+          tono={snap.procesando >= snap.capacidad.max_jobs ? "alerta" : undefined}
+        />
+        <Kpi
+          icono={Clock}
+          titulo="En cola"
+          valor={snap.conteo.pendientes}
+          subtitulo="esperando un slot"
+          tono={snap.conteo.pendientes > 0 ? "espera" : undefined}
+        />
+        <Kpi
+          icono={Users}
+          titulo="Workers activos"
+          valor={snap.workers_activos.length}
+          subtitulo="procesos que reclaman trabajos"
+          tono={snap.workers_activos.length > 0 ? "ok" : undefined}
+        />
+      </div>
+
+      {marcaActiva && (
+        <p className="text-xs text-muted-foreground">
+          Los slots son globales (no se filtran por {nombreActiva ?? marcaActiva}); las listas de
+          abajo sí se acotan a esa marca.
+        </p>
+      )}
+
+      {/* La cola por dentro. */}
+      <ColaCard
+        titulo="En curso"
+        icono={Activity}
+        jobs={enCurso}
+        vacio="Ningún claude -p corriendo ahora."
+      >
+        <TablaJobs
+          jobs={enCurso}
+          mostrarWorker
+          esAdmin={esAdmin}
+          onCancelar={(id) => cancelar.mutate(id)}
+          cancelandoId={cancelandoId}
+          onReintentar={(id) => reintentar.mutate(id)}
+          reintentandoId={reintentandoId}
+        />
+      </ColaCard>
+
+      <ColaCard
+        titulo="Esperando"
+        icono={Clock}
+        jobs={esperando}
+        vacio="Nada esperando un slot ahora mismo."
+        borde={esperando.length > 0 ? "border-amber-500/30" : undefined}
+      >
+        <TablaJobs
+          jobs={esperando}
+          mostrarWorker={false}
+          esAdmin={esAdmin}
+          onCancelar={(id) => cancelar.mutate(id)}
+          cancelandoId={cancelandoId}
+          onPriorizar={(id) => priorizar.mutate(id)}
+          priorizandoId={priorizandoId}
+          onReintentar={(id) => reintentar.mutate(id)}
+          reintentandoId={reintentandoId}
+        />
+      </ColaCard>
+    </div>
+  );
+}

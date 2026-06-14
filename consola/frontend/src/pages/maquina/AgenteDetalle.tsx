@@ -78,7 +78,6 @@ const ETIQUETA_CLASE: Record<ClaseDaemon, string> = {
 const ETIQUETA_DAEMON: Record<string, string> = {
   investigacion: "Investigación",
   produccion: "Producción",
-  sugerencias: "Sugerencias editoriales",
   ingesta: "Ingesta de noticias",
   trends: "Tendencias",
   algoritmos: "Algoritmos de plataforma",
@@ -102,7 +101,6 @@ const PROMPTS_POR_DAEMON: Record<string, { etiqueta: string; doc: string }[]> = 
     { etiqueta: "Copy", doc: "prompt/copy" },
     { etiqueta: "Arte", doc: "prompt/arte" },
   ],
-  sugerencias: [{ etiqueta: "Sugerencias editoriales", doc: "prompt/sugerencias" }],
 };
 
 function nombreLegible(daemon: string): string {

@@ -102,7 +102,6 @@ const DAEMONS = {
   daemons: [
     daemon({ daemon: "investigacion", clase: "ia", motor: "investigacion", barrible: true, clave_gate: "KENI_MAQUINA" }),
     daemon({ daemon: "produccion", clase: "ia", motor: "produccion", clave_gate: "KENI_MAQUINA" }),
-    daemon({ daemon: "sugerencias", clase: "ia", motor: "produccion", clave_gate: "KENI_SUGERENCIAS_EDITORIALES" }),
     daemon({ daemon: "ingesta", clase: "maquina", motor: "investigacion", barrible: true, clave_gate: "KENI_PIPELINE_SELECCION" }),
     daemon({ daemon: "programador", clase: "maquina", motor: "produccion", clave_gate: null }),
     daemon({ daemon: "reaper", clase: "sistema", motor: null, clave_gate: null }),
@@ -175,9 +174,9 @@ describe("Agentes (dos columnas por motor)", () => {
   it("monta la banda global + las dos columnas por motor (editor no ve agentes IA ni servicios)", async () => {
     stubFetch(snapshot([job({})]));
     renderConProviders(<Agentes />);
-    // Banda global: presupuesto/parada de emergencia + capacidad del pool.
+    // Banda global: presupuesto/parada de emergencia + KPIs de cómputo + enlace a la cola.
     expect(await screen.findByText("Presupuesto y parada de emergencia")).toBeInTheDocument();
-    expect(screen.getByText("Pool compartido")).toBeInTheDocument();
+    expect(screen.getByText("Ver cola y cómputo")).toBeInTheDocument();
     // Columnas por motor: Workers + economía de cada motor.
     expect(screen.getAllByText("Workers (reactivos)").length).toBe(2);
     expect(screen.getByText("Economía (tokens) de Investigación")).toBeInTheDocument();
@@ -193,9 +192,8 @@ describe("Agentes (dos columnas por motor)", () => {
     sesionStub.usuario = { id: "u1", rol: "admin" };
     stubFetch(snapshot([job({})]));
     renderConProviders(<Agentes />);
-    // Tarjeta del agente IA de cada motor, con su toggle on/off in-place (clave_gate).
-    expect(await screen.findByText("Sugerencias editoriales")).toBeInTheDocument();
-    expect(screen.getAllByText("Agentes IA (proactivos)").length).toBe(2);
+    // Tarjeta del agente IA de cada motor (bloque por motor), con su toggle on/off in-place.
+    expect(await screen.findAllByText("Agentes IA (proactivos)")).toHaveLength(2);
     expect(
       screen.getByRole("switch", { name: /Encender\/apagar el agente investigacion/i }),
     ).toBeInTheDocument();
