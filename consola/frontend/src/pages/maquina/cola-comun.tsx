@@ -115,7 +115,6 @@ export function TablaJobs({
                   <Badge
                     variant="secondary"
                     className="border border-sky-500/30 bg-sky-500/10 text-[10px] text-sky-600"
-                    title={`Prioridad ${j.prioridad}: adelanta en la cola al lote de fondo.`}
                   >
                     prioritario
                   </Badge>
@@ -242,7 +241,6 @@ export function PanelPresupuesto({
             Presupuesto y parada de emergencia
           </CardTitle>
           <ChipNivelPresupuesto nivel={presupuesto.nivel} />
-          <span className="text-xs text-muted-foreground">· global, compartido por ambos motores</span>
         </div>
       </CardHeader>
       <CardContent className="flex flex-wrap items-center justify-between gap-4 p-4 pt-2">
@@ -302,10 +300,6 @@ export function PanelPresupuesto({
                 aria-label="Parada de emergencia: corta toda la generación con IA, incluida la manual"
               />
             </label>
-            <p className="max-w-[26ch] text-[11px] leading-snug text-muted-foreground">
-              Corta TODA la generación con IA, incluida la manual; lo que corre termina y lo
-              encolado espera.
-            </p>
           </div>
         )}
       </CardContent>

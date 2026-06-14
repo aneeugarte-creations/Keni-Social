@@ -74,7 +74,7 @@ const ETAPAS: {
     descripcion: "Recolecta, deduplica, clasifica y rankea noticias para el pool.",
     excepciones: {
       base: "KENI_INVESTIGACION",
-      nota: "La excepción es por PROCESO: apagar «Investigación» en una marca apaga Selección y Validación a la vez para esa marca.",
+      nota: "Apaga Selección y Validación juntas.",
     },
   },
   {
@@ -85,7 +85,7 @@ const ETAPAS: {
     descripcion: "Criba/QA de la fuente antes de escribir copy.",
     excepciones: {
       base: "KENI_INVESTIGACION",
-      nota: "La excepción es por PROCESO: apagar «Investigación» en una marca apaga Selección y Validación a la vez para esa marca.",
+      nota: "Apaga Selección y Validación juntas.",
     },
   },
   {
@@ -267,10 +267,7 @@ export function PipelineEnVivo({
               auto-producción. Apagado, ninguna etapa corre en automático aunque sus
               switches estén encendidos (lo manual no depende de él). */}
           {maquina && (
-            <label
-              className="flex items-center gap-2 text-sm"
-              title="Interruptor general de toda la auto-producción. Apagado, ninguna etapa corre en automático."
-            >
+            <label className="flex items-center gap-2 text-sm">
               <span className={cn(maquinaOn ? "text-muted-foreground" : "text-destructive")}>
                 Máquina
                 <span className="ml-1.5 text-xs">{maquinaOn ? "· encendida" : "· apagada"}</span>

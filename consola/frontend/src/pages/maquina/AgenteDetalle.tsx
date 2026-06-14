@@ -61,13 +61,6 @@ const ETIQUETA_ESTADO: Record<EstadoDaemon, string> = {
   inactivo: "Apagado por ajuste",
   atrasado: "Atrasado",
 };
-const TITULO_ESTADO: Record<EstadoDaemon, string> = {
-  ok: "Barrió dentro de su intervalo.",
-  error: "Su último barrido falló.",
-  inactivo: "Su gate de ajuste está apagado: no barre.",
-  atrasado: "Lleva más de su intervalo sin barrer.",
-};
-
 const ETIQUETA_CLASE: Record<ClaseDaemon, string> = {
   ia: "IA",
   maquina: "Máquina",
@@ -120,7 +113,6 @@ function ChipEstado({ estado }: { estado: EstadoDaemon }) {
   return (
     <Badge
       variant="outline"
-      title={TITULO_ESTADO[estado]}
       className={cn(
         "border-transparent",
         estado === "ok" && "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
@@ -235,12 +227,7 @@ function Controles({ latido }: { latido: LatidoDaemon }) {
                   aria-label={`Encender/apagar el daemon ${latido.daemon}`}
                 />
               ) : (
-                <span
-                  className="text-xs text-muted-foreground"
-                  title="Sin interruptor: este daemon corre siempre (no tiene gate de ajuste)."
-                >
-                  Siempre activo
-                </span>
+                <span className="text-xs text-muted-foreground">Siempre activo</span>
               )}
             </div>
           </div>
@@ -282,9 +269,7 @@ function LogBarridos({ daemon }: { daemon: string }) {
             cargando={query.isFetching}
           />
         ) : query.data.barridos.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Aún no hay barridos registrados (proceso sin iniciar o recién desplegado).
-          </p>
+          <p className="text-sm text-muted-foreground">Sin barridos</p>
         ) : (
           <Table>
             <TableHeader>
@@ -383,16 +368,10 @@ function Analizar({ latido }: { latido: LatidoDaemon }) {
             <Badge
               variant="outline"
               className="border-transparent bg-amber-500/15 text-amber-600 dark:text-amber-400"
-              title="Este agente encola/ejecuta claude -p: consume del presupuesto de tokens."
             >
               <Coins className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
               gasta tokens
             </Badge>
-          )}
-          {latido.motor && (
-            <span className="text-xs text-muted-foreground">
-              Click para ver actividad del proceso
-            </span>
           )}
           {latido.error_txt && (
             <p className="w-full text-xs text-red-600 dark:text-red-400">
@@ -487,7 +466,6 @@ export default function AgenteDetalle() {
               <Badge
                 variant="outline"
                 className="border-transparent bg-sky-500/15 text-sky-600 dark:text-sky-400"
-                title="El daemon barrerá en su siguiente tick (≤ ~1 min)."
               >
                 Barrido solicitado
               </Badge>

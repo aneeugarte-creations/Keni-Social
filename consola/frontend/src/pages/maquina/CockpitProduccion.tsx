@@ -155,7 +155,6 @@ export default function CockpitProduccion() {
           className="p-5"
         >
           <p className="text-base font-medium">Arte</p>
-          <p className="text-xs text-muted-foreground">Tiene coste.</p>
         </TarjetaAccion>
       </div>
 

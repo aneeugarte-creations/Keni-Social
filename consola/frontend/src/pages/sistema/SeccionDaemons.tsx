@@ -43,21 +43,12 @@ const ETIQUETA_ESTADO: Record<EstadoDaemon, string> = {
   atrasado: "Atrasado",
 };
 
-// Leyenda concisa de la jerga de estado (tooltip), para no obligar a saberla de memoria.
-const TITULO_ESTADO: Record<EstadoDaemon, string> = {
-  ok: "Barrió dentro de su intervalo.",
-  error: "Su último barrido falló.",
-  inactivo: "Su gate de ajuste está apagado: no barre.",
-  atrasado: "Lleva más de su intervalo sin barrer.",
-};
-
 /** Chip de estado de daemon con color semántico (verde/rojo/gris/ámbar). Exportado para que
  *  las tarjetas de agente IA de la página Agentes pinten el mismo estado con el mismo color. */
 export function ChipEstadoDaemon({ estado }: { estado: EstadoDaemon }) {
   return (
     <Badge
       variant="outline"
-      title={TITULO_ESTADO[estado]}
       className={cn(
         "border-transparent",
         estado === "ok" && "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
@@ -130,7 +121,6 @@ function FilaDaemon({
             <Badge
               variant="outline"
               className="border-transparent bg-sky-500/15 text-sky-600 dark:text-sky-400"
-              title="El daemon barrerá en su siguiente tick (≤ ~1 min)."
             >
               Barrido solicitado
             </Badge>
@@ -169,12 +159,7 @@ function FilaDaemon({
             aria-label={`Encender/apagar el daemon ${latido.daemon}`}
           />
         ) : (
-          <span
-            className="text-xs text-muted-foreground"
-            title="Sin interruptor: este daemon corre siempre (no tiene gate de ajuste)."
-          >
-            Siempre activo
-          </span>
+          <span className="text-xs text-muted-foreground">Siempre activo</span>
         )}
       </TableCell>
     </FilaConAcciones>
@@ -338,9 +323,7 @@ export function SeccionDaemons({
         {error ? (
           <p className="text-sm text-muted-foreground">{error}</p>
         ) : ordenados.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No hay latidos registrados aún (proceso sin iniciar o recién desplegado).
-          </p>
+          <p className="text-sm text-muted-foreground">Sin latidos</p>
         ) : (
           <TablaDaemons
             filas={ordenados}

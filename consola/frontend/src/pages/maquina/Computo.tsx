@@ -1,9 +1,8 @@
 /**
  * Página CÓMPUTO Y COLA (`/maquina/computo`): la cola de generación POR DENTRO, al mismo nivel
- * que las páginas de detalle de agente. Explica en lenguaje llano qué son los slots (cuántos
- * `claude -p` corren a la vez) y la cola (lo que espera un slot, SIN tope), enseña el estado en
- * vivo (en curso / en cola / workers + presupuesto y parada de emergencia) y deja al humano
- * PRIORIZAR, cancelar, reintentar y purgar la cola in-place. `?proceso=` enfoca a un motor.
+ * que las páginas de detalle de agente. Enseña el estado en vivo (en curso / en cola / workers +
+ * presupuesto y parada de emergencia) y deja al humano PRIORIZAR, cancelar, reintentar y purgar
+ * la cola in-place. `?proceso=` enfoca a un motor.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, ArrowLeft, Clock, Cpu, RefreshCw, Trash2, Users } from "lucide-react";
@@ -62,7 +61,7 @@ function ColaCard({
 export default function Computo() {
   const { usuario } = useSesion();
   const esAdmin = usuario?.rol === "admin";
-  const { marcaActiva, nombreActiva } = useMarcaActiva();
+  const { marcaActiva } = useMarcaActiva();
   const [searchParams] = useSearchParams();
   const crudoProceso = searchParams.get("proceso");
   const proceso: Proceso | undefined =
@@ -211,25 +210,6 @@ export default function Computo() {
         </p>
       )}
 
-      {/* Explicación en lenguaje llano. */}
-      <Card>
-        <CardContent className="space-y-1.5 p-4 text-sm text-muted-foreground">
-          <p>
-            Los <strong className="text-foreground">slots</strong> son cuántos trabajos de IA
-            (<code>claude -p</code>) corren a la vez: es el único límite real de la máquina.
-          </p>
-          <p>
-            La <strong className="text-foreground">cola</strong> es lo que espera a que se libere
-            un slot. No tiene tope: todo lo que encoles entra y se irá despachando.
-          </p>
-          <p>
-            Tú decides el orden:{" "}
-            <strong className="text-foreground">prioriza</strong> lo que deba salir antes, cancela
-            lo que sobre y purga la cola si quieres empezar de cero.
-          </p>
-        </CardContent>
-      </Card>
-
       {/* Presupuesto + parada de emergencia (globales). */}
       {snap.presupuesto && (
         <PanelPresupuesto
@@ -245,39 +225,24 @@ export default function Computo() {
           icono={Cpu}
           titulo="En curso"
           valor={`${snap.procesando} / ${snap.capacidad.max_jobs}`}
-          subtitulo="trabajos IA corriendo (slots de cómputo)"
           tono={snap.procesando >= snap.capacidad.max_jobs ? "alerta" : undefined}
         />
         <Kpi
           icono={Clock}
           titulo="En cola"
           valor={snap.conteo.pendientes}
-          subtitulo="esperando un slot"
           tono={snap.conteo.pendientes > 0 ? "espera" : undefined}
         />
         <Kpi
           icono={Users}
           titulo="Workers activos"
           valor={snap.workers_activos.length}
-          subtitulo="procesos que reclaman trabajos"
           tono={snap.workers_activos.length > 0 ? "ok" : undefined}
         />
       </div>
 
-      {marcaActiva && (
-        <p className="text-xs text-muted-foreground">
-          Los slots son globales (no se filtran por {nombreActiva ?? marcaActiva}); las listas de
-          abajo sí se acotan a esa marca.
-        </p>
-      )}
-
       {/* La cola por dentro. */}
-      <ColaCard
-        titulo="En curso"
-        icono={Activity}
-        jobs={enCurso}
-        vacio="Ningún claude -p corriendo ahora."
-      >
+      <ColaCard titulo="En curso" icono={Activity} jobs={enCurso} vacio="—">
         <TablaJobs
           jobs={enCurso}
           mostrarWorker
@@ -293,7 +258,7 @@ export default function Computo() {
         titulo="Esperando"
         icono={Clock}
         jobs={esperando}
-        vacio="Nada esperando un slot ahora mismo."
+        vacio="—"
         borde={esperando.length > 0 ? "border-amber-500/30" : undefined}
       >
         <TablaJobs

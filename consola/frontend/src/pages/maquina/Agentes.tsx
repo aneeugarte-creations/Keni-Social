@@ -59,30 +59,17 @@ import type {
 /** Los dos motores de la máquina (ADR 0011), en orden de flujo. */
 const MOTORES: Proceso[] = ["investigacion", "produccion"];
 
-/** Agente(s) IA (clase=ia) de cada motor: etiqueta humana + subtítulo. El on/off, estado y
- *  barrido vienen del latido del daemon (campo `clase`/`motor`); el resto del control (editar
- *  prompt, barrer, log) vive en la página de detalle del agente (`/maquina/agentes/{daemon}`),
- *  a la que la tarjeta enlaza entera. */
+/** Agente(s) IA (clase=ia) de cada motor: etiqueta humana. El on/off, estado y barrido vienen del
+ *  latido del daemon (campo `clase`/`motor`); el resto del control (editar prompt, barrer, log)
+ *  vive en la página de detalle del agente (`/maquina/agentes/{daemon}`), a la que la tarjeta
+ *  enlaza entera. */
 type AgenteMeta = {
   daemon: string;
   etiqueta: string;
-  sub: string;
 };
 const AGENTES_IA: Record<Proceso, AgenteMeta[]> = {
-  investigacion: [
-    {
-      daemon: "investigacion",
-      etiqueta: "Investigación",
-      sub: "Criba y verifica las fuentes que alimentan el motor de reutilizar.",
-    },
-  ],
-  produccion: [
-    {
-      daemon: "produccion",
-      etiqueta: "Producción",
-      sub: "Redacta el copy y genera el arte de los borradores.",
-    },
-  ],
+  investigacion: [{ daemon: "investigacion", etiqueta: "Investigación" }],
+  produccion: [{ daemon: "produccion", etiqueta: "Producción" }],
 };
 
 /** Mini-tabla de desglose por TIPO de trabajo (de un motor). */
@@ -224,7 +211,6 @@ function TarjetaAgenteIA({
                   IA
                 </Badge>
               </CardTitle>
-              <p className="mt-0.5 text-xs text-muted-foreground">{meta.sub}</p>
             </div>
             {/* Toggle on/off IN-PLACE (clave_gate); no debe navegar al detalle al clicarlo. */}
             <div onClick={noNavegar} onKeyDown={noNavegar}>
@@ -236,9 +222,7 @@ function TarjetaAgenteIA({
                   aria-label={`Encender/apagar el agente ${meta.daemon}`}
                 />
               ) : (
-                <span className="text-xs text-muted-foreground" title="Sin interruptor: corre siempre.">
-                  Siempre activo
-                </span>
+                <span className="text-xs text-muted-foreground">Siempre activo</span>
               )}
             </div>
           </div>
@@ -248,7 +232,6 @@ function TarjetaAgenteIA({
               <Badge
                 variant="outline"
                 className="border-transparent bg-sky-500/15 text-sky-600 dark:text-sky-400"
-                title="El agente barrerá en su siguiente tick (≤ ~1 min)."
               >
                 Barrido solicitado
               </Badge>
@@ -285,9 +268,7 @@ function AgentesIaMotor({
         Agentes IA (proactivos)
       </h3>
       {tarjetas.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No hay latidos del agente aún (proceso sin iniciar o recién desplegado).
-        </p>
+        <p className="text-sm text-muted-foreground">Sin latidos</p>
       ) : (
         tarjetas.map(({ meta, latido }) => (
           <TarjetaAgenteIA
@@ -331,23 +312,17 @@ function WorkersMotor({
       <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         Workers (reactivos)
       </h3>
-      <p className="text-xs text-muted-foreground">
-        El pool de cómputo es compartido (capacidad arriba); esto es la parte de{" "}
-        {PROC_META[motor].etiqueta}.
-      </p>
       <div className="grid grid-cols-2 gap-3">
         <Kpi
           icono={Cpu}
           titulo="En curso"
           valor={pp.procesando}
-          subtitulo="claude -p de este motor"
           tono={pp.procesando > 0 ? "ok" : undefined}
         />
         <Kpi
           icono={Clock}
           titulo="En cola"
           valor={pp.pendientes}
-          subtitulo="esperando slot"
           tono={pp.pendientes > 0 ? "espera" : undefined}
         />
       </div>
@@ -360,9 +335,7 @@ function WorkersMotor({
         </CardHeader>
         <CardContent className="p-0">
           {enCurso.length === 0 ? (
-            <p className="p-4 pt-0 text-sm text-muted-foreground">
-              Ningún <code>claude -p</code> de {PROC_META[motor].etiqueta} corriendo ahora.
-            </p>
+            <p className="p-4 pt-0 text-sm text-muted-foreground">—</p>
           ) : (
             <TablaJobs
               jobs={enCurso}
@@ -544,7 +517,6 @@ function ColumnaMotor({
             clases={["maquina"]}
             motor={motor}
             titulo="Servicios (no consumen IA)"
-            descripcion={`Alimentan/operan el motor de ${meta.etiqueta} sin modelo (feeds, scheduler, GC).`}
           />
         </div>
       )}
@@ -578,7 +550,7 @@ export default function Agentes() {
   const qc = useQueryClient();
   // Respeta el switch GLOBAL de marca: las listas de jobs y la economía se acotan a la marca
   // activa (null = "Todas", solo admin). La capacidad del pool y el presupuesto son globales.
-  const { marcaActiva, nombreActiva } = useMarcaActiva();
+  const { marcaActiva } = useMarcaActiva();
   const [cancelandoId, setCancelandoId] = React.useState<string | null>(null);
   const [priorizandoId, setPriorizandoId] = React.useState<string | null>(null);
 
@@ -749,12 +721,7 @@ export default function Agentes() {
             {/* Cómputo de la máquina: el ÚNICO límite real son los slots (concurrencia de
                 `claude -p`); la cola que espera un slot no tiene tope. Detalle y control de la
                 cola por dentro, en «Cómputo y cola». */}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs text-muted-foreground">
-                {marcaActiva
-                  ? `Los slots de cómputo son globales (no se filtran por ${nombreActiva ?? marcaActiva}); las listas de trabajos de cada motor sí.`
-                  : "Los slots son la concurrencia de la máquina; la cola que espera un slot no tiene tope."}
-              </p>
+            <div className="flex flex-wrap items-center justify-end gap-2">
               <Button asChild variant="outline" size="sm">
                 <Link to={`/maquina/computo${proceso ? `?proceso=${proceso}` : ""}`}>
                   <ListTree className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
@@ -767,14 +734,12 @@ export default function Agentes() {
                 icono={Cpu}
                 titulo="En curso"
                 valor={`${cola.data.procesando} / ${cola.data.capacidad.max_jobs}`}
-                subtitulo="trabajos IA corriendo (slots de cómputo)"
                 tono={cola.data.procesando >= cola.data.capacidad.max_jobs ? "alerta" : undefined}
               />
               <Kpi
                 icono={Clock}
                 titulo="En cola"
                 valor={cola.data.conteo.pendientes}
-                subtitulo="esperando un slot"
                 tono={cola.data.conteo.pendientes > 0 ? "espera" : undefined}
               />
             </div>
@@ -814,10 +779,7 @@ export default function Agentes() {
 
       {/* ===== ACTIVIDAD (feed cross-motor, plegado al final) ===== */}
       <div className="mt-8">
-        <SeccionColapsable
-          titulo="Actividad"
-          descripcion="El historial de ejecución cross-motor: runs del pipeline y actividad suelta de IA."
-        >
+        <SeccionColapsable titulo="Actividad">
           <Produccion embebido />
         </SeccionColapsable>
       </div>

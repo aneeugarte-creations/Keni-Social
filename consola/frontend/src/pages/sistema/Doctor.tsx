@@ -95,9 +95,6 @@ function TemasBloqueados({ marca }: { marca?: string }) {
       >
         <OctagonX className="h-4 w-4 shrink-0 text-red-500" aria-hidden="true" />
         <span className="font-medium">Temas bloqueados ({total})</span>
-        <span className="hidden text-xs text-muted-foreground sm:inline">
-          · fuera del flujo hasta que alguien decida
-        </span>
         <Flecha className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
       </button>
       {abierto && (

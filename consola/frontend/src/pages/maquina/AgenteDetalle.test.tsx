@@ -111,7 +111,7 @@ describe("AgenteDetalle", () => {
   it("muestra el estado vacío cuando no hay barridos", async () => {
     stubFetch({ daemons: [latido({})], barridos: [] });
     renderEn("investigacion");
-    expect(await screen.findByText(/Aún no hay barridos registrados/)).toBeInTheDocument();
+    expect(await screen.findByText("Sin barridos")).toBeInTheDocument();
   });
 
   it("avisa cuando el agente no existe en la lista", async () => {

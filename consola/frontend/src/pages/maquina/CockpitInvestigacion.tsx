@@ -150,13 +150,6 @@ export default function CockpitInvestigacion() {
         {/* PROCESO · PIPELINE (núcleo): UN proceso en dos tramos —aguas arriba (informativo) y
             control (Selección/Validación)— más el índice editable de prompts. */}
         <TabsContent value="pipeline" className="space-y-6">
-          <p className="text-sm text-muted-foreground">
-            Un solo proceso en dos tramos: <strong className="font-medium text-foreground">aguas
-            arriba</strong> la máquina descubre, agrupa y ordena sola; en el{" "}
-            <strong className="font-medium text-foreground">control</strong> tú decides qué pasa
-            por Selección y Validación.
-          </p>
-
           {/* Tramo 1 · aguas arriba (automático, informativo). */}
           <RielInvestigacion />
 
@@ -165,10 +158,6 @@ export default function CockpitInvestigacion() {
             <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Control · tú decides
             </h3>
-            <p className="text-xs text-muted-foreground">
-              Selección: qué entra al pool. Validación: el embudo de control de calidad que
-              contrasta fuentes antes de la mesa.
-            </p>
             {cola.isPending ? (
               <Skeleton className="h-40 w-full rounded-xl" />
             ) : cola.data ? (
