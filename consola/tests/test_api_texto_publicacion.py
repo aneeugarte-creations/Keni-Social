@@ -314,8 +314,9 @@ def test_variables_catalogo(entorno_sin_pg):
     assert vs, "el catálogo no puede estar vacío"
     assert all({"nombre", "descripcion", "ejemplo", "origen"} <= set(v) for v in vs)
     nombres = {v["nombre"] for v in vs}
-    # Variables REALES del código (perfil editorial, fusión, traducción, sugerencias, importadores).
-    assert {"MARCA", "MAX_KEYWORDS", "EDITORIAL", "HISTORIAS", "ITEMS", "PLATAFORMA", "RUTA"} <= nombres
+    # Variables REALES del código (perfil editorial, fusión, traducción, importadores).
+    # (PLATAFORMA se retiró al borrar el agente de sugerencias editoriales.)
+    assert {"MARCA", "MAX_KEYWORDS", "EDITORIAL", "HISTORIAS", "ITEMS", "RUTA"} <= nombres
 
 
 def test_maquina_tres_maquinas(entorno_sin_pg):
