@@ -233,6 +233,11 @@ def registrar_cierre(registro: dict[str, Any]) -> None:
         cache_creation = int(metricas.get("cache_creation") or 0)
     except (TypeError, ValueError):
         cache_read = cache_creation = 0
+    # Proceso de la maquina (ADR 0011): prefiere el sellado del registro y, si falta, lo deduce
+    # de tipo/etiqueta (`proceso_de`). Asi el ledger separa el gasto de investigacion vs produccion.
+    from .generaciones import proceso_de
+
+    proceso = proceso_de(registro)
     try:
         repos.registrar_gasto_ia(
             gen_id,
@@ -246,6 +251,7 @@ def registrar_cierre(registro: dict[str, Any]) -> None:
             cache_read=cache_read,
             cache_creation=cache_creation,
             modelo=modelo,
+            proceso=proceso,
         )
     except Exception:  # noqa: BLE001 -- el ledger nunca debe romper el cierre de un job
         _log.warning("presupuesto_ia: fallo al registrar el gasto de %s", gen_id, exc_info=True)

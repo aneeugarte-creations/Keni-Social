@@ -476,6 +476,7 @@ def registrar_gasto_ia(
     cache_read: int = 0,
     cache_creation: int = 0,
     modelo: str = "",
+    proceso: str = "produccion",
 ) -> None:
     """UPSERT del gasto de UNA generacion cerrada (idempotente por `gen_id`).
 
@@ -485,6 +486,9 @@ def registrar_gasto_ia(
     `cache_read`/`cache_creation` (prompt caching): tokens de cache leidos / creados, para medir
     si el caching ocurre y el ahorro (run sin caching => 0; no rompe agregados viejos).
     `modelo`: id del modelo que gasto (para el coste medio por imagen POR MODELO).
+    `proceso` (ADR 0011): 'investigacion' | 'produccion', el loop de la maquina que gasto;
+    lo conoce el llamante (`presupuesto_ia.registrar_cierre` via `generaciones.proceso_de`).
+    Default 'produccion' (la maquina de contenido) para llamantes que aun no lo pasan.
     """
     if not gen_id:
         return
@@ -493,16 +497,18 @@ def registrar_gasto_ia(
     try:
         con.execute(
             "INSERT INTO gasto_ia (gen_id, dia, tipo, marca, tokens_in, tokens_out, "
-            "coste_usd, prompt_chars, cache_read, cache_creation, modelo, actualizado) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "coste_usd, prompt_chars, cache_read, cache_creation, modelo, proceso, actualizado) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT (gen_id) DO UPDATE SET "
             "dia = EXCLUDED.dia, tipo = EXCLUDED.tipo, marca = EXCLUDED.marca, "
             "tokens_in = EXCLUDED.tokens_in, tokens_out = EXCLUDED.tokens_out, "
             "coste_usd = EXCLUDED.coste_usd, prompt_chars = EXCLUDED.prompt_chars, "
             "cache_read = EXCLUDED.cache_read, cache_creation = EXCLUDED.cache_creation, "
-            "modelo = EXCLUDED.modelo, actualizado = EXCLUDED.actualizado",
+            "modelo = EXCLUDED.modelo, proceso = EXCLUDED.proceso, "
+            "actualizado = EXCLUDED.actualizado",
             (gen_id, dia, tipo, marca, int(tokens_in), int(tokens_out), float(coste_usd),
-             int(prompt_chars), int(cache_read), int(cache_creation), str(modelo or ""), ahora),
+             int(prompt_chars), int(cache_read), int(cache_creation), str(modelo or ""),
+             str(proceso or "produccion"), ahora),
         )
         con.commit()
     finally:

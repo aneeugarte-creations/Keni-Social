@@ -854,6 +854,26 @@ def _backfill_pesos_fuente(con: Any) -> None:
         (fuentes_pesos.PESO_POTENTE,),
     )
 
+
+def _backfill_gasto_ia_proceso(con: Any) -> None:
+    """Backfill ONE-SHOT de `gasto_ia.proceso` desde el indice de generaciones (idempotente).
+
+    La columna nace con DEFAULT 'produccion' (todas las filas existentes => produccion al
+    instante). Este backfill REFINA las de INVESTIGACION cruzando por `gen_id` con
+    `generaciones_indice.proceso` (que sella/deduce `proceso_de` al indexar). Las filas sin
+    match en el indice (o sin proceso valido) se quedan en 'produccion' (la maquina de
+    contenido, default deliberado). Idempotente: solo toca filas cuyo proceso difiere del
+    indice; correr dos veces no cambia nada.
+    """
+    if not _tabla_existe(con, "gasto_ia") or not _tabla_existe(con, "generaciones_indice"):
+        return
+    con.execute(
+        "UPDATE gasto_ia g SET proceso = gi.proceso FROM generaciones_indice gi "
+        "WHERE g.gen_id = gi.gen_id AND gi.proceso IN ('investigacion', 'produccion') "
+        "AND g.proceso <> gi.proceso"
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Normalizacion de TIMESTAMPS TEXT al canon UTC-sin-offset (ver `tiempo.py`)    #
 # --------------------------------------------------------------------------- #

@@ -98,6 +98,53 @@ def test_hook_error_tambien_registra(entorno):
     assert repos.gasto_ia_del_dia(_hoy())["tokens"] == 300
 
 
+# --------------------------------------------------------------------------- #
+# gasto_ia.proceso: relleno en vivo (ADR 0011)                                  #
+# --------------------------------------------------------------------------- #
+
+
+def _proceso_de_gasto(gen_id: str) -> str | None:
+    """Lee la columna `proceso` de la fila del ledger (sin reader publico)."""
+    from keni_consola._db_comun import _conectar
+
+    con = _conectar()
+    try:
+        fila = con.execute(
+            "SELECT proceso FROM gasto_ia WHERE gen_id = ?", (gen_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return fila["proceso"] if fila else None
+
+
+def test_ledger_proceso_default_produccion(entorno):
+    # Sin pasar proceso, el ledger lo asume 'produccion' (la maquina de contenido).
+    repos.registrar_gasto_ia("g1", dia=_hoy(), tokens_in=10, tokens_out=5)
+    assert _proceso_de_gasto("g1") == "produccion"
+
+
+def test_ledger_proceso_explicito(entorno):
+    repos.registrar_gasto_ia(
+        "g2", dia=_hoy(), tokens_in=10, tokens_out=5, proceso="investigacion"
+    )
+    assert _proceso_de_gasto("g2") == "investigacion"
+
+
+def test_hook_cierre_sella_proceso_investigacion(entorno):
+    # Una criba/validacion de fuente (tipo pipeline + etiqueta "Validación · …") -> investigacion.
+    gen_id = generaciones.crear(
+        {"tipo": "pipeline", "marca": _MARCA, "etiqueta": "Validación · fuente"}
+    )["id"]
+    _cerrar(gen_id, tokens_in=100, tokens_out=50, coste=0.1)
+    assert _proceso_de_gasto(gen_id) == "investigacion"
+
+
+def test_hook_cierre_sella_proceso_produccion(entorno):
+    gen_id = _gen(tipo="copy")
+    _cerrar(gen_id, tokens_in=100, tokens_out=50, coste=0.1)
+    assert _proceso_de_gasto(gen_id) == "produccion"
+
+
 def test_hook_sin_consumo_no_deja_fila(entorno):
     """Un terminal sin metricas de tokens (imagen/proceso/fallo temprano) no ensucia el ledger."""
     gen_id = _gen(tipo="imagen")

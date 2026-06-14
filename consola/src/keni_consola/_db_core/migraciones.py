@@ -36,6 +36,7 @@ from .migraciones_columnas import (
     _COLUMNAS_USUARIOS_AMPLIADAS,
     _COLUMNAS_USUARIOS_RETIRADAS,
     _asegurar_marca_grid_rota,
+    _backfill_gasto_ia_proceso,
     _backfill_pesos_fuente,
     _migrar_columnas_aprobaciones,
     _migrar_columnas_campanias,
@@ -400,6 +401,10 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # existentes (las nuevas la traen del DDL). One-shot e idempotente (CREATE TABLE/INDEX IF
     # NOT EXISTS); sin backfill (el historial es prospectivo). Ver `db_latidos.registrar_barrido`.
     Migracion("0034-tabla-daemon-barridos", _migrar_tabla_daemon_barridos),
+    # ECONOMIA: backfill de `gasto_ia.proceso` (la columna la trae el DDL con DEFAULT
+    # 'produccion'). Refina las filas de INVESTIGACION desde `generaciones_indice`; lo demas
+    # queda en 'produccion'. One-shot e idempotente. Ver `_backfill_gasto_ia_proceso`.
+    Migracion("0035-backfill-gasto-ia-proceso", _backfill_gasto_ia_proceso),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.
