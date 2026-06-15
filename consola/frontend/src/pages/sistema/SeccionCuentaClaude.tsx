@@ -39,6 +39,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, mensajeError } from "@/lib/api";
+import { haceSegundos } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
 import type { CuentaAuth, CuentaUso, MedidorUso } from "@/types";
 
@@ -100,24 +101,21 @@ function Medidor({ m }: { m: MedidorUso }) {
   );
 }
 
-/** Bloque del medidor de uso de la suscripción. */
+/** Bloque del medidor de uso. NUNCA muestra la frase pelada: si la lectura actual no trae
+ *  medidor, se sirve el último cacheado ("última lectura con datos hace X"). */
 function BloqueUso({ uso }: { uso: CuentaUso | undefined }) {
   if (!uso) return null;
-  if (!uso.disponible) {
-    return (
-      <div className="space-y-1 rounded-lg border border-border/60 p-3">
-        <p className="text-sm text-muted-foreground">
-          {uso.mensaje || "Cuenta de suscripción activa."}
-        </p>
-        <p className="text-xs text-muted-foreground/80">
-          El medidor detallado (sesión / semana) no lo expone la versión de Claude Code del
-          servidor; úsalo con <code>claude /usage</code> en tu terminal.
-        </p>
-      </div>
-    );
+  if (!uso.medidores.length) {
+    // Ni medidor ni cache aún: estado neutro mientras llega el primero (no la frase pelada).
+    return <p className="text-sm text-muted-foreground">Obteniendo medidor de uso…</p>;
   }
   return (
     <div className="space-y-3">
+      {uso.cacheado && uso.actualizado != null && (
+        <p className="text-xs text-muted-foreground/80">
+          Última lectura con datos: {haceSegundos(Date.now() / 1000 - uso.actualizado)}.
+        </p>
+      )}
       {uso.medidores.map((m) => (
         <Medidor key={m.etiqueta} m={m} />
       ))}

@@ -111,3 +111,40 @@ def test_bearer_efectivo_respeta_override(monkeypatch, tmp_path):
     assert cc.bearer_efectivo() == "explicito"
     monkeypatch.delenv("KENI_CONTROL_BEARER", raising=False)
     assert cc.bearer_efectivo() == "auto"
+
+
+def test_uso_cachea_y_sirve_ultimo_bueno(monkeypatch, tmp_path):
+    # Núcleo del "nunca la frase": una lectura con medidor se cachea; la siguiente, que solo
+    # trae la frase, sirve el ÚLTIMO bueno (cacheado:true) en vez de la frase pelada.
+    import subprocess
+
+    monkeypatch.setattr(cc, "_dir_cache", lambda: tmp_path)
+    monkeypatch.setattr(
+        cc, "_ejecutar",
+        lambda argv, *, timeout: subprocess.CompletedProcess(argv, 0, _USAGE_COMPLETO, ""),
+    )
+    r1 = cc.uso()
+    assert r1["disponible"] is True and r1["cacheado"] is False
+    assert [m["pct"] for m in r1["medidores"]] == [26, 67, 2]
+
+    monkeypatch.setattr(
+        cc, "_ejecutar",
+        lambda argv, *, timeout: subprocess.CompletedProcess(argv, 0, _USAGE_SOLO_FRASE, ""),
+    )
+    r2 = cc.uso()
+    assert r2["disponible"] is True and r2["cacheado"] is True
+    assert [m["pct"] for m in r2["medidores"]] == [26, 67, 2]
+    assert r2["actualizado"] == r1["actualizado"]
+
+
+def test_uso_sin_cache_cae_a_no_disponible(monkeypatch, tmp_path):
+    # Sin un buen medidor previo, una lectura solo-frase sí cae a disponible:false (cold start).
+    import subprocess
+
+    monkeypatch.setattr(cc, "_dir_cache", lambda: tmp_path)
+    monkeypatch.setattr(
+        cc, "_ejecutar",
+        lambda argv, *, timeout: subprocess.CompletedProcess(argv, 0, _USAGE_SOLO_FRASE, ""),
+    )
+    r = cc.uso()
+    assert r["disponible"] is False and r["medidores"] == []

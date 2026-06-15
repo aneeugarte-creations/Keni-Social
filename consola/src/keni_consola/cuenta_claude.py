@@ -51,6 +51,10 @@ _CLAUDE = "claude"
 # sin que el operador configure nada. La gestion de cuenta esta ACTIVA por defecto.
 _FICHERO_BEARER = "control-bearer.secret"
 
+# Cache del ULTIMO medidor `/usage` bueno (en /data, compartido): para no mostrar nunca la
+# frase pelada cuando una lectura puntual no trae medidor. Ver `uso()`.
+_FICHERO_USO_CACHE = "usage-cache.json"
+
 
 def bearer_efectivo() -> str:
     """Bearer del listener de control. SIEMPRE devuelve uno (gestion de cuenta activa por def).
@@ -248,17 +252,79 @@ def estado() -> dict:
 
 
 def uso() -> dict:
-    """Medidor de uso de la suscripcion (`claude -p /usage`) parseado."""
+    """Medidor de uso de la suscripcion (`claude -p /usage`) con CACHE del ultimo bueno.
+
+    `claude -p /usage` a veces devuelve SOLO la frase generica (sin medidor): le pasa cuando
+    se le aporrea (rate-limit del propio comando) o ante un bache puntual. Para no mostrar
+    NUNCA esa frase pelada, persistimos el ultimo medidor bueno en `/data` y, cuando una
+    lectura no trae medidor (o falla/timeout), devolvemos el ULTIMO bueno con `cacheado:true`
+    y `actualizado` (epoch). El front pinta "actualizado hace X". Solo si NUNCA hubo un buen
+    medidor cae a `disponible:false`.
+    """
     try:
         cp = _ejecutar([_CLAUDE, "-p", "/usage"], timeout=_TIMEOUT_USO)
+        parsed = parsear_uso(cp.stdout)
+        if cp.returncode != 0 and not parsed["disponible"]:
+            parsed["error"] = (_limpiar(cp.stderr).strip() or "uso no disponible")
     except FileNotFoundError:
-        return {"disponible": False, "mensaje": "", "medidores": [], "crudo": "", "error": "claude no disponible"}
+        parsed = {"disponible": False, "mensaje": "", "medidores": [], "crudo": "", "error": "claude no disponible"}
     except subprocess.TimeoutExpired:
-        return {"disponible": False, "mensaje": "", "medidores": [], "crudo": "", "error": "timeout"}
-    parsed = parsear_uso(cp.stdout)
-    if cp.returncode != 0 and not parsed["disponible"]:
-        parsed["error"] = (_limpiar(cp.stderr).strip() or "uso no disponible")
+        parsed = {"disponible": False, "mensaje": "", "medidores": [], "crudo": "", "error": "timeout"}
+
+    if parsed["disponible"]:
+        ts = time.time()
+        _guardar_cache_uso({"medidores": parsed["medidores"], "mensaje": parsed["mensaje"], "ts": ts})
+        parsed["actualizado"] = ts
+        parsed["cacheado"] = False
+        return parsed
+
+    # Lectura sin medidor: NO mostramos la frase pelada; servimos el ultimo bueno si lo hay.
+    cache = _cargar_cache_uso()
+    if cache and cache.get("medidores"):
+        return {
+            "disponible": True,
+            "cacheado": True,
+            "actualizado": cache.get("ts"),
+            "mensaje": cache.get("mensaje", ""),
+            "medidores": cache["medidores"],
+            "crudo": parsed.get("crudo", ""),
+        }
     return parsed
+
+
+def _dir_cache():
+    """Directorio del cache de uso (volumen compartido /data). Aislable en tests."""
+    from . import rutas
+
+    return rutas.dir_config()
+
+
+def _guardar_cache_uso(datos: dict) -> None:
+    """Persiste el ultimo medidor bueno (escritura atomica; best-effort, nunca propaga)."""
+    import json
+    from pathlib import Path
+
+    try:
+        base = Path(_dir_cache())
+        base.mkdir(parents=True, exist_ok=True)
+        ruta = base / _FICHERO_USO_CACHE
+        tmp = base / f".{_FICHERO_USO_CACHE}.{os.getpid()}.tmp"
+        tmp.write_text(json.dumps(datos), encoding="utf-8")
+        os.replace(tmp, ruta)
+    except (OSError, ValueError, TypeError):
+        pass
+
+
+def _cargar_cache_uso() -> dict | None:
+    """Lee el ultimo medidor bueno cacheado (None si no hay/ilegible)."""
+    import json
+    from pathlib import Path
+
+    try:
+        datos = json.loads((Path(_dir_cache()) / _FICHERO_USO_CACHE).read_text(encoding="utf-8"))
+        return datos if isinstance(datos, dict) else None
+    except (OSError, ValueError):
+        return None
 
 
 def logout() -> dict:

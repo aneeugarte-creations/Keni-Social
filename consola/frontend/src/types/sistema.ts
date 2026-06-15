@@ -794,12 +794,16 @@ export interface MedidorUso {
 
 /** Medidor de uso de la suscripción (`claude -p /usage`). */
 export interface CuentaUso {
-  /** `false` cuando el CLI solo devuelve la frase genérica sin medidor (p.ej. auth por API key). */
+  /** `true` si hay medidores que mostrar (frescos o del cache); `false` solo si nunca hubo. */
   disponible: boolean;
   /** Frase de cabecera ("You are currently using your subscription…"). */
   mensaje: string;
   /** Medidores parseados (vacío si `disponible` es false). */
   medidores: MedidorUso[];
+  /** `true` si los medidores vienen del CACHE (la lectura actual no traía medidor). */
+  cacheado?: boolean;
+  /** Epoch (segundos) de cuándo se capturó el medidor mostrado. */
+  actualizado?: number | null;
   crudo?: string;
   error?: string;
 }
