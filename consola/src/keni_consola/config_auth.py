@@ -7,6 +7,9 @@ from ._config_comun import (
     ADMIN_USER_DEF,
     ENV_ADMIN_PASS,
     ENV_ADMIN_USER,
+    ENV_CONTROL_BEARER,
+    ENV_CONTROL_PORT,
+    ENV_CONTROL_URL,
     ENV_COOKIE_SECURE,
     ENV_HTTPS,
     ENV_MCP_BEARER,
@@ -113,6 +116,29 @@ def mcp_bearer() -> str | None:
     por dentro el MCP opera la API con una sesion del usuario `mcp_usuario()`.
     """
     return _crudo(ENV_MCP_BEARER) or None
+
+
+def control_bearer() -> str | None:
+    """Bearer del listener de CONTROL del `daemons` (`KENI_CONTROL_BEARER`; None si no esta).
+
+    None/vacio => el listener NO se monta (apagado por defecto) y el `back` degrada la
+    seccion de cuenta. Cuando esta, el `daemons` exige `Authorization: Bearer <este valor>`
+    y el `back` lo envia al proxear (comparacion en tiempo constante). Soporta el secreto por
+    fichero `KENI_CONTROL_BEARER_FILE` (via `_crudo`)."""
+    return _crudo(ENV_CONTROL_BEARER) or None
+
+
+def control_puerto() -> int:
+    """Puerto del listener de control del `daemons` (`KENI_CONTROL_PORT`, def 8770; >0)."""
+    puerto = _entero(ENV_CONTROL_PORT, 8770)
+    return puerto if puerto > 0 else 8770
+
+
+def control_url() -> str:
+    """URL base con que el `back` alcanza el control del `daemons` (`KENI_CONTROL_URL`).
+
+    Def `http://daemons:8770` (nombre del servicio en la red interna docker)."""
+    return _crudo(ENV_CONTROL_URL) or "http://daemons:8770"
 
 
 def mcp_usuario() -> str | None:

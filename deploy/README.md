@@ -69,6 +69,35 @@ Esto **dockeriza la arquitectura objetivo**, pero el código aún no la consume 
 
 ---
 
+## Cuenta de Claude (cambiar desde el panel) — ADR 0013
+
+El panel **Sistema** (admin) trae una sección **Cuenta de Claude del servidor**: ve el estado
+de auth y el medidor de uso (`/usage`), y permite **cambiar de cuenta** (login: URL → pegar
+código) y cerrar sesión, **sin SSH**. Lo sirve el `daemons` (tiene `claude`; instancia única)
+por un listener de control interno protegido con `KENI_CONTROL_BEARER`; el `back` lo proxea
+(admin-gated). Sin ese bearer la sección queda "no configurada" (apagado por defecto).
+
+Las credenciales viven en el volumen compartido `/data/claude-cfg`
+(`CLAUDE_CONFIG_DIR`), así que un login aplica **en caliente** a `worker`+`daemons`.
+
+**Activar (1 vez):**
+1. `KENI_CONTROL_BEARER=$(openssl rand -base64 24)` en `deploy/.env` y `bash deploy.sh`.
+
+**Corte env-var → credenciales (DOS fases, porque el token de entorno GANA al fichero):**
+- **Fase 1 (segura, ya en este deploy):** con el token aún inyectado, entra al panel y haz
+  **Cambiar cuenta** con la cuenta deseada. Esto SIEMBRA `/data/claude-cfg` (aún inerte: el
+  token manda). La generación nunca se queda sin auth.
+- **Fase 2 (gated):** comenta/quita `CLAUDE_CODE_OAUTH_TOKEN_FILE` de `worker` **y** `daemons`
+  en `docker-compose.yml`, `bash deploy.sh` (reinicia esos 2). Ahora gobiernan las
+  credenciales: el cambio de cuenta es en caliente y `claude -p /usage` da el medidor completo.
+
+> ⚠️ El handshake del login (`claude auth login` por PTY) se valida en un contenedor local con
+> una cuenta de prueba ANTES de la fase 2 en prod: no se puede probar contra la cuenta viva sin
+> desconectarla. `claude auth logout` desde el panel deja al servidor SIN cuenta hasta el
+> siguiente login (la generación para): úsalo solo para cambiar de cuenta.
+
+---
+
 ## Ingress (estado actual: Traefik único, Caddy retirado)
 
 **HECHO.** En el servidor Latitude (`social.kenitech.io`) Traefik es el **ingress único**

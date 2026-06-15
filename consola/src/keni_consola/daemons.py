@@ -101,6 +101,14 @@ def main() -> int:
     # esto el recolector no corria en produccion y los sueltos quedaban "ejecutando" para siempre.
     iniciar_limpiador()
 
+    # LISTENER DE CONTROL (gestion de la cuenta de Claude desde el panel admin): solo se
+    # monta si hay `KENI_CONTROL_BEARER`. Vive aqui (no en el back) porque cambiar la cuenta
+    # ejecuta `claude` (auth/login/logout, /usage) y el back no lo tiene; el `daemons` es de
+    # instancia unica, ideal para el login interactivo que mantiene un proceso vivo.
+    from .control import iniciar_control
+
+    iniciar_control()
+
     # Los daemons son hilos; el proceso principal queda en un bucle de LATIDO: toca el
     # fichero de liveness cada _LATIDO_SEG para que el healthcheck del contenedor (deploy)
     # distinga "proceso vivo" de "proceso colgado/atascado" sin depender de la BD. Antes era

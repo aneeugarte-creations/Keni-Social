@@ -7,8 +7,11 @@ import type {
   RespuestaBarridosDaemon,
   RespuestaBorrarLoteS3,
   RespuestaBorrarS3,
+  RespuestaCuenta,
+  RespuestaCuentaAccion,
   RespuestaDaemons,
   RespuestaDoctor,
+  RespuestaLoginIniciar,
   RespuestaProbarS3,
   RespuestaRecursos,
   RespuestaRendimiento,
@@ -60,4 +63,24 @@ export const apiSistema = {
       json: { keys },
     }),
 
+  // --- Cuenta de Claude del servidor (proxy admin al control del daemons) ---
+  sistemaCuenta: (signal?: AbortSignal) =>
+    peticion<RespuestaCuenta>("/sistema/cuenta", { signal }),
+  cuentaLoginIniciar: (opts: { console?: boolean; email?: string; sso?: boolean }) =>
+    peticion<RespuestaLoginIniciar>("/sistema/cuenta/login/iniciar", {
+      metodo: "POST",
+      json: opts,
+    }),
+  cuentaLoginCodigo: (sesion: string, codigo: string) =>
+    peticion<RespuestaCuentaAccion>("/sistema/cuenta/login/codigo", {
+      metodo: "POST",
+      json: { sesion, codigo },
+    }),
+  cuentaLoginCancelar: (sesion: string) =>
+    peticion<{ ok: boolean }>("/sistema/cuenta/login/cancelar", {
+      metodo: "POST",
+      json: { sesion },
+    }),
+  cuentaLogout: () =>
+    peticion<RespuestaCuentaAccion>("/sistema/cuenta/logout", { metodo: "POST" }),
 };

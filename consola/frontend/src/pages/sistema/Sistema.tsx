@@ -6,6 +6,7 @@ import { TituloPagina } from "@/components/layout/encabezado";
 import { ApiError, api } from "@/lib/api";
 
 import { AvisosDoctor } from "./Doctor";
+import { SeccionCuentaClaude } from "./SeccionCuentaClaude";
 import { SeccionDaemons } from "./SeccionDaemons";
 import { SeccionNavegadorS3 } from "./NavegadorS3";
 import { SeccionBackups } from "./SeccionBackups";
@@ -47,6 +48,7 @@ export default function Sistema() {
       <TituloPagina titulo="Sistema" icono={ServerCog} />
       <div className="space-y-6">
         <AvisosDoctor />
+        <SeccionCuentaClaude />
         <SeccionRecursos />
         {/* SERVICIOS DE SISTEMA (clase=sistema): pura infraestructura (limpiador, GC de media,
             métricas, alertas, patrones, comercial). Los agentes IA y los servicios de la máquina

@@ -69,6 +69,17 @@ ENV_MCP_BEARER = "KENI_MCP_BEARER"
 # fija, cae al admin de bootstrap (`KENI_CONSOLA_ADMIN_USER`): el dueño de la consola.
 ENV_MCP_USUARIO = "KENI_MCP_USUARIO"
 
+# Listener de CONTROL del proceso `daemons` (gestion de la cuenta de Claude: estado/uso/
+# login/logout, ver `cuenta_claude` + `control`). Solo el `daemons` (imagen del worker, con
+# `claude`) lo levanta; el `back` lo alcanza por la red interna y lo protege con el bearer.
+# Si `KENI_CONTROL_BEARER` no esta, el listener NO se monta (apagado por defecto).
+ENV_CONTROL_BEARER = "KENI_CONTROL_BEARER"
+# Puerto del listener de control (interno, nunca por Traefik). Def 8770.
+ENV_CONTROL_PORT = "KENI_CONTROL_PORT"
+# URL base con que el `back` alcanza el control del `daemons` (red interna docker). Def
+# `http://daemons:8770`. Vacia => el back asume que no hay control (degrada la seccion).
+ENV_CONTROL_URL = "KENI_CONTROL_URL"
+
 # Observabilidad.
 ENV_LOG_LEVEL = "KENI_CONSOLA_LOG_LEVEL"
 
@@ -864,6 +875,9 @@ __all__ = [
     'ENV_LOG_LEVEL',
     'ENV_MAQUINA',
     'ENV_MAX_JOBS',
+    'ENV_CONTROL_BEARER',
+    'ENV_CONTROL_PORT',
+    'ENV_CONTROL_URL',
     'ENV_MCP_BEARER',
     'ENV_MCP_USUARIO',
     'ENV_MEDIA',

@@ -742,3 +742,74 @@ export interface RespuestaBorrarLoteS3 {
   /** Keys que fallaron, con su motivo. */
   fallidos: FalloBorradoS3[];
 }
+
+// ── Cuenta de Claude (panel admin: estado de auth + uso + cambio de cuenta) ──────────────
+//
+// La generación corre `claude -p` con la cuenta de Claude del servidor. Esta sección la
+// gestiona desde el panel: ve el estado de auth y el medidor de uso (suscripción), y permite
+// CAMBIAR de cuenta (logout + login interactivo: URL → pegar código). El back proxea al
+// control del proceso `daemons` (quien tiene `claude`); ver `api/sistema/cuenta.py`.
+
+/** Estado de autenticación (`claude auth status --json`). */
+export interface CuentaAuth {
+  /** ¿Hay sesión iniciada? null = desconocido (el CLI no respondió como se esperaba). */
+  logueado: boolean | null;
+  /** Método de auth: "oauth_token" (token de entorno) | "claudeai" (login) | … */
+  metodo: string | null;
+  /** Proveedor: "firstParty" (suscripción) | "console" (API) | … */
+  proveedor: string | null;
+  /** Salida cruda del CLI (diagnóstico). */
+  crudo?: string;
+  /** Error legible si no se pudo leer el estado. */
+  error?: string;
+}
+
+/** Un medidor del `/usage` (sesión 5h / semana / …). */
+export interface MedidorUso {
+  /** Etiqueta tal cual la da el CLI ("Current session", "Current week (all models)", …). */
+  etiqueta: string;
+  /** Porcentaje usado (0–100). */
+  pct: number;
+  /** Texto del reset ("Jun 15 at 7:39pm (America/Mexico_City)") o null. */
+  reset: string | null;
+}
+
+/** Medidor de uso de la suscripción (`claude -p /usage`). */
+export interface CuentaUso {
+  /** `false` cuando el CLI solo devuelve la frase genérica (caso del token de entorno). */
+  disponible: boolean;
+  /** Frase de cabecera ("You are currently using your subscription…"). */
+  mensaje: string;
+  /** Medidores parseados (vacío si `disponible` es false). */
+  medidores: MedidorUso[];
+  crudo?: string;
+  error?: string;
+}
+
+/** Respuesta de `GET /api/sistema/cuenta`. */
+export interface RespuestaCuenta {
+  /** `false` si la gestión de cuenta no está configurada en este servidor. */
+  disponible: boolean;
+  auth?: CuentaAuth;
+  uso?: CuentaUso;
+  error?: string;
+}
+
+/** Respuesta de `POST /api/sistema/cuenta/login/iniciar`. */
+export interface RespuestaLoginIniciar {
+  /** Id de la sesión de login viva (se devuelve al pegar el código). */
+  sesion?: string;
+  /** URL de autorización a abrir en el navegador. */
+  url?: string;
+  /** Salida capturada del CLI (diagnóstico). */
+  salida?: string;
+  /** Error legible si no se obtuvo la URL. */
+  error?: string;
+}
+
+/** Respuesta de `POST /api/sistema/cuenta/login/codigo` y `/logout`. */
+export interface RespuestaCuentaAccion {
+  ok: boolean;
+  mensaje?: string;
+  salida?: string;
+}

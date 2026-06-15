@@ -61,7 +61,7 @@ from starlette.routing import Route
 #  2) deja cada submodulo accesible como atributo del paquete (p. ej. `sistema.s3`), que
 #     es lo que los tests parchean: `monkeypatch.setattr(api_sistema.s3, "_cliente_s3", ...)`.
 #     Importar la FUNCION `s3` (homonima del modulo) habria pisado ese atributo.
-from . import backups, daemons, recursos, rendimiento, s3
+from . import backups, cuenta, daemons, recursos, rendimiento, s3
 
 # Re-exports planos que leen TERCEROS por su nombre historico de modulo:
 #   - `api.estado` (doctor) consume `_discos`, `UMBRAL_DISCO_*`, `sonda_daemons`,
@@ -81,6 +81,7 @@ __all__ = [
     "backups",
     "rendimiento",
     "s3",
+    "cuenta",
     # Sondas compartidas con el doctor (`api.estado`)
     "sonda_daemons",
     "sonda_backups",
@@ -111,4 +112,11 @@ RUTAS = [
     Route("/api/sistema/s3/borrar-lote", s3.s3_borrar_lote, methods=["POST"]),
     Route("/api/sistema/s3/borrar", s3.s3_borrar, methods=["POST"]),
     Route("/api/sistema/s3/probar", s3.probar_s3, methods=["POST"]),
+    # Cuenta de Claude del servidor (proxy admin al control del daemons). Las mas
+    # especificas (/cuenta/login/...) van ANTES que /cuenta (Starlette casa por orden).
+    Route("/api/sistema/cuenta/login/iniciar", cuenta.login_iniciar, methods=["POST"]),
+    Route("/api/sistema/cuenta/login/codigo", cuenta.login_codigo, methods=["POST"]),
+    Route("/api/sistema/cuenta/login/cancelar", cuenta.login_cancelar, methods=["POST"]),
+    Route("/api/sistema/cuenta/logout", cuenta.logout, methods=["POST"]),
+    Route("/api/sistema/cuenta", cuenta.cuenta, methods=["GET"]),
 ]
