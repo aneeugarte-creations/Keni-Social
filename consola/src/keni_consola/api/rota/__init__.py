@@ -74,6 +74,7 @@ from .swaps import (
     listar_swaps,
     rechazar_swap,
     rechazar_swap_admin,
+    reclamar_swap,
 )
 from .turnos import (
     actualizar_turno,
@@ -125,6 +126,7 @@ __all__ = [
     "aprobar_swap",
     "rechazar_swap_admin",
     "cancelar_swap",
+    "reclamar_swap",
     "listar_programas",
     "crear_programa",
     "actualizar_programa",
@@ -205,6 +207,7 @@ RUTAS = [
     Route("/api/rota/swaps/{swap_id}/aprobar", aprobar_swap, methods=["POST"]),
     Route("/api/rota/swaps/{swap_id}/rechazar-admin", rechazar_swap_admin, methods=["POST"]),
     Route("/api/rota/swaps/{swap_id}/cancelar", cancelar_swap, methods=["POST"]),
+    Route("/api/rota/swaps/{swap_id}/reclamar", reclamar_swap, methods=["POST"]),
     # Configuración editorial de FRANJAS de cobertura (#185). GET libre; PATCH solo admin.
     Route("/api/rota/config/franjas", obtener_config_franjas, methods=["GET"]),
     Route("/api/rota/config/franjas", guardar_config_franjas, methods=["PATCH"]),

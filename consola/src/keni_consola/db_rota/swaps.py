@@ -375,3 +375,120 @@ def aplicar_swap_turno(
     finally:
         con.close()
     return _fila_a_swap_turno(fila) if fila is not None else None
+
+
+def reclamar_oferta_turno(
+    swap_id: str, *, claimer_id: str, claimer_nombre: str
+) -> dict[str, Any] | None:
+    """El que RECLAMA una cesión se vuelve su destinatario: `propuesto` -> `aceptado`.
+
+    Fija `destinatario_id`/`destinatario_nombre` y `decidido_destinatario`. La GUARDA va en
+    el propio WHERE (`estado='propuesto' AND destinatario_id='' AND tipo='cesion'`): así dos
+    reclamos del MISMO turno se serializan -> solo el primero hace match (rowcount=1); el
+    segundo ve `destinatario_id<>''` y no toca nada (rowcount=0). NO pasa por
+    `actualizar_swap_turno` (su allowlist defensiva protege `destinatario_id` a propósito).
+
+    Devuelve el swap ya `aceptado`, o None si no es reclamable (no existe / ya reclamado /
+    no es una cesión propuesta).
+    """
+    ahora = ahora_iso()
+    con = _conectar()
+    try:
+        cur = con.execute(
+            "UPDATE rota_swaps_turno SET destinatario_id = ?, destinatario_nombre = ?, "
+            "estado = ?, decidido_destinatario = ?, actualizado = ? "
+            "WHERE id = ? AND estado = ? AND destinatario_id = '' AND tipo = ?",
+            (claimer_id, claimer_nombre or "", "aceptado", ahora, ahora, swap_id, "propuesto", "cesion"),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+        fila = con.execute(f"{_SELECT_SWAP_TURNO} WHERE id = ?", (swap_id,)).fetchone()
+    finally:
+        con.close()
+    return _fila_a_swap_turno(fila) if fila is not None else None
+
+
+def aplicar_oferta_turno(
+    swap_id: str,
+    *,
+    dueno_id: str,
+    fecha_a: str,
+    franja_a: str,
+    destinatario_id: str,
+    destinatario_nombre: str,
+    respuesta_admin: str = "",
+) -> dict[str, Any] | None:
+    """Aprueba+ejecuta una oferta de UNA VÍA (cesión / turno abierto) en UNA transacción:
+    reasigna el turno `(fecha_a, franja_a)` de `dueno_id` a `destinatario_id` (el que reclamó)
+    y marca el swap `aplicado`. Es el gemelo de 1 fila de `aplicar_swap_turno`.
+
+    `dueno_id` es el ocupante ESPERADO del turno antes de aplicar: en una cesión es el cedente
+    (su `solicitante_id`); en un turno abierto es '' (sin dueño). Re-valida bajo `FOR UPDATE`
+    que la celda sigue con ese ocupante; si no, `no_coinciden`. Mismo contrato de salida que
+    `aplicar_swap_turno` (dict | no_coinciden | conflicto_destino | None) y misma defensa de
+    idempotencia + índice único.
+    """
+    ahora = ahora_iso()
+    con = _conectar()
+    try:
+        swap = con.execute(
+            f"{_SELECT_SWAP_TURNO} WHERE id = ? FOR UPDATE", (swap_id,)
+        ).fetchone()
+        if swap is None:
+            con.commit()
+            return None
+        if swap["estado"] == "aplicado":  # idempotencia: otra petición ya lo aplicó
+            con.commit()
+            return _fila_a_swap_turno(swap)
+        fila_a = con.execute(
+            "SELECT id, miembro_id, miembro_nombre, fecha, franja_id FROM rota_turnos "
+            "WHERE fecha = ? AND franja_id = ? AND miembro_id = ? FOR UPDATE",
+            (fecha_a, franja_a, dueno_id),
+        ).fetchone()
+        if fila_a is None:  # la celda ya no tiene al ocupante esperado -> 409 con detalle
+            actual_a = con.execute(
+                "SELECT miembro_id, miembro_nombre FROM rota_turnos "
+                "WHERE fecha = ? AND franja_id = ?",
+                (fecha_a, franja_a),
+            ).fetchone()
+            con.commit()
+            return {
+                "error": "no_coinciden",
+                "esperado": {
+                    "a": {
+                        "fecha": fecha_a,
+                        "franja": franja_a,
+                        "miembro_id": dueno_id,
+                        "miembro_nombre": swap["solicitante_nombre"],
+                    }
+                },
+                "actual": {
+                    "a": {
+                        "fecha": fecha_a,
+                        "franja": franja_a,
+                        "miembro_id": actual_a["miembro_id"] if actual_a else "",
+                        "miembro_nombre": actual_a["miembro_nombre"] if actual_a else "",
+                    }
+                },
+            }
+        try:
+            con.execute(
+                "UPDATE rota_turnos SET miembro_id = ?, miembro_nombre = ?, "
+                "actualizado = ? WHERE id = ?",
+                (destinatario_id, destinatario_nombre, ahora, fila_a["id"]),
+            )
+            con.execute(
+                "UPDATE rota_swaps_turno SET estado = ?, respuesta_admin = ?, "
+                "decidido_admin = ?, aplicado = ?, actualizado = ? "
+                "WHERE id = ? AND estado <> ?",
+                ("aplicado", respuesta_admin or "", ahora, ahora, ahora, swap_id, "aplicado"),
+            )
+            con.commit()
+        except IntegrityError:  # el que reclamó ya ocupa esa celda -> índice único parcial
+            con.rollback()
+            return {"error": "conflicto_destino"}
+        fila = con.execute(f"{_SELECT_SWAP_TURNO} WHERE id = ?", (swap_id,)).fetchone()
+    finally:
+        con.close()
+    return _fila_a_swap_turno(fila) if fila is not None else None
