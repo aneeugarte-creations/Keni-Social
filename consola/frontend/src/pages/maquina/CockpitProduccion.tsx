@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ListChecks, Pencil, Sparkles } from "lucide-react";
+import { ListChecks, Pencil, Wand2 } from "lucide-react";
 import * as React from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
@@ -163,7 +163,7 @@ export default function CockpitProduccion() {
 
   return (
     <>
-      <TituloPagina titulo="Producción" icono={Sparkles} />
+      <TituloPagina titulo="Producción" icono={Wand2} />
       <AccionesPagina>
         <MenuAcciones
           ajustesTitulo="Ajustes de producción"

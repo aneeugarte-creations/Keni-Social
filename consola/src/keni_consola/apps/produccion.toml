@@ -162,7 +162,7 @@ orden = 10
 [[nav]]
 ruta = "/maquina/produccion"
 etiqueta = "Producción"
-icono = "Sparkles"
+icono = "Wand2"
 descripcion = "Cockpit del motor de PRODUCCIÓN: genera copy y arte publicable. Aloja la tira de etapas y el drawer de ajustes de la máquina. En construcción (fase siguiente)."
 grupo = "maquina"
 grupo_orden = 25
@@ -170,9 +170,9 @@ orden = 20
 
 [[nav]]
 ruta = "/maquina/computo"
-etiqueta = "Cómputo"
-icono = "Cpu"
-descripcion = "La «sala de máquinas» (observabilidad y control): el Cómputo (la cola en vivo) y, en pestañas hermanas, la Economía (presupuesto + coste) y la Actividad (la traza completa). Los dos agentes IA son los dos cockpits (Investigación/Producción)."
+etiqueta = "Agentes"
+icono = "Bot"
+descripcion = "La «sala de máquinas» (observabilidad y control de los agentes): Cómputo (la cola en vivo) y, en pestañas hermanas, la Economía (presupuesto + coste) y la Actividad (la traza completa)."
 grupo = "maquina"
 grupo_orden = 25
 orden = 30

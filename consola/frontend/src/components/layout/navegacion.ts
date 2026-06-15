@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   Sparkles,
   Type,
+  Wand2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -70,6 +71,7 @@ export const ICONOS: Record<string, LucideIcon> = {
   ShieldCheck,
   Sparkles,
   Type,
+  Wand2,
 };
 
 /** Resuelve un nombre de icono del catálogo a su componente (fallback Sparkles). */

@@ -30,10 +30,10 @@ const CATALOGO = {
       nav: [
         { ruta: "/contenido/imagen", etiqueta: "Imagen", icono: "Palette", descripcion: "", grupo: "contenido", grupo_orden: 20, orden: 10 },
         { ruta: "/contenido/texto", etiqueta: "Texto", icono: "Library", descripcion: "", grupo: "contenido", grupo_orden: 20, orden: 20 },
-        // Bloque «Máquina»: dos cockpits (los agentes IA) + el hub de la sala de máquinas (Cómputo).
+        // Bloque «Máquina»: dos cockpits (los agentes IA) + el hub de la sala de máquinas («Agentes»).
         { ruta: "/maquina/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "", grupo: "maquina", grupo_orden: 25, orden: 10 },
-        { ruta: "/maquina/produccion", etiqueta: "Producción", icono: "Sparkles", descripcion: "", grupo: "maquina", grupo_orden: 25, orden: 20 },
-        { ruta: "/maquina/computo", etiqueta: "Cómputo", icono: "Cpu", descripcion: "", grupo: "maquina", grupo_orden: 25, orden: 30 },
+        { ruta: "/maquina/produccion", etiqueta: "Producción", icono: "Wand2", descripcion: "", grupo: "maquina", grupo_orden: 25, orden: 20 },
+        { ruta: "/maquina/computo", etiqueta: "Agentes", icono: "Bot", descripcion: "", grupo: "maquina", grupo_orden: 25, orden: 30 },
       ],
     },
     {
@@ -85,8 +85,8 @@ const CATALOGO = {
       etiqueta: "Máquina",
       items: [
         { ruta: "/maquina/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "Cockpit de investigación" },
-        { ruta: "/maquina/produccion", etiqueta: "Producción", icono: "Sparkles", descripcion: "Cockpit de producción" },
-        { ruta: "/maquina/computo", etiqueta: "Cómputo", icono: "Cpu", descripcion: "Cómputo, economía y actividad" },
+        { ruta: "/maquina/produccion", etiqueta: "Producción", icono: "Wand2", descripcion: "Cockpit de producción" },
+        { ruta: "/maquina/computo", etiqueta: "Agentes", icono: "Bot", descripcion: "Cómputo, economía y actividad" },
       ],
     },
     {
@@ -242,10 +242,10 @@ describe("Sidebar · bloques de flujo", () => {
     // Bloque "Contenido".
     expect(screen.getByRole("link", { name: /imagen/i })).toHaveAttribute("href", "/contenido/imagen");
     expect(screen.getByRole("link", { name: /texto/i })).toHaveAttribute("href", "/contenido/texto");
-    // Bloque "Máquina": dos cockpits (los agentes IA) + el hub de la sala de máquinas (Cómputo).
+    // Bloque "Máquina": dos cockpits (los agentes IA) + el hub de la sala de máquinas («Agentes»).
     expect(screen.getByRole("link", { name: /investigación/i })).toHaveAttribute("href", "/maquina/investigacion");
     expect(screen.getByRole("link", { name: /producción/i })).toHaveAttribute("href", "/maquina/produccion");
-    expect(screen.getByRole("link", { name: /cómputo/i })).toHaveAttribute("href", "/maquina/computo");
+    expect(screen.getByRole("link", { name: /agentes/i })).toHaveAttribute("href", "/maquina/computo");
     // Bloque "Datos": solo Analíticas.
     expect(screen.getByRole("link", { name: /analíticas/i })).toHaveAttribute("href", "/datos/analiticas");
     // Las pestañas internas de un hub NO viven en el sidebar (van in-page).
