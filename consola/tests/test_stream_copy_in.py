@@ -88,8 +88,7 @@ def test_unificada_contenido_conserva_emojis_y_copy_in_no():
 
 def test_unificada_texto_corto_va_a_la_red_estrecha_y_el_largo_a_las_anchas():
     # La red cuyo tope NO admite el largo recibe `texto_corto`; las más anchas, el copy COMPLETO.
-    # Con X Premium (25000) la estrecha pasa a ser Instagram (2200): un copy >2200 se condensa
-    # SOLO para Instagram; X (25000) y Facebook (sin tope) conservan el largo.
+    # Un copy >2200 se condensa solo para Instagram (2200); X (25000) y Facebook (sin tope) usan el largo.
     largo = "L" * 2300  # supera el límite de Instagram (2200), no el de X (25000) ni Facebook
     salida = '```json\n{"texto": "' + largo + '", "texto_corto": "Versión breve", "copy_in": "T"}\n```'
     piezas = stream.parsear_salida_unificada(salida, ["x", "instagram", "facebook"])["piezas"]

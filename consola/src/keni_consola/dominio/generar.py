@@ -202,14 +202,11 @@ def instruccion_redes(redes_ids: list[str]) -> str:
 
 
 # Una red es "estrecha" si su límite la obliga a un copy mucho más corto que el de las redes
-# amplias. El caso histórico era X (cuenta gratis, 280): mezclar X con Instagram (2200)/Facebook
-# (sin tope) en UN solo copy forzaba todo a 280 = un tuit publicado en IG/FB. Por debajo de este
-# umbral pedimos un `texto_corto` aparte para esas redes, dejando el copy completo para las amplias.
-# NOTA (X Premium): desde que X vale 25.000 (la cuenta de AMX tiene Premium), NINGUNA de las 5 redes
-# canónicas es estrecha (todas ≥ 600 o sin tope), así que la rama de `texto_corto` queda DORMIDA en
-# la práctica. Se conserva como mecanismo GENÉRICO: si alguna red volviera a tener un tope < 600, se
-# reactiva sola. La asignación final por red la hace `stream.parsear_salida_unificada` por longitud
-# real, no por este umbral (que solo decide el fraseo del prompt).
+# amplias: por debajo de este umbral pedimos un `texto_corto` aparte para ella y dejamos el copy
+# completo a las amplias. Hoy ninguna de las 5 redes canónicas es estrecha (todas ≥ 600 o sin
+# tope), así que la rama de `texto_corto` no se usa; se conserva como mecanismo genérico para una
+# red futura con tope < 600. La asignación final por red la hace `stream.parsear_salida_unificada`
+# por longitud real, no por este umbral (que solo decide el fraseo del prompt).
 UMBRAL_COPY_ESTRECHO = 600
 
 
@@ -303,9 +300,8 @@ def instruccion_copy_unico(
     hashtags (el equipo los añade aparte). Pide un único bloque ```json con un OBJETO PLANO.
 
     Cuando se mezclan redes AMPLIAS con ESTRECHAS (límite < `UMBRAL_COPY_ESTRECHO`), pide DOS
-    versiones del mismo mensaje: `texto` (completa, para las amplias) y `texto_corto` (condensada
-    ≤ límite de las estrechas). Con X Premium (25.000) ninguna red canónica es estrecha, así que
-    hoy siempre cae en el caso de un único `texto` (rama doble dormida, ver `UMBRAL_COPY_ESTRECHO`).
+    versiones: `texto` (completa, para las amplias) y `texto_corto` (≤ límite de las estrechas).
+    Hoy ninguna red canónica es estrecha, así que siempre pide un único `texto`.
 
     TODA generación SUGIERE el formato (`tipo`: post|carrusel): el modelo dice si la pieza luce
     mejor como post de foto o como carrusel (explainer/lista). `n_notas` (pipeline, historias):

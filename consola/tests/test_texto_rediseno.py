@@ -158,8 +158,8 @@ def test_previsualizar_pipeline_copy_es_fiel_al_lanzamiento():
     Sin `redes_ids` se previsualiza con TODAS las redes (un lanzamiento real siempre las trae)."""
     libtexto.crear("Copy base", tipo="prompt", carpeta="", cuerpo="BASE", rol="copy", pipelines=["copy"])
     prev = libtexto.previsualizar_pipeline("copy", "unotv", "CTX")
-    # Con X Premium (25000) ninguna de las 5 redes es estrecha: la instrucción unificada pide
-    # UN SOLO copy acotado al tope más estricto entre todas (Instagram = 2200), sin `texto_corto`.
+    # La instrucción unificada pide un solo copy acotado al límite más estricto entre todas las
+    # redes (Instagram = 2200), sin versión corta aparte.
     assert "Este copy se publicará TAL CUAL en estas redes" in prev["prompt_efectivo"]
     assert "texto_corto" not in prev["prompt_efectivo"]
     assert "2200 caracteres" in prev["prompt_efectivo"]  # Instagram, el más estricto, desde el código

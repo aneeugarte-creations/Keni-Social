@@ -64,7 +64,7 @@ def _caso(**kw) -> CasoEval:
 
 
 def test_check_limite_red_corta_por_tramo():
-    # Instagram (2200) es el tope duro más estricto desde que X subió a Premium (25000).
+    # Instagram (2200) es el tope duro más estricto entre las redes.
     res = {d.nombre: d for d in correr_dimensiones(_caso(red="instagram", copy="a" * 2300))}
     assert res["limite_red"].fallo  # 2300 > 2200 (límite duro de Instagram)
     assert not [d for d in correr_dimensiones(_caso(red="instagram", copy="a" * 2000)) if d.nombre == "limite_red" and d.fallo]

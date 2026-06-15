@@ -64,8 +64,8 @@ def test_oro_instruccion_redes_byte_identica():
 
 
 def test_oro_copy_unico_mixto_byte_identico():
-    # Con X Premium (25000) ninguna de las 5 redes es estrecha: UN solo copy acotado al tope
-    # más estricto entre las pedidas (Instagram = 2200), sin `texto_corto`.
+    # Copy unificado: un solo `texto` acotado al límite más estricto entre las redes pedidas
+    # (Instagram = 2200), sin versión corta aparte.
     assert generar.instruccion_copy_unico(["instagram", "x", "facebook"]) == _GOLD_CU_MIXTO
 
 

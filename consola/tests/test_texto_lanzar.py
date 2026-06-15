@@ -320,7 +320,7 @@ def test_lanzar_copy_adjunta_reglas_de_imagen_y_sin_hardcode_de_emojis(encolado)
     final = encolado["prompt"]
     assert "Reglas de imagen" in final  # título del adjunto `editorial/reglas/imagen`
     assert generar.INSTRUCCION_SIN_EMOJIS not in final
-    # Modo UNIFICADO: el tope viene del límite más estricto de las redes pedidas (X Premium = 25000).
+    # Modo UNIFICADO: el tope viene del límite más estricto de las redes pedidas (X = 25000).
     assert "más estricto" in final and "25000 caracteres" in final
     assert "UN SOLO copy" in final
 

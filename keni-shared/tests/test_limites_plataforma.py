@@ -11,7 +11,7 @@ def test_tabla_canonica_tiene_las_cinco_redes_en_orden():
 
 def test_valores_canonicos():
     assert limites_plataforma.LIMITES == {
-        "x": 25000,  # X Premium (la cuenta de AMX lo tiene); antes 280 (cuenta gratis)
+        "x": 25000,  # X Premium
         "instagram": 2200,
         "facebook": None,
         "tiktok": 4000,  # caption ampliado 2023-24 (#112)

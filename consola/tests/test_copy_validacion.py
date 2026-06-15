@@ -59,7 +59,7 @@ def test_motivo_texto_vacio():
 
 
 def test_motivo_excede_limite_de_la_red():
-    # X Premium = 25000; un cuerpo por encima del tope invalida la pieza.
+    # X = 25000; un cuerpo por encima del tope invalida la pieza.
     motivo = dom_copy._motivo_invalida({"red": "x", "contenido": "a" * 25001})
     assert "límite 25000" in motivo
 
