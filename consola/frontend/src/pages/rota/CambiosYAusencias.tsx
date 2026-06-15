@@ -719,6 +719,24 @@ export function TarjetaSwap({
   const puedeAprobarAdmin = esAdmin && swap.estado === "aceptado";
   const puedeCancelar = soySolicitante && !esTerminal;
 
+  // Resumen legible del turno de cada lado (fecha · franja). `_a` es del solicitante, `_b`
+  // del destinatario; con esto la tarjeta dice el RESULTADO por persona en vez de obligar a
+  // adivinar de quién es cada turno.
+  const turnoA = `${formatearFechaCorta(swap.fecha_a)} · ${swap.franja_a_nombre ?? ETIQUETA_FRANJA[swap.franja_a]}`;
+  const turnoB = `${formatearFechaCorta(swap.fecha_b)} · ${swap.franja_b_nombre ?? ETIQUETA_FRANJA[swap.franja_b]}`;
+
+  // Estado CONSCIENTE DE PERSPECTIVA: a quien le toca actuar se lo decimos en primera
+  // persona (lo genérico en tercera persona no comunica "esto me toca a mí").
+  const etiquetaEstado = puedeAceptarRechazarDestinatario
+    ? "Pendiente de TU respuesta"
+    : puedeAprobarAdmin
+      ? "Para aprobar"
+      : ETIQUETA_ESTADO_SWAP[swap.estado];
+  const varianteEstado =
+    puedeAceptarRechazarDestinatario || puedeAprobarAdmin
+      ? "aviso"
+      : VARIANTE_ESTADO_SWAP[swap.estado];
+
   const cancelar = useMutation({
     mutationFn: () => api.cancelarSwap(swap.id),
     onSuccess: () => {
@@ -740,21 +758,27 @@ export function TarjetaSwap({
             <ArrowLeftRight className="h-3.5 w-3.5 text-muted-foreground" />
             <span className="font-medium">{swap.destinatario_nombre}</span>
           </div>
-          <div className="text-xs text-muted-foreground">
-            <span>
-              {formatearFechaCorta(swap.fecha_a)} ·{" "}
-              {swap.franja_a_nombre ?? ETIQUETA_FRANJA[swap.franja_a]}
-            </span>
-            <span className="mx-1.5">↔</span>
-            <span>
-              {formatearFechaCorta(swap.fecha_b)} ·{" "}
-              {swap.franja_b_nombre ?? ETIQUETA_FRANJA[swap.franja_b]}
-            </span>
-          </div>
+          {soyDestinatario ? (
+            <p className="text-sm">
+              Te quedas con <span className="font-medium text-foreground">{turnoA}</span> y
+              entregas tu <span className="font-medium text-foreground">{turnoB}</span>.
+            </p>
+          ) : soySolicitante ? (
+            <p className="text-sm">
+              Entregas tu <span className="font-medium text-foreground">{turnoA}</span> y te
+              llevas <span className="font-medium text-foreground">{turnoB}</span>.
+            </p>
+          ) : (
+            <div className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">{swap.solicitante_nombre}</span>:{" "}
+              {turnoA}
+              <span className="mx-1.5">⇄</span>
+              <span className="font-medium text-foreground">{swap.destinatario_nombre}</span>:{" "}
+              {turnoB}
+            </div>
+          )}
         </div>
-        <Badge variant={VARIANTE_ESTADO_SWAP[swap.estado]}>
-          {ETIQUETA_ESTADO_SWAP[swap.estado]}
-        </Badge>
+        <Badge variant={varianteEstado}>{etiquetaEstado}</Badge>
       </div>
 
       {/* Indicador de progreso de la cadena (solicitante → compañero → el coordinador de la rota): hace
@@ -915,7 +939,7 @@ export function DialogAccionSwap({
     aceptar: {
       titulo: "Aceptar el cambio",
       descripcion:
-        "Aceptar: tu compañero recibirá tu respuesta",
+        "Aceptas cubrir su turno. Pasará a Elías para la aprobación final.",
       botonConfirmar: "Aceptar",
       llamar: (cuerpo) => api.aceptarSwap(swapId, cuerpo),
       toastOk: "Cambio aceptado. Espera la aprobación de Elías.",
@@ -970,7 +994,7 @@ export function DialogAccionSwap({
             <DialogDescription>{meta.descripcion}</DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5">
-            <Label htmlFor={`resp-${swapId}-${accion}`}>Respuesta</Label>
+            <Label htmlFor={`resp-${swapId}-${accion}`}>Respuesta (opcional)</Label>
             <Textarea
               id={`resp-${swapId}-${accion}`}
               value={respuesta}
