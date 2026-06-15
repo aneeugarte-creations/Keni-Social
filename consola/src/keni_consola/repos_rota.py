@@ -294,6 +294,7 @@ def crear_swap_turno(
     destinatario_nombre: str = "",
     motivo: str = "",
     marca: str = "",
+    tipo: str = "intercambio",
 ) -> dict[str, Any]:
     return db.crear_swap_turno(
         solicitante_id,
@@ -306,6 +307,7 @@ def crear_swap_turno(
         destinatario_nombre=destinatario_nombre,
         motivo=motivo,
         marca=marca,
+        tipo=tipo,
     )
 
 
