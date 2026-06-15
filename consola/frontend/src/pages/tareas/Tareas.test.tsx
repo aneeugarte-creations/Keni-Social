@@ -192,6 +192,39 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect(screen.queryByRole("button", { name: "Asignar" })).toBeNull();
   });
 
+  it("PANORAMA: un evento PASADO no suma al contador de la persona; uno FUTURO sí", async () => {
+    renderTareas([
+      // Cobertura de un partido del 10 jun (ya pasó): no es carga pendiente → no cuenta.
+      tarea({
+        id: "t-pas",
+        titulo: "Partido viejo",
+        responsable_id: "u-luis",
+        responsable_nombre: "luis",
+        evento_id: "ev-pas",
+        fecha_objetivo: "2026-06-10",
+        hora_objetivo: "13:00",
+      }),
+      // Cobertura de un partido futuro: sí cuenta.
+      tarea({
+        id: "t-fut",
+        titulo: "Partido futuro",
+        responsable_id: "u-ana",
+        responsable_nombre: "ana",
+        evento_id: "ev-fut",
+        fecha_objetivo: "2026-07-20",
+        hora_objetivo: "13:00",
+      }),
+    ]);
+
+    const chipLuis = await screen.findByRole("button", { name: "Ver solo lo de luis" });
+    const chipAna = await screen.findByRole("button", { name: "Ver solo lo de ana" });
+    // luis: su único partido ya pasó → 0 (pero la fila sigue en la agenda). ana: futuro → 1.
+    expect(chipLuis).toHaveTextContent(/0/);
+    expect(chipAna).toHaveTextContent(/1/);
+    // El partido pasado SIGUE visible en el calendario (no se elimina, solo deja de contar).
+    expect(screen.getAllByText("Partido viejo").length).toBeGreaterThan(0);
+  });
+
   it("un evento 'no_cubrir' NO aparece en la lista", async () => {
     renderTareas([], [evento({ id: "ev-x", titulo: "Amistoso sin señal", tipo_cobertura: "no_cubrir" })]);
     await waitFor(() => expect(apiMod.api.rotaEventos).toHaveBeenCalled());

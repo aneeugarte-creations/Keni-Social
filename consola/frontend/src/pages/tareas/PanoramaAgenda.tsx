@@ -682,18 +682,30 @@ export function PanoramaAgenda({
       nombrePorId.set(t.responsable_id, t.responsable_nombre);
   }
 
-  // Carga por persona = nº de tareas activas (no hechas). Más cargados primero (cuello de botella).
+  // Carga por persona = nº de tareas ACTIVAS. «Activa» = ni hecha, ni un evento que YA pasó: un
+  // partido que ya ocurrió no es trabajo pendiente (no se cubre hacia atrás), así que deja de
+  // sumar al contador —pero SIGUE en el calendario/agenda para poder revisarlo—. Mismo criterio de
+  // «ya pasó» que el semáforo «Cubierto» (posicionTemporal). Más cargados primero (cuello de botella).
+  const yaPaso = (fecha?: string | null, hora?: string | null) =>
+    posicionTemporal(fecha, hora) === "despues";
+  const esCargaActiva = (t: Contenido) =>
+    t.estado !== "hecha" && !(t.evento_id && yaPaso(t.fecha_objetivo, t.hora_objetivo));
   const idsPersona = new Set<string>(usuarios.map((u) => u.id));
   for (const t of conResponsable) idsPersona.add(t.responsable_id);
   const cargas = [...idsPersona]
     .map((id) => ({
       id,
       nombre: nombrePorId.get(id) || "Sin nombre",
-      n: conResponsable.filter((t) => t.responsable_id === id && t.estado !== "hecha").length,
+      n: conResponsable.filter((t) => t.responsable_id === id && esCargaActiva(t)).length,
     }))
     .sort((a, b) => b.n - a.n || a.nombre.localeCompare(b.nombre));
+  // «Por cubrir» también excluye lo que ya pasó (un partido pasado no es coverable). Los encargos
+  // sueltos sin dueño NO llevan fecha de evento, así que siguen contando aunque venzan (son tarea
+  // pendiente, no un evento ido).
   const nPorCubrir =
-    eventosLibres.length + recuperables.length + encargos.filter((t) => !t.responsable_id).length;
+    eventosLibres.filter((e) => !yaPaso(e.fecha, e.hora)).length +
+    recuperables.filter((t) => !yaPaso(t.fecha_objetivo, t.hora_objetivo)).length +
+    encargos.filter((t) => !t.responsable_id).length;
 
   // Agenda, aplicando el filtro de persona/pool si lo hay.
   const soloPool = filtro === "__pool__";
