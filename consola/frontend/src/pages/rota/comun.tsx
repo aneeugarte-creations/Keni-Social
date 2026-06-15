@@ -44,11 +44,31 @@ import type {
   FranjaTurno,
   MiembroRota,
   PrioridadEvento,
+  SwapTurno,
   TipoAusencia,
   TipoCoberturaEvento,
   TurnoCobertura,
   TurnoRota,
 } from "@/types";
+
+
+/**
+ * Nº de cambios de turno que requieren la ACCIÓN del usuario actual (alimenta el badge
+ * de la pestaña «Cambios y ausencias»): los que espera responder como destinatario
+ * (`propuesto` dirigido a mí) y, si es admin, los que esperan su aprobación (`aceptado`).
+ * Las ausencias NO cuentan: no tienen estado de aprobación, son un registro directo.
+ */
+export function contarSwapsPendientes(
+  swaps: SwapTurno[],
+  miId: string,
+  esAdmin: boolean,
+): number {
+  return swaps.filter(
+    (s) =>
+      (s.estado === "propuesto" && s.destinatario_id === miId) ||
+      (esAdmin && s.estado === "aceptado"),
+  ).length;
+}
 
 
 /**

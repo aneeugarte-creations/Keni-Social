@@ -1,5 +1,6 @@
 // Página «Turnos» (rota): shell de pestañas. Partido mecánicamente de pages/Rota.tsx
 // en pages/rota/* (como feed/ y publicaciones/), sin cambios de comportamiento.
+import { useQuery } from "@tanstack/react-query";
 import {
   CalendarClock,
 } from "lucide-react";
@@ -8,12 +9,16 @@ import { useSearchParams } from "react-router-dom";
 
 import { TituloPagina } from "@/components/layout/encabezado";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useSesion } from "@/hooks/sesion-contexto";
+import { api } from "@/lib/api";
 import { lunesDeSemana } from "@/lib/rota-calendario";
 import { TareasBoard } from "@/pages/tareas/Tareas";
+import type { FiltrosSwaps } from "@/types";
 
 import { Calendario } from "./Calendario";
 import { CambiosYAusencias } from "./CambiosYAusencias";
+import { contarSwapsPendientes } from "./comun";
 import { MisTurnos } from "./MisTurnos";
 
 
@@ -24,7 +29,26 @@ const PESTANAS = ["calendario", "cobertura", "mis-turnos", "cambios-ausencias"];
 
 export default function Rota() {
   const { usuario } = useSesion();
+  const { marcaActiva } = useMarcaActiva();
   const esAdmin = usuario?.rol === "admin";
+
+  // Badge de la pestaña «Cambios y ausencias»: nº de cambios de turno que esperan MI
+  // acción (responder como destinatario o, si soy admin, aprobar). Comparte la queryKey
+  // con CambiosYAusencias para no duplicar la petición; se actualiza al invalidar swaps.
+  const filtrosSwaps: FiltrosSwaps = {
+    ...(esAdmin ? {} : { mio: true }),
+    ...(marcaActiva ? { marca: marcaActiva } : {}),
+  };
+  const swapsPendientesQ = useQuery({
+    enabled: usuario !== null,
+    queryKey: ["rota", "swaps", filtrosSwaps] as const,
+    queryFn: ({ signal }) => api.listarSwaps(filtrosSwaps, signal),
+  });
+  const pendientesCambios = contarSwapsPendientes(
+    swapsPendientesQ.data?.swaps ?? [],
+    usuario?.id ?? "",
+    esAdmin,
+  );
   // Por defecto: la semana ACTUAL (la que contiene hoy, en zona CDMX).
   const [lunes, setLunes] = React.useState(() => lunesDeSemana(new Date()));
   // Pestaña activa (controlada). La gestión de EVENTOS se mudó al hub de Fuentes
@@ -52,7 +76,17 @@ export default function Rota() {
           <TabsTrigger value="calendario">Calendario</TabsTrigger>
           <TabsTrigger value="cobertura">Cobertura</TabsTrigger>
           <TabsTrigger value="mis-turnos">Mis turnos</TabsTrigger>
-          <TabsTrigger value="cambios-ausencias">Cambios y ausencias</TabsTrigger>
+          <TabsTrigger value="cambios-ausencias">
+            Cambios y ausencias
+            {pendientesCambios > 0 && (
+              <span
+                className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none text-primary-foreground tabular-nums"
+                aria-label={`${pendientesCambios} pendientes`}
+              >
+                {pendientesCambios > 99 ? "99+" : pendientesCambios}
+              </span>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="calendario">
