@@ -1,6 +1,4 @@
-// Atajos de teclado del Lienzo, extraídos como hook. Mantiene EXACTAMENTE el comportamiento previo:
-// mismo handler `keydown` sobre `window`, mismas dependencias del efecto y mismo orden de ramas.
-// Ignora si el foco está en un campo editable o un <select>.
+// Atajos de teclado del Lienzo, extraídos como hook. Ignora si el foco está en un campo editable o un <select>.
 
 import type { RefObject } from "react";
 import { useEffect, useRef } from "react";

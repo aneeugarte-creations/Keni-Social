@@ -79,8 +79,7 @@ def test_cada_app_lleva_descripcion_y_nav_para_la_tarjeta():
             assert {"ruta", "etiqueta", "icono", "descripcion"} <= set(item)
 
     # La ruta primaria (primer item) de cada app: `nav` viene ordenada por bloque de
-    # flujo (grupo_orden, orden). Tras retirar Revisión, la 1ª entrada de Producción cae en
-    # el bloque "contenido" (Imagen), ya que la app dejó de aportar entradas al bloque "operacion".
+    # flujo (grupo_orden, orden).
     assert porid["produccion"]["nav"][0]["ruta"] == "/contenido/imagen"
     assert porid["metricas"]["nav"][0]["ruta"] == "/datos/analiticas"
     # La app "operacion" aporta TRES entradas (Feed, Programación, Turnos); la 1ª por orden es
@@ -137,8 +136,6 @@ def test_flag_acepta_varias_formas_de_off():
 
 
 def test_shell_no_es_app_ni_aporta_nav():
-    # El shell no es app de catálogo y (tras retirar el Panel) ya no aporta nav: el
-    # sidebar lo encabeza el Feed del equipo, no una entrada del shell.
     cat = registro.catalogo(_entorno())
     assert "shell" not in [a["id"] for a in cat["apps"]]
     primer_bloque = cat["navegacion"][0]["items"]

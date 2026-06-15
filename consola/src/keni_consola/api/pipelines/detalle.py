@@ -123,11 +123,6 @@ def _actividad_y_generaciones(contenido_id: str, gens: list[dict]) -> tuple[list
         )
         gen_real = _generacion_publica(gen.get("gen_id", "") or "")
         if gen_real is not None and etapa:
-            # Por etapa nos quedamos con la generación COMPLETADA más reciente (su salida ES
-            # el resultado real); solo si ninguna terminó aún, la más reciente en curso (el
-            # stream vivo). Antes ganaba "la más reciente" a secas: con un relanzamiento, el
-            # duplicado recién arrancado TAPABA la salida del que ya completó (la etapa decía
-            # "Completado" y su cuadro "En curso…", sin resultado que mirar).
             terminada = gen_real.get("estado") == "completado"
             previa = gens_por_etapa.get(etapa)
             if (
@@ -154,7 +149,6 @@ async def detalle(request: Request) -> Response:
     es_pipeline = (item.get("origen") or "") == ORIGEN_PIPELINE
     piezas = repos.listar_contenido_plataforma(pipeline_id)
     cluster = repos.cluster_por_contenido(pipeline_id)
-    # UNA sola lectura del almacén de generaciones (antes 3×, ~3 s cada una); se reparte.
     gens = generaciones.listar(limite=None)
     eventos, generaciones_por_etapa = _actividad_y_generaciones(pipeline_id, gens)
     # Fusión/Editorial: la IA del pool (Haiku) es a nivel de marca/lote; enlazamos su generación más

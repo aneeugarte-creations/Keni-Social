@@ -15,9 +15,7 @@ from ... import rutas
 from ._comun import _es_admin, _logger, _rechazo_no_admin
 
 # Umbrales de USO de disco (%) que consume el doctor (`/api/estado`, chequeo `infra:disco`).
-# AVISO replica el umbral historico del banner del panel Sistema (>= 85% el volumen va
-# justo); ERROR marca un volumen al borde del lleno. Las sondas de este modulo NO los
-# aplican (devuelven el porcentaje crudo y el front/doctor juzgan).
+# Las sondas de este modulo NO los aplican (devuelven el porcentaje crudo y el front/doctor juzgan).
 UMBRAL_DISCO_AVISO_PCT = 85.0
 UMBRAL_DISCO_ERROR_PCT = 95.0
 

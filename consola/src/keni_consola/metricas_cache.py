@@ -395,11 +395,9 @@ async def ads_async(rango: str, marca: str | None) -> tuple[dict, str]:
 # --------------------------------------------------------------------------- #
 
 
-# TODOS los tipos que sirve la cache: el barrido refresca el combo COMPLETO. Antes solo
-# refrescaba reporte/analisis/piezas/tendencia (y el listado solo por-marca): seguidores,
-# desgloses, crosstab, correlacion y el listado de "todas" se llenaban una vez por lazy-fill
-# y se servian PARA SIEMPRE — la alerta de ingesta y el grafico de seguidores del dashboard
-# global ensenaban datos congelados de hace semanas como si fueran de hoy.
+# TODOS los tipos que sirve la cache: el barrido refresca el combo COMPLETO (incluyendo
+# seguidores, desgloses, crosstab, correlacion y el listado global). Asi la alerta de ingesta
+# y el grafico de seguidores del dashboard ven datos frescos sin quedar congelados.
 _TIPOS_BARRIDO = (
     TIPO_REPORTE,
     TIPO_ANALISIS,

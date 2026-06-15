@@ -24,8 +24,7 @@ export const apiGeneraciones = {
     }),
 
   // --- Historial de generaciones (NEUTRO; común a copy/documento) ---
-  // Guardar una entrada del historial como publicaciones (borradores). El listado/detalle
-  // del historial ya no tiene página propia.
+  // Guardar una entrada del historial como publicaciones (borradores).
   guardarHistorial: (id: string, cuerpo: CuerpoGuardarHistorial = {}) =>
     peticion<RespuestaPublicaciones>(`/prompts/historial/${encodeURIComponent(id)}/guardar`, {
       metodo: "POST",

@@ -7,8 +7,7 @@ import { iconoRed } from "@/pages/publicaciones/meta";
  * Selector de redes objetivo como chips (pastillas) de selección MÚLTIPLE.
  *
  * Convive con `SelectorRed` (dropdown de selección ÚNICA): el sufijo `Multiple`
- * los distingue para evitar confundir los imports (antes ambos diferían solo en
- * la "s" final: `SelectorRed` vs `SelectorRedes`). Este es el de chips.
+ * los distingue para evitar confundir los imports. Este es el de chips.
  *
  * Sobrio, sin casillas: seleccionada = relleno gris sutil + texto en foreground;
  * sin seleccionar = solo contorno + gris. Las opciones vienen del backend.

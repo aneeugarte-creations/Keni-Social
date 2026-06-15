@@ -4,9 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import { SelectorRedMultiple } from "./SelectorRedMultiple";
 
 /**
- * Tests del selector de redes múltiple (chips), movido a `comunes/` y renombrado
- * desde `pages/copy/SelectorRedes` para no confundirlo con `SelectorRed`
- * (dropdown único) — #89 / N5.
+ * Tests del selector de redes múltiple (chips). El sufijo diferencia entre
+ * `SelectorRedMultiple` (chips) y `SelectorRed` (dropdown único).
  */
 const OPCIONES = [
   { id: "instagram", nombre: "Instagram" },

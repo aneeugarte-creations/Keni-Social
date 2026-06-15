@@ -10,7 +10,7 @@
 // se vea la transparencia.
 //
 // El popover se renderiza en un PORTAL a `body` con posición fija: así NO lo recorta el
-// `overflow` del panel inspector (antes quedaba oculto tras el lienzo).
+// `overflow` del panel inspector.
 
 import { useQuery } from "@tanstack/react-query";
 import { Pipette } from "lucide-react";

@@ -8,8 +8,7 @@ api/contenido, api/breaking, api/insumos) y la ETAPA DE COPY del pipeline, que e
 motor de copy automático (ver `pipeline_contenido.ejecutar_cd`). Este módulo expone esa
 función única (`lanzar_para_topic`) + su dedup por etiqueta (`autogen`).
 
-Antes existía además un DAEMON suelto (`KENI_AUTOGEN`) que barría el tablero y auto-generaba
-copy; se RETIRÓ: la selección de temas del news-pool sin copy vive ahora dentro de la etapa de
+La selección de temas del news-pool sin copy vive dentro de la etapa de
 copy del pipeline (`pipeline_contenido.temas_autogen_sin_copy`), gateada por `KENI_PIPELINE_COPY`.
 
   - SOLO FUENTES: la etapa de copy solo procesa temas cuyo `origen` es de una FUENTE
@@ -43,9 +42,8 @@ _log = logging.getLogger("keni_consola.autogen_copy")
 ORIGENES_TOPIC: frozenset[str] = frozenset(ORIGENES_AUTOGEN)
 
 # Etiqueta de origen del historial para el copy auto-generado (nota -> piezas por red, con
-# auto-verificacion). Tras retirar el sistema de skills, el copy va por el lanzador NEUTRO
-# (`dominio.generar.lanzar_copy`), que compone el prompt copy-desde-nota autocontenido; este
-# valor es solo la etiqueta de procedencia en el historial.
+# auto-verificacion). El copy va por el lanzador NEUTRO (`dominio.generar.lanzar_copy`), que
+# compone el prompt copy-desde-nota autocontenido; este valor es solo la etiqueta de procedencia.
 ORIGEN_HISTORIAL = "copy-desde-nota"
 
 # Etiqueta-marca de dedup: un tema ya encolado para auto-generacion la lleva.

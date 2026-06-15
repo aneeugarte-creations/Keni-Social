@@ -37,10 +37,6 @@ from typing import TypedDict
 
 SABADO = 5
 
-# Re-export para que `api/rota.py` mantenga su contrato historico (otros call sites lo
-# usan; el predicado de sabado lo conserva). Tras la migracion a franjas por semana, el
-# concepto "franja de trabajo" desaparece (todo turno es jornada laboral), pero el simbolo
-# se conserva para no romper imports en el primer paso del refactor.
 FRANJAS_TRABAJO: tuple[str, ...] = ()
 
 __all__ = ["FRANJAS_TRABAJO"]
@@ -231,11 +227,6 @@ def viola_rotacion_sabado_trabajo(
 # --------------------------------------------------------------------------- #
 
 
-# Defaults editoriales por SI los call sites legados (resumen_carga, cobertura sin
-# franjas) caen aqui. Tras la migracion la cobertura USA las franjas vivas de la
-# semana; estos defaults se mantienen para no romper la firma publica del modulo (un
-# test que llame `cobertura_de_evento` sin pasar `franjas_semana` sigue funcionando con
-# los rangos del piloto Mar 2026: matutino 08-16, vespertino 16-24).
 FRANJA_MATUTINO_DEFAULT_INICIO = "08:00"
 FRANJA_MATUTINO_DEFAULT_FIN = "16:00"
 FRANJA_VESPERTINO_DEFAULT_INICIO = "16:00"

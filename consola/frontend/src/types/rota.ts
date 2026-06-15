@@ -107,11 +107,6 @@ export type CuerpoActualizarEventoRota = Partial<CuerpoCrearEventoRota> & {
 /** Estado de un turno: `propuesto` (Keni) o `aprobado` (publicado por el coordinador de la rota). */
 export type EstadoTurnoRota = "propuesto" | "aprobado";
 
-// Nota: el viejo `TurnoRota` (turno ligado a un evento + cobertura persistida) ya
-// no existe. Ahora el turno es persona × día × franja (modelo nuevo, ver más abajo).
-// La cobertura es DERIVADA (calculada): para cada evento, los turnos cuya
-// `(fecha, franja)` lo cubren. Ver `CoberturaEvento` / `RespuestaCoberturaSemana`.
-
 // --- Gestión de turnos: horario de trabajo + ausencias (F4 · #144, ola A) ---
 
 /** Tipo de una ausencia/vacación. */
@@ -164,9 +159,6 @@ export interface CuerpoActualizarAusenciaRota {
   motivo?: string;
 }
 
-/** Franja de un turno LEGACY: literal mañana / tarde / descanso. Se mantiene como
- * derivada en la respuesta para retrocompat con UI vieja; codigo nuevo usa
- * `franja_id` + `franja_nombre` (modelo "franjas por semana"). */
 export type FranjaTurno = "matutino" | "vespertino" | "descanso" | string;
 
 /**
@@ -213,8 +205,6 @@ export interface TurnoRota {
   franja_id: string;
   /** Nombre legible de la franja (lo emite el backend para evitar joins en el cliente). */
   franja_nombre: string;
-  /** Retrocompat: literal `matutino`/`vespertino`/`descanso` derivado del nombre de la
-   * franja para UI vieja. Codigo nuevo lee `franja_id`/`franja_nombre`. */
   franja: FranjaTurno;
   estado: EstadoTurnoRota;
   /** Cobertura forzada que rompe la rotación de sábados (la decide el coordinador de la rota). */
@@ -429,11 +419,7 @@ export type EstadoSwap =
   | "rechazado_admin"
   | "cancelado";
 
-/** Una solicitud de cambio de turno entre dos compañeros (snapshot de un swap).
- *
- * Tras el modelo "franjas por semana", los campos `franja_a`/`franja_b` ahora son
- * `franja_id` (id de la franja viva de la semana del turno), no literales. Nombre de
- * campo conservado por inercia (cambio de SEMANTICA del dato, no de columna). */
+/** Una solicitud de cambio de turno entre dos compañeros (snapshot de un swap). */
 export interface SwapTurno {
   id: string;
   solicitante_id: string;
@@ -621,8 +607,6 @@ export interface RespuestaActualizarLoteTurnos {
 
 /**
  * Cuerpo de `POST /api/rota/copiar-semana`: replica turnos de una semana en otra.
- * Simplificado tras ola back3: ya NO hay `alcance` (solo se copian turnos, los
- * eventos son por semana y no se duplican).
  */
 export interface CuerpoCopiarSemana {
   de_lunes: string;

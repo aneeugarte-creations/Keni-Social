@@ -264,8 +264,6 @@ def test_borrador_facebook_preserva_fecha_programada(monkeypatch):
     }
     borrador = _borrador_de_publicacion(pub)
     assert borrador is not None
-    # Tras la migración a fechas UTC-conscientes (`programador._parsear_fecha`), la fecha
-    # de pared sin zona se normaliza a UTC-aware (el envío a Metricool ya la convierte a CDMX).
     assert borrador.publicar_en == datetime(2026, 5, 30, 18, 0, tzinfo=timezone.utc)
 
 
@@ -517,12 +515,7 @@ def test_varias_piezas_una_sin_creds_no_rompe_otras(entorno, monkeypatch):
 
 
 def test_error_de_red_libera_la_preparacion_y_no_rompe_barrido(entorno, monkeypatch):
-    """Un fallo HTTP de Metricool se loguea, LIBERA `preparado_en` y no rompe el barrido.
-
-    Antes la pieza quedaba con `preparado_en` estampado y `piezas_vencidas` la excluia
-    PARA SIEMPRE: una pieza programada que nunca salia, en silencio. Ahora el claim se
-    libera para que el siguiente barrido la reintente.
-    """
+    """Un fallo HTTP de Metricool se loguea, LIBERA `preparado_en` y no rompe el barrido."""
     monkeypatch.setenv("KENI_PUBLICAR_REAL", "1")
     monkeypatch.delenv("KENI_CONSOLA_URL_PUBLICA", raising=False)
 

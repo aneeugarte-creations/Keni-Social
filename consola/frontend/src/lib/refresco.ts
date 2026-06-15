@@ -1,10 +1,6 @@
 /**
  * Cadencias de REFRESCO únicas de toda la consola (refetchInterval de react-query).
  *
- * Antes cada página declaraba la suya (Monitor 3 s/30 s, Sistema 8 s/32 s, Pipelines
- * 30 s, detalle 15 s) en ficheros distintos y el mismo dato se refrescaba a ritmos
- * incoherentes. Aquí viven TODAS, con un criterio único:
- *
  *  - VIVO (3 s): estado operacional que cambia en segundos y se mira en directo
  *    (cola de generación del Monitor).
  *  - PANEL (8 s): salud de paneles (recursos, daemons, síntesis de cola en Sistema).

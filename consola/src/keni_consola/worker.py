@@ -18,8 +18,6 @@ PARALELO. Cada hilo del POOL corre su propio bucle reclama->procesa->termina, bl
 SU job (`_esperar_terminal`); el POOL da el paralelismo de N vias. Reclamar es concurrente-
 seguro (`FOR UPDATE SKIP LOCKED`: dos hilos nunca cogen el mismo job). El semaforo de
 `runner.slot` (BoundedSemaphore(max_jobs)) es un tope adicional al numero de procesos.
-ANTES el bucle era UNICO y serial (clavaba 1 job y ESPERABA su terminal antes del siguiente),
-asi que corria 1 job a la vez pese a KENI_MAX_JOBS; el POOL arregla eso.
 
 POR QUE REUSA `generaciones.lanzar_job_claude`: ahi vive TODO el endurecimiento #137 que
 hay que PRESERVAR (grupo de procesos propio, kill del ARBOL al timeout/cancel, tope de

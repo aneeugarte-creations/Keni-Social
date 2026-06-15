@@ -35,8 +35,7 @@ from .tiempo import iso_utc
 _log = logging.getLogger("keni_consola.reaper_generaciones")
 
 # TTL del saneo de QA 'en_curso' ≈ 2× el wall-timeout real de la criba: un zombi se detecta en
-# minutos (antes 30 min fijos = hasta media hora de cupo serial bloqueado por marca), y una
-# criba VIVA nunca se toca (el doble del timeout deja margen de sobra al worker).
+# minutos, y una criba VIVA nunca se toca (el doble del timeout deja margen de sobra al worker).
 _FACTOR_TTL_QA_EN_CURSO = 2
 
 

@@ -53,7 +53,6 @@ export default function CockpitProduccion() {
   const { usuario } = useSesion();
   const esAdmin = usuario?.rol === "admin";
   const [searchParams] = useSearchParams();
-  // Deep-link heredado del Monitor: `?tab=ajustes` abre el drawer de ajustes directamente.
   const abrirAjustes = searchParams.get("tab") === "ajustes";
   const navigate = useNavigate();
 
@@ -67,7 +66,6 @@ export default function CockpitProduccion() {
   const { marcaActiva, nombreActiva } = useMarcaActiva();
   const [copyAbierto, setCopyAbierto] = React.useState(false);
   const [arteAbierto, setArteAbierto] = React.useState(false);
-  // Prompt que se está editando in-place (overlay), o `null`.
   const [promptEditando, setPromptEditando] = React.useState<string | null>(null);
 
   const marcasQuery = useQuery({

@@ -65,7 +65,7 @@ export function useHover({
         return { x: r.x, y: r.y, w: r.width, h: r.height, rot: 0 };
       }
     }
-    // Caja VISIBLE (banda del overlay, bloque del texto legado) rotada alrededor del ORIGEN de la
+    // Caja VISIBLE (banda del overlay) rotada alrededor del ORIGEN de la
     // capa (c.x, c.y): es el pivote del nodo Konva y del export. El desplazamiento local del tope
     // visible (vis.y - c.y) se rota con la capa para colocar el contorno donde se pinta de verdad.
     const vis = cajaVisual(c);

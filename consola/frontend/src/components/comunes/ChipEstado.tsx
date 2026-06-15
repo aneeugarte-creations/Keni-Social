@@ -3,11 +3,8 @@
  *
  * Un solo vocabulario visual para los estados de GENERACIÓN (registro de `claude -p`:
  * ejecutando/completado/error/lanzado), de ETAPA/RUN de pipeline (ok/en_curso/revisar/
- * pendiente/saltada/fallo) y de JOB de cola (pendiente/reclamado). Antes cada página
- * tenía su mapeo (Actividad `presentacionEstado`, Pipelines `ASPECTO`, conversión inline
- * en Pipelines para estados de generación) y el mismo concepto se llamaba distinto
- * («OK» vs «Completado», «Visualizando…» vs «En curso»). Consolidado aquí: misma
- * etiqueta y mismo color signifiquen lo mismo estés en la página que estés.
+ * pendiente/saltada/fallo) y de JOB de cola (pendiente/reclamado). La misma
+ * etiqueta y el mismo color significan lo mismo en toda la consola.
  */
 
 import type { BadgeProps } from "@/components/ui/badge";

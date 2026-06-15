@@ -1,8 +1,7 @@
-"""Tests del CABLEADO del render a la pieza (cierre del hueco VIDEO).
+"""Tests del CABLEADO del render a la pieza.
 
-El render dejaba el mp4 solo en `resultado`; ahora, si la composicion tiene `contenido_id`, lo
-adjunta a las plataformas de VIDEO de la pieza (`video=<clave>`, `falta_video=0`) para que fluya
-por feed/aprobacion/publicacion.
+Si la composicion tiene `contenido_id`, se adjunta el video a las plataformas de VIDEO de la
+pieza (`video=<clave>`, `falta_video=0`) para que fluya por feed/aprobacion/publicacion.
 
 ffmpeg/render van MONKEYPATCHEADOS. Repos en Postgres de pruebas (fixture `entorno`): SKIP en
 local sin BD, corre en CI.

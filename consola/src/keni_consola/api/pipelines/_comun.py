@@ -23,9 +23,6 @@ from ...pipeline_contenido import (
 # import-calendario). Un tema de tablero solo se lista si la máquina lo TRABAJÓ (tiene
 # generaciones del pipeline correlacionadas): el alta manual sin trabajo IA no es una run.
 _ORIGENES_RUN = frozenset({ORIGEN_PIPELINE, *ORIGENES_AUTOGEN})
-# Tipos de generación que cuentan como TRABAJO del pipeline sobre un tema ("autogen" es el
-# nombre LEGADO del copy de tablero, anterior a sellarlo como `pipeline`; se acepta para que
-# las runs históricas no pierdan su evidencia).
 _TIPOS_TRABAJO_PIPELINE = frozenset({"pipeline", TIPO_ACTIVIDAD, "autogen"})
 
 # Estado de etapa cuando su toggle está DESACTIVADO para la marca (1 toggle = 1 etapa): la etapa

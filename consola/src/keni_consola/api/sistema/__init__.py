@@ -95,7 +95,7 @@ __all__ = [
 
 # El ORDEN y los paths/metodos son CONTRATO (Starlette casa por orden): las rutas mas
 # especificas de S3 (/s3/objetos, /s3/objeto, /s3/borrar-lote, /s3/borrar) van ANTES que
-# /s3/probar y /s3 para que casen correctamente. Identico a la antigua `api/sistema.py`.
+# /s3/probar y /s3 para que casen correctamente.
 RUTAS = [
     Route("/api/sistema/recursos", recursos.recursos, methods=["GET"]),
     Route("/api/sistema/daemons", daemons.daemons_latidos, methods=["GET"]),

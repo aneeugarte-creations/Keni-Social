@@ -166,8 +166,6 @@ export function TablaJobs({
               <TableCell className="font-medium">
                 <span className="inline-flex items-center gap-1.5">
                   {j.etiqueta || j.gen_id}
-                  {/* Prioridad de cola (1f3acd7d): un lanzamiento manual adelanta al lote de
-                      fondo del pipeline. Solo se señala lo prioritario (>0). */}
                   {j.prioridad > 0 && (
                     <Badge
                       variant="secondary"

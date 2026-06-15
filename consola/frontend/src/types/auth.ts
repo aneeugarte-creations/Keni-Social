@@ -11,9 +11,7 @@ export type RolUsuario = "admin" | "editor";
  * Cargo (función) de un usuario en el equipo. Ortogonal al rol de permisos: describe
  * QUÉ hace la persona (community manager, director, coordinador de redes...). Allowlist
  * sincronizada con `keni_consola.estados.CARGOS_USUARIO`; cadena vacía = sin
- * clasificar (usuarios legados antes de la migración). Tras la ola
- * `feat/roles-marcas` (organigrama del cliente dictado por la dirección) se añaden cargos
- * específicos por vertical/función; los valores viejos se conservan por retrocompat.
+ * clasificar.
  */
 export type CargoUsuario =
   // Catalogo original (retrocompat):

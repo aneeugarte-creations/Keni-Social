@@ -246,8 +246,7 @@ def _mock_reels(net: str, reels: list[dict]) -> None:
 def test_mejores_piezas_incluye_reels_de_instagram():
     """Los Reels viven en `/v2/analytics/reels/{network}` (endpoint APARTE de /posts).
 
-    Sin leerlos, todo el vídeo vertical cross-posteado quedaba invisible (solo se veía en
-    TikTok). Se parsean con su caption (`content`) — que SÍ trae los hashtags — y métricas.
+    Se parsean con su caption (`content`) — que SÍ trae los hashtags — y métricas.
     """
     _mock_posts("instagram", [])  # sin posts de feed
     _mock_reels(
@@ -521,8 +520,7 @@ def test_piezas_sin_fecha_o_fuera_de_rango_se_descartan():
 def test_seguidores_van_con_subject_account_y_metrica_por_red():
     """La serie de followers se pide con subject=account y la métrica correcta por red.
 
-    Confirmado contra la API real: sin `subject=account` la llamada da 400 (por eso antes
-    `seguidores_netos` salía 0). Instagram usa la métrica `followers`.
+    Instagram usa la métrica `followers`.
     """
     _mock_perfiles(_perfil(instagram="x"))
     _mock_posts("instagram", [_post_ig("p1", 100, 10)])

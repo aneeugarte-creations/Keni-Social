@@ -256,7 +256,7 @@ def test_noticias_reparto_en_secciones(store):
             assert a is not None, f"falta la clave {clave}"
             if a.tipo in ("int", "float"):
                 assert a.minimo is not None, f"{clave} debe tener minimo"
-    # El master de rendimiento es un bool; ya no es un daemon de `automatismos_generales`.
+    # El master de rendimiento es un bool.
     master = ajustes_catalogo.por_clave(config.ENV_RENDIMIENTO_RANKING)
     assert master is not None and master.tipo == "bool" and master.grupo == "noticias_rendimiento"
 

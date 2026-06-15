@@ -97,7 +97,7 @@ def test_raiz_sin_build_devuelve_placeholder(entorno, sin_build):
 def test_ruta_cualquiera_no_api_devuelve_placeholder(entorno, sin_build):
     """Cualquier ruta que no sea /api ni /assets cae al fallback del SPA."""
     c = _cliente()
-    r = c.get("/tareas")  # antes era una pagina; ahora la enruta el SPA
+    r = c.get("/tareas")
     assert r.status_code == 200
     assert "La interfaz aún no está construida" in r.text
 

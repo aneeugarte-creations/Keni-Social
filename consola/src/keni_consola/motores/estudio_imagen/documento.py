@@ -57,8 +57,7 @@ VERSION = 1
 
 TIPOS_CAPA = ("imagen", "texto", "logo", "marco", "overlay", "grupo")
 # Catálogo de FORMAS compartido (espejo de `pathForma` en `render_node/dibujar.mjs` y de
-# `CATALOGO_FORMAS` en `documento.ts`). Retrocompat: "rect"/"elipse" eran las únicas; las nuevas
-# se añaden con default seguro "rect". El marco además admite "linea" (trazo recto, no rellenable).
+# `CATALOGO_FORMAS` en `documento.ts`). El marco además admite "linea" (trazo recto, no rellenable).
 _FORMAS = ("rect", "elipse", "triangulo", "rombo", "pentagono", "hexagono", "estrella", "flecha")
 _FORMAS_MARCO = (*_FORMAS, "linea")
 _FORMAS_IMAGEN = _FORMAS

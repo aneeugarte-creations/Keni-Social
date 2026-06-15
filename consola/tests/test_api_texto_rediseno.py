@@ -113,7 +113,7 @@ def test_editoriales_filtra_por_pipeline(cliente):
 def test_historial_vacio_sin_publicaciones_y_revertir_al_borrador(cliente, monkeypatch):
     """Sin Postgres ni publicaciones el historial es VACÍO (es el de publicaciones, no el
     git log de autosaves). `version/{sha}` y `revertir/{sha}` siguen operando por git: el
-    sha del commit de creación se lee de `sha_actual` (el autosave ya no commitea)."""
+    sha del commit de creación se lee de `sha_actual`."""
     if shutil.which("git") is None:
         pytest.skip("git no disponible")
     monkeypatch.setenv("KENI_TEXTO_GIT", "1")

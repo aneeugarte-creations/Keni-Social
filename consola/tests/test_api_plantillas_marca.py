@@ -87,8 +87,6 @@ def test_get_spec_devuelve_cuatro_formatos(cli):
     r = cli.get("/api/plantillas-marca/unotv/spec")
     assert r.status_code == 200
     spec = r.json()["spec"]
-    # `horizontal` (16:9 de X) se añadió cuando la placa de marca pasó a componer
-    # también ese lienzo (follow-up #2); antes eran tres.
     assert sorted(spec["formatos"]) == ["cuadrado", "feed", "horizontal", "vertical"]
 
 

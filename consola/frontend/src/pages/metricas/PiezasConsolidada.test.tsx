@@ -179,7 +179,6 @@ describe("PiezasConsolidada", () => {
     renderConProviders(<PiezasConsolidada marcaActual="__todas__" rangoActual="mes" marcas={MARCAS} />);
     await screen.findByText("Noticia local");
 
-    // La fila ya NO es un control (sin role="button"); el botón es el título de la pieza.
     expect(screen.queryByRole("button", { name: /Ver detalle de/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Noticia local" }));
     expect(await screen.findByRole("dialog")).toBeInTheDocument();

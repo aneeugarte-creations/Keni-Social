@@ -543,8 +543,7 @@ def test_parsear_atom_link_enclosure_se_extrae():
 
 
 # Feed WordPress SIN tags de media (UnoTV, La Jornada…): la foto del artículo va como
-# primer <img> DENTRO del <content:encoded>. Es el caso real medido en el piloto: los
-# items de UnoTV nacían con imagen='' y las piezas de sus historias salían sin foto.
+# primer <img> DENTRO del <content:encoded>.
 _RSS_IMG_EN_CUERPO_XML = """<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
   <channel>

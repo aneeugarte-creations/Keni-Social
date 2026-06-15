@@ -1,7 +1,7 @@
 // Geometría y paradas de un degradado para Konva. PURO (sin Konva): se testea sin montar el
-// canvas. Compartido por el render de capas (`CapaNodo`) y el del fondo (`FondoNodo`) — antes el
-// fondo duplicaba el cálculo de paradas. Mismas fórmula/convención que `dibujar.mjs` del servidor,
-// de modo que la previa del editor y el export coinciden.
+// canvas. Compartido por el render de capas (`CapaNodo`) y el del fondo (`FondoNodo`). Mismas
+// fórmula/convención que `dibujar.mjs` del servidor, de modo que la previa del editor y el
+// export coinciden.
 
 import type { RellenoDegradado } from "../documento";
 

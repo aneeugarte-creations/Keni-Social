@@ -2,8 +2,7 @@
 
 Timeline de outlets (quién abrió / quién se sumó), masa de corroboración ponderada,
 señal de velocidad/breaking en ventana, clasificación corroborada/única/dudosa, y el
-`recalcular` que recompone los agregados de un cluster a partir de sus items. Movido
-VERBATIM desde el antiguo `clustering.py`.
+`recalcular` que recompone los agregados de un cluster a partir de sus items.
 """
 
 from __future__ import annotations

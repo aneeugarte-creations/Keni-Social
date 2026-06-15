@@ -1,7 +1,7 @@
 """Instrucciones por MODO del asistente del tablero (`dominio.asistente`). PURO, sin BD.
 
 Las instrucciones aditivas de los modos `variantes`/`resumir` viven SOLO en la Biblioteca/
-semilla (`prompt/asistente/<modo>`, editables); ya no hay copia del texto en código.
+semilla (`prompt/asistente/<modo>`, editables).
 Solo se cubre la composición del texto base (el lanzamiento delega en `dominio.generar`,
 cubierto en sus propios tests).
 """
@@ -53,9 +53,9 @@ def test_instruccion_editada_en_biblioteca_gana():
 
 
 def test_sin_doc_ni_semilla_degrada_sin_instruccion(monkeypatch, tmp_path):
-    # Ya no hay copia del texto en código (la semilla es la única fuente). Sin doc NI semilla,
-    # el modo degrada a SIN instrucción aditiva. El test de cobertura semilla↔código garantiza
-    # que la semilla SIEMPRE está, así que este camino es inalcanzable en producción.
+    # La semilla es la única fuente. Sin doc NI semilla, el modo degrada a SIN instrucción aditiva.
+    # El test de cobertura semilla↔código garantiza que la semilla SIEMPRE está,
+    # así que este camino es inalcanzable en producción.
     monkeypatch.setenv("KENI_TEXTO_SEMILLA", str(tmp_path / "semilla-vacia"))
     base = asistente.construir_texto_base(
         modo="variantes", titulo="T", descripcion="D", notas=""

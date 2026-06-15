@@ -85,7 +85,7 @@ def test_stub_render_marca_error(entorno):
     worker.procesar_job(job, "w")
     g = generaciones.obtener(reg["id"])
     assert g["estado"] == generaciones.ESTADO_ERROR
-    # Ejecutor real (ya no es stub): valida y reporta en español que la composicion no existe.
+    # Ejecutor real: valida y reporta en español que la composicion no existe.
     assert "composicion" in g["error"].lower()
     assert repos.contar_jobs_activos() == 0
 

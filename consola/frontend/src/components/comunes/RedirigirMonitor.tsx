@@ -1,12 +1,10 @@
 import { Navigate, useLocation } from "react-router-dom";
 
 /**
- * Redirección legacy del antiguo Monitor (`/datos/produccion/monitor`, antes el hub
- * Producción·Monitor) a la nueva sección «Máquina» (fase 2A). El Monitor se RELOCALIZÓ:
- *   - la vista global del worker/cola es ahora `/maquina/agentes` (página Agentes),
- *   - la tira de etapas + el drawer de ajustes viven en el cockpit de Producción
- *     (`/maquina/produccion`), así que `?tab=ajustes` abre el drawer ALLÍ,
- *   - la antigua pestaña «Salud» (la infra) ya redirigía a `/sistema` (`?tab=salud`).
+ * Redirección a la sección «Máquina». Gestiona los tabs históricos:
+ *   - `?tab=salud` → `/sistema` (infra),
+ *   - `?tab=ajustes` → `/maquina/produccion?tab=ajustes` (drawer),
+ *   - el resto → `/maquina/agentes` (página Agentes).
  *
  * Preserva los query params relevantes (`?proceso=` para prefiltrar Agentes). Vive en su
  * propio fichero (no en `router.tsx`) para no romper el fast-refresh del módulo de rutas.

@@ -1,18 +1,6 @@
 """FuenteCompuesta: combina los adaptadores reales por plataforma en metricas
 multi-marca/multi-plataforma. Implementa FuenteMetricas a partir de la config.
 
-FALLBACK HISTÓRICO, NO la fuente única
---------------------------------------
-La fuente única de métricas de keni-social es **Metricool** (`fuentes.metricool`):
-dashboard por marca/cuenta Y rendimiento por pieza salen del MISMO camino, sin
-desfase. `FuenteCompuesta` queda como capacidad histórica (ADR 0005 §B) y está
-DESACTIVADA por defecto: `config.construir_fuente` solo la instancia con el flag
-opt-in `KENI_METRICAS_PERMITIR_REAL=1`. Razón del gate: solo cubre el dashboard
-agregado (resumen + mejores piezas); NO implementa `metricas_de_post` ni
-`serie_diaria`, así que conviviría con el tablero leyendo cero en el rendimiento por
-pieza — exactamente el desfase entre fuentes que la consolidación elimina. No la
-selecciones para producción: usa `metricool`.
-
 Semántica de agregación entre plataformas (#138)
 -------------------------------------------------
 Las redes NO miden lo mismo, así que no todo se puede sumar entre ellas. La regla

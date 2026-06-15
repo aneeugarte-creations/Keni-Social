@@ -27,19 +27,6 @@ Cada persona tiene:
 que el admin edite desde /usuarios. Asi el organigrama queda definido de fabrica pero es
 editable y la semilla sigue siendo idempotente.
 
-Ola "feat/roles-marcas" (segunda audiencia con la dirección):
-  - Ampliacion del catalogo de cargos para reflejar el organigrama real (vertical/
-    funcion); los cargos VIEJOS se conservan por retrocompat.
-  - Reasignaciones reales: la coordinadora y el coordinador de redes eran "coordinador"
-    plano -> ahora son `coordinador_redes` (cada uno de su marca); gerencia de podcast
-    "gerente" -> `gerente_podcast`; la coordinadora operativa "estrategia" ->
-    `coordinador_operativo`; fotografía/QA "fotografia" -> `fotografia_qa`;
-    el creativo de vertical "guionista" -> `creativo_vertical` (Nacion Gamer); editorial
-    de YouTube "editorial" -> `editorial_youtube`; el coordinador de YouTube "coordinador"
-    -> `coordinador_youtube`.
-  - Correccion CRITICA: la creativa de Fundación NO es community manager de ClaroSports; es creativo de
-    Fundacion TELMEX. Sale del calendario de cobertura (`cobertura=False`) y deja de
-    aparecer en la rota.
 
 Idempotente: si el usuario `usuario` ya existe, NO se borra ni se pisa la contrasena;
 SI se actualizan `cargo`, `cobertura` y `marcas` para que la BD refleje el organigrama
@@ -100,8 +87,6 @@ EQUIPO_AMX: tuple[
      "Jorge Luis Espinosa", "elias"),
     ("roger", ROL_EDITOR, "community_manager", True, False, ("claro-sports",),
      "Rogelio Aguilar", "elias"),
-    # La creativa de Fundación: NO es de ClaroSports (era un error). Es creativa de Fundacion; fuera de la
-    # rota de cobertura. Esta fila es la CORRECCION explicita que motiva esta ola.
     ("daiana", ROL_EDITOR, "creativo_vertical", False, False, ("fundacion",),
      "Daiana", "diana"),
     ("mariana", ROL_EDITOR, "coordinador_operativo", False, True, ("claro-sports",),
@@ -126,11 +111,6 @@ EQUIPO_AMX: tuple[
 _USUARIOS_PUEDE_COORDINAR_FORZADO: frozenset[str] = frozenset({"elias", "ale", "mariana"})
 
 
-# Cargos del catalogo VIEJO que la ola anterior usaba en `EQUIPO_AMX`. Si un usuario aun
-# tiene uno de estos como cargo, la migracion correctiva lo sustituye por el del
-# organigrama nuevo (sin pisar cargos que el admin haya editado a un valor del catalogo
-# nuevo). Si su cargo ya esta en el catalogo nuevo (el admin lo cambio o ya corre con la
-# nueva semilla), no se toca.
 _CARGOS_VIEJOS_CATALOGO: frozenset[str] = frozenset({
     "director", "gerente", "coordinador", "content_manager", "community_manager",
     "redactor", "guionista", "editorial", "estrategia", "fotografia",
@@ -169,9 +149,7 @@ def sembrar_equipo() -> None:
         marcas_lista = list(marcas)
         if usuario in existentes:
             actual = existentes[usuario]
-            # Correccion correctiva critica: la creativa de Fundación SIEMPRE se sobreescribe (sale del
-            # calendario, va a Fundacion). El admin no tiene autoridad para revertir
-            # esta semilla porque su valor anterior era un error de captura.
+            # Se sobreescribe INCONDICIONALMENTE la creativa de Fundación.
             if usuario == "daiana":
                 if (
                     actual.get("cargo") != cargo

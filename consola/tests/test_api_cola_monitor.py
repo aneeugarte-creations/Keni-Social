@@ -120,9 +120,7 @@ def test_cola_snapshot_marca_reclamado_como_procesando(entorno):
 def test_cola_filtra_por_marca(entorno):
     """`?marca=` acota las LISTAS en_curso/esperando a esa marca; los KPIs siguen GLOBALES.
 
-    Es el bug del Monitor: estando en claro-sports se veian TODOS los jobs de unotv (el
-    endpoint no admitia marca y el front no la pasaba). La capacidad/conteo se queda global
-    a proposito (la cola es infra compartida).
+    La capacidad/conteo se queda global a proposito (la cola es infra compartida).
     """
     g_uno = _encolar("Copy UnoTV", marca="unotv")
     g_claro = _encolar("Copy Claro", marca="claro-sports")
@@ -178,11 +176,9 @@ def test_cola_series_contrato(entorno):
 def test_serie_excluye_marcadores_y_desglosa_por_proceso(entorno):
     """La serie NO cuenta los marcadores de etapa (coste 0) y separa investigacion/produccion.
 
-    Era el bug del Monitor: `_resultados_por_dia` contaba los miles de `pipeline_etapa` (CI/QA/CD,
-    sin tokens) y "completados" no cuadraba ni con los encolados ni con el gasto. Aqui se sellan
-    tres generaciones COMPLETADAS hoy —un marcador (excluido), una criba QA (investigacion, con
-    tokens) y un copy (produccion, con tokens)— y se comprueba que la serie cuenta SOLO las dos
-    reales, cada una en su proceso y con su gasto.
+    Aqui se sellan tres generaciones COMPLETADAS hoy —un marcador (excluido), una criba QA
+    (investigacion, con tokens) y un copy (produccion, con tokens)— y se comprueba que la serie
+    cuenta SOLO las dos reales, cada una en su proceso y con su gasto.
     """
     # Marcador de etapa: completado pero SIN coste -> debe quedar fuera de la serie.
     generaciones.crear({

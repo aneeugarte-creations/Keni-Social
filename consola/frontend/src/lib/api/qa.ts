@@ -3,8 +3,6 @@
 import { peticion } from "./_core";
 import type { CuerpoVerificar, RespuestaGeneracion } from "@/types";
 
-// La «página de revisión de copy» (qa-editorial) se RETIRÓ (feature muerta: sin UI). Aquí solo
-// queda la verificación de vídeo, que es un workflow independiente.
 export const apiQa = {
   // --- Verificación de video (workflow propio, independiente de Generar copy) ---
   // Lanza el análisis de procedencia en segundo plano; se sondea como cualquier

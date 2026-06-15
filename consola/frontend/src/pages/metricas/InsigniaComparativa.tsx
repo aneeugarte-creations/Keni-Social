@@ -1,8 +1,7 @@
 /**
  * Insignia comparativa de una métrica entre dos periodos (A = antes, B = actual).
  *
- * Generaliza la antigua `InsigniaVariacion` de CompararPeriodos para reutilizarla
- * también en los KPIs del dashboard. Dos criterios según el tipo de métrica:
+ * Dos criterios según el tipo de métrica:
  *
  * - CONTEOS (vistas, interacciones, granulares, seguidores): variación porcentual
  *   relativa (`variacion_pct`). Caso especial base-0: el backend devuelve

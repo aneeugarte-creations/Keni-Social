@@ -423,8 +423,7 @@ export function VistaLista({
     setSeleccionadas(todasSeleccionadas ? new Set() : new Set(publicaciones.map((p) => p.id)));
 
   // Borrado en lote: UN solo round-trip al endpoint batch (`POST /publicaciones/borrar-lote`),
-  // que itera el borrado en servidor y reporta los fallos parciales sin abortar el resto
-  // (antes: N DELETEs en paralelo desde el cliente).
+  // que itera el borrado en servidor y reporta los fallos parciales sin abortar el resto.
   const borrarLote = useMutation({
     mutationFn: async (ids: string[]) => {
       const res = await api.borrarPublicacionesLote(ids);

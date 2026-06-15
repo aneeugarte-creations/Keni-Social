@@ -157,9 +157,6 @@ def _construir_marcas() -> dict[str, tuple[str, int, list[Plataforma], str]]:
     return marcas_muestra
 
 
-# Cuentas servidas por la muestra (derivadas del cliente activo). Reemplaza al antiguo
-# `_MARCAS` hardcodeado; se mantiene el nombre `_MARCAS` por compatibilidad con el
-# resto del modulo y sus tests.
 _MARCAS: dict[str, tuple[str, int, list[Plataforma], str]] = _construir_marcas()
 
 # peso de cada plataforma en el reparto de visualizaciones

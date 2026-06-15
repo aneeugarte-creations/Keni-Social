@@ -187,9 +187,7 @@ def _verificar_grupo(
 def _ejecutar_haiku(prompt: str, dir_permitido: str) -> str:
     """Ejecutor real: el runner síncrono de `traduccion` con el modelo de la fusión.
 
-    El nombre es histórico (la fusión nació con haiku); el modelo real lo decide
-    `config.fusion_modelo()` (def sonnet: el juicio "mismo evento vs mismo tema" se le
-    escapaba a haiku y agrupaba por tema).
+    El modelo real lo decide `config.fusion_modelo()` (def sonnet).
     """
     from .. import config
     from .traduccion import _ejecutar_claude_json

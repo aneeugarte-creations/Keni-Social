@@ -31,7 +31,7 @@ describe("documentoVacio", () => {
 describe("cajaVisual / bandaOverlay / altoVisual", () => {
   it("bandaOverlay espeja EXACTAMENTE al export (max(1, floor(h*alto_frac)))", () => {
     const ov = nuevaCapaOverlay({ h: 1350, alto_frac: 0.45 });
-    // 1350*0.45 = 607.5 -> el export hace floor: 607 (el editor antes medía 607.5).
+    // 1350*0.45 = 607.5 -> el export hace floor: 607
     expect(bandaOverlay(ov)).toBe(607);
     // Degenerados: nunca menos de 1px, como dibujarOverlayInferior.
     expect(bandaOverlay(nuevaCapaOverlay({ h: 100, alto_frac: 0 }))).toBe(1);

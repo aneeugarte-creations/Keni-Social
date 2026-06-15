@@ -79,8 +79,7 @@ export function iconoDe(nombre: string): LucideIcon {
 
 /**
  * Filtra la navegación según el rol. Los ítems admin del sidebar se ocultan
- * para no-admin (hoy ya no hay ninguno: Usuarios bajó al dropdown del avatar
- * y se filtra allí). Se descartan los grupos que quedan vacíos.
+ * para no-admin. Se descartan los grupos que quedan vacíos.
  *
  * `grupos` es la navegación ya hidratada del catálogo (la de la app actual; vacía
  * en el launcher o en rutas de shell). La fuente de verdad es el backend

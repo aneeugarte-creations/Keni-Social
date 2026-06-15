@@ -1,31 +1,16 @@
 """Render ON-DEMAND de la imagen compuesta de una pieza, derivada de su RECETA.
 
-PROBLEMA QUE RESUELVE
-=====================
-Hasta ahora cada pieza horneaba y PERSISTÍA un PNG con el logo + pleca + titular (+ foto)
-incrustados en píxeles. Editar el copy_in generaba otro PNG: N variantes de texto sobre la
-misma marca = N imágenes casi idénticas en el almacén, duplicando logo/pleca una y otra vez.
-
-LA RECETA YA VIVE EN LA PIEZA
-=============================
-Una publicación ya guarda todo lo necesario para componer su imagen: `marca`/`red`, `foto`
+Una publicación guarda todo lo necesario para componer su imagen: `marca`/`red`, `foto`
 (la foto cruda), `copy_in` (el titular), `foto_encuadre` (recorte 4:5), `plantilla_diseno_id`
-(plantilla del estudio) y `placa_oculta`. Así que la imagen publicable se DERIVA de esa receta
-y se renderiza bajo demanda, en vez de persistir un composite por cada edición.
-
-CONTENT-ADDRESSED = CACHÉ NATURAL
-=================================
-El render reusa `estudio_imagen.componer_desde_plantilla`, que guarda el PNG con clave por hash del
-contenido. Misma receta => mismo objeto => no se duplica y los renders repetidos pegan en caché.
-Los renders que ninguna pieza acaba usando son huérfanos reciclables por el GC de media.
+(plantilla del estudio) y `placa_oculta`. La imagen publicable se DERIVA de esa receta
+y se renderiza bajo demanda con clave por hash del contenido (content-addressed).
 
 CUÁNDO SE DERIVA Y CUÁNDO NO
 ============================
   - `imagen` (bespoke) presente       -> se respeta tal cual (editor pro / piezas legadas).
   - placa_oculta                      -> publica la FOTO cruda (sin placa).
   - plantilla del estudio (elegida o por defecto de la marca) -> `componer_desde_plantilla`.
-  - sin plantilla de estudio resoluble -> foto cruda. (La placa de marca por SPEC, legada, YA NO
-    se compone: solo se aplican plantillas de la galería del estudio.)
+  - sin plantilla de estudio resoluble -> foto cruda.
   - nada de lo anterior               -> "" => el llamante cae a `imagen_fuente`.
 """
 
@@ -39,10 +24,9 @@ from typing import Any
 def marca_tiene_plantilla_estudio(marca: str) -> bool:
     """True si la marca tiene al menos UNA plantilla en la GALERÍA del estudio (PlantillaDiseno).
 
-    Es la ÚNICA fuente de placa: la placa de marca por SPEC (legada, "Sube una foto"/"ÚLTIMA HORA")
-    YA NO se aplica —solo se componen plantillas del estudio—. Tolerante: si el almacén no está
-    disponible (p. ej. tests unitarios sin Postgres), devuelve False (se trata como "sin plantilla":
-    la pieza publica su foto). En producción consulta el almacén real.
+    Es la ÚNICA fuente de placa. Tolerante: si el almacén no está disponible (p. ej. tests
+    unitarios sin Postgres), devuelve False (se trata como "sin plantilla": la pieza publica su foto).
+    En producción consulta el almacén real.
     """
     marca = (marca or "").strip()
     if not marca:
@@ -59,9 +43,8 @@ def tiene_receta(pub: dict[str, Any]) -> bool:
     """True si la imagen publicable se DERIVA de una plantilla del ESTUDIO (placa por capas).
 
     SOLO componen plantillas de la galería del estudio: la elegida por la pieza
-    (`plantilla_diseno_id`) o la POR DEFECTO de la marca si tiene alguna. La placa de marca por SPEC
-    (legada, "Sube una foto"/"ÚLTIMA HORA") YA NO se aplica. Sin plantilla de estudio, la pieza
-    publica su foto cruda / `imagen_fuente`. Decide si `imagen_url` apunta a `/compuesta`.
+    (`plantilla_diseno_id`) o la POR DEFECTO de la marca si tiene alguna. Sin plantilla de estudio,
+    la pieza publica su foto cruda / `imagen_fuente`. Decide si `imagen_url` apunta a `/compuesta`.
     """
     if pub.get("placa_oculta"):
         return False
@@ -71,17 +54,15 @@ def tiene_receta(pub: dict[str, Any]) -> bool:
 
 
 def _receta_manda(pub: dict[str, Any]) -> bool:
-    """La RECETA prevalece sobre un `imagen` horneado obsoleto. Solo cuando todo esto se cumple:
+    """La RECETA prevalece sobre un `imagen` horneado. Solo cuando todo esto se cumple:
 
       - la pieza NO está PUBLICADA (las publicadas congelan su `imagen` como registro exacto), y
       - tiene receta viva (placa de marca / plantilla del estudio), y
       - hay ALGO de lo que recomponer: una plantilla del estudio elegida (`plantilla_diseno_id`,
         que puede no llevar foto), o una `foto` cruda (la placa de marca se compone sobre ella).
 
-    Sin esto, el editor mostraba la plantilla correcta (render en vivo) pero el feed seguía
-    sirviendo la placa VIEJA horneada en `imagen` (de un publish anterior o de antes de
-    render-on-demand). Y al revés: si solo hay `imagen` (ni plantilla ni foto), ese `imagen` es un
-    asset SUBIDO/IMPORTADO bespoke —no una placa derivada— y se RESPETA tal cual.
+    Si solo hay `imagen` (ni plantilla ni foto), ese `imagen` es un asset SUBIDO/IMPORTADO bespoke
+    —no una placa derivada— y se RESPETA tal cual.
     """
     if (pub.get("estado") or "") == "publicado":
         return False
@@ -98,17 +79,13 @@ def _plantilla_efectiva(pub: dict[str, Any]) -> dict[str, Any] | None:
     - Si la pieza fija una `plantilla_diseno_id` explícita -> esa.
     - Si no, y la marca tiene plantillas EN ROTACIÓN (`rotar=1`, activas) -> la PRIMERA de ellas
       (orden estable de la galería). Las plantillas en rotación MANDAN: una pieza sin plantilla nunca
-      se compone con una de fuera de la rotación si la marca tiene alguna marcada. Cubre las piezas
-      legadas (creadas antes de marcar la rotación, sin `plantilla_diseno_id`): al mostrarlas, el feed
-      adopta la plantilla en rotación, no la primera cualquiera de la galería.
+      se compone con una de fuera de la rotación si la marca tiene alguna marcada.
     - Si no hay ninguna en rotación -> la plantilla de estudio POR DEFECTO de la marca, idéntica a la
       del editor: la llamada "Placa de marca" si existe, o la PRIMERA de la galería (orden manual /
       más reciente).
 
-    Así el feed compone EXACTAMENTE la plantilla que enseña el editor (de ahí el arreglo de la
-    "plantilla vieja en el feed"). Devuelve None si la pieza no tiene plantilla explícita y la marca
-    no tiene NINGUNA plantilla de estudio: ahí el llamante sirve la FOTO cruda (la placa de marca por
-    SPEC, legada, ya no se compone).
+    El feed compone EXACTAMENTE la plantilla que enseña el editor. Devuelve None si la pieza no tiene
+    plantilla explícita y la marca no tiene NINGUNA plantilla de estudio.
     """
     from .. import repos
 
@@ -191,7 +168,6 @@ def imagen_compuesta_id(pub: dict[str, Any]) -> str:
       3. sin plantilla de estudio (placa oculta / marca sin plantilla): devuelve la `foto` cruda.
       4. plantilla del estudio: `componer_desde_plantilla(doc, copy_in, fotos)`.
 
-    Ya NO se usa la placa de marca por SPEC (legada): solo componen plantillas de la galería.
     El render es content-addressed: idéntica receta => idéntico id (cacheado, sin duplicar).
     Devuelve "" si no hay imagen derivable (el llamante decide el fallback a `imagen_fuente`).
     Lanza `estudio_imagen.EstudioError` si el render falla (el endpoint -> 4xx; el publicador
@@ -217,7 +193,7 @@ def imagen_compuesta_id(pub: dict[str, Any]) -> str:
             fotos=fotos_de_pieza(pub),  # una foto por hueco (collage); legado = hueco único
         )
         return resultado["id"]
-    # Sin plantilla de estudio resoluble: la foto cruda (NO la placa de marca por SPEC, retirada).
+    # Sin plantilla de estudio resoluble: la foto cruda.
     return foto
 
 
@@ -240,7 +216,7 @@ def imagen_url_de(pub: dict[str, Any]) -> str:
     """URL servible de la imagen de la pieza para la UI/MCP (sin renderizar nada aquí).
 
     Precedencia (barata, sin componer):
-      - receta viva en pieza NO publicada   -> `/api/publicaciones/{id}/compuesta` (gana al PNG viejo).
+      - receta viva en pieza NO publicada   -> `/api/publicaciones/{id}/compuesta`.
       - `imagen` horneada (bespoke/legacy/publicada) -> `/api/media/{imagen}`.
       - receta derivable                   -> `/api/publicaciones/{id}/compuesta` (on-demand).
       - foto cruda                          -> `/api/media/{foto}`.
@@ -297,7 +273,7 @@ def render_bytes(pub: dict[str, Any]) -> tuple[bytes, str] | None:
             fotos=fotos_de_pieza(pub),  # una foto por hueco (collage); legado = hueco único
         )
         return datos, "image/png"
-    # Sin plantilla de estudio resoluble: la foto cruda (NO la placa por SPEC, retirada).
+    # Sin plantilla de estudio resoluble: la foto cruda.
     if not foto:
         return None
     datos = media.leer_media(foto)
@@ -328,8 +304,7 @@ def firma_receta(pub: dict[str, Any]) -> str:
     try:
         if not pub.get("placa_oculta"):
             # La plantilla EFECTIVA (explícita o la por defecto de la marca): su documento entra en
-            # la firma para que editar la plantilla invalide la caché HTTP. (La placa por SPEC ya no
-            # se usa, así que no entra en la firma.)
+            # la firma para que editar la plantilla invalide la caché HTTP.
             plantilla = _plantilla_efectiva(pub)
             if plantilla is not None:
                 base["doc"] = plantilla.get("documento") or ""

@@ -1,7 +1,6 @@
 """Tests del pipeline de contenido CI→QA(fuente)→CD (ADITIVO, gateado por `KENI_PIPELINE_COPY`).
 
-REDISEÑO QPC: la QA se movió a ANTES del copy y por PIEZA (tema/fuente). El barrido es ahora
-CI (crea temas SIN copy) → QA de la FUENTE (criba permisiva por tema) → CD (copy SOLO de los
+El barrido es CI (crea temas SIN copy) → QA de la FUENTE (criba permisiva por tema) → CD (copy SOLO de los
 temas `no_verificado`). Todo OFFLINE: ni red (og:image mockeada), ni `claude` (`lanzar_copy` y
 la generación de QA mockeados), ni feeds reales (items canned). Cubre:
   (a) gateado OFF por defecto -> el barrido NO produce nada;
@@ -239,7 +238,6 @@ def test_nota_de_item_limpia_resumen_y_anexa_cuerpo():
 
 
 def test_nota_de_cluster_incluye_texto_de_cada_fuente():
-    # Antes la nota solo llevaba título + 1 resumen + URLs; ahora lleva el texto de CADA fuente.
     items = [
         {"fuente_nombre": "UnoTV", "titulo": "Bloqueo en caseta", "url": "https://uno.test/a",
          "resumen": "Normalistas cierran la autopista."},
@@ -262,7 +260,6 @@ def test_nota_de_cluster_sin_cuerpos_cae_a_resumenes():
 
 
 def test_fetch_cuerpo_gateado_off_no_toca_la_red(monkeypatch):
-    # Sin el flag, NO se llama al seam de red y devuelve "" (comportamiento previo).
     monkeypatch.delenv("KENI_PIPELINE_FETCH_FUENTE", raising=False)
     llamado = {"n": 0}
 
@@ -587,8 +584,7 @@ def test_qa_no_verificado_genera_copy_con_aviso(entorno, monkeypatch):
     """Una QA `no_verificado` -> el ENCADENADO dispara el copy YA y las piezas heredan el ⚠️.
 
     ENCADENADO POR EVENTOS: el `procesar` de la QA, al persistir un veredicto apto, lanza el
-    copy de ESE tema al instante (antes esperaba al siguiente barrido de CD, +20 min). El
-    barrido queda de red de seguridad. DEDUP AL ÉXITO: el lanzamiento NO limpia
+    copy de ESE tema al instante. El barrido queda de red de seguridad. DEDUP AL ÉXITO: el lanzamiento NO limpia
     `copy_pendiente` (lo limpia el post-procesado del copy al completar); un copy fallido se
     reintenta y, en cuanto hay pieza, el tema sale de la selección.
     """
@@ -709,11 +705,9 @@ def test_qa_cluster_acotada_por_el_embudo(entorno, monkeypatch):
 def test_copy_fallido_se_reintenta_tras_el_backoff(entorno, monkeypatch):
     """DEDUP AL ÉXITO + BACKOFF: un copy fallido se RELANZA, pero solo PASADA la espera creciente.
 
-    Antes `copy_pendiente` se limpiaba al ENCOLAR y un copy fallido jamás se reintentaba (el
-    tema quedaba huérfano para siempre). El doble lanzamiento mientras el job está EN VUELO
-    lo evita la clave de idempotencia de `dominio.generar.lanzar` (no este filtro). Con el tick
-    corto, el reintento INMEDIATO quemaba los 3 intentos en <1 min: ahora el barrido SALTA el
-    tema mientras dura el backoff del intento (`_BACKOFF_ETAPA_SEG`).
+    El doble lanzamiento mientras el job está EN VUELO lo evita la clave de idempotencia de
+    `dominio.generar.lanzar` (no este filtro). El barrido SALTA el tema mientras dura el
+    backoff del intento (`_BACKOFF_ETAPA_SEG`).
     """
     monkeypatch.setenv("KENI_PIPELINE_COPY", "1")
     llamadas = _mock_lanzar_copy(monkeypatch)
@@ -1026,9 +1020,8 @@ def test_crear_tema_de_cluster_no_resuelve_og_image_de_fuente_ajena(entorno, mon
 def test_crear_tema_de_cluster_no_usa_imagen_de_feed_ajeno(entorno, monkeypatch):
     """Item de fuente AJENA con foto en el feed (media-tag): NO se usa (sin derechos).
 
-    Antes había un fallback a "cualquier imagen ya capturada en los items": colaba fotos de
-    medios ajenos en las piezas (y encendía la etapa Arte sin arte). Solo fuentes PROPIAS
-    aportan imagen; sin ellas, el tema nace sin foto y el arte lo decide la etapa de Arte IA."""
+    Solo fuentes PROPIAS aportan imagen; sin ellas, el tema nace sin foto y el arte lo decide
+    la etapa de Arte IA."""
     import json
 
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)

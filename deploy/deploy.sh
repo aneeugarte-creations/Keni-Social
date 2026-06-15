@@ -51,15 +51,12 @@ if [ -z "$DB_URL_EFECTIVA" ] || { [ -n "$PG_SUPERUSER" ] && [ "$USUARIO_URL" = "
   fi
 fi
 
-# VERSIONADO POR CONTENIDO (deploy QUIRÚRGICO). Antes la tag era un TIMESTAMP único por deploy,
-# igual para las 4 imágenes: como cambiaba SIEMPRE, el `up -d` final RECREABA TODOS los
-# contenedores en cada deploy —incluido el `worker`, abortando sus `claude -p` en vuelo— aunque
-# el cambio fuese solo de front. Ahora la tag de CADA imagen es un HASH de SUS entradas de build;
-# así solo se (re)construye y recrea el servicio cuyo contenido cambió. Un deploy de SOLO front
-# (o solo mcp) NO toca el worker. back y worker comparten `consola/`: un cambio ahí recrea ambos
-# (el worker DEBE correr ese código). El hash sale del ÁRBOL de ficheros (no de git: este script
-# corre en el dir estable del host, cuyo .git puede no estar sincronizado). El janitor sigue
-# conservando N por repo (ordena por CreatedAt); una imagen sin cambios no se reconstruye.
+# VERSIONADO POR CONTENIDO (deploy QUIRÚRGICO). La tag de CADA imagen es un HASH de SUS entradas
+# de build; así solo se (re)construye y recrea el servicio cuyo contenido cambió. Un deploy de
+# SOLO front (o solo mcp) NO toca el worker. back y worker comparten `consola/`: un cambio ahí
+# recrea ambos (el worker DEBE correr ese código). El hash sale del ÁRBOL de ficheros (no de git:
+# este script corre en el dir estable del host, cuyo .git puede no estar sincronizado). El janitor
+# sigue conservando N por repo (ordena por CreatedAt); una imagen sin cambios no se reconstruye.
 RAIZ="$(cd .. && pwd)"   # raíz del repo (deploy/ es el cwd; el contexto de build es `..`)
 # SEGURIDAD ante "deploy perdido": el hash debe incluir TODO lo que afecta al runtime de la
 # imagen; si se dejara una entrada fuera, un cambio real no cambiaría el hash y el código viejo

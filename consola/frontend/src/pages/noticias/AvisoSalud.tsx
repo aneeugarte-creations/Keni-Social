@@ -3,8 +3,7 @@
  *
  * La página de Noticias es para CURAR; la salud de fuentes tiene su pantalla (Fuentes).
  * Aquí solo aparece UNA línea ámbar cuando algo requiere atención (fuentes con error);
- * si todo está bien, no se muestra nada — fuera los chips de "28 feeds activos / 219 en
- * 24 h" que eran ruido operacional.
+ * si todo está bien, no se muestra nada.
  */
 
 import { useQuery } from "@tanstack/react-query";

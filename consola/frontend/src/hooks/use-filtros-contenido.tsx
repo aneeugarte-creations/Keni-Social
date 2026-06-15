@@ -82,7 +82,7 @@ export function FiltrosContenidoProvider({ children }: { children: React.ReactNo
   }, [usuarioId]);
 
   // Líneas elegibles: las de la marca activa + las globales (marca === ""). Con marca
-  // activa null ("Todas") se muestran todas. (Misma regla que tenían las páginas.)
+  // activa null ("Todas") se muestran todas.
   const lineasElegibles = React.useMemo<LineaEditorialOpcion[]>(
     () => lineas.filter((l) => l.marca === "" || marcaActiva == null || l.marca === marcaActiva),
     [lineas, marcaActiva],

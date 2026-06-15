@@ -59,9 +59,7 @@ def test_espejo_propaga_estado_falta_imagen_a_las_hermanas(cliente):
     """FIX: al añadir la foto a UNA red, el ESPEJO actualiza la flag ALMACENADA `falta_imagen`
     de las hermanas (lo que lee la LISTA del feed), sin tener que abrir cada una.
 
-    Antes solo se replicaba el contenido (la foto), pero la flag `falta_imagen` quedaba stale en
-    las hermanas hasta abrirlas (donde se recalculaba al vuelo): la lista seguía marcando
-    «falta imagen». El espejo NO aprueba en las hermanas, pero SÍ refleja el estado de contenido.
+    El espejo NO aprueba en las hermanas, pero SÍ refleja el estado de contenido.
     """
     from keni_consola import repos
 

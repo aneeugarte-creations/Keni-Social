@@ -149,7 +149,7 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
     # TODO post necesita una FOTO REAL para estar LISTO (no se manda a revisión sin foto): la foto
     # cruda subida (`foto`), la imagen de la fuente (`imagen_fuente`) o —en piezas SIN marca/placa—
     # la imagen subida bespoke (`imagen`). En piezas de MARCA, `imagen` es solo la placa compuesta y
-    # NO cuenta como foto. (Antes una pieza sin copy-in se daba por lista SIN foto; ya no.)
+    # NO cuenta como foto.
     # CONTENIDO real, NO los flags `falta_*` almacenados (fuente única `flags_falta_de_contenido`).
     falta = flags_falta_de_contenido(pub)
     # El ASSET requerido depende del formato: vídeo -> `falta_video` (no `falta_imagen`).

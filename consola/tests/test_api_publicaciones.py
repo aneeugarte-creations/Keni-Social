@@ -606,8 +606,7 @@ def test_put_desprogramar_a_aprobado_permitido(cliente):
 
 
 def test_encolar_publicado_es_terminal_409(cliente):
-    """Una pieza ya publicada NO se re-encola: el endpoint la rechaza ANTES de tocar nada
-    (revertir publicado->programado reseteaba `preparado_en` y arriesgaba un doble-post)."""
+    """Una pieza ya publicada NO se re-encola: el endpoint la rechaza ANTES de tocar nada."""
     pub = _crear(
         cliente, estado="publicado", fecha_programada="2026-06-15T18:00"
     ).json()["publicacion"]
@@ -689,7 +688,7 @@ def test_put_misma_fecha_conserva_preparado_en(cliente):
 
 def test_fecha_programada_se_normaliza_a_minutos(cliente):
     """El UNIQUE de parrilla compara el TEXT crudo: 'T18:00:00' y 'T18:00' deben quedar
-    iguales tras la normalizacion (antes no chocaban y se doble-reservaba el slot)."""
+    iguales tras la normalizacion."""
     pid = _crear(cliente).json()["publicacion"]["id"]
     r = cliente.put(
         f"/api/publicaciones/{pid}",
@@ -727,7 +726,7 @@ def test_crear_normaliza_fecha_programada(cliente):
 
 def test_doble_reserva_mismo_slot_con_formatos_distintos_409(cliente):
     """Dos piezas al MISMO instante con formatos distintos ('T18:00' vs 'T18:00:00')
-    chocan tras el canon: la segunda recibe 409 (antes pasaban ambas)."""
+    chocan tras el canon: la segunda recibe 409."""
     a = _crear(cliente).json()["publicacion"]["id"]
     b = _crear(cliente).json()["publicacion"]["id"]
     r1 = cliente.put(

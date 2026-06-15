@@ -102,9 +102,8 @@ def _validar_rango(rango: str) -> str:
 
     Los tokens (`mes:AAAA-MM`, `rango:AAAA-MM-DD_AAAA-MM-DD`) pasan tal cual: la fachada
     valida su formato y lanza ValueError (→400) si está mal. Un `AAAA-MM` desnudo se
-    normaliza a `mes:AAAA-MM` — antes caía al fallback y "mayo 2026" devolvía en silencio
-    los últimos 30 días (números de otro periodo, peor que un error). Un rango basura
-    cualquiera cae a 'mes' (compat con el comportamiento previo, sin romper la vista).
+    normaliza a `mes:AAAA-MM`. Un rango basura cualquiera cae a 'mes' (compat con el
+    comportamiento previo, sin romper la vista).
     """
     if rango in RANGOS_VALIDOS:
         return rango

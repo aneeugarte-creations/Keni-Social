@@ -2,9 +2,7 @@
 
 Reune los DOS registros donde vive la "verdad" de lo que la IA produce —las
 GENERACIONES (`generaciones.py`: copy, rss, autogen, hashtags, imagen, verificacion,
-qa-editorial, prompt) y los RUNS de agente (`agentes.py`)— y sirve sus AGREGADOS
-(el feed unificado por items se retiro en la consolidacion: la actividad se mira en
-`/api/pipelines`). La normalizacion/mezcla/agregacion es DOMINIO PURO
+qa-editorial, prompt) y los RUNS de agente (`agentes.py`)— y sirve sus AGREGADOS. La normalizacion/mezcla/agregacion es DOMINIO PURO
 (`consola.actividad`); aqui solo se LEEN ambos orígenes (via `generaciones.listar(...)`
 y el dominio `agentes`, NUNCA por HTTP) y se sirven.
 

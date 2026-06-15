@@ -1,7 +1,7 @@
 import * as React from "react";
 
 /**
- * Logotipo de X (antes Twitter). lucide-react no trae la marca, así que lo
+ * Logotipo de X. lucide-react no trae la marca, así que lo
  * definimos aquí. Usa `currentColor` y acepta `className` para integrarse igual
  * que los iconos de lucide (p. ej. `className="h-4 w-4"`).
  */

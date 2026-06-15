@@ -10,11 +10,6 @@ import {
   RED_TODAS,
 } from "./selectores";
 
-/**
- * Tests del centinela canónico `NINGUNA` (#89 / N1) y sus helpers. Antes el
- * valor `"__ninguna__"` se declaraba localmente en `DialogoNueva` y
- * `Termometro`; ahora la única fuente de verdad vive aquí.
- */
 describe("centinelas canónicos", () => {
   it("NINGUNA es el valor canónico __ninguna__", () => {
     expect(NINGUNA).toBe("__ninguna__");

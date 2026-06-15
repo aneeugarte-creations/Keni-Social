@@ -1,8 +1,5 @@
 """Algoritmos: inteligencia de PLATAFORMA (cambios de algoritmo + tendencias por red).
 
-Superficie de descubrimiento DISTINTA de Fuentes (RSS de MARCA para convertir
-notas en copy) y del antiguo Radar/Termometro (retirados).
-
 Aqui seguimos los BLOGS OFICIALES de las plataformas (Meta, YouTube, ...) y agregadores
 de industria (Social Media Today, ...) para saber QUE cambia en los algoritmos y que
 tendencias funcionan, con dos usos: (1) ir actualizando la ficha editorial de cada
@@ -152,11 +149,10 @@ def _normalizar(texto: str) -> str:
 def _coincide(texto: str, variantes: tuple[str, ...]) -> bool:
     """True si alguna variante aparece en el texto normalizado, por LÍMITE DE PALABRA.
 
-    Antes era subcadena tras `strip()`: la variante "new " perdía su espacio y casaba "news"
-    (inflando la importancia de todo agregador). Ahora toda variante exige límite de palabra
-    al inicio; las que traían espacio final ("new ", "rank ") lo exigen también al final
-    (palabra completa). Las variantes-prefijo ("penaliz", "monetiz") siguen casando sus
-    derivados ("penalización") porque no llevan espacio final.
+    Toda variante exige límite de palabra al inicio; las que traían espacio final ("new ",
+    "rank ") lo exigen también al final (palabra completa). Las variantes-prefijo
+    ("penaliz", "monetiz") siguen casando sus derivados ("penalización") porque no llevan
+    espacio final.
     """
     for v in variantes:
         vn = _normalizar(v).strip()

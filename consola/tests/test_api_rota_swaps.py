@@ -46,8 +46,7 @@ def _cli_de(app, usuario: str) -> TestClient:
 def _crear_horario(app, equipo: list[dict]) -> dict[str, str]:
     """Siembra turnos de trabajo en LUNES para los dos primeros miembros (ana, beto).
 
-    Antes la consola PROPONIA reparto automatico; ahora el coordinador de la rota asigna a mano, asi que los
-    tests siembran directo via `repos.crear_turno_rota`. Sembramos a cada miembro su
+    Tests siembran directo via `repos.crear_turno_rota`. Sembramos a cada miembro su
     turno en DIA_A y DIA_B (franjas distintas por persona para no solaparse): asi
     cualquier `_payload_swap(X, Y)` con X, Y en (ana, beto) — incluido `(ana, ana)` que se
     usa en los tests de "consigo mismo" / "destinatario inexistente" — encuentra los
@@ -56,7 +55,7 @@ def _crear_horario(app, equipo: list[dict]) -> dict[str, str]:
     Devuelve el mapa `{nombre_legacy -> franja_id}` para usar en `_payload_swap` (Mañana
     y Tarde de la semana LUNES, sembradas al crear el primer turno).
     """
-    del app  # ya no se usa: sembramos directo en BD.
+    del app
     primero, segundo = equipo[0], equipo[1]
     for dia in (DIA_A, DIA_B):
         repos.crear_turno_rota(
@@ -87,7 +86,7 @@ def _turno_de(
     franja_ids: tuple[str, ...],
 ) -> dict:
     """Busca un turno del miembro en esa fecha cuya `franja_id` este en `franja_ids`."""
-    del app  # ya no se usa: leemos directo de BD.
+    del app
     for t in repos.listar_turnos_rota(semana=LUNES):
         if (
             t["miembro_id"] == miembro_id
@@ -137,7 +136,6 @@ def _payload_swap(ana: dict, beto: dict, app) -> dict:
     return {
         "destinatario_id": beto["id"],
         "fecha_a": ta["fecha"],
-        # `franja_a`/`franja_b` ahora son `franja_id` reales (modelo "franjas por semana").
         "franja_a": ta["franja_id"],
         "fecha_b": tb["fecha"],
         "franja_b": tb["franja_id"],

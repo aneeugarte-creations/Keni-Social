@@ -1,10 +1,4 @@
-"""Dominio HASHTAGS: prompt de sugerencia + parseo de la salida (PURO, sin HTTP).
-
-Extraido de `api/hashtags.py` para que el WORKER de generacion (#130 Fase 2 / ADR 0002
-Fase B) pueda reconstruir el post-procesado de un job de hashtags SIN importar de `api/`
-(el worker corre fuera del proceso del back, posiblemente en otro contenedor). `api/
-hashtags.py` reexporta estas funciones, asi que sus contratos HTTP no cambian.
-"""
+"""Dominio HASHTAGS: prompt de sugerencia + parseo de la salida (PURO, sin HTTP)."""
 
 from __future__ import annotations
 

@@ -316,14 +316,13 @@ def _nota_de_cluster(
     items: list[dict[str, Any]],
     cuerpos: dict[str, str] | None = None,
 ) -> str:
-    """Nota de partida del copy desde una HISTORIA (cluster): texto de CADA fuente, no solo URLs.
+    """Nota de partida del copy desde una HISTORIA (cluster): arma un BLOQUE por fuente.
 
-    PURA. Antes la nota era titulo + UN resumen + una lista de URLs; el modelo no tenía el texto
-    de las otras fuentes y no podía cruzar datos. Ahora arma un BLOQUE por fuente (medio · título
-    · URL · resumen limpio · cuerpo del artículo si `cuerpos` lo trae) para que `claude -p`
-    sintetice de verdad. `cuerpos` mapea URL del item -> cuerpo del artículo (el `content:encoded`
-    archivado del feed o, en su defecto, el fetch HTTP); sin él, cada bloque queda con
-    medio+título+resumen (mejor que solo el link). Tope `_MAX_ENLACES_CLUSTER`.
+    PURA. Arma un bloque por fuente (medio · título · URL · resumen limpio · cuerpo del artículo
+    si `cuerpos` lo trae) para que `claude -p` sintetice cruzando datos. `cuerpos` mapea URL del
+    item -> cuerpo del artículo (el `content:encoded` archivado del feed o, en su defecto, el
+    fetch HTTP); sin él, cada bloque queda con medio+título+resumen (mejor que solo el link).
+    Tope `_MAX_ENLACES_CLUSTER`.
     """
     cuerpos = cuerpos or {}
     partes = [titulo.strip(), _limpiar_snippet(resumen)]
@@ -852,10 +851,10 @@ def promover_clusters_marca(
 ) -> list[dict[str, Any]]:
     """CI — promueve a temas las top-N historias rankeadas de una marca. Registra la etapa CI.
 
-    Reemplaza la lectura directa de feeds RSS (que creaba un tema por item): ahora consume el pool
-    ya fusionado/rankeado (Ola B). El filtro `qa_estados` (ADR 0011 F3) es OBLIGATORIO — por
-    defecto las VERIFICADAS (`VERIFICADAS_QA`): la admisión SIEMPRE criba, no hay camino que
-    promueva sin filtrar por veredicto. Devuelve los temas creados. Best-effort por historia.
+    Consume el pool ya fusionado/rankeado (Ola B). El filtro `qa_estados` (ADR 0011 F3) es
+    OBLIGATORIO — por defecto las VERIFICADAS (`VERIFICADAS_QA`): la admisión SIEMPRE criba, no
+    hay camino que promueva sin filtrar por veredicto. Devuelve los temas creados. Best-effort por
+    historia.
     """
     clusters = clusters_para_promover(
         marca, maximo=maximo, cupos_categoria=cupos_categoria, qa_estados=qa_estados

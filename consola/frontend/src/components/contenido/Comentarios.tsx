@@ -1,12 +1,3 @@
-/**
- * Hilo de COMENTARIOS internos de una pieza (inspirado en Planable): discusión de redacción
- * del equipo por item, con opción de marcar hilos como resueltos. Los comentarios cuelgan del
- * `contenido` PADRE (el tema), no de la fila por red, así que solo necesita su `contenidoId`.
- *
- * Reutilizable por el editor de publicaciones (`DialogoEditar`) y cualquier superficie de
- * contenido. Antes vivía dentro de `PanelColaboracion`; se extrajo al fusionar Tablero y
- * Publicaciones (#fusion) para que el editor único lo monte como pestaña.
- */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import * as React from "react";

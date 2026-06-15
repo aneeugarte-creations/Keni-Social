@@ -1,7 +1,6 @@
 """Helpers PUROS de similitud de títulos (normalización + fuzzy con sinónimos).
 
-Antes vivían en `keni_consola.radar` (Radar v1, retirado). Se extrajeron aquí porque
-los reutiliza el clustering del pool (`dominio.clustering`): cruzar títulos para fundir
+Se reutilizan en el clustering del pool (`dominio.clustering`): cruzar títulos para fundir
 "la misma noticia" contada por varias fuentes. Sin red, sin estado, deterministas.
 """
 

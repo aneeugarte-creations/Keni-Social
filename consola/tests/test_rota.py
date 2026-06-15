@@ -87,9 +87,7 @@ def test_viola_rotacion_sabado():
 
 
 def test_viola_rotacion_sabado_trabajo():
-    """Tras `franjas por semana`, el predicado ya no recibe `franja`: cualquier turno en
-    sábado cuenta como jornada (el descanso paso a ser turno explicito con `es_descanso=true`,
-    NO una ausencia implicita; la regla aplica igual)."""
+    """Cualquier turno en sábado cuenta como jornada."""
     previos = {"u0"}
     # u0 trabajó el sábado previo: asignarle de nuevo sin override viola.
     assert r.viola_rotacion_sabado_trabajo(previos, "u0", override=False) is True
@@ -125,8 +123,7 @@ def test_miembro_ausente_rango_inclusivo():
 
 
 def test_mapear_franja_limites_legacy():
-    """Helper legacy que solo se conserva para migracion + tests retrocompat. El modelo
-    nuevo usa `franjas_activas_en` con las franjas vivas de la semana."""
+    """Helper para tests retrocompat: mapea tiempo a franja."""
     assert r.mapear_franja("08:00") == "matutino"
     assert r.mapear_franja("15:59") == "matutino"
     assert r.mapear_franja("16:00") == "vespertino"
@@ -305,8 +302,7 @@ def test_cobertura_de_evento_hora_invalida_o_madrugada():
 
 
 def test_cobertura_de_evento_sin_franjas_no_cubre():
-    """Sin franjas vivas (semana sin definicion), no hay cobertura honesta (no asumimos
-    franjas implicitas en el modelo nuevo)."""
+    """Sin franjas vivas, no hay cobertura honesta (no asumimos franjas implicitas)."""
     evento = {"id": "ev", "fecha": "2026-06-10", "hora": "14:00"}
     turnos = [{"id": "T1", "fecha": "2026-06-10", "franja_id": "x", "miembro_id": "u_a"}]
     assert r.cobertura_de_evento(evento, turnos, []) == []

@@ -178,7 +178,6 @@ describe("VistaLista — 'Añadir a la cola' solo en piezas aprobadas/programada
   it("una pieza PUBLICADA NO ofrece 'Añadir a la cola' (no se re-encola)", async () => {
     renderLista([pub({ id: "p1", titulo: "Salió", estado: "publicado" })]);
     fireEvent.contextMenu(screen.getByText("Salió").closest('[role="button"]')!);
-    // El menú abre con otras acciones, pero la de encolar NO está.
     await screen.findByRole("menuitem", { name: /Duplicar/ });
     expect(screen.queryByRole("menuitem", { name: /Añadir a la cola/ })).toBeNull();
   });

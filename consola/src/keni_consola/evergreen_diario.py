@@ -13,8 +13,7 @@ generó y APROBÓ. Este barrido la llena solo:
   - Si el equipo ya creó un green hoy (cuenta como generado de la línea), el barrido NO añade
     otro: el automatismo rellena los días en los que nadie creó uno nuevo.
 
-Sustituye al antiguo "reciclaje" (panel + sugerencias), retirado: un solo origen, un solo
-mecanismo. Gateado por el interruptor general (`KENI_MAQUINA`); no publica nada por sí mismo
+Gateado por el interruptor general (`KENI_MAQUINA`); no publica nada por sí mismo
 (la publicación real sigue tras `KENI_PUBLICAR_REAL` y el gate humano ya ocurrió: el banco
 está aprobado). Best-effort: un fallo se loguea y el siguiente barrido reintenta.
 """

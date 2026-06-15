@@ -276,7 +276,6 @@ def fila_a_snapshot(fila: Any) -> dict[str, Any]:
     return snap
 
 
-# Alias privado retrocompat (call sites internos historicos de este modulo).
 _fila_a_snapshot = fila_a_snapshot
 
 

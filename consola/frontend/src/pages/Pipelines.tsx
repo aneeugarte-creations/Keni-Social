@@ -508,9 +508,3 @@ export function PanelEtapa({
     </div>
   );
 }
-
-// La antigua vista «Pipelines» (y la pestaña «Feed» del hub Actividad IA) viven hoy
-// FUSIONADAS en la página Producción (`pages/Produccion.tsx`): una sola línea temporal de
-// runs del pipeline + actividad suelta. Este módulo conserva la maquinaria de render
-// compartida (tarjeta del feed, tira de etapas, panel por etapa, bloque IA, métricas) que
-// usan Producción y los detalles (`PipelineDetalle`, `GeneracionDetalle`).

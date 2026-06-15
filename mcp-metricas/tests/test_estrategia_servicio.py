@@ -354,9 +354,7 @@ def test_metricool_correlacion_usa_serie_y_marca_nota():
 def test_serie_seguidores_neto_por_red_ignora_huecos():
     """Una red con dato al inicio pero AUSENTE el último día no debe restar su stock.
 
-    Regresión del bug "−4,979,127": antes `neto = último_total − primer_total` y, con
-    huecos de Metricool (p.ej. YouTube falta el último día), restaba todo su stock. Ahora
-    el neto es POR RED (primer/último de cada red en sus propios días) y se suma.
+    El neto es POR RED (primer/último de cada red en sus propios días) y se suma.
     """
 
     class _Cuenta:
@@ -385,8 +383,7 @@ def test_serie_seguidores_neto_por_red_ignora_huecos():
 def test_serie_seguidores_descarta_dia_incompleto():
     """Un último día con valor ~0 (incompleto, sin consolidar) NO debe dar neto negativo.
 
-    Regresión del "−14M": Metricool reporta hoy aún sin consolidar (followers ~0 para
-    algunas redes). Como el stock PERSISTE, ese día se descarta y se arrastra el último
+    Como el stock PERSISTE, ese día se descarta y se arrastra el último
     valor válido; el neto usa primer/último valor VÁLIDO.
     """
 
@@ -417,12 +414,8 @@ def test_serie_seguidores_descarta_dia_incompleto():
 
 
 def test_serie_seguidores_cuenta_sin_snapshots_no_hunde_el_agregado():
-    """UNA cuenta que deja de reportar no debe hundir la red agregada (caso "−2.2M").
+    """UNA cuenta que deja de reportar no debe hundir la red agregada.
 
-    Regresión del precipicio de mayo-2026: el TikTok de Claro Sports (~2.3M) dejó de
-    traer snapshots en Metricool del 19-may al 02-jun mientras el TikTok de UnoTV (~3.2M)
-    seguía reportando. La suma de la red caía un 35-40% —por ENCIMA del umbral agregado
-    de 0.5×mediana— y el chart pintaba una pérdida falsa de millones, con neto de −2.2M.
     El carry-forward debe ser POR CUENTA antes de sumar: la cuenta muda arrastra su último
     stock y el total sigue plano."""
 

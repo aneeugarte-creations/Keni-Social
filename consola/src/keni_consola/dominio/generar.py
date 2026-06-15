@@ -1,7 +1,6 @@
 """Lanzador NEUTRO de generaciones de IA (`claude -p`), único punto de lanzamiento.
 
-Reemplaza a `dominio.skills.lanzar_generacion_*` tras retirar el sistema de skills. Compone
-el prompt final (cuerpo del prompt + línea editorial adjunta + contexto + instrucción de
+Compone el prompt final (cuerpo del prompt + línea editorial adjunta + contexto + instrucción de
 redes), crea el registro de generación y lo ENCOLA reutilizando la infra de `generaciones`
 (`encolar_job_claude` + worker + sondeo). El post-procesado (parsear piezas, crear
 borradores, etc.) llega como `procesar` + `procesar_spec` (kinds de `jobspec`, fábricas en
@@ -32,9 +31,7 @@ _log = logging.getLogger("keni_consola.generar")
 # los envoltorios que `componer` concatena al prompt base viven como prompts EDITABLES en
 # `prompt/envoltorios/*` (SEMILLA en `texto_semilla/`, ÚNICA fuente del texto); el código
 # conserva la LÓGICA (cuándo se inyecta cada bloque, qué valor lleva cada `{{VARIABLE}}` —
-# límites de red, ids válidos, catálogo de fotos…). YA NO hay un `_FALLBACK_*` con el texto
-# duplicado en código: la cobertura de la semilla la garantiza el test semilla↔código
-# (`test_prompts_semilla_fallback`). El ORDEN de concatenación de `componer` NO cambia
+# límites de red, ids válidos, catálogo de fotos…). El ORDEN de concatenación de `componer` NO cambia
 # (prompt caching: estable-primero); solo de dónde sale el texto.
 PROMPT_ENVOLTORIO_SIN_EMOJIS = "prompt/envoltorios/sin-emojis"
 PROMPT_ENVOLTORIO_REDES = "prompt/envoltorios/redes"
@@ -67,10 +64,10 @@ def _plantilla_envoltorio(doc_id: str, fallback: str = "") -> str:
 
 
 # Instrucción ADITIVA de estilo, OPT-IN por flujo (la usan flujos cuya salida nunca debe
-# llevar emojis, p. ej. evergreen/termómetro). El COPY ya NO la inyecta: su política de
-# emojis vive en el prompt (`copy-desde-nota` §4) + la editorial adjunta de la marca, la
-# única fuente; el hardcode la contradecía. El texto EDITABLE vive en la Biblioteca
-# (`PROMPT_ENVOLTORIO_SIN_EMOJIS`); esta constante es el fallback (== semilla).
+# llevar emojis, p. ej. evergreen/termómetro). Su política de emojis vive en el prompt
+# (`copy-desde-nota` §4) + la editorial adjunta de la marca, la única fuente. El texto
+# EDITABLE vive en la Biblioteca (`PROMPT_ENVOLTORIO_SIN_EMOJIS`); esta constante es el
+# fallback (== semilla).
 INSTRUCCION_SIN_EMOJIS = "No uses emojis en el copy."
 
 
@@ -802,8 +799,7 @@ def lanzar_copy(
         for f in (fotos_notas or [])
         if isinstance(f, dict) and str(f.get("imagen") or "").strip()
     ]
-    # Sin `sin_emojis`: la política de emojis del copy vive en el prompt + editorial adjunta
-    # (única fuente); el hardcode "No uses emojis" contradecía al prompt de copy.
+    # La política de emojis del copy vive en el prompt + editorial adjunta (única fuente).
     prompt = componer_copy(
         cuerpo, marca=marca, contexto=contexto, redes_ids=redes_ids,
         n_notas=max(0, int(n_notas or 0)), fotos_notas=fotos,

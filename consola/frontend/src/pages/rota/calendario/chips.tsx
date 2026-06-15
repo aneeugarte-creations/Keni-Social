@@ -1,6 +1,5 @@
 // Chips del calendario de la rota: badge de coordinador, chip de evento y chip de turno
-// (con menú contextual de CRUD). Extraído verbatim de CalendarioPiezas.tsx (refactor de
-// pura reubicación).
+// (con menú contextual de CRUD).
 import { useMutation } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -224,11 +223,6 @@ export function ChipEventoCalendario({
     </button>
   );
 }
-
-// La antigua pestaña `Turnos` (rejilla CRUD por dropdown) se fusionó con el Calendario:
-// su cabecera de acciones (badges/copia/aprobar/despublicar/franjas/exportar) y la
-// rejilla con dropdown + `ChipTurnoCM` ahora viven dentro de `Calendario` arriba.
-// `ChipTurnoCM` y `DialogEditarTurno` (este último en ./dialogs) siguen siendo reutilizables.
 
 export function ChipTurnoCM({
   turno,

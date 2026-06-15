@@ -7,17 +7,15 @@
  * marca activa es otra. La marca activa la fija el selector global de la barra superior
  * (`useMarcaActiva`): es el id canónico, o `null` para la vista agregada "Todas" (admin).
  *
- * HOY NINGUNA ruta está restringida por marca: Turnos (rota de cobertura) pasó a ser POR
- * MARCA —cada marca ve su rota vía `rota_eventos.marca`; "Todas" agrega— y el Carril Rápido
- * de Breaking se retiró junto con la página de Revisión. El mecanismo se conserva (lo usan
- * el Sidebar y el SubnavHub) para futuras superficies que solo apliquen a una marca concreta.
+ * El mecanismo se usa en el Sidebar y el SubnavHub para superficies que aplican solo a una
+ * marca concreta.
  */
 
 /**
  * Rutas restringidas a una marca concreta: `{ruta, marca}`. Una ruta restringida solo es
  * visible cuando la marca activa coincide, o en "Todas" (`marcaActiva === null`, admin).
- * Hoy está VACÍA (ninguna superficie es mono-marca); añadir una entrada aquí basta para
- * ocultar su nav/pestaña y bloquear su ruta para el resto de marcas.
+ * Añadir una entrada aquí basta para ocultar su nav/pestaña y bloquear su ruta para el
+ * resto de marcas.
  */
 const RUTAS_RESTRINGIDAS_POR_MARCA: ReadonlyArray<{ ruta: string; marca: string }> = [];
 

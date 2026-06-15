@@ -161,10 +161,6 @@ ENV_MAQUINA = "KENI_MAQUINA"
 ENV_INVESTIGADOR = "KENI_INVESTIGADOR"
 ENV_INVESTIGADOR_INTERVALO_HORAS = "KENI_INVESTIGADOR_INTERVALO_HORAS"
 
-# (El antiguo KENI_PRIORIZA_METRICAS / _RANGO del "loop de aprendizaje Fase 5" se RETIRO:
-# nunca tuvo llamador productivo. La señal de metricas en el ranking vive ahora en
-# KENI_RENDIMIENTO_RANKING + KENI_SCORE_PESO_RENDIMIENTO, sobre las historias del pool.)
-
 # Auto-refresco de Algoritmos (inteligencia de plataforma): ingiere periodicamente los
 # feeds de blogs oficiales/agregadores. Gateado OFF por defecto (la pagina Algoritmos tiene
 # un boton "Refrescar" manual); con el flag ON, un daemon ingiere cada N horas.

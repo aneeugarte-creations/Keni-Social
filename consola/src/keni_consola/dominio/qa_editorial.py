@@ -154,8 +154,7 @@ VERDICTO_PROBLEMA = "problema"
 _FUENTE_PROBLEMA_DESDE = frozenset({"no_publicar"})
 
 # CONTRATO del prompt de fuente (`prompt/validacion`): el campo JSON `veredicto` va en slug
-# ASCII ("apta" | "problema"). Los emojis 🟢/🔴 se aceptan como LEGADO (piezas en vuelo o un
-# prompt editado en producción aún viejo); el semáforo visual queda para la línea humana.
+# ASCII ("apta" | "problema").
 _FUENTE_SLUG_APTA = "apta"
 _FUENTE_SLUG_PROBLEMA = "problema"
 

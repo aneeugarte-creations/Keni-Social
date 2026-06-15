@@ -1,9 +1,8 @@
 """Tests del backend POSTGRES de la capa operacional (`db.py` + `auth/` + `motor_db`).
 
-Tras la ADR 0004, Postgres es el unico backend; estos tests cubren la paridad funcional
-basica (CRUD de tareas, comercial + serie temporal con ON CONFLICT, rota, auth, cola de
-jobs concurrente) sobre el Postgres de pruebas, y las migraciones de columnas idempotentes
-para bases creadas por versiones anteriores. SKIP si no hay Postgres (ver `_postgres.py`).
+Estos tests cubren la paridad funcional basica (CRUD de tareas, comercial + serie
+temporal con ON CONFLICT, rota, auth, cola de jobs concurrente) sobre el Postgres de
+pruebas, y las migraciones de columnas idempotentes. SKIP si no hay Postgres (ver `_postgres.py`).
 """
 
 from __future__ import annotations
@@ -140,8 +139,8 @@ def test_migracion_columnas_comercial_granulares_bd_vieja(pg):
     legada = db.obtener_publicacion_comercial("viejo")
     assert legada is not None
     assert legada["titulo"] == "Pieza legada"
-    assert legada["formato"] == ""  # columna nueva: DEFAULT '' para la fila legada
-    # El snapshot legado conserva su valor y gana las columnas granulares en 0.
+    assert legada["formato"] == ""
+    # El snapshot ganará las columnas granulares inicializadas en 0.
     ultimo = db.ultimo_snapshot_comercial("viejo")
     assert ultimo["interacciones"] == 42
     for campo in db_comercial._METRICAS_GRANULARES_SNAPSHOT:
@@ -163,8 +162,6 @@ def test_rota_eventos_y_turnos(pg):
     """
     ev = db.crear_evento_rota("Transmision", fecha="2026-03-01", hora="20:00")
     assert db.obtener_evento_rota(ev["id"])["titulo"] == "Transmision"
-    # Usamos el shim retrocompat `franja="vespertino"` que siembra la franja Tarde de la
-    # semana y traduce a `franja_id`. La aserción es por la franja Tarde resuelta en BD.
     turno = db.crear_turno_rota(
         "2026-W09", "2026-03-01", miembro_id="u-luis", miembro_nombre="luis",
         franja="vespertino", override=True,
@@ -187,15 +184,11 @@ def test_rota_eventos_y_turnos(pg):
 
 
 def test_migracion_columnas_eventos_rota_postgres_bd_vieja(pg):
-    """Regresion del 500 del calendario en hosted: un `rota_eventos` Postgres creado ANTES
-    de la ola B (sin tipo_cobertura/prioridad/cambiado/actualizado) debe ALTERarse al crear
-    el esquema, TAMBIEN en Postgres.
+    """La tabla `rota_eventos` debe ALTERarse al crear el esquema para añadir nuevas columnas.
 
-    Reproduce el estado real del hosted: la tabla PERSISTE entre despliegues, asi que
-    `CREATE TABLE IF NOT EXISTS` no anade columnas. Antes la migracion estaba gateada a SQLite
-    -> leer el calendario sobre Postgres daba `UndefinedColumn` -> 500. Ahora corre en ambos.
+    La tabla PERSISTE entre despliegues, asi que `CREATE TABLE IF NOT EXISTS` no anade
+    columnas nuevas. La migracion debe ejecutarse de forma idempotente en Postgres.
     """
-    # Simula la tabla legada (esquema pre-ola-B) sobre Postgres.
     con = motor_db.conectar_cruda()
     con.execute("DROP TABLE IF EXISTS rota_eventos")
     con.execute(
@@ -215,7 +208,7 @@ def test_migracion_columnas_eventos_rota_postgres_bd_vieja(pg):
     eventos = db.listar_eventos_rota(desde="2026-06-01", hasta="2026-06-07")
     assert len(eventos) == 1
     legado = eventos[0]
-    # El evento legado queda con los DEFAULT de la ola B (sigue cubierto, prioridad media).
+    # Los campos nuevos tienen sus valores por defecto.
     assert legado["tipo_cobertura"] == "transmision"
     assert legado["prioridad"] == "media"
     assert legado["cambiado"] is False
@@ -286,8 +279,7 @@ def test_cola_encolar_idempotente_por_gen_id_pg(pg):
 def test_cola_encolar_resucita_fila_terminada_pg(pg):
     """Re-encolar un gen_id con fila `terminado` la REVIVE a `pendiente` (spec nuevo).
 
-    Antes el `ON CONFLICT DO NOTHING` devolvia el job viejo y el trabajo nuevo no corria
-    jamas. La resurreccion SOLO aplica a filas terminadas; una viva queda intacta.
+    La resurreccion SOLO aplica a filas terminadas; una viva queda intacta.
     """
     j1 = db.encolar_job("gen-r", '{"v": 1}')
     assert db.reclamar_job("w") is not None

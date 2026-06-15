@@ -2,7 +2,6 @@
 
 El score que lista el panel y el listón que dispara producción son dos niveles distintos a
 propósito: encolar QA+copy (coste real de tokens) exige un listón más alto y explicable.
-Movido VERBATIM desde el antiguo `clustering.py`.
 """
 
 from __future__ import annotations

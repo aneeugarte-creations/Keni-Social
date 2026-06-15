@@ -1,8 +1,4 @@
-"""`crear_borrador_en` deriva `falta_copy` del copy REAL, no lo hardcodea a False.
-
-Regresión: el flag fijo en False creaba piezas "copy listo" con copy vacío (drift que mentía en
-el label del feed y en el gate de auto-avance). Ahora un copy vacío => `falta_copy=True`.
-"""
+"""`crear_borrador_en` deriva `falta_copy` del copy REAL: un copy vacío => `falta_copy=True`."""
 
 from __future__ import annotations
 

@@ -14,26 +14,6 @@ SEGURIDAD / VALIDACION (no duplica logica; reusa las fuentes de verdad):
     tracebacks crudos.
 
 `marca_nombre` y `red_nombre` se resuelven EN SERVIDOR (la UI solo muestra nombres).
-
-================================================================================
-ESTRUCTURA DEL PAQUETE (refactor sin cambio de comportamiento)
-
-Este módulo era un único `publicaciones.py` (~1264 líneas); se partió en submódulos
-por área funcional. El descubridor de `api/__init__.py` (`pkgutil.iter_modules`) NO
-desciende dentro de subpaquetes, así que la ÚNICA superficie pública sigue siendo la
-variable `RUTAS` que este `__init__` exporta (mismo orden/paths/métodos que antes); el
-resto de la superficie (handlers, helpers y constantes que consumen otros módulos y los
-tests) se re-exporta aquí como FACADE.
-
-  - `_comun.py`     : helpers compartidos (serialización, flags de readiness, reset de
-                      aprobaciones al editar contenido aprobado).
-  - `crud.py`       : CRUD (alta/lote, listado/paginación, detalle, edición, borrado/lote,
-                      cadenas batch, duplicar/clonar, programar en Metricool).
-  - `espejo.py`     : propagación de ESPEJO entre redes hermanas de una misma idea.
-  - `programacion.py`: cálculo de HUECOS (franjas/cadencias), endpoint `encolar` y el
-                      encolado con backstop de unicidad + reintento.
-  - `composicion.py`: integrar foto / aplicar plantilla / servir imagen compuesta.
-================================================================================
 """
 
 from __future__ import annotations
@@ -127,7 +107,6 @@ __all__ = [
 ]
 
 
-# RUTAS: ensamblado IDÉNTICO al del módulo monolítico original (mismos paths, métodos y ORDEN).
 # El orden importa: las rutas literales batch (`cadenas`, `borrar-lote`, `{id}/compuesta`) van
 # ANTES de la genérica `/{publicacion_id}` para que no se interpreten como un id.
 RUTAS = [

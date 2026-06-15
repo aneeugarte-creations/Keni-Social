@@ -1,10 +1,7 @@
 """Utilidades puras de calculo de metricas — fuente UNICA del monorepo.
 
 `engagement_pct()` es el UNICO sitio donde se define la formula de engagement.
-Toda metrica/pieza (real, de muestra, agregada o de reporte) la usa. Antes estaba
-copiada en 10 sitios (issue #97 / H4); luego vivia en `keni_metricas.fuentes.base`
-y la consola no podia importarla salvo via keni_metricas. Ahora vive en
-`keni_shared` (H3/E1), la capa mas baja, y la importan ambos paquetes.
+Toda metrica/pieza (real, de muestra, agregada o de reporte) la usa.
 
 Sin estado ni I/O: solo aritmetica.
 """

@@ -4,9 +4,7 @@ import { estiloFuente, familiaReal } from "./tipografia";
 
 // `estiloFuente` construye el `fontStyle` de Konva con el PESO NUMÉRICO REAL de la capa: Konva lo
 // concatena tal cual en el shorthand del canvas y el navegador elige la MISMA cara que el export
-// del servidor (`fuenteCss` pinta `${peso} …px`). El binario normal/bold de antes enseñaba 400/700
-// en la previa aunque la capa pidiera Light 300 o Black 900 (los titulares Montserrat de Claro
-// Sports) y el export pintara el peso real.
+// del servidor (`fuenteCss` pinta `${peso} …px`).
 describe("estiloFuente (fontStyle Konva con peso real)", () => {
   it("pasa el peso numérico tal cual (Light 300, ExtraBold 800, Black 900…)", () => {
     for (const peso of [300, 400, 500, 600, 700, 800, 900]) {

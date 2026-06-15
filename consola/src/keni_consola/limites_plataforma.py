@@ -1,9 +1,8 @@
 """Limites de caracteres por plataforma — REEXPORTA `keni_shared.limites_plataforma`.
 
-La fuente UNICA de los topes vive AHORA en `keni_shared.limites_plataforma`
-(H3/E1), la capa mas baja del monorepo, para que keni-metricas y keni-consola la
-importen de la MISMA fuente (antes vivia aqui y el frontend/skills la espejaban
-con guards). `redes.py` la consume, el endpoint `GET /api/limites` la expone y los
+La fuente UNICA de los topes vive en `keni_shared.limites_plataforma` (la capa mas
+baja del monorepo), para que keni-metricas y keni-consola la importen de la MISMA
+fuente. `redes.py` la consume, el endpoint `GET /api/limites` la expone y los
 guards (`test_api_limites.py` para meta.ts, `evals/test_limites.py` para
 plataformas.md) anclan contra esta fuente unica.
 

@@ -1,27 +1,16 @@
 """Spec SERIALIZABLE de un job de generacion (#130 Fase 2 / ADR 0002 Fase B).
 
-El back ya NO ejecuta `claude -p` en proceso: ENCOLA un job (este spec, como JSON) y un
-WORKER lo clava y lo ejecuta —in-proceso en local, en un servicio aparte en hosted—. El
-reto del desacoplo es que el POST-PROCESADO de una generacion (`procesar`) era un CLOSURE
-de Python que el back construia (parsear piezas, registrar historial, crear borradores,
-marcar un item de RSS, parsear hashtags). Un worker en OTRO proceso no puede recibir un
-closure; SI puede recibir sus PARAMETROS y reconstruirlo, porque toda esa logica es codigo
-de DOMINIO PURO (`dominio.copy`, `dominio.qa_editorial`, `dominio.hashtags`, `repos`) que el
-worker comparte.
-
-Por eso un job se serializa como:
+Un job se serializa como:
   - `prompt` (str): el prompt de `claude -p` YA renderizado por el back.
-  - `cwd_kind` ("generacion"): COMO resolver el cwd en el worker. Tras retirar el sistema de
-    skills hay UN solo cwd: el dir NEUTRO y writable `cwd_generacion` (los prompts son
+  - `cwd_kind` ("generacion"): COMO resolver el cwd en el worker. Hay UN solo cwd: el dir NEUTRO y writable `cwd_generacion` (los prompts son
     autocontenidos; el corpus editorial viaja DENTRO del prompt, no se descubre por cwd).
   - `dir_temporal` (str | None): dir de la subida (foto/clip); el worker lo borra al final
-    y lo pasa como `--add-dir` (igual que antes). En hosted los temporales de subida no se
+    y lo pasa como `--add-dir`. En hosted los temporales de subida no se
     comparten entre back y worker: ver la nota de `media`/`clip` en el README de deploy.
   - `procesar` (dict): el KIND de post-procesado + sus parametros serializables.
 
-`construir(...)` arma el spec desde los mismos parametros que antes recibian
-`lanzar_generacion_copy`/`_skill`/RSS/hashtags. `reconstruir_procesar(spec)` + `cwd(spec)`
-lo deshacen en el worker. El spec NO lleva closures ni objetos: solo str/list/dict/bool/None.
+`construir(...)` arma el spec desde los parametros de la generacion.
+`reconstruir_procesar(spec)` + `cwd(spec)` lo deshacen en el worker. El spec NO lleva closures ni objetos: solo str/list/dict/bool/None.
 """
 
 from __future__ import annotations
@@ -58,15 +47,13 @@ PRIORIDAD_URGENTE = 20
 
 # cwd NEUTRO para prompts AUTOCONTENIDOS (Texto y TODAS las generaciones de texto): un
 # dir writable sin skills (el corpus editorial va DENTRO del prompt, no se descubre por cwd).
-# Tras retirar el sistema de skills es el ÚNICO cwd de `claude`; ya no hay cwd "de skills".
 CWD_GENERACION = "generacion"
 
 # Kinds de post-procesado (`procesar`). Mapean a las fabricas de `dominio.copy`/`qa`/`hashtags`.
 PROC_COPY = "copy"
 PROC_DOCUMENTO = "documento"
 PROC_HASHTAGS = "hashtags"
-# QA de la FUENTE (pre-copy, rediseño QPC): criba PERMISIVA de la nota de origen por TEMA antes
-# de generar copy. Persiste el veredicto estructurado (`no_verificado`/`problema`) + hallazgos
+# QA de la FUENTE (pre-copy, rediseño QPC): criba PERMISIVA de la nota de origen por TEMA. Persiste el veredicto estructurado (`no_verificado`/`problema`) + hallazgos
 # sobre el `contenido` (tema), para que CD genere copy SOLO de los `no_verificado`.
 PROC_QA_FUENTE = "qa-fuente"
 # Texto de prompts: post-procesado IDENTIDAD. Un prompt de la texto devuelve el
@@ -86,8 +73,8 @@ PROC_EVERGREEN_IDEAS = "evergreen-ideas"
 PROC_INSUMOS = "insumos"
 # Importacion de CALENDARIO desde un archivo NO tabular (PDF/Word/imagen/captura): parsea el
 # JSON `{"filas":[...]}` de claude (Haiku) e IMPORTA al tablero (`importar_a_tablero`). El camino
-# tabular (.xlsx/.csv) sigue siendo SINCRONO en el back (no usa claude); solo el camino IA, que
-# antes ejecutaba `claude -p` en la peticion, se ENCOLA al worker (el back no tiene claude).
+# tabular (.xlsx/.csv) sigue siendo SINCRONO en el back (no usa claude); solo el camino IA se
+# ENCOLA al worker (el back no tiene claude).
 PROC_IMPORT_CALENDARIO = "import-calendario"
 # Crítica IA (post-aprobación, con VISIÓN): tras los dos OK humanos, `claude -p` critica la pieza
 # (arte sintético, coherencia imagen↔texto, sustancia, rigor, hashtags, voz) y VOTA el nivel
@@ -100,16 +87,15 @@ PROC_CRITICA_IA = "critica-ia"
 # ------------------------------------------------------------------------------------------- #
 # Jobs de PROCESO (no-claude): el SEAM del motor de video (Ola VIDEO).                         #
 # ------------------------------------------------------------------------------------------- #
-# La cola/worker existentes solo corrian `claude -p`. Estos KINDS encolan trabajo GENERICO
-# (render de video con ffmpeg, transcripcion ASR con faster-whisper) que NO usa claude, pero
-# SI reutiliza la infra de `generaciones`/`jobs`/worker para colgarse de Actividad IA +
-# streaming. El worker DESPACHA un job de proceso a su EJECUTOR (ver `EJECUTORES_PROCESO`) en
-# vez de reconstruir un `procesar` de claude. El spec de un job de proceso es PLANO:
-#   {"kind": <PROC_*>, ...params}  (sin `prompt`/`procesar`/`cwd`; el ejecutor lee los params).
+# Estos KINDS encolan trabajo GENERICO (render de video con ffmpeg, transcripcion ASR con
+# faster-whisper) que NO usa claude, pero SI reutiliza la infra de `generaciones`/`jobs`/worker
+# para colgarse de Actividad IA + streaming. El worker DESPACHA un job de proceso a su EJECUTOR
+# (ver `EJECUTORES_PROCESO`) en vez de reconstruir un `procesar` de claude. El spec de un job de
+# proceso es PLANO: {"kind": <PROC_*>, ...params}  (sin `prompt`/`procesar`/`cwd`; el ejecutor
+# lee los params).
 PROC_RENDER_VIDEO = "render-video"
 PROC_TRANSCRIBIR = "transcribir"
-# Generacion de ARTE (imagen) del auto-pipeline: ANTES era SINCRONA (corria dentro del barrido
-# con su propio ThreadPool, fuera de la cola). Ahora es un job de PROCESO: la llamada HTTP al
+# Generacion de ARTE (imagen) del auto-pipeline: un job de PROCESO. La llamada HTTP al
 # proveedor de imagen + la subida a S3 + el adjuntado a la pieza son I/O (y algo de CPU), encajan
 # en el carril de proceso (NO bloquea el copy) y heredan idempotencia (clave estable en
 # `dominio.generar.lanzar_arte`) + reintentos/huerfanos del reaper. Su ejecutor (`autogen_arte.

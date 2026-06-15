@@ -1,8 +1,7 @@
 """Util comun de escritura atomica (`io_atomico.escribir_atomico`) — H3/E1.
 
-Verifica las garantias que antes estaban copiadas en ~10 modulos de la consola y
-en el asistente de keni-metricas: el destino nunca queda a medias, el padre se
-crea, el temporal se borra al fallar, y `modo` aplica permisos (p.ej. 0600).
+Verifica que el destino nunca queda a medias, el padre se crea, el temporal se
+borra al fallar, y `modo` aplica permisos (p.ej. 0600).
 """
 
 from __future__ import annotations

@@ -30,16 +30,7 @@ import type {
 } from "@/types";
 
 
-// --- Día de la semana + utilidades de fecha ---------------------------------
-
-// `diaCorto` y `esFinDeSemana` se movieron a `@/lib/rota-calendario`.
-
 // --- Dialog "Configurar franjas" (solo admin) -------------------------------
-//
-// Los wrappers `BotonConfigFranjas` / `BotonFranjasDeSemana` se eliminaron al fusionar
-// sus acciones dentro del menu "Mas" del calendario (ola "cabecera-slim"): la apertura
-// la gobierna `Calendario` con estado propio (`abrirFranjasSemana` / `abrirPlantillaFranjas`)
-// y aqui solo viven los dialogs.
 
 export function DialogFranjasDeSemana({
   lunes,

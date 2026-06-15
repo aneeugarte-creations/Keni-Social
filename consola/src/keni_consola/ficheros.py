@@ -1,10 +1,5 @@
 """Backend de FICHEROS YAML de la Consola Keni: el HISTORIAL DE PROMPTS vive en disco.
 
-Tras la migracion a Postgres (ADR 0004/0006), este modulo ya solo respalda el
-HISTORIAL DE PROMPTS: publicaciones, plantillas, fuentes-rss, hashtags y franjas
-viven en Postgres (`db.py`), y `tareas` tambien. La fachada `repos.py` delega aqui
-unicamente las funciones de historial (`*_historial_prompt`); el resto va a `db.py`.
-
 Los YAML estan organizados POR MARCA (agente = marca = carpeta), raiz =
 `KENI_CONSOLA_RAIZ` (def `~/keni-proyectos`):
 
@@ -27,7 +22,7 @@ filtrables. Se actualiza al escribir; si un YAML cambio por fuera (mtime) se
 re-indexa; si el indice se borra, se reconstruye leyendo los ficheros.
 
 ORDEN ESTABLE: las fechas de creacion llevan HORA (ISO datetime) para un orden
-determinista (antes el orden se apoyaba en el `rowid` de SQLite).
+determinista.
 """
 
 from __future__ import annotations

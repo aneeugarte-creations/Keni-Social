@@ -46,7 +46,6 @@ def test_etapa_generando_copy_solo_si_no_hay_copy():
 
 def test_pieza_sin_foto_no_esta_lista_aunque_no_lleve_copy_in():
     # TODO post necesita una FOTO real: sin foto (ni copy-in) NO está lista -> "Falta imagen".
-    # (Antes una pieza de solo texto se daba por lista sin foto; ya no.)
     d = publicacion_a_dict(_pub(contenido="Solo texto", copy_in="", imagen="", foto=""))
     assert d["etapa_ia"] == "generando_arte"
 
@@ -126,7 +125,7 @@ def test_copy_in_no_aplica_sin_marca():
 
 def test_en_revision_sin_hashtags_pide_hashtags():
     # YA en revisión, completa (copy + foto + placa) pero sin hashtags: la acción es ponerlos
-    # (clave para campañas/líneas). Antes salía un "para revisar" que ocultaba el hueco.
+    # (clave para campañas/líneas).
     d = publicacion_a_dict(
         _pub(estado="en_revision", contenido="Texto sin etiquetas", copy_in="TITULAR", foto="bg.png")
     )
@@ -152,6 +151,6 @@ def test_hashtags_no_bloquean_en_borrador():
 def test_en_revision_no_oculta_lo_que_falta():
     # «Revisión» es interno: NO manda sobre el contenido. Una pieza en revisión sin la foto real
     # (solo copy + placa) enseña la acción pendiente —"Falta imagen"—, no un "para revisar" que
-    # mienta. (Antes en_revision cortocircuitaba a "lista"; ya no.)
+    # mienta.
     d = publicacion_a_dict(_pub(contenido="copy", copy_in="TITULAR", estado="en_revision", foto=""))
     assert d["etapa_ia"] == "generando_arte"

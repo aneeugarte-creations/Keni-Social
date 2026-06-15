@@ -3,8 +3,7 @@
 // shorthand CSS del canvas (`<fontStyle> <fontVariant> <size>px <familia>`), así que aquí va el
 // PESO NUMÉRICO REAL de la capa (300/800/900…), no un binario normal/bold: el export del servidor
 // pinta `${peso} …px` (fuenteCss en fuentes.mjs / dibujar.mjs) y la previa debe elegir LA MISMA
-// cara. Con "bold"/"normal" el lienzo enseñaba 700/400 aunque la capa pidiera Light 300 o Black
-// 900 (p. ej. los titulares Montserrat estilo Gotham de Claro Sports) y el export pintara otra.
+// cara.
 //
 // Las webfonts de `index.html` cargan por familia EXACTAMENTE las caras que el backend registra
 // en Skia (guard en fuentes.mirror.test.ts): así el font-matching del navegador y el de Skia

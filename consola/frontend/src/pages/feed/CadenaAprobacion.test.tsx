@@ -49,7 +49,6 @@ describe("CadenaAprobacion · panel de estado (solo lectura)", () => {
     renderCadena(cadenaOK());
     expect(screen.getByText("1/2")).toBeInTheDocument();
     expect(screen.getByText(/Ana/)).toBeInTheDocument();
-    // La explicación "Faltan X OK…" se quitó (el conteo basta).
     expect(screen.queryByText(/Faltan/i)).not.toBeInTheDocument();
   });
 

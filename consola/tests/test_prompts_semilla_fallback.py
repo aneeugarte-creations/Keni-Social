@@ -51,10 +51,9 @@ _CASOS = [
     (clasificador_marca._plantilla, "prompt/clasificacion-marca"),
 ]
 
-# Ids de prompt que el CÓDIGO espera encontrar en la semilla tras MATAR los `_FALLBACK_*`
-# duplicados (la semilla es la única fuente). Si alguien borra un .md de `texto_semilla/`, este
-# test lo caza ANTES del deploy: sin la semilla, la generación se quedaría sin ese prompt y, sin
-# fallback en código, degradaría a vacío. CONTRATO semilla↔código.
+# Ids de prompt que el CÓDIGO espera encontrar en la semilla (la semilla es la única fuente).
+# Si alguien borra un .md de `texto_semilla/`, este test lo caza ANTES del deploy: sin la semilla,
+# la generación se quedaría sin ese prompt y degradaría a vacío. CONTRATO semilla↔código.
 _IDS_SEMILLA_OBLIGATORIA = [
     generar.PROMPT_ENVOLTORIO_SIN_EMOJIS,
     generar.PROMPT_ENVOLTORIO_REDES,

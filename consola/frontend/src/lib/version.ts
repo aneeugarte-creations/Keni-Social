@@ -4,8 +4,8 @@
  * Contexto: los assets llevan hash en el nombre y se cachean inmutables; `index.html`
  * es `no-store`. Tras un deploy, una pestaña abierta sigue con el bundle viejo en
  * memoria y, al navegar a una página cuyo chunk cambió de hash, el `import()` falla
- * (404). Antes había que recargar A MANO ("hay una versión nueva, recarga"): esa es la
- * UX fea que eliminamos.
+ * (404). Este código lo resuelve detectando automáticamente la nueva versión y
+ * recargando en silencio.
  *
  * Detección (preferente → alterna):
  *  1) `/version.json` (lo escribe Vite en cada build con un `buildId` único; nginx lo

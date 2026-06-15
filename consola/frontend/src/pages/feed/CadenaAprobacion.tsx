@@ -139,9 +139,6 @@ export function CadenaAprobacion({
           Resuelve {plural(sinResolver, "comentario")} antes de publicar
         </p>
       )}
-
-      {/* El override de forzar (admin/coordinación) ya no vive aquí: se ofrece en el toast
-          del primer OK (PostFeed), con su confirmación. El panel queda solo-estado. */}
     </section>
   );
 }

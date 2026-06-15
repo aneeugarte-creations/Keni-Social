@@ -225,8 +225,8 @@ def test_importar_semilla_puebla_y_es_idempotente():
 
 
 def test_semilla_trae_prompt_qa_fuente_editable():
-    # La criba pre-copy de la FUENTE se migró de `_DEFAULT_QA_CRITERIOS` a un prompt EDITABLE de
-    # la Biblioteca: su cuerpo efectivo lo trae la semilla del paquete (visible en «Prompts»).
+    # La criba pre-copy de la FUENTE es un prompt EDITABLE de la Biblioteca cuyo cuerpo efectivo
+    # lo trae la semilla del paquete (visible en «Prompts»).
     cuerpo = libtexto.cuerpo_efectivo("prompt/validacion")
     assert cuerpo and "CRIBA PREVIA" in cuerpo
 
@@ -241,8 +241,8 @@ def test_importar_semilla_no_pisa_lo_editado():
 
 
 def test_semilla_trae_los_prompts_migrados_del_codigo():
-    # Los 4 prompts que estaban hardcodeados en Python viajan ahora como semilla EDITABLE,
-    # con sus variables {{...}} en el cuerpo (las sustituye el módulo que los inyecta).
+    # Los prompts son semilla EDITABLE con sus variables {{...}} en el cuerpo (las sustituye
+    # el módulo que los inyecta).
     casos = {
         "prompt/clasificacion-marca": ("{{MARCAS}}", "{{MARCA_FALLBACK}}", "{{NOTICIA}}"),
         "prompt/hashtags": ("{{MARCA}}", "{{RED}}", "{{TEXTO}}"),
@@ -273,7 +273,7 @@ def test_importar_semilla_materializa_docs_nuevos_en_store_existente():
 
 
 def test_migrar_nombres_biblioteca_renombra_refresca_y_preserva():
-    # Simula un store con el ID VIEJO (de antes del rediseño), un patrones (script) y un doc del
+    # Simula un store con el ID VIEJO, un patrones (script) y un doc del
     # equipo que NO está en la semilla (termometro). La migración renombra/refresca sin pisar esos.
     from keni_consola.libtexto._rutas import raiz
     (raiz() / "prompt").mkdir(parents=True, exist_ok=True)
@@ -324,9 +324,9 @@ def test_limpiar_prompts_obsoletos_borra_y_es_idempotente():
 
 
 def test_migrar_descripciones_editorial_corrige_plantillas_y_respeta_ediciones():
-    # Las descripciones-plantilla VIEJAS (repetían título y marca) se corrigen en el store;
-    # cualquier descripción editada por el equipo NO casa con la plantilla y se respeta.
-    # El título de los globales pierde el paréntesis SIN mover el fichero (id estable).
+    # Las descripciones-plantilla se corrigen en el store; cualquier descripción editada por el
+    # equipo NO casa con la plantilla y se respeta. El título de los globales pierde el paréntesis
+    # SIN mover el fichero (id estable).
     from keni_consola.libtexto._rutas import raiz
 
     base = raiz() / "editorial" / "rrss"
@@ -372,8 +372,7 @@ def test_migrar_descripciones_editorial_corrige_plantillas_y_respeta_ediciones()
 
 
 def test_migrar_dir_legacy_renombra_biblioteca_a_texto(tmp_path, monkeypatch):
-    """Una instalación previa guarda los documentos bajo `…/biblioteca`; la migración los
-    mueve a `…/texto` para que `libtexto.raiz()` (renombrado) los vea. Sin override por env."""
+    """Los documentos se mueven a `…/texto` para que `libtexto.raiz()` los vea. Sin override por env."""
     from keni_consola import rutas
 
     monkeypatch.delenv("KENI_TEXTO_DIR", raising=False)

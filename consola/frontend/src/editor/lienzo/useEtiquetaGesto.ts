@@ -39,8 +39,7 @@ export function useEtiquetaGesto({
     } else if (nodos.length === 1) {
       const capa = documento.capas.find((c) => c.id === nodos[0].id());
       if (!capa) return;
-      // Alto VISIBLE como base (banda del overlay, línea del texto sin caja): es lo que abraza el
-      // Transformer; con el h del modelo el rótulo decía 1350 mientras la caja medía ~607.
+      // Alto VISIBLE como base (banda del overlay, línea del texto sin caja): es lo que abraza el Transformer.
       const hBase = cajaVisual(capa).h;
       texto = etiquetaTamano(Math.abs(capa.w * nodos[0].scaleX()), Math.abs(hBase * nodos[0].scaleY()));
     } else {

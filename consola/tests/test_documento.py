@@ -24,7 +24,6 @@ def _img(x, y, w, h, es_foto=True):
 
 
 def test_capas_foto_conserva_varios_huecos():
-    # Un collage declara N huecos (es_foto): validar los CONSERVA todos (antes colapsaba a 1).
     doc = d.validar(_doc(capas=[_img(0, 0, 540, 1350), _img(540, 0, 540, 1350), _img(0, 0, 100, 100, es_foto=False)]))
     assert d.cuenta_huecos_foto(doc) == 2
     assert len(d.capas_foto(doc)) == 2
@@ -83,7 +82,6 @@ def test_validar_capa_imagen_normaliza_y_genera_id():
 
 
 def test_validar_capa_imagen_forma_y_radio_defaults_retrocompat():
-    # Documento viejo (sin forma/radio): valida con los defaults limpios (rect, 0).
     doc = d.validar(_doc(capas=[{"tipo": "imagen", "x": 0, "y": 0, "w": 100, "h": 100}]))
     capa = doc["capas"][0]
     assert capa["forma"] == "rect" and capa["radio"] == 0
@@ -99,7 +97,6 @@ def test_validar_capa_imagen_forma_elipse_y_radio():
     malo = d.validar(_doc(capas=[{"tipo": "imagen", "x": 0, "y": 0, "w": 10, "h": 10,
                                   "forma": "trapecio", "radio": 0}]))
     assert malo["capas"][0]["forma"] == "rect" and malo["capas"][0]["radio"] == 0
-    # Radio negativo => DocumentoError (límite [0, ∞); ya no se acota en silencio a 0).
     with pytest.raises(d.DocumentoError, match="radio.*no puede ser menor"):
         d.validar(_doc(capas=[{"tipo": "imagen", "x": 0, "y": 0, "w": 10, "h": 10, "radio": -5}]))
 
@@ -120,7 +117,6 @@ def test_validar_sombra_texto_ausente_es_null_y_no_ensucia():
 
 
 def test_validar_sombra_texto_plana_no_persiste_blur_ni_opacidad():
-    # Sombra clásica (dx,dy,color) sin blur ni opacidad: no se añaden esos campos => render legado.
     doc = d.validar(_doc(capas=[{"tipo": "texto", "x": 0, "y": 0, "w": 100, "h": 0,
                                  "texto": "hola", "color": "#FFFFFF",
                                  "sombra": {"dx": 3, "dy": 4, "color": "#000000"}}]))
@@ -172,7 +168,6 @@ def test_validar_sombra_imagen_opcional():
 
 
 def test_validar_capa_imagen_flip_solo_si_true():
-    # Ausente / False => NO se persiste (no ensucia documentos viejos ni cambia el render legado).
     sin = d.validar(_doc(capas=[{"tipo": "imagen", "x": 0, "y": 0, "w": 10, "h": 10}]))
     assert "flip_h" not in sin["capas"][0] and "flip_v" not in sin["capas"][0]
     no = d.validar(_doc(capas=[{"tipo": "imagen", "x": 0, "y": 0, "w": 10, "h": 10,
@@ -282,7 +277,7 @@ def test_validar_marco_y_overlay_y_grupo():
 
 
 def test_capa_overlay_lado_arriba_se_conserva_y_abajo_se_descarta():
-    """`lado:"arriba"` se persiste; ausente o "abajo" NO se guarda (retrocompat: overlay inferior)."""
+    """`lado:"arriba"` se persiste; ausente o "abajo" NO se guarda."""
     doc = d.validar(_doc(capas=[
         {"tipo": "overlay", "x": 0, "y": 0, "w": 1080, "h": 1350, "color": "#111315", "lado": "arriba"},
         {"tipo": "overlay", "x": 0, "y": 0, "w": 1080, "h": 1350, "color": "#111315", "lado": "abajo"},

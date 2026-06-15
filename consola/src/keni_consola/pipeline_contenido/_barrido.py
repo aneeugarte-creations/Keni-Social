@@ -317,14 +317,9 @@ def _ejecutar_barrido() -> dict[str, Any]:
 
 
 # UN SOLO CAMINO DE QA (ADR 0011 F3): la criba corre SOBRE EL CLUSTER, PRE-admisión
-# (`ejecutar_qa_clusters`), nunca sobre el TEMA post-admisión. Aquí vivía `ejecutar_qa` (criba de
-# TEMAS ya materializados, post-frontera): se RETIRÓ por duplicar el camino y por poder dejar un
-# TEMA en `qa_veredicto='en_curso'`. La FRONTERA queda nítida en código: Investigación verifica la
-# fuente ANTES de cruzar (cluster → veredicto) y la admisión solo promueve las VERIFICADAS; ningún
-# barrido pone ya un TEMA en `en_curso` (el único escritor, `_qa.lanzar_qa_fuente`, ya no tiene
-# llamador en los loops — solo lo invoca el `procesar`/encadenado del camino manual/legado). Por
-# eso el reaper de TEMAS `en_curso` (`reaper_generaciones._sanear_qa_en_curso`) queda como mera red
-# para filas legadas, no para un camino vivo.
+# (`ejecutar_qa_clusters`), nunca sobre el TEMA post-admisión. La FRONTERA queda nítida en código:
+# Investigación verifica la fuente ANTES de cruzar (cluster → veredicto) y la admisión solo
+# promueve las VERIFICADAS.
 
 
 def ejecutar_cd(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
@@ -335,8 +330,7 @@ def ejecutar_cd(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
       1) temas del propio pipeline (origen `pipeline`) cuya QA salió `no_verificado`
          (`temas_para_copy` → `lanzar_copy_de_tema`),
       2) temas que las FUENTES de noticias metieron al tablero sin copy
-         (`temas_autogen_sin_copy` → `autogen_copy.lanzar_para_topic`), FUNDIENDO aquí la
-         selección del antiguo daemon suelto `autogen_copy`.
+         (`temas_autogen_sin_copy` → `autogen_copy.lanzar_para_topic`).
     SIN topes propios (flujo continuo): el carril 1 lo acota la ADMISIÓN (gate serial en vuelo);
     el carril 2, el dedup por etiqueta + el backpressure de la cola. Si la cola se llena, corta la
     fase (el siguiente tick reintenta). REINTENTOS ACOTADOS en el carril 1: al agotar
@@ -492,13 +486,11 @@ def ejecutar_arte() -> list[dict[str, Any]]:
     return adjuntados
 
 
-# TICK del flujo continuo (constante, NO un ajuste): los loops ya no barren "por tandas" cada
-# N minutos; reaccionan al ESTADO cada pocos segundos. En cuanto la QA de una pieza termina, el
-# siguiente tick de producción lanza su Copy (latencia entre etapas: segundos, no minutos). El
-# volumen NO lo pone el tick sino la ADMISIÓN (gate serial en vuelo por marca) + el backpressure
-# de la cola; un tick sin trabajo son unas pocas lecturas indexadas a BD. Cada proceso tiene su
-# propia constante para poder divergir (p. ej. investigar más rápido que producir) sin tocar el
-# otro; hoy ambos son 15 s.
+# TICK del flujo continuo (constante, NO un ajuste): reaccionan al ESTADO cada pocos segundos.
+# En cuanto la QA de una pieza termina, el siguiente tick de producción lanza su Copy. El volumen
+# NO lo pone el tick sino la ADMISIÓN (gate serial en vuelo por marca) + el backpressure de la
+# cola. Cada proceso tiene su propia constante para poder divergir sin tocar el otro; hoy ambos
+# son 15 s.
 _TICK_INVESTIGACION_SEGUNDOS = 15.0
 _TICK_PRODUCCION_SEGUNDOS = 15.0
 _TICK_SEGUNDOS = _TICK_INVESTIGACION_SEGUNDOS  # alias retro: cadencia "del pipeline" = investigación.

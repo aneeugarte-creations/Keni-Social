@@ -68,8 +68,7 @@ MARCAS_DEFAULT = {
 
 
 # --------------------------------------------------------------------------- #
-# Fuentes y texto (copiados de breaking-express/componer.py para que el skill   #
-# sea autónomo; misma lógica, sin importar nada del hermano).                   #
+# Fuentes y texto                                                                #
 # --------------------------------------------------------------------------- #
 
 _FUENTES_BOLD = [
@@ -197,8 +196,8 @@ def _resolver_clave_marca(marca: str) -> str:
 def cargar_marca(marca: str) -> dict:
     """Lee tokens de la marca del marcas.json hermano; si no existe, cae a los
     defaults internos. Resuelve la ruta con pathlib relativo al script
-    (marcas.json en el mismo dir, relocalizado desde breaking-express) y NO
-    duplica todo el JSON: solo toma los tokens que la placa necesita."""
+    (marcas.json en el mismo dir) y NO duplica todo el JSON: solo toma los tokens
+    que la placa necesita."""
     clave = _resolver_clave_marca(marca)
     cfg_path = Path(__file__).resolve().parent / "marcas.json"
     m: dict | None = None

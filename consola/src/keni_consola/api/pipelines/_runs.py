@@ -115,8 +115,7 @@ def _fusion_de(cluster: dict | None, marca: str, *, corrio_pool: bool = False) -
     """Etapa "Fusión": dedup IA del pool. SOLO evidencia persistida: con historia (cluster)
     enlazada corrió (ok). Sin historia, `corrio_pool` desempata: si la IA del pool corrió
     para la marca (hay generación "Fusión de historias"), la etapa CORRIÓ y esta historia
-    simplemente no se agrupó con otras — antes se pintaba "Saltada" con un bloque IA
-    completado al lado (contradicción visible). Solo sin evidencia alguna queda saltada."""
+    simplemente no se agrupó con otras. Solo sin evidencia alguna queda saltada."""
     if not cluster:
         if corrio_pool:
             return {
@@ -238,8 +237,7 @@ def _etapas_de_run(
 
     # --- Arte: SOLO evidencia de arte IA (marcador ARTE / generación de arte correlacionada).
     # Una pieza puede traer IMAGEN sin que el arte IA corriera (la foto de la nota de una
-    # fuente PROPIA, bajada en la ingesta): eso NO es trabajo de esta etapa y antes la
-    # pintaba "ok" con el toggle apagado. La foto de fuente vive en la pieza (feed), no aquí.
+    # fuente PROPIA, bajada en la ingesta): eso NO es trabajo de esta etapa. La foto de fuente vive en la pieza (feed), no aquí.
     con_arte = sum(1 for p in piezas if not p["falta_imagen"])
     if arte_ia:
         arte_estado, arte_detalle = "ok", f"{con_arte}/{total}"
@@ -260,8 +258,7 @@ def _etapas_de_run(
         ap_estado, ap_detalle = "en_curso", f"{aprobadas}/{total}"
     elif en_curso:
         # Esperando al HUMANO (piezas en revisión, ninguna aprobada aún): es "pendiente", no
-        # "en curso" — la máquina no está haciendo nada. Antes esto pintaba runs de hace una
-        # semana como "En curso" en la lista solo porque nadie llegó a aprobarlas.
+        # "en curso" — la máquina no está haciendo nada.
         ap_estado, ap_detalle = "pendiente", "En revisión"
     elif qa_veredicto == QA_CADUCADA and not total:
         # Run CADUCADA sin piezas: cerrada sin producto (no quede "pendiente" para siempre).

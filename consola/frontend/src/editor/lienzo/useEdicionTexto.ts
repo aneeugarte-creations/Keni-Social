@@ -25,8 +25,7 @@ export function useEdicionTexto({
   const avisoBinding = useRef(false);
 
   // Doble clic en una capa de texto -> edición en línea WYSIWYG sobre la imagen (patrón Canva).
-  // Se edita LO QUE SE VE: con binding y «Copy de muestra» activo, el copy de muestra (antes se
-  // editaba `capa.texto` y el lienzo seguía pintando la muestra: la edición parecía rota); en el
+  // Se edita LO QUE SE VE: con binding y «Copy de muestra» activo, el copy de muestra; en el
   // resto de casos, el texto real de la capa.
   const abrirEdicionTexto = (id: string) => {
     const capa = documento.capas.find((c) => c.id === id);

@@ -83,10 +83,8 @@ def _emitir_bajo_rendimiento(hoy_iso: str, umbral: float) -> int:
 def emitir_alertas(hoy: date | None = None) -> int:
     """Corre UN barrido de alertas. Devuelve cuantas `pieza.bajo_rendimiento` NUEVAS emitio.
 
-    (El carril de reciclaje se retiro con la feature: el evergreen diario automatico
-    sustituye a las sugerencias de "retomar" piezas.) Es lo que ejecuta cada vuelta del
-    hilo y tambien se puede llamar a mano (test/CLI). La idempotencia por bucket diario
-    hace que re-ejecutar el mismo dia no duplique avisos.
+    Es lo que ejecuta cada vuelta del hilo y tambien se puede llamar a mano (test/CLI).
+    La idempotencia por bucket diario hace que re-ejecutar el mismo dia no duplique avisos.
     """
     hoy_iso = (hoy or hoy_utc()).isoformat()
     umbral = config.alertas_umbral_engagement()

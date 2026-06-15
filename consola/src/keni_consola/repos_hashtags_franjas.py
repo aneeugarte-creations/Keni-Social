@@ -9,9 +9,7 @@ from ._repos_comun import (
 # --------------------------------------------------------------------------- #
 # Grupos de hashtags (OPERACIONAL: Postgres via db.py; rezago cerrado, ADR 0006) #
 # --------------------------------------------------------------------------- #
-# CONTENIDO editorial reutilizable que vivia file-backed (YAML + indice SQLite de rutas
-# absolutas). El indice se desincronizaba al recrear contenedores; ahora vive en Postgres
-# (ADR 0006). El dict devuelto conserva las mismas claves; la fachada delega 1:1 en db.py.
+# El dict devuelto conserva las mismas claves; la fachada delega 1:1 en db.py.
 
 
 def listar_grupos_hashtags(

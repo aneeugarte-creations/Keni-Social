@@ -1,8 +1,8 @@
 """Catalogo UNICO de marca de la consola — REEXPORTA `keni_shared.marcas`.
 
-La definicion canonica vive AHORA en `keni_shared.marcas` (H3/E1), la capa mas
+La definicion canonica vive en `keni_shared.marcas` (H3/E1), la capa mas
 baja del monorepo, para que keni-metricas y keni-consola la importen de la MISMA
-fuente (antes vivia aqui y keni-metricas/skills la espejaban con guards).
+fuente.
 
 Este modulo se conserva como reexport para no romper los imports existentes de la
 consola (`from . import marcas`, `from .. import marcas`): el codigo sigue usando

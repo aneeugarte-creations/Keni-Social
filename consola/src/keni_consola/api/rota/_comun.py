@@ -157,7 +157,6 @@ def _turno_a_dict(
     franja_def = (franjas_por_id or {}).get(turno.get("franja_id", "") or "")
     nombre = franja_def["nombre"] if franja_def else ""
     es_descanso = bool(franja_def.get("es_descanso", False)) if franja_def else False
-    # Mapeo retrocompat: nombre conocido -> literal viejo.
     if es_descanso:
         franja_legacy = "descanso"
     elif nombre == "Mañana":

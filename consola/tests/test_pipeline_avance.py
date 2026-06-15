@@ -110,7 +110,6 @@ def test_avance_no_tiene_exclusion_por_marca(entorno, monkeypatch):
     (cualquier `KENI_PIPELINE_AVANCE::<marca>`) se IGNORA y la pieza avanza igual."""
     _encender(monkeypatch)
     pub = _crear_borrador(_cli_usuario())
-    # Un valor legado en el store no debe apagar el avance (la etapa ya no lo lee).
     legado = f"KENI_PIPELINE_AVANCE{config.SEP_MARCA}{_MARCA}"
     monkeypatch.setattr("keni_consola.ajustes.obtener", lambda c: "0" if c == legado else None)
 

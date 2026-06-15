@@ -43,8 +43,7 @@ function LineaMetricas({ metricas }: { metricas: MetricasRun | null }) {
 
 /**
  * Etiqueta humana de la ETAPA de progreso (en qué etapa va, no cuánto falta), según la
- * `fase` que deriva el backend del stream. La fase "" (registros legados / antes de
- * arrancar) cae a "Visualizando…", el comportamiento previo.
+ * `fase` que deriva el backend del stream. La fase vacía cae a "Visualizando…".
  */
 function etiquetaFase(fase: string): string {
   switch (fase) {

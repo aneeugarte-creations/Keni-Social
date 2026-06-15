@@ -1,10 +1,7 @@
-"""Tests del CRUD editorial reutilizable migrado de FICHEROS a Postgres (ADR 0006).
+"""Tests del CRUD editorial reutilizable en Postgres (ADR 0006).
 
-Fuentes RSS (+ items vistos + salud), grupos de hashtags y franjas editoriales eran los
-ULTIMOS rezagados file-backed (YAML + indice SQLite de rutas absolutas, que se
-desincronizaba al recrear contenedores -> Fuentes RSS aparecia vacia). Aqui se cubre que el
-CRUD vive en Postgres (`keni_consola.db`) y conserva el contrato de los dicts (mismas
-claves que tenia la capa de ficheros, hoy retirada para estas 3 entidades).
+Fuentes RSS (+ items vistos + salud), grupos de hashtags y franjas editoriales: CRUD
+que vive en Postgres (`keni_consola.db`).
 """
 
 from __future__ import annotations
@@ -108,7 +105,7 @@ def test_borrar_fuente_rss_limpia_items_vistos(entorno):
 
 
 def test_items_vistos_idempotentes_y_sin_fuente(entorno):
-    # marcar_item NO exige fuente existente (paridad con el file-backed).
+    # marcar_item NO exige fuente existente.
     db.marcar_item("fuente-fantasma", "k1", True)
     db.marcar_item("fuente-fantasma", "k1", True)  # idempotente
     db.marcar_item("fuente-fantasma", "k2", True)

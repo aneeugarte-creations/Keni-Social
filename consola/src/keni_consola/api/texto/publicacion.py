@@ -171,7 +171,7 @@ async def publicar(request: Request) -> Response:
         nota=datos.get("nota") if isinstance(datos.get("nota"), str) else "",
     )
     # Relee el doc: el commit del borrador no cambió el working copy, pero `_doc_json`
-    # recalcula el estado de publicación (ahora con puntero y `sin_publicar` actualizado).
+    # recalcula el estado de publicación (con puntero y `sin_publicar` actualizado).
     return JSONResponse({"documento": _doc_json(libtexto.obtener(doc_id) or doc)})
 
 
@@ -187,7 +187,7 @@ async def solicitar(request: Request) -> Response:
         return JSONResponse({"error": "Ese documento no existe."}, status_code=404)
     datos = await leer_json(request)
     # Igual que publicar: sin sha explícito, COMITEA el borrador actual para proponer ESA
-    # versión (no un HEAD preexistente, que el autosave ya no mueve).
+    # versión (no un HEAD preexistente).
     sha, error = _sha_a_publicar(doc_id, datos, autor=autor_de_peticion(request))
     if error is not None:
         return error

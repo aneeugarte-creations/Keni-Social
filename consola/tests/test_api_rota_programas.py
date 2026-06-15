@@ -117,8 +117,7 @@ def test_actualizar_programa_color_y_descripcion(cliente):
 def test_renombrar_programa_hace_cascada_en_piezas(cliente):
     """Cuando renombro el programa, las piezas que lo referencian se actualizan."""
     p = _crear_programa(cliente, nombre="OLD NAME")
-    # Siembra piezas (legacy `rota_piezas`) por el dominio: la API HTTP de piezas se retiró,
-    # pero la cascada de programa->piezas sigue viva mientras exista la tabla y la migración.
+    # Siembra piezas por el dominio.
     repos.crear_pieza_rota(programa="OLD NAME", contenido_sugerido="post 1")
     repos.crear_pieza_rota(programa="OLD NAME", contenido_sugerido="post 2")
     # Una pieza con OTRO nombre no debe cambiar.

@@ -199,8 +199,7 @@ def crear_app(
     usuarios (#130, idempotente). Los tests lo desactivan por defecto (la mayoria usan
     el token y no quieren pagar el coste del hash); los de auth lo activan o crean el
     usuario a mano. `abrir`: funcion opcional `(Path) -> str` para lanzar Claude Code (interactivo);
-    por defecto la real. `lanzar_run` se ACEPTA por retrocompatibilidad con los tests
-    (el hub Agentes se retiró del backend; ya no lanza runs), pero se IGNORA.
+    por defecto la real. `lanzar_run` se ACEPTA por retrocompatibilidad con los tests, pero se IGNORA.
     `lanzar_generacion`: funcion opcional `(gen_id, *, prompt, cwd, procesar, dir_temporal)`
     para lanzar trabajos de IA (copy/RSS/hashtags) en background. `lanzar_imagen`: funcion
     opcional `(gen_id, *, generar)` para trabajos de imagen. Por defecto todas son las
@@ -215,11 +214,6 @@ def crear_app(
         from . import generaciones as gen_modulo
 
         if lanzar_generacion is not None:
-            # #130 Fase 2: el seam de lanzamiento es ahora ENCOLAR (el back ya no ejecuta
-            # `claude -p` en la peticion). El fake recibe la MISMA firma de antes (gen_id +
-            # prompt/cwd/procesar/dir_temporal); aceptamos el `spec` extra (lo ignora). Asi
-            # las fakes existentes (noop / "completa" que corre `procesar`) siguen valiendo
-            # sin tocar nada, y ningun test toca la cola ni `claude` real.
             def _encolar_inyectado(gen_id, *, prompt, cwd, procesar, dir_temporal=None, spec=None):  # noqa: ANN001
                 return lanzar_generacion(
                     gen_id, prompt=prompt, cwd=cwd, procesar=procesar, dir_temporal=dir_temporal
@@ -235,9 +229,6 @@ def crear_app(
     except OSError:
         pass
 
-    # Migra las claves del store de ajustes guardadas bajo nombres RENOMBRADOS (las etapas
-    # del pipeline consolidaron sus env sin retrocompat y los toggles guardados quedaban
-    # huerfanos: la UI los habia mostrado encendidos y la etapa corria/se pintaba apagada).
     # Idempotente y best-effort: corre en back Y daemons (mismo volumen), antes de leer config.
     try:
         from . import ajustes
@@ -248,10 +239,9 @@ def crear_app(
     except OSError:
         _logger.warning("No se pudieron migrar las claves legadas de ajustes.", exc_info=True)
 
-    # SEGURIDAD del cutover (#130): crea el esquema y, en hosted (Postgres), REHUSA arrancar
+    # Crea el esquema y, en hosted (Postgres), REHUSA arrancar
     # si el Postgres esta vacio pero hay un SQLite local CON datos (evita orfanar datos
-    # vivos). El error SE PROPAGA a proposito (no lo tragamos): un cutover pendiente debe
-    # PARAR el arranque, no servir en blanco. En el perfil local es casi no-op.
+    # vivos). El error SE PROPAGA a proposito (no lo tragamos): detiene el arranque.
     db.arrancar_persistencia()
 
     # Bootstrap del admin inicial (#130): si la BD no tiene usuarios, crea uno desde
@@ -282,8 +272,8 @@ def crear_app(
             bootstrap_lineas.sembrar_fuentes_ingesta()
         except Exception:  # noqa: BLE001 -- idem: no impide el arranque
             _logger.warning("No se pudieron sembrar las fuentes del motor de ingesta.", exc_info=True)
-        # Migración al tablero de contenido unificado: lleva tareas, piezas de la rota y
-        # publicaciones legadas al modelo `contenido` para que el tablero las muestre.
+        # Lleva tareas, piezas de la rota y
+        # publicaciones al modelo `contenido` para que el tablero las muestre.
         # Idempotente (marca el origen / preserva ids) y best-effort: no impide el arranque.
         try:
             from . import migrar_contenido

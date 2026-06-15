@@ -76,8 +76,8 @@ async def _llamar(cliente: ClienteFalso, nombre: str, **args) -> dict:
 
 
 def test_allowlists_vienen_de_keni_shared():
-    """Las tuplas ya NO son un espejo a mano: son las mismas de keni-shared (y por
-    tanto las que re-exporta `keni_consola.estados`)."""
+    """Las tuplas son las mismas de keni-shared (y por tanto las que re-exporta
+    `keni_consola.estados`)."""
     from keni_shared import estados as compartidos
 
     assert ESTADOS_PLATAFORMA is compartidos.ESTADOS_CONTENIDO_PLATAFORMA
@@ -175,7 +175,7 @@ async def test_crear_contenido_arma_el_cuerpo():
     )
     assert out["contenido"]["id"] == "c1"
     cuerpo = cliente.llamadas[0][1][0]
-    assert cuerpo["titulo"] == "Final Liga MX"  # trim
+    assert cuerpo["titulo"] == "Final Liga MX"
     assert cuerpo["redes"] == ["instagram", "x"]
     assert cuerpo["marca"] == "claro_sports"
 

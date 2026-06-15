@@ -32,8 +32,6 @@ from urllib.parse import urlsplit
 from xml.etree import ElementTree as ET
 
 # Limites de descarga (defensa frente a feeds maliciosos o gigantes).
-# `_TIMEOUT` baja de 10s a 6s (F0 rendimiento): un feed lento ya no bloquea 10s el path de
-# carga del Radar/Parrilla. 6s es holgado para un RSS sano y recorta la cola larga.
 _TIMEOUT = 6.0  # segundos
 _MAX_BYTES = 5 * 1024 * 1024  # 5 MB
 _MAX_ITEMS = 30  # items por feed

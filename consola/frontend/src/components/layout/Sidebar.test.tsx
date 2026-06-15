@@ -30,8 +30,7 @@ const CATALOGO = {
       nav: [
         { ruta: "/contenido/imagen", etiqueta: "Imagen", icono: "Palette", descripcion: "", grupo: "contenido", grupo_orden: 20, orden: 10 },
         { ruta: "/contenido/texto", etiqueta: "Texto", icono: "Library", descripcion: "", grupo: "contenido", grupo_orden: 20, orden: 20 },
-        // Bloque «Máquina»: cada motor UNA sola vez (consolidación de nav). Las viejas entradas
-        // «datos» (Investigación /datos/investigacion, Producción /datos/produccion) se retiraron.
+        // Bloque «Máquina»: cada motor UNA sola vez (consolidación de nav).
         { ruta: "/maquina/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "", grupo: "maquina", grupo_orden: 25, orden: 10 },
         { ruta: "/maquina/produccion", etiqueta: "Producción", icono: "Sparkles", descripcion: "", grupo: "maquina", grupo_orden: 25, orden: 20 },
         { ruta: "/maquina/agentes", etiqueta: "Agentes", icono: "Bot", descripcion: "", grupo: "maquina", grupo_orden: 25, orden: 30 },
@@ -63,9 +62,9 @@ const CATALOGO = {
     },
   ],
   // Bloques de flujo tal como los entrega el backend (`entradas_nav_activas`):
-  // Feed (red social interna) encabeza "Operación", seguido de Programación y Turnos (antes
-  // pestañas del hub Calendario, ahora páginas planas). Revisión se retiró. Los hubs que quedan
-  // van como UNA entrada (su sub-nav es in-page). El bloque vive también en el path.
+  // Feed (red social interna) encabeza "Operación", seguido de Programación y Turnos (páginas
+  // planas). Los hubs que quedan van como UNA entrada (su sub-nav es in-page). El bloque vive
+  // también en el path.
   navegacion: [
     {
       etiqueta: "Operación",
@@ -228,8 +227,7 @@ describe("Sidebar · bloques de flujo", () => {
   });
 
   it("Programación y Turnos se ven en cualquier marca (ambas son por marca, sin gating)", async () => {
-    // Tras separar el hub Calendario en dos páginas planas, ambas son por marca: cada marca ve
-    // su Programación y sus Turnos. Ya no hay ruta restringida a una marca concreta.
+    // Ambas son por marca: cada marca ve su Programación y sus Turnos.
     renderSidebar("editor", "/operacion/feed", {}, "unotv");
     expect(await screen.findByRole("link", { name: /programación/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /turnos/i })).toBeInTheDocument();
@@ -338,7 +336,7 @@ describe("apps-scope · helpers", () => {
     const hojas = hojasDeApp(apps[0]).map((h) => h.ruta);
     expect(hojas).toEqual([
       "/contenido/imagen",
-      // /contenido/texto (hub) → sus sub-pestañas (Algoritmos se mudó al cockpit de Investigación)
+      // /contenido/texto (hub) → sus sub-pestañas
       "/contenido/texto/documentos",
       "/contenido/texto/estrategia",
       // Bloque «Máquina»: tres páginas planas (no hubs), una por motor. Investigación y Producción
@@ -384,9 +382,6 @@ describe("Avatar · visibilidad de Usuarios por rol", () => {
     fireEvent.click(screen.getByRole("button", { name: /x.*editor/i }));
     expect(screen.queryByRole("menuitem", { name: /usuarios/i })).not.toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: /mi cuenta/i })).toBeInTheDocument();
-    // «Configuración» ya no existe en el avatar: los ajustes se DISTRIBUYERON a la
-    // página a la que afectan (Monitor·Ajustes, Noticias, Programación, Métricas,
-    // Estudio); la cuenta se queda con «Mi cuenta» (incluida la apariencia).
     expect(screen.queryByRole("menuitem", { name: /configuración/i })).not.toBeInTheDocument();
   });
 });

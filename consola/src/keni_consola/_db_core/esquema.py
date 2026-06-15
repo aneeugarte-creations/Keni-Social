@@ -28,8 +28,7 @@ def arrancar_persistencia() -> None:
     Abre Postgres (`DATABASE_URL` obligatoria, ADR 0004) y crea/migra el esquema, de modo
     que el back arranca con las tablas listas por cualquier via. Si falta `DATABASE_URL`,
     `motor_db.conectar_cruda()` lanza un `RuntimeError` accionable (no se traga: un back sin
-    Postgres no debe servir). El antiguo guardia anti-orfanamiento SQLite->Postgres se
-    retiro con SQLite (ADR 0004): ya no hay un origen local que orfanar.
+    Postgres no debe servir).
     """
     _conectar().close()  # crea/migra el esquema y cierra
 
@@ -85,14 +84,11 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_comercial_snapshots_pub "
     "ON comercial_snapshots (publicacion_id)",
     # Campañas comerciales: agrupan piezas por uno o varios HASHTAGS configurables, y
-    # pueden abarcar VARIAS marcas (multimarca). No monitorizan piezas sueltas (eso era
-    # `comercial_publicaciones`, retirado de la UI): definen un filtro (marcas + hashtags) y
+    # pueden abarcar VARIAS marcas (multimarca). Definen un filtro (marcas + hashtags) y
     # la analítica se computa AL VUELO sobre el listado de piezas del periodo
     # (`servicio.construir_listado_piezas`, por cada marca), cruzando por los hashtags del
     # caption (`Pieza.texto`). `marcas` y `hashtags` son arrays JSON (ids de marca; tags sin
-    # '#', con su casing); portables SQLite/Postgres como TEXT. La columna `marca` (singular)
-    # es vestigial: queda para que las BDs antiguas conserven su valor durante la migración a
-    # `marcas` (ver `_migrar_columnas_campanias`); el código solo lee/escribe `marcas`.
+    # '#', con su casing); portables SQLite/Postgres como TEXT.
     """
     CREATE TABLE IF NOT EXISTS comercial_campanias (
         id                   TEXT PRIMARY KEY,
@@ -164,8 +160,6 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         --     y se apaga al borrar la ultima o al reset admin).
         --   - mfa_recovery_codes: JSON con la lista de codigos de recuperacion HASHEADOS
         --     (scrypt, mismo hasher que la contrasena); cada uno se consume de un solo uso.
-        -- (La columna TOTP `mfa_secret_cifrado` se ELIMINO al pasar a passkeys; ver
-        --  `_migrar_columnas_usuarios`, que la dropa idempotentemente en BDs viejas.)
         mfa_activo             INTEGER NOT NULL DEFAULT 0,
         mfa_recovery_codes     TEXT NOT NULL DEFAULT '[]'
     )
@@ -217,11 +211,8 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_usuarios_marcas_marca ON usuarios_marcas (marca_id)",
-    # `tipo_cobertura`/`prioridad`/`cambiado`/`actualizado` (ola B): el evento ya no es
-    # solo "que sacar"; lleva COMO se cubre (transmision|imagenes|no_cubrir), su PRIORIDAD
-    # y si se REPROGRAMO (`cambiado`=1: hay que volver a avisar al equipo). `actualizado`
-    # se refresca en cada edicion. Para bases NUEVAS se declaran aqui; las viejas las
-    # migra `_migrar_columnas_eventos_rota` (idempotente, solo SQLite).
+    # El evento lleva COMO se cubre (transmision|imagenes|no_cubrir) y su PRIORIDAD.
+    # `actualizado` se refresca en cada edicion.
     """
     CREATE TABLE IF NOT EXISTS rota_eventos (
         id             TEXT PRIMARY KEY,
@@ -242,20 +233,9 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     """,
     "CREATE INDEX IF NOT EXISTS idx_rota_eventos_fecha ON rota_eventos (fecha)",
     "CREATE INDEX IF NOT EXISTS idx_rota_eventos_marca ON rota_eventos (marca)",
-    # FRANJAS POR SEMANA (#XYZ "Mundial"): el feedback real del piloto descubrio
-    # semanas con coberturas atipicas (Mundial, eventos grandes) con MAS de 2 franjas y
-    # CON SOLAPES (ej. semana 24 jun 2026: 09:00-17:00, 13:00-21:00, 17:00-01:00). El
-    # modelo viejo (`Franja = matutino|vespertino|descanso` literal en `rota_turnos.franja`)
-    # no lo soportaba. Ahora cada SEMANA tiene sus propias franjas: nombre libre, rangos
-    # HH:MM, solapes permitidos y `fin <= inicio` indica franja que cruza medianoche.
-    # `rota_config_franjas` (singleton) sigue existiendo como plantilla por defecto al
-    # sembrar las 2 franjas de trabajo iniciales ("Mañana", "Tarde") de una semana nueva.
-    #
-    # `es_descanso`: marca una franja como "no laboral" (turno planificado de descanso). El
-    # usuario aclaro: el descanso NO es ausencia implicita, es un turno explicito asignado a
-    # la persona ese dia. La franja descanso NO cubre ningun evento (`franjas_activas_en`
-    # la EXCLUYE). Sirve para que la UI muestre una fila "Descanso" en la rejilla donde el
-    # admin marca quien no trabaja ese dia (distinto de "olvido de asignacion").
+    # `es_descanso`: marca una franja como "no laboral" (turno planificado de descanso).
+    # Una persona con turno en franja Descanso esta planificada para no trabajar ese dia
+    # (distinto de "olvido de asignacion").
     """
     CREATE TABLE IF NOT EXISTS rota_franjas (
         id           TEXT PRIMARY KEY,
@@ -277,15 +257,9 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_rota_franjas_lunes ON rota_franjas (lunes)",
     "CREATE INDEX IF NOT EXISTS idx_rota_franjas_marca ON rota_franjas (marca)",
     # TURNO = horario del miembro en (fecha, franja_id). NO esta atado a un evento concreto.
-    # Cambio de modelo (#XYZ "franjas por semana"): el `franja` literal de tres valores
-    # ('matutino'/'vespertino'/'descanso') desaparece. Ahora cada turno apunta a una
-    # `franja_id` de `rota_franjas` (definidas por semana, con nombre libre y solapes).
-    # El "descanso" sigue existiendo como FRANJA explicita (con `es_descanso=true`) en cada
-    # semana: una persona con turno en la franja Descanso esta planificada para no trabajar
-    # ese dia (distinto de "olvido de asignacion"). La migracion (`_migrar_modelo_franjas`):
-    #   - siembra ("Mañana"/"Tarde"/"Descanso") en cada semana con turnos legados (usando
-    #     `rota_config_franjas` como plantilla para las dos primeras),
-    #   - asigna `franja_id` a los turnos PRESERVANDO los de `franja='descanso'`.
+    # Cada turno apunta a una `franja_id` de `rota_franjas` (definidas por semana, con
+    # nombre libre y solapes). Una persona con turno en la franja Descanso esta planificada
+    # para no trabajar ese dia (distinto de "olvido de asignacion").
     """
     CREATE TABLE IF NOT EXISTS rota_turnos (
         id             TEXT PRIMARY KEY,
@@ -827,10 +801,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "ON metricas_cache (tipo, rango, marca)",
     # ----------------------------------------------------------------------- #
     # ACTIVOS REUTILIZABLES (ola "activos"): texto de medios interna.     #
-    # (Las "plantillas de contenido" se retiraron por completo.)               #
     # ----------------------------------------------------------------------- #
-    # Limpieza one-shot: elimina la tabla retirada `plantilla_contenido` (y sus datos) si una
-    # BD vieja aun la tiene. Idempotente (IF EXISTS); no afecta a plantillas de MARCA/diseno.
     "DROP TABLE IF EXISTS plantilla_contenido CASCADE",
     # TEXTO DE MEDIOS interna (ola "activos"): catalogo editorial de imagenes/clips
     # APROBADOS y reutilizables al armar una pieza. NO publica a redes (eso es Metricool); es

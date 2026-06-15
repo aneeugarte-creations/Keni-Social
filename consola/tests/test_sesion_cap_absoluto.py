@@ -1,8 +1,6 @@
 """Tests del TOPE ABSOLUTO de vida de una sesion (item LOW: seguridad).
 
-`auth.sesion_valida` desliza `expira = now + horas_sesion()` en cada uso, asi que un token
-activo (o robado-pero-usado) nunca caducaba: la columna `creada` se guardaba pero no se
-aplicaba. El cap absoluto (`KENI_CONSOLA_SESION_MAX_HORAS`, def 720h = 30 d) RECHAZA y BORRA
+El cap absoluto (`KENI_CONSOLA_SESION_MAX_HORAS`, def 720h = 30 d) RECHAZA y BORRA
 una sesion cuya antiguedad desde `creada` supera el tope, AUNQUE se acabe de usar. La ventana
 deslizante (idle) sigue intacta.
 

@@ -30,7 +30,6 @@ export function TemaProvider({ children }: { children: React.ReactNode }) {
     () => ({
       tema: tema === "oscuro" ? ("dark" as const) : ("light" as const),
       esOscuro: tema === "oscuro",
-      // Se mantienen por compatibilidad del contexto, pero ya no hay UI que las use.
       alternar: () => setTema((t) => (t === "oscuro" ? "claro" : "oscuro")),
       fijar: (t: Tema) => setTema(t),
     }),

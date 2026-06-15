@@ -1,12 +1,5 @@
 """Escritura atomica de texto a fichero — fuente UNICA del monorepo.
 
-El patron «temporal en el mismo directorio + `os.replace`» estaba copiado en ~10
-modulos de dominio de la consola (ficheros, agentes, sugerencias, secretos,
-skills_catalogo, preferencias, generaciones) y, ademas, en el
-asistente de onboarding de keni-metricas. Esto lo unifica en una sola funcion,
-ahora en `keni_shared` para que AMBOS paquetes la importen de la misma fuente
-(hallazgo H3/E1; antes H7/N2 dejaba una copia en cada paquete).
-
 Garantias:
   - El fichero destino nunca queda a medias: se escribe a un temporal en el MISMO
     directorio (mismo sistema de ficheros, asi `os.replace` es atomico) y solo al

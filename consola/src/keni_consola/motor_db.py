@@ -1,11 +1,8 @@
 """Motor de persistencia operacional: Postgres, un solo backend (ADR 0004).
 
 Toda la persistencia OPERACIONAL (tareas, comercial, rota, usuarios, sesiones, jobs) pasa
-por `conectar_cruda()`, que abre Postgres usando `DATABASE_URL`. Antes (ADR 0002/#130) el
-backend se elegia segun la presencia de esa var: SIN `DATABASE_URL` -> SQLite local; CON
-ella -> Postgres. La ADR 0004 retira ese SQLite operacional: ahora `DATABASE_URL` es
-REQUERIDA (un Postgres, local o hosted). Asi desaparece el drift SQLite<->Postgres que
-causaba bugs (p. ej. columnas que solo migraban en un backend). Ver `docs/adr/0004`.
+por `conectar_cruda()`, que abre Postgres usando `DATABASE_URL`. `DATABASE_URL` es
+REQUERIDA (un Postgres, local o hosted). Ver `docs/adr/0004`.
 
 La privacidad del perfil local se preserva apuntando `DATABASE_URL` a un Postgres LOCAL
 (ningun dato sale de la maquina). Lo que se pierde es el "cero-config / offline por

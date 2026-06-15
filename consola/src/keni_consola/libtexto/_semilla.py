@@ -29,23 +29,14 @@ __all__ = [
     "migrar_nombres_biblioteca", "limpiar_prompts_obsoletos", "migrar_descripciones_editorial",
 ]
 
-# Prompts del sistema RETIRADOS de la semilla (fusionados/borrados): sus ficheros quedarían
-# huérfanos en el store de la Biblioteca. `limpiar_prompts_obsoletos` los borra al desplegar.
 _PROMPTS_OBSOLETOS_BIBLIOTECA: tuple[str, ...] = (
-    "prompt/arte-sistema",       # fusionado en prompt/arte (directiva única del generador)
-    "prompt/arte-ilustracion",   # Estudio de generación retirado (código muerto)
-    "prompt/sugerencias",        # agente de sugerencias editoriales retirado (feature borrada)
-    "prompt/editorial/sugerencias-plataforma",  # id viejo del mismo prompt retirado
+    "prompt/arte-sistema",
+    "prompt/arte-ilustracion",
+    "prompt/sugerencias",
+    "prompt/editorial/sugerencias-plataforma",
 )
 _SENTINELA_OBSOLETOS = ".prompts-obsoletos-v1"
 
-# Migración ONE-SHOT del rediseño de nombres/ids de la Biblioteca: el store en vivo ya tiene los
-# docs del sistema con ids/títulos VIEJOS, y `importar_semilla` no pisa lo existente, así que los
-# nombres nuevos + descripción + cuerpos limpios no llegarían. Esta migración (a) borra del store
-# las copias con el id viejo de los prompts renombrados y (b) RE-SIEMBRA todos los docs del sistema
-# desde la semilla nueva, EXCEPTO los `patrones.md` (los gestiona `patrones_derivar --store`). One-
-# shot por SENTINELA: tras correr no vuelve a tocar el store, así que las ediciones futuras del
-# equipo se respetan. El contenido viejo es recuperable (historial git de la semilla).
 _RENOMBRES_PROMPT_BIBLIOTECA: tuple[tuple[str, str], ...] = (
     ("prompt/copy-desde-nota", "prompt/copy"),
     ("prompt/qa-fuente", "prompt/validacion"),
@@ -61,15 +52,8 @@ _RENOMBRES_PROMPT_BIBLIOTECA: tuple[tuple[str, str], ...] = (
     ("prompt/importacion/parrilla", "prompt/importar/parrilla"),
 )
 _SENTINELA_NOMBRES = ".migracion-nombres-v1"
-# Carpetas de prompt que quedan vacías en el store tras aplanar los ids (se limpian al final).
 _CARPETAS_VIEJAS_BIBLIOTECA = ("prompt/imagen", "prompt/noticias", "prompt/importacion", "prompt/editorial")
 
-# Migración ONE-SHOT del recorte de texto de la UI: las descripciones (y dos títulos) que la
-# semilla VIEJA escribió en los editoriales repetían el título y la marca ("Ajustes de formato
-# por red propios de Piso 15…" bajo "Formato por red · Piso 15"). Los stores ya sembrados las
-# conservan, porque `importar_semilla` no pisa. Esto las sustituye SOLO si el valor sigue siendo
-# EXACTAMENTE la plantilla vieja (regex de plantilla, marca comodín): cualquier edición del
-# equipo, por mínima que sea, deja de casar y se respeta. One-shot por sentinela.
 _DESCRIPCIONES_VIEJAS_EDITORIAL: tuple[tuple[str, str], ...] = (
     (r"Ajustes de formato por red propios de .+, sobre el formato común\.",
      "Excepciones de la marca sobre el formato común."),
@@ -241,15 +225,11 @@ def migrar_nombres_biblioteca(origen: Path | None = None) -> int:
     if sentinela.exists():
         return 0
     n = 0
-    # (1) Borra del store las copias con el ID VIEJO de los prompts renombrados (el id nuevo se
-    #     siembra en el paso 2). Sin esto quedarían huérfanas en la Biblioteca con el nombre viejo.
     for viejo, _nuevo in _RENOMBRES_PROMPT_BIBLIOTECA:
         ruta_vieja = destino_raiz.joinpath(*f"{viejo}.md".split("/"))
         if ruta_vieja.is_file():
             ruta_vieja.unlink()
             n += 1
-    # (2) Re-siembra desde la semilla NUEVA todos los docs del sistema (ids nuevos + editoriales con
-    #     título/descr/cuerpo limpios), EXCEPTO patrones.md (lo gestiona `patrones_derivar --store`).
     for ruta in sorted(base.rglob("*.md")):
         rel = ruta.relative_to(base)
         partes = rel.with_suffix("").as_posix().split("/")
@@ -265,7 +245,6 @@ def migrar_nombres_biblioteca(origen: Path | None = None) -> int:
         destino.parent.mkdir(parents=True, exist_ok=True)
         escribir_atomico(destino, texto)
         n += 1
-    # (3) Limpia las carpetas viejas de prompt que quedaron vacías tras aplanar los ids.
     for sub in _CARPETAS_VIEJAS_BIBLIOTECA:
         carpeta = destino_raiz.joinpath(*sub.split("/"))
         try:
@@ -279,14 +258,11 @@ def migrar_nombres_biblioteca(origen: Path | None = None) -> int:
 
 
 def migrar_descripciones_editorial() -> int:
-    """Sustituye en el store las descripciones-plantilla VIEJAS de los editoriales (ONE-SHOT).
+    """Sustituye descripciones y títulos de editoriales (ONE-SHOT por sentinela).
 
-    Las semillas viejas escribían descripciones que repetían el título y la marca; los stores
-    ya sembrados las conservan (`importar_semilla` no pisa). Aquí se reemplaza cada descripción
-    (y los dos títulos con paréntesis de los globales) SOLO si su valor actual casa EXACTO con
-    la plantilla vieja — una edición del equipo deja de casar y se respeta. Se escribe IN PLACE
-    (sin `guardar`, que movería el fichero al cambiar el título = id nuevo). Idempotente por
-    sentinela. Devuelve cuántos documentos tocó.
+    Se reemplaza cada descripción (y dos títulos específicos) SOLO si su valor actual casa
+    EXACTO con un patrón conocido — una edición del equipo deja de casar y se respeta.
+    Se escribe IN PLACE (sin `guardar`). Idempotente. Devuelve cuántos documentos tocó.
     """
     import dataclasses
     import re
@@ -322,12 +298,9 @@ def migrar_descripciones_editorial() -> int:
 
 
 def limpiar_prompts_obsoletos() -> int:
-    """Borra del store los prompts del sistema RETIRADOS (`_PROMPTS_OBSOLETOS_BIBLIOTECA`).
+    """Borra del store los prompts obsoletos (`_PROMPTS_OBSOLETOS_BIBLIOTECA`).
 
-    ONE-SHOT por sentinela: tras fusionar/borrar prompts (p. ej. `arte-sistema`→`arte`, o el
-    Estudio de generación retirado), sus ficheros quedarían huérfanos en la Biblioteca. Esto los
-    elimina al desplegar (vía `sembrar`). Idempotente; no toca nada más del store. Devuelve cuántos
-    borró. Recuperable: el contenido vive en el historial git de la semilla.
+    ONE-SHOT por sentinela. Idempotente; no toca nada más del store. Devuelve cuántos borró.
     """
     destino_raiz = raiz()
     sentinela = destino_raiz / _SENTINELA_OBSOLETOS

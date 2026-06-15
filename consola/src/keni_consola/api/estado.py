@@ -11,13 +11,7 @@ sistema (consolidacion del viejo banner del front + conexion de metricas):
     `api/sistema.py` (`_discos`, `sonda_backups`, `sonda_s3_salud`).
   - METRICAS (`metricas:metricool`, admin=True): conexion a Metricool POR MARCA, la
     MISMA fuente y el MISMO juicio que `GET /api/conexiones/metricool`
-    (`api.conexiones.estado_marcas_metricool`). HISTORIA: antes este endpoint
-    serializaba los chequeos del doctor CLI de `keni_metricas` (Python instalado,
-    "cuentas en el config", "credenciales por plataforma", fuente de muestra...);
-    describian un modelo de configuracion que esta app ya no usa (hoy las metricas
-    se conectan via Metricool por marca) y pintaban avisos FALSOS en produccion.
-    Se retiraron por completo; el doctor CLI sigue intacto en `keni_metricas` para
-    quien lo use en local.
+    (`api.conexiones.estado_marcas_metricool`).
 
 CONTRATO de cada chequeo: `{id, estado, nombre, detalle, icono, admin, siguiente_paso}`.
   - `id`: estable ("maquina:*" / "infra:*" / "metricas:*"). El front puede anclar

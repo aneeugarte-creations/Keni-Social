@@ -9,9 +9,6 @@ from ._repos_comun import (
 # --------------------------------------------------------------------------- #
 # Fuentes RSS + items vistos + salud (OPERACIONAL: Postgres via db.py; ADR 0006) #
 # --------------------------------------------------------------------------- #
-# Ultimo rezago file-backed cerrado: el indice SQLite de rutas absolutas dejaba la pagina de
-# Fuentes RSS vacia tras recrear contenedores. Ahora vive en Postgres (ADR 0006). El dict
-# devuelto conserva las mismas claves; la fachada delega 1:1 en db.py.
 
 
 def listar_fuentes_rss(

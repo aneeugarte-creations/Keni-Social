@@ -79,10 +79,6 @@ export const apiPublicaciones = {
     }),
 
   // --- Aprobación de PUBLICACIONES (#9): cola de revisión + decisión + programación ---
-  // CONSOLIDACIÓN: la aprobación es ahora la MISMA cadena multinivel del tablero (una
-  // publicación ES una fila `contenido_plataforma`). Estos endpoints se conservan y por
-  // dentro FORWARDEAN a la cadena: `enviarARevision` crea una cadena SIMPLE (1 nivel) y deja
-  // la pieza en revisión; `aprobar`/`rechazar` deciden el nivel actual de esa cadena.
   // Programar NO es aprobación (es programación) y NO publica de verdad: el posteo real
   // vía Metricool está gated por `KENI_PUBLICAR_REAL`.
   /** Cola de aprobación: publicaciones en revisión (FIFO). Lectura; cada item es una `Publicacion`. */

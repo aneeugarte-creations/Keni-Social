@@ -1,9 +1,7 @@
 /**
  * Piezas COMPARTIDAS del Monitor para los dos loops (ADR 0011): Investigación y Producción
  * comparten cola y pool ÚNICOS; estos componentes leen el MISMO snapshot/serie
- * (`/api/actividad/cola*`) y lo presentan desglosado por proceso, sin inventar dos colas. El
- * antiguo monitor embebido de Investigación (página de Noticias) es ahora un chip que enlaza
- * al Monitor prefiltrado (`?proceso=investigacion`).
+ * (`/api/actividad/cola*`) y lo presentan desglosado por proceso, sin inventar dos colas.
  */
 import { Coins } from "lucide-react";
 import * as React from "react";

@@ -52,15 +52,6 @@ Claude. Por eso este lanzador NO es transitorio: su robustez es deuda PERMANENTE
   - SIN TRAGAR EXCEPCIONES: los fallos del hilo se LOGUEAN correlacionados por job-id (y
     por el request-id de la peticion que lo lanzo, #123), ya no se silencian en mudo.
 
-REFACTOR (sin cambio de comportamiento): este módulo es un PAQUETE con tres submódulos
-internos —`_comun` (constantes/helpers/registro en memoria), `_almacen` (store YAML, CRUD,
-idempotencia, poda, reaper) y `_lanzadores` (encolado/ejecución de claude/imagen/proceso +
-cancelación)— y este `__init__.py` re-exporta la superficie pública (e interna referenciada
-desde fuera) EXACTA del módulo original, para que `import keni_consola.generaciones` y los
-`generaciones.<símbolo>` de los consumidores sigan funcionando sin tocar nada. Los lanzadores
-INYECTABLES (`encolar_job_claude`, `lanzar_job_imagen`) se reasignan a nivel de ESTE paquete
-(`gen_modulo.encolar_job_claude = ...`); ningún submódulo los llama internamente, así que la
-reasignación del barrel es la única vía de invocación y la inyección sigue intacta.
 """
 
 from __future__ import annotations

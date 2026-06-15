@@ -1,12 +1,11 @@
 """Persistencia — dominio editor (barrel del paquete). Implementación de db.py (ver barrel `db.py`).
 
-Este paquete reemplaza al antiguo módulo `db_editor.py`. Re-exporta TODA su superficie
-pública Y privada para que tanto `from .db_editor import X` (incluidos símbolos `_privados`)
+Re-exporta TODA su superficie pública Y privada para que tanto `from .db_editor import X` (incluidos símbolos `_privados`)
 como `import keni_consola.db_editor` sigan resolviendo sin tocar a los consumidores ni a `db.py`.
 """
 from __future__ import annotations
 
-# Compartidos (preservan la superficie del módulo original: estaban en su namespace).
+# Compartidos
 from ._comun import Any, IntegrityError, _conectar, datetime, uuid
 from .bloques import (
     _CAMPOS_EDITABLES_BLOQUES,

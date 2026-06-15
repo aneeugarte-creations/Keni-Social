@@ -21,7 +21,7 @@ def _doc_json(
     contenido editable: refleja qué módulo inyecta el prompt en un agente. [] si no está catalogado
     (p. ej. documentos editoriales o prompts aún sin cablear).
 
-    Estado de PUBLICACIÓN (rediseño de la Biblioteca; CONTRATO con el frontend, también en
+    Estado de PUBLICACIÓN (CONTRATO con el frontend, también en
     el listado): `produccion` (`{sha, autor, nota, creado}` | null), `sha_actual` (HEAD git
     del doc | null) y `sin_publicar` (hay cambios sin publicar; false sin puntero).
     `estado_pub` (opcional) lo precalculan los listados POR LOTE para no pagar una consulta

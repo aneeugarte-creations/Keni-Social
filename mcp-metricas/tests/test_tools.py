@@ -2,9 +2,7 @@
 
 Replica el registro que hace `server.crear_servidor` (`registrar(mcp, fuente,
 historico)`) sobre una `FastMCP` de prueba y las invoca con `mcp.call_tool`,
-que es la misma superficie que usa un cliente MCP real. Asi se ejecuta la logica
-de verdad de `tools.py` (antes los tests mockeaban `registrar` y nunca corrian
-las funciones, dejandolas al 8% de cobertura).
+que es la misma superficie que usa un cliente MCP real.
 
 `call_tool` devuelve una lista de `TextContent` cuyo `.text` es el JSON que la
 tool retorno (incluido el camino de error `{"error": ...}`, que NO es excepcion).

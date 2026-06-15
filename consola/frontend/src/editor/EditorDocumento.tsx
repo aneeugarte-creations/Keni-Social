@@ -77,7 +77,6 @@ import type { StoreEditor } from "./store";
 import { Telon, useCerrarConEscape } from "./Telon";
 import { useFuentesMarca } from "./useFuentesMarca";
 
-// El generador de IA NO va en el editor: era solo para las imágenes del feed (sobra aquí).
 type Herramienta = "diseno" | "elementos" | "texto" | "marca" | "subidas" | "capas";
 
 // Preferencias de "Vista con muestra" (toggles de PRESENTACIÓN del editor) en localStorage. Foto y
@@ -88,7 +87,6 @@ const CLAVE_MUESTRA_COPY = "keni.editor.muestra.copy.on";
 function leerToggle(clave: string): boolean {
   try {
     const v = localStorage.getItem(clave);
-    // Migración: si no hay valor propio, hereda la antigua clave única `keni.editor.muestra`.
     if (v === null) {
       const legado = localStorage.getItem("keni.editor.muestra");
       return legado === null ? true : legado === "1";
@@ -121,8 +119,8 @@ const HERRAMIENTAS: { clave: Herramienta; etiqueta: string; Icono: typeof Shapes
   // `panelDiseno` u `onPlantillas` (se filtra en el componente).
   { clave: "diseno", etiqueta: "Diseño", Icono: LayoutTemplate },
   { clave: "elementos", etiqueta: "Elementos", Icono: Shapes },
-  // `clave: "texto"` es el id INTERNO histórico del panel (antes «Biblioteca»); la etiqueta visible
-  // es «Galería» (galería de imágenes/activos de la marca), que es lo que de verdad es este panel.
+  // `clave: "texto"` es el id INTERNO del panel; la etiqueta visible es «Galería» (galería de
+  // imágenes/activos de la marca), que es lo que de verdad es este panel.
   { clave: "texto", etiqueta: "Galería", Icono: ImageIcon },
   // «Marca» (Brand Kit estilo Canva): kit de identidad de la marca del documento a un clic
   // (logos + colores + tipografías). Tras Galería (orden Canva: …Texto, Marca…), antes de Capas.

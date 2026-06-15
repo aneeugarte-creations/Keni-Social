@@ -6,8 +6,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Bloque de error reutilizable: icono, título, mensaje en español y botón
- * "Reintentar". Sustituye las copias duplicadas que vivían en Métricas,
- * Publicaciones, Conexiones, Fuentes y Estado.
+ * "Reintentar".
  *
  * El mensaje cae a un texto genérico si no se proporciona uno.
  */

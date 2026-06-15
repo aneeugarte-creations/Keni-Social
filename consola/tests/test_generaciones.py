@@ -138,8 +138,6 @@ def test_argv_disallowed_tools_endurecible_por_env(entorno, monkeypatch):
 
 
 def test_no_existe_endurecer_sin_web(entorno):
-    # La constante de veto de red por-callsite se RETIRÓ (era dead code tras relajar la
-    # política): ya no debe existir en el dominio de generación.
     from keni_consola.dominio import generar as gen_dom
 
     assert not hasattr(gen_dom, "ENDURECER_SIN_WEB")

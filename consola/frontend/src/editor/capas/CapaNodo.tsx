@@ -617,11 +617,9 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
         : {};
       // WORDMARK: chip ceñido al TEXTO, espejo del export (`dibujarLogo`): fondo de
       // (anchoMedido + 2·20) × (tam + 2·12) SIN radio, anclado a la esquina sup-izq de la caja,
-      // texto en (20,12) con baseline top y tam = round(0.42·h). Antes el editor pintaba la caja
-      // w×h completa redondeada con el texto centrado: el rótulo del PNG salía en otro sitio y de
-      // otro tamaño. La caja w×h sigue siendo la capa (h gobierna `tam` al redimensionar). Texto
-      // vacío => "LOGO" atenuado como ayuda de edición (el export no pinta nada): divergencia
-      // consciente, señalada con la opacidad.
+      // texto en (20,12) con baseline top y tam = round(0.42·h). La caja w×h es la capa (h
+      // gobierna `tam` al redimensionar). Texto vacío => "LOGO" atenuado como ayuda de edición
+      // (el export no pinta nada): divergencia consciente, señalada con la opacidad.
       const textoWm = (c.wordmark.texto || "").trim();
       const tamWm = Math.round(c.h * 0.42);
       const anchoWm = medirTexto(
@@ -872,12 +870,9 @@ export function CapaNodo({ capa, seleccionada, onSelect, onChange, onGesto, inte
       }
       // El nodo Konva es un GROUP en (c.x, c.y) — el ORIGEN DEL MODELO — con la banda como Rect
       // HIJO en coords locales (y = h - band, contrato del export: la y almacenada es el tope de
-      // la CAJA y la banda vive pegada a su fondo). Antes el nodo raíz era el propio Rect en el
-      // tope de la BANDA (y + h - band) heredando los writebacks genéricos, que guardaban esa y
-      // como y del modelo: cada arrastre (o un mero clic en un tirador, que burlaba la guarda de
-      // no-op) desplazaba la banda +(h-band), deriva acumulativa. Con el Group, origen del nodo ==
-      // origen del modelo: onDragEnd/onTransformEnd y su guarda vuelven a ser correctos, el
-      // multi-arrastre vuelca coords válidas y la ROTACIÓN pivota en (x,y) como el export.
+      // la CAJA y la banda vive pegada a su fondo). Con el Group, origen del nodo == origen del
+      // modelo: onDragEnd/onTransformEnd y su guarda son correctos, el multi-arrastre vuelca
+      // coords válidas y la ROTACIÓN pivota en (x,y) como el export.
       // ARRIBA: la banda se pega al tope (y local 0) y el gradiente se invierte (opaco en el borde
       // superior -> transparente hacia dentro); ABAJO (def): banda al fondo (y local h-band), opaco
       // abajo. Las paradas van transparente(0)->opaco(1), así que el punto OPACO es el borde pegado.

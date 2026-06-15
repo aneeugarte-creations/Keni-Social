@@ -144,9 +144,7 @@ def ejecutar_barrido() -> dict[str, Any]:
             )
 
         # OJO: sin feeds RSS vencidos el barrido NO termina aquí: los pasos post-RSS (agencias,
-        # clustering, fusión, re-score, traducción) corren IGUAL. Antes un `return` temprano
-        # dejaba los items de Trends/agencias sin clusterizar indefinidamente si ningún RSS
-        # estaba vencido (Trends inserta por su propio daemon, fuera de este planificador).
+        # clustering, fusión, re-score, traducción) corren IGUAL.
         max_items = config.ingesta_max_items()
         resultados = []
         if feeds:

@@ -1,4 +1,3 @@
-// Alta/edición/tarjeta de AUSENCIAS. Partido mecánicamente de pages/Rota.tsx.
 import { useMutation } from "@tanstack/react-query";
 import {
   CalendarOff,

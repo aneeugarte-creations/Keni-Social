@@ -1,7 +1,6 @@
 /**
  * Tests de la tira «Pipeline en vivo»: en concreto, que el lápiz «Editar prompt» de una etapa
- * abre el editor en un OVERLAY (encima de la página, sin navegar), en vez del antiguo deep-link
- * a la Biblioteca (`/contenido/texto/documentos?doc=…`). Decisión «in-place + biblioteca».
+ * abre el editor en un OVERLAY (encima de la página, sin navegar).
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";

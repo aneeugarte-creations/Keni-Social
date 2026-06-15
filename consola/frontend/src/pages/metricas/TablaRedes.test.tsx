@@ -35,7 +35,6 @@ describe("TablaRedes", () => {
     expect(screen.getByText("Vistas")).toBeInTheDocument();
     expect(screen.getByText("Interacciones")).toBeInTheDocument();
     expect(screen.getByText("Engagement")).toBeInTheDocument();
-    // El 'Alcance' ya NO se muestra (no se mide con la fuente de posts).
     expect(screen.queryByText("Alcance")).not.toBeInTheDocument();
     // Una métrica concreta formateada (vistas de instagram).
     expect(screen.getByText("120,000")).toBeInTheDocument();

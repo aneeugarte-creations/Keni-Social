@@ -1,6 +1,4 @@
 // --- Historial de generaciones de prompts ---
-// (El listado/detalle del historial por HTTP se retiró en la consolidación;
-// queda solo el cuerpo de "guardar como publicación".)
 
 /**
  * Cuerpo opcional para recuperar una entrada del historial como publicación(es)

@@ -56,8 +56,6 @@ def emitir_vencimientos(hoy: date | None = None) -> int:
     """
     hoy_iso = (hoy or hoy_utc()).isoformat()
     try:
-        # Filtro EN SQL (`fecha_entrega < hoy AND estado NOT IN (cerrados)`): antes se traia
-        # el tablero ENTERO en cada barrido y se filtraba en Python (full scan por minuto).
         items = repos.listar_contenido_vencido(hoy_iso)
     except Exception:  # noqa: BLE001 -- un fallo de lectura no debe matar el barrido
         _log.exception("No se pudo leer el tablero para el barrido de vencimientos.")

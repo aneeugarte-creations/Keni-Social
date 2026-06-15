@@ -1,5 +1,3 @@
-// Página «Turnos» (rota): shell de pestañas. Partido mecánicamente de pages/Rota.tsx
-// en pages/rota/* (como feed/ y publicaciones/), sin cambios de comportamiento.
 import { useQuery } from "@tanstack/react-query";
 import {
   CalendarClock,
@@ -51,9 +49,7 @@ export default function Rota() {
   );
   // Por defecto: la semana ACTUAL (la que contiene hoy, en zona CDMX).
   const [lunes, setLunes] = React.useState(() => lunesDeSemana(new Date()));
-  // Pestaña activa (controlada). La gestión de EVENTOS se mudó al hub de Fuentes
-  // (ola "Calendario = turnos / Fuentes = eventos"); aquí el Calendario es solo turnos
-  // + su cobertura derivada.
+  // Pestaña activa (controlada). Aquí el Calendario es solo turnos + su cobertura derivada.
   //
   // La inicial puede venir por `?tab=` (deep-link desde la campana de notificaciones de
   // un cambio de turno); si el valor no es válido, cae a "calendario".

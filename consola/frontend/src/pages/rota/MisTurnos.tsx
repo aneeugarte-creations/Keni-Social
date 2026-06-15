@@ -147,9 +147,6 @@ export function ListaMisTurnos({ turnos }: { turnos: TurnoRota[] }) {
                       className="h-4 w-4 text-muted-foreground"
                       aria-hidden="true"
                     />
-                    {/* Nombre REAL de la franja (siempre emitido por el backend). Antes se
-                        indexaba `ETIQUETA_FRANJA[t.franja]` con el literal legacy, que queda
-                        `undefined` (título en blanco) para franjas custom como "Cobertura nocturna". */}
                     {t.franja_nombre}
                   </span>
                   {t.es_sabado && (

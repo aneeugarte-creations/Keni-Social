@@ -1,8 +1,5 @@
 // Catálogo de FORMATOS de lienzo (presets de red/plataforma) compartido por el editor.
-//
-// Antes vivía duplicado en `Paneles.tsx` (selector de aspect-ratio del inspector). Lo extraemos
-// aquí para que tanto el inspector como «Adaptar a…» (reencuadre 1-clic) usen la MISMA lista, sin
-// derivas. Cada preset es un `formato` del Documento (w, h, safe_top, safe_bottom).
+// Cada preset es un `formato` del Documento (w, h, safe_top, safe_bottom).
 
 import type { Documento } from "./documento";
 

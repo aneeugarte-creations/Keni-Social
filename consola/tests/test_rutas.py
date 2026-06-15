@@ -93,8 +93,7 @@ def test_keni_data_dir_agrupa_todo_el_estado(monkeypatch, sin_vars, tmp_path):
     monkeypatch.setenv(rutas.ENV_DATA_DIR, str(raiz))
 
     config = raiz / "keni-social"
-    # La operacional ya no es un fichero (vive en Postgres, ADR 0004): solo se prueban los
-    # recursos que SIGUEN siendo rutas en disco.
+    # Se prueban los recursos que son rutas en disco.
     assert indice.ruta_indice() == config / "indice.sqlite"
     assert media.dir_media() == config / "media"
     assert secretos.ruta_secretos() == config / "secretos.toml"
@@ -139,12 +138,7 @@ def test_local_no_cambia_subpaths(monkeypatch, sin_vars, tmp_path):
 
 
 def test_generaciones_respeta_xdg(monkeypatch, sin_vars, tmp_path):
-    """`generaciones.raiz()` AHORA honra `XDG_CONFIG_HOME` (#126), como el resto de recursos.
-
-    Antes este recurso ignoraba XDG (siempre `~/.config`). Tras el fix cuelga de
-    `rutas.dir_config()`, asi que con `XDG_CONFIG_HOME` fijado vive bajo el (igual que
-    media, indice, etc.). El default SIN XDG sigue siendo `~/.config/...` (cubierto arriba).
-    """
+    """`generaciones.raiz()` honra `XDG_CONFIG_HOME` (#126), como el resto de recursos."""
     xdg = tmp_path / "xdg"
     monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
     esperada = xdg / "keni-social" / "generaciones"
@@ -187,7 +181,7 @@ def test_secreto_de_imagen_por_entorno(monkeypatch, tmp_path):
 
 
 def test_secreto_openai_env_es_fallback(monkeypatch, tmp_path):
-    """`OPENAI_API_KEY` tambien inyecta la clave (fallback historico)."""
+    """`OPENAI_API_KEY` tambien inyecta la clave (fallback)."""
     monkeypatch.setenv("KENI_CONSOLA_SECRETOS", str(tmp_path / "secretos.toml"))
     monkeypatch.delenv(secretos.ENV_IMAGEN_API_KEY, raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", _CLAVE_OPENAI)

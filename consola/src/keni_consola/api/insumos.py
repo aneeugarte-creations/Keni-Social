@@ -595,7 +595,6 @@ async def usar_item(request: Request) -> Response:
     generar = datos.get("generar", True)
     autor = autor_de_peticion(request)
 
-    # Crea el item del tablero.
     contenido = repos.crear_contenido(
         clase="contenido",
         flujo="importante",

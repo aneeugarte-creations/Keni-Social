@@ -52,11 +52,9 @@ def encolar_job(gen_id: str, spec: str, prioridad: int = 0) -> str:
 
     RESURRECCION de filas `terminado`: re-encolar un `gen_id` cuya fila vieja ya esta
     `terminado` debe correr el trabajo NUEVO (p. ej. el reintento de un copy del pipeline que
-    fallo). Antes el `ON CONFLICT DO NOTHING` devolvia el job viejo (terminado) y el nuevo no
-    corria jamas. El `ON CONFLICT ... DO UPDATE` REVIVE la fila a `pendiente` (spec/prioridad
+    fallo). El `ON CONFLICT ... DO UPDATE` REVIVE la fila a `pendiente` (spec/prioridad
     nuevos, flags de despacho limpios) SOLO si estaba `terminado` (el `WHERE jobs.estado = ?`);
-    una fila VIVA no se toca (idempotencia intacta: el RETURNING viene vacio y se relee su id
-    real con un SELECT, como antes).
+    una fila VIVA no se toca (idempotencia intacta).
     """
     job_id = uuid.uuid4().hex[:12]
     ahora = ahora_iso()
@@ -90,9 +88,8 @@ def contar_jobs_activos() -> int:
     """Nº de jobs EN VUELO en la cola COMPARTIDA: `pendiente` (esperando) + `reclamado` (corriendo).
 
     Conteo AUTORITATIVO (Postgres) de cuanto hay en vuelo, visible para TODOS los procesos (back,
-    daemons, worker) y autoliberado al marcar un job `terminado`. La cola NO tiene tope
-    (R-NO-LIMIT): este valor YA NO gatea la admision (`cola.encolar` siempre acepta); queda como
-    señal de profundidad para el monitor/diagnostico y los tests.
+    daemons, worker) y autoliberado al marcar un job `terminado`. Queda como señal de profundidad
+    para el monitor/diagnostico y los tests.
     """
     con = _conectar()
     try:
@@ -123,6 +120,8 @@ def jobs_activos(limite: int = 200) -> list[dict[str, Any]]:
     `creado` (cuando se encolo), `claimed_at` (cuando empezo a correr) y `prioridad` (mayor =
     adelanta en la cola; el Monitor distingue los manuales del lote de fondo). El front deriva
     la EDAD y enriquece con el registro de generacion (etiqueta/tipo/marca). Sin `spec` (pesado).
+    `creado`/`claimed_at` son timestamptz (migracion 0033): se re-emiten al canon ISO
+    ('' si `claimed_at` aun es NULL), tal como los consumia el monitor (`_edad_s`).
     """
     con = _conectar()
     try:
@@ -139,8 +138,6 @@ def jobs_activos(limite: int = 200) -> list[dict[str, Any]]:
             "gen_id": f["gen_id"],
             "estado": f["estado"],
             "worker": f["worker"] or "",
-            # `creado`/`claimed_at` son timestamptz (migracion 0033): se re-emiten al canon ISO
-            # ('' si `claimed_at` aun es NULL), tal como los consumia el monitor (`_edad_s`).
             "creado": iso_o_vacio(f["creado"]),
             "claimed_at": iso_o_vacio(f["claimed_at"]),
             "prioridad": int(f["prioridad"] or 0),
@@ -155,8 +152,8 @@ def encolados_por_dia(dias: int = 14) -> list[dict[str, Any]]:
 
     Throughput de ENTRADA de la cola: cuanto se pidio cada dia (incluye los ya `terminado`,
     que se conservan). `creado` es `timestamptz` (migracion 0033): el dia (UTC) se deriva con
-    `to_char(creado AT TIME ZONE 'UTC', 'YYYY-MM-DD')` (devuelve el mismo string `YYYY-MM-DD`
-    de antes). El corte `creado >= ?` compara nativo (el param ISO se castea a timestamptz)."""
+    `to_char(creado AT TIME ZONE 'UTC', 'YYYY-MM-DD')`. El corte `creado >= ?` compara nativo
+    (el param ISO se castea a timestamptz)."""
     corte = iso_utc(datetime.now(UTC) - timedelta(days=max(0, int(dias))))
     con = _conectar()
     try:
@@ -200,10 +197,9 @@ def reclamar_job(
 
     RE-RECLAMO DE HUERFANOS: ademas de los `pendiente`, clava los `reclamado` cuyo
     `claimed_at` es mas viejo que `wall-timeout + _RECLAIM_STALE_MARGEN_S` — su worker murio
-    a mitad (reinicio/deploy/OOM) y nadie lo sacaria adelante (antes quedaba `reclamado` para
-    siempre y el registro `ejecutando` -> la UI mostraba "Generando..." sin fin). El umbral
-    supera el tiempo maximo que un worker VIVO retiene la fila, asi nunca se roba un job en
-    curso. El UPDATE re-sella `worker`/`claimed_at`, asi un segundo abandono se vuelve a cubrir.
+    a mitad (reinicio/deploy/OOM) y nadie lo sacaria adelante. El umbral supera el tiempo maximo
+    que un worker VIVO retiene la fila, asi nunca se roba un job en curso. El UPDATE re-sella
+    `worker`/`claimed_at`, asi un segundo abandono se vuelve a cubrir.
 
     GUARDIA ANTI-DUPLICADO (re-reclamo de huerfanos): un worker puede haber MUERTO DESPUES de
     fijar el estado terminal del registro (y de correr su post-procesado: `crear_borrador` es un
@@ -224,11 +220,10 @@ def reclamar_job(
 
     TOPE DE INTENTOS (anti crash-loop): cada reclamo incrementa `jobs.intentos`. Un huerfano
     que ya quemo `KENI_JOBS_MAX_INTENTOS` intentos NO se re-ejecuta: se cierra su job y su
-    registro queda en error (motivo `interrumpido`, mensaje claro). Sin esto, un job que MATA
-    al worker (OOM por un prompt enorme, bug del runner) se re-reclamaba para siempre, quemando
-    tokens de la suscripcion compartida en cada vuelta. `reencolar_job` (reintento admin) y la
-    resurreccion de `encolar_job` resetean el contador (intencion humana/trabajo nuevo). Esta
-    comprobacion es DB-pura (columna `intentos`), asi que permanece dentro del lock (sin disco).
+    registro queda en error (motivo `interrumpido`, mensaje claro). `reencolar_job` (reintento
+    admin) y la resurreccion de `encolar_job` resetean el contador (intencion humana/trabajo
+    nuevo). Esta comprobacion es DB-pura (columna `intentos`), asi que permanece dentro del lock
+    (sin disco).
     """
     ahora = ahora_iso()
     limite_huerfano = iso_utc(

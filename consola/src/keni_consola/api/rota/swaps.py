@@ -168,8 +168,6 @@ async def crear_swap(request: Request) -> Response:
         return JSONResponse(
             {"error": "Las fechas no son válidas (usa AAAA-MM-DD)."}, status_code=400
         )
-    # `franja_a`/`franja_b` ahora son `franja_id` reales (la columna en BD conserva el
-    # nombre `franja_a/_b` por inercia: cambio de SEMANTICA del dato, no de columna).
     franja_a = str(datos.get("franja_a", "")).strip()
     franja_b = str(datos.get("franja_b", "")).strip()
     if not franja_a or not franja_b:

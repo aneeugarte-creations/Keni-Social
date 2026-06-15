@@ -103,7 +103,6 @@ describe("RielInvestigacion", () => {
   it("el lápiz de una etapa con prompt es un botón (no deep-link) que abre el editor in-place", () => {
     renderRiel(usuario("admin"));
     const lapiz = screen.getByLabelText("Editar el prompt de Verificación");
-    // Ya no navega a la Biblioteca: es un botón que abre el overlay, no un enlace con href.
     expect(lapiz.tagName).toBe("BUTTON");
     expect(lapiz.getAttribute("href")).toBeNull();
     // La ingesta es mecánica (sin prompt): no lleva lápiz.

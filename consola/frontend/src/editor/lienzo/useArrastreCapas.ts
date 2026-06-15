@@ -217,7 +217,7 @@ export function useArrastreCapas({
       });
       const env = cajaEnvolvente(cajas);
       if (!env) {
-        // Grupo sin cajas conocidas (degenerado): movimiento en bloque sin imán, como antes.
+        // Grupo sin cajas conocidas (degenerado): movimiento en bloque sin imán.
         aplicarDeltaGrupo(dxBase, dyBase);
         setGuias(SIN_GUIAS);
         pintarEtiquetas([]);

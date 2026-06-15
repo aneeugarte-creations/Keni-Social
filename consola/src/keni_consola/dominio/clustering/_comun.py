@@ -2,7 +2,7 @@
 
 Núcleo común que reutilizan varias áreas del paquete: normalización de fechas/texto,
 escalado logarítmico, y el ratio fuzzy de claves (directo + token-sort, con veto de
-números incompatibles). Sin BD ni red. Movido VERBATIM desde el antiguo `clustering.py`.
+números incompatibles). Sin BD ni red.
 """
 
 from __future__ import annotations

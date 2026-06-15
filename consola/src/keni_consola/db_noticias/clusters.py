@@ -218,8 +218,7 @@ def listar_noticia_clusters(
 
     Filtros: `marca` ('' / None = todas), `desde` (ISO; `ultimo_visto >= desde`), `estado`. Orden
     `score DESC, ultimo_visto DESC` (jerarquización por el algoritmo de ponderación; recencia como
-    desempate). Ya NO se filtra por `categoria` (la jerarquización es por marca/línea editorial).
-    Devuelve `(clusters, total)`.
+    desempate). Devuelve `(clusters, total)`.
     """
     condiciones: list[str] = []
     params: list[Any] = []

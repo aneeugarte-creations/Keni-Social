@@ -270,11 +270,7 @@ def cluster_umbral_merge() -> float:
 
 
 def cluster_breaking_fuentes() -> int:
-    """LEGADO: umbral breaking por CONTEO de fuentes (`KENI_CLUSTER_BREAKING_FUENTES`, def 3, min 2).
-
-    El motor ya usa el umbral PONDERADO (`cluster_breaking_peso`); este accesor queda para el
-    mapeo de compatibilidad y para despliegues que aún lo lean.
-    """
+    """Umbral breaking por conteo de fuentes (`KENI_CLUSTER_BREAKING_FUENTES`, def 3, min 2)."""
     return _entero(ENV_CLUSTER_BREAKING_FUENTES, CLUSTER_BREAKING_FUENTES_DEF, minimo=2)
 
 
@@ -326,9 +322,8 @@ def _peso01(env_flag: str, defecto: float) -> float:
 
 
 # Peso AUTOMÁTICO de la señal de rendimiento cuando `KENI_RENDIMIENTO_RANKING` está ON pero
-# `KENI_SCORE_PESO_RENDIMIENTO` no se fijó explícitamente. Antes, encender el flag sin fijar el
-# peso podía dejar la señal multiplicada por cero (flag muerto). Con el auto-peso, los demás
-# pesos se RENORMALIZAN por (1 - auto) para que la combinación lineal siga sumando ~1.
+# `KENI_SCORE_PESO_RENDIMIENTO` no se fijó explícitamente. Los demás pesos se RENORMALIZAN
+# por (1 - auto) para que la combinación lineal siga sumando ~1.
 SCORE_PESO_RENDIMIENTO_AUTO = 0.10
 
 
@@ -584,8 +579,7 @@ def perfil_editorial_activo() -> bool:
 
     Def OFF (conservador, IA en prod): sin el flag el ranking usa el vocabulario semilla
     (`relevancia_marca`). Con el flag, el daemon refresca el perfil por marca (Haiku, TTL) y el
-    score usa esas keywords derivadas de la línea editorial de la página texto. (Nombre previo
-    del flag: `KENI_PIPELINE_EDITORIAL`; es ranking, no voz editorial — ADR 0011.)
+    score usa esas keywords derivadas de la línea editorial de la página texto.
     """
     return _crudo(ENV_RANKING_PERFIL_IA).lower() in _VERDADEROS
 
@@ -811,8 +805,6 @@ def alguna_etapa_produccion_activa() -> bool:
     return True
 
 
-# Alias retro: "alguna etapa del pipeline" = el loop de producción (siempre-activo bajo la
-# máquina). Lo conservan tests y llamadores previos al split en dos procesos (ADR 0011 F3).
 alguna_etapa_pipeline_activa = alguna_etapa_produccion_activa
 
 

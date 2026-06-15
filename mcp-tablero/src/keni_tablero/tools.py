@@ -28,7 +28,6 @@ from .cliente import ClienteConsola, ErrorConsola
 
 # Las allowlists del tablero (CLASES/ESTADOS_*/FLUJOS) vienen de keni-shared
 # (`keni_shared.estados`), la MISMA fuente que re-exporta `keni_consola.estados`.
-# Antes eran un espejo a mano que podia desincronizarse en silencio de la Consola.
 # Se valida aqui para dar un error claro ANTES de tocar la red.
 
 

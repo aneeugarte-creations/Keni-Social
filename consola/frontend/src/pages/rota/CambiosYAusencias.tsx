@@ -61,9 +61,7 @@ import { NuevaAusencia, TarjetaAusencia } from "./Ausencias";
 import { ChipToggle, ETIQUETA_FRANJA, filtrarEquipoPorMarca, formatearFechaCorta } from "./comun";
 
 
-// --- Pestaña: cambios de turno entre compañeros (#175) --------------------
-//
-// Flujo (todo lo orquesta el backend; el cliente solo informa):
+// --- Flujo (todo lo orquesta el backend; el cliente solo informa) -----------
 //   A (solicitante) crea -> B (destinatario) acepta/rechaza -> admin aprueba
 //   (ejecuta el swap sobre `rota_turnos_trabajo`) o rechaza. A puede cancelar
 //   mientras el estado no sea terminal (terminales: aplicado, rechazado,
@@ -221,12 +219,9 @@ export function ProgresoSwap({ swap }: { swap: SwapTurno }) {
 
 /**
  * Vista FUSIONADA de Cambios de turno + Ausencias en una sola lista cronologica.
- *
- * La iteracion previa intento fusionar con sub-tabs (Cambios / Ausencias hermanas);
- * el usuario lo rechazo: aqui no hay sub-tabs. Una unica cabecera, un boton "Nueva
- * solicitud" que abre un formulario colapsable con selector de tipo, una banda de
- * chips para filtrar (tipo + estado) y una lista mezclada de tarjetas (cada una
- * con su badge de tipo: "Cambio" o "Ausencia").
+ * Una unica cabecera, un boton "Nueva solicitud" que abre un formulario colapsable
+ * con selector de tipo, una banda de chips para filtrar (tipo + estado) y una lista
+ * mezclada de tarjetas (cada una con su badge de tipo: "Cambio" o "Ausencia").
  *
  * Sigue habiendo dos consultas backend (swaps y ausencias) porque cada recurso es
  * independiente; la fusion ocurre en cliente. Conserva el contrato actual de los
@@ -484,14 +479,12 @@ export function CambiosYAusencias({ esAdmin }: { esAdmin: boolean }) {
 }
 
 /**
- * Formulario SIMPLIFICADO para pedir un cambio de turno.
+ * Formulario para pedir un cambio de turno.
  *
- * Antes pedia 6 campos (compañero + fecha A + franja A + fecha B + franja B + motivo).
- * Ahora son 3: "Mi turno" (Select sobre los turnos REALES del solicitante en la
- * semana actual y la siguiente), "Turno deseado" (Select sobre los turnos de los
- * demas CMs en el mismo rango) y motivo opcional. De cada Select derivamos
- * `fecha`/`franja_id` (y `destinatario_id` del segundo). El backend sigue
- * recibiendo el mismo cuerpo `crearSwap`.
+ * "Mi turno" (Select sobre los turnos REALES del solicitante en la semana actual
+ * y la siguiente), "Turno deseado" (Select sobre los turnos de los demas CMs en el
+ * mismo rango) y motivo opcional. De cada Select derivamos `fecha`/`franja_id`
+ * (y `destinatario_id` del segundo). El backend sigue recibiendo el mismo cuerpo `crearSwap`.
  *
  * Rango: hardcoded a "semana actual + siguiente" (14 dias). Si la lista queda
  * vacia avisamos al usuario en lugar de saltar a otra ventana.
@@ -728,10 +721,6 @@ export function TarjetaSwap({
             <span className="font-medium">{swap.destinatario_nombre}</span>
           </div>
           <div className="text-xs text-muted-foreground">
-            {/* `franja_a`/`franja_b` ahora son `franja_id` (uuid), no literales: el backend
-                emite el nombre legible en `franja_a_nombre`/`franja_b_nombre`. Indexar
-                `ETIQUETA_FRANJA[franja_id]` daba `undefined` (franja en blanco); se mantiene
-                como FALLBACK solo para swaps legacy que aún traen el literal en `franja_a`. */}
             <span>
               {formatearFechaCorta(swap.fecha_a)} ·{" "}
               {swap.franja_a_nombre ?? ETIQUETA_FRANJA[swap.franja_a]}

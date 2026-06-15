@@ -1,8 +1,6 @@
 """Cache de config + fuente/cliente httpx en `servicio`/`config` (fix N+1 por pieza).
 
-El tablero pide rendimiento pieza-a-pieza: antes cada llamada re-leía el config del
-disco y construía una `FuenteMetricool` NUEVA (con su propio `httpx.Client`), abriendo
-docenas de conexiones y quemando cuota. Aquí se verifica que:
+Verifica que:
 
   - `cargar_config()` se memoiza (no re-parsea el TOML si no cambia mtime/env).
   - `servicio._fuente()` reusa la MISMA fuente base (y su cliente httpx) entre llamadas.

@@ -387,8 +387,8 @@ export function altoVisual(c: Capa): number {
 
 // Alto en px de la BANDA visible de un overlay (degradado de legibilidad pegado al fondo de su
 // caja). Espejo EXACTO del export (`dibujarOverlayInferior` en dibujar.mjs:
-// max(1, floor(h * alto_frac)) con default 0.58), INCLUIDO el floor — el editor medía la banda
-// sin floor y derivaba sub-píxel respecto al PNG. Única fuente de la fórmula en el cliente.
+// max(1, floor(h * alto_frac)) con default 0.58), INCLUIDO el floor. Única fuente de la fórmula
+// en el cliente.
 export function bandaOverlay(c: CapaOverlay): number {
   return Math.max(1, Math.floor(c.h * (c.alto_frac ?? 0.58)));
 }

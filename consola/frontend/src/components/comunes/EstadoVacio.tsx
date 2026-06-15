@@ -6,8 +6,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Estado vacío reutilizable: icono opcional, título, texto descriptivo y una
- * acción opcional (p. ej. un botón). Sustituye los bloques de "sin resultados"
- * duplicados en varias páginas.
+ * acción opcional (p. ej. un botón).
  */
 export function EstadoVacio({
   icono: Icono,

@@ -116,7 +116,7 @@ async def listar(request: Request) -> Response:
         items = [it for it in items if it["id"] in con_etiqueta]
     # Una sola lectura de las plataformas y etiquetas, agrupadas por contenido. Si el GET
     # acota por `?marca=` (workspace), el filtro se empuja al SQL via la marca denormalizada
-    # de `contenido_plataforma` (antes se traia la tabla ENTERA en cada GET del tablero).
+    # de `contenido_plataforma`.
     por_contenido: dict[str, list[dict]] = {}
     for plat in repos.listar_contenido_plataforma(marca=q.get("marca") or None):
         por_contenido.setdefault(plat["contenido_id"], []).append(plat)

@@ -322,9 +322,7 @@ def _cobertura_por_marca(rep: dict) -> list[dict]:
                     )
                 else:
                     # Conectada pero SIN actividad en el rango: métricas a null (no un 0/0.0%
-                    # falso) + motivo, igual que el resto de estados no-con_datos. Antes
-                    # emitía 0/0/0.0%, que se leía como dato real (justo lo que mina la
-                    # confianza en la página).
+                    # falso) + motivo, igual que el resto de estados no-con_datos.
                     redes.append(
                         {
                             "red": red,

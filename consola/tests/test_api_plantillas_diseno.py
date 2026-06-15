@@ -95,7 +95,7 @@ def test_categoria_default_general(cliente):
 
 
 def test_categoria_legado_post_cae_a_general(cliente):
-    """El legado 'post' (categoría hardcodeada histórica) se normaliza a 'general' al escribir."""
+    """La categoría 'post' se normaliza a 'general' al escribir."""
     r = cliente.post("/api/plantillas-diseno", json={
         "marca": "unotv", "categoria": "post", "documento": _DOC,
     })

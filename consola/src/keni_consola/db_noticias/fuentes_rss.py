@@ -246,9 +246,7 @@ def actualizar_fuente_rss(
 def registrar_salud_fuente_rss(fuente_id: str, *, conteo: int, error: str = "") -> None:
     """Anota la salud de una fuente (instante UTC + conteo + error). Best-effort.
 
-    Canon UTC sin offset (`tiempo.ahora_iso`): la columna `ultima_actualizacion` mezclaba
-    fechas locales sin hora con instantes UTC (`registrar_sondeo_feed`), y el `MAX()` /
-    las comparaciones de frescura salían de relojes distintos. Formato unificado.
+    Canon UTC sin offset (`tiempo.ahora_iso`); formato unificado.
     """
     con = _conectar()
     try:

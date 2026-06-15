@@ -5,10 +5,7 @@ Estas fábricas convierten la salida cruda de `claude -p` en los ARTEFACTOS de l
 PURO: dependen de `stream` (parseo), `repos` (historial), `dominio.publicaciones` (handoff
 A→C de borradores), `redes` y `media`. NO dependen del catálogo de skills.
 
-Viven aquí (y ya no en `dominio.skills`) porque son el post-procesado de CUALQUIER
-generación de copy, venga de la Texto de prompts o de donde sea: al retirar el sistema
-de skills, este módulo es su hogar estable. `jobspec.reconstruir_procesar` los reconstruye
-en el worker desde el `spec`.
+`jobspec.reconstruir_procesar` los reconstruye en el worker desde el `spec`.
 """
 
 from __future__ import annotations

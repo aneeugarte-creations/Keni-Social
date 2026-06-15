@@ -26,13 +26,6 @@ export function Num({
   onChange: (v: number) => void;
   paso?: number;
 }) {
-  // BORRADOR local mientras se edita, para que el valor del store no machaque el texto a medio
-  // teclear. Antes el input era 100% controlado y `Number("") === 0` (campo vacío, "-" o "."
-  // iniciales reportan value "") escribía 0 al documento al instante: la capa saltaba al origen al
-  // vaciar el campo o al empezar a teclear un negativo, y el value redondeado lo reescribía a "0".
-  // Solo se emite cuando el texto parsea a un número FINITO ("1e999" -> Infinity viajaría como
-  // null en JSON y el guardado lo rechazaría con 400), SIN redondear (el redondeo a 2 decimales es
-  // solo presentación). Escape restaura el valor de entrada; blur/Enter vuelven a la presentación.
   const [borrador, setBorrador] = useState<string | null>(null);
   const inicial = useRef(valor);
   return (

@@ -236,8 +236,6 @@ describe("FeedIdeacion · feed de ideación interno", () => {
       expect.stringContaining("Publicadas"),
       expect.stringContaining("Todas"),
     ]);
-    // «En preparación» ya no existe: «borrador» dejó de ser un estado donde descanse una pieza
-    // (el pipeline la avanza sola a revisión), así que no hay pestaña de borradores.
     expect(screen.queryByRole("tab", { name: /En preparación/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /Por aprobar/ })).not.toBeInTheDocument();
   });
@@ -319,8 +317,6 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     };
     stubFetch([PUBLICACION, BORRADOR, APROBADA, PUBLICADA]);
     renderFeed();
-    // En "Todas" se ve el borrador completo, pintado directo como "Para revisar": el
-    // pipeline lo avanza solo a revisión, así que no hay badge "En borrador" intermedio.
     expect(await screen.findByText("Borrador completo")).toBeInTheDocument();
     expect(screen.getAllByText("Para revisar").length).toBeGreaterThan(0);
     expect(screen.queryByText("En borrador")).not.toBeInTheDocument();
@@ -337,8 +333,6 @@ describe("FeedIdeacion · feed de ideación interno", () => {
   });
 
   it("badges de pestañas: el total EXACTO del servidor (piezas), sin esperar a agotar el feed", async () => {
-    // El feed deja páginas pendientes (cursor_siguiente presente): antes los badges no se
-    // pintaban nunca; ahora salen de `paginacion.total` (limite=1) por estado.
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string | URL) => {
@@ -453,7 +447,6 @@ describe("FeedIdeacion · feed de ideación interno", () => {
         return new Response("{}", { status: 200 });
       }),
     );
-    // Arranca en 'Todas' (el default ahora es 'Pendientes', que ocultaría la publicada).
     renderFeed({}, "/?vista=todo");
     // 'Todas' (matriz por idea): ambas tarjetas.
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();

@@ -1,7 +1,7 @@
 // ENCUADRE — controles independientes del lienzo (preferencias persistidas en localStorage),
 // extraídos como hook. Owns el estado de los toggles y su persistencia; el componente solo lee.
-//   · imán: ajuste magnético a objetos + bordes/centro del lienzo + márgenes. Por defecto ON
-//     (antes estaba siempre activo). Apagado => sin snap a objetos/márgenes.
+//   · imán: ajuste magnético a objetos + bordes/centro del lienzo + márgenes. Por defecto ON.
+//     Apagado => sin snap a objetos/márgenes.
 //   · grid: rejilla visual + snap a línea de rejilla POR UMBRAL (no redondeo duro; entre líneas
 //     el movimiento es libre). El imán tiene PRIORIDAD sobre la rejilla.
 //   · tamCelda: tamaño de celda de la rejilla en px del documento (fina/media/gruesa).

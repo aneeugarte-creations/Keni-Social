@@ -47,7 +47,6 @@ export function PanelLineasPlan({ marca, nombre }: { marca: string; nombre: stri
                   {ETIQUETA_LINEA[l.categoria] ??
                     l.categoria.charAt(0).toUpperCase() + l.categoria.slice(1)}
                 </div>
-                {/* Los TRES números de la línea: generados · publicados / objetivo. */}
                 <div
                   className={cn(
                     "mt-1 text-lg font-semibold tabular-nums",
@@ -64,7 +63,6 @@ export function PanelLineasPlan({ marca, nombre }: { marca: string; nombre: stri
                 </div>
                 {l.objetivo != null && (
                   <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-                    {/* Barra doble: generados (claro) y, encima, publicados (sólido). */}
                     <div className="relative h-full">
                       <div
                         className={cn(

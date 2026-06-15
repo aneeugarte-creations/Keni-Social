@@ -3,10 +3,6 @@
 Modulo SIN dependencias internas: vive aparte de cualquier backend de persistencia
 para que tanto el almacen de CONTENIDO (`ficheros.py`, YAML) como el OPERACIONAL
 (`db.py`, SQLite) y la fachada (`repos.py`) puedan importarlo sin acoplarse entre si.
-
-Antes estas constantes vivian en `db.py`; al separar el contenido (YAML) del dato
-operacional (SQLite) se movieron aqui para que `ficheros.py` no dependa de `db.py`
-por una simple allowlist (E5/H2, riesgo R5 del plan de persistencia).
 """
 
 from __future__ import annotations
@@ -17,9 +13,7 @@ from __future__ import annotations
 from keni_shared import estados as _estados_compartidos
 
 # Estados validos de una tarea/pendiente (operacional; vive en SQLite). El orden
-# es el ciclo de vida: pendiente -> en curso -> hecha (#145, F5). "en_curso" se
-# anadio al pasar el tablero a multiusuario; las tareas legadas solo tenian
-# "pendiente"/"hecha" y siguen siendo validas (ambos estados se conservan).
+# es el ciclo de vida: pendiente -> en curso -> hecha (#145, F5).
 ESTADOS_TAREA: tuple[str, ...] = ("pendiente", "en_curso", "hecha")
 
 # Estados validos de una publicacion (flujo editorial; YAML). El flujo de aprobacion
@@ -29,12 +23,7 @@ ESTADOS_TAREA: tuple[str, ...] = ("pendiente", "en_curso", "hecha")
 #                   |
 #                   +-> (rechazo) -> borrador
 #
-# `en_revision` se anadio DESPUES del set original; un YAML legado nunca lo trae, asi
-# que la lectura sigue siendo retrocompatible (los 4 estados originales validan igual).
 # Estados del flujo de publicación (fuente única; usar estas constantes, no literales).
-# `en_revision` se anadio DESPUES del set original (#9): el autor envia su pieza a revision;
-# un revisor/admin la aprueba o la devuelve a borrador. Un YAML legado nunca lo trae, asi
-# que la lectura sigue siendo retrocompatible (los 4 estados originales validan igual).
 ESTADO_BORRADOR = "borrador"
 ESTADO_EN_REVISION = "en_revision"
 ESTADO_APROBADO = "aprobado"
@@ -77,8 +66,7 @@ ROL_EDITOR = "editor"
 # de redes, YouTube u operativo; gerencia de podcast es `gerente_podcast`; la creativa de
 # Fundación/el creativo de vertical son `creativo_vertical` de Fundacion/Nacion Gamer;
 # editorial de YouTube es `editorial_youtube`; fotografía/QA
-# combina fotografia con QA). Los valores VIEJOS se conservan tal cual por retrocompat
-# de usuarios legados creados antes de la ampliacion (no se les fuerza la migracion).
+# combina fotografia con QA). Los valores VIEJOS se conservan tal cual por retrocompat.
 CARGOS_USUARIO: tuple[str, ...] = (
     # Catalogo original (retrocompat):
     "director",
@@ -143,13 +131,7 @@ ESTADOS_SWAP_TERMINALES: tuple[str, ...] = (
     ESTADO_SWAP_CANCELADO,
 )
 
-# Franjas LEGADAS de un turno de TRABAJO (pre-#XYZ, ola "franjas por semana"). Se conservan
-# como nombres VIEJOS para que la MIGRACION (`_migrar_modelo_franjas` en `db.py`) sepa
-# reconocer las filas pre-migracion con `franja='matutino'/'vespertino'/'descanso'`. Tras
-# la migracion, los turnos referencian `rota_franjas.id` (franjas por semana, configurables,
-# con solapes permitidos) y NO usan estos literales para nada operativo.
-#
-# Mientras quedan tests legados que pasan estos strings al crear un turno, los aceptamos por
+# Mientras quedan tests que pasan estos strings al crear un turno, los aceptamos por
 # retrocompat y el repos los traduce a un `franja_id` real sembrando la semana por defecto
 # (Mañana 08:00-16:00, Tarde 16:00-24:00). Codigo nuevo debe pasar `franja_id` directamente.
 FRANJAS_TURNO_LEGACY: tuple[str, ...] = ("matutino", "vespertino", "descanso")
@@ -259,8 +241,8 @@ ESTADO_EVERGREEN_DESCARTADA = "descartada"
 # Origen de una idea evergreen, todas en el MISMO banco (Contenidos):
 #   - `ia`:      propuesta por la IA en el taller.
 #   - `manual`:  tecleada a mano (alta rápida en el banco).
-#   - `idea`:    aportación de "Idea del equipo" (antes en Fuentes-Internas).
-#   - `interna`: aportación de "Interno AMX" (briefs/material de programa; antes en Fuentes).
+#   - `idea`:    aportación de "Idea del equipo".
+#   - `interna`: aportación de "Interno AMX" (briefs/material de programa).
 ORIGENES_EVERGREEN_IDEA: tuple[str, ...] = ("ia", "manual", "idea", "interna")
 # Orígenes que puede declarar una aportación MANUAL al crear (la IA usa su propio camino).
 ORIGENES_EVERGREEN_IDEA_MANUAL: tuple[str, ...] = ("manual", "idea", "interna")

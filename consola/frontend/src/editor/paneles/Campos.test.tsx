@@ -1,11 +1,3 @@
-/**
- * Tests del control numérico `Num` del inspector:
- *  - los estados PARCIALES ("", "-" inicial) NO emiten — antes el input era 100% controlado y
- *    `Number("") === 0` escribía 0 al documento al vaciar el campo (la capa saltaba al origen) y
- *    el value redondeado machacaba el texto a medio teclear.
- *  - el texto válido se emite EN VIVO y SIN redondear (el redondeo a 2 decimales es presentación).
- *  - Escape restaura el valor con el que se entró al campo.
- */
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 

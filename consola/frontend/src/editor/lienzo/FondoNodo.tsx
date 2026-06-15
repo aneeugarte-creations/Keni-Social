@@ -10,10 +10,7 @@ export function FondoNodo({ fondo, w, h }: { fondo: Documento["fondo"]; w: numbe
   const img = useImagen(fondo.tipo === "imagen" ? fondo.imagen?.media_id : null);
   if (fondo.tipo === "color") return <Rect x={0} y={0} width={w} height={h} fill={fondo.color} listening={false} />;
   if (fondo.tipo === "degradado" && fondo.degradado) {
-    // Soporta lineal/radial y multi-stop (mismo helper/convención que el render y las capas):
-    // default lineal 180 = vertical (↓), sin cambio visual respecto al comportamiento previo.
     const deg = fondo.degradado;
-    // Mismas paradas (endurecidas) que el render de capas; antes esto se duplicaba aquí.
     const stops = colorStopsKonva(deg);
     if (deg.tipo === "radial") {
       const r = Math.sqrt(w * w + h * h) / 2;

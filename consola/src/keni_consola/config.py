@@ -1,8 +1,6 @@
 """Configuracion CENTRAL de la Consola Keni: fuente UNICA de las env vars `KENI_*`.
 
-Antes cada modulo leia sus `os.environ.get("KENI_...")` por su cuenta (~30 lecturas
-dispersas), repitiendo el nombre de la var, su default y el parseo. Este modulo las
-CENTRALIZA: declara cada nombre de variable UNA vez (constantes `ENV_*`) y expone un
+Declara cada nombre de variable UNA vez (constantes `ENV_*`) y expone un
 accesor por variable que encapsula su default, su tipo y su precedencia. Los modulos
 llaman al accesor en vez de tocar `os.environ` directamente.
 

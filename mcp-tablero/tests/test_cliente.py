@@ -39,8 +39,7 @@ def test_manda_token_en_ambas_cabeceras(cliente):
 
 @respx.mock
 def test_listar_urlencodea_los_filtros(cliente):
-    """Filtros con espacios/acentos/&: antes la query se armaba con f-strings y salia
-    una URL invalida; ahora va por `params=` de httpx (encoding correcto)."""
+    """Filtros con espacios/acentos/&: va por `params=` de httpx (encoding correcto)."""
     ruta = respx.get(f"{BASE}/api/contenido").respond(json={"contenidos": []})
     cliente.listar_contenido({"marca": "claro sports & más", "flujo": "evento", "clase": ""})
     url = ruta.calls.last.request.url
@@ -75,8 +74,7 @@ def test_error_usa_mensaje_de_la_api_clave_error(cliente):
 
 @respx.mock
 def test_error_usa_clave_mensaje_si_no_hay_error(cliente):
-    """Algunos endpoints responden `{"mensaje": ...}`: tambien se aprovecha (antes solo
-    se leia `error` y el detalle de la API se perdia)."""
+    """Algunos endpoints responden `{"mensaje": ...}`: tambien se aprovecha."""
     respx.post(f"{BASE}/api/contenido").respond(409, json={"mensaje": "Ya existe."})
     with pytest.raises(ErrorConsola, match="Ya existe."):
         cliente.crear_contenido({"titulo": "x"})

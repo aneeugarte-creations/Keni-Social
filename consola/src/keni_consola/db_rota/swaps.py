@@ -19,11 +19,6 @@ from ._comun import (
 # acepta, el coordinador de la rota (admin) aprueba o rechaza. La aprobacion EJECUTA el swap en
 # `rota_turnos` (intercambia `miembro_id` de las dos franjas) y la solicitud
 # pasa a `aplicado`. Las ausencias REALES (vacaciones, baja) viven en SAP, no aqui.
-#
-# IMPORTANTE: tras la migracion a "franjas por semana", las columnas `franja_a`/`franja_b`
-# de `rota_swaps_turno` referencian `rota_franjas.id` (NO strings 'matutino'/'vespertino').
-# Es un cambio de SEMANTICA del DATO, no de columna: los call sites deben pasar el
-# `franja_id` real al crear el swap y al re-validarlo en el aprobado.
 
 _COLS_SWAP_TURNO = (
     "id",

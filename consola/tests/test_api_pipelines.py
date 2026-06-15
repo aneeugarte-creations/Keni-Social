@@ -47,8 +47,6 @@ def _run_por_titulo(cliente, titulo: str) -> dict | None:
 
 def test_run_qa_no_verificado_con_copy(cliente):
     """Tema con QA `no_verificado` + copy en borrador: CI/QA/CD ok, aprobación pendiente.
-
-    Orden NUEVO (rediseño QPC): CI -> Criba de la fuente (QA) -> Copy (CD) -> Aprobación.
     """
     tema = _tema_pipeline("Tema apto", qa_veredicto="no_verificado")
     repos.crear_contenido_plataforma(
@@ -105,8 +103,7 @@ def test_run_qa_problema_omite_copy(cliente):
 
 def test_aprobacion_esperando_humano_es_pendiente(cliente):
     """Piezas EN REVISIÓN sin ninguna aprobada = la run espera al HUMANO: 'pendiente' (con el
-    detalle 'En revisión'), no 'en_curso' — la máquina no está haciendo nada. Antes, runs de
-    hace una semana aparecían 'En curso' en la lista solo porque nadie las había aprobado."""
+    detalle 'En revisión'), no 'en_curso' — la máquina no está haciendo nada."""
     tema = _tema_pipeline("Run en revisión", qa_veredicto="no_verificado")
     repos.crear_contenido_plataforma(
         contenido_id=tema["id"], red="x", estado="en_revision",
@@ -373,8 +370,7 @@ def test_detalle_enlaza_haiku_del_pool_por_etapa(cliente):
 def test_etapa_arte_exige_evidencia_de_arte_ia(cliente, monkeypatch):
     """La etapa Arte se deriva de la EVIDENCIA de arte GENERADO (generación/marcador de
     auto-arte correlacionado), no de que la pieza tenga imagen: la FOTO de la nota de una
-    fuente propia (bajada en ingesta) no es arte IA. Antes, esa foto pintaba Arte 'ok' con
-    el toggle apagado (encendida estando apagada)."""
+    fuente propia (bajada en ingesta) no es arte IA."""
     # Toggle Arte off (default) + pieza CON imagen (foto de fuente): saltada, NO ok.
     tema = _tema_pipeline("Tema foto de fuente")
     repos.crear_contenido_plataforma(
@@ -575,7 +571,7 @@ def test_feed_unificado_mezcla_runs_y_actividad_suelta(cliente):
 
 def test_run_suma_metricas_de_sus_generaciones(cliente):
     """Una generación correlacionada a la run (contenido_id) NO sale suelta: su coste se
-    SUMA en `metricas` de la run (antes salía duplicada en la pestaña Feed)."""
+    SUMA en `metricas` de la run."""
     tema = _tema_pipeline("Run con coste")
     _gen_suelta("Copy de la run", contenido_id=tema["id"])
     _gen_suelta("Arte de la run", tipo="imagen", contenido_id=tema["id"],
@@ -612,8 +608,7 @@ def test_filtros_clase_y_tipo(cliente):
 
 def test_fusion_editorial_no_saltada_si_el_pool_corrio(cliente):
     """Run SIN historia pero con la IA del pool corrida (generaciones Fusión/Encaje de la
-    marca): Fusión y Editorial se pintan 'ok' con detalle honesto, NO 'saltada' — antes la
-    página enseñaba 'Saltada' junto a un bloque IA completado con output (contradicción)."""
+    marca): Fusión y Editorial se pintan 'ok' con detalle honesto, NO 'saltada'."""
     tema = _tema_pipeline("Run sin grupo")
     generaciones.crear({
         "tipo": "pipeline", "marca": "unotv", "etiqueta": "Fusión de historias — UnoTV",

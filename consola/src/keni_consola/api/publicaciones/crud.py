@@ -60,16 +60,6 @@ _MARCAS: tuple[tuple[str, str], ...] = tuple(marcas.opciones())
 _MARCAS_IDS = {m[0] for m in _MARCAS}
 
 
-# MAQUINA DE ESTADOS del PUT generico (#estados): transiciones validas desde cada estado.
-# Antes el PUT aceptaba CUALQUIER estado del catalogo sin mirar el actual, bypasseando los
-# gates de los endpoints de flujo (enviar-a-revision/aprobar/encolar). Politica:
-#   - AVANZAR en el flujo (borrador -> en_revision -> aprobado -> programado -> publicado)
-#     se permite TAMBIEN a saltos: el operador puede marcar "ya lo publique a mano" sin
-#     recorrer estados intermedios (es el uso real de la UI y del MCP).
-#   - RETROCEDER solo a `borrador` (rechazo/reset de la pieza) o `programado -> aprobado`
-#     (desprogramar). Otros retrocesos pasan por los endpoints de flujo.
-#   - `publicado` es TERMINAL: una pieza ya publicada no se mueve por el PUT (evita
-#     re-programar/duplicar un post que ya salio; el camino legitimo es duplicar/reciclar).
 _TRANSICIONES_PUT: dict[str, frozenset[str]] = {
     ESTADO_BORRADOR: frozenset({ESTADO_EN_REVISION, ESTADO_APROBADO, ESTADO_PROGRAMADO, ESTADO_PUBLICADO}),
     ESTADO_EN_REVISION: frozenset({ESTADO_BORRADOR, ESTADO_APROBADO, ESTADO_PROGRAMADO, ESTADO_PUBLICADO}),
@@ -418,9 +408,6 @@ async def actualizar(request: Request) -> Response:
         campos["estado"] = estado
     if "fecha_programada" in datos:
         fecha = datos.get("fecha_programada")
-        # `null` = limpiar la fecha (la pieza deja de estar programada). El SPA manda null cuando
-        # el estado no es "programado"; tratarlo como "" en vez de rechazarlo (antes daba 400 al
-        # guardar cualquier pieza no programada).
         if fecha is None:
             campos["fecha_programada"] = ""
         elif isinstance(fecha, str):

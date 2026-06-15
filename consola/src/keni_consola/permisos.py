@@ -87,16 +87,16 @@ def usuario_actual(request: Request) -> dict[str, Any] | None:
 # Marca como FOCO POR DEFECTO (NO una restriccion): capacitar, no limitar       #
 # --------------------------------------------------------------------------- #
 #
-# CONTRATO (revertido respecto al cerrojo duro del ADR 0003): el equipo es
-# MULTIDISCIPLINAR; la marca NO acota lo que alguien puede ver o tocar. Cualquiera
-# cubre/accede CUALQUIER marca. La marca es solo un FOCO POR DEFECTO: cuando un
-# listado/metrica no pide marca explicita, se enfoca en la(s) marca(s) preferida(s)
-# del usuario para reducir la mezcla de contexto. Ese foco es SIEMPRE sobreescribible
-# pasando una `marca` explicita (cualquiera) y NUNCA bloquea (sin 403/404/400 por marca).
+# CONTRATO: el equipo es MULTIDISCIPLINAR; la marca NO acota lo que alguien puede ver o
+# tocar. Cualquiera cubre/accede CUALQUIER marca. La marca es solo un FOCO POR DEFECTO:
+# cuando un listado/metrica no pide marca explicita, se enfoca en la(s) marca(s)
+# preferida(s) del usuario para reducir la mezcla de contexto. Ese foco es SIEMPRE
+# sobreescribible pasando una `marca` explicita (cualquiera) y NUNCA bloquea
+# (sin 403/404/400 por marca).
 #
-# Por eso NO existe ya `rechazo_pieza`/`rechazo_marca`: no hay cerrojo por marca. Solo
-# queda `marcas_preferentes` (antes `marcas_visibles`/`marcas_scope`), que da el FOCO
-# por defecto (None = sin preferencia => todas las marcas).
+# Por eso NO hay `rechazo_pieza`/`rechazo_marca`: no hay cerrojo por marca. Solo hay
+# `marcas_preferentes`, que da el FOCO por defecto (None = sin preferencia => todas
+# las marcas).
 
 
 def marcas_preferentes(request: Request) -> set[str] | None:

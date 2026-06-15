@@ -114,8 +114,7 @@ export function AppShell() {
     setMenuAbierto(false);
   }, [location.pathname]);
 
-  // El sidebar se muestra SIEMPRE ahora: ya no hay launcher `/` sin barra. Las
-  // apps viven dentro del sidebar como grupos de acordeón. `PaletaProvider` monta
+  // Las apps viven dentro del sidebar como grupos de acordeón. `PaletaProvider` monta
   // la paleta de comandos (⌘K) una sola vez y registra su listener global.
   return (
     <PaletaProvider>
@@ -168,10 +167,9 @@ export function AppShell() {
             {menuAbierto ? <X /> : <Menu />}
           </Button>
 
-          {/* Sección (dropdown del hub o título de página plana) + acciones, donde antes
-              estaban los breadcrumbs. Recibe los huecos por props (no consume el contexto):
-              el Provider solo envuelve al `<Outlet/>`, que es quien portaliza título/acciones
-              a estos huecos. */}
+          {/* Sección (dropdown del hub o título de página plana) + acciones. Recibe los huecos
+              por props (no consume el contexto): el Provider solo envuelve al `<Outlet/>`, que
+              es quien portaliza título/acciones a estos huecos. */}
           {enEditor ? (
             <>
               {/* EDITOR (patrón Canva): las HERRAMIENTAS van CENTRADAS en la barra, no

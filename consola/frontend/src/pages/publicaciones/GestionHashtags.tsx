@@ -199,7 +199,6 @@ export function GestionHashtags({
   // null = sin formulario; "nuevo" = creando; objeto = editando ese grupo.
   const [editando, setEditando] = React.useState<GrupoHashtags | "nuevo" | null>(null);
 
-  // Al cerrar, reseteamos el formulario.
   React.useEffect(() => {
     if (!abierto) setEditando(null);
   }, [abierto]);

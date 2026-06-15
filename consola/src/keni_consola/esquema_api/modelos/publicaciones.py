@@ -40,8 +40,7 @@ EtapaIa = Literal[
 # escribe veredictos legibles y matizados ("ok — confirmar marcador con el equipo",
 # "marcar claramente como rumor", "pendiente resultado real del partido"), no un enum
 # cerrado. La UI deriva la insignia (Listo/Revisar/No publicar) de un prefijo normalizado
-# (`meta.metaVeredicto`). "" = sin veredicto. Era un `Literal` cerrado y eso rompía el
-# contrato `RespuestaPublicaciones` en cada pieza con veredicto real (drift del calendario).
+# (`meta.metaVeredicto`). "" = sin veredicto.
 Veredicto = str
 
 

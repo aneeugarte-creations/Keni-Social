@@ -168,9 +168,8 @@ export default function Imagen() {
     return { id, store };
   };
 
-  // Lienzo EN BLANCO de verdad: SIEMPRE limpio y vacío. No restaura borradores previos de la marca
-  // (antes reaparecían "elementos de otros diseños"); los borradores de plantilla/pieza sí se
-  // recuperan en sus propios flujos (abrirPlantilla / abrirPiezaTab / restaurarWorkspace).
+  // Lienzo EN BLANCO de verdad: SIEMPRE limpio y vacío. No restaura borradores previos de la marca;
+  // los borradores de plantilla/pieza sí se recuperan en sus propios flujos (abrirPlantilla / abrirPiezaTab / restaurarWorkspace).
   const abrirPestana = (marcaArg?: string) => {
     // Un lienzo nuevo necesita una marca CONCRETA: si el global está en «Todas», cae a `marcaInicial`.
     const marca = marcaArg || marcaEfectiva || marcaInicial;
@@ -696,8 +695,7 @@ export default function Imagen() {
   };
 
   // Guarda el documento en la PUBLICACIÓN anclada (render + versión + fija su imagen). El PNG
-  // resultante se ofrece en el toast (acción «Ver PNG»), SIN estado residual compartido entre
-  // pestañas (antes un `exportUrl` global enseñaba el render de otra pestaña).
+  // resultante se ofrece en el toast (acción «Ver PNG»).
   const guardarEnPieza = useMutation({
     mutationFn: () => {
       if (!storeActivo || !pestanaActiva?.contenido || !pestanaActiva?.plataforma) {

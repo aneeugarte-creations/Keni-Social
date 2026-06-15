@@ -12,9 +12,6 @@ from ._repos_comun import (
 # --------------------------------------------------------------------------- #
 # Publicaciones (OPERACIONAL: Postgres via db.py; fusión sobre `contenido`, paso 3)    #
 # --------------------------------------------------------------------------- #
-# Una publicacion = una fila `contenido_plataforma` (es_publicacion=1) + su padre. Misma
-# forma de dict que antes (YAML); el resto del sistema (API/aprobación/Metricool/prompts)
-# no cambia. `id`/`fecha_creacion` permiten preservar identidad al migrar desde YAML.
 
 
 def crear_publicacion(
@@ -74,8 +71,6 @@ def listar_publicaciones(
     desplazamiento: int | None = None,
     cursor: tuple[str, str] | None = None,
 ) -> list[dict[str, Any]]:
-    # `marca` admite varias (secuencia -> `IN (...)` en SQL): el foco multi-marca del feed
-    # se empuja al repo para que el keyset pagine bien (antes se post-filtraba en memoria).
     # `responsable` ("la lista"): "" = piezas libres (por coger); otro valor = de ese usuario.
     # `desde`/`hasta` (ISO): rango de `fecha_programada` para el calendario (sin fecha = fuera).
     return db.listar_publicaciones(

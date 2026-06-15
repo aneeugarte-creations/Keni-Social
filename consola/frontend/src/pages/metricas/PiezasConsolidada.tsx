@@ -476,9 +476,6 @@ function FilaPieza({
     pieza.formato ? nombreFormato(pieza.formato) : "",
   ].filter(Boolean);
 
-  // Accesibilidad: el control real (focusable, accionable con teclado) es el BOTÓN del
-  // título; el onClick de la fila se conserva solo como atajo de ratón. El enlace externo
-  // ya no queda anidado dentro de un control con role="button".
   return (
     <TableRow onClick={onAbrir} className="cursor-pointer">
       <TableCell className="max-w-[20rem]">

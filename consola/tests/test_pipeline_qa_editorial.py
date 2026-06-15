@@ -1,8 +1,8 @@
-"""Tests de la QA de la FUENTE (pre-copy) por DOCUMENTO de Texto del pipeline (rediseño QPC).
+"""Tests de la QA de la FUENTE (pre-copy) por DOCUMENTO de Texto del pipeline.
 
 El equipo NO usa skills: la QA se hace adjuntando un DOCUMENTO de la Texto con los criterios.
-Regla del dueño: "si el documento existe, adjúntalo; si no existe, créalo y adjúntalo." La QA se
-movió a ANTES del copy y por TEMA (fuente): criba la NOTA de origen y persiste un veredicto
+Regla del dueño: "si el documento existe, adjúntalo; si no existe, créalo y adjúntalo." La QA
+corre ANTES del copy y por TEMA (fuente): criba la NOTA de origen y persiste un veredicto
 ESTRUCTURADO (`no_verificado`/`problema`) sobre el TEMA. Aquí cubrimos, OFFLINE (mock de claude):
   - `asegurar_documento_qa` crea el documento si falta (idempotente).
   - `lanzar_qa_fuente` enlaza una generación a la etapa QA (`gen_id`) y deja el tema `en_curso`.

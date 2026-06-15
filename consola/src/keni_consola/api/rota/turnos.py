@@ -167,11 +167,6 @@ def _validar_y_resolver_turno(
 
     # Validacion de `franja_id`: debe existir y pertenecer a la semana de la fecha del
     # turno. La fecha final puede venir de `datos` o de `actual` (PATCH parcial).
-    #
-    # RETROCOMPAT: tests legados envian `franja: "matutino"|"vespertino"|"descanso"`. Lo
-    # aceptamos traduciendo al `franja_id` de la franja por defecto de la semana (Mañana,
-    # Tarde, Descanso). Esto permite que tests pre-"franjas por semana" sigan ejerciendo
-    # las reglas de POST/PATCH; codigo nuevo debe pasar `franja_id` directo.
     legacy_franja: str | None = None
     if "franja" in datos and "franja_id" not in datos:
         bruto = datos.get("franja")

@@ -8,8 +8,7 @@
  * Es CRUD sobre `/api/etiquetas` (acotado por clase) y `/api/hashtags`. El filtro
  * por marca lo manda SIEMPRE el switch global de la barra superior
  * (`useMarcaActiva`): no hay selector de marca propio. Aquí el equipo afina la
- * estrategia editorial de cada marca; antes estas piezas vivían dispersas en el
- * menú "Gestionar" del Feed (sitio equivocado).
+ * estrategia editorial de cada marca.
  *
  * Este fichero es solo el CONTENEDOR fino: los paneles y diálogos viven en
  * `./gestion-lineas/`.

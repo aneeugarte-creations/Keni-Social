@@ -79,7 +79,6 @@ export interface MarkdownProps {
   className?: string;
 }
 
-/** Renderiza Markdown seguro con estilos del tema. */
 export function Markdown({ children, className }: MarkdownProps) {
   return (
     <div className={cn("break-words text-sm text-foreground", className)}>

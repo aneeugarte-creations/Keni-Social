@@ -1,8 +1,7 @@
 """Persistencia — dominio noticias. Implementación de db.py (ver barrel `db.py`).
 
-Paquete troceado por áreas (pura reubicación, sin cambio de comportamiento). Este
-`__init__` es el FACADE: re-exporta EXACTAMENTE la superficie pública histórica del
-antiguo módulo `db_noticias.py` para no romper imports (`db.py`, `api/fuentes.py`).
+Este `__init__` es el FACADE: re-exporta EXACTAMENTE la superficie pública del
+módulo para no romper imports (`db.py`, `api/fuentes.py`).
 """
 from __future__ import annotations
 

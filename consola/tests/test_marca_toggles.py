@@ -43,7 +43,6 @@ def test_catalogo_expone_toggles_por_marca():
     assert config.clave_por_marca(config.ENV_INVESTIGACION, "nacion-gamer") in claves
     assert config.clave_por_marca(config.ENV_PRODUCCION, "nacion-gamer") in claves
     assert config.clave_por_marca(config.ENV_PIPELINE_ARTE, "unotv") in claves
-    # Las etapas internas YA NO son toggles por marca (las agrupan los maestros).
     assert config.clave_por_marca(config.ENV_PIPELINE_COPY, "unotv") not in claves
     assert config.clave_por_marca(config.ENV_PIPELINE_SELECCION, "unotv") not in claves
     por_marca = [a for a in ajustes_catalogo.catalogo() if config.SEP_MARCA in a.clave]

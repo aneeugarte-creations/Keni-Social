@@ -1,5 +1,4 @@
 // Pestaña CALENDARIO de la rota (rejilla semanal de turnos + cobertura derivada).
-// Partido mecánicamente de pages/Rota.tsx.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BellRing,

@@ -1,13 +1,6 @@
 """Catálogo de fuentes RSS sugeridas (semilla de onboarding), cargado desde datos.
 
-El catálogo es DATOS, no lógica. Antes este módulo embebía ~140 presets como literales
-Python (1798 líneas); ahora la semilla vive en `fuentes_presets.json` (mismo directorio) y
-aquí solo queda el loader + las 3 funciones de consulta.
-
-La semilla se recortó al conjunto que el equipo del piloto demostró VALIOSO en producción
-(las `fuentes_rss` que dejó activas tras curar a mano: marcas propias UnoTV / Claro Sports /
-Nación Gamer + un puñado de externas con tráfico real). El catálogo deja de ser un menú de
-cientos de fuentes que decidimos nosotros: el equipo da de alta las suyas desde la UI
+El catálogo es DATOS, no lógica. El equipo da de alta las fuentes desde la UI
 (`POST /api/rss/fuentes`), que acepta cualquier categoría de `CATEGORIAS_VALIDAS`.
 
 Contrato de cada preset (04-fuentes-externas.md): id, nombre, url, categoria, marca_sugerida,

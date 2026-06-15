@@ -31,8 +31,7 @@ def _crear_evento(cli, **extra) -> dict:
 def test_duplicar_evento_y_cambiado_reset(cliente):
     """Duplicar un evento da uno NUEVO con `cambiado=0` (no reprogramado).
 
-    Modelo ola back3: los turnos no van atados a eventos, asi que la cuestion de
-    "no se clonan turnos" es trivial (no habia nada que clonar). El clon nace fresco.
+    El clon nace fresco.
     """
     original = _crear_evento(cliente, titulo="Pumas vs America J17", hora="16:00")
     # Lo marcamos como reprogramado (cambiado=1).
@@ -56,12 +55,7 @@ def test_duplicar_evento_y_cambiado_reset(cliente):
 
 
 def test_duplicar_evento_propaga_marca(cliente):
-    """El clon HEREDA la marca del original (regresion auditoria-turnos hallazgo A).
-
-    Sin esto el clon nacia con marca="" e INVISIBLE en toda vista filtrada por marca
-    (la rejilla y el export de Claro Sports): el caso estrella "Jornada 17 -> 18" se
-    duplicaba y "desaparecia", obligando a recrear el partido a mano.
-    """
+    """El clon HEREDA la marca del original."""
     original = _crear_evento(cliente, titulo="Pumas vs America J17", marca="claro-sports")
     assert original["marca"] == "claro-sports"
     r = cliente.post(

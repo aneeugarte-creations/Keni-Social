@@ -16,11 +16,10 @@ from ._comun import _columnas_existentes, _log, _tabla_existe
 
 
 def _migrar_renombre_catalogo_media(con: Any) -> None:
-    """Renombra la tabla `biblioteca_media` (nombre viejo) a `catalogo_media` y sus índices.
+    """Renombra la tabla `biblioteca_media` a `catalogo_media` y sus índices (idempotente).
 
-    El catálogo de medios aprobados se llamaba `biblioteca_media`; se renombró a `catalogo_media`
-    al purgar "biblioteca" del repo. Idempotente: solo actúa si existe la tabla vieja y aún no la
-    nueva. Es el ÚNICO sitio que aún nombra la tabla vieja (la fuente del renombre).
+    Solo actúa si existe la tabla vieja y aún no la nueva. Es el ÚNICO sitio que aún
+    nombra la tabla vieja (la fuente del renombre).
     """
     if not _tabla_existe(con, "biblioteca_media") or _tabla_existe(con, "catalogo_media"):
         return
@@ -36,9 +35,9 @@ def _migrar_renombre_catalogo_media(con: Any) -> None:
 def _migrar_columnas_noticias_algoritmo(con: Any) -> None:
     """Anade `sugerida` a `noticias_algoritmo` si una BD ya creada no la tuviera (idempotente).
 
-    La tabla `noticias_algoritmo` se creo sin esta columna; el job de sugerencias editoriales
-    la usa para no re-procesar una noticia. `ADD COLUMN IF NOT EXISTS` es seguro y no-op si ya
-    esta. Solo aplica si la tabla existe (un primer arranque ya la crea con la columna).
+    El job de sugerencias editoriales la usa para no re-procesar una noticia. `ADD COLUMN IF
+    NOT EXISTS` es seguro y no-op si ya esta. Solo aplica si la tabla existe (un primer
+    arranque ya la crea con la columna).
     """
     if not _tabla_existe(con, "noticias_algoritmo"):
         return
@@ -243,9 +242,9 @@ def _migrar_columnas_etiquetas(con: Any) -> None:
 def _migrar_green_a_evergreen(con: Any) -> None:
     """Rebrand GREEN -> EVERGREEN sobre una BD productiva (idempotente, preserva datos).
 
-    El código pasó a `evergreen*`; este paso renombra el esquema/datos viejos para que NO
-    se huérfanen. Todo guardado: en una BD fresca (sin `green*`) cada paso es no-op y el DDL
-    crea ya `evergreen_ideas`/`es_evergreen`. Corre ANTES del DDL declarativo.
+    Este paso renombra el esquema/datos viejos para que NO se huérfanen. Todo guardado:
+    en una BD fresca (sin `green*`) cada paso es no-op y el DDL crea ya `evergreen_ideas`/
+    `es_evergreen`. Corre ANTES del DDL declarativo.
     """
     # Tabla green_ideas -> evergreen_ideas (+ sus índices). RENAME solo si la vieja existe y
     # la nueva no (re-ejecuciones seguras).

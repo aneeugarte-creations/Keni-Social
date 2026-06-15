@@ -50,7 +50,7 @@ describe("ProgresoGeneracion", () => {
     expect(screen.getByText("Terminando…")).toBeInTheDocument();
   });
 
-  it("sin fase (registro legado) cae a 'Visualizando…'", () => {
+  it("sin fase cae a 'Visualizando…'", () => {
     render(<ProgresoGeneracion generacion={base({ fase: "", salida: "en curso" })} />);
     expect(screen.getByText("Visualizando…")).toBeInTheDocument();
   });

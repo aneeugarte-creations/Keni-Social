@@ -281,14 +281,12 @@ def test_pool_se_rehace_si_cambia_la_url(monkeypatch):
 
 # --------------------------------------------------------------------------- #
 # Red de seguridad __del__: una lease soltada SIN close() vuelve al pool (GC)  #
-# (regresion del bug de fuga que agotaba el pool -> PoolTimeout -> app colgada)#
 # --------------------------------------------------------------------------- #
 
 
 def test_del_devuelve_la_lease_fugada_sin_close(pool_falso):
-    """Patron historico de `db.py`: `con = _conectar(); ... ; con.close()` sin try/finally.
-    Si la funcion lanza antes del close(), la lease se 'fuga'. La red `__del__` la devuelve
-    por GC, asi el pool NO se agota (el bug original dejaba `vivas` creciendo sin tope)."""
+    """Si la funcion lanza antes del close(), una lease puede 'fugarse' sin ser devuelta.
+    La red `__del__` asegura que vuelva al pool por GC, impidiendo que se agote."""
     import gc
 
     for _ in range(50):

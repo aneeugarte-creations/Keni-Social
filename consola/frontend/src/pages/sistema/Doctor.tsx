@@ -1,6 +1,6 @@
 /**
  * El «doctor» en la UI (`GET /api/estado`, Fase 1 de la consolidación del Monitor):
- * la zona de ESTADO que sustituye al viejo BannerAlertas. Dos consumidores:
+ * Dos consumidores:
  *
  *  - `ZonaEstado` (Monitor, todo el equipo): si todo está ok, una línea discreta;
  *    si no, la lista de chequeos con su siguiente paso. Los chequeos `admin:true`
@@ -179,8 +179,7 @@ function AvisoDoctorCaido({ doctor }: { doctor: ReturnType<typeof useDoctor> }) 
 
 /**
  * Avisos del doctor para la página SISTEMA (admin): solo los chequeos de operador
- * (`admin:true`) que requieren atención. Sustituye al viejo BannerAlertas (que recomputaba
- * umbrales en el front); ahora el back es la única fuente del juicio. Sin problemas, nada.
+ * (`admin:true`) que requieren atención. Sin problemas, nada.
  */
 export function AvisosDoctor() {
   const doctor = useDoctor();

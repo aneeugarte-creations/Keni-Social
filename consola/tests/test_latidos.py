@@ -117,8 +117,6 @@ def test_nombre_de_sweep_alias():
 
     assert latidos.nombre_de_sweep(sweep) == "test_latidos"
     assert latidos._ALIAS["ingesta_daemon"] == "ingesta"
-    # "pipeline" se partio en "investigacion"+"produccion": el nombre viejo esta
-    # RETIRADO (la sonda ignora su fila huerfana) y ya no hay alias que lo resucite.
     assert "pipeline" in latidos.RETIRADOS
     assert "pipeline" not in latidos._ALIAS.values()
 
@@ -242,8 +240,6 @@ def test_endpoint_daemons_inactivo_viejo_no_es_atrasado(entorno):
 
 
 def test_endpoint_daemons_ignora_retirados(entorno):
-    # La fila huerfana de un daemon RETIRADO/renombrado (p. ej. "pipeline", que se
-    # partio en investigacion+produccion) no se pinta nunca: nadie la actualizara.
     db.latido_barrido("pipeline", ok=True, intervalo_seg=15.0, tick_seg=60.0)
     _envejecer_latido("pipeline")
     db.latido_barrido("programador", ok=True, intervalo_seg=60.0, tick_seg=60.0)

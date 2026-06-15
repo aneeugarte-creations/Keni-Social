@@ -51,7 +51,7 @@ interface FilaConAccionesProps {
  * Fila/tarjeta con modelo de interacción "item-first": la acción primaria se dispara
  * con click izquierdo sobre el cuerpo (o Enter/Espacio), y las secundarias viven en un
  * único menú abierto por click derecho, por teclado (Shift+F10 / tecla Menú) o por el
- * kebab "⋮". Sustituye a las filas con hilera de botones-icono.
+ * kebab "⋮".
  *
  * Los controles interactivos internos (botones, enlaces, inputs) no disparan la acción
  * primaria: se detectan con `closest` y se ignoran. Usa `data-no-primaria` para excluir
@@ -164,7 +164,6 @@ export function FilaConAcciones({
     // botón-icono directo ya la ofrece.
     onContextMenu: hayMenu ? (e: React.MouseEvent) => menu.abrirEn(e) : undefined,
     onKeyDown: esClicable || hayMenu ? alTeclear : undefined,
-    // Long-press táctil → menú secundario (equivalente al click derecho).
     onTouchStart: hayMenu ? alTocarInicio : undefined,
     onTouchEnd: hayMenu ? cancelarLargo : undefined,
     onTouchMove: hayMenu ? cancelarLargo : undefined,

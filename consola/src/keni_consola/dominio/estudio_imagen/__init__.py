@@ -1,9 +1,8 @@
 """Estudio de imagen — dominio: componer prompt + correr los motores relocalizados.
 
-BARREL del paquete. El módulo `dominio/estudio_imagen.py` (~1010 líneas) se partió por
-responsabilidad en submódulos privados; este `__init__.py` RE-EXPORTA la superficie completa
-(pública Y privada referenciada desde fuera) para no cambiar el comportamiento ni la superficie:
-quien importe `from ..dominio import estudio_imagen` o haga `estudio_imagen.X` sigue viéndolo todo.
+BARREL del paquete. RE-EXPORTA la superficie completa (pública Y privada referenciada desde
+fuera) para no cambiar el comportamiento: quien importe `from ..dominio import estudio_imagen`
+o haga `estudio_imagen.X` sigue viéndolo todo.
 
 Mapa de submódulos:
   - `_comun`     : constantes de formato, `EstudioError`, helpers de subproceso/materialización.
@@ -20,9 +19,6 @@ COMPONE/RENDERIZA de forma determinista (plantilla de marca + documento de capas
 # pública Y privada (consumidores hacen `estudio_imagen.X`, incluido `estudio_imagen._privado`).
 
 from __future__ import annotations
-
-# Imports de módulo conservados (paridad de `dir()`: el módulo original los exponía como
-# atributos, y algún flujo/test podría tocarlos como `estudio_imagen.<modulo>`).
 import copy
 import json
 import os

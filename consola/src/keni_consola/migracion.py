@@ -1,13 +1,5 @@
 """Migracion one-shot del cutover hosted: media disco -> S3/Garage (#130).
 
-HISTORICO (ADR 0004): originalmente este modulo orquestaba tambien el cutover de datos
-SQLite -> Postgres. Tras retirar SQLite de la persistencia operacional, la DB ya solo es
-Postgres y NO hay nada que copiar entre bases. `--solo-db` GARANTIZA el esquema en Postgres
-(DDL idempotente + migraciones VERSIONADAS pendientes del journal `schema_migraciones`; ver
-`_db_core.MIGRACIONES`) para que `deploy/deploy.sh` siga llamando al mismo comando sin
-romper. La copia de media disco -> bucket S3 SI tiene sentido todavia en clientes que aun
-guardan la media en disco.
-
 Uso:
 
     python -m keni_consola.migracion            # asegura esquema + migra media
@@ -55,9 +47,7 @@ class ResumenMigracion:
 def asegurar_esquema(*, dry_run: bool = False) -> bool:
     """Asegura que el esquema Postgres existe (idempotente). Devuelve True si OK.
 
-    Sustituto del antiguo `migrar_db` (SQLite -> Postgres): tras la ADR 0004 ya no hay
-    fuente SQLite; lo unico que queda por hacer del lado de la DB es que el esquema este
-    creado. Lo creamos abriendo una conexion (lo dispara `db._conectar`, que ejecuta el DDL
+    Lo creamos abriendo una conexion (lo dispara `db._conectar`, que ejecuta el DDL
     idempotente y aplica las migraciones VERSIONADAS pendientes del journal
     `schema_migraciones` bajo el advisory lock de esquema; si una migracion falla, este
     comando sale con error visible en vez de dejar esquema a medias). En `dry_run` no abre
@@ -151,8 +141,6 @@ def migrar(*, solo_db: bool = False, solo_media: bool = False, dry_run: bool = F
     """Ejecuta la migracion segun las banderas y devuelve el resumen."""
     resumen = ResumenMigracion()
     if not solo_media:
-        # Renombre del almacén de documentos `…/biblioteca` → `…/texto` (idempotente). Sin él, una
-        # instalación previa tendría los documentos bajo el dir viejo y la página Texto saldría vacía.
         if not dry_run:
             from . import libtexto
 

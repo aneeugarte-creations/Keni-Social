@@ -10,8 +10,7 @@ from __future__ import annotations
 
 
 def test_listar_fuentes_lee_de_fuentes_rss(cliente):
-    # /api/fuentes presenta los feeds de `fuentes_rss` como catálogo (tipo='rss'); ya no hay
-    # una tabla-hub espejo aparte. Crear un feed por la API RSS lo hace aparecer aquí.
+    # /api/fuentes presenta los feeds de `fuentes_rss` como catálogo (tipo='rss'). Crear un feed por la API RSS lo hace aparecer aquí.
     cliente.post(
         "/api/rss/fuentes",
         json={"nombre": "Diario", "url": "https://93.184.216.34/feed.xml", "marca": "unotv"},
@@ -28,7 +27,6 @@ def test_listar_fuentes_lee_de_fuentes_rss(cliente):
 
 
 def test_listar_fuentes_filtra_por_tipo(cliente):
-    # Solo existe el tipo 'rss'; pedir otro tipo devuelve vacío (sin error).
     cliente.post(
         "/api/rss/fuentes", json={"nombre": "Diario", "url": "https://93.184.216.34/feed.xml"}
     )
@@ -38,7 +36,6 @@ def test_listar_fuentes_filtra_por_tipo(cliente):
 
 def test_listar_fuentes_tipo_invalido_400(cliente):
     assert cliente.get("/api/fuentes?tipo=loquesea").status_code == 400
-    # `api`/`galeria` eran tipos MUERTOS: ya no están en el catálogo y se rechazan.
     assert cliente.get("/api/fuentes?tipo=api").status_code == 400
     assert cliente.get("/api/fuentes?tipo=galeria").status_code == 400
 

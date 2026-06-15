@@ -172,10 +172,9 @@ def test_turno_rota_sin_miembro_no_choca(entorno):
 
 
 def test_normalizar_timestamps_texto_idempotente(entorno):
-    """`_normalizar_timestamps_texto` lleva al canon (UTC sin offset) las columnas que SIGUEN
-    siendo TEXT, de forma idempotente. Tras la migracion 0033, `contenido.creado` es
-    `timestamptz` y esta funcion YA NO la toca (su instante lo garantiza el tipo nativo y el
-    cast de entrada normaliza el offset); aqui se cubren las TEXT que quedan en `contenido`:
+    """`_normalizar_timestamps_texto` lleva al canon (UTC sin offset) las columnas TEXT
+    de forma idempotente. Las columnas timestamptz (nativas) están garantizadas por el tipo.
+    Esta prueba cubre las columnas TEXT que quedan en `contenido`:
     `contenido_plataforma.preparado_en` (canon segundos) y `fecha_programada` (canon minutos).
     """
     c = db.crear_contenido(titulo="TS", marca="unotv")
@@ -213,10 +212,10 @@ def test_normalizar_timestamps_texto_idempotente(entorno):
 
 
 def test_contenido_actualizado_timestamptz_convierte_offsets_no_utc(entorno):
-    """`contenido.actualizado` es `timestamptz` (migracion 0033): un literal con offset NO-UTC
-    se convierte al INSTANTE UTC por el cast de entrada del driver/Postgres (no por la
-    normalizacion TEXT, que ya no toca esta columna). Vuelve como `datetime` aware: la igualdad
-    de datetimes aware compara por instante, asi que -06:00 a las 10:00 equivale a 16:00 UTC.
+    """`contenido.actualizado` es `timestamptz`: un literal con offset NO-UTC se convierte
+    al INSTANTE UTC por el cast de entrada del driver/Postgres. Vuelve como `datetime` aware:
+    la igualdad de datetimes aware compara por instante, asi que -06:00 a las 10:00 equivale
+    a 16:00 UTC.
     """
     c = db.crear_contenido(titulo="TS2", marca="unotv")
     con = db._conectar()

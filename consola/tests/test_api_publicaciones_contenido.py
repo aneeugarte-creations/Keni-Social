@@ -52,8 +52,8 @@ def test_crear_con_imagen_incluye_url(cliente):
 
 def test_crear_marca_sin_plantilla_estudio_imagen_url_vacio(cliente):
     # Sin imagen horneada, sin foto y SIN plantilla de estudio (el test no siembra ninguna), la
-    # pieza no tiene imagen servible -> `imagen_url` vacío. La placa de marca por SPEC se retiró:
-    # solo componen plantillas de la galería del estudio (el /compuesta con plantilla lo cubre
+    # pieza no tiene imagen servible -> `imagen_url` vacío.
+    # Solo componen plantillas de la galería del estudio (el /compuesta con plantilla lo cubre
     # `test_render_pieza`).
     pub = _crear(cliente).json()["publicacion"]
     assert pub["imagen"] == ""

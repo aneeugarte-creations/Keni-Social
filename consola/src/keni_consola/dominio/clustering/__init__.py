@@ -31,8 +31,6 @@ helpers privados que usan los tests), sin cambiar comportamiento.
 
 from __future__ import annotations
 
-# Submódulos hermanos de `dominio` reexportados para compatibilidad (p.ej. tests usan
-# `clustering.similitud`): antes el módulo hacía `from . import dedup, similitud`.
 from .. import dedup, similitud
 from ._comun import BREAKING_PESO_DEF, BREAKING_VENTANA_H_DEF
 from ._comun import _numeros_incompatibles as _numeros_incompatibles  # re-export para tests

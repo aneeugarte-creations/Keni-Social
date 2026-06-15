@@ -3,9 +3,6 @@
 Fuente UNICA de los estados/clases/flujos del tablero, importada tanto por la
 Consola (`keni_consola.estados`, que las re-exporta para sus consumidores) como
 por el MCP de tablero (`keni_tablero.tools`, que valida ANTES de tocar la red).
-Antes `keni_tablero` llevaba un espejo a mano de estas tuplas y cualquier cambio
-en la Consola lo dejaba desincronizado en silencio (H3/E1: misma jugada que
-`engagement_pct` o el catalogo de marcas).
 
 Solo TUPLAS de literales: este paquete es la capa mas baja del monorepo (sin
 dependencias) y aqui no debe entrar logica de negocio.

@@ -1,12 +1,8 @@
 """Runner UNICO de `claude -p` en streaming para los jobs en segundo plano (#116).
 
-Antes habia DOS lanzadores casi identicos —`generaciones.lanzar_job_claude` y
-`api/agentes.lanzar_run_background`— que ademas DIVERGIAN: los runs de agente no
-aplicaban `--max-turns` (sin tope de turnos => sin tope de coste por turnos) y
-dependian de `api.skills` (acoplamiento api->api). Aqui viven las MECANICAS
-compartidas (argv, lectura de stream con throttle, espera con wall-timeout y kill);
-cada llamante conserva SU finalizacion (generaciones post-procesa y guarda
-`resultado`; los runs solo guardan el texto).
+Aqui viven las MECANICAS compartidas (argv, lectura de stream con throttle, espera
+con wall-timeout y kill); cada llamante conserva SU finalizacion (generaciones
+post-procesa y guarda `resultado`; los runs solo guardan el texto).
 
 CONCURRENCIA (#116 / R-NO-LIMIT): sin tope, N peticiones lanzaban N procesos `claude`
 a la vez (CPU/RAM/rate-limit/coste). `slot()` aplica un semaforo (`KENI_MAX_JOBS`,

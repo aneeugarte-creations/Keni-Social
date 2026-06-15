@@ -26,9 +26,9 @@ function tabActivo(pestanas: ItemTabHub[], pathname: string): ItemTabHub {
 }
 
 /**
- * Navegación de sección como DROPDOWN (antes era una tira de pestañas horizontales). Muestra la
- * sección activa —icono + etiqueta— y al elegir otra navega a su ruta. Vive en la barra superior,
- * donde antes estaban los breadcrumbs. Mucho más compacto en móvil que una fila de pestañas.
+ * Navegación de sección como DROPDOWN. Muestra la sección activa —icono + etiqueta— y al elegir
+ * otra navega a su ruta. Vive en la barra superior. Mucho más compacto en móvil que una fila
+ * de pestañas.
  */
 export function SelectorSeccion({
   pestanas,

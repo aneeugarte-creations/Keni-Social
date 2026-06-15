@@ -1,11 +1,8 @@
 /**
  * Selector de marca compartido. Un único componente y un único centinela
  * (`MARCA_TODAS`, definido en `./selectores`) para representar "todas las
- * marcas" / "sin marca concreta".
- *
- * Reemplaza los selectores de marca dispersos que usaban tres centinelas
- * distintos. El catálogo de marcas SIEMPRE llega de la API; aquí solo se
- * renderiza, sin hardcodear ids.
+ * marcas" / "sin marca concreta". El catálogo de marcas SIEMPRE llega de la API;
+ * aquí solo se renderiza, sin hardcodear ids.
  *
  * - `incluirTodas` (por defecto `true`): añade la opción "Todas". Cuando el
  *   campo es obligatorio (p. ej. Generar copy) se pasa `false`.

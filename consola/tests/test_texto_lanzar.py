@@ -207,9 +207,9 @@ def test_lanzar_prompt_piezas_con_redes_crea_spec_copy(encolado):
     from keni_consola.dominio import generar
 
     assert generar.INSTRUCCION_SIN_EMOJIS not in encolado["prompt"]
-    # POLÍTICA REVISADA: el camino COPY (piezas) es SALIDA ESTRUCTURADA (se parsea a piezas por
-    # red; el usuario no ve la salida cruda), así que NO veta la web por-callsite. El `endurecer`
-    # del spec queda en None; la única veta es la GLOBAL `Bash Write Edit` (en `_argv_claude`).
+    # El camino COPY (piezas) es SALIDA ESTRUCTURADA (se parsea a piezas por red; el usuario no
+    # ve la salida cruda), así que NO veta la web por-callsite. El `endurecer` del spec queda en
+    # None; la única veta es la GLOBAL `Bash Write Edit` (en `_argv_claude`).
     assert encolado["spec"]["endurecer"] is None
 
 
@@ -303,8 +303,8 @@ def test_lanzar_prompt_piezas_sin_redes_cae_a_identidad(encolado):
     reg = texto_lanzar.lanzar(prompt_id=prompt.id, marca=_MARCA)
     assert reg["tipo"] == "prompt"
     assert encolado["spec"]["procesar"]["kind"] == jobspec.PROC_PROMPT
-    # El camino IDENTIDAD NO endurece la web (igual que hoy): puede enrutar prompts de
-    # INVESTIGACIÓN (brief-tendencias) que la usan legítimamente.
+    # El camino IDENTIDAD NO endurece la web: puede enrutar prompts de INVESTIGACIÓN
+    # (brief-tendencias) que la usan legítimamente.
     assert encolado["spec"]["endurecer"] is None
 
 

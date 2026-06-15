@@ -12,9 +12,6 @@ import type {
 } from "@/types";
 
 export const apiActividad = {
-  // --- Actividad IA unificada (generaciones + runs de agentes) ---
-  // Solo lectura: el backend fusiona ambas fuentes y expone sus agregados (totales +
-  // por tipo + por día). El feed por items se retiró: la actividad se mira en Pipelines.
   actividadAgregados: (params: { marca?: string } = {}, signal?: AbortSignal) =>
     peticion<ActividadAgregados>(
       `/actividad/agregados${query({ marca: params.marca })}`,

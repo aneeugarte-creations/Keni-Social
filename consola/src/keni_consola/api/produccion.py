@@ -156,8 +156,6 @@ async def dia(request: Request) -> Response:
     piezas.sort(key=lambda p: p["creado"], reverse=True)
 
     # Objetivo: el MISMO cupo que regula la admisión (0/{} = sin cupo configurado -> None).
-    # El modelo por franjas se eliminó (feat(maquina)!): ahora es cupo diario simple +
-    # plan editorial por categoría (`plan_dia`).
     objetivo = {
         "dia": config.cupo_dia(marca) or None,
         "plan": config.plan_dia(marca) or None,

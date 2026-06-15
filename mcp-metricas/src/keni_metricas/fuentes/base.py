@@ -7,10 +7,9 @@
   reales por marca.
 
 `engagement_pct()` es la fórmula única de engagement; toda métrica/pieza (real, de
-muestra, agregada o de reporte) la usa. La definición vive AHORA en
-`keni_shared.metricas` (H3/E1), la capa más baja del monorepo, para que la consola
-también la importe de la misma fuente; aquí se reexporta para no tocar los ~10
-sitios de keni-metricas que ya la importan de `.fuentes.base` (antes #97 / H4).
+muestra, agregada o de reporte) la usa. Se importa de `keni_shared.metricas` (la capa
+más baja del monorepo) y se reexporta aquí para mantener compatibilidad con los sitios
+existentes que la importan de este módulo.
 
 `AdaptadorBase` centraliza el boilerplate que los 4 adaptadores reales
 (meta/youtube/x/tiktok) repetían: el guard `disponible()`, el header `Bearer`,

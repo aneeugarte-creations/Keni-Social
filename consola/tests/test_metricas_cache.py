@@ -62,12 +62,7 @@ def test_refrescar_combo_actualiza_generado_en(entorno, monkeypatch):
 
 
 def test_refrescar_combo_marca_concreta_incluye_listado(entorno):
-    """Una marca CONCRETA refresca también el listado de piezas (lo que leen las Campañas).
-
-    Regresión: el listado solo se llenaba por lazy-fill y nunca se refrescaba, así que la
-    primera versión cacheada (sin `texto`/reels tras un deploy) se servía para siempre y la
-    campaña de hashtag quedaba en cero. El daemon debe mantenerlo fresco por marca.
-    """
+    """Una marca CONCRETA refresca también el listado de piezas (lo que leen las Campañas)."""
     mc.refrescar_combo("semana", "claro_sports")
     entrada = repos.leer_metricas_cache(mc._clave(mc.TIPO_PIEZAS_LISTADO, "semana", "claro_sports"))
     assert entrada is not None
@@ -75,25 +70,14 @@ def test_refrescar_combo_marca_concreta_incluye_listado(entorno):
 
 
 def test_refrescar_combo_todas_incluye_el_combo_completo(entorno):
-    """`marca=None` ("todas") también refresca el combo COMPLETO (listado y series).
-
-    Regresión del dashboard global congelado: la alerta de ingesta lee el listado de
-    "todas" y el gráfico de seguidores sin filtro lee la serie global; al quedar ambos
-    fuera del barrido se llenaban una vez por lazy-fill y servían PARA SIEMPRE su primera
-    versión (piezas de hace semanas como "última pieza", precipicios viejos en el chart).
-    """
+    """`marca=None` ("todas") también refresca el combo COMPLETO (listado y series)."""
     mc.refrescar_combo("semana", None)
     for tipo in (mc.TIPO_REPORTE, mc.TIPO_PIEZAS_LISTADO, mc.TIPO_SEGUIDORES, mc.TIPO_DESGLOSE):
         assert repos.leer_metricas_cache(mc._clave(tipo, "semana", None)) is not None, tipo
 
 
 def test_clave_lleva_version_de_esquema(entorno):
-    """La clave lleva `v{N}:`: subir la versión invalida los payloads de forma vieja.
-
-    Regresión "Piezas publicadas: 0": un reporte cacheado ANTES de añadir el campo
-    `publicaciones` se servía tal cual y el serializador rellenaba el hueco con 0. Con la
-    versión en la clave, el payload viejo simplemente deja de leerse y se recalcula.
-    """
+    """La clave lleva `v{N}:`: subir la versión invalida los payloads de forma vieja."""
     assert mc._clave(mc.TIPO_REPORTE, "mes", None).startswith(f"v{mc._VERSION_ESQUEMA}:")
     # Una entrada escrita con OTRO esquema (clave sin versión) no la lee nadie.
     repos.guardar_metricas_cache(

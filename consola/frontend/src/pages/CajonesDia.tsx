@@ -129,7 +129,7 @@ const CAJONES: DescripcionCajon[] = [
 
 // ── Utilidades ────────────────────────────────────────────────────────────────
 
-/** Hoy en ISO YYYY-MM-DD, en zona CDMX (antes era el día UTC, que se adelantaba de noche). */
+/** Hoy en ISO YYYY-MM-DD, en zona CDMX. */
 function hoyIso(): string {
   return hoyCDMX();
 }

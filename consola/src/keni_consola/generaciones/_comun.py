@@ -73,8 +73,6 @@ ESTADO_COMPLETADO = "completado"
 ESTADO_ERROR = "error"
 # Fases de PROGRESO (en que etapa va el run, no cuanto falta). Re-exportadas del dominio
 # (`stream`), unica fuente. La UI las pinta ("Razonando…" → "Escribiendo…" → "Terminando…").
-# Migracion suave: registros viejos sin `fase` la traen como "" (la UI cae al comportamiento
-# previo); por eso NO sube la version de esquema YAML (anadir un campo opcional vacio es compat).
 FASE_RAZONANDO = stream.FASE_RAZONANDO
 FASE_GENERANDO = stream.FASE_GENERANDO
 FASE_COMPLETADO = stream.FASE_COMPLETADO
@@ -138,8 +136,7 @@ def proceso_de(reg: dict[str, Any]) -> str:
     return PROCESO_PRODUCCION
 
 # Wall-timeout (segundos) de un trabajo de claude en background. Override por
-# `KENI_CLAUDE_TIMEOUT` (centralizado en `config.claude_timeout`). Sustituye al viejo
-# timeout de 180 s de la peticion sincrona.
+# `KENI_CLAUDE_TIMEOUT` (centralizado en `config.claude_timeout`).
 
 # Registro EN MEMORIA de trabajos en vuelo (id -> handle). El YAML es la fuente de
 # verdad para el sondeo; esto solo permite inspeccionar/cancelar localmente.

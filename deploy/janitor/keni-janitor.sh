@@ -26,7 +26,7 @@ LOG="${LOG:-/var/log/keni-janitor.log}"
 # generaciones del volumen `keni-data`). Borra por MTIME mas viejo que GEN_DIAS dias (def 30,
 # igual que el default del daemon). OFF si GEN_DIR no existe.
 # OJO: el volumen Compose se llama `keni-social_keni-data` (prefijo del proyecto), no
-# `keni-data`; con el default anterior el dir no existia y esta red de seguridad era INERTE.
+# `keni-data`.
 GEN_DIR="${GEN_DIR:-/var/lib/docker/volumes/keni-social_keni-data/_data/keni-social/generaciones}"
 GEN_DIAS="${GEN_DIAS:-30}"
 

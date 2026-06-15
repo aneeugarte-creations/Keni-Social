@@ -18,9 +18,7 @@ se reporta presencia/estado y, como mucho, una PISTA (`····last4`).
     POST   /api/conexiones/metricool/perfiles     -> descubre las marcas (blogId) de un token
 
 Las metricas se consumen VIA Metricool (ADR 0005 §B): NO hay ingesta propia por
-plataforma. La antigua seccion "Redes sociales" (un token global por plataforma que
-alimentaba la fuente `real`/`FuenteCompuesta`) se RETIRO de Conexiones; el plumbing
-de esa fuente sigue en `keni_metricas`, pero ya no se gestiona desde aqui.
+plataforma.
 
 REUTILIZA los helpers de metricas (`leer_config_existente` + `fusionar_config` +
 `escribir_config_atomico`) para escribir el config.toml de forma atomica y segura;
@@ -204,14 +202,6 @@ async def imagen_probar(request: Request) -> Response:
 def _config_existente() -> dict:
     """Lee el config.toml de metricas existente ({} si no existe). Solo lectura."""
     return asistente.leer_config_existente(ruta_config())
-#
-# A diferencia de las redes (un token global por plataforma), Metricool guarda
-# credenciales POR MARCA: en el cliente cada marca es una cuenta Metricool distinta, con
-# su PROPIO user_token (X-Mc-Auth) + user_id + blog_id. Se persisten en
-# `[metricool.marcas.<id>]` del config.toml de metricas, vía los MISMOS helpers
-# del asistente (atomico 0600). `user_token` esta en `asistente.CLAVES_SECRETAS`:
-# nunca se devuelve por la API ni se loguea; del estado solo sale presencia +
-# una PISTA no sensible del user_id (no secreto) y el blog_id.
 
 
 def _marcas_metricool() -> list[tuple[str, str]]:

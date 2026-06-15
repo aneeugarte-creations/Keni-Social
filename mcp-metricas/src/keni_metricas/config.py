@@ -39,8 +39,8 @@ from .schema import Cuenta, Pieza, Plataforma, ResumenMetricas
 FUENTES_VALIDAS: frozenset[str] = frozenset({"muestra", "metricool", "real"})
 
 # Fuente por defecto cuando el config no declara `fuente`: Metricool (la fuente única
-# de pago). Antes era "muestra"; ahora la Consola arranca apuntando a la fuente real y
-# degrada con honestidad a estado vacío si faltan credenciales (no a datos de demo).
+# de pago). La Consola arranca apuntando a la fuente real y degrada con honestidad a
+# estado vacío si faltan credenciales (no a datos de demo).
 FUENTE_DEFECTO: str = "metricool"
 
 # Env var que habilita la fuente `real` (adaptadores por plataforma) como fallback

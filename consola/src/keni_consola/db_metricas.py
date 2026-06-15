@@ -177,7 +177,7 @@ def registrar_snapshot_pieza(
     )
     valores = [
         # hex COMPLETO (32): esta tabla acumula una fila por pieza por refresco (volumen alto
-        # y sostenido); con hex[:12] el riesgo de colision de id dejaba de ser teorico.
+        # y sostenido).
         uuid.uuid4().hex,
         pieza_id,
         marca or "",
@@ -295,8 +295,7 @@ def podar_snapshots_piezas(retencion_dias: int, ahora_iso: str) -> int:
     except (TypeError, ValueError):
         return 0
     # Corte en el CANON (UTC sin offset, segundos): el `ts` comparado es TEXT y la
-    # comparacion es lexicografica; un corte con "+00:00"/microsegundos (segun lo que
-    # pasara el llamante) ordenaba mal contra los ts canonicos y podaba de menos/mas.
+    # comparacion es lexicografica.
     corte_iso = iso_utc(corte)
     con = _conectar()
     try:
@@ -334,8 +333,8 @@ def leer_metricas_cache(clave: str) -> dict[str, Any] | None:
         return None
     try:
         bruto = fila["payload"]
-        # Tras migrar `payload` a `jsonb` (ADR 0012), `dict_row` lo devuelve ya como dict/list;
-        # en BDs aun TEXT (o tests con str), se deserializa. Un valor corrupto -> None (= ausencia).
+        # `dict_row` devuelve como dict/list cuando es jsonb; en BDs TEXT (o tests con str),
+        # se deserializa. Un valor corrupto -> None (= ausencia).
         payload = bruto if isinstance(bruto, (dict, list)) else json.loads(bruto)
     except (ValueError, TypeError):
         return None

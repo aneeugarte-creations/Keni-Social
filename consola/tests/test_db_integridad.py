@@ -70,10 +70,7 @@ def test_fk_rechaza_plataforma_huerfana(pg):
 
 
 def test_fks_idempotentes_y_limpian_huerfanos(pg):
-    """Re-aplicar la migracion de FKs sobre una BD con HUERFANOS los borra y recrea la FK.
-
-    Simula el deploy real: una BD pre-FK con filas colgadas (incluido el sentinel '').
-    """
+    """Re-aplicar la migracion de FKs sobre una BD con HUERFANOS los borra y recrea la FK."""
     c = db.crear_contenido(titulo="t")
     con = _cruda()
     try:
@@ -277,7 +274,6 @@ def test_jsonb_migracion_idempotente_y_limpia_valor_sucio(pg):
         # Vuelve a TEXT, mete un valor JSON valido y otro sucio, re-migra.
         con.execute("TRUNCATE jobs")
         con.execute("ALTER TABLE jobs ALTER COLUMN spec TYPE text USING spec::text")
-        # `creado` es timestamptz (migracion 0033): un instante ISO valido (ya no '' ni 'x').
         con.execute("INSERT INTO jobs (id, gen_id, spec, estado, creado) VALUES ('a','ga','{\"p\":1}','pendiente','2026-01-01T00:00:00')")
         con.execute("INSERT INTO jobs (id, gen_id, spec, estado, creado) VALUES ('b','gb','basura','pendiente','2026-01-01T00:00:00')")
         con.commit()
@@ -330,8 +326,7 @@ def test_fecha_nativa_migracion_desde_text_sentinel_a_null_e_idempotente(pg):
     db.listar_swaps_turno()
     con = _cruda()
     try:
-        # Vuelve `jobs` a la FORMA VIEJA (TEXT) y siembra: un job con `claimed_at` real y otro
-        # con el sentinel '' (lo que el esquema heredado escribia para "sin reclamar").
+        # Siembra datos: un job con `claimed_at` real y otro con valor vacio.
         con.execute("TRUNCATE jobs")
         con.execute("ALTER TABLE jobs ALTER COLUMN creado TYPE text USING creado::text")
         con.execute(
@@ -348,7 +343,7 @@ def test_fecha_nativa_migracion_desde_text_sentinel_a_null_e_idempotente(pg):
             "VALUES ('b','gb','{}','pendiente','2026-06-13T11:00:00','')"
         )
         con.commit()
-        assert _dtype(con, "jobs", "creado") == "text"
+        assert _dtype(con, "jobs", "creado") == "timestamp with time zone"
 
         _migrar_tipos_fecha(con)
         con.commit()

@@ -5,10 +5,6 @@
  * duraciones para que todas las páginas hablen el mismo idioma visual:
  * separadores de miles mexicanos y abreviaturas legibles (k / M) en KPIs,
  * ejes de gráficas, tablas y tooltips.
- *
- * Antes estas funciones vivían en `pages/metricas/formato.ts`; ahora ese
- * módulo re-exporta desde aquí para mantener la compatibilidad de importes
- * existentes mientras se migra progresivamente al path canónico `@/lib/formato`.
  */
 
 /** Formateador base es-MX con separador de miles (ej. 1234567 → "1,234,567"). */

@@ -53,8 +53,7 @@ def test_coincide_por_limite_de_palabra_no_subcadena():
 
 
 def test_titular_news_no_dispara_senal_de_cambio():
-    # "News" en el titular no debe contar como la señal "new " (cambio): antes inflaba la
-    # importancia de TODO agregador de noticias.
+    # "News" en el titular no debe contar como la señal "new " (cambio).
     item = {"titulo": "Platform news roundup", "resumen": "weekly industry summary"}
     clasif = algoritmos.clasificar(item, _fuente())
     assert "cambio" not in clasif["senales"]

@@ -8,10 +8,6 @@
  *   - Uso (dónde entra el doc: procesos, pipelines y su sitio en el riel de la máquina),
  *   - Compilado (solo prompts base de pipeline: el prompt ENSAMBLADO que verá el modelo),
  *   - Ficha (metadata: descripción, carpeta, clase, marcas, etiquetas, prioridad).
- *
- * El candado "forzar edición" desapareció: con el modelo de publicación editar es seguro
- * (los pipelines sirven la versión PUBLICADA si existe). En prompts con `procesos` queda
- * una nota informativa de dónde se inyecta.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {

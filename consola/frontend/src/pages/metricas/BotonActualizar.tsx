@@ -65,10 +65,6 @@ export function useActualizarMetricas({
     }
   }, [estadoQuery.data, solicitado, queryClient]);
 
-  // `disparando` cubre el hueco entre el click y el aterrizaje del POST: el polling NO
-  // arranca hasta que el backend confirmó el disparo. Antes se fijaba `solicitado` ANTES
-  // del POST y el primer poll podía ver `corriendo=false` (refresco aún no arrancado) y
-  // mostrar "Actualizado" con datos viejos.
   const [disparando, setDisparando] = React.useState(false);
 
   const actualizar = React.useCallback(async () => {
@@ -81,7 +77,6 @@ export function useActualizarMetricas({
       queryClient.removeQueries({ queryKey: ["metricas", "estado"] });
       setSolicitado(base); // ahora sí: el refresco está en marcha, empieza el polling
     } catch (e) {
-      // El disparo falló: avisa (antes se silenciaba) y no te quedes polleando.
       toast.error(mensajeError(e));
     } finally {
       setDisparando(false);

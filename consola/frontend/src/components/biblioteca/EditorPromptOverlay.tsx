@@ -1,14 +1,3 @@
-/**
- * OVERLAY «Editar prompt»: abre el editor de un documento de la Biblioteca ENCIMA de la
- * página actual, sin navegar (decisión «in-place + biblioteca»). Antes el lápiz de cada
- * etapa hacía deep-link a `/contenido/texto/documentos?doc=…` y te SACABA del cockpit;
- * ahora reutiliza el MISMO editor (`DetalleDocumento`) embebido dentro de un diálogo.
- *
- * `DetalleDocumento` ya recibe el doc por prop (`docId`) y no depende del query `?doc=`
- * ni del routing de la página Texto: aquí solo lo montamos dentro del diálogo. La Biblioteca
- * (página Texto) sigue usándolo igual vía `?doc=` como superficie de edición profunda; este
- * overlay es para el día a día desde la máquina.
- */
 import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
 

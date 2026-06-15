@@ -1,11 +1,10 @@
 /**
  * ChipInvestigacion — indicador COMPACTO del loop de Investigación (ADR 0011, Fase 3).
  *
- * Sustituye al antiguo panel «Monitor de investigación» embebido en la página de Noticias
- * (que duplicaba la vista del Monitor): un chip con los jobs del loop en el pool compartido
- * («Investigación: N en curso · M en cola», del MISMO snapshot `GET /api/actividad/cola`)
- * que enlaza a la página Agentes prefiltrada (`/maquina/agentes?proceso=investigacion`), donde
- * viven la vista completa (tablas, serie, economía) y la operación de la cola.
+ * Un chip con los jobs del loop en el pool compartido («Investigación: N en curso · M en cola»,
+ * del MISMO snapshot `GET /api/actividad/cola`) que enlaza a la página Agentes prefiltrada
+ * (`/maquina/agentes?proceso=investigacion`), donde viven la vista completa (tablas, serie,
+ * economía) y la operación de la cola.
  */
 import { useQuery } from "@tanstack/react-query";
 import { Microscope } from "lucide-react";
@@ -20,7 +19,6 @@ export function ChipInvestigacion() {
     queryFn: ({ signal }) => api.cola({}, signal),
     refetchInterval: INTERVALO_VIVO_MS,
   });
-  // Back anterior (sin desglose por proceso): sin chip, para no mentir con ceros.
   const inv = cola.data?.por_proceso?.investigacion;
   if (!inv) return null;
   return (

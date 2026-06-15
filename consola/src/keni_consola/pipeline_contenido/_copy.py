@@ -45,11 +45,9 @@ def lanzar_copy_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | None) -
     omite (sin parámetros / marca inválida).
 
     DEDUP AL ÉXITO (no al lanzar): `copy_pendiente` lo limpia el POST-PROCESADO del copy al
-    completar con éxito (`limpiar_pendiente=True`), no este lanzador. Antes se limpiaba tras
-    encolar y un copy FALLIDO jamás se reintentaba (el tema quedaba huérfano para siempre).
-    Mientras el job está EN VUELO no hay doble lanzamiento: la clave de idempotencia de
-    `dominio.generar.lanzar` devuelve el run en curso, y `temas_para_copy` además excluye los
-    temas que ya tienen piezas.
+    completar con éxito (`limpiar_pendiente=True`), no este lanzador. Mientras el job está EN
+    VUELO no hay doble lanzamiento: la clave de idempotencia de `dominio.generar.lanzar` devuelve
+    el run en curso, y `temas_para_copy` además excluye los temas que ya tienen piezas.
     """
     tema_id = (tema.get("id") or "").strip()
     marca = (tema.get("marca") or "").strip()
@@ -121,10 +119,10 @@ def lanzar_copy_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | None) -
 def temas_para_copy(marca: str | None = None) -> list[dict[str, Any]]:
     """Temas listos para CD: QA `no_verificado` (o `saltada`), con `copy_pendiente` y SIN copy aún.
 
-    La guarda de DOS niveles (copy_pendiente no vacío + sin piezas) hace la fase CD idempotente
-    y auto-curativa: un tema cuyo copy ya se lanzó no se relanza aunque su `copy_pendiente` no se
-    hubiera limpiado (p. ej. tras un fallo). Best-effort. Un tema con QA `saltada` (etapa QA
-    desactivada para la marca) fluye a CD igual que uno `no_verificado`; un `problema` sí bloquea.
+    La guarda de DOS niveles (copy_pendiente no vacío + sin piezas) hace la fase CD idempotente:
+    un tema cuyo copy ya se lanzó no se relanza aunque su `copy_pendiente` no se hubiera limpiado.
+    Un tema con QA `saltada` (etapa QA desactivada para la marca) fluye a CD igual que uno
+    `no_verificado`; un `problema` sí bloquea.
     """
     listos: list[dict[str, Any]] = []
     for tema in temas_pipeline(marca):
@@ -141,29 +139,24 @@ def temas_para_copy(marca: str | None = None) -> list[dict[str, Any]]:
 
 
 def temas_autogen_sin_copy() -> list[dict[str, Any]]:
-    """Temas del news-pool/tablero sin copy que la etapa de copy debe redactar (FUNDE autogen_copy).
+    """Temas del news-pool/tablero sin copy que la etapa de copy debe redactar.
 
     La etapa de copy del pipeline es el ÚNICO motor de copy: además de los temas que el propio
     pipeline ingiere (origen `pipeline`, vía QA→CD), también redacta los temas que las FUENTES
     de noticias meten al tablero (`estados.ORIGENES_AUTOGEN`: import-calendario, radar-auto,
-    radar, rss, equipo) y que aún no tienen copy. FUENTE ÚNICA de la selección del news-pool (ya
-    no hay un `autogen_copy.topics_pendientes` paralelo: aquí vive la selección, en
-    `autogen_copy` solo el LANZADOR `lanzar_para_topic` + el dedup por etiqueta que esta reutiliza).
-    Reglas:
+    radar, rss, equipo) y que aún no tienen copy. La selección vive en esta función; en
+    `autogen_copy` solo el LANZADOR `lanzar_para_topic` + el dedup por etiqueta. Reglas:
       - clase 'contenido', origen en `ORIGENES_AUTOGEN`, estado != 'hecha',
       - con marca válida y título no vacío,
       - per-marca: salta las marcas apagadas a mano para «Generar copy» (`ENV_PIPELINE_COPY`),
       - dedup: salta los ya encolados (etiqueta `autogen`, vía `autogen_copy.ids_ya_generados`) y
         los que ya tienen copy.
-    SIN cap propio: el backpressure lo pone la cola de generación (`ColaLlenaError` corta la fase
-    en `ejecutar_cd`; el siguiente tick retoma donde quedó gracias al dedup por etiqueta).
-    Best-effort: una lectura fallida devuelve []. Import diferido de `autogen_copy` para reusar su
-    dedup por etiqueta sin acoplar la carga del módulo.
+    SIN cap propio: el backpressure lo pone la cola de generación. Best-effort: una lectura
+    fallida devuelve [].
     """
     from .. import autogen_copy
 
     try:
-        # WHERE empujado a SQL (antes: tabla completa + filtro en Python por CADA barrido).
         items = repos.listar_contenido_origenes(
             sorted(ORIGENES_AUTOGEN), excluir_estado="hecha"
         )

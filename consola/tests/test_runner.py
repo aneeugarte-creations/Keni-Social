@@ -1,8 +1,5 @@
 """dominio.runner: argv unico (con --max-turns) + semaforo de concurrencia (#116).
 
-Antes habia dos lanzadores `claude -p` duplicados; los runs de agente NO aplicaban
-`--max-turns` y nada topaba la concurrencia. Estos tests fijan ese contrato.
-
 ANTI-CUELGUE: todo acotado (Barrier/Event/Timer/join con timeout) + `pytest-timeout`
 de backstop. Nada puede esperar para siempre.
 """
@@ -104,9 +101,7 @@ def test_on_encolado_se_llama_si_hay_cola(monkeypatch):
 def test_admitir_siempre_acepta_sin_tope_de_cola(monkeypatch):
     """La cola NO tiene tope: con 1 slot ocupado, admitir N excedentes NUNCA rechaza.
 
-    Antes `admitir()` rechazaba con `ColaLlenaError` pasado `max_jobs+max_cola`. Ahora la
-    cola no tiene tope: el exceso simplemente queda admitido (esperando un slot), nada se
-    rechaza por tamano de cola. El unico limite real lo impone el semaforo de `slot()`.
+    El unico limite real lo impone el semaforo de `slot()`.
     """
     monkeypatch.setenv("KENI_MAX_JOBS", "1")
     suelta = threading.Event()

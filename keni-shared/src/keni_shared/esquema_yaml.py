@@ -1,15 +1,7 @@
 """Versionado de esquema de los YAML del monorepo (#125): `version` por fichero.
 
-PROBLEMA: ningun YAML llevaba marca de version de esquema. Un cambio incompatible
-en la forma de un fichero obligaria a una migracion heuristica sobre datos reales
-editados a mano (fragil). Aqui esta la fuente UNICA de "que version tiene cada
-tipo de fichero" y "como subir de una version a la siguiente".
-
-DECISION (issue #125): `version: <int>` como clave top-level DENTRO de cada YAML;
-upgrade PEREZOSO en lectura via un registro de migraciones por tipo, reescrito solo
-al siguiente guardado (sin reescritura masiva al arranque). La version 1 == la forma
-ACTUAL: hoy todo tipo esta en 1 y `MIGRACIONES` esta vacio, asi que `migrar` solo
-ESTAMPA `version: 1` sobre ficheros legados al leerlos/guardarlos.
+`version: <int>` como clave top-level DENTRO de cada YAML; upgrade PEREZOSO en lectura
+via un registro de migraciones por tipo, reescrito solo al siguiente guardado.
 
 USO (cada modulo de dominio que (de)serializa YAML):
   - lector:  `datos = migrar(tipo, yaml.safe_load(texto))` tras cargar.
@@ -19,10 +11,8 @@ ANADIR UNA MIGRACION (cuando cambie la forma de un tipo, p.ej. de la version N a
   1. Subir `VERSIONES[tipo]` a N+1.
   2. Anadir a `MIGRACIONES[tipo]` una funcion `dict -> dict` que transforma de la version
      N a la N+1, en la posicion N-1 (la lista[0] sube 1->2, la lista[1] sube 2->3, ...).
-     La 0->1 es siempre identidad (solo estampa la version), por eso NO se registra: la
-     primera migracion que se anade es la 1->2.
+     La 0->1 es siempre identidad (solo estampa la version), por eso NO se registra.
   3. La migracion recibe un dict ya copiado; debe devolver el dict transformado.
-     Idempotencia y orden los garantiza `migrar`.
 
 Capa MAS BAJA (en `keni_shared`): sin dependencias de keni-metricas ni de la consola,
 para que ambos paquetes importen de la misma fuente.

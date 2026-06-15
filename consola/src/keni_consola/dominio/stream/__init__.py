@@ -1,22 +1,20 @@
 """Dominio STREAM: parseo del stream/resultado de `claude`, metricas, presupuesto y verdicto.
 
-Logica de negocio PURA (sin HTTP, sin subprocess, sin disco) extraida de `api/skills.py`
-(hallazgo H6): aqui viven el acumulador del stream NDJSON, el parseo del JSON de
-resultado, el calculo del argumento de presupuesto, la derivacion del verdicto a partir
-de los simbolos ✅/⚠️/❌ y la limpieza determinista de emojis del copy. Tambien el
-reparto de la salida cruda en piezas por red (via bloque ```json o, como fallback, por
-encabezados de plataforma) y la derivacion del titulo.
+Logica de negocio PURA (sin HTTP, sin subprocess, sin disco): aqui viven el acumulador del
+stream NDJSON, el parseo del JSON de resultado, el calculo del argumento de presupuesto,
+la derivacion del verdicto a partir de los simbolos ✅/⚠️/❌ y la limpieza determinista
+de emojis del copy. Tambien el reparto de la salida cruda en piezas por red (via bloque
+```json o, como fallback, por encabezados de plataforma) y la derivacion del titulo.
 
 Es la capa que consumen tanto `api.skills` (orquestacion HTTP) como `generaciones`
-(trabajo en segundo plano), SIN crear el ciclo dominio↔api que antes obligaba a imports
-perezosos en `generaciones.py`: este modulo no importa de `api/` ni de `generaciones`.
+(trabajo en segundo plano). Este modulo no importa de `api/` ni de `generaciones`.
 
-FACADE: este paquete trocea el antiguo `stream.py` (~976 LOC) en areas por
-responsabilidad —`_comun` (excepcion + conversiones), `invocacion` (argv/metricas/
-resultado/acumulador), `parser` (reparto en piezas por red) y `texto` (verdicto/emojis/
-titulo/redes)— y re-exporta aqui EXACTAMENTE la misma superficie publica (mas los pocos
-nombres privados que terceros referencian, p. ej. `_RE_BLOQUE_JSON`), de modo que
-`from ..dominio import stream` y `stream.<nombre>` siguen funcionando sin cambios.
+FACADE: este paquete trocea `stream.py` en areas por responsabilidad —`_comun` (excepcion +
+conversiones), `invocacion` (argv/metricas/resultado/acumulador), `parser` (reparto en piezas
+por red) y `texto` (verdicto/emojis/titulo/redes)— y re-exporta aqui EXACTAMENTE la misma
+superficie publica (mas los pocos nombres privados que terceros referencian, p. ej.
+`_RE_BLOQUE_JSON`), de modo que `from ..dominio import stream` y `stream.<nombre>` siguen
+funcionando sin cambios.
 """
 
 from __future__ import annotations

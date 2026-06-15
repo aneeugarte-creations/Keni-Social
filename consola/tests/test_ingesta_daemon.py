@@ -152,11 +152,7 @@ def test_barrido_aplica_backoff_cuando_el_feed_falla(monkeypatch):
 
 
 def test_barrido_sin_feeds_vencidos_corre_los_pasos_post_rss(monkeypatch):
-    """Sin feeds RSS vencidos, el barrido NO sondea nada pero los pasos post-RSS corren igual.
-
-    Antes un `return` temprano dejaba los items de Trends/agencias SIN clusterizar
-    indefinidamente si ningún RSS estaba vencido (Trends inserta por su propio daemon).
-    """
+    """Sin feeds RSS vencidos, el barrido NO sondea nada pero los pasos post-RSS corren igual."""
     _parchear_comun(monkeypatch, feeds=[], fetcher=lambda _u: _FEED_OK)
     llamados: list[str] = []
     monkeypatch.setattr(ingesta_daemon, "paso_agencias",

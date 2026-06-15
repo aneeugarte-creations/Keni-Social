@@ -8,8 +8,7 @@ cruzando por los hashtags presentes en el caption de cada pieza (`Pieza.texto`, 
 ÍNTEGRO: los hashtags suelen ir al final y se perderían en el `titulo` truncado). Las
 campañas son MULTIMARCA: agregan las piezas de todas sus marcas.
 
-No monitoriza piezas sueltas ni guarda snapshots propios (eso era el viejo apartado de
-publicaciones comerciales, retirado): reúsa lo que el dashboard de Métricas ya descarga.
+Reúsa lo que el dashboard de Métricas ya descarga.
 Las cifras salen de la fuente activa de Métricas (Metricool), igual que el resto
 de la consola; la procedencia viaja en `fuente`.
 """

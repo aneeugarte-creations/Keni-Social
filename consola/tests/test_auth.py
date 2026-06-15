@@ -77,9 +77,8 @@ def test_bootstrap_es_idempotente(entorno, monkeypatch):
 
 def test_bootstrap_sin_pass_no_crea_admin_ni_loguea_contrasena(entorno, monkeypatch, caplog):
     """Hardening 2026-06: sin KENI_CONSOLA_ADMIN_PASS NO se crea admin y NUNCA se loguea
-    una contrasena (antes se generaba una aleatoria y se MOSTRABA en el log: una
-    credencial valida en claro que sobrevive en `docker logs`). El aviso debe decir
-    como arreglarlo (fijar la env o usar el token de mantenimiento con la BD vacia)."""
+    una contrasena en el log. El aviso debe decir como arreglarlo (fijar la env o usar
+    el token de mantenimiento con la BD vacia)."""
     import logging
 
     from keni_consola.observabilidad import NOMBRE_LOGGER

@@ -4,12 +4,11 @@ Cubre: un solo catalogo (no dos) con 5 marcas (el golf NO es marca, es un
 sub-vertical editorial de Claro Sports), traduccion id canonico <-> id_metricas,
 y los helpers de la frontera con metricas.
 
-FUENTE UNICA (H3/E1): el catalogo canonico vive AHORA en `keni_shared.marcas`;
-`keni_consola.marcas` lo REEXPORTA y `keni_metricas` tambien lo importa. Antes
-keni_consola era la fuente y los demas la espejaban con guards; ahora todos
-importan de la misma fuente. Estos tests verifican via el reexport de la consola
-(que es como lo usa su codigo) y, ademas, que la fuente es UNICA de verdad: un
-cambio en keni_shared se ve en consola y en keni_metricas sin tocar espejos.
+FUENTE UNICA (H3/E1): el catalogo canonico vive en `keni_shared.marcas`;
+`keni_consola.marcas` lo REEXPORTA y `keni_metricas` tambien lo importa.
+Estos tests verifican via el reexport de la consola (que es como lo usa su codigo)
+y que la fuente es UNICA de verdad: un cambio en keni_shared se ve en consola y
+en keni_metricas sin tocar espejos.
 """
 
 from __future__ import annotations

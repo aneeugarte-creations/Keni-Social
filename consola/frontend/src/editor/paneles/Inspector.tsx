@@ -37,8 +37,7 @@ export function Inspector({ fuentesExtra = [], onRecortar }: { fuentesExtra?: st
   // Una RÁFAGA de ediciones sobre la misma capa (teclear "1080" = 4 eventos, arrastrar un slider
   // = decenas) cuenta como UN paso de deshacer: instantánea en el PRIMER cambio (no al enfocar,
   // que ensuciaría el redo) + actualizaciones sin registrar — el mismo patrón de coalescencia que
-  // el nudge de flechas en `useAtajosTeclado`. Antes cada pulsación era un paso de historial y
-  // Ctrl+Z deshacía dígito a dígito.
+  // el nudge de flechas en `useAtajosTeclado`.
   const set = (cambios: Partial<Capa>) => {
     const ahora = Date.now();
     const st = store.getState();

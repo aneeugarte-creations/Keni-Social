@@ -173,7 +173,7 @@ def test_fila_a_contenido_plataforma_deriva_imagen_url():
     """`imagen` es el NOMBRE de archivo; el serializador añade `imagen_url` servible.
 
     Pura (sin DB): la UI (feed/preview) debe usar `imagen_url` en un <img>; `imagen`
-    a secas no es navegable. Antes de esto el feed pintaba `src={imagen}` y salía rota.
+    a secas no es navegable.
     """
     fila = {c: "" for c in db_contenido._COLS_CONTENIDO_PLATAFORMA}
     for b in db_contenido._BOOLS_CONTENIDO_PLATAFORMA:
@@ -215,7 +215,7 @@ def test_fila_a_contenido_plataforma_imagen_fuente_fallback():
 
 def test_listar_contenido_plataforma_filtra_por_marca(entorno):
     """El filtro `marca` (denormalizada) se aplica EN SQL: solo viajan las filas de esa
-    marca (antes el tablero traia la tabla entera y filtraba en memoria)."""
+    marca."""
     a = db.crear_contenido(titulo="De UnoTV", marca="unotv")
     b = db.crear_contenido(titulo="De Claro", marca="claro-sports")
     db.crear_contenido_plataforma(contenido_id=a["id"], red="x")

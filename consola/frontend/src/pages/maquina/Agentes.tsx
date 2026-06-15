@@ -626,8 +626,6 @@ export default function Agentes() {
     onSettled: () => setPriorizandoId(null),
   });
 
-  // Deep-link viejo del Monitor (`?tab=salud` = la infra): la infra es ahora /sistema. (Tras
-  // TODOS los hooks, para no variar su orden entre renders.)
   if (crudoTab === "salud") return <Navigate to="/sistema" replace />;
 
   const quitarProceso = () => {

@@ -14,8 +14,6 @@ from ._comun import (
 #
 # En el Excel cada HOJA evergreen ("Álvaro Fidalgo", "Real Oviedo", "Anfitriones", "PATY
 # CANTU", "MUNDIAL", "LA SELECCIÓN EN TUS MANOS", "IDEAS SIN DERECHOS") es un PROGRAMA.
-# Hasta ahora `rota_piezas.programa` era texto libre; pasamos a un catalogo con color y
-# fechas de campana (inicio/fin) para que la UI pueda colorear y filtrar la parrilla.
 #
 # IMPORTANTE: las piezas siguen referenciando al programa POR NOMBRE (no por id) para que
 # una pieza huerfana de un programa borrado siga apareciendo en la parrilla con su texto

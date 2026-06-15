@@ -1,15 +1,8 @@
 """API Aprobacion de PUBLICACIONES (#9): cola de revision, decision y programacion.
 
-CONSOLIDACION (aprobacion unica): este modulo YA NO tiene un flujo de aprobacion propio.
-La aprobacion de una publicacion es ahora la MISMA cadena multinivel del tablero de
-contenido (`api/colaboracion.py` + `dominio/colaboracion.py`), porque una publicacion ES
-una fila `contenido_plataforma` (`es_publicacion=1`): su id es el `plataforma_id`. Estos
-endpoints se conservan por RETROCOMPAT (quien los llame sigue funcionando), pero por dentro
-FORWARDEAN a la cadena:
-
   - GET  /api/aprobacion/cola                  -> piezas en revision (sin cambios; lectura).
   - POST /api/aprobacion/{id}/enviar-a-revision -> crea una cadena SIMPLE (1 nivel) y deja
-        la pieza `en_revision` (equivale a la vieja transicion borrador->en_revision).
+        la pieza `en_revision`.
   - POST /api/aprobacion/{id}/aprobar           -> DECIDE el nivel actual de la cadena como
         aprobado; si la cadena queda completa, la pieza pasa a `aprobado`.
   - POST /api/aprobacion/{id}/rechazar          -> DECIDE el nivel actual como rechazado;

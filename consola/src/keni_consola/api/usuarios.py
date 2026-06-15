@@ -11,7 +11,7 @@ Endpoints (todos bajo `/api/usuarios`, CONTRATO con el frontend):
                                       nombre?, manager_id?, marcas?} -> 200.
   - DELETE /api/usuarios/{id}       -> 204.
 
-PATCH (ampliacion "feat/roles-marcas"): ademas de rol/password, el admin puede actualizar
+PATCH: ademas de rol/password, el admin puede actualizar
 `cargo` (allowlist `CARGOS_USUARIO`), `cobertura` (bool) y `marcas` (lista de ids canonicos
 del catalogo de `keni_shared.marcas`). Las marcas se REEMPLAZAN al conjunto enviado (lista
 vacia = desasignar todas). Cada valor invalido devuelve 400 con el mensaje accionable.
@@ -23,7 +23,7 @@ GUARDAS de integridad (no quedarse sin acceso de admin):
 
 Autorizacion (#150): exige una SESION de un usuario REAL con rol admin. El middleware
 deja ese usuario en `request.state.usuario`. El TOKEN de mantenimiento
-(`request.state.auth_por_token`) YA NO cuenta como admin: por si solo no puede listar,
+(`request.state.auth_por_token`) NO cuenta como admin: por si solo no puede listar,
 modificar ni borrar usuarios -> 403. La UNICA excepcion es el BOOTSTRAP DE RECUPERACION:
 crear el PRIMER admin cuando la BD no tiene NINGUN usuario (POST con rol admin). Es un
 arranque acotado, no poder admin general, y queda registrado como mantenimiento.

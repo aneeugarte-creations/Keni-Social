@@ -5,7 +5,6 @@ import type { ObjetoS3 } from "@/types";
 import type { ClaveOrden, OrdenS3 } from "./tipos";
 
 // Auto-refresco de los paneles: cadencias ÚNICAS de la consola (`@/lib/refresco`).
-// Se re-exporta con el nombre histórico para no tocar a todos los consumidores.
 export { INTERVALO_PANEL_MS as INTERVALO_RECURSOS_MS } from "@/lib/refresco";
 
 /** Bytes → cadena legible (GB/MB/KB). 0 si no hay dato. */

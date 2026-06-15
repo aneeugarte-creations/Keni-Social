@@ -1,5 +1,5 @@
 // Constantes, helpers y componentes pequeños COMPARTIDOS por las vistas de la rota
-// (calendario / mis turnos / cambios y ausencias). Partido mecánicamente de pages/Rota.tsx.
+// (calendario / mis turnos / cambios y ausencias).
 import { useMutation } from "@tanstack/react-query";
 import {
   BellRing,
@@ -154,8 +154,7 @@ export const PRESENTACION_AUSENCIA: Record<
 
 export function formatearFechaCorta(s: string): string {
   if (!s) return "";
-  // Convención de lib/fecha.ts: anclar el día a mediodía UTC y formatear en CDMX
-  // (antes: parse T00:00:00 en zona local del navegador, a diferencia del resto).
+  // Convención de lib/fecha.ts: anclar el día a mediodía UTC y formatear en CDMX.
   const d = new Date(`${s}T12:00:00Z`);
   if (Number.isNaN(d.getTime())) return s;
   return d.toLocaleDateString("es-MX", {
@@ -229,9 +228,7 @@ export function LeyendaCobertura() {
 }
 
 /**
- * Icono "?" con popover que muestra la leyenda completa bajo demanda. Sustituye a la
- * `LeyendaCobertura` que vivia siempre visible bajo la cabecera del calendario y la
- * llenaba de ruido visual; ahora la leyenda solo aparece cuando el usuario la pide.
+ * Icono "?" con popover que muestra la leyenda completa bajo demanda.
  *
  * Popover autocontenido (mismo patron que IndicadorEstado): se cierra al pulsar fuera
  * o con Escape.
@@ -373,8 +370,7 @@ export function MenuMasAcciones({
 
 /**
  * Badge de estado de la semana con tooltip que explica al usuario el significado
- * (Borrador = no visible para el equipo; Publicada = el equipo ya la ve). Reemplaza
- * los badges desnudos sin contexto que dejaba la cabecera anterior.
+ * (Borrador = no visible para el equipo; Publicada = el equipo ya la ve).
  */
 export function BadgeEstadoSemana({ aprobada, hayTurnos }: { aprobada: boolean; hayTurnos: boolean }) {
   if (aprobada) {
@@ -618,11 +614,6 @@ export interface ConflictoCandidato {
  * la franja de descanso), las columnas son los 7 días. Cada celda contiene un recuadro
  * por persona que trabaja esa franja ese día — con sus eventos cubiertos como chips
  * dentro — más, opcionalmente, un recuadro "Sin cubrir" con los eventos sin coverage.
- *
- * Antes existían dos pestañas hermanas, "Calendario" (read-only) y "Turnos" (CRUD por
- * dropdown). La fusión las unifica: el dropdown "+ Añadir persona" aparece al pie de
- * cada celda cuando la semana es editable (no aprobada), y cada recuadro persona
- * expone el menú contextual (editar/duplicar/borrar) heredado de la rejilla anterior.
  */
 // --- Helper compartido: chip toggle ----------------------------------------
 //

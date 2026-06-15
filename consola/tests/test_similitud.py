@@ -1,7 +1,4 @@
-"""Tests de los helpers PUROS de similitud (extraídos del antiguo Radar v1).
-
-Antes vivían en `keni_consola.radar` (retirado); ahora en `dominio.similitud`, donde
-los reutiliza el clustering del pool. Cubre normalización, sin-acentos y clave fuzzy
+"""Tests de los helpers PUROS de similitud. Cubre normalización, sin-acentos y clave fuzzy
 con sinónimos.
 """
 

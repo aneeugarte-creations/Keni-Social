@@ -1,22 +1,12 @@
 """Fuente UNICA de verdad de los LIMITES DE CARACTERES por plataforma.
 
-Antes los limites estaban duplicados en dos sitios sin enlace (#112 / H7):
-  - `redes.py` (backend, dataclass `Red.limite`),
-  - `consola/frontend/src/pages/publicaciones/meta.ts` (dict semilla).
-
-Esto los centraliza aqui, en `keni_shared` (H3/E1; antes vivian en la consola y
-keni_metricas no podia importarlos). `redes.py` consume estos valores (no los
-redefine) y el frontend los lee por `GET /api/limites`, todo anclado contra esta
-fuente unica.
-
 `limite` es el TOPE TECNICO DURO de caracteres de la red, o `None` cuando no hay
 un tope practico (Facebook / YouTube descripcion). No es la recomendacion
 editorial (esa vive en `plataformas.md`).
 
-TikTok: el caption admite hasta 4.000 caracteres desde la ampliacion de 2023-24
-(antes eran 2.200). Tomamos 4.000 como el limite tecnico ACTUAL real (lo editorial
-sigue siendo corto; eso lo dice la skill, no este tope). Ver el porque en el
-docstring de `LIMITES` y en `plataformas.md`.
+TikTok: el caption admite hasta 4.000 caracteres (lo editorial sigue siendo corto;
+eso lo dice la skill, no este tope). Ver el porque en el docstring de `LIMITES`
+y en `plataformas.md`.
 
 X: 25.000 es el limite del post con X Premium. Lo editorial (concision) lo dice
 `plataformas.md`, no este tope.

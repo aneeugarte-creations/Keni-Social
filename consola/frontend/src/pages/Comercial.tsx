@@ -1,11 +1,11 @@
 /**
  * Campañas: seguimiento de campañas de marca agrupadas por uno o varios HASHTAGS.
  *
- * Reemplaza el antiguo seguimiento de publicaciones sueltas por objetivo. Se elige una
- * campaña (definida por sus hashtags) y un periodo, y se ven KPIs (visualizaciones,
- * interacciones, engagement) con comparativa, la tendencia diaria y la tabla de piezas
- * del periodo —solo las publicaciones cuyo texto lleva alguno de los hashtags—. La marca
- * la fija el switch global de la barra superior; cada campaña pertenece a una marca.
+ * Se elige una campaña (definida por sus hashtags) y un periodo, y se ven KPIs
+ * (visualizaciones, interacciones, engagement) con comparativa, la tendencia diaria
+ * y la tabla de piezas del periodo —solo las publicaciones cuyo texto lleva alguno
+ * de los hashtags—. La marca la fija el switch global de la barra superior; cada
+ * campaña pertenece a una marca.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Megaphone, Pencil, Plus, Trash2 } from "lucide-react";

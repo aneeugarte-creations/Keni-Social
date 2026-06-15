@@ -7,8 +7,8 @@ Cubre:
   - Best-effort: ítem faltante en la respuesta -> devuelve el original para ese ítem.
   - Lista vacía -> devuelve lista vacía.
   - Textos largos se truncan en el payload (no en la respuesta final).
-  - El Radar EN VIVO ya NO traduce (#desacoplo del back): solo etiqueta `idioma` y nunca
-    llama a `traducir_items`. La traducción de historias persistidas la hace el daemon de
+  - El Radar EN VIVO solo etiqueta `idioma` (#desacoplo del back) y nunca llama a
+    `traducir_items`. La traducción de historias persistidas la hace el daemon de
     ingesta (tests del daemon, no aquí).
 """
 
@@ -216,10 +216,7 @@ def _sembrar_cluster_idioma(cid, *, idioma, traducido=0, estado="nuevo"):
 def test_clusters_extranjeros_sin_traducir_no_revienta_con_like(cliente):  # noqa: ARG001
     """El selector usa `idioma NOT LIKE 'es%%'`: el `%` literal DEBE ir doblado o psycopg casca.
 
-    Antes reventaba en prod con `ProgrammingError: only '%s','%b','%t' are allowed as
-    placeholders, got "%'"` (el shim `?`->`%s` no escapaba el `%`), tumbando el paso de
-    traducción del daemon en CADA barrido. Los tests del daemon mockeaban este repo, así que
-    el SQL real nunca corría: este test lo ejercita contra Postgres de verdad.
+    Este test lo ejercita contra Postgres de verdad (no mocked como los tests del daemon).
     """
     from keni_consola import repos
 

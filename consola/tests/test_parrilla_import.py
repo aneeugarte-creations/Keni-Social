@@ -64,7 +64,6 @@ def test_extrae_none_si_no_hay_json():
 
 
 def test_contrato_estricto_solo_acepta_operaciones():
-    # El prompt pide EXACTAMENTE {"operaciones": [...]}; los alias viejos ya no cuelan.
     assert pi.extraer_bloque_json('{"ops": [{"tipo": "crear_evento"}]}') is None
     assert pi.extraer_bloque_json('{"operations": [{"tipo": "crear_evento"}]}') is None
     assert pi.extraer_bloque_json(
@@ -90,7 +89,6 @@ def test_crear_evento_valido():
 
 
 def test_crear_evento_fecha_en_otra_semana_es_valida():
-    # El modelo RANGO ya no exige una sola semana: una fecha en otra semana del año es válida.
     txt = '[{"tipo": "crear_evento", "fecha": "2026-06-20", "titulo": "X"}]'
     validas, errores = pi.parsear_y_validar(txt, _ctx())
     assert errores == []
@@ -325,7 +323,6 @@ def test_crear_evento_nunca_conflictua():
 def test_validar_operaciones_re_chequea_contra_contexto_vivo():
     ops = [
         {"tipo": "crear_turno", "fecha": "2026-06-02", "franja": "Mañana", "miembro_id": "u1"},
-        # Esta era valida cuando se generó pero el miembro ya no está en el roster vivo.
         {"tipo": "crear_turno", "fecha": "2026-06-02", "franja": "Mañana", "miembro_id": "u9"},
     ]
     validas, errores = pi.validar_operaciones(ops, _ctx())

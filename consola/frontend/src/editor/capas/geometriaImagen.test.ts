@@ -9,7 +9,7 @@ describe("geometriaImagenEnCaja", () => {
     // Foto 200×100 (2:1) en caja 100×100: cover escala a 200×100 ⇒ desborda 100px en X.
     const g = geometriaImagenEnCaja(200, 100, 100, 100, "cover", [0.5, 0.5]);
     expect({ x: g.vx, y: g.vy, w: g.vw, h: g.vh }).toEqual({ x: 0, y: 0, w: 100, h: 100 });
-    // El destino completo sí desborda (es lo que antes inflaba el marco).
+    // El destino completo sí desborda.
     expect(g.dw).toBeCloseTo(200);
     expect(g.ix).toBeCloseTo(-50);
     // La fuente visible es la banda central (50..150) de la foto.
@@ -60,7 +60,7 @@ describe("geometriaImagenEnCaja", () => {
     expect(g.vh).toBeGreaterThan(0);
   });
 
-  it("fuente con dimensiones 0 no casca (cae a 1px, como el camino legado img.width || 1)", () => {
+  it("fuente con dimensiones 0 no casca (cae a 1px)", () => {
     const g = geometriaImagenEnCaja(0, 0, 100, 50, "cover", [0.5, 0.5]);
     expect(Number.isFinite(g.vw)).toBe(true);
     expect(Number.isFinite(g.sh)).toBe(true);

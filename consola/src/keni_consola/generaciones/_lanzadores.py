@@ -64,14 +64,6 @@ __all__ = [
 # --------------------------------------------------------------------------- #
 # REINTENTO de fallos TRANSITORIOS del modelo/CLI (529/overloaded, blip, crash) #
 # --------------------------------------------------------------------------- #
-#
-# Un 529/overloaded, un blip de red o un crash de la CLI mandaban el job DIRECTO a `error`, sin
-# reintento (la generacion es `claude -p`, no el SDK; aqui no habia nada que reintentara). Ahora
-# distinguimos el fallo TRANSITORIO (reintentable) del de MODELO/CONTENIDO o de PRESUPUESTO (NO
-# reintentable: reintentar no cambiaria el resultado) y reintentamos los transitorios con backoff
-# corto. Solo se reintentan fallos RAPIDOS (un TIMEOUT no: ya consumio su wall-timeout), asi el
-# total cabe en el margen que el worker espera el terminal (`worker._esperar_terminal`). El tope
-# es independiente del de `jobs.intentos` (anti crash-loop del worker) y se acota por presupuesto.
 
 # Backoff exponencial corto entre reintentos (s). Monkeypatcheable en tests (->0 para no esperar).
 _BACKOFF_BASE_S = 2.0
@@ -525,9 +517,8 @@ def lanzar_job_claude(
                 "fecha_fin": fecha_fin,
             })
         except Exception:  # noqa: BLE001 -- el cierre nunca debe propagar
-            # Antes era `pass` mudo: un fallo del cierre se volvia un job atascado en
-            # "ejecutando" sin rastro. Ahora lo LOGUEAMOS con el job-id + request-id (#123,
-            # #137) y, best-effort, intentamos dejarlo en error (no propagamos: es daemon).
+            # Logueamos con el job-id + request-id (#123, #137) y, best-effort, intentamos dejarlo
+            # en error (no propagamos: es daemon).
             _log.exception("%s: fallo al fijar el estado terminal", etq)
             try:
                 actualizar(gen_id, {

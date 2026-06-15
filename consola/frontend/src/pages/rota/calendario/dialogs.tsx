@@ -1,6 +1,5 @@
 // Diálogos del calendario de la rota: edición de evento, edición de turno y popup de
-// carga del equipo. Extraído verbatim de CalendarioPiezas.tsx (refactor de pura
-// reubicación).
+// carga del equipo.
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -437,9 +436,8 @@ export function DialogEditarTurno({
 // --- Popup "Carga del equipo" -----------------------------------------------
 
 /**
- * Resumen de carga del equipo de la semana, en un diálogo. Antes era un panel
- * colapsable bajo el calendario; ahora se invoca bajo demanda desde el menú "Más"
- * para no alargar la vista. El componente sólo se monta cuando el popup está abierto,
+ * Resumen de carga del equipo de la semana, en un diálogo. Se invoca bajo demanda
+ * desde el menú "Más". El componente sólo se monta cuando el popup está abierto,
  * así que la query arranca al abrir.
  */
 export function DialogCargaEquipo({ lunes, onCerrar }: { lunes: string; onCerrar: () => void }) {

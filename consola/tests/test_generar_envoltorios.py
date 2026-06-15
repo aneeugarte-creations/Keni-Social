@@ -1,13 +1,12 @@
-"""Envoltorios del copy migrados a la Biblioteca (`prompt/envoltorios/*`). PURO, sin BD.
+"""Tests de envoltorios de copy en la Biblioteca (`prompt/envoltorios/*`). PURO, sin BD.
 
 Regla de producto: TODOS los prompts de IA se gestionan desde la Biblioteca. Estos tests
-fijan el contrato de la migración de los bloques de `dominio.generar`:
+verifican la generación de envoltorios del dominio:
 
-  - REGRESIÓN DE ORO (byte-idéntico): con la semilla sin editar, cada instrucción compuesta
-    es EXACTAMENTE la misma que producía el código hardcodeado previo (literales capturados
-    de la versión anterior). Si la semilla o el ensamblaje divergen, esto revienta.
-  - La SEMILLA es la ÚNICA fuente del texto: ya no hay `_FALLBACK_*` duplicado en código (solo
-    «sin emojis» conserva un respaldo MÍNIMO, `INSTRUCCION_SIN_EMOJIS`).
+  - Salida byte-idéntica: con la semilla sin editar, cada instrucción compuesta es la
+    esperada. Si la semilla o el ensamblaje divergen, esto revienta.
+  - La SEMILLA es la ÚNICA fuente del texto: solo «sin emojis» conserva un respaldo MÍNIMO,
+    `INSTRUCCION_SIN_EMOJIS`.
   - Un doc EDITADO en el store gana (el texto sale de la Biblioteca, los valores del código).
   - Sin doc NI semilla, los envoltorios estructurales degradan a vacío con warning (camino
     inalcanzable: lo cubre el test de cobertura semilla↔código).

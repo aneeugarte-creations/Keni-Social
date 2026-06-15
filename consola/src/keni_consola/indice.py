@@ -105,10 +105,6 @@ def _conectar() -> sqlite3.Connection:
     return con
 
 
-# Columnas anadidas DESPUES del esquema original (denormalizacion de runs). Una BD
-# de indice creada antes de #121 no las tiene; las anadimos en caliente con un
-# `ALTER TABLE ADD COLUMN` idempotente (el indice es regenerable, asi que poblarlas
-# lo hace el reindexado de runs; aqui solo garantizamos que la columna existe).
 _COLS_EXTRA: tuple[tuple[str, str], ...] = (
     ("agente", "TEXT NOT NULL DEFAULT ''"),
     ("coste_usd", "REAL NOT NULL DEFAULT 0"),

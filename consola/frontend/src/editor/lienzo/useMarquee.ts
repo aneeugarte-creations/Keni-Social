@@ -61,9 +61,8 @@ export function useMarquee({
       const hits = st.documento.capas
         .filter((c) => {
           if (!c.visible || c.bloqueada) return false;
-          // Intersección contra la caja VISIBLE (banda del overlay, bloque del texto legado):
-          // con la caja del modelo, un overlay a sangre (0,0,w,h) caía en CUALQUIER marquee
-          // aunque no tocara la banda. AABB sin rotar, como siempre (aproximación preexistente).
+          // Intersección contra la caja VISIBLE (banda del overlay).
+          // AABB sin rotar.
           const v = cajaVisual(c);
           return !(v.x > x1 || v.x + v.w < x0 || v.y > y1 || v.y + v.h < y0);
         })

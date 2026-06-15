@@ -16,23 +16,12 @@ from ._comun import (
 # Rota: eventos/transmisiones + turnos (horarios persona×dia×franja)            #
 # --------------------------------------------------------------------------- #
 #
-# Sustituye el Excel manual del coordinador de la rota. Dos entidades operacionales INDEPENDIENTES (ver
-# comentario "cambio de modelo" en la DDL): el EVENTO (calendario de transmisiones) y el
-# TURNO (horario del miembro en (fecha, franja)). Un turno NO va atado a un evento. La
-# "cobertura" (quien cubre un evento) es una vista DERIVADA: para un evento, sus coberturas
+# Dos entidades operacionales INDEPENDIENTES: el EVENTO (calendario de transmisiones)
+# y el TURNO (horario del miembro en (fecha, franja)). Un turno NO va atado a un evento.
+# La "cobertura" (quien cubre un evento) es una vista DERIVADA: para un evento, sus coberturas
 # son los miembros cuyo turno coincide con la franja+fecha del evento (`mapear_franja` en
 # `rota.py`). Pueden existir turnos sin eventos y eventos sin turnos.
-#
-# Antes el codigo tenia dos tablas: `rota_turnos` (cobertura, mal modelada) y
-# `rota_turnos` (horario). El feedback del usuario aclaro que la cobertura no es un
-# concepto persistido: un turno cubre todos los eventos que caen en su franja+fecha. La
-# migracion (`_migrar_modelo_turnos`) convierte la cobertura legada en turnos del nuevo modelo
-# y unifica todo en una unica tabla `rota_turnos`.
 
-# Columnas de `rota_eventos`. La ola B (#144) anade tipo_cobertura/prioridad/cambiado/
-# actualizado: `cambiado`/`actualizado` son GESTIONADAS POR EL SISTEMA (no editables a
-# pelo: `cambiado` lo derivamos al reprogramar y `actualizado` se refresca en cada edicion),
-# por eso quedan fuera de `_CAMPOS_EDITABLES_EVENTO_ROTA`.
 _COLS_EVENTO_ROTA = (
     "id",
     "titulo",
@@ -67,7 +56,6 @@ def _fila_a_evento_rota(fila: Any) -> dict[str, Any]:
     # Defensa retrocompatible: una fila migrada con NULL/"" cae al valor por defecto.
     evento["tipo_cobertura"] = fila["tipo_cobertura"] or TIPO_COBERTURA_TRANSMISION
     evento["prioridad"] = fila["prioridad"] or PRIORIDAD_EVENTO_DEFECTO
-    # `marca` puede ser NULL en filas muy antiguas (antes de la columna); normalizar a "".
     evento["marca"] = fila["marca"] or ""
     return evento
 

@@ -103,8 +103,6 @@ def main() -> int:
     try:
         from . import libtexto
 
-        # Rediseño de nombres/ids (one-shot): re-siembra los docs del sistema con los nombres
-        # nuevos y borra los ids viejos del store. Va ANTES de importar_semilla (que no pisa).
         m = libtexto.migrar_nombres_biblioteca()
         if m:
             print(f"Texto: {m} documento(s) migrados al nuevo esquema de nombres.")
@@ -113,7 +111,7 @@ def main() -> int:
             print(f"Texto: {o} prompt(s) obsoleto(s) eliminados del store.")
         d = libtexto.migrar_descripciones_editorial()
         if d:
-            print(f"Texto: {d} editorial(es) con descripcion/titulo de plantilla vieja corregidos.")
+            print(f"Texto: {d} editorial(es) corregidos.")
         n = libtexto.importar_semilla()
         if n:
             print(f"Texto: {n} documento(s) base importados.")

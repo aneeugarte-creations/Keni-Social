@@ -886,7 +886,6 @@ def test_relevancia_marca_resumen_pesa_menos_que_titulo():
 def test_relevancia_marca_frases_casan_por_limite_de_palabra():
     pal = frozenset({"box office"})
     assert clustering._relevancia_marca({"titulo": "box office records", "resumen": ""}, pal) > 0.0
-    # La frase ya no casa por subcadena dentro de otra palabra.
     assert clustering._relevancia_marca({"titulo": "boxofficemania total", "resumen": ""}, pal) == 0.0
 
 

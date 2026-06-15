@@ -9,8 +9,7 @@ estrictamente dentro de la raiz (intentos con `..`, rutas absolutas, nombres
 peligrosos) se rechaza con 400 y un mensaje en espanol. Nunca se crea en una ruta
 arbitraria. Sin shell.
 
-Las plantillas viven ahora en `src/keni_consola/plantillas/` (movidas desde la
-antigua carpeta de features al migrar a API JSON).
+Las plantillas viven en `src/keni_consola/plantillas/`.
 """
 
 from __future__ import annotations
@@ -24,7 +23,6 @@ from starlette.routing import Route
 from .. import config, proyectos
 from .._http_json import leer_json
 
-# Las plantillas viven en el paquete (no en features/, que se elimino).
 _DIR_PLANTILLAS = Path(__file__).parent.parent / "plantillas"
 
 # Marcador de posicion del nombre dentro de las plantillas (.md).

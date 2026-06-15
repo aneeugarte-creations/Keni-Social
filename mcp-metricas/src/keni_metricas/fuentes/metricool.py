@@ -127,9 +127,8 @@ _METRICA_ALC = "alc"
 # distinto por red:
 #   - facebook:  pageFollows        - instagram: followers
 #   - tiktok:    followers_count    - youtube:   totalSubscribers
-# (Antes faltaba `subject=account` y los nombres de FB/YT/TikTok eran erróneos -> 400, por
-# eso `seguidores_netos` salía 0 en todas.) El neto del periodo = último - primer punto.
-# Si la red no expone followers (o no está conectada) la serie viene vacía -> 0 (honesto).
+# El neto del periodo = último - primer punto. Si la red no expone followers (o no está
+# conectada) la serie viene vacía -> 0 (honesto).
 _METRICA_SEG = "seg"
 # Valor de `subject` para las métricas de cuenta/community en timelines (followers).
 _SUBJECT_CUENTA = "account"
@@ -171,9 +170,7 @@ _METRICAS_RED: dict[Plataforma, dict[str, str]] = {
 #   - TikTok:    createTime (ISO), viewCount, likeCount/commentCount/shareCount,
 #                averageTimeWatched, videoId, shareUrl, title/videoDescription.
 #   - YouTube:   publishedAt, views, likes/comments/shares, videoId, watchUrl, title.
-# Se prueban TODOS los alias en orden, así un mismo parser cubre las cuatro redes (antes
-# solo encajaba Instagram y TikTok/Facebook se descartaban enteros por no reconocer ni
-# su fecha ni sus vistas).
+# Se prueban TODOS los alias en orden para parsear todas las redes de forma consistente.
 _ALIAS_ID = ("id", "postId", "providerId", "videoId")
 _ALIAS_FECHA = (
     "publishedAt", "publicationDate", "dateTime", "date", "createdAt",
@@ -374,11 +371,10 @@ def _fecha(v) -> date | None:
     """Fecha de publicación del post -> `date`, o None si no se puede determinar.
 
     Metricool devuelve `publishedAt` como OBJETO `{'dateTime': 'AAAA-MM-DDTHH:MM:SS',
-    'timezone': '...'}`, NO como string plano; antes esto no se parseaba y CADA pieza
-    quedaba sellada con la fecha de hoy (colando posts viejos/sin-fecha como "en rango").
-    Aquí se extrae el `dateTime` del objeto, y se acepta también string ISO (con o sin
-    hora) o epoch (segundos/milisegundos). Devuelve None si no hay fecha reconocible: el
-    llamante NO debe fabricar una fecha (ver `_pieza_desde_post`)."""
+    'timezone': '...'}`, no como string plano. Se extrae el `dateTime` del objeto, y se
+    acepta también string ISO (con o sin hora) o epoch (segundos/milisegundos). Devuelve
+    None si no hay fecha reconocible: el llamante NO debe fabricar una fecha (ver
+    `_pieza_desde_post`)."""
     if isinstance(v, dict):
         v = v.get("dateTime") or v.get("date") or v.get("value") or v.get("iso")
     if isinstance(v, bool):  # bool es subclase de int: no es una fecha

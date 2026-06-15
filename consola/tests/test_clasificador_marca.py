@@ -189,10 +189,6 @@ def test_prompt_editado_en_la_biblioteca_gana():
 
 
 def test_sin_doc_ni_semilla_degrada_pero_sigue_clasificando(monkeypatch, tmp_path):
-    # Ya no hay copia del prompt en código (la semilla es la única fuente). Sin doc en el store
-    # NI semilla, la plantilla queda vacía (prompt vacío), pero el flujo sigue siendo robusto:
-    # devuelve la marca de la IA. El test de cobertura semilla↔código garantiza que la semilla
-    # SIEMPRE está, así que el prompt vacío es inalcanzable en producción.
     monkeypatch.setenv("KENI_TEXTO_SEMILLA", str(tmp_path / "semilla-vacia"))
     ej = _ejecutor_que_devuelve('{"marca": "claro-sports"}')
     marca = clasificador_marca.clasificar_marca(

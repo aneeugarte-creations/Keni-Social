@@ -1,14 +1,3 @@
-/**
- * Centinelas y helpers compartidos por los selectores de marca y red.
- *
- * Vive en su propio módulo (sin componentes) para no romper el fast-refresh de
- * los `.tsx` y para tener una única fuente de verdad de los centinelas:
- * `MARCA_TODAS` y `RED_TODAS` (ambos `"__todas__"`), más `NINGUNA`
- * (`"__ninguna__"`) para "sin marca / sin red / sin fijar". Antes estos tres
- * centinelas se declaraban localmente con nombres distintos (`"todas"`,
- * `"__todos__"`, `"__ninguna__"`) repartidos por la app.
- */
-
 /** Valor único que representa "todas las marcas" / "sin marca concreta". */
 export const MARCA_TODAS = "__todas__";
 

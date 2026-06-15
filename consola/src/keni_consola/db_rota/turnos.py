@@ -21,7 +21,6 @@ from ._comun import (
 #
 # Un TURNO es el horario que un miembro tiene en una (fecha, franja). NO va asociado a un
 # evento. Cubre todos los eventos que caigan en su franja (cobertura derivada, no persistida).
-# Forma identica a la antigua `rota_turnos` (modelo viejo) tras la migracion.
 
 _COLS_TURNO_ROTA = (
     "id",
@@ -546,8 +545,8 @@ def copiar_turnos_rota(
                 "marca": marca_val or fila.get("marca", ""),
             }
             # OR IGNORE: con el indice unico `idx_rota_turnos_uniq` una RE-COPIA sobre la
-            # misma semana (sin `reemplazar`) chocaria con los turnos ya copiados; antes
-            # duplicaba en silencio, ahora el duplicado se salta y se cuenta solo lo insertado.
+            # misma semana (sin `reemplazar`) chocaria con los turnos ya copiados; el duplicado
+            # se salta y se cuenta solo lo insertado.
             cur = con.execute(
                 f"INSERT OR IGNORE INTO rota_turnos ({', '.join(_COLS_TURNO_ROTA)}) "
                 f"VALUES ({marcadores})",

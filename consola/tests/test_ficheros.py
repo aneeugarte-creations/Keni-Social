@@ -1,20 +1,4 @@
-"""Tests del backend de FICHEROS YAML: la verdad vive en disco.
-
-Tras la migracion a Postgres (ADR 0004/0006), la UNICA entidad editorial que sigue
-file-backed es el HISTORIAL de prompts (`<marca>/historial/<YYYY>/<MM>/<id>.yaml`).
-Publicaciones, plantillas, fuentes RSS, hashtags y franjas viven en Postgres y se
-prueban en test_repos / test_db_editorial. Aqui cubrimos la infra YAML compartida que
-el historial sigue ejercitando, contra el historial:
-  - layout agente=marca=carpeta + marca.yaml/CLAUDE.md sembrados al escribir.
-  - round-trip: crear -> .yaml legible -> editar a mano -> repos lo lee actualizado.
-  - texto multilinea volcado como bloque literal '|' (editable a mano).
-  - orden por fecha-hora (mas reciente primero, determinista).
-  - YAML corrupto se OMITE sin romper el listado.
-  - escritura atomica (no quedan ficheros .tmp).
-  - regeneracion del indice si se borra (los .yaml son la verdad).
-
-OFFLINE, todo aislado en tmp (raiz de datos + indice via env vars).
-"""
+"""Tests de historial de prompts: layout, round-trip, orden, validación, atomicidad e índice."""
 
 from __future__ import annotations
 

@@ -95,7 +95,6 @@ def test_normalizar_generacion_resultado_url_por_tipo():
         "copy": "/operacion/feed/lista",
         "rss": "/operacion/feed/lista",
         "imagen": "/contenido/estudio",
-        # QA/verificación ya no tienen página propia (Revisión se retiró): enlazan al Feed.
         "verificacion": "/operacion/feed",
         "qa-editorial": "/operacion/feed",
     }

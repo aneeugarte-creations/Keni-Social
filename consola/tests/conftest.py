@@ -260,7 +260,7 @@ def lanzador_generacion_completa(salida: str, metricas=None):  # noqa: ANN001
 
     Llama al `procesar` REAL con una `salida` canned (asi se cubre el post-procesado:
     piezas/publicaciones/historial/hashtags) y fija el registro en `completado`. Sin
-    Popen ni red. Equivale a lo que antes hacia `monkeypatch.setattr(skills, "_runner", ...)`.
+    Popen ni red.
     """
     import shutil as _sh
 

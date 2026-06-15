@@ -252,11 +252,7 @@ def test_token_generado_si_no_hay_env(entorno, monkeypatch):
 
 
 def test_crear_app_genera_token_pero_no_loguea_su_valor(entorno, monkeypatch, caplog):
-    """#150: sin env var, `crear_app` genera un token pero NUNCA loguea su VALOR.
-
-    Antes (#134) el token generado se imprimia en el log (UX `?token=...`); era un vector
-    de fuga (backdoor en logs/capturas). Ahora se avisa de que se genero, sin revelarlo.
-    """
+    """#150: sin env var, `crear_app` genera un token pero NUNCA loguea su VALOR."""
     monkeypatch.delenv("KENI_CONSOLA_TOKEN", raising=False)
     # `configurar_logging()` (lo llaman otros tests/arranque) deja el logger del paquete
     # con `propagate=False`; caplog captura via el root, asi que forzamos propagacion

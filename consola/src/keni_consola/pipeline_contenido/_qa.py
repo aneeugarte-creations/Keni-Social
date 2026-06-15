@@ -117,10 +117,9 @@ def _contexto_qa_fuente(nota: str) -> str:
 def _endurecer_qa_fuente() -> dict[str, Any] | None:
     """Overrides `endurecer` de la criba de la fuente: modelo rápido + esfuerzo bajo + timeout corto.
 
-    La QA-fuente era un run `claude -p` completo con modelo/esfuerzo por defecto (~60-120 s por
-    tema); como es una criba PERMISIVA (no redacción), corre con Haiku + `low` + ~180 s
-    (configurables: `KENI_QA_FUENTE_MODELO`, `KENI_QA_FUENTE_ESFUERZO`, `KENI_QA_FUENTE_TIMEOUT`).
-    Se omiten las claves vacías (cada una cae a su global). None si no hay ningún override.
+    Es una criba PERMISIVA (no redacción): corre con Haiku + `low` + ~180 s (configurables:
+    `KENI_QA_FUENTE_MODELO`, `KENI_QA_FUENTE_ESFUERZO`, `KENI_QA_FUENTE_TIMEOUT`). Se omiten las
+    claves vacías (cada una cae a su global). None si no hay ningún override.
     """
     overrides: dict[str, Any] = {}
     modelo = config.qa_fuente_modelo()

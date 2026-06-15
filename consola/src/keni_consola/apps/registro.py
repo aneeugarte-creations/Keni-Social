@@ -17,7 +17,7 @@ CONTRATO de los manifests (un fichero por app, sin colisión entre tareas):
   "shell" para el lint.
 
 ACTIVACIÓN por flag (env var nombrada en `flag_activacion`):
-  - ausente o vacía  -> ACTIVA (el repo arranca IGUAL que hoy: todo activo).
+  - ausente o vacía  -> ACTIVA (todo activo por defecto).
   - "0"/"false"/"no"/"off" (case-insensitive) -> DESACTIVADA (se oculta del catálogo).
   - cualquier otro valor -> ACTIVA.
 """

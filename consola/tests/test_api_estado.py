@@ -6,11 +6,6 @@ reusa el estado por marca de `api/conexiones` (la misma fuente que
 `GET /api/conexiones/metricool`). Aqui se parchean por sonda para cubrir cada
 escenario (cola llena, pausa, presupuesto, disco, backups, S3, daemons, Metricool)
 sin depender del disco/config real de la maquina o del CI.
-
-HISTORIA: el doctor ya NO serializa los chequeos del doctor CLI de `keni_metricas`
-(Python, "cuentas en el config", "credenciales por plataforma", fuente de muestra):
-describian un modelo de configuracion obsoleto y pintaban avisos falsos en
-produccion. Hay tests que blindan que NO vuelvan.
 """
 
 from __future__ import annotations

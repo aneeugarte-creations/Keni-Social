@@ -37,8 +37,8 @@ _LANZAR_CLAUDE_REAL = generaciones.lanzar_job_claude
 _ENCOLAR_REAL = generaciones.encolar_job_claude
 
 
-# NOTA: el post-procesado de copy YA NO compone una placa al crear (render on-demand): la
-# imagen se deriva de la receta y se sirve por `/compuesta`. Por eso no hace falta stubear el
+# NOTA: el post-procesado de copy compone on-demand (render on-demand): la imagen se
+# deriva de la receta y se sirve por `/compuesta`. Por eso no hace falta stubear el
 # compositor en la creación; los tests que sí componen (Estudio) lo mockean en su cuerpo.
 
 
@@ -82,9 +82,8 @@ def test_encolar_idempotente_por_gen_id(entorno):
 def test_gate_cola_fondo_siempre_encola_sin_tope(entorno, monkeypatch):
     """La cola NO tiene tope (R-NO-LIMIT): el FONDO encola sin limite, nada se rechaza.
 
-    Antes `cola.encolar` rechazaba el fondo con `ColaLlenaError` al pasar `max_jobs+max_cola`.
-    Ahora la cola crece sin tope: el unico limite es la CONCURRENCIA (`max_jobs`), el exceso
-    espera. Encolar muchos jobs de fondo con un solo slot NUNCA rechaza.
+    El unico limite es la CONCURRENCIA (`max_jobs`), el exceso espera. Encolar muchos jobs
+    de fondo con un solo slot NUNCA rechaza.
     """
     monkeypatch.setenv("KENI_MAX_JOBS", "1")  # solo 1 corre a la vez; el resto ESPERA en cola
 
@@ -214,8 +213,7 @@ def test_encolar_gen_id_con_fila_terminada_resucita_el_job(entorno):
 def test_reclama_job_huerfano_de_worker_muerto(entorno):
     """Un job `reclamado` cuyo worker murio (claimed_at viejo) lo RE-RECLAMA otro worker.
 
-    Antes quedaba `reclamado` para siempre y su registro `ejecutando` -> "Generando..." sin
-    fin. Un job recien reclamado (worker vivo) NO se re-reclama: solo al pasar el umbral.
+    Un job recien reclamado (worker vivo) NO se re-reclama: solo al pasar el umbral.
     """
     gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
     cola.encolar(gen["id"], jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags()))
@@ -369,9 +367,8 @@ def test_reencolar_resetea_intentos(entorno, monkeypatch):
 
 
 def test_spec_corrupto_se_reclama_con_spec_none(entorno):
-    # spec que NO es un objeto job (tras migrar `spec` a jsonb, el JSON sintacticamente roto ya
-    # no puede ni almacenarse; lo que el worker debe tolerar es un JSON valido NO-objeto, p. ej.
-    # un numero): se recibe con spec=None y se marca en error.
+    # spec que NO es un objeto job: un JSON valido NO-objeto (p. ej. un numero) se recibe
+    # con spec=None y se marca en error.
     gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
     repos.encolar_job(gen["id"], "123")
     clavado = cola.reclamar()
@@ -1193,9 +1190,7 @@ def _fake_lanzar_proc_lento_factory(sleep_s: float):
 def test_worker_inproceso_corre_jobs_en_paralelo(entorno, monkeypatch, pool_limpio):
     """El pool in-proceso (KENI_MAX_JOBS) corre N jobs EN PARALELO: tiempo ≈ slowest, no sum.
 
-    REGRESION del bug serial: el bucle antiguo clavaba 1 job, esperaba su terminal y recien
-    entonces clavaba el siguiente => N jobs lentos tardaban N × t. Con el pool de N hilos los
-    N jobs se solapan y el total ≈ t (el de un solo job) + holgura.
+    Con el pool de N hilos los N jobs se solapan y el total ≈ t (el de un solo job) + holgura.
     """
     n = 4
     sleep_s = 1.5
@@ -1238,11 +1233,9 @@ def test_worker_inproceso_corre_jobs_en_paralelo(entorno, monkeypatch, pool_limp
 def test_pool_detener_reencola_los_en_vuelo_para_el_worker_post_deploy(entorno, monkeypatch, pool_limpio):
     """`pool.detener()` (apagado/SIGTERM por deploy) DEVUELVE los jobs en vuelo a `pendiente`.
 
-    ANTES se marcaban INTERRUMPIDO y se sacaban de la cola "para que los relanzara el reaper",
-    pero NINGUN reaper relanzaba jobs terminados: cada deploy PERDIA los jobs en vuelo y exigia
-    relanzarlos a mano. Ahora el apagado gracioso re-encola cada job (mismo spec) y deja su
-    registro `ejecutando` (la UI sigue en "Generando..."): el worker post-deploy lo re-reclama
-    y lo completa SOLO. La guardia anti-duplicado del reclamo cubre el post-procesado.
+    El apagado gracioso re-encola cada job (mismo spec) y deja su registro `ejecutando` (la UI
+    sigue en "Generando..."): el worker post-deploy lo re-reclama y lo completa SOLO. La guardia
+    anti-duplicado del reclamo cubre el post-procesado.
     """
     n = 3
     monkeypatch.setenv("KENI_MAX_JOBS", str(n))

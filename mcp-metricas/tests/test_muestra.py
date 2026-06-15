@@ -97,7 +97,6 @@ def test_rango_invalido(fuente: FuenteMuestra):
 # --- B7: n negativo no debe devolver de mas --------------------------------
 @pytest.mark.parametrize("n", [-1, -5, -100])
 def test_mejores_piezas_n_negativo_devuelve_vacio(fuente: FuenteMuestra, n: int):
-    # antes, candidatas[:n] con n<0 devolvia casi todas las candidatas (p.ej. 11)
     assert fuente.mejores_piezas("claro_sports", "mes", n) == []
 
 

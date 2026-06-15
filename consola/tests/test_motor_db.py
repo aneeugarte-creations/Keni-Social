@@ -81,10 +81,9 @@ def test_traduce_insert_or_ignore_insensible_a_mayusculas():
 
 
 def test_integrity_error_es_neutra():
-    """El tipo que se relanza desde el wrapper es `motor_db.IntegrityError`.
+    """El tipo que se relanza desde el wrapper es `motor_db.IntegrityError` (alias sqlite3.IntegrityError).
 
-    Por compatibilidad con el codigo y los tests historicos sigue siendo el tipo de sqlite3
-    (`sqlite3.IntegrityError`); ningun SQLite operacional se abre ya (ADR 0004).
+    Ningún SQLite operacional se abre ya (ADR 0004).
     """
     assert motor_db.IntegrityError is sqlite3.IntegrityError
 

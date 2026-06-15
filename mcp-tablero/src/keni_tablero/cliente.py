@@ -109,8 +109,7 @@ class ClienteConsola:
     # --- Contenido (tablero) -------------------------------------------------- #
 
     def listar_contenido(self, params: dict[str, str] | None = None) -> dict[str, Any]:
-        # `params=` de httpx url-encodea los valores (antes se armaba la query con
-        # f-strings y un filtro con espacios/acentos generaba una URL invalida).
+        # `params=` de httpx url-encodea los valores.
         filtrados = {k: v for k, v in (params or {}).items() if v}
         return self._peticion("GET", "/api/contenido", params=filtrados or None)
 

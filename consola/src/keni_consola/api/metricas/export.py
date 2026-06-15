@@ -103,7 +103,7 @@ def _filas_piezas_export(payload: dict) -> list[dict]:
     """Aplana `top`/`peores` del payload de piezas a filas con su grupo (Top/Peores)."""
     filas: list[dict] = []
     # La etiqueta del grupo lleva el conteo REAL (Top N / Peores N), derivado de la lista, para
-    # no quedar desfasada si cambia el número de piezas (antes estaba fija en "5").
+    # no quedar desfasada si cambia el número de piezas.
     for grupo, clave in (("Top", "top"), ("Peores", "peores")):
         items = payload.get(clave, []) or []
         etiqueta = f"{grupo} {len(items)}"

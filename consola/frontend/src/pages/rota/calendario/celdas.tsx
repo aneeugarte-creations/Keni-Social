@@ -1,6 +1,5 @@
 // Celdas de la rejilla del calendario de la rota: la celda (franja × día), el recuadro
-// por persona y el dropdown "+ Añadir persona". Extraído verbatim de CalendarioPiezas.tsx
-// (refactor de pura reubicación).
+// por persona y el dropdown "+ Añadir persona".
 import { useMutation } from "@tanstack/react-query";
 import {
   AlertTriangle,

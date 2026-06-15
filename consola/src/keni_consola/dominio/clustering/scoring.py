@@ -1,8 +1,7 @@
 """Scoring de historias para el ranking newsroom y selección diversa (capa pura).
 
 Pesos del score (`PesosScore`), la fórmula combinada (`puntuar`/`puntuar_detalle`), la
-señal de frescura y el top-N con diversidad (MMR). Movido VERBATIM desde el antiguo
-`clustering.py`.
+señal de frescura y el top-N con diversidad (MMR).
 """
 
 from __future__ import annotations

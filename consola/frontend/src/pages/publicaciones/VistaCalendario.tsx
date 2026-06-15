@@ -180,7 +180,6 @@ function PildoraPub({
         type="button"
         draggable={!publicado}
         onDragStart={(e) => {
-          // Una pieza ya publicada NO se reprograma arrastrándola: el post ya salió.
           if (publicado) {
             e.preventDefault();
             return;

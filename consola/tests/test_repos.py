@@ -84,21 +84,16 @@ def test_reexporta_constantes_publicas():
 
 
 def test_no_hay_conmutador():
-    # El conmutador `_backend()` y la lectura de `KENI_CONSOLA_BACKEND` se retiraron.
     assert not hasattr(repos, "_backend")
     fuente = inspect.getsource(repos)
     assert "KENI_CONSOLA_BACKEND" not in fuente
 
 
 def test_publicaciones_persisten_en_postgres_no_en_yaml(entorno, monkeypatch):
-    # Tras la fusión (paso 3), las publicaciones viven en Postgres (modelo `contenido`),
-    # NO como YAML en disco. El viejo KENI_CONSOLA_BACKEND ya no influye.
     monkeypatch.setenv("KENI_CONSOLA_BACKEND", "sqlite")
     pub = repos.crear_publicacion("unotv", "x", titulo="T", contenido="C")
-    # Ya NO se escribe ningún .yaml de la publicación en disco.
     yamls = list((entorno / "datos").rglob(f"{pub['id']}.yaml"))
     assert not yamls, "la publicacion ya no debe escribirse como YAML"
-    # Se lee desde Postgres por repos y por db (misma fuente).
     assert repos.obtener_publicacion(pub["id"])["marca"] == "unotv"
     assert db.obtener_publicacion(pub["id"])["titulo"] == "T"
 

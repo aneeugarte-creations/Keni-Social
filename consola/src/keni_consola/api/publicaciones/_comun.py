@@ -2,8 +2,7 @@
 
 Reune lo que usan varias areas (CRUD y espejo) sin crear ciclos: la serializacion de
 piezas, las flags de readiness derivadas del contenido y el reset de aprobaciones al
-editar contenido ya aprobado. Extraido TAL CUAL del modulo `publicaciones.py` original
-(refactor de pura reubicacion, sin cambio de comportamiento).
+editar contenido ya aprobado.
 """
 
 from __future__ import annotations

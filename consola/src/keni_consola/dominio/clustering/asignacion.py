@@ -9,8 +9,7 @@ Reglas de agrupación (`asignar`):
   - si nada casa → cluster nuevo.
 
 Reutiliza la lógica de cruce de títulos del Radar (`similitud.clave_fuzzy` + sinónimos +
-`SequenceMatcher`) y la normalización/hash de `dominio.dedup`. Movido VERBATIM desde el
-antiguo `clustering.py`.
+`SequenceMatcher`) y la normalización/hash de `dominio.dedup`.
 """
 
 from __future__ import annotations
@@ -111,8 +110,6 @@ def asignar(
             _ratio_titulos(titulo, str(c.get("titulo") or "")),
             _ratio_titulos(titulo, str(c.get("titulo_es") or "")),
         )
-        # A EMPATE exacto de ratio gana el PRIMER candidato visto (determinista); antes el
-        # `>=` dejaba ganar al último, y el resultado dependía del orden de la lista.
         if ratio >= umbral and (mejor_id is None or ratio > mejor_ratio):
             mejor_ratio = ratio
             mejor_id = str(c["id"])

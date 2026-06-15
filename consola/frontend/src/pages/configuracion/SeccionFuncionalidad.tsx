@@ -252,7 +252,7 @@ function ConmutadorMarca({
  *  " · " (publicación) es un único conmutador sin etiqueta. `maestros` mapea la clave BASE de cada
  *  ajuste (p. ej. `KENI_GENERAR`, `KENI_PUBLICAR_REAL`) a si su maestro global está ON: con el
  *  maestro OFF, la excepción se ve apagada y deshabilitada (consistente entre Generar/Arte y
- *  Publicación; antes Generar/Arte la OCULTABA y publicación la atenuaba — ahora ambas igual). */
+ *  Publicación). */
 export function ExcepcionesPorMarca({
   ajustes,
   onGuardar,

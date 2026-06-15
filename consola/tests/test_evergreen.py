@@ -136,7 +136,7 @@ def test_borrar_evergreen_idea(entorno):
 
 
 # --------------------------------------------------------------------------- #
-# Generar pieza desde una idea: terminal feliz `generada` (cajón histórico)    #
+# Generar pieza desde una idea: terminal feliz `generada`                      #
 # --------------------------------------------------------------------------- #
 
 

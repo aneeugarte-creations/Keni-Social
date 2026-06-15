@@ -500,7 +500,6 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     // Nada de un Check enfocable que solo lanza un toast: el botón no existe.
     expect(screen.queryByRole("button", { name: /me gusta/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /tu ok/i })).not.toBeInTheDocument();
-    // El dato del último OK (antes solo en el title del Check) queda legible.
     expect(screen.getByText("OK: Leo")).toBeInTheDocument();
     expect(screen.getByTitle("Último OK")).toBeInTheDocument();
     // Comentar sigue disponible.

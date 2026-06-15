@@ -24,13 +24,7 @@ const EstrategiaMarcas = lazy(() =>
 // ruta-padre se deja sin `element` y react-router renderiza `<Outlet/>` por defecto;
 // la subnav entre sub-rutas vive in-page (SubnavHub, via HUB_TABS).
 const Fuentes = lazy(() => import("@/pages/Fuentes"));
-// Hub Investigación: la pieza «Noticias» (su MESA DE REDACCIÓN, el pool persistente de
-// cobertura) se RELOCALIZÓ al cockpit de Investigación (`/maquina/investigacion`, pestaña «Mesa
-// de redacción»); su ruta vieja `/datos/investigacion` redirige allí (abajo). Queda el banco
-// evergreen (ContenidosHub) + Fuentes como sub-rutas del hub.
 const ContenidosHub = lazy(() => import("@/pages/ContenidosHub"));
-// Los ajustes del motor de noticias y los algoritmos (inteligencia de plataforma, un INPUT de
-// investigación) viven ahora en el cockpit de Investigación; sus rutas viejas redirigen allí.
 
 const Metricas = lazy(() => import("@/pages/Metricas"));
 const Comercial = lazy(() => import("@/pages/Comercial"));
@@ -38,25 +32,19 @@ const Comercial = lazy(() => import("@/pages/Comercial"));
 const Rota = lazy(() => import("@/pages/rota"));
 // Feed de ideación (Flujo D, Fase 4): la "red social interna" dentro del AppShell.
 const FeedIdeacion = lazy(() => import("@/pages/feed/FeedIdeacion"));
-// Lista de contenido (pestaña "Lista" del hub Feed) y calendario de publicaciones
-// (página plana "Programación", `/operacion/programacion`): las dos mitades del antiguo tablero.
 const ListaContenido = lazy(() => import("@/pages/feed/ListaContenido"));
 const CalendarioContenido = lazy(() => import("@/pages/calendario/CalendarioContenido"));
 
-// El feed de Producción ya no es una ruta propia: se PLEGÓ en el dashboard de Workers
-// (`/maquina/cola`, sección «Actividad»), que lo importa directamente. El índice
-// `/datos/produccion` redirige a Workers; aquí solo viven sus páginas de detalle.
 const PipelineDetalle = lazy(() => import("@/pages/PipelineDetalle"));
 const GeneracionDetalle = lazy(() => import("@/pages/GeneracionDetalle"));
 
 // Sección «Máquina» (fase 2A): la máquina de generación como UNA sección con dos cockpits
 // (Investigación · Producción, esqueletos por ahora) y la Cola compartida (la vista global
-// del worker/cola, relocalizada del antiguo Monitor).
+// del worker/cola).
 const CockpitInvestigacion = lazy(() => import("@/pages/maquina/CockpitInvestigacion"));
 const CockpitProduccion = lazy(() => import("@/pages/maquina/CockpitProduccion"));
-// «Agentes» (antes «Workers»/Cola): la casa de los dos agentes de ejecución de la máquina
-// —Workers (pool reactivo) y Daemons (proactivos)— + economía y actividad. La ruta vieja
-// `/maquina/cola` redirige a `/maquina/agentes` preservando `?proceso=`.
+// «Agentes»: la casa de los dos agentes de ejecución de la máquina
+// —Workers (pool reactivo) y Daemons (proactivos)— + economía y actividad.
 const Agentes = lazy(() => import("@/pages/maquina/Agentes"));
 // Detalle de UN agente/daemon (`/maquina/agentes/:agente`): su estado, log por barrido y
 // controles in-place (encendido, barrer, editar prompt). Filtra la lista de daemons por nombre.
@@ -77,7 +65,7 @@ const Webhooks = lazy(() => import("@/pages/Webhooks"));
 const MiCuenta = lazy(() => import("@/pages/MiCuenta"));
 const Usuarios = lazy(() => import("@/pages/Usuarios"));
 // Sistema (admin): la infraestructura que sostiene la consola (recursos, daemons,
-// backups, latencias, S3). Antes pestaña «Salud» del Monitor; página propia de nuevo.
+// backups, latencias, S3).
 const Sistema = lazy(() => import("@/pages/sistema/Sistema"));
 
 /**

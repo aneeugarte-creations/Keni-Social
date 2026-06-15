@@ -1,5 +1,3 @@
-// Helpers compartidos del calendario de la rota. Extraído verbatim de CalendarioPiezas.tsx
-// (refactor de pura reubicación): la antigua librería de componentes se troceó por familias.
 import type { MiembroRota } from "@/types";
 
 import { filtrarEquipoPorMarca } from "../comun";
@@ -8,9 +6,8 @@ import { filtrarEquipoPorMarca } from "../comun";
 //
 // Modelo: un turno NO está ligado a un evento. Es el horario que cada persona tiene
 // en (fecha, franja_id). La cobertura es derivada. El CRUD vive ahora dentro del
-// Calendario fusionado (la antigua pestaña "Turnos" se absorbió aquí); estas
-// utilidades se conservan porque siguen siendo la fuente de la lista de CMs y de
-// los chips de persona con menú.
+// Calendario fusionado; estas utilidades se conservan porque siguen siendo la fuente
+// de la lista de CMs y de los chips de persona con menú.
 
 /**
  * Restringe el equipo a los community managers de la marca activa que cubren hoy.

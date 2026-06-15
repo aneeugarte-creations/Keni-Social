@@ -75,8 +75,7 @@ describe("VistaCalendario — aviso sin fecha y píldora terminal", () => {
 
   it("sin piezas programadas avisa y remite a la Lista del Feed para las piezas sin fecha", () => {
     // El calendario solo recibe piezas con fecha (la API lo acota por rango): el vacío
-    // remite a la Lista, donde viven las piezas sin programar. No deriva ya un conteo
-    // de "sin fecha" de su propio listado (ese conteo era siempre 0 en producción).
+    // remite a la Lista, donde viven las piezas sin programar.
     renderCalendario([]);
     expect(
       screen.getByText(/No hay piezas programadas en esta ventana/),

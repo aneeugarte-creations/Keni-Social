@@ -39,7 +39,6 @@ def test_borrar_deja_sin_clave(almacen):
 
 
 def test_borrar_sin_clave_no_lanza(almacen):
-    # borrar cuando no hay nada guardado no debe fallar
     secretos.borrar_clave_imagen()
     assert secretos.obtener_clave_imagen() is None
 

@@ -131,7 +131,7 @@ export function useInsercionImagen({
         const nuevas = store.getState().documento.capas;
         st.seleccionar(nuevas[nuevas.length - 1]?.id ?? null);
       } else {
-        // Imagen suelta: la capa adopta el aspect-ratio real de la foto (antes: cuadrado fijo).
+        // Imagen suelta: la capa adopta el aspect-ratio real de la foto.
         void insertarActivoImagen(asset.objeto, { x: dx, y: dy });
       }
       return;

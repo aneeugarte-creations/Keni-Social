@@ -2,7 +2,7 @@
 
 Conteo graduado de coincidencias del vocabulario de marca en título/resumen (con
 saturación suave), su explicación (palabras que casaron) y la asignación de marca a
-historias sin marca dominante. Movido VERBATIM desde el antiguo `clustering.py`.
+historias sin marca dominante.
 """
 
 from __future__ import annotations
@@ -13,9 +13,6 @@ from typing import Any
 from ._comun import _sin_acentos
 
 # Saturación SUAVE de la señal de marca: ~3 coincidencias de vocabulario ≈ señal plena.
-# Antes la señal era ESCALONADA (1 keyword puntuaba igual que 12) y SATURADA (un vocabulario
-# genérico daba ~1.0 casi siempre); ahora el conteo gradúa y las frases casan por LÍMITE de
-# palabra (no por subcadena).
 _MARCA_SATURA_COINCIDENCIAS = 3.0
 _PESO_MARCA_RESUMEN = 0.6
 
@@ -68,8 +65,7 @@ def _coincidencias(texto: str, vocabulario: frozenset[str]) -> list[str]:
 
     Tokens sueltos casan por igualdad de token; FRASES por límite de palabra (regex), no por
     subcadena: 'liga mx' ya no se cuela dentro de otra palabra. La tokenización separa por
-    NO-alfanuméricos (antes era `split()` y la puntuación pegada — "méxico:" — impedía casar
-    el token "mexico" en titulares reales). Determinista.
+    NO-alfanuméricos. Determinista.
     """
     if not texto or not vocabulario:
         return []

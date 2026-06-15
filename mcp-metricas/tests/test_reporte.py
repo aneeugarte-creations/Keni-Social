@@ -77,7 +77,7 @@ def test_render_markdown_cabecera_usa_nombre_legible_no_id():
 def test_render_markdown_usa_separador_es_mx_punto_no_coma():
     # D1: el texto debe usar el separador de miles es-MX (punto), MISMA fuente de
     # verdad (`formato.miles`) que el dashboard. No debe filtrarse la coma de
-    # Python (`f"{n:,}"`) que se usaba antes.
+    # Python (`f"{n:,}"`).
     rep = construir_reporte(FuenteMuestra(), "mes", top=1)
     md = render_markdown(rep)
     total_vis = rep["total"]["visualizaciones"]

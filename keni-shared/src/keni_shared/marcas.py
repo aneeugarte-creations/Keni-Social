@@ -1,36 +1,20 @@
 """Catalogo UNICO de las marcas editoriales de Keni — fuente canonica del monorepo.
 
-Historicamente convivian DOS catalogos incompatibles (uno con ids `guion_bajo`
-para Metricas/Config y otro con `slug-guion` para el contenido), por lo que la
-misma marca tenia dos identidades. Este modulo unifica todo en un solo catalogo
-con un `id` CANONICO publico. Antes vivia en la consola y keni_metricas/skills lo
-ESPEJABAN con guards (no podian importarlo, por la direccion de dependencia);
-ahora vive en `keni_shared` (H3/E1), la capa mas baja, y lo importan AMBOS
-paquetes desde la misma fuente.
-
 Cada marca tiene tres campos:
 
   - `id`          identificador CANONICO y publico, en forma `slug-guion`
-                  (p.ej. `claro-sports`). Es la forma que ya usaba casi todo el
-                  contenido (Publicaciones, Skills, RSS, Franjas, Plantillas,
-                  Hashtags) y la que viaja por la API. UNA marca = UN id.
-  - `etiqueta`    nombre HUMANO legible, con acentos (p.ej. "Nación Gamer"). Es lo
-                  unico que ve la persona; identico en TODA la consola.
+                  (p.ej. `claro-sports`). UNA marca = UN id.
+  - `etiqueta`    nombre HUMANO legible, con acentos (p.ej. "Nación Gamer").
   - `id_metricas` identificador con `guion_bajo` que necesita `keni_metricas` para
                   hablar con sus cuentas (p.ej. `claro_sports`). Solo se usa en la
-                  FRONTERA con metricas (api/metricas.py, api/conexiones.py); el resto
-                  de la consola trabaja siempre con el `id` canonico.
+                  FRONTERA con metricas (api/metricas.py, api/conexiones.py).
 
-El catalogo NO esta hardcodeado: se CARGA de un paquete de cliente declarativo
-(`clientes/<cliente>.toml`, ver `keni_shared.cliente`), externalizado a
-configuracion (#135). El cliente POR DEFECTO es `clientes/amx.toml`, con las
-mismas 5 marcas de siempre, de modo que sin configurar nada nada cambia. Anadir un
-cliente nuevo = anadir/seleccionar un `.toml`, sin tocar este modulo. El golf NO es
-una marca propia: es un matiz/sub-vertical editorial dentro del contexto de Claro
-Sports (va como cuenta hermana, ver `keni_shared.cuentas`).
+El catalogo se carga de un paquete de cliente declarativo (`clientes/<cliente>.toml`,
+ver `keni_shared.cliente`), externalizado a configuracion (#135). Anadir un cliente
+nuevo = anadir/seleccionar un `.toml`, sin tocar este modulo.
 
-El catalogo se materializa UNA vez al importar el modulo (desde el cliente activo).
-Las funciones del modulo son puras sobre ese catalogo ya cargado.
+El catalogo se materializa UNA vez al importar el modulo. Las funciones del modulo
+son puras sobre ese catalogo ya cargado.
 
 USO TIPICO:
 

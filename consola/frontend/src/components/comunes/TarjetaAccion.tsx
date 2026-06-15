@@ -29,9 +29,9 @@ interface TarjetaAccionProps {
  * un único menú (click derecho · long-press táctil · teclado). NO pinta botones ni iconos:
  * la pista de que es accionable es el realce naranja del borde al pasar el ratón o enfocar.
  *
- * Reemplaza a las tarjetas saturadas de 3-4 botones. Para acciones que requieren entrada
- * (elegir, escribir), `onPrimaria` debe abrir un diálogo/popup; las acciones directas
- * (ir a, generar) van en `onPrimaria` o en `acciones` según sean primaria o secundaria.
+ * Para acciones que requieren entrada (elegir, escribir), `onPrimaria` debe abrir un
+ * diálogo/popup; las acciones directas (ir a, generar) van en `onPrimaria` o en `acciones`
+ * según sean primaria o secundaria.
  */
 export function TarjetaAccion({
   onPrimaria,

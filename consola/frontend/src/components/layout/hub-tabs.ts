@@ -60,32 +60,16 @@ export const TABS_ANALITICAS: ItemTabHub[] = [
   { ruta: "/datos/analiticas/comercial", etiqueta: "Campañas", icono: Megaphone },
 ];
 
-// El antiguo hub "Parrilla" se separó en "Feed" (feed de ideación + Lista de contenido).
-// El hub "Calendario" se separó a su vez en DOS páginas planas del sidebar —Programación
-// y Turnos— sin sub-pestañas (no figuran aquí). La marca la fija el switch global de la topbar.
 export const TABS_FEED: ItemTabHub[] = [
   { ruta: "/operacion/feed/feed", etiqueta: "Feed", icono: LayoutGrid },
   { ruta: "/operacion/feed/lista", etiqueta: "Lista", icono: ListTodo },
 ];
 
-// El bloque CONTENIDO ya no agrupa un hub "Estudio" con pestañas: Imagen, Video y Texto
-// son TRES entradas planas del sidebar (sin sub-navegación por pestañas). Imagen
-// (`/contenido/imagen`) y Video (`/contenido/video`) son páginas sueltas; Texto sigue
-// siendo el hub de la Texto (abajo).
-
-// La página TEXTO (antes "Texto") es un hub: documentos (prompts + línea editorial) y
-// estrategia de marcas. Algoritmos (inteligencia de plataforma) se MUDÓ al cockpit de
-// Investigación: es un INPUT del motor de descubrimiento, no una herramienta de la Biblioteca.
 export const TABS_TEXTO: ItemTabHub[] = [
   // Documentos: prompts + línea editorial + plantillas, con filtros.
   { ruta: "/contenido/texto/documentos", etiqueta: "Documentos", icono: BookText },
   { ruta: "/contenido/texto/estrategia", etiqueta: "Estrategia de marcas", icono: Target },
 ];
-
-// Producción (antes «Actividad IA») es ya una PÁGINA PLANA (el feed unificado: runs del
-// pipeline + actividad suelta, con conteos y métricas). Su antigua pestaña «Monitor» se
-// RELOCALIZÓ a la sección «Máquina» (fase 2A): la vista global del worker/cola es
-// `/maquina/cola`. Por eso /datos/produccion ya no es un hub (no figura en HUB_TABS).
 
 /**
  * Mapa `rutaPadre -> sub-pestañas`. La clave es la ruta del hub (la misma que

@@ -145,7 +145,6 @@ export function EvolucionRedes({
   const marca_ = marcaParam(marcaActual);
 
   // MISMA queryKey que PiezasConsolidada => caché compartida (sin coste extra).
-  // (PanoramaPiezas ya no: usa periodo y queryKey propios.)
   const { data, isPending, isError } = useQuery({
     queryKey: ["metricas", "piezas-listado", rangoActual ?? "", marca_ ?? "todas"],
     queryFn: ({ signal }) =>

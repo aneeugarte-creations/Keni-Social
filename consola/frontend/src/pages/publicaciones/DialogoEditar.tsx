@@ -247,11 +247,6 @@ export function DialogoEditar({
   // Persiste la pieza. NO cierra el diálogo: lo comparten el autoguardado y el cierre.
   const persistir = React.useCallback(async () => {
     if (!publicacion) return;
-    // RENDER ON-DEMAND: las piezas de MARCA ya no hornean un PNG al guardar. Persistimos su
-    // RECETA (foto + copy_in + placa_oculta + plantilla + encuadre) y dejamos `imagen` vacío; la
-    // imagen publicable se renderiza on-demand en el servidor (/api/publicaciones/{id}/compuesta).
-    // Así no se duplica un PNG por cada edición de texto. Las piezas SIN marca conservan su
-    // `imagen` (imagen subida/generada, sin receta de placa).
     const imagenFinal = publicacion.marca ? "" : imagen;
     // COLLAGE: persistimos `fotos` (una foto por hueco). Por RETROCOMPAT sincronizamos el hueco 0 al
     // par legado `foto`/`foto_encuadre`, que el backend (y consumidores viejos) siguen leyendo.

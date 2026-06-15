@@ -1,8 +1,7 @@
 """Perfil editorial por marca: keywords/temas DERIVADOS de la línea editorial (libtexto) con Haiku.
 
-Reemplaza el vocabulario hardcodeado de `relevancia_marca` por un perfil extraído de la ESTRATEGIA
-de la página *texto*: un agente Haiku lee los docs editoriales de la marca (`libtexto.editoriales_
-de_marca`) y devuelve sus temas/keywords; se cachea en disco (dir de texto) y se refresca cuando
+Un agente Haiku lee los docs editoriales de la marca (`libtexto.editoriales_de_marca`)
+y devuelve sus temas/keywords; se cachea en disco (dir de texto) y se refresca cuando
 cambia la editorial (hash) o caduca (TTL). El ranking usa `palabras(marca)` (match léxico, SIN
 coste por-cluster: el Haiku solo corre en el refresco, acotado por marca y TTL).
 
@@ -98,9 +97,6 @@ def _hash(texto: str) -> str:
     return hashlib.sha256(texto.encode("utf-8")).hexdigest()[:16]
 
 
-# La plantilla vive en la Biblioteca de Texto como prompt EDITABLE (pestaña «Prompts»). Se
-# insertan la MARCA, el tope de keywords y la línea editorial en sus marcadores. Si el store
-# fallara, la red es la SEMILLA del paquete (fuente única, sin texto duplicado aquí).
 _PROMPT_ID = "prompt/editorial"
 
 

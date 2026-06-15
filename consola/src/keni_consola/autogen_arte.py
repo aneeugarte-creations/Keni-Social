@@ -9,21 +9,12 @@ copy/borrador en alguna plataforma pero le FALTA imagen, genera UN arte por IA (
 el MISMO proveedor que el boton `/api/media/generar`) y lo ADJUNTA a esa plataforma. La pieza
 sigue su flujo normal de revision/aprobacion humana.
 
-Antes existía un DAEMON suelto que barría el tablero; se RETIRÓ: la etapa vive ahora dentro
-del barrido del pipeline (`pipeline_contenido.ejecutar_arte`), que reutiliza la SELECCIÓN
-(`topics_sin_arte`) y el LANZAMIENTO (`lanzar_para_topic`) de este módulo.
-
-POR LA COLA (antes SÍNCRONO)
-============================
-La generación del arte ANTES corría SÍNCRONA dentro del barrido (con un ThreadPool propio,
-fuera del sistema de cola/carriles/reintentos/idempotencia). Eso tenía dos problemas: (1) sin
-idempotencia real, un crash entre `media.generar_imagen(prompt)` —que ya gastó el proveedor— y
-el etiquetado de éxito RE-GASTABA el proveedor en el siguiente barrido; (2) mezclaba trabajo de
-imagen (I/O + algo de CPU) fuera de la cola de jobs. AHORA `lanzar_para_topic` solo SELECCIONA
-y ENCOLA un job de PROCESO (`jobspec.PROC_IMAGEN`) vía `dominio.generar.lanzar_arte`, con CLAVE
-DE IDEMPOTENCIA ESTABLE (tema+marca+prompt-base); el WORKER, en su CARRIL de proceso (no bloquea
-el copy), corre `ejecutar_arte_job` —que llama a `media.generar_imagen`, sube la imagen y la
-adjunta a la pieza—. La semántica observable se conserva: NO publica, deja la imagen en el
+POR LA COLA
+===========
+`lanzar_para_topic` SELECCIONA y ENCOLA un job de PROCESO (`jobspec.PROC_IMAGEN`) vía
+`dominio.generar.lanzar_arte`, con CLAVE DE IDEMPOTENCIA ESTABLE (tema+marca+prompt-base);
+el WORKER, en su CARRIL de proceso, corre `ejecutar_arte_job` —que llama a `media.generar_imagen`,
+sube la imagen y la adjunta a la pieza—. La semántica observable: NO publica, deja la imagen en el
 borrador, y el dedup por etiqueta `autogen-arte` se asigna AL ÉXITO (en el ejecutor).
 
 SEGURO POR DISENO (CONSERVADOR)

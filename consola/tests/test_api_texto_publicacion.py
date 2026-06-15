@@ -124,7 +124,7 @@ def test_publicar_mueve_el_puntero_y_expone_campos(entorno_pub):
 
     # Editar tras publicar: el puntero NO se mueve y el doc queda "sin publicar" (por
     # CONTENIDO: working copy V2 != cuerpo publicado V1). `sha_actual` (HEAD git) NO se mueve
-    # con el autosave: el versionado intencionado ya no commitea al teclear.
+    # con el autosave.
     c.put(f"/api/texto/{doc['id']}", json={"cuerpo": "V2"})
     d = c.get(f"/api/texto/{doc['id']}").json()["documento"]
     assert d["produccion"]["sha"] == head
@@ -526,7 +526,7 @@ def test_maquina_tres_maquinas(entorno_sin_pg):
     assert por_id["ranking"]["doc_id"] == "prompt/editorial"
     assert por_id["ranking"]["titulo"] == "Ranking"
     assert por_id["fusion"]["titulo"] == "Fusión"
-    # El clasificador de marca ya es un prompt de la Biblioteca (migrado del hardcodeado).
+    # El clasificador de marca es un prompt de la Biblioteca.
     assert por_id["clasificacion"]["doc_id"] == "prompt/clasificacion-marca"
     # Etapas mecánicas: SOLO contexto (sin doc_id ni estado de publicación).
     for eid in ("ingesta", "clustering", "admision"):

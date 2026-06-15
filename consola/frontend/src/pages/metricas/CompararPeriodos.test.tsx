@@ -57,10 +57,6 @@ const RESP: CompararMetricas = {
   ],
 };
 
-// La marca ahora la manda el switch global (`useMarcaActiva`), así que el componente
-// debe renderizarse bajo `MarcaActivaProvider` (y su sesión). Usamos un usuario admin
-// sin marcas asignadas → marca activa = null ("Todas"), que es el valor agregado por
-// defecto que la comparativa usaba antes (`MARCA_TODAS`).
 beforeEach(() => {
   // El provider resuelve el catálogo de marcas vía `publicacionesOpciones`; lo mockeamos
   // para no hacer fetch real. No afecta a la marca activa (deriva de la sesión).
@@ -110,10 +106,6 @@ describe("CompararPeriodos", () => {
     expect(screen.getByText("Comparar con")).toBeInTheDocument();
     expect(screen.getByText("Periodo actual")).toBeInTheDocument();
 
-    // SelectorTiempo expone un combobox "Tipo de periodo" por cada periodo (A y B),
-    // que el antiguo SelectorRango (solo presets) NO tenía. Dos periodos => dos
-    // selectores de tipo: es lo que habilita comparar periodos arbitrarios
-    // (mes:AAAA-MM / rango:AAAA-MM-DD_AAAA-MM-DD), no solo preset vs preset.
     const modos = screen.getAllByLabelText("Tipo de periodo");
     expect(modos).toHaveLength(2);
   });
@@ -135,9 +127,6 @@ describe("CompararPeriodos", () => {
   });
 
   it("no revienta con valores null (métrica no comparable) -> muestra '—'", async () => {
-    // Regresión: una métrica con valor null (p.ej. 'alcance', que ya no se mide, o
-    // engagement no comparable entre redes) reventaba TODA la página vía
-    // `valor.toLocaleString` sin guardia. Ahora se muestra "—".
     const respNull = {
       ...RESP,
       total: {

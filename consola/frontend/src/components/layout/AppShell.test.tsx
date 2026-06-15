@@ -106,7 +106,6 @@ function renderShell(ruta: string) {
         <MemoryRouter initialEntries={[ruta]}>
           <Routes>
             <Route path="/" element={<AppShell />}>
-              {/* `/` ya no es launcher: redirige al tablero (como en el router real). */}
               <Route index element={<Navigate to="/generacion" replace />} />
               <Route path="generacion" element={<div>contenido app</div>} />
               <Route path="configuracion" element={<div>contenido config</div>} />
@@ -133,7 +132,6 @@ describe("AppShell · sidebar siempre presente", () => {
     await waitFor(() =>
       expect(screen.getByRole("link", { name: /^generación$/i })).toBeInTheDocument(),
     );
-    // Ya no hay control "⊞ Apps" (no hay launcher).
     expect(screen.queryByRole("link", { name: /^apps$/i })).not.toBeInTheDocument();
   });
 
@@ -146,7 +144,6 @@ describe("AppShell · sidebar siempre presente", () => {
   it("ya no hay breadcrumb de ruta en la topbar (la nav es por pestañas)", async () => {
     renderShell("/generacion");
     await screen.findByText("contenido app");
-    // El breadcrumb "Hub › Pestaña" se eliminó: no existe la región de navegación "Ruta".
     expect(screen.queryByRole("navigation", { name: /^ruta$/i })).not.toBeInTheDocument();
   });
 

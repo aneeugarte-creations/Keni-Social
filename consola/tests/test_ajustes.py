@@ -51,7 +51,7 @@ def test_guardar_clave_por_marca_no_corrompe_el_store(store):
         "KENI_PIPELINE_COPY": "1",
         "KENI_PIPELINE_COPY::unotv": "1",
     }
-    # Y un guardado posterior NO borra las anteriores (antes: leer()->{}->wipe).
+    # Y un guardado posterior NO borra las anteriores.
     ajustes.guardar("KENI_PIPELINE_ARTE", "1")
     assert ajustes.obtener("KENI_MAQUINA") == "1"
     assert ajustes.obtener("KENI_PIPELINE_COPY::unotv") == "1"

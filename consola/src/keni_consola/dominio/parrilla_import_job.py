@@ -50,8 +50,8 @@ _SLOTS_DEFECTO: tuple[str, ...] = (
 # Endurecimiento del run READ-ONLY: el job SOLO lee el documento y emite JSON. Vetamos las
 # herramientas de ESCRITURA (Write/Edit/Bash) y de RED (WebFetch/WebSearch), mas las tools MCP
 # de la consola que MUTAN datos. Presupuesto/turnos GENEROSOS: un documento puede traer un año
-# entero (cientos/miles de operaciones); el tope de antes ($0.5 / 6 turnos) ahogaba esos casos
-# (error_max_budget_usd). El coste real lo acota el tamaño del documento, no un tope artificial.
+# entero (cientos/miles de operaciones). El coste real lo acota el tamaño del documento, no un
+# tope artificial.
 _TOOLS_VETADAS: tuple[str, ...] = (
     "Write",
     "Edit",
@@ -110,9 +110,8 @@ def _tabla_a_texto(filas: list[list[Any]]) -> str:
 def _xlsx_todas_las_hojas(datos: bytes) -> str | None:
     """Transcribe TODAS las hojas de un .xlsx a texto (una sección por hoja, con cabecera).
 
-    CRÍTICO: un libro de parrilla suele tener MUCHAS hojas (una por sección/tema/semana). El
-    helper de `importador_calendario` solo lee la PRIMERA hoja (`active`), así que claude veía
-    ~1/N del documento. Aquí recorremos `wb.worksheets` enteras para no perder secciones.
+    CRÍTICO: un libro de parrilla suele tener MUCHAS hojas (una por sección/tema/semana).
+    Aquí recorremos `wb.worksheets` enteras para no perder secciones.
     """
     import io
 
@@ -140,9 +139,8 @@ def _extraer_texto_documento(datos: bytes, nombre: str) -> str | None:
     """Transcribe a TEXTO los formatos que claude no debería leer como binario (Excel/CSV/texto).
 
     Devuelve el texto a EMBEBER en el prompt, o None para formatos que claude lee mejor como
-    fichero (PDF, imagen, Word). PURO salvo por openpyxl. Un .xlsx es un ZIP que la tool Read NO
-    interpreta: leerlo así costaba turnos y dinero (el bug del `error_max_budget_usd`);
-    transcrito a TSV (TODAS las hojas), el run es una transformación texto→JSON.
+    fichero (PDF, imagen, Word). PURO salvo por openpyxl. Un .xlsx transcrito a TSV (TODAS las
+    hojas) permite una transformación texto→JSON más eficiente.
     """
     n = (nombre or "").lower()
     if n.endswith((".xlsx", ".xlsm")):
@@ -372,9 +370,7 @@ def lanzar(
 
     - Hoja de cálculo / CSV / texto: lo TRANSCRIBIMOS a texto aquí (en el back, que tiene S3) y
       lo EMBEBEMOS en el prompt. El run es una transformación texto→JSON sin abrir ficheros (sin
-      tools de lectura): rápido y barato. Esto evita el caso en que claude intentaba leer un
-      .xlsx BINARIO turno a turno hasta agotar el presupuesto (`error_max_budget_usd`) y bloquear
-      el worker ~45 min.
+      tools de lectura): rápido y barato.
     - PDF / imagen / Word: claude lo LEE como fichero. El back NO escribe los bytes: decide una
       ruta local (bajo `KENI_DATA_DIR`, idéntica en back y worker) y el WORKER baja el objeto de
       S3 a esa ruta (`prefetch_s3`) ANTES de correr claude. `dir_temporal` lo limpia al terminar.

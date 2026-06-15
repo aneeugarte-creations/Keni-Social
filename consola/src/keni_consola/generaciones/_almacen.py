@@ -85,10 +85,6 @@ def raiz() -> Path:
     cuelga de la raiz de estado unica (`rutas.dir_config()`), igual que el resto de
     recursos de config: local `${XDG_CONFIG_HOME:-~/.config}/keni-social/generaciones`,
     o `<KENI_DATA_DIR>/keni-social/generaciones` en contenedor.
-
-    XDG (#126): antes este recurso IGNORABA `XDG_CONFIG_HOME` (siempre `~/.config`); ahora
-    lo respeta como los demas. Con XDG SIN fijar el default es IDENTICO al historico
-    (`~/.config/keni-social/generaciones`), asi no se orfanan registros locales existentes.
     """
     if (p := config.override_ruta(config.ENV_GENERACIONES)) is not None:
         return p

@@ -13,7 +13,7 @@ from .. import config
 from ..tiempo import iso_utc
 
 # Env var (opcional) para la duracion de la sesion en horas (def 12h). Nombre/default
-# canonicos en `config` (fuente unica); re-exportados aqui por compat de referencias.
+# canonicos en `config` (fuente unica).
 ENV_SESION_HORAS = config.ENV_SESION_HORAS
 SESION_HORAS_DEF = config.SESION_HORAS_DEF
 

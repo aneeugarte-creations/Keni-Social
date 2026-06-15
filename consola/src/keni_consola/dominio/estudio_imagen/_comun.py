@@ -105,7 +105,7 @@ def marca_tiene_plantilla(marca: str) -> bool:
 # publica va en 4:5 (`feed`, 1080x1350) sea cual sea la red — es el encuadre canonico del post.
 # Solo el video nativo vertical (tiktok) cae a `vertical` 9:16; los reels/stories/shorts no pasan
 # por esta placa de foto, los genera el set multi-formato (`formatos_red.MATRIZ`). Red desconocida
-# -> `feed`. (Antes IG iba a `cuadrado` 1:1, lo que descuadraba el post: ya no.)
+# -> `feed`.
 _FORMATO_POR_RED = {
     "tiktok": "vertical",
     "instagram": "feed",

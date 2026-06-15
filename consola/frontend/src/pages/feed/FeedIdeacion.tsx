@@ -145,7 +145,6 @@ export default function FeedIdeacion() {
   React.useEffect(() => {
     guardarPref("keni_feed_columnas", columnas);
   }, [columnas]);
-  // El zoom (FeedZoom) se retiró: limpia la preferencia muerta de instalaciones previas.
   React.useEffect(() => {
     try {
       window.localStorage.removeItem("keni_feed_escala");

@@ -1,13 +1,5 @@
 /**
  * TarjetaHistoria — la tarjeta editorial de una historia del pool.
- *
- * Rediseño "mesa de redacción": en vez de una nube de badges técnicos, la tarjeta cuenta la
- * historia como la contaría un editor — título, FRASE de corroboración ("Confirmada por
- * Reuters y Milenio · la abrió Reuters hace 42 min"), resumen y un punto de PRIORIDAD
- * (alta/media/baja) cuyo tooltip explica por qué rankea (nunca el número crudo). Una última
- * hora toma el tratamiento rojo de tarjeta entera. Las acciones dicen la verdad del sistema:
- * si la historia "sale sola al feed" (supera el listón) el humano lo VE — no hacer nada es
- * una decisión válida; Adelantar/Empujar y Descartar quedan en el menú contextual.
  */
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";

@@ -192,7 +192,7 @@ def test_registrar_arte_sin_contenido_es_noop():
 
 
 # --------------------------------------------------------------------------- #
-# lanzar_para_topic: ahora ENCOLA (antes era SÍNCRONO). Repos/generar PARCHEADOS #
+# lanzar_para_topic: encolado. Repos/generar PARCHEADOS #
 # --------------------------------------------------------------------------- #
 
 

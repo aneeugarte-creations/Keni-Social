@@ -80,8 +80,7 @@ export function useGestoLateral({
       caja: { x: r.x, y: r.y, w: r.width, h: r.height },
     };
     // Valida con un gesto nulo (el borde en su posición actual): si la geometría no es recortable
-    // (p. ej. contain con letterbox + forma: la foto no cubre la caja), no se arma y el tirador
-    // estira como hasta ahora.
+    // (p. ej. contain con letterbox + forma: la foto no cubre la caja), no se arma.
     const bordeActual =
       lado === "izq" ? r.x : lado === "der" ? r.x + r.width : lado === "arriba" ? r.y : r.y + r.height;
     if (!recorteLateral(params, lado, bordeActual)) return;

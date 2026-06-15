@@ -26,7 +26,7 @@ def _escribir_config(monkeypatch, tmp_path, contenido: str):
 
 
 def test_default_es_metricool(monkeypatch, tmp_path):
-    """La fuente única por defecto es `metricool` (antes era `muestra`).
+    """La fuente única por defecto es `metricool`.
 
     Sin credenciales degrada a una `FuenteMetricool` VACÍA (estado honesto, sin
     cuentas), nunca a la fuente de muestra: el producto no muestra datos de demo por
@@ -52,7 +52,7 @@ def test_fuente_muestra_explicita_por_env(monkeypatch, tmp_path):
 
 
 def test_fuente_real_requiere_flag_opt_in(monkeypatch, tmp_path):
-    """`real` (fallback histórico) se rechaza sin el flag `KENI_METRICAS_PERMITIR_REAL`."""
+    """`real` se rechaza sin el flag `KENI_METRICAS_PERMITIR_REAL`."""
     monkeypatch.setenv("KENI_METRICAS_FUENTE", "real")
     monkeypatch.delenv("KENI_METRICAS_PERMITIR_REAL", raising=False)
     monkeypatch.setenv("KENI_METRICAS_CONFIG", str(tmp_path / "noexiste.toml"))
@@ -62,7 +62,7 @@ def test_fuente_real_requiere_flag_opt_in(monkeypatch, tmp_path):
 
 
 def test_fuente_real_con_flag_construye_compuesta(monkeypatch, tmp_path):
-    """Con el flag opt-in, `real` vuelve a instanciar la FuenteCompuesta (adaptadores)."""
+    """Con el flag opt-in, `real` instancia la FuenteCompuesta (adaptadores)."""
     monkeypatch.setenv("KENI_METRICAS_FUENTE", "real")
     monkeypatch.setenv("KENI_METRICAS_PERMITIR_REAL", "1")
     monkeypatch.setenv("KENI_METRICAS_CONFIG", str(tmp_path / "noexiste.toml"))
