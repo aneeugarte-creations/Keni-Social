@@ -33,7 +33,6 @@ import { formatearFechaHora, tiempoRelativo } from "@/lib/fecha";
 import { INTERVALO_VIVO_MS } from "@/lib/refresco";
 import { cn } from "@/lib/utils";
 import { useGuardarAjuste } from "@/pages/configuracion/SeccionFuncionalidad";
-import { nombreLegible, PROMPTS_POR_DAEMON } from "@/pages/maquina/agentes-meta";
 import { PROC_META } from "@/pages/monitor/comun";
 import { ChipEstadoDaemon, formatoIntervalo } from "@/pages/sistema/SeccionDaemons";
 import type { LatidoDaemon, Proceso } from "@/types";
@@ -60,7 +59,7 @@ function TarjetaAgente({
 }) {
   const solicitado = latido.barrido_solicitado !== "";
   const barrido = latido.ultimo_barrido ? tiempoRelativo(latido.ultimo_barrido) : "nunca";
-  const prompts = PROMPTS_POR_DAEMON[latido.daemon] ?? [];
+  const prompts = latido.prompts;
 
   return (
     <Card className="border-border">
@@ -69,7 +68,7 @@ function TarjetaAgente({
           <div className="min-w-0">
             <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
               <Bot className="h-4 w-4 text-sky-600" aria-hidden="true" />
-              {nombreLegible(latido.daemon)}
+              {latido.etiqueta}
               <Badge
                 variant="outline"
                 className="border-transparent bg-sky-500/15 text-[10px] text-sky-600 dark:text-sky-400"

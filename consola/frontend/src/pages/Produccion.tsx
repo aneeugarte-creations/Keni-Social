@@ -103,11 +103,11 @@ export default function Produccion() {
     (item: Pipeline) => {
       if (item.clase === "actividad") {
         if (item.origen === "generacion") {
-          navigate(`/datos/produccion/actividad/${encodeURIComponent(item.id)}`);
+          navigate(`/maquina/actividad/generacion/${encodeURIComponent(item.id)}`);
         }
         return;
       }
-      navigate(`/datos/produccion/pipelines/${encodeURIComponent(item.id)}`);
+      navigate(`/maquina/actividad/pipelines/${encodeURIComponent(item.id)}`);
     },
     [navigate],
   );

@@ -298,9 +298,11 @@ export const router = createBrowserRouter([
             path: "produccion",
             children: [
               { index: true, element: <Navigate to="/maquina/actividad" replace /> },
-              { path: "pipelines/:id", element: <PipelineDetalle /> },
-              // Detalle de un trabajo SUELTO (generación fuera del pipeline): mismo in/out.
-              { path: "actividad/:id", element: <GeneracionDetalle /> },
+              // Los detalles (run del pipeline / trabajo suelto) se RELOCALIZARON bajo la pestaña
+              // Actividad del hub de la máquina (`/maquina/actividad/...`); estas rutas viejas
+              // redirigen preservando el id (compat con enlaces/marcadores).
+              { path: "pipelines/*", element: <RedirigirPrefijo a="/maquina/actividad/pipelines" /> },
+              { path: "actividad/*", element: <RedirigirPrefijo a="/maquina/actividad/generacion" /> },
               // Monitor: RELOCALIZADO a la sección «Máquina» (fase 2A). La vista global del
               // worker/cola es `/maquina/cola`; la tira de etapas + el drawer de ajustes,
               // el cockpit de Producción. Redirige preservando `?tab=`/`?proceso=`.
@@ -337,6 +339,10 @@ export const router = createBrowserRouter([
           // Economía (contabilidad) y Actividad (traza): pestañas hermanas del hub de la máquina.
           { path: "economia", element: <Economia /> },
           { path: "actividad", element: <Actividad /> },
+          // Detalle desde la traza: una run del pipeline y un trabajo suelto (generación). Viven
+          // bajo Actividad (la traza), no en «datos»; las tarjetas del feed enlazan aquí.
+          { path: "actividad/pipelines/:id", element: <PipelineDetalle /> },
+          { path: "actividad/generacion/:id", element: <GeneracionDetalle /> },
           // Compat: la página se llamaba «Workers» (`/maquina/cola`); redirige preservando
           // `?proceso=` (los cockpits enlazan aquí prefiltrado).
           { path: "cola", element: <RedirigirCola /> },

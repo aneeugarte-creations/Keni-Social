@@ -153,7 +153,7 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
   it("enlaza al proceso IA (su run) cuando la pieza nació del pipeline", () => {
     renderPost(pub({ pipeline_id: "c1" }));
     const enlace = screen.getByRole("link", { name: /ver proceso ia/i });
-    expect(enlace).toHaveAttribute("href", "/datos/produccion/pipelines/c1");
+    expect(enlace).toHaveAttribute("href", "/maquina/actividad/pipelines/c1");
   });
 
   it("no ofrece «ver proceso IA» en piezas sin pipeline (manuales/radar/rss)", () => {

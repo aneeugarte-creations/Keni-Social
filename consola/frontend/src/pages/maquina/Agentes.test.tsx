@@ -23,16 +23,23 @@ function daemon(parcial: Record<string, unknown>) {
     ultimo_error: "", error_txt: "", duracion_ms: 0, barridos: 3, errores: 0, edad_seg: 10,
     umbral_atraso_seg: 180, estado: "ok", barrido_solicitado: "", barrible: false,
     grupo: "infra", gasta_tokens: false, clase: "sistema", motor: null, clave_gate: null,
+    // `etiqueta` (nombre humano) y `prompts` (docs editables del agente IA) los da el backend.
+    etiqueta: "", prompts: [],
     ...parcial,
   };
 }
+const VERIFICAR = [{ etiqueta: "Verificar", doc: "prompt/verificar" }];
+const REDACTAR_ILUSTRAR = [
+  { etiqueta: "Redactar", doc: "prompt/redactar" },
+  { etiqueta: "Ilustrar", doc: "prompt/ilustrar" },
+];
 const DAEMONS = {
   daemons: [
-    daemon({ daemon: "investigacion", clase: "ia", motor: "investigacion", barrible: true, gasta_tokens: true, clave_gate: "KENI_MAQUINA" }),
-    daemon({ daemon: "produccion", clase: "ia", motor: "produccion", clave_gate: "KENI_MAQUINA" }),
-    daemon({ daemon: "recolectar", clase: "maquina", motor: "investigacion", barrible: true, clave_gate: "KENI_PIPELINE_RECOLECTAR" }),
-    daemon({ daemon: "programador", clase: "maquina", motor: "produccion", clave_gate: null }),
-    daemon({ daemon: "limpiador", clase: "sistema", motor: null, clave_gate: null }),
+    daemon({ daemon: "investigacion", etiqueta: "Investigación", prompts: VERIFICAR, clase: "ia", motor: "investigacion", barrible: true, gasta_tokens: true, clave_gate: "KENI_MAQUINA" }),
+    daemon({ daemon: "produccion", etiqueta: "Producción", prompts: REDACTAR_ILUSTRAR, clase: "ia", motor: "produccion", clave_gate: "KENI_MAQUINA" }),
+    daemon({ daemon: "recolectar", etiqueta: "Recolección de noticias", clase: "maquina", motor: "investigacion", barrible: true, clave_gate: "KENI_PIPELINE_RECOLECTAR" }),
+    daemon({ daemon: "programador", etiqueta: "Programador de parrilla", clase: "maquina", motor: "produccion", clave_gate: null }),
+    daemon({ daemon: "limpiador", etiqueta: "Limpiador (cola y generaciones)", clase: "sistema", motor: null, clave_gate: null }),
   ],
   error: null,
 };

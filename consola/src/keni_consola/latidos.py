@@ -216,6 +216,53 @@ def gasta_tokens(daemon: str) -> bool:
     return daemon in GASTA_TOKENS
 
 
+# ETIQUETA humana de cada daemon: lo que la tarjeta/fila del panel muestra en vez del nombre
+# crudo. Fuente única (igual que el resto de la clasificación), keyed por el nombre CANÓNICO
+# (tras `_ALIAS`: `ingesta`, no `recolectar`; `limpiador`, no `reaper`). Un daemon no mapeado cae
+# a su nombre capitalizado (ver `etiqueta_de`), así el panel nunca queda mudo.
+ETIQUETA = {
+    "investigacion": "Investigación",
+    "produccion": "Producción",
+    "ingesta": "Recolección de noticias",
+    "trends": "Tendencias",
+    "algoritmos": "Algoritmos de plataforma",
+    "noticias_gc": "GC de noticias",
+    "programador": "Programador de parrilla",
+    "vencimientos": "Vencimientos",
+    "comercial": "Comercial",
+    "metricas": "Métricas",
+    "metricas_piezas": "Métricas de piezas",
+    "alertas_rendimiento": "Alertas de rendimiento",
+    "media_gc": "GC de media",
+    "patrones": "Patrones de marca",
+    "limpiador": "Limpiador (cola y generaciones)",
+}
+
+
+def etiqueta_de(daemon: str) -> str:
+    """Etiqueta humana del daemon para el panel; nombre capitalizado si no está mapeado."""
+    return ETIQUETA.get(daemon) or (daemon[:1].upper() + daemon[1:])
+
+
+# PROMPTS de la Biblioteca que gobiernan cada agente IA (clase=ia): lo que el panel ofrece editar
+# in-place (cada uno abre su doc en el editor). Cada entrada es {etiqueta, doc}, con `doc` = id del
+# documento en la Biblioteca. SOLO los daemons IA tienen prompt (el resto no corre `claude -p`).
+# Fuente única en el backend, en sintonía con las etapas IA de los cockpits (Verificar/Redactar/
+# Ilustrar); un test verifica que cada `doc` existe en la Biblioteca.
+PROMPTS: dict[str, list[dict[str, str]]] = {
+    "investigacion": [{"etiqueta": "Verificar", "doc": "prompt/verificar"}],
+    "produccion": [
+        {"etiqueta": "Redactar", "doc": "prompt/redactar"},
+        {"etiqueta": "Ilustrar", "doc": "prompt/ilustrar"},
+    ],
+}
+
+
+def prompts_de(daemon: str) -> list[dict[str, str]]:
+    """Prompts de la Biblioteca que gobiernan el agente IA; vacío si no es IA o no tiene."""
+    return [dict(p) for p in PROMPTS.get(daemon, [])]
+
+
 # Mínimo entre DOS latidos de ciclo del mismo daemon (las de barrido no se throttlean:
 # son una por sweep y traen el resultado). 30s mantiene el panel fresco con coste nulo.
 _MIN_ENTRE_CICLOS_SEG = 30.0

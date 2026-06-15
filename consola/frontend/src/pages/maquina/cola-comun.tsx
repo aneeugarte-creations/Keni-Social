@@ -159,7 +159,7 @@ export function TablaJobs({
               kebab="nunca"
               acciones={acciones}
               onPrimaria={() =>
-                navigate(`/datos/produccion/actividad/${encodeURIComponent(j.gen_id)}`)
+                navigate(`/maquina/actividad/generacion/${encodeURIComponent(j.gen_id)}`)
               }
               etiquetaAcciones={`Acciones de ${j.etiqueta || j.gen_id}`}
             >

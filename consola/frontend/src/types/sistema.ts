@@ -561,9 +561,21 @@ export interface LatidoDaemon {
   motor: MotorDaemon;
   /** `true` si el daemon encola/ejecuta `claude -p` (gasta tokens); `false` el resto. */
   gasta_tokens: boolean;
+  /** Nombre humano del daemon para el panel (cae al nombre crudo capitalizado si no está mapeado).
+   *  Lo da el backend (`latidos.etiqueta_de`); el front ya no hardcodea el mapeo. */
+  etiqueta: string;
+  /** Prompts de la Biblioteca que gobiernan este agente IA (lo que el panel ofrece editar
+   *  in-place); `[]` si no es IA. Lo da el backend (`latidos.prompts_de`). */
+  prompts: PromptDaemon[];
   /** Clave de ajuste (KENI_*) que enciende/apaga el daemon desde su fila (toggle in-place;
    *  pásala a `POST /api/ajustes`). `null` = SIEMPRE-ON sin toggle (limpiador/programador/…). */
   clave_gate: string | null;
+}
+
+/** Un prompt de la Biblioteca que gobierna un agente IA (etiqueta visible + id de documento). */
+export interface PromptDaemon {
+  etiqueta: string;
+  doc: string;
 }
 
 /** Respuesta de `GET /api/sistema/daemons`. Degradada: lista vacía + error legible. */

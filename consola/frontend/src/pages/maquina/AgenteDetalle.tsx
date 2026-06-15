@@ -50,7 +50,6 @@ import { duracion } from "@/lib/formato";
 import { INTERVALO_DETALLE_MS } from "@/lib/refresco";
 import { cn } from "@/lib/utils";
 import { useGuardarAjuste } from "@/pages/configuracion/SeccionFuncionalidad";
-import { nombreLegible, PROMPTS_POR_DAEMON } from "@/pages/maquina/agentes-meta";
 import type { ClaseDaemon, EstadoDaemon, LatidoDaemon } from "@/types";
 
 // Cuántos barridos pedir al log (el back acota a su cota dura por daemon).
@@ -152,7 +151,7 @@ function Controles({ latido }: { latido: LatidoDaemon }) {
 
   const solicitado = latido.barrido_solicitado !== "";
   const barriendo = barrer.isPending;
-  const prompts = latido.clase === "ia" ? (PROMPTS_POR_DAEMON[latido.daemon] ?? []) : [];
+  const prompts = latido.prompts;
 
   const acciones = [
     ...(latido.barrible
@@ -421,7 +420,7 @@ export default function AgenteDetalle() {
       <Card>
         <CardHeader className="p-4 pb-2">
           <div className="flex flex-wrap items-center gap-2">
-            <CardTitle className="text-lg">{nombreLegible(latido.daemon)}</CardTitle>
+            <CardTitle className="text-lg">{latido.etiqueta}</CardTitle>
             <span className="font-mono text-xs text-muted-foreground">{latido.daemon}</span>
             <Badge variant="secondary">{ETIQUETA_CLASE[latido.clase]}</Badge>
             {latido.motor && (

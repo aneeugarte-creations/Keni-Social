@@ -476,7 +476,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           {publicacion.pipeline_id && (
             <Tooltip label="Ver proceso de generación">
               <Link
-                to={`/datos/produccion/pipelines/${encodeURIComponent(publicacion.pipeline_id)}`}
+                to={`/maquina/actividad/pipelines/${encodeURIComponent(publicacion.pipeline_id)}`}
                 onClick={(e) => e.stopPropagation()}
                 className="-my-2 -mr-2 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
                 aria-label="Ver proceso IA"

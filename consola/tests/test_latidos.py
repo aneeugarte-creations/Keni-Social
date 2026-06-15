@@ -412,6 +412,68 @@ def test_endpoint_daemons_expone_clave_gate(entorno):
 
 
 # --------------------------------------------------------------------------- #
+# etiqueta + prompts: nombre humano y prompts editables (que el front no hardcodee)  #
+# --------------------------------------------------------------------------- #
+
+
+def test_etiqueta_de_mapea_nombre_humano_y_capitaliza():
+    # Mapeo explícito por nombre CANÓNICO (tras _ALIAS: ingesta/limpiador, no recolectar/reaper).
+    assert latidos.etiqueta_de("investigacion") == "Investigación"
+    assert latidos.etiqueta_de("ingesta") == "Recolección de noticias"
+    assert latidos.etiqueta_de("limpiador") == "Limpiador (cola y generaciones)"
+    # Un daemon sin etiqueta mapeada cae a su nombre capitalizado (el panel nunca queda mudo).
+    assert latidos.etiqueta_de("daemon_nuevo") == "Daemon_nuevo"
+
+
+def test_prompts_de_solo_los_agentes_ia():
+    # Solo los daemons IA tienen prompts editables (corren `claude -p`); el resto, ninguno.
+    assert latidos.prompts_de("investigacion") == [
+        {"etiqueta": "Verificar", "doc": "prompt/verificar"}
+    ]
+    assert latidos.prompts_de("produccion") == [
+        {"etiqueta": "Redactar", "doc": "prompt/redactar"},
+        {"etiqueta": "Ilustrar", "doc": "prompt/ilustrar"},
+    ]
+    for d in ("ingesta", "trends", "programador", "metricas", "limpiador", "daemon_nuevo"):
+        assert latidos.prompts_de(d) == []
+
+
+def test_prompts_de_devuelve_copias_aisladas():
+    # Mutar la lista devuelta NO debe contaminar el mapa fuente (el panel recibe una copia).
+    p = latidos.prompts_de("investigacion")
+    p.append({"etiqueta": "x", "doc": "y"})
+    assert len(latidos.prompts_de("investigacion")) == 1
+
+
+def test_prompts_docs_existen_en_el_catalogo_de_procesos():
+    # Cada `doc` de PROMPTS debe ser un prompt REAL del catálogo de procesos (mismo doc que se
+    # inyecta a la IA). Si alguien renombra/retira un prompt, este test cae antes que el front.
+    from keni_consola import prompts_procesos
+
+    for daemon, prompts in latidos.PROMPTS.items():
+        for p in prompts:
+            assert prompts_procesos.procesos_de(p["doc"]), (
+                f"prompt {p['doc']!r} del agente {daemon!r} no existe en el catálogo de procesos"
+            )
+
+
+def test_endpoint_daemons_expone_etiqueta_y_prompts(entorno):
+    # El endpoint añade `etiqueta` (nombre humano) y `prompts` (docs editables del agente IA, []
+    # si no es IA): el front pinta el nombre y ofrece editar prompts SIN hardcodear el mapeo.
+    db.latido_barrido("produccion", ok=True, intervalo_seg=60.0, tick_seg=60.0)
+    db.latido_barrido("ingesta", ok=True, intervalo_seg=60.0, tick_seg=60.0)
+    c = _cli_admin()
+    por_nombre = {d["daemon"]: d for d in c.get("/api/sistema/daemons").json()["daemons"]}
+    assert por_nombre["produccion"]["etiqueta"] == "Producción"
+    assert por_nombre["produccion"]["prompts"] == [
+        {"etiqueta": "Redactar", "doc": "prompt/redactar"},
+        {"etiqueta": "Ilustrar", "doc": "prompt/ilustrar"},
+    ]
+    assert por_nombre["ingesta"]["etiqueta"] == "Recolección de noticias"
+    assert por_nombre["ingesta"]["prompts"] == []
+
+
+# --------------------------------------------------------------------------- #
 # Barrido FORZADO: flag en BD + consumo en bucle_gateado + endpoint             #
 # --------------------------------------------------------------------------- #
 

@@ -105,7 +105,7 @@ function TemasBloqueados({ marca }: { marca?: string }) {
                 {p.marca_nombre || p.marca}
               </Badge>
               <Link
-                to={`/datos/produccion/pipelines/${encodeURIComponent(p.id)}`}
+                to={`/maquina/actividad/pipelines/${encodeURIComponent(p.id)}`}
                 className="min-w-0 truncate font-medium underline-offset-2 hover:underline"
                 title={p.titulo}
               >
