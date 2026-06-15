@@ -47,11 +47,17 @@ def test_parsear_uso_tolera_ansi_y_cr():
     assert r["medidores"][0]["pct"] == 10
 
 
-def test_parsear_estado_oauth_token():
-    r = cc.parsear_estado('{"loggedIn": true, "authMethod": "oauth_token", "apiProvider": "firstParty"}')
+def test_parsear_estado_login_credenciales():
+    # Forma REAL del `auth status` con login por credenciales (incluye email/plan/org).
+    r = cc.parsear_estado(
+        '{"loggedIn": true, "authMethod": "claude.ai", "apiProvider": "firstParty",'
+        ' "email": "owner@kenitech.io", "orgName": "Acme", "subscriptionType": "max"}'
+    )
     assert r["logueado"] is True
-    assert r["metodo"] == "oauth_token"
-    assert r["proveedor"] == "firstParty"
+    assert r["metodo"] == "claude.ai"
+    assert r["email"] == "owner@kenitech.io"
+    assert r["plan"] == "max"
+    assert r["org"] == "Acme"
 
 
 def test_parsear_estado_no_json_desconocido():

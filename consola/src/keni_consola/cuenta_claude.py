@@ -144,24 +144,30 @@ def _limpiar(texto: str) -> str:
 
 
 def parsear_estado(stdout: str) -> dict:
-    """Parsea `claude auth status --json` -> {logueado, metodo, proveedor, crudo}.
+    """Parsea `claude auth status --json` -> {logueado, metodo, proveedor, email, plan, org, crudo}.
 
-    Tolerante: si el stdout no es el JSON esperado, devuelve `logueado=None` con el texto
-    crudo, para que la UI muestre "desconocido" en vez de romperse.
+    Con login por credenciales, el CLI da bastante más que con un token: `email`, `orgName`
+    y `subscriptionType` (p.ej. "max"). Tolerante: si el stdout no es el JSON esperado,
+    devuelve `logueado=None` con el texto crudo, para que la UI muestre "desconocido".
     """
     import json
 
+    base = {"logueado": None, "metodo": None, "proveedor": None,
+            "email": None, "plan": None, "org": None}
     crudo = _limpiar(stdout).strip()
     try:
         datos = json.loads(crudo)
     except (json.JSONDecodeError, ValueError):
-        return {"logueado": None, "metodo": None, "proveedor": None, "crudo": crudo}
+        return {**base, "crudo": crudo}
     if not isinstance(datos, dict):
-        return {"logueado": None, "metodo": None, "proveedor": None, "crudo": crudo}
+        return {**base, "crudo": crudo}
     return {
         "logueado": bool(datos.get("loggedIn")) if datos.get("loggedIn") is not None else None,
         "metodo": datos.get("authMethod"),
         "proveedor": datos.get("apiProvider"),
+        "email": datos.get("email"),
+        "plan": datos.get("subscriptionType"),
+        "org": datos.get("orgName"),
         "crudo": crudo,
     }
 

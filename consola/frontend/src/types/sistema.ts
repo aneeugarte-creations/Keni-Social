@@ -766,10 +766,16 @@ export interface RespuestaBorrarLoteS3 {
 export interface CuentaAuth {
   /** ¿Hay sesión iniciada? null = desconocido (el CLI no respondió como se esperaba). */
   logueado: boolean | null;
-  /** Método de auth: "claudeai" (login de suscripción) | "api_key" | … */
+  /** Método de auth: "claude.ai" (login de suscripción) | "api_key" | … */
   metodo: string | null;
   /** Proveedor: "firstParty" (suscripción) | "console" (API) | … */
   proveedor: string | null;
+  /** Email de la cuenta conectada (solo con login por credenciales; null si no). */
+  email?: string | null;
+  /** Tipo de suscripción ("max", "pro", …) o null. */
+  plan?: string | null;
+  /** Organización de la cuenta o null. */
+  org?: string | null;
   /** Salida cruda del CLI (diagnóstico). */
   crudo?: string;
   /** Error legible si no se pudo leer el estado. */

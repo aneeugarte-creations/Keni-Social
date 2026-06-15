@@ -6,6 +6,7 @@ import {
   KeyRound,
   Loader2,
   LogOut,
+  RefreshCw,
   UserCog,
 } from "lucide-react";
 import * as React from "react";
@@ -41,7 +42,12 @@ import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { CuentaAuth, CuentaUso, MedidorUso } from "@/types";
 
-import { INTERVALO_RECURSOS_MS, colorUso } from "./lib";
+import { colorUso } from "./lib";
+
+// El estado de cuenta + medidor `/usage` se refresca cada HORA: leerlo ejecuta `claude -p
+// /usage` en el servidor (subproceso + roundtrip a Anthropic), y el uso casi no cambia en
+// minutos. Para verlo al momento está el botón de refresco. (Antes iba al pulso del panel, 8s.)
+const INTERVALO_CUENTA_MS = 60 * 60 * 1000;
 
 /** Etiqueta legible del método de auth que reporta el CLI. */
 function metodoLegible(metodo: string | null): string {
@@ -101,11 +107,11 @@ function BloqueUso({ uso }: { uso: CuentaUso | undefined }) {
     return (
       <div className="space-y-1 rounded-lg border border-border/60 p-3">
         <p className="text-sm text-muted-foreground">
-          {uso.mensaje || "El medidor de uso no está disponible."}
+          {uso.mensaje || "Cuenta de suscripción activa."}
         </p>
         <p className="text-xs text-muted-foreground/80">
-          El detalle de uso (sesión / semana) solo aparece con una cuenta de suscripción
-          conectada.
+          El medidor detallado (sesión / semana) no lo expone la versión de Claude Code del
+          servidor; úsalo con <code>claude /usage</code> en tu terminal.
         </p>
       </div>
     );
@@ -322,7 +328,10 @@ export function SeccionCuentaClaude() {
   const query = useQuery({
     queryKey: ["sistema", "cuenta"],
     queryFn: ({ signal }) => api.sistemaCuenta(signal),
-    refetchInterval: INTERVALO_RECURSOS_MS,
+    // Cada hora, y NO al reenfocar la ventana: leerlo es caro (`claude -p /usage`). Para
+    // verlo al instante, el botón de refresco de la cabecera.
+    refetchInterval: INTERVALO_CUENTA_MS,
+    refetchOnWindowFocus: false,
   });
 
   if (query.isPending) {
@@ -351,7 +360,22 @@ export function SeccionCuentaClaude() {
             <KeyRound className="h-4 w-4" aria-hidden="true" />
             Cuenta de Claude del servidor
           </span>
-          {data.disponible && <BadgeAuth auth={data.auth} />}
+          <span className="flex items-center gap-2">
+            {data.disponible && <BadgeAuth auth={data.auth} />}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={refrescar}
+              disabled={query.isFetching}
+              title="Actualizar estado y uso ahora"
+            >
+              <RefreshCw
+                className={cn("h-4 w-4", query.isFetching && "animate-spin")}
+                aria-hidden="true"
+              />
+            </Button>
+          </span>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 p-4 pt-0">
@@ -378,12 +402,14 @@ export function SeccionCuentaClaude() {
           <>
             <dl className="grid grid-cols-1 gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2">
               <div className="flex items-baseline justify-between gap-3 border-b border-border/50 py-1">
-                <dt className="text-muted-foreground">Método</dt>
-                <dd className="font-medium">{metodoLegible(data.auth?.metodo ?? null)}</dd>
+                <dt className="text-muted-foreground">Cuenta</dt>
+                <dd className="truncate font-medium">{data.auth?.email ?? "—"}</dd>
               </div>
               <div className="flex items-baseline justify-between gap-3 border-b border-border/50 py-1">
-                <dt className="text-muted-foreground">Proveedor</dt>
-                <dd className="font-medium">{data.auth?.proveedor ?? "—"}</dd>
+                <dt className="text-muted-foreground">Plan</dt>
+                <dd className="font-medium capitalize">
+                  {data.auth?.plan ?? metodoLegible(data.auth?.metodo ?? null)}
+                </dd>
               </div>
             </dl>
 
