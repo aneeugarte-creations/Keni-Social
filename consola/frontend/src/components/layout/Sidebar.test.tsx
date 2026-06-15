@@ -26,14 +26,14 @@ const CATALOGO = {
       icono: "Sparkles",
       descripcion: "Copy, clips, imágenes y verificación",
       permisos: ["editor", "admin"],
-      rutas_frontend: ["/contenido/imagen", "/maquina/investigacion", "/maquina/agentes"],
+      rutas_frontend: ["/contenido/imagen", "/maquina/investigacion", "/maquina/computo"],
       nav: [
         { ruta: "/contenido/imagen", etiqueta: "Imagen", icono: "Palette", descripcion: "", grupo: "contenido", grupo_orden: 20, orden: 10 },
         { ruta: "/contenido/texto", etiqueta: "Texto", icono: "Library", descripcion: "", grupo: "contenido", grupo_orden: 20, orden: 20 },
-        // Bloque «Máquina»: cada motor UNA sola vez (consolidación de nav).
+        // Bloque «Máquina»: dos cockpits (los agentes IA) + el hub de la sala de máquinas (Cómputo).
         { ruta: "/maquina/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "", grupo: "maquina", grupo_orden: 25, orden: 10 },
         { ruta: "/maquina/produccion", etiqueta: "Producción", icono: "Sparkles", descripcion: "", grupo: "maquina", grupo_orden: 25, orden: 20 },
-        { ruta: "/maquina/agentes", etiqueta: "Agentes", icono: "Bot", descripcion: "", grupo: "maquina", grupo_orden: 25, orden: 30 },
+        { ruta: "/maquina/computo", etiqueta: "Cómputo", icono: "Cpu", descripcion: "", grupo: "maquina", grupo_orden: 25, orden: 30 },
       ],
     },
     {
@@ -86,7 +86,7 @@ const CATALOGO = {
       items: [
         { ruta: "/maquina/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "Cockpit de investigación" },
         { ruta: "/maquina/produccion", etiqueta: "Producción", icono: "Sparkles", descripcion: "Cockpit de producción" },
-        { ruta: "/maquina/agentes", etiqueta: "Agentes", icono: "Bot", descripcion: "Workers, daemons, economía y actividad" },
+        { ruta: "/maquina/computo", etiqueta: "Cómputo", icono: "Cpu", descripcion: "Cómputo, economía y actividad" },
       ],
     },
     {
@@ -242,10 +242,10 @@ describe("Sidebar · bloques de flujo", () => {
     // Bloque "Contenido".
     expect(screen.getByRole("link", { name: /imagen/i })).toHaveAttribute("href", "/contenido/imagen");
     expect(screen.getByRole("link", { name: /texto/i })).toHaveAttribute("href", "/contenido/texto");
-    // Bloque "Máquina": cada motor UNA sola vez (consolidación de nav).
+    // Bloque "Máquina": dos cockpits (los agentes IA) + el hub de la sala de máquinas (Cómputo).
     expect(screen.getByRole("link", { name: /investigación/i })).toHaveAttribute("href", "/maquina/investigacion");
     expect(screen.getByRole("link", { name: /producción/i })).toHaveAttribute("href", "/maquina/produccion");
-    expect(screen.getByRole("link", { name: /agentes/i })).toHaveAttribute("href", "/maquina/agentes");
+    expect(screen.getByRole("link", { name: /cómputo/i })).toHaveAttribute("href", "/maquina/computo");
     // Bloque "Datos": solo Analíticas.
     expect(screen.getByRole("link", { name: /analíticas/i })).toHaveAttribute("href", "/datos/analiticas");
     // Las pestañas internas de un hub NO viven en el sidebar (van in-page).
@@ -339,11 +339,10 @@ describe("apps-scope · helpers", () => {
       // /contenido/texto (hub) → sus sub-pestañas
       "/contenido/texto/documentos",
       "/contenido/texto/estrategia",
-      // Bloque «Máquina»: los cockpits Investigación/Producción son páginas planas; Agentes es el
-      // hub «sala de máquinas» → se aplana a sus pestañas (Agentes/Cómputo/Economía/Actividad).
+      // Bloque «Máquina»: los cockpits Investigación/Producción son páginas planas; Cómputo es la
+      // entrada del hub «sala de máquinas» → se aplana a sus pestañas (Cómputo/Economía/Actividad).
       "/maquina/investigacion",
       "/maquina/produccion",
-      "/maquina/agentes",
       "/maquina/computo",
       "/maquina/economia",
       "/maquina/actividad",
@@ -362,13 +361,13 @@ describe("apps-scope · helpers", () => {
     const grupos = gruposDeApp(apps[0]);
     const rutas = grupos.flatMap((g) => g.items.map((i) => i.ruta));
     // Ordenado por (grupo_orden, orden): contenido(20: /imagen,/texto) · maquina(25: /investigacion,
-    // /produccion, /cola). Producción ya no aporta entradas a "operacion" ni a "datos".
+    // /produccion, /computo). Producción ya no aporta entradas a "operacion" ni a "datos".
     expect(rutas).toEqual([
       "/contenido/imagen",
       "/contenido/texto",
       "/maquina/investigacion",
       "/maquina/produccion",
-      "/maquina/agentes",
+      "/maquina/computo",
     ]);
   });
 });

@@ -87,8 +87,8 @@ export default function CockpitInvestigacion() {
       {seccion !== "algoritmos" && (
         <AccionesPagina>
           <MenuAcciones ajustesTitulo="Ajustes de investigación" ajustes={<PanelInvestigacion />}>
-            <ItemMenu icono={ListChecks} onClick={() => navigate("/maquina/agentes?proceso=investigacion")}>
-              Ver agentes
+            <ItemMenu icono={ListChecks} onClick={() => navigate("/maquina/computo?proceso=investigacion")}>
+              Ver cómputo
             </ItemMenu>
           </MenuAcciones>
         </AccionesPagina>

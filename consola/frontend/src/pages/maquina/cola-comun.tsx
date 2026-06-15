@@ -1,8 +1,9 @@
 /**
- * Piezas COMPARTIDAS de la cola/cómputo entre la página de Agentes (`/maquina/agentes`) y la de
- * Cómputo y cola (`/maquina/computo`): la tarjeta KPI, la tabla de jobs activos (con sus
- * acciones admin) y el panel de presupuesto + parada de emergencia. Viven aquí para que ambas
- * superficies reusen el mismo render y el mismo contrato sin duplicarlo.
+ * Piezas COMPARTIDAS de la sala de máquinas entre Cómputo (`/maquina/computo`) y Economía
+ * (`/maquina/economia`): la tarjeta KPI, la tabla de jobs activos (con sus acciones admin) y el
+ * panel de presupuesto + parada de emergencia. Viven aquí para que ambas superficies reusen el
+ * mismo render y el mismo contrato sin duplicarlo (Cómputo usa Kpi/TablaJobs; Economía, el panel
+ * de presupuesto).
  */
 import { ArrowUp, Coins, type Cpu, RotateCcw, XCircle } from "lucide-react";
 import * as React from "react";

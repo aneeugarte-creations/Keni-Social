@@ -29,13 +29,12 @@ _SIDEBAR_BLOQUES = [
     # Imagen (editor de imagen por capas + IA), Video (estudio de video) y Texto (la
     # Texto: prompts + línea editorial + plantillas).
     ["Imagen", "Video", "Texto"],
-    # "Máquina": la máquina de generación — dos cockpits de trabajo de igual peso (Investigación:
-    # descubre/verifica; Producción: genera copy/arte) + la entrada Agentes, que es el hub «sala de
-    # máquinas» (los agentes IA proactivos, y en pestañas hermanas in-page el Cómputo —la cola—, la
-    # Economía —coste— y la Actividad —la traza—). Tras la consolidación de navegación, cada motor
-    # sale UNA sola vez: las viejas entradas «datos» de Investigación y Producción se retiraron del
-    # menú (Investigación → cockpit; el feed de producción → pestaña «Actividad» del hub).
-    ["Investigación", "Producción", "Agentes"],
+    # "Máquina": dos cockpits de trabajo de igual peso (Investigación: descubre/verifica;
+    # Producción: genera copy/arte) — que SON los dos agentes IA — + la entrada Cómputo, hub «sala
+    # de máquinas» (la cola en vivo, y en pestañas hermanas in-page la Economía —coste— y la
+    # Actividad —la traza—). La lista «Agentes» se retiró: era redundante con los dos cockpits
+    # (su on/off y prompts viven ahí; su salud, en el doctor).
+    ["Investigación", "Producción", "Cómputo"],
     # "Datos": lo que alimenta o refleja la automatización. Solo queda Analíticas (la medición
     # que cierra el loop); la aporta `metricas.toml`.
     ["Analíticas"],
@@ -108,7 +107,9 @@ def test_iconos_de_nav_son_strings_lucide():
     # las viejas entradas «datos» (/datos/investigacion, /datos/produccion) se retiraron del menú.
     assert iconos["/maquina/investigacion"] == "Search"
     assert iconos["/maquina/produccion"] == "Sparkles"
-    assert iconos["/maquina/agentes"] == "Bot"
+    assert iconos["/maquina/computo"] == "Cpu"
+    # La lista «Agentes» se retiró: ya no hay entrada de nav suya.
+    assert "/maquina/agentes" not in iconos
     assert "/datos/investigacion" not in iconos
     assert "/datos/produccion" not in iconos
 

@@ -185,9 +185,9 @@ export default function CockpitProduccion() {
         >
           <ItemMenu
             icono={ListChecks}
-            onClick={() => navigate("/maquina/agentes?proceso=produccion")}
+            onClick={() => navigate("/maquina/computo?proceso=produccion")}
           >
-            Ver agentes (Producción)
+            Ver cómputo (Producción)
           </ItemMenu>
         </MenuAcciones>
       </AccionesPagina>

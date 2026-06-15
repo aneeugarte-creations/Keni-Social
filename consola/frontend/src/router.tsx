@@ -43,15 +43,12 @@ const GeneracionDetalle = lazy(() => import("@/pages/GeneracionDetalle"));
 // del worker/cola).
 const CockpitInvestigacion = lazy(() => import("@/pages/maquina/CockpitInvestigacion"));
 const CockpitProduccion = lazy(() => import("@/pages/maquina/CockpitProduccion"));
-// «Agentes»: la pestaña de aterrizaje del hub de la máquina («sala de máquinas»): los AGENTES IA
-// proactivos (daemons clase=ia que corren `claude -p`) con su control in-place. Sus pestañas
-// hermanas son Cómputo, Economía y Actividad.
-const Agentes = lazy(() => import("@/pages/maquina/Agentes"));
-// Detalle de UN agente/daemon (`/maquina/agentes/:agente`): su estado, log por barrido y
-// controles in-place (encendido, barrer, editar prompt). Filtra la lista de daemons por nombre.
+// Detalle de UN daemon (`/maquina/agentes/:agente`): su estado y log por barrido; lo abren las
+// tablas de daemons (Sistema + cockpits). La LISTA «Agentes» se retiró: los dos agentes IA son
+// los dos cockpits (su on/off y prompts viven ahí; su salud, en el doctor).
 const AgenteDetalle = lazy(() => import("@/pages/maquina/AgenteDetalle"));
 // «Cómputo y cola» (`/maquina/computo`): la cola por dentro (en curso + esperando) con su control
-// admin (priorizar/cancelar/reintentar/purgar) + estado de slots. Pestaña del hub de la máquina.
+// admin (priorizar/cancelar/reintentar/purgar) + estado de slots. Pestaña de aterrizaje del hub.
 const Computo = lazy(() => import("@/pages/maquina/Computo"));
 // «Economía» (`/maquina/economia`): la contabilidad de la máquina (presupuesto + parada de
 // emergencia + economía de tokens desglosada por motor). Pestaña del hub de la máquina.
@@ -328,11 +325,12 @@ export const router = createBrowserRouter([
       {
         path: "maquina",
         children: [
-          { index: true, element: <Navigate to="/maquina/agentes" replace /> },
+          { index: true, element: <Navigate to="/maquina/computo" replace /> },
           { path: "investigacion", element: <CockpitInvestigacion /> },
           { path: "produccion", element: <CockpitProduccion /> },
-          { path: "agentes", element: <Agentes /> },
-          // Detalle de UN agente/daemon (`:agente` = nombre del daemon).
+          // La LISTA «Agentes» se retiró (redundante con los dos cockpits): redirige al hub.
+          { path: "agentes", element: <Navigate to="/maquina/computo" replace /> },
+          // Detalle de UN daemon (`:agente` = nombre): lo abren las tablas de daemons.
           { path: "agentes/:agente", element: <AgenteDetalle /> },
           // Cómputo y cola (estática; no choca con la dinámica `agentes/:agente`).
           { path: "computo", element: <Computo /> },

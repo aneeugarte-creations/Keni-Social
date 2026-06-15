@@ -169,10 +169,10 @@ grupo_orden = 25
 orden = 20
 
 [[nav]]
-ruta = "/maquina/agentes"
-etiqueta = "Agentes"
-icono = "Bot"
-descripcion = "La «sala de máquinas»: los agentes IA (proactivos, claude -p) con su control in-place, y en pestañas hermanas el Cómputo (la cola), la Economía (presupuesto + coste) y la Actividad (la traza completa)."
+ruta = "/maquina/computo"
+etiqueta = "Cómputo"
+icono = "Cpu"
+descripcion = "La «sala de máquinas» (observabilidad y control): el Cómputo (la cola en vivo) y, en pestañas hermanas, la Economía (presupuesto + coste) y la Actividad (la traza completa). Los dos agentes IA son los dos cockpits (Investigación/Producción)."
 grupo = "maquina"
 grupo_orden = 25
 orden = 30

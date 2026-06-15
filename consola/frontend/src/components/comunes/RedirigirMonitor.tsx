@@ -4,9 +4,9 @@ import { Navigate, useLocation } from "react-router-dom";
  * Redirección a la sección «Máquina». Gestiona los tabs históricos:
  *   - `?tab=salud` → `/sistema` (infra),
  *   - `?tab=ajustes` → `/maquina/produccion?tab=ajustes` (drawer),
- *   - el resto → `/maquina/agentes` (página Agentes).
+ *   - el resto → `/maquina/computo` (la cola por dentro).
  *
- * Preserva los query params relevantes (`?proceso=` para prefiltrar Agentes). Vive en su
+ * Preserva los query params relevantes (`?proceso=` para prefiltrar Cómputo). Vive en su
  * propio fichero (no en `router.tsx`) para no romper el fast-refresh del módulo de rutas.
  */
 export function RedirigirMonitor() {
@@ -20,9 +20,9 @@ export function RedirigirMonitor() {
   // Los ajustes de la máquina viven en el drawer del cockpit de Producción.
   if (tab === "ajustes") return <Navigate to="/maquina/produccion?tab=ajustes" replace />;
 
-  // El resto (incl. `?proceso=investigacion|produccion`) cae en la página Agentes,
+  // El resto (incl. `?proceso=investigacion|produccion`) cae en Cómputo (la cola),
   // preservando el prefiltro de proceso.
   params.delete("tab");
   const cola = params.toString();
-  return <Navigate to={`/maquina/agentes${cola ? `?${cola}` : ""}`} replace />;
+  return <Navigate to={`/maquina/computo${cola ? `?${cola}` : ""}`} replace />;
 }

@@ -22,7 +22,7 @@ import type { EtapaMaquina, EtapaPrompt, MaquinaTexto } from "@/types";
  *  propia enlaza a su proceso EN VIVO. Importación no tiene página de proceso: sin enlace. */
 const RUTA_PROCESO: Record<string, string> = {
   investigacion: "/maquina/investigacion",
-  produccion: "/maquina/agentes",
+  produccion: "/maquina/produccion",
 };
 
 /** Badge del estado de publicación de una etapa con prompt (producción / sin publicar). */

@@ -1,11 +1,11 @@
 /**
- * Página de DETALLE de un agente/daemon de la máquina (`/maquina/agentes/:agente`).
+ * Página de DETALLE de un daemon de la máquina (`/maquina/agentes/:agente`).
  *
- * El listado de Agentes (`/maquina/agentes`) muestra TODOS los daemons en tablas; esta página
- * abre UNO solo para verlo, analizarlo y controlarlo de cerca: su estado actual, su LOG por
- * barrido (cada iteración del bucle con su duración/resultado/resumen), y los controles in-place
- * que ya viven en el dashboard (encender/apagar vía su `clave_gate`, «Barrer ahora», y —para
- * los agentes de IA— editar su prompt sin salir de la página).
+ * Lo abren las TABLAS de daemons (Sistema · servicios de sistema; los cockpits · servicios no-IA
+ * de su motor) para ver UNO de cerca: su estado actual, su LOG por barrido (cada iteración del
+ * bucle con su duración/resultado/resumen) y los controles in-place (encender/apagar vía su
+ * `clave_gate`, «Barrer ahora», y —para los daemons de IA— editar su prompt sin salir de la
+ * página). No hay lista de Agentes: los dos agentes IA son los dos cockpits.
  *
  * No hay endpoint de «un daemon»: se filtra la lista (`GET /api/sistema/daemons`) por nombre.
  * El log viene de `GET /api/sistema/daemons/{daemon}/barridos`. Ambos son de admin (403 si no).
@@ -25,7 +25,7 @@ import {
   XCircle,
 } from "lucide-react";
 import * as React from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
@@ -309,7 +309,7 @@ function Analizar({ latido }: { latido: LatidoDaemon }) {
       realce
       onPrimaria={
         latido.motor
-          ? () => navigate(`/maquina/agentes?proceso=${latido.motor}`)
+          ? () => navigate(`/maquina/computo?proceso=${latido.motor}`)
           : undefined
       }
       acciones={[]}
@@ -353,18 +353,19 @@ function Analizar({ latido }: { latido: LatidoDaemon }) {
 
 export default function AgenteDetalle() {
   const { agente } = useParams<{ agente: string }>();
+  const navigate = useNavigate();
   const query = useQuery({
     queryKey: ["sistema", "daemons"],
     queryFn: ({ signal }) => api.sistemaDaemons(signal),
     refetchInterval: INTERVALO_DETALLE_MS,
   });
 
+  // El detalle se abre desde las tablas de daemons (Sistema / cockpits): «Atrás» vuelve a su
+  // origen en vez de a una página fija (ya no hay lista de Agentes).
   const volver = (
-    <Button variant="ghost" size="sm" asChild className="mb-2 -ml-2 w-fit">
-      <Link to="/maquina/agentes">
-        <ArrowLeft className="mr-1 h-4 w-4" aria-hidden="true" />
-        Agentes
-      </Link>
+    <Button variant="ghost" size="sm" className="mb-2 -ml-2 w-fit" onClick={() => navigate(-1)}>
+      <ArrowLeft className="mr-1 h-4 w-4" aria-hidden="true" />
+      Atrás
     </Button>
   );
 

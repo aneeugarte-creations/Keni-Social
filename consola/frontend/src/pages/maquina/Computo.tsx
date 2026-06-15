@@ -1,8 +1,8 @@
 /**
- * Página CÓMPUTO Y COLA (`/maquina/computo`): la cola de generación POR DENTRO, al mismo nivel
- * que las páginas de detalle de agente. Enseña el estado en vivo (en curso / en cola / workers +
- * presupuesto y parada de emergencia) y deja al humano PRIORIZAR, cancelar, reintentar y purgar
- * la cola in-place. `?proceso=` enfoca a un motor.
+ * Página CÓMPUTO Y COLA (`/maquina/computo`): la cola de generación POR DENTRO. Enseña el estado
+ * en vivo (en curso / en cola / workers) y deja al humano PRIORIZAR, cancelar, reintentar y purgar
+ * la cola in-place. `?proceso=` enfoca a un motor. Es la pestaña de aterrizaje del hub de la
+ * máquina; el presupuesto y la economía viven en su pestaña hermana «Economía».
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Clock, Cpu, RefreshCw, Trash2, Users } from "lucide-react";
@@ -19,9 +19,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
-import { INTERVALO_SERIE_MS, INTERVALO_VIVO_MS } from "@/lib/refresco";
-import { Kpi, PanelPresupuesto, TablaJobs } from "@/pages/maquina/cola-comun";
-import { PROC_META, resultadoDelDia } from "@/pages/monitor/comun";
+import { INTERVALO_VIVO_MS } from "@/lib/refresco";
+import { Kpi, TablaJobs } from "@/pages/maquina/cola-comun";
+import { PROC_META } from "@/pages/monitor/comun";
 import type { ColaJob, Proceso } from "@/types";
 
 /** Card con la lista de jobs de un estado (en curso / esperando), o un vacío amable. */
@@ -76,11 +76,6 @@ export default function Computo() {
     queryKey: ["actividad", "cola", marcaActiva ?? "todas"],
     queryFn: ({ signal }) => api.cola({ marca: marcaActiva ?? undefined }, signal),
     refetchInterval: INTERVALO_VIVO_MS,
-  });
-  const serie = useQuery({
-    queryKey: ["actividad", "cola", "series"],
-    queryFn: ({ signal }) => api.colaSeries(14, signal),
-    refetchInterval: INTERVALO_SERIE_MS,
   });
 
   const refrescar = () => void qc.invalidateQueries({ queryKey: ["actividad", "cola"] });
@@ -195,16 +190,7 @@ export default function Computo() {
         </p>
       )}
 
-      {/* Presupuesto + parada de emergencia (globales). */}
-      {snap.presupuesto && (
-        <PanelPresupuesto
-          presupuesto={snap.presupuesto}
-          resHoy={resultadoDelDia(serie.data, snap.presupuesto.dia)}
-          esAdmin={esAdmin}
-        />
-      )}
-
-      {/* Estado en vivo. */}
+      {/* Estado en vivo. (El presupuesto y la parada de emergencia viven en «Economía».) */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <Kpi
           icono={Cpu}
