@@ -11,6 +11,7 @@
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowLeftRight,
   AtSign,
   Bell,
   Megaphone,
@@ -42,6 +43,7 @@ const ICONO: Record<TipoNotificacion, React.ComponentType<{ className?: string }
   rechazo: XCircle,
   publicacion: Megaphone,
   asignacion: UserPlus,
+  cambio_turno: ArrowLeftRight,
 };
 
 /** Ruta del feed: destino base al pulsar una notificación. */

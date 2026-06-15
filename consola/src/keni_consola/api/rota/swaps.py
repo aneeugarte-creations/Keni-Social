@@ -8,6 +8,7 @@ from starlette.responses import JSONResponse, Response
 
 from ... import auth, marcas, repos
 from ..._http_json import leer_json
+from ...dominio import notificaciones_turnos
 from ...estados import (
     ESTADO_SWAP_ACEPTADO,
     ESTADO_SWAP_CANCELADO,
@@ -220,7 +221,10 @@ async def crear_swap(request: Request) -> Response:
         motivo=motivo,
         marca=marca_swap,
     )
-    return JSONResponse({"swap": _swap_a_dict(swap, nombres)}, status_code=201)
+    swap_dict = _swap_a_dict(swap, nombres)
+    # Avisa al destinatario in-app (campana) de que tiene un cambio que responder.
+    notificaciones_turnos.tras_solicitud(swap_dict, actor=usuario)
+    return JSONResponse({"swap": swap_dict}, status_code=201)
 
 
 def _error_transicion(estado_actual: str, accion: str) -> Response:
@@ -290,7 +294,10 @@ async def aceptar_swap(request: Request) -> Response:
     )
     if actualizado is None:  # carrera: lo borraron entre medias
         return JSONResponse({"error": "La solicitud ya no existe."}, status_code=404)
-    return JSONResponse({"swap": _swap_a_dict(actualizado, _nombres_equipo())})
+    swap_dict = _swap_a_dict(actualizado, _nombres_equipo())
+    # Aceptado por B: avisa a los admin de que hay un cambio esperando su aprobacion.
+    notificaciones_turnos.tras_respuesta_destinatario(swap_dict, "aceptado", actor=usuario)
+    return JSONResponse({"swap": swap_dict})
 
 
 async def rechazar_swap(request: Request) -> Response:
@@ -323,7 +330,10 @@ async def rechazar_swap(request: Request) -> Response:
     )
     if actualizado is None:
         return JSONResponse({"error": "La solicitud ya no existe."}, status_code=404)
-    return JSONResponse({"swap": _swap_a_dict(actualizado, _nombres_equipo())})
+    swap_dict = _swap_a_dict(actualizado, _nombres_equipo())
+    # Rechazado por B: avisa al solicitante de que su cambio no sale.
+    notificaciones_turnos.tras_respuesta_destinatario(swap_dict, "rechazado", actor=usuario)
+    return JSONResponse({"swap": swap_dict})
 
 
 async def aprobar_swap(request: Request) -> Response:
@@ -377,7 +387,12 @@ async def aprobar_swap(request: Request) -> Response:
             {"error": "Ese compañero ya tiene un turno en ese hueco."},
             status_code=409,
         )
-    return JSONResponse({"swap": _swap_a_dict(resultado, nombres)})
+    swap_dict = _swap_a_dict(resultado, nombres)
+    # Aplicado por el admin: avisa a ambas partes de que el cambio quedó hecho.
+    notificaciones_turnos.tras_decision_admin(
+        swap_dict, "aplicado", actor=_usuario_actual(request)
+    )
+    return JSONResponse({"swap": swap_dict})
 
 
 async def rechazar_swap_admin(request: Request) -> Response:
@@ -406,7 +421,12 @@ async def rechazar_swap_admin(request: Request) -> Response:
     )
     if actualizado is None:
         return JSONResponse({"error": "La solicitud ya no existe."}, status_code=404)
-    return JSONResponse({"swap": _swap_a_dict(actualizado, _nombres_equipo())})
+    swap_dict = _swap_a_dict(actualizado, _nombres_equipo())
+    # Rechazado por el admin: avisa a ambas partes del desenlace.
+    notificaciones_turnos.tras_decision_admin(
+        swap_dict, "rechazado_admin", actor=_usuario_actual(request)
+    )
+    return JSONResponse({"swap": swap_dict})
 
 
 async def cancelar_swap(request: Request) -> Response:
@@ -429,7 +449,10 @@ async def cancelar_swap(request: Request) -> Response:
     actualizado = repos.actualizar_swap_turno(swap_id, {"estado": ESTADO_SWAP_CANCELADO})
     if actualizado is None:
         return JSONResponse({"error": "La solicitud ya no existe."}, status_code=404)
-    return JSONResponse({"swap": _swap_a_dict(actualizado, _nombres_equipo())})
+    swap_dict = _swap_a_dict(actualizado, _nombres_equipo())
+    # Cancelado por el solicitante: avisa al destinatario, que lo tenía en su lista.
+    notificaciones_turnos.tras_cancelacion(swap_dict, actor=usuario)
+    return JSONResponse({"swap": swap_dict})
 
 
 def _ahora_iso() -> str:

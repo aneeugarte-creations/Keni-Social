@@ -89,7 +89,9 @@ export type TipoNotificacion =
   | "rechazo"
   | "publicacion"
   // El manager te EMPUJÓ una pieza (la señal que retira el «te paso esto» del WhatsApp).
-  | "asignacion";
+  | "asignacion"
+  // Ciclo de vida de un CAMBIO DE TURNO (swap): te lo proponen, falta tu OK, o el desenlace.
+  | "cambio_turno";
 
 /** Una notificación del buzón de un usuario sobre una pieza. */
 export interface Notificacion {

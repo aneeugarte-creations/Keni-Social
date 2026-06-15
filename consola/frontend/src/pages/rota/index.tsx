@@ -4,6 +4,7 @@ import {
   CalendarClock,
 } from "lucide-react";
 import * as React from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { TituloPagina } from "@/components/layout/encabezado";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -21,6 +22,9 @@ import { MisTurnos } from "./MisTurnos";
 
 // ===========================================================================
 
+/** Valores válidos de pestaña (orden = el de la barra). */
+const PESTANAS = ["calendario", "cobertura", "mis-turnos", "cambios-ausencias"];
+
 export default function Rota() {
   const { usuario } = useSesion();
   const esAdmin = usuario?.rol === "admin";
@@ -29,7 +33,19 @@ export default function Rota() {
   // Pestaña activa (controlada). La gestión de EVENTOS se mudó al hub de Fuentes
   // (ola "Calendario = turnos / Fuentes = eventos"); aquí el Calendario es solo turnos
   // + su cobertura derivada.
-  const [pestania, setPestania] = React.useState("calendario");
+  //
+  // La inicial puede venir por `?tab=` (deep-link desde la campana de notificaciones de
+  // un cambio de turno); si el valor no es válido, cae a "calendario".
+  const [params] = useSearchParams();
+  const tabParam = params.get("tab");
+  const [pestania, setPestania] = React.useState(() =>
+    tabParam && PESTANAS.includes(tabParam) ? tabParam : "calendario",
+  );
+  // Si el `?tab=` cambia con la página ya montada (clic en la campana estando en Turnos),
+  // sincroniza la pestaña activa.
+  React.useEffect(() => {
+    if (tabParam && PESTANAS.includes(tabParam)) setPestania(tabParam);
+  }, [tabParam]);
 
   return (
     <>
