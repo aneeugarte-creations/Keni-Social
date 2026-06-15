@@ -32,15 +32,9 @@ from ._comun import (
 )
 
 __all__ = [
-    "items_ingeribles",
-    "_leer_items_fuente",
-    "fuentes_activas_de_marca",
-    "_redes_de_fuente",
     "_copy_pendiente_de",
-    "_fecha_fuente_iso",
     "_AVISO_SIN_LINEA",
     "_auto_etiquetar_linea",
-    "crear_tema_de",
     "crear_tema_de_cluster",
     "clusters_para_promover",
     "clusters_pendientes_verificar",
@@ -52,95 +46,12 @@ __all__ = [
     "caducar_temas_viejos",
     "caducar_qa_clusters_en_curso",
     "_claves_dedup_marca",
-    "_url_fuente_de",
-    "_nota_de_item",
     "_nota_de_cluster",
     "_fetch_cuerpo",
-    "ingerir_marca",
 ]
 
 # Tope de enlaces corroborantes que se anexan a la nota de un tema promovido de un cluster.
 _MAX_ENLACES_CLUSTER = 6
-
-
-def items_ingeribles(
-    items: list[dict[str, Any]],
-    *,
-    vistas: set[str],
-    maximo: int,
-) -> list[dict[str, Any]]:
-    """Subconjunto de items de un feed que se debe ingerir (PURA, testeable).
-
-    Reglas, en orden:
-      - con `clave` no vacía (necesaria para dedup/marcado),
-      - con `titulo` no vacío,
-      - no ya usados (`clave` en `vistas`),
-      - sin claves duplicadas dentro del propio barrido,
-      - se RECORTA a `maximo` (cap de seguridad por barrido y por marca).
-
-    Determinista: depende solo de sus argumentos (conserva el orden de entrada, que el feed
-    ya trae cronológico).
-    """
-    elegidos: list[dict[str, Any]] = []
-    vistos = set(vistas)
-    for item in items:
-        if len(elegidos) >= maximo:
-            break
-        clave = (item.get("clave") or "").strip()
-        if not clave:
-            continue
-        if not (item.get("titulo") or "").strip():
-            continue
-        if clave in vistos:
-            continue
-        vistos.add(clave)
-        elegidos.append(item)
-    return elegidos
-
-
-def _leer_items_fuente(fuente: dict[str, Any]) -> list[dict[str, Any]]:
-    """Lee los items crudos de un feed (via `api.rss`). Best-effort: [] si falla.
-
-    Import diferido de `api.rss` (no acoplar el daemon a la capa API en carga); reutiliza su
-    `leer_items_fuente` (con el `_DESCARGADOR` mockeable de los tests).
-    """
-    try:
-        from ..api import rss as api_rss
-
-        return api_rss.leer_items_fuente(fuente)
-    except Exception:  # noqa: BLE001 -- un feed que falla no debe abortar el barrido
-        _log.warning("pipeline: no se pudo leer el feed %s", fuente.get("id", ""), exc_info=True)
-        return []
-
-
-def fuentes_activas_de_marca(marca: str) -> list[dict[str, Any]]:
-    """Feeds RSS ACTIVOS de una marca. Best-effort: [] si la lectura falla."""
-    try:
-        fuentes = repos.listar_fuentes_rss()
-    except Exception:  # noqa: BLE001 -- sin feeds legibles, esta marca no produce nada
-        return []
-    return [
-        f
-        for f in fuentes
-        if (f.get("marca") or "") == marca and f.get("activo", True)
-    ]
-
-
-def _redes_de_fuente(fuente: dict[str, Any]) -> list[str]:
-    """Redes objetivo de un item: las `redes_def` del feed si las tiene; si no, el defecto."""
-    crudo = fuente.get("redes_def", "")
-    pedidas = {r for r in (crudo if isinstance(crudo, list) else []) if redes.es_red(r)}
-    if not pedidas and isinstance(crudo, str) and crudo:
-        import json
-
-        try:
-            datos = json.loads(crudo)
-        except (json.JSONDecodeError, ValueError):
-            datos = []
-        pedidas = {r for r in datos if isinstance(r, str) and redes.es_red(r)}
-    if pedidas:
-        return [r for r in redes.ids() if r in pedidas]
-    return list(redes.redes_de_formato(_FORMATO_PIPELINE))
 
 
 def _copy_pendiente_de(trabajo: dict[str, Any], nota: str, redes_ids: list[str]) -> str:
@@ -180,30 +91,6 @@ def _copy_pendiente_de(trabajo: dict[str, Any], nota: str, redes_ids: list[str])
         return ""
 
 
-def _fecha_fuente_iso(item: dict[str, Any]) -> str:
-    """ISO UTC de la fecha de la FUENTE (pubDate/updated del item); "" si falta o no parsea.
-
-    Reutiliza el parser tolerante del feed (`http_feed.fecha_a_orden`, que cubre RFC 822 e
-    ISO 8601 y asume UTC para naive). Un crudo ausente/ilegible cae a la fecha mínima
-    (epoch); lo tratamos como "" (la pieza no conserva fecha de fuente). Best-effort: nunca
-    rompe la ingesta.
-    """
-    crudo = (item.get("fecha") or "").strip()
-    if not crudo:
-        return ""
-    try:
-        from datetime import UTC
-
-        from ..dominio import http_feed
-
-        dt = http_feed.fecha_a_orden(crudo)
-        if dt.year <= 1970:  # epoch = no se pudo parsear
-            return ""
-        return dt.astimezone(UTC).isoformat(timespec="seconds")
-    except Exception:  # noqa: BLE001 -- el dato es informativo; un fallo no debe romper la ingesta
-        return ""
-
-
 _AVISO_SIN_LINEA = "⚠ Sin línea: clasifícala a una línea o deséchala."
 
 
@@ -227,87 +114,6 @@ def _auto_etiquetar_linea(tema: dict[str, Any], titulo: str, resumen: str) -> No
         _log.warning(
             "pipeline: auto-etiquetado de línea falló (%s)", tema.get("id"), exc_info=True
         )
-
-
-def crear_tema_de(
-    trabajo: dict[str, Any], *, claves_vistas: set[str] | None = None
-) -> dict[str, Any] | None:
-    """CI — crea el `contenido` (tema) de UN trabajo de ingesta SIN generar copy, y marca el item.
-
-    Rediseño QPC: el copy se genera DESPUÉS, en la fase CD, y SOLO si la QA de la fuente pasa.
-    El tema nace con `origen=ORIGEN_PIPELINE` (para que la vista Pipelines y las fases QA/CD lo
-    encuentren), la nota en `descripcion` y los parámetros de copy pendiente en `copy_pendiente`
-    (JSON). Marca el item del feed como USADO (dedup) para no re-ingerirlo. None si se omite.
-
-    `claves_vistas` (opcional): claves de dedup (`dominio.dedup.clave`) del contenido reciente de
-    la marca. Si el título de este trabajo ya está ahí (misma noticia en cola o publicada hace
-    poco), NO se crea el tema (se marca el item usado y se devuelve None). Tras crear, la clave
-    nueva se añade al conjunto para dedup también dentro del mismo barrido. Sin él, no hay dedup.
-    """
-    item = trabajo["item"]
-    fuente = trabajo["fuente"]
-    titulo = (item.get("titulo") or "").strip()
-    if not titulo:
-        return None
-    marca = (fuente.get("marca") or "").strip()
-    if not marca or not marcas.es_marca(marca):
-        return None
-    clave = (item.get("clave") or "").strip()
-    # Dedup de contenido: misma noticia (título normalizado) ya en la cola o publicada hace poco
-    # para esta marca -> no se crea otro tema. Se marca el item usado para no re-evaluarlo.
-    if claves_vistas is not None and dedup.es_duplicado(titulo, claves_vistas):
-        if clave:
-            try:
-                repos.marcar_item(fuente["id"], clave, True)
-            except Exception:  # noqa: BLE001 -- best-effort
-                _log.warning("pipeline: no se pudo marcar item dup usado (%s)", clave, exc_info=True)
-        _log.info("pipeline: omito duplicado «%s» (%s)", titulo[:60], marca)
-        return None
-    # Cuerpo del artículo: PRIMERO el que ya trae el feed (`content:encoded`, gratis); solo si el
-    # feed no lo manda (wires sin cuerpo) se intenta el fetch HTTP (gateado por el flag).
-    cuerpo = (item.get("cuerpo") or "").strip() or _fetch_cuerpo((item.get("enlace") or "").strip())
-    nota = _nota_de_item(item, cuerpo)[: gen_dom.MAX_TEXTO]
-    redes_ids = _redes_de_fuente(fuente)
-    try:
-
-        tema = repos.crear_contenido(
-            clase="contenido",
-            titulo=titulo[:300],
-            descripcion=nota[:5000],
-            marca=marca,
-            origen=ORIGEN_PIPELINE,
-            fecha_objetivo=hoy_utc().isoformat(),
-            # FOTO explícito: el pipeline no sabe si el ítem será foto o video, así que crea
-            # un post de FOTO (3 redes IG/X/FB). El humano puede pasarlo a video más adelante.
-            formato=_FORMATO_PIPELINE,
-            copy_pendiente=_copy_pendiente_de(trabajo, nota, redes_ids),
-            # Fecha de la FUENTE (pubDate del item), para mostrar en la Consola "Fuente del …"
-            # junto a "Generado el …" (`creado`). "" si la fuente no traía fecha.
-            fecha_fuente=_fecha_fuente_iso(item),
-            # URL CANÓNICA de la nota de origen (trazabilidad + dedup por URL). El enlace ya va
-            # como texto en la nota; aquí se persiste estructurado. "" si no es http(s) válido.
-            url_fuente=_url_fuente_de(item),
-            # NOMBRE legible del MEDIO de origen (la fuente RSS configurada): la pieza lo
-            # conserva para la UI (cabecera de grupo del feed) aunque el item desaparezca.
-            fuente_nombre=(fuente.get("nombre") or "").strip(),
-        )
-    except Exception:  # noqa: BLE001 -- sin tema, este item no produce nada (no rompe el barrido)
-        _log.warning("pipeline: no se pudo crear el tema (%s)", marca, exc_info=True)
-        return None
-    # Auto-etiquetado de línea (vertical) y origen — gated por KENI_PIPELINE_LINEAS.
-    _auto_etiquetar_linea(tema, titulo, (item.get("resumen") or "").strip())
-    # Dedup intra-barrido: registra el título recién creado para que otro item con el mismo
-    # título (otra fuente) en este MISMO barrido no cree un segundo tema.
-    if claves_vistas is not None:
-        claves_vistas.add(dedup.clave(titulo))
-    # Dedup: marca el item del feed como usado tras crear el tema, para que un re-barrido
-    # inmediato no lo vuelva a elegir. Best-effort.
-    if clave:
-        try:
-            repos.marcar_item(fuente["id"], clave, True)
-        except Exception:  # noqa: BLE001 -- el marcado es dedup; un fallo no debe romper el barrido
-            _log.warning("pipeline: no se pudo marcar el item usado (%s)", clave, exc_info=True)
-    return tema
 
 
 def _nota_de_cluster(
@@ -536,7 +342,7 @@ def _imagen_de_cluster(items: list[dict[str, Any]]) -> str:
 
     La `imagen` del feed del primer item propia que la traiga (`_fotos_notas_de_cluster`) o,
     si ninguno la traía, la `og:image` resuelta del primer artículo propia (un solo fetch por
-    historia) —igual que `ingerir_marca`—. "" si nada: el arte lo pone la etapa de Ilustrar
+    historia). "" si nada: el arte lo pone la etapa de Ilustrar
     (o el equipo). Nunca la foto de un medio ajeno.
     """
     fotos = _fotos_notas_de_cluster(items)
@@ -563,7 +369,7 @@ def crear_tema_de_cluster(
 ) -> dict[str, Any] | None:
     """CI — promueve una HISTORIA (cluster rankeado) a tema del pipeline SIN copy. Marca el cluster usado.
 
-    Mismo modelo que `crear_tema_de` (origen `pipeline`, nota en `descripcion`, parámetros de copy
+    Modelo: origen `pipeline`, nota en `descripcion`, parámetros de copy
     en `copy_pendiente` para la fase CD, QA pendiente), pero la nota viene del cluster (título +
     resumen + enlaces corroborantes de sus items) en vez de un único item RSS. La dedup contra el
     contenido reciente de la marca evita re-promover una historia que ya está en el tablero. None
@@ -897,19 +703,6 @@ def _claves_dedup_marca(marca: str) -> set[str]:
     return {k for t in titulos if (k := dedup.clave(t))}
 
 
-def _url_fuente_de(item: dict[str, Any]) -> str:
-    """URL CANÓNICA del enlace de origen del item, para `contenido.url_fuente` (trazabilidad/dedup).
-
-    Solo canoniza http/https (la canonización ya descarta lo demás devolviendo ""). El enlace
-    sigue viajando como texto en la nota; esto lo persiste estructurado. "" si no hay enlace
-    válido. Best-effort y puro (delega en `dedup.url_canonica`).
-    """
-    enlace = (item.get("enlace") or "").strip()
-    if not enlace.startswith(("http://", "https://")):
-        return ""
-    return dedup.url_canonica(enlace)
-
-
 def _fetch_cuerpo(enlace: str) -> str:
     """Cuerpo del artículo de `enlace` SI el flag `pipeline_fetch_fuente` está ON; "" si no.
 
@@ -924,62 +717,3 @@ def _fetch_cuerpo(enlace: str) -> str:
     except Exception:  # noqa: BLE001 -- el cuerpo es un extra; nunca rompe el barrido
         return ""
 
-
-def _nota_de_item(item: dict[str, Any], cuerpo: str = "") -> str:
-    """Nota de partida del copy: titulo + resumen LIMPIO + cuerpo del artículo + enlace.
-
-    PURA. `cuerpo` (opcional) es el texto del artículo ya descargado (`_fetch_cuerpo`): cuando
-    viene, el modelo redacta sobre el artículo real, no solo sobre el snippet RSS. El resumen se
-    normaliza SIEMPRE (`_limpiar_snippet`: entidades, boilerplate de WordPress). Vacíos se omiten.
-    """
-    titulo = (item.get("titulo") or "").strip()
-    resumen = _limpiar_snippet(item.get("resumen") or "")
-    enlace = (item.get("enlace") or "").strip()
-    partes = [titulo, resumen]
-    if cuerpo.strip():
-        partes.append("Artículo:\n" + cuerpo.strip())
-    if enlace:
-        partes.append("Fuente: " + enlace)
-    return "\n\n".join(p for p in partes if p)
-
-
-def ingerir_marca(marca: str, *, maximo: int) -> list[dict[str, Any]]:
-    """CI — lee los feeds activos de una marca y elige items frescos. Registra la etapa CI.
-
-    Devuelve una lista de "trabajos" `{item, fuente, propia, imagen}` listos para la fase CD.
-    Para feeds de marca PROPIA resuelve la `og:image` del artículo (best-effort). Registra UNA
-    entrada de actividad CI con el resumen (n temas / m fuentes / k con foto).
-    """
-    fuentes = fuentes_activas_de_marca(marca)
-    trabajos: list[dict[str, Any]] = []
-    con_foto = 0
-    for fuente in fuentes:
-        if len(trabajos) >= maximo:
-            break
-        try:
-            vistas = repos.claves_vistas(fuente["id"])
-        except Exception:  # noqa: BLE001 -- sin dedup legible, mejor no ingerir este feed
-            continue
-        crudos = _ref._leer_items_fuente(fuente)
-        restante = maximo - len(trabajos)
-        elegidos = items_ingeribles(crudos, vistas=vistas, maximo=restante)
-        propia = bool(fuente.get("propia"))
-        for item in elegidos:
-            imagen = ""
-            if propia:
-                try:
-                    imagen = _ref._FETCH_OG_IMAGE(item.get("enlace", "") or "")
-                except Exception:  # noqa: BLE001 -- og:image best-effort; nunca rompe
-                    imagen = ""
-                if imagen:
-                    con_foto += 1
-            trabajos.append(
-                {"item": item, "fuente": fuente, "propia": propia, "imagen": imagen}
-            )
-    registrar_etapa(
-        ETAPA_ADMITIR,
-        marca,
-        f"Recolección de fuentes — {marcas.etiqueta_de(marca)}: {len(trabajos)} temas "
-        f"seleccionados de {len(fuentes)} fuentes ({con_foto} con foto)",
-    )
-    return trabajos

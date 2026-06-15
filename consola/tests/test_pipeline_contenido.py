@@ -11,7 +11,7 @@ la generación de Verificar mockeados), ni feeds reales (items canned). Cubre:
       copy y las piezas heredan el aviso ⚠️;
   (e) el cap por barrido (VERIFICAR y REDACTAR) se respeta.
 
-Las funciones PURAS (`items_ingeribles`, `qa_lexico`, `_extraer_og_image`) se prueban sin DB.
+Las funciones PURAS (`qa_lexico`, `_extraer_og_image`) se prueban sin DB.
 Los flujos con persistencia usan la fixture `entorno` (Postgres de pruebas; se salta si no hay).
 """
 
@@ -44,19 +44,6 @@ _QA_PROBLEMA = (
 # --------------------------------------------------------------------------- #
 
 
-def _item(**kw):
-    base = {
-        "titulo": "Un tema fresco",
-        "resumen": "Por qué importa",
-        "enlace": "https://ejemplo.test/nota",
-        "fecha": "",
-        "clave": "k1",
-        "imagen": "",
-    }
-    base.update(kw)
-    return base
-
-
 def _mock_lanzar_copy(monkeypatch):
     """Parchea `gen_dom.lanzar_copy` para capturar las llamadas (sin `claude`)."""
     llamadas: list[dict] = []
@@ -69,25 +56,9 @@ def _mock_lanzar_copy(monkeypatch):
     return llamadas
 
 
-def _mock_feed(monkeypatch, items):
-    """Parchea la lectura de items del feed para devolver `items` canned (sin red)."""
-    monkeypatch.setattr(pc, "_leer_items_fuente", lambda fuente: list(items))
-
-
 def _mock_og_image(monkeypatch, url=""):
     """Parchea la resolución de og:image (sin red)."""
     monkeypatch.setattr(pc, "_FETCH_OG_IMAGE", lambda enlace: url)
-
-
-def _admitir_desde_feed(marca="unotv", *, maximo=2):
-    """ADMITIR feed→tema con los building blocks `ingerir_marca` + `crear_tema_de` (sin el barrido).
-
-    El barrido auto ahora promueve CLUSTERS rankeados; estos building blocks de feed siguen
-    existiendo y se cubren aquí en aislamiento (dedup, copy_pendiente con og:image, url_fuente).
-    """
-    trabajos = pc.ingerir_marca(marca, maximo=maximo)
-    claves: set[str] = set()
-    return [t for tr in trabajos if (t := pc.crear_tema_de(tr, claves_vistas=claves))]
 
 
 def _envejecer_intento(tema_id, campo):
@@ -133,35 +104,6 @@ def _inicializar_cluster(
 # --------------------------------------------------------------------------- #
 # Funciones PURAS (sin DB)                                                     #
 # --------------------------------------------------------------------------- #
-
-
-def test_items_ingeribles_filtra_usados_y_capa():
-    items = [_item(clave="a"), _item(clave="b"), _item(clave="c")]
-    elegidos = pc.items_ingeribles(items, vistas={"b"}, maximo=5)
-    assert [i["clave"] for i in elegidos] == ["a", "c"]
-
-
-def test_items_ingeribles_respeta_cap():
-    items = [_item(clave=f"k{i}") for i in range(5)]
-    elegidos = pc.items_ingeribles(items, vistas=set(), maximo=2)
-    assert [i["clave"] for i in elegidos] == ["k0", "k1"]
-
-
-def test_items_ingeribles_omite_sin_clave_o_sin_titulo():
-    items = [_item(clave=""), _item(titulo="  "), _item(clave="ok")]
-    elegidos = pc.items_ingeribles(items, vistas=set(), maximo=5)
-    assert [i["clave"] for i in elegidos] == ["ok"]
-
-
-def test_url_fuente_de_canoniza_http():
-    item = _item(enlace="https://www.ejemplo.test/n/?utm_source=x&id=9#a")
-    assert pc._url_fuente_de(item) == "ejemplo.test/n?id=9"
-
-
-def test_url_fuente_de_vacia_si_no_http():
-    assert pc._url_fuente_de(_item(enlace="")) == ""
-    assert pc._url_fuente_de(_item(enlace="ftp://x/y")) == ""
-    assert pc._url_fuente_de({"titulo": "x"}) == ""
 
 
 def test_extraer_og_image():
@@ -224,18 +166,6 @@ def test_extraer_texto_articulo_parrafos_fallback():
 def test_extraer_texto_articulo_sin_cuerpo_es_vacio():
     assert pc._extraer_texto_articulo("<html><body><p>x</p></body></html>") == ""
     assert pc._extraer_texto_articulo("") == ""
-
-
-def test_nota_de_item_limpia_resumen_y_anexa_cuerpo():
-    item = {
-        "titulo": "Título",
-        "resumen": "Resumen [&#8230;] The post Título appeared first on UnoTV .",
-        "enlace": "https://ejemplo.test/n",
-    }
-    nota = pc._nota_de_item(item, "Cuerpo real del artículo.")
-    assert "The post" not in nota
-    assert "Artículo:\nCuerpo real del artículo." in nota
-    assert "Fuente: https://ejemplo.test/n" in nota
 
 
 def test_nota_de_cluster_incluye_texto_de_cada_fuente():
@@ -328,9 +258,6 @@ def test_gateado_off_no_arranca_el_daemon():
 def test_iniciar_pipeline_no_genera_sin_flag(entorno, monkeypatch):
     """El daemon arranca pero, gateado OFF, NO crea temas (el barrido no corre)."""
     llamadas = _mock_lanzar_copy(monkeypatch)
-    repos.crear_fuente_rss("Diario", _URL_OK, marca="unotv")
-    _mock_feed(monkeypatch, [_item()])
-    _mock_og_image(monkeypatch, "")
 
     from keni_consola import daemon_util
 
@@ -359,57 +286,6 @@ def _etapas_de_actividad():
         for g in generaciones.listar(limite=None)
         if g["tipo"] == pc.TIPO_ACTIVIDAD
     ]
-
-
-def test_admitir_crea_temas_sin_copy_y_dedup(entorno, monkeypatch):
-    """ADMITIR feed→tema (building blocks) selecciona <= cap, crea temas SIN copy y dedup efectiva."""
-    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-
-    fuente = repos.crear_fuente_rss("Diario", _URL_OK, marca="unotv")
-    items = [_item(clave="a", titulo="Tema A"), _item(clave="b", titulo="Tema B"),
-             _item(clave="c", titulo="Tema C")]
-    _mock_feed(monkeypatch, items)
-    _mock_og_image(monkeypatch, "")
-
-    temas = _admitir_desde_feed(maximo=2)
-
-    # ADMITIR creó 2 temas (cap) SIN copy ni veredicto de Verificar.
-    assert len(temas) == 2
-    titulos = {t["titulo"] for t in pc.temas_pipeline()}
-    assert {"Tema A", "Tema B"} <= titulos
-    assert all((t.get("verificar_veredicto") or "") == "" for t in pc.temas_pipeline())
-
-    # dedup: A y B quedaron marcados usados.
-    vistas = repos.claves_vistas(fuente["id"])
-    assert {"a", "b"} <= vistas
-
-    # Etapa ADMITIR en la actividad.
-    assert any(e.startswith("ADMITIR · ") for e in _etapas_de_actividad())
-
-    # dedup efectiva: un SEGUNDO pase crea el restante (C).
-    _admitir_desde_feed(maximo=2)
-    assert {t["titulo"] for t in pc.temas_pipeline()} >= {"Tema A", "Tema B", "Tema C"}
-
-
-def test_admitir_guarda_copy_pendiente_con_imagen_propia(entorno, monkeypatch):
-    """Feed de marca PROPIA: la og:image resuelta queda en `copy_pendiente` del tema."""
-    import json
-
-    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-
-    repos.crear_fuente_rss("Casa", _URL_OK, marca="unotv", propia=True)
-    _mock_feed(monkeypatch, [_item(clave="p1", titulo="Nota propia")])
-    _mock_og_image(monkeypatch, "https://casa.test/foto.jpg")
-
-    temas = _admitir_desde_feed(maximo=1)
-
-    assert len(temas) == 1
-    pend = json.loads(pc.temas_pipeline()[0]["copy_pendiente"])
-    assert pend["imagen"] == "https://casa.test/foto.jpg"
-    assert pend["tipo_contenido"] == "fuente"
-    # Un item RSS suelto NO es un panel: una sola nota y sin catálogo de fotos por nota.
-    assert pend["n_notas"] == 1
-    assert pend["fotos_notas"] == []
 
 
 def test_fotos_notas_de_cluster_solo_propias_con_su_titulo(entorno, monkeypatch):
@@ -492,63 +368,13 @@ def test_redactar_pendiente_viejo_sin_panel_no_ofrece_carrusel(entorno, monkeypa
     assert llamadas[0]["n_notas"] == 1
 
 
-def test_admitir_persiste_url_fuente_canonica(entorno, monkeypatch):
-    """ADMITIR: un item con `enlace` http(s) persiste `url_fuente` CANÓNICA en el tema creado."""
-    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-
-    repos.crear_fuente_rss("Diario", _URL_OK, marca="unotv")
-    # Enlace con tracking + esquema + www: la canónica los normaliza (cruce por URL).
-    enlace = "https://www.ejemplo.test/nota-1?utm_source=rss&id=7#frag"
-    _mock_feed(monkeypatch, [_item(clave="u1", titulo="Tema con URL", enlace=enlace)])
-    _mock_og_image(monkeypatch, "")
-
-    temas = _admitir_desde_feed(maximo=1)
-
-    assert len(temas) == 1
-    tema = repos.obtener_contenido(temas[0]["id"])
-    assert (tema.get("url_fuente") or "") == "ejemplo.test/nota-1?id=7"
-
-
-def test_admitir_persiste_fuente_nombre_de_la_fuente(entorno, monkeypatch):
-    """ADMITIR (feed RSS): el tema conserva el NOMBRE del medio (`fuente_nombre` = nombre de la fuente).
-
-    Se copia al `contenido` al promover para que la cabecera de grupo del feed muestre la
-    procedencia aunque el item/cluster de origen desaparezca después.
-    """
-    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-
-    repos.crear_fuente_rss("Diario", _URL_OK, marca="unotv")
-    _mock_feed(monkeypatch, [_item(clave="fn1", titulo="Tema con medio")])
-    _mock_og_image(monkeypatch, "")
-
-    temas = _admitir_desde_feed(maximo=1)
-
-    assert len(temas) == 1
-    tema = repos.obtener_contenido(temas[0]["id"])
-    assert (tema.get("fuente_nombre") or "") == "Diario"
-
-
-def test_admitir_url_fuente_vacia_si_enlace_no_http(entorno, monkeypatch):
-    """ADMITIR: un item sin enlace http(s) deja `url_fuente` vacía (no rompe la creación del tema)."""
-    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-
-    repos.crear_fuente_rss("Diario", _URL_OK, marca="unotv")
-    _mock_feed(monkeypatch, [_item(clave="u2", titulo="Sin enlace", enlace="")])
-    _mock_og_image(monkeypatch, "")
-
-    temas = _admitir_desde_feed(maximo=1)
-    assert len(temas) == 1
-    tema = repos.obtener_contenido(temas[0]["id"])
-    assert (tema.get("url_fuente") or "") == ""
-
-
 # --------------------------------------------------------------------------- #
 # (d) VERIFICAR la fuente: problema NO genera copy (❗); no_verificado SÍ (⚠️)  #
 # --------------------------------------------------------------------------- #
 
 
 def _tema_pipeline(titulo="Tema", marca="unotv", **campos):
-    # `copy_pendiente` lo fija ADMITIR (`crear_tema_de`) en producción: parámetros del copy a lanzar
+    # `copy_pendiente` lo fija ADMITIR (`crear_tema_de_cluster`) en producción: parámetros del copy a lanzar
     # SOLO si Verificar la fuente pasa. La fase Redactar exige que esté presente; lo inicializamos aquí.
     campos.setdefault(
         "copy_pendiente",

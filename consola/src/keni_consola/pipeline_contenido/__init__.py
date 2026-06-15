@@ -1,73 +1,49 @@
-"""Pipeline de contenido CI→CD→QA por marca (fase3 auto-produccion).
+"""Pipeline de contenido por marca (ADR 0011 F3, auto-producción).
 
 BARREL del paquete. La implementación está repartida en submódulos por ETAPA —para que cada
-fase se lea y testee aislada— y este `__init__` REEXPORTA toda la superficie pública (Y los
-símbolos privados que algún consumidor importa directamente), de modo que `keni_consola
-.pipeline_contenido` resuelve EXACTAMENTE igual que cuando era un módulo único. Submódulos:
+fase se lea y testee aislada— y este `__init__` REEXPORTA toda la superficie pública (y los
+símbolos privados que algún consumidor importa directamente), de modo que
+`keni_consola.pipeline_contenido` resuelve igual que cuando era un módulo único. Submódulos:
 
-  - `_comun`   — constantes del flujo, seams de `og:image`, sello de actividad por etapa,
-                 autor de los lanzamientos y lecturas de temas/copy compartidas entre fases.
-  - `_ingesta` — CI: selección pura de items + creación de temas (sin copy) + dedup.
-  - `_qa`      — QA: verificación de la FUENTE (pre-copy, `claude -p`) + veredicto léxico.
-  - `_copy`    — CD: lanza copy de los temas con QA `no_verificado` (+ news-pool autogen).
-  - `_barrido` — orquesta CI→QA→CD→arte→avance bajo single-flight, y el hilo demonio.
+  - `_comun`     — constantes del flujo, seams de `og:image`/artículo, sello de actividad por
+                   etapa, autor de los lanzamientos y lecturas de temas/copy compartidas.
+  - `_ref`       — proxy perezoso al paquete para honrar el monkeypatch de seams en los tests.
+  - `_admitir`   — ADMITIR (CI): promueve HISTORIAS (clusters) ya verificadas del pool rankeado
+                   a temas SIN copy, con dedup, cupos por marca/plan y caducidad (TTL).
+  - `_verificar` — VERIFICAR (QA): verifica la FUENTE de la HISTORIA (`claude -p`) ANTES de
+                   admitir + veredicto léxico del copy para la vista de runs (`qa_lexico`).
+  - `_redactar`  — REDACTAR (CD): lanza el copy de los temas con QA `no_verificado` sin copy
+                   (+ los temas del news-pool sin copy).
+  - `_revisar`   — criba de calidad ADVISORY del copy (voz + coherencia), pre-avance.
+  - `_avance`    — pasa los borradores COMPLETOS (copy + arte) a la cola de revisión humana.
+  - `_barrido`   — orquesta los DOS procesos (investigación / producción) bajo single-flight
+                   y arranca sus hilos demonio.
 
-PROBLEMA QUE RESUELVE
-=====================
-Los daemons existentes (`autogen_redactar`, `autogen_ilustrar`, `radar_auto`) automatizan PASOS
-sueltos del tablero, pero no hay un flujo que, por MARCA, lea sus fuentes RSS frescas y las
-lleve de extremo a extremo —ingesta → creación de copy+arte de marca → validación
-automática— dejando BORRADORES listos para la aprobación humana, y que REGISTRE cada ETAPA
-como un pipeline de CI/CD (visible en "Actividad IA"). Este daemon (espejo de `autogen_redactar`/
-`radar_auto`) hace exactamente eso, cada N horas y por marca con feeds activos:
+DOS PROCESOS (ADR 0011 F3)
+==========================
+El espinazo noticia->pieza son DOS loops independientes, cada uno con su gate, cadencia y
+advisory lock (ver `_barrido`):
 
-  - CI — RECOLECCIÓN DE FUENTES: lee items frescos (no usados) de los feeds activos de la marca,
-    elige hasta un CAP, y CREA un `contenido` (tema) por item SIN generar copy todavía. Para
-    feeds de MARCA PROPIA (`propia`) resuelve la `og:image` del artículo (la foto real); para
-    feeds de no-propia / tendencia, sin imagen. Guarda en el tema (`copy_pendiente`, JSON) los
-    parámetros que la fase CD necesitará para lanzar el copy. Marca el item del feed como USADO
-    (dedup). Registra UNA entrada de actividad etapa="CI".
-  - QA — VERIFICACIÓN DE LA FUENTE (pre-copy): por cada TEMA nuevo sin veredicto, lanza un `claude -p`
-    que evalúa la NOTA DE ORIGEN (no el copy: aún no existe) contra el DOCUMENTO de Texto
-    de criterios. Es PERMISIVO y devuelve un veredicto ESTRUCTURADO con dos salidas:
-    `no_verificado` (nada de peso en contra: seguir; la pieza llevará ⚠️ "no verificado") o
-    `problema` (algo de peso: NO se genera copy; el tema se marca ❗ con los hallazgos). Por
-    defecto `no_verificado` cuando hay duda (permisivo). El veredicto + hallazgos se PERSISTEN
-    sobre el tema (`verificar_veredicto`/`verificar_hallazgos`). Sin tope por etapa (el volumen lo regula la
-    admisión). Registra etapa="QA" por tema, enlazada a la generación (stream).
-  - CD — CREACIÓN DE CONTENIDO: por cada tema cuya QA salió `no_verificado` y que aún no tiene
-    copy, lanza la generación de copy por el camino PROBADO (`dominio.generar.lanzar_copy`) con
-    los parámetros guardados (`imagen_fuente` para marca propia). NUNCA genera copy de un tema
-    `problema` (ahorra tokens). Registra etapa="CD" por tema y limpia `copy_pendiente`.
+  • INVESTIGACIÓN — caducidad (TTL) -> VERIFICAR la fuente de las historias candidatas del pool
+    (QA sobre el CLUSTER, pre-admisión, asíncrona vía `claude -p`) -> ADMITIR las verificadas
+    como temas (heredando su veredicto). La frontera "QA = investigación" vive en los datos: la
+    admisión solo promueve historias ya verificadas (`no_verificado`/`saltada`); las `problema`
+    nunca se materializan (fail-closed).
+  • PRODUCCIÓN — REDACTAR el copy de los temas verificados -> ILUSTRAR (etapa de arte) -> AVANCE
+    de los borradores completos a la cola de revisión humana.
 
-ORDEN Y ASINCRONÍA (DOS FASES ENTRE BARRIDOS)
-=============================================
-La QA es asíncrona (`claude -p`): un tema verificado en un barrido NO tiene veredicto en ESE mismo
-barrido. Por eso el flujo es de DOS FASES entre barridos: la fase QA marca el tema; la fase CD
-de un barrido POSTERIOR actúa sobre los temas `no_verificado` sin copy. Se eligió esta vía
-(no encadenar la QA→copy dentro del worker) por ser la más limpia y reusar el mismo patrón
-async que ya tenía el QA editorial: el estado vive en el TEMA, es idempotente y auto-curativo.
+ASINCRONÍA (DOS FASES)
+======================
+La QA es asíncrona (`claude -p`): una historia verificada en un barrido NO tiene veredicto en
+ESE mismo barrido; el `procesar` lo persiste en el cluster y la admisión de un barrido POSTERIOR
+la promueve. El estado vive en el cluster/tema: idempotente y auto-curativo.
 
-El borrador queda `borrador` para el paso de APROBACIÓN HUMANA en la parrilla. Nada se
-publica; NUNCA se llama a Metricool.
-
-SEGURO POR DISEÑO (CONSERVADOR)
-===============================
-  - GATEADO: el daemon solo barre con `KENI_PIPELINE_REDACTAR=1` (def OFF). Sin el flag, el
-    comportamiento existente NO cambia (este modulo es ADITIVO: nadie lo invoca con el flag
-    ausente). El hilo arranca SIEMPRE y comprueba el flag en cada ciclo (apagar/encender en
-    runtime sin reiniciar).
-  - SOLO LECTURA DE FUENTES: la ingesta solo LEE feeds RSS y resuelve `og:image`; el guard
-    SSRF de los feeds sigue aplicando antes en el flujo (`http_feed`).
-  - CAP por barrido y por marca (`KENI_PIPELINE_MAX`, def 3): cada item lanza un `claude -p`;
-    el cap evita saturación. El cap del worker (`KENI_MAX_JOBS`) sigue aplicando después en el flujo.
-  - DEDUP: al crear el tema (CI), el item del feed se marca USADO (`repos.marcar_item`); el
-    siguiente barrido lo salta. La ingesta lee `claves_vistas` para no re-elegir lo ya usado.
-  - NO PUBLICA: el borrador nace `borrador` y pasa por la MISMA revisión/aprobación humana;
-    la publicación real (Metricool) sigue gated por `KENI_PUBLICAR_REAL` (no se toca aquí).
-
-La SELECCIÓN de items (`items_ingeribles`) y el VEREDICTO léxico (`qa_lexico`) son PUROS y
-testeables. El LANZAMIENTO reutiliza `lanzar_copy` sin tocar su contrato: bajo riesgo.
+SEGURO POR DISEÑO
+=================
+Cada etapa está GATEADA por su toggle bajo el maestro `KENI_MAQUINA` (apagar/encender en runtime
+sin reiniciar). NADA se publica solo: el borrador nace `borrador`, el AVANCE solo lo mueve a la
+cola de revisión HUMANA, y la publicación real sigue gated por `KENI_PUBLICAR_REAL`. El veredicto
+léxico (`qa_lexico`) es PURO y testeable.
 """
 
 from __future__ import annotations
@@ -163,21 +139,12 @@ from ._admitir import (
     _auto_etiquetar_linea,
     _claves_dedup_marca,
     _copy_pendiente_de,
-    _fecha_fuente_iso,
     _fetch_cuerpo,
-    _leer_items_fuente,
     _nota_de_cluster,
-    _nota_de_item,
-    _redes_de_fuente,
-    _url_fuente_de,
     caducar_qa_clusters_en_curso,
     clusters_para_promover,
     clusters_pendientes_verificar,
-    crear_tema_de,
     crear_tema_de_cluster,
-    fuentes_activas_de_marca,
-    ingerir_marca,
-    items_ingeribles,
     caducar_temas_viejos,
     promover_clusters_marca,
     temas_en_proceso,
@@ -262,15 +229,9 @@ __all__ = [
     "en_backoff",
     "marcar_fallo_etapa",
     # CI
-    "items_ingeribles",
-    "_leer_items_fuente",
-    "fuentes_activas_de_marca",
-    "_redes_de_fuente",
     "_copy_pendiente_de",
-    "_fecha_fuente_iso",
     "_AVISO_SIN_LINEA",
     "_auto_etiquetar_linea",
-    "crear_tema_de",
     "crear_tema_de_cluster",
     "clusters_para_promover",
     "clusters_pendientes_verificar",
@@ -279,11 +240,8 @@ __all__ = [
     "caducar_temas_viejos",
     "caducar_qa_clusters_en_curso",
     "_claves_dedup_marca",
-    "_url_fuente_de",
-    "_nota_de_item",
     "_nota_de_cluster",
     "_fetch_cuerpo",
-    "ingerir_marca",
     # QA
     "qa_lexico",
     "asegurar_documento_qa",
