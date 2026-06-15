@@ -343,7 +343,7 @@ def test_fecha_nativa_migracion_desde_text_sentinel_a_null_e_idempotente(pg):
             "VALUES ('b','gb','{}','pendiente','2026-06-13T11:00:00','')"
         )
         con.commit()
-        assert _dtype(con, "jobs", "creado") == "timestamp with time zone"
+        assert _dtype(con, "jobs", "creado") == "text"
 
         _migrar_tipos_fecha(con)
         con.commit()

@@ -111,7 +111,7 @@ def main() -> int:
             print(f"Texto: {o} prompt(s) obsoleto(s) eliminados del store.")
         d = libtexto.migrar_descripciones_editorial()
         if d:
-            print(f"Texto: {d} editorial(es) corregidos.")
+            print(f"Texto: {d} editorial(es) con descripcion/titulo de plantilla vieja corregidos.")
         n = libtexto.importar_semilla()
         if n:
             print(f"Texto: {n} documento(s) base importados.")
