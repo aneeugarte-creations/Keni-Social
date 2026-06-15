@@ -242,7 +242,7 @@ def _migrar_columnas_etiquetas(con: Any) -> None:
 def _migrar_green_a_evergreen(con: Any) -> None:
     """Rebrand GREEN -> EVERGREEN sobre una BD productiva (idempotente, preserva datos).
 
-    Este paso renombra el esquema/datos viejos para que NO se huérfanen. Todo guardado:
+    Este paso renombra el esquema/datos viejos para que NO queden sueltos. Todo guardado:
     en una BD fresca (sin `green*`) cada paso es no-op y el DDL crea ya `evergreen_ideas`/
     `es_evergreen`. Corre ANTES del DDL declarativo.
     """
@@ -291,7 +291,7 @@ def _migrar_renombre_columnas_etapas(con: Any) -> None:
     datos). Re-ejecutable: una vez renombrada, el guard la salta. Corre PRE-DDL para que el
     renombre ocurra ANTES de que las migraciones de ADD COLUMN re-aplicables (0011/0019, cuya
     tupla directora cambió de `qa_*` a `verificar_*`) re-evalúen: tras el renombre la columna nueva
-    ya existe, así que NO crean una columna vacía huérfana (mismo patrón PRE-DDL que el renombre
+    ya existe, así que NO crean una columna vacía suelta (mismo patrón PRE-DDL que el renombre
     green->evergreen). En una BD virgen las tablas aún no existen en PRE-DDL: el guard hace no-op y
     el DDL declarativo las crea ya con el nombre nuevo. Además dropa el CHECK viejo
     `ck_contenido_qa_veredicto` (Postgres lo arrastra a la columna renombrada): la migración
@@ -790,7 +790,7 @@ _COLUMNAS_NOTICIAS_CLUSTERS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("traducido", "INTEGER NOT NULL DEFAULT 0"),
     # Relevancia EXPLICABLE: la razón humana del score y su desglose por señal (JSON con
     # corroboracion/frescura/viralidad/marca/rendimiento/breaking + palabras casadas). Las
-    # escribe el daemon al puntuar; la UI/el listón de promoción las muestran al equipo.
+    # escribe el daemon al puntuar; la UI/el umbral de promoción las muestran al equipo.
     ("score_razon", "TEXT NOT NULL DEFAULT ''"),
     ("score_desglose", "TEXT NOT NULL DEFAULT ''"),
     # TRACKING DE FUENTES (ranking ponderado): masa de corroboración (Σ peso por outlet),
@@ -871,7 +871,7 @@ def _backfill_pesos_fuente(con: Any) -> None:
     """Backfill ONE-SHOT del peso editorial: seed por host en `fuentes_rss` + propagación.
 
     Tres pasos (cada uno idempotente; la migración corre una sola vez por BD):
-      1. A cada fuente existente con peso por defecto (1.0) se le asigna el peso semilla de
+      1. A cada fuente existente con peso por defecto (1.0) se le asigna el peso base de
          su HOST (`fuentes_pesos.peso_de_url`); los pesos ya editados a mano no se pisan.
       2. Los items archivados heredan el peso de su fuente (denormalización retroactiva).
       3. Los items de AGENCIA (`fuente_id` 'agencia-*': Reuters/AFP, sin fila en
@@ -974,7 +974,7 @@ def _migrar_etiquetas_etapas_verbos(con: Any) -> None:
 #
 # Historicamente convivieron dos formatos en las MISMAS columnas TEXT: naive
 # "YYYY-MM-DDTHH:MM:SS" (el ~80%) y aware "...+00:00" (a veces con microsegundos). Como
-# estas columnas se comparan/ordenan LEXICOGRAFICAMENTE en SQL (poda de snapshots, keyset
+# estas columnas se comparan/ordenan LEXICOGRAFICAMENTE en SQL (limpieza de snapshots, keyset
 # del feed `c.creado < ?`, dedup por `creado >=`, el UNIQUE de parrilla sobre el texto de
 # `fecha_programada`), la mezcla rompia el orden. El canon es UTC SIN offset; aqui se
 # normalizan los valores YA almacenados (idempotente: tras normalizar, ningun patron casa).

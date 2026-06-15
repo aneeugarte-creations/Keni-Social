@@ -181,8 +181,8 @@ def _fuente_a_dict(fuente: dict[str, Any]) -> dict[str, Any]:
 
 
 # Categorías VÁLIDAS de un feed: el vocabulario editorial canónico + 'breaking' (la cadencia
-# más agresiva del motor). DESACOPLADO de lo que traiga la semilla de presets: el equipo puede
-# crear una fuente en cualquier categoría editorial aunque la semilla no incluya ninguna de
+# más agresiva del motor). DESACOPLADO de lo que traigan los presets iniciales: el equipo puede
+# crear una fuente en cualquier categoría editorial aunque esos presets no incluyan ninguna de
 # ella. La categoría manda la cadencia de sondeo (`config.ingesta_intervalo_categoria`) y la
 # detección de huecos de /salud; '' = sin categoría (cadencia por defecto).
 def _categorias_validas() -> frozenset[str]:

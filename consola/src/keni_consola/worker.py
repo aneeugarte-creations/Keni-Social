@@ -21,7 +21,7 @@ seguro (`FOR UPDATE SKIP LOCKED`: dos hilos nunca cogen el mismo job). El semafo
 
 POR QUE REUSA `generaciones.lanzar_job_claude`: ahi vive TODO el endurecimiento #137 que
 hay que PRESERVAR (grupo de procesos propio, kill del ARBOL al timeout/cancel, tope de
-concurrencia con `slot`, sin huerfanos, log correlacionado por job-id). El worker NO
+concurrencia con `slot`, sin procesos sueltos, log correlacionado por job-id). El worker NO
 reimplementa nada de eso: clava el job, reconstruye prompt+post-procesado+cwd desde el
 `spec` (`dominio.jobspec`) y delega en `lanzar_job_claude(ya_admitido=True)` (el cupo de
 admision ya lo tomo `encolar_job_claude`). Asi el comportamiento de ejecucion es identico
@@ -54,11 +54,11 @@ from .dominio import jobspec
 
 _log = logging.getLogger("keni_consola.worker")
 
-# Jobs (id -> {id, gen_id}) que el worker está EJECUTANDO ahora mismo (claude en vuelo).
+# Jobs (id -> {id, gen_id}) que el worker está EJECUTANDO ahora mismo (claude en curso).
 # Con el pool de hilos (KENI_MAX_JOBS) puede haber VARIOS a la vez, asi que es un MAPA, no
 # un solo job. Lo usa el manejador de apagado: si el worker muere a mitad (deploy/SIGTERM),
 # marca TODAS esas generaciones como INTERRUMPIDAS al instante (en vez de dejarlas
-# "ejecutando" fantasma hasta el reaper) y saca cada job de la cola para que NO se
+# "ejecutando" fantasma hasta el limpiador) y saca cada job de la cola para que NO se
 # re-ejecute en bucle reiniciando el run. Cada hilo del pool registra y des-registra SU job.
 _JOBS_EN_CURSO: dict[str, dict[str, str]] = {}
 _JOBS_EN_CURSO_LOCK = threading.Lock()
@@ -81,7 +81,7 @@ def _reset_estado_para_tests() -> None:
 
     `_JOBS_EN_CURSO` es estado de MODULO (proceso): si un test arranca un pool y por lo que
     sea no lo detiene del todo, su entrada contaminaria el siguiente test (que veria jobs
-    "en vuelo" fantasma). `_Pool.detener()` ya lo deja vacio; este helper es la red de
+    "en curso" fantasma). `_Pool.detener()` ya lo deja vacio; este helper es la red de
     seguridad del teardown para garantizar aislamiento entre tests pase lo que pase.
     """
     with _JOBS_EN_CURSO_LOCK:
@@ -89,13 +89,13 @@ def _reset_estado_para_tests() -> None:
 
 
 def _jobs_en_curso() -> list[dict[str, str]]:
-    """Copia de los jobs en vuelo ahora mismo (para el apagado): lista, sin el lock fuera."""
+    """Copia de los jobs en curso ahora mismo (para el apagado): lista, sin el lock fuera."""
     with _JOBS_EN_CURSO_LOCK:
         return list(_JOBS_EN_CURSO.values())
 
 # Cuanto sondea el vigia de cancelacion el flag de la cola (s). Equilibrio: cancelar se
 # siente casi inmediato (~1.5 s) sin martillear la BD con un SELECT por job cada 0.4 s
-# (con N jobs en vuelo el sondeo de cancelacion era la mayor fuente de QPS de fondo).
+# (con N jobs en curso el sondeo de cancelacion era la mayor fuente de QPS de fondo).
 _SONDEO_CANCELACION_S = 1.5
 
 
@@ -123,13 +123,13 @@ def _finalizar_error(gen_id: str, mensaje: str) -> None:
 def _sanear_qa_si_fallo(gen_id: str, spec: object) -> None:
     """Si un job de QA-FUENTE termino en ERROR, devuelve su tema a "sin veredicto" (re-criba).
 
-    CIERRA EL ZOMBI `verificar_veredicto='en_curso'`: la fase QA marca el tema `en_curso` ANTES de
+    CIERRA EL ATASCO `verificar_veredicto='en_curso'`: la fase QA marca el tema `en_curso` ANTES de
     lanzar, y solo el `procesar` (exito) escribe el veredicto real. Si la generacion muere en
     error/timeout/cancelacion, nada lo reseteaba: el tema quedaba excluido PARA SIEMPRE de
     `temas_sin_verificar` y contando en `temas_en_vuelo` (bloqueando el cupo serial de su marca).
     Aqui, al cerrar un job cuyo `procesar` es `qa-fuente` con el registro en ERROR, se resetea
-    el sentinel a "" para que el siguiente barrido lo re-cribe. El reaper cubre ademas los
-    casos donde este saneo no llega a correr (muerte no graciosa del worker). Best-effort.
+    el sentinel a "" para que el siguiente barrido lo re-cribe. El limpiador cubre ademas los
+    casos donde esta reparación no llega a correr (muerte no graciosa del worker). Best-effort.
     """
     try:
         p = (spec.get("procesar") if isinstance(spec, dict) else None) or {}
@@ -150,8 +150,8 @@ def _sanear_qa_si_fallo(gen_id: str, spec: object) -> None:
             _log.info(
                 "worker: QA de la fuente fallida; tema %s devuelto a re-criba", contenido_id
             )
-    except Exception:  # noqa: BLE001 -- saneo best-effort; el reaper es la red de seguridad
-        _log.warning("worker: fallo el saneo del tema de QA (gen %s)", gen_id, exc_info=True)
+    except Exception:  # noqa: BLE001 -- reparación best-effort; el limpiador es la red de seguridad
+        _log.warning("worker: fallo la reparación del tema de QA (gen %s)", gen_id, exc_info=True)
 
 
 def _vigilar_cancelacion(job_id: str, gen_id: str, parar: threading.Event) -> None:
@@ -304,7 +304,7 @@ def procesar_job(job: dict, worker_id: str = "") -> None:
     vigia.start()
 
     # Marca este job como "en curso" mientras corre claude: si el worker recibe SIGTERM
-    # (deploy) durante este tramo, el manejador de apagado lo marca interrumpido al instante.
+    # (deploy) durante esta fase, el manejador de apagado lo marca interrumpido al instante.
     _marcar_job_en_curso({"id": job_id, "gen_id": gen_id})
     try:
         # El runner real (con TODO el #137). `ya_admitido=True`: el cupo lo tomo el
@@ -315,8 +315,8 @@ def procesar_job(job: dict, worker_id: str = "") -> None:
             dir_temporal=dir_temporal, ya_admitido=True, endurecer=endurecer,
         )
         _esperar_terminal(gen_id)
-        # Saneo del pipeline: una QA de la fuente que TERMINO EN ERROR devuelve su tema a
-        # "sin veredicto" (re-criba), en vez de dejarlo `en_curso` zombi para siempre.
+        # Corrección del pipeline: una QA de la fuente que TERMINO EN ERROR devuelve su tema a
+        # "sin veredicto" (re-criba), en vez de dejarlo `en_curso` colgado para siempre.
         _sanear_qa_si_fallo(gen_id, spec)
     finally:
         _desmarcar_job_en_curso(job_id)
@@ -395,17 +395,17 @@ def _bucle(parar: threading.Event, worker_id: str, *, solo_proceso: bool | None 
     uno con su cupo de hilos independiente, para que un video largo no acapare un slot del copy
     manual prioritario (head-of-line). `None` = cualquiera (pool unico legado). Los jobs de
     proceso NO gastan tokens de la suscripcion: su carril queda EXENTO del corte por presupuesto
-    (solo lo frena el kill switch PAUSADO), como el gate de encolado (`cola.encolar`).
+    (solo lo detiene el kill switch PAUSADO), como el gate de encolado (`cola.encolar`).
     """
     sondeo = config.worker_sondeo_segundos()
     espera = sondeo
     # Un carril CPU-bound (proceso) NO gasta tokens IA: el corte por presupuesto (AGOTADO/
-    # SOLO_MANUAL) no le aplica; solo el kill switch PAUSADO lo frena. El carril de inferencia
+    # SOLO_MANUAL) no le aplica; solo el kill switch PAUSADO lo detiene. El carril de inferencia
     # (y el pool unico legado, None) si gasta tokens.
     gasta_tokens = solo_proceso is not True
     while not parar.is_set():
-        # GATE DE ECONOMIA (presupuesto_ia): se decide ANTES de reclamar, asi una avalancha
-        # YA ENCOLADA tambien se corta (el gate de admision solo frena lo nuevo). Pausado
+        # GATE DE ECONOMIA (presupuesto_ia): se decide ANTES de reclamar, asi una ráfaga
+        # YA ENCOLADA tambien se corta (el gate de admision solo limita lo nuevo). Pausado
         # (kill switch) o agotado (presupuesto + margen): no se reclama NADA (lo encolado
         # queda `pendiente`, listo para la reanudacion). Solo-manual: se reclama unicamente
         # prioridad >= MANUAL (el fondo espera). El gate es barato (lectura cacheada ~3 s).
@@ -473,7 +473,7 @@ def _max_jobs_proceso() -> int:
 
     Carril SEPARADO del de inferencia (`claude -p`, `config.max_jobs()`): asi un video largo no
     agota los slots del copy manual. Default 2, minimo 0 (0 = sin carril dedicado: los jobs de
-    proceso esperarian a que el carril de inferencia los tomara, head-of-line de vuelta — por eso
+    proceso esperarian a que el carril de inferencia los tomara, head-of-line otra vez — por eso
     el default es >=1). Se lee INLINE de `os.environ` (no por `config.py`, de otro agente).
     """
     crudo = os.environ.get("KENI_MAX_JOBS_PROCESO")
@@ -496,7 +496,7 @@ class _Pool:
     Separar los carriles evita el HEAD-OF-LINE: un video largo ya no acapara un slot del copy
     manual prioritario. Cada hilo reclama y procesa de forma independiente, filtrando por su
     carril (`cola.reclamar(solo_proceso=...)`). Comparten el mismo `parar` (Event): `detener()`
-    lo activa, cancela TODOS los jobs en vuelo y hace join con timeout (apagado determinista).
+    lo activa, cancela TODOS los jobs en curso y hace join con timeout (apagado determinista).
     """
 
     def __init__(self, n: int, prefijo_id: str, *, n_proceso: int | None = None) -> None:
@@ -534,7 +534,7 @@ class _Pool:
             hilo.start()
 
     def detener(self, *, timeout: float = 10.0) -> None:
-        """Apagado DETERMINISTA: para el bucle, cancela TODOS los jobs en vuelo y hace join.
+        """Apagado DETERMINISTA: para el bucle, cancela TODOS los jobs en curso y hace join.
 
         GARANTIA: al volver, NINGUN hilo del pool sigue vivo y `_JOBS_EN_CURSO` esta vacio
         (ni un job procesandose, ni un hilo en su bucle de reclamacion). No quedan hilos
@@ -544,7 +544,7 @@ class _Pool:
         1) Activa `parar`: tras esto NINGUN hilo entra a procesar un job nuevo (el bucle
            re-comprueba `parar` JUSTO despues de reclamar; si esta puesto, devuelve el job a
            la cola y sale en vez de procesarlo).
-        2) BUCLE de cancelacion+join: repetidamente captura los jobs en vuelo, MATA EL ARBOL
+        2) BUCLE de cancelacion+join: repetidamente captura los jobs en curso, MATA EL ARBOL
            de cada `claude` (`generaciones.cancelar` -> desbloquea su hilo `gen-<id>`, que fija
            terminal y libera el slot -> desbloquea al hilo del pool en `_esperar_terminal`) y
            hace join. Se REPITE porque un hilo pudo haber reclamado un job en la ventana de
@@ -554,15 +554,15 @@ class _Pool:
            POST-DEPLOY lo retome solo, y deja su registro `ejecutando` otra vez (revive el
            `cancelado` que escribio el hilo del job: el usuario no cancelo nada; la UI sigue
            mostrando "Generando..." y el run se reanuda sin intervencion). ANTES se marcaba
-           INTERRUMPIDO y se sacaba de la cola "para que se re-reclame mas tarde (reaper)",
-           pero NINGUN reaper relanzaba jobs terminados: cada deploy PERDIA los jobs en vuelo
+           INTERRUMPIDO y se sacaba de la cola "para que se re-reclame mas tarde (limpiador)",
+           pero NINGUN limpiador relanzaba jobs terminados: cada deploy PERDIA los jobs en curso
            y exigia relanzarlos a mano. Excepcion: un registro que YA llego a `completado`
            (su post-procesado corrio) NO se re-encola (re-ejecutarlo duplicaria borradores).
         4) Limpia `_JOBS_EN_CURSO` (defensa final): si un hilo quedo colgado pasado el timeout
            (no deberia), su entrada no debe contaminar el registro global.
 
-        El reaper cubre las muertes NO graciosas (SIGKILL/OOM), donde esto no llega a correr
-        (ahi actua el re-reclamo de huerfanos de `reclamar_job` por `claimed_at` viejo).
+        El limpiador cubre las muertes NO graciosas (SIGKILL/OOM), donde esto no llega a correr
+        (ahi actua el re-reclamo de los sueltos de `reclamar_job` por `claimed_at` viejo).
         """
         self._parar.set()
         limite = time.monotonic() + timeout
@@ -630,7 +630,7 @@ class _Pool:
             except Exception:  # noqa: BLE001 -- en apagado, best-effort
                 pass
             try:
-                cola.reencolar(gid)  # de vuelta a `pendiente`: el proximo worker lo clava
+                cola.reencolar(gid)  # de regreso a `pendiente`: el proximo worker lo clava
             except Exception:  # noqa: BLE001
                 pass
         # 4) Defensa: vaciar el registro global por si un hilo quedo colgado (no debe ocurrir).
@@ -669,7 +669,7 @@ def main() -> int:
     Consume la MISMA cola que el back (Postgres compartido). Arranca un POOL de
     `config.max_jobs()` hilos (cada uno reclama+procesa), asi corre HASTA N jobs `claude`
     en paralelo. El proceso principal se queda BLOQUEADO esperando la señal de apagado; al
-    recibirla, para el pool y cancela TODOS los jobs en vuelo. El back arranca con
+    recibirla, para el pool y cancela TODOS los jobs en curso. El back arranca con
     `KENI_WORKER_EXTERNO=1` para no duplicar el worker in-proceso.
     """
     from .observabilidad import configurar_logging
@@ -682,14 +682,14 @@ def main() -> int:
 
     pool = _Pool(config.max_jobs(), "svc")
     # Señal de "apagar el proceso principal": el manejador la activa y el hilo principal,
-    # que espera en ella, detiene el pool (cancelando TODOS los jobs en vuelo) y sale.
+    # que espera en ella, detiene el pool (cancelando TODOS los jobs en curso) y sale.
     apagar = threading.Event()
 
     def _al_apagar(signum: int, _frame: object) -> None:
         """SIGTERM/SIGINT (apagado por deploy): NO hace trabajo pesado en el manejador (corre
         en el hilo principal y debe ser breve/reentrante-seguro). Solo activa los eventos; el
-        hilo principal hace el apagado real (parar el pool + cancelar todos los jobs en vuelo,
-        dejandolos INTERRUMPIDOS y re-reclamables). El reaper cubre las muertes NO graciosas."""
+        hilo principal hace el apagado real (parar el pool + cancelar todos los jobs en curso,
+        dejandolos INTERRUMPIDOS y re-reclamables). El limpiador cubre las muertes NO graciosas."""
         _log.warning("worker: señal de apagado %s recibida; deteniendo el pool", signum)
         pool.parar.set()  # corta YA la reclamacion de jobs nuevos en todos los hilos
         apagar.set()
@@ -707,7 +707,7 @@ def main() -> int:
     except (KeyboardInterrupt, SystemExit):
         pool.parar.set()
     finally:
-        # Apagado determinista: cancela los jobs en vuelo y hace join con timeout del pool.
+        # Apagado determinista: cancela los jobs en curso y hace join con timeout del pool.
         pool.detener()
     return 0
 

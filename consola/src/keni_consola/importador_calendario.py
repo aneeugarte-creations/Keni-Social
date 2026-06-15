@@ -433,12 +433,12 @@ def parsear_respuesta_claude(texto: str) -> tuple[list[FilaCalendario], list[dic
 
 # La plantilla vive en la Biblioteca de Texto como prompt EDITABLE (pestaña «Prompts»). Se
 # insertan la RUTA del archivo y las listas (catálogo) de MARCAS y REDES en sus marcadores.
-# Si el store fallara, la red es la SEMILLA del paquete (fuente única, sin texto duplicado aquí).
+# Si el store fallara, el respaldo es el valor por defecto del paquete (fuente única, sin texto duplicado aquí).
 _PROMPT_ID = "prompt/importar/calendario"
 
 
 def _plantilla() -> str:
-    """Cuerpo EFECTIVO de la plantilla (store del equipo > semilla del paquete)."""
+    """Cuerpo EFECTIVO de la plantilla (store del equipo > valor por defecto del paquete)."""
     from . import libtexto
 
     try:

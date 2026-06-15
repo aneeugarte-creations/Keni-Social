@@ -61,7 +61,7 @@ def _nombres_equipo() -> dict[str, str]:
     """Mapa id->nombre del equipo COMPLETO (todos los usuarios).
 
     No filtra por cobertura: un turno asignado a alguien que despues queda fuera de la
-    rota sigue mostrando su nombre, no un id huerfano.
+    rota sigue mostrando su nombre, no un id suelto.
     """
     return {m.id: m.nombre for m in _equipo(solo_cobertura=False)}
 

@@ -1,8 +1,8 @@
-"""Siembra de la Biblioteca de Texto: migra el esquema de nombres/ids (one-shot) y materializa
+"""Inicialización de la Biblioteca de Texto: migra el esquema de nombres/ids (one-shot) y materializa
 en el STORE los prompts/editorial base que aún NO estén. Idempotente (no pisa lo que el equipo edite).
 
 Por qué es un paso de DEPLOY y no del arranque: el `back` corre `uvicorn ...crear_app --factory`,
-así que NO pasa por `__main__.main()` (donde vivía la siembra para no tocar el estado real en los
+así que NO pasa por `__main__.main()` (donde vivía la inicialización para no tocar el estado real en los
 tests). Sin esto, los prompts/editorial NUEVOS que viajan en una imagen no aparecen en el estudio
 hasta que alguien los importa. `deploy.sh` lo ejecuta tras la migración de esquema. Ejecutar:
 
@@ -29,7 +29,7 @@ def main() -> int:
         print(f"Texto: {d} editorial(es) con descripcion/titulo de plantilla vieja corregidos.")
     n = libtexto.importar_semilla()
     print(f"Texto: {n} documento(s) base importados.")
-    # Linea base en git: que cada doc sembrado tenga HEAD (snapshot estable para los pipelines,
+    # Linea base en git: que cada doc inicial tenga HEAD (snapshot estable para los pipelines,
     # no el working copy que reescribe el autosave). Best-effort: 0 si el versionado esta off.
     b = libtexto.asegurar_linea_base()
     if b:

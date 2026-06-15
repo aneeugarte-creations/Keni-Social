@@ -723,7 +723,7 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
 
     @mcp.tool()
     async def keni_produccion_dia(marca: str = "") -> dict:
-        """Producción del DÍA de una marca, de un vistazo: el embudo de las últimas 24 h
+        """Producción del DÍA de una marca, de un vistazo: el flujo de las últimas 24 h
         (temas creados → generando → en borrador → en revisión → aprobado → programado →
         publicado), desglosado por vertical y por origen, contra el objetivo diario
         (`KENI_CUPO_DIA`); más la cola de generación y la de programación (programadas con

@@ -27,10 +27,10 @@ from .db_comercial import (
 # mín 2 para que siempre quepa una recta). DECISIÓN: cuando la serie excede el tope, se devuelven
 # los ÚLTIMOS N puntos (los más recientes), NO un muestreo: así el ÚLTIMO punto —el dato actual,
 # el que la UI rotula y del que cuelga la "velocidad"— SIEMPRE entra, y la curva queda visualmente
-# correcta en su tramo reciente (el más relevante para decisiones). Se implementa como
+# correcta en su intervalo reciente (el más relevante para decisiones). Se implementa como
 # `ORDER BY ts DESC LIMIT N` y luego se reinvierte a ASC (orden de graficado). `limite=None`
 # (cap por defecto) vs `limite<=0` (SIN tope, serie COMPLETA: ruta para análisis/exportación que
-# necesite todo el histórico, p. ej. la poda o un reporte agregado).
+# necesite todo el histórico, p. ej. la limpieza o un reporte agregado).
 _METRICAS_SERIE_MAX_DEF = 500
 
 
@@ -104,7 +104,7 @@ def ultimo_snapshot_comercial(publicacion_id: str) -> dict[str, Any] | None:
 # del modulo comercial). Habilita analisis temporales por marca×red×formato. Relacion con
 # las otras dos series: `metricas_cache` guarda el valor ACTUAL (sobrescrito); esta guarda
 # la SERIE; `comercial_snapshots` sigue para el seguimiento de OBJETIVOS comerciales. Ver
-# ADR 0007. El crecimiento lo acota la poda por retencion (`podar_snapshots_piezas`).
+# ADR 0007. El crecimiento lo acota la limpieza por retencion (`podar_snapshots_piezas`).
 
 # Metricas que el snapshot por pieza captura ademas de la clave (pieza/marca/red/formato/ts).
 # Una sola tupla DRY mantiene alineados INSERT y SELECT: anadir una metrica = anadir aqui +
@@ -285,8 +285,8 @@ def podar_snapshots_piezas(retencion_dias: int, ahora_iso: str) -> int:
     """Borra los snapshots por pieza con `ts` < (`ahora_iso` - `retencion_dias`). Devuelve nº borrados.
 
     El corte se calcula a partir del `ahora_iso` que pasa el LLAMANTE (el daemon ya tiene un
-    reloj): db.py NO genera la hora del sistema, para que la poda sea testeable de forma
-    determinista. `ahora_iso` se parsea como ISO; si no parsea, no se poda nada (defensivo).
+    reloj): db.py NO genera la hora del sistema, para que la limpieza sea testeable de forma
+    determinista. `ahora_iso` se parsea como ISO; si no parsea, no se borra nada (defensivo).
     """
     if retencion_dias <= 0:
         return 0

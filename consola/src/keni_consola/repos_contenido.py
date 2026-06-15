@@ -135,7 +135,7 @@ def verificar_veredicto_por_contenido(contenido_ids: list[str]) -> dict[str, str
 
 
 def sanear_qa_en_curso_huerfanos(umbral_iso: str) -> int:
-    """Resetea a "" los `verificar_veredicto='en_curso'` zombi (reaper). Delegado en `db.py`."""
+    """Resetea a "" los `verificar_veredicto='en_curso'` atascados (limpiador). Delegado en `db.py`."""
     return db.sanear_qa_en_curso_huerfanos(umbral_iso)
 
 

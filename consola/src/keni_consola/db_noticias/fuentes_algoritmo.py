@@ -43,7 +43,7 @@ def listar_fuentes_algoritmo() -> list[dict[str, Any]]:
 
 
 def contar_fuentes_algoritmo() -> int:
-    """Total de fuentes de algoritmo (para decidir si sembrar las semilla)."""
+    """Total de fuentes de algoritmo (para decidir si cargar las fuentes por defecto)."""
     con = _conectar()
     try:
         fila = con.execute("SELECT COUNT(*) AS n FROM fuentes_algoritmo").fetchone()

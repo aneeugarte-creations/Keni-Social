@@ -45,7 +45,7 @@ def _hash_titulo(titulo: str) -> str:
 
     Usa `dedup.clave` (minúsculas, sin acentos, solo tokens alfanuméricos) para que dos
     titulares equivalentes con distinta puntuación colisionen. "" si el título no tiene
-    tokens útiles (no se puede deduplicar de forma fiable: el item se omite aguas arriba).
+    tokens útiles (no se puede deduplicar de forma fiable: el item se omite antes, en el flujo).
     """
     k = dedup.clave(titulo)
     if not k:
@@ -182,7 +182,7 @@ def filtrar_por_vocabulario(
 
     Conservador a propósito: basta UNA coincidencia (título o resumen) para entrar; con
     vocabulario VACÍO no filtra nada (honesto: sin agenda definida no hay criterio). El
-    clustering aguas abajo sigue puntuando la relevancia GRADUADA; esto solo corta el cero.
+    clustering posterior (en el flujo) sigue puntuando la relevancia GRADUADA; esto solo corta el cero.
     """
     if not palabras or not items:
         return list(items), []

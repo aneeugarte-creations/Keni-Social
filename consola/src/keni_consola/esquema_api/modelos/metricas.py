@@ -342,11 +342,11 @@ class PiezaMetrica(TypedDict):
 
 
 class DistribucionBucket(TypedDict):
-    """Un tramo del histograma de engagement (cuántas piezas caen en [inicio, fin))."""
+    """Un intervalo del histograma de engagement (cuántas piezas caen en [inicio, fin))."""
 
     etiqueta: str
     inicio: float
-    # fin: null = tramo abierto superior ("10%+").
+    # fin: null = intervalo abierto superior ("10%+").
     fin: float | None
     n: int
 

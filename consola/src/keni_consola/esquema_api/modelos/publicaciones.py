@@ -22,7 +22,7 @@ __all__ = [
 # El flujo de aprobacion de equipo (#9, Fase 3) intercala `en_revision` entre el
 # borrador y el aprobado.
 EstadoPublicacion = Literal["borrador", "en_revision", "aprobado", "programado", "publicado"]
-# Etapa REAL de la tubería IA de una pieza (Flujo C), derivada por
+# Etapa REAL del flujo de IA de una pieza (Flujo C), derivada por
 # `pipeline_estado.etapa_de_pieza`. La consume el Feed de ideación (Flujo D): es el
 # estado-por-etapa "en vivo" de la pieza, más rico que `estado` (incluye el gate humano).
 # Mantener en sincronía con `pipeline_estado.ETAPAS_PIEZA` y con `EtapaIa` del front.
@@ -120,7 +120,7 @@ class Publicacion(TypedDict):
     falta_revision: bool
     falta_publicar: bool
     falta_video: bool
-    # Etapa REAL de la tubería IA (Flujo C), derivada de `estado`+checklist por
+    # Etapa REAL del flujo de IA (Flujo C), derivada de `estado`+checklist por
     # `pipeline_estado.etapa_de_pieza`. La prefiere el Feed (Flujo D) sobre su derivación.
     etapa_ia: EtapaIa
     fecha_creacion: str

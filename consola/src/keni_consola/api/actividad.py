@@ -173,7 +173,7 @@ def _item_job(job: dict, ahora: datetime) -> dict:
         # Prioridad de cola (mayor = adelanta): los lanzamientos manuales van por delante
         # del lote de fondo del pipeline; el Monitor lo señala en la lista de espera.
         "prioridad": int(job.get("prioridad") or 0),
-        # Intentos quemados (anti crash-loop): >1 delata un job que ya mato a un worker.
+        # Intentos gastados (anti crash-loop): >1 delata un job que ya mato a un worker.
         "intentos": int(job.get("intentos") or 0),
         "encolado_hace_s": _edad_s(job.get("creado"), ahora),
         "corriendo_hace_s": _edad_s(job.get("claimed_at"), ahora) if corriendo else None,

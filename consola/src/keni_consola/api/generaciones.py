@@ -14,7 +14,7 @@ terminal:
                                        final `terminal` al acabar. El SPA lo prefiere al
                                        sondeo (menos peticiones, menos latencia percibida) y
                                        DEGRADA al sondeo de 1.2 s si SSE no esta disponible.
-  - `POST /api/generaciones/{id}/cancelar` -> cancela un job en vuelo (#137): mata el
+  - `POST /api/generaciones/{id}/cancelar` -> cancela un job en curso (#137): mata el
                                        ARBOL del subproceso `claude` y deja el registro
                                        en estado terminal. 404 si no existe.
 
@@ -115,7 +115,7 @@ async def stream_estado(request: Request) -> Response:
       - `terminal` -> `{generacion}` al llegar a estado terminal; luego cierra.
       - `:ping`    -> comentario heartbeat cada ~15 s sin avance.
     Cierra limpio si el cliente desconecta o al timeout duro (15 min). Si el registro
-    desaparece en pleno stream (poda), emite `terminal` con `generacion: null` y cierra.
+    desaparece en pleno stream (borrado), emite `terminal` con `generacion: null` y cierra.
 
     AUTENTICACION: como sus hermanos, la aporta el middleware global (`SeguridadConsola`
     protege todo `/api`); `EventSource` no puede mandar cabeceras pero la cookie de
@@ -135,7 +135,7 @@ async def stream_estado(request: Request) -> Response:
                 return
             g = await run_in_threadpool(generaciones.obtener, gen_id)
             if g is None:
-                # Podada/borrada en pleno stream: terminal "vacio" y cierre limpio.
+                # Borrada en pleno stream: terminal "vacio" y cierre limpio.
                 yield _evento_sse("terminal", {"generacion": None})
                 return
             huella = _huella(g)
@@ -169,12 +169,12 @@ async def stream_estado(request: Request) -> Response:
 
 
 async def cancelar(request: Request) -> Response:
-    """Cancela un job de generacion EN VUELO (#137).
+    """Cancela un job de generacion EN CURSO (#137).
 
     Mata el ARBOL del subproceso `claude` y deja el registro en estado terminal
     (`error`/`motivo=cancelado`, lo fija el hilo del job). -> `{generacion}` con el
     estado actual. 404 si la generacion no existe. Si ya habia terminado (sin job en
-    vuelo) devuelve el registro tal cual: la cancelacion es idempotente.
+    curso) devuelve el registro tal cual: la cancelacion es idempotente.
 
     La generacion es subprocess `claude -p` (ADR 0001), asi que cancelar = matar el arbol
     del proceso local; lo dispara el usuario desde la SPA (un boton "Cancelar").

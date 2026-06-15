@@ -137,7 +137,7 @@ async def crear(request: Request) -> Response:
     Autorizacion (#150): la regla normal es rol admin (sesion real). EXCEPCION acotada de
     recuperacion: si la peticion entro por el TOKEN de mantenimiento Y la BD NO tiene
     NINGUN usuario, se permite crear el PRIMER admin (bootstrap). Asi un despliegue recien
-    arrancado puede sembrar su admin inicial con el token, pero el token NO da poder admin
+    arrancado puede crear su admin inicial con el token, pero el token NO da poder admin
     sobre una BD que YA tiene usuarios (ahi exige una sesion admin real, como el resto).
     """
     bootstrap_por_token = False
@@ -183,7 +183,7 @@ async def crear(request: Request) -> Response:
         validos = " o ".join(f'"{r}"' for r in ROLES_USUARIO)
         return JSONResponse({"error": f"Rol inválido. Usa {validos}."}, status_code=400)
 
-    # Bootstrap por token: SOLO sirve para sembrar el primer ADMIN (recuperar el acceso),
+    # Bootstrap por token: SOLO sirve para crear el primer ADMIN (recuperar el acceso),
     # no para crear editores. Crear un editor con la BD vacia dejaria la consola sin admin.
     if bootstrap_por_token and rol != ROL_ADMIN:
         return JSONResponse(

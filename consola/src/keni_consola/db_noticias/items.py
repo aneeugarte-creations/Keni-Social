@@ -44,7 +44,7 @@ ESTADOS_NOTICIA_ITEM: tuple[str, ...] = ("nuevo", "usado", "descartado")
 
 
 def _fila_a_noticia_item(fila: Any) -> dict[str, Any]:
-    """Fila de `noticias_items` -> dict publico (snake_case, tipos saneados)."""
+    """Fila de `noticias_items` -> dict publico (snake_case, tipos normalizados)."""
     return {
         "id": fila["id"],
         "fuente_id": fila["fuente_id"] or "",

@@ -151,8 +151,7 @@ _MODELO_DEFECTO = "openai/gpt-5-image-mini"
 # encima de una foto limpia. Los generadores puros (Nano Banana/Gemini) lo respetan sin dano.
 #
 # El TEXTO de esta directiva vive en la Biblioteca de Texto como prompt EDITABLE
-# (`_SISTEMA_IMAGEN_ID`): el equipo lo ajusta desde el estudio sin tocar codigo. La semilla del
-# paquete tiene la version base; `_FALLBACK` abajo es una red defensiva por si la lectura fallara.
+# (`_SISTEMA_IMAGEN_ID`): el equipo lo ajusta desde el estudio sin tocar codigo. El paquete trae la version base; `_FALLBACK` abajo es una red defensiva por si la lectura fallara.
 _SISTEMA_IMAGEN_ID = "prompt/ilustrar"
 _SISTEMA_IMAGEN_FALLBACK = (
     "Eres un generador de fotografias. Tu UNICA salida es UNA sola fotografia realista que "
@@ -165,7 +164,7 @@ _SISTEMA_IMAGEN_FALLBACK = (
 def _sistema_imagen() -> str:
     """Directiva de SISTEMA del generador de imagen, leida de la Biblioteca (editable).
 
-    Resuelve el cuerpo EFECTIVO del prompt `_SISTEMA_IMAGEN_ID` (store del equipo > semilla del
+    Resuelve el cuerpo EFECTIVO del prompt `_SISTEMA_IMAGEN_ID` (store del equipo > base del
     paquete). Import diferido de `libtexto` (evita ciclos; igual que `config`/`secretos`). Si la
     lectura fallara o viniera vacia, cae al `_SISTEMA_IMAGEN_FALLBACK` para no quedarnos sin la
     directiva (sin ella los modelos GPT devuelven texto/infografia).

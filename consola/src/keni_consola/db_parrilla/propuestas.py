@@ -213,7 +213,7 @@ def aplicar_propuesta_parrilla(
     eventos_creados: list[str] = []
     turnos_creados: list[str] = []
     turnos_modificados: list[str] = []
-    # Cache por semana del mapa {nombre_normalizado -> franja_id} (siembra defaults una vez).
+    # Cache por semana del mapa {nombre_normalizado -> franja_id} (inicializa defaults una vez).
     franjas_por_semana: dict[str, dict[str, str]] = {}
 
     def _franja_id_de(
@@ -224,7 +224,7 @@ def aplicar_propuesta_parrilla(
         puede traer slots nuevos), usando `inicio`/`fin` si vienen o un horario por defecto.
         `es_descanso` se infiere del nombre. No rechaza nada por plantilla."""
         if semana not in franjas_por_semana:
-            # Cargamos las franjas YA existentes de la semana (sin sembrar: no imponemos la
+            # Cargamos las franjas YA existentes de la semana (sin inicializar: no imponemos la
             # plantilla por defecto; solo creamos las que el documento realmente use).
             filas = con.execute(
                 "SELECT id, nombre FROM rota_franjas WHERE lunes = ?", (semana,)

@@ -218,7 +218,7 @@ def listar_runs(marca_id: str) -> list[dict[str, Any]]:
 def obtener_run(marca_id: str, run_id: str) -> dict[str, Any] | None:
     """Un run del agente por id (None si no existe o su YAML no valida).
 
-    El `run_id` se sanea (solo el `stem`) para impedir traversal por la ruta.
+    El `run_id` se restringe al `stem` para impedir traversal por la ruta.
     """
     if not isinstance(run_id, str) or not run_id:
         return None

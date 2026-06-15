@@ -28,11 +28,11 @@ def encolar(gen_id: str, spec: dict[str, Any]) -> str:
     LA COLA NO TIENE TOPE (R-NO-LIMIT): la admision NUNCA rechaza por tamano de cola. Un pico de
     trabajo (manual o de fondo) simplemente SE ENCOLA y ESPERA; el unico limite real es la
     CONCURRENCIA (`max_jobs`: cuantos `claude -p` corren a la vez), que el worker/`runner.slot`
-    aplican aguas abajo. Rechazar y reencolar por "cola llena" era trabajo inutil por un limite
+    aplican despues, en el flujo. Rechazar y reencolar por "cola llena" era trabajo inutil por un limite
     inutil. La prioridad de despacho (manual > pipeline) decide QUE sale antes, no QUE entra: los
     manuales van PRIMERO (`jobs.prioridad`, `reclamar_job` ordena por ella).
 
-    LO QUE SI FRENA LA ADMISION (freno VOLUNTARIO, se conserva): el kill switch humano y el corte
+    LO QUE SI LIMITA LA ADMISION (tope VOLUNTARIO, se conserva): el kill switch humano y el corte
     automatico por presupuesto (`presupuesto_ia`). No son tope de cola: son economia de la
     suscripcion compartida. Se mapean a subclases de `ColaLlenaError` (429 + backpressure del
     pipeline). Igual la economia de CONTEXTO: un prompt patologico se rechaza ANTES de gastar.
@@ -45,7 +45,7 @@ def encolar(gen_id: str, spec: dict[str, Any]) -> str:
 
     # ECONOMIA DE TOKENS (presupuesto_ia): el kill switch y el corte automatico se deciden
     # ANTES que el tope de capacidad. Pausado (humano): NADA entra, ni manual ni procesos
-    # (es el freno de mano de toda la maquinaria IA). Agotado (presupuesto + margen): no
+    # (es el control manual de toda la maquinaria IA). Agotado (presupuesto + margen): no
     # entra nada QUE GASTE TOKENS (un job de PROCESO —render ffmpeg/ASR— no toca la
     # suscripcion y queda exento del corte por presupuesto). Solo-manual: el FONDO se corta
     # y lo manual del equipo sigue entrando hasta el margen. La REGLA vive en
@@ -70,7 +70,7 @@ def encolar(gen_id: str, spec: dict[str, Any]) -> str:
             "los lanzamientos manuales siguen disponibles."
         )
 
-    # ECONOMIA DE CONTEXTO: el tamano del prompt se gobierna AQUI (embudo unico de admision).
+    # ECONOMIA DE CONTEXTO: el tamano del prompt se gobierna AQUI (punto unico de admision).
     # Tope DURO (`KENI_PROMPT_MAX_CHARS`): un prompt patologico (feeds concatenados sin criba,
     # un documento gigante) se rechaza ANTES de gastar tokens, con el remedio en el mensaje.
     # Umbral de AVISO (`KENI_PROMPT_AVISO_CHARS`): no corta, deja rastro correlacionado para
@@ -104,7 +104,7 @@ def reclamar(
     job se devuelve con `spec=None` para que el worker lo marque en error (no lo ejecuta).
 
     `prioridad_minima` (corte del presupuesto, ver `presupuesto_ia`): si viene, SOLO se
-    clavan jobs con `prioridad >= prioridad_minima`. Asi una avalancha de fondo YA ENCOLADA
+    clavan jobs con `prioridad >= prioridad_minima`. Asi una rafaga de fondo YA ENCOLADA
     deja de ejecutarse al agotarse el presupuesto (queda `pendiente`, no se pierde) mientras
     lo manual sigue saliendo.
 

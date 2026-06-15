@@ -17,7 +17,7 @@ Redactar del pipeline (`pipeline_contenido.temas_autogen_sin_copy`), gateada por
   - DEDUP: al COMPLETAR CON EXITO el copy, el post-procesado ETIQUETA el tema `autogen` para
     no re-generarlo (la selección lee esa etiqueta para saltarse lo ya hecho). Se etiqueta al
     éxito —no al encolar— para que un copy fallido se REINTENTE en el siguiente barrido; el
-    doble lanzamiento en vuelo lo evita la clave de idempotencia de `dominio.generar.lanzar`.
+    doble lanzamiento en curso lo evita la clave de idempotencia de `dominio.generar.lanzar`.
   - NO PUBLICA: el borrador nace `borrador` y pasa por la MISMA revision/aprobacion humana;
     la publicacion real (vía Metricool) sigue gated por `KENI_PUBLICAR_REAL`.
 """
@@ -105,7 +105,7 @@ def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
 
     Reutiliza el lanzador NEUTRO `dominio.generar.lanzar_copy` (mismo camino que el boton
     manual del asistente y que `api/rss.generar`): compone el prompt copy-desde-nota
-    autocontenido (semilla + editorial de la marca + la nota del tema), encola en background
+    autocontenido (prompt base + editorial de la marca + la nota del tema), encola en background
     y el borrador entra a la cola de revision. `contenido_id` NIDA el borrador bajo el tema.
 
     Es trabajo del PIPELINE (su etapa de Redactar redactando un tema del tablero), asi que se
@@ -144,7 +144,7 @@ def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
         # DEDUP AL EXITO (no al encolar): la etiqueta `autogen` la asigna el POST-PROCESADO
         # del copy al completar con exito. Antes se etiquetaba tras encolar y un copy FALLIDO
         # jamas se reintentaba (el tema quedaba excluido para siempre de la seleccion).
-        # Mientras el job esta EN VUELO no hay doble lanzamiento: la clave de idempotencia
+        # Mientras el job esta EN CURSO no hay doble lanzamiento: la clave de idempotencia
         # de `dominio.generar.lanzar` devuelve el run en curso.
         etiqueta_exito=ETIQUETA_AUTOGEN,
     )

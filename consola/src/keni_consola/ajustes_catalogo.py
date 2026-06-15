@@ -56,7 +56,7 @@ GRUPOS: tuple[tuple[str, str], ...] = (
     ("noticias_tecnico", "Perfil editorial"),
     ("tuning", "Sistema, limpieza y alertas"),
 )
-# NOTA (auditoría 2026-06, matar ruido de UI): los grupos `noticias_orden` y `noticias_breaking`
+# NOTA (auditoría 2026-06, limpiar la UI): los grupos `noticias_orden` y `noticias_breaking`
 # se RETIRARON del catálogo: eran solo pesos/umbrales del algoritmo de ranking/clustering
 # (tunables de ingeniería). Sus claves `KENI_SCORE_*`/`KENI_CLUSTER_BREAKING_*` siguen vivas
 # en el código y se leen de env/defecto (`config._crudo`); simplemente ya no se editan en UI.
@@ -106,7 +106,7 @@ def _maestros_etapa() -> list[Ajuste]:
     representativa (Recolectar para Investigación, Redactar para Producción). SIGUEN en el catálogo
     aunque la tira ya no las pinte: son la base de las excepciones por marca
     (`KENI_INVESTIGACION::marca` apaga el proceso entero con un toggle), el respaldo de
-    lectura del riel de Noticias (etapas sin flag propio en catálogo: Fusionar/Clasificar/
+    lectura del flujo de Noticias (etapas sin flag propio en catálogo: Fusionar/Clasificar/
     Priorizar) y el interruptor «de proceso» para API/MCP. «Publicar» vive en `publicacion`.
     """
     return [
@@ -179,7 +179,7 @@ def _ajustes_por_marca() -> list[Ajuste]:
     """Toggles `bool` por marca para «Investigación», «Producción» (virtuales: fan-out a sus
     etapas) e «Ilustrar».
 
-    Apagar «Investigación» en una marca la excluye del tramo de pool (Recolectar→Verificar);
+    Apagar «Investigación» en una marca la excluye de la fase de pool (Recolectar→Verificar);
     apagar «Producción» la deja sin copy automático; apagar «Ilustrar», sin imagen por IA. Se
     generan en caliente desde el catálogo de marcas."""
     salida: list[Ajuste] = []
@@ -321,7 +321,7 @@ def _construir_catalogo() -> list[Ajuste]:
         Ajuste(
             clave=config.ENV_MEDIA_GC,
             tipo="bool",
-            etiqueta="Limpieza de media huérfana",
+            etiqueta="Limpieza de media suelta",
             ayuda="Borra periódicamente los objetos de imagen del Estudio que ninguna "
             "publicación usa y son más viejos que el umbral de antigüedad.",
             grupo="automatismos_generales",
@@ -332,7 +332,7 @@ def _construir_catalogo() -> list[Ajuste]:
             tipo="bool",
             etiqueta="Limpieza del pool de noticias",
             ayuda="Purga periódicamente del pool las historias no llevadas al tablero, de "
-            "una sola fuente, con score bajo y sin actividad reciente (más items huérfanos viejos).",
+            "una sola fuente, con score bajo y sin actividad reciente (más items sueltos viejos).",
             grupo="automatismos_generales",
             defecto=False,
         ),
@@ -367,7 +367,7 @@ def _construir_catalogo() -> list[Ajuste]:
             grupo="automatismos_generales",
             defecto=False,
         ),
-        # NOTA: las etapas del tramo noticia→copy (Fusionar/Priorizar/Recolectar/Verificar/Redactar/
+        # NOTA: las etapas de la fase noticia→copy (Fusionar/Priorizar/Recolectar/Verificar/Redactar/
         # Avance) NO tienen toggle propio: las agrupa el interruptor único «Generar»
         # (`KENI_GENERAR`, virtual con fan-out; ver `claves_fisicas`). El master
         # «Priorizar por rendimiento» (KENI_RENDIMIENTO_RANKING) tampoco: NO es un daemon on/off,
@@ -385,7 +385,7 @@ def _construir_catalogo() -> list[Ajuste]:
         # --- Máquina de contenido · admisión del flujo continuo (grupo `pipeline_topes`) --- #
         # Viven en el MONITOR (junto a la cola que controlan), NO en Configuración. FLUJO CONTINUO:
         # no hay intervalo (tick corto fijo) ni topes por etapa; el volumen lo regulan estos knobs
-        # de ADMISIÓN (y `KENI_MAX_JOBS` aguas abajo). In=out: solo entra lo que cabe en vuelo.
+        # de ADMISIÓN (y `KENI_MAX_JOBS` más adelante en el flujo). In=out: solo entra lo que cabe en vuelo.
         Ajuste(
             clave=config.ENV_PIPELINE_MAX,
             tipo="int",
@@ -409,7 +409,7 @@ def _construir_catalogo() -> list[Ajuste]:
         # interno del barrido de Ilustrar, no un control de operación. Sigue leyéndose de env.)
         # --- Economía de tokens (presupuesto diario + kill switch; `presupuesto_ia.py`) --- #
         # La generación usa la MISMA suscripción `claude` que el equipo: estos knobs evitan que
-        # una avalancha de fondo agote los tokens de todos. Editables en caliente (Monitor).
+        # una ráfaga de fondo agote los tokens de todos. Editables en caliente (Monitor).
         Ajuste(
             clave=config.ENV_GENERACION_PAUSADA,
             tipo="bool",
@@ -483,7 +483,7 @@ def _construir_catalogo() -> list[Ajuste]:
             tipo="int",
             etiqueta="Limpieza media: antigüedad mínima (horas)",
             ayuda="Un objeto de media más nuevo que esto (horas) nunca se borra, aunque parezca "
-            "huérfano.",
+            "suelto.",
             grupo="tuning",
             defecto=config.MEDIA_GC_ANTIGUEDAD_HORAS_DEF,
             minimo=1,
@@ -540,15 +540,15 @@ def _construir_catalogo() -> list[Ajuste]:
             minimo=1,
         ),
         # --- Producción automática (grupo `noticias_produccion`) -------------------------- #
-        # LISTÓN de producción automática: el panel lista TODO el pool jerarquizado, pero promover
+        # UMBRAL de producción automática: el panel lista TODO el pool jerarquizado, pero promover
         # una historia a tema dispara Verificar+Redactar (claude -p: coste real de tokens). Estos dos umbrales
-        # son ese listón (la regla vive en `dominio.agrupar.evaluar_liston`, explicable).
+        # son ese mínimo (la regla vive en `dominio.agrupar.evaluar_liston`, explicable).
         Ajuste(
             clave=config.ENV_PROMOVER_MIN_SCORE,
             tipo="float",
             etiqueta="Relevancia mínima para producir en automático",
             ayuda="Una historia solo dispara la producción automática si su relevancia llega a "
-            "este valor; 0 = sin listón (de 0 a 1).",
+            "este valor; 0 = sin umbral (de 0 a 1).",
             grupo="noticias_produccion",
             defecto=_LISTON_MIN_SCORE_DEF,
             minimo=0,
@@ -559,7 +559,7 @@ def _construir_catalogo() -> list[Ajuste]:
             tipo="float",
             etiqueta="Encaje mínimo con la marca",
             ayuda="Cuánto debe encajar la historia con los temas de la marca para producirse en "
-            "automático (0.2 ≈ un término de la marca en el título); 0 = sin listón (de 0 a 1).",
+            "automático (0.2 ≈ un término de la marca en el título); 0 = sin umbral (de 0 a 1).",
             grupo="noticias_produccion",
             defecto=_LISTON_MIN_MARCA_DEF,
             minimo=0,

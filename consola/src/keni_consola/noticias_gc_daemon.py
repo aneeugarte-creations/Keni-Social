@@ -5,8 +5,8 @@ Espejo de `media_gc_daemon`: un hilo que arranca SIEMPRE y, gateado por `KENI_NO
 (desde la API de ajustes) aplica sin reiniciar.
 
 SEGURO POR DEFECTO (CONSERVADOR): sin `KENI_NOTICIAS_GC` no se borra ninguna noticia. El barrido
-purga el RUIDO de baja relevancia (historias `nuevo` no llevadas al tablero, de una sola fuente,
-score bajo e inactivas + items huérfanos viejos), conservando lo usado/ligado/corroborado/score
+purga lo IRRELEVANTE de baja relevancia (historias `nuevo` no llevadas al tablero, de una sola fuente,
+score bajo e inactivas + items sueltos viejos), conservando lo usado/ligado/corroborado/score
 alto/reciente. La lógica del borrado vive en `db_noticias.purgar_pool_irrelevante`. NO es un TTL.
 """
 
@@ -22,7 +22,7 @@ _log = logging.getLogger("keni_consola.noticias_gc_daemon")
 
 
 def ejecutar_barrido() -> dict[str, Any]:
-    """Un barrido de GC del pool: purga el ruido de baja relevancia con los umbrales vivos.
+    """Un barrido de GC del pool: purga lo irrelevante de baja relevancia con los umbrales vivos.
 
     Best-effort: `repos.purgar_pool_irrelevante` es una operación atómica (commit único) y
     devuelve los conteos. Devuelve `{clusters, items, dry_run}`.

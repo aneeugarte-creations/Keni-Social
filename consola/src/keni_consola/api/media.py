@@ -122,7 +122,7 @@ def lanzar_generacion_imagen(
                 contenido_id=contenido_id, marca=marca, titulo=titulo,
                 prompt=prompt, imagen=nombre,
             )
-        # Sella el gasto en el registro: el cierre lo vuelca al ledger por el embudo único de
+        # Sella el gasto en el registro: el cierre lo vuelca al ledger por la vía única de
         # `presupuesto_ia.registrar_cierre` (coste real + modelo). Solo si hubo coste medible.
         if salida.coste_usd > 0:
             generaciones.actualizar(

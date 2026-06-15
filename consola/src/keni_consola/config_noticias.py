@@ -189,7 +189,7 @@ def ingesta_filtro_activo() -> bool:
     """True si el filtro de ENTRADA por vocabulario está activo (`KENI_INGESTA_FILTRO`, def ON).
 
     Def ON (a diferencia de las etapas IA): no gasta recursos ni borra nada ya archivado, solo
-    deja de ARCHIVAR ruido nuevo. `0`/`no`/`off` lo apaga (se archiva todo, como antes).
+    deja de ARCHIVAR contenido irrelevante nuevo. `0`/`no`/`off` lo apaga (se archiva todo, como antes).
     """
     crudo = _crudo(ENV_INGESTA_FILTRO).lower()
     if not crudo:
@@ -382,8 +382,8 @@ def promover_diversidad_umbral() -> float:
     return _peso01(ENV_PROMOVER_DIVERSIDAD_UMBRAL, PROMOVER_DIVERSIDAD_UMBRAL_DEF)
 
 
-# LISTÓN de producción automática: el panel LISTA todo el pool jerarquizado, pero PROMOVER una
-# historia a tema (que acaba en Verificar+Redactar con `claude -p`: coste real de tokens) exige un listón
+# UMBRAL de producción automática: el panel LISTA todo el pool jerarquizado, pero PROMOVER una
+# historia a tema (que acaba en Verificar+Redactar con `claude -p`: coste real de tokens) exige un umbral
 # más alto y explicable. Defaults en `dominio.agrupar` (capa pura); editables en caliente.
 ENV_PROMOVER_MIN_SCORE = "KENI_PROMOVER_MIN_SCORE"
 ENV_PROMOVER_MIN_MARCA = "KENI_PROMOVER_MIN_MARCA"
@@ -391,7 +391,7 @@ ENV_PROMOVER_MIN_MARCA = "KENI_PROMOVER_MIN_MARCA"
 
 def promover_min_score() -> float:
     """Score mínimo [0,1] para que una historia dispare producción automática
-    (`KENI_PROMOVER_MIN_SCORE`, def 0.35). `0` desactiva el listón de score. Valor inválido → def."""
+    (`KENI_PROMOVER_MIN_SCORE`, def 0.35). `0` desactiva el umbral de score. Valor inválido → def."""
     from .dominio.agrupar import LISTON_MIN_SCORE_DEF
 
     return _peso01(ENV_PROMOVER_MIN_SCORE, LISTON_MIN_SCORE_DEF)
@@ -399,7 +399,7 @@ def promover_min_score() -> float:
 
 def promover_min_marca() -> float:
     """Encaje de marca mínimo [0,1] (relevancia por vocabulario) para la producción automática
-    (`KENI_PROMOVER_MIN_MARCA`, def 0.2 ≈ 1 término del vocabulario). `0` desactiva el listón de
+    (`KENI_PROMOVER_MIN_MARCA`, def 0.2 ≈ 1 término del vocabulario). `0` desactiva el umbral de
     marca. Exentas: historias curadas por el equipo y breaking corroboradas (ver
     `agrupar.evaluar_liston`). Valor inválido → def."""
     from .dominio.agrupar import LISTON_MIN_MARCA_DEF
@@ -523,7 +523,7 @@ def noticias_gc_activo() -> bool:
     """True si el GC del pool de noticias debe BARRER (`KENI_NOTICIAS_GC`, def OFF).
 
     Conservador: sin el flag NO se borra ninguna noticia. Con el flag, un hilo demonio purga el
-    ruido de baja relevancia (ver `db_noticias.purgar_pool_irrelevante`) cada N horas.
+    contenido irrelevante de baja relevancia (ver `db_noticias.purgar_pool_irrelevante`) cada N horas.
     """
     return _crudo(ENV_NOTICIAS_GC).lower() in _VERDADEROS
 
@@ -534,7 +534,7 @@ def noticias_gc_intervalo_horas() -> int:
 
 
 def noticias_gc_score_umbral() -> float:
-    """Score por debajo del cual una historia de UNA fuente es "ruido" purgable
+    """Score por debajo del cual una historia de UNA fuente es "irrelevante" purgable
     (`KENI_NOTICIAS_GC_SCORE_UMBRAL`, def 0.15, clamp [0,1]). 0 = no purgar por score."""
     return _peso01(ENV_NOTICIAS_GC_SCORE_UMBRAL, NOTICIAS_GC_SCORE_UMBRAL_DEF)
 
@@ -577,7 +577,7 @@ def noticias_retencion_horas() -> int:
 def priorizar_perfil_activo() -> bool:
     """True si la priorización usa el perfil de relevancia extraído con Haiku (`KENI_PRIORIZAR_PERFIL_IA`).
 
-    Def OFF (conservador, IA en prod): sin el flag la priorización usa el vocabulario semilla
+    Def OFF (conservador, IA en prod): sin el flag la priorización usa el vocabulario base
     (`relevancia_marca`). Con el flag, el daemon refresca el perfil por marca (Haiku, TTL) y el
     score usa esas keywords derivadas de la línea editorial de la página texto.
     """
@@ -696,7 +696,7 @@ def pipeline_max() -> int:
 
 
 def pipeline_en_vuelo_max() -> int:
-    """WIP del gate SERIAL: piezas EN VUELO por marca (`KENI_PIPELINE_EN_VUELO_MAX`, def 8, min 1).
+    """WIP del gate SERIAL: piezas EN CURSO por marca (`KENI_PIPELINE_EN_VUELO_MAX`, def 8, min 1).
 
     ES el regulador del flujo continuo (in=out): Admitir no admite más historias de una
     marca mientras ésta tenga >= esto sin terminar (Verificar pendiente o cribado sin copy); primero se
@@ -718,7 +718,7 @@ def pipeline_fetch_fuente() -> bool:
 
 
 def pipeline_tema_ttl_horas() -> int:
-    """TTL (horas) de un tema EN VUELO del pipeline (`KENI_PIPELINE_TEMA_TTL_HORAS`, def 24, min 1).
+    """TTL (horas) de un tema EN CURSO del pipeline (`KENI_PIPELINE_TEMA_TTL_HORAS`, def 24, min 1).
 
     El pipeline es una VENTANA DESLIZANTE sobre la priorización de noticias frescas, sin colas
     intermedias: lo que no completó sus fases dentro del TTL CADUCA (libera su hueco del gate
@@ -772,9 +772,9 @@ def qa_fuente_timeout() -> int:
 
 
 def qa_en_curso_ttl_seg() -> int:
-    """TTL (s) del saneador de temas `verificar_veredicto='en_curso'` huerfanos (`KENI_QA_EN_CURSO_TTL_MIN`).
+    """TTL (s) del limpiador de temas `verificar_veredicto='en_curso'` sueltos (`KENI_QA_EN_CURSO_TTL_MIN`).
 
-    Def 30 min (muy superior al timeout de la criba, asi nunca toca una verificación viva). El reaper
+    Def 30 min (muy superior al timeout de la criba, asi nunca toca una verificación viva). El recolector
     resetea a "" los `en_curso` mas viejos para que vuelvan a la re-criba del barrido.
     """
     return _entero(ENV_QA_EN_CURSO_TTL_MIN, QA_EN_CURSO_TTL_MIN_DEF, minimo=5) * 60
@@ -786,7 +786,7 @@ def alguna_etapa_investigacion_activa() -> bool:
 
     El loop de investigación (caducidad + Admitir + Verificar) solo tiene sentido si su admisión o su criba
     están encendidas: con Recolectar Y Verificar globales OFF no entra nada nuevo ni se criba, y
-    el loop duerme (la caducidad de lo ya en vuelo retoma en cuanto se reactive). El override por
+    el loop duerme (la caducidad de lo ya en curso retoma en cuanto se reactive). El override por
     marca se aplica DENTRO del barrido (`etapa_activa`), no aquí: basta una marca activa para que
     el loop barra. Las etapas de Fusionar/Priorizar viven en el daemon de Recolectar, no en este loop.
     """
@@ -836,7 +836,7 @@ def ilustrar_activo() -> bool:
 
 # CLAVE VIRTUAL del catálogo/UI: el equipo enciende/apaga UN solo interruptor «Generar»
 # («o llega copy o no empieza») y la capa de ajustes lo TRADUCE a las cinco etapas internas
-# del tramo noticia→copy. Las etapas siguen existiendo como mecanismo (daemons, vista
+# de la fase noticia→copy. Las etapas siguen existiendo como mecanismo (daemons, vista
 # Pipelines, tests) pero dejan de ser botones: la única etapa con interruptor propio es
 # Ilustrar (la única con coste externo real). Estas claves VIRTUALES nunca se leen en runtime:
 # las lecturas siguen siendo por etapa; la API de ajustes escribe las claves físicas a la vez.

@@ -13,9 +13,9 @@ pregunta) en un PERFIL JSON por marca. Ese perfil alimenta dos consumidores:
     bloquea, se ANOTA y degrada el veredicto `listo` -> `revisar`.
 
 El perfil es REGENERABLE (`keni_consola.patrones_derivar`, CLI + daemon opcional): la
-semilla viaja en el paquete (`patrones_semilla/<marca>.json`) y el runtime puede
+base viaja en el paquete (`patrones_semilla/<marca>.json`) y el runtime puede
 sobrescribirla bajo el dir de datos (`<dir_config>/patrones/<marca>.json`), misma
-filosofía semilla/store que `libtexto`. Sin perfil para una marca/red el verificador
+filosofía base/store que `libtexto`. Sin perfil para una marca/red el verificador
 NO inventa: devuelve sin avisos (degradación honesta).
 
 Capas: este módulo es PURO (texto + dicts); no importa `dominio` ni toca red/BD.
@@ -47,7 +47,7 @@ VERSION_PERFIL = 1
 MIN_MUESTRAS_RED = 80
 
 # Piezas con menos visualizaciones que esto se excluyen de la derivación: con base
-# diminuta el engagement_pct es ruido (3 likes / 40 vistas = 7.5%) y contamina los
+# diminuta el engagement_pct es basura (3 likes / 40 vistas = 7.5%) y contamina los
 # cuartiles. No afecta al verificador (que mira texto, no métricas).
 MIN_VISUALIZACIONES = 50
 
@@ -297,18 +297,18 @@ def derivar_perfil(
     }
 
 
-# --- Carga del perfil (data dir > semilla del paquete) ----------------------------
+# --- Carga del perfil (data dir > base del paquete) ----------------------------
 
 
 def dir_perfiles_semilla() -> Path:
-    """Dir de los perfiles SEMILLA que viajan en el paquete (`patrones_semilla/`)."""
+    """Dir de los perfiles BASE que viajan en el paquete (`patrones_semilla/`)."""
     return Path(__file__).resolve().parent / "patrones_semilla"
 
 
 def dir_perfiles_data() -> Path:
     """Dir de perfiles del RUNTIME (`<dir_config>/patrones`): lo escribe la re-derivación.
 
-    Override por `KENI_PATRONES_DIR` (tests). Gana sobre la semilla, igual que el
+    Override por `KENI_PATRONES_DIR` (tests). Gana sobre la base, igual que el
     store de texto gana sobre `texto_semilla`.
     """
     import os
@@ -322,7 +322,7 @@ def dir_perfiles_data() -> Path:
 
 
 def cargar_perfil(marca: str) -> dict[str, object] | None:
-    """Perfil de `marca` (id canónico slug-guion): runtime si existe, si no semilla.
+    """Perfil de `marca` (id canónico slug-guion): runtime si existe, si no base.
 
     None si no hay perfil o no es utilizable (JSON roto, versión desconocida,
     sin `redes`): el verificador entonces NO avisa nada (sin datos no se inventa).

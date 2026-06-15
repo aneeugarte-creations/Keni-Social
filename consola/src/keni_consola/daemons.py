@@ -16,7 +16,7 @@ NO correrian en produccion. Este proceso aparte los mantiene vivos:
     `KENI_PIPELINE_ILUSTRAR`, bajo el maestro `KENI_MAQUINA`) ingiere del news-pool y lleva los
     temas a borrador (copy + arte) en la cola de revision; el resultado para en el gate
     humano (nada se publica solo),
-  - reaper de generaciones zombi (cierra como `error` las `ejecutando` huerfanas).
+  - recolector de generaciones colgadas (cierra como `error` las `ejecutando` sueltas).
 
 SAFE BY DEFAULT: este proceso NO publica nada ni crea/aprueba contenido por su
 cuenta. Los unicos caminos que lo harian estan gated por env y vienen AUSENTES por
@@ -78,7 +78,7 @@ def main() -> int:
     # borradores en revisión. SAFE BY DEFAULT: no barre salvo su toggle ON; nunca publica.
     iniciar_pipeline()
     iniciar_refresco_algoritmos()  # ingesta de feeds de algoritmo; solo lee si KENI_ALGORITMOS_AUTO=1.
-    iniciar_media_gc()  # GC de media huerfana; no borra salvo KENI_MEDIA_GC=1 (def OFF).
+    iniciar_media_gc()  # GC de media sin referencia; no borra salvo KENI_MEDIA_GC=1 (def OFF).
     # Re-derivación de PATRONES editoriales por marca (Metricool -> perfil + doc 'patrones'):
     # solo lee métricas y reescribe los artefactos de patrones cada N días. GATEADO: no corre
     # salvo KENI_PATRONES_AUTO=1 (def OFF); Voz/Reglas (criterio humano) jamás se tocan.
@@ -93,17 +93,17 @@ def main() -> int:
     # Google Trends como fuente externa: ingiere las tendencias (con sus noticias) al pool.
     # GATEADO: no ingiere salvo KENI_TRENDS=1 (def OFF).
     iniciar_trends()
-    # Reaper de generaciones zombi (SIEMPRE activo): cierra como `error`/`interrumpido` las
+    # Recolector de generaciones colgadas (SIEMPRE activo): cierra como `error`/`interrumpido` las
     # `ejecutando` cuyo proceso murio (reinicio/deploy/OOM/cuelgue), para que la UI no las
-    # muestre "Generando..." indefinidamente. Barre al arrancar (limpia los huerfanos del
+    # muestre "Generando..." indefinidamente. Barre al arrancar (limpia los sueltos del
     # deploy anterior) y cada N min. Antes solo se cableaba en `__main__` (servidor monolitico);
     # con el split de servicios (Fase 3) NINGUN proceso hosted corre `__main__`, asi que sin
-    # esto el reaper no corria en produccion y los huerfanos quedaban "ejecutando" para siempre.
+    # esto el recolector no corria en produccion y los sueltos quedaban "ejecutando" para siempre.
     iniciar_reaper()
 
     # Los daemons son hilos; el proceso principal queda en un bucle de LATIDO: toca el
     # fichero de liveness cada _LATIDO_SEG para que el healthcheck del contenedor (deploy)
-    # distinga "proceso vivo" de "proceso colgado/zombi" sin depender de la BD. Antes era
+    # distinga "proceso vivo" de "proceso colgado/atascado" sin depender de la BD. Antes era
     # un Event().wait() mudo: el contenedor solo se reiniciaba si el proceso MORIA, nunca
     # si quedaba colgado.
     from . import latidos

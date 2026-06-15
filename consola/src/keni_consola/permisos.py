@@ -5,7 +5,7 @@ CONTEXTO (#153, deriva de #130 multiusuario / #145 acotado por permisos)
 El servicio multiusuario hosted tiene atribucion de autor (#130 Fase 1) pero el
 ESTADO y los SECRETOS globales (clave del proveedor de imagen en `secretos.toml`,
 tokens de redes en el `config.toml` de metricas) viven en UN solo fichero que
-cualquier usuario autenticado podia leer y mutar. El primer cerrojo achacable es
+cualquier usuario autenticado podia leer y mutar. El primer bloqueo achacable es
 exigir rol ADMIN para esas areas sensibles y globales.
 
 Este modulo centraliza la pregunta "¿esta peticion la hace un admin?" que antes
@@ -37,7 +37,7 @@ en `request.state`. El gate de sesion + CSRF lo sigue aplicando el middleware.
 ALCANCE (lo que SI y lo que NO cubre #153)
 ==========================================
 Hoy el modelo de roles es binario (`admin`/`editor`) y SIN dimension de tenant ni de
-marca/proyecto en la cuenta: por eso el cerrojo achacable es "solo admin" sobre el
+marca/proyecto en la cuenta: por eso el bloqueo achacable es "solo admin" sobre el
 estado/secreto global, no un acotamiento por tenant. El AISLAMIENTO de secretos POR
 TENANT (un almacen por cliente en vez de un fichero global) es un cambio de arquitectura
 mayor y queda DIFERIDO: ver `docs/adr/0003-aislamiento-secretos-por-tenant.md`.
@@ -94,7 +94,7 @@ def usuario_actual(request: Request) -> dict[str, Any] | None:
 # sobreescribible pasando una `marca` explicita (cualquiera) y NUNCA bloquea
 # (sin 403/404/400 por marca).
 #
-# Por eso NO hay `rechazo_pieza`/`rechazo_marca`: no hay cerrojo por marca. Solo hay
+# Por eso NO hay `rechazo_pieza`/`rechazo_marca`: no hay bloqueo por marca. Solo hay
 # `marcas_preferentes`, que da el FOCO por defecto (None = sin preferencia => todas
 # las marcas).
 

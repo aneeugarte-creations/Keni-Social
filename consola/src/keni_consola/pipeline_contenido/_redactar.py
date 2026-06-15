@@ -45,8 +45,8 @@ def lanzar_redactar_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | Non
     omite (sin parámetros / marca inválida).
 
     DEDUP AL ÉXITO (no al lanzar): `copy_pendiente` lo limpia el POST-PROCESADO del copy al
-    completar con éxito (`limpiar_pendiente=True`), no este lanzador. Mientras el job está EN
-    VUELO no hay doble lanzamiento: la clave de idempotencia de `dominio.generar.lanzar` devuelve
+    completar con éxito (`limpiar_pendiente=True`), no este lanzador. Mientras el job está en
+    curso no hay doble lanzamiento: la clave de idempotencia de `dominio.generar.lanzar` devuelve
     el run en curso, y `temas_para_redactar` además excluye los temas que ya tienen piezas.
     """
     tema_id = (tema.get("id") or "").strip()
@@ -133,7 +133,7 @@ def temas_para_redactar(marca: str | None = None) -> list[dict[str, Any]]:
         if _tiene_copy(tema.get("id", "") or ""):
             continue
         listos.append(tema)
-        # SIN recorte: el volumen lo acota la ADMISIÓN (gate serial en vuelo por marca) y el
+        # SIN recorte: el volumen lo acota la ADMISIÓN (gate serial en curso por marca) y el
         # backpressure de la cola (`ColaLlenaError` corta la fase; el siguiente tick reintenta).
     return listos
 

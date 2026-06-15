@@ -177,7 +177,7 @@ async def daemons_barrer(request: Request) -> Response:
             status_code=404,
         )
     if daemon not in latidos.BARRIBLES:
-        # Su bucle NO consume `barrido_solicitado`: aceptar dejaria el flag huerfano.
+        # Su bucle NO consume `barrido_solicitado`: aceptar dejaria el flag suelto.
         return JSONResponse(
             {
                 "error": f"El daemon {daemon!r} no admite barrido forzado: su bucle "

@@ -82,7 +82,7 @@ def cadencia_valida(cadencia: dict[str, Any]) -> bool:
 
 
 def _duracion_min(cadencia: dict[str, Any]) -> int:
-    """Minutos de ventana activa; una ventana nocturna (fin<inicio) suma el tramo de madrugada."""
+    """Minutos de ventana activa; una ventana nocturna (fin<inicio) suma el intervalo de madrugada."""
     delta = _minutos(cadencia["hora_fin"]) - _minutos(cadencia["hora_inicio"])
     return delta if delta > 0 else delta + 24 * 60
 

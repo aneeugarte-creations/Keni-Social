@@ -70,7 +70,7 @@ async def crear_programa(request: Request) -> Response:
             {"error": f"El nombre no puede tener más de {_MAX_NOMBRE_PROGRAMA} caracteres."},
             status_code=400,
         )
-    # Unicidad case-insensitive: defensa en profundidad (el UNIQUE del DDL es el ultimo cerrojo).
+    # Unicidad case-insensitive: defensa en profundidad (el UNIQUE del DDL es el ultimo bloqueo).
     if repos.existe_programa_por_nombre(nombre):
         return JSONResponse(
             {"error": "Ya existe un programa con ese nombre.", "programa_existente": True},

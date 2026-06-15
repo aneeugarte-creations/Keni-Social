@@ -45,7 +45,7 @@ async def problemas(request: Request) -> Response:
     """GET /api/pipelines/problemas?marca=&limite=50: temas BLOQUEADOS del pipeline (solo lectura).
 
     Tras agotar sus reintentos (o una criba 🔴 de peso), un tema queda con veredicto `problema`
-    y SALE del flujo (no se reintenta ni cuenta en el cupo en vuelo): esta lista lo hace VISIBLE
+    y SALE del flujo (no se reintenta ni cuenta en el cupo en curso): esta lista lo hace VISIBLE
     para que un humano decida (relanzar a mano / descartar). Recientes (por `actualizado`)
     primero. Aún sin UI propia: lo consume quien monitorea (curl / consola / vista futura).
     """

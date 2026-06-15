@@ -346,20 +346,20 @@ def refrescar_piezas_recientes(
             datos = recalcular(marca, red, id_post)
             if datos.get("encontrado"):
                 refrescadas += 1
-    # Tras acumular puntos nuevos en el histórico, poda los antiguos para acotar el
+    # Tras acumular puntos nuevos en el histórico, borra los antiguos para acotar el
     # crecimiento de `metricas_pieza_snapshots` (ADR 0007). El "ahora" lo pasa este
-    # llamante (que ya tiene el reloj), no db.py. Best-effort: un fallo de poda no
+    # llamante (que ya tiene el reloj), no db.py. Best-effort: un fallo de borrado no
     # invalida el barrido (los puntos ya quedaron escritos).
     try:
         retencion = config.metricas_historico_retencion_dias()
         borrados = repos.podar_snapshots_piezas(retencion, ahora.isoformat(timespec="seconds"))
         if borrados:
             _log.info(
-                "Poda del histórico por pieza: %d snapshot(s) > %d días eliminados.",
+                "Limpieza del histórico por pieza: %d snapshot(s) > %d días eliminados.",
                 borrados, retencion,
             )
-    except Exception:  # noqa: BLE001 -- la poda es best-effort; no debe romper el barrido
-        _log.exception("metricas_pieza: fallo al podar el histórico por pieza.")
+    except Exception:  # noqa: BLE001 -- el borrado es best-effort; no debe romper el barrido
+        _log.exception("metricas_pieza: fallo al borrar el histórico por pieza.")
     return refrescadas
 
 

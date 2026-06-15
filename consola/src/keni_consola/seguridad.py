@@ -12,7 +12,7 @@ anade una barrera minima (NO multiusuario, eso es #130):
      Si no se define, se genera uno aleatorio al arrancar y se MUESTRA en el log
      (asi el modo local sigue siendo usable sin configurar nada). El token se
      acepta por cabecera (`Authorization: Bearer <t>` o `X-Keni-Token: <t>`) o por
-     cookie `keni_consola_token` (que el propio servidor siembra al servir el SPA,
+     cookie `keni_consola_token` (que el propio servidor escribe al servir el SPA,
      para que las descargas por `window.open` y las `<img src>` —que NO pueden
      mandar cabeceras— sigan funcionando).
 
@@ -33,7 +33,7 @@ QUE SE PROTEGE Y QUE NO
     exigen ademas Origin/Referer del mismo host.
   - El SPA y sus estaticos (`/`, `/assets/*`, favicons) NO exigen token: hay que
     poder cargar la pagina para luego autenticar las llamadas. El index del SPA
-    siembra la cookie del token (modo local) para que la UI funcione sin pasos.
+    escribe la cookie del token (modo local) para que la UI funcione sin pasos.
 
 El SPA tambien manda el token por cabecera (`api.ts` lo lee de `window.__KENI_TOKEN__`,
 inyectado en el index), de modo que la cookie es defensa en profundidad y no el unico
@@ -88,7 +88,7 @@ ENV_ORIGENES = config.ENV_ORIGENES
 ENV_COOKIE_SECURE = config.ENV_COOKIE_SECURE
 ENV_HTTPS = config.ENV_HTTPS
 
-# Nombre de la cookie en la que el servidor siembra el token (para GET por navegacion
+# Nombre de la cookie en la que el servidor escribe el token (para GET por navegacion
 # y `<img>`, que no pueden mandar cabeceras). NO es HttpOnly a proposito: el SPA podria
 # necesitar leerla; la defensa CSRF no depende del secreto de la cookie sino del Origin.
 COOKIE_TOKEN = "keni_consola_token"
@@ -286,7 +286,7 @@ def _host_de_url(url: str) -> str | None:
 # sesion; aun asi pasan por la verificacion Origin/CSRF de las mutaciones (son POST).
 #   - `/api/auth/mfa/login/opciones` y `/api/auth/mfa/verify`: SEGUNDO PASO del login con MFA
 #     (passkeys). Solo se alcanzan con la cookie PRE-AUTH de corta vida (factor-1 superado, sin
-#     sesion real). NO son una sesion: `login/opciones` arma las opciones WebAuthn y siembra la
+#     sesion real). NO son una sesion: `login/opciones` arma las opciones WebAuthn y escribe la
 #     cookie de challenge; `verify` valida la assertion (o un recovery) antes de emitir la sesion
 #     real. Que sean publicas NO debilita nada: un estado factor-1-only NUNCA alcanza otro `/api`
 #     (esos siguen exigiendo sesion COMPLETA). El enrolamiento (`/api/auth/mfa/registro/*`,
@@ -331,7 +331,7 @@ class SeguridadConsola:
     """Middleware ASGI: sesion (+ token interino opcional) para `/api` + CSRF (#134 + #130).
 
     - Las rutas que NO empiezan por `/api` (SPA, assets, favicons) pasan SIN credencial:
-      hay que poder cargar la pagina. El index siembra la cookie del token (si lo hay).
+      hay que poder cargar la pagina. El index escribe la cookie del token (si lo hay).
     - `/api/auth/login` es PUBLICO (crea la sesion) pero pasa por el chequeo CSRF.
     - El resto de `/api/...`: exige UNA sesion valida (cookie `keni_consola_sesion`) O,
       SI HAY token interino configurado, el token (cabecera/cookie). Si falta o no vale ->
@@ -364,7 +364,7 @@ class SeguridadConsola:
 
         ruta = scope.get("path", "")
         if not ruta.startswith("/api"):
-            # SPA / estaticos: sin credencial. (El index siembra la cookie aparte.)
+            # SPA / estaticos: sin credencial. (El index escribe la cookie aparte.)
             await self.app(scope, receive, send)
             return
 

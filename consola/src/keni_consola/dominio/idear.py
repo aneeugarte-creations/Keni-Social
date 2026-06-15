@@ -61,7 +61,7 @@ def _ideas_crudas(texto: str) -> list[Any] | None:
     """Saca la lista cruda de ideas del texto de claude (tolera fences y dict envoltorio).
 
     Acepta una lista JSON cruda o un objeto `{"ideas": [...]}` (o `items`), opcionalmente
-    dentro de un bloque cercado ```json. Devuelve la lista (sin sanear) o None si no hay JSON.
+    dentro de un bloque cercado ```json. Devuelve la lista (sin depurar) o None si no hay JSON.
     """
     if not isinstance(texto, str) or not texto.strip():
         return None
@@ -82,7 +82,7 @@ def _ideas_crudas(texto: str) -> list[Any] | None:
 
 
 def parsear_ideas(salida: str) -> list[dict[str, str]]:
-    """Parsea la salida de claude en una lista saneada de `{titulo, descripcion}`. PURO.
+    """Parsea la salida de claude en una lista depurada de `{titulo, descripcion}`. PURO.
 
     Reglas: el `titulo` es OBLIGATORIO (se omite la idea sin titulo); `descripcion` es opcional.
     Se recortan longitudes, se ignoran entradas que no sean objeto y se DEDUPLICAN por titulo

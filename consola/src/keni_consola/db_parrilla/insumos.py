@@ -156,7 +156,7 @@ def borrar_insumo_lote(lote_id: str) -> bool:
 
 
 def sanear_lotes_parseando_huerfanos(antes_de: str) -> int:
-    """Reconcilia lotes ZOMBI atascados en `parseando` creados antes de `antes_de` (ISO).
+    """Reconcilia lotes atascados en `parseando` creados antes de `antes_de` (ISO).
 
     Un lote nace `parseando` y solo pasa a `listo`/`error` cuando el worker termina su
     callback (inserta ítems y actualiza el lote). Si el PROCESO muere entre el INSERT de

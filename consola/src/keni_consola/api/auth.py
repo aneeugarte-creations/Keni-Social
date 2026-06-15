@@ -114,10 +114,10 @@ def reiniciar_limite_login_por_ip() -> None:
 #
 # FLUJO LOGIN con MFA ON y usuario con >=1 passkey:
 #   1) POST /api/auth/login  con user/pass OK -> NO crea sesion. Devuelve 200 {mfa_required:
-#      true} y siembra una cookie PRE-AUTH de corta vida (5 min) que SOLO identifica al usuario
+#      true} y establece una cookie PRE-AUTH de corta vida (5 min) que SOLO identifica al usuario
 #      que ya supero el factor 1. No es una sesion: no abre nada de `/api`.
 #   2) POST /api/auth/mfa/login/opciones (cookie pre-auth) -> devuelve las opciones WebAuthn de
-#      autenticacion y siembra la cookie de CHALLENGE (Fernet, 5 min) atada al usuario.
+#      autenticacion y establece la cookie de CHALLENGE (Fernet, 5 min) atada al usuario.
 #   3) El navegador corre `startAuthentication` (Face ID / huella / llave) y POSTea la assertion
 #      a POST /api/auth/mfa/verify (cookie pre-auth + cookie challenge) -> verifica y SOLO
 #      entonces crea la sesion real. `verify` tambien acepta un RECOVERY code (sin assertion).
@@ -242,7 +242,7 @@ def _leer_token_challenge(token: str | None, usuario_id: str) -> str | None:
 
 
 def _set_cookie_challenge(resp: Response, nombre: str, token: str) -> None:
-    """Siembra una cookie de challenge WebAuthn: HttpOnly, SameSite=Strict, vida corta (5 min)."""
+    """Establece una cookie de challenge WebAuthn: HttpOnly, SameSite=Strict, vida corta (5 min)."""
     resp.set_cookie(
         nombre,
         token,
@@ -260,7 +260,7 @@ def _borrar_cookie_challenge(resp: Response, nombre: str) -> None:
 
 
 def _set_cookie_sesion(resp: Response, token: str) -> None:
-    """Siembra la cookie de sesion: HttpOnly, SameSite=Strict, path=/ (CONTRATO).
+    """Establece la cookie de sesion: HttpOnly, SameSite=Strict, path=/ (CONTRATO).
 
     `max_age` acompana a la expiracion server-side para que el navegador la descarte
     cuando caduca. HttpOnly: el JS no la lee (defensa anti-XSS de robo de sesion).
@@ -283,7 +283,7 @@ def _borrar_cookie_sesion(resp: Response) -> None:
 
 
 def _set_cookie_pendiente(resp: Response, token: str) -> None:
-    """Siembra la cookie PRE-AUTH (factor-1 superado): HttpOnly, SameSite=Strict, vida corta.
+    """Establece la cookie PRE-AUTH (factor-1 superado): HttpOnly, SameSite=Strict, vida corta.
 
     Misma postura de seguridad que la cookie de sesion (HttpOnly + Strict + Secure tras TLS),
     pero con un `max_age` de 5 min. Esta cookie NO da acceso a `/api`: solo sirve para el paso
@@ -308,7 +308,7 @@ def _borrar_cookie_pendiente(resp: Response) -> None:
 def _respuesta_sesion_creada(
     usuario_id: str, usuario: dict, *, debe_inscribir_mfa: bool = False
 ) -> Response:
-    """Crea la sesion real, siembra su cookie y borra la pre-auth; devuelve la respuesta 200.
+    """Crea la sesion real, establece su cookie y borra la pre-auth; devuelve la respuesta 200.
 
     `debe_inscribir_mfa` (flujo de GRACIA): True cuando es un admin OBLIGADO a tener segundo
     factor que aun NO tiene passkey. NO bloqueamos el login (no hay lockout): abrimos la sesion
@@ -378,7 +378,7 @@ def _mfa_enrolamiento_disponible(usuario: dict | None) -> bool:
 
 
 async def login(request: Request) -> Response:
-    """POST /api/auth/login: valida credenciales, abre sesion y siembra la cookie.
+    """POST /api/auth/login: valida credenciales, abre sesion y establece la cookie.
 
     Antes de NADA (ni siquiera leer el body) se aplica el limite de intentos FALLIDOS por
     IP (429): es la barrera barata contra fuerza bruta distribuida sobre muchas cuentas y
@@ -576,7 +576,7 @@ async def mfa_login_opciones(request: Request) -> Response:
     """POST /api/auth/mfa/login/opciones: opciones WebAuthn de autenticacion + cookie de challenge.
 
     PUBLICO (solo exige la cookie pre-auth). Devuelve las opciones spec-JSON para
-    `startAuthentication` y siembra la cookie de challenge (Fernet, 5 min, atada al usuario).
+    `startAuthentication` y establece la cookie de challenge (Fernet, 5 min, atada al usuario).
     Si el usuario ya no tiene passkeys (reset admin entre pasos), caduca la pre-auth.
     """
     # Maquinaria EFECTIVA (flag global, o MFA de admin obligatorio + clave): si el login elevó,
@@ -616,7 +616,7 @@ async def mfa_verify(request: Request) -> Response:
 
     PUBLICO (cookie pre-auth + cookie challenge). Cuerpo: `{assertion: {...}}` (la credencial que
     devuelve `startAuthentication`) O `{codigo: "XXXX-XXXX"}` (un codigo de recuperacion). Si
-    cuadra, crea la sesion real, siembra su cookie y borra las pre-auth/challenge. Con el flag OFF
+    cuadra, crea la sesion real, establece su cookie y borra las pre-auth/challenge. Con el flag OFF
     no deberia recibir trafico; aun asi rehusa limpiamente.
     """
     if not seguridad.mfa_maquinaria_activa():
@@ -709,7 +709,7 @@ async def mfa_registro_opciones(request: Request) -> Response:
     """POST /api/auth/mfa/registro/opciones: opciones WebAuthn de REGISTRO + cookie de challenge.
 
     Requiere flag ON + sesion completa. Devuelve las opciones spec-JSON para `startRegistration`
-    (excluye las passkeys ya enroladas) y siembra la cookie de challenge de registro.
+    (excluye las passkeys ya enroladas) y establece la cookie de challenge de registro.
     """
     usuario = _exige_sesion(request)
     if usuario is None:

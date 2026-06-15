@@ -150,7 +150,7 @@ async def pieza_guardar(request: Request) -> Response:
         return JSONResponse({"error": "Falta el 'documento'."}, status_code=400)
 
     # VALIDACIÓN PREVIA: que la plataforma existe y pertenece al contenido (404 si no).
-    # Se hace ANTES de renderizar para evitar huérfanos si el render falla después.
+    # Se hace ANTES de renderizar para evitar registros sueltos si el render falla después.
     plataforma = repos.obtener_contenido_plataforma(pid)
     if plataforma is None:
         return JSONResponse({"error": "Esa publicación no existe."}, status_code=404)

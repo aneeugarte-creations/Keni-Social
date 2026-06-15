@@ -112,7 +112,7 @@ def metricas_piezas_refresco_horas() -> int:
 def metricas_historico_retencion_dias() -> int:
     """Días de retención del HISTÓRICO de métricas por pieza (`metricas_pieza_snapshots`).
 
-    `KENI_METRICAS_HISTORICO_RETENCION_DIAS`, def 90, min 1. El daemon de refresco poda los
+    `KENI_METRICAS_HISTORICO_RETENCION_DIAS`, def 90, min 1. El daemon de refresco borra los
     snapshots más antiguos que esta ventana para acotar el crecimiento de la tabla (ADR 0007).
     """
     return _entero(

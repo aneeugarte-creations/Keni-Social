@@ -33,7 +33,7 @@ def max_jobs() -> int:
 
     Es el UNICO limite de la cola: cuantos `claude -p` corren a la vez. La cola NO tiene
     tope (R-NO-LIMIT); los jobs que no caben simplemente ESPERAN un slot, nada se rechaza
-    por tamano de cola. El freno voluntario de presupuesto/pausa vive aparte (`presupuesto_ia`).
+    por tamano de cola. El tope voluntario de presupuesto/pausa vive aparte (`presupuesto_ia`).
     """
     return _entero(ENV_MAX_JOBS, MAX_JOBS_DEF, minimo=1)
 
@@ -43,7 +43,7 @@ def max_jobs() -> int:
 # --------------------------------------------------------------------------- #
 #
 # La generacion corre `claude -p` con la MISMA suscripcion que usa el equipo a diario: una
-# avalancha de jobs de fondo puede agotar los tokens de TODOS sin que nadie lo vea venir.
+# rafaga de jobs de fondo puede agotar los tokens de TODOS sin que nadie lo vea venir.
 # Estos knobs (editables en caliente via el store de ajustes) gobiernan el corte automatico
 # (`presupuesto_ia.py`) y la pausa manual de la generacion. Todos se leen EN CALIENTE.
 
@@ -69,10 +69,10 @@ def presupuesto_margen_manual_pct() -> int:
 def jobs_max_intentos() -> int:
     """Intentos maximos de ejecucion de un job de la cola (`KENI_JOBS_MAX_INTENTOS`, def 3).
 
-    Cuenta el intento normal MAS los re-reclamos de huerfano (worker muerto a mitad). Al
+    Cuenta el intento normal MAS los re-reclamos de un job sin dueño (worker muerto a mitad). Al
     agotarse, el re-reclamo DESCARTA el job (registro en error con motivo `interrumpido`) en
     vez de re-ejecutarlo para siempre: un job que mata al worker (OOM por un prompt enorme,
-    bug del runner) no debe convertirse en un crash-loop que ademas quema tokens en cada vuelta.
+    bug del runner) no debe convertirse en un crash-loop que ademas consume tokens en cada iteracion.
     """
     return _entero(ENV_JOBS_MAX_INTENTOS, JOBS_MAX_INTENTOS_DEF, minimo=1)
 
@@ -81,7 +81,7 @@ def prompt_max_chars() -> int:
     """Tope DURO del prompt de una generacion (`KENI_PROMPT_MAX_CHARS`, def 200000; 0 = sin tope).
 
     Economia de contexto: un prompt patologico (feeds concatenados sin criba, un documento
-    gigante) quemaria decenas de miles de tokens de la suscripcion compartida en UNA generacion.
+    gigante) consumiria decenas de miles de tokens de la suscripcion compartida en UNA generacion.
     Superarlo rechaza el encolado con un mensaje claro (`PromptExcesivoError` -> 429).
     """
     return _entero(ENV_PROMPT_MAX_CHARS, PROMPT_MAX_CHARS_DEF, minimo=0)
@@ -101,8 +101,8 @@ def generacion_pausada() -> bool:
 
     Encendido: NO se encola NADA nuevo (fondo ni manual; 429 claro) y el worker DEJA de
     reclamar jobs (lo ya encolado espera; lo que corre termina). Editable en caliente desde
-    la UI (store de ajustes compartido por back/worker/daemons via /data): es el freno de
-    mano cuando la suscripcion compartida esta al limite o algo se desboca.
+    la UI (store de ajustes compartido por back/worker/daemons via /data): es el control
+    manual cuando la suscripcion compartida esta al limite o algo se desboca.
     """
     return _crudo(ENV_GENERACION_PAUSADA).lower() in _VERDADEROS
 

@@ -169,7 +169,7 @@ async def dia(request: Request) -> Response:
         plan = config.plan_dia(marca)
         try:
             resumen = repos.resumen_plan_por_categoria(marca, desde_iso)
-        except Exception:  # noqa: BLE001 -- el panel no casca por un contador
+        except Exception:  # noqa: BLE001 -- el panel no falla por un contador
             _log.exception("produccion: fallo el conteo por categoría (%s).", marca)
             resumen = {}
         categorias = sorted(set(plan) | set(resumen))

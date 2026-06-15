@@ -41,7 +41,7 @@ from .io_atomico import escribir_atomico
 from .motores.estudio_imagen import spec_plantilla
 
 # Clave (en el JSON por marca) del SPEC de capas del editor visual. Convive con los campos
-# planos (legacy/seed): el render usa el spec; los planos siembran el spec por defecto.
+# planos (legacy/seed): el render usa el spec; los planos inicializan el spec por defecto.
 SPEC_KEY = "spec"
 
 # Variable de entorno que sobreescribe la raiz del store (override de maxima prioridad; tests).

@@ -132,7 +132,7 @@ def lanzar_para_publicacion(publicacion_id: str) -> dict[str, Any] | None:
     """ENCOLA la crítica IA de una pieza si toca (flag ON, humanos OK, nivel IA pendiente).
 
     Devuelve el registro de generación encolado, o None si no aplica. Idempotente: la clave
-    `critica-ia:{id}` evita un segundo run en vuelo; además se re-comprueba que el nivel IA
+    `critica-ia:{id}` evita un segundo run en curso; además se re-comprueba que el nivel IA
     siga pendiente (si ya fue votado o la cadena cambió, no encola).
     """
     if not config.critica_ia_activa():

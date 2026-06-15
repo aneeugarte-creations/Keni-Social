@@ -303,7 +303,7 @@ class AcumuladorStream:
           `stream_event` con `message_start`        -> nuevo turno (cuenta turno + modelo).
           `stream_event` `content_block_delta`/`text_delta` -> texto del ASISTENTE token a
             token: se ACUMULA en `texto` para que la UI lo muestre en vivo (el `thinking`
-            NO se acumula: es ruido para el copy).
+            NO se acumula: es irrelevante para el copy).
           `stream_event` `message_delta`/`usage`    -> tokens PARCIALES del turno.
           `assistant`/`result` siguen llegando igual; en modo parcial NO recontamos turnos
             ni tokens desde `assistant` (lo hacen los `stream_event`), via `_vio_stream`.
@@ -342,7 +342,7 @@ class AcumuladorStream:
         try:
             evento = json.loads(crudo)
         except (json.JSONDecodeError, ValueError):
-            return  # ruido en el stream: lo ignoramos (degradacion robusta)
+            return  # línea irrelevante en el stream: lo ignoramos (degradacion robusta)
         if not isinstance(evento, dict):
             return
         tipo = evento.get("type")

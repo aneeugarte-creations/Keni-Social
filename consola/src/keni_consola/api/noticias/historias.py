@@ -103,7 +103,7 @@ def _evaluar_liston(
     La MISMA evaluación que usa la promoción CI (`noticias_liston.evaluar`): el panel nunca
     dice una cosa y el pipeline hace otra. `vocab_memo` evita releer el cache del perfil
     editorial por cada historia del listado. Best-effort: ante un fallo se reporta NO
-    promovible con motivo genérico (el panel no casca por una historia rara).
+    promovible con motivo genérico (el panel no falla por una historia rara).
     """
     from ... import noticias_liston
 
@@ -342,7 +342,7 @@ async def mesa(request: Request) -> Response:
             resumen_plan = repos.resumen_plan_por_categoria(
                 marca, inicio_dia_cdmx_iso_utc()
             )
-        except Exception:  # noqa: BLE001 -- sin contador, la mesa muestra progreso 0 (no casca)
+        except Exception:  # noqa: BLE001 -- sin contador, la mesa muestra progreso 0 (no falla)
             resumen_plan = {}
 
     clusters, _total = repos.listar_noticia_clusters(

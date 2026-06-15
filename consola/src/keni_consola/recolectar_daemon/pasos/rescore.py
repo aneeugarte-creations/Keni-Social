@@ -84,7 +84,7 @@ def paso_rescore(
                 breaking_peso=breaking_peso, breaking_ventana_h=breaking_ventana_h,
             )
             # Breaking/velocidad DECAEN con el reloj (la ventana se ancla en ahora): el
-            # re-score persiste el flag vivo para que el listón/los cupos no traten como
+            # re-score persiste el flag vivo para que el umbral/los cupos no traten como
             # última hora una historia de ayer.
             breaking_vivo = int(desglose.get("breaking") or 0)
             vel_viva = float(desglose.get("velocidad") or 0.0)

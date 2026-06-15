@@ -34,7 +34,7 @@ REGLAS
     fachada, se sube `_VERSION_ESQUEMA` y todas las entradas viejas dejan de leerse
     (se recalculan); sin esto, un payload viejo servia campos nuevos como 0/None
     (p.ej. "Piezas publicadas: 0" en meses cacheados antes del KPI). La purga del
-    barrido borra las filas huerfanas.
+    barrido borra las filas sueltas.
   - Estado de refresco EN MEMORIA (un solo proceso del back; el daemon y el POST
     viven en el mismo proceso uvicorn): un Lock + un dict. Se resetea al reiniciar.
   - Conexion por operacion (via `repos`), segura entre hilos (igual que el resto).
@@ -105,7 +105,7 @@ _ESTADO: dict[str, object] = {
 _LOCKS_GUARDIAN = threading.Lock()
 _LOCKS_COMBO: dict[str, threading.Lock] = {}
 
-# Claves con un refresco en FONDO en vuelo (stale-while-revalidate): evita que N lecturas
+# Claves con un refresco en FONDO en curso (stale-while-revalidate): evita que N lecturas
 # de la misma entrada caducada disparen N recalculos. Protegido por `_LOCKS_GUARDIAN`.
 _SWR_EN_VUELO: set[str] = set()
 
@@ -154,7 +154,7 @@ def _caducada(generado_en: str) -> bool:
 
 
 def _revalidar_en_fondo(tipo: str, rango: str, marca: str | None) -> None:
-    """Dispara UN refresco en fondo del combo (idempotente mientras este en vuelo).
+    """Dispara UN refresco en fondo del combo (idempotente mientras este en curso).
 
     Stale-while-revalidate: el llamante ya devolvio la entrada caducada (la UI no
     espera); aqui se recalcula en un hilo daemon y la SIGUIENTE lectura ve el dato

@@ -9,9 +9,9 @@ El archivo vive en `~/.config/keni-social/sugerencias.json` (o la ruta de
 `KENI_CONSOLA_SUGERENCIAS`, útil en tests). Escritura ATÓMICA (temp + os.replace).
 NO contiene secretos.
 
-La PRIMERA vez que se lee (archivo inexistente) se SIEMBRA con una idea de partida
+La PRIMERA vez que se lee (archivo inexistente) se INICIALIZA con una idea de partida
 (moderación de lives de YouTube como herramienta aparte). Borrar todas las
-sugerencias deja el archivo con lista vacía y NO vuelve a sembrar.
+sugerencias deja el archivo con lista vacía y NO vuelve a inicializar.
 """
 
 from __future__ import annotations
@@ -81,7 +81,7 @@ def ruta_sugerencias() -> Path:
 
 
 def _normalizar(item: Any) -> dict[str, Any] | None:
-    """Sanea un registro leído de disco; None si no es utilizable (sin id/título)."""
+    """Limpia un registro leído de disco; None si no es utilizable (sin id/título)."""
     if not isinstance(item, dict):
         return None
     sid = item.get("id")
@@ -130,7 +130,7 @@ def _escribir(lista: list[dict[str, Any]]) -> None:
 
 
 def listar() -> list[dict[str, Any]]:
-    """Lista de sugerencias. La PRIMERA vez (sin archivo) siembra la idea de partida."""
+    """Lista de sugerencias. La PRIMERA vez (sin archivo) inicializa la idea de partida."""
     if not ruta_sugerencias().exists():
         semilla = [dict(s) for s in _SEMILLA]
         _escribir(semilla)
@@ -182,7 +182,7 @@ def actualizar_estado(sugerencia_id: str, estado: str) -> dict[str, Any] | None:
 
 
 def borrar(sugerencia_id: str) -> bool:
-    """Borra una sugerencia por id. True si existía. NO vuelve a sembrar al vaciarse."""
+    """Borra una sugerencia por id. True si existía. NO vuelve a inicializar al vaciarse."""
     with bloqueo_archivo(ruta_sugerencias()):
         lista = listar()
         restantes = [s for s in lista if s["id"] != sugerencia_id]

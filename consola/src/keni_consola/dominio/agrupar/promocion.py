@@ -1,7 +1,7 @@
-"""Listón de PROMOCIÓN a producción automática (auto-producción). PURA.
+"""Umbral de PROMOCIÓN a producción automática (auto-producción). PURA.
 
-El score que lista el panel y el listón que dispara producción son dos niveles distintos a
-propósito: encolar Verificar+Redactar (coste real de tokens) exige un listón más alto y explicable.
+El score que lista el panel y el umbral que dispara producción son dos niveles distintos a
+propósito: encolar Verificar+Redactar (coste real de tokens) exige un umbral más alto y explicable.
 """
 
 from __future__ import annotations
@@ -17,9 +17,9 @@ from ._comun import (
 from .corroboracion import peso_ventana_actual
 from .scoring import puntuar_detalle
 
-# El score que LISTA el panel y el listón que DISPARA producción automática son dos niveles
+# El score que LISTA el panel y el umbral que DISPARA producción automática son dos niveles
 # distintos a propósito: el panel muestra el pool jerarquizado (todo lo que pasó la entrada),
-# pero encolar Verificar+Redactar (`claude -p`, coste real de tokens) exige un listón MÁS ALTO y
+# pero encolar Verificar+Redactar (`claude -p`, coste real de tokens) exige un umbral MÁS ALTO y
 # EXPLICABLE. Defaults conservadores; editables en caliente desde la consola.
 LISTON_MIN_SCORE_DEF = 0.35
 LISTON_MIN_MARCA_DEF = 0.2
@@ -36,7 +36,7 @@ def evaluar_liston(
     breaking_peso: float = BREAKING_PESO_DEF,
     breaking_ventana_h: int = BREAKING_VENTANA_H_DEF,
 ) -> tuple[bool, str]:
-    """¿Esta historia supera el LISTÓN de producción automática? `(supera, motivo)`. PURA.
+    """¿Esta historia supera el UMBRAL de producción automática? `(supera, motivo)`. PURA.
 
     Reglas, en orden (el motivo explica la PRIMERA que falla):
       1. VERIFICACIÓN: una historia `dudosa` (única fuente de baja confianza / clickbait)
@@ -44,7 +44,7 @@ def evaluar_liston(
       2. MADURACIÓN: la historia debe llevar al menos `min_maduracion_min` minutos en el
          pool (desde `primer_visto`) antes de competir por plaza. Promover al primer
          avistamiento elige con UNA fuente y señal a medio acumular; esperar deja que la
-         corroboración/viralidad separen lo grande del ruido y la selección compare
+         corroboración/viralidad separen lo grande de lo irrelevante y la selección compare
          historias maduras entre sí. Exentas: CURADAS por el equipo y BREAKING
          corroboradas (la urgencia real no espera). `0` desactiva la regla; sin
          `primer_visto` parseable no se retiene (no se castiga un dato ausente).
@@ -62,7 +62,7 @@ def evaluar_liston(
         return False, "verificación dudosa (única fuente no fiable o clickbait)"
     curada = int(cluster.get("senal") or 0) >= SENAL_CURADO
     # Breaking EN VIVO si hay timeline (misma derivación que el scoring: masa ponderada en la
-    # ventana actual, decae sola); sin timeline se respeta el flag persistido. Así el listón
+    # ventana actual, decae sola); sin timeline se respeta el flag persistido. Así el umbral
     # no depende de un flag desfasado entre re-scores.
     detalle_liston = cluster.get("fuentes_detalle") or []
     if isinstance(detalle_liston, list) and detalle_liston:

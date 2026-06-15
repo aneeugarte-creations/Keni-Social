@@ -14,7 +14,7 @@ from ._comun import (
 # --------------------------------------------------------------------------- #
 #
 # Cada semana tiene sus propias franjas (nombre libre, rangos HH:MM, solapes permitidos,
-# soporte a franjas que cruzan medianoche). Se siembran 2 por defecto ("Mañana", "Tarde")
+# soporte a franjas que cruzan medianoche). Se inicializan 2 por defecto ("Mañana", "Tarde")
 # la primera vez que la API lee la semana; admin puede anadir, editar o borrar mas.
 
 # GRID POR MARCA: `marca` es la rejilla a la que pertenece la franja (columna del grid).

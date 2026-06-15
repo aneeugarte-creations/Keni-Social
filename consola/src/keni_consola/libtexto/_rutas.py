@@ -1,6 +1,6 @@
-"""Localización de la raíz del almacén + saneo/resolución de ids de documento.
+"""Localización de la raíz del almacén + validación/resolución de ids de documento.
 
-SEGURIDAD: el id se sanea contra traversal (segmentos `[a-z0-9-]`, primer segmento =
+SEGURIDAD: el id se valida contra traversal (segmentos `[a-z0-9-]`, primer segmento =
 tipo válido, sin `..`); las rutas se resuelven y se comprueba que caen ESTRICTAMENTE
 dentro de `raiz()`.
 """

@@ -177,7 +177,7 @@ def paso_agrupar() -> dict[str, Any]:
                 if marca_c:
                     recalc["marca"] = marca_c
             # Relevancia desde la LÍNEA EDITORIAL (perfil Haiku) si está activa (maestro + por-marca:
-            # el toggle "Priorizar"); si no, semilla.
+            # el toggle "Priorizar"); si no, la base inicial.
             if (
                 perfil_activo and marca_c and marca_c not in perfil_refrescadas
                 and not config.marca_apagada(config.ENV_PRIORIZAR_PERFIL_IA, marca_c)
@@ -208,7 +208,7 @@ def paso_agrupar() -> dict[str, Any]:
             )
             recalc["score"] = score
             # Explicación PERSISTIDA: la razón humana y el desglose por señal viajan con el
-            # score (el panel y el listón de promoción los muestran; sin esto la priorización es
+            # score (el panel y el umbral de promoción los muestran; sin esto la priorización es
             # una caja negra y el equipo no puede auditar por qué algo sube o baja).
             recalc["score_razon"] = razon
             recalc["score_desglose"] = desglose

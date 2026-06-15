@@ -41,16 +41,16 @@ _AGRUPAR_LEXICO_INTERVALO_SEG = 900.0
 _ultimo_agrupar_lexico = 0.0  # time.monotonic() de la última pasada completada
 
 # Caducidad del pool (TTL): como mucho una pasada cada tantos segundos (la caducidad se mide
-# en horas; pasarla en cada tick de 30s sería ruido de BD sin efecto).
+# en horas; pasarla en cada tick de 30s sería escritura irrelevante en BD sin efecto).
 _CADUCIDAD_INTERVALO_SEG = 900.0
 _ultima_caducidad = 0.0  # time.monotonic() de la última pasada completada
 
 
 def _palabras_relevancia(marca: str, perfil_activo: bool) -> frozenset[str]:
-    """Keywords de relevancia de la marca (perfil editorial Haiku si está activo; si no, semilla).
+    """Keywords de relevancia de la marca (perfil editorial Haiku si está activo; si no, la base inicial).
 
-    Delegado en `noticias_liston.palabras_relevancia` (fuente única perfil-vs-semilla, la misma
-    que usan el listón de promoción y la API del panel; si divergieran, el panel explicaría un
+    Delegado en `noticias_liston.palabras_relevancia` (fuente única perfil-vs-base, la misma
+    que usan el umbral de promoción y la API del panel; si divergieran, el panel explicaría un
     score que la priorización no calculó).
     """
     return noticias_liston.palabras_relevancia(marca, perfil_activo)
@@ -191,7 +191,7 @@ def _fusionar_grupo(
       - ANTI-TOCTOU: antes de absorber, RE-LEE cada cluster absorbible; si entre la lectura del
         lote y ahora adquirió `contenido_id` o dejó de ser `nuevo` (el pipeline lo promovió),
         NO se absorbe (se conserva intacto).
-      - SIN HUÉRFANOS: los items se reasignan en LOTES de 500 HASTA VACIAR el cluster (antes el
+      - SIN ITEMS SUELTOS: los items se reasignan en LOTES de 500 HASTA VACIAR el cluster (antes el
         tope de 500 dejaba items colgando del cluster borrado si había más).
     """
     clusters = [por_id[i] for i in ids if i in por_id]

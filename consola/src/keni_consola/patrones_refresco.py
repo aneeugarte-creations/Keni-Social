@@ -71,7 +71,7 @@ def _perfil_mas_viejo_dias(marcas_keni: list[str], ahora: datetime) -> float | N
     """Edad del perfil RUNTIME más viejo entre `marcas_keni`; None si falta alguno.
 
     None = "hay una marca sin perfil runtime aún" -> toca derivar (primer arranque).
-    Solo mira el runtime (`dir_perfiles_data`): la semilla del paquete es la foto del
+    Solo mira el runtime (`dir_perfiles_data`): la base del paquete es la foto del
     último commit, no del último refresco.
     """
     from . import patrones_marca

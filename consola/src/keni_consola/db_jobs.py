@@ -29,11 +29,11 @@ JOB_PENDIENTE = "pendiente"
 JOB_RECLAMADO = "reclamado"
 JOB_TERMINADO = "terminado"
 
-# Margen sobre el wall-timeout tras el cual un job `reclamado` se considera HUERFANO (su
+# Margen sobre el wall-timeout tras el cual un job `reclamado` se considera SIN DUEÑO (su
 # worker murio a mitad: reinicio/deploy/OOM) y OTRO worker lo RE-RECLAMA para que el trabajo
 # complete solo, sin que el usuario relance. Debe SUPERAR el wall-timeout + el margen terminal
 # del worker (~60 s), asi un worker VIVO que aun esta cerrando su job nunca pierde la fila
-# (a esa edad la fila ya seria `terminado`, no `reclamado`). El reaper de generaciones (TTL
+# (a esa edad la fila ya seria `terminado`, no `reclamado`). El recolector de generaciones (TTL
 # 1 h) sigue como red de ultimo recurso si el re-reclamo tampoco lo saca adelante.
 _RECLAIM_STALE_MARGEN_S = 300
 
@@ -85,9 +85,9 @@ def encolar_job(gen_id: str, spec: str, prioridad: int = 0) -> str:
 
 
 def contar_jobs_activos() -> int:
-    """Nº de jobs EN VUELO en la cola COMPARTIDA: `pendiente` (esperando) + `reclamado` (corriendo).
+    """Nº de jobs EN CURSO en la cola COMPARTIDA: `pendiente` (esperando) + `reclamado` (corriendo).
 
-    Conteo AUTORITATIVO (Postgres) de cuanto hay en vuelo, visible para TODOS los procesos (back,
+    Conteo AUTORITATIVO (Postgres) de cuanto hay en curso, visible para TODOS los procesos (back,
     daemons, worker) y autoliberado al marcar un job `terminado`. Queda como señal de profundidad
     para el monitor/diagnostico y los tests.
     """
@@ -114,7 +114,7 @@ def contar_jobs_por_estado() -> dict[str, int]:
 
 
 def jobs_activos(limite: int = 200) -> list[dict[str, Any]]:
-    """Jobs EN VUELO (`pendiente` + `reclamado`) con sus metadatos de despacho, mas antiguos primero.
+    """Jobs EN CURSO (`pendiente` + `reclamado`) con sus metadatos de despacho, mas antiguos primero.
 
     Para el monitor de cola: cada fila lleva `id`, `gen_id`, `estado`, `worker` (quien lo clavo),
     `creado` (cuando se encolo), `claimed_at` (cuando empezo a correr) y `prioridad` (mayor =
@@ -195,31 +195,31 @@ def reclamar_job(
         ya no puede acaparar: head-of-line eliminado).
       - `solo_proceso=None`  -> cualquiera (back-compat: el pool unico de antes).
 
-    RE-RECLAMO DE HUERFANOS: ademas de los `pendiente`, clava los `reclamado` cuyo
+    RE-RECLAMO DE JOBS SIN DUEÑO: ademas de los `pendiente`, clava los `reclamado` cuyo
     `claimed_at` es mas viejo que `wall-timeout + _RECLAIM_STALE_MARGEN_S` — su worker murio
     a mitad (reinicio/deploy/OOM) y nadie lo sacaria adelante. El umbral supera el tiempo maximo
     que un worker VIVO retiene la fila, asi nunca se roba un job en curso. El UPDATE re-sella
     `worker`/`claimed_at`, asi un segundo abandono se vuelve a cubrir.
 
-    GUARDIA ANTI-DUPLICADO (re-reclamo de huerfanos): un worker puede haber MUERTO DESPUES de
+    GUARDIA ANTI-DUPLICADO (re-reclamo de jobs sin dueño): un worker puede haber MUERTO DESPUES de
     fijar el estado terminal del registro (y de correr su post-procesado: `crear_borrador` es un
     INSERT fresco, NO idempotente) pero ANTES de llamar a `terminar_job` — el job queda
-    `reclamado`. Re-ejecutarlo DUPLICARIA el borrador. Por eso, al re-reclamar un HUERFANO,
+    `reclamado`. Re-ejecutarlo DUPLICARIA el borrador. Por eso, al re-reclamar un job SIN DUEÑO,
     consultamos el registro de generaciones: si su `gen_id` YA esta en un estado TERMINAL
     (`completado`/`error`), NO se relanza: se marca el job `terminado` y se pasa al siguiente
-    (su trabajo ya se hizo). Solo afecta al re-reclamo de huerfanos; un `pendiente` nunca corrio.
+    (su trabajo ya se hizo). Solo afecta al re-reclamo de jobs sin dueño; un `pendiente` nunca corrio.
 
     RENDIMIENTO (la lectura del YAML va FUERA del row-lock): la guardia anti-duplicado lee y
     parsea un fichero YAML (`_gen_ya_terminal` -> `generaciones.obtener`). Hacer ese I/O de disco
     mientras se retiene el `FOR UPDATE` alargaba la contencion de la fila (y, con varios workers,
     de toda la cola). Ahora se CLAVA la fila y se hace COMMIT (suelta el lock) ANTES de tocar el
-    disco; recien entonces, si era un huerfano, se comprueba si su registro ya es terminal y, en
+    disco; recien entonces, si era un job sin dueño, se comprueba si su registro ya es terminal y, en
     ese caso, se cierra el job sin relanzarlo. Tras clavarlo con `claimed_at` fresco, ningun otro
-    worker lo ve como huerfano, asi que cerrarlo fuera del lock es seguro (no hay carrera). El
+    worker lo ve como sin dueño, asi que cerrarlo fuera del lock es seguro (no hay carrera). El
     camino normal (un `pendiente`) NO toca el disco en absoluto.
 
-    TOPE DE INTENTOS (anti crash-loop): cada reclamo incrementa `jobs.intentos`. Un huerfano
-    que ya quemo `KENI_JOBS_MAX_INTENTOS` intentos NO se re-ejecuta: se cierra su job y su
+    TOPE DE INTENTOS (anti crash-loop): cada reclamo incrementa `jobs.intentos`. Un job sin dueño
+    que ya gasto `KENI_JOBS_MAX_INTENTOS` intentos NO se re-ejecuta: se cierra su job y su
     registro queda en error (motivo `interrumpido`, mensaje claro). `reencolar_job` (reintento
     admin) y la resurreccion de `encolar_job` resetean el contador (intencion humana/trabajo
     nuevo). Esta comprobacion es DB-pura (columna `intentos`), asi que permanece dentro del lock
@@ -242,7 +242,7 @@ def reclamar_job(
         params_kind = tuple(kinds_proceso)
     con = _conectar()
     try:
-        # Acotamos los saltos: descartamos huerfanos ya-terminados (terminando su job) y
+        # Acotamos los saltos: descartamos jobs sin dueño ya-terminados (terminando su job) y
         # seguimos buscando, sin reintentar para siempre.
         for _ in range(_MAX_SALTOS_RECLAMO):
             fila = con.execute(
@@ -256,9 +256,9 @@ def reclamar_job(
             if fila is None:
                 con.commit()
                 return None
-            # Solo un HUERFANO (estado `reclamado`) pudo haber corrido ya su post-procesado.
+            # Solo un JOB SIN DUEÑO (estado `reclamado`) pudo haber corrido ya su post-procesado.
             es_huerfano = fila["estado"] == JOB_RECLAMADO
-            # TOPE DE INTENTOS (anti crash-loop): un huerfano que ya agoto sus intentos NO se
+            # TOPE DE INTENTOS (anti crash-loop): un job sin dueño que ya agoto sus intentos NO se
             # re-ejecuta. Es DB-puro (sin disco): se decide DENTRO del lock. Se cierra el job y
             # el registro queda en error claro (best-effort, ya fuera del lock tras el commit).
             if es_huerfano and int(fila["intentos"] or 0) >= config.jobs_max_intentos():
@@ -275,7 +275,7 @@ def reclamar_job(
                 (JOB_RECLAMADO, worker, ahora, fila["id"]),
             )
             con.commit()
-            # GUARDIA ANTI-DUPLICADO, ya FUERA del lock: solo un huerfano pudo haber corrido su
+            # GUARDIA ANTI-DUPLICADO, ya FUERA del lock: solo un job sin dueño pudo haber corrido su
             # post-procesado. Si su registro ya es terminal, el trabajo se hizo: cerramos el job
             # SIN relanzarlo (evita el borrador duplicado) y buscamos el siguiente. Con el
             # `claimed_at` fresco que acabamos de fijar, ningun otro worker lo re-reclama mientras
@@ -293,7 +293,7 @@ def reclamar_job(
         con.close()
 
 
-# Tope de huerfanos-ya-terminados que `reclamar_job` descarta de una tirada antes de rendirse
+# Tope de jobs sin dueño ya-terminados que `reclamar_job` descarta de una tirada antes de rendirse
 # (cota dura para que el barrido nunca gire indefinidamente). Si hubiera mas, el siguiente
 # `reclamar` los sigue limpiando.
 _MAX_SALTOS_RECLAMO = 50
@@ -303,7 +303,7 @@ def _marcar_error_reintentos(gen_id: str, intentos: int) -> None:
     """Deja el registro de generacion en ERROR claro al descartar un job sin intentos.
 
     Import perezoso de `generaciones` (igual que `_gen_ya_terminal`) y best-effort: si el
-    registro no se puede escribir, el job igualmente quedo `terminado` (el reaper de
+    registro no se puede escribir, el job igualmente quedo `terminado` (el recolector de
     generaciones acabara marcando el `ejecutando` colgado como interrumpido).
     """
     try:
@@ -430,10 +430,10 @@ def job_cancelado(job_id: str) -> bool:
 def gen_ids_jobs_pendientes() -> set[str]:
     """`gen_id` de TODOS los jobs `pendiente` (esperando turno en la cola).
 
-    Lo usa el reaper de generaciones: un registro `ejecutando` cuyo job sigue PENDIENTE no
-    es un zombi (nada llego a correr ni a morir): esta legitimamente en cola, posiblemente
+    Lo usa el recolector de generaciones: un registro `ejecutando` cuyo job sigue PENDIENTE no
+    esta colgado (nada llego a correr ni a morir): esta legitimamente en cola, posiblemente
     retenido por el corte de presupuesto o el kill switch (`presupuesto_ia`), y puede
-    esperar mas que el TTL. Segarlo lo mataria en silencio: la guardia anti-duplicado del
+    esperar mas que el TTL. Cerrarlo lo mataria en silencio: la guardia anti-duplicado del
     reclamo veria el registro terminal y cerraria el job sin ejecutarlo.
     """
     con = _conectar()
@@ -611,7 +611,7 @@ def indexar_generacion(
 
 
 def desindexar_generacion(gen_id: str) -> None:
-    """Borra la fila de indice de una generacion (al borrar/poda el YAML). Idempotente."""
+    """Borra la fila de indice de una generacion (al borrar/limpiar el YAML). Idempotente."""
     if not gen_id:
         return
     con = _conectar()
@@ -679,7 +679,7 @@ def contar_indice_generaciones(*, marca: str | None = None) -> int:
 
 
 def indice_generaciones_por_estado(estado: str) -> list[dict[str, Any]]:
-    """Payloads de las generaciones del indice en `estado` (recientes primero). Para el reaper."""
+    """Payloads de las generaciones del indice en `estado` (recientes primero). Para el recolector."""
     con = _conectar()
     try:
         filas = con.execute(

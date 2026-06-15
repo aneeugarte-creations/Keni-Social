@@ -204,7 +204,7 @@ def capturar_pendientes() -> int:
 
 
 def _metrica_objetivo(pub: dict[str, Any]) -> str:
-    """Metrica del objetivo, saneada a una de las permitidas (def: interacciones)."""
+    """Metrica del objetivo, normalizada a una de las permitidas (def: interacciones)."""
     metrica = pub.get("metrica_objetivo") or "interacciones"
     return metrica if metrica in repos.METRICAS_COMERCIAL else "interacciones"
 
@@ -222,7 +222,7 @@ def evaluar_aviso(pub: dict[str, Any]) -> bool:
     metrica = _metrica_objetivo(pub)
     cruce: str | None = None
     # `limite=0` => serie COMPLETA: buscamos el PRIMER cruce del objetivo en TODO el histórico, no
-    # solo en el tramo reciente (un cap aquí podría perder el cruce real si fue hace mucho).
+    # solo en el intervalo reciente (un cap aquí podría perder el cruce real si fue hace mucho).
     for snap in repos.listar_snapshots_comerciales(pub["id"], limite=0):
         if snap[metrica] >= objetivo:
             cruce = snap["ts"]

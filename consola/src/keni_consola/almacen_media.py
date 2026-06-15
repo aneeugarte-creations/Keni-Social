@@ -15,7 +15,7 @@ desde `media.py` o la promocion de reusables), NUNCA el cliente. Asi se puede li
 unas carpetas (fotos efimeras) sin tocar otras (logos/plantillas reusables).
 
 SEGURIDAD: el nombre plano del objeto lo genera SIEMPRE el llamante (`media.py`: uuid/sha256 +
-ext saneada), NUNCA el cliente. En disco, `resolver_media` valida ANTI-TRAVERSAL que la key
+ext normalizada), NUNCA el cliente. En disco, `resolver_media` valida ANTI-TRAVERSAL que la key
 caiga dentro del dir. En S3 la key se valida con `_clave_segura`: la categoria (si la hay) debe
 ser una de CATEGORIAS y el resto un nombre plano; cualquier `..`/separador raro se rechaza.
 
@@ -58,7 +58,7 @@ CATEGORIAS: frozenset[str] = frozenset(
 def componer_clave(categoria: str | None, nombre: str) -> str:
     """Compone la KEY del almacen a partir de la `categoria` (subcarpeta) y el `nombre` plano.
 
-    `nombre` es el nombre de objeto plano que genera `media.py` (uuid/sha256 + ext saneada). Con
+    `nombre` es el nombre de objeto plano que genera `media.py` (uuid/sha256 + ext normalizada). Con
     `categoria` (∈ CATEGORIAS) la key es `<categoria>/<nombre>`; sin ella, el nombre plano (compat
     con el almacen historico sin carpetas). Valida ambos trozos; lanza ValueError si algo no cuadra.
     """
@@ -282,7 +282,7 @@ def listar_objetos() -> list[tuple[str, float]]:
     """Lista los objetos del backend activo como `(nombre, mtime_epoch)` (neutral disco/S3).
 
     `mtime_epoch` es la antiguedad del objeto en segundos epoch (UTC): en disco el mtime del
-    fichero; en S3/Garage el `LastModified` de la key. Lo usa el GC de huerfanos para borrar
+    fichero; en S3/Garage el `LastModified` de la key. Lo usa el GC de sueltos para borrar
     SOLO los objetos viejos (no las variantes recien generadas que el usuario aun revisa).
 
     - DISCO: recorre `dir_media()` RECURSIVAMENTE y devuelve cada fichero con su mtime. La key

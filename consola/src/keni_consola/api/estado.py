@@ -76,7 +76,7 @@ def _chequeo_cola() -> dict:
     """Cola de generacion: profundidad. La cola NO tiene tope (R-NO-LIMIT): nunca "llena".
 
     El unico limite es la CONCURRENCIA (`max_jobs`); el exceso ESPERA, nada se rechaza por
-    tamano de cola. El chequeo informa cuanto hay en vuelo (corriendo + esperando), no avisa
+    tamano de cola. El chequeo informa cuanto hay en curso (corriendo + esperando), no avisa
     de saturacion (no existe). Sigue degradando a `aviso` si la BD no responde.
     """
     try:

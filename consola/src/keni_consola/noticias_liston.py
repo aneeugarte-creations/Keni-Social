@@ -1,10 +1,10 @@
-"""Listón de PRODUCCIÓN AUTOMÁTICA de noticias — fuente única de la decisión.
+"""Umbral de PRODUCCIÓN AUTOMÁTICA de noticias — fuente única de la decisión.
 
 PROBLEMA QUE RESUELVE
 =====================
 El panel lista el pool jerarquizado completo, pero PROMOVER una historia a tema dispara la
 cadena QA→copy (`claude -p` ×2: coste real de tokens de la suscripción). Antes la promoción
-CI cogía el top-N por score SIN listón: con un pool ruidoso, el ruido se promovía igual
+CI cogía el top-N por score SIN umbral: con un pool lleno de basura, esa basura se promovía igual
 (garbage in → tokens out). Este módulo concentra la decisión «¿esta historia merece
 producción automática?» para que la promoción (pipeline), el panel (API `promovible`) y
 cualquier otro consumidor respondan EXACTAMENTE igual:
@@ -15,7 +15,7 @@ cualquier otro consumidor respondan EXACTAMENTE igual:
   - los umbrales vivos vienen de `config` (`KENI_PROMOVER_MIN_SCORE` /
     `KENI_PROMOVER_MIN_MARCA`, editables en caliente desde la consola);
   - el vocabulario de marca es el MISMO que usa el ranking (perfil editorial Haiku si la
-    etapa Priorizar está activa para la marca; si no, la semilla de `relevancia_marca`).
+    etapa Priorizar está activa para la marca; si no, la base de `relevancia_marca`).
 
 Siempre devuelve el MOTIVO legible (también al superar): la decisión es explicable ante el
 equipo, no una caja negra.
@@ -30,11 +30,11 @@ from .dominio import agrupar, perfil_editorial
 
 
 def palabras_relevancia(marca: str, perfil_activo: bool | None = None) -> frozenset[str]:
-    """Vocabulario EFECTIVO de una marca: perfil editorial (Haiku) si está activo; si no, semilla.
+    """Vocabulario EFECTIVO de una marca: perfil editorial (Haiku) si está activo; si no, base.
 
-    Centraliza la elección perfil-vs-semilla (la misma que usa el daemon de ingesta al puntuar).
+    Centraliza la elección perfil-vs-base (la misma que usa el daemon de ingesta al puntuar).
     Respeta el toggle POR MARCA de `KENI_PRIORIZAR_PERFIL_IA`: una marca con el perfil de Priorizar
-    apagado vuelve al vocabulario SEMILLA aunque tenga un perfil Haiku cacheado. `perfil_activo`
+    apagado vuelve al vocabulario BASE aunque tenga un perfil Haiku cacheado. `perfil_activo`
     admite el valor ya leído (el daemon lo lee una vez por barrido); None = leer de config.
     """
     if perfil_activo is None:
@@ -55,7 +55,7 @@ def evaluar(
     ahora: datetime | None = None,
     palabras_marca: frozenset[str] | None = None,
 ) -> tuple[bool, str]:
-    """¿`cluster` supera el listón de producción automática AHORA? `(supera, motivo)`.
+    """¿`cluster` supera el umbral de producción automática AHORA? `(supera, motivo)`.
 
     Lee los umbrales vivos de config y el vocabulario efectivo de la marca del cluster, y
     delega la regla en `agrupar.evaluar_liston` (pura). `ahora` inyectable para tests.

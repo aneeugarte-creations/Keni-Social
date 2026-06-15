@@ -98,7 +98,7 @@ PROC_TRANSCRIBIR = "transcribir"
 # Generacion de ARTE (imagen) del auto-pipeline: un job de PROCESO. La llamada HTTP al
 # proveedor de imagen + la subida a S3 + el adjuntado a la pieza son I/O (y algo de CPU), encajan
 # en el carril de proceso (NO bloquea el copy) y heredan idempotencia (clave estable en
-# `dominio.generar.lanzar_arte`) + reintentos/huerfanos del reaper. Su ejecutor (`autogen_ilustrar.
+# `dominio.generar.lanzar_arte`) + reintentos/sueltos del limpiador. Su ejecutor (`autogen_ilustrar.
 # ejecutar_arte_job`) llama a `media.generar_imagen` y reporta estado como ASR/video. NO gasta
 # tokens de la suscripcion claude (proveedor de imagen aparte), asi que —como los demas procesos—
 # queda EXENTO del corte por presupuesto de tokens; solo el kill switch PAUSADO lo frena.
@@ -211,7 +211,7 @@ def construir_copy(
     URL). "" = no se toca (comportamiento de hoy).
     `limpiar_pendiente` (pipeline): si True, el post-procesado LIMPIA `contenido.copy_pendiente`
     del tema AL COMPLETAR CON EXITO (dedup al exito, no al lanzar: un copy fallido se reintenta
-    en el siguiente barrido; mientras el job esta EN VUELO, la clave de idempotencia de
+    en el siguiente barrido; mientras el job esta EN CURSO, la clave de idempotencia de
     `dominio.generar.lanzar` evita el doble lanzamiento).
     `etiqueta_exito` (autogen): nombre de etiqueta a asignar al tema AL COMPLETAR CON EXITO
     (p. ej. `autogen`): mismo principio de dedup-al-exito que `limpiar_pendiente`.
@@ -598,7 +598,7 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
         # COPY NIDADO BAJO UN TEMA (pipeline/autogen): acciones POST-EXITO sobre el tema.
         #   - dedup AL EXITO (no al lanzar): limpiar `copy_pendiente` / etiquetar `autogen`
         #     SOLO cuando los borradores ya existen. Un copy fallido conserva sus marcas de
-        #     "pendiente" y el barrido lo REINTENTA; el doble lanzamiento en vuelo lo evita
+        #     "pendiente" y el barrido lo REINTENTA; el doble lanzamiento en curso lo evita
         #     la clave de idempotencia de `dominio.generar.lanzar`.
         #   - ENCADENADO copy->arte: dispara la etapa de Ilustración de ESE tema al instante (si su
         #     gate esta activo), sin esperar al siguiente barrido (que queda de red de

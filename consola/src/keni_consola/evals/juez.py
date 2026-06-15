@@ -14,7 +14,7 @@ Este módulo NO corre en CI (cuesta dinero y no es determinista). Es el HOOK doc
 
   2. CALIBRACIÓN DEL JUEZ: medir cuánto COINCIDE el juez LLM con la etiqueta humana del caso
      (`espera`). Sin acuerdo medido, un "juez IA" es fe ciega. `acuerdo_con_humano` calcula ese
-     acuerdo sobre un mini-set etiquetado (de momento, los propios casos semilla con su `espera`
+     acuerdo sobre un mini-set etiquetado (de momento, los propios casos base con su `espera`
      como proxy de etiqueta humana; cuando el cliente aporte etiquetas finas se sustituyen).
 
 Honestidad: hoy esto es ANDAMIAJE. El juez real (`critica_ia`) vota sobre una PUBLICACIÓN ya
@@ -46,7 +46,7 @@ class AcuerdoJuez:
     total: int
     aciertos: int
     falsos_positivos: int  # juez dijo 'pasa' donde el humano dijo 'falla' (lo PEOR: deja pasar basura)
-    falsos_negativos: int  # juez dijo 'falla' donde el humano dijo 'pasa' (ruido: molesta al equipo)
+    falsos_negativos: int  # juez dijo 'falla' donde el humano dijo 'pasa' (falsa alarma: molesta al equipo)
 
     @property
     def acuerdo(self) -> float:
@@ -57,7 +57,7 @@ def acuerdo_con_humano(juez: Juez, casos: list[CasoEval]) -> AcuerdoJuez:
     """Mide el acuerdo de `juez` con la etiqueta humana (`caso.espera`) sobre `casos`.
 
     Es la pieza de CALIBRACIÓN: un juez solo es fiable si su acuerdo es alto y, sobre todo, si
-    sus FALSOS POSITIVOS (deja pasar lo que el humano rechaza) son ~0. Con los casos semilla el
+    sus FALSOS POSITIVOS (deja pasar lo que el humano rechaza) son ~0. Con los casos base el
     número es orientativo (la etiqueta es la `espera` del propio caso); con etiquetas reales del
     cliente se vuelve una métrica de verdad. PURO: no llama al modelo, solo aplica el juez dado."""
     aciertos = fp = fn = 0

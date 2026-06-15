@@ -182,7 +182,7 @@ def entradas_nav_activas(entorno: dict[str, str] | None = None) -> list[dict]:
 def modulo_a_app() -> dict[str, str]:
     """Mapa `api/<modulo>` -> id de unidad (app o "shell"). Lo usa el lint de fronteras.
 
-    Falla ruidosamente si un módulo aparece en dos manifests (un router pertenece a
+    Falla de forma visible si un módulo aparece en dos manifests (un router pertenece a
     UNA sola unidad).
     """
     mapa: dict[str, str] = {}

@@ -12,11 +12,11 @@ la MISMA maquinaria de verificación que corre en producción.
 
 QUÉ ES Y QUÉ NO ES
 ==================
-- ES: infraestructura ejecutable + casos SEMILLA realistas, barata y apta para CI (cero
+- ES: infraestructura ejecutable + casos BASE realistas, barata y apta para CI (cero
   `claude -p`: reutiliza el lint determinista de `patrones_marca`, el gate de calidad
   advisory de `pipeline_contenido._revisar` y los límites técnicos de `keni_shared`).
 - NO ES: un juez de calidad EDITORIAL definitivo. Los casos "de oro" definitivos los
-  aporta la mesa del cliente; aquí van casos semilla para que el harness
+  aporta la mesa del cliente; aquí van casos base para que el harness
   sea ejecutable y útil desde ya. NO sustituye la revisión humana (el principio rector es
   precisamente "humano decide qué se publica"); es el cinturón que evita que una edición de
   prompt rompa lo medible sin avisar.

@@ -1,5 +1,5 @@
 """Pipelines: registro/atribución, preview del prompt ensamblado, catálogo de variables,
-la "máquina" (riel de pipelines) y la estrategia editorial por marca.
+la "máquina" (flujo de pipelines) y la estrategia editorial por marca.
 
 OJO: nada que ver con `api/pipelines.py` (módulo aparte). Aquí vive el catálogo de procesos
 de generación tal como lo consume el rediseño de la Biblioteca.
@@ -55,7 +55,7 @@ async def pipeline_preview(request: Request) -> Response:
 
 
 # --------------------------------------------------------------------------- #
-# Catálogo de variables {{VAR}} + la "máquina" (riel de pipelines)             #
+# Catálogo de variables {{VAR}} + la "máquina" (flujo de pipelines)             #
 # --------------------------------------------------------------------------- #
 
 
@@ -68,10 +68,10 @@ async def variables(request: Request) -> Response:
     return JSONResponse({"variables": libtexto.catalogo_variables()})
 
 
-# Las TRES MÁQUINAS del riel (ADR 0011): Investigación (el motor de noticias), Producción
+# Las TRES MÁQUINAS del flujo (ADR 0011): Investigación (el motor de noticias), Producción
 # (la máquina de contenido) y las Herramientas de importación. Cada etapa es:
 #   - `mecanica`: paso del proceso SIN prompt de la Biblioteca (código puro, p. ej. Agrupar
-#     léxico o Admitir). Da contexto: el riel cuenta la historia completa
+#     léxico o Admitir). Da contexto: el flujo cuenta la historia completa
 #     del proceso, no solo los prompts editables.
 #   - `prompt` : etapa cuyo prompt vive en la Biblioteca. `doc_id=None` => se resuelve por el
 #     REGISTRO (`prompt_base_de`, ver `_ETAPA_PIPELINE`): respeta rebindeos sin tocar código.
@@ -80,12 +80,12 @@ async def variables(request: Request) -> Response:
 # Investigación; Redactar/Ilustrar son Producción), apoyado en el orden real de los daemons
 # (`recolectar_daemon.ejecutar_barrido`, `pipeline_contenido._barrido`). Donde difieren hoy
 # manda el ADR: la marca se clasifica DENTRO de Agrupar y Verificar corre
-# tras Admitir del lado `contenido` (hasta F3), pero el riel los presenta como etapas del
+# tras Admitir del lado `contenido` (hasta F3), pero el flujo los presenta como etapas del
 # proceso de Investigación. Fusionar son DOS prompts: la verificación previa
 # (`prompt/fusionar-verificar`) corre por grupo propuesto ANTES de fusionar.
 #
 # TERMINOLOGÍA (ADR 0011 §5 + páginas de proceso de F2): los títulos e ids de las etapas
-# compartidas casan 1:1 con el riel de la página Investigación (`/datos/investigacion`:
+# compartidas casan 1:1 con el flujo de la página Investigación (`/datos/investigacion`:
 # Recolectar · Fusionar · Clasificar · Priorizar · Verificar) y con las etapas que muestra el
 # hub Producción (`/datos/produccion`: Redactar · Ilustrar · Aprobar). Las etapas intermedias que
 # esas páginas NO muestran (Agrupar, Traducir, Admitir…) se mantienen solo como
@@ -152,7 +152,7 @@ async def maquina(request: Request) -> Response:
 
     Las CAPAS editoriales ya no salen aquí: el ensamblaje por marca vive en
     `GET /api/texto/estrategia?marca=` (`orden_inyeccion` + pilares). `marca` se acepta
-    por compatibilidad pero el riel es global (no depende de la marca).
+    por compatibilidad pero el flujo es global (no depende de la marca).
     """
     punteros = libtexto.producciones()
     shas = libtexto.shas_actuales()

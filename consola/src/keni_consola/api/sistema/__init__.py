@@ -8,7 +8,7 @@ token de mantenimiento NO es admin: recibe 403.
 
 Este paquete trocea por AREAS la antigua `api/sistema.py` (PURA reubicacion, mismo
 contrato): los handlers viven en `recursos.py`, `s3.py`, `daemons.py`, `backups.py` y
-`rendimiento.py`; los helpers compartidos (cerrojo de rol + logger) en `_comun.py`. Este
+`rendimiento.py`; los helpers compartidos (bloqueo de rol + logger) en `_comun.py`. Este
 `__init__` es el FACADE: re-exporta lo que terceros leen (`api.estado` consume `_discos`,
 `sonda_daemons`, `sonda_backups`, `sonda_s3_salud`, `UMBRAL_DISCO_*`) y ensambla `RUTAS`
 con EXACTAMENTE las mismas rutas/metodos/orden que antes.
@@ -54,7 +54,7 @@ from __future__ import annotations
 
 from starlette.routing import Route
 
-# Helpers compartidos (cerrojo de rol + logger). Re-exportados por si algun consumidor
+# Helpers compartidos (bloqueo de rol + logger). Re-exportados por si algun consumidor
 # los leyera por su nombre historico de modulo.
 # Importamos las AREAS como MODULOS (no sus funciones sueltas) por dos razones:
 #  1) los handlers se referencian como `area.handler` al armar `RUTAS`;

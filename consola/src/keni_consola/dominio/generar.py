@@ -501,7 +501,7 @@ def lanzar(
     `claude -p` que producen borradores duplicados/competidores del mismo tema. La clave es
     `(autor_id, tipo, marca, hash(prompt))`: el prompt es AUTOCONTENIDO (lleva dentro el
     contexto/redes/editorial), asi que dos lanzamientos del mismo tema/redes coinciden y dos
-    DISTINTOS (otro tema, otras redes, otro tipo) no. Mientras hay un run EN VUELO con esa
+    DISTINTOS (otro tema, otras redes, otro tipo) no. Mientras hay un run EN CURSO con esa
     clave, un segundo lanzamiento DEVUELVE ese run en lugar de arrancar otro; al terminar, un
     re-lanzamiento legitimo (regenerar) vuelve a correr. Un caller puede forzar la clave con
     `clave_idem` (p.ej. un token de idempotencia del cliente). La convergencia atomica la
@@ -526,9 +526,9 @@ def lanzar(
         **_autor_campos(autor),
     })
     if not nueva:
-        # Ya hay un run EN VUELO con esta clave (otro POST lo arrancó): NO encolamos un segundo.
+        # Ya hay un run EN CURSO con esta clave (otro POST lo arrancó): NO encolamos un segundo.
         # Devolvemos ese run para que la UI lo sondee. Limpiamos el temporal que este llamante
-        # preparó y que ya no se usará (lo consume el run en vuelo con su propio temporal).
+        # preparó y que ya no se usará (lo consume el run en curso con su propio temporal).
         if dir_temporal is not None:
             shutil.rmtree(dir_temporal, ignore_errors=True)
         return gen
@@ -605,19 +605,19 @@ def lanzar_arte(
     (`jobspec.PROC_IMAGEN`) que el WORKER despacha a su ejecutor (`autogen_ilustrar.ejecutar_arte_job`),
     el cual llama a `media.generar_imagen`, sube la imagen y la adjunta a la pieza. Antes el arte
     era SÍNCRONO (corría dentro del barrido con un ThreadPool propio, fuera de la cola); enrutarlo
-    por la cola le da el CARRIL de proceso (no bloquea el copy), los REINTENTOS/huérfanos del reaper
+    por la cola le da el CARRIL de proceso (no bloquea el copy), los REINTENTOS/sueltos del limpiador
     y —lo principal— la IDEMPOTENCIA que faltaba.
 
     IDEMPOTENCIA DE LANZAMIENTO: la clave es ESTABLE `(autor, "arte", marca, contenido_id, prompt)`
     —tema+marca+prompt-base, el MISMO patrón que el copy (`dominio.generar.lanzar`), SIN nonce—.
-    Mientras un arte del MISMO tema está EN VUELO (registro no terminal), un re-encolado (otro
-    barrido del pipeline, el encadenado copy→arte, o un reaper que reintenta) DEVUELVE ese run y
+    Mientras un arte del MISMO tema está EN CURSO (registro no terminal), un re-encolado (otro
+    barrido del pipeline, el encadenado copy→arte, o un limpiador que reintenta) DEVUELVE ese run y
     NO encola un segundo job: ni doble gasto del proveedor ni doble subida. Al terminar (el registro
     pasa a terminal), un re-lanzamiento legítimo vuelve a correr. La convergencia atómica la
     garantiza `generaciones.crear_idempotente` (creación exclusiva del índice en disco).
 
     El registro sale en Actividad IA (`tipo='autogen'`). Devuelve el registro de generación (para
-    sondeo/conteo) — o el run en vuelo si ya había uno con esta clave. Propaga `ColaLlenaError`
+    sondeo/conteo) — o el run en curso si ya había uno con esta clave. Propaga `ColaLlenaError`
     (cola llena / presupuesto / pausa) para que el barrido la trate como backpressure y reintente.
     """
     prompt = (prompt or "").strip()
@@ -633,7 +633,7 @@ def lanzar_arte(
         **_autor_campos(autor),
     })
     if not nueva:
-        # Ya hay un arte EN VUELO con esta clave (otro barrido lo arrancó): NO encolamos otro.
+        # Ya hay un arte EN CURSO con esta clave (otro barrido lo arrancó): NO encolamos otro.
         return gen
     # Spec PLANO del job de proceso (kind a nivel raíz, sin prompt/procesar de claude). La
     # `prioridad` viaja DENTRO del spec (`jobspec.prioridad`): el arte es FONDO y cede el paso a
@@ -825,11 +825,11 @@ def lanzar_copy(
     # CLAVE DE IDEMPOTENCIA ESTABLE: la clave por defecto de `lanzar` usa hash(prompt), pero el
     # prompt del copy lleva un NONCE anti-inyección DISTINTO por llamada (el delimitador del
     # contexto, ver `envolver_contenido_usuario`), así que esa clave NUNCA coincidía y la
-    # promesa "un re-lanzamiento del mismo trabajo devuelve el run en vuelo" estaba ROTA para
+    # promesa "un re-lanzamiento del mismo trabajo devuelve el run en curso" estaba ROTA para
     # el copy: el backoff del pipeline (1/4/16 min) relanzaba el copy del MISMO tema mientras
     # el primero seguía corriendo (3 generaciones y 3 juegos de borradores por tema, medido en
     # el piloto). La clave se calcula aquí sobre los INSUMOS estables del trabajo lógico (sin
-    # nonce): mismo tema/nota/redes => mismo run mientras esté en vuelo; al terminar, un
+    # nonce): mismo tema/nota/redes => mismo run mientras esté en curso; al terminar, un
     # re-lanzamiento legítimo (regenerar) vuelve a correr.
     clave_estable = generaciones.clave_idempotencia(
         _autor_campos(autor)["autor_id"], tipo, marca, prompt_efectivo,

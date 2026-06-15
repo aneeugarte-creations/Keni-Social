@@ -40,7 +40,7 @@ _RUTA_SEMILLA = Path(__file__).resolve().parent / "fuentes_presets.json"
 
 
 def _cargar() -> list[dict[str, Any]]:
-    """Lee la semilla del paquete (`fuentes_presets.json`). Falla ruidoso si está corrupta."""
+    """Lee la semilla del paquete (`fuentes_presets.json`). Falla de forma visible si está corrupta."""
     datos = json.loads(_RUTA_SEMILLA.read_text(encoding="utf-8"))
     if not isinstance(datos, list):
         raise ValueError("fuentes_presets.json debe ser una lista de presets")

@@ -36,7 +36,7 @@ def relevancia_marca_detalle(
     Misma graduación que `_relevancia_marca` (título a peso pleno, resumen a 0.6, saturación
     suave a 3 coincidencias). Las `palabras` devueltas son los términos del vocabulario
     presentes en título o resumen (orden alfabético, sin duplicar): son la EXPLICACIÓN de la
-    señal de marca que la UI/el listón muestran al equipo. PURA y determinista.
+    señal de marca que la UI/el umbral muestran al equipo. PURA y determinista.
 
     Historias EXTRANJERAS: el vocabulario es español, así que un titular en inglés solo casa
     los términos neutrales (nintendo, nfl…). Si la historia trae TRADUCCIÓN (`titulo_es` /

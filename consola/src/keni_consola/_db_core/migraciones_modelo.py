@@ -114,7 +114,7 @@ def _migrar_modelo_turnos(con: Any) -> None:
             """
         )
 
-    # PASO 2: sembrar la cobertura legada como turnos en _v2 (si la habia y tenia miembros).
+    # PASO 2: inicializar la cobertura legada como turnos en _v2 (si la habia y tenia miembros).
     if tiene_turnos_vieja and "evento_id" in cols_turnos and "miembro_id" in cols_turnos:
         # Leemos las franjas configuradas (singleton id='default') o aplicamos defaults.
         mat_ini = _MIGR_FRANJA_MATUTINO_INICIO_MIN

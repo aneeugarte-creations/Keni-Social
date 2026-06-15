@@ -56,10 +56,10 @@ def marca_apagada(env_flag: str, marca: str) -> bool:
 
 
 def media_gc_activo() -> bool:
-    """True si el daemon de GC de media huerfana debe BARRER (`KENI_MEDIA_GC`).
+    """True si el daemon de GC de media sin referencia debe BARRER (`KENI_MEDIA_GC`).
 
     Def OFF (conservador): sin el flag NO se borra ningun objeto del almacen. Con el flag,
-    un hilo demonio barre cada N horas y borra los objetos HUERFANOS (no referenciados por
+    un hilo demonio barre cada N horas y borra los objetos SIN REFERENCIA (no referenciados por
     ninguna publicacion ni catalogados en catalogo-media) y mas viejos que el umbral. El
     hilo arranca SIEMPRE pero, gateado, solo actua cuando el flag esta activo.
     """
@@ -76,7 +76,7 @@ def media_gc_intervalo_horas() -> int:
 def media_gc_antiguedad_horas() -> int:
     """Antiguedad MINIMA (horas) de un objeto para considerarlo borrable (`KENI_MEDIA_GC_ANTIGUEDAD_HORAS`).
 
-    Def 24h, min 1: un objeto mas NUEVO que esto NUNCA se borra, aunque parezca huerfano,
+    Def 24h, min 1: un objeto mas NUEVO que esto NUNCA se borra, aunque parezca sin referencia,
     para no eliminar las variantes recien generadas por el Estudio que el usuario aun revisa.
     """
     return _entero(
@@ -87,22 +87,22 @@ def media_gc_antiguedad_horas() -> int:
 def autogen_arte_max() -> int:
     """Maximo de temas a auto-ilustrar por barrido (`KENI_AUTOGEN_ARTE_MAX`, def 3, min 1).
 
-    Cada item llama al proveedor de imagen (coste): el cap evita avalanchas por barrido.
+    Cada item llama al proveedor de imagen (coste): el cap evita rafagas por barrido.
     """
     return _entero(ENV_AUTOGEN_ARTE_MAX, AUTOGEN_ARTE_MAX_DEF, minimo=1)
 
 
 def generaciones_ttl_seg() -> int:
-    """Antigüedad (s) tras la cual una generacion `ejecutando` se considera zombi.
+    """Antigüedad (s) tras la cual una generacion `ejecutando` se considera colgada.
 
     `KENI_GENERACIONES_TTL_HORAS` (def 1 h, min 1). MUY por encima del wall-timeout (~10 min):
-    asi el reaper nunca cierra una generacion que de verdad sigue viva.
+    asi el recolector nunca cierra una generacion que de verdad sigue viva.
     """
     return _entero(ENV_GENERACIONES_TTL_HORAS, GENERACIONES_TTL_HORAS_DEF, minimo=1) * 3600
 
 
 def reaper_intervalo_seg() -> int:
-    """Cada cuanto barre el reaper de generaciones (`KENI_REAPER_INTERVALO_MIN`, def 10, min 1)."""
+    """Cada cuanto barre el recolector de generaciones (`KENI_REAPER_INTERVALO_MIN`, def 10, min 1)."""
     return _entero(ENV_REAPER_INTERVALO_MIN, REAPER_INTERVALO_MIN_DEF, minimo=1) * 60
 
 

@@ -89,7 +89,7 @@ def carpeta_agente(agente_id: str, *, crear: bool = True) -> Path:
     raiz (defensa en profundidad).
 
     Si `crear` (defecto), crea la carpeta y un `CLAUDE.md` ON-DEMAND si faltan: las
-    marcas usan su plantilla por tipo; los genericos NO se siembran aqui (su CLAUDE.md
+    marcas usan su plantilla por tipo; los genericos NO se inicializan aqui (su CLAUDE.md
     y manifiesto los crea `crear_agente`/`conectar_agente`).
     """
     if not isinstance(agente_id, str):
@@ -322,7 +322,7 @@ def borrar_agente(agente_id: str) -> None:
         raise AgenteInvalido("Agente no encontrado.")
     shutil.rmtree(carpeta)
     # Los runs del agente borrado salen del disco: reindexamos para que el indice (y
-    # por tanto los agregados del monitor) no conserve filas huerfanas de coste/tokens.
+    # por tanto los agregados del monitor) no conserve filas sueltas de coste/tokens.
     # Import LOCAL: `_runs` depende de este modulo, evitamos el ciclo a nivel de import.
     from . import _runs
 
@@ -345,7 +345,7 @@ def resumen_agente(agente_id: str) -> dict[str, Any]:
     """Resumen ligero de un agente (marca o generico). NO crea la carpeta si no existe.
 
     Cuenta publicaciones (siempre 0 en genericos: no son marcas) y runs leyendo el
-    disco; reporta si el `CLAUDE.md` existe y si `es_marca`. No siembra nada
+    disco; reporta si el `CLAUDE.md` existe y si `es_marca`. No inicializa nada
     (`crear=False`) para que el LISTADO no materialice carpetas.
     """
     carpeta = carpeta_agente(agente_id, crear=False)

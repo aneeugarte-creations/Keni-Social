@@ -95,7 +95,7 @@ def ejecutar_investigacion() -> dict[str, Any]:
     """Un TICK del proceso de INVESTIGACIÓN: caducidad + CI (admisión) → QA de la fuente.
 
     Recolecta del pool ya fusionado/rankeado, ADMITE por marca solo hasta llenar el cupo en
-    vuelo (gate serial WIP) y lanza la CRIBA de la fuente (`claude -p`) de lo admitido sin
+    curso (gate serial WIP) y lanza la CRIBA de la fuente (`claude -p`) de lo admitido sin
     veredicto. Best-effort. Devuelve `{temas, cribados}`.
 
     SINGLE-FLIGHT cross-proceso (advisory lock): el daemon de investigación y el disparo a
@@ -153,7 +153,7 @@ def _ejecutar_investigacion() -> dict[str, Any]:
 
     Rediseño F3 (la frontera "QA = investigación" en los datos): la QA corre sobre la HISTORIA
     (cluster) ANTES de materializar contenido, y la admisión solo promueve las VERIFICADAS:
-      0) FRESCURA: caduca los temas en vuelo (TTL) y resetea las QA de cluster `en_curso` zombi.
+      0) FRESCURA: caduca los temas en curso (TTL) y resetea las QA de cluster `en_curso` atascadas.
       1) QA: criba las candidatas sin veredicto (top del ranking que pasan el listón), acotada
          por el embudo. Asíncrona; persiste el veredicto en el cluster.
       2) ADMISIÓN: promueve a tema (con copy pendiente) las historias ya verificadas, heredando
@@ -163,28 +163,28 @@ def _ejecutar_investigacion() -> dict[str, Any]:
     maximo = config.pipeline_max()
     # --- Fase 0 · FRESCURA. ------------------------------------------------------------------
     # VENTANA DESLIZANTE sobre el ranking: lo que no se completó a tiempo caduca y libera su hueco
-    # (temas en vuelo); y una QA de cluster que murió (en_curso zombi) se resetea para re-cribar.
+    # (temas en curso); y una QA de cluster que murió (en_curso atascada) se resetea para re-cribar.
     try:
         _admitir.caducar_temas_viejos()
-    except Exception:  # noqa: BLE001 -- la caducidad es saneo; nunca rompe el barrido
-        _log.exception("pipeline: fallo la caducidad de temas en vuelo.")
+    except Exception:  # noqa: BLE001 -- la caducidad es limpieza; nunca rompe el barrido
+        _log.exception("pipeline: fallo la caducidad de temas en curso.")
     try:
         _admitir.caducar_qa_clusters_en_curso()
-    except Exception:  # noqa: BLE001 -- el reaper de QA es saneo; nunca rompe el barrido
-        _log.exception("pipeline: fallo el reaper de QA de clusters en curso.")
+    except Exception:  # noqa: BLE001 -- el limpiador de QA es limpieza; nunca rompe el barrido
+        _log.exception("pipeline: fallo el limpiador de QA de clusters en curso.")
     # --- Fase QA (criba de la FUENTE sobre la historia, pre-admisión). -----------------------
     cribados = ejecutar_verificar_clusters(autor=autor)
     # --- Fase ADMISIÓN · "Crear noticias": materializa las historias YA VERIFICADAS por marca. -
     # Etapa CI = toggle "Crear noticias" (`KENI_PIPELINE_RECOLECTAR`): si está OFF no entra nada. La
     # admisión consume el pool RANKEADO restringido a las verificadas (`no_verificado`/`saltada`),
-    # llena el cupo en vuelo (gate serial WIP) y los cupos del plan/diario, y HEREDA el veredicto
+    # llena el cupo en curso (gate serial WIP) y los cupos del plan/diario, y HEREDA el veredicto
     # del cluster al contenido (la pieza nace verificada y lista para copy).
     temas_nuevos: list[dict[str, Any]] = []
     for marca in marcas.ids():
         # FUENTE ÚNICA de verdad (config.etapa_activa): maestro global ON y marca no excluida.
         if not config.etapa_activa(config.ENV_PIPELINE_RECOLECTAR, marca):
             continue
-        # SERIAL POR MARCA: no metas más historias si esta marca ya tiene cola EN VUELO (sin copy).
+        # SERIAL POR MARCA: no metas más historias si esta marca ya tiene cola en curso (sin copy).
         cupo = config.pipeline_en_vuelo_max() - _admitir.temas_en_vuelo(marca)
         if cupo <= 0:
             continue
@@ -248,7 +248,7 @@ def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[
         if not config.etapa_activa(config.ENV_PIPELINE_RECOLECTAR, marca):
             continue
         # PRESUPUESTO DEL EMBUDO: no cribes más de lo que cabe en vuelo (verificación acotada,
-        # como la admisión). A medida que la admisión drena verificadas (pasan a `usado`), el
+        # como la admisión). A medida que la admisión vacía verificadas (pasan a `usado`), el
         # embudo encoge y se libera presupuesto para cribar la siguiente tanda.
         try:
             embudo = repos.contar_clusters_funnel_qa(marca, _FUNNEL_QA)
@@ -331,10 +331,10 @@ def ejecutar_redactar(*, autor: dict[str, str] | None = None) -> list[dict[str, 
          (`temas_para_redactar` → `lanzar_redactar_de_tema`),
       2) temas que las FUENTES de noticias metieron al tablero sin copy
          (`temas_autogen_sin_copy` → `autogen_redactar.lanzar_para_topic`).
-    SIN topes propios (flujo continuo): el carril 1 lo acota la ADMISIÓN (gate serial en vuelo);
+    SIN topes propios (flujo continuo): el carril 1 lo acota la ADMISIÓN (gate serial en curso);
     el carril 2, el dedup por etiqueta + el backpressure de la cola. Si la cola se llena, corta la
     fase (el siguiente tick reintenta). REINTENTOS ACOTADOS en el carril 1: al agotar
-    `_MAX_INTENTOS_ETAPA`, el tema se marca `problema` (sale del cupo en vuelo, fallo visible).
+    `_MAX_INTENTOS_ETAPA`, el tema se marca `problema` (sale del cupo en curso, fallo visible).
     Best-effort por tema. Devuelve las generaciones de copy lanzadas.
     """
     if autor is None:
@@ -372,7 +372,7 @@ def ejecutar_redactar(*, autor: dict[str, str] | None = None) -> list[dict[str, 
             )
             continue
         if gen:
-            # Tras el lanzamiento efectivo (cola llena o fallo previo no queman intentos). Si el
+            # Tras el lanzamiento efectivo (cola llena o fallo previo no gastan intentos). Si el
             # copy completó EN LÍNEA (tests síncronos), `copy_pendiente` ya se limpió y no anota.
             anotar_intento(tema, "redactar_intentos")
             lanzados.append(gen)
@@ -488,7 +488,7 @@ def ejecutar_ilustrar() -> list[dict[str, Any]]:
 
 # TICK del flujo continuo (constante, NO un ajuste): reaccionan al ESTADO cada pocos segundos.
 # En cuanto la QA de una pieza termina, el siguiente tick de producción lanza su Copy. El volumen
-# NO lo pone el tick sino la ADMISIÓN (gate serial en vuelo por marca) + el backpressure de la
+# NO lo pone el tick sino la ADMISIÓN (gate serial en curso por marca) + el backpressure de la
 # cola. Cada proceso tiene su propia constante para poder divergir sin tocar el otro; hoy ambos
 # son 15 s.
 _TICK_INVESTIGACION_SEGUNDOS = 15.0

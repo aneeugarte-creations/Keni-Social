@@ -86,7 +86,7 @@ ORIGEN_PIPELINE = "pipeline"
 
 # `tipo` con el que se sellan los MARCADORES de etapa (CI/CD/QA): registros `generaciones`
 # ligeros SIN coste (no llaman a `claude`). Llevan tipo PROPIO `pipeline_etapa` para que la
-# vista "Actividad IA" los EXCLUYA (no son trabajo con tokens/coste; serían ruido a 0). El
+# vista "Actividad IA" los EXCLUYA (no son trabajo con tokens/coste; serían irrelevantes a 0). El
 # trabajo REAL con coste (criba QA, copy, arte, fusión/encaje del pool) se sella
 # `tipo='pipeline'` (TIPO_PIPELINE) y SÍ aparece en Actividad con sus tokens/coste/tiempo: TODO
 # lo que lanza la máquina es UN solo tipo; lo manual (copy a mano, imagen del Estudio) conserva
@@ -131,7 +131,7 @@ _TITULO_QA = "Verificar"
 _ETIQUETA_QA = "Verificar la fuente"
 
 # Veredicto SENTINEL que se persiste en el TEMA mientras su QA de la fuente (claude -p) está en
-# vuelo: la fase QA NO lo re-lanza (deja de estar "sin veredicto") y la vista Pipelines pinta la
+# curso: la fase QA NO lo re-lanza (deja de estar "sin veredicto") y la vista Pipelines pinta la
 # etapa QA como "en curso". Al completar, el `procesar` lo sustituye por el veredicto real.
 QA_EN_CURSO = "en_curso"
 
@@ -141,7 +141,7 @@ QA_EN_CURSO = "en_curso"
 # "saltada". Distinto de "sin veredicto" (que significaría "QA pendiente, aún por cribar").
 QA_SALTADA = "saltada"
 
-# Veredicto TERMINAL de FRESCURA: el tema superó el TTL en vuelo (`KENI_PIPELINE_TEMA_TTL_HORAS`)
+# Veredicto TERMINAL de FRESCURA: el tema superó el TTL en curso (`KENI_PIPELINE_TEMA_TTL_HORAS`)
 # sin completar sus fases y CADUCA: sale del gate serial (libera hueco de admisión), no se criba
 # ni genera copy. El pipeline es ventana deslizante sobre el ranking: lo de ayer no entra hoy.
 QA_CADUCADA = "caducada"
@@ -256,7 +256,7 @@ def _fetch_html_validado(enlace: str, *, timeout: float, max_bytes: int) -> str:
                         if not destino:
                             return ""
                         # Resuelve un Location relativo contra la URL actual y revalida en la
-                        # siguiente vuelta (el guard SSRF se aplica también al destino del redirect).
+                        # siguiente iteración (el guard SSRF se aplica también al destino del redirect).
                         url = str(respuesta.url.join(destino))
                         continue
                     respuesta.raise_for_status()
@@ -573,12 +573,12 @@ def _copy_pendiente_leido(tema: dict[str, Any]) -> dict[str, Any]:
 # REINTENTOS ACOTADOS por etapa (flujo continuo): con el tick corto, una etapa que falla se
 # relanzaría cada pocos segundos para siempre (bucle de tokens). Cada lanzamiento de QA/Copy
 # anota su intento en `copy_pendiente` (JSON, sin migración de esquema); al agotarlos, el tema
-# se marca `problema` con un hallazgo de sistema: SALE del cupo en vuelo (in=out se sostiene)
+# se marca `problema` con un hallazgo de sistema: SALE del cupo en curso (in=out se sostiene)
 # y queda visible en Pipelines/tablero como fallo, para que un humano decida.
 _MAX_INTENTOS_ETAPA = 3
 
 # BACKOFF creciente entre reintentos (espera tras el intento 1/2/3): con el tick de ~15 s, un
-# fallo transitorio (proveedor caído, timeout) quemaba los 3 intentos en <1 min; esperar 1/4/16
+# fallo transitorio (proveedor caído, timeout) consumía los 3 intentos en <1 min; esperar 1/4/16
 # min da tiempo a que pase, SIN dormir el barrido (el tema solo se SALTA en el tick).
 _BACKOFF_ETAPA_SEG = (60.0, 240.0, 960.0)
 
@@ -648,7 +648,7 @@ def en_backoff(tema: dict[str, Any], campo: str) -> bool:
 def marcar_fallo_etapa(tema_id: str, etapa: str, motivo: str) -> None:
     """Marca el tema con veredicto `problema` por fallo REPETIDO de una etapa (salida terminal).
 
-    El tema sale del cupo en vuelo (deja de reintentarse y de bloquear la admisión de su marca)
+    El tema sale del cupo en curso (deja de reintentarse y de bloquear la admisión de su marca)
     y el fallo queda visible (❗) con un hallazgo de sistema. Mismo formato que la criba QA.
     """
     import json
@@ -680,7 +680,7 @@ def _tiene_copy(tema_id: str) -> bool:
 def temas_pipeline(marca: str | None = None) -> list[dict[str, Any]]:
     """TODOS los temas del pipeline (origen `pipeline`), en orden FIFO. [] si la lectura falla.
 
-    NO recorta: el volumen lo acota la ADMISIÓN (gate serial en vuelo por marca), así que aquí
+    NO recorta: el volumen lo acota la ADMISIÓN (gate serial en curso por marca), así que aquí
     solo puede haber, como mucho, lo admitido. `listar_contenido` ya ordena por prioridad y
     `fecha_objetivo/creado ASC`, así que el más antiguo PENDIENTE se atiende primero (justo).
     """

@@ -156,7 +156,7 @@ RUTAS = [
     Route("/api/texto/pipelines/{pid}/preview", pipeline_preview, methods=["GET"]),
     Route("/api/texto/lanzar", lanzar, methods=["POST"]),
     Route("/api/texto/lanzar-archivo", lanzar_archivo, methods=["POST"]),
-    # Publicación: catálogo de variables, riel de la máquina (tres máquinas,
+    # Publicación: catálogo de variables, flujo de la máquina (tres máquinas,
     # ADR 0011), estrategia de marca y solicitudes.
     Route("/api/texto/variables", variables, methods=["GET"]),
     Route("/api/texto/maquina", maquina, methods=["GET"]),

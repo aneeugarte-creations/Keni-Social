@@ -302,7 +302,7 @@ async def actualizar(request: Request) -> Response:
         if err:
             return JSONResponse({"error": err}, status_code=400)
         # Reasignar la pieza a OTRA marca es una accion legitima (el equipo es
-        # multidisciplinar y cubre cualquier marca): la marca es un foco, no un cerrojo.
+        # multidisciplinar y cubre cualquier marca): la marca es un foco, no un bloqueo.
         campos["marca"] = marca
     if "evento_id" in datos:
         evento_id = datos.get("evento_id") or ""

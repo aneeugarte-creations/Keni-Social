@@ -183,7 +183,7 @@ def ejecutar_barrido() -> dict[str, Any]:
                     filtrados = len(descartados)
                     items_filtrados += filtrados
                 except Exception:  # noqa: BLE001 -- ante un fallo del filtro, se archiva todo (fail-open:
-                    # perder cobertura es peor que archivar ruido; el listón aguas abajo contiene el coste)
+                    # perder cobertura es peor que archivar basura; el umbral posterior contiene el coste)
                     _log.exception(
                         "recolectar_daemon: fallo el filtro de entrada del feed %s.", feed.get("id")
                     )

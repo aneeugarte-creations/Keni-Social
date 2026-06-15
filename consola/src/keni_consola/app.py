@@ -105,10 +105,10 @@ def _token_app(request: Request) -> str | None:
 
 
 def _respuesta_index_spa(request: Request, html: str) -> HTMLResponse:
-    """Devuelve el index del SPA inyectando el token y sembrando la cookie (#134).
+    """Devuelve el index del SPA inyectando el token y fijando la cookie (#134).
 
     El token se inyecta en el HTML (`window.__KENI_TOKEN__`, lo lee `api.ts` para la
-    cabecera) y se siembra como cookie `keni_consola_token`, de modo que las descargas
+    cabecera) y se fija como cookie `keni_consola_token`, de modo que las descargas
     por `window.open` y las `<img src>` —que no pueden mandar cabeceras— sigan
     autenticando. La cookie es SameSite=Strict: el navegador no la envia desde otro
     sitio, lo que (junto al chequeo de Origin en mutaciones) cierra el vector CSRF.
@@ -173,7 +173,7 @@ async def _manejar_cola_llena(request: Request, exc: ColaLlenaError) -> Response
     Manejador CENTRAL por TIPO: cualquier endpoint que deje propagar `ColaLlenaError`
     (en vez de tragarla) responde un 429 consistente con un mensaje en espanol y la
     cabecera `Retry-After`. La cola NO tiene tope (R-NO-LIMIT): esto YA NO se dispara por
-    tamano de cola, solo por el freno VOLUNTARIO de presupuesto/pausa (subclases de
+    tamano de cola, solo por el tope VOLUNTARIO de presupuesto/pausa (subclases de
     `ColaLlenaError`). El mensaje real (`str(exc)`) precisa el porque."""
     return JSONResponse(
         {"error": str(exc) or "Hay demasiadas generaciones en curso; inténtalo en unos segundos."},
@@ -203,7 +203,7 @@ def crear_app(
     `token`: token INTERINO opcional para la API (#134/#130). Es un gate EXTRA, no la
     barrera principal (esa es la sesion). Tres formas:
       - NO pasarlo (def): se resuelve de `KENI_CONSOLA_TOKEN`; si no esta, en local se
-        GENERA uno (su VALOR NO se loguea, #150; la cookie la siembra el index del SPA). El
+        GENERA uno (su VALOR NO se loguea, #150; la cookie la fija el index del SPA). El
         arranque hosted fija la env (o la deja vacia para correr SIN token interino).
       - `token="..."`: usa ese token fijo (los tests pasan uno conocido).
       - `token=None`: EXPRESAMENTE sin token interino. La unica credencial es la sesion;
@@ -328,7 +328,7 @@ def crear_app(
 
     # Seguridad (#134/#130/#150): resolvemos el token de mantenimiento opcional. Si NO se
     # inyecto (centinela), lo toma de KENI_CONSOLA_TOKEN; en local, si no esta, GENERA uno
-    # (su valor NO se loguea, #150; la cookie la siembra el index del SPA). Si se inyecta
+    # (su valor NO se loguea, #150; la cookie la fija el index del SPA). Si se inyecta
     # `token=None` EXPRESAMENTE, no hay token: la app queda protegida solo por sesion + CSRF
     # (el despliegue ya no depende del token, #130). El token NO es admin (#150).
     if token is _TOKEN_NO_ESPECIFICADO:

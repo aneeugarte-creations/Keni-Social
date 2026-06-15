@@ -217,7 +217,7 @@ def _expandir_cross_post(
     El equipo cross-postea el mismo contenido y a veces olvida el tag en una red (sobre todo
     TikTok); sin esto, esas piezas no se cuentan pese a ser de la campaña. El emparejamiento
     es por `_clave_contenido`, única en la práctica (0 colisiones en los datos del piloto);
-    las claves demasiado cortas no siembran nada (evita falsos positivos).
+    las claves demasiado cortas no emparejan nada (evita falsos positivos).
 
     Devuelve `(piezas_en_campania, ids_cross)`, donde `ids_cross` (id, red) son las añadidas
     por inferencia, para que la UI las marque como tales y el humano pueda revisarlas.

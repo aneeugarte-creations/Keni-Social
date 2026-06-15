@@ -457,9 +457,9 @@ def verificar_veredicto_por_contenido(contenido_ids: list[str]) -> dict[str, str
 
 
 def sanear_qa_en_curso_huerfanos(umbral_iso: str) -> int:
-    """Devuelve a re-criba (verificar_veredicto='') los temas ZOMBI en 'en_curso' mas viejos que `umbral_iso`.
+    """Devuelve a re-criba (verificar_veredicto='') los temas COLGADOS en 'en_curso' mas viejos que `umbral_iso`.
 
-    Saneamiento del reaper: la fase QA marca el tema `en_curso` antes de lanzar la criba; si
+    Limpieza del recolector: la fase QA marca el tema `en_curso` antes de lanzar la criba; si
     la generacion muere sin finalizador, el sentinel quedaba para siempre (tema excluido de
     `temas_sin_verificar` y contando en `temas_en_vuelo`). Compara contra `actualizado` (lo refresca
     cada escritura, incluida la que puso `en_curso`): un `en_curso` legitimo y reciente NUNCA
@@ -527,7 +527,7 @@ def resumen_plan_por_categoria(marca: str, desde_iso: str) -> dict[str, dict[str
     o del reciclaje evergreen; '' = alta manual, fuera del plan) creado en la ventana Y que
     tenga AL MENOS UNA pieza por red (`contenido_plataforma`): un tema SIN ninguna pieza
     —promovido pero con el copy aún sin generar, o ya fallido/borrado— NO infla el plan (de
-    ahí que borrar el último post baje el contador y que un tema zombi sin piezas no cuente).
+    ahí que borrar el último post baje el contador y que un tema colgado sin piezas no cuente).
     Se exige «≥1 pieza», NO «es_publicacion=1», a propósito: las reemisiones evergreen del
     banco nacen con piezas `es_publicacion=0` y deben seguir contando (si no, el barrido
     evergreen reemitiría sin fin al ver el cupo vacío).
@@ -548,7 +548,7 @@ def resumen_plan_por_categoria(marca: str, desde_iso: str) -> dict[str, dict[str
             "FROM contenido c "
             "WHERE c.marca = ? AND c.clase = 'contenido' "
             "AND (c.categoria <> '' OR c.flujo = 'evergreen') "
-            # Solo temas con contenido REAL: al menos una pieza por red (no el tema zombi
+            # Solo temas con contenido REAL: al menos una pieza por red (no el tema colgado
             # promovido cuyo copy nunca se generó). NO se filtra por es_publicacion: las
             # reemisiones evergreen del banco nacen con es_publicacion=0 y deben contar.
             "AND EXISTS (SELECT 1 FROM contenido_plataforma p "

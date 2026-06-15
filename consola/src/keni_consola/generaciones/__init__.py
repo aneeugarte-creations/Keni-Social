@@ -45,7 +45,7 @@ Claude. Por eso este lanzador NO es transitorio: su robustez es deuda PERMANENTE
   - GRUPO DE PROCESOS: el subprocess arranca con su propio grupo (`runner.lanzar_proc`)
     y al timeout/cancel se mata el ARBOL entero (`runner.matar_arbol`), no solo el padre.
   - ADMISION SIN TOPE DE COLA (R-NO-LIMIT): la cola SIEMPRE admite; el unico limite es la
-    concurrencia (`max_jobs`), el exceso ESPERA. El freno VOLUNTARIO de presupuesto/pausa sí
+    concurrencia (`max_jobs`), el exceso ESPERA. El límite VOLUNTARIO de presupuesto/pausa sí
     rechaza (subclases de `ColaLlenaError` -> 429), reflejado como `error`/`motivo="cola_llena"`.
   - CANCELACION: `cancelar(gen_id)` mata el arbol del job y lo marca cancelado; el usuario
     la dispara desde la SPA (`POST /api/generaciones/{id}/cancelar`).
@@ -176,7 +176,7 @@ __all__ = [
     "PresupuestoAgotadoError",
     "PromptExcesivoError",
     "Procesar",
-    # Almacén / CRUD / idempotencia / poda / reaper.
+    # Almacén / CRUD / idempotencia / limpieza / recolector de colgadas.
     "raiz",
     "crear",
     "crear_idempotente",

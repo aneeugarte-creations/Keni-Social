@@ -1,4 +1,4 @@
-"""Observabilidad de la TUBERIA automatica: en que ETAPA esta cada tema (Fase 2 / Flujo C).
+"""Observabilidad del PIPELINE automatico: en que ETAPA esta cada tema (Fase 2 / Flujo C).
 
 PROBLEMA QUE RESUELVE
 =====================
@@ -34,11 +34,11 @@ from .estados import CLASE_CONTENIDO, ORIGENES_AUTOGEN
 ETIQUETA_AUTOGEN = "autogen"
 ETIQUETA_AUTOGEN_ARTE = "autogen-arte"
 
-# Estado terminal del contenido padre: ya no esta "en la tuberia".
+# Estado terminal del contenido padre: ya no esta "en el pipeline".
 _ESTADO_CERRADO = "hecha"
 
 # --------------------------------------------------------------------------- #
-# Etapas de la tuberia (orden = avance). Son una LECTURA derivada, no un enum   #
+# Etapas del pipeline (orden = avance). Son una LECTURA derivada, no un enum    #
 # persistido: NO viven en `estados.py` (no son estados del dominio).            #
 # --------------------------------------------------------------------------- #
 ETAPA_PRIORIZADA = "priorizada"          # tema auto-generable en cola, sin copy aun
@@ -92,7 +92,7 @@ def etapa_de_tema(
     *,
     etiquetas: list[str] | None = None,
 ) -> str:
-    """Etapa de la tuberia de UN tema (PURA). `etiquetas` = NOMBRES ya resueltos.
+    """Etapa del pipeline de UN tema (PURA). `etiquetas` = NOMBRES ya resueltos.
 
     Reglas, de la SALIDA hacia la ENTRADA (gana la mas avanzada que aplique):
       - clase != 'contenido' (una tarea) o estado padre 'hecha' (cerrado) -> FUERA.
@@ -222,13 +222,13 @@ def contar_por_etapa(
     etiquetas_por_item: dict[str, list[str]] | None = None,
     incluir_fuera: bool = False,
 ) -> dict[str, int]:
-    """Cuenta temas por ETAPA de la tuberia (PURA). Devuelve un dict etapa -> n.
+    """Cuenta temas por ETAPA del pipeline (PURA). Devuelve un dict etapa -> n.
 
     `plataformas_por_item`: id de contenido -> sus filas `contenido_plataforma`.
     `etiquetas_por_item`:    id de contenido -> NOMBRES de etiqueta resueltos.
     Ambos se inyectan (los lee la capa API), de modo que esta funcion no toca la BD.
 
-    Por defecto NO cuenta los temas FUERA de la tuberia (manual/tarea/cerrado): el panel
+    Por defecto NO cuenta los temas FUERA del pipeline (manual/tarea/cerrado): el panel
     quiere ver el flujo automatico. `incluir_fuera=True` los suma (etapa `fuera_de_tuberia`).
     El dict de salida SIEMPRE trae las etapas relevantes en 0 (forma estable para la UI).
     """

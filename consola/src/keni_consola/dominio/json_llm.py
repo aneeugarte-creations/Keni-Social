@@ -25,7 +25,7 @@ _log = logging.getLogger("keni_consola.dominio.json_llm")
 
 _RE_FENCE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
 
-# Tope de posiciones '{'/'[' que se intentan en el rescate por brackets (salidas malformadas
+# Tope de posiciones '{'/'[' que se intentan en la recuperación por brackets (salidas malformadas
 # enormes: cada intento fallido puede costar O(n); acotamos para no degenerar en O(n²)).
 _MAX_INTENTOS_BRACKET = 50
 

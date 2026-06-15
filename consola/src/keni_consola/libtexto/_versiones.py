@@ -53,7 +53,7 @@ def historial(doc_id: str, *, limite: int = 50) -> list[dict[str, str]]:
     frontend lo sintetiza aparte. Si el doc no tiene publicaciones -> lista vacía.
 
     BEST-EFFORT (como el resto del modelo de publicación): si Postgres no está disponible,
-    cae a lista vacía (NO al `git log`, que es ruido de "crear"/"mover").
+    cae a lista vacía (NO al `git log`, que son commits irrelevantes de "crear"/"mover").
     """
     if obtener(doc_id) is None:
         raise TextoError("Ese documento no existe.")

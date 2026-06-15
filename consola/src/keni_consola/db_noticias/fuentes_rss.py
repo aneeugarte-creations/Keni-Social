@@ -275,7 +275,7 @@ def borrar_fuente_rss(fuente_id: str) -> bool:
 def purgar_pool_irrelevante(
     *, score_umbral: float, inactividad_horas: int, dry_run: bool = False
 ) -> dict[str, int]:
-    """GC del pool por RELEVANCIA (no por edad sola): borra el ruido de baja relevancia.
+    """GC del pool por RELEVANCIA (no por edad sola): borra la basura de baja relevancia.
 
     CONSERVADOR. Borra SOLO lo que no aporta y nadie va a trabajar:
       - clusters `estado='nuevo'`, SIN `contenido_id` (no llevados al tablero), de UNA sola fuente
@@ -283,7 +283,7 @@ def purgar_pool_irrelevante(
         (`ultimo_visto < ahora - inactividad_horas`). Se CONSERVAN: usados/ligados a contenido,
         corroborados (multi-fuente), de score alto, o recientes.
       - items `estado='nuevo'`, SIN `contenido_id`, viejos (`capturado_en < cutoff`) y
-        HUÉRFANOS (sin cluster o cuyo cluster ya no existe — p. ej. recién purgado). Los items de
+        SUELTOS (sin cluster o cuyo cluster ya no existe — p. ej. recién purgado). Los items de
         clusters que SOBREVIVEN se conservan.
     NO es un TTL: la antigüedad es solo UNA condición junto a la baja relevancia. `dry_run=True`
     cuenta sin borrar. Devuelve `{clusters, items, dry_run}`.
@@ -312,7 +312,7 @@ def purgar_pool_irrelevante(
         cur_cl = con.execute(  # noqa: S608 -- condición estática; valores parametrizados
             f"DELETE FROM noticias_clusters WHERE {cond_clusters}", (score_umbral, cutoff)
         )
-        # Tras borrar clusters, los items huérfanos (cluster inexistente) caen en `cond_items`.
+        # Tras borrar clusters, los items sueltos (cluster inexistente) caen en `cond_items`.
         cur_it = con.execute(  # noqa: S608 -- idem
             f"DELETE FROM noticias_items WHERE {cond_items}", (cutoff,)
         )

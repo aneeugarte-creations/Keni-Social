@@ -17,11 +17,11 @@ deuda PERMANENTE, no contencion transitoria. Hay que tenerlas bien:
   - CONCURRENCIA, no tope de cola (R-NO-LIMIT): la cola NO tiene tope. `slot()` aplica un
     semaforo (`KENI_MAX_JOBS`): los jobs que no caben simplemente ESPERAN un hueco; NADA se
     rechaza por tamano de cola. La espera no es infinita: cada job tiene wall-timeout, asi
-    que los slots SIEMPRE se liberan. (El freno voluntario por presupuesto/pausa vive en
+    que los slots SIEMPRE se liberan. (El límite voluntario por presupuesto/pausa vive en
     `presupuesto_ia` y entra por `cola.encolar`, no aqui.)
   - GRUPO DE PROCESOS: `lanzar_proc()` arranca `claude` con `start_new_session=True`
     (lider de su propio grupo). Al timeout/cancel `matar_arbol()` mata el GRUPO entero,
-    no solo el padre: evita herramientas hijas zombis que `claude` haya lanzado.
+    no solo el padre: evita herramientas hijas colgadas que `claude` haya lanzado.
 """
 
 from __future__ import annotations
@@ -80,7 +80,7 @@ class ColaLlenaError(RuntimeError):
     """Backpressure de admision: el job se rechaza (429) en vez de admitirse AHORA.
 
     Ya NO se lanza por tamano de cola (la cola no tiene tope, R-NO-LIMIT): queda como CLASE
-    BASE de los frenos VOLUNTARIOS de admision —`GeneracionPausadaError`,
+    BASE de los límites VOLUNTARIOS de admision —`GeneracionPausadaError`,
     `PresupuestoAgotadoError`, `PromptExcesivoError`— que `cola.encolar` sigue aplicando. Los
     llamantes (manejador central 429 de la app, backpressure del pipeline) la capturan por el
     tipo base y la tratan como "ahora no; reintenta luego"; el mensaje (`str(exc)`) precisa el porque.
@@ -108,7 +108,7 @@ class PresupuestoAgotadoError(ColaLlenaError):
 class PromptExcesivoError(ColaLlenaError):
     """El prompt supera el tope duro (`KENI_PROMPT_MAX_CHARS`): rechazar ANTES de gastar.
 
-    Economia de contexto: un prompt patologico quemaria decenas de miles de tokens en una
+    Economia de contexto: un prompt patologico gastaria decenas de miles de tokens en una
     sola generacion. Subclase de `ColaLlenaError` por pragmatismo: el manejador central ya
     devuelve un 429 con el mensaje claro y el pipeline lo trata como rechazo de admision
     sin cablear un handler nuevo (el remedio NO es reintentar, es recortar el contexto;
@@ -198,7 +198,7 @@ def lanzar_proc(
 
     PERMANENTE (#137): `start_new_session=True` hace al hijo lider de un grupo nuevo, asi
     `matar_arbol()` puede senalizar al GRUPO entero (padre + herramientas hijas que
-    `claude` lance). Sin esto, un `proc.kill()` mataba SOLO el padre y dejaba zombis.
+    `claude` lance). Sin esto, un `proc.kill()` mataba SOLO el padre y dejaba procesos colgados.
     En Windows no hay grupos POSIX, pero el piloto corre en macOS/Linux. argv como lista
     (sin shell). El llamante elige stdout/stderr/text via los kwargs fijos de aqui.
 

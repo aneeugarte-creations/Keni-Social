@@ -251,7 +251,7 @@ ENV_TRAD_MIN_SCORE = "KENI_TRAD_MIN_SCORE"
 ENV_TRAD_LOTE = "KENI_TRAD_LOTE"
 ENV_FUENTES_BAJA_CONFIANZA = "KENI_FUENTES_BAJA_CONFIANZA"
 
-# Pipeline de contenido Admitir→Redactar→Revisar por marca (fase3 auto-produccion, Flujo "tubería"). Un hilo
+# Pipeline de contenido Admitir→Redactar→Revisar por marca (fase3 auto-produccion). Un hilo
 # demonio que, cada N horas y por marca con feeds RSS activos, admite temas frescos (Admitir),
 # lanza la redaccion del copy+imagen de marca (Redactar, mismo camino que el boton manual) y revisa
 # automaticamente los borradores recientes (Revisar), registrando CADA etapa en "Actividad IA" como
@@ -320,7 +320,7 @@ ENV_AUTO_PROGRAMAR = "KENI_AUTO_PROGRAMAR"
 # se reinicia la cadena; un coordinador puede `forzar`).
 ENV_CRITICA_IA = "KENI_CRITICA_IA"
 
-# Reaper de generaciones zombi: una generacion `ejecutando` cuyo proceso murio (reinicio/
+# Reaper de generaciones atascadas: una generacion `ejecutando` cuyo proceso murio (reinicio/
 # OOM/cuelgue) queda colgada para siempre. El reaper la cierra como `error` pasada una
 # antigüedad MUY superior al wall-timeout (asi nunca mata una viva). Siempre activo.
 ENV_GENERACIONES_TTL_HORAS = "KENI_GENERACIONES_TTL_HORAS"
@@ -332,24 +332,24 @@ ENV_REAPER_INTERVALO_MIN = "KENI_REAPER_INTERVALO_MIN"
 ENV_QA_FUENTE_MODELO = "KENI_QA_FUENTE_MODELO"
 ENV_QA_FUENTE_ESFUERZO = "KENI_QA_FUENTE_ESFUERZO"
 ENV_QA_FUENTE_TIMEOUT = "KENI_QA_FUENTE_TIMEOUT"
-# Saneador de temas zombi `verificar_veredicto='en_curso'`: si el lanzamiento/generacion de la criba
+# Corrector de temas atascados `verificar_veredicto='en_curso'`: si el lanzamiento/generacion de la criba
 # muere sin finalizador, el tema quedaba excluido para siempre de la re-criba (y contando en
 # el cupo en vuelo). El reaper resetea a "" los `en_curso` mas viejos que este TTL (minutos).
 ENV_QA_EN_CURSO_TTL_MIN = "KENI_QA_EN_CURSO_TTL_MIN"
 
-# Recoleccion de basura (GC) de MEDIA HUERFANA (Estudio de imagen, diseno §5). El Estudio
+# Recoleccion de basura (GC) de MEDIA SUELTA (Estudio de imagen, diseno §5). El Estudio
 # genera N variantes; las NO elegidas quedan como objetos sueltos en el almacen de media que
 # nadie borra. Un hilo demonio barre periodicamente el almacen y borra SOLO los objetos
-# HUERFANOS: ni referenciados por una publicacion (`imagen`) ni catalogados en catalogo-media
+# SUELTOS: ni referenciados por una publicacion (`imagen`) ni catalogados en catalogo-media
 # y mas VIEJOS que un umbral (def 24h, para no tocar variantes recien generadas que el usuario
 # aun revisa). CONSERVADOR por defecto (OFF): sin `KENI_MEDIA_GC` no se borra nada.
 ENV_MEDIA_GC = "KENI_MEDIA_GC"
 ENV_MEDIA_GC_INTERVALO_HORAS = "KENI_MEDIA_GC_INTERVALO_HORAS"
 ENV_MEDIA_GC_ANTIGUEDAD_HORAS = "KENI_MEDIA_GC_ANTIGUEDAD_HORAS"
 
-# GC del POOL DE NOTICIAS por RELEVANCIA (no por edad sola). Un hilo demonio barre y borra el
-# ruido: historias `nuevo` no llevadas al tablero, de UNA fuente, score bajo y sin actividad
-# reciente, + items huérfanos viejos. CONSERVA usados/ligados/corroborados/score alto/recientes.
+# GC del POOL DE NOTICIAS por RELEVANCIA (no por edad sola). Un hilo demonio barre y borra lo
+# irrelevante: historias `nuevo` no llevadas al tablero, de UNA fuente, score bajo y sin actividad
+# reciente, + items sueltos viejos. CONSERVA usados/ligados/corroborados/score alto/recientes.
 # CONSERVADOR por defecto (OFF): sin `KENI_NOTICIAS_GC` no se borra nada.
 ENV_NOTICIAS_GC = "KENI_NOTICIAS_GC"
 ENV_NOTICIAS_GC_INTERVALO_HORAS = "KENI_NOTICIAS_GC_INTERVALO_HORAS"
@@ -359,7 +359,7 @@ ENV_NOTICIAS_GC_INACTIVIDAD_HORAS = "KENI_NOTICIAS_GC_INACTIVIDAD_HORAS"
 # Perfil editorial por marca (Fase 2): un agente Haiku extrae las keywords/temas de la línea
 # editorial (página texto) y la priorización las usa como relevancia de marca (reemplaza el diccionario
 # hardcodeado). GATEADO por `KENI_PRIORIZAR_PERFIL_IA` (def OFF): sin el flag se usa el vocabulario
-# semilla. El refresco (Haiku) corre acotado por marca + TTL en el daemon de Recolectar. (ADR 0011:
+# base. El refresco (Haiku) corre acotado por marca + TTL en el daemon de Recolectar. (ADR 0011:
 # es priorización por relevancia, no voz editorial.)
 ENV_PRIORIZAR_PERFIL_IA = "KENI_PRIORIZAR_PERFIL_IA"
 ENV_PERFIL_EDITORIAL_TTL_HORAS = "KENI_PERFIL_EDITORIAL_TTL_HORAS"
@@ -512,8 +512,8 @@ DB_POOL_MIN_DEF = 2
 # 20 sobra; por proceso, y son 3 (back/daemons/worker) -> 60 < max_connections=200 de Postgres.
 DB_POOL_MAX_DEF = 20
 CLAUDE_TIMEOUT_DEF = 600
-# Verificar la fuente: timeout corto (criba permisiva con modelo rapido) y TTL del saneador de
-# temas `en_curso` huerfanos (minutos; muy superior al timeout de la criba).
+# Verificar la fuente: timeout corto (criba permisiva con modelo rapido) y TTL del corrector de
+# temas `en_curso` sueltos (minutos; muy superior al timeout de la criba).
 QA_FUENTE_TIMEOUT_DEF = 180
 QA_EN_CURSO_TTL_MIN_DEF = 30
 # Cadencia de sondeo de la cola por el worker (s). Bajo para que el job arranque casi
@@ -525,11 +525,11 @@ PRESUPUESTO_TOKENS_DIA_DEF = 0
 # Margen EXTRA (%) sobre el presupuesto que se concede SOLO a los lanzamientos manuales del
 # equipo cuando el fondo ya esta cortado. Al superarlo, corte TOTAL (tambien lo manual).
 PRESUPUESTO_MARGEN_MANUAL_DEF = 20
-# Intentos maximos de ejecucion de un job (el normal + re-reclamos de huerfano). 3 da dos
+# Intentos maximos de ejecucion de un job (el normal + re-reclamos de suelto). 3 da dos
 # reintentos automaticos tras muertes del worker sin permitir un crash-loop infinito.
 JOBS_MAX_INTENTOS_DEF = 3
 # Tope DURO del prompt por generacion (chars; ~4 chars = 1 token). 200k chars ~ 50k tokens:
-# muy por encima de cualquier prompt legitimo de copy; corta los patologicos (avalancha de
+# muy por encima de cualquier prompt legitimo de copy; corta los patologicos (saturación de
 # feeds concatenados). 0 = sin tope. El AVISO (warning + visible) salta mucho antes.
 PROMPT_MAX_CHARS_DEF = 200_000
 PROMPT_AVISO_CHARS_DEF = 80_000
@@ -540,7 +540,7 @@ METRICAS_REFRESCO_HORAS_DEF = 6
 # `metricas_pieza` (4h): un post no cambia minuto a minuto.
 METRICAS_PIEZAS_REFRESCO_HORAS_DEF = 4
 # Retencion del historico por pieza (`metricas_pieza_snapshots`): a 4h de cadencia, 90 dias
-# son ~540 puntos por pieza; la poda mantiene la tabla acotada (ADR 0007).
+# son ~540 puntos por pieza; la limpieza mantiene la tabla acotada (ADR 0007).
 METRICAS_HISTORICO_RETENCION_DIAS_DEF = 90
 # Cadencia del barrido de alertas de rendimiento (horas).
 ALERTAS_INTERVALO_HORAS_DEF = 6
@@ -637,7 +637,7 @@ AUTOGEN_ARTE_MAX_DEF = 3
 
 # Pipeline de contenido (FLUJO CONTINUO): Admitir admite hasta este nº de historias por
 # marca en cada pasada, acotada además por el gate serial en vuelo. Cada admisión acaba en
-# `claude -p` (coste); el cap del worker (`KENI_MAX_JOBS`) sigue aplicando aguas abajo.
+# `claude -p` (coste); el cap del worker (`KENI_MAX_JOBS`) sigue aplicando más adelante en el flujo.
 PIPELINE_MAX_DEF = 3
 # WIP del gate serial: piezas EN VUELO (sin terminar Verificar→Redactar) por marca. ES el regulador del
 # flujo continuo: in=out (no se admite más hasta que algo sale por el otro lado).
@@ -648,18 +648,18 @@ PIPELINE_TEMA_TTL_HORAS_DEF = 24
 
 
 # Reaper de generaciones: TTL 1h (>> wall-timeout de ~10 min, asi no toca jobs vivos) y
-# barrido cada 10 min. El barrido tambien corre al arrancar (limpia los huerfanos del crash
+# barrido cada 10 min. El barrido tambien corre al arrancar (limpia los sueltos del crash
 # anterior de inmediato).
 GENERACIONES_TTL_HORAS_DEF = 1
 REAPER_INTERVALO_MIN_DEF = 10
 
-# Recoleccion de basura de media huerfana (Estudio §5). Barre 1 vez al dia (no urge: el
+# Recoleccion de basura de media suelta (Estudio §5). Barre 1 vez al dia (no urge: el
 # almacen crece lento) y solo borra objetos mas viejos que ANTIGUEDAD (def 24h), para NO
 # tocar las variantes recien generadas que el usuario aun esta revisando en el Estudio.
 MEDIA_GC_INTERVALO_HORAS_DEF = 24
 MEDIA_GC_ANTIGUEDAD_HORAS_DEF = 24
 
-# GC del pool de noticias: cada 6h; purga historias con score < 0.15 (ruido) e inactivas > 48h.
+# GC del pool de noticias: cada 6h; purga historias con score < 0.15 (basura) e inactivas > 48h.
 NOTICIAS_GC_INTERVALO_HORAS_DEF = 6
 NOTICIAS_GC_SCORE_UMBRAL_DEF = 0.15
 NOTICIAS_GC_INACTIVIDAD_HORAS_DEF = 48

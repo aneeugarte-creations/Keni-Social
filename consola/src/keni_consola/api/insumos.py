@@ -148,7 +148,7 @@ def _descartar_gemela_pool(item: dict[str, Any]) -> None:
     historia corroborada por otras fuentes sigue viva (existe sin el cajón). Solo toca gemelas
     `nuevo` SIN `contenido_id` (una ya usada/recogida por el auto-feed conserva su rastro).
 
-    Best-effort por diseño: NUNCA lanza. Un fallo aquí no debe frenar el borrado/descarte del
+    Best-effort por diseño: NUNCA lanza. Un fallo aquí no debe impedir el borrado/descarte del
     ítem que lo invoca (`descartar_item`, `borrar_lote`) — el dedup por título del pipeline es la
     segunda red.
     """

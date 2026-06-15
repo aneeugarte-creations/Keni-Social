@@ -241,7 +241,7 @@ def render_bytes(pub: dict[str, Any]) -> tuple[bytes, str] | None:
     """Bytes de la imagen publicable + su mime, renderizando ON-DEMAND y SIN persistir.
 
     Es el camino EFÍMERO del endpoint `/compuesta`: el composite (placa/plantilla) se renderiza
-    en memoria y NO se escribe en el almacén — no genera huérfanos. Para `imagen` ya horneada
+    en memoria y NO se escribe en el almacén — no genera objetos sueltos. Para `imagen` ya horneada
     (bespoke / publicada) o la `foto` cruda, se sirven sus bytes tal cual (assets reales, sin
     crear nada nuevo). Devuelve `None` si la pieza no tiene imagen servible. Lanza
     `estudio_imagen.EstudioError` si el render falla.

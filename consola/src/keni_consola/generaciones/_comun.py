@@ -3,7 +3,7 @@
 Submódulo interno del paquete `generaciones` (ver `__init__.py`, que re-exporta la
 superficie pública estable). Aquí viven las CONSTANTES de estado/fase/motivo/tipos, los
 helpers triviales (`nuevo_id`, `ahora_iso`, `_timeout`), el logger del dominio, el registro
-EN MEMORIA de trabajos en vuelo (`_HANDLES`/`_HANDLES_LOCK`) y el alias de tipo `Procesar`.
+EN MEMORIA de trabajos en curso (`_HANDLES`/`_HANDLES_LOCK`) y el alias de tipo `Procesar`.
 Sin estado de negocio: solo cimientos compartidos por `_almacen` y `_lanzadores`.
 
 `ColaLlenaError` se RE-EXPORTA aquí (clase BASE del backpressure de admisión —
@@ -81,7 +81,7 @@ MOTIVO_TIMEOUT = "timeout"
 MOTIVO_COLA_LLENA = "cola_llena"
 MOTIVO_CANCELADO = "cancelado"
 # Una generacion quedo `ejecutando` pero su proceso murio (reinicio/deploy, OOM, worker
-# matado, o `generar()` colgado): el finalizador nunca corrio. El reaper la marca asi.
+# matado, o `generar()` colgado): el finalizador nunca corrio. El recolector la marca asi.
 MOTIVO_INTERRUMPIDO = "interrumpido"
 
 # Tipos de trabajo (para que el frontend sepa como renderizar el resultado).
@@ -138,7 +138,7 @@ def proceso_de(reg: dict[str, Any]) -> str:
 # Wall-timeout (segundos) de un trabajo de claude en background. Override por
 # `KENI_CLAUDE_TIMEOUT` (centralizado en `config.claude_timeout`).
 
-# Registro EN MEMORIA de trabajos en vuelo (id -> handle). El YAML es la fuente de
+# Registro EN MEMORIA de trabajos en curso (id -> handle). El YAML es la fuente de
 # verdad para el sondeo; esto solo permite inspeccionar/cancelar localmente.
 _HANDLES: dict[str, dict[str, object]] = {}
 _HANDLES_LOCK = threading.Lock()
@@ -147,7 +147,7 @@ _HANDLES_LOCK = threading.Lock()
 # el MISMO proceso que lo espera (`worker._esperar_terminal`); el hilo que fija el estado
 # terminal (`_almacen.actualizar`) DESPIERTA al que espera con este Event, en vez de obligarlo
 # a re-stat/re-parsear el YAML cada 200 ms. El Event se crea perezosamente (get-or-create) y se
-# DESCARTA cuando el que espera termina, asi no se acumulan eventos huerfanos. Si el job lo
+# DESCARTA cuando el que espera termina, asi no se acumulan eventos sueltos. Si el job lo
 # fijara OTRO proceso (no deberia: quien reclama ejecuta), el que espera cae a un sondeo de
 # disco acotado como red de seguridad (ver `worker._esperar_terminal`).
 _TERMINALES: dict[str, threading.Event] = {}
@@ -185,13 +185,13 @@ def descartar_evento_terminal(gen_id: str) -> None:
 # Numero de generaciones recientes que devuelve el listado.
 _LISTADO_MAX = 50
 
-# Estados TERMINALES de una generacion (ya no esta en vuelo). Una idempotencia solo retiene a
-# DOS lanzamientos del MISMO trabajo mientras hay uno EN VUELO; al terminar, un re-lanzamiento
+# Estados TERMINALES de una generacion (ya no esta en curso). Una idempotencia solo retiene a
+# DOS lanzamientos del MISMO trabajo mientras hay uno EN CURSO; al terminar, un re-lanzamiento
 # legitimo (el usuario quiere regenerar) vuelve a correr.
 _ESTADOS_TERMINALES = frozenset({ESTADO_COMPLETADO, ESTADO_ERROR})
 
 # Patron del NOMBRE base de un registro de generacion (`<id>.yaml`): exactamente 12 hex,
-# tal como los acuna `nuevo_id`. La poda solo borra ficheros cuyo stem case con esto (nunca
+# tal como los acuna `nuevo_id`. La limpieza solo borra ficheros cuyo stem case con esto (nunca
 # temporales `.tmp-*` ni nombres ajenos en el dir).
 _ES_ID = re.compile(r"[0-9a-f]{12}")
 

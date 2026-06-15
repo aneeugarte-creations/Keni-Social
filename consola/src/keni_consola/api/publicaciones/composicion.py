@@ -98,7 +98,7 @@ async def aplicar_plantilla(request: Request) -> Response:
     foco, zoom = estudio_imagen.parsear_encuadre(foto_encuadre)
 
     # Render de VALIDACIÓN (síncrono) a BYTES: confirma que la plantilla compone con esta
-    # foto/copy_in antes de fijarla, SIN persistir nada (no genera huérfanos). La imagen se
+    # foto/copy_in antes de fijarla, SIN persistir nada (no genera registros sueltos). La imagen se
     # renderiza on-demand y efímera desde la receta (`/compuesta`); no se hornea en `imagen`.
     try:
         estudio_imagen.componer_desde_plantilla_bytes(
@@ -134,7 +134,7 @@ async def compuesta(request: Request) -> Response:
     escribir nada en el almacén — el composite es función pura de la receta, no un objeto que
     almacenar. La caché vive en la capa HTTP: `ETag = hash(receta)` + `Cache-Control`; si el
     cliente reenvía `If-None-Match` y la receta no cambió, respondemos 304 SIN recomponer (el
-    ETag se calcula de la receta, barato; no corre Node). Así no se generan huérfanos.
+    ETag se calcula de la receta, barato; no corre Node). Así no se generan registros sueltos.
 
     404 si la pieza no existe o no tiene imagen servible; 422 si el render falla (motivo en
     español).

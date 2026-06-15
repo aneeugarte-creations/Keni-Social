@@ -297,7 +297,7 @@ def clusters_por_contenidos(contenido_ids: list[str]) -> dict[str, dict[str, Any
     marcadores = ",".join("?" for _ in ids)
     con = _conectar()
     try:
-        filas = con.execute(  # noqa: S608 -- marcadores parametrizados; ids deduplicados/saneados
+        filas = con.execute(  # noqa: S608 -- marcadores parametrizados; ids deduplicados/depurados
             f"{_SELECT_NOTICIA_CLUSTER} WHERE contenido_id IN ({marcadores}) "
             "ORDER BY actualizado DESC, id DESC",
             tuple(ids),
@@ -472,11 +472,11 @@ def marcar_cluster_qa(cluster_id: str, veredicto: str, hallazgos: str = "") -> N
 
 
 def contar_clusters_funnel_qa(marca: str, estados: tuple[str, ...]) -> int:
-    """Cuántas HISTORIAS `nuevo` de la marca están en el EMBUDO de verificación (ADR 0011 F3).
+    """Cuántas HISTORIAS `nuevo` de la marca están en la ADMISIÓN de verificación (ADR 0011 F3).
 
-    El embudo son los clusters aún sin promover (`estado='nuevo'`) cuyo `verificar_veredicto` está en
+    La admisión son los clusters aún sin promover (`estado='nuevo'`) cuyo `verificar_veredicto` está en
     `estados` (p. ej. en_curso + verificadas-pendientes). Acota cuánta QA se lanza por tick para
-    que la verificación no recorra todo el pool: el presupuesto de QA = tope en vuelo − embudo.
+    que la verificación no recorra todo el pool: el presupuesto de QA = tope en curso − admisión.
     0 ante cualquier fallo o `estados` vacío.
     """
     if not estados:
@@ -495,12 +495,12 @@ def contar_clusters_funnel_qa(marca: str, estados: tuple[str, ...]) -> int:
 
 
 def sanear_qa_clusters_en_curso(umbral_iso: str) -> int:
-    """Resetea a "" el `verificar_veredicto='en_curso'` ZOMBI de los clusters (reaper de verificación).
+    """Resetea a "" el `verificar_veredicto='en_curso'` atascado de los clusters (limpiador de verificación).
 
-    Si una QA de la fuente sobre un cluster muere (deploy/OOM/cuelgue), el cluster quedaría
+    Si una QA de la fuente sobre un cluster se interrumpe (deploy/OOM/cuelgue), el cluster quedaría
     `en_curso` para siempre: ni se re-criba ni se admite. Devuelve los `en_curso` más viejos que
     `umbral_iso` a "" para que el barrido los vuelva a cribar. Mismo patrón que
-    `sanear_qa_en_curso_huerfanos` sobre `contenido`. Devuelve cuántos saneó.
+    `sanear_qa_en_curso_huerfanos` sobre `contenido`. Devuelve cuántos corrigió.
     """
     con = _conectar()
     try:
@@ -672,7 +672,7 @@ def actualizar_scores_clusters(scores: dict[str, float | dict[str, Any]]) -> int
     Cada valor puede ser un float (solo score; la explicación persistida se conserva) o un dict
     `{score, score_razon?, score_desglose?, breaking?, velocidad?}` para refrescar también la
     razón/el desglose y el flag breaking/velocidad VIVOS (anclados en ahora, decaen con el
-    reloj; si no se refrescaran, el listón trataría como última hora una historia de ayer).
+    reloj; si no se refrescaran, el umbral trataría como última hora una historia de ayer).
     Devuelve nº filas.
     """
     ahora = ahora_iso()

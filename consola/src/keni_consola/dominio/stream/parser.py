@@ -201,7 +201,7 @@ def parsear_salida_unificada(salida: str, redes_ids: list[str]) -> dict[str, obj
     valida contra ese par cerrado; ausente, otro valor o sin JSON -> `"post"` (degradación
     honesta: nunca se arma un carrusel por accidente).
 
-    `slides` (solo con `tipo=carrusel`): `[{titular, foto}, …]` saneados — `titular` no vacío
+    `slides` (solo con `tipo=carrusel`): `[{titular, foto}, …]` depurados — `titular` no vacío
     SIN emojis (es texto de placa, misma política que `copy_in`) y `foto` el número del
     catálogo del prompt (int >= 0; 0 = sin foto, valores raros caen a 0). Tope
     `_MAX_SLIDES`. Con `tipo=post` (o slides ilegibles), lista vacía.

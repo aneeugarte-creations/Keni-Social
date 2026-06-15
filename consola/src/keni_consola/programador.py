@@ -301,7 +301,7 @@ def _borrador_de_publicacion(pub: dict[str, Any]) -> object | None:
         nombre_imagen = ""
     # CONGELAR el registro de lo publicado: si la imagen se DERIVÓ de la receta (no estaba
     # horneada), la materializamos y la REFERENCIAMOS en la pieza (`imagen`). Así el composite
-    # publicado es un asset VIVO (no un huérfano) y la pieza queda con el PNG exacto que se posteó
+    # publicado es un asset VIVO (no uno suelto) y la pieza queda con el PNG exacto que se posteó
     # —no un re-render que podría diferir si luego se edita la receta—.
     if nombre_imagen and nombre_imagen != imagen_previa and render_pieza.tiene_receta(pub):
         try:
@@ -636,7 +636,7 @@ def iniciar_programador(intervalo_segundos: float | None = None) -> threading.Th
         while True:
             t0 = time.monotonic()
             try:
-                # RESCATE de aprobadas sin hueco: la auto-programación síncrona (al aprobar)
+                # RECUPERACIÓN de aprobadas sin hueco: la auto-programación síncrona (al aprobar)
                 # se queda sin efecto si EN ESE MOMENTO no había cadencia/franja aplicable
                 # (p. ej. se configuró después). Sin este barrido no había NINGÚN reintento:
                 # la pieza moría en `aprobado`. Best-effort e idempotente (solo toca piezas
@@ -656,7 +656,7 @@ def iniciar_programador(intervalo_segundos: float | None = None) -> threading.Th
                     from . import auto_programar
 
                     auto_programar.barrer_aprobadas()
-                except Exception:  # noqa: BLE001 -- el rescate nunca rompe el barrido principal
+                except Exception:  # noqa: BLE001 -- la recuperación nunca rompe el barrido principal
                     _log.exception("Fallo el barrido de piezas aprobadas sin programar.")
                 n = preparar_vencidas()
                 if n:

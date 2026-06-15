@@ -1,7 +1,7 @@
 """Economia de tokens de la generacion: presupuesto diario, corte automatico y kill switch.
 
 POR QUE EXISTE: la generacion corre `claude -p` con la MISMA suscripcion que usa el equipo
-a diario (OAuth, ADR 0001). Una avalancha de noticias puede saturar la cola de jobs de fondo
+a diario (OAuth, ADR 0001). Una ráfaga de noticias puede saturar la cola de jobs de fondo
 y AGOTAR los tokens de todos sin que nadie lo vea venir. Este modulo es el guardian:
 
   - LEDGER: cada generacion CERRADA (terminal) deja su gasto en la tabla `gasto_ia`
@@ -10,7 +10,7 @@ y AGOTAR los tokens de todos sin que nadie lo vea venir. Este modulo es el guard
     los caminos (claude, imagen, procesos) sin tocar cada lanzador.
   - PRESUPUESTO: `KENI_PRESUPUESTO_TOKENS_DIA` (tokens in+out por dia UTC; 0 = sin limite).
     Editable EN CALIENTE via el store de ajustes (compartido back/worker/daemons por /data).
-  - CORTE AUTOMATICO en dos escalones (gradual, no un acantilado):
+  - CORTE AUTOMATICO en dos escalones (gradual):
       * gastado >= presupuesto            -> SOLO_MANUAL: el fondo (pipeline/autogen) se
         deja de encolar y de reclamar; lo manual del equipo sigue.
       * gastado >= presupuesto * (1+m%)   -> AGOTADO: corte TOTAL (tampoco manual). El
@@ -19,7 +19,7 @@ y AGOTAR los tokens de todos sin que nadie lo vea venir. Este modulo es el guard
     encola nada y el worker no reclama nada; lo que corre termina y lo encolado espera.
 
 QUIEN PREGUNTA: `cola.encolar` (gate de admision, excepciones 429 claras), `worker._bucle`
-(gate de reclamo: la avalancha YA encolada tambien se corta) y la API del monitor
+(gate de reclamo: la ráfaga YA encolada tambien se corta) y la API del monitor
 (`/api/actividad/cola` expone `estado()` para humanos y agentes).
 
 CACHE: el worker pregunta en cada iteracion del bucle y el SUM del dia en Postgres no es
@@ -58,7 +58,7 @@ _CACHE_EXPIRA = 0.0
 
 # Ultimo nivel observado por ESTE proceso: cada TRANSICION deja un log WARNING (entrar en
 # corte) o INFO (volver a normal) — la señal operativa que consume la observabilidad (los
-# gates en si son silenciosos: rechazan/esperan sin ruido por peticion).
+# gates en si son silenciosos: rechazan/esperan sin loguear por peticion).
 _ULTIMO_NIVEL: str | None = None
 
 
@@ -110,7 +110,7 @@ def nivel() -> str:
 
     Sin presupuesto configurado (0) no hay corte automatico: solo `normal`/`pausado`.
     Cada TRANSICION de nivel deja un log (WARNING al endurecer, INFO al relajar): es la
-    señal operativa del corte; los gates por peticion no loguean (serian ruido).
+    señal operativa del corte; los gates por peticion no loguean (serian basura en el log).
     """
     if config.generacion_pausada():
         return _con_transicion(NIVEL_PAUSADO)

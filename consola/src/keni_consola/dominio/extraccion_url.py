@@ -325,7 +325,7 @@ class _ExtractorTexto(HTMLParser):
     Mantiene una profundidad de etiquetas "basura" (`script/style/...`) para ignorar su
     texto. Capta el `<title>` aparte para usarlo de encabezado de la nota. Si aparece un
     `<article>`/`<main>`, marca que hay region principal: el texto fuera de ella se
-    descarta (los menus/footers suelen quedar fuera), reduciendo ruido.
+    descarta (los menus/footers suelen quedar fuera), reduciendo contenido irrelevante.
     """
 
     def __init__(self) -> None:

@@ -131,7 +131,7 @@ def _extension_segura(nombre: str | None) -> str:
 
 
 async def _guardar_subida(archivo: UploadFile) -> tuple[Path, Path, str]:
-    """Vuelca un `UploadFile` a un temporal saneado. Devuelve (ruta, dir_temporal, extension)."""
+    """Vuelca un `UploadFile` a un temporal con extensión normalizada. Devuelve (ruta, dir_temporal, extension)."""
     dir_temporal = Path(tempfile.mkdtemp(prefix="keni-texto-"))
     ext = _extension_segura(archivo.filename)
     destino = dir_temporal / f"{uuid.uuid4().hex}{ext}"

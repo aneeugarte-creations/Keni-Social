@@ -1,21 +1,21 @@
-"""Relevancia por marca para la investigacion (Plan del dia / Radar / listón de noticias).
+"""Relevancia por marca para la investigacion (Plan del dia / Radar / umbral de noticias).
 
 La investigacion es POR MARCA: el Plan del dia de Claro Sports no es "lo viral en
 general", sino "lo que Claro Sports deberia publicar hoy". Para eso, cada marca
 tiene un conjunto de PALABRAS CLAVE de interes; los temas que las contienen suben
-en la parrilla de esa marca y superan el listón de producción automática.
+en la parrilla de esa marca y superan el umbral de producción automática.
 
-v1 (semilla en codigo): un mapa `marca_id -> palabras` para las marcas del cliente,
+v1 (base en codigo): un mapa `marca_id -> palabras` para las marcas del cliente,
 editable aqui. Es el primer paso explicito y versionado; la intencion es externalizar
 este vocabulario a configuracion por marca (gestionable desde la Consola) sin cambiar
 el contrato de `palabras_de_marca`. Honestidad: si una marca no tiene vocabulario, la
 relevancia de marca no aplica (la parrilla cae a su scoring general, sin inventar).
 Cuando la etapa Priorizar (perfil Haiku) esta activa, ese perfil SUSTITUYE esta
-semilla (ver `noticias_liston.palabras_relevancia`); la semilla es el suelo fiable.
+base (ver `noticias_liston.palabras_relevancia`); la base es el suelo fiable.
 
 Las palabras son tokens o frases en minuscula y SIN ACENTOS (el matching normaliza el
 texto antes de comparar): tokens por igualdad exacta de token, frases por limite de
-palabra. CRITERIO de la semilla: terminos que identifican la AGENDA de la marca con
+palabra. CRITERIO de la base: terminos que identifican la AGENDA de la marca con
 poca ambiguedad. Los nombres de UNA palabra muy genericos ("leon", "santos") van en
 FRASE ("club leon", "santos laguna") para no arrastrar historias de otra agenda; los
 clusters SIN marca (Trends/agencias) se asignan por este vocabulario y un falso
@@ -24,7 +24,7 @@ positivo cambia de marca la historia, no solo su score.
 
 from __future__ import annotations
 
-# Vocabulario semilla por marca (id canonico → palabras de interes). Sin acentos:
+# Vocabulario base por marca (id canonico → palabras de interes). Sin acentos:
 # el matching normaliza el texto antes de comparar.
 _PALABRAS_POR_MARCA: dict[str, frozenset[str]] = {
     # ------------------------------------------------------------------ #

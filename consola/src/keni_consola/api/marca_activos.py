@@ -54,7 +54,7 @@ def _validar_marca(marca: object) -> tuple[str | None, str | None]:
 
 
 def _normalizar_lineas(valor: object) -> list[str]:
-    """Lista de ids de linea (etiquetas clase=vertical) saneada: strings no vacios, sin duplicados."""
+    """Lista de ids de linea (etiquetas clase=vertical) normalizada: strings no vacios, sin duplicados."""
     if not isinstance(valor, list):
         return []
     vistas: list[str] = []

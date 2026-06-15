@@ -106,7 +106,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # (velocidad, curvas de crecimiento, correlación) por marca×red×formato. A diferencia de
     # `metricas_cache` (valor ACTUAL, sobrescrito), esta tabla es la SERIE histórica; a
     # diferencia de `comercial_snapshots` (seguimiento de OBJETIVOS de piezas comerciales),
-    # esta es GENERAL. El crecimiento lo acota la poda por retención (ADR 0007).
+    # esta es GENERAL. El crecimiento lo acota la limpieza por retención (ADR 0007).
     """
     CREATE TABLE IF NOT EXISTS metricas_pieza_snapshots (
         id                             TEXT PRIMARY KEY,
@@ -249,7 +249,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     )
     """,
     # GRID POR MARCA: cada marca tiene su propia rejilla (franjas, turnos, coordinacion). La
-    # `marca` la sembramos/filtramos en toda lectura/escritura del grid; "" = sin marca (solo
+    # `marca` la fijamos/filtramos en toda lectura/escritura del grid; "" = sin marca (solo
     # filas legadas antes de la migracion, backfilled a 'claro-sports'). La unicidad del NOMBRE
     # de franja es POR (marca, lunes, nombre) — dos marcas pueden tener su propia "Mañana" la
     # misma semana — y vive como indice unico idempotente (`idx_rota_franjas_uniq`), no inline
@@ -545,7 +545,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # "Real Oviedo", "Anfitriones", "PATY CANTU", "MUNDIAL", "LA SELECCIÓN EN TUS MANOS",
     # "IDEAS SIN DERECHOS") es un PROGRAMA con sus propias piezas. Aqui catalogamos los
     # programas para tener color/descripcion/fechas vivas; `rota_piezas.programa` referencia
-    # a este catalogo POR NOMBRE (case-sensitive) y NO por id (defensa: una pieza huerfana
+    # a este catalogo POR NOMBRE (case-sensitive) y NO por id (defensa: una pieza suelta
     # con un programa borrado sigue mostrandose). `nombre` UNIQUE (case-insensitive lo
     # garantiza la capa API/repos). `activo` para esconder del selector sin perder histórico.
     """
@@ -682,7 +682,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # (fuente de verdad del sondeo), `spec` el JSON serializable para reconstruir el job
     # (prompt + post-procesado + cwd) en el worker, `estado` el del ciclo de la cola
     # (pendiente|reclamado|terminado), `claimed_at`/`worker` para depurar y reaprovechar
-    # jobs huerfanos (un worker que muere a media ejecucion). `cancelado` lo marca el back
+    # jobs sueltos (un worker que muere a media ejecucion). `cancelado` lo marca el back
     # al cancelar: el worker lo lee y mata el arbol (cancelacion cross-proceso).
     """
     CREATE TABLE IF NOT EXISTS jobs (
@@ -712,7 +712,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_jobs_estado_prioridad "
     "ON jobs (estado, prioridad DESC, creado ASC)",
     # INTENTOS de ejecucion (anti crash-loop): se incrementa en cada reclamo (normal o
-    # re-reclamo de huerfano). Al superar `KENI_JOBS_MAX_INTENTOS`, el re-reclamo DESCARTA
+    # re-reclamo de suelto). Al superar `KENI_JOBS_MAX_INTENTOS`, el re-reclamo DESCARTA
     # el job en vez de re-ejecutarlo para siempre. Migracion idempotente.
     "ALTER TABLE jobs ADD COLUMN IF NOT EXISTS intentos INTEGER NOT NULL DEFAULT 0",
     # LEDGER de gasto de IA (economia de tokens, ver `presupuesto_ia.py`): una fila por
@@ -1193,7 +1193,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # Noticias de algoritmo ya INGERIDAS y CLASIFICADAS (a diferencia de los items RSS, que se
     # leen en vivo y no se persisten): aqui SI se persisten para poder ordenarlas por
     # importancia, mostrarlas en el panel y enlazarlas a la texto. `importancia` es un
-    # score HEURISTICO (entero comparable) y `nivel` su tramo (alta/media/baja); `senales` son
+    # score HEURISTICO (entero comparable) y `nivel` su intervalo (alta/media/baja); `senales` son
     # las palabras clave que dispararon el score (JSON, para el "por que" honesto, sin inventar).
     # `es_cambio` marca lo que parece un cambio de algoritmo confirmado (candidato a la ficha).
     # Dedup por (fuente_id, clave) — la misma identidad estable que usa el RSS.
@@ -1461,7 +1461,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # HISTORIAL por barrido (observabilidad): `daemon_latidos` solo guarda el RESUMEN acumulado
     # (ultimo ok/error + contadores); esta tabla deja una fila POR BARRIDO ejecutado para poder
     # ver la traza reciente de cada daemon (que hizo / cuanto tardo / si fallo). La escribe el
-    # hook comun `latidos.barrido` (best-effort) y se PODA con cota dura por daemon (los
+    # hook comun `latidos.barrido` (best-effort) y se LIMPIA con cota dura por daemon (los
     # `_MAX_BARRIDOS_POR_DAEMON` mas recientes; ver `db_latidos.registrar_barrido`). `id` TEXT
     # (uuid) como el resto del esquema; `ok` 1/0; `resumen` texto corto (qué hizo / nº items,
     # lo aporta el sweep si devuelve un str). Migracion 0034 para BDs ya creadas.
@@ -1476,7 +1476,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         error_txt   TEXT NOT NULL DEFAULT ''
     )
     """,
-    # Listado/poda por daemon, recientes primero (desempate por id para orden estable).
+    # Listado/limpieza por daemon, recientes primero (desempate por id para orden estable).
     "CREATE INDEX IF NOT EXISTS idx_daemon_barridos_daemon_ts "
     "ON daemon_barridos (daemon, ts_inicio DESC, id DESC)",
 )

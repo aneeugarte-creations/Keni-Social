@@ -268,7 +268,7 @@ def borrar_pieza_rota(pieza_id: str) -> bool:
     """Borra una pieza; True si existia, False si no.
 
     NO arrastra cascada desde `rota_eventos`: borrar un evento NO borra sus piezas (decision
-    de la API). Las piezas huerfanas tras borrar el evento siguen accesibles via su programa.
+    de la API). Las piezas sueltas tras borrar el evento siguen accesibles via su programa.
     """
     con = _conectar()
     try:

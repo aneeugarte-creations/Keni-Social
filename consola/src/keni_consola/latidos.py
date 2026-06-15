@@ -3,7 +3,7 @@
 QUÉ RESUELVE (auditoría 2026-06, observabilidad): hasta ahora el único signo de vida de
 los daemons era el log. Si un hilo moría o un barrido llevaba horas fallando, nadie lo
 veía sin entrar por ssh. Con esto cada daemon deja un LATIDO persistido (tabla
-`daemon_latidos`) en cada vuelta del bucle y en cada barrido, y el panel Sistema lo
+`daemon_latidos`) en cada iteración del bucle y en cada barrido, y el panel Sistema lo
 muestra (endpoint `/api/sistema/daemons`), juzgando "atrasado" sin conocer la config.
 
 CONTRATO DE SEGURIDAD: registrar un latido NUNCA rompe un barrido ni mata un hilo.
@@ -44,7 +44,7 @@ _ALIAS = {
 # (el upsert nunca borra) pero ya no hay hilo que las actualice; la sonda del panel
 # (`api.sistema.sonda_daemons`) las IGNORA para no pintar falsos "atrasado".
 #   - "pipeline": el hilo único del pipeline se partió en "investigacion" + "produccion"
-#     (cada loop late con su propio nombre); la fila vieja quedó huérfana.
+#     (cada loop late con su propio nombre); la fila vieja quedó suelta.
 RETIRADOS = frozenset({"pipeline"})
 
 # Daemons cuyo bucle corre sobre `daemon_util.bucle_gateado` y por tanto CONSUMEN el flag
@@ -109,7 +109,7 @@ GASTA_TOKENS = frozenset({"investigacion", "produccion"})
 #   - ia:  investigacion (loop de criba/Verificar -> motor investigacion), produccion (loop de Redactar/Ilustrar
 #          -> motor produccion).
 #   - maquina/investigacion:  ingesta (recolección RSS), trends (Google Trends), algoritmos (feeds
-#          de algoritmo), noticias_gc (poda el POOL de noticias que alimenta reutilizar).
+#          de algoritmo), noticias_gc (limpia el POOL de noticias que alimenta reutilizar).
 #   - maquina/produccion:     programador (publica la parrilla), vencimientos (escáner de eventos
 #          que dispara producción por caducidad).
 #   - sistema/None:  reaper, media_gc, metricas, metricas_piezas, alertas_rendimiento, patrones
@@ -235,7 +235,7 @@ def nombre_de_sweep(sweep_fn: Callable[[], Any]) -> str:
 
 
 def ciclo(daemon: str, *, activo: bool, intervalo_seg: float, tick_seg: float) -> None:
-    """Latido de CICLO (el bucle dio una vuelta), throttleado y best-effort."""
+    """Latido de CICLO (el bucle dio una iteración), throttleado y best-effort."""
     ahora = time.monotonic()
     if ahora - _ultimo_ciclo.get(daemon, 0.0) < _MIN_ENTRE_CICLOS_SEG:
         return
@@ -264,7 +264,7 @@ def barrido(
 
     Hace DOS cosas, cada una best-effort e independiente: (1) actualiza el RESUMEN acumulado
     del daemon en `daemon_latidos` (ultimo ok/error + contadores) y (2) deja una fila de
-    HISTORIAL en `daemon_barridos` (una por barrido, podada con cota dura). `resumen` es un
+    HISTORIAL en `daemon_barridos` (una por barrido, recortada con cota dura). `resumen` es un
     texto corto opcional (qué hizo / nº items) que aporta el bucle si el sweep devuelve un str.
     """
     try:

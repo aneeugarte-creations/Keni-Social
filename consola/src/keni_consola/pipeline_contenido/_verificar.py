@@ -193,8 +193,8 @@ def lanzar_verificar_fuente(
         contenido_id=tema_id,
         # CLAVE ESTABLE por tema: el prompt lleva un nonce por llamada (anti-inyección) y la
         # clave por defecto (hash del prompt) nunca coincidiría. Con esta, un re-lanzamiento de
-        # la criba del MISMO tema mientras hay una en vuelo devuelve ese run (cinturón además
-        # del marcador `en_curso`, que un saneo/reset puede limpiar a destiempo).
+        # la criba del MISMO tema mientras hay una en curso devuelve ese run (cinturón además
+        # del marcador `en_curso`, que una reparación/reset puede limpiar a destiempo).
         clave_idem=generaciones.clave_idempotencia(
             (autor or {}).get("id", ""), TIPO_PIPELINE, marca, "qa-fuente", tema_id
         ),
@@ -310,8 +310,8 @@ def lanzar_verificar_cluster(
 def temas_sin_verificar(marca: str | None = None) -> list[dict[str, Any]]:
     """Temas del pipeline SIN veredicto de QA todavía (criba pendiente). Best-effort.
 
-    Excluye los `en_curso` (su QA está en vuelo) y los ya cribados (`no_verificado`/`problema`).
-    SIN recorte: el volumen lo acota la ADMISIÓN (el gate serial en vuelo por marca); aquí solo
+    Excluye los `en_curso` (su QA está en curso) y los ya cribados (`no_verificado`/`problema`).
+    SIN recorte: el volumen lo acota la ADMISIÓN (el gate serial en curso por marca); aquí solo
     puede haber, como mucho, lo admitido. La cola de generación pone el backpressure real
     (`ColaLlenaError` corta la fase y el siguiente tick reintenta).
     """

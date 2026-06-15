@@ -17,13 +17,13 @@ from .tiempo import ahora_iso
 _MAX_ERROR_TXT = 500
 # Tope del `resumen` (texto corto de qué hizo el barrido / nº items): el panel muestra una línea.
 _MAX_RESUMEN = 300
-# COTA dura del historial por daemon (`daemon_barridos`): se poda a los N barridos mas recientes
+# COTA dura del historial por daemon (`daemon_barridos`): se recorta a los N barridos mas recientes
 # en cada insercion, asi la tabla no crece sin limite (un daemon barre cada pocos minutos).
 _MAX_BARRIDOS_POR_DAEMON = 50
 
 
 def latido_ciclo(daemon: str, *, activo: bool, intervalo_seg: float, tick_seg: float) -> None:
-    """Registra que el BUCLE del daemon dio una vuelta (vivo), corra o no el sweep.
+    """Registra que el BUCLE del daemon dio una iteración (vivo), corra o no el sweep.
 
     Upsert de `visto`/`activo`/`intervalo_seg`/`tick_seg`; no toca los campos de barrido.
     """
@@ -93,7 +93,7 @@ def latido_barrido(
 
 
 # --------------------------------------------------------------------------- #
-# Historial por barrido (`daemon_barridos`): una fila por sweep + poda con cota #
+# Historial por barrido (`daemon_barridos`): una fila por sweep + recorte con cota #
 # --------------------------------------------------------------------------- #
 
 
@@ -106,10 +106,10 @@ def registrar_barrido(
     resumen: str = "",
     error_txt: str = "",
 ) -> None:
-    """Inserta UNA fila de historial por el barrido de `daemon` y poda el exceso.
+    """Inserta UNA fila de historial por el barrido de `daemon` y recorta el exceso.
 
     `ts_inicio` es el instante (ISO canon) del barrido; por defecto el actual (los sweeps son
-    cortos, asi que `ahora` ≈ inicio). Tras insertar se PODA el daemon a sus
+    cortos, asi que `ahora` ≈ inicio). Tras insertar se RECORTA el daemon a sus
     `_MAX_BARRIDOS_POR_DAEMON` barridos mas recientes (cota dura, en la misma conexion). `id`
     es un uuid (como el resto del esquema); `resumen`/`error_txt` se truncan defensivamente.
     """
@@ -124,7 +124,7 @@ def registrar_barrido(
             "error_txt) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (bid, daemon, ts, int(duracion_ms), 1 if ok else 0, res, err),
         )
-        # Poda: conserva solo los N mas recientes de ESTE daemon (recientes primero, desempate
+        # Recorte: conserva solo los N mas recientes de ESTE daemon (recientes primero, desempate
         # por id para un orden estable cuando el ts coincide al segundo).
         con.execute(
             "DELETE FROM daemon_barridos WHERE daemon = ? AND id NOT IN ("

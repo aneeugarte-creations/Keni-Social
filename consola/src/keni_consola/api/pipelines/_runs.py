@@ -32,7 +32,7 @@ from ._comun import (
 def _cluster_publico(cluster: dict | None) -> dict | None:
     """Forma reducida de la HISTORIA (cluster) de la que nació el tema, para la UI. None si no hay.
 
-    Es la PRUEBA de que hubo dedup + priorización por IA aguas arriba (pool de noticias): cuántas
+    Es la PRUEBA de que hubo dedup + priorización por IA antes en el flujo (pool de noticias): cuántas
     fuentes corroboran, cuántas notas se agruparon (fusionar), el score de Priorizar, la verificación
     por corroboración y si fue breaking. La vista lo pinta junto a la etapa Priorizar.
     """

@@ -188,7 +188,7 @@ def crear_publicacion(
     """Crea una publicacion (padre `contenido` + fila `contenido_plataforma` es_publicacion=1).
 
     ATOMICA: padre y fila por plataforma se insertan en UNA transaccion (antes eran dos:
-    un fallo entre ambas dejaba un `contenido` huerfano sin fila por plataforma).
+    un fallo entre ambas dejaba un `contenido` suelto sin fila por plataforma).
 
     Acepta `id`/`fecha_creacion` opcionales (preservaban identidad al migrar desde el YAML
     legado, hoy retirado). El `estado` editorial se traduce al de
@@ -732,7 +732,7 @@ def borrar_publicacion(publicacion_id: str) -> bool:
     Dos casos (modelo consolidado: publicacion = fila `contenido_plataforma` con
     `es_publicacion=1` colgada de un `contenido`):
       - Publicacion SUELTA (su padre 1:1 solo contiene esta fila): se borra el padre, que
-        arrastra la fila (no deja un `contenido` huerfano y vacio). Es el caso de la
+        arrastra la fila (no deja un `contenido` suelto y vacio). Es el caso de la
         generacion manual de copy de siempre.
       - Borrador ANIDADO bajo un tema (el padre tiene MAS filas por plataforma, p.ej. un tema
         importado/Radar con su copy auto-generado): se borra SOLO esta fila, conservando el

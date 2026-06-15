@@ -1,4 +1,4 @@
-"""Semilla idempotente de LÍNEAS de contenido (etiquetas clase 'vertical') y ORÍGENES
+"""Inicializacion idempotente de LÍNEAS de contenido (etiquetas clase 'vertical') y ORÍGENES
 (clase 'origen') por marca.
 
 - Las LÍNEAS las dicta el equipo. Solo UnoTV está definida (la dio la dirección): virales,
@@ -125,7 +125,7 @@ def _backfill_ttl_si_defaults(*, nombre: str, clase: str, marca: str, ttl_dias: 
 
 
 def sembrar_lineas() -> int:
-    """Siembra líneas (vertical) por marca y orígenes (global). Devuelve cuántas creó.
+    """Inicializa líneas (vertical) por marca y orígenes (global). Devuelve cuántas creó.
 
     Idempotente y tolerante a fallos por etiqueta (no aborta el resto). Pensada para el
     bootstrap del arranque.
@@ -145,15 +145,15 @@ def sembrar_lineas() -> int:
                     ):
                         actualizadas += 1
             except Exception:  # noqa: BLE001 -- una etiqueta no debe romper el resto
-                _log.warning("semilla líneas: no se pudo crear/actualizar %s/%s", marca, nombre, exc_info=True)
+                _log.warning("inicializacion líneas: no se pudo crear/actualizar %s/%s", marca, nombre, exc_info=True)
     for nombre in ORIGENES_GLOBALES:
         try:
             if _crear_si_falta(nombre=nombre, clase="origen", marca=""):
                 creadas += 1
         except Exception:  # noqa: BLE001
-            _log.warning("semilla orígenes: no se pudo crear %s", nombre, exc_info=True)
+            _log.warning("inicializacion orígenes: no se pudo crear %s", nombre, exc_info=True)
     if creadas or actualizadas:
-        _log.info("semilla líneas/orígenes: %d creadas, %d actualizadas (TTL backfill)", creadas, actualizadas)
+        _log.info("inicializacion líneas/orígenes: %d creadas, %d actualizadas (TTL backfill)", creadas, actualizadas)
     return creadas
 
 
@@ -188,8 +188,8 @@ def _es_google_news(preset: dict) -> bool:
     """True si el preset es un feed de Google News (`news.google.com`).
 
     Google News solo entrega titular + snippet corto (sin `content:encoded`) tras un redirect
-    de consentimiento: aporta ruido sin cuerpo para el copy. La señal de tendencia ya la cubre
-    Google Trends, así que NO se auto-siembran. Siguen en el catálogo (activables a mano).
+    de consentimiento: aporta contenido irrelevante sin cuerpo para el copy. La señal de tendencia ya la cubre
+    Google Trends, así que NO se auto-inicializan. Siguen en el catálogo (activables a mano).
     """
     return "news.google.com" in (preset.get("url") or "")
 
@@ -197,8 +197,8 @@ def _es_google_news(preset: dict) -> bool:
 def _preset_va_en_seed(preset: dict) -> bool:
     """True si el preset debe activarse en el auto-seed por defecto.
 
-    Función PURA (sin red ni BD), reutilizable en tests. La semilla (`fuentes_presets.json`) YA
-    es el conjunto curado que el equipo dejó valioso en producción, así que se siembra ENTERA,
+    Función PURA (sin red ni BD), reutilizable en tests. El catálogo base (`fuentes_presets.json`) YA
+    es el conjunto curado que el equipo dejó valioso en producción, así que se carga ENTERO,
     salvo los dos guardas defensivos: NO plantillas (URL con variable sin sustituir) y NO Google
     News (snippet sin cuerpo; la tendencia la cubre Google Trends). El catálogo de hoy no trae
     ninguno de los dos, pero los guardas se mantienen por si se reintroducen.
@@ -210,18 +210,18 @@ def sembrar_fuentes_ingesta() -> int:
     """Activa los presets de feeds como `fuentes_rss` SI el catálogo está vacío (idempotente).
 
     Garantiza cobertura inicial real para que el motor de ingesta no arranque vacío. Solo
-    siembra cuando NO hay ninguna `fuentes_rss` (no pisa un catálogo que el equipo ya curó).
+    inicializa cuando NO hay ninguna `fuentes_rss` (no pisa un catálogo que el equipo ya curó).
     Idempotente por URL: omite cualquier preset cuya URL ya exista. Salta las PLANTILLAS (URL
     con variable) y los presets fuera del subset por defecto (`_preset_va_en_seed`): el catálogo
-    completo (cientos de presets verificados) se activa a mano desde la UI; aquí sembramos un
-    subconjunto sensato por marca para arrancar con cobertura útil sin ruido. Fija
+    completo (cientos de presets verificados) se activa a mano desde la UI; aquí activamos un
+    subconjunto sensato por marca para arrancar con cobertura útil sin contenido irrelevante. Fija
     `categoria`/`marca_sugerida`/`prioridad` para la planificación. Best-effort por preset.
     """
     try:
         if repos.contar_fuentes_rss() > 0:
             return 0
-    except Exception:  # noqa: BLE001 -- si no se puede leer, no sembramos (no rompe el arranque)
-        _log.warning("semilla feeds ingesta: no se pudo consultar fuentes_rss", exc_info=True)
+    except Exception:  # noqa: BLE001 -- si no se puede leer, no inicializamos (no rompe el arranque)
+        _log.warning("inicializacion feeds ingesta: no se pudo consultar fuentes_rss", exc_info=True)
         return 0
 
     existentes: set[str] = set()
@@ -251,8 +251,8 @@ def sembrar_fuentes_ingesta() -> int:
             existentes.add(url)
             creadas += 1
         except Exception:  # noqa: BLE001 -- un preset no debe romper el resto
-            _log.warning("semilla feeds ingesta: no se pudo crear %s", url, exc_info=True)
+            _log.warning("inicializacion feeds ingesta: no se pudo crear %s", url, exc_info=True)
 
     if creadas:
-        _log.info("semilla feeds ingesta: %d fuente(s) activadas desde presets.", creadas)
+        _log.info("inicializacion feeds ingesta: %d fuente(s) activadas desde presets.", creadas)
     return creadas

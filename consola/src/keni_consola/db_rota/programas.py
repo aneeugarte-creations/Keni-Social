@@ -16,7 +16,7 @@ from ._comun import (
 # CANTU", "MUNDIAL", "LA SELECCIÓN EN TUS MANOS", "IDEAS SIN DERECHOS") es un PROGRAMA.
 #
 # IMPORTANTE: las piezas siguen referenciando al programa POR NOMBRE (no por id) para que
-# una pieza huerfana de un programa borrado siga apareciendo en la parrilla con su texto
+# una pieza suelta de un programa borrado siga apareciendo en la parrilla con su texto
 # original. Al RENOMBRAR un programa, la API ejecuta una cascada (UPDATE rota_piezas SET
 # programa = ? WHERE programa = ?) en la MISMA transaccion: ver `actualizar_programa_rota`.
 
@@ -170,7 +170,7 @@ def actualizar_programa_rota(
     ningun escenario deja piezas referenciando a un nombre que ya no existe.
 
     NOTA: la unicidad case-insensitive y el control de existencia los valida la capa API
-    ANTES de llamar (defensa en profundidad: el UNIQUE del DDL es el ultimo cerrojo).
+    ANTES de llamar (defensa en profundidad: el UNIQUE del DDL es el ultimo bloqueo).
     """
     cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_PROGRAMA_ROTA}
     if not cambios:

@@ -39,7 +39,7 @@ _RESUMEN_MAX = 500  # caracteres del resumen (tras limpiar HTML)
 # Cuerpo COMPLETO del artículo (`<content:encoded>` en RSS, `<content>` en Atom): muchos medios
 # (UnoTV, Claro Sports, Infobae, AS…) mandan la nota entera ahí, no en `<description>`. Lo
 # capturamos para que el copy se redacte sobre el texto real, no sobre el snippet. Cap generoso
-# (la nota cabe de sobra; aguas abajo `gen_dom.MAX_TEXTO` la vuelve a acotar si hiciera falta).
+# (la nota cabe de sobra; después (en el flujo) `gen_dom.MAX_TEXTO` la vuelve a acotar si hiciera falta).
 _CUERPO_MAX = 8000
 # Cola de WordPress en el cuerpo/resumen: "The post <título> appeared first on <medio>." y la
 # marca de truncado "[…]"/"[...]" del excerpt. Se quitan para no ensuciar el material del modelo.
@@ -459,7 +459,7 @@ def parsear_feed(xml: str, *, max_items: int = _MAX_ITEMS) -> list[dict[str, str
                 "fecha": fecha,
                 "clave": _clave_item(clave_feed, enlace),
                 # Feeds WordPress (UnoTV…) no mandan enclosure/media:content: la foto del
-                # artículo va como primer <img> del content:encoded. Sin ese rescate, los
+                # artículo va como primer <img> del content:encoded. Sin esa recuperación, los
                 # items de marca PROPIA nacían sin imagen y la pieza no la heredaba.
                 "imagen": _imagen_item(entrada) or _imagen_de_html(cuerpo_html),
             }

@@ -1,4 +1,4 @@
-"""Pipeline de contenido CI→CD→QA por marca (fase3 auto-produccion, Flujo "tubería").
+"""Pipeline de contenido CI→CD→QA por marca (fase3 auto-produccion).
 
 BARREL del paquete. La implementación está repartida en submódulos por ETAPA —para que cada
 fase se lea y testee aislada— y este `__init__` REEXPORTA toda la superficie pública (Y los
@@ -58,9 +58,9 @@ SEGURO POR DISEÑO (CONSERVADOR)
     ausente). El hilo arranca SIEMPRE y comprueba el flag en cada ciclo (apagar/encender en
     runtime sin reiniciar).
   - SOLO LECTURA DE FUENTES: la ingesta solo LEE feeds RSS y resuelve `og:image`; el guard
-    SSRF de los feeds sigue aplicando aguas arriba (`http_feed`).
+    SSRF de los feeds sigue aplicando antes en el flujo (`http_feed`).
   - CAP por barrido y por marca (`KENI_PIPELINE_MAX`, def 3): cada item lanza un `claude -p`;
-    el cap evita avalanchas. El cap del worker (`KENI_MAX_JOBS`) sigue aplicando aguas abajo.
+    el cap evita saturación. El cap del worker (`KENI_MAX_JOBS`) sigue aplicando después en el flujo.
   - DEDUP: al crear el tema (CI), el item del feed se marca USADO (`repos.marcar_item`); el
     siguiente barrido lo salta. La ingesta lee `claves_vistas` para no re-elegir lo ya usado.
   - NO PUBLICA: el borrador nace `borrador` y pasa por la MISMA revisión/aprobación humana;

@@ -54,7 +54,7 @@ VEREDICTO_REVISAR = "revisar"
 # el solapamiento refleja entidades y palabras con carga, no relleno gramatical.
 _LARGO_TOKEN_CONTENIDO = 4
 # Mínimos para que el contraste signifique algo: por debajo, un copy/nota corto comparte poco por
-# puro azar y avisar sería ruido. Sólo notas y copys SUSTANCIALES entran al chequeo.
+# puro azar y avisar sería irrelevante. Sólo notas y copys SUSTANCIALES entran al chequeo.
 _MIN_TOKENS_COPY = 12
 _MIN_TOKENS_NOTA = 20
 

@@ -139,7 +139,7 @@ def linea_base(mensaje: str = "linea base de la Biblioteca") -> int:
 
     Garantiza que todo documento tenga un HEAD git, para que el modelo de publicacion sirva su
     snapshot estable (no el working copy que el autosave reescribe). Pensado para correr tras
-    la siembra/importacion, que escribe `.md` sin commitear. Best-effort e idempotente: si el
+    la inicializacion/importacion, que escribe `.md` sin commitear. Best-effort e idempotente: si el
     versionado esta apagado, no hay repo posible o no hay nada pendiente, devuelve 0 sin tocar
     nada. Devuelve cuantos `.md` quedaron pendientes de versionar en esta pasada.
     """

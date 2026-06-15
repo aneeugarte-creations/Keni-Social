@@ -23,9 +23,9 @@ Cada persona tiene:
                   operativa y fotografía/QA trabajan en Claro Sports pero reportan a la
                   dirección, no al coordinador de redes.
 
-`nombre`/`manager_id` se siembran SOLO si estan vacios (segunda pasada), para no pisar lo
+`nombre`/`manager_id` se rellenan SOLO si estan vacios (segunda pasada), para no pisar lo
 que el admin edite desde /usuarios. Asi el organigrama queda definido de fabrica pero es
-editable y la semilla sigue siendo idempotente.
+editable y la inicializacion sigue siendo idempotente.
 
 
 Idempotente: si el usuario `usuario` ya existe, NO se borra ni se pisa la contrasena;
@@ -106,7 +106,7 @@ EQUIPO_AMX: tuple[
 
 # Usuarios cuyo `puede_coordinar` se sobreescribe INCONDICIONALMENTE en cada seed (ola
 # "coord"). Es el listado canonico que pide el negocio: el coordinador de redes (admin de redes
-# ClaroSports), fotografía/QA, la coordinadora operativa. El resto se sembra
+# ClaroSports), fotografía/QA, la coordinadora operativa. El resto se rellena
 # correctivamente solo si nadie lo ha tocado (ver `sembrar_equipo`).
 _USUARIOS_PUEDE_COORDINAR_FORZADO: frozenset[str] = frozenset({"elias", "ale", "mariana"})
 
@@ -130,7 +130,7 @@ def sembrar_equipo() -> None:
     - `puede_coordinar` (ola "coord"): para los 3 usuarios canonicos (el coordinador de
       redes, fotografía/QA y la coordinadora operativa) se sobreescribe INCONDICIONALMENTE en cada seed (garantiza el estado
       deseado tras el deploy aunque el admin lo hubiera editado). Para el resto, solo
-      se sembra correctivamente si nadie lo ha tocado (es decir, si difiere del seed Y
+      se rellena correctivamente si nadie lo ha tocado (es decir, si difiere del seed Y
       el valor actual es el default `False`); asi un admin que lo haya activado a mano
       no pierde su cambio.
     - Caso especial de la creativa de Fundación (sacarla del calendario de ClaroSports): se sobreescribe
@@ -213,7 +213,7 @@ def sembrar_equipo() -> None:
             nuevos += 1
 
     # Segunda pasada (organigrama): ya existen los 16, asi que sus ids son resolubles.
-    # Sembramos `nombre` y `manager_id` SOLO si estan vacios, para no pisar nada que el
+    # Rellenamos `nombre` y `manager_id` SOLO si estan vacios, para no pisar nada que el
     # admin haya editado a mano (idempotente: la segunda corrida no cambia nada). El
     # `manager` del seed es el `usuario` (login) del superior; lo traducimos a su id.
     por_usuario = {u["usuario"]: u for u in listar_usuarios()}

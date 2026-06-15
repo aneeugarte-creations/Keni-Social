@@ -44,11 +44,11 @@ __all__ = ["ejecutar_avance", "piezas_para_avance"]
 _log = logging.getLogger("keni_consola.pipeline_contenido")
 
 # Minutos sin ediciones antes de mover una pieza: si `fecha_actualizacion` es más reciente,
-# alguien (o la propia tubería) sigue trabajándola y se espera al siguiente barrido.
+# alguien (o el propio pipeline) sigue trabajándola y se espera al siguiente barrido.
 _REPOSO_MINUTOS = 10
 
 # Cap de envíos por barrido: acota el trabajo de un tick (el daemon barre cada pocos
-# segundos, así que un backlog grande se drena en minutos igualmente).
+# segundos, así que un backlog grande se vacía en minutos igualmente).
 _MAX_POR_BARRIDO = 50
 
 

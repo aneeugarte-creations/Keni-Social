@@ -1,14 +1,14 @@
 """GENERACIONES · ALMACÉN: localización del store, escritura atómica, CRUD, idempotencia,
-poda de retención y reaper de zombis.
+limpieza de retención y recolector de colgadas.
 
 Submódulo interno del paquete `generaciones`. El registro YAML es la FUENTE DE VERDAD del
 sondeo; aquí vive todo lo que LEE/ESCRIBE ese store (un `<id>.yaml` por generación) y las
-políticas que lo acotan (poda #128, reaper de `ejecutando` colgadas). El `__init__.py`
+políticas que lo acotan (limpieza #128, recolector de `ejecutando` colgadas). El `__init__.py`
 re-exporta la superficie pública estable (`crear`, `actualizar`, `obtener`, `listar`,
 `contar`, `crear_idempotente`, `podar_generaciones`, `reclamar_zombis`, `raiz`,
 `clave_idempotencia`).
 
-SEGURIDAD: escritura atomica (tmp + os.replace); el id de un registro se sanea contra
+SEGURIDAD: escritura atomica (tmp + os.replace); el id de un registro se valida contra
 traversal al leer; sin shell. Errores en espanol, sin tracebacks.
 """
 
@@ -191,7 +191,7 @@ def _indexar(pub: dict[str, Any]) -> None:
 
 
 def _desindexar(gen_id: str) -> None:
-    """Borra la fila de indice de una generacion (al borrar/podar su YAML). Best-effort."""
+    """Borra la fila de indice de una generacion (al borrar/limpiar su YAML). Best-effort."""
     if not isinstance(gen_id, str) or not gen_id:
         return
     try:
@@ -350,7 +350,7 @@ def crear_idempotente(clave: str, datos: dict[str, Any]) -> tuple[dict[str, Any]
     crearlo. El ganador acuña un `gen_id`, escribe el registro, sella el indice con ese id y
     devuelve `(gen, True)` (debe encolar). Un llamante CONCURRENTE que choca con el `O_EXCL` lee
     el `gen_id` del indice; si esa generacion EXISTE y NO es terminal, devuelve `(gen_existente,
-    False)` (NO encola: comparte el run en vuelo). Si el indice apunta a una generacion ya
+    False)` (NO encola: comparte el run en curso). Si el indice apunta a una generacion ya
     TERMINAL o desaparecida (claim viejo de un run que ya acabo), el indice se RECLAMA para este
     lanzamiento nuevo (un re-lanzamiento legitimo tras completar debe poder correr).
 
@@ -361,7 +361,7 @@ def crear_idempotente(clave: str, datos: dict[str, Any]) -> tuple[dict[str, Any]
     base.mkdir(parents=True, exist_ok=True)
     ruta_idx = _ruta_idem(clave)
     # Reintento acotado: cubre la carrera "el ganador aun no sello el id" y el reciclaje de un
-    # claim terminal. En la practica converge en 1-2 vueltas; el tope evita un bucle infinito.
+    # claim terminal. En la practica converge en 1-2 iteraciones; el tope evita un bucle infinito.
     for _ in range(50):
         try:
             fd = os.open(ruta_idx, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
@@ -370,10 +370,10 @@ def crear_idempotente(clave: str, datos: dict[str, Any]) -> tuple[dict[str, Any]
             if gen_id_existente:
                 existente = obtener(gen_id_existente)
                 if existente is not None and existente.get("estado") not in _ESTADOS_TERMINALES:
-                    return existente, False  # run en vuelo: comparte, NO encoles otro
+                    return existente, False  # run en curso: comparte, NO encoles otro
             # Claim viejo (terminal/ausente) o aun sin sellar: intenta reclamarlo borrandolo y
             # reintentando la creacion exclusiva. Si otro lo recrea entre medias, la siguiente
-            # vuelta lo vera y compartira (o reciclara) segun su estado.
+            # iteracion lo vera y compartira (o reciclara) segun su estado.
             try:
                 os.unlink(ruta_idx)
             except FileNotFoundError:
@@ -432,7 +432,7 @@ def actualizar(gen_id: str, cambios: dict[str, Any]) -> dict[str, Any]:
 
     HOOK DE CIERRE (economia de tokens): cuando `cambios` lleva el registro a un estado
     TERMINAL, vuelca su gasto (tokens/coste de `metricas`) al ledger `gasto_ia` via
-    `presupuesto_ia.registrar_cierre`. Este es el embudo UNICO por el que TODOS los caminos
+    `presupuesto_ia.registrar_cierre`. Este es el punto UNICO por el que TODOS los caminos
     (claude, imagen, procesos, fakes de tests) fijan el terminal, asi que el ledger no
     depende de cada lanzador. Best-effort e idempotente (UPSERT por gen_id): un re-cierre
     (reintento/re-encolado tras deploy) actualiza la fila, no duplica gasto.
@@ -488,8 +488,8 @@ def _todas_ordenadas() -> list[dict[str, Any]]:
 
     Las generaciones NO viven en el indice SQLite (son estado efimero de ejecucion en
     su propio almacen), asi que el orden/recorte se hace en memoria sobre el glob. El
-    volumen lo ACOTA la poda de retencion (`podar_generaciones`, #128): sin ella el
-    almacen y este escaneo crecian sin tope. Con la poda activa el conjunto queda en el
+    volumen lo ACOTA la limpieza de retencion (`podar_generaciones`, #128): sin ella el
+    almacen y este escaneo crecian sin tope. Con la limpieza activa el conjunto queda en el
     orden de `KENI_GENERACIONES_RETENCION_MAX` (def 2000), un escaneo barato.
 
     SEGUIMIENTO (no en este cambio, bajo riesgo): este metodo parsea TODOS los .yaml en
@@ -497,7 +497,7 @@ def _todas_ordenadas() -> list[dict[str, Any]]:
     el orden CONTRACTUAL es por `fecha_inicio` (campo DENTRO del YAML), que difiere del
     mtime (el mtime cambia en cada `actualizar`); ordenar por mtime alteraria la semantica
     visible. La via correcta es un indice (un campo/columna `fecha_inicio` indexado) para
-    paginar sin parsear todo; queda pendiente. De momento la poda basta para acotar el coste.
+    paginar sin parsear todo; queda pendiente. De momento la limpieza basta para acotar el coste.
     """
     base = raiz()
     if not base.is_dir():
@@ -578,7 +578,7 @@ def contar() -> int:
 
 
 # --------------------------------------------------------------------------- #
-# Poda de retencion: acota el almacen de registros (disco + escaneo) #128       #
+# Limpieza de retencion: acota el almacen de registros (disco + escaneo) #128    #
 # --------------------------------------------------------------------------- #
 
 # Defaults de la politica de retencion. Se leen INLINE de `os.environ` (no por
@@ -595,7 +595,7 @@ def _entero_env(nombre: str, defecto: int, *, minimo: int = 0) -> int:
     """Lee un entero >= `minimo` de `os.environ[nombre]`; cae a `defecto` si falta/inválido.
 
     Helper INLINE (no toca `config.py`, de otro agente): tolera valores ausentes, no
-    numéricos o por debajo del mínimo sin romper la poda.
+    numéricos o por debajo del mínimo sin romper la limpieza.
     """
     crudo = os.environ.get(nombre)
     if crudo is None:
@@ -626,7 +626,7 @@ def podar_generaciones(
     el patron de id (12 hex de `nuevo_id`) — nunca temporales `.tmp-*` ni nada ajeno. Tolera
     carreras (fichero ya borrado por otro): un `FileNotFoundError`/`OSError` al hacer stat o
     unlink se ignora por item, sin abortar el barrido. NO parsea los YAML (no depende de que
-    sean validos), asi un fichero corrupto no rompe la poda. Loguea el total podado.
+    sean validos), asi un fichero corrupto no rompe la limpieza. Loguea el total borrado.
 
     `dias`/`maximo`/`ahora` se inyectan en tests; por defecto salen del entorno / del reloj.
     """
@@ -657,7 +657,7 @@ def podar_generaciones(
         candidatos.append((mtime, ruta_fichero))
 
     if len(candidatos) <= max_ret:
-        return 0  # por debajo del piso: nada que podar
+        return 0  # por debajo del piso: nada que borrar
 
     # Mas reciente primero; el piso de los `max_ret` primeros queda SIEMPRE protegido.
     candidatos.sort(key=lambda par: par[0], reverse=True)
@@ -671,11 +671,11 @@ def podar_generaciones(
         except FileNotFoundError:
             continue  # carrera: otro lo borro ya; cuenta como hecho sin sumar
         except OSError:
-            _log.warning("Poda de generaciones: no se pudo borrar %s", ruta_fichero.name, exc_info=True)
+            _log.warning("Limpieza de generaciones: no se pudo borrar %s", ruta_fichero.name, exc_info=True)
             continue
         _desindexar(ruta_fichero.stem)  # quita su fila de indice (best-effort)
     if podados:
-        _log.info("Poda de generaciones: %d registro(s) viejo(s) borrado(s).", podados)
+        _log.info("Limpieza de generaciones: %d registro(s) viejo(s) borrado(s).", podados)
     return podados
 
 
@@ -684,8 +684,8 @@ def reclamar_zombis(max_edad_seg: float, *, ahora: datetime | None = None) -> in
 
     Una generacion nace `ejecutando` y solo pasa a terminal cuando corre su finalizador. Si
     el proceso que la ejecuta MUERE (reinicio/deploy, OOM, worker matado, `generar()` de
-    imagen colgado), el finalizador nunca corre y el registro queda ZOMBI en `ejecutando`
-    para siempre (el wall-timeout solo protege si el proceso sigue vivo). Este reaper barre
+    imagen colgado), el finalizador nunca corre y el registro queda COLGADO en `ejecutando`
+    para siempre (el wall-timeout solo protege si el proceso sigue vivo). Este recolector barre
     las `ejecutando` cuyo `fecha_inicio` es mas viejo que `max_edad_seg` y las cierra como
     `error`/`interrumpido`. SEGURO: `max_edad_seg` debe ser MUY superior a cualquier job real
     (que termina en <= wall-timeout), asi nunca mata uno vivo. Devuelve cuantas reclamo.
@@ -693,26 +693,26 @@ def reclamar_zombis(max_edad_seg: float, *, ahora: datetime | None = None) -> in
     `ahora` se inyecta en tests; por defecto es la hora actual. Best-effort por item: un
     fallo al parsear/actualizar uno NO aborta el barrido.
 
-    EXENTAS las generaciones cuyo job sigue PENDIENTE en la cola: no son zombis (nada llego
+    EXENTAS las generaciones cuyo job sigue PENDIENTE en la cola: no son colgadas (nada llego
     a correr ni a morir), estan esperando turno — posiblemente retenidas MAS que el TTL por
     el corte de presupuesto o el kill switch (`presupuesto_ia`), o por una cola cargada.
-    Segarlas las mataria en silencio: al reanudarse, la guardia anti-duplicado del reclamo
+    Cerrarlas las mataria en silencio: al reanudarse, la guardia anti-duplicado del reclamo
     veria el registro terminal y cerraria el job SIN ejecutarlo (trabajo perdido). Best-
-    effort: si la cola no se puede leer, se asume vacia (comportamiento anti-zombi previo).
+    effort: si la cola no se puede leer, se asume vacia (comportamiento anti-colgadas previo).
     """
     referencia = ahora if ahora is not None else datetime.now()
     try:
         from .. import repos
 
         en_cola = repos.gen_ids_jobs_pendientes()
-    except Exception:  # noqa: BLE001 -- sin lectura de la cola, mejor reaper que zombis
+    except Exception:  # noqa: BLE001 -- sin lectura de la cola, mejor recolectar que dejar colgadas
         en_cola = set()
     reclamadas = 0
     for gen in _todas_ordenadas():
         if gen.get("estado") != ESTADO_EJECUTANDO:
             continue
         if gen.get("id") in en_cola:
-            continue  # job aun pendiente: espera legitima (corte/pausa/cola), no zombi
+            continue  # job aun pendiente: espera legitima (corte/pausa/cola), no colgada
         try:
             inicio = datetime.fromisoformat(gen.get("fecha_inicio", ""))
         except ValueError:

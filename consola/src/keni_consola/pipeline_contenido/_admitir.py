@@ -364,7 +364,7 @@ def clusters_para_promover(
 
     Reusa el pool ya FUSIONADO y RANKEADO (Ola B): `listar_noticia_clusters` viene ordenado por
     score (mayor primero). Así el pipeline produce las pocas historias más relevantes por marca
-    —no un tema por cada item RSS—, que es lo que frena el volumen y respeta la jerarquización.
+    —no un tema por cada item RSS—, que es lo que limita el volumen y respeta la jerarquización.
 
     LISTÓN de producción automática (`noticias_liston.evaluar`): promover acaba en QA+copy
     (`claude -p`: coste real de tokens), así que antes de competir por plaza cada candidata debe
@@ -407,7 +407,7 @@ def clusters_para_promover(
             supera, motivo = noticias_liston.evaluar(c)
         except Exception:  # noqa: BLE001 -- ante un fallo del listón, NO se promueve (fail-closed:
             # promover cuesta tokens; una historia retenida de más la recoge el humano o el
-            # siguiente barrido, una promovida de más ya quemó el claude -p).
+            # siguiente barrido, una promovida de más ya gastó el claude -p).
             _log.warning("pipeline: fallo al evaluar el listón de una historia (%s)", c.get("id"), exc_info=True)
             continue
         if supera:
@@ -458,7 +458,7 @@ def clusters_pendientes_verificar(marca: str, *, maximo: int) -> list[dict[str, 
 
     El listón evita gastar `claude -p` cribando historias que jamás se admitirían (score/marca
     bajo umbral). Las ya `en_curso`/`no_verificado`/`saltada`/`problema` quedan fuera (su QA ya
-    corrió o está en vuelo). Ordenadas por score (el pool ya viene rankeado); se recorta a
+    corrió o está en curso). Ordenadas por score (el pool ya viene rankeado); se recorta a
     `maximo` (el presupuesto del embudo de verificación). Best-effort: [] ante fallo o maximo<=0.
     """
     if maximo <= 0:
@@ -685,7 +685,7 @@ def _temas_en_vuelo_de(marca: str) -> list[dict[str, Any]]:
 def temas_en_vuelo(marca: str) -> int:
     """Cuántos temas del pipeline de `marca` están EN VUELO (gate serial de la admisión).
 
-    Es lo que CI mira para no promover más historias de esa marca hasta drenarlas (así cada
+    Es lo que CI mira para no promover más historias de esa marca hasta vaciarlas (así cada
     item que entra se completa antes de meter nuevos). Best-effort: 0 ante cualquier fallo.
     """
     return len(_temas_en_vuelo_de(marca))
@@ -701,7 +701,7 @@ def cupo_produccion_restante(
     una ventana móvil de 24 h) — `KENI_CUPO_DIA`, cuenta temas `origen=pipeline` por
     `creado`. Con plan, el volumen lo gobiernan los cupos POR CATEGORÍA
     (`cupos_categoria_restantes`). `None` = cupo desactivado (0): la admisión queda solo con
-    el gate serial en vuelo. FAIL-CLOSED ante un contador ilegible: promover gasta tokens,
+    el gate serial en curso. FAIL-CLOSED ante un contador ilegible: promover gasta tokens,
     así que sin lectura fiable se devuelve 0 (el siguiente tick reintenta).
     """
     from ..tiempo import inicio_dia_cdmx_iso_utc
@@ -773,7 +773,7 @@ def categoria_efectiva(cluster: dict[str, Any]) -> str:
 
 
 def caducar_temas_viejos(*, ahora: datetime | None = None) -> int:
-    """FRESCURA (ventana deslizante): caduca los temas EN VUELO que superaron el TTL.
+    """FRESCURA (ventana deslizante): caduca los temas en curso que superaron el TTL.
 
     El pipeline no arrastra backlog: un tema que no completó sus fases (QA→copy) dentro de
     `KENI_PIPELINE_TEMA_TTL_HORAS` (def 24 h) se marca `verificar_veredicto='caducada'` — sale del
@@ -795,7 +795,7 @@ def caducar_temas_viejos(*, ahora: datetime | None = None) -> int:
             if not tema_id:
                 continue
             nota = (
-                f"⏳ Caducada ({config.pipeline_tema_ttl_horas()} h en vuelo sin completar): "
+                f"⏳ Caducada ({config.pipeline_tema_ttl_horas()} h en curso sin completar): "
                 "el pipeline prioriza lo fresco del ranking."
             )
             try:
@@ -808,7 +808,7 @@ def caducar_temas_viejos(*, ahora: datetime | None = None) -> int:
                     },
                 )
                 caducados += 1
-            except Exception:  # noqa: BLE001 -- un tema ilegible no debe frenar la caducidad
+            except Exception:  # noqa: BLE001 -- un tema ilegible no debe detener la caducidad
                 _log.exception("pipeline: no se pudo caducar el tema %s", tema_id)
     if caducados:
         _log.info("pipeline: %d tema(s) caducados (TTL %d h): hueco libre para lo fresco.",
@@ -817,22 +817,22 @@ def caducar_temas_viejos(*, ahora: datetime | None = None) -> int:
 
 
 def caducar_qa_clusters_en_curso(*, ahora: datetime | None = None) -> int:
-    """Reaper de la VERIFICACIÓN: resetea los clusters `verificar_veredicto='en_curso'` ZOMBI (ADR 0011 F3).
+    """Limpiador de la verificación: resetea los clusters `verificar_veredicto='en_curso'` atascados (ADR 0011 F3).
 
     Si una QA de la fuente sobre un cluster muere (deploy/OOM/cuelgue), el cluster quedaría
     `en_curso` para siempre: ni se re-criba ni se admite. Pasado el TTL de `en_curso` (el mismo
-    que el reaper de `contenido`, `config.qa_en_curso_ttl_seg`), vuelve a "" para re-cribar.
-    Corre al inicio del barrido de investigación. Best-effort; devuelve cuántos saneó.
+    que el limpiador de `contenido`, `config.qa_en_curso_ttl_seg`), vuelve a "" para re-cribar.
+    Corre al inicio del barrido de investigación. Best-effort; devuelve cuántos reparó.
     """
     momento = ahora or datetime.now(timezone.utc)
     umbral = momento - timedelta(seconds=config.qa_en_curso_ttl_seg())
     try:
         n = repos.sanear_qa_clusters_en_curso(umbral.astimezone(timezone.utc).isoformat())
-    except Exception:  # noqa: BLE001 -- el saneo es best-effort; nunca rompe el barrido
-        _log.exception("pipeline: fallo el reaper de QA de clusters en curso.")
+    except Exception:  # noqa: BLE001 -- la reparación es best-effort; nunca rompe el barrido
+        _log.exception("pipeline: fallo el limpiador de QA de clusters en curso.")
         return 0
     if n:
-        _log.info("pipeline: %d cluster(s) con QA en_curso zombi reseteados a re-criba.", n)
+        _log.info("pipeline: %d cluster(s) con QA en_curso atascada reseteados a re-criba.", n)
     return n
 
 

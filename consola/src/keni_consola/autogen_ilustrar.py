@@ -24,7 +24,7 @@ SEGURO POR DISENO (CONSERVADOR)
     tenga alguna `contenido_plataforma` con copy pero sin imagen. No inventa piezas.
   - SIN CREDENCIALES, NO HACE NADA: si no hay proveedor de imagen configurado, no ilustra.
   - CAP por barrido (`KENI_AUTOGEN_ARTE_MAX`, def 3): cada item llama al proveedor de
-    imagen (coste); el cap evita avalanchas.
+    imagen (coste); el cap evita rafagas.
   - DEDUP: tras procesar, el tema se ETIQUETA `autogen-arte` para no re-generarlo. La
     seleccion lee esa etiqueta para saltarse lo ya hecho.
   - NO PUBLICA: solo adjunta el arte al borrador; la revision/aprobacion humana y la
@@ -192,13 +192,13 @@ def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
     FUERA del barrido (`ejecutar_arte_job`), heredando idempotencia + reintentos + carril. Antes
     esta función llamaba a `media.generar_imagen` EN LÍNEA y adjuntaba la imagen aquí mismo.
 
-    Devuelve el REGISTRO de generación encolado (para sondeo/conteo) —o el run en vuelo si ya
+    Devuelve el REGISTRO de generación encolado (para sondeo/conteo) —o el run en curso si ya
     había uno con esta clave (idempotencia)—, o None si se OMITE (sin proveedor, sin plataforma
     candidata, prompt vacío). Los gates SAFE se conservan: el cap por barrido y el dedup por
     etiqueta `autogen-arte` los aplican los llamadores (`topics_sin_arte`/`ids_ya_procesados`);
     la etiqueta se asigna AL ÉXITO dentro del ejecutor, NO al encolar (dedup-al-éxito, como el
     copy): un arte que falla NO queda etiquetado y el barrido lo reintenta, mientras la clave de
-    idempotencia evita el doble lanzamiento del que sigue en vuelo. Propaga `ColaLlenaError`
+    idempotencia evita el doble lanzamiento del que sigue en curso. Propaga `ColaLlenaError`
     (backpressure) para que el barrido la recoja en el próximo tick.
     """
     if not media.proveedor_configurado():
@@ -241,7 +241,7 @@ def _resolver_objetivo_arte(
     Si `plataforma_id` sigue teniendo copy SIN imagen, ésa; si no (la ilustró un humano, o un
     intento previo del propio job antes de marcar terminal), la PRIMERA plataforma del tema con
     copy y sin imagen. None si ya no queda candidata: el ejecutor lo trata como un no-op idempotente
-    (no re-genera ni re-sube). Best-effort: una lectura fallida devuelve None (el reaper lo recoge).
+    (no re-genera ni re-sube). Best-effort: una lectura fallida devuelve None (el recolector lo recoge).
     """
     if not contenido_id:
         return None
@@ -266,7 +266,7 @@ def ejecutar_arte_job(gen_id: str, spec: dict[str, Any]) -> None:
     Actividad IA + el pipeline de la pieza (`registrar_arte`). NO publica: la imagen queda en el
     borrador para la revisión humana de siempre.
 
-    IDEMPOTENTE ante re-claim del reaper / re-encolado: si la pieza ya NO tiene plataforma con copy
+    IDEMPOTENTE ante re-claim del recolector / re-encolado: si la pieza ya NO tiene plataforma con copy
     sin imagen (un intento previo del MISMO job ya la adjuntó antes de marcar terminal, o un humano
     la ilustró), COMPLETA sin volver a llamar al proveedor —ni doble gasto ni doble subida—. El
     contrato de firma (`ejecutar(gen_id, spec)`) es el de todos los jobs de proceso.

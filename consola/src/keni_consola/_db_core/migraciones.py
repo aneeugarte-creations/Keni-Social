@@ -219,7 +219,7 @@ def _aplicar_migraciones(con: Any, migraciones: tuple[Migracion, ...]) -> None:
 
 # PRE-DDL: transforman la forma VIEJA de una tabla ANTES de que el DDL declarativo cree
 # tablas/indices que chocarian con ella (indice sobre columna aun inexistente "envenena" la
-# conexion; un CREATE TABLE IF NOT EXISTS sobre un renombre pendiente huerfanaria los datos).
+# conexion; un CREATE TABLE IF NOT EXISTS sobre un renombre pendiente dejaria sueltos los datos).
 MIGRACIONES_PRE_DDL: tuple[Migracion, ...] = (
     # El DDL declara `rota_turnos` con la forma NUEVA (fecha/franja); una BD con el modelo
     # viejo (cobertura) debe convertirse antes (renombre + drop + renombre final).
@@ -246,7 +246,7 @@ MIGRACIONES_PRE_DDL: tuple[Migracion, ...] = (
         _migrar_columnas_plantillas_diseno,
         re_aplicar_si_cambia=True,
     ),
-    # Renombres: deben correr antes de que el DDL cree la tabla nueva VACIA y huerfane datos.
+    # Renombres: deben correr antes de que el DDL cree la tabla nueva VACIA y deje sueltos los datos.
     Migracion("0006-green-a-evergreen", _migrar_green_a_evergreen, re_aplicar_si_cambia=True),
     Migracion(
         "0007-renombre-catalogo-media", _migrar_renombre_catalogo_media, re_aplicar_si_cambia=True
@@ -257,7 +257,7 @@ MIGRACIONES_PRE_DDL: tuple[Migracion, ...] = (
     # `verificar_*` en `contenido`/`noticias_clusters` (piloto AMX), preservando datos. PRE-DDL
     # a proposito: debe correr ANTES de que las migraciones de ADD COLUMN re-aplicables (0011/
     # 0019, cuya tupla cambio de `qa_*` a `verificar_*`) re-evaluen y, al no ver aun la columna
-    # nueva, crearian una columna vacia huerfana (mismo motivo que el renombre green->evergreen).
+    # nueva, crearian una columna vacia suelta (mismo motivo que el renombre green->evergreen).
     # One-shot pero idempotente (RENAME guardado por la existencia de la columna).
     Migracion("0037-renombre-columnas-etapas", _migrar_renombre_columnas_etapas),
 )
@@ -374,7 +374,7 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
         datos=_COLUMNAS_DAEMON_LATIDOS_AMPLIADAS,
     ),
     # INTEGRIDAD (ADR 0012, apendice de 0004): FKs reales en las relaciones de alto valor del
-    # hub `contenido` y afines, con limpieza previa de huerfanos. Es re-ejecutable e idempotente
+    # hub `contenido` y afines, con limpieza previa de sueltos. Es re-ejecutable e idempotente
     # (DROP IF EXISTS + ADD), asi que la dejamos `re_aplicar_si_cambia=True`: editar `_FKS`
     # (anadir/quitar una relacion) cambia la huella y re-aplica la migracion una vez.
     Migracion("0028-fks-hub-contenido", _migrar_fks_hub, re_aplicar_si_cambia=True, datos=_FKS),
@@ -416,8 +416,8 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # queda en 'produccion'. One-shot e idempotente. Ver `_backfill_gasto_ia_proceso`.
     Migracion("0035-backfill-gasto-ia-proceso", _backfill_gasto_ia_proceso),
     # LIMPIEZA: la feature "agente de sugerencias editoriales" (daemon del digest diario) se
-    # retiro por completo (API, repos, MCP, semilla, DDL). Esta migracion elimina su tabla
-    # huerfana en BDs ya creadas. One-shot e idempotente (`DROP TABLE IF EXISTS`).
+    # retiro por completo (API, repos, MCP, inicializacion, DDL). Esta migracion elimina su tabla
+    # suelta en BDs ya creadas. One-shot e idempotente (`DROP TABLE IF EXISTS`).
     Migracion("0036-drop-sugerencias-editoriales", _drop_tabla_sugerencias_editoriales),
     # ETAPAS CON NOMBRE DE VERBO (Fase 2): reescribe los MARCADORES de etapa persistidos en
     # `generaciones_indice.payload->>'etiqueta'` con los prefijos viejos (CI/QA/CD/ARTE) y las

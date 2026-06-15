@@ -1,12 +1,12 @@
-"""Hilo demonio que ejecuta la GC de media huerfana periodicamente (GATEADO EN VIVO).
+"""Hilo demonio que ejecuta la GC de media sin dueño periodicamente (GATEADO EN VIVO).
 
-La LOGICA del barrido (deteccion + borrado de huerfanos) vive en `dominio.media_gc`; aqui
+La LOGICA del barrido (deteccion + borrado de objetos sin dueño) vive en `dominio.media_gc`; aqui
 solo esta el envoltorio de DAEMON, espejo de `radar_auto`/`autogen_ilustrar`: un hilo que arranca
 SIEMPRE y, gateado por `KENI_MEDIA_GC` (def OFF), barre cada N horas SOLO cuando el flag esta
 activo. Asi encender/apagar en runtime (desde la API de ajustes) aplica sin reiniciar.
 
 SEGURO POR DEFECTO (CONSERVADOR): sin `KENI_MEDIA_GC` el hilo no borra nada. El barrido solo
-elimina objetos HUERFANOS (no referenciados por ninguna publicacion) y mas viejos que el
+elimina objetos SIN DUEÑO (no referenciados por ninguna publicacion) y mas viejos que el
 umbral (`dominio.media_gc.limpiar`).
 """
 
@@ -23,7 +23,7 @@ _log = logging.getLogger("keni_consola.media_gc_daemon")
 
 
 def ejecutar_barrido() -> dict[str, Any]:
-    """Un barrido de GC: borra los huerfanos viejos con el umbral de antiguedad vivo.
+    """Un barrido de GC: borra los objetos sin dueño viejos con el umbral de antiguedad vivo.
 
     Lo llama el daemon. Best-effort: `media_gc.limpiar` es robusto ante errores por objeto y
     loguea el resumen. Devuelve el dict de resumen (`{borrados, conservados, dry_run, ...}`).
@@ -37,7 +37,7 @@ def _resumen_barrido(res: dict[str, Any]) -> str:
     if not borrados:
         return "sin novedad"
     seco = " (dry-run)" if (res or {}).get("dry_run") else ""
-    return f"{borrados} media huérfana(s) borrada(s){seco}"
+    return f"{borrados} media sin dueño borrada(s){seco}"
 
 
 def _intervalo_segundos() -> float:
@@ -46,7 +46,7 @@ def _intervalo_segundos() -> float:
 
 
 def iniciar_media_gc(intervalo_segundos: float | None = None) -> threading.Thread:
-    """Arranca el hilo demonio de GC de media huerfana (GATEADO EN VIVO).
+    """Arranca el hilo demonio de GC de media sin dueño (GATEADO EN VIVO).
 
     Pensado para el servidor real (`__main__`/`daemons`), NO para `crear_app` (los tests no
     lo arrancan, igual que el resto de daemons). El hilo arranca SIEMPRE y comprueba
@@ -69,7 +69,7 @@ def iniciar_media_gc(intervalo_segundos: float | None = None) -> threading.Threa
     hilo.start()
     estado = "ACTIVA" if config.media_gc_activo() else "EN ESPERA (KENI_MEDIA_GC off)"
     _log.info(
-        "GC de media huerfana %s, cada %.0f h (umbral antiguedad=%dh).",
+        "GC de media sin dueño %s, cada %.0f h (umbral antiguedad=%dh).",
         estado, intervalo / 3600.0, config.media_gc_antiguedad_horas(),
     )
     return hilo

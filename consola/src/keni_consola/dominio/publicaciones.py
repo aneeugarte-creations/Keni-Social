@@ -139,7 +139,7 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
     # (NO se duplica la heurística). El feed (Flujo D) PREFIERE este `etapa_ia`.
     #
     # IMPORTANTE: la etapa se deriva del CONTENIDO REAL, NO de los flags `falta_*` almacenados
-    # (se DESINCRONIZAN: la tubería rellena copy/imagen sin tocar siempre el flag).
+    # (se DESINCRONIZAN: el pipeline rellena copy/imagen sin tocar siempre el flag).
     #
     # IMAGEN vs PLANTILLA: el campo `imagen` guarda la PLACA compuesta, que es solo la PLANTILLA
     # (parte del copy-in), NO una imagen real. Una pieza "lleva imagen" si tiene copy-in/placa o
@@ -260,7 +260,7 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         # de publicación). La PORTADA del carrusel es la imagen compuesta de siempre (slide 1);
         # estos van detrás tal cual en el post multi-media. "" = sin slides / otro formato.
         "carrusel": pub.get("carrusel") or "",
-        # Etapa IA real de la tubería (Flujo C): generando_copy | generando_arte |
+        # Etapa IA real del pipeline (Flujo C): generando_copy | generando_arte |
         # lista_para_revisar | aprobada | programada | publicada. La consume el Feed.
         "etapa_ia": etapa_ia,
         "fecha_creacion": pub["fecha_creacion"],

@@ -51,7 +51,7 @@ def main() -> int:
     # app (un unico token por proceso). Si el operador fijo `KENI_CONSOLA_TOKEN`, usamos
     # ese; si no, generamos uno. NUNCA lo metemos en la URL ni lo imprimimos (#150): un
     # token en la URL/log es un vector de fuga trivial (historial, capturas, logs). La
-    # cookie del token la siembra el propio index del SPA al cargar la pagina (ver
+    # cookie del token la inicializa el propio index del SPA al cargar la pagina (ver
     # `app._respuesta_index_spa`), sin necesidad de `?token=` en la URL.
     from . import seguridad
 
@@ -60,7 +60,7 @@ def main() -> int:
     # Host navegable para la URL: si el bind es `0.0.0.0` (todas las interfaces) no es
     # una direccion a la que el navegador pueda ir, asi que mostramos `localhost`.
     host_url = "localhost" if HOST in ("0.0.0.0", "::") else HOST
-    # URL LIMPIA, SIN el token (#150): la cookie se siembra al servir el index.
+    # URL LIMPIA, SIN el token (#150): la cookie se inicializa al servir el index.
     url = f"http://{host_url}:{puerto}/"
     print(f"Consola Keni escuchando en {HOST}:{puerto}")
     if HOST in ("0.0.0.0", "::"):
@@ -88,7 +88,7 @@ def main() -> int:
 
     # Abrir el navegador es best-effort: si falla (sin entorno grafico, etc.) no debe
     # impedir que el servidor arranque. Abrimos la URL LIMPIA (sin token, #150): la cookie
-    # del token la siembra el index del SPA al cargar, asi que la UI funciona igual.
+    # del token la inicializa el index del SPA al cargar, asi que la UI funciona igual.
     try:
         webbrowser.open(url)
     except Exception:  # noqa: BLE001
@@ -97,7 +97,7 @@ def main() -> int:
     # Pasamos el token ya resuelto a la app (asi no se vuelve a generar otro).
     app = crear_app(token=token)
 
-    # Siembra de la Texto (best-effort): en el PRIMER arranque copia la linea editorial
+    # Inicializacion de la Texto (best-effort): en el PRIMER arranque copia la linea editorial
     # y los prompts base al store si aun no estan. Idempotente; no pisa lo que el equipo edite.
     # Vive aqui (servidor real), NO en `crear_app`, para no tocar el estado real en los tests.
     try:
@@ -115,11 +115,11 @@ def main() -> int:
         n = libtexto.importar_semilla()
         if n:
             print(f"Texto: {n} documento(s) base importados.")
-        # Linea base en git: cada doc sembrado con HEAD (snapshot estable para los pipelines).
+        # Linea base en git: cada doc inicializado con HEAD (snapshot estable para los pipelines).
         b = libtexto.asegurar_linea_base()
         if b:
             print(f"Texto: {b} documento(s) versionados como linea base.")
-    except Exception:  # noqa: BLE001 -- la siembra nunca debe impedir el arranque
+    except Exception:  # noqa: BLE001 -- la inicializacion nunca debe impedir el arranque
         pass
 
     # Captura programada del apartado Comercial: un hilo demonio que va tomando
@@ -194,7 +194,7 @@ def main() -> int:
 
     iniciar_refresco_algoritmos()
 
-    # MÁQUINA DE CONTENIDO (Flujo C): el pipeline es el espinazo de la auto-producción. Si está
+    # MÁQUINA DE CONTENIDO (Flujo C): el pipeline es el núcleo de la auto-producción. Si está
     # activo (`KENI_PIPELINE_REDACTAR`, bajo el maestro `KENI_MAQUINA`), cada N horas ingiere del news-pool,
     # genera copy (etapa de Redactar) y arte (etapa de Ilustrar, `KENI_PIPELINE_ILUSTRAR`) y valida los
     # borradores recientes (QA), registrando cada etapa en "Actividad IA". Deja borradores en la
@@ -204,8 +204,8 @@ def main() -> int:
 
     iniciar_pipeline()
 
-    # GC de MEDIA HUERFANA (Estudio §5): un hilo demonio que, si `KENI_MEDIA_GC` esta activo
-    # (def OFF), barre cada N horas el almacen de media y borra los objetos HUERFANOS (no
+    # GC de MEDIA SUELTA (Estudio §5): un hilo demonio que, si `KENI_MEDIA_GC` esta activo
+    # (def OFF), barre cada N horas el almacen de media y borra los objetos SUELTOS (no
     # referenciados por ninguna publicacion) y mas viejos que el umbral. SAFE BY DEFAULT: sin
     # el flag no borra nada. Vive aqui (servidor real), NO en `crear_app`, para no arrancarlo
     # en los tests.
@@ -214,17 +214,17 @@ def main() -> int:
     iniciar_media_gc()
 
     # GC del POOL DE NOTICIAS por relevancia (no por edad): un hilo demonio gateado por
-    # `KENI_NOTICIAS_GC` (def OFF) que purga el ruido de baja relevancia (historias `nuevo` de una
-    # fuente, score bajo e inactivas + items huérfanos viejos), conservando lo usado/corroborado/
+    # `KENI_NOTICIAS_GC` (def OFF) que purga lo irrelevante de baja relevancia (historias `nuevo` de una
+    # fuente, score bajo e inactivas + items sueltos viejos), conservando lo usado/corroborado/
     # reciente. SAFE BY DEFAULT: sin el flag no borra nada. Vive aquí (servidor real), no en tests.
     from .noticias_gc_daemon import iniciar_noticias_gc
 
     iniciar_noticias_gc()
 
-    # Reaper de GENERACIONES zombi: un hilo demonio (SIEMPRE activo) que cierra como `error`
+    # Reaper de GENERACIONES atascadas: un hilo demonio (SIEMPRE activo) que cierra como `error`
     # las generaciones colgadas en `ejecutando` cuyo proceso murio (reinicio/OOM/cuelgue), para
     # que el Monitor de Actividad no las muestre "Ejecutando…" indefinidamente. Barre al
-    # arrancar (limpia los huerfanos del crash anterior) y cada N min. Vive aqui (servidor
+    # arrancar (limpia las sueltas del crash anterior) y cada N min. Vive aqui (servidor
     # real), NO en `crear_app`, para no arrancarlo en los tests.
     from .reaper_generaciones import iniciar_reaper
 

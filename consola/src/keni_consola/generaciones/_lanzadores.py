@@ -317,7 +317,7 @@ def encolar_job_claude(
 
     SIN TOPE DE COLA (R-NO-LIMIT): `cola.encolar` SIEMPRE acepta; nada se rechaza por tamano de
     cola. El unico limite es la concurrencia (`max_jobs`), que el worker/`runner.slot` aplican
-    aguas abajo (el exceso ESPERA). `cola.encolar` aun puede rechazar por el freno VOLUNTARIO de
+    más adelante en el flujo (el exceso ESPERA). `cola.encolar` aun puede rechazar por el límite VOLUNTARIO de
     presupuesto/pausa (subclases de `ColaLlenaError` -> 429), que se conserva.
     """
     if spec is None:
@@ -357,7 +357,7 @@ def encolar_job_proceso(
     errores via `actualizar(...)`.
 
     Reutiliza el MISMO camino de admision que el camino claude (`cola.encolar`): la cola NO tiene
-    tope (R-NO-LIMIT), asi que SIEMPRE encola; solo el freno voluntario de presupuesto/pausa puede
+    tope (R-NO-LIMIT), asi que SIEMPRE encola; solo el límite voluntario de presupuesto/pausa puede
     rechazar (subclase de `ColaLlenaError` -> 429). Si `gen_id` no se pasa, se crea uno.
     Devuelve el registro publico de la generacion (incluye su `id`).
     """
@@ -402,7 +402,7 @@ def lanzar_job_claude(
     worker): asi NO se vuelve a admitir (evita doble cuenta), pero `slot` SIGUE liberandolo.
 
     SIN TOPE DE COLA (R-NO-LIMIT): `runner.admitir()` SIEMPRE acepta (solo lleva la cuenta de
-    jobs en vuelo); nada se rechaza por tamano de cola. Con `ya_admitido` la admision la hizo ya
+    jobs en curso); nada se rechaza por tamano de cola. Con `ya_admitido` la admision la hizo ya
     el encolado (el worker no re-admite). El hilo hereda la admision (`slot(ya_admitido=True)`) y
     la libera al terminar. La concurrencia (`max_jobs`) la impone `slot` haciendo ESPERAR.
     """
@@ -428,7 +428,7 @@ def lanzar_job_claude(
     etq = f"generacion {gen_id}" + (f" (req {rid})" if rid else "")
 
     # Admision: la cola NO tiene tope (R-NO-LIMIT), asi que `admitir()` SIEMPRE acepta (solo
-    # cuenta el job en vuelo). El hilo, ya admitido, libera el cupo al terminar via `slot`. Si el
+    # cuenta el job en curso). El hilo, ya admitido, libera el cupo al terminar via `slot`. Si el
     # cupo ya lo tomo `encolar_job_claude` (worker, #130 Fase 2), NO re-admitimos.
     if not ya_admitido:
         runner.admitir()
@@ -637,7 +637,7 @@ def lanzar_job_claude(
 
 
 def cancelar(gen_id: str) -> bool:
-    """Cancela un job de claude EN VUELO: mata el ARBOL del subproceso (#137, PERMANENTE).
+    """Cancela un job de claude EN CURSO: mata el ARBOL del subproceso (#137, PERMANENTE).
 
     Devuelve True si se pudo cancelar algo (handle in-memoria del proceso O un job en la
     cola); False si no hay nada que cancelar (ya terminó). Tiene DOS vias, porque el job

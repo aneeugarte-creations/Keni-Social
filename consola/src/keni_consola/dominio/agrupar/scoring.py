@@ -128,7 +128,7 @@ def puntuar_detalle(
 
     BREAKING emerge de aquí, no es un carril aparte: 2 fuentes potentes a la vez ⇒
     corroboración 0.67 + velocidad 1.0 + frescura ≈ 1 ⇒ ~0.6+, top del pool, y el flag
-    `breaking` (masa en ventana ≥ `breaking_peso`) exime de maduración en el listón ⇒ sale
+    `breaking` (masa en ventana ≥ `breaking_peso`) exime de maduración en el umbral ⇒ sale
     al feed en el siguiente barrido. El bonus aditivo (`pesos.breaking`) queda en 0.0 por
     defecto (knob de rollback). Es MONÓTONA en cada señal (los tests lo verifican).
 

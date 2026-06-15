@@ -521,7 +521,7 @@ def resumen_carga(
 # --------------------------------------------------------------------------- #
 #
 # El producto quiere que el equipo SOLO cree piezas: la operativa es automatica. Una
-# pieza no debe quedar HUERFANA. Si quien la crea no fija responsable, lo deriva la rota:
+# pieza no debe quedar SIN RESPONSABLE. Si quien la crea no fija responsable, lo deriva la rota:
 # de los miembros que entran a trabajar HOY (turno en una franja NO-descanso) y cubren la
 # MARCA de la pieza, se elige uno de forma DETERMINISTA. Esta funcion es PURA y testeable
 # (recibe los turnos, los miembros con sus marcas y el dia); la capa de API

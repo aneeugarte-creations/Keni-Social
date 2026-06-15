@@ -153,8 +153,8 @@ FRANJA_MATUTINO_LEGACY = "matutino"
 FRANJA_VESPERTINO_LEGACY = "vespertino"
 FRANJA_DESCANSO_LEGACY = "descanso"
 
-# Nombres por defecto que sembramos para una semana nueva (las 2 franjas iniciales). Estos
-# valores se usan al RENDERIZAR la primera vista de una semana sin franjas: la API siembra
+# Nombres por defecto que creamos para una semana nueva (las 2 franjas iniciales). Estos
+# valores se usan al RENDERIZAR la primera vista de una semana sin franjas: la API crea
 # "Mañana" y "Tarde" con los rangos de `rota_config_franjas` (plantilla global) si existe,
 # o con los DEFAULTs editoriales del dominio (`rota.py`).
 NOMBRE_FRANJA_MANANA_DEFAULT = "Mañana"
@@ -383,7 +383,7 @@ DECISION_RECHAZADO = "rechazado"
 # pre-copy). Allowlist CANONICA para el CHECK de esquema (ADR 0012). "" = sin cribar / a
 # re-criba. Los valores NO viven en este modulo dependency-free (son del pipeline/dominio);
 # se enumeran aqui como literales, con su origen, para no acoplar `estados` al pipeline:
-#   - "en_curso":      SENTINEL en vuelo            (`pipeline_contenido._comun.QA_EN_CURSO`)
+#   - "en_curso":      SENTINEL en curso            (`pipeline_contenido._comun.QA_EN_CURSO`)
 #   - "saltada":       QA desactivada para la marca (`pipeline_contenido._comun.QA_SALTADA`)
 #   - "caducada":      tema que supero el TTL       (`pipeline_contenido._comun.QA_CADUCADA`)
 #   - "no_verificado": apta para seguir (⚠️)        (`dominio.verificar_fuente.VERDICTO_NO_VERIFICADO`)

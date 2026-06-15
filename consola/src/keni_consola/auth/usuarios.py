@@ -223,7 +223,7 @@ def crear_usuario(
                 nuevo["nombre"], nuevo["manager_id"],
             ),
         )
-        # Marcas del organigrama (N:M): sembrarlas en la misma conexion para que el
+        # Marcas del organigrama (N:M): crearlas en la misma conexion para que el
         # alta del usuario quede COMPLETA si la transaccion confirma.
         marcas_norm = sorted(set(marcas or []))
         for marca in marcas_norm:

@@ -3,7 +3,7 @@
 Es la pieza REPRODUCIBLE del ciclo editorial basado en datos (ver `patrones_marca`):
 
     extraer (Metricool, ventana de meses)  ->  derivar (cuartil top vs fondo)
-      ->  perfil JSON (runtime o semilla)  ->  doc `editorial/rrss/<marca>/patrones`
+      ->  perfil JSON (runtime o base)  ->  doc `editorial/rrss/<marca>/patrones`
 
 Modos de salida (combinables):
   --store    escribe el perfil en `<dir_config>/patrones/<marca>.json` y CREA/ACTUALIZA
@@ -138,7 +138,7 @@ def cargar_piezas_jsonl(ruta: Path) -> dict[str, list[dict[str, object]]]:
     return resultado
 
 
-# --- Salidas: runtime (store) y semilla (repo) -------------------------------------
+# --- Salidas: runtime (store) y base (repo) -------------------------------------
 
 _FRONTMATTER_DOC = """---
 titulo: "Patrones medidos · {etiqueta}"
@@ -170,7 +170,7 @@ def escribir_semilla(perfil: dict[str, object], marca_keni: str, *, ahora: str) 
     ruta_json.parent.mkdir(parents=True, exist_ok=True)
     ruta_doc.parent.mkdir(parents=True, exist_ok=True)
     escribir_atomico(ruta_json, json.dumps(perfil, ensure_ascii=False, indent=1) + "\n")
-    # `creado` estable en la semilla (la identidad del doc no cambia entre regeneraciones).
+    # `creado` estable en la base (la identidad del doc no cambia entre regeneraciones).
     escribir_atomico(
         ruta_doc, _doc_patrones(perfil, marca_keni, creado="2026-06-10T00:00:00+00:00", ahora=ahora)
     )
@@ -195,8 +195,8 @@ def aplicar_store(perfil: dict[str, object], marca_keni: str, *, ahora: str) -> 
     cuerpo = patrones_marca.renderizar_doc(perfil, cat_marcas.etiqueta_de(marca_keni))
     if libtexto.obtener(doc_id) is None:
         # `crear` deriva el slug del título: "Patrones" -> ".../patrones", el MISMO id
-        # con el que importa la semilla (`patrones.md`); así crear-primero y
-        # sembrar-después convergen en un único documento.
+        # con el que importa la base (`patrones.md`); así crear-primero e
+        # inicializar-después convergen en un único documento.
         doc = libtexto.crear(
             "Patrones",
             tipo="editorial",
@@ -226,7 +226,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--meses", type=int, default=MESES_DEFECTO, help="ventana hacia atrás")
     parser.add_argument("--jsonl", type=Path, default=None, help="volcado previo en vez de la API")
     parser.add_argument("--store", action="store_true", help="aplica al runtime (data dir + store)")
-    parser.add_argument("--semilla", action="store_true", help="reescribe la semilla del paquete")
+    parser.add_argument("--semilla", action="store_true", help="reescribe la base del paquete")
     parser.add_argument(
         "--salida", type=Path, default=None, help="además, escribe los perfiles JSON en este dir"
     )
@@ -270,7 +270,7 @@ def main(argv: list[str] | None = None) -> int:
             )
         if args.semilla:
             for ruta in escribir_semilla(perfil, marca_keni, ahora=ahora):
-                print(f"  semilla: {ruta}")
+                print(f"  base: {ruta}")
         if args.store:
             print(f"  store: {aplicar_store(perfil, marca_keni, ahora=ahora)}")
     return salida

@@ -36,7 +36,7 @@ from .media import lanzar_generacion_imagen
 _log = logging.getLogger("keni_consola.artes")
 
 # Tope de imagenes ALTERNATIVAS por lanzamiento manual de arte: cada una cuesta dinero (una
-# llamada al proveedor), asi que se acota para evitar avalanchas/abuso. 1..4 basta para
+# llamada al proveedor), asi que se acota para evitar ráfagas/abuso. 1..4 basta para
 # comparar variaciones de un mismo prompt.
 _MAX_ALTERNATIVAS = 4
 # Prompt base del arte en la Biblioteca (mismo id que la directiva del generador): si el
@@ -68,7 +68,7 @@ def _validar_marca(marca: object) -> tuple[str | None, str | None]:
 
 
 def _normalizar_etiquetas(valor: object) -> list[str]:
-    """Lista de etiquetas saneada (cadenas no vacias, recortadas, sin duplicados)."""
+    """Lista de etiquetas normalizada (cadenas no vacias, recortadas, sin duplicados)."""
     if not isinstance(valor, list):
         return []
     vistas: list[str] = []

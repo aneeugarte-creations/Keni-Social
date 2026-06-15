@@ -268,7 +268,7 @@ def _filtros(f: Any) -> dict[str, Any] | None:
         else:
             out[k] = defecto
     duotono = _duotono(f.get("duotono"))
-    # Solo persistir si algo se aparta del neutro (evita ruido en el JSON). El duotono cuenta como
+    # Solo persistir si algo se aparta del neutro (evita datos irrelevantes en el JSON). El duotono cuenta como
     # "no neutro" aunque brillo/contraste sigan a 1.
     neutro = out["brillo"] == 1 and out["contraste"] == 1 and out["saturacion"] == 1 and out["desenfoque"] == 0
     if neutro and duotono is None:

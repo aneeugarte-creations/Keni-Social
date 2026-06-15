@@ -658,7 +658,7 @@ async def duplicar(request: Request) -> Response:
         nueva_marca = datos.get("marca")
         if not isinstance(nueva_marca, str) or nueva_marca not in _MARCAS_IDS:
             return JSONResponse({"error": "Marca no permitida."}, status_code=400)
-        # Duplicar hacia CUALQUIER marca es legitimo: la marca es un foco, no un cerrojo.
+        # Duplicar hacia CUALQUIER marca es legitimo: la marca es un foco, no un bloqueo.
         marca = nueva_marca
     if "red" in datos:
         nueva_red = datos.get("red")

@@ -157,7 +157,7 @@ def guardar(clave: str, valor: str) -> None:
     """Guarda `clave -> valor` (ambos str) en el store (escritura atomica).
 
     Sobrescribe el valor previo si lo hubiera. NO valida: la validacion (tipo/min/max/
-    catalogo) la hace `ajustes_catalogo.validar_valor` aguas arriba (la API).
+    catalogo) la hace `ajustes_catalogo.validar_valor` antes, en la API.
     """
     datos = leer()
     datos[clave] = valor
@@ -177,7 +177,7 @@ def borrar(clave: str) -> None:
 # --------------------------------------------------------------------------- #
 #
 # Los renames "limpios" de las etapas del pipeline (consolidacion etapa = variable = toggle)
-# dejaron HUERFANAS las claves ya guardadas en el store: el toggle que el equipo encendio con
+# dejaron SUELTAS las claves ya guardadas en el store: el toggle que el equipo encendio con
 # el nombre viejo (p. ej. `KENI_QA::unotv = 1`) dejaba de leerse y la etapa aparecia APAGADA
 # aunque la UI la hubiera mostrado encendida. Esta tabla viejo -> nuevo permite migrar el store
 # al arranque. Cubre tambien las variantes por marca (`VIEJO::marca` -> `NUEVO::marca`).
@@ -219,7 +219,7 @@ def migrar_claves_legado() -> int:
       - si el destino NO existe en el store, copia el valor (se conserva la intencion del
         equipo: lo que estaba encendido sigue encendido bajo el nombre nuevo);
       - si el destino YA existe, NO lo pisa (lo escrito con el nombre nuevo es mas reciente);
-      - en ambos casos BORRA la clave legada (el store queda sin huerfanos que confundan).
+      - en ambos casos BORRA la clave legada (el store queda sin claves sueltas que confundan).
 
     OJO con los prefijos: `KENI_PIPELINE` es prefijo de los nombres nuevos, por eso el match
     es EXACTO o `VIEJO + "::"` (nunca un startswith del nombre desnudo). Idempotente (la
