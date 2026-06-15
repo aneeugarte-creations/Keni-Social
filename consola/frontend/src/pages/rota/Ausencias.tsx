@@ -70,8 +70,13 @@ export function NuevaAusencia({
   const crear = useMutation({
     mutationFn: () =>
       api.crearAusenciaRota({ miembro_id: miembroId, tipo, desde, hasta, motivo: motivo.trim() }),
-    onSuccess: () => {
-      toast.success("Ausencia registrada.");
+    onSuccess: (data) => {
+      const n = data.conflictos?.length ?? 0;
+      if (n > 0)
+        toast.warning(
+          `Ausencia registrada, pero deja ${n} turno${n > 1 ? "s" : ""} sin cubrir. Revisa la cobertura.`,
+        );
+      else toast.success("Ausencia registrada.");
       setDesde("");
       setHasta("");
       setMotivo("");
@@ -282,8 +287,13 @@ export function DialogoEditarAusencia({
   const guardar = useMutation({
     mutationFn: () =>
       api.actualizarAusenciaRota(ausencia.id, { tipo, desde, hasta, motivo: motivo.trim() }),
-    onSuccess: () => {
-      toast.success("Ausencia actualizada.");
+    onSuccess: (data) => {
+      const n = data.conflictos?.length ?? 0;
+      if (n > 0)
+        toast.warning(
+          `Ausencia actualizada, pero deja ${n} turno${n > 1 ? "s" : ""} sin cubrir. Revisa la cobertura.`,
+        );
+      else toast.success("Ausencia actualizada.");
       onGuardada();
     },
     onError: (e) => toast.error(mensajeError(e)),

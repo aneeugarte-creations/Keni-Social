@@ -1,6 +1,7 @@
 """API Rota · ausencias/vacaciones del equipo (CRUD)."""
 from __future__ import annotations
 
+from datetime import date, timedelta
 from typing import Any
 
 from starlette.requests import Request
@@ -34,6 +35,47 @@ def _puede_gestionar_ausencia(request: Request, miembro_id: str) -> bool:
     if usuario is None:  # entró por el token de mantenimiento
         return True
     return usuario["id"] == miembro_id or _es_admin(request)
+
+
+def _conflictos_cobertura(miembro_id: str, desde: str, hasta: str) -> list[dict[str, str]]:
+    """Turnos de cobertura YA asignados a `miembro_id` dentro de [desde, hasta] (inclusivo).
+
+    Es la cara que faltaba del cruce ausencia<->turno: hoy se avisa al ASIGNAR un turno a
+    alguien ausente (`_violacion_ausencia`); esto avisa al REGISTRAR/editar una ausencia
+    sobre alguien que YA tiene turnos. NO bloquea (la ausencia se guarda igual): solo
+    MATERIALIZA el hueco para que el coordinador lo resuelva, en vez de descubrirlo el día
+    del partido. Excluye los descansos (no son jornada => no son hueco de cobertura).
+
+    Devuelve `[{fecha, franja}]` ordenado por fecha. Acota la consulta a las SEMANAS que
+    toca el rango (normalmente 1-2), no recorre toda la tabla.
+    """
+    if not miembro_id:
+        return []
+    try:
+        d_ini = date.fromisoformat(desde)
+        d_fin = date.fromisoformat(hasta)
+    except ValueError:
+        return []
+    if d_fin < d_ini:
+        return []
+    # Lunes de cada semana que cae dentro del rango.
+    lunes = d_ini - timedelta(days=d_ini.weekday())
+    conflictos: list[dict[str, str]] = []
+    while lunes <= d_fin:
+        for t in repos.listar_turnos_rota(semana=lunes.isoformat()):
+            if t.get("miembro_id") != miembro_id:
+                continue
+            if not (desde <= t.get("fecha", "") <= hasta):
+                continue
+            franja = repos.obtener_franja_semana(t.get("franja_id", "") or "")
+            if franja and franja.get("es_descanso"):
+                continue  # un descanso no es cobertura
+            conflictos.append(
+                {"fecha": t["fecha"], "franja": (franja or {}).get("nombre", "") or ""}
+            )
+        lunes += timedelta(days=7)
+    conflictos.sort(key=lambda c: (c["fecha"], c["franja"]))
+    return conflictos
 
 
 def _ausencia_a_dict(ausencia: dict[str, Any], nombres: dict[str, str]) -> dict[str, Any]:
@@ -121,7 +163,12 @@ async def crear_ausencia(request: Request) -> Response:
         motivo=str(datos.get("motivo", "")).strip(),
     )
     return JSONResponse(
-        {"ausencia": _ausencia_a_dict(ausencia, nombres)}, status_code=201
+        {
+            "ausencia": _ausencia_a_dict(ausencia, nombres),
+            # Aviso (no bloqueo): turnos que esta ausencia deja descubiertos.
+            "conflictos": _conflictos_cobertura(miembro_id, desde, hasta),
+        },
+        status_code=201,
     )
 
 
@@ -163,7 +210,13 @@ async def actualizar_ausencia(request: Request) -> Response:
     ausencia = repos.actualizar_ausencia_rota(ausencia_id, campos)
     if ausencia is None:
         return JSONResponse({"error": "La ausencia ya no existe."}, status_code=404)
-    return JSONResponse({"ausencia": _ausencia_a_dict(ausencia, _nombres_equipo())})
+    return JSONResponse(
+        {
+            "ausencia": _ausencia_a_dict(ausencia, _nombres_equipo()),
+            # Aviso (no bloqueo): turnos que el rango (quizá ampliado) deja descubiertos.
+            "conflictos": _conflictos_cobertura(actual["miembro_id"], desde, hasta),
+        }
+    )
 
 
 async def borrar_ausencia(request: Request) -> Response:

@@ -133,8 +133,19 @@ export interface RespuestaAusenciasRota {
   ausencias: AusenciaRota[];
 }
 
+/** Un turno de cobertura YA asignado que cae dentro del rango de una ausencia: el hueco
+ *  que esa ausencia deja al registrarse/editarse (aviso, no bloqueo). */
+export interface ConflictoCobertura {
+  /** ISO (AAAA-MM-DD) del turno que queda descubierto. */
+  fecha: string;
+  /** Nombre legible de la franja (p. ej. "Mañana"); "" si no resuelve. */
+  franja: string;
+}
+
 export interface RespuestaAusenciaRota {
   ausencia: AusenciaRota;
+  /** Turnos que la ausencia deja sin cubrir; ausente o `[]` = ninguno. */
+  conflictos?: ConflictoCobertura[];
 }
 
 export interface CuerpoCrearAusenciaRota {

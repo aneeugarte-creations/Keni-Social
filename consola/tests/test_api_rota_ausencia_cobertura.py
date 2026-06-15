@@ -1,0 +1,55 @@
+"""La ausencia avisa del HUECO de cobertura que deja (turnos ya asignados en su rango).
+
+Cara que faltaba del cruce ausencia<->turno: al REGISTRAR/editar una ausencia sobre alguien
+que YA tiene turnos asignados, la respuesta trae `conflictos` (aviso, NO bloqueo). Excluye
+los descansos. Usa el cliente del token (la frontera de permisos se cubre aparte).
+"""
+
+from __future__ import annotations
+
+from keni_consola import repos
+
+from .test_api_rota import _crear_equipo
+
+LUNES = "2026-05-25"  # es lunes
+MARTES = "2026-05-26"
+
+
+def test_crear_ausencia_avisa_de_turnos_en_el_rango(cliente):
+    miembro = _crear_equipo(1)[0]
+    # El miembro tiene un turno (Mañana) el martes, DENTRO del rango de la ausencia.
+    repos.crear_turno_rota(
+        LUNES,
+        MARTES,
+        miembro_id=miembro["id"],
+        miembro_nombre=miembro["usuario"],
+        franja="matutino",
+    )
+    r = cliente.post(
+        "/api/rota/ausencias",
+        json={
+            "miembro_id": miembro["id"],
+            "desde": LUNES,
+            "hasta": "2026-05-31",
+            "tipo": "vacaciones",
+        },
+    )
+    assert r.status_code == 201, r.text
+    conflictos = r.json()["conflictos"]
+    assert [c["fecha"] for c in conflictos] == [MARTES]
+    assert conflictos[0]["franja"]  # nombre legible de la franja, no el uuid
+
+
+def test_crear_ausencia_sin_turnos_no_tiene_conflictos(cliente):
+    miembro = _crear_equipo(1)[0]
+    r = cliente.post(
+        "/api/rota/ausencias",
+        json={
+            "miembro_id": miembro["id"],
+            "desde": "2026-06-08",
+            "hasta": "2026-06-10",
+            "tipo": "descanso",
+        },
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["conflictos"] == []
