@@ -454,9 +454,12 @@ export function DialogoCrearTarea({
                   {campoPrioridad}
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-3">
+                // Tarea: «Asignar a» cabalga en la MISMA fila que Para cuándo/Prioridad (3 col)
+                // en vez de una fila aparte, para que el diálogo entre sin scroll (igual altura
+                // que Evento). Etiquetas cortas → los campos alinean.
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                   <div className="space-y-1.5">
-                    <Label htmlFor="tarea-fecha">Para cuándo (opcional)</Label>
+                    <Label htmlFor="tarea-fecha">Para cuándo</Label>
                     <Input
                       id="tarea-fecha"
                       type="date"
@@ -465,6 +468,7 @@ export function DialogoCrearTarea({
                     />
                   </div>
                   {campoPrioridad}
+                  {campoResponsable}
                 </div>
               )}
 
@@ -484,8 +488,6 @@ export function DialogoCrearTarea({
                   rows={2}
                 />
               </div>
-
-              {modo === "tarea" && campoResponsable}
             </div>
 
             <DialogFooter>
