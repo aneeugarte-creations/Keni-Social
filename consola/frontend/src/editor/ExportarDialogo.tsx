@@ -25,8 +25,8 @@ import { api, mensajeError, urlMedia } from "@/lib/api";
 import { cabecerasAuth } from "@/lib/api/_core";
 import type { OpcionesExport } from "@/lib/api/imagen";
 
-import { conFotoEnHuecosVacios, type Documento, tieneHuecoFotoVacio } from "./documento";
-import { getFotoMuestraSrc, getObjetoMuestraExport, setObjetoMuestraExport } from "./muestra";
+import { type CapaTexto, conFotoEnHuecosVacios, conTextosHorneados, type Documento, tieneHuecoFotoVacio } from "./documento";
+import { copyMuestra, getFotoMuestraSrc, getObjetoMuestraExport, setObjetoMuestraExport } from "./muestra";
 import type { StoreEditor } from "./store";
 
 type Formato = "png" | "jpg";
@@ -101,12 +101,37 @@ async function objetoFotoMuestra(): Promise<string | null> {
   return id;
 }
 
+/**
+ * Texto a HORNEAR en una capa de texto para que la descarga muestre lo mismo que el lienzo, o `null`
+ * para dejarla como está (el render server-side la pinta por su cuenta). Solo afecta a capas con
+ * `binding`: el render usa el valor del binding y, sin pieza, llega vacío (titular sin texto).
+ *  - "Copy de muestra" activo: el lienzo enseña el copy de ejemplo -> se hornea ese.
+ *  - Hay copy REAL de la pieza para ese binding -> no se hornea (lo pinta el server vía `bindings`).
+ *  - Si no, se hornea el `texto` ESCRITO por el equipo. El placeholder genérico de hueco vacío
+ *    ("Titular de ejemplo"/"PLECA") NO se hornea: es una pista de edición, no contenido publicable.
+ */
+function textoHornear(
+  c: CapaTexto,
+  muestraCopy: boolean,
+  bindings: Record<string, string> | undefined,
+): string | null {
+  if (!c.binding) return null;
+  if (muestraCopy) {
+    const m = copyMuestra(c.binding);
+    return m && m.trim() ? m : null;
+  }
+  const real = bindings?.[c.binding];
+  if (real && real.trim()) return null;
+  return (c.texto || "").trim() ? c.texto : null;
+}
+
 export function ExportarDialogo({
   store,
   bindings,
   nombre,
   variante = "primario",
   muestraFoto = false,
+  muestraCopy = false,
 }: {
   store: StoreEditor;
   // Titular/pleca REAL de la pieza (cuando la pestaña está anclada a una publicación). Sin pieza
@@ -120,6 +145,9 @@ export function ExportarDialogo({
   // "Vista con muestra (foto)" activa: si lo está y hay foto de muestra real, se HORNEA en el hueco
   // de foto vacío al descargar, para que el archivo salga WYSIWYG (la foto que se ve, no el gris).
   muestraFoto?: boolean;
+  // "Vista con muestra (copy)" activa: si lo está, los titulares/plecas con binding se HORNEAN con el
+  // copy de ejemplo al descargar (lo que se ve). El titular ESCRITO se hornea siempre (con o sin él).
+  muestraCopy?: boolean;
 }) {
   const [abierto, setAbierto] = useState(false);
   const [formato, setFormato] = useState<Formato>("png");
@@ -140,6 +168,9 @@ export function ExportarDialogo({
         const objeto = await objetoFotoMuestra();
         if (objeto) doc = conFotoEnHuecosVacios(doc, objeto);
       }
+      // WYSIWYG (texto): hornea en cada titular/pleca el texto que se ve en el lienzo (escrito por el
+      // equipo, o el copy de muestra si ese modo está activo) para que la descarga no salga sin texto.
+      doc = conTextosHorneados(doc, (c) => textoHornear(c, muestraCopy, bindings));
       const res = await api.imagenRender(doc, bindings, opciones);
       const url = urlMedia(res.url || res.id);
       const archivo = `${repararNombre(nombre || doc.marca)}.${formato}`;

@@ -561,6 +561,7 @@ export function EditorDocumento({
           nombre={exportar.nombre}
           variante={exportar.primario === false ? "secundario" : "primario"}
           muestraFoto={muestraFoto}
+          muestraCopy={muestraCopy}
         />
       )}
       {accionesFin}

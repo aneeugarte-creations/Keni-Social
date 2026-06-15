@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { altoVisual, bandaOverlay, cajaVisual, conFotoEnHuecosVacios, documentoVacio, nuevaCapaImagen, nuevaCapaMarco, nuevaCapaOverlay, nuevaCapaTexto, tieneHuecoFotoVacio } from "./documento";
+import { altoVisual, bandaOverlay, cajaVisual, conFotoEnHuecosVacios, conTextosHorneados, documentoVacio, nuevaCapaImagen, nuevaCapaMarco, nuevaCapaOverlay, nuevaCapaTexto, tieneHuecoFotoVacio } from "./documento";
 
 describe("documentoVacio", () => {
   it("nace transparente y con el hueco de foto OCULTO (marcado y bloqueado)", () => {
@@ -111,5 +111,36 @@ describe("tieneHuecoFotoVacio / conFotoEnHuecosVacios (hornear foto de muestra e
     expect(objetos).toContain("foto-real"); // el hueco con foto real intacto
     expect(objetos).toContain("logo-deco"); // la imagen no-hueco intacta
     expect(objetos.filter((o) => o === "muestra-1")).toHaveLength(1); // solo un hueco rellenado
+  });
+});
+
+describe("conTextosHorneados (congelar el texto visible en la descarga)", () => {
+  const fmt = { w: 1080, h: 1350, safe_top: 60, safe_bottom: 96 };
+
+  it("hornea el texto resuelto y QUITA el binding, sin tocar las capas que el resolver deja en null", () => {
+    const titular = nuevaCapaTexto({ binding: "copy_in", texto: "MI TITULAR" });
+    const pleca = nuevaCapaTexto({ binding: "etiqueta_default", texto: "" });
+    const libre = nuevaCapaTexto({ binding: null, texto: "pie de foto" });
+    const doc = { ...documentoVacio(fmt, "uno-tv"), capas: [titular, pleca, libre] };
+
+    const out = conTextosHorneados(doc, (c) =>
+      c.binding === "copy_in" ? c.texto : null,
+    );
+    const [t, p, l] = out.capas as typeof doc.capas;
+    // El titular se congela: texto literal + binding quitado (el server pintará `texto`, no el binding).
+    expect(t.tipo === "texto" && t.texto).toBe("MI TITULAR");
+    expect(t.tipo === "texto" && t.binding).toBeNull();
+    // La pleca (resolver -> null) y la capa libre quedan EXACTAMENTE igual (misma referencia).
+    expect(p).toBe(pleca);
+    expect(l).toBe(libre);
+    // No muta el documento original.
+    expect(titular.binding).toBe("copy_in");
+  });
+
+  it("deja intactas las capas que no son de texto", () => {
+    const img = nuevaCapaImagen("foto", { es_foto: true });
+    const doc = { ...documentoVacio(fmt, "claro-sports"), capas: [img] };
+    const out = conTextosHorneados(doc, () => "lo que sea");
+    expect(out.capas[0]).toBe(img);
   });
 });

@@ -401,6 +401,25 @@ export function conFotoEnHuecosVacios(doc: Documento, objeto: string): Documento
   };
 }
 
+// Copia del documento con el TEXTO de cada capa de texto de nivel superior CONGELADO según `resolver`
+// (devuelve el texto a hornear, o `null` para dejar la capa como está). A la capa horneada se le
+// quita el `binding`: así el render del servidor pinta ese `texto` literal en vez del valor del
+// binding (que sin pieza llega vacío). Sirve para que la descarga sea WYSIWYG con el titular/pleca
+// que se ve en el lienzo, sin tocar el documento editable ni lo que se guarda como plantilla/pieza.
+export function conTextosHorneados(
+  doc: Documento,
+  resolver: (c: CapaTexto) => string | null,
+): Documento {
+  return {
+    ...doc,
+    capas: doc.capas.map((c) => {
+      if (c.tipo !== "texto") return c;
+      const v = resolver(c);
+      return v == null ? c : { ...c, texto: v, binding: null };
+    }),
+  };
+}
+
 // Alto VISUAL de una capa para centrar/repartir: los textos sin caja (h<=0) ocupan una línea
 // (tamano × interlineado); el overlay solo pinta su BANDA inferior; el resto usa su h del modelo.
 export function altoVisual(c: Capa): number {
