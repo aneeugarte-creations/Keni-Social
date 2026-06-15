@@ -1,12 +1,13 @@
 /**
- * PanelPipeline — el panel CONSOLIDADO de un pipeline (Investigación o Producción): una sola
- * superficie con TODAS las fases del proceso como TARJETAS GRANDES en orden de flujo. Cada
- * tarjeta lleva:
+ * PanelPipeline — el pipeline CONSOLIDADO de un proceso (Investigación o Producción) como una
+ * SECUENCIA VERTICAL de fases: una fila por fase, en orden de flujo y unidas por un conector (↓),
+ * para que el recorrido se lea de arriba a abajo. NO va dentro de una caja: es la superficie misma
+ * (sin «cajas dentro de cajas»). Cada fila es UNIFORME (mismo alto) y lleva:
  *   · su ICONO de tipo — 🤖 (LLM) / ⚙ (determinista) —,
  *   · su INTERRUPTOR (on/off) — el toggle ES el indicador de estado; no hay puntos de color —,
- *   · sus CONTEOS de cola (en curso · en cola) donde la fase tiene trabajos (y el embudo opcional),
+ *   · sus CONTEOS de cola (en curso · en cola) donde la fase tiene trabajos,
  *   · «Editar prompt» (las fases con prompt abren su doc de la Biblioteca en un overlay) y las
- *     «Excepciones por marca», en el menú de la tarjeta.
+ *     «Excepciones por marca», en el menú de la fila.
  * En la cabecera, el maestro «Máquina» (`KENI_MAQUINA`): apagado, nada automático corre.
  *
  * Genérico: el llamante le pasa las FASES (`fases`), el mapa tipo-de-job→fase para los conteos
@@ -15,13 +16,12 @@
  * tienen el maestro virtual del proceso lo indican con `heredada`.
  */
 import { useQuery } from "@tanstack/react-query";
-import { Bot, Cog, SquarePen, Users } from "lucide-react";
+import { Bot, ChevronDown, Cog, SquarePen, Users } from "lucide-react";
 import * as React from "react";
 
 import { EditorPromptOverlay } from "@/components/biblioteca/EditorPromptOverlay";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { ItemMenuContextual } from "@/components/comunes/MenuContextual";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -139,9 +139,9 @@ export function PanelPipeline({
   queuePorTipo: Record<string, string>;
   /** Clave de cola cuya fase muestra el embudo de verificación (`cola.embudo_qa`). */
   embudoEn?: string;
-  /** Snapshot de la cola (conteos por fase). Sin él, las tarjetas no muestran conteos. */
+  /** Snapshot de la cola (conteos por fase). Sin él, las filas no muestran conteos. */
   cola?: ColaMonitor;
-  /** Admin: lee/edita los switches del catálogo. No-admin: tarjetas informativas. */
+  /** Admin: lee/edita los switches del catálogo. No-admin: filas informativas. */
   esAdmin?: boolean;
   /** Indicador opcional en la cabecera (p. ej. jobs en curso del proceso). */
   chip?: React.ReactNode;
@@ -178,74 +178,99 @@ export function PanelPipeline({
   const maquinaOn = Boolean(maquina?.valor);
 
   return (
-    <Card data-testid="panel-pipeline">
-      <CardHeader className="p-4 pb-2">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <CardTitle className="text-sm">{titulo}</CardTitle>
-          <div className="flex flex-wrap items-center gap-3">
-            {chip}
-            {/* MAESTRO «Máquina» (KENI_MAQUINA): el interruptor general de TODA la auto-producción. */}
-            {maquina && (
-              <label className="flex items-center gap-2 text-sm">
-                <span className={cn(maquinaOn ? "text-muted-foreground" : "text-destructive")}>
-                  Máquina
-                  <span className="ml-1.5 text-xs">{maquinaOn ? "· encendida" : "· apagada"}</span>
-                </span>
-                <SwitchAjuste
-                  ajuste={maquina}
-                  ariaLabel="Máquina (interruptor general de toda la auto-producción)"
-                />
-              </label>
-            )}
-          </div>
+    <section data-testid="panel-pipeline">
+      {/* Cabecera (sin caja): título del proceso + indicador + maestro «Máquina». */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold">{titulo}</h3>
+        <div className="flex flex-wrap items-center gap-3">
+          {chip}
+          {maquina && (
+            <label className="flex items-center gap-2 text-sm">
+              <span className={cn(maquinaOn ? "text-muted-foreground" : "text-destructive")}>
+                Máquina
+                <span className="ml-1.5 text-xs">{maquinaOn ? "· encendida" : "· apagada"}</span>
+              </span>
+              <SwitchAjuste
+                ajuste={maquina}
+                ariaLabel="Máquina (interruptor general de toda la auto-producción)"
+              />
+            </label>
+          )}
         </div>
-      </CardHeader>
-      <CardContent className="p-4 pt-2">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {fases.map((e) => {
-            const claveEfectiva = e.claves.find((c) => porClave.has(c));
-            const ajuste = claveEfectiva ? porClave.get(claveEfectiva) : undefined;
-            const doc = esAdmin ? e.doc : undefined;
-            const deEtapa = e.excepciones
-              ? porMarca.filter((a) => a.clave.startsWith(`${e.excepciones!.base}::`))
-              : [];
-            // Acciones de la tarjeta: «Editar prompt» (primaria, abre al click) y «Excepciones».
-            const acciones: ItemMenuContextual[] = [];
-            if (doc) {
-              acciones.push({
-                etiqueta: `Editar el prompt de ${e.nombre}`,
-                icono: SquarePen,
-                onClick: () => setDocEditando(doc),
-              });
-            }
-            if (ajuste && e.excepciones && deEtapa.length > 0) {
-              acciones.push({
-                etiqueta: `Excepciones por marca de ${e.nombre}`,
-                icono: Users,
-                onClick: () => setExcepNombre(e.nombre),
-              });
-            }
-            return (
+      </div>
+
+      {/* Secuencia VERTICAL de fases, unidas por un conector (↓): el flujo se lee arriba→abajo. */}
+      <ol className="mx-auto max-w-3xl">
+        {fases.map((e, i) => {
+          const claveEfectiva = e.claves.find((c) => porClave.has(c));
+          const ajuste = claveEfectiva ? porClave.get(claveEfectiva) : undefined;
+          const doc = esAdmin ? e.doc : undefined;
+          const deEtapa = e.excepciones
+            ? porMarca.filter((a) => a.clave.startsWith(`${e.excepciones!.base}::`))
+            : [];
+          // Acciones de la fila: «Editar prompt» (primaria, abre al click) y «Excepciones».
+          const acciones: ItemMenuContextual[] = [];
+          if (doc) {
+            acciones.push({
+              etiqueta: `Editar el prompt de ${e.nombre}`,
+              icono: SquarePen,
+              onClick: () => setDocEditando(doc),
+            });
+          }
+          if (ajuste && e.excepciones && deEtapa.length > 0) {
+            acciones.push({
+              etiqueta: `Excepciones por marca de ${e.nombre}`,
+              icono: Users,
+              onClick: () => setExcepNombre(e.nombre),
+            });
+          }
+          const conCola = e.queue !== undefined;
+          const enCursoN = conCola ? (enCurso[e.queue!] ?? 0) : 0;
+          const esperaN = conCola ? (esperando[e.queue!] ?? 0) : 0;
+          const embudo = e.queue !== undefined && e.queue === embudoEn ? cola?.embudo_qa : undefined;
+          return (
+            <li key={e.nombre}>
+              {/* Conector de flujo entre fases. */}
+              {i > 0 && (
+                <div className="flex justify-center py-1" aria-hidden="true">
+                  <ChevronDown className="h-4 w-4 text-muted-foreground/40" />
+                </div>
+              )}
               <FilaConAcciones
-                key={e.nombre}
                 como="div"
                 acciones={acciones}
                 onPrimaria={acciones[0]?.onClick}
                 kebab="nunca"
                 realce
                 etiquetaAcciones={`Acciones de ${e.nombre}`}
-                className="flex min-h-[5.5rem] flex-col rounded-lg border border-border/70 p-3"
+                className="flex items-center justify-between gap-3 rounded-lg border border-border/70 px-3.5 py-2.5"
               >
-                <div className="flex items-start justify-between gap-2">
-                  <span className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
+                {/* Izquierda: icono + nombre (línea 1) y ayuda/heredada (línea 2). Alto UNIFORME. */}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 text-sm font-medium">
                     {e.es_ia ? (
                       <Bot className="h-4 w-4 shrink-0" aria-label="IA" />
                     ) : (
                       <Cog className="h-4 w-4 shrink-0 text-muted-foreground" aria-label="determinista" />
                     )}
                     <span className="truncate">{e.nombre}</span>
-                  </span>
-                  {/* El switch ES el indicador de estado (no hay punto de color). */}
+                  </div>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    {e.ayuda}
+                    {e.heredada && <span className="text-muted-foreground/70"> · {e.heredada}</span>}
+                  </p>
+                </div>
+                {/* Derecha: conteos de cola (1 línea) + el switch (indicador de estado). */}
+                <div className="flex shrink-0 items-center gap-3">
+                  {conCola && (
+                    <span className="hidden text-right text-xs tabular-nums text-muted-foreground sm:block">
+                      <span className={enCursoN > 0 ? "font-medium text-foreground" : undefined}>
+                        {enCursoN} en curso
+                      </span>{" "}
+                      · {esperaN} en cola
+                      {embudo && <> · embudo {embudo.en_vuelo}</>}
+                    </span>
+                  )}
                   {ajuste && (
                     <SwitchAjuste
                       ajuste={ajuste}
@@ -253,30 +278,6 @@ export function PanelPipeline({
                     />
                   )}
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">{e.ayuda}</p>
-                {e.heredada && (
-                  <p className="mt-0.5 text-[11px] text-muted-foreground/80">· {e.heredada}</p>
-                )}
-                {e.queue && (
-                  <p className="mt-auto pt-1.5 text-xs tabular-nums text-muted-foreground">
-                    <span
-                      className={
-                        (enCurso[e.queue] ?? 0) > 0 ? "font-medium text-foreground" : undefined
-                      }
-                    >
-                      {enCurso[e.queue] ?? 0} en curso
-                    </span>{" "}
-                    · {esperando[e.queue] ?? 0} en cola
-                  </p>
-                )}
-                {e.queue && e.queue === embudoEn && cola?.embudo_qa && (
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">
-                    Embudo: {cola.embudo_qa.en_vuelo} en vuelo
-                    {cola.embudo_qa.tope_por_marca > 0 && (
-                      <> · tope {cola.embudo_qa.tope_por_marca}/marca</>
-                    )}
-                  </p>
-                )}
                 {ajuste && e.excepciones && deEtapa.length > 0 && (
                   <DialogoExcepciones
                     etiqueta={e.nombre}
@@ -289,16 +290,16 @@ export function PanelPipeline({
                   />
                 )}
               </FilaConAcciones>
-            );
-          })}
-        </div>
-      </CardContent>
+            </li>
+          );
+        })}
+      </ol>
 
       <EditorPromptOverlay
         docId={docEditando}
         abierto={docEditando !== null}
         onCerrar={() => setDocEditando(null)}
       />
-    </Card>
+    </section>
   );
 }
