@@ -49,9 +49,12 @@ import {
   franjasSolapan,
   presentacionFranja,
   type ConflictoCandidato,
-  type RecuadroPersona,
+  type CubridorEvento,
+  type ItemEventoCalendario,
 } from "./comun";
 import { DialogConfigFranjas, DialogFranjasDeSemana } from "./Franjas";
+import { CLAVE_TAREAS } from "@/pages/tareas/claves";
+import { agrupar } from "@/pages/tareas/tipos";
 
 
 export function Calendario({
@@ -78,6 +81,14 @@ export function Calendario({
     queryKey: ["rota", "cobertura", lunes, marcaActiva] as const,
     queryFn: ({ signal }) =>
       api.cobertura({ lunes, marca: marcaActiva ?? undefined }, signal),
+  });
+  // Tareas de cobertura (clase='tarea' con evento_id): la TITULARIDAD real, quién COGIÓ
+  // cada evento. Es la MISMA fuente que el Panorama (mismo queryKey → cache compartida y se
+  // invalida igual al coger/soltar), así calendario y Panorama dicen lo mismo.
+  const tareasQ = useQuery({
+    queryKey: [...CLAVE_TAREAS, "tareas", marcaActiva ?? "todas"],
+    queryFn: ({ signal }) =>
+      api.contenido({ clase: "tarea", marca: marcaActiva ?? undefined }, signal),
   });
   const turnosQ = useQuery({
     queryKey: claveTurnos,
@@ -197,15 +208,6 @@ export function Calendario({
     [coberturaQ.data?.eventos, desde, hasta],
   );
 
-  // Turnos indexados por (franja_id, fecha, miembro_id) → TurnoRota. Sirve para que el
-  // recuadro persona conserve el id del turno (para borrar/duplicar) sin volver a
-  // buscar. También lo usamos para construir la lista de personas por celda.
-  const turnoPorCelda = React.useMemo(() => {
-    const m = new Map<string, TurnoRota>();
-    for (const t of turnos) m.set(`${t.franja_id}|${t.fecha}|${t.miembro_id}`, t);
-    return m;
-  }, [turnos]);
-
   // Personas que trabajan cada (franja_id, fecha) según los turnos publicados.
   const personasPorCelda = React.useMemo(() => {
     const m = new Map<string, TurnoRota[]>();
@@ -294,85 +296,41 @@ export function Calendario({
     [ausenciaDe, turnosPorMiembroFecha, franjaPorId],
   );
 
-  // Itera los eventos y los reparte en su (franja_id, fecha) → persona/sin-cubrir.
-  // - Con cobertura: cada cubridor entra en el recuadro de su persona (su `franja_id`
-  //   ya viene resuelto por el backend, así que la asignación es directa).
-  // - Sin turno a esa hora: el evento cae en un recuadro etiquetado "Sin turno a esa
-  //   hora" en la franja que su hora resuelve contra las franjas vivas de la semana.
-  //   Mide CAPACIDAD (nadie trabaja esa franja), NO es el "Por cubrir" del tablero
-  //   Cobertura (evento que nadie ha reclamado). Si la semana aún no tiene franjas
-  //   (race), el evento se pierde de la rejilla — caso raro, sin franjas no hay rejilla.
-  const recuadrosPorCelda = React.useMemo(() => {
-    const m = new Map<string, RecuadroPersona[]>(); // clave: `${franja_id}|${fecha}`
-    // Primero las personas que trabajan cada celda (aunque no tengan eventos).
-    for (const franja of franjasSemana) {
-      for (const fecha of dias) {
-        const personas = personasPorCelda.get(`${franja.id}|${fecha}`) ?? [];
-        const lista: RecuadroPersona[] = personas.map((t) => ({
-          miembro_id: t.miembro_id,
-          miembro_nombre: t.miembro_nombre,
-          turno: t,
-          sinCubrir: false,
-          eventos: [],
-        }));
-        m.set(`${franja.id}|${fecha}`, lista);
-      }
-    }
-    // Coloca cada evento en su recuadro.
-    for (const evento of eventosCobertura) {
-      if (evento.cobertura.length === 0) {
-        const franjaId = franjaIdParaHoraEvento(evento.hora, franjasSemana);
-        if (!franjaId) continue;
-        const clave = `${franjaId}|${evento.fecha}`;
-        const lista = m.get(clave) ?? [];
-        let recuadroSin = lista.find((r) => r.sinCubrir);
-        if (!recuadroSin) {
-          recuadroSin = {
-            miembro_id: "",
-            // Etiqueta no mostrada (el render usa copy fijo "Sin turno a esa hora"); se
-            // deja coherente para no reintroducir el ambiguo "Sin cubrir" por grep.
-            miembro_nombre: "Sin turno a esa hora",
-            turno: null,
-            sinCubrir: true,
-            eventos: [],
-          };
-          lista.push(recuadroSin);
-        }
-        recuadroSin.eventos.push({ evento, cobertura: [] });
-        m.set(clave, lista);
-        continue;
-      }
-
-      for (const cob of evento.cobertura) {
-        const clave = `${cob.franja_id}|${evento.fecha}`;
-        const lista = m.get(clave) ?? [];
-        const recuadro = lista.find(
-          (r) => !r.sinCubrir && r.miembro_id === cob.miembro_id,
-        );
-        if (recuadro) {
-          recuadro.eventos.push({ evento, cobertura: evento.cobertura });
-        } else {
-          // El backend devolvió una cobertura cuyo miembro no aparece en `turnosQ`
-          // para esa (franja_id, fecha). Caso raro (carrera de invalidaciones); lo
-          // metemos como persona del cubridor para no perder el dato. `turno` queda
-          // null porque no tenemos el TurnoRota local; el menú de CRUD del recuadro
-          // se desactiva (sólo se ven los chips de evento).
-          const turnoLocal =
-            turnoPorCelda.get(`${cob.franja_id}|${evento.fecha}|${cob.miembro_id}`) ??
-            null;
-          lista.push({
-            miembro_id: cob.miembro_id,
-            miembro_nombre: cob.miembro_nombre,
-            turno: turnoLocal,
-            sinCubrir: false,
-            eventos: [{ evento, cobertura: evento.cobertura }],
-          });
-        }
-        m.set(clave, lista);
-      }
+  // TITULARIDAD: quién COGIÓ cada evento, derivada de las tareas de cobertura (la MISMA
+  // fuente que el Panorama) y NO de quién está de turno. Antes el calendario usaba la
+  // cobertura DERIVADA de turnos (`evento.cobertura`): metía el evento bajo CADA persona
+  // de la franja → salía duplicado y no coincidía con el Panorama. Ahora coinciden.
+  const tareas = tareasQ.data?.contenidos ?? [];
+  const cubridoresPorEvento = React.useMemo(() => {
+    const m = new Map<string, CubridorEvento[]>();
+    for (const c of agrupar(tareas, eventosCobertura).coberturas) {
+      m.set(
+        c.eventoId,
+        c.cubridores.map((t) => ({ id: t.responsable_id, nombre: t.responsable_nombre })),
+      );
     }
     return m;
-  }, [eventosCobertura, dias, personasPorCelda, franjasSemana, turnoPorCelda]);
+  }, [tareas, eventosCobertura]);
+
+  // Cada evento UNA sola vez en su celda: franja por su HORA, día por su FECHA. Con su
+  // titularidad real; sin cubridores = «Por cubrir» (lo pinta el chip). Si la semana aún no
+  // tiene franjas (race) o la hora no cae en ninguna, el evento se pierde de la rejilla.
+  const eventosPorCelda = React.useMemo(() => {
+    const m = new Map<string, ItemEventoCalendario[]>(); // clave: `${franja_id}|${fecha}`
+    for (const evento of eventosCobertura) {
+      const franjaId = franjaIdParaHoraEvento(evento.hora, franjasSemana);
+      if (!franjaId) continue;
+      const clave = `${franjaId}|${evento.fecha}`;
+      const lista = m.get(clave) ?? [];
+      lista.push({ evento, cubridores: cubridoresPorEvento.get(evento.id) ?? [] });
+      m.set(clave, lista);
+    }
+    // Orden estable por hora dentro de la celda.
+    for (const lista of m.values()) {
+      lista.sort((a, b) => (a.evento.hora || "").localeCompare(b.evento.hora || ""));
+    }
+    return m;
+  }, [eventosCobertura, franjasSemana, cubridoresPorEvento]);
 
   const inicio = semana?.inicio ?? coberturaQ.data?.inicio ?? dias[0] ?? "";
   const fin = semana?.fin ?? coberturaQ.data?.fin ?? dias[6] ?? "";
@@ -596,16 +554,14 @@ export function Calendario({
                           ) : null}
                         </div>
                         {dias.map((fecha) => {
-                          const recuadros =
-                            recuadrosPorCelda.get(`${franja.id}|${fecha}`) ?? [];
+                          const personas =
+                            personasPorCelda.get(`${franja.id}|${fecha}`) ?? [];
+                          const eventos =
+                            eventosPorCelda.get(`${franja.id}|${fecha}`) ?? [];
                           // CMs disponibles para añadir aquí: los de ClaroSports que no
-                          // estén ya asignados a esta celda. La franja Descanso también
+                          // estén ya de turno en esta celda. La franja Descanso también
                           // admite asignaciones (turno de no-laboral explícito).
-                          const yaEnCelda = new Set(
-                            recuadros
-                              .filter((r) => !r.sinCubrir && r.miembro_id)
-                              .map((r) => r.miembro_id),
-                          );
+                          const yaEnCelda = new Set(personas.map((t) => t.miembro_id));
                           const cmsDisponibles = cms.filter(
                             (m) => !yaEnCelda.has(m.id),
                           );
@@ -618,7 +574,8 @@ export function Calendario({
                               lunes={lunes}
                               fecha={fecha}
                               franja={franja}
-                              recuadros={recuadros}
+                              personas={personas}
+                              eventos={eventos}
                               equipo={equipo}
                               cmsDisponibles={cmsDisponibles}
                               editable={editable}

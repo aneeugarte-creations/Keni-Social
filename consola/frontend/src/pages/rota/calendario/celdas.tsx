@@ -9,7 +9,6 @@ import {
 import * as React from "react";
 import { toast } from "sonner";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -27,7 +26,6 @@ import {
 } from "@/components/ui/select";
 import { ApiError, api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { AvatarPersona } from "@/pages/tareas/AvatarPersona";
 import type {
   AusenciaRota,
   CoordinacionTurno,
@@ -35,32 +33,27 @@ import type {
   EventoRota,
   FranjaSemana,
   MiembroRota,
+  TurnoRota,
 } from "@/types";
 
-import type { ConflictoCandidato, RecuadroPersona } from "../comun";
+import type { ConflictoCandidato, ItemEventoCalendario } from "../comun";
 import { BadgeCoordinador, ChipEventoCalendario, ChipTurnoCM } from "./chips";
 
 
-// Copy del recuadro de eventos cuya franja NO tiene ningún turno asignado a esa hora.
-// Mide CAPACIDAD (nadie trabaja esa franja ese día). Es DISTINTO del "Por cubrir" del
-// tablero Cobertura (un evento que nadie ha reclamado): el copy inequívoco evita que se
-// confundan los dos planos (capacidad vs titularidad).
-const ETIQUETA_SIN_TURNO = "Sin turno a esa hora";
-const TITULO_SIN_TURNO =
-  "Ningún turno cubre esta franja a esta hora (capacidad). No es lo mismo que «Por cubrir» en Cobertura.";
-
-
 /**
- * Una celda (franja × día) de la rejilla. Mantiene estado local para abrir el dropdown
- * desde dos puntos de entrada: el propio trigger del dropdown al pie de la celda y el
- * recuadro "Sin cubrir" cuando hay eventos sin coverage. La separación a componente es
- * lo que permite tener `useState` por celda sin polucionar el padre con un Map.
+ * Una celda (franja × día) de la rejilla. Dos planos separados (ya no anidados):
+ *  - CAPACIDAD: quién está de turno esa franja (avatares con CRUD) + «Añadir persona».
+ *  - EVENTOS: cada evento de esa franja UNA sola vez, con quién lo COGIÓ (titularidad real,
+ *    la misma que el Panorama) o «Por cubrir» si nadie lo ha cogido.
+ * Antes el evento se anidaba bajo CADA persona de turno → salía duplicado y mezclaba
+ * capacidad con titularidad. Ahora el evento es del DÍA/FRANJA, no de la persona.
  */
 export function CeldaDeRejilla({
   lunes,
   fecha,
   franja,
-  recuadros,
+  personas,
+  eventos,
   equipo,
   cmsDisponibles,
   editable,
@@ -76,7 +69,10 @@ export function CeldaDeRejilla({
   lunes: string;
   fecha: string;
   franja: FranjaSemana;
-  recuadros: RecuadroPersona[];
+  /** Personas de TURNO en esta franja ese día (CAPACIDAD). */
+  personas: TurnoRota[];
+  /** Eventos de esta franja/día, cada uno UNA vez, con su titularidad real (claims). */
+  eventos: ItemEventoCalendario[];
   equipo: MiembroRota[];
   cmsDisponibles: MiembroRota[];
   editable: boolean;
@@ -97,15 +93,6 @@ export function CeldaDeRejilla({
   onEditarEvento: (evento: EventoRota) => void;
   onCambio: () => void;
 }) {
-  // Cada vez que sube, el dropdown del pie se abre. Se usa para que un click en el header
-  // del recuadro "Sin cubrir" abra el dropdown sin necesitar pasar refs.
-  const [pedidoAbrir, setPedidoAbrir] = React.useState(0);
-  const placeholderDropdown =
-    recuadros.length === 0
-      ? franja.es_descanso
-        ? "—"
-        : "Sin turno asignado"
-      : "Añadir persona";
   return (
     <div
       className={cn(
@@ -126,135 +113,42 @@ export function CeldaDeRejilla({
           onCambio={onCambio}
         />
       )}
-      {recuadros.length === 0 && !editable && (
-        <div className="rounded-md border border-dashed border-border/60 px-2 py-3 text-center text-[11px] text-muted-foreground/60">
-          {franja.es_descanso ? "—" : "Sin turno asignado"}
-        </div>
-      )}
-      {recuadros.map((rec) => (
-        <RecuadroPersonaCalendario
-          key={`${rec.miembro_id}-${rec.sinCubrir ? "sin" : "ok"}`}
-          recuadro={rec}
-          franja={franja}
-          equipo={equipo}
-          ausencia={
-            rec.sinCubrir ? undefined : ausenciaDe(rec.miembro_id, fecha)
-          }
-          editable={editable}
-          onEditarEvento={onEditarEvento}
-          onCambio={onCambio}
-          onClickHeaderSinCubrir={
-            editable ? () => setPedidoAbrir((n) => n + 1) : undefined
-          }
-        />
-      ))}
-      {editable && (
-        <DropdownAnadirPersona
-          lunes={lunes}
-          fecha={fecha}
-          franja={franja}
-          cmsDisponibles={cmsDisponibles}
-          conflictoCandidato={conflictoCandidato}
-          onCambio={onCambio}
-          placeholder={placeholderDropdown}
-          pedidoAbrir={pedidoAbrir}
-        />
-      )}
-    </div>
-  );
-}
 
-/**
- * Un recuadro por persona dentro de una celda día-franja del calendario fusionado. La
- * cabecera del recuadro reutiliza `ChipTurnoCM`: cuando `editable=true` y el recuadro
- * representa a una persona real (no "Sin cubrir"), expone el menú contextual de CRUD
- * (editar detalles / duplicar / borrar) y el botón × inline para quitar el turno. Los
- * eventos cubiertos por esa persona aparecen como chips clicables debajo.
- */
-export function RecuadroPersonaCalendario({
-  recuadro,
-  franja,
-  equipo,
-  ausencia,
-  editable,
-  onEditarEvento,
-  onCambio,
-  onClickHeaderSinCubrir,
-}: {
-  recuadro: RecuadroPersona;
-  franja: FranjaSemana;
-  /** Equipo de la rota (para que `DialogEditarTurno` pueda reasignar). */
-  equipo: MiembroRota[];
-  ausencia?: AusenciaRota;
-  /** `true` si la semana es borrador (no aprobada): habilita CRUD de turnos. */
-  editable: boolean;
-  onEditarEvento: (evento: EventoRota) => void;
-  onCambio: () => void;
-  /**
-   * Cuando el recuadro es "Sin cubrir" y el padre quiere abrir el dropdown al hacer
-   * click en su header, pasa este callback. Solo lo recibe el header sinCubrir.
-   */
-  onClickHeaderSinCubrir?: () => void;
-}) {
-  const esDescanso = franja.es_descanso;
-  const estilo = recuadro.sinCubrir
-    ? "border-dashed border-amber-300/70 bg-amber-50/30 dark:bg-amber-950/10"
-    : esDescanso
-      ? "border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900/40"
-      : "border-border bg-background";
-  return (
-    <div className={`flex flex-col gap-1 rounded-md border p-1.5 text-xs ${estilo}`}>
-      <div className="flex items-center justify-between gap-1">
-        {recuadro.sinCubrir ? (
-          onClickHeaderSinCubrir ? (
-            <button
-              type="button"
-              onClick={onClickHeaderSinCubrir}
-              className="truncate text-left font-medium text-amber-700 hover:underline dark:text-amber-400"
-              title={`${TITULO_SIN_TURNO} Pulsa para asignar a alguien.`}
-            >
-              {ETIQUETA_SIN_TURNO}
-            </button>
-          ) : (
-            <span
-              className="truncate font-medium text-amber-700 dark:text-amber-400"
-              title={TITULO_SIN_TURNO}
-            >
-              {ETIQUETA_SIN_TURNO}
-            </span>
-          )
-        ) : recuadro.turno ? (
-          // `ChipTurnoCM` ya envuelve el nombre en un menú contextual (editar /
-          // duplicar / borrar) + botón × para quitar el turno. Reusamos el mismo
-          // componente que la rejilla CRUD anterior — una única fuente de verdad.
+      {/* CAPACIDAD: quién está de turno esta franja (avatares con CRUD). NO cuelga eventos:
+          el evento ya no es «de la persona», es del día/franja (ver bloque de eventos). */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {personas.map((t) => (
           <ChipTurnoCM
-            turno={recuadro.turno}
+            key={t.id}
+            turno={t}
             equipo={equipo}
-            ausencia={ausencia}
+            ausencia={ausenciaDe(t.miembro_id, fecha)}
             editable={editable}
             onCambio={onCambio}
           />
-        ) : (
-          // Coverage suelta: el backend devolvió un cubridor cuyo TurnoRota local no
-          // tenemos (carrera de invalidación). Solo el avatar (sin menú); la acción
-          // CRUD vuelve disponible al siguiente refetch.
-          <span className="inline-flex max-w-full items-center gap-1 text-xs">
-            <AvatarPersona id={recuadro.miembro_id} nombre={recuadro.miembro_nombre} size="sm" />
+        ))}
+        {personas.length === 0 && !editable && (
+          <span className="text-[11px] text-muted-foreground/60">
+            {franja.es_descanso ? "—" : "Sin turno asignado"}
           </span>
         )}
-        {recuadro.eventos.length > 0 && (
-          <Badge variant="outline" className="h-4 px-1 text-[10px] font-normal">
-            {recuadro.eventos.length}
-          </Badge>
+        {editable && (
+          <DropdownAnadirPersona
+            lunes={lunes}
+            fecha={fecha}
+            franja={franja}
+            cmsDisponibles={cmsDisponibles}
+            conflictoCandidato={conflictoCandidato}
+            onCambio={onCambio}
+            placeholder={personas.length === 0 ? (franja.es_descanso ? "—" : "Añadir persona") : "Añadir"}
+          />
         )}
       </div>
-      {recuadro.eventos.length === 0 ? (
-        <span className="px-0.5 text-[10px] text-muted-foreground/70">
-          {esDescanso ? "Descanso" : "Sin eventos"}
-        </span>
-      ) : (
+
+      {/* EVENTOS: cada uno UNA vez, con quién lo COGIÓ (titularidad real) o «Por cubrir». */}
+      {eventos.length > 0 && (
         <div className="flex flex-col gap-1">
-          {recuadro.eventos.map((item) => (
+          {eventos.map((item) => (
             <ChipEventoCalendario
               key={item.evento.id}
               item={item}

@@ -8,12 +8,15 @@ import type {
   EventoRota,
   FranjaSemana,
   MiembroRota,
-  TurnoCobertura,
   TurnoRota,
 } from "@/types";
 
-import { franjasSolapan, type ConflictoCandidato } from "../comun";
-import { DropdownAnadirPersona, RecuadroPersonaCalendario } from "./celdas";
+import {
+  franjasSolapan,
+  type ConflictoCandidato,
+  type ItemEventoCalendario,
+} from "../comun";
+import { CeldaDeRejilla, DropdownAnadirPersona } from "./celdas";
 
 vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), info: vi.fn() }),
@@ -58,18 +61,6 @@ function evento(over: Partial<EventoRota> = {}): EventoRota {
   };
 }
 
-function cubridor(over: Partial<TurnoCobertura> = {}): TurnoCobertura {
-  return {
-    turno_id: "t1",
-    miembro_id: "u1",
-    miembro_nombre: "Persona",
-    franja_id: "f-manana",
-    franja_nombre: "Mañana",
-    override: false,
-    ...over,
-  };
-}
-
 function turno(over: Partial<TurnoRota> = {}): TurnoRota {
   return {
     id: "tr1",
@@ -91,155 +82,58 @@ function turno(over: Partial<TurnoRota> = {}): TurnoRota {
   };
 }
 
-describe("RecuadroPersonaCalendario — copy «Sin turno a esa hora»", () => {
-  it("etiqueta el recuadro sin turno de forma inequívoca (no «Sin cubrir»)", () => {
-    render(
-      <RecuadroPersonaCalendario
-        recuadro={{
-          miembro_id: "",
-          miembro_nombre: "Sin turno a esa hora",
-          turno: null,
-          sinCubrir: true,
-          eventos: [],
-        }}
-        franja={franja()}
-        equipo={[]}
-        editable={false}
-        onEditarEvento={vi.fn()}
-        onCambio={vi.fn()}
-      />,
-    );
-    expect(screen.getByText("Sin turno a esa hora")).toBeInTheDocument();
-    // «Por cubrir»/«Sin cubrir» quedan reservados a otros planos; aquí NO deben aparecer.
-    expect(screen.queryByText("Sin cubrir")).toBeNull();
-    expect(screen.queryByText("Por cubrir")).toBeNull();
+function itemEvento(
+  cubridores: { id: string; nombre: string }[] = [],
+  over: Partial<EventoRota> = {},
+): ItemEventoCalendario {
+  return { evento: evento(over), cubridores };
+}
+
+function renderCelda(
+  over: { personas?: TurnoRota[]; eventos?: ItemEventoCalendario[]; editable?: boolean } = {},
+) {
+  return conProvider(
+    <CeldaDeRejilla
+      lunes="2026-06-15"
+      fecha="2026-06-15"
+      franja={franja()}
+      personas={over.personas ?? []}
+      eventos={over.eventos ?? []}
+      equipo={[]}
+      cmsDisponibles={[]}
+      editable={over.editable ?? false}
+      finde={false}
+      ausenciaDe={() => undefined}
+      conflictoCandidato={() => ({ solapa: false })}
+      candidatosCoordinador={[]}
+      coordinacionEditable={false}
+      onEditarEvento={vi.fn()}
+      onCambio={vi.fn()}
+    />,
+  );
+}
+
+describe("CeldaDeRejilla — evento UNA vez + titularidad real (coherente con Panorama)", () => {
+  it("el evento sale una sola vez con quien lo COGIÓ, no con quien está de turno", () => {
+    renderCelda({
+      // Roger está de TURNO (capacidad) pero NO cogió el evento; Tezcucano lo cogió.
+      personas: [turno({ id: "tr-roger", miembro_id: "u-roger", miembro_nombre: "Roger" })],
+      eventos: [itemEvento([{ id: "u-tezcu", nombre: "Tezcucano Pérez" }])],
+    });
+    // UNA vez (antes se duplicaba bajo cada persona de turno de la franja).
+    expect(screen.getAllByText("España vs Cabo Verde")).toHaveLength(1);
+    // En el evento, quien lo COGIÓ (su primer nombre).
+    expect(screen.getByText("Tezcucano")).toBeInTheDocument();
+    // Roger está en CAPACIDAD (avatar; su nombre en el `title`), pero NO figura como
+    // cubridor del evento → no aparece como texto plano.
+    expect(screen.getByTitle("Roger")).toBeInTheDocument();
+    expect(screen.queryByText("Roger")).toBeNull();
   });
 
-  it("cuando es asignable, el header es un botón con la misma etiqueta", () => {
-    const onClick = vi.fn();
-    render(
-      <RecuadroPersonaCalendario
-        recuadro={{
-          miembro_id: "",
-          miembro_nombre: "Sin turno a esa hora",
-          turno: null,
-          sinCubrir: true,
-          eventos: [],
-        }}
-        franja={franja()}
-        equipo={[]}
-        editable
-        onEditarEvento={vi.fn()}
-        onCambio={vi.fn()}
-        onClickHeaderSinCubrir={onClick}
-      />,
-    );
-    const boton = screen.getByRole("button", { name: "Sin turno a esa hora" });
-    fireEvent.click(boton);
-    expect(onClick).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("ChipEventoCalendario — cubridores en el evento del calendario", () => {
-  it("muestra el avatar + PRIMER nombre de cada cubridor (como en el tablero)", () => {
-    render(
-      <RecuadroPersonaCalendario
-        recuadro={{
-          miembro_id: "u-elias",
-          miembro_nombre: "Elias",
-          turno: null,
-          sinCubrir: false,
-          eventos: [
-            {
-              evento: evento(),
-              cobertura: [
-                cubridor({ turno_id: "t-elias", miembro_id: "u-elias", miembro_nombre: "Elias" }),
-                cubridor({ turno_id: "t-rami", miembro_id: "u-rami", miembro_nombre: "Ramiro Soto" }),
-              ],
-            },
-          ],
-        }}
-        franja={franja()}
-        equipo={[]}
-        editable={false}
-        onEditarEvento={vi.fn()}
-        onCambio={vi.fn()}
-      />,
-    );
-    expect(screen.getByText("España vs Cabo Verde")).toBeInTheDocument();
-    // Cada cubridor sale por su PRIMER nombre, no el nombre completo.
-    expect(screen.getByText("Ramiro")).toBeInTheDocument();
-    expect(screen.queryByText("Ramiro Soto")).toBeNull();
-    // El otro cubridor también figura (al menos en el chip).
-    expect(screen.getAllByText("Elias").length).toBeGreaterThanOrEqual(1);
-  });
-
-  it("no muestra cubridores cuando el evento no tiene cobertura («Sin turno a esa hora»)", () => {
-    render(
-      <RecuadroPersonaCalendario
-        recuadro={{
-          miembro_id: "",
-          miembro_nombre: "Sin turno a esa hora",
-          turno: null,
-          sinCubrir: true,
-          eventos: [{ evento: evento({ titulo: "Amistoso sin señal" }), cobertura: [] }],
-        }}
-        franja={franja()}
-        equipo={[]}
-        editable={false}
-        onEditarEvento={vi.fn()}
-        onCambio={vi.fn()}
-      />,
-    );
-    expect(screen.getByText("Amistoso sin señal")).toBeInTheDocument();
-    expect(screen.queryByText("Ramiro")).toBeNull();
-  });
-});
-
-describe("RecuadroPersonaCalendario — cabecera = solo avatar (sin nombre escrito)", () => {
-  it("un turno real muestra el avatar de la persona, NO su nombre como texto", () => {
-    conProvider(
-      <RecuadroPersonaCalendario
-        recuadro={{
-          miembro_id: "u-tezcu",
-          miembro_nombre: "Tezcucano Pérez",
-          turno: turno(),
-          sinCubrir: false,
-          eventos: [],
-        }}
-        franja={franja()}
-        equipo={[]}
-        editable={false}
-        onEditarEvento={vi.fn()}
-        onCambio={vi.fn()}
-      />,
-    );
-    // El nombre vive en el `title` del avatar (hover), no como texto plano.
-    expect(screen.getByTitle("Tezcucano Pérez")).toBeInTheDocument();
-    expect(screen.queryByText("Tezcucano Pérez")).toBeNull();
-    // La inicial del avatar sí se pinta.
-    expect(screen.getByText("T")).toBeInTheDocument();
-  });
-
-  it("la coverage suelta (sin TurnoRota local) también es solo avatar", () => {
-    render(
-      <RecuadroPersonaCalendario
-        recuadro={{
-          miembro_id: "u-ana",
-          miembro_nombre: "Ana",
-          turno: null,
-          sinCubrir: false,
-          eventos: [],
-        }}
-        franja={franja()}
-        equipo={[]}
-        editable={false}
-        onEditarEvento={vi.fn()}
-        onCambio={vi.fn()}
-      />,
-    );
-    expect(screen.getByTitle("Ana")).toBeInTheDocument();
-    expect(screen.queryByText("Ana")).toBeNull();
+  it("un evento que nadie ha cogido sale como «Por cubrir»", () => {
+    renderCelda({ eventos: [itemEvento([], { titulo: "Amistoso sin dueño" })] });
+    expect(screen.getByText("Amistoso sin dueño")).toBeInTheDocument();
+    expect(screen.getByText("Por cubrir")).toBeInTheDocument();
   });
 });
 

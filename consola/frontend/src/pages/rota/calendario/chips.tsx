@@ -188,7 +188,6 @@ export function ChipEventoCalendario({
 }) {
   const cob = COBERTURA[item.evento.tipo_cobertura] ?? COBERTURA.transmision;
   const Icono = cob.icono;
-  const tieneOverride = item.cobertura.some((c) => c.override);
   return (
     <button
       type="button"
@@ -208,23 +207,22 @@ export function ChipEventoCalendario({
             <BellRing className="h-2.5 w-2.5" /> cambió
           </Badge>
         )}
-        {tieneOverride && (
-          <span className="inline-flex items-center gap-0.5 text-amber-700 dark:text-amber-400">
-            <AlertTriangle className="h-2.5 w-2.5" /> override
-          </span>
-        )}
       </span>
-      {/* Quién lo cubre: el mismo avatar redondo (color por persona) + primer nombre que
-          se ve en el tablero de Cobertura, para que el evento del calendario diga de un
-          vistazo su equipo. Vacío en «Sin turno a esa hora» (evento sin cobertura). */}
-      {item.cobertura.length > 0 && (
+      {/* Quién lo COGIÓ: el mismo avatar + primer nombre que muestra el Panorama (titularidad
+          real, no quién está de turno), para que calendario y Panorama digan lo mismo. Si nadie
+          lo ha cogido → «Por cubrir», igual que en el tablero de Cobertura. */}
+      {item.cubridores.length > 0 ? (
         <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-          {item.cobertura.map((c) => (
-            <span key={c.turno_id} className="inline-flex items-center gap-1">
-              <AvatarPersona id={c.miembro_id} nombre={c.miembro_nombre} size="sm" />
-              <span className="truncate font-medium">{primerNombre(c.miembro_nombre)}</span>
+          {item.cubridores.map((c) => (
+            <span key={c.id} className="inline-flex items-center gap-1">
+              <AvatarPersona id={c.id} nombre={c.nombre} size="sm" />
+              <span className="truncate font-medium">{primerNombre(c.nombre)}</span>
             </span>
           ))}
+        </span>
+      ) : (
+        <span className="inline-flex w-fit items-center rounded border border-amber-300 bg-amber-50 px-1 text-[10px] font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+          Por cubrir
         </span>
       )}
       {item.evento.cambiado && (

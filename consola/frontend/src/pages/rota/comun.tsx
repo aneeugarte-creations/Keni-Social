@@ -47,8 +47,6 @@ import type {
   SwapTurno,
   TipoAusencia,
   TipoCoberturaEvento,
-  TurnoCobertura,
-  TurnoRota,
 } from "@/types";
 
 
@@ -579,20 +577,18 @@ export function presentacionFranja(franja: FranjaSemana, indiceLaboral: number):
   );
 }
 
-export interface ItemEventoCalendario {
-  evento: EventoRota;
-  /** Turnos (cobertura derivada) que cubren el evento por (fecha, franja). */
-  cobertura: TurnoCobertura[];
+/** Una persona que COGIÓ un evento (titularidad real). La misma noción que el Panorama:
+ * sale de la tarea de cobertura (clase='tarea' con `evento_id`), no de quién está de turno. */
+export interface CubridorEvento {
+  /** `responsable_id` del claim (la persona que cogió el evento). */
+  id: string;
+  nombre: string;
 }
 
-export interface RecuadroPersona {
-  miembro_id: string;
-  miembro_nombre: string;
-  /** El turno concreto de esta persona en esta celda (para CRUD: editar/duplicar/borrar). */
-  turno: TurnoRota | null;
-  /** `true` si el recuadro es "Sin cubrir" (eventos sin cobertura derivada). */
-  sinCubrir: boolean;
-  eventos: ItemEventoCalendario[];
+export interface ItemEventoCalendario {
+  evento: EventoRota;
+  /** Quién COGIÓ el evento (titularidad real, coherente con el Panorama). Vacío = «Por cubrir». */
+  cubridores: CubridorEvento[];
 }
 
 /**
