@@ -1,5 +1,5 @@
 /**
- * Cajones del día — insumos diarios del equipo AMX.
+ * Cajones del día — insumos diarios del equipo de redes.
  *
  * El equipo vuelca material en los cajones del día (UnoTV: Portal/SMS, Corresponsales,
  * Reporteros, Eventos Claro · Claro Sports: Notas, Indicaciones). Haiku los parsea y produce ítems limpios,

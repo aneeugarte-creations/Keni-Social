@@ -3,7 +3,7 @@
 TODO OFFLINE: la fuente es de muestra (`KENI_METRICAS_CONFIG` inexistente, lo fija
 `entorno`). Cubre en particular que la respuesta exponga el campo `fuente`
 ("muestra"|"real") — N3: el frontend pinta un badge para distinguir datos ficticios
-de reales (riesgo operativo del piloto AMX).
+de reales (riesgo operativo del piloto).
 """
 
 from __future__ import annotations

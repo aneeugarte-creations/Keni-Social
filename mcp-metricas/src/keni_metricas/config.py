@@ -96,7 +96,7 @@ class CuentaConfig:
 class MetricoolConfig:
     """Credenciales POR MARCA para la fuente `metricool` (API REST).
 
-    El modelo PRIMARIO es per-marca: en AMX cada marca es de hecho una cuenta
+    El modelo PRIMARIO es per-marca: en el cliente cada marca es de hecho una cuenta
     Metricool distinta, con su PROPIO `user_token` (cabecera `X-Mc-Auth`),
     `user_id` y `blog_id` (ambos query params). Cada marca vive en
     `[metricool.marcas.<id>]` con esos tres campos (y opcional `nombre`,

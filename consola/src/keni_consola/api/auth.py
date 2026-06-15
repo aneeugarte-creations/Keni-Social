@@ -457,7 +457,7 @@ async def me(request: Request) -> Response:
     usuario = getattr(request.state, "usuario", None)
     if usuario is None:
         return JSONResponse({"error": "No hay sesión iniciada."}, status_code=401)
-    # `marcas` (organigrama AMX): se consultan SIEMPRE porque la sesion del middleware
+    # `marcas` (organigrama del cliente): se consultan SIEMPRE porque la sesion del middleware
     # no las arrastra (la cookie no carga la tabla N:M). La pagina de Mi cuenta y el filtro
     # de la rota las usan para saber a que verticales pertenece la persona.
     refrescado = auth.obtener_usuario_por_id(usuario["id"]) or {}

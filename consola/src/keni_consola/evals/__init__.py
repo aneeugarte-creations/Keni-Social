@@ -16,7 +16,7 @@ QUÉ ES Y QUÉ NO ES
   `claude -p`: reutiliza el lint determinista de `patrones_marca`, el gate de calidad
   advisory de `pipeline_contenido._calidad` y los límites técnicos de `keni_shared`).
 - NO ES: un juez de calidad EDITORIAL definitivo. Los casos "de oro" definitivos los
-  aporta la mesa de AMX (UnoTV / Claro Sports); aquí van casos semilla para que el harness
+  aporta la mesa del cliente; aquí van casos semilla para que el harness
   sea ejecutable y útil desde ya. NO sustituye la revisión humana (el principio rector es
   precisamente "humano decide qué se publica"); es el cinturón que evita que una edición de
   prompt rompa lo medible sin avisar.

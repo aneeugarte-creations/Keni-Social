@@ -55,7 +55,7 @@ def _fuente_combinada(rep_a: dict, rep_b: dict) -> str:
     La comparativa cruza dos reportes; basta con que uno sea de datos de muestra para
     que el resultado deba advertirse como muestra (no se mezclan datos ficticios con
     reales sin que la UI lo marque). Cae a "muestra" por prudencia si falta el campo
-    (riesgo operativo del piloto AMX), igual que `/reporte`.
+    (riesgo operativo del piloto), igual que `/reporte`.
     """
     fuente_a = rep_a.get("fuente") or "muestra"
     fuente_b = rep_b.get("fuente") or "muestra"
@@ -399,7 +399,7 @@ def _reporte_serializable(rep: dict, rango: str, marca: str | None) -> dict:
         "marca": marca or "",
         # Fuente de los datos: "muestra" (ficticios) o "real". La UI pinta un badge
         # de advertencia con esto para que no se confundan datos de muestra con
-        # reales (riesgo operativo del piloto AMX). Cae a "muestra" por prudencia.
+        # reales (riesgo operativo del piloto). Cae a "muestra" por prudencia.
         "fuente": rep.get("fuente") or "muestra",
         "total": {
             "visualizaciones": t.get("visualizaciones", 0),
@@ -494,7 +494,7 @@ async def comparar(request: Request) -> Response:
             "generado_en": min(gen_a, gen_b),
             # Fuente de los datos de la comparativa: "muestra" si cualquiera de los dos
             # reportes lo es. La UI pinta un badge de advertencia con esto (N6, igual que
-            # /reporte) para no confundir datos de muestra con reales (piloto AMX).
+            # /reporte) para no confundir datos de muestra con reales (piloto).
             "fuente": _fuente_combinada(rep_a, rep_b),
             "total": _comparar_totales(
                 _total_comparable(rep_a, des_a, seg_a, lis_a),

@@ -2,7 +2,7 @@
 
 /** Un miembro del equipo (un usuario de la consola) disponible para la rota.
  *
- * `marcas` viene del organigrama AMX (ola `feat/roles-marcas`): ids canónicos de las
+ * `marcas` viene del organigrama del cliente (ola `feat/roles-marcas`): ids canónicos de las
  * verticales a las que pertenece (claro-sports, unotv...). La rota hoy solo cubre
  * ClaroSports; el front filtra por `marcas.includes("claro-sports")`.
  *

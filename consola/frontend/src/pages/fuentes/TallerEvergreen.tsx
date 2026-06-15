@@ -289,7 +289,7 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
           <CardTitle className="text-base">Aportar a mano</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          {/* Tipo de aportación: una idea suelta del equipo, o contenido interno de AMX
+          {/* Tipo de aportación: una idea suelta del equipo, o contenido interno del cliente
               (briefs, material de programa). Ambos entran al MISMO banco. Control segmentado
               (Tabs) — el patrón canónico de la consola: segmento activo blanco sobre track
               gris, sin negro. */}

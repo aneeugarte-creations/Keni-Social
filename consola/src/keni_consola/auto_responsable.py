@@ -39,7 +39,7 @@ def responsable_automatico(marca: str, fecha_iso: str | None = None) -> dict[str
     `fecha_iso` (def hoy) permite testear sin tocar el reloj. Lee:
       - los turnos del dia (de la semana que contiene `fecha_iso`),
       - las franjas de descanso de esa semana (para excluir turnos no laborales),
-      - las marcas de cada miembro del equipo (organigrama AMX).
+      - las marcas de cada miembro del equipo (organigrama del cliente).
     y delega la eleccion determinista en `rota.responsable_por_marca_hoy`. Devuelve la
     forma `{"id","usuario"}` lista para `repos.crear_contenido(responsable=...)`, o None
     si la pieza no tiene marca, la marca es de reparto PULL (`MARCAS_REPARTO_PULL`),

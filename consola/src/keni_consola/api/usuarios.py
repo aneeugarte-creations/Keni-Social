@@ -108,7 +108,7 @@ async def listar(request: Request) -> Response:
     """GET /api/usuarios: lista de cuentas (sin salt/hash).
 
     Cada fila incluye `cargo`/`cobertura`/`marcas` para la pagina de Usuarios (organigrama
-    AMX). `marcas` siempre es una lista (vacia si el usuario no tiene marcas asignadas).
+    del cliente). `marcas` siempre es una lista (vacia si el usuario no tiene marcas asignadas).
     """
     if not _es_admin(request):
         return _rechazo_no_admin()

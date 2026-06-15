@@ -196,7 +196,7 @@ ENV_PIPELINE_SELECCION = "KENI_PIPELINE_SELECCION"
 ENV_CLASIFICAR_MARCA_IA = "KENI_CLASIFICAR_MARCA_IA"
 ENV_MARCAS_ACTIVAS = "KENI_MARCAS_ACTIVAS"
 ENV_MARCA_NOTICIAS = "KENI_MARCA_NOTICIAS"
-# Piloto AMX: noticias (unotv), deportes (claro-sports), gaming (nacion-gamer). El resto de
+# Piloto: noticias (unotv), deportes (claro-sports), gaming (nacion-gamer). El resto de
 # marcas no participan en el encaje automático mientras no se añadan aquí.
 MARCAS_ACTIVAS_DEF = "unotv,claro-sports,nacion-gamer"
 MARCA_NOTICIAS_DEF = "unotv"

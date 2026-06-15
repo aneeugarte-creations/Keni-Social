@@ -67,12 +67,12 @@ ROLES_USUARIO: tuple[str, ...] = ("admin", "editor")
 ROL_ADMIN = "admin"
 ROL_EDITOR = "editor"
 
-# Cargos del equipo (transcripciones AMX): describen la FUNCION en el equipo, no los
+# Cargos del equipo (transcripciones del cliente): describen la FUNCION en el equipo, no los
 # permisos. Ortogonal a `ROLES_USUARIO` (que sigue siendo admin/editor). `cobertura` es
 # el flag separado que dice si esa persona entra en la rota de turnos: hay cargos que
 # por funcion no cubren (estrategia, fotografia, gerencia) y community managers que si.
 #
-# Ampliacion (organigrama dictado por Bernardo, AMX): se anaden cargos especificos por
+# Ampliacion (organigrama dictado por Bernardo): se anaden cargos especificos por
 # vertical/funcion que la version "plana" no capturaba (un `coordinador` real puede ser
 # de redes, YouTube u operativo; Maira es `gerente_podcast`; Daiana/Jonathan son
 # `creativo_vertical` de Fundacion/Nacion Gamer; Yustine es editorial de YouTube; Ale
@@ -90,7 +90,7 @@ CARGOS_USUARIO: tuple[str, ...] = (
     "editorial",
     "estrategia",
     "fotografia",
-    # Ampliacion (organigrama real de AMX):
+    # Ampliacion (organigrama real del cliente):
     "coordinador_redes",        # jefe de redes de una marca (Diana UnoTV, Elias ClaroSports)
     "coordinador_youtube",      # coordinacion del canal de YouTube (Lalo YT)
     "gerente_podcast",          # gerencia del podcast Piso 15 (Maira)
@@ -402,7 +402,7 @@ VEREDICTOS_QA_CONTENIDO: tuple[str, ...] = (
 )
 
 # Cadena de aprobacion POR DEFECTO al pedir revision de una pieza (orden = nivel
-# 1-based). Refleja el organigrama de redes de AMX: redaccion -> coordinacion ->
+# 1-based). Refleja el organigrama de redes del cliente: redaccion -> coordinacion ->
 # direccion. Es solo la plantilla inicial; quien pide la revision puede mandar su
 # propia lista de etiquetas (la cadena vive en datos, no en codigo).
 CADENA_APROBACION_DEFECTO: tuple[str, ...] = (

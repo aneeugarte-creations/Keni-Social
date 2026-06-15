@@ -55,7 +55,7 @@ def _fila_a_usuario_publico(fila: Any, marcas: list[str] | None = None) -> dict[
     es candidato a coordinador por celda (ola "coord"). Todos vacios/`False` por defecto
     para usuarios legados.
 
-    `marcas` (organigrama AMX): lista de ids canonicos de las verticales a las que
+    `marcas` (organigrama del cliente): lista de ids canonicos de las verticales a las que
     pertenece la persona (`["claro-sports", "unotv"]`). Llega de la tabla N:M
     `usuarios_marcas`. Si el caller ya las consulto pasa la lista; en caso contrario se
     consulta aqui (una query por usuario) para mantener la forma publica completa.
@@ -89,7 +89,7 @@ def _marcas_de_usuario(usuario_id: str, con: Any | None = None) -> list[str]:
 
     Si se pasa `con`, REUSA esa conexion (para batches o transacciones); si no, abre la
     suya. Vacio si el usuario no tiene marcas asignadas (caso normal en usuarios legados
-    antes del organigrama AMX).
+    antes del organigrama del cliente).
     """
     cerrar = False
     if con is None:
@@ -186,7 +186,7 @@ def crear_usuario(
     persiste. `cargo` es texto libre validado en la API (allowlist en
     `estados.CARGOS_USUARIO`); `cobertura` indica si la persona entra en la rota de
     turnos (`False` por defecto). `puede_coordinar` indica si es candidato a coordinador
-    por celda (ola "coord"; `False` por defecto). `marcas` (organigrama AMX): lista de
+    por celda (ola "coord"; `False` por defecto). `marcas` (organigrama del cliente): lista de
     ids canonicos de verticales (`["claro-sports", "unotv"]`); vacio/`None` deja al
     usuario sin marcas.
     """
@@ -257,7 +257,7 @@ def crear_usuario(
 def listar_usuarios() -> list[dict[str, Any]]:
     """Todos los usuarios (forma publica), por nombre ascendente.
 
-    Cada usuario incluye su lista de `marcas` (organigrama AMX). Para evitar N+1, se hace
+    Cada usuario incluye su lista de `marcas` (organigrama del cliente). Para evitar N+1, se hace
     una sola consulta a `usuarios_marcas` y se indexa por `usuario_id`.
     """
     con = db.conectar()

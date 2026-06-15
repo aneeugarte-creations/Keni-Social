@@ -104,7 +104,7 @@ def marcas_preferentes(request: Request) -> set[str] | None:
 
     None (sin foco => todas las marcas) cuando: es admin, se entro por token (sin usuario
     de sesion), o el usuario no tiene marcas asignadas. En otro caso, el conjunto de ids
-    canonicos de sus marcas (relacion N:M del organigrama AMX).
+    canonicos de sus marcas (relacion N:M del organigrama del cliente).
 
     NO es una restriccion: solo es el FOCO POR DEFECTO de listados/metricas cuando no se
     pide marca explicita. Pasar una `marca` explicita (cualquiera) sobreescribe este foco.

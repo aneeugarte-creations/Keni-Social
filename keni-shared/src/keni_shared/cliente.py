@@ -1,6 +1,6 @@
 """Carga del PAQUETE DE CLIENTE: marcas y cuentas, externalizadas a configuracion (#135).
 
-Hasta ahora las 5 marcas de AMX (y sus cuentas de deportes) estaban HARDCODEADAS en
+Hasta ahora las 5 marcas del cliente (y sus cuentas de deportes) estaban HARDCODEADAS en
 la capa base (`marcas.py` / `cuentas.py`): anadir un cliente nuevo exigia editar
 codigo y redeployar. Este modulo invierte eso. Las marcas/cuentas viven en ficheros
 `.toml` empaquetados en `clientes/` (uno por cliente, declarativo, como ya hace el

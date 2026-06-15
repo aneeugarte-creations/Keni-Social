@@ -5,7 +5,7 @@ general", sino "lo que Claro Sports deberia publicar hoy". Para eso, cada marca
 tiene un conjunto de PALABRAS CLAVE de interes; los temas que las contienen suben
 en la parrilla de esa marca y superan el listón de producción automática.
 
-v1 (semilla en codigo): un mapa `marca_id -> palabras` para las marcas de AMX,
+v1 (semilla en codigo): un mapa `marca_id -> palabras` para las marcas del cliente,
 editable aqui. Es el primer paso explicito y versionado; la intencion es externalizar
 este vocabulario a configuracion por marca (gestionable desde la Consola) sin cambiar
 el contrato de `palabras_de_marca`. Honestidad: si una marca no tiene vocabulario, la

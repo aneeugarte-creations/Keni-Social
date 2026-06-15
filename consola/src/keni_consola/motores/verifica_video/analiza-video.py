@@ -2,7 +2,7 @@
 """analiza-video.py - reune SENALES para saber si un video es nuevo o ya circulaba antes.
 
 Resuelve el "pega el link y dime si es reciente o si ya salio hace anos" del equipo de
-AMX Contenido. NO da el veredicto final: junta evidencia objetiva y se la pasa a la skill
+redes. NO da el veredicto final: junta evidencia objetiva y se la pasa a la skill
 (Claude) y al humano para que decidan. Pensado para el camino GRATIS (sin APIs de pago):
 
   1. Metadatos de la plataforma con yt-dlp  -> fecha de SUBIDA, autor, titulo, miniatura.

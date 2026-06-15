@@ -3,7 +3,7 @@
 B (app Métricas) es **consumidor** de Metricool, no motor de ingesta propia
 (ADR 0005 §B). En vez de construir un adaptador contra cada API oficial (Meta/
 TikTok/X/YouTube), leemos lo que Metricool YA consolidó vía su API REST
-(AMX está en plan **Advanced**, que habilita el API token). Esta clase implementa
+(el cliente está en plan **Advanced**, que habilita el API token). Esta clase implementa
 el MISMO contrato `FuenteMetricas` que `FuenteMuestra` y `FuenteCompuesta`, de
 modo que el dashboard, el MCP y los reportes funcionan igual con cualquiera.
 
@@ -122,7 +122,7 @@ _METRICA_VIS = "vis"
 _METRICA_INT = "int"
 _METRICA_ALC = "alc"
 # Métrica de SEGUIDORES por red (tamaño de comunidad, un STOCK acumulado). Nombres
-# CONFIRMADOS contra la API real (cuenta del piloto AMX): la serie de community vive en
+# CONFIRMADOS contra la API real (cuenta del piloto): la serie de community vive en
 # `/v2/analytics/timelines` con `subject=account` (¡imprescindible!) y un nombre de métrica
 # distinto por red:
 #   - facebook:  pageFollows        - instagram: followers
@@ -164,7 +164,7 @@ _METRICAS_RED: dict[Plataforma, dict[str, str]] = {
 }
 
 # Alias de campos al parsear un post de `/v2/analytics/posts/{network}`. La forma del
-# post DIFIERE por red (confirmado contra la API real de Metricool del piloto AMX):
+# post DIFIERE por red (confirmado contra la API real de Metricool del piloto):
 #   - Instagram: publishedAt, views, interactions, reach, likes/comments/shares/saved.
 #   - Facebook:  created (objeto) / timestamp (epoch ms), impressions, reactions,
 #                comments, shares, linkclicks, videoViews.
@@ -209,7 +209,7 @@ _ALIAS_SEG_POST = ("followsFromPost", "newFollowers", "followersGained")
 # Metricool sirve los Reels de Facebook/Instagram en un endpoint APARTE de `/posts`;
 # `/posts/{network}` NO los incluye. Sin esto, todo el contenido en VÍDEO vertical
 # (lo que más cross-postea un medio) quedaba invisible: solo se veían en TikTok. La
-# FORMA del reel difiere de un post y entre redes (confirmado contra la API real AMX):
+# FORMA del reel difiere de un post y entre redes (confirmado contra la API real):
 #   - Instagram: reelId, content (caption), publishedAt, views, impressionsTotal,
 #                interactions, likes/comments/shares/saved, url, averageWatchTime.
 #   - Facebook:  reelId, description (caption), created, blueReelsPlayCount,
@@ -337,7 +337,7 @@ def _interacciones_reel(reel: dict, gran: dict) -> int:
     """Interacciones (CONTEO) de un Reel: el MÁXIMO entre el agregado, las acciones de FB y
     el desglose granular.
 
-    Por red (confirmado contra la API real AMX): Instagram trae `interactions` (conteo).
+    Por red (confirmado contra la API real): Instagram trae `interactions` (conteo).
     Facebook NO lo trae: su conteo es reacciones (`postVideoReactions`) + acciones sociales
     (`postVideoSocialActions`); su campo `engagement` es una TASA (%), NO un conteo, así que
     NUNCA se usa como interacciones (era el bug: `engagement`=0.83 → 0). `max(...)` toma lo
@@ -406,7 +406,7 @@ def _fecha(v) -> date | None:
 class FuenteMetricool:
     """Implementa `FuenteMetricas` leyendo de la API REST de Metricool.
 
-    Credenciales POR MARCA: en AMX cada marca es una cuenta Metricool distinta,
+    Credenciales POR MARCA: en el cliente cada marca es una cuenta Metricool distinta,
     así que cada una trae su PROPIO ``user_token`` (cabecera ``X-Mc-Auth``),
     ``user_id`` y ``blog_id`` (query params). NO hay identidad global.
 

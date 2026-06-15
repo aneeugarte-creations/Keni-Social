@@ -19,7 +19,7 @@ from ._comun import _equipo_dict, _evento_a_dict
 async def equipo(request: Request) -> Response:
     """GET /api/rota/equipo: miembros asignables a la rota (cobertura=True).
 
-    Cada miembro incluye `marcas` (organigrama AMX) para que el frontend pueda filtrar
+    Cada miembro incluye `marcas` (organigrama del cliente) para que el frontend pueda filtrar
     por vertical: hoy la rota cubre solo ClaroSports y solo deben aparecer quienes la
     tengan en `marcas`. `?todos=1` devuelve el equipo COMPLETO (incluido el personal sin
     cobertura), util para casos excepcionales donde el admin quiere asignar a alguien que

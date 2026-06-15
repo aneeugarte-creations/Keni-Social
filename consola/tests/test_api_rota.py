@@ -128,7 +128,7 @@ def test_equipo_todos_incluye_no_cobertura(cliente):
 
 
 def test_equipo_incluye_marcas_de_cada_miembro(cliente):
-    """`/api/rota/equipo` incluye `marcas` por miembro (organigrama AMX).
+    """`/api/rota/equipo` incluye `marcas` por miembro (organigrama del cliente).
 
     El frontend filtra por vertical en el cliente; el backend devuelve el conjunto sin
     filtrar y la rota actual se limita a `claro-sports` en la UI.
@@ -150,7 +150,7 @@ def test_equipo_incluye_puede_coordinar_tras_sembrar(cliente):
     """`/api/rota/equipo?todos=1` expone `puede_coordinar` por miembro (ola "coord").
 
     Tras `sembrar_equipo`, los tres canónicos (Elías, Ale, Mariana) quedan con
-    `puede_coordinar=True`; el resto del equipo AMX queda en `False`. El frontend
+    `puede_coordinar=True`; el resto del equipo de redes queda en `False`. El frontend
     necesita este campo para listar candidatos a coordinador por celda en el
     calendario (sin él, el dropdown muestra "Sin candidatos").
     """

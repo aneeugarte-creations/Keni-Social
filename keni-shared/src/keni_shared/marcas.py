@@ -23,7 +23,7 @@ Cada marca tiene tres campos:
 
 El catalogo NO esta hardcodeado: se CARGA de un paquete de cliente declarativo
 (`clientes/<cliente>.toml`, ver `keni_shared.cliente`), externalizado a
-configuracion (#135). El cliente POR DEFECTO es AMX (`clientes/amx.toml`), con las
+configuracion (#135). El cliente POR DEFECTO es `clientes/amx.toml`, con las
 mismas 5 marcas de siempre, de modo que sin configurar nada nada cambia. Anadir un
 cliente nuevo = anadir/seleccionar un `.toml`, sin tocar este modulo. El golf NO es
 una marca propia: es un matiz/sub-vertical editorial dentro del contexto de Claro
@@ -65,7 +65,7 @@ class Marca:
 
 # Catalogo del cliente ACTIVO, en orden de presentacion estable (el del `.toml`).
 # `id` es la forma canonica (slug-guion); `id_metricas` la forma guion_bajo que
-# espera keni_metricas. Por defecto son las 5 marcas de AMX (`clientes/amx.toml`),
+# espera keni_metricas. Por defecto son las 5 marcas del cliente (`clientes/amx.toml`),
 # pero NO estan hardcodeadas aqui: se CARGAN del paquete de cliente (#135). El golf
 # es un sub-vertical editorial de Claro Sports, NO una marca propia.
 MARCAS: tuple[Marca, ...] = tuple(

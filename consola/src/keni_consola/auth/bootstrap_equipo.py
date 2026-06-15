@@ -1,4 +1,4 @@
-"""Bootstrap idempotente del equipo real (16 personas de AMX Contenido).
+"""Bootstrap idempotente del equipo real (16 personas).
 
 Fuente de verdad: organigrama dictado por Bernardo (transcripcion
 `03-entrega/unotv-clarosports/transcripciones/organizacion/organigrama.txt`) y resumen
@@ -133,7 +133,7 @@ _CARGOS_VIEJOS_CATALOGO: frozenset[str] = frozenset({
 
 
 def sembrar_equipo() -> None:
-    """Asegura los 16 usuarios del equipo AMX en la BD (idempotente).
+    """Asegura los 16 usuarios del equipo de redes en la BD (idempotente).
 
     - Usuarios nuevos: se crean con `PASSWORD_INICIAL` y `debe_cambiar_password=True`,
       con su cargo, cobertura, `puede_coordinar` y marcas del organigrama.

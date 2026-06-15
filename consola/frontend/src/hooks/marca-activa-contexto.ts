@@ -9,7 +9,7 @@ import type { MarcaDisponible } from "@/types";
  * cambia de marca de forma deliberada y visible.
  *
  * La marca activa DERIVA del perfil (`usuario.marcas`, la relación N:M del
- * organigrama AMX):
+ * organigrama del cliente):
  *   - Marca primaria = la primera marca asignada (su "marca de casa").
  *   - Por defecto FUERTE: la consola arranca en la marca primaria.
  *   - El cambio es deliberado (switch en la barra superior) y se PERSISTE por

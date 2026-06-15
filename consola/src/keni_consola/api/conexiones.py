@@ -206,7 +206,7 @@ def _config_existente() -> dict:
     return asistente.leer_config_existente(ruta_config())
 #
 # A diferencia de las redes (un token global por plataforma), Metricool guarda
-# credenciales POR MARCA: en AMX cada marca es una cuenta Metricool distinta, con
+# credenciales POR MARCA: en el cliente cada marca es una cuenta Metricool distinta, con
 # su PROPIO user_token (X-Mc-Auth) + user_id + blog_id. Se persisten en
 # `[metricool.marcas.<id>]` del config.toml de metricas, vía los MISMOS helpers
 # del asistente (atomico 0600). `user_token` esta en `asistente.CLAVES_SECRETAS`:

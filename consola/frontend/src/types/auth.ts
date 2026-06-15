@@ -12,7 +12,7 @@ export type RolUsuario = "admin" | "editor";
  * QUÉ hace la persona (community manager, director, coordinador de redes...). Allowlist
  * sincronizada con `keni_consola.estados.CARGOS_USUARIO`; cadena vacía = sin
  * clasificar (usuarios legados antes de la migración). Tras la ola
- * `feat/roles-marcas` (organigrama AMX dictado por Bernardo) se añaden cargos
+ * `feat/roles-marcas` (organigrama del cliente dictado por Bernardo) se añaden cargos
  * específicos por vertical/función; los valores viejos se conservan por retrocompat.
  */
 export type CargoUsuario =
@@ -27,7 +27,7 @@ export type CargoUsuario =
   | "editorial"
   | "estrategia"
   | "fotografia"
-  // Ampliacion del organigrama AMX:
+  // Ampliacion del organigrama del cliente:
   | "coordinador_redes"
   | "coordinador_youtube"
   | "gerente_podcast"
@@ -53,7 +53,7 @@ export const ETIQUETA_CARGO: Record<Exclude<CargoUsuario, "">, string> = {
   editorial: "Editorial",
   estrategia: "Estrategia digital",
   fotografia: "Fotografía",
-  // Ampliacion organigrama AMX:
+  // Ampliacion organigrama del cliente:
   coordinador_redes: "Coordinador de redes",
   coordinador_youtube: "Coordinador de YouTube",
   gerente_podcast: "Gerente de podcast",
@@ -68,7 +68,7 @@ export const ETIQUETA_CARGO: Record<Exclude<CargoUsuario, "">, string> = {
 
 /**
  * Orden estable de los cargos para los selectores (agrupa primero los del organigrama
- * AMX y deja al final los del catalogo legado por si quedan usuarios sin migrar).
+ * del cliente y deja al final los del catalogo legado por si quedan usuarios sin migrar).
  */
 export const CARGOS_ORDENADOS: Exclude<CargoUsuario, "">[] = [
   "director",
@@ -249,7 +249,7 @@ export interface CuerpoCrearUsuario {
 
 /**
  * Cuerpo de `PATCH /api/usuarios/{id}`: cambiar rol, resetear contraseña, o editar
- * cargo/cobertura/marcas del organigrama AMX. Todos opcionales (se manda solo lo que
+ * cargo/cobertura/marcas del organigrama del cliente. Todos opcionales (se manda solo lo que
  * cambia). `marcas` reemplaza el conjunto entero (lista vacía = desasignar todas).
  */
 export interface CuerpoActualizarUsuario {

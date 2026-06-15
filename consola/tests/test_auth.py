@@ -107,7 +107,7 @@ def test_bootstrap_respeta_admin_user_env(entorno, monkeypatch):
 
 
 def test_sembrar_equipo_crea_los_16(entorno):
-    """El seed deja en la BD los 16 usuarios del organigrama AMX.
+    """El seed deja en la BD los 16 usuarios del organigrama del cliente.
 
     Tras la ola "feat/roles-marcas" el calendario de cobertura tiene 9 personas (Daiana
     sale del calendario; va a Fundacion como creativo de vertical).
@@ -956,7 +956,7 @@ def test_sembrar_equipo_no_pisa_organigrama_editado(entorno):
 
 
 def test_catalogo_cargos_incluye_los_nuevos(entorno):
-    """Sanidad: el catalogo `CARGOS_USUARIO` cubre los cargos del organigrama AMX."""
+    """Sanidad: el catalogo `CARGOS_USUARIO` cubre los cargos del organigrama del cliente."""
     from keni_consola.estados import CARGOS_USUARIO
     for cargo in (
         "coordinador_redes",

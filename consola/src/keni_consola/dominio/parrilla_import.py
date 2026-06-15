@@ -2,7 +2,7 @@
 
 PROBLEMA QUE RESUELVE
 =====================
-El equipo de redes de AMX recibe la rota/parrilla de la semana en cualquier formato (un PDF,
+El equipo de redes recibe la rota/parrilla de la semana en cualquier formato (un PDF,
 una captura de pantalla, un Excel raro, un Word, un texto pegado). Hoy hay que teclear evento
 a evento y turno a turno en la rejilla. Aqui vive la logica que convierte la salida de un
 `claude -p` (que LEYO el documento) en una PROPUESTA de operaciones estructuradas y la VALIDA

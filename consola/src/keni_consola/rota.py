@@ -19,7 +19,7 @@ de trabajo (`viola_rotacion_sabado_trabajo`) aplica la misma idea al turno labor
 sabado: tras la migracion a "franjas por semana", un turno SIEMPRE cuenta como jornada
 laboral (el `descanso` paso a ser ausencia implicita y dejo de ser una franja).
 
-FRANJAS POR SEMANA (ola "Mundial"): el feedback real del piloto AMX descubrio semanas
+FRANJAS POR SEMANA (ola "Mundial"): el feedback real del piloto descubrio semanas
 con coberturas atipicas (Mundial, eventos grandes) que requieren MAS de 2 franjas y CON
 SOLAPES (ej. semana 24: 09:00-17:00, 13:00-21:00, 17:00-01:00 cruzando medianoche). El
 modelo viejo (`Franja = matutino|vespertino|descanso`, enum hardcoded) no lo soportaba.

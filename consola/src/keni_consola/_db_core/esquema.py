@@ -203,7 +203,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_sesiones_usuario ON sesiones (usuario_id)",
-    # Relacion N:M usuarios <-> marcas (organigrama AMX, transcripciones de Bernardo):
+    # Relacion N:M usuarios <-> marcas (organigrama del cliente, transcripciones de Bernardo):
     # una persona puede pertenecer a varias verticales/marcas (Yustine cubre ClaroSports +
     # UnoTV + Piso 15; Bernardo a todas). `marca_id` se valida en la capa API contra el
     # catalogo canonico (`keni_shared.marcas`) — no es FK en la BD porque las marcas viven
@@ -242,7 +242,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     """,
     "CREATE INDEX IF NOT EXISTS idx_rota_eventos_fecha ON rota_eventos (fecha)",
     "CREATE INDEX IF NOT EXISTS idx_rota_eventos_marca ON rota_eventos (marca)",
-    # FRANJAS POR SEMANA (#XYZ "Mundial"): el feedback real del piloto AMX descubrio
+    # FRANJAS POR SEMANA (#XYZ "Mundial"): el feedback real del piloto descubrio
     # semanas con coberturas atipicas (Mundial, eventos grandes) con MAS de 2 franjas y
     # CON SOLAPES (ej. semana 24 jun 2026: 09:00-17:00, 13:00-21:00, 17:00-01:00). El
     # modelo viejo (`Franja = matutino|vespertino|descanso` literal en `rota_turnos.franja`)
@@ -1342,7 +1342,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_noticias_clusters_ultimo ON noticias_clusters (ultimo_visto)",
     "CREATE INDEX IF NOT EXISTS idx_noticias_clusters_estado ON noticias_clusters (estado)",
     "CREATE INDEX IF NOT EXISTS idx_noticias_clusters_clave ON noticias_clusters (clave)",
-    # INSUMOS DEL DÍA (cajones): material diario del equipo de AMX procesado con Haiku.
+    # INSUMOS DEL DÍA (cajones): material diario del equipo de redes procesado con Haiku.
     # `insumos_lote` = un "drop" (pegada o archivo) en uno de los 4 cajones del día.
     # `insumos_item` = cada ítem extraído por el parser. El par modela el historial por
     # día editorial para poder recuperar cualquier jornada pasada (portal/corresponsales/

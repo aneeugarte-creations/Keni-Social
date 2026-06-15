@@ -22,7 +22,7 @@ import { filtrarEquipoPorMarca } from "../comun";
  *    coordina pero no se asigna a una franja).
  *
  * Si los tres filtros dejan la lista vacía (puede ocurrir en entornos donde el
- * seed de cargos del organigrama AMX aún no se ha aplicado a la BD), degrada al
+ * seed de cargos del organigrama del cliente aún no se ha aplicado a la BD), degrada al
  * filtro por marca+cobertura para no romper la rejilla.
  */
 export function cmsDeMarca(equipo: MiembroRota[], marcaActiva: string | null): MiembroRota[] {

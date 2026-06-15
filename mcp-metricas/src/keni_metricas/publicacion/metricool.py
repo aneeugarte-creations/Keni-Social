@@ -16,7 +16,7 @@
 
 Por que Metricool y no Graph API directo
 =========================================
-AMX ya esta en plan **Advanced** de Metricool (que habilita el API token). En vez
+El cliente ya esta en plan **Advanced** de Metricool (que habilita el API token). En vez
 de integrar cada API oficial (Graph API de Meta, API de TikTok, API de X) para
 PUBLICAR directo en cada red, entregamos el post al **scheduler de Metricool** con
 su fecha de publicacion y Metricool lo dispara. Asi:
@@ -79,7 +79,7 @@ from .modelos import (  # reutiliza la ref de media (solo URL) y el normalizador
 
 BASE = "https://app.metricool.com/api"
 ENDPOINT_PROGRAMAR = "/v2/scheduler/posts"
-# AMX/UnoTV operan en horario de Ciudad de Mexico; configurable por borrador.
+# El cliente opera en horario de Ciudad de Mexico; configurable por borrador.
 TIMEZONE_DEF = "America/Mexico_City"
 
 # Plataforma (keni) -> network (Metricool). Metricool usa "twitter" para X.
@@ -221,7 +221,7 @@ class ProgramacionNoConfigurada(RuntimeError):
 class AdaptadorPublicacionMetricool:
     """Construye y (opcionalmente) ejecuta la programacion de un borrador en Metricool.
 
-    Credenciales POR MARCA: cada marca de AMX es una cuenta Metricool distinta, con
+    Credenciales POR MARCA: cada marca del cliente es una cuenta Metricool distinta, con
     su propio `user_token` (cabecera `X-Mc-Auth`), `user_id` y `blog_id` (query
     params). Son las MISMAS que resuelve `config.MetricoolConfig.marcas_configuradas()`
     para la lectura de metricas; aqui se reciben ya resueltas para una marca.

@@ -6,7 +6,7 @@ offline cuando no hay credenciales reales configuradas (las metricas reales
 llegan via Metricool, `fuentes.metricool`).
 
 Cifras ancladas a la realidad del cliente (entrevista a Mariana de Leon,
-estrategia digital de AMX, 2026-05-18; ordenes de magnitud de followers
+estrategia digital del cliente, 2026-05-18; ordenes de magnitud de followers
 contrastados en redes publicas):
 - Claro Sports Mexico: ~80M visualizaciones/mes, engagement 2-3% (audiencia muy
   futbolera). Picos: Olimpicos Milano-Cortina ~150M/3%; proyeccion Mundial 2026
@@ -45,15 +45,15 @@ from ..schema import (
 from .base import CuentaNoEncontrada, engagement_pct
 
 # PERFILES de muestra por cuenta: cifras creibles (visualizaciones/mes, plataformas,
-# tema) ancladas a la realidad de AMX. Estan KEYED por `id_metricas` (guion_bajo).
+# tema) ancladas a la realidad del cliente. Estan KEYED por `id_metricas` (guion_bajo).
 #
 # Las CUENTAS que sirve la muestra ya NO se hardcodean aqui: se DERIVAN del cliente
 # activo (`keni_shared.marcas`/`keni_shared.cuentas`, externalizado a config en #135;
-# por defecto AMX). Este diccionario solo aporta el PERFIL de cada id; las cuentas de
+# por defecto, el cliente base). Este diccionario solo aporta el PERFIL de cada id; las cuentas de
 # un cliente sin perfil propio caen a `_PERFIL_DEFECTO`. Asi, cambiar de cliente =
 # cambiar el `.toml`, sin tocar este modulo, y la muestra sigue al catalogo.
 #
-# Para el cliente AMX por defecto, los perfiles cubren exactamente las 5 marcas
+# Para el cliente por defecto, los perfiles cubren exactamente las 5 marcas
 # editoriales (unotv, claro_sports, nacion_gamer, piso_15, fundacion) MAS las 2
 # cuentas hermanas de Claro Sports (claro_sports_tv, csport_golf; el golf es un
 # sub-vertical, no una marca). El guard `tests/test_muestra.py` ancla esto al catalogo.
@@ -110,7 +110,7 @@ _PERFILES: dict[str, tuple[str, int, list[Plataforma], str]] = {
 # Perfil por defecto para cuentas de un cliente sin perfil propio en `_PERFILES`
 # (p.ej. un cliente nuevo cargado por config): cifras medias y todas las plataformas,
 # tema "social". Garantiza que la muestra responda para CUALQUIER cliente sin tocar
-# codigo, sin pretender ser tan realista como los perfiles calibrados de AMX.
+# codigo, sin pretender ser tan realista como los perfiles calibrados del cliente.
 _PERFIL_DEFECTO: tuple[str, int, list[Plataforma], str] = (
     "",  # el nombre real lo pone la etiqueta del catalogo (ver `_MARCAS`)
     10_000_000,
@@ -122,7 +122,7 @@ _PERFIL_DEFECTO: tuple[str, int, list[Plataforma], str] = (
 # hermanas de deportes). Se DERIVA de `keni_shared.marcas` (fuente unica, ahora
 # cargada de config en #135): la muestra sigue al cliente seleccionado.
 IDS_METRICAS_MARCAS: frozenset[str] = frozenset(m.id_metricas for m in _marcas.MARCAS)
-# Cuentas hermanas de deportes (canal de TV + sub-vertical de golf en AMX): NO son
+# Cuentas hermanas de deportes (canal de TV + sub-vertical de golf): NO son
 # marcas. Derivadas tambien de la fuente unica `keni_shared.cuentas`.
 IDS_CUENTAS_HERMANAS: frozenset[str] = frozenset(_cuentas.CUENTAS_DEPORTES_HERMANAS)
 
@@ -130,8 +130,8 @@ IDS_CUENTAS_HERMANAS: frozenset[str] = frozenset(_cuentas.CUENTAS_DEPORTES_HERMA
 def _construir_marcas() -> dict[str, tuple[str, int, list[Plataforma], str]]:
     """Cuentas que sirve la muestra: las del cliente activo + sus cuentas hermanas.
 
-    Cada id toma su perfil de `_PERFILES` (cifras AMX) o `_PERFIL_DEFECTO` si no lo
-    tiene; el nombre humano sale de la etiqueta del catalogo. Para el cliente AMX por
+    Cada id toma su perfil de `_PERFILES` (cifras reales) o `_PERFIL_DEFECTO` si no lo
+    tiene; el nombre humano sale de la etiqueta del catalogo. Para el cliente por
     defecto coincide exactamente con los perfiles, asi que el comportamiento historico
     (5 marcas + 2 hermanas, con sus cifras) no cambia.
 

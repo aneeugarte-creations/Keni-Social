@@ -1,7 +1,7 @@
 """Reparto de NOTIFICACIONES in-app (el "cajon" de la campana, junto al selector de marca).
 
 La persistencia vive en `db.py`/`repos` (tabla `notificaciones`); aqui decidimos A QUIEN
-notificar cuando pasa algo en una pieza. Reglas (acordadas con el equipo AMX):
+notificar cuando pasa algo en una pieza. Reglas (acordadas con el equipo de redes):
 
   - Te SUSCRIBES a una pieza si eres su autor, comentaste, la aprobaste/rechazaste, o te
     mencionaron (@) en un comentario suyo. `interesados_en` calcula ese conjunto al vuelo

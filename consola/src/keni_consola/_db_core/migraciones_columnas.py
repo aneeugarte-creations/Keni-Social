@@ -628,7 +628,7 @@ def _migrar_columnas_programas(con: Any) -> None:
 
 
 # Columnas que se anadieron a `usuarios` despues del esquema original (cargo + cobertura
-# del equipo real, transcripciones AMX; `puede_coordinar` ola "coord"). Una BD creada
+# del equipo real, transcripciones del cliente; `puede_coordinar` ola "coord"). Una BD creada
 # antes no las tiene; legado -> `cargo=''` (sin clasificar), `cobertura=0` (no entra en
 # rota), `puede_coordinar=false` (no es candidato a coordinador). Cada par es (columna,
 # fragmento de tipo/DEFAULT).

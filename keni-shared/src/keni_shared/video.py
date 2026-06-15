@@ -43,7 +43,7 @@ from . import limites_plataforma
 #   - safe_top        : margen superior seguro (px).
 #   - safe_bottom     : margen inferior seguro (px) — mayor en 9:16 (caption/botones de Reels/TikTok).
 PRESETS_FORMATO: dict[str, dict[str, int]] = {
-    # Vertical (Reels / TikTok / Shorts): el formato dominante del piloto AMX.
+    # Vertical (Reels / TikTok / Shorts): el formato dominante del piloto.
     "9:16": {"w": 1080, "h": 1920, "fps": 30, "safe_top": 220, "safe_bottom": 320},
     # Cuadrado (feed clasico): zonas seguras simetricas y moderadas.
     "1:1": {"w": 1080, "h": 1080, "fps": 30, "safe_top": 120, "safe_bottom": 120},

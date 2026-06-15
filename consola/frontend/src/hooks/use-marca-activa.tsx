@@ -43,7 +43,7 @@ export function MarcaActivaProvider({ children }: { children: React.ReactNode })
   const { usuario } = useSesion();
   const usuarioId = usuario?.id ?? "";
   const esAdmin = usuario?.rol === "admin";
-  // Marcas del perfil (organigrama AMX), en id canónico. Vacío = no cubre ninguna.
+  // Marcas del perfil (organigrama del cliente), en id canónico. Vacío = no cubre ninguna.
   const marcasUsuario = React.useMemo(() => usuario?.marcas ?? [], [usuario?.marcas]);
   const marcaPrimaria = marcasUsuario[0] ?? null;
 

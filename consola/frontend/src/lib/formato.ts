@@ -201,7 +201,7 @@ export function nombreRed(red: string): string {
  * en los datos): así una red sin datos aparece igualmente como fila/serie con "—" y no
  * "desaparece" de la tabla. Es el mismo universo que `_REDES_AUDITABLES` del backend.
  *
- * Incluye `x` (Twitter) aunque en el piloto AMX no esté contratada en Metricool: se
+ * Incluye `x` (Twitter) aunque en el piloto no esté contratada en Metricool: se
  * muestra como fila vacía (la ausencia es una decisión de contratación, no un hueco de
  * datos; el "por qué" se explica en la auditoría de cobertura). `x` va al final porque
  * es la que sistemáticamente no aporta datos en el piloto.

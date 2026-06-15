@@ -1,6 +1,6 @@
 """API de Insumos del día (cajones) — bandejas de material diario.
 
-Los cajones reciben el material que el equipo de redes de AMX recibe cada día:
+Los cajones reciben el material que el equipo de redes recibe cada día:
   - portal        : lista numerada Portal/SMS                (UnoTV)
   - corresponsales: el "así vamos" por estado                (UnoTV)
   - reporteros    : PDF de agenda de coberturas              (UnoTV)

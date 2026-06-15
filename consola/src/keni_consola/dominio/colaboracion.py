@@ -383,7 +383,7 @@ def humanos_aprobados_ia_pendiente(cadena: list[dict[str, Any]]) -> bool:
 # allowlist en `estados.CARGOS_USUARIO`): p. ej. "Coordinación" la decide un coordinador y
 # "Dirección" un director. Es una guarda EDITORIAL ortogonal a la separacion de funciones
 # ("otro par de ojos") y al rol de permisos (admin/editor). Mapa por defecto razonable a
-# partir del organigrama de AMX; lo demas no exige cargo (cualquiera del equipo decide).
+# partir del organigrama del cliente; lo demas no exige cargo (cualquiera del equipo decide).
 CARGO_POR_ETIQUETA: dict[str, str] = {
     "coordinación": "coordinador",
     "coordinacion": "coordinador",

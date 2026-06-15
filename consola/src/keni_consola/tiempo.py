@@ -36,7 +36,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta, timezone
 from typing import Any
 
-# Jornada del equipo AMX (piloto): zona del centro de México, que NO observa DST desde 2022
+# Jornada del equipo de redes (piloto): zona del centro de México, que NO observa DST desde 2022
 # (offset FIJO UTC-6). Se modela como offset fijo a propósito —no `zoneinfo`— para no
 # depender de la base IANA del sistema (las imágenes `python:3.12-slim` no traen `tzdata`).
 _TZ_CDMX = timezone(timedelta(hours=-6))

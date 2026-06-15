@@ -80,7 +80,7 @@ _SINONIMOS: dict[str, set[str]] = {
     "evergreen": {
         # Terminología evergreen + sinónimos ES/EN…
         "evergreen", "evergreen list", "lista evergreen", "verde", "lista verde",
-        # …y RETROCOMPAT: el equipo de AMX ya escribe "green"/"green list" en sus calendarios.
+        # …y RETROCOMPAT: el equipo de redes ya escribe "green"/"green list" en sus calendarios.
         "green", "green list", "lista green", "greenlist",
     },
     "notas": {"notas", "nota", "detalle", "descripcion", "comentarios", "notes", "comment"},

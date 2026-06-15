@@ -2,7 +2,7 @@
 
 OBJETIVO: anadir un cliente nuevo = anadir/seleccionar un `.toml`, SIN tocar la capa
 base. Estos tests verifican:
-  1. El cliente POR DEFECTO (AMX) carga las 5 marcas de siempre (no se rompe nada).
+  1. El cliente POR DEFECTO carga las 5 marcas de siempre (no se rompe nada).
   2. Seleccionar OTRO cliente via env var cambia el catalogo y las cuentas, sin que
      cambie una sola linea de codigo de `marcas.py` / `cuentas.py`.
   3. Un fichero de cliente invalido se rechaza con un error de dominio claro.
@@ -34,11 +34,11 @@ def _recargar() -> None:
 
 @pytest.fixture
 def restaurar_cliente_amx(monkeypatch):
-    """Tras el test, vuelve al cliente por defecto (AMX) y recarga los modulos.
+    """Tras el test, vuelve al cliente por defecto y recarga los modulos.
 
     Borra las env vars de seleccion ANTES de recargar (el orden de teardown de
     `monkeypatch` no esta garantizado respecto a este finalizador), para que la
-    recarga final materialice AMX y no el cliente del test.
+    recarga final materialice el cliente por defecto y no el del test.
     """
     yield
     monkeypatch.delenv("KENI_CLIENTE_CONFIG", raising=False)
@@ -70,7 +70,7 @@ def test_seleccionar_otro_cliente_cambia_marcas_sin_tocar_codigo(
     # El catalogo de marcas cambio a las del cliente demo.
     assert marcas_mod.ids() == ["acme-news", "acme-sports"]
     assert marcas_mod.es_marca("acme-sports")
-    assert not marcas_mod.es_marca("claro-sports")  # ya no es la de AMX
+    assert not marcas_mod.es_marca("claro-sports")  # ya no es la del cliente por defecto
     assert marcas_mod.etiqueta_de("acme-news") == "ACME News"
     assert marcas_mod.id_metricas_de("acme-sports") == "acme_sports"
     assert dict(marcas_mod.opciones_metricas()) == {
