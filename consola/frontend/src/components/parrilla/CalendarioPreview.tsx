@@ -198,6 +198,10 @@ function fechaDeOperacion(op: OperacionPropuesta): string | null {
   if (op.tipo === "crear_evento" || op.tipo === "crear_turno") {
     return typeof op.fecha === "string" && op.fecha ? op.fecha : null;
   }
+  // crear_tarea: la ubica su deadline opcional (puede no traerla).
+  if (op.tipo === "crear_tarea") {
+    return typeof op.fecha_objetivo === "string" && op.fecha_objetivo ? op.fecha_objetivo : null;
+  }
   // modificar_turno: la fecha actual (o la nueva si la mueve).
   const c = op.cambios ?? {};
   const nueva = typeof c.fecha === "string" ? c.fecha : null;
