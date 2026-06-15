@@ -242,8 +242,11 @@ export function DialogoCrearTarea({
                       className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"
                     >
                       <CalendarDays className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      <span className="truncate font-medium">{ev.titulo}</span>
-                      <span className="ml-auto shrink-0 text-muted-foreground">
+                      {/* min-w-0 + flex-1: sin esto, un título largo con `truncate` (nowrap) NO
+                          encoge en el flex y estira la fila más allá del diálogo, empujando el botón
+                          «Aceptar y añadir» fuera de pantalla (había que deslizar a la derecha). */}
+                      <span className="min-w-0 flex-1 truncate font-medium">{ev.titulo}</span>
+                      <span className="shrink-0 whitespace-nowrap text-muted-foreground">
                         {ev.fecha ? formatearFecha(ev.fecha) : ""}
                         {ev.hora ? ` · ${ev.hora}` : ""}
                       </span>
