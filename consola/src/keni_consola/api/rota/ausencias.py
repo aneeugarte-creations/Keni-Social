@@ -12,7 +12,28 @@ from ..._http_json import leer_json
 from ...estados import (
     TIPOS_AUSENCIA,
 )
-from ._comun import _fecha_valida, _nombres_equipo
+from ._comun import _es_admin, _fecha_valida, _nombres_equipo, _usuario_actual
+
+_MSG_SOLO_DUENO = (
+    "Solo puedes gestionar tus propias ausencias (o un administrador la de cualquiera)."
+)
+
+
+def _puede_gestionar_ausencia(request: Request, miembro_id: str) -> bool:
+    """¿La petición puede crear/editar/borrar una ausencia de `miembro_id`?
+
+    Frontera de permisos (auditoría Turnos jun-2026): el agujero era que cualquier editor
+    autenticado mutaba la ausencia de OTRO por API directa. Modelo dueño-o-admin:
+      - Con SESIÓN, solo el DUEÑO de la ausencia (su `miembro_id`) o un ADMIN.
+      - El token de mantenimiento (operador de confianza, sin usuario de sesión) conserva
+        acceso pleno —no es un usuario del equipo, es la credencial de operación—.
+    Honra "capacidad, no dependencia": cada quien gestiona LO SUYO sin pedir permiso, y el
+    admin/coordinador la de cualquiera; nadie toca la de otro.
+    """
+    usuario = _usuario_actual(request)
+    if usuario is None:  # entró por el token de mantenimiento
+        return True
+    return usuario["id"] == miembro_id or _es_admin(request)
 
 
 def _ausencia_a_dict(ausencia: dict[str, Any], nombres: dict[str, str]) -> dict[str, Any]:
@@ -74,6 +95,8 @@ async def crear_ausencia(request: Request) -> Response:
         return JSONResponse(
             {"error": "Indica un miembro del equipo válido."}, status_code=400
         )
+    if not _puede_gestionar_ausencia(request, miembro_id):
+        return JSONResponse({"error": _MSG_SOLO_DUENO}, status_code=403)
     desde = str(datos.get("desde", "")).strip()
     hasta = str(datos.get("hasta", "")).strip()
     if not _fecha_valida(desde) or not _fecha_valida(hasta):
@@ -105,6 +128,11 @@ async def crear_ausencia(request: Request) -> Response:
 async def actualizar_ausencia(request: Request) -> Response:
     """PATCH /api/rota/ausencias/{id}: edita una ausencia (tipo/fechas/motivo)."""
     ausencia_id = request.path_params["ausencia_id"]
+    actual = repos.obtener_ausencia_rota(ausencia_id)
+    if actual is None:
+        return JSONResponse({"error": "La ausencia ya no existe."}, status_code=404)
+    if not _puede_gestionar_ausencia(request, actual["miembro_id"]):
+        return JSONResponse({"error": _MSG_SOLO_DUENO}, status_code=403)
     datos = await leer_json(request)
     campos: dict[str, Any] = {}
     if "tipo" in datos:
@@ -125,9 +153,6 @@ async def actualizar_ausencia(request: Request) -> Response:
     if "motivo" in datos and isinstance(datos["motivo"], str):
         campos["motivo"] = datos["motivo"].strip()
     # Coherencia del rango si se tocó alguno de los dos extremos.
-    actual = repos.obtener_ausencia_rota(ausencia_id)
-    if actual is None:
-        return JSONResponse({"error": "La ausencia ya no existe."}, status_code=404)
     desde = campos.get("desde", actual["desde"])
     hasta = campos.get("hasta", actual["hasta"])
     if desde and hasta and hasta < desde:
@@ -142,8 +167,13 @@ async def actualizar_ausencia(request: Request) -> Response:
 
 
 async def borrar_ausencia(request: Request) -> Response:
-    """DELETE /api/rota/ausencias/{id}: borra una ausencia."""
+    """DELETE /api/rota/ausencias/{id}: borra una ausencia (solo su dueño o un admin)."""
     ausencia_id = request.path_params["ausencia_id"]
+    actual = repos.obtener_ausencia_rota(ausencia_id)
+    if actual is None:
+        return JSONResponse({"error": "La ausencia ya no existe."}, status_code=404)
+    if not _puede_gestionar_ausencia(request, actual["miembro_id"]):
+        return JSONResponse({"error": _MSG_SOLO_DUENO}, status_code=403)
     if not repos.borrar_ausencia_rota(ausencia_id):
         return JSONResponse({"error": "La ausencia ya no existe."}, status_code=404)
     return JSONResponse({"mensaje": "Ausencia eliminada."})

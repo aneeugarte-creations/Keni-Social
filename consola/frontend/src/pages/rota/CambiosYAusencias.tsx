@@ -418,6 +418,8 @@ export function CambiosYAusencias({ esAdmin }: { esAdmin: boolean }) {
             ) : (
               <NuevaAusencia
                 equipo={equipo}
+                esAdmin={esAdmin}
+                miId={usuario?.id ?? ""}
                 onCreada={() => {
                   invalidarAusencias();
                   setFormAbierto(false);
@@ -470,6 +472,7 @@ export function CambiosYAusencias({ esAdmin }: { esAdmin: boolean }) {
               <TarjetaAusencia
                 key={`au-${it.ausencia.id}`}
                 ausencia={it.ausencia}
+                puedeGestionar={esAdmin || it.ausencia.miembro_id === (usuario?.id ?? "")}
                 onCambio={invalidarAusencias}
               />
             ),

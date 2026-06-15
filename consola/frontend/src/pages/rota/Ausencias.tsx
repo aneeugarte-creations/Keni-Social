@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { confirmar } from "@/components/comunes/confirmar";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import {
@@ -48,12 +49,19 @@ import { TIPOS_AUSENCIA } from "./comun";
 
 export function NuevaAusencia({
   equipo,
+  esAdmin,
+  miId,
   onCreada,
 }: {
   equipo: MiembroRota[];
+  esAdmin: boolean;
+  miId: string;
   onCreada: () => void;
 }) {
-  const [miembroId, setMiembroId] = React.useState("");
+  // Frontera de permisos: un editor solo registra LO SUYO (el back devuelve 403 si no);
+  // el admin/coordinador, la de cualquiera. Para no ofrecer una acción condenada al 403,
+  // el no-admin queda fijado a sí mismo (selector bloqueado a su nombre).
+  const [miembroId, setMiembroId] = React.useState(esAdmin ? "" : miId);
   const [tipo, setTipo] = React.useState<TipoAusencia>("vacaciones");
   const [desde, setDesde] = React.useState("");
   const [hasta, setHasta] = React.useState("");
@@ -80,18 +88,23 @@ export function NuevaAusencia({
     <div className="space-y-4">
       <div className="space-y-1.5">
         <Label>Persona</Label>
-        <Select value={miembroId} onValueChange={setMiembroId}>
-          <SelectTrigger aria-label="Persona">
-            <SelectValue placeholder="Elige a un miembro" />
-          </SelectTrigger>
-          <SelectContent>
-            {equipo.map((m) => (
-              <SelectItem key={m.id} value={m.id}>
-                {m.nombre}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {esAdmin ? (
+          <Select value={miembroId} onValueChange={setMiembroId}>
+            <SelectTrigger aria-label="Persona">
+              <SelectValue placeholder="Elige a un miembro" />
+            </SelectTrigger>
+            <SelectContent>
+              {equipo.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  {m.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          // No-admin: solo su propia ausencia. Campo bloqueado a su nombre.
+          <Input value={equipo.find((m) => m.id === miId)?.nombre ?? "Tú"} disabled readOnly />
+        )}
       </div>
       <div className="space-y-1.5">
         <Label>Tipo</Label>
@@ -144,9 +157,11 @@ export function NuevaAusencia({
 
 export function TarjetaAusencia({
   ausencia,
+  puedeGestionar,
   onCambio,
 }: {
   ausencia: AusenciaRota;
+  puedeGestionar: boolean;
   onCambio: () => void;
 }) {
   const borrar = useMutation({
@@ -163,28 +178,43 @@ export function TarjetaAusencia({
   const etiquetaTipo =
     TIPOS_AUSENCIA.find((t) => t.valor === ausencia.tipo)?.etiqueta ?? ausencia.tipo;
 
-  const acciones: EntradaMenuContextual[] = [
-    {
-      etiqueta: "Editar",
-      icono: Pencil,
-      onClick: () => setEditando(true),
-      deshabilitado: borrar.isPending,
-    },
-    {
-      etiqueta: "Borrar",
-      icono: Trash2,
-      destructivo: true,
-      onClick: () => borrar.mutate(),
-      deshabilitado: borrar.isPending,
-    },
-  ];
+  // Frontera de permisos: solo el dueño de la ausencia (o un admin) ve editar/borrar; el
+  // resto la ve en modo lectura. Borrar pasa por confirmación (acción destructiva, antes
+  // se ejecutaba al primer clic).
+  const acciones: EntradaMenuContextual[] = puedeGestionar
+    ? [
+        {
+          etiqueta: "Editar",
+          icono: Pencil,
+          onClick: () => setEditando(true),
+          deshabilitado: borrar.isPending,
+        },
+        {
+          etiqueta: "Borrar",
+          icono: Trash2,
+          destructivo: true,
+          onClick: async () => {
+            if (
+              await confirmar({
+                titulo: "Borrar ausencia",
+                mensaje: `¿Borrar la ausencia de ${ausencia.miembro_nombre || "este miembro"}?`,
+                destructivo: true,
+                textoConfirmar: "Borrar",
+              })
+            )
+              borrar.mutate();
+          },
+          deshabilitado: borrar.isPending,
+        },
+      ]
+    : [];
 
   return (
     <Card>
       <FilaConAcciones
         como="div"
-        realce
-        onPrimaria={() => setEditando(true)}
+        realce={puedeGestionar}
+        onPrimaria={puedeGestionar ? () => setEditando(true) : undefined}
         acciones={acciones}
       >
         <div className="min-w-0 space-y-1">
