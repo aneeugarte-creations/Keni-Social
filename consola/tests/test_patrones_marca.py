@@ -265,7 +265,7 @@ def test_aplicar_store_crea_y_actualiza_doc(tmp_path, monkeypatch):
 
     doc = libtexto.obtener(doc_id)
     assert doc is not None and "Patrones medidos" in doc.cuerpo
-    assert doc.pipelines == ["copy"]
+    assert doc.pipelines == ["redactar"]
     # Segunda aplicación: ACTUALIZA el cuerpo sin mover el documento (id estable).
     perfil2 = dict(perfil, piezas=999)
     assert patrones_derivar.aplicar_store(perfil2, "unotv", ahora="t2") == doc_id

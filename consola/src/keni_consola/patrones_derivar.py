@@ -145,7 +145,7 @@ titulo: "Patrones medidos · {etiqueta}"
 tipo: editorial
 clase: ""
 marcas: [{marca}]
-pipelines: [copy]
+pipelines: [redactar]
 creado: {creado}
 actualizado: {actualizado}
 ---
