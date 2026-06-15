@@ -71,7 +71,7 @@ const ETIQUETA_CLASE: Record<ClaseDaemon, string> = {
 const ETIQUETA_DAEMON: Record<string, string> = {
   investigacion: "Investigación",
   produccion: "Producción",
-  ingesta: "Ingesta de noticias",
+  recolectar: "Recolección de noticias",
   trends: "Tendencias",
   algoritmos: "Algoritmos de plataforma",
   noticias_gc: "GC de noticias",
@@ -89,10 +89,10 @@ const ETIQUETA_DAEMON: Record<string, string> = {
 // Prompts de la Biblioteca que gobiernan cada agente de IA, por NOMBRE de daemon (el mismo
 // mapeo que usan los cockpits de Investigación/Producción). Solo clase=ia tiene prompt.
 const PROMPTS_POR_DAEMON: Record<string, { etiqueta: string; doc: string }[]> = {
-  investigacion: [{ etiqueta: "Validación / verificación", doc: "prompt/validacion" }],
+  investigacion: [{ etiqueta: "Verificar", doc: "prompt/verificar" }],
   produccion: [
-    { etiqueta: "Copy", doc: "prompt/copy" },
-    { etiqueta: "Arte", doc: "prompt/arte" },
+    { etiqueta: "Redactar", doc: "prompt/redactar" },
+    { etiqueta: "Ilustrar", doc: "prompt/ilustrar" },
   ],
 };
 

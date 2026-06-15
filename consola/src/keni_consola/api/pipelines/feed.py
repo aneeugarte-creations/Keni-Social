@@ -111,7 +111,7 @@ def _actividad_suelta(gens: list[dict], ids_runs: set[str], marca: str | None) -
 def _temas_trabajados(gens: list[dict]) -> set[str]:
     """Ids de contenido con TRABAJO del pipeline correlacionado (copy/arte/criba/marcadores).
 
-    Es la evidencia que convierte un tema del TABLERO en run del feed: la etapa de copy del
+    Es la evidencia que convierte un tema del TABLERO en run del feed: la etapa Redactar del
     pipeline también redacta los temas de `ORIGENES_AUTOGEN` (rss/equipo/historia/…); ese
     trabajo debe verse DENTRO de la run de su tema, no como entradas sueltas.
     """
@@ -125,7 +125,7 @@ def _temas_trabajados(gens: list[dict]) -> set[str]:
 def _runs_del_pipeline(marca: str | None, trabajados: set[str]) -> list[dict]:
     """Temas que son RUNS del feed, más recientes primero, acotados a `_UNIVERSO_MAX`.
 
-    Son runs: (a) todo contenido `origen='pipeline'` (ingerido por el propio pipeline) y
+    Son runs: (a) todo contenido `origen='pipeline'` (recolectado por el propio pipeline) y
     (b) los temas del TABLERO (`ORIGENES_AUTOGEN`) que la máquina TRABAJÓ (`trabajados`:
     tienen generaciones del pipeline correlacionadas) — su copy/arte pertenece al pipeline
     y se muestra como run, no como entradas sueltas. Un alta manual sin trabajo IA no es

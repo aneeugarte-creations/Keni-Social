@@ -16,7 +16,7 @@ def _problema_de(item: dict) -> dict:
 
     `etapa`/`error` salen del ÚLTIMO hallazgo: los fallos repetidos de etapa
     (`marcar_fallo_etapa`) dejan un hallazgo `tipo='sistema'` con la etapa en `fragmento`;
-    un 🔴 de la propia criba (sin hallazgo de sistema) es un problema de "Validación".
+    un 🔴 de la propia criba (sin hallazgo de sistema) es un problema de "Verificar".
     `intentos` lee los contadores de reintento de `copy_pendiente` (qa/cd).
     """
     qa = _qa_fuente_de(item)
@@ -28,7 +28,7 @@ def _problema_de(item: dict) -> dict:
         "titulo": item.get("titulo", "") or "",
         "marca": marca,
         "marca_nombre": _marca_nombre(marca),
-        "etapa": (ultimo.get("fragmento") or "") if es_sistema else "Validación",
+        "etapa": (ultimo.get("fragmento") or "") if es_sistema else "Verificar",
         "intentos": {
             "qa": intentos_de(item, "qa_intentos"),
             "cd": intentos_de(item, "cd_intentos"),

@@ -22,7 +22,7 @@ def test_verdicto_por_simbolo_sigue_mandando():
 
 
 def test_verdicto_en_palabras_del_prompt_de_copy():
-    # `prompt/copy` pide abrir con la línea de veredicto EN PALABRAS, sin
+    # `prompt/redactar` pide abrir con la línea de veredicto EN PALABRAS, sin
     # símbolo; antes esto devolvía "" y el veredicto del modelo se perdía.
     assert stream.derivar_verdicto("LISTO PARA APROBAR\n\nLeyenda: …") == "listo"
     assert stream.derivar_verdicto("REVISAR ANTES DE PUBLICAR\nuna cifra a confirmar") == "revisar"

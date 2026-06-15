@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronDown, ChevronRight, Clock, Coins, OctagonAlert, Sparkles } from "lucide-react";
+import { AlertTriangle, Bot, ChevronDown, ChevronRight, Clock, Coins, Cog, OctagonAlert, Sparkles } from "lucide-react";
 import * as React from "react";
 
 import { aspectoEstado, ChipEstado } from "@/components/comunes/ChipEstado";
@@ -31,20 +31,20 @@ const VERIFICACION_TEXTO: Record<string, string> = {
 // consola (`components/comunes/ChipEstado`): misma etiqueta y color que Actividad/Monitor.
 export { ChipEstado };
 
-// Etapa (clave) -> código de etapa de los eventos de actividad (la traza CI/CD/QA).
+// Etapa (clave) -> código de etapa de los eventos de actividad (la traza Fusionar/Priorizar/Verificar/Redactar/Ilustrar).
 export const ETAPA_A_EVENTO: Record<string, string> = {
-  fusion: "FUSION", editorial: "EDITORIAL", ci: "CI", qa: "QA", cd: "CD", arte: "ARTE",
+  fusionar: "FUSIONAR", priorizar: "PRIORIZAR", admitir: "ADMITIR", verificar: "VERIFICAR", redactar: "REDACTAR", ilustrar: "ILUSTRAR",
 };
 
 // Catálogo de etapas para el filtro `?etapa=` (espeja `_ETAPAS` del back, en orden de flujo).
 export const ETAPAS_FILTRO: { clave: string; nombre: string }[] = [
-  { clave: "fusion", nombre: "Fusión" },
-  { clave: "editorial", nombre: "Editorial" },
-  { clave: "ci", nombre: "Selección" },
-  { clave: "qa", nombre: "Validación" },
-  { clave: "cd", nombre: "Copy" },
-  { clave: "arte", nombre: "Arte" },
-  { clave: "aprobacion", nombre: "Aprobación" },
+  { clave: "fusionar", nombre: "Fusionar" },
+  { clave: "priorizar", nombre: "Priorizar" },
+  { clave: "admitir", nombre: "Admitir" },
+  { clave: "verificar", nombre: "Verificar" },
+  { clave: "redactar", nombre: "Redactar" },
+  { clave: "ilustrar", nombre: "Ilustrar" },
+  { clave: "aprobar", nombre: "Aprobar" },
 ];
 // Valores del filtro `?estado=` (el `estado_global` de la run). Nombres = los del chip
 // único (`aspectoEstado`): el filtro y el badge dicen lo mismo.
@@ -117,12 +117,12 @@ function ListaHallazgos({ hallazgos }: { hallazgos: PipelineHallazgo[] }) {
   );
 }
 
-/** Chips de las señales del cluster. `modo` decide cuáles: "fusion" (dedup: fuentes/notas) o
- *  "editorial" (score/verificación/viralidad). */
-function ProcedenciaIA({ cluster, modo }: { cluster: PipelineCluster; modo: "fusion" | "editorial" }) {
+/** Chips de las señales del cluster. `modo` decide cuáles: "fusionar" (dedup: fuentes/notas) o
+ *  "priorizar" (score/verificación/viralidad). */
+function ProcedenciaIA({ cluster, modo }: { cluster: PipelineCluster; modo: "fusionar" | "priorizar" }) {
   return (
     <div className="flex flex-wrap gap-1.5">
-      {modo === "fusion" && (
+      {modo === "fusionar" && (
         <>
           <Badge variant="outline" className="text-[10px]">{cluster.n_fuentes} fuentes</Badge>
           {cluster.n_items > 1 && (
@@ -130,7 +130,7 @@ function ProcedenciaIA({ cluster, modo }: { cluster: PipelineCluster; modo: "fus
           )}
         </>
       )}
-      {modo === "editorial" && (
+      {modo === "priorizar" && (
         <>
           <Badge variant="outline" className="text-[10px]">Score {cluster.score.toFixed(2)}</Badge>
           {cluster.verificacion && (
@@ -168,7 +168,8 @@ function Punto({ estado }: { estado: string }) {
   );
 }
 
-/** Tira horizontal de etapas (CI · CD · QA · Aprobación), estilo pipeline de GitLab. */
+/** Tira horizontal de etapas (Verificar · Redactar · Ilustrar · Aprobar), estilo pipeline de GitLab.
+ *  Cada etapa marca su tipo con un icono: 🤖 (Bot) si es IA, ⚙ (Cog) si es determinista. */
 export function TiraEtapas({ etapas }: { etapas: PipelineEtapa[] }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
@@ -182,6 +183,11 @@ export function TiraEtapas({ etapas }: { etapas: PipelineEtapa[] }) {
             title={e.detalle}
           >
             <Punto estado={e.estado} />
+            {e.es_ia ? (
+              <Bot className="h-3 w-3" aria-label="IA" />
+            ) : (
+              <Cog className="h-3 w-3 text-muted-foreground" aria-label="determinista" />
+            )}
             <span className="font-medium">{e.nombre}</span>
           </div>
           {i < etapas.length - 1 && <span className="text-muted-foreground/40">→</span>}
@@ -374,7 +380,7 @@ function ContenidoEtapa({
   generacion?: PipelineGeneracion;
   plantilla?: string;
 }) {
-  if (clave === "fusion" || clave === "editorial") {
+  if (clave === "fusionar" || clave === "priorizar") {
     return (
       <div className="space-y-2 text-xs">
         {run.cluster
@@ -384,22 +390,22 @@ function ContenidoEtapa({
       </div>
     );
   }
-  if (clave === "ci") {
-    // Selección: crea el tema en BD (no es IA). Solo la nota de origen.
+  if (clave === "admitir") {
+    // Admitir: crea el tema en BD (no es IA). Solo la nota de origen.
     return run.descripcion
       ? <Markdown className="text-xs text-muted-foreground">{run.descripcion}</Markdown>
       : null;
   }
-  if (clave === "cd") {
+  if (clave === "redactar") {
     // Solo el bloque IA (prompt | razonamiento + resultado): el copy final por red ya se ve
     // en la SALIDA del bloque y, sobre todo, en el feed/aprobación (su sitio). Repetir aquí
     // las tarjetas por red (X/Instagram/Facebook con placa) era contenido duplicado e irrelevante.
     return <BloqueIA gen={generacion} plantilla={plantilla} />;
   }
-  if (clave === "arte") {
-    // Solo si el arte IA CORRIÓ (estado ok): una pieza puede traer la FOTO de la nota de una
-    // fuente propia (bajada en la ingesta) sin que esta etapa la generara — esa foto vive en
-    // la pieza (feed/aprobación), no aquí. Enseñarla con la etapa apagada mentía ("Arte ok").
+  if (clave === "ilustrar") {
+    // Solo si Ilustrar CORRIÓ (estado ok): una pieza puede traer la FOTO de la nota de una
+    // fuente propia (bajada al recolectar) sin que esta etapa la generara — esa foto vive en
+    // la pieza (feed/aprobación), no aquí. Enseñarla con la etapa apagada mentía ("Ilustrar ok").
     const imagenes = estado === "ok" ? run.piezas.filter((p) => p.imagen_url) : [];
     return (
       <div className="space-y-2">
@@ -415,7 +421,7 @@ function ContenidoEtapa({
       </div>
     );
   }
-  if (clave === "qa") {
+  if (clave === "verificar") {
     const qa = run.qa_fuente;
     return (
       <div className="space-y-2">
@@ -435,7 +441,7 @@ function ContenidoEtapa({
     // su contenido es el bloque entrada/salida de la generación, sin piezas ni criba.
     return <BloqueIA gen={generacion} plantilla={plantilla} />;
   }
-  // aprobacion — gate HUMANO (no IA).
+  // aprobar — gate HUMANO (no IA).
   return (
     <div className="space-y-1.5">
       {run.piezas.map((p, i) => (
@@ -481,14 +487,14 @@ export function PanelEtapa({
         <span className="flex items-center gap-2">
           <Punto estado={etapa.estado} />
           <span className="text-sm font-semibold">{etapa.nombre}</span>
-          {/* Marca clara IA vs no-IA (Selección = Sistema/BD; Aprobación = Humano). */}
+          {/* Marca clara IA vs no-IA (Admitir/Recolectar = Sistema/BD; Aprobar = Humano). */}
           {etapa.es_ia ? (
             <Badge variant="outline" className="gap-1 border-violet-500/30 text-[10px] text-violet-600">
               <Sparkles className="h-2.5 w-2.5" aria-hidden="true" />IA
             </Badge>
           ) : (
             <Badge variant="outline" className="text-[10px] text-muted-foreground">
-              {etapa.clave === "aprobacion" ? "Humano" : "Sistema"}
+              {etapa.clave === "aprobar" ? "Humano" : "Sistema"}
             </Badge>
           )}
           <ChipEstado estado={etapa.estado} />

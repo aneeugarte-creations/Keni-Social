@@ -115,7 +115,7 @@ describe("AgenteDetalle", () => {
   });
 
   it("avisa cuando el agente no existe en la lista", async () => {
-    stubFetch({ daemons: [latido({ daemon: "ingesta" })], barridos: [] });
+    stubFetch({ daemons: [latido({ daemon: "recolectar" })], barridos: [] });
     renderEn("fantasma");
     expect(await screen.findByText("Agente no encontrado")).toBeInTheDocument();
   });

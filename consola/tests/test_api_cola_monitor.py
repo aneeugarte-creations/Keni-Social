@@ -64,7 +64,7 @@ def _encolar(etiqueta: str = "Copy de nota", marca: str = _MARCA) -> str:
 
 
 def test_cola_snapshot_contrato(entorno):
-    gen_id = _encolar("QA fuente · UnoTV")
+    gen_id = _encolar("Verificar · UnoTV")
     r = _cli_token().get("/api/actividad/cola")
     assert r.status_code == 200
     data = r.json()
@@ -77,7 +77,7 @@ def test_cola_snapshot_contrato(entorno):
     assert data["conteo"]["activos"] == data["conteo"]["pendientes"] + data["conteo"]["reclamados"]
     # El job pendiente aparece en `esperando` con su etiqueta enriquecida desde el registro.
     esperando = data["esperando"]
-    assert any(j["gen_id"] == gen_id and j["etiqueta"] == "QA fuente · UnoTV" for j in esperando)
+    assert any(j["gen_id"] == gen_id and j["etiqueta"] == "Verificar · UnoTV" for j in esperando)
     # Cada job en vuelo trae su `proceso` (ADR 0011); un `tipo='copy'` es produccion.
     job = next(j for j in esperando if j["gen_id"] == gen_id)
     assert job["proceso"] == generaciones.PROCESO_PRODUCCION
@@ -98,7 +98,7 @@ def test_cola_snapshot_contrato(entorno):
     assert porclave["reaper"]["editable"] is False
     assert porclave["reaper"]["clave_ajuste"] == ""
     assert porclave["publicar_real"]["editable"] is False  # peligroso: read-only en el Monitor
-    # El interruptor general y las etapas (Selección/Copy) ya NO son daemons: viven en la sección
+    # El interruptor general y las etapas (Admitir/Redactar) ya NO son daemons: viven en la sección
     # «Máquina de contenido» del Monitor (no en este panel de daemons de fondo).
     assert "maquina" not in porclave
     assert "ingesta" not in porclave
@@ -176,7 +176,7 @@ def test_cola_series_contrato(entorno):
 def test_serie_excluye_marcadores_y_desglosa_por_proceso(entorno):
     """La serie NO cuenta los marcadores de etapa (coste 0) y separa investigacion/produccion.
 
-    Aqui se sellan tres generaciones COMPLETADAS hoy —un marcador (excluido), una criba QA
+    Aqui se sellan tres generaciones COMPLETADAS hoy —un marcador (excluido), una criba Verificar
     (investigacion, con tokens) y un copy (produccion, con tokens)— y se comprueba que la serie
     cuenta SOLO las dos reales, cada una en su proceso y con su gasto.
     """
@@ -185,9 +185,9 @@ def test_serie_excluye_marcadores_y_desglosa_por_proceso(entorno):
         "tipo": "pipeline_etapa", "marca": _MARCA, "etiqueta": "QA · criba",
         "estado": generaciones.ESTADO_COMPLETADO, "fecha_fin": generaciones.ahora_iso(),
     })
-    # Criba QA real (investigacion) con tokens.
+    # Criba Verificar real (investigacion) con tokens.
     generaciones.crear({
-        "tipo": "pipeline", "marca": _MARCA, "etiqueta": "Validación · tema",
+        "tipo": "pipeline", "marca": _MARCA, "etiqueta": "Verificar · tema",
         "proceso": generaciones.PROCESO_INVESTIGACION,
         "estado": generaciones.ESTADO_COMPLETADO, "fecha_fin": generaciones.ahora_iso(),
         "metricas": {"tokens_in": 100, "tokens_out": 20, "total_cost_usd": 0.01},

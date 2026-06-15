@@ -1,4 +1,4 @@
-"""Etapa de CALIDAD del copy del pipeline: criba ADVISORY antes del avance. OFFLINE + DB tmp.
+"""Etapa de REVISAR del copy del pipeline: criba ADVISORY antes del avance. OFFLINE + DB tmp.
 
 Cubre:
   - COHERENCIA (pura): avisa sólo cuando el copy no comparte NINGÚN término de contenido con su
@@ -7,7 +7,7 @@ Cubre:
     (el borrador ya lleva sus hashtags), avisa fuera de patrón.
   - `verificar_calidad_pieza` (DB): ADVISORY — degrada `listo`→`revisar` y anota el tema, sin
     bloquear; un copy limpio no se toca.
-  - Integración en `ejecutar_avance`: gateada por `KENI_PIPELINE_CALIDAD`. Con el toggle ON una
+  - Integración en `ejecutar_avance`: gateada por `KENI_PIPELINE_REVISAR`. Con el toggle ON una
     pieza marcada AVANZA igual (no bloquea) pero sale degradada; con el toggle OFF, intacta.
 """
 
@@ -165,7 +165,7 @@ def _encender_maquina(monkeypatch) -> None:
 def test_avance_con_calidad_on_marca_pero_no_bloquea(entorno, monkeypatch, tmp_path):
     _sembrar_perfil(monkeypatch, tmp_path)
     _encender_maquina(monkeypatch)
-    monkeypatch.setenv("KENI_PIPELINE_CALIDAD", "1")
+    monkeypatch.setenv("KENI_PIPELINE_REVISAR", "1")
     pub = _borrador(_cli(), contenido="Copy con emoji 🔥 que se sale del patrón")
 
     enviadas = _avance.ejecutar_avance()
@@ -179,7 +179,7 @@ def test_avance_con_calidad_on_marca_pero_no_bloquea(entorno, monkeypatch, tmp_p
 def test_avance_con_calidad_off_no_marca(entorno, monkeypatch, tmp_path):
     _sembrar_perfil(monkeypatch, tmp_path)
     _encender_maquina(monkeypatch)
-    monkeypatch.delenv("KENI_PIPELINE_CALIDAD", raising=False)
+    monkeypatch.delenv("KENI_PIPELINE_REVISAR", raising=False)
     pub = _borrador(_cli(), contenido="Copy con emoji 🔥 que se sale del patrón")
 
     enviadas = _avance.ejecutar_avance()

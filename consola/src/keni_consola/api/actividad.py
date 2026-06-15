@@ -120,7 +120,7 @@ async def agregados(request: Request) -> Response:
 # TOGGLE REAL (PUT /api/ajustes) en vez de un badge de solo lectura. "" => sin toggle (reaper).
 # El estado se lee best-effort: si el accesor no existe en `config`, el daemon sale con
 # `activo=None` (desconocido) en vez de romper el panel.
-# El interruptor general (`maquina`), la Selección (`ingesta`) y el Copy (`pipeline`) NO están aquí:
+# El interruptor general (`maquina`), la Recolección (`ingesta`) y la Redacción (`pipeline`) NO están aquí:
 # son ETAPAS de la máquina y se controlan en la sección «Máquina de contenido» del Monitor (toggles
 # del catálogo: maquina_global + maestros_etapa + topes). Aquí quedan los daemons de fondo restantes.
 _DAEMONS: list[tuple[str, str, str | None, str, str]] = [

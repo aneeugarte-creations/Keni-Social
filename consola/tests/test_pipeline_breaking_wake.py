@@ -38,7 +38,7 @@ def test_despertar_daemon_nunca_lanza(monkeypatch):
 
 def _stub_investigacion(monkeypatch, *, categoria: str):
     """Stubea la fase de investigación para que admita UN tema con la `categoria` dada."""
-    monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
+    monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setattr(_barrido._ingesta, "caducar_temas_viejos", lambda: None)
     monkeypatch.setattr(_barrido._ingesta, "caducar_qa_clusters_en_curso", lambda: None)
     monkeypatch.setattr(_barrido, "ejecutar_qa_clusters", lambda *, autor=None: [])

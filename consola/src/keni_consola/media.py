@@ -153,7 +153,7 @@ _MODELO_DEFECTO = "openai/gpt-5-image-mini"
 # El TEXTO de esta directiva vive en la Biblioteca de Texto como prompt EDITABLE
 # (`_SISTEMA_IMAGEN_ID`): el equipo lo ajusta desde el estudio sin tocar codigo. La semilla del
 # paquete tiene la version base; `_FALLBACK` abajo es una red defensiva por si la lectura fallara.
-_SISTEMA_IMAGEN_ID = "prompt/arte"
+_SISTEMA_IMAGEN_ID = "prompt/ilustrar"
 _SISTEMA_IMAGEN_FALLBACK = (
     "Eres un generador de fotografias. Tu UNICA salida es UNA sola fotografia realista que "
     "represente la peticion; NUNCA respondas con texto. PROHIBIDO dentro de la imagen: texto, "

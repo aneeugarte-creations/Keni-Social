@@ -25,11 +25,11 @@ const RUN = {
   creado: "2026-06-10T10:00:00",
   actualizado: "2026-06-10T10:05:00",
   estado_global: "pendiente",
-  etapa_actual: "aprobacion",
+  etapa_actual: "aprobar",
   etapas: [
-    { clave: "fusion", nombre: "Fusión", estado: "ok", detalle: "2 fuentes", ts: "", es_ia: true },
-    { clave: "cd", nombre: "Copy", estado: "ok", detalle: "1/1", ts: "", es_ia: true },
-    { clave: "aprobacion", nombre: "Aprobación", estado: "pendiente", detalle: "", ts: "", es_ia: false },
+    { clave: "fusionar", nombre: "Fusionar", estado: "ok", detalle: "2 fuentes", ts: "", es_ia: true },
+    { clave: "redactar", nombre: "Redactar", estado: "ok", detalle: "1/1", ts: "", es_ia: true },
+    { clave: "aprobar", nombre: "Aprobar", estado: "pendiente", detalle: "", ts: "", es_ia: false },
   ],
   qa_fuente: null,
   cluster: null,
@@ -129,8 +129,8 @@ describe("Producción (feed unificado: runs del pipeline + actividad suelta)", (
     stubFetch();
     renderConProviders(<Produccion />);
     expect(await screen.findByText("Cómo gana la FIFA")).toBeInTheDocument();
-    expect(screen.getByText("Fusión")).toBeInTheDocument();
-    expect(screen.getByText("Aprobación")).toBeInTheDocument();
+    expect(screen.getByText("Fusionar")).toBeInTheDocument();
+    expect(screen.getByText("Aprobar")).toBeInTheDocument();
     // Métricas de la run en la tarjeta (tokens compactos, 5000 → "5 k").
     expect(screen.getByText(/5\s*k tok/i)).toBeInTheDocument();
   });
@@ -152,7 +152,7 @@ describe("Producción (feed unificado: runs del pipeline + actividad suelta)", (
   });
 
   it("etiquetaTipoGeneracion devuelve label para todos los tipos conocidos", () => {
-    expect(etiquetaTipoGeneracion("copy")).toBe("Copy");
+    expect(etiquetaTipoGeneracion("copy")).toBe("Redactar");
     expect(etiquetaTipoGeneracion("rss")).toBe("RSS");
     expect(etiquetaTipoGeneracion("imagen")).toBe("Imagen");
     expect(etiquetaTipoGeneracion("insumos")).toBe("Cajones del día");

@@ -1,5 +1,5 @@
 ---
-titulo: "Editorial"
+titulo: "Priorizar"
 descripcion: "Extrae las keywords y temas de la línea editorial de una marca para priorizar el pool."
 tipo: prompt
 carpeta: "noticias"

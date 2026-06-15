@@ -10,7 +10,7 @@ editable aqui. Es el primer paso explicito y versionado; la intencion es externa
 este vocabulario a configuracion por marca (gestionable desde la Consola) sin cambiar
 el contrato de `palabras_de_marca`. Honestidad: si una marca no tiene vocabulario, la
 relevancia de marca no aplica (la parrilla cae a su scoring general, sin inventar).
-Cuando la etapa Editorial (perfil Haiku) esta activa, ese perfil SUSTITUYE esta
+Cuando la etapa Priorizar (perfil Haiku) esta activa, ese perfil SUSTITUYE esta
 semilla (ver `noticias_liston.palabras_relevancia`); la semilla es el suelo fiable.
 
 Las palabras son tokens o frases en minuscula y SIN ACENTOS (el matching normaliza el

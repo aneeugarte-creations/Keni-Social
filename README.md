@@ -42,7 +42,7 @@ keni-consola
 - [`docs/arquitectura.md`](docs/arquitectura.md) — cómo encajan la Texto (prompts), el MCP de métricas y la Consola.
 - [`docs/estado-producto.md`](docs/estado-producto.md) — panorama honesto: qué está listo, qué está pausado por gating externo.
 - [`docs/mapa-codigo.md`](docs/mapa-codigo.md) — índice de los módulos de `keni_consola` (dónde vive cada cosa).
-- [`docs/maquina-contenido/`](docs/maquina-contenido/README.md) — specs de los motores de contenido (ingesta, clustering, verificación, auto-feed, video).
+- [`docs/maquina-contenido/`](docs/maquina-contenido/README.md) — specs de los motores de contenido (recolectar, agrupar, verificación, auto-feed, video).
 - [`docs/adr/`](docs/adr/) — decisiones de arquitectura (ADR 0001–0007).
 
 ## Instalación como plugin

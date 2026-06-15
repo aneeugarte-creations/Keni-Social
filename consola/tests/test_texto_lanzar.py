@@ -203,7 +203,7 @@ def test_lanzar_prompt_piezas_con_redes_crea_spec_copy(encolado):
     # El prompt compuesto pide el bloque json de piezas por red, con sus límites técnicos.
     assert "piezas" in encolado["prompt"]
     assert "máx 25000 caracteres" in encolado["prompt"]
-    # La política de emojis vive en el prompt/editorial, NO en un hardcode del lanzamiento.
+    # La política de emojis vive en el prompt/priorizar, NO en un hardcode del lanzamiento.
     from keni_consola.dominio import generar
 
     assert generar.INSTRUCCION_SIN_EMOJIS not in encolado["prompt"]

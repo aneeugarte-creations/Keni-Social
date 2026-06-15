@@ -1,8 +1,8 @@
 ---
-titulo: "Insumo: eventos Claro Sports"
+titulo: "Recibir: eventos Claro Sports"
 descripcion: "Parsea la agenda de eventos de Claro Sports al pool de noticias."
 tipo: prompt
-carpeta: "insumos"
+carpeta: "recibir"
 creado: 2026-06-08T00:00:00+00:00
 actualizado: 2026-06-08T00:00:00+00:00
 ---

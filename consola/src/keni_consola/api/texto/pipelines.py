@@ -70,59 +70,62 @@ async def variables(request: Request) -> Response:
 
 # Las TRES MÁQUINAS del riel (ADR 0011): Investigación (el motor de noticias), Producción
 # (la máquina de contenido) y las Herramientas de importación. Cada etapa es:
-#   - `mecanica`: paso del proceso SIN prompt de la Biblioteca (código puro, p. ej. el
-#     clustering léxico o la admisión). Da contexto: el riel cuenta la historia completa
+#   - `mecanica`: paso del proceso SIN prompt de la Biblioteca (código puro, p. ej. Agrupar
+#     léxico o Admitir). Da contexto: el riel cuenta la historia completa
 #     del proceso, no solo los prompts editables.
 #   - `prompt` : etapa cuyo prompt vive en la Biblioteca. `doc_id=None` => se resuelve por el
 #     REGISTRO (`prompt_base_de`, ver `_ETAPA_PIPELINE`): respeta rebindeos sin tocar código.
 #
-# El ORDEN sigue el modelo conceptual del ADR 0011 (frontera: la verificación de fuente es
-# Investigación; copy/arte son Producción), apoyado en el orden real de los daemons
+# El ORDEN sigue el modelo conceptual del ADR 0011 (frontera: Verificar la fuente es
+# Investigación; Redactar/Ilustrar son Producción), apoyado en el orden real de los daemons
 # (`ingesta_daemon.ejecutar_barrido`, `pipeline_contenido._barrido`). Donde difieren hoy
-# manda el ADR: la clasificación de marca corre DENTRO del clustering y la verificación corre
-# tras la admisión del lado `contenido` (hasta F3), pero el riel los presenta como etapas del
-# proceso de Investigación. La fusión son DOS prompts: la comprobación previa
-# (`prompt/fusion-verificacion`) corre por grupo propuesto ANTES de fundir.
+# manda el ADR: la marca se clasifica DENTRO de Agrupar y Verificar corre
+# tras Admitir del lado `contenido` (hasta F3), pero el riel los presenta como etapas del
+# proceso de Investigación. Fusionar son DOS prompts: la verificación previa
+# (`prompt/fusionar-verificar`) corre por grupo propuesto ANTES de fusionar.
 #
 # TERMINOLOGÍA (ADR 0011 §5 + páginas de proceso de F2): los títulos e ids de las etapas
 # compartidas casan 1:1 con el riel de la página Investigación (`/datos/investigacion`:
-# Ingesta · Fusión · Clasificación · Ranking · Verificación) y con las etapas que muestra el
-# hub Producción (`/datos/produccion`: Copy · Arte · Aprobación). Las etapas intermedias que
-# esas páginas NO muestran (clustering, traducción, admisión…) se mantienen solo como
-# contexto del proceso, en el vocabulario nuevo (sin "QA", "criba" ni "priorización").
+# Recolectar · Fusionar · Clasificar · Priorizar · Verificar) y con las etapas que muestra el
+# hub Producción (`/datos/produccion`: Redactar · Ilustrar · Aprobar). Las etapas intermedias que
+# esas páginas NO muestran (Agrupar, Traducir, Admitir…) se mantienen solo como
+# contexto del proceso, en el vocabulario nuevo (verbos C).
 # Tupla de etapa: (tipo, id, titulo, doc_id | None, seccion | None).
+# Iconos en la UI: `mecanica` => ⚙ (determinista) · `prompt` => 🤖 (LLM).
 _Etapa = tuple[str, str, str, str | None, str | None]
 _MAQUINAS: tuple[tuple[str, str, str, tuple[_Etapa, ...]], ...] = (
     ("investigacion", "Investigación", "El motor de noticias", (
-        ("mecanica", "ingesta", "Ingesta", None, None),
-        ("mecanica", "clustering", "Clustering y merge léxico", None, None),
-        ("prompt", "fusion-verificacion", "Fusión · comprobación previa", "prompt/fusion-verificacion", None),
-        ("prompt", "fusion", "Fusión", "prompt/fusion", None),
-        ("prompt", "traduccion", "Traducción y localización MX", "prompt/traduccion", None),
-        ("prompt", "clasificacion", "Clasificación", "prompt/clasificacion-marca", None),
-        ("prompt", "ranking", "Ranking", "prompt/editorial", None),
-        ("mecanica", "admision", "Admisión", None, None),
-        ("prompt", "verificacion", "Verificación", None, None),  # prompt_base_de("qa")
+        ("mecanica", "recolectar", "Recolectar", None, None),
+        ("mecanica", "agrupar", "Agrupar", None, None),
+        ("prompt", "fusionar-verificar", "Fusionar · verificar", "prompt/fusionar-verificar", None),
+        ("prompt", "fusionar", "Fusionar", "prompt/fusionar", None),
+        ("prompt", "traducir", "Traducir", "prompt/traducir", None),
+        ("prompt", "clasificar", "Clasificar", "prompt/clasificar-marca", None),
+        ("prompt", "priorizar", "Priorizar", "prompt/priorizar", None),
+        ("mecanica", "admitir", "Admitir", None, None),
+        ("prompt", "verificar", "Verificar", None, None),  # prompt_base_de("qa")
     )),
     ("produccion", "Producción", "La máquina de contenido", (
-        ("prompt", "copy", "Copy", None, None),                  # prompt_base_de("copy")
-        ("prompt", "arte", "Arte", "prompt/arte", None),
-        ("mecanica", "aprobacion", "Aprobación", None, None),
-        ("mecanica", "publicacion", "Publicación", None, None),
-        ("prompt", "evergreen", "Taller evergreen", None, "taller"),        # prompt_base_de("evergreen")
+        ("prompt", "redactar", "Redactar", None, None),          # prompt_base_de("copy")
+        ("mecanica", "revisar", "Revisar", None, None),
+        ("prompt", "ilustrar", "Ilustrar", "prompt/ilustrar", None),
+        ("mecanica", "aprobar", "Aprobar", None, None),
+        ("mecanica", "publicar", "Publicar", None, None),
+        ("prompt", "idear", "Idear", None, "taller"),            # prompt_base_de("evergreen")
     )),
-    ("importacion", "Herramientas de importación", "Insumos del equipo", (
-        ("prompt", "insumos-portal", "Insumos · Portal/SMS", "prompt/insumos/portal", None),
-        ("prompt", "insumos-corresponsales", "Insumos · Corresponsales", "prompt/insumos/corresponsales", None),
-        ("prompt", "insumos-reporteros", "Insumos · Reporteros", "prompt/insumos/reporteros", None),
-        ("prompt", "insumos-eventos-claro", "Insumos · Eventos Claro Sports", "prompt/insumos/eventos-claro", None),
+    ("importacion", "Herramientas de importación", "Material recibido del equipo", (
+        ("prompt", "recibir-portal", "Recibir · Portal/SMS", "prompt/recibir/portal", None),
+        ("prompt", "recibir-corresponsales", "Recibir · Corresponsales", "prompt/recibir/corresponsales", None),
+        ("prompt", "recibir-reporteros", "Recibir · Reporteros", "prompt/recibir/reporteros", None),
+        ("prompt", "recibir-eventos-claro", "Recibir · Eventos Claro Sports", "prompt/recibir/eventos-claro", None),
         ("prompt", "importar-calendario", "Importar calendario", "prompt/importar/calendario", None),
         ("prompt", "importar-parrilla", "Importar rota/parrilla", "prompt/importar/parrilla", None),
     )),
 )
 
 # id de etapa -> pipeline del registro cuyo prompt base efectivo la alimenta (rebindeable).
-_ETAPA_PIPELINE = {"verificacion": "qa", "copy": "copy", "evergreen": "evergreen"}
+# Los valores son las CLAVES del registro `libtexto.PIPELINES` (qa/copy/evergreen), estables.
+_ETAPA_PIPELINE = {"verificar": "qa", "redactar": "copy", "idear": "evergreen"}
 
 
 def _doc_id_de_etapa(eid: str, doc_id: str | None) -> str:
@@ -144,7 +147,7 @@ async def maquina(request: Request) -> Response:
     con sus etapas en el orden del proceso (ver `_MAQUINAS`):
       - etapa `mecanica`: `{tipo, id, titulo}` (sin prompt de la Biblioteca; contexto).
       - etapa `prompt`  : `{tipo, id, titulo, doc_id, produccion, sha_actual, sin_publicar}`
-        (+ `seccion` opcional, p. ej. `"taller"` para el evergreen) con el estado de
+        (+ `seccion` opcional, p. ej. `"taller"` para Idear) con el estado de
         publicación del documento que se inyecta en esa etapa.
 
     Las CAPAS editoriales ya no salen aquí: el ensamblaje por marca vive en

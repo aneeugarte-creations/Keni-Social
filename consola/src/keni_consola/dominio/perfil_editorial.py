@@ -2,11 +2,11 @@
 
 Un agente Haiku lee los docs editoriales de la marca (`libtexto.editoriales_de_marca`)
 y devuelve sus temas/keywords; se cachea en disco (dir de texto) y se refresca cuando
-cambia la editorial (hash) o caduca (TTL). El ranking usa `palabras(marca)` (match léxico, SIN
+cambia la editorial (hash) o caduca (TTL). La priorización usa `palabras(marca)` (match léxico, SIN
 coste por-cluster: el Haiku solo corre en el refresco, acotado por marca y TTL).
 
-GATEADO por `KENI_RANKING_PERFIL_IA` (def OFF): la decisión de usarlo/refrescarlo la toma el daemon
-de ingesta; este módulo es neutro (lee/escribe el cache y, si se le pide, llama a Haiku).
+GATEADO por `KENI_PRIORIZAR_PERFIL_IA` (def OFF): la decisión de usarlo/refrescarlo la toma el daemon
+de Recolección; este módulo es neutro (lee/escribe el cache y, si se le pide, llama a Haiku).
 
 Patrón de Haiku SÍNCRONO POR LOTES idéntico a `dominio.traduccion` (ejecutor inyectable en tests).
 BEST-EFFORT: ante cualquier fallo (sin claude, JSON inválido, sin editorial) NO toca el cache y
@@ -66,7 +66,7 @@ def _guardar(data: dict[str, Any]) -> None:
 
         ruta.parent.mkdir(parents=True, exist_ok=True)
         escribir_atomico(ruta, json.dumps(data, ensure_ascii=False, indent=2))
-    except Exception:  # noqa: BLE001 -- el cache es best-effort; un fallo no rompe la ingesta
+    except Exception:  # noqa: BLE001 -- el cache es best-effort; un fallo no rompe la Recolección
         _log.warning("perfil_editorial: no se pudo persistir el cache.", exc_info=True)
 
 
@@ -97,7 +97,7 @@ def _hash(texto: str) -> str:
     return hashlib.sha256(texto.encode("utf-8")).hexdigest()[:16]
 
 
-_PROMPT_ID = "prompt/editorial"
+_PROMPT_ID = "prompt/priorizar"
 
 
 def _plantilla() -> str:
@@ -132,7 +132,7 @@ def _extraer_keywords(texto: str) -> list[str]:
     bruto = json_llm.extraer_lista(texto, claves=("keywords",))
     if bruto is None:
         return []
-    from . import similitud  # sin acentos: el clustering compara contra texto de-acentuado
+    from . import similitud  # sin acentos: la Agrupación compara contra texto de-acentuado
 
     fuera: list[str] = []
     for k in bruto:
@@ -169,7 +169,7 @@ def refrescar_si_corresponde(
 
     `al_refrescar(marca, keywords, prompt, salida)`: callback OPCIONAL que se invoca SOLO cuando
     Haiku refrescó de verdad el perfil (no en aciertos de cache), con el PROMPT y la SALIDA reales
-    de la llamada. El daemon lo usa para registrar la actividad IA del encaje editorial con el
+    de la llamada. El daemon lo usa para registrar la actividad IA de Priorizar con el
     Haiku real; un fallo del callback no rompe el refresco (es observabilidad).
     """
     texto = _texto_editorial(marca)

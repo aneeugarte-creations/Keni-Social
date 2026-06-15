@@ -20,7 +20,7 @@ import { RielInvestigacion } from "@/pages/noticias/RielInvestigacion";
 /**
  * Cockpit de INVESTIGACIÓN (`/maquina/investigacion`): la casa del motor PROACTIVO que descubre
  * y verifica noticias. A diferencia de Producción (que se lanza a mano), Investigación es un
- * flujo continuo —descubrir → agrupar → seleccionar → validar → mesa de redacción— y el cockpit
+ * flujo continuo —recolectar → agrupar → admitir → verificar → mesa de redacción— y el cockpit
  * lo ordena de ENTRADA a SALIDA en pestañas agrupadas (`?seccion=`), cada una REUTILIZANDO una
  * superficie ya existente sin reescribirla:
  *
@@ -30,9 +30,9 @@ import { RielInvestigacion } from "@/pages/noticias/RielInvestigacion";
  *       vieja `/contenido/texto/algoritmos` redirige aquí.
  *   PROCESO
  *     · PIPELINE (núcleo): UN solo proceso en dos fases. Antes (en el flujo), la línea INFORMATIVA de
- *       ingesta (`RielInvestigacion`: la máquina descubre/agrupa/rankea sola; cada etapa con
+ *       recolección (`RielInvestigacion`: la máquina recolecta/agrupa/prioriza sola; cada etapa con
  *       prompt es una BURBUJA clicable que lo edita in-place). En el control, la tira
- *       `PipelineEnVivo` recortada a Investigación (`soloProceso`) —Selección + Validación, con
+ *       `PipelineEnVivo` recortada a Investigación (`soloProceso`) —Recolectar + Verificar, con
  *       el switch inline y «Editar prompt»/«Excepciones» en el menú de la etapa—. El repertorio
  *       completo de prompts vive en la Biblioteca (Texto · Documentos); no se duplica aquí.
  *   SALIDA
@@ -55,9 +55,9 @@ const SECCIONES: readonly Seccion[] = [
   "contenidos",
 ];
 
-/** Docs de la Biblioteca por etapa de la tira de control: la etapa Validación abre su doc en
- *  overlay desde su menú. Selección es mecánica (sin prompt propio). */
-const DOC_POR_ETAPA = { validacion: "prompt/validacion" } as const;
+/** Docs de la Biblioteca por etapa de la tira de control: la etapa Verificar abre su doc en
+ *  overlay desde su menú. Recolectar es mecánica (sin prompt propio). */
+const DOC_POR_ETAPA = { verificar: "prompt/verificar" } as const;
 
 export default function CockpitInvestigacion() {
   const { usuario } = useSesion();
@@ -132,12 +132,12 @@ export default function CockpitInvestigacion() {
         </TabsContent>
 
         {/* PROCESO · PIPELINE (núcleo): UN proceso en dos fases —antes en el flujo (informativo) y
-            control (Selección/Validación)— más el índice editable de prompts. */}
+            control (Recolectar/Verificar)— más el índice editable de prompts. */}
         <TabsContent value="pipeline" className="space-y-6">
           {/* Fase 1 · antes en el flujo (automático, informativo). */}
           <RielInvestigacion />
 
-          {/* Fase 2 · control (Selección + Validación), con switches y «Editar prompt». */}
+          {/* Fase 2 · control (Recolectar + Verificar), con switches y «Editar prompt». */}
           <section className="space-y-2">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Control · tú decides

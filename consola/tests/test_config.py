@@ -485,32 +485,32 @@ def test_gate_maquina_on_respeta_el_toggle_interno(limpio, store_aislado):
 
 
 def test_gate_maquina_no_cambia_la_semantica_del_accesor(limpio, store_aislado):
-    """El accesor interno (p.ej. `ingesta_activa`) conserva su semantica; solo el gate ANDea.
+    """El accesor interno (p.ej. `recolectar_activo`) conserva su semantica; solo el gate ANDea.
 
     Con su propio flag ON pero la maquina apagada (default), el accesor sigue True pero el
     gate efectivo es False: nada corre hasta encender el interruptor general.
     """
-    store_aislado.setenv(config.ENV_PIPELINE_SELECCION, "1")
-    assert config.ingesta_activa() is True  # semantica intacta
-    assert config.gate_maquina(config.ingesta_activa)() is False  # maquina off -> no corre
+    store_aislado.setenv(config.ENV_PIPELINE_RECOLECTAR, "1")
+    assert config.recolectar_activo() is True  # semantica intacta
+    assert config.gate_maquina(config.recolectar_activo)() is False  # maquina off -> no corre
     store_aislado.setenv(config.ENV_MAQUINA, "1")
-    assert config.gate_maquina(config.ingesta_activa)() is True  # maquina on -> sigue su toggle
+    assert config.gate_maquina(config.recolectar_activo)() is True  # maquina on -> sigue su toggle
 
 
 # --------------------------------------------------------------------------- #
-# Etapa QA (toggle propio `KENI_PIPELINE_VALIDACION`) + barrido por "cualquier etapa activa"     #
+# Etapa Verificar (toggle propio `KENI_PIPELINE_VERIFICAR`) + barrido por "cualquier etapa activa" #
 # --------------------------------------------------------------------------- #
 
 
-def test_qa_activo_default_off(limpio, store_aislado):
-    """Sin `KENI_PIPELINE_VALIDACION`, la etapa de QA está APAGADA por defecto (kill-switch, como las demás)."""
-    assert config.qa_activo() is False
+def test_verificar_activo_default_off(limpio, store_aislado):
+    """Sin `KENI_PIPELINE_VERIFICAR`, la etapa de Verificar está APAGADA por defecto (kill-switch, como las demás)."""
+    assert config.verificar_activo() is False
 
 
 @pytest.mark.parametrize("valor", ["1", "true", "on", "si", "yes"])
-def test_qa_activo_afirmativo(limpio, store_aislado, valor):
-    store_aislado.setenv(config.ENV_PIPELINE_VALIDACION, valor)
-    assert config.qa_activo() is True
+def test_verificar_activo_afirmativo(limpio, store_aislado, valor):
+    store_aislado.setenv(config.ENV_PIPELINE_VERIFICAR, valor)
+    assert config.verificar_activo() is True
 
 
 def test_alguna_etapa_pipeline_activa_siempre_true(limpio, store_aislado):
@@ -518,12 +518,12 @@ def test_alguna_etapa_pipeline_activa_siempre_true(limpio, store_aislado):
 
     La etapa de AVANCE (borradores completos → revisión) corre INCONDICIONALMENTE (ya no es un
     toggle), así que `alguna_etapa_pipeline_activa` es siempre True: el daemon nunca se duerme
-    mientras la máquina esté encendida. Las fases que gastan IA (CI/QA/Copy/Arte) se auto-gatean
-    DENTRO del barrido; el maestro general (`KENI_MAQUINA`) se aplica aparte en el `activo_fn`."""
+    mientras la máquina esté encendida. Las fases que gastan IA (Admitir/Verificar/Redactar/Ilustrar)
+    se auto-gatean DENTRO del barrido; el maestro general (`KENI_MAQUINA`) se aplica aparte en el `activo_fn`."""
     assert config.alguna_etapa_pipeline_activa() is True  # sin ninguna env
     for env in (
-        config.ENV_PIPELINE_SELECCION, config.ENV_PIPELINE_VALIDACION,
-        config.ENV_PIPELINE_COPY, config.ENV_PIPELINE_ARTE,
+        config.ENV_PIPELINE_RECOLECTAR, config.ENV_PIPELINE_VERIFICAR,
+        config.ENV_PIPELINE_REDACTAR, config.ENV_PIPELINE_ILUSTRAR,
     ):
         store_aislado.setenv(env, "0")
     assert config.alguna_etapa_pipeline_activa() is True  # incluso con todas las de IA OFF
@@ -534,25 +534,25 @@ def test_alguna_etapa_produccion_activa_siempre_true_y_alias(limpio, store_aisla
     y `alguna_etapa_pipeline_activa` es su alias retro (mismo objeto)."""
     assert config.alguna_etapa_produccion_activa() is True
     assert config.alguna_etapa_pipeline_activa is config.alguna_etapa_produccion_activa
-    for env in (config.ENV_PIPELINE_COPY, config.ENV_PIPELINE_ARTE):
+    for env in (config.ENV_PIPELINE_REDACTAR, config.ENV_PIPELINE_ILUSTRAR):
         store_aislado.setenv(env, "0")
-    assert config.alguna_etapa_produccion_activa() is True  # Copy/Arte OFF: AVANCE igual barre
+    assert config.alguna_etapa_produccion_activa() is True  # Redactar/Ilustrar OFF: AVANCE igual barre
 
 
-def test_alguna_etapa_investigacion_activa_gateada_por_seleccion_o_validacion(limpio, store_aislado):
-    """El loop de INVESTIGACIÓN (ADR 0011 F3) solo barre si Selección o Validación están ON; con
-    ambas OFF duerme (nada que admitir ni cribar). Fusión/Ranking viven en el daemon de ingesta."""
+def test_alguna_etapa_investigacion_activa_gateada_por_recolectar_o_verificar(limpio, store_aislado):
+    """El loop de INVESTIGACIÓN (ADR 0011 F3) solo barre si Recolectar o Verificar están ON; con
+    ambas OFF duerme (nada que admitir ni cribar). Fusionar/Priorizar viven en el daemon de ingesta."""
     for env in (
-        config.ENV_PIPELINE_SELECCION, config.ENV_PIPELINE_VALIDACION,
-        config.ENV_PIPELINE_COPY, config.ENV_PIPELINE_ARTE,
+        config.ENV_PIPELINE_RECOLECTAR, config.ENV_PIPELINE_VERIFICAR,
+        config.ENV_PIPELINE_REDACTAR, config.ENV_PIPELINE_ILUSTRAR,
     ):
         store_aislado.setenv(env, "0")
     assert config.alguna_etapa_investigacion_activa() is False  # ambas etapas de investigación OFF
-    store_aislado.setenv(config.ENV_PIPELINE_SELECCION, "1")
-    assert config.alguna_etapa_investigacion_activa() is True  # basta Selección ON
-    store_aislado.setenv(config.ENV_PIPELINE_SELECCION, "0")
-    store_aislado.setenv(config.ENV_PIPELINE_VALIDACION, "1")
-    assert config.alguna_etapa_investigacion_activa() is True  # o basta Validación ON
+    store_aislado.setenv(config.ENV_PIPELINE_RECOLECTAR, "1")
+    assert config.alguna_etapa_investigacion_activa() is True  # basta Recolectar ON
+    store_aislado.setenv(config.ENV_PIPELINE_RECOLECTAR, "0")
+    store_aislado.setenv(config.ENV_PIPELINE_VERIFICAR, "1")
+    assert config.alguna_etapa_investigacion_activa() is True  # o basta Verificar ON
 
 
 # --------------------------------------------------------------------------- #

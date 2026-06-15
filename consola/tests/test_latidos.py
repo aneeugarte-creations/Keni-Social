@@ -366,7 +366,7 @@ def test_endpoint_daemons_expone_clase_y_motor(entorno):
 
 def test_clave_gate_de_mapea_cada_daemon_gateado():
     # Mapeo explícito daemon -> clave KENI_* que gobierna su on/off (fuente única en latidos).
-    assert latidos.clave_gate_de("ingesta") == "KENI_PIPELINE_SELECCION"
+    assert latidos.clave_gate_de("ingesta") == "KENI_PIPELINE_RECOLECTAR"
     assert latidos.clave_gate_de("trends") == "KENI_TRENDS"
     assert latidos.clave_gate_de("algoritmos") == "KENI_ALGORITMOS_AUTO"
     assert latidos.clave_gate_de("media_gc") == "KENI_MEDIA_GC"
@@ -405,7 +405,7 @@ def test_endpoint_daemons_expone_clave_gate(entorno):
     db.latido_barrido("reaper", ok=True, intervalo_seg=60.0, tick_seg=60.0)
     c = _cli_admin()
     por_nombre = {d["daemon"]: d for d in c.get("/api/sistema/daemons").json()["daemons"]}
-    assert por_nombre["ingesta"]["clave_gate"] == "KENI_PIPELINE_SELECCION"
+    assert por_nombre["ingesta"]["clave_gate"] == "KENI_PIPELINE_RECOLECTAR"
     assert por_nombre["reaper"]["clave_gate"] is None
 
 

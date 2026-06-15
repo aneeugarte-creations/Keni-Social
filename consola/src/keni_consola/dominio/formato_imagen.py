@@ -10,7 +10,7 @@ al píxel). El llamante lee las dimensiones de la imagen y nos las pasa.
 
 NO se exige el formato POR RED: el equipo cruza formatos (postea 1:1 y 4:5 indistintamente en
 IG/FB/X), así que atar cada red a un único lienzo bloqueaba imágenes perfectamente válidas. La
-matriz `red -> lienzos` de `formatos_red` describe qué GENERA el flujo de arte desde una foto,
+matriz `red -> lienzos` de `formatos_red` describe qué GENERA el flujo de ilustración desde una foto,
 no qué es aceptable al validar; por eso aquí miramos el set canónico completo. `red` se conserva
 en la firma por compatibilidad (y por si en el futuro se quiere afinar por red).
 """

@@ -2,9 +2,9 @@
 
 PROBLEMA QUE RESUELVE
 =====================
-La etapa de copy del pipeline deja BORRADORES de texto listos para revisar, pero el equipo
-aun tiene que generar un arte a mano para cada uno. La ETAPA DE ARTE del pipeline (toggle
-"Generar arte", `KENI_PIPELINE_ARTE`) corre TRAS la de copy y, para cada TEMA que YA tiene
+La etapa Redactar del pipeline deja BORRADORES de texto listos para revisar, pero el equipo
+aun tiene que generar un arte a mano para cada uno. La ETAPA ILUSTRAR del pipeline (toggle
+"Ilustrar", `KENI_PIPELINE_ILUSTRAR`) corre TRAS Redactar y, para cada TEMA que YA tiene
 copy/borrador en alguna plataforma pero le FALTA imagen, genera UN arte por IA (reutilizando
 el MISMO proveedor que el boton `/api/media/generar`) y lo ADJUNTA a esa plataforma. La pieza
 sigue su flujo normal de revision/aprobacion humana.
@@ -19,7 +19,7 @@ borrador, y el dedup por etiqueta `autogen-arte` se asigna AL ÉXITO (en el ejec
 
 SEGURO POR DISENO (CONSERVADOR)
 ===============================
-  - GATEADO: la etapa solo ilustra con `KENI_PIPELINE_ARTE=1` (def OFF) + `KENI_MAQUINA=1`.
+  - GATEADO: la etapa solo ilustra con `KENI_PIPELINE_ILUSTRAR=1` (def OFF) + `KENI_MAQUINA=1`.
   - SOLO TEMAS CON COPY Y SIN IMAGEN: solo procesa contenido 'contenido' no cerrado que
     tenga alguna `contenido_plataforma` con copy pero sin imagen. No inventa piezas.
   - SIN CREDENCIALES, NO HACE NADA: si no hay proveedor de imagen configurado, no ilustra.
@@ -153,7 +153,7 @@ def topics_sin_arte(
         if not (item.get("titulo") or "").strip():
             continue
         # Exclusión por marca: no auto-ilustramos temas de una marca apagada a mano para arte.
-        if config.marca_apagada(config.ENV_PIPELINE_ARTE, item.get("marca") or ""):
+        if config.marca_apagada(config.ENV_PIPELINE_ILUSTRAR, item.get("marca") or ""):
             continue
         item_id = item.get("id")
         if item_id in ya_procesados:
@@ -363,7 +363,7 @@ def registrar_arte(
             "contenido_id": contenido_id,
             "prompt": prompt[:20000],
             "salida": f"Imagen generada: {imagen}",
-            "etiqueta": f"Arte — {(titulo or '')[:80]}",
+            "etiqueta": f"Ilustrar — {(titulo or '')[:80]}",
             "estado": generaciones.ESTADO_COMPLETADO,
             "fase": generaciones.FASE_COMPLETADO,
             "fecha_fin": generaciones.ahora_iso(),

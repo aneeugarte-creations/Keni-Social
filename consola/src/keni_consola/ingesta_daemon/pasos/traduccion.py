@@ -1,4 +1,4 @@
-"""Paso de TRADUCCIÓN (Ola D): traduce a ES los clusters extranjeros recientes sin traducir."""
+"""Paso de TRADUCIR (Ola D): traduce a ES los clusters extranjeros recientes sin traducir."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from ...dominio import traduccion
 from .._comun import _log
 
 
-def paso_traduccion(*, ejecutor: traduccion.Ejecutor | None = None) -> dict[str, Any]:
+def paso_traducir(*, ejecutor: traduccion.Ejecutor | None = None) -> dict[str, Any]:
     """Traduce a ES los clusters EXTRANJEROS recientes sin traducir. Best-effort, ACOTADO.
 
     Selecciona hasta `KENI_TRAD_LOTE` clusters con `idioma != es`, `score >= KENI_TRAD_MIN_SCORE`,
@@ -19,7 +19,7 @@ def paso_traduccion(*, ejecutor: traduccion.Ejecutor | None = None) -> dict[str,
     procesa un lote del backlog; lo que falte se coge en barridos sucesivos.
 
     `ejecutor` inyectable (tests): si es None se usa el subproceso real. Devuelve
-    `{traducidos, candidatos}`. Un fallo de la traducción NO aborta el barrido.
+    `{traducidos, candidatos}`. Un fallo de Traducir NO aborta el barrido.
     """
     ventana_h = config.cluster_ventana_h()
     min_score = config.trad_min_score()
@@ -36,8 +36,8 @@ def paso_traduccion(*, ejecutor: traduccion.Ejecutor | None = None) -> dict[str,
         for c in candidatos
     ]
     traducciones = traduccion.traducir_items(items, ejecutor=ejecutor)
-    # La traducción no registra actividad propia: descarta sus métricas para que no se
-    # atribuyan al SIGUIENTE paso que sí registra (fusión/encaje del próximo barrido).
+    # Traducir no registra actividad propia: descarta sus métricas para que no se
+    # atribuyan al SIGUIENTE paso que sí registra (Fusionar/Priorizar del próximo barrido).
     traduccion.tomar_metricas_acumuladas()
     por_id = {str(t.get("id") or ""): t for t in traducciones}
     originales = {c["id"]: c for c in candidatos}

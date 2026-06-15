@@ -1,4 +1,4 @@
-"""Orquestador del barrido de ingesta: planificación PURA, barrido y arranque del hilo daemon.
+"""Orquestador del barrido de recolección: planificación PURA, barrido y arranque del hilo daemon.
 
 `ejecutar_barrido` invoca cada `paso_*` a través del facade (`_pkg.paso_*`) para que el
 parcheo de los pasos en tests siga surtiendo efecto tras el troceado del módulo.
@@ -120,13 +120,13 @@ def ejecutar_barrido() -> dict[str, Any]:
 
         ahora = datetime.now(UTC)
         feeds = repos.feeds_vencidos(iso_utc(ahora), config.ingesta_batch())
-        # Excepción por marca de "Crear noticias" (KENI_PIPELINE_SELECCION::<marca>): salta los feeds de
+        # Excepción por marca de "Crear noticias" (KENI_PIPELINE_RECOLECTAR::<marca>): salta los feeds de
         # marcas apagadas a mano. Los COMPARTIDOS (marca vacía) siempre corren —`marca_apagada`
-        # con marca vacía es False. Best-effort: no toca clustering/traducción (pasos globales).
-        feeds = [f for f in feeds if not config.marca_apagada(config.ENV_PIPELINE_SELECCION, str(f.get("marca") or ""))]
+        # con marca vacía es False. Best-effort: no toca agrupar/traducir (pasos globales).
+        feeds = [f for f in feeds if not config.marca_apagada(config.ENV_PIPELINE_RECOLECTAR, str(f.get("marca") or ""))]
         # PLAN EDITORIAL DIARIO: una marca con plan solo digiere los feeds de las categorías
         # de su plan — sondear lo que jamás competirá por una plaza es carga (red + archivo +
-        # clustering) sin salida. Los feeds fuera de plan se APLAZAN (proximo_sondeo += 6 h)
+        # agrupar) sin salida. Los feeds fuera de plan se APLAZAN (proximo_sondeo += 6 h)
         # para no re-evaluarlos en cada barrido. FAIL-OPEN: un feed SIN categoría o sin marca
         # no se filtra (sin clasificar no hay criterio; mejor digerir de más que quedar ciego).
         feeds, fuera_de_plan = _particion_por_plan(feeds)
@@ -144,7 +144,7 @@ def ejecutar_barrido() -> dict[str, Any]:
             )
 
         # OJO: sin feeds RSS vencidos el barrido NO termina aquí: los pasos post-RSS (agencias,
-        # clustering, fusión, re-score, traducción) corren IGUAL.
+        # agrupar, fusionar, re-score, traducir) corren IGUAL.
         max_items = config.ingesta_max_items()
         resultados = []
         if feeds:
@@ -156,7 +156,7 @@ def ejecutar_barrido() -> dict[str, Any]:
 
         max_errores = config.ingesta_max_errores()
         filtro_activo = config.ingesta_filtro_activo()
-        perfil_activo = config.perfil_editorial_activo()
+        perfil_activo = config.priorizar_perfil_activo()
         vocab_cache: dict[str, frozenset[str]] = {}  # 1 lectura de vocabulario por marca/barrido
         items_nuevos = 0
         items_filtrados = 0
@@ -168,7 +168,7 @@ def ejecutar_barrido() -> dict[str, Any]:
                 errores += 1
             # FILTRO DE ENTRADA (la puerta del pool): un feed asignado a una marca solo archiva
             # items que casan la agenda de esa marca (>= 1 término del vocabulario, el MISMO que
-            # usa el ranking). Exentos: feeds PROPIOS (su contenido ES la marca), feeds sin
+            # usa la priorización). Exentos: feeds PROPIOS (su contenido ES la marca), feeds sin
             # marca (compartidos/agencias) y marcas sin vocabulario (sin criterio no se filtra).
             # Lo descartado NO se archiva: se CUENTA por sondeo (observable en /salud).
             filtrados = 0
@@ -237,73 +237,73 @@ def ejecutar_barrido() -> dict[str, Any]:
                 )
 
         # Paso de AGENCIAS (Fase 2): vuelca al MISMO pool las notas de Reuters/AFP CONFIGURADAS,
-        # antes del clustering para que se agrupen en el mismo barrido. Gateado por KENI_PIPELINE_SELECCION
+        # antes de agrupar para que se agrupen en el mismo barrido. Gateado por KENI_PIPELINE_RECOLECTAR
         # (este daemon) — sin toggle propio. Best-effort + no-op honesto sin credencial: nunca
         # rompe el barrido de RSS. Sus items entran al conteo de `items_nuevos`.
         agencias_resumen: dict[str, Any] = {"items": 0}
         try:
             agencias_resumen = _pkg.paso_agencias()
-        except Exception:  # noqa: BLE001 -- las agencias son aditivas; nunca tumban la ingesta
+        except Exception:  # noqa: BLE001 -- las agencias son aditivas; nunca tumban la recolección
             _log.exception("ingesta_daemon: fallo en el paso de agencias.")
         items_nuevos += agencias_resumen["items"]
 
-        # Paso de CLUSTERING (Ola B): agrupa en historias los items recién insertados (y
+        # Paso de AGRUPAR (Ola B): agrupa en historias los items recién insertados (y
         # cualquier reciente sin cluster), recalcula y puntúa. Best-effort: un fallo del paso
-        # se loguea y NO invalida el barrido de ingesta (que ya persistió los artículos).
+        # se loguea y NO invalida el barrido de recolección (que ya persistió los artículos).
         cluster_resumen: dict[str, Any] = {"items": 0, "clusters_nuevos": 0, "clusters_tocados": 0}
         try:
-            cluster_resumen = _pkg.paso_clustering()
-        except Exception:  # noqa: BLE001 -- el clustering es aditivo; nunca tumba la ingesta
-            _log.exception("ingesta_daemon: fallo en el paso de clustering.")
-        # Ventana ya cargada/actualizada por el clustering (si la hay): se REUTILIZA en el
-        # re-score y la fusión del mismo barrido, sin re-leer la BD.
+            cluster_resumen = _pkg.paso_agrupar()
+        except Exception:  # noqa: BLE001 -- el agrupar es aditivo; nunca tumba la recolección
+            _log.exception("ingesta_daemon: fallo en el paso de agrupar.")
+        # Ventana ya cargada/actualizada por el agrupar (si la hay): se REUTILIZA en el
+        # re-score y el fusionar del mismo barrido, sin re-leer la BD.
         clusters_ventana = cluster_resumen.pop("clusters_ventana", None)
 
-        # Paso de MERGE LÉXICO tardío: funde historias de la ventana que se descubrieron
+        # Paso de MERGE LÉXICO tardío: fusiona historias de la ventana que se descubrieron
         # iguales después de nacer por separado (sin IA; throttled). Best-effort. ANTES del
-        # re-score para que las fundidas se repunten ya consolidadas.
+        # re-score para que las fusionadas se repunten ya consolidadas.
         merge_resumen: dict[str, Any] = {"grupos": 0, "fusionadas": 0}
         try:
             merge_resumen = _pkg.paso_merge_lexico(clusters_ventana)
             if merge_resumen.get("fusionadas"):
                 clusters_ventana = None  # la ventana cambió: que el re-score la recargue
-        except Exception:  # noqa: BLE001 -- el merge es aditivo; nunca tumba la ingesta
+        except Exception:  # noqa: BLE001 -- el merge es aditivo; nunca tumba la recolección
             _log.exception("ingesta_daemon: fallo en el paso de merge léxico.")
 
         # Paso de RE-SCORE (score que envejece): repuntúa periódicamente la ventana para que
         # la frescura DECAIGA aunque no entren items nuevos (ver `paso_rescore`). Best-effort.
         try:
             _pkg.paso_rescore(clusters_ventana)
-        except Exception:  # noqa: BLE001 -- el re-score es aditivo; nunca tumba la ingesta
+        except Exception:  # noqa: BLE001 -- el re-score es aditivo; nunca tumba la recolección
             _log.exception("ingesta_daemon: fallo en el paso de re-score.")
 
-        # Paso de FUSIÓN SEMÁNTICA (Fase 2b): funde con Haiku las historias del mismo evento que el
-        # léxico no unió (titulares distintos). Gateado `KENI_PIPELINE_FUSION` (def OFF). Best-effort.
+        # Paso de FUSIONAR SEMÁNTICAMENTE (Fase 2b): fusiona con Haiku las historias del mismo evento que el
+        # léxico no unió (titulares distintos). Gateado `KENI_PIPELINE_FUSIONAR` (def OFF). Best-effort.
         try:
-            _pkg.paso_fusion_semantica(recientes=clusters_ventana)
-        except Exception:  # noqa: BLE001 -- la fusión es aditiva; nunca tumba la ingesta
-            _log.exception("ingesta_daemon: fallo en el paso de fusión semántica.")
+            _pkg.paso_fusionar_semantica(recientes=clusters_ventana)
+        except Exception:  # noqa: BLE001 -- el fusionar es aditivo; nunca tumba la recolección
+            _log.exception("ingesta_daemon: fallo en el paso de fusionar semántico.")
 
-        # Paso de TRADUCCIÓN (Ola D): traduce a ES, por lotes, los clusters EXTRANJEROS recientes
+        # Paso de TRADUCIR (Ola D): traduce a ES, por lotes, los clusters EXTRANJEROS recientes
         # aún sin traducir. Best-effort: un fallo (subproceso, JSON, etc.) se loguea y NO invalida
         # el barrido. Sin tope artificial: cada barrido procesa un lote del backlog.
         trad_resumen: dict[str, Any] = {"traducidos": 0, "candidatos": 0}
         try:
-            trad_resumen = _pkg.paso_traduccion()
-        except Exception:  # noqa: BLE001 -- la traducción es aditiva; nunca tumba la ingesta
-            _log.exception("ingesta_daemon: fallo en el paso de traducción.")
+            trad_resumen = _pkg.paso_traducir()
+        except Exception:  # noqa: BLE001 -- el traducir es aditivo; nunca tumba la recolección
+            _log.exception("ingesta_daemon: fallo en el paso de traducir.")
 
         # Paso de CADUCIDAD (TTL): lo viejo expira solo y lo caducado se purga tras la retención.
-        # Throttled (1 pasada / 15 min) y best-effort: nunca tumba la ingesta.
+        # Throttled (1 pasada / 15 min) y best-effort: nunca tumba la recolección.
         try:
             _pkg.paso_caducidad()
-        except Exception:  # noqa: BLE001 -- la caducidad es aditiva; nunca tumba la ingesta
+        except Exception:  # noqa: BLE001 -- la caducidad es aditiva; nunca tumba la recolección
             _log.exception("ingesta_daemon: fallo en el paso de caducidad.")
 
         _log.info(
             "ingesta_daemon: barrido de %d feed(s) -> %d artículo(s) nuevo(s) (%d de agencias, "
-            "%d filtrados en la entrada), %d error(es), %d auto-desactivado(s); clustering: "
-            "%d item(s), %d historia(s) nueva(s); traducción: %d historia(s).",
+            "%d filtrados en la entrada), %d error(es), %d auto-desactivado(s); agrupar: "
+            "%d item(s), %d historia(s) nueva(s); traducir: %d historia(s).",
             len(feeds), items_nuevos, agencias_resumen["items"], items_filtrados, errores,
             auto_desactivados, cluster_resumen["items"], cluster_resumen["clusters_nuevos"],
             trad_resumen["traducidos"],
@@ -321,7 +321,7 @@ def ejecutar_barrido() -> dict[str, Any]:
 
 
 def _resumen_barrido(res: dict[str, Any]) -> str:
-    """Resumen corto del barrido de ingesta para el historial (feeds/items/historias)."""
+    """Resumen corto del barrido de recolección para el historial (feeds/items/historias)."""
     feeds = res.get("feeds", 0)
     nuevos = res.get("items_nuevos", 0)
     clusters = (res.get("clustering") or {}).get("clusters_nuevos", 0)
@@ -331,16 +331,16 @@ def _resumen_barrido(res: dict[str, Any]) -> str:
 
 
 def iniciar_ingesta() -> threading.Thread:
-    """Arranca el hilo daemon del motor de ingesta (GATEADO EN VIVO).
+    """Arranca el hilo daemon del motor de recolección (GATEADO EN VIVO).
 
-    El hilo arranca SIEMPRE y comprueba `KENI_PIPELINE_SELECCION` en cada ciclo: encender/apagar en
+    El hilo arranca SIEMPRE y comprueba `KENI_PIPELINE_RECOLECTAR` en cada ciclo: encender/apagar en
     runtime aplica sin reiniciar. Tick corto (30s) para recoger feeds vencidos pronto y ser
     responsivo al apagado. El hilo es daemon; un fallo de barrido se loguea y NO lo mata.
     """
 
     def bucle() -> None:
         daemon_util.bucle_gateado(
-            activo_fn=config.gate_maquina(config.ingesta_activa),
+            activo_fn=config.gate_maquina(config.recolectar_activo),
             intervalo_seg_fn=lambda: _TICK_SEG,
             sweep_fn=ejecutar_barrido,
             tick_seg=_TICK_SEG,
@@ -350,9 +350,9 @@ def iniciar_ingesta() -> threading.Thread:
 
     hilo = threading.Thread(target=bucle, name="ingesta-daemon", daemon=True)
     hilo.start()
-    estado = "ACTIVO" if config.ingesta_activa() else "EN ESPERA (KENI_PIPELINE_SELECCION off)"
+    estado = "ACTIVO" if config.recolectar_activo() else "EN ESPERA (KENI_PIPELINE_RECOLECTAR off)"
     _log.info(
-        "Ingesta daemon %s, tick %.0fs (batch=%d, workers=%d, max_items=%d).",
+        "Daemon de recolección %s, tick %.0fs (batch=%d, workers=%d, max_items=%d).",
         estado, _TICK_SEG, config.ingesta_batch(), config.ingesta_workers(),
         config.ingesta_max_items(),
     )

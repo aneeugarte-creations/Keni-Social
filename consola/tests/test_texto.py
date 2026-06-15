@@ -227,7 +227,7 @@ def test_importar_semilla_puebla_y_es_idempotente():
 def test_semilla_trae_prompt_qa_fuente_editable():
     # La criba pre-copy de la FUENTE es un prompt EDITABLE de la Biblioteca cuyo cuerpo efectivo
     # lo trae la semilla del paquete (visible en «Prompts»).
-    cuerpo = libtexto.cuerpo_efectivo("prompt/validacion")
+    cuerpo = libtexto.cuerpo_efectivo("prompt/verificar")
     assert cuerpo and "CRIBA PREVIA" in cuerpo
 
 
@@ -244,7 +244,7 @@ def test_semilla_trae_los_prompts_migrados_del_codigo():
     # Los prompts son semilla EDITABLE con sus variables {{...}} en el cuerpo (las sustituye
     # el módulo que los inyecta).
     casos = {
-        "prompt/clasificacion-marca": ("{{MARCAS}}", "{{MARCA_FALLBACK}}", "{{NOTICIA}}"),
+        "prompt/clasificar-marca": ("{{MARCAS}}", "{{MARCA_FALLBACK}}", "{{NOTICIA}}"),
         "prompt/hashtags": ("{{MARCA}}", "{{RED}}", "{{TEXTO}}"),
         "prompt/asistente/variantes": (),
         "prompt/asistente/resumir": (),
@@ -267,7 +267,7 @@ def test_importar_semilla_materializa_docs_nuevos_en_store_existente():
     (raiz() / "prompt" / "clasificacion-marca.md").unlink()
     libtexto.guardar("prompt/hashtags", cuerpo="EDITADO POR EL EQUIPO")
     assert libtexto.importar_semilla() == 1  # solo el que faltaba
-    cuerpo = libtexto.cuerpo_efectivo("prompt/clasificacion-marca")
+    cuerpo = libtexto.cuerpo_efectivo("prompt/clasificar-marca")
     assert cuerpo and "{{MARCAS}}" in cuerpo
     assert libtexto.obtener("prompt/hashtags").cuerpo.strip() == "EDITADO POR EL EQUIPO"
 
@@ -287,8 +287,8 @@ def test_migrar_nombres_biblioteca_renombra_refresca_y_preserva():
     assert n > 0
     # El id viejo desaparece; el nuevo existe con el título nuevo.
     assert libtexto.obtener("prompt/qa-fuente") is None
-    val = libtexto.obtener("prompt/validacion")
-    assert val is not None and val.titulo == "Validación"
+    val = libtexto.obtener("prompt/verificar")
+    assert val is not None and val.titulo == "Verificar"
     # patrones (script) y termometro (equipo) NO se pisan.
     assert libtexto.obtener("editorial/rrss/unotv/patrones").cuerpo.strip() == "BANDAS DEL SCRIPT"
     assert libtexto.obtener("prompt/termometro-mundial") is not None
@@ -307,7 +307,7 @@ def test_sembrar_migra_antes_de_importar_sin_duplicar():
     (raiz() / "prompt" / "qa-fuente.md").write_text("---\ntitulo: QA fuente\n---\nVIEJO", encoding="utf-8")
     sembrar.main()
     ids = {d.id for d in libtexto.listar(tipo="prompt")}
-    assert "prompt/validacion" in ids
+    assert "prompt/verificar" in ids
     assert "prompt/qa-fuente" not in ids  # el viejo NO sobrevive (no se duplica)
 
 

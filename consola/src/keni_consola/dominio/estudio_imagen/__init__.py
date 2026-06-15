@@ -12,7 +12,7 @@ Mapa de submódulos:
 
 El arte PERTENECE a la pieza: una imagen es un objeto del almacen de media (`<uuid>.png`) y se
 asocia a la publicacion por `publicacion.imagen`. La GENERACIÓN por IA NO vive aquí: corre por
-`media.generar_imagen` (auto-arte del pipeline y botón «Generar con IA»); este paquete solo
+`media.generar_imagen` (auto-ilustración del pipeline y botón «Generar con IA»); este paquete solo
 COMPONE/RENDERIZA de forma determinista (plantilla de marca + documento de capas) y RECORTA.
 """
 # ruff: noqa: F401  -- BARREL: todo lo importado aquí es re-export intencional de la superficie

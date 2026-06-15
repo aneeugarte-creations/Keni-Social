@@ -8,10 +8,10 @@
 
 /** Mapa tipo → etiqueta legible para los tipos de generación conocidos. */
 export const ETIQUETAS_TIPO_GENERACION: Record<string, string> = {
-  copy: "Copy",
+  copy: "Redactar",
   rss: "RSS",
   imagen: "Imagen",
-  verificacion: "Verificación",
+  verificacion: "Verificar",
   "qa-editorial": "QA editorial",
   autogen: "Auto-copy",
   run: "Run",

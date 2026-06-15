@@ -1,4 +1,4 @@
-"""Clustering de HISTORIAS sobre el archivo de artículos (Ola B) — capa PURA/testeable.
+"""Agrupación de HISTORIAS sobre el archivo de artículos (Ola B) — capa PURA/testeable.
 
 El motor de ingesta (Ola A) archiva miles de artículos crudos en `noticias_items`. Esta
 capa los agrupa en HISTORIAS: la misma noticia contada por varias fuentes y a lo largo del

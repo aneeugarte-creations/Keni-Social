@@ -1,8 +1,8 @@
 ---
-titulo: "Insumo: indicaciones y correcciones (Claro Sports)"
+titulo: "Recibir: indicaciones y correcciones (Claro Sports)"
 descripcion: "Parsea indicaciones/correcciones editoriales como guía; NUNCA se publican."
 tipo: prompt
-carpeta: "insumos"
+carpeta: "recibir"
 creado: 2026-06-11T00:00:00+00:00
 actualizado: 2026-06-11T00:00:00+00:00
 ---

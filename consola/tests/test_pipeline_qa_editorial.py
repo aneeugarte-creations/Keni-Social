@@ -5,7 +5,7 @@ Regla del dueño: "si el documento existe, adjúntalo; si no existe, créalo y a
 corre ANTES del copy y por TEMA (fuente): criba la NOTA de origen y persiste un veredicto
 ESTRUCTURADO (`no_verificado`/`problema`) sobre el TEMA. Aquí cubrimos, OFFLINE (mock de claude):
   - `asegurar_documento_qa` crea el documento si falta (idempotente).
-  - `lanzar_qa_fuente` enlaza una generación a la etapa QA (`gen_id`) y deja el tema `en_curso`.
+  - `lanzar_qa_fuente` enlaza una generación a la etapa Verificar (`gen_id`) y deja el tema `en_curso`.
   - el `procesar` (vía lanzador completo) persiste el veredicto estructurado sobre el tema.
 
 Usa la fixture `entorno` (Postgres aislado + Texto en tmp) y construye el cliente con un
@@ -37,8 +37,8 @@ def test_asegurar_documento_qa_lo_crea_si_falta(entorno):
     doc = libtexto.obtener(pc.PROMPT_QA_ID)
     assert doc is not None
     assert doc.cuerpo.strip()  # tiene criterios
-    # Es la criba de la FUENTE (pre-copy), NO el QA de copy: `PROMPT_QA_ID` = prompt/validacion.
-    assert pc.PROMPT_QA_ID == "prompt/validacion"
+    # Es la criba de la FUENTE (pre-copy), NO el QA de copy: `PROMPT_QA_ID` = prompt/verificar.
+    assert pc.PROMPT_QA_ID == "prompt/verificar"
     assert "CRIBA PREVIA" in doc.cuerpo
     # Idempotente: una segunda llamada no duplica.
     pc.asegurar_documento_qa()
@@ -47,18 +47,18 @@ def test_asegurar_documento_qa_lo_crea_si_falta(entorno):
 
 
 def test_lanzar_qa_fuente_enlaza_generacion_y_marca_en_curso(entorno):
-    """`lanzar_qa_fuente` lanza una generación, la enlaza a la etapa QA y deja el tema en_curso."""
+    """`lanzar_qa_fuente` lanza una generación, la enlaza a la etapa Verificar y deja el tema en_curso."""
     cliente = _cliente()  # noqa: F841 -- el lanzador noop deja la generación en `ejecutando`
     tema = _tema()
     gen = pc.lanzar_qa_fuente(tema, autor=None)
     assert gen is not None
     gen_id = gen["id"]
 
-    # El tema queda en_curso (no se re-lanzará en la fase QA).
+    # El tema queda en_curso (no se re-lanzará en la fase Verificar).
     actual = repos.obtener_contenido(tema["id"])
     assert (actual.get("qa_veredicto") or "") == pc.QA_EN_CURSO
 
-    # El marcador de etapa QA enlaza la generación por `gen_id` (su stream se ve en el detalle).
+    # El marcador de etapa Verificar enlaza la generación por `gen_id` (su stream se ve en el detalle).
     marcadores = [
         g for g in generaciones.listar(limite=None)
         if g.get("tipo") == pc.TIPO_ACTIVIDAD
@@ -66,7 +66,7 @@ def test_lanzar_qa_fuente_enlaza_generacion_y_marca_en_curso(entorno):
     ]
     assert any((m.get("gen_id") or "") == gen_id for m in marcadores)
 
-    # El detalle del pipeline surface el stream de la etapa QA.
+    # El detalle del pipeline surface el stream de la etapa Verificar.
     d = cliente.get(f"/api/pipelines/{tema['id']}")
     assert d.status_code == 200
     por_etapa = d.json()["generaciones_por_etapa"]

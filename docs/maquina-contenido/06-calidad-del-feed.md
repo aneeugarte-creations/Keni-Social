@@ -1,20 +1,20 @@
 # 06 — Calidad del feed: filtro de entrada, listón, explicabilidad y caducidad
 
 El pool de noticias es la materia prima de la producción automática: cada historia
-promovida acaba en QA + copy (`claude -p` ×2, coste real de tokens de la suscripción).
+promovida acaba en Verificar + Redactar (`claude -p` ×2, coste real de tokens de la suscripción).
 Este doc cubre las CUATRO defensas que mantienen el feed constante, jerarquizado y de
 calidad para las marcas del piloto (unotv = noticias nacionales MX, claro-sports =
 deportes, nacion-gamer = gaming), y por qué cada una vive donde vive:
 
 ```
-RSS/agencias/trends ──► [1 FILTRO DE ENTRADA] ──► noticias_items ──► clustering
+RSS/agencias/trends ──► [1 FILTRO DE ENTRADA] ──► noticias_items ──► Agrupar
                                                                         │ (dedup por
                                                                         ▼  evento)
         panel Cobertura ◄── score EXPLICABLE ◄── noticias_clusters ─────┘
                                                        │
               [4 CADUCIDAD TTL] ◄──(reloj)──           │
                                                        ▼
-                                    [2 LISTÓN] ──► promoción CI ──► QA ──► copy ($)
+                                    [2 LISTÓN] ──► promoción Admitir ──► Verificar ──► Redactar ($)
 ```
 
 ## 1. Filtro de ENTRADA por agenda de marca (`KENI_INGESTA_FILTRO`, def ON)
@@ -91,13 +91,13 @@ caducidad es el RELOJ del feed y va **encendida por defecto**:
   1 pasada/15 min) y también en el GC daemon (instalaciones con la ingesta apagada).
   La lógica vive en `db_noticias.caducar_pool`.
 
-## Dedup por EVENTO (clustering token-sort)
+## Dedup por EVENTO (Agrupar, token-sort)
 
 `clustering._ratio_claves = max(ratio directo, ratio con tokens ordenados)`: el mismo
 evento titulado con las mismas palabras en otro orden («América vence a Chivas en el
 clásico» / «En el clásico, América vence a Chivas») se une sin relajar el umbral
 global (0.82). Aplica en `asignar`, `Asignador` y en la diversidad de la promoción
-(`seleccionar_diversos`). La fusión semántica Haiku (`KENI_PIPELINE_FUSION`) sigue
+(`seleccionar_diversos`). Fusionar (semántica Haiku, `KENI_PIPELINE_FUSIONAR`) sigue
 cubriendo los titulares de sintaxis distinta.
 
 ## Knobs (todos editables en caliente desde ajustes)

@@ -972,7 +972,7 @@ def test_cola_llena_no_deja_cadaver_en_actividad(entorno, monkeypatch):
     """Un lanzamiento rechazado por la admisión (cola llena/presupuesto/pausa) NO deja un
     registro en error: el `claude -p` nunca ocurrió y el tick del pipeline reintenta cada
     pocos segundos — dejarlo mintaba un "fallo" nuevo por intento y llenaba la Actividad
-    de cadáveres (la avalancha de 'QA fuente · Error' del piloto)."""
+    de cadáveres (la avalancha de 'Verificar · Error' del piloto)."""
     from keni_consola.dominio import generar as gen_dom
     from keni_consola.dominio import jobspec
 
@@ -983,7 +983,7 @@ def test_cola_llena_no_deja_cadaver_en_actividad(entorno, monkeypatch):
     antes = generaciones.contar()
     with pytest.raises(runner.ColaLlenaError):
         gen_dom.lanzar(
-            tipo="pipeline", titulo="Validación de la fuente", marca=_MARCA, prompt="p",
+            tipo="pipeline", titulo="Verificar de la fuente", marca=_MARCA, prompt="p",
             procesar=lambda salida, metricas: {}, procesar_spec=jobspec.construir_hashtags(),
         )
     # El registro del intento se BORRÓ: la Actividad queda limpia (mismo conteo que antes).
@@ -1015,7 +1015,7 @@ def test_endpoint_cancelar_sin_job_en_vuelo_devuelve_el_registro(entorno):
 def test_proceso_se_sella_y_persiste(entorno):
     """El campo `proceso` se guarda y sobrevive al round-trip (obtener)."""
     g = generaciones.crear({
-        "tipo": "pipeline", "marca": _MARCA, "etiqueta": "Validación · X",
+        "tipo": "pipeline", "marca": _MARCA, "etiqueta": "Verificar · X",
         "proceso": generaciones.PROCESO_INVESTIGACION,
     })
     leido = generaciones.obtener(g["id"])
@@ -1030,8 +1030,8 @@ def test_proceso_de_deduce_sin_sello():
     assert generaciones.proceso_de({"tipo": "pipeline_etapa", "etiqueta": "QA · criba"}) == inv
     assert generaciones.proceso_de({"tipo": "pipeline_etapa", "etiqueta": "CI · ingesta"}) == inv
     assert generaciones.proceso_de({"tipo": "pipeline_etapa", "etiqueta": "CD · copy"}) == prod
-    # Generacion real `pipeline`: la criba QA ("Validación · ...") es investigacion; el resto, no.
-    assert generaciones.proceso_de({"tipo": "pipeline", "etiqueta": "Validación · t"}) == inv
+    # Generacion real `pipeline`: la criba ("Verificar · ...") es investigacion; el resto, no.
+    assert generaciones.proceso_de({"tipo": "pipeline", "etiqueta": "Verificar · t"}) == inv
     assert generaciones.proceso_de({"tipo": "pipeline", "etiqueta": "Titular · UnoTV"}) == prod
     # Trabajo de produccion (copy/imagen/manual) y lo desconocido -> produccion.
     assert generaciones.proceso_de({"tipo": "copy", "etiqueta": "Copy"}) == prod

@@ -1,4 +1,4 @@
-"""Paso de MERGE LÉXICO tardío: funde historias de la ventana que el léxico descubre iguales."""
+"""Paso de MERGE LÉXICO tardío: fusiona historias de la ventana que el léxico descubre iguales."""
 
 from __future__ import annotations
 
@@ -23,8 +23,8 @@ def paso_merge_lexico(
     momento: dos historias del mismo evento pueden nacer por separado (orden de llegada,
     traducción tardía) y quedarse duplicadas en el pool. Esto agrupa los clusters `nuevo`
     sin promover cuyo título (o traducción) casa con ratio >= `KENI_CLUSTER_UMBRAL_MERGE`
-    (0.86, más estricto que el de asignación; 0 apaga) y los funde con `_fusionar_grupo`
-    (anti-TOCTOU incluido). SIN IA: complementa la fusión semántica de Haiku (gateada), no
+    (0.86, más estricto que el de asignación; 0 apaga) y los fusiona con `_fusionar_grupo`
+    (anti-TOCTOU incluido). SIN IA: complementa el fusionar semántico de Haiku (gateado), no
     la sustituye. Throttled a una pasada por `_MERGE_LEXICO_INTERVALO_SEG`.
     """
     umbral = config.cluster_umbral_merge()
@@ -43,12 +43,12 @@ def paso_merge_lexico(
             if clusters_ventana is not None
             else repos.clusters_recientes(config.cluster_ventana_h())
         )
-    except Exception:  # noqa: BLE001 -- sin pool legible no se funde nada (no toca el throttle)
+    except Exception:  # noqa: BLE001 -- sin pool legible no se fusiona nada (no toca el throttle)
         _log.warning("ingesta_daemon: no se pudo leer la ventana para el merge léxico.", exc_info=True)
         return {"grupos": 0, "fusionadas": 0}
 
     # Solo historias del pool sin promover: lo usado/descartado no se toca (y _fusionar_grupo
-    # re-verifica anti-TOCTOU por si el pipeline promueve entre la lectura y la fusión).
+    # re-verifica anti-TOCTOU por si el pipeline promueve entre la lectura y fusionar).
     candidatos = [
         c for c in clusters
         if (c.get("estado") or "nuevo") == "nuevo" and not (c.get("contenido_id") or "")
@@ -62,7 +62,7 @@ def paso_merge_lexico(
     breaking_peso = config.cluster_breaking_peso()
     breaking_ventana_h = config.cluster_breaking_ventana_h()
     fuentes_baja = config.fuentes_baja_confianza()
-    perfil_activo = config.perfil_editorial_activo()
+    perfil_activo = config.priorizar_perfil_activo()
     ahora = datetime.now(UTC)
     por_id = {str(c["id"]): c for c in candidatos}
     grupos_total = 0
@@ -76,8 +76,8 @@ def paso_merge_lexico(
             ):
                 grupos_total += 1
                 fusionadas_total += len(grupo) - 1
-        except Exception:  # noqa: BLE001 -- una fusión problemática no aborta la pasada
-            _log.exception("ingesta_daemon: fallo al fundir un grupo léxico de historias.")
+        except Exception:  # noqa: BLE001 -- un fusionado problemático no aborta la pasada
+            _log.exception("ingesta_daemon: fallo al fusionar un grupo léxico de historias.")
     _comun._ultimo_merge_lexico = ahora_mono
     if grupos_total:
         _log.info(

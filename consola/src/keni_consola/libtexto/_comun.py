@@ -73,21 +73,21 @@ ROLES_PROMPT = ("", "copy", "qa", "evergreen", "arte")
 #   titulo/descripcion : etiquetas humanas para la UI.
 PIPELINES: dict[str, dict[str, str]] = {
     "copy": {
-        "titulo": "Copy",
+        "titulo": "Redactar",
         "descripcion": "Convierte una nota/clip/tendencia en copy publicable por red.",
-        "prompt_defecto": "prompt/copy",
+        "prompt_defecto": "prompt/redactar",
         "rol": "copy",
     },
     "qa": {
-        "titulo": "Validación",
+        "titulo": "Verificar",
         "descripcion": "Verifica la nota de origen antes de generar copy (pipeline de contenido).",
-        "prompt_defecto": "prompt/validacion",
+        "prompt_defecto": "prompt/verificar",
         "rol": "qa",
     },
     "evergreen": {
-        "titulo": "Evergreen",
+        "titulo": "Idear",
         "descripcion": "Propone ideas de contenido evergreen para la marca.",
-        "prompt_defecto": "prompt/evergreen",
+        "prompt_defecto": "prompt/idear",
         "rol": "evergreen",
     },
 }

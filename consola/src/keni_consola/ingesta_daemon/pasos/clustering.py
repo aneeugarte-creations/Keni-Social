@@ -1,4 +1,4 @@
-"""Paso de CLUSTERING (Ola B): agrupa en historias los items recientes sin cluster."""
+"""Paso de AGRUPAR (Ola B): agrupa en historias los items recientes sin cluster."""
 
 from __future__ import annotations
 
@@ -18,16 +18,16 @@ from .._comun import (
     _rendimiento_top_lineas,
 )
 
-# Tope de items a CLUSTERIZAR por barrido: el clustering es best-effort y ACOTADO. Si un
+# Tope de items a AGRUPAR por barrido: el agrupar es best-effort y ACOTADO. Si un
 # barrido inserta más, el resto queda sin cluster y se recoge en el siguiente tick (siguen
 # en la ventana). Evita un barrido caro tras un arranque en frío con miles de items pendientes.
 _CLUSTER_BATCH = 500
 
 
-def paso_clustering() -> dict[str, Any]:
+def paso_agrupar() -> dict[str, Any]:
     """Agrupa en HISTORIAS los items recientes SIN cluster. Best-effort, ACOTADO a la ventana.
 
-    Incremental: NO re-cluster el archivo entero. Carga (1) los clusters cuya `ultimo_visto`
+    Incremental: NO re-agrupa el archivo entero. Carga (1) los clusters cuya `ultimo_visto`
     está en la ventana (`KENI_CLUSTER_VENTANA_H`) y (2) hasta `_CLUSTER_BATCH` items recientes
     sin `cluster_id`, en orden cronológico. Para cada item: lo une al cluster reciente que casa
     (misma url canónica o título fuzzy ≥ `KENI_CLUSTER_UMBRAL`) o crea uno nuevo. La decisión
@@ -43,7 +43,7 @@ def paso_clustering() -> dict[str, Any]:
 
     Devuelve `{items, clusters_nuevos, clusters_tocados, clusters_ventana}` (`clusters_ventana`
     = los clusters de la ventana ya actualizados, para que el barrido los REUTILICE en la
-    fusión/re-score sin re-leer la BD). Un fallo de un item se loguea y no aborta el paso.
+    fusionar/re-score sin re-leer la BD). Un fallo de un item se loguea y no aborta el paso.
     """
     ventana_h = config.cluster_ventana_h()
     umbral = config.cluster_umbral()
@@ -51,7 +51,7 @@ def paso_clustering() -> dict[str, Any]:
     breaking_ventana_h = config.cluster_breaking_ventana_h()
     fuentes_baja = config.fuentes_baja_confianza()
     pesos = config.score_pesos()  # pesos editables del algoritmo de ponderación
-    perfil_activo = config.perfil_editorial_activo()  # relevancia desde la línea editorial (Haiku)
+    perfil_activo = config.priorizar_perfil_activo()  # relevancia desde la línea editorial (Haiku)
     perfil_ttl = config.perfil_editorial_ttl_horas()
     perfil_refrescadas: set[str] = set()  # 1 refresco por marca por barrido (Haiku acotado)
     # Señal de RENDIMIENTO (Fase 2c, gateada): líneas top por engagement, POR MARCA y perezoso.
@@ -59,7 +59,7 @@ def paso_clustering() -> dict[str, Any]:
     rend_cache: dict[str, tuple[set[str], dict[str, str], list[dict[str, Any]]]] = {}
 
     # REPARACIÓN: items con `cluster_id` colgante (cluster que ya no existe, p. ej. proceso
-    # muerto a mitad de un barrido antiguo) vuelven a '' y se re-clusterizan. Best-effort.
+    # muerto a mitad de un barrido antiguo) vuelven a '' y se re-agrupan. Best-effort.
     try:
         reparados = repos.limpiar_items_cluster_colgante()
         if reparados:
@@ -118,7 +118,7 @@ def paso_clustering() -> dict[str, Any]:
             asignaciones.setdefault(destino, []).append(item["id"])
             tocados.add(destino)
         except Exception:  # noqa: BLE001 -- un item problemático no aborta el paso
-            _log.exception("ingesta_daemon: fallo al clusterizar el item %s.", item.get("id"))
+            _log.exception("ingesta_daemon: fallo al agrupar el item %s.", item.get("id"))
 
     # Asignación en LOTE: un UPDATE por cluster tocado (antes, uno por item: ~500 round-trips).
     try:
@@ -177,17 +177,17 @@ def paso_clustering() -> dict[str, Any]:
                 if marca_c:
                     recalc["marca"] = marca_c
             # Relevancia desde la LÍNEA EDITORIAL (perfil Haiku) si está activa (maestro + por-marca:
-            # el toggle "Editorial"); si no, semilla.
+            # el toggle "Priorizar"); si no, semilla.
             if (
                 perfil_activo and marca_c and marca_c not in perfil_refrescadas
-                and not config.marca_apagada(config.ENV_RANKING_PERFIL_IA, marca_c)
+                and not config.marca_apagada(config.ENV_PRIORIZAR_PERFIL_IA, marca_c)
             ):
                 perfil_refrescadas.add(marca_c)
                 perfil_editorial.refrescar_si_corresponde(
                     marca_c, ttl_horas=perfil_ttl, ahora=ahora,
                     al_refrescar=lambda m, kws, prompt, salida: _pkg._registrar_actividad_ia(
                         m,
-                        f"Encaje editorial — {marcas.etiqueta_de(m)}: {len(kws)} temas clave",
+                        f"Priorizar historias — {marcas.etiqueta_de(m)}: {len(kws)} temas clave",
                         salida,  # la respuesta REAL de Haiku (keywords del perfil)
                         prompt=prompt,
                     ),
@@ -208,13 +208,13 @@ def paso_clustering() -> dict[str, Any]:
             )
             recalc["score"] = score
             # Explicación PERSISTIDA: la razón humana y el desglose por señal viajan con el
-            # score (el panel y el listón de promoción los muestran; sin esto el ranking es
+            # score (el panel y el listón de promoción los muestran; sin esto la priorización es
             # una caja negra y el equipo no puede auditar por qué algo sube o baja).
             recalc["score_razon"] = razon
             recalc["score_desglose"] = desglose
             indice[cid] = repos.upsert_noticia_cluster(recalc)
             # Sella el encaje de marca por IA aparte del upsert (la columna está en `_NO_PISAR`):
-            # así un recalc posterior sin el flag no lo borra (mismo patrón que la traducción).
+            # así un recalc posterior sin el flag no lo borra (mismo patrón que Traducir).
             if marca_por_ia:
                 try:
                     repos.marcar_cluster_marca_ia(cid)

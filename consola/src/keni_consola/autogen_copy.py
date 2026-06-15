@@ -4,14 +4,14 @@ PROBLEMA QUE RESUELVE
 Varios caminos del producto necesitan ENCOLAR la generacion de copy de un tema del tablero
 por el MISMO camino que el boton manual del asistente (el lanzador NEUTRO
 `dominio.generar.lanzar_copy`): los endpoints manuales (api/fuentes, api/noticias,
-api/contenido, api/breaking, api/insumos) y la ETAPA DE COPY del pipeline, que es el ÚNICO
+api/contenido, api/breaking, api/insumos) y la ETAPA de Redactar del pipeline, que es el ÚNICO
 motor de copy automático (ver `pipeline_contenido.ejecutar_cd`). Este módulo expone esa
 función única (`lanzar_para_topic`) + su dedup por etiqueta (`autogen`).
 
 La selección de temas del news-pool sin copy vive dentro de la etapa de
-copy del pipeline (`pipeline_contenido.temas_autogen_sin_copy`), gateada por `KENI_PIPELINE_COPY`.
+Redactar del pipeline (`pipeline_contenido.temas_autogen_sin_copy`), gateada por `KENI_PIPELINE_REDACTAR`.
 
-  - SOLO FUENTES: la etapa de copy solo procesa temas cuyo `origen` es de una FUENTE
+  - SOLO FUENTES: la etapa de Redactar solo procesa temas cuyo `origen` es de una FUENTE
     (`estados.ORIGENES_AUTOGEN`); el contenido manual del equipo NO se toca.
   - REQUIERE MARCA: sin marca no hay voz/tropicalizacion; esos temas se omiten.
   - DEDUP: al COMPLETAR CON EXITO el copy, el post-procesado ETIQUETA el tema `autogen` para
@@ -108,11 +108,11 @@ def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
     autocontenido (semilla + editorial de la marca + la nota del tema), encola en background
     y el borrador entra a la cola de revision. `contenido_id` NIDA el borrador bajo el tema.
 
-    Es trabajo del PIPELINE (su etapa de copy redactando un tema del tablero), asi que se
+    Es trabajo del PIPELINE (su etapa de Redactar redactando un tema del tablero), asi que se
     sella IGUAL que el copy de un tema ingerido: `tipo="pipeline"` + marcador de etapa CD
     correlacionado al tema. Antes salia como `tipo="autogen"` / "Auto-copy" (un nombre
     legado, suelto en Produccion, fuera de su run): el feed unificado lo muestra ahora como
-    la run del tema con su etapa Copy.
+    la run del tema con su etapa Redactar.
     """
     marca = item.get("marca") or ""
     if not marca or not marcas.es_marca(marca):

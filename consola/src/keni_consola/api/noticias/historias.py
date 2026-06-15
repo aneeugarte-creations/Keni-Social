@@ -70,7 +70,7 @@ def _pieza_estado(estado: str, contenido_id: str, resumen: dict[str, str]) -> st
       - 'en_pool'    -> aún no promovida (cluster 'nuevo'),
       - 'descartada' -> cluster 'descartado',
       - 'en_cola'    -> promovida pero SIN pieza en el feed todavía (dedup, sin redes, o copy
-                        aún por encolar / etapa de copy detenida),
+                        aún por encolar / etapa Redactar detenida),
       - 'generando'  -> pieza creada, copy en proceso (fila sin `copy` aún),
       - 'en_feed'    -> pieza con copy: visible REAL en el feed.
     `resumen` = mapa `contenido_id -> 'lista'|'generando'` de `repos.estado_pieza_por_contenido`.
@@ -314,7 +314,7 @@ async def mesa(request: Request) -> Response:
     del plan editorial diario (cupo, generados/publicados en 24 h móviles, restante) con las
     top-N candidatas (`estado='nuevo'`) de cada una, más el bloque `fuera_de_plan` (líneas de
     feed que el plan no contempla). Una historia compite por la línea de su
-    `categoria_efectiva` ('breaking' si lo es — el MISMO criterio que la admisión CI).
+    `categoria_efectiva` ('breaking' si lo es — el MISMO criterio que Admitir (CI)).
     Sin plan configurado: `plan=false` y todo el pool va en `fuera_de_plan` (la UI degrada a
     lista plana). Orden de líneas: breaking primero, luego el orden del plan.
     """
@@ -586,7 +586,7 @@ async def borrar_historias_lote(request: Request) -> Response:
     """POST /api/noticias/historias/borrar-lote: BORRA HARD (irreversible) varias historias + artículos.
 
     Cuerpo `{ids: [cluster_id, ...]}`. A diferencia de `descartar-lote` (que solo marca el estado),
-    esto ELIMINA del archivo el cluster Y sus `noticias_items` (si no, el clustering los reagrupa y
+    esto ELIMINA del archivo el cluster Y sus `noticias_items` (si no, el agrupado los reagrupa y
     la historia reaparece). Idempotente; tope de seguridad `_MAX_LOTE_DESCARTE`. Devuelve `{borradas:n}`.
     """
     datos = await leer_json(request)

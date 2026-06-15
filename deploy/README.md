@@ -237,8 +237,8 @@ el volumen `keni-data`. Tras el cutover, mantén el backup hasta verificar.
 ## Encender el pipeline automático para VALIDACIÓN (Flujo C, Fase 2)
 
 La "máquina de contenido" lleva cada tema de entrada a **borrador completo en la cola de
-revisión** a través del **pipeline** (un único espinazo): `news-pool → etapa de copy → etapa de
-arte → cola de revisión`. El modelo es **1 master + 3 etapas**, todo colgando del pipeline.
+revisión** a través del **pipeline** (un único espinazo): `news-pool → etapa de Redactar → etapa de
+Ilustrar → cola de revisión`. El modelo es **1 master + 3 etapas**, todo colgando del pipeline.
 Vienen **OFF por defecto** (conservador). Para validar la cadena end-to-end en el hosted del
 piloto, la decisión de dirección es **encender el master + las 3 etapas y dejar el de publicar
 OFF**:
@@ -246,9 +246,9 @@ OFF**:
 | Flag | Qué hace | Validación |
 |---|---|---|
 | `KENI_MAQUINA` | Interruptor general (kill-switch); sin él nada automático corre | **ON** |
-| `KENI_PIPELINE_SELECCION` | «Crear noticias»: ingesta + clustering + traducción/tropicalización MX | **ON** |
-| `KENI_PIPELINE_COPY` | «Generar copy»: etapa de copy (único motor de copy) | **ON** |
-| `KENI_PIPELINE_ARTE` | «Generar arte»: etapa de arte (temas con copy sin imagen) | **ON** |
+| `KENI_PIPELINE_RECOLECTAR` | «Crear noticias»: Recolectar + Agrupar + Traducir/tropicalización MX | **ON** |
+| `KENI_PIPELINE_REDACTAR` | «Generar copy»: etapa de Redactar (único motor de copy) | **ON** |
+| `KENI_PIPELINE_ILUSTRAR` | «Generar arte»: etapa de Ilustrar (temas con copy sin imagen) | **ON** |
 | `KENI_PUBLICAR_REAL` | Publica de verdad a Metricool | **OFF** (queda en dry-run) |
 
 **Por qué es SEGURO encender el master + las 3 etapas:** la máquina de contenido solo PRODUCE
@@ -257,7 +257,7 @@ hasta el borrador. Cada pieza nace `borrador`/`pendiente` y **para en la cola de
 multinivel) sigue intacto. **Nada sale a redes** sin que el humano lo autorice: el posteo real
 va por Metricool y está gated por `KENI_PUBLICAR_REAL`, que se queda **OFF**. Además el pipeline
 tiene cap por barrido (`KENI_PIPELINE_MAX`, `KENI_AUTOGEN_ARTE_MAX`, def 3) y dedup por
-etiqueta, así que no hay ráfagas. La etapa de arte **degrada** si no hay proveedor de imagen
+etiqueta, así que no hay ráfagas. La etapa de Ilustrar **degrada** si no hay proveedor de imagen
 configurado (no hace nada). Los **defaults siguen OFF en código**: encender es una decisión de
 operación, no un cambio de fuente.
 
@@ -278,9 +278,9 @@ default**.
 
    ```yaml
    #   KENI_MAQUINA:       "1"
-   #   KENI_PIPELINE_SELECCION:       "1"
-   #   KENI_PIPELINE_COPY:      "1"
-   #   KENI_PIPELINE_ARTE:  "1"
+   #   KENI_PIPELINE_RECOLECTAR:       "1"
+   #   KENI_PIPELINE_REDACTAR:      "1"
+   #   KENI_PIPELINE_ILUSTRAR:  "1"
    #   KENI_PUBLICAR_REAL deliberadamente NO se pone (sigue OFF = dry-run).
    ```
 

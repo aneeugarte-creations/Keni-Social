@@ -181,9 +181,9 @@ ENV_TRENDS_GEOS = "KENI_TRENDS_GEOS"
 # MOTOR DE INGESTA PERSISTENTE (Ola A): un hilo demonio sondea en background los feeds RSS
 # VENCIDOS (cadencia por feed/categoría) y PERSISTE cada artículo en `noticias_items` (archivo
 # a nivel de artículo). A diferencia del resto, SOLO LEE feeds públicos y persiste; no genera ni
-# publica nada. Def OFF para CI/tests; se ACTIVA en producción (deploy: KENI_PIPELINE_SELECCION=1). `BATCH`
+# publica nada. Def OFF para CI/tests; se ACTIVA en producción (deploy: KENI_PIPELINE_RECOLECTAR=1). `BATCH`
 # = feeds por barrido; `WORKERS` = descargas en paralelo; `MAX_ITEMS` = artículos por feed.
-ENV_PIPELINE_SELECCION = "KENI_PIPELINE_SELECCION"
+ENV_PIPELINE_RECOLECTAR = "KENI_PIPELINE_RECOLECTAR"
 # Encaje de MARCA con IA (Haiku) para historias sin marca (Trends/agencias). Cuando el
 # vocabulario no las encaja quedan con marca='' e invisibles/no-promovibles; con este flag ON
 # un breaking sin marca se clasifica en una de `KENI_MARCAS_ACTIVAS` (o cae a `KENI_MARCA_NOTICIAS`
@@ -210,9 +210,9 @@ ENV_INGESTA_INTERVALO_CIENCIA_TECH = "KENI_INGESTA_INTERVALO_CIENCIA_TECH"
 ENV_INGESTA_INTERVALO_GAMING = "KENI_INGESTA_INTERVALO_GAMING"
 ENV_INGESTA_INTERVALO_DEFECTO = "KENI_INGESTA_INTERVALO_DEFECTO"
 
-# Clustering de HISTORIAS (Ola B): ventana reciente de agrupación, umbral fuzzy de cruce de
-# títulos y heurística de "breaking" (N fuentes distintas en < M horas). Clustering INCREMENTAL
-# acotado por la ventana: nunca re-cluster el archivo entero. Corre dentro del barrido de ingesta.
+# Agrupar HISTORIAS (Ola B): ventana reciente de agrupación, umbral fuzzy de cruce de
+# títulos y heurística de "breaking" (N fuentes distintas en < M horas). Agrupación INCREMENTAL
+# acotada por la ventana: nunca re-agrupa el archivo entero. Corre dentro del barrido de Recolectar.
 ENV_CLUSTER_VENTANA_H = "KENI_CLUSTER_VENTANA_H"
 ENV_CLUSTER_UMBRAL = "KENI_CLUSTER_UMBRAL"
 # Umbral del MERGE LÉXICO TARDÍO de la ventana (fundir historias ya formadas que se
@@ -229,8 +229,8 @@ ENV_BREAKING_EXTRA_DIA = "KENI_BREAKING_EXTRA_DIA"
 ENV_CLUSTER_BREAKING_VENTANA_H = "KENI_CLUSTER_BREAKING_VENTANA_H"
 
 # Pesos del ALGORITMO DE PONDERACIÓN del score de cluster (jerarquización de noticias). Editables
-# por la consola para que el equipo afine el ranking sin tocar código (clamp [0,1]; default =
-# los de `dominio.clustering.PesosScore`). El daemon de ingesta los inyecta en `clustering.puntuar`.
+# por la consola para que el equipo afine la priorización sin tocar código (clamp [0,1]; default =
+# los de `dominio.clustering.PesosScore`). El daemon de Recolectar los inyecta en `clustering.puntuar`.
 ENV_SCORE_PESO_CORROBORACION = "KENI_SCORE_PESO_CORROBORACION"
 ENV_SCORE_PESO_VELOCIDAD = "KENI_SCORE_PESO_VELOCIDAD"
 ENV_SCORE_PESO_FRESCURA = "KENI_SCORE_PESO_FRESCURA"
@@ -238,11 +238,11 @@ ENV_SCORE_PESO_VIRALIDAD = "KENI_SCORE_PESO_VIRALIDAD"
 ENV_SCORE_PESO_MARCA = "KENI_SCORE_PESO_MARCA"
 ENV_SCORE_BONUS_BREAKING = "KENI_SCORE_BONUS_BREAKING"
 
-# Monitor de COBERTURA + traducción completa + auto-verificación (Ola D). Aditivo sobre A-C.
+# Monitor de COBERTURA + Traducir completo + auto-verificación (Ola D). Aditivo sobre A-C.
 #   MAX_ERRORES: tras N errores seguidos el daemon AUTO-DESACTIVA el feed (deja de sondearlo).
 #   FEED_SLA_MIN: un feed activo sin items nuevos en > N min cuenta como "stale" en /salud.
-#   TRAD_MIN_SCORE: score mínimo de un cluster extranjero para entrar a traducción.
-#   TRAD_LOTE: clusters por barrido a traducir (acotado; el resto se cogen en el siguiente).
+#   TRAD_MIN_SCORE: score mínimo de un cluster extranjero para entrar a Traducir.
+#   TRAD_LOTE: clusters por barrido a Traducir (acotado; el resto se cogen en el siguiente).
 #   FUENTES_BAJA_CONFIANZA: dominios/outlets agregadores/foros que marcan una historia 'dudosa'
 #     si son su única fuente (lista CSV configurable).
 ENV_INGESTA_MAX_ERRORES = "KENI_INGESTA_MAX_ERRORES"
@@ -251,52 +251,52 @@ ENV_TRAD_MIN_SCORE = "KENI_TRAD_MIN_SCORE"
 ENV_TRAD_LOTE = "KENI_TRAD_LOTE"
 ENV_FUENTES_BAJA_CONFIANZA = "KENI_FUENTES_BAJA_CONFIANZA"
 
-# Pipeline de contenido CI→CD→QA por marca (fase3 auto-produccion, Flujo "tubería"). Un hilo
-# demonio que, cada N horas y por marca con feeds RSS activos, ingiere temas frescos (CI),
-# lanza la generacion de copy+arte de marca (CD, mismo camino que el boton manual) y valida
-# automaticamente los borradores recientes (QA), registrando CADA etapa en "Actividad IA" como
-# un pipeline de CI/CD. Deja BORRADORES en la cola de revision para la aprobacion humana; NUNCA
-# publica. CONSERVADOR por defecto (OFF): sin `KENI_PIPELINE_COPY` el comportamiento no cambia.
-ENV_PIPELINE_COPY = "KENI_PIPELINE_COPY"
+# Pipeline de contenido Admitir→Redactar→Revisar por marca (fase3 auto-produccion, Flujo "tubería"). Un hilo
+# demonio que, cada N horas y por marca con feeds RSS activos, admite temas frescos (Admitir),
+# lanza la redaccion del copy+imagen de marca (Redactar, mismo camino que el boton manual) y revisa
+# automaticamente los borradores recientes (Revisar), registrando CADA etapa en "Actividad IA" como
+# un pipeline. Deja BORRADORES en la cola de revision para la aprobacion humana; NUNCA
+# publica. CONSERVADOR por defecto (OFF): sin `KENI_PIPELINE_REDACTAR` el comportamiento no cambia.
+ENV_PIPELINE_REDACTAR = "KENI_PIPELINE_REDACTAR"
 ENV_PIPELINE_MAX = "KENI_PIPELINE_MAX"
 # FLUJO CONTINUO: el pipeline ya no barre por tandas (sin intervalo configurable: tick corto
-# constante en `pipeline_contenido._barrido`) ni tiene topes por etapa (QA/Copy/autogen/revisar):
-# el volumen lo regula la ADMISIÓN (gate serial en vuelo por marca) + el backpressure de la cola.
+# constante en `pipeline_contenido._barrido`) ni tiene topes por etapa (Verificar/Redactar/Ilustrar/Revisar):
+# el volumen lo regula Admitir (gate serial en vuelo por marca) + el backpressure de la cola.
 ENV_PIPELINE_EN_VUELO_MAX = "KENI_PIPELINE_EN_VUELO_MAX"  # gate serial: temas en vuelo por marca
-# Enriquecimiento de la NOTA de origen en ingesta: antes de encolar el copy, el daemon descarga
+# Enriquecimiento de la NOTA de origen al Recolectar: antes de encolar el copy, el daemon descarga
 # el CUERPO del/los artículo(s) (no solo el snippet RSS) y, en clusters, agrega el texto de CADA
 # fuente —no solo sus URLs—. Así `claude -p` sintetiza sobre material real sin gastar turnos en
 # WebFetch ni pedir permisos. CONSERVADOR por defecto (OFF): sin el flag la nota es título+resumen
 # como hasta ahora. Best-effort: un fetch que falle cae a título+resumen (nunca rompe el barrido).
 ENV_PIPELINE_FETCH_FUENTE = "KENI_PIPELINE_FETCH_FUENTE"  # ingerir el cuerpo del artículo en la nota
-# Frescura del pipeline (ventana deslizante sobre el ranking): TTL en horas de un tema EN VUELO.
+# Frescura del pipeline (ventana deslizante sobre la priorización): TTL en horas de un tema EN VUELO.
 # Lo que no se completó a tiempo CADUCA y libera su hueco; hoy entra lo de hoy, no el backlog.
 ENV_PIPELINE_TEMA_TTL_HORAS = "KENI_PIPELINE_TEMA_TTL_HORAS"  # caducidad de temas en vuelo
 
-# Etapa de QA del pipeline: "Validar (QA)" (`KENI_PIPELINE_VALIDACION`, toggle de etapa por marca). Es la criba
-# de la FUENTE (pre-copy): un `claude -p` evalúa la nota de origen antes de generar copy. Toggle
+# Etapa de Verificar del pipeline: "Verificar" (`KENI_PIPELINE_VERIFICAR`, toggle de etapa por marca). Es la criba
+# de la FUENTE (pre-copy): un `claude -p` evalúa la nota de origen antes de redactar el copy. Toggle
 # PROPIO (1 toggle = 1 etapa): apagarla por marca la deja como "Saltada" y el copy se genera
-# igual (sin la criba). CONSERVADOR por defecto (OFF), como el resto de etapas: sin `KENI_PIPELINE_VALIDACION` no
+# igual (sin la criba). CONSERVADOR por defecto (OFF), como el resto de etapas: sin `KENI_PIPELINE_VERIFICAR` no
 # se criba (la etapa aparece saltada). Encender desde el panel admin para activar la verificación.
-ENV_PIPELINE_VALIDACION = "KENI_PIPELINE_VALIDACION"
+ENV_PIPELINE_VERIFICAR = "KENI_PIPELINE_VERIFICAR"
 
-# Etapa de ARTE del pipeline: "Generar arte" (`KENI_PIPELINE_ARTE`, toggle de etapa). Tras la
-# etapa de copy, el pipeline genera UN arte por IA (mismo proveedor que `/api/media/generar`)
-# para los temas con copy pero sin imagen y lo adjunta. CONSERVADOR por defecto (OFF): sin
-# `KENI_PIPELINE_ARTE` no se ilustra. Sin proveedor de imagen configurado, no hace nada.
+# Etapa de Ilustrar del pipeline: "Ilustrar" (`KENI_PIPELINE_ILUSTRAR`, toggle de etapa). Tras la
+# etapa de Redactar, el pipeline genera UNA imagen por IA (mismo proveedor que `/api/media/generar`)
+# para los temas con copy pero sin imagen y la adjunta. CONSERVADOR por defecto (OFF): sin
+# `KENI_PIPELINE_ILUSTRAR` no se ilustra. Sin proveedor de imagen configurado, no hace nada.
 # `KENI_AUTOGEN_ARTE_MAX` acota cuántos temas se ilustran por barrido (cada uno cuesta).
-ENV_PIPELINE_ARTE = "KENI_PIPELINE_ARTE"
+ENV_PIPELINE_ILUSTRAR = "KENI_PIPELINE_ILUSTRAR"
 ENV_AUTOGEN_ARTE_MAX = "KENI_AUTOGEN_ARTE_MAX"
 
-# Etapa de CALIDAD del COPY del pipeline: "Validar copy" (`KENI_PIPELINE_CALIDAD`, toggle de etapa).
+# Etapa de Revisar del COPY del pipeline: "Revisar" (`KENI_PIPELINE_REVISAR`, toggle de etapa).
 # ANTES de que un borrador completo avance solo a la cola de revisión (etapa AVANCE), la IA "hacia
-# adentro" filtra la CALIDAD del copy generado: verificación de VOZ contra los patrones medidos de
+# adentro" revisa el copy generado: verificación de VOZ contra los patrones medidos de
 # la marca (`patrones_marca`) + chequeo barato de COHERENCIA con la nota de origen. ADVISORY y
 # SAFE-by-default (mismo patrón que `dominio.copy.verificar_voz`): NUNCA bloquea el avance ni
 # descarta la pieza; si detecta algo, DEGRADA el veredicto (`listo`→`revisar`) y deja una nota para
 # que el humano decida en la revisión. CONSERVADOR por defecto (OFF): sin el flag el avance no
-# cambia. Existe la criba de la FUENTE (QA pre-copy); esto es la criba del COPY ya redactado.
-ENV_PIPELINE_CALIDAD = "KENI_PIPELINE_CALIDAD"
+# cambia. Existe la criba de la FUENTE (Verificar, pre-copy); esto es la criba del COPY ya redactado.
+ENV_PIPELINE_REVISAR = "KENI_PIPELINE_REVISAR"
 
 # La etapa de AVANCE (un borrador COMPLETO pasa SOLO a la cola de revisión con la misma cadena
 # que el envío humano) ya NO es configurable: corre incondicionalmente bajo el maestro
@@ -326,7 +326,7 @@ ENV_CRITICA_IA = "KENI_CRITICA_IA"
 ENV_GENERACIONES_TTL_HORAS = "KENI_GENERACIONES_TTL_HORAS"
 ENV_REAPER_INTERVALO_MIN = "KENI_REAPER_INTERVALO_MIN"
 
-# QA de la FUENTE (criba pre-copy del pipeline): es un filtro PERMISIVO, no redaccion, asi
+# Verificar la FUENTE (criba pre-copy del pipeline): es un filtro PERMISIVO, no redaccion, asi
 # que corre BARATO por defecto: modelo rapido (Haiku), esfuerzo bajo y timeout corto. Cada
 # una es configurable; vacia ("") = se usa el global correspondiente.
 ENV_QA_FUENTE_MODELO = "KENI_QA_FUENTE_MODELO"
@@ -357,21 +357,21 @@ ENV_NOTICIAS_GC_SCORE_UMBRAL = "KENI_NOTICIAS_GC_SCORE_UMBRAL"
 ENV_NOTICIAS_GC_INACTIVIDAD_HORAS = "KENI_NOTICIAS_GC_INACTIVIDAD_HORAS"
 
 # Perfil editorial por marca (Fase 2): un agente Haiku extrae las keywords/temas de la línea
-# editorial (página texto) y el ranking las usa como relevancia de marca (reemplaza el diccionario
-# hardcodeado). GATEADO por `KENI_RANKING_PERFIL_IA` (def OFF): sin el flag se usa el vocabulario
-# semilla. El refresco (Haiku) corre acotado por marca + TTL en el daemon de ingesta. (Nombre
-# previo: `KENI_PIPELINE_EDITORIAL`; migrado por alias legado. ADR 0011: es ranking, no voz.)
-ENV_RANKING_PERFIL_IA = "KENI_RANKING_PERFIL_IA"
+# editorial (página texto) y la priorización las usa como relevancia de marca (reemplaza el diccionario
+# hardcodeado). GATEADO por `KENI_PRIORIZAR_PERFIL_IA` (def OFF): sin el flag se usa el vocabulario
+# semilla. El refresco (Haiku) corre acotado por marca + TTL en el daemon de Recolectar. (ADR 0011:
+# es priorización por relevancia, no voz editorial.)
+ENV_PRIORIZAR_PERFIL_IA = "KENI_PRIORIZAR_PERFIL_IA"
 ENV_PERFIL_EDITORIAL_TTL_HORAS = "KENI_PERFIL_EDITORIAL_TTL_HORAS"
 
-# Fusión SEMÁNTICA de historias del mismo evento (Fase 2b): un agente Haiku agrupa las historias
+# Fusionar SEMÁNTICAMENTE historias del mismo evento (Fase 2b): un agente Haiku agrupa las historias
 # recientes de una marca que cubren el mismo acontecimiento (titulares distintos) y el daemon las
-# funde en una sola (n_fuentes real). GATEADO por `KENI_PIPELINE_FUSION` (def OFF). `_MAX` acota
+# funde en una sola (n_fuentes real). GATEADO por `KENI_PIPELINE_FUSIONAR` (def OFF). `_MAX` acota
 # cuántas historias por marca se mandan a Haiku por barrido (coste/contexto).
-ENV_PIPELINE_FUSION = "KENI_PIPELINE_FUSION"
+ENV_PIPELINE_FUSIONAR = "KENI_PIPELINE_FUSIONAR"
 ENV_FUSION_SEMANTICA_MAX = "KENI_FUSION_SEMANTICA_MAX"
 
-# Señal de RENDIMIENTO en el ranking (Fase 2c): prioriza historias de las líneas editoriales que
+# Señal de RENDIMIENTO en la priorización (Fase 2c): prioriza historias de las líneas editoriales que
 # MEJOR funcionan en redes (Metricool). GATEADO por `KENI_RENDIMIENTO_RANKING` (def OFF). Anti-sesgo:
 # una línea solo cuenta si tiene ≥ `_MIN_PIEZAS` medidas; se limita al `_TOP_N`. El peso de la señal
 # en el score es `KENI_SCORE_PESO_RENDIMIENTO`.
@@ -385,13 +385,13 @@ ENV_RENDIMIENTO_MIN_PIEZAS = "KENI_RENDIMIENTO_MIN_PIEZAS"
 # (más rápido/económico para extracción estructurada). Si se deja vacío (""), no se pasa
 # `--model` y `claude` usa su propio default. Ver `dominio/insumos_parse.py`.
 ENV_INSUMOS_MODELO = "KENI_INSUMOS_MODELO"
-# Modelo de la FUSIÓN semántica de historias (decide qué se corrobora con qué; el juicio
+# Modelo de Fusionar (fusión semántica) historias (decide qué se corrobora con qué; el juicio
 # fino "mismo evento vs mismo tema" se le escapaba a haiku). Def "sonnet"; "" = sin --model.
 ENV_FUSION_MODELO = "KENI_FUSION_MODELO"
 
-# Traducción + tropicalización MX de temas extranjeros en el Radar (Ola 4). La traducción es
-# SIEMPRE ON (no tiene toggle propio: corre dentro de la etapa de ingesta, gateada por
-# KENI_PIPELINE_SELECCION + KENI_MAQUINA). `KENI_TRADUCCION_MAX` acota cuántos temas extranjeros del top
+# Traducir + tropicalización MX de temas extranjeros en el Radar (Ola 4). Traducir es
+# SIEMPRE ON (no tiene toggle propio: corre dentro de la etapa de Recolectar, gateada por
+# KENI_PIPELINE_RECOLECTAR + KENI_MAQUINA). `KENI_TRADUCCION_MAX` acota cuántos temas extranjeros del top
 # se traducen por request (def 15). Se usa el mismo modelo de `KENI_INSUMOS_MODELO` (Haiku).
 ENV_TRADUCCION_MAX = "KENI_TRADUCCION_MAX"
 
@@ -512,7 +512,7 @@ DB_POOL_MIN_DEF = 2
 # 20 sobra; por proceso, y son 3 (back/daemons/worker) -> 60 < max_connections=200 de Postgres.
 DB_POOL_MAX_DEF = 20
 CLAUDE_TIMEOUT_DEF = 600
-# QA de la fuente: timeout corto (criba permisiva con modelo rapido) y TTL del saneador de
+# Verificar la fuente: timeout corto (criba permisiva con modelo rapido) y TTL del saneador de
 # temas `en_curso` huerfanos (minutos; muy superior al timeout de la criba).
 QA_FUENTE_TIMEOUT_DEF = 180
 QA_EN_CURSO_TTL_MIN_DEF = 30
@@ -611,7 +611,7 @@ SCORE_BONUS_BREAKING_DEF = 0.0
 #   8 errores seguidos ya es señal robusta de feed muerto (con backoff, son horas de fallos).
 #   SLA de frescura por feed: 180 min (3h) sin items nuevos en un feed activo = "stale".
 #   Umbral de score 0 = traducir TODO cluster extranjero reciente (sin filtro de relevancia);
-#   subirlo limita la traducción a historias más relevantes. Lote de 40 por barrido para no
+#   subirlo limita Traducir a historias más relevantes. Lote de 40 por barrido para no
 #   saturar Haiku (el backlog se procesa a lo largo de varios barridos, sin tope artificial).
 INGESTA_MAX_ERRORES_DEF = 8
 FEED_SLA_MIN_DEF = 180
@@ -631,19 +631,19 @@ FUENTES_BAJA_CONFIANZA_DEF: tuple[str, ...] = (
     "substack.com",
 )
 
-# Etapa de ARTE del pipeline: cap bajo por barrido (def 3), porque cada item llama al
+# Etapa de Ilustrar del pipeline: cap bajo por barrido (def 3), porque cada item llama al
 # proveedor de imagen (coste).
 AUTOGEN_ARTE_MAX_DEF = 3
 
-# Pipeline de contenido (FLUJO CONTINUO): la Selección admite hasta este nº de historias por
-# marca en cada admisión, acotada además por el gate serial en vuelo. Cada admisión acaba en
+# Pipeline de contenido (FLUJO CONTINUO): Admitir admite hasta este nº de historias por
+# marca en cada pasada, acotada además por el gate serial en vuelo. Cada admisión acaba en
 # `claude -p` (coste); el cap del worker (`KENI_MAX_JOBS`) sigue aplicando aguas abajo.
 PIPELINE_MAX_DEF = 3
-# WIP del gate serial: piezas EN VUELO (sin terminar QA→Copy) por marca. ES el regulador del
+# WIP del gate serial: piezas EN VUELO (sin terminar Verificar→Redactar) por marca. ES el regulador del
 # flujo continuo: in=out (no se admite más hasta que algo sale por el otro lado).
 PIPELINE_EN_VUELO_MAX_DEF = 8
 # TTL por defecto de un tema EN VUELO (horas): un día. "Lo que no entró ayer no entra hoy":
-# el pipeline prioriza siempre lo fresco del ranking, nunca arrastra backlog.
+# el pipeline prioriza siempre lo fresco de la priorización, nunca arrastra backlog.
 PIPELINE_TEMA_TTL_HORAS_DEF = 24
 
 
@@ -667,10 +667,10 @@ NOTICIAS_GC_INACTIVIDAD_HORAS_DEF = 48
 # Perfil editorial: se re-extrae con Haiku cada 24h (o si cambia la línea editorial).
 PERFIL_EDITORIAL_TTL_HORAS_DEF = 24
 
-# Fusión semántica: hasta 40 historias por marca y barrido se mandan a Haiku a agrupar.
+# Fusionar (semántica): hasta 40 historias por marca y barrido se mandan a Haiku a agrupar.
 FUSION_SEMANTICA_MAX_DEF = 40
 
-# Rendimiento en el ranking (Fase 2c): peso de la señal (0.15), top-3 líneas, muestra mínima 5.
+# Rendimiento en la priorización (Fase 2c): peso de la señal (0.15), top-3 líneas, muestra mínima 5.
 SCORE_PESO_RENDIMIENTO_DEF = 0.15
 RENDIMIENTO_TOP_N_DEF = 3
 RENDIMIENTO_MIN_PIEZAS_DEF = 5
@@ -802,7 +802,7 @@ __all__ = [
     'ENV_ALERTAS_UMBRAL_ENGAGEMENT',
     'ENV_ALGORITMOS_AUTO',
     'ENV_ALGORITMOS_INTERVALO_HORAS',
-    'ENV_PIPELINE_ARTE',
+    'ENV_PIPELINE_ILUSTRAR',
     'ENV_AUTOGEN_ARTE_MAX',
     'ENV_AUTO_PREAPROBACION',
     'ENV_AUTO_PROGRAMAR',
@@ -833,7 +833,7 @@ __all__ = [
     'ENV_EVENTOS_INTERVALO_SEGUNDOS',
     'ENV_EVENTOS_VENCIMIENTOS',
     'ENV_FEED_SLA_MIN',
-    'ENV_PIPELINE_FUSION',
+    'ENV_PIPELINE_FUSIONAR',
     'ENV_FUSION_SEMANTICA_MAX',
     'ENV_FFMPEG_BIN',
     'ENV_FUENTES_BAJA_CONFIANZA',
@@ -844,7 +844,7 @@ __all__ = [
     'ENV_IMAGEN_API_KEY',
     'ENV_IMAGEN_PROVEEDOR',
     'ENV_INDICE',
-    'ENV_PIPELINE_SELECCION',
+    'ENV_PIPELINE_RECOLECTAR',
     'ENV_INGESTA_BATCH',
     'ENV_INGESTA_INTERVALO_BREAKING',
     'ENV_INGESTA_INTERVALO_CIENCIA_TECH',
@@ -881,7 +881,7 @@ __all__ = [
     'ENV_NOTICIAS_GC_INTERVALO_HORAS',
     'ENV_NOTICIAS_GC_SCORE_UMBRAL',
     'ENV_ORIGENES',
-    'ENV_RANKING_PERFIL_IA',
+    'ENV_PRIORIZAR_PERFIL_IA',
     'ENV_PATRONES_AUTO',
     'ENV_PERFIL_EDITORIAL_TTL_HORAS',
     'ENV_PG_DB',
@@ -889,7 +889,7 @@ __all__ = [
     'ENV_PG_PASSWORD',
     'ENV_PG_PORT',
     'ENV_PG_USER',
-    'ENV_PIPELINE_COPY',
+    'ENV_PIPELINE_REDACTAR',
     'ENV_PIPELINE_MAX',
     'ENV_PIPELINE_EN_VUELO_MAX',
     'ENV_PIPELINE_TEMA_TTL_HORAS',
@@ -903,7 +903,7 @@ __all__ = [
     'ENV_PROMPT_AVISO_CHARS',
     'ENV_PROGRAMADOR_INTERVALO_SEGUNDOS',
     'ENV_PUBLICAR_REAL',
-    'ENV_PIPELINE_VALIDACION',
+    'ENV_PIPELINE_VERIFICAR',
     'ENV_QA_EN_CURSO_TTL_MIN',
     'ENV_QA_FUENTE_ESFUERZO',
     'ENV_QA_FUENTE_MODELO',

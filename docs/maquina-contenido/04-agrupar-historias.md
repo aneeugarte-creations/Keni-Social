@@ -1,4 +1,4 @@
-# Ola B — Clustering de historias + scoring (sobre el store persistente)
+# Ola B — Agrupar historias + scoring (sobre el store persistente)
 
 El archivo `noticias_items` (Ola A) tiene miles de artículos crudos. Esta ola los
 agrupa en **historias** (misma noticia contada por varias fuentes, multi-fuente y
@@ -32,7 +32,7 @@ actualizado   TEXT NOT NULL DEFAULT ''
 Índices: `(marca, score)`, `(categoria)`, `(ultimo_visto)`, `(estado)`, `(clave)`.
 `noticias_items.cluster_id` (ya existe en Ola A) apunta aquí.
 
-## Clustering (dominio/clustering.py — PURO/testeable)
+## Agrupar (dominio/clustering.py — PURO/testeable)
 
 Incremental, dentro de una **ventana reciente** (config `KENI_CLUSTER_VENTANA_H`,
 def 72h):
@@ -52,11 +52,11 @@ def 72h):
 
 ## Integración en el daemon de ingesta
 
-Tras insertar items nuevos en cada barrido, ejecutar un paso de clustering:
+Tras insertar items nuevos en cada barrido, ejecutar un paso de Agrupar:
 para los items recién insertados (sin `cluster_id`), cargar clusters de la ventana,
 asignar/crear, fijar `noticias_items.cluster_id`, y `upsert` del cluster recalculado.
 Best-effort; acotado por la ventana. (Si es más limpio, un `iniciar_clustering()`
-aparte gateado por `KENI_PIPELINE_SELECCION`, con su propio tick corto.)
+aparte gateado por `KENI_PIPELINE_RECOLECTAR`, con su propio tick corto.)
 
 ## API (api/noticias.py — añadir)
 - `GET /api/noticias/historias?marca=&categoria=&desde=&estado=&limit=&offset=`
@@ -82,5 +82,5 @@ hasta ~8 items del cluster como fuentes corroborantes).
 
 ## Reglas
 - Worktree `~/projects/keni-social-ing`. ruff + ast + tsc -b + vite build + vitest.
-  Lógica de clustering PURA y testeada (fuzzy, ventana, breaking). SQLite `?`.
+  Lógica de Agrupar PURA y testeada (fuzzy, ventana, breaking). SQLite `?`.
   snake_case. No tocar `webapp/`.

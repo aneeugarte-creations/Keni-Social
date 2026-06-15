@@ -68,10 +68,10 @@ def _prompts_plantilla() -> dict[str, str]:
 def _generacion_pool_de_marca(marca: str, gens: list[dict], *, prefijo: str) -> dict | None:
     """La generación de pool (tipo `pipeline`, Haiku) más reciente de `marca` con etiqueta `prefijo`.
 
-    La IA del POOL (Fusión / Encaje) corre por LOTE de marca, no 1:1 con cada pieza. Para dar
-    transparencia del Haiku REAL en las etapas Fusión/Editorial, enlazamos su generación de pool más
-    reciente (con prompt+salida reales). `prefijo` distingue "Fusión de historias" (→ Fusión) de
-    "Encaje editorial" (→ Editorial). `gens` es la lista YA leída (evita re-escanear el almacén).
+    La IA del POOL (Fusionar / Encaje) corre por LOTE de marca, no 1:1 con cada pieza. Para dar
+    transparencia del Haiku REAL en las etapas Fusionar/Priorizar, enlazamos su generación de pool más
+    reciente (con prompt+salida reales). `prefijo` distingue "Fusionar historias" (→ Fusionar) de
+    "Priorizar historias" (→ Priorizar). `gens` es la lista YA leída (evita re-escanear el almacén).
     None si no hay ninguna.
     """
     if not marca:
@@ -140,7 +140,7 @@ async def detalle(request: Request) -> Response:
     """GET /api/pipelines/{pipeline_id}: una run + su log de actividad por etapas.
 
     Acepta tanto los temas del pipeline (`origen='pipeline'`) como los del TABLERO que su
-    etapa de copy redacta (`ORIGENES_AUTOGEN`): ambos son runs del feed de Producción.
+    etapa Redactar redacta (`ORIGENES_AUTOGEN`): ambos son runs del feed de Producción.
     """
     pipeline_id = request.path_params["pipeline_id"]
     item = repos.obtener_contenido(pipeline_id)
@@ -151,7 +151,7 @@ async def detalle(request: Request) -> Response:
     cluster = repos.cluster_por_contenido(pipeline_id)
     gens = generaciones.listar(limite=None)
     eventos, generaciones_por_etapa = _actividad_y_generaciones(pipeline_id, gens)
-    # Fusión/Editorial: la IA del pool (Haiku) es a nivel de marca/lote; enlazamos su generación más
+    # Fusionar/Priorizar: la IA del pool (Haiku) es a nivel de marca/lote; enlazamos su generación más
     # reciente para enseñar el prompt+salida REALES del Haiku en cada etapa (por su etiqueta).
     # SOLO en temas del pipeline: a un tema del tablero el pool no le aplica (etapas "No aplica").
     marca_tema = item.get("marca", "") or ""
@@ -163,7 +163,7 @@ async def detalle(request: Request) -> Response:
         generaciones_por_etapa.setdefault("EDITORIAL", gen_encaje)
     # Métricas de la run + evidencia del pool y del arte IA: las MISMAS derivaciones que la
     # lista, para que detalle y tarjeta no se contradigan (p. ej. "Saltada" aquí y "ok" allá).
-    # La suma incluye las etapas de POOL enlazadas (Fusión/Encaje): la cabecera cuadra con el
+    # La suma incluye las etapas de POOL enlazadas (Fusionar/Encaje): la cabecera cuadra con el
     # agregado de los bloques de etapa que esta misma página enseña.
     met = _metricas_por_run(gens, {pipeline_id}).get(pipeline_id)
     if es_pipeline:

@@ -182,18 +182,28 @@ def borrar(clave: str) -> None:
 # aunque la UI la hubiera mostrado encendida. Esta tabla viejo -> nuevo permite migrar el store
 # al arranque. Cubre tambien las variantes por marca (`VIEJO::marca` -> `NUEVO::marca`).
 #
-# ORDEN: ante una CADENA de renames hacia el mismo destino (PERFIL_EDITORIAL -> PIPELINE_RANKING
-# -> PIPELINE_EDITORIAL -> RANKING_PERFIL_IA), va PRIMERO el alias mas RECIENTE (gana la intencion
-# mas nueva; el alias mas viejo solo aplica si el destino sigue ausente tras migrar el reciente).
+# ORDEN: ante una CADENA de renames hacia el mismo destino (perfil/ranking previos ->
+# KENI_PRIORIZAR_PERFIL_IA), va PRIMERO el alias mas RECIENTE (gana la intencion mas nueva;
+# el alias mas viejo solo aplica si el destino sigue ausente tras migrar el reciente).
 CLAVES_LEGADO: tuple[tuple[str, str], ...] = (
-    ("KENI_PIPELINE_EDITORIAL", "KENI_RANKING_PERFIL_IA"),
-    ("KENI_PIPELINE_RANKING", "KENI_RANKING_PERFIL_IA"),
-    ("KENI_PERFIL_EDITORIAL", "KENI_RANKING_PERFIL_IA"),
-    ("KENI_FUSION_SEMANTICA", "KENI_PIPELINE_FUSION"),
-    ("KENI_INGESTA", "KENI_PIPELINE_SELECCION"),
-    ("KENI_QA", "KENI_PIPELINE_VALIDACION"),
-    ("KENI_PIPELINE", "KENI_PIPELINE_COPY"),
-    ("KENI_AUTOGEN_ARTE", "KENI_PIPELINE_ARTE"),
+    # Verbos C (lo MAS reciente: etapa = verbo de accion). El store del piloto guardo las
+    # claves bajo el nombre PREVIO de cada gate; estas las migran al verbo. Van primero.
+    ("KENI_RANKING_PERFIL_IA", "KENI_PRIORIZAR_PERFIL_IA"),
+    ("KENI_PIPELINE_FUSION", "KENI_PIPELINE_FUSIONAR"),
+    ("KENI_PIPELINE_SELECCION", "KENI_PIPELINE_RECOLECTAR"),
+    ("KENI_PIPELINE_VALIDACION", "KENI_PIPELINE_VERIFICAR"),
+    ("KENI_PIPELINE_COPY", "KENI_PIPELINE_REDACTAR"),
+    ("KENI_PIPELINE_ARTE", "KENI_PIPELINE_ILUSTRAR"),
+    ("KENI_PIPELINE_CALIDAD", "KENI_PIPELINE_REVISAR"),
+    # Renames anteriores: el RHS apunta YA al destino FINAL (el verbo), sin encadenar.
+    ("KENI_PIPELINE_EDITORIAL", "KENI_PRIORIZAR_PERFIL_IA"),
+    ("KENI_PIPELINE_RANKING", "KENI_PRIORIZAR_PERFIL_IA"),
+    ("KENI_PERFIL_EDITORIAL", "KENI_PRIORIZAR_PERFIL_IA"),
+    ("KENI_FUSION_SEMANTICA", "KENI_PIPELINE_FUSIONAR"),
+    ("KENI_INGESTA", "KENI_PIPELINE_RECOLECTAR"),
+    ("KENI_QA", "KENI_PIPELINE_VERIFICAR"),
+    ("KENI_PIPELINE", "KENI_PIPELINE_REDACTAR"),
+    ("KENI_AUTOGEN_ARTE", "KENI_PIPELINE_ILUSTRAR"),
 )
 
 # Separador de las claves por-marca (`KENI_PIPELINE_COPY::unotv`). Literal a proposito: es el

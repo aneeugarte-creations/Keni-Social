@@ -65,10 +65,10 @@ def test_doc_incluye_procesos_de_transparencia(cliente):
     # cualquiera lo trae vacío. Y va en TODOS los documentos del listado.
     cualq = cliente.post("/api/texto", json={"titulo": "Mi prompt", "tipo": "prompt"}).json()["documento"]
     assert cualq["procesos"] == []
-    cat = cliente.post("/api/texto", json={"titulo": "Validación", "tipo": "prompt"}).json()["documento"]
-    assert cat["id"] == "prompt/validacion"
-    # Vocabulario ADR 0011 §5: la etapa se llama "verificación" (sin "criba"/"QA").
-    assert cat["procesos"] and any("verificación" in p.lower() for p in cat["procesos"])
+    cat = cliente.post("/api/texto", json={"titulo": "Verificar", "tipo": "prompt"}).json()["documento"]
+    assert cat["id"] == "prompt/verificar"
+    # Vocabulario ADR 0011 §5 (verbos C): la etapa se llama "Verificar" (sin "criba"/"QA").
+    assert cat["procesos"] and any("verificar" in p.lower() for p in cat["procesos"])
     docs = cliente.get("/api/texto", params={"tipo": "prompt"}).json()["documentos"]
     assert all("procesos" in d for d in docs)
 

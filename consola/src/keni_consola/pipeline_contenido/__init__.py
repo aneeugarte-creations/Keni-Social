@@ -21,7 +21,7 @@ automática— dejando BORRADORES listos para la aprobación humana, y que REGIS
 como un pipeline de CI/CD (visible en "Actividad IA"). Este daemon (espejo de `autogen_copy`/
 `radar_auto`) hace exactamente eso, cada N horas y por marca con feeds activos:
 
-  - CI — INGESTA DE FUENTES: lee items frescos (no usados) de los feeds activos de la marca,
+  - CI — RECOLECCIÓN DE FUENTES: lee items frescos (no usados) de los feeds activos de la marca,
     elige hasta un CAP, y CREA un `contenido` (tema) por item SIN generar copy todavía. Para
     feeds de MARCA PROPIA (`propia`) resuelve la `og:image` del artículo (la foto real); para
     feeds de no-propia / tendencia, sin imagen. Guarda en el tema (`copy_pendiente`, JSON) los
@@ -53,7 +53,7 @@ publica; NUNCA se llama a Metricool.
 
 SEGURO POR DISEÑO (CONSERVADOR)
 ===============================
-  - GATEADO: el daemon solo barre con `KENI_PIPELINE_COPY=1` (def OFF). Sin el flag, el
+  - GATEADO: el daemon solo barre con `KENI_PIPELINE_REDACTAR=1` (def OFF). Sin el flag, el
     comportamiento existente NO cambia (este modulo es ADITIVO: nadie lo invoca con el flag
     ausente). El hilo arranca SIEMPRE y comprueba el flag en cada ciclo (apagar/encender en
     runtime sin reiniciar).

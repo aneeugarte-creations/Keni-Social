@@ -1,5 +1,5 @@
 ---
-titulo: "Copy"
+titulo: "Redactar"
 descripcion: "Convierte una nota, varias fuentes o un clip en copy publicable por red."
 tipo: prompt
 carpeta: ""
@@ -42,7 +42,7 @@ línea, en pocas palabras, qué hay que revisar si no está listo.
    ángulo más fuerte. **No inventes nada que no esté en la fuente.** Si falta un dato, dilo;
    no lo rellenes. Si hay varias fuentes del mismo tema, trátalas como UNA historia: sintetiza
    lo común y **cruza los datos** (cifras, fechas, nombres, cargos). Si discrepan, usa la
-   formulación más prudente o ninguna cifra, y anota la discrepancia para la verificación.
+   formulación más prudente o ninguna cifra, y anota la discrepancia para la auto-verificación.
 2. **Marca:** úsala tal cual se indica. Si no se indica, infiérela del tema y dilo explícito.
 3. **Redacta según el MODO que pide la instrucción del lanzamiento** (la instrucción que
    acompaña a este prompt manda; ella trae redes y límites, que salen del código de la Consola):

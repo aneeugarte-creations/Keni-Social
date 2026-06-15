@@ -1,4 +1,4 @@
-"""PIPELINES · métricas por run + evidencia del POOL (Fusión/Encaje) y del arte IA.
+"""PIPELINES · métricas por run + evidencia del POOL (Fusionar/Encaje) y del arte IA.
 
 Agrega las generaciones REALES correlacionadas a cada run (items/tokens/coste/duración) y
 deriva, de las mismas generaciones, qué marcas corrieron el pool y qué runs tienen arte IA —
@@ -57,8 +57,8 @@ def _metricas_por_run(gens: list[dict], ids_runs: set[str]) -> dict[str, dict]:
 
 
 def _pool_por_marca(gens: list[dict]) -> dict[str, list[dict]]:
-    """Por marca, las generaciones de POOL que el detalle ENLAZA en Fusión/Editorial: la
-    "Fusión de historias" más reciente y el "Encaje editorial" más reciente.
+    """Por marca, las generaciones de POOL que el detalle ENLAZA en Fusionar/Priorizar: la
+    "Fusionar historias" más reciente y el "Priorizar historias" más reciente.
 
     Es la MISMA selección que `_generacion_pool_de_marca` (recientes por fecha_fin/inicio),
     pero en lote para la lista. Las métricas de la run suman ESTAS generaciones (las etapas
@@ -87,7 +87,7 @@ def _pool_por_marca(gens: list[dict]) -> dict[str, list[dict]]:
 
 
 def _con_pool(metricas: dict | None, pool: list[dict]) -> dict:
-    """Métricas de la run + las de sus etapas de POOL (Fusión/Encaje enlazadas). Copia nueva."""
+    """Métricas de la run + las de sus etapas de POOL (Fusionar/Encaje enlazadas). Copia nueva."""
     acc = dict(metricas or _METRICAS_CERO)
     for g in pool:
         _sumar_gen(acc, g)
@@ -99,7 +99,7 @@ def _runs_con_arte_ia(gens: list[dict]) -> set[str]:
 
     El auto-arte deja dos trazas correlacionadas al tema: el MARCADOR de etapa
     (`tipo='pipeline_etapa'`, etiqueta "ARTE · …") y la generación con el prompt real
-    (`tipo='pipeline'`, etiqueta "Arte — …"). Cualquiera de las dos vale. La etapa Arte se
+    (`tipo='pipeline'`, etiqueta "Arte — …"). Cualquiera de las dos vale. La etapa Ilustrar se
     deriva de ESTA evidencia, no de si la pieza tiene imagen (la foto de la nota de una
     fuente propia no es arte IA).
     """
@@ -120,7 +120,7 @@ def _runs_con_arte_ia(gens: list[dict]) -> set[str]:
 def _marcas_con_pool(gens: list[dict], prefijo: str) -> set[str]:
     """Marcas con alguna generación de POOL (tipo `pipeline`, etiqueta con `prefijo`).
 
-    Es la evidencia de que la IA del pool (Fusión / Encaje editorial, por lote de marca)
+    Es la evidencia de que la IA del pool (Fusionar / Priorizar, por lote de marca)
     CORRIÓ: la usa la derivación de etapas para no pintar "Saltada" una fase con output.
     """
     return {

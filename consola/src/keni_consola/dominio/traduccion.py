@@ -167,7 +167,7 @@ def _ejecutar_claude_json(prompt: str, dir_permitido: str, modelo: str | None = 
 # La plantilla vive en la Biblioteca de Texto como prompt EDITABLE (pestaña «Prompts»). La lista
 # JSON a traducir se inserta en `{{ITEMS}}`. Si el store fallara, la red es la SEMILLA del
 # paquete (fuente única, sin texto duplicado aquí).
-_PROMPT_ID = "prompt/traduccion"
+_PROMPT_ID = "prompt/traducir"
 _MARCA_ITEMS = "{{ITEMS}}"
 
 
@@ -177,7 +177,7 @@ def _plantilla() -> str:
 
     try:
         cuerpo = (libtexto.cuerpo_efectivo(_PROMPT_ID) or "").strip()
-    except Exception:  # noqa: BLE001 -- nunca dejar la traducción sin prompt por un fallo de lectura
+    except Exception:  # noqa: BLE001 -- nunca dejar Traducir sin prompt por un fallo de lectura
         cuerpo = ""
     return cuerpo or libtexto.cuerpo_semilla(_PROMPT_ID).strip()
 

@@ -33,7 +33,7 @@ const ADMIN = {
 };
 
 const DOC_COPY: DocumentoTexto = {
-  id: "prompt/copy",
+  id: "prompt/redactar",
   titulo: "Prompt de copy",
   descripcion: "Genera el copy por red",
   tipo: "prompt",
@@ -56,8 +56,8 @@ const DOC_COPY: DocumentoTexto = {
 };
 
 const DOC_FUSION: DocumentoTexto = {
-  id: "prompt/fusion",
-  titulo: "Fusión de historias",
+  id: "prompt/fusionar",
+  titulo: "Fusionar historias",
   tipo: "prompt",
   carpeta: "pipelines",
   cuerpo: "Agrupa historias.",
@@ -97,18 +97,18 @@ const MAQUINA = {
       titulo: "Investigación",
       subtitulo: "El motor de noticias",
       etapas: [
-        { tipo: "mecanica", id: "ingesta", titulo: "Ingesta" },
-        { tipo: "mecanica", id: "clustering", titulo: "Clustering y merge léxico" },
+        { tipo: "mecanica", id: "recolectar", titulo: "Recolectar" },
+        { tipo: "mecanica", id: "agrupar", titulo: "Agrupar" },
         {
           tipo: "prompt",
-          id: "fusion",
-          titulo: "Fusión",
-          doc_id: "prompt/fusion",
+          id: "fusionar",
+          titulo: "Fusionar",
+          doc_id: "prompt/fusionar",
           produccion: DOC_FUSION.produccion,
           sha_actual: "a1",
           sin_publicar: false,
         },
-        { tipo: "mecanica", id: "admision", titulo: "Admisión" },
+        { tipo: "mecanica", id: "admitir", titulo: "Admitir" },
       ],
     },
     {
@@ -118,20 +118,20 @@ const MAQUINA = {
       etapas: [
         {
           tipo: "prompt",
-          id: "copy",
-          titulo: "Copy",
-          doc_id: "prompt/copy",
+          id: "redactar",
+          titulo: "Redactar",
+          doc_id: "prompt/redactar",
           produccion: DOC_COPY.produccion,
           sha_actual: "c1",
           sin_publicar: true,
         },
-        { tipo: "mecanica", id: "aprobacion", titulo: "Aprobación" },
-        { tipo: "mecanica", id: "publicacion", titulo: "Publicación" },
+        { tipo: "mecanica", id: "aprobar", titulo: "Aprobar" },
+        { tipo: "mecanica", id: "publicar", titulo: "Publicar" },
         {
           tipo: "prompt",
-          id: "evergreen",
-          titulo: "Taller evergreen",
-          doc_id: "prompt/evergreen",
+          id: "idear",
+          titulo: "Idear",
+          doc_id: "prompt/idear",
           produccion: null,
           sha_actual: null,
           sin_publicar: false,
@@ -146,9 +146,9 @@ const MAQUINA = {
       etapas: [
         {
           tipo: "prompt",
-          id: "insumos-portal",
-          titulo: "Insumos · Portal/SMS",
-          doc_id: "prompt/insumos/portal",
+          id: "recibir-portal",
+          titulo: "Recibir · Portal/SMS",
+          doc_id: "prompt/recibir/portal",
           produccion: null,
           sha_actual: null,
           sin_publicar: false,
@@ -187,7 +187,7 @@ const ESTRATEGIA = {
 const SOLICITUDES = [
   {
     id: "s1",
-    doc_id: "prompt/copy",
+    doc_id: "prompt/redactar",
     titulo: "Prompt de copy",
     sha_propuesto: "c1",
     autor: "luis",
@@ -239,7 +239,7 @@ function stubFetch() {
               titulo: "Copy",
               descripcion: "",
               rol: "copy",
-              prompt_base_id: "prompt/copy",
+              prompt_base_id: "prompt/redactar",
             },
           ],
         });
@@ -258,7 +258,7 @@ function stubFetch() {
           documento: { ...DOC_COPY, cuerpo: sha === "c0" ? "Copy viejo." : "Copy nuevo." },
         });
       }
-      // Documento individual (el id lleva barras: /api/texto/prompt/copy).
+      // Documento individual (el id lleva barras: /api/texto/prompt/redactar).
       const doc = DOCS.find((d) => path === `/api/texto/${d.id}`);
       if (doc && metodo === "GET") return json({ documento: doc });
       if (doc && metodo === "PUT") {
@@ -309,14 +309,14 @@ describe("Biblioteca de Prompts (tres máquinas + estrategia)", () => {
     expect(screen.getByRole("tab", { name: "Documentos" })).toBeInTheDocument();
 
     // Etapa con prompt: tarjeta clicable con el nombre del doc y su publicación.
-    const tarjeta = screen.getByTitle("Fusión — abrir el prompt");
+    const tarjeta = screen.getByTitle("Fusionar — abrir el prompt");
     expect(tarjeta.tagName).toBe("BUTTON");
     // El nombre del doc sale del listado (carga aparte): espera a que aparezca.
-    expect(await screen.findByText("Fusión de historias")).toBeInTheDocument();
+    expect(await screen.findByText("Fusionar historias")).toBeInTheDocument();
     expect(screen.getAllByText("producción").length).toBeGreaterThan(0);
 
     // Etapa mecánica: nodo fantasma NO clicable, con tooltip explicativo.
-    const mecanica = screen.getByText("Ingesta");
+    const mecanica = screen.getByText("Recolectar");
     expect(mecanica.closest("button")).toBeNull();
     expect(screen.getAllByTitle("Etapa automática sin prompt").length).toBe(3);
 
@@ -350,9 +350,9 @@ describe("Biblioteca de Prompts (tres máquinas + estrategia)", () => {
 
     // El evergreen (seccion "taller") vive separado del riel principal.
     const taller = screen.getByRole("region", { name: "Taller" });
-    expect(taller).toContainElement(screen.getByText("Taller evergreen"));
+    expect(taller).toContainElement(screen.getByText("Idear"));
 
-    // Bajo la etapa de copy, el enlace discreto salta a la pestaña Estrategia de marca.
+    // Bajo la etapa de Redactar, el enlace discreto salta a la pestaña Estrategia de marca.
     fireEvent.click(
       screen.getByText(/Las capas editoriales de la marca viven en Estrategia de marca/),
     );
@@ -364,7 +364,7 @@ describe("Biblioteca de Prompts (tres máquinas + estrategia)", () => {
     montar("/?vista=importacion");
 
     expect(await screen.findByText("Insumos del equipo")).toBeInTheDocument();
-    expect(screen.getByTitle("Insumos · Portal/SMS — abrir el prompt")).toBeInTheDocument();
+    expect(screen.getByTitle("Recibir · Portal/SMS — abrir el prompt")).toBeInTheDocument();
   });
 
   it("Estrategia de marca monta el espacio de la marca activa y abre documentos", async () => {
@@ -398,7 +398,7 @@ describe("Biblioteca de Prompts (tres máquinas + estrategia)", () => {
     montar("/?vista=documentos");
 
     await waitFor(() => expect(screen.getByText("Prompt de copy")).toBeInTheDocument());
-    expect(screen.getByText("Fusión de historias")).toBeInTheDocument();
+    expect(screen.getByText("Fusionar historias")).toBeInTheDocument();
     expect(screen.getByText("Voz UnoTV")).toBeInTheDocument();
     // Estado de publicación en la tabla: punteros de producción y aviso sin publicar.
     expect(screen.getAllByText("● prod").length).toBe(2);
@@ -412,7 +412,7 @@ describe("Biblioteca de Prompts (tres máquinas + estrategia)", () => {
     montar("/?vista=produccion");
 
     await screen.findByText("La máquina de contenido");
-    fireEvent.click(screen.getByTitle("Copy — abrir el prompt"));
+    fireEvent.click(screen.getByTitle("Redactar — abrir el prompt"));
 
     // Cabecera: título editable, línea de deployment, badge sin publicar y acciones.
     expect(await screen.findByDisplayValue("Prompt de copy")).toBeInTheDocument();
@@ -427,7 +427,7 @@ describe("Biblioteca de Prompts (tres máquinas + estrategia)", () => {
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Uso" }), { button: 0 });
     expect(
       await screen.findByText(
-        (_t, el) => el?.tagName === "LI" && el.textContent?.replace(/[\s→]/g, "") === "ProducciónCopy",
+        (_t, el) => el?.tagName === "LI" && el.textContent?.replace(/[\s→]/g, "") === "ProducciónRedactar",
       ),
     ).toBeInTheDocument();
 

@@ -1,4 +1,4 @@
-"""Estado y helpers COMPARTIDOS del motor de ingesta (refactor de pura reubicación).
+"""Estado y helpers COMPARTIDOS del motor de recolección (refactor de pura reubicación).
 
 Aquí viven, en UN SOLO sitio para no duplicar estado:
   - El logger del daemon (`_log`, nombre `keni_consola.ingesta_daemon`).
@@ -7,7 +7,7 @@ Aquí viven, en UN SOLO sitio para no duplicar estado:
     los sellan vía `_comun.<var>` (no `global` cruzado de módulos): así el estado de
     throttling es único, sin copias divergentes por módulo.
   - Helpers de relevancia/rendimiento, registro de actividad IA, clasificación de marca
-    por IA y la fusión de un grupo de historias, que comparten varios pasos.
+    por IA y fusionar un grupo de historias, que comparten varios pasos.
 
 Las funciones que un test parchea sobre el FACADE (`ingesta_daemon._registrar_actividad_ia`,
 `_clasificar_marca_ia`, `_fusionar_grupo`) y que se invocan desde OTRO módulo del paquete se
@@ -51,7 +51,7 @@ def _palabras_relevancia(marca: str, perfil_activo: bool) -> frozenset[str]:
 
     Delegado en `noticias_liston.palabras_relevancia` (fuente única perfil-vs-semilla, la misma
     que usan el listón de promoción y la API del panel; si divergieran, el panel explicaría un
-    score que el ranking no calculó).
+    score que la priorización no calculó).
     """
     return noticias_liston.palabras_relevancia(marca, perfil_activo)
 
@@ -82,7 +82,7 @@ def _rendimiento_top_lineas(marca: str) -> tuple[set[str], dict[str, str], list[
         etiquetas = [e for e in repos.listar_etiquetas(clase="vertical") if e.get("id")]
         id_a_nombre = {e["id"]: (e.get("nombre") or "") for e in etiquetas}
         return top, id_a_nombre, etiquetas
-    except Exception:  # noqa: BLE001 -- la señal de rendimiento es opcional; nunca rompe la ingesta
+    except Exception:  # noqa: BLE001 -- la señal de rendimiento es opcional; nunca rompe la recolección
         _log.warning("ingesta_daemon: no se pudo calcular el rendimiento por línea (señal inerte).", exc_info=True)
         return set(), {}, []
 
@@ -105,19 +105,19 @@ def _rendimiento_bonus(
 def _registrar_actividad_ia(marca: str, etiqueta: str, salida: str, *, prompt: str = "") -> None:
     """Sella una GENERACIÓN-actividad (`tipo='noticias-ia'`) de un paso IA del pool (best-effort).
 
-    Hace VISIBLES en «Actividad IA» (y en la etapa Editorial del pipeline) los pasos Haiku del pool
-    —fusión de historias (dedup) y encaje editorial— que antes corrían mudos. Es un registro ya
+    Hace VISIBLES en «Actividad IA» (y en la etapa Priorizar del pipeline) los pasos Haiku del pool
+    —Fusionar (dedup) y Priorizar— que antes corrían mudos. Es un registro ya
     COMPLETADO (no encola trabajo: el Haiku ya corrió). `prompt` y `salida` son los REALES de la
     llamada a Haiku (transparencia: qué se pidió y qué respondió token a token); si no se pasan,
     queda solo el resumen. Las MÉTRICAS (tokens/coste/duración) son las acumuladas por el
     ejecutor síncrono desde la última toma (las llamadas Haiku de ESTE paso): antes estas
-    generaciones salían sin coste en Producción (etapas Fusión/Editorial a cero). Un fallo al
+    generaciones salían sin coste en Producción (etapas Fusionar/Priorizar a cero). Un fallo al
     registrar NUNCA aborta el barrido (es observabilidad).
     """
     try:
         registro: dict[str, Any] = {
             "tipo": "pipeline",
-            # Fusion/clasificacion/traduccion del pool = INVESTIGACION (motor de noticias). Corre
+            # Fusionar/Clasificar/Traducir del pool = INVESTIGACION (motor de noticias). Corre
             # INLINE (Haiku, ya completado: no encola), pero su coste cuenta del lado investigacion.
             "proceso": generaciones.PROCESO_INVESTIGACION,
             "marca": marca,
@@ -132,7 +132,7 @@ def _registrar_actividad_ia(marca: str, etiqueta: str, salida: str, *, prompt: s
         if metricas:
             registro["metricas"] = metricas
         generaciones.crear(registro)
-    except Exception:  # noqa: BLE001 -- la actividad es best-effort; nunca rompe la ingesta
+    except Exception:  # noqa: BLE001 -- la actividad es best-effort; nunca rompe la recolección
         _log.warning("ingesta_daemon: no se pudo registrar actividad IA (%s).", etiqueta, exc_info=True)
 
 
@@ -159,7 +159,7 @@ def _clasificar_marca_ia(cluster: dict[str, Any]) -> str:
             candidatas,
             fallback=fallback,
         )
-    except Exception:  # noqa: BLE001 -- best-effort: nunca rompe el barrido de ingesta
+    except Exception:  # noqa: BLE001 -- best-effort: nunca rompe el barrido de recolección
         _log.warning("ingesta_daemon: fallo el clasificador de marca IA.", exc_info=True)
         return ""
     _pkg._registrar_actividad_ia(
@@ -204,7 +204,7 @@ def _fusionar_grupo(
         cid = str(c["id"])
         if cid == canon_id:
             continue
-        # Re-verificación anti-TOCTOU: el absorbido pudo ser promovido entre lectura y fusión.
+        # Re-verificación anti-TOCTOU: el absorbido pudo ser promovido entre lectura y fusionar.
         actual = repos.obtener_noticia_cluster(cid)
         if actual is None:
             continue

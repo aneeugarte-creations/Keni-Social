@@ -15,7 +15,7 @@ cualquier otro consumidor respondan EXACTAMENTE igual:
   - los umbrales vivos vienen de `config` (`KENI_PROMOVER_MIN_SCORE` /
     `KENI_PROMOVER_MIN_MARCA`, editables en caliente desde la consola);
   - el vocabulario de marca es el MISMO que usa el ranking (perfil editorial Haiku si la
-    etapa Editorial está activa para la marca; si no, la semilla de `relevancia_marca`).
+    etapa Priorizar está activa para la marca; si no, la semilla de `relevancia_marca`).
 
 Siempre devuelve el MOTIVO legible (también al superar): la decisión es explicable ante el
 equipo, no una caja negra.
@@ -33,15 +33,15 @@ def palabras_relevancia(marca: str, perfil_activo: bool | None = None) -> frozen
     """Vocabulario EFECTIVO de una marca: perfil editorial (Haiku) si está activo; si no, semilla.
 
     Centraliza la elección perfil-vs-semilla (la misma que usa el daemon de ingesta al puntuar).
-    Respeta el toggle POR MARCA de `KENI_RANKING_PERFIL_IA`: una marca con el perfil de ranking
+    Respeta el toggle POR MARCA de `KENI_PRIORIZAR_PERFIL_IA`: una marca con el perfil de Priorizar
     apagado vuelve al vocabulario SEMILLA aunque tenga un perfil Haiku cacheado. `perfil_activo`
     admite el valor ya leído (el daemon lo lee una vez por barrido); None = leer de config.
     """
     if perfil_activo is None:
-        perfil_activo = config.perfil_editorial_activo()
+        perfil_activo = config.priorizar_perfil_activo()
     if (
         perfil_activo and marca
-        and not config.marca_apagada(config.ENV_RANKING_PERFIL_IA, marca)
+        and not config.marca_apagada(config.ENV_PRIORIZAR_PERFIL_IA, marca)
     ):
         perfil = perfil_editorial.palabras(marca)
         if perfil:

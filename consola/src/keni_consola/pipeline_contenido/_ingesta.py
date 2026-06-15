@@ -1,4 +1,4 @@
-"""CI — ingesta de fuentes: SELECCIÓN pura de items + creación de temas (sin copy).
+"""CI — recolección de fuentes: SELECCIÓN pura de items + creación de temas (sin copy).
 
 Lee los feeds RSS activos de una marca, elige items frescos (no usados, deduplicados) y crea un
 `contenido` (tema) por item SIN generar copy todavía: el copy se redacta después en la fase CD,
@@ -208,7 +208,7 @@ _AVISO_SIN_LINEA = "⚠ Sin línea: clasifícala a una línea o deséchala."
 
 
 def _auto_etiquetar_linea(tema: dict[str, Any], titulo: str, resumen: str) -> None:
-    """Auto-etiqueta la pieza con su LÍNEA (vertical) y ORIGEN (siempre, dentro de la etapa de copy).
+    """Auto-etiqueta la pieza con su LÍNEA (vertical) y ORIGEN (siempre, dentro de la etapa de Redactar).
 
     Sin línea → deja un aviso en `notas` (la pieza NO se descarta). Best-effort: un fallo no
     rompe la ingesta.
@@ -536,7 +536,7 @@ def _imagen_de_cluster(items: list[dict[str, Any]]) -> str:
 
     La `imagen` del feed del primer item propia que la traiga (`_fotos_notas_de_cluster`) o,
     si ninguno la traía, la `og:image` resuelta del primer artículo propia (un solo fetch por
-    historia) —igual que `ingerir_marca`—. "" si nada: el arte lo pone la etapa de Arte IA
+    historia) —igual que `ingerir_marca`—. "" si nada: el arte lo pone la etapa de Ilustrar
     (o el equipo). Nunca la foto de un medio ajeno.
     """
     fotos = _fotos_notas_de_cluster(items)
@@ -979,7 +979,7 @@ def ingerir_marca(marca: str, *, maximo: int) -> list[dict[str, Any]]:
     registrar_etapa(
         ETAPA_CI,
         marca,
-        f"Ingesta de fuentes — {marcas.etiqueta_de(marca)}: {len(trabajos)} temas "
+        f"Recolección de fuentes — {marcas.etiqueta_de(marca)}: {len(trabajos)} temas "
         f"seleccionados de {len(fuentes)} fuentes ({con_foto} con foto)",
     )
     return trabajos

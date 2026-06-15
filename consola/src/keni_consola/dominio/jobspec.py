@@ -600,7 +600,7 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
         #     SOLO cuando los borradores ya existen. Un copy fallido conserva sus marcas de
         #     "pendiente" y el barrido lo REINTENTA; el doble lanzamiento en vuelo lo evita
         #     la clave de idempotencia de `dominio.generar.lanzar`.
-        #   - ENCADENADO copy->arte: dispara la etapa de arte de ESE tema al instante (si su
+        #   - ENCADENADO copy->arte: dispara la etapa de Ilustración de ESE tema al instante (si su
         #     gate esta activo), sin esperar al siguiente barrido (que queda de red de
         #     seguridad). Todo best-effort: el copy YA esta hecho; nada de esto lo rompe.
         limpiar_pendiente = bool(p.get("limpiar_pendiente"))

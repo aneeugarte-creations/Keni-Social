@@ -54,7 +54,7 @@ def paso_rescore(
     pesos = config.score_pesos()
     breaking_peso = config.cluster_breaking_peso()
     breaking_ventana_h = config.cluster_breaking_ventana_h()
-    perfil_activo = config.perfil_editorial_activo()
+    perfil_activo = config.priorizar_perfil_activo()
     rendimiento_activo = config.rendimiento_ranking_activo()
     ahora = datetime.now(UTC)
     palabras_cache: dict[str, frozenset[str]] = {}
@@ -63,7 +63,7 @@ def paso_rescore(
     revisados = 0
     for c in clusters:
         if (c.get("estado") or "nuevo") != "nuevo":
-            continue  # usados/descartados ya no compiten en el ranking
+            continue  # usados/descartados ya no compiten en la priorización
         revisados += 1
         try:
             marca_c = str(c.get("marca") or "")

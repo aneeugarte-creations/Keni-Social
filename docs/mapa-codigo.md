@@ -22,9 +22,9 @@ Cada uno exporta un `iniciar_*`; casi todos GATEADOS por env var (OFF por defect
 - `programador.py` — programador de publicaciones (#9, Fase 3): prepara/publica las piezas vencidas.
 - `auto_programar.py` — una pieza APROBADA pasa SOLA a `programado` en su próximo hueco.
 - `auto_responsable.py` — auto-asignación de responsable desde la rota.
-- `pipeline_contenido.py` — MÁQUINA DE CONTENIDO: espinazo CI→QA→copy→arte (etapas «Generar copy»/«Generar arte»).
-- `autogen_copy.py` — lanzador reutilizable de COPY de un tema (`lanzar_para_topic`); usado por la etapa de copy del pipeline y por endpoints manuales.
-- `autogen_arte.py` — selección + lanzador de ARTE (`topics_sin_arte`/`lanzar_para_topic`); los usa la etapa de arte del pipeline.
+- `pipeline_contenido.py` — MÁQUINA DE CONTENIDO: espinazo CI→QA→Redactar→Ilustrar (etapas «Generar copy»/«Generar arte»).
+- `autogen_copy.py` — lanzador reutilizable de COPY de un tema (`lanzar_para_topic`); usado por la etapa de Redactar del pipeline y por endpoints manuales.
+- `autogen_arte.py` — selección + lanzador de ARTE (`topics_sin_arte`/`lanzar_para_topic`); los usa la etapa de Ilustrar del pipeline.
 - `ingesta_daemon.py` — motor de ingesta persistente (Ola A), etapa «Crear noticias».
 - `trends_daemon.py` — vuelca Google Trends (con sus noticias) al pool de Noticias.
 - `eventos_scanner.py` — barrido de vencimientos del tablero: emite `contenido.vencido`.

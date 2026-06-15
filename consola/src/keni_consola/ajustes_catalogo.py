@@ -78,7 +78,7 @@ GRUPOS_INVESTIGACION: tuple[str, ...] = (
 )
 
 # Grupos de la sección «Máquina de contenido» del drawer del MONITOR (proceso de PRODUCCIÓN,
-# ADR 0011): el interruptor general, el maestro de Producción (Producción/Arte), sus excepciones
+# ADR 0011): el interruptor general, el maestro de Producción (Redactar/Ilustrar), sus excepciones
 # por marca y los topes de admisión. El proceso de INVESTIGACIÓN vive en el MISMO drawer, en su
 # propia sección (`GRUPOS_INVESTIGACION`). Estos grupos se editan en el Monitor, junto a la cola
 # que controlan. La fuente de verdad de "qué pinta el Monitor" son estas tuplas; el front las usa
@@ -95,44 +95,44 @@ GRUPOS_MAQUINA: tuple[str, ...] = (
 def _maestros_etapa() -> list[Ajuste]:
     """Los interruptores de etapa de la máquina + los maestros virtuales (ADR 0011).
 
-    La tira «Pipeline en vivo» del Monitor opera las etapas FÍSICAS una a una: Selección
-    (`KENI_PIPELINE_SELECCION`), Validación (`KENI_PIPELINE_VALIDACION`), Copy
-    (`KENI_PIPELINE_COPY`) y Arte (`KENI_PIPELINE_ARTE`). Cada una es su propia clave del
+    La tira «Pipeline en vivo» del Monitor opera las etapas FÍSICAS una a una: Recolectar
+    (`KENI_PIPELINE_RECOLECTAR`), Verificar (`KENI_PIPELINE_VERIFICAR`), Redactar
+    (`KENI_PIPELINE_REDACTAR`) e Ilustrar (`KENI_PIPELINE_ILUSTRAR`). Cada una es su propia clave del
     store (sin fan-out): el operador puede apagar una etapa sin tocar las demás.
 
     `KENI_INVESTIGACION` y `KENI_PRODUCCION` son VIRTUALES (no se leen en runtime): al
     guardarlas, la API escribe sus etapas físicas (`config.ETAPAS_INVESTIGACION` /
     `config.ETAPAS_PRODUCCION`) con el mismo valor. Su valor mostrado es el de una etapa
-    representativa (ingesta para Investigación, copy para Producción). SIGUEN en el catálogo
+    representativa (Recolectar para Investigación, Redactar para Producción). SIGUEN en el catálogo
     aunque la tira ya no las pinte: son la base de las excepciones por marca
     (`KENI_INVESTIGACION::marca` apaga el proceso entero con un toggle), el respaldo de
-    lectura del riel de Noticias (etapas sin flag propio en catálogo: Fusión/Clasificación/
-    Ranking) y el interruptor «de proceso» para API/MCP. «Publicar» vive en `publicacion`.
+    lectura del riel de Noticias (etapas sin flag propio en catálogo: Fusionar/Clasificar/
+    Priorizar) y el interruptor «de proceso» para API/MCP. «Publicar» vive en `publicacion`.
     """
     return [
         Ajuste(
             clave=config.ENV_INVESTIGACION,
             tipo="bool",
             etiqueta="Investigación",
-            ayuda="Para todas las marcas: recolecta, deduplica, clasifica, rankea y "
+            ayuda="Para todas las marcas: recolecta, deduplica, clasifica, prioriza y "
             "verifica noticias para dejar el pool listo (no escribe copy). Virtual: "
             "enciende/apaga TODAS las etapas del proceso a la vez.",
             grupo="maestros_investigacion",
             defecto=False,
         ),
         Ajuste(
-            clave=config.ENV_PIPELINE_SELECCION,
+            clave=config.ENV_PIPELINE_RECOLECTAR,
             tipo="bool",
-            etiqueta="Selección",
-            ayuda="Etapa física: recolecta e ingiere noticias de las fuentes al pool.",
+            etiqueta="Recolectar",
+            ayuda="Etapa física: recolecta noticias de las fuentes al pool.",
             grupo="maestros_investigacion",
             defecto=False,
         ),
         Ajuste(
-            clave=config.ENV_PIPELINE_VALIDACION,
+            clave=config.ENV_PIPELINE_VERIFICAR,
             tipo="bool",
-            etiqueta="Validación",
-            ayuda="Etapa física: criba/QA de la fuente antes de escribir copy.",
+            etiqueta="Verificar",
+            ayuda="Etapa física: criba/verificación de la fuente antes de escribir el copy.",
             grupo="maestros_investigacion",
             defecto=False,
         ),
@@ -141,23 +141,23 @@ def _maestros_etapa() -> list[Ajuste]:
             tipo="bool",
             etiqueta="Producción",
             ayuda="Para todas las marcas: redacta el copy que convierte una noticia "
-            "verificada en pieza publicable (el arte tiene interruptor propio). Virtual: "
-            "equivale hoy a la etapa Copy.",
+            "verificada en pieza publicable (la imagen tiene interruptor propio). Virtual: "
+            "equivale hoy a la etapa Redactar.",
             grupo="maestros_produccion",
             defecto=False,
         ),
         Ajuste(
-            clave=config.ENV_PIPELINE_COPY,
+            clave=config.ENV_PIPELINE_REDACTAR,
             tipo="bool",
-            etiqueta="Copy",
+            etiqueta="Redactar",
             ayuda="Etapa física: redacta el copy de los temas admitidos al flujo.",
             grupo="maestros_produccion",
             defecto=False,
         ),
         Ajuste(
-            clave=config.ENV_PIPELINE_ARTE,
+            clave=config.ENV_PIPELINE_ILUSTRAR,
             tipo="bool",
-            etiqueta="Arte IA",
+            etiqueta="Ilustrar",
             ayuda="Para todas las marcas: genera imagen por IA para los temas con copy y sin "
             "imagen.",
             grupo="maestros_produccion",
@@ -177,10 +177,10 @@ def _global_de_etapa(env_flag: str) -> bool:
 
 def _ajustes_por_marca() -> list[Ajuste]:
     """Toggles `bool` por marca para «Investigación», «Producción» (virtuales: fan-out a sus
-    etapas) y «Arte».
+    etapas) e «Ilustrar».
 
-    Apagar «Investigación» en una marca la excluye del tramo de pool (ingesta→verificación);
-    apagar «Producción» la deja sin copy automático; apagar «Arte», sin imagen por IA. Se
+    Apagar «Investigación» en una marca la excluye del tramo de pool (Recolectar→Verificar);
+    apagar «Producción» la deja sin copy automático; apagar «Ilustrar», sin imagen por IA. Se
     generan en caliente desde el catálogo de marcas."""
     salida: list[Ajuste] = []
     for mid, nombre in marcas.opciones():
@@ -191,7 +191,7 @@ def _ajustes_por_marca() -> list[Ajuste]:
                 etiqueta=f"{nombre} · Investigación",
                 ayuda=f"Apaga la investigación de noticias (pool) solo para «{nombre}».",
                 grupo="automatizacion_marca_investigacion",
-                defecto=_global_de_etapa(config.ENV_PIPELINE_SELECCION),
+                defecto=_global_de_etapa(config.ENV_PIPELINE_RECOLECTAR),
             )
         )
         salida.append(
@@ -201,17 +201,17 @@ def _ajustes_por_marca() -> list[Ajuste]:
                 etiqueta=f"{nombre} · Producción",
                 ayuda=f"Apaga la producción de copy solo para «{nombre}».",
                 grupo="automatizacion_marca_produccion",
-                defecto=_global_de_etapa(config.ENV_PIPELINE_COPY),
+                defecto=_global_de_etapa(config.ENV_PIPELINE_REDACTAR),
             )
         )
         salida.append(
             Ajuste(
-                clave=config.clave_por_marca(config.ENV_PIPELINE_ARTE, mid),
+                clave=config.clave_por_marca(config.ENV_PIPELINE_ILUSTRAR, mid),
                 tipo="bool",
-                etiqueta=f"{nombre} · Arte IA",
+                etiqueta=f"{nombre} · Ilustrar",
                 ayuda=f"Apaga la imagen por IA solo para «{nombre}».",
                 grupo="automatizacion_marca_produccion",
-                defecto=_global_de_etapa(config.ENV_PIPELINE_ARTE),
+                defecto=_global_de_etapa(config.ENV_PIPELINE_ILUSTRAR),
             )
         )
     return salida
@@ -290,7 +290,7 @@ def _construir_catalogo() -> list[Ajuste]:
             defecto=False,
         ),
         # --- Automatismos generales (barridos del sistema, sin dimensión por marca) ----- #
-        # Las 6 etapas de la máquina (Fusión/Editorial/Selección/Validación/Copy/Arte) NO están aquí:
+        # Las 6 etapas de la máquina (Fusionar/Priorizar/Recolectar/Verificar/Redactar/Ilustrar) NO están aquí:
         # su maestro vive en `_maestros_etapa()` y las excepciones por marca en `_ajustes_por_marca()`.
         Ajuste(
             clave=config.ENV_ALERTAS_ACTIVAS,
@@ -367,11 +367,11 @@ def _construir_catalogo() -> list[Ajuste]:
             grupo="automatismos_generales",
             defecto=False,
         ),
-        # NOTA: las etapas del tramo noticia→copy (Fusión/Editorial/Selección/Validación/Copy/
+        # NOTA: las etapas del tramo noticia→copy (Fusionar/Priorizar/Recolectar/Verificar/Redactar/
         # Avance) NO tienen toggle propio: las agrupa el interruptor único «Generar»
         # (`KENI_GENERAR`, virtual con fan-out; ver `claves_fisicas`). El master
         # «Priorizar por rendimiento» (KENI_RENDIMIENTO_RANKING) tampoco: NO es un daemon on/off,
-        # sino un modulador del ranking, así que vive con sus pesos en `noticias_ranking`.
+        # sino un modulador de la priorización, así que vive con sus pesos en `noticias_ranking`.
         # --- Publicacion (peligroso) ----------------------------------------------- #
         Ajuste(
             clave=config.ENV_PUBLICAR_REAL,
@@ -390,7 +390,7 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_PIPELINE_MAX,
             tipo="int",
             etiqueta="Historias admitidas por marca",
-            ayuda="Máximo de historias que la Selección admite de golpe por marca.",
+            ayuda="Máximo de historias que Admitir admite de golpe por marca.",
             grupo="pipeline_topes",
             defecto=config.PIPELINE_MAX_DEF,
             minimo=1,
@@ -399,14 +399,14 @@ def _construir_catalogo() -> list[Ajuste]:
             clave=config.ENV_PIPELINE_EN_VUELO_MAX,
             tipo="int",
             etiqueta="Piezas en vuelo por marca",
-            ayuda="Tope de piezas sin terminar (Validación pendiente o sin copy) por marca; "
+            ayuda="Tope de piezas sin terminar (Verificar pendiente o sin copy) por marca; "
             "no se admite más hasta que algo termina.",
             grupo="pipeline_topes",
             defecto=config.PIPELINE_EN_VUELO_MAX_DEF,
             minimo=1,
         ),
         # (KENI_AUTOGEN_ARTE_MAX —temas ilustrados por ciclo— se DEGRADÓ a solo-env: batch
-        # interno del barrido de Arte, no un control de operación. Sigue leyéndose de env.)
+        # interno del barrido de Ilustrar, no un control de operación. Sigue leyéndose de env.)
         # --- Economía de tokens (presupuesto diario + kill switch; `presupuesto_ia.py`) --- #
         # La generación usa la MISMA suscripción `claude` que el equipo: estos knobs evitan que
         # una avalancha de fondo agote los tokens de todos. Editables en caliente (Monitor).
@@ -541,7 +541,7 @@ def _construir_catalogo() -> list[Ajuste]:
         ),
         # --- Producción automática (grupo `noticias_produccion`) -------------------------- #
         # LISTÓN de producción automática: el panel lista TODO el pool jerarquizado, pero promover
-        # una historia a tema dispara QA+copy (claude -p: coste real de tokens). Estos dos umbrales
+        # una historia a tema dispara Verificar+Redactar (claude -p: coste real de tokens). Estos dos umbrales
         # son ese listón (la regla vive en `dominio.clustering.evaluar_liston`, explicable).
         Ajuste(
             clave=config.ENV_PROMOVER_MIN_SCORE,
@@ -567,7 +567,7 @@ def _construir_catalogo() -> list[Ajuste]:
         ),
         # MADURACIÓN + CUPOS de volumen: dedican tiempo a ELEGIR (la corroboración se acumula
         # antes de competir por plaza) y anclan el volumen auto-producido a la cadencia real de
-        # publicación de cada marca (pocas plazas por franja → selección, no goteo continuo).
+        # publicación de cada marca (pocas plazas por franja → admisión selectiva, no goteo continuo).
         Ajuste(
             clave=config.ENV_PROMOVER_MADURACION_MIN,
             tipo="int",
@@ -598,7 +598,7 @@ def _construir_catalogo() -> list[Ajuste]:
             defecto="",
         ),
         # El master «Priorizar por rendimiento» vive AQUÍ (no en automatismos): no arranca ningún
-        # daemon, modula el ranking. Sus tres parámetros (KENI_SCORE_PESO_RENDIMIENTO,
+        # daemon, modula la priorización. Sus tres parámetros (KENI_SCORE_PESO_RENDIMIENTO,
         # KENI_RENDIMIENTO_TOP_N, KENI_RENDIMIENTO_MIN_PIEZAS) se DEGRADARON a solo-env:
         # moduladores del algoritmo, no controles de operación. El operador decide SI se
         # prioriza; cuánto y cómo es tuning de ingeniería (env/defecto).
@@ -703,8 +703,8 @@ _ETAPAS_VIRTUAL: dict[str, tuple[str, ...]] = {
     config.ENV_PRODUCCION: config.ETAPAS_PRODUCCION,
 }
 _LECTURA_VIRTUAL: dict[str, str] = {
-    config.ENV_INVESTIGACION: config.ENV_PIPELINE_SELECCION,
-    config.ENV_PRODUCCION: config.ENV_PIPELINE_COPY,
+    config.ENV_INVESTIGACION: config.ENV_PIPELINE_RECOLECTAR,
+    config.ENV_PRODUCCION: config.ENV_PIPELINE_REDACTAR,
 }
 
 
@@ -738,7 +738,7 @@ def valor_y_fuente(ajuste: Ajuste) -> tuple[Any, str]:
     """Valor EFECTIVO (tipado) + su FUENTE ('store' | 'env' | 'defecto').
 
     Misma precedencia que `config._crudo`: store (UI) > env > defecto del catalogo. La clave
-    virtual «Generar» se resuelve desde su clave de lectura (etapa de Copy).
+    virtual «Generar» se resuelve desde su clave de lectura (etapa de Redactar).
     """
     clave = _clave_lectura(ajuste.clave)
     desde_store = ajustes.obtener(clave)

@@ -40,7 +40,7 @@ def url_canonica_clustering(url: str) -> str:
 
 
 def clave_cluster(item: dict[str, Any]) -> str:
-    """Clave de identidad de un item para clustering.
+    """Clave de identidad de un item para agrupación.
 
     `url:<host/path>` si el item tiene url canónica (cruce exacto entre fuentes que enlazan
     el mismo recurso); si no, `t:<hash>` del título normalizado (`dedup`), para que titulares
@@ -201,10 +201,10 @@ def grupos_lexicos(
     momento: dos historias del mismo evento pueden nacer por separado (distinto orden de
     llegada, traducción tardía) y quedarse duplicadas. Esto barre los clusters de la ventana
     y agrupa los pares cuyo título (o su traducción `titulo_es`) casa con ratio >= `umbral`
-    — MÁS ESTRICTO que el de asignación (0.86 vs 0.82: fundir historias ya formadas pide más
+    — MÁS ESTRICTO que el de asignación (0.86 vs 0.82: fusionar historias ya formadas pide más
     certeza), con el veto de números incompatibles y sin cruzar categorías distintas (una
     categoría vacía casa con cualquiera). Devuelve listas de ids (≥2) para que el daemon las
-    funda con `_fusionar_grupo` (que ya trae anti-TOCTOU). Determinista; `umbral<=0` apaga.
+    fusiona con `_fusionar_grupo` (que ya trae anti-TOCTOU). Determinista; `umbral<=0` apaga.
     """
     if umbral <= 0 or len(clusters) < 2:
         return []

@@ -172,7 +172,7 @@ def test_orden_por_defecto_conserva_entrada():
 
 def test_prompt_es_el_tema_titulo_y_descripcion():
     # `prompt_arte` es el mensaje de USUARIO (el tema): título + descripción, sin la directiva
-    # (esa va en el mensaje de SISTEMA `prompt/arte`, que añade `media.generar_imagen`).
+    # (esa va en el mensaje de SISTEMA `prompt/ilustrar`, que añade `media.generar_imagen`).
     prompt = aa.prompt_arte(_item(titulo="Final de copa", descripcion="Juega Mexico"))
     assert prompt == "Final de copa. Juega Mexico"
 
@@ -298,7 +298,7 @@ def test_ejecutar_arte_job_genera_adjunta_y_completa(monkeypatch):
 
 
 def test_ejecutar_arte_job_registra_actividad(monkeypatch):
-    """El arte deja constancia: una generación `tipo='pipeline'` con su PROMPT + la etapa ARTE
+    """El arte deja constancia: una generación `tipo='pipeline'` con su PROMPT + la etapa ILUSTRAR
     correlacionada al tema (gen_id), visible en Actividad IA y el detalle del pipeline."""
     monkeypatch.setattr(aa.media, "proveedor_configurado", lambda: True)
     monkeypatch.setattr(aa.media, "generar_imagen", lambda prompt: b"PNGBYTES")

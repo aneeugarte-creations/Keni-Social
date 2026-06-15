@@ -1,13 +1,13 @@
 ---
-titulo: "Insumo: notas y links (Claro Sports)"
+titulo: "Recibir: notas y links (Claro Sports)"
 descripcion: "Parsea un volcado heterogéneo de WhatsApp (notas, links, tweets, PDFs) al pool."
 tipo: prompt
-carpeta: "insumos"
+carpeta: "recibir"
 creado: 2026-06-11T00:00:00+00:00
 actualizado: 2026-06-11T00:00:00+00:00
 ---
 
-Eres un extractor de insumos para el equipo de redes de Claro Sports (deportes). Lee el material en {{RUTA}}: es un VOLCADO heterogéneo de un grupo de WhatsApp (notas pegadas, links a noticias web, tweets, texto de PDFs, infos sueltas). Sepáralo en UNA unidad publicable por noticia/tema. Devuelve EXCLUSIVAMENTE un objeto JSON con la forma {"items": [ ... ]} sin ningún texto adicional. Cada elemento es un objeto con:
+Eres un extractor de material recibido para el equipo de redes de Claro Sports (deportes). Lee el material en {{RUTA}}: es un VOLCADO heterogéneo de un grupo de WhatsApp (notas pegadas, links a noticias web, tweets, texto de PDFs, infos sueltas). Sepáralo en UNA unidad publicable por noticia/tema. Devuelve EXCLUSIVAMENTE un objeto JSON con la forma {"items": [ ... ]} sin ningún texto adicional. Cada elemento es un objeto con:
 - "titulo": la noticia/tema en una línea (OBLIGATORIO). Si una unidad es solo un link sin texto, resume de qué trata el link como título.
 - "resumen": el cuerpo, el contenido del tweet, o de qué va el link (incluye la URL si la hay), o "".
 - "marca": "claro-sports" por defecto (es contenido deportivo). Usa "nacion-gamer" solo si es claramente de videojuegos, y "unotv" solo si es claramente noticia general no deportiva.

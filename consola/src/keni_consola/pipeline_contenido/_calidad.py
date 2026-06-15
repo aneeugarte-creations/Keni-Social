@@ -1,6 +1,6 @@
-"""Etapa de CALIDAD del COPY del pipeline: criba ADVISORY antes del avance a revisión.
+"""Etapa Revisar (calidad del copy) del pipeline: criba ADVISORY antes del avance a revisión.
 
-La criba de la FUENTE (QA pre-copy, `_qa`) valida la NOTA de origen ANTES de redactar; esta
+La criba de la FUENTE (Verificar, pre-redactar, `_qa`) valida la NOTA de origen ANTES de redactar; esta
 etapa valida el COPY YA REDACTADO, justo antes de que un borrador completo avance solo a la cola
 de revisión (etapa AVANCE, `_avance`). Es la "IA hacia adentro": filtra calidad para que el
 humano solo DECIDA, no corrija. Dos chequeos, ambos BARATOS y deterministas (sin `claude -p`):
@@ -18,7 +18,7 @@ humano solo DECIDA, no corrija. Dos chequeos, ambos BARATOS y deterministas (sin
 ADVISORY y SAFE-by-default (mismo patrón que `dominio.copy.verificar_voz`): NUNCA bloquea el
 avance ni descarta la pieza. Si encuentra avisos, DEGRADA el veredicto del borrador
 (`listo`→`revisar`, sólo un pase limpio) y deja una nota en el tema padre; el humano decide en la
-revisión con los avisos delante. Gateada por `KENI_PIPELINE_CALIDAD` (def OFF): sin el toggle el
+revisión con los avisos delante. Gateada por `KENI_PIPELINE_REVISAR` (def OFF): sin el toggle el
 avance no cambia ni un byte.
 
 PURO/testeable: `avisos_voz`, `avisos_coherencia` y `avisos_calidad` no tocan BD ni red (el
@@ -145,7 +145,7 @@ def _anotar(avisos: list[str], *, contenido_id: str, marca: str) -> None:
     _log.warning("calidad: copy fuera de calidad tema=%s marca=%s: %s", contenido_id or "-", marca, detalle)
     if not contenido_id:
         return
-    nota = f"⚠ Validación de copy (voz/coherencia, IA hacia adentro): {detalle}."
+    nota = f"⚠ Revisión del copy (voz/coherencia, IA hacia adentro): {detalle}."
     try:
         tema = repos.obtener_contenido(contenido_id)
         if tema is None:

@@ -6,7 +6,7 @@ El objetivo editorial es un puñado de contenidos AL DÍA por marca (p.ej. 13 de
 pero su seguimiento estaba repartido: la cola de generación en Actividad, las runs en
 Pipelines, la cola de aprobación en el feed y lo programado en el calendario. Nadie veía
 de un vistazo "¿cómo van los 13 de hoy?". Este endpoint junta las CUATRO vistas para la
-ventana de producción (las mismas 24 h móviles del cupo de admisión):
+ventana de producción (las mismas 24 h móviles del cupo de Admitir):
 
   GET /api/produccion/dia?marca=unotv ->
     {
@@ -25,7 +25,7 @@ ventana de producción (las mismas 24 h móviles del cupo de admisión):
 El EMBUDO cuenta TEMAS (contenido padre), no filas por red: el objetivo diario se mide en
 contenidos, y cada tema se clasifica por su pieza MÁS AVANZADA (publicado > programado >
 aprobado > en_revision > borrador con copy > generando). `objetivo.dia` es el MISMO
-`KENI_CUPO_DIA` que regula la admisión: una sola fuente de verdad para "cuántos al día".
+`KENI_CUPO_DIA` que regula Admitir: una sola fuente de verdad para "cuántos al día".
 
 Lo consumen la UI (panel de producción) y el MCP operativo (`keni_produccion_dia`), para
 que tanto el equipo como los agentes monitoricen la generación del día sin sumar a mano.
@@ -94,7 +94,7 @@ async def dia(request: Request) -> Response:
 
     ahora = datetime.fromisoformat(ahora_iso())
     # JORNADA MX (la parrilla del día), no ventana móvil de 24 h: a medianoche de México
-    # el monitor vuelve a 0, igual que el contador del plan de la Mesa y la admisión.
+    # el monitor vuelve a 0, igual que el contador del plan de la Mesa y Admitir.
     desde_iso = inicio_dia_cdmx_iso_utc(ahora)
 
     # Temas (contenido padre) CREADOS en la ventana + sus filas por red.
@@ -155,14 +155,14 @@ async def dia(request: Request) -> Response:
         )
     piezas.sort(key=lambda p: p["creado"], reverse=True)
 
-    # Objetivo: el MISMO cupo que regula la admisión (0/{} = sin cupo configurado -> None).
+    # Objetivo: el MISMO cupo que regula Admitir (0/{} = sin cupo configurado -> None).
     objetivo = {
         "dia": config.cupo_dia(marca) or None,
         "plan": config.plan_dia(marca) or None,
     }
 
     # CANTIDADES POR LÍNEA del plan (monitor): GENERADOS y PUBLICADOS en la ventana vs
-    # OBJETIVO, por categoría — el MISMO conteo que usa la admisión (contenido.categoria).
+    # OBJETIVO, por categoría — el MISMO conteo que usa Admitir (contenido.categoria).
     # Incluye las categorías del plan aunque vayan a 0 y las generadas fuera de plan.
     por_categoria: list[dict[str, Any]] = []
     if marca:

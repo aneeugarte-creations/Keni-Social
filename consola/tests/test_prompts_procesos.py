@@ -30,7 +30,7 @@ def test_catalogo_no_tiene_ids_fantasma():
 
 
 def test_procesos_de_prompt_conocido():
-    procs = pp.procesos_de("prompt/arte")
+    procs = pp.procesos_de("prompt/ilustrar")
     assert procs and any("imagen" in p.lower() for p in procs)
 
 
@@ -43,19 +43,19 @@ def test_catalogo_cubre_los_prompts_inyectados():
     # Los prompts que migramos a la Biblioteca DEBEN estar catalogados: la transparencia exige ver
     # a qué proceso se inyectan. Si cableas un prompt nuevo, añádelo también a `prompts_procesos`.
     esperados = {
-        "prompt/arte",
-        "prompt/insumos/portal",
-        "prompt/insumos/corresponsales",
-        "prompt/insumos/reporteros",
-        "prompt/insumos/eventos-claro",
-        "prompt/insumos/notas",
-        "prompt/insumos/contexto",
-        "prompt/traduccion",
-        "prompt/fusion",
-        "prompt/editorial",
+        "prompt/ilustrar",
+        "prompt/recibir/portal",
+        "prompt/recibir/corresponsales",
+        "prompt/recibir/reporteros",
+        "prompt/recibir/eventos-claro",
+        "prompt/recibir/notas",
+        "prompt/recibir/contexto",
+        "prompt/traducir",
+        "prompt/fusionar",
+        "prompt/priorizar",
         "prompt/importar/calendario",
         "prompt/importar/parrilla",
-        "prompt/validacion",
+        "prompt/verificar",
         # Envoltorios del copy (dominio/generar.py)
         "prompt/envoltorios/redes",
         "prompt/envoltorios/copy-unico",

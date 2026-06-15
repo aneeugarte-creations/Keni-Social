@@ -117,18 +117,18 @@ _DIAS_DEDUP = 60
 # `redes.redes_de_formato` (fuente única); video -> las 5 queda definido para flujos futuros.
 _FORMATO_PIPELINE = redes.FORMATO_FOTO
 
-# --- QA de la FUENTE por DOCUMENTO de Texto (no skills) ------------------------------
+# --- Verificar la FUENTE por DOCUMENTO de Texto (no skills) ------------------------------
 # El equipo NO usa skills: la criba pre-copy de la FUENTE se hace adjuntando un DOCUMENTO de la
 # Texto con los criterios. Regla del dueño: "si el documento existe, adjúntalo; si no existe,
-# créalo y adjúntalo." Apunta al prompt EDITABLE `prompt/validacion` (pestaña «Prompts»), cuyo
+# créalo y adjúntalo." Apunta al prompt EDITABLE `prompt/verificar` (pestaña «Prompts»), cuyo
 # cuerpo base viaja en la semilla. El título DEBE sluggear al id (`crear` deriva el id del
-# slug del título): "Validación" -> "prompt/validacion". DISTINTO del QA de COPY (`prompt/qa-editorial`).
-PROMPT_QA_ID = "prompt/validacion"
-_TITULO_QA = "Validación"
+# slug del título): "Verificar" -> "prompt/verificar". DISTINTO de Revisar el COPY (`prompt/qa-editorial`).
+PROMPT_QA_ID = "prompt/verificar"
+_TITULO_QA = "Verificar"
 # Etiqueta HUMANA de la generación de la criba (Actividad IA). DISTINTA del título del prompt
-# (`_TITULO_QA`="Validación", que sluggea al id `prompt/validacion`): en la vista Pipelines
-# la etapa se llama "Validación", y la actividad debe llamarse igual para no desconcertar.
-_ETIQUETA_QA = "Validación de la fuente"
+# (`_TITULO_QA`="Verificar", que sluggea al id `prompt/verificar`): en la vista Pipelines
+# la etapa se llama "Verificar", y la actividad debe llamarse igual para no desconcertar.
+_ETIQUETA_QA = "Verificar la fuente"
 
 # Veredicto SENTINEL que se persiste en el TEMA mientras su QA de la fuente (claude -p) está en
 # vuelo: la fase QA NO lo re-lanza (deja de estar "sin veredicto") y la vista Pipelines pinta la
@@ -136,7 +136,7 @@ _ETIQUETA_QA = "Validación de la fuente"
 QA_EN_CURSO = "en_curso"
 
 # Veredicto SENTINEL que se persiste cuando la etapa QA está DESACTIVADA para la marca (toggle
-# `KENI_PIPELINE_VALIDACION` off): no se lanza la criba, pero el tema NO queda bloqueado: `temas_para_copy` lo acepta
+# `KENI_PIPELINE_VERIFICAR` off): no se lanza la criba, pero el tema NO queda bloqueado: `temas_para_copy` lo acepta
 # igual que un `no_verificado`, así el copy se genera sin criba. La vista Pipelines pinta QA como
 # "saltada". Distinto de "sin veredicto" (que significaría "QA pendiente, aún por cribar").
 QA_SALTADA = "saltada"
@@ -152,7 +152,7 @@ VERDICTO_NO_VERIFICADO = dom_qa.VERDICTO_NO_VERIFICADO  # ⚠️ OK para seguir 
 VERDICTO_PROBLEMA = dom_qa.VERDICTO_PROBLEMA  # ❗ algo de peso en contra: NO se genera copy
 
 # Criterios por defecto del documento QA que se CREA si aún no existe (idempotente). MISMO
-# cuerpo que la semilla `prompt/validacion` del paquete (último recurso si la semilla no se
+# cuerpo que la semilla `prompt/verificar` del paquete (último recurso si la semilla no se
 # pudiera leer; si tocas uno, toca el otro). REDISEÑO: la QA es PRE-COPY y criba la NOTA DE
 # ORIGEN (no el copy, que aún no existe). Es PERMISIVA: solo levanta `problema` ante algo de
 # PESO (dato falso evidente, problema legal/ético claro); ante la duda, `no_verificado`.
@@ -447,7 +447,7 @@ def registrar_etapa(
     """Sella una entrada de ACTIVIDAD de una etapa del pipeline (CI/CD/QA). Best-effort.
 
     Crea una generación-marcador `completado` (sin `claude`): `tipo='pipeline'` y la etapa +
-    detalle en la `etiqueta` ("CI · Ingesta...", etc.). La vista "Actividad IA" la muestra
+    detalle en la `etiqueta` ("CI · Recolectar...", etc.). La vista "Actividad IA" la muestra
     junto al resto de la actividad de IA. Un fallo al sellar NUNCA aborta el barrido (devuelve
     None y se loguea): la actividad es trazabilidad, no parte crítica del flujo.
 
@@ -461,7 +461,7 @@ def registrar_etapa(
     STREAM del agente (su proceso de pensamiento). CI no lanza `claude`, así que lo deja vacío.
     """
     etiqueta = f"{etapa} · {detalle}".strip()
-    # Frontera ADR 0011: admision (CI) y validacion (QA) son INVESTIGACION; copy (CD) y arte son
+    # Frontera ADR 0011: Admitir (CI) y Verificar (QA) son INVESTIGACION; Redactar (CD) e Ilustrar son
     # PRODUCCION. Se sella en el marcador para clasificarlo sin reparsear la etiqueta.
     proceso = (
         generaciones.PROCESO_INVESTIGACION
@@ -485,8 +485,8 @@ def registrar_etapa(
         return None
 
 
-# Estados del EMBUDO de verificacion (clusters `nuevo` ya en el circuito QA y aun sin admitir):
-# en vuelo + verificados-pendientes + saltados. Acotan cuanta QA se lanza por tick (el mismo
+# Estados del EMBUDO de verificacion (clusters `nuevo` ya en el circuito de Verificar y aun sin
+# admitir): en vuelo + verificados-pendientes + saltados. Acotan cuanta verificación se lanza por tick (el mismo
 # `_FUNNEL_QA` que usa `_barrido`); aqui se exponen para que el Monitor lea el embudo sin
 # importar el barrido (el orquestador) desde la capa API.
 EMBUDO_QA_ESTADOS = (QA_EN_CURSO, VERDICTO_NO_VERIFICADO, QA_SALTADA)
@@ -499,9 +499,9 @@ VERIFICADAS_QA = (VERDICTO_NO_VERIFICADO, QA_SALTADA)
 
 
 def embudo_qa() -> dict[str, Any]:
-    """Estado del EMBUDO de QA (lo unico que Investigacion acota aparte de la cola compartida).
+    """Estado del EMBUDO de Verificar (lo unico que Investigacion acota aparte de la cola compartida).
 
-    Por cada marca con admision (Seleccion) activa, cuenta sus clusters en el embudo y lo compara
+    Por cada marca con Recolectar activa, cuenta sus clusters en el embudo y lo compara
     con el tope EN VUELO por marca (`pipeline_en_vuelo_max`). Devuelve el total y el desglose por
     marca, para que el Monitor muestre "cuanto se esta verificando" sin tocar la cola de jobs.
     Best-effort: una marca cuyo conteo falle se omite (no tumba el snapshot).
@@ -510,7 +510,7 @@ def embudo_qa() -> dict[str, Any]:
     por_marca: list[dict[str, Any]] = []
     total = 0
     for marca in marcas.ids():
-        if not config.etapa_activa(config.ENV_PIPELINE_SELECCION, marca):
+        if not config.etapa_activa(config.ENV_PIPELINE_RECOLECTAR, marca):
             continue
         try:
             n = repos.contar_clusters_funnel_qa(marca, EMBUDO_QA_ESTADOS)

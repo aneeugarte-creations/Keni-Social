@@ -1,19 +1,19 @@
 /**
  * PIPELINE EN VIVO (Fase 2 de la consolidación del Monitor): la máquina de contenido como
- * una tira de etapas — Selección → Validación → Copy → Arte — con, EN CADA ETAPA, su
+ * una tira de etapas — Recolectar → Verificar → Redactar → Ilustrar — con, EN CADA ETAPA, su
  * interruptor FÍSICO al lado de su estado (conteos vivos del snapshot de la cola) y un
  * acceso a sus EXCEPCIONES POR MARCA, en vez de esconder los controles en un drawer.
  *
  * JERARQUÍA DE PARO (de más global a más fino):
  *   1. «Máquina» (`KENI_MAQUINA`, cabecera de la tira): el interruptor general; apagado,
  *      NADA automático corre aunque las etapas estén encendidas.
- *   2. El switch de cada etapa: su clave FÍSICA del catálogo (`KENI_PIPELINE_SELECCION`/
- *      `_VALIDACION`/`_COPY`/`_ARTE`), una clave por etapa, sin fan-out. Las claves
+ *   2. El switch de cada etapa: su clave FÍSICA del catálogo (`KENI_PIPELINE_RECOLECTAR`/
+ *      `_VERIFICAR`/`_REDACTAR`/`_ILUSTRAR`), una clave por etapa, sin fan-out. Las claves
  *      VIRTUALES `KENI_INVESTIGACION`/`KENI_PRODUCCION` ya no se pintan aquí (siguen en el
  *      catálogo para las excepciones por marca, la API/MCP y la línea de Noticias).
  *   3. Las excepciones por marca de cada etapa (diálogo del icono de la etapa): las claves
- *      por-marca existentes (`KENI_INVESTIGACION::m` —gobierna Selección y Validación a la
- *      vez—, `KENI_PRODUCCION::m`, `KENI_PIPELINE_ARTE::m`).
+ *      por-marca existentes (`KENI_INVESTIGACION::m` —gobierna Recolectar y Verificar a la
+ *      vez—, `KENI_PRODUCCION::m`, `KENI_PIPELINE_ILUSTRAR::m`).
  *
  * Los toggles usan la MISMA mutación compartida (`useGuardarAjuste`), pero CADA control
  * monta su propia instancia: el estado «guardando» es por control, sin el race visual de
@@ -25,7 +25,7 @@
  * hay jobs de cola de esa etapa (cuando los haya, se añade al mapa).
  */
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, SquarePen, Users } from "lucide-react";
+import { Bot, ChevronRight, Cog, SquarePen, Users } from "lucide-react";
 import * as React from "react";
 
 import { EditorPromptOverlay } from "@/components/biblioteca/EditorPromptOverlay";
@@ -51,49 +51,54 @@ import type { AjusteAdmin, ColaJob, ColaMonitor, Proceso } from "@/types";
 
 import { PROC_META } from "./comun";
 
-type EtapaId = "seleccion" | "validacion" | "copy" | "arte";
+type EtapaId = "recolectar" | "verificar" | "redactar" | "ilustrar";
 
 /** El interruptor GENERAL de la máquina (cabecera de la tira). */
 const CLAVE_MAQUINA = "KENI_MAQUINA";
 
 /** Las etapas de la tira, en orden de flujo. `clave` = su interruptor FÍSICO del catálogo;
- *  `excepciones` = la clave BASE de sus toggles por marca (los del grupo
- *  `automatizacion_marca_*` del catálogo) + la nota que explica su alcance. */
+ *  `es_ia` distingue 🤖 (LLM) de ⚙ (determinista); `excepciones` = la clave BASE de sus
+ *  toggles por marca (los del grupo `automatizacion_marca_*` del catálogo) + la nota que
+ *  explica su alcance. */
 const ETAPAS: {
   id: EtapaId;
   etiqueta: string;
   proceso: Proceso;
   clave: string;
+  es_ia: boolean;
   descripcion: string;
   excepciones: { base: string; nota: string };
 }[] = [
   {
-    id: "seleccion",
-    etiqueta: "Selección",
+    id: "recolectar",
+    etiqueta: "Recolectar",
     proceso: "investigacion",
-    clave: "KENI_PIPELINE_SELECCION",
-    descripcion: "Recolecta, deduplica, clasifica y rankea noticias para el pool.",
+    clave: "KENI_PIPELINE_RECOLECTAR",
+    es_ia: false,
+    descripcion: "Recolecta, deduplica, clasifica y prioriza noticias para el pool.",
     excepciones: {
       base: "KENI_INVESTIGACION",
-      nota: "Apaga Selección y Validación juntas.",
+      nota: "Apaga Recolectar y Verificar juntas.",
     },
   },
   {
-    id: "validacion",
-    etiqueta: "Validación",
+    id: "verificar",
+    etiqueta: "Verificar",
     proceso: "investigacion",
-    clave: "KENI_PIPELINE_VALIDACION",
-    descripcion: "Criba/QA de la fuente antes de escribir copy.",
+    clave: "KENI_PIPELINE_VERIFICAR",
+    es_ia: true,
+    descripcion: "Criba/verificación de la fuente antes de escribir copy.",
     excepciones: {
       base: "KENI_INVESTIGACION",
-      nota: "Apaga Selección y Validación juntas.",
+      nota: "Apaga Recolectar y Verificar juntas.",
     },
   },
   {
-    id: "copy",
-    etiqueta: "Copy",
+    id: "redactar",
+    etiqueta: "Redactar",
     proceso: "produccion",
-    clave: "KENI_PIPELINE_COPY",
+    clave: "KENI_PIPELINE_REDACTAR",
+    es_ia: true,
     descripcion: "Redacta el copy que convierte una noticia verificada en pieza publicable.",
     excepciones: {
       base: "KENI_PRODUCCION",
@@ -101,40 +106,41 @@ const ETAPAS: {
     },
   },
   {
-    id: "arte",
-    etiqueta: "Arte",
+    id: "ilustrar",
+    etiqueta: "Ilustrar",
     proceso: "produccion",
-    clave: "KENI_PIPELINE_ARTE",
+    clave: "KENI_PIPELINE_ILUSTRAR",
+    es_ia: true,
     descripcion: "Genera imagen por IA para los temas con copy y sin imagen.",
     excepciones: {
-      base: "KENI_PIPELINE_ARTE",
-      nota: "Apagar «Arte IA» en una marca la deja sin imagen por IA.",
+      base: "KENI_PIPELINE_ILUSTRAR",
+      nota: "Apagar «Ilustrar» en una marca la deja sin imagen por IA.",
     },
   },
 ];
 
 /** Mapa EXPLÍCITO tipo de job → etapa de la tira. Lo que no mapea cae en «Otros». */
 const ETAPA_POR_TIPO: Record<string, EtapaId> = {
-  // Selección: trabajos del pool de noticias (ingesta/cajones).
-  rss: "seleccion",
-  "noticias-ia": "seleccion",
-  insumos: "seleccion",
-  // Validación: la criba/QA de la fuente (los jobs `pipeline` de la cola son esa criba)
-  // y las verificaciones editoriales.
-  pipeline: "validacion",
-  verificacion: "validacion",
-  "qa-editorial": "validacion",
-  // Copy: redacción (manual o del pipeline).
-  copy: "copy",
-  autogen: "copy",
-  // Arte: imagen IA.
-  imagen: "arte",
+  // Recolectar: trabajos del pool de noticias (recolección/cajones).
+  rss: "recolectar",
+  "noticias-ia": "recolectar",
+  insumos: "recolectar",
+  // Verificar: la criba/verificación de la fuente (los jobs `pipeline` de la cola son esa
+  // criba) y las verificaciones editoriales.
+  pipeline: "verificar",
+  verificacion: "verificar",
+  "qa-editorial": "verificar",
+  // Redactar: redacción (manual o del pipeline).
+  copy: "redactar",
+  autogen: "redactar",
+  // Ilustrar: imagen IA.
+  imagen: "ilustrar",
 };
 
 type Conteos = Record<EtapaId | "otros", number>;
 
 function contar(jobs: ColaJob[]): Conteos {
-  const c: Conteos = { seleccion: 0, validacion: 0, copy: 0, arte: 0, otros: 0 };
+  const c: Conteos = { recolectar: 0, verificar: 0, redactar: 0, ilustrar: 0, otros: 0 };
   for (const j of jobs) c[ETAPA_POR_TIPO[j.tipo] ?? "otros"] += 1;
   return c;
 }
@@ -208,11 +214,11 @@ export function PipelineEnVivo({
   esAdmin: boolean;
   /** Prefiltro de proceso (`?proceso=`): atenúa las etapas del otro loop. */
   proceso?: Proceso;
-  /** RECORTA la tira a las etapas de UN solo motor (Producción → Copy/Arte; Investigación →
-   *  Selección/Validación). A diferencia de `proceso` (que solo atenúa), aquí las etapas del
+  /** RECORTA la tira a las etapas de UN solo motor (Producción → Redactar/Ilustrar; Investigación →
+   *  Recolectar/Verificar). A diferencia de `proceso` (que solo atenúa), aquí las etapas del
    *  otro motor NO se pintan: cada cockpit muestra únicamente sus etapas. */
   soloProceso?: Proceso;
-  /** «Editar prompt» por etapa (doc de la Biblioteca, p. ej. `prompt/copy`): pinta un lápiz
+  /** «Editar prompt» por etapa (doc de la Biblioteca, p. ej. `prompt/redactar`): pinta un lápiz
    *  junto al nombre de la etapa que abre el editor en un OVERLAY (encima de la página, sin
    *  navegar). Solo admin (la Biblioteca es de admin). */
   docPorEtapa?: Partial<Record<EtapaId, string>>;
@@ -221,8 +227,8 @@ export function PipelineEnVivo({
   const [docEditando, setDocEditando] = React.useState<string | null>(null);
   // Etapa cuyo diálogo de «Excepciones por marca» está abierto (o null).
   const [excepEtapa, setExcepEtapa] = React.useState<EtapaId | null>(null);
-  // Recorte por motor: el cockpit de Producción pide solo Copy/Arte; el de Investigación, solo
-  // Selección/Validación. Sin `soloProceso`, la tira completa (las cuatro etapas).
+  // Recorte por motor: el cockpit de Producción pide solo Redactar/Ilustrar; el de Investigación,
+  // solo Recolectar/Verificar. Sin `soloProceso`, la tira completa (las cuatro etapas).
   const etapas = soloProceso ? ETAPAS.filter((e) => e.proceso === soloProceso) : ETAPAS;
   const enCurso = contar(cola.en_curso);
   const esperando = contar(cola.esperando);
@@ -326,6 +332,11 @@ export function PipelineEnVivo({
                         className={cn("h-2 w-2 shrink-0 rounded-full", PROC_META[e.proceso].barra)}
                         aria-hidden="true"
                       />
+                      {e.es_ia ? (
+                        <Bot className="h-3.5 w-3.5 shrink-0" aria-label="IA" />
+                      ) : (
+                        <Cog className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-label="determinista" />
+                      )}
                       <span className="truncate">{e.etiqueta}</span>
                     </span>
                     {/* El switch de la etapa es el control PRINCIPAL: se queda inline. */}
@@ -342,9 +353,9 @@ export function PipelineEnVivo({
                     </span>{" "}
                     · {esperando[e.id]} en cola
                   </p>
-                  {/* La Validación es el único punto donde Investigación acota aparte de la
-                      cola compartida: su embudo de QA (en vuelo + tope por marca). */}
-                  {e.id === "validacion" && cola.embudo_qa && (
+                  {/* Verificar es el único punto donde Investigación acota aparte de la
+                      cola compartida: su embudo de verificación (en vuelo + tope por marca). */}
+                  {e.id === "verificar" && cola.embudo_qa && (
                     <p className="mt-0.5 text-[11px] text-muted-foreground">
                       Embudo: {cola.embudo_qa.en_vuelo} en vuelo
                       {cola.embudo_qa.tope_por_marca > 0 && (

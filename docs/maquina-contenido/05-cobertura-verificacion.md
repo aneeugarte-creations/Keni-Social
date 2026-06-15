@@ -1,4 +1,4 @@
-# Ola D — Monitor de cobertura + traducción completa + auto-verificación
+# Ola D — Monitor de cobertura + Traducir todo + auto-verificación
 
 Cierra el motor para que la cobertura sea de medio serio: salud a escala,
 detección de huecos, traducción de todo lo relevante, y verificación por
@@ -28,11 +28,11 @@ corroboración. Aditivo sobre Olas A–C.
 - `POST /api/fuentes/{id}/reactivar` → `activo=1`, `desactivado_auto=0`,
   `errores_seguidos=0`, `proximo_sondeo=''` (reintentar ya).
 
-## 2. Traducción completa (no solo top-15)
+## 2. Traducir todo (no solo top-15)
 
-Hoy la traducción del Radar está topada a 15. Para el motor:
+Hoy Traducir en el Radar está topado a 15. Para el motor:
 - Los **clusters** (historias) en idioma extranjero se traducen+tropicalizan a MX
-  en el daemon (paso tras clustering), por LOTES con Haiku
+  en el daemon (paso tras Agrupar), por LOTES con Haiku
   (`dominio/traduccion.traducir_items`), guardando en `noticias_clusters`:
   `titulo_es`, `resumen_es`, `traducido` (migración idempotente, columnas nuevas).
 - Sin tope artificial: traduce todos los clusters extranjeros recientes con
@@ -46,7 +46,7 @@ Hoy la traducción del Radar está topada a 15. Para el motor:
 
 Verificación a nivel de cobertura (no fact-check por afirmación): se basa en
 corroboración multi-fuente independiente, barata y robusta.
-- En `recalcular`/clustering, fija `verificacion` en el cluster:
+- En `recalcular`/Agrupar, fija `verificacion` en el cluster:
   - `corroborada` si `n_fuentes >= 2` con dominios/outlets distintos,
   - `unica_fuente` si solo 1 fuente,
   - `dudosa` si la única fuente es de baja confianza (lista `FUENTES_BAJA_CONFIANZA`

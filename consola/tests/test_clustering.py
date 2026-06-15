@@ -947,7 +947,7 @@ def test_cluster_solo_curado_conserva_su_senal_y_titulo():
 
 
 # --------------------------------------------------------------------------- #
-# seleccionar_diversos (MMR suave para la promoción CI)                         #
+# seleccionar_diversos (MMR suave para la promoción ADMITIR)                    #
 # --------------------------------------------------------------------------- #
 
 

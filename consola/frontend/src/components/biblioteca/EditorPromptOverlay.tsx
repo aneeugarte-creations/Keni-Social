@@ -10,7 +10,7 @@ export function EditorPromptOverlay({
   abierto,
   onCerrar,
 }: {
-  /** Doc de la Biblioteca a editar (p. ej. `prompt/copy`). `null` cuando no hay nada abierto. */
+  /** Doc de la Biblioteca a editar (p. ej. `prompt/redactar`). `null` cuando no hay nada abierto. */
   docId: string | null;
   abierto: boolean;
   onCerrar: () => void;

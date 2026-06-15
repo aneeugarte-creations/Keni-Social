@@ -102,7 +102,7 @@ const DAEMONS = {
   daemons: [
     daemon({ daemon: "investigacion", clase: "ia", motor: "investigacion", barrible: true, clave_gate: "KENI_MAQUINA" }),
     daemon({ daemon: "produccion", clase: "ia", motor: "produccion", clave_gate: "KENI_MAQUINA" }),
-    daemon({ daemon: "ingesta", clase: "maquina", motor: "investigacion", barrible: true, clave_gate: "KENI_PIPELINE_SELECCION" }),
+    daemon({ daemon: "recolectar", clase: "maquina", motor: "investigacion", barrible: true, clave_gate: "KENI_PIPELINE_RECOLECTAR" }),
     daemon({ daemon: "programador", clase: "maquina", motor: "produccion", clave_gate: null }),
     daemon({ daemon: "reaper", clase: "sistema", motor: null, clave_gate: null }),
   ],

@@ -32,9 +32,9 @@ from ._comun import (
 def _cluster_publico(cluster: dict | None) -> dict | None:
     """Forma reducida de la HISTORIA (cluster) de la que nació el tema, para la UI. None si no hay.
 
-    Es la PRUEBA de que hubo dedup + jerarquización por IA aguas arriba (pool de noticias): cuántas
-    fuentes corroboran, cuántas notas se agruparon (fusión), el score del ranking, la verificación
-    por corroboración y si fue breaking. La vista lo pinta junto a la etapa Jerarquización.
+    Es la PRUEBA de que hubo dedup + priorización por IA aguas arriba (pool de noticias): cuántas
+    fuentes corroboran, cuántas notas se agruparon (fusionar), el score de Priorizar, la verificación
+    por corroboración y si fue breaking. La vista lo pinta junto a la etapa Priorizar.
     """
     if not cluster:
         return None
@@ -60,19 +60,19 @@ def _etapa_off(env_flag: str, marca: str) -> bool:
     return not config.etapa_activa(env_flag, marca)
 
 
-def _qa_off(marca: str) -> bool:
-    """Etapa QA desactivada para `marca` (solo aplica a runs SIN veredicto persistido)."""
-    return _etapa_off(config.ENV_PIPELINE_VALIDACION, marca)
+def _verificar_off(marca: str) -> bool:
+    """Etapa Verificar desactivada para `marca` (solo aplica a runs SIN veredicto persistido)."""
+    return _etapa_off(config.ENV_PIPELINE_VERIFICAR, marca)
 
 
-def _cd_off(marca: str) -> bool:
-    """Etapa Copy desactivada para `marca` (solo aplica a runs SIN copy persistido)."""
-    return _etapa_off(config.ENV_PIPELINE_COPY, marca)
+def _redactar_off(marca: str) -> bool:
+    """Etapa Redactar desactivada para `marca` (solo aplica a runs SIN copy persistido)."""
+    return _etapa_off(config.ENV_PIPELINE_REDACTAR, marca)
 
 
-def _arte_off(marca: str) -> bool:
-    """Etapa Arte desactivada para `marca` (solo aplica a runs SIN arte persistido)."""
-    return _etapa_off(config.ENV_PIPELINE_ARTE, marca)
+def _ilustrar_off(marca: str) -> bool:
+    """Etapa Ilustrar desactivada para `marca` (solo aplica a runs SIN arte persistido)."""
+    return _etapa_off(config.ENV_PIPELINE_ILUSTRAR, marca)
 
 
 def _pieza_de(plat: dict) -> dict:
@@ -91,7 +91,7 @@ def _pieza_detalle(plat: dict) -> dict:
     """Forma COMPLETA de una pieza para el detalle: lo que ocurrió de verdad en cada etapa.
 
     Sobre la forma reducida añade el COPY generado (texto por red + copy-in), la imagen de
-    la placa, las OBSERVACIONES de la validación (recalculadas con la misma QA léxica, para
+    la placa, las OBSERVACIONES de la verificación (recalculadas con la misma criba léxica, para
     mostrar el "por qué" del veredicto) y la traza de revisión humana (revisor + fechas).
     """
     base = _pieza_de(plat)
@@ -111,42 +111,42 @@ def _pieza_detalle(plat: dict) -> dict:
     }
 
 
-def _fusion_de(cluster: dict | None, marca: str, *, corrio_pool: bool = False) -> dict:
-    """Etapa "Fusión": dedup IA del pool. SOLO evidencia persistida: con historia (cluster)
+def _fusionar_de(cluster: dict | None, marca: str, *, corrio_pool: bool = False) -> dict:
+    """Etapa "Fusionar": dedup IA del pool. SOLO evidencia persistida: con historia (cluster)
     enlazada corrió (ok). Sin historia, `corrio_pool` desempata: si la IA del pool corrió
-    para la marca (hay generación "Fusión de historias"), la etapa CORRIÓ y esta historia
+    para la marca (hay generación "Fusionar historias"), la etapa CORRIÓ y esta historia
     simplemente no se agrupó con otras. Solo sin evidencia alguna queda saltada."""
     if not cluster:
         if corrio_pool:
             return {
-                "clave": "fusion", "nombre": "Fusión", "estado": "ok",
+                "clave": "fusionar", "nombre": "Fusionar", "estado": "ok",
                 "detalle": "Sin grupo: no se fusionó con otras historias", "ts": "",
             }
-        return {"clave": "fusion", "nombre": "Fusión", "estado": _ESTADO_SALTADA, "detalle": "", "ts": ""}
+        return {"clave": "fusionar", "nombre": "Fusionar", "estado": _ESTADO_SALTADA, "detalle": "", "ts": ""}
     n_fuentes = int(cluster.get("n_fuentes", 0) or 0)
     n_items = int(cluster.get("n_items", 0) or 0)
     detalle = f"{n_fuentes} fuentes" + (f" · {n_items} notas" if n_items > 1 else "")
     return {
-        "clave": "fusion", "nombre": "Fusión", "estado": "ok",
+        "clave": "fusionar", "nombre": "Fusionar", "estado": "ok",
         "detalle": detalle, "ts": cluster.get("primer_visto", "") or "",
     }
 
 
-def _editorial_de(cluster: dict | None, marca: str, *, corrio_pool: bool = False) -> dict:
-    """Etapa "Editorial": encaje editorial IA + score. SOLO evidencia persistida (el score del
-    cluster). Sin historia, `corrio_pool` (hay generación "Encaje editorial" de la marca)
-    pinta la etapa como corrida sin score propio, igual que en Fusión (fix "Saltada")."""
+def _priorizar_de(cluster: dict | None, marca: str, *, corrio_pool: bool = False) -> dict:
+    """Etapa "Priorizar": encaje editorial IA + score. SOLO evidencia persistida (el score del
+    cluster). Sin historia, `corrio_pool` (hay generación "Priorizar historias" de la marca)
+    pinta la etapa como corrida sin score propio, igual que en Fusionar (fix "Saltada")."""
     if not cluster:
         if corrio_pool:
             return {
-                "clave": "editorial", "nombre": "Editorial", "estado": "ok",
+                "clave": "priorizar", "nombre": "Priorizar", "estado": "ok",
                 "detalle": "Sin score: el tema no venía de una historia del pool", "ts": "",
             }
-        return {"clave": "editorial", "nombre": "Editorial", "estado": _ESTADO_SALTADA, "detalle": "", "ts": ""}
+        return {"clave": "priorizar", "nombre": "Priorizar", "estado": _ESTADO_SALTADA, "detalle": "", "ts": ""}
     score = round(float(cluster.get("score", 0.0) or 0.0), 2)
     detalle = f"Score {score}" + (" · 🔥" if cluster.get("breaking") else "")
     return {
-        "clave": "editorial", "nombre": "Editorial", "estado": "ok",
+        "clave": "priorizar", "nombre": "Priorizar", "estado": "ok",
         "detalle": detalle, "ts": cluster.get("primer_visto", "") or "",
     }
 
@@ -160,49 +160,49 @@ def _etapas_de_run(
     pool_editorial: bool = False,
     arte_ia: bool = False,
 ) -> list[dict]:
-    """Deriva las 7 etapas de una run: Fusión + Editorial (pool) + Selección/Validación/Copy/Arte
-    (toggles) + Aprobación (humana).
+    """Deriva las 7 etapas de una run: Fusionar + Priorizar (pool) + Admitir/Verificar/Redactar/Ilustrar
+    (toggles) + Aprobar (humana).
 
-    Fusión y Editorial se derivan de la HISTORIA enlazada (cluster): el dedup y el encaje/score del pool,
+    Fusionar y Priorizar se derivan de la HISTORIA enlazada (cluster): el dedup y el encaje/score del pool,
     previos al tema; sin historia, `pool_fusion`/`pool_editorial` (hay generación de pool de la
     marca) las pintan como corridas sin grupo/score, no "saltada". Las togglables
-    (Selección/Validación/Copy/Arte) están activas o "saltada"
+    (Admitir/Verificar/Redactar/Ilustrar) están activas o "saltada"
     según su toggle por-marca; si activas, su estado se deriva del estado real (no de logs): el
-    `qa_veredicto` del tema y las publicaciones por plataforma (auto-curativo). La Validación
-    (criba pre-copy) va ANTES del copy; un `problema` NO genera copy. Arte exige `arte_ia`
+    `qa_veredicto` del tema y las publicaciones por plataforma (auto-curativo). La etapa Verificar
+    (criba pre-copy) va ANTES del copy; un `problema` NO genera copy. Ilustrar exige `arte_ia`
     (evidencia de arte GENERADO: marcador/generación de arte de la run): una imagen de fuente
-    propia en la pieza no enciende la etapa. Aprobación es el
+    propia en la pieza no enciende la etapa. Aprobar es el
     gate humano (nunca saltada). Cada etapa es `{clave, nombre, estado, detalle, ts}`.
 
     Un tema del TABLERO (origen != 'pipeline': rss/equipo/historia/importación, redactado
-    por la etapa de copy) no pasa por el pool ni por la criba: Fusión/Editorial/Validación
+    por la etapa Redactar) no pasa por el pool ni por la criba: Fusionar/Priorizar/Verificar
     se pintan saltadas con el motivo "no aplica", honestas en vez de "pendiente" eterno.
     """
     marca = item.get("marca", "") or ""
     es_tablero = (item.get("origen") or "") != ORIGEN_PIPELINE
     if es_tablero:
-        # El tema entró por el tablero, no por el pool de noticias: la fusión/encaje del pool
+        # El tema entró por el tablero, no por el pool de noticias: el fusionar/encaje del pool
         # no aplican (la evidencia de pool de la MARCA es de otros temas; no se hereda).
         no_aplica = "No aplica: tema del tablero (sin pool de noticias)"
-        fusion = {"clave": "fusion", "nombre": "Fusión", "estado": _ESTADO_SALTADA, "detalle": no_aplica, "ts": ""}
-        editorial = {"clave": "editorial", "nombre": "Editorial", "estado": _ESTADO_SALTADA, "detalle": no_aplica, "ts": ""}
+        fusion = {"clave": "fusionar", "nombre": "Fusionar", "estado": _ESTADO_SALTADA, "detalle": no_aplica, "ts": ""}
+        editorial = {"clave": "priorizar", "nombre": "Priorizar", "estado": _ESTADO_SALTADA, "detalle": no_aplica, "ts": ""}
     else:
-        fusion = _fusion_de(cluster, marca, corrio_pool=pool_fusion)
-        editorial = _editorial_de(cluster, marca, corrio_pool=pool_editorial)
+        fusion = _fusionar_de(cluster, marca, corrio_pool=pool_fusion)
+        editorial = _priorizar_de(cluster, marca, corrio_pool=pool_editorial)
     creado = item.get("creado", "") or ""
     actualizado = item.get("actualizado", "") or ""
     total = len(piezas)
     qa_veredicto = (item.get("qa_veredicto", "") or "").strip()
     es_problema = qa_veredicto == VERDICTO_PROBLEMA
 
-    # --- Selección: el tema EXISTE, luego la selección CORRIÓ (evidencia, no toggle). --------
+    # --- Admitir: el tema EXISTE, luego Admitir CORRIÓ (evidencia, no toggle). --------
     ci_detalle = f"Del tablero · {item.get('origen') or ''}" if es_tablero else ""
-    ci = {"clave": "ci", "nombre": "Selección", "estado": "ok", "detalle": ci_detalle, "ts": creado}
+    ci = {"clave": "admitir", "nombre": "Admitir", "estado": "ok", "detalle": ci_detalle, "ts": creado}
 
-    # --- Validación: PRIMERO el veredicto persistido en el TEMA (lo que de verdad pasó); el
+    # --- Verificar: PRIMERO el veredicto persistido en el TEMA (lo que de verdad pasó); el
     # toggle solo decide el estado de una run que AÚN no tiene veredicto (futuro).
     if es_tablero and not qa_veredicto:
-        # La criba valida la FUENTE de una noticia ingerida; un tema del tablero no la tiene.
+        # La criba verifica la FUENTE de una noticia recolectada; un tema del tablero no la tiene.
         qa_estado, qa_detalle = _ESTADO_SALTADA, "No aplica: sin criba (tema del tablero)"
     elif qa_veredicto == QA_SALTADA:
         qa_estado, qa_detalle = _ESTADO_SALTADA, ""
@@ -214,13 +214,13 @@ def _etapas_de_run(
         qa_estado, qa_detalle = "en_curso", ""
     elif qa_veredicto == VERDICTO_NO_VERIFICADO:
         qa_estado, qa_detalle = "ok", "No verificado"
-    elif _qa_off(marca):
+    elif _verificar_off(marca):
         qa_estado, qa_detalle = _ESTADO_SALTADA, ""
     else:
         qa_estado, qa_detalle = "pendiente", ""
-    qa = {"clave": "qa", "nombre": "Validación", "estado": qa_estado, "detalle": qa_detalle, "ts": ""}
+    qa = {"clave": "verificar", "nombre": "Verificar", "estado": qa_estado, "detalle": qa_detalle, "ts": ""}
 
-    # --- Copy: PRIMERO el copy persistido (≥1 pieza con copy = corrió, diga lo que diga el
+    # --- Redactar: PRIMERO el copy persistido (≥1 pieza con copy = corrió, diga lo que diga el
     # toggle de hoy); 'problema'/'caducada' lo omiten; el toggle solo pinta el futuro.
     con_copy = sum(1 for p in piezas if not p["falta_copy"])
     if con_copy:
@@ -229,27 +229,27 @@ def _etapas_de_run(
         cd_estado, cd_detalle = "pendiente", "Omitido"
     elif qa_veredicto == QA_CADUCADA:
         cd_estado, cd_detalle = _ESTADO_SALTADA, "Caducada"
-    elif _cd_off(marca):
+    elif _redactar_off(marca):
         cd_estado, cd_detalle = _ESTADO_SALTADA, ""
     else:
         cd_estado, cd_detalle = "pendiente", ""
-    cd = {"clave": "cd", "nombre": "Copy", "estado": cd_estado, "detalle": cd_detalle, "ts": ""}
+    cd = {"clave": "redactar", "nombre": "Redactar", "estado": cd_estado, "detalle": cd_detalle, "ts": ""}
 
-    # --- Arte: SOLO evidencia de arte IA (marcador ARTE / generación de arte correlacionada).
+    # --- Ilustrar: SOLO evidencia de arte IA (marcador ARTE / generación de arte correlacionada).
     # Una pieza puede traer IMAGEN sin que el arte IA corriera (la foto de la nota de una
-    # fuente PROPIA, bajada en la ingesta): eso NO es trabajo de esta etapa. La foto de fuente vive en la pieza (feed), no aquí.
+    # fuente PROPIA, bajada al recolectar): eso NO es trabajo de esta etapa. La foto de fuente vive en la pieza (feed), no aquí.
     con_arte = sum(1 for p in piezas if not p["falta_imagen"])
     if arte_ia:
         arte_estado, arte_detalle = "ok", f"{con_arte}/{total}"
     elif qa_veredicto == QA_CADUCADA:
         arte_estado, arte_detalle = _ESTADO_SALTADA, "Caducada"
-    elif _arte_off(marca):
+    elif _ilustrar_off(marca):
         arte_estado, arte_detalle = _ESTADO_SALTADA, ""
     else:
         arte_estado, arte_detalle = "pendiente", ""
-    arte = {"clave": "arte", "nombre": "Arte", "estado": arte_estado, "detalle": arte_detalle, "ts": ""}
+    arte = {"clave": "ilustrar", "nombre": "Ilustrar", "estado": arte_estado, "detalle": arte_detalle, "ts": ""}
 
-    # --- Aprobación: del estado de las piezas (revisión humana en la parrilla). ---------
+    # --- Aprobar: del estado de las piezas (revisión humana en la parrilla). ---------
     aprobadas = sum(1 for p in piezas if p["estado"] in _ESTADOS_APROBADOS)
     en_curso = any(p["estado"] in _ESTADOS_EN_CURSO for p in piezas)
     if total and aprobadas == total:
@@ -266,7 +266,7 @@ def _etapas_de_run(
     else:
         ap_estado, ap_detalle = "pendiente", ""
     aprobacion = {
-        "clave": "aprobacion", "nombre": "Aprobación", "estado": ap_estado,
+        "clave": "aprobar", "nombre": "Aprobar", "estado": ap_estado,
         "detalle": ap_detalle, "ts": actualizado if ap_estado == "ok" else "",
     }
 
@@ -280,7 +280,7 @@ def _estado_global(etapas: list[dict]) -> str:
     """Estado global de la run: 'fallo' si alguna etapa falló; si no, la primera no-{ok,saltada}.
 
     Una etapa 'saltada' (toggle off para la marca) NO bloquea ni cuenta como fallo: se trata como
-    'ok' a efectos de avance, así un run con QA saltada y todo lo demás ok queda 'ok'.
+    'ok' a efectos de avance, así un run con Verificar saltada y todo lo demás ok queda 'ok'.
     """
     for etapa in etapas:
         if etapa["estado"] == "fallo":
@@ -320,10 +320,10 @@ def _run_de(
     placa, observaciones, traza de revisión) para mostrar todo lo ocurrido por etapa. En la
     LISTA basta la reducida. Las ETAPAS se derivan SIEMPRE de la forma reducida (mismos campos).
     `cluster`: la HISTORIA de la que nació el tema (None si no nació de una); alimenta la etapa
-    Jerarquización y el bloque `cluster` (procedencia IA: corroboración, fusión, score).
+    Priorizar y el bloque `cluster` (procedencia IA: corroboración, fusionar, score).
     `metricas`: suma de las generaciones correlacionadas a la run (items/tokens/coste/duración);
     None cae a ceros (forma estable). `pool_fusion`/`pool_editorial`: evidencia de que la IA del
-    pool corrió para la marca (pinta Fusión/Editorial sin historia como corridas, no saltadas).
+    pool corrió para la marca (pinta Fusionar/Priorizar sin historia como corridas, no saltadas).
     """
     base = [_pieza_de(p) for p in piezas_plat]
     etapas = _etapas_de_run(
@@ -331,7 +331,7 @@ def _run_de(
         pool_fusion=pool_fusion, pool_editorial=pool_editorial, arte_ia=arte_ia,
     )
     marca = item.get("marca", "") or ""
-    # `origen` real de la pieza padre (la fuente RSS que la ingirió): contexto de la etapa CI.
+    # `origen` real de la pieza padre (la fuente RSS que la recolectó): contexto de la etapa Admitir.
     return {
         "clase": "run",
         "id": item.get("id", ""),
@@ -346,9 +346,9 @@ def _run_de(
         # Etapa donde la run está «parada» (para el filtro `?etapa=` y el resaltado en la UI).
         "etapa_actual": _etapa_actual(etapas),
         "etapas": etapas,
-        # Criba de la fuente (⚠️/❗ + hallazgos): la señal de QA pre-copy del tema.
+        # Criba de la fuente (⚠️/❗ + hallazgos): la señal de Verificar pre-copy del tema.
         "qa_fuente": _qa_fuente_de(item),
-        # Procedencia IA del tema (historia/cluster): None si se creó a mano o pre-ranking.
+        # Procedencia IA del tema (historia/cluster): None si se creó a mano o pre-priorización.
         "cluster": _cluster_publico(cluster),
         # Coste real de la run: la suma de sus generaciones (`contenido_id` correlacionado).
         "metricas": metricas or dict(_METRICAS_CERO),

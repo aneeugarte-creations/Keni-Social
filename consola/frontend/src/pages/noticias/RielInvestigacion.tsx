@@ -1,21 +1,22 @@
 /**
  * RielInvestigacion — la fase de ANTES (en el flujo) del proceso de Investigación, hecho visible.
  *
- * Es la mitad AUTOMÁTICA e INFORMATIVA del flujo: una tira horizontal de las cinco etapas que
- * la máquina corre sola (Ingesta · Fusión · Clasificación · Ranking · Verificación) con su
- * estado ON/OFF. NO es la tira de control (esa es «Pipeline en vivo», con switches por etapa);
- * aquí solo se LEE qué hace el motor y si está encendido. El nombre evita chocar con la «línea de
- * la máquina» de la Biblioteca (`pages/texto/RielMaquina`, que son etapas de PROMPT, no de
- * noticias): este es el riel de INGESTA de noticias.
+ * Es la mitad AUTOMÁTICA e INFORMATIVA del flujo: una tira horizontal del flujo COMPLETO que
+ * la máquina corre sola (Recolectar · Agrupar · Fusionar · Traducir · Clasificar · Priorizar ·
+ * Admitir · Verificar) con su estado ON/OFF y su tipo (🤖 LLM / ⚙ determinista). NO es la tira de
+ * control (esa es «Pipeline en vivo», con switches por etapa); aquí solo se LEE qué hace el motor
+ * y si está encendido. El nombre evita chocar con el «riel de la máquina» de la Biblioteca
+ * (`pages/texto/RielMaquina`, que son etapas de PROMPT, no de noticias): este es el riel de
+ * recolección de noticias.
  *
  * El estado se lee del catálogo de ajustes (`GET /api/ajustes`, solo admin) por la `clave` de
  * cada flag físico, con el maestro VIRTUAL «Investigación» (`KENI_INVESTIGACION`) como respaldo
- * para las etapas sin flag propio (Fusión/Clasificación/Ranking). Los toggles reales viven en
+ * para las etapas sin flag propio (Agrupar/Traducir/Admitir). Los toggles reales viven en
  * «Pipeline en vivo» (control) y en el drawer de ajustes del motor. El lápiz de cada etapa con
  * prompt abre su documento de la Biblioteca en un OVERLAY (in-place, sin salir del cockpit).
  */
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { Bot, ChevronDown, ChevronRight, Cog } from "lucide-react";
 import * as React from "react";
 
 import { EditorPromptOverlay } from "@/components/biblioteca/EditorPromptOverlay";
@@ -36,6 +37,8 @@ type EstadoEtapa = "on" | "off" | "desconocido";
 interface EtapaProceso {
   /** Nombre legible de la etapa. */
   nombre: string;
+  /** Tipo de la etapa: 🤖 (LLM) si es IA, ⚙ (determinista) si no. */
+  es_ia: boolean;
   /** Claves del catálogo a consultar EN ORDEN; la primera presente decide el estado. */
   claves: readonly string[];
   /** Qué hace la etapa (tooltip). */
@@ -44,37 +47,61 @@ interface EtapaProceso {
   doc?: string;
 }
 
-// Las cinco etapas del tramo aguas arriba (ADR 0011), en orden de flujo. Cada una resuelve su
-// estado por su flag físico y, si el catálogo no lo expone, cae al maestro `KENI_INVESTIGACION`.
+// El flujo COMPLETO del tramo aguas arriba (ADR 0011), en orden. Cada etapa resuelve su estado
+// por su flag físico y, si el catálogo no lo expone, cae al maestro `KENI_INVESTIGACION`.
 const ETAPAS: readonly EtapaProceso[] = [
   {
-    nombre: "Ingesta",
-    claves: ["KENI_PIPELINE_SELECCION", MAESTRO_INVESTIGACION],
+    nombre: "Recolectar",
+    es_ia: false,
+    claves: ["KENI_PIPELINE_RECOLECTAR", MAESTRO_INVESTIGACION],
     ayuda: "Recolecta artículos de las fuentes",
   },
   {
-    nombre: "Fusión",
-    claves: ["KENI_PIPELINE_FUSION", MAESTRO_INVESTIGACION],
-    ayuda: "Agrupa en un solo cluster las notas del mismo evento",
-    doc: "prompt/fusion",
+    nombre: "Agrupar",
+    es_ia: false,
+    claves: ["KENI_PIPELINE_RECOLECTAR", MAESTRO_INVESTIGACION],
+    ayuda: "Agrupa las notas parecidas del mismo evento",
   },
   {
-    nombre: "Clasificación",
+    nombre: "Fusionar",
+    es_ia: true,
+    claves: ["KENI_PIPELINE_FUSIONAR", MAESTRO_INVESTIGACION],
+    ayuda: "Funde las notas agrupadas en una sola historia",
+    doc: "prompt/fusionar",
+  },
+  {
+    nombre: "Traducir",
+    es_ia: true,
+    claves: [MAESTRO_INVESTIGACION],
+    ayuda: "Adapta el texto al español de México",
+    doc: "prompt/traducir",
+  },
+  {
+    nombre: "Clasificar",
+    es_ia: true,
     claves: ["KENI_CLASIFICAR_MARCA_IA", MAESTRO_INVESTIGACION],
     ayuda: "Asigna marca a las notas de últimas horas",
-    doc: "prompt/clasificacion-marca",
+    doc: "prompt/clasificar-marca",
   },
   {
-    nombre: "Ranking",
-    claves: ["KENI_RANKING_PERFIL_IA", MAESTRO_INVESTIGACION],
+    nombre: "Priorizar",
+    es_ia: true,
+    claves: ["KENI_PRIORIZAR_PERFIL_IA", MAESTRO_INVESTIGACION],
     ayuda: "Ordena por relevancia para tu marca",
-    doc: "prompt/editorial",
+    doc: "prompt/priorizar",
   },
   {
-    nombre: "Verificación",
-    claves: ["KENI_PIPELINE_VALIDACION", MAESTRO_INVESTIGACION],
+    nombre: "Admitir",
+    es_ia: false,
+    claves: [MAESTRO_INVESTIGACION],
+    ayuda: "Crea el tema admitido en la mesa de redacción",
+  },
+  {
+    nombre: "Verificar",
+    es_ia: true,
+    claves: ["KENI_PIPELINE_VERIFICAR", MAESTRO_INVESTIGACION],
     ayuda: "Contrasta las fuentes antes de pasar a la mesa",
-    doc: "prompt/validacion",
+    doc: "prompt/verificar",
   },
 ] as const;
 
@@ -130,10 +157,10 @@ export function RielInvestigacion() {
     estado === "on" ? "activa" : estado === "off" ? "apagada" : "estado no disponible";
 
   return (
-    <section aria-label="Aguas arriba: ingesta automática de noticias" data-testid="riel-investigacion">
+    <section aria-label="Aguas arriba: recolección automática de noticias" data-testid="riel-investigacion">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Aguas arriba · ingesta automática
+          Aguas arriba · recolección automática
         </h3>
         {/* El estado del loop (jobs en curso/cola) cabe aquí, como indicador de la fase —no como
             una «vista» aparte—; enlaza a Agentes prefiltrado. */}
@@ -153,7 +180,7 @@ export function RielInvestigacion() {
               <Tooltip label={`${etapa.ayuda} (${etiquetaEstado(estado)})`} side="top">
                 {/* La BURBUJA es el botón: si la etapa tiene prompt (y eres admin), tocarla edita
                     su documento IN-PLACE (overlay), sin lápiz suelto. El borde vira a naranja al
-                    hover como pista. Las etapas mecánicas (Ingesta) no son clicables. */}
+                    hover como pista. Las etapas mecánicas (Recolectar) no son clicables. */}
                 {esAdmin && etapa.doc ? (
                   <button
                     type="button"
@@ -164,6 +191,11 @@ export function RielInvestigacion() {
                     className="flex cursor-pointer items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm shadow-sm transition-colors hover:border-keni-300 focus-visible:border-keni-300 focus-visible:outline-none"
                   >
                     <Punto estado={estado} />
+                    {etapa.es_ia ? (
+                      <Bot className="h-3.5 w-3.5 shrink-0" aria-label="IA" />
+                    ) : (
+                      <Cog className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-label="determinista" />
+                    )}
                     <span className="font-medium leading-none">{etapa.nombre}</span>
                   </button>
                 ) : (
@@ -173,6 +205,11 @@ export function RielInvestigacion() {
                     data-estado={estado}
                   >
                     <Punto estado={estado} />
+                    {etapa.es_ia ? (
+                      <Bot className="h-3.5 w-3.5 shrink-0" aria-label="IA" />
+                    ) : (
+                      <Cog className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-label="determinista" />
+                    )}
                     <span className="font-medium leading-none">{etapa.nombre}</span>
                   </div>
                 )}

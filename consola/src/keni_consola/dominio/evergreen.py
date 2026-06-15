@@ -1,4 +1,4 @@
-"""Taller EVERGREEN / brainstorming: lanzar la PROPUESTA de ideas evergreen + su post-procesado.
+"""Ideación EVERGREEN / brainstorming: lanzar la PROPUESTA de ideas evergreen + su post-procesado.
 
 CONCEPTO: la IA NO genera contenido evergreen a ciegas. PROPONE una lista de IDEAS; una
 persona las APRUEBA o las DESCARTA; y solo para las aprobadas se genera la pieza
@@ -31,7 +31,7 @@ from . import generar
 _log = logging.getLogger("keni_consola.evergreen")
 
 # Prompt semilla que pide N ideas evergreen como JSON. Viaja en la texto semilla.
-PROMPT_BRAINSTORMING = "prompt/evergreen"
+PROMPT_BRAINSTORMING = "prompt/idear"
 
 # Topes defensivos: cuantas ideas importamos de una salida y longitudes maximas por campo.
 MAX_IDEAS = 10
@@ -155,7 +155,7 @@ def lanzar_propuesta(
 
 
 def construir_procesar_evergreen_ideas(*, marca: str, generacion_id: str = ""):  # noqa: ANN201
-    """Devuelve el callback `procesar(salida, metricas) -> dict` del taller EVERGREEN (worker).
+    """Devuelve el callback `procesar(salida, metricas) -> dict` de la Ideación EVERGREEN (worker).
 
     Parsea la salida de claude y crea una fila `evergreen_ideas` por cada idea (estado `propuesta`,
     origen `ia`, enlazada a `generacion_id`). Devuelve un resumen `{ideas, ids}` para el registro.
@@ -176,7 +176,7 @@ def construir_procesar_evergreen_ideas(*, marca: str, generacion_id: str = ""): 
             )
             ids.append(fila["id"])
         if not ids:
-            _log.info("taller evergreen: claude no devolvió ideas legibles (marca=%s)", marca)
+            _log.info("ideación evergreen: claude no devolvió ideas legibles (marca=%s)", marca)
         return {"ideas": len(ids), "ids": ids}
 
     return procesar

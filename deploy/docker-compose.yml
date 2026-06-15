@@ -322,8 +322,8 @@ services:
     # `python -m keni_consola.daemons`: refresco de metricas (cuenta + por pieza), alertas de
     # rendimiento/reciclaje, scanner de vencimientos, captura comercial, programador (DRY-RUN
     # salvo KENI_PUBLICAR_REAL), auto-promocion del Radar (solo con KENI_RADAR_AUTO) y la
-    # MÁQUINA DE CONTENIDO (Flujo C): el pipeline (KENI_PIPELINE_COPY) ingiere del news-pool y, en sus
-    # etapas de copy y arte (KENI_PIPELINE_ARTE), lleva los temas a BORRADOR en la cola de revision.
+    # MÁQUINA DE CONTENIDO (Flujo C): el pipeline (KENI_PIPELINE_REDACTAR) ingiere del news-pool y, en sus
+    # etapas de Redactar e Ilustrar (KENI_PIPELINE_ILUSTRAR), lleva los temas a BORRADOR en la cola de revision.
     # NO publica ni aprueba contenido por su cuenta (la auto-produccion para en el gate humano); NO
     # publica puertos ni va por Traefik. Comparte Postgres + /data (donde viven las credenciales
     # Metricool y la clave del proveedor de imagen del auto-arte).
@@ -332,7 +332,7 @@ services:
     # semántica de historias, encaje editorial, traducción— corren `claude -p` SÍNCRONO dentro
     # de ESTE proceso (dominio.fusion_semantica/traduccion), no por la cola. Con la imagen del
     # back (sin Node/claude) fallaban TODOS los barridos con "El asistente (claude) no está
-    # disponible en el servidor" y la etapa de Fusión nunca corría en hosted. La imagen del
+    # disponible en el servidor" y la etapa de Fusionar nunca corría en hosted. La imagen del
     # worker trae claude + el entrypoint que carga el token desde /run/secrets.
     build:
       context: ..
@@ -399,9 +399,9 @@ services:
       # (avatar -> Configuración) o, si se prefiere fijar por entorno, descomentando los flags de
       # abajo. El maestro KENI_MAQUINA es el kill-switch global; cuelgan de él las 3 etapas:
       #   KENI_MAQUINA:       "1"   # interruptor general (sin él, NADA automático de contenido corre)
-      #   KENI_PIPELINE_SELECCION:       "1"   # «Crear noticias»: ingesta + clustering + traducción (siempre on)
-      #   KENI_PIPELINE_COPY:      "1"   # «Generar copy»: etapa de copy (único motor de copy)
-      #   KENI_PIPELINE_ARTE:  "1"   # «Generar arte»: etapa de arte (temas con copy sin imagen)
+      #   KENI_PIPELINE_RECOLECTAR:       "1"   # «Crear noticias»: Recolectar + Agrupar + Traducir (siempre on)
+      #   KENI_PIPELINE_REDACTAR:      "1"   # «Generar copy»: etapa de Redactar (único motor de copy)
+      #   KENI_PIPELINE_ILUSTRAR:  "1"   # «Generar arte»: etapa de Ilustrar (temas con copy sin imagen)
       # GATES DE SEGURIDAD: ausentes por defecto. Sin estos, el sistema NO publica ni crea
       # contenido solo. Activar SOLO con decision explicita (ver deploy/README.md §Validacion):
       #   KENI_RADAR_AUTO:    "1"   # auto-promueve temas del Radar (def: solo bandeja revisable)
@@ -410,7 +410,7 @@ services:
       # para en la cola de revision; nada sale a redes sin que el humano lo autorice. Los flags
       # también se encienden EN CALIENTE desde el store editable (/data/ajustes.toml), sin
       # reiniciar el contenedor (store > env > defecto).
-      # ENRIQUECER LA NOTA: con esto, antes de generar copy la ingesta DESCARGA el cuerpo del
+      # ENRIQUECER LA NOTA: con esto, antes de Redactar, Recolectar DESCARGA el cuerpo del
       # artículo (no solo el snippet RSS) y, en clusters, agrega el texto de CADA fuente. Da a
       # `claude -p` material real para sintetizar (clave en notas multi-fuente). Implica egress
       # del daemon a los medios; OFF por defecto. Encender por env (descomentar) o en caliente:

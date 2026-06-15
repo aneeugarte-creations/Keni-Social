@@ -16,23 +16,23 @@ def _store(monkeypatch, datos: dict[str, str]):
 
 def test_sin_override_no_esta_apagada(monkeypatch):
     _store(monkeypatch, {})
-    assert config.marca_apagada(config.ENV_PIPELINE_COPY, "claro-sports") is False
-    assert config.marca_apagada(config.ENV_PIPELINE_ARTE, "nacion-gamer") is False
+    assert config.marca_apagada(config.ENV_PIPELINE_REDACTAR, "claro-sports") is False
+    assert config.marca_apagada(config.ENV_PIPELINE_ILUSTRAR, "nacion-gamer") is False
 
 
 def test_override_falsy_apaga_la_marca(monkeypatch):
-    _store(monkeypatch, {config.clave_por_marca(config.ENV_PIPELINE_COPY, "nacion-gamer"): "0"})
-    assert config.marca_apagada(config.ENV_PIPELINE_COPY, "nacion-gamer") is True   # excluida
-    assert config.marca_apagada(config.ENV_PIPELINE_COPY, "claro-sports") is False  # sin override
+    _store(monkeypatch, {config.clave_por_marca(config.ENV_PIPELINE_REDACTAR, "nacion-gamer"): "0"})
+    assert config.marca_apagada(config.ENV_PIPELINE_REDACTAR, "nacion-gamer") is True   # excluida
+    assert config.marca_apagada(config.ENV_PIPELINE_REDACTAR, "claro-sports") is False  # sin override
 
 
 def test_override_truthy_no_apaga(monkeypatch):
-    _store(monkeypatch, {config.clave_por_marca(config.ENV_PIPELINE_ARTE, "claro-sports"): "1"})
-    assert config.marca_apagada(config.ENV_PIPELINE_ARTE, "claro-sports") is False
+    _store(monkeypatch, {config.clave_por_marca(config.ENV_PIPELINE_ILUSTRAR, "claro-sports"): "1"})
+    assert config.marca_apagada(config.ENV_PIPELINE_ILUSTRAR, "claro-sports") is False
 
 
 def test_clave_por_marca_formato():
-    assert config.clave_por_marca("KENI_PIPELINE_COPY", "unotv") == "KENI_PIPELINE_COPY::unotv"
+    assert config.clave_por_marca("KENI_PIPELINE_REDACTAR", "unotv") == "KENI_PIPELINE_REDACTAR::unotv"
 
 
 def test_catalogo_expone_toggles_por_marca():
@@ -42,9 +42,10 @@ def test_catalogo_expone_toggles_por_marca():
     # y el plan editorial diario (texto) en `noticias_produccion_marca`.
     assert config.clave_por_marca(config.ENV_INVESTIGACION, "nacion-gamer") in claves
     assert config.clave_por_marca(config.ENV_PRODUCCION, "nacion-gamer") in claves
-    assert config.clave_por_marca(config.ENV_PIPELINE_ARTE, "unotv") in claves
-    assert config.clave_por_marca(config.ENV_PIPELINE_COPY, "unotv") not in claves
-    assert config.clave_por_marca(config.ENV_PIPELINE_SELECCION, "unotv") not in claves
+    assert config.clave_por_marca(config.ENV_PIPELINE_ILUSTRAR, "unotv") in claves
+    # Las etapas internas YA NO son toggles por marca (las agrupan los maestros).
+    assert config.clave_por_marca(config.ENV_PIPELINE_REDACTAR, "unotv") not in claves
+    assert config.clave_por_marca(config.ENV_PIPELINE_RECOLECTAR, "unotv") not in claves
     por_marca = [a for a in ajustes_catalogo.catalogo() if config.SEP_MARCA in a.clave]
     # Las excepciones de máquina por marca van REPARTIDAS por proceso (ADR 0011, C4):
     # Investigación en su grupo, Producción/Arte en el suyo.
@@ -89,17 +90,17 @@ def test_etapa_activa_es_la_fuente_unica(monkeypatch):
     daemon, vista Pipelines y catalogo de ajustes)."""
     # Maestro OFF: apagada para todas las marcas aunque no haya override.
     _store(monkeypatch, {})
-    monkeypatch.delenv(config.ENV_PIPELINE_COPY, raising=False)
-    assert config.etapa_activa(config.ENV_PIPELINE_COPY, "unotv") is False
+    monkeypatch.delenv(config.ENV_PIPELINE_REDACTAR, raising=False)
+    assert config.etapa_activa(config.ENV_PIPELINE_REDACTAR, "unotv") is False
 
     # Maestro ON sin override: activa.
-    monkeypatch.setenv(config.ENV_PIPELINE_COPY, "1")
-    assert config.etapa_activa(config.ENV_PIPELINE_COPY, "unotv") is True
+    monkeypatch.setenv(config.ENV_PIPELINE_REDACTAR, "1")
+    assert config.etapa_activa(config.ENV_PIPELINE_REDACTAR, "unotv") is True
 
     # Override falsy por marca: apagada SOLO para esa marca.
-    _store(monkeypatch, {config.clave_por_marca(config.ENV_PIPELINE_COPY, "unotv"): "0"})
-    assert config.etapa_activa(config.ENV_PIPELINE_COPY, "unotv") is False
-    assert config.etapa_activa(config.ENV_PIPELINE_COPY, "claro-sports") is True
+    _store(monkeypatch, {config.clave_por_marca(config.ENV_PIPELINE_REDACTAR, "unotv"): "0"})
+    assert config.etapa_activa(config.ENV_PIPELINE_REDACTAR, "unotv") is False
+    assert config.etapa_activa(config.ENV_PIPELINE_REDACTAR, "claro-sports") is True
 
 
 def test_etapa_global_activa_cubre_las_seis_etapas(monkeypatch):
@@ -107,8 +108,8 @@ def test_etapa_global_activa_cubre_las_seis_etapas(monkeypatch):
     # `etapa_global_activa` cubre solo las SEIS que sí se encienden/apagan.
     _store(monkeypatch, {})
     etapas = (
-        config.ENV_PIPELINE_FUSION, config.ENV_RANKING_PERFIL_IA, config.ENV_PIPELINE_SELECCION,
-        config.ENV_PIPELINE_VALIDACION, config.ENV_PIPELINE_COPY, config.ENV_PIPELINE_ARTE,
+        config.ENV_PIPELINE_FUSIONAR, config.ENV_PRIORIZAR_PERFIL_IA, config.ENV_PIPELINE_RECOLECTAR,
+        config.ENV_PIPELINE_VERIFICAR, config.ENV_PIPELINE_REDACTAR, config.ENV_PIPELINE_ILUSTRAR,
     )
     for env in etapas:
         monkeypatch.setenv(env, "1")

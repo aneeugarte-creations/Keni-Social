@@ -71,7 +71,7 @@ BARRIBLES = frozenset({
 # "Workers" del panel Sistema (el front agrupa por aquí en vez de hardcodear nombres).
 # Fuente única, igual que BARRIBLES. Cuatro grupos:
 #   - "investigacion": alimentan el motor de REUTILIZAR (descubrir/ingerir/validar fuentes).
-#   - "produccion":    el motor de CREAR borradores (copy+arte).
+#   - "produccion":    el motor de CREAR borradores (Redactar + Ilustrar).
 #   - "flujo":         actúan EN el flujo de publicación/comercial; NO gastan tokens claude.
 #   - "infra":         pura infraestructura (métricas, GC, alertas, reaper, patrones).
 # Un daemon registrado que NO esté en ningún conjunto cae a "infra" por defecto (ver
@@ -106,9 +106,9 @@ GASTA_TOKENS = frozenset({"investigacion", "produccion"})
 #   - `motor`:  "investigacion" | "produccion" | None. El loop de la máquina (ADR 0011) al que
 #               sirve el daemon; None para los de `sistema` (no pertenecen a ningún motor).
 # Verificado contra cada módulo (punto de partida editable; reclasifica aquí al añadir un daemon):
-#   - ia:  investigacion (loop de criba/QA -> motor investigacion), produccion (loop de copy/arte
+#   - ia:  investigacion (loop de criba/Verificar -> motor investigacion), produccion (loop de Redactar/Ilustrar
 #          -> motor produccion).
-#   - maquina/investigacion:  ingesta (admisión RSS), trends (Google Trends), algoritmos (feeds
+#   - maquina/investigacion:  ingesta (recolección RSS), trends (Google Trends), algoritmos (feeds
 #          de algoritmo), noticias_gc (poda el POOL de noticias que alimenta reutilizar).
 #   - maquina/produccion:     programador (publica la parrilla), vencimientos (escáner de eventos
 #          que dispara producción por caducidad).
@@ -151,7 +151,7 @@ def motor_de(daemon: str) -> str | None:
 # Sistema). Fuente única, igual que BARRIBLES/GRUPO_*. Cada valor es una clave REAL del
 # catálogo de ajustes (`ajustes_catalogo`) — un test lo verifica. Verificado contra el
 # `activo_fn` de cada `bucle_gateado` (ver daemons.py + cada módulo):
-#   - ingesta            -> KENI_PIPELINE_SELECCION   (ingesta_daemon/_bucle: ingesta_activa)
+#   - ingesta            -> KENI_PIPELINE_RECOLECTAR   (ingesta_daemon/_bucle: recolectar_activo)
 #   - trends             -> KENI_TRENDS               (trends_daemon: trends_activo)
 #   - algoritmos         -> KENI_ALGORITMOS_AUTO      (algoritmos_refresco: algoritmos_auto_activo)
 #   - media_gc           -> KENI_MEDIA_GC             (media_gc_daemon: media_gc_activo)
@@ -160,14 +160,14 @@ def motor_de(daemon: str) -> str | None:
 #   - alertas_rendimiento-> KENI_ALERTAS_RENDIMIENTO  (alertas_rendimiento_activas)
 #   - vencimientos       -> KENI_EVENTOS_VENCIMIENTOS (eventos_scanner: eventos_vencimientos_activos)
 #   - investigacion      -> KENI_MAQUINA   (loop pipeline: gate_maquina(alguna_etapa_investigacion_activa);
-#                                           su on/off real son varias claves de etapa —Selección/Validación—
+#                                           su on/off real son varias claves de etapa —Recolectar/Verificar—
 #                                           sin una clave propia, así que el toggle de fila usa el MAESTRO)
 #   - produccion         -> KENI_MAQUINA   (loop pipeline: gate_maquina(alguna_etapa_produccion_activa),
 #                                           que siempre es True bajo la máquina => su único interruptor es el MAESTRO)
 # Los gateados de máquina (ingesta/trends/algoritmos) corren además bajo
 # KENI_MAQUINA (AND), pero el toggle de SU fila gobierna su flag PROPIO; el maestro es otra fila.
 CLAVE_GATE = {
-    "ingesta": "KENI_PIPELINE_SELECCION",
+    "ingesta": "KENI_PIPELINE_RECOLECTAR",
     "trends": "KENI_TRENDS",
     "algoritmos": "KENI_ALGORITMOS_AUTO",
     "media_gc": "KENI_MEDIA_GC",

@@ -157,15 +157,15 @@ def test_barrido_sin_feeds_vencidos_corre_los_pasos_post_rss(monkeypatch):
     llamados: list[str] = []
     monkeypatch.setattr(ingesta_daemon, "paso_agencias",
                         lambda: llamados.append("agencias") or {"items": 0})
-    monkeypatch.setattr(ingesta_daemon, "paso_clustering",
+    monkeypatch.setattr(ingesta_daemon, "paso_agrupar",
                         lambda: llamados.append("clustering") or {"items": 0, "clusters_nuevos": 0})
     monkeypatch.setattr(ingesta_daemon, "paso_merge_lexico",
                         lambda *a, **k: llamados.append("merge") or {"grupos": 0, "fusionadas": 0})
     monkeypatch.setattr(ingesta_daemon, "paso_rescore",
                         lambda *a, **k: llamados.append("rescore") or {"revisados": 0, "actualizados": 0})
-    monkeypatch.setattr(ingesta_daemon, "paso_fusion_semantica",
+    monkeypatch.setattr(ingesta_daemon, "paso_fusionar_semantica",
                         lambda **k: llamados.append("fusion") or {"grupos": 0, "fusionadas": 0})
-    monkeypatch.setattr(ingesta_daemon, "paso_traduccion",
+    monkeypatch.setattr(ingesta_daemon, "paso_traducir",
                         lambda: llamados.append("traduccion") or {"traducidos": 0, "candidatos": 0})
 
     resumen = ingesta_daemon.ejecutar_barrido()
@@ -192,7 +192,7 @@ def test_barrido_respeta_single_flight(monkeypatch):
 
 
 def test_barrido_salta_feeds_de_marca_apagada(monkeypatch):
-    """Excepción por marca de KENI_PIPELINE_SELECCION: el feed de una marca apagada se salta; el feed
+    """Excepción por marca de KENI_PIPELINE_RECOLECTAR: el feed de una marca apagada se salta; el feed
     COMPARTIDO (marca vacía) y el de una marca permitida sí se sondean."""
     feed_apagado = {"id": "off", "nombre": "Off", "url": "https://93.184.216.34/a",
                     "categoria": "mx", "marca": "nacion-gamer", "errores_seguidos": 0}
@@ -200,8 +200,8 @@ def test_barrido_salta_feeds_de_marca_apagada(monkeypatch):
                       "categoria": "mx", "marca": "claro-sports", "errores_seguidos": 0}
     feed_compartido = {"id": "shared", "nombre": "Shared", "url": "https://93.184.216.34/c",
                        "categoria": "mx", "marca": "", "errores_seguidos": 0}
-    # Override falsy de KENI_PIPELINE_SELECCION solo para nacion-gamer -> esa marca queda apagada.
-    overrides = {config.clave_por_marca(config.ENV_PIPELINE_SELECCION, "nacion-gamer"): "0"}
+    # Override falsy de KENI_PIPELINE_RECOLECTAR solo para nacion-gamer -> esa marca queda apagada.
+    overrides = {config.clave_por_marca(config.ENV_PIPELINE_RECOLECTAR, "nacion-gamer"): "0"}
     monkeypatch.setattr("keni_consola.ajustes.obtener", lambda clave: overrides.get(clave))
 
     registrados = []
@@ -210,8 +210,8 @@ def test_barrido_salta_feeds_de_marca_apagada(monkeypatch):
     monkeypatch.setattr(ingesta_daemon.repos, "crear_noticias_items", lambda items: len(items))
     monkeypatch.setattr(ingesta_daemon.repos, "registrar_sondeo_feed",
                         lambda fid, **kw: registrados.append(fid))
-    monkeypatch.setattr(ingesta_daemon, "paso_clustering", lambda: {"items": 0, "clusters_nuevos": 0})
-    monkeypatch.setattr(ingesta_daemon, "paso_traduccion", lambda: {"traducidos": 0, "candidatos": 0})
+    monkeypatch.setattr(ingesta_daemon, "paso_agrupar", lambda: {"items": 0, "clusters_nuevos": 0})
+    monkeypatch.setattr(ingesta_daemon, "paso_traducir", lambda: {"traducidos": 0, "candidatos": 0})
 
     resumen = ingesta_daemon.ejecutar_barrido()
     # El feed apagado NO se sondea; el permitido y el compartido sí.
@@ -238,8 +238,8 @@ def test_barrido_aplaza_feeds_fuera_del_plan(monkeypatch):
     monkeypatch.setattr(ingesta_daemon.repos, "crear_noticias_items", lambda items: len(items))
     monkeypatch.setattr(ingesta_daemon.repos, "registrar_sondeo_feed",
                         lambda fid, **kw: registrados.setdefault(fid, kw))
-    monkeypatch.setattr(ingesta_daemon, "paso_clustering", lambda: {"items": 0, "clusters_nuevos": 0})
-    monkeypatch.setattr(ingesta_daemon, "paso_traduccion", lambda: {"traducidos": 0, "candidatos": 0})
+    monkeypatch.setattr(ingesta_daemon, "paso_agrupar", lambda: {"items": 0, "clusters_nuevos": 0})
+    monkeypatch.setattr(ingesta_daemon, "paso_traducir", lambda: {"traducidos": 0, "candidatos": 0})
 
     resumen = ingesta_daemon.ejecutar_barrido()
 
@@ -265,8 +265,8 @@ def _parchear_filtro(monkeypatch, *, feeds, fetcher):
     _parchear_comun(monkeypatch, feeds=feeds, fetcher=fetcher)
     monkeypatch.setenv(config.ENV_INGESTA_FILTRO, "1")
     # Sin estos pasos (sin BD aquí), el barrido se queda en la mecánica de ingesta.
-    monkeypatch.setattr(ingesta_daemon, "paso_clustering", lambda: {"items": 0, "clusters_nuevos": 0})
-    monkeypatch.setattr(ingesta_daemon, "paso_traduccion", lambda: {"traducidos": 0, "candidatos": 0})
+    monkeypatch.setattr(ingesta_daemon, "paso_agrupar", lambda: {"items": 0, "clusters_nuevos": 0})
+    monkeypatch.setattr(ingesta_daemon, "paso_traducir", lambda: {"traducidos": 0, "candidatos": 0})
 
 
 def test_filtro_entrada_descarta_lo_que_no_casa_la_agenda(monkeypatch):
@@ -356,8 +356,8 @@ def test_barrido_auto_desactiva_feed_al_alcanzar_max_errores(monkeypatch):
     monkeypatch.setattr(ingesta_daemon.repos, "registrar_sondeo_feed",
                         lambda fid, **kw: registrados.append((fid, kw)))
     # Aislar clustering/traducción (no relevantes aquí; sin BD).
-    monkeypatch.setattr(ingesta_daemon, "paso_clustering", lambda: {"items": 0, "clusters_nuevos": 0})
-    monkeypatch.setattr(ingesta_daemon, "paso_traduccion", lambda: {"traducidos": 0, "candidatos": 0})
+    monkeypatch.setattr(ingesta_daemon, "paso_agrupar", lambda: {"items": 0, "clusters_nuevos": 0})
+    monkeypatch.setattr(ingesta_daemon, "paso_traducir", lambda: {"traducidos": 0, "candidatos": 0})
 
     resumen = ingesta_daemon.ejecutar_barrido()
     assert resumen["auto_desactivados"] == 1
@@ -376,8 +376,8 @@ def test_barrido_no_desactiva_antes_del_umbral(monkeypatch):
     monkeypatch.setattr(ingesta_daemon.repos, "crear_noticias_items", lambda items: len(items))
     monkeypatch.setattr(ingesta_daemon.repos, "registrar_sondeo_feed",
                         lambda fid, **kw: registrados.append((fid, kw)))
-    monkeypatch.setattr(ingesta_daemon, "paso_clustering", lambda: {"items": 0, "clusters_nuevos": 0})
-    monkeypatch.setattr(ingesta_daemon, "paso_traduccion", lambda: {"traducidos": 0, "candidatos": 0})
+    monkeypatch.setattr(ingesta_daemon, "paso_agrupar", lambda: {"items": 0, "clusters_nuevos": 0})
+    monkeypatch.setattr(ingesta_daemon, "paso_traducir", lambda: {"traducidos": 0, "candidatos": 0})
 
     resumen = ingesta_daemon.ejecutar_barrido()
     # Un solo error (< umbral): NO se desactiva; no se toca `activo`.
@@ -397,8 +397,8 @@ def test_barrido_reactiva_feed_auto_desactivado_al_recuperarse(monkeypatch):
     monkeypatch.setattr(ingesta_daemon.repos, "crear_noticias_items", lambda items: len(items))
     monkeypatch.setattr(ingesta_daemon.repos, "registrar_sondeo_feed",
                         lambda fid, **kw: registrados.append((fid, kw)))
-    monkeypatch.setattr(ingesta_daemon, "paso_clustering", lambda: {"items": 0, "clusters_nuevos": 0})
-    monkeypatch.setattr(ingesta_daemon, "paso_traduccion", lambda: {"traducidos": 0, "candidatos": 0})
+    monkeypatch.setattr(ingesta_daemon, "paso_agrupar", lambda: {"items": 0, "clusters_nuevos": 0})
+    monkeypatch.setattr(ingesta_daemon, "paso_traducir", lambda: {"traducidos": 0, "candidatos": 0})
 
     ingesta_daemon.ejecutar_barrido()
     _fid, kw = registrados[0]
@@ -412,7 +412,7 @@ def test_barrido_reactiva_feed_auto_desactivado_al_recuperarse(monkeypatch):
 # --------------------------------------------------------------------------- #
 
 
-def test_paso_traduccion_marca_clusters_y_guarda_es(monkeypatch):
+def test_paso_traducir_marca_clusters_y_guarda_es(monkeypatch):
     candidatos = [
         {"id": "c1", "titulo": "Foreign one", "resumen": "Body one", "idioma": "en"},
         {"id": "c2", "titulo": "Foreign two", "resumen": "Body two", "idioma": "fr"},
@@ -435,7 +435,7 @@ def test_paso_traduccion_marca_clusters_y_guarda_es(monkeypatch):
             for it in items
         ]})
 
-    resumen = ingesta_daemon.paso_traduccion(ejecutor=_ejecutor_ok)
+    resumen = ingesta_daemon.paso_traducir(ejecutor=_ejecutor_ok)
     assert resumen == {"traducidos": 2, "candidatos": 2}
     por_id = dict(guardados)
     assert por_id["c1"]["titulo_es"] == "ES Foreign one"
@@ -443,13 +443,13 @@ def test_paso_traduccion_marca_clusters_y_guarda_es(monkeypatch):
     assert por_id["c2"]["resumen_es"] == "ES Body two"
 
 
-def test_paso_traduccion_sin_candidatos_no_hace_nada(monkeypatch):
+def test_paso_traducir_sin_candidatos_no_hace_nada(monkeypatch):
     monkeypatch.setattr(ingesta_daemon.repos, "clusters_extranjeros_sin_traducir",
                         lambda ventana_h, **kw: [])
     def _no_guardar(*a, **k):  # noqa: ANN002, ANN003
         raise AssertionError("no debería guardar sin candidatos")
     monkeypatch.setattr(ingesta_daemon.repos, "marcar_cluster_traducido", _no_guardar)
-    assert ingesta_daemon.paso_traduccion() == {"traducidos": 0, "candidatos": 0}
+    assert ingesta_daemon.paso_traducir() == {"traducidos": 0, "candidatos": 0}
 
 
 # --------------------------------------------------------------------------- #
@@ -508,8 +508,8 @@ def test_barrido_ingiere_agencias_y_suma_a_items_nuevos(monkeypatch):
     monkeypatch.setattr(ingesta_daemon.repos, "crear_noticias_items",
                         lambda items: persistidos.extend(items) or len(items))
     monkeypatch.setattr(ingesta_daemon.repos, "registrar_sondeo_feed", lambda fid, **kw: None)
-    monkeypatch.setattr(ingesta_daemon, "paso_clustering", lambda: {"items": 0, "clusters_nuevos": 0})
-    monkeypatch.setattr(ingesta_daemon, "paso_traduccion", lambda: {"traducidos": 0, "candidatos": 0})
+    monkeypatch.setattr(ingesta_daemon, "paso_agrupar", lambda: {"items": 0, "clusters_nuevos": 0})
+    monkeypatch.setattr(ingesta_daemon, "paso_traducir", lambda: {"traducidos": 0, "candidatos": 0})
     monkeypatch.setattr(ingesta_daemon.agencias, "traer_items",
                         lambda ag: [{"titulo": "Ag", "resumen": "", "enlace": f"https://{ag}/1", "fecha": "", "fuente": ag.upper(), "clave": f"https://{ag}/1"}] if ag == "reuters" else [])
 
@@ -526,8 +526,8 @@ def test_barrido_no_aborta_si_paso_agencias_revienta(monkeypatch):
     _parchear_comun(monkeypatch, feeds=[feed], fetcher=lambda _u: _FEED_OK)
     monkeypatch.setattr(ingesta_daemon.repos, "crear_noticias_items", lambda items: len(items))
     monkeypatch.setattr(ingesta_daemon.repos, "registrar_sondeo_feed", lambda fid, **kw: None)
-    monkeypatch.setattr(ingesta_daemon, "paso_clustering", lambda: {"items": 0, "clusters_nuevos": 0})
-    monkeypatch.setattr(ingesta_daemon, "paso_traduccion", lambda: {"traducidos": 0, "candidatos": 0})
+    monkeypatch.setattr(ingesta_daemon, "paso_agrupar", lambda: {"items": 0, "clusters_nuevos": 0})
+    monkeypatch.setattr(ingesta_daemon, "paso_traducir", lambda: {"traducidos": 0, "candidatos": 0})
     def _revienta():
         raise RuntimeError("boom")
     monkeypatch.setattr(ingesta_daemon, "paso_agencias", _revienta)
@@ -543,9 +543,9 @@ def test_barrido_no_aborta_si_paso_agencias_revienta(monkeypatch):
 # --------------------------------------------------------------------------- #
 
 
-def test_paso_fusion_semantica_registra_actividad_ia(monkeypatch):
+def test_paso_fusionar_semantica_registra_actividad_ia(monkeypatch):
     """Al fundir, sella `noticias-ia` con el Haiku REAL (prompt + salida) + el resumen humano."""
-    monkeypatch.setattr(ingesta_daemon.config, "fusion_semantica_activa", lambda: True)
+    monkeypatch.setattr(ingesta_daemon.config, "fusionar_semantica_activo", lambda: True)
     recientes = [
         {"id": "c1", "titulo": "Remontada épica", "estado": "nuevo", "marca": "unotv"},
         {"id": "c2", "titulo": "Remontada increíble", "estado": "nuevo", "marca": "unotv"},
@@ -566,20 +566,20 @@ def test_paso_fusion_semantica_registra_actividad_ia(monkeypatch):
             registradas.append((marca, etiqueta, salida, prompt)),
     )
 
-    resumen = ingesta_daemon.paso_fusion_semantica()
+    resumen = ingesta_daemon.paso_fusionar_semantica()
     assert resumen == {"grupos": 1, "fusionadas": 1}
     assert len(registradas) == 1
     marca, etiqueta, salida, prompt = registradas[0]
     assert marca == "unotv"
-    assert "Fusión de historias" in etiqueta
+    assert "Fusionar historias" in etiqueta
     assert prompt == "PROMPT-HAIKU-FUSION"  # el prompt REAL de Haiku
     assert '{"grupos"' in salida  # la salida REAL de Haiku
     assert "Remontada épica" in salida  # + el resumen humano de qué se unió
 
 
-def test_paso_fusion_semantica_sin_fusiones_no_registra(monkeypatch):
+def test_paso_fusionar_semantica_sin_fusiones_no_registra(monkeypatch):
     """Si Haiku no agrupa nada, no hay generación de actividad (sin ruido a 0)."""
-    monkeypatch.setattr(ingesta_daemon.config, "fusion_semantica_activa", lambda: True)
+    monkeypatch.setattr(ingesta_daemon.config, "fusionar_semantica_activo", lambda: True)
     recientes = [
         {"id": "c1", "titulo": "A", "estado": "nuevo", "marca": "unotv"},
         {"id": "c2", "titulo": "B", "estado": "nuevo", "marca": "unotv"},
@@ -591,16 +591,16 @@ def test_paso_fusion_semantica_sin_fusiones_no_registra(monkeypatch):
     monkeypatch.setattr(ingesta_daemon, "_registrar_actividad_ia",
                         lambda *a, **k: registradas.append(a))
 
-    assert ingesta_daemon.paso_fusion_semantica() == {"grupos": 0, "fusionadas": 0}
+    assert ingesta_daemon.paso_fusionar_semantica() == {"grupos": 0, "fusionadas": 0}
     assert registradas == []
 
 
 # --------------------------------------------------------------------------- #
-# paso_clustering: marca por vocabulario + durabilidad + escritura en lote     #
+# paso_agrupar: marca por vocabulario + durabilidad + escritura en lote     #
 # --------------------------------------------------------------------------- #
 
 
-def test_paso_clustering_asigna_marca_por_vocabulario_a_historia_solo_trends(monkeypatch):
+def test_paso_agrupar_asigna_marca_por_vocabulario_a_historia_solo_trends(monkeypatch):
     """Un cluster formado SOLO por items sin marca (Trends) acaba con marca asignada por
     vocabulario y, por tanto, SELECCIONABLE por la promoción por marca (antes quedaba con
     marca='' e invisible para todas)."""
@@ -614,7 +614,7 @@ def test_paso_clustering_asigna_marca_por_vocabulario_a_historia_solo_trends(mon
         "capturado_en": datetime.now(UTC).isoformat(),
     }
     eventos: list[tuple[str, object]] = []
-    monkeypatch.setattr(ingesta_daemon.config, "perfil_editorial_activo", lambda: False)
+    monkeypatch.setattr(ingesta_daemon.config, "priorizar_perfil_activo", lambda: False)
     monkeypatch.setattr(ingesta_daemon.config, "rendimiento_ranking_activo", lambda: False)
     monkeypatch.setattr(ingesta_daemon.repos, "limpiar_items_cluster_colgante", lambda: 0)
     monkeypatch.setattr(ingesta_daemon.repos, "items_sin_cluster", lambda desde, lim: [dict(item)])
@@ -627,7 +627,7 @@ def test_paso_clustering_asigna_marca_por_vocabulario_a_historia_solo_trends(mon
     monkeypatch.setattr(ingesta_daemon.repos, "asignar_cluster_items",
                         lambda asg: eventos.append(("asignar", dict(asg))))
 
-    resumen = ingesta_daemon.paso_clustering()
+    resumen = ingesta_daemon.paso_agrupar()
 
     assert resumen["items"] == 1
     assert resumen["clusters_nuevos"] == 1
@@ -655,7 +655,7 @@ def test_paso_rescore_baja_el_score_de_una_historia_vieja(monkeypatch):
         "ultimo_visto": (datetime.now(UTC) - timedelta(hours=60)).isoformat(),
         "score": 0.9,  # score persistido cuando era FRESCA (congelado desde entonces)
     }
-    monkeypatch.setattr(ingesta_daemon.config, "perfil_editorial_activo", lambda: False)
+    monkeypatch.setattr(ingesta_daemon.config, "priorizar_perfil_activo", lambda: False)
     monkeypatch.setattr(ingesta_daemon.config, "rendimiento_ranking_activo", lambda: False)
     guardados: list[dict] = []
     monkeypatch.setattr(ingesta_daemon.repos, "actualizar_scores_clusters",
@@ -770,7 +770,7 @@ def test_registrar_actividad_ia_sella_metricas_acumuladas(entorno):
     """El registro de actividad del pool sella las MÉTRICAS acumuladas por el ejecutor síncrono
     (tokens/coste/duración de las llamadas Haiku de ese paso) y la toma RESETEA: el siguiente
     registro sin llamadas sale sin métricas (no se duplica el coste). Antes estas generaciones
-    salían sin coste y las etapas Fusión/Editorial aparecían a cero en Producción."""
+    salían sin coste y las etapas Fusionar/Priorizar aparecían a cero en Producción."""
     import pytest
 
     from keni_consola import generaciones
@@ -781,11 +781,11 @@ def test_registrar_actividad_ia_sella_metricas_acumuladas(entorno):
         {"tokens_in": 100, "tokens_out": 40, "total_cost_usd": 0.0123, "duration_ms": 4200}
     )
     ingesta_daemon._registrar_actividad_ia(
-        "unotv", "Fusión de historias — UnoTV: 1 absorbida(s)", "SALIDA", prompt="PROMPT",
+        "unotv", "Fusionar historias — UnoTV: 1 absorbida(s)", "SALIDA", prompt="PROMPT",
     )
     gen = next(
         g for g in generaciones.listar(limite=None)
-        if (g.get("etiqueta") or "").startswith("Fusión")
+        if (g.get("etiqueta") or "").startswith("Fusionar")
     )
     m = gen.get("metricas") or {}
     assert m.get("tokens_in") == 100
@@ -793,9 +793,9 @@ def test_registrar_actividad_ia_sella_metricas_acumuladas(entorno):
     assert m.get("total_cost_usd") == pytest.approx(0.0123)
     assert m.get("duration_ms") == 4200
 
-    ingesta_daemon._registrar_actividad_ia("unotv", "Encaje editorial — UnoTV", "S2")
+    ingesta_daemon._registrar_actividad_ia("unotv", "Priorizar historias — UnoTV", "S2")
     gen2 = next(
         g for g in generaciones.listar(limite=None)
-        if (g.get("etiqueta") or "").startswith("Encaje")
+        if (g.get("etiqueta") or "").startswith("Priorizar")
     )
     assert not gen2.get("metricas")

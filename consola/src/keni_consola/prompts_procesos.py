@@ -14,36 +14,36 @@ from __future__ import annotations
 
 PROCESOS_POR_PROMPT: dict[str, list[str]] = {
     # Imagen
-    "prompt/arte": [
-        "Generación de imagen · directiva del generador (auto-arte del pipeline y botón «Generar con IA»)",
+    "prompt/ilustrar": [
+        "Generación de imagen · directiva del generador (etapa Ilustrar del pipeline y botón «Generar con IA»)",
     ],
-    # Insumos del día (buzón de cajones)
-    "prompt/insumos/portal": ["Buzón de insumos · cajón Portal/SMS"],
-    "prompt/insumos/corresponsales": ["Buzón de insumos · cajón Corresponsales"],
-    "prompt/insumos/reporteros": ["Buzón de insumos · cajón Reporteros"],
-    "prompt/insumos/eventos-claro": ["Buzón de insumos · cajón Eventos Claro Sports"],
-    "prompt/insumos/notas": ["Buzón de insumos · cajón Notas y links (Claro Sports)"],
-    "prompt/insumos/contexto": ["Buzón de insumos · cajón Indicaciones (Claro Sports)"],
+    # Recibir (cajones del día)
+    "prompt/recibir/portal": ["Recibir · cajón Portal/SMS"],
+    "prompt/recibir/corresponsales": ["Recibir · cajón Corresponsales"],
+    "prompt/recibir/reporteros": ["Recibir · cajón Reporteros"],
+    "prompt/recibir/eventos-claro": ["Recibir · cajón Eventos Claro Sports"],
+    "prompt/recibir/notas": ["Recibir · cajón Notas y links (Claro Sports)"],
+    "prompt/recibir/contexto": ["Recibir · cajón Indicaciones (Claro Sports)"],
     # Noticias / algoritmo
-    "prompt/traduccion": ["Ingesta de noticias · traducción/localización (MX)"],
-    "prompt/fusion": [
-        "Ingesta de noticias · fusión de historias del mismo evento",
+    "prompt/traducir": ["Recolectar noticias · Traducir (MX)"],
+    "prompt/fusionar": [
+        "Recolectar noticias · Fusionar historias del mismo evento",
     ],
-    "prompt/fusion-verificacion": [
-        "Ingesta de noticias · verificación de cada grupo propuesto antes de fundir",
+    "prompt/fusionar-verificar": [
+        "Recolectar noticias · Verificar cada grupo propuesto antes de fusionar",
     ],
-    "prompt/editorial": ["Investigación · ranking (perfil de keywords por marca)"],
-    "prompt/clasificacion-marca": ["Investigación · clasificación de marca"],
+    "prompt/priorizar": ["Investigación · Priorizar (perfil de keywords por marca)"],
+    "prompt/clasificar-marca": ["Investigación · Clasificar marca"],
     # Importación de documentos
     "prompt/importar/calendario": ["Importar calendario de contenido (documento → parrilla)"],
     "prompt/importar/parrilla": ["Importar rota/parrilla (documento → operaciones)"],
     # Pipeline de contenido
-    "prompt/validacion": ["Investigación · verificación de la fuente (antes del copy)"],
-    "prompt/copy": ["Producción · generación de copy desde la nota"],
+    "prompt/verificar": ["Investigación · Verificar la fuente (antes del copy)"],
+    "prompt/redactar": ["Producción · Redactar copy desde la nota"],
     "prompt/critica": [
-        "Aprobación · crítica IA con visión (vota el nivel «Crítica IA» antes de programar)",
+        "Aprobar · crítica IA con visión (vota el nivel «Crítica IA» antes de programar)",
     ],
-    "prompt/evergreen": ["Taller evergreen · brainstorming de ideas"],
+    "prompt/idear": ["Idear · brainstorming de ideas"],
     # Envoltorios del copy (instrucciones aditivas que `dominio.generar.componer` concatena
     # al prompt base; el código decide CUÁNDO se inyectan y rellena sus {{VARIABLES}}).
     "prompt/envoltorios/redes": [

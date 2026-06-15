@@ -131,9 +131,9 @@ def test_ledger_proceso_explicito(entorno):
 
 
 def test_hook_cierre_sella_proceso_investigacion(entorno):
-    # Una criba/validacion de fuente (tipo pipeline + etiqueta "Validación · …") -> investigacion.
+    # Una criba/verificacion de fuente (tipo pipeline + etiqueta "Verificar · …") -> investigacion.
     gen_id = generaciones.crear(
-        {"tipo": "pipeline", "marca": _MARCA, "etiqueta": "Validación · fuente"}
+        {"tipo": "pipeline", "marca": _MARCA, "etiqueta": "Verificar · fuente"}
     )["id"]
     _cerrar(gen_id, tokens_in=100, tokens_out=50, coste=0.1)
     assert _proceso_de_gasto(gen_id) == "investigacion"

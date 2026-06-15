@@ -115,7 +115,7 @@ def ejecutar_investigacion() -> dict[str, Any]:
 def ejecutar_produccion() -> dict[str, Any]:
     """Un TICK del proceso de PRODUCCIÓN: CD (copy) → arte → avance a revisión.
 
-    Genera copy SOLO de los temas verificados (`temas_para_copy`), los ilustra (etapa arte) y
+    Genera copy SOLO de los temas verificados (`temas_para_copy`), los ilustra (etapa Ilustrar) y
     avanza los borradores completos a la cola de revisión. Best-effort. Devuelve
     `{lanzados, artes, avances}`. Single-flight con su propio lock (`pipeline_produccion`):
     independiente del de investigación, así los dos loops nunca se serializan entre sí.
@@ -175,14 +175,14 @@ def _ejecutar_investigacion() -> dict[str, Any]:
     # --- Fase QA (criba de la FUENTE sobre la historia, pre-admisión). -----------------------
     cribados = ejecutar_qa_clusters(autor=autor)
     # --- Fase ADMISIÓN · "Crear noticias": materializa las historias YA VERIFICADAS por marca. -
-    # Etapa CI = toggle "Crear noticias" (`KENI_PIPELINE_SELECCION`): si está OFF no entra nada. La
+    # Etapa CI = toggle "Crear noticias" (`KENI_PIPELINE_RECOLECTAR`): si está OFF no entra nada. La
     # admisión consume el pool RANKEADO restringido a las verificadas (`no_verificado`/`saltada`),
     # llena el cupo en vuelo (gate serial WIP) y los cupos del plan/diario, y HEREDA el veredicto
     # del cluster al contenido (la pieza nace verificada y lista para copy).
     temas_nuevos: list[dict[str, Any]] = []
     for marca in marcas.ids():
         # FUENTE ÚNICA de verdad (config.etapa_activa): maestro global ON y marca no excluida.
-        if not config.etapa_activa(config.ENV_PIPELINE_SELECCION, marca):
+        if not config.etapa_activa(config.ENV_PIPELINE_RECOLECTAR, marca):
             continue
         # SERIAL POR MARCA: no metas más historias si esta marca ya tiene cola EN VUELO (sin copy).
         cupo = config.pipeline_en_vuelo_max() - _ingesta.temas_en_vuelo(marca)
@@ -229,7 +229,7 @@ def ejecutar_qa_clusters(*, autor: dict[str, str] | None = None) -> list[dict[st
     """Fase QA del proceso de INVESTIGACIÓN (ADR 0011 F3): criba la FUENTE de las HISTORIAS
     candidatas ANTES de materializar contenido.
 
-    Por marca con admisión activa (`KENI_PIPELINE_SELECCION`): toma las candidatas sin veredicto
+    Por marca con admisión activa (`KENI_PIPELINE_RECOLECTAR`): toma las candidatas sin veredicto
     que pasan el listón (`clusters_pendientes_qa`), acotadas por el presupuesto del EMBUDO
     (`tope en vuelo − embudo`) para no cribar todo el pool. Si la Validación está activa, lanza
     la criba `claude -p` y marca el cluster `en_curso` (asíncrona: el veredicto lo persiste el
@@ -245,7 +245,7 @@ def ejecutar_qa_clusters(*, autor: dict[str, str] | None = None) -> list[dict[st
     for marca in marcas.ids():
         # La QA solo tiene sentido si la admisión de la marca está activa (solo verificamos lo que
         # admitiríamos). El override por marca de Selección excluye la marca aquí también.
-        if not config.etapa_activa(config.ENV_PIPELINE_SELECCION, marca):
+        if not config.etapa_activa(config.ENV_PIPELINE_RECOLECTAR, marca):
             continue
         # PRESUPUESTO DEL EMBUDO: no cribes más de lo que cabe en vuelo (verificación acotada,
         # como la admisión). A medida que la admisión drena verificadas (pasan a `usado`), el
@@ -263,7 +263,7 @@ def ejecutar_qa_clusters(*, autor: dict[str, str] | None = None) -> list[dict[st
             continue
         # Validación OFF para la marca: se SALTA la criba; el cluster se marca `saltada` para que
         # la admisión lo promueva igual (sin verificar). Misma FUENTE ÚNICA (config.etapa_activa).
-        validacion_on = config.etapa_activa(config.ENV_PIPELINE_VALIDACION, marca)
+        validacion_on = config.etapa_activa(config.ENV_PIPELINE_VERIFICAR, marca)
         for cluster in pendientes:
             cid = (cluster.get("id") or "").strip()
             if not cid:
@@ -294,15 +294,15 @@ def _ejecutar_produccion() -> dict[str, Any]:
     autor = _ref._autor_pipeline()
     # --- Fase CD (copy) + Etapa ARTE + Etapa AVANCE. -----------------------------------------
     lanzados = ejecutar_cd(autor=autor)
-    # Etapa de arte (tras copy): ilustra los temas con copy y sin imagen. Gateada por su propio
-    # toggle "Generar arte" (KENI_PIPELINE_ARTE) + máquina; si está OFF, devuelve [].
+    # Etapa de Ilustrar (tras copy): ilustra los temas con copy y sin imagen. Gateada por su propio
+    # toggle "Generar arte" (KENI_PIPELINE_ILUSTRAR) + máquina; si está OFF, devuelve [].
     artes = ejecutar_arte()
     # Etapa de AVANCE (tras arte): los borradores COMPLETOS (copy + foto) entran solos a la
     # cola de revisión. Incondicional bajo el maestro KENI_MAQUINA (sin toggle propio).
     avances = ejecutar_avance()
     if lanzados or artes or avances:
         _log.info(
-            "producción: %d copy encolado(s) (CD), %d arte(s) (etapa arte), %d avance(s) (a revisión).",
+            "producción: %d copy encolado(s) (CD), %d arte(s) (etapa Ilustrar), %d avance(s) (a revisión).",
             len(lanzados), len(artes), len(avances),
         )
     return {"lanzados": lanzados, "artes": artes, "avances": avances}
@@ -323,10 +323,10 @@ def _ejecutar_barrido() -> dict[str, Any]:
 
 
 def ejecutar_cd(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
-    """Fase CD (etapa de copy): genera copy de los temas con QA `no_verificado` y sin copy aún,
+    """Fase CD (etapa de Redactar): genera copy de los temas con QA `no_verificado` y sin copy aún,
     Y de los temas del news-pool (orígenes de noticias) que aún no tienen copy.
 
-    DOS fuentes de temas, una sola ruta de copy (la etapa de copy es el ÚNICO motor):
+    DOS fuentes de temas, una sola ruta de copy (la etapa de Redactar es el ÚNICO motor):
       1) temas del propio pipeline (origen `pipeline`) cuya QA salió `no_verificado`
          (`temas_para_copy` → `lanzar_copy_de_tema`),
       2) temas que las FUENTES de noticias metieron al tablero sin copy
@@ -339,7 +339,7 @@ def ejecutar_cd(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
     """
     if autor is None:
         autor = _ref._autor_pipeline()
-    # Etapa CD = toggle "Generar copy" (`KENI_PIPELINE_COPY`), 1 toggle = 1 etapa: si el maestro está
+    # Etapa CD = toggle "Generar copy" (`KENI_PIPELINE_REDACTAR`), 1 toggle = 1 etapa: si el maestro está
     # OFF no se genera copy (aunque el daemon barra por otra etapa). Por marca se filtra abajo.
     if not config.pipeline_activo():
         return []
@@ -347,7 +347,7 @@ def ejecutar_cd(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
     for tema in temas_para_copy():
         # Exclusión por marca: no generamos copy de temas de una marca apagada a mano (aunque
         # ya estuvieran ingeridos antes de apagarla). Misma FUENTE ÚNICA que la vista/catálogo.
-        if not config.etapa_activa(config.ENV_PIPELINE_COPY, tema.get("marca") or ""):
+        if not config.etapa_activa(config.ENV_PIPELINE_REDACTAR, tema.get("marca") or ""):
             continue
         # Reintentos acotados: un copy fallido conserva `copy_pendiente` (dedup al éxito) y se
         # relanzaría cada tick para siempre; al agotar los intentos, salida TERMINAL (problema).
@@ -376,7 +376,7 @@ def ejecutar_cd(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
             # copy completó EN LÍNEA (tests síncronos), `copy_pendiente` ya se limpió y no anota.
             anotar_intento(tema, "cd_intentos")
             lanzados.append(gen)
-    # Fundido de la selección de autogen_copy: la etapa de copy también redacta los temas del
+    # Fundido de la selección de autogen_copy: la etapa de Redactar también redacta los temas del
     # news-pool/tablero (orígenes de noticias) que aún no tienen copy, vía el lanzador NEUTRO.
     from .. import autogen_copy
 
@@ -403,35 +403,35 @@ _UMBRAL_FALLO_ARTE = 0.5
 
 
 def ejecutar_arte() -> list[dict[str, Any]]:
-    """Etapa de ARTE del pipeline (tras copy): ilustra los temas con copy y sin imagen.
+    """Etapa de Ilustrar del pipeline (tras copy): ilustra los temas con copy y sin imagen.
 
-    Toggle "Generar arte" (`KENI_PIPELINE_ARTE`, gateado además por el maestro `KENI_MAQUINA`).
+    Toggle "Generar arte" (`KENI_PIPELINE_ILUSTRAR`, gateado además por el maestro `KENI_MAQUINA`).
     FUNDE el antiguo daemon suelto `autogen_arte`: reutiliza su selección
     (`autogen_arte.topics_sin_arte`) y su lanzador (`autogen_arte.lanzar_para_topic` →
     `media.generar_imagen`), con cap por barrido (`KENI_AUTOGEN_ARTE_MAX`). Per-marca: salta las
-    marcas apagadas a mano (lo hace la propia selección, gateada por `ENV_PIPELINE_ARTE`). Sin
+    marcas apagadas a mano (lo hace la propia selección, gateada por `ENV_PIPELINE_ILUSTRAR`). Sin
     proveedor de imagen configurado, no hace nada. Best-effort: un fallo por tema se loguea y se
     sigue. Devuelve los artes adjuntados.
 
-    GATEADO EN VIVO: solo actúa con `KENI_PIPELINE_ARTE=1` Y `KENI_MAQUINA=1`. Sin el toggle, la
+    GATEADO EN VIVO: solo actúa con `KENI_PIPELINE_ILUSTRAR=1` Y `KENI_MAQUINA=1`. Sin el toggle, la
     etapa no ilustra (el equipo hace el arte a mano).
     """
 
     from .. import autogen_arte
 
-    if not config.gate_maquina(config.autogen_arte_activo)():
+    if not config.gate_maquina(config.ilustrar_activo)():
         return []
     from .. import media
 
     if not media.proveedor_configurado():
-        _log.info("pipeline: etapa de arte sin proveedor de imagen configurado; se omite.")
+        _log.info("pipeline: etapa de Ilustrar sin proveedor de imagen configurado; se omite.")
         return []
     try:
         # Solo la clase 'contenido' (el filtro va en SQL; las tareas nunca se ilustran).
         # `topics_sin_arte` aplica el resto de reglas (estado, copy sin imagen, dedup...).
         items = repos.listar_contenido(clase="contenido")
-    except Exception:  # noqa: BLE001 -- sin tablero, la etapa de arte no actúa
-        _log.exception("pipeline: no se pudo leer el tablero para la etapa de arte.")
+    except Exception:  # noqa: BLE001 -- sin tablero, la etapa de Ilustrar no actúa
+        _log.exception("pipeline: no se pudo leer el tablero para la etapa de Ilustrar.")
         return []
     elegidos = autogen_arte.topics_sin_arte(
         items,
@@ -456,7 +456,7 @@ def ejecutar_arte() -> list[dict[str, Any]]:
             # siguiente tick reintenta. NO lo contamos como `fallido` (no debe disparar la alerta
             # "¿proveedor de imagen caído?", que es para fallos reales de generación).
             return None
-        except Exception:  # noqa: BLE001 -- un fallo por tema no debe matar la etapa de arte
+        except Exception:  # noqa: BLE001 -- un fallo por tema no debe matar la etapa de Ilustrar
             fallidos.append(str(item.get("id", "") or ""))
             _log.exception(
                 "pipeline: fallo el encolado de arte del tema %s (marca %s).",
@@ -482,7 +482,7 @@ def ejecutar_arte() -> list[dict[str, Any]]:
             len(fallidos), len(elegidos), ", ".join(fallidos),
         )
     if adjuntados:
-        _log.info("pipeline: %d tema(s) ilustrado(s) (etapa arte).", len(adjuntados))
+        _log.info("pipeline: %d tema(s) ilustrado(s) (etapa Ilustrar).", len(adjuntados))
     return adjuntados
 
 

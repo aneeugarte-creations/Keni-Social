@@ -66,12 +66,12 @@ _LISTA_MARCAS = ", ".join(etiqueta for _id, etiqueta in marcas.opciones()) or "(
 # red es la SEMILLA del paquete (`libtexto.cuerpo_semilla`), no un texto duplicado aquí. El
 # cajón usa "_" (p.ej. `eventos_claro`); el id de Biblioteca usa "-".
 _PROMPT_INSUMO_IDS: dict[str, str] = {
-    "portal": "prompt/insumos/portal",
-    "corresponsales": "prompt/insumos/corresponsales",
-    "reporteros": "prompt/insumos/reporteros",
-    "eventos_claro": "prompt/insumos/eventos-claro",
-    "notas": "prompt/insumos/notas",
-    "contexto": "prompt/insumos/contexto",
+    "portal": "prompt/recibir/portal",
+    "corresponsales": "prompt/recibir/corresponsales",
+    "reporteros": "prompt/recibir/reporteros",
+    "eventos_claro": "prompt/recibir/eventos-claro",
+    "notas": "prompt/recibir/notas",
+    "contexto": "prompt/recibir/contexto",
 }
 _MARCA_RUTA = "{{RUTA}}"
 
@@ -331,7 +331,7 @@ def construir_procesar_insumos(*, lote_id: str, cajon: str, fecha: str, marca_de
             campos["error"] = "Aviso: " + "; ".join(a for a in avisos[:3] if a)
         repos.actualizar_insumo_lote(lote_id, campos)
         # Pool único (Ola E): además de su tabla propia, cada nota entra al pool
-        # `noticias_items` para que el clustering la deduplique y el auto-feed la use.
+        # `noticias_items` para que la Agrupación la deduplique y el auto-feed la use.
         # Los EVENTOS NO entran (agenda de cobertura, no notas de copy). Idempotente por
         # UNIQUE(fuente_id, clave). Best-effort: un fallo aquí no marca el lote en error.
         try:

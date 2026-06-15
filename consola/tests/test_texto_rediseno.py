@@ -128,8 +128,8 @@ def test_editoriales_scoping_por_carpeta():
 
 
 def test_prompt_base_defecto_cuando_nadie_rebindea():
-    assert libtexto.prompt_base_de("copy") == "prompt/copy"
-    assert libtexto.prompt_base_de("qa") == "prompt/validacion"
+    assert libtexto.prompt_base_de("copy") == "prompt/redactar"
+    assert libtexto.prompt_base_de("qa") == "prompt/verificar"
 
 
 def test_prompt_base_rebindeo_por_documento():
@@ -138,7 +138,7 @@ def test_prompt_base_rebindeo_por_documento():
     assert libtexto.prompt_base_de("copy") == nuevo.id
     # Un borrador NO rebindea (estado != activo).
     libtexto.guardar(nuevo.id, estado="borrador")
-    assert libtexto.prompt_base_de("copy") == "prompt/copy"
+    assert libtexto.prompt_base_de("copy") == "prompt/redactar"
 
 
 def test_previsualizar_pipeline_ensambla_base_y_adjuntos():

@@ -18,8 +18,8 @@ from ...pipeline_contenido import (
     VERDICTO_PROBLEMA,
 )
 
-# Orígenes de tema que el feed acepta como RUN: los del propio pipeline (ingesta del pool) y
-# los del TABLERO que su etapa de copy redacta (`ORIGENES_AUTOGEN`: rss/radar/equipo/historia/
+# Orígenes de tema que el feed acepta como RUN: los del propio pipeline (recolección del pool) y
+# los del TABLERO que su etapa Redactar redacta (`ORIGENES_AUTOGEN`: rss/radar/equipo/historia/
 # import-calendario). Un tema de tablero solo se lista si la máquina lo TRABAJÓ (tiene
 # generaciones del pipeline correlacionadas): el alta manual sin trabajo IA no es una run.
 _ORIGENES_RUN = frozenset({ORIGEN_PIPELINE, *ORIGENES_AUTOGEN})
@@ -33,33 +33,33 @@ _ESTADO_SALTADA = "saltada"
 _LIMITE_DEF = 50
 _LIMITE_MAX = 200
 
-# Catálogo de etapas del pipeline (clave → nombre) en orden de flujo. Fusión y Editorial son el
+# Catálogo de etapas del pipeline (clave → nombre) en orden de flujo. Fusionar y Priorizar son el
 # trabajo del POOL (dedup + encaje/score), DERIVADO de la historia (cluster), no de un toggle.
-# Selección/Validación/Copy son TOGGLABLES por marca (activa = estado real; desactivada = "saltada").
-# Aprobación es el gate humano. `estado_global` toma la primera no-{ok,saltada}.
+# Admitir/Verificar/Redactar son TOGGLABLES por marca (activa = estado real; desactivada = "saltada").
+# Aprobar es el gate humano. `estado_global` toma la primera no-{ok,saltada}.
 _ETAPAS = (
-    ("fusion", "Fusión"),
-    ("editorial", "Editorial"),
-    ("ci", "Selección"),
-    ("qa", "Validación"),
-    ("cd", "Copy"),
-    ("arte", "Arte"),
-    ("aprobacion", "Aprobación"),
+    ("fusionar", "Fusionar"),
+    ("priorizar", "Priorizar"),
+    ("admitir", "Admitir"),
+    ("verificar", "Verificar"),
+    ("redactar", "Redactar"),
+    ("ilustrar", "Ilustrar"),
+    ("aprobar", "Aprobar"),
 )
 # Claves válidas para el filtro `?etapa=` (la etapa donde la run está parada). Catálogo de
 # `_ETAPAS`, sin duplicar la fuente de verdad.
 _ETAPA_CLAVES = frozenset(clave for clave, _ in _ETAPAS)
 # Etapas que SON una llamada a un LLM (la UI las marca "IA" y enseña prompt+proceso+resultado).
-# Selección (crea el tema en BD) y Aprobación (humana) NO lo son.
-_ETAPAS_IA = frozenset({"fusion", "editorial", "qa", "cd", "arte"})
+# Admitir (crea el tema en BD) y Aprobar (humana) NO lo son.
+_ETAPAS_IA = frozenset({"fusionar", "priorizar", "verificar", "redactar", "ilustrar"})
 # Prompt de la Biblioteca de Texto que usa cada etapa IA (código de etapa → id editable). Permite
 # enseñar el PROMPT de entrada SIEMPRE, aunque la etapa aún no haya corrido (plantilla).
 _PROMPT_POR_ETAPA = {
-    "FUSION": "prompt/fusion",
-    "EDITORIAL": "prompt/editorial",
-    "QA": "prompt/validacion",
-    "CD": "prompt/copy",
-    "ARTE": "prompt/arte",
+    "FUSIONAR": "prompt/fusionar",
+    "PRIORIZAR": "prompt/priorizar",
+    "VERIFICAR": "prompt/verificar",
+    "REDACTAR": "prompt/redactar",
+    "ILUSTRAR": "prompt/ilustrar",
 }
 # Valores válidos del filtro `?estado=` (el `estado_global` de la run).
 _ESTADOS_GLOBAL = frozenset({"ok", "en_curso", "pendiente", "revisar", "fallo"})
@@ -72,11 +72,11 @@ _ESTADO_ACTIVIDAD = {
     "error": "fallo",
     "ejecutando": "en_curso",
 }
-# Prefijos de etiqueta de la IA del POOL (lote por marca): "Fusión de historias" alimenta
-# la etapa Fusión y "Encaje editorial" la etapa Editorial. Fuente única para el detalle
+# Prefijos de etiqueta de la IA del POOL (lote por marca): "Fusionar historias" alimenta
+# la etapa Fusionar y "Priorizar historias" la etapa Priorizar. Fuente única para el detalle
 # (enlazar la generación) y la lista (evidencia de que el pool corrió: fix "Saltada").
-_PREFIJO_POOL_FUSION = "Fusión"
-_PREFIJO_POOL_EDITORIAL = "Encaje"
+_PREFIJO_POOL_FUSION = "Fusionar"
+_PREFIJO_POOL_EDITORIAL = "Priorizar"
 # Métricas a cero de un item sin generaciones correlacionadas (forma estable para la UI).
 _METRICAS_CERO = {"items": 0, "tokens": 0, "coste_usd": 0.0, "duration_ms": 0}
 # Tope de runs a MATERIALIZAR antes de filtrar/paginar en memoria. El tablero del equipo es
@@ -84,7 +84,7 @@ _METRICAS_CERO = {"items": 0, "tokens": 0, "coste_usd": 0.0, "duration_ms": 0}
 # más recientes). `log()` no aplica aquí: la paginación reporta el `total` ya acotado a esto.
 _UNIVERSO_MAX = 500
 
-# Estados de plataforma que cuentan como "aprobado" para la etapa de Aprobación.
+# Estados de plataforma que cuentan como "aprobado" para la etapa de Aprobar.
 _ESTADOS_APROBADOS = frozenset({"aprobado", "programado", "publicado"})
 # Estados de plataforma "en curso" de revisión humana (aún no aprobados).
 _ESTADOS_EN_CURSO = frozenset({"en_curso", "en_revision"})

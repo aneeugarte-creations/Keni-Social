@@ -1,21 +1,21 @@
 # Máquina de contenido — especificaciones
 
 Specs de los motores que alimentan el tablero de contenido (ingesta de noticias,
-clustering, verificación, video). Cada doc es autocontenido; léelos en orden para
+agrupar, verificar, video). Cada doc es autocontenido; léelos en orden para
 entender la tubería de "reutilizar lo que ya existe".
 
 > **Modelo de máquina de contenido (Fase 1):** 1 master (`KENI_MAQUINA`) + 3 etapas, todas
-> colgando del pipeline: «Crear noticias» (`KENI_PIPELINE_SELECCION`, global), «Generar copy»
-> (`KENI_PIPELINE_COPY`) y «Generar arte» (`KENI_PIPELINE_ARTE`), estas dos con excepción por marca.
-> Los daemons sueltos de auto-copy / auto-arte / auto-feed / breaking / auto-avance se
+> colgando del pipeline: «Crear noticias» (`KENI_PIPELINE_RECOLECTAR`, global), «Generar copy»
+> (`KENI_PIPELINE_REDACTAR`) y «Generar arte» (`KENI_PIPELINE_ILUSTRAR`), estas dos con excepción por marca.
+> Los daemons sueltos de auto-redactar / auto-ilustrar / auto-feed / breaking / auto-avance se
 > retiraron; sus etapas viven dentro del pipeline (`pipeline_contenido.py`).
 
 | # | Doc | Qué cubre | Código principal |
 |---|-----|-----------|------------------|
 | 01 | [insumos-del-dia](01-insumos-del-dia.md) | Cajones del día: captura manual de insumos | `api/insumos.py`, `dominio/insumos_parse.py` |
-| 02 | [fuentes-externas](02-fuentes-externas.md) | Presets de fuentes + traducción de idiomas | `dominio/fuentes_presets.py`, `dominio/traduccion.py` |
+| 02 | [fuentes-externas](02-fuentes-externas.md) | Presets de fuentes + traducir idiomas | `dominio/fuentes_presets.py`, `dominio/traduccion.py` |
 | 03 | [motor-ingesta](03-motor-ingesta.md) | Motor de ingesta persistente (núcleo de cobertura) | `ingesta_daemon.py`, `dominio/ingesta.py` |
-| 04 | [clustering-historias](04-clustering-historias.md) | Clustering de historias + scoring | `dominio/clustering.py` |
+| 04 | [agrupar-historias](04-agrupar-historias.md) | Agrupar historias + scoring | `dominio/clustering.py` |
 | 05 | [cobertura-verificacion](05-cobertura-verificacion.md) | Monitor de cobertura + auto-verificación | `api/noticias.py` (`/salud`), `dominio/clustering.py` |
 | 06 | [calidad-del-feed](06-calidad-del-feed.md) | Filtro de entrada + listón de auto-producción + score explicable + caducidad TTL | `noticias_liston.py`, `dominio/clustering.py`, `ingesta_daemon.py` |
 | 07 | [video-formato](07-video-formato.md) | Aceptar video como formato (no solo foto) | `api/media.py`, `media.py` |
@@ -30,5 +30,5 @@ entender la tubería de "reutilizar lo que ya existe".
 
 **Feature relacionada sin spec aquí:** el endpoint MANUAL de breaking
 (`api/breaking.py` + `dominio/breaking.py`) prepara borradores de breaking a demanda (lo usa
-la página Cobertura). La detección automática de "breaking" del clustering
+la página Cobertura). La detección automática de "breaking" de Agrupar
 (`KENI_CLUSTER_BREAKING_*`) solo marca historias, sin daemon ni toggle.

@@ -1,6 +1,6 @@
 """Tests del endpoint `/api/pipelines` (vista estilo GitLab del pipeline de contenido).
 
-Cada `contenido` con `origen='pipeline'` es una RUN; sus etapas (CI/CD/QA/Aprobación) se
+Cada `contenido` con `origen='pipeline'` es una RUN; sus etapas (ADMITIR/REDACTAR/VERIFICAR/Aprobar) se
 DERIVAN del estado real de la pieza y sus publicaciones por plataforma. Aquí montamos ese
 estado a mano (sin daemon ni `claude`) y comprobamos la derivación + el detalle + la
 exclusión de lo que NO es del pipeline. Usa la fixture `cliente` (entorno aislado + Postgres).
@@ -19,18 +19,18 @@ from keni_consola.pipeline_contenido import ETAPA_CD, ORIGEN_PIPELINE, registrar
 
 @pytest.fixture(autouse=True)
 def _etapas_activas(monkeypatch):
-    """Activa los maestros togglables de las etapas (Fusión/Editorial/Selección/Validación/Copy) para
+    """Activa los maestros togglables de las etapas (Fusionar/Priorizar/Admitir/Verificar/Copy) para
     estos tests.
 
     El default de cada toggle es OFF; sin esto, `_etapas_de_run` pintaría todo "saltada". Los tests
     que ejercitan el caso "saltada" apagan el toggle puntual (global o por marca) por encima de esto.
-    (Arte se deja OFF por defecto; el test de Arte lo enciende a propósito.)
+    (Ilustrar se deja OFF por defecto; el test de Ilustrar lo enciende a propósito.)
     """
-    monkeypatch.setenv(config.ENV_PIPELINE_FUSION, "1")
-    monkeypatch.setenv(config.ENV_RANKING_PERFIL_IA, "1")
-    monkeypatch.setenv(config.ENV_PIPELINE_SELECCION, "1")
-    monkeypatch.setenv(config.ENV_PIPELINE_VALIDACION, "1")
-    monkeypatch.setenv(config.ENV_PIPELINE_COPY, "1")
+    monkeypatch.setenv(config.ENV_PIPELINE_FUSIONAR, "1")
+    monkeypatch.setenv(config.ENV_PRIORIZAR_PERFIL_IA, "1")
+    monkeypatch.setenv(config.ENV_PIPELINE_RECOLECTAR, "1")
+    monkeypatch.setenv(config.ENV_PIPELINE_VERIFICAR, "1")
+    monkeypatch.setenv(config.ENV_PIPELINE_REDACTAR, "1")
 
 
 def _tema_pipeline(titulo: str, marca: str = "unotv", **campos) -> dict:
@@ -46,7 +46,9 @@ def _run_por_titulo(cliente, titulo: str) -> dict | None:
 
 
 def test_run_qa_no_verificado_con_copy(cliente):
-    """Tema con QA `no_verificado` + copy en borrador: CI/QA/CD ok, aprobación pendiente.
+    """Tema con VERIFICAR `no_verificado` + copy en borrador: ADMITIR/VERIFICAR/REDACTAR ok, aprobación pendiente.
+
+    Orden NUEVO (rediseño QPC): ADMITIR -> Criba de la fuente (VERIFICAR) -> Copy (REDACTAR) -> Aprobar.
     """
     tema = _tema_pipeline("Tema apto", qa_veredicto="no_verificado")
     repos.crear_contenido_plataforma(
@@ -56,13 +58,13 @@ def test_run_qa_no_verificado_con_copy(cliente):
     run = _run_por_titulo(cliente, "Tema apto")
     assert run is not None
     assert [e["clave"] for e in run["etapas"]] == [
-        "fusion", "editorial", "ci", "qa", "cd", "arte", "aprobacion"
+        "fusionar", "priorizar", "admitir", "verificar", "redactar", "ilustrar", "aprobar"
     ]
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
-    # Sin cluster -> Fusión/Editorial saltadas; Arte saltada (toggle off). Ninguna bloquea.
+    # Sin cluster -> Fusionar/Priorizar saltadas; Ilustrar saltada (toggle off). Ninguna bloquea.
     assert etapas == {
-        "fusion": "saltada", "editorial": "saltada", "ci": "ok", "qa": "ok",
-        "cd": "ok", "arte": "saltada", "aprobacion": "pendiente",
+        "fusionar": "saltada", "priorizar": "saltada", "admitir": "ok", "verificar": "ok",
+        "redactar": "ok", "ilustrar": "saltada", "aprobar": "pendiente",
     }
     assert run["estado_global"] == "pendiente"
     assert run["cluster"] is None
@@ -72,20 +74,20 @@ def test_run_qa_no_verificado_con_copy(cliente):
 
 
 def test_run_sin_qa_todo_pendiente(cliente):
-    """Tema sin veredicto de QA todavía: QA y CD pendientes (la QA va antes del copy)."""
+    """Tema sin veredicto de VERIFICAR todavía: VERIFICAR y REDACTAR pendientes (la VERIFICAR va antes del copy)."""
     tema = _tema_pipeline("Tema sin criba")
     repos.crear_contenido_plataforma(
         contenido_id=tema["id"], red="x", estado="borrador", copy="",
     )
     run = _run_por_titulo(cliente, "Tema sin criba")
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
-    assert etapas["ci"] == "ok"
-    assert etapas["qa"] == "pendiente"
-    assert etapas["cd"] == "pendiente"
+    assert etapas["admitir"] == "ok"
+    assert etapas["verificar"] == "pendiente"
+    assert etapas["redactar"] == "pendiente"
 
 
 def test_run_qa_problema_omite_copy(cliente):
-    """QA `problema` -> etapa QA 'revisar', CD pendiente (copy omitido) y ❗ con hallazgos."""
+    """VERIFICAR `problema` -> etapa VERIFICAR 'revisar', REDACTAR pendiente (copy omitido) y ❗ con hallazgos."""
     hallazgos = (
         '{"resumen": "Dato falso", '
         '"hallazgos": [{"tipo": "dato", "gravedad": "error", "explicacion": "x"}]}'
@@ -93,8 +95,8 @@ def test_run_qa_problema_omite_copy(cliente):
     _tema_pipeline("Tema con problema", qa_veredicto="problema", qa_hallazgos=hallazgos)
     run = _run_por_titulo(cliente, "Tema con problema")
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
-    assert etapas["qa"] == "revisar"
-    assert etapas["cd"] == "pendiente"
+    assert etapas["verificar"] == "revisar"
+    assert etapas["redactar"] == "pendiente"
     qa = run["qa_fuente"]
     assert qa["problema"] is True
     assert qa["copy_omitido"] is True
@@ -110,14 +112,14 @@ def test_aprobacion_esperando_humano_es_pendiente(cliente):
         copy="Copy.", veredicto="no_verificado",
     )
     run = _run_por_titulo(cliente, "Run en revisión")
-    ap = next(e for e in run["etapas"] if e["clave"] == "aprobacion")
+    ap = next(e for e in run["etapas"] if e["clave"] == "aprobar")
     assert ap["estado"] == "pendiente"
     assert ap["detalle"] == "En revisión"
     assert run["estado_global"] == "pendiente"
 
 
 def test_run_aprobado(cliente):
-    """Pieza aprobada con QA `no_verificado` -> aprobación ok y estado_global ok."""
+    """Pieza aprobada con VERIFICAR `no_verificado` -> aprobación ok y estado_global ok."""
     tema = _tema_pipeline("Tema aprobado", qa_veredicto="no_verificado")
     repos.crear_contenido_plataforma(
         contenido_id=tema["id"], red="x", estado="aprobado",
@@ -125,40 +127,40 @@ def test_run_aprobado(cliente):
     )
     run = _run_por_titulo(cliente, "Tema aprobado")
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
-    assert etapas["aprobacion"] == "ok"
+    assert etapas["aprobar"] == "ok"
     assert run["estado_global"] == "ok"
 
 
 def test_run_qa_saltada_genera_copy(cliente, monkeypatch):
-    """QA desactivada para la marca (`KENI_PIPELINE_VALIDACION::unotv=0`): etapa QA 'saltada' y el copy se genera
-    igual (CD 'ok'). 'saltada' no bloquea: el estado_global lo marca la aprobación pendiente."""
+    """VERIFICAR desactivada para la marca (`KENI_PIPELINE_VERIFICAR::unotv=0`): etapa VERIFICAR 'saltada' y el copy se genera
+    igual (REDACTAR 'ok'). 'saltada' no bloquea: el estado_global lo marca la aprobación pendiente."""
     monkeypatch.setattr(
         "keni_consola.ajustes.obtener",
-        lambda clave: "0" if clave == config.clave_por_marca(config.ENV_PIPELINE_VALIDACION, "unotv") else None,
+        lambda clave: "0" if clave == config.clave_por_marca(config.ENV_PIPELINE_VERIFICAR, "unotv") else None,
     )
-    tema = _tema_pipeline("Tema sin QA", qa_veredicto="saltada")
+    tema = _tema_pipeline("Tema sin VERIFICAR", qa_veredicto="saltada")
     repos.crear_contenido_plataforma(
         contenido_id=tema["id"], red="x", estado="borrador",
         copy="Copy generado sin criba.", veredicto="no_verificado",
     )
-    run = _run_por_titulo(cliente, "Tema sin QA")
+    run = _run_por_titulo(cliente, "Tema sin VERIFICAR")
     assert run is not None
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
     assert etapas == {
-        "fusion": "saltada", "editorial": "saltada", "ci": "ok", "qa": "saltada",
-        "cd": "ok", "arte": "saltada", "aprobacion": "pendiente",
+        "fusionar": "saltada", "priorizar": "saltada", "admitir": "ok", "verificar": "saltada",
+        "redactar": "ok", "ilustrar": "saltada", "aprobar": "pendiente",
     }
     assert run["estado_global"] == "pendiente"
 
 
 def test_marca_con_noticias_off_sigue_localizable(cliente, monkeypatch):
-    """Una marca con 'Crear noticias' (CI) apagada SIGUE listando sus runs, y la etapa CI se
+    """Una marca con 'Crear noticias' (ADMITIR) apagada SIGUE listando sus runs, y la etapa ADMITIR se
     pinta por la EVIDENCIA, no por el toggle de hoy: el tema EXISTE, luego la selección corrió
     ('ok'). Apagar el interruptor después no re-pinta la historia de la run.
     """
     monkeypatch.setattr(
         "keni_consola.ajustes.obtener",
-        lambda clave: "0" if clave == config.clave_por_marca(config.ENV_PIPELINE_SELECCION, "claro-sports") else None,
+        lambda clave: "0" if clave == config.clave_por_marca(config.ENV_PIPELINE_RECOLECTAR, "claro-sports") else None,
     )
     _tema_pipeline("Run claro", marca="claro-sports")
     _tema_pipeline("Run uno", marca="unotv")
@@ -167,7 +169,7 @@ def test_marca_con_noticias_off_sigue_localizable(cliente, monkeypatch):
     assert "Run uno" in titulos
     assert "Run claro" in titulos  # ya NO se oculta
     claro = next(x for x in pipelines if x["titulo"] == "Run claro")
-    ci = next(e for e in claro["etapas"] if e["clave"] == "ci")
+    ci = next(e for e in claro["etapas"] if e["clave"] == "admitir")
     assert ci["estado"] == "ok"  # la run existe: la selección CORRIÓ, diga lo que diga el toggle
 
 
@@ -180,29 +182,29 @@ def test_etapas_ejecutadas_no_se_repintan_con_toggles_off(cliente, monkeypatch):
         contenido_id=tema["id"], red="x", estado="aprobado",
         copy="Copy hecho.", veredicto="no_verificado",
     )
-    for env in (config.ENV_PIPELINE_FUSION, config.ENV_RANKING_PERFIL_IA,
-                config.ENV_PIPELINE_SELECCION, config.ENV_PIPELINE_VALIDACION,
-                config.ENV_PIPELINE_COPY, config.ENV_PIPELINE_ARTE):
+    for env in (config.ENV_PIPELINE_FUSIONAR, config.ENV_PRIORIZAR_PERFIL_IA,
+                config.ENV_PIPELINE_RECOLECTAR, config.ENV_PIPELINE_VERIFICAR,
+                config.ENV_PIPELINE_REDACTAR, config.ENV_PIPELINE_ILUSTRAR):
         monkeypatch.delenv(env, raising=False)
     run = _run_por_titulo(cliente, "Run histórica")
     estados = {e["clave"]: e["estado"] for e in run["etapas"]}
-    assert estados["fusion"] == "ok"      # hay historia enlazada: la fusión corrió
-    assert estados["editorial"] == "ok"   # hay score: el encaje corrió
-    assert estados["ci"] == "ok"          # el tema existe: la selección corrió
-    assert estados["qa"] == "ok"          # veredicto persistido: la criba corrió
-    assert estados["cd"] == "ok"          # hay copy persistido: la etapa corrió
+    assert estados["fusionar"] == "ok"      # hay historia enlazada: la fusión corrió
+    assert estados["priorizar"] == "ok"   # hay score: el encaje corrió
+    assert estados["admitir"] == "ok"          # el tema existe: la selección corrió
+    assert estados["verificar"] == "ok"          # veredicto persistido: la criba corrió
+    assert estados["redactar"] == "ok"          # hay copy persistido: la etapa corrió
 
 
 def test_run_caducada_se_pinta_cerrada(cliente):
-    """Una run CADUCADA (TTL de frescura) queda CERRADA sin producto: Validación 'saltada' con
-    el motivo, Copy/Aprobación 'saltada' (no un 'pendiente' eterno) y estado_global 'ok'."""
+    """Una run CADUCADA (TTL de frescura) queda CERRADA sin producto: Verificar 'saltada' con
+    el motivo, Copy/Aprobar 'saltada' (no un 'pendiente' eterno) y estado_global 'ok'."""
     _tema_pipeline("Run caducada", qa_veredicto="caducada")
     run = _run_por_titulo(cliente, "Run caducada")
     etapas = {e["clave"]: e for e in run["etapas"]}
-    assert etapas["qa"]["estado"] == "saltada"
-    assert "Caducada" in etapas["qa"]["detalle"]
-    assert etapas["cd"]["estado"] == "saltada"
-    assert etapas["aprobacion"]["estado"] == "saltada"
+    assert etapas["verificar"]["estado"] == "saltada"
+    assert "Caducada" in etapas["verificar"]["detalle"]
+    assert etapas["redactar"]["estado"] == "saltada"
+    assert etapas["aprobar"]["estado"] == "saltada"
     assert run["estado_global"] == "ok"  # cerrada: no bloquea ni queda pendiente
 
 
@@ -218,7 +220,7 @@ def _historia_de(tema_id: str, marca: str = "unotv", **campos) -> dict:
 
 
 def test_fusion_y_editorial_ok_desde_historia(cliente):
-    """Un tema de una HISTORIA: Fusión y Editorial 'ok' con sus señales (fuentes/notas, score)."""
+    """Un tema de una HISTORIA: Fusionar y Priorizar 'ok' con sus señales (fuentes/notas, score)."""
     tema = _tema_pipeline("Tema con historia")
     _historia_de(
         tema["id"], n_items=5, n_fuentes=3, score=0.82, breaking=1, verificacion="corroborada",
@@ -226,18 +228,18 @@ def test_fusion_y_editorial_ok_desde_historia(cliente):
     run = _run_por_titulo(cliente, "Tema con historia")
     assert run is not None
     etapas = {e["clave"]: e for e in run["etapas"]}
-    assert etapas["fusion"]["estado"] == "ok"
-    assert etapas["editorial"]["estado"] == "ok"
+    assert etapas["fusionar"]["estado"] == "ok"
+    assert etapas["priorizar"]["estado"] == "ok"
     cl = run["cluster"]
     assert cl is not None
     assert cl["n_fuentes"] == 3
     assert cl["n_items"] == 5
     assert cl["breaking"] is True
     assert cl["score"] == pytest.approx(0.82)
-    # Fusión = dedup (fuentes/notas); Editorial = score (+ breaking).
-    assert "3 fuentes" in etapas["fusion"]["detalle"]
-    assert "5 notas" in etapas["fusion"]["detalle"]
-    assert "0.82" in etapas["editorial"]["detalle"]
+    # Fusionar = dedup (fuentes/notas); Priorizar = score (+ breaking).
+    assert "3 fuentes" in etapas["fusionar"]["detalle"]
+    assert "5 notas" in etapas["fusionar"]["detalle"]
+    assert "0.82" in etapas["priorizar"]["detalle"]
 
 
 def test_cluster_por_contenido_reverso(cliente):
@@ -303,20 +305,20 @@ def test_etapa_actual_y_filtro_por_etapa(cliente):
     repos.crear_contenido_plataforma(
         contenido_id=aprob["id"], red="x", estado="aprobado", copy="C.", veredicto="no_verificado",
     )
-    _tema_pipeline("Run en QA")  # sin veredicto: la QA queda 'pendiente'
-    en_qa = _run_por_titulo(cliente, "Run en QA")
-    assert en_qa["etapa_actual"] == "qa"
+    _tema_pipeline("Run en VERIFICAR")  # sin veredicto: la VERIFICAR queda 'pendiente'
+    en_qa = _run_por_titulo(cliente, "Run en VERIFICAR")
+    assert en_qa["etapa_actual"] == "verificar"
     aprobada = _run_por_titulo(cliente, "Run aprobada")
     assert aprobada["etapa_actual"] == ""  # todo ok/saltada: no está parada en ninguna
 
-    titulos_qa = {x["titulo"] for x in cliente.get("/api/pipelines?etapa=qa").json()["pipelines"]}
-    assert "Run en QA" in titulos_qa
+    titulos_qa = {x["titulo"] for x in cliente.get("/api/pipelines?etapa=verificar").json()["pipelines"]}
+    assert "Run en VERIFICAR" in titulos_qa
     assert "Run aprobada" not in titulos_qa
 
 
 def test_filtro_por_estado_global_e_invalido_se_ignora(cliente):
     """`?estado=` filtra por estado_global; un valor inválido se ignora (no 400)."""
-    _tema_pipeline("Run pendiente")  # QA pendiente -> estado_global 'pendiente'
+    _tema_pipeline("Run pendiente")  # VERIFICAR pendiente -> estado_global 'pendiente'
     pend = {x["titulo"] for x in cliente.get("/api/pipelines?estado=pendiente").json()["pipelines"]}
     assert "Run pendiente" in pend
     # Filtro inválido: se ignora, devuelve 200 con el conjunto sin filtrar (no rompe la UI).
@@ -335,7 +337,7 @@ def test_detalle_run(cliente):
     body = d.json()
     assert body["pipeline"]["id"] == tema["id"]
     assert [e["clave"] for e in body["pipeline"]["etapas"]] == [
-        "fusion", "editorial", "ci", "qa", "cd", "arte", "aprobacion"
+        "fusionar", "priorizar", "admitir", "verificar", "redactar", "ilustrar", "aprobar"
     ]
     assert "actividad" in body
     assert "qa_fuente" in body["pipeline"]
@@ -347,38 +349,39 @@ def test_detalle_run(cliente):
 
 
 def test_detalle_enlaza_haiku_del_pool_por_etapa(cliente):
-    """El detalle enlaza el Haiku del pool por etapa: 'Fusión...' -> FUSION, 'Encaje...' -> EDITORIAL,
+    """El detalle enlaza el Haiku del pool por etapa: 'Fusionar...' -> FUSION, 'Priorizar...' -> EDITORIAL,
     cada uno con su prompt + salida REALES."""
     tema = _tema_pipeline("Tema con pool", marca="unotv")
     generaciones.crear({
-        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Fusión de historias — UnoTV",
-        "prompt": "PROMPT-FUSION", "salida": "SALIDA-FUSION",
+        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Fusionar historias — UnoTV",
+        "prompt": "PROMPT-FUSIONAR", "salida": "SALIDA-FUSIONAR",
         "estado": generaciones.ESTADO_COMPLETADO, "fase": generaciones.FASE_COMPLETADO,
     })
     generaciones.crear({
-        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Encaje editorial — UnoTV",
-        "prompt": "PROMPT-ENCAJE", "salida": "SALIDA-ENCAJE",
+        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Priorizar historias — UnoTV",
+        "prompt": "PROMPT-PRIORIZAR", "salida": "SALIDA-PRIORIZAR",
         "estado": generaciones.ESTADO_COMPLETADO, "fase": generaciones.FASE_COMPLETADO,
     })
     por_etapa = cliente.get(f"/api/pipelines/{tema['id']}").json()["generaciones_por_etapa"]
-    assert por_etapa["FUSION"]["prompt"] == "PROMPT-FUSION"
-    assert por_etapa["FUSION"]["salida"] == "SALIDA-FUSION"
-    assert por_etapa["EDITORIAL"]["prompt"] == "PROMPT-ENCAJE"
-    assert por_etapa["EDITORIAL"]["salida"] == "SALIDA-ENCAJE"
+    assert por_etapa["FUSION"]["prompt"] == "PROMPT-FUSIONAR"
+    assert por_etapa["FUSION"]["salida"] == "SALIDA-FUSIONAR"
+    assert por_etapa["EDITORIAL"]["prompt"] == "PROMPT-PRIORIZAR"
+    assert por_etapa["EDITORIAL"]["salida"] == "SALIDA-PRIORIZAR"
 
 
 def test_etapa_arte_exige_evidencia_de_arte_ia(cliente, monkeypatch):
-    """La etapa Arte se deriva de la EVIDENCIA de arte GENERADO (generación/marcador de
+    """La etapa Ilustrar se deriva de la EVIDENCIA de arte GENERADO (generación/marcador de
     auto-arte correlacionado), no de que la pieza tenga imagen: la FOTO de la nota de una
-    fuente propia (bajada en ingesta) no es arte IA."""
-    # Toggle Arte off (default) + pieza CON imagen (foto de fuente): saltada, NO ok.
+    fuente propia (bajada en ingesta) no es arte IA. Antes, esa foto pintaba Ilustrar 'ok' con
+    el toggle apagado (encendida estando apagada)."""
+    # Toggle Ilustrar off (default) + pieza CON imagen (foto de fuente): saltada, NO ok.
     tema = _tema_pipeline("Tema foto de fuente")
     repos.crear_contenido_plataforma(
         contenido_id=tema["id"], red="x", estado="borrador", copy="C.",
         imagen="foto-fuente.png", falta_imagen=False,
     )
     run = _run_por_titulo(cliente, "Tema foto de fuente")
-    arte = next(e for e in run["etapas"] if e["clave"] == "arte")
+    arte = next(e for e in run["etapas"] if e["clave"] == "ilustrar")
     assert arte["estado"] == "saltada"
     # Con EVIDENCIA de arte IA (la generación que deja el auto-arte) -> ok, aunque el toggle
     # de HOY esté apagado (la evidencia no se re-pinta con interruptores).
@@ -389,32 +392,32 @@ def test_etapa_arte_exige_evidencia_de_arte_ia(cliente, monkeypatch):
     )
     generaciones.crear({
         "tipo": "pipeline", "marca": "unotv", "contenido_id": tema2["id"],
-        "etiqueta": "Arte — Tema arte ia", "estado": generaciones.ESTADO_COMPLETADO,
+        "etiqueta": "Ilustrar — Tema arte ia", "estado": generaciones.ESTADO_COMPLETADO,
     })
     run2 = _run_por_titulo(cliente, "Tema arte ia")
-    arte2 = next(e for e in run2["etapas"] if e["clave"] == "arte")
+    arte2 = next(e for e in run2["etapas"] if e["clave"] == "ilustrar")
     assert arte2["estado"] == "ok"
     # Toggle ON pero sin evidencia: pendiente (el arte aún no corrió), tampoco 'ok'.
-    monkeypatch.setenv(config.ENV_PIPELINE_ARTE, "1")
+    monkeypatch.setenv(config.ENV_PIPELINE_ILUSTRAR, "1")
     tema3 = _tema_pipeline("Tema arte pendiente")
     repos.crear_contenido_plataforma(
         contenido_id=tema3["id"], red="x", estado="borrador", copy="C.",
         imagen="foto-fuente.png", falta_imagen=False,
     )
     run3 = _run_por_titulo(cliente, "Tema arte pendiente")
-    arte3 = next(e for e in run3["etapas"] if e["clave"] == "arte")
+    arte3 = next(e for e in run3["etapas"] if e["clave"] == "ilustrar")
     assert arte3["estado"] == "pendiente"
 
 
 def test_etapas_marcan_ia_y_detalle_trae_prompts(cliente):
-    """Cada etapa trae `es_ia` (IA vs no-IA: Selección/Aprobación NO); el detalle expone
+    """Cada etapa trae `es_ia` (IA vs no-IA: Admitir/Aprobar NO); el detalle expone
     `prompts_por_etapa` (plantilla del prompt de cada etapa IA)."""
     tema = _tema_pipeline("Tema ia flags")
     run = _run_por_titulo(cliente, "Tema ia flags")
     ia = {e["clave"]: e["es_ia"] for e in run["etapas"]}
-    assert ia["fusion"] is True and ia["editorial"] is True
-    assert ia["qa"] is True and ia["cd"] is True and ia["arte"] is True
-    assert ia["ci"] is False and ia["aprobacion"] is False
+    assert ia["fusionar"] is True and ia["priorizar"] is True
+    assert ia["verificar"] is True and ia["redactar"] is True and ia["ilustrar"] is True
+    assert ia["admitir"] is False and ia["aprobar"] is False
     body = cliente.get(f"/api/pipelines/{tema['id']}").json()
     assert isinstance(body["prompts_por_etapa"], dict)
 
@@ -451,7 +454,7 @@ def test_problemas_lista_temas_bloqueados(cliente):
     p = body["problemas"][0]
     assert p["titulo"] == "Tema bloqueado"
     assert p["marca"] == "unotv" and p["marca_nombre"]
-    assert p["etapa"] == "Copy"  # el hallazgo de sistema trae la etapa que agotó reintentos
+    assert p["etapa"] == "Redactar"  # el hallazgo de sistema trae la etapa que agotó reintentos
     assert p["intentos"] == {"qa": 1, "cd": 3}
     assert "falló 3 veces" in p["error"]
     assert p["hallazgos"] and p["hallazgos"][0]["tipo"] == "sistema"
@@ -459,14 +462,14 @@ def test_problemas_lista_temas_bloqueados(cliente):
 
 
 def test_problemas_criba_roja_es_validacion(cliente):
-    """Un 🔴 de la propia criba (hallazgo no-sistema) se atribuye a la etapa Validación."""
+    """Un 🔴 de la propia criba (hallazgo no-sistema) se atribuye a la etapa Verificar."""
     hallazgos = json.dumps({
         "resumen": "Dato falso evidente",
         "hallazgos": [{"tipo": "dato", "gravedad": "error", "explicacion": "es falso"}],
     })
     _tema_pipeline("Criba roja", qa_veredicto="problema", qa_hallazgos=hallazgos)
     p = cliente.get("/api/pipelines/problemas").json()["problemas"][0]
-    assert p["etapa"] == "Validación"
+    assert p["etapa"] == "Verificar"
     assert p["error"] == "es falso"
     assert p["intentos"] == {"qa": 0, "cd": 0}  # sin copy_pendiente no hay contadores
 
@@ -489,10 +492,10 @@ def test_problemas_vacio_sin_bloqueados(cliente):
 
 
 def test_detalle_expone_stream_de_la_etapa(cliente):
-    """Un marcador de etapa CD con `gen_id` -> el detalle surface el STREAM de esa generación.
+    """Un marcador de etapa REDACTAR con `gen_id` -> el detalle surface el STREAM de esa generación.
 
     Crea una generación REAL (con `salida` = el proceso del agente) y un marcador de etapa
-    CD que la referencia por `gen_id`; el detalle debe traer `generaciones_por_etapa["CD"]`
+    REDACTAR que la referencia por `gen_id`; el detalle debe traer `generaciones_por_etapa["CD"]`
     con esa `salida` y su estado.
     """
     tema = _tema_pipeline("Tema con stream")
@@ -574,13 +577,13 @@ def test_run_suma_metricas_de_sus_generaciones(cliente):
     SUMA en `metricas` de la run."""
     tema = _tema_pipeline("Run con coste")
     _gen_suelta("Copy de la run", contenido_id=tema["id"])
-    _gen_suelta("Arte de la run", tipo="imagen", contenido_id=tema["id"],
+    _gen_suelta("Ilustrar de la run", tipo="imagen", contenido_id=tema["id"],
                 metricas={"tokens_in": 10, "tokens_out": 10, "total_cost_usd": 0.005,
                           "duration_ms": 1000})
     items = cliente.get("/api/pipelines").json()["pipelines"]
     titulos = {x["titulo"] for x in items}
     assert "Copy de la run" not in titulos
-    assert "Arte de la run" not in titulos
+    assert "Ilustrar de la run" not in titulos
     run = next(x for x in items if x["titulo"] == "Run con coste")
     assert run["metricas"]["items"] == 2
     assert run["metricas"]["tokens"] == 150 + 20
@@ -607,36 +610,37 @@ def test_filtros_clase_y_tipo(cliente):
 
 
 def test_fusion_editorial_no_saltada_si_el_pool_corrio(cliente):
-    """Run SIN historia pero con la IA del pool corrida (generaciones Fusión/Encaje de la
-    marca): Fusión y Editorial se pintan 'ok' con detalle honesto, NO 'saltada'."""
+    """Run SIN historia pero con la IA del pool corrida (generaciones Fusionar/Priorizar de la
+    marca): Fusionar y Priorizar se pintan 'ok' con detalle honesto, NO 'saltada' — antes la
+    página enseñaba 'Saltada' junto a un bloque IA completado con output (contradicción)."""
     tema = _tema_pipeline("Run sin grupo")
     generaciones.crear({
-        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Fusión de historias — UnoTV",
+        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Fusionar historias — UnoTV",
         "prompt": "P", "salida": "S",
         "estado": generaciones.ESTADO_COMPLETADO, "fase": generaciones.FASE_COMPLETADO,
     })
     generaciones.crear({
-        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Encaje editorial — UnoTV",
+        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Priorizar historias — UnoTV",
         "prompt": "P", "salida": "S",
         "estado": generaciones.ESTADO_COMPLETADO, "fase": generaciones.FASE_COMPLETADO,
     })
     run = _run_por_titulo(cliente, "Run sin grupo")
     etapas = {e["clave"]: e for e in run["etapas"]}
-    assert etapas["fusion"]["estado"] == "ok"
-    assert "Sin grupo" in etapas["fusion"]["detalle"]
-    assert etapas["editorial"]["estado"] == "ok"
+    assert etapas["fusionar"]["estado"] == "ok"
+    assert "Sin grupo" in etapas["fusionar"]["detalle"]
+    assert etapas["priorizar"]["estado"] == "ok"
     # El detalle deriva IGUAL (misma evidencia) y además enlaza la generación del pool.
     det = cliente.get(f"/api/pipelines/{tema['id']}").json()
     det_etapas = {e["clave"]: e for e in det["pipeline"]["etapas"]}
-    assert det_etapas["fusion"]["estado"] == "ok"
-    assert det_etapas["editorial"]["estado"] == "ok"
+    assert det_etapas["fusionar"]["estado"] == "ok"
+    assert det_etapas["priorizar"]["estado"] == "ok"
     assert det["generaciones_por_etapa"]["FUSION"]["salida"] == "S"
     # Sin pool ni historia (otra marca): sigue 'saltada' (sin evidencia no se inventa nada).
     _tema_pipeline("Run sin evidencia", marca="claro-sports")
     sin = _run_por_titulo(cliente, "Run sin evidencia")
     sin_etapas = {e["clave"]: e["estado"] for e in sin["etapas"]}
-    assert sin_etapas["fusion"] == "saltada"
-    assert sin_etapas["editorial"] == "saltada"
+    assert sin_etapas["fusionar"] == "saltada"
+    assert sin_etapas["priorizar"] == "saltada"
 
 
 def test_lista_trae_sumatorio_de_metricas(cliente):
@@ -665,7 +669,7 @@ def test_lista_trae_sumatorio_de_metricas(cliente):
 def test_tema_de_tablero_trabajado_sale_como_run(cliente):
     """Un tema del tablero (origen de `ORIGENES_AUTOGEN`) que la etapa de copy REDACTÓ es una
     RUN del feed (no una entrada suelta "Auto-copy"): su trabajo se ve dentro de la run, con
-    etapas honestas (Fusión/Editorial/Criba "no aplica": no pasó por el pool)."""
+    etapas honestas (Fusionar/Priorizar/Criba "no aplica": no pasó por el pool)."""
     tema = repos.crear_contenido(
         clase="contenido", titulo="Breaking usada a mano", marca="unotv", origen="historia",
     )
@@ -681,21 +685,21 @@ def test_tema_de_tablero_trabajado_sale_como_run(cliente):
     })
     # Pool de la marca corrido: NO se hereda (el tema no vino del pool).
     generaciones.crear({
-        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Fusión de historias — UnoTV",
+        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Fusionar historias — UnoTV",
         "estado": generaciones.ESTADO_COMPLETADO,
     })
     items = cliente.get("/api/pipelines").json()["pipelines"]
     run = next(x for x in items if x["titulo"] == "Breaking usada a mano")
     assert run["clase"] == "run"
     etapas = {e["clave"]: e for e in run["etapas"]}
-    assert etapas["fusion"]["estado"] == "saltada"
-    assert "No aplica" in etapas["fusion"]["detalle"]
-    assert etapas["editorial"]["estado"] == "saltada"
-    assert etapas["qa"]["estado"] == "saltada"
-    assert "Sin criba" in etapas["qa"]["detalle"] or "No aplica" in etapas["qa"]["detalle"]
-    assert etapas["ci"]["estado"] == "ok"
-    assert "historia" in etapas["ci"]["detalle"]
-    assert etapas["cd"]["estado"] == "ok"  # el copy persistido
+    assert etapas["fusionar"]["estado"] == "saltada"
+    assert "No aplica" in etapas["fusionar"]["detalle"]
+    assert etapas["priorizar"]["estado"] == "saltada"
+    assert etapas["verificar"]["estado"] == "saltada"
+    assert "Sin criba" in etapas["verificar"]["detalle"] or "No aplica" in etapas["verificar"]["detalle"]
+    assert etapas["admitir"]["estado"] == "ok"
+    assert "historia" in etapas["admitir"]["detalle"]
+    assert etapas["redactar"]["estado"] == "ok"  # el copy persistido
     assert run["metricas"]["tokens"] == 150
     # El trabajo NO sale duplicado como entrada suelta.
     assert all(
@@ -705,7 +709,7 @@ def test_tema_de_tablero_trabajado_sale_como_run(cliente):
     det = cliente.get(f"/api/pipelines/{tema['id']}")
     assert det.status_code == 200
     det_etapas = {e["clave"]: e for e in det.json()["pipeline"]["etapas"]}
-    assert det_etapas["fusion"]["estado"] == "saltada"  # coherente con la lista
+    assert det_etapas["fusionar"]["estado"] == "saltada"  # coherente con la lista
 
 
 def test_autogen_legacy_correlacionado_se_pliega_en_su_run(cliente):
@@ -773,18 +777,18 @@ def test_lanzar_sella_contenido_id_en_el_registro(cliente, monkeypatch):
 def test_run_de_pipeline_suma_tambien_las_etapas_de_pool(cliente):
     """La tarjeta de una run del pipeline cuadra con el AGREGADO de sus etapas: además de las
     generaciones correlacionadas (copy/criba/arte), suma las etapas de POOL que su detalle
-    enlaza (la Fusión y el Encaje más recientes de la marca). Un tema del TABLERO no las suma
+    enlaza (la Fusionar y el Priorizar más recientes de la marca). Un tema del TABLERO no las suma
     (el pool no le aplica)."""
     tema = _tema_pipeline("Run con pool sumado")
     _gen_suelta("Copy de la run", contenido_id=tema["id"])  # 150 tok · 0.02 · 3000 ms
     generaciones.crear({
-        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Fusión de historias — UnoTV",
+        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Fusionar historias — UnoTV",
         "estado": generaciones.ESTADO_COMPLETADO,
         "metricas": {"tokens_in": 10, "tokens_out": 90, "total_cost_usd": 0.01,
                      "duration_ms": 2000},
     })
     generaciones.crear({
-        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Encaje editorial — UnoTV",
+        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Priorizar historias — UnoTV",
         "estado": generaciones.ESTADO_COMPLETADO,
         "metricas": {"tokens_in": 5, "tokens_out": 45, "total_cost_usd": 0.005,
                      "duration_ms": 1000},

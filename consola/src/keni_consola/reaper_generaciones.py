@@ -58,8 +58,8 @@ def _sanear_qa_en_curso() -> int:
     generación mueren sin finalizador, el tema quedaba excluido PARA SIEMPRE de `temas_sin_qa`
     y contando en `temas_en_vuelo` (bloquea el cupo serial de su marca). Por cada zombi más
     viejo que el TTL (`_ttl_qa_en_curso_seg`, vs `actualizado`):
-      - etapa de Validación ACTIVA para la marca -> se resetea a "" (re-criba en el barrido);
-      - APAGADA (`KENI_PIPELINE_VALIDACION` off, global o `::marca`) -> se marca `saltada`
+      - etapa Verificar ACTIVA para la marca -> se resetea a "" (re-criba en el barrido);
+      - APAGADA (`KENI_PIPELINE_VERIFICAR` off, global o `::marca`) -> se marca `saltada`
         (CD lo recoge sin re-cribar; re-cribar con la etapa apagada lo dejaría zombi otra vez).
     WARN por tema (tema_id + marca + destino). El worker además sanea en caliente al cerrar un
     job de QA en error; esto es la red para las muertes no graciosas.
@@ -81,8 +81,8 @@ def _sanear_qa_en_curso() -> int:
             continue
         tema_id = (tema.get("id") or "").strip()
         marca = tema.get("marca") or ""
-        validacion_activa = config.etapa_activa(config.ENV_PIPELINE_VALIDACION, marca)
-        nuevo = "" if validacion_activa else QA_SALTADA
+        verificar_activa = config.etapa_activa(config.ENV_PIPELINE_VERIFICAR, marca)
+        nuevo = "" if verificar_activa else QA_SALTADA
         try:
             repos.actualizar_contenido(tema_id, {"qa_veredicto": nuevo})
         except Exception:  # noqa: BLE001 -- best-effort por tema; el resto del saneo sigue
@@ -94,7 +94,7 @@ def _sanear_qa_en_curso() -> int:
         tocados += 1
         _log.warning(
             "Reaper de generaciones: QA 'en_curso' zombi del tema %s (marca %s) -> %s.",
-            tema_id, marca, "re-criba" if validacion_activa else "saltada",
+            tema_id, marca, "re-criba" if verificar_activa else "saltada",
         )
     return tocados
 

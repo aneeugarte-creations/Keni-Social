@@ -1,14 +1,15 @@
-"""Tests del pipeline de contenido CI→QA(fuente)→CD (ADITIVO, gateado por `KENI_PIPELINE_COPY`).
+"""Tests del pipeline de contenido ADMITIR→VERIFICAR(fuente)→REDACTAR (ADITIVO, gateado por `KENI_PIPELINE_REDACTAR`).
 
-El barrido es CI (crea temas SIN copy) → QA de la FUENTE (criba permisiva por tema) → CD (copy SOLO de los
+REDISEÑO QPC: Verificar se movió a ANTES del copy y por PIEZA (tema/fuente). El barrido es ahora
+ADMITIR (crea temas SIN copy) → VERIFICAR de la FUENTE (criba permisiva por tema) → REDACTAR (copy SOLO de los
 temas `no_verificado`). Todo OFFLINE: ni red (og:image mockeada), ni `claude` (`lanzar_copy` y
-la generación de QA mockeados), ni feeds reales (items canned). Cubre:
+la generación de Verificar mockeados), ni feeds reales (items canned). Cubre:
   (a) gateado OFF por defecto -> el barrido NO produce nada;
-  (b) con el flag, CI selecciona <= cap por marca, crea temas SIN copy y marca el item usado;
-  (c) se emiten entradas de actividad de etapa CI (y, al lanzar, QA/CD);
+  (b) con el flag, ADMITIR selecciona <= cap por marca, crea temas SIN copy y marca el item usado;
+  (c) se emiten entradas de actividad de etapa ADMITIR (y, al lanzar, VERIFICAR/REDACTAR);
   (d) una fuente `problema` NO genera copy y marca el tema ❗; una `no_verificado` SÍ genera
       copy y las piezas heredan el aviso ⚠️;
-  (e) el cap por barrido (QA y CD) se respeta.
+  (e) el cap por barrido (VERIFICAR y REDACTAR) se respeta.
 
 Las funciones PURAS (`items_ingeribles`, `qa_lexico`, `_extraer_og_image`) se prueban sin DB.
 Los flujos con persistencia usan la fixture `entorno` (Postgres de pruebas; se salta si no hay).
@@ -25,7 +26,7 @@ from .conftest import _cliente, lanzador_generacion_completa
 
 _URL_OK = "https://ejemplo.test/feed.xml"
 
-# Salidas canned de la QA de la fuente (semáforo + bloque json estructurado).
+# Salidas canned de Verificar la fuente (semáforo + bloque json estructurado).
 _QA_OK = (
     "🟢 Fuente apta.\n\n"
     '```json\n{"veredicto": "🟢", "resumen": "Sin problemas de peso", "hallazgos": []}\n```\n'
@@ -78,8 +79,8 @@ def _mock_og_image(monkeypatch, url=""):
     monkeypatch.setattr(pc, "_FETCH_OG_IMAGE", lambda enlace: url)
 
 
-def _ci_desde_feed(marca="unotv", *, maximo=2):
-    """CI feed→tema con los building blocks `ingerir_marca` + `crear_tema_de` (sin el barrido).
+def _admitir_desde_feed(marca="unotv", *, maximo=2):
+    """ADMITIR feed→tema con los building blocks `ingerir_marca` + `crear_tema_de` (sin el barrido).
 
     El barrido auto ahora promueve CLUSTERS rankeados; estos building blocks de feed siguen
     existiendo y se cubren aquí en aislamiento (dedup, copy_pendiente con og:image, url_fuente).
@@ -102,15 +103,15 @@ def _sembrar_cluster(
     verificacion="corroborada", n_fuentes=2, categoria="mx", breaking=0,
     qa_veredicto="",
 ):
-    """Siembra un cluster del pool (Ola B) para los tests de promoción CI→tema.
+    """Siembra un cluster del pool (Ola B) para los tests de promoción ADMITIR→tema.
 
     Por defecto el cluster SUPERA el listón de producción automática (`noticias_liston`):
     FRESCO (`ultimo_visto` ≈ ahora), corroborado y con encaje de marca unotv por el resumen.
     Los tests del propio listón pasan valores que lo incumplen a propósito.
 
     `qa_veredicto`: estado de la criba del cluster. Por defecto "" (sin cribar, el estado del que
-    parte la QA de investigación). La ADMISIÓN solo promueve las VERIFICADAS, así que los tests
-    que llaman DIRECTO a la promoción (sin pasar por la fase QA) deben sembrar el cluster ya
+    parte Verificar en investigación). La ADMISIÓN solo promueve las VERIFICADAS, así que los tests
+    que llaman DIRECTO a la promoción (sin pasar por la fase Verificar) deben sembrar el cluster ya
     verificado (`VERDICTO_NO_VERIFICADO`) — es el camino real, no el atajo sin filtro.
     """
     from datetime import UTC, datetime
@@ -320,7 +321,7 @@ def test_qa_lexico_supera_limite_de_red():
 
 
 def test_gateado_off_no_arranca_el_daemon():
-    """Sin `KENI_PIPELINE_COPY`, el flag está OFF (def): el `bucle_gateado` no barrería."""
+    """Sin `KENI_PIPELINE_REDACTAR`, el flag está OFF (def): el `bucle_gateado` no barrería."""
     assert config.pipeline_activo() is False
 
 
@@ -347,7 +348,7 @@ def test_iniciar_pipeline_no_genera_sin_flag(entorno, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# (b)+(c) CI: crea temas SIN copy, dedup, y etapa CI en actividad              #
+# (b)+(c) ADMITIR: crea temas SIN copy, dedup, y etapa ADMITIR en actividad    #
 # --------------------------------------------------------------------------- #
 
 
@@ -360,8 +361,8 @@ def _etapas_de_actividad():
     ]
 
 
-def test_ci_crea_temas_sin_copy_y_dedup(entorno, monkeypatch):
-    """CI feed→tema (building blocks) selecciona <= cap, crea temas SIN copy y dedup efectiva."""
+def test_admitir_crea_temas_sin_copy_y_dedup(entorno, monkeypatch):
+    """ADMITIR feed→tema (building blocks) selecciona <= cap, crea temas SIN copy y dedup efectiva."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
 
     fuente = repos.crear_fuente_rss("Diario", _URL_OK, marca="unotv")
@@ -370,9 +371,9 @@ def test_ci_crea_temas_sin_copy_y_dedup(entorno, monkeypatch):
     _mock_feed(monkeypatch, items)
     _mock_og_image(monkeypatch, "")
 
-    temas = _ci_desde_feed(maximo=2)
+    temas = _admitir_desde_feed(maximo=2)
 
-    # CI creó 2 temas (cap) SIN copy ni veredicto de QA.
+    # ADMITIR creó 2 temas (cap) SIN copy ni veredicto de Verificar.
     assert len(temas) == 2
     titulos = {t["titulo"] for t in pc.temas_pipeline()}
     assert {"Tema A", "Tema B"} <= titulos
@@ -382,15 +383,15 @@ def test_ci_crea_temas_sin_copy_y_dedup(entorno, monkeypatch):
     vistas = repos.claves_vistas(fuente["id"])
     assert {"a", "b"} <= vistas
 
-    # Etapa CI en la actividad.
+    # Etapa ADMITIR en la actividad.
     assert any(e.startswith("CI · ") for e in _etapas_de_actividad())
 
     # dedup efectiva: un SEGUNDO pase crea el restante (C).
-    _ci_desde_feed(maximo=2)
+    _admitir_desde_feed(maximo=2)
     assert {t["titulo"] for t in pc.temas_pipeline()} >= {"Tema A", "Tema B", "Tema C"}
 
 
-def test_ci_guarda_copy_pendiente_con_imagen_propia(entorno, monkeypatch):
+def test_admitir_guarda_copy_pendiente_con_imagen_propia(entorno, monkeypatch):
     """Feed de marca PROPIA: la og:image resuelta queda en `copy_pendiente` del tema."""
     import json
 
@@ -400,7 +401,7 @@ def test_ci_guarda_copy_pendiente_con_imagen_propia(entorno, monkeypatch):
     _mock_feed(monkeypatch, [_item(clave="p1", titulo="Nota propia")])
     _mock_og_image(monkeypatch, "https://casa.test/foto.jpg")
 
-    temas = _ci_desde_feed(maximo=1)
+    temas = _admitir_desde_feed(maximo=1)
 
     assert len(temas) == 1
     pend = json.loads(pc.temas_pipeline()[0]["copy_pendiente"])
@@ -450,9 +451,9 @@ def test_imagen_de_cluster_og_image_solo_como_rescate(entorno, monkeypatch):
     ) == ""
 
 
-def test_cd_pasa_fotos_notas_y_n_notas_al_copy(entorno, monkeypatch):
-    """CD: `fotos_notas`/`n_notas` del copy_pendiente viajan a `lanzar_copy` (habilitan el carrusel)."""
-    monkeypatch.setenv("KENI_PIPELINE_COPY", "1")
+def test_redactar_pasa_fotos_notas_y_n_notas_al_copy(entorno, monkeypatch):
+    """REDACTAR: `fotos_notas`/`n_notas` del copy_pendiente viajan a `lanzar_copy` (habilitan el carrusel)."""
+    monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")
     llamadas = _mock_lanzar_copy(monkeypatch)
     fotos = [
         {"titulo": "Concierto A", "imagen": "https://casa.test/a.jpg"},
@@ -475,9 +476,9 @@ def test_cd_pasa_fotos_notas_y_n_notas_al_copy(entorno, monkeypatch):
     assert llamadas[0]["n_notas"] == 4
 
 
-def test_cd_pendiente_viejo_sin_panel_no_ofrece_carrusel(entorno, monkeypatch):
+def test_redactar_pendiente_viejo_sin_panel_no_ofrece_carrusel(entorno, monkeypatch):
     """Compat: un copy_pendiente anterior al carrusel sigue funcionando (n_notas=1, sin fotos)."""
-    monkeypatch.setenv("KENI_PIPELINE_COPY", "1")
+    monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")
     llamadas = _mock_lanzar_copy(monkeypatch)
     tema = _tema_pipeline(
         titulo="Pendiente legado",
@@ -491,8 +492,8 @@ def test_cd_pendiente_viejo_sin_panel_no_ofrece_carrusel(entorno, monkeypatch):
     assert llamadas[0]["n_notas"] == 1
 
 
-def test_ci_persiste_url_fuente_canonica(entorno, monkeypatch):
-    """CI: un item con `enlace` http(s) persiste `url_fuente` CANÓNICA en el tema creado."""
+def test_admitir_persiste_url_fuente_canonica(entorno, monkeypatch):
+    """ADMITIR: un item con `enlace` http(s) persiste `url_fuente` CANÓNICA en el tema creado."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
 
     repos.crear_fuente_rss("Diario", _URL_OK, marca="unotv")
@@ -501,15 +502,15 @@ def test_ci_persiste_url_fuente_canonica(entorno, monkeypatch):
     _mock_feed(monkeypatch, [_item(clave="u1", titulo="Tema con URL", enlace=enlace)])
     _mock_og_image(monkeypatch, "")
 
-    temas = _ci_desde_feed(maximo=1)
+    temas = _admitir_desde_feed(maximo=1)
 
     assert len(temas) == 1
     tema = repos.obtener_contenido(temas[0]["id"])
     assert (tema.get("url_fuente") or "") == "ejemplo.test/nota-1?id=7"
 
 
-def test_ci_persiste_fuente_nombre_de_la_fuente(entorno, monkeypatch):
-    """CI (feed RSS): el tema conserva el NOMBRE del medio (`fuente_nombre` = nombre de la fuente).
+def test_admitir_persiste_fuente_nombre_de_la_fuente(entorno, monkeypatch):
+    """ADMITIR (feed RSS): el tema conserva el NOMBRE del medio (`fuente_nombre` = nombre de la fuente).
 
     Se copia al `contenido` al promover para que la cabecera de grupo del feed muestre la
     procedencia aunque el item/cluster de origen desaparezca después.
@@ -520,35 +521,35 @@ def test_ci_persiste_fuente_nombre_de_la_fuente(entorno, monkeypatch):
     _mock_feed(monkeypatch, [_item(clave="fn1", titulo="Tema con medio")])
     _mock_og_image(monkeypatch, "")
 
-    temas = _ci_desde_feed(maximo=1)
+    temas = _admitir_desde_feed(maximo=1)
 
     assert len(temas) == 1
     tema = repos.obtener_contenido(temas[0]["id"])
     assert (tema.get("fuente_nombre") or "") == "Diario"
 
 
-def test_ci_url_fuente_vacia_si_enlace_no_http(entorno, monkeypatch):
-    """CI: un item sin enlace http(s) deja `url_fuente` vacía (no rompe la creación del tema)."""
+def test_admitir_url_fuente_vacia_si_enlace_no_http(entorno, monkeypatch):
+    """ADMITIR: un item sin enlace http(s) deja `url_fuente` vacía (no rompe la creación del tema)."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
 
     repos.crear_fuente_rss("Diario", _URL_OK, marca="unotv")
     _mock_feed(monkeypatch, [_item(clave="u2", titulo="Sin enlace", enlace="")])
     _mock_og_image(monkeypatch, "")
 
-    temas = _ci_desde_feed(maximo=1)
+    temas = _admitir_desde_feed(maximo=1)
     assert len(temas) == 1
     tema = repos.obtener_contenido(temas[0]["id"])
     assert (tema.get("url_fuente") or "") == ""
 
 
 # --------------------------------------------------------------------------- #
-# (d) QA de la fuente: problema NO genera copy (❗); no_verificado SÍ (⚠️)      #
+# (d) VERIFICAR la fuente: problema NO genera copy (❗); no_verificado SÍ (⚠️)  #
 # --------------------------------------------------------------------------- #
 
 
 def _tema_pipeline(titulo="Tema", marca="unotv", **campos):
-    # `copy_pendiente` lo fija CI (`crear_tema_de`) en producción: parámetros del copy a lanzar
-    # SOLO si la QA de la fuente pasa. La fase CD exige que esté presente; lo sembramos aquí.
+    # `copy_pendiente` lo fija ADMITIR (`crear_tema_de`) en producción: parámetros del copy a lanzar
+    # SOLO si Verificar la fuente pasa. La fase Redactar exige que esté presente; lo sembramos aquí.
     campos.setdefault(
         "copy_pendiente",
         json.dumps({"nota": "Nota de origen a cribar.", "redes_ids": ["x"]}),
@@ -559,37 +560,38 @@ def _tema_pipeline(titulo="Tema", marca="unotv", **campos):
     )
 
 
-def test_qa_problema_no_genera_copy_y_marca_tema(entorno, monkeypatch):
-    """Una QA de la fuente `problema` -> NO se lanza copy y el tema queda ❗ con hallazgos."""
-    monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")        # etapa QA activa (criba la fuente)
-    monkeypatch.setenv("KENI_PIPELINE_COPY", "1")  # etapa CD activa (aun así, un 'problema' no genera copy)
+def test_verificar_problema_no_genera_copy_y_marca_tema(entorno, monkeypatch):
+    """Un Verificar de la fuente `problema` -> NO se lanza copy y el tema queda ❗ con hallazgos."""
+    monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")        # etapa Verificar activa (criba la fuente)
+    monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")  # etapa Redactar activa (aun así, un 'problema' no genera copy)
     cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_QA_PROBLEMA))  # noqa: F841
     llamadas = _mock_lanzar_copy(monkeypatch)
     tema = _tema_pipeline(titulo="Tema malo")
 
-    # QA de la fuente (síncrona en test) -> el procesar persiste el veredicto en el tema. El
-    # camino tema-QA es el manual/legado (`lanzar_qa_fuente`); el barrido criba CLUSTERS, no temas.
+    # Verificar la fuente (síncrona en test) -> el procesar persiste el veredicto en el tema. El
+    # camino tema-Verificar es el manual/legado (`lanzar_qa_fuente`); el barrido criba CLUSTERS, no temas.
     pc.lanzar_qa_fuente(tema, autor=None)
     refrescado = repos.obtener_contenido(tema["id"])
     assert refrescado["qa_veredicto"] == pc.VERDICTO_PROBLEMA
     assert "es falso" in (refrescado["qa_hallazgos"] or "")
 
-    # Fase CD: un tema `problema` NO entra a copy (ahorro de tokens).
+    # Fase Redactar: un tema `problema` NO entra a copy (ahorro de tokens).
     pc.ejecutar_cd(autor=None)
     assert llamadas == []
     assert pc.temas_para_copy() == []
 
 
-def test_qa_no_verificado_genera_copy_con_aviso(entorno, monkeypatch):
-    """Una QA `no_verificado` -> el ENCADENADO dispara el copy YA y las piezas heredan el ⚠️.
+def test_verificar_no_verificado_genera_copy_con_aviso(entorno, monkeypatch):
+    """Un Verificar `no_verificado` -> el ENCADENADO dispara el copy YA y las piezas heredan el ⚠️.
 
-    ENCADENADO POR EVENTOS: el `procesar` de la QA, al persistir un veredicto apto, lanza el
-    copy de ESE tema al instante. El barrido queda de red de seguridad. DEDUP AL ÉXITO: el lanzamiento NO limpia
+    ENCADENADO POR EVENTOS: el `procesar` de Verificar, al persistir un veredicto apto, lanza el
+    copy de ESE tema al instante (antes esperaba al siguiente barrido de Redactar, +20 min). El
+    barrido queda de red de seguridad. DEDUP AL ÉXITO: el lanzamiento NO limpia
     `copy_pendiente` (lo limpia el post-procesado del copy al completar); un copy fallido se
     reintenta y, en cuanto hay pieza, el tema sale de la selección.
     """
-    monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")        # etapa QA activa (criba la fuente)
-    monkeypatch.setenv("KENI_PIPELINE_COPY", "1")  # etapa CD activa (genera copy del tema apto)
+    monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")        # etapa Verificar activa (criba la fuente)
+    monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")  # etapa Redactar activa (genera copy del tema apto)
     cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_QA_OK))  # noqa: F841
     llamadas = _mock_lanzar_copy(monkeypatch)
     tema = _tema_pipeline(titulo="Tema ok")
@@ -598,7 +600,7 @@ def test_qa_no_verificado_genera_copy_con_aviso(entorno, monkeypatch):
     refrescado = repos.obtener_contenido(tema["id"])
     assert refrescado["qa_veredicto"] == pc.VERDICTO_NO_VERIFICADO
 
-    # ENCADENADO QA→copy: el copy se disparó al persistirse el veredicto (sin esperar a CD).
+    # ENCADENADO Verificar→copy: el copy se disparó al persistirse el veredicto (sin esperar a Redactar).
     assert len(llamadas) == 1
     # La pieza hereda el aviso ⚠️ por el veredicto inicial.
     assert llamadas[0]["veredicto_inicial"] == pc.VERDICTO_NO_VERIFICADO
@@ -606,7 +608,7 @@ def test_qa_no_verificado_genera_copy_con_aviso(entorno, monkeypatch):
     assert llamadas[0]["limpiar_pendiente"] is True
     assert (repos.obtener_contenido(tema["id"])["copy_pendiente"] or "").strip()
 
-    # Éxito del copy (simulado): nace la pieza -> el tema sale de la selección de CD y el
+    # Éxito del copy (simulado): nace la pieza -> el tema sale de la selección de Redactar y el
     # barrido (red de seguridad) NO lo relanza.
     repos.crear_contenido_plataforma(contenido_id=tema["id"], red="x", copy="Hola X")
     assert pc.temas_para_copy() == []
@@ -614,13 +616,13 @@ def test_qa_no_verificado_genera_copy_con_aviso(entorno, monkeypatch):
     assert len(llamadas) == 1
 
 
-def test_encadenado_no_dispara_copy_si_cd_apagada(entorno, monkeypatch):
-    """El encadenado QA→copy respeta el gate de CD: con «Generar copy» OFF no lanza nada."""
-    monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")
-    monkeypatch.delenv("KENI_PIPELINE_COPY", raising=False)
+def test_encadenado_no_dispara_copy_si_redactar_apagada(entorno, monkeypatch):
+    """El encadenado Verificar→copy respeta el gate de Redactar: con «Generar copy» OFF no lanza nada."""
+    monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")
+    monkeypatch.delenv("KENI_PIPELINE_REDACTAR", raising=False)
     cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_QA_OK))  # noqa: F841
     llamadas = _mock_lanzar_copy(monkeypatch)
-    tema = _tema_pipeline(titulo="Sin CD")
+    tema = _tema_pipeline(titulo="Sin Redactar")
 
     pc.lanzar_qa_fuente(tema, autor=None)
 
@@ -628,10 +630,10 @@ def test_encadenado_no_dispara_copy_si_cd_apagada(entorno, monkeypatch):
     assert llamadas == []  # el encadenado no salta el toggle de copy
 
 
-def test_encadenado_cola_llena_no_rompe_la_qa(entorno, monkeypatch):
-    """`ColaLlenaError` al encadenar el copy NO rompe el procesar de la QA (lo recoge el barrido)."""
-    monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")
-    monkeypatch.setenv("KENI_PIPELINE_COPY", "1")
+def test_encadenado_cola_llena_no_rompe_verificar(entorno, monkeypatch):
+    """`ColaLlenaError` al encadenar el copy NO rompe el procesar de Verificar (lo recoge el barrido)."""
+    monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")
+    monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")
     cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_QA_OK))  # noqa: F841
 
     def _llena(**_kw):
@@ -642,21 +644,21 @@ def test_encadenado_cola_llena_no_rompe_la_qa(entorno, monkeypatch):
 
     pc.lanzar_qa_fuente(tema, autor=None)  # no debe reventar
 
-    # El veredicto SÍ quedó persistido y el tema sigue elegible para el barrido de CD.
+    # El veredicto SÍ quedó persistido y el tema sigue elegible para el barrido de Redactar.
     assert repos.obtener_contenido(tema["id"])["qa_veredicto"] == pc.VERDICTO_NO_VERIFICADO
     assert [t["id"] for t in pc.temas_para_copy()] == [tema["id"]]
 
 
-def test_qa_cluster_problema_no_se_admite(entorno, monkeypatch):
-    """ADR 0011 F3: la QA corre sobre la HISTORIA; una `problema` NO se materializa como contenido."""
-    monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
-    monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")
+def test_verificar_cluster_problema_no_se_admite(entorno, monkeypatch):
+    """ADR 0011 F3: Verificar corre sobre la HISTORIA; una `problema` NO se materializa como contenido."""
+    monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
+    monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_MAX", "5")
     cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_QA_PROBLEMA))  # noqa: F841
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     _sembrar_cluster("c-malo", titulo="Historia dudosa", score=0.8)
 
-    # Un tick de investigación: QA (síncrona en test) marca el cluster, la admisión decide.
+    # Un tick de investigación: Verificar (síncrona en test) marca el cluster, la admisión decide.
     res = pc._ejecutar_investigacion()
 
     assert repos.obtener_noticia_cluster("c-malo")["qa_veredicto"] == pc.VERDICTO_PROBLEMA
@@ -666,10 +668,10 @@ def test_qa_cluster_problema_no_se_admite(entorno, monkeypatch):
     assert repos.obtener_noticia_cluster("c-malo")["estado"] == "nuevo"
 
 
-def test_qa_cluster_ok_se_admite_heredando_veredicto(entorno, monkeypatch):
-    """ADR 0011 F3: una historia que pasa la QA se admite y el TEMA HEREDA el veredicto del cluster."""
-    monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
-    monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")
+def test_verificar_cluster_ok_se_admite_heredando_veredicto(entorno, monkeypatch):
+    """ADR 0011 F3: una historia que pasa Verificar se admite y el TEMA HEREDA el veredicto del cluster."""
+    monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
+    monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_MAX", "5")
     cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_QA_OK))  # noqa: F841
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
@@ -680,15 +682,15 @@ def test_qa_cluster_ok_se_admite_heredando_veredicto(entorno, monkeypatch):
     assert repos.obtener_noticia_cluster("c-ok")["qa_veredicto"] == pc.VERDICTO_NO_VERIFICADO
     assert len(res["temas"]) == 1
     tema = res["temas"][0]
-    # El contenido nace VERIFICADO (frontera "QA = investigación" alineada en los datos).
+    # El contenido nace VERIFICADO (frontera "Verificar = investigación" alineada en los datos).
     assert repos.obtener_contenido(tema["id"])["qa_veredicto"] == pc.VERDICTO_NO_VERIFICADO
     assert repos.obtener_noticia_cluster("c-ok")["estado"] == "usado"
 
 
-def test_qa_cluster_acotada_por_el_embudo(entorno, monkeypatch):
+def test_verificar_cluster_acotada_por_el_embudo(entorno, monkeypatch):
     """ADR 0011 F3: la criba se acota al EMBUDO (tope en vuelo) — no recorre todo el pool por tick."""
-    monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
-    monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")
+    monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
+    monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_EN_VUELO_MAX", "1")  # embudo de 1
     cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_QA_OK))  # noqa: F841
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
@@ -709,7 +711,7 @@ def test_copy_fallido_se_reintenta_tras_el_backoff(entorno, monkeypatch):
     `dominio.generar.lanzar` (no este filtro). El barrido SALTA el tema mientras dura el
     backoff del intento (`_BACKOFF_ETAPA_SEG`).
     """
-    monkeypatch.setenv("KENI_PIPELINE_COPY", "1")
+    monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")
     llamadas = _mock_lanzar_copy(monkeypatch)
     tema = _tema_pipeline(titulo="Reintento", qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
 
@@ -734,13 +736,13 @@ def test_copy_fallido_se_reintenta_tras_el_backoff(entorno, monkeypatch):
     assert len(llamadas) == 2
 
 
-def test_qa_no_relanza_tema_ya_cribado(entorno, monkeypatch):
+def test_verificar_no_relanza_tema_ya_cribado(entorno, monkeypatch):
     """Un tema con veredicto ya no se re-criba (idempotente)."""
     _tema_pipeline(titulo="Ya cribado", qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
     assert pc.temas_sin_qa() == []
 
 
-def test_temas_sin_qa_devuelve_todos_los_pendientes(entorno):
+def test_temas_sin_verificar_devuelve_todos_los_pendientes(entorno):
     """FLUJO CONTINUO: sin recorte por etapa; los pendientes entran TODOS (los cribados no).
 
     El volumen lo acota la ADMISIÓN (gate serial en vuelo por marca), no una ventana de revisión:
@@ -754,8 +756,8 @@ def test_temas_sin_qa_devuelve_todos_los_pendientes(entorno):
 
 
 def test_temas_para_copy_devuelve_todos_los_listos(entorno):
-    """FLUJO CONTINUO: CD ve TODOS los temas listos (cribados+pendiente de copy), sin ventana."""
-    # Viejos no_verificado pero YA copiados (copy_pendiente vacío -> no pasan el filtro de CD).
+    """FLUJO CONTINUO: REDACTAR ve TODOS los temas listos (cribados+pendiente de copy), sin ventana."""
+    # Viejos no_verificado pero YA copiados (copy_pendiente vacío -> no pasan el filtro de Redactar).
     _tema_pipeline(titulo="Viejo 1", id="v1", qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente="")
     _tema_pipeline(titulo="Viejo 2", id="v2", qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente="")
     _tema_pipeline(titulo="Nuevo A", id="n1", qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
@@ -763,9 +765,9 @@ def test_temas_para_copy_devuelve_todos_los_listos(entorno):
     assert {t["id"] for t in pc.temas_para_copy()} == {"n1", "n2"}
 
 
-def test_cd_sin_tope_lanza_todos_los_listos(entorno, monkeypatch):
-    """FLUJO CONTINUO: la fase CD redacta TODOS los temas listos en un tick (sin cap por etapa)."""
-    monkeypatch.setenv("KENI_PIPELINE_COPY", "1")
+def test_redactar_sin_tope_lanza_todos_los_listos(entorno, monkeypatch):
+    """FLUJO CONTINUO: la fase Redactar redacta TODOS los temas listos en un tick (sin cap por etapa)."""
+    monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")
     llamadas = _mock_lanzar_copy(monkeypatch)
     import json
 
@@ -781,11 +783,11 @@ def test_cd_sin_tope_lanza_todos_los_listos(entorno, monkeypatch):
     assert len(llamadas) == 4
 
 
-def test_cd_reintentos_agotados_marca_problema_sin_lanzar(entorno, monkeypatch):
-    """REINTENTOS ACOTADOS en CD: un copy que ya agotó sus intentos sale TERMINAL (problema)."""
+def test_redactar_reintentos_agotados_marca_problema_sin_lanzar(entorno, monkeypatch):
+    """REINTENTOS ACOTADOS en Redactar: un copy que ya agotó sus intentos sale TERMINAL (problema)."""
     import json
 
-    monkeypatch.setenv("KENI_PIPELINE_COPY", "1")
+    monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")
     llamadas = _mock_lanzar_copy(monkeypatch)
     pend = json.dumps({"nota": "n", "redes_ids": ["x"], "cd_intentos": pc._MAX_INTENTOS_ETAPA})
     tema = _tema_pipeline(titulo="Copy agotado", qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend)
@@ -799,11 +801,11 @@ def test_cd_reintentos_agotados_marca_problema_sin_lanzar(entorno, monkeypatch):
     assert pc.temas_en_vuelo("unotv") == 0  # terminal: libera la admisión de su marca
 
 
-def test_cd_reintento_anota_intentos_acumulados(entorno, monkeypatch):
+def test_redactar_reintento_anota_intentos_acumulados(entorno, monkeypatch):
     """Cada relanzamiento de copy suma su intento (el tope corta el bucle de reintentos)."""
     import json
 
-    monkeypatch.setenv("KENI_PIPELINE_COPY", "1")
+    monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")
     llamadas = _mock_lanzar_copy(monkeypatch)
     tema = _tema_pipeline(titulo="Suma intentos", qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
 
@@ -817,15 +819,15 @@ def test_cd_reintento_anota_intentos_acumulados(entorno, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# 1 toggle = 1 etapa: Noticias/QA/Copy independientes por marca                 #
+# 1 toggle = 1 etapa: Noticias/Verificar/Redactar independientes por marca      #
 # --------------------------------------------------------------------------- #
 
 
 def test_solo_noticias_promueve_cluster_qa_saltada_cd_no(entorno, monkeypatch):
-    """Solo «Crear noticias» ON: CI promueve la historia top, QA la marca 'saltada', CD no copia."""
-    monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
-    monkeypatch.delenv("KENI_PIPELINE_VALIDACION", raising=False)        # QA off -> etapa saltada
-    monkeypatch.delenv("KENI_PIPELINE_COPY", raising=False)  # Copy off -> CD no corre
+    """Solo «Crear noticias» ON: ADMITIR promueve la historia top, Verificar la marca 'saltada', Redactar no copia."""
+    monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
+    monkeypatch.delenv("KENI_PIPELINE_VERIFICAR", raising=False)        # Verificar off -> etapa saltada
+    monkeypatch.delenv("KENI_PIPELINE_REDACTAR", raising=False)  # Redactar off -> no corre
     monkeypatch.setenv("KENI_PIPELINE_MAX", "5")
     llamadas = _mock_lanzar_copy(monkeypatch)
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
@@ -833,39 +835,39 @@ def test_solo_noticias_promueve_cluster_qa_saltada_cd_no(entorno, monkeypatch):
 
     resumen = pc.ejecutar_barrido()
 
-    # CI promovió el cluster a un tema del pipeline.
+    # ADMITIR promovió el cluster a un tema del pipeline.
     assert len(resumen["temas"]) == 1
     assert any(t["titulo"] == "Historia caliente" for t in pc.temas_pipeline())
-    # QA desactivada: el tema queda 'saltada' (no se lanza criba).
+    # Verificar desactivada: el tema queda 'saltada' (no se lanza criba).
     assert all((t.get("qa_veredicto") or "") == pc.QA_SALTADA for t in pc.temas_pipeline())
-    # CD desactivada: no se genera copy aunque haya tema listo.
+    # Redactar desactivada: no se genera copy aunque haya tema listo.
     assert llamadas == []
     # El cluster quedó marcado usado (no se re-promueve).
     assert repos.obtener_noticia_cluster("c1")["estado"] == "usado"
 
 
 def test_dos_loops_investigacion_y_produccion_separan_fases(entorno, monkeypatch):
-    """ADR 0011 F3: `ejecutar_investigacion` cubre CI+QA y `ejecutar_produccion` CD+arte+avance.
+    """ADR 0011 F3: `ejecutar_investigacion` cubre ADMITIR+VERIFICAR y `ejecutar_produccion` REDACTAR+ILUSTRAR+avance.
 
     El barrido combinado (`_ejecutar_barrido`) es la unión exacta de ambos, así el disparo a
     demanda y los tests siguen viendo el resumen completo aunque en producción cada proceso
     corra en su propio hilo/lock/cadencia.
     """
-    monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
-    monkeypatch.delenv("KENI_PIPELINE_VALIDACION", raising=False)  # QA saltada
-    monkeypatch.delenv("KENI_PIPELINE_COPY", raising=False)  # Copy off
+    monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
+    monkeypatch.delenv("KENI_PIPELINE_VERIFICAR", raising=False)  # Verificar saltada
+    monkeypatch.delenv("KENI_PIPELINE_REDACTAR", raising=False)  # Redactar off
     monkeypatch.setenv("KENI_PIPELINE_MAX", "5")
     _mock_lanzar_copy(monkeypatch)
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     _sembrar_cluster("c1", titulo="Historia caliente", score=0.8)
 
-    # INVESTIGACIÓN: admite (CI) + criba (QA). Solo expone {temas, cribados}.
+    # INVESTIGACIÓN: admite (ADMITIR) + criba (VERIFICAR). Solo expone {temas, cribados}.
     inv = pc._ejecutar_investigacion()
     assert set(inv) == {"temas", "cribados"}
     assert len(inv["temas"]) == 1
     assert any(t["titulo"] == "Historia caliente" for t in pc.temas_pipeline())
 
-    # PRODUCCIÓN: copy + arte + avance. Solo expone {lanzados, artes, avances}.
+    # PRODUCCIÓN: copy + Ilustrar + avance. Solo expone {lanzados, artes, avances}.
     prod = pc._ejecutar_produccion()
     assert set(prod) == {"lanzados", "artes", "avances"}
 
@@ -877,7 +879,7 @@ def test_dos_loops_investigacion_y_produccion_separan_fases(entorno, monkeypatch
 def test_promover_clusters_top_n_por_score(entorno, monkeypatch):
     """`promover_clusters_marca` promueve las top-N historias por score y las marca usado."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    # Verificadas (estado real tras la QA): la admisión SIEMPRE criba — solo promueve verificadas.
+    # Verificadas (estado real tras Verificar): la admisión SIEMPRE criba — solo promueve verificadas.
     _sembrar_cluster("baja", titulo="Score bajo", score=0.1, qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
     _sembrar_cluster("alta", titulo="Score alto", score=0.9, qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
     _sembrar_cluster("media", titulo="Score medio", score=0.5, qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
@@ -893,11 +895,11 @@ def test_promover_clusters_top_n_por_score(entorno, monkeypatch):
 
 
 def test_promover_clusters_marca_filtra_sin_cribar_por_defecto(entorno, monkeypatch):
-    """El filtro de QA es OBLIGATORIO por defecto (ADR 0011 F3): un cluster SIN cribar (veredicto
+    """El filtro de Verificar es OBLIGATORIO por defecto (ADR 0011 F3): un cluster SIN cribar (veredicto
     '') NO se promueve aunque gane en score/listón — no existe un camino que promueva sin verificar.
     """
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    _sembrar_cluster("sin_cribar", titulo="Aún sin QA", score=0.9)  # qa_veredicto='' por defecto
+    _sembrar_cluster("sin_cribar", titulo="Aún sin Verificar", score=0.9)  # qa_veredicto='' por defecto
     _sembrar_cluster("verificada", titulo="Ya verificada", score=0.5,
                      qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
 
@@ -922,13 +924,13 @@ def test_crear_tema_de_cluster_dedup_no_repromueve(entorno, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# Serial POR MARCA: el gate de CI no promueve más historias mientras la marca  #
+# Serial POR MARCA: el gate de ADMITIR no promueve más historias mientras la marca #
 # tenga cola EN VUELO (sin cribar / sin copy). Cada item entra y se completa.  #
 # --------------------------------------------------------------------------- #
 
 
 def test_crear_tema_de_cluster_copia_fuente_y_fecha_de_la_nota(entorno, monkeypatch):
-    """La promoción CI→tema COPIA la procedencia de la nota original al `contenido`.
+    """La promoción ADMITIR→tema COPIA la procedencia de la nota original al `contenido`.
 
     `fuente_nombre` viene del item más reciente del cluster, y `fecha_fuente` prefiere su
     `publicado_en` (cuando el medio publicó la nota). Se copian porque el GC de noticias
@@ -1020,8 +1022,9 @@ def test_crear_tema_de_cluster_no_resuelve_og_image_de_fuente_ajena(entorno, mon
 def test_crear_tema_de_cluster_no_usa_imagen_de_feed_ajeno(entorno, monkeypatch):
     """Item de fuente AJENA con foto en el feed (media-tag): NO se usa (sin derechos).
 
-    Solo fuentes PROPIAS aportan imagen; sin ellas, el tema nace sin foto y el arte lo decide
-    la etapa de Arte IA."""
+    Antes había un fallback a "cualquier imagen ya capturada en los items": colaba fotos de
+    medios ajenos en las piezas (y encendía la etapa Ilustrar sin arte). Solo fuentes PROPIAS
+    aportan imagen; sin ellas, el tema nace sin foto y el arte lo decide la etapa de Ilustrar IA."""
     import json
 
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
@@ -1042,10 +1045,10 @@ def test_crear_tema_de_cluster_no_usa_imagen_de_feed_ajeno(entorno, monkeypatch)
     assert pend["tipo_contenido"] == ""
 
 
-def test_temas_en_vuelo_cuenta_pendientes_de_qa_o_copy(entorno):
-    """`temas_en_vuelo` cuenta los temas sin terminar las fases de IA (QA pendiente o sin copy).
+def test_temas_en_vuelo_cuenta_pendientes_de_verificar_o_copy(entorno):
+    """`temas_en_vuelo` cuenta los temas sin terminar las fases de IA (Verificar pendiente o sin copy).
 
-    En vuelo: veredicto ''/'en_curso' (QA pendiente) y 'no_verificado'/'saltada' SIN copy. NO en
+    En vuelo: veredicto ''/'en_curso' (Verificar pendiente) y 'no_verificado'/'saltada' SIN copy. NO en
     vuelo: 'problema' (terminal) ni 'no_verificado' que YA tiene copy en una pieza por plataforma.
     """
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
@@ -1068,7 +1071,7 @@ def test_temas_en_vuelo_cuenta_pendientes_de_qa_o_copy(entorno):
 
 def test_caducidad_libera_el_gate_y_excluye_de_las_fases(entorno):
     """Un tema EN VUELO que supera el TTL caduca: sale del gate serial (libera hueco para lo
-    fresco del ranking) y NINGUNA fase lo retoma (ni QA lo criba ni CD le genera copy)."""
+    fresco del ranking) y NINGUNA fase lo retoma (ni Verificar lo criba ni Redactar le genera copy)."""
     from datetime import datetime, timedelta, timezone
 
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
@@ -1120,10 +1123,10 @@ def test_caducado_libera_hueco_para_lo_fresco_del_ranking(entorno, monkeypatch):
     from keni_consola.pipeline_contenido import _ingesta
 
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
+    monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_EN_VUELO_MAX", "1")
-    monkeypatch.delenv("KENI_PIPELINE_VALIDACION", raising=False)
-    monkeypatch.delenv("KENI_PIPELINE_COPY", raising=False)
+    monkeypatch.delenv("KENI_PIPELINE_VERIFICAR", raising=False)
+    monkeypatch.delenv("KENI_PIPELINE_REDACTAR", raising=False)
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
     _tema_pipeline(titulo="Backlog vencido", qa_veredicto="", copy_pendiente=pend)
     _sembrar_cluster("hot", titulo="Lo fresco de hoy", score=0.9)
@@ -1137,12 +1140,12 @@ def test_caducado_libera_hueco_para_lo_fresco_del_ranking(entorno, monkeypatch):
     assert [t["titulo"] for t in res["temas"]] == ["Lo fresco de hoy"]
 
 
-def test_ci_serial_no_promueve_si_marca_llena(entorno, monkeypatch):
-    """Gate SERIAL: si la marca ya tiene >= cupo en vuelo, CI no promueve clusters nuevos."""
+def test_admitir_serial_no_promueve_si_marca_llena(entorno, monkeypatch):
+    """Gate SERIAL: si la marca ya tiene >= cupo en vuelo, ADMITIR no promueve clusters nuevos."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")  # ingesta_activa: CI corre
+    monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")  # recolectar_activo: ADMITIR corre
     monkeypatch.setenv("KENI_PIPELINE_EN_VUELO_MAX", "2")
-    # 2 temas en vuelo (pendientes de QA) -> cupo 0 para unotv.
+    # 2 temas en vuelo (pendientes de Verificar) -> cupo 0 para unotv.
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
     _tema_pipeline(titulo="En vuelo 1", qa_veredicto="", copy_pendiente=pend)
     _tema_pipeline(titulo="En vuelo 2", qa_veredicto="", copy_pendiente=pend)
@@ -1154,10 +1157,10 @@ def test_ci_serial_no_promueve_si_marca_llena(entorno, monkeypatch):
     assert repos.obtener_noticia_cluster("hot")["estado"] == "nuevo"  # el cluster sigue disponible
 
 
-def test_ci_serial_promueve_solo_hasta_el_cupo(entorno, monkeypatch):
-    """Gate SERIAL: con cupo parcial, CI promueve como mucho `cupo` historias (no `pipeline_max`)."""
+def test_admitir_serial_promueve_solo_hasta_el_cupo(entorno, monkeypatch):
+    """Gate SERIAL: con cupo parcial, ADMITIR promueve como mucho `cupo` historias (no `pipeline_max`)."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
+    monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_MAX", "3")  # pipeline_max alto: el límite real es el cupo
     monkeypatch.setenv("KENI_PIPELINE_EN_VUELO_MAX", "3")
     # 2 en vuelo -> cupo 1: solo entra 1 historia aunque haya 3 clusters y pipeline_max=3.
@@ -1181,9 +1184,9 @@ def test_ci_serial_promueve_solo_hasta_el_cupo(entorno, monkeypatch):
 
 
 def test_cupo_dia_corta_la_admision(entorno, monkeypatch):
-    """Sin plan, con el cupo DIARIO (24 h móviles) agotado, CI no admite más."""
+    """Sin plan, con el cupo DIARIO (24 h móviles) agotado, ADMITIR no admite más."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
+    monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_CUPO_DIA", "1")
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
     t = _tema_pipeline(
@@ -1201,7 +1204,7 @@ def test_cupo_dia_corta_la_admision(entorno, monkeypatch):
 def test_plan_llena_cupos_por_categoria_con_lo_mejor(entorno, monkeypatch):
     """Con plan, cada categoría se lleva SUS mejores historias y las demás no compiten."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
+    monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_MAX", "10")
     monkeypatch.setenv("KENI_PLAN_DIA", "mx:1,internacional:1")
     _sembrar_cluster("mx1", titulo="Nacional floja", score=0.5, categoria="mx")
@@ -1224,7 +1227,7 @@ def test_plan_llena_cupos_por_categoria_con_lo_mejor(entorno, monkeypatch):
 def test_plan_breaking_consume_slot_breaking(entorno, monkeypatch):
     """Una historia BREAKING compite por el cupo 'breaking', no por el de su categoría."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
+    monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_MAX", "10")
     monkeypatch.setenv("KENI_PLAN_DIA", "breaking:1")
     _sembrar_cluster("br1", titulo="Ultima hora corroborada", score=0.8, categoria="mx", breaking=1)
@@ -1238,7 +1241,7 @@ def test_plan_breaking_consume_slot_breaking(entorno, monkeypatch):
 def test_plan_descuenta_lo_ya_generado_hoy(entorno, monkeypatch):
     """El cupo de una categoría descuenta lo GENERADO en 24 h (contenido.categoria persistida)."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    monkeypatch.setenv("KENI_PIPELINE_SELECCION", "1")
+    monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_PLAN_DIA", "mx:1")
     # Generado previo de la línea mx (la categoría vive EN el contenido, no en el cluster),
     # CON post real (es_publicacion=1): un tema sin post no consumiría cupo (no cuenta).
@@ -1363,7 +1366,7 @@ def test_plan_sin_linea_breaking_compite_por_su_feed(entorno, monkeypatch):
 
 
 def test_temas_para_copy_incluye_qa_saltada(entorno):
-    """Un tema con QA 'saltada' fluye a CD igual que 'no_verificado'; un 'problema' no."""
+    """Un tema con Verificar 'saltada' fluye a Redactar igual que 'no_verificado'; un 'problema' no."""
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
     _tema_pipeline(titulo="Saltada ok", qa_veredicto=pc.QA_SALTADA, copy_pendiente=pend)
     _tema_pipeline(titulo="Problema", qa_veredicto=pc.VERDICTO_PROBLEMA, copy_pendiente=pend)
@@ -1403,7 +1406,7 @@ def test_temas_autogen_sin_copy_selecciona_origenes_de_noticias(entorno):
 
 def test_ejecutar_cd_funde_pool_via_autogen_lanzar(entorno, monkeypatch):
     """`ejecutar_cd` lanza copy de los temas del pool vía `autogen_copy.lanzar_para_topic`."""
-    monkeypatch.setenv("KENI_PIPELINE_COPY", "1")  # etapa CD activa (sin el global, ejecutar_cd no corre)
+    monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")  # etapa Redactar activa (sin el global, ejecutar_cd no corre)
     from keni_consola import autogen_copy
 
     lanzadas: list[str] = []
@@ -1420,8 +1423,8 @@ def test_ejecutar_cd_funde_pool_via_autogen_lanzar(entorno, monkeypatch):
 
 
 def test_ejecutar_cd_salta_pool_de_marca_apagada(entorno, monkeypatch):
-    """La exclusión por marca de «Generar copy» (ENV_PIPELINE_COPY) también aplica al pool."""
-    monkeypatch.setenv("KENI_PIPELINE_COPY", "1")  # etapa CD activa; la exclusión es por marca, no global
+    """La exclusión por marca de «Generar copy» (ENV_PIPELINE_REDACTAR) también aplica al pool."""
+    monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")  # etapa Redactar activa; la exclusión es por marca, no global
     from keni_consola import autogen_copy
 
     monkeypatch.setattr(pc.config, "marca_apagada", lambda env, marca: marca == "unotv")
@@ -1438,13 +1441,13 @@ def test_ejecutar_cd_salta_pool_de_marca_apagada(entorno, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# Etapa de ARTE del pipeline (toggle "Generar arte", KENI_PIPELINE_ARTE)        #
+# Etapa de ILUSTRAR del pipeline (toggle "Generar arte", KENI_PIPELINE_ILUSTRAR)    #
 # --------------------------------------------------------------------------- #
 
 
 def test_ejecutar_arte_off_por_defecto_no_hace_nada(entorno, monkeypatch):
-    """Sin `KENI_PIPELINE_ARTE`, la etapa de arte no ilustra (devuelve [])."""
-    monkeypatch.delenv(config.ENV_PIPELINE_ARTE, raising=False)
+    """Sin `KENI_PIPELINE_ILUSTRAR`, la etapa de Ilustrar no ilustra (devuelve [])."""
+    monkeypatch.delenv(config.ENV_PIPELINE_ILUSTRAR, raising=False)
     monkeypatch.setenv(config.ENV_MAQUINA, "1")
     assert pc.ejecutar_arte() == []
 
@@ -1454,7 +1457,7 @@ def test_ejecutar_arte_gateado_corre_seleccion_y_lanzamiento(entorno, monkeypatc
     from keni_consola import autogen_arte
 
     monkeypatch.setenv(config.ENV_MAQUINA, "1")
-    monkeypatch.setenv(config.ENV_PIPELINE_ARTE, "1")
+    monkeypatch.setenv(config.ENV_PIPELINE_ILUSTRAR, "1")
     monkeypatch.setattr(autogen_arte.media, "proveedor_configurado", lambda: True)
     item = {"id": "t1", "titulo": "Tema", "marca": "unotv"}
     monkeypatch.setattr(pc.repos, "listar_contenido", lambda **_k: [item])
@@ -1473,11 +1476,11 @@ def test_ejecutar_arte_gateado_corre_seleccion_y_lanzamiento(entorno, monkeypatc
 
 
 def test_ejecutar_arte_sin_proveedor_no_ilustra(entorno, monkeypatch):
-    """Con el toggle ON pero sin proveedor de imagen, la etapa de arte no hace nada."""
+    """Con el toggle ON pero sin proveedor de imagen, la etapa de Ilustrar no hace nada."""
     from keni_consola import media
 
     monkeypatch.setenv(config.ENV_MAQUINA, "1")
-    monkeypatch.setenv(config.ENV_PIPELINE_ARTE, "1")
+    monkeypatch.setenv(config.ENV_PIPELINE_ILUSTRAR, "1")
     monkeypatch.setattr(media, "proveedor_configurado", lambda: False)
     assert pc.ejecutar_arte() == []
 
@@ -1512,7 +1515,7 @@ def test_clusters_para_promover_suave_rellena_si_solo_hay_duplicados(entorno):
 
 
 # --------------------------------------------------------------------------- #
-# LISTÓN de producción automática: promover cuesta tokens (QA+copy con IA);    #
+# LISTÓN de producción automática: promover cuesta tokens (Verificar+copy con IA); #
 # el ruido se queda en el pool aunque haya plazas libres.                       #
 # --------------------------------------------------------------------------- #
 
@@ -1522,7 +1525,7 @@ def test_clusters_para_promover_respeta_el_liston(entorno):
     from datetime import UTC, datetime, timedelta
 
     # Todas VERIFICADAS (pasaron la criba): así el ÚNICO discriminante de la promoción es el
-    # listón, no el filtro de QA (que ya cribó a todas por igual).
+    # listón, no el filtro de Verificar (que ya cribó a todas por igual).
     _sembrar_cluster("apta", titulo="Sismo sacude la CDMX", score=0.9,
                      qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
     # Sin encaje de marca: ni el título ni el resumen casan el vocabulario unotv.
@@ -1547,7 +1550,7 @@ def test_clusters_para_promover_respeta_el_liston(entorno):
 
 
 def test_promover_clusters_marca_no_promueve_bajo_liston(entorno, monkeypatch):
-    """El barrido CI deja en el pool (estado `nuevo`) lo que no supera el listón: ni tema ni copy."""
+    """El barrido ADMITIR deja en el pool (estado `nuevo`) lo que no supera el listón: ni tema ni copy."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     _sembrar_cluster("apta", titulo="Sismo sacude la CDMX", score=0.9,
                      qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
@@ -1586,11 +1589,11 @@ def test_upsert_cluster_no_revierte_estado_ni_contenido_id(entorno):
 
 
 def test_encadenar_arte_tras_copy_ilustra_ese_tema(entorno, monkeypatch):
-    """El post-procesado del copy dispara el ARTE de ESE tema al instante (gates ON)."""
+    """El post-procesado del copy dispara ILUSTRAR de ESE tema al instante (gates ON)."""
     from keni_consola import autogen_arte, media
 
     monkeypatch.setenv(config.ENV_MAQUINA, "1")
-    monkeypatch.setenv(config.ENV_PIPELINE_ARTE, "1")
+    monkeypatch.setenv(config.ENV_PIPELINE_ILUSTRAR, "1")
     monkeypatch.setattr(media, "proveedor_configurado", lambda: True)
     monkeypatch.setattr(autogen_arte, "ids_ya_procesados", lambda: set())
     lanzados: list[str] = []
@@ -1613,12 +1616,12 @@ def test_encadenar_arte_tras_copy_respeta_gates(entorno, monkeypatch):
     from keni_consola import autogen_arte, media
 
     # Toggle OFF: ni siquiera consulta el tema.
-    monkeypatch.delenv(config.ENV_PIPELINE_ARTE, raising=False)
+    monkeypatch.delenv(config.ENV_PIPELINE_ILUSTRAR, raising=False)
     monkeypatch.setenv(config.ENV_MAQUINA, "1")
     assert pc.encadenar_arte_tras_copy("cualquiera") is None
 
     # Toggle ON pero tema YA ilustrado (dedup por etiqueta): tampoco.
-    monkeypatch.setenv(config.ENV_PIPELINE_ARTE, "1")
+    monkeypatch.setenv(config.ENV_PIPELINE_ILUSTRAR, "1")
     monkeypatch.setattr(media, "proveedor_configurado", lambda: True)
     tema = repos.crear_contenido(
         clase="contenido", titulo="Ya ilustrado", marca="unotv", origen=pc.ORIGEN_PIPELINE,
@@ -1677,7 +1680,7 @@ def test_reaper_qa_zombi_re_criba_con_validacion_activa(entorno, monkeypatch):
     """El saneo del reaper devuelve a re-criba ('') SOLO los `en_curso` zombis (per-tema)."""
     from keni_consola import reaper_generaciones
 
-    monkeypatch.setenv("KENI_PIPELINE_VALIDACION", "1")
+    monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")
     zombi = _tema_pipeline(titulo="Zombi", qa_veredicto=pc.QA_EN_CURSO)
     vivo = _tema_pipeline(titulo="Vivo", qa_veredicto=pc.QA_EN_CURSO)
     _envejecer_actualizado(zombi["id"])
@@ -1690,10 +1693,10 @@ def test_reaper_qa_zombi_re_criba_con_validacion_activa(entorno, monkeypatch):
 
 
 def test_reaper_qa_zombi_saltada_con_validacion_apagada(entorno, monkeypatch):
-    """Con la etapa de Validación APAGADA, el zombi pasa a 'saltada' (CD lo recoge), no a re-criba."""
+    """Con la etapa de Verificar APAGADA, el zombi pasa a 'saltada' (REDACTAR lo recoge), no a re-criba."""
     from keni_consola import reaper_generaciones
 
-    monkeypatch.delenv("KENI_PIPELINE_VALIDACION", raising=False)  # etapa off (def)
+    monkeypatch.delenv("KENI_PIPELINE_VERIFICAR", raising=False)  # etapa off (def)
     zombi = _tema_pipeline(titulo="Zombi sin QA", qa_veredicto=pc.QA_EN_CURSO)
     _envejecer_actualizado(zombi["id"])
 
@@ -1710,7 +1713,7 @@ def test_ejecutar_arte_fallo_masivo_emite_un_error_agregado(entorno, monkeypatch
     from keni_consola import autogen_arte
 
     monkeypatch.setenv(config.ENV_MAQUINA, "1")
-    monkeypatch.setenv(config.ENV_PIPELINE_ARTE, "1")
+    monkeypatch.setenv(config.ENV_PIPELINE_ILUSTRAR, "1")
     monkeypatch.setattr(autogen_arte.media, "proveedor_configurado", lambda: True)
     items = [
         {"id": "t1", "titulo": "Tema 1", "marca": "unotv"},
@@ -1747,7 +1750,7 @@ def test_ejecutar_arte_fallo_aislado_sin_error_agregado(entorno, monkeypatch, ca
     from keni_consola import autogen_arte
 
     monkeypatch.setenv(config.ENV_MAQUINA, "1")
-    monkeypatch.setenv(config.ENV_PIPELINE_ARTE, "1")
+    monkeypatch.setenv(config.ENV_PIPELINE_ILUSTRAR, "1")
     monkeypatch.setattr(autogen_arte.media, "proveedor_configurado", lambda: True)
     items = [
         {"id": "t1", "titulo": "Tema 1", "marca": "unotv"},
@@ -1804,9 +1807,9 @@ def test_listar_contenido_origenes_filtra_en_sql(entorno):
     assert repos.listar_contenido_origenes([]) == []
 
 
-def test_lanzar_para_topic_sella_pipeline_y_marcador_cd(entorno, monkeypatch):
+def test_lanzar_para_topic_sella_pipeline_y_marcador_redactar(entorno, monkeypatch):
     """El copy de un tema del TABLERO es trabajo del PIPELINE: se lanza `tipo='pipeline'`
-    (no el legado "autogen") y deja el marcador de etapa CD correlacionado al tema, para que
+    (no el legado "autogen") y deja el marcador de etapa Redactar correlacionado al tema, para que
     Producción lo muestre dentro de la run (stream en el detalle + métricas sumadas)."""
     from keni_consola import autogen_copy
 

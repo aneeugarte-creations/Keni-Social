@@ -8,7 +8,7 @@
  *     cuenta la historia completa del proceso sin robar protagonismo.
  *
  * El evergreen (`seccion: "taller"`) se separa del riel principal como anexo
- * «Taller». En Producción, bajo la etapa de copy, un enlace discreto lleva a la
+ * «Taller». En Producción, bajo la etapa de Redactar, un enlace discreto lleva a la
  * pestaña «Estrategia de marca» (las capas editoriales ya no viven aquí).
  */
 import { AlertTriangle, ArrowRight, CheckCircle2, Cog, Hammer } from "lucide-react";
@@ -117,7 +117,7 @@ export function RielMaquina({
   /** Título legible de un doc de la línea (lookup en el listado); fallback: el id. */
   tituloDe: (docId: string) => string | undefined;
   onAbrir: (docId: string) => void;
-  /** Solo Producción: salto a la pestaña «Estrategia de marca» bajo la etapa de copy. */
+  /** Solo Producción: salto a la pestaña «Estrategia de marca» bajo la etapa de Redactar. */
   onIrAEstrategia?: () => void;
 }) {
   // Salud agregada y partición línea principal / anexo «Taller» (seccion === "taller").
@@ -183,7 +183,7 @@ export function RielMaquina({
             {e.tipo === "prompt" ? (
               <>
                 <TarjetaEtapa etapa={e} tituloDoc={tituloDe(e.doc_id)} onAbrir={onAbrir} />
-                {e.id === "copy" && onIrAEstrategia ? (
+                {e.id === "redactar" && onIrAEstrategia ? (
                   <button
                     type="button"
                     onClick={onIrAEstrategia}

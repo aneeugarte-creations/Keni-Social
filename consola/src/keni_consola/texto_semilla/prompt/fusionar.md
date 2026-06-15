@@ -1,5 +1,5 @@
 ---
-titulo: "Fusión"
+titulo: "Fusionar"
 descripcion: "Agrupa historias del mismo evento (deduplicación semántica del pool de noticias)."
 tipo: prompt
 carpeta: "noticias"

@@ -1,7 +1,8 @@
 /**
- * Tests del RielInvestigacion (ADR 0011, C3): la tira de las cinco etapas del proceso
- * (Ingesta · Fusión · Clasificación · Ranking · Verificación) con su estado ON/OFF leído del
- * catálogo de ajustes. El estado solo es legible por admin; el resto ve la tira informativa.
+ * Tests del RielInvestigacion (ADR 0011, C3): la tira del flujo completo del proceso
+ * (Recolectar · Agrupar · Fusionar · Traducir · Clasificar · Priorizar · Admitir · Verificar) con
+ * su estado ON/OFF leído del catálogo de ajustes. El estado solo es legible por admin; el resto
+ * ve la tira informativa.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -67,7 +68,16 @@ function renderRiel(u: UsuarioSesion | null) {
   );
 }
 
-const ETAPAS = ["ingesta", "fusión", "clasificación", "ranking", "verificación"];
+const ETAPAS = [
+  "recolectar",
+  "agrupar",
+  "fusionar",
+  "traducir",
+  "clasificar",
+  "priorizar",
+  "admitir",
+  "verificar",
+];
 
 beforeEach(() => {
   vi.spyOn(apiMod.api, "ajustes").mockResolvedValue(ajustes(true));
@@ -78,7 +88,7 @@ afterEach(() => {
 });
 
 describe("RielInvestigacion", () => {
-  it("pinta las cinco etapas del proceso en orden", async () => {
+  it("pinta todas las etapas del proceso en orden", async () => {
     renderRiel(usuario("admin"));
     for (const e of ETAPAS) expect(screen.getByTestId(`etapa-${e}`)).toBeTruthy();
   });
@@ -86,7 +96,7 @@ describe("RielInvestigacion", () => {
   it("admin: el maestro ON deja todas las etapas en estado «on»", async () => {
     renderRiel(usuario("admin"));
     await waitFor(() =>
-      expect(screen.getByTestId("etapa-ingesta").getAttribute("data-estado")).toBe("on"),
+      expect(screen.getByTestId("etapa-recolectar").getAttribute("data-estado")).toBe("on"),
     );
     for (const e of ETAPAS)
       expect(screen.getByTestId(`etapa-${e}`).getAttribute("data-estado")).toBe("on");
@@ -96,17 +106,17 @@ describe("RielInvestigacion", () => {
     vi.spyOn(apiMod.api, "ajustes").mockResolvedValue(ajustes(false));
     renderRiel(usuario("admin"));
     await waitFor(() =>
-      expect(screen.getByTestId("etapa-ingesta").getAttribute("data-estado")).toBe("off"),
+      expect(screen.getByTestId("etapa-recolectar").getAttribute("data-estado")).toBe("off"),
     );
   });
 
   it("el lápiz de una etapa con prompt es un botón (no deep-link) que abre el editor in-place", () => {
     renderRiel(usuario("admin"));
-    const lapiz = screen.getByLabelText("Editar el prompt de Verificación");
+    const lapiz = screen.getByLabelText("Editar el prompt de Verificar");
     expect(lapiz.tagName).toBe("BUTTON");
     expect(lapiz.getAttribute("href")).toBeNull();
-    // La ingesta es mecánica (sin prompt): no lleva lápiz.
-    expect(screen.queryByLabelText(/Editar el prompt de Ingesta/)).toBeNull();
+    // Recolectar es mecánica (sin prompt): no lleva lápiz.
+    expect(screen.queryByLabelText(/Editar el prompt de Recolectar/)).toBeNull();
     // Al pulsarlo se abre el overlay «Editar prompt» encima del cockpit (sin salir).
     fireEvent.click(lapiz);
     expect(screen.getByRole("dialog")).toBeTruthy();
@@ -115,7 +125,7 @@ describe("RielInvestigacion", () => {
   it("no admin: no consulta el catálogo y las etapas quedan «desconocido»", async () => {
     const spy = vi.spyOn(apiMod.api, "ajustes");
     renderRiel(usuario("editor"));
-    expect(screen.getByTestId("etapa-ingesta").getAttribute("data-estado")).toBe("desconocido");
+    expect(screen.getByTestId("etapa-recolectar").getAttribute("data-estado")).toBe("desconocido");
     expect(spy).not.toHaveBeenCalled();
     // Sin estado legible, tampoco el pie de «Ajustes».
     expect(screen.queryByText(/Ajustes del motor/i)).toBeNull();

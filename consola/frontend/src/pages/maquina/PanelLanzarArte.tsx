@@ -1,6 +1,6 @@
 /**
  * Lanzador manual de ARTE (gemelo «rico» de «Generar copy»): genera N imágenes a mano para
- * una marca a partir del prompt de arte de la Biblioteca (`prompt/arte`, editable) con un
+ * una marca a partir del prompt de la etapa Ilustrar de la Biblioteca (`prompt/ilustrar`, editable) con un
  * modelo de imagen y un nº de alternativas elegidos. DEJA CLARO QUE TIENE COSTE: estima el
  * gasto con el coste medio por imagen del modelo («~$X por imagen × N»). Lanza con
  * `POST /api/artes/generar`, sondea cada generación devuelta (`GET /api/generaciones/{id}`)
@@ -36,8 +36,8 @@ import { MENSAJE_MARCA_REQUERIDA, useMarcaActiva } from "@/hooks/marca-activa-co
 import { api, mensajeError, urlMedia } from "@/lib/api";
 import type { Generacion } from "@/types";
 
-/** Doc de la Biblioteca con el prompt de arte (mismo id que la directiva del generador). */
-const PROMPT_ARTE_ID = "prompt/arte";
+/** Doc de la Biblioteca con el prompt de Ilustrar (mismo id que la directiva del generador). */
+const PROMPT_ILUSTRAR_ID = "prompt/ilustrar";
 /** Tope de alternativas por lanzamiento (espejo de `_MAX_ALTERNATIVAS` en el backend). */
 const MAX_ALTERNATIVAS = 4;
 /** Cada cuánto sondeamos las generaciones en curso (mientras alguna sigue viva). */
@@ -70,8 +70,8 @@ export function PanelLanzarArte({
 
   // ── Prompt de arte de la Biblioteca: precargado y EDITABLE (el usuario puede escribir el suyo). ──
   const promptQuery = useQuery({
-    queryKey: ["texto-doc", PROMPT_ARTE_ID],
-    queryFn: ({ signal }) => api.documento(PROMPT_ARTE_ID, signal),
+    queryKey: ["texto-doc", PROMPT_ILUSTRAR_ID],
+    queryFn: ({ signal }) => api.documento(PROMPT_ILUSTRAR_ID, signal),
     enabled: open,
   });
   const [prompt, setPrompt] = React.useState("");
@@ -201,7 +201,7 @@ export function PanelLanzarArte({
             className="min-h-[120px] w-full text-sm"
           />
           <p className="text-xs text-muted-foreground">
-            Parte del prompt de la Biblioteca (<code>prompt/arte</code>); escríbelo a tu gusto.
+            Parte del prompt de la Biblioteca (<code>prompt/ilustrar</code>); escríbelo a tu gusto.
           </p>
         </div>
 

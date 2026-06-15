@@ -163,7 +163,7 @@ Nota sobre `generar.py` vs `media.py`: ambos llaman a OpenRouter `chat/completio
 - `diseno-unotv/guia-diseno.md`, `plantillas-prompt.md` → `editorial/marcas/unotv` (clase `marca`, `marcas:[unotv]`).
 - `diseno-clarosports/guia-diseno.md`, `plantillas-prompt.md` → `editorial/marcas/claro-sports`.
 - Las reglas legales de `revisa-imagen` (`contexto-editorial/reglas-legales.md`) → `editorial/reglas/imagen` (clase `reglas`, global).
-- Prompts de imagen reutilizables (etapa «Arte») → `prompt/arte*` (p. ej. `prompt/arte-ilustracion`).
+- Prompts de imagen reutilizables (etapa «Ilustrar») → `prompt/ilustrar*` (p. ej. `prompt/ilustrar-ilustracion`).
 
 ---
 
@@ -179,7 +179,7 @@ La operación generativa del Estudio compone el prompt **igual que `dominio/gene
 
 ```
 prompt_imagen_final =
-    <prompt base de imagen>            (Texto: prompt/arte*, editable)
+    <prompt base de imagen>            (Texto: prompt/ilustrar*, editable)
   + <dirección de arte de la marca>    (Texto: editorial/marcas/<marca>, auto-adjunto por marca)
   + <copy / titular de la pieza>       (contexto: lo que dice la publicación)
   + <formato/aspecto>                  (derivado de la red destino: 4:5, 9:16, 1:1, 16:9)
@@ -226,7 +226,7 @@ Las operaciones deterministas (`editar`) NO necesitan `claude`: corren el motor 
 Implementada como **job `claude` puntual**: `POST /api/imagenes/revisar` lanza un `claude -p` con la imagen vía `--add-dir` y la regla `editorial/reglas/imagen` adjunta en el prompt; devuelve el checklist ✅/⚠️/❌ (`dominio/estudio_imagen.revisar`, reutiliza `encolar_job_claude`/`_argv_claude`). La revisión NO bloquea la generación: es el cierre antes de "Usar en la pieza" (gate humano). Pendiente a medio plazo: unificarla con el QA editorial existente (`api/qa_editorial.py`) para no fragmentar la verificación.
 
 ### 3.6 Relación con la Texto
-- **Prompts de imagen** = documentos `tipo: prompt` (p. ej. `prompt/arte-ilustracion`). El Estudio los carga con `texto.cuerpo_efectivo(id)` (mismo seam que `dominio/generar.py:180`).
+- **Prompts de imagen** = documentos `tipo: prompt` (p. ej. `prompt/ilustrar-ilustracion`). El Estudio los carga con `texto.cuerpo_efectivo(id)` (mismo seam que `dominio/generar.py:180`).
 - **Dirección de arte por marca** = documentos `tipo: editorial, clase: marca` (`editorial/marcas/unotv`, `editorial/marcas/claro-sports`), auto-adjuntos por marca con `texto.editoriales_de_marca(marca)` (igual que el copy). Editables por el equipo; sustituyen al `ESTILO_MARCA` hard-coded.
 - **Reglas legales de imagen** = `editorial/reglas/imagen` (clase `reglas`, global), adjunta al job de revisión.
 - Estos documentos viajan en la **semilla** de la Texto (`keni_consola/texto_semilla/{prompt,editorial}/`), igual que ya viajan los prompts de copy.

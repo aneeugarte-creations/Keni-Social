@@ -1,21 +1,21 @@
-"""Fusión SEMÁNTICA de historias del MISMO evento con claude (Fase 2b).
+"""Fusionar SEMÁNTICAMENTE historias del MISMO evento con claude (Fase 2b).
 
-El clustering léxico (clustering.asignar) une variantes claras del MISMO titular (url canónica o
+El agrupar léxico (clustering.asignar) une variantes claras del MISMO titular (url canónica o
 título fuzzy ≥ umbral), pero NO une coberturas del mismo evento con titulares distintos
 ("Zelensky responde" vs "Rusia lanza misiles"). Esta capa, OPCIONAL y gateada, le pasa a Haiku el
 lote de historias recientes de una marca y le pide AGRUPAR las que son del mismo evento; el daemon
-funde cada grupo en una sola historia (n_fuentes real → mejor señal de tendencia/corroboración).
+fusiona cada grupo en una sola historia (n_fuentes real → mejor señal de tendencia/corroboración).
 
 Este módulo es NEUTRO y PURO de I/O: solo construye el prompt, llama al ejecutor (inyectable en
-tests) y parsea los grupos. La FUSIÓN efectiva (reasignar items + borrar absorbidos + recalcular)
-la hace el daemon (`ingesta_daemon`), que es quien tiene los repos. BEST-EFFORT: ante cualquier
-fallo devuelve [] (no se funde nada).
+tests) y parsea los grupos. Fusionar de verdad (reasignar items + borrar absorbidos + recalcular)
+lo hace el daemon (`ingesta_daemon`), que es quien tiene los repos. BEST-EFFORT: ante cualquier
+fallo devuelve [] (no se fusiona nada).
 
-DOS PASADAS (la fusión equivocada es cara: infla la corroboración y puede auto-producir una
-pieza con fuentes que no hablan de lo mismo — pasó con «Shakira en la inauguración» fundida
+DOS PASADAS (fusionar por error es caro: infla la corroboración y puede auto-producir una
+pieza con fuentes que no hablan de lo mismo — pasó con «Shakira en la inauguración» fusionada
 con «alerta de seguridad de la embajada» por compartir «Mundial»):
-  1. PROPUESTA sobre el lote completo (prompt `fusion-historias`).
-  2. VERIFICACIÓN por grupo propuesto (prompt `fusion-verificacion`): re-pregunta con SOLO
+  1. PROPUESTA sobre el lote completo (prompt `fusionar`).
+  2. VERIFICACIÓN por grupo propuesto (prompt `fusionar-verificar`): re-pregunta con SOLO
      esas historias y el grupo puede salir confirmado, PARTIDO en subgrupos o descartado.
      Mismo contrato JSON; cualquier fallo descarta el grupo (conservador).
 El modelo es el de `config.fusion_modelo()` (def sonnet: pocas llamadas, juicio fino).
@@ -43,8 +43,8 @@ _MAX_CHARS_ITEM = 240        # recorte de titulo+resumen por historia
 # La plantilla vive en la Biblioteca de Texto como prompt EDITABLE (pestaña «Prompts»). La lista
 # JSON de historias se inserta en `{{HISTORIAS}}`. Si el store fallara, la red es la SEMILLA del
 # paquete (fuente única, sin texto duplicado aquí).
-_PROMPT_ID = "prompt/fusion"
-_PROMPT_VERIFICACION_ID = "prompt/fusion-verificacion"
+_PROMPT_ID = "prompt/fusionar"
+_PROMPT_VERIFICACION_ID = "prompt/fusionar-verificar"
 _MARCA_HISTORIAS = "{{HISTORIAS}}"
 
 
@@ -54,7 +54,7 @@ def _plantilla(prompt_id: str = _PROMPT_ID) -> str:
 
     try:
         cuerpo = (libtexto.cuerpo_efectivo(prompt_id) or "").strip()
-    except Exception:  # noqa: BLE001 -- nunca dejar la fusión sin prompt por un fallo de lectura
+    except Exception:  # noqa: BLE001 -- nunca dejar Fusionar sin prompt por un fallo de lectura
         cuerpo = ""
     return cuerpo or libtexto.cuerpo_semilla(prompt_id).strip()
 
@@ -94,7 +94,7 @@ def proponer_fusiones(
 
     `al_ejecutar(prompt, salida)`: callback OPCIONAL que se invoca con el PROMPT y la SALIDA reales
     de Haiku tras la llamada (antes de parsear). El daemon lo usa para registrar la actividad IA de
-    la fusión con el Haiku real; un fallo del callback no afecta a la fusión (es observabilidad).
+    Fusionar con el Haiku real; un fallo del callback no afecta a Fusionar (es observabilidad).
     """
     validos = [c for c in clusters if (c.get("id") and (c.get("titulo") or "").strip())][:_MAX_CLUSTERS]
     if len(validos) < 2:
@@ -140,7 +140,7 @@ def proponer_fusiones(
 
     # SEGUNDA PASADA: cada grupo propuesto se VERIFICA con un prompt enfocado (solo esas
     # historias). El verificador puede confirmar, PARTIR en subgrupos o descartar; un grupo
-    # que no supera la verificación NO se funde (conservador: la fusión equivocada infla la
+    # que no supera la verificación NO se fusiona (conservador: fusionar mal infla la
     # corroboración). Mismo contrato JSON, así el parseo y los ejecutores de test no cambian.
     payload_por_id = {q["id"]: q for q in payload}
     confirmados: list[list[str]] = []

@@ -673,7 +673,7 @@ def lanzar_arte(
 
 
 # Prompt base por defecto para la generación de copy (piezas por red). Viaja en la semilla.
-PROMPT_COPY = "prompt/copy"
+PROMPT_COPY = "prompt/redactar"
 
 
 def adjuntos_copy(marca: str) -> list[libtexto.Documento]:

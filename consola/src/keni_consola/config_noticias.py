@@ -48,21 +48,21 @@ from ._config_comun import (
     ENV_NOTICIAS_GC_INTERVALO_HORAS,
     ENV_NOTICIAS_GC_SCORE_UMBRAL,
     ENV_PERFIL_EDITORIAL_TTL_HORAS,
-    ENV_PIPELINE_ARTE,
-    ENV_PIPELINE_CALIDAD,
-    ENV_PIPELINE_COPY,
+    ENV_PIPELINE_ILUSTRAR,
+    ENV_PIPELINE_REVISAR,
+    ENV_PIPELINE_REDACTAR,
     ENV_PIPELINE_EN_VUELO_MAX,
     ENV_PIPELINE_FETCH_FUENTE,
     ENV_PIPELINE_TEMA_TTL_HORAS,
-    ENV_PIPELINE_FUSION,
+    ENV_PIPELINE_FUSIONAR,
     ENV_PIPELINE_MAX,
-    ENV_PIPELINE_SELECCION,
-    ENV_PIPELINE_VALIDACION,
+    ENV_PIPELINE_RECOLECTAR,
+    ENV_PIPELINE_VERIFICAR,
     ENV_QA_EN_CURSO_TTL_MIN,
     ENV_QA_FUENTE_ESFUERZO,
     ENV_QA_FUENTE_MODELO,
     ENV_QA_FUENTE_TIMEOUT,
-    ENV_RANKING_PERFIL_IA,
+    ENV_PRIORIZAR_PERFIL_IA,
     ENV_RENDIMIENTO_MIN_PIEZAS,
     ENV_RENDIMIENTO_RANKING,
     ENV_RENDIMIENTO_TOP_N,
@@ -123,14 +123,14 @@ from ._config_comun import (
 # --------------------------------------------------------------------------- #
 
 
-def ingesta_activa() -> bool:
-    """True si el motor de ingesta persistente debe sondear feeds (`KENI_PIPELINE_SELECCION`).
+def recolectar_activo() -> bool:
+    """True si el motor de ingesta persistente debe sondear feeds (`KENI_PIPELINE_RECOLECTAR`).
 
     Def OFF (CI/tests): sin el flag, el hilo arranca pero no sondea nada. Se ACTIVA en
-    producción (deploy: `KENI_PIPELINE_SELECCION=1`) para que el archivo de artículos esté siempre al día.
+    producción (deploy: `KENI_PIPELINE_RECOLECTAR=1`) para que el archivo de artículos esté siempre al día.
     SOLO LEE feeds públicos y persiste artículos; no genera ni publica nada.
     """
-    return _crudo(ENV_PIPELINE_SELECCION).lower() in _VERDADEROS
+    return _crudo(ENV_PIPELINE_RECOLECTAR).lower() in _VERDADEROS
 
 
 def clasificar_marca_ia() -> bool:
@@ -226,7 +226,7 @@ def ingesta_intervalo_categoria(categoria: str) -> int:
 def cluster_ventana_h() -> int:
     """Ventana reciente (horas) de agrupación de historias (`KENI_CLUSTER_VENTANA_H`, def 72, min 1).
 
-    Clustering INCREMENTAL: solo se cargan los clusters cuya `ultimo_visto` cae en esta ventana
+    Agrupación INCREMENTAL: solo se cargan los clusters cuya `ultimo_visto` cae en esta ventana
     para decidir a cuál unir un item nuevo. Acota el trabajo por barrido (nunca el archivo entero).
     """
     return _entero(ENV_CLUSTER_VENTANA_H, CLUSTER_VENTANA_H_DEF, minimo=1)
@@ -330,7 +330,7 @@ SCORE_PESO_RENDIMIENTO_AUTO = 0.10
 def score_pesos():
     """Pesos del algoritmo de ponderación del score de cluster, como `clustering.PesosScore`.
 
-    Lee cada peso del store/env (clamp [0,1]; default = los de `clustering`). El daemon de ingesta
+    Lee cada peso del store/env (clamp [0,1]; default = los de `clustering`). El daemon de Recolectar
     inyecta el resultado en `clustering.puntuar` para que el equipo afine la jerarquización desde
     la consola sin tocar código. Import perezoso de `dominio.clustering` para evitar ciclos.
 
@@ -366,7 +366,7 @@ def score_pesos():
     )
 
 
-# Umbral de DIVERSIDAD de la promoción CI (MMR suave sobre el top-N de historias): dos títulos
+# Umbral de DIVERSIDAD de la admisión a tema (MMR suave sobre el top-N de historias): dos títulos
 # con ratio fuzzy >= umbral se consideran el mismo macro-tema y el segundo cede su plaza (si
 # quedan plazas libres al final, se rellenan igual). 0 desactiva. Activado SUAVE por defecto.
 ENV_PROMOVER_DIVERSIDAD_UMBRAL = "KENI_PROMOVER_DIVERSIDAD_UMBRAL"
@@ -374,7 +374,7 @@ PROMOVER_DIVERSIDAD_UMBRAL_DEF = 0.80
 
 
 def promover_diversidad_umbral() -> float:
-    """Umbral [0,1] de similitud de título para la selección DIVERSA de la promoción CI.
+    """Umbral [0,1] de similitud de título para la admisión DIVERSA a tema.
 
     (`KENI_PROMOVER_DIVERSIDAD_UMBRAL`, def 0.80.) `0` desactiva la diversidad (top-N puro por
     score). Valor inválido → def. Suave: nunca reduce el número de historias promovidas.
@@ -383,7 +383,7 @@ def promover_diversidad_umbral() -> float:
 
 
 # LISTÓN de producción automática: el panel LISTA todo el pool jerarquizado, pero PROMOVER una
-# historia a tema (que acaba en QA+copy con `claude -p`: coste real de tokens) exige un listón
+# historia a tema (que acaba en Verificar+Redactar con `claude -p`: coste real de tokens) exige un listón
 # más alto y explicable. Defaults en `dominio.clustering` (capa pura); editables en caliente.
 ENV_PROMOVER_MIN_SCORE = "KENI_PROMOVER_MIN_SCORE"
 ENV_PROMOVER_MIN_MARCA = "KENI_PROMOVER_MIN_MARCA"
@@ -411,7 +411,7 @@ def promover_min_marca() -> float:
 # Cupos de producción automática (volumen ≈ cadencia real de cada marca)       #
 # --------------------------------------------------------------------------- #
 
-# La admisión CI sin cupo produce al ritmo de la ingesta (cientos de noticias/día → cientos de
+# Admitir sin cupo produce al ritmo de Recolectar (cientos de noticias/día → cientos de
 # temas/día), muy por encima de lo que una marca publica de verdad. El PLAN EDITORIAL DIARIO
 # (`plan_dia`) reparte el objetivo del día en cupos POR CATEGORÍA («lo mejor de cada tipo»,
 # con slots explícitos para breaking); para marcas sin plan, `cupo_dia` pone un techo simple.
@@ -426,7 +426,7 @@ def promover_maduracion_min() -> int:
     """Minutos mínimos de una historia en el pool antes de poder promoverse
     (`KENI_PROMOVER_MADURACION_MIN`, def 45, min 0; `0` desactiva). Exentas las curadas y las
     breaking corroboradas (regla en `clustering.evaluar_liston`): la urgencia real no espera.
-    Dedicar este tiempo a "elegir" deja que la corroboración se acumule y que la selección
+    Dedicar este tiempo a "elegir" deja que la corroboración se acumule y que Admitir
     compare historias maduras, no primeras llegadas."""
     return _entero(ENV_PROMOVER_MADURACION_MIN, PROMOVER_MADURACION_MIN_DEF, minimo=0)
 
@@ -475,9 +475,9 @@ def plan_dia(marca: str = "") -> dict[str, int]:
     """PLAN EDITORIAL DIARIO de una marca: cupos por CATEGORÍA (`KENI_PLAN_DIA[::marca]`).
 
     Formato "categoria:n,…" (p. ej. "mx:4,internacional:4,breaking:2,entretenimiento:2,
-    evergreen:1" = el objetivo diario de UnoTV). Con plan, la admisión CI llena cada cupo
+    evergreen:1" = el objetivo diario de UnoTV). Con plan, Admitir llena cada cupo
     con LAS MEJORES historias de esa categoría (las breaking corroboradas consumen el cupo
-    'breaking' sea cual sea su categoría de feed) y la ingesta salta los feeds de categorías
+    'breaking' sea cual sea su categoría de feed) y Recolectar salta los feeds de categorías
     fuera del plan. Categorías sin pool (p. ej. 'evergreen') reservan el hueco para el flujo
     manual ('evergreen' lo llena su automatismo diario). {} = sin plan (cae al cupo diario
     global, `cupo_dia`). El override por marca SUSTITUYE al global (no se mezclan)."""
@@ -489,12 +489,12 @@ def plan_dia(marca: str = "") -> dict[str, int]:
 
 
 # --------------------------------------------------------------------------- #
-# Señal de rendimiento en el ranking (líneas que mejor funcionan) — Fase 2c     #
+# Señal de rendimiento en la priorización (líneas que mejor funcionan) — Fase 2c #
 # --------------------------------------------------------------------------- #
 
 
 def rendimiento_ranking_activo() -> bool:
-    """True si el ranking prioriza historias de las líneas que mejor rinden (`KENI_RENDIMIENTO_RANKING`).
+    """True si la priorización sube las historias de las líneas que mejor rinden (`KENI_RENDIMIENTO_RANKING`).
 
     Def OFF: sin el flag, el daemon no calcula la señal de rendimiento (queda inerte aunque tenga
     peso). Con el flag, calcula las líneas top por engagement (Metricool) y empuja las historias
@@ -574,14 +574,14 @@ def noticias_retencion_horas() -> int:
 # --------------------------------------------------------------------------- #
 
 
-def perfil_editorial_activo() -> bool:
-    """True si el ranking usa el perfil de relevancia extraído con Haiku (`KENI_RANKING_PERFIL_IA`).
+def priorizar_perfil_activo() -> bool:
+    """True si la priorización usa el perfil de relevancia extraído con Haiku (`KENI_PRIORIZAR_PERFIL_IA`).
 
-    Def OFF (conservador, IA en prod): sin el flag el ranking usa el vocabulario semilla
+    Def OFF (conservador, IA en prod): sin el flag la priorización usa el vocabulario semilla
     (`relevancia_marca`). Con el flag, el daemon refresca el perfil por marca (Haiku, TTL) y el
     score usa esas keywords derivadas de la línea editorial de la página texto.
     """
-    return _crudo(ENV_RANKING_PERFIL_IA).lower() in _VERDADEROS
+    return _crudo(ENV_PRIORIZAR_PERFIL_IA).lower() in _VERDADEROS
 
 
 def perfil_editorial_ttl_horas() -> int:
@@ -591,18 +591,18 @@ def perfil_editorial_ttl_horas() -> int:
 
 
 # --------------------------------------------------------------------------- #
-# Fusión semántica de historias (Haiku) — Fase 2b                              #
+# Fusionar (semántica) historias (Haiku) — Fase 2b                             #
 # --------------------------------------------------------------------------- #
 
 
-def fusion_semantica_activa() -> bool:
-    """True si se funden con IA las historias del mismo evento (`KENI_PIPELINE_FUSION`, def OFF).
+def fusionar_semantica_activo() -> bool:
+    """True si se funden con IA las historias del mismo evento (`KENI_PIPELINE_FUSIONAR`, def OFF).
 
-    Def OFF (IA que MUTA el pool en prod): sin el flag, el clustering se queda en el léxico. Con el
+    Def OFF (IA que MUTA el pool en prod): sin el flag, la agrupación se queda en el léxico. Con el
     flag, el daemon manda a Haiku las historias recientes por marca y funde los grupos del mismo
     acontecimiento (conservador: ante duda no fusiona).
     """
-    return _crudo(ENV_PIPELINE_FUSION).lower() in _VERDADEROS
+    return _crudo(ENV_PIPELINE_FUSIONAR).lower() in _VERDADEROS
 
 
 def fusion_semantica_max() -> int:
@@ -613,7 +613,7 @@ def fusion_semantica_max() -> int:
 
 
 # --------------------------------------------------------------------------- #
-# Monitor de cobertura + traducción completa + auto-verificación (Ola D)        #
+# Monitor de cobertura + Traducir completo + auto-verificación (Ola D)          #
 # --------------------------------------------------------------------------- #
 
 
@@ -637,7 +637,7 @@ def feed_sla_min() -> int:
 def trad_min_score() -> float:
     """Score mínimo de un cluster extranjero para entrar a traducción (`KENI_TRAD_MIN_SCORE`, def 0).
 
-    0 = traducir TODO cluster extranjero reciente; subirlo limita la traducción a las historias
+    0 = traducir TODO cluster extranjero reciente; subirlo limita Traducir a las historias
     más relevantes. Valor inválido o negativo → def.
     """
     crudo = _crudo(ENV_TRAD_MIN_SCORE)
@@ -674,23 +674,23 @@ def fuentes_baja_confianza() -> frozenset[str]:
 
 
 def pipeline_activo() -> bool:
-    """True si el daemon del pipeline de contenido debe BARRER (`KENI_PIPELINE_COPY`).
+    """True si el daemon del pipeline de contenido debe BARRER (`KENI_PIPELINE_REDACTAR`).
 
-    Def OFF (conservador): sin el flag el comportamiento existente NO cambia (nada se ingiere/
+    Def OFF (conservador): sin el flag el comportamiento existente NO cambia (nada se recolecta/
     genera por el pipeline). Con el flag a un valor afirmativo, un hilo demonio ejecuta cada N
-    horas el flujo CI→CD→QA por marca y deja borradores en la cola de revision. Nada se publica
+    horas el flujo Admitir→Redactar→Revisar por marca y deja borradores en la cola de revision. Nada se publica
     solo (sigue gated). El hilo arranca SIEMPRE pero, gateado, solo actua con el flag activo.
     """
-    return _crudo(ENV_PIPELINE_COPY).lower() in _VERDADEROS
+    return _crudo(ENV_PIPELINE_REDACTAR).lower() in _VERDADEROS
 
 
 # FLUJO CONTINUO: el pipeline ya no tiene intervalo configurable (tick corto constante en
-# `pipeline_contenido._barrido`) ni topes por etapa (QA/Copy/autogen/revisar): el volumen lo
-# regulan los DOS knobs de admisión de abajo + el backpressure de la cola (`KENI_MAX_JOBS`).
+# `pipeline_contenido._barrido`) ni topes por etapa (Verificar/Redactar/Ilustrar/Revisar): el volumen lo
+# regulan los DOS knobs de Admitir de abajo + el backpressure de la cola (`KENI_MAX_JOBS`).
 
 
 def pipeline_max() -> int:
-    """Máximo de historias que la Selección admite por marca en cada admisión
+    """Máximo de historias que Admitir admite por marca en cada pasada
     (`KENI_PIPELINE_MAX`, def 3, min 1). Cada admisión acaba en `claude -p` (coste)."""
     return _entero(ENV_PIPELINE_MAX, PIPELINE_MAX_DEF, minimo=1)
 
@@ -698,8 +698,8 @@ def pipeline_max() -> int:
 def pipeline_en_vuelo_max() -> int:
     """WIP del gate SERIAL: piezas EN VUELO por marca (`KENI_PIPELINE_EN_VUELO_MAX`, def 8, min 1).
 
-    ES el regulador del flujo continuo (in=out): la Selección no admite más historias de una
-    marca mientras ésta tenga >= esto sin terminar (QA pendiente o cribado sin copy); primero se
+    ES el regulador del flujo continuo (in=out): Admitir no admite más historias de una
+    marca mientras ésta tenga >= esto sin terminar (Verificar pendiente o cribado sin copy); primero se
     COMPLETA lo que entró, luego entran nuevas.
     """
     return _entero(ENV_PIPELINE_EN_VUELO_MAX, PIPELINE_EN_VUELO_MAX_DEF, minimo=1)
@@ -720,27 +720,27 @@ def pipeline_fetch_fuente() -> bool:
 def pipeline_tema_ttl_horas() -> int:
     """TTL (horas) de un tema EN VUELO del pipeline (`KENI_PIPELINE_TEMA_TTL_HORAS`, def 24, min 1).
 
-    El pipeline es una VENTANA DESLIZANTE sobre el ranking de noticias frescas, sin colas
+    El pipeline es una VENTANA DESLIZANTE sobre la priorización de noticias frescas, sin colas
     intermedias: lo que no completó sus fases dentro del TTL CADUCA (libera su hueco del gate
     serial y no genera copy). Lo de ayer no entra hoy; hoy entra lo de hoy.
     """
     return _entero(ENV_PIPELINE_TEMA_TTL_HORAS, PIPELINE_TEMA_TTL_HORAS_DEF, minimo=1)
 
 
-def qa_activo() -> bool:
-    """True si la ETAPA de QA del pipeline debe cribar la fuente (`KENI_PIPELINE_VALIDACION`, "Validar (QA)").
+def verificar_activo() -> bool:
+    """True si la ETAPA de Verificar del pipeline debe cribar la fuente (`KENI_PIPELINE_VERIFICAR`, "Verificar").
 
     Def OFF (conservador, como el resto de etapas): sin el flag NO se criba y la etapa aparece
-    "Saltada"; el copy se genera igual. Con el flag, antes de generar copy un `claude -p` evalúa
+    "Saltada"; el copy se genera igual. Con el flag, antes de redactar el copy un `claude -p` evalúa
     la nota de origen (criba pre-copy). Toggle PROPIO por marca: 1 toggle = 1 etapa.
     """
-    return _crudo(ENV_PIPELINE_VALIDACION).lower() in _VERDADEROS
+    return _crudo(ENV_PIPELINE_VERIFICAR).lower() in _VERDADEROS
 
 
 def qa_fuente_modelo() -> str:
     """Modelo de claude de la CRIBA de la fuente (`KENI_QA_FUENTE_MODELO`, def "haiku").
 
-    La QA-fuente es un filtro PERMISIVO (no redaccion): por defecto corre con un modelo
+    La criba de Verificar es un filtro PERMISIVO (no redaccion): por defecto corre con un modelo
     rapido/economico. Mismas semanticas que `insumos_modelo`: var no fijada -> "haiku";
     fijada a "" -> sin `--model` (default de claude); fijada a un valor -> ese modelo.
     """
@@ -774,7 +774,7 @@ def qa_fuente_timeout() -> int:
 def qa_en_curso_ttl_seg() -> int:
     """TTL (s) del saneador de temas `qa_veredicto='en_curso'` huerfanos (`KENI_QA_EN_CURSO_TTL_MIN`).
 
-    Def 30 min (muy superior al timeout de la criba, asi nunca toca una QA viva). El reaper
+    Def 30 min (muy superior al timeout de la criba, asi nunca toca una verificación viva). El reaper
     resetea a "" los `en_curso` mas viejos para que vuelvan a la re-criba del barrido.
     """
     return _entero(ENV_QA_EN_CURSO_TTL_MIN, QA_EN_CURSO_TTL_MIN_DEF, minimo=5) * 60
@@ -784,13 +784,13 @@ def alguna_etapa_investigacion_activa() -> bool:
     """Gate del loop de INVESTIGACIÓN (ADR 0011 F3): True si hay trabajo de investigación que
     considerar bajo la máquina.
 
-    El loop de investigación (caducidad + CI + QA) solo tiene sentido si su admisión o su criba
-    están encendidas: con Selección Y Validación globales OFF no entra nada nuevo ni se criba, y
+    El loop de investigación (caducidad + Admitir + Verificar) solo tiene sentido si su admisión o su criba
+    están encendidas: con Recolectar Y Verificar globales OFF no entra nada nuevo ni se criba, y
     el loop duerme (la caducidad de lo ya en vuelo retoma en cuanto se reactive). El override por
     marca se aplica DENTRO del barrido (`etapa_activa`), no aquí: basta una marca activa para que
-    el loop barra. Las etapas de Fusión/Ranking viven en el daemon de ingesta, no en este loop.
+    el loop barra. Las etapas de Fusionar/Priorizar viven en el daemon de Recolectar, no en este loop.
     """
-    return etapa_global_activa(ENV_PIPELINE_SELECCION) or etapa_global_activa(ENV_PIPELINE_VALIDACION)
+    return etapa_global_activa(ENV_PIPELINE_RECOLECTAR) or etapa_global_activa(ENV_PIPELINE_VERIFICAR)
 
 
 def alguna_etapa_produccion_activa() -> bool:
@@ -798,7 +798,7 @@ def alguna_etapa_produccion_activa() -> bool:
 
     La etapa de AVANCE (borradores completos → cola de revisión) corre INCONDICIONALMENTE, así
     que siempre hay trabajo de producción que considerar y el loop nunca debe quedarse dormido
-    mientras la máquina esté ON. Las fases que sí gastan `claude -p` (Copy/Arte) se auto-gatean
+    mientras la máquina esté ON. Las fases que sí gastan `claude -p` (Redactar/Ilustrar) se auto-gatean
     DENTRO del barrido por su propio flag global + override por-marca: si están OFF no hacen
     nada, pero el barrido igual corre para drenar los borradores completos a revisión.
     """
@@ -808,8 +808,8 @@ def alguna_etapa_produccion_activa() -> bool:
 alguna_etapa_pipeline_activa = alguna_etapa_produccion_activa
 
 
-def pipeline_calidad_activo() -> bool:
-    """True si la ETAPA de CALIDAD del copy debe cribar antes del avance (`KENI_PIPELINE_CALIDAD`).
+def revisar_activo() -> bool:
+    """True si la ETAPA de Revisar el copy debe cribar antes del avance (`KENI_PIPELINE_REVISAR`).
 
     Def OFF (conservador, como el resto de etapas): sin el flag el avance a revisión no cambia.
     Con el flag, antes de mover un borrador completo a la cola de revisión la IA "hacia adentro"
@@ -817,17 +817,17 @@ def pipeline_calidad_activo() -> bool:
     nota de origen). ADVISORY/safe-by-default: nunca bloquea ni descarta; si detecta algo, degrada
     el veredicto (`listo`→`revisar`) y deja una nota para que el humano decida.
     """
-    return _crudo(ENV_PIPELINE_CALIDAD).lower() in _VERDADEROS
+    return _crudo(ENV_PIPELINE_REVISAR).lower() in _VERDADEROS
 
 
-def autogen_arte_activo() -> bool:
-    """True si la ETAPA de arte del pipeline debe ilustrar (`KENI_PIPELINE_ARTE`, "Generar arte").
+def ilustrar_activo() -> bool:
+    """True si la ETAPA de Ilustrar del pipeline debe ilustrar (`KENI_PIPELINE_ILUSTRAR`, "Ilustrar").
 
-    Def OFF (conservador): el equipo hace el arte a mano. Con el flag, la etapa de arte del
-    pipeline (tras la de copy) genera imagen por IA para los temas con copy pero sin imagen y
+    Def OFF (conservador): el equipo hace la imagen a mano. Con el flag, la etapa de Ilustrar del
+    pipeline (tras la de Redactar) genera imagen por IA para los temas con copy pero sin imagen y
     la adjunta. Sin proveedor de imagen configurado, no hace nada (degrada).
     """
-    return _crudo(ENV_PIPELINE_ARTE).lower() in _VERDADEROS
+    return _crudo(ENV_PIPELINE_ILUSTRAR).lower() in _VERDADEROS
 
 
 # --------------------------------------------------------------------------- #
@@ -838,27 +838,27 @@ def autogen_arte_activo() -> bool:
 # («o llega copy o no empieza») y la capa de ajustes lo TRADUCE a las cinco etapas internas
 # del tramo noticia→copy. Las etapas siguen existiendo como mecanismo (daemons, vista
 # Pipelines, tests) pero dejan de ser botones: la única etapa con interruptor propio es
-# ARTE (la única con coste externo real). Estas claves VIRTUALES nunca se leen en runtime:
+# Ilustrar (la única con coste externo real). Estas claves VIRTUALES nunca se leen en runtime:
 # las lecturas siguen siendo por etapa; la API de ajustes escribe las claves físicas a la vez.
 #
 # DOS PROCESOS (ADR 0011): la máquina se gobierna con dos maestros, no con un único «Generar».
-#   - INVESTIGACIÓN: noticia recolectada, deduplicada, rankeada y VERIFICADA (el pool listo).
-#   - PRODUCCIÓN: la noticia verificada se convierte en pieza (copy). ARTE conserva su propio
+#   - INVESTIGACIÓN: noticia recolectada, deduplicada, priorizada y VERIFICADA (el pool listo).
+#   - PRODUCCIÓN: la noticia verificada se convierte en pieza (copy). Ilustrar conserva su propio
 #     interruptor (única etapa con coste externo real); el AVANCE a revisión corre siempre.
 ENV_INVESTIGACION = "KENI_INVESTIGACION"
 ENV_PRODUCCION = "KENI_PRODUCCION"
 
 # Etapas que agrupa cada maestro (orden de pipeline). Solo las que admiten override por marca
 # (`etapa_activa`) entran en el fan-out, para que el toggle por marca sea simétrico. La
-# clasificación de marca IA y el ranking por rendimiento son flags propios de Investigación
+# Clasificar marca IA y la priorización por rendimiento son flags propios de Investigación
 # (no per-marca) y se muestran aparte, no en el fan-out del maestro.
 ETAPAS_INVESTIGACION: tuple[str, ...] = (
-    ENV_PIPELINE_SELECCION,
-    ENV_PIPELINE_FUSION,
-    ENV_RANKING_PERFIL_IA,
-    ENV_PIPELINE_VALIDACION,
+    ENV_PIPELINE_RECOLECTAR,
+    ENV_PIPELINE_FUSIONAR,
+    ENV_PRIORIZAR_PERFIL_IA,
+    ENV_PIPELINE_VERIFICAR,
 )
-ETAPAS_PRODUCCION: tuple[str, ...] = (ENV_PIPELINE_COPY,)
+ETAPAS_PRODUCCION: tuple[str, ...] = (ENV_PIPELINE_REDACTAR,)
 
 
 def _accesor_global_de_etapa(env_flag: str):
@@ -870,12 +870,12 @@ def _accesor_global_de_etapa(env_flag: str):
     """
     try:
         return {
-            ENV_PIPELINE_FUSION: fusion_semantica_activa,
-            ENV_RANKING_PERFIL_IA: perfil_editorial_activo,
-            ENV_PIPELINE_SELECCION: ingesta_activa,
-            ENV_PIPELINE_VALIDACION: qa_activo,
-            ENV_PIPELINE_COPY: pipeline_activo,
-            ENV_PIPELINE_ARTE: autogen_arte_activo,
+            ENV_PIPELINE_FUSIONAR: fusionar_semantica_activo,
+            ENV_PRIORIZAR_PERFIL_IA: priorizar_perfil_activo,
+            ENV_PIPELINE_RECOLECTAR: recolectar_activo,
+            ENV_PIPELINE_VERIFICAR: verificar_activo,
+            ENV_PIPELINE_REDACTAR: pipeline_activo,
+            ENV_PIPELINE_ILUSTRAR: ilustrar_activo,
         }[env_flag]
     except KeyError:
         raise ValueError(f"'{env_flag}' no es una etapa del pipeline de contenido.") from None
@@ -973,7 +973,7 @@ def afp_configurado() -> bool:
 
 
 # --------------------------------------------------------------------------- #
-# Accesores: traducción + tropicalización MX (Ola 4)                           #
+# Accesores: Traducir + tropicalización MX (Ola 4)                             #
 # --------------------------------------------------------------------------- #
 
 

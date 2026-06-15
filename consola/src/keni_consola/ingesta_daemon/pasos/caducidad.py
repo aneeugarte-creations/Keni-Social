@@ -15,8 +15,8 @@ def paso_caducidad(*, forzar: bool = False) -> dict[str, Any]:
 
     El feed es perecedero POR DISEÑO: una historia `nuevo` sin actividad en `KENI_NOTICIAS_TTL_H`
     (def 72h, la vida de la frescura del score) caduca sola a `descartado` (sale del panel, del
-    ranking y de la promoción; lo usado nunca caduca), y lo caducado sin usar se borra tras
-    `KENI_NOTICIAS_RETENCION_H` (def 14 días). Corre DENTRO del barrido de ingesta: donde se
+    priorización y de la promoción; lo usado nunca caduca), y lo caducado sin usar se borra tras
+    `KENI_NOTICIAS_RETENCION_H` (def 14 días). Corre DENTRO del barrido de recolección: donde se
     construye el feed, se limpia el feed (no depende de que el GC por relevancia esté encendido).
     La lógica vive en `db_noticias.caducar_pool`; aquí solo el throttle y el log.
     """

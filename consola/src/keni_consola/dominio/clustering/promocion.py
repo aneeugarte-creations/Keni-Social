@@ -1,7 +1,7 @@
 """Listón de PROMOCIÓN a producción automática (auto-producción). PURA.
 
 El score que lista el panel y el listón que dispara producción son dos niveles distintos a
-propósito: encolar QA+copy (coste real de tokens) exige un listón más alto y explicable.
+propósito: encolar Verificar+Redactar (coste real de tokens) exige un listón más alto y explicable.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from .scoring import puntuar_detalle
 
 # El score que LISTA el panel y el listón que DISPARA producción automática son dos niveles
 # distintos a propósito: el panel muestra el pool jerarquizado (todo lo que pasó la entrada),
-# pero encolar QA+copy (`claude -p`, coste real de tokens) exige un listón MÁS ALTO y
+# pero encolar Verificar+Redactar (`claude -p`, coste real de tokens) exige un listón MÁS ALTO y
 # EXPLICABLE. Defaults conservadores; editables en caliente desde la consola.
 LISTON_MIN_SCORE_DEF = 0.35
 LISTON_MIN_MARCA_DEF = 0.2

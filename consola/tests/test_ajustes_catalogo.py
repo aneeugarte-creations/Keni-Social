@@ -5,8 +5,8 @@ por tipo/min/max, y la precedencia STORE > ENV > DEFECTO via `config._crudo`. To
 aislado con monkeypatch de env y del store (sin DB ni red).
 
 Modelo de máquina de contenido: 1 master (KENI_MAQUINA) + 6 etapas con nombres consolidados
-(`KENI_PIPELINE_<ETAPA>`: Fusión/Ranking/Selección/Validación/Copy/Arte/Avance). Todas tienen
-excepción por marca (1 toggle = 1 etapa).
+(`KENI_PIPELINE_<ETAPA>`: Fusionar/Priorizar/Recolectar/Verificar/Redactar/Ilustrar/Revisar).
+Todas tienen excepción por marca (1 toggle = 1 etapa).
 """
 
 from __future__ import annotations
@@ -45,10 +45,10 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_MAQUINA,
         # Los maestros de la máquina (ADR 0011): «Investigación» y «Producción» (virtuales,
         # agrupan sus etapas) + las etapas FÍSICAS que opera la tira «Pipeline en vivo»
-        # (Selección/Validación/Copy/Arte; Arte siempre tuvo interruptor propio).
+        # (Recolectar/Verificar/Redactar/Ilustrar; Ilustrar siempre tuvo interruptor propio).
         config.ENV_INVESTIGACION, config.ENV_PRODUCCION,
-        config.ENV_PIPELINE_SELECCION, config.ENV_PIPELINE_VALIDACION,
-        config.ENV_PIPELINE_COPY, config.ENV_PIPELINE_ARTE,
+        config.ENV_PIPELINE_RECOLECTAR, config.ENV_PIPELINE_VERIFICAR,
+        config.ENV_PIPELINE_REDACTAR, config.ENV_PIPELINE_ILUSTRAR,
         # Automatismos generales (barridos de mantenimiento; SOLO toggles on/off).
         config.ENV_ALERTAS_ACTIVAS, config.ENV_EVENTOS_VENCIMIENTOS,
         config.ENV_AUTO_PREAPROBACION, config.ENV_MEDIA_GC,
@@ -93,8 +93,8 @@ def test_catalogo_tiene_las_claves_esperadas(store):
 _MAESTROS_ENV = {
     # Virtuales de proceso (fan-out) + etapas físicas de la tira «Pipeline en vivo».
     config.ENV_INVESTIGACION, config.ENV_PRODUCCION,
-    config.ENV_PIPELINE_SELECCION, config.ENV_PIPELINE_VALIDACION,
-    config.ENV_PIPELINE_COPY, config.ENV_PIPELINE_ARTE,
+    config.ENV_PIPELINE_RECOLECTAR, config.ENV_PIPELINE_VERIFICAR,
+    config.ENV_PIPELINE_REDACTAR, config.ENV_PIPELINE_ILUSTRAR,
 }
 
 
@@ -105,7 +105,7 @@ def test_maestros_son_investigacion_produccion_y_arte(store):
     «Investigación» y «Producción» son claves VIRTUALES (`KENI_INVESTIGACION`/`KENI_PRODUCCION`):
     agrupan sus etapas internas con fan-out (ver `claves_fisicas`) y se conservan para las
     excepciones por marca, el respaldo de lectura del riel de Noticias y la API/MCP. La tira
-    «Pipeline en vivo» opera las FÍSICAS: Selección/Validación/Copy/Arte, cada una su clave."""
+    «Pipeline en vivo» opera las FÍSICAS: Recolectar/Verificar/Redactar/Ilustrar, cada una su clave."""
     maestros = [
         a for a in ajustes_catalogo.catalogo()
         if a.grupo in {"maestros_investigacion", "maestros_produccion"}
@@ -118,10 +118,10 @@ def test_maestros_son_investigacion_produccion_y_arte(store):
     etiquetas = {a.clave: a.etiqueta for a in maestros}
     assert etiquetas[config.ENV_INVESTIGACION] == "Investigación"
     assert etiquetas[config.ENV_PRODUCCION] == "Producción"
-    assert etiquetas[config.ENV_PIPELINE_SELECCION] == "Selección"
-    assert etiquetas[config.ENV_PIPELINE_VALIDACION] == "Validación"
-    assert etiquetas[config.ENV_PIPELINE_COPY] == "Copy"
-    assert etiquetas[config.ENV_PIPELINE_ARTE] == "Arte IA"
+    assert etiquetas[config.ENV_PIPELINE_RECOLECTAR] == "Recolectar"
+    assert etiquetas[config.ENV_PIPELINE_VERIFICAR] == "Verificar"
+    assert etiquetas[config.ENV_PIPELINE_REDACTAR] == "Redactar"
+    assert etiquetas[config.ENV_PIPELINE_ILUSTRAR] == "Ilustrar"
 
 
 def test_maestros_fan_out_a_sus_etapas(store):
@@ -140,20 +140,20 @@ def test_maestros_fan_out_a_sus_etapas(store):
         config.clave_por_marca(e, "unotv") for e in config.ETAPAS_INVESTIGACION
     ]
     # COPY va en Producción, no en Investigación; Arte va aparte de ambos.
-    assert config.ENV_PIPELINE_COPY not in config.ETAPAS_INVESTIGACION
-    assert config.ENV_PIPELINE_ARTE not in config.ETAPAS_INVESTIGACION
-    assert config.ENV_PIPELINE_ARTE not in config.ETAPAS_PRODUCCION
+    assert config.ENV_PIPELINE_REDACTAR not in config.ETAPAS_INVESTIGACION
+    assert config.ENV_PIPELINE_ILUSTRAR not in config.ETAPAS_INVESTIGACION
+    assert config.ENV_PIPELINE_ILUSTRAR not in config.ETAPAS_PRODUCCION
     assert ajustes_catalogo.claves_fisicas(config.ENV_CUPO_DIA) == [config.ENV_CUPO_DIA]
 
 
 def test_produccion_se_lee_desde_copy_e_investigacion_desde_ingesta(store):
-    """El valor mostrado de cada maestro es el de su etapa representativa: Producción = Copy,
-    Investigación = Selección (ingesta)."""
-    ajustes.guardar(config.ENV_PIPELINE_COPY, "1")
+    """El valor mostrado de cada maestro es el de su etapa representativa: Producción = Redactar,
+    Investigación = Recolectar (ingesta)."""
+    ajustes.guardar(config.ENV_PIPELINE_REDACTAR, "1")
     a_prod = _ajuste(config.ENV_PRODUCCION)
     valor, fuente = ajustes_catalogo.valor_y_fuente(a_prod)
     assert valor is True and fuente == "store"
-    ajustes.guardar(config.ENV_PIPELINE_SELECCION, "1")
+    ajustes.guardar(config.ENV_PIPELINE_RECOLECTAR, "1")
     a_inv = _ajuste(config.ENV_INVESTIGACION)
     valor, fuente = ajustes_catalogo.valor_y_fuente(a_inv)
     assert valor is True and fuente == "store"
@@ -162,8 +162,8 @@ def test_produccion_se_lee_desde_copy_e_investigacion_desde_ingesta(store):
 def test_toggles_por_marca_repartidos_por_proceso(store):
     """Las excepciones por marca son los tres maestros CON fan-out/excepción, REPARTIDAS por
     proceso (ADR 0011, C4): Investigación en `automatizacion_marca_investigacion`; Producción
-    y Arte en `automatizacion_marca_produccion`. Las etapas físicas de la tira (Selección/
-    Validación/Copy) son ajustes propios SIN excepción por marca: no aparecen ahí."""
+    y Arte en `automatizacion_marca_produccion`. Las etapas físicas de la tira (Recolectar/
+    Verificar/Redactar) son ajustes propios SIN excepción por marca: no aparecen ahí."""
     def _bases(grupo: str) -> set[str]:
         return {
             a.clave.split(config.SEP_MARCA, 1)[0]
@@ -174,16 +174,16 @@ def test_toggles_por_marca_repartidos_por_proceso(store):
     investigacion = _bases("automatizacion_marca_investigacion")
     produccion = _bases("automatizacion_marca_produccion")
     assert investigacion == {config.ENV_INVESTIGACION}
-    assert produccion == {config.ENV_PRODUCCION, config.ENV_PIPELINE_ARTE}
+    assert produccion == {config.ENV_PRODUCCION, config.ENV_PIPELINE_ILUSTRAR}
     # El grupo viejo unificado ya no existe.
     assert _bases("automatizacion_marca") == set()
     # Por marca solo los virtuales + Arte; las físicas de la tira (sin fan-out) quedan fuera.
     assert investigacion | produccion == {
-        config.ENV_INVESTIGACION, config.ENV_PRODUCCION, config.ENV_PIPELINE_ARTE
+        config.ENV_INVESTIGACION, config.ENV_PRODUCCION, config.ENV_PIPELINE_ILUSTRAR
     }
     assert not (investigacion | produccion) & {
-        config.ENV_PIPELINE_SELECCION, config.ENV_PIPELINE_VALIDACION,
-        config.ENV_PIPELINE_COPY,
+        config.ENV_PIPELINE_RECOLECTAR, config.ENV_PIPELINE_VERIFICAR,
+        config.ENV_PIPELINE_REDACTAR,
     }
 
 
@@ -471,8 +471,8 @@ def test_valor_desde_store_gana_a_env(store, monkeypatch):
 
 
 def test_bool_efectivo_tipado(store, monkeypatch):
-    monkeypatch.setenv(config.ENV_PIPELINE_ARTE, "1")
-    a = _ajuste(config.ENV_PIPELINE_ARTE)
+    monkeypatch.setenv(config.ENV_PIPELINE_ILUSTRAR, "1")
+    a = _ajuste(config.ENV_PIPELINE_ILUSTRAR)
     valor, fuente = ajustes_catalogo.valor_y_fuente(a)
     assert valor is True and fuente == "env"
 
@@ -497,7 +497,7 @@ def test_a_dict_int_tiene_min(store):
 
 
 def test_a_dict_bool_sin_min_ni_opciones(store):
-    d = ajustes_catalogo.a_dict(_ajuste(config.ENV_PIPELINE_ARTE))
+    d = ajustes_catalogo.a_dict(_ajuste(config.ENV_PIPELINE_ILUSTRAR))
     assert d["tipo"] == "bool" and "min" not in d and "opciones" not in d
 
 
@@ -511,12 +511,12 @@ def test_a_dict_bool_sin_min_ni_opciones(store):
     ("true", "1"), ("0", "0"), ("YES", "1"), ("off", "0"),
 ])
 def test_validar_bool_ok(store, entrada, guardado):
-    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_PIPELINE_ARTE), entrada)
+    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_PIPELINE_ILUSTRAR), entrada)
     assert err is None and val == guardado
 
 
 def test_validar_bool_invalido(store):
-    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_PIPELINE_ARTE), "quizas")
+    val, err = ajustes_catalogo.validar_valor(_ajuste(config.ENV_PIPELINE_ILUSTRAR), "quizas")
     assert val is None and err is not None
 
 
@@ -563,15 +563,15 @@ def test_validar_float_bajo_minimo(store):
 
 
 def test_config_crudo_store_gana_a_env(store, monkeypatch):
-    monkeypatch.setenv(config.ENV_PIPELINE_COPY, "0")
-    ajustes.guardar(config.ENV_PIPELINE_COPY, "1")
-    assert config._crudo(config.ENV_PIPELINE_COPY) == "1"
+    monkeypatch.setenv(config.ENV_PIPELINE_REDACTAR, "0")
+    ajustes.guardar(config.ENV_PIPELINE_REDACTAR, "1")
+    assert config._crudo(config.ENV_PIPELINE_REDACTAR) == "1"
     assert config.pipeline_activo() is True  # accesor bool ve el store
 
 
 def test_config_crudo_cae_a_env_sin_store(store, monkeypatch):
-    monkeypatch.setenv(config.ENV_PIPELINE_COPY, "1")
-    assert config._crudo(config.ENV_PIPELINE_COPY) == "1"
+    monkeypatch.setenv(config.ENV_PIPELINE_REDACTAR, "1")
+    assert config._crudo(config.ENV_PIPELINE_REDACTAR) == "1"
     assert config.pipeline_activo() is True
 
 

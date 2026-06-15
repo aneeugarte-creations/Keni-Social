@@ -505,34 +505,34 @@ def test_maquina_tres_maquinas(entorno_sin_pg):
     assert prod["titulo"] == "Producción" and prod["subtitulo"] == "La máquina de contenido"
     assert imp["titulo"] == "Herramientas de importación"
 
-    # Investigación: el proceso COMPLETO en orden (la frontera del ADR: la verificación es
+    # Investigación: el proceso COMPLETO en orden (la frontera del ADR: Verificar la fuente es
     # Investigación), con las etapas sin prompt de la Biblioteca como `mecanica` (contexto).
     # Ids/títulos de las etapas compartidas casan 1:1 con el riel de la página Investigación
-    # (Ingesta · Fusión · Clasificación · Ranking · Verificación).
+    # (verbos C: Recolectar · Fusionar · Clasificar · Priorizar · Verificar).
     assert [(e["tipo"], e["id"]) for e in inv["etapas"]] == [
-        ("mecanica", "ingesta"),
-        ("mecanica", "clustering"),
-        ("prompt", "fusion-verificacion"),
-        ("prompt", "fusion"),
-        ("prompt", "traduccion"),
-        ("prompt", "clasificacion"),
-        ("prompt", "ranking"),
-        ("mecanica", "admision"),
-        ("prompt", "verificacion"),
+        ("mecanica", "recolectar"),
+        ("mecanica", "agrupar"),
+        ("prompt", "fusionar-verificar"),
+        ("prompt", "fusionar"),
+        ("prompt", "traducir"),
+        ("prompt", "clasificar"),
+        ("prompt", "priorizar"),
+        ("mecanica", "admitir"),
+        ("prompt", "verificar"),
     ]
     por_id = {e["id"]: e for e in inv["etapas"]}
-    assert por_id["verificacion"]["doc_id"] == "prompt/validacion"  # prompt_base_de("qa")
-    assert por_id["verificacion"]["titulo"] == "Verificación"
-    assert por_id["ranking"]["doc_id"] == "prompt/editorial"
-    assert por_id["ranking"]["titulo"] == "Ranking"
-    assert por_id["fusion"]["titulo"] == "Fusión"
-    # El clasificador de marca es un prompt de la Biblioteca.
-    assert por_id["clasificacion"]["doc_id"] == "prompt/clasificacion-marca"
+    assert por_id["verificar"]["doc_id"] == "prompt/verificar"  # prompt_base_de("qa")
+    assert por_id["verificar"]["titulo"] == "Verificar"
+    assert por_id["priorizar"]["doc_id"] == "prompt/priorizar"
+    assert por_id["priorizar"]["titulo"] == "Priorizar"
+    assert por_id["fusionar"]["titulo"] == "Fusionar"
+    # El clasificador de marca ya es un prompt de la Biblioteca (migrado del hardcodeado).
+    assert por_id["clasificar"]["doc_id"] == "prompt/clasificar-marca"
     # Etapas mecánicas: SOLO contexto (sin doc_id ni estado de publicación).
-    for eid in ("ingesta", "clustering", "admision"):
+    for eid in ("recolectar", "agrupar", "admitir"):
         assert set(por_id[eid]) == {"tipo", "id", "titulo"}
-    assert por_id["ingesta"]["titulo"] == "Ingesta"
-    assert por_id["clasificacion"]["titulo"] == "Clasificación"
+    assert por_id["recolectar"]["titulo"] == "Recolectar"
+    assert por_id["clasificar"]["titulo"] == "Clasificar"
     # Etapas prompt: doc + estado de publicación (degradado sin BD: sin puntero).
     for m in maquinas:
         for e in m["etapas"]:
@@ -541,41 +541,42 @@ def test_maquina_tres_maquinas(entorno_sin_pg):
                         "sin_publicar"} <= set(e)
                 assert e["produccion"] is None
 
-    # Producción: copy -> arte -> aprobación -> publicación, y el taller evergreen al final
-    # (mismo vocabulario que el hub Producción: Copy · Arte · Aprobación).
+    # Producción: redactar -> revisar -> ilustrar -> aprobar -> publicar, y el taller idear al
+    # final (mismo vocabulario que el hub Producción, verbos C: Redactar · Ilustrar · Aprobar).
     assert [(e["tipo"], e["id"]) for e in prod["etapas"]] == [
-        ("prompt", "copy"),
-        ("prompt", "arte"),
-        ("mecanica", "aprobacion"),
-        ("mecanica", "publicacion"),
-        ("prompt", "evergreen"),
+        ("prompt", "redactar"),
+        ("mecanica", "revisar"),
+        ("prompt", "ilustrar"),
+        ("mecanica", "aprobar"),
+        ("mecanica", "publicar"),
+        ("prompt", "idear"),
     ]
     pp = {e["id"]: e for e in prod["etapas"]}
-    assert pp["copy"]["doc_id"] == "prompt/copy"
-    assert pp["copy"]["titulo"] == "Copy"
-    assert pp["arte"]["doc_id"] == "prompt/arte"
-    assert pp["arte"]["titulo"] == "Arte"
-    assert pp["evergreen"]["doc_id"] == "prompt/evergreen"
+    assert pp["redactar"]["doc_id"] == "prompt/redactar"
+    assert pp["redactar"]["titulo"] == "Redactar"
+    assert pp["ilustrar"]["doc_id"] == "prompt/ilustrar"
+    assert pp["ilustrar"]["titulo"] == "Ilustrar"
+    assert pp["idear"]["doc_id"] == "prompt/idear"
     # `seccion` es OPCIONAL: solo el taller la lleva.
-    assert pp["evergreen"]["seccion"] == "taller"
-    assert "seccion" not in pp["copy"] and "seccion" not in pp["arte"]
+    assert pp["idear"]["seccion"] == "taller"
+    assert "seccion" not in pp["redactar"] and "seccion" not in pp["ilustrar"]
 
-    # Importación: los 4 buzones de insumos + los 2 importadores, todos `prompt`.
+    # Importación: los 4 cajones de Recibir + los 2 importadores, todos `prompt`.
     assert all(e["tipo"] == "prompt" for e in imp["etapas"])
     assert [e["doc_id"] for e in imp["etapas"]] == [
-        "prompt/insumos/portal", "prompt/insumos/corresponsales",
-        "prompt/insumos/reporteros", "prompt/insumos/eventos-claro",
+        "prompt/recibir/portal", "prompt/recibir/corresponsales",
+        "prompt/recibir/reporteros", "prompt/recibir/eventos-claro",
         "prompt/importar/calendario", "prompt/importar/parrilla",
     ]
 
 
 def test_maquina_respeta_rebindeo_de_copy(entorno_sin_pg):
-    """La etapa de copy se resuelve por el registro: un prompt activo rol=copy la rebindea."""
+    """La etapa Redactar se resuelve por el registro: un prompt activo rol=copy la rebindea."""
     c = _cliente()
     nuevo = _crear_doc(c, titulo="Copy alterno", cuerpo="X", rol="copy", pipelines=["copy"])
     r = c.get("/api/texto/maquina")
     prod = next(m for m in r.json()["maquinas"] if m["id"] == "produccion")
-    etapa = next(e for e in prod["etapas"] if e["id"] == "copy")
+    etapa = next(e for e in prod["etapas"] if e["id"] == "redactar")
     assert etapa["doc_id"] == nuevo["id"]
 
 

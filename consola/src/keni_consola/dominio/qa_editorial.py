@@ -18,7 +18,7 @@ from . import stream
 # `registrar_historial_prompt`), NO un id de prompt de la Biblioteca. Por eso NO lleva el
 # prefijo `prompt/` ni se cataloga en `prompts_procesos.py` ni se resuelve con
 # `libtexto.cuerpo_efectivo`: es un tipo INTERNO no editable. El prompt REAL de la QA de la
-# fuente vive en la Biblioteca como `prompt/validacion` (lo resuelve `pipeline_contenido`).
+# fuente vive en la Biblioteca como `prompt/verificar` (lo resuelve `pipeline_contenido`).
 # Es un valor ESTABLE: se persiste como `origen` en filas de historial en producción; cambiarlo
 # partiría los datos históricos. Se conserva el nombre del constante por compatibilidad.
 PROMPT_ID = "qa-editorial"
@@ -153,7 +153,7 @@ VERDICTO_PROBLEMA = "problema"
 # (permisivo: ante la duda, deja pasar). Cubre que el prompt use el lenguaje de semáforo.
 _FUENTE_PROBLEMA_DESDE = frozenset({"no_publicar"})
 
-# CONTRATO del prompt de fuente (`prompt/validacion`): el campo JSON `veredicto` va en slug
+# CONTRATO del prompt de fuente (`prompt/verificar`): el campo JSON `veredicto` va en slug
 # ASCII ("apta" | "problema").
 _FUENTE_SLUG_APTA = "apta"
 _FUENTE_SLUG_PROBLEMA = "problema"

@@ -153,7 +153,7 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
         "contenido_id": cluster.get("contenido_id") or "",
         # Verificación: la recalcula el clustering en cada upsert (sí entra al SET de conflicto).
         "verificacion": cluster.get("verificacion") or "unica_fuente",
-        # Traducción: el ALTA la nace vacía; el paso de traducción la escribe aparte
+        # Traducción: el ALTA la nace vacía; el paso de traducir la escribe aparte
         # (`marcar_cluster_traducido`). NO entra al SET de conflicto, así un recalc del cluster
         # NO pisa una traducción ya hecha (best-effort, persistente entre barridos).
         "titulo_es": cluster.get("titulo_es") or "",
@@ -372,7 +372,7 @@ def clusters_recientes(ventana_h: int, marca: str | None = None) -> list[dict[st
 def clusters_extranjeros_sin_traducir(
     ventana_h: int, *, min_score: float = 0.0, limite: int = 40
 ) -> list[dict[str, Any]]:
-    """Clusters EXTRANJEROS recientes aún sin traducir (Ola D), para el paso de traducción.
+    """Clusters EXTRANJEROS recientes aún sin traducir (Ola D), para el paso de traducir.
 
     Selecciona clusters con `traducido = 0`, `idioma` no vacío y distinto de español
     (no empieza por 'es'), `score >= min_score`, `ultimo_visto` dentro de la ventana, y estado
@@ -577,7 +577,7 @@ def cluster_por_url_canonica(url_recortada: str, desde: str) -> str:
 
 
 def items_sin_cluster(desde: str, limite: int) -> list[dict[str, Any]]:
-    """Items de archivo recientes SIN cluster asignado (para el paso de clustering del daemon).
+    """Items de archivo recientes SIN cluster asignado (para el paso de agrupar del daemon).
 
     Filtra `cluster_id = ''`, `capturado_en >= desde` (ventana reciente: clustering acotado,
     nunca el archivo entero) y `estado <> 'descartado'`. MÁS ANTIGUOS primero, para agrupar en
@@ -618,7 +618,7 @@ def asignar_cluster_items(asignaciones: dict[str, list[str]]) -> None:
     """Fija `cluster_id` para LOTES de items en UNA conexión: un UPDATE por cluster (IN (...)).
 
     `asignaciones` = `{cluster_id: [item_ids]}`. Sustituye el UPDATE-por-item del paso de
-    clustering (~cientos de round-trips por barrido) por un round-trip por cluster tocado.
+    agrupar (~cientos de round-trips por barrido) por un round-trip por cluster tocado.
     Idempotente y best-effort: ids inexistentes simplemente no actualizan nada.
     """
     pares = {
@@ -648,7 +648,7 @@ def limpiar_items_cluster_colgante() -> int:
     Si el proceso muere entre asignar `cluster_id` a los items y persistir el cluster (o un
     cluster se borró dejando items detrás), esos items quedaban invisibles PARA SIEMPRE (ni
     `items_sin_cluster` ni `items_de_cluster` los recogían). Re-ponerlos a '' los devuelve al
-    paso de clustering (si siguen en la ventana) o los deja a tiro del GC (si ya no). Solo toca
+    paso de agrupar (si siguen en la ventana) o los deja a tiro del GC (si ya no). Solo toca
     items `estado='nuevo'` (los usados/descartados conservan su rastro). Devuelve nº reparados.
     """
     con = _conectar()

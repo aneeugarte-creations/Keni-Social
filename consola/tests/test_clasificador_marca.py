@@ -151,7 +151,7 @@ def test_clasificar_marca_ia_wiring_usa_candidatas_validas(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# El prompt vive en la Biblioteca (prompt/clasificacion-marca)                 #
+# El prompt vive en la Biblioteca (prompt/clasificar-marca)                 #
 # --------------------------------------------------------------------------- #
 
 
@@ -176,7 +176,7 @@ def test_prompt_editado_en_la_biblioteca_gana():
 
     libtexto.importar_semilla()
     libtexto.guardar(
-        "prompt/clasificacion-marca",
+        "prompt/clasificar-marca",
         cuerpo="PERSONALIZADO\n{{MARCAS}}\nfallback={{MARCA_FALLBACK}}\n{{NOTICIA}}",
     )
     ej = _ejecutor_que_devuelve('{"marca": "unotv"}')

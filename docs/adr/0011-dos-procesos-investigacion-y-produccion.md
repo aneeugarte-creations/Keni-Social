@@ -14,26 +14,26 @@ El flujo noticia → publicación creció como un solo "pipeline" con muchas eta
 trabajo está repartido en dos daemons, pero la frontera conceptual no coincide con la
 operativa y la UI lo refleja a medias:
 
-- **`ingesta_daemon`** (tick ~30 s, gate `KENI_PIPELINE_SELECCION`): sondeo RSS, agencias,
-  clustering, merge léxico, **fusión semántica** (Haiku), traducción, re-score, caducidad y
-  **clasificación de marca** (Haiku). Escribe el pool (`noticias_items`, `noticias_clusters`).
+- **`ingesta_daemon`** (tick ~30 s, gate `KENI_PIPELINE_RECOLECTAR`): sondeo RSS, agencias,
+  Agrupar, **Fusionar** (Haiku), Traducir, re-score, caducidad y
+  **Clasificar marca** (Haiku). Escribe el pool (`noticias_items`, `noticias_clusters`).
 - **`pipeline_contenido/_barrido._ejecutar_barrido`** (cadencia `KENI_INVESTIGADOR_INTERVALO_HORAS`,
-  gate `KENI_MAQUINA`): en una sola pasada hace **CI (admisión: `crear_tema_de_cluster`)**,
-  **QA (validación de fuente, `lanzar_qa_fuente`)**, **CD (copy)**, **ARTE** y **AVANCE** a
+  gate `KENI_MAQUINA`): en una sola pasada hace **CI (Admitir: `crear_tema_de_cluster`)**,
+  **QA (verificación de fuente, `lanzar_qa_fuente`)**, **CD (Redactar)**, **Ilustrar** y **AVANCE** a
   revisión. Escribe `contenido` y `contenido_plataforma`.
 
 Problemas:
 
-1. **Frontera mal puesta.** La admisión y la **validación (QA)** —que son trabajo de
-   *investigar* si una noticia merece y es fiable— viven en el mismo barrido que el copy y el
-   arte (*producir* la pieza). La verificación corre, además, *después* de cruzar a `contenido`,
+1. **Frontera mal puesta.** Admitir y **Verificar (QA)** —que son trabajo de
+   *investigar* si una noticia merece y es fiable— viven en el mismo barrido que Redactar e
+   Ilustrar (*producir* la pieza). La verificación corre, además, *después* de cruzar a `contenido`,
    o sea ya del lado producción del modelo de datos.
 2. **UI dispersa.** Producción es una página clara (`Produccion.tsx`: feed de runs, etapas
    explícitas, Monitor con cola y toggles). Investigación está repartida: el pool en
-   `Cobertura`/`MesaNoticias`, la fusión como un badge, el score en un modal, el QA como un
+   `Cobertura`/`MesaNoticias`, Fusionar como un badge, el score en un modal, el QA como un
    badge y **la marca asignada no se ve**. No hay una vista del *proceso* de investigación.
 3. **Toggles cruzados.** Los interruptores del motor —incluidos los de investigación
-   (`SELECCION`, `FUSION`, perfil editorial)— viven en el **Monitor de Producción**. El
+   (`RECOLECTAR`, `FUSIONAR`, perfil editorial)— viven en el **Monitor de Producción**. El
    interruptor virtual "Generar" agrupa 5 claves de ambos mundos.
 4. **Nomenclatura desalineada.** `KENI_INVESTIGADOR_INTERVALO_HORAS` gobierna la cadencia del
    pipeline de **producción** (mal nombre); coexiste con otro daemon "Investigador" (snapshot
@@ -45,26 +45,26 @@ La app se organiza en **dos procesos con nombre, frontera explícita y control i
 
 ### 1. Investigación (el «motor de noticias»)
 
-Recolecta, deduplica, clasifica, **rankea** y **verifica** noticias. Etapas:
+Recolecta, deduplica, clasifica, **prioriza** y **verifica** noticias. Etapas:
 
-ingesta (sondeo RSS + agencias) → clustering → merge léxico → **fusión semántica** →
-traducción → **clasificación de marca** → ranking/score (incl. perfil de relevancia) →
-admisión → **validación (QA de fuente)**.
+Recolectar (sondeo RSS + agencias) → Agrupar → **Fusionar** →
+Traducir → **Clasificar marca** → Priorizar/score (incl. perfil de relevancia) →
+Admitir → **Verificar (QA de fuente)**.
 
-**Salida:** un pool de historias deduplicadas, clasificadas por marca, rankeadas y
+**Salida:** un pool de historias deduplicadas, clasificadas por marca, priorizadas y
 **verificadas**, listas para producir. Es el insumo de Producción.
 
 ### 2. Producción (la «máquina de contenido»)
 
 Convierte una historia verificada en pieza publicable. Etapas:
 
-redacción editorial (voz de marca / copy) → arte → avance a revisión → publicación.
+Redactar (voz de marca) → Ilustrar → avance a revisión → Publicar.
 
 ### 3. Frontera
 
 Una historia **sale de Investigación cuando está verificada (QA pasada)**. Producción
-empieza en la redacción del copy. Es decir: **Validación (QA) es Investigación**; **editorial
-(voz/redacción), copy y arte son Producción**.
+empieza en Redactar. Es decir: **Verificar (QA) es Investigación**; **Redactar
+(voz/redacción) e Ilustrar son Producción**.
 
 > Hoy QA corre sobre `contenido` (ya cruzada la frontera de datos `crear_tema_de_cluster`).
 > Alinear el modelo de datos con esta frontera —que QA verifique la historia *antes* de
@@ -78,8 +78,8 @@ marca (`::marca`) y bajo el kill-switch global `KENI_MAQUINA`:
 
 | Maestro | Agrupa (claves físicas actuales) |
 |---|---|
-| **Investigación** | `KENI_PIPELINE_SELECCION` (ingesta), `KENI_PIPELINE_FUSION`, `KENI_CLASIFICAR_MARCA_IA`, `KENI_RENDIMIENTO_RANKING`, perfil de relevancia (ver §5), `KENI_PIPELINE_VALIDACION` (QA) |
-| **Producción** | `KENI_PIPELINE_COPY` (copy/editorial), `KENI_PIPELINE_ARTE`, `KENI_PUBLICAR_REAL`, `KENI_AUTO_PROGRAMAR` |
+| **Investigación** | `KENI_PIPELINE_RECOLECTAR` (Recolectar), `KENI_PIPELINE_FUSIONAR`, `KENI_CLASIFICAR_MARCA_IA`, `KENI_RENDIMIENTO_RANKING`, perfil de relevancia (ver §5), `KENI_PIPELINE_VERIFICAR` (Verificar) |
+| **Producción** | `KENI_PIPELINE_REDACTAR` (Redactar), `KENI_PIPELINE_ILUSTRAR`, `KENI_PUBLICAR_REAL`, `KENI_AUTO_PROGRAMAR` |
 
 El interruptor virtual "Generar" (que hoy escribe 5 claves de ambos mundos) se **parte** en
 los dos maestros. `etapa_activa(flag, marca)` sigue siendo la fuente única de verdad por
@@ -93,22 +93,22 @@ etapa; los maestros son una capa de agrupación encima, no reemplazan los flags 
   (p. ej. `KENI_PRODUCCION_INTERVALO_HORAS`) con **alias legado** (store/env viejos siguen
   leyéndose) para no romper despliegues.
 - `KENI_PIPELINE_EDITORIAL` **no es** la voz/redacción editorial: hoy es el **perfil de
-  keywords que alimenta el RANKING** (investigación). Para quitar la ambigüedad se renombra a
-  un nombre de *relevancia/ranking* (p. ej. `KENI_RANKING_PERFIL_IA`, con alias legado) y se
+  keywords que alimenta Priorizar** (investigación). Para quitar la ambigüedad se renombra a
+  un nombre de *relevancia/Priorizar* (p. ej. `KENI_PRIORIZAR_PERFIL_IA`, con alias legado) y se
   ubica en el maestro **Investigación**. El término "editorial" queda reservado para la
   redacción del copy (Producción). *(Punto a confirmar por el equipo: si se prefiere tratar el
   perfil editorial como Producción, se mueve de maestro sin cambiar su función.)*
-- "CI" (admisión) y "Ola A–D" son jerga interna; en la UI y los nombres de cara al equipo se
-  usan términos del proceso (admisión, ranking, verificación), no las siglas.
+- "CI" (Admitir) y "Ola A–D" son jerga interna; en la UI y los nombres de cara al equipo se
+  usan términos del proceso (Admitir, Priorizar, verificación), no las siglas.
 
 ### 6. UI: dos páginas-proceso
 
 - **Investigación**: el proceso completo en una página —el pool/mesa + las **etapas visibles**
-  (fusión, clasificación de marca, ranking, **validación**) con su estado, el **monitor de
+  (Fusionar, Clasificar marca, Priorizar, **Verificar**) con su estado, el **monitor de
   investigación** (qué se está fusionando/clasificando/verificando y su coste) y **sus
   toggles**. Se **superficie la marca asignada y el QA como etapas** (hoy ocultos/como badge).
 - **Producción**: la página actual (feed de runs + cola + toggles de producción),
-  recortada a copy/arte/avance/publicación. Los toggles de investigación **salen** del Monitor
+  recortada a Redactar/Ilustrar/avance/Publicar. Los toggles de investigación **salen** del Monitor
   de Producción.
 
 ## Plan por fases
@@ -120,10 +120,10 @@ etapa; los maestros son una capa de agrupación encima, no reemplazan los flags 
 - **F2 — UI.** Página Investigación como proceso (etapas + marca + QA visibles + monitor +
   toggles); sacar los toggles de investigación del Monitor de Producción.
 - **F3 — Split físico (hecho).** `_barrido` se partió en dos loops independientes (Investigación
-  = caducidad + admisión + QA; Producción = copy + arte + avance) con hilo, cadencia, gate y
+  = caducidad + Admitir + QA; Producción = Redactar + Ilustrar + avance) con hilo, cadencia, gate y
   single-flight (`pipeline_investigacion`/`pipeline_produccion`) propios. El modelo de datos se
   alineó con la frontera: la QA verifica la HISTORIA (`noticias_clusters.qa_veredicto`, sellada
-  por `marcar_cluster_qa`) ANTES de materializar contenido; la admisión solo promueve las
+  por `marcar_cluster_qa`) ANTES de materializar contenido; Admitir solo promueve las
   verificadas (heredando el veredicto al `contenido`) y las `problema` no cruzan a producción.
   La criba se acota por un EMBUDO (tope en vuelo) y un reaper sanea las QA `en_curso` zombi. Las
   vistas de historias leen el veredicto NATIVO del cluster (fallback al contenido heredado para
@@ -135,7 +135,7 @@ etapa; los maestros son una capa de agrupación encima, no reemplazan los flags 
 **A favor**
 - Modelo mental claro: dos procesos con nombre, frontera y control propio; deja de haber un
   "pipeline" monolítico que mezcla investigar y producir.
-- Investigación deja de estar dispersa: la fusión, la clasificación de marca, el ranking y la
+- Investigación deja de estar dispersa: Fusionar, Clasificar marca, Priorizar y la
   verificación se ven como etapas de un proceso, con su monitor y sus toggles.
 - Se pueden encender/parar y escalar los dos procesos por separado (p. ej. investigar sin
   producir mientras se valida una marca).

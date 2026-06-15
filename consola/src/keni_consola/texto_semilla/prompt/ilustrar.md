@@ -1,6 +1,6 @@
 ---
-titulo: "Arte"
-descripcion: "Directiva del generador de imagen: una foto realista de la noticia, sin texto ni placas. La usan el auto-arte del pipeline y el botón «Generar con IA»."
+titulo: "Ilustrar"
+descripcion: "Directiva del generador de imagen: una foto realista de la noticia, sin texto ni placas. La usan la ilustración automática del pipeline y el botón «Generar con IA»."
 tipo: prompt
 carpeta: ""
 creado: 2026-06-08T00:00:00+00:00

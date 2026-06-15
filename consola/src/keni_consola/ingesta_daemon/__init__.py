@@ -1,4 +1,4 @@
-"""Daemon del MOTOR DE INGESTA PERSISTENTE (Ola A).
+"""Daemon del MOTOR DE RECOLECCIÓN PERSISTENTE (Ola A).
 
 PROBLEMA QUE RESUELVE
 =====================
@@ -10,7 +10,7 @@ del store; nadie golpea la red por request.
 
 SEGURO POR DISEÑO
 =================
-  - GATEADO EN VIVO: solo sondea con `KENI_PIPELINE_SELECCION=1` (def OFF para CI/tests; ON en prod).
+  - GATEADO EN VIVO: solo sondea con `KENI_PIPELINE_RECOLECTAR=1` (def OFF para CI/tests; ON en prod).
     El hilo arranca SIEMPRE y comprueba el flag cada ciclo (toggle en caliente).
   - SOLO LECTURA EXTERNA: descarga feeds RSS públicos (guard SSRF de `http_feed`) y persiste.
     No publica, no genera, no llama a `claude -p`.
@@ -30,7 +30,7 @@ ESTRUCTURA (refactor de pura reubicación, sin cambio de comportamiento)
 El módulo se troceó en un paquete por áreas; este `__init__` es el FACADE que preserva la
 superficie pública (mismo nombre de import `keni_consola.ingesta_daemon`):
   - `_comun`: estado/throttles compartidos y helpers (relevancia, rendimiento, actividad IA,
-    clasificación de marca, fusión de un grupo).
+    clasificación de marca, fusionar un grupo).
   - `pasos/`: cada `paso_*` independiente (clustering, rescore, merge_lexico, fusion_semantica,
     traduccion, caducidad, agencias).
   - `_bucle`: orquestador (`ejecutar_barrido`), planificación pura y arranque del hilo
@@ -89,11 +89,11 @@ from ._comun import (  # noqa: F401
 # Pasos (parcheables sobre el facade: el orquestador los invoca vía `_pkg.paso_*`).
 from .pasos.agencias import paso_agencias  # noqa: F401
 from .pasos.caducidad import paso_caducidad  # noqa: F401
-from .pasos.clustering import paso_clustering  # noqa: F401
-from .pasos.fusion_semantica import paso_fusion_semantica  # noqa: F401
+from .pasos.clustering import paso_agrupar  # noqa: F401
+from .pasos.fusion_semantica import paso_fusionar_semantica  # noqa: F401
 from .pasos.merge_lexico import paso_merge_lexico  # noqa: F401
 from .pasos.rescore import paso_rescore  # noqa: F401
-from .pasos.traduccion import paso_traduccion  # noqa: F401
+from .pasos.traduccion import paso_traducir  # noqa: F401
 
 __all__ = [
     "ejecutar_barrido",
@@ -101,9 +101,9 @@ __all__ = [
     "planificar_proximo",
     "paso_agencias",
     "paso_caducidad",
-    "paso_clustering",
-    "paso_fusion_semantica",
+    "paso_agrupar",
+    "paso_fusionar_semantica",
     "paso_merge_lexico",
     "paso_rescore",
-    "paso_traduccion",
+    "paso_traducir",
 ]

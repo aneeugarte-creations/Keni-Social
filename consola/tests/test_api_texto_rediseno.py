@@ -75,7 +75,7 @@ def test_pipelines_listar(cliente):
     ids = {p["id"] for p in r.json()["pipelines"]}
     assert {"copy", "qa", "evergreen"} <= ids
     copy = next(p for p in r.json()["pipelines"] if p["id"] == "copy")
-    assert copy["prompt_base_id"] == "prompt/copy"
+    assert copy["prompt_base_id"] == "prompt/redactar"
 
 
 def test_pipeline_preview_ensambla(cliente):

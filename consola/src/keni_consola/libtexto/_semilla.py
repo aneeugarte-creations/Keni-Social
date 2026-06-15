@@ -37,6 +37,21 @@ _PROMPTS_OBSOLETOS_BIBLIOTECA: tuple[str, ...] = (
 )
 _SENTINELA_OBSOLETOS = ".prompts-obsoletos-v1"
 
+# Migración ONE-SHOT del rediseño de nombres/ids de la Biblioteca: el store en vivo ya tiene los
+# docs del sistema con ids/títulos VIEJOS, y `importar_semilla` no pisa lo existente, así que los
+# nombres nuevos + descripción + cuerpos limpios no llegarían. Esta migración (a) borra del store
+# las copias con el id viejo de los prompts renombrados y (b) RE-SIEMBRA todos los docs del sistema
+# desde la semilla nueva, EXCEPTO los `patrones.md` (los gestiona `patrones_derivar --store`). One-
+# shot por SENTINELA: tras correr no vuelve a tocar el store, así que las ediciones futuras del
+# equipo se respetan. El contenido viejo es recuperable (historial git de la semilla).
+#
+# OLA v2 (rediseño de ETAPAS a verbos C): los ids que ARRIBA quedaron en su forma «v1» (prompt/copy,
+# prompt/validacion, prompt/editorial, prompt/fusion, prompt/insumos/*, …) NOMBRABAN una etapa de la
+# máquina por su nombre viejo y ahora pasan al verbo C (Redactar, Verificar, Priorizar, Fusionar,
+# Recibir, …). El store en vivo ya pasó la v1, así que su sentinela es `.migracion-nombres-v1`; por
+# eso el SENTINELA sube a `.migracion-nombres-v2`: la MISMA función vuelve a correr (el call site no
+# cambia), borra los ids «v1» con `_IDS_VIEJOS_BIBLIOTECA_V2` y re-siembra los ids con verbo C. En un
+# store fresco las dos olas se aplican de una sola pasada. Idempotente por el sentinela v2.
 _RENOMBRES_PROMPT_BIBLIOTECA: tuple[tuple[str, str], ...] = (
     ("prompt/copy-desde-nota", "prompt/copy"),
     ("prompt/qa-fuente", "prompt/validacion"),
@@ -51,8 +66,35 @@ _RENOMBRES_PROMPT_BIBLIOTECA: tuple[tuple[str, str], ...] = (
     ("prompt/importacion/calendario", "prompt/importar/calendario"),
     ("prompt/importacion/parrilla", "prompt/importar/parrilla"),
 )
-_SENTINELA_NOMBRES = ".migracion-nombres-v1"
-_CARPETAS_VIEJAS_BIBLIOTECA = ("prompt/imagen", "prompt/noticias", "prompt/importacion", "prompt/editorial")
+# OLA v2: ids del sistema cuyo nombre nombraba una ETAPA por su nombre viejo y que ahora pasa al
+# verbo C. Se BORRAN del store (su id con verbo C se re-siembra en el mismo paso). El cuerpo viejo es
+# recuperable (historial git de la semilla). El destino renombrado: prompt/fusion→fusionar,
+# prompt/fusion-verificacion→fusionar-verificar, prompt/traduccion→traducir,
+# prompt/clasificacion-marca→clasificar-marca, prompt/editorial→priorizar, prompt/validacion→verificar,
+# prompt/copy→redactar, prompt/arte→ilustrar, prompt/evergreen→idear, prompt/insumos/*→recibir/*.
+_IDS_VIEJOS_BIBLIOTECA_V2: tuple[str, ...] = (
+    "prompt/fusion",
+    "prompt/fusion-verificacion",
+    "prompt/traduccion",
+    "prompt/clasificacion-marca",
+    "prompt/editorial",
+    "prompt/validacion",
+    "prompt/copy",
+    "prompt/arte",
+    "prompt/evergreen",
+    "prompt/insumos/contexto",
+    "prompt/insumos/corresponsales",
+    "prompt/insumos/eventos-claro",
+    "prompt/insumos/notas",
+    "prompt/insumos/portal",
+    "prompt/insumos/reporteros",
+)
+_SENTINELA_NOMBRES = ".migracion-nombres-v2"
+# Carpetas de prompt que quedan vacías en el store tras aplanar/renombrar los ids (se limpian al
+# final). `prompt/insumos` la vacía la ola v2 al mover sus prompts a `prompt/recibir`.
+_CARPETAS_VIEJAS_BIBLIOTECA = (
+    "prompt/imagen", "prompt/noticias", "prompt/importacion", "prompt/editorial", "prompt/insumos",
+)
 
 _DESCRIPCIONES_VIEJAS_EDITORIAL: tuple[tuple[str, str], ...] = (
     (r"Ajustes de formato por red propios de .+, sobre el formato común\.",
@@ -216,6 +258,11 @@ def migrar_nombres_biblioteca(origen: Path | None = None) -> int:
     Pensado para el arranque del servidor, ANTES de `importar_semilla`. Devuelve cuántos
     documentos tocó (0 si ya se aplicó o no hay semilla). Idempotente: tras la primera pasada
     deja un sentinela y no vuelve a pisar el store (respeta ediciones futuras del equipo).
+
+    Corre DOS olas en la misma pasada: la v1 (renombres de ids ya planos) y la v2 (rediseño de
+    ETAPAS a verbos C, `_IDS_VIEJOS_BIBLIOTECA_V2`). El sentinela es `.migracion-nombres-v2`, así
+    que un store que solo pasó la v1 (sentinela `.migracion-nombres-v1`) vuelve a entrar aquí y
+    recibe la v2 sin tocar el call site.
     """
     base = origen or dir_semilla()
     if not base.is_dir():
@@ -230,6 +277,16 @@ def migrar_nombres_biblioteca(origen: Path | None = None) -> int:
         if ruta_vieja.is_file():
             ruta_vieja.unlink()
             n += 1
+    # (1b) OLA v2: borra los ids del sistema que nombraban una ETAPA por su nombre viejo (prompt/copy,
+    #      prompt/validacion, prompt/insumos/*, …); su id con verbo C se re-siembra en el paso 2.
+    #      Imprescindible en un store que ya pasó la v1 y todavía conserva esos ids.
+    for viejo in _IDS_VIEJOS_BIBLIOTECA_V2:
+        ruta_vieja = destino_raiz.joinpath(*f"{viejo}.md".split("/"))
+        if ruta_vieja.is_file():
+            ruta_vieja.unlink()
+            n += 1
+    # (2) Re-siembra desde la semilla NUEVA todos los docs del sistema (ids nuevos + editoriales con
+    #     título/descr/cuerpo limpios), EXCEPTO patrones.md (lo gestiona `patrones_derivar --store`).
     for ruta in sorted(base.rglob("*.md")):
         rel = ruta.relative_to(base)
         partes = rel.with_suffix("").as_posix().split("/")

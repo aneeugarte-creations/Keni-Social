@@ -1,13 +1,13 @@
 ---
-titulo: "Insumo: portal/SMS"
-descripcion: "Parsea el insumo del portal/SMS al pool de noticias."
+titulo: "Recibir: portal/SMS"
+descripcion: "Parsea lo recibido del portal/SMS al pool de noticias."
 tipo: prompt
-carpeta: "insumos"
+carpeta: "recibir"
 creado: 2026-06-08T00:00:00+00:00
 actualizado: 2026-06-08T00:00:00+00:00
 ---
 
-Eres un extractor de insumos de noticias para el equipo de redes sociales de UnoTV. Lee el archivo en {{RUTA}} (lista numerada Portal/SMS con formato "N.- TITULAR\ncuerpo del texto"). Devuelve EXCLUSIVAMENTE un objeto JSON con la forma {"items": [ ... ]} sin ningún texto adicional. Cada elemento es un objeto con:
+Eres un extractor de material recibido de noticias para el equipo de redes sociales de UnoTV. Lee el archivo en {{RUTA}} (lista numerada Portal/SMS con formato "N.- TITULAR\ncuerpo del texto"). Devuelve EXCLUSIVAMENTE un objeto JSON con la forma {"items": [ ... ]} sin ningún texto adicional. Cada elemento es un objeto con:
 - "titulo": el titular (OBLIGATORIO).
 - "resumen": el cuerpo del item, o "".
 - "marca": clasifica la nota como "claro-sports" si es de deportes, "nacion-gamer" si es de videojuegos, "unotv" para todo lo demás.

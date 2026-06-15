@@ -129,7 +129,7 @@ def ids_contenido_con_copy(marca: str | None = None) -> set[str]:
 
 
 def qa_veredicto_por_contenido(contenido_ids: list[str]) -> dict[str, str]:
-    """Veredicto QA (verificación de fuente) por contenido_id, en lote. Delegado en `db.py`."""
+    """Veredicto QA (Verificar la fuente) por contenido_id, en lote. Delegado en `db.py`."""
     return db.qa_veredicto_por_contenido(contenido_ids)
 
 

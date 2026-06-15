@@ -39,7 +39,7 @@ Categorías: `mx`, `internacional`, `deportes`, `ciencia-tech`, `gaming`, `tende
   aplica `marca_sugerida`/`linea_sugerida` si no se pasa marca). Idempotente por URL.
   → `{ "creadas": n, "fuentes": [ ... ] }`.
 
-## B. Traducción + tropicalización MX
+## B. Traducir + tropicalización MX
 
 `dominio/traduccion.py` (NUEVO): traducción **síncrona por lotes** con Haiku,
 mismo patrón que `importador_calendario._ejecutar_claude_json` (claude -p
@@ -54,8 +54,8 @@ Ejecutor inyectable (tests). Best-effort: si falla, devuelve los originales.
 ### Integración en el Radar (radar.py / api/radar.py) — ADITIVA y acotada
 - Detectar idioma del item/preset (usa el `idioma` del preset; heurística simple
   si no se sabe). Marcar `idioma` en cada tema.
-- La traducción es **SIEMPRE ON** (no tiene toggle propio: corre dentro de la etapa
-  «Crear noticias», gateada por `KENI_PIPELINE_SELECCION` + `KENI_MAQUINA`). Tras consolidar,
+- Traducir corre **SIEMPRE** (no tiene toggle propio: va dentro de la etapa
+  «Crear noticias», gateada por `KENI_PIPELINE_RECOLECTAR` + `KENI_MAQUINA`). Tras consolidar,
   toma los temas extranjeros del **top N** (cap, p.ej. `KENI_TRADUCCION_MAX=15`),
   llama UNA vez a `traducir_items`, y sustituye `titulo`/`por_que` por la versión ES,
   guardando `titulo_original`. Con timeout y fallback al original (no degradar el

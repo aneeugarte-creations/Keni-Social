@@ -3,7 +3,7 @@
 Por cada tema cuya QA de la fuente salió `no_verificado` y que aún no tiene copy, lanza la
 generación por el camino PROBADO (`dominio.generar.lanzar_copy`) con los parámetros que CI guardó
 en `copy_pendiente`. Incluye también la selección del news-pool (orígenes autogen) que la etapa
-de copy del pipeline redacta (fundido de `autogen_copy`).
+de Redactar del pipeline redacta (fundido de `autogen_copy`).
 """
 
 from __future__ import annotations
@@ -139,16 +139,16 @@ def temas_para_copy(marca: str | None = None) -> list[dict[str, Any]]:
 
 
 def temas_autogen_sin_copy() -> list[dict[str, Any]]:
-    """Temas del news-pool/tablero sin copy que la etapa de copy debe redactar.
+    """Temas del news-pool/tablero sin copy que la etapa de Redactar debe redactar.
 
-    La etapa de copy del pipeline es el ÚNICO motor de copy: además de los temas que el propio
+    La etapa de Redactar del pipeline es el ÚNICO motor de copy: además de los temas que el propio
     pipeline ingiere (origen `pipeline`, vía QA→CD), también redacta los temas que las FUENTES
     de noticias meten al tablero (`estados.ORIGENES_AUTOGEN`: import-calendario, radar-auto,
     radar, rss, equipo) y que aún no tienen copy. La selección vive en esta función; en
     `autogen_copy` solo el LANZADOR `lanzar_para_topic` + el dedup por etiqueta. Reglas:
       - clase 'contenido', origen en `ORIGENES_AUTOGEN`, estado != 'hecha',
       - con marca válida y título no vacío,
-      - per-marca: salta las marcas apagadas a mano para «Generar copy» (`ENV_PIPELINE_COPY`),
+      - per-marca: salta las marcas apagadas a mano para «Generar copy» (`ENV_PIPELINE_REDACTAR`),
       - dedup: salta los ya encolados (etiqueta `autogen`, vía `autogen_copy.ids_ya_generados`) y
         los que ya tienen copy.
     SIN cap propio: el backpressure lo pone la cola de generación. Best-effort: una lectura
@@ -174,7 +174,7 @@ def temas_autogen_sin_copy() -> list[dict[str, Any]]:
         marca = item.get("marca") or ""
         if not marca or not marcas.es_marca(marca):
             continue
-        if config.marca_apagada(config.ENV_PIPELINE_COPY, marca):
+        if config.marca_apagada(config.ENV_PIPELINE_REDACTAR, marca):
             continue
         if not (item.get("titulo") or "").strip():
             continue
@@ -200,7 +200,7 @@ def encadenar_copy_tras_qa(
     `no_verificado`: antes cada etapa esperaba al siguiente barrido de 20 min (40-60 min en
     total para 3-8 min de LLM). El barrido queda como RED DE SEGURIDAD (recoge lo que el
     encadenado pierda). Respeta los MISMOS gates que la fase CD: toggle global de copy
-    (`KENI_PIPELINE_COPY`), exclusión por marca y las guardas de dedup (`copy_pendiente`
+    (`KENI_PIPELINE_REDACTAR`), exclusión por marca y las guardas de dedup (`copy_pendiente`
     presente + sin piezas aún). `ColaLlenaError` NO rompe el procesar de la QA: se loguea y
     el barrido lo reintenta. Devuelve la generación lanzada o None si se omite.
     """
@@ -216,7 +216,7 @@ def encadenar_copy_tras_qa(
         return None
     if not (tema.get("copy_pendiente") or "").strip():
         return None
-    if config.marca_apagada(config.ENV_PIPELINE_COPY, tema.get("marca") or ""):
+    if config.marca_apagada(config.ENV_PIPELINE_REDACTAR, tema.get("marca") or ""):
         return None
     if _tiene_copy(tema.get("id", "") or ""):
         return None
@@ -233,7 +233,7 @@ def encadenar_copy_tras_qa(
 
 
 def encadenar_arte_tras_copy(contenido_id: str) -> dict[str, Any] | None:
-    """Dispara la etapa de ARTE de UN tema justo tras crearse sus borradores (por eventos).
+    """Dispara la etapa de Ilustrar de UN tema justo tras crearse sus borradores (por eventos).
 
     Lo llama el POST-PROCESADO del copy (worker) cuando el copy nidó piezas bajo un tema:
     ilustra ESE tema al instante en vez de esperar al barrido. MISMOS gates que
@@ -243,7 +243,7 @@ def encadenar_arte_tras_copy(contenido_id: str) -> dict[str, Any] | None:
     """
     if not contenido_id:
         return None
-    if not config.gate_maquina(config.autogen_arte_activo)():
+    if not config.gate_maquina(config.ilustrar_activo)():
         return None
     from .. import autogen_arte, media
 
@@ -259,7 +259,7 @@ def encadenar_arte_tras_copy(contenido_id: str) -> dict[str, Any] | None:
             return None
         if not (tema.get("titulo") or "").strip():
             return None
-        if config.marca_apagada(config.ENV_PIPELINE_ARTE, tema.get("marca") or ""):
+        if config.marca_apagada(config.ENV_PIPELINE_ILUSTRAR, tema.get("marca") or ""):
             return None
         if (tema.get("id") or "") in autogen_arte.ids_ya_procesados():
             return None

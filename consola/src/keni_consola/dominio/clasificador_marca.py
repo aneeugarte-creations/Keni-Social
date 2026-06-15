@@ -33,11 +33,11 @@ Ejecutor = Callable[[str, str], str]
 _MAX_CHARS = 600
 
 # El prompt vive en la Biblioteca de Texto como documento EDITABLE (pestaña «Prompts», doc
-# `prompt/clasificacion-marca`): el equipo lo ajusta sin tocar código. Las variables
+# `prompt/clasificar-marca`): el equipo lo ajusta sin tocar código. Las variables
 # {{MARCAS}}, {{MARCA_FALLBACK}} y {{NOTICIA}} se sustituyen aquí al componer la llamada. La
-# SEMILLA del paquete (`texto_semilla/prompt/clasificacion-marca.md`) es la ÚNICA fuente del
+# SEMILLA del paquete (`texto_semilla/prompt/clasificar-marca.md`) es la ÚNICA fuente del
 # texto: no hay copia duplicada en código (el test semilla↔código garantiza que existe).
-_PROMPT_ID = "prompt/clasificacion-marca"
+_PROMPT_ID = "prompt/clasificar-marca"
 
 
 def _plantilla() -> str:

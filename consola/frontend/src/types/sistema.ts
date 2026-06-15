@@ -352,10 +352,10 @@ export interface ProblemaPipeline {
   titulo: string;
   marca: string;
   marca_nombre: string;
-  /** Etapa donde se bloqueó ("Validación" o el fragmento del último hallazgo de sistema). */
+  /** Etapa donde se bloqueó ("Verificar" o el fragmento del último hallazgo de sistema). */
   etapa: string;
-  /** Reintentos quemados por etapa (criba de la fuente / copy). */
-  intentos: { qa: number; cd: number };
+  /** Reintentos quemados por etapa (verificación de la fuente / redacción). */
+  intentos: { verificar: number; redactar: number };
   /** Motivo legible del bloqueo (explicación del último hallazgo o resumen de la criba). */
   error: string;
   resumen: string;
