@@ -105,13 +105,26 @@ export function PanelVersiones({
       : objetivoVersion
         ? objetivoVersion.mensaje || "Publicación"
         : "";
-  // Lado «después» del diff (el «antes» es siempre la versión que abriste).
   const cuerpoObjetivo =
     comparaCon === "borrador"
       ? cuerpoBorrador ?? ""
       : objetivoQuery.data?.documento.cuerpo ?? "";
   const cargandoComparacion =
     !!comparandoSha && objetivoQuery.isPending;
+
+  // El diff se lee CRONOLÓGICAMENTE: el lado más ANTIGUO es «antes» y el más nuevo «después»,
+  // así borrar una línea sale en ROJO y añadir en VERDE, sin importar cuál de las dos abriste.
+  // («Tu borrador» es siempre lo más reciente.) Las fechas son ISO: comparan como string.
+  const aperturaLabel = verVersion?.mensaje || "esta versión";
+  const aperturaCuerpo = verQuery.data?.documento.cuerpo ?? "";
+  const fechaApertura = verVersion?.fecha ?? "";
+  const fechaObjetivo =
+    comparaCon === "borrador" ? "9999-12-31T23:59:59" : objetivoVersion?.fecha ?? "";
+  const aperturaEsAntes = fechaApertura <= fechaObjetivo;
+  const diffAntes = aperturaEsAntes ? aperturaCuerpo : cuerpoObjetivo;
+  const diffDespues = aperturaEsAntes ? cuerpoObjetivo : aperturaCuerpo;
+  const labelAntes = aperturaEsAntes ? aperturaLabel : objetivoLabel;
+  const labelDespues = aperturaEsAntes ? objetivoLabel : aperturaLabel;
   // Opciones de comparación: el borrador (si lo tenemos) + el resto de versiones.
   const opcionesCompara = [
     ...(cuerpoBorrador !== undefined ? [{ value: "borrador", label: "Tu borrador" }] : []),
@@ -329,7 +342,7 @@ export function PanelVersiones({
             </DialogTitle>
             <DialogDescription>
               {comparaCon
-                ? `Cambios desde «${verVersion?.mensaje || "esta versión"}» hasta «${objetivoLabel}»`
+                ? `Cambios desde «${labelAntes}» hasta «${labelDespues}»`
                 : verVersion
                   ? `${verVersion.autor} · ${
                       tiempoRelativo(verVersion.fecha) ||
@@ -367,11 +380,7 @@ export function PanelVersiones({
               {verQuery.isPending || cargandoComparacion ? (
                 <Skeleton className="h-40 w-full" />
               ) : comparaCon ? (
-                <DiffProsa
-                  antes={verQuery.data?.documento.cuerpo ?? ""}
-                  despues={cuerpoObjetivo}
-                  soloCambios={soloCambios}
-                />
+                <DiffProsa antes={diffAntes} despues={diffDespues} soloCambios={soloCambios} />
               ) : (
                 <LectorProsa cuerpo={verQuery.data?.documento.cuerpo ?? ""} />
               )}

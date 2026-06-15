@@ -155,18 +155,33 @@ describe("PanelVersiones", () => {
     expect(screen.queryByLabelText("Solo cambios")).not.toBeInTheDocument();
   });
 
-  it("dentro del visor se puede COMPARAR la versión con otra (muestra el diff)", async () => {
+  // Subtítulo cronológico esperado SIEMPRE: la más antigua (1 jun) es el «antes».
+  const SUBTITULO_CRONOLOGICO =
+    "Cambios desde «Primera versión de la voz» hasta «Tono más directo en titulares»";
+
+  it("comparar muestra el diff con su toggle, y el sentido es cronológico (abro la antigua)", async () => {
     stubFetch();
     montar();
+    // Abro la ANTIGUA (bbb222, 1 jun) y comparo con la NUEVA (aaa111, 10 jun).
     await screen.findByText("Primera versión de la voz");
     fireEvent.click(screen.getByRole("button", { name: /Primera versión de la voz/ }));
     const dialog = await screen.findByRole("dialog");
     // Por defecto solo se ve el contenido (sin barra de diff).
     expect(within(dialog).queryByText("Solo cambios")).not.toBeInTheDocument();
-    // Elegir comparar con otra versión → aparece el diff, su subtítulo y el toggle.
     fireEvent.change(within(dialog).getByRole("combobox"), { target: { value: "aaa111" } });
     expect(await within(dialog).findByText("Solo cambios")).toBeInTheDocument();
-    expect(within(dialog).getByText(/Cambios desde/)).toBeInTheDocument();
+    expect(within(dialog).getByText(SUBTITULO_CRONOLOGICO)).toBeInTheDocument();
+  });
+
+  it("el sentido del diff NO depende de cuál abras (abro la nueva, comparo con la antigua)", async () => {
+    stubFetch();
+    montar();
+    // Abro la NUEVA (aaa111) y comparo con la ANTIGUA (bbb222) → MISMO sentido cronológico.
+    await screen.findByText("Tono más directo en titulares");
+    fireEvent.click(screen.getByRole("button", { name: /Tono más directo en titulares/ }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByRole("combobox"), { target: { value: "bbb222" } });
+    expect(await within(dialog).findByText(SUBTITULO_CRONOLOGICO)).toBeInTheDocument();
   });
 
   it("«Restaurar» (admin) revierte en un clic: revierte y publica", async () => {
