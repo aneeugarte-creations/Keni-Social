@@ -1,8 +1,8 @@
 /**
- * Tests del RielInvestigacion (ADR 0011, C3): la tira del flujo completo del proceso
- * (Recolectar · Agrupar · Fusionar · Traducir · Clasificar · Priorizar · Admitir · Verificar) con
- * su estado ON/OFF leído del catálogo de ajustes. El estado solo es legible por admin; el resto
- * ve la tira informativa.
+ * Tests del RielInvestigacion CONSOLIDADO (ADR 0011): un panel de TARJETAS con todas las fases del
+ * tramo aguas arriba (Recolectar · Agrupar · Fusionar · Traducir · Clasificar · Priorizar ·
+ * Admitir · Verificar). El SWITCH es el indicador de estado (no hay puntos de color); solo admin
+ * lee/edita el catálogo. Las fases con prompt abren su doc al clicar la tarjeta.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -55,28 +55,28 @@ function ajustes(valor: boolean): RespuestaAjustes {
   };
 }
 
-function renderRiel(u: UsuarioSesion | null) {
+function renderRiel(esAdmin: boolean) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <SesionContexto.Provider value={sesionValor(u)}>
+      <SesionContexto.Provider value={sesionValor(usuario(esAdmin ? "admin" : "editor"))}>
         <MemoryRouter>
-          <RielInvestigacion />
+          <RielInvestigacion esAdmin={esAdmin} />
         </MemoryRouter>
       </SesionContexto.Provider>
     </QueryClientProvider>,
   );
 }
 
-const ETAPAS = [
-  "recolectar",
-  "agrupar",
-  "fusionar",
-  "traducir",
-  "clasificar",
-  "priorizar",
-  "admitir",
-  "verificar",
+const NOMBRES = [
+  "Recolectar",
+  "Agrupar",
+  "Fusionar",
+  "Traducir",
+  "Clasificar",
+  "Priorizar",
+  "Admitir",
+  "Verificar",
 ];
 
 beforeEach(() => {
@@ -87,47 +87,41 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("RielInvestigacion", () => {
-  it("pinta todas las etapas del proceso en orden", async () => {
-    renderRiel(usuario("admin"));
-    for (const e of ETAPAS) expect(screen.getByTestId(`etapa-${e}`)).toBeTruthy();
+describe("RielInvestigacion (pipeline consolidado)", () => {
+  it("pinta una tarjeta por cada fase del proceso", () => {
+    renderRiel(true);
+    for (const n of NOMBRES) expect(screen.getByText(n)).toBeTruthy();
   });
 
-  it("admin: el maestro ON deja todas las etapas en estado «on»", async () => {
-    renderRiel(usuario("admin"));
+  it("admin: cada fase muestra su switch (el toggle indica encendido)", async () => {
+    renderRiel(true);
     await waitFor(() =>
-      expect(screen.getByTestId("etapa-recolectar").getAttribute("data-estado")).toBe("on"),
+      expect(screen.getAllByRole("switch").length).toBeGreaterThanOrEqual(NOMBRES.length),
     );
-    for (const e of ETAPAS)
-      expect(screen.getByTestId(`etapa-${e}`).getAttribute("data-estado")).toBe("on");
+    // Maestro Investigación ON → los switches de las fases salen encendidos.
+    expect(screen.getAllByRole("switch")[0].getAttribute("aria-checked")).toBe("true");
   });
 
-  it("admin: el maestro OFF deja las etapas en «off»", async () => {
+  it("admin: el maestro OFF deja los switches apagados", async () => {
     vi.spyOn(apiMod.api, "ajustes").mockResolvedValue(ajustes(false));
-    renderRiel(usuario("admin"));
+    renderRiel(true);
     await waitFor(() =>
-      expect(screen.getByTestId("etapa-recolectar").getAttribute("data-estado")).toBe("off"),
+      expect(screen.getAllByRole("switch")[0]?.getAttribute("aria-checked")).toBe("false"),
     );
   });
 
-  it("el lápiz de una etapa con prompt es un botón (no deep-link) que abre el editor in-place", () => {
-    renderRiel(usuario("admin"));
-    const lapiz = screen.getByLabelText("Editar el prompt de Verificar");
-    expect(lapiz.tagName).toBe("BUTTON");
-    expect(lapiz.getAttribute("href")).toBeNull();
-    // Recolectar es mecánica (sin prompt): no lleva lápiz.
-    expect(screen.queryByLabelText(/Editar el prompt de Recolectar/)).toBeNull();
-    // Al pulsarlo se abre el overlay «Editar prompt» encima del cockpit (sin salir).
-    fireEvent.click(lapiz);
-    expect(screen.getByRole("dialog")).toBeTruthy();
+  it("una fase con prompt abre el editor in-place al clicar la tarjeta", async () => {
+    renderRiel(true);
+    // Verificar tiene prompt: clicar su tarjeta lanza la acción primaria (Editar prompt) → overlay.
+    fireEvent.click(screen.getByText("Verificar"));
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy());
   });
 
-  it("no admin: no consulta el catálogo y las etapas quedan «desconocido»", async () => {
+  it("no admin: ni switches ni consulta del catálogo (informativo)", () => {
     const spy = vi.spyOn(apiMod.api, "ajustes");
-    renderRiel(usuario("editor"));
-    expect(screen.getByTestId("etapa-recolectar").getAttribute("data-estado")).toBe("desconocido");
+    renderRiel(false);
+    for (const n of NOMBRES) expect(screen.getByText(n)).toBeTruthy();
+    expect(screen.queryAllByRole("switch").length).toBe(0);
     expect(spy).not.toHaveBeenCalled();
-    // Sin estado legible, tampoco el pie de «Ajustes».
-    expect(screen.queryByText(/Ajustes del motor/i)).toBeNull();
   });
 });

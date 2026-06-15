@@ -1,66 +1,108 @@
 /**
- * RielInvestigacion — la fase de ANTES (en el flujo) del proceso de Investigación, hecho visible.
+ * RielInvestigacion — el PIPELINE de Investigación CONSOLIDADO: una sola superficie con TODAS las
+ * fases del tramo aguas arriba como TARJETAS GRANDES en orden de flujo
+ * (Recolectar · Agrupar · Fusionar · Traducir · Clasificar · Priorizar · Admitir · Verificar).
  *
- * Es la mitad AUTOMÁTICA e INFORMATIVA del flujo: una tira horizontal del flujo COMPLETO que
- * la máquina corre sola (Recolectar · Agrupar · Fusionar · Traducir · Clasificar · Priorizar ·
- * Admitir · Verificar) con su estado ON/OFF y su tipo (🤖 LLM / ⚙ determinista). NO es la tira de
- * control (esa es «Pipeline en vivo», con switches por etapa); aquí solo se LEE qué hace el motor
- * y si está encendido. El nombre evita chocar con el «riel de la máquina» de la Biblioteca
- * (`pages/texto/RielMaquina`, que son etapas de PROMPT, no de noticias): este es el riel de
- * recolección de noticias.
+ * Funde lo que antes eran DOS bloques (la tira informativa «Aguas arriba» y el control «Pipeline
+ * en vivo» recortado a 2 etapas): cada fase es una tarjeta con
+ *   · su ICONO de tipo — 🤖 (LLM) / ⚙ (determinista) —,
+ *   · su INTERRUPTOR (on/off) — el toggle ES el indicador de estado; no hay puntos de color —,
+ *   · sus CONTEOS de cola (en curso · en cola) donde la fase tiene trabajos, y el embudo de Verificar,
+ *   · «Editar prompt» (las fases con prompt abren su doc de la Biblioteca en un overlay) y las
+ *     «Excepciones por marca», en el menú de la tarjeta.
+ * En la cabecera, el maestro «Máquina» (`KENI_MAQUINA`): apagado, nada automático corre.
  *
- * El estado se lee del catálogo de ajustes (`GET /api/ajustes`, solo admin) por la `clave` de
- * cada flag físico, con el maestro VIRTUAL «Investigación» (`KENI_INVESTIGACION`) como respaldo
- * para las etapas sin flag propio (Agrupar/Traducir/Admitir). Los toggles reales viven en
- * «Pipeline en vivo» (control) y en el drawer de ajustes del motor. El lápiz de cada etapa con
- * prompt abre su documento de la Biblioteca en un OVERLAY (in-place, sin salir del cockpit).
+ * Cada fase resuelve su switch por su flag FÍSICO del catálogo; las fases sin flag propio
+ * (Agrupar, Traducir, Admitir) caen al maestro virtual de Investigación (`KENI_INVESTIGACION`) y
+ * lo indican con una nota («junto con Recolectar» / «con Investigación»): su toggle gobierna ese
+ * flag compartido. El estado solo es legible/editable por admin (`/api/ajustes`).
  */
 import { useQuery } from "@tanstack/react-query";
-import { Bot, ChevronDown, ChevronRight, Cog } from "lucide-react";
+import { Bot, Cog, SquarePen, Users } from "lucide-react";
 import * as React from "react";
 
 import { EditorPromptOverlay } from "@/components/biblioteca/EditorPromptOverlay";
-import { Tooltip } from "@/components/ui/tooltip";
-import { useSesion } from "@/hooks/sesion-contexto";
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { ItemMenuContextual } from "@/components/comunes/MenuContextual";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { CLAVE_AJUSTES } from "@/pages/configuracion/lib";
+import {
+  ExcepcionesPorMarca,
+  useGuardarAjuste,
+} from "@/pages/configuracion/SeccionFuncionalidad";
 import { ChipInvestigacion } from "@/pages/noticias/ChipInvestigacion";
+import type { AjusteAdmin, ColaJob, ColaMonitor } from "@/types";
 
-/** El maestro VIRTUAL de Investigación: único toggle del proceso que expone el catálogo (y que
- *  mantiene sincronizadas sus etapas físicas). Respaldo cuando la etapa no tiene flag propio
- *  en el catálogo. */
+/** El interruptor GENERAL de la máquina (cabecera). Apagado, nada automático corre. */
+const CLAVE_MAQUINA = "KENI_MAQUINA";
+/** Maestro VIRTUAL de Investigación: respaldo de las fases sin flag físico propio. */
 const MAESTRO_INVESTIGACION = "KENI_INVESTIGACION";
 
-type EstadoEtapa = "on" | "off" | "desconocido";
+/** Las fases con trabajos en la cola: a cuál se asigna cada tipo de job. */
+type QueueId = "recolectar" | "verificar";
+const ETAPA_POR_TIPO: Record<string, QueueId> = {
+  rss: "recolectar",
+  "noticias-ia": "recolectar",
+  insumos: "recolectar",
+  pipeline: "verificar",
+  verificacion: "verificar",
+  "qa-editorial": "verificar",
+};
 
-interface EtapaProceso {
-  /** Nombre legible de la etapa. */
-  nombre: string;
-  /** Tipo de la etapa: 🤖 (LLM) si es IA, ⚙ (determinista) si no. */
-  es_ia: boolean;
-  /** Claves del catálogo a consultar EN ORDEN; la primera presente decide el estado. */
-  claves: readonly string[];
-  /** Qué hace la etapa (tooltip). */
-  ayuda: string;
-  /** Doc de la Biblioteca cuyo prompt alimenta la etapa (lápiz «Editar prompt»). */
-  doc?: string;
+function contar(jobs: ColaJob[]): Record<QueueId, number> {
+  const c: Record<QueueId, number> = { recolectar: 0, verificar: 0 };
+  for (const j of jobs) {
+    const e = ETAPA_POR_TIPO[j.tipo];
+    if (e) c[e] += 1;
+  }
+  return c;
 }
 
-// El flujo COMPLETO del tramo aguas arriba (ADR 0011), en orden. Cada etapa resuelve su estado
-// por su flag físico y, si el catálogo no lo expone, cae al maestro `KENI_INVESTIGACION`.
-const ETAPAS: readonly EtapaProceso[] = [
+interface Etapa {
+  /** Nombre legible de la fase. */
+  nombre: string;
+  /** 🤖 (LLM) si es IA, ⚙ (determinista) si no. */
+  es_ia: boolean;
+  /** Claves del catálogo EN ORDEN; la primera presente gobierna el switch y el estado. */
+  claves: readonly string[];
+  /** Qué hace la fase. */
+  ayuda: string;
+  /** Doc de la Biblioteca cuyo prompt alimenta la fase («Editar prompt»). */
+  doc?: string;
+  /** Fase con trabajos en cola: muestra sus conteos. */
+  queue?: QueueId;
+  /** Clave BASE de los toggles por marca (grupo `automatizacion_marca_*`) + nota de alcance. */
+  excepciones?: { base: string; nota: string };
+  /** Nota cuando el switch gobierna un flag COMPARTIDO (fase sin flag propio). */
+  heredada?: string;
+}
+
+// El flujo COMPLETO del tramo aguas arriba (ADR 0011), en orden de ENTRADA a SALIDA.
+const ETAPAS: readonly Etapa[] = [
   {
     nombre: "Recolectar",
     es_ia: false,
     claves: ["KENI_PIPELINE_RECOLECTAR", MAESTRO_INVESTIGACION],
     ayuda: "Recolecta artículos de las fuentes",
+    queue: "recolectar",
+    excepciones: { base: MAESTRO_INVESTIGACION, nota: "Apaga Recolectar y Verificar juntas." },
   },
   {
     nombre: "Agrupar",
     es_ia: false,
     claves: ["KENI_PIPELINE_RECOLECTAR", MAESTRO_INVESTIGACION],
     ayuda: "Agrupa las notas parecidas del mismo evento",
+    heredada: "junto con Recolectar",
   },
   {
     nombre: "Fusionar",
@@ -75,6 +117,7 @@ const ETAPAS: readonly EtapaProceso[] = [
     claves: [MAESTRO_INVESTIGACION],
     ayuda: "Adapta el texto al español de México",
     doc: "prompt/traducir",
+    heredada: "con Investigación",
   },
   {
     nombre: "Clasificar",
@@ -95,6 +138,7 @@ const ETAPAS: readonly EtapaProceso[] = [
     es_ia: false,
     claves: [MAESTRO_INVESTIGACION],
     ayuda: "Crea el tema admitido en la mesa de redacción",
+    heredada: "con Investigación",
   },
   {
     nombre: "Verificar",
@@ -102,133 +146,224 @@ const ETAPAS: readonly EtapaProceso[] = [
     claves: ["KENI_PIPELINE_VERIFICAR", MAESTRO_INVESTIGACION],
     ayuda: "Contrasta las fuentes antes de pasar a la mesa",
     doc: "prompt/verificar",
+    queue: "verificar",
+    excepciones: { base: MAESTRO_INVESTIGACION, nota: "Apaga Recolectar y Verificar juntas." },
   },
 ] as const;
 
-function Punto({ estado }: { estado: EstadoEtapa }) {
+/** Switch de UN ajuste bool con su PROPIA mutación (el «guardando» es de este control). */
+function SwitchAjuste({ ajuste, ariaLabel }: { ajuste: AjusteAdmin; ariaLabel: string }) {
+  const guardar = useGuardarAjuste();
   return (
-    <span
-      className={cn(
-        "h-2 w-2 shrink-0 rounded-full",
-        estado === "on" && "bg-emerald-500",
-        estado === "off" && "bg-muted-foreground/40",
-        estado === "desconocido" && "bg-muted-foreground/20 ring-1 ring-muted-foreground/30",
-      )}
-      aria-hidden="true"
+    <Switch
+      checked={Boolean(ajuste.valor)}
+      disabled={guardar.isPending}
+      onCheckedChange={(v) => guardar.mutate({ clave: ajuste.clave, valor: v })}
+      aria-label={ariaLabel}
     />
   );
 }
 
-export function RielInvestigacion() {
-  const { usuario } = useSesion();
-  const esAdmin = usuario === null || usuario.rol === "admin";
+/** Diálogo CONTROLADO de las EXCEPCIONES POR MARCA de una fase (clave `base::marca`). */
+function DialogoExcepciones({
+  etiqueta,
+  base,
+  nota,
+  deEtapa,
+  etapaActiva,
+  abierto,
+  onOpenChange,
+}: {
+  etiqueta: string;
+  base: string;
+  nota: string;
+  deEtapa: AjusteAdmin[];
+  etapaActiva: boolean;
+  abierto: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const guardar = useGuardarAjuste();
+  return (
+    <Dialog open={abierto} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{etiqueta} · excepciones por marca</DialogTitle>
+          <DialogDescription>
+            Sin tocar, cada marca sigue el switch global de la fase. Apágala para desviarse. {nota}
+          </DialogDescription>
+        </DialogHeader>
+        <ExcepcionesPorMarca
+          ajustes={deEtapa}
+          onGuardar={(cuerpo) => guardar.mutate(cuerpo)}
+          guardando={guardar.isPending}
+          maestros={{ [base]: etapaActiva }}
+        />
+      </DialogContent>
+    </Dialog>
+  );
+}
 
-  // Prompt abierto en el overlay «Editar prompt» (in-place, sin sacarte del cockpit).
-  const [docAbierto, setDocAbierto] = React.useState<string | null>(null);
+export function RielInvestigacion({
+  cola,
+  esAdmin = true,
+}: {
+  /** Snapshot de la cola (conteos por fase). Sin él, las tarjetas no muestran conteos. */
+  cola?: ColaMonitor;
+  /** Admin: lee/edita los switches del catálogo. No-admin: tarjetas informativas. */
+  esAdmin?: boolean;
+}) {
+  // Doc abierto en el overlay «Editar prompt» (in-place, sin sacarte del cockpit).
+  const [docEditando, setDocEditando] = React.useState<string | null>(null);
+  // Fase cuyo diálogo de «Excepciones por marca» está abierto (o null).
+  const [excepNombre, setExcepNombre] = React.useState<string | null>(null);
 
-  // El estado ON/OFF solo es legible por admin (el endpoint /api/ajustes lo exige). Para el
-  // resto la tira sigue siendo informativa (los nombres del proceso), con estado «desconocido».
+  // Catálogo de ajustes (solo admin: /api/ajustes devuelve 403 a un editor). Misma queryKey que
+  // Configuración/drawer → React Query dedupe (cero peticiones extra).
   const { data } = useQuery({
     queryKey: CLAVE_AJUSTES,
     queryFn: ({ signal }) => api.ajustes(signal),
     enabled: esAdmin,
   });
-
-  const valores = React.useMemo(() => {
-    const mapa = new Map<string, boolean>();
-    for (const grupo of data?.grupos ?? [])
-      for (const ajuste of grupo.ajustes) mapa.set(ajuste.clave, Boolean(ajuste.valor));
+  const porClave = React.useMemo(() => {
+    const mapa = new Map<string, AjusteAdmin>();
+    for (const g of data?.grupos ?? []) for (const a of g.ajustes) mapa.set(a.clave, a);
     return mapa;
   }, [data]);
-
-  const estadoDe = React.useCallback(
-    (claves: readonly string[]): EstadoEtapa => {
-      if (!esAdmin) return "desconocido";
-      for (const clave of claves) {
-        const valor = valores.get(clave);
-        if (valor !== undefined) return valor ? "on" : "off";
-      }
-      return "desconocido";
-    },
-    [esAdmin, valores],
+  const porMarca = React.useMemo(
+    () =>
+      (data?.grupos ?? [])
+        .filter((g) => g.id.startsWith("automatizacion_marca"))
+        .flatMap((g) => g.ajustes),
+    [data],
   );
 
-  const etiquetaEstado = (estado: EstadoEtapa) =>
-    estado === "on" ? "activa" : estado === "off" ? "apagada" : "estado no disponible";
+  const enCurso = cola ? contar(cola.en_curso) : { recolectar: 0, verificar: 0 };
+  const esperando = cola ? contar(cola.esperando) : { recolectar: 0, verificar: 0 };
+
+  const maquina = esAdmin ? porClave.get(CLAVE_MAQUINA) : undefined;
+  const maquinaOn = Boolean(maquina?.valor);
 
   return (
-    <section aria-label="Aguas arriba: recolección automática de noticias" data-testid="riel-investigacion">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Aguas arriba · recolección automática
-        </h3>
-        {/* El estado del loop (jobs en curso/cola) cabe aquí, como indicador de la fase —no como
-            una «vista» aparte—; enlaza a Agentes prefiltrado. */}
-        <ChipInvestigacion />
-      </div>
-      <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center">
-        {ETAPAS.map((etapa, i) => {
-          const estado = estadoDe(etapa.claves);
-          return (
-            <React.Fragment key={etapa.nombre}>
-              {i > 0 ? (
-                <span className="flex justify-center text-muted-foreground/40 sm:justify-start" aria-hidden>
-                  <ChevronDown className="h-4 w-4 sm:hidden" />
-                  <ChevronRight className="hidden h-4 w-4 sm:block" />
+    <Card data-testid="riel-investigacion">
+      <CardHeader className="p-4 pb-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle className="text-sm">Pipeline en vivo</CardTitle>
+          <div className="flex flex-wrap items-center gap-3">
+            <ChipInvestigacion />
+            {/* MAESTRO «Máquina» (KENI_MAQUINA): el interruptor general de TODA la auto-producción. */}
+            {maquina && (
+              <label className="flex items-center gap-2 text-sm">
+                <span className={cn(maquinaOn ? "text-muted-foreground" : "text-destructive")}>
+                  Máquina
+                  <span className="ml-1.5 text-xs">{maquinaOn ? "· encendida" : "· apagada"}</span>
                 </span>
-              ) : null}
-              <Tooltip label={`${etapa.ayuda} (${etiquetaEstado(estado)})`} side="top">
-                {/* La BURBUJA es el botón: si la etapa tiene prompt (y eres admin), tocarla edita
-                    su documento IN-PLACE (overlay), sin lápiz suelto. El borde vira a naranja al
-                    hover como pista. Las etapas mecánicas (Recolectar) no son clicables. */}
-                {esAdmin && etapa.doc ? (
-                  <button
-                    type="button"
-                    onClick={() => setDocAbierto(etapa.doc!)}
-                    aria-label={`Editar el prompt de ${etapa.nombre}`}
-                    data-testid={`etapa-${etapa.nombre.toLowerCase()}`}
-                    data-estado={estado}
-                    className="flex cursor-pointer items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm shadow-sm transition-colors hover:border-keni-300 focus-visible:border-keni-300 focus-visible:outline-none"
-                  >
-                    <Punto estado={estado} />
-                    {etapa.es_ia ? (
-                      <Bot className="h-3.5 w-3.5 shrink-0" aria-label="IA" />
+                <SwitchAjuste
+                  ajuste={maquina}
+                  ariaLabel="Máquina (interruptor general de toda la auto-producción)"
+                />
+              </label>
+            )}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="p-4 pt-2">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {ETAPAS.map((e) => {
+            const claveEfectiva = e.claves.find((c) => porClave.has(c));
+            const ajuste = claveEfectiva ? porClave.get(claveEfectiva) : undefined;
+            const doc = esAdmin ? e.doc : undefined;
+            const deEtapa = e.excepciones
+              ? porMarca.filter((a) => a.clave.startsWith(`${e.excepciones!.base}::`))
+              : [];
+            // Acciones de la tarjeta: «Editar prompt» (primaria, abre al click) y «Excepciones».
+            const acciones: ItemMenuContextual[] = [];
+            if (doc) {
+              acciones.push({
+                etiqueta: `Editar el prompt de ${e.nombre}`,
+                icono: SquarePen,
+                onClick: () => setDocEditando(doc),
+              });
+            }
+            if (ajuste && e.excepciones && deEtapa.length > 0) {
+              acciones.push({
+                etiqueta: `Excepciones por marca de ${e.nombre}`,
+                icono: Users,
+                onClick: () => setExcepNombre(e.nombre),
+              });
+            }
+            return (
+              <FilaConAcciones
+                key={e.nombre}
+                como="div"
+                acciones={acciones}
+                onPrimaria={acciones[0]?.onClick}
+                kebab="nunca"
+                realce
+                etiquetaAcciones={`Acciones de ${e.nombre}`}
+                className="flex min-h-[5.5rem] flex-col rounded-lg border border-border/70 p-3"
+                data-testid={`etapa-${e.nombre.toLowerCase()}`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <span className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
+                    {e.es_ia ? (
+                      <Bot className="h-4 w-4 shrink-0" aria-label="IA" />
                     ) : (
-                      <Cog className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-label="determinista" />
+                      <Cog className="h-4 w-4 shrink-0 text-muted-foreground" aria-label="determinista" />
                     )}
-                    <span className="font-medium leading-none">{etapa.nombre}</span>
-                  </button>
-                ) : (
-                  <div
-                    className="flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm shadow-sm"
-                    data-testid={`etapa-${etapa.nombre.toLowerCase()}`}
-                    data-estado={estado}
-                  >
-                    <Punto estado={estado} />
-                    {etapa.es_ia ? (
-                      <Bot className="h-3.5 w-3.5 shrink-0" aria-label="IA" />
-                    ) : (
-                      <Cog className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-label="determinista" />
-                    )}
-                    <span className="font-medium leading-none">{etapa.nombre}</span>
-                  </div>
+                    <span className="truncate">{e.nombre}</span>
+                  </span>
+                  {/* El switch ES el indicador de estado (no hay punto de color). Las fases sin
+                      flag propio gobiernan el compartido; las informativas (no-admin) no lo pintan. */}
+                  {ajuste && (
+                    <SwitchAjuste
+                      ajuste={ajuste}
+                      ariaLabel={`${ajuste.etiqueta} (switch de la fase ${e.nombre})`}
+                    />
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">{e.ayuda}</p>
+                {e.heredada && (
+                  <p className="mt-0.5 text-[11px] text-muted-foreground/80">· {e.heredada}</p>
                 )}
-              </Tooltip>
-            </React.Fragment>
-          );
-        })}
-      </div>
-      {esAdmin && (
-        <p className="mt-1.5 text-xs text-muted-foreground">
-          Informativo. Enciende o apaga cada etapa en «Pipeline en vivo» o en los ajustes del motor.
-        </p>
-      )}
+                {e.queue && (
+                  <p className="mt-auto pt-1.5 text-xs tabular-nums text-muted-foreground">
+                    <span className={enCurso[e.queue] > 0 ? "font-medium text-foreground" : undefined}>
+                      {enCurso[e.queue]} en curso
+                    </span>{" "}
+                    · {esperando[e.queue]} en cola
+                  </p>
+                )}
+                {/* Verificar acota aparte de la cola compartida: su embudo (en vuelo + tope/marca). */}
+                {e.queue === "verificar" && cola?.embudo_qa && (
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    Embudo: {cola.embudo_qa.en_vuelo} en vuelo
+                    {cola.embudo_qa.tope_por_marca > 0 && (
+                      <> · tope {cola.embudo_qa.tope_por_marca}/marca</>
+                    )}
+                  </p>
+                )}
+                {ajuste && e.excepciones && deEtapa.length > 0 && (
+                  <DialogoExcepciones
+                    etiqueta={e.nombre}
+                    base={e.excepciones.base}
+                    nota={e.excepciones.nota}
+                    deEtapa={deEtapa}
+                    etapaActiva={Boolean(ajuste.valor)}
+                    abierto={excepNombre === e.nombre}
+                    onOpenChange={(v) => setExcepNombre(v ? e.nombre : null)}
+                  />
+                )}
+              </FilaConAcciones>
+            );
+          })}
+        </div>
+      </CardContent>
 
       <EditorPromptOverlay
-        docId={docAbierto}
-        abierto={docAbierto !== null}
-        onCerrar={() => setDocAbierto(null)}
+        docId={docEditando}
+        abierto={docEditando !== null}
+        onCerrar={() => setDocEditando(null)}
       />
-    </section>
+    </Card>
   );
 }

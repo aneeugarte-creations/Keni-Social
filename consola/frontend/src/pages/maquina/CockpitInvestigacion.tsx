@@ -4,7 +4,6 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api } from "@/lib/api";
@@ -14,7 +13,6 @@ import Cobertura from "@/pages/Cobertura";
 import ContenidosHub from "@/pages/ContenidosHub";
 import Fuentes from "@/pages/Fuentes";
 import { PanelInvestigacion } from "@/pages/configuracion/SeccionFuncionalidad";
-import { PipelineEnVivo } from "@/pages/monitor/PipelineEnVivo";
 import { RielInvestigacion } from "@/pages/noticias/RielInvestigacion";
 
 /**
@@ -54,10 +52,6 @@ const SECCIONES: readonly Seccion[] = [
   "mesa",
   "contenidos",
 ];
-
-/** Docs de la Biblioteca por etapa de la tira de control: la etapa Verificar abre su doc en
- *  overlay desde su menú. Recolectar es mecánica (sin prompt propio). */
-const DOC_POR_ETAPA = { verificar: "prompt/verificar" } as const;
 
 export default function CockpitInvestigacion() {
   const { usuario } = useSesion();
@@ -131,28 +125,11 @@ export default function CockpitInvestigacion() {
           <Algoritmos />
         </TabsContent>
 
-        {/* PROCESO · PIPELINE (núcleo): UN proceso en dos fases —antes en el flujo (informativo) y
-            control (Recolectar/Verificar)— más el índice editable de prompts. */}
-        <TabsContent value="pipeline" className="space-y-6">
-          {/* Fase 1 · antes en el flujo (automático, informativo). */}
-          <RielInvestigacion />
-
-          {/* Fase 2 · control (Recolectar + Verificar), con switches y «Editar prompt». */}
-          <section className="space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Control · tú decides
-            </h3>
-            {cola.isPending ? (
-              <Skeleton className="h-40 w-full rounded-xl" />
-            ) : cola.data ? (
-              <PipelineEnVivo
-                cola={cola.data}
-                esAdmin={esAdmin}
-                soloProceso="investigacion"
-                docPorEtapa={DOC_POR_ETAPA}
-              />
-            ) : null}
-          </section>
+        {/* PROCESO · PIPELINE (núcleo): el pipeline CONSOLIDADO — todas las fases del tramo aguas
+            arriba como tarjetas grandes en orden, cada una con su icono, switch (on/off), conteos
+            de cola, «Editar prompt» y excepciones; el maestro «Máquina» en la cabecera. */}
+        <TabsContent value="pipeline">
+          <RielInvestigacion cola={cola.data} esAdmin={esAdmin} />
         </TabsContent>
 
         {/* SALIDA · MESA DE REDACCIÓN: el pool con usar/descartar (Cobertura). */}
