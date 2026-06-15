@@ -4,7 +4,7 @@
  *
  * Pestañas principales (estado en la URL: `?vista=`, `?doc=`, `?filtro=`):
  *   - Investigación (default) · Producción · Importación: la línea de SU máquina
- *     (GET /api/texto/maquina, riel GLOBAL), etapas `prompt` como tarjetas clicables y
+ *     (GET /api/texto/maquina, flujo GLOBAL), etapas `prompt` como tarjetas clicables y
  *     etapas `mecanica` como nodos fantasma; el evergreen aparte como anexo «Taller».
  *   - Estrategia de marca: el espacio editorial de la marca activa (EstrategiaMarca).
  *   - Documentos: tabla plana para gestión/búsqueda (filtros + papelera + sin publicar).
@@ -42,7 +42,7 @@ import type { DocumentoTexto } from "@/types";
 
 import { DetalleDocumento } from "./texto/DetalleDocumento";
 import { EstrategiaMarca } from "./texto/estrategia/EstrategiaMarca";
-import { RielMaquina } from "./texto/RielMaquina";
+import { FlujoMaquina } from "./texto/FlujoMaquina";
 import { TablaDocumentos } from "./texto/TablaDocumentos";
 
 /** Las pestañas principales: las tres máquinas + estrategia + gestión. */
@@ -300,7 +300,7 @@ export default function Texto() {
           {maquinaQuery.isError ? (
             <p className="text-sm text-muted-foreground">{mensajeError(maquinaQuery.error)}</p>
           ) : (
-            <RielMaquina
+            <FlujoMaquina
               maquina={maquinaActiva}
               cargando={maquinaQuery.isPending}
               tituloDe={(id) => tituloPorId.get(id)}

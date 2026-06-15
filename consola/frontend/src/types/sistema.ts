@@ -89,7 +89,7 @@ export interface ColaJob {
   etiqueta: string;
   tipo: string;
   marca: string;
-  /** A qué loop pertenece el job: investigación (criba/QA) o producción (copy/arte). */
+  /** A qué loop pertenece el job: investigación (verificación/QA) o producción (copy/arte). */
   proceso: Proceso;
   gen_estado: string;
   fase: string;
@@ -150,7 +150,7 @@ export interface ConteoProceso {
 export interface AdmisionQa {
   /** Clusters en el admision de verificación (en proceso + pendientes + saltados), sumados. */
   en_proceso: number;
-  /** Tope en proceso POR MARCA (cuánta criba cabe a la vez por marca). */
+  /** Tope en proceso POR MARCA (cuánta verificación cabe a la vez por marca). */
   tope_por_marca: number;
   marcas: { marca: string; en_proceso: number; tope: number }[];
 }
@@ -265,7 +265,7 @@ export interface PipelinePieza {
   creado?: string;
 }
 
-/** Un hallazgo estructurado de la criba de la fuente (lo que está mal en la nota de origen). */
+/** Un hallazgo estructurado de la verificación de la fuente (lo que está mal en la nota de origen). */
 export interface PipelineHallazgo {
   tipo?: string;
   gravedad?: string;
@@ -275,7 +275,7 @@ export interface PipelineHallazgo {
   no_verificable?: boolean;
 }
 
-/** Veredicto ESTRUCTURADO de la criba de la fuente (rediseño QPC, pre-copy):
+/** Veredicto ESTRUCTURADO de la verificación de la fuente (rediseño QPC, pre-copy):
  *  `no_verificado` (⚠️ apta, no verificada a fondo) o `problema` (❗ algo de peso: sin copy). */
 export interface PipelineQaFuente {
   veredicto: string;
@@ -333,7 +333,7 @@ export interface Pipeline {
   /** Clave de la etapa donde la run está «parada» (1ª no-ok/saltada); "" si todo está hecho. */
   etapa_actual: string;
   etapas: PipelineEtapa[];
-  /** Criba de la fuente (⚠️/❗ + hallazgos). `null` en items sueltos. */
+  /** Verificación de la fuente (⚠️/❗ + hallazgos). `null` en items sueltos. */
   qa_fuente?: PipelineQaFuente | null;
   /** Procedencia IA (historia/cluster) del tema. `null` si no nació de una historia. */
   cluster?: PipelineCluster | null;
@@ -345,7 +345,7 @@ export interface Pipeline {
 }
 
 /** Un tema BLOQUEADO del pipeline (`GET /api/pipelines/problemas`): tras agotar reintentos
- *  (o una criba de peso) queda con veredicto `problema` y SALE del flujo; esta forma lo hace
+ *  (o una verificación de peso) queda con veredicto `problema` y SALE del flujo; esta forma lo hace
  *  visible para que un humano decida (relanzar a mano / descartar). */
 export interface ProblemaPipeline {
   id: string;
@@ -356,7 +356,7 @@ export interface ProblemaPipeline {
   etapa: string;
   /** Reintentos quemados por etapa (verificación de la fuente / redacción). */
   intentos: { verificar: number; redactar: number };
-  /** Motivo legible del bloqueo (explicación del último hallazgo o resumen de la criba). */
+  /** Motivo legible del bloqueo (explicación del último hallazgo o resumen de la verificación). */
   error: string;
   resumen: string;
   hallazgos: PipelineHallazgo[];

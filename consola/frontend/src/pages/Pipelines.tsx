@@ -56,8 +56,8 @@ export const ESTADOS_FILTRO: { clave: string; nombre: string }[] = [
   { clave: "ok", nombre: "Completado" },
 ];
 
-/** Chip de la criba de la fuente (rediseño QPC): ⚠️ "No verificado" o ❗ "QA: problema".
- *  Nada si aún no hay veredicto (criba pendiente/en curso: lo cubre la tira de etapas). */
+/** Chip de la verificación de la fuente (rediseño QPC): ⚠️ "No verificado" o ❗ "QA: problema".
+ *  Nada si aún no hay veredicto (verificación pendiente/en curso: lo cubre la tira de etapas). */
 function BadgeQaFuente({ qa, className }: { qa?: PipelineQaFuente; className?: string }) {
   if (!qa) return null;
   if (qa.problema) {
@@ -65,7 +65,7 @@ function BadgeQaFuente({ qa, className }: { qa?: PipelineQaFuente; className?: s
       <Badge
         variant="secondary"
         className={cn("gap-1 border border-destructive/30 bg-destructive/10 text-destructive", className)}
-        title={qa.resumen || "Criba encontró problema; sin copy."}
+        title={qa.resumen || "La verificación encontró un problema; sin copy."}
       >
         <OctagonAlert className="h-3 w-3" aria-hidden="true" />
         Problema
@@ -87,7 +87,7 @@ function BadgeQaFuente({ qa, className }: { qa?: PipelineQaFuente; className?: s
   return null;
 }
 
-/** Lista de hallazgos de la criba (lo que está mal en la nota de origen). Nada si vacía. */
+/** Lista de hallazgos de la verificación (lo que está mal en la nota de origen). Nada si vacía. */
 function ListaHallazgos({ hallazgos }: { hallazgos: PipelineHallazgo[] }) {
   if (!hallazgos || hallazgos.length === 0) return null;
   return (
@@ -438,7 +438,7 @@ function ContenidoEtapa({
   }
   if (clave === "trabajo") {
     // Trabajo SUELTO (item `clase="actividad"` del feed): todo el trabajo es UNA etapa IA;
-    // su contenido es el bloque entrada/salida de la generación, sin piezas ni criba.
+    // su contenido es el bloque entrada/salida de la generación, sin piezas ni verificación.
     return <BloqueIA gen={generacion} plantilla={plantilla} />;
   }
   // aprobar — gate HUMANO (no IA).

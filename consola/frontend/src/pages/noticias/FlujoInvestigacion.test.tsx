@@ -1,6 +1,6 @@
 /**
- * Tests del RielInvestigacion CONSOLIDADO (ADR 0011): un panel de TARJETAS con todas las fases del
- * intervalo aguas arriba (Recolectar · Agrupar · Fusionar · Traducir · Clasificar · Priorizar ·
+ * Tests del FlujoInvestigacion CONSOLIDADO (ADR 0011): un panel de TARJETAS con todas las fases del
+ * intervalo antes (en el flujo) (Recolectar · Agrupar · Fusionar · Traducir · Clasificar · Priorizar ·
  * Admitir · Verificar). El SWITCH es el indicador de estado (no hay puntos de color); solo admin
  * lee/edita el catálogo. Las fases con prompt abren su doc al clicar la tarjeta.
  */
@@ -13,7 +13,7 @@ import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
 import * as apiMod from "@/lib/api";
 import type { RespuestaAjustes, UsuarioSesion } from "@/types";
 
-import { RielInvestigacion } from "./RielInvestigacion";
+import { FlujoInvestigacion } from "./FlujoInvestigacion";
 
 function usuario(rol: "admin" | "editor"): UsuarioSesion {
   return { id: "u1", usuario: "u", rol, debe_cambiar_password: false, marcas: ["unotv"] };
@@ -55,13 +55,13 @@ function ajustes(valor: boolean): RespuestaAjustes {
   };
 }
 
-function renderRiel(esAdmin: boolean) {
+function renderFlujo(esAdmin: boolean) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
       <SesionContexto.Provider value={sesionValor(usuario(esAdmin ? "admin" : "editor"))}>
         <MemoryRouter>
-          <RielInvestigacion esAdmin={esAdmin} />
+          <FlujoInvestigacion esAdmin={esAdmin} />
         </MemoryRouter>
       </SesionContexto.Provider>
     </QueryClientProvider>,
@@ -87,14 +87,14 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("RielInvestigacion (pipeline consolidado)", () => {
+describe("FlujoInvestigacion (pipeline consolidado)", () => {
   it("pinta una tarjeta por cada fase del proceso", () => {
-    renderRiel(true);
+    renderFlujo(true);
     for (const n of NOMBRES) expect(screen.getByText(n)).toBeTruthy();
   });
 
   it("admin: cada fase muestra su switch (el toggle indica encendido)", async () => {
-    renderRiel(true);
+    renderFlujo(true);
     await waitFor(() =>
       expect(screen.getAllByRole("switch").length).toBeGreaterThanOrEqual(NOMBRES.length),
     );
@@ -104,14 +104,14 @@ describe("RielInvestigacion (pipeline consolidado)", () => {
 
   it("admin: el maestro OFF deja los switches apagados", async () => {
     vi.spyOn(apiMod.api, "ajustes").mockResolvedValue(ajustes(false));
-    renderRiel(true);
+    renderFlujo(true);
     await waitFor(() =>
       expect(screen.getAllByRole("switch")[0]?.getAttribute("aria-checked")).toBe("false"),
     );
   });
 
   it("una fase con prompt abre el editor in-place al clicar la tarjeta", async () => {
-    renderRiel(true);
+    renderFlujo(true);
     // Verificar tiene prompt: clicar su tarjeta lanza la acción primaria (Editar prompt) → overlay.
     fireEvent.click(screen.getByText("Verificar"));
     await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy());
@@ -119,7 +119,7 @@ describe("RielInvestigacion (pipeline consolidado)", () => {
 
   it("no admin: ni switches ni consulta del catálogo (informativo)", () => {
     const spy = vi.spyOn(apiMod.api, "ajustes");
-    renderRiel(false);
+    renderFlujo(false);
     for (const n of NOMBRES) expect(screen.getByText(n)).toBeTruthy();
     expect(screen.queryAllByRole("switch").length).toBe(0);
     expect(spy).not.toHaveBeenCalled();

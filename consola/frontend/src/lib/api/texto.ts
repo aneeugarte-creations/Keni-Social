@@ -80,7 +80,7 @@ export const apiTexto = {
       `/texto/pipelines/${pipeline}/preview${query({ marca, contexto })}`,
       { signal },
     ),
-  // --- Las tres máquinas (riel GLOBAL de etapas en orden real de ejecución) ---
+  // --- Las tres máquinas (flujo GLOBAL de etapas en orden real de ejecución) ---
   maquinaTexto: (signal?: AbortSignal) =>
     peticion<RespuestaMaquinaTexto>("/texto/maquina", { signal }),
   // --- Variables del catálogo (`{{NOMBRE}}` que la consola sustituye al inyectar) ---

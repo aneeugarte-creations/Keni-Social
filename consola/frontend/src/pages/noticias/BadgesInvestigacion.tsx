@@ -4,8 +4,8 @@
  *  - `ChipMarca`: la marca de la historia como chip discreto; si la asignó el clasificador IA
  *    (`marca_clasificada_por_ia`), un mini-badge «IA» a su lado.
  *  - `BadgeVeredictoFuente`: el veredicto de VERIFICACIÓN de la fuente (`verificar_veredicto`):
- *    'no_verificado' = la fuente pasó la criba sin problemas (deja pasar a copy) → «Verificada»;
- *    'problema' = la criba encontró un problema de peso → «Problema en la fuente». Nada si vacío.
+ *    'no_verificado' = la fuente pasó la verificación sin problemas (deja pasar a copy) → «Verificada»;
+ *    'problema' = la verificación encontró un problema de peso → «Problema en la fuente». Nada si vacío.
  *
  *  Línea visual calcada de los badges de Pipelines (`BadgeQaFuente`): discretos, sin saturar la
  *  tarjeta.

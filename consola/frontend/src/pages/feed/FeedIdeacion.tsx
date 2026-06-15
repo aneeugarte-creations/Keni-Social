@@ -2,7 +2,7 @@
  * FEED DE IDEACIÓN (`/parrilla/feed`) — Flujo D, Fase 4 del plan de máquina automática.
  *
  * La superficie de "red social interna": el equipo ve las piezas como POSTS (copy de IA +
- * arte/formato), con un LABEL de su etapa en la tubería, y APRUEBA en línea —como quien
+ * arte/formato), con un LABEL de su etapa en la pipeline, y APRUEBA en línea —como quien
  * interactúa con un post— sin abrir el kanban.
  *
  * UN feed por fecha (keyset `feed=1` + `cursor`, `creado DESC`, scroll infinito) con 4 PESTAÑAS

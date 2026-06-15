@@ -2,7 +2,7 @@
  * Biblioteca de Prompts (página Texto, rediseño TRES MÁQUINAS + Estrategia de marca):
  *   - Pestañas principales (?vista=): Investigación (default) | Producción | Importación |
  *     Estrategia de marca | Documentos.
- *   - Cada pestaña de máquina pinta SU riel de `GET /api/texto/maquina` ({maquinas}),
+ *   - Cada pestaña de máquina pinta SU flujo de `GET /api/texto/maquina` ({maquinas}),
  *     discriminando etapas `prompt` (tarjetas clicables) de `mecanica` (nodos fantasma),
  *     con el evergreen (seccion "taller") separado como anexo «Taller».
  *   - Estrategia de marca monta `EstrategiaMarca` con la marca activa global.
@@ -348,7 +348,7 @@ describe("Biblioteca de Prompts (tres máquinas + estrategia)", () => {
       screen.getByRole("link", { name: /Ver el proceso en vivo/ }).getAttribute("href"),
     ).toBe("/maquina/agentes");
 
-    // El evergreen (seccion "taller") vive separado del riel principal.
+    // El evergreen (seccion "taller") vive separado del flujo principal.
     const taller = screen.getByRole("region", { name: "Taller" });
     expect(taller).toContainElement(screen.getByText("Idear"));
 
@@ -407,7 +407,7 @@ describe("Biblioteca de Prompts (tres máquinas + estrategia)", () => {
     expect(screen.getByRole("button", { name: /Papelera/ })).toBeInTheDocument();
   });
 
-  it("abre el detalle desde el riel, «Uso» sitúa máquina → etapa y vuelve a la pestaña de origen", async () => {
+  it("abre el detalle desde el flujo, «Uso» sitúa máquina → etapa y vuelve a la pestaña de origen", async () => {
     stubFetch();
     montar("/?vista=produccion");
 

@@ -7,7 +7,7 @@
  *   - etapa `mecanica`: nodo atenuado/fantasma (pill pequeña, no clicable) que
  *     cuenta la historia completa del proceso sin robar protagonismo.
  *
- * El evergreen (`seccion: "taller"`) se separa del riel principal como anexo
+ * El evergreen (`seccion: "taller"`) se separa del flujo principal como anexo
  * «Taller». En Producción, bajo la etapa de Redactar, un enlace discreto lleva a la
  * pestaña «Estrategia de marca» (las capas editoriales ya no viven aquí).
  */
@@ -104,7 +104,7 @@ function Conector() {
   return <div className="mx-auto h-4 w-px bg-border" aria-hidden />;
 }
 
-export function RielMaquina({
+export function FlujoMaquina({
   maquina,
   cargando,
   tituloDe,

@@ -31,7 +31,7 @@ const ASPECTO: Record<string, Aspecto> = {
   // Esperando turno.
   pendiente: { variant: "outline", clase: "text-muted-foreground", texto: "Pendiente" },
   lanzado: { variant: "outline", clase: "text-muted-foreground", texto: "En cola" },
-  // Atención humana / cribas.
+  // Atención humana / verificaciones.
   revisar: { variant: "secondary", clase: AMBAR, texto: "Revisar" },
   saltada: { variant: "outline", clase: "text-muted-foreground/60 border-dashed line-through", texto: "Omitida" },
   // Terminales con problema.

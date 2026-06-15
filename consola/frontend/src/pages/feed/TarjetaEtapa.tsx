@@ -1,7 +1,7 @@
 /**
  * Badge de ETAPA IA de una pieza en el Feed de ideación (Flujo D, Fase 4).
  *
- * Es un LABEL del estado en la tubería ("Generando copy / Falta imagen / Para revisar /
+ * Es un LABEL del estado en la pipeline ("Generando copy / Falta imagen / Para revisar /
  * Aprobada / Programada / Publicada"), con un punto de color por estado. NO usa spinner en
  * bucle: el feed enseña muchas piezas a la vez y un icono girando en cada una distrae.
  *

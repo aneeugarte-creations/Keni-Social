@@ -157,7 +157,7 @@ export interface EstadoPublicacionDoc {
 }
 
 /**
- * Etapa MECÁNICA del riel (`GET /api/texto/maquina`): paso del proceso SIN prompt de la
+ * Etapa MECÁNICA del flujo (`GET /api/texto/maquina`): paso del proceso SIN prompt de la
  * Biblioteca (código puro o prompt hardcodeado). Da contexto: cuenta la historia completa.
  */
 export interface EtapaMecanica {
@@ -172,11 +172,11 @@ export interface EtapaPrompt extends EstadoPublicacionDoc {
   id: string;
   titulo: string;
   doc_id: string;
-  /** Sección visual opcional: `"taller"` separa el evergreen del riel principal. */
+  /** Sección visual opcional: `"taller"` separa el evergreen del flujo principal. */
   seccion?: string;
 }
 
-/** Una etapa del riel, discriminada por `tipo`. */
+/** Una etapa del flujo, discriminada por `tipo`. */
 export type EtapaMaquina = EtapaMecanica | EtapaPrompt;
 
 /** Una de las TRES máquinas del ADR 0011 (investigacion | produccion | importacion). */
@@ -187,7 +187,7 @@ export interface MaquinaTexto {
   etapas: EtapaMaquina[];
 }
 
-/** `GET /api/texto/maquina`: las tres máquinas en orden, con sus etapas. Riel GLOBAL. */
+/** `GET /api/texto/maquina`: las tres máquinas en orden, con sus etapas. Flujo GLOBAL. */
 export interface RespuestaMaquinaTexto {
   maquinas: MaquinaTexto[];
 }

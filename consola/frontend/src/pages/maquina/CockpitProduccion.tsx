@@ -45,7 +45,7 @@ const FASES_PRODUCCION: readonly FasePipeline[] = [
     nombre: "Revisar",
     es_ia: false,
     claves: ["KENI_PIPELINE_REVISAR", MAESTRO_PRODUCCION],
-    ayuda: "Criba la voz y la calidad del copy antes de avanzar",
+    ayuda: "Verifica la voz y la calidad del copy antes de avanzar",
     heredada: "con Producción",
   },
   {

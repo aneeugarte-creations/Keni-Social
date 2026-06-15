@@ -82,7 +82,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   const etapa = etapaDePublicacion(publicacion);
   const enRevision = publicacion.estado === "en_revision";
   const yaAprobada = etapa === "aprobada" || etapa === "programada" || etapa === "publicada";
-  // Autogenerada por la IA: sin autor humano (las piezas de la tubería —pipeline/rss/radar— no
+  // Autogenerada por la IA: sin autor humano (las piezas de la pipeline —pipeline/rss/radar— no
   // tienen autor; las que postea el equipo SÍ). En ese caso la firma es "IA", no "desconocido".
   const generadaPorIA = !publicacion.autor_nombre?.trim();
 

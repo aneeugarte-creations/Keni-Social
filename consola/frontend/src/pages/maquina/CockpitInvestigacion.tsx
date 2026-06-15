@@ -14,7 +14,7 @@ import ContenidosHub from "@/pages/ContenidosHub";
 import Fuentes from "@/pages/Fuentes";
 import { PanelInvestigacion } from "@/pages/configuracion/SeccionFuncionalidad";
 import { SeccionDaemons } from "@/pages/sistema/SeccionDaemons";
-import { RielInvestigacion } from "@/pages/noticias/RielInvestigacion";
+import { FlujoInvestigacion } from "@/pages/noticias/FlujoInvestigacion";
 
 /**
  * Cockpit de INVESTIGACIÓN (`/maquina/investigacion`): la casa del motor PROACTIVO que descubre
@@ -29,8 +29,8 @@ import { RielInvestigacion } from "@/pages/noticias/RielInvestigacion";
  *       vieja `/contenido/texto/algoritmos` redirige aquí.
  *   PROCESO
  *     · PIPELINE (núcleo): UN solo proceso en dos fases. Antes (en el flujo), la línea INFORMATIVA de
- *       el pipeline CONSOLIDADO (`RielInvestigacion` sobre `PanelPipeline`): TODAS las fases del
- *       intervalo aguas arriba como tarjetas grandes en orden, cada una con su icono, switch (on/off),
+ *       el pipeline CONSOLIDADO (`FlujoInvestigacion` sobre `PanelPipeline`): TODAS las fases del
+ *       intervalo antes (en el flujo) como tarjetas grandes en orden, cada una con su icono, switch (on/off),
  *       conteos de cola y «Editar prompt»/«Excepciones» en el menú; el maestro «Máquina» en la
  *       cabecera. El repertorio completo de prompts vive en la Biblioteca (Texto · Documentos).
  *   SALIDA
@@ -129,7 +129,7 @@ export default function CockpitInvestigacion() {
             arriba como tarjetas grandes en orden, cada una con su icono, switch (on/off), conteos
             de cola, «Editar prompt» y excepciones; el maestro «Máquina» en la cabecera. */}
         <TabsContent value="pipeline">
-          <RielInvestigacion cola={cola.data} esAdmin={esAdmin} />
+          <FlujoInvestigacion cola={cola.data} esAdmin={esAdmin} />
           {/* Servicios de la máquina NO-IA de este motor (recolección, trends, GC de noticias…):
               los daemons clase=maquina del proceso de investigación. Solo admin. */}
           {esAdmin && (

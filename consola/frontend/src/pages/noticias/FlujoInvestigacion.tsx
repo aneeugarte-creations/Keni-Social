@@ -1,5 +1,5 @@
 /**
- * RielInvestigacion — el pipeline de INVESTIGACIÓN consolidado: todas las fases del intervalo aguas
+ * FlujoInvestigacion — el pipeline de INVESTIGACIÓN consolidado: todas las fases del intervalo aguas
  * arriba (Recolectar · Agrupar · Fusionar · Traducir · Clasificar · Priorizar · Admitir · Verificar)
  * como tarjetas grandes en orden, con icono, switch (on/off), conteos de cola y «Editar prompt».
  *
@@ -14,7 +14,7 @@ import type { ColaMonitor } from "@/types";
 /** Maestro VIRTUAL de Investigación: respaldo de las fases sin flag físico propio. */
 const MAESTRO = "KENI_INVESTIGACION";
 
-// El flujo COMPLETO del intervalo aguas arriba (ADR 0011), en orden de ENTRADA a SALIDA.
+// El flujo COMPLETO del intervalo antes (en el flujo) (ADR 0011), en orden de ENTRADA a SALIDA.
 const FASES: readonly FasePipeline[] = [
   {
     nombre: "Recolectar",
@@ -78,7 +78,7 @@ const FASES: readonly FasePipeline[] = [
   },
 ];
 
-/** Tipo de job → fase con cola. Recolectar agrupa el pool; Verificar la criba de la fuente. */
+/** Tipo de job → fase con cola. Recolectar agrupa el pool; Verificar la verificación de la fuente. */
 const QUEUE_POR_TIPO: Record<string, string> = {
   rss: "recolectar",
   "noticias-ia": "recolectar",
@@ -88,7 +88,7 @@ const QUEUE_POR_TIPO: Record<string, string> = {
   "qa-editorial": "verificar",
 };
 
-export function RielInvestigacion({
+export function FlujoInvestigacion({
   cola,
   esAdmin = true,
 }: {

@@ -19,7 +19,7 @@
  */
 import type { Publicacion } from "@/types";
 
-/** Las etapas observables de la tubería IA, en orden. Una pieza COMPLETA (copy + arte) está
+/** Las etapas observables de la pipeline IA, en orden. Una pieza COMPLETA (copy + arte) está
  *  "lista para revisar" en cuanto tiene todo su contenido: el pipeline la mueve sola a la cola
  *  de revisión (etapa de avance incondicional), así que «borrador» no es un estado donde
  *  descanse — no hay etapa intermedia que mostrar. */
@@ -127,7 +127,7 @@ export function etapaDePublicacion(p: Publicacion): EtapaIa {
 
 /** Etapa sin normalizar: la explícita del backend si llega, o la derivación local. */
 function etapaBruta(p: Publicacion): EtapaIa {
-  // Etapa REAL de la tubería (Flujo C, `pipeline_estado.etapa_de_pieza`): si llega y es una
+  // Etapa REAL de la pipeline (Flujo C, `pipeline_estado.etapa_de_pieza`): si llega y es una
   // etapa conocida, manda sobre la derivación local. El backend la sirve hoy en
   // `Publicacion.etapa_ia`; el guard cubre respuestas legadas/parciales que la omitan.
   const explicita = (p as { etapa_ia?: string }).etapa_ia;
