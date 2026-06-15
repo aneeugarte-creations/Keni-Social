@@ -766,7 +766,7 @@ export function PanoramaAgenda({
     tareasHoy.filter((t) => t.estado === "hecha").length;
   const pctHoy = totalHoy ? Math.round((hechosHoy / totalHoy) * 100) : 0;
   const hoyCompleto = totalHoy > 0 && hechosHoy === totalHoy;
-  const marcaNombre = marca ? catalogos?.marcas.find((m) => m.id === marca)?.nombre : undefined;
+  const marcaNombre = marca ? catalogos?.marcas?.find((m) => m.id === marca)?.nombre : undefined;
 
   // BANDA «URGENTE AHORA» (breaking): los ítems prioridad «alta» de HOY o SIN FECHA SALEN de los
   // cajones de día y saltan al tope. Lo urgente de otro día se queda en su día (con su badge rojo).
