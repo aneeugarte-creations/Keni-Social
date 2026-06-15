@@ -29,6 +29,11 @@ def main() -> int:
         print(f"Texto: {d} editorial(es) con descripcion/titulo de plantilla vieja corregidos.")
     n = libtexto.importar_semilla()
     print(f"Texto: {n} documento(s) base importados.")
+    # Linea base en git: que cada doc sembrado tenga HEAD (snapshot estable para los pipelines,
+    # no el working copy que reescribe el autosave). Best-effort: 0 si el versionado esta off.
+    b = libtexto.asegurar_linea_base()
+    if b:
+        print(f"Texto: {b} documento(s) versionados como linea base.")
     return 0
 
 

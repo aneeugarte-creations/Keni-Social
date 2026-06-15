@@ -26,11 +26,11 @@ Este modulo es la CAPA DE LECTURA de ese modelo para libtexto y el ensamblaje:
   - `estado_publicacion`: los 3 campos nuevos del JSON de documento de la API
     (`produccion`, `sha_actual`, `sin_publicar`).
 
-NOTA (alcance del snapshot estable): solo cubre docs con AL MENOS un commit git (creados via
-API, movidos o publicados antes). Los docs de la SEMILLA que nunca se commitearon (el import
-escribe el `.md` pero no commitea) no tienen HEAD: para ellos el llamante sigue cayendo al
-working copy. TODO: commitear una linea base al importar la semilla cerraria tambien ese
-caso, pero eso vive en `_semilla.py` (fuera de la capa de lectura).
+NOTA (alcance del snapshot estable): cubre los docs con AL MENOS un commit git. Los creados
+via API/movidos/publicados ya tienen HEAD; los de la SEMILLA, que el import escribe sin
+commitear, reciben una linea base versionada al final de la siembra
+(`_semilla.asegurar_linea_base`), asi que tambien sirven snapshot estable. Solo cae al working
+copy si el versionado esta apagado o no hay repo (migracion suave).
 
 La ESCRITURA (publicar/solicitar/aprobar/rechazar) vive en `api/texto.py` + `db_texto_pub`
 (validaciones de rol y de sha en la API; persistencia pura en db).

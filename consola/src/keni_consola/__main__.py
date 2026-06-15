@@ -117,6 +117,10 @@ def main() -> int:
         n = libtexto.importar_semilla()
         if n:
             print(f"Texto: {n} documento(s) base importados.")
+        # Linea base en git: cada doc sembrado con HEAD (snapshot estable para los pipelines).
+        b = libtexto.asegurar_linea_base()
+        if b:
+            print(f"Texto: {b} documento(s) versionados como linea base.")
     except Exception:  # noqa: BLE001 -- la siembra nunca debe impedir el arranque
         pass
 

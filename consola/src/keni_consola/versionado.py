@@ -134,6 +134,41 @@ def registrar(
         _log.debug("versionado best-effort fallo (%s): %s", mensaje, exc)
 
 
+def linea_base(mensaje: str = "linea base de la Biblioteca") -> int:
+    """Registra UN commit con los `.md` del store que aun no esten versionados.
+
+    Garantiza que todo documento tenga un HEAD git, para que el modelo de publicacion sirva su
+    snapshot estable (no el working copy que el autosave reescribe). Pensado para correr tras
+    la siembra/importacion, que escribe `.md` sin commitear. Best-effort e idempotente: si el
+    versionado esta apagado, no hay repo posible o no hay nada pendiente, devuelve 0 sin tocar
+    nada. Devuelve cuantos `.md` quedaron pendientes de versionar en esta pasada.
+    """
+    if not _habilitado():
+        return 0
+    try:
+        base = _base()
+        if not _asegurar_repo(base):
+            return 0
+        # `.md` sin seguimiento o modificados respecto al HEAD (la papelera esta en .gitignore).
+        previo = _git(base, "status", "--porcelain", "--", "*.md")
+        pendientes = [l for l in previo.stdout.splitlines() if l.strip()]
+        if not pendientes:
+            return 0
+        _git(base, "add", "-A", "--", "*.md")
+        env = {
+            "GIT_AUTHOR_NAME": _AUTOR_DEFECTO[0], "GIT_AUTHOR_EMAIL": _AUTOR_DEFECTO[1],
+            "GIT_COMMITTER_NAME": _AUTOR_DEFECTO[0], "GIT_COMMITTER_EMAIL": _AUTOR_DEFECTO[1],
+        }
+        res = _git(base, "commit", "-q", "-m", mensaje, env=env)
+        if res.returncode != 0 and "nothing to commit" not in (res.stdout + res.stderr):
+            _log.debug("linea base texto fallo: %s", (res.stdout + res.stderr).strip())
+            return 0
+        return len(pendientes)
+    except (OSError, subprocess.SubprocessError) as exc:
+        _log.debug("linea base best-effort fallo: %s", exc)
+        return 0
+
+
 def _rel(base: Path, doc_id: str) -> str:
     """Ruta relativa POSIX del `.md` de `doc_id` dentro del repo."""
     return (Path(*doc_id.split("/")).with_suffix(".md")).as_posix()

@@ -117,6 +117,7 @@ from ._rutas import (
     raiz,
 )
 from ._semilla import (
+    asegurar_linea_base,
     cuerpo_efectivo,
     cuerpo_semilla,
     dir_semilla,
@@ -230,6 +231,7 @@ __all__ = [
     "cuerpo_efectivo",
     "cuerpo_semilla",
     "importar_semilla",
+    "asegurar_linea_base",
     "migrar_nombres_biblioteca",
     "limpiar_prompts_obsoletos",
     "migrar_descripciones_editorial",

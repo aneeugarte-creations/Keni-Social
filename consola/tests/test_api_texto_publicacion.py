@@ -19,7 +19,7 @@ import pytest
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
-from keni_consola import generaciones, libtexto, marcas
+from keni_consola import generaciones, libtexto, marcas, versionado
 from keni_consola.api import texto as api_texto
 from keni_consola.dominio import generar
 
@@ -434,6 +434,28 @@ def test_adjunto_sin_puntero_sirve_snapshot_estable(entorno_pub):
     prompt = generar.componer("haz algo", [libtexto.obtener(edi["id"])], "")
     assert "EDITORIAL HEAD" in prompt
     assert "EDITORIAL BORRADOR" not in prompt
+
+
+def test_semilla_recibe_linea_base_git_y_sirve_snapshot(entorno_pub):
+    """Los documentos de la SEMILLA se escriben sin commit; `asegurar_linea_base` les fija un
+    HEAD git, de modo que los pipelines sirven su snapshot estable y NO el working copy que el
+    autosave reescribe en vivo (cierra el caso que antes caía al working copy)."""
+    n = libtexto.importar_semilla()
+    assert n > 0
+    doc_id = "prompt/copy"
+    assert libtexto.obtener(doc_id) is not None
+    # Recién sembrado: aún sin commit -> sin HEAD.
+    assert versionado.sha_documento(doc_id) is None
+    # Línea base: queda versionado y devuelve cuántos fijó.
+    assert libtexto.asegurar_linea_base() > 0
+    assert versionado.sha_documento(doc_id) is not None
+    # Idempotente: una segunda pasada no fija nada nuevo.
+    assert libtexto.asegurar_linea_base() == 0
+    # El autosave reescribe el working copy sin commitear...
+    libtexto.guardar(doc_id, cuerpo="BORRADOR VIVO SEMILLA")
+    efectivo = libtexto.cuerpo_efectivo(doc_id) or ""
+    assert efectivo.strip()                          # sirve el snapshot estable, no vacío
+    assert "BORRADOR VIVO SEMILLA" not in efectivo   # NUNCA el borrador a medias
 
 
 def test_sin_postgres_todo_degrada_a_working_copy(entorno_sin_pg):

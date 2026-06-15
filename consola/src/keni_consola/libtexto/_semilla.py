@@ -25,6 +25,7 @@ from ._rutas import raiz
 
 __all__ = [
     "dir_semilla", "obtener_semilla", "cuerpo_efectivo", "cuerpo_semilla", "importar_semilla",
+    "asegurar_linea_base",
     "migrar_nombres_biblioteca", "limpiar_prompts_obsoletos", "migrar_descripciones_editorial",
 ]
 
@@ -209,6 +210,20 @@ def importar_semilla(origen: Path | None = None) -> int:
         escribir_atomico(destino, texto)
         n += 1
     return n
+
+
+def asegurar_linea_base() -> int:
+    """Fija en git una linea base de los documentos del store que aun no tengan commit.
+
+    La siembra/migracion escribe los `.md` directo a disco (atomico) sin commitear, asi que
+    un documento recien sembrado no tiene HEAD git y el modelo de publicacion caeria a su
+    working copy. Esto registra esos documentos como una linea base versionada, de modo que
+    los pipelines sirvan su snapshot estable. Best-effort e idempotente. Se llama al final de
+    la siembra. Devuelve cuantos documentos quedaron versionados por primera vez.
+    """
+    from .. import versionado
+
+    return versionado.linea_base()
 
 
 def migrar_nombres_biblioteca(origen: Path | None = None) -> int:
