@@ -8,7 +8,7 @@
  *
  * LÍMITES DE CARACTERES (#112): la fuente ÚNICA de verdad de los topes es el
  * backend (`GET /api/limites`, módulo `limites_plataforma`). Este módulo NO los
- * define: mantiene una semilla (`_LIMITES_SEMILLA`, espejo del backend) para que
+ * define: mantiene una semilla (`_LIMITES_BASE`, espejo del backend) para que
  * `metaRed().limite` funcione síncronamente antes de que la app hidrate, y se
  * corrige al arrancar con `hidratarLimites(...)` (lo llama el `AppShell`). Así un
  * cambio de tope se edita en un solo sitio (el backend) sin tocar este archivo.
@@ -48,7 +48,7 @@ const _VISUAL_REDES: Record<string, VisualRed> = {
  * sirve antes de que `hidratarLimites()` traiga los valores reales de la API. Es
  * la copia que el guard de CI mantiene alineada con el backend.
  */
-const _LIMITES_SEMILLA: Record<string, number | null> = {
+const _LIMITES_BASE: Record<string, number | null> = {
   x: 25000,
   instagram: 2200,
   facebook: null,
@@ -61,7 +61,7 @@ const _LIMITES_SEMILLA: Record<string, number | null> = {
  * Empieza con la semilla para que `metaRed().limite` no sea nunca incorrecto por
  * defecto; al hidratar, queda exactamente lo que diga el backend.
  */
-const _limites: Record<string, number | null> = { ..._LIMITES_SEMILLA };
+const _limites: Record<string, number | null> = { ..._LIMITES_BASE };
 
 /**
  * Sobrescribe la caché de límites con lo que devuelve `GET /api/limites`.

@@ -30,7 +30,7 @@ Cada uno exporta un `iniciar_*`; casi todos GATEADOS por env var (OFF por defect
 - `eventos_scanner.py` — barrido de vencimientos del tablero: emite `contenido.vencido`.
 - `alertas_rendimiento.py` — barrido de alertas de rendimiento / reciclaje proactivo.
 - `media_gc_daemon.py` — GC periódica de media suelta (gateado en vivo).
-- `reaper_generaciones.py` — cierra generaciones atascada (`ejecutando` sueltas).
+- `limpiador_generaciones.py` — cierra generaciones atascada (`ejecutando` sueltas).
 - `sugerencias_algoritmo.py` — job diario: noticias de algoritmo → sugerencias editoriales. *(nombre engañoso: produce sugerencias EDITORIALES)*
 - `metricas_refresco.py` — refresco de la cache de métricas (espejo de `programador.py`).
 - `metricas_piezas_refresco.py` — refresco PROACTIVO de la cache de métricas POR PIEZA.

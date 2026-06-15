@@ -221,14 +221,14 @@ def main() -> int:
 
     iniciar_noticias_gc()
 
-    # Reaper de GENERACIONES atascadas: un hilo demonio (SIEMPRE activo) que cierra como `error`
+    # Limpiador de GENERACIONES atascadas: un hilo demonio (SIEMPRE activo) que cierra como `error`
     # las generaciones colgadas en `ejecutando` cuyo proceso murio (reinicio/OOM/cuelgue), para
     # que el Monitor de Actividad no las muestre "Ejecutando…" indefinidamente. Barre al
     # arrancar (limpia las sueltas del crash anterior) y cada N min. Vive aqui (servidor
     # real), NO en `crear_app`, para no arrancarlo en los tests.
-    from .reaper_generaciones import iniciar_reaper
+    from .limpiador_generaciones import iniciar_limpiador
 
-    iniciar_reaper()
+    iniciar_limpiador()
 
     uvicorn.run(app, host=HOST, port=puerto, log_level="warning")
     return 0

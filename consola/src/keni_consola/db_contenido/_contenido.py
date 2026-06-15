@@ -409,7 +409,7 @@ def listar_contenido_origenes(
 def ids_contenido_con_copy(marca: str | None = None) -> set[str]:
     """Ids de `contenido` con AL MENOS una pieza por plataforma con copy redactado.
 
-    Variante agregada para el gate serial del pipeline (`temas_en_vuelo`): antes se traia la
+    Variante agregada para el gate serial del pipeline (`temas_en_proceso`): antes se traia la
     tabla `contenido_plataforma` ENTERA por cada marca y barrido y se filtraba en Python.
     Con `marca`, el JOIN acota a los temas de esa marca. Mismo criterio que el filtro previo
     en Python: `copy` no vacio (texto redactado, no solo la fila placeholder).
@@ -461,7 +461,7 @@ def reparar_qa_en_curso_sueltos(umbral_iso: str) -> int:
 
     Limpieza del recolector: la fase QA marca el tema `en_curso` antes de lanzar la criba; si
     la generacion muere sin finalizador, el sentinel quedaba para siempre (tema excluido de
-    `temas_sin_verificar` y contando en `temas_en_vuelo`). Compara contra `actualizado` (lo refresca
+    `temas_sin_verificar` y contando en `temas_en_proceso`). Compara contra `actualizado` (lo refresca
     cada escritura, incluida la que puso `en_curso`): un `en_curso` legitimo y reciente NUNCA
     se toca (el umbral es muy superior al timeout de la criba). Devuelve cuantos reseteo.
     """

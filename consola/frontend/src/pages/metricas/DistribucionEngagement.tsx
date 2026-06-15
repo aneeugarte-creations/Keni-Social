@@ -3,7 +3,7 @@
  *
  * Consume `GET /api/metricas/piezas` (AnaliticaPiezas): el backend ya calcula sobre
  * TODAS las piezas del periodo el resumen estadístico (n, mediana, p25/p75, mín/máx,
- * desviación) del engagement y de las vistas, además del histograma por tramos. Es el
+ * desviación) del engagement y de las vistas, además del histograma por intervalos. Es el
  * complemento de la tabla consolidada de abajo: aquélla resume el conjunto FILTRADO
  * client-side; esto, el universo completo que el cliente no puede recalcular.
  *
@@ -82,8 +82,8 @@ export function DistribucionEngagement({
 function Cuerpo({ data }: { data: AnaliticaPiezas }) {
   const e = data.engagement;
   const v = data.visualizaciones;
-  const datos = data.distribucion.map((b) => ({ tramo: b.etiqueta, Piezas: b.n }));
-  // Alternativa textual del histograma (lectores de pantalla): total + tramo a tramo.
+  const datos = data.distribucion.map((b) => ({ intervalo: b.etiqueta, Piezas: b.n }));
+  // Alternativa textual del histograma (lectores de pantalla): total + intervalo a intervalo.
   const resumen = `Distribución del engagement de ${numeroCompleto(data.total)} piezas: ${data.distribucion
     .map((b) => `${b.etiqueta}: ${b.n}`)
     .join(", ")}`;
@@ -107,13 +107,13 @@ function Cuerpo({ data }: { data: AnaliticaPiezas }) {
         <BarChart
           className="h-56"
           data={datos}
-          index="tramo"
+          index="intervalo"
           categories={["Piezas"]}
           colors={["emerald"]}
           valueFormatter={numeroCompleto}
           showLegend={false}
           showAnimation
-          customTooltip={(props) => <TooltipTramo {...props} />}
+          customTooltip={(props) => <TooltipIntervalo {...props} />}
         />
       </div>
 
@@ -125,8 +125,8 @@ function Cuerpo({ data }: { data: AnaliticaPiezas }) {
   );
 }
 
-/** Tooltip del histograma: tramo + conteo pluralizado ("12 piezas") es-MX. */
-function TooltipTramo({ payload, active, label }: CustomTooltipProps) {
+/** Tooltip del histograma: intervalo + conteo pluralizado ("12 piezas") es-MX. */
+function TooltipIntervalo({ payload, active, label }: CustomTooltipProps) {
   if (!active || !payload || payload.length === 0) return null;
   return (
     <div className="rounded-md border border-border bg-popover px-3 py-2 text-popover-foreground shadow-md">

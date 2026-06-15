@@ -32,7 +32,7 @@ const DAEMONS = {
     daemon({ daemon: "produccion", clase: "ia", motor: "produccion", clave_gate: "KENI_MAQUINA" }),
     daemon({ daemon: "recolectar", clase: "maquina", motor: "investigacion", barrible: true, clave_gate: "KENI_PIPELINE_RECOLECTAR" }),
     daemon({ daemon: "programador", clase: "maquina", motor: "produccion", clave_gate: null }),
-    daemon({ daemon: "reaper", clase: "sistema", motor: null, clave_gate: null }),
+    daemon({ daemon: "limpiador", clase: "sistema", motor: null, clave_gate: null }),
   ],
   error: null,
 };
@@ -106,7 +106,7 @@ describe("Agentes (agents-first)", () => {
     // Servicios NO-IA (clase maquina) y de sistema NO aparecen como agentes.
     expect(screen.queryByText(/Recolección de noticias/)).toBeNull();
     expect(screen.queryByText(/Programador de parrilla/)).toBeNull();
-    expect(screen.queryByText(/Reaper/)).toBeNull();
+    expect(screen.queryByText(/Limpiador/)).toBeNull();
   });
 
   it("?proceso= enfoca la página a un solo motor", async () => {

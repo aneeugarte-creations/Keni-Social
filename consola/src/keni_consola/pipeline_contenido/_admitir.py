@@ -48,7 +48,7 @@ __all__ = [
     "cupo_produccion_restante",
     "cupos_categoria_restantes",
     "promover_clusters_marca",
-    "temas_en_vuelo",
+    "temas_en_proceso",
     "caducar_temas_viejos",
     "caducar_qa_clusters_en_curso",
     "_claves_dedup_marca",
@@ -389,7 +389,7 @@ def clusters_para_promover(
     # pueden vivir lejos del top global del pool.
     limite = max(maximo * 4, maximo + 8) if cupos_categoria is None else max(maximo * 10, 80)
     # Con el filtro de QA las verificadas pueden vivir más abajo en el ranking (solo se cribó el
-    # top del embudo): sobremuestrea más para no quedarte corto al filtrar por veredicto.
+    # top del admision): sobremuestrea más para no quedarte corto al filtrar por veredicto.
     limite = max(limite, 80)
     try:
         clusters, _total = repos.listar_noticia_clusters(
@@ -459,7 +459,7 @@ def clusters_pendientes_verificar(marca: str, *, maximo: int) -> list[dict[str, 
     El umbral evita gastar `claude -p` cribando historias que jamás se admitirían (score/marca
     bajo umbral). Las ya `en_curso`/`no_verificado`/`saltada`/`problema` quedan fuera (su QA ya
     corrió o está en curso). Ordenadas por score (el pool ya viene rankeado); se recorta a
-    `maximo` (el presupuesto del embudo de verificación). Best-effort: [] ante fallo o maximo<=0.
+    `maximo` (el presupuesto del admision de verificación). Best-effort: [] ante fallo o maximo<=0.
     """
     if maximo <= 0:
         return []
@@ -653,12 +653,12 @@ def crear_tema_de_cluster(
     return tema
 
 
-def _temas_en_vuelo_de(marca: str) -> list[dict[str, Any]]:
-    """Temas del pipeline de `marca` EN VUELO (sin terminar las fases de IA). [] si falla.
+def _temas_en_proceso_de(marca: str) -> list[dict[str, Any]]:
+    """Temas del pipeline de `marca` EN PROCESO (sin terminar las fases de IA). [] si falla.
 
-    En vuelo = pendiente de QA (veredicto ''/'en_curso') O cribado-apto/saltado pero SIN copy aún.
+    En proceso = pendiente de QA (veredicto ''/'en_curso') O cribado-apto/saltado pero SIN copy aún.
     Compartido por el gate SERIAL (cuenta) y la CADUCIDAD (caduca los que superan el TTL): una
-    sola definición de "en vuelo" para ambos.
+    sola definición de "en proceso" para ambos.
     """
     try:
         temas = temas_pipeline(marca)
@@ -672,23 +672,23 @@ def _temas_en_vuelo_de(marca: str) -> list[dict[str, Any]]:
         con_copy = repos.ids_contenido_con_copy(marca)
     except Exception:  # noqa: BLE001 -- sin plataformas, contamos solo los pendientes de QA
         con_copy = set()
-    en_vuelo: list[dict[str, Any]] = []
+    en_proceso: list[dict[str, Any]] = []
     for t in temas:
         veredicto = (t.get("verificar_veredicto") or "").strip()
         if veredicto in ("", QA_EN_CURSO):
-            en_vuelo.append(t)  # pendiente de QA
+            en_proceso.append(t)  # pendiente de QA
         elif veredicto in (VERDICTO_NO_VERIFICADO, QA_SALTADA) and (t.get("id") or "") not in con_copy:
-            en_vuelo.append(t)  # cribado pero pendiente de copy
-    return en_vuelo
+            en_proceso.append(t)  # cribado pero pendiente de copy
+    return en_proceso
 
 
-def temas_en_vuelo(marca: str) -> int:
-    """Cuántos temas del pipeline de `marca` están EN VUELO (gate serial de la admisión).
+def temas_en_proceso(marca: str) -> int:
+    """Cuántos temas del pipeline de `marca` están EN PROCESO (gate serial de la admisión).
 
     Es lo que CI mira para no promover más historias de esa marca hasta vaciarlas (así cada
     item que entra se completa antes de meter nuevos). Best-effort: 0 ante cualquier fallo.
     """
-    return len(_temas_en_vuelo_de(marca))
+    return len(_temas_en_proceso_de(marca))
 
 
 def cupo_produccion_restante(
@@ -787,7 +787,7 @@ def caducar_temas_viejos(*, ahora: datetime | None = None) -> int:
     ttl = timedelta(hours=config.pipeline_tema_ttl_horas())
     caducados = 0
     for marca in marcas.ids():
-        for tema in _temas_en_vuelo_de(marca):
+        for tema in _temas_en_proceso_de(marca):
             creado = _fecha_aware(str(tema.get("creado") or ""))
             if creado is None or momento - creado < ttl:
                 continue

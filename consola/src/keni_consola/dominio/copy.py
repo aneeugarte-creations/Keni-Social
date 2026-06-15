@@ -88,21 +88,21 @@ _RE_TUIT_HILO = re.compile(r"^\d{1,2}/\d{1,2}(?:\s|$)")
 _RE_SEPARADOR_SLIDE = re.compile(r"^\s*---\s*$")
 
 
-def _tramos_publicables(texto: str) -> list[str]:
-    """Tramos del `texto` de una pieza a validar contra el limite tecnico de su red.
+def _intervalos_publicables(texto: str) -> list[str]:
+    """Intervalos del `texto` de una pieza a validar contra el limite tecnico de su red.
 
     CONTRATO DE PIEZAS COMPUESTAS: un hilo viaja numerado dentro de `texto` (cada tuit abre
     con "1/n ") y un carrusel con las slides separadas por una linea `---`; el limite de la
-    red aplica a CADA tramo (tuit/slide), no al texto entero. Pieza simple = un unico tramo.
+    red aplica a CADA intervalo (tuit/slide), no al texto entero. Pieza simple = un unico intervalo.
     """
     lineas = texto.splitlines()
     inicios = [i for i, ln in enumerate(lineas) if _RE_TUIT_HILO.match(ln.strip())]
     if len(inicios) >= 2:  # un hilo de verdad tiene 2+ tuits numerados
-        tramos = [
+        intervalos = [
             "\n".join(lineas[ini:fin]).strip()
             for ini, fin in zip(inicios, [*inicios[1:], len(lineas)], strict=True)
         ]
-        return [t for t in tramos if t]
+        return [t for t in intervalos if t]
     if any(_RE_SEPARADOR_SLIDE.match(ln) for ln in lineas):
         partes: list[list[str]] = [[]]
         for ln in lineas:
@@ -110,8 +110,8 @@ def _tramos_publicables(texto: str) -> list[str]:
                 partes.append([])
             else:
                 partes[-1].append(ln)
-        tramos = ["\n".join(p).strip() for p in partes]
-        return [t for t in tramos if t]
+        intervalos = ["\n".join(p).strip() for p in partes]
+        return [t for t in intervalos if t]
     return [texto]
 
 
@@ -127,12 +127,12 @@ def _motivo_invalida(pieza: dict[str, object]) -> str | None:
     contenido = pieza.get("contenido")
     if not isinstance(contenido, str) or not contenido.strip():
         return f"{red}: texto vacío"
-    tramos = _tramos_publicables(contenido)
-    if not tramos:  # solo separadores/numeración sin texto: equivale a vacío
+    intervalos = _intervalos_publicables(contenido)
+    if not intervalos:  # solo separadores/numeración sin texto: equivale a vacío
         return f"{red}: texto vacío"
     limite = limites_plataforma.limite_de(red)
     if limite is not None:
-        mas_largo = max(len(t) for t in tramos)
+        mas_largo = max(len(t) for t in intervalos)
         if mas_largo > limite:
             return f"{red}: {mas_largo} caracteres (límite {limite})"
     return None
@@ -146,7 +146,7 @@ def _inyectar_hashtags(texto: str, tags: list[str], *, red: str) -> str:
     técnico de la red.
 
     - Dedup case-insensitive contra los hashtags YA presentes en el texto (la IA pudo ponerlos).
-    - Respeta `limites_plataforma`: añade los que QUEPAN (mide el tramo más largo, igual que
+    - Respeta `limites_plataforma`: añade los que QUEPAN (mide el intervalo más largo, igual que
       `_motivo_invalida`); si alguno no cabe, lo salta. Si ninguno cabe, deja el texto igual
       (el badge marcará «Faltan hashtags» y el equipo lo ajusta en revisión).
     - Inline al final (separado por espacio): compacto y seguro para el límite de X.
@@ -162,8 +162,8 @@ def _inyectar_hashtags(texto: str, tags: list[str], *, red: str) -> str:
     for tag in faltan:
         candidato = f"{resultado} #{tag}" if resultado else f"#{tag}"
         if limite is not None:
-            tramos = _tramos_publicables(candidato)
-            mas_largo = max((len(t) for t in tramos), default=len(candidato))
+            intervalos = _intervalos_publicables(candidato)
+            mas_largo = max((len(t) for t in intervalos), default=len(candidato))
             if mas_largo > limite:
                 continue  # este hashtag no cabe; probamos el siguiente
         resultado = candidato
@@ -371,7 +371,7 @@ def crear_publicaciones_desde_piezas(
     (best-effort, no debe abortar toda la generación por una pieza).
 
     VALIDACIÓN PRE-PERSISTENCIA: una pieza con red desconocida, texto vacío o que excede el
-    límite técnico de su red (`limites_plataforma`; en hilos/carruseles, por tramo) NO crea
+    límite técnico de su red (`limites_plataforma`; en hilos/carruseles, por intervalo) NO crea
     borrador. Se descarta SOLO esa pieza (las válidas del lote se crean igual), se loguea
     WARN y, si hay tema (`contenido_id`), se deja una nota en él.
 

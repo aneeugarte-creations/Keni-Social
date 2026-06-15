@@ -42,7 +42,7 @@ services:
     # principal). El CI comparte host con PRODUCCION (ver README): estos topes son DUROS para
     # que un build no pueda asfixiar a prod (back/worker/db). El server es liviano (UI+API);
     # 1 vCPU sobra. Cambio de FICHERO solamente: se aplica a mano en la siguiente ventana
-    # (NO recrear los servicios Woodpecker con pipelines en vuelo).
+    # (NO recrear los servicios Woodpecker con pipelines en proceso).
     mem_limit: 512m
     cpus: 1.0
     # Sin healthcheck: la imagen es scratch (sin shell/wget/curl).

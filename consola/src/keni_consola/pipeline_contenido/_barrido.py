@@ -142,10 +142,10 @@ def ejecutar_barrido() -> dict[str, Any]:
     return {**inv, **prod}
 
 
-# Estados del EMBUDO de verificación: clusters `nuevo` que ya entraron al circuito de QA y aún
-# no se admitieron (en vuelo, verificados-pendientes o saltados). Acotan cuánta QA se lanza por
-# tick (presupuesto = tope en vuelo − embudo) para que la criba no recorra todo el pool.
-_FUNNEL_QA = (QA_EN_CURSO, VERDICTO_NO_VERIFICADO, QA_SALTADA)
+# Estados del ADMISION de verificación: clusters `nuevo` que ya entraron al circuito de QA y aún
+# no se admitieron (en proceso, verificados-pendientes o saltados). Acotan cuánta QA se lanza por
+# tick (presupuesto = tope en proceso − admision) para que la criba no recorra todo el pool.
+_ADMISION_QA = (QA_EN_CURSO, VERDICTO_NO_VERIFICADO, QA_SALTADA)
 
 
 def _ejecutar_investigacion() -> dict[str, Any]:
@@ -155,7 +155,7 @@ def _ejecutar_investigacion() -> dict[str, Any]:
     (cluster) ANTES de materializar contenido, y la admisión solo promueve las VERIFICADAS:
       0) FRESCURA: caduca los temas en curso (TTL) y resetea las QA de cluster `en_curso` atascadas.
       1) QA: criba las candidatas sin veredicto (top del ranking que pasan el umbral), acotada
-         por el embudo. Asíncrona; persiste el veredicto en el cluster.
+         por el admision. Asíncrona; persiste el veredicto en el cluster.
       2) ADMISIÓN: promueve a tema (con copy pendiente) las historias ya verificadas, heredando
          su veredicto al contenido. Las `problema` no se materializan.
     """
@@ -185,7 +185,7 @@ def _ejecutar_investigacion() -> dict[str, Any]:
         if not config.etapa_activa(config.ENV_PIPELINE_RECOLECTAR, marca):
             continue
         # SERIAL POR MARCA: no metas más historias si esta marca ya tiene cola en curso (sin copy).
-        cupo = config.pipeline_en_vuelo_max() - _admitir.temas_en_vuelo(marca)
+        cupo = config.pipeline_en_proceso_max() - _admitir.temas_en_proceso(marca)
         if cupo <= 0:
             continue
         # VOLUMEN: con PLAN EDITORIAL DIARIO, llena los cupos POR CATEGORÍA que queden hoy; sin
@@ -230,8 +230,8 @@ def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[
     candidatas ANTES de materializar contenido.
 
     Por marca con admisión activa (`KENI_PIPELINE_RECOLECTAR`): toma las candidatas sin veredicto
-    que pasan el umbral (`clusters_pendientes_verificar`), acotadas por el presupuesto del EMBUDO
-    (`tope en vuelo − embudo`) para no cribar todo el pool. Si la Validación está activa, lanza
+    que pasan el umbral (`clusters_pendientes_verificar`), acotadas por el presupuesto del ADMISION
+    (`tope en proceso − admision`) para no cribar todo el pool. Si la Validación está activa, lanza
     la criba `claude -p` y marca el cluster `en_curso` (asíncrona: el veredicto lo persiste el
     `procesar` sobre el cluster). Si la Validación está OFF para la marca, marca el cluster
     `saltada` (sin `claude -p`) para que la admisión lo promueva igual. Best-effort por historia;
@@ -241,21 +241,21 @@ def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[
     if autor is None:
         autor = _ref._autor_pipeline()
     cribados: list[dict[str, Any]] = []
-    en_vuelo_max = config.pipeline_en_vuelo_max()
+    en_proceso_max = config.pipeline_en_proceso_max()
     for marca in marcas.ids():
         # La QA solo tiene sentido si la admisión de la marca está activa (solo verificamos lo que
         # admitiríamos). El override por marca de Selección excluye la marca aquí también.
         if not config.etapa_activa(config.ENV_PIPELINE_RECOLECTAR, marca):
             continue
-        # PRESUPUESTO DEL EMBUDO: no cribes más de lo que cabe en vuelo (verificación acotada,
+        # PRESUPUESTO DEL ADMISION: no cribes más de lo que cabe en proceso (verificación acotada,
         # como la admisión). A medida que la admisión vacía verificadas (pasan a `usado`), el
-        # embudo encoge y se libera presupuesto para cribar la siguiente tanda.
+        # admision encoge y se libera presupuesto para cribar la siguiente tanda.
         try:
-            embudo = repos.contar_clusters_funnel_qa(marca, _FUNNEL_QA)
+            admision = repos.contar_clusters_admision_qa(marca, _ADMISION_QA)
         except Exception:  # noqa: BLE001 -- sin contador fiable, no cribamos esta marca este tick
-            _log.warning("pipeline: no se pudo contar el embudo de QA (%s)", marca, exc_info=True)
+            _log.warning("pipeline: no se pudo contar el admision de QA (%s)", marca, exc_info=True)
             continue
-        presupuesto = en_vuelo_max - embudo
+        presupuesto = en_proceso_max - admision
         if presupuesto <= 0:
             continue
         pendientes = clusters_pendientes_verificar(marca, maximo=presupuesto)

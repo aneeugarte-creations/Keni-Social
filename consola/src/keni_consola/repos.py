@@ -239,7 +239,7 @@ from .repos_noticias import (  # noqa: F401
     clusters_extranjeros_sin_traducir,
     clusters_por_contenidos,
     clusters_recientes,
-    contar_clusters_funnel_qa,
+    contar_clusters_admision_qa,
     contar_fuentes_algoritmo,
     contar_fuentes_rss,
     conteos_items_recientes,

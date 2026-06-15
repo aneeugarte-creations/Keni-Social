@@ -24,7 +24,7 @@ const ETIQUETA_DAEMON: Record<string, string> = {
   alertas_rendimiento: "Alertas de rendimiento",
   media_gc: "GC de media",
   patrones: "Patrones de marca",
-  reaper: "Reaper (cola)",
+  limpiador: "Limpiador (cola)",
 };
 
 /** Un prompt de la Biblioteca que gobierna un agente IA (etiqueta visible + doc id). */

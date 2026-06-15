@@ -126,7 +126,7 @@ def _reparar_qa_si_fallo(gen_id: str, spec: object) -> None:
     CIERRA EL ATASCO `verificar_veredicto='en_curso'`: la fase QA marca el tema `en_curso` ANTES de
     lanzar, y solo el `procesar` (exito) escribe el veredicto real. Si la generacion muere en
     error/timeout/cancelacion, nada lo reseteaba: el tema quedaba excluido PARA SIEMPRE de
-    `temas_sin_verificar` y contando en `temas_en_vuelo` (bloqueando el cupo serial de su marca).
+    `temas_sin_verificar` y contando en `temas_en_proceso` (bloqueando el cupo serial de su marca).
     Aqui, al cerrar un job cuyo `procesar` es `qa-fuente` con el registro en ERROR, se resetea
     el sentinel a "" para que el siguiente barrido lo re-cribe. El limpiador cubre ademas los
     casos donde esta reparación no llega a correr (muerte no graciosa del worker). Best-effort.

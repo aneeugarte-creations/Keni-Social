@@ -1,8 +1,8 @@
 /**
- * Evolución por red: barras APILADAS por tramo de tiempo — una capa por red social (color),
+ * Evolución por red: barras APILADAS por intervalo de tiempo — una capa por red social (color),
  * altura = vistas. Cuenta la COMPOSICIÓN y la tendencia: cómo crecen las vistas totales
- * tramo a tramo y qué red las empuja (lo que la tabla "Detalle por red", agregada de todo
- * el periodo, no muestra). El tamaño del tramo se adapta al periodo real de los datos:
+ * intervalo a intervalo y qué red las empuja (lo que la tabla "Detalle por red", agregada de todo
+ * el periodo, no muestra). El tamaño del intervalo se adapta al periodo real de los datos:
  * día (≤45 días), semana (≤180) o mes. Estética del Panorama (panel tematizado, neón).
  *
  * Reúsa la MISMA query que `PiezasConsolidada` (misma `queryKey`): caché compartida, sin
@@ -34,13 +34,13 @@ import { SeccionColapsable } from "./SeccionColapsable";
 /** Orden canónico de redes (color y apilado estables). */
 const ORDEN_REDES = ["facebook", "instagram", "tiktok", "youtube", "x"];
 
-/** Una fila = un tramo (día, semana o mes); además de `tramo` (etiqueta) lleva la suma por red. */
-interface FilaTramo {
-  tramo: string;
+/** Una fila = un intervalo (día, semana o mes); además de `intervalo` (etiqueta) lleva la suma por red. */
+interface FilaIntervalo {
+  intervalo: string;
   [red: string]: number | string;
 }
 
-/** Tamaño del tramo de agregación, adaptativo al span real de los datos. */
+/** Tamaño del intervalo de agregación, adaptativo al span real de los datos. */
 export type Granularidad = "dia" | "semana" | "mes";
 
 /**
@@ -70,7 +70,7 @@ function fechaDeISO(iso: string): Date | null {
   return new Date(a, m - 1, d, 12);
 }
 
-/** Inicio del tramo que contiene `f`: el propio día, su lunes (ISO) o el día 1 del mes. */
+/** Inicio del intervalo que contiene `f`: el propio día, su lunes (ISO) o el día 1 del mes. */
 function inicioTramo(f: Date, gran: Granularidad): Date {
   if (gran === "mes") return new Date(f.getFullYear(), f.getMonth(), 1, 12);
   if (gran === "semana") {
@@ -81,7 +81,7 @@ function inicioTramo(f: Date, gran: Granularidad): Date {
   return new Date(f);
 }
 
-/** Inicio del tramo SIGUIENTE (para rellenar con 0 los tramos intermedios vacíos). */
+/** Inicio del intervalo SIGUIENTE (para rellenar con 0 los intervalos intermedios vacíos). */
 function siguienteTramo(f: Date, gran: Granularidad): Date {
   const d = new Date(f);
   if (gran === "mes") d.setMonth(d.getMonth() + 1);
@@ -89,14 +89,14 @@ function siguienteTramo(f: Date, gran: Granularidad): Date {
   return d;
 }
 
-/** Etiqueta del tramo: día → "1 jun"; semana → "Sem del 1 jun"; mes → "Jun 2026". */
-export function etiquetaTramo(f: Date, gran: Granularidad): string {
+/** Etiqueta del intervalo: día → "1 jun"; semana → "Sem del 1 jun"; mes → "Jun 2026". */
+export function etiquetaIntervalo(f: Date, gran: Granularidad): string {
   if (gran === "mes") return etiquetaMes(f.getFullYear(), f.getMonth());
   if (gran === "semana") return `Sem del ${etiquetaDia(f)}`;
   return etiquetaDia(f);
 }
 
-/** Tooltip (tematizado): desglose por red del tramo + total. */
+/** Tooltip (tematizado): desglose por red del intervalo + total. */
 function TooltipEvolucion(props: {
   active?: boolean;
   label?: string | number;
@@ -168,7 +168,7 @@ export function EvolucionRedes({
     }
     if (!validas.length) {
       return {
-        filas: [] as FilaTramo[],
+        filas: [] as FilaIntervalo[],
         redesPresentes: [] as string[],
         gran: "dia" as Granularidad,
       };
@@ -180,7 +180,7 @@ export function EvolucionRedes({
     const spanDias = Math.round((maxT - minT) / 86_400_000);
     const gran = granularidadParaSpan(spanDias);
 
-    // Agrega vistas por (tramo, red). Clave = timestamp del inicio del tramo.
+    // Agrega vistas por (intervalo, red). Clave = timestamp del inicio del intervalo.
     const porTramo = new Map<number, Record<string, number>>();
     for (const v of validas) {
       const clave = inicioTramo(v.f, gran).getTime();
@@ -194,8 +194,8 @@ export function EvolucionRedes({
       (a, b) => (ORDEN_REDES.indexOf(a) + 1 || 99) - (ORDEN_REDES.indexOf(b) + 1 || 99),
     );
 
-    // Recorre TODOS los tramos del rango (rellena con 0 los vacíos) para una serie continua.
-    const out: FilaTramo[] = [];
+    // Recorre TODOS los intervalos del rango (rellena con 0 los vacíos) para una serie continua.
+    const out: FilaIntervalo[] = [];
     const fin = inicioTramo(new Date(maxT), gran).getTime();
     for (
       let cur = inicioTramo(new Date(minT), gran);
@@ -203,7 +203,7 @@ export function EvolucionRedes({
       cur = siguienteTramo(cur, gran)
     ) {
       const sumas = porTramo.get(cur.getTime()) ?? {};
-      const fila: FilaTramo = { tramo: etiquetaTramo(cur, gran) };
+      const fila: FilaIntervalo = { intervalo: etiquetaIntervalo(cur, gran) };
       for (const red of presentes) fila[red] = sumas[red] ?? 0;
       out.push(fila);
     }
@@ -211,7 +211,7 @@ export function EvolucionRedes({
     return { filas: out, redesPresentes: presentes, gran };
   }, [piezas]);
 
-  // Muestra ~8 etiquetas de tramo como máximo en el eje X (interval = categorías a saltar).
+  // Muestra ~8 etiquetas de intervalo como máximo en el eje X (interval = categorías a saltar).
   const intervalo = Math.max(0, Math.ceil(filas.length / 8) - 1);
 
   const contenido = isPending ? (
@@ -225,11 +225,11 @@ export function EvolucionRedes({
           Aún no hay piezas publicadas en este periodo.
         </p>
       ) : (
-        /* role=img: alternativa textual del chart (resume tramos, granularidad y redes). */
+        /* role=img: alternativa textual del chart (resume intervalos, granularidad y redes). */
         <div
           className="rounded-xl border border-border bg-card p-6"
           role="img"
-          aria-label={`Vistas por red en ${filas.length} tramos por ${
+          aria-label={`Vistas por red en ${filas.length} intervalos por ${
             gran === "dia" ? "día" : gran
           }: redes ${redesPresentes.map(nombreRed).join(", ")}`}
         >
@@ -240,7 +240,7 @@ export function EvolucionRedes({
                 Vistas por red
               </p>
               <p className="text-xs text-muted-foreground">
-                Por red y tramo
+                Por red y intervalo
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-0.5">
@@ -260,11 +260,11 @@ export function EvolucionRedes({
           </div>
 
           <ResponsiveContainer width="100%" height={288}>
-            {/* Barras apiladas (no áreas): son sumas DISCRETAS por tramo, no un continuo. */}
+            {/* Barras apiladas (no áreas): son sumas DISCRETAS por intervalo, no un continuo. */}
             <BarChart data={filas} margin={{ top: 12, right: 18, bottom: 4, left: 8 }}>
               <CartesianGrid stroke="hsl(var(--border))" strokeOpacity={0.5} strokeDasharray="3 3" vertical={false} />
               <XAxis
-                dataKey="tramo"
+                dataKey="intervalo"
                 interval={intervalo}
                 tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
                 tickLine={false}
@@ -303,7 +303,7 @@ export function EvolucionRedes({
     <SeccionColapsable
       titulo="Evolución por red"
       icono={BarChart3}
-      descripcion="Por tramo, apiladas por red."
+      descripcion="Por intervalo, apiladas por red."
     >
       {contenido}
     </SeccionColapsable>

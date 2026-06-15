@@ -765,7 +765,7 @@ def test_reintento_respeta_el_tope(entorno, monkeypatch):
 @pytest.mark.timeout(30)
 @pytest.mark.skipif(os.name != "posix", reason="subproceso real")
 def test_lanzar_job_claude_no_rechaza_por_tope_de_cola(entorno, monkeypatch):
-    """La cola NO tiene tope (R-NO-LIMIT): `lanzar_job_claude` admite aunque ya haya muchos en vuelo.
+    """La cola NO tiene tope (R-NO-LIMIT): `lanzar_job_claude` admite aunque ya haya muchos en proceso.
 
     Antes la admision rechazaba con `ColaLlenaError` al pasar `max_jobs+max_cola`. Hoy nada se
     rechaza por tamano de cola: con varios cupos ya admitidos, lanzar otro job se ADMITE (arranca
@@ -998,7 +998,7 @@ def test_endpoint_cancelar_404_si_no_existe(entorno):
     assert r.status_code == 404
 
 
-def test_endpoint_cancelar_sin_job_en_vuelo_devuelve_el_registro(entorno):
+def test_endpoint_cancelar_sin_job_en_proceso_devuelve_el_registro(entorno):
     """Cancelar una generacion ya terminada es idempotente: devuelve el registro tal cual."""
     g = generaciones.crear({"tipo": "copy", "marca": _MARCA, "etiqueta": "X"})
     generaciones.actualizar(g["id"], {"estado": generaciones.ESTADO_COMPLETADO})

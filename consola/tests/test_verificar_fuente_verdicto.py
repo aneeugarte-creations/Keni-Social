@@ -1,7 +1,7 @@
 """Tests del veredicto de la QA de la FUENTE (`dominio.verificar_fuente.parsear_verdicto_fuente`).
 
 PURO (sin Postgres ni claude). El contrato del prompt pide el campo JSON `veredicto` en slug
-ASCII ("apta" | "problema"); el parser acepta TAMBIÉN el emoji legado 🟢/🔴 (piezas en vuelo
+ASCII ("apta" | "problema"); el parser acepta TAMBIÉN el emoji legado 🟢/🔴 (piezas en proceso
 o un prompt editado en producción aún viejo) y degrada PERMISIVO ante valores basura.
 """
 
@@ -37,7 +37,7 @@ def test_slug_tolera_mayusculas_y_espacios():
 
 
 def test_emoji_legado_verde_y_rojo():
-    # Salidas en vuelo (o un prompt viejo en producción) siguen mandando el semáforo en el JSON.
+    # Salidas en proceso (o un prompt viejo en producción) siguen mandando el semáforo en el JSON.
     assert verificar.parsear_verdicto_fuente(_salida("🟢", linea="🟢 Fuente apta."))["verdicto"] == verificar.VERDICTO_NO_VERIFICADO
     assert verificar.parsear_verdicto_fuente(_salida("🔴", linea="🔴 Problema."))["verdicto"] == verificar.VERDICTO_PROBLEMA
 

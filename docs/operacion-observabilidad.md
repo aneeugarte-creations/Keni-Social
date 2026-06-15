@@ -17,7 +17,7 @@ defiende solo (autoheal, systemd, alertas) y deja rastro consultable.
 | Proceso | `restart: unless-stopped` en todos los servicios | proceso que MUERE |
 | Salud | healthchecks + sidecar `autoheal` (label `autoheal=true`) | proceso vivo pero COLGADO |
 | Cola | claim `FOR UPDATE SKIP LOCKED` + re-reclamo de sueltos + re-encolado en el apagado del pool (`stop_grace_period: 30s` del worker) | jobs sin perder ni duplicar tras reinicio/deploy/OOM |
-| Daemons | bucles gateados que capturan excepciones + reaper de generaciones atascada | barridos que fallan sin matar el hilo; sueltos "Generando…" |
+| Daemons | bucles gateados que capturan excepciones + limpiador de generaciones atascada | barridos que fallan sin matar el hilo; sueltos "Generando…" |
 | Deploy | verificación de salud post-`up` (back, front, daemons, worker) con **rollback automático** a `:previa` | una imagen rota no se queda en prod |
 | Host | timers systemd: backup (03:30) + janitor (00:10) + alertas (cada 10 min) | disco, backups, certificado, contenedores no sanos |
 
@@ -85,7 +85,7 @@ en `/etc/keni-backup.conf`.
 - **capa el build cache a 15 GB** (`BUILD_CACHE_KEEP`) aunque el disco vaya sobrado
   (2026-06: había 41 GB acumulados con el disco al 9 %);
 - prune agresivo solo si el disco supera el 50 %;
-- purga de respaldo de registros de generación >30 días (la vía principal es el reaper).
+- purga de respaldo de registros de generación >30 días (la vía principal es el limpiador).
 
 Logs de contenedores capados por daemon.json (`max-size: 50m`, `max-file: 5`).
 

@@ -150,7 +150,7 @@ ENV_MIN_APROBACIONES = "KENI_MIN_APROBACIONES"
 # NINGUN daemon de automatizacion de CONTENIDO corre, aunque su toggle individual este ON: es
 # la condicion necesaria que se ANDea con cada toggle (ver `gate_maquina`). Cuando esta ON,
 # cada subsistema sigue EXACTAMENTE su propio toggle, como hasta ahora. NO afecta a los daemons
-# de mantenimiento (metricas, alertas, vencimientos, reaper, GC de media) ni a la publicacion.
+# de mantenimiento (metricas, alertas, vencimientos, limpiador, GC de media) ni a la publicacion.
 ENV_MAQUINA = "KENI_MAQUINA"
 
 # Investigador (Fase 1): daemon que MATERIALIZA por marca un snapshot del Radar (temas
@@ -261,17 +261,17 @@ ENV_PIPELINE_REDACTAR = "KENI_PIPELINE_REDACTAR"
 ENV_PIPELINE_MAX = "KENI_PIPELINE_MAX"
 # FLUJO CONTINUO: el pipeline ya no barre por tandas (sin intervalo configurable: tick corto
 # constante en `pipeline_contenido._barrido`) ni tiene topes por etapa (Verificar/Redactar/Ilustrar/Revisar):
-# el volumen lo regula Admitir (gate serial en vuelo por marca) + el backpressure de la cola.
-ENV_PIPELINE_EN_VUELO_MAX = "KENI_PIPELINE_EN_VUELO_MAX"  # gate serial: temas en vuelo por marca
+# el volumen lo regula Admitir (gate serial en proceso por marca) + el backpressure de la cola.
+ENV_PIPELINE_EN_PROCESO_MAX = "KENI_PIPELINE_EN_PROCESO_MAX"  # gate serial: temas en proceso por marca
 # Enriquecimiento de la NOTA de origen al Recolectar: antes de encolar el copy, el daemon descarga
 # el CUERPO del/los artículo(s) (no solo el snippet RSS) y, en clusters, agrega el texto de CADA
 # fuente —no solo sus URLs—. Así `claude -p` sintetiza sobre material real sin gastar turnos en
 # WebFetch ni pedir permisos. CONSERVADOR por defecto (OFF): sin el flag la nota es título+resumen
 # como hasta ahora. Best-effort: un fetch que falle cae a título+resumen (nunca rompe el barrido).
 ENV_PIPELINE_FETCH_FUENTE = "KENI_PIPELINE_FETCH_FUENTE"  # ingerir el cuerpo del artículo en la nota
-# Frescura del pipeline (ventana deslizante sobre la priorización): TTL en horas de un tema EN VUELO.
+# Frescura del pipeline (ventana deslizante sobre la priorización): TTL en horas de un tema EN PROCESO.
 # Lo que no se completó a tiempo CADUCA y libera su hueco; hoy entra lo de hoy, no el backlog.
-ENV_PIPELINE_TEMA_TTL_HORAS = "KENI_PIPELINE_TEMA_TTL_HORAS"  # caducidad de temas en vuelo
+ENV_PIPELINE_TEMA_TTL_HORAS = "KENI_PIPELINE_TEMA_TTL_HORAS"  # caducidad de temas en proceso
 
 # Etapa de Verificar del pipeline: "Verificar" (`KENI_PIPELINE_VERIFICAR`, toggle de etapa por marca). Es la criba
 # de la FUENTE (pre-copy): un `claude -p` evalúa la nota de origen antes de redactar el copy. Toggle
@@ -320,11 +320,11 @@ ENV_AUTO_PROGRAMAR = "KENI_AUTO_PROGRAMAR"
 # se reinicia la cadena; un coordinador puede `forzar`).
 ENV_CRITICA_IA = "KENI_CRITICA_IA"
 
-# Reaper de generaciones atascadas: una generacion `ejecutando` cuyo proceso murio (reinicio/
-# OOM/cuelgue) queda colgada para siempre. El reaper la cierra como `error` pasada una
+# Limpiador de generaciones atascadas: una generacion `ejecutando` cuyo proceso murio (reinicio/
+# OOM/cuelgue) queda colgada para siempre. El limpiador la cierra como `error` pasada una
 # antigüedad MUY superior al wall-timeout (asi nunca mata una viva). Siempre activo.
 ENV_GENERACIONES_TTL_HORAS = "KENI_GENERACIONES_TTL_HORAS"
-ENV_REAPER_INTERVALO_MIN = "KENI_REAPER_INTERVALO_MIN"
+ENV_LIMPIADOR_INTERVALO_MIN = "KENI_LIMPIADOR_INTERVALO_MIN"
 
 # Verificar la FUENTE (criba pre-copy del pipeline): es un filtro PERMISIVO, no redaccion, asi
 # que corre BARATO por defecto: modelo rapido (Haiku), esfuerzo bajo y timeout corto. Cada
@@ -334,7 +334,7 @@ ENV_QA_FUENTE_ESFUERZO = "KENI_QA_FUENTE_ESFUERZO"
 ENV_QA_FUENTE_TIMEOUT = "KENI_QA_FUENTE_TIMEOUT"
 # Corrector de temas atascados `verificar_veredicto='en_curso'`: si el lanzamiento/generacion de la criba
 # muere sin finalizador, el tema quedaba excluido para siempre de la re-criba (y contando en
-# el cupo en vuelo). El reaper resetea a "" los `en_curso` mas viejos que este TTL (minutos).
+# el cupo en proceso). El limpiador resetea a "" los `en_curso` mas viejos que este TTL (minutos).
 ENV_QA_EN_CURSO_TTL_MIN = "KENI_QA_EN_CURSO_TTL_MIN"
 
 # Recoleccion de basura (GC) de MEDIA SUELTA (Estudio de imagen, diseno §5). El Estudio
@@ -636,22 +636,22 @@ FUENTES_BAJA_CONFIANZA_DEF: tuple[str, ...] = (
 AUTOGEN_ARTE_MAX_DEF = 3
 
 # Pipeline de contenido (FLUJO CONTINUO): Admitir admite hasta este nº de historias por
-# marca en cada pasada, acotada además por el gate serial en vuelo. Cada admisión acaba en
+# marca en cada pasada, acotada además por el gate serial en proceso. Cada admisión acaba en
 # `claude -p` (coste); el cap del worker (`KENI_MAX_JOBS`) sigue aplicando más adelante en el flujo.
 PIPELINE_MAX_DEF = 3
-# WIP del gate serial: piezas EN VUELO (sin terminar Verificar→Redactar) por marca. ES el regulador del
+# WIP del gate serial: piezas EN PROCESO (sin terminar Verificar→Redactar) por marca. ES el regulador del
 # flujo continuo: in=out (no se admite más hasta que algo sale por el otro lado).
-PIPELINE_EN_VUELO_MAX_DEF = 8
-# TTL por defecto de un tema EN VUELO (horas): un día. "Lo que no entró ayer no entra hoy":
+PIPELINE_EN_PROCESO_MAX_DEF = 8
+# TTL por defecto de un tema EN PROCESO (horas): un día. "Lo que no entró ayer no entra hoy":
 # el pipeline prioriza siempre lo fresco de la priorización, nunca arrastra backlog.
 PIPELINE_TEMA_TTL_HORAS_DEF = 24
 
 
-# Reaper de generaciones: TTL 1h (>> wall-timeout de ~10 min, asi no toca jobs vivos) y
+# Limpiador de generaciones: TTL 1h (>> wall-timeout de ~10 min, asi no toca jobs vivos) y
 # barrido cada 10 min. El barrido tambien corre al arrancar (limpia los sueltos del crash
 # anterior de inmediato).
 GENERACIONES_TTL_HORAS_DEF = 1
-REAPER_INTERVALO_MIN_DEF = 10
+LIMPIADOR_INTERVALO_MIN_DEF = 10
 
 # Recoleccion de basura de media suelta (Estudio §5). Barre 1 vez al dia (no urge: el
 # almacen crece lento) y solo borra objetos mas viejos que ANTIGUEDAD (def 24h), para NO
@@ -891,7 +891,7 @@ __all__ = [
     'ENV_PG_USER',
     'ENV_PIPELINE_REDACTAR',
     'ENV_PIPELINE_MAX',
-    'ENV_PIPELINE_EN_VUELO_MAX',
+    'ENV_PIPELINE_EN_PROCESO_MAX',
     'ENV_PIPELINE_TEMA_TTL_HORAS',
     'ENV_PORT',
     'ENV_PREFERENCIAS',
@@ -909,7 +909,7 @@ __all__ = [
     'ENV_QA_FUENTE_MODELO',
     'ENV_QA_FUENTE_TIMEOUT',
     'ENV_RAIZ',
-    'ENV_REAPER_INTERVALO_MIN',
+    'ENV_LIMPIADOR_INTERVALO_MIN',
     'ENV_RENDIMIENTO_MIN_PIEZAS',
     'ENV_RENDIMIENTO_RANKING',
     'ENV_RENDIMIENTO_TOP_N',
@@ -985,11 +985,11 @@ __all__ = [
     'NOTICIAS_GC_SCORE_UMBRAL_DEF',
     'PERFIL_EDITORIAL_TTL_HORAS_DEF',
     'PIPELINE_MAX_DEF',
-    'PIPELINE_EN_VUELO_MAX_DEF',
+    'PIPELINE_EN_PROCESO_MAX_DEF',
     'PIPELINE_TEMA_TTL_HORAS_DEF',
     'PORT_DEF',
     'Path',
-    'REAPER_INTERVALO_MIN_DEF',
+    'LIMPIADOR_INTERVALO_MIN_DEF',
     'RENDIMIENTO_MIN_PIEZAS_DEF',
     'RENDIMIENTO_TOP_N_DEF',
     'S3_BUCKET_DEF',

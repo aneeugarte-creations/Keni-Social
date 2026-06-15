@@ -78,25 +78,25 @@ def test_cola_snapshot_contrato(entorno):
     # El job pendiente aparece en `esperando` con su etiqueta enriquecida desde el registro.
     esperando = data["esperando"]
     assert any(j["gen_id"] == gen_id and j["etiqueta"] == "Verificar · UnoTV" for j in esperando)
-    # Cada job en vuelo trae su `proceso` (ADR 0011); un `tipo='copy'` es produccion.
+    # Cada job en proceso trae su `proceso` (ADR 0011); un `tipo='copy'` es produccion.
     job = next(j for j in esperando if j["gen_id"] == gen_id)
     assert job["proceso"] == generaciones.PROCESO_PRODUCCION
-    # Desglose del pool compartido por proceso + embudo de QA (contrato del Monitor de 2 loops).
+    # Desglose del pool compartido por proceso + admision de QA (contrato del Monitor de 2 loops).
     assert set(data["por_proceso"]) == {
         generaciones.PROCESO_INVESTIGACION, generaciones.PROCESO_PRODUCCION,
     }
     assert data["por_proceso"][generaciones.PROCESO_PRODUCCION]["pendientes"] >= 1
-    assert {"en_vuelo", "tope_por_marca", "marcas"} <= set(data["embudo_qa"])
-    # Daemons: lista no vacia con el reaper SIEMPRE activo.
+    assert {"en_proceso", "tope_por_marca", "marcas"} <= set(data["admision_qa"])
+    # Daemons: lista no vacia con el limpiador SIEMPRE activo.
     porclave = {d["clave"]: d for d in data["daemons"]}
-    assert "reaper" in porclave
-    assert porclave["reaper"]["activo"] is True
+    assert "limpiador" in porclave
+    assert porclave["limpiador"]["activo"] is True
     # Toggles REALES en el Monitor: un daemon con clave de catálogo no peligrosa es editable y trae
-    # su `clave_ajuste`; el reaper (sin toggle) y `publicar_real` (peligroso) NO son editables.
+    # su `clave_ajuste`; el limpiador (sin toggle) y `publicar_real` (peligroso) NO son editables.
     assert porclave["media_gc"]["editable"] is True
     assert porclave["media_gc"]["clave_ajuste"] == "KENI_MEDIA_GC"
-    assert porclave["reaper"]["editable"] is False
-    assert porclave["reaper"]["clave_ajuste"] == ""
+    assert porclave["limpiador"]["editable"] is False
+    assert porclave["limpiador"]["clave_ajuste"] == ""
     assert porclave["publicar_real"]["editable"] is False  # peligroso: read-only en el Monitor
     # El interruptor general y las etapas (Admitir/Redactar) ya NO son daemons: viven en la sección
     # «Máquina de contenido» del Monitor (no en este panel de daemons de fondo).
@@ -144,7 +144,7 @@ def test_cola_filtra_por_marca(entorno):
 
 
 def test_cola_jobs_traen_prioridad(entorno):
-    """Cada job en vuelo expone su `prioridad` de cola (mayor = adelanta al lote de fondo).
+    """Cada job en proceso expone su `prioridad` de cola (mayor = adelanta al lote de fondo).
 
     La prioridad viaja DENTRO del spec (`jobspec.prioridad`): manual > pipeline. El Monitor
     la usa para señalar qué espera "por delante" en la cola.

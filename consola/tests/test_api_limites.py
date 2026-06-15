@@ -3,7 +3,7 @@
 #112: los limites de caracteres por red viven SOLO en `limites_plataforma`; el
 endpoint los expone y `redes.py` los consume sin redefinirlos. OFFLINE, sin red.
 
-N11: guard CRUZADO backend <-> frontend. La semilla `_LIMITES_SEMILLA` de
+N11: guard CRUZADO backend <-> frontend. La semilla `_LIMITES_BASE` de
 `consola/frontend/.../meta.ts` (espejo del backend, usado antes de hidratar desde
 `GET /api/limites`) debe coincidir EXACTAMENTE con `limites_plataforma.LIMITES`. Si
 alguien cambia un tope en el backend y olvida la semilla del frontend, este test
@@ -68,15 +68,15 @@ def test_limite_de_red_desconocida_es_none():
 # --------------------------------------------------------------------------- #
 #
 # El frontend NO puede importar `keni_consola`, asi que `meta.ts` mantiene una
-# SEMILLA (`_LIMITES_SEMILLA`) que es un espejo del backend para que el limite sea
+# SEMILLA (`_LIMITES_BASE`) que es un espejo del backend para que el limite sea
 # correcto el instante anterior a la hidratacion (`GET /api/limites`). Este guard la
 # ancla al backend: si divergen (alguien cambia el backend y olvida la semilla, o al
 # reves), el CI lo caza. Mismo enfoque que el guard de marcas en `test_marcas.py`
 # (parsea el artefacto no-Python y compara).
 
-# Captura el cuerpo del objeto `const _LIMITES_SEMILLA: ... = { ... };` de meta.ts.
+# Captura el cuerpo del objeto `const _LIMITES_BASE: ... = { ... };` de meta.ts.
 _RE_SEMILLA = re.compile(
-    r"_LIMITES_SEMILLA\s*:[^=]*=\s*\{(?P<cuerpo>.*?)\}\s*;",
+    r"_LIMITES_BASE\s*:[^=]*=\s*\{(?P<cuerpo>.*?)\}\s*;",
     re.DOTALL,
 )
 # Cada entrada `id: <valor>` del cuerpo, donde el valor es un entero o `null`.
@@ -84,10 +84,10 @@ _RE_ENTRADA = re.compile(r"(?P<id>[A-Za-z_][\w-]*)\s*:\s*(?P<valor>\d+|null)\b")
 
 
 def _semilla_meta_ts() -> dict[str, int | None]:
-    """Parsea `_LIMITES_SEMILLA` de meta.ts -> dict id->limite (`null` => None)."""
+    """Parsea `_LIMITES_BASE` de meta.ts -> dict id->limite (`null` => None)."""
     texto = _META_TS.read_text(encoding="utf-8")
     bloque = _RE_SEMILLA.search(texto)
-    assert bloque is not None, "no se encontro _LIMITES_SEMILLA en meta.ts"
+    assert bloque is not None, "no se encontro _LIMITES_BASE en meta.ts"
     semilla: dict[str, int | None] = {}
     for m in _RE_ENTRADA.finditer(bloque.group("cuerpo")):
         valor = m.group("valor")
@@ -103,6 +103,6 @@ def test_semilla_meta_ts_coincide_con_limites_backend():
     semilla = _semilla_meta_ts()
     # Coincidencia EXACTA: mismas redes y mismos topes (incluido tiktok=4000 y los None).
     assert semilla == limites_plataforma.LIMITES, (
-        "la semilla _LIMITES_SEMILLA de meta.ts divergio de limites_plataforma.LIMITES; "
+        "la semilla _LIMITES_BASE de meta.ts divergio de limites_plataforma.LIMITES; "
         f"meta.ts={semilla} backend={limites_plataforma.LIMITES}"
     )

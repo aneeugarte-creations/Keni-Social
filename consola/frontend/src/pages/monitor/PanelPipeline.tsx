@@ -11,7 +11,7 @@
  * En la cabecera, el maestro «Máquina» (`KENI_MAQUINA`): apagado, nada automático corre.
  *
  * Genérico: el llamante le pasa las FASES (`fases`), el mapa tipo-de-job→fase para los conteos
- * (`queuePorTipo`) y opcionalmente qué fase muestra el embudo de verificación (`embudoEn`). Cada
+ * (`queuePorTipo`) y opcionalmente qué fase muestra el admision de verificación (`admisionEn`). Cada
  * fase resuelve su switch por la PRIMERA de sus `claves` presente en el catálogo; las que solo
  * tienen el maestro virtual del proceso lo indican con `heredada`.
  */
@@ -126,7 +126,7 @@ export function PanelPipeline({
   titulo,
   fases,
   queuePorTipo,
-  embudoEn,
+  admisionEn,
   cola,
   esAdmin = true,
   chip,
@@ -137,8 +137,8 @@ export function PanelPipeline({
   fases: readonly FasePipeline[];
   /** Mapa tipo-de-job → clave de cola, para repartir los conteos por fase. */
   queuePorTipo: Record<string, string>;
-  /** Clave de cola cuya fase muestra el embudo de verificación (`cola.embudo_qa`). */
-  embudoEn?: string;
+  /** Clave de cola cuya fase muestra el admision de verificación (`cola.admision_qa`). */
+  admisionEn?: string;
   /** Snapshot de la cola (conteos por fase). Sin él, las filas no muestran conteos. */
   cola?: ColaMonitor;
   /** Admin: lee/edita los switches del catálogo. No-admin: filas informativas. */
@@ -227,7 +227,7 @@ export function PanelPipeline({
           const conCola = e.queue !== undefined;
           const enCursoN = conCola ? (enCurso[e.queue!] ?? 0) : 0;
           const esperaN = conCola ? (esperando[e.queue!] ?? 0) : 0;
-          const embudo = e.queue !== undefined && e.queue === embudoEn ? cola?.embudo_qa : undefined;
+          const admision = e.queue !== undefined && e.queue === admisionEn ? cola?.admision_qa : undefined;
           return (
             <li key={e.nombre}>
               {/* Conector de flujo entre fases. */}
@@ -268,7 +268,7 @@ export function PanelPipeline({
                         {enCursoN} en curso
                       </span>{" "}
                       · {esperaN} en cola
-                      {embudo && <> · embudo {embudo.en_vuelo}</>}
+                      {admision && <> · admision {admision.en_proceso}</>}
                     </span>
                   )}
                   {ajuste && (

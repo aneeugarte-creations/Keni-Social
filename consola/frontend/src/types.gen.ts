@@ -274,7 +274,7 @@ export interface PiezaMetrica {
   rendimiento_relativo: number | null;
 }
 /**
- * Un tramo del histograma de engagement (cuántas piezas caen en [inicio, fin)).
+ * Un intervalo del histograma de engagement (cuántas piezas caen en [inicio, fin)).
  */
 export interface DistribucionBucket {
   etiqueta: string;

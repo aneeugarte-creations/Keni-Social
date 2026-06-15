@@ -63,9 +63,9 @@ __all__ = [
     "_limpiar_snippet",
     # actividad / autor / lecturas compartidas
     "registrar_etapa",
-    "EMBUDO_QA_ESTADOS",
+    "ADMISION_QA_ESTADOS",
     "VERIFICADAS_QA",
-    "embudo_qa",
+    "admision_qa",
     "_autor_pipeline",
     "_copy_pendiente_leido",
     "_tiene_copy",
@@ -104,7 +104,7 @@ ETAPA_ILUSTRAR = "ILUSTRAR"
 
 # FLUJO CONTINUO: el pipeline NO tiene topes por etapa (cribas QA/copies/autogen/revisados). El
 # volumen lo regula la ADMISIÓN (`config.pipeline_max()` + el gate serial WIP
-# `config.pipeline_en_vuelo_max()`, editables en el Monitor) y el backpressure de la cola.
+# `config.pipeline_en_proceso_max()`, editables en el Monitor) y el backpressure de la cola.
 
 # DEDUP de contenido: ventana (días) hacia atrás para considerar que una noticia "ya está" en la
 # marca. Un tema nuevo cuyo título coincide (normalizado) con otro contenido de la MISMA marca
@@ -485,11 +485,11 @@ def registrar_etapa(
         return None
 
 
-# Estados del EMBUDO de verificacion (clusters `nuevo` ya en el circuito de Verificar y aun sin
-# admitir): en vuelo + verificados-pendientes + saltados. Acotan cuanta verificación se lanza por tick (el mismo
-# `_FUNNEL_QA` que usa `_barrido`); aqui se exponen para que el Monitor lea el embudo sin
+# Estados del ADMISION de verificacion (clusters `nuevo` ya en el circuito de Verificar y aun sin
+# admitir): en proceso + verificados-pendientes + saltados. Acotan cuanta verificación se lanza por tick (el mismo
+# `_ADMISION_QA` que usa `_barrido`); aqui se exponen para que el Monitor lea el admision sin
 # importar el barrido (el orquestador) desde la capa API.
-EMBUDO_QA_ESTADOS = (QA_EN_CURSO, VERDICTO_NO_VERIFICADO, QA_SALTADA)
+ADMISION_QA_ESTADOS = (QA_EN_CURSO, VERDICTO_NO_VERIFICADO, QA_SALTADA)
 
 # Veredictos que ADMITEN a producción (ADR 0011 F3): la historia pasó la criba (`no_verificado`)
 # o la QA estaba saltada para la marca. FUENTE ÚNICA del filtro OBLIGATORIO de la admisión: la
@@ -498,27 +498,27 @@ EMBUDO_QA_ESTADOS = (QA_EN_CURSO, VERDICTO_NO_VERIFICADO, QA_SALTADA)
 VERIFICADAS_QA = (VERDICTO_NO_VERIFICADO, QA_SALTADA)
 
 
-def embudo_qa() -> dict[str, Any]:
-    """Estado del EMBUDO de Verificar (lo unico que Investigacion acota aparte de la cola compartida).
+def admision_qa() -> dict[str, Any]:
+    """Estado del ADMISION de Verificar (lo unico que Investigacion acota aparte de la cola compartida).
 
-    Por cada marca con Recolectar activa, cuenta sus clusters en el embudo y lo compara
-    con el tope EN VUELO por marca (`pipeline_en_vuelo_max`). Devuelve el total y el desglose por
+    Por cada marca con Recolectar activa, cuenta sus clusters en el admision y lo compara
+    con el tope EN PROCESO por marca (`pipeline_en_proceso_max`). Devuelve el total y el desglose por
     marca, para que el Monitor muestre "cuanto se esta verificando" sin tocar la cola de jobs.
     Best-effort: una marca cuyo conteo falle se omite (no tumba el snapshot).
     """
-    tope = config.pipeline_en_vuelo_max()
+    tope = config.pipeline_en_proceso_max()
     por_marca: list[dict[str, Any]] = []
     total = 0
     for marca in marcas.ids():
         if not config.etapa_activa(config.ENV_PIPELINE_RECOLECTAR, marca):
             continue
         try:
-            n = repos.contar_clusters_funnel_qa(marca, EMBUDO_QA_ESTADOS)
+            n = repos.contar_clusters_admision_qa(marca, ADMISION_QA_ESTADOS)
         except Exception:  # noqa: BLE001 -- un conteo que falle no debe tumbar el Monitor
             continue
         total += n
-        por_marca.append({"marca": marca, "en_vuelo": n, "tope": tope})
-    return {"en_vuelo": total, "tope_por_marca": tope, "marcas": por_marca}
+        por_marca.append({"marca": marca, "en_proceso": n, "tope": tope})
+    return {"en_proceso": total, "tope_por_marca": tope, "marcas": por_marca}
 
 
 def _autor_pipeline() -> dict[str, str] | None:

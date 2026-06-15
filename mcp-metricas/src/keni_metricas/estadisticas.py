@@ -47,7 +47,7 @@ def resumen_numerico(valores: Iterable[float | int | None]) -> EstadisticasNumer
 
 
 # Intervalos fijos del histograma de engagement (%). El ultimo es abierto ("10%+").
-_TRAMOS_ENGAGEMENT: tuple[tuple[float, float | None], ...] = (
+_INTERVALOS_ENGAGEMENT: tuple[tuple[float, float | None], ...] = (
     (0, 2), (2, 4), (4, 6), (6, 8), (8, 10), (10, None),
 )
 
@@ -55,7 +55,7 @@ _TRAMOS_ENGAGEMENT: tuple[tuple[float, float | None], ...] = (
 def buckets_engagement(piezas: Sequence[Pieza]) -> list[DistribucionBucket]:
     """Histograma de piezas por intervalo de engagement (detecta concentracion del resultado)."""
     buckets: list[DistribucionBucket] = []
-    for inicio, fin in _TRAMOS_ENGAGEMENT:
+    for inicio, fin in _INTERVALOS_ENGAGEMENT:
         if fin is None:
             n = sum(1 for p in piezas if p.engagement_pct >= inicio)
             etiqueta = f"{int(inicio)}%+"

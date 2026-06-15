@@ -1,4 +1,4 @@
-"""Tests del reaper de generaciones atascada (`generaciones.reclamar_atascadas`).
+"""Tests del limpiador de generaciones atascada (`generaciones.reclamar_atascadas`).
 
 Las generaciones viven en ficheros YAML (no Postgres), así que estos tests usan `tmp_path`
 vía `KENI_CONSOLA_GENERACIONES` y NO necesitan base de datos. La hora se inyecta para no
@@ -82,7 +82,7 @@ def test_almacen_vacio_no_rompe(almacen):
 def test_ttl_qa_en_curso_derivado_del_timeout_real(monkeypatch):
     """Sin override, el TTL es ~2x el wall-timeout REAL de la criba (no 30 min fijos)."""
     from keni_consola import config
-    from keni_consola import reaper_generaciones as rg
+    from keni_consola import limpiador_generaciones as rg
 
     monkeypatch.delenv(config.ENV_QA_EN_CURSO_TTL_MIN, raising=False)
     monkeypatch.delenv("KENI_QA_FUENTE_TIMEOUT", raising=False)
@@ -99,7 +99,7 @@ def test_ttl_qa_en_curso_derivado_del_timeout_real(monkeypatch):
 def test_ttl_qa_en_curso_respeta_el_override_explicito(monkeypatch):
     """`KENI_QA_EN_CURSO_TTL_MIN` explicito manda sobre la derivacion."""
     from keni_consola import config
-    from keni_consola import reaper_generaciones as rg
+    from keni_consola import limpiador_generaciones as rg
 
     monkeypatch.setenv(config.ENV_QA_EN_CURSO_TTL_MIN, "30")
     assert rg._ttl_qa_en_curso_seg() == 30 * 60

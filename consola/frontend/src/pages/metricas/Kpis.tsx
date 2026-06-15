@@ -95,7 +95,7 @@ export function Kpis({
         ))}
       </div>
       {/* Leyenda de comparabilidad: con el periodo en curso, las insignias comparan
-          tramos de la MISMA duración (días transcurridos vs el tramo equivalente del
+          intervalos de la MISMA duración (días transcurridos vs el intervalo equivalente del
           periodo anterior), y aquí se dice de forma visible, no solo en el tooltip. */}
       {par?.enCurso && data && (
         <p className="text-xs text-muted-foreground" role="note">

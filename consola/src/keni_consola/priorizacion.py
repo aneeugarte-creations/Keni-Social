@@ -47,8 +47,8 @@ BONUS_EVERGREEN = 80
 # acotados (no en bruto, que aplastaria todo lo demas): un tema muy viral sube por encima de
 # lo normal, pero por DEBAJO del compromiso (el must-do humano sigue mandando). Tope acotado.
 BONUS_VIRALIDAD_MAX = 60
-# Tramos (umbral de señal -> bonus). Ordenados de mayor a menor; el primero que se supera gana.
-_TRAMOS_VIRALIDAD: tuple[tuple[int, int], ...] = (
+# Intervalos (umbral de señal -> bonus). Ordenados de mayor a menor; el primero que se supera gana.
+_INTERVALOS_VIRALIDAD: tuple[tuple[int, int], ...] = (
     (500_000, 60),
     (100_000, 45),
     (50_000, 30),
@@ -69,7 +69,7 @@ def peso_viralidad(senal: object) -> int:
         return 0
     if valor <= 0:
         return 0
-    for umbral, bonus in _TRAMOS_VIRALIDAD:
+    for umbral, bonus in _INTERVALOS_VIRALIDAD:
         if valor >= umbral:
             return bonus
     return 0
@@ -100,7 +100,7 @@ def peso_fecha(fecha_objetivo: object, hoy: date) -> int:
     """Cuanto pesa la cercania de la fecha objetivo: vencido/hoy urge, lejano pesa poco.
 
     Un vencido RECIENTE (hasta `_VENCIDO_DIAS_PLENO` dias) es lo mas urgente (150); a partir
-    de ahi DECAE por tramos (100 → 40 → 10): lo vencido hace semanas baja en vez de quedarse
+    de ahi DECAE por intervalos (100 → 40 → 10): lo vencido hace semanas baja en vez de quedarse
     arriba indefinidamente.
     """
     f = _fecha_iso(fecha_objetivo)

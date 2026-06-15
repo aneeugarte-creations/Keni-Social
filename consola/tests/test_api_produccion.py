@@ -1,6 +1,6 @@
-"""Producción del día (`GET /api/produccion/dia`): embudo de 24 h + colas. OFFLINE, DB tmp.
+"""Producción del día (`GET /api/produccion/dia`): admision de 24 h + colas. OFFLINE, DB tmp.
 
-Cubre la forma del contrato, la clasificación del embudo por la pieza MÁS AVANZADA del
+Cubre la forma del contrato, la clasificación del admision por la pieza MÁS AVANZADA del
 tema, el filtro por marca y la validación de marca. Las piezas se crean por el API (como
 en producción) y se mueven de estado por repos.
 """
@@ -34,8 +34,8 @@ def _crear(cli: TestClient, **campos) -> dict:
     return r.json()["publicacion"]
 
 
-def test_produccion_dia_contrato_y_embudo(entorno):
-    """El embudo cuenta TEMAS por su pieza más avanzada; el contrato trae las 4 vistas."""
+def test_produccion_dia_contrato_y_admision(entorno):
+    """El admision cuenta TEMAS por su pieza más avanzada; el contrato trae las 4 vistas."""
     cli = _cli()
     _crear(cli, titulo="Borrador con copy")  # copy sin avanzar -> en_borrador
     prog = _crear(cli, titulo="Programada")
@@ -48,7 +48,7 @@ def test_produccion_dia_contrato_y_embudo(entorno):
 
     assert data["marca"] == "unotv"
     assert data["ventana"]["desde"] < data["ventana"]["hasta"]
-    emb = data["embudo"]
+    emb = data["admision"]
     assert emb["total"] == 2
     assert emb["en_borrador"] == 1
     assert emb["programado"] == 1
@@ -57,7 +57,7 @@ def test_produccion_dia_contrato_y_embudo(entorno):
     assert {"pendientes", "en_curso"} <= set(data["cola_generacion"])
     assert [p["id"] for p in data["programacion"]["programadas"]] == [prog["id"]]
     assert data["programacion"]["programadas"][0]["fecha_programada"] == "2030-01-01T10:00"
-    # Detalle por tema, más recientes primero, con su estado del embudo.
+    # Detalle por tema, más recientes primero, con su estado del admision.
     assert len(data["piezas"]) == 2
     assert {p["estado"] for p in data["piezas"]} == {"en_borrador", "programado"}
     # Sin etiquetas de vertical asignadas, caen al cajón "(sin vertical)".
@@ -141,11 +141,11 @@ def test_produccion_dia_filtra_por_marca(entorno):
 
     r = cli.get("/api/produccion/dia?marca=claro-sports")
     assert r.status_code == 200
-    assert r.json()["embudo"]["total"] == 1
+    assert r.json()["admision"]["total"] == 1
     # Sin marca: todas.
     r = cli.get("/api/produccion/dia")
     assert r.status_code == 200
-    assert r.json()["embudo"]["total"] == 2
+    assert r.json()["admision"]["total"] == 2
 
 
 def test_produccion_dia_marca_invalida_400(entorno):

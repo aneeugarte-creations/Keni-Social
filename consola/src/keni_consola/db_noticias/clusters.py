@@ -471,7 +471,7 @@ def marcar_cluster_qa(cluster_id: str, veredicto: str, hallazgos: str = "") -> N
         con.close()
 
 
-def contar_clusters_funnel_qa(marca: str, estados: tuple[str, ...]) -> int:
+def contar_clusters_admision_qa(marca: str, estados: tuple[str, ...]) -> int:
     """Cuántas HISTORIAS `nuevo` de la marca están en la ADMISIÓN de verificación (ADR 0011 F3).
 
     La admisión son los clusters aún sin promover (`estado='nuevo'`) cuyo `verificar_veredicto` está en

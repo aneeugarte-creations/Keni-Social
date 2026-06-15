@@ -30,7 +30,7 @@ import { RielInvestigacion } from "@/pages/noticias/RielInvestigacion";
  *   PROCESO
  *     · PIPELINE (núcleo): UN solo proceso en dos fases. Antes (en el flujo), la línea INFORMATIVA de
  *       el pipeline CONSOLIDADO (`RielInvestigacion` sobre `PanelPipeline`): TODAS las fases del
- *       tramo aguas arriba como tarjetas grandes en orden, cada una con su icono, switch (on/off),
+ *       intervalo aguas arriba como tarjetas grandes en orden, cada una con su icono, switch (on/off),
  *       conteos de cola y «Editar prompt»/«Excepciones» en el menú; el maestro «Máquina» en la
  *       cabecera. El repertorio completo de prompts vive en la Biblioteca (Texto · Documentos).
  *   SALIDA
@@ -125,7 +125,7 @@ export default function CockpitInvestigacion() {
           <Algoritmos />
         </TabsContent>
 
-        {/* PROCESO · PIPELINE (núcleo): el pipeline CONSOLIDADO — todas las fases del tramo aguas
+        {/* PROCESO · PIPELINE (núcleo): el pipeline CONSOLIDADO — todas las fases del intervalo aguas
             arriba como tarjetas grandes en orden, cada una con su icono, switch (on/off), conteos
             de cola, «Editar prompt» y excepciones; el maestro «Máquina» en la cabecera. */}
         <TabsContent value="pipeline">

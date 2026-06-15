@@ -73,7 +73,7 @@ def test_crear_idempotente_converge_misma_clave(entorno):
     g1, nueva1 = generaciones.crear_idempotente("aa11", datos)
     g2, nueva2 = generaciones.crear_idempotente("aa11", datos)
     assert nueva1 is True  # el primero crea
-    assert nueva2 is False  # el segundo NO crea: comparte el run en vuelo
+    assert nueva2 is False  # el segundo NO crea: comparte el run en proceso
     assert g1["id"] == g2["id"]  # misma generacion
 
 
@@ -128,7 +128,7 @@ def test_lanzar_limpia_temporal_del_lanzamiento_redundante(entorno, cuenta_encol
         tipo="copy", titulo="Copy", marca=_MARCA, prompt="PROMPT IDENTICO",
         procesar=lambda s, m: {}, procesar_spec={}, autor=autor, dir_temporal=temp,
     )
-    # Convergió al run en vuelo (no encoló otro) y borró el temporal redundante.
+    # Convergió al run en proceso (no encoló otro) y borró el temporal redundante.
     assert len(cuenta_encolados) == 1
     assert not temp.exists()
     assert g2["id"] == cuenta_encolados[0]
@@ -144,7 +144,7 @@ def test_lanzar_copy_converge_pese_al_nonce_del_prompt(entorno, cuenta_encolados
 
     El prompt del copy lleva un NONCE anti-inyección distinto por llamada (el delimitador del
     contexto), así que la clave por defecto (hash del prompt) NUNCA coincidía: el backoff del
-    pipeline relanzaba el copy del MISMO tema en vuelo (3 generaciones y 3 juegos de borradores
+    pipeline relanzaba el copy del MISMO tema en proceso (3 generaciones y 3 juegos de borradores
     por tema, medido). La clave estable por insumos (tema/nota/redes) restaura la promesa.
     """
     autor = {"id": "u1", "usuario": "ana"}
@@ -154,7 +154,7 @@ def test_lanzar_copy_converge_pese_al_nonce_del_prompt(entorno, cuenta_encolados
     )
     g1 = generar.lanzar_copy(**args)
     g2 = generar.lanzar_copy(**args)
-    assert g1["id"] == g2["id"]  # convergen al run en vuelo
+    assert g1["id"] == g2["id"]  # convergen al run en proceso
     assert len(cuenta_encolados) == 1  # UN solo claude -p
 
     # Un trabajo DISTINTO (otro tema/nota) sí arranca el suyo.

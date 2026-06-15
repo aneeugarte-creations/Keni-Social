@@ -105,7 +105,7 @@ export interface ColaDaemon {
   etiqueta: string;
   activo: boolean | null;
   descripcion: string;
-  /** Env var del catálogo de ajustes que lo enciende/apaga ("" = sin toggle, p. ej. reaper). */
+  /** Env var del catálogo de ajustes que lo enciende/apaga ("" = sin toggle, p. ej. limpiador). */
   clave_ajuste: string;
   /** Si el Monitor puede pintarlo como TOGGLE real (clave en catálogo y no peligrosa). */
   editable: boolean;
@@ -146,13 +146,13 @@ export interface ConteoProceso {
   pendientes: number;
 }
 
-/** Embudo de QA: el único límite que Investigación acota aparte de la cola compartida. */
-export interface EmbudoQa {
-  /** Clusters en el embudo de verificación (en vuelo + pendientes + saltados), sumados. */
-  en_vuelo: number;
-  /** Tope en vuelo POR MARCA (cuánta criba cabe a la vez por marca). */
+/** Admisión de QA: el único límite que Investigación acota aparte de la cola compartida. */
+export interface AdmisionQa {
+  /** Clusters en el admision de verificación (en proceso + pendientes + saltados), sumados. */
+  en_proceso: number;
+  /** Tope en proceso POR MARCA (cuánta criba cabe a la vez por marca). */
   tope_por_marca: number;
-  marcas: { marca: string; en_vuelo: number; tope: number }[];
+  marcas: { marca: string; en_proceso: number; tope: number }[];
 }
 
 /** Snapshot en vivo de la cola de generación + workers + daemons. */
@@ -167,8 +167,8 @@ export interface ColaMonitor {
   workers_activos: string[];
   /** Desglose del pool compartido por proceso (ADR 0011): los dos loops sobre la misma cola. */
   por_proceso?: Record<Proceso, ConteoProceso>;
-  /** Estado del embudo de QA (Investigación). */
-  embudo_qa?: EmbudoQa;
+  /** Estado del admision de QA (Investigación). */
+  admision_qa?: AdmisionQa;
   en_curso: ColaJob[];
   esperando: ColaJob[];
   daemons: ColaDaemon[];
@@ -518,7 +518,7 @@ export type MotorDaemon = "investigacion" | "produccion" | null;
 
 /** Latido de un daemon de fondo (una fila de `daemon_latidos` + campos derivados). */
 export interface LatidoDaemon {
-  /** Nombre estable del daemon ("ingesta", "pipeline", "reaper"…). */
+  /** Nombre estable del daemon ("ingesta", "pipeline", "limpiador"…). */
   daemon: string;
   /** Última iteración del bucle (ISO) — el hilo vive aunque el gate esté OFF. */
   visto: string;
@@ -562,7 +562,7 @@ export interface LatidoDaemon {
   /** `true` si el daemon encola/ejecuta `claude -p` (gasta tokens); `false` el resto. */
   gasta_tokens: boolean;
   /** Clave de ajuste (KENI_*) que enciende/apaga el daemon desde su fila (toggle in-place;
-   *  pásala a `POST /api/ajustes`). `null` = SIEMPRE-ON sin toggle (reaper/programador/…). */
+   *  pásala a `POST /api/ajustes`). `null` = SIEMPRE-ON sin toggle (limpiador/programador/…). */
   clave_gate: string | null;
 }
 

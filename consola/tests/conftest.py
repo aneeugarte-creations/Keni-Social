@@ -39,7 +39,7 @@ from starlette.testclient import TestClient
 # reconexión: ver `_postgres.limpiar_postgres`, que cierra el pool del proceso ANTES del
 # `pg_terminate_backend`/TRUNCATE (si no, el pool descubre sus conexiones muertas server-side y
 # psycopg_pool las reconstruye con ~1 s de backoff cada una -> esa era la causa del 3x, no un
-# "embudo de lock"). DEBE ir antes de importar `db`/`app` (abren el pool de forma perezosa).
+# "admision de lock"). DEBE ir antes de importar `db`/`app` (abren el pool de forma perezosa).
 # `setdefault` respeta overrides (`KENI_DB_POOL=0` para el camino directo, p.ej. depurar).
 os.environ.setdefault("KENI_DB_POOL", "1")
 

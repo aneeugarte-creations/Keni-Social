@@ -587,7 +587,7 @@ function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
   // Un lote `parseando` que YA tiene ítems está ATASCADO (el worker murió entre el INSERT de
   // los ítems y el UPDATE final del lote): el parseo SÍ produjo resultado, así que NO
   // mostramos "Procesando con Haiku…" por él (antes se quedaba atascado para siempre). El
-  // reaper del back lo reconciliará a `listo`. Comparamos por `lote_id` de los ítems.
+  // limpiador del back lo reconciliará a `listo`. Comparamos por `lote_id` de los ítems.
   const idsLotesConItems = new Set(items.map((it) => it.lote_id));
   const lotesParseando = lotes.filter(
     (l) => l.estado === "parseando" && !idsLotesConItems.has(l.id),
@@ -767,7 +767,7 @@ export default function CajonesDia() {
   // SONDEO: mientras haya lotes REALMENTE en proceso (parseando y SIN ítems aún), refrescamos
   // cada ~1.5 s para que los ítems aparezcan en cuanto el lote pase a "listo"/"error". Un lote
   // `parseando` que ya tiene ítems está ATASCADO (worker muerto a medias): no seguimos sondeando
-  // por él indefinidamente (el reaper del back lo reconcilia). Misma lógica que `lotesParseando`.
+  // por él indefinidamente (el limpiador del back lo reconcilia). Misma lógica que `lotesParseando`.
   const insumosQuery = useQuery({
     queryKey: CLAVE_INSUMOS(fecha, ocultarCaducados, marcaActiva),
     queryFn: ({ signal }) =>

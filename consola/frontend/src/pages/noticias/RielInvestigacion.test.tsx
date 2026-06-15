@@ -1,6 +1,6 @@
 /**
  * Tests del RielInvestigacion CONSOLIDADO (ADR 0011): un panel de TARJETAS con todas las fases del
- * tramo aguas arriba (Recolectar · Agrupar · Fusionar · Traducir · Clasificar · Priorizar ·
+ * intervalo aguas arriba (Recolectar · Agrupar · Fusionar · Traducir · Clasificar · Priorizar ·
  * Admitir · Verificar). El SWITCH es el indicador de estado (no hay puntos de color); solo admin
  * lee/edita el catálogo. Las fases con prompt abren su doc al clicar la tarjeta.
  */

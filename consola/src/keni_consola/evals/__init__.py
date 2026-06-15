@@ -27,8 +27,8 @@ CAPAS / REUSO (no se reinventa la verificación, se ENVUELVE)
   pregunta contra el perfil real medido de la marca). El MISMO lint del post-procesado.
 - `pipeline_contenido._revisar.avisos_coherencia` -> dimensión COHERENCIA (solapamiento
   léxico copy↔nota de origen; caza alucinaciones / pieza cruzada).
-- `keni_shared.limites_plataforma.limite_de` + `dominio.copy._tramos_publicables` ->
-  dimensión LÍMITE (tope técnico duro por red, por tramo de hilo/carrusel).
+- `keni_shared.limites_plataforma.limite_de` + `dominio.copy._intervalos_publicables` ->
+  dimensión LÍMITE (tope técnico duro por red, por intervalo de hilo/carrusel).
 - `redes.es_red` / `marcas.es_marca` -> validación del catálogo de cada caso.
 
 El runner es PURO y determinista (no toca BD ni red; el perfil de patrones se lee de disco).

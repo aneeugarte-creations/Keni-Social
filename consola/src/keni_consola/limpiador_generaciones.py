@@ -1,4 +1,4 @@
-"""Reaper de generaciones colgadas: cierra las `ejecutando` sueltas (proceso muerto).
+"""Limpiador de generaciones colgadas: cierra las `ejecutando` sueltas (proceso muerto).
 
 PROBLEMA QUE RESUELVE
 =====================
@@ -32,7 +32,7 @@ from datetime import UTC, datetime, timedelta
 from . import config, daemon_util, generaciones
 from .tiempo import iso_utc
 
-_log = logging.getLogger("keni_consola.reaper_generaciones")
+_log = logging.getLogger("keni_consola.limpiador_generaciones")
 
 # TTL de la reparación de QA 'en_curso' ≈ 2× el wall-timeout real de la criba: una colgada se detecta en
 # minutos, y una criba VIVA nunca se toca (el doble del timeout deja margen de sobra al worker).
@@ -56,7 +56,7 @@ def _reparar_qa_en_curso() -> int:
 
     La fase QA marca el tema `en_curso` ANTES de lanzar la criba; si el lanzamiento o la
     generación mueren sin finalizador, el tema quedaba excluido PARA SIEMPRE de `temas_sin_verificar`
-    y contando en `temas_en_vuelo` (bloquea el cupo serial de su marca). Por cada colgado más
+    y contando en `temas_en_proceso` (bloquea el cupo serial de su marca). Por cada colgado más
     viejo que el TTL (`_ttl_qa_en_curso_seg`, vs `actualizado`):
       - etapa Verificar ACTIVA para la marca -> se resetea a "" (re-criba en el barrido);
       - APAGADA (`KENI_PIPELINE_VERIFICAR` off, global o `::marca`) -> se marca `saltada`
@@ -87,13 +87,13 @@ def _reparar_qa_en_curso() -> int:
             repos.actualizar_contenido(tema_id, {"verificar_veredicto": nuevo})
         except Exception:  # noqa: BLE001 -- best-effort por tema; el resto de la reparación sigue
             _log.warning(
-                "Reaper de generaciones: no se pudo reparar la QA colgada del tema %s.",
+                "Limpiador de generaciones: no se pudo reparar la QA colgada del tema %s.",
                 tema_id, exc_info=True,
             )
             continue
         tocados += 1
         _log.warning(
-            "Reaper de generaciones: QA 'en_curso' colgada del tema %s (marca %s) -> %s.",
+            "Limpiador de generaciones: QA 'en_curso' colgada del tema %s (marca %s) -> %s.",
             tema_id, marca, "re-criba" if verificar_activa else "saltada",
         )
     return tocados
@@ -102,20 +102,20 @@ def _reparar_qa_en_curso() -> int:
 def ejecutar_barrido() -> int:
     """Un barrido: reclama las colgadas y BORRA registros viejos. Devuelve cuantas colgadas cerro.
 
-    Dos reparaciones en el mismo tick (reusa el scheduling del reaper, no abre un proceso
+    Dos reparaciones en el mismo tick (reusa el scheduling del limpiador, no abre un proceso
     nuevo): (1) cierra las `ejecutando` sueltas (`reclamar_atascadas`); (2) BORRA los registros
     YAML fuera de la politica de retencion (`purgar_generaciones`, #128), que acota disco +
     el escaneo de `_todas_ordenadas`. El borrado es best-effort y NO afecta al valor devuelto
-    (que sigue siendo el numero de colgadas cerradas, contrato del reaper); un fallo se loguea
+    (que sigue siendo el numero de colgadas cerradas, contrato del limpiador); un fallo se loguea
     y no aborta el barrido (asi un problema de borrado nunca impide reclamar atascadas).
     """
     n = generaciones.reclamar_atascadas(config.generaciones_ttl_seg())
     if n:
-        _log.info("Reaper de generaciones: %d generacion(es) colgada(s) cerrada(s) como error.", n)
+        _log.info("Limpiador de generaciones: %d generacion(es) colgada(s) cerrada(s) como error.", n)
     try:
         generaciones.purgar_generaciones()
     except Exception:  # noqa: BLE001 -- el borrado es best-effort; no debe tumbar el barrido
-        _log.warning("Reaper de generaciones: fallo el borrado de registros viejos.", exc_info=True)
+        _log.warning("Limpiador de generaciones: fallo el borrado de registros viejos.", exc_info=True)
     # Tercera reparación: lotes de cajones COLGADOS atascados en `parseando`. Si el worker muere
     # entre el INSERT de los ítems y el UPDATE del lote, el lote queda `parseando` para siempre
     # (spinner "Procesando con Haiku…" eterno en el SPA + lote no borrable). Mismo TTL que las
@@ -129,9 +129,9 @@ def ejecutar_barrido() -> int:
         )
         m = repos.reparar_lotes_parseando_sueltos(umbral)
         if m:
-            _log.info("Reaper de generaciones: %d lote(s) de cajón colgado reconciliado(s).", m)
+            _log.info("Limpiador de generaciones: %d lote(s) de cajón colgado reconciliado(s).", m)
     except Exception:  # noqa: BLE001 -- reparación aditiva; un fallo no debe tumbar el barrido
-        _log.warning("Reaper de generaciones: fallo la reparación de lotes de cajón.", exc_info=True)
+        _log.warning("Limpiador de generaciones: fallo la reparación de lotes de cajón.", exc_info=True)
     # Cuarta reparación: temas del pipeline COLGADOS en `verificar_veredicto='en_curso'` (detalle en
     # `_reparar_qa_en_curso`): TTL derivado del timeout real de la criba (~2×) y, con la etapa
     # de Validación apagada, el colgado pasa a `saltada` (CD lo recoge) en vez de re-cribarse.
@@ -139,26 +139,26 @@ def ejecutar_barrido() -> int:
         z = _reparar_qa_en_curso()
         if z:
             _log.info(
-                "Reaper de generaciones: %d tema(s) con QA 'en_curso' colgada reparado(s).", z
+                "Limpiador de generaciones: %d tema(s) con QA 'en_curso' colgada reparado(s).", z
             )
     except Exception:  # noqa: BLE001 -- reparación aditiva; un fallo no debe tumbar el barrido
-        _log.warning("Reaper de generaciones: fallo la reparación de QA en_curso.", exc_info=True)
+        _log.warning("Limpiador de generaciones: fallo la reparación de QA en_curso.", exc_info=True)
     return n
 
 
 def _resumen_barrido(n: int) -> str:
-    """Resumen corto del barrido del reaper para el historial (colgadas cerradas)."""
+    """Resumen corto del barrido del limpiador para el historial (colgadas cerradas)."""
     return f"{n} generación(es) colgada(s) cerrada(s)" if n else "sin novedad"
 
 
-def iniciar_reaper(intervalo_segundos: float | None = None) -> threading.Thread:
-    """Arranca el hilo demonio del reaper (SIEMPRE activo). Barre al arrancar y cada N min.
+def iniciar_limpiador(intervalo_segundos: float | None = None) -> threading.Thread:
+    """Arranca el hilo demonio del limpiador (SIEMPRE activo). Barre al arrancar y cada N min.
 
     Pensado para el servidor real (`__main__`), NO para `crear_app` (los tests no lo arrancan).
     El hilo es daemon; un fallo de barrido se loguea y NO lo mata.
     """
     intervalo = (
-        intervalo_segundos if intervalo_segundos is not None else float(config.reaper_intervalo_seg())
+        intervalo_segundos if intervalo_segundos is not None else float(config.limpiador_intervalo_seg())
     )
 
     def bucle() -> None:
@@ -170,10 +170,10 @@ def iniciar_reaper(intervalo_segundos: float | None = None) -> threading.Thread:
             resumen_fn=_resumen_barrido,
         )
 
-    hilo = threading.Thread(target=bucle, name="reaper-generaciones-daemon", daemon=True)
+    hilo = threading.Thread(target=bucle, name="limpiador-generaciones-daemon", daemon=True)
     hilo.start()
     _log.info(
-        "Reaper de generaciones ACTIVO cada %.0f min (TTL %.0f h).",
+        "Limpiador de generaciones ACTIVO cada %.0f min (TTL %.0f h).",
         intervalo / 60.0, config.generaciones_ttl_seg() / 3600.0,
     )
     return hilo

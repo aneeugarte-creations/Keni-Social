@@ -62,7 +62,7 @@ def main() -> int:
     from .patrones_refresco import iniciar_refresco_patrones
     from .pipeline_contenido import iniciar_pipeline
     from .programador import iniciar_programador
-    from .reaper_generaciones import iniciar_reaper
+    from .limpiador_generaciones import iniciar_limpiador
     from .trends_daemon import iniciar_trends
 
     iniciar_captura_programada()
@@ -99,7 +99,7 @@ def main() -> int:
     # deploy anterior) y cada N min. Antes solo se cableaba en `__main__` (servidor monolitico);
     # con el split de servicios (Fase 3) NINGUN proceso hosted corre `__main__`, asi que sin
     # esto el recolector no corria en produccion y los sueltos quedaban "ejecutando" para siempre.
-    iniciar_reaper()
+    iniciar_limpiador()
 
     # Los daemons son hilos; el proceso principal queda en un bucle de LATIDO: toca el
     # fichero de liveness cada _LATIDO_SEG para que el healthcheck del contenedor (deploy)

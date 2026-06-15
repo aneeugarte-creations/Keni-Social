@@ -6,8 +6,8 @@ lo que el sistema mide. Si una edición de prompt degrada la salida por debajo d
 el caso golden que dependía de ello cambia de veredicto y el harness lo caza.
 
 Dimensiones (claves estables; se referencian en los casos y en el reporte):
-  - `limite_red`  : tope técnico DURO de caracteres por red, por tramo de hilo/carrusel.
-                    Reusa `keni_shared.limites_plataforma` + `dominio.copy._tramos_publicables`
+  - `limite_red`  : tope técnico DURO de caracteres por red, por intervalo de hilo/carrusel.
+                    Reusa `keni_shared.limites_plataforma` + `dominio.copy._intervalos_publicables`
                     (la misma criba que descarta piezas inválidas en el post-procesado).
   - `voz`         : adherencia a los PATRONES medidos de la marca (longitud p-derivada, banda de
                     emojis/hashtags, gancho en mayúsculas, pregunta). Reusa
@@ -53,30 +53,30 @@ def _na(nombre: str) -> ResultadoDimension:
 
 
 def check_limite_red(caso: CasoEval) -> ResultadoDimension:
-    """Falla si algún tramo publicable del copy supera el límite técnico DURO de la red."""
+    """Falla si algún intervalo publicable del copy supera el límite técnico DURO de la red."""
     from keni_shared import limites_plataforma
 
     limite = limites_plataforma.limite_de(caso.red)
     if limite is None:
         return _na("limite_red")  # red sin tope práctico (Facebook / YouTube): nada que medir
-    tramos = _tramos(caso.copy)
-    excesos = [len(t) for t in tramos if len(t) > limite]
+    intervalos = _intervalos(caso.copy)
+    excesos = [len(t) for t in intervalos if len(t) > limite]
     if excesos:
         return _falla(
             "limite_red",
-            [f"{caso.red}: tramo de {max(excesos)} caracteres (límite técnico {limite})"],
+            [f"{caso.red}: intervalo de {max(excesos)} caracteres (límite técnico {limite})"],
         )
     return _ok("limite_red")
 
 
-def _tramos(texto: str) -> list[str]:
-    """Tramos publicables (tuit de un hilo / slide de carrusel / pieza simple). Reusa la criba
+def _intervalos(texto: str) -> list[str]:
+    """Intervalos publicables (tuit de un hilo / slide de carrusel / pieza simple). Reusa la criba
     del post-procesado de copy; si no estuviera disponible, cae al texto entero (best-effort)."""
     try:
         from keni_consola.dominio import copy as dom_copy
 
-        tramos = dom_copy._tramos_publicables(texto)  # noqa: SLF001 -- reuso del contrato de piezas
-        return tramos or [texto]
+        intervalos = dom_copy._intervalos_publicables(texto)  # noqa: SLF001 -- reuso del contrato de piezas
+        return intervalos or [texto]
     except Exception:  # noqa: BLE001 -- sin la criba, mide el texto entero
         return [texto]
 

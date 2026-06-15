@@ -107,7 +107,7 @@ _LOCKS_COMBO: dict[str, threading.Lock] = {}
 
 # Claves con un refresco en FONDO en curso (stale-while-revalidate): evita que N lecturas
 # de la misma entrada caducada disparen N recalculos. Protegido por `_LOCKS_GUARDIAN`.
-_SWR_EN_VUELO: set[str] = set()
+_SWR_EN_PROCESO: set[str] = set()
 
 
 def _lock_combo(clave: str) -> threading.Lock:
@@ -163,9 +163,9 @@ def _revalidar_en_fondo(tipo: str, rango: str, marca: str | None) -> None:
     """
     clave = _clave(tipo, rango, marca)
     with _LOCKS_GUARDIAN:
-        if clave in _SWR_EN_VUELO:
+        if clave in _SWR_EN_PROCESO:
             return
-        _SWR_EN_VUELO.add(clave)
+        _SWR_EN_PROCESO.add(clave)
 
     def _trabajo() -> None:
         try:
@@ -174,7 +174,7 @@ def _revalidar_en_fondo(tipo: str, rango: str, marca: str | None) -> None:
             _log.exception("Fallo el refresco en fondo de %s.", clave)
         finally:
             with _LOCKS_GUARDIAN:
-                _SWR_EN_VUELO.discard(clave)
+                _SWR_EN_PROCESO.discard(clave)
 
     threading.Thread(target=_trabajo, name="revalida-metricas", daemon=True).start()
 

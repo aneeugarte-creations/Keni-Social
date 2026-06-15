@@ -121,8 +121,8 @@ describe("AgenteDetalle", () => {
   });
 
   it("daemon sin gate se pinta como «Siempre activo»", async () => {
-    stubFetch({ daemons: [latido({ daemon: "reaper", clase: "sistema", motor: null, clave_gate: null, barrible: false })], barridos: [] });
-    renderEn("reaper");
+    stubFetch({ daemons: [latido({ daemon: "limpiador", clase: "sistema", motor: null, clave_gate: null, barrible: false })], barridos: [] });
+    renderEn("limpiador");
     expect(await screen.findByText("Siempre activo")).toBeInTheDocument();
   });
 });

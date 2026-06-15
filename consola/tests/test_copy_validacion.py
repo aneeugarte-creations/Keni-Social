@@ -1,11 +1,11 @@
 """Validación PRE-PERSISTENCIA de piezas de copy (`dominio.copy`).
 
 Una pieza con red desconocida, texto vacío o que excede el límite técnico de su red
-(`keni_shared.limites_plataforma`; en hilos/carruseles, por tramo) NO crea borrador: se
+(`keni_shared.limites_plataforma`; en hilos/carruseles, por intervalo) NO crea borrador: se
 descarta SOLO esa pieza, se loguea WARN y, si hay tema, se deja una nota en él. Las piezas
 válidas del mismo lote se crean igual.
 
-Los helpers de tramos/motivo son PUROS (sin DB); la creación de borradores usa Postgres
+Los helpers de intervalos/motivo son PUROS (sin DB); la creación de borradores usa Postgres
 (fixture `entorno`).
 """
 
@@ -18,29 +18,29 @@ _MARCA = "unotv"
 
 
 # --------------------------------------------------------------------------- #
-# Tramos publicables (contrato de piezas compuestas) — PURO                     #
+# Intervalos publicables (contrato de piezas compuestas) — PURO                     #
 # --------------------------------------------------------------------------- #
 
 
 def test_pieza_simple_es_un_unico_tramo():
-    assert dom_copy._tramos_publicables("Hola X") == ["Hola X"]
+    assert dom_copy._intervalos_publicables("Hola X") == ["Hola X"]
 
 
 def test_hilo_se_parte_por_tuits_numerados():
     texto = "1/3 Gancho del hilo\n2/3 Desarrollo\ncon segunda línea\n3/3 Cierre con CTA"
-    tramos = dom_copy._tramos_publicables(texto)
-    assert tramos == ["1/3 Gancho del hilo", "2/3 Desarrollo\ncon segunda línea", "3/3 Cierre con CTA"]
+    intervalos = dom_copy._intervalos_publicables(texto)
+    assert intervalos == ["1/3 Gancho del hilo", "2/3 Desarrollo\ncon segunda línea", "3/3 Cierre con CTA"]
 
 
 def test_carrusel_se_parte_por_separador():
     texto = "Slide 1: gancho\n---\nSlide 2: dato\n---\nSlide 3: CTA"
-    assert dom_copy._tramos_publicables(texto) == ["Slide 1: gancho", "Slide 2: dato", "Slide 3: CTA"]
+    assert dom_copy._intervalos_publicables(texto) == ["Slide 1: gancho", "Slide 2: dato", "Slide 3: CTA"]
 
 
 def test_una_sola_linea_numerada_no_es_hilo():
     # "1/2 de la población…" como apertura de una pieza simple NO debe partirse.
     texto = "1/2 de la población vio el partido"
-    assert dom_copy._tramos_publicables(texto) == [texto]
+    assert dom_copy._intervalos_publicables(texto) == [texto]
 
 
 # --------------------------------------------------------------------------- #
@@ -65,7 +65,7 @@ def test_motivo_excede_limite_de_la_red():
 
 
 def test_hilo_valida_por_tuit_no_por_total():
-    # Un hilo de 3 tuits ≤25000 supera los 25000 totales y AUN ASI es válido (límite por tramo).
+    # Un hilo de 3 tuits ≤25000 supera los 25000 totales y AUN ASI es válido (límite por intervalo).
     hilo = "\n".join(f"{i}/3 " + "a" * 10000 for i in (1, 2, 3))
     assert len(hilo) > 25000
     assert dom_copy._motivo_invalida({"red": "x", "contenido": hilo}) is None

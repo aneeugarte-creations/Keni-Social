@@ -10,11 +10,11 @@ from ._config_comun import (
     ENV_MEDIA_GC,
     ENV_MEDIA_GC_ANTIGUEDAD_HORAS,
     ENV_MEDIA_GC_INTERVALO_HORAS,
-    ENV_REAPER_INTERVALO_MIN,
+    ENV_LIMPIADOR_INTERVALO_MIN,
     GENERACIONES_TTL_HORAS_DEF,
     MEDIA_GC_ANTIGUEDAD_HORAS_DEF,
     MEDIA_GC_INTERVALO_HORAS_DEF,
-    REAPER_INTERVALO_MIN_DEF,
+    LIMPIADOR_INTERVALO_MIN_DEF,
     _crudo,
     _entero,
 )
@@ -101,9 +101,9 @@ def generaciones_ttl_seg() -> int:
     return _entero(ENV_GENERACIONES_TTL_HORAS, GENERACIONES_TTL_HORAS_DEF, minimo=1) * 3600
 
 
-def reaper_intervalo_seg() -> int:
-    """Cada cuanto barre el recolector de generaciones (`KENI_REAPER_INTERVALO_MIN`, def 10, min 1)."""
-    return _entero(ENV_REAPER_INTERVALO_MIN, REAPER_INTERVALO_MIN_DEF, minimo=1) * 60
+def limpiador_intervalo_seg() -> int:
+    """Cada cuanto barre el recolector de generaciones (`KENI_LIMPIADOR_INTERVALO_MIN`, def 10, min 1)."""
+    return _entero(ENV_LIMPIADOR_INTERVALO_MIN, LIMPIADOR_INTERVALO_MIN_DEF, minimo=1) * 60
 
 
 def consola_url_publica() -> str | None:

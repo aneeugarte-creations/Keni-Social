@@ -110,8 +110,8 @@ def test_sin_senal_de_viralidad_puntua_como_antes():
     assert sin_clave == con_cero == base_esperada
 
 
-def test_viralidad_sube_el_score_por_tramos():
-    """Mayor señal -> mayor bonus, por tramos acotados (no lineal)."""
+def test_viralidad_sube_el_score_por_intervalos():
+    """Mayor señal -> mayor bonus, por intervalos acotados (no lineal)."""
     bajo = pr.score_contenido(_item(senal_viralidad=2_000), hoy=HOY)
     medio = pr.score_contenido(_item(senal_viralidad=60_000), hoy=HOY)
     alto = pr.score_contenido(_item(senal_viralidad=1_000_000), hoy=HOY)
@@ -145,7 +145,7 @@ def test_vencido_reciente_es_lo_mas_urgente():
     assert pr.peso_fecha("2026-05-24", HOY) == 150          # vencida hace 7 dias (pleno)
 
 
-def test_vencido_viejo_decae_por_tramos():
+def test_vencido_viejo_decae_por_intervalos():
     pleno = pr.peso_fecha("2026-05-30", HOY)                 # atraso 1 dia
     dos_semanas = pr.peso_fecha("2026-05-20", HOY)           # atraso 11 dias
     un_mes = pr.peso_fecha("2026-05-05", HOY)                # atraso 26 dias

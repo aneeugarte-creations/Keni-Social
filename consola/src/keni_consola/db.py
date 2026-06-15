@@ -295,7 +295,7 @@ from .db_noticias import (  # noqa: F401
     clusters_extranjeros_sin_traducir,
     clusters_por_contenidos,
     clusters_recientes,
-    contar_clusters_funnel_qa,
+    contar_clusters_admision_qa,
     contar_fuentes_algoritmo,
     contar_fuentes_rss,
     conteos_items_recientes,
@@ -631,7 +631,7 @@ __all__ = [
     "ESTADOS_NOTICIA_CLUSTER",
     # Traducción + verificación de historias (Ola D).
     "clusters_extranjeros_sin_traducir",
-    "contar_clusters_funnel_qa",
+    "contar_clusters_admision_qa",
     "marcar_cluster_marca_ia",
     "marcar_cluster_qa",
     "marcar_cluster_traducido",

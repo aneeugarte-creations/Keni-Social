@@ -391,14 +391,14 @@ def test_pipeline_admision_default_y_clamp(limpio):
     el volumen lo regula la admisión (estos dos) + el backpressure de la cola.
     """
     assert config.pipeline_max() == 3
-    assert config.pipeline_en_vuelo_max() == 8
-    limpio.setenv(config.ENV_PIPELINE_EN_VUELO_MAX, "12")
-    assert config.pipeline_en_vuelo_max() == 12
+    assert config.pipeline_en_proceso_max() == 8
+    limpio.setenv(config.ENV_PIPELINE_EN_PROCESO_MAX, "12")
+    assert config.pipeline_en_proceso_max() == 12
     limpio.setenv(config.ENV_PIPELINE_MAX, "5")
     assert config.pipeline_max() == 5
     # Clamp min 1 (un 0/negativo no apaga la admisión).
-    limpio.setenv(config.ENV_PIPELINE_EN_VUELO_MAX, "0")
-    assert config.pipeline_en_vuelo_max() == 1
+    limpio.setenv(config.ENV_PIPELINE_EN_PROCESO_MAX, "0")
+    assert config.pipeline_en_proceso_max() == 1
     limpio.setenv(config.ENV_PIPELINE_MAX, "-3")
     assert config.pipeline_max() == 1
 

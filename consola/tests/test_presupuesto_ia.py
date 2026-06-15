@@ -349,9 +349,9 @@ def test_reclamar_prioridad_minima_corta_el_fondo_encolado(entorno):
     assert cola.reclamar("w1") is not None
 
 
-def test_reaper_respeta_generaciones_con_job_pendiente(entorno):
+def test_limpiador_respeta_generaciones_con_job_pendiente(entorno):
     """Una generacion cuyo job sigue PENDIENTE no es atascada: puede esperar mas que el TTL
-    (retenida por el corte de presupuesto, el kill switch o una cola cargada) y el reaper
+    (retenida por el corte de presupuesto, el kill switch o una cola cargada) y el limpiador
     NO debe segarla (la guardia anti-duplicado cerraria luego su job sin ejecutarlo)."""
     from datetime import datetime, timedelta
 

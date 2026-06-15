@@ -371,7 +371,7 @@ def test_ejecutar_arte_job_error_de_proveedor_marca_error(monkeypatch):
 
 
 def test_lanzar_arte_idempotente_no_duplica(entorno):
-    """Re-encolar el MISMO arte (mismo tema+marca+prompt) mientras el primero sigue EN VUELO
+    """Re-encolar el MISMO arte (mismo tema+marca+prompt) mientras el primero sigue EN PROCESO
     devuelve el MISMO registro y NO encola un segundo job de imagen: ni doble gasto del proveedor
     ni doble subida. Al COMPLETAR, un re-lanzamiento legítimo vuelve a correr (registro nuevo)."""
     from keni_consola import cola, generaciones, repos
@@ -379,9 +379,9 @@ def test_lanzar_arte_idempotente_no_duplica(entorno):
 
     args = dict(contenido_id="c1", marca="claro-sports", titulo="Final", prompt="ilustra la final")
     g1 = generar.lanzar_arte(**args)
-    g2 = generar.lanzar_arte(**args)  # re-encolado en vuelo (otro barrido / encadenado / reaper)
+    g2 = generar.lanzar_arte(**args)  # re-encolado en proceso (otro barrido / encadenado / limpiador)
 
-    assert g1["id"] == g2["id"]  # comparte el run en vuelo (clave de idempotencia estable)
+    assert g1["id"] == g2["id"]  # comparte el run en proceso (clave de idempotencia estable)
     assert repos.contar_jobs_activos() == 1  # UN solo job para ese arte
 
     job = cola.reclamar("w")

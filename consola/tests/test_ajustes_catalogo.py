@@ -58,7 +58,7 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_RENDIMIENTO_RANKING,
         config.ENV_PUBLICAR_REAL,
         # Admisión del flujo continuo (topes de volumen por marca).
-        config.ENV_PIPELINE_MAX, config.ENV_PIPELINE_EN_VUELO_MAX,
+        config.ENV_PIPELINE_MAX, config.ENV_PIPELINE_EN_PROCESO_MAX,
         # Tuning: umbrales de alto nivel de alertas/GC + caducidades editoriales. Los
         # intervalos de daemons, la concurrencia (KENI_MAX_JOBS) y demás tunables de
         # ingeniería se DEGRADARON a solo-env (auditoría 2026-06).
@@ -285,7 +285,7 @@ def test_tuning_solo_operacional(store):
 # (KENI_PROMPT_MAX_CHARS) se degradaron a solo-env.
 _PIPELINE_TOPES_INT = {
     config.ENV_PIPELINE_MAX,
-    config.ENV_PIPELINE_EN_VUELO_MAX,
+    config.ENV_PIPELINE_EN_PROCESO_MAX,
 }
 
 

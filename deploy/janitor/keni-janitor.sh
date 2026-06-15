@@ -20,7 +20,7 @@ THRESHOLD="${THRESHOLD:-50}"
 REPO_REGEX="${REPO_REGEX:-^keni-social/}"
 LOG="${LOG:-/var/log/keni-janitor.log}"
 # Belt-and-suspenders (#128): borrado de registros YAML de generacion viejos en el volumen de
-# datos. La fuente de verdad del borrado es el daemon (reaper -> generaciones.purgar_generaciones,
+# datos. La fuente de verdad del borrado es el daemon (limpiador -> generaciones.purgar_generaciones,
 # que respeta el piso de los N mas recientes); esto es solo una red de seguridad por si el
 # daemon estuviera caido. SOLO actua si GEN_DIR apunta a un dir existente (def: el subdir de
 # generaciones del volumen `keni-data`). Borra por MTIME mas viejo que GEN_DIAS dias (def 30,
@@ -77,7 +77,7 @@ fi
 #     vaciaba al cruzar THRESHOLD. `--keep-storage` limpia por LRU dejando los
 #     BUILD_CACHE_KEEP mas recientes: los builds del CI siguen calientes y el cache deja
 #     de acumular capas muertas. No toca imagenes ni contenedores; las capas en uso por
-#     un build en vuelo Docker no las suelta.
+#     un build en proceso Docker no las suelta.
 BUILD_CACHE_KEEP="${BUILD_CACHE_KEEP:-15GB}"
 if [ "$aggressive" != 1 ]; then
   antes_cache="$(docker system df --format '{{.Type}} {{.Size}}' 2>/dev/null | awk '/Build Cache/ {print $3}')"

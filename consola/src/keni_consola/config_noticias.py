@@ -51,7 +51,7 @@ from ._config_comun import (
     ENV_PIPELINE_ILUSTRAR,
     ENV_PIPELINE_REVISAR,
     ENV_PIPELINE_REDACTAR,
-    ENV_PIPELINE_EN_VUELO_MAX,
+    ENV_PIPELINE_EN_PROCESO_MAX,
     ENV_PIPELINE_FETCH_FUENTE,
     ENV_PIPELINE_TEMA_TTL_HORAS,
     ENV_PIPELINE_FUSIONAR,
@@ -97,7 +97,7 @@ from ._config_comun import (
     NOTICIAS_GC_INTERVALO_HORAS_DEF,
     NOTICIAS_GC_SCORE_UMBRAL_DEF,
     PERFIL_EDITORIAL_TTL_HORAS_DEF,
-    PIPELINE_EN_VUELO_MAX_DEF,
+    PIPELINE_EN_PROCESO_MAX_DEF,
     PIPELINE_TEMA_TTL_HORAS_DEF,
     PIPELINE_MAX_DEF,
     QA_EN_CURSO_TTL_MIN_DEF,
@@ -695,14 +695,14 @@ def pipeline_max() -> int:
     return _entero(ENV_PIPELINE_MAX, PIPELINE_MAX_DEF, minimo=1)
 
 
-def pipeline_en_vuelo_max() -> int:
-    """WIP del gate SERIAL: piezas EN CURSO por marca (`KENI_PIPELINE_EN_VUELO_MAX`, def 8, min 1).
+def pipeline_en_proceso_max() -> int:
+    """WIP del gate SERIAL: piezas EN CURSO por marca (`KENI_PIPELINE_EN_PROCESO_MAX`, def 8, min 1).
 
     ES el regulador del flujo continuo (in=out): Admitir no admite más historias de una
     marca mientras ésta tenga >= esto sin terminar (Verificar pendiente o cribado sin copy); primero se
     COMPLETA lo que entró, luego entran nuevas.
     """
-    return _entero(ENV_PIPELINE_EN_VUELO_MAX, PIPELINE_EN_VUELO_MAX_DEF, minimo=1)
+    return _entero(ENV_PIPELINE_EN_PROCESO_MAX, PIPELINE_EN_PROCESO_MAX_DEF, minimo=1)
 
 
 def pipeline_fetch_fuente() -> bool:

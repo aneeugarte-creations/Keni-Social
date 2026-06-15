@@ -277,7 +277,7 @@ def test_grupo_de_clasifica_cada_motor():
     assert latidos.grupo_de("programador") == "flujo"
     assert latidos.grupo_de("vencimientos") == "flujo"
     assert latidos.grupo_de("metricas") == "infra"
-    assert latidos.grupo_de("reaper") == "infra"
+    assert latidos.grupo_de("limpiador") == "infra"
 
 
 def test_grupo_de_default_infra():
@@ -292,7 +292,7 @@ def test_gasta_tokens_solo_los_que_encolan_claude():
     assert latidos.gasta_tokens("produccion") is True
     for d in ("ingesta", "trends", "algoritmos", "comercial", "programador",
               "vencimientos", "metricas", "metricas_piezas", "alertas_rendimiento",
-              "media_gc", "patrones", "noticias_gc", "reaper"):
+              "media_gc", "patrones", "noticias_gc", "limpiador"):
         assert latidos.gasta_tokens(d) is False
 
 
@@ -322,7 +322,7 @@ def test_clase_de_clasifica_ia_maquina_sistema():
     for d in ("ingesta", "trends", "algoritmos", "noticias_gc", "programador", "vencimientos"):
         assert latidos.clase_de(d) == "maquina"
     # SISTEMA: infraestructura (incl. patrones, comercial, media_gc).
-    for d in ("reaper", "media_gc", "metricas", "metricas_piezas", "alertas_rendimiento",
+    for d in ("limpiador", "media_gc", "metricas", "metricas_piezas", "alertas_rendimiento",
               "patrones", "comercial"):
         assert latidos.clase_de(d) == "sistema"
 
@@ -336,7 +336,7 @@ def test_motor_de_mapea_el_loop_o_none():
     assert latidos.motor_de("programador") == "produccion"
     assert latidos.motor_de("vencimientos") == "produccion"
     # Sistema no pertenece a ningun motor.
-    for d in ("reaper", "metricas", "patrones", "comercial"):
+    for d in ("limpiador", "metricas", "patrones", "comercial"):
         assert latidos.motor_de(d) is None
 
 
@@ -383,7 +383,7 @@ def test_clave_gate_de_mapea_cada_daemon_gateado():
 
 def test_clave_gate_de_null_en_siempre_on():
     # Daemons SIEMPRE-ON sin toggle de ajuste -> None (el front no pinta switch on/off).
-    for d in ("reaper", "programador", "comercial", "metricas", "metricas_piezas"):
+    for d in ("limpiador", "programador", "comercial", "metricas", "metricas_piezas"):
         assert latidos.clave_gate_de(d) is None
     # Un daemon desconocido tampoco tiene gate.
     assert latidos.clave_gate_de("daemon_nuevo_sin_clasificar") is None
@@ -404,11 +404,11 @@ def test_endpoint_daemons_expone_clave_gate(entorno):
     # El endpoint añade `clave_gate` a cada daemon (contrato del toggle de fila): el front
     # lee aquí qué clave conmutar, o null si el daemon es siempre-on.
     db.latido_barrido("ingesta", ok=True, intervalo_seg=60.0, tick_seg=60.0)
-    db.latido_barrido("reaper", ok=True, intervalo_seg=60.0, tick_seg=60.0)
+    db.latido_barrido("limpiador", ok=True, intervalo_seg=60.0, tick_seg=60.0)
     c = _cli_admin()
     por_nombre = {d["daemon"]: d for d in c.get("/api/sistema/daemons").json()["daemons"]}
     assert por_nombre["ingesta"]["clave_gate"] == "KENI_PIPELINE_RECOLECTAR"
-    assert por_nombre["reaper"]["clave_gate"] is None
+    assert por_nombre["limpiador"]["clave_gate"] is None
 
 
 # --------------------------------------------------------------------------- #

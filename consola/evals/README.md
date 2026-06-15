@@ -14,7 +14,7 @@ despliega sin que nada lo cace. Este harness es esa red **en la capa medible**.
 
   | Dimensión    | Qué mide                                           | Reutiliza |
   |--------------|----------------------------------------------------|-----------|
-  | `limite_red` | tope técnico DURO de caracteres por red (por tramo)| `keni_shared.limites_plataforma` + `dominio.copy._tramos_publicables` |
+  | `limite_red` | tope técnico DURO de caracteres por red (por intervalo)| `keni_shared.limites_plataforma` + `dominio.copy._intervalos_publicables` |
   | `voz`        | longitud/emojis/hashtags/gancho/pregunta vs patrón real de la marca | `patrones_marca.verificar_pieza` (el MISMO lint del post-procesado) |
   | `coherencia` | solapamiento léxico copy↔nota (caza alucinación / pieza cruzada) | `pipeline_contenido._calidad.avisos_coherencia` |
   | `prohibidos` | términos vetados por la regla editorial de la marca | `dominio.dedup` (normalización) |

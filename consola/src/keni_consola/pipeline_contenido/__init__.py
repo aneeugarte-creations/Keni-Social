@@ -137,13 +137,13 @@ from ._comun import (
     _log,
     _tiene_copy,
     anotar_intento,
-    embudo_qa,
+    admision_qa,
     en_backoff,
     intentos_de,
     marcar_fallo_etapa,
     registrar_etapa,
     temas_pipeline,
-    EMBUDO_QA_ESTADOS,
+    ADMISION_QA_ESTADOS,
 )
 from ._revisar import (
     avisos_calidad,
@@ -180,7 +180,7 @@ from ._admitir import (
     items_ingeribles,
     caducar_temas_viejos,
     promover_clusters_marca,
-    temas_en_vuelo,
+    temas_en_proceso,
 )
 from ._verificar import (
     _contexto_qa_fuente,
@@ -250,8 +250,8 @@ __all__ = [
     "_limpiar_snippet",
     # actividad / autor / lecturas compartidas
     "registrar_etapa",
-    "embudo_qa",
-    "EMBUDO_QA_ESTADOS",
+    "admision_qa",
+    "ADMISION_QA_ESTADOS",
     "_autor_pipeline",
     "_copy_pendiente_leido",
     "_tiene_copy",
@@ -276,7 +276,7 @@ __all__ = [
     "clusters_para_promover",
     "clusters_pendientes_verificar",
     "promover_clusters_marca",
-    "temas_en_vuelo",
+    "temas_en_proceso",
     "caducar_temas_viejos",
     "caducar_qa_clusters_en_curso",
     "_claves_dedup_marca",

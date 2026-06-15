@@ -687,11 +687,11 @@ def test_verificar_cluster_ok_se_admite_heredando_veredicto(entorno, monkeypatch
     assert repos.obtener_noticia_cluster("c-ok")["estado"] == "usado"
 
 
-def test_verificar_cluster_acotada_por_el_embudo(entorno, monkeypatch):
-    """ADR 0011 F3: la criba se acota al EMBUDO (tope en vuelo) — no recorre todo el pool por tick."""
+def test_verificar_cluster_acotada_por_el_admision(entorno, monkeypatch):
+    """ADR 0011 F3: la criba se acota al ADMISION (tope en proceso) — no recorre todo el pool por tick."""
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")
-    monkeypatch.setenv("KENI_PIPELINE_EN_VUELO_MAX", "1")  # embudo de 1
+    monkeypatch.setenv("KENI_PIPELINE_EN_PROCESO_MAX", "1")  # admision de 1
     cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_QA_OK))  # noqa: F841
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     for i in range(3):
@@ -699,7 +699,7 @@ def test_verificar_cluster_acotada_por_el_embudo(entorno, monkeypatch):
 
     cribados = pc.ejecutar_verificar_clusters(autor=None)
 
-    # Con tope en vuelo = 1, solo se criba 1 historia en este tick (la mejor del ranking).
+    # Con tope en proceso = 1, solo se criba 1 historia en este tick (la mejor del ranking).
     assert len(cribados) == 1
     assert cribados[0]["id"] == "c0"
 
@@ -707,7 +707,7 @@ def test_verificar_cluster_acotada_por_el_embudo(entorno, monkeypatch):
 def test_copy_fallido_se_reintenta_tras_el_backoff(entorno, monkeypatch):
     """DEDUP AL ÉXITO + BACKOFF: un copy fallido se RELANZA, pero solo PASADA la espera creciente.
 
-    El doble lanzamiento mientras el job está EN VUELO lo evita la clave de idempotencia de
+    El doble lanzamiento mientras el job está EN PROCESO lo evita la clave de idempotencia de
     `dominio.generar.lanzar` (no este filtro). El barrido SALTA el tema mientras dura el
     backoff del intento (`_BACKOFF_ETAPA_SEG`).
     """
@@ -745,7 +745,7 @@ def test_verificar_no_relanza_tema_ya_cribado(entorno, monkeypatch):
 def test_temas_sin_verificar_devuelve_todos_los_pendientes(entorno):
     """FLUJO CONTINUO: sin recorte por etapa; los pendientes entran TODOS (los cribados no).
 
-    El volumen lo acota la ADMISIÓN (gate serial en vuelo por marca), no una ventana de revisión:
+    El volumen lo acota la ADMISIÓN (gate serial en proceso por marca), no una ventana de revisión:
     aquí solo puede haber, como mucho, lo admitido.
     """
     _tema_pipeline(titulo="Viejo 1", id="v1", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
@@ -798,7 +798,7 @@ def test_redactar_reintentos_agotados_marca_problema_sin_lanzar(entorno, monkeyp
     refrescado = repos.obtener_contenido(tema["id"])
     assert refrescado["verificar_veredicto"] == pc.VERDICTO_PROBLEMA
     assert "falló" in (refrescado["verificar_hallazgos"] or "")
-    assert pc.temas_en_vuelo("unotv") == 0  # terminal: libera la admisión de su marca
+    assert pc.temas_en_proceso("unotv") == 0  # terminal: libera la admisión de su marca
 
 
 def test_redactar_reintento_anota_intentos_acumulados(entorno, monkeypatch):
@@ -925,7 +925,7 @@ def test_crear_tema_de_cluster_dedup_no_repromueve(entorno, monkeypatch):
 
 # --------------------------------------------------------------------------- #
 # Serial POR MARCA: el gate de ADMITIR no promueve más historias mientras la marca #
-# tenga cola EN VUELO (sin cribar / sin copy). Cada item entra y se completa.  #
+# tenga cola EN PROCESO (sin cribar / sin copy). Cada item entra y se completa.  #
 # --------------------------------------------------------------------------- #
 
 
@@ -1045,10 +1045,10 @@ def test_crear_tema_de_cluster_no_usa_imagen_de_feed_ajeno(entorno, monkeypatch)
     assert pend["tipo_contenido"] == ""
 
 
-def test_temas_en_vuelo_cuenta_pendientes_de_verificar_o_copy(entorno):
-    """`temas_en_vuelo` cuenta los temas sin terminar las fases de IA (Verificar pendiente o sin copy).
+def test_temas_en_proceso_cuenta_pendientes_de_verificar_o_copy(entorno):
+    """`temas_en_proceso` cuenta los temas sin terminar las fases de IA (Verificar pendiente o sin copy).
 
-    En vuelo: veredicto ''/'en_curso' (Verificar pendiente) y 'no_verificado'/'saltada' SIN copy. NO en
+    En proceso: veredicto ''/'en_curso' (Verificar pendiente) y 'no_verificado'/'saltada' SIN copy. NO en
     vuelo: 'problema' (terminal) ni 'no_verificado' que YA tiene copy en una pieza por plataforma.
     """
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
@@ -1058,32 +1058,32 @@ def test_temas_en_vuelo_cuenta_pendientes_de_verificar_o_copy(entorno):
     _tema_pipeline(titulo="Saltada sin copy", verificar_veredicto=pc.QA_SALTADA, copy_pendiente=pend)  # +1
     _tema_pipeline(titulo="Problema", verificar_veredicto=pc.VERDICTO_PROBLEMA, copy_pendiente=pend)  # terminal: 0
     con_copy = _tema_pipeline(titulo="Apto con copy", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend)
-    # Una pieza por plataforma CON copy -> ya pasó la etapa de copy: no cuenta como en vuelo.
+    # Una pieza por plataforma CON copy -> ya pasó la etapa de copy: no cuenta como en proceso.
     repos.crear_contenido_plataforma(contenido_id=con_copy["id"], red="x", copy="Copy listo")
 
-    assert pc.temas_en_vuelo("unotv") == 4
+    assert pc.temas_en_proceso("unotv") == 4
 
 
 # --------------------------------------------------------------------------- #
-# FRESCURA: caducidad TTL de temas en vuelo (ventana deslizante)               #
+# FRESCURA: caducidad TTL de temas en proceso (ventana deslizante)               #
 # --------------------------------------------------------------------------- #
 
 
 def test_caducidad_libera_el_gate_y_excluye_de_las_fases(entorno):
-    """Un tema EN VUELO que supera el TTL caduca: sale del gate serial (libera hueco para lo
+    """Un tema EN PROCESO que supera el TTL caduca: sale del gate serial (libera hueco para lo
     fresco del ranking) y NINGUNA fase lo retoma (ni Verificar lo criba ni Redactar le genera copy)."""
     from datetime import datetime, timedelta, timezone
 
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
     _tema_pipeline(titulo="Atascado", verificar_veredicto="", copy_pendiente=pend)
     _tema_pipeline(titulo="Apto viejo", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend)
-    assert pc.temas_en_vuelo("unotv") == 2
+    assert pc.temas_en_proceso("unotv") == 2
 
     futuro = datetime.now(timezone.utc) + timedelta(hours=25)  # > TTL (def 24 h)
     assert pc.caducar_temas_viejos(ahora=futuro) == 2
 
     # Liberan el gate, no se re-criban ni generan copy, y quedan marcados con el motivo.
-    assert pc.temas_en_vuelo("unotv") == 0
+    assert pc.temas_en_proceso("unotv") == 0
     assert pc.temas_sin_verificar() == []
     assert pc.temas_para_redactar() == []
     temas = {t["titulo"]: t for t in pc.temas_pipeline()}
@@ -1104,10 +1104,10 @@ def test_caducidad_respeta_lo_fresco_y_lo_terminal(entorno):
     )
     repos.crear_contenido_plataforma(contenido_id=con_copy["id"], red="x", copy="Copy listo")
 
-    # Dentro del TTL: nada caduca (lo en vuelo sigue siendo fresco).
+    # Dentro del TTL: nada caduca (lo en proceso sigue siendo fresco).
     pronto = datetime.now(timezone.utc) + timedelta(hours=1)
     assert pc.caducar_temas_viejos(ahora=pronto) == 0
-    # Pasado el TTL: solo caduca el EN VUELO; terminal y con-copy intactos.
+    # Pasado el TTL: solo caduca el EN PROCESO; terminal y con-copy intactos.
     futuro = datetime.now(timezone.utc) + timedelta(hours=25)
     assert pc.caducar_temas_viejos(ahora=futuro) == 1
     temas = {t["titulo"]: t for t in pc.temas_pipeline()}
@@ -1124,13 +1124,13 @@ def test_caducado_libera_hueco_para_lo_fresco_del_ranking(entorno, monkeypatch):
 
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
-    monkeypatch.setenv("KENI_PIPELINE_EN_VUELO_MAX", "1")
+    monkeypatch.setenv("KENI_PIPELINE_EN_PROCESO_MAX", "1")
     monkeypatch.delenv("KENI_PIPELINE_VERIFICAR", raising=False)
     monkeypatch.delenv("KENI_PIPELINE_REDACTAR", raising=False)
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
     _tema_pipeline(titulo="Backlog vencido", verificar_veredicto="", copy_pendiente=pend)
     _sembrar_cluster("hot", titulo="Lo fresco de hoy", score=0.9)
-    # Con el backlog en vuelo, el cupo (1) está agotado: no entra nada.
+    # Con el backlog en proceso, el cupo (1) está agotado: no entra nada.
     assert pc._ejecutar_barrido()["temas"] == []
     # Caduca el backlog (reloj adelantado > TTL) y el siguiente tick admite lo fresco.
     assert _admitir.caducar_temas_viejos(
@@ -1141,14 +1141,14 @@ def test_caducado_libera_hueco_para_lo_fresco_del_ranking(entorno, monkeypatch):
 
 
 def test_admitir_serial_no_promueve_si_marca_llena(entorno, monkeypatch):
-    """Gate SERIAL: si la marca ya tiene >= cupo en vuelo, ADMITIR no promueve clusters nuevos."""
+    """Gate SERIAL: si la marca ya tiene >= cupo en proceso, ADMITIR no promueve clusters nuevos."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")  # recolectar_activo: ADMITIR corre
-    monkeypatch.setenv("KENI_PIPELINE_EN_VUELO_MAX", "2")
-    # 2 temas en vuelo (pendientes de Verificar) -> cupo 0 para unotv.
+    monkeypatch.setenv("KENI_PIPELINE_EN_PROCESO_MAX", "2")
+    # 2 temas en proceso (pendientes de Verificar) -> cupo 0 para unotv.
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
-    _tema_pipeline(titulo="En vuelo 1", verificar_veredicto="", copy_pendiente=pend)
-    _tema_pipeline(titulo="En vuelo 2", verificar_veredicto="", copy_pendiente=pend)
+    _tema_pipeline(titulo="En proceso 1", verificar_veredicto="", copy_pendiente=pend)
+    _tema_pipeline(titulo="En proceso 2", verificar_veredicto="", copy_pendiente=pend)
     _sembrar_cluster("hot", titulo="Historia caliente", score=0.9)
 
     res = pc._ejecutar_barrido()
@@ -1162,11 +1162,11 @@ def test_admitir_serial_promueve_solo_hasta_el_cupo(entorno, monkeypatch):
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_MAX", "3")  # pipeline_max alto: el límite real es el cupo
-    monkeypatch.setenv("KENI_PIPELINE_EN_VUELO_MAX", "3")
-    # 2 en vuelo -> cupo 1: solo entra 1 historia aunque haya 3 clusters y pipeline_max=3.
+    monkeypatch.setenv("KENI_PIPELINE_EN_PROCESO_MAX", "3")
+    # 2 en proceso -> cupo 1: solo entra 1 historia aunque haya 3 clusters y pipeline_max=3.
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
-    _tema_pipeline(titulo="En vuelo 1", verificar_veredicto="", copy_pendiente=pend)
-    _tema_pipeline(titulo="En vuelo 2", verificar_veredicto="", copy_pendiente=pend)
+    _tema_pipeline(titulo="En proceso 1", verificar_veredicto="", copy_pendiente=pend)
+    _tema_pipeline(titulo="En proceso 2", verificar_veredicto="", copy_pendiente=pend)
     _sembrar_cluster("c1", titulo="Hist 1", score=0.9)
     _sembrar_cluster("c2", titulo="Hist 2", score=0.8)
     _sembrar_cluster("c3", titulo="Hist 3", score=0.7)
@@ -1638,8 +1638,8 @@ def test_reparar_qa_en_curso_sueltos_resetea_solo_viejos(entorno):
     """El reparador devuelve a re-criba ('') SOLO los `en_curso` más viejos que el umbral.
 
     Cierra el ZOMBI: si la criba muere sin finalizador, el tema quedaba `en_curso` para
-    siempre (excluido de `temas_sin_verificar` y contando en el cupo en vuelo de su marca).
-    NOTA: el reaper usa ahora su reparación PER-TEMA (`reaper_generaciones._reparar_qa_en_curso`,
+    siempre (excluido de `temas_sin_verificar` y contando en el cupo en proceso de su marca).
+    NOTA: el limpiador usa ahora su reparación PER-TEMA (`limpiador_generaciones._reparar_qa_en_curso`,
     con WARN por tema y destino según el toggle); esta primitiva SQL en lote sigue en repos.
     """
     from keni_consola import db
@@ -1676,31 +1676,31 @@ def _envejecer_actualizado(tema_id, fecha="2020-01-01T00:00:00"):
         con.close()
 
 
-def test_reaper_qa_atascada_re_criba_con_validacion_activa(entorno, monkeypatch):
-    """El reparación del reaper devuelve a re-criba ('') SOLO los `en_curso` atascadas (per-tema)."""
-    from keni_consola import reaper_generaciones
+def test_limpiador_qa_atascada_re_criba_con_validacion_activa(entorno, monkeypatch):
+    """El reparación del limpiador devuelve a re-criba ('') SOLO los `en_curso` atascadas (per-tema)."""
+    from keni_consola import limpiador_generaciones
 
     monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")
     atascada = _tema_pipeline(titulo="Zombi", verificar_veredicto=pc.QA_EN_CURSO)
     vivo = _tema_pipeline(titulo="Vivo", verificar_veredicto=pc.QA_EN_CURSO)
     _envejecer_actualizado(atascada["id"])
 
-    n = reaper_generaciones._reparar_qa_en_curso()
+    n = limpiador_generaciones._reparar_qa_en_curso()
 
     assert n == 1
     assert (repos.obtener_contenido(atascada["id"])["verificar_veredicto"] or "") == ""  # a re-criba
     assert repos.obtener_contenido(vivo["id"])["verificar_veredicto"] == pc.QA_EN_CURSO  # intacto
 
 
-def test_reaper_qa_atascada_saltada_con_validacion_apagada(entorno, monkeypatch):
+def test_limpiador_qa_atascada_saltada_con_validacion_apagada(entorno, monkeypatch):
     """Con la etapa de Verificar APAGADA, el atascada pasa a 'saltada' (REDACTAR lo recoge), no a re-criba."""
-    from keni_consola import reaper_generaciones
+    from keni_consola import limpiador_generaciones
 
     monkeypatch.delenv("KENI_PIPELINE_VERIFICAR", raising=False)  # etapa off (def)
     atascada = _tema_pipeline(titulo="Zombi sin QA", verificar_veredicto=pc.QA_EN_CURSO)
     _envejecer_actualizado(atascada["id"])
 
-    n = reaper_generaciones._reparar_qa_en_curso()
+    n = limpiador_generaciones._reparar_qa_en_curso()
 
     assert n == 1
     assert repos.obtener_contenido(atascada["id"])["verificar_veredicto"] == pc.QA_SALTADA

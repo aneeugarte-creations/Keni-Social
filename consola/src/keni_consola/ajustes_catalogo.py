@@ -385,7 +385,7 @@ def _construir_catalogo() -> list[Ajuste]:
         # --- Máquina de contenido · admisión del flujo continuo (grupo `pipeline_topes`) --- #
         # Viven en el MONITOR (junto a la cola que controlan), NO en Configuración. FLUJO CONTINUO:
         # no hay intervalo (tick corto fijo) ni topes por etapa; el volumen lo regulan estos knobs
-        # de ADMISIÓN (y `KENI_MAX_JOBS` más adelante en el flujo). In=out: solo entra lo que cabe en vuelo.
+        # de ADMISIÓN (y `KENI_MAX_JOBS` más adelante en el flujo). In=out: solo entra lo que cabe en proceso.
         Ajuste(
             clave=config.ENV_PIPELINE_MAX,
             tipo="int",
@@ -396,13 +396,13 @@ def _construir_catalogo() -> list[Ajuste]:
             minimo=1,
         ),
         Ajuste(
-            clave=config.ENV_PIPELINE_EN_VUELO_MAX,
+            clave=config.ENV_PIPELINE_EN_PROCESO_MAX,
             tipo="int",
-            etiqueta="Piezas en vuelo por marca",
+            etiqueta="Piezas en proceso por marca",
             ayuda="Tope de piezas sin terminar (Verificar pendiente o sin copy) por marca; "
             "no se admite más hasta que algo termina.",
             grupo="pipeline_topes",
-            defecto=config.PIPELINE_EN_VUELO_MAX_DEF,
+            defecto=config.PIPELINE_EN_PROCESO_MAX_DEF,
             minimo=1,
         ),
         # (KENI_AUTOGEN_ARTE_MAX —temas ilustrados por ciclo— se DEGRADÓ a solo-env: batch

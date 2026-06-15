@@ -18,7 +18,7 @@ import { INTERVALO_RECURSOS_MS } from "./lib";
  * Página SISTEMA (admin, dropdown del avatar): el HARDWARE, el ALMACENAMIENTO y los SERVICIOS DE
  * SISTEMA que sostienen la consola — recursos del servidor (CPU/RAM/disco), backups, latencias de
  * la API y S3/Garage (estado + explorador) y los daemons de pura infraestructura (clase=sistema:
- * reaper, GC de media, métricas, alertas, patrones, comercial). Los agentes IA y los servicios de
+ * limpiador, GC de media, métricas, alertas, patrones, comercial). Los agentes IA y los servicios de
  * la máquina de contenido (ingesta/trends/programador/…) viven en la página Agentes
  * (/maquina/agentes), junto a los Workers. Arriba, los chequeos de operador del doctor
  * (`/api/estado`) que requieran atención (sustituyen al viejo BannerAlertas: el juicio vive en el
@@ -48,7 +48,7 @@ export default function Sistema() {
       <div className="space-y-6">
         <AvisosDoctor />
         <SeccionRecursos />
-        {/* SERVICIOS DE SISTEMA (clase=sistema): pura infraestructura (reaper, GC de media,
+        {/* SERVICIOS DE SISTEMA (clase=sistema): pura infraestructura (limpiador, GC de media,
             métricas, alertas, patrones, comercial). Los agentes IA y los servicios de la máquina
             de contenido (clase ia/maquina) viven en la página Agentes (/maquina/agentes). */}
         <SeccionDaemons clases={["sistema"]} titulo="Servicios de sistema" />

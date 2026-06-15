@@ -777,7 +777,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # Orden del listado (recientes primero, desempate por id) -> paginacion por SQL.
     "CREATE INDEX IF NOT EXISTS idx_generaciones_indice_orden "
     "ON generaciones_indice (fecha_inicio DESC, gen_id DESC)",
-    # Filtro por marca (Actividad IA por marca) y por estado (reaper de `ejecutando`).
+    # Filtro por marca (Actividad IA por marca) y por estado (limpiador de `ejecutando`).
     "CREATE INDEX IF NOT EXISTS idx_generaciones_indice_marca ON generaciones_indice (marca)",
     "CREATE INDEX IF NOT EXISTS idx_generaciones_indice_estado ON generaciones_indice (estado)",
     # Cache de metricas (lectura instantanea + refresco en 2o plano, ver metricas_cache.py):

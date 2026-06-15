@@ -1018,7 +1018,7 @@
           "type": "integer"
         }
       },
-      "description": "Un tramo del histograma de engagement (cuántas piezas caen en [inicio, fin)).",
+      "description": "Un intervalo del histograma de engagement (cuántas piezas caen en [inicio, fin)).",
       "required": [
         "etiqueta",
         "inicio",

@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 import type { PiezaListado, PiezasListado } from "@/types";
 
 import { COLOR_RED } from "./coloresRed";
-import { EvolucionRedes, etiquetaTramo, granularidadParaSpan } from "./EvolucionRedes";
+import { EvolucionRedes, etiquetaIntervalo, granularidadParaSpan } from "./EvolucionRedes";
 
 beforeAll(() => {
   if (!globalThis.ResizeObserver) {
@@ -70,7 +70,7 @@ function renderConProviders(ui: React.ReactElement) {
 }
 
 describe("granularidadParaSpan", () => {
-  it("adapta el tramo al span real: día ≤45, semana ≤180, mes después", () => {
+  it("adapta el intervalo al span real: día ≤45, semana ≤180, mes después", () => {
     expect(granularidadParaSpan(45)).toBe("dia");
     expect(granularidadParaSpan(46)).toBe("semana");
     expect(granularidadParaSpan(180)).toBe("semana");
@@ -78,30 +78,30 @@ describe("granularidadParaSpan", () => {
   });
 });
 
-describe("etiquetaTramo", () => {
+describe("etiquetaIntervalo", () => {
   it("mes → «Jun 2026» (capitalizado, sin punto)", () => {
-    expect(etiquetaTramo(new Date(2026, 5, 1, 12), "mes")).toBe("Jun 2026");
+    expect(etiquetaIntervalo(new Date(2026, 5, 1, 12), "mes")).toBe("Jun 2026");
   });
 
   it("semana → «Sem del 1 jun»", () => {
-    expect(etiquetaTramo(new Date(2026, 5, 1, 12), "semana")).toBe("Sem del 1 jun");
+    expect(etiquetaIntervalo(new Date(2026, 5, 1, 12), "semana")).toBe("Sem del 1 jun");
   });
 
   it("día → «1 jun»", () => {
-    expect(etiquetaTramo(new Date(2026, 5, 1, 12), "dia")).toBe("1 jun");
+    expect(etiquetaIntervalo(new Date(2026, 5, 1, 12), "dia")).toBe("1 jun");
   });
 });
 
 describe("EvolucionRedes", () => {
-  it("ofrece una alternativa textual del chart (role=img con tramos, granularidad y redes)", async () => {
+  it("ofrece una alternativa textual del chart (role=img con intervalos, granularidad y redes)", async () => {
     vi.spyOn(api, "metricasPiezasListado").mockResolvedValue(resp(DOS_REDES));
     renderConProviders(<EvolucionRedes marcaActual="__todas__" rangoActual="mes" />);
 
-    // Span de 10 días → 10 tramos por día; las redes con su nombre LEGIBLE.
+    // Span de 10 días → 10 intervalos por día; las redes con su nombre LEGIBLE.
     const img = await screen.findByRole("img", { name: /Vistas por red/ });
     expect(img).toHaveAttribute(
       "aria-label",
-      "Vistas por red en 10 tramos por día: redes Facebook, Instagram",
+      "Vistas por red en 10 intervalos por día: redes Facebook, Instagram",
     );
   });
 

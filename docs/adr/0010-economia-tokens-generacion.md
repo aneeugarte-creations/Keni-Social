@@ -25,7 +25,7 @@ Gobernar el consumo en **tres capas**, todas visibles y editables en caliente:
 
 1. **Ledger `gasto_ia` (Postgres).** Una fila por generación **cerrada** (estado terminal),
    con tokens in/out, coste estimado, `prompt_chars` y el día UTC del cierre. La escribe un
-   hook en el **embudo único** por el que todos los caminos fijan el terminal
+   hook en el **admision único** por el que todos los caminos fijan el terminal
    (`generaciones._almacen.actualizar`), así no depende de cada lanzador (claude, imagen,
    procesos, fakes de tests). Es **UPSERT por `gen_id`**: re-cerrar (reintento, re-encolado
    tras deploy) actualiza la fila, nunca duplica gasto. Los jobs sin consumo medible

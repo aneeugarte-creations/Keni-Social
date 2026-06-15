@@ -193,7 +193,7 @@ def test_estado_sondas_reales_no_crashean(entorno):
 
 
 def test_chequeo_cola_ok_sin_concepto_de_llena(entorno, sondas_sanas, monkeypatch):
-    """La cola NO tiene tope (R-NO-LIMIT): aunque haya mucho en vuelo, el chequeo es OK (no avisa
+    """La cola NO tiene tope (R-NO-LIMIT): aunque haya mucho en proceso, el chequeo es OK (no avisa
     de "llena", que ya no existe); el exceso simplemente espera por concurrencia."""
     cargada = {**_snapshot_cola_sano(), "reclamados": 4, "pendientes": 50, "activos": 54}
     monkeypatch.setattr(api_actividad, "snapshot_cola", lambda: cargada)

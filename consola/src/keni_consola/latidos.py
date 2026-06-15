@@ -36,7 +36,7 @@ _ALIAS = {
     "trends_daemon": "trends",
     "algoritmos_refresco": "algoritmos",
     "patrones_refresco": "patrones",
-    "reaper_generaciones": "reaper",
+    "limpiador_generaciones": "limpiador",
     "eventos_scanner": "vencimientos",
 }
 
@@ -60,7 +60,7 @@ BARRIBLES = frozenset({
     "trends",
     "algoritmos",
     "patrones",
-    "reaper",
+    "limpiador",
     "vencimientos",
     "alertas_rendimiento",
     "investigacion",
@@ -73,7 +73,7 @@ BARRIBLES = frozenset({
 #   - "investigacion": alimentan el motor de REUTILIZAR (descubrir/ingerir/validar fuentes).
 #   - "produccion":    el motor de CREAR borradores (Redactar + Ilustrar).
 #   - "flujo":         actúan EN el flujo de publicación/comercial; NO gastan tokens claude.
-#   - "infra":         pura infraestructura (métricas, GC, alertas, reaper, patrones).
+#   - "infra":         pura infraestructura (métricas, GC, alertas, limpiador, patrones).
 # Un daemon registrado que NO esté en ningún conjunto cae a "infra" por defecto (ver
 # `grupo_de`): al añadir un daemon nuevo, clasifícalo aquí o asume que se pinta como infra.
 GRUPO_INVESTIGACION = frozenset({"ingesta", "trends", "algoritmos", "investigacion"})
@@ -86,7 +86,7 @@ GRUPO_INFRA = frozenset({
     "media_gc",
     "patrones",
     "noticias_gc",
-    "reaper",
+    "limpiador",
 })
 
 # Daemons que ENCOLAN/EJECUTAN `claude -p` y por tanto GASTAN tokens. El resto opera sin
@@ -101,7 +101,7 @@ GASTA_TOKENS = frozenset({"investigacion", "produccion"})
 #   - `clase`:  "ia"      -> gasta tokens Y tiene prompt (corre `claude -p`).
 #               "maquina" -> parte de la MAQUINA de contenido pero NO-IA (alimenta/opera los
 #                            motores sin modelo: feeds, scheduler, GC del pool de noticias).
-#               "sistema" -> pura infraestructura (métricas, GC de media, alertas, reaper,
+#               "sistema" -> pura infraestructura (métricas, GC de media, alertas, limpiador,
 #                            patrones, comercial).
 #   - `motor`:  "investigacion" | "produccion" | None. El loop de la máquina (ADR 0011) al que
 #               sirve el daemon; None para los de `sistema` (no pertenecen a ningún motor).
@@ -112,7 +112,7 @@ GASTA_TOKENS = frozenset({"investigacion", "produccion"})
 #          de algoritmo), noticias_gc (limpia el POOL de noticias que alimenta reutilizar).
 #   - maquina/produccion:     programador (publica la parrilla), vencimientos (escáner de eventos
 #          que dispara producción por caducidad).
-#   - sistema/None:  reaper, media_gc, metricas, metricas_piezas, alertas_rendimiento, patrones
+#   - sistema/None:  limpiador, media_gc, metricas, metricas_piezas, alertas_rendimiento, patrones
 #          (deriva de Metricool SIN claude), comercial.
 # Cualquier daemon NO mapeado cae a ("sistema", None) (ver `clase_de`/`motor_de`): nunca rompe el
 # panel y, como mucho, sale como infraestructura hasta que se clasifique aquí.
@@ -125,7 +125,7 @@ _CLASE_MOTOR: dict[str, tuple[str, str | None]] = {
     "noticias_gc": ("maquina", "investigacion"),
     "programador": ("maquina", "produccion"),
     "vencimientos": ("maquina", "produccion"),
-    "reaper": ("sistema", None),
+    "limpiador": ("sistema", None),
     "media_gc": ("sistema", None),
     "metricas": ("sistema", None),
     "metricas_piezas": ("sistema", None),
@@ -180,16 +180,16 @@ CLAVE_GATE = {
 }
 
 # Daemons SIEMPRE-ON sin toggle de ajuste: su bucle corre incondicionalmente (legados con
-# `while True`, o `reaper` con `activo_fn=lambda: True`). No tienen fila-toggle => clave_gate
+# `while True`, o `limpiador` con `activo_fn=lambda: True`). No tienen fila-toggle => clave_gate
 # null. Nota: `programador` SIEMPRE corre (su gate KENI_PUBLICAR_REAL solo decide publicar de
 # verdad vs dry-run, no apaga el daemon), por eso queda sin gate de encendido.
-SIN_GATE = frozenset({"reaper", "programador", "comercial", "metricas", "metricas_piezas"})
+SIN_GATE = frozenset({"limpiador", "programador", "comercial", "metricas", "metricas_piezas"})
 
 
 def clave_gate_de(daemon: str) -> str | None:
     """Clave de ajuste (KENI_*) que enciende/apaga el daemon desde su fila, o None.
 
-    None = el daemon es SIEMPRE-ON (sin toggle: legados/reaper) o aún no está clasificado.
+    None = el daemon es SIEMPRE-ON (sin toggle: legados/limpiador) o aún no está clasificado.
     El front usa esto para pintar (o no) el switch on/off in-place y, si lo hay, qué clave
     pasar a POST /api/ajustes. Fuente única, igual que `grupo_de`/`gasta_tokens`.
     """

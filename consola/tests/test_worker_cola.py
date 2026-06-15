@@ -8,7 +8,7 @@ subproceso de python que emite NDJSON canned). Cubre:
     post-procesado real corre (historial/publicaciones).
   - Reclamacion concurrente NO doble-ejecuta un mismo job (varios hilos worker).
   - Cancelacion cross-proceso mata el ARBOL (proceso que lanza un hijo; sin sueltos).
-  - Reiniciar el back NO mata un job en vuelo del worker (el proceso sigue vivo).
+  - Reiniciar el back NO mata un job en proceso del worker (el proceso sigue vivo).
 
 Las pruebas que ejercitan el subproceso real usan `_LANZAR_CLAUDE_REAL` (referencia
 genuina capturada al importar; ver test_generaciones.py).
@@ -98,7 +98,7 @@ def test_gate_cola_fondo_siempre_encola_sin_tope(entorno, monkeypatch):
     n = 10  # muy por encima de la concurrencia: todos entran y esperan
     for _ in range(n):
         assert _encolar_fondo()
-    assert repos.contar_jobs_activos() == n  # los N quedan EN VUELO (pendientes), ninguno rechazado
+    assert repos.contar_jobs_activos() == n  # los N quedan EN PROCESO (pendientes), ninguno rechazado
 
 
 def test_gate_cola_manual_siempre_encola_y_va_primero(entorno, monkeypatch):
@@ -134,7 +134,7 @@ def test_gate_cola_no_satura_tras_muchos_ciclos(entorno, monkeypatch):
     el back sumaba al encolar y el worker restaba al terminar, en memorias SEPARADAS, asi que el
     contador del back solo subia y nunca bajaba — saturando el back para siempre. Hoy la cola NO
     tiene tope (R-NO-LIMIT) y `cola.encolar` SIEMPRE acepta: tras N ciclos completos seguimos
-    pudiendo encolar y la cuenta de jobs en vuelo vuelve a 0.
+    pudiendo encolar y la cuenta de jobs en proceso vuelve a 0.
     """
     monkeypatch.setenv("KENI_MAX_JOBS", "1")
     for i in range(20):  # muchos ciclos, muy por encima de cualquier antiguo tope
@@ -955,7 +955,7 @@ def test_reparar_qa_si_fallo_devuelve_el_tema_a_recriba(entorno):
 
     CIERRA EL ZOMBI: la fase QA marca `en_curso` ANTES de lanzar y solo el `procesar` (exito)
     escribe el veredicto real; si la generacion muere, el tema quedaba excluido para siempre
-    de la re-criba (y contando en el cupo en vuelo de su marca).
+    de la re-criba (y contando en el cupo en proceso de su marca).
     """
     from keni_consola import pipeline_contenido as pc
 
@@ -1032,13 +1032,13 @@ def test_cancelar_job_pendiente_no_lanza_claude(entorno, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# Reiniciar el back NO mata un job en vuelo del worker                         #
+# Reiniciar el back NO mata un job en proceso del worker                         #
 # --------------------------------------------------------------------------- #
 
 
 @pytest.mark.timeout(30)
 @pytest.mark.skipif(os.name != "posix", reason="subproceso real")
-def test_reinicio_back_no_mata_job_en_vuelo(entorno, monkeypatch):
+def test_reinicio_back_no_mata_job_en_proceso(entorno, monkeypatch):
     """Reiniciar el BACK no toca el proceso `claude` del worker (modelo hosted).
 
     Simulamos el back con la app (crear_app) y un worker SEPARADO (procesar_job en un
@@ -1094,7 +1094,7 @@ def test_reinicio_back_no_mata_job_en_vuelo(entorno, monkeypatch):
     del cli
     _ = _cliente()  # "back" #2 (nuevo)
     # El proceso del worker sigue vivo (el reinicio del back no lo toco).
-    assert _vivo(pids["claude"]), "reiniciar el back no debe matar el job en vuelo del worker"
+    assert _vivo(pids["claude"]), "reiniciar el back no debe matar el job en proceso del worker"
 
     # Y el job termina por su cuenta, sin perderse.
     assert _esperar_terminal(gen["id"]) == generaciones.ESTADO_COMPLETADO
@@ -1126,7 +1126,7 @@ def pool_limpio():
     """Garantiza que NINGUN pool de worker sobreviva al test (aislamiento entre tests).
 
     El test registra su `_Pool` (o el `iniciar_worker_inproceso`) via `registrar(...)`; el
-    teardown SIEMPRE lo detiene (cancela jobs en vuelo + join determinista) y, como red de
+    teardown SIEMPRE lo detiene (cancela jobs en proceso + join determinista) y, como red de
     seguridad, vacia el registro GLOBAL `_JOBS_EN_CURSO` y comprueba que no quedaron hilos
     del pool vivos. Sin esto, un hilo fugado de un test reclamaba jobs del siguiente (la
     pollucion que rompia `test_pool_detener_...` con `assert 4 == 3`).
@@ -1230,8 +1230,8 @@ def test_worker_inproceso_corre_jobs_en_paralelo(entorno, monkeypatch, pool_limp
 
 @pytest.mark.timeout(40)
 @pytest.mark.skipif(os.name != "posix", reason="subproceso real")
-def test_pool_detener_reencola_los_en_vuelo_para_el_worker_post_deploy(entorno, monkeypatch, pool_limpio):
-    """`pool.detener()` (apagado/SIGTERM por deploy) DEVUELVE los jobs en vuelo a `pendiente`.
+def test_pool_detener_reencola_los_en_proceso_para_el_worker_post_deploy(entorno, monkeypatch, pool_limpio):
+    """`pool.detener()` (apagado/SIGTERM por deploy) DEVUELVE los jobs en proceso a `pendiente`.
 
     El apagado gracioso re-encola cada job (mismo spec) y deja su registro `ejecutando` (la UI
     sigue en "Generando..."): el worker post-deploy lo re-reclama y lo completa SOLO. La guardia
@@ -1240,7 +1240,7 @@ def test_pool_detener_reencola_los_en_vuelo_para_el_worker_post_deploy(entorno, 
     n = 3
     monkeypatch.setenv("KENI_MAX_JOBS", str(n))
     monkeypatch.setattr(generaciones.shutil, "which", lambda _n: "/usr/bin/claude")
-    # Jobs LARGOS: estan en vuelo cuando paramos el pool.
+    # Jobs LARGOS: estan en proceso cuando paramos el pool.
     monkeypatch.setattr(
         generaciones.runner, "lanzar_proc", _fake_lanzar_proc_lento_factory(300)
     )
@@ -1255,18 +1255,18 @@ def test_pool_detener_reencola_los_en_vuelo_para_el_worker_post_deploy(entorno, 
         gens.append(gen["id"])
 
     hilo = pool_limpio(worker.iniciar_worker_inproceso())
-    # Esperar a que los N jobs esten EN VUELO (registrados como en curso en el worker). Que el
+    # Esperar a que los N jobs esten EN PROCESO (registrados como en curso en el worker). Que el
     # registro tenga EXACTAMENTE n (ni 1 mas) verifica de paso que ningun pool de un test
     # previo dejo jobs fantasma (la regresion de aislamiento que este fixture cierra).
     # Timeout AMPLIO (red de seguridad, no plazo de rendimiento): normalmente los N jobs entran
-    # en vuelo en <1s, pero bajo carga alta (suite -n6 lenta) el hilo worker puede tardar en
+    # en proceso en <1s, pero bajo carga alta (suite -n6 lenta) el hilo worker puede tardar en
     # reclamar; 60s evita el flake sin enmascarar un cuelgue real.
     fin = time.monotonic() + 60
     while time.monotonic() < fin and len(worker._jobs_en_curso()) < n:
         time.sleep(0.05)
-    assert len(worker._jobs_en_curso()) == n, "los N jobs deberian estar en vuelo"
+    assert len(worker._jobs_en_curso()) == n, "los N jobs deberian estar en proceso"
 
-    # Apagado determinista: para el pool, cancela los `claude` en vuelo, hace join y RE-ENCOLA.
+    # Apagado determinista: para el pool, cancela los `claude` en proceso, hace join y RE-ENCOLA.
     hilo._pool.detener()  # type: ignore[attr-defined]
 
     # Fuera del registro de en-curso, pero el TRABAJO no se pierde: el registro sigue

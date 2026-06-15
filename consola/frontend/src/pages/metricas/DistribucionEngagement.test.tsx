@@ -93,11 +93,11 @@ describe("DistribucionEngagement", () => {
     expect(screen.getByText("0.1 % – 12.5 %")).toBeInTheDocument();
   });
 
-  it("ofrece una alternativa textual del histograma (role=img con el tramo a tramo)", async () => {
+  it("ofrece una alternativa textual del histograma (role=img con el intervalo a intervalo)", async () => {
     vi.spyOn(api, "metricasPiezas").mockResolvedValue(RESP);
     renderConProviders(<DistribucionEngagement marcaActual="__todas__" rangoActual="semana" />);
 
-    // El resumen incluye el total y CADA etiqueta de tramo con su conteo: es la única
+    // El resumen incluye el total y CADA etiqueta de intervalo con su conteo: es la única
     // representación accesible del chart (los ticks SVG no se renderizan en jsdom).
     const img = await screen.findByRole("img");
     expect(img).toHaveAttribute(

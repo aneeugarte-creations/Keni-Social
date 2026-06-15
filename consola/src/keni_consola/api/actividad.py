@@ -11,10 +11,10 @@ Endpoints:
       -> `{"total": {...}, "por_tipo": [...], "por_dia": [...]}`
   - `GET /api/actividad/cola`
       -> MONITOR EN VIVO de la cola de generacion: capacidad (`max_jobs`: la cola NO tiene tope,
-         R-NO-LIMIT), conteo (pendientes/reclamados/terminados/activos), `procesando` (claude -p en vuelo), slots
+         R-NO-LIMIT), conteo (pendientes/reclamados/terminados/activos), `procesando` (claude -p en proceso), slots
          libres, workers activos, listas `en_curso`/`esperando` (con etiqueta/tipo/marca/edad),
          desglose `por_proceso` (investigacion/produccion sobre la MISMA cola, ADR 0011), el
-         `embudo_qa` (lo unico que Investigacion acota aparte) y el estado de los daemons de
+         `admision_qa` (lo unico que Investigacion acota aparte) y el estado de los daemons de
          fondo. Para "que ocurre AHORA en la cola".
   - `GET /api/actividad/cola/series?dias=`
       -> series por dia: `encolados` (de la tabla de jobs) y `resultados` (completados/errores/
@@ -117,7 +117,7 @@ async def agregados(request: Request) -> Response:
 # Daemons de fondo a reportar: (clave, etiqueta, accesor de toggle en `config`, descripcion,
 # clave_ajuste). `accesor`=None => SIEMPRE activo (sin toggle). `clave_ajuste` es la env var
 # del catálogo de ajustes (`KENI_*`) que lo enciende/apaga; el Monitor la usa para pintar un
-# TOGGLE REAL (PUT /api/ajustes) en vez de un badge de solo lectura. "" => sin toggle (reaper).
+# TOGGLE REAL (PUT /api/ajustes) en vez de un badge de solo lectura. "" => sin toggle (limpiador).
 # El estado se lee best-effort: si el accesor no existe en `config`, el daemon sale con
 # `activo=None` (desconocido) en vez de romper el panel.
 # El interruptor general (`maquina`), la Recolección (`ingesta`) y la Redacción (`pipeline`) NO están aquí:
@@ -138,7 +138,7 @@ _DAEMONS: list[tuple[str, str, str | None, str, str]] = [
      "Re-deriva los patrones editoriales por marca desde sus métricas.", config.ENV_PATRONES_AUTO),
     ("publicar_real", "Publicación real", "publicar_real",
      "Si está OFF, el programador corre en DRY-RUN (no publica).", config.ENV_PUBLICAR_REAL),
-    ("reaper", "Reaper de generaciones", None,
+    ("limpiador", "Limpiador de generaciones", None,
      "Siempre activo: cierra como error las generaciones atascada.", ""),
 ]
 
@@ -154,7 +154,7 @@ def _edad_s(iso: str | None, ahora: datetime) -> int | None:
 
 
 def _item_job(job: dict, ahora: datetime) -> dict:
-    """Normaliza un job en vuelo + su registro de generacion para el monitor (sin `spec`)."""
+    """Normaliza un job en proceso + su registro de generacion para el monitor (sin `spec`)."""
     reg = generaciones.obtener(job["gen_id"]) or {}
     corriendo = job["estado"] == repos.JOB_RECLAMADO
     return {
@@ -185,7 +185,7 @@ def _daemons_estado() -> list[dict]:
 
     Cada daemon reporta su `clave_ajuste` (env var del catálogo) y si es `editable`: el Monitor
     pinta un TOGGLE REAL (PUT /api/ajustes) cuando la clave está en el catálogo y NO es peligrosa;
-    si no (reaper sin toggle, o `publicar_real` que es peligroso y vive en su flujo propio), pinta
+    si no (limpiador sin toggle, o `publicar_real` que es peligroso y vive en su flujo propio), pinta
     un badge de solo lectura. Así los toggles del Monitor son los MISMOS que los de Configuración.
     """
     items: list[dict] = []
@@ -256,38 +256,38 @@ async def cola(request: Request) -> Response:
 
     ahora = datetime.now()
     filas = repos.jobs_activos(limite=200)
-    en_vuelo = [_item_job(j, ahora) for j in filas]
+    en_proceso = [_item_job(j, ahora) for j in filas]
     # Desglose del pool COMPARTIDO por proceso (ADR 0011): se calcula sobre TODOS los jobs en
     # vuelo (global, como los KPIs de capacidad), ANTES de acotar las listas por marca. La cola y
-    # el pool son UNICOS; esto solo dice cuanto del trabajo en vuelo es Investigacion (criba/QA)
+    # el pool son UNICOS; esto solo dice cuanto del trabajo en proceso es Investigacion (criba/QA)
     # y cuanto Produccion (copy/arte), para poder vigilar los dos loops sobre la misma cola.
     por_proceso = {
         proc: {
             "procesando": sum(
-                1 for j in en_vuelo
+                1 for j in en_proceso
                 if j["proceso"] == proc and j["estado"] == repos.JOB_RECLAMADO
             ),
             "pendientes": sum(
-                1 for j in en_vuelo
+                1 for j in en_proceso
                 if j["proceso"] == proc and j["estado"] == repos.JOB_PENDIENTE
             ),
         }
         for proc in (generaciones.PROCESO_INVESTIGACION, generaciones.PROCESO_PRODUCCION)
     }
-    # EMBUDO de QA: el unico limite que Investigacion acota aparte de la cola compartida (cuanta
-    # criba cabe en vuelo por marca). Lazy import del helper del pipeline (evita acoplar la API al
-    # orquestador) y best-effort: un fallo deja el embudo vacio, nunca tumba el snapshot.
+    # ADMISION de QA: el unico limite que Investigacion acota aparte de la cola compartida (cuanta
+    # criba cabe en proceso por marca). Lazy import del helper del pipeline (evita acoplar la API al
+    # orquestador) y best-effort: un fallo deja el admision vacio, nunca tumba el snapshot.
     try:
-        from ..pipeline_contenido import embudo_qa as _embudo_qa
+        from ..pipeline_contenido import admision_qa as _admision_qa
 
-        embudo = _embudo_qa()
-    except Exception:  # noqa: BLE001 -- el embudo es observabilidad; su fallo no rompe el Monitor
-        embudo = {"en_vuelo": 0, "tope_por_marca": 0, "marcas": []}
+        admision = _admision_qa()
+    except Exception:  # noqa: BLE001 -- el admision es observabilidad; su fallo no rompe el Monitor
+        admision = {"en_proceso": 0, "tope_por_marca": 0, "marcas": []}
     # Listas para mostrar: respetan el switch GLOBAL de marca (la capacidad/los conteos no).
     if marca:
-        en_vuelo = [j for j in en_vuelo if j["marca"] == marca]
-    en_curso = [j for j in en_vuelo if j["estado"] == repos.JOB_RECLAMADO]
-    esperando = [j for j in en_vuelo if j["estado"] == repos.JOB_PENDIENTE]
+        en_proceso = [j for j in en_proceso if j["marca"] == marca]
+    en_curso = [j for j in en_proceso if j["estado"] == repos.JOB_RECLAMADO]
+    esperando = [j for j in en_proceso if j["estado"] == repos.JOB_PENDIENTE]
     workers = sorted({j.get("worker") for j in filas if j["estado"] == repos.JOB_RECLAMADO and j.get("worker")})
 
     return JSONResponse(
@@ -302,13 +302,13 @@ async def cola(request: Request) -> Response:
                 "terminados": terminados,
                 "activos": activos,
             },
-            "procesando": reclamados,  # claude -p en vuelo (acotado por max_jobs)
+            "procesando": reclamados,  # claude -p en proceso (acotado por max_jobs)
             "slots_libres": max(0, max_jobs - reclamados),
             "workers_activos": workers,
-            # Desglose del pool compartido por proceso + embudo de QA (Investigacion). La cola es
+            # Desglose del pool compartido por proceso + admision de QA (Investigacion). La cola es
             # UNA; estos dos campos dejan ver los dos loops (ADR 0011) sobre esa misma cola.
             "por_proceso": por_proceso,
-            "embudo_qa": embudo,
+            "admision_qa": admision,
             "en_curso": en_curso,
             "esperando": esperando,
             "daemons": _daemons_estado(),
@@ -410,7 +410,7 @@ async def cola_series(request: Request) -> Response:
 async def cola_purgar(request: Request) -> Response:
     """POST /api/actividad/cola/purgar: libera la cola (cancela+termina TODO lo activo). Admin.
 
-    Para cada job en vuelo: marca el flag `cancelado` (un worker que lo este corriendo mata el
+    Para cada job en proceso: marca el flag `cancelado` (un worker que lo este corriendo mata el
     arbol de `claude`), saca el job de la cola (`terminar`, libera el slot de inmediato) y cierra
     el registro de generacion si seguia `ejecutando`. Es el boton de "destrabar / resetear
     capacidad". Devuelve cuantos jobs purgo.

@@ -1,4 +1,4 @@
-"""API Producción del día: el embudo de los N contenidos diarios de una marca, en un sitio.
+"""API Producción del día: el admision de los N contenidos diarios de una marca, en un sitio.
 
 PROBLEMA QUE RESUELVE
 =====================
@@ -12,7 +12,7 @@ ventana de producción (las mismas 24 h móviles del cupo de Admitir):
     {
       "marca", "ventana": {desde, hasta},
       "objetivo": {"dia": cupo_dia|None, "plan": plan_dia|None},
-      "embudo": {"total", "generando", "en_borrador", "en_revision",
+      "admision": {"total", "generando", "en_borrador", "en_revision",
                   "aprobado", "programado", "publicado"},
       "por_vertical": [{"vertical", "total", "en_revision", "programado", "publicado"}],
       "por_origen": {"pipeline": n, "historia": n, ...},
@@ -22,7 +22,7 @@ ventana de producción (las mismas 24 h móviles del cupo de Admitir):
       "piezas": [{"id", "titulo", "vertical", "estado", "redes", "creado"}],
     }
 
-El EMBUDO cuenta TEMAS (contenido padre), no filas por red: el objetivo diario se mide en
+El ADMISION cuenta TEMAS (contenido padre), no filas por red: el objetivo diario se mide en
 contenidos, y cada tema se clasifica por su pieza MÁS AVANZADA (publicado > programado >
 aprobado > en_revision > borrador con copy > generando). `objetivo.dia` es el MISMO
 `KENI_CUPO_DIA` que regula Admitir: una sola fuente de verdad para "cuántos al día".
@@ -64,8 +64,8 @@ def _estado_max(filas: list[dict[str, Any]]) -> str:
     return _ESCALERA[mejor] if mejor >= 0 else ""
 
 
-def _peldano_embudo(filas: list[dict[str, Any]]) -> str:
-    """Peldaño del embudo de un tema: estados editoriales o 'generando'/'en_borrador'.
+def _peldano_admision(filas: list[dict[str, Any]]) -> str:
+    """Peldaño del admision de un tema: estados editoriales o 'generando'/'en_borrador'.
 
     'generando' = tiene redes pero NINGUNA con copy todavía (la IA trabaja);
     'en_borrador' = hay copy pero ninguna red pasó de pendiente/en_curso (reposo del
@@ -115,8 +115,8 @@ async def dia(request: Request) -> Response:
         if e.get("nombre")
     }
 
-    # Embudo + detalle por tema.
-    embudo = {
+    # Admisión + detalle por tema.
+    admision = {
         "total": len(items),
         "generando": 0,
         "en_borrador": 0,
@@ -131,8 +131,8 @@ async def dia(request: Request) -> Response:
     for it in items:
         iid = str(it.get("id") or "")
         sus_filas = filas_por_item.get(iid, [])
-        peldano = _peldano_embudo(sus_filas)
-        embudo[peldano] = embudo.get(peldano, 0) + 1
+        peldano = _peldano_admision(sus_filas)
+        admision[peldano] = admision.get(peldano, 0) + 1
         origen = str(it.get("origen") or "") or "manual"
         por_origen[origen] = por_origen.get(origen, 0) + 1
         vertical = _vertical_de(etiquetas_por_item.get(iid, []), verticales)
@@ -224,7 +224,7 @@ async def dia(request: Request) -> Response:
             "ventana": {"desde": desde_iso, "hasta": ahora.isoformat(timespec="seconds")},
             "objetivo": objetivo,
             "por_categoria": por_categoria,
-            "embudo": embudo,
+            "admision": admision,
             "por_vertical": [
                 {"vertical": k, **v}
                 for k, v in sorted(por_vertical.items(), key=lambda kv: -kv[1]["total"])

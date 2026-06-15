@@ -98,7 +98,7 @@ def sonda_daemons() -> dict:
                 "motor": latidos.motor_de(f["daemon"]),
                 # `clave_gate`: la clave de ajuste (KENI_*) que enciende/apaga el daemon
                 # desde su fila (toggle in-place; el front la pasa a POST /api/ajustes).
-                # null = SIEMPRE-ON sin toggle (reaper/programador/metricas/...). Fuente
+                # null = SIEMPRE-ON sin toggle (limpiador/programador/metricas/...). Fuente
                 # unica en `latidos`, asi el front no hardcodea el mapeo daemon->clave.
                 "clave_gate": latidos.clave_gate_de(f["daemon"]),
             }

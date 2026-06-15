@@ -294,7 +294,7 @@ services:
       # (la UI hace polling; una oficina entera puede salir por UNA sola IP NAT).
       #   keni-ratelimit: 50 req/s de media con rafagas de 100 POR IP de origen (criterio
       #     por defecto de Traefik: la IP remota). Periodo por defecto: 1s.
-      #   keni-inflightreq: tope de 150 peticiones EN VUELO hacia el back. OJO: el criterio
+      #   keni-inflightreq: tope de 150 peticiones EN PROCESO hacia el back. OJO: el criterio
       #     por defecto de inFlightReq es requestHost => es un tope GLOBAL de concurrencia
       #     (las SSE abiertas cuentan); protege al unico proceso uvicorn de un pileup.
       - traefik.http.middlewares.keni-ratelimit.ratelimit.average=50
@@ -546,7 +546,7 @@ services:
     # ejecutar: claim FOR UPDATE SKIP LOCKED), pero hay que re-presupuestar RAM antes
     # (2 workers × 20g no caben con holgura junto a db+CI en 61 GiB).
     # APAGADO LIMPIO: al recibir SIGTERM el pool del worker deja de reclamar, cancela los
-    # `claude` en vuelo y RE-ENCOLA cada job capturado (worker.py `_Pool.detener`, timeout
+    # `claude` en proceso y RE-ENCOLA cada job capturado (worker.py `_Pool.detener`, timeout
     # interno 10s). El default de Docker (10s a SIGKILL) cortaba ese cierre JUSTO al
     # limite; 30s le da margen real para devolver los jobs a `pendiente` sin perder nada.
     stop_grace_period: 30s

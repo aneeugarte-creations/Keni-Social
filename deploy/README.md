@@ -154,7 +154,7 @@ tiene usuarios). Entra por `https://social.kenitech.io`.
 entradas de build** (`FRONT_VERSION`/`BACK_VERSION`/`WORKER_VERSION`/`MCP_VERSION`) y también
 `:latest`. Así el deploy es **quirúrgico**: solo (re)construye y **recrea** el servicio cuyo
 contenido cambió. Un deploy de **solo front** (o solo mcp) **no toca el `worker`**, de modo
-que sus `claude -p` en vuelo no se interrumpen. `back` y `worker` comparten `consola/`, así que
+que sus `claude -p` en proceso no se interrumpen. `back` y `worker` comparten `consola/`, así que
 un cambio de código ahí recrea **ambos** (el worker DEBE correr ese código). El compose
 interpola `${FRONT_VERSION:-latest}` etc., así que un `docker compose build` "pelado" sin las
 vars sigue dando `:latest` (compatible). El hash se calcula del árbol de ficheros (no de git:

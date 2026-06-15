@@ -120,7 +120,7 @@ describe("Kpis", () => {
     );
 
     expect(await screen.findByText("+39.0 %")).toBeInTheDocument();
-    // NUNCA 10 días contra los 31 de mayo: tramos de la MISMA duración (1–10 vs 1–10).
+    // NUNCA 10 días contra los 31 de mayo: intervalos de la MISMA duración (1–10 vs 1–10).
     const { rango_a = "", rango_b = "" } = espia.mock.calls[0][0];
     expect(rango_b).toBe("rango:2026-06-01_2026-06-10");
     expect(rango_a).toBe("rango:2026-05-01_2026-05-10");
