@@ -1,10 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Hand, Pencil, Plus, Trash2, UserPlus, Zap } from "lucide-react";
+import { ChevronDown, ChevronRight, Hand, Pencil, Plus, Target, Trash2, UserPlus, Zap } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { confirmar } from "@/components/comunes/confirmar";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SesionContexto } from "@/hooks/sesion-contexto";
@@ -765,6 +766,7 @@ export function PanoramaAgenda({
     tareasHoy.filter((t) => t.estado === "hecha").length;
   const pctHoy = totalHoy ? Math.round((hechosHoy / totalHoy) * 100) : 0;
   const hoyCompleto = totalHoy > 0 && hechosHoy === totalHoy;
+  const marcaNombre = marca ? catalogos?.marcas.find((m) => m.id === marca)?.nombre : undefined;
 
   // BANDA «URGENTE AHORA» (breaking): los ítems prioridad «alta» de HOY o SIN FECHA SALEN de los
   // cajones de día y saltan al tope. Lo urgente de otro día se queda en su día (con su badge rojo).
@@ -806,32 +808,50 @@ export function PanoramaAgenda({
 
   return (
     <div className="space-y-4">
-      {/* MARCADOR de hoy: «hechos / total» del día con barra de progreso. En vivo: se rehace al
-          cubrir/asignar/marcar hecha (invalida CLAVE_TAREAS) o cuando un partido pasa. Solo si hay algo hoy. */}
+      {/* MARCADOR de hoy: «hechos / total» del día, con el look de «Producción del día por línea»
+          pero como UNA sola tile y referido a HOY (no ventana móvil). En vivo: se rehace al
+          cubrir/asignar/marcar hecha (invalida CLAVE_TAREAS) o cuando un partido pasa. */}
       {totalHoy > 0 && (
-        <section
-          aria-label={`Progreso de hoy: ${hechosHoy} de ${totalHoy}`}
-          className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2 shadow-sm"
-        >
-          <span className="shrink-0 text-sm font-semibold">Hoy</span>
-          <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-muted">
-            <div
-              className={cn(
-                "h-full rounded-full transition-all",
-                hoyCompleto ? "bg-emerald-500" : "bg-primary",
+        <Card aria-label={`Progreso de hoy: ${hechosHoy} de ${totalHoy}`}>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Target className="h-4 w-4 text-emerald-600" />
+              Avance de hoy
+              {marcaNombre && (
+                <Badge variant="outline" className="text-[10px]">
+                  {marcaNombre}
+                </Badge>
               )}
-              style={{ width: `${pctHoy}%` }}
-            />
-          </div>
-          <span
-            className={cn(
-              "shrink-0 text-sm font-semibold tabular-nums",
-              hoyCompleto && "text-emerald-600 dark:text-emerald-400",
-            )}
-          >
-            {hechosHoy}/{totalHoy}
-          </span>
-        </section>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 pt-2">
+            <div className="rounded-lg border border-border/60 p-3">
+              <div className="text-xs text-muted-foreground">Tareas y eventos</div>
+              <div
+                className={cn(
+                  "mt-1 text-lg font-semibold tabular-nums",
+                  hoyCompleto ? "text-emerald-600" : undefined,
+                )}
+              >
+                {hechosHoy}
+                <span className="text-sm font-normal text-muted-foreground"> / {totalHoy}</span>
+              </div>
+              <div className="mt-0.5 text-[11px] tabular-nums text-muted-foreground">
+                {totalHoy - hechosHoy} pendiente{totalHoy - hechosHoy === 1 ? "" : "s"}
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all",
+                    hoyCompleto ? "bg-emerald-500" : "bg-sky-500",
+                  )}
+                  style={{ width: `${pctHoy}%` }}
+                />
+              </div>
+            </div>
+            <p className="mt-2 text-[11px] text-muted-foreground">Hechas / total de hoy.</p>
+          </CardContent>
+        </Card>
       )}
 
       {/* Atajo de 5 segundos para meter algo a cubrir (todos), antes de la agenda. Solo con marca

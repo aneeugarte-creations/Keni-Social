@@ -238,9 +238,10 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
       tarea({ id: "eD", titulo: "Encargo pendiente", fecha_objetivo: hoy, estado: "pendiente" }),
     ]);
 
-    // 4 cosas hoy, 2 hechas (el partido pasado + el encargo hecho) → «2/4».
+    // 4 cosas hoy, 2 hechas (el partido pasado + el encargo hecho) → «2 / 4» (hechas / total).
     const marcador = await screen.findByLabelText(/Progreso de hoy/);
-    expect(marcador).toHaveTextContent("2/4");
+    expect(marcador).toHaveTextContent(/2\s*\/\s*4/);
+    expect(marcador).toHaveTextContent(/2\s*pendientes/); // 4 − 2 = 2 pendientes
   });
 
   it("un evento 'no_cubrir' NO aparece en la lista", async () => {
