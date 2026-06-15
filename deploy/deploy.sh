@@ -131,7 +131,6 @@ render_secret POSTGRES_PASSWORD        postgres_password        10001:999    440
 render_secret S3_ACCESS_KEY            s3_access_key            10001:10001  400
 render_secret S3_SECRET_KEY            s3_secret_key            10001:10001  400
 render_secret ANTHROPIC_API_KEY        anthropic_api_key        10001:10001  400
-render_secret CLAUDE_CODE_OAUTH_TOKEN  claude_code_oauth_token  10001:10001  400
 render_secret KENI_CONSOLA_ADMIN_PASS  consola_admin_pass       10001:10001  400
 render_secret KENI_CONSOLA_TOKEN       consola_token            10001:10001  400
 render_secret KENI_MCP_BEARER          mcp_bearer               10001:10001  400

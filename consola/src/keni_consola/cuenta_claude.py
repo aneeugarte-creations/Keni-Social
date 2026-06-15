@@ -2,12 +2,10 @@
 y CAMBIO de cuenta (logout + login interactivo) sin reiniciar contenedores.
 
 POR QUE EXISTE: la generacion corre `claude -p` (ADR 0001) con la cuenta de Claude de la
-maquina. Hasta ahora esa cuenta era un `CLAUDE_CODE_OAUTH_TOKEN` inyectado por entorno
-(secreto del host), que el `claude` lee SOLO al arrancar el proceso -> cambiarla exigia
-tocar el host y reiniciar. Con `CLAUDE_CONFIG_DIR` apuntando al volumen COMPARTIDO `/data`
-(`/data/claude-cfg`, ADR 0013), las credenciales viven en un fichero que `claude` relee en
-cada invocacion y que worker + daemons comparten: un `claude auth login` desde el panel
-cambia la cuenta EN CALIENTE para ambos, sin reinicio.
+maquina. Esa cuenta se fija con `claude auth login` desde el panel; con `CLAUDE_CONFIG_DIR`
+apuntando al volumen COMPARTIDO `/data` (`/data/claude-cfg`, ADR 0013), las credenciales
+viven en un fichero que `claude` relee en cada invocacion y que worker + daemons comparten:
+un login desde el panel cambia la cuenta EN CALIENTE para ambos, sin reinicio.
 
 DONDE CORRE: SOLO en la imagen del worker (worker/daemons), que lleva Node + `claude`. El
 `back` NO tiene `claude`: alcanza estas funciones por el listener de control del proceso
@@ -21,8 +19,8 @@ QUE OFRECE EL CLI (verificado en claude 2.1.x):
     stdin (lo conducimos por un PTY; ver `iniciar_login`/`enviar_codigo`).
   - `claude auth logout` -> borra las credenciales.
   - `claude -p /usage` -> el medidor de la suscripcion (sesion 5h / semana). OJO: el medidor
-    DETALLADO solo aparece con auth por CREDENCIALES (login), no con el token de entorno
-    (con token solo sale la primera linea). Es la razon de fondo para migrar a credenciales.
+    DETALLADO solo aparece con auth por CREDENCIALES (login); con una API key solo sale la
+    primera linea. Es una de las razones para fijar la cuenta por login.
 
 SEPARACION testeable: los PARSERS (`parsear_estado`, `parsear_uso`) son puros (texto->dict)
 y se testean sin subprocess; los RUNNERS (`estado`, `uso`, `logout`) y el gestor de login

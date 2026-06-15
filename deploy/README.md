@@ -64,8 +64,9 @@ Esto **dockeriza la arquitectura objetivo**, pero el código aún no la consume 
   requisito: si lo dejas vacío, el back queda igualmente protegido por **sesión + CSRF** (sin
   sesión válida → 401 en `/api`). Si lo pones, sigue valiendo como credencial adicional de
   mantenimiento. El bind `0.0.0.0` del back solo lo alcanza Traefik.
-- **Claude (generación) usa el OAuth token de la máquina**, no una API key: el back
-  recibe `CLAUDE_CODE_OAUTH_TOKEN` desde `/etc/learn-platform/claude-oauth-token`.
+- **La cuenta de Claude (generación) se fija con `claude auth login` desde el panel**
+  (Sistema → Cuenta de Claude); las credenciales viven en `CLAUDE_CONFIG_DIR`
+  (`/data/claude-cfg`, volumen compartido). Ver §Cuenta.
 
 ---
 
@@ -78,23 +79,17 @@ por un listener de control interno protegido con `KENI_CONTROL_BEARER`; el `back
 (admin-gated). Sin ese bearer la sección queda "no configurada" (apagado por defecto).
 
 Las credenciales viven en el volumen compartido `/data/claude-cfg`
-(`CLAUDE_CONFIG_DIR`), así que un login aplica **en caliente** a `worker`+`daemons`.
+(`CLAUDE_CONFIG_DIR`), así que un login aplica **en caliente** a `worker`+`daemons` sin
+reiniciar. NO hay token por entorno: la cuenta se fija únicamente por login.
 
-**Activar (1 vez):**
+**Activar + fijar la cuenta:**
 1. `KENI_CONTROL_BEARER=$(openssl rand -base64 24)` en `deploy/.env` y `bash deploy.sh`.
+2. En el panel (Sistema → Cuenta de Claude) → **Cambiar cuenta**: abre la URL, inicia sesión
+   y pega el código. Las credenciales se escriben en `/data/claude-cfg`; la generación y el
+   medidor `/usage` quedan operativos al instante.
 
-**Corte env-var → credenciales (DOS fases, porque el token de entorno GANA al fichero):**
-- **Fase 1 (segura, ya en este deploy):** con el token aún inyectado, entra al panel y haz
-  **Cambiar cuenta** con la cuenta deseada. Esto SIEMBRA `/data/claude-cfg` (aún inerte: el
-  token manda). La generación nunca se queda sin auth.
-- **Fase 2 (gated):** comenta/quita `CLAUDE_CODE_OAUTH_TOKEN_FILE` de `worker` **y** `daemons`
-  en `docker-compose.yml`, `bash deploy.sh` (reinicia esos 2). Ahora gobiernan las
-  credenciales: el cambio de cuenta es en caliente y `claude -p /usage` da el medidor completo.
-
-> ⚠️ El handshake del login (`claude auth login` por PTY) se valida en un contenedor local con
-> una cuenta de prueba ANTES de la fase 2 en prod: no se puede probar contra la cuenta viva sin
-> desconectarla. `claude auth logout` desde el panel deja al servidor SIN cuenta hasta el
-> siguiente login (la generación para): úsalo solo para cambiar de cuenta.
+> `claude auth logout` desde el panel deja al servidor SIN cuenta hasta el siguiente login (la
+> generación para): úsalo solo para cambiar de cuenta.
 
 ---
 
