@@ -36,6 +36,7 @@ import {
   COLOR_PRIORIDAD,
 } from "@/lib/rota-calendario";
 import { cn } from "@/lib/utils";
+import { AvatarPersona } from "@/pages/tareas/AvatarPersona";
 import type {
   AusenciaRota,
   CoordinacionTurno,
@@ -173,6 +174,9 @@ export function BadgeCoordinador({
   );
 }
 
+/** Primer nombre (lo que cabe en el chip): "Tezcucano Pérez" → "Tezcucano". */
+const primerNombre = (n: string) => n.trim().split(/\s+/)[0] || n;
+
 /** Chip de evento dentro de un recuadro de persona (clicable: abre edición). */
 export function ChipEventoCalendario({
   item,
@@ -211,6 +215,19 @@ export function ChipEventoCalendario({
           </span>
         )}
       </span>
+      {/* Quién lo cubre: el mismo avatar redondo (color por persona) + primer nombre que
+          se ve en el tablero de Cobertura, para que el evento del calendario diga de un
+          vistazo su equipo. Vacío en «Sin turno a esa hora» (evento sin cobertura). */}
+      {item.cobertura.length > 0 && (
+        <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+          {item.cobertura.map((c) => (
+            <span key={c.turno_id} className="inline-flex items-center gap-1">
+              <AvatarPersona id={c.miembro_id} nombre={c.miembro_nombre} size="sm" />
+              <span className="truncate font-medium">{primerNombre(c.miembro_nombre)}</span>
+            </span>
+          ))}
+        </span>
+      )}
       {item.evento.cambiado && (
         <span
           // Stop propagation: marcar avisado no debe abrir el modal de edición.

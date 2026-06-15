@@ -3,7 +3,13 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import type { AusenciaRota, FranjaSemana, MiembroRota } from "@/types";
+import type {
+  AusenciaRota,
+  EventoRota,
+  FranjaSemana,
+  MiembroRota,
+  TurnoCobertura,
+} from "@/types";
 
 import { franjasSolapan, type ConflictoCandidato } from "../comun";
 import { DropdownAnadirPersona, RecuadroPersonaCalendario } from "./celdas";
@@ -30,6 +36,37 @@ function franja(over: Partial<FranjaSemana> = {}): FranjaSemana {
 function conProvider(ui: React.ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+}
+
+function evento(over: Partial<EventoRota> = {}): EventoRota {
+  return {
+    id: "ev1",
+    titulo: "España vs Cabo Verde",
+    fecha: "2026-06-15",
+    hora: "10:00",
+    contenido: "",
+    nota: "",
+    tipo_cobertura: "transmision",
+    prioridad: "media",
+    cambiado: false,
+    actualizado: "",
+    es_sabado: false,
+    marca: "",
+    marca_nombre: "",
+    ...over,
+  };
+}
+
+function cubridor(over: Partial<TurnoCobertura> = {}): TurnoCobertura {
+  return {
+    turno_id: "t1",
+    miembro_id: "u1",
+    miembro_nombre: "Persona",
+    franja_id: "f-manana",
+    franja_nombre: "Mañana",
+    override: false,
+    ...over,
+  };
 }
 
 describe("RecuadroPersonaCalendario — copy «Sin turno a esa hora»", () => {
@@ -78,6 +115,62 @@ describe("RecuadroPersonaCalendario — copy «Sin turno a esa hora»", () => {
     const boton = screen.getByRole("button", { name: "Sin turno a esa hora" });
     fireEvent.click(boton);
     expect(onClick).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ChipEventoCalendario — cubridores en el evento del calendario", () => {
+  it("muestra el avatar + PRIMER nombre de cada cubridor (como en el tablero)", () => {
+    render(
+      <RecuadroPersonaCalendario
+        recuadro={{
+          miembro_id: "u-elias",
+          miembro_nombre: "Elias",
+          turno: null,
+          sinCubrir: false,
+          eventos: [
+            {
+              evento: evento(),
+              cobertura: [
+                cubridor({ turno_id: "t-elias", miembro_id: "u-elias", miembro_nombre: "Elias" }),
+                cubridor({ turno_id: "t-rami", miembro_id: "u-rami", miembro_nombre: "Ramiro Soto" }),
+              ],
+            },
+          ],
+        }}
+        franja={franja()}
+        equipo={[]}
+        editable={false}
+        onEditarEvento={vi.fn()}
+        onCambio={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("España vs Cabo Verde")).toBeInTheDocument();
+    // Cada cubridor sale por su PRIMER nombre, no el nombre completo.
+    expect(screen.getByText("Ramiro")).toBeInTheDocument();
+    expect(screen.queryByText("Ramiro Soto")).toBeNull();
+    // El otro cubridor también figura (al menos en el chip).
+    expect(screen.getAllByText("Elias").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("no muestra cubridores cuando el evento no tiene cobertura («Sin turno a esa hora»)", () => {
+    render(
+      <RecuadroPersonaCalendario
+        recuadro={{
+          miembro_id: "",
+          miembro_nombre: "Sin turno a esa hora",
+          turno: null,
+          sinCubrir: true,
+          eventos: [{ evento: evento({ titulo: "Amistoso sin señal" }), cobertura: [] }],
+        }}
+        franja={franja()}
+        equipo={[]}
+        editable={false}
+        onEditarEvento={vi.fn()}
+        onCambio={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Amistoso sin señal")).toBeInTheDocument();
+    expect(screen.queryByText("Ramiro")).toBeNull();
   });
 });
 
