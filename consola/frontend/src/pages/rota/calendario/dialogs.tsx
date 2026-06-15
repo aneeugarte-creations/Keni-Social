@@ -46,6 +46,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { ApiError, api, mensajeError } from "@/lib/api";
 import type {
+  Contenido,
   EventoRota,
   FranjaTurno,
   MiembroRota,
@@ -57,15 +58,26 @@ import type {
 import { PRIORIDADES, TIPOS_COBERTURA } from "../comun";
 
 
-/** Diálogo de edición rápida de evento: lo que más se cambia desde el calendario. */
+/**
+ * Diálogo de edición rápida de evento: lo que más se cambia desde el calendario.
+ *
+ * `tareasVinculadas` (opcional) son las TAREAS de cobertura enlazadas al evento (cubridores +
+ * roles soltados). El calendario NO las pasa (su cobertura es por turnos); la AGENDA de Tareas
+ * SÍ, porque allí la fila de cobertura se DERIVA de esas tareas (su título/fecha son una foto
+ * del evento tomada al cubrir). Con ellas: al guardar se propaga el cambio a cada tarea (si no,
+ * editar el partido no se vería en la agenda) y al borrar se borran en cascada (si no, la fila
+ * de cobertura seguiría viva). Sin ellas, el diálogo se comporta como siempre (solo el evento).
+ */
 export function DialogEditarEvento({
   evento,
   onCerrar,
   onCambio,
+  tareasVinculadas,
 }: {
   evento: EventoRota;
   onCerrar: () => void;
   onCambio: () => void;
+  tareasVinculadas?: Contenido[];
 }) {
   const [titulo, setTitulo] = React.useState(evento.titulo);
   const [fecha, setFecha] = React.useState(evento.fecha);
@@ -76,16 +88,32 @@ export function DialogEditarEvento({
   const [prioridad, setPrioridad] = React.useState<PrioridadEvento>(evento.prioridad);
   const [contenido, setContenido] = React.useState(evento.contenido);
 
+  const vinculadas = tareasVinculadas ?? [];
   const guardar = useMutation({
-    mutationFn: () =>
-      api.actualizarEventoRota(evento.id, {
+    mutationFn: async () => {
+      await api.actualizarEventoRota(evento.id, {
         titulo: titulo.trim(),
         fecha,
         hora: hora.trim(),
         tipo_cobertura: tipoCobertura,
         prioridad,
         contenido: contenido.trim(),
-      }),
+      });
+      // Propaga el cambio a las tareas de cobertura: su título/fecha/hora son una foto del
+      // evento al cubrir, así que sin esto la agenda mostraría los datos viejos del partido.
+      if (vinculadas.length > 0) {
+        await Promise.all(
+          vinculadas.map((t) =>
+            api.actualizarContenido(t.id, {
+              titulo: titulo.trim(),
+              fecha_objetivo: fecha,
+              hora_objetivo: hora.trim(),
+              prioridad,
+            }),
+          ),
+        );
+      }
+    },
     onSuccess: () => {
       toast.success("Evento guardado.");
       onCambio();
@@ -94,7 +122,14 @@ export function DialogEditarEvento({
     onError: (e) => toast.error(mensajeError(e)),
   });
   const borrar = useMutation({
-    mutationFn: () => api.eliminarEventoRota(evento.id),
+    mutationFn: async () => {
+      await api.eliminarEventoRota(evento.id);
+      // Cascada: la fila de cobertura se deriva de estas tareas, no del evento; sin borrarlas
+      // el partido seguiría apareciendo (ahora sin dueño claro). Borrar el evento = cancelarlo.
+      if (vinculadas.length > 0) {
+        await Promise.all(vinculadas.map((t) => api.eliminarContenido(t.id)));
+      }
+    },
     onSuccess: () => {
       toast.success("Evento eliminado.");
       onCambio();
@@ -102,6 +137,12 @@ export function DialogEditarEvento({
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
+  // Aviso de borrado adaptado: si hay gente cubriendo, deja claro que se cancela su cobertura.
+  const nCubren = vinculadas.filter((t) => t.responsable_id).length;
+  const mensajeBorrar =
+    nCubren > 0
+      ? `¿Borrar este evento? Cancelará la cobertura de ${nCubren} ${nCubren === 1 ? "persona" : "personas"}.`
+      : "¿Borrar este evento? Sus turnos también se perderán.";
 
   return (
     <Dialog open onOpenChange={(o) => !o && onCerrar()}>
@@ -193,7 +234,7 @@ export function DialogEditarEvento({
             onClick={async () => {
               if (
                 await confirmar({
-                  mensaje: "¿Borrar este evento? Sus turnos también se perderán.",
+                  mensaje: mensajeBorrar,
                   destructivo: true,
                   textoConfirmar: "Borrar",
                 })

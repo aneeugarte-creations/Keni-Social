@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { confirmar } from "@/components/comunes/confirmar";
 import {
   MarcaActivaContexto,
   type ValorMarcaActiva,
@@ -17,6 +18,12 @@ import Tareas from "./Tareas";
 
 vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
+}));
+
+// El borrado pasa por la confirmación propia de la app; en tests la resolvemos siempre en `true`
+// (el `<ContenedorConfirmacion />` no está montado, así que sin mock resolvería `false`).
+vi.mock("@/components/comunes/confirmar", () => ({
+  confirmar: vi.fn().mockResolvedValue(true),
 }));
 
 function tarea(over: Partial<Contenido> = {}): Contenido {
@@ -137,6 +144,11 @@ function renderTareas(tareas: Contenido[], eventos: EventoRota[] = [], u = usuar
 }
 
 describe("Tareas — lista compartida de eventos + encargos", () => {
+  // `restoreAllMocks` (abajo) borra el valor resuelto del mock de `confirmar` tras cada test;
+  // lo re-armamos aquí para que el borrado (que confirma primero) siga su curso por defecto.
+  beforeEach(() => {
+    vi.mocked(confirmar).mockResolvedValue(true);
+  });
   afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();
@@ -713,5 +725,106 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
       expect(contenido.mock.calls.length).toBeGreaterThan(antesContenido);
       expect(rotaEventos.mock.calls.length).toBeGreaterThan(antesEventos);
     });
+  });
+
+  // --- EDITAR / BORRAR el partido desde la agenda (solo admin) ---
+
+  it("MANAGER EDITA un evento por cubrir: abre el diálogo y guarda vía actualizarEventoRota", async () => {
+    const actualizar = vi
+      .spyOn(apiMod.api, "actualizarEventoRota")
+      .mockResolvedValue({} as never);
+    renderTareas(
+      [],
+      [evento({ id: "ev9", titulo: "Cruz Azul vs América" })],
+      usuario("admin", "u-admin"),
+    );
+
+    fireEvent.click(await screen.findByText("Cruz Azul vs América")); // desplegar la fila
+    const card = screen
+      .getByRole("group", { name: "Rol de cobertura" })
+      .closest("[role='button']")!;
+    fireEvent.contextMenu(card);
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Editar/ }));
+
+    // Aparece el diálogo de edición y «Guardar» dispara el PATCH del evento.
+    expect(await screen.findByText("Editar evento")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    await waitFor(() =>
+      expect(actualizar).toHaveBeenCalledWith(
+        "ev9",
+        expect.objectContaining({ titulo: "Cruz Azul vs América" }),
+      ),
+    );
+  });
+
+  it("MANAGER BORRA un evento por cubrir: confirma y llama a eliminarEventoRota", async () => {
+    const borrar = vi
+      .spyOn(apiMod.api, "eliminarEventoRota")
+      .mockResolvedValue({ mensaje: "ok" } as never);
+    renderTareas(
+      [],
+      [evento({ id: "ev9", titulo: "Cruz Azul vs América" })],
+      usuario("admin", "u-admin"),
+    );
+
+    fireEvent.click(await screen.findByText("Cruz Azul vs América"));
+    const card = screen
+      .getByRole("group", { name: "Rol de cobertura" })
+      .closest("[role='button']")!;
+    fireEvent.contextMenu(card);
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Borrar/ }));
+    await waitFor(() => expect(borrar).toHaveBeenCalledWith("ev9"));
+  });
+
+  it("un EDITOR (no admin) NO ve Editar/Borrar del evento", async () => {
+    renderTareas(
+      [],
+      [evento({ id: "ev9", titulo: "Cruz Azul vs América" })],
+      usuario("editor", "u-ed"),
+    );
+    fireEvent.click(await screen.findByText("Cruz Azul vs América"));
+    const card = screen
+      .getByRole("group", { name: "Rol de cobertura" })
+      .closest("[role='button']")!;
+    fireEvent.contextMenu(card);
+    // Sin acciones de admin no se abre menú alguno: no hay item «Editar» ni «Borrar».
+    expect(screen.queryByRole("menuitem", { name: /Editar/ })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: /Borrar/ })).toBeNull();
+  });
+
+  it("BORRAR una cobertura borra el evento Y sus tareas en cascada (el partido se cancela)", async () => {
+    const borrarEv = vi
+      .spyOn(apiMod.api, "eliminarEventoRota")
+      .mockResolvedValue({ mensaje: "ok" } as never);
+    const borrarCont = vi
+      .spyOn(apiMod.api, "eliminarContenido")
+      .mockResolvedValue({} as never);
+    renderTareas(
+      [
+        tarea({
+          id: "t-cob",
+          titulo: "Cruz Azul vs América",
+          evento_id: "ev1",
+          responsable_id: "u-luis",
+          responsable_nombre: "luis",
+          fecha_objetivo: "2026-07-01",
+        }),
+      ],
+      [evento({ id: "ev1", titulo: "Cruz Azul vs América", fecha: "2026-07-01" })],
+      usuario("admin", "u-admin"),
+    );
+
+    // El título sale en la fila Y en la banda «lo último cogido»: desplegamos la fila (la que
+    // está dentro de un <button> de la agenda, no el chip de la banda).
+    const titulos = await screen.findAllByText("Cruz Azul vs América");
+    const filaBtn = titulos.map((t) => t.closest("button")).find(Boolean)!;
+    fireEvent.click(filaBtn);
+
+    const card = screen.getByText("Cubren:").closest("[role='button']")!;
+    fireEvent.contextMenu(card);
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Borrar/ }));
+
+    await waitFor(() => expect(borrarEv).toHaveBeenCalledWith("ev1"));
+    expect(borrarCont).toHaveBeenCalledWith("t-cob");
   });
 });

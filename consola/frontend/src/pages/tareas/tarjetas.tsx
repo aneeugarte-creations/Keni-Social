@@ -6,6 +6,7 @@ import {
   ChevronRight,
   ClipboardList,
   Hand,
+  Pencil,
   Play,
   Trash2,
   UserCheck,
@@ -44,8 +45,10 @@ import { PLANTILLA_DEFECTO, type PlantillaGuion } from "./guion";
 import { etiquetaRol, type RolCobertura, ROLES_COBERTURA, rolesCubiertos } from "./roles";
 import type { Cobertura } from "./tipos";
 
+import { confirmar } from "@/components/comunes/confirmar";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
+import { DialogEditarEvento } from "@/pages/rota/calendario/dialogs";
 
 /**
  * Umbral (minutos) de la fase PRE-LIVE del semáforo: cuando falta ≤ esto para el pitido, el evento
@@ -314,6 +317,7 @@ export function TarjetaEventoLibre({
   const usuario = React.useContext(SesionContexto)?.usuario ?? null;
   const esManager = usuario?.rol === "admin";
   const [asignarAbierto, setAsignarAbierto] = React.useState(false);
+  const [editarAbierto, setEditarAbierto] = React.useState(false);
   const [rol, setRol] = React.useState<RolCobertura>("foto");
   const usuarios = catalogos?.usuarios ?? [];
 
@@ -330,10 +334,41 @@ export function TarjetaEventoLibre({
       toast.error(mensajeError(e));
     },
   });
+  // Borrar el evento por cubrir: no tiene cobertura aún (0 tareas), así que basta el evento.
+  const borrar = useMutation({
+    mutationFn: () => api.eliminarEventoRota(evento.id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
+      toast.success(`"${evento.titulo}" borrado.`);
+    },
+    onError: (e) => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
+      toast.error(mensajeError(e));
+    },
+  });
+  const pedirBorrar = async () => {
+    if (
+      await confirmar({
+        mensaje: `¿Borrar "${evento.titulo}"? Desaparece de la lista para todos.`,
+        destructivo: true,
+        textoConfirmar: "Borrar",
+      })
+    )
+      borrar.mutate();
+  };
 
+  // Editar/Borrar el partido: acciones de coordinación (solo admin), como el resto del reparto.
   const accionesEvento: EntradaMenuContextual[] = [];
   if (esManager) {
     accionesEvento.push({ etiqueta: "Asignar", icono: UserPlus, onClick: () => setAsignarAbierto(true) });
+    accionesEvento.push({ etiqueta: "Editar", icono: Pencil, onClick: () => setEditarAbierto(true) });
+    accionesEvento.push({ separador: true });
+    accionesEvento.push({
+      etiqueta: "Borrar",
+      icono: Trash2,
+      destructivo: true,
+      onClick: () => void pedirBorrar(),
+    });
   }
 
   return (
@@ -386,6 +421,16 @@ export function TarjetaEventoLibre({
         onElegir={(id) => cubrir.mutate(id)}
         enviando={cubrir.isPending}
       />
+
+      {editarAbierto && (
+        <div data-no-primaria>
+          <DialogEditarEvento
+            evento={evento}
+            onCerrar={() => setEditarAbierto(false)}
+            onCambio={() => void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS })}
+          />
+        </div>
+      )}
     </FilaConAcciones>
   );
 }
@@ -644,11 +689,16 @@ export function TarjetaCobertura({
   const usuario = React.useContext(SesionContexto)?.usuario ?? null;
   const esManager = usuario?.rol === "admin";
   const [asignarAbierto, setAsignarAbierto] = React.useState(false);
+  const [editarAbierto, setEditarAbierto] = React.useState(false);
   const [rol, setRol] = React.useState<RolCobertura>("foto");
   const usuarios = catalogos?.usuarios ?? [];
   const yaApuntado = Boolean(
     usuario && cobertura.cubridores.some((t) => t.responsable_id === usuario.id),
   );
+  // El EVENTO subyacente (si sigue cargado) habilita editar/borrar el partido; las tareas
+  // enlazadas (cubridores + roles soltados) viajan al diálogo para propagar/cascada.
+  const evento = cobertura.evento;
+  const vinculadas = [...cobertura.cubridores, ...cobertura.libres];
 
   const cubrir = useMutation({
     mutationFn: (responsableId?: string) =>
@@ -678,6 +728,38 @@ export function TarjetaCobertura({
     },
   });
 
+  // Borrar el partido = cancelarlo: borra el evento Y sus tareas de cobertura (la fila se deriva
+  // de esas tareas, no del evento; sin borrarlas el partido seguiría vivo sin dueño claro).
+  const borrar = useMutation({
+    mutationFn: async () => {
+      if (!evento) return;
+      await api.eliminarEventoRota(evento.id);
+      await Promise.all(vinculadas.map((t) => api.eliminarContenido(t.id)));
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
+      toast.success(`"${cobertura.titulo}" borrado.`);
+    },
+    onError: (e) => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
+      toast.error(mensajeError(e));
+    },
+  });
+  const pedirBorrar = async () => {
+    const n = cobertura.cubridores.length;
+    if (
+      await confirmar({
+        mensaje:
+          n > 0
+            ? `¿Borrar "${cobertura.titulo}"? Cancelará la cobertura de ${n} ${n === 1 ? "persona" : "personas"}.`
+            : `¿Borrar "${cobertura.titulo}"? Desaparece de la lista para todos.`,
+        destructivo: true,
+        textoConfirmar: "Borrar",
+      })
+    )
+      borrar.mutate();
+  };
+
   const accionesCobertura: EntradaMenuContextual[] = [];
   if (esManager) {
     accionesCobertura.push({
@@ -685,6 +767,17 @@ export function TarjetaCobertura({
       icono: UserPlus,
       onClick: () => setAsignarAbierto(true),
     });
+    // Editar/Borrar el partido exigen el evento subyacente (la cobertura sola no basta).
+    if (evento) {
+      accionesCobertura.push({ etiqueta: "Editar", icono: Pencil, onClick: () => setEditarAbierto(true) });
+      accionesCobertura.push({ separador: true });
+      accionesCobertura.push({
+        etiqueta: "Borrar",
+        icono: Trash2,
+        destructivo: true,
+        onClick: () => void pedirBorrar(),
+      });
+    }
   }
 
   return (
@@ -760,6 +853,17 @@ export function TarjetaCobertura({
         onElegir={(id) => cubrir.mutate(id)}
         enviando={cubrir.isPending}
       />
+
+      {editarAbierto && evento && (
+        <div data-no-primaria>
+          <DialogEditarEvento
+            evento={evento}
+            tareasVinculadas={vinculadas}
+            onCerrar={() => setEditarAbierto(false)}
+            onCambio={() => void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS })}
+          />
+        </div>
+      )}
     </FilaConAcciones>
   );
 }

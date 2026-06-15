@@ -19,6 +19,14 @@ export type Cobertura = {
    * igual que `tipoCobertura`.
    */
   prioridad?: PrioridadEvento;
+  /**
+   * El EVENTO de la rota subyacente (si sigue en la lista cargada): la FUENTE para EDITAR o
+   * BORRAR el partido desde su cobertura. La fila de cobertura se deriva de las TAREAS (su
+   * título/fecha son una FOTO del evento tomada al cubrir), así que editar/borrar el partido
+   * debe tocar el evento Y sus tareas; este puntero da el evento. `undefined` si no se encuentra
+   * (la acción de editar/borrar no se ofrece).
+   */
+  evento?: EventoRota;
   cubridores: Contenido[];
   /**
    * ROLES soltados de un evento que SIGUE cubierto por otros: tareas de cobertura HUÉRFANAS
@@ -73,6 +81,7 @@ export function agrupar(tareas: Contenido[], eventos: EventoRota[]) {
         orden: cubridores[0].fecha_objetivo || "9999-99-99",
         tipoCobertura: eventoPorId.get(eventoId)?.tipo_cobertura,
         prioridad: eventoPorId.get(eventoId)?.prioridad,
+        evento: eventoPorId.get(eventoId),
         cubridores,
         libres: lista.filter((t) => !t.responsable_id),
       });
