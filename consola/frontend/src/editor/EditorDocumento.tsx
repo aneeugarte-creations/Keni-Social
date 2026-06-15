@@ -666,6 +666,7 @@ export function EditorDocumento({
                   fuentesExtra={fuentesExtra}
                   onAbrirAjustes={() => setAjustes(true)}
                   onReencuadrar={abrirReencuadre}
+                  onRecortar={abrirRecorte}
                   onReemplazar={abrirReemplazo}
                 />
               }

@@ -21,6 +21,7 @@ import {
   FoldVertical,
   Italic,
   Replace,
+  Scissors,
   Settings2,
   Strikethrough,
   Underline,
@@ -294,11 +295,13 @@ export function BarraContextual({
   fuentesExtra = [],
   onAbrirAjustes,
   onReencuadrar,
+  onRecortar,
   onReemplazar,
 }: {
   fuentesExtra?: string[];
   onAbrirAjustes: () => void;
   onReencuadrar: () => void;
+  onRecortar: () => void;
   onReemplazar: () => void;
 }) {
   const store = useStoreEditor();
@@ -486,6 +489,7 @@ export function BarraContextual({
         <>
           <BotonIcono titulo="Reemplazar imagen" onClick={onReemplazar}><Replace className="h-4 w-4" /> Reemplazar</BotonIcono>
           <BotonIcono titulo="Reencuadrar (arrastra la foto dentro del marco)" onClick={onReencuadrar}><Crop className="h-4 w-4" /> Reencuadrar</BotonIcono>
+          <BotonIcono titulo="Recortar (tira de los bordes para recortar la imagen)" onClick={onRecortar}><Scissors className="h-4 w-4" /> Recortar</BotonIcono>
         </>
       )}
 

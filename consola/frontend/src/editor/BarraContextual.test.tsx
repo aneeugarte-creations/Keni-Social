@@ -40,7 +40,7 @@ function montarCon(capa: Capa) {
     // QueryClient. El contexto de marca es opcional y aquí no se monta (sin colores de marca).
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <ProveedorEditor store={store}>
-        <BarraContextual onAbrirAjustes={vi.fn()} onReencuadrar={vi.fn()} onReemplazar={vi.fn()} />
+        <BarraContextual onAbrirAjustes={vi.fn()} onReencuadrar={vi.fn()} onRecortar={vi.fn()} onReemplazar={vi.fn()} />
       </ProveedorEditor>
     </QueryClientProvider>,
   );
@@ -296,5 +296,38 @@ describe("BarraContextual — tachado (S)", () => {
     expect(btn).toHaveAttribute("title", "El texto en arco no admite tachado");
     fireEvent.click(btn);
     expect(capaTexto(store).tachado).toBeUndefined();
+  });
+});
+
+describe("BarraContextual — imagen: Recortar", () => {
+  function montarImagen(onRecortar: () => void) {
+    const doc = documentoVacio(FORMATO, "m1");
+    doc.capas.push(nuevaCapaImagen("obj", { id: "img1" }));
+    const store = crearStoreEditor(doc);
+    store.getState().seleccionar("img1");
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <ProveedorEditor store={store}>
+          <BarraContextual
+            onAbrirAjustes={vi.fn()}
+            onReencuadrar={vi.fn()}
+            onRecortar={onRecortar}
+            onReemplazar={vi.fn()}
+          />
+        </ProveedorEditor>
+      </QueryClientProvider>,
+    );
+  }
+
+  it("una imagen ofrece 'Recortar' y al pulsarlo entra al modo recorte", () => {
+    const onRecortar = vi.fn();
+    montarImagen(onRecortar);
+    fireEvent.click(screen.getByRole("button", { name: "Recortar" }));
+    expect(onRecortar).toHaveBeenCalledTimes(1);
+  });
+
+  it("una capa de TEXTO no ofrece 'Recortar' (el recorte es solo para imágenes)", () => {
+    montarConTexto();
+    expect(screen.queryByRole("button", { name: "Recortar" })).toBeNull();
   });
 });
