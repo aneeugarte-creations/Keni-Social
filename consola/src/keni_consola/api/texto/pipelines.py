@@ -78,7 +78,7 @@ async def variables(request: Request) -> Response:
 #
 # El ORDEN sigue el modelo conceptual del ADR 0011 (frontera: Verificar la fuente es
 # Investigación; Redactar/Ilustrar son Producción), apoyado en el orden real de los daemons
-# (`ingesta_daemon.ejecutar_barrido`, `pipeline_contenido._barrido`). Donde difieren hoy
+# (`recolectar_daemon.ejecutar_barrido`, `pipeline_contenido._barrido`). Donde difieren hoy
 # manda el ADR: la marca se clasifica DENTRO de Agrupar y Verificar corre
 # tras Admitir del lado `contenido` (hasta F3), pero el riel los presenta como etapas del
 # proceso de Investigación. Fusionar son DOS prompts: la verificación previa
@@ -103,15 +103,15 @@ _MAQUINAS: tuple[tuple[str, str, str, tuple[_Etapa, ...]], ...] = (
         ("prompt", "clasificar", "Clasificar", "prompt/clasificar-marca", None),
         ("prompt", "priorizar", "Priorizar", "prompt/priorizar", None),
         ("mecanica", "admitir", "Admitir", None, None),
-        ("prompt", "verificar", "Verificar", None, None),  # prompt_base_de("qa")
+        ("prompt", "verificar", "Verificar", None, None),  # prompt_base_de("verificar")
     )),
     ("produccion", "Producción", "La máquina de contenido", (
-        ("prompt", "redactar", "Redactar", None, None),          # prompt_base_de("copy")
+        ("prompt", "redactar", "Redactar", None, None),          # prompt_base_de("redactar")
         ("mecanica", "revisar", "Revisar", None, None),
         ("prompt", "ilustrar", "Ilustrar", "prompt/ilustrar", None),
         ("mecanica", "aprobar", "Aprobar", None, None),
         ("mecanica", "publicar", "Publicar", None, None),
-        ("prompt", "idear", "Idear", None, "taller"),            # prompt_base_de("evergreen")
+        ("prompt", "idear", "Idear", None, "taller"),            # prompt_base_de("idear")
     )),
     ("importacion", "Herramientas de importación", "Material recibido del equipo", (
         ("prompt", "recibir-portal", "Recibir · Portal/SMS", "prompt/recibir/portal", None),
@@ -124,8 +124,8 @@ _MAQUINAS: tuple[tuple[str, str, str, tuple[_Etapa, ...]], ...] = (
 )
 
 # id de etapa -> pipeline del registro cuyo prompt base efectivo la alimenta (rebindeable).
-# Los valores son las CLAVES del registro `libtexto.PIPELINES` (qa/copy/evergreen), estables.
-_ETAPA_PIPELINE = {"verificar": "qa", "redactar": "copy", "idear": "evergreen"}
+# Los valores son las CLAVES del registro `libtexto.PIPELINES` (verificar/redactar/idear), estables.
+_ETAPA_PIPELINE = {"verificar": "verificar", "redactar": "redactar", "idear": "idear"}
 
 
 def _doc_id_de_etapa(eid: str, doc_id: str | None) -> str:

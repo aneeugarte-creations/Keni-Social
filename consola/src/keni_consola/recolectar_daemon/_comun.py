@@ -1,0 +1,240 @@
+"""Estado y helpers COMPARTIDOS del motor de recolección (refactor de pura reubicación).
+
+Aquí viven, en UN SOLO sitio para no duplicar estado:
+  - El logger del daemon (`_log`, nombre `keni_consola.recolectar_daemon`).
+  - Los throttles globales de los pasos periódicos (`_ultimo_rescore`,
+    `_ultimo_agrupar_lexico`, `_ultima_caducidad`) y sus intervalos. Los pasos los leen y
+    los sellan vía `_comun.<var>` (no `global` cruzado de módulos): así el estado de
+    throttling es único, sin copias divergentes por módulo.
+  - Helpers de relevancia/rendimiento, registro de actividad IA, clasificación de marca
+    por IA y fusionar un grupo de historias, que comparten varios pasos.
+
+Las funciones que un test parchea sobre el FACADE (`recolectar_daemon._registrar_actividad_ia`,
+`_clasificar_marca_ia`, `_fusionar_grupo`) y que se invocan desde OTRO módulo del paquete se
+resuelven al vuelo a través del paquete (`_pkg.<nombre>`), para que el parcheo del facade
+siga surtiendo efecto tras el troceado.
+"""
+
+from __future__ import annotations
+
+import logging
+from datetime import datetime
+from typing import Any
+
+import keni_consola.recolectar_daemon as _pkg
+
+from .. import config, generaciones, marcas, noticias_liston, repos
+from ..dominio import agrupar, traducir
+from ..tiempo import ahora_iso
+
+_log = logging.getLogger("keni_consola.recolectar_daemon")
+
+# --- Throttles de los pasos periódicos (estado ÚNICO, leído/sellado vía `_comun.<var>`) -----
+# Re-score periódico de la ventana: como MÍNIMO cada tantos segundos se repuntúa la ventana
+# completa, aunque no entren items nuevos (la frescura decae con el reloj).
+_RESCORE_INTERVALO_SEG = 900.0
+_ultimo_rescore = 0.0  # time.monotonic() de la última pasada completada
+
+# Merge léxico tardío: como mucho una pasada por intervalo (mismo throttle que el re-score:
+# los duplicados tardíos aparecen despacio; barrer la ventana entera cada tick sería caro).
+_AGRUPAR_LEXICO_INTERVALO_SEG = 900.0
+_ultimo_agrupar_lexico = 0.0  # time.monotonic() de la última pasada completada
+
+# Caducidad del pool (TTL): como mucho una pasada cada tantos segundos (la caducidad se mide
+# en horas; pasarla en cada tick de 30s sería ruido de BD sin efecto).
+_CADUCIDAD_INTERVALO_SEG = 900.0
+_ultima_caducidad = 0.0  # time.monotonic() de la última pasada completada
+
+
+def _palabras_relevancia(marca: str, perfil_activo: bool) -> frozenset[str]:
+    """Keywords de relevancia de la marca (perfil editorial Haiku si está activo; si no, semilla).
+
+    Delegado en `noticias_liston.palabras_relevancia` (fuente única perfil-vs-semilla, la misma
+    que usan el listón de promoción y la API del panel; si divergieran, el panel explicaría un
+    score que la priorización no calculó).
+    """
+    return noticias_liston.palabras_relevancia(marca, perfil_activo)
+
+
+def _rendimiento_top_lineas(marca: str) -> tuple[set[str], dict[str, str], list[dict[str, Any]]]:
+    """Precalcula (1 vez por marca y barrido) las líneas TOP por engagement DE ESA MARCA.
+
+    Por MARCA (antes era global: las líneas top se calculaban con las métricas de TODAS las
+    marcas, y el éxito de una marca premiaba historias de otra). Gateado por
+    `KENI_RENDIMIENTO_RANKING` (def OFF). Best-effort: ante cualquier fallo (sin métricas, sin
+    Metricool) devuelve vacío y la señal queda inerte. Devuelve
+    `(nombres_top, {etiqueta_id: nombre}, etiquetas_vertical)`.
+    """
+    if not config.rendimiento_ranking_activo():
+        return set(), {}, []
+    try:
+        from .. import metricas_linea
+        from ..dominio import rendimiento_tema
+
+        data = metricas_linea.lineas_y_origenes(
+            "mes", marca or None, marcas.id_metricas_de(marca) if marca else None
+        )
+        top = rendimiento_tema.lineas_top(
+            data.get("lineas", []),
+            minimo_piezas=config.rendimiento_min_piezas(),
+            n=config.rendimiento_top_n(),
+        )
+        etiquetas = [e for e in repos.listar_etiquetas(clase="vertical") if e.get("id")]
+        id_a_nombre = {e["id"]: (e.get("nombre") or "") for e in etiquetas}
+        return top, id_a_nombre, etiquetas
+    except Exception:  # noqa: BLE001 -- la señal de rendimiento es opcional; nunca rompe la recolección
+        _log.warning("recolectar_daemon: no se pudo calcular el rendimiento por línea (señal inerte).", exc_info=True)
+        return set(), {}, []
+
+
+def _rendimiento_bonus(
+    cluster: dict[str, Any],
+    top_lineas: set[str],
+    vert_id_a_nombre: dict[str, str],
+    vert_etiquetas: list[dict[str, Any]],
+) -> float:
+    """Bonus [0,1] de una historia: 1.0 si su línea (clasificación léxica) está en el top. 0 si no."""
+    from ..dominio import clasificador_lineas, rendimiento_tema
+
+    texto = f"{cluster.get('titulo', '')} {cluster.get('resumen', '')}"
+    lid = clasificador_lineas.clasificar(texto, vert_etiquetas)
+    nombre = vert_id_a_nombre.get(lid or "", "")
+    return rendimiento_tema.bonus_de_historia(nombre, top_lineas)
+
+
+def _registrar_actividad_ia(marca: str, etiqueta: str, salida: str, *, prompt: str = "") -> None:
+    """Sella una GENERACIÓN-actividad (`tipo='noticias-ia'`) de un paso IA del pool (best-effort).
+
+    Hace VISIBLES en «Actividad IA» (y en la etapa Priorizar del pipeline) los pasos Haiku del pool
+    —Fusionar (dedup) y Priorizar— que antes corrían mudos. Es un registro ya
+    COMPLETADO (no encola trabajo: el Haiku ya corrió). `prompt` y `salida` son los REALES de la
+    llamada a Haiku (transparencia: qué se pidió y qué respondió token a token); si no se pasan,
+    queda solo el resumen. Las MÉTRICAS (tokens/coste/duración) son las acumuladas por el
+    ejecutor síncrono desde la última toma (las llamadas Haiku de ESTE paso): antes estas
+    generaciones salían sin coste en Producción (etapas Fusionar/Priorizar a cero). Un fallo al
+    registrar NUNCA aborta el barrido (es observabilidad).
+    """
+    try:
+        registro: dict[str, Any] = {
+            "tipo": "pipeline",
+            # Fusionar/Clasificar/Traducir del pool = INVESTIGACION (motor de noticias). Corre
+            # INLINE (Haiku, ya completado: no encola), pero su coste cuenta del lado investigacion.
+            "proceso": generaciones.PROCESO_INVESTIGACION,
+            "marca": marca,
+            "etiqueta": etiqueta,
+            "prompt": (prompt or "")[:20000],
+            "salida": (salida or "")[:20000],
+            "estado": generaciones.ESTADO_COMPLETADO,
+            "fase": generaciones.FASE_COMPLETADO,
+            "fecha_fin": ahora_iso(),
+        }
+        metricas = traducir.tomar_metricas_acumuladas()
+        if metricas:
+            registro["metricas"] = metricas
+        generaciones.crear(registro)
+    except Exception:  # noqa: BLE001 -- la actividad es best-effort; nunca rompe la recolección
+        _log.warning("recolectar_daemon: no se pudo registrar actividad IA (%s).", etiqueta, exc_info=True)
+
+
+def _clasificar_marca_ia(cluster: dict[str, Any]) -> str:
+    """Asigna marca a un BREAKING sin marca con Haiku. '' si no hay candidatas válidas.
+
+    Las candidatas son `config.marcas_activas()` (validadas contra el catálogo); el fallback
+    es `config.marca_noticias()` (o la primera candidata). Best-effort: cualquier fallo del
+    clasificador devuelve el fallback. Sella la actividad IA (coste visible en Producción).
+    """
+    from ..dominio import clasificador_marca
+
+    activas = [m for m in config.marcas_activas() if marcas.es_marca(m)]
+    if not activas:
+        return ""
+    fallback = config.marca_noticias()
+    if fallback not in activas:
+        fallback = activas[0]
+    candidatas = [(m, marcas.etiqueta_de(m)) for m in activas]
+    try:
+        marca = clasificador_marca.clasificar_marca(
+            str(cluster.get("titulo") or ""),
+            str(cluster.get("resumen") or ""),
+            candidatas,
+            fallback=fallback,
+        )
+    except Exception:  # noqa: BLE001 -- best-effort: nunca rompe el barrido de recolección
+        _log.warning("recolectar_daemon: fallo el clasificador de marca IA.", exc_info=True)
+        return ""
+    _pkg._registrar_actividad_ia(
+        marca,
+        f"Encaje de marca — breaking → {marcas.etiqueta_de(marca)}",
+        f'{{"marca": "{marca}"}}',
+        prompt=str(cluster.get("titulo") or "")[:300],
+    )
+    return marca
+
+
+def _fusionar_grupo(
+    ids: list[str],
+    por_id: dict[str, dict[str, Any]],
+    *,
+    pesos: Any,
+    breaking_peso: float,
+    breaking_ventana_h: int,
+    fuentes_baja: frozenset[str],
+    perfil_activo: bool,
+    ahora: datetime,
+) -> bool:
+    """Funde un grupo de historias en la CANÓNICA (más fuentes, desempate por score).
+
+    Reasigna los items de las absorbidas a la canónica, borra las absorbidas (vacías) y recalcula
+    + repuntúa la canónica (n_fuentes/score reales). Devuelve True si fusionó (≥2 historias).
+
+    Salvaguardas:
+      - ANTI-TOCTOU: antes de absorber, RE-LEE cada cluster absorbible; si entre la lectura del
+        lote y ahora adquirió `contenido_id` o dejó de ser `nuevo` (el pipeline lo promovió),
+        NO se absorbe (se conserva intacto).
+      - SIN HUÉRFANOS: los items se reasignan en LOTES de 500 HASTA VACIAR el cluster (antes el
+        tope de 500 dejaba items colgando del cluster borrado si había más).
+    """
+    clusters = [por_id[i] for i in ids if i in por_id]
+    if len(clusters) < 2:
+        return False
+    canon = max(clusters, key=lambda c: (int(c.get("n_fuentes") or 0), float(c.get("score") or 0.0)))
+    canon_id = str(canon["id"])
+    absorbidas = 0
+    for c in clusters:
+        cid = str(c["id"])
+        if cid == canon_id:
+            continue
+        # Re-verificación anti-TOCTOU: el absorbido pudo ser promovido entre lectura y fusionar.
+        actual = repos.obtener_noticia_cluster(cid)
+        if actual is None:
+            continue
+        if (actual.get("contenido_id") or "") or (actual.get("estado") or "nuevo") != "nuevo":
+            continue
+        # Reasigna TODOS los items, por lotes, hasta vaciar (cota dura de seguridad: 100 lotes).
+        for _ in range(100):
+            lote = repos.items_de_cluster(cid, limite=500)
+            if not lote:
+                break
+            repos.asignar_cluster_items({canon_id: [it["id"] for it in lote]})
+        repos.borrar_noticia_cluster(cid)
+        absorbidas += 1
+    if not absorbidas:
+        return False
+    items = repos.items_de_cluster(canon_id, limite=500)
+    if not items:
+        return False
+    base = repos.obtener_noticia_cluster(canon_id) or canon
+    recalc = agrupar.recalcular(
+        base, items,
+        breaking_peso=breaking_peso,
+        breaking_ventana_h=breaking_ventana_h,
+        fuentes_baja_confianza=fuentes_baja,
+        ahora=ahora,
+    )
+    palabras = _palabras_relevancia(recalc.get("marca") or "", perfil_activo)
+    recalc["score"], recalc["score_razon"], recalc["score_desglose"] = agrupar.puntuar_detalle(
+        recalc, palabras_marca=palabras, ahora=ahora, pesos=pesos,
+        breaking_peso=breaking_peso, breaking_ventana_h=breaking_ventana_h,
+    )
+    repos.upsert_noticia_cluster(recalc)
+    return True

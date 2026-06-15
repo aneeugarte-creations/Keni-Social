@@ -10,9 +10,9 @@ que existe en el codigo (no se inventan variables). Cuando se cablea un marcador
 en un modulo, se anade aqui su entrada. Origen = el proceso/modulo que la sustituye:
 
   - `dominio/perfil_editorial.py`  -> {{MARCA}} {{MAX_KEYWORDS}} {{EDITORIAL}}
-  - `dominio/fusion_semantica.py`  -> {{HISTORIAS}}        (fusionar Y fusionar-verificar)
-  - `dominio/traduccion.py`        -> {{ITEMS}}
-  - `dominio/insumos_parse.py`     -> {{RUTA}}
+  - `dominio/fusionar_semantica.py`  -> {{HISTORIAS}}        (fusionar Y fusionar-verificar)
+  - `dominio/traducir.py`        -> {{ITEMS}}
+  - `dominio/recibir_parse.py`     -> {{RUTA}}
   - `importador_calendario.py`     -> {{RUTA}} {{MARCAS}} {{REDES}}
   - `dominio/parrilla_import_job.py` -> {{FUENTE}} {{MIEMBROS}} {{SLOTS}} {{REGLA_FUENTE}}
                                         {{ESQUEMA_JSON}} {{COLA_FUENTE}}

@@ -123,10 +123,10 @@ def _finalizar_error(gen_id: str, mensaje: str) -> None:
 def _sanear_qa_si_fallo(gen_id: str, spec: object) -> None:
     """Si un job de QA-FUENTE termino en ERROR, devuelve su tema a "sin veredicto" (re-criba).
 
-    CIERRA EL ZOMBI `qa_veredicto='en_curso'`: la fase QA marca el tema `en_curso` ANTES de
+    CIERRA EL ZOMBI `verificar_veredicto='en_curso'`: la fase QA marca el tema `en_curso` ANTES de
     lanzar, y solo el `procesar` (exito) escribe el veredicto real. Si la generacion muere en
     error/timeout/cancelacion, nada lo reseteaba: el tema quedaba excluido PARA SIEMPRE de
-    `temas_sin_qa` y contando en `temas_en_vuelo` (bloqueando el cupo serial de su marca).
+    `temas_sin_verificar` y contando en `temas_en_vuelo` (bloqueando el cupo serial de su marca).
     Aqui, al cerrar un job cuyo `procesar` es `qa-fuente` con el registro en ERROR, se resetea
     el sentinel a "" para que el siguiente barrido lo re-cribe. El reaper cubre ademas los
     casos donde este saneo no llega a correr (muerte no graciosa del worker). Best-effort.
@@ -145,8 +145,8 @@ def _sanear_qa_si_fallo(gen_id: str, spec: object) -> None:
         from .pipeline_contenido import QA_EN_CURSO
 
         tema = repos.obtener_contenido(contenido_id)
-        if tema is not None and (tema.get("qa_veredicto") or "") == QA_EN_CURSO:
-            repos.actualizar_contenido(contenido_id, {"qa_veredicto": ""})
+        if tema is not None and (tema.get("verificar_veredicto") or "") == QA_EN_CURSO:
+            repos.actualizar_contenido(contenido_id, {"verificar_veredicto": ""})
             _log.info(
                 "worker: QA de la fuente fallida; tema %s devuelto a re-criba", contenido_id
             )

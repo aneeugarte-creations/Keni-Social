@@ -87,9 +87,9 @@ _COLS_CONTENIDO = (
     "senal_viralidad",
     # QA DE LA FUENTE (pre-copy): veredicto del cribado de la nota de origen antes de generar
     # copy. "no_verificado" (⚠️, OK para seguir, no verificado a fondo) o "problema" (❗, algo de
-    # peso en contra: NO se generó copy). `qa_hallazgos` es el JSON estructurado de hallazgos.
-    "qa_veredicto",
-    "qa_hallazgos",
+    # peso en contra: NO se generó copy). `verificar_hallazgos` es el JSON estructurado de hallazgos.
+    "verificar_veredicto",
+    "verificar_hallazgos",
     # Parámetros de lanzamiento de copy PENDIENTE (JSON): el sweep guarda aquí, al crear el tema
     # en CI, lo que la fase CD necesitará para lanzar el copy (redes, imagen ya resuelta, fuente,
     # clave) SOLO si la QA de la fuente sale `no_verificado`. "" tras lanzar (o si no aplica).
@@ -144,8 +144,8 @@ _CAMPOS_EDITABLES_CONTENIDO: tuple[str, ...] = (
     "id_post_metricool",
     # QA de la FUENTE: el sweep del pipeline persiste aquí el veredicto del cribado pre-copy
     # (`no_verificado`/`problema`) y sus hallazgos estructurados (JSON) sobre la nota de origen.
-    "qa_veredicto",
-    "qa_hallazgos",
+    "verificar_veredicto",
+    "verificar_hallazgos",
     # Parámetros de lanzamiento de copy pendiente (JSON): editable para que el sweep lo fije al
     # crear el tema y lo limpie ("") tras lanzar el copy en la fase CD.
     "copy_pendiente",
@@ -205,8 +205,8 @@ def crear_contenido(
     formato: str = redes.FORMATO_FOTO,
     id_post_metricool: str = "",
     senal_viralidad: int = 0,
-    qa_veredicto: str = "",
-    qa_hallazgos: str = "",
+    verificar_veredicto: str = "",
+    verificar_hallazgos: str = "",
     copy_pendiente: str = "",
     fecha_fuente: str = "",
     url_fuente: str = "",
@@ -231,7 +231,7 @@ def crear_contenido(
         fecha_entrega=fecha_entrega, autor=autor, responsable=responsable, origen=origen,
         notas=notas, categoria=categoria, tipo_contenido=tipo_contenido, formato=formato,
         id_post_metricool=id_post_metricool, senal_viralidad=senal_viralidad,
-        qa_veredicto=qa_veredicto, qa_hallazgos=qa_hallazgos,
+        verificar_veredicto=verificar_veredicto, verificar_hallazgos=verificar_hallazgos,
         copy_pendiente=copy_pendiente, fecha_fuente=fecha_fuente, url_fuente=url_fuente,
         fuente_nombre=fuente_nombre, creado=creado, actualizado=actualizado, id=id,
     )
@@ -291,8 +291,8 @@ def _fila_contenido_nueva(**campos: Any) -> dict[str, Any]:
         # Señal de viralidad del Radar (Fase 5): >=0; defensivo ante valores no enteros.
         "senal_viralidad": _entero_no_negativo(campos.get("senal_viralidad") or 0),
         # QA de la fuente (pre-copy): suele nacer "" (lo fija el sweep tras cribar la nota).
-        "qa_veredicto": campos.get("qa_veredicto") or "",
-        "qa_hallazgos": campos.get("qa_hallazgos") or "",
+        "verificar_veredicto": campos.get("verificar_veredicto") or "",
+        "verificar_hallazgos": campos.get("verificar_hallazgos") or "",
         "copy_pendiente": campos.get("copy_pendiente") or "",
         "fecha_fuente": campos.get("fecha_fuente") or "",
         # URL de la nota de origen (Investigador F3): la conserva la pieza para el dedup por URL.
@@ -434,7 +434,7 @@ def ids_contenido_con_copy(marca: str | None = None) -> set[str]:
     return {f["cid"] for f in filas if f["cid"]}
 
 
-def qa_veredicto_por_contenido(contenido_ids: list[str]) -> dict[str, str]:
+def verificar_veredicto_por_contenido(contenido_ids: list[str]) -> dict[str, str]:
     """Veredicto de VERIFICACIÓN (QA de fuente) por `contenido_id`, en LOTE (sin N+1).
 
     El QA corre sobre `contenido` (no sobre el cluster), así que la Mesa de Investigación lo
@@ -448,20 +448,20 @@ def qa_veredicto_por_contenido(contenido_ids: list[str]) -> dict[str, str]:
     con = _conectar()
     try:
         filas = con.execute(
-            f"SELECT id, qa_veredicto FROM contenido WHERE id IN ({marcadores})",  # noqa: S608 -- marcadores
+            f"SELECT id, verificar_veredicto FROM contenido WHERE id IN ({marcadores})",  # noqa: S608 -- marcadores
             tuple(ids),
         ).fetchall()
     finally:
         con.close()
-    return {f["id"]: (f["qa_veredicto"] or "") for f in filas if (f["qa_veredicto"] or "")}
+    return {f["id"]: (f["verificar_veredicto"] or "") for f in filas if (f["verificar_veredicto"] or "")}
 
 
 def sanear_qa_en_curso_huerfanos(umbral_iso: str) -> int:
-    """Devuelve a re-criba (qa_veredicto='') los temas ZOMBI en 'en_curso' mas viejos que `umbral_iso`.
+    """Devuelve a re-criba (verificar_veredicto='') los temas ZOMBI en 'en_curso' mas viejos que `umbral_iso`.
 
     Saneamiento del reaper: la fase QA marca el tema `en_curso` antes de lanzar la criba; si
     la generacion muere sin finalizador, el sentinel quedaba para siempre (tema excluido de
-    `temas_sin_qa` y contando en `temas_en_vuelo`). Compara contra `actualizado` (lo refresca
+    `temas_sin_verificar` y contando en `temas_en_vuelo`). Compara contra `actualizado` (lo refresca
     cada escritura, incluida la que puso `en_curso`): un `en_curso` legitimo y reciente NUNCA
     se toca (el umbral es muy superior al timeout de la criba). Devuelve cuantos reseteo.
     """
@@ -471,8 +471,8 @@ def sanear_qa_en_curso_huerfanos(umbral_iso: str) -> int:
             # `actualizado` es timestamptz (migracion 0033): `IS NOT NULL` sustituye al viejo
             # `<> ''` (el repo siempre lo escribe, asi que en la practica nunca es NULL); el
             # `< ?` compara nativo contra el umbral ISO (casteado a timestamptz).
-            "UPDATE contenido SET qa_veredicto = '' "
-            "WHERE qa_veredicto = 'en_curso' AND actualizado IS NOT NULL AND actualizado < ?",
+            "UPDATE contenido SET verificar_veredicto = '' "
+            "WHERE verificar_veredicto = 'en_curso' AND actualizado IS NOT NULL AND actualizado < ?",
             (umbral_iso,),
         )
         con.commit()

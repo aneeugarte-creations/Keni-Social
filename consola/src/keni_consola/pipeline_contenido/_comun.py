@@ -16,7 +16,7 @@ from typing import Any
 
 from .. import config, generaciones, marcas, redes, repos
 from ..dominio import http_feed
-from ..dominio import qa_editorial as dom_qa
+from ..dominio import verificar_fuente as dom_verificar
 
 __all__ = [
     # módulos/seams reexportados que algún consumidor referencia vía el paquete
@@ -28,15 +28,15 @@ __all__ = [
     "marcas",
     "repos",
     "redes",
-    "dom_qa",
+    "dom_verificar",
     "_log",
     # constantes de flujo
     "ORIGEN_PIPELINE",
     "TIPO_ACTIVIDAD",
     "TIPO_PIPELINE",
-    "ETAPA_CI",
-    "ETAPA_CD",
-    "ETAPA_QA",
+    "ETAPA_ADMITIR",
+    "ETAPA_REDACTAR",
+    "ETAPA_VERIFICAR",
     "_DIAS_DEDUP",
     "_FORMATO_PIPELINE",
     "PROMPT_QA_ID",
@@ -91,16 +91,16 @@ ORIGEN_PIPELINE = "pipeline"
 # `tipo='pipeline'` (TIPO_PIPELINE) y SÍ aparece en Actividad con sus tokens/coste/tiempo: TODO
 # lo que lanza la máquina es UN solo tipo; lo manual (copy a mano, imagen del Estudio) conserva
 # su tipo propio. La vista Pipelines lee los marcadores por `contenido_id`. La ETAPA viaja en la
-# `etiqueta` ("CI · ..."/"CD · ..."/"QA · ...").
+# `etiqueta` ("ADMITIR · ..."/"REDACTAR · ..."/"VERIFICAR · ...").
 TIPO_ACTIVIDAD = "pipeline_etapa"
 # `tipo` ÚNICO de toda generación REAL que lanza el pipeline (criba QA, copy, arte, Haiku del
 # pool): trabajo con tokens/coste/tiempo, identificable y medible en Actividad como `pipeline`.
 TIPO_PIPELINE = "pipeline"
 
-ETAPA_CI = "CI"
-ETAPA_CD = "CD"
-ETAPA_QA = "QA"
-ETAPA_ARTE = "ARTE"
+ETAPA_ADMITIR = "ADMITIR"
+ETAPA_REDACTAR = "REDACTAR"
+ETAPA_VERIFICAR = "VERIFICAR"
+ETAPA_ILUSTRAR = "ILUSTRAR"
 
 # FLUJO CONTINUO: el pipeline NO tiene topes por etapa (cribas QA/copies/autogen/revisados). El
 # volumen lo regula la ADMISIÓN (`config.pipeline_max()` + el gate serial WIP
@@ -136,7 +136,7 @@ _ETIQUETA_QA = "Verificar la fuente"
 QA_EN_CURSO = "en_curso"
 
 # Veredicto SENTINEL que se persiste cuando la etapa QA está DESACTIVADA para la marca (toggle
-# `KENI_PIPELINE_VERIFICAR` off): no se lanza la criba, pero el tema NO queda bloqueado: `temas_para_copy` lo acepta
+# `KENI_PIPELINE_VERIFICAR` off): no se lanza la criba, pero el tema NO queda bloqueado: `temas_para_redactar` lo acepta
 # igual que un `no_verificado`, así el copy se genera sin criba. La vista Pipelines pinta QA como
 # "saltada". Distinto de "sin veredicto" (que significaría "QA pendiente, aún por cribar").
 QA_SALTADA = "saltada"
@@ -148,8 +148,8 @@ QA_CADUCADA = "caducada"
 
 # Veredictos ESTRUCTURADOS de la QA de la FUENTE (rediseño QPC), reexportados del dominio para
 # que el sweep, la API y los tests compartan los literales sin acoplarse al módulo de dominio.
-VERDICTO_NO_VERIFICADO = dom_qa.VERDICTO_NO_VERIFICADO  # ⚠️ OK para seguir (no verificado a fondo)
-VERDICTO_PROBLEMA = dom_qa.VERDICTO_PROBLEMA  # ❗ algo de peso en contra: NO se genera copy
+VERDICTO_NO_VERIFICADO = dom_verificar.VERDICTO_NO_VERIFICADO  # ⚠️ OK para seguir (no verificado a fondo)
+VERDICTO_PROBLEMA = dom_verificar.VERDICTO_PROBLEMA  # ❗ algo de peso en contra: NO se genera copy
 
 # Criterios por defecto del documento QA que se CREA si aún no existe (idempotente). MISMO
 # cuerpo que la semilla `prompt/verificar` del paquete (último recurso si la semilla no se
@@ -447,7 +447,7 @@ def registrar_etapa(
     """Sella una entrada de ACTIVIDAD de una etapa del pipeline (CI/CD/QA). Best-effort.
 
     Crea una generación-marcador `completado` (sin `claude`): `tipo='pipeline'` y la etapa +
-    detalle en la `etiqueta` ("CI · Recolectar...", etc.). La vista "Actividad IA" la muestra
+    detalle en la `etiqueta` ("ADMITIR · Recolectar...", etc.). La vista "Actividad IA" la muestra
     junto al resto de la actividad de IA. Un fallo al sellar NUNCA aborta el barrido (devuelve
     None y se loguea): la actividad es trazabilidad, no parte crítica del flujo.
 
@@ -465,7 +465,7 @@ def registrar_etapa(
     # PRODUCCION. Se sella en el marcador para clasificarlo sin reparsear la etiqueta.
     proceso = (
         generaciones.PROCESO_INVESTIGACION
-        if etapa in (ETAPA_CI, ETAPA_QA)
+        if etapa in (ETAPA_ADMITIR, ETAPA_VERIFICAR)
         else generaciones.PROCESO_PRODUCCION
     )
     try:
@@ -584,7 +584,7 @@ _BACKOFF_ETAPA_SEG = (60.0, 240.0, 960.0)
 
 
 def intentos_de(tema: dict[str, Any], campo: str) -> int:
-    """Intentos ya consumidos de una etapa (`campo` = 'qa_intentos'/'cd_intentos'). 0 si no hay."""
+    """Intentos ya consumidos de una etapa (`campo` = 'verificar_intentos'/'redactar_intentos'). 0 si no hay."""
     try:
         return int(_copy_pendiente_leido(tema).get(campo) or 0)
     except (TypeError, ValueError):
@@ -659,8 +659,8 @@ def marcar_fallo_etapa(tema_id: str, etapa: str, motivo: str) -> None:
     }]
     try:
         repos.actualizar_contenido(tema_id, {
-            "qa_veredicto": VERDICTO_PROBLEMA,
-            "qa_hallazgos": json.dumps(hallazgos, ensure_ascii=False),
+            "verificar_veredicto": VERDICTO_PROBLEMA,
+            "verificar_hallazgos": json.dumps(hallazgos, ensure_ascii=False),
         })
         _log.warning("pipeline: tema %s marcado problema por fallo repetido de %s", tema_id, etapa)
     except Exception:  # noqa: BLE001 -- best-effort; el tema seguirá reintentando si no persiste

@@ -153,7 +153,7 @@ from .db_contenido import (  # noqa: F401
     existe_publicado_similar,
     hashtags_de_contenido,
     ids_contenido_con_copy,
-    qa_veredicto_por_contenido,
+    verificar_veredicto_por_contenido,
     existe_publicado_similar_en_cache,
     listar_contenido,
     listar_contenido_origenes,
@@ -206,7 +206,7 @@ from .db_editor import (  # noqa: F401
     reordenar_plantillas_diseno,
     ultima_documento_version,
 )
-from .db_evergreen import (  # noqa: F401
+from .db_idear import (  # noqa: F401
     actualizar_evergreen_idea,
     asignar_etiqueta,
     borrar_evergreen_idea,

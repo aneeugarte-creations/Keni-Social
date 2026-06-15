@@ -1,7 +1,7 @@
 """Encaje de MARCA con IA (Haiku) para historias SIN marca (Trends/agencias).
 
 PROBLEMA QUE CIERRA: las noticias de Tendencias/agencias entran al pool sin marca
-(`marca=''`). Si el encaje por vocabulario (`clustering.marca_por_vocabulario`) no las
+(`marca=''`). Si el encaje por vocabulario (`agrupar.marca_por_vocabulario`) no las
 casa, quedan invisibles por marca y NUNCA se auto-promueven al feed: `crear_tema_de_cluster`
 descarta los clusters sin marca (`if not marca: return None`). Esto pasa sobre todo con los
 BREAKING (última hora) genéricos.
@@ -116,6 +116,6 @@ def clasificar_marca(
 
 def _ejecutar(prompt: str, carpeta: str) -> str:
     """Ejecutor real: reutiliza el subproceso `claude -p` de traducción (acumula métricas)."""
-    from .traduccion import _ejecutar_claude_json
+    from .traducir import _ejecutar_claude_json
 
     return _ejecutar_claude_json(prompt, carpeta)

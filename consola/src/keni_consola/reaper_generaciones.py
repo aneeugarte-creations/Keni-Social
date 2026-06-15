@@ -40,7 +40,7 @@ _FACTOR_TTL_QA_EN_CURSO = 2
 
 
 def _ttl_qa_en_curso_seg() -> int:
-    """TTL (s) del saneo de temas `qa_veredicto='en_curso'` huérfanos.
+    """TTL (s) del saneo de temas `verificar_veredicto='en_curso'` huérfanos.
 
     El override explícito (`KENI_QA_EN_CURSO_TTL_MIN`) manda; sin él, se DERIVA del timeout
     real de la criba (`config.qa_fuente_timeout()`; si está a 0 —sin endurecer—, rige el
@@ -52,10 +52,10 @@ def _ttl_qa_en_curso_seg() -> int:
 
 
 def _sanear_qa_en_curso() -> int:
-    """Saneo de temas del pipeline ZOMBI en `qa_veredicto='en_curso'`. Devuelve cuántos tocó.
+    """Saneo de temas del pipeline ZOMBI en `verificar_veredicto='en_curso'`. Devuelve cuántos tocó.
 
     La fase QA marca el tema `en_curso` ANTES de lanzar la criba; si el lanzamiento o la
-    generación mueren sin finalizador, el tema quedaba excluido PARA SIEMPRE de `temas_sin_qa`
+    generación mueren sin finalizador, el tema quedaba excluido PARA SIEMPRE de `temas_sin_verificar`
     y contando en `temas_en_vuelo` (bloquea el cupo serial de su marca). Por cada zombi más
     viejo que el TTL (`_ttl_qa_en_curso_seg`, vs `actualizado`):
       - etapa Verificar ACTIVA para la marca -> se resetea a "" (re-criba en el barrido);
@@ -72,7 +72,7 @@ def _sanear_qa_en_curso() -> int:
     for tema in repos.listar_contenido():
         if (tema.get("origen") or "") != ORIGEN_PIPELINE:
             continue
-        if (tema.get("qa_veredicto") or "") != QA_EN_CURSO:
+        if (tema.get("verificar_veredicto") or "") != QA_EN_CURSO:
             continue
         # `actualizado` lo refresca cada escritura, incluida la que puso `en_curso`: un
         # `en_curso` legítimo y reciente NUNCA se toca. Sin fecha no hay evidencia: se respeta.
@@ -84,7 +84,7 @@ def _sanear_qa_en_curso() -> int:
         verificar_activa = config.etapa_activa(config.ENV_PIPELINE_VERIFICAR, marca)
         nuevo = "" if verificar_activa else QA_SALTADA
         try:
-            repos.actualizar_contenido(tema_id, {"qa_veredicto": nuevo})
+            repos.actualizar_contenido(tema_id, {"verificar_veredicto": nuevo})
         except Exception:  # noqa: BLE001 -- best-effort por tema; el resto del saneo sigue
             _log.warning(
                 "Reaper de generaciones: no se pudo sanear la QA zombi del tema %s.",
@@ -132,7 +132,7 @@ def ejecutar_barrido() -> int:
             _log.info("Reaper de generaciones: %d lote(s) de cajón zombi reconciliado(s).", m)
     except Exception:  # noqa: BLE001 -- saneamiento aditivo; un fallo no debe tumbar el barrido
         _log.warning("Reaper de generaciones: fallo el saneo de lotes de cajón.", exc_info=True)
-    # Cuarto saneamiento: temas del pipeline ZOMBI en `qa_veredicto='en_curso'` (detalle en
+    # Cuarto saneamiento: temas del pipeline ZOMBI en `verificar_veredicto='en_curso'` (detalle en
     # `_sanear_qa_en_curso`): TTL derivado del timeout real de la criba (~2×) y, con la etapa
     # de Validación apagada, el zombi pasa a `saltada` (CD lo recoge) en vez de re-cribarse.
     try:

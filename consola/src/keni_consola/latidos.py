@@ -30,7 +30,7 @@ _log = logging.getLogger("keni_consola.latidos")
 # lo deriva del módulo de su `sweep_fn`); estos alias pulen los casos poco legibles para
 # que el panel muestre nombres cortos y estables aunque el módulo se renombre.
 _ALIAS = {
-    "ingesta_daemon": "ingesta",
+    "recolectar_daemon": "ingesta",
     "media_gc_daemon": "media_gc",
     "noticias_gc_daemon": "noticias_gc",
     "trends_daemon": "trends",
@@ -151,7 +151,7 @@ def motor_de(daemon: str) -> str | None:
 # Sistema). Fuente única, igual que BARRIBLES/GRUPO_*. Cada valor es una clave REAL del
 # catálogo de ajustes (`ajustes_catalogo`) — un test lo verifica. Verificado contra el
 # `activo_fn` de cada `bucle_gateado` (ver daemons.py + cada módulo):
-#   - ingesta            -> KENI_PIPELINE_RECOLECTAR   (ingesta_daemon/_bucle: recolectar_activo)
+#   - ingesta            -> KENI_PIPELINE_RECOLECTAR   (recolectar_daemon/_bucle: recolectar_activo)
 #   - trends             -> KENI_TRENDS               (trends_daemon: trends_activo)
 #   - algoritmos         -> KENI_ALGORITMOS_AUTO      (algoritmos_refresco: algoritmos_auto_activo)
 #   - media_gc           -> KENI_MEDIA_GC             (media_gc_daemon: media_gc_activo)

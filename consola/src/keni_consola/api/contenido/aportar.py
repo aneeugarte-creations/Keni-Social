@@ -70,7 +70,7 @@ async def aportar(request: Request) -> Response:
 
     Es la PUERTA CREATIVA (Fase 1): un miembro del equipo "postea" material crudo (foto/
     nota/idea/url) con marca, y eso ENCIENDE el pipeline automaticamente. Crea un item del
-    tablero con `origen='equipo'`, que el daemon de auto-generacion (`autogen_copy`, gateado
+    tablero con `origen='equipo'`, que el daemon de auto-generacion (`autogen_redactar`, gateado
     por `KENI_AUTOGEN`) recoge IGUAL que a una fuente externa para escribir el copy solo
     (sin que el equipo pulse nada). El gate humano sigue intacto: el borrador para en la cola
     de revision.
@@ -153,7 +153,7 @@ async def aportar(request: Request) -> Response:
 
     # Clip de video/audio (opcional): se TRANSCRIBE EN LOCAL (whisper.cpp; el audio no sale de
     # la maquina, mismo camino que la skill clip-a-copy) y el texto se anexa al `material` como
-    # nota NO verificada. Asi entra al auto-copy igual que una nota escrita (autogen_copy lee
+    # nota NO verificada. Asi entra al auto-copy igual que una nota escrita (autogen_redactar lee
     # titulo+descripcion). El clip NO se guarda; solo su transcripcion alimenta el copy.
     clip = form.get("clip")
     if isinstance(clip, UploadFile) and (clip.filename or ""):

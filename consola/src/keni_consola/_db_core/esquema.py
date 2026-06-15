@@ -372,8 +372,8 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         id_post_metricool   TEXT NOT NULL DEFAULT '',
         senal_viralidad     INTEGER NOT NULL DEFAULT 0,
         espejo              INTEGER NOT NULL DEFAULT 1,
-        qa_veredicto        TEXT NOT NULL DEFAULT '',
-        qa_hallazgos        TEXT NOT NULL DEFAULT '',
+        verificar_veredicto        TEXT NOT NULL DEFAULT '',
+        verificar_hallazgos        TEXT NOT NULL DEFAULT '',
         copy_pendiente      TEXT NOT NULL DEFAULT '',
         fecha_fuente        TEXT NOT NULL DEFAULT '',
         url_fuente          TEXT NOT NULL DEFAULT '',
@@ -1225,7 +1225,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # items RSS del Radar v1 (que se leen en VIVO por request, con tope), aqui cada artículo de
     # cada feed se PERSISTE una vez (dedup por (fuente_id, clave)) para tener cobertura
     # newsroom-grade: el Radar/Plan y la UI leen del store y la red se sondea en background por
-    # el `ingesta_daemon`. `clave` = url_canonica normalizada (o hash del título si no hay url);
+    # el `recolectar_daemon`. `clave` = url_canonica normalizada (o hash del título si no hay url);
     # `categoria`/`marca` vienen de la fuente; `estado` nuevo|usado|descartado; `contenido_id`
     # enlaza al tablero cuando el equipo lo usa; `cluster_id` lo llena la Ola B (historias).
     """
@@ -1302,8 +1302,8 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         primera_fuente_nombre TEXT NOT NULL DEFAULT '',
         fuentes_detalle TEXT NOT NULL DEFAULT '',
         marca_clasificada_por_ia INTEGER NOT NULL DEFAULT 0,
-        qa_veredicto  TEXT NOT NULL DEFAULT '',
-        qa_hallazgos  TEXT NOT NULL DEFAULT '',
+        verificar_veredicto  TEXT NOT NULL DEFAULT '',
+        verificar_hallazgos  TEXT NOT NULL DEFAULT '',
         creado        TEXT NOT NULL DEFAULT '',
         actualizado   TEXT NOT NULL DEFAULT ''
     )

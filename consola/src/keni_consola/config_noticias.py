@@ -328,18 +328,18 @@ SCORE_PESO_RENDIMIENTO_AUTO = 0.10
 
 
 def score_pesos():
-    """Pesos del algoritmo de ponderación del score de cluster, como `clustering.PesosScore`.
+    """Pesos del algoritmo de ponderación del score de cluster, como `agrupar.PesosScore`.
 
     Lee cada peso del store/env (clamp [0,1]; default = los de `clustering`). El daemon de Recolectar
-    inyecta el resultado en `clustering.puntuar` para que el equipo afine la jerarquización desde
-    la consola sin tocar código. Import perezoso de `dominio.clustering` para evitar ciclos.
+    inyecta el resultado en `agrupar.puntuar` para que el equipo afine la jerarquización desde
+    la consola sin tocar código. Import perezoso de `dominio.agrupar` para evitar ciclos.
 
     Señal de RENDIMIENTO (Fase 2c): si el flag `KENI_RENDIMIENTO_RANKING` está ON y el peso NO
     se fijó explícitamente, se aplica `SCORE_PESO_RENDIMIENTO_AUTO` (0.10) renormalizando la
     combinación lineal (corroboración/frescura/viralidad/marca × 0.90): encender el flag SIEMPRE
     tiene efecto. Un peso explícito (store/env) manda y no renormaliza nada.
     """
-    from .dominio.clustering import PesosScore
+    from .dominio.agrupar import PesosScore
 
     corroboracion = _peso01(ENV_SCORE_PESO_CORROBORACION, SCORE_PESO_CORROBORACION_DEF)
     velocidad = _peso01(ENV_SCORE_PESO_VELOCIDAD, SCORE_PESO_VELOCIDAD_DEF)
@@ -384,7 +384,7 @@ def promover_diversidad_umbral() -> float:
 
 # LISTÓN de producción automática: el panel LISTA todo el pool jerarquizado, pero PROMOVER una
 # historia a tema (que acaba en Verificar+Redactar con `claude -p`: coste real de tokens) exige un listón
-# más alto y explicable. Defaults en `dominio.clustering` (capa pura); editables en caliente.
+# más alto y explicable. Defaults en `dominio.agrupar` (capa pura); editables en caliente.
 ENV_PROMOVER_MIN_SCORE = "KENI_PROMOVER_MIN_SCORE"
 ENV_PROMOVER_MIN_MARCA = "KENI_PROMOVER_MIN_MARCA"
 
@@ -392,7 +392,7 @@ ENV_PROMOVER_MIN_MARCA = "KENI_PROMOVER_MIN_MARCA"
 def promover_min_score() -> float:
     """Score mínimo [0,1] para que una historia dispare producción automática
     (`KENI_PROMOVER_MIN_SCORE`, def 0.35). `0` desactiva el listón de score. Valor inválido → def."""
-    from .dominio.clustering import LISTON_MIN_SCORE_DEF
+    from .dominio.agrupar import LISTON_MIN_SCORE_DEF
 
     return _peso01(ENV_PROMOVER_MIN_SCORE, LISTON_MIN_SCORE_DEF)
 
@@ -401,8 +401,8 @@ def promover_min_marca() -> float:
     """Encaje de marca mínimo [0,1] (relevancia por vocabulario) para la producción automática
     (`KENI_PROMOVER_MIN_MARCA`, def 0.2 ≈ 1 término del vocabulario). `0` desactiva el listón de
     marca. Exentas: historias curadas por el equipo y breaking corroboradas (ver
-    `clustering.evaluar_liston`). Valor inválido → def."""
-    from .dominio.clustering import LISTON_MIN_MARCA_DEF
+    `agrupar.evaluar_liston`). Valor inválido → def."""
+    from .dominio.agrupar import LISTON_MIN_MARCA_DEF
 
     return _peso01(ENV_PROMOVER_MIN_MARCA, LISTON_MIN_MARCA_DEF)
 
@@ -425,7 +425,7 @@ ENV_PLAN_DIA = "KENI_PLAN_DIA"
 def promover_maduracion_min() -> int:
     """Minutos mínimos de una historia en el pool antes de poder promoverse
     (`KENI_PROMOVER_MADURACION_MIN`, def 45, min 0; `0` desactiva). Exentas las curadas y las
-    breaking corroboradas (regla en `clustering.evaluar_liston`): la urgencia real no espera.
+    breaking corroboradas (regla en `agrupar.evaluar_liston`): la urgencia real no espera.
     Dedicar este tiempo a "elegir" deja que la corroboración se acumule y que Admitir
     compare historias maduras, no primeras llegadas."""
     return _entero(ENV_PROMOVER_MADURACION_MIN, PROMOVER_MADURACION_MIN_DEF, minimo=0)
@@ -772,7 +772,7 @@ def qa_fuente_timeout() -> int:
 
 
 def qa_en_curso_ttl_seg() -> int:
-    """TTL (s) del saneador de temas `qa_veredicto='en_curso'` huerfanos (`KENI_QA_EN_CURSO_TTL_MIN`).
+    """TTL (s) del saneador de temas `verificar_veredicto='en_curso'` huerfanos (`KENI_QA_EN_CURSO_TTL_MIN`).
 
     Def 30 min (muy superior al timeout de la criba, asi nunca toca una verificación viva). El reaper
     resetea a "" los `en_curso` mas viejos para que vuelvan a la re-criba del barrido.

@@ -168,7 +168,7 @@ def _etapas_de_run(
     marca) las pintan como corridas sin grupo/score, no "saltada". Las togglables
     (Admitir/Verificar/Redactar/Ilustrar) están activas o "saltada"
     según su toggle por-marca; si activas, su estado se deriva del estado real (no de logs): el
-    `qa_veredicto` del tema y las publicaciones por plataforma (auto-curativo). La etapa Verificar
+    `verificar_veredicto` del tema y las publicaciones por plataforma (auto-curativo). La etapa Verificar
     (criba pre-copy) va ANTES del copy; un `problema` NO genera copy. Ilustrar exige `arte_ia`
     (evidencia de arte GENERADO: marcador/generación de arte de la run): una imagen de fuente
     propia en la pieza no enciende la etapa. Aprobar es el
@@ -192,8 +192,8 @@ def _etapas_de_run(
     creado = item.get("creado", "") or ""
     actualizado = item.get("actualizado", "") or ""
     total = len(piezas)
-    qa_veredicto = (item.get("qa_veredicto", "") or "").strip()
-    es_problema = qa_veredicto == VERDICTO_PROBLEMA
+    verificar_veredicto = (item.get("verificar_veredicto", "") or "").strip()
+    es_problema = verificar_veredicto == VERDICTO_PROBLEMA
 
     # --- Admitir: el tema EXISTE, luego Admitir CORRIÓ (evidencia, no toggle). --------
     ci_detalle = f"Del tablero · {item.get('origen') or ''}" if es_tablero else ""
@@ -201,18 +201,18 @@ def _etapas_de_run(
 
     # --- Verificar: PRIMERO el veredicto persistido en el TEMA (lo que de verdad pasó); el
     # toggle solo decide el estado de una run que AÚN no tiene veredicto (futuro).
-    if es_tablero and not qa_veredicto:
+    if es_tablero and not verificar_veredicto:
         # La criba verifica la FUENTE de una noticia recolectada; un tema del tablero no la tiene.
         qa_estado, qa_detalle = _ESTADO_SALTADA, "No aplica: sin criba (tema del tablero)"
-    elif qa_veredicto == QA_SALTADA:
+    elif verificar_veredicto == QA_SALTADA:
         qa_estado, qa_detalle = _ESTADO_SALTADA, ""
-    elif qa_veredicto == QA_CADUCADA:
+    elif verificar_veredicto == QA_CADUCADA:
         qa_estado, qa_detalle = _ESTADO_SALTADA, "Caducada: el pipeline priorizó lo fresco"
-    elif qa_veredicto == VERDICTO_PROBLEMA:
+    elif verificar_veredicto == VERDICTO_PROBLEMA:
         qa_estado, qa_detalle = "revisar", "Problema en la fuente"
-    elif qa_veredicto == "en_curso":
+    elif verificar_veredicto == "en_curso":
         qa_estado, qa_detalle = "en_curso", ""
-    elif qa_veredicto == VERDICTO_NO_VERIFICADO:
+    elif verificar_veredicto == VERDICTO_NO_VERIFICADO:
         qa_estado, qa_detalle = "ok", "No verificado"
     elif _verificar_off(marca):
         qa_estado, qa_detalle = _ESTADO_SALTADA, ""
@@ -227,7 +227,7 @@ def _etapas_de_run(
         cd_estado, cd_detalle = "ok", f"{con_copy}/{total}"
     elif es_problema:
         cd_estado, cd_detalle = "pendiente", "Omitido"
-    elif qa_veredicto == QA_CADUCADA:
+    elif verificar_veredicto == QA_CADUCADA:
         cd_estado, cd_detalle = _ESTADO_SALTADA, "Caducada"
     elif _redactar_off(marca):
         cd_estado, cd_detalle = _ESTADO_SALTADA, ""
@@ -241,7 +241,7 @@ def _etapas_de_run(
     con_arte = sum(1 for p in piezas if not p["falta_imagen"])
     if arte_ia:
         arte_estado, arte_detalle = "ok", f"{con_arte}/{total}"
-    elif qa_veredicto == QA_CADUCADA:
+    elif verificar_veredicto == QA_CADUCADA:
         arte_estado, arte_detalle = _ESTADO_SALTADA, "Caducada"
     elif _ilustrar_off(marca):
         arte_estado, arte_detalle = _ESTADO_SALTADA, ""
@@ -260,7 +260,7 @@ def _etapas_de_run(
         # Esperando al HUMANO (piezas en revisión, ninguna aprobada aún): es "pendiente", no
         # "en curso" — la máquina no está haciendo nada.
         ap_estado, ap_detalle = "pendiente", "En revisión"
-    elif qa_veredicto == QA_CADUCADA and not total:
+    elif verificar_veredicto == QA_CADUCADA and not total:
         # Run CADUCADA sin piezas: cerrada sin producto (no quede "pendiente" para siempre).
         ap_estado, ap_detalle = _ESTADO_SALTADA, "Caducada"
     else:

@@ -58,8 +58,10 @@ from .migraciones_columnas import (
     _migrar_columnas_turnos_rota,
     _migrar_columnas_usuarios,
     _migrar_columnas_video_composiciones,
+    _migrar_etiquetas_etapas_verbos,
     _migrar_green_a_evergreen,
     _migrar_renombre_catalogo_media,
+    _migrar_renombre_columnas_etapas,
     _normalizar_timestamps_texto,
 )
 from .migraciones_integridad import (
@@ -251,6 +253,13 @@ MIGRACIONES_PRE_DDL: tuple[Migracion, ...] = (
     ),
     # GRID POR MARCA: anade `marca` al grid de rota antes de los indices `idx_rota_*_marca`.
     Migracion("0008-marca-grid-rota", _asegurar_marca_grid_rota, re_aplicar_si_cambia=True),
+    # ETAPAS CON NOMBRE DE VERBO (Fase 2): renombra las columnas de etapa legacy `qa_*` ->
+    # `verificar_*` en `contenido`/`noticias_clusters` (piloto AMX), preservando datos. PRE-DDL
+    # a proposito: debe correr ANTES de que las migraciones de ADD COLUMN re-aplicables (0011/
+    # 0019, cuya tupla cambio de `qa_*` a `verificar_*`) re-evaluen y, al no ver aun la columna
+    # nueva, crearian una columna vacia huerfana (mismo motivo que el renombre green->evergreen).
+    # One-shot pero idempotente (RENAME guardado por la existencia de la columna).
+    Migracion("0037-renombre-columnas-etapas", _migrar_renombre_columnas_etapas),
 )
 
 # POST-DDL: ALTER/backfill sobre tablas que el DDL ya garantiza (anaden columnas a BDs
@@ -370,7 +379,7 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # (anadir/quitar una relacion) cambia la huella y re-aplica la migracion una vez.
     Migracion("0028-fks-hub-contenido", _migrar_fks_hub, re_aplicar_si_cambia=True, datos=_FKS),
     # INTEGRIDAD (ADR 0012): CHECK de allowlist en los campos de estado (estado de contenido y
-    # de la fila por plataforma, decision de aprobacion, rol de usuario, qa_veredicto), con
+    # de la fila por plataforma, decision de aprobacion, rol de usuario, verificar_veredicto), con
     # normalizacion previa de valores invalidos. Re-aplicable (idempotente): editar una
     # allowlist de dominio cambia la huella y re-normaliza + recrea el CHECK una vez.
     Migracion("0029-checks-dominio", _migrar_checks_dominio, re_aplicar_si_cambia=True),
@@ -410,6 +419,12 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # retiro por completo (API, repos, MCP, semilla, DDL). Esta migracion elimina su tabla
     # huerfana en BDs ya creadas. One-shot e idempotente (`DROP TABLE IF EXISTS`).
     Migracion("0036-drop-sugerencias-editoriales", _drop_tabla_sugerencias_editoriales),
+    # ETAPAS CON NOMBRE DE VERBO (Fase 2): reescribe los MARCADORES de etapa persistidos en
+    # `generaciones_indice.payload->>'etiqueta'` con los prefijos viejos (CI/QA/CD/ARTE) y las
+    # frases del pool ("Fusión de historias"/"Encaje editorial") a sus verbos nuevos (ADMITIR/
+    # VERIFICAR/REDACTAR/ILUSTRAR, Fusionar/Priorizar). One-shot e idempotente (solo reescribe
+    # las filas que aun tengan el prefijo/frase viejo). Ver `_migrar_etiquetas_etapas_verbos`.
+    Migracion("0038-etiquetas-etapas-verbos", _migrar_etiquetas_etapas_verbos),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.

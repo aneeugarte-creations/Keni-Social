@@ -17,7 +17,7 @@ from starlette.requests import Request
 from ... import (
     auth,
     auto_responsable,
-    autogen_copy,
+    autogen_redactar,
     config,
     generaciones,
     importador_calendario,
@@ -48,7 +48,7 @@ __all__ = [
     # Puentes a módulos de la Consola que usan los submódulos.
     "auth",
     "auto_responsable",
-    "autogen_copy",
+    "autogen_redactar",
     "config",
     "generaciones",
     "importador_calendario",

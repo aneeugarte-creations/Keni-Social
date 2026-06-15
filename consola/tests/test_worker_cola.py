@@ -961,24 +961,24 @@ def test_sanear_qa_si_fallo_devuelve_el_tema_a_recriba(entorno):
 
     tema = repos.crear_contenido(
         clase="contenido", titulo="Zombi QA", marca=_MARCA, origen=pc.ORIGEN_PIPELINE,
-        qa_veredicto=pc.QA_EN_CURSO,
+        verificar_veredicto=pc.QA_EN_CURSO,
     )
     spec = {
         "procesar": jobspec.construir_qa_fuente(
             marca=_MARCA, titulo="Zombi QA", autor=None, contenido_id=tema["id"],
         )
     }
-    gen = generaciones.crear({"tipo": "pipeline", "marca": _MARCA, "etiqueta": "QA"})
+    gen = generaciones.crear({"tipo": "pipeline", "marca": _MARCA, "etiqueta": "VERIFICAR"})
 
     # Registro aun NO en error: el saneo no toca el sentinel (la QA podria seguir viva).
     generaciones.actualizar(gen["id"], {"estado": generaciones.ESTADO_COMPLETADO})
     worker._sanear_qa_si_fallo(gen["id"], spec)
-    assert repos.obtener_contenido(tema["id"])["qa_veredicto"] == pc.QA_EN_CURSO
+    assert repos.obtener_contenido(tema["id"])["verificar_veredicto"] == pc.QA_EN_CURSO
 
     # Registro en ERROR: el saneo devuelve el tema a "" (re-criba en el proximo barrido).
     generaciones.actualizar(gen["id"], {"estado": generaciones.ESTADO_ERROR})
     worker._sanear_qa_si_fallo(gen["id"], spec)
-    assert (repos.obtener_contenido(tema["id"])["qa_veredicto"] or "") == ""
+    assert (repos.obtener_contenido(tema["id"])["verificar_veredicto"] or "") == ""
 
 
 def test_procesar_copy_dedup_al_exito_limpia_pendiente_y_etiqueta(entorno):
@@ -987,7 +987,7 @@ def test_procesar_copy_dedup_al_exito_limpia_pendiente_y_etiqueta(entorno):
     DEDUP AL EXITO (no al lanzar): las marcas de dedup las pone el `procesar` cuando los
     borradores YA existen; un copy fallido las conserva y el barrido lo reintenta.
     """
-    from keni_consola import autogen_copy
+    from keni_consola import autogen_redactar
 
     tema = repos.crear_contenido(
         clase="contenido", titulo="Tema pool", marca=_MARCA, origen="rss",
@@ -998,7 +998,7 @@ def test_procesar_copy_dedup_al_exito_limpia_pendiente_y_etiqueta(entorno):
         procesar=jobspec.construir_copy(
             prompt_id="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="T",
             texto_base="nota", contenido_id=tema["id"],
-            limpiar_pendiente=True, etiqueta_exito=autogen_copy.ETIQUETA_AUTOGEN,
+            limpiar_pendiente=True, etiqueta_exito=autogen_redactar.ETIQUETA_AUTOGEN,
         ),
     )
     procesar = jobspec.reconstruir_procesar(jobspec.deserializar(jobspec.serializar(spec)))
@@ -1006,7 +1006,7 @@ def test_procesar_copy_dedup_al_exito_limpia_pendiente_y_etiqueta(entorno):
 
     actual = repos.obtener_contenido(tema["id"])
     assert (actual["copy_pendiente"] or "") == ""  # dedup del pipeline, al exito
-    assert tema["id"] in autogen_copy.ids_ya_generados()  # dedup del autogen (etiqueta)
+    assert tema["id"] in autogen_redactar.ids_ya_generados()  # dedup del autogen (etiqueta)
 
 
 @pytest.mark.timeout(20)

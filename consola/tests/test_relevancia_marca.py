@@ -10,7 +10,7 @@ from __future__ import annotations
 import unicodedata
 
 from keni_consola import relevancia_marca
-from keni_consola.dominio import clustering
+from keni_consola.dominio import agrupar
 
 _MARCAS_PILOTO = ("unotv", "claro-sports", "nacion-gamer")
 
@@ -47,7 +47,7 @@ def test_titulares_reales_casan_su_marca():
     }
     for marca, titulo in casos.items():
         pal = relevancia_marca.palabras_de_marca(marca)
-        s = clustering._relevancia_marca({"titulo": titulo, "resumen": ""}, pal)
+        s = agrupar._relevancia_marca({"titulo": titulo, "resumen": ""}, pal)
         assert s > 0.0, (marca, titulo)
 
 
@@ -60,10 +60,10 @@ def test_nombres_genericos_solo_casan_como_frase():
     pal = relevancia_marca.palabras_de_marca("claro-sports")
     assert "leon" not in pal and "santos" not in pal
     assert "club leon" in pal and "santos laguna" in pal
-    ciudad = clustering._relevancia_marca(
+    ciudad = agrupar._relevancia_marca(
         {"titulo": "Inauguran hospital en Leon, Guanajuato", "resumen": ""}, pal
     )
-    club = clustering._relevancia_marca(
+    club = agrupar._relevancia_marca(
         {"titulo": "Club Leon gana en la jornada 5", "resumen": ""}, pal
     )
     assert ciudad == 0.0

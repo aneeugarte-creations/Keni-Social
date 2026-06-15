@@ -32,9 +32,9 @@ from ._comun import (
     marcar_fallo_etapa,
 )
 from ._avance import ejecutar_avance
-from ._copy import lanzar_copy_de_tema, temas_autogen_sin_copy, temas_para_copy
-from ._ingesta import clusters_pendientes_qa, promover_clusters_marca
-from ._qa import lanzar_qa_cluster
+from ._redactar import lanzar_redactar_de_tema, temas_autogen_sin_copy, temas_para_redactar
+from ._admitir import clusters_pendientes_verificar, promover_clusters_marca
+from ._verificar import lanzar_verificar_cluster
 
 __all__ = [
     "ejecutar_barrido",
@@ -43,9 +43,9 @@ __all__ = [
     "_ejecutar_investigacion",
     "ejecutar_produccion",
     "_ejecutar_produccion",
-    "ejecutar_qa_clusters",
-    "ejecutar_cd",
-    "ejecutar_arte",
+    "ejecutar_verificar_clusters",
+    "ejecutar_redactar",
+    "ejecutar_ilustrar",
     "ejecutar_avance",
     "_intervalo_segundos",
     "_intervalo_investigacion_segundos",
@@ -115,7 +115,7 @@ def ejecutar_investigacion() -> dict[str, Any]:
 def ejecutar_produccion() -> dict[str, Any]:
     """Un TICK del proceso de PRODUCCIÓN: CD (copy) → arte → avance a revisión.
 
-    Genera copy SOLO de los temas verificados (`temas_para_copy`), los ilustra (etapa Ilustrar) y
+    Genera copy SOLO de los temas verificados (`temas_para_redactar`), los ilustra (etapa Ilustrar) y
     avanza los borradores completos a la cola de revisión. Best-effort. Devuelve
     `{lanzados, artes, avances}`. Single-flight con su propio lock (`pipeline_produccion`):
     independiente del de investigación, así los dos loops nunca se serializan entre sí.
@@ -173,7 +173,7 @@ def _ejecutar_investigacion() -> dict[str, Any]:
     except Exception:  # noqa: BLE001 -- el reaper de QA es saneo; nunca rompe el barrido
         _log.exception("pipeline: fallo el reaper de QA de clusters en curso.")
     # --- Fase QA (criba de la FUENTE sobre la historia, pre-admisión). -----------------------
-    cribados = ejecutar_qa_clusters(autor=autor)
+    cribados = ejecutar_verificar_clusters(autor=autor)
     # --- Fase ADMISIÓN · "Crear noticias": materializa las historias YA VERIFICADAS por marca. -
     # Etapa CI = toggle "Crear noticias" (`KENI_PIPELINE_RECOLECTAR`): si está OFF no entra nada. La
     # admisión consume el pool RANKEADO restringido a las verificadas (`no_verificado`/`saltada`),
@@ -225,12 +225,12 @@ def _ejecutar_investigacion() -> dict[str, Any]:
     return {"temas": temas_nuevos, "cribados": cribados}
 
 
-def ejecutar_qa_clusters(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
+def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
     """Fase QA del proceso de INVESTIGACIÓN (ADR 0011 F3): criba la FUENTE de las HISTORIAS
     candidatas ANTES de materializar contenido.
 
     Por marca con admisión activa (`KENI_PIPELINE_RECOLECTAR`): toma las candidatas sin veredicto
-    que pasan el listón (`clusters_pendientes_qa`), acotadas por el presupuesto del EMBUDO
+    que pasan el listón (`clusters_pendientes_verificar`), acotadas por el presupuesto del EMBUDO
     (`tope en vuelo − embudo`) para no cribar todo el pool. Si la Validación está activa, lanza
     la criba `claude -p` y marca el cluster `en_curso` (asíncrona: el veredicto lo persiste el
     `procesar` sobre el cluster). Si la Validación está OFF para la marca, marca el cluster
@@ -258,7 +258,7 @@ def ejecutar_qa_clusters(*, autor: dict[str, str] | None = None) -> list[dict[st
         presupuesto = en_vuelo_max - embudo
         if presupuesto <= 0:
             continue
-        pendientes = clusters_pendientes_qa(marca, maximo=presupuesto)
+        pendientes = clusters_pendientes_verificar(marca, maximo=presupuesto)
         if not pendientes:
             continue
         # Validación OFF para la marca: se SALTA la criba; el cluster se marca `saltada` para que
@@ -277,7 +277,7 @@ def ejecutar_qa_clusters(*, autor: dict[str, str] | None = None) -> list[dict[st
                     cribados.append({"id": cid, "gen_id": "", "verdicto": QA_SALTADA})
                 continue
             try:
-                gen = lanzar_qa_cluster(cluster, autor=autor)
+                gen = lanzar_verificar_cluster(cluster, autor=autor)
             except generaciones.ColaLlenaError as e:
                 _log.info("pipeline: QA en pausa por admisión (%s); el resto entra en el próximo tick.", e)
                 break
@@ -293,10 +293,10 @@ def _ejecutar_produccion() -> dict[str, Any]:
     """Cuerpo de PRODUCCIÓN (ya bajo el single-flight de `ejecutar_produccion`)."""
     autor = _ref._autor_pipeline()
     # --- Fase CD (copy) + Etapa ARTE + Etapa AVANCE. -----------------------------------------
-    lanzados = ejecutar_cd(autor=autor)
+    lanzados = ejecutar_redactar(autor=autor)
     # Etapa de Ilustrar (tras copy): ilustra los temas con copy y sin imagen. Gateada por su propio
     # toggle "Generar arte" (KENI_PIPELINE_ILUSTRAR) + máquina; si está OFF, devuelve [].
-    artes = ejecutar_arte()
+    artes = ejecutar_ilustrar()
     # Etapa de AVANCE (tras arte): los borradores COMPLETOS (copy + foto) entran solos a la
     # cola de revisión. Incondicional bajo el maestro KENI_MAQUINA (sin toggle propio).
     avances = ejecutar_avance()
@@ -317,20 +317,20 @@ def _ejecutar_barrido() -> dict[str, Any]:
 
 
 # UN SOLO CAMINO DE QA (ADR 0011 F3): la criba corre SOBRE EL CLUSTER, PRE-admisión
-# (`ejecutar_qa_clusters`), nunca sobre el TEMA post-admisión. La FRONTERA queda nítida en código:
+# (`ejecutar_verificar_clusters`), nunca sobre el TEMA post-admisión. La FRONTERA queda nítida en código:
 # Investigación verifica la fuente ANTES de cruzar (cluster → veredicto) y la admisión solo
 # promueve las VERIFICADAS.
 
 
-def ejecutar_cd(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
+def ejecutar_redactar(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
     """Fase CD (etapa de Redactar): genera copy de los temas con QA `no_verificado` y sin copy aún,
     Y de los temas del news-pool (orígenes de noticias) que aún no tienen copy.
 
     DOS fuentes de temas, una sola ruta de copy (la etapa de Redactar es el ÚNICO motor):
       1) temas del propio pipeline (origen `pipeline`) cuya QA salió `no_verificado`
-         (`temas_para_copy` → `lanzar_copy_de_tema`),
+         (`temas_para_redactar` → `lanzar_redactar_de_tema`),
       2) temas que las FUENTES de noticias metieron al tablero sin copy
-         (`temas_autogen_sin_copy` → `autogen_copy.lanzar_para_topic`).
+         (`temas_autogen_sin_copy` → `autogen_redactar.lanzar_para_topic`).
     SIN topes propios (flujo continuo): el carril 1 lo acota la ADMISIÓN (gate serial en vuelo);
     el carril 2, el dedup por etiqueta + el backpressure de la cola. Si la cola se llena, corta la
     fase (el siguiente tick reintenta). REINTENTOS ACOTADOS en el carril 1: al agotar
@@ -344,24 +344,24 @@ def ejecutar_cd(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
     if not config.pipeline_activo():
         return []
     lanzados: list[dict[str, Any]] = []
-    for tema in temas_para_copy():
+    for tema in temas_para_redactar():
         # Exclusión por marca: no generamos copy de temas de una marca apagada a mano (aunque
         # ya estuvieran ingeridos antes de apagarla). Misma FUENTE ÚNICA que la vista/catálogo.
         if not config.etapa_activa(config.ENV_PIPELINE_REDACTAR, tema.get("marca") or ""):
             continue
         # Reintentos acotados: un copy fallido conserva `copy_pendiente` (dedup al éxito) y se
         # relanzaría cada tick para siempre; al agotar los intentos, salida TERMINAL (problema).
-        if intentos_de(tema, "cd_intentos") >= _MAX_INTENTOS_ETAPA:
+        if intentos_de(tema, "redactar_intentos") >= _MAX_INTENTOS_ETAPA:
             marcar_fallo_etapa(
                 tema.get("id", "") or "", "Copy",
                 f"La generación de copy falló {_MAX_INTENTOS_ETAPA} veces.",
             )
             continue
         # Backoff creciente entre intentos (1/4/16 min): mismo rationale que en la fase QA.
-        if en_backoff(tema, "cd_intentos"):
+        if en_backoff(tema, "redactar_intentos"):
             continue
         try:
-            gen = lanzar_copy_de_tema(tema, autor=autor)
+            gen = lanzar_redactar_de_tema(tema, autor=autor)
         except generaciones.ColaLlenaError as e:
             _log.info("pipeline: CD en pausa por admisión (%s); el resto entra en el próximo tick.", e)
             return lanzados
@@ -374,15 +374,15 @@ def ejecutar_cd(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
         if gen:
             # Tras el lanzamiento efectivo (cola llena o fallo previo no queman intentos). Si el
             # copy completó EN LÍNEA (tests síncronos), `copy_pendiente` ya se limpió y no anota.
-            anotar_intento(tema, "cd_intentos")
+            anotar_intento(tema, "redactar_intentos")
             lanzados.append(gen)
-    # Fundido de la selección de autogen_copy: la etapa de Redactar también redacta los temas del
+    # Fundido de la selección de autogen_redactar: la etapa de Redactar también redacta los temas del
     # news-pool/tablero (orígenes de noticias) que aún no tienen copy, vía el lanzador NEUTRO.
-    from .. import autogen_copy
+    from .. import autogen_redactar
 
     for item in temas_autogen_sin_copy():
         try:
-            gen = autogen_copy.lanzar_para_topic(item)
+            gen = autogen_redactar.lanzar_para_topic(item)
         except generaciones.ColaLlenaError as e:
             _log.info("pipeline: CD (pool) en pausa por admisión (%s); el resto entra en el próximo barrido.", e)
             break
@@ -402,12 +402,12 @@ def ejecutar_cd(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
 _UMBRAL_FALLO_ARTE = 0.5
 
 
-def ejecutar_arte() -> list[dict[str, Any]]:
+def ejecutar_ilustrar() -> list[dict[str, Any]]:
     """Etapa de Ilustrar del pipeline (tras copy): ilustra los temas con copy y sin imagen.
 
     Toggle "Generar arte" (`KENI_PIPELINE_ILUSTRAR`, gateado además por el maestro `KENI_MAQUINA`).
-    FUNDE el antiguo daemon suelto `autogen_arte`: reutiliza su selección
-    (`autogen_arte.topics_sin_arte`) y su lanzador (`autogen_arte.lanzar_para_topic` →
+    FUNDE el antiguo daemon suelto `autogen_ilustrar`: reutiliza su selección
+    (`autogen_ilustrar.topics_sin_arte`) y su lanzador (`autogen_ilustrar.lanzar_para_topic` →
     `media.generar_imagen`), con cap por barrido (`KENI_AUTOGEN_ARTE_MAX`). Per-marca: salta las
     marcas apagadas a mano (lo hace la propia selección, gateada por `ENV_PIPELINE_ILUSTRAR`). Sin
     proveedor de imagen configurado, no hace nada. Best-effort: un fallo por tema se loguea y se
@@ -417,7 +417,7 @@ def ejecutar_arte() -> list[dict[str, Any]]:
     etapa no ilustra (el equipo hace el arte a mano).
     """
 
-    from .. import autogen_arte
+    from .. import autogen_ilustrar
 
     if not config.gate_maquina(config.ilustrar_activo)():
         return []
@@ -433,12 +433,12 @@ def ejecutar_arte() -> list[dict[str, Any]]:
     except Exception:  # noqa: BLE001 -- sin tablero, la etapa de Ilustrar no actúa
         _log.exception("pipeline: no se pudo leer el tablero para la etapa de Ilustrar.")
         return []
-    elegidos = autogen_arte.topics_sin_arte(
+    elegidos = autogen_ilustrar.topics_sin_arte(
         items,
-        plataformas_por_item=autogen_arte._plataformas_por_item(items),
-        ya_procesados=autogen_arte.ids_ya_procesados(),
+        plataformas_por_item=autogen_ilustrar._plataformas_por_item(items),
+        ya_procesados=autogen_ilustrar.ids_ya_procesados(),
         maximo=config.autogen_arte_max(),
-        etiquetas_por_item=autogen_arte._etiquetas_por_item(),
+        etiquetas_por_item=autogen_ilustrar._etiquetas_por_item(),
         hoy=hoy_utc(),
     )
 
@@ -450,7 +450,7 @@ def ejecutar_arte() -> list[dict[str, Any]]:
 
     def _ilustrar(item: dict[str, Any]) -> dict[str, Any] | None:
         try:
-            return autogen_arte.lanzar_para_topic(item)
+            return autogen_ilustrar.lanzar_para_topic(item)
         except generaciones.ColaLlenaError:
             # BACKPRESSURE (cola llena / presupuesto / pausa), NO un fallo del proveedor: el
             # siguiente tick reintenta. NO lo contamos como `fallido` (no debe disparar la alerta

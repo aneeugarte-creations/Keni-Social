@@ -101,7 +101,7 @@ def _sembrar_cluster(
     cid, *, marca="unotv", titulo="Historia X", score=0.5, estado="nuevo",
     resumen="México: el gobierno informa de seguridad en la CDMX", ultimo_visto=None,
     verificacion="corroborada", n_fuentes=2, categoria="mx", breaking=0,
-    qa_veredicto="",
+    verificar_veredicto="",
 ):
     """Siembra un cluster del pool (Ola B) para los tests de promoción ADMITIR→tema.
 
@@ -109,7 +109,7 @@ def _sembrar_cluster(
     FRESCO (`ultimo_visto` ≈ ahora), corroborado y con encaje de marca unotv por el resumen.
     Los tests del propio listón pasan valores que lo incumplen a propósito.
 
-    `qa_veredicto`: estado de la criba del cluster. Por defecto "" (sin cribar, el estado del que
+    `verificar_veredicto`: estado de la criba del cluster. Por defecto "" (sin cribar, el estado del que
     parte Verificar en investigación). La ADMISIÓN solo promueve las VERIFICADAS, así que los tests
     que llaman DIRECTO a la promoción (sin pasar por la fase Verificar) deben sembrar el cluster ya
     verificado (`VERDICTO_NO_VERIFICADO`) — es el camino real, no el atajo sin filtro.
@@ -125,8 +125,8 @@ def _sembrar_cluster(
         or datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="seconds"),
         "estado": estado, "verificacion": verificacion,
     })
-    if qa_veredicto:
-        repos.marcar_cluster_qa(cid, qa_veredicto)
+    if verificar_veredicto:
+        repos.marcar_cluster_qa(cid, verificar_veredicto)
     return repos.obtener_noticia_cluster(cid)
 
 
@@ -285,14 +285,14 @@ def test_en_backoff_puro_segun_intentos_y_timestamp():
     """`en_backoff` (PURO sobre el dict): espera tras un intento RECIENTE; sin ts/intentos no."""
     from keni_consola.tiempo import ahora_iso
 
-    reciente = json.dumps({"qa_intentos": 1, "qa_intentos_ts": ahora_iso()})
-    assert pc.en_backoff({"id": "t", "copy_pendiente": reciente}, "qa_intentos") is True
-    viejo = json.dumps({"qa_intentos": 1, "qa_intentos_ts": "2020-01-01T00:00:00"})
-    assert pc.en_backoff({"id": "t", "copy_pendiente": viejo}, "qa_intentos") is False
+    reciente = json.dumps({"verificar_intentos": 1, "verificar_intentos_ts": ahora_iso()})
+    assert pc.en_backoff({"id": "t", "copy_pendiente": reciente}, "verificar_intentos") is True
+    viejo = json.dumps({"verificar_intentos": 1, "verificar_intentos_ts": "2020-01-01T00:00:00"})
+    assert pc.en_backoff({"id": "t", "copy_pendiente": viejo}, "verificar_intentos") is False
     # Temas previos al backoff (intentos sin timestamp) y temas sin intentos: sin espera.
-    legacy = json.dumps({"qa_intentos": 2})
-    assert pc.en_backoff({"id": "t", "copy_pendiente": legacy}, "qa_intentos") is False
-    assert pc.en_backoff({"id": "t", "copy_pendiente": ""}, "qa_intentos") is False
+    legacy = json.dumps({"verificar_intentos": 2})
+    assert pc.en_backoff({"id": "t", "copy_pendiente": legacy}, "verificar_intentos") is False
+    assert pc.en_backoff({"id": "t", "copy_pendiente": ""}, "verificar_intentos") is False
 
 
 def test_qa_lexico_listo_sin_observaciones():
@@ -377,14 +377,14 @@ def test_admitir_crea_temas_sin_copy_y_dedup(entorno, monkeypatch):
     assert len(temas) == 2
     titulos = {t["titulo"] for t in pc.temas_pipeline()}
     assert {"Tema A", "Tema B"} <= titulos
-    assert all((t.get("qa_veredicto") or "") == "" for t in pc.temas_pipeline())
+    assert all((t.get("verificar_veredicto") or "") == "" for t in pc.temas_pipeline())
 
     # dedup: A y B quedaron marcados usados.
     vistas = repos.claves_vistas(fuente["id"])
     assert {"a", "b"} <= vistas
 
     # Etapa ADMITIR en la actividad.
-    assert any(e.startswith("CI · ") for e in _etapas_de_actividad())
+    assert any(e.startswith("ADMITIR · ") for e in _etapas_de_actividad())
 
     # dedup efectiva: un SEGUNDO pase crea el restante (C).
     _admitir_desde_feed(maximo=2)
@@ -461,7 +461,7 @@ def test_redactar_pasa_fotos_notas_y_n_notas_al_copy(entorno, monkeypatch):
     ]
     tema = _tema_pipeline(
         titulo="Panel de conciertos",
-        qa_veredicto=pc.VERDICTO_NO_VERIFICADO,
+        verificar_veredicto=pc.VERDICTO_NO_VERIFICADO,
         copy_pendiente=json.dumps({
             "nota": "Nota", "redes_ids": ["x", "instagram", "facebook"],
             "imagen": "https://casa.test/a.jpg",
@@ -469,7 +469,7 @@ def test_redactar_pasa_fotos_notas_y_n_notas_al_copy(entorno, monkeypatch):
             "tipo_contenido": "fuente",
         }),
     )
-    pc.lanzar_copy_de_tema(repos.obtener_contenido(tema["id"]), autor=None)
+    pc.lanzar_redactar_de_tema(repos.obtener_contenido(tema["id"]), autor=None)
     assert len(llamadas) == 1
     assert llamadas[0]["imagen_fuente"] == "https://casa.test/a.jpg"
     assert llamadas[0]["fotos_notas"] == fotos
@@ -482,12 +482,12 @@ def test_redactar_pendiente_viejo_sin_panel_no_ofrece_carrusel(entorno, monkeypa
     llamadas = _mock_lanzar_copy(monkeypatch)
     tema = _tema_pipeline(
         titulo="Pendiente legado",
-        qa_veredicto=pc.VERDICTO_NO_VERIFICADO,
+        verificar_veredicto=pc.VERDICTO_NO_VERIFICADO,
         copy_pendiente=json.dumps({
             "nota": "Nota", "redes_ids": ["x"], "imagen": "https://casa.test/a.jpg",
         }),
     )
-    pc.lanzar_copy_de_tema(repos.obtener_contenido(tema["id"]), autor=None)
+    pc.lanzar_redactar_de_tema(repos.obtener_contenido(tema["id"]), autor=None)
     assert llamadas[0]["fotos_notas"] == []
     assert llamadas[0]["n_notas"] == 1
 
@@ -569,16 +569,16 @@ def test_verificar_problema_no_genera_copy_y_marca_tema(entorno, monkeypatch):
     tema = _tema_pipeline(titulo="Tema malo")
 
     # Verificar la fuente (síncrona en test) -> el procesar persiste el veredicto en el tema. El
-    # camino tema-Verificar es el manual/legado (`lanzar_qa_fuente`); el barrido criba CLUSTERS, no temas.
-    pc.lanzar_qa_fuente(tema, autor=None)
+    # camino tema-Verificar es el manual/legado (`lanzar_verificar_fuente`); el barrido criba CLUSTERS, no temas.
+    pc.lanzar_verificar_fuente(tema, autor=None)
     refrescado = repos.obtener_contenido(tema["id"])
-    assert refrescado["qa_veredicto"] == pc.VERDICTO_PROBLEMA
-    assert "es falso" in (refrescado["qa_hallazgos"] or "")
+    assert refrescado["verificar_veredicto"] == pc.VERDICTO_PROBLEMA
+    assert "es falso" in (refrescado["verificar_hallazgos"] or "")
 
     # Fase Redactar: un tema `problema` NO entra a copy (ahorro de tokens).
-    pc.ejecutar_cd(autor=None)
+    pc.ejecutar_redactar(autor=None)
     assert llamadas == []
-    assert pc.temas_para_copy() == []
+    assert pc.temas_para_redactar() == []
 
 
 def test_verificar_no_verificado_genera_copy_con_aviso(entorno, monkeypatch):
@@ -596,9 +596,9 @@ def test_verificar_no_verificado_genera_copy_con_aviso(entorno, monkeypatch):
     llamadas = _mock_lanzar_copy(monkeypatch)
     tema = _tema_pipeline(titulo="Tema ok")
 
-    pc.lanzar_qa_fuente(tema, autor=None)
+    pc.lanzar_verificar_fuente(tema, autor=None)
     refrescado = repos.obtener_contenido(tema["id"])
-    assert refrescado["qa_veredicto"] == pc.VERDICTO_NO_VERIFICADO
+    assert refrescado["verificar_veredicto"] == pc.VERDICTO_NO_VERIFICADO
 
     # ENCADENADO Verificar→copy: el copy se disparó al persistirse el veredicto (sin esperar a Redactar).
     assert len(llamadas) == 1
@@ -611,8 +611,8 @@ def test_verificar_no_verificado_genera_copy_con_aviso(entorno, monkeypatch):
     # Éxito del copy (simulado): nace la pieza -> el tema sale de la selección de Redactar y el
     # barrido (red de seguridad) NO lo relanza.
     repos.crear_contenido_plataforma(contenido_id=tema["id"], red="x", copy="Hola X")
-    assert pc.temas_para_copy() == []
-    pc.ejecutar_cd(autor=None)
+    assert pc.temas_para_redactar() == []
+    pc.ejecutar_redactar(autor=None)
     assert len(llamadas) == 1
 
 
@@ -624,9 +624,9 @@ def test_encadenado_no_dispara_copy_si_redactar_apagada(entorno, monkeypatch):
     llamadas = _mock_lanzar_copy(monkeypatch)
     tema = _tema_pipeline(titulo="Sin Redactar")
 
-    pc.lanzar_qa_fuente(tema, autor=None)
+    pc.lanzar_verificar_fuente(tema, autor=None)
 
-    assert repos.obtener_contenido(tema["id"])["qa_veredicto"] == pc.VERDICTO_NO_VERIFICADO
+    assert repos.obtener_contenido(tema["id"])["verificar_veredicto"] == pc.VERDICTO_NO_VERIFICADO
     assert llamadas == []  # el encadenado no salta el toggle de copy
 
 
@@ -642,11 +642,11 @@ def test_encadenado_cola_llena_no_rompe_verificar(entorno, monkeypatch):
     monkeypatch.setattr(pc.gen_dom, "lanzar_copy", _llena)
     tema = _tema_pipeline(titulo="Cola llena")
 
-    pc.lanzar_qa_fuente(tema, autor=None)  # no debe reventar
+    pc.lanzar_verificar_fuente(tema, autor=None)  # no debe reventar
 
     # El veredicto SÍ quedó persistido y el tema sigue elegible para el barrido de Redactar.
-    assert repos.obtener_contenido(tema["id"])["qa_veredicto"] == pc.VERDICTO_NO_VERIFICADO
-    assert [t["id"] for t in pc.temas_para_copy()] == [tema["id"]]
+    assert repos.obtener_contenido(tema["id"])["verificar_veredicto"] == pc.VERDICTO_NO_VERIFICADO
+    assert [t["id"] for t in pc.temas_para_redactar()] == [tema["id"]]
 
 
 def test_verificar_cluster_problema_no_se_admite(entorno, monkeypatch):
@@ -661,7 +661,7 @@ def test_verificar_cluster_problema_no_se_admite(entorno, monkeypatch):
     # Un tick de investigación: Verificar (síncrona en test) marca el cluster, la admisión decide.
     res = pc._ejecutar_investigacion()
 
-    assert repos.obtener_noticia_cluster("c-malo")["qa_veredicto"] == pc.VERDICTO_PROBLEMA
+    assert repos.obtener_noticia_cluster("c-malo")["verificar_veredicto"] == pc.VERDICTO_PROBLEMA
     assert res["temas"] == []  # 'problema' NO cruza a producción
     assert pc.temas_pipeline() == []
     # La historia sigue en el pool (visible con su veredicto), sin promover.
@@ -679,11 +679,11 @@ def test_verificar_cluster_ok_se_admite_heredando_veredicto(entorno, monkeypatch
 
     res = pc._ejecutar_investigacion()
 
-    assert repos.obtener_noticia_cluster("c-ok")["qa_veredicto"] == pc.VERDICTO_NO_VERIFICADO
+    assert repos.obtener_noticia_cluster("c-ok")["verificar_veredicto"] == pc.VERDICTO_NO_VERIFICADO
     assert len(res["temas"]) == 1
     tema = res["temas"][0]
     # El contenido nace VERIFICADO (frontera "Verificar = investigación" alineada en los datos).
-    assert repos.obtener_contenido(tema["id"])["qa_veredicto"] == pc.VERDICTO_NO_VERIFICADO
+    assert repos.obtener_contenido(tema["id"])["verificar_veredicto"] == pc.VERDICTO_NO_VERIFICADO
     assert repos.obtener_noticia_cluster("c-ok")["estado"] == "usado"
 
 
@@ -697,7 +697,7 @@ def test_verificar_cluster_acotada_por_el_embudo(entorno, monkeypatch):
     for i in range(3):
         _sembrar_cluster(f"c{i}", titulo=f"Historia {i}", score=0.9 - i * 0.1)
 
-    cribados = pc.ejecutar_qa_clusters(autor=None)
+    cribados = pc.ejecutar_verificar_clusters(autor=None)
 
     # Con tope en vuelo = 1, solo se criba 1 historia en este tick (la mejor del ranking).
     assert len(cribados) == 1
@@ -713,33 +713,33 @@ def test_copy_fallido_se_reintenta_tras_el_backoff(entorno, monkeypatch):
     """
     monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")
     llamadas = _mock_lanzar_copy(monkeypatch)
-    tema = _tema_pipeline(titulo="Reintento", qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    tema = _tema_pipeline(titulo="Reintento", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
 
-    pc.ejecutar_cd(autor=None)
+    pc.ejecutar_redactar(autor=None)
     assert len(llamadas) == 1
     # El lanzamiento NO limpió `copy_pendiente` (lo limpia el post-procesado al ÉXITO).
     assert (repos.obtener_contenido(tema["id"])["copy_pendiente"] or "").strip()
 
     # El copy "falló" (no nació pieza), pero el tick INMEDIATO no relanza: backoff en curso.
-    pc.ejecutar_cd(autor=None)
+    pc.ejecutar_redactar(autor=None)
     assert len(llamadas) == 1
 
     # Pasada la espera (timestamp envejecido), el barrido sí lo reintenta.
-    _envejecer_intento(tema["id"], "cd_intentos")
-    pc.ejecutar_cd(autor=None)
+    _envejecer_intento(tema["id"], "redactar_intentos")
+    pc.ejecutar_redactar(autor=None)
     assert len(llamadas) == 2
 
     # Éxito (pieza creada): deja de relanzarse.
     repos.crear_contenido_plataforma(contenido_id=tema["id"], red="x", copy="Listo")
-    _envejecer_intento(tema["id"], "cd_intentos")
-    pc.ejecutar_cd(autor=None)
+    _envejecer_intento(tema["id"], "redactar_intentos")
+    pc.ejecutar_redactar(autor=None)
     assert len(llamadas) == 2
 
 
 def test_verificar_no_relanza_tema_ya_cribado(entorno, monkeypatch):
     """Un tema con veredicto ya no se re-criba (idempotente)."""
-    _tema_pipeline(titulo="Ya cribado", qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
-    assert pc.temas_sin_qa() == []
+    _tema_pipeline(titulo="Ya cribado", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    assert pc.temas_sin_verificar() == []
 
 
 def test_temas_sin_verificar_devuelve_todos_los_pendientes(entorno):
@@ -748,21 +748,21 @@ def test_temas_sin_verificar_devuelve_todos_los_pendientes(entorno):
     El volumen lo acota la ADMISIÓN (gate serial en vuelo por marca), no una ventana de revisión:
     aquí solo puede haber, como mucho, lo admitido.
     """
-    _tema_pipeline(titulo="Viejo 1", id="v1", qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
-    _tema_pipeline(titulo="Viejo 2", id="v2", qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    _tema_pipeline(titulo="Viejo 1", id="v1", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    _tema_pipeline(titulo="Viejo 2", id="v2", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
     _tema_pipeline(titulo="Nuevo A", id="n1")  # sin veredicto -> pendiente
     _tema_pipeline(titulo="Nuevo B", id="n2")
-    assert {t["id"] for t in pc.temas_sin_qa()} == {"n1", "n2"}
+    assert {t["id"] for t in pc.temas_sin_verificar()} == {"n1", "n2"}
 
 
 def test_temas_para_copy_devuelve_todos_los_listos(entorno):
     """FLUJO CONTINUO: REDACTAR ve TODOS los temas listos (cribados+pendiente de copy), sin ventana."""
     # Viejos no_verificado pero YA copiados (copy_pendiente vacío -> no pasan el filtro de Redactar).
-    _tema_pipeline(titulo="Viejo 1", id="v1", qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente="")
-    _tema_pipeline(titulo="Viejo 2", id="v2", qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente="")
-    _tema_pipeline(titulo="Nuevo A", id="n1", qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
-    _tema_pipeline(titulo="Nuevo B", id="n2", qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
-    assert {t["id"] for t in pc.temas_para_copy()} == {"n1", "n2"}
+    _tema_pipeline(titulo="Viejo 1", id="v1", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente="")
+    _tema_pipeline(titulo="Viejo 2", id="v2", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente="")
+    _tema_pipeline(titulo="Nuevo A", id="n1", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    _tema_pipeline(titulo="Nuevo B", id="n2", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    assert {t["id"] for t in pc.temas_para_redactar()} == {"n1", "n2"}
 
 
 def test_redactar_sin_tope_lanza_todos_los_listos(entorno, monkeypatch):
@@ -775,10 +775,10 @@ def test_redactar_sin_tope_lanza_todos_los_listos(entorno, monkeypatch):
     for i in range(4):
         _tema_pipeline(
             titulo=f"C{i}", id=f"tcd{i}",
-            qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend,
+            verificar_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend,
         )
 
-    lanzados = pc.ejecutar_cd(autor=None)
+    lanzados = pc.ejecutar_redactar(autor=None)
     assert len(lanzados) == 4
     assert len(llamadas) == 4
 
@@ -789,15 +789,15 @@ def test_redactar_reintentos_agotados_marca_problema_sin_lanzar(entorno, monkeyp
 
     monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")
     llamadas = _mock_lanzar_copy(monkeypatch)
-    pend = json.dumps({"nota": "n", "redes_ids": ["x"], "cd_intentos": pc._MAX_INTENTOS_ETAPA})
-    tema = _tema_pipeline(titulo="Copy agotado", qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend)
+    pend = json.dumps({"nota": "n", "redes_ids": ["x"], "redactar_intentos": pc._MAX_INTENTOS_ETAPA})
+    tema = _tema_pipeline(titulo="Copy agotado", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend)
 
-    lanzados = pc.ejecutar_cd(autor=None)
+    lanzados = pc.ejecutar_redactar(autor=None)
 
     assert lanzados == [] and llamadas == []
     refrescado = repos.obtener_contenido(tema["id"])
-    assert refrescado["qa_veredicto"] == pc.VERDICTO_PROBLEMA
-    assert "falló" in (refrescado["qa_hallazgos"] or "")
+    assert refrescado["verificar_veredicto"] == pc.VERDICTO_PROBLEMA
+    assert "falló" in (refrescado["verificar_hallazgos"] or "")
     assert pc.temas_en_vuelo("unotv") == 0  # terminal: libera la admisión de su marca
 
 
@@ -807,15 +807,15 @@ def test_redactar_reintento_anota_intentos_acumulados(entorno, monkeypatch):
 
     monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")
     llamadas = _mock_lanzar_copy(monkeypatch)
-    tema = _tema_pipeline(titulo="Suma intentos", qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    tema = _tema_pipeline(titulo="Suma intentos", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
 
-    pc.ejecutar_cd(autor=None)  # 1er intento (el copy mockeado "falla": no nace pieza)
-    _envejecer_intento(tema["id"], "cd_intentos")  # fuera del backoff: el barrido reintenta
-    pc.ejecutar_cd(autor=None)  # 2º intento
+    pc.ejecutar_redactar(autor=None)  # 1er intento (el copy mockeado "falla": no nace pieza)
+    _envejecer_intento(tema["id"], "redactar_intentos")  # fuera del backoff: el barrido reintenta
+    pc.ejecutar_redactar(autor=None)  # 2º intento
 
     assert len(llamadas) == 2
     pend = json.loads(repos.obtener_contenido(tema["id"])["copy_pendiente"])
-    assert pend["cd_intentos"] == 2
+    assert pend["redactar_intentos"] == 2
 
 
 # --------------------------------------------------------------------------- #
@@ -839,7 +839,7 @@ def test_solo_noticias_promueve_cluster_qa_saltada_cd_no(entorno, monkeypatch):
     assert len(resumen["temas"]) == 1
     assert any(t["titulo"] == "Historia caliente" for t in pc.temas_pipeline())
     # Verificar desactivada: el tema queda 'saltada' (no se lanza criba).
-    assert all((t.get("qa_veredicto") or "") == pc.QA_SALTADA for t in pc.temas_pipeline())
+    assert all((t.get("verificar_veredicto") or "") == pc.QA_SALTADA for t in pc.temas_pipeline())
     # Redactar desactivada: no se genera copy aunque haya tema listo.
     assert llamadas == []
     # El cluster quedó marcado usado (no se re-promueve).
@@ -880,9 +880,9 @@ def test_promover_clusters_top_n_por_score(entorno, monkeypatch):
     """`promover_clusters_marca` promueve las top-N historias por score y las marca usado."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     # Verificadas (estado real tras Verificar): la admisión SIEMPRE criba — solo promueve verificadas.
-    _sembrar_cluster("baja", titulo="Score bajo", score=0.1, qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
-    _sembrar_cluster("alta", titulo="Score alto", score=0.9, qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
-    _sembrar_cluster("media", titulo="Score medio", score=0.5, qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    _sembrar_cluster("baja", titulo="Score bajo", score=0.1, verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    _sembrar_cluster("alta", titulo="Score alto", score=0.9, verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    _sembrar_cluster("media", titulo="Score medio", score=0.5, verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
 
     temas = pc.promover_clusters_marca("unotv", maximo=2)
 
@@ -899,9 +899,9 @@ def test_promover_clusters_marca_filtra_sin_cribar_por_defecto(entorno, monkeypa
     '') NO se promueve aunque gane en score/listón — no existe un camino que promueva sin verificar.
     """
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    _sembrar_cluster("sin_cribar", titulo="Aún sin Verificar", score=0.9)  # qa_veredicto='' por defecto
+    _sembrar_cluster("sin_cribar", titulo="Aún sin Verificar", score=0.9)  # verificar_veredicto='' por defecto
     _sembrar_cluster("verificada", titulo="Ya verificada", score=0.5,
-                     qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+                     verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
 
     temas = pc.promover_clusters_marca("unotv", maximo=5)  # SIN qa_estados: cae al filtro por defecto
 
@@ -1052,12 +1052,12 @@ def test_temas_en_vuelo_cuenta_pendientes_de_verificar_o_copy(entorno):
     vuelo: 'problema' (terminal) ni 'no_verificado' que YA tiene copy en una pieza por plataforma.
     """
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
-    _tema_pipeline(titulo="Pendiente QA", qa_veredicto="", copy_pendiente=pend)          # +1
-    _tema_pipeline(titulo="QA en curso", qa_veredicto=pc.QA_EN_CURSO, copy_pendiente=pend)  # +1
-    _tema_pipeline(titulo="Apto sin copy", qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend)  # +1
-    _tema_pipeline(titulo="Saltada sin copy", qa_veredicto=pc.QA_SALTADA, copy_pendiente=pend)  # +1
-    _tema_pipeline(titulo="Problema", qa_veredicto=pc.VERDICTO_PROBLEMA, copy_pendiente=pend)  # terminal: 0
-    con_copy = _tema_pipeline(titulo="Apto con copy", qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend)
+    _tema_pipeline(titulo="Pendiente QA", verificar_veredicto="", copy_pendiente=pend)          # +1
+    _tema_pipeline(titulo="QA en curso", verificar_veredicto=pc.QA_EN_CURSO, copy_pendiente=pend)  # +1
+    _tema_pipeline(titulo="Apto sin copy", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend)  # +1
+    _tema_pipeline(titulo="Saltada sin copy", verificar_veredicto=pc.QA_SALTADA, copy_pendiente=pend)  # +1
+    _tema_pipeline(titulo="Problema", verificar_veredicto=pc.VERDICTO_PROBLEMA, copy_pendiente=pend)  # terminal: 0
+    con_copy = _tema_pipeline(titulo="Apto con copy", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend)
     # Una pieza por plataforma CON copy -> ya pasó la etapa de copy: no cuenta como en vuelo.
     repos.crear_contenido_plataforma(contenido_id=con_copy["id"], red="x", copy="Copy listo")
 
@@ -1075,8 +1075,8 @@ def test_caducidad_libera_el_gate_y_excluye_de_las_fases(entorno):
     from datetime import datetime, timedelta, timezone
 
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
-    _tema_pipeline(titulo="Atascado", qa_veredicto="", copy_pendiente=pend)
-    _tema_pipeline(titulo="Apto viejo", qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend)
+    _tema_pipeline(titulo="Atascado", verificar_veredicto="", copy_pendiente=pend)
+    _tema_pipeline(titulo="Apto viejo", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend)
     assert pc.temas_en_vuelo("unotv") == 2
 
     futuro = datetime.now(timezone.utc) + timedelta(hours=25)  # > TTL (def 24 h)
@@ -1084,10 +1084,10 @@ def test_caducidad_libera_el_gate_y_excluye_de_las_fases(entorno):
 
     # Liberan el gate, no se re-criban ni generan copy, y quedan marcados con el motivo.
     assert pc.temas_en_vuelo("unotv") == 0
-    assert pc.temas_sin_qa() == []
-    assert pc.temas_para_copy() == []
+    assert pc.temas_sin_verificar() == []
+    assert pc.temas_para_redactar() == []
     temas = {t["titulo"]: t for t in pc.temas_pipeline()}
-    assert temas["Atascado"]["qa_veredicto"] == pc.QA_CADUCADA
+    assert temas["Atascado"]["verificar_veredicto"] == pc.QA_CADUCADA
     assert "Caducada" in (temas["Atascado"].get("notas") or "")
 
 
@@ -1097,10 +1097,10 @@ def test_caducidad_respeta_lo_fresco_y_lo_terminal(entorno):
     from datetime import datetime, timedelta, timezone
 
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
-    _tema_pipeline(titulo="Fresco", qa_veredicto="", copy_pendiente=pend)
-    _tema_pipeline(titulo="Problema viejo", qa_veredicto=pc.VERDICTO_PROBLEMA, copy_pendiente=pend)
+    _tema_pipeline(titulo="Fresco", verificar_veredicto="", copy_pendiente=pend)
+    _tema_pipeline(titulo="Problema viejo", verificar_veredicto=pc.VERDICTO_PROBLEMA, copy_pendiente=pend)
     con_copy = _tema_pipeline(
-        titulo="Con copy", qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend
+        titulo="Con copy", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend
     )
     repos.crear_contenido_plataforma(contenido_id=con_copy["id"], red="x", copy="Copy listo")
 
@@ -1111,8 +1111,8 @@ def test_caducidad_respeta_lo_fresco_y_lo_terminal(entorno):
     futuro = datetime.now(timezone.utc) + timedelta(hours=25)
     assert pc.caducar_temas_viejos(ahora=futuro) == 1
     temas = {t["titulo"]: t for t in pc.temas_pipeline()}
-    assert temas["Problema viejo"]["qa_veredicto"] == pc.VERDICTO_PROBLEMA
-    assert temas["Con copy"]["qa_veredicto"] == pc.VERDICTO_NO_VERIFICADO
+    assert temas["Problema viejo"]["verificar_veredicto"] == pc.VERDICTO_PROBLEMA
+    assert temas["Con copy"]["verificar_veredicto"] == pc.VERDICTO_NO_VERIFICADO
 
 
 def test_caducado_libera_hueco_para_lo_fresco_del_ranking(entorno, monkeypatch):
@@ -1128,7 +1128,7 @@ def test_caducado_libera_hueco_para_lo_fresco_del_ranking(entorno, monkeypatch):
     monkeypatch.delenv("KENI_PIPELINE_VERIFICAR", raising=False)
     monkeypatch.delenv("KENI_PIPELINE_REDACTAR", raising=False)
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
-    _tema_pipeline(titulo="Backlog vencido", qa_veredicto="", copy_pendiente=pend)
+    _tema_pipeline(titulo="Backlog vencido", verificar_veredicto="", copy_pendiente=pend)
     _sembrar_cluster("hot", titulo="Lo fresco de hoy", score=0.9)
     # Con el backlog en vuelo, el cupo (1) está agotado: no entra nada.
     assert pc._ejecutar_barrido()["temas"] == []
@@ -1147,8 +1147,8 @@ def test_admitir_serial_no_promueve_si_marca_llena(entorno, monkeypatch):
     monkeypatch.setenv("KENI_PIPELINE_EN_VUELO_MAX", "2")
     # 2 temas en vuelo (pendientes de Verificar) -> cupo 0 para unotv.
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
-    _tema_pipeline(titulo="En vuelo 1", qa_veredicto="", copy_pendiente=pend)
-    _tema_pipeline(titulo="En vuelo 2", qa_veredicto="", copy_pendiente=pend)
+    _tema_pipeline(titulo="En vuelo 1", verificar_veredicto="", copy_pendiente=pend)
+    _tema_pipeline(titulo="En vuelo 2", verificar_veredicto="", copy_pendiente=pend)
     _sembrar_cluster("hot", titulo="Historia caliente", score=0.9)
 
     res = pc._ejecutar_barrido()
@@ -1165,8 +1165,8 @@ def test_admitir_serial_promueve_solo_hasta_el_cupo(entorno, monkeypatch):
     monkeypatch.setenv("KENI_PIPELINE_EN_VUELO_MAX", "3")
     # 2 en vuelo -> cupo 1: solo entra 1 historia aunque haya 3 clusters y pipeline_max=3.
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
-    _tema_pipeline(titulo="En vuelo 1", qa_veredicto="", copy_pendiente=pend)
-    _tema_pipeline(titulo="En vuelo 2", qa_veredicto="", copy_pendiente=pend)
+    _tema_pipeline(titulo="En vuelo 1", verificar_veredicto="", copy_pendiente=pend)
+    _tema_pipeline(titulo="En vuelo 2", verificar_veredicto="", copy_pendiente=pend)
     _sembrar_cluster("c1", titulo="Hist 1", score=0.9)
     _sembrar_cluster("c2", titulo="Hist 2", score=0.8)
     _sembrar_cluster("c3", titulo="Hist 3", score=0.7)
@@ -1190,7 +1190,7 @@ def test_cupo_dia_corta_la_admision(entorno, monkeypatch):
     monkeypatch.setenv("KENI_CUPO_DIA", "1")
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
     t = _tema_pipeline(
-        titulo="Producido hoy", qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend
+        titulo="Producido hoy", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend
     )
     repos.crear_contenido_plataforma(contenido_id=t["id"], red="x", copy="Copy listo")
     _sembrar_cluster("hot", titulo="Historia caliente", score=0.9)
@@ -1268,9 +1268,9 @@ def test_promocion_persiste_categoria_en_el_contenido(entorno, monkeypatch):
     # test_plan_sin_linea_breaking_compite_por_su_feed) y desplazaría a la nacional.
     monkeypatch.setenv("KENI_PLAN_DIA", "mx:1,breaking:1")
     _sembrar_cluster("cat1", titulo="Nacional persistida", score=0.9, categoria="mx",
-                     qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+                     verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
     _sembrar_cluster("cat2", titulo="Urgente persistida", score=0.9, categoria="mx", breaking=1,
-                     qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+                     verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
 
     temas = pc.promover_clusters_marca(
         "unotv", maximo=2, cupos_categoria={"mx": 1, "breaking": 1}
@@ -1358,7 +1358,7 @@ def test_plan_sin_linea_breaking_compite_por_su_feed(entorno, monkeypatch):
     cupo de su categoría de FEED."""
     monkeypatch.setenv("KENI_PLAN_DIA", "mx:1")
     _sembrar_cluster("brx", titulo="Ultima hora sin linea propia", score=0.9,
-                     categoria="mx", breaking=1, qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+                     categoria="mx", breaking=1, verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
 
     elegidos = pc.clusters_para_promover("unotv", maximo=5, cupos_categoria={"mx": 1})
 
@@ -1368,16 +1368,16 @@ def test_plan_sin_linea_breaking_compite_por_su_feed(entorno, monkeypatch):
 def test_temas_para_copy_incluye_qa_saltada(entorno):
     """Un tema con Verificar 'saltada' fluye a Redactar igual que 'no_verificado'; un 'problema' no."""
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
-    _tema_pipeline(titulo="Saltada ok", qa_veredicto=pc.QA_SALTADA, copy_pendiente=pend)
-    _tema_pipeline(titulo="Problema", qa_veredicto=pc.VERDICTO_PROBLEMA, copy_pendiente=pend)
+    _tema_pipeline(titulo="Saltada ok", verificar_veredicto=pc.QA_SALTADA, copy_pendiente=pend)
+    _tema_pipeline(titulo="Problema", verificar_veredicto=pc.VERDICTO_PROBLEMA, copy_pendiente=pend)
 
-    titulos = {t["titulo"] for t in pc.temas_para_copy()}
+    titulos = {t["titulo"] for t in pc.temas_para_redactar()}
     assert "Saltada ok" in titulos
     assert "Problema" not in titulos
 
 
 # --------------------------------------------------------------------------- #
-# Fundido de la selección de autogen_copy en la etapa de copy (news-pool)      #
+# Fundido de la selección de autogen_redactar en la etapa de copy (news-pool)      #
 # --------------------------------------------------------------------------- #
 
 
@@ -1405,19 +1405,19 @@ def test_temas_autogen_sin_copy_selecciona_origenes_de_noticias(entorno):
 
 
 def test_ejecutar_cd_funde_pool_via_autogen_lanzar(entorno, monkeypatch):
-    """`ejecutar_cd` lanza copy de los temas del pool vía `autogen_copy.lanzar_para_topic`."""
-    monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")  # etapa Redactar activa (sin el global, ejecutar_cd no corre)
-    from keni_consola import autogen_copy
+    """`ejecutar_redactar` lanza copy de los temas del pool vía `autogen_redactar.lanzar_para_topic`."""
+    monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")  # etapa Redactar activa (sin el global, ejecutar_redactar no corre)
+    from keni_consola import autogen_redactar
 
     lanzadas: list[str] = []
     monkeypatch.setattr(
-        autogen_copy, "lanzar_para_topic",
+        autogen_redactar, "lanzar_para_topic",
         lambda item: lanzadas.append(item["id"]) or {"id": f"g-{item['id']}"},
     )
     repos.crear_contenido(
         clase="contenido", titulo="Noticia pool", marca="unotv", origen="rss",
     )
-    lanzados = pc.ejecutar_cd(autor=None)
+    lanzados = pc.ejecutar_redactar(autor=None)
     assert len(lanzadas) == 1
     assert len(lanzados) == 1
 
@@ -1425,18 +1425,18 @@ def test_ejecutar_cd_funde_pool_via_autogen_lanzar(entorno, monkeypatch):
 def test_ejecutar_cd_salta_pool_de_marca_apagada(entorno, monkeypatch):
     """La exclusión por marca de «Generar copy» (ENV_PIPELINE_REDACTAR) también aplica al pool."""
     monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")  # etapa Redactar activa; la exclusión es por marca, no global
-    from keni_consola import autogen_copy
+    from keni_consola import autogen_redactar
 
     monkeypatch.setattr(pc.config, "marca_apagada", lambda env, marca: marca == "unotv")
     lanzadas: list[str] = []
     monkeypatch.setattr(
-        autogen_copy, "lanzar_para_topic",
+        autogen_redactar, "lanzar_para_topic",
         lambda item: lanzadas.append(item["id"]) or {"id": "g"},
     )
     repos.crear_contenido(
         clase="contenido", titulo="Apagada", marca="unotv", origen="rss",
     )
-    pc.ejecutar_cd(autor=None)
+    pc.ejecutar_redactar(autor=None)
     assert lanzadas == []
 
 
@@ -1449,28 +1449,28 @@ def test_ejecutar_arte_off_por_defecto_no_hace_nada(entorno, monkeypatch):
     """Sin `KENI_PIPELINE_ILUSTRAR`, la etapa de Ilustrar no ilustra (devuelve [])."""
     monkeypatch.delenv(config.ENV_PIPELINE_ILUSTRAR, raising=False)
     monkeypatch.setenv(config.ENV_MAQUINA, "1")
-    assert pc.ejecutar_arte() == []
+    assert pc.ejecutar_ilustrar() == []
 
 
 def test_ejecutar_arte_gateado_corre_seleccion_y_lanzamiento(entorno, monkeypatch):
-    """Con el toggle + máquina ON y proveedor configurado, ilustra vía autogen_arte."""
-    from keni_consola import autogen_arte
+    """Con el toggle + máquina ON y proveedor configurado, ilustra vía autogen_ilustrar."""
+    from keni_consola import autogen_ilustrar
 
     monkeypatch.setenv(config.ENV_MAQUINA, "1")
     monkeypatch.setenv(config.ENV_PIPELINE_ILUSTRAR, "1")
-    monkeypatch.setattr(autogen_arte.media, "proveedor_configurado", lambda: True)
+    monkeypatch.setattr(autogen_ilustrar.media, "proveedor_configurado", lambda: True)
     item = {"id": "t1", "titulo": "Tema", "marca": "unotv"}
     monkeypatch.setattr(pc.repos, "listar_contenido", lambda **_k: [item])
-    monkeypatch.setattr(autogen_arte, "_plataformas_por_item", lambda items: {})
-    monkeypatch.setattr(autogen_arte, "ids_ya_procesados", lambda: set())
-    monkeypatch.setattr(autogen_arte, "_etiquetas_por_item", lambda: {})
-    monkeypatch.setattr(autogen_arte, "topics_sin_arte", lambda *a, **k: [item])
+    monkeypatch.setattr(autogen_ilustrar, "_plataformas_por_item", lambda items: {})
+    monkeypatch.setattr(autogen_ilustrar, "ids_ya_procesados", lambda: set())
+    monkeypatch.setattr(autogen_ilustrar, "_etiquetas_por_item", lambda: {})
+    monkeypatch.setattr(autogen_ilustrar, "topics_sin_arte", lambda *a, **k: [item])
     adjuntados: list[str] = []
     monkeypatch.setattr(
-        autogen_arte, "lanzar_para_topic",
+        autogen_ilustrar, "lanzar_para_topic",
         lambda it: adjuntados.append(it["id"]) or {"contenido_id": it["id"]},
     )
-    res = pc.ejecutar_arte()
+    res = pc.ejecutar_ilustrar()
     assert adjuntados == ["t1"]
     assert len(res) == 1
 
@@ -1482,7 +1482,7 @@ def test_ejecutar_arte_sin_proveedor_no_ilustra(entorno, monkeypatch):
     monkeypatch.setenv(config.ENV_MAQUINA, "1")
     monkeypatch.setenv(config.ENV_PIPELINE_ILUSTRAR, "1")
     monkeypatch.setattr(media, "proveedor_configurado", lambda: False)
-    assert pc.ejecutar_arte() == []
+    assert pc.ejecutar_ilustrar() == []
 
 
 # --------------------------------------------------------------------------- #
@@ -1493,11 +1493,11 @@ def test_ejecutar_arte_sin_proveedor_no_ilustra(entorno, monkeypatch):
 def test_clusters_para_promover_diversifica_titulos_casi_identicos(entorno):
     """Un macro-tema (dos historias casi idénticas) no se come todas las plazas del barrido."""
     _sembrar_cluster("dup1", titulo="Messi gana el premio en París", score=0.9,
-                     qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+                     verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
     _sembrar_cluster("dup2", titulo="Messi gana el premio en París hoy", score=0.8,
-                     qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+                     verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
     _sembrar_cluster("otra", titulo="Sismo de magnitud en la capital", score=0.5,
-                     qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+                     verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
 
     elegidos = pc.clusters_para_promover("unotv", maximo=2)
 
@@ -1507,9 +1507,9 @@ def test_clusters_para_promover_diversifica_titulos_casi_identicos(entorno):
 def test_clusters_para_promover_suave_rellena_si_solo_hay_duplicados(entorno):
     """Si todo el pool es el mismo macro-tema, se rellena igual (nunca devuelve menos)."""
     _sembrar_cluster("dup1", titulo="Messi gana el premio en París", score=0.9,
-                     qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+                     verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
     _sembrar_cluster("dup2", titulo="Messi gana el premio en París hoy", score=0.8,
-                     qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+                     verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
     elegidos = pc.clusters_para_promover("unotv", maximo=2)
     assert {c["id"] for c in elegidos} == {"dup1", "dup2"}
 
@@ -1527,20 +1527,20 @@ def test_clusters_para_promover_respeta_el_liston(entorno):
     # Todas VERIFICADAS (pasaron la criba): así el ÚNICO discriminante de la promoción es el
     # listón, no el filtro de Verificar (que ya cribó a todas por igual).
     _sembrar_cluster("apta", titulo="Sismo sacude la CDMX", score=0.9,
-                     qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+                     verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
     # Sin encaje de marca: ni el título ni el resumen casan el vocabulario unotv.
     _sembrar_cluster(
         "irrelevante", titulo="Gossip de celebridades en Hollywood", score=0.8,
-        resumen="Rumores del espectáculo extranjero", qa_veredicto=pc.VERDICTO_NO_VERIFICADO,
+        resumen="Rumores del espectáculo extranjero", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO,
     )
     # Verificación dudosa: jamás dispara producción automática, puntúe lo que puntúe.
     _sembrar_cluster("dudosa", titulo="Increíble suceso en México hoy", score=0.7,
-                     verificacion="dudosa", qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+                     verificacion="dudosa", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
     # Vieja sin señales: su score persistido era alto, pero el listón recalcula AHORA.
     _sembrar_cluster(
         "vieja", titulo="México: nota de hace una semana", score=0.95, n_fuentes=1,
         ultimo_visto=(datetime.now(UTC) - timedelta(days=7)).replace(tzinfo=None)
-        .isoformat(timespec="seconds"), qa_veredicto=pc.VERDICTO_NO_VERIFICADO,
+        .isoformat(timespec="seconds"), verificar_veredicto=pc.VERDICTO_NO_VERIFICADO,
     )
 
     elegidos = pc.clusters_para_promover("unotv", maximo=4)
@@ -1553,10 +1553,10 @@ def test_promover_clusters_marca_no_promueve_bajo_liston(entorno, monkeypatch):
     """El barrido ADMITIR deja en el pool (estado `nuevo`) lo que no supera el listón: ni tema ni copy."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     _sembrar_cluster("apta", titulo="Sismo sacude la CDMX", score=0.9,
-                     qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+                     verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
     _sembrar_cluster(
         "irrelevante", titulo="Gossip de celebridades en Hollywood", score=0.8,
-        resumen="Rumores del espectáculo extranjero", qa_veredicto=pc.VERDICTO_NO_VERIFICADO,
+        resumen="Rumores del espectáculo extranjero", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO,
     )
 
     temas = pc.promover_clusters_marca("unotv", maximo=2)
@@ -1590,22 +1590,22 @@ def test_upsert_cluster_no_revierte_estado_ni_contenido_id(entorno):
 
 def test_encadenar_arte_tras_copy_ilustra_ese_tema(entorno, monkeypatch):
     """El post-procesado del copy dispara ILUSTRAR de ESE tema al instante (gates ON)."""
-    from keni_consola import autogen_arte, media
+    from keni_consola import autogen_ilustrar, media
 
     monkeypatch.setenv(config.ENV_MAQUINA, "1")
     monkeypatch.setenv(config.ENV_PIPELINE_ILUSTRAR, "1")
     monkeypatch.setattr(media, "proveedor_configurado", lambda: True)
-    monkeypatch.setattr(autogen_arte, "ids_ya_procesados", lambda: set())
+    monkeypatch.setattr(autogen_ilustrar, "ids_ya_procesados", lambda: set())
     lanzados: list[str] = []
     monkeypatch.setattr(
-        autogen_arte, "lanzar_para_topic",
+        autogen_ilustrar, "lanzar_para_topic",
         lambda it: lanzados.append(it["id"]) or {"contenido_id": it["id"]},
     )
     tema = repos.crear_contenido(
         clase="contenido", titulo="Ilustrable", marca="unotv", origen=pc.ORIGEN_PIPELINE,
     )
 
-    res = pc.encadenar_arte_tras_copy(tema["id"])
+    res = pc.encadenar_ilustrar_tras_redactar(tema["id"])
 
     assert lanzados == [tema["id"]]
     assert res is not None
@@ -1613,12 +1613,12 @@ def test_encadenar_arte_tras_copy_ilustra_ese_tema(entorno, monkeypatch):
 
 def test_encadenar_arte_tras_copy_respeta_gates(entorno, monkeypatch):
     """Con el toggle de arte OFF (o el tema ya ilustrado) el encadenado NO lanza nada."""
-    from keni_consola import autogen_arte, media
+    from keni_consola import autogen_ilustrar, media
 
     # Toggle OFF: ni siquiera consulta el tema.
     monkeypatch.delenv(config.ENV_PIPELINE_ILUSTRAR, raising=False)
     monkeypatch.setenv(config.ENV_MAQUINA, "1")
-    assert pc.encadenar_arte_tras_copy("cualquiera") is None
+    assert pc.encadenar_ilustrar_tras_redactar("cualquiera") is None
 
     # Toggle ON pero tema YA ilustrado (dedup por etiqueta): tampoco.
     monkeypatch.setenv(config.ENV_PIPELINE_ILUSTRAR, "1")
@@ -1626,26 +1626,26 @@ def test_encadenar_arte_tras_copy_respeta_gates(entorno, monkeypatch):
     tema = repos.crear_contenido(
         clase="contenido", titulo="Ya ilustrado", marca="unotv", origen=pc.ORIGEN_PIPELINE,
     )
-    monkeypatch.setattr(autogen_arte, "ids_ya_procesados", lambda: {tema["id"]})
+    monkeypatch.setattr(autogen_ilustrar, "ids_ya_procesados", lambda: {tema["id"]})
     monkeypatch.setattr(
-        autogen_arte, "lanzar_para_topic",
+        autogen_ilustrar, "lanzar_para_topic",
         lambda it: (_ for _ in ()).throw(AssertionError("no debe ilustrar un tema ya hecho")),
     )
-    assert pc.encadenar_arte_tras_copy(tema["id"]) is None
+    assert pc.encadenar_ilustrar_tras_redactar(tema["id"]) is None
 
 
 def test_sanear_qa_en_curso_huerfanos_resetea_solo_viejos(entorno):
     """El saneador devuelve a re-criba ('') SOLO los `en_curso` más viejos que el umbral.
 
     Cierra el ZOMBI: si la criba muere sin finalizador, el tema quedaba `en_curso` para
-    siempre (excluido de `temas_sin_qa` y contando en el cupo en vuelo de su marca).
+    siempre (excluido de `temas_sin_verificar` y contando en el cupo en vuelo de su marca).
     NOTA: el reaper usa ahora su saneo PER-TEMA (`reaper_generaciones._sanear_qa_en_curso`,
     con WARN por tema y destino según el toggle); esta primitiva SQL en lote sigue en repos.
     """
     from keni_consola import db
 
-    zombi = _tema_pipeline(titulo="Zombi", qa_veredicto=pc.QA_EN_CURSO)
-    vivo = _tema_pipeline(titulo="Vivo", qa_veredicto=pc.QA_EN_CURSO)
+    zombi = _tema_pipeline(titulo="Zombi", verificar_veredicto=pc.QA_EN_CURSO)
+    vivo = _tema_pipeline(titulo="Vivo", verificar_veredicto=pc.QA_EN_CURSO)
     # Envejecemos el `actualizado` del zombi más allá del umbral (el del vivo queda reciente).
     con = db._conectar()
     try:
@@ -1660,8 +1660,8 @@ def test_sanear_qa_en_curso_huerfanos_resetea_solo_viejos(entorno):
     n = repos.sanear_qa_en_curso_huerfanos("2025-01-01T00:00:00")
 
     assert n == 1
-    assert (repos.obtener_contenido(zombi["id"])["qa_veredicto"] or "") == ""  # a re-criba
-    assert repos.obtener_contenido(vivo["id"])["qa_veredicto"] == pc.QA_EN_CURSO  # intacto
+    assert (repos.obtener_contenido(zombi["id"])["verificar_veredicto"] or "") == ""  # a re-criba
+    assert repos.obtener_contenido(vivo["id"])["verificar_veredicto"] == pc.QA_EN_CURSO  # intacto
 
 
 def _envejecer_actualizado(tema_id, fecha="2020-01-01T00:00:00"):
@@ -1681,15 +1681,15 @@ def test_reaper_qa_zombi_re_criba_con_validacion_activa(entorno, monkeypatch):
     from keni_consola import reaper_generaciones
 
     monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")
-    zombi = _tema_pipeline(titulo="Zombi", qa_veredicto=pc.QA_EN_CURSO)
-    vivo = _tema_pipeline(titulo="Vivo", qa_veredicto=pc.QA_EN_CURSO)
+    zombi = _tema_pipeline(titulo="Zombi", verificar_veredicto=pc.QA_EN_CURSO)
+    vivo = _tema_pipeline(titulo="Vivo", verificar_veredicto=pc.QA_EN_CURSO)
     _envejecer_actualizado(zombi["id"])
 
     n = reaper_generaciones._sanear_qa_en_curso()
 
     assert n == 1
-    assert (repos.obtener_contenido(zombi["id"])["qa_veredicto"] or "") == ""  # a re-criba
-    assert repos.obtener_contenido(vivo["id"])["qa_veredicto"] == pc.QA_EN_CURSO  # intacto
+    assert (repos.obtener_contenido(zombi["id"])["verificar_veredicto"] or "") == ""  # a re-criba
+    assert repos.obtener_contenido(vivo["id"])["verificar_veredicto"] == pc.QA_EN_CURSO  # intacto
 
 
 def test_reaper_qa_zombi_saltada_con_validacion_apagada(entorno, monkeypatch):
@@ -1697,40 +1697,40 @@ def test_reaper_qa_zombi_saltada_con_validacion_apagada(entorno, monkeypatch):
     from keni_consola import reaper_generaciones
 
     monkeypatch.delenv("KENI_PIPELINE_VERIFICAR", raising=False)  # etapa off (def)
-    zombi = _tema_pipeline(titulo="Zombi sin QA", qa_veredicto=pc.QA_EN_CURSO)
+    zombi = _tema_pipeline(titulo="Zombi sin QA", verificar_veredicto=pc.QA_EN_CURSO)
     _envejecer_actualizado(zombi["id"])
 
     n = reaper_generaciones._sanear_qa_en_curso()
 
     assert n == 1
-    assert repos.obtener_contenido(zombi["id"])["qa_veredicto"] == pc.QA_SALTADA
+    assert repos.obtener_contenido(zombi["id"])["verificar_veredicto"] == pc.QA_SALTADA
 
 
 def test_ejecutar_arte_fallo_masivo_emite_un_error_agregado(entorno, monkeypatch, caplog):
     """>50% de lanzamientos de arte fallidos en un ciclo -> UN único ERROR agregado (proveedor)."""
     import logging
 
-    from keni_consola import autogen_arte
+    from keni_consola import autogen_ilustrar
 
     monkeypatch.setenv(config.ENV_MAQUINA, "1")
     monkeypatch.setenv(config.ENV_PIPELINE_ILUSTRAR, "1")
-    monkeypatch.setattr(autogen_arte.media, "proveedor_configurado", lambda: True)
+    monkeypatch.setattr(autogen_ilustrar.media, "proveedor_configurado", lambda: True)
     items = [
         {"id": "t1", "titulo": "Tema 1", "marca": "unotv"},
         {"id": "t2", "titulo": "Tema 2", "marca": "unotv"},
     ]
     monkeypatch.setattr(pc.repos, "listar_contenido", lambda **_k: items)
-    monkeypatch.setattr(autogen_arte, "_plataformas_por_item", lambda items: {})
-    monkeypatch.setattr(autogen_arte, "ids_ya_procesados", lambda: set())
-    monkeypatch.setattr(autogen_arte, "_etiquetas_por_item", lambda: {})
-    monkeypatch.setattr(autogen_arte, "topics_sin_arte", lambda *a, **k: list(items))
+    monkeypatch.setattr(autogen_ilustrar, "_plataformas_por_item", lambda items: {})
+    monkeypatch.setattr(autogen_ilustrar, "ids_ya_procesados", lambda: set())
+    monkeypatch.setattr(autogen_ilustrar, "_etiquetas_por_item", lambda: {})
+    monkeypatch.setattr(autogen_ilustrar, "topics_sin_arte", lambda *a, **k: list(items))
     monkeypatch.setattr(
-        autogen_arte, "lanzar_para_topic",
+        autogen_ilustrar, "lanzar_para_topic",
         lambda it: (_ for _ in ()).throw(RuntimeError("proveedor caído")),
     )
 
     with caplog.at_level(logging.ERROR, logger="keni_consola.pipeline_contenido"):
-        res = pc.ejecutar_arte()
+        res = pc.ejecutar_ilustrar()
 
     assert res == []
     agregados = [
@@ -1747,30 +1747,30 @@ def test_ejecutar_arte_fallo_aislado_sin_error_agregado(entorno, monkeypatch, ca
     """Un fallo de arte AISLADO (<=50% del ciclo) no dispara la señal de proveedor caído."""
     import logging
 
-    from keni_consola import autogen_arte
+    from keni_consola import autogen_ilustrar
 
     monkeypatch.setenv(config.ENV_MAQUINA, "1")
     monkeypatch.setenv(config.ENV_PIPELINE_ILUSTRAR, "1")
-    monkeypatch.setattr(autogen_arte.media, "proveedor_configurado", lambda: True)
+    monkeypatch.setattr(autogen_ilustrar.media, "proveedor_configurado", lambda: True)
     items = [
         {"id": "t1", "titulo": "Tema 1", "marca": "unotv"},
         {"id": "t2", "titulo": "Tema 2", "marca": "unotv"},
     ]
     monkeypatch.setattr(pc.repos, "listar_contenido", lambda **_k: items)
-    monkeypatch.setattr(autogen_arte, "_plataformas_por_item", lambda items: {})
-    monkeypatch.setattr(autogen_arte, "ids_ya_procesados", lambda: set())
-    monkeypatch.setattr(autogen_arte, "_etiquetas_por_item", lambda: {})
-    monkeypatch.setattr(autogen_arte, "topics_sin_arte", lambda *a, **k: list(items))
+    monkeypatch.setattr(autogen_ilustrar, "_plataformas_por_item", lambda items: {})
+    monkeypatch.setattr(autogen_ilustrar, "ids_ya_procesados", lambda: set())
+    monkeypatch.setattr(autogen_ilustrar, "_etiquetas_por_item", lambda: {})
+    monkeypatch.setattr(autogen_ilustrar, "topics_sin_arte", lambda *a, **k: list(items))
 
     def _solo_t1_falla(it):
         if it["id"] == "t1":
             raise RuntimeError("fallo puntual")
         return {"contenido_id": it["id"]}
 
-    monkeypatch.setattr(autogen_arte, "lanzar_para_topic", _solo_t1_falla)
+    monkeypatch.setattr(autogen_ilustrar, "lanzar_para_topic", _solo_t1_falla)
 
     with caplog.at_level(logging.ERROR, logger="keni_consola.pipeline_contenido"):
-        res = pc.ejecutar_arte()
+        res = pc.ejecutar_ilustrar()
 
     assert len(res) == 1  # t2 sí se ilustró
     assert not [
@@ -1811,7 +1811,7 @@ def test_lanzar_para_topic_sella_pipeline_y_marcador_redactar(entorno, monkeypat
     """El copy de un tema del TABLERO es trabajo del PIPELINE: se lanza `tipo='pipeline'`
     (no el legado "autogen") y deja el marcador de etapa Redactar correlacionado al tema, para que
     Producción lo muestre dentro de la run (stream en el detalle + métricas sumadas)."""
-    from keni_consola import autogen_copy
+    from keni_consola import autogen_redactar
 
     capturas: dict[str, object] = {}
 
@@ -1819,7 +1819,7 @@ def test_lanzar_para_topic_sella_pipeline_y_marcador_redactar(entorno, monkeypat
         capturas.update(kwargs)
         return {"id": "gen-tablero-1"}
 
-    monkeypatch.setattr(autogen_copy.dom_generar, "lanzar_copy", _fake_lanzar_copy)
+    monkeypatch.setattr(autogen_redactar.dom_generar, "lanzar_copy", _fake_lanzar_copy)
     marcadores: list[tuple] = []
     monkeypatch.setattr(
         pc, "registrar_etapa",
@@ -1830,7 +1830,7 @@ def test_lanzar_para_topic_sella_pipeline_y_marcador_redactar(entorno, monkeypat
 
     item = {"id": "tema-tablero", "marca": "unotv", "origen": "equipo",
             "titulo": "Nota del equipo", "descripcion": "La nota."}
-    gen = autogen_copy.lanzar_para_topic(item)
+    gen = autogen_redactar.lanzar_para_topic(item)
 
     assert gen == {"id": "gen-tablero-1"}
     assert capturas["tipo"] == "pipeline"
@@ -1838,7 +1838,7 @@ def test_lanzar_para_topic_sella_pipeline_y_marcador_redactar(entorno, monkeypat
     assert capturas["titulo"] == "Nota del equipo"  # etiqueta legible, no "Auto-copy"
     assert len(marcadores) == 1
     etapa, marca, detalle, contenido_id, gen_id = marcadores[0]
-    assert etapa == pc.ETAPA_CD
+    assert etapa == pc.ETAPA_REDACTAR
     assert marca == "unotv"
     assert contenido_id == "tema-tablero"
     assert gen_id == "gen-tablero-1"

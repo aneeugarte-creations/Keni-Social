@@ -105,7 +105,7 @@ from .repos_contenido import (  # noqa: F401
     existe_publicado_similar,
     hashtags_de_contenido,
     ids_contenido_con_copy,
-    qa_veredicto_por_contenido,
+    verificar_veredicto_por_contenido,
     ids_contenido_con_etiqueta,
     listar_contenido,
     listar_contenido_origenes,

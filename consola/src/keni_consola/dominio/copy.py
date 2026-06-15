@@ -173,7 +173,7 @@ def _inyectar_hashtags(texto: str, tags: list[str], *, red: str) -> str:
 def _avisar_piezas_descartadas(motivos: list[str], *, contenido_id: str, marca: str) -> None:
     """Deja rastro de las piezas descartadas: WARN + nota en el tema (si lo hay).
 
-    Sigue el patron de avisos en `contenido.notas` (ver `pipeline_contenido._ingesta`).
+    Sigue el patron de avisos en `contenido.notas` (ver `pipeline_contenido._admitir`).
     Best-effort: nunca rompe el post-procesado (las piezas validas del lote ya se crearon).
     """
     detalle = "; ".join(motivos)

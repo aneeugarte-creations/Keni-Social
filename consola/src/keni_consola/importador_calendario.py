@@ -534,7 +534,7 @@ def extraer_con_claude(
 # ENCOLA como un job de generacion (Haiku); el WORKER corre claude y luego este
 # `procesar(salida, metricas)` parsea su salida (`parsear_respuesta_claude`) e IMPORTA al
 # tablero (`importar_a_tablero`). Es la factory que `jobspec.reconstruir_procesar` arma a partir
-# del spec `PROC_IMPORT_CALENDARIO` (mismo patron que `insumos_parse.construir_procesar_insumos`).
+# del spec `PROC_IMPORT_CALENDARIO` (mismo patron que `recibir_parse.construir_procesar_insumos`).
 
 
 def construir_procesar_import(

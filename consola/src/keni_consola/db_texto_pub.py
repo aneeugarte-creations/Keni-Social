@@ -10,7 +10,7 @@ Modelo de PUBLICACION de la Biblioteca:
     como produccion; el admin aprueba (publica + `aprobada`) o rechaza. A lo sumo UNA
     solicitud `abierta` por doc: crear una nueva SUSTITUYE a la abierta anterior.
 
-Este modulo es persistencia PURA (mismo patron que `db_evergreen`): no valida documentos
+Este modulo es persistencia PURA (mismo patron que `db_idear`): no valida documentos
 ni shas (lo hace `api/texto`), no toca git (lo hace `versionado`).
 """
 from __future__ import annotations

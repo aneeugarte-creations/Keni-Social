@@ -9,7 +9,7 @@ from .fuentes_rss import _SELECT_FUENTE_RSS, _fila_a_fuente_rss
 # MOTOR DE INGESTA PERSISTENTE (Ola A): archivo a nivel de artículo            #
 # --------------------------------------------------------------------------- #
 # `noticias_items` es el ARCHIVO: una fila por artículo de feed, persistido una vez (dedup por
-# (fuente_id, clave)). Lo alimenta el `ingesta_daemon` en background; el Radar/Plan y la UI
+# (fuente_id, clave)). Lo alimenta el `recolectar_daemon` en background; el Radar/Plan y la UI
 # leen de aqui. El bulk-insert usa `ON CONFLICT DO NOTHING` sobre el indice unico, asi
 # re-ingerir el mismo artículo es inofensivo. La planificación de feeds (`feeds_vencidos`,
 # `registrar_sondeo_feed`) vive en las columnas de `fuentes_rss` (mismas conexiones).

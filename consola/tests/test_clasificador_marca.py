@@ -127,7 +127,7 @@ def test_config_marcas_activas_def_piloto(monkeypatch):
 
 
 def test_clasificar_marca_ia_wiring_usa_candidatas_validas(monkeypatch):
-    from keni_consola import ingesta_daemon
+    from keni_consola import recolectar_daemon
 
     capturado: dict[str, object] = {}
 
@@ -139,9 +139,9 @@ def test_clasificar_marca_ia_wiring_usa_candidatas_validas(monkeypatch):
     monkeypatch.setattr(
         "keni_consola.dominio.clasificador_marca.clasificar_marca", _fake
     )
-    monkeypatch.setattr(ingesta_daemon, "_registrar_actividad_ia", lambda *a, **k: None)
+    monkeypatch.setattr(recolectar_daemon, "_registrar_actividad_ia", lambda *a, **k: None)
 
-    marca = ingesta_daemon._clasificar_marca_ia(
+    marca = recolectar_daemon._clasificar_marca_ia(
         {"titulo": "Gol de último minuto", "resumen": "", "breaking": 1}
     )
     assert marca == "claro-sports"

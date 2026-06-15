@@ -41,7 +41,7 @@ def _stub_investigacion(monkeypatch, *, categoria: str):
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setattr(_barrido._ingesta, "caducar_temas_viejos", lambda: None)
     monkeypatch.setattr(_barrido._ingesta, "caducar_qa_clusters_en_curso", lambda: None)
-    monkeypatch.setattr(_barrido, "ejecutar_qa_clusters", lambda *, autor=None: [])
+    monkeypatch.setattr(_barrido, "ejecutar_verificar_clusters", lambda *, autor=None: [])
     monkeypatch.setattr(_barrido._ingesta, "temas_en_vuelo", lambda marca: 0)
     monkeypatch.setattr(_barrido._ingesta, "cupos_categoria_restantes", lambda marca: None)
     monkeypatch.setattr(_barrido._ingesta, "cupo_produccion_restante", lambda marca: None)

@@ -182,7 +182,7 @@ def test_serie_excluye_marcadores_y_desglosa_por_proceso(entorno):
     """
     # Marcador de etapa: completado pero SIN coste -> debe quedar fuera de la serie.
     generaciones.crear({
-        "tipo": "pipeline_etapa", "marca": _MARCA, "etiqueta": "QA · criba",
+        "tipo": "pipeline_etapa", "marca": _MARCA, "etiqueta": "VERIFICAR · criba",
         "estado": generaciones.ESTADO_COMPLETADO, "fecha_fin": generaciones.ahora_iso(),
     })
     # Criba Verificar real (investigacion) con tokens.

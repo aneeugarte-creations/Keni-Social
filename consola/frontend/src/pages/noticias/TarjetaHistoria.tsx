@@ -298,7 +298,7 @@ export function TarjetaHistoria({
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <ChipMarca historia={historia} />
 
-            <BadgeVeredictoFuente veredicto={historia.qa_veredicto} />
+            <BadgeVeredictoFuente veredicto={historia.verificar_veredicto} />
 
             {/* Score: dato visual inline; "Ver score" en el menú contextual abre el desglose. */}
             <span

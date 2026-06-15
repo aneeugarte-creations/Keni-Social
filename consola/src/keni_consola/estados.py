@@ -258,7 +258,7 @@ TIPO_CONTENIDO_DEFECTO = "ia"
 # `origen` de un item del tablero: de QUÉ fuente nació. Es texto libre en la DB (no hay
 # enum duro en `repos.crear_contenido`), pero las FUENTES que la auto-generación de copy
 # considera "tema redactable" se enumeran aquí, en el módulo neutro, para que tanto el
-# daemon (`autogen_copy.ORIGENES_TOPIC`) como los flujos transversales referencien UN
+# daemon (`autogen_redactar.ORIGENES_TOPIC`) como los flujos transversales referencien UN
 # único valor en vez de literales sueltos.
 #   - `import-calendario` · `radar-auto` · `radar` · `rss`: fuentes EXTERNAS (lo histórico).
 #   - `equipo`: ALTA CREATIVA del equipo (Fase 1 / Flujo A). El equipo "postea" material
@@ -365,15 +365,15 @@ DECISION_PENDIENTE = "pendiente"
 DECISION_APROBADO = "aprobado"
 DECISION_RECHAZADO = "rechazado"
 
-# Veredictos validos de la QA DE LA FUENTE persistida en `contenido.qa_veredicto` (criba
+# Veredictos validos de la QA DE LA FUENTE persistida en `contenido.verificar_veredicto` (criba
 # pre-copy). Allowlist CANONICA para el CHECK de esquema (ADR 0012). "" = sin cribar / a
 # re-criba. Los valores NO viven en este modulo dependency-free (son del pipeline/dominio);
 # se enumeran aqui como literales, con su origen, para no acoplar `estados` al pipeline:
 #   - "en_curso":      SENTINEL en vuelo            (`pipeline_contenido._comun.QA_EN_CURSO`)
 #   - "saltada":       QA desactivada para la marca (`pipeline_contenido._comun.QA_SALTADA`)
 #   - "caducada":      tema que supero el TTL       (`pipeline_contenido._comun.QA_CADUCADA`)
-#   - "no_verificado": apta para seguir (⚠️)        (`dominio.qa_editorial.VERDICTO_NO_VERIFICADO`)
-#   - "problema":      algo de peso en contra (❗)   (`dominio.qa_editorial.VERDICTO_PROBLEMA`)
+#   - "no_verificado": apta para seguir (⚠️)        (`dominio.verificar_fuente.VERDICTO_NO_VERIFICADO`)
+#   - "problema":      algo de peso en contra (❗)   (`dominio.verificar_fuente.VERDICTO_PROBLEMA`)
 # Si se anade un veredicto nuevo en el pipeline, anadirlo AQUI (el CHECK lo rechazaria si no).
 VEREDICTOS_QA_CONTENIDO: tuple[str, ...] = (
     "",

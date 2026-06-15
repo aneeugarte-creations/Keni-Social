@@ -15,7 +15,7 @@ from typing import Any
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from ... import autogen_copy, config, marcas, repos
+from ... import autogen_redactar, config, marcas, repos
 from ..._http_json import leer_json
 from ...seguridad import autor_de_peticion
 from ...tiempo import hoy_utc
@@ -126,7 +126,7 @@ async def usar(request: Request) -> Response:
     genero = False
     if marca and generar:
         try:
-            genero = autogen_copy.lanzar_para_topic(contenido) is not None
+            genero = autogen_redactar.lanzar_para_topic(contenido) is not None
         except Exception:  # noqa: BLE001 -- la generación es opcional; nunca tumba el uso
             genero = False
 

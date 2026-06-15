@@ -4,7 +4,7 @@ Compone el prompt final (cuerpo del prompt + línea editorial adjunta + contexto
 redes), crea el registro de generación y lo ENCOLA reutilizando la infra de `generaciones`
 (`encolar_job_claude` + worker + sondeo). El post-procesado (parsear piezas, crear
 borradores, etc.) llega como `procesar` + `procesar_spec` (kinds de `jobspec`, fábricas en
-`dominio.copy`/`dominio.qa_editorial`/`dominio.hashtags`).
+`dominio.copy`/`dominio.verificar_fuente`/`dominio.hashtags`).
 
 Los prompts son AUTOCONTENIDOS: la línea editorial y la entrada van DENTRO del prompt, así
 que `claude` corre con un cwd NEUTRO (`jobspec.CWD_GENERACION`).
@@ -602,7 +602,7 @@ def lanzar_arte(
     """Crea el registro y ENCOLA la generación de ARTE como JOB de PROCESO (kind imagen).
 
     A diferencia de `lanzar` (claude), el arte NO corre `claude -p`: es un job de PROCESO
-    (`jobspec.PROC_IMAGEN`) que el WORKER despacha a su ejecutor (`autogen_arte.ejecutar_arte_job`),
+    (`jobspec.PROC_IMAGEN`) que el WORKER despacha a su ejecutor (`autogen_ilustrar.ejecutar_arte_job`),
     el cual llama a `media.generar_imagen`, sube la imagen y la adjunta a la pieza. Antes el arte
     era SÍNCRONO (corría dentro del barrido con un ThreadPool propio, fuera de la cola); enrutarlo
     por la cola le da el CARRIL de proceso (no bloquea el copy), los REINTENTOS/huérfanos del reaper
@@ -775,7 +775,7 @@ def lanzar_copy(
 
     `contenido_id` (lista viva): si apunta a un tema del tablero, el borrador resultante se
     NIDA bajo ese tema (cuelga de su tarjeta) en vez de nacer como contenido suelto. Lo usa
-    el auto-copy (`autogen_copy`); sin el (default ""), borrador suelto como hoy.
+    el auto-copy (`autogen_redactar`); sin el (default ""), borrador suelto como hoy.
 
     `url_fuente` (RSS, trazabilidad): URL CANONICA de la nota de origen. Si viene, el post-
     procesado la PERSISTE en `contenido.url_fuente` del tema padre de cada borrador (dedup por
@@ -790,7 +790,7 @@ def lanzar_copy(
     # Resolucion por REGISTRO: si el caller no rebindea (usa el id por defecto), el pipeline
     # "copy" decide su prompt base (que puede haberse re-bindeado en la Texto sin tocar
     # codigo). Si el caller pasa un prompt_id distinto, se respeta tal cual.
-    prompt_efectivo = libtexto.prompt_base_de("copy") if prompt_id == PROMPT_COPY else prompt_id
+    prompt_efectivo = libtexto.prompt_base_de("redactar") if prompt_id == PROMPT_COPY else prompt_id
     cuerpo = libtexto.cuerpo_efectivo(prompt_efectivo)
     if cuerpo is None:
         raise libtexto.TextoError("No está disponible el prompt de copy. Reinstala la Consola.")

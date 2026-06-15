@@ -35,7 +35,7 @@ from .modelo import FALLA, PASA, CasoEval
 Juez = Callable[[CasoEval], str]
 
 # Ejecutor de generación live: (prompt, dir_permitido) -> salida. MISMA firma que los
-# ejecutores de `dominio.traduccion` / `clasificador_marca`, para reusar el subproceso real.
+# ejecutores de `dominio.traducir` / `clasificador_marca`, para reusar el subproceso real.
 EjecutorLLM = Callable[[str, str], str]
 
 

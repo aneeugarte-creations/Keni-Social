@@ -267,6 +267,47 @@ def _migrar_green_a_evergreen(con: Any) -> None:
         )
 
 
+# ETAPAS CON NOMBRE DE VERBO (Fase 2): las columnas de etapa legacy `qa_*` (la etapa "QA" pasó a
+# "Verificar" en todo el código) se renombran a `verificar_*` en las BDs productivas (piloto AMX),
+# preservando los datos (Postgres conserva los valores en un RENAME COLUMN). Cada tupla es
+# (tabla, columna_vieja, columna_nueva). `qa_veredicto`/`qa_hallazgos` viven tanto en `contenido`
+# (criba de la FUENTE pre-copy) como en `noticias_clusters` (verificación de la historia antes de
+# admitir): ambas se renombran. NO se tocan `qa_intentos`/`cd_intentos`: nunca fueron columnas,
+# son claves dentro del JSON de `copy_pendiente` (ya renombradas en el código a `verificar_*`/
+# `redactar_intentos`).
+_RENOMBRES_COLUMNAS_ETAPAS: tuple[tuple[str, str, str], ...] = (
+    ("contenido", "qa_veredicto", "verificar_veredicto"),
+    ("contenido", "qa_hallazgos", "verificar_hallazgos"),
+    ("noticias_clusters", "qa_veredicto", "verificar_veredicto"),
+    ("noticias_clusters", "qa_hallazgos", "verificar_hallazgos"),
+)
+
+
+def _migrar_renombre_columnas_etapas(con: Any) -> None:
+    """Renombra las columnas de etapa legacy `qa_*` -> `verificar_*` (idempotente, preserva datos).
+
+    Por cada (tabla, viejo, nuevo) de `_RENOMBRES_COLUMNAS_ETAPAS`: si la tabla existe y tiene la
+    columna VIEJA pero aún NO la nueva, `ALTER TABLE ... RENAME COLUMN` (Postgres conserva los
+    datos). Re-ejecutable: una vez renombrada, el guard la salta. Corre PRE-DDL para que el
+    renombre ocurra ANTES de que las migraciones de ADD COLUMN re-aplicables (0011/0019, cuya
+    tupla directora cambió de `qa_*` a `verificar_*`) re-evalúen: tras el renombre la columna nueva
+    ya existe, así que NO crean una columna vacía huérfana (mismo patrón PRE-DDL que el renombre
+    green->evergreen). En una BD virgen las tablas aún no existen en PRE-DDL: el guard hace no-op y
+    el DDL declarativo las crea ya con el nombre nuevo. Además dropa el CHECK viejo
+    `ck_contenido_qa_veredicto` (Postgres lo arrastra a la columna renombrada): la migración
+    `0029-checks-dominio`, re-aplicable, lo recrea con el nombre nuevo
+    (`ck_contenido_verificar_veredicto`); sin este DROP quedaría un constraint duplicado e inerte.
+    """
+    for tabla, viejo, nuevo in _RENOMBRES_COLUMNAS_ETAPAS:
+        if not _tabla_existe(con, tabla):
+            continue
+        cols = _columnas_existentes(con, tabla)
+        if viejo in cols and nuevo not in cols:
+            con.execute(f"ALTER TABLE {tabla} RENAME COLUMN {viejo} TO {nuevo}")  # noqa: S608 -- allowlist fija
+    if _tabla_existe(con, "contenido"):
+        con.execute("ALTER TABLE contenido DROP CONSTRAINT IF EXISTS ck_contenido_qa_veredicto")
+
+
 # Columnas que se anadieron a `rota_eventos` despues de su esquema original (ola B, #144).
 # Una BD creada antes no las tiene; `ALTER TABLE ... ADD COLUMN ... DEFAULT ...` es
 # retrocompatible (las filas viejas quedan con el valor por defecto, sin reescribir nada):
@@ -440,10 +481,10 @@ _COLUMNAS_CONTENIDO_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # sin señal (alta manual, RSS, o BD vieja): la pieza puntua como antes de la Fase 5.
     ("senal_viralidad", "INTEGER NOT NULL DEFAULT 0"),
     # QA de la FUENTE (pre-copy, rediseño QPC): el pipeline criba la NOTA DE ORIGEN antes de
-    # generar copy. `qa_veredicto` = "no_verificado" (⚠️ OK para seguir) o "problema" (❗ algo de
-    # peso: NO se generó copy). `qa_hallazgos` = JSON estructurado de lo encontrado. BD vieja -> "".
-    ("qa_veredicto", "TEXT NOT NULL DEFAULT ''"),
-    ("qa_hallazgos", "TEXT NOT NULL DEFAULT ''"),
+    # generar copy. `verificar_veredicto` = "no_verificado" (⚠️ OK para seguir) o "problema" (❗ algo de
+    # peso: NO se generó copy). `verificar_hallazgos` = JSON estructurado de lo encontrado. BD vieja -> "".
+    ("verificar_veredicto", "TEXT NOT NULL DEFAULT ''"),
+    ("verificar_hallazgos", "TEXT NOT NULL DEFAULT ''"),
     ("copy_pendiente", "TEXT NOT NULL DEFAULT ''"),
     # Fecha de la FUENTE de origen (pipeline): pubDate normalizado a ISO UTC. Las bases
     # creadas antes de esta columna la reciben aquí (idempotente). Legado -> "".
@@ -761,11 +802,11 @@ _COLUMNAS_NOTICIAS_CLUSTERS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("marca_clasificada_por_ia", "INTEGER NOT NULL DEFAULT 0"),
     # VERIFICACIÓN (QA de la fuente) sobre la HISTORIA, ANTES de materializar contenido de
     # producción (ADR 0011 F3): "no_verificado" (⚠️ apta, sigue a admisión) o "problema" (❗ no
-    # se admite). `qa_hallazgos` = JSON estructurado de lo encontrado. Hereda al `contenido` al
+    # se admite). `verificar_hallazgos` = JSON estructurado de lo encontrado. Hereda al `contenido` al
     # admitir, así la frontera "QA = investigación" queda alineada con el modelo de datos. BD
     # vieja -> "" (sin veredicto: aún por cribar).
-    ("qa_veredicto", "TEXT NOT NULL DEFAULT ''"),
-    ("qa_hallazgos", "TEXT NOT NULL DEFAULT ''"),
+    ("verificar_veredicto", "TEXT NOT NULL DEFAULT ''"),
+    ("verificar_hallazgos", "TEXT NOT NULL DEFAULT ''"),
 )
 
 def _migrar_columnas_noticias_clusters(con: Any) -> None:
@@ -871,6 +912,55 @@ def _backfill_gasto_ia_proceso(con: Any) -> None:
         "WHERE g.gen_id = gi.gen_id AND gi.proceso IN ('investigacion', 'produccion') "
         "AND g.proceso <> gi.proceso"
     )
+
+
+# ETAPAS CON NOMBRE DE VERBO (Fase 2): los MARCADORES de etapa persistidos en el índice de
+# generaciones (`generaciones_indice.payload->>'etiqueta'`, jsonb) nacieron con los prefijos
+# viejos. El código ya ESCRIBE los verbos nuevos y los LECTORES (Actividad IA / Pipelines) casan
+# por el prefijo nuevo, así que las filas legadas dejaron de casar. Estos backfills reescriben el
+# prefijo SOLO en las filas que aún lo tengan. Dos formas:
+#   - PREFIJOS de etapa (anclados al inicio): "CI · "/"QA · "/"CD · "/"ARTE · ".
+#   - FRASES del pool (en cualquier parte de la etiqueta): "Fusión de historias"/"Encaje editorial".
+_PREFIJOS_ETIQUETA_ETAPAS: tuple[tuple[str, str], ...] = (
+    ("CI · ", "ADMITIR · "),
+    ("QA · ", "VERIFICAR · "),
+    ("CD · ", "REDACTAR · "),
+    ("ARTE · ", "ILUSTRAR · "),
+)
+_FRASES_ETIQUETA_POOL: tuple[tuple[str, str], ...] = (
+    ("Fusión de historias", "Fusionar historias"),
+    ("Encaje editorial", "Priorizar historias"),
+)
+
+
+def _migrar_etiquetas_etapas_verbos(con: Any) -> None:
+    """Reescribe los marcadores de etapa legados en `generaciones_indice` (idempotente).
+
+    Ver el comentario de `_PREFIJOS_ETIQUETA_ETAPAS`. Idempotente: el `WHERE ... LIKE` filtra solo
+    las filas que aún tienen el prefijo/frase viejo; tras reescribir ninguna casa el patrón, así
+    que re-ejecutarlo no toca nada. El patrón LIKE viaja como PARÁMETRO (no como literal en el SQL),
+    así que su `%` es dato y no necesita doblarse.
+    """
+    if not _tabla_existe(con, "generaciones_indice"):
+        return
+    for viejo, nuevo in _PREFIJOS_ETIQUETA_ETAPAS:
+        # `right(s, -n)` = todo MENOS los primeros n CARACTERES (no bytes: '·' es multibyte, así
+        # que `len(viejo)` en Python cuenta los mismos caracteres que `right` en Postgres).
+        con.execute(
+            "UPDATE generaciones_indice "
+            "SET payload = jsonb_set(payload, '{etiqueta}', "
+            "to_jsonb(? || right(payload->>'etiqueta', ?))) "
+            "WHERE payload->>'etiqueta' LIKE ?",
+            (nuevo, -len(viejo), viejo + "%"),
+        )
+    for viejo, nuevo in _FRASES_ETIQUETA_POOL:
+        con.execute(
+            "UPDATE generaciones_indice "
+            "SET payload = jsonb_set(payload, '{etiqueta}', "
+            "to_jsonb(replace(payload->>'etiqueta', ?, ?))) "
+            "WHERE payload->>'etiqueta' LIKE ?",
+            (viejo, nuevo, "%" + viejo + "%"),
+        )
 
 
 # --------------------------------------------------------------------------- #

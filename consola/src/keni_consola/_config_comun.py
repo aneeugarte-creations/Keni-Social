@@ -230,7 +230,7 @@ ENV_CLUSTER_BREAKING_VENTANA_H = "KENI_CLUSTER_BREAKING_VENTANA_H"
 
 # Pesos del ALGORITMO DE PONDERACIÓN del score de cluster (jerarquización de noticias). Editables
 # por la consola para que el equipo afine la priorización sin tocar código (clamp [0,1]; default =
-# los de `dominio.clustering.PesosScore`). El daemon de Recolectar los inyecta en `clustering.puntuar`.
+# los de `dominio.agrupar.PesosScore`). El daemon de Recolectar los inyecta en `agrupar.puntuar`.
 ENV_SCORE_PESO_CORROBORACION = "KENI_SCORE_PESO_CORROBORACION"
 ENV_SCORE_PESO_VELOCIDAD = "KENI_SCORE_PESO_VELOCIDAD"
 ENV_SCORE_PESO_FRESCURA = "KENI_SCORE_PESO_FRESCURA"
@@ -332,7 +332,7 @@ ENV_REAPER_INTERVALO_MIN = "KENI_REAPER_INTERVALO_MIN"
 ENV_QA_FUENTE_MODELO = "KENI_QA_FUENTE_MODELO"
 ENV_QA_FUENTE_ESFUERZO = "KENI_QA_FUENTE_ESFUERZO"
 ENV_QA_FUENTE_TIMEOUT = "KENI_QA_FUENTE_TIMEOUT"
-# Saneador de temas zombi `qa_veredicto='en_curso'`: si el lanzamiento/generacion de la criba
+# Saneador de temas zombi `verificar_veredicto='en_curso'`: si el lanzamiento/generacion de la criba
 # muere sin finalizador, el tema quedaba excluido para siempre de la re-criba (y contando en
 # el cupo en vuelo). El reaper resetea a "" los `en_curso` mas viejos que este TTL (minutos).
 ENV_QA_EN_CURSO_TTL_MIN = "KENI_QA_EN_CURSO_TTL_MIN"
@@ -383,7 +383,7 @@ ENV_RENDIMIENTO_MIN_PIEZAS = "KENI_RENDIMIENTO_MIN_PIEZAS"
 # Insumos del día (cajones): modelo de parseo que usa `claude -p` para extraer los ítems
 # del material diario (portal/corresponsales/reporteros/eventos_claro). Por defecto "haiku"
 # (más rápido/económico para extracción estructurada). Si se deja vacío (""), no se pasa
-# `--model` y `claude` usa su propio default. Ver `dominio/insumos_parse.py`.
+# `--model` y `claude` usa su propio default. Ver `dominio/recibir_parse.py`.
 ENV_INSUMOS_MODELO = "KENI_INSUMOS_MODELO"
 # Modelo de Fusionar (fusión semántica) historias (decide qué se corrobora con qué; el juicio
 # fino "mismo evento vs mismo tema" se le escapaba a haiku). Def "sonnet"; "" = sin --model.
@@ -597,7 +597,7 @@ CLUSTER_BREAKING_PESO_DEF = 3.0
 BREAKING_EXTRA_DIA_DEF = 4
 CLUSTER_BREAKING_VENTANA_H_DEF = 6
 
-# Pesos del algoritmo de ponderación del score (defaults; espejan `clustering.PesosScore`).
+# Pesos del algoritmo de ponderación del score (defaults; espejan `agrupar.PesosScore`).
 # El bonus breaking es 0.0: breaking ya emerge del ranking (corroboración ponderada ×
 # velocidad); el knob queda para rollback/ajuste sin tocar código.
 SCORE_PESO_CORROBORACION_DEF = 0.30

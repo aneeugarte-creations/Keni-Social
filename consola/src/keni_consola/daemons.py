@@ -54,7 +54,7 @@ def main() -> int:
     from .algoritmos_refresco import iniciar_refresco_algoritmos
     from .comercial import iniciar_captura_programada
     from .eventos_scanner import iniciar_scanner_vencimientos
-    from .ingesta_daemon import iniciar_ingesta
+    from .recolectar_daemon import iniciar_ingesta
     from .media_gc_daemon import iniciar_media_gc
     from .metricas_piezas_refresco import iniciar_refresco_piezas
     from .metricas_refresco import iniciar_refresco_metricas

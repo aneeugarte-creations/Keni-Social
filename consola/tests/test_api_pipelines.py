@@ -14,7 +14,7 @@ import pytest
 
 from keni_consola import config, generaciones, repos
 from keni_consola.api.pipelines import _estado_global
-from keni_consola.pipeline_contenido import ETAPA_CD, ORIGEN_PIPELINE, registrar_etapa
+from keni_consola.pipeline_contenido import ETAPA_REDACTAR, ORIGEN_PIPELINE, registrar_etapa
 
 
 @pytest.fixture(autouse=True)
@@ -50,7 +50,7 @@ def test_run_qa_no_verificado_con_copy(cliente):
 
     Orden NUEVO (rediseño QPC): ADMITIR -> Criba de la fuente (VERIFICAR) -> Copy (REDACTAR) -> Aprobar.
     """
-    tema = _tema_pipeline("Tema apto", qa_veredicto="no_verificado")
+    tema = _tema_pipeline("Tema apto", verificar_veredicto="no_verificado")
     repos.crear_contenido_plataforma(
         contenido_id=tema["id"], red="x", estado="borrador",
         copy="Copy válido y corto.", veredicto="no_verificado",
@@ -92,7 +92,7 @@ def test_run_qa_problema_omite_copy(cliente):
         '{"resumen": "Dato falso", '
         '"hallazgos": [{"tipo": "dato", "gravedad": "error", "explicacion": "x"}]}'
     )
-    _tema_pipeline("Tema con problema", qa_veredicto="problema", qa_hallazgos=hallazgos)
+    _tema_pipeline("Tema con problema", verificar_veredicto="problema", verificar_hallazgos=hallazgos)
     run = _run_por_titulo(cliente, "Tema con problema")
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
     assert etapas["verificar"] == "revisar"
@@ -106,7 +106,7 @@ def test_run_qa_problema_omite_copy(cliente):
 def test_aprobacion_esperando_humano_es_pendiente(cliente):
     """Piezas EN REVISIÓN sin ninguna aprobada = la run espera al HUMANO: 'pendiente' (con el
     detalle 'En revisión'), no 'en_curso' — la máquina no está haciendo nada."""
-    tema = _tema_pipeline("Run en revisión", qa_veredicto="no_verificado")
+    tema = _tema_pipeline("Run en revisión", verificar_veredicto="no_verificado")
     repos.crear_contenido_plataforma(
         contenido_id=tema["id"], red="x", estado="en_revision",
         copy="Copy.", veredicto="no_verificado",
@@ -120,7 +120,7 @@ def test_aprobacion_esperando_humano_es_pendiente(cliente):
 
 def test_run_aprobado(cliente):
     """Pieza aprobada con VERIFICAR `no_verificado` -> aprobación ok y estado_global ok."""
-    tema = _tema_pipeline("Tema aprobado", qa_veredicto="no_verificado")
+    tema = _tema_pipeline("Tema aprobado", verificar_veredicto="no_verificado")
     repos.crear_contenido_plataforma(
         contenido_id=tema["id"], red="x", estado="aprobado",
         copy="Copy.", veredicto="no_verificado",
@@ -138,7 +138,7 @@ def test_run_qa_saltada_genera_copy(cliente, monkeypatch):
         "keni_consola.ajustes.obtener",
         lambda clave: "0" if clave == config.clave_por_marca(config.ENV_PIPELINE_VERIFICAR, "unotv") else None,
     )
-    tema = _tema_pipeline("Tema sin VERIFICAR", qa_veredicto="saltada")
+    tema = _tema_pipeline("Tema sin VERIFICAR", verificar_veredicto="saltada")
     repos.crear_contenido_plataforma(
         contenido_id=tema["id"], red="x", estado="borrador",
         copy="Copy generado sin criba.", veredicto="no_verificado",
@@ -176,7 +176,7 @@ def test_marca_con_noticias_off_sigue_localizable(cliente, monkeypatch):
 def test_etapas_ejecutadas_no_se_repintan_con_toggles_off(cliente, monkeypatch):
     """Una run COMPLETADA pinta sus etapas por lo EJECUTADO aunque hoy TODOS los toggles estén
     apagados: encender/apagar interruptores no ilumina ni apaga la historia de las runs."""
-    tema = _tema_pipeline("Run histórica", qa_veredicto="no_verificado")
+    tema = _tema_pipeline("Run histórica", verificar_veredicto="no_verificado")
     _historia_de(tema["id"], n_fuentes=3, n_items=4, score=0.8)
     repos.crear_contenido_plataforma(
         contenido_id=tema["id"], red="x", estado="aprobado",
@@ -198,7 +198,7 @@ def test_etapas_ejecutadas_no_se_repintan_con_toggles_off(cliente, monkeypatch):
 def test_run_caducada_se_pinta_cerrada(cliente):
     """Una run CADUCADA (TTL de frescura) queda CERRADA sin producto: Verificar 'saltada' con
     el motivo, Copy/Aprobar 'saltada' (no un 'pendiente' eterno) y estado_global 'ok'."""
-    _tema_pipeline("Run caducada", qa_veredicto="caducada")
+    _tema_pipeline("Run caducada", verificar_veredicto="caducada")
     run = _run_por_titulo(cliente, "Run caducada")
     etapas = {e["clave"]: e for e in run["etapas"]}
     assert etapas["verificar"]["estado"] == "saltada"
@@ -301,7 +301,7 @@ def test_paginacion_envelope_y_offset(cliente):
 
 def test_etapa_actual_y_filtro_por_etapa(cliente):
     """`etapa_actual` = la etapa donde está parada; `?etapa=` filtra por ella."""
-    aprob = _tema_pipeline("Run aprobada", qa_veredicto="no_verificado")
+    aprob = _tema_pipeline("Run aprobada", verificar_veredicto="no_verificado")
     repos.crear_contenido_plataforma(
         contenido_id=aprob["id"], red="x", estado="aprobado", copy="C.", veredicto="no_verificado",
     )
@@ -363,10 +363,10 @@ def test_detalle_enlaza_haiku_del_pool_por_etapa(cliente):
         "estado": generaciones.ESTADO_COMPLETADO, "fase": generaciones.FASE_COMPLETADO,
     })
     por_etapa = cliente.get(f"/api/pipelines/{tema['id']}").json()["generaciones_por_etapa"]
-    assert por_etapa["FUSION"]["prompt"] == "PROMPT-FUSIONAR"
-    assert por_etapa["FUSION"]["salida"] == "SALIDA-FUSIONAR"
-    assert por_etapa["EDITORIAL"]["prompt"] == "PROMPT-PRIORIZAR"
-    assert por_etapa["EDITORIAL"]["salida"] == "SALIDA-PRIORIZAR"
+    assert por_etapa["FUSIONAR"]["prompt"] == "PROMPT-FUSIONAR"
+    assert por_etapa["FUSIONAR"]["salida"] == "SALIDA-FUSIONAR"
+    assert por_etapa["PRIORIZAR"]["prompt"] == "PROMPT-PRIORIZAR"
+    assert por_etapa["PRIORIZAR"]["salida"] == "SALIDA-PRIORIZAR"
 
 
 def test_etapa_arte_exige_evidencia_de_arte_ia(cliente, monkeypatch):
@@ -433,7 +433,7 @@ def test_detalle_404(cliente):
 
 def test_problemas_lista_temas_bloqueados(cliente):
     """Lista los temas `problema` con etapa, intentos, último error y timestamps; excluye el resto."""
-    pend = json.dumps({"nota": "n", "qa_intentos": 1, "cd_intentos": 3})
+    pend = json.dumps({"nota": "n", "verificar_intentos": 1, "redactar_intentos": 3})
     hallazgos = json.dumps({
         "resumen": "Fallo repetido de la etapa",
         "hallazgos": [{
@@ -443,9 +443,9 @@ def test_problemas_lista_temas_bloqueados(cliente):
         }],
     })
     _tema_pipeline(
-        "Tema bloqueado", qa_veredicto="problema", qa_hallazgos=hallazgos, copy_pendiente=pend,
+        "Tema bloqueado", verificar_veredicto="problema", verificar_hallazgos=hallazgos, copy_pendiente=pend,
     )
-    _tema_pipeline("Tema sano", qa_veredicto="no_verificado")
+    _tema_pipeline("Tema sano", verificar_veredicto="no_verificado")
 
     r = cliente.get("/api/pipelines/problemas")
     assert r.status_code == 200
@@ -467,7 +467,7 @@ def test_problemas_criba_roja_es_validacion(cliente):
         "resumen": "Dato falso evidente",
         "hallazgos": [{"tipo": "dato", "gravedad": "error", "explicacion": "es falso"}],
     })
-    _tema_pipeline("Criba roja", qa_veredicto="problema", qa_hallazgos=hallazgos)
+    _tema_pipeline("Criba roja", verificar_veredicto="problema", verificar_hallazgos=hallazgos)
     p = cliente.get("/api/pipelines/problemas").json()["problemas"][0]
     assert p["etapa"] == "Verificar"
     assert p["error"] == "es falso"
@@ -475,8 +475,8 @@ def test_problemas_criba_roja_es_validacion(cliente):
 
 
 def test_problemas_filtra_por_marca_y_valida(cliente):
-    _tema_pipeline("P claro", marca="claro-sports", qa_veredicto="problema")
-    _tema_pipeline("P uno", marca="unotv", qa_veredicto="problema")
+    _tema_pipeline("P claro", marca="claro-sports", verificar_veredicto="problema")
+    _tema_pipeline("P uno", marca="unotv", verificar_veredicto="problema")
     titulos = {
         x["titulo"]
         for x in cliente.get("/api/pipelines/problemas?marca=claro-sports").json()["problemas"]
@@ -486,7 +486,7 @@ def test_problemas_filtra_por_marca_y_valida(cliente):
 
 
 def test_problemas_vacio_sin_bloqueados(cliente):
-    _tema_pipeline("Todo bien", qa_veredicto="no_verificado")
+    _tema_pipeline("Todo bien", verificar_veredicto="no_verificado")
     body = cliente.get("/api/pipelines/problemas").json()
     assert body == {"problemas": [], "total": 0}
 
@@ -495,7 +495,7 @@ def test_detalle_expone_stream_de_la_etapa(cliente):
     """Un marcador de etapa REDACTAR con `gen_id` -> el detalle surface el STREAM de esa generación.
 
     Crea una generación REAL (con `salida` = el proceso del agente) y un marcador de etapa
-    REDACTAR que la referencia por `gen_id`; el detalle debe traer `generaciones_por_etapa["CD"]`
+    REDACTAR que la referencia por `gen_id`; el detalle debe traer `generaciones_por_etapa["REDACTAR"]`
     con esa `salida` y su estado.
     """
     tema = _tema_pipeline("Tema con stream")
@@ -508,15 +508,15 @@ def test_detalle_expone_stream_de_la_etapa(cliente):
         "estado": generaciones.ESTADO_COMPLETADO,
     })
     registrar_etapa(
-        ETAPA_CD, "unotv", "Generación de copy", contenido_id=tema["id"], gen_id=gen["id"],
+        ETAPA_REDACTAR, "unotv", "Generación de copy", contenido_id=tema["id"], gen_id=gen["id"],
     )
 
     d = cliente.get(f"/api/pipelines/{tema['id']}")
     assert d.status_code == 200
     body = d.json()
     por_etapa = body["generaciones_por_etapa"]
-    assert "CD" in por_etapa
-    cd = por_etapa["CD"]
+    assert "REDACTAR" in por_etapa
+    cd = por_etapa["REDACTAR"]
     assert cd["id"] == gen["id"]
     assert cd["salida"] == "Razonando sobre la nota… escribiendo el copy…"
     assert cd["estado"] == generaciones.ESTADO_COMPLETADO
@@ -526,7 +526,7 @@ def test_detalle_expone_stream_de_la_etapa(cliente):
 def test_detalle_sin_gen_id_no_trae_generacion(cliente):
     """Back-compat: un marcador SIN `gen_id` no añade nada a `generaciones_por_etapa`."""
     tema = _tema_pipeline("Tema sin stream")
-    registrar_etapa(ETAPA_CD, "unotv", "Generación de copy", contenido_id=tema["id"])
+    registrar_etapa(ETAPA_REDACTAR, "unotv", "Generación de copy", contenido_id=tema["id"])
     body = cliente.get(f"/api/pipelines/{tema['id']}").json()
     assert body["generaciones_por_etapa"] == {}
 
@@ -553,7 +553,7 @@ def test_feed_unificado_mezcla_runs_y_actividad_suelta(cliente):
     _tema_pipeline("Run del feed")
     _gen_suelta("Copy a mano")
     generaciones.crear({  # marcador de etapa: sin coste, fuera del feed
-        "tipo": "pipeline_etapa", "marca": "unotv", "etiqueta": "CD · Generación de copy",
+        "tipo": "pipeline_etapa", "marca": "unotv", "etiqueta": "REDACTAR · Generación de copy",
         "estado": generaciones.ESTADO_COMPLETADO,
     })
     items = cliente.get("/api/pipelines").json()["pipelines"]
@@ -569,7 +569,7 @@ def test_feed_unificado_mezcla_runs_y_actividad_suelta(cliente):
     assert suelta["metricas"]["tokens"] == 150
     assert suelta["metricas"]["coste_usd"] == pytest.approx(0.02)
     assert suelta["metricas"]["duration_ms"] == 3000
-    assert all(x["titulo"] != "CD · Generación de copy" for x in items)
+    assert all(x["titulo"] != "REDACTAR · Generación de copy" for x in items)
 
 
 def test_run_suma_metricas_de_sus_generaciones(cliente):
@@ -634,7 +634,7 @@ def test_fusion_editorial_no_saltada_si_el_pool_corrio(cliente):
     det_etapas = {e["clave"]: e for e in det["pipeline"]["etapas"]}
     assert det_etapas["fusionar"]["estado"] == "ok"
     assert det_etapas["priorizar"]["estado"] == "ok"
-    assert det["generaciones_por_etapa"]["FUSION"]["salida"] == "S"
+    assert det["generaciones_por_etapa"]["FUSIONAR"]["salida"] == "S"
     # Sin pool ni historia (otra marca): sigue 'saltada' (sin evidencia no se inventa nada).
     _tema_pipeline("Run sin evidencia", marca="claro-sports")
     sin = _run_por_titulo(cliente, "Run sin evidencia")
@@ -743,7 +743,7 @@ def test_metricas_de_run_via_marcador_sin_contenido_id(cliente):
                      "duration_ms": 5000},
     })
     registrar_etapa(
-        ETAPA_CD, "unotv", "Generación de copy", contenido_id=tema["id"], gen_id=gen["id"],
+        ETAPA_REDACTAR, "unotv", "Generación de copy", contenido_id=tema["id"], gen_id=gen["id"],
     )
     run = _run_por_titulo(cliente, "Run correlada por marcador")
     assert run["metricas"]["items"] == 1

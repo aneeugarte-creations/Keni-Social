@@ -21,7 +21,7 @@ from typing import Any
 
 from . import copy as dom_copy
 from . import hashtags as dom_hashtags
-from . import qa_editorial as dom_qa
+from . import verificar_fuente as dom_verificar
 
 # Versiona el spec por si su forma cambia (un worker viejo no debe malinterpretar uno nuevo).
 VERSION = 1
@@ -98,7 +98,7 @@ PROC_TRANSCRIBIR = "transcribir"
 # Generacion de ARTE (imagen) del auto-pipeline: un job de PROCESO. La llamada HTTP al
 # proveedor de imagen + la subida a S3 + el adjuntado a la pieza son I/O (y algo de CPU), encajan
 # en el carril de proceso (NO bloquea el copy) y heredan idempotencia (clave estable en
-# `dominio.generar.lanzar_arte`) + reintentos/huerfanos del reaper. Su ejecutor (`autogen_arte.
+# `dominio.generar.lanzar_arte`) + reintentos/huerfanos del reaper. Su ejecutor (`autogen_ilustrar.
 # ejecutar_arte_job`) llama a `media.generar_imagen` y reporta estado como ASR/video. NO gasta
 # tokens de la suscripcion claude (proveedor de imagen aparte), asi que —como los demas procesos—
 # queda EXENTO del corte por presupuesto de tokens; solo el kill switch PAUSADO lo frena.
@@ -119,7 +119,7 @@ EJECUTORES_PROCESO: dict[str, str] = {
     # El ejecutor del arte vive junto al resto de la logica de auto-arte (seleccion + dedup +
     # registro), que ya conoce `media`/`repos`/`generaciones`; el worker lo despacha igual que
     # ASR/video, sin que worker.py tenga que conocer la imagen (dispatch GENERICO de proceso).
-    PROC_IMAGEN: "keni_consola.autogen_arte:ejecutar_arte_job",
+    PROC_IMAGEN: "keni_consola.autogen_ilustrar:ejecutar_arte_job",
 }
 
 
@@ -275,7 +275,7 @@ def construir_qa_fuente(
     """Spec del post-procesado de la QA de la FUENTE (pre-copy).
 
     El destino del veredicto: `cluster_id` (ADR 0011 F3) = QA sobre la HISTORIA antes de
-    materializar contenido (el worker sella `noticias_clusters.qa_veredicto`); `contenido_id`
+    materializar contenido (el worker sella `noticias_clusters.verificar_veredicto`); `contenido_id`
     (legado/manual) = QA sobre un TEMA ya materializado. Uno u otro.
     """
     return {
@@ -328,7 +328,7 @@ def construir_insumos(
     """Spec del post-procesado de un lote de INSUMOS (cajones): parsea + inserta items.
 
     `lote_id` es el lote (estado `parseando`) al que pertenecen los items; `cajon`/`fecha`
-    los necesita el normalizador (`insumos_parse._items_desde_registros`). `marca_defecto`
+    los necesita el normalizador (`recibir_parse._items_desde_registros`). `marca_defecto`
     (id canónico de la marca que el equipo eligió al aportar el lote) es el fallback de marca
     para los ítems que la IA no clasifique: así el filtro por marca del cajón los encuentra en
     vez de dejarlos sin marca. El worker parsea `{"items":[...]}`, normaliza, INSERTA los items
@@ -517,18 +517,18 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
 
     if kind == PROC_EVERGREEN_IDEAS:
         # Import perezoso: el factory toca BD (`repos`), no cabe en este modulo de dominio puro.
-        from . import evergreen as dom_evergreen
+        from . import idear as dom_idear
 
-        return dom_evergreen.construir_procesar_evergreen_ideas(
+        return dom_idear.construir_procesar_evergreen_ideas(
             marca=p.get("marca", "") or "",
             generacion_id=p.get("generacion_id", "") or "",
         )
 
     if kind == PROC_INSUMOS:
         # Import perezoso: el factory toca BD (`repos`), no cabe en este modulo de dominio puro.
-        from . import insumos_parse
+        from . import recibir_parse
 
-        return insumos_parse.construir_procesar_insumos(
+        return recibir_parse.construir_procesar_insumos(
             lote_id=p["lote_id"], cajon=p.get("cajon", ""), fecha=p.get("fecha", ""),
             marca_defecto=p.get("marca_defecto", "") or "",
         )
@@ -552,7 +552,7 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
         )
 
     if kind == PROC_QA_FUENTE:
-        return dom_qa.construir_procesar_qa_fuente(
+        return dom_verificar.construir_procesar_qa_fuente(
             p["marca"], p.get("titulo", ""), autor=autor,
             contenido_id=p.get("contenido_id", "") or "",
             cluster_id=p.get("cluster_id", "") or "",
@@ -621,9 +621,9 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
                 except Exception:  # noqa: BLE001 -- dedup best-effort; el copy ya esta hecho
                     pass
             try:
-                from ..pipeline_contenido import encadenar_arte_tras_copy
+                from ..pipeline_contenido import encadenar_ilustrar_tras_redactar
 
-                encadenar_arte_tras_copy(contenido_id)
+                encadenar_ilustrar_tras_redactar(contenido_id)
             except Exception:  # noqa: BLE001 -- el encadenado nunca rompe el post-procesado
                 pass
             return resultado
@@ -637,7 +637,7 @@ def _asignar_etiqueta_por_nombre(contenido_id: str, nombre: str) -> None:
     """Asigna al contenido la etiqueta llamada `nombre` (creandola si falta). Best-effort.
 
     Pequeno helper del dedup-al-exito del copy autogen (etiqueta `autogen`): mismo criterio
-    de normalizacion que `autogen_copy._id_etiqueta_autogen`, sin acoplar este modulo de
+    de normalizacion que `autogen_redactar._id_etiqueta_autogen`, sin acoplar este modulo de
     dominio a aquel (import de `repos` perezoso, igual que el resto de posts-procesados).
     """
     from .. import repos

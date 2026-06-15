@@ -13,7 +13,7 @@ Dimensiones (claves estables; se referencian en los casos y en el reporte):
                     emojis/hashtags, gancho en mayúsculas, pregunta). Reusa
                     `patrones_marca.verificar_pieza` — el MISMO lint del post-procesado de copy.
   - `coherencia`  : solapamiento léxico copy↔nota de origen (caza alucinación / pieza cruzada).
-                    Reusa `pipeline_contenido._calidad.avisos_coherencia`. Solo si hay `fuente`.
+                    Reusa `pipeline_contenido._revisar.avisos_coherencia`. Solo si hay `fuente`.
   - `prohibidos`  : términos vetados por la regla editorial de la marca (los declara el caso).
                     Normaliza con `dominio.dedup.clave` (sin acentos, tokens) para no fallar por
                     tildes/mayúsculas. Solo si el caso trae `prohibidos`.
@@ -106,7 +106,7 @@ def check_coherencia(caso: CasoEval) -> ResultadoDimension:
     """Falla si el copy no comparte NINGÚN término de contenido con su nota de origen.
 
     Solo aplica si el caso trae `fuente` sustancial; si no, `na`. Reusa la heurística
-    conservadora de `pipeline_contenido._calidad` (mismo umbral que el gate de producción)."""
+    conservadora de `pipeline_contenido._revisar` (mismo umbral que el gate de producción)."""
     if not caso.fuente.strip():
         return _na("coherencia")
     try:

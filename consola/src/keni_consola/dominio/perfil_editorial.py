@@ -8,7 +8,7 @@ coste por-cluster: el Haiku solo corre en el refresco, acotado por marca y TTL).
 GATEADO por `KENI_PRIORIZAR_PERFIL_IA` (def OFF): la decisión de usarlo/refrescarlo la toma el daemon
 de Recolección; este módulo es neutro (lee/escribe el cache y, si se le pide, llama a Haiku).
 
-Patrón de Haiku SÍNCRONO POR LOTES idéntico a `dominio.traduccion` (ejecutor inyectable en tests).
+Patrón de Haiku SÍNCRONO POR LOTES idéntico a `dominio.traducir` (ejecutor inyectable en tests).
 BEST-EFFORT: ante cualquier fallo (sin claude, JSON inválido, sin editorial) NO toca el cache y
 devuelve lo que hubiera (o vacío); el daemon cae entonces al vocabulario semilla.
 """
@@ -28,7 +28,7 @@ from . import json_llm
 
 _log = logging.getLogger("keni_consola.dominio.perfil_editorial")
 
-# Ejecutor inyectable (misma firma que `traduccion.Ejecutor`): `(prompt, dir_permitido) -> str`.
+# Ejecutor inyectable (misma firma que `traducir.Ejecutor`): `(prompt, dir_permitido) -> str`.
 Ejecutor = Callable[[str, str], str]
 
 # Nº de keywords/temas que se piden a Haiku (cota del perfil).
@@ -215,6 +215,6 @@ def refrescar_si_corresponde(
 
 def _ejecutar_haiku(prompt: str, dir_permitido: str) -> str:
     """Ejecutor real: reutiliza el runner síncrono de `traduccion` (claude -p --output-format json)."""
-    from .traduccion import _ejecutar_claude_json
+    from .traducir import _ejecutar_claude_json
 
     return _ejecutar_claude_json(prompt, dir_permitido)

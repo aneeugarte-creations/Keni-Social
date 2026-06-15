@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from . import ajustes, config, marcas, preferencias
-from .dominio.clustering import (
+from .dominio.agrupar import (
     LISTON_MIN_MARCA_DEF as _LISTON_MIN_MARCA_DEF,
     LISTON_MIN_SCORE_DEF as _LISTON_MIN_SCORE_DEF,
 )
@@ -542,7 +542,7 @@ def _construir_catalogo() -> list[Ajuste]:
         # --- Producción automática (grupo `noticias_produccion`) -------------------------- #
         # LISTÓN de producción automática: el panel lista TODO el pool jerarquizado, pero promover
         # una historia a tema dispara Verificar+Redactar (claude -p: coste real de tokens). Estos dos umbrales
-        # son ese listón (la regla vive en `dominio.clustering.evaluar_liston`, explicable).
+        # son ese listón (la regla vive en `dominio.agrupar.evaluar_liston`, explicable).
         Ajuste(
             clave=config.ENV_PROMOVER_MIN_SCORE,
             tipo="float",

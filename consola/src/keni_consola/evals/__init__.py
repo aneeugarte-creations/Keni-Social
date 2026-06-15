@@ -14,7 +14,7 @@ QUÉ ES Y QUÉ NO ES
 ==================
 - ES: infraestructura ejecutable + casos SEMILLA realistas, barata y apta para CI (cero
   `claude -p`: reutiliza el lint determinista de `patrones_marca`, el gate de calidad
-  advisory de `pipeline_contenido._calidad` y los límites técnicos de `keni_shared`).
+  advisory de `pipeline_contenido._revisar` y los límites técnicos de `keni_shared`).
 - NO ES: un juez de calidad EDITORIAL definitivo. Los casos "de oro" definitivos los
   aporta la mesa del cliente; aquí van casos semilla para que el harness
   sea ejecutable y útil desde ya. NO sustituye la revisión humana (el principio rector es
@@ -25,7 +25,7 @@ CAPAS / REUSO (no se reinventa la verificación, se ENVUELVE)
 ===========================================================
 - `patrones_marca.verificar_pieza`  -> dimensión VOZ (longitud/emojis/hashtags/gancho/
   pregunta contra el perfil real medido de la marca). El MISMO lint del post-procesado.
-- `pipeline_contenido._calidad.avisos_coherencia` -> dimensión COHERENCIA (solapamiento
+- `pipeline_contenido._revisar.avisos_coherencia` -> dimensión COHERENCIA (solapamiento
   léxico copy↔nota de origen; caza alucinaciones / pieza cruzada).
 - `keni_shared.limites_plataforma.limite_de` + `dominio.copy._tramos_publicables` ->
   dimensión LÍMITE (tope técnico duro por red, por tramo de hilo/carrusel).

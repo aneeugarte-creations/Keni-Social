@@ -124,8 +124,8 @@ def proceso_de(reg: dict[str, Any]) -> str:
     tipo = (reg.get("tipo") or "").strip()
     etiqueta = reg.get("etiqueta") or ""
     if tipo == "pipeline_etapa":
-        # La etapa viaja en la etiqueta ("CI · ..."/"QA · ..."/"CD · ..."/"ARTE · ...").
-        return PROCESO_INVESTIGACION if etiqueta[:2] in ("CI", "QA") else PROCESO_PRODUCCION
+        # La etapa viaja en la etiqueta ("ADMITIR · ..."/"VERIFICAR · ..."/"REDACTAR · ..."/"ILUSTRAR · ...").
+        return PROCESO_INVESTIGACION if etiqueta.startswith(("ADMITIR", "VERIFICAR")) else PROCESO_PRODUCCION
     if tipo == "pipeline":
         # La criba de la fuente (Verificar) lleva etiqueta "Verificar · ..."; el resto es copy/arte.
         return (

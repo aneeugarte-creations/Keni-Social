@@ -36,9 +36,9 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import autogen_copy, config, generaciones, marcas, redes, repos, rutas
+from .. import autogen_redactar, config, generaciones, marcas, redes, repos, rutas
 from .._http_json import leer_json
-from ..dominio import indicaciones, ingesta, insumos_parse, jobspec
+from ..dominio import indicaciones, ingesta, recibir_parse, jobspec
 from ..dominio.frescura import estado_frescura, resolver_linea
 from ..seguridad import autor_de_peticion
 from ..tiempo import hoy_utc
@@ -410,9 +410,9 @@ async def aportar(request: Request) -> Response:
             )
             lote = repos.obtener_insumo_lote(lote_id) or lote
             return JSONResponse({"lote": _lote_a_dict(lote), "generacion": None}, status_code=500)
-        prompt = insumos_parse.construir_prompt_archivo(cajon, str(ruta))
+        prompt = recibir_parse.construir_prompt_archivo(cajon, str(ruta))
     else:
-        prompt = insumos_parse.construir_prompt_texto(cajon, texto)
+        prompt = recibir_parse.construir_prompt_texto(cajon, texto)
 
     # Spec del post-procesado: parsea la salida de Haiku e inserta los ítems (en el worker).
     procesar_spec = jobspec.construir_insumos(
@@ -617,7 +617,7 @@ async def usar_item(request: Request) -> Response:
     genero = False
     if item.get("marca") and generar:
         try:
-            genero = autogen_copy.lanzar_para_topic(contenido) is not None
+            genero = autogen_redactar.lanzar_para_topic(contenido) is not None
         except Exception:  # noqa: BLE001 -- la generación es opcional
             genero = False
 

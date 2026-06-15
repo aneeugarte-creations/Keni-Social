@@ -37,7 +37,7 @@ def cliente(monkeypatch, tmp_path):
 def test_crear_con_campos_nuevos(cliente):
     r = cliente.post("/api/texto", json={
         "titulo": "Voz", "tipo": "editorial", "clase": "voz", "marcas": [_MARCA],
-        "estado": "borrador", "etiquetas": ["piloto"], "pipelines": ["copy"], "prioridad": 4,
+        "estado": "borrador", "etiquetas": ["piloto"], "pipelines": ["redactar"], "prioridad": 4,
     })
     assert r.status_code == 200
     doc = r.json()["documento"]
@@ -80,7 +80,7 @@ def test_pipelines_listar(cliente):
 
 def test_pipeline_preview_ensambla(cliente):
     cliente.post("/api/texto", json={
-        "titulo": "Copy base", "tipo": "prompt", "cuerpo": "INSTRUCCION", "rol": "copy", "pipelines": ["copy"],
+        "titulo": "Copy base", "tipo": "prompt", "cuerpo": "INSTRUCCION", "rol": "redactar", "pipelines": ["redactar"],
     })
     cliente.post("/api/texto", json={"titulo": "Reglas", "tipo": "editorial", "clase": "reglas", "cuerpo": "REGLA"})
     r = cliente.get(f"/api/texto/pipelines/copy/preview", params={"marca": _MARCA, "contexto": "CTX"})
@@ -98,7 +98,7 @@ def test_pipeline_preview_desconocido_404(cliente):
 
 
 def test_editoriales_filtra_por_pipeline(cliente):
-    cliente.post("/api/texto", json={"titulo": "Solo copy", "tipo": "editorial", "clase": "reglas", "cuerpo": "c", "pipelines": ["copy"]})
+    cliente.post("/api/texto", json={"titulo": "Solo copy", "tipo": "editorial", "clase": "reglas", "cuerpo": "c", "pipelines": ["redactar"]})
     r_copy = cliente.get("/api/texto/editoriales", params={"marca": _MARCA, "pipeline": "copy"})
     r_qa = cliente.get("/api/texto/editoriales", params={"marca": _MARCA, "pipeline": "qa"})
     assert any(d["id"] == "editorial/solo-copy" for d in r_copy.json()["editoriales"])

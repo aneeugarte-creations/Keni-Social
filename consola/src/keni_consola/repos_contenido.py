@@ -37,8 +37,8 @@ def crear_contenido(
     formato: str = "foto",
     id_post_metricool: str = "",
     senal_viralidad: int = 0,
-    qa_veredicto: str = "",
-    qa_hallazgos: str = "",
+    verificar_veredicto: str = "",
+    verificar_hallazgos: str = "",
     copy_pendiente: str = "",
     fecha_fuente: str = "",
     url_fuente: str = "",
@@ -70,8 +70,8 @@ def crear_contenido(
         formato=formato,
         id_post_metricool=id_post_metricool,
         senal_viralidad=senal_viralidad,
-        qa_veredicto=qa_veredicto,
-        qa_hallazgos=qa_hallazgos,
+        verificar_veredicto=verificar_veredicto,
+        verificar_hallazgos=verificar_hallazgos,
         copy_pendiente=copy_pendiente,
         fecha_fuente=fecha_fuente,
         url_fuente=url_fuente,
@@ -128,13 +128,13 @@ def ids_contenido_con_copy(marca: str | None = None) -> set[str]:
     return db.ids_contenido_con_copy(marca)
 
 
-def qa_veredicto_por_contenido(contenido_ids: list[str]) -> dict[str, str]:
+def verificar_veredicto_por_contenido(contenido_ids: list[str]) -> dict[str, str]:
     """Veredicto QA (Verificar la fuente) por contenido_id, en lote. Delegado en `db.py`."""
-    return db.qa_veredicto_por_contenido(contenido_ids)
+    return db.verificar_veredicto_por_contenido(contenido_ids)
 
 
 def sanear_qa_en_curso_huerfanos(umbral_iso: str) -> int:
-    """Resetea a "" los `qa_veredicto='en_curso'` zombi (reaper). Delegado en `db.py`."""
+    """Resetea a "" los `verificar_veredicto='en_curso'` zombi (reaper). Delegado en `db.py`."""
     return db.sanear_qa_en_curso_huerfanos(umbral_iso)
 
 

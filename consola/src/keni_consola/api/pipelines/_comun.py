@@ -101,15 +101,15 @@ def _marca_nombre(marca: str) -> str:
 def _qa_fuente_de(item: dict) -> dict:
     """Veredicto ESTRUCTURADO de la criba de la fuente (rediseño QPC), para la UI.
 
-    Lee el veredicto persistido en el TEMA (`qa_veredicto`/`qa_hallazgos`):
+    Lee el veredicto persistido en el TEMA (`verificar_veredicto`/`verificar_hallazgos`):
       - `no_verificado` (⚠️): apta, no verificada a fondo; las piezas llevan el aviso.
       - `problema` (❗): algo de peso; NO se generó copy. `hallazgos` trae el detalle.
     `hallazgos` se parsea del JSON guardado (`{resumen, hallazgos:[...]}`); [] si vacío/ilegible.
     """
-    veredicto = (item.get("qa_veredicto", "") or "").strip()
+    veredicto = (item.get("verificar_veredicto", "") or "").strip()
     resumen = ""
     hallazgos: list[dict] = []
-    crudo = (item.get("qa_hallazgos", "") or "").strip()
+    crudo = (item.get("verificar_hallazgos", "") or "").strip()
     if crudo:
         try:
             datos = json.loads(crudo)

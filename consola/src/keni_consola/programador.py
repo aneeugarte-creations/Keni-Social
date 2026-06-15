@@ -633,9 +633,9 @@ def iniciar_programador(intervalo_segundos: float | None = None) -> threading.Th
                 # barrido de abajo programa al hueco de las 8:00). ANTES de barrer aprobadas,
                 # para que la reemisión se programe en este mismo tick.
                 try:
-                    from . import evergreen_diario
+                    from . import idear_diario
 
-                    evergreen_diario.barrer()
+                    idear_diario.barrer()
                 except Exception:  # noqa: BLE001 -- el evergreen nunca rompe el barrido principal
                     _log.exception("Fallo el barrido del evergreen diario.")
                 try:

@@ -13,7 +13,7 @@ from ._comun import (
     _contenido_a_dict,
     _red_valida,
     _validar_marca,
-    autogen_copy,
+    autogen_redactar,
     autor_de_peticion,
     leer_json,
     repos,
@@ -79,7 +79,7 @@ async def desde_radar(request: Request) -> Response:
         )
 
     # Generacion de copy en SEGUNDO PLANO (item E), reusando el flujo del asistente/RSS
-    # (`autogen_copy.lanzar_para_topic`): compone la nota desde el tema, infiere redes y
+    # (`autogen_redactar.lanzar_para_topic`): compone la nota desde el tema, infiere redes y
     # encola un `claude -p` cuyo borrador cuelga del tema. GATEADO por marca (sin marca no
     # hay voz) y por el flag `generar` del cuerpo (def True). Es BEST-EFFORT: si la skill o
     # la cola fallan, NO rompe la promocion (queda el copy manual como fallback).
@@ -87,7 +87,7 @@ async def desde_radar(request: Request) -> Response:
     genero = False
     if marca and generar_copy:
         try:
-            genero = autogen_copy.lanzar_para_topic(item) is not None
+            genero = autogen_redactar.lanzar_para_topic(item) is not None
         except Exception:  # noqa: BLE001 -- la generacion es opcional; nunca tumba la promocion
             genero = False
 

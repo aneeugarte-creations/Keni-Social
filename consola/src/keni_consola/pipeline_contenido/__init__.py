@@ -14,11 +14,11 @@ símbolos privados que algún consumidor importa directamente), de modo que `ken
 
 PROBLEMA QUE RESUELVE
 =====================
-Los daemons existentes (`autogen_copy`, `autogen_arte`, `radar_auto`) automatizan PASOS
+Los daemons existentes (`autogen_redactar`, `autogen_ilustrar`, `radar_auto`) automatizan PASOS
 sueltos del tablero, pero no hay un flujo que, por MARCA, lea sus fuentes RSS frescas y las
 lleve de extremo a extremo —ingesta → creación de copy+arte de marca → validación
 automática— dejando BORRADORES listos para la aprobación humana, y que REGISTRE cada ETAPA
-como un pipeline de CI/CD (visible en "Actividad IA"). Este daemon (espejo de `autogen_copy`/
+como un pipeline de CI/CD (visible en "Actividad IA"). Este daemon (espejo de `autogen_redactar`/
 `radar_auto`) hace exactamente eso, cada N horas y por marca con feeds activos:
 
   - CI — RECOLECCIÓN DE FUENTES: lee items frescos (no usados) de los feeds activos de la marca,
@@ -33,7 +33,7 @@ como un pipeline de CI/CD (visible en "Actividad IA"). Este daemon (espejo de `a
     `no_verificado` (nada de peso en contra: seguir; la pieza llevará ⚠️ "no verificado") o
     `problema` (algo de peso: NO se genera copy; el tema se marca ❗ con los hallazgos). Por
     defecto `no_verificado` cuando hay duda (permisivo). El veredicto + hallazgos se PERSISTEN
-    sobre el tema (`qa_veredicto`/`qa_hallazgos`). Sin tope por etapa (el volumen lo regula la
+    sobre el tema (`verificar_veredicto`/`verificar_hallazgos`). Sin tope por etapa (el volumen lo regula la
     admisión). Registra etapa="QA" por tema, enlazada a la generación (stream).
   - CD — CREACIÓN DE CONTENIDO: por cada tema cuya QA salió `no_verificado` y que aún no tiene
     copy, lanza la generación de copy por el camino PROBADO (`dominio.generar.lanzar_copy`) con
@@ -82,7 +82,7 @@ from typing import Any
 from .. import config, daemon_util, generaciones, libtexto, marcas, redes, repos
 from ..dominio import dedup, jobspec
 from ..dominio import generar as gen_dom
-from ..dominio import qa_editorial as dom_qa
+from ..dominio import verificar_fuente as dom_verificar
 from ..estados import CLASE_CONTENIDO, ORIGENES_AUTOGEN
 from ._barrido import (
     _ejecutar_barrido,
@@ -91,13 +91,13 @@ from ._barrido import (
     _intervalo_investigacion_segundos,
     _intervalo_produccion_segundos,
     _intervalo_segundos,
-    ejecutar_arte,
+    ejecutar_ilustrar,
     ejecutar_avance,
     ejecutar_barrido,
-    ejecutar_cd,
+    ejecutar_redactar,
     ejecutar_investigacion,
     ejecutar_produccion,
-    ejecutar_qa_clusters,
+    ejecutar_verificar_clusters,
     iniciar_pipeline,
 )
 from ._comun import (
@@ -114,10 +114,10 @@ from ._comun import (
     _RE_OG_IMAGE,
     _TITULO_QA,
     _ETIQUETA_QA,
-    ETAPA_ARTE,
-    ETAPA_CD,
-    ETAPA_CI,
-    ETAPA_QA,
+    ETAPA_ILUSTRAR,
+    ETAPA_REDACTAR,
+    ETAPA_ADMITIR,
+    ETAPA_VERIFICAR,
     ORIGEN_PIPELINE,
     PROMPT_QA_ID,
     QA_EN_CURSO,
@@ -145,20 +145,20 @@ from ._comun import (
     temas_pipeline,
     EMBUDO_QA_ESTADOS,
 )
-from ._calidad import (
+from ._revisar import (
     avisos_calidad,
     avisos_coherencia,
     avisos_voz,
     verificar_calidad_pieza,
 )
-from ._copy import (
-    encadenar_arte_tras_copy,
-    encadenar_copy_tras_qa,
-    lanzar_copy_de_tema,
+from ._redactar import (
+    encadenar_ilustrar_tras_redactar,
+    encadenar_redactar_tras_verificar,
+    lanzar_redactar_de_tema,
     temas_autogen_sin_copy,
-    temas_para_copy,
+    temas_para_redactar,
 )
-from ._ingesta import (
+from ._admitir import (
     _AVISO_SIN_LINEA,
     _auto_etiquetar_linea,
     _claves_dedup_marca,
@@ -172,7 +172,7 @@ from ._ingesta import (
     _url_fuente_de,
     caducar_qa_clusters_en_curso,
     clusters_para_promover,
-    clusters_pendientes_qa,
+    clusters_pendientes_verificar,
     crear_tema_de,
     crear_tema_de_cluster,
     fuentes_activas_de_marca,
@@ -182,14 +182,14 @@ from ._ingesta import (
     promover_clusters_marca,
     temas_en_vuelo,
 )
-from ._qa import (
+from ._verificar import (
     _contexto_qa_fuente,
     asegurar_documento_qa,
     dom_qa_titulo,
-    lanzar_qa_cluster,
-    lanzar_qa_fuente,
+    lanzar_verificar_cluster,
+    lanzar_verificar_fuente,
     qa_lexico,
-    temas_sin_qa,
+    temas_sin_verificar,
 )
 
 # Superficie pública reexportada. Incluye los módulos/seams que la forma histórica del módulo
@@ -212,7 +212,7 @@ __all__ = [
     "dedup",
     "gen_dom",
     "jobspec",
-    "dom_qa",
+    "dom_verificar",
     "CLASE_CONTENIDO",
     "ORIGENES_AUTOGEN",
     "_log",
@@ -220,10 +220,10 @@ __all__ = [
     "ORIGEN_PIPELINE",
     "TIPO_ACTIVIDAD",
     "TIPO_PIPELINE",
-    "ETAPA_CI",
-    "ETAPA_CD",
-    "ETAPA_QA",
-    "ETAPA_ARTE",
+    "ETAPA_ADMITIR",
+    "ETAPA_REDACTAR",
+    "ETAPA_VERIFICAR",
+    "ETAPA_ILUSTRAR",
     "PROMPT_QA_ID",
     "QA_EN_CURSO",
     "QA_SALTADA",
@@ -274,7 +274,7 @@ __all__ = [
     "crear_tema_de",
     "crear_tema_de_cluster",
     "clusters_para_promover",
-    "clusters_pendientes_qa",
+    "clusters_pendientes_verificar",
     "promover_clusters_marca",
     "temas_en_vuelo",
     "caducar_temas_viejos",
@@ -290,15 +290,15 @@ __all__ = [
     "asegurar_documento_qa",
     "dom_qa_titulo",
     "_contexto_qa_fuente",
-    "lanzar_qa_fuente",
-    "lanzar_qa_cluster",
-    "temas_sin_qa",
+    "lanzar_verificar_fuente",
+    "lanzar_verificar_cluster",
+    "temas_sin_verificar",
     # CD
-    "lanzar_copy_de_tema",
-    "temas_para_copy",
+    "lanzar_redactar_de_tema",
+    "temas_para_redactar",
     "temas_autogen_sin_copy",
-    "encadenar_copy_tras_qa",
-    "encadenar_arte_tras_copy",
+    "encadenar_redactar_tras_verificar",
+    "encadenar_ilustrar_tras_redactar",
     # CALIDAD del copy (criba advisory pre-avance)
     "avisos_voz",
     "avisos_coherencia",
@@ -311,9 +311,9 @@ __all__ = [
     "_ejecutar_investigacion",
     "ejecutar_produccion",
     "_ejecutar_produccion",
-    "ejecutar_qa_clusters",
-    "ejecutar_cd",
-    "ejecutar_arte",
+    "ejecutar_verificar_clusters",
+    "ejecutar_redactar",
+    "ejecutar_ilustrar",
     "ejecutar_avance",
     "_intervalo_segundos",
     "_intervalo_investigacion_segundos",

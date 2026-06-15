@@ -14,7 +14,7 @@ from typing import Any
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from ... import autogen_copy, config, estados, marcas, repos
+from ... import autogen_redactar, config, estados, marcas, repos
 from ..._http_json import leer_json
 from ...seguridad import autor_de_peticion
 from ...tiempo import hoy_utc
@@ -203,7 +203,7 @@ def _historia_a_dict(
         "senal": int(cluster.get("senal") or 0),
         "score": float(cluster.get("score") or 0.0),
         # Relevancia EXPLICABLE: la razón humana del score y su desglose por señal (los
-        # persiste el daemon al puntuar; ver `clustering.puntuar_detalle`).
+        # persiste el daemon al puntuar; ver `agrupar.puntuar_detalle`).
         "score_razon": cluster.get("score_razon") or "",
         "score_desglose": cluster.get("score_desglose") or {},
         # LISTÓN de producción automática (la MISMA evaluación que la promoción CI): si esta
@@ -215,7 +215,7 @@ def _historia_a_dict(
         # Etapas de INVESTIGACIÓN visibles por historia (ADR 0011): el veredicto de
         # VERIFICACIÓN (QA de la fuente, del contenido asociado; lo inyecta el llamante en
         # lote) y si la MARCA la asignó el clasificador IA.
-        "qa_veredicto": cluster.get("qa_veredicto") or "",
+        "verificar_veredicto": cluster.get("verificar_veredicto") or "",
         "marca_clasificada_por_ia": bool(cluster.get("marca_clasificada_por_ia")),
         "traducido": traducido,
         "idioma": cluster.get("idioma") or "",
@@ -277,16 +277,16 @@ async def listar_historias(request: Request) -> Response:
         desplazamiento=desplazamiento,
     )
     # Estado REAL de cara al feed + veredicto QA (verificación). El QA vive en la HISTORIA
-    # (`noticias_clusters.qa_veredicto`, ADR 0011 F3): la criba corre sobre el cluster ANTES de
+    # (`noticias_clusters.verificar_veredicto`, ADR 0011 F3): la criba corre sobre el cluster ANTES de
     # admitir. Se prefiere el veredicto NATIVO del cluster y se cae al del `contenido` heredado
     # (batch, evita N+1) solo para historias admitidas ANTES de F3 (cluster sin veredicto propio).
     cids = [c.get("contenido_id") or "" for c in clusters]
     resumen_pieza = repos.estado_pieza_por_contenido(cids)
-    qa_map = repos.qa_veredicto_por_contenido(cids)
+    qa_map = repos.verificar_veredicto_por_contenido(cids)
     vocab_memo: dict[str, frozenset[str]] = {}  # vocabulario por marca, 1 lectura por request
     historias = [
         _historia_a_dict(
-            {**c, "qa_veredicto": (c.get("qa_veredicto") or "") or qa_map.get(c.get("contenido_id") or "", "")},
+            {**c, "verificar_veredicto": (c.get("verificar_veredicto") or "") or qa_map.get(c.get("contenido_id") or "", "")},
             repos.items_de_cluster(c["id"], limite=_MAX_ENLACES_HISTORIA),
             pieza_estado=_pieza_estado(
                 c.get("estado") or "nuevo", c.get("contenido_id") or "", resumen_pieza
@@ -359,13 +359,13 @@ async def mesa(request: Request) -> Response:
     resumen_pieza = repos.estado_pieza_por_contenido(cids)
     # Veredicto de verificación por historia: NATIVO del cluster (ADR 0011 F3), con fallback al
     # contenido heredado para historias admitidas antes de F3 (cluster sin veredicto propio).
-    qa_map = repos.qa_veredicto_por_contenido(cids)
+    qa_map = repos.verificar_veredicto_por_contenido(cids)
     vocab_memo: dict[str, frozenset[str]] = {}
 
     def _historias(lote: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return [
             _historia_a_dict(
-                {**c, "qa_veredicto": (c.get("qa_veredicto") or "") or qa_map.get(c.get("contenido_id") or "", "")},
+                {**c, "verificar_veredicto": (c.get("verificar_veredicto") or "") or qa_map.get(c.get("contenido_id") or "", "")},
                 repos.items_de_cluster(c["id"], limite=_MAX_ENLACES_HISTORIA),
                 pieza_estado=_pieza_estado(
                     c.get("estado") or "nuevo", c.get("contenido_id") or "", resumen_pieza
@@ -418,11 +418,11 @@ async def detalle_historia(request: Request) -> Response:
     cid = cluster.get("contenido_id") or ""
     # Veredicto NATIVO del cluster (ADR 0011 F3: la QA corre sobre la historia); fallback al
     # contenido heredado para historias admitidas antes de F3 (cluster sin veredicto propio).
-    qa_veredicto = (cluster.get("qa_veredicto") or "") or (
-        repos.qa_veredicto_por_contenido([cid]).get(cid, "") if cid else ""
+    verificar_veredicto = (cluster.get("verificar_veredicto") or "") or (
+        repos.verificar_veredicto_por_contenido([cid]).get(cid, "") if cid else ""
     )
     historia = _historia_a_dict(
-        {**cluster, "qa_veredicto": qa_veredicto}, items, pieza_estado=_pieza_estado_de(cluster),
+        {**cluster, "verificar_veredicto": verificar_veredicto}, items, pieza_estado=_pieza_estado_de(cluster),
         liston=_evaluar_liston(cluster, {}),
     )
     return JSONResponse({"historia": historia, "items": [_item_a_dict(it) for it in items]})
@@ -495,7 +495,7 @@ async def usar_historia(request: Request) -> Response:
     genero = False
     if marca and generar:
         try:
-            genero = autogen_copy.lanzar_para_topic(contenido) is not None
+            genero = autogen_redactar.lanzar_para_topic(contenido) is not None
         except Exception:  # noqa: BLE001 -- la generación es opcional; nunca tumba el uso
             genero = False
 

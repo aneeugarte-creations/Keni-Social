@@ -234,7 +234,7 @@ def test_noticias_reparto_en_secciones(store):
         "noticias_rendimiento": {
             config.ENV_RENDIMIENTO_RANKING,
         },
-        # Listón de auto-producción (dominio.clustering.evaluar_liston): umbrales que deciden
+        # Listón de auto-producción (dominio.agrupar.evaluar_liston): umbrales que deciden
         # qué historias del pool disparan QA+copy automáticos (coste real de tokens).
         "noticias_produccion": {
             config.ENV_PROMOVER_MIN_SCORE,

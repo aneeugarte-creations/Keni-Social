@@ -157,7 +157,7 @@ def score_contenido(
         o 0 (la mayoria de piezas) => no cambia nada.
     (El antiguo `bonus_metricas` por marca se RETIRO: nunca tuvo un llamador productivo —
     codigo muerto desde su introduccion. La señal de rendimiento por metricas vive hoy en el
-    ranking de historias del pool: `clustering.puntuar` + `KENI_RENDIMIENTO_RANKING`.)
+    ranking de historias del pool: `agrupar.puntuar` + `KENI_RENDIMIENTO_RANKING`.)
     """
     etiquetas = etiquetas or []
     score = PESO_PRIORIDAD.get(item.get("prioridad") or "media", PESO_PRIORIDAD["media"])

@@ -1,7 +1,7 @@
 """API del MOTOR DE INGESTA PERSISTENTE (Ola A): archivo de artículos + cobertura.
 
 Superficie de LECTURA del archivo (`noticias_items`) + curación ligera. El motor ingiere en
-background (`ingesta_daemon`); aquí el equipo VE el flujo continuo, filtra, y decide qué USA
+background (`recolectar_daemon`); aquí el equipo VE el flujo continuo, filtra, y decide qué USA
 (lleva al tablero) o DESCARTA. Nada se publica desde aquí.
 
   - GET  /api/noticias            -> {items:[...], total} filtrable + paginado, recientes 1º.
@@ -11,7 +11,7 @@ background (`ingesta_daemon`); aquí el equipo VE el flujo continuo, filtra, y d
 
 MARCA-AWARE: `marca` filtra el archivo; '' o ausente = todas (vista admin). El alta del
 borrador (`usar`) reusa el MISMO camino que la aportación manual (`crear_contenido` +
-`autogen_copy.lanzar_para_topic`, `origen='noticia'`). Validación: `marca`/`estado` de
+`autogen_redactar.lanzar_para_topic`, `origen='noticia'`). Validación: `marca`/`estado` de
 allowlist; SQL parametrizado en `db`. Errores en español, sin tracebacks.
 
 ================================================================================

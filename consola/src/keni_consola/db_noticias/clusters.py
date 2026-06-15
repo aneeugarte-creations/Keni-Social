@@ -48,8 +48,8 @@ _COLS_NOTICIA_CLUSTER: tuple[str, ...] = (
     "primera_fuente_nombre",
     "fuentes_detalle",
     "marca_clasificada_por_ia",
-    "qa_veredicto",
-    "qa_hallazgos",
+    "verificar_veredicto",
+    "verificar_hallazgos",
     "creado",
     "actualizado",
 )
@@ -106,8 +106,8 @@ def _fila_a_noticia_cluster(fila: Any) -> dict[str, Any]:
         "marca_clasificada_por_ia": bool(fila["marca_clasificada_por_ia"]),
         # Verificación (QA de la fuente) sobre la HISTORIA (ADR 0011 F3): veredicto +
         # hallazgos; la admisión solo materializa contenido de las verificadas.
-        "qa_veredicto": fila["qa_veredicto"] or "",
-        "qa_hallazgos": fila["qa_hallazgos"] or "",
+        "verificar_veredicto": fila["verificar_veredicto"] or "",
+        "verificar_hallazgos": fila["verificar_hallazgos"] or "",
         "creado": fila["creado"] or "",
         "actualizado": fila["actualizado"] or "",
     }
@@ -175,8 +175,8 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
         # Verificación (QA de la fuente) sobre la historia (ADR 0011 F3): valor del ALTA; en
         # conflicto NO se pisa (está en `_NO_PISAR`), lo sella aparte `marcar_cluster_qa`. Así un
         # recalc (merge/fusión/rescore) sin el veredicto no borra una QA ya hecha.
-        "qa_veredicto": cluster.get("qa_veredicto") or "",
-        "qa_hallazgos": cluster.get("qa_hallazgos") or "",
+        "verificar_veredicto": cluster.get("verificar_veredicto") or "",
+        "verificar_hallazgos": cluster.get("verificar_hallazgos") or "",
         "creado": cluster.get("creado") or ahora,
         "actualizado": ahora,
     }
@@ -187,7 +187,7 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
     # 'usado' a 'nuevo' ni borrar su enlace al tema (lo que duplicaba el tema en el tablero).
     _NO_PISAR = (
         "id", "creado", "titulo_es", "resumen_es", "titulo_original", "idioma", "traducido",
-        "estado", "contenido_id", "marca_clasificada_por_ia", "qa_veredicto", "qa_hallazgos",
+        "estado", "contenido_id", "marca_clasificada_por_ia", "verificar_veredicto", "verificar_hallazgos",
     )
     actualizables = [c for c in _COLS_NOTICIA_CLUSTER if c not in _NO_PISAR]
     set_clause = ", ".join(f"{c} = excluded.{c}" for c in actualizables)
@@ -452,7 +452,7 @@ def marcar_cluster_marca_ia(cluster_id: str) -> None:
 def marcar_cluster_qa(cluster_id: str, veredicto: str, hallazgos: str = "") -> None:
     """Sella la VERIFICACIÓN (QA de la fuente) de la HISTORIA (ADR 0011 F3).
 
-    Escribe `qa_veredicto` (+ `qa_hallazgos`) en el cluster ANTES de materializar contenido de
+    Escribe `verificar_veredicto` (+ `verificar_hallazgos`) en el cluster ANTES de materializar contenido de
     producción: la admisión solo promueve las verificadas (`no_verificado`/`saltada`) y hereda
     el veredicto al `contenido`. Aparte del upsert (ambas columnas están en `_NO_PISAR`) para
     que un recalc del daemon sin el veredicto no lo borre — mismo patrón que
@@ -462,7 +462,7 @@ def marcar_cluster_qa(cluster_id: str, veredicto: str, hallazgos: str = "") -> N
     con = _conectar()
     try:
         con.execute(
-            "UPDATE noticias_clusters SET qa_veredicto = ?, qa_hallazgos = ?, actualizado = ? "
+            "UPDATE noticias_clusters SET verificar_veredicto = ?, verificar_hallazgos = ?, actualizado = ? "
             "WHERE id = ?",
             (veredicto or "", hallazgos or "", ahora_iso(), cluster_id),
         )
@@ -474,7 +474,7 @@ def marcar_cluster_qa(cluster_id: str, veredicto: str, hallazgos: str = "") -> N
 def contar_clusters_funnel_qa(marca: str, estados: tuple[str, ...]) -> int:
     """Cuántas HISTORIAS `nuevo` de la marca están en el EMBUDO de verificación (ADR 0011 F3).
 
-    El embudo son los clusters aún sin promover (`estado='nuevo'`) cuyo `qa_veredicto` está en
+    El embudo son los clusters aún sin promover (`estado='nuevo'`) cuyo `verificar_veredicto` está en
     `estados` (p. ej. en_curso + verificadas-pendientes). Acota cuánta QA se lanza por tick para
     que la verificación no recorra todo el pool: el presupuesto de QA = tope en vuelo − embudo.
     0 ante cualquier fallo o `estados` vacío.
@@ -486,7 +486,7 @@ def contar_clusters_funnel_qa(marca: str, estados: tuple[str, ...]) -> int:
     try:
         fila = con.execute(  # noqa: S608 -- marcadores parametrizados; estados de allowlist interna
             f"SELECT COUNT(*) AS n FROM noticias_clusters "
-            f"WHERE marca = ? AND estado = 'nuevo' AND qa_veredicto IN ({marcadores})",
+            f"WHERE marca = ? AND estado = 'nuevo' AND verificar_veredicto IN ({marcadores})",
             (marca, *estados),
         ).fetchone()
     finally:
@@ -495,7 +495,7 @@ def contar_clusters_funnel_qa(marca: str, estados: tuple[str, ...]) -> int:
 
 
 def sanear_qa_clusters_en_curso(umbral_iso: str) -> int:
-    """Resetea a "" el `qa_veredicto='en_curso'` ZOMBI de los clusters (reaper de verificación).
+    """Resetea a "" el `verificar_veredicto='en_curso'` ZOMBI de los clusters (reaper de verificación).
 
     Si una QA de la fuente sobre un cluster muere (deploy/OOM/cuelgue), el cluster quedaría
     `en_curso` para siempre: ni se re-criba ni se admite. Devuelve los `en_curso` más viejos que
@@ -505,8 +505,8 @@ def sanear_qa_clusters_en_curso(umbral_iso: str) -> int:
     con = _conectar()
     try:
         cur = con.execute(
-            "UPDATE noticias_clusters SET qa_veredicto = '', actualizado = ? "
-            "WHERE qa_veredicto = 'en_curso' AND actualizado <> '' AND actualizado < ?",
+            "UPDATE noticias_clusters SET verificar_veredicto = '', actualizado = ? "
+            "WHERE verificar_veredicto = 'en_curso' AND actualizado <> '' AND actualizado < ?",
             (ahora_iso(), umbral_iso),
         )
         con.commit()

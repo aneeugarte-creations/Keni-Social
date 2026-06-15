@@ -30,8 +30,8 @@ def _problema_de(item: dict) -> dict:
         "marca_nombre": _marca_nombre(marca),
         "etapa": (ultimo.get("fragmento") or "") if es_sistema else "Verificar",
         "intentos": {
-            "qa": intentos_de(item, "qa_intentos"),
-            "cd": intentos_de(item, "cd_intentos"),
+            "qa": intentos_de(item, "verificar_intentos"),
+            "cd": intentos_de(item, "redactar_intentos"),
         },
         "error": str(ultimo.get("explicacion") or "") or qa["resumen"],
         "resumen": qa["resumen"],
@@ -62,7 +62,7 @@ async def problemas(request: Request) -> Response:
         it
         for it in repos.listar_contenido(marca=marca or None)
         if (it.get("origen") or "") == ORIGEN_PIPELINE
-        and (it.get("qa_veredicto") or "").strip() == VERDICTO_PROBLEMA
+        and (it.get("verificar_veredicto") or "").strip() == VERDICTO_PROBLEMA
     ]
     bloqueados.sort(
         key=lambda it: (it.get("actualizado") or it.get("creado") or "", it.get("id", "")),

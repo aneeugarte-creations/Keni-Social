@@ -1,6 +1,6 @@
 """Helpers PUROS de similitud de títulos (normalización + fuzzy con sinónimos).
 
-Se reutilizan en el clustering del pool (`dominio.clustering`): cruzar títulos para fundir
+Se reutilizan en el agrupamiento del pool (`dominio.agrupar`): cruzar títulos para fundir
 "la misma noticia" contada por varias fuentes. Sin red, sin estado, deterministas.
 """
 

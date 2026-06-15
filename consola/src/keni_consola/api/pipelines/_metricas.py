@@ -98,7 +98,7 @@ def _runs_con_arte_ia(gens: list[dict]) -> set[str]:
     """Ids de contenido con EVIDENCIA de arte GENERADO por IA (auto-arte).
 
     El auto-arte deja dos trazas correlacionadas al tema: el MARCADOR de etapa
-    (`tipo='pipeline_etapa'`, etiqueta "ARTE · …") y la generación con el prompt real
+    (`tipo='pipeline_etapa'`, etiqueta "ILUSTRAR · …") y la generación con el prompt real
     (`tipo='pipeline'`, etiqueta "Arte — …"). Cualquiera de las dos vale. La etapa Ilustrar se
     deriva de ESTA evidencia, no de si la pieza tiene imagen (la foto de la nota de una
     fuente propia no es arte IA).
@@ -110,7 +110,7 @@ def _runs_con_arte_ia(gens: list[dict]) -> set[str]:
             continue
         etiqueta = (g.get("etiqueta", "") or "")
         tipo = g.get("tipo") or ""
-        if (tipo == TIPO_ACTIVIDAD and etiqueta.startswith("ARTE")) or (
+        if (tipo == TIPO_ACTIVIDAD and etiqueta.startswith("ILUSTRAR")) or (
             tipo == "pipeline" and etiqueta.startswith("Arte")
         ):
             out.add(cid)

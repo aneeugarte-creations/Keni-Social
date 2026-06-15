@@ -28,7 +28,7 @@ def ejecutar_barrido() -> dict[str, Any]:
     devuelve los conteos. Devuelve `{clusters, items, dry_run}`.
 
     UN SOLO DUEÑO DE LA CADUCIDAD POR TTL: la caducidad por edad (`repos.caducar_pool`: TTL +
-    retención) la ejecuta SOLO `ingesta_daemon.paso_caducidad` (el reloj del feed: donde se
+    retención) la ejecuta SOLO `recolectar_daemon.paso_caducidad` (el reloj del feed: donde se
     construye, se limpia; corre SIEMPRE, mientras que este GC va gateado OFF por defecto). Aquí
     NO se duplica — este daemon hace EXCLUSIVAMENTE la purga por relevancia (score+inactividad),
     que es única suya.

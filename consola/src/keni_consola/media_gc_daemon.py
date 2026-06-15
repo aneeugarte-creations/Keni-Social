@@ -1,7 +1,7 @@
 """Hilo demonio que ejecuta la GC de media huerfana periodicamente (GATEADO EN VIVO).
 
 La LOGICA del barrido (deteccion + borrado de huerfanos) vive en `dominio.media_gc`; aqui
-solo esta el envoltorio de DAEMON, espejo de `radar_auto`/`autogen_arte`: un hilo que arranca
+solo esta el envoltorio de DAEMON, espejo de `radar_auto`/`autogen_ilustrar`: un hilo que arranca
 SIEMPRE y, gateado por `KENI_MEDIA_GC` (def OFF), barre cada N horas SOLO cuando el flag esta
 activo. Asi encender/apagar en runtime (desde la API de ajustes) aplica sin reiniciar.
 

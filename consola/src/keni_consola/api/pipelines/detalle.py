@@ -92,11 +92,11 @@ def _actividad_y_generaciones(contenido_id: str, gens: list[dict]) -> tuple[list
     """Log de etapas (`tipo='pipeline'`) de un contenido + sus generaciones por etapa.
 
     Lee TODAS las generaciones-marcador del pipeline y filtra por el `contenido_id` que
-    sella `pipeline_contenido.registrar_etapa` (CD/QA lo llevan; CI es brand-level y no
+    sella `pipeline_contenido.registrar_etapa` (REDACTAR/VERIFICAR lo llevan; ADMITIR es brand-level y no
     queda atado a un contenido). Recientes primero. Cada evento normaliza la etiqueta
-    ("CI · ..."/"CD · ..."/"QA · ...") a `{etapa, etiqueta, estado, fecha}`.
+    ("ADMITIR · ..."/"REDACTAR · ..."/"VERIFICAR · ...") a `{etapa, etiqueta, estado, fecha}`.
 
-    Además devuelve `generaciones_por_etapa`: un mapa código-de-etapa (CI/CD/QA) -> la
+    Además devuelve `generaciones_por_etapa`: un mapa código-de-etapa (ADMITIR/REDACTAR/VERIFICAR) -> la
     generación REAL de `claude -p` (resuelta por el `gen_id` del marcador) con su STREAM, para
     que el detalle muestre el proceso del agente por etapa. Solo se incluye la etapa cuyo
     marcador trae `gen_id` resoluble; si una etapa tiene varios (raro), gana el más reciente.
@@ -157,10 +157,10 @@ async def detalle(request: Request) -> Response:
     marca_tema = item.get("marca", "") or ""
     gen_fusion = _generacion_pool_de_marca(marca_tema, gens, prefijo=_PREFIJO_POOL_FUSION) if es_pipeline else None
     if gen_fusion is not None:
-        generaciones_por_etapa.setdefault("FUSION", gen_fusion)
+        generaciones_por_etapa.setdefault("FUSIONAR", gen_fusion)
     gen_encaje = _generacion_pool_de_marca(marca_tema, gens, prefijo=_PREFIJO_POOL_EDITORIAL) if es_pipeline else None
     if gen_encaje is not None:
-        generaciones_por_etapa.setdefault("EDITORIAL", gen_encaje)
+        generaciones_por_etapa.setdefault("PRIORIZAR", gen_encaje)
     # Métricas de la run + evidencia del pool y del arte IA: las MISMAS derivaciones que la
     # lista, para que detalle y tarjeta no se contradigan (p. ej. "Saltada" aquí y "ok" allá).
     # La suma incluye las etapas de POOL enlazadas (Fusionar/Encaje): la cabecera cuadra con el

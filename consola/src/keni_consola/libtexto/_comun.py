@@ -53,10 +53,10 @@ SALIDAS = ("", "documento", "piezas")
 ESTADOS = ("activo", "borrador", "archivado")
 ESTADO_DEFECTO = "activo"
 
-# ROL de un PROMPT base: ata un prompt al rol que un pipeline espera (copy/qa/evergreen/...).
+# ROL de un PROMPT base: ata un prompt al rol que un pipeline espera (redactar/verificar/idear/...).
 # "" = prompt generico (lanzable a mano, no es base de ningun pipeline). Permite re-bindear
 # que prompt alimenta un pipeline SIN tocar codigo (gana el doc con ese rol+pipeline).
-ROLES_PROMPT = ("", "copy", "qa", "evergreen", "arte")
+ROLES_PROMPT = ("", "redactar", "verificar", "idear", "ilustrar")
 
 # --------------------------------------------------------------------------- #
 # Registro de PIPELINES                                                        #
@@ -72,23 +72,23 @@ ROLES_PROMPT = ("", "copy", "qa", "evergreen", "arte")
 #   rol            : rol que el prompt base de este pipeline debe declarar para rebindearlo.
 #   titulo/descripcion : etiquetas humanas para la UI.
 PIPELINES: dict[str, dict[str, str]] = {
-    "copy": {
+    "redactar": {
         "titulo": "Redactar",
         "descripcion": "Convierte una nota/clip/tendencia en copy publicable por red.",
         "prompt_defecto": "prompt/redactar",
-        "rol": "copy",
+        "rol": "redactar",
     },
-    "qa": {
+    "verificar": {
         "titulo": "Verificar",
         "descripcion": "Verifica la nota de origen antes de generar copy (pipeline de contenido).",
         "prompt_defecto": "prompt/verificar",
-        "rol": "qa",
+        "rol": "verificar",
     },
-    "evergreen": {
+    "idear": {
         "titulo": "Idear",
         "descripcion": "Propone ideas de contenido evergreen para la marca.",
         "prompt_defecto": "prompt/idear",
-        "rol": "evergreen",
+        "rol": "idear",
     },
 }
 
@@ -156,7 +156,7 @@ class Documento:
     # auto-adjunto por pipeline ([] = aplica a TODOS, retrocompat). Para PROMPTS marca de que
     # pipelines es la base (junto con `rol`).
     pipelines: list[str] = field(default_factory=list)
-    rol: str = ""  # solo prompt: copy | qa | evergreen | arte | "" (ver ROLES_PROMPT)
+    rol: str = ""  # solo prompt: redactar | verificar | idear | ilustrar | "" (ver ROLES_PROMPT)
     prioridad: int = 0  # orden de ensamblaje del auto-adjunto (menor = antes); empata por pilar/id
 
     def a_dict(self) -> dict[str, object]:

@@ -11,7 +11,7 @@ import json
 
 from keni_consola import repos
 from keni_consola.dominio import ingesta as dom_ingesta
-from keni_consola.dominio import insumos_parse
+from keni_consola.dominio import recibir_parse
 
 # --------------------------------------------------------------------------- #
 # Constructores puros de fila de pool                                          #
@@ -69,7 +69,7 @@ def test_procesar_cajon_escribe_insumos_y_noticias(monkeypatch):
         {"titulo": "Nota A", "marca": "unotv", "tipo": "nota", "resumen": "r"},
         {"titulo": "Partido X", "marca": "claro-sports", "tipo": "evento"},
     ]})
-    procesar = insumos_parse.construir_procesar_insumos(
+    procesar = recibir_parse.construir_procesar_insumos(
         lote_id="l1", cajon="portal", fecha="2026-06-05"
     )
     res = procesar(salida, None)
@@ -87,7 +87,7 @@ def test_procesar_cajon_escribe_insumos_y_noticias(monkeypatch):
 
 def test_procesar_cajon_salida_basura_no_escribe_pool(monkeypatch):
     cap = _capturas(monkeypatch)
-    procesar = insumos_parse.construir_procesar_insumos(
+    procesar = recibir_parse.construir_procesar_insumos(
         lote_id="l2", cajon="portal", fecha="2026-06-05"
     )
     res = procesar("lo siento, nada", None)

@@ -536,11 +536,11 @@ def test_historias_liston_no_promovible_explica_por_que(cliente):
 # --------------------------------------------------------------------------- #
 
 
-def test_historia_expone_qa_veredicto_y_marca_por_ia(cliente):
+def test_historia_expone_verificar_veredicto_y_marca_por_ia(cliente):
     """La historia trae el veredicto QA de su contenido (verificación) y si la marca fue IA."""
     cont = repos.crear_contenido(
         clase="contenido", titulo="Tema verificado", marca="unotv", categoria="mx",
-        qa_veredicto="no_verificado",
+        verificar_veredicto="no_verificado",
     )
     _sembrar_cluster("h-qa", marca="unotv")
     repos.actualizar_noticia_cluster("h-qa", estado="usado", contenido_id=cont["id"])
@@ -550,7 +550,7 @@ def test_historia_expone_qa_veredicto_y_marca_por_ia(cliente):
         x for x in cliente.get("/api/noticias/historias", params={"marca": "unotv"}).json()["historias"]
         if x["id"] == "h-qa"
     )
-    assert h["qa_veredicto"] == "no_verificado"  # veredicto QA del contenido asociado (batch)
+    assert h["verificar_veredicto"] == "no_verificado"  # veredicto QA del contenido asociado (batch)
     assert h["marca_clasificada_por_ia"] is True
 
 
@@ -560,7 +560,7 @@ def test_historia_sin_contenido_ni_ia_trae_campos_vacios(cliente):
         x for x in cliente.get("/api/noticias/historias", params={"marca": "unotv"}).json()["historias"]
         if x["id"] == "h-plain"
     )
-    assert h["qa_veredicto"] == ""
+    assert h["verificar_veredicto"] == ""
     assert h["marca_clasificada_por_ia"] is False
 
 
@@ -574,23 +574,23 @@ def test_historia_expone_qa_nativo_del_cluster_sin_contenido(cliente):
         "/api/noticias/historias", params={"marca": "unotv"}
     ).json()["historias"]
     h = next(x for x in historias if x["id"] == "h-prob")
-    assert h["qa_veredicto"] == "problema"  # nativo del cluster, sin contenido enlazado
+    assert h["verificar_veredicto"] == "problema"  # nativo del cluster, sin contenido enlazado
 
     # El detalle también lo expone (mismo veredicto nativo).
     det = cliente.get("/api/noticias/historias/h-prob").json()["historia"]
-    assert det["qa_veredicto"] == "problema"
+    assert det["verificar_veredicto"] == "problema"
 
 
 def test_marcar_cluster_qa_persiste_y_no_se_pisa_en_recalc(entorno):
     """ADR 0011 F3: `marcar_cluster_qa` sella el veredicto en la historia y un recalc (upsert) sin
-    veredicto NO lo borra (`qa_veredicto`/`qa_hallazgos` en `_NO_PISAR`)."""
+    veredicto NO lo borra (`verificar_veredicto`/`verificar_hallazgos` en `_NO_PISAR`)."""
     _sembrar_cluster("h-v", marca="unotv")
     repos.marcar_cluster_qa("h-v", "no_verificado", '{"resumen":"ok"}')
     c = repos.obtener_noticia_cluster("h-v")
-    assert c["qa_veredicto"] == "no_verificado"
-    assert c["qa_hallazgos"] == '{"resumen":"ok"}'
+    assert c["verificar_veredicto"] == "no_verificado"
+    assert c["verificar_hallazgos"] == '{"resumen":"ok"}'
     # Recalc del daemon (mismo id, sin veredicto): no debe revertir la verificación.
     _sembrar_cluster("h-v", marca="unotv", titulo="Historia re-puntuada")
     c2 = repos.obtener_noticia_cluster("h-v")
-    assert c2["qa_veredicto"] == "no_verificado"  # preservado pese al upsert
+    assert c2["verificar_veredicto"] == "no_verificado"  # preservado pese al upsert
     assert c2["titulo"] == "Historia re-puntuada"  # el resto del recalc sí entra

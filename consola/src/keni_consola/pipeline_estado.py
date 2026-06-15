@@ -2,7 +2,7 @@
 
 PROBLEMA QUE RESUELVE
 =====================
-Los daemons (`radar_auto` -> `autogen_copy` -> `autogen_arte` -> revision) llevan cada tema
+Los daemons (`radar_auto` -> `autogen_redactar` -> `autogen_ilustrar` -> revision) llevan cada tema
 de "entrada" a "borrador completo en cola de revision", pero hoy NO hay forma de ver EN QUE
 PUNTO esta cada pieza a lo largo de la cadena. Este modulo deriva, de las senales que YA
 existen (estado de `contenido_plataforma`, presencia de copy/imagen, etiquetas de dedup
@@ -27,7 +27,7 @@ from typing import Any
 from .estados import CLASE_CONTENIDO, ORIGENES_AUTOGEN
 
 # Etiquetas de dedup que ponen los daemons al ENCOLAR copy / arte (fuente unica: el valor
-# que usan `autogen_copy.ETIQUETA_AUTOGEN` y `autogen_arte.ETIQUETA_AUTOGEN_ARTE`). Se
+# que usan `autogen_redactar.ETIQUETA_AUTOGEN` y `autogen_ilustrar.ETIQUETA_AUTOGEN_ARTE`). Se
 # replican aqui como literales para no acoplar este modulo neutro a los daemons (que
 # importan config/media/etc.); si cambian alla, este modulo no compila menos, solo deja de
 # distinguir "en cola" de "generando" (degrada con elegancia, no rompe).
@@ -72,7 +72,7 @@ def _norm(texto: object) -> str:
 
 
 def _tiene_copy(plataforma: dict[str, Any]) -> bool:
-    """True si la fila por plataforma tiene copy redactado (mismo criterio que autogen_arte)."""
+    """True si la fila por plataforma tiene copy redactado (mismo criterio que autogen_ilustrar)."""
     return bool((plataforma.get("copy") or "").strip())
 
 

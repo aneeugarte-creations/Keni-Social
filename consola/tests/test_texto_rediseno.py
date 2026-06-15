@@ -33,7 +33,7 @@ def _texto_tmp(monkeypatch, tmp_path):
 def test_campos_nuevos_round_trip_editorial():
     doc = libtexto.crear(
         "Voz UnoTV", tipo="editorial", clase="voz", marcas=["unotv"], cuerpo="Tono cercano.",
-        estado="borrador", etiquetas=["Tono", "tono", "  Piloto "], pipelines=["copy"], prioridad=5,
+        estado="borrador", etiquetas=["Tono", "tono", "  Piloto "], pipelines=["redactar"], prioridad=5,
     )
     leido = libtexto.obtener(doc.id)
     assert leido is not None
@@ -45,7 +45,7 @@ def test_campos_nuevos_round_trip_editorial():
 
 
 def test_rol_solo_para_prompt_y_defaults():
-    p = libtexto.crear("Copy base", tipo="prompt", cuerpo="...", rol="copy", pipelines=["copy"])
+    p = libtexto.crear("Copy base", tipo="prompt", cuerpo="...", rol="redactar", pipelines=["redactar"])
     assert libtexto.obtener(p.id).rol == "copy"
     # Un editorial ignora rol (queda vacio aunque se intente).
     e = libtexto.crear("Reglas", tipo="editorial", clase="reglas", cuerpo="...")
@@ -89,7 +89,7 @@ def test_editoriales_filtra_por_pipeline():
     # Global sin pipelines declarados -> aplica a TODOS (retrocompat).
     libtexto.crear("Plataformas", tipo="editorial", clase="plataforma", cuerpo="p")
     # Acotado a copy: NO debe entrar en qa.
-    libtexto.crear("Solo copy", tipo="editorial", clase="reglas", cuerpo="c", pipelines=["copy"])
+    libtexto.crear("Solo copy", tipo="editorial", clase="reglas", cuerpo="c", pipelines=["redactar"])
     ids_copy = {d.id for d in libtexto.editoriales_de_marca("unotv", pipeline="copy")}
     ids_qa = {d.id for d in libtexto.editoriales_de_marca("unotv", pipeline="qa")}
     assert "editorial/plataformas" in ids_copy and "editorial/plataformas" in ids_qa
@@ -128,21 +128,21 @@ def test_editoriales_scoping_por_carpeta():
 
 
 def test_prompt_base_defecto_cuando_nadie_rebindea():
-    assert libtexto.prompt_base_de("copy") == "prompt/redactar"
-    assert libtexto.prompt_base_de("qa") == "prompt/verificar"
+    assert libtexto.prompt_base_de("redactar") =="prompt/redactar"
+    assert libtexto.prompt_base_de("verificar") == "prompt/verificar"
 
 
 def test_prompt_base_rebindeo_por_documento():
-    # Un prompt activo con rol=copy que declara el pipeline copy GANA al defecto del registro.
-    nuevo = libtexto.crear("Copy v2", tipo="prompt", cuerpo="...", rol="copy", pipelines=["copy"])
-    assert libtexto.prompt_base_de("copy") == nuevo.id
+    # Un prompt activo con rol=redactar que declara el pipeline redactar GANA al defecto del registro.
+    nuevo = libtexto.crear("Copy v2", tipo="prompt", cuerpo="...", rol="redactar", pipelines=["redactar"])
+    assert libtexto.prompt_base_de("redactar") ==nuevo.id
     # Un borrador NO rebindea (estado != activo).
     libtexto.guardar(nuevo.id, estado="borrador")
-    assert libtexto.prompt_base_de("copy") == "prompt/redactar"
+    assert libtexto.prompt_base_de("redactar") =="prompt/redactar"
 
 
 def test_previsualizar_pipeline_ensambla_base_y_adjuntos():
-    libtexto.crear("Copy base", tipo="prompt", carpeta="", cuerpo="INSTRUCCION BASE", rol="copy", pipelines=["copy"])
+    libtexto.crear("Copy base", tipo="prompt", carpeta="", cuerpo="INSTRUCCION BASE", rol="redactar", pipelines=["redactar"])
     libtexto.crear("Reglas", tipo="editorial", clase="reglas", cuerpo="REGLA EDITORIAL")
     prev = libtexto.previsualizar_pipeline("copy", "unotv", "CONTEXTO DE PRUEBA")
     assert prev["falta_base"] is False
@@ -156,7 +156,7 @@ def test_previsualizar_pipeline_copy_es_fiel_al_lanzamiento():
     """El preview del pipeline `copy` pasa por la MISMA composición que `lanzar_copy`:
     instrucción de copy UNIFICADO + reglas de imagen adjuntas.
     Sin `redes_ids` se previsualiza con TODAS las redes (un lanzamiento real siempre las trae)."""
-    libtexto.crear("Copy base", tipo="prompt", carpeta="", cuerpo="BASE", rol="copy", pipelines=["copy"])
+    libtexto.crear("Copy base", tipo="prompt", carpeta="", cuerpo="BASE", rol="redactar", pipelines=["redactar"])
     prev = libtexto.previsualizar_pipeline("copy", "unotv", "CTX")
     # La instrucción unificada pide un solo copy acotado al límite más estricto entre todas las
     # redes (Instagram = 2200), sin versión corta aparte.

@@ -13,13 +13,13 @@ from keni_consola import importador_calendario, libtexto
 from keni_consola.dominio import (
     asistente,
     clasificador_marca,
-    fusion_semantica,
+    fusionar_semantica,
     generar,
     hashtags,
-    insumos_parse,
+    recibir_parse,
     parrilla_import_job,
     perfil_editorial,
-    traduccion,
+    traducir,
 )
 
 
@@ -42,8 +42,8 @@ def store_roto(monkeypatch, tmp_path):
 
 # (función _plantilla, id del seed del que debe salir el fallback)
 _CASOS = [
-    (traduccion._plantilla, "prompt/traducir"),
-    (fusion_semantica._plantilla, "prompt/fusionar"),
+    (traducir._plantilla, "prompt/traducir"),
+    (fusionar_semantica._plantilla, "prompt/fusionar"),
     (perfil_editorial._plantilla, "prompt/priorizar"),
     (parrilla_import_job._plantilla, "prompt/importar/parrilla"),
     (importador_calendario._plantilla, "prompt/importar/calendario"),
@@ -97,8 +97,8 @@ def test_fallback_de_cada_modulo_resuelve_desde_la_semilla(store_roto):
 
 
 def test_fallback_insumos_por_cajon_resuelve_desde_la_semilla(store_roto):
-    for cajon, prompt_id in insumos_parse._PROMPT_INSUMO_IDS.items():
-        prompt = insumos_parse._prompt_de_cajon(cajon, "/tmp/insumo.txt")
+    for cajon, prompt_id in recibir_parse._PROMPT_INSUMO_IDS.items():
+        prompt = recibir_parse._prompt_de_cajon(cajon, "/tmp/insumo.txt")
         assert prompt == _semilla(prompt_id).replace("{{RUTA}}", "/tmp/insumo.txt"), cajon
         # El contrato JSON del cajón sobrevive al fallback.
         assert '{"items"' in prompt, cajon

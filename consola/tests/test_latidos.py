@@ -116,7 +116,9 @@ def test_nombre_de_sweep_alias():
         pass
 
     assert latidos.nombre_de_sweep(sweep) == "test_latidos"
-    assert latidos._ALIAS["ingesta_daemon"] == "ingesta"
+    assert latidos._ALIAS["recolectar_daemon"] == "ingesta"
+    # "pipeline" se partio en "investigacion"+"produccion": el nombre viejo esta
+    # RETIRADO (la sonda ignora su fila huerfana) y ya no hay alias que lo resucite.
     assert "pipeline" in latidos.RETIRADOS
     assert "pipeline" not in latidos._ALIAS.values()
 
@@ -636,7 +638,7 @@ def test_bucle_gateado_escribe_historial_con_resumen(entorno):
 def test_resumen_fn_formatea_dict_de_conteos():
     # Los formateadores de resumen son PUROS: derivan un str humano de los conteos del sweep
     # (dict que consumen tests/disparo a demanda) sin tocar ese contrato. Vacio => "sin novedad".
-    from keni_consola.ingesta_daemon import _bucle as ingesta_bucle
+    from keni_consola.recolectar_daemon import _bucle as ingesta_bucle
     from keni_consola.pipeline_contenido import _barrido as pc_barrido
 
     assert ingesta_bucle._resumen_barrido(
@@ -656,7 +658,7 @@ def test_resumen_fn_formatea_dict_de_conteos():
 def test_bucle_gateado_resumen_fn_escribe_historial(entorno):
     # Daemon GATEADO con dict de conteos: el `resumen_fn` deriva el str del resultado del sweep
     # y ese texto aterriza NO VACIO en `daemon_barridos` (lo que pinta la pagina de detalle).
-    from keni_consola.ingesta_daemon import _bucle as ingesta_bucle
+    from keni_consola.recolectar_daemon import _bucle as ingesta_bucle
 
     daemon_util.bucle_gateado(
         activo_fn=lambda: True,

@@ -61,7 +61,7 @@ def _es_marcador_pipeline(gen: dict) -> bool:
     if tipo == "pipeline_etapa":
         return True
     if tipo == "pipeline":
-        return (gen.get("etiqueta", "") or "").startswith(("CI · ", "CD · ", "QA · "))
+        return (gen.get("etiqueta", "") or "").startswith(("ADMITIR · ", "REDACTAR · ", "VERIFICAR · "))
     return False
 
 

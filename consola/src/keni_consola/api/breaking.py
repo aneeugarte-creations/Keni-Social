@@ -15,7 +15,7 @@ ENDPOINTS
   POST /api/breaking/preparar
     Body: `{ "titulo": str, "marca": str, "redes": [str]? }`
     Crea un DRAFT `contenido` (flujo='importante', prioridad='alta', origen='breaking')
-    y encola la generación de copy reusando `autogen_copy.lanzar_para_topic` (el mismo
+    y encola la generación de copy reusando `autogen_redactar.lanzar_para_topic` (el mismo
     camino que el botón manual del asistente y que el radar). NUNCA publica.
     → `{ "contenido_id": str, "generacion_id": str }`
 
@@ -36,7 +36,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import autogen_copy, marcas, redes, repos
+from .. import autogen_redactar, marcas, redes, repos
 from .._http_json import leer_json
 from ..dominio import breaking as dom_breaking
 from ..estados import FLUJO_IMPORTANTE
@@ -133,7 +133,7 @@ async def preparar(request: Request) -> Response:
 
     Crea un DRAFT `contenido` con `origen='breaking'`, `flujo='importante'`,
     `prioridad='alta'` y lanza la generación de copy en segundo plano reusando
-    `autogen_copy.lanzar_para_topic` (el mismo camino que el botón manual del
+    `autogen_redactar.lanzar_para_topic` (el mismo camino que el botón manual del
     asistente y que `/api/contenido/desde-radar`). NUNCA publica: el borrador
     nace sin aprobación y pasa por el flujo de revisión humana normal.
 
@@ -202,10 +202,10 @@ async def preparar(request: Request) -> Response:
             contenido_id=item["id"], red=red, falta_copy=True, falta_imagen=True
         )
 
-    # --- Encolar generación de copy (reusa autogen_copy.lanzar_para_topic) ---
+    # --- Encolar generación de copy (reusa autogen_redactar.lanzar_para_topic) ---
     gen_id = ""
     try:
-        gen = autogen_copy.lanzar_para_topic(item)
+        gen = autogen_redactar.lanzar_para_topic(item)
         if gen:
             gen_id = gen.get("id") or ""
     except Exception:  # noqa: BLE001 -- la generación es opcional; nunca tumba la preparación

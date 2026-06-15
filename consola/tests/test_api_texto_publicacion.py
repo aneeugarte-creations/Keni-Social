@@ -442,7 +442,7 @@ def test_semilla_recibe_linea_base_git_y_sirve_snapshot(entorno_pub):
     autosave reescribe en vivo (cierra el caso que antes caía al working copy)."""
     n = libtexto.importar_semilla()
     assert n > 0
-    doc_id = "prompt/copy"
+    doc_id = "prompt/redactar"
     assert libtexto.obtener(doc_id) is not None
     # Recién sembrado: aún sin commit -> sin HEAD.
     assert versionado.sha_documento(doc_id) is None
@@ -521,7 +521,7 @@ def test_maquina_tres_maquinas(entorno_sin_pg):
         ("prompt", "verificar"),
     ]
     por_id = {e["id"]: e for e in inv["etapas"]}
-    assert por_id["verificar"]["doc_id"] == "prompt/verificar"  # prompt_base_de("qa")
+    assert por_id["verificar"]["doc_id"] == "prompt/verificar"  # prompt_base_de("verificar")
     assert por_id["verificar"]["titulo"] == "Verificar"
     assert por_id["priorizar"]["doc_id"] == "prompt/priorizar"
     assert por_id["priorizar"]["titulo"] == "Priorizar"
@@ -573,7 +573,7 @@ def test_maquina_tres_maquinas(entorno_sin_pg):
 def test_maquina_respeta_rebindeo_de_copy(entorno_sin_pg):
     """La etapa Redactar se resuelve por el registro: un prompt activo rol=copy la rebindea."""
     c = _cliente()
-    nuevo = _crear_doc(c, titulo="Copy alterno", cuerpo="X", rol="copy", pipelines=["copy"])
+    nuevo = _crear_doc(c, titulo="Copy alterno", cuerpo="X", rol="redactar", pipelines=["redactar"])
     r = c.get("/api/texto/maquina")
     prod = next(m for m in r.json()["maquinas"] if m["id"] == "produccion")
     etapa = next(e for e in prod["etapas"] if e["id"] == "redactar")

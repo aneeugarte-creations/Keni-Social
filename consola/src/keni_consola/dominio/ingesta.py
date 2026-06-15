@@ -186,12 +186,12 @@ def filtrar_por_vocabulario(
     """
     if not palabras or not items:
         return list(items), []
-    from . import clustering  # import local: clustering importa de este módulo (lazy)
+    from . import agrupar  # import local: agrupar importa de este módulo (lazy)
 
     aptos: list[dict[str, Any]] = []
     descartados: list[dict[str, Any]] = []
     for it in items:
-        s, _casadas = clustering.relevancia_marca_detalle(it, palabras)
+        s, _casadas = agrupar.relevancia_marca_detalle(it, palabras)
         (aptos if s > 0.0 else descartados).append(it)
     return aptos, descartados
 

@@ -26,7 +26,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import autogen_arte, generaciones, media, repos
+from .. import autogen_ilustrar, generaciones, media, repos
 from .._http_json import leer_json
 from ..dominio import extraccion_url
 from ..seguridad import autor_de_peticion
@@ -118,7 +118,7 @@ def lanzar_generacion_imagen(
         nombre = media.guardar_bytes(salida.datos, ext="png")
         # Para una pieza: deja la traza de la etapa ARTE en SU pipeline (prompt + salida reales).
         if contenido_id:
-            autogen_arte.registrar_arte(
+            autogen_ilustrar.registrar_arte(
                 contenido_id=contenido_id, marca=marca, titulo=titulo,
                 prompt=prompt, imagen=nombre,
             )
