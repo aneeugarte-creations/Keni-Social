@@ -599,11 +599,11 @@ describe("CajonesDia", () => {
     expect(screen.getByText("Procesando con Haiku…")).toBeInTheDocument();
   });
 
-  it("NO muestra 'Procesando con Haiku…' si el lote parseando YA tiene ítems (zombi: worker muerto a medias)", async () => {
+  it("NO muestra 'Procesando con Haiku…' si el lote parseando YA tiene ítems (atascado: worker muerto a medias)", async () => {
     // Lote atascado en `parseando` pero con ítems ya insertados: el parseo SÍ terminó.
     // El spinner NO debe quedarse atascado (regresión: antes se mostraba para siempre).
     const itemDelLote = { ...ITEM_PARSED, id: "item-z", lote_id: LOTE_PARSEANDO.id };
-    const insumosZombi = {
+    const insumosAtascados = {
       fecha: "2026-06-05",
       cajones: [
         { cajon: "portal", lotes: [LOTE_PARSEANDO], items: [itemDelLote] },
@@ -612,7 +612,7 @@ describe("CajonesDia", () => {
         { cajon: "eventos_claro", lotes: [], items: [] },
       ],
     };
-    mockApiInsumos(insumosZombi, { dias: [] });
+    mockApiInsumos(insumosAtascados, { dias: [] });
     renderConProviders(<CajonesDia />);
 
     // El ítem del lote aparece…
@@ -706,7 +706,7 @@ describe("CajonesDia", () => {
       expect(aportarMock).toHaveBeenCalled();
     });
     // Sin marca activa (vista "Todas") el lote cae a la marca del cajón (Portal → unotv):
-    // sus ítems no quedan huérfanos del filtro por marca.
+    // sus ítems no quedan sueltos del filtro por marca.
     const form = aportarMock.mock.calls[0][0] as FormData;
     expect(form.get("marca")).toBe("unotv");
   });

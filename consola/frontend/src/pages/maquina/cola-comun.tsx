@@ -1,6 +1,6 @@
 /**
  * Piezas COMPARTIDAS de la cola/cómputo entre la página de Agentes (`/maquina/agentes`) y la de
- * Cómputo y cola (`/maquina/computo`): la tarjeta KPI, la tabla de jobs en vuelo (con sus
+ * Cómputo y cola (`/maquina/computo`): la tarjeta KPI, la tabla de jobs activos (con sus
  * acciones admin) y el panel de presupuesto + parada de emergencia. Viven aquí para que ambas
  * superficies reusen el mismo render y el mismo contrato sin duplicarlo.
  */
@@ -85,7 +85,7 @@ export function Kpi({
   return cuerpo;
 }
 
-/** Tabla de jobs en vuelo (en curso o esperando), con acciones admin in-place. */
+/** Tabla de jobs activos (en curso o esperando), con acciones admin in-place. */
 export function TablaJobs({
   jobs,
   mostrarWorker,

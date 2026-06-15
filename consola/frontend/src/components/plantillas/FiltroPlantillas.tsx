@@ -188,7 +188,7 @@ export function BuscadorPlantillas({
 
 /**
  * Chips de categoría en carrusel horizontal (estilo Canva): «Todas» primero y después SOLO las
- * categorías presentes en los datos. Con menos de 2 categorías no se renderiza (sería ruido).
+ * categorías presentes en los datos. Con menos de 2 categorías no se renderiza (sería irrelevante).
  */
 export function ChipsCategoria({
   categorias,

@@ -829,7 +829,7 @@ export function TarjetaCobertura({
           <TarjetaTarea key={t.id} tarea={t} catalogos={catalogos} enCobertura />
         ))}
       </div>
-      {/* Roles SOLTADOS (huérfanos) de este evento aún vivo: «Por cubrir · <rol>» re-cogibles. */}
+      {/* Roles SOLTADOS (sin dueño) de este evento aún vivo: «Por cubrir · <rol>» re-cogibles. */}
       {cobertura.libres.length > 0 && (
         <div className="space-y-1.5" data-no-primaria>
           {cobertura.libres.map((t) => (

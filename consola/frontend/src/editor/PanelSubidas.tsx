@@ -3,7 +3,7 @@
 // SOLO mecanismos que ya existen — sin backend nuevo:
 //  - Subir: `api.subirMedia` (POST /api/media) sube el binario al almacén (S3/Garage).
 //  - Reutilizar: `api.guardarArte` (POST /api/artes, idempotente) cataloga el objeto con
-//    `tipo: "subida"`, lo que lo PROTEGE del GC de media huérfana y lo hace listable.
+//    `tipo: "subida"`, lo que lo PROTEGE del GC de media sin dueño y lo hace listable.
 //  - Recientes: `api.listarArtes({marca, tipo: "subida"})` es la fuente de verdad del grid
 //    (más recientes primero; incluye las subidas globales de marca '').
 //  - Insertar: el MISMO mecanismo que la Galería — clic inserta una capa imagen centrada

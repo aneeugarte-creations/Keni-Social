@@ -131,7 +131,7 @@ export function ZonaEstado({ esAdmin, marca }: { esAdmin: boolean; marca?: strin
   const doctor = useDoctor();
   const visibles = (doctor.data?.resultados ?? []).filter((c) => esAdmin || !c.admin);
   const conProblema = visibles.filter((c) => c.estado !== "ok");
-  // Sin datos aún no se pinta nada (la zona es diagnóstico, no debe meter ruido), pero el
+  // Sin datos aún no se pinta nada (la zona es diagnóstico, no debe distraer), pero el
   // DOCTOR CAÍDO no desaparece en silencio: «todo en orden» y «no sé leer el estado» no
   // pueden verse igual, así que el fallo se avisa con reintento.
   return (

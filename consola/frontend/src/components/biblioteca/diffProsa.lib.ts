@@ -38,7 +38,7 @@ const RE_ES_VARIABLE = /^\{\{[A-Z_]+\}\}$/;
 
 /**
  * Quita el bloque frontmatter YAML inicial (`---\n...\n---`) si lo hay. Solo cuenta al
- * principio del texto; metadatos jamás deben entrar al diff (ni como cambio ni como ruido).
+ * principio del texto; metadatos jamás deben entrar al diff (ni como cambio ni como dato irrelevante).
  */
 export function quitarFrontmatter(texto: string): string {
   const t = texto.replace(/\r\n/g, "\n");

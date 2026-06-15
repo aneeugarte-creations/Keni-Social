@@ -261,7 +261,7 @@ export default function FeedIdeacion() {
   );
 
   // ANTI-N+1: pide en UN lote las cadenas de aprobación de las piezas cargadas y las
-  // siembra en las claves individuales que consumen los `PostFeed` (vía contexto).
+  // precarga en las claves individuales que consumen los `PostFeed` (vía contexto).
   const cadenasLote = useCadenasLote(piezas);
 
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = feedQuery;
@@ -270,7 +270,7 @@ export default function FeedIdeacion() {
   // salen como hueco "No generado". Si se filtra por una red concreta, el feed es PLANO.
   // RESPALDO ante error de /opciones: el catálogo estático de formato.ts (las 5 redes conocidas)
   // en vez de `[]` —con catálogo vacío TODAS las ideas se pintaban como "No generado" aunque
-  // tuvieran contenido—. Mientras /opciones está en vuelo, el gate de abajo enseña skeleton.
+  // tuvieran contenido—. Mientras /opciones está en curso, el gate de abajo enseña skeleton.
   const catalogoRedes = React.useMemo(
     () =>
       opcionesQuery.isError

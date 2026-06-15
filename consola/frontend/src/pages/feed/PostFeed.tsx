@@ -94,9 +94,9 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   // (ahí el gate de comentarios sin resolver bloquea PROGRAMAR/publicar, como el "merge" de un PR).
   //
   // ANTI-N+1: dentro del feed, el padre pide las cadenas de la página en UN lote
-  // (`useCadenasLote`) y las SIEMBRA en esta misma clave. Mientras el lote está en vuelo,
+  // (`useCadenasLote`) y las PRECARGA en esta misma clave. Mientras el lote está en curso,
   // esta query queda deshabilitada (si no, cada tarjeta dispararía su GET en paralelo);
-  // al aterrizar, encuentra el dato sembrado fresco (staleTime) y no refetchea. Fuera del
+  // al aterrizar, encuentra el dato precargado fresco (staleTime) y no refetchea. Fuera del
   // feed (sin contexto) o si el lote falla, carga individual como siempre.
   const lote = React.useContext(CadenasLoteContexto);
   const cadenaQuery = useQuery({
@@ -110,7 +110,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   // Comentarios SIN RESOLVER: como en GitHub, bloquean publicar hasta marcarse resueltos. La cifra
   // viene de la cadena (cuenta los hilos abiertos del tema). Mientras carga es 0 (no bloquea de más).
   const sinResolver = cadena?.comentarios_sin_resolver ?? 0;
-  // Cadena AÚN en vuelo (lote anti-N+1 o query individual sin aterrizar): el tooltip/toast del
+  // Cadena AÚN en curso (lote anti-N+1 o query individual sin aterrizar): el tooltip/toast del
   // like lo dice tal cual, sin inventarse un "espera tu turno" que todavía no consta.
   const cadenaCargando = enRevision && !cadena && !cadenaQuery.isError;
   // OK HUMANOS ya dados (decisor con id propio, no el reservado "auto" del QA/pre-aprobación). Si

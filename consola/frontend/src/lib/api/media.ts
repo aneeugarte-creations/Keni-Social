@@ -39,7 +39,7 @@ export const apiMedia = {
     peticion<RespuestaMedia>("/media/desde-url", { metodo: "POST", json: { url } }),
 
   // --- Galería de artes (objetos de media catalogados para reutilizar) ---
-  // Guardar un arte lo PROTEGE del GC de media huérfana y lo hace seleccionable por marca
+  // Guardar un arte lo PROTEGE del GC de media sin dueño y lo hace seleccionable por marca
   // desde el editor de imagen de una pieza. El `objeto` es UNIQUE: `guardarArte` es idempotente.
   listarArtes: (
     filtros: { marca?: string; tipo?: string; q?: string } = {},

@@ -132,9 +132,9 @@ export interface Historia {
    * crudas del desglose, la UI reconstruye el cálculo: señal × peso = aporte, Σ = score.
    */
   score_pesos?: Record<string, number>;
-  /** true si supera el LISTÓN de producción automática (la misma evaluación que el pipeline). */
+  /** true si supera el UMBRAL de producción automática (la misma evaluación que el pipeline). */
   promovible?: boolean;
-  /** Motivo legible del listón (por qué supera, o por qué no). */
+  /** Motivo legible del umbral (por qué supera, o por qué no). */
   promovible_motivo?: string;
   /** 1 si la historia está en modo breaking (aceleración de fuentes). */
   breaking: number;

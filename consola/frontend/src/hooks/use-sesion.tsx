@@ -39,7 +39,7 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
       const { usuario } = await api.me();
       setUsuario(usuario);
     } catch (e) {
-      // 401 = sin sesión (esperado): mostramos el login sin ruido. Cualquier
+      // 401 = sin sesión (esperado): mostramos el login sin alarmas. Cualquier
       // otro error también cae al login (no podemos afirmar que haya sesión).
       if (!(e instanceof ApiError)) {
         // Error inesperado de red: lo dejamos sin sesión igualmente.
@@ -81,7 +81,7 @@ export function SesionProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const verificarConPasskey = React.useCallback(async () => {
-    // 2º paso (passkey): pedimos opciones (el backend siembra la cookie de challenge), corremos
+    // 2º paso (passkey): pedimos opciones (el backend fija la cookie de challenge), corremos
     // la ceremonia WebAuthn en el navegador y enviamos la assertion. py_webauthn la verifica
     // contra el challenge de la cookie y, si cuadra, emite la sesión real y devuelve el usuario.
     const optionsJSON = await api.mfaLoginOpciones();

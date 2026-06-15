@@ -98,8 +98,8 @@ export function AppShell() {
   );
 
   // Hidrata la caché de límites de caracteres desde la fuente única del backend
-  // (`GET /api/limites`, #112). Mientras carga, `metaRed().limite` usa la semilla
-  // (espejo del backend). Si falla, la semilla sigue siendo válida (sin romper).
+  // (`GET /api/limites`, #112). Mientras carga, `metaRed().limite` usa los valores base
+  // (espejo del backend). Si falla, los valores base siguen siendo válidos (sin romper).
   const limitesQuery = useQuery({
     queryKey: ["limites"],
     queryFn: ({ signal }) => api.limites(signal),
@@ -189,7 +189,7 @@ export function AppShell() {
                 {/* Hairline entre las acciones del DOCUMENTO (guardado/exportar) y el contexto
                     GLOBAL (marca + campana): marca el límite de grupo sin añadir otra medida
                     de gap. Solo en escritorio: en móvil el slot fin va vacío (portaliza a la
-                    fila bajo el header) y el separador quedaría huérfano. */}
+                    fila bajo el header) y el separador quedaría suelto. */}
                 <div aria-hidden className="hidden h-5 w-px bg-[hsl(var(--foreground)/0.15)] md:block" />
                 <ControlContexto />
                 <CampanaNotificaciones />

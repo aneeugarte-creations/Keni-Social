@@ -29,7 +29,7 @@ import { RielInvestigacion } from "@/pages/noticias/RielInvestigacion";
  *     · ALGORITMOS (`Algoritmos`): inteligencia de plataforma + trends. La ruta
  *       vieja `/contenido/texto/algoritmos` redirige aquí.
  *   PROCESO
- *     · PIPELINE (núcleo): UN solo proceso en dos tramos. Aguas arriba, el riel INFORMATIVO de
+ *     · PIPELINE (núcleo): UN solo proceso en dos fases. Antes (en el flujo), la línea INFORMATIVA de
  *       ingesta (`RielInvestigacion`: la máquina descubre/agrupa/rankea sola; cada etapa con
  *       prompt es una BURBUJA clicable que lo edita in-place). En el control, la tira
  *       `PipelineEnVivo` recortada a Investigación (`soloProceso`) —Selección + Validación, con
@@ -101,7 +101,7 @@ export default function CockpitInvestigacion() {
       )}
 
       <Tabs value={seccion} onValueChange={cambiarSeccion}>
-        {/* Pestañas agrupadas por tramo del flujo: Entrada → Proceso → Salida. */}
+        {/* Pestañas agrupadas por fase del flujo: Entrada → Proceso → Salida. */}
         <TabsList className="h-auto flex-wrap gap-y-1">
           <span className="px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
             Entrada
@@ -131,13 +131,13 @@ export default function CockpitInvestigacion() {
           <Algoritmos />
         </TabsContent>
 
-        {/* PROCESO · PIPELINE (núcleo): UN proceso en dos tramos —aguas arriba (informativo) y
+        {/* PROCESO · PIPELINE (núcleo): UN proceso en dos fases —antes en el flujo (informativo) y
             control (Selección/Validación)— más el índice editable de prompts. */}
         <TabsContent value="pipeline" className="space-y-6">
-          {/* Tramo 1 · aguas arriba (automático, informativo). */}
+          {/* Fase 1 · antes en el flujo (automático, informativo). */}
           <RielInvestigacion />
 
-          {/* Tramo 2 · control (Selección + Validación), con switches y «Editar prompt». */}
+          {/* Fase 2 · control (Selección + Validación), con switches y «Editar prompt». */}
           <section className="space-y-2">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Control · tú decides

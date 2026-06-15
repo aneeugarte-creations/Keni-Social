@@ -5,7 +5,7 @@
  * WYSIWYG (EditorWysiwyg con chips de variables; la edición es libre: producción no
  * cambia hasta publicar), y panel lateral con pestañas:
  *   - Versiones (PanelVersiones: publicado ↔ tu borrador, diff ancho, traer/descartar),
- *   - Uso (dónde entra el doc: procesos, pipelines y su sitio en el riel de la máquina),
+ *   - Uso (dónde entra el doc: procesos, pipelines y su sitio en la línea de la máquina),
  *   - Compilado (solo prompts base de pipeline: el prompt ENSAMBLADO que verá el modelo),
  *   - Ficha (metadata: descripción, carpeta, clase, marcas, etiquetas, prioridad).
  */
@@ -56,7 +56,7 @@ export function DetalleDocumento({
   onIdCambiado,
 }: {
   docId: string;
-  /** Riel de la máquina (para situar el doc en la pestaña "Uso"). */
+  /** Línea de la máquina (para situar el doc en la pestaña "Uso"). */
   maquina?: RespuestaMaquinaTexto;
   onCerrar: () => void;
   /** El id puede cambiar al renombrar/mover: el contenedor actualiza la URL. */
@@ -87,8 +87,8 @@ export function DetalleDocumento({
   // Resolver del conflicto "sobrescribir con lo mío" (re-fetch del rev + reintento): deshabilita
   // los botones mientras corre para no disparar guardados en paralelo.
   const [resolviendoConflicto, setResolviendoConflicto] = React.useState(false);
-  // Anti auto-conflicto: NO lanzamos un autosave nuevo mientras hay uno en vuelo (mandaría un
-  // `rev` viejo y chocaríamos contra nosotros mismos). `guardandoRef` marca el vuelo; `pendienteRef`
+  // Anti auto-conflicto: NO lanzamos un autosave nuevo mientras hay uno en curso (mandaría un
+  // `rev` viejo y chocaríamos contra nosotros mismos). `guardandoRef` marca el guardado activo; `pendienteRef`
   // encola el último estado tecleado para guardarlo al volver. `borradorRef` espeja el borrador para
   // que la resolución del conflicto guarde SIEMPRE lo último tecleado.
   const guardandoRef = React.useRef(false);

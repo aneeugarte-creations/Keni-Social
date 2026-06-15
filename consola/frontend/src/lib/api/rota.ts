@@ -219,7 +219,7 @@ export const apiRota = {
 
   // --- Franjas POR SEMANA (modelo "Mundial") ---
   // CRUD de `rota_franjas` (N franjas por semana, solapes permitidos, soporte cruce de
-  // medianoche, franja Descanso explicita con `es_descanso=true`). GET siembra defaults
+  // medianoche, franja Descanso explicita con `es_descanso=true`). GET inicializa defaults
   // (Mañana/Tarde/Descanso) si la semana esta vacia. POST/PATCH/DELETE exigen admin.
   // GRID POR MARCA: `marca` (query) acota la rejilla; al crear, exige una marca concreta.
   listarFranjasSemana: (lunes: string, marca?: string, signal?: AbortSignal) =>

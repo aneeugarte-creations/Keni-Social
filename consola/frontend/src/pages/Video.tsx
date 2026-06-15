@@ -296,7 +296,7 @@ export default function Video() {
     [composicionId, actualizarMeta],
   );
 
-  // Indicador de guardado: "Guardando…" mientras hay alguna escritura en vuelo; "Guardado" tras crear.
+  // Indicador de guardado: "Guardando…" mientras hay alguna escritura en curso; "Guardado" tras crear.
   const guardando = crear.isPending || guardar.isPending || actualizarMeta.isPending;
 
   // Reabre una composición desde el gestor: navega a `?composicion=<id>` (el efecto la carga).

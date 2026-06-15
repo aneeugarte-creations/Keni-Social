@@ -22,7 +22,7 @@ export function EditorPromptOverlay({
     if (abierto) setIdActual(docId);
   }, [abierto, docId]);
 
-  // El riel de la máquina alimenta la pestaña «Uso» del editor. Misma queryKey que la página
+  // El flujo de la máquina alimenta la pestaña «Uso» del editor. Misma queryKey que la página
   // Texto: React Query dedupe (cero peticiones extra si ya está en caché).
   const maquinaQuery = useQuery({
     queryKey: ["texto-maquina"],

@@ -301,7 +301,7 @@ describe("Video", () => {
     vi.spyOn(apiMod.api.video, "composicion").mockResolvedValue({
       composicion: { id: "comp-7", documento: docConBase(), titulo: "T", estado: "borrador" },
     });
-    // PUT controlable: así se puede asertar el "Guardando…" mientras la escritura está en vuelo.
+    // PUT controlable: así se puede asertar el "Guardando…" mientras la escritura está en curso.
     let resolverPut: () => void = () => {};
     const put = vi
       .spyOn(apiMod.api.video, "guardarComposicion")
@@ -323,14 +323,14 @@ describe("Video", () => {
     const guardado = put.mock.calls[0][1] as ComposicionVideo;
     const clip = (guardado.pistas[0] as { clips: { recorte_out_ms?: number }[] }).clips[0];
     expect(clip.recorte_out_ms).toBe(15000);
-    // Feedback del autoguardado: "Guardando…" en vuelo y "Guardado" al asentar.
+    // Feedback del autoguardado: "Guardando…" en curso y "Guardado" al asentar.
     expect(screen.getByText("Guardando…")).toBeInTheDocument();
     await act(async () => resolverPut());
     expect(await screen.findByText(/^Guardado$/)).toBeInTheDocument();
   });
 
   it("lo editado MIENTRAS se creaba el borrador se guarda al terminar la creación (flush)", async () => {
-    // Creación controlable: el segundo cambio llega con el POST aún en vuelo.
+    // Creación controlable: el segundo cambio llega con el POST aún en curso.
     let resolverCrear: () => void = () => {};
     const crear = vi.spyOn(apiMod.api.video, "crearComposicion").mockImplementation(
       () => new Promise<{ id: string }>((res) => { resolverCrear = () => res({ id: "comp-nueva" }); }),
@@ -338,11 +338,11 @@ describe("Video", () => {
     const put = vi.spyOn(apiMod.api.video, "guardarComposicion").mockResolvedValue({} as never);
     renderVideo();
     irABase();
-    fireEvent.click(screen.getByRole("radio", { name: "1:1" })); // primer cambio → crea (en vuelo)
+    fireEvent.click(screen.getByRole("radio", { name: "1:1" })); // primer cambio → crea (en curso)
     await waitFor(() => expect(crear).toHaveBeenCalledTimes(1));
     await act(async () => {}); // deja propagar el isPending de la creación
     fireEvent.click(screen.getByRole("radio", { name: "16:9" })); // edición DURANTE la creación
-    expect(crear).toHaveBeenCalledTimes(1); // no re-crea: la creación sigue en vuelo
+    expect(crear).toHaveBeenCalledTimes(1); // no re-crea: la creación sigue en curso
     expect(put).not.toHaveBeenCalled(); // sin id todavía no hay dónde guardar
     await act(async () => resolverCrear());
     // Al llegar el id se FLUSHEA el doc vigente: el 16:9 no se pierde (antes quedaba solo local).

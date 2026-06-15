@@ -399,7 +399,7 @@ export function EstrategiaMarca({
     );
   }
 
-  // ── Carga (endpoint nuevo o fallback en vuelo). ──
+  // ── Carga (endpoint nuevo o fallback en curso). ──
   const cargando =
     estrategiaQuery.isPending || (usarFallback && docsQuery.isPending);
   if (cargando) {

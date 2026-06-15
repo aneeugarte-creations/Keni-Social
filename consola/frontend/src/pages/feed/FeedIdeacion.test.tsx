@@ -641,7 +641,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     expect(screen.queryByText("No generado")).not.toBeInTheDocument();
   });
 
-  it("mientras /opciones está en vuelo se ve skeleton, no placeholders falsos", async () => {
+  it("mientras /opciones está en curso se ve skeleton, no placeholders falsos", async () => {
     let feedServido = false;
     vi.stubGlobal(
       "fetch",

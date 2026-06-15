@@ -16,7 +16,7 @@ export const apiGeneraciones = {
     peticion<RespuestaGeneraciones>("/generaciones", { signal }),
   generacion: (id: string, signal?: AbortSignal) =>
     peticion<RespuestaGeneracion>(`/generaciones/${encodeURIComponent(id)}`, { signal }),
-  // Cancela un trabajo en vuelo (#137): el backend mata el árbol del subproceso `claude`
+  // Cancela un trabajo en curso (#137): el backend mata el árbol del subproceso `claude`
   // y devuelve el registro en su estado terminal (error/motivo=cancelado). Idempotente.
   cancelarGeneracion: (id: string) =>
     peticion<RespuestaGeneracion>(`/generaciones/${encodeURIComponent(id)}/cancelar`, {

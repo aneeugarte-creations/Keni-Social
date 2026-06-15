@@ -48,7 +48,7 @@ export function GraficaPorSerie({
 
   // Tab inicial = el primer eje de la respuesta. Si el tab elegido por el usuario ya no
   // existe en los datos (cambio de marca/rango), caemos al inicial SIN efecto: se deriva
-  // en render, evitando un estado huérfano que dejaría los tabs sin contenido.
+  // en render, evitando un estado suelto que dejaría los tabs sin contenido.
   const ejeInicial = React.useMemo(() => data?.series[0]?.eje ?? "", [data]);
   const [tab, setTab] = React.useState("");
   const tabValido = data?.series.some((s) => s.eje === tab) ? tab : ejeInicial;

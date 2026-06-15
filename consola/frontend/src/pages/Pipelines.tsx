@@ -393,7 +393,7 @@ function ContenidoEtapa({
   if (clave === "cd") {
     // Solo el bloque IA (prompt | razonamiento + resultado): el copy final por red ya se ve
     // en la SALIDA del bloque y, sobre todo, en el feed/aprobación (su sitio). Repetir aquí
-    // las tarjetas por red (X/Instagram/Facebook con placa) era ruido duplicado.
+    // las tarjetas por red (X/Instagram/Facebook con placa) era contenido duplicado e irrelevante.
     return <BloqueIA gen={generacion} plantilla={plantilla} />;
   }
   if (clave === "arte") {

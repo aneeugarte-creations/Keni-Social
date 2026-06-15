@@ -5,7 +5,7 @@ import type { Publicacion } from "@/types";
 /** Claves de React Query para publicaciones (raíz para invalidar en bloque). */
 export const CLAVE_PUBLICACIONES = ["publicaciones"] as const;
 
-/** Clave de la cadena de aprobación de UNA pieza (la siembra el batch del feed). */
+/** Clave de la cadena de aprobación de UNA pieza (la precarga el batch del feed). */
 export const claveCadenaAprobacion = (plataformaId: string) =>
   ["cadena-aprobacion", plataformaId] as const;
 

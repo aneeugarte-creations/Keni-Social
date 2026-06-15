@@ -3,7 +3,7 @@
  *
  * Es un LABEL del estado en la tubería ("Generando copy / Falta imagen / Para revisar /
  * Aprobada / Programada / Publicada"), con un punto de color por estado. NO usa spinner en
- * bucle: el feed enseña muchas piezas a la vez y un icono girando en cada una es ruido.
+ * bucle: el feed enseña muchas piezas a la vez y un icono girando en cada una distrae.
  *
  * LENGUAJE DE COLOR UNIFICADO con la Lista (`META_ESTADOS`): la misma pieza luce el MISMO
  * color en el Feed y en la Lista del hub — para-revisar=violeta, aprobada=azul,

@@ -227,7 +227,7 @@ export interface RotaSemana {
   /** Las 7 fechas ISO (lunes->domingo) de la semana. */
   dias: string[];
   turnos: TurnoRota[];
-  /** Franjas vivas de la semana (modelo "franjas por semana"). El backend siembra
+  /** Franjas vivas de la semana (modelo "franjas por semana"). El backend inicializa
    * por defecto Mañana/Tarde/Descanso si la semana esta vacia. */
   franjas: FranjaSemana[];
   /** `true` => todos los turnos aprobados (publicado al equipo). */
@@ -516,7 +516,7 @@ export interface CuerpoDuplicarEventoRota {
 //
 // Cada hoja EVERGREEN del Excel es un PROGRAMA ("Álvaro Fidalgo", "Real Oviedo",
 // "MUNDIAL"...). Se cataloga con color y fechas; las piezas referencian POR NOMBRE
-// (no por id) para que una pieza huérfana siga apareciendo con su texto. Renombrar
+// (no por id) para que una pieza suelta siga apareciendo con su texto. Renombrar
 // hace cascada sobre `rota_piezas.programa` (transaccional).
 
 /** Un programa/campaña del catálogo editorial. */

@@ -1,10 +1,10 @@
 /**
- * RielInvestigacion — el tramo AGUAS ARRIBA del proceso de Investigación, hecho visible.
+ * RielInvestigacion — la fase de ANTES (en el flujo) del proceso de Investigación, hecho visible.
  *
  * Es la mitad AUTOMÁTICA e INFORMATIVA del flujo: una tira horizontal de las cinco etapas que
  * la máquina corre sola (Ingesta · Fusión · Clasificación · Ranking · Verificación) con su
  * estado ON/OFF. NO es la tira de control (esa es «Pipeline en vivo», con switches por etapa);
- * aquí solo se LEE qué hace el motor y si está encendido. El nombre evita chocar con el «riel de
+ * aquí solo se LEE qué hace el motor y si está encendido. El nombre evita chocar con la «línea de
  * la máquina» de la Biblioteca (`pages/texto/RielMaquina`, que son etapas de PROMPT, no de
  * noticias): este es el riel de INGESTA de noticias.
  *
@@ -135,7 +135,7 @@ export function RielInvestigacion() {
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Aguas arriba · ingesta automática
         </h3>
-        {/* El estado del loop (jobs en curso/cola) cabe aquí, como indicador del tramo —no como
+        {/* El estado del loop (jobs en curso/cola) cabe aquí, como indicador de la fase —no como
             una «vista» aparte—; enlaza a Agentes prefiltrado. */}
         <ChipInvestigacion />
       </div>

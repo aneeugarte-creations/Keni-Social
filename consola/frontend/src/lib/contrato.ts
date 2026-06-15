@@ -43,7 +43,7 @@ export class ContratoDriftError extends Error {
 
 // AJV se construye perezosamente (la primera validación) y se memoiza. `strict:
 // false` evita que palabras clave del Draft-2020-12 que no afectan a la validación
-// (p. ej. `$comment`, `title`) emitan ruido; mantenemos la validación de datos.
+// (p. ej. `$comment`, `title`) emitan falsos positivos; mantenemos la validación de datos.
 let _ajv: Ajv2020 | null = null;
 const _cache = new Map<NombreContrato, ValidateFunction | null>();
 

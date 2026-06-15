@@ -106,7 +106,7 @@ export function PanelLanzarArte({
   const porImagen = costeQuery.data?.por_imagen ?? null;
   const costeGlobal = costeQuery.data?.global ?? false;
 
-  // ── Generaciones lanzadas: se siembran del POST y se refrescan sondeando el listado. ──
+  // ── Generaciones lanzadas: se inicializan del POST y se refrescan sondeando el listado. ──
   const [lanzadas, setLanzadas] = React.useState<Generacion[]>([]);
   const ids = React.useMemo(() => lanzadas.map((g) => g.id), [lanzadas]);
   const seguimiento = useQuery({
@@ -123,7 +123,7 @@ export function PanelLanzarArte({
       return pendiente ? INTERVALO_SONDEO_MS : false;
     },
   });
-  // Cada id: su instantánea del sondeo si llegó, si no la semilla del POST (estado «ejecutando»).
+  // Cada id: su instantánea del sondeo si llegó, si no el valor inicial del POST (estado «ejecutando»).
   const generaciones = React.useMemo(() => {
     const lista = seguimiento.data?.generaciones ?? [];
     return lanzadas.map((seed) => lista.find((g) => g.id === seed.id) ?? seed);

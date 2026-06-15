@@ -77,7 +77,7 @@ export interface ActividadAgregados {
 
 // --- Monitor de cola (`GET /api/actividad/cola` y `/cola/series`) ---
 
-/** Un job EN VUELO (pendiente o reclamado) enriquecido con su registro de generación. */
+/** Un job EN CURSO (pendiente o reclamado) enriquecido con su registro de generación. */
 /** Proceso de la máquina (ADR 0011): los dos loops que comparten la misma cola/pool. */
 export type Proceso = "investigacion" | "produccion";
 
@@ -138,7 +138,7 @@ export interface PresupuestoIA {
   dia: string;
 }
 
-/** Conteo del pool COMPARTIDO atribuible a un proceso (jobs en vuelo de ese loop). */
+/** Conteo del pool COMPARTIDO atribuible a un proceso (jobs en curso de ese loop). */
 export interface ConteoProceso {
   /** Jobs reclamados (claude -p corriendo) de este proceso. */
   procesando: number;
@@ -500,7 +500,7 @@ export interface RespuestaProbarS3 {
 
 // ── Daemons de fondo (GET /api/sistema/daemons) ──────────────────────────────
 // Latidos persistidos por cada daemon (tabla `daemon_latidos`): el bucle late en cada
-// vuelta (`visto`) y cada barrido deja resultado (`ultimo_ok`/`ultimo_error`). El back
+// iteración (`visto`) y cada barrido deja resultado (`ultimo_ok`/`ultimo_error`). El back
 // ya juzga el `estado` (umbral de atraso incluido); el front solo pinta.
 
 /** Estado agregado de un daemon, calculado por el back. */
@@ -520,9 +520,9 @@ export type MotorDaemon = "investigacion" | "produccion" | null;
 export interface LatidoDaemon {
   /** Nombre estable del daemon ("ingesta", "pipeline", "reaper"…). */
   daemon: string;
-  /** Última vuelta del bucle (ISO) — el hilo vive aunque el gate esté OFF. */
+  /** Última iteración del bucle (ISO) — el hilo vive aunque el gate esté OFF. */
   visto: string;
-  /** `true` si el gate del daemon estaba ON en la última vuelta. */
+  /** `true` si el gate del daemon estaba ON en la última iteración. */
   activo: boolean;
   /** Intervalo configurado entre barridos (segundos). */
   intervalo_seg: number;

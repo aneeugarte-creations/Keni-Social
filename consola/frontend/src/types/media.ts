@@ -70,7 +70,7 @@ export type TipoArte = "estudio" | "subida" | "ia" | "original";
 
 /**
  * Un ARTE: una imagen del almacén que el equipo CONSERVA para reutilizar en publicaciones.
- * Catalogarla la protege del GC de media huérfana y la hace seleccionable por marca.
+ * Catalogarla la protege del GC de media sin dueño y la hace seleccionable por marca.
  */
 export interface Arte {
   /** Id del item del catálogo (no del objeto de media). */

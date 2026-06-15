@@ -251,7 +251,7 @@ export default function MobileFeed() {
       ),
     getNextPageParam: (ultima) => ultima.paginacion?.cursor_siguiente ?? undefined,
     // La frescura llega por el botón Actualizar y las actualizaciones in-place tras cada
-    // reacción: sin refetch en cadena de N páginas en cada vuelta a la pestaña.
+    // reacción: sin refetch en cadena de N páginas en cada regreso a la pestaña.
     staleTime: 30_000,
     refetchOnWindowFocus: false,
   });

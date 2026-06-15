@@ -10,7 +10,7 @@
  *   2. El switch de cada etapa: su clave FÍSICA del catálogo (`KENI_PIPELINE_SELECCION`/
  *      `_VALIDACION`/`_COPY`/`_ARTE`), una clave por etapa, sin fan-out. Las claves
  *      VIRTUALES `KENI_INVESTIGACION`/`KENI_PRODUCCION` ya no se pintan aquí (siguen en el
- *      catálogo para las excepciones por marca, la API/MCP y el riel de Noticias).
+ *      catálogo para las excepciones por marca, la API/MCP y la línea de Noticias).
  *   3. Las excepciones por marca de cada etapa (diálogo del icono de la etapa): las claves
  *      por-marca existentes (`KENI_INVESTIGACION::m` —gobierna Selección y Validación a la
  *      vez—, `KENI_PRODUCCION::m`, `KENI_PIPELINE_ARTE::m`).

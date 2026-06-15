@@ -81,8 +81,8 @@ export function DialogoEditar({
   // --- Autoguardado --- //
   // La pieza se guarda SOLA al editar (debounced); no hay botón ni indicador de guardado.
   const cargandoRef = React.useRef(true); // true mientras se cargan los valores al abrir (no autoguarda)
-  const guardandoRef = React.useRef(false); // hay un guardado en vuelo
-  const pendienteRef = React.useRef(false); // hubo cambios durante el guardado en vuelo
+  const guardandoRef = React.useRef(false); // hay un guardado en curso
+  const pendienteRef = React.useRef(false); // hubo cambios durante el guardado en curso
   const [gestionHashtags, setGestionHashtags] = React.useState(false);
 
   // Catálogo de marcas para la gestión de grupos de hashtags.
@@ -301,7 +301,7 @@ export function DialogoEditar({
   // Solo se autoguarda cuando hay contenido (el copy del post). Sin título: ya no lo exige.
   const datosValidos = !!publicacion && contenido.trim().length > 0;
 
-  // Autoguardado: persiste sin cerrar; coalesciona los cambios ocurridos durante un guardado en vuelo.
+  // Autoguardado: persiste sin cerrar; coalesciona los cambios ocurridos durante un guardado en curso.
   const autoguardar = React.useCallback(async () => {
     if (!datosValidos) return;
     if (guardandoRef.current) {

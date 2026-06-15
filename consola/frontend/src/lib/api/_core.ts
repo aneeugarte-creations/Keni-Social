@@ -21,7 +21,7 @@ export const BASE_API = "/api";
 
 /**
  * Token de sesion de la Consola (#134). El backend lo inyecta en el index del SPA
- * como `window.__KENI_TOKEN__` y tambien lo siembra como cookie `keni_consola_token`
+ * como `window.__KENI_TOKEN__` y tambien lo guarda como cookie `keni_consola_token`
  * (SameSite=Strict). Lo mandamos por cabecera cuando esta disponible (defensa en
  * profundidad); la cookie cubre las descargas por `window.open` y las `<img src>`,
  * que no pueden mandar cabeceras. Si no hay token inyectado, se devuelve cadena vacia

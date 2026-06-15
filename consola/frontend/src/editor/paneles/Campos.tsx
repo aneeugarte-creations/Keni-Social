@@ -96,7 +96,7 @@ export function CamposSombra({ sombra, onChange }: { sombra: Sombra; onChange: (
 }
 
 // Control de esquinas de un rect: radio uniforme o independiente por esquina ([tl,tr,br,bl]).
-// Al activar "Esquinas independientes" siembra los 4 con el radio uniforme actual; al desactivar,
+// Al activar "Esquinas independientes" inicializa los 4 con el radio uniforme actual; al desactivar,
 // vuelve al radio uniforme (toma la esquina superior izquierda). `onChange` emite {radio} y/o {radios}.
 export function RadioEsquinas({
   radio,
@@ -184,7 +184,7 @@ export function CamposDegradado({ deg, onChange }: { deg: RellenoDegradado; onCh
           <Num valor={deg.angulo ?? 180} onChange={(v) => onChange({ ...deg, angulo: v })} />
         </Campo>
       )}
-      {/* Multi-stop AVANZADO: editor de paradas. Al activarlo se siembran desde/hasta como 2 paradas. */}
+      {/* Multi-stop AVANZADO: editor de paradas. Al activarlo se inicializan desde/hasta como 2 paradas. */}
       {stops ? (
         <div className="flex flex-col gap-1.5 rounded border border-border/60 p-1.5">
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">

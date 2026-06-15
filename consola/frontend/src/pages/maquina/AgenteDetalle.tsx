@@ -3,7 +3,7 @@
  *
  * El listado de Agentes (`/maquina/agentes`) muestra TODOS los daemons en tablas; esta página
  * abre UNO solo para verlo, analizarlo y controlarlo de cerca: su estado actual, su LOG por
- * barrido (cada vuelta del bucle con su duración/resultado/resumen), y los controles in-place
+ * barrido (cada iteración del bucle con su duración/resultado/resumen), y los controles in-place
  * que ya viven en el dashboard (encender/apagar vía su `clave_gate`, «Barrer ahora», y —para
  * los agentes de IA— editar su prompt sin salir de la página).
  *

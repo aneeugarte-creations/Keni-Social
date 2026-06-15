@@ -79,11 +79,11 @@ function FilaDaemon({
 }: {
   latido: LatidoDaemon;
   onBarrer: (daemon: string) => void;
-  /** Daemon cuya solicitud de barrido está en vuelo (deshabilita SOLO su botón). */
+  /** Daemon cuya solicitud de barrido está en curso (deshabilita SOLO su botón). */
   barriendo: string | null;
   /** Enciende/apaga el daemon IN-PLACE (POST /api/ajustes con su `clave_gate`). */
   onToggle: (clave: string, valor: boolean) => void;
-  /** Clave de ajuste cuyo guardado está en vuelo (deshabilita SOLO ese switch). */
+  /** Clave de ajuste cuyo guardado está en curso (deshabilita SOLO ese switch). */
   guardandoClave: string | null;
 }) {
   const navigate = useNavigate();

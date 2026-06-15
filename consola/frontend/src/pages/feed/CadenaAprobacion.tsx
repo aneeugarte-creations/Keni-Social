@@ -12,7 +12,7 @@
  * cadena (lo filtramos de los "humanos"), solo no se pinta como badge.
  *
  * SÍ se muestra, en cambio, el estado de la CRÍTICA IA (nivel automático AL FINAL, tras los dos
- * OK humanos): "En crítica IA…" mientras el crítico revisa, y un aviso si frenó la pieza. Es la
+ * OK humanos): "En crítica IA…" mientras el crítico revisa, y un aviso si rechazó la pieza. Es la
  * última red antes de programar; el equipo necesita verla (y su comentario, vía `sinResolver`).
  * Ambos niveles automáticos se EXCLUYEN del conteo de OK humanos.
  *
@@ -60,7 +60,7 @@ export function CadenaAprobacion({
   const ia = niveles.find(esCriticaIA);
   const humanosOk = humanos.length > 0 && humanos.every((n) => n.decision === "aprobado");
   const criticaEnCurso = !!ia && humanosOk && ia.decision === "pendiente";
-  const criticaFreno = !!ia && ia.decision === "rechazado";
+  const criticaRechazo = !!ia && ia.decision === "rechazado";
   // Dos dislikes (de dos personas) rechazan la pieza; la regla vive en `aprobacion.ts`
   // (fuente única, junto a `esDislikeDecisivo`).
   const umbralDislike = umbralDislikes(cadena);
@@ -105,7 +105,7 @@ export function CadenaAprobacion({
         </div>
       )}
 
-      {/* Crítica IA (última red antes de programar): en curso o frenó la pieza. El detalle del
+      {/* Crítica IA (última red antes de programar): en curso o rechazó la pieza. El detalle del
           problema llega como comentario sin resolver (línea de abajo). */}
       {criticaEnCurso && (
         <p className="mt-2 flex items-center gap-1.5 text-sm text-muted-foreground">
@@ -113,10 +113,10 @@ export function CadenaAprobacion({
           En crítica IA…
         </p>
       )}
-      {criticaFreno && (
+      {criticaRechazo && (
         <p className={`mt-2 flex items-center gap-1.5 text-sm font-medium ${TEXTO_AVISO}`}>
           <Bot className="h-3.5 w-3.5" aria-hidden="true" />
-          La crítica IA frenó esta pieza; revisa el comentario.
+          La crítica IA rechazó esta pieza; revisa el comentario.
         </p>
       )}
 

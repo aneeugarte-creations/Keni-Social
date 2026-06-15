@@ -525,7 +525,7 @@ function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
   const queryClient = useQueryClient();
   // Marca activa global: se estampa en el lote al aportar para que los ítems sin
   // marca reconocida por la IA hereden la marca del contexto (y el filtro por marca
-  // del cajón los encuentre, en vez de dejarlos "huérfanos" fuera de toda marca).
+  // del cajón los encuentre, en vez de dejarlos "sueltos" fuera de toda marca).
   const { marcaActiva } = useMarcaActiva();
   const [texto, setTexto] = React.useState("");
   const [archivo, setArchivo] = React.useState<File | null>(null);
@@ -541,7 +541,7 @@ function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
       form.set("fecha", fecha);
       // Marca del lote: la activa del switch global; en "Todas" (null, admin) cae a la
       // marca DUEÑA del cajón (cada buzón es de una marca), no a un lote sin marca cuyos
-      // ítems quedarían huérfanos del filtro por marca.
+      // ítems quedarían sueltos del filtro por marca.
       form.set("marca", marcaActiva ?? def.marca);
       if (texto.trim()) form.set("texto", texto.trim());
       if (archivo) form.set("archivo", archivo);
@@ -584,7 +584,7 @@ function TarjetaCajon({ def, datos, fecha }: PropsTarjetaCajon) {
   // Lotes con error para mostrar aviso
   const lotesError = lotes.filter((l) => l.estado === "error");
   // Lotes realmente en proceso: el worker aún corre Haiku y todavía no insertó ítems.
-  // Un lote `parseando` que YA tiene ítems es un ZOMBI (el worker murió entre el INSERT de
+  // Un lote `parseando` que YA tiene ítems está ATASCADO (el worker murió entre el INSERT de
   // los ítems y el UPDATE final del lote): el parseo SÍ produjo resultado, así que NO
   // mostramos "Procesando con Haiku…" por él (antes se quedaba atascado para siempre). El
   // reaper del back lo reconciliará a `listo`. Comparamos por `lote_id` de los ítems.
@@ -766,7 +766,7 @@ export default function CajonesDia() {
   // Datos del día seleccionado — filtrados por la marca activa (null = todas).
   // SONDEO: mientras haya lotes REALMENTE en proceso (parseando y SIN ítems aún), refrescamos
   // cada ~1.5 s para que los ítems aparezcan en cuanto el lote pase a "listo"/"error". Un lote
-  // `parseando` que ya tiene ítems es un ZOMBI (worker muerto a medias): no seguimos sondeando
+  // `parseando` que ya tiene ítems está ATASCADO (worker muerto a medias): no seguimos sondeando
   // por él indefinidamente (el reaper del back lo reconcilia). Misma lógica que `lotesParseando`.
   const insumosQuery = useQuery({
     queryKey: CLAVE_INSUMOS(fecha, ocultarCaducados, marcaActiva),

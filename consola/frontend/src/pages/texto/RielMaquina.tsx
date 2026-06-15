@@ -1,5 +1,5 @@
 /**
- * El RIEL de UNA máquina de la Biblioteca (`GET /api/texto/maquina`, ADR 0011):
+ * La LÍNEA de UNA máquina de la Biblioteca (`GET /api/texto/maquina`, ADR 0011):
  * las etapas en el ORDEN REAL del proceso, con conectores CSS puros y dos
  * tratamientos visuales claramente distintos:
  *   - etapa `prompt`  : tarjeta plena CLICABLE (título de etapa, nombre del doc,
@@ -114,13 +114,13 @@ export function RielMaquina({
   /** La máquina a pintar (`maquinas[i]` del endpoint), o `undefined` mientras carga. */
   maquina?: MaquinaTexto;
   cargando: boolean;
-  /** Título legible de un doc del riel (lookup en el listado); fallback: el id. */
+  /** Título legible de un doc de la línea (lookup en el listado); fallback: el id. */
   tituloDe: (docId: string) => string | undefined;
   onAbrir: (docId: string) => void;
   /** Solo Producción: salto a la pestaña «Estrategia de marca» bajo la etapa de copy. */
   onIrAEstrategia?: () => void;
 }) {
-  // Salud agregada y partición riel principal / anexo «Taller» (seccion === "taller").
+  // Salud agregada y partición línea principal / anexo «Taller» (seccion === "taller").
   const { principales, taller, conCambios } = React.useMemo(() => {
     const etapas = maquina?.etapas ?? [];
     return {
@@ -175,7 +175,7 @@ export function RielMaquina({
         )}
       </header>
 
-      {/* ───────── El riel principal ───────── */}
+      {/* ───────── La línea principal ───────── */}
       <ol className="mt-5" aria-label={`Etapas de ${maquina.titulo}`}>
         {principales.map((e, i) => (
           <li key={e.id} className={e.tipo === "mecanica" ? "text-center" : undefined}>

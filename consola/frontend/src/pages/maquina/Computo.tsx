@@ -118,7 +118,7 @@ export default function Computo() {
     mutationFn: () => api.colaPurgar(),
     onSuccess: (r) => {
       toast.success(
-        r.purgados > 0 ? `Cola liberada (${r.purgados} en vuelo).` : "La cola ya estaba libre.",
+        r.purgados > 0 ? `Cola liberada (${r.purgados} en curso).` : "La cola ya estaba libre.",
       );
       refrescar();
     },
@@ -183,7 +183,7 @@ export default function Computo() {
                   await confirmar({
                     titulo: "Liberar la cola",
                     mensaje:
-                      "¿Liberar la cola? Cancela todo lo que esté en vuelo (en curso + esperando) y libera la capacidad.",
+                      "¿Liberar la cola? Cancela todo lo que esté activo (en curso + esperando) y libera la capacidad.",
                     destructivo: true,
                     textoConfirmar: "Liberar",
                   })

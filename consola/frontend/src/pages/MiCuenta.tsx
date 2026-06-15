@@ -236,7 +236,7 @@ function SeccionMfa({ activo, debeInscribir }: { activo: boolean; debeInscribir:
 
   const registrar = useMutation({
     mutationFn: async () => {
-      // 1) Opciones (el backend siembra la cookie de challenge). 2) Ceremonia en el navegador.
+      // 1) Opciones (el backend establece la cookie de challenge). 2) Ceremonia en el navegador.
       // 3) El backend verifica y guarda la credencial.
       const optionsJSON = await api.mfaRegistroOpciones();
       const credential = await startRegistration({

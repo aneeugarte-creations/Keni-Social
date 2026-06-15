@@ -3,7 +3,7 @@
  * TRES MÁQUINAS del ADR 0011 + la Estrategia de marca.
  *
  * Pestañas principales (estado en la URL: `?vista=`, `?doc=`, `?filtro=`):
- *   - Investigación (default) · Producción · Importación: el riel de SU máquina
+ *   - Investigación (default) · Producción · Importación: la línea de SU máquina
  *     (GET /api/texto/maquina, riel GLOBAL), etapas `prompt` como tarjetas clicables y
  *     etapas `mecanica` como nodos fantasma; el evergreen aparte como anexo «Taller».
  *   - Estrategia de marca: el espacio editorial de la marca activa (EstrategiaMarca).
@@ -110,7 +110,7 @@ export default function Texto() {
 
   const [q, setQ] = React.useState("");
 
-  // ── Datos: listado de la marca (tabla, búsqueda y títulos del riel), el riel GLOBAL
+  // ── Datos: listado de la marca (tabla, búsqueda y títulos de la línea), la línea GLOBAL
   //    de las tres máquinas y las solicitudes pendientes (admins). ──
   const docsQuery = useQuery({
     queryKey: ["texto", "lista", marcaActiva],
@@ -138,7 +138,7 @@ export default function Texto() {
   const numSolicitudes = solicitudesQuery.data?.solicitudes.length ?? 0;
   const [bandejaAbierta, setBandejaAbierta] = React.useState(false);
 
-  // Título legible de los docs del riel (las tarjetas muestran el nombre del prompt).
+  // Título legible de los docs de la línea (las tarjetas muestran el nombre del prompt).
   const tituloPorId = React.useMemo(
     () => new Map(documentos.map((d) => [d.id, d.titulo])),
     [documentos],
@@ -187,7 +187,7 @@ export default function Texto() {
           value={q}
           onChange={(e) => {
             setQ(e.target.value);
-            // Buscar es gestionar: la búsqueda vive en Documentos, no en los rieles.
+            // Buscar es gestionar: la búsqueda vive en Documentos, no en las líneas.
             if (e.target.value && vista !== "documentos") irAVista("documentos");
           }}
           placeholder="Buscar documentos…"

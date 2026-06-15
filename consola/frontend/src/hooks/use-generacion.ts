@@ -220,7 +220,7 @@ export function useGeneracion(persistKey?: string) {
     iniciar,
     /** Olvida la generación actual (limpia la vista y el sessionStorage). */
     limpiar,
-    /** Cancela el trabajo en vuelo (mata el subproceso en el servidor). */
+    /** Cancela el trabajo en curso (mata el subproceso en el servidor). */
     cancelar,
   };
 }

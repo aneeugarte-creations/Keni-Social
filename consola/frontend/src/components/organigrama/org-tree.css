@@ -41,7 +41,7 @@
   padding-top: 0.5rem;
 }
 
-/* Guía vertical (tramo del codo). En los hijos NO últimos baja entera para enlazar con el
+/* Guía vertical (segmento del codo). En los hijos NO últimos baja entera para enlazar con el
  * siguiente hermano; en el último solo llega hasta el conector horizontal. */
 .org-v-children > .org-v-node::before {
   content: "";
@@ -57,7 +57,7 @@
   height: 2rem;
 }
 
-/* Tramo horizontal del codo hasta la tarjeta (a la altura del avatar). */
+/* Segmento horizontal del codo hasta la tarjeta (a la altura del avatar). */
 .org-v-children > .org-v-node::after {
   content: "";
   position: absolute;

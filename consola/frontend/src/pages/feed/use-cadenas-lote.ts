@@ -9,10 +9,10 @@
  *     y que AÚN no tienen nada en caché bajo `claveCadenaAprobacion(id)`.
  *  2. Esas ids "faltantes" se piden en UNA llamada (`GET /api/publicaciones/cadenas?ids=`)
  *     y el resultado se REPARTE con `setQueryData` a las claves individuales existentes.
- *  3. Mientras el lote está en vuelo, `pendiente(id)` devuelve true: `PostFeed` mantiene su
+ *  3. Mientras el lote está en curso, `pendiente(id)` devuelve true: `PostFeed` mantiene su
  *     query individual DESHABILITADA para esas ids (si no, cada tarjeta dispararía su GET
  *     en paralelo al lote y volveríamos al N+1). Al aterrizar el lote, las queries
- *     individuales encuentran datos frescos sembrados y no refetchean (staleTime).
+ *     individuales encuentran datos frescos precargados y no refetchean (staleTime).
  *
  * El backend SIEMPRE devuelve una entrada por id pedida (sin cadena => `sin_cadena`), así
  * que ninguna id se queda "faltante" para siempre. Si el lote FALLA, `pendiente` se apaga
@@ -43,7 +43,7 @@ export const CadenasLoteContexto = React.createContext<{
 } | null>(null);
 
 export function useCadenasLote(piezas: Publicacion[]): {
-  /** true mientras la cadena de esa pieza viene en el lote en vuelo (no dispares tu GET). */
+  /** true mientras la cadena de esa pieza viene en el lote en curso (no dispares tu GET). */
   pendiente: (id: string) => boolean;
 } {
   const queryClient = useQueryClient();
@@ -52,9 +52,9 @@ export function useCadenasLote(piezas: Publicacion[]): {
     () => [...new Set(piezas.filter(necesitaCadena).map((p) => p.id))],
     [piezas],
   );
-  // Solo las que aún no tienen caché individual: las ya sembradas (o refrescadas tras una
+  // Solo las que aún no tienen caché individual: las ya precargadas (o refrescadas tras una
   // reacción) no se vuelven a pedir en lote. Se recalcula en cada render; al aterrizar el
-  // lote (siembra + rerender) queda vacío y la query se deshabilita sola.
+  // lote (precarga + rerender) queda vacío y la query se deshabilita sola.
   const faltantes = elegibles.filter(
     (id) => queryClient.getQueryData(claveCadenaAprobacion(id)) === undefined,
   );
@@ -63,7 +63,7 @@ export function useCadenasLote(piezas: Publicacion[]): {
   const loteQuery = useQuery({
     queryKey: ["cadenas-aprobacion-lote", claveLote],
     enabled: faltantes.length > 0,
-    // El lote es un mecanismo de SIEMBRA, no una caché a mantener: una vez repartido,
+    // El lote es un mecanismo de PRECARGA, no una caché a mantener: una vez repartido,
     // la verdad vive en las claves individuales.
     staleTime: Infinity,
     gcTime: 0,
