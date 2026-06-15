@@ -11,6 +11,7 @@ import {
   localADoc,
   moverAsa,
   recortarCaja,
+  recortarCajaRotada,
   recorteLateral,
   vistaRecorte,
 } from "./recorte";
@@ -339,5 +340,30 @@ describe("recortarCaja (recorte de RECUADRO para objetos sin píxeles)", () => {
 
   it("'mover' desplaza el recuadro entero sin cambiar tamaño", () => {
     expect(recortarCaja(caja, "mover", 15, -5)).toEqual({ x: 115, y: 95, w: 200, h: 100 });
+  });
+});
+
+describe("recortarCajaRotada (recorte a lo largo de los ejes locales del objeto)", () => {
+  const caja = { x: 100, y: 100, w: 200, h: 20 }; // p. ej. una línea (rotada se ve vertical)
+
+  it("sin rotación es idéntico a recortarCaja", () => {
+    expect(recortarCajaRotada(caja, 0, "e", -50, 0)).toEqual(recortarCaja(caja, "e", -50, 0));
+    expect(recortarCajaRotada(caja, 0, "w", 30, 0)).toEqual(recortarCaja(caja, "w", 30, 0));
+  });
+
+  it("rotado 90°: arrastrar el borde local 'e' a lo largo del eje local acorta el largo", () => {
+    // A 90° el eje X local apunta hacia ABAJO en el documento. Arrastrar 30px hacia ARRIBA (dy=-30)
+    // recorta el extremo local 'e' (el de abajo): largo 200 -> 170, origen fijo.
+    const r = recortarCajaRotada(caja, 90, "e", 0, -30);
+    expect(r).toMatchObject({ x: 100, y: 100, w: 170, h: 20 });
+  });
+
+  it("rotado 90°: el borde local 'w' mueve el origen por el eje local (no por el del documento)", () => {
+    // Arrastrar 'w' 30px hacia abajo (dy=+30): el origen se desplaza por el eje local -> en documento
+    // baja en Y; el largo se acorta a 170.
+    const r = recortarCajaRotada(caja, 90, "w", 0, 30);
+    expect(r.w).toBe(170);
+    expect(r.x).toBeCloseTo(100, 6);
+    expect(r.y).toBeCloseTo(130, 6);
   });
 });

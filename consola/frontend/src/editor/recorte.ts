@@ -262,3 +262,23 @@ export function recortarCaja(c: CajaRecorte, asa: AsaRecorte, dx: number, dy: nu
   }
   return { x, y, w, h };
 }
+
+// Igual que `recortarCaja` pero para un objeto ROTADO `rot`° (su recuadro se recorta a lo largo de
+// SUS PROPIOS ejes, como en Canva): el delta del puntero (en px del documento) se proyecta a los ejes
+// LOCALES del objeto, se recorta el recuadro local (origen 0,0) y el nuevo origen se devuelve a coords
+// del documento. `x,y` es la esquina sup-izq local (= pivote de rotación de Konva). Con `rot` 0 es
+// `recortarCaja` directo.
+export function recortarCajaRotada(
+  c: CajaRecorte,
+  rot: number,
+  asa: AsaRecorte,
+  dx: number,
+  dy: number,
+  min = MIN_CAJA_PX,
+): CajaRecorte {
+  if (!rot) return recortarCaja(c, asa, dx, dy, min);
+  const dLocal = docALocal(0, 0, rot, dx, dy); // delta del puntero en los ejes locales del objeto
+  const local = recortarCaja({ x: 0, y: 0, w: c.w, h: c.h }, asa, dLocal.x, dLocal.y, min);
+  const origen = localADoc(c.x, c.y, rot, local.x, local.y); // nuevo origen local -> documento
+  return { x: origen.x, y: origen.y, w: local.w, h: local.h };
+}

@@ -315,16 +315,23 @@ export function EditorDocumento({
       setTool(null);
     }
   };
-  // RECORTAR (crop visual con tiradores): entra al modo recorte sobre la capa imagen seleccionada.
-  // Cierra los paneles (en móvil la hoja inferior tapaba el lienzo y el recorte no se veía).
+  // RECORTAR (crop visual con tiradores): entra al modo recorte sobre la capa seleccionada. La FOTO
+  // recorta píxeles; un objeto/forma/línea recorta su recuadro (admite rotación). Cierra los paneles
+  // (en móvil la hoja inferior tapaba el lienzo y el recorte no se veía).
   const abrirRecorte = () => {
     const sel = store.getState().seleccion;
-    if (sel) {
-      setRecorteId(sel);
-      setReencuadreId(null);
-      setAjustes(false);
-      setTool(null);
+    if (!sel) return;
+    const capa = store.getState().documento.capas.find((c) => c.id === sel);
+    // La FOTO se recorta a píxeles y su overlay no resuelve rotación (el objeto/forma SÍ). Avisar en
+    // vez de abrir un recorte descolocado o un no-op silencioso.
+    if (capa?.tipo === "imagen" && (((capa.rotacion || 0) % 360) + 360) % 360 !== 0) {
+      toast.info("Para recortar la foto, pon su rotación a 0 (el recorte de foto aún no rota).");
+      return;
     }
+    setRecorteId(sel);
+    setReencuadreId(null);
+    setAjustes(false);
+    setTool(null);
   };
   const abrirReemplazo = () => {
     const sel = store.getState().seleccion;

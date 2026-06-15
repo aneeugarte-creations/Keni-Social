@@ -31,11 +31,12 @@ export function useRecorte({
   const [recorteInternoId, setRecorteInternoId] = useState<string | null>(null);
   const recorteActivoId = recorteId ?? recorteInternoId;
   // Recortable = imagen (recorte de PÍXELES, `crop`) o cualquier otro objeto (recorte de CAJA, encoge
-  // su recuadro). Sin rotación en ambos (el overlay no resuelve ejes girados). El reencuadre manda si
-  // coinciden. El doble clic solo entra para imágenes (Lienzo); el botón "Recortar", para cualquiera.
+  // su recuadro). La IMAGEN exige rotación 0 (su overlay no resuelve ejes girados); el objeto SÍ admite
+  // rotación (recorta a lo largo de sus ejes locales, p. ej. una línea vertical = línea rotada 90°). El
+  // reencuadre manda si coinciden. El doble clic solo entra para imágenes; el botón, para cualquiera.
   const capaRecorte =
     !capaReencuadre && recorteActivoId
-      ? documento.capas.find((c) => c.id === recorteActivoId && sinRotacion(c)) ?? null
+      ? documento.capas.find((c) => c.id === recorteActivoId && (c.tipo !== "imagen" || sinRotacion(c))) ?? null
       : null;
 
   // SESIÓN de recorte: instantánea al ENTRAR en el modo, para que "Cancelar"/Esc restaure el estado

@@ -7,7 +7,7 @@
 import { type PointerEvent as PointerEventReact, useRef } from "react";
 
 import type { Capa } from "../documento";
-import { type AsaRecorte, type CajaRecorte, recortarCaja } from "../recorte";
+import { type AsaRecorte, type CajaRecorte, recortarCajaRotada } from "../recorte";
 import type { StoreEditor } from "../store";
 
 export function RecorteCajaOverlay({
@@ -47,7 +47,9 @@ export function RecorteCajaOverlay({
     if (!d) return;
     const dx = (e.clientX - d.px) / escala;
     const dy = (e.clientY - d.py) / escala;
-    store.getState().actualizar(capa.id, recortarCaja(d.caja, d.asa, dx, dy) as Partial<Capa>, false);
+    // Recorta a lo largo de los ejes LOCALES del objeto (soporta rotación, p. ej. línea vertical).
+    const caja = recortarCajaRotada(d.caja, capa.rotacion || 0, d.asa, dx, dy);
+    store.getState().actualizar(capa.id, caja as Partial<Capa>, false);
   };
   const onUp = () => {
     drag.current = null;
@@ -75,7 +77,15 @@ export function RecorteCajaOverlay({
       role="group"
       aria-label="Recortar objeto"
       className="pointer-events-none absolute"
-      style={{ left: capa.x * escala, top: capa.y * escala, width: W, height: H }}
+      style={{
+        left: capa.x * escala,
+        top: capa.y * escala,
+        width: W,
+        height: H,
+        // Misma rotación y pivote que Konva (esquina sup-izq) para que el overlay calce con el objeto.
+        transform: capa.rotacion ? `rotate(${capa.rotacion}deg)` : undefined,
+        transformOrigin: "0 0",
+      }}
     >
       {/* Oscurecido de TODO lo de fuera del recuadro (sombra gigante) + contorno del recuadro. */}
       <div
