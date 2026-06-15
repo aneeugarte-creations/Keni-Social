@@ -1,6 +1,6 @@
 """Persistencia — publicaciones y solicitudes de la Biblioteca de Texto (ver barrel `db.py`).
 
-Modelo de PUBLICACION de la Biblioteca (rediseno "version publicada"):
+Modelo de PUBLICACION de la Biblioteca:
 
   - `texto_publicaciones`: cada fila es un acto de PUBLICAR un documento (`doc_id` de
     libtexto) fijando un `sha` git inmutable. La fila MAS RECIENTE por doc_id es el puntero
@@ -138,7 +138,7 @@ def crear_texto_solicitud(
 ) -> dict[str, Any]:
     """Crea una solicitud ABIERTA para `doc_id`, SUSTITUYENDO la abierta anterior si la hay.
 
-    Decision de diseno (contrato del rediseno): una nueva solicitud sobre el mismo doc
+    Decision de diseno: una nueva solicitud sobre el mismo doc
     reemplaza a la abierta (la ultima propuesta del equipo es la que cuenta); las ya
     resueltas (aprobada/rechazada) se conservan como historial.
     """

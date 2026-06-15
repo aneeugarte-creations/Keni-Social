@@ -1,7 +1,7 @@
 """Modelo de PUBLICACION de la Biblioteca: versiones inmutables + puntero "produccion".
 
-Rediseno de la Biblioteca de Prompts: EDITAR es libre (working copy + commits git, como
-siempre), pero los PIPELINES inyectan SIEMPRE la version PUBLICADA de cada documento (un
+EDITAR es libre (working copy + commits git), pero los PIPELINES inyectan SIEMPRE la
+version PUBLICADA de cada documento (un
 sha git fijado por un admin). Publicar = mover el puntero (tabla `texto_publicaciones`,
 solo admin; los editores proponen via `texto_solicitudes`). Sin puntero para un doc, el
 fallback es la working copy: la migracion es suave y nada se rompe.

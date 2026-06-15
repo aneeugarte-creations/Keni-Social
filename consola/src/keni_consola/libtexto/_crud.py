@@ -211,9 +211,9 @@ def guardar(
     Solo se aplican los campos pasados (no-None).
 
     `rev_base` (concurrencia optimista): si se pasa, es el `rev_documento` que el cliente
-    cargo; si el working copy cambio debajo (otro editor guardo antes), se lanza
-    `ConflictoEdicion` (la API -> 409) y NO se escribe. `None` (autosave legado / sin rev)
-    desactiva el chequeo: last-write-wins, como antes.
+    cargo; si el working copy cambio debajo (otro editor guardo entretanto), se lanza
+    `ConflictoEdicion` (la API -> 409) y NO se escribe. `None` (sin rev) desactiva el
+    chequeo: last-write-wins.
     """
     actual = obtener(doc_id)
     if actual is None:
@@ -245,18 +245,16 @@ def guardar(
         rol=nuevo_rol, prioridad=nueva_prioridad,
     )
 
-    # VERSIONADO INTENCIONADO (rediseño "commit como GitHub"): GUARDAR es un AUTOSAVE de
-    # BORRADOR y NO crea versión. Antes cada autosave (debounce 600ms) commiteaba "editar X",
-    # generando decenas de commits basura por edición; el HEAD git ya no se mueve al teclear.
-    # Una VERSIÓN solo nace al PUBLICAR/SOLICITAR (commit intencional con la nota del usuario,
-    # ver `_versiones.fijar_version`). El cálculo de `sin_publicar` pasa a ser por CONTENIDO
-    # (working copy vs cuerpo publicado), no por divergencia de HEAD (ver `_publicacion`).
+    # GUARDAR es un AUTOSAVE de BORRADOR y NO crea versión: escribe el working copy de forma
+    # atómica. Una VERSIÓN solo nace al PUBLICAR/SOLICITAR (commit intencional con la nota del
+    # usuario, ver `_versiones.fijar_version`). El cálculo de `sin_publicar` es por CONTENIDO
+    # (working copy vs cuerpo publicado, ver `_publicacion`).
     #
-    # DECISIÓN sobre el RENAME: el MOVER (cambio de título/carpeta) SÍ deja UN commit de
-    # movimiento. Es barato (uno por rename, no por tecla) y conserva el rastro del fichero a
-    # través del renombrado para `git --follow`, de modo que las versiones publicadas con un
-    # sha anterior al rename siguen siendo legibles. El contenido de un rename no es "una
-    # versión publicable": solo es el efecto colateral de mover el `.md` en git.
+    # El MOVER (cambio de título/carpeta) SÍ deja UN commit de movimiento. Es barato (uno por
+    # rename, no por tecla) y conserva el rastro del fichero a través del renombrado para
+    # `git --follow`, de modo que las versiones publicadas con un sha anterior al rename siguen
+    # siendo legibles. El contenido de un rename no es "una versión publicable": solo es el
+    # efecto colateral de mover el `.md` en git.
     # (Concurrencia optimista: el chequeo de `rev_base` esta arriba, antes de tocar disco.)
     cambia_titulo = titulo is not None and _slug(nuevo_titulo) != actual.id.split("/")[-1]
     cambia_carpeta = carpeta is not None and "/".join(partes_carpeta) != actual.carpeta

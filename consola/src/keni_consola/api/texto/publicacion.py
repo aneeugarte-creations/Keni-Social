@@ -1,7 +1,7 @@
 """Versionado (git) y PUBLICACIÓN inmutable + solicitudes.
 
 Historial/versión/revertir (lectura del historial git del doc) y el modelo de publicación
-del rediseño de la Biblioteca: EDITAR es libre (working copy + commits git); los pipelines
+de la Biblioteca: EDITAR es libre (working copy + commits git); los pipelines
 inyectan SIEMPRE la versión PUBLICADA (sha git fijado). Publicar = mover el puntero
 "producción" (solo ADMIN). Un editor PROPONE publicar vía una SOLICITUD que el admin aprueba
 (publica) o rechaza. Sin puntero, fallback a working copy (migración suave).
@@ -42,8 +42,8 @@ async def version(request: Request) -> Response:
 async def revertir(request: Request) -> Response:
     """`POST /api/texto/{doc_id}/revertir/{sha}` -> "Traer al borrador" -> `{documento}`.
 
-    Rediseño del versionado intencionado: NO crea un commit ni publica; CARGA el contenido de
-    esa versión en el working copy (borrador). El usuario decide después si lo publica.
+    NO crea un commit ni publica; CARGA el contenido de esa versión en el working copy
+    (borrador). El usuario decide después si lo publica.
     """
     try:
         doc = libtexto.restaurar_version(
@@ -94,8 +94,8 @@ def _resolver_sha(doc_id: str, datos: dict) -> tuple[str | None, Response | None
       - `(None, None)`  : el body NO trajo sha -> el llamante debe COMITEAR el borrador como
                           versión nueva (commit intencionado con la nota, ver `fijar_version`).
 
-    Rediseño del versionado intencionado: el autosave ya NO commitea, así que el caso normal
-    de "Publicar" es comitear el working copy ahora (no fijar un HEAD preexistente).
+    El autosave no commitea, así que el caso normal de "Publicar" es comitear el working copy
+    ahora (no fijar un HEAD preexistente).
     """
     sha = datos.get("sha")
     if sha is None:

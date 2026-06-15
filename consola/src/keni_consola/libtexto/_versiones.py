@@ -1,13 +1,13 @@
-"""Versionado INTENCIONADO de un documento (rediseño "commit como GitHub").
+"""Versionado INTENCIONADO de un documento: el commit es una decisión editorial.
 
 Una VERSIÓN nace solo al PUBLICAR/SOLICITAR (`fijar_version`), no en cada autosave. Por eso:
 
   - `historial` devuelve el HISTORIAL DE PUBLICACIONES (tabla `texto_publicaciones`), no el
-    `git log` crudo (que ahora solo tiene "crear"/"mover" + los commits de publicación). Es
-    lo que ve el usuario como "versiones".
-  - `version` lee el `.md` completo de un sha git (sigue siendo git por debajo).
+    `git log` crudo (que solo tiene "crear"/"mover" + los commits de publicación). Es lo que
+    ve el usuario como "versiones".
+  - `version` lee el `.md` completo de un sha git (es git por debajo).
   - `restaurar_version` ("Traer al borrador") CARGA el contenido de una versión en el working
-    copy SIN commitear ni publicar (antes creaba un commit "revertir X").
+    copy SIN commitear ni publicar.
   - `descartar_borrador` resetea el working copy al contenido PUBLICADO (puntero de
     producción) SIN commitear.
   - `fijar_version` comitea el working copy como versión inmutable y devuelve su sha (es el
@@ -53,7 +53,7 @@ def historial(doc_id: str, *, limite: int = 50) -> list[dict[str, str]]:
     frontend lo sintetiza aparte. Si el doc no tiene publicaciones -> lista vacía.
 
     BEST-EFFORT (como el resto del modelo de publicación): si Postgres no está disponible,
-    cae a lista vacía (NO al `git log`, que tras el rediseño es ruido de "crear"/"mover").
+    cae a lista vacía (NO al `git log`, que es ruido de "crear"/"mover").
     """
     if obtener(doc_id) is None:
         raise TextoError("Ese documento no existe.")
@@ -135,10 +135,10 @@ def _escribir_desde_texto(doc_id: str, texto: str) -> Documento:
 def restaurar_version(doc_id: str, sha: str, *, autor: dict[str, str] | None = None) -> Documento:
     """"Traer al borrador": CARGA el contenido de la versión `sha` en el working copy.
 
-    NO commitea ni publica (antes creaba un commit "revertir X"): el contenido entra al
-    BORRADOR; el usuario decide después si lo publica. El id/carpeta se conservan. Lanza si
-    la versión o el documento no existen. `autor` se acepta por compatibilidad de firma con la
-    API (ya no se usa: no hay commit que atribuir).
+    NO commitea ni publica: el contenido entra al BORRADOR; el usuario decide después si lo
+    publica. El id/carpeta se conservan. Lanza si la versión o el documento no existen.
+    `autor` se acepta por compatibilidad de firma con la API (no se usa: no hay commit que
+    atribuir).
     """
     texto = versionado.version(doc_id, sha)
     if texto is None:
@@ -164,10 +164,10 @@ def descartar_borrador(doc_id: str) -> Documento:
 def fijar_version(doc_id: str, *, nota: str = "", autor: dict[str, str] | None = None) -> str | None:
     """Comitea el working copy como una VERSIÓN inmutable y devuelve su sha (o None).
 
-    Es el COMMIT INTENCIONAL del rediseño: lo disparan PUBLICAR y SOLICITAR. La `nota` del
-    usuario es el MENSAJE del commit (deja de ser solo metadato de Postgres). Si el working
-    copy no cambió respecto al último commit (p. ej. publicar justo tras crear), git no crea
-    commit nuevo y se devuelve el sha vigente: igualmente válido para fijar el puntero.
+    Es el COMMIT INTENCIONAL: lo disparan PUBLICAR y SOLICITAR. La `nota` del usuario es el
+    MENSAJE del commit. Si el working copy no cambió respecto al último commit (p. ej. publicar
+    justo tras crear), git no crea commit nuevo y se devuelve el sha vigente: igualmente válido
+    para fijar el puntero.
 
     Best-effort git (como todo `versionado`): devuelve None si el versionado está apagado o
     no hay repo/commits, y el llamante traduce eso a un 400 accionable. Lanza si el documento
