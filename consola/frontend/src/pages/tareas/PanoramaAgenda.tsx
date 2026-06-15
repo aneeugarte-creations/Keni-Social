@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Hand, Plus, Trophy, Zap } from "lucide-react";
+import { ChevronDown, ChevronRight, Hand, Plus, Zap } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -20,6 +20,7 @@ import type { CatalogosContenido, Contenido, EventoRota, PrioridadEvento } from 
 import { AvatarPersona } from "./AvatarPersona";
 import { CLAVE_TAREAS } from "./claves";
 import { DialogoAnadirPersona } from "./dialogos";
+import { IconoEvento } from "./icono-evento";
 import { etiquetaRol } from "./roles";
 import {
   RolesCubiertos,
@@ -357,7 +358,9 @@ function FilaAgenda({
         </span>
         {/* Semáforo a la IZQUIERDA, antes del título: luz de estado al inicio de la fila. */}
         {cob && <SemaforoCobertura fecha={cob.orden} hora={cob.hora} compacto />}
-        {esCobertura && <Trophy className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+        {esCobertura && (
+          <IconoEvento titulo={titulo} className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        )}
         <span className="flex-1 truncate text-sm font-medium">{titulo}</span>
         {tarea?.estado === "en_curso" && (
           <Badge variant="outline" className="border-sky-500/40 text-sky-700 dark:text-sky-300">

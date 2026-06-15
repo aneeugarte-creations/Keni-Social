@@ -8,7 +8,6 @@ import {
   Hand,
   Play,
   Trash2,
-  Trophy,
   UserCheck,
   UserMinus,
   UserPlus,
@@ -40,6 +39,7 @@ import type {
 import { AvatarPersona } from "./AvatarPersona";
 import { CLAVE_TAREAS } from "./claves";
 import { DialogoAsignar } from "./dialogos";
+import { IconoEvento } from "./icono-evento";
 import { PLANTILLA_DEFECTO, type PlantillaGuion } from "./guion";
 import { etiquetaRol, type RolCobertura, ROLES_COBERTURA, rolesCubiertos } from "./roles";
 import type { Cobertura } from "./tipos";
@@ -346,7 +346,7 @@ export function TarjetaEventoLibre({
       className="rounded-lg border border-dashed border-border bg-card p-3 shadow-sm"
     >
       <div className="flex flex-wrap items-center gap-2">
-        <Trophy className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <IconoEvento titulo={evento.titulo} className="h-4 w-4 shrink-0 text-muted-foreground" />
         <span className="font-medium">{evento.titulo}</span>
         <Badge variant="outline" className="border-dashed text-muted-foreground">
           Por cubrir
@@ -533,7 +533,9 @@ export function TarjetaTarea({
           </>
         ) : (
           <>
-            {esCobertura && <Trophy className="h-4 w-4 shrink-0 text-muted-foreground" />}
+            {esCobertura && (
+              <IconoEvento titulo={tarea.titulo} className="h-4 w-4 shrink-0 text-muted-foreground" />
+            )}
             <span className="font-medium">{tarea.titulo}</span>
             {/* Rol de la cobertura: en un recuperable («Por cubrir») deja claro qué rol resurge. */}
             {esCobertura && (
