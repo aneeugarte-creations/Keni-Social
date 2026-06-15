@@ -13,7 +13,7 @@
  * SIN publicar).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Check, Eye, Rocket, RotateCcw } from "lucide-react";
+import { ArrowRight, Check, Eye, FileText, Rocket, RotateCcw } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -21,7 +21,6 @@ import { DiffProsa } from "@/components/biblioteca/DiffProsa";
 import { LectorProsa } from "@/components/biblioteca/LectorProsa";
 import { confirmar } from "@/components/comunes/confirmar";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
-import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -71,7 +70,8 @@ export function PanelVersiones({
     [histQuery.data],
   );
 
-  // ── Versión publicada a comparar con el borrador. Por defecto: la que está EN VIVO. ──
+  // ── Versión publicada elegida en el selector del sidebar (lado izquierdo del diff).
+  //    Por defecto: la que está EN VIVO. Es solo la preferencia del selector. ──
   const [comparaSha, setComparaSha] = React.useState<string | null>(null);
   React.useEffect(() => {
     const hay = (sha?: string | null) => !!sha && historial.some((v) => v.sha === sha);
@@ -80,16 +80,19 @@ export function PanelVersiones({
     );
   }, [historial, produccionSha]);
 
-  // ── Diff «Revisar cambios» en diálogo ancho: versión elegida ↔ tu borrador. ──
+  // ── Diff «Revisar cambios» en diálogo ancho: versión elegida ↔ tu borrador.
+  //    `diffSha` es el sha que se está mostrando AHORA en el diálogo: vive aparte de
+  //    `comparaSha` para que abrir el diff de una fila no cambie el selector del sidebar. ──
   const [diffAbierto, setDiffAbierto] = React.useState(false);
+  const [diffSha, setDiffSha] = React.useState<string | null>(null);
   const [soloCambios, setSoloCambios] = React.useState(true);
   const comparaQuery = useQuery({
-    queryKey: ["texto-version", docId, comparaSha],
-    queryFn: ({ signal }) => api.versionTexto(docId, comparaSha as string, signal),
-    enabled: !!comparaSha,
+    queryKey: ["texto-version", docId, diffSha],
+    queryFn: ({ signal }) => api.versionTexto(docId, diffSha as string, signal),
+    enabled: !!diffSha,
   });
   const abrirDiff = (sha: string | null) => {
-    setComparaSha(sha);
+    setDiffSha(sha);
     setSoloCambios(true);
     setDiffAbierto(true);
   };
@@ -118,7 +121,7 @@ export function PanelVersiones({
     const ok = await confirmar({
       titulo: "Traer al borrador",
       mensaje:
-        "Cargaremos esta versión en tu borrador. No se publica: revísala y publica cuando quieras.",
+        "Cargaremos esta versión en tu borrador y se sobrescribirá tu borrador actual sin publicar. No se publica: revísala y publica cuando quieras.",
       textoConfirmar: "Traer al borrador",
     });
     if (ok) traerMut.mutate(sha);
@@ -155,10 +158,10 @@ export function PanelVersiones({
     );
   }
 
-  const antesDiff = comparaSha ? comparaQuery.data?.documento.cuerpo ?? "" : "";
-  const etiquetaDiff = !comparaSha
+  const antesDiff = diffSha ? comparaQuery.data?.documento.cuerpo ?? "" : "";
+  const etiquetaDiff = !diffSha
     ? "Todo es nuevo: aún no hay nada publicado."
-    : comparaSha === produccionSha
+    : diffSha === produccionSha
       ? "Cambios desde lo publicado hasta tu borrador"
       : "Cambios desde esta versión hasta tu borrador";
 
@@ -184,10 +187,14 @@ export function PanelVersiones({
         </div>
       ) : null}
 
-      {/* ───────── Comparador (siempre frente a tu borrador) ───────── */}
+      {/* ───────── Comparador: dirección fija «tu borrador ↔ versión elegida» ─────────
+          La comparación SIEMPRE enfrenta tu borrador (lado derecho) contra una versión
+          publicada (lado izquierdo, este selector). No se ofrece comparar dos versiones
+          publicadas entre sí: el lado derecho está clavado al borrador en edición y el
+          90% de los casos es «¿qué he cambiado respecto a lo publicado?». */}
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <label className="flex items-center gap-1.5 text-muted-foreground">
-          Comparar con
+          Comparar <span className="font-medium text-foreground">tu borrador</span> con:
           <select
             value={comparaSha ?? ""}
             onChange={(e) => setComparaSha(e.target.value || null)}
@@ -206,6 +213,8 @@ export function PanelVersiones({
           variant="outline"
           size="sm"
           className="ml-auto"
+          disabled={!sinPublicar}
+          title={!sinPublicar ? "No hay cambios sin publicar" : undefined}
           onClick={() => abrirDiff(comparaSha)}
         >
           <Eye className="mr-1 h-3.5 w-3.5" /> Ver qué cambió
@@ -245,27 +254,18 @@ export function PanelVersiones({
             </div>
           </li>
 
-          {/* Publicaciones (historial). */}
+          {/* Publicaciones (historial). Las acciones por fila son botones VISIBLES
+              («Abrir versión», «Restaurar»); el cuerpo de la fila abre el diff. */}
           {historial.map((v) => {
             const esEnVivo = !!produccionSha && v.sha === produccionSha;
-            const acciones: EntradaMenuContextual[] = [
-              { etiqueta: "Ver", icono: Eye, onClick: () => setVerSha(v.sha) },
-              {
-                etiqueta: "Traer al borrador",
-                icono: RotateCcw,
-                onClick: () => void onTraer(v.sha),
-                deshabilitado: traerMut.isPending,
-              },
-            ];
             return (
               <FilaConAcciones
                 key={v.sha}
                 como="li"
-                kebab="hover"
                 realce
-                className="flex items-start gap-2 py-2 pl-3 pr-9"
+                className="flex items-start gap-2 py-2 pl-3 pr-3"
                 onPrimaria={() => abrirDiff(v.sha)}
-                acciones={acciones}
+                acciones={[]}
               >
                 <span className="mt-1 block h-2 w-2 shrink-0 rounded-full bg-border" aria-hidden />
                 <div className="min-w-0 flex-1">
@@ -285,6 +285,25 @@ export function PanelVersiones({
                       {tiempoRelativo(v.fecha) || v.fecha.slice(0, 16).replace("T", " ")}
                     </span>
                   </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setVerSha(v.sha)}
+                  >
+                    <FileText className="mr-1 h-3.5 w-3.5" /> Abrir versión
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    disabled={traerMut.isPending}
+                    onClick={() => void onTraer(v.sha)}
+                  >
+                    <RotateCcw className="mr-1 h-3.5 w-3.5" /> Restaurar
+                  </Button>
                 </div>
               </FilaConAcciones>
             );
@@ -326,7 +345,7 @@ export function PanelVersiones({
         <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col gap-3 overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Eye className="h-4 w-4" /> {verVersion?.mensaje || "Versión publicada"}
+              <FileText className="h-4 w-4" /> {verVersion?.mensaje || "Versión publicada"}
             </DialogTitle>
           </DialogHeader>
           <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border p-4">

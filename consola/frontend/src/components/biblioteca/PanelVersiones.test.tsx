@@ -1,8 +1,8 @@
 /**
- * PanelVersiones (rediseño para redes NO técnicas): comparación por defecto
- * «Publicado ↔ Tu borrador», fila sintética del borrador, lista de PUBLICACIONES por su
- * nota (sin SHA), la que está EN VIVO marcada, diff ancho «Revisar cambios» y acción
- * «Descartar cambios».
+ * PanelVersiones para un equipo de redes NO técnico: comparación «Tu borrador ↔ versión
+ * elegida», fila sintética del borrador, lista de PUBLICACIONES por su nota (sin SHA), la
+ * que está EN VIVO marcada, diff ancho «Revisar cambios», acciones VISIBLES por fila
+ * («Abrir versión», «Restaurar») y «Descartar cambios».
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -53,6 +53,8 @@ function stubFetch() {
       if (path.endsWith("/historial")) return json({ historial: HISTORIAL });
       if (path.endsWith("/descartar"))
         return json({ documento: { id: "doc", cuerpo: "Publicado" } });
+      if (path.includes("/revertir/"))
+        return json({ documento: { id: "doc", cuerpo: "Texto publicado." } });
       if (path.includes("/version/"))
         return json({ documento: { id: "doc", cuerpo: "Texto publicado." } });
       return json({ error: `sin stub: ${metodo} ${path}` }, 404);
@@ -126,5 +128,54 @@ describe("PanelVersiones", () => {
       expect(llamadas.some((l) => l.metodo === "POST" && l.path.endsWith("/descartar"))).toBe(true),
     );
     await waitFor(() => expect(onBorradorActualizado).toHaveBeenCalled());
+  });
+
+  it("«Abrir versión» (botón visible) abre el lector renderizado de esa versión", async () => {
+    stubFetch();
+    montar();
+    await screen.findByText("Tono más directo en titulares");
+    // Nombre exacto: la fila también es role=button, pero su nombre es el texto completo.
+    const botones = screen.getAllByRole("button", { name: "Abrir versión" });
+    expect(botones.length).toBe(HISTORIAL.length);
+    fireEvent.click(botones[0]);
+    expect(await screen.findByText("Texto publicado.")).toBeInTheDocument();
+  });
+
+  it("«Restaurar» (botón visible) trae la versión al borrador y avisa al contenedor", async () => {
+    const llamadas = stubFetch();
+    const { onBorradorActualizado } = montar();
+    await screen.findByText("Tono más directo en titulares");
+    const botones = screen.getAllByRole("button", { name: "Restaurar" });
+    expect(botones.length).toBe(HISTORIAL.length);
+    fireEvent.click(botones[0]);
+    await waitFor(() =>
+      expect(llamadas.some((l) => l.metodo === "POST" && l.path.includes("/revertir/"))).toBe(true),
+    );
+    await waitFor(() => expect(onBorradorActualizado).toHaveBeenCalled());
+  });
+
+  it("abrir el diff de una fila NO cambia el selector «Comparar con»", async () => {
+    stubFetch();
+    montar();
+    await screen.findAllByText("Primera versión de la voz");
+    const selector = screen.getByLabelText(
+      "Versión publicada a comparar con tu borrador",
+    ) as HTMLSelectElement;
+    // Por defecto el selector apunta a lo publicado (en vivo).
+    expect(selector.value).toBe("aaa111");
+    // Clic en el cuerpo de la 2ª publicación (su autor es único en esa fila).
+    fireEvent.click(screen.getByText("luis"));
+    expect(await screen.findByText("Revisar cambios")).toBeInTheDocument();
+    // El diff muestra ESA versión, no la del selector…
+    expect(screen.getByText(/Cambios desde esta versión/)).toBeInTheDocument();
+    // …y el selector del sidebar sigue intacto.
+    expect(selector.value).toBe("aaa111");
+  });
+
+  it("«Ver qué cambió» se deshabilita cuando no hay cambios sin publicar", async () => {
+    stubFetch();
+    montar({ sinPublicar: false });
+    const boton = await screen.findByRole("button", { name: /Ver qué cambió/ });
+    expect(boton).toBeDisabled();
   });
 });
