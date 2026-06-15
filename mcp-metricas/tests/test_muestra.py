@@ -145,7 +145,7 @@ def test_mejores_piezas_baten_media_de_su_plataforma(fuente: FuenteMuestra):
 
 # --- T9: el factor de engagement por marca cae donde toca ------------------
 def test_engagement_claro_sports_en_rango_esperado(fuente: FuenteMuestra):
-    # Cifra de Mariana: Claro Sports combinado ~2-3%.
+    # Cifra de la coordinadora operativa: Claro Sports combinado ~2-3%.
     r = fuente.resumen("claro_sports", "mes")
     assert 1.8 <= r.engagement_pct <= 3.5
 

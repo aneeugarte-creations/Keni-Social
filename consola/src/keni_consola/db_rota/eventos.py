@@ -16,7 +16,7 @@ from ._comun import (
 # Rota: eventos/transmisiones + turnos (horarios persona×dia×franja)            #
 # --------------------------------------------------------------------------- #
 #
-# Sustituye el Excel manual de Elias. Dos entidades operacionales INDEPENDIENTES (ver
+# Sustituye el Excel manual del coordinador de la rota. Dos entidades operacionales INDEPENDIENTES (ver
 # comentario "cambio de modelo" en la DDL): el EVENTO (calendario de transmisiones) y el
 # TURNO (horario del miembro en (fecha, franja)). Un turno NO va atado a un evento. La
 # "cobertura" (quien cubre un evento) es una vista DERIVADA: para un evento, sus coberturas
@@ -131,7 +131,7 @@ def listar_eventos_rota(
     """Eventos de la rota, en orden cronologico. Filtros opcionales (todos combinables).
 
     `desde`/`hasta` acotan por rango de fechas (ISO). `solo_cambiados` deja solo los
-    REPROGRAMADOS (`cambiado=1`, los que Elias debe re-avisar). `tipo_cobertura` filtra por
+    REPROGRAMADOS (`cambiado=1`, los que el coordinador de la rota debe re-avisar). `tipo_cobertura` filtra por
     tipo de cobertura (transmision|imagenes|no_cubrir); la API ya valida el valor.
     `marca` filtra por id canonico de marca; None o "" -> sin filtro (devuelve todas).
     """
@@ -187,8 +187,8 @@ def actualizar_evento_rota(evento_id: str, campos: dict[str, Any]) -> dict[str, 
       - Si la edicion cambia `fecha`, `hora` o `tipo_cobertura` -> `cambiado=1` automatico
         (se reprogramo: el equipo debe re-enterarse). Solo si el valor REALMENTE cambia.
       - Si el request trae `cambiado=False` explicito (la accion "ya avisé / visto" de
-        Elias) -> se LIMPIA a 0, y limpiar GANA aunque en el mismo request se hubiera
-        reprogramado (Elias dice "ya está visto").
+        el coordinador de la rota) -> se LIMPIA a 0, y limpiar GANA aunque en el mismo request se hubiera
+        reprogramado (el coordinador de la rota dice "ya está visto").
     Solo se escriben los campos editables; `cambiado`/`actualizado` los gestiona el sistema.
     """
     actual = obtener_evento_rota(evento_id)

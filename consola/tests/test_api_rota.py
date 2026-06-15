@@ -14,7 +14,7 @@ Cubre el CONTRATO de `/api/rota/*`:
 
 Reusa el aislamiento de `entorno`; el equipo son usuarios creados a mano (auth); el
 `cliente` por defecto entra por el token de mantenimiento. Los turnos se siembran a
-mano (Elias asigna). Las pruebas de aprobacion (solo-admin) usan una sesion admin real.
+mano (el coordinador de la rota asigna). Las pruebas de aprobacion (solo-admin) usan una sesion admin real.
 """
 
 from __future__ import annotations
@@ -72,7 +72,7 @@ def _crear_turno(
     nota_relevo: str = "",
     marca: str = "",
 ) -> dict:
-    """Siembra un TURNO en la BD (Elias asigna a mano; el backend solo persiste).
+    """Siembra un TURNO en la BD (el coordinador de la rota asigna a mano; el backend solo persiste).
 
     El turno es el horario del miembro en `(fecha, franja)`. NO va atado a un evento.
 
@@ -149,7 +149,7 @@ def test_equipo_incluye_marcas_de_cada_miembro(cliente):
 def test_equipo_incluye_puede_coordinar_tras_sembrar(cliente):
     """`/api/rota/equipo?todos=1` expone `puede_coordinar` por miembro (ola "coord").
 
-    Tras `sembrar_equipo`, los tres canónicos (Elías, Ale, Mariana) quedan con
+    Tras `sembrar_equipo`, los tres canónicos (el coordinador de redes, fotografía/QA y la coordinadora operativa) quedan con
     `puede_coordinar=True`; el resto del equipo de redes queda en `False`. El frontend
     necesita este campo para listar candidatos a coordinador por celda en el
     calendario (sin él, el dropdown muestra "Sin candidatos").

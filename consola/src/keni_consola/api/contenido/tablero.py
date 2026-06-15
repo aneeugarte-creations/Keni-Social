@@ -466,7 +466,7 @@ async def asignar(request: Request) -> Response:
     """POST /api/contenido/{id}/asignar: el MANAGER (admin) EMPUJA la pieza a una persona.
 
     Es la SEGUNDA puerta de escritura del mismo campo `responsable_id` —el self-claim del
-    empleado es `coger` (CAS contra responsable vacío, no pisa a nadie)—; aquí Elias asigna,
+    empleado es `coger` (CAS contra responsable vacío, no pisa a nadie)—; aquí el coordinador de redes asigna,
     o REASIGNA pisando un responsable ya puesto, a quien elija. Solo admin: un editor reparte
     cogiendo del pool, no empujando a otros. Avisa al asignado (in-app), que es lo que retira
     el «te paso esto» del WhatsApp. Para LIBERAR una pieza se usa `soltar`, no este endpoint.

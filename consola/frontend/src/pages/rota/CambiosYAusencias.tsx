@@ -105,7 +105,7 @@ export const ESTADOS_TERMINALES_SWAP: ReadonlySet<EstadoSwap> = new Set([
 /** Timestamp ISO ("2026-05-25T18:42:11", UTC) como fecha-hora corta en CDMX. */
 export const formatearMomentoCorto = (s: string): string => formatearFechaHoraCorta(s);
 
-/** Estado de cada nodo del progreso de un swap (la cadena solicitante→compañero→Elías). */
+/** Estado de cada nodo del progreso de un swap (la cadena solicitante→compañero→el coordinador de la rota). */
 type EstadoPasoSwap = "hecho" | "actual" | "pendiente" | "rechazado";
 
 interface PasoSwap {
@@ -115,7 +115,7 @@ interface PasoSwap {
 }
 
 /**
- * Deriva los 3 nodos del progreso de un swap (solicitante → compañero → Elías) a partir
+ * Deriva los 3 nodos del progreso de un swap (solicitante → compañero → el coordinador de la rota) a partir
  * SOLO de su estado. Hace VISIBLE en qué punto de la cadena está la solicitud sin tocar el
  * backend: es la misma máquina de estados que `ETIQUETA_ESTADO_SWAP`, vista como recorrido.
  *
@@ -144,7 +144,7 @@ export function pasosSwap(swap: SwapTurno): PasoSwap[] {
     detalleCompania = "Aceptó";
   }
 
-  // Nodo de Elías (admin): aprueba (y aplica) o rechaza.
+  // Nodo del coordinador de la rota (admin): aprueba (y aplica) o rechaza.
   let elias: EstadoPasoSwap;
   let detalleElias: string;
   if (e === "aprobado" || e === "aplicado") {
@@ -183,7 +183,7 @@ const COLOR_PASO_SWAP: Record<EstadoPasoSwap, string> = {
 };
 
 /**
- * Indicador de progreso legible de un swap: solicitante → compañero → Elías. Cada nodo
+ * Indicador de progreso legible de un swap: solicitante → compañero → el coordinador de la rota. Cada nodo
  * lleva icono (hecho ✓ / pendiente ⏳ / en espera ○ / rechazado ✕) + nombre + un detalle
  * corto, para que de un vistazo se vea en qué eslabón está la cadena.
  */
@@ -592,7 +592,7 @@ export function FormularioNuevoSwap({
     !motivoExcedido &&
     !crear.isPending;
 
-  // Etiqueta de cada opcion: "Lun 8 jun · Mañana" o "Lun 8 jun · Mañana · Tezcu"
+  // Etiqueta de cada opcion: "Lun 8 jun · Mañana" o "Lun 8 jun · Mañana · un community manager"
   // segun si es opcion propia o de un compañero.
   const etiquetaTurnoPropio = (t: TurnoRota) =>
     `${formatearFechaCorta(t.fecha)} · ${t.franja_nombre}`;
@@ -745,7 +745,7 @@ export function TarjetaSwap({
         </Badge>
       </div>
 
-      {/* Indicador de progreso de la cadena (solicitante → compañero → Elías): hace
+      {/* Indicador de progreso de la cadena (solicitante → compañero → el coordinador de la rota): hace
           inequívoco en qué punto está la solicitud, complementando el badge de estado. */}
       <ProgresoSwap swap={swap} />
 

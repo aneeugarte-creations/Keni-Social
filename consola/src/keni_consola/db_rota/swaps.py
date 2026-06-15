@@ -16,7 +16,7 @@ from ._comun import (
 #
 # Cuando un CM (solicitante A) necesita cubrir un asunto personal le pide a un
 # companero (B) intercambiar el turno de un dia por el de otro. B acepta/rechaza, y si
-# acepta, Elias (admin) aprueba o rechaza. La aprobacion EJECUTA el swap en
+# acepta, el coordinador de la rota (admin) aprueba o rechaza. La aprobacion EJECUTA el swap en
 # `rota_turnos` (intercambia `miembro_id` de las dos franjas) y la solicitud
 # pasa a `aplicado`. Las ausencias REALES (vacaciones, baja) viven en SAP, no aqui.
 #

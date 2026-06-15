@@ -36,7 +36,7 @@ def _equipo_dict(solo_cobertura: bool = True) -> list[dict[str, Any]]:
     pueda filtrar por vertical y por funcion en el organigrama.
 
     Hoy la rota solo cubre Claro Sports; con `marcas` el front puede limitar el equipo a
-    los que pertenecen a esa marca (Daiana ya sale por `cobertura=False`, pero Jonathan
+    los que pertenecen a esa marca (la creativa de Fundación ya sale por `cobertura=False`, pero el creativo de vertical
     cubre nacion-gamer y NO debe aparecer en la rota de ClaroSports). `cargo` permite
     ademas restringir la rejilla de Turnos a community managers (los coordinadores
     siguen en el equipo, pero no aparecen en la grilla de asignacion por franja).

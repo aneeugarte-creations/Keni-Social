@@ -476,7 +476,7 @@ async def crear_turnos_lote(request: Request) -> Response:
     Cuerpo: `{turnos: [{lunes?, fecha, miembro_id, franja_id, motivo?, nota_relevo?, override?, estado?}, ...]}`.
     Si ALGUNA entrada falla la validacion (fecha invalida, miembro no existe, franja
     invalida) o ya existe un turno para `(miembro, fecha, franja_id)`, devuelve 409 con el
-    indice y el motivo SIN tocar BD. Caso comun: "Mañana lun-vie para Luis".
+    indice y el motivo SIN tocar BD. Caso comun: "Mañana lun-vie para un community manager".
     """
     datos = await leer_json(request)
     entradas = datos.get("turnos")
@@ -834,9 +834,9 @@ async def duplicar_turno(request: Request) -> Response:
 
 
 async def aprobar_turnos(request: Request) -> Response:
-    """POST /api/rota/turnos/aprobar {lunes}: Elias APRUEBA (publica) los turnos al equipo.
+    """POST /api/rota/turnos/aprobar {lunes}: el coordinador de la rota APRUEBA (publica) los turnos al equipo.
 
-    Solo admin: la frontera dice que Elias aprueba los turnos finales antes de publicarlos
+    Solo admin: la frontera dice que el coordinador de la rota aprueba los turnos finales antes de publicarlos
     al equipo. Marca todos los turnos de la semana como `aprobado`.
     """
     if not _es_admin(request):

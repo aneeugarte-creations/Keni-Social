@@ -278,7 +278,7 @@ def contar_piezas_por_programa(nombre: str) -> int:
 # --------------------------------------------------------------------------- #
 #
 # Cuando un CM (A) le pide a otro (B) intercambiar turnos por un asunto personal y
-# Elias (admin) lo aprueba, se aplica el swap sobre `rota_turnos_trabajo`. Las ausencias
+# el coordinador de la rota (admin) lo aprueba, se aplica el swap sobre `rota_turnos_trabajo`. Las ausencias
 # REALES (vacaciones/baja) viven en SAP, no aqui. La fachada delega 1:1 en db.py.
 
 

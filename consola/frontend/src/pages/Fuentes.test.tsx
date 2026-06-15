@@ -257,7 +257,7 @@ describe("Fuentes — Catálogo (Ola 4)", () => {
     stubFetch();
     renderFuentes();
 
-    // Sin ?tab= abre INTERNAS: ahí viven los cajones y clips que Elías vuelca a diario
+    // Sin ?tab= abre INTERNAS: ahí viven los cajones y clips que el coordinador de redes vuelca a diario
     // ("Externas" son ajustes de RSS, no el flujo del día).
     const tabInternas = await screen.findByRole("tab", { name: "Internas" });
     expect(tabInternas).toHaveAttribute("aria-selected", "true");

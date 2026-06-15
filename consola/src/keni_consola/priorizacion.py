@@ -3,7 +3,7 @@
 PROBLEMA QUE RESUELVE
 =====================
 El tablero kanban ordena por prioridad fija (alta/media/baja) + fecha. La "lista viva" que pide
-Angel debe RE-ORDENARSE sola cada vez que entra algo: un tema obligatorio con fecha encima debe
+un content manager debe RE-ORDENARSE sola cada vez que entra algo: un tema obligatorio con fecha encima debe
 subir; uno evergreen sin fecha, bajar. Aqui un SCORE determinista combina las senales que el
 contenido YA tiene (compromiso, evergreen list, prioridad, cercania de la fecha objetivo, flujo,
 frescura).

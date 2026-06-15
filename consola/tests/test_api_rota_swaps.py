@@ -6,7 +6,7 @@ terminal. Cubre permisos por estado, validaciones de entrada, el caso 409 cuando
 turnos han cambiado entre el "aceptado" y el "aprobar", y el flujo completo end-to-end.
 
 Las ausencias REALES (vacaciones/baja) viven en SAP, NO aqui: el endpoint exige que los
-turnos existan en `rota_turnos_trabajo` (es decir, que Elias haya propuesto/aprobado el
+turnos existan en `rota_turnos_trabajo` (es decir, que el coordinador de la rota haya propuesto/aprobado el
 horario antes), si no devuelve 400 con motivo accionable.
 """
 
@@ -46,7 +46,7 @@ def _cli_de(app, usuario: str) -> TestClient:
 def _crear_horario(app, equipo: list[dict]) -> dict[str, str]:
     """Siembra turnos de trabajo en LUNES para los dos primeros miembros (ana, beto).
 
-    Antes la consola PROPONIA reparto automatico; ahora Elias asigna a mano, asi que los
+    Antes la consola PROPONIA reparto automatico; ahora el coordinador de la rota asigna a mano, asi que los
     tests siembran directo via `repos.crear_turno_rota`. Sembramos a cada miembro su
     turno en DIA_A y DIA_B (franjas distintas por persona para no solaparse): asi
     cualquier `_payload_swap(X, Y)` con X, Y en (ana, beto) — incluido `(ana, ana)` que se

@@ -2,7 +2,7 @@
  * Lógica PURA del organigrama (sin React): paleta por marca, agrupación por zona y
  * construcción del árbol de reporte a partir de `UsuarioAdmin[]`.
  *
- * Dos ejes ORTOGONALES (regla dictada por Bernardo: "estar debajo de alguien ≠
+ * Dos ejes ORTOGONALES (regla dictada por la dirección: "estar debajo de alguien ≠
  * reportarle"):
  *   - `manager_id` define el ÁRBOL de reporte (quién reporta a quién). Es lo editable.
  *   - `marcas` define la VERTICAL de trabajo. De aquí salen las "zonas" de color del

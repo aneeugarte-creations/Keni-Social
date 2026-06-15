@@ -27,7 +27,7 @@ from .turnos import _turnos_semana
 _MEDIA_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 _MEDIA_CSV = "text/csv; charset=utf-8"
 
-# Cabeceras de la parrilla exportada: mismas columnas que el Excel de Elías.
+# Cabeceras de la parrilla exportada: mismas columnas que el Excel del coordinador de la rota.
 _CABECERAS_EXPORT = ("Fecha", "Día", "Hora", "Evento / transmisión", "Qué sacar", "Persona", "Estado")
 _DIAS = ("Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo")
 
@@ -38,7 +38,7 @@ def _filas_export(
     """Devuelve `(titulo, filas)` de la cobertura DERIVADA de la semana, lista para xlsx/CSV.
 
     Una fila por (evento, miembro cubridor). Eventos sin cubridores aparecen con `Persona`
-    vacia (Elias detecta huecos al exportar). Cobertura DERIVADA: cruza eventos × turnos ×
+    vacia (el coordinador de la rota detecta huecos al exportar). Cobertura DERIVADA: cruza eventos × turnos ×
     franjas vivas de la semana. GRID POR MARCA: `marca` acota a esa rejilla (None = todas).
     """
     if not lunes_iso:
@@ -184,7 +184,7 @@ async def export_xlsx(request: Request) -> Response:
     fmt_titulo = libro.add_format({"bold": True, "font_size": 14})
     fmt_cabecera = libro.add_format({"bold": True, "bg_color": "#EEEEEE", "border": 1})
 
-    # Hoja 1: cobertura de eventos (la parrilla histórica; columnas del Excel de Elías).
+    # Hoja 1: cobertura de eventos (la parrilla histórica; columnas del Excel del coordinador de la rota).
     hoja = libro.add_worksheet("Rota")
     hoja.write(0, 0, titulo, fmt_titulo)
     for col, encabezado in enumerate(_CABECERAS_EXPORT):

@@ -109,14 +109,15 @@ def test_bootstrap_respeta_admin_user_env(entorno, monkeypatch):
 def test_sembrar_equipo_crea_los_16(entorno):
     """El seed deja en la BD los 16 usuarios del organigrama del cliente.
 
-    Tras la ola "feat/roles-marcas" el calendario de cobertura tiene 9 personas (Daiana
-    sale del calendario; va a Fundacion como creativo de vertical).
+    Tras la ola "feat/roles-marcas" el calendario de cobertura tiene 9 personas (la creativa
+    de Fundación sale del calendario; va a Fundacion como creativo de vertical).
     """
     auth.sembrar_equipo()
     usuarios = {u["usuario"]: u for u in auth.listar_usuarios()}
     assert set(u for u, *_ in auth.EQUIPO_AMX) <= set(usuarios)
-    # 9 cubren: 3 community managers ClaroSports (Tezcu, Luis, Roger) + 2 content managers
-    # UnoTV (Lalo, Angel) + Elias + Yustine + Jonathan + Jose. Daiana YA NO cubre.
+    # 9 cubren: 3 community managers ClaroSports + 2 content managers UnoTV + el coordinador
+    # de redes + editorial de YouTube + el creativo de vertical + el redactor. La creativa
+    # de Fundación YA NO cubre.
     cubren = [u for u in usuarios.values() if u["cobertura"]]
     assert len(cubren) == 9
     assert usuarios["bernardo"]["rol"] == "admin"
@@ -138,7 +139,7 @@ def test_sembrar_equipo_es_idempotente(entorno):
 def test_sembrar_equipo_sincroniza_cargo_y_cobertura(entorno):
     """Si un usuario ya existe con cargo del catalogo VIEJO, el seed lo pone al dia.
 
-    Tezcu se crea sin cargo (""); como su cargo esta en el catalogo viejo (cadena vacia),
+    Un community manager se crea sin cargo (""); como su cargo esta en el catalogo viejo (cadena vacia),
     el seed lo migra a `community_manager` y le asigna la cobertura/marcas del organigrama.
     La contrasena NO se pisa.
     """
@@ -156,10 +157,10 @@ def test_sembrar_equipo_asigna_marcas_del_organigrama(entorno):
     """Cada usuario del organigrama recibe SUS verticales (N:M).
 
     Casos clave:
-      - Bernardo: las 5 marcas (claro-sports, unotv, piso-15, nacion-gamer, fundacion).
-      - Daiana:   ['fundacion'] (NO claro-sports), y `cobertura=False` (sale del calendario).
-      - Yustine:  ['claro-sports', 'piso-15', 'unotv'] (cubre 3 verticales).
-      - Jonathan: ['nacion-gamer'].
+      - La dirección: las 5 marcas (claro-sports, unotv, piso-15, nacion-gamer, fundacion).
+      - La creativa de Fundación: ['fundacion'] (NO claro-sports), y `cobertura=False` (sale del calendario).
+      - Editorial de YouTube: ['claro-sports', 'piso-15', 'unotv'] (cubre 3 verticales).
+      - El creativo de vertical: ['nacion-gamer'].
     """
     auth.sembrar_equipo()
     usuarios = {u["usuario"]: u for u in auth.listar_usuarios()}
@@ -167,7 +168,7 @@ def test_sembrar_equipo_asigna_marcas_del_organigrama(entorno):
     assert sorted(usuarios["bernardo"]["marcas"]) == sorted(
         ["claro-sports", "unotv", "piso-15", "nacion-gamer", "fundacion"]
     )
-    # Correccion critica: Daiana NO es de claro-sports.
+    # Correccion critica: la creativa de Fundación NO es de claro-sports.
     assert usuarios["daiana"]["cargo"] == "creativo_vertical"
     assert usuarios["daiana"]["cobertura"] is False
     assert usuarios["daiana"]["marcas"] == ["fundacion"]
@@ -176,7 +177,7 @@ def test_sembrar_equipo_asigna_marcas_del_organigrama(entorno):
 
 
 def test_sembrar_equipo_marca_puede_coordinar_para_los_tres(entorno):
-    """El seed pone `puede_coordinar=True` para Elias, Ale, Mariana; False para el resto.
+    """El seed pone `puede_coordinar=True` para el coordinador de redes, fotografía/QA y la coordinadora operativa; False para el resto.
 
     Es el listado canonico de candidatos a coordinador (ola "coord"). Los tres se
     sobreescriben INCONDICIONALMENTE; el resto del equipo queda con el default `False`.
@@ -194,7 +195,7 @@ def test_sembrar_equipo_marca_puede_coordinar_para_los_tres(entorno):
 def test_sembrar_equipo_respeta_puede_coordinar_personalizado(entorno):
     """Si el admin marca `puede_coordinar=True` a alguien fuera del seed, NO se revierte.
 
-    Tezcu no esta en el listado canonico pero si el admin lo habilita como coordinador,
+    Un community manager no esta en el listado canonico pero si el admin lo habilita como coordinador,
     re-correr el seed no debe quitarselo.
     """
     auth.sembrar_equipo()
@@ -206,7 +207,7 @@ def test_sembrar_equipo_respeta_puede_coordinar_personalizado(entorno):
 
 
 def test_sembrar_equipo_corrige_puede_coordinar_de_los_tres(entorno):
-    """Si Elias/Ale/Mariana tienen `puede_coordinar=False` por error, el seed lo restaura.
+    """Si el coordinador de redes, fotografía/QA o la coordinadora operativa tienen `puede_coordinar=False` por error, el seed lo restaura.
 
     Los tres son los canonicos (`_USUARIOS_PUEDE_COORDINAR_FORZADO`): el seed los
     sobreescribe INCONDICIONALMENTE a True tras cada deploy.
@@ -224,7 +225,7 @@ def test_sembrar_equipo_corrige_puede_coordinar_de_los_tres(entorno):
 
 
 def test_sembrar_equipo_corrige_daiana_aunque_este_editada(entorno):
-    """La correccion de Daiana es INCONDICIONAL: sale del calendario tras este seed.
+    """La correccion de la creativa de Fundación es INCONDICIONAL: sale del calendario tras este seed.
 
     Aunque el admin la hubiera dejado mal (CM cubriendo claro-sports), el bootstrap la
     sobreescribe a `creativo_vertical` + `cobertura=False` + ['fundacion']. Es la
@@ -248,12 +249,12 @@ def test_sembrar_equipo_corrige_daiana_aunque_este_editada(entorno):
 def test_sembrar_equipo_respeta_cargos_personalizados_del_nuevo_catalogo(entorno):
     """Si el admin ya migro el cargo a uno del catalogo NUEVO, el seed lo respeta.
 
-    Salvo Daiana, que tiene la correccion incondicional. Para el resto, si un admin
+    Salvo la creativa de Fundación, que tiene la correccion incondicional. Para el resto, si un admin
     cambio el cargo a un valor distinto del catalogo nuevo (p. ej. `coordinador_invitados`),
     re-correr el seed no debe revertirlo.
     """
     auth.sembrar_equipo()
-    # Admin migra a Diana a un cargo del catalogo nuevo distinto del organigrama.
+    # Admin migra a la coordinadora de redes a un cargo del catalogo nuevo distinto del organigrama.
     diana = next(u for u in auth.listar_usuarios() if u["usuario"] == "diana")
     auth.actualizar_perfil(diana["id"], cargo="coordinador_invitados")
     # Re-correr el seed.
@@ -932,14 +933,14 @@ def test_crear_usuario_api_con_nombre(entorno):
 
 
 def test_sembrar_equipo_define_organigrama(entorno):
-    """El seed deja nombre + linea de reporte: Elias reporta a Bernardo; Tezcu a Elias."""
+    """El seed deja nombre + linea de reporte: el coordinador de redes reporta a la dirección; un community manager al coordinador de redes."""
     auth.sembrar_equipo()
     por_usuario = {u["usuario"]: u for u in auth.listar_usuarios()}
     assert por_usuario["bernardo"]["nombre"] == "Bernardo Vázquez"
     assert por_usuario["bernardo"]["manager_id"] == ""  # raiz
     assert por_usuario["elias"]["manager_id"] == por_usuario["bernardo"]["id"]
     assert por_usuario["tezcu"]["manager_id"] == por_usuario["elias"]["id"]
-    # Regla de Bernardo: Mariana trabaja en Claro Sports pero REPORTA a Bernardo.
+    # Regla de la dirección: la coordinadora operativa trabaja en Claro Sports pero REPORTA a la dirección.
     assert por_usuario["mariana"]["manager_id"] == por_usuario["bernardo"]["id"]
     assert por_usuario["yustine"]["manager_id"] == por_usuario["laloyt"]["id"]
 
@@ -948,7 +949,7 @@ def test_sembrar_equipo_no_pisa_organigrama_editado(entorno):
     """Idempotencia: si el admin reasigna un superior, el re-seed NO lo revierte."""
     auth.sembrar_equipo()
     por_usuario = {u["usuario"]: u for u in auth.listar_usuarios()}
-    # El admin mueve a Tezcu para que reporte a Bernardo (excepcion puntual).
+    # El admin mueve a un community manager para que reporte a la dirección (excepcion puntual).
     auth.actualizar_perfil(por_usuario["tezcu"]["id"], manager_id=por_usuario["bernardo"]["id"])
     auth.sembrar_equipo()  # segunda corrida no debe revertir
     tezcu = {u["usuario"]: u for u in auth.listar_usuarios()}["tezcu"]

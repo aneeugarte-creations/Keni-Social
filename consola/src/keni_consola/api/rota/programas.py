@@ -170,7 +170,7 @@ async def borrar_programa(request: Request) -> Response:
 
     Si HAY piezas referenciando el programa (por nombre), devuelve 409 con
     `{en_uso: True, piezas_afectadas: N}` salvo que el cliente pase `?forzar=true` (lo
-    típico de Elías: "ya sé que hay piezas y aun así quiero borrar el catálogo; las
+    típico del coordinador de la rota: "ya sé que hay piezas y aun así quiero borrar el catálogo; las
     piezas huérfanas seguirán mostrando el nombre textual").
     """
     programa_id = request.path_params["programa_id"]

@@ -78,7 +78,7 @@ def test_dataclasses_son_construibles():
 
 def test_viola_rotacion_sabado():
     assert r.viola_rotacion_sabado("u0", "u0", override=False) is True
-    # Con override explícito, NO viola (cobertura estratégica de Elías).
+    # Con override explícito, NO viola (cobertura estratégica del coordinador de la rota).
     assert r.viola_rotacion_sabado("u0", "u0", override=True) is False
     # Persona distinta: no viola.
     assert r.viola_rotacion_sabado("u0", "u1", override=False) is False

@@ -393,7 +393,7 @@ def crear_borrador_en(
     que un placeholder ya traiga).
 
     Variante de `crear_borrador` que NIDA la pieza bajo un tema del tablero en vez de crear
-    su propio padre (peticion de Angel: el borrador auto-generado cuelga del tema origen).
+    su propio padre (peticion de un content manager: el borrador auto-generado cuelga del tema origen).
     Crea una fila `contenido_plataforma` con `es_publicacion=1`, estado `pendiente`
     (== `borrador` editorial) y `falta_copy` DERIVADO del copy real (no hardcodeado): con copy
     es `False`, y si llega vacío (copy aún por generar) es `True`, para que el flag NO mienta

@@ -1,7 +1,7 @@
 """Semilla idempotente de LÍNEAS de contenido (etiquetas clase 'vertical') y ORÍGENES
 (clase 'origen') por marca.
 
-- Las LÍNEAS las dicta el equipo. Solo UnoTV está definida (la dio Bernardo): virales,
+- Las LÍNEAS las dicta el equipo. Solo UnoTV está definida (la dio la dirección): virales,
   internacional, nacional, presidencia, comercial, reportero/corresponsales, ciencia/tech,
   geek/pop, eventos. El RESTO de marcas se deja VACÍO a propósito: el equipo las creará
   desde la pestaña de Líneas cuando toque (no se inventan aquí).

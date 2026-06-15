@@ -425,7 +425,7 @@ function FilaAgenda({
 }
 
 /**
- * PANORAMA (la cabina de Elias): una AGENDA por día —como un calendario— de quién cubre qué.
+ * PANORAMA (la cabina del coordinador de la rota): una AGENDA por día —como un calendario— de quién cubre qué.
  *
  * Arriba, la carga por persona (avatar + conteo) que además FILTRA la agenda, y una banda con
  * lo último que ha cogido el equipo. Debajo, los partidos/encargos agrupados por día (Hoy /

@@ -183,7 +183,7 @@ async def actualizar_evento(request: Request) -> Response:
             return JSONResponse({"error": "Marca no reconocida."}, status_code=400)
         campos["marca"] = marca_val
     # `cambiado` no es un campo editable de texto: lo derivamos en db.py, pero el request
-    # puede enviarlo (típicamente `false`) como acción "ya avisé / visto" de Elías.
+    # puede enviarlo (típicamente `false`) como acción "ya avisé / visto" del coordinador de la rota.
     if "cambiado" in datos:
         campos["cambiado"] = bool(datos["cambiado"])
     evento = repos.actualizar_evento_rota(evento_id, campos)

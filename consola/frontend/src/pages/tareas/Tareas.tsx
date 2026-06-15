@@ -35,7 +35,7 @@ const LENTES: { id: Lente; etiqueta: string }[] = [
  * (`/operacion/tareas`) como dentro de Turnos (pestaña «Cobertura»).
  *
  * Se LLENA SOLA con los eventos/partidos a cubrir (los que entran por Fuentes o se añaden aquí)
- * y los muestra ordenados por fecha como «Por cubrir»; el equipo los coge o Elias los reparte.
+ * y los muestra ordenados por fecha como «Por cubrir»; el equipo los coge o el coordinador de la rota los reparte.
  * Conviven los encargos sueltos (tareas sin evento). El dueño de una cobertura se registra como
  * una tarea (clase='tarea') enlazada al evento: el evento es la unidad canónica, sin duplicar.
  *

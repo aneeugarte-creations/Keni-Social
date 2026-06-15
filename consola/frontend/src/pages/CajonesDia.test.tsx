@@ -320,7 +320,7 @@ describe("CajonesDia", () => {
     expect(screen.getByText("Corresponsales")).toBeInTheDocument();
     expect(screen.getByText("Reporteros (agenda PDF)")).toBeInTheDocument();
     expect(screen.getByText("Eventos Claro (Excel/CSV)")).toBeInTheDocument();
-    // Cajones de Claro Sports para que Elías vuelque su material de WhatsApp.
+    // Cajones de Claro Sports para que el coordinador de redes vuelque su material de WhatsApp.
     expect(screen.getByText("Notas y links")).toBeInTheDocument();
     expect(screen.getByText("Indicaciones")).toBeInTheDocument();
   });

@@ -103,7 +103,7 @@ export interface Notificacion {
   plataforma_id: string;
   actor_id: string;
   actor_nombre: string;
-  /** Frase ya armada para la UI (p. ej. "Diana te mencionó en «…»"). */
+  /** Frase ya armada para la UI (p. ej. "la coordinadora de redes te mencionó en «…»"). */
   resumen: string;
   enlace: string;
   leida: boolean;

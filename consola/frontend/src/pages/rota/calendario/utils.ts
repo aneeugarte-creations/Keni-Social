@@ -15,10 +15,10 @@ import { filtrarEquipoPorMarca } from "../comun";
 /**
  * Restringe el equipo a los community managers de la marca activa que cubren hoy.
  *
- * Aplica los tres filtros pedidos por Bernardo:
+ * Aplica los tres filtros pedidos por la dirección:
  *  - `marcas.includes(marcaActiva)` (vertical correcta; "Todas"/`null` no filtra).
  *  - `cobertura === true` (la persona está disponible para cubrir hoy).
- *  - `cargo === "community_manager"` (los coordinadores quedan fuera; Elías
+ *  - `cargo === "community_manager"` (los coordinadores quedan fuera; el coordinador de la rota
  *    coordina pero no se asigna a una franja).
  *
  * Si los tres filtros dejan la lista vacía (puede ocurrir en entornos donde el

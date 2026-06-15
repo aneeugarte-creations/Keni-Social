@@ -203,9 +203,9 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_sesiones_usuario ON sesiones (usuario_id)",
-    # Relacion N:M usuarios <-> marcas (organigrama del cliente, transcripciones de Bernardo):
-    # una persona puede pertenecer a varias verticales/marcas (Yustine cubre ClaroSports +
-    # UnoTV + Piso 15; Bernardo a todas). `marca_id` se valida en la capa API contra el
+    # Relacion N:M usuarios <-> marcas (organigrama del cliente, transcripciones de la dirección):
+    # una persona puede pertenecer a varias verticales/marcas (editorial de YouTube cubre ClaroSports +
+    # UnoTV + Piso 15; la dirección a todas). `marca_id` se valida en la capa API contra el
     # catalogo canonico (`keni_shared.marcas`) — no es FK en la BD porque las marcas viven
     # en TOML/codigo, no en SQL. Borrar un usuario propaga (ON DELETE CASCADE).
     """
@@ -607,7 +607,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     """,
     # Solicitudes de cambio de turno entre compañeros (#175): cuando un CM (A) quiere
     # canjear su turno por el de otro (B) por un asunto personal, crea una solicitud en
-    # estado `propuesto`; B acepta/rechaza, y si acepta, Elias (admin) aprueba o rechaza.
+    # estado `propuesto`; B acepta/rechaza, y si acepta, el coordinador de la rota (admin) aprueba o rechaza.
     # Al aprobar se ejecuta el swap en `rota_turnos` (intercambia miembro_id) y la
     # solicitud queda `aplicado`. Las ausencias de verdad (vacaciones/baja) siguen en SAP
     # y NO se gestionan aqui. Estados validos: ESTADOS_SWAP (ver `estados.py`).
@@ -643,7 +643,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_rota_swaps_fechas ON rota_swaps_turno (fecha_a, fecha_b)",
     # COORDINADOR POR TURNO (ola "coord"): cada celda del calendario (fecha, franja_id) puede
     # tener UN coordinador asignado, INDEPENDIENTE del turno de CM. Los candidatos son los
-    # usuarios con `puede_coordinar=true` (hoy Elias, Ale, Mariana; lo decide el admin desde
+    # usuarios con `puede_coordinar=true` (hoy el coordinador de redes, fotografía/QA y la coordinadora operativa; lo decide el admin desde
     # /usuarios). UNIQUE(fecha, franja_id): una celda = un coordinador. La tabla es nueva
     # (no hay migracion historica). Borrar un turno o cambiar franja NO borra la coordinacion.
     """

@@ -301,7 +301,7 @@ function RolLibre({ tarea }: { tarea: Contenido }) {
 
 /**
  * Un EVENTO «Por cubrir»: un partido/transmisión que nadie ha cogido todavía. No tiene tarea
- * aún; al coger (o que Elias asigne) se crea su registro de cobertura vía `cubrirEvento`.
+ * aún; al coger (o que el coordinador de la rota asigne) se crea su registro de cobertura vía `cubrirEvento`.
  */
 export function TarjetaEventoLibre({
   evento,

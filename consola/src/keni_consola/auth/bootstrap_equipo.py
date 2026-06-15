@@ -1,6 +1,6 @@
 """Bootstrap idempotente del equipo real (16 personas).
 
-Fuente de verdad: organigrama dictado por Bernardo (transcripcion
+Fuente de verdad: organigrama dictado por la dirección (transcripcion
 `03-entrega/unotv-clarosports/transcripciones/organizacion/organigrama.txt`) y resumen
 de participantes (`03-entrega/unotv-clarosports/equipo/RESUMEN-PARTICIPANTES.md`).
 
@@ -11,29 +11,33 @@ Cada persona tiene:
                   directivos, gerencia podcast, coordinacion de redes/operativa, fotografia
                   + QA, creativo de Fundacion y coordinacion de YouTube NO cubren.
   - `puede_coordinar` : True si es candidato a coordinador por celda en el calendario
-                  (ola "coord"). Hoy: Elias, Ale, Mariana. El admin puede ampliar la lista
+                  (ola "coord"). Hoy: el coordinador de redes, fotografía/QA y la
+                  coordinadora operativa. El admin puede ampliar la lista
                   desde /usuarios marcando el flag a quien quiera.
   - `marcas`    : ids canonicos de las VERTICALES a las que pertenece (relacion N:M en la
                   tabla `usuarios_marcas`). Una persona puede estar en varias
-                  (Yustine: claro-sports + unotv + piso-15; Bernardo: las 5).
+                  (editorial de YouTube: claro-sports + unotv + piso-15; la dirección: las 5).
   - `nombre`    : nombre HUMANO real (organigrama). Lo que se pinta en las tarjetas.
-  - `manager`   : `usuario` (login) del SUPERIOR al que reporta ("" = raiz; solo Bernardo).
-                  Define el ARBOL del organigrama. Ortogonal a `marcas`: Mariana/Ale
-                  trabajan en Claro Sports pero reportan a Bernardo, no a Elias.
+  - `manager`   : `usuario` (login) del SUPERIOR al que reporta ("" = raiz; solo la dirección).
+                  Define el ARBOL del organigrama. Ortogonal a `marcas`: la coordinadora
+                  operativa y fotografía/QA trabajan en Claro Sports pero reportan a la
+                  dirección, no al coordinador de redes.
 
 `nombre`/`manager_id` se siembran SOLO si estan vacios (segunda pasada), para no pisar lo
 que el admin edite desde /usuarios. Asi el organigrama queda definido de fabrica pero es
 editable y la semilla sigue siendo idempotente.
 
-Ola "feat/roles-marcas" (segunda audiencia con Bernardo):
+Ola "feat/roles-marcas" (segunda audiencia con la dirección):
   - Ampliacion del catalogo de cargos para reflejar el organigrama real (vertical/
     funcion); los cargos VIEJOS se conservan por retrocompat.
-  - Reasignaciones reales: Diana/Elias eran "coordinador" plano -> ahora son
-    `coordinador_redes` (cada uno de su marca); Maira "gerente" -> `gerente_podcast`;
-    Mariana "estrategia" -> `coordinador_operativo`; Ale "fotografia" -> `fotografia_qa`;
-    Jonathan "guionista" -> `creativo_vertical` (Nacion Gamer); Yustine "editorial" ->
-    `editorial_youtube`; Lalo YT "coordinador" -> `coordinador_youtube`.
-  - Correccion CRITICA: Daiana NO es community manager de ClaroSports; es creativo de
+  - Reasignaciones reales: la coordinadora y el coordinador de redes eran "coordinador"
+    plano -> ahora son `coordinador_redes` (cada uno de su marca); gerencia de podcast
+    "gerente" -> `gerente_podcast`; la coordinadora operativa "estrategia" ->
+    `coordinador_operativo`; fotografía/QA "fotografia" -> `fotografia_qa`;
+    el creativo de vertical "guionista" -> `creativo_vertical` (Nacion Gamer); editorial
+    de YouTube "editorial" -> `editorial_youtube`; el coordinador de YouTube "coordinador"
+    -> `coordinador_youtube`.
+  - Correccion CRITICA: la creativa de Fundación NO es community manager de ClaroSports; es creativo de
     Fundacion TELMEX. Sale del calendario de cobertura (`cobertura=False`) y deja de
     aparecer en la rota.
 
@@ -41,7 +45,7 @@ Idempotente: si el usuario `usuario` ya existe, NO se borra ni se pisa la contra
 SI se actualizan `cargo`, `cobertura` y `marcas` para que la BD refleje el organigrama
 vigente sin forzar a nadie a recambiar la contrasena. Si no existe, se crea con
 password "cambiar" y `debe_cambiar_password=True` (debe cambiarla al primer login).
-Bernardo es el unico admin del equipo real (los demas son editor).
+La dirección es el unico admin del equipo real (los demas son editor).
 """
 
 from __future__ import annotations
@@ -59,18 +63,20 @@ _logger = logging.getLogger(NOMBRE_LOGGER)
 PASSWORD_INICIAL = "cambiar"
 
 # Equipo real (16): (usuario, rol_permisos, cargo, cobertura, puede_coordinar, marcas,
-# nombre, manager). Bernardo dicto el organigrama en la segunda audiencia; estas son las
+# nombre, manager). La dirección dicto el organigrama en la segunda audiencia; estas son las
 # verticales/funciones reales por persona. `cobertura=True` = entra en la rota de turnos
-# (Claro Sports fin de semana son Tezcu+Luis+Roger+Elias; UnoTV son Lalo+Angel; Yustine
-# refuerza WhatsApp UnoTV pero entra en cobertura; Jonathan cubre Nacion Gamer).
+# (Claro Sports fin de semana son los community managers + el coordinador de redes; UnoTV
+# son los content managers; editorial de YouTube refuerza WhatsApp UnoTV pero entra en
+# cobertura; el creativo de vertical cubre Nacion Gamer).
 # `puede_coordinar=True` (ola "coord"): candidato a coordinador por celda. Hoy son tres
-# (Elias, Ale, Mariana); el admin lo decide desde /usuarios.
+# (el coordinador de redes, fotografía/QA y la coordinadora operativa); el admin lo decide desde /usuarios.
 #
 # `nombre` (organigrama): nombre HUMANO real para pintar las tarjetas. `manager` es el
-# `usuario` (login) del SUPERIOR al que reporta segun el organigrama dictado por Bernardo
-# ("" = raiz; solo Bernardo). Regla clave de Bernardo: "estar debajo de alguien != reportarle"
-# -> Mariana y Ale trabajan en Claro Sports pero REPORTAN a Bernardo, no a Elias; Lalo YT
-# coordina YouTube de las tres verticales y reporta a Bernardo; Yustine reporta a Lalo YT.
+# `usuario` (login) del SUPERIOR al que reporta segun el organigrama dictado por la dirección
+# ("" = raiz; solo la dirección). Regla clave de la dirección: "estar debajo de alguien != reportarle"
+# -> la coordinadora operativa y fotografía/QA trabajan en Claro Sports pero REPORTAN a la
+# dirección, no al coordinador de redes; el coordinador de YouTube
+# coordina YouTube de las tres verticales y reporta a la dirección; editorial de YouTube reporta al coordinador de YouTube.
 # Las marcas (vertical de trabajo) y la linea de reporte (manager) son ORTOGONALES.
 EQUIPO_AMX: tuple[
     tuple[str, str, str, bool, bool, tuple[str, ...], str, str], ...
@@ -94,7 +100,7 @@ EQUIPO_AMX: tuple[
      "Jorge Luis Espinosa", "elias"),
     ("roger", ROL_EDITOR, "community_manager", True, False, ("claro-sports",),
      "Rogelio Aguilar", "elias"),
-    # Daiana: NO es de ClaroSports (era un error). Es creativa de Fundacion; fuera de la
+    # La creativa de Fundación: NO es de ClaroSports (era un error). Es creativa de Fundacion; fuera de la
     # rota de cobertura. Esta fila es la CORRECCION explicita que motiva esta ola.
     ("daiana", ROL_EDITOR, "creativo_vertical", False, False, ("fundacion",),
      "Daiana", "diana"),
@@ -114,8 +120,8 @@ EQUIPO_AMX: tuple[
 )
 
 # Usuarios cuyo `puede_coordinar` se sobreescribe INCONDICIONALMENTE en cada seed (ola
-# "coord"). Es el listado canonico que pide el negocio: Elias (admin de redes
-# ClaroSports), Ale (foto/QA), Mariana (coordinador operativo). El resto se sembra
+# "coord"). Es el listado canonico que pide el negocio: el coordinador de redes (admin de redes
+# ClaroSports), fotografía/QA, la coordinadora operativa. El resto se sembra
 # correctivamente solo si nadie lo ha tocado (ver `sembrar_equipo`).
 _USUARIOS_PUEDE_COORDINAR_FORZADO: frozenset[str] = frozenset({"elias", "ale", "mariana"})
 
@@ -141,13 +147,13 @@ def sembrar_equipo() -> None:
       `cargo` y `cobertura` cuando el cargo actual es del catalogo VIEJO (un admin que
       lo haya cambiado a un cargo del NUEVO catalogo se respeta), y se REEMPLAZA el
       conjunto de marcas N:M para reflejar el organigrama vigente.
-    - `puede_coordinar` (ola "coord"): para los 3 usuarios canonicos (Elias, Ale,
-      Mariana) se sobreescribe INCONDICIONALMENTE en cada seed (garantiza el estado
+    - `puede_coordinar` (ola "coord"): para los 3 usuarios canonicos (el coordinador de
+      redes, fotografía/QA y la coordinadora operativa) se sobreescribe INCONDICIONALMENTE en cada seed (garantiza el estado
       deseado tras el deploy aunque el admin lo hubiera editado). Para el resto, solo
       se sembra correctivamente si nadie lo ha tocado (es decir, si difiere del seed Y
       el valor actual es el default `False`); asi un admin que lo haya activado a mano
       no pierde su cambio.
-    - Caso especial Daiana (sacarla del calendario de ClaroSports): se sobreescribe
+    - Caso especial de la creativa de Fundación (sacarla del calendario de ClaroSports): se sobreescribe
       INCONDICIONALMENTE su cargo/cobertura/marcas a (`creativo_vertical`, False,
       ["fundacion"]). Es la correccion critica que motiva esta ola y debe quedar
       garantizada tras el deploy, aunque alguien la haya editado mal a mano.
@@ -163,7 +169,7 @@ def sembrar_equipo() -> None:
         marcas_lista = list(marcas)
         if usuario in existentes:
             actual = existentes[usuario]
-            # Correccion correctiva critica: Daiana SIEMPRE se sobreescribe (sale del
+            # Correccion correctiva critica: la creativa de Fundación SIEMPRE se sobreescribe (sale del
             # calendario, va a Fundacion). El admin no tiene autoridad para revertir
             # esta semilla porque su valor anterior era un error de captura.
             if usuario == "daiana":

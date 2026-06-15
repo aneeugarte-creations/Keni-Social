@@ -5,7 +5,7 @@ tests) y la fuente con la que el MCP funciona desde el dia 1, como respaldo
 offline cuando no hay credenciales reales configuradas (las metricas reales
 llegan via Metricool, `fuentes.metricool`).
 
-Cifras ancladas a la realidad del cliente (entrevista a Mariana de Leon,
+Cifras ancladas a la realidad del cliente (entrevista a la coordinadora operativa,
 estrategia digital del cliente, 2026-05-18; ordenes de magnitud de followers
 contrastados en redes publicas):
 - Claro Sports Mexico: ~80M visualizaciones/mes, engagement 2-3% (audiencia muy
@@ -181,7 +181,7 @@ _ENG = {
 }
 
 # factor de engagement por marca: no todas las audiencias interactuan igual.
-# Calibrado para que Claro Sports caiga en ~2-3% combinado (cifra de Mariana) y
+# Calibrado para que Claro Sports caiga en ~2-3% combinado (cifra de la coordinadora operativa) y
 # UnoTV mucho mas abajo (noticias = mucho alcance, poca interaccion).
 _ENG_FACTOR: dict[str, float] = {
     "claro_sports": 0.62,

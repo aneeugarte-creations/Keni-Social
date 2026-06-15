@@ -370,8 +370,8 @@ def duplicar_turno_rota(
 ) -> dict[str, Any] | None:
     """Clona un turno con overrides opcionales. None si el id no existe.
 
-    Caso comun: "rellena la semana siguiente con el turno de Luis del lunes". El estado se
-    reinicia a `propuesto` (Elias re-aprueba antes de publicar). `motivo` y `nota_relevo`
+    Caso comun: "rellena la semana siguiente con el turno de un community manager del lunes". El estado se
+    reinicia a `propuesto` (el coordinador de la rota re-aprueba antes de publicar). `motivo` y `nota_relevo`
     NO viajan (son del turno ORIGINAL, no del clon).
     """
     original = obtener_turno_rota(turno_id)
@@ -449,7 +449,7 @@ def copiar_turnos_rota(
     franjas de la semana origen a la destino (mismo nombre/inicio/fin/orden) si la semana
     destino aun no tiene una franja con ese nombre — asi los turnos clonados se enlazan a
     una franja real en la semana destino. Los IDs son nuevos (uuid); el `estado` arranca
-    como `propuesto` (Elias re-aprueba antes de publicar). Si `reemplazar=True`, primero
+    como `propuesto` (el coordinador de la rota re-aprueba antes de publicar). Si `reemplazar=True`, primero
     borra los turnos existentes de `a_lunes` (las franjas NO se borran: no son turnos).
 
     GRID POR MARCA: con `marca` copia SOLO la rejilla de esa marca (franjas y turnos); el

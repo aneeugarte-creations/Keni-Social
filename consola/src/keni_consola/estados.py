@@ -72,10 +72,11 @@ ROL_EDITOR = "editor"
 # el flag separado que dice si esa persona entra en la rota de turnos: hay cargos que
 # por funcion no cubren (estrategia, fotografia, gerencia) y community managers que si.
 #
-# Ampliacion (organigrama dictado por Bernardo): se anaden cargos especificos por
+# Ampliacion (organigrama dictado por la dirección): se anaden cargos especificos por
 # vertical/funcion que la version "plana" no capturaba (un `coordinador` real puede ser
-# de redes, YouTube u operativo; Maira es `gerente_podcast`; Daiana/Jonathan son
-# `creativo_vertical` de Fundacion/Nacion Gamer; Yustine es editorial de YouTube; Ale
+# de redes, YouTube u operativo; gerencia de podcast es `gerente_podcast`; la creativa de
+# Fundación/el creativo de vertical son `creativo_vertical` de Fundacion/Nacion Gamer;
+# editorial de YouTube es `editorial_youtube`; fotografía/QA
 # combina fotografia con QA). Los valores VIEJOS se conservan tal cual por retrocompat
 # de usuarios legados creados antes de la ampliacion (no se les fuerza la migracion).
 CARGOS_USUARIO: tuple[str, ...] = (
@@ -91,30 +92,30 @@ CARGOS_USUARIO: tuple[str, ...] = (
     "estrategia",
     "fotografia",
     # Ampliacion (organigrama real del cliente):
-    "coordinador_redes",        # jefe de redes de una marca (Diana UnoTV, Elias ClaroSports)
-    "coordinador_youtube",      # coordinacion del canal de YouTube (Lalo YT)
-    "gerente_podcast",          # gerencia del podcast Piso 15 (Maira)
-    "creativo_vertical",        # creativo de una vertical (Jonathan NG, Daiana Fundacion)
-    "editorial_youtube",        # editorial enfocada a YouTube (Yustine)
+    "coordinador_redes",        # jefe de redes de una marca (p. ej. UnoTV, ClaroSports)
+    "coordinador_youtube",      # coordinacion del canal de YouTube
+    "gerente_podcast",          # gerencia del podcast Piso 15
+    "creativo_vertical",        # creativo de una vertical (p. ej. Nacion Gamer, Fundacion)
+    "editorial_youtube",        # editorial enfocada a YouTube
     "coordinador_invitados",    # coordinacion de invitados (uso futuro)
-    "coordinador_operativo",    # coordinacion operativa (Mariana)
-    "fotografia_qa",            # fotografia + QA editorial (Ale)
+    "coordinador_operativo",    # coordinacion operativa
+    "fotografia_qa",            # fotografia + QA editorial
     "editor_video",             # edicion de video (uso futuro)
     "disenador",                # diseno grafico (uso futuro)
 )
 
 # Estados de un turno de la rota (F4 · #144): `propuesto` es lo que Keni genera;
-# `aprobado` es lo que Elias publica al equipo (nada se publica antes de aprobar).
+# `aprobado` es lo que el coordinador de la rota publica al equipo (nada se publica antes de aprobar).
 # Operacional; vive en SQLite. Lo COMPARTEN los turnos de cobertura de eventos
 # (`rota_turnos`) y los turnos de trabajo del horario del equipo (`rota_turnos_trabajo`):
-# misma frontera de aprobacion (Keni propone -> Elias aprueba y publica).
+# misma frontera de aprobacion (Keni propone -> el coordinador de la rota aprueba y publica).
 ESTADOS_ROTA: tuple[str, ...] = ("propuesto", "aprobado")
 ESTADO_ROTA_PROPUESTO = "propuesto"
 ESTADO_ROTA_APROBADO = "aprobado"
 
 # Estados del flujo de SWAPS de turno (intercambios entre companeros, #175). Cuando un
 # CM (A) pide a otro (B) cubrirle un turno, la solicitud nace `propuesto`; B `acepta` o
-# `rechaza`; si acepta, Elias (admin) `aprueba` (que aplica el swap en
+# `rechaza`; si acepta, el coordinador de la rota (admin) `aprueba` (que aplica el swap en
 # `rota_turnos_trabajo` y la solicitud queda `aplicado`) o `rechazado_admin`. El
 # solicitante puede `cancelar` mientras la solicitud no sea terminal.
 #
@@ -173,12 +174,12 @@ FRANJAS_TRABAJO: tuple[str, ...] = (FRANJA_MATUTINO_LEGACY, FRANJA_VESPERTINO_LE
 
 # Tipos de una AUSENCIA del horario (F4 · #144): el proponedor los respeta por igual
 # (cualquier ausencia que cubra una fecha excluye al miembro ese dia). `vacaciones` es el
-# caso de Elias ("las vacaciones, esto por el acomodo"); `descanso` es un dia libre
+# caso del coordinador de la rota ("las vacaciones, esto por el acomodo"); `descanso` es un dia libre
 # planificado; `baja` una ausencia medica/forzosa; `otro` el cajon de sastre. Operacional;
 # vive en SQLite (`rota_ausencias.tipo`).
 TIPOS_AUSENCIA: tuple[str, ...] = ("vacaciones", "descanso", "baja", "otro")
 
-# Tipo de COBERTURA de un evento del calendario (F4 · #144, ola B). Elias distingue tres
+# Tipo de COBERTURA de un evento del calendario (F4 · #144, ola B). El coordinador de la rota distingue tres
 # casos reales: `transmision` (sale con senal/transmision), `imagenes` ("algunos no los
 # vamos a transmitir, pero si los cubrimos con imagenes y fotografias") y `no_cubrir` (se
 # trackea en el calendario pero NO se asigna cobertura). DEFAULT `transmision`: un evento

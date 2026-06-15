@@ -632,7 +632,7 @@ def _migrar_columnas_programas(con: Any) -> None:
 # antes no las tiene; legado -> `cargo=''` (sin clasificar), `cobertura=0` (no entra en
 # rota), `puede_coordinar=false` (no es candidato a coordinador). Cada par es (columna,
 # fragmento de tipo/DEFAULT).
-#   - nombre: nombre HUMANO de la persona (Bernardo Vazquez, Elias...) para el organigrama;
+#   - nombre: nombre HUMANO de la persona (p. ej. la dirección, el coordinador de redes...) para el organigrama;
 #     legado -> "" (la UI cae al `usuario`/login). No es UNIQUE: dos personas pueden
 #     llamarse igual, lo que identifica la cuenta sigue siendo `usuario`.
 #   - manager_id: id del usuario SUPERIOR (a quien reporta) en el organigrama; legado/raiz

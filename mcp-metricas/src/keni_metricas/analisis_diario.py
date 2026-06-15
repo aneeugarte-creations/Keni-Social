@@ -6,7 +6,7 @@ y accionable de qué subió/bajó, qué pieza(s) lo explican y cuál es el sigui
 paso. No es un cálculo nuevo de métricas: ENSAMBLA lo que ya producen el reporte
 consolidado y el detector de picos, y lo redacta.
 
-Frontera (UX-roadmap §0, spec de Elías §0): keni-social CONSOLIDA y SUGIERE; la
+Frontera (UX-roadmap §0, spec del coordinador de redes §0): keni-social CONSOLIDA y SUGIERE; la
 interpretación final y la decisión de qué cambiar quedan en el equipo. Por eso la
 narrativa NO atribuye causas de coyuntura externas (eso lo pone el humano): se
 limita a "este número se movió y esta pieza lo acompaña", más una sugerencia de

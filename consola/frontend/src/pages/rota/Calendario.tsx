@@ -90,7 +90,7 @@ export function Calendario({
     queryFn: ({ signal }) => api.rotaEquipo(signal),
   });
   // Equipo completo (incluye sin cobertura): necesario para resolver candidatos a
-  // coordinador (ola "coord") como Mariana o Ale, que tienen `cobertura=false`.
+  // coordinador (ola "coord") como la coordinadora operativa o fotografía/QA, que tienen `cobertura=false`.
   const equipoTodosQ = useQuery({
     queryKey: ["rota", "equipo", "todos"],
     queryFn: ({ signal }) => api.rotaEquipoTodos(signal),
@@ -114,8 +114,8 @@ export function Calendario({
   const equipo = filtrarEquipoPorMarca(equipoQ.data?.equipo ?? [], marcaActiva);
   const cms = cmsDeMarca(equipoQ.data?.equipo ?? [], marcaActiva);
   // Candidatos a coordinador (ola "coord"): usuarios con `puede_coordinar=true`. Se
-  // sacan del equipo COMPLETO (no solo cobertura) porque hoy son Elias (cubre), Ale
-  // y Mariana (NO cubren). El admin gestiona el flag desde /usuarios.
+  // sacan del equipo COMPLETO (no solo cobertura) porque hoy son el coordinador de redes
+  // (cubre), fotografía/QA y la coordinadora operativa (NO cubren). El admin gestiona el flag desde /usuarios.
   const candidatosCoordinador = React.useMemo(
     () => (equipoTodosQ.data?.equipo ?? []).filter((m) => m.puede_coordinar),
     [equipoTodosQ.data?.equipo],

@@ -12,7 +12,7 @@ export type RolUsuario = "admin" | "editor";
  * QUÉ hace la persona (community manager, director, coordinador de redes...). Allowlist
  * sincronizada con `keni_consola.estados.CARGOS_USUARIO`; cadena vacía = sin
  * clasificar (usuarios legados antes de la migración). Tras la ola
- * `feat/roles-marcas` (organigrama del cliente dictado por Bernardo) se añaden cargos
+ * `feat/roles-marcas` (organigrama del cliente dictado por la dirección) se añaden cargos
  * específicos por vertical/función; los valores viejos se conservan por retrocompat.
  */
 export type CargoUsuario =
@@ -122,7 +122,7 @@ export interface UsuarioSesion {
   puede_coordinar?: boolean;
   /**
    * Verticales/marcas a las que pertenece (relación N:M con `keni_shared.marcas`).
-   * Una persona puede estar en varias (Yustine: claro-sports + unotv + piso-15).
+   * Una persona puede estar en varias (editorial de YouTube: claro-sports + unotv + piso-15).
    * Solo llega por `GET /api/auth/me`; el login no lo incluye.
    */
   marcas?: string[];

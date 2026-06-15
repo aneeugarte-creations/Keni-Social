@@ -267,7 +267,7 @@ async def aceptar_swap(request: Request) -> Response:
     """POST /api/rota/swaps/{id}/aceptar: el DESTINATARIO acepta el cambio.
 
     Solo si el estado actual es `propuesto` y el usuario es el destinatario. Cuerpo
-    opcional `{respuesta}` para dejar una nota a A/Elías.
+    opcional `{respuesta}` para dejar una nota a A/el coordinador de la rota.
     """
     swap_id = request.path_params["swap_id"]
     err, swap, usuario = await _ahora_yo_soy(request, swap_id)

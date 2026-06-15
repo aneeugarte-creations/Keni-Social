@@ -40,7 +40,7 @@ export interface EventoRota {
   /** ISO (AAAA-MM-DD). */
   fecha: string;
   hora: string;
-  /** "Qué sacar" de esta transmisión (el campo clave del Excel de Elías). */
+  /** "Qué sacar" de esta transmisión (el campo clave del Excel del coordinador de la rota). */
   contenido: string;
   nota: string;
   /** Tipo de cobertura: transmisión (con señal) / solo imágenes / no cubrir. */
@@ -104,7 +104,7 @@ export type CuerpoActualizarEventoRota = Partial<CuerpoCrearEventoRota> & {
   cambiado?: boolean;
 };
 
-/** Estado de un turno: `propuesto` (Keni) o `aprobado` (publicado por Elías). */
+/** Estado de un turno: `propuesto` (Keni) o `aprobado` (publicado por el coordinador de la rota). */
 export type EstadoTurnoRota = "propuesto" | "aprobado";
 
 // Nota: el viejo `TurnoRota` (turno ligado a un evento + cobertura persistida) ya
@@ -206,7 +206,7 @@ export interface TurnoRota {
    * franja para UI vieja. Codigo nuevo lee `franja_id`/`franja_nombre`. */
   franja: FranjaTurno;
   estado: EstadoTurnoRota;
-  /** Cobertura forzada que rompe la rotación de sábados (la decide Elías). */
+  /** Cobertura forzada que rompe la rotación de sábados (la decide el coordinador de la rota). */
   override: boolean;
   motivo: string;
   /** Reporte de fin de turno: qué queda pendiente para el siguiente. */

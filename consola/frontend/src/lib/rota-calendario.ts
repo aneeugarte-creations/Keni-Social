@@ -12,7 +12,7 @@ import type { PrioridadEvento, TipoCoberturaEvento } from "@/types";
 
 /**
  * Presentación de cada tipo de cobertura: etiqueta, icono y clases de color (chips/leyenda).
- * Tropicalización MX y consistente con la voz del producto (Elías decide qué se cubre).
+ * Tropicalización MX y consistente con la voz del producto (el coordinador de la rota decide qué se cubre).
  */
 export const COBERTURA: Record<
   TipoCoberturaEvento,

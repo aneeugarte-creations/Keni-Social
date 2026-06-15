@@ -60,7 +60,7 @@ export const apiContenido = {
     }),
   /** "La lista" (reparto ClaroSports): el MANAGER (admin) EMPUJA el tema a una persona
    *  concreta —o lo REASIGNA pisando a quien lo tuviera—. Es la otra puerta del mismo
-   *  responsable: `cogerContenido` es el self-claim del empleado; esto es el push de Elias.
+   *  responsable: `cogerContenido` es el self-claim del empleado; esto es el push del coordinador de redes.
    *  El asignado recibe aviso in-app. 403 si no eres manager; 400 sin persona (libera con soltar). */
   asignarContenido: (contenidoId: string, responsableId: string) =>
     peticion<RespuestaContenidoItem>(`/contenido/${encodeURIComponent(contenidoId)}/asignar`, {
