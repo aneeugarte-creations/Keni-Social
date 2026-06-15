@@ -28,11 +28,10 @@ import { RielInvestigacion } from "@/pages/noticias/RielInvestigacion";
  *       vieja `/contenido/texto/algoritmos` redirige aquí.
  *   PROCESO
  *     · PIPELINE (núcleo): UN solo proceso en dos fases. Antes (en el flujo), la línea INFORMATIVA de
- *       recolección (`RielInvestigacion`: la máquina recolecta/agrupa/prioriza sola; cada etapa con
- *       prompt es una BURBUJA clicable que lo edita in-place). En el control, la tira
- *       `PipelineEnVivo` recortada a Investigación (`soloProceso`) —Recolectar + Verificar, con
- *       el switch inline y «Editar prompt»/«Excepciones» en el menú de la etapa—. El repertorio
- *       completo de prompts vive en la Biblioteca (Texto · Documentos); no se duplica aquí.
+ *       el pipeline CONSOLIDADO (`RielInvestigacion` sobre `PanelPipeline`): TODAS las fases del
+ *       tramo aguas arriba como tarjetas grandes en orden, cada una con su icono, switch (on/off),
+ *       conteos de cola y «Editar prompt»/«Excepciones» en el menú; el maestro «Máquina» en la
+ *       cabecera. El repertorio completo de prompts vive en la Biblioteca (Texto · Documentos).
  *   SALIDA
  *     · MESA DE REDACCIÓN (`Cobertura`): el pool segmentado por líneas con usar/descartar; lo que
  *       el humano revisa. La ruta vieja `/datos/investigacion` redirige aquí.

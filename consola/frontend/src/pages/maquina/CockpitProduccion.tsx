@@ -15,16 +15,75 @@ import { INTERVALO_VIVO_MS } from "@/lib/refresco";
 import { PanelAjustes, PanelMaquinaContenido } from "@/pages/configuracion/SeccionFuncionalidad";
 import { SeccionImagen } from "@/pages/configuracion/SeccionImagen";
 import { PanelLanzarArte } from "@/pages/maquina/PanelLanzarArte";
-import { PipelineEnVivo } from "@/pages/monitor/PipelineEnVivo";
+import { PanelPipeline, type FasePipeline } from "@/pages/monitor/PanelPipeline";
 import { PanelLanzar } from "@/pages/texto/PanelLanzar";
 
 // Grupos del catálogo que son TUNING DE SISTEMA (jobs, limpieza, alertas) y gobiernan CÓMO se
 // produce: se ajustan desde el drawer del propio cockpit (la misma sección que vigila sus efectos).
 const GRUPOS_SISTEMA = ["automatismos_generales", "tuning"] as const;
 
-// Docs de la Biblioteca de cada etapa de PRODUCCIÓN: el lápiz «Editar prompt» de cada tarjeta de
-// la tira los abre in-place (overlay), igual que el lanzamiento manual.
-const DOC_POR_ETAPA = { redactar: "prompt/redactar", ilustrar: "prompt/ilustrar" } as const;
+/** Maestro VIRTUAL de Producción: respaldo de las fases sin flag físico propio en el catálogo. */
+const MAESTRO_PRODUCCION = "KENI_PRODUCCION";
+
+// Las fases del MOTOR de auto-producción, en orden de flujo. Mismas tarjetas que Investigación
+// (panel `PanelPipeline`): icono, switch (on/off), conteos de cola y «Editar prompt».
+const FASES_PRODUCCION: readonly FasePipeline[] = [
+  {
+    nombre: "Redactar",
+    es_ia: true,
+    claves: ["KENI_PIPELINE_REDACTAR", MAESTRO_PRODUCCION],
+    ayuda: "Redacta el copy que convierte la noticia verificada en pieza",
+    doc: "prompt/redactar",
+    queue: "redactar",
+    excepciones: {
+      base: MAESTRO_PRODUCCION,
+      nota: "Apagar «Producción» en una marca la deja sin copy automático.",
+    },
+  },
+  {
+    nombre: "Revisar",
+    es_ia: false,
+    claves: ["KENI_PIPELINE_REVISAR", MAESTRO_PRODUCCION],
+    ayuda: "Criba la voz y la calidad del copy antes de avanzar",
+    heredada: "con Producción",
+  },
+  {
+    nombre: "Ilustrar",
+    es_ia: true,
+    claves: ["KENI_PIPELINE_ILUSTRAR", MAESTRO_PRODUCCION],
+    ayuda: "Genera imagen por IA para los temas con copy y sin imagen",
+    doc: "prompt/ilustrar",
+    queue: "ilustrar",
+    excepciones: {
+      base: "KENI_PIPELINE_ILUSTRAR",
+      nota: "Apagar «Ilustrar» en una marca la deja sin imagen por IA.",
+    },
+  },
+  {
+    nombre: "Aprobar",
+    es_ia: false,
+    claves: ["KENI_AUTO_PREAPROBACION"],
+    ayuda: "El OK humano antes de programar la pieza",
+    heredada: "el switch auto-aprueba las de bajo riesgo",
+  },
+  {
+    nombre: "Publicar",
+    es_ia: false,
+    claves: ["KENI_PUBLICAR_REAL"],
+    ayuda: "Postea de verdad en el programador (apagado: simulación)",
+    excepciones: {
+      base: "KENI_PUBLICAR_REAL",
+      nota: "Apagar «Publicar» en una marca la deja en simulación (sin postear).",
+    },
+  },
+];
+
+/** Tipo de job → fase con cola: la redacción (copy/autogen) y la imagen IA. */
+const QUEUE_POR_TIPO_PRODUCCION: Record<string, string> = {
+  copy: "redactar",
+  autogen: "redactar",
+  imagen: "ilustrar",
+};
 
 // Prompts de las etapas manuales (Redactar/Ilustrar): el lanzamiento del cockpit los dispara
 // contra una marca LOCAL, y su lápiz abre el editor in-place sin salir de la página.
@@ -42,9 +101,10 @@ const PROMPT_ILUSTRAR = "prompt/ilustrar";
  *      desde un botón dentro del popup.
  *   2. BORRADORES → REVISIÓN: estado VIVO con cuántas piezas de la marca esperan revisión
  *      (cola de aprobación) y el atajo directo al Feed de revisión.
- *   3. MOTOR de auto-producción (tira `PipelineEnVivo` recortado a Producción: solo Redactar e
- *      Ilustrar, cada etapa con su conteo vivo, su toggle y su «Editar prompt»). En su cabecera vive
- *      el maestro global «Máquina». Va al final: el manual es lo principal, no la tira.
+ *   3. MOTOR de auto-producción (panel `PanelPipeline` con TODAS las fases de Producción —Redactar ·
+ *      Revisar · Ilustrar · Aprobar · Publicar—, cada una con su icono, switch, conteo vivo y
+ *      «Editar prompt»). En su cabecera vive el maestro global «Máquina». Va al final: el manual es
+ *      lo principal, no la tira.
  *   4. DRAWER de ajustes (⋮ → Ajustes): SOLO lo que gobierna cómo se redacta e ilustra —
  *      «Máquina de contenido» (admisión + topes), «Conexiones · Imagen IA» (imagen) y «Sistema»
  *      (automatismos + tuning). Sin presupuesto/economía (eso vive en Agentes).
@@ -174,19 +234,18 @@ export default function CockpitProduccion() {
         )}
       </TarjetaAccion>
 
-      {/* 3. MOTOR de auto-producción: tira recortada a Producción (solo Redactar e Ilustrar). */}
-      {cola.isPending ? (
-        <Skeleton className="mt-6 h-40 w-full rounded-xl" />
-      ) : cola.data ? (
-        <div className="mt-6">
-          <PipelineEnVivo
-            cola={cola.data}
-            esAdmin={esAdmin}
-            soloProceso="produccion"
-            docPorEtapa={DOC_POR_ETAPA}
-          />
-        </div>
-      ) : null}
+      {/* 3. MOTOR de auto-producción: el pipeline COMPLETO de Producción como tarjetas grandes
+          (Redactar · Revisar · Ilustrar · Aprobar · Publicar), cada una con su icono, switch,
+          conteos de cola y «Editar prompt»; el maestro «Máquina» en la cabecera. */}
+      <div className="mt-6">
+        <PanelPipeline
+          titulo="Pipeline en vivo"
+          fases={FASES_PRODUCCION}
+          queuePorTipo={QUEUE_POR_TIPO_PRODUCCION}
+          cola={cola.data}
+          esAdmin={esAdmin}
+        />
+      </div>
 
       {/* Lanzador de Redactar (reusa PanelLanzar): marca del switch global + «Editar prompt» dentro. */}
       <PanelLanzar
