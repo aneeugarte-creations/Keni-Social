@@ -8,7 +8,7 @@ el caso golden que dependía de ello cambia de veredicto y el harness lo caza.
 Dimensiones (claves estables; se referencian en los casos y en el reporte):
   - `limite_red`  : tope técnico DURO de caracteres por red, por intervalo de hilo/carrusel.
                     Reusa `keni_shared.limites_plataforma` + `dominio.copy._intervalos_publicables`
-                    (la misma criba que descarta piezas inválidas en el post-procesado).
+                    (la misma verificación que descarta piezas inválidas en el post-procesado).
   - `voz`         : adherencia a los PATRONES medidos de la marca (longitud p-derivada, banda de
                     emojis/hashtags, gancho en mayúsculas, pregunta). Reusa
                     `patrones_marca.verificar_pieza` — el MISMO lint del post-procesado de copy.
@@ -70,14 +70,14 @@ def check_limite_red(caso: CasoEval) -> ResultadoDimension:
 
 
 def _intervalos(texto: str) -> list[str]:
-    """Intervalos publicables (tuit de un hilo / slide de carrusel / pieza simple). Reusa la criba
+    """Intervalos publicables (tuit de un hilo / slide de carrusel / pieza simple). Reusa la verificación
     del post-procesado de copy; si no estuviera disponible, cae al texto entero (best-effort)."""
     try:
         from keni_consola.dominio import copy as dom_copy
 
         intervalos = dom_copy._intervalos_publicables(texto)  # noqa: SLF001 -- reuso del contrato de piezas
         return intervalos or [texto]
-    except Exception:  # noqa: BLE001 -- sin la criba, mide el texto entero
+    except Exception:  # noqa: BLE001 -- sin la verificación, mide el texto entero
         return [texto]
 
 

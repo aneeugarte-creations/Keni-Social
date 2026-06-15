@@ -132,7 +132,7 @@ def _maestros_etapa() -> list[Ajuste]:
             clave=config.ENV_PIPELINE_VERIFICAR,
             tipo="bool",
             etiqueta="Verificar",
-            ayuda="Etapa física: criba/verificación de la fuente antes de escribir el copy.",
+            ayuda="Etapa física: verificación/verificación de la fuente antes de escribir el copy.",
             grupo="maestros_investigacion",
             defecto=False,
         ),

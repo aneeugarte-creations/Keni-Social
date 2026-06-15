@@ -2,7 +2,7 @@
 
 El equipo NO usa skills: la QA se hace adjuntando un DOCUMENTO de la Texto con los criterios.
 Regla del dueño: "si el documento existe, adjúntalo; si no existe, créalo y adjúntalo." La QA
-corre ANTES del copy y por TEMA (fuente): criba la NOTA de origen y persiste un veredicto
+corre ANTES del copy y por TEMA (fuente): verifica la NOTA de origen y persiste un veredicto
 ESTRUCTURADO (`no_verificado`/`problema`) sobre el TEMA. Aquí cubrimos, OFFLINE (mock de claude):
   - `asegurar_documento_qa` crea el documento si falta (idempotente).
   - `lanzar_verificar_fuente` enlaza una generación a la etapa Verificar (`gen_id`) y deja el tema `en_curso`.
@@ -37,9 +37,9 @@ def test_asegurar_documento_qa_lo_crea_si_falta(entorno):
     doc = libtexto.obtener(pc.PROMPT_QA_ID)
     assert doc is not None
     assert doc.cuerpo.strip()  # tiene criterios
-    # Es la criba de la FUENTE (pre-copy), NO el QA de copy: `PROMPT_QA_ID` = prompt/verificar.
+    # Es la verificación de la FUENTE (pre-copy), NO el QA de copy: `PROMPT_QA_ID` = prompt/verificar.
     assert pc.PROMPT_QA_ID == "prompt/verificar"
-    assert "CRIBA PREVIA" in doc.cuerpo
+    assert "VERIFICACIÓN PREVIA" in doc.cuerpo
     # Idempotente: una segunda llamada no duplica.
     pc.asegurar_documento_qa()
     docs = [d for d in libtexto.listar(tipo="prompt") if d.id == pc.PROMPT_QA_ID]
@@ -75,7 +75,7 @@ def test_lanzar_qa_fuente_enlaza_generacion_y_marca_en_curso(entorno):
 
 
 def test_qa_fuente_persiste_veredicto_no_verificado(entorno):
-    """Una criba 🟢 sin hallazgos -> veredicto `no_verificado` persistido en el tema."""
+    """Una verificación 🟢 sin hallazgos -> veredicto `no_verificado` persistido en el tema."""
     salida = (
         "🟢 Fuente apta.\n\n"
         '```json\n{"veredicto": "🟢", "resumen": "OK", "hallazgos": []}\n```\n'
@@ -89,7 +89,7 @@ def test_qa_fuente_persiste_veredicto_no_verificado(entorno):
 
 
 def test_endurecer_qa_fuente_barato_por_defecto(monkeypatch):
-    """La criba de la fuente corre BARATA por defecto: Haiku + esfuerzo low + timeout 180 s.
+    """La verificación de la fuente corre BARATA por defecto: Haiku + esfuerzo low + timeout 180 s.
 
     Es un filtro PERMISIVO (no redacción): no necesita el modelo/esfuerzo/timeout globales.
     Cada override es configurable por env y, vaciándolos todos, no se endurece nada (None).
@@ -115,7 +115,7 @@ def test_endurecer_qa_fuente_barato_por_defecto(monkeypatch):
 def test_qa_en_curso_ttl_configurable_con_minimo(monkeypatch):
     """El TTL del reparador de `en_curso` atascada es configurable, con suelo de 5 min.
 
-    El suelo evita que un TTL absurdo resetee QAs VIVAS (debe superar el timeout de la criba).
+    El suelo evita que un TTL absurdo resetee QAs VIVAS (debe superar el timeout de la verificación).
     """
     from keni_consola import config
 
@@ -149,7 +149,7 @@ def test_lanzar_qa_fuente_lanza_con_endurecer_barato(entorno, monkeypatch):
 
 
 def test_qa_fuente_persiste_veredicto_problema(entorno):
-    """Una criba 🔴 con hallazgo de error -> veredicto `problema` + hallazgos persistidos."""
+    """Una verificación 🔴 con hallazgo de error -> veredicto `problema` + hallazgos persistidos."""
     salida = (
         "🔴 Problema de peso.\n\n"
         '```json\n{"veredicto": "🔴", "resumen": "Dato falso", '

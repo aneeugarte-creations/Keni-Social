@@ -87,13 +87,13 @@ ORIGEN_PIPELINE = "pipeline"
 # `tipo` con el que se sellan los MARCADORES de etapa (CI/CD/QA): registros `generaciones`
 # ligeros SIN coste (no llaman a `claude`). Llevan tipo PROPIO `pipeline_etapa` para que la
 # vista "Actividad IA" los EXCLUYA (no son trabajo con tokens/coste; serían irrelevantes a 0). El
-# trabajo REAL con coste (criba QA, copy, arte, fusión/encaje del pool) se sella
+# trabajo REAL con coste (verificación QA, copy, arte, fusión/encaje del pool) se sella
 # `tipo='pipeline'` (TIPO_PIPELINE) y SÍ aparece en Actividad con sus tokens/coste/tiempo: TODO
 # lo que lanza la máquina es UN solo tipo; lo manual (copy a mano, imagen del Estudio) conserva
 # su tipo propio. La vista Pipelines lee los marcadores por `contenido_id`. La ETAPA viaja en la
 # `etiqueta` ("ADMITIR · ..."/"REDACTAR · ..."/"VERIFICAR · ...").
 TIPO_ACTIVIDAD = "pipeline_etapa"
-# `tipo` ÚNICO de toda generación REAL que lanza el pipeline (criba QA, copy, arte, Haiku del
+# `tipo` ÚNICO de toda generación REAL que lanza el pipeline (verificación QA, copy, arte, Haiku del
 # pool): trabajo con tokens/coste/tiempo, identificable y medible en Actividad como `pipeline`.
 TIPO_PIPELINE = "pipeline"
 
@@ -102,7 +102,7 @@ ETAPA_REDACTAR = "REDACTAR"
 ETAPA_VERIFICAR = "VERIFICAR"
 ETAPA_ILUSTRAR = "ILUSTRAR"
 
-# FLUJO CONTINUO: el pipeline NO tiene topes por etapa (cribas QA/copies/autogen/revisados). El
+# FLUJO CONTINUO: el pipeline NO tiene topes por etapa (verificaciones QA/copies/autogen/revisados). El
 # volumen lo regula la ADMISIÓN (`config.pipeline_max()` + el gate serial WIP
 # `config.pipeline_en_proceso_max()`, editables en el Monitor) y el backpressure de la cola.
 
@@ -118,14 +118,14 @@ _DIAS_DEDUP = 60
 _FORMATO_PIPELINE = redes.FORMATO_FOTO
 
 # --- Verificar la FUENTE por DOCUMENTO de Texto (no skills) ------------------------------
-# El equipo NO usa skills: la criba pre-copy de la FUENTE se hace adjuntando un DOCUMENTO de la
+# El equipo NO usa skills: la verificación pre-copy de la FUENTE se hace adjuntando un DOCUMENTO de la
 # Texto con los criterios. Regla del dueño: "si el documento existe, adjúntalo; si no existe,
 # créalo y adjúntalo." Apunta al prompt EDITABLE `prompt/verificar` (pestaña «Prompts»), cuyo
 # cuerpo base viaja en la inicial. El título DEBE sluggear al id (`crear` deriva el id del
 # slug del título): "Verificar" -> "prompt/verificar". DISTINTO de Revisar el COPY (`prompt/qa-editorial`).
 PROMPT_QA_ID = "prompt/verificar"
 _TITULO_QA = "Verificar"
-# Etiqueta HUMANA de la generación de la criba (Actividad IA). DISTINTA del título del prompt
+# Etiqueta HUMANA de la generación de la verificación (Actividad IA). DISTINTA del título del prompt
 # (`_TITULO_QA`="Verificar", que sluggea al id `prompt/verificar`): en la vista Pipelines
 # la etapa se llama "Verificar", y la actividad debe llamarse igual para no desconcertar.
 _ETIQUETA_QA = "Verificar la fuente"
@@ -136,13 +136,13 @@ _ETIQUETA_QA = "Verificar la fuente"
 QA_EN_CURSO = "en_curso"
 
 # Veredicto SENTINEL que se persiste cuando la etapa QA está DESACTIVADA para la marca (toggle
-# `KENI_PIPELINE_VERIFICAR` off): no se lanza la criba, pero el tema NO queda bloqueado: `temas_para_redactar` lo acepta
-# igual que un `no_verificado`, así el copy se genera sin criba. La vista Pipelines pinta QA como
-# "saltada". Distinto de "sin veredicto" (que significaría "QA pendiente, aún por cribar").
+# `KENI_PIPELINE_VERIFICAR` off): no se lanza la verificación, pero el tema NO queda bloqueado: `temas_para_redactar` lo acepta
+# igual que un `no_verificado`, así el copy se genera sin verificación. La vista Pipelines pinta QA como
+# "saltada". Distinto de "sin veredicto" (que significaría "QA pendiente, aún por verificar").
 QA_SALTADA = "saltada"
 
 # Veredicto TERMINAL de FRESCURA: el tema superó el TTL en curso (`KENI_PIPELINE_TEMA_TTL_HORAS`)
-# sin completar sus fases y CADUCA: sale del gate serial (libera hueco de admisión), no se criba
+# sin completar sus fases y CADUCA: sale del gate serial (libera hueco de admisión), no se verificación
 # ni genera copy. El pipeline es ventana deslizante sobre el ranking: lo de ayer no entra hoy.
 QA_CADUCADA = "caducada"
 
@@ -153,20 +153,20 @@ VERDICTO_PROBLEMA = dom_verificar.VERDICTO_PROBLEMA  # ❗ algo de peso en contr
 
 # Criterios por defecto del documento QA que se CREA si aún no existe (idempotente). MISMO
 # cuerpo que la inicial `prompt/verificar` del paquete (último recurso si la inicial no se
-# pudiera leer; si tocas uno, toca el otro). REDISEÑO: la QA es PRE-COPY y criba la NOTA DE
+# pudiera leer; si tocas uno, toca el otro). REDISEÑO: la QA es PRE-COPY y verifica la NOTA DE
 # ORIGEN (no el copy, que aún no existe). Es PERMISIVA: solo levanta `problema` ante algo de
 # PESO (dato falso evidente, problema legal/ético claro); ante la duda, `no_verificado`.
 # SEÑALA (no publica ni reescribe). El campo JSON `veredicto` va en slug ASCII
 # ("apta"|"problema"); el semáforo 🟢/🔴 queda como línea humana.
 _DEFAULT_QA_CRITERIOS = """\
 Eres el revisor editorial de AMX Contenido. Recibes en el bloque CONTEXTO la NOTA DE ORIGEN
-(título + resumen + enlace) de la que se generará copy para redes. Haces una CRIBA PREVIA,
+(título + resumen + enlace) de la que se generará copy para redes. Haces una VERIFICACIÓN PREVIA,
 ANTES de que se redacte el copy: decides si la fuente es apta para producir contenido. NO
 redactas copy ni reescribes nada. Aplica la LÍNEA EDITORIAL adjunta (voz de marca, reglas).
 
 Modo dry-run: no publicas ni haces peticiones de red. SEÑALAS; el equipo decide.
 
-SÉ PERMISIVO: esta criba es un primer filtro barato, NO una verificación a fondo. Solo levanta
+SÉ PERMISIVO: esta verificación es un primer filtro barato, NO una verificación a fondo. Solo levanta
 un PROBLEMA cuando hay algo de PESO en contra (un dato claramente falso, un asunto legal o ético
 serio, una fuente no fiable o sensacionalista que no debería amplificarse). Ante la duda, DEJA
 PASAR: el copy generado llevará un aviso de "no verificado" y un humano lo revisará después.
@@ -491,10 +491,10 @@ def registrar_etapa(
 # importar el barrido (el orquestador) desde la capa API.
 ADMISION_QA_ESTADOS = (QA_EN_CURSO, VERDICTO_NO_VERIFICADO, QA_SALTADA)
 
-# Veredictos que ADMITEN a producción (ADR 0011 F3): la historia pasó la criba (`no_verificado`)
+# Veredictos que ADMITEN a producción (ADR 0011 F3): la historia pasó la verificación (`no_verificado`)
 # o la QA estaba saltada para la marca. FUENTE ÚNICA del filtro OBLIGATORIO de la admisión: la
 # usa `promover_clusters_marca`/`clusters_para_promover` por defecto (no existe ya un camino que
-# promueva SIN cribar) y el barrido de investigación.
+# promueva SIN verificar) y el barrido de investigación.
 VERIFICADAS_QA = (VERDICTO_NO_VERIFICADO, QA_SALTADA)
 
 
@@ -649,7 +649,7 @@ def marcar_fallo_etapa(tema_id: str, etapa: str, motivo: str) -> None:
     """Marca el tema con veredicto `problema` por fallo REPETIDO de una etapa (salida terminal).
 
     El tema sale del cupo en curso (deja de reintentarse y de bloquear la admisión de su marca)
-    y el fallo queda visible (❗) con un hallazgo de sistema. Mismo formato que la criba QA.
+    y el fallo queda visible (❗) con un hallazgo de sistema. Mismo formato que la verificación QA.
     """
     import json
 

@@ -40,12 +40,12 @@ def test_descripcion_round_trip_y_separada_del_cuerpo():
     # (lo unico que se inyecta en la IA). Round-trip crear -> obtener -> guardar.
     doc = libtexto.crear(
         "Validación", tipo="prompt", cuerpo="Eres el revisor…",
-        descripcion="Criba editorial de la fuente antes de generar copy.",
+        descripcion="Verificación editorial de la fuente antes de generar copy.",
     )
     leido = libtexto.obtener(doc.id)
     assert leido is not None
-    assert leido.descripcion == "Criba editorial de la fuente antes de generar copy."
-    assert "Criba editorial" not in leido.cuerpo  # separada del contenido inyectable
+    assert leido.descripcion == "Verificación editorial de la fuente antes de generar copy."
+    assert "Verificación editorial" not in leido.cuerpo  # separada del contenido inyectable
     assert leido.a_dict()["descripcion"] == leido.descripcion
     # Editar solo la descripcion no toca el cuerpo.
     libtexto.guardar(doc.id, descripcion="Otra cosa.")
@@ -225,10 +225,10 @@ def test_importar_inicial_puebla_y_es_idempotente():
 
 
 def test_inicial_trae_prompt_qa_fuente_editable():
-    # La criba pre-copy de la FUENTE es un prompt EDITABLE de la Biblioteca cuyo cuerpo efectivo
+    # La verificación pre-copy de la FUENTE es un prompt EDITABLE de la Biblioteca cuyo cuerpo efectivo
     # lo trae la inicial del paquete (visible en «Prompts»).
     cuerpo = libtexto.cuerpo_efectivo("prompt/verificar")
-    assert cuerpo and "CRIBA PREVIA" in cuerpo
+    assert cuerpo and "VERIFICACIÓN PREVIA" in cuerpo
 
 
 def test_importar_inicial_no_pisa_lo_editado():

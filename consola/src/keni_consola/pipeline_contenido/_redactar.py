@@ -96,7 +96,7 @@ def lanzar_redactar_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | Non
         fotos_notas=fotos_notas,
         n_notas=n_notas,
         tipo_contenido=tipo_contenido,
-        # La fuente pasó como `no_verificado` (criba permisiva, sin verificación a fondo): las
+        # La fuente pasó como `no_verificado` (verificación permisiva, sin verificación a fondo): las
         # piezas heredan ese aviso (⚠️) en su veredicto, para que la parrilla y Pipelines lo
         # muestren. Si el copy trajera un veredicto propio, ese manda; aquí da el por defecto.
         veredicto_inicial=VERDICTO_NO_VERIFICADO,

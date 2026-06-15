@@ -521,7 +521,7 @@ def lanzar(
         # viajaba en el `procesar_spec` y el registro quedaba sin atar (runs a cero).
         "contenido_id": contenido_id or "",
         # Proceso de la maquina (ADR 0011): por defecto PRODUCCION (la maquina de contenido:
-        # copy/arte/manual). La criba QA de la fuente lo pasa "investigacion" (motor de noticias).
+        # copy/arte/manual). La verificación QA de la fuente lo pasa "investigacion" (motor de noticias).
         "proceso": proceso or generaciones.PROCESO_PRODUCCION,
         **_autor_campos(autor),
     })

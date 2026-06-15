@@ -357,8 +357,8 @@ def clusters_para_promover(
     """Top-N historias (`estado='nuevo'`) de la marca por SCORE, con UMBRAL y DIVERSIDAD. Best-effort.
 
     `qa_estados` (ADR 0011 F3): el filtro de QA es OBLIGATORIO — por defecto a las VERIFICADAS
-    (`VERIFICADAS_QA` = `no_verificado`/`saltada`), así la admisión SIEMPRE criba: las `problema`
-    y las aún sin cribar nunca se materializan como contenido (no existe un camino que promueva
+    (`VERIFICADAS_QA` = `no_verificado`/`saltada`), así la admisión SIEMPRE verificación: las `problema`
+    y las aún sin verificar nunca se materializan como contenido (no existe un camino que promueva
     sin filtrar). Se puede ESTRECHAR a un subconjunto, nunca abrir a "todo": un conjunto vacío
     promueve cero (fail-closed), no todo.
 
@@ -372,7 +372,7 @@ def clusters_para_promover(
     encaje con el vocabulario de la marca ≥ `KENI_PROMOVER_MIN_MARCA` (exentas las curadas por
     el equipo y las breaking corroboradas). Las que no lo superan se quedan `nuevo` en el pool
     (visibles en el panel con su motivo; el humano puede usarlas a mano y la caducidad las
-    expira sola). Se loguea cuántas quedaron bajo el umbral: la criba es auditable.
+    expira sola). Se loguea cuántas quedaron bajo el umbral: la verificación es auditable.
 
     DIVERSIDAD (MMR suave): se sobremuestrea el top y `agrupar.seleccionar_diversos` salta
     las historias cuyo título es casi idéntico (ratio fuzzy ≥ `KENI_PROMOVER_DIVERSIDAD_UMBRAL`,
@@ -388,7 +388,7 @@ def clusters_para_promover(
     # Con PLAN (cupos por categoría) la muestra crece: las categorías minoritarias del plan
     # pueden vivir lejos del top global del pool.
     limite = max(maximo * 4, maximo + 8) if cupos_categoria is None else max(maximo * 10, 80)
-    # Con el filtro de QA las verificadas pueden vivir más abajo en el ranking (solo se cribó el
+    # Con el filtro de QA las verificadas pueden vivir más abajo en el ranking (solo se verificó el
     # top del admision): sobremuestrea más para no quedarte corto al filtrar por veredicto.
     limite = max(limite, 80)
     try:
@@ -453,10 +453,10 @@ def clusters_para_promover(
 
 
 def clusters_pendientes_verificar(marca: str, *, maximo: int) -> list[dict[str, Any]]:
-    """Top-N historias (`estado='nuevo'`) de la marca SIN cribar aún (`verificar_veredicto`==''), que
+    """Top-N historias (`estado='nuevo'`) de la marca SIN verificar aún (`verificar_veredicto`==''), que
     pasan el UMBRAL — las candidatas a las que lanzar la QA de la fuente (ADR 0011 F3).
 
-    El umbral evita gastar `claude -p` cribando historias que jamás se admitirían (score/marca
+    El umbral evita gastar `claude -p` verificando historias que jamás se admitirían (score/marca
     bajo umbral). Las ya `en_curso`/`no_verificado`/`saltada`/`problema` quedan fuera (su QA ya
     corrió o está en curso). Ordenadas por score (el pool ya viene rankeado); se recorta a
     `maximo` (el presupuesto del admision de verificación). Best-effort: [] ante fallo o maximo<=0.
@@ -470,16 +470,16 @@ def clusters_pendientes_verificar(marca: str, *, maximo: int) -> list[dict[str, 
         clusters, _total = repos.listar_noticia_clusters(
             marca=marca, estado="nuevo", limite=limite
         )
-    except Exception:  # noqa: BLE001 -- sin pool legible, esta marca no criba nada
+    except Exception:  # noqa: BLE001 -- sin pool legible, esta marca no verificación nada
         _log.warning("pipeline: no se pudieron leer historias para QA (%s)", marca, exc_info=True)
         return []
     pendientes: list[dict[str, Any]] = []
     for c in clusters:
         if (c.get("verificar_veredicto") or "").strip():
-            continue  # ya cribada / en curso
+            continue  # ya verificada / en curso
         try:
             supera, _motivo = noticias_umbral.evaluar(c)
-        except Exception:  # noqa: BLE001 -- fail-closed: ante fallo del umbral no se criba
+        except Exception:  # noqa: BLE001 -- fail-closed: ante fallo del umbral no se verificación
             continue
         if supera:
             pendientes.append(c)
@@ -656,7 +656,7 @@ def crear_tema_de_cluster(
 def _temas_en_proceso_de(marca: str) -> list[dict[str, Any]]:
     """Temas del pipeline de `marca` EN PROCESO (sin terminar las fases de IA). [] si falla.
 
-    En proceso = pendiente de QA (veredicto ''/'en_curso') O cribado-apto/saltado pero SIN copy aún.
+    En proceso = pendiente de QA (veredicto ''/'en_curso') O verificado-apto/saltado pero SIN copy aún.
     Compartido por el gate SERIAL (cuenta) y la CADUCIDAD (caduca los que superan el TTL): una
     sola definición de "en proceso" para ambos.
     """
@@ -678,7 +678,7 @@ def _temas_en_proceso_de(marca: str) -> list[dict[str, Any]]:
         if veredicto in ("", QA_EN_CURSO):
             en_proceso.append(t)  # pendiente de QA
         elif veredicto in (VERDICTO_NO_VERIFICADO, QA_SALTADA) and (t.get("id") or "") not in con_copy:
-            en_proceso.append(t)  # cribado pero pendiente de copy
+            en_proceso.append(t)  # verificado pero pendiente de copy
     return en_proceso
 
 
@@ -777,7 +777,7 @@ def caducar_temas_viejos(*, ahora: datetime | None = None) -> int:
 
     El pipeline no arrastra backlog: un tema que no completó sus fases (QA→copy) dentro de
     `KENI_PIPELINE_TEMA_TTL_HORAS` (def 24 h) se marca `verificar_veredicto='caducada'` — sale del
-    gate serial (libera hueco de admisión para lo fresco del ranking), la fase QA no lo criba
+    gate serial (libera hueco de admisión para lo fresco del ranking), la fase QA no lo verificación
     y la fase CD no le genera copy. Lo de ayer no entra hoy; hoy entra lo de hoy.
 
     Corre al inicio de cada barrido (barato: lecturas indexadas + updates puntuales).
@@ -820,8 +820,8 @@ def caducar_qa_clusters_en_curso(*, ahora: datetime | None = None) -> int:
     """Limpiador de la verificación: resetea los clusters `verificar_veredicto='en_curso'` atascados (ADR 0011 F3).
 
     Si una QA de la fuente sobre un cluster muere (deploy/OOM/cuelgue), el cluster quedaría
-    `en_curso` para siempre: ni se re-criba ni se admite. Pasado el TTL de `en_curso` (el mismo
-    que el limpiador de `contenido`, `config.qa_en_curso_ttl_seg`), vuelve a "" para re-cribar.
+    `en_curso` para siempre: ni se re-verificación ni se admite. Pasado el TTL de `en_curso` (el mismo
+    que el limpiador de `contenido`, `config.qa_en_curso_ttl_seg`), vuelve a "" para re-verificar.
     Corre al inicio del barrido de investigación. Best-effort; devuelve cuántos reparó.
     """
     momento = ahora or datetime.now(timezone.utc)
@@ -832,7 +832,7 @@ def caducar_qa_clusters_en_curso(*, ahora: datetime | None = None) -> int:
         _log.exception("pipeline: fallo el limpiador de QA de clusters en curso.")
         return 0
     if n:
-        _log.info("pipeline: %d cluster(s) con QA en_curso atascada reseteados a re-criba.", n)
+        _log.info("pipeline: %d cluster(s) con QA en_curso atascada reseteados a re-verificación.", n)
     return n
 
 
@@ -852,7 +852,7 @@ def promover_clusters_marca(
     """CI — promueve a temas las top-N historias rankeadas de una marca. Registra la etapa CI.
 
     Consume el pool ya fusionado/rankeado (Ola B). El filtro `qa_estados` (ADR 0011 F3) es
-    OBLIGATORIO — por defecto las VERIFICADAS (`VERIFICADAS_QA`): la admisión SIEMPRE criba, no
+    OBLIGATORIO — por defecto las VERIFICADAS (`VERIFICADAS_QA`): la admisión SIEMPRE verificación, no
     hay camino que promueva sin filtrar por veredicto. Devuelve los temas creados. Best-effort por
     historia.
     """

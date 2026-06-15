@@ -131,7 +131,7 @@ def test_ledger_proceso_explicito(entorno):
 
 
 def test_hook_cierre_sella_proceso_investigacion(entorno):
-    # Una criba/verificacion de fuente (tipo pipeline + etiqueta "Verificar · …") -> investigacion.
+    # Una verificación/verificacion de fuente (tipo pipeline + etiqueta "Verificar · …") -> investigacion.
     gen_id = generaciones.crear(
         {"tipo": "pipeline", "marca": _MARCA, "etiqueta": "Verificar · fuente"}
     )["id"]

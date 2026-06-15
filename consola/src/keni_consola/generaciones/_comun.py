@@ -97,7 +97,7 @@ TIPOS = (
 )
 
 # PROCESO de la maquina (ADR 0011): la frontera entre los DOS loops. INVESTIGACION es el motor
-# de noticias —Admitir + criba/Verificar de la fuente + Fusionar/Clasificar/Traducir (Haiku del
+# de noticias —Admitir + verificación/Verificar de la fuente + Fusionar/Clasificar/Traducir (Haiku del
 # pool)—; PRODUCCION es la maquina de contenido —Redactar + Ilustrar + avance—. Comparten la
 # MISMA cola y el MISMO pool (no hay dos colas): el `proceso` solo CLASIFICA el trabajo para
 # poder medir cada lado por separado en el Monitor. Se SELLA en el registro al lanzar (campo
@@ -111,7 +111,7 @@ def proceso_de(reg: dict[str, Any]) -> str:
     """Proceso (investigacion|produccion) de una generacion. Prefiere el campo SELLADO.
 
     Si el registro trae `proceso` valido (sellado al lanzar tras ADR 0011), lo usa. Para
-    registros PREVIOS al sello, lo deduce: la criba de la fuente (Verificar) y los marcadores
+    registros PREVIOS al sello, lo deduce: la verificación de la fuente (Verificar) y los marcadores
     CI/QA son Investigacion; el copy del pipeline y los marcadores CD/ARTE son Produccion; el
     resto (copy manual, imagen, hashtags, video, prompt, evergreen...) es Produccion (la maquina
     de contenido). Defensivo: nunca lanza; default Produccion ante lo desconocido.
@@ -127,7 +127,7 @@ def proceso_de(reg: dict[str, Any]) -> str:
         # La etapa viaja en la etiqueta ("ADMITIR · ..."/"VERIFICAR · ..."/"REDACTAR · ..."/"ILUSTRAR · ...").
         return PROCESO_INVESTIGACION if etiqueta.startswith(("ADMITIR", "VERIFICAR")) else PROCESO_PRODUCCION
     if tipo == "pipeline":
-        # La criba de la fuente (Verificar) lleva etiqueta "Verificar · ..."; el resto es copy/arte.
+        # La verificación de la fuente (Verificar) lleva etiqueta "Verificar · ..."; el resto es copy/arte.
         return (
             PROCESO_INVESTIGACION
             if etiqueta.startswith("Verificar ·")

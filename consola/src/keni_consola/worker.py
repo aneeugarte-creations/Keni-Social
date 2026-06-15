@@ -121,14 +121,14 @@ def _finalizar_error(gen_id: str, mensaje: str) -> None:
 
 
 def _reparar_qa_si_fallo(gen_id: str, spec: object) -> None:
-    """Si un job de QA-FUENTE termino en ERROR, devuelve su tema a "sin veredicto" (re-criba).
+    """Si un job de QA-FUENTE termino en ERROR, devuelve su tema a "sin veredicto" (re-verificación).
 
     CIERRA EL ATASCO `verificar_veredicto='en_curso'`: la fase QA marca el tema `en_curso` ANTES de
     lanzar, y solo el `procesar` (exito) escribe el veredicto real. Si la generacion muere en
     error/timeout/cancelacion, nada lo reseteaba: el tema quedaba excluido PARA SIEMPRE de
     `temas_sin_verificar` y contando en `temas_en_proceso` (bloqueando el cupo serial de su marca).
     Aqui, al cerrar un job cuyo `procesar` es `qa-fuente` con el registro en ERROR, se resetea
-    el sentinel a "" para que el siguiente barrido lo re-cribe. El limpiador cubre ademas los
+    el sentinel a "" para que el siguiente barrido lo re-verifique. El limpiador cubre ademas los
     casos donde esta reparación no llega a correr (muerte no graciosa del worker). Best-effort.
     """
     try:
@@ -148,7 +148,7 @@ def _reparar_qa_si_fallo(gen_id: str, spec: object) -> None:
         if tema is not None and (tema.get("verificar_veredicto") or "") == QA_EN_CURSO:
             repos.actualizar_contenido(contenido_id, {"verificar_veredicto": ""})
             _log.info(
-                "worker: QA de la fuente fallida; tema %s devuelto a re-criba", contenido_id
+                "worker: QA de la fuente fallida; tema %s devuelto a re-verificación", contenido_id
             )
     except Exception:  # noqa: BLE001 -- reparación best-effort; el limpiador es la red de seguridad
         _log.warning("worker: fallo la reparación del tema de QA (gen %s)", gen_id, exc_info=True)
@@ -316,7 +316,7 @@ def procesar_job(job: dict, worker_id: str = "") -> None:
         )
         _esperar_terminal(gen_id)
         # Corrección del pipeline: una QA de la fuente que TERMINO EN ERROR devuelve su tema a
-        # "sin veredicto" (re-criba), en vez de dejarlo `en_curso` colgado para siempre.
+        # "sin veredicto" (re-verificación), en vez de dejarlo `en_curso` colgado para siempre.
         _reparar_qa_si_fallo(gen_id, spec)
     finally:
         _desmarcar_job_en_curso(job_id)

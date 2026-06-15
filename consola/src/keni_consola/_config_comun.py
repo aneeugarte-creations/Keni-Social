@@ -284,11 +284,11 @@ ENV_PIPELINE_FETCH_FUENTE = "KENI_PIPELINE_FETCH_FUENTE"  # ingerir el cuerpo de
 # Lo que no se completó a tiempo CADUCA y libera su hueco; hoy entra lo de hoy, no el backlog.
 ENV_PIPELINE_TEMA_TTL_HORAS = "KENI_PIPELINE_TEMA_TTL_HORAS"  # caducidad de temas en proceso
 
-# Etapa de Verificar del pipeline: "Verificar" (`KENI_PIPELINE_VERIFICAR`, toggle de etapa por marca). Es la criba
+# Etapa de Verificar del pipeline: "Verificar" (`KENI_PIPELINE_VERIFICAR`, toggle de etapa por marca). Es la verificación
 # de la FUENTE (pre-copy): un `claude -p` evalúa la nota de origen antes de redactar el copy. Toggle
 # PROPIO (1 toggle = 1 etapa): apagarla por marca la deja como "Saltada" y el copy se genera
-# igual (sin la criba). CONSERVADOR por defecto (OFF), como el resto de etapas: sin `KENI_PIPELINE_VERIFICAR` no
-# se criba (la etapa aparece saltada). Encender desde el panel admin para activar la verificación.
+# igual (sin la verificación). CONSERVADOR por defecto (OFF), como el resto de etapas: sin `KENI_PIPELINE_VERIFICAR` no
+# se verificación (la etapa aparece saltada). Encender desde el panel admin para activar la verificación.
 ENV_PIPELINE_VERIFICAR = "KENI_PIPELINE_VERIFICAR"
 
 # Etapa de Ilustrar del pipeline: "Ilustrar" (`KENI_PIPELINE_ILUSTRAR`, toggle de etapa). Tras la
@@ -306,7 +306,7 @@ ENV_AUTOGEN_ARTE_MAX = "KENI_AUTOGEN_ARTE_MAX"
 # SAFE-by-default (mismo patrón que `dominio.copy.verificar_voz`): NUNCA bloquea el avance ni
 # descarta la pieza; si detecta algo, DEGRADA el veredicto (`listo`→`revisar`) y deja una nota para
 # que el humano decida en la revisión. CONSERVADOR por defecto (OFF): sin el flag el avance no
-# cambia. Existe la criba de la FUENTE (Verificar, pre-copy); esto es la criba del COPY ya redactado.
+# cambia. Existe la verificación de la FUENTE (Verificar, pre-copy); esto es la verificación del COPY ya redactado.
 ENV_PIPELINE_REVISAR = "KENI_PIPELINE_REVISAR"
 
 # La etapa de AVANCE (un borrador COMPLETO pasa SOLO a la cola de revisión con la misma cadena
@@ -337,14 +337,14 @@ ENV_CRITICA_IA = "KENI_CRITICA_IA"
 ENV_GENERACIONES_TTL_HORAS = "KENI_GENERACIONES_TTL_HORAS"
 ENV_LIMPIADOR_INTERVALO_MIN = "KENI_LIMPIADOR_INTERVALO_MIN"
 
-# Verificar la FUENTE (criba pre-copy del pipeline): es un filtro PERMISIVO, no redaccion, asi
+# Verificar la FUENTE (verificación pre-copy del pipeline): es un filtro PERMISIVO, no redaccion, asi
 # que corre BARATO por defecto: modelo rapido (Haiku), esfuerzo bajo y timeout corto. Cada
 # una es configurable; vacia ("") = se usa el global correspondiente.
 ENV_QA_FUENTE_MODELO = "KENI_QA_FUENTE_MODELO"
 ENV_QA_FUENTE_ESFUERZO = "KENI_QA_FUENTE_ESFUERZO"
 ENV_QA_FUENTE_TIMEOUT = "KENI_QA_FUENTE_TIMEOUT"
-# Corrector de temas atascados `verificar_veredicto='en_curso'`: si el lanzamiento/generacion de la criba
-# muere sin finalizador, el tema quedaba excluido para siempre de la re-criba (y contando en
+# Corrector de temas atascados `verificar_veredicto='en_curso'`: si el lanzamiento/generacion de la verificación
+# muere sin finalizador, el tema quedaba excluido para siempre de la re-verificación (y contando en
 # el cupo en proceso). El limpiador resetea a "" los `en_curso` mas viejos que este TTL (minutos).
 ENV_QA_EN_CURSO_TTL_MIN = "KENI_QA_EN_CURSO_TTL_MIN"
 
@@ -523,8 +523,8 @@ DB_POOL_MIN_DEF = 2
 # 20 sobra; por proceso, y son 3 (back/daemons/worker) -> 60 < max_connections=200 de Postgres.
 DB_POOL_MAX_DEF = 20
 CLAUDE_TIMEOUT_DEF = 600
-# Verificar la fuente: timeout corto (criba permisiva con modelo rapido) y TTL del corrector de
-# temas `en_curso` sueltos (minutos; muy superior al timeout de la criba).
+# Verificar la fuente: timeout corto (verificación permisiva con modelo rapido) y TTL del corrector de
+# temas `en_curso` sueltos (minutos; muy superior al timeout de la verificación).
 QA_FUENTE_TIMEOUT_DEF = 180
 QA_EN_CURSO_TTL_MIN_DEF = 30
 # Cadencia de sondeo de la cola por el worker (s). Bajo para que el job arranque casi

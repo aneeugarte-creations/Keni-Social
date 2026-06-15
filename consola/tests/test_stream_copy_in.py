@@ -109,7 +109,7 @@ def test_unificada_texto_corto_se_ignora_si_el_largo_cabe():
 
 def test_unificada_sin_texto_corto_el_largo_no_se_trunca():
     # Sin `texto_corto`, todas las redes heredan el copy largo TAL CUAL (el parser no trunca; si
-    # alguna lo excediera, lo cribaría después la validación de longitud).
+    # alguna lo excediera, lo verificaría después la validación de longitud).
     largo = "L" * 400
     salida = '```json\n{"texto": "' + largo + '", "copy_in": ""}\n```'
     piezas = stream.parsear_salida_unificada(salida, ["x", "instagram"])["piezas"]

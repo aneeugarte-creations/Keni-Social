@@ -137,9 +137,9 @@ def parsear_informe(salida: str) -> dict[str, object]:
 
 
 # --------------------------------------------------------------------------- #
-# QA DE LA FUENTE (pre-copy, rediseño QPC): criba PERMISIVA de la NOTA de origen #
+# QA DE LA FUENTE (pre-copy, rediseño QPC): verificación PERMISIVA de la NOTA de origen #
 # --------------------------------------------------------------------------- #
-# El QA se movió a ANTES del copy y por PIEZA (tema/fuente), no por plataforma: cribar la nota
+# El QA se movió a ANTES del copy y por PIEZA (tema/fuente), no por plataforma: verificar la nota
 # de origen antes de gastar tokens generando copy. Es PERMISIVO y devuelve un veredicto
 # ESTRUCTURADO con SOLO dos salidas: `no_verificado` (nada de peso en contra: seguir, la pieza
 # llevará ⚠️) o `problema` (algo de peso: NO generar copy, marcar ❗ con los hallazgos). Por
@@ -271,7 +271,7 @@ def construir_procesar_qa_fuente(  # noqa: ANN201
                 contenido_id,
                 {"verificar_veredicto": verdicto, "verificar_hallazgos": serializar_hallazgos(informe)},
             )
-            # ENCADENADO QA->copy (por eventos): si la fuente paso la criba, dispara el copy
+            # ENCADENADO QA->copy (por eventos): si la fuente paso la verificación, dispara el copy
             # de ESE tema YA, sin esperar al siguiente barrido de 20 min (el barrido queda de
             # red de seguridad: recoge lo que el encadenado pierda, p. ej. con la cola llena).
             # Respeta los mismos gates que la fase CD (toggle copy global + por marca) dentro

@@ -85,7 +85,7 @@ _COLS_CONTENIDO = (
     "formato",
     "id_post_metricool",
     "senal_viralidad",
-    # QA DE LA FUENTE (pre-copy): veredicto del cribado de la nota de origen antes de generar
+    # QA DE LA FUENTE (pre-copy): veredicto del verificado de la nota de origen antes de generar
     # copy. "no_verificado" (⚠️, OK para seguir, no verificado a fondo) o "problema" (❗, algo de
     # peso en contra: NO se generó copy). `verificar_hallazgos` es el JSON estructurado de hallazgos.
     "verificar_veredicto",
@@ -142,7 +142,7 @@ _CAMPOS_EDITABLES_CONTENIDO: tuple[str, ...] = (
     # Editable para que el flujo de publicación pueda fijar el id de Metricool a nivel
     # pieza cuando esté disponible (Item C); hoy se rellena solo si el publicador lo pasa.
     "id_post_metricool",
-    # QA de la FUENTE: el sweep del pipeline persiste aquí el veredicto del cribado pre-copy
+    # QA de la FUENTE: el sweep del pipeline persiste aquí el veredicto del verificado pre-copy
     # (`no_verificado`/`problema`) y sus hallazgos estructurados (JSON) sobre la nota de origen.
     "verificar_veredicto",
     "verificar_hallazgos",
@@ -290,7 +290,7 @@ def _fila_contenido_nueva(**campos: Any) -> dict[str, Any]:
         "id_post_metricool": campos.get("id_post_metricool") or "",
         # Señal de viralidad del Radar (Fase 5): >=0; defensivo ante valores no enteros.
         "senal_viralidad": _entero_no_negativo(campos.get("senal_viralidad") or 0),
-        # QA de la fuente (pre-copy): suele nacer "" (lo fija el sweep tras cribar la nota).
+        # QA de la fuente (pre-copy): suele nacer "" (lo fija el sweep tras verificar la nota).
         "verificar_veredicto": campos.get("verificar_veredicto") or "",
         "verificar_hallazgos": campos.get("verificar_hallazgos") or "",
         "copy_pendiente": campos.get("copy_pendiente") or "",
@@ -457,13 +457,13 @@ def verificar_veredicto_por_contenido(contenido_ids: list[str]) -> dict[str, str
 
 
 def reparar_qa_en_curso_sueltos(umbral_iso: str) -> int:
-    """Devuelve a re-criba (verificar_veredicto='') los temas COLGADOS en 'en_curso' mas viejos que `umbral_iso`.
+    """Devuelve a re-verificación (verificar_veredicto='') los temas COLGADOS en 'en_curso' mas viejos que `umbral_iso`.
 
-    Limpieza del recolector: la fase QA marca el tema `en_curso` antes de lanzar la criba; si
+    Limpieza del recolector: la fase QA marca el tema `en_curso` antes de lanzar la verificación; si
     la generacion muere sin finalizador, el sentinel quedaba para siempre (tema excluido de
     `temas_sin_verificar` y contando en `temas_en_proceso`). Compara contra `actualizado` (lo refresca
     cada escritura, incluida la que puso `en_curso`): un `en_curso` legitimo y reciente NUNCA
-    se toca (el umbral es muy superior al timeout de la criba). Devuelve cuantos reseteo.
+    se toca (el umbral es muy superior al timeout de la verificación). Devuelve cuantos reseteo.
     """
     con = _conectar()
     try:

@@ -119,10 +119,10 @@ def ejecutar_avance() -> list[dict[str, Any]]:
     Incondicional bajo el único maestro `KENI_MAQUINA` (sin toggle propio ni exclusión por
     marca). Best-effort: un fallo por pieza se loguea y se sigue. Devuelve las piezas enviadas.
 
-    CRIBA DE CALIDAD (ADVISORY, gateada por `KENI_PIPELINE_REVISAR`, def OFF): si el toggle está
+    VERIFICACIÓN DE CALIDAD (ADVISORY, gateada por `KENI_PIPELINE_REVISAR`, def OFF): si el toggle está
     ON, ANTES de mover cada borrador se valida la CALIDAD de su copy (voz de marca + coherencia
     con la nota de origen, `_revisar`). Es safe-by-default: NO bloquea el avance —la pieza pasa a
-    revisión igual—, pero si la criba encuentra algo DEGRADA su veredicto (`listo`→`revisar`) y
+    revisión igual—, pero si la verificación encuentra algo DEGRADA su veredicto (`listo`→`revisar`) y
     deja una nota, para que el humano decida con los avisos delante (IA hacia adentro: filtra la
     calidad, no corrige). Con el toggle OFF el avance no cambia.
     """
@@ -133,13 +133,13 @@ def ejecutar_avance() -> list[dict[str, Any]]:
     except Exception:  # noqa: BLE001 -- sin tablero, la etapa no actúa
         _log.exception("pipeline: no se pudieron leer los borradores para la etapa de avance.")
         return []
-    criba_calidad = config.revisar_activo()
+    verificacion_calidad = config.revisar_activo()
     enviadas: list[dict[str, Any]] = []
     for pub in piezas_para_avance(pubs, ahora=ahora_iso()):
-        # Criba de calidad ADVISORY (no bloquea: marca/degrada y deja al humano decidir). Si
+        # Verificación de calidad ADVISORY (no bloquea: marca/degrada y deja al humano decidir). Si
         # marcó la pieza, el `pub` en memoria conserva el veredicto viejo, pero la transición de
         # `_enviar` no lo toca (sólo el estado), así que la degradación ya persistida se respeta.
-        if criba_calidad:
+        if verificacion_calidad:
             _revisar.verificar_calidad_pieza(pub)
         try:
             if _enviar(pub):

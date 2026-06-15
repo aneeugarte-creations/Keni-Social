@@ -109,7 +109,7 @@ def _actividad_suelta(gens: list[dict], ids_runs: set[str], marca: str | None) -
 
 
 def _temas_trabajados(gens: list[dict]) -> set[str]:
-    """Ids de contenido con TRABAJO del pipeline correlacionado (copy/arte/criba/marcadores).
+    """Ids de contenido con TRABAJO del pipeline correlacionado (copy/arte/verificación/marcadores).
 
     Es la evidencia que convierte un tema del TABLERO en run del feed: la etapa Redactar del
     pipeline también redacta los temas de `ORIGENES_AUTOGEN` (rss/equipo/historia/…); ese

@@ -80,7 +80,7 @@ def test_almacen_vacio_no_rompe(almacen):
 
 
 def test_ttl_qa_en_curso_derivado_del_timeout_real(monkeypatch):
-    """Sin override, el TTL es ~2x el wall-timeout REAL de la criba (no 30 min fijos)."""
+    """Sin override, el TTL es ~2x el wall-timeout REAL de la verificación (no 30 min fijos)."""
     from keni_consola import config
     from keni_consola import limpiador_generaciones as rg
 
@@ -91,7 +91,7 @@ def test_ttl_qa_en_curso_derivado_del_timeout_real(monkeypatch):
     monkeypatch.setenv("KENI_QA_FUENTE_TIMEOUT", "60")
     assert rg._ttl_qa_en_curso_seg() == 120
 
-    # Criba sin endurecer (timeout 0): rige el wall-timeout global de claude.
+    # Verificación sin endurecer (timeout 0): rige el wall-timeout global de claude.
     monkeypatch.setenv("KENI_QA_FUENTE_TIMEOUT", "0")
     assert rg._ttl_qa_en_curso_seg() == 2 * config.claude_timeout()
 

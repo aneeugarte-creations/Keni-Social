@@ -1,4 +1,4 @@
-"""QA — criba de la FUENTE (pre-copy) + helper léxico de vista/detalle.
+"""QA — verificación de la FUENTE (pre-copy) + helper léxico de vista/detalle.
 
 Por cada TEMA nuevo sin veredicto, lanza un `claude -p` que evalúa la NOTA DE ORIGEN (no el copy:
 aún no existe) contra el DOCUMENTO de criterios de la Texto, y persiste un veredicto ESTRUCTURADO
@@ -73,10 +73,10 @@ def asegurar_documento_qa() -> str:
     Regla del dueño: "si el documento existe, adjúntalo; si no existe, créalo y adjúntalo." El
     equipo NO usa skills: el QA se hace con un documento adjunto. Aquí:
       - si el documento (`PROMPT_QA_ID`) ya está en el STORE de la Texto, lo respeta;
-      - si no, lo CREA con el cuerpo de la inicial `prompt/verificar` (criba pre-copy). IDEMPOTENTE.
+      - si no, lo CREA con el cuerpo de la inicial `prompt/verificar` (verificación pre-copy). IDEMPOTENTE.
     Devuelve `PROMPT_QA_ID` si el documento queda disponible (creado o ya presente), o "" si no
     se pudo asegurar (best-effort: sin documento, la QA de la fuente no corre y el tema queda sin
-    veredicto, de modo que la fase CD no genera copy hasta que haya criba).
+    veredicto, de modo que la fase CD no genera copy hasta que haya verificación).
 
     Nota: la inicial del paquete ya trae un `prompt/verificar`; `cuerpo_efectivo` lo resuelve
     aunque no esté materializado en el store. Materializarlo aquí garantiza un documento EDITABLE
@@ -87,7 +87,7 @@ def asegurar_documento_qa() -> str:
             return PROMPT_QA_ID
         # No está en el store: si la inicial lo trae, ya hay cuerpo efectivo; aun así CREAMOS el
         # documento del store para que sea editable/adjuntable (la regla pide un doc real).
-        # `PROMPT_QA_ID` = `prompt/verificar`: la criba pre-copy vive como prompt EDITABLE en la
+        # `PROMPT_QA_ID` = `prompt/verificar`: la verificación pre-copy vive como prompt EDITABLE en la
         # Biblioteca (inicial del paquete); la constante es el último recurso si faltara.
         cuerpo_inicial = libtexto.cuerpo_efectivo(PROMPT_QA_ID)
         cuerpo = cuerpo_inicial or _DEFAULT_QA_CRITERIOS
@@ -110,14 +110,14 @@ def dom_qa_titulo(texto: str) -> str:
 
 
 def _contexto_qa_fuente(nota: str) -> str:
-    """Bloque de contexto de la QA de la FUENTE: la nota de origen a cribar (titulo+resumen+enlace)."""
-    return "Nota de origen a cribar (aún no hay copy):\n\n" + nota
+    """Bloque de contexto de la QA de la FUENTE: la nota de origen a verificar (titulo+resumen+enlace)."""
+    return "Nota de origen a verificar (aún no hay copy):\n\n" + nota
 
 
 def _endurecer_qa_fuente() -> dict[str, Any] | None:
-    """Overrides `endurecer` de la criba de la fuente: modelo rápido + esfuerzo bajo + timeout corto.
+    """Overrides `endurecer` de la verificación de la fuente: modelo rápido + esfuerzo bajo + timeout corto.
 
-    Es una criba PERMISIVA (no redacción): corre con Haiku + `low` + ~180 s (configurables:
+    Es una verificación PERMISIVA (no redacción): corre con Haiku + `low` + ~180 s (configurables:
     `KENI_QA_FUENTE_MODELO`, `KENI_QA_FUENTE_ESFUERZO`, `KENI_QA_FUENTE_TIMEOUT`). Se omiten las
     claves vacías (cada una cae a su global). None si no hay ningún override.
     """
@@ -137,7 +137,7 @@ def _endurecer_qa_fuente() -> dict[str, Any] | None:
 def lanzar_verificar_fuente(
     tema: dict[str, Any], *, autor: dict[str, str] | None
 ) -> dict[str, Any] | None:
-    """QA de la FUENTE via `claude -p`: criba la NOTA de origen de un TEMA contra el doc de Texto.
+    """QA de la FUENTE via `claude -p`: verifica la NOTA de origen de un TEMA contra el doc de Texto.
 
     Rediseño QPC (pre-copy, por TEMA): evalúa el material de origen (no el copy: aún no existe) y
     persiste un veredicto ESTRUCTURADO (`no_verificado`/`problema`) + hallazgos sobre el TEMA
@@ -165,7 +165,7 @@ def lanzar_verificar_fuente(
     doc_id = _ref.asegurar_documento_qa()
     cuerpo = libtexto.cuerpo_efectivo(doc_id) if doc_id else None
     if not cuerpo:
-        return None  # sin documento de QA no hay criba: el tema queda sin veredicto (sin copy).
+        return None  # sin documento de QA no hay verificación: el tema queda sin veredicto (sin copy).
 
     titulo = (tema.get("titulo") or "").strip() or dom_qa_titulo(nota)
     prompt = gen_dom.componer(
@@ -184,16 +184,16 @@ def lanzar_verificar_fuente(
     gen = gen_dom.lanzar(
         tipo=TIPO_PIPELINE,
         # Etiqueta HUMANA en Actividad: el nombre de la etapa ("Verificar", como en la vista
-        # Pipelines) + el TEMA cribado. Sin el tema, N cribas simultáneas eran N filas idénticas
+        # Pipelines) + el TEMA verificado. Sin el tema, N verificaciones simultáneas eran N filas idénticas
         # en el feed ("Verificar la fuente · UnoTV" ×16) imposibles de distinguir.
         titulo=f"Verificar · {titulo}",
         marca=marca,
         prompt=prompt,
-        # Correlación con el TEMA: Producción suma las métricas de la criba en su run.
+        # Correlación con el TEMA: Producción suma las métricas de la verificación en su run.
         contenido_id=tema_id,
         # CLAVE ESTABLE por tema: el prompt lleva un nonce por llamada (anti-inyección) y la
         # clave por defecto (hash del prompt) nunca coincidiría. Con esta, un re-lanzamiento de
-        # la criba del MISMO tema mientras hay una en curso devuelve ese run (cinturón además
+        # la verificación del MISMO tema mientras hay una en curso devuelve ese run (cinturón además
         # del marcador `en_curso`, que una reparación/reset puede limpiar a destiempo).
         clave_idem=generaciones.clave_idempotencia(
             (autor or {}).get("id", ""), TIPO_PIPELINE, marca, "qa-fuente", tema_id
@@ -205,22 +205,22 @@ def lanzar_verificar_fuente(
             marca=marca, titulo=titulo, autor=autor, contenido_id=tema_id,
         ),
         autor=autor,
-        # Criba QA de la FUENTE = VERIFICACIÓN con SALIDA ESTRUCTURADA (veredicto
+        # Verificación QA de la FUENTE = VERIFICACIÓN con SALIDA ESTRUCTURADA (veredicto
         # `no_verificado`/`problema` + hallazgos, parseados; el usuario no ve la salida cruda).
         # Corroborar el material puede requerir LEER la fuente: NO se le veta la web. Queda la
         # veta global `Bash Write Edit`.
-        # CRIBA BARATA: la QA de la fuente es un filtro permisivo, no redacción. Corre con un
+        # VERIFICACIÓN BARATA: la QA de la fuente es un filtro permisivo, no redacción. Corre con un
         # modelo rápido (def Haiku), esfuerzo bajo y timeout corto (def 180 s), configurables
         # por env (`KENI_QA_FUENTE_MODELO`/`_ESFUERZO`/`_TIMEOUT`). Solo endurece; vacío = global.
         endurecer=_endurecer_qa_fuente(),
-        # Frontera ADR 0011: la criba/QA de la fuente es INVESTIGACION (motor de noticias), no
+        # Frontera ADR 0011: la verificación/QA de la fuente es INVESTIGACION (motor de noticias), no
         # produccion. Se sella en el registro para medir el coste de investigar por separado.
         proceso=generaciones.PROCESO_INVESTIGACION,
     )
     registrar_etapa(
         ETAPA_VERIFICAR,
         marca,
-        f"Criba de la fuente (claude) — '{titulo[:120]}'",
+        f"Verificación de la fuente (claude) — '{titulo[:120]}'",
         contenido_id=tema_id,
         gen_id=gen.get("id", "") if isinstance(gen, dict) else "",
     )
@@ -233,8 +233,8 @@ def lanzar_verificar_cluster(
     """QA de la FUENTE sobre una HISTORIA (cluster) via `claude -p`, ANTES de materializar
     contenido de producción (ADR 0011 F3).
 
-    Criba la nota de origen del cluster (título + resumen + bloques de sus fuentes; usa los
-    cuerpos ARCHIVADOS del feed, sin fetch HTTP — la criba es permisiva) y sella el veredicto en
+    Verificación la nota de origen del cluster (título + resumen + bloques de sus fuentes; usa los
+    cuerpos ARCHIVADOS del feed, sin fetch HTTP — la verificación es permisiva) y sella el veredicto en
     `noticias_clusters.verificar_veredicto` (no en `contenido`: la pieza aún no existe). El barrido de
     investigación admite luego solo las `no_verificado` (hereda el veredicto al contenido) y deja
     fuera las `problema`. ASÍNCRONO: marca el cluster `en_curso` y devuelve la generación; None si
@@ -253,7 +253,7 @@ def lanzar_verificar_cluster(
     resumen = (cluster.get("resumen_es") or cluster.get("resumen") or "").strip()
     try:
         items = repos.items_de_cluster(cid, limite=_admitir._MAX_ENLACES_CLUSTER)
-    except Exception:  # noqa: BLE001 -- sin items legibles, cribamos con título+resumen igual
+    except Exception:  # noqa: BLE001 -- sin items legibles, verificamos con título+resumen igual
         items = []
     cuerpos = dict(repos.cuerpos_de_cluster(cid))  # archivados (gratis); sin fetch HTTP en QA
     nota = _admitir._nota_de_cluster(titulo, resumen, items, cuerpos)[: gen_dom.MAX_TEXTO]
@@ -263,7 +263,7 @@ def lanzar_verificar_cluster(
     doc_id = _ref.asegurar_documento_qa()
     cuerpo = libtexto.cuerpo_efectivo(doc_id) if doc_id else None
     if not cuerpo:
-        return None  # sin documento de QA no hay criba: el cluster queda sin veredicto.
+        return None  # sin documento de QA no hay verificación: el cluster queda sin veredicto.
 
     titulo = titulo or dom_qa_titulo(nota)
     prompt = gen_dom.componer(
@@ -294,23 +294,23 @@ def lanzar_verificar_cluster(
         ),
         autor=autor,
         endurecer=_endurecer_qa_fuente(),
-        # Frontera ADR 0011: la criba/QA de la fuente es INVESTIGACION (motor de noticias), no
+        # Frontera ADR 0011: la verificación/QA de la fuente es INVESTIGACION (motor de noticias), no
         # produccion. Se sella en el registro para medir el coste de investigar por separado.
         proceso=generaciones.PROCESO_INVESTIGACION,
     )
     registrar_etapa(
         ETAPA_VERIFICAR,
         marca,
-        f"Criba de la fuente (claude) — '{titulo[:120]}'",
+        f"Verificación de la fuente (claude) — '{titulo[:120]}'",
         gen_id=gen.get("id", "") if isinstance(gen, dict) else "",
     )
     return gen
 
 
 def temas_sin_verificar(marca: str | None = None) -> list[dict[str, Any]]:
-    """Temas del pipeline SIN veredicto de QA todavía (criba pendiente). Best-effort.
+    """Temas del pipeline SIN veredicto de QA todavía (verificación pendiente). Best-effort.
 
-    Excluye los `en_curso` (su QA está en curso) y los ya cribados (`no_verificado`/`problema`).
+    Excluye los `en_curso` (su QA está en curso) y los ya verificados (`no_verificado`/`problema`).
     SIN recorte: el volumen lo acota la ADMISIÓN (el gate serial en curso por marca); aquí solo
     puede haber, como mucho, lo admitido. La cola de generación pone el backpressure real
     (`ColaLlenaError` corta la fase y el siguiente tick reintenta).

@@ -699,7 +699,7 @@ def pipeline_en_proceso_max() -> int:
     """WIP del gate SERIAL: piezas EN CURSO por marca (`KENI_PIPELINE_EN_PROCESO_MAX`, def 8, min 1).
 
     ES el regulador del flujo continuo (in=out): Admitir no admite más historias de una
-    marca mientras ésta tenga >= esto sin terminar (Verificar pendiente o cribado sin copy); primero se
+    marca mientras ésta tenga >= esto sin terminar (Verificar pendiente o verificado sin copy); primero se
     COMPLETA lo que entró, luego entran nuevas.
     """
     return _entero(ENV_PIPELINE_EN_PROCESO_MAX, PIPELINE_EN_PROCESO_MAX_DEF, minimo=1)
@@ -728,19 +728,19 @@ def pipeline_tema_ttl_horas() -> int:
 
 
 def verificar_activo() -> bool:
-    """True si la ETAPA de Verificar del pipeline debe cribar la fuente (`KENI_PIPELINE_VERIFICAR`, "Verificar").
+    """True si la ETAPA de Verificar del pipeline debe verificar la fuente (`KENI_PIPELINE_VERIFICAR`, "Verificar").
 
-    Def OFF (conservador, como el resto de etapas): sin el flag NO se criba y la etapa aparece
+    Def OFF (conservador, como el resto de etapas): sin el flag NO se verificación y la etapa aparece
     "Saltada"; el copy se genera igual. Con el flag, antes de redactar el copy un `claude -p` evalúa
-    la nota de origen (criba pre-copy). Toggle PROPIO por marca: 1 toggle = 1 etapa.
+    la nota de origen (verificación pre-copy). Toggle PROPIO por marca: 1 toggle = 1 etapa.
     """
     return _crudo(ENV_PIPELINE_VERIFICAR).lower() in _VERDADEROS
 
 
 def qa_fuente_modelo() -> str:
-    """Modelo de claude de la CRIBA de la fuente (`KENI_QA_FUENTE_MODELO`, def "haiku").
+    """Modelo de claude de la VERIFICACIÓN de la fuente (`KENI_QA_FUENTE_MODELO`, def "haiku").
 
-    La criba de Verificar es un filtro PERMISIVO (no redaccion): por defecto corre con un modelo
+    La verificación de Verificar es un filtro PERMISIVO (no redaccion): por defecto corre con un modelo
     rapido/economico. Mismas semanticas que `insumos_modelo`: var no fijada -> "haiku";
     fijada a "" -> sin `--model` (default de claude); fijada a un valor -> ese modelo.
     """
@@ -751,7 +751,7 @@ def qa_fuente_modelo() -> str:
 
 
 def qa_fuente_esfuerzo() -> str:
-    """Esfuerzo (thinking) de la criba de la fuente (`KENI_QA_FUENTE_ESFUERZO`, def "low").
+    """Esfuerzo (thinking) de la verificación de la fuente (`KENI_QA_FUENTE_ESFUERZO`, def "low").
 
     "" (explicito) = sin override (cae a la preferencia global). El valor se valida contra
     `preferencias.ESFUERZOS_VALIDOS` en el armado del argv (un valor invalido se ignora).
@@ -763,7 +763,7 @@ def qa_fuente_esfuerzo() -> str:
 
 
 def qa_fuente_timeout() -> int:
-    """Wall-timeout (s) de la criba de la fuente (`KENI_QA_FUENTE_TIMEOUT`, def 180, min 0).
+    """Wall-timeout (s) de la verificación de la fuente (`KENI_QA_FUENTE_TIMEOUT`, def 180, min 0).
 
     0 = sin override (se usa el global `KENI_CLAUDE_TIMEOUT`). El override solo ENDURECE:
     el runner lo topa con `min(global, override)`.
@@ -774,8 +774,8 @@ def qa_fuente_timeout() -> int:
 def qa_en_curso_ttl_seg() -> int:
     """TTL (s) del limpiador de temas `verificar_veredicto='en_curso'` sueltos (`KENI_QA_EN_CURSO_TTL_MIN`).
 
-    Def 30 min (muy superior al timeout de la criba, asi nunca toca una verificación viva). El recolector
-    resetea a "" los `en_curso` mas viejos para que vuelvan a la re-criba del barrido.
+    Def 30 min (muy superior al timeout de la verificación, asi nunca toca una verificación viva). El recolector
+    resetea a "" los `en_curso` mas viejos para que vuelvan a la re-verificación del barrido.
     """
     return _entero(ENV_QA_EN_CURSO_TTL_MIN, QA_EN_CURSO_TTL_MIN_DEF, minimo=5) * 60
 
@@ -784,8 +784,8 @@ def alguna_etapa_investigacion_activa() -> bool:
     """Gate del loop de INVESTIGACIÓN (ADR 0011 F3): True si hay trabajo de investigación que
     considerar bajo la máquina.
 
-    El loop de investigación (caducidad + Admitir + Verificar) solo tiene sentido si su admisión o su criba
-    están encendidas: con Recolectar Y Verificar globales OFF no entra nada nuevo ni se criba, y
+    El loop de investigación (caducidad + Admitir + Verificar) solo tiene sentido si su admisión o su verificación
+    están encendidas: con Recolectar Y Verificar globales OFF no entra nada nuevo ni se verificación, y
     el loop duerme (la caducidad de lo ya en curso retoma en cuanto se reactive). El override por
     marca se aplica DENTRO del barrido (`etapa_activa`), no aquí: basta una marca activa para que
     el loop barra. Las etapas de Fusionar/Priorizar viven en el daemon de Recolectar, no en este loop.
@@ -809,7 +809,7 @@ alguna_etapa_pipeline_activa = alguna_etapa_produccion_activa
 
 
 def revisar_activo() -> bool:
-    """True si la ETAPA de Revisar el copy debe cribar antes del avance (`KENI_PIPELINE_REVISAR`).
+    """True si la ETAPA de Revisar el copy debe verificar antes del avance (`KENI_PIPELINE_REVISAR`).
 
     Def OFF (conservador, como el resto de etapas): sin el flag el avance a revisión no cambia.
     Con el flag, antes de mover un borrador completo a la cola de revisión la IA "hacia adentro"

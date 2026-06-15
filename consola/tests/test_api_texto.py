@@ -50,10 +50,10 @@ def test_crear_y_guardar_descripcion(cliente):
     # La descripcion (metadata humana) entra por POST y PUT y vuelve en el JSON del documento.
     r = cliente.post("/api/texto", json={
         "titulo": "Validación", "tipo": "prompt", "cuerpo": "Eres el revisor…",
-        "descripcion": "Criba editorial de la fuente.",
+        "descripcion": "Verificación editorial de la fuente.",
     })
     doc = r.json()["documento"]
-    assert doc["descripcion"] == "Criba editorial de la fuente."
+    assert doc["descripcion"] == "Verificación editorial de la fuente."
     r = cliente.put(f"/api/texto/{doc['id']}", json={"descripcion": "Otra."})
     assert r.json()["documento"]["descripcion"] == "Otra."
     # Se conserva al releer.
@@ -67,7 +67,7 @@ def test_doc_incluye_procesos_de_transparencia(cliente):
     assert cualq["procesos"] == []
     cat = cliente.post("/api/texto", json={"titulo": "Verificar", "tipo": "prompt"}).json()["documento"]
     assert cat["id"] == "prompt/verificar"
-    # Vocabulario ADR 0011 §5 (verbos C): la etapa se llama "Verificar" (sin "criba"/"QA").
+    # Vocabulario ADR 0011 §5 (verbos C): la etapa se llama "Verificar" (sin "verificación"/"QA").
     assert cat["procesos"] and any("verificar" in p.lower() for p in cat["procesos"])
     docs = cliente.get("/api/texto", params={"tipo": "prompt"}).json()["documentos"]
     assert all("procesos" in d for d in docs)

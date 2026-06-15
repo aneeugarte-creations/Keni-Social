@@ -559,7 +559,7 @@ def construir_procesar_copy(
     `contenido_id` (lista viva): si apunta a un tema del tablero existente, cada borrador se
     ADJUNTA a ese `contenido` (cuelga de su tarjeta); sin el (default ""), borrador suelto.
     `veredicto_inicial` (pipeline QPC): veredicto por DEFECTO de las piezas cuando la salida no
-    trae uno propio (p. ej. `no_verificado`, para heredar el aviso de la criba de la fuente).
+    trae uno propio (p. ej. `no_verificado`, para heredar el aviso de la verificación de la fuente).
     `url_fuente` (RSS, trazabilidad): URL CANONICA de la nota de origen. Si viene, se PERSISTE en
     `contenido.url_fuente` del tema padre de cada borrador creado (dedup por URL). Best-effort:
     un fallo NUNCA rompe el post-procesado (el copy ya esta hecho). "" = no se toca.

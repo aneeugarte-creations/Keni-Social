@@ -749,7 +749,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # medio por imagen POR MODELO; legados/claude => '' (cae a la media global). Idempotente.
     "ALTER TABLE gasto_ia ADD COLUMN IF NOT EXISTS modelo TEXT NOT NULL DEFAULT ''",
     # PROCESO de la maquina (ADR 0011): 'investigacion' | 'produccion'. Permite desglosar el
-    # gasto de la suscripcion por loop (cuanto se va en criba/QA vs copy/arte). Se rellena EN
+    # gasto de la suscripcion por loop (cuanto se va en verificación/QA vs copy/arte). Se rellena EN
     # VIVO al registrar el cierre (proceso ya conocido del job / `generaciones.proceso_de`).
     # DEFAULT 'produccion' (la maquina de contenido): las filas existentes quedan en produccion
     # al instante y la migracion 0035 REFINA las de investigacion desde `generaciones_indice`.

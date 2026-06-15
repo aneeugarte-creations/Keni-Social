@@ -176,16 +176,16 @@ def test_cola_series_contrato(entorno):
 def test_serie_excluye_marcadores_y_desglosa_por_proceso(entorno):
     """La serie NO cuenta los marcadores de etapa (coste 0) y separa investigacion/produccion.
 
-    Aqui se sellan tres generaciones COMPLETADAS hoy —un marcador (excluido), una criba Verificar
+    Aqui se sellan tres generaciones COMPLETADAS hoy —un marcador (excluido), una verificación Verificar
     (investigacion, con tokens) y un copy (produccion, con tokens)— y se comprueba que la serie
     cuenta SOLO las dos reales, cada una en su proceso y con su gasto.
     """
     # Marcador de etapa: completado pero SIN coste -> debe quedar fuera de la serie.
     generaciones.crear({
-        "tipo": "pipeline_etapa", "marca": _MARCA, "etiqueta": "VERIFICAR · criba",
+        "tipo": "pipeline_etapa", "marca": _MARCA, "etiqueta": "VERIFICAR · verificación",
         "estado": generaciones.ESTADO_COMPLETADO, "fecha_fin": generaciones.ahora_iso(),
     })
-    # Criba Verificar real (investigacion) con tokens.
+    # Verificación Verificar real (investigacion) con tokens.
     generaciones.crear({
         "tipo": "pipeline", "marca": _MARCA, "etiqueta": "Verificar · tema",
         "proceso": generaciones.PROCESO_INVESTIGACION,

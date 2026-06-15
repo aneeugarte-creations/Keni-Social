@@ -1,7 +1,7 @@
 """Tests del pipeline de contenido ADMITIR→VERIFICAR(fuente)→REDACTAR (ADITIVO, gateado por `KENI_PIPELINE_REDACTAR`).
 
 REDISEÑO QPC: Verificar se movió a ANTES del copy y por PIEZA (tema/fuente). El barrido es ahora
-ADMITIR (crea temas SIN copy) → VERIFICAR de la FUENTE (criba permisiva por tema) → REDACTAR (copy SOLO de los
+ADMITIR (crea temas SIN copy) → VERIFICAR de la FUENTE (verificación permisiva por tema) → REDACTAR (copy SOLO de los
 temas `no_verificado`). Todo OFFLINE: ni red (og:image mockeada), ni `claude` (`lanzar_copy` y
 la generación de Verificar mockeados), ni feeds reales (items canned). Cubre:
   (a) gateado OFF por defecto -> el barrido NO produce nada;
@@ -109,7 +109,7 @@ def _inicializar_cluster(
     FRESCO (`ultimo_visto` ≈ ahora), corroborado y con encaje de marca unotv por el resumen.
     Los tests del propio umbral pasan valores que lo incumplen a propósito.
 
-    `verificar_veredicto`: estado de la criba del cluster. Por defecto "" (sin cribar, el estado del que
+    `verificar_veredicto`: estado de la verificación del cluster. Por defecto "" (sin verificar, el estado del que
     parte Verificar en investigación). La ADMISIÓN solo promueve las VERIFICADAS, así que los tests
     que llaman DIRECTO a la promoción (sin pasar por la fase Verificar) deben inicializar el cluster ya
     verificado (`VERDICTO_NO_VERIFICADO`) — es el camino real, no el atajo sin filtro.
@@ -552,24 +552,24 @@ def _tema_pipeline(titulo="Tema", marca="unotv", **campos):
     # SOLO si Verificar la fuente pasa. La fase Redactar exige que esté presente; lo inicializamos aquí.
     campos.setdefault(
         "copy_pendiente",
-        json.dumps({"nota": "Nota de origen a cribar.", "redes_ids": ["x"]}),
+        json.dumps({"nota": "Nota de origen a verificar.", "redes_ids": ["x"]}),
     )
     return repos.crear_contenido(
         clase="contenido", titulo=titulo, marca=marca, origen=pc.ORIGEN_PIPELINE,
-        descripcion="Nota de origen a cribar.", **campos,
+        descripcion="Nota de origen a verificar.", **campos,
     )
 
 
 def test_verificar_problema_no_genera_copy_y_marca_tema(entorno, monkeypatch):
     """Un Verificar de la fuente `problema` -> NO se lanza copy y el tema queda ❗ con hallazgos."""
-    monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")        # etapa Verificar activa (criba la fuente)
+    monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")        # etapa Verificar activa (verifica la fuente)
     monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")  # etapa Redactar activa (aun así, un 'problema' no genera copy)
     cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_QA_PROBLEMA))  # noqa: F841
     llamadas = _mock_lanzar_copy(monkeypatch)
     tema = _tema_pipeline(titulo="Tema malo")
 
     # Verificar la fuente (síncrona en test) -> el procesar persiste el veredicto en el tema. El
-    # camino tema-Verificar es el manual/legado (`lanzar_verificar_fuente`); el barrido criba CLUSTERS, no temas.
+    # camino tema-Verificar es el manual/legado (`lanzar_verificar_fuente`); el barrido verificación CLUSTERS, no temas.
     pc.lanzar_verificar_fuente(tema, autor=None)
     refrescado = repos.obtener_contenido(tema["id"])
     assert refrescado["verificar_veredicto"] == pc.VERDICTO_PROBLEMA
@@ -590,7 +590,7 @@ def test_verificar_no_verificado_genera_copy_con_aviso(entorno, monkeypatch):
     `copy_pendiente` (lo limpia el post-procesado del copy al completar); un copy fallido se
     reintenta y, en cuanto hay pieza, el tema sale de la selección.
     """
-    monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")        # etapa Verificar activa (criba la fuente)
+    monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")        # etapa Verificar activa (verifica la fuente)
     monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")  # etapa Redactar activa (genera copy del tema apto)
     cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_QA_OK))  # noqa: F841
     llamadas = _mock_lanzar_copy(monkeypatch)
@@ -688,7 +688,7 @@ def test_verificar_cluster_ok_se_admite_heredando_veredicto(entorno, monkeypatch
 
 
 def test_verificar_cluster_acotada_por_el_admision(entorno, monkeypatch):
-    """ADR 0011 F3: la criba se acota al ADMISION (tope en proceso) — no recorre todo el pool por tick."""
+    """ADR 0011 F3: la verificación se acota al ADMISION (tope en proceso) — no recorre todo el pool por tick."""
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_EN_PROCESO_MAX", "1")  # admision de 1
@@ -697,11 +697,11 @@ def test_verificar_cluster_acotada_por_el_admision(entorno, monkeypatch):
     for i in range(3):
         _inicializar_cluster(f"c{i}", titulo=f"Historia {i}", score=0.9 - i * 0.1)
 
-    cribados = pc.ejecutar_verificar_clusters(autor=None)
+    verificados = pc.ejecutar_verificar_clusters(autor=None)
 
-    # Con tope en proceso = 1, solo se criba 1 historia en este tick (la mejor del ranking).
-    assert len(cribados) == 1
-    assert cribados[0]["id"] == "c0"
+    # Con tope en proceso = 1, solo se verificación 1 historia en este tick (la mejor del ranking).
+    assert len(verificados) == 1
+    assert verificados[0]["id"] == "c0"
 
 
 def test_copy_fallido_se_reintenta_tras_el_backoff(entorno, monkeypatch):
@@ -736,14 +736,14 @@ def test_copy_fallido_se_reintenta_tras_el_backoff(entorno, monkeypatch):
     assert len(llamadas) == 2
 
 
-def test_verificar_no_relanza_tema_ya_cribado(entorno, monkeypatch):
-    """Un tema con veredicto ya no se re-criba (idempotente)."""
-    _tema_pipeline(titulo="Ya cribado", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
+def test_verificar_no_relanza_tema_ya_verificado(entorno, monkeypatch):
+    """Un tema con veredicto ya no se re-verificación (idempotente)."""
+    _tema_pipeline(titulo="Ya verificado", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
     assert pc.temas_sin_verificar() == []
 
 
 def test_temas_sin_verificar_devuelve_todos_los_pendientes(entorno):
-    """FLUJO CONTINUO: sin recorte por etapa; los pendientes entran TODOS (los cribados no).
+    """FLUJO CONTINUO: sin recorte por etapa; los pendientes entran TODOS (los verificados no).
 
     El volumen lo acota la ADMISIÓN (gate serial en proceso por marca), no una ventana de revisión:
     aquí solo puede haber, como mucho, lo admitido.
@@ -756,7 +756,7 @@ def test_temas_sin_verificar_devuelve_todos_los_pendientes(entorno):
 
 
 def test_temas_para_copy_devuelve_todos_los_listos(entorno):
-    """FLUJO CONTINUO: REDACTAR ve TODOS los temas listos (cribados+pendiente de copy), sin ventana."""
+    """FLUJO CONTINUO: REDACTAR ve TODOS los temas listos (verificados+pendiente de copy), sin ventana."""
     # Viejos no_verificado pero YA copiados (copy_pendiente vacío -> no pasan el filtro de Redactar).
     _tema_pipeline(titulo="Viejo 1", id="v1", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente="")
     _tema_pipeline(titulo="Viejo 2", id="v2", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente="")
@@ -838,7 +838,7 @@ def test_solo_noticias_promueve_cluster_qa_saltada_cd_no(entorno, monkeypatch):
     # ADMITIR promovió el cluster a un tema del pipeline.
     assert len(resumen["temas"]) == 1
     assert any(t["titulo"] == "Historia caliente" for t in pc.temas_pipeline())
-    # Verificar desactivada: el tema queda 'saltada' (no se lanza criba).
+    # Verificar desactivada: el tema queda 'saltada' (no se lanza verificación).
     assert all((t.get("verificar_veredicto") or "") == pc.QA_SALTADA for t in pc.temas_pipeline())
     # Redactar desactivada: no se genera copy aunque haya tema listo.
     assert llamadas == []
@@ -861,9 +861,9 @@ def test_dos_loops_investigacion_y_produccion_separan_fases(entorno, monkeypatch
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     _inicializar_cluster("c1", titulo="Historia caliente", score=0.8)
 
-    # INVESTIGACIÓN: admite (ADMITIR) + criba (VERIFICAR). Solo expone {temas, cribados}.
+    # INVESTIGACIÓN: admite (ADMITIR) + verificación (VERIFICAR). Solo expone {temas, verificados}.
     inv = pc._ejecutar_investigacion()
-    assert set(inv) == {"temas", "cribados"}
+    assert set(inv) == {"temas", "verificados"}
     assert len(inv["temas"]) == 1
     assert any(t["titulo"] == "Historia caliente" for t in pc.temas_pipeline())
 
@@ -873,13 +873,13 @@ def test_dos_loops_investigacion_y_produccion_separan_fases(entorno, monkeypatch
 
     # El combinado es la unión de las claves de ambos procesos.
     combinado = pc._ejecutar_barrido()
-    assert set(combinado) == {"temas", "cribados", "lanzados", "artes", "avances"}
+    assert set(combinado) == {"temas", "verificados", "lanzados", "artes", "avances"}
 
 
 def test_promover_clusters_top_n_por_score(entorno, monkeypatch):
     """`promover_clusters_marca` promueve las top-N historias por score y las marca usado."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    # Verificadas (estado real tras Verificar): la admisión SIEMPRE criba — solo promueve verificadas.
+    # Verificadas (estado real tras Verificar): la admisión SIEMPRE verificación — solo promueve verificadas.
     _inicializar_cluster("baja", titulo="Score bajo", score=0.1, verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
     _inicializar_cluster("alta", titulo="Score alto", score=0.9, verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
     _inicializar_cluster("media", titulo="Score medio", score=0.5, verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
@@ -894,19 +894,19 @@ def test_promover_clusters_top_n_por_score(entorno, monkeypatch):
     assert repos.obtener_noticia_cluster("baja")["estado"] == "nuevo"  # no promovida
 
 
-def test_promover_clusters_marca_filtra_sin_cribar_por_defecto(entorno, monkeypatch):
-    """El filtro de Verificar es OBLIGATORIO por defecto (ADR 0011 F3): un cluster SIN cribar (veredicto
+def test_promover_clusters_marca_filtra_sin_verificar_por_defecto(entorno, monkeypatch):
+    """El filtro de Verificar es OBLIGATORIO por defecto (ADR 0011 F3): un cluster SIN verificar (veredicto
     '') NO se promueve aunque gane en score/umbral — no existe un camino que promueva sin verificar.
     """
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    _inicializar_cluster("sin_cribar", titulo="Aún sin Verificar", score=0.9)  # verificar_veredicto='' por defecto
+    _inicializar_cluster("sin_verificar", titulo="Aún sin Verificar", score=0.9)  # verificar_veredicto='' por defecto
     _inicializar_cluster("verificada", titulo="Ya verificada", score=0.5,
                      verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
 
     temas = pc.promover_clusters_marca("unotv", maximo=5)  # SIN qa_estados: cae al filtro por defecto
 
-    assert {t["titulo"] for t in temas} == {"Ya verificada"}  # la sin cribar NO cruza
-    assert repos.obtener_noticia_cluster("sin_cribar")["estado"] == "nuevo"  # se queda en el pool
+    assert {t["titulo"] for t in temas} == {"Ya verificada"}  # la sin verificar NO cruza
+    assert repos.obtener_noticia_cluster("sin_verificar")["estado"] == "nuevo"  # se queda en el pool
 
 
 def test_crear_tema_de_cluster_dedup_no_repromueve(entorno, monkeypatch):
@@ -925,7 +925,7 @@ def test_crear_tema_de_cluster_dedup_no_repromueve(entorno, monkeypatch):
 
 # --------------------------------------------------------------------------- #
 # Serial POR MARCA: el gate de ADMITIR no promueve más historias mientras la marca #
-# tenga cola EN PROCESO (sin cribar / sin copy). Cada item entra y se completa.  #
+# tenga cola EN PROCESO (sin verificar / sin copy). Cada item entra y se completa.  #
 # --------------------------------------------------------------------------- #
 
 
@@ -1071,7 +1071,7 @@ def test_temas_en_proceso_cuenta_pendientes_de_verificar_o_copy(entorno):
 
 def test_caducidad_libera_el_gate_y_excluye_de_las_fases(entorno):
     """Un tema EN PROCESO que supera el TTL caduca: sale del gate serial (libera hueco para lo
-    fresco del ranking) y NINGUNA fase lo retoma (ni Verificar lo criba ni Redactar le genera copy)."""
+    fresco del ranking) y NINGUNA fase lo retoma (ni Verificar lo verificación ni Redactar le genera copy)."""
     from datetime import datetime, timedelta, timezone
 
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
@@ -1082,7 +1082,7 @@ def test_caducidad_libera_el_gate_y_excluye_de_las_fases(entorno):
     futuro = datetime.now(timezone.utc) + timedelta(hours=25)  # > TTL (def 24 h)
     assert pc.caducar_temas_viejos(ahora=futuro) == 2
 
-    # Liberan el gate, no se re-criban ni generan copy, y quedan marcados con el motivo.
+    # Liberan el gate, no se re-verifican ni generan copy, y quedan marcados con el motivo.
     assert pc.temas_en_proceso("unotv") == 0
     assert pc.temas_sin_verificar() == []
     assert pc.temas_para_redactar() == []
@@ -1524,8 +1524,8 @@ def test_clusters_para_promover_respeta_el_umbral(entorno):
     """Solo las historias que superan el umbral compiten por plaza; el ruido queda en el pool."""
     from datetime import UTC, datetime, timedelta
 
-    # Todas VERIFICADAS (pasaron la criba): así el ÚNICO discriminante de la promoción es el
-    # umbral, no el filtro de Verificar (que ya cribó a todas por igual).
+    # Todas VERIFICADAS (pasaron la verificación): así el ÚNICO discriminante de la promoción es el
+    # umbral, no el filtro de Verificar (que ya verificó a todas por igual).
     _inicializar_cluster("apta", titulo="Sismo sacude la CDMX", score=0.9,
                      verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
     # Sin encaje de marca: ni el título ni el resumen casan el vocabulario unotv.
@@ -1635,9 +1635,9 @@ def test_encadenar_arte_tras_copy_respeta_gates(entorno, monkeypatch):
 
 
 def test_reparar_qa_en_curso_sueltos_resetea_solo_viejos(entorno):
-    """El reparador devuelve a re-criba ('') SOLO los `en_curso` más viejos que el umbral.
+    """El reparador devuelve a re-verificación ('') SOLO los `en_curso` más viejos que el umbral.
 
-    Cierra el ATASCADA: si la criba muere sin finalizador, el tema quedaba `en_curso` para
+    Cierra el ATASCADA: si la verificación muere sin finalizador, el tema quedaba `en_curso` para
     siempre (excluido de `temas_sin_verificar` y contando en el cupo en proceso de su marca).
     NOTA: el limpiador usa ahora su reparación PER-TEMA (`limpiador_generaciones._reparar_qa_en_curso`,
     con WARN por tema y destino según el toggle); esta primitiva SQL en lote sigue en repos.
@@ -1660,7 +1660,7 @@ def test_reparar_qa_en_curso_sueltos_resetea_solo_viejos(entorno):
     n = repos.reparar_qa_en_curso_sueltos("2025-01-01T00:00:00")
 
     assert n == 1
-    assert (repos.obtener_contenido(atascada["id"])["verificar_veredicto"] or "") == ""  # a re-criba
+    assert (repos.obtener_contenido(atascada["id"])["verificar_veredicto"] or "") == ""  # a re-verificación
     assert repos.obtener_contenido(vivo["id"])["verificar_veredicto"] == pc.QA_EN_CURSO  # intacto
 
 
@@ -1676,8 +1676,8 @@ def _envejecer_actualizado(tema_id, fecha="2020-01-01T00:00:00"):
         con.close()
 
 
-def test_limpiador_qa_atascada_re_criba_con_validacion_activa(entorno, monkeypatch):
-    """El reparación del limpiador devuelve a re-criba ('') SOLO los `en_curso` atascadas (per-tema)."""
+def test_limpiador_qa_atascada_re_verificacion_con_validacion_activa(entorno, monkeypatch):
+    """El reparación del limpiador devuelve a re-verificación ('') SOLO los `en_curso` atascadas (per-tema)."""
     from keni_consola import limpiador_generaciones
 
     monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")
@@ -1688,12 +1688,12 @@ def test_limpiador_qa_atascada_re_criba_con_validacion_activa(entorno, monkeypat
     n = limpiador_generaciones._reparar_qa_en_curso()
 
     assert n == 1
-    assert (repos.obtener_contenido(atascada["id"])["verificar_veredicto"] or "") == ""  # a re-criba
+    assert (repos.obtener_contenido(atascada["id"])["verificar_veredicto"] or "") == ""  # a re-verificación
     assert repos.obtener_contenido(vivo["id"])["verificar_veredicto"] == pc.QA_EN_CURSO  # intacto
 
 
 def test_limpiador_qa_atascada_saltada_con_validacion_apagada(entorno, monkeypatch):
-    """Con la etapa de Verificar APAGADA, el atascada pasa a 'saltada' (REDACTAR lo recoge), no a re-criba."""
+    """Con la etapa de Verificar APAGADA, el atascada pasa a 'saltada' (REDACTAR lo recoge), no a re-verificación."""
     from keni_consola import limpiador_generaciones
 
     monkeypatch.delenv("KENI_PIPELINE_VERIFICAR", raising=False)  # etapa off (def)

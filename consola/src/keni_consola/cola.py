@@ -71,7 +71,7 @@ def encolar(gen_id: str, spec: dict[str, Any]) -> str:
         )
 
     # ECONOMIA DE CONTEXTO: el tamano del prompt se gobierna AQUI (punto unico de admision).
-    # Tope DURO (`KENI_PROMPT_MAX_CHARS`): un prompt patologico (feeds concatenados sin criba,
+    # Tope DURO (`KENI_PROMPT_MAX_CHARS`): un prompt patologico (feeds concatenados sin verificación,
     # un documento gigante) se rechaza ANTES de gastar tokens, con el remedio en el mensaje.
     # Umbral de AVISO (`KENI_PROMPT_AVISO_CHARS`): no corta, deja rastro correlacionado para
     # ver la deriva del contexto antes de chocar con el tope.

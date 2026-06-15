@@ -1027,10 +1027,10 @@ def test_proceso_de_deduce_sin_sello():
     """Sin campo `proceso` (registros previos), se deduce de tipo/etiqueta. Funcion pura."""
     inv, prod = generaciones.PROCESO_INVESTIGACION, generaciones.PROCESO_PRODUCCION
     # Marcadores de etapa: ADMITIR/VERIFICAR -> investigacion; REDACTAR/ILUSTRAR -> produccion.
-    assert generaciones.proceso_de({"tipo": "pipeline_etapa", "etiqueta": "VERIFICAR · criba"}) == inv
+    assert generaciones.proceso_de({"tipo": "pipeline_etapa", "etiqueta": "VERIFICAR · verificación"}) == inv
     assert generaciones.proceso_de({"tipo": "pipeline_etapa", "etiqueta": "ADMITIR · ingesta"}) == inv
     assert generaciones.proceso_de({"tipo": "pipeline_etapa", "etiqueta": "REDACTAR · copy"}) == prod
-    # Generacion real `pipeline`: la criba ("Verificar · ...") es investigacion; el resto, no.
+    # Generacion real `pipeline`: la verificación ("Verificar · ...") es investigacion; el resto, no.
     assert generaciones.proceso_de({"tipo": "pipeline", "etiqueta": "Verificar · t"}) == inv
     assert generaciones.proceso_de({"tipo": "pipeline", "etiqueta": "Titular · UnoTV"}) == prod
     # Trabajo de produccion (copy/imagen/manual) y lo desconocido -> produccion.

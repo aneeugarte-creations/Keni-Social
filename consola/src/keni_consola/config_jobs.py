@@ -80,7 +80,7 @@ def jobs_max_intentos() -> int:
 def prompt_max_chars() -> int:
     """Tope DURO del prompt de una generacion (`KENI_PROMPT_MAX_CHARS`, def 200000; 0 = sin tope).
 
-    Economia de contexto: un prompt patologico (feeds concatenados sin criba, un documento
+    Economia de contexto: un prompt patologico (feeds concatenados sin verificación, un documento
     gigante) consumiria decenas de miles de tokens de la suscripcion compartida en UNA generacion.
     Superarlo rechaza el encolado con un mensaje claro (`PromptExcesivoError` -> 429).
     """

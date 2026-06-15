@@ -34,8 +34,8 @@ from .tiempo import iso_utc
 
 _log = logging.getLogger("keni_consola.limpiador_generaciones")
 
-# TTL de la reparación de QA 'en_curso' ≈ 2× el wall-timeout real de la criba: una colgada se detecta en
-# minutos, y una criba VIVA nunca se toca (el doble del timeout deja margen de sobra al worker).
+# TTL de la reparación de QA 'en_curso' ≈ 2× el wall-timeout real de la verificación: una colgada se detecta en
+# minutos, y una verificación VIVA nunca se toca (el doble del timeout deja margen de sobra al worker).
 _FACTOR_TTL_QA_EN_CURSO = 2
 
 
@@ -43,7 +43,7 @@ def _ttl_qa_en_curso_seg() -> int:
     """TTL (s) de la reparación de temas `verificar_veredicto='en_curso'` sueltos.
 
     El override explícito (`KENI_QA_EN_CURSO_TTL_MIN`) manda; sin él, se DERIVA del timeout
-    real de la criba (`config.qa_fuente_timeout()`; si está a 0 —sin endurecer—, rige el
+    real de la verificación (`config.qa_fuente_timeout()`; si está a 0 —sin endurecer—, rige el
     global `config.claude_timeout()`), x`_FACTOR_TTL_QA_EN_CURSO`. No duplica la constante.
     """
     if (os.environ.get(config.ENV_QA_EN_CURSO_TTL_MIN) or "").strip():
@@ -54,13 +54,13 @@ def _ttl_qa_en_curso_seg() -> int:
 def _reparar_qa_en_curso() -> int:
     """Reparación de temas del pipeline COLGADOS en `verificar_veredicto='en_curso'`. Devuelve cuántos tocó.
 
-    La fase QA marca el tema `en_curso` ANTES de lanzar la criba; si el lanzamiento o la
+    La fase QA marca el tema `en_curso` ANTES de lanzar la verificación; si el lanzamiento o la
     generación mueren sin finalizador, el tema quedaba excluido PARA SIEMPRE de `temas_sin_verificar`
     y contando en `temas_en_proceso` (bloquea el cupo serial de su marca). Por cada colgado más
     viejo que el TTL (`_ttl_qa_en_curso_seg`, vs `actualizado`):
-      - etapa Verificar ACTIVA para la marca -> se resetea a "" (re-criba en el barrido);
+      - etapa Verificar ACTIVA para la marca -> se resetea a "" (re-verificación en el barrido);
       - APAGADA (`KENI_PIPELINE_VERIFICAR` off, global o `::marca`) -> se marca `saltada`
-        (CD lo recoge sin re-cribar; re-cribar con la etapa apagada lo dejaría colgado otra vez).
+        (CD lo recoge sin re-verificar; re-verificar con la etapa apagada lo dejaría colgado otra vez).
     WARN por tema (tema_id + marca + destino). El worker además repara en caliente al cerrar un
     job de QA en error; esto es la red para las muertes no limpias.
     """
@@ -94,7 +94,7 @@ def _reparar_qa_en_curso() -> int:
         tocados += 1
         _log.warning(
             "Limpiador de generaciones: QA 'en_curso' colgada del tema %s (marca %s) -> %s.",
-            tema_id, marca, "re-criba" if verificar_activa else "saltada",
+            tema_id, marca, "re-verificación" if verificar_activa else "saltada",
         )
     return tocados
 
@@ -133,8 +133,8 @@ def ejecutar_barrido() -> int:
     except Exception:  # noqa: BLE001 -- reparación aditiva; un fallo no debe tumbar el barrido
         _log.warning("Limpiador de generaciones: fallo la reparación de lotes de cajón.", exc_info=True)
     # Cuarta reparación: temas del pipeline COLGADOS en `verificar_veredicto='en_curso'` (detalle en
-    # `_reparar_qa_en_curso`): TTL derivado del timeout real de la criba (~2×) y, con la etapa
-    # de Validación apagada, el colgado pasa a `saltada` (CD lo recoge) en vez de re-cribarse.
+    # `_reparar_qa_en_curso`): TTL derivado del timeout real de la verificación (~2×) y, con la etapa
+    # de Validación apagada, el colgado pasa a `saltada` (CD lo recoge) en vez de re-verificarse.
     try:
         z = _reparar_qa_en_curso()
         if z:

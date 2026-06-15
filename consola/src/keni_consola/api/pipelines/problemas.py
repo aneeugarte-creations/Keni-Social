@@ -16,7 +16,7 @@ def _problema_de(item: dict) -> dict:
 
     `etapa`/`error` salen del ÚLTIMO hallazgo: los fallos repetidos de etapa
     (`marcar_fallo_etapa`) dejan un hallazgo `tipo='sistema'` con la etapa en `fragmento`;
-    un 🔴 de la propia criba (sin hallazgo de sistema) es un problema de "Verificar".
+    un 🔴 de la propia verificación (sin hallazgo de sistema) es un problema de "Verificar".
     `intentos` lee los contadores de reintento de `copy_pendiente` (qa/cd).
     """
     qa = _qa_fuente_de(item)
@@ -44,7 +44,7 @@ def _problema_de(item: dict) -> dict:
 async def problemas(request: Request) -> Response:
     """GET /api/pipelines/problemas?marca=&limite=50: temas BLOQUEADOS del pipeline (solo lectura).
 
-    Tras agotar sus reintentos (o una criba 🔴 de peso), un tema queda con veredicto `problema`
+    Tras agotar sus reintentos (o una verificación 🔴 de peso), un tema queda con veredicto `problema`
     y SALE del flujo (no se reintenta ni cuenta en el cupo en curso): esta lista lo hace VISIBLE
     para que un humano decida (relanzar a mano / descartar). Recientes (por `actualizado`)
     primero. Aún sin UI propia: lo consume quien monitorea (curl / consola / vista futura).

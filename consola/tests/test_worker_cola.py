@@ -950,12 +950,12 @@ def test_esperar_terminal_despierta_por_senal_sin_sondear_disco(entorno, monkeyp
     assert lecturas["n"] <= 3, f"sondeo de disco excesivo ({lecturas['n']} lecturas)"
 
 
-def test_reparar_qa_si_fallo_devuelve_el_tema_a_recriba(entorno):
+def test_reparar_qa_si_fallo_devuelve_el_tema_a_reverificación(entorno):
     """Un job de QA-FUENTE que termina en ERROR resetea el sentinel `en_curso` del tema.
 
     CIERRA EL ATASCADA: la fase QA marca `en_curso` ANTES de lanzar y solo el `procesar` (exito)
     escribe el veredicto real; si la generacion muere, el tema quedaba excluido para siempre
-    de la re-criba (y contando en el cupo en proceso de su marca).
+    de la re-verificación (y contando en el cupo en proceso de su marca).
     """
     from keni_consola import pipeline_contenido as pc
 
@@ -975,7 +975,7 @@ def test_reparar_qa_si_fallo_devuelve_el_tema_a_recriba(entorno):
     worker._reparar_qa_si_fallo(gen["id"], spec)
     assert repos.obtener_contenido(tema["id"])["verificar_veredicto"] == pc.QA_EN_CURSO
 
-    # Registro en ERROR: el reparación devuelve el tema a "" (re-criba en el proximo barrido).
+    # Registro en ERROR: el reparación devuelve el tema a "" (re-verificación en el proximo barrido).
     generaciones.actualizar(gen["id"], {"estado": generaciones.ESTADO_ERROR})
     worker._reparar_qa_si_fallo(gen["id"], spec)
     assert (repos.obtener_contenido(tema["id"])["verificar_veredicto"] or "") == ""

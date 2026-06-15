@@ -408,7 +408,7 @@ def lanzar_job_claude(
     """
     acumulador = stream.AcumuladorStream()
     # Wall-timeout del run: el global (`KENI_CLAUDE_TIMEOUT`, def 600 s) salvo que el job
-    # traiga un override en `endurecer["timeout"]` (timeout POR ETAPA: p. ej. la criba QA de
+    # traiga un override en `endurecer["timeout"]` (timeout POR ETAPA: p. ej. la verificación QA de
     # la fuente corre con ~180 s). Solo puede ENDURECER (acortar): se topa con `min(...)`,
     # nunca alarga el global (misma filosofia que el resto de overrides de `endurecer`).
     timeout = _timeout()

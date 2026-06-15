@@ -53,7 +53,7 @@ CWD_GENERACION = "generacion"
 PROC_COPY = "copy"
 PROC_DOCUMENTO = "documento"
 PROC_HASHTAGS = "hashtags"
-# QA de la FUENTE (pre-copy, rediseño QPC): criba PERMISIVA de la nota de origen por TEMA. Persiste el veredicto estructurado (`no_verificado`/`problema`) + hallazgos
+# QA de la FUENTE (pre-copy, rediseño QPC): verificación PERMISIVA de la nota de origen por TEMA. Persiste el veredicto estructurado (`no_verificado`/`problema`) + hallazgos
 # sobre el `contenido` (tema), para que CD genere copy SOLO de los `no_verificado`.
 PROC_QA_FUENTE = "qa-fuente"
 # Texto de prompts: post-procesado IDENTIDAD. Un prompt de la texto devuelve el
@@ -204,7 +204,7 @@ def construir_copy(
     por slide (titular + su foto por número) y arma la pieza CARRUSEL. None/[] = sin catálogo
     (los slides salen como placa de solo texto si el modelo elige carrusel).
     `veredicto_inicial` (pipeline QPC): veredicto por DEFECTO de cada borrador cuando la salida
-    no trae uno propio (p. ej. `no_verificado` para que la pieza herede el aviso de la criba de
+    no trae uno propio (p. ej. `no_verificado` para que la pieza herede el aviso de la verificación de
     la fuente). "" = comportamiento de hoy (el veredicto sale de la propia salida del copy).
     `url_fuente` (RSS, trazabilidad): URL CANONICA de la nota de origen. Si viene, el post-
     procesado la PERSISTE en `contenido.url_fuente` del tema padre de cada borrador (dedup por

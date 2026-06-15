@@ -1,4 +1,4 @@
-"""Etapa de REVISAR del copy del pipeline: criba ADVISORY antes del avance. OFFLINE + DB tmp.
+"""Etapa de REVISAR del copy del pipeline: verificación ADVISORY antes del avance. OFFLINE + DB tmp.
 
 Cubre:
   - COHERENCIA (pura): avisa sólo cuando el copy no comparte NINGÚN término de contenido con su
@@ -187,4 +187,4 @@ def test_avance_con_calidad_off_no_marca(entorno, monkeypatch, tmp_path):
     assert [p["id"] for p in enviadas] == [pub["id"]]
     actual = repos.obtener_publicacion(pub["id"])
     assert actual["estado"] == "en_revision"
-    assert actual["veredicto"] == "listo"  # sin criba, no se toca el veredicto
+    assert actual["veredicto"] == "listo"  # sin verificación, no se toca el veredicto

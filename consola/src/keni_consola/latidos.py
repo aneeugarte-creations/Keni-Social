@@ -106,7 +106,7 @@ GASTA_TOKENS = frozenset({"investigacion", "produccion"})
 #   - `motor`:  "investigacion" | "produccion" | None. El loop de la máquina (ADR 0011) al que
 #               sirve el daemon; None para los de `sistema` (no pertenecen a ningún motor).
 # Verificado contra cada módulo (punto de partida editable; reclasifica aquí al añadir un daemon):
-#   - ia:  investigacion (loop de criba/Verificar -> motor investigacion), produccion (loop de Redactar/Ilustrar
+#   - ia:  investigacion (loop de verificación/Verificar -> motor investigacion), produccion (loop de Redactar/Ilustrar
 #          -> motor produccion).
 #   - maquina/investigacion:  ingesta (recolección RSS), trends (Google Trends), algoritmos (feeds
 #          de algoritmo), noticias_gc (limpia el POOL de noticias que alimenta reutilizar).

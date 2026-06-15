@@ -91,7 +91,7 @@ def _pieza_detalle(plat: dict) -> dict:
     """Forma COMPLETA de una pieza para el detalle: lo que ocurrió de verdad en cada etapa.
 
     Sobre la forma reducida añade el COPY generado (texto por red + copy-in), la imagen de
-    la placa, las OBSERVACIONES de la verificación (recalculadas con la misma criba léxica, para
+    la placa, las OBSERVACIONES de la verificación (recalculadas con la misma verificación léxica, para
     mostrar el "por qué" del veredicto) y la traza de revisión humana (revisor + fechas).
     """
     base = _pieza_de(plat)
@@ -169,13 +169,13 @@ def _etapas_de_run(
     (Admitir/Verificar/Redactar/Ilustrar) están activas o "saltada"
     según su toggle por-marca; si activas, su estado se deriva del estado real (no de logs): el
     `verificar_veredicto` del tema y las publicaciones por plataforma (auto-curativo). La etapa Verificar
-    (criba pre-copy) va ANTES del copy; un `problema` NO genera copy. Ilustrar exige `arte_ia`
+    (verificación pre-copy) va ANTES del copy; un `problema` NO genera copy. Ilustrar exige `arte_ia`
     (evidencia de arte GENERADO: marcador/generación de arte de la run): una imagen de fuente
     propia en la pieza no enciende la etapa. Aprobar es el
     gate humano (nunca saltada). Cada etapa es `{clave, nombre, estado, detalle, ts}`.
 
     Un tema del TABLERO (origen != 'pipeline': rss/equipo/historia/importación, redactado
-    por la etapa Redactar) no pasa por el pool ni por la criba: Fusionar/Priorizar/Verificar
+    por la etapa Redactar) no pasa por el pool ni por la verificación: Fusionar/Priorizar/Verificar
     se pintan saltadas con el motivo "no aplica", honestas en vez de "pendiente" eterno.
     """
     marca = item.get("marca", "") or ""
@@ -202,8 +202,8 @@ def _etapas_de_run(
     # --- Verificar: PRIMERO el veredicto persistido en el TEMA (lo que de verdad pasó); el
     # toggle solo decide el estado de una run que AÚN no tiene veredicto (futuro).
     if es_tablero and not verificar_veredicto:
-        # La criba verifica la FUENTE de una noticia recolectada; un tema del tablero no la tiene.
-        qa_estado, qa_detalle = _ESTADO_SALTADA, "No aplica: sin criba (tema del tablero)"
+        # La verificación verifica la FUENTE de una noticia recolectada; un tema del tablero no la tiene.
+        qa_estado, qa_detalle = _ESTADO_SALTADA, "No aplica: sin verificación (tema del tablero)"
     elif verificar_veredicto == QA_SALTADA:
         qa_estado, qa_detalle = _ESTADO_SALTADA, ""
     elif verificar_veredicto == QA_CADUCADA:
@@ -346,7 +346,7 @@ def _run_de(
         # Etapa donde la run está «parada» (para el filtro `?etapa=` y el resaltado en la UI).
         "etapa_actual": _etapa_actual(etapas),
         "etapas": etapas,
-        # Criba de la fuente (⚠️/❗ + hallazgos): la señal de Verificar pre-copy del tema.
+        # Verificación de la fuente (⚠️/❗ + hallazgos): la señal de Verificar pre-copy del tema.
         "qa_fuente": _qa_fuente_de(item),
         # Procedencia IA del tema (historia/cluster): None si se creó a mano o pre-priorización.
         "cluster": _cluster_publico(cluster),

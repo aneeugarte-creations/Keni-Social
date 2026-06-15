@@ -277,7 +277,7 @@ async def listar_historias(request: Request) -> Response:
         desplazamiento=desplazamiento,
     )
     # Estado REAL de cara al feed + veredicto QA (verificación). El QA vive en la HISTORIA
-    # (`noticias_clusters.verificar_veredicto`, ADR 0011 F3): la criba corre sobre el cluster ANTES de
+    # (`noticias_clusters.verificar_veredicto`, ADR 0011 F3): la verificación corre sobre el cluster ANTES de
     # admitir. Se prefiere el veredicto NATIVO del cluster y se cae al del `contenido` heredado
     # (batch, evita N+1) solo para historias admitidas ANTES de F3 (cluster sin veredicto propio).
     cids = [c.get("contenido_id") or "" for c in clusters]

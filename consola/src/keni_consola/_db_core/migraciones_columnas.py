@@ -271,7 +271,7 @@ def _migrar_green_a_evergreen(con: Any) -> None:
 # "Verificar" en todo el código) se renombran a `verificar_*` en las BDs productivas (piloto AMX),
 # preservando los datos (Postgres conserva los valores en un RENAME COLUMN). Cada tupla es
 # (tabla, columna_vieja, columna_nueva). `qa_veredicto`/`qa_hallazgos` viven tanto en `contenido`
-# (criba de la FUENTE pre-copy) como en `noticias_clusters` (verificación de la historia antes de
+# (verificación de la FUENTE pre-copy) como en `noticias_clusters` (verificación de la historia antes de
 # admitir): ambas se renombran. NO se tocan `qa_intentos`/`cd_intentos`: nunca fueron columnas,
 # son claves dentro del JSON de `copy_pendiente` (ya renombradas en el código a `verificar_*`/
 # `redactar_intentos`).
@@ -480,7 +480,7 @@ _COLUMNAS_CONTENIDO_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # priorizacion (`priorizacion.peso_viralidad`) la use al ordenar la lista del dia. 0 =
     # sin señal (alta manual, RSS, o BD vieja): la pieza puntua como antes de la Fase 5.
     ("senal_viralidad", "INTEGER NOT NULL DEFAULT 0"),
-    # QA de la FUENTE (pre-copy, rediseño QPC): el pipeline criba la NOTA DE ORIGEN antes de
+    # QA de la FUENTE (pre-copy, rediseño QPC): el pipeline verifica la NOTA DE ORIGEN antes de
     # generar copy. `verificar_veredicto` = "no_verificado" (⚠️ OK para seguir) o "problema" (❗ algo de
     # peso: NO se generó copy). `verificar_hallazgos` = JSON estructurado de lo encontrado. BD vieja -> "".
     ("verificar_veredicto", "TEXT NOT NULL DEFAULT ''"),
@@ -809,7 +809,7 @@ _COLUMNAS_NOTICIAS_CLUSTERS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # producción (ADR 0011 F3): "no_verificado" (⚠️ apta, sigue a admisión) o "problema" (❗ no
     # se admite). `verificar_hallazgos` = JSON estructurado de lo encontrado. Hereda al `contenido` al
     # admitir, así la frontera "QA = investigación" queda alineada con el modelo de datos. BD
-    # vieja -> "" (sin veredicto: aún por cribar).
+    # vieja -> "" (sin veredicto: aún por verificar).
     ("verificar_veredicto", "TEXT NOT NULL DEFAULT ''"),
     ("verificar_hallazgos", "TEXT NOT NULL DEFAULT ''"),
 )

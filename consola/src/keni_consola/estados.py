@@ -379,9 +379,9 @@ DECISION_PENDIENTE = "pendiente"
 DECISION_APROBADO = "aprobado"
 DECISION_RECHAZADO = "rechazado"
 
-# Veredictos validos de la QA DE LA FUENTE persistida en `contenido.verificar_veredicto` (criba
-# pre-copy). Allowlist CANONICA para el CHECK de esquema (ADR 0012). "" = sin cribar / a
-# re-criba. Los valores NO viven en este modulo dependency-free (son del pipeline/dominio);
+# Veredictos validos de la QA DE LA FUENTE persistida en `contenido.verificar_veredicto` (verificación
+# pre-copy). Allowlist CANONICA para el CHECK de esquema (ADR 0012). "" = sin verificar / a
+# re-verificación. Los valores NO viven en este modulo dependency-free (son del pipeline/dominio);
 # se enumeran aqui como literales, con su origen, para no acoplar `estados` al pipeline:
 #   - "en_curso":      SENTINEL en curso            (`pipeline_contenido._comun.QA_EN_CURSO`)
 #   - "saltada":       QA desactivada para la marca (`pipeline_contenido._comun.QA_SALTADA`)

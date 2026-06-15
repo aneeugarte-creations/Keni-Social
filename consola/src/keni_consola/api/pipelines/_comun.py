@@ -99,7 +99,7 @@ def _marca_nombre(marca: str) -> str:
 
 
 def _qa_fuente_de(item: dict) -> dict:
-    """Veredicto ESTRUCTURADO de la criba de la fuente (rediseño QPC), para la UI.
+    """Veredicto ESTRUCTURADO de la verificación de la fuente (rediseño QPC), para la UI.
 
     Lee el veredicto persistido en el TEMA (`verificar_veredicto`/`verificar_hallazgos`):
       - `no_verificado` (⚠️): apta, no verificada a fondo; las piezas llevan el aviso.

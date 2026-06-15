@@ -1,6 +1,6 @@
-"""Etapa Revisar (calidad del copy) del pipeline: criba ADVISORY antes del avance a revisión.
+"""Etapa Revisar (calidad del copy) del pipeline: verificación ADVISORY antes del avance a revisión.
 
-La criba de la FUENTE (Verificar, pre-redactar, `_qa`) valida la NOTA de origen ANTES de redactar; esta
+La verificación de la FUENTE (Verificar, pre-redactar, `_qa`) valida la NOTA de origen ANTES de redactar; esta
 etapa valida el COPY YA REDACTADO, justo antes de que un borrador completo avance solo a la cola
 de revisión (etapa AVANCE, `_avance`). Es la "IA hacia adentro": filtra calidad para que el
 humano solo DECIDA, no corrija. Dos chequeos, ambos BARATOS y deterministas (sin `claude -p`):
@@ -44,7 +44,7 @@ __all__ = [
 ]
 
 # Veredictos del copy relevantes para la degradación advisory: un pase LIMPIO ("listo") baja a
-# "revisar" si la criba encuentra algo; cualquier otro veredicto ya pide ojos humanos y se respeta.
+# "revisar" si la verificación encuentra algo; cualquier otro veredicto ya pide ojos humanos y se respeta.
 VEREDICTO_LISTO = "listo"
 VEREDICTO_REVISAR = "revisar"
 
@@ -157,7 +157,7 @@ def _anotar(avisos: list[str], *, contenido_id: str, marca: str) -> None:
 
 
 def verificar_calidad_pieza(pub: dict[str, Any]) -> list[str]:
-    """Criba ADVISORY de la CALIDAD del copy de UN borrador antes de su avance a revisión.
+    """Verificación ADVISORY de la CALIDAD del copy de UN borrador antes de su avance a revisión.
 
     Devuelve los avisos encontrados (vacío = copy dentro de calidad). Con avisos: DEGRADA el
     veredicto del borrador (sólo un `listo` limpio → `revisar`) y deja una nota en el tema padre,
@@ -172,8 +172,8 @@ def verificar_calidad_pieza(pub: dict[str, Any]) -> list[str]:
         return []
     try:
         avisos = avisos_calidad(marca, red, texto, nota_origen=_nota_origen(contenido_id))
-    except Exception:  # noqa: BLE001 -- la criba de calidad jamás rompe el avance
-        _log.warning("calidad: criba del copy falló para la pieza %s", pub_id, exc_info=True)
+    except Exception:  # noqa: BLE001 -- la verificación de calidad jamás rompe el avance
+        _log.warning("calidad: verificación del copy falló para la pieza %s", pub_id, exc_info=True)
         return []
     if not avisos:
         return []

@@ -136,7 +136,7 @@ def _migrar_checks_dominio(con: Any) -> None:
         ("contenido_plataforma", "estado", ESTADOS_CONTENIDO_PLATAFORMA, "pendiente"),
         ("contenido_aprobaciones", "decision", DECISIONES_APROBACION, "pendiente"),
         ("usuarios", "rol", ROLES_USUARIO, "editor"),
-        # QA de la FUENTE: '' es valido (sin cribar). NO se aplica a `noticias_clusters.verificar_veredicto`
+        # QA de la FUENTE: '' es valido (sin verificar). NO se aplica a `noticias_clusters.verificar_veredicto`
         # a proposito (su set de valores aun no esta centralizado; se difiere a la ola siguiente).
         ("contenido", "verificar_veredicto", VEREDICTOS_QA_CONTENIDO, ""),
     )

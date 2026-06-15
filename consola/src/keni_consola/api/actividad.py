@@ -165,7 +165,7 @@ def _item_job(job: dict, ahora: datetime) -> dict:
         "etiqueta": reg.get("etiqueta") or "",
         "tipo": reg.get("tipo") or "",
         "marca": reg.get("marca") or "",
-        # Proceso (ADR 0011): investigacion (criba/QA) | produccion (copy/arte). La cola es
+        # Proceso (ADR 0011): investigacion (verificación/QA) | produccion (copy/arte). La cola es
         # COMPARTIDA; esto solo clasifica cada job para desglosar el pool por proceso.
         "proceso": generaciones.proceso_de(reg),
         "gen_estado": reg.get("estado") or "",
@@ -259,7 +259,7 @@ async def cola(request: Request) -> Response:
     en_proceso = [_item_job(j, ahora) for j in filas]
     # Desglose del pool COMPARTIDO por proceso (ADR 0011): se calcula sobre TODOS los jobs en
     # vuelo (global, como los KPIs de capacidad), ANTES de acotar las listas por marca. La cola y
-    # el pool son UNICOS; esto solo dice cuanto del trabajo en proceso es Investigacion (criba/QA)
+    # el pool son UNICOS; esto solo dice cuanto del trabajo en proceso es Investigacion (verificación/QA)
     # y cuanto Produccion (copy/arte), para poder vigilar los dos loops sobre la misma cola.
     por_proceso = {
         proc: {
@@ -275,7 +275,7 @@ async def cola(request: Request) -> Response:
         for proc in (generaciones.PROCESO_INVESTIGACION, generaciones.PROCESO_PRODUCCION)
     }
     # ADMISION de QA: el unico limite que Investigacion acota aparte de la cola compartida (cuanta
-    # criba cabe en proceso por marca). Lazy import del helper del pipeline (evita acoplar la API al
+    # verificación cabe en proceso por marca). Lazy import del helper del pipeline (evita acoplar la API al
     # orquestador) y best-effort: un fallo deja el admision vacio, nunca tumba el snapshot.
     try:
         from ..pipeline_contenido import admision_qa as _admision_qa

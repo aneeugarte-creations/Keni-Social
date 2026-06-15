@@ -48,7 +48,7 @@ def _run_por_titulo(cliente, titulo: str) -> dict | None:
 def test_run_qa_no_verificado_con_copy(cliente):
     """Tema con VERIFICAR `no_verificado` + copy en borrador: ADMITIR/VERIFICAR/REDACTAR ok, aprobación pendiente.
 
-    Orden NUEVO (rediseño QPC): ADMITIR -> Criba de la fuente (VERIFICAR) -> Copy (REDACTAR) -> Aprobar.
+    Orden NUEVO (rediseño QPC): ADMITIR -> Verificación de la fuente (VERIFICAR) -> Copy (REDACTAR) -> Aprobar.
     """
     tema = _tema_pipeline("Tema apto", verificar_veredicto="no_verificado")
     repos.crear_contenido_plataforma(
@@ -68,18 +68,18 @@ def test_run_qa_no_verificado_con_copy(cliente):
     }
     assert run["estado_global"] == "pendiente"
     assert run["cluster"] is None
-    # La criba de la fuente surface el aviso ⚠️.
+    # La verificación de la fuente surface el aviso ⚠️.
     assert run["qa_fuente"]["no_verificado"] is True
     assert run["qa_fuente"]["problema"] is False
 
 
 def test_run_sin_qa_todo_pendiente(cliente):
     """Tema sin veredicto de VERIFICAR todavía: VERIFICAR y REDACTAR pendientes (la VERIFICAR va antes del copy)."""
-    tema = _tema_pipeline("Tema sin criba")
+    tema = _tema_pipeline("Tema sin verificación")
     repos.crear_contenido_plataforma(
         contenido_id=tema["id"], red="x", estado="borrador", copy="",
     )
-    run = _run_por_titulo(cliente, "Tema sin criba")
+    run = _run_por_titulo(cliente, "Tema sin verificación")
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
     assert etapas["admitir"] == "ok"
     assert etapas["verificar"] == "pendiente"
@@ -141,7 +141,7 @@ def test_run_qa_saltada_genera_copy(cliente, monkeypatch):
     tema = _tema_pipeline("Tema sin VERIFICAR", verificar_veredicto="saltada")
     repos.crear_contenido_plataforma(
         contenido_id=tema["id"], red="x", estado="borrador",
-        copy="Copy generado sin criba.", veredicto="no_verificado",
+        copy="Copy generado sin verificación.", veredicto="no_verificado",
     )
     run = _run_por_titulo(cliente, "Tema sin VERIFICAR")
     assert run is not None
@@ -191,7 +191,7 @@ def test_etapas_ejecutadas_no_se_repintan_con_toggles_off(cliente, monkeypatch):
     assert estados["fusionar"] == "ok"      # hay historia enlazada: la fusión corrió
     assert estados["priorizar"] == "ok"   # hay score: el encaje corrió
     assert estados["admitir"] == "ok"          # el tema existe: la selección corrió
-    assert estados["verificar"] == "ok"          # veredicto persistido: la criba corrió
+    assert estados["verificar"] == "ok"          # veredicto persistido: la verificación corrió
     assert estados["redactar"] == "ok"          # hay copy persistido: la etapa corrió
 
 
@@ -461,13 +461,13 @@ def test_problemas_lista_temas_bloqueados(cliente):
     assert p["creado"] and p["actualizado"]
 
 
-def test_problemas_criba_roja_es_validacion(cliente):
-    """Un 🔴 de la propia criba (hallazgo no-sistema) se atribuye a la etapa Verificar."""
+def test_problemas_verificacion_roja_es_validacion(cliente):
+    """Un 🔴 de la propia verificación (hallazgo no-sistema) se atribuye a la etapa Verificar."""
     hallazgos = json.dumps({
         "resumen": "Dato falso evidente",
         "hallazgos": [{"tipo": "dato", "gravedad": "error", "explicacion": "es falso"}],
     })
-    _tema_pipeline("Criba roja", verificar_veredicto="problema", verificar_hallazgos=hallazgos)
+    _tema_pipeline("Verificación roja", verificar_veredicto="problema", verificar_hallazgos=hallazgos)
     p = cliente.get("/api/pipelines/problemas").json()["problemas"][0]
     assert p["etapa"] == "Verificar"
     assert p["error"] == "es falso"
@@ -669,7 +669,7 @@ def test_lista_trae_sumatorio_de_metricas(cliente):
 def test_tema_de_tablero_trabajado_sale_como_run(cliente):
     """Un tema del tablero (origen de `ORIGENES_AUTOGEN`) que la etapa de copy REDACTÓ es una
     RUN del feed (no una entrada suelta "Auto-copy"): su trabajo se ve dentro de la run, con
-    etapas honestas (Fusionar/Priorizar/Criba "no aplica": no pasó por el pool)."""
+    etapas honestas (Fusionar/Priorizar/Verificación "no aplica": no pasó por el pool)."""
     tema = repos.crear_contenido(
         clase="contenido", titulo="Breaking usada a mano", marca="unotv", origen="historia",
     )
@@ -696,7 +696,7 @@ def test_tema_de_tablero_trabajado_sale_como_run(cliente):
     assert "No aplica" in etapas["fusionar"]["detalle"]
     assert etapas["priorizar"]["estado"] == "saltada"
     assert etapas["verificar"]["estado"] == "saltada"
-    assert "Sin criba" in etapas["verificar"]["detalle"] or "No aplica" in etapas["verificar"]["detalle"]
+    assert "Sin verificación" in etapas["verificar"]["detalle"] or "No aplica" in etapas["verificar"]["detalle"]
     assert etapas["admitir"]["estado"] == "ok"
     assert "historia" in etapas["admitir"]["detalle"]
     assert etapas["redactar"]["estado"] == "ok"  # el copy persistido
@@ -776,7 +776,7 @@ def test_lanzar_sella_contenido_id_en_el_registro(cliente, monkeypatch):
 
 def test_run_de_pipeline_suma_tambien_las_etapas_de_pool(cliente):
     """La tarjeta de una run del pipeline cuadra con el AGREGADO de sus etapas: además de las
-    generaciones correlacionadas (copy/criba/arte), suma las etapas de POOL que su detalle
+    generaciones correlacionadas (copy/verificación/arte), suma las etapas de POOL que su detalle
     enlaza (la Fusionar y el Priorizar más recientes de la marca). Un tema del TABLERO no las suma
     (el pool no le aplica)."""
     tema = _tema_pipeline("Run con pool sumado")

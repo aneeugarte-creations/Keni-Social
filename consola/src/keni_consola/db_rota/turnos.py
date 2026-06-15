@@ -316,7 +316,7 @@ def crear_turnos_rota_lote(turnos: list[dict[str, Any]]) -> list[dict[str, Any]]
     antes de pasarla aqui; aqui solo se persiste con defensas minimas (uuid, `actualizado`).
 
     NO comprueba unicidad: si dos turnos chocan en (semana, fecha, miembro_id, franja), se
-    persisten ambos (el endpoint lote es responsable de cribar antes). Lista vacia -> sin op.
+    persisten ambos (el endpoint lote es responsable de verificar antes). Lista vacia -> sin op.
     """
     if not turnos:
         return []

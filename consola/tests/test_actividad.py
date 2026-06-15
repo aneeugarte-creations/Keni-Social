@@ -291,7 +291,7 @@ def test_agregados_marca_invalida_400(cliente):
 
 def test_agregados_api_sella_proceso_y_desglosa(cliente):
     """La API sella el proceso de cada generacion y abre `por_proceso` (copy->produccion;
-    una criba 'Verificar · …' del pipeline -> investigacion)."""
+    una verificación 'Verificar · …' del pipeline -> investigacion)."""
     _crear_gen("unotv", "Copy UnoTV")  # tipo copy -> produccion
     generaciones.crear({
         "tipo": "pipeline", "marca": "unotv",

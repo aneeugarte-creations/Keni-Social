@@ -8,7 +8,7 @@ símbolos privados que algún consumidor importa directamente), de modo que `ken
   - `_comun`   — constantes del flujo, seams de `og:image`, sello de actividad por etapa,
                  autor de los lanzamientos y lecturas de temas/copy compartidas entre fases.
   - `_ingesta` — CI: selección pura de items + creación de temas (sin copy) + dedup.
-  - `_qa`      — QA: criba de la FUENTE (pre-copy, `claude -p`) + veredicto léxico.
+  - `_qa`      — QA: verificación de la FUENTE (pre-copy, `claude -p`) + veredicto léxico.
   - `_copy`    — CD: lanza copy de los temas con QA `no_verificado` (+ news-pool autogen).
   - `_barrido` — orquesta CI→QA→CD→arte→avance bajo single-flight, y el hilo demonio.
 
@@ -27,7 +27,7 @@ como un pipeline de CI/CD (visible en "Actividad IA"). Este daemon (espejo de `a
     feeds de no-propia / tendencia, sin imagen. Guarda en el tema (`copy_pendiente`, JSON) los
     parámetros que la fase CD necesitará para lanzar el copy. Marca el item del feed como USADO
     (dedup). Registra UNA entrada de actividad etapa="CI".
-  - QA — CRIBA DE LA FUENTE (pre-copy): por cada TEMA nuevo sin veredicto, lanza un `claude -p`
+  - QA — VERIFICACIÓN DE LA FUENTE (pre-copy): por cada TEMA nuevo sin veredicto, lanza un `claude -p`
     que evalúa la NOTA DE ORIGEN (no el copy: aún no existe) contra el DOCUMENTO de Texto
     de criterios. Es PERMISIVO y devuelve un veredicto ESTRUCTURADO con dos salidas:
     `no_verificado` (nada de peso en contra: seguir; la pieza llevará ⚠️ "no verificado") o
@@ -42,7 +42,7 @@ como un pipeline de CI/CD (visible en "Actividad IA"). Este daemon (espejo de `a
 
 ORDEN Y ASINCRONÍA (DOS FASES ENTRE BARRIDOS)
 =============================================
-La QA es asíncrona (`claude -p`): un tema cribado en un barrido NO tiene veredicto en ESE mismo
+La QA es asíncrona (`claude -p`): un tema verificado en un barrido NO tiene veredicto en ESE mismo
 barrido. Por eso el flujo es de DOS FASES entre barridos: la fase QA marca el tema; la fase CD
 de un barrido POSTERIOR actúa sobre los temas `no_verificado` sin copy. Se eligió esta vía
 (no encadenar la QA→copy dentro del worker) por ser la más limpia y reusar el mismo patrón
@@ -299,7 +299,7 @@ __all__ = [
     "temas_autogen_sin_copy",
     "encadenar_redactar_tras_verificar",
     "encadenar_ilustrar_tras_redactar",
-    # CALIDAD del copy (criba advisory pre-avance)
+    # CALIDAD del copy (verificación advisory pre-avance)
     "avisos_voz",
     "avisos_coherencia",
     "avisos_calidad",

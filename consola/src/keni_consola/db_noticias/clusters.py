@@ -498,8 +498,8 @@ def reparar_qa_clusters_en_curso(umbral_iso: str) -> int:
     """Resetea a "" el `verificar_veredicto='en_curso'` atascado de los clusters (limpiador de verificación).
 
     Si una QA de la fuente sobre un cluster se interrumpe (deploy/OOM/cuelgue), el cluster quedaría
-    `en_curso` para siempre: ni se re-criba ni se admite. Devuelve los `en_curso` más viejos que
-    `umbral_iso` a "" para que el barrido los vuelva a cribar. Mismo patrón que
+    `en_curso` para siempre: ni se re-verificación ni se admite. Devuelve los `en_curso` más viejos que
+    `umbral_iso` a "" para que el barrido los vuelva a verificar. Mismo patrón que
     `reparar_qa_en_curso_sueltos` sobre `contenido`. Devuelve cuántos corrigió.
     """
     con = _conectar()
