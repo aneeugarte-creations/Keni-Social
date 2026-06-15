@@ -635,7 +635,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
 
     renderTareas([]);
     fireEvent.click(await screen.findByRole("button", { name: /Añadir/ }));
-    fireEvent.change(screen.getByPlaceholderText(/Pega el enlace/), {
+    fireEvent.change(screen.getByPlaceholderText(/Pega un enlace/), {
       target: { value: "https://liga.test/jornada" },
     });
     fireEvent.click(screen.getByRole("button", { name: /Analizar/ }));

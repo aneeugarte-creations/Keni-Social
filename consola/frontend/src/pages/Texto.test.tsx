@@ -416,7 +416,7 @@ describe("Biblioteca de Prompts (tres máquinas + estrategia)", () => {
 
     // Cabecera: título editable, línea de deployment, badge sin publicar y acciones.
     expect(await screen.findByDisplayValue("Prompt de copy")).toBeInTheDocument();
-    expect(screen.getByText(/v\. producción desde/)).toBeInTheDocument();
+    expect(screen.getByText(/Publicado .* desde/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Publicar/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Probar/ })).toBeInTheDocument();
 
