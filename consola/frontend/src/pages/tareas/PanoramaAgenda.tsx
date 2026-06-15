@@ -726,7 +726,8 @@ export function PanoramaAgenda({
     coberturasHoy.filter((c) => yaPaso(c.orden, c.hora)).length +
     tareasHoy.filter((t) => t.estado === "hecha").length;
   const pctHoy = totalHoy ? Math.round((hechosHoy / totalHoy) * 100) : 0;
-  const hoyCompleto = totalHoy > 0 && hechosHoy === totalHoy;
+  // Verde cuando ya está hecha la MAYORÍA del día (≥90%): el día se da por «casi cerrado».
+  const hoyCasiListo = totalHoy > 0 && hechosHoy / totalHoy >= 0.9;
 
   // BANDA «URGENTE AHORA» (breaking): los ítems prioridad «alta» de HOY o SIN FECHA SALEN de los
   // cajones de día y saltan al tope. Lo urgente de otro día se queda en su día (con su badge rojo).
@@ -785,7 +786,7 @@ export function PanoramaAgenda({
               <div
                 className={cn(
                   "mt-1 text-lg font-semibold tabular-nums",
-                  hoyCompleto ? "text-emerald-600" : undefined,
+                  hoyCasiListo ? "text-emerald-600" : undefined,
                 )}
               >
                 {hechosHoy}
@@ -798,7 +799,7 @@ export function PanoramaAgenda({
                 <div
                   className={cn(
                     "h-full rounded-full transition-all",
-                    hoyCompleto ? "bg-emerald-500" : "bg-keni-500",
+                    hoyCasiListo ? "bg-emerald-500" : "bg-keni-500",
                   )}
                   style={{ width: `${pctHoy}%` }}
                 />

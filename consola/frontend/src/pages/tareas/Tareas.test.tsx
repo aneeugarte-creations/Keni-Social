@@ -242,6 +242,26 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     const marcador = await screen.findByLabelText(/Progreso de hoy/);
     expect(marcador).toHaveTextContent(/2\s*\/\s*4/);
     expect(marcador).toHaveTextContent(/2\s*pendientes/); // 4 − 2 = 2 pendientes
+    // 50% (< 90%): la barra es naranja de marca, aún no verde.
+    expect(marcador.querySelector(".bg-keni-500")).not.toBeNull();
+    expect(marcador.querySelector(".bg-emerald-500")).toBeNull();
+  });
+
+  it("PANORAMA: el marcador se pone VERDE al llegar al 90% del día", async () => {
+    const hoy = hoyCDMX();
+    // 9 hechas + 1 pendiente = 9/10 = 90% → verde.
+    const hechas = Array.from({ length: 9 }, (_, i) =>
+      tarea({ id: `h${i}`, titulo: `Hecha ${i}`, fecha_objetivo: hoy, estado: "hecha", responsable_id: "u-luis", responsable_nombre: "luis" }),
+    );
+    renderTareas([
+      ...hechas,
+      tarea({ id: "pend", titulo: "Pendiente", fecha_objetivo: hoy, estado: "pendiente" }),
+    ]);
+
+    const marcador = await screen.findByLabelText(/Progreso de hoy/);
+    expect(marcador).toHaveTextContent(/9\s*\/\s*10/);
+    expect(marcador.querySelector(".bg-emerald-500")).not.toBeNull(); // verde a ≥90%
+    expect(marcador.querySelector(".bg-keni-500")).toBeNull();
   });
 
   it("un evento 'no_cubrir' NO aparece en la lista", async () => {
