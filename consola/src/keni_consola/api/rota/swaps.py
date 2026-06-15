@@ -15,9 +15,6 @@ from ...estados import (
     ESTADO_SWAP_PROPUESTO,
     ESTADO_SWAP_RECHAZADO,
     ESTADO_SWAP_RECHAZADO_ADMIN,
-    TIPO_SWAP_CESION,
-    TIPO_SWAP_INTERCAMBIO,
-    TIPOS_SWAP,
 )
 from ...tiempo import ahora_iso
 from ._comun import _es_admin, _fecha_valida, _marca_param, _nombres_equipo, _usuario_actual
@@ -137,48 +134,6 @@ async def listar_swaps(request: Request) -> Response:
     return JSONResponse({"swaps": [_swap_a_dict(s, nombres) for s in swaps]})
 
 
-async def _crear_cesion(
-    usuario: dict[str, Any], datos: dict[str, Any], nombres: dict[str, str]
-) -> Response:
-    """Crea una CESIÓN (#175, una vía): A ofrece SU turno `(fecha_a, franja_a)` sin contraparte.
-
-    Nace `propuesto` con `destinatario_id=''` (lo rellena quien la RECLAME) y sin turno B.
-    Valida que el turno ofrecido existe en el horario y es de A.
-    """
-    fecha_a = str(datos.get("fecha_a", "")).strip()
-    if not _fecha_valida(fecha_a):
-        return JSONResponse(
-            {"error": "La fecha no es válida (usa AAAA-MM-DD)."}, status_code=400
-        )
-    franja_a = str(datos.get("franja_a", "")).strip()
-    if not franja_a:
-        return JSONResponse(
-            {"error": "Indica la franja del turno que cedes."}, status_code=400
-        )
-    franja_a_def = repos.obtener_franja_semana(franja_a)
-    if franja_a_def is None:
-        return JSONResponse({"error": "La franja indicada no existe."}, status_code=400)
-    if not _existe_turno(usuario["id"], fecha_a, franja_a):
-        return JSONResponse(
-            {"error": "No encuentro tu turno en el horario para esa fecha y franja."},
-            status_code=400,
-        )
-    swap = repos.crear_swap_turno(
-        usuario["id"],
-        "",  # destinatario vacío: lo fija quien reclame
-        fecha_a,
-        franja_a,
-        "",  # sin turno B (la cesión es de una sola vía)
-        "",
-        solicitante_nombre=nombres.get(usuario["id"], usuario.get("usuario", "")),
-        destinatario_nombre="",
-        motivo=str(datos.get("motivo", "")).strip(),
-        marca=franja_a_def.get("marca", "") or "",
-        tipo=TIPO_SWAP_CESION,
-    )
-    return JSONResponse({"swap": _swap_a_dict(swap, nombres)}, status_code=201)
-
-
 async def crear_swap(request: Request) -> Response:
     """POST /api/rota/swaps: A (sesion) crea una solicitud de cambio de turno con B.
 
@@ -193,14 +148,6 @@ async def crear_swap(request: Request) -> Response:
         )
     datos = await leer_json(request)
     nombres = _nombres_equipo()
-
-    # VERBO (#175): el body trae `tipo` (default 'intercambio' = ruta histórica, intacta).
-    # La cesión (una vía: sin turno B ni destinatario fijo) tiene su propia validación.
-    tipo = str(datos.get("tipo", TIPO_SWAP_INTERCAMBIO)).strip() or TIPO_SWAP_INTERCAMBIO
-    if tipo not in TIPOS_SWAP:
-        return JSONResponse({"error": "Tipo de cambio no reconocido."}, status_code=400)
-    if tipo == TIPO_SWAP_CESION:
-        return await _crear_cesion(usuario, datos, nombres)
 
     destinatario_id = datos.get("destinatario_id")
     if not isinstance(destinatario_id, str) or not destinatario_id:
@@ -389,49 +336,6 @@ async def rechazar_swap(request: Request) -> Response:
     return JSONResponse({"swap": swap_dict})
 
 
-async def reclamar_swap(request: Request) -> Response:
-    """POST /api/rota/swaps/{id}/reclamar: un compañero RECLAMA una cesión.
-
-    La cesión (propuesta, sin destinatario) pasa a `aceptado` con el reclamante como
-    destinatario; de ahí va a la aprobación del admin, igual que un intercambio aceptado.
-    """
-    swap_id = request.path_params["swap_id"]
-    usuario = _usuario_actual(request)
-    if usuario is None:
-        return JSONResponse(
-            {"error": "Inicia sesión para reclamar un turno."}, status_code=401
-        )
-    swap = repos.obtener_swap_turno(swap_id)
-    if swap is None:
-        return JSONResponse({"error": "La solicitud ya no existe."}, status_code=404)
-    if swap.get("tipo") != TIPO_SWAP_CESION:
-        return JSONResponse(
-            {"error": "Esta solicitud no es una cesión que se pueda reclamar."},
-            status_code=409,
-        )
-    if swap["estado"] != ESTADO_SWAP_PROPUESTO:
-        return _error_transicion(swap["estado"], "reclamar")
-    if swap["solicitante_id"] == usuario["id"]:
-        return JSONResponse(
-            {"error": "No puedes reclamar tu propia cesión."}, status_code=400
-        )
-    nombres = _nombres_equipo()
-    actualizado = repos.reclamar_oferta_turno(
-        swap_id,
-        claimer_id=usuario["id"],
-        claimer_nombre=nombres.get(usuario["id"], usuario.get("usuario", "")),
-    )
-    if actualizado is None:  # carrera: alguien la reclamó/cambió entre medias
-        return JSONResponse(
-            {"error": "Ese turno ya fue reclamado o ya no está disponible."},
-            status_code=409,
-        )
-    swap_dict = _swap_a_dict(actualizado, nombres)
-    # Reclamada -> avisa a los admin de que hay un cambio esperando su aprobación.
-    notificaciones_turnos.tras_respuesta_destinatario(swap_dict, "aceptado", actor=usuario)
-    return JSONResponse({"swap": swap_dict})
-
-
 async def aprobar_swap(request: Request) -> Response:
     """POST /api/rota/swaps/{id}/aprobar: admin APRUEBA y EJECUTA el swap.
 
@@ -451,32 +355,18 @@ async def aprobar_swap(request: Request) -> Response:
     datos = await leer_json(request)
     respuesta = str(datos.get("respuesta", "")).strip()
     nombres = _nombres_equipo()
-    if swap.get("tipo") == TIPO_SWAP_CESION:
-        # Cesión (una vía): reasigna el turno de A al que reclamó (destinatario).
-        resultado = repos.aplicar_oferta_turno(
-            swap_id,
-            dueno_id=swap["solicitante_id"],
-            fecha_a=swap["fecha_a"],
-            franja_a=swap["franja_a"],
-            destinatario_id=swap["destinatario_id"],
-            destinatario_nombre=nombres.get(
-                swap["destinatario_id"], swap["destinatario_nombre"]
-            ),
-            respuesta_admin=respuesta,
-        )
-    else:
-        resultado = repos.aplicar_swap_turno(
-            swap_id,
-            solicitante_id=swap["solicitante_id"],
-            solicitante_nombre=nombres.get(swap["solicitante_id"], swap["solicitante_nombre"]),
-            destinatario_id=swap["destinatario_id"],
-            destinatario_nombre=nombres.get(swap["destinatario_id"], swap["destinatario_nombre"]),
-            fecha_a=swap["fecha_a"],
-            franja_a=swap["franja_a"],
-            fecha_b=swap["fecha_b"],
-            franja_b=swap["franja_b"],
-            respuesta_admin=respuesta,
-        )
+    resultado = repos.aplicar_swap_turno(
+        swap_id,
+        solicitante_id=swap["solicitante_id"],
+        solicitante_nombre=nombres.get(swap["solicitante_id"], swap["solicitante_nombre"]),
+        destinatario_id=swap["destinatario_id"],
+        destinatario_nombre=nombres.get(swap["destinatario_id"], swap["destinatario_nombre"]),
+        fecha_a=swap["fecha_a"],
+        franja_a=swap["franja_a"],
+        fecha_b=swap["fecha_b"],
+        franja_b=swap["franja_b"],
+        respuesta_admin=respuesta,
+    )
     if resultado is None:  # carrera: el swap se borro
         return JSONResponse({"error": "La solicitud ya no existe."}, status_code=404)
     if "error" in resultado and resultado["error"] == "no_coinciden":

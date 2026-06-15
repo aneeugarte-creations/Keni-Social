@@ -367,35 +367,6 @@ def aplicar_swap_turno(
     )
 
 
-def reclamar_oferta_turno(
-    swap_id: str, *, claimer_id: str, claimer_nombre: str
-) -> dict[str, Any] | None:
-    return db.reclamar_oferta_turno(
-        swap_id, claimer_id=claimer_id, claimer_nombre=claimer_nombre
-    )
-
-
-def aplicar_oferta_turno(
-    swap_id: str,
-    *,
-    dueno_id: str,
-    fecha_a: str,
-    franja_a: str,
-    destinatario_id: str,
-    destinatario_nombre: str,
-    respuesta_admin: str = "",
-) -> dict[str, Any] | None:
-    return db.aplicar_oferta_turno(
-        swap_id,
-        dueno_id=dueno_id,
-        fecha_a=fecha_a,
-        franja_a=franja_a,
-        destinatario_id=destinatario_id,
-        destinatario_nombre=destinatario_nombre,
-        respuesta_admin=respuesta_admin,
-    )
-
-
 
 # --------------------------------------------------------------------------- #
 # Config de franjas (#185)                                                     #
