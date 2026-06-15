@@ -417,7 +417,7 @@ def test_endpoint_daemons_expone_clave_gate(entorno):
 
 
 def test_etiqueta_de_mapea_nombre_humano_y_capitaliza():
-    # Mapeo explícito por nombre CANÓNICO (tras _ALIAS: ingesta/limpiador, no recolectar/reaper).
+    # Mapeo explícito por nombre CANÓNICO (tras _ALIAS: ingesta/limpiador).
     assert latidos.etiqueta_de("investigacion") == "Investigación"
     assert latidos.etiqueta_de("ingesta") == "Recolección de noticias"
     assert latidos.etiqueta_de("limpiador") == "Limpiador (cola y generaciones)"

@@ -218,7 +218,7 @@ def gasta_tokens(daemon: str) -> bool:
 
 # ETIQUETA humana de cada daemon: lo que la tarjeta/fila del panel muestra en vez del nombre
 # crudo. Fuente única (igual que el resto de la clasificación), keyed por el nombre CANÓNICO
-# (tras `_ALIAS`: `ingesta`, no `recolectar`; `limpiador`, no `reaper`). Un daemon no mapeado cae
+# (tras `_ALIAS`: `ingesta` y `limpiador`). Un daemon no mapeado cae
 # a su nombre capitalizado (ver `etiqueta_de`), así el panel nunca queda mudo.
 ETIQUETA = {
     "investigacion": "Investigación",

@@ -265,7 +265,7 @@ export function RolesCubiertos({ cubridores }: { cubridores: Contenido[] }) {
 }
 
 /**
- * Un ROL soltado dentro de una cobertura aún viva: tarea de cobertura HUÉRFANA (sin dueño) que
+ * Un ROL soltado dentro de una cobertura aún viva: tarea de cobertura SUELTA (sin dueño) que
  * conserva su `formato`. Resurge como «Por cubrir · <rol>» re-cogible (coger = retoma ESE rol).
  */
 function RolLibre({ tarea }: { tarea: Contenido }) {

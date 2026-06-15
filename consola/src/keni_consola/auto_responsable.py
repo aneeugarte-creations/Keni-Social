@@ -1,7 +1,7 @@
 """Auto-asignacion de responsable desde la rota (Fase 3 · auto-operativa).
 
 Resuelve QUIEN debe ser el responsable por defecto de una pieza nueva cuando quien la
-crea no fija uno: lo deriva de la ROTA del dia. Asi una pieza nunca queda HUERFANA y el
+crea no fija uno: lo deriva de la ROTA del dia. Asi una pieza nunca queda SUELTA y el
 equipo solo tiene que CREAR el contenido; el reparto operativo lo hace la consola.
 
 Este modulo es la CAPA DE I/O (lee `repos`/`auth`) sobre la funcion PURA del dominio

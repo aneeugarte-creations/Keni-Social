@@ -29,7 +29,7 @@ export type Cobertura = {
   evento?: EventoRota;
   cubridores: Contenido[];
   /**
-   * ROLES soltados de un evento que SIGUE cubierto por otros: tareas de cobertura HUÉRFANAS
+   * ROLES soltados de un evento que SIGUE cubierto por otros: tareas de cobertura SUELTAS
    * (sin responsable, su `formato` conserva el rol). Resurgen como «Por cubrir · <rol>»
    * re-cogibles DENTRO de la cobertura — el partido nunca desaparece (lo sostienen los demás
    * cubridores) y el rol liberado no se pierde de vista.
@@ -49,7 +49,7 @@ export type Item =
  *    `evento_id`). MULTI-COBERTURA: varias personas pueden cubrir el mismo evento.
  *  - `encargos`: tareas sueltas (sin `evento_id`), de UN dueño.
  *  - `eventosLibres`: eventos coverables con 0 cubridores → «Por cubrir».
- * Una tarea de cobertura SOLTADA (sin responsable) queda HUÉRFANA: su evento vuelve a «Por
+ * Una tarea de cobertura SOLTADA (sin responsable) queda SUELTA: su evento vuelve a «Por
  * cubrir» (se devuelve como `recuperable`, re-cogible) — el partido NUNCA se borra.
  */
 export function agrupar(tareas: Contenido[], eventos: EventoRota[]) {
@@ -72,7 +72,7 @@ export function agrupar(tareas: Contenido[], eventos: EventoRota[]) {
   for (const [eventoId, lista] of porEvento) {
     const cubridores = lista.filter((t) => t.responsable_id);
     if (cubridores.length > 0) {
-      // El evento sigue cubierto por ≥1 persona; las tareas HUÉRFANAS (roles soltados) viajan
+      // El evento sigue cubierto por ≥1 persona; las tareas SUELTAS (roles soltados) viajan
       // como `libres` para resurgir como «Por cubrir · <rol>» dentro de la misma cobertura.
       coberturas.push({
         eventoId,

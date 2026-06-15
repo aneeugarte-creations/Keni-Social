@@ -217,7 +217,7 @@ def logout() -> dict:
 #   enviar_codigo(sid,cod) escribe el codigo en el PTY y espera el cierre (exito/fallo)
 #   cancelar_login(sid)    mata el proceso
 # El proceso `daemons` es de INSTANCIA UNICA (no escala), asi que el registro en memoria es
-# seguro. Un reaper perezoso mata sesiones abandonadas (URL emitida, codigo nunca pegado).
+# seguro. Un limpiador perezoso mata sesiones abandonadas (URL emitida, codigo nunca pegado).
 
 
 @dataclass

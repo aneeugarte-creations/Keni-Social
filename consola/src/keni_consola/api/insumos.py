@@ -179,7 +179,7 @@ def _reenlazar_gemela_pool(item_previo: dict[str, Any], campos: dict[str, Any]) 
     """Mantiene VIVO el enlace ítem↔gemela-del-pool cuando se EDITA el título.
 
     El enlace ítem↔gemela se deriva del hash del título (`_noticia_pool_de_item`): si el equipo
-    reescribe el título, la gemela queda HUÉRFANA (Descartar deja viva la vieja y el 409
+    reescribe el título, la gemela queda SUELTA (Descartar deja viva la vieja y el 409
     anti-doble-pieza de "Empujar ya" no dispara). No hay enlace ESTABLE persistido en
     `insumos_item` (haría falta una columna nueva + migración, y el punto que crea AMBAS filas
     vive en el worker, fuera de este router), así que RE-CALCULAMOS aquí, en el mismo PATCH:

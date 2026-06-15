@@ -70,7 +70,7 @@ def test_fk_rechaza_plataforma_suelta(pg):
 
 
 def test_fks_idempotentes_y_limpian_sueltos(pg):
-    """Re-aplicar la migracion de FKs sobre una BD con HUERFANOS los borra y recrea la FK."""
+    """Re-aplicar la migracion de FKs sobre una BD con SUELTOS los borra y recrea la FK."""
     c = db.crear_contenido(titulo="t")
     con = _cruda()
     try:

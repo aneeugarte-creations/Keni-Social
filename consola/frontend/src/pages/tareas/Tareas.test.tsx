@@ -428,7 +428,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     const coger = vi
       .spyOn(apiMod.api, "cogerContenido")
       .mockResolvedValue({ contenido: {} } as never);
-    // Tarea de cobertura HUÉRFANA (evento_id pero sin responsable, como tras «Soltar»): el
+    // Tarea de cobertura SUELTA (evento_id pero sin responsable, como tras «Soltar»): el
     // partido NO se borró, debe reaparecer como «Por cubrir» y poder re-cogerse.
     renderTareas([
       tarea({ id: "t-suelta", titulo: "Brasil vs Marruecos", evento_id: "ev2", responsable_id: "", responsable_nombre: "", fecha_objetivo: "2026-07-02" }),
@@ -436,8 +436,8 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
 
     fireEvent.click(await screen.findByText("Brasil vs Marruecos"));
     // Item-first: la cobertura suelta muestra badge «Libre»; click en la tarjeta = coger.
-    const libreHuerfana = await screen.findByText("Libre");
-    fireEvent.click(libreHuerfana.closest("[role='button']")!);
+    const libreSuelta = await screen.findByText("Libre");
+    fireEvent.click(libreSuelta.closest("[role='button']")!);
     await waitFor(() => expect(coger).toHaveBeenCalledWith("t-suelta"));
   });
 

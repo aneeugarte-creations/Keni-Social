@@ -92,7 +92,7 @@ def test_purga_borra_sueltas_y_rangos_adhoc_viejos(entorno, monkeypatch):
     """La purga del barrido borra claves de esquema viejo y rangos ad-hoc caducados,
     sin tocar la cache por-pieza del tablero (misma tabla, tipo `pieza_contenido`)."""
     monkeypatch.setattr(mc, "_ahora", lambda: "2026-06-10T12:00:00")
-    # Huérfana de esquema viejo + rango ad-hoc caducado + pieza del tablero (intocable).
+    # Suelta de esquema viejo + rango ad-hoc caducado + pieza del tablero (intocable).
     repos.guardar_metricas_cache(
         "reporte:mes:todas", mc.TIPO_REPORTE, "mes", "", {}, "muestra", "2026-05-01T00:00:00"
     )

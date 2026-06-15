@@ -221,7 +221,7 @@ describe("RecuadroPersonaCalendario — cabecera = solo avatar (sin nombre escri
     expect(screen.getByText("T")).toBeInTheDocument();
   });
 
-  it("la coverage huérfana (sin TurnoRota local) también es solo avatar", () => {
+  it("la coverage suelta (sin TurnoRota local) también es solo avatar", () => {
     render(
       <RecuadroPersonaCalendario
         recuadro={{

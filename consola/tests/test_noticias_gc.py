@@ -75,11 +75,11 @@ def test_purga_items_sueltos_viejos(entorno):
     """Items `nuevo` viejos y sin cluster (o cuyo cluster ya no existe) se purgan; recientes no."""
     repos.crear_noticias_items([
         {"fuente_id": "f", "fuente_nombre": "F", "categoria": "mx", "marca": "unotv",
-         "titulo": "Huerfano viejo", "resumen": "r", "url": "https://e.com/1",
+         "titulo": "Suelto viejo", "resumen": "r", "url": "https://e.com/1",
          "url_canonica": "e.com/1", "clave": "k-viejo", "cluster_id": "",
          "capturado_en": _VIEJO},
         {"fuente_id": "f", "fuente_nombre": "F", "categoria": "mx", "marca": "unotv",
-         "titulo": "Huerfano nuevo", "resumen": "r", "url": "https://e.com/2",
+         "titulo": "Suelto nuevo", "resumen": "r", "url": "https://e.com/2",
          "url_canonica": "e.com/2", "clave": "k-nuevo", "cluster_id": "",
          "capturado_en": _ahora()},
     ])

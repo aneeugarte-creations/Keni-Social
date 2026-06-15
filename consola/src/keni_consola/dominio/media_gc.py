@@ -1,12 +1,12 @@
-"""Recoleccion de basura (GC) de MEDIA HUERFANA del almacen (Estudio de imagen, diseno §5).
+"""Recoleccion de basura (GC) de MEDIA SUELTA del almacen (Estudio de imagen, diseno §5).
 
 PROBLEMA QUE RESUELVE
 =====================
 El Estudio de imagen genera N variantes por pieza; las NO elegidas quedan como objetos
 sueltos en el almacen de media (`almacen_media`) y nadie las borra: el almacen crece sin
-limite. Aqui un barrido CONSERVADOR localiza y borra los objetos HUERFANOS.
+limite. Aqui un barrido CONSERVADOR localiza y borra los objetos SUELTOS.
 
-DEFINICION DE HUERFANO (conservadora; ante la duda, NO se borra)
+DEFINICION DE SUELTO (conservadora; ante la duda, NO se borra)
 ================================================================
 Un objeto del almacen es suelto si y SOLO si cumple las DOS condiciones:
   1. NO es una REFERENCIA VIVA: ni el `imagen` (composite horneado) ni la `foto` cruda de
@@ -294,7 +294,7 @@ def referencias_vivas() -> set[str]:
 
 
 def sueltos(antiguedad_horas: float = 24) -> list[str]:
-    """Objetos HUERFANOS borrables: ni referenciados/catalogados ni recientes.
+    """Objetos SUELTOS borrables: ni referenciados/catalogados ni recientes.
 
     Devuelve los nombres de objeto de `almacen_media.listar_objetos()` que NO estan en
     `referencias_vivas()` y cuyo mtime es mas viejo que `antiguedad_horas` (medido contra
