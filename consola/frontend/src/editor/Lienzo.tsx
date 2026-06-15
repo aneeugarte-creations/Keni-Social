@@ -28,6 +28,7 @@ import { CropOverlay } from "./lienzo/CropOverlay";
 import { FondoNodo } from "./lienzo/FondoNodo";
 import { RATIO_FIJO, acotarCajaTransformer, clampMarco, franjasZonaSegura } from "./lienzo/lib";
 import { OverlayEdicionTexto } from "./lienzo/OverlayEdicionTexto";
+import { RecorteCajaOverlay } from "./lienzo/RecorteCajaOverlay";
 import { ReframeOverlay } from "./lienzo/ReframeOverlay";
 import { useArrastreCapas } from "./lienzo/useArrastreCapas";
 import { type LienzoApi, type ZoomApi, useAtajosTeclado } from "./lienzo/useAtajosTeclado";
@@ -472,14 +473,17 @@ export function Lienzo({
             store={store}
           />
         )}
-        {capaRecorte && (
+        {capaRecorte && (capaRecorte.tipo === "imagen" ? (
           <CropOverlay
             capa={capaRecorte as CapaImagen}
             escala={escala}
             store={store}
             muestraFoto={muestraFoto}
           />
-        )}
+        ) : (
+          // Objeto sin píxeles (forma, línea, logo): recorta el RECUADRO con tiradores.
+          <RecorteCajaOverlay capa={capaRecorte} escala={escala} store={store} />
+        ))}
         {/* Etiqueta VIVA del gesto: rótulo junto al cursor durante resize/rotación. Movido por
             mutación directa del DOM (solo transform durante el gesto => 60 fps). */}
         <div

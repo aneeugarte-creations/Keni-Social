@@ -299,12 +299,12 @@ describe("BarraContextual — tachado (S)", () => {
   });
 });
 
-describe("BarraContextual — imagen: Recortar", () => {
-  function montarImagen(onRecortar: () => void) {
+describe("BarraContextual — Recortar (cualquier objeto, no solo fotos)", () => {
+  function montarRecorte(capa: Capa, onRecortar: () => void) {
     const doc = documentoVacio(FORMATO, "m1");
-    doc.capas.push(nuevaCapaImagen("obj", { id: "img1" }));
+    doc.capas.push(capa);
     const store = crearStoreEditor(doc);
-    store.getState().seleccionar("img1");
+    store.getState().seleccionar(capa.id);
     render(
       <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
         <ProveedorEditor store={store}>
@@ -319,14 +319,21 @@ describe("BarraContextual — imagen: Recortar", () => {
     );
   }
 
-  it("una imagen ofrece 'Recortar' y al pulsarlo entra al modo recorte", () => {
+  it("una FOTO ofrece 'Recortar' y al pulsarlo entra al modo recorte", () => {
     const onRecortar = vi.fn();
-    montarImagen(onRecortar);
+    montarRecorte(nuevaCapaImagen("obj", { id: "img1" }), onRecortar);
     fireEvent.click(screen.getByRole("button", { name: "Recortar" }));
     expect(onRecortar).toHaveBeenCalledTimes(1);
   });
 
-  it("una capa de TEXTO no ofrece 'Recortar' (el recorte es solo para imágenes)", () => {
+  it("una FORMA/LÍNEA (marco) también ofrece 'Recortar' y lo dispara", () => {
+    const onRecortar = vi.fn();
+    montarRecorte(nuevaCapaMarco({ id: "linea1", forma: "linea" }), onRecortar);
+    fireEvent.click(screen.getByRole("button", { name: "Recortar" }));
+    expect(onRecortar).toHaveBeenCalledTimes(1);
+  });
+
+  it("una capa de TEXTO no ofrece 'Recortar' (el texto se ajusta con su tamaño/tiradores)", () => {
     montarConTexto();
     expect(screen.queryByRole("button", { name: "Recortar" })).toBeNull();
   });

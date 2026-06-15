@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   type GestoLateral,
+  MIN_CAJA_PX,
   MIN_CROP,
   MIN_LADO_PX,
   clampCrop,
@@ -9,6 +10,7 @@ import {
   escalarCrop,
   localADoc,
   moverAsa,
+  recortarCaja,
   recorteLateral,
   vistaRecorte,
 } from "./recorte";
@@ -303,5 +305,39 @@ describe("localADoc / docALocal (coords locales de capa con rotación)", () => {
     const l = docALocal(33, -7, 37.5, d.x, d.y);
     expect(l.x).toBeCloseTo(12.3, 9);
     expect(l.y).toBeCloseTo(-4.2, 9);
+  });
+});
+
+describe("recortarCaja (recorte de RECUADRO para objetos sin píxeles)", () => {
+  const caja = { x: 100, y: 100, w: 200, h: 100 };
+
+  it("arrastrar el borde DERECHO/INFERIOR cambia solo el tamaño (el origen queda fijo)", () => {
+    expect(recortarCaja(caja, "e", -50, 0)).toEqual({ x: 100, y: 100, w: 150, h: 100 });
+    expect(recortarCaja(caja, "s", 0, 40)).toEqual({ x: 100, y: 100, w: 200, h: 140 });
+  });
+
+  it("arrastrar el borde IZQUIERDO/SUPERIOR mueve el origen y el borde opuesto queda fijo", () => {
+    // Izquierda +30: x avanza a 130 y el borde derecho (300) no se mueve => w = 170.
+    expect(recortarCaja(caja, "w", 30, 0)).toEqual({ x: 130, y: 100, w: 170, h: 100 });
+    // Arriba +20: y baja a 120 y el borde inferior (200) no se mueve => h = 80.
+    expect(recortarCaja(caja, "n", 0, 20)).toEqual({ x: 100, y: 120, w: 200, h: 80 });
+  });
+
+  it("una esquina mueve los DOS bordes que la tocan", () => {
+    // nw: izquierda +10 y arriba +10 (bordes der=300 / inf=200 fijos).
+    expect(recortarCaja(caja, "nw", 10, 10)).toEqual({ x: 110, y: 110, w: 190, h: 90 });
+  });
+
+  it("no colapsa por debajo del mínimo y el borde opuesto NO se cruza", () => {
+    // Empujar la izquierda muy a la derecha: x se topa en der - MIN y w = MIN.
+    const r = recortarCaja(caja, "w", 1000, 0);
+    expect(r.w).toBe(MIN_CAJA_PX);
+    expect(r.x).toBe(300 - MIN_CAJA_PX); // pegado al borde derecho fijo
+    // Empujar el borde derecho hacia dentro hasta colapsar: w se topa en MIN.
+    expect(recortarCaja(caja, "e", -1000, 0).w).toBe(MIN_CAJA_PX);
+  });
+
+  it("'mover' desplaza el recuadro entero sin cambiar tamaño", () => {
+    expect(recortarCaja(caja, "mover", 15, -5)).toEqual({ x: 115, y: 95, w: 200, h: 100 });
   });
 });

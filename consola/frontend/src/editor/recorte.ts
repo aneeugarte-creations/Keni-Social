@@ -220,3 +220,45 @@ export function docALocal(x0: number, y0: number, rot: number, px: number, py: n
   const dy = py - y0;
   return { x: dx * cos + dy * sin, y: -dx * sin + dy * cos };
 }
+
+// ── Recorte de CAJA (objetos no-imagen: formas, líneas, logos) ────────────────────────────────────
+//
+// Para una imagen, "recortar" recorta sus PÍXELES (campo `crop`). Para un objeto sin píxeles (marco,
+// línea, logo) "recortar" = encoger su RECUADRO desde un borde: el borde OPUESTO al tirador queda
+// fijo y el arrastrado avanza, con un mínimo para no colapsarlo. Deltas en px del DOCUMENTO sobre la
+// caja de ENTRADA del gesto (no acumula sobre estados intermedios), espejo de `moverAsa` pero en px.
+
+export interface CajaRecorte {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export const MIN_CAJA_PX = 8;
+
+export function recortarCaja(c: CajaRecorte, asa: AsaRecorte, dx: number, dy: number, min = MIN_CAJA_PX): CajaRecorte {
+  if (asa === "mover") return { x: c.x + dx, y: c.y + dy, w: c.w, h: c.h };
+  const der = c.x + c.w; // borde derecho/inferior: fijo salvo que se arrastre ese lado
+  const aba = c.y + c.h;
+  let { x, y, w, h } = c;
+  const oeste = asa === "nw" || asa === "w" || asa === "sw";
+  const este = asa === "ne" || asa === "e" || asa === "se";
+  const norte = asa === "nw" || asa === "n" || asa === "ne";
+  const sur = asa === "sw" || asa === "s" || asa === "se";
+  if (oeste) {
+    x = Math.min(c.x + dx, der - min); // no pasar del borde derecho menos el mínimo
+    w = der - x;
+  }
+  if (este) {
+    w = Math.max(min, c.w + dx);
+  }
+  if (norte) {
+    y = Math.min(c.y + dy, aba - min);
+    h = aba - y;
+  }
+  if (sur) {
+    h = Math.max(min, c.h + dy);
+  }
+  return { x, y, w, h };
+}

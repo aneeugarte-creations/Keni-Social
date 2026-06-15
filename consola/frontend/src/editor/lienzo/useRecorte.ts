@@ -30,15 +30,20 @@ export function useRecorte({
   // capa de imagen (estado interno). Excluyente con reencuadre (el reencuadre manda si coinciden).
   const [recorteInternoId, setRecorteInternoId] = useState<string | null>(null);
   const recorteActivoId = recorteId ?? recorteInternoId;
+  // Recortable = imagen (recorte de PÍXELES, `crop`) o cualquier otro objeto (recorte de CAJA, encoge
+  // su recuadro). Sin rotación en ambos (el overlay no resuelve ejes girados). El reencuadre manda si
+  // coinciden. El doble clic solo entra para imágenes (Lienzo); el botón "Recortar", para cualquiera.
   const capaRecorte =
     !capaReencuadre && recorteActivoId
-      ? documento.capas.find((c) => c.id === recorteActivoId && c.tipo === "imagen" && sinRotacion(c)) ?? null
+      ? documento.capas.find((c) => c.id === recorteActivoId && sinRotacion(c)) ?? null
       : null;
 
-  // SESIÓN de recorte: instantánea al ENTRAR en el modo, para que "Cancelar"/Esc restaure el crop
-  // de entrada y para que "Hecho"/Enter colapse todos los gestos del modo en UN paso de deshacer
-  // (como Canva). `pasadoLen` ancla el historial al estado de entrada.
-  const sesionRecorte = useRef<{ id: string; crop?: Crop; pasadoLen: number } | null>(null);
+  // SESIÓN de recorte: instantánea al ENTRAR en el modo, para que "Cancelar"/Esc restaure el estado
+  // de entrada (el `crop` de la imagen, o el RECUADRO del objeto) y para que "Hecho"/Enter colapse
+  // todos los gestos del modo en UN paso de deshacer (como Canva). `pasadoLen` ancla el historial.
+  const sesionRecorte = useRef<
+    { id: string; crop?: Crop; caja?: { x: number; y: number; w: number; h: number }; pasadoLen: number } | null
+  >(null);
   useEffect(() => {
     if (!capaRecorte) {
       sesionRecorte.current = null;
@@ -46,10 +51,11 @@ export function useRecorte({
     }
     if (sesionRecorte.current?.id === capaRecorte.id) return;
     const st = store.getState();
-    const c = st.documento.capas.find((x) => x.id === capaRecorte.id) as CapaImagen | undefined;
+    const c = st.documento.capas.find((x) => x.id === capaRecorte.id);
     sesionRecorte.current = {
       id: capaRecorte.id,
-      crop: c?.crop ? { ...c.crop } : undefined,
+      crop: c?.tipo === "imagen" && c.crop ? { ...c.crop } : undefined,
+      caja: c && c.tipo !== "imagen" ? { x: c.x, y: c.y, w: c.w, h: c.h } : undefined,
       pasadoLen: st.pasado.length,
     };
   }, [capaRecorte, store]);
@@ -75,7 +81,8 @@ export function useRecorte({
     }
     salirRecorte();
   };
-  // "Cancelar"/Esc: restaura el crop de entrada y DESCARTA los pasos de historial del modo.
+  // "Cancelar"/Esc: restaura el estado de entrada (crop de la imagen o recuadro del objeto) y
+  // DESCARTA los pasos de historial del modo.
   const cancelarRecorte = () => {
     const ses = sesionRecorte.current;
     if (ses) {
@@ -83,10 +90,14 @@ export function useRecorte({
         documento: {
           ...s.documento,
           capas: s.documento.capas.map((c) => {
-            if (c.id !== ses.id || c.tipo !== "imagen") return c;
-            if (ses.crop) return { ...c, crop: { ...ses.crop } } as Capa;
-            const { crop: _omit, ...resto } = c as CapaImagen;
-            return resto as Capa;
+            if (c.id !== ses.id) return c;
+            if (c.tipo === "imagen") {
+              if (ses.crop) return { ...c, crop: { ...ses.crop } } as Capa;
+              const { crop: _omit, ...resto } = c as CapaImagen;
+              return resto as Capa;
+            }
+            // Objeto no-imagen: restaura el RECUADRO de entrada.
+            return ses.caja ? ({ ...c, ...ses.caja } as Capa) : c;
           }),
         },
         pasado: s.pasado.slice(0, ses.pasadoLen),

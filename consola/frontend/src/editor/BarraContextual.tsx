@@ -489,7 +489,6 @@ export function BarraContextual({
         <>
           <BotonIcono titulo="Reemplazar imagen" onClick={onReemplazar}><Replace className="h-4 w-4" /> Reemplazar</BotonIcono>
           <BotonIcono titulo="Reencuadrar (arrastra la foto dentro del marco)" onClick={onReencuadrar}><Crop className="h-4 w-4" /> Reencuadrar</BotonIcono>
-          <BotonIcono titulo="Recortar (tira de los bordes para recortar la imagen)" onClick={onRecortar}><Scissors className="h-4 w-4" /> Recortar</BotonIcono>
         </>
       )}
 
@@ -551,6 +550,12 @@ export function BarraContextual({
           </>
         );
       })()}
+
+      {/* RECORTAR: para imagen (recorta píxeles), forma/línea y logo (encoge el recuadro). El texto
+          se ajusta con su propio tamaño/tiradores; el overlay full-canvas no se recorta. */}
+      {(capa.tipo === "imagen" || capa.tipo === "marco" || capa.tipo === "logo") && (
+        <BotonIcono titulo="Recortar (arrastra los bordes)" onClick={onRecortar}><Scissors className="h-4 w-4" /> Recortar</BotonIcono>
+      )}
 
       <div className="ml-auto flex items-center gap-1">
         <Sep />
