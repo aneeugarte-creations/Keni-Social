@@ -12,10 +12,18 @@
  *      la mitad) y las variables se pintan como pastillas, coherentes con el editor.
  *   3. `soloCambios` colapsa las rachas de párrafos sin cambios tras un separador
  *      "··· N párrafos sin cambios" (clic para desplegarlos).
+ *
+ * Antes de NADA, ambos lados pasan por `aProsaPlana` (ver `diffProsa.lib.ts`): se les quita
+ * el frontmatter y el markup markdown y se les normaliza el whitespace con el MISMO pipeline,
+ * de forma que (a) no se vea markdown crudo, (b) los metadatos no entren al diff y (c) los
+ * cambios fantasma de formato (viñeta `*` vs `-`, espacios, hard-breaks) se cancelen. Las
+ * pastillas de `{{VARIABLE}}` sobreviven intactas. Además, un fragmento que sea PURO
+ * whitespace nunca se pinta como añadido/borrado: un salto de línea no es un "cambio".
  */
 import { diffArrays } from "diff";
 import * as React from "react";
 
+import { aProsaPlana, esSoloEspacios } from "@/components/biblioteca/diffProsa.lib";
 import { cn } from "@/lib/utils";
 
 // `{{VARIABLE}}` | racha de espacios | racha sin espacios. Cubre TODO el texto, así
@@ -83,13 +91,19 @@ function BloqueCambiado({ antes, despues }: { antes: string; despues: string }) 
   );
   return (
     <p className="whitespace-pre-wrap leading-relaxed">
-      {partes.map((p, i) => (
-        <Fragmento
-          key={i}
-          texto={p.value.join("")}
-          tipo={p.added ? "mas" : p.removed ? "menos" : "igual"}
-        />
-      ))}
+      {partes.map((p, i) => {
+        const texto = p.value.join("");
+        // Un fragmento de SOLO whitespace (espacios/saltos) jamás se resalta: el cambio de
+        // whitespace es estructura, no contenido. Se pinta como contexto (tipo "igual").
+        const tipo = esSoloEspacios(texto)
+          ? "igual"
+          : p.added
+            ? "mas"
+            : p.removed
+              ? "menos"
+              : "igual";
+        return <Fragmento key={i} texto={texto} tipo={tipo} />;
+      })}
     </p>
   );
 }
@@ -140,10 +154,21 @@ export interface DiffProsaProps {
  * Pensado para que una persona de redes (no técnica) entienda QUÉ cambió en un prompt.
  */
 export function DiffProsa({ antes, despues, soloCambios = false, className }: DiffProsaProps) {
-  const bloques = React.useMemo(() => agruparBloques(antes, despues), [antes, despues]);
+  // Proyecta AMBOS lados a prosa plana con el MISMO pipeline (strip de frontmatter + limpieza
+  // de markdown + normalización de whitespace) ANTES de diffear: ni markdown crudo ni
+  // metadatos ni diffs fantasma de formato. Las pastillas `{{VARIABLE}}` sobreviven.
+  const antesPlano = React.useMemo(() => aProsaPlana(antes), [antes]);
+  const despuesPlano = React.useMemo(() => aProsaPlana(despues), [despues]);
+  const bloques = React.useMemo(
+    () => agruparBloques(antesPlano, despuesPlano),
+    [antesPlano, despuesPlano],
+  );
   // Rachas sin cambios desplegadas a mano en modo "solo cambios" (clic en el separador).
   const [desplegados, setDesplegados] = React.useState<Set<number>>(new Set());
-  React.useEffect(() => setDesplegados(new Set()), [antes, despues, soloCambios]);
+  React.useEffect(
+    () => setDesplegados(new Set()),
+    [antesPlano, despuesPlano, soloCambios],
+  );
 
   const hayCambios = bloques.some((b) => b.tipo === "cambio");
   if (!hayCambios) {

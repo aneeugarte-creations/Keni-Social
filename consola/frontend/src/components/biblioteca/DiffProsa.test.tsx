@@ -40,4 +40,62 @@ describe("DiffProsa", () => {
     fireEvent.click(separador);
     expect(screen.getByText("Dos.")).toBeInTheDocument();
   });
+
+  it("un cambio de SOLO whitespace no produce ningún resaltado", () => {
+    // Mismo contenido, distinto whitespace (espacios extra y un salto): jamás se resalta.
+    const { container } = render(
+      <DiffProsa antes={"Hola    mundo cruel."} despues={"Hola mundo\ncruel."} />,
+    );
+    expect(container.querySelector("ins")).toBeNull();
+    expect(container.querySelector("del")).toBeNull();
+  });
+
+  it("espacios sobrantes idénticos por lo demás dan 'Sin cambios'", () => {
+    // Tras normalizar, ambos lados colapsan a lo mismo: ni bloque de cambio.
+    render(<DiffProsa antes={"Hola   mundo."} despues={"Hola mundo."} />);
+    expect(screen.getByText(/Sin cambios/)).toBeInTheDocument();
+  });
+
+  it("no muestra el frontmatter como contenido ni como cambio", () => {
+    const antes = "---\nslug: viejo\n---\nEl cuerpo no cambia.";
+    const despues = "---\nslug: nuevo\n---\nEl cuerpo no cambia.";
+    const { container } = render(<DiffProsa antes={antes} despues={despues} />);
+    expect(container.textContent).not.toContain("slug");
+    expect(container.textContent).not.toContain("---");
+    expect(screen.getByText(/Sin cambios/)).toBeInTheDocument();
+  });
+
+  it("no escupe markdown crudo: encabezados, negrita y viñetas se limpian", () => {
+    const { container } = render(
+      <DiffProsa
+        antes={"## Titular\n\n- punto"}
+        despues={"## Titular nuevo\n\n- punto"}
+      />,
+    );
+    expect(container.textContent).not.toContain("##");
+    expect(container.textContent).not.toContain("- punto");
+    expect(container.textContent).toContain("Titular");
+    // El cambio real de palabra sí se resalta.
+    expect(container.querySelector("ins")?.textContent?.trim()).toBe("nuevo");
+  });
+
+  it("la viñeta `*` vs `-` no genera un diff fantasma de formato", () => {
+    const { container } = render(
+      <DiffProsa antes={"* uno\n* dos"} despues={"- uno\n- dos"} />,
+    );
+    expect(container.querySelector("ins")).toBeNull();
+    expect(container.querySelector("del")).toBeNull();
+  });
+
+  it("una variable `{{VAR}}` se pinta como pastilla (sin las llaves crudas)", () => {
+    const { container } = render(
+      <DiffProsa antes="Sobre {{MARCA}} hoy." despues="Sobre {{MARCA}} ahora." />,
+    );
+    // El chip muestra el nombre sin `{{ }}`.
+    expect(container.textContent).toContain("MARCA");
+    expect(container.textContent).not.toContain("{{MARCA}}");
+    // Y el cambio real de palabra sí se resalta.
+    expect(container.querySelector("ins")?.textContent).toBe("ahora.");
+    expect(container.querySelector("del")?.textContent).toBe("hoy.");
+  });
 });
