@@ -23,7 +23,11 @@
 import { diffArrays } from "diff";
 import * as React from "react";
 
-import { aProsaPlana, esSoloEspacios } from "@/components/biblioteca/diffProsa.lib";
+import {
+  aProsaPlana,
+  esSoloEspacios,
+  normalizarEspacios,
+} from "@/components/biblioteca/diffProsa.lib";
 import { cn } from "@/lib/utils";
 
 // `{{VARIABLE}}` | racha de espacios | racha sin espacios. Cubre TODO el texto, así
@@ -172,9 +176,15 @@ export function DiffProsa({ antes, despues, soloCambios = false, className }: Di
 
   const hayCambios = bloques.some((b) => b.tipo === "cambio");
   if (!hayCambios) {
+    // El texto plano es idéntico. Si el markdown ORIGINAL (sin frontmatter, con espacios
+    // normalizados pero conservando el markup) difiere, el único cambio fue de FORMATO
+    // (negritas, títulos, citas...): avisamos para no confundir con "no se guardó nada".
+    const soloFormato = normalizarEspacios(antes) !== normalizarEspacios(despues);
     return (
       <p className={cn("text-sm text-muted-foreground", className)}>
-        Sin cambios.
+        {soloFormato
+          ? "ℹ Solo cambios de formato (negritas, títulos…); el texto es el mismo."
+          : "Sin cambios."}
       </p>
     );
   }

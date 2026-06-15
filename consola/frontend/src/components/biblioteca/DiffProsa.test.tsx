@@ -87,6 +87,47 @@ describe("DiffProsa", () => {
     expect(container.querySelector("del")).toBeNull();
   });
 
+  it("avisa de cambio de SOLO formato cuando el texto plano es el mismo", () => {
+    render(<DiffProsa antes={"Esto importa."} despues={"**Esto** importa."} />);
+    expect(screen.getByText(/Solo cambios de formato/)).toBeInTheDocument();
+    expect(screen.queryByText(/^Sin cambios\.$/)).not.toBeInTheDocument();
+  });
+
+  it("un cambio de solo frontmatter sigue siendo 'Sin cambios' (no formato)", () => {
+    render(
+      <DiffProsa
+        antes={"---\nslug: viejo\n---\nEl cuerpo no cambia."}
+        despues={"---\nslug: nuevo\n---\nEl cuerpo no cambia."}
+      />,
+    );
+    expect(screen.getByText(/^Sin cambios\.$/)).toBeInTheDocument();
+    expect(screen.queryByText(/Solo cambios de formato/)).not.toBeInTheDocument();
+  });
+
+  it("no escupe caracteres crudos de fence, tabla, backslash ni autolink", () => {
+    const antes = [
+      "Intro vieja.",
+      "",
+      "```ts\nconst x = 1\n```",
+      "",
+      "| A | B |\n| --- | --- |\n| 1 | 2 |",
+      "",
+      "Línea con break\\",
+      "Ver <https://keni.io/x> y <br> fin.",
+    ].join("\n");
+    const despues = antes.replace("Intro vieja.", "Intro nueva.");
+    const { container } = render(<DiffProsa antes={antes} despues={despues} />);
+    const txt = container.textContent ?? "";
+    expect(txt).not.toContain("```");
+    expect(txt).not.toContain("|");
+    expect(txt).not.toContain("\\");
+    expect(txt).not.toContain("<br>");
+    expect(txt).not.toContain("<https://keni.io/x>");
+    expect(txt).toContain("https://keni.io/x");
+    // El cambio real de palabra sí se resalta.
+    expect(container.querySelector("ins")?.textContent?.trim()).toBe("nueva.");
+  });
+
   it("una variable `{{VAR}}` se pinta como pastilla (sin las llaves crudas)", () => {
     const { container } = render(
       <DiffProsa antes="Sobre {{MARCA}} hoy." despues="Sobre {{MARCA}} ahora." />,

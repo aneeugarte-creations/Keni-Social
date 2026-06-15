@@ -37,14 +37,29 @@ function esReglaHorizontal(linea: string): boolean {
   return /^\s{0,3}(?:([-*_])[ \t]*){3,}$/.test(linea);
 }
 
+/** ¿Es un delimitador de bloque de código (` ``` ` o `~~~`, con o sin lenguaje)? */
+function esDelimitadorFence(linea: string): boolean {
+  return /^\s*(?:```|~~~)/.test(linea);
+}
+
+/** ¿Es la fila SEPARADORA de una tabla markdown (`|---|---|`, `| :-- | --: |`)? */
+function esSeparadorTabla(linea: string): boolean {
+  return /\|/.test(linea) && /-/.test(linea) && /^[\s|:-]+$/.test(linea);
+}
+
 /** Limpia los marcadores markdown de PRINCIPIO de línea (estructura), no el contenido. */
 function limpiarLinea(linea: string): string {
   let l = linea.replace(/[ \t]+$/, ""); // trailing spaces fuera (no es contenido).
+  l = l.replace(/\\$/, ""); // hard-break por backslash (tiptap) fuera.
+  if (esDelimitadorFence(l)) return ""; // fence ```/~~~ -> fuera (el contenido se conserva).
   if (esReglaHorizontal(l)) return ""; // separador visual -> línea en blanco.
+  if (esSeparadorTabla(l)) return ""; // fila separadora de tabla -> fuera.
   l = l.replace(/^(?:\s{0,3}>[ \t]?)+/, ""); // citas `>` (incluido anidado).
   l = l.replace(/^\s{0,3}#{1,6}[ \t]+/, ""); // encabezados `#`..`######`.
   // Viñetas `-`/`*`/`+` -> un único marcador `• `, así `*` vs `-` no es un cambio.
   l = l.replace(/^(\s*)[-*+][ \t]+/, "$1• ");
+  // Pipes de tabla -> espacios (`| col | col |` queda como prosa, sin barras crudas).
+  if (l.includes("|")) l = l.replace(/\s*\|\s*/g, " ").trim();
   return l;
 }
 
@@ -52,9 +67,14 @@ function limpiarLinea(linea: string): string {
 function limpiarInline(fragmento: string): string {
   return (
     fragmento
+      // Autolinks `<https://...>` / `<mailto:...>` -> su URL/correo (antes de borrar tags).
+      .replace(/<(https?:\/\/[^>\s]+)>/g, "$1")
+      .replace(/<mailto:([^>\s]+)>/g, "$1")
       // Imágenes y enlaces -> su texto visible (antes que nada, por los `[]()`).
       .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
       .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+      // Tags HTML inline simples (`<br>`, `<sub>`, `</sub>`, `<br/>`...) -> fuera.
+      .replace(/<\/?[a-zA-Z][\w-]*(?:\s[^>]*)?\/?>/g, "")
       // Código inline -> su contenido (antes de `*`/`_` por si los contiene).
       .replace(/`([^`]+)`/g, "$1")
       // Negrita, tachado e itálica.
@@ -94,4 +114,19 @@ export function aProsaPlana(texto: string): string {
 /** ¿El fragmento es PURO whitespace? Un cambio de solo whitespace no se resalta. */
 export function esSoloEspacios(texto: string): boolean {
   return texto.length > 0 && /^\s+$/.test(texto);
+}
+
+/**
+ * Normaliza SOLO el whitespace (y quita frontmatter) PERO conserva el markup markdown.
+ * Sirve para distinguir, cuando el texto plano de ambos lados es idéntico, un cambio de
+ * SOLO formato (negritas/títulos/citas) de un cambio inexistente o de puro whitespace:
+ * dos textos con el mismo plano cuyo `normalizarEspacios` difiere solo pueden diferir en
+ * el markup, no en el contenido ni en los espacios.
+ */
+export function normalizarEspacios(texto: string): string {
+  return quitarFrontmatter(texto)
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }

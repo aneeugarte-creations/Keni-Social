@@ -4,7 +4,12 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { aProsaPlana, esSoloEspacios, quitarFrontmatter } from "./diffProsa.lib";
+import {
+  aProsaPlana,
+  esSoloEspacios,
+  normalizarEspacios,
+  quitarFrontmatter,
+} from "./diffProsa.lib";
 
 describe("quitarFrontmatter", () => {
   it("quita el bloque YAML inicial `---...---`", () => {
@@ -52,6 +57,59 @@ describe("aProsaPlana", () => {
   it("colapsa espacios sobrantes y limita líneas en blanco", () => {
     expect(aProsaPlana("hola    mundo")).toBe("hola mundo");
     expect(aProsaPlana("a\n\n\n\nb")).toBe("a\n\nb");
+  });
+
+  it("elimina los fences ``` conservando el contenido del bloque", () => {
+    const md = "Ejemplo:\n\n```json\n{ \"a\": 1 }\n```\n\nFin.";
+    const plano = aProsaPlana(md);
+    expect(plano).not.toContain("```");
+    expect(plano).toContain("Ejemplo:");
+    expect(plano).toContain('{ "a": 1 }');
+    expect(plano).toContain("Fin.");
+  });
+
+  it("limpia los pipes de tabla y borra la fila separadora", () => {
+    const md = "| Col A | Col B |\n| --- | --- |\n| uno | dos |";
+    const plano = aProsaPlana(md);
+    expect(plano).not.toContain("|");
+    expect(plano).not.toMatch(/---/);
+    expect(plano).toContain("Col A");
+    expect(plano).toContain("Col B");
+    expect(plano).toContain("uno");
+    expect(plano).toContain("dos");
+  });
+
+  it("quita el hard-break por backslash al final de línea", () => {
+    const plano = aProsaPlana("primera línea\\\nsegunda línea");
+    expect(plano).not.toContain("\\");
+    expect(plano).toContain("primera línea");
+    expect(plano).toContain("segunda línea");
+  });
+
+  it("convierte autolinks `<https://...>` a su URL (sin `<` ni `>`)", () => {
+    const plano = aProsaPlana("Más en <https://keni.io/guia> ahora");
+    expect(plano).not.toMatch(/[<>]/);
+    expect(plano).toContain("https://keni.io/guia");
+  });
+
+  it("elimina tags HTML inline simples (`<br>`, `<sub>`)", () => {
+    const plano = aProsaPlana("Texto<br>con un <sub>índice</sub> aquí");
+    expect(plano).not.toMatch(/[<>]/);
+    expect(plano).toContain("índice");
+  });
+});
+
+describe("normalizarEspacios", () => {
+  it("conserva el markup pero quita frontmatter y colapsa espacios", () => {
+    expect(normalizarEspacios("---\nx: 1\n---\n**Hola**   mundo")).toBe("**Hola** mundo");
+  });
+
+  it("da el mismo resultado si solo cambia el whitespace", () => {
+    expect(normalizarEspacios("Hola   mundo.")).toBe(normalizarEspacios("Hola mundo."));
+  });
+
+  it("difiere cuando cambia el markup (negrita)", () => {
+    expect(normalizarEspacios("Hola mundo.")).not.toBe(normalizarEspacios("**Hola** mundo."));
   });
 });
 
