@@ -107,14 +107,14 @@ def barrer() -> int:
     """
     if not config.maquina_activa():
         return 0
-    from .pipeline_contenido import _ingesta
+    from .pipeline_contenido import _admitir
 
     reemitidos = 0
     for marca in marcas.ids():
         plan = config.plan_dia(marca)
         if plan.get("evergreen", 0) <= 0:
             continue
-        restantes = _ingesta.cupos_categoria_restantes(marca) or {}
+        restantes = _admitir.cupos_categoria_restantes(marca) or {}
         if restantes.get("evergreen", 0) <= 0:
             continue  # hoy ya hay green (del equipo o de una reemisión previa)
         banco = _banco_de(marca)

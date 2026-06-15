@@ -684,7 +684,7 @@ def adjuntos_copy(marca: str) -> list[libtexto.Documento]:
     sobre la placa), así que se adjuntan aquí. Best-effort: store o, si no, semilla; si el
     documento falta o está vacío, no se adjunta y el lanzamiento NO se rompe.
     """
-    adjuntos = list(libtexto.editoriales_de_marca(marca, pipeline="copy"))
+    adjuntos = list(libtexto.editoriales_de_marca(marca, pipeline="redactar"))
     # Perezoso para no ciclar: `estudio_imagen` importa este módulo al cargarse.
     from .estudio_imagen import REGLAS_IMAGEN
 

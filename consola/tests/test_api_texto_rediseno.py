@@ -43,7 +43,7 @@ def test_crear_con_campos_nuevos(cliente):
     doc = r.json()["documento"]
     assert doc["estado"] == "borrador"
     assert doc["etiquetas"] == ["piloto"]
-    assert doc["pipelines"] == ["copy"]
+    assert doc["pipelines"] == ["redactar"]
     assert doc["prioridad"] == 4
 
 
@@ -73,8 +73,8 @@ def test_pipelines_listar(cliente):
     r = cliente.get("/api/texto/pipelines")
     assert r.status_code == 200
     ids = {p["id"] for p in r.json()["pipelines"]}
-    assert {"copy", "qa", "evergreen"} <= ids
-    copy = next(p for p in r.json()["pipelines"] if p["id"] == "copy")
+    assert {"redactar", "verificar", "idear"} <= ids
+    copy = next(p for p in r.json()["pipelines"] if p["id"] == "redactar")
     assert copy["prompt_base_id"] == "prompt/redactar"
 
 
@@ -83,7 +83,7 @@ def test_pipeline_preview_ensambla(cliente):
         "titulo": "Copy base", "tipo": "prompt", "cuerpo": "INSTRUCCION", "rol": "redactar", "pipelines": ["redactar"],
     })
     cliente.post("/api/texto", json={"titulo": "Reglas", "tipo": "editorial", "clase": "reglas", "cuerpo": "REGLA"})
-    r = cliente.get(f"/api/texto/pipelines/copy/preview", params={"marca": _MARCA, "contexto": "CTX"})
+    r = cliente.get(f"/api/texto/pipelines/redactar/preview", params={"marca": _MARCA, "contexto": "CTX"})
     assert r.status_code == 200
     prev = r.json()
     assert prev["falta_base"] is False
@@ -99,8 +99,8 @@ def test_pipeline_preview_desconocido_404(cliente):
 
 def test_editoriales_filtra_por_pipeline(cliente):
     cliente.post("/api/texto", json={"titulo": "Solo copy", "tipo": "editorial", "clase": "reglas", "cuerpo": "c", "pipelines": ["redactar"]})
-    r_copy = cliente.get("/api/texto/editoriales", params={"marca": _MARCA, "pipeline": "copy"})
-    r_qa = cliente.get("/api/texto/editoriales", params={"marca": _MARCA, "pipeline": "qa"})
+    r_copy = cliente.get("/api/texto/editoriales", params={"marca": _MARCA, "pipeline": "redactar"})
+    r_qa = cliente.get("/api/texto/editoriales", params={"marca": _MARCA, "pipeline": "verificar"})
     assert any(d["id"] == "editorial/solo-copy" for d in r_copy.json()["editoriales"])
     assert all(d["id"] != "editorial/solo-copy" for d in r_qa.json()["editoriales"])
 

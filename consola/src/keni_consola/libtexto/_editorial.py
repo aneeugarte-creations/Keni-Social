@@ -107,7 +107,7 @@ def previsualizar_pipeline(
     """Devuelve el prompt ENSAMBLADO que recibiria `claude -p` para `pipeline`+`marca`.
 
     "Lo que inyectas es lo que ves": usa el MISMO compositor que la generacion real, sin
-    lanzar nada. Para el pipeline `copy` pasa por la MISMA composicion que `lanzar_copy`
+    lanzar nada. Para el pipeline `redactar` pasa por la MISMA composicion que `lanzar_copy`
     (adjuntos de copy con reglas de imagen + instruccion de redes con limites): `redes_ids`
     son las redes a previsualizar; sin ellas se previsualiza con TODAS (un lanzamiento
     real siempre las trae). Devuelve `{pipeline, prompt_base_id, prompt_efectivo, adjuntos,
@@ -117,7 +117,7 @@ def previsualizar_pipeline(
 
     base_id = prompt_base_de(pipeline)
     cuerpo = cuerpo_efectivo(base_id) if base_id else None
-    if pipeline == "copy":
+    if pipeline == "redactar":
         from .. import redes as catalogo_redes
 
         ids = list(redes_ids) if redes_ids else catalogo_redes.ids()

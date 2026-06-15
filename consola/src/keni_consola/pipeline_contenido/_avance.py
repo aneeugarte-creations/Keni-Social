@@ -37,7 +37,7 @@ from ..dominio import colaboracion
 from ..dominio.publicaciones import publicacion_a_dict
 from ..estados import ESTADO_EN_REVISION
 from ..tiempo import ahora_iso
-from . import _calidad
+from . import _revisar
 
 __all__ = ["ejecutar_avance", "piezas_para_avance"]
 
@@ -121,7 +121,7 @@ def ejecutar_avance() -> list[dict[str, Any]]:
 
     CRIBA DE CALIDAD (ADVISORY, gateada por `KENI_PIPELINE_REVISAR`, def OFF): si el toggle está
     ON, ANTES de mover cada borrador se valida la CALIDAD de su copy (voz de marca + coherencia
-    con la nota de origen, `_calidad`). Es safe-by-default: NO bloquea el avance —la pieza pasa a
+    con la nota de origen, `_revisar`). Es safe-by-default: NO bloquea el avance —la pieza pasa a
     revisión igual—, pero si la criba encuentra algo DEGRADA su veredicto (`listo`→`revisar`) y
     deja una nota, para que el humano decida con los avisos delante (IA hacia adentro: filtra la
     calidad, no corrige). Con el toggle OFF el avance no cambia.
@@ -140,7 +140,7 @@ def ejecutar_avance() -> list[dict[str, Any]]:
         # marcó la pieza, el `pub` en memoria conserva el veredicto viejo, pero la transición de
         # `_enviar` no lo toca (sólo el estado), así que la degradación ya persistida se respeta.
         if criba_calidad:
-            _calidad.verificar_calidad_pieza(pub)
+            _revisar.verificar_calidad_pieza(pub)
         try:
             if _enviar(pub):
                 enviadas.append(pub)

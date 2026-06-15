@@ -170,7 +170,7 @@ def lanzar_verificar_fuente(
     titulo = (tema.get("titulo") or "").strip() or dom_qa_titulo(nota)
     prompt = gen_dom.componer(
         cuerpo,
-        libtexto.editoriales_de_marca(marca, pipeline="qa"),
+        libtexto.editoriales_de_marca(marca, pipeline="verificar"),
         _contexto_qa_fuente(nota),
     )
     # Marca el tema en curso ANTES de lanzar (para que la fase QA no lo re-lance). CLAVE con el
@@ -241,7 +241,7 @@ def lanzar_verificar_cluster(
     no se pudo lanzar (sin doc / sin marca / sin nota). `ColaLlenaError` se PROPAGA (corta la fase
     QA de esa marca). Mismo runtime barato (Haiku/low/timeout corto) que `lanzar_verificar_fuente`.
     """
-    from . import _ingesta
+    from . import _admitir
 
     cid = (cluster.get("id") or "").strip()
     if not cid:
@@ -252,11 +252,11 @@ def lanzar_verificar_cluster(
     titulo = (cluster.get("titulo_es") or cluster.get("titulo") or "").strip()
     resumen = (cluster.get("resumen_es") or cluster.get("resumen") or "").strip()
     try:
-        items = repos.items_de_cluster(cid, limite=_ingesta._MAX_ENLACES_CLUSTER)
+        items = repos.items_de_cluster(cid, limite=_admitir._MAX_ENLACES_CLUSTER)
     except Exception:  # noqa: BLE001 -- sin items legibles, cribamos con título+resumen igual
         items = []
     cuerpos = dict(repos.cuerpos_de_cluster(cid))  # archivados (gratis); sin fetch HTTP en QA
-    nota = _ingesta._nota_de_cluster(titulo, resumen, items, cuerpos)[: gen_dom.MAX_TEXTO]
+    nota = _admitir._nota_de_cluster(titulo, resumen, items, cuerpos)[: gen_dom.MAX_TEXTO]
     if not nota.strip():
         return None
 
@@ -268,7 +268,7 @@ def lanzar_verificar_cluster(
     titulo = titulo or dom_qa_titulo(nota)
     prompt = gen_dom.componer(
         cuerpo,
-        libtexto.editoriales_de_marca(marca, pipeline="qa"),
+        libtexto.editoriales_de_marca(marca, pipeline="verificar"),
         _contexto_qa_fuente(nota),
     )
     # Marca el cluster en curso ANTES de lanzar (la fase QA no lo re-lanza). Con el lanzador

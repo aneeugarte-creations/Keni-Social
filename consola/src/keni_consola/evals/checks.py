@@ -110,9 +110,9 @@ def check_coherencia(caso: CasoEval) -> ResultadoDimension:
     if not caso.fuente.strip():
         return _na("coherencia")
     try:
-        from keni_consola.pipeline_contenido import _calidad
+        from keni_consola.pipeline_contenido import _revisar
 
-        avisos = _calidad.avisos_coherencia(caso.copy, caso.fuente)
+        avisos = _revisar.avisos_coherencia(caso.copy, caso.fuente)
     except Exception:  # noqa: BLE001
         return _na("coherencia")
     return _falla("coherencia", list(avisos)) if avisos else _ok("coherencia")

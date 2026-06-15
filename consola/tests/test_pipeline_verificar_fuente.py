@@ -94,22 +94,22 @@ def test_endurecer_qa_fuente_barato_por_defecto(monkeypatch):
     Es un filtro PERMISIVO (no redacción): no necesita el modelo/esfuerzo/timeout globales.
     Cada override es configurable por env y, vaciándolos todos, no se endurece nada (None).
     """
-    from keni_consola.pipeline_contenido import _qa
+    from keni_consola.pipeline_contenido import _verificar
 
     for var in ("KENI_QA_FUENTE_MODELO", "KENI_QA_FUENTE_ESFUERZO", "KENI_QA_FUENTE_TIMEOUT"):
         monkeypatch.delenv(var, raising=False)
-    assert _qa._endurecer_qa_fuente() == {"modelo": "haiku", "esfuerzo": "low", "timeout": 180}
+    assert _verificar._endurecer_qa_fuente() == {"modelo": "haiku", "esfuerzo": "low", "timeout": 180}
 
     # Overrides por env: otro modelo / sin override (cae al global correspondiente).
     monkeypatch.setenv("KENI_QA_FUENTE_MODELO", "sonnet")
     monkeypatch.setenv("KENI_QA_FUENTE_TIMEOUT", "60")
-    endurecido = _qa._endurecer_qa_fuente()
+    endurecido = _verificar._endurecer_qa_fuente()
     assert endurecido["modelo"] == "sonnet" and endurecido["timeout"] == 60
 
     monkeypatch.setenv("KENI_QA_FUENTE_MODELO", "")
     monkeypatch.setenv("KENI_QA_FUENTE_ESFUERZO", "")
     monkeypatch.setenv("KENI_QA_FUENTE_TIMEOUT", "0")
-    assert _qa._endurecer_qa_fuente() is None
+    assert _verificar._endurecer_qa_fuente() is None
 
 
 def test_qa_en_curso_ttl_configurable_con_minimo(monkeypatch):
@@ -129,7 +129,7 @@ def test_qa_en_curso_ttl_configurable_con_minimo(monkeypatch):
 
 def test_lanzar_qa_fuente_lanza_con_endurecer_barato(entorno, monkeypatch):
     """`lanzar_verificar_fuente` pasa el `endurecer` barato (modelo/esfuerzo/timeout) al lanzador."""
-    from keni_consola.pipeline_contenido import _qa
+    from keni_consola.pipeline_contenido import _verificar
 
     cliente = _cliente()  # noqa: F841 -- inicializa stores; el lanzador real se intercepta abajo
     capturado: dict = {}
@@ -138,7 +138,7 @@ def test_lanzar_qa_fuente_lanza_con_endurecer_barato(entorno, monkeypatch):
         capturado.update(kw)
         return {"id": "gen-qa-1"}
 
-    monkeypatch.setattr(_qa.gen_dom, "lanzar", _fake_lanzar)
+    monkeypatch.setattr(_verificar.gen_dom, "lanzar", _fake_lanzar)
     tema = _tema()
 
     gen = pc.lanzar_verificar_fuente(tema, autor=None)

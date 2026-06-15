@@ -336,7 +336,7 @@ def test_previsualizar_copy_compone_igual_que_lanzar_copy(encolado):
     generar.lanzar_copy(
         marca=_MARCA, contexto="Nota: gol en el 90'", redes_ids=["x"], titulo="Copy",
     )
-    prev = libtexto.previsualizar_pipeline("copy", _MARCA, "Nota: gol en el 90'", redes_ids=["x"])
+    prev = libtexto.previsualizar_pipeline("redactar", _MARCA, "Nota: gol en el 90'", redes_ids=["x"])
 
     sin_nonce = lambda s: re.sub(r"contenido_usuario_[0-9a-f]+", "contenido_usuario_NONCE", s)  # noqa: E731
     assert sin_nonce(prev["prompt_efectivo"]) == sin_nonce(encolado["prompt"])

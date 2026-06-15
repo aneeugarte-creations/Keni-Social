@@ -39,14 +39,14 @@ def test_campos_nuevos_round_trip_editorial():
     assert leido is not None
     assert leido.estado == "borrador"
     assert leido.etiquetas == ["tono", "piloto"]  # normalizadas + de-dup
-    assert leido.pipelines == ["copy"]
+    assert leido.pipelines == ["redactar"]
     assert leido.prioridad == 5
     assert leido.rol == ""  # editorial no lleva rol
 
 
 def test_rol_solo_para_prompt_y_defaults():
     p = libtexto.crear("Copy base", tipo="prompt", cuerpo="...", rol="redactar", pipelines=["redactar"])
-    assert libtexto.obtener(p.id).rol == "copy"
+    assert libtexto.obtener(p.id).rol == "redactar"
     # Un editorial ignora rol (queda vacio aunque se intente).
     e = libtexto.crear("Reglas", tipo="editorial", clase="reglas", cuerpo="...")
     assert e.estado == "activo" and e.etiquetas == [] and e.prioridad == 0
@@ -90,8 +90,8 @@ def test_editoriales_filtra_por_pipeline():
     libtexto.crear("Plataformas", tipo="editorial", clase="plataforma", cuerpo="p")
     # Acotado a copy: NO debe entrar en qa.
     libtexto.crear("Solo copy", tipo="editorial", clase="reglas", cuerpo="c", pipelines=["redactar"])
-    ids_copy = {d.id for d in libtexto.editoriales_de_marca("unotv", pipeline="copy")}
-    ids_qa = {d.id for d in libtexto.editoriales_de_marca("unotv", pipeline="qa")}
+    ids_copy = {d.id for d in libtexto.editoriales_de_marca("unotv", pipeline="redactar")}
+    ids_qa = {d.id for d in libtexto.editoriales_de_marca("unotv", pipeline="verificar")}
     assert "editorial/plataformas" in ids_copy and "editorial/plataformas" in ids_qa
     assert "editorial/solo-copy" in ids_copy
     assert "editorial/solo-copy" not in ids_qa
@@ -144,7 +144,7 @@ def test_prompt_base_rebindeo_por_documento():
 def test_previsualizar_pipeline_ensambla_base_y_adjuntos():
     libtexto.crear("Copy base", tipo="prompt", carpeta="", cuerpo="INSTRUCCION BASE", rol="redactar", pipelines=["redactar"])
     libtexto.crear("Reglas", tipo="editorial", clase="reglas", cuerpo="REGLA EDITORIAL")
-    prev = libtexto.previsualizar_pipeline("copy", "unotv", "CONTEXTO DE PRUEBA")
+    prev = libtexto.previsualizar_pipeline("redactar", "unotv", "CONTEXTO DE PRUEBA")
     assert prev["falta_base"] is False
     assert "INSTRUCCION BASE" in prev["prompt_efectivo"]
     assert "REGLA EDITORIAL" in prev["prompt_efectivo"]
@@ -157,7 +157,7 @@ def test_previsualizar_pipeline_copy_es_fiel_al_lanzamiento():
     instrucción de copy UNIFICADO + reglas de imagen adjuntas.
     Sin `redes_ids` se previsualiza con TODAS las redes (un lanzamiento real siempre las trae)."""
     libtexto.crear("Copy base", tipo="prompt", carpeta="", cuerpo="BASE", rol="redactar", pipelines=["redactar"])
-    prev = libtexto.previsualizar_pipeline("copy", "unotv", "CTX")
+    prev = libtexto.previsualizar_pipeline("redactar", "unotv", "CTX")
     # La instrucción unificada pide un solo copy acotado al límite más estricto entre todas las
     # redes (Instagram = 2200), sin versión corta aparte.
     assert "Este copy se publicará TAL CUAL en estas redes" in prev["prompt_efectivo"]
@@ -166,13 +166,13 @@ def test_previsualizar_pipeline_copy_es_fiel_al_lanzamiento():
     assert any(a["id"] == "editorial/reglas/imagen" for a in prev["adjuntos"])
 
     # Con redes explícitas, solo esas entran en la instrucción.
-    prev_x = libtexto.previsualizar_pipeline("copy", "unotv", "CTX", redes_ids=["x"])
+    prev_x = libtexto.previsualizar_pipeline("redactar", "unotv", "CTX", redes_ids=["x"])
     assert "Este copy se publicará TAL CUAL en estas redes: X." in prev_x["prompt_efectivo"]
 
 
 def test_previsualizar_pipeline_sin_prompt_base():
     # Sin store ni semilla del prompt de qa -> falta_base True (no revienta).
-    prev = libtexto.previsualizar_pipeline("qa", "unotv")
+    prev = libtexto.previsualizar_pipeline("verificar", "unotv")
     assert "falta_base" in prev
 
 

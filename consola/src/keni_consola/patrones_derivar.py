@@ -203,7 +203,7 @@ def aplicar_store(perfil: dict[str, object], marca_keni: str, *, ahora: str) -> 
             carpeta=f"rrss/{marca_keni}",
             cuerpo=cuerpo,
             marcas=[marca_keni],
-            pipelines=["copy"],
+            pipelines=["redactar"],
         )
         return doc.id
     # Solo el cuerpo: sin `titulo` el doc no se mueve de ruta (el id es estable).

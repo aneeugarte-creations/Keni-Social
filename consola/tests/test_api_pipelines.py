@@ -392,7 +392,7 @@ def test_etapa_arte_exige_evidencia_de_arte_ia(cliente, monkeypatch):
     )
     generaciones.crear({
         "tipo": "pipeline", "marca": "unotv", "contenido_id": tema2["id"],
-        "etiqueta": "Ilustrar — Tema arte ia", "estado": generaciones.ESTADO_COMPLETADO,
+        "etiqueta": "Arte — Tema arte ia", "estado": generaciones.ESTADO_COMPLETADO,
     })
     run2 = _run_por_titulo(cliente, "Tema arte ia")
     arte2 = next(e for e in run2["etapas"] if e["clave"] == "ilustrar")
@@ -437,7 +437,7 @@ def test_problemas_lista_temas_bloqueados(cliente):
     hallazgos = json.dumps({
         "resumen": "Fallo repetido de la etapa",
         "hallazgos": [{
-            "tipo": "sistema", "gravedad": "error", "fragmento": "Copy",
+            "tipo": "sistema", "gravedad": "error", "fragmento": "Redactar",
             "explicacion": "La generación de copy falló 3 veces.",
             "sugerencia": "Revisa la generación o relanza a mano.",
         }],

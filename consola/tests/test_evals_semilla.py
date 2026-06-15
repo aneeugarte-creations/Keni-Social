@@ -1,7 +1,7 @@
 """Red de regresión del harness de EVALS (artefacto: el hueco "no hay eval de calidad de IA").
 
 Garantiza que los casos golden SEMILLA mantienen su veredicto esperado: un cambio que degrade
-la MAQUINARIA DE VERIFICACIÓN (lint de `patrones_marca`, gate `_calidad`, límites de red) o los
+la MAQUINARIA DE VERIFICACIÓN (lint de `patrones_marca`, gate `_revisar`, límites de red) o los
 PERFILES MEDIDOS de marca (`patrones_semilla/*.json`) flipa algún caso y este test lo caza. NO
 toca BD ni red (determinista, barato) — corre en cualquier pipeline sin Postgres.
 

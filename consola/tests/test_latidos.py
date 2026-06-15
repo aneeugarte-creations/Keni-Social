@@ -642,10 +642,10 @@ def test_resumen_fn_formatea_dict_de_conteos():
     from keni_consola.pipeline_contenido import _barrido as pc_barrido
 
     assert ingesta_bucle._resumen_barrido(
-        {"feeds": 3, "items_nuevos": 7, "clustering": {"clusters_nuevos": 2}}
+        {"feeds": 3, "items_nuevos": 7, "agrupar": {"clusters_nuevos": 2}}
     ) == "3 feed(s) sondeado(s) · 7 item(s) nuevo(s) · 2 historia(s)"
     assert ingesta_bucle._resumen_barrido(
-        {"feeds": 0, "items_nuevos": 0, "clustering": {"clusters_nuevos": 0}}
+        {"feeds": 0, "items_nuevos": 0, "agrupar": {"clusters_nuevos": 0}}
     ) == "sin novedad"
     assert pc_barrido._resumen_produccion(
         {"lanzados": [1, 2], "artes": [1], "avances": []}
@@ -663,7 +663,7 @@ def test_bucle_gateado_resumen_fn_escribe_historial(entorno):
     daemon_util.bucle_gateado(
         activo_fn=lambda: True,
         intervalo_seg_fn=lambda: 0.0,
-        sweep_fn=lambda: {"feeds": 4, "items_nuevos": 9, "clustering": {"clusters_nuevos": 1}},
+        sweep_fn=lambda: {"feeds": 4, "items_nuevos": 9, "agrupar": {"clusters_nuevos": 1}},
         tick_seg=0.001,
         log=_LOG,
         nombre="ingesta-hist",

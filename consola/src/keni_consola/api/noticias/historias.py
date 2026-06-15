@@ -318,7 +318,7 @@ async def mesa(request: Request) -> Response:
     Sin plan configurado: `plan=false` y todo el pool va en `fuera_de_plan` (la UI degrada a
     lista plana). Orden de líneas: breaking primero, luego el orden del plan.
     """
-    from ...pipeline_contenido import _ingesta as _pc_ingesta
+    from ...pipeline_contenido import _admitir as _pc_ingesta
     from ...tiempo import inicio_dia_cdmx_iso_utc
 
     marca, error = _validar_marca(request.query_params.get("marca"))
@@ -467,7 +467,7 @@ async def usar_historia(request: Request) -> Response:
     url_fuente = items[0].get("url_canonica") if items else ""
     fecha_fuente = cluster.get("primer_visto") or ""
 
-    from ...pipeline_contenido import _ingesta as _pc_ingesta
+    from ...pipeline_contenido import _admitir as _pc_ingesta
 
     contenido = repos.crear_contenido(
         clase="contenido",

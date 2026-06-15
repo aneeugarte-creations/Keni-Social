@@ -414,7 +414,7 @@ def test_admitir_guarda_copy_pendiente_con_imagen_propia(entorno, monkeypatch):
 
 def test_fotos_notas_de_cluster_solo_propias_con_su_titulo(entorno, monkeypatch):
     """`_fotos_notas_de_cluster`: foto propia POR NOTA (con su título), sin duplicar; ajenas fuera."""
-    from keni_consola.pipeline_contenido import _ingesta
+    from keni_consola.pipeline_contenido import _admitir
 
     propia = repos.crear_fuente_rss("Casa", _URL_OK, marca="unotv", propia=True)
     ajena = repos.crear_fuente_rss("Tercero", "https://otro.test/feed.xml", marca="unotv")
@@ -425,17 +425,17 @@ def test_fotos_notas_de_cluster_solo_propias_con_su_titulo(entorno, monkeypatch)
         {"fuente_id": propia["id"], "titulo": "Concierto B", "imagen": "https://casa.test/b.jpg", "url": "https://casa.test/2"},
         {"fuente_id": propia["id"], "titulo": "Sin foto", "imagen": "", "url": "https://casa.test/3"},
     ]
-    assert _ingesta._fotos_notas_de_cluster(items) == [
+    assert _admitir._fotos_notas_de_cluster(items) == [
         {"titulo": "Concierto A", "imagen": "https://casa.test/a.jpg"},
         {"titulo": "Concierto B", "imagen": "https://casa.test/b.jpg"},
     ]
     # La PORTADA del tema es la primera foto propia.
-    assert _ingesta._imagen_de_cluster(items) == "https://casa.test/a.jpg"
+    assert _admitir._imagen_de_cluster(items) == "https://casa.test/a.jpg"
 
 
 def test_imagen_de_cluster_og_image_solo_como_rescate(entorno, monkeypatch):
     """Sin foto en NINGÚN item propia, la portada se resuelve por og:image (un solo fetch)."""
-    from keni_consola.pipeline_contenido import _ingesta
+    from keni_consola.pipeline_contenido import _admitir
 
     propia = repos.crear_fuente_rss("Casa", _URL_OK, marca="unotv", propia=True)
     _mock_og_image(monkeypatch, "https://casa.test/og.jpg")
@@ -443,10 +443,10 @@ def test_imagen_de_cluster_og_image_solo_como_rescate(entorno, monkeypatch):
         {"fuente_id": propia["id"], "imagen": "", "url": "https://casa.test/1"},
         {"fuente_id": propia["id"], "imagen": "", "url": "https://casa.test/2"},
     ]
-    assert _ingesta._imagen_de_cluster(items) == "https://casa.test/og.jpg"
+    assert _admitir._imagen_de_cluster(items) == "https://casa.test/og.jpg"
     # Sin fuentes propias, "" (no se toca la red ni se usa la foto de un tercero).
     ajena = repos.crear_fuente_rss("Tercero", "https://otro.test/feed.xml", marca="unotv")
-    assert _ingesta._imagen_de_cluster(
+    assert _admitir._imagen_de_cluster(
         [{"fuente_id": ajena["id"], "imagen": "https://otro.test/x.jpg", "url": "https://otro.test/1"}]
     ) == ""
 
@@ -1120,7 +1120,7 @@ def test_caducado_libera_hueco_para_lo_fresco_del_ranking(entorno, monkeypatch):
     (la historia top de HOY), no lo que quedó atascado ayer (sin colas intermedias)."""
     from datetime import datetime, timedelta, timezone
 
-    from keni_consola.pipeline_contenido import _ingesta
+    from keni_consola.pipeline_contenido import _admitir
 
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
@@ -1133,7 +1133,7 @@ def test_caducado_libera_hueco_para_lo_fresco_del_ranking(entorno, monkeypatch):
     # Con el backlog en vuelo, el cupo (1) está agotado: no entra nada.
     assert pc._ejecutar_barrido()["temas"] == []
     # Caduca el backlog (reloj adelantado > TTL) y el siguiente tick admite lo fresco.
-    assert _ingesta.caducar_temas_viejos(
+    assert _admitir.caducar_temas_viejos(
         ahora=datetime.now(timezone.utc) + timedelta(hours=25)
     ) == 1
     res = pc._ejecutar_barrido()
@@ -1296,15 +1296,15 @@ def test_plan_por_marca_gana_al_global(entorno, monkeypatch):
 def test_cupo_produccion_restante_none_sin_cupos(entorno, monkeypatch):
     """Cupo diario a 0 -> None (la admisión queda solo con el gate serial)."""
     monkeypatch.setenv("KENI_CUPO_DIA", "0")
-    from keni_consola.pipeline_contenido import _ingesta
+    from keni_consola.pipeline_contenido import _admitir
 
-    assert _ingesta.cupo_produccion_restante("unotv") is None
-    assert _ingesta.cupos_categoria_restantes("unotv") is None  # sin plan
+    assert _admitir.cupo_produccion_restante("unotv") is None
+    assert _admitir.cupos_categoria_restantes("unotv") is None  # sin plan
 
 
 def test_plan_breaking_excede_su_cupo_con_tope_extra(entorno, monkeypatch):
     """La última hora EXCEDE el plan: techo efectivo = cupo + KENI_BREAKING_EXTRA_DIA."""
-    from keni_consola.pipeline_contenido import _ingesta
+    from keni_consola.pipeline_contenido import _admitir
 
     monkeypatch.setenv("KENI_PLAN_DIA", "breaking:1")
     monkeypatch.setenv("KENI_BREAKING_EXTRA_DIA", "1")
@@ -1317,10 +1317,10 @@ def test_plan_breaking_excede_su_cupo_con_tope_extra(entorno, monkeypatch):
         contenido_id=breaking["id"], red="facebook", marca="unotv", copy="P", es_publicacion=True
     )
     # Queda el hueco EXTRA: una nueva última hora aún sale al feed.
-    assert _ingesta.cupos_categoria_restantes("unotv") == {"breaking": 1}
+    assert _admitir.cupos_categoria_restantes("unotv") == {"breaking": 1}
     # Con el extra a 0 el plan vuelve a ser techo duro también para breaking.
     monkeypatch.setenv("KENI_BREAKING_EXTRA_DIA", "0")
-    assert _ingesta.cupos_categoria_restantes("unotv") == {}
+    assert _admitir.cupos_categoria_restantes("unotv") == {}
 
 
 def test_cupos_solo_cuentan_la_jornada_mx_no_dias_previos(entorno, monkeypatch):
@@ -1330,7 +1330,7 @@ def test_cupos_solo_cuentan_la_jornada_mx_no_dias_previos(entorno, monkeypatch):
     anterior (aquí, hace años) ya no consume cupo hoy, así que el auto-feed puede volver a
     llenar el plan de la nueva jornada.
     """
-    from keni_consola.pipeline_contenido import _ingesta
+    from keni_consola.pipeline_contenido import _admitir
 
     monkeypatch.setenv("KENI_PLAN_DIA", "mx:1")
     # Ambos con post real (es_publicacion=1): lo ÚNICO que excluye al viejo es la fecha.
@@ -1342,7 +1342,7 @@ def test_cupos_solo_cuentan_la_jornada_mx_no_dias_previos(entorno, monkeypatch):
     repos.crear_contenido_plataforma(
         contenido_id=ayer["id"], red="facebook", marca="unotv", copy="P", es_publicacion=True
     )
-    assert _ingesta.cupos_categoria_restantes("unotv") == {"mx": 1}
+    assert _admitir.cupos_categoria_restantes("unotv") == {"mx": 1}
     # De hoy: consume el cupo -> sin hueco.
     hoy = repos.crear_contenido(
         clase="contenido", titulo="Nacional de hoy", marca="unotv", categoria="mx"
@@ -1350,7 +1350,7 @@ def test_cupos_solo_cuentan_la_jornada_mx_no_dias_previos(entorno, monkeypatch):
     repos.crear_contenido_plataforma(
         contenido_id=hoy["id"], red="facebook", marca="unotv", copy="P", es_publicacion=True
     )
-    assert _ingesta.cupos_categoria_restantes("unotv") == {}
+    assert _admitir.cupos_categoria_restantes("unotv") == {}
 
 
 def test_plan_sin_linea_breaking_compite_por_su_feed(entorno, monkeypatch):

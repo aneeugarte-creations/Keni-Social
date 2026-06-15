@@ -432,7 +432,7 @@ _APP_POR_STEM: dict[str, str] = {
     "test_actividad": "app_produccion",
     "test_api_cola_monitor": "app_produccion",
     "test_pipeline_contenido": "app_produccion",
-    "test_pipeline_qa_editorial": "app_produccion",
+    "test_pipeline_verificar_fuente": "app_produccion",
     "test_api_pipelines": "app_produccion",
     "test_generaciones": "app_produccion",
     "test_api_hashtags": "app_produccion",

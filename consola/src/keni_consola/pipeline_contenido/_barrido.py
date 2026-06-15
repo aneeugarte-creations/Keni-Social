@@ -18,7 +18,7 @@ from typing import Any
 
 from .. import config, daemon_util, generaciones, marcas, repos
 from ..tiempo import hoy_utc
-from . import _ingesta, _ref
+from . import _admitir, _ref
 from ._comun import (
     _MAX_INTENTOS_ETAPA,
     QA_EN_CURSO,
@@ -71,7 +71,7 @@ _LOCK_PRODUCCION = "pipeline_produccion"
 _DAEMON_INVESTIGACION = "investigacion"
 _DAEMON_PRODUCCION = "produccion"
 
-# Categoría del plan con la que nace una última hora (ver `_ingesta.categoria_efectiva`).
+# Categoría del plan con la que nace una última hora (ver `_admitir.categoria_efectiva`).
 _CATEGORIA_BREAKING = "breaking"
 
 
@@ -165,11 +165,11 @@ def _ejecutar_investigacion() -> dict[str, Any]:
     # VENTANA DESLIZANTE sobre el ranking: lo que no se completó a tiempo caduca y libera su hueco
     # (temas en vuelo); y una QA de cluster que murió (en_curso zombi) se resetea para re-cribar.
     try:
-        _ingesta.caducar_temas_viejos()
+        _admitir.caducar_temas_viejos()
     except Exception:  # noqa: BLE001 -- la caducidad es saneo; nunca rompe el barrido
         _log.exception("pipeline: fallo la caducidad de temas en vuelo.")
     try:
-        _ingesta.caducar_qa_clusters_en_curso()
+        _admitir.caducar_qa_clusters_en_curso()
     except Exception:  # noqa: BLE001 -- el reaper de QA es saneo; nunca rompe el barrido
         _log.exception("pipeline: fallo el reaper de QA de clusters en curso.")
     # --- Fase QA (criba de la FUENTE sobre la historia, pre-admisión). -----------------------
@@ -185,19 +185,19 @@ def _ejecutar_investigacion() -> dict[str, Any]:
         if not config.etapa_activa(config.ENV_PIPELINE_RECOLECTAR, marca):
             continue
         # SERIAL POR MARCA: no metas más historias si esta marca ya tiene cola EN VUELO (sin copy).
-        cupo = config.pipeline_en_vuelo_max() - _ingesta.temas_en_vuelo(marca)
+        cupo = config.pipeline_en_vuelo_max() - _admitir.temas_en_vuelo(marca)
         if cupo <= 0:
             continue
         # VOLUMEN: con PLAN EDITORIAL DIARIO, llena los cupos POR CATEGORÍA que queden hoy; sin
         # plan, cae al cupo diario simple. La admisión es SELECCIÓN, no goteo.
-        cupos_cat = _ingesta.cupos_categoria_restantes(marca)
+        cupos_cat = _admitir.cupos_categoria_restantes(marca)
         if cupos_cat is not None:
             if not cupos_cat:
                 _log.debug("pipeline: plan diario de %s completo; hoy no entra más.", marca)
                 continue
             cupo = min(cupo, sum(cupos_cat.values()))
         else:
-            cupo_volumen = _ingesta.cupo_produccion_restante(marca)
+            cupo_volumen = _admitir.cupo_produccion_restante(marca)
             if cupo_volumen is not None:
                 if cupo_volumen <= 0:
                     _log.debug("pipeline: cupo diario agotado para %s.", marca)

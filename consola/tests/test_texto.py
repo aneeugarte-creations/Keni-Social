@@ -264,7 +264,7 @@ def test_importar_semilla_materializa_docs_nuevos_en_store_existente():
 
     assert libtexto.importar_semilla() > 0
     # Simula el store viejo: aún no tenía uno de los docs nuevos, y otro está editado.
-    (raiz() / "prompt" / "clasificacion-marca.md").unlink()
+    (raiz() / "prompt" / "clasificar-marca.md").unlink()
     libtexto.guardar("prompt/hashtags", cuerpo="EDITADO POR EL EQUIPO")
     assert libtexto.importar_semilla() == 1  # solo el que faltaba
     cuerpo = libtexto.cuerpo_efectivo("prompt/clasificar-marca")

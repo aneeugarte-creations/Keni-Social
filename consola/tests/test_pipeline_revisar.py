@@ -17,7 +17,7 @@ import json
 
 from keni_consola import app as app_modulo
 from keni_consola import auth, patrones_marca, repos
-from keni_consola.pipeline_contenido import _avance, _calidad
+from keni_consola.pipeline_contenido import _avance, _revisar
 from starlette.testclient import TestClient
 
 from .conftest import TOKEN_PRUEBA
@@ -45,23 +45,23 @@ _NOTA_FUTBOL = (
 
 
 def test_coherencia_avisa_si_no_comparte_terminos():
-    avisos = _calidad.avisos_coherencia(_COPY_TECH, _NOTA_FUTBOL)
+    avisos = _revisar.avisos_coherencia(_COPY_TECH, _NOTA_FUTBOL)
     assert len(avisos) == 1 and "no comparte" in avisos[0]
 
 
 def test_coherencia_calla_si_comparte_algun_termino():
     # El copy ahora menciona "futbol" (presente en la nota): hay solapamiento -> sin aviso.
-    assert _calidad.avisos_coherencia(_COPY_TECH + " futbol", _NOTA_FUTBOL) == []
+    assert _revisar.avisos_coherencia(_COPY_TECH + " futbol", _NOTA_FUTBOL) == []
 
 
 def test_coherencia_calla_con_textos_cortos():
     # Copy corto (pocos términos de contenido): el contraste no significa nada -> sin aviso.
-    assert _calidad.avisos_coherencia("gol en el noventa", _NOTA_FUTBOL) == []
-    assert _calidad.avisos_coherencia(_COPY_TECH, "nota breve sin sustancia") == []
+    assert _revisar.avisos_coherencia("gol en el noventa", _NOTA_FUTBOL) == []
+    assert _revisar.avisos_coherencia(_COPY_TECH, "nota breve sin sustancia") == []
 
 
 def test_coherencia_calla_sin_nota():
-    assert _calidad.avisos_coherencia(_COPY_TECH, "") == []
+    assert _revisar.avisos_coherencia(_COPY_TECH, "") == []
 
 
 # --------------------------------------------------------------------------- #
@@ -88,19 +88,19 @@ def _sembrar_perfil(monkeypatch, tmp_path, *, red: str = "x") -> None:
 
 def test_voz_avisa_emoji_fuera_de_patron(monkeypatch, tmp_path):
     _sembrar_perfil(monkeypatch, tmp_path)
-    avisos = _calidad.avisos_voz(_MARCA, "x", "Un copy con un emoji 🔥 al final")
+    avisos = _revisar.avisos_voz(_MARCA, "x", "Un copy con un emoji 🔥 al final")
     assert avisos and "emoji" in avisos[0]
 
 
 def test_voz_calla_copy_en_patron(monkeypatch, tmp_path):
     _sembrar_perfil(monkeypatch, tmp_path)
-    assert _calidad.avisos_voz(_MARCA, "x", "Un copy sobrio sin emojis ni adornos") == []
+    assert _revisar.avisos_voz(_MARCA, "x", "Un copy sobrio sin emojis ni adornos") == []
 
 
 def test_voz_sin_perfil_no_inventa(monkeypatch, tmp_path):
     # Sin perfil para la marca, el lint no se pronuncia (degradación honesta).
     monkeypatch.setenv("KENI_PATRONES_DIR", str(tmp_path / "vacio"))
-    assert _calidad.avisos_voz(_MARCA, "x", "Lo que sea con emoji 🔥") == []
+    assert _revisar.avisos_voz(_MARCA, "x", "Lo que sea con emoji 🔥") == []
 
 
 # --------------------------------------------------------------------------- #
@@ -135,20 +135,20 @@ def test_verificar_calidad_degrada_listo_y_anota(entorno, monkeypatch, tmp_path)
     _sembrar_perfil(monkeypatch, tmp_path)
     pub = _borrador(_cli(), contenido="Copy con emoji 🔥 fuera de patrón")
 
-    avisos = _calidad.verificar_calidad_pieza(pub)
+    avisos = _revisar.verificar_calidad_pieza(pub)
 
     assert avisos  # encontró algo (voz)
     actual = repos.obtener_publicacion(pub["id"])
     assert actual["veredicto"] == "revisar"  # degradado (advisory), no bloqueado
     tema = repos.obtener_contenido(pub["contenido_id"])
-    assert "Validación de copy" in (tema.get("notas") or "")
+    assert "Revisión del copy" in (tema.get("notas") or "")
 
 
 def test_verificar_calidad_no_toca_copy_limpio(entorno, monkeypatch, tmp_path):
     _sembrar_perfil(monkeypatch, tmp_path)
     pub = _borrador(_cli(), contenido="Copy sobrio dentro de patrón, sin emojis")
 
-    assert _calidad.verificar_calidad_pieza(pub) == []
+    assert _revisar.verificar_calidad_pieza(pub) == []
     assert repos.obtener_publicacion(pub["id"])["veredicto"] == "listo"  # intacto
 
 

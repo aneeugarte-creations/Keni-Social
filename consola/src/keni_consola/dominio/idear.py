@@ -133,7 +133,7 @@ def lanzar_propuesta(
             "No está disponible el prompt de brainstorming. Reinstala la Consola."
         )
     prompt = generar.componer(
-        cuerpo, libtexto.editoriales_de_marca(marca, pipeline="evergreen"), contexto, sin_emojis=True
+        cuerpo, libtexto.editoriales_de_marca(marca, pipeline="idear"), contexto, sin_emojis=True
     )
     # Import perezoso del jobspec para no acoplar; el spec NO lleva la generacion_id real (la
     # crea `generar.lanzar`), pero el worker la inyecta al reconstruir el procesar.
