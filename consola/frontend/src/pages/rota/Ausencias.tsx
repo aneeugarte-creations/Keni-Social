@@ -214,14 +214,17 @@ export function TarjetaAusencia({
     : [];
 
   return (
-    <Card>
+    // Misma ficha flotante que la tarjeta de cambio (rounded-lg + shadow-sm) para que la
+    // lista fusionada se lea como un solo sistema; padding en el contenido (antes el texto
+    // tocaba el borde) con `pr-10` para reservar el hueco del kebab de acciones.
+    <Card className="rounded-lg shadow-sm">
       <FilaConAcciones
         como="div"
         realce={puedeGestionar}
         onPrimaria={puedeGestionar ? () => setEditando(true) : undefined}
         acciones={acciones}
       >
-        <div className="min-w-0 space-y-1">
+        <div className="min-w-0 space-y-1 p-4 pr-10">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline" className="font-normal">
               <CalendarOff className="mr-1 h-3 w-3" /> Ausencia

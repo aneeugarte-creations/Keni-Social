@@ -89,7 +89,9 @@ export const VARIANTE_ESTADO_SWAP: Record<
   aplicado: "ok",
   rechazado: "error",
   rechazado_admin: "error",
-  cancelado: "error",
+  // Cancelar es una salida NEUTRA (el solicitante retiró su petición), no un fallo: gris,
+  // no rojo. El rojo se reserva a rechazos reales.
+  cancelado: "secondary",
 };
 
 /** Estados terminales: el swap ya no admite más acciones (solo historial). */
@@ -443,14 +445,32 @@ export function CambiosYAusencias({ esAdmin }: { esAdmin: boolean }) {
       )}
 
       {cargandoTodo ? (
-        <Skeleton className="h-40 w-full rounded-md" />
+        // Skeleton con la FORMA de la lista (tarjetas), no un bloque suelto: la carga
+        // "promete" el contenido real y evita el salto al aparecer.
+        <div className="space-y-3">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-28 w-full rounded-lg" />
+          ))}
+        </div>
       ) : items.length === 0 ? (
         <EstadoVacio
-          icono={ArrowLeftRight}
+          icono={filtroTipo === "ausencias" ? CalendarOff : ArrowLeftRight}
           titulo={
             filtroEstado === "historial"
-              ? "Sin historial"
-              : "Sin solicitudes activas"
+              ? "Sin historial todavía"
+              : "Nada pendiente por ahora"
+          }
+          texto={
+            filtroEstado === "historial"
+              ? "Aquí aparecerán los cambios y ausencias ya cerrados."
+              : "Pide cambiar un turno con un compañero o registra una ausencia."
+          }
+          accion={
+            filtroEstado === "historial" ? undefined : (
+              <Button variant="secondary" size="sm" onClick={() => setFormAbierto(true)}>
+                <Plus className="h-4 w-4" /> Nueva solicitud
+              </Button>
+            )
           }
         />
       ) : (
@@ -709,7 +729,7 @@ export function TarjetaSwap({
   });
 
   return (
-    <div className="rounded-md border bg-card p-4 space-y-3">
+    <div className="rounded-lg border bg-card p-4 shadow-sm space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -756,7 +776,7 @@ export function TarjetaSwap({
           <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Motivo ·{" "}
           </span>
-          <span className="text-muted-foreground">{swap.motivo}</span>
+          <span className="text-foreground">{swap.motivo}</span>
         </div>
       )}
       {swap.respuesta_destinatario && (
@@ -764,7 +784,7 @@ export function TarjetaSwap({
           <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Respuesta de {swap.destinatario_nombre} ·{" "}
           </span>
-          <span className="text-muted-foreground">{swap.respuesta_destinatario}</span>
+          <span className="text-foreground">{swap.respuesta_destinatario}</span>
         </div>
       )}
       {swap.respuesta_admin && (
@@ -772,7 +792,7 @@ export function TarjetaSwap({
           <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Nota de Elías ·{" "}
           </span>
-          <span className="text-muted-foreground">{swap.respuesta_admin}</span>
+          <span className="text-foreground">{swap.respuesta_admin}</span>
         </div>
       )}
 

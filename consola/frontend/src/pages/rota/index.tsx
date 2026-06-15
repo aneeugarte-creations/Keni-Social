@@ -76,7 +76,7 @@ export default function Rota() {
             Cambios y ausencias
             {pendientesCambios > 0 && (
               <span
-                className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none text-primary-foreground tabular-nums"
+                className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold leading-none text-white tabular-nums"
                 aria-label={`${pendientesCambios} pendientes`}
               >
                 {pendientesCambios > 99 ? "99+" : pendientesCambios}
