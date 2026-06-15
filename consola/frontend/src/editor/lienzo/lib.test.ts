@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CAJA_MIN_PX,
   ESCALA_MAX,
   ESCALA_MIN,
   PASOS_ZOOM,
   ZOOM_MAX,
   ZOOM_MIN,
+  acotarCajaTransformer,
   clampMarco,
   clampZoom,
   etiquetaGrados,
@@ -65,6 +67,27 @@ describe("etiquetaGrados", () => {
     expect(etiquetaGrados(-10)).toBe("350°");
     expect(etiquetaGrados(370.2)).toBe("10°");
     expect(etiquetaGrados(360)).toBe("0°");
+  });
+});
+
+describe("acotarCajaTransformer", () => {
+  const fina = { x: 0, y: 0, width: 200, height: 4, rotation: 0 }; // capa fina (alto < CAJA_MIN_PX)
+
+  it("al ROTAR deja pasar la caja aunque sea más fina que el mínimo (el cuadrado debe girar)", () => {
+    const girada = { ...fina, rotation: 30 };
+    expect(acotarCajaTransformer(fina, girada, "rotater")).toBe(girada);
+  });
+
+  it("al REDIMENSIONAR rechaza la caja que cae por debajo del mínimo y conserva la vieja", () => {
+    const colapsada = { x: 0, y: 0, width: 200, height: CAJA_MIN_PX - 1, rotation: 0 };
+    const vieja = { x: 0, y: 0, width: 200, height: 50, rotation: 0 };
+    expect(acotarCajaTransformer(vieja, colapsada, "bottom-center")).toBe(vieja);
+  });
+
+  it("al REDIMENSIONAR deja pasar una caja que respeta el mínimo en ambos ejes", () => {
+    const vieja = { x: 0, y: 0, width: 200, height: 50, rotation: 0 };
+    const nueva = { x: 0, y: 0, width: 200, height: 40, rotation: 0 };
+    expect(acotarCajaTransformer(vieja, nueva, "bottom-center")).toBe(nueva);
   });
 });
 

@@ -36,6 +36,23 @@ export function etiquetaGrados(grados: number): string {
   return `${((Math.round(grados) % 360) + 360) % 360}°`;
 }
 
+// Tamaño mínimo (px de pantalla) de la caja del Transformer al REDIMENSIONAR: sin esto, arrastrar un
+// tirador puede colapsar la capa a un hilo imposible de volver a agarrar.
+export const CAJA_MIN_PX = 8;
+
+// boundBoxFunc del Transformer de Konva: acota el tamaño mínimo SOLO al redimensionar. Al ROTAR (el
+// ancla activa es "rotater") la caja conserva su tamaño, así que aplicar el clamp congelaría el giro
+// de una capa fina (alto/ancho < CAJA_MIN_PX, p. ej. una línea o un titular muy bajo): por eso la
+// rotación pasa SIEMPRE. `ancla` es trRef.current.getActiveAnchor() (cadena vacía / null si ninguna).
+export function acotarCajaTransformer<T extends { width: number; height: number }>(
+  vieja: T,
+  nueva: T,
+  ancla: string | null,
+): T {
+  if (ancla === "rotater") return nueva;
+  return nueva.width < CAJA_MIN_PX || nueva.height < CAJA_MIN_PX ? vieja : nueva;
+}
+
 // Portapapeles de capas (módulo, para copiar/pegar incluso entre pestañas del workspace). Guarda
 // TODA la selección múltiple, no solo la capa primaria.
 export const portapapeles: { capas: Capa[] } = { capas: [] };

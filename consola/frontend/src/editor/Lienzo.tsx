@@ -26,7 +26,7 @@ import { CapaGuias } from "./lienzo/CapaGuias";
 import { ControlesEncuadre } from "./lienzo/ControlesEncuadre";
 import { CropOverlay } from "./lienzo/CropOverlay";
 import { FondoNodo } from "./lienzo/FondoNodo";
-import { RATIO_FIJO, clampMarco, franjasZonaSegura } from "./lienzo/lib";
+import { RATIO_FIJO, acotarCajaTransformer, clampMarco, franjasZonaSegura } from "./lienzo/lib";
 import { OverlayEdicionTexto } from "./lienzo/OverlayEdicionTexto";
 import { ReframeOverlay } from "./lienzo/ReframeOverlay";
 import { useArrastreCapas } from "./lienzo/useArrastreCapas";
@@ -452,7 +452,9 @@ export function Lienzo({
                 finalizarGestoLateral();
                 ocultarEtiquetaGesto();
               }}
-              boundBoxFunc={(o, n) => (n.width < 8 || n.height < 8 ? o : n)}
+              // El clamp de tamaño mínimo solo aplica al REDIMENSIONAR; la rotación pasa siempre
+              // (si no, una capa fina —línea/titular bajo— no podría girar desde el cuadrado).
+              boundBoxFunc={(o, n) => acotarCajaTransformer(o, n, trRef.current?.getActiveAnchor() ?? null)}
             />
           </Layer>
         </Stage>
