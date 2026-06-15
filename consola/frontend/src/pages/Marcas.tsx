@@ -1,17 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Check,
-  LayoutGrid,
-  Loader2,
-  Network,
-  Plug,
-  Plus,
-  RefreshCw,
-  Send,
-  Unplug,
-  Users,
-} from "lucide-react";
+import { BarChart3, Check, LayoutGrid, Loader2, Network, Plus, Send, Unplug, Users } from "lucide-react";
 import * as React from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
@@ -29,6 +19,10 @@ import { tiempoRelativo } from "@/pages/publicaciones/meta";
 import type { CanalPublicacion, MarcaDashboard, RedMarca, TotalesMarcas } from "@/types";
 
 const CLAVE_MARCAS = ["marcas", "dashboard"];
+
+// Página de métricas de audiencia (Metricool). El panel de Marcas es CONEXIONES; los
+// números de audiencia viven aquí y se enlazan, no se duplican.
+const RUTA_ANALITICAS = "/analiticas/metricas";
 
 // Ruta de retorno del OAuth: una ventana mínima de Keni que avisa al panel y se cierra.
 const RUTA_OAUTH_RETORNO = "/oauth/conectado";
@@ -61,20 +55,17 @@ function TarjetaResumen({
   );
 }
 
-/** Fila de totales globales del dashboard. */
+/** Fila de totales de conexión del dashboard. */
 function FilaResumen({ totales }: { totales: TotalesMarcas }) {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+    <div className="grid grid-cols-3 gap-3">
       <TarjetaResumen etiqueta="Marcas" valor={formatearNumero(totales.marcas)} icono={LayoutGrid} />
-      <TarjetaResumen etiqueta="Cuentas" valor={formatearNumero(totales.cuentas)} icono={Users} />
       <TarjetaResumen
         etiqueta="Redes conectadas"
         valor={formatearNumero(totales.redes_conectadas)}
         icono={Network}
       />
-      <TarjetaResumen etiqueta="Seguidores" valor={formatearNumero(totales.seguidores)} icono={Users} />
-      <TarjetaResumen etiqueta="Posts totales" valor={formatearNumero(totales.posts_totales)} icono={Plug} />
-      <TarjetaResumen etiqueta="Posts / día" valor={formatearNumero(totales.posts_dia)} icono={RefreshCw} />
+      <TarjetaResumen etiqueta="Cuentas" valor={formatearNumero(totales.cuentas)} icono={Users} />
     </div>
   );
 }
@@ -209,7 +200,7 @@ function FilaRed({
   );
 }
 
-/** Tarjeta de UNA marca con sus conexiones, redes (accionables) y métricas. */
+/** Tarjeta de UNA marca con sus conexiones y redes accionables. */
 function TarjetaMarca({ marca }: { marca: MarcaDashboard }) {
   const queryClient = useQueryClient();
   const [accion, setAccion] = React.useState<string | null>(null);
@@ -289,7 +280,7 @@ function TarjetaMarca({ marca }: { marca: MarcaDashboard }) {
           onCambiar={cambiarCanal}
         />
       </CardHeader>
-      <CardContent className="space-y-4 p-4 pt-2">
+      <CardContent className="space-y-3 p-4 pt-2">
         {/* Redes: una fila accionable por red (conectar / desconectar / reconectar). */}
         {marca.redes.length === 0 ? (
           <p className="text-xs text-muted-foreground">Sin redes disponibles.</p>
@@ -307,32 +298,25 @@ function TarjetaMarca({ marca }: { marca: MarcaDashboard }) {
           </div>
         )}
 
-        {/* Métricas agregadas de la marca. */}
-        <div className="grid grid-cols-3 gap-2 border-t border-border pt-3">
-          <div>
-            <p className="text-sm font-semibold leading-tight">{formatearNumero(marca.metricas.seguidores)}</p>
-            <p className="text-[11px] text-muted-foreground">Seguidores</p>
-          </div>
-          <div>
-            <p className="text-sm font-semibold leading-tight">{formatearNumero(marca.metricas.posts_totales)}</p>
-            <p className="text-[11px] text-muted-foreground">Posts</p>
-          </div>
-          <div>
-            <p className="text-sm font-semibold leading-tight">{formatearNumero(marca.metricas.posts_dia)}</p>
-            <p className="text-[11px] text-muted-foreground">Posts / día</p>
-          </div>
-        </div>
+        {/* Las métricas de audiencia viven en Analíticas (Metricool): enlace, no duplicado. */}
+        <Link
+          to={RUTA_ANALITICAS}
+          className="flex items-center justify-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <BarChart3 className="h-3.5 w-3.5" aria-hidden="true" />
+          Ver analíticas
+        </Link>
       </CardContent>
     </Card>
   );
 }
 
 /**
- * Página MARCAS (admin): el centro de control EN VIVO de todas las marcas × redes ×
- * cuentas. Arriba, los totales; debajo, una tarjeta por marca donde se CONECTA cada
+ * Página MARCAS (admin): el centro de control de CONEXIONES de todas las marcas × redes.
+ * Arriba, los totales de conexión; debajo, una tarjeta por marca donde se CONECTA cada
  * red en un par de clics (OAuth oficial de la red dentro de una ventana de Keni; el
  * equipo nunca sale a un tercero), se desconecta, se ve el estado real y se elige el
- * canal por el que publica la marca. Las métricas se leen de Metricool.
+ * canal por el que publica. Las métricas de audiencia tienen su página en Analíticas.
  */
 export default function Marcas() {
   const queryClient = useQueryClient();
@@ -360,8 +344,8 @@ export default function Marcas() {
       <div className="space-y-4">
         {isPending ? (
           <>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-              {Array.from({ length: 6 }).map((_, i) => (
+            <div className="grid grid-cols-3 gap-3">
+              {Array.from({ length: 3 }).map((_, i) => (
                 <Skeleton key={i} className="h-[68px] w-full rounded-xl" />
               ))}
             </div>

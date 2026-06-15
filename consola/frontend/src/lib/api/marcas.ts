@@ -4,7 +4,8 @@ import { peticion } from "./_core";
 import type { RespuestaMarcas } from "@/types";
 
 export const apiMarcas = {
-  // Foto en vivo de todas las marcas × redes × cuentas (totales + por marca).
+  // Estado en vivo de todas las marcas × redes × cuentas (control de conexiones).
+  // Rápido: solo estado, sin métricas (las métricas viven en Analíticas).
   getMarcas: (signal?: AbortSignal) =>
     peticion<RespuestaMarcas>("/marcas", { signal }),
 };

@@ -22,7 +22,7 @@ export type PlataformaRed =
 /** Estado de conexión de una red en Postproxy. */
 export type EstadoRed = "active" | "expired" | "inactive";
 
-/** Una red de una marca con su estado y métricas básicas. */
+/** Una red de una marca con su estado de conexión. */
 export interface RedMarca {
   plataforma: string;
   conectado: boolean;
@@ -30,7 +30,6 @@ export interface RedMarca {
   perfil_id: string | null;
   nombre_cuenta: string | null;
   post_count: number | null;
-  seguidores: number | null;
 }
 
 /** Estado de Metricool de una marca (solo conexión, sin secretos). */
@@ -44,14 +43,7 @@ export interface PostproxyMarca {
   profile_group_id: string | null;
 }
 
-/** Métricas agregadas de una marca. */
-export interface MetricasMarca {
-  seguidores: number | null;
-  posts_totales: number | null;
-  posts_dia: number | null;
-}
-
-/** Una marca con su estado de conexiones, redes y métricas. */
+/** Una marca con su estado de conexiones y sus redes. */
 export interface MarcaDashboard {
   marca: string;
   etiqueta: string;
@@ -60,17 +52,13 @@ export interface MarcaDashboard {
   /** Canal por el que la marca publica sus piezas. */
   canal_publicacion: CanalPublicacion;
   redes: RedMarca[];
-  metricas: MetricasMarca;
 }
 
-/** Totales globales del dashboard. */
+/** Totales globales del dashboard (control de conexiones). */
 export interface TotalesMarcas {
   marcas: number;
   redes_conectadas: number;
   cuentas: number;
-  seguidores: number | null;
-  posts_totales: number;
-  posts_dia: number | null;
 }
 
 /** Respuesta de `GET /api/marcas`. */

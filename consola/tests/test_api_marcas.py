@@ -1,9 +1,9 @@
-"""Dashboard "Marcas" (`GET /api/marcas`): vista consolidada por marca.
+"""Dashboard "Marcas" (`GET /api/marcas`): estado de conexiones por marca × red.
 
 SOLO ADMIN (#153): un editor recibe 403. Se MOCKEAN los probadores de conexión y el
-cliente de Postproxy + la fachada de métricas, así el test ejercita la AGREGACIÓN del
-endpoint (no la red ni la fuente real). Propiedad clave: el endpoint NUNCA casca y
-DEGRADA a null/desconectado si un proveedor falla; nunca inventa ceros.
+cliente de Postproxy, así el test ejercita la AGREGACIÓN del endpoint (no la red real).
+Propiedad clave: el endpoint NUNCA casca y DEGRADA a desconectado si un proveedor falla.
+Las métricas de audiencia NO viven aquí (tienen su página en Analíticas).
 """
 
 from __future__ import annotations
@@ -13,8 +13,7 @@ from starlette.testclient import TestClient
 
 from keni_consola import app as app_modulo
 from keni_consola import auth
-from keni_consola.api import conexiones, marcas
-from keni_metricas import servicio as metricas_servicio
+from keni_consola.api import conexiones
 from keni_metricas.fuentes import postproxy as pp_cliente
 
 from .conftest import TOKEN_PRUEBA
@@ -40,8 +39,7 @@ def _cli_como(rol: str) -> TestClient:
 # --------------------------------------------------------------------------- #
 @pytest.fixture
 def mocks(monkeypatch):
-    """Mockea conexiones + métricas para una respuesta determinista."""
-    # api_key presente (para que el dashboard intente listar perfiles).
+    """Mockea el estado de conexiones + el cliente Postproxy para una respuesta fija."""
     monkeypatch.setattr(conexiones, "_postproxy_api_key", lambda cfg: "PP_KEY")
     monkeypatch.setattr(conexiones, "_config_existente", lambda: {})
 
@@ -79,25 +77,6 @@ def mocks(monkeypatch):
         return False, "sin grupo", []
 
     monkeypatch.setattr(pp_cliente, "listar_perfiles", _perfiles)
-
-    def _serie(rango="mes", marca=None):
-        return {
-            "puntos": [
-                {"fecha": "2026-05-01", "total": 1000, "por_red": {"instagram": 1000}},
-                {"fecha": "2026-05-31", "total": 1200, "por_red": {"instagram": 1200}},
-            ]
-        }
-
-    def _reporte(rango="mes", marca=None):
-        return {
-            "total": {"publicaciones": 30},
-            "cuentas": [
-                {"resumen": {"periodo": {"desde": "2026-05-01", "hasta": "2026-05-31"}}}
-            ],
-        }
-
-    monkeypatch.setattr(metricas_servicio, "construir_serie_seguidores", _serie)
-    monkeypatch.setattr(metricas_servicio, "construir_reporte", _reporte)
     return monkeypatch
 
 
@@ -116,13 +95,14 @@ def test_admin_forma_completa(entorno, mocks):
     assert r.status_code == 200
     cuerpo = r.json()
     assert "generado_en" in cuerpo
-    assert set(cuerpo["totales"]) == {
-        "marcas", "redes_conectadas", "cuentas", "seguidores", "posts_totales", "posts_dia"
-    }
+    # El panel es CONTROL DE CONEXIONES: totales de conexión, sin métricas de audiencia.
+    assert set(cuerpo["totales"]) == {"marcas", "redes_conectadas", "cuentas"}
     por_marca = {m["marca"]: m for m in cuerpo["marcas"]}
     cs = por_marca["claro_sports"]
     assert cs["metricool"] == {"conectado": True}
     assert cs["postproxy"] == {"conectado": True, "profile_group_id": "g1"}
+    # Las métricas NO viven en el panel (tienen su página en Analíticas).
+    assert "metricas" not in cs
     # Canal de publicación por marca (selector metricool|postproxy).
     assert cs["canal_publicacion"] == "postproxy"
     assert por_marca["unotv"]["canal_publicacion"] == "metricool"
@@ -137,10 +117,6 @@ def test_admin_forma_completa(entorno, mocks):
     fb = next(r for r in cs["redes"] if r["plataforma"] == "facebook")
     assert fb["conectado"] is False
     assert fb["estado"] is None
-    # Métricas cableadas: seguidores = último total; posts/día = 30/31 días.
-    assert cs["metricas"]["seguidores"] == 1200
-    assert cs["metricas"]["posts_totales"] == 30
-    assert cs["metricas"]["posts_dia"] == round(30 / 31, 2)
     # google_business NO aparece.
     assert all(r["plataforma"] != "google_business" for m in cuerpo["marcas"] for r in m["redes"])
 
@@ -153,28 +129,27 @@ def test_marca_sin_grupo_redes_desconectadas(entorno, mocks):
     assert all(r["conectado"] is False for r in unotv["redes"])
 
 
-def test_metricas_degradan_a_null_si_fallan(entorno, monkeypatch):
-    """Si la fachada de métricas LANZA, las métricas van a null (no a 0) y no casca."""
-    monkeypatch.setattr(conexiones, "_postproxy_api_key", lambda cfg: "")
+def test_postproxy_caido_no_casca(entorno, monkeypatch):
+    """Si el cliente Postproxy LANZA, las redes van a desconectadas y el panel NO casca."""
+    monkeypatch.setattr(conexiones, "_postproxy_api_key", lambda cfg: "PP_KEY")
     monkeypatch.setattr(conexiones, "_config_existente", lambda: {})
     monkeypatch.setattr(
         conexiones, "estado_postproxy",
-        lambda: {"configurado": False, "pista": None, "marcas": [
-            {"marca": "claro_sports", "etiqueta": "Claro Sports", "profile_group_id": None}]},
+        lambda: {"configurado": True, "pista": "····9999", "marcas": [
+            {"marca": "claro_sports", "etiqueta": "Claro Sports",
+             "profile_group_id": "g1", "canal": "metricool"}]},
     )
     monkeypatch.setattr(conexiones, "estado_marcas_metricool", lambda: [])
 
     def _boom(*a, **k):
-        raise RuntimeError("metricool caído")
+        raise RuntimeError("postproxy caído")
 
-    monkeypatch.setattr(metricas_servicio, "construir_serie_seguidores", _boom)
-    monkeypatch.setattr(metricas_servicio, "construir_reporte", _boom)
+    monkeypatch.setattr(pp_cliente, "listar_perfiles", _boom)
 
     c = _cli_como("admin")
     r = c.get("/api/marcas")
     assert r.status_code == 200
     cuerpo = r.json()
     cs = next(m for m in cuerpo["marcas"] if m["marca"] == "claro_sports")
-    assert cs["metricas"] == {"seguidores": None, "posts_totales": None, "posts_dia": None}
-    assert cuerpo["totales"]["seguidores"] is None
-    assert cuerpo["totales"]["posts_dia"] is None
+    assert all(red["conectado"] is False for red in cs["redes"])
+    assert cuerpo["totales"]["redes_conectadas"] == 0
