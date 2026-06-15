@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   aProsaPlana,
+  desescaparMarkdown,
   esSoloEspacios,
   normalizarEspacios,
   quitarFrontmatter,
@@ -96,6 +97,31 @@ describe("aProsaPlana", () => {
     const plano = aProsaPlana("Texto<br>con un <sub>índice</sub> aquí");
     expect(plano).not.toMatch(/[<>]/);
     expect(plano).toContain("índice");
+  });
+
+  it("no genera diff fantasma entre markdown canónico y sobre-escapado (JSON con corchetes)", () => {
+    const canonico = 'Config {"grupos": [["id1","id2"]]} final.';
+    const sobreEscapado = 'Config {"grupos": \\[\\["id1","id2"\\]\\]} final.';
+    expect(aProsaPlana(sobreEscapado)).toBe(aProsaPlana(canonico));
+  });
+
+  it("trata igual un fence ```json y su versión sobre-escapada", () => {
+    const canonico = "Ejemplo:\n\n```json\n{ \"a\": 1 }\n```\n\nFin.";
+    const sobreEscapado = "Ejemplo:\n\n\\`\\`\\`json\n{ \"a\": 1 }\n\\`\\`\\`\n\nFin.";
+    expect(aProsaPlana(sobreEscapado)).toBe(aProsaPlana(canonico));
+  });
+});
+
+describe("desescaparMarkdown (defensa en el diff)", () => {
+  it("quita el backslash espurio y es idempotente", () => {
+    expect(desescaparMarkdown('\\[\\["id1"\\]\\]')).toBe('[["id1"]]');
+    const una = desescaparMarkdown('\\`\\`\\`json');
+    expect(una).toBe("```json");
+    expect(desescaparMarkdown(una)).toBe(una);
+  });
+
+  it("no toca los saltos de línea", () => {
+    expect(desescaparMarkdown("a\nb\n\nc")).toBe("a\nb\n\nc");
   });
 });
 

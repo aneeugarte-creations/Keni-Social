@@ -25,10 +25,28 @@ import { useVariables } from "@/hooks/use-biblioteca";
 import { cn } from "@/lib/utils";
 import type { VariableCatalogo } from "@/types";
 
+/**
+ * Conjunto de puntuación ASCII escapable de CommonMark que tiptap-markdown (markdown-it)
+ * antepone con backslash al serializar (`[`->`\[`, `` ` ``->`` \` ``, `*`->`\*`, ...),
+ * incluido el propio `\`. `getMarkdown()` sobre-escapa esta puntuación.
+ */
+const RE_ESCAPE_MARKDOWN = /\\([\\`*_{}[\]()#+\-.!>|~])/g;
+
+/**
+ * Quita el backslash espurio que tiptap-markdown antepone a la puntuación escapable de
+ * CommonMark, devolviendo markdown canónico. PURO e IDEMPOTENTE (aplicarlo dos veces da lo
+ * mismo que una: un `[` ya sin escapar no se vuelve a tocar) y no altera saltos de línea ni
+ * listas. Así el round-trip cargar->serializar es estable para prosa con corchetes,
+ * backticks o JSON (`[["id1","id2"]]` se persiste tal cual, no `\[\["id1","id2"\]\]`).
+ */
+export function desescaparMarkdown(md: string): string {
+  return md.replace(RE_ESCAPE_MARKDOWN, "$1");
+}
+
 /** tiptap-markdown añade `storage.markdown.getMarkdown()` en runtime pero no lo tipa. */
 function aMarkdown(editor: Editor): string {
   const storage = editor.storage as { markdown?: { getMarkdown: () => string } };
-  return storage.markdown?.getMarkdown() ?? "";
+  return desescaparMarkdown(storage.markdown?.getMarkdown() ?? "");
 }
 
 // Estilo del contenido editable (no hay plugin `prose`): mapeo elemento->clases coherente

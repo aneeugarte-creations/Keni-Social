@@ -14,6 +14,23 @@
  * la pinta como pastilla, así que aquí la protegemos de cualquier transformación.
  */
 
+/**
+ * Puntuación ASCII escapable de CommonMark que tiptap-markdown antepone con backslash al
+ * serializar (`[`->`\[`, `` ` ``->`` \` ``, `*`->`\*`, ...), incluido el propio `\`.
+ */
+const RE_ESCAPE_MARKDOWN = /\\([\\`*_{}[\]()#+\-.!>|~])/g;
+
+/**
+ * Quita el backslash espurio que tiptap-markdown antepone a la puntuación escapable (misma
+ * lógica que `desescaparMarkdown` del editor; se duplica aquí, puro y sin estado, para no
+ * crear dependencia circular con el componente del editor). PURO e IDEMPOTENTE. Se aplica en
+ * `aProsaPlana` para que el contenido ya guardado escapado (histórico) también diffee limpio
+ * sin esperar a re-guardarlo.
+ */
+export function desescaparMarkdown(texto: string): string {
+  return texto.replace(RE_ESCAPE_MARKDOWN, "$1");
+}
+
 /** `{{VARIABLE}}` como unidad: para proteger las variables al limpiar inline markdown. */
 const RE_VARIABLE = /(\{\{[A-Z_]+\}\})/g;
 /** Igual que `RE_VARIABLE` pero anclado y SIN flag global (para `.test`, sin `lastIndex`). */
@@ -93,6 +110,9 @@ function limpiarInline(fragmento: string): string {
  */
 export function aProsaPlana(texto: string): string {
   let t = quitarFrontmatter(texto);
+  // Desescape de markdown sobre-escapado (histórico) ANTES de limpiar: así un lado guardado
+  // como `\[\[...\]\]` y otro como `[[...]]` quedan idénticos y no producen diff fantasma.
+  t = desescaparMarkdown(t);
   // Marcadores de bloque, línea a línea.
   t = t
     .split("\n")
