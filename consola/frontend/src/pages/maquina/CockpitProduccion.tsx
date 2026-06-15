@@ -16,6 +16,7 @@ import { PanelAjustes, PanelMaquinaContenido } from "@/pages/configuracion/Secci
 import { SeccionImagen } from "@/pages/configuracion/SeccionImagen";
 import { PanelLanzarArte } from "@/pages/maquina/PanelLanzarArte";
 import { PanelPipeline, type FasePipeline } from "@/pages/monitor/PanelPipeline";
+import { SeccionDaemons } from "@/pages/sistema/SeccionDaemons";
 import { PanelLanzar } from "@/pages/texto/PanelLanzar";
 
 // Grupos del catálogo que son TUNING DE SISTEMA (jobs, limpieza, alertas) y gobiernan CÓMO se
@@ -184,7 +185,7 @@ export default function CockpitProduccion() {
         >
           <ItemMenu
             icono={ListChecks}
-            onClick={() => navigate("/maquina/cola?proceso=produccion")}
+            onClick={() => navigate("/maquina/agentes?proceso=produccion")}
           >
             Ver agentes (Producción)
           </ItemMenu>
@@ -246,6 +247,18 @@ export default function CockpitProduccion() {
           esAdmin={esAdmin}
         />
       </div>
+
+      {/* 4. SERVICIOS de la máquina NO-IA de este motor (recolección, programador, GC…): los
+          daemons clase=maquina del proceso de producción. Solo admin (endpoint de daemons). */}
+      {esAdmin && (
+        <div className="mt-6 rounded-xl border border-dashed border-border/70 bg-muted/30 p-2">
+          <SeccionDaemons
+            clases={["maquina"]}
+            motor="produccion"
+            titulo="Servicios (no consumen IA)"
+          />
+        </div>
+      )}
 
       {/* Lanzador de Redactar (reusa PanelLanzar): marca del switch global + «Editar prompt» dentro. */}
       <PanelLanzar

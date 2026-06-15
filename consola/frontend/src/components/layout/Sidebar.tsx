@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 
 import { CuentaUsuario } from "@/components/layout/CuentaUsuario";
 import { rutaVisibleParaMarca } from "@/components/layout/gating-marca";
+import { subPestanasDe } from "@/components/layout/hub-tabs";
 import { iconoDe } from "@/components/layout/navegacion";
 import { usePaletaComandos } from "@/hooks/paleta-contexto";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
@@ -69,6 +70,18 @@ function clasesIconoRail(activa: boolean) {
  * items, agrupados por bloque con un separador). El estado colapsado lo controla el
  * AppShell (persistido en localStorage) vía `colapsado`/`onToggleColapsar`.
  */
+/**
+ * ¿`pathname` cae dentro del hub de la entrada `ruta` (una pestaña suya o una sub-ruta de ella)?
+ * Para hubs cuyas pestañas no comparten el prefijo de la entrada (la sala de máquinas: la entrada
+ * «Agentes» y sus pestañas Cómputo/Economía/Actividad), así la entrada del sidebar sigue marcada
+ * activa estando en una pestaña hermana. Para entradas que no son hub, devuelve `false`.
+ */
+function enHubDe(ruta: string, pathname: string): boolean {
+  const pestanas = subPestanasDe(ruta);
+  if (!pestanas) return false;
+  return pestanas.some((p) => pathname === p.ruta || pathname.startsWith(`${p.ruta}/`));
+}
+
 export function Sidebar({
   onNavegar,
   colapsado = false,
@@ -78,6 +91,7 @@ export function Sidebar({
   colapsado?: boolean;
   onToggleColapsar?: () => void;
 }) {
+  const { pathname } = useLocation();
   // Sidebar DATA-DRIVEN (ADR 0005): se hidrata de `/api/catalogo`. El backend ya
   // agrupa la nav por bloque de flujo (apps activas según flags + el Panel del
   // shell) y la ordena; aquí solo la pintamos. `staleTime: Infinity`: el catálogo
@@ -122,7 +136,9 @@ export function Sidebar({
                       to={item.ruta}
                       onClick={onNavegar}
                       aria-label={item.etiqueta}
-                      className={({ isActive }) => clasesIconoRail(isActive)}
+                      className={({ isActive }) =>
+                        clasesIconoRail(isActive || enHubDe(item.ruta, pathname))
+                      }
                     >
                       <Icono className="h-4 w-4" aria-hidden="true" />
                     </NavLink>
@@ -180,7 +196,9 @@ export function Sidebar({
                       to={item.ruta}
                       onClick={onNavegar}
                       title={item.descripcion}
-                      className={clasesItem}
+                      className={({ isActive }) =>
+                        clasesItem({ isActive: isActive || enHubDe(item.ruta, pathname) })
+                      }
                     >
                       <Icono className="h-4 w-4 shrink-0" aria-hidden="true" />
                       <span>{item.etiqueta}</span>

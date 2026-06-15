@@ -1,6 +1,10 @@
 import {
+  Activity,
   BarChart3,
   BookText,
+  Bot,
+  Coins,
+  Cpu,
   LayoutGrid,
   ListTodo,
   Megaphone,
@@ -71,6 +75,19 @@ export const TABS_TEXTO: ItemTabHub[] = [
   { ruta: "/contenido/texto/estrategia", etiqueta: "Estrategia de marcas", icono: Target },
 ];
 
+// «Sala de máquinas»: la observabilidad y el control de la máquina, separados de las páginas de
+// trabajo (los cockpits). Los AGENTES son la pestaña de aterrizaje; Cómputo (la cola), Economía
+// (coste) y Actividad (la traza) son sus hermanas. A diferencia de los demás hubs, sus pestañas
+// NO comparten el prefijo de la ruta-padre, así que `pestanasDeRuta` casa por pertenencia (abajo).
+export const TABS_MAQUINA: ItemTabHub[] = [
+  // `end: true`: `/maquina/agentes` es prefijo del detalle `/maquina/agentes/:agente`; sin esto la
+  // pestaña Agentes quedaría activa también en el detalle.
+  { ruta: "/maquina/agentes", etiqueta: "Agentes", icono: Bot, end: true },
+  { ruta: "/maquina/computo", etiqueta: "Cómputo", icono: Cpu },
+  { ruta: "/maquina/economia", etiqueta: "Economía", icono: Coins },
+  { ruta: "/maquina/actividad", etiqueta: "Actividad", icono: Activity },
+];
+
 /**
  * Mapa `rutaPadre -> sub-pestañas`. La clave es la ruta del hub (la misma que
  * entrega el catálogo para esa entrada de nav). El sidebar la usa para saber que
@@ -81,9 +98,12 @@ export const HUB_TABS: Record<string, ItemTabHub[]> = {
   "/datos/analiticas": TABS_ANALITICAS,
   "/operacion/feed": TABS_FEED,
   // Bajo /operacion, Programación y Turnos son páginas planas (sin pestañas), no hubs;
-  // por eso no figuran aquí. Igual que Imagen/Video bajo /contenido y la sección «Máquina»
-  // (Investigación/Producción/Cola son tres páginas planas del bloque, no un hub).
+  // por eso no figuran aquí. Igual que Imagen/Video bajo /contenido.
   "/contenido/texto": TABS_TEXTO,
+  // «Sala de máquinas»: la clave es la pestaña de aterrizaje (Agentes), la MISMA ruta que el
+  // catálogo entrega para esa entrada de nav. Los cockpits (Investigación/Producción) NO están
+  // aquí: son páginas de trabajo planas, ajenas a este hub.
+  "/maquina/agentes": TABS_MAQUINA,
 };
 
 /**
@@ -106,6 +126,11 @@ export function subPestanasDe(ruta: string): ItemTabHub[] | undefined {
 export function pestanasDeRuta(pathname: string): ItemTabHub[] | undefined {
   for (const [ruta, pestanas] of Object.entries(HUB_TABS)) {
     if (pathname === ruta || pathname.startsWith(`${ruta}/`)) return pestanas;
+    // Hubs cuyas pestañas NO comparten el prefijo de la ruta-padre (p. ej. la sala de máquinas:
+    // /maquina/agentes · /maquina/computo · /maquina/economia · /maquina/actividad): se casa por
+    // PERTENENCIA a una pestaña (la propia ruta o una sub-ruta suya, como un detalle).
+    if (pestanas.some((p) => pathname === p.ruta || pathname.startsWith(`${p.ruta}/`)))
+      return pestanas;
   }
   return undefined;
 }

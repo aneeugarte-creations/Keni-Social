@@ -13,6 +13,7 @@ import Cobertura from "@/pages/Cobertura";
 import ContenidosHub from "@/pages/ContenidosHub";
 import Fuentes from "@/pages/Fuentes";
 import { PanelInvestigacion } from "@/pages/configuracion/SeccionFuncionalidad";
+import { SeccionDaemons } from "@/pages/sistema/SeccionDaemons";
 import { RielInvestigacion } from "@/pages/noticias/RielInvestigacion";
 
 /**
@@ -86,7 +87,7 @@ export default function CockpitInvestigacion() {
       {seccion !== "algoritmos" && (
         <AccionesPagina>
           <MenuAcciones ajustesTitulo="Ajustes de investigación" ajustes={<PanelInvestigacion />}>
-            <ItemMenu icono={ListChecks} onClick={() => navigate("/maquina/cola")}>
+            <ItemMenu icono={ListChecks} onClick={() => navigate("/maquina/agentes?proceso=investigacion")}>
               Ver agentes
             </ItemMenu>
           </MenuAcciones>
@@ -129,6 +130,17 @@ export default function CockpitInvestigacion() {
             de cola, «Editar prompt» y excepciones; el maestro «Máquina» en la cabecera. */}
         <TabsContent value="pipeline">
           <RielInvestigacion cola={cola.data} esAdmin={esAdmin} />
+          {/* Servicios de la máquina NO-IA de este motor (recolección, trends, GC de noticias…):
+              los daemons clase=maquina del proceso de investigación. Solo admin. */}
+          {esAdmin && (
+            <div className="mt-6 rounded-xl border border-dashed border-border/70 bg-muted/30 p-2">
+              <SeccionDaemons
+                clases={["maquina"]}
+                motor="investigacion"
+                titulo="Servicios (no consumen IA)"
+              />
+            </div>
+          )}
         </TabsContent>
 
         {/* SALIDA · MESA DE REDACCIÓN: el pool con usar/descartar (Cobertura). */}

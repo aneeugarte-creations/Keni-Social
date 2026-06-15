@@ -50,6 +50,7 @@ import { duracion } from "@/lib/formato";
 import { INTERVALO_DETALLE_MS } from "@/lib/refresco";
 import { cn } from "@/lib/utils";
 import { useGuardarAjuste } from "@/pages/configuracion/SeccionFuncionalidad";
+import { nombreLegible, PROMPTS_POR_DAEMON } from "@/pages/maquina/agentes-meta";
 import type { ClaseDaemon, EstadoDaemon, LatidoDaemon } from "@/types";
 
 // Cuántos barridos pedir al log (el back acota a su cota dura por daemon).
@@ -66,39 +67,6 @@ const ETIQUETA_CLASE: Record<ClaseDaemon, string> = {
   maquina: "Máquina",
   sistema: "Sistema",
 };
-
-// Nombre legible de cada daemon conocido; los no mapeados caen al nombre crudo capitalizado.
-const ETIQUETA_DAEMON: Record<string, string> = {
-  investigacion: "Investigación",
-  produccion: "Producción",
-  recolectar: "Recolección de noticias",
-  trends: "Tendencias",
-  algoritmos: "Algoritmos de plataforma",
-  noticias_gc: "GC de noticias",
-  programador: "Programador de parrilla",
-  vencimientos: "Vencimientos",
-  comercial: "Comercial",
-  metricas: "Métricas",
-  metricas_piezas: "Métricas de piezas",
-  alertas_rendimiento: "Alertas de rendimiento",
-  media_gc: "GC de media",
-  patrones: "Patrones de marca",
-  reaper: "Reaper (cola)",
-};
-
-// Prompts de la Biblioteca que gobiernan cada agente de IA, por NOMBRE de daemon (el mismo
-// mapeo que usan los cockpits de Investigación/Producción). Solo clase=ia tiene prompt.
-const PROMPTS_POR_DAEMON: Record<string, { etiqueta: string; doc: string }[]> = {
-  investigacion: [{ etiqueta: "Verificar", doc: "prompt/verificar" }],
-  produccion: [
-    { etiqueta: "Redactar", doc: "prompt/redactar" },
-    { etiqueta: "Ilustrar", doc: "prompt/ilustrar" },
-  ],
-};
-
-function nombreLegible(daemon: string): string {
-  return ETIQUETA_DAEMON[daemon] ?? daemon.charAt(0).toUpperCase() + daemon.slice(1);
-}
 
 /** Intervalo legible ("90 s", "15 min", "4 h"); espejo del de SeccionDaemons. */
 function formatoIntervalo(seg: number): string {

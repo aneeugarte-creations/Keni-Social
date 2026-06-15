@@ -29,12 +29,12 @@ _SIDEBAR_BLOQUES = [
     # Imagen (editor de imagen por capas + IA), Video (estudio de video) y Texto (la
     # Texto: prompts + línea editorial + plantillas).
     ["Imagen", "Video", "Texto"],
-    # "Máquina": la máquina de generación — dos cockpits de igual peso (Investigación:
-    # descubre/verifica; Producción: genera copy/arte) + la página Agentes (los dos agentes de
-    # ejecución: Workers —pool reactivo— y Daemons —proactivos— + economía de tokens + el FEED de
-    # actividad, TODO JUNTO). Tras la consolidación de navegación, cada motor sale UNA sola vez y
-    # vive aquí: las viejas entradas «datos» de Investigación y Producción (esta última, el feed)
-    # se retiraron del menú (Investigación → cockpit; el feed → sección «Actividad» de Agentes).
+    # "Máquina": la máquina de generación — dos cockpits de trabajo de igual peso (Investigación:
+    # descubre/verifica; Producción: genera copy/arte) + la entrada Agentes, que es el hub «sala de
+    # máquinas» (los agentes IA proactivos, y en pestañas hermanas in-page el Cómputo —la cola—, la
+    # Economía —coste— y la Actividad —la traza—). Tras la consolidación de navegación, cada motor
+    # sale UNA sola vez: las viejas entradas «datos» de Investigación y Producción se retiraron del
+    # menú (Investigación → cockpit; el feed de producción → pestaña «Actividad» del hub).
     ["Investigación", "Producción", "Agentes"],
     # "Datos": lo que alimenta o refleja la automatización. Solo queda Analíticas (la medición
     # que cierra el loop); la aporta `metricas.toml`.

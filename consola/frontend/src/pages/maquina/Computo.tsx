@@ -5,14 +5,15 @@
  * la cola in-place. `?proceso=` enfoca a un motor.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, ArrowLeft, Clock, Cpu, RefreshCw, Trash2, Users } from "lucide-react";
+import { Activity, Clock, Cpu, RefreshCw, Trash2, Users } from "lucide-react";
 import * as React from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { confirmar } from "@/components/comunes/confirmar";
-import { Button } from "@/components/ui/button";
+import { AccionesPagina } from "@/components/layout/encabezado";
+import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
@@ -125,19 +126,9 @@ export default function Computo() {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const volver = (
-    <Button variant="ghost" size="sm" asChild className="mb-2 -ml-2 w-fit">
-      <Link to={`/maquina/agentes${proceso ? `?proceso=${proceso}` : ""}`}>
-        <ArrowLeft className="mr-1 h-4 w-4" aria-hidden="true" />
-        Agentes
-      </Link>
-    </Button>
-  );
-
   if (cola.isError) {
     return (
       <div className="space-y-4 p-4">
-        {volver}
         <BloqueError
           titulo="No se pudo leer la cola"
           mensaje={mensajeError(cola.error)}
@@ -150,7 +141,6 @@ export default function Computo() {
   if (cola.isPending) {
     return (
       <div className="space-y-4 p-4">
-        {volver}
         <Skeleton className="h-24 w-full rounded-xl" />
         <Skeleton className="h-48 w-full rounded-xl" />
       </div>
@@ -163,20 +153,16 @@ export default function Computo() {
 
   return (
     <div className="space-y-4 p-4">
-      {volver}
-
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-lg font-semibold">Cómputo y cola</h1>
-        <div className="flex items-center gap-1">
-          <Button variant="outline" size="sm" onClick={refrescar} disabled={cola.isFetching}>
-            <RefreshCw className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+      {/* El título lo pinta la tira de pestañas del hub (Cómputo); aquí solo el menú de acciones. */}
+      <AccionesPagina>
+        <MenuAcciones>
+          <ItemMenu icono={RefreshCw} onClick={refrescar} disabled={cola.isFetching}>
             Actualizar
-          </Button>
+          </ItemMenu>
           {esAdmin && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-destructive hover:text-destructive"
+            <ItemMenu
+              icono={Trash2}
+              className="text-destructive"
               disabled={purgar.isPending}
               onClick={async () => {
                 if (
@@ -192,12 +178,11 @@ export default function Computo() {
                 }
               }}
             >
-              <Trash2 className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
               Purgar cola
-            </Button>
+            </ItemMenu>
           )}
-        </div>
-      </div>
+        </MenuAcciones>
+      </AccionesPagina>
 
       {/* Enfoque a un motor (?proceso=). */}
       {proceso && (

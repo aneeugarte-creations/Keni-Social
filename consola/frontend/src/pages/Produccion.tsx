@@ -1,11 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { Coins, Factory, RefreshCw } from "lucide-react";
+import { Factory, RefreshCw } from "lucide-react";
 import * as React from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
-import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
+import { AccionesPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,16 +38,15 @@ const PAGINA = 20;
  * etapa con el nombre de su trabajo — mismo aspecto, mismas métricas (tokens · coste ·
  * duración), mismo detalle entrada/salida al abrirla.
  *
- * La ECONOMÍA de tokens (conteos del periodo + desglose por tipo/día) se MOVIÓ a la página
- * Agentes (`/maquina/agentes`), donde vive JUNTA con el gasto por proceso y el pool reactivo;
- * aquí queda solo el feed. El catálogo de tipos del filtro se deriva del propio feed (no hay
- * ya una query aparte de agregados solo para eso).
+ * La ECONOMÍA de tokens (conteos del periodo + desglose por tipo/día) vive en su propia página
+ * (`/maquina/economia`); aquí queda solo el feed/traza. El catálogo de tipos del filtro se deriva
+ * del propio feed (no hay ya una query aparte de agregados solo para eso).
  *
- * `embebido`: cuando el feed se monta DENTRO de la página Agentes (sección «Actividad»,
- * `/maquina/agentes`), no aporta su propio título/menú de página (los pone Agentes) ni el
- * enlace «Economía de tokens → Agentes» (sería circular). Como página suelta sí los pinta.
+ * Es la pestaña «Actividad» del hub de la máquina (`/maquina/actividad`): el título lo pinta la
+ * tira de pestañas del hub, así que esta página NO porta su propio `<TituloPagina/>`; solo aporta
+ * el menú de acciones (Actualizar) a la cabecera.
  */
-export default function Produccion({ embebido = false }: { embebido?: boolean }) {
+export default function Produccion() {
   const navigate = useNavigate();
   // La marca la MANDA el switch global de la barra superior (workspace); Producción no
   // tiene selector propio. `marcaActiva` es el id canónico (o null = "Todas", solo admin).
@@ -117,31 +116,14 @@ export default function Produccion({ embebido = false }: { embebido?: boolean })
 
   return (
     <div className="space-y-6">
-      {/* Como página suelta porta su título/menú a la cabecera y enlaza a la economía (en Workers).
-          Embebido en Workers (sección «Actividad») no los pinta: el título y el menú son de la Cola
-          y el enlace a la economía sería circular (la economía vive en la misma página). */}
-      {!embebido && (
-        <>
-          <TituloPagina titulo="Producción" icono={Factory} />
-          <AccionesPagina>
-            <MenuAcciones>
-              <ItemMenu icono={RefreshCw} onClick={refrescar} disabled={listaQuery.isFetching}>
-                Actualizar
-              </ItemMenu>
-            </MenuAcciones>
-          </AccionesPagina>
-
-          {/* La economía de tokens (conteos + desglose por tipo/día) se unificó en la página
-              Agentes, junto al gasto por proceso y el pool. Aquí queda el feed; enlace breve allí. */}
-          <Link
-            to="/maquina/agentes"
-            className="flex items-center gap-1.5 text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-          >
-            <Coins className="h-4 w-4" aria-hidden="true" />
-            Economía de tokens → Agentes
-          </Link>
-        </>
-      )}
+      {/* El título lo pinta la tira de pestañas del hub (Actividad); aquí solo el menú de acciones. */}
+      <AccionesPagina>
+        <MenuAcciones>
+          <ItemMenu icono={RefreshCw} onClick={refrescar} disabled={listaQuery.isFetching}>
+            Actualizar
+          </ItemMenu>
+        </MenuAcciones>
+      </AccionesPagina>
 
       {/* Filtros del feed: etapa (runs), estado (todo), tipo (trabajos sueltos). */}
       <div className="flex flex-wrap items-center gap-2">

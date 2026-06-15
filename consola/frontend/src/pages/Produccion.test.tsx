@@ -103,18 +103,16 @@ describe("Producción (feed unificado: runs del pipeline + actividad suelta)", (
     vi.unstubAllGlobals();
   });
 
-  it("la economía de tokens se movió a Agentes: aquí solo queda el feed + un enlace", async () => {
+  it("es la pestaña Actividad del hub: solo el feed/traza, sin economía ni título propio", async () => {
     stubFetch();
     renderConProviders(<Produccion />);
     // Espera al feed para asegurar el render completo.
     expect(await screen.findByText("Cómo gana la FIFA")).toBeInTheDocument();
-    // Los KPIs de economía (Trabajos IA / Coste total / Tiempo de cómputo) ya NO viven aquí.
+    // Los KPIs de economía (Trabajos IA / Coste total / Tiempo de cómputo) viven en /maquina/economia.
     expect(screen.queryByText("Trabajos IA")).toBeNull();
     expect(screen.queryByText("Coste total")).toBeNull();
-    expect(screen.queryByText("Tiempo de cómputo")).toBeNull();
-    // En su lugar, un enlace breve a la página Agentes.
-    const enlace = screen.getByRole("link", { name: /Econom[ií]a de tokens.*Agentes/i });
-    expect(enlace).toHaveAttribute("href", "/maquina/agentes");
+    // El enlace «Economía de tokens → Agentes» desapareció: la economía es una pestaña hermana.
+    expect(screen.queryByRole("link", { name: /Econom[ií]a de tokens/i })).toBeNull();
   });
 
   it("junto a los filtros solo va el CONTEO del feed", async () => {

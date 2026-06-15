@@ -43,16 +43,22 @@ const GeneracionDetalle = lazy(() => import("@/pages/GeneracionDetalle"));
 // del worker/cola).
 const CockpitInvestigacion = lazy(() => import("@/pages/maquina/CockpitInvestigacion"));
 const CockpitProduccion = lazy(() => import("@/pages/maquina/CockpitProduccion"));
-// «Agentes»: la casa de los dos agentes de ejecución de la máquina
-// —Workers (pool reactivo) y Daemons (proactivos)— + economía y actividad.
+// «Agentes»: la pestaña de aterrizaje del hub de la máquina («sala de máquinas»): los AGENTES IA
+// proactivos (daemons clase=ia que corren `claude -p`) con su control in-place. Sus pestañas
+// hermanas son Cómputo, Economía y Actividad.
 const Agentes = lazy(() => import("@/pages/maquina/Agentes"));
 // Detalle de UN agente/daemon (`/maquina/agentes/:agente`): su estado, log por barrido y
 // controles in-place (encendido, barrer, editar prompt). Filtra la lista de daemons por nombre.
 const AgenteDetalle = lazy(() => import("@/pages/maquina/AgenteDetalle"));
 // «Cómputo y cola» (`/maquina/computo`): la cola por dentro (en curso + esperando) con su control
-// admin (priorizar/cancelar/reintentar/purgar) + estado de slots y presupuesto. Al mismo nivel
-// que las páginas de detalle de agente; la banda de Agentes enlaza aquí.
+// admin (priorizar/cancelar/reintentar/purgar) + estado de slots. Pestaña del hub de la máquina.
 const Computo = lazy(() => import("@/pages/maquina/Computo"));
+// «Economía» (`/maquina/economia`): la contabilidad de la máquina (presupuesto + parada de
+// emergencia + economía de tokens desglosada por motor). Pestaña del hub de la máquina.
+const Economia = lazy(() => import("@/pages/maquina/Economia"));
+// «Actividad» (`/maquina/actividad`): la TRAZA unificada de la máquina (runs del pipeline +
+// trabajos sueltos), antes embebida en Agentes. Es el feed de Producción como página propia.
+const Actividad = lazy(() => import("@/pages/Produccion"));
 
 // Feed móvil para revisores (#qa-movil-feed): superficie tipo red social, una
 // columna, SIN sidebar. Vive FUERA del AppShell (layout propio) y se llega por
@@ -291,7 +297,7 @@ export const router = createBrowserRouter([
           {
             path: "produccion",
             children: [
-              { index: true, element: <Navigate to="/maquina/agentes" replace /> },
+              { index: true, element: <Navigate to="/maquina/actividad" replace /> },
               { path: "pipelines/:id", element: <PipelineDetalle /> },
               // Detalle de un trabajo SUELTO (generación fuera del pipeline): mismo in/out.
               { path: "actividad/:id", element: <GeneracionDetalle /> },
@@ -328,6 +334,9 @@ export const router = createBrowserRouter([
           { path: "agentes/:agente", element: <AgenteDetalle /> },
           // Cómputo y cola (estática; no choca con la dinámica `agentes/:agente`).
           { path: "computo", element: <Computo /> },
+          // Economía (contabilidad) y Actividad (traza): pestañas hermanas del hub de la máquina.
+          { path: "economia", element: <Economia /> },
+          { path: "actividad", element: <Actividad /> },
           // Compat: la página se llamaba «Workers» (`/maquina/cola`); redirige preservando
           // `?proceso=` (los cockpits enlazan aquí prefiltrado).
           { path: "cola", element: <RedirigirCola /> },

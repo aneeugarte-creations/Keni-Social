@@ -339,11 +339,14 @@ describe("apps-scope · helpers", () => {
       // /contenido/texto (hub) → sus sub-pestañas
       "/contenido/texto/documentos",
       "/contenido/texto/estrategia",
-      // Bloque «Máquina»: tres páginas planas (no hubs), una por motor. Investigación y Producción
-      // son cockpits; Agentes el dashboard de cola/economía/actividad/daemons.
+      // Bloque «Máquina»: los cockpits Investigación/Producción son páginas planas; Agentes es el
+      // hub «sala de máquinas» → se aplana a sus pestañas (Agentes/Cómputo/Economía/Actividad).
       "/maquina/investigacion",
       "/maquina/produccion",
       "/maquina/agentes",
+      "/maquina/computo",
+      "/maquina/economia",
+      "/maquina/actividad",
     ]);
   });
 
