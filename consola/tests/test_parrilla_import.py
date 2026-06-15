@@ -383,7 +383,21 @@ def test_componer_prompt_inserta_fragmentos_ambos_modos():
     assert "### HOJA: A" in p_txt                        # documento embebido en la cola
     assert '"operaciones"' in p_txt                      # esquema/contrato JSON
     assert "{{" not in p_txt                              # todos los marcadores sustituidos
+    # Encuadre GENÉRICO inyectado por código: anula el corte «si no es una parrilla, vacío» de las
+    # plantillas viejas del store (un solo evento — cartelera/nota/frase — también cuenta).
+    assert "UN SOLO evento" in p_txt
+    assert "NO sea una parrilla de turnos" in p_txt      # recordatorio final tras el documento
     # Modo RUTA: claude lee el fichero; aparece la ruta y NO hay documento embebido.
     p_ruta = pij.componer_prompt(ctx=_ctx(), ruta_doc="/tmp/rota.pdf")
     assert "/tmp/rota.pdf" in p_ruta
     assert "{{" not in p_ruta
+    assert "UN SOLO evento" in p_ruta                     # el encuadre va en ambos modos
+
+
+def test_componer_prompt_ancla_la_fecha_de_hoy_cuando_se_pasa():
+    # Con `hoy`, el prompt ancla las fechas relativas/sin año (notas, frases sueltas). Sin `hoy`,
+    # no aparece la frase de anclaje (los documentos de parrilla traen fechas explícitas).
+    con = pij.componer_prompt(ctx=_ctx(), texto_documento="fila", hoy="2026-06-15")
+    assert "2026-06-15" in con and "Hoy es 2026-06-15" in con
+    sin = pij.componer_prompt(ctx=_ctx(), texto_documento="fila")
+    assert "Hoy es" not in sin

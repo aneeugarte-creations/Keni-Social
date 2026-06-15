@@ -299,24 +299,44 @@ def componer_prompt(
         if hoy
         else ""
     )
+    # Encuadre GENÉRICO inyectado por CÓDIGO (no por la plantilla editable): la plantilla viva en
+    # el store de un equipo ya desplegado pudo sembrarse cuando esto solo importaba PARRILLAS de
+    # turnos —y remataba con «si no es una parrilla, vacío»—. Como `importar_semilla` no pisa el
+    # store, editar la SEMILLA no llega a ese equipo. Estos fragmentos sí (van en {{FUENTE}} y
+    # {{COLA_FUENTE}}, marcadores que toda versión de la plantilla conserva): generalizan el
+    # encuadre y ANULAN ese corte para que UN solo evento (cartelera, nota, frase) también cuente.
+    encuadre = (
+        "EXTRAES EVENTOS de lo que te den. La fuente puede ser CUALQUIER COSA (una parrilla/rota de "
+        "turnos, la cartelera o agenda de un recinto, una nota o página web de un evento, o una sola "
+        "frase) y el evento de CUALQUIER TIPO (un partido, un concierto, una función de lucha libre, "
+        "una rueda de prensa, un estreno, una conferencia…), no solo deportes ni turnos. Aunque haya "
+        "UN SOLO evento, extráelo: NO exijas que la fuente sea una parrilla completa. "
+    )
+    recordatorio_final = (
+        "\n\nIMPORTANTE: emite un `crear_evento` por CADA evento con fecha que aparezca arriba, "
+        "aunque sea uno solo y aunque la fuente NO sea una parrilla de turnos. Devuelve "
+        '`{"operaciones": []}` ÚNICAMENTE si no hay NINGÚN evento (ni turno) con fecha.'
+    )
 
     if texto_documento is not None:
         fuente = (
-            f"{ancla_hoy}El documento ya está TRANSCRITO a texto más abajo (es una hoja de "
-            "cálculo/CSV, una página web o texto plano). Trabaja EXCLUSIVAMENTE con ese texto; NO "
+            f"{ancla_hoy}{encuadre}El documento ya está TRANSCRITO a texto más abajo (es una hoja "
+            "de cálculo/CSV, una página web o texto plano). Trabaja EXCLUSIVAMENTE con ese texto; NO "
             "abras ni leas ningún fichero ni uses herramientas. IMPORTANTE: el documento puede "
             "tener VARIAS HOJAS/secciones, cada una marcada con una línea «### HOJA: <nombre>»; "
             "recórrelas TODAS y extrae las operaciones de CADA hoja (no te quedes solo en la primera)."
         )
         regla_fuente = "- No uses herramientas: todo lo que necesitas está en el texto de abajo."
-        cola_fuente = f"\n\nDOCUMENTO (transcripción):\n```\n{texto_documento}\n```"
+        cola_fuente = (
+            f"\n\nDOCUMENTO (transcripción):\n```\n{texto_documento}\n```{recordatorio_final}"
+        )
     else:
         fuente = (
-            f"{ancla_hoy}Lee EXCLUSIVAMENTE el documento en la ruta {ruta_doc} "
+            f"{ancla_hoy}{encuadre}Lee EXCLUSIVAMENTE el documento en la ruta {ruta_doc} "
             "(PDF, imagen/captura o Word)."
         )
         regla_fuente = "- No uses herramientas más allá de LEER el documento de la ruta indicada."
-        cola_fuente = ""
+        cola_fuente = recordatorio_final
 
     # Inserta los fragmentos calculados en la plantilla editable. El orden deja COLA_FUENTE (que
     # puede llevar el documento embebido del usuario) al final, para no reescanear su contenido.
