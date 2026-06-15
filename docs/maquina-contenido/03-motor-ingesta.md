@@ -85,7 +85,7 @@ categoría. Registra `daemons.iniciar_ingesta()` como los demás.
 
 En el bootstrap, si no hay `fuentes_rss`, **activa los presets** de
 `dominio/fuentes_presets` como `fuentes_rss` (idempotente por URL), con su
-`marca_sugerida`, `categoria` y `prioridad` por categoría. La semilla
+`marca_sugerida`, `categoria` y `prioridad` por categoría. La inicial
 (`fuentes_presets.json`) es el conjunto curado que el piloto dejó valioso en
 producción (marcas propias UnoTV / Claro Sports / Nación Gamer + externas con
 tráfico real); se siembra entera salvo plantillas y Google News. El equipo da de

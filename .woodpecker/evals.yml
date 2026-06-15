@@ -2,9 +2,9 @@
 #
 # El mayor hueco señalado por el AI Lead: NO había ningún eval de la calidad de la salida de IA.
 # Los prompts de la Biblioteca son editables EN VIVO sin red de regresión. Este pipeline corre el
-# harness determinista (`keni_consola.evals`) sobre los casos golden semilla: si alguien debilita
+# harness determinista (`keni_consola.evals`) sobre los casos golden inicial: si alguien debilita
 # la MAQUINARIA DE VERIFICACIÓN (lint de `patrones_marca`, gate `_calidad`, límites de red) o mueve
-# los PERFILES MEDIDOS de marca (`patrones_semilla/*.json`), algún caso semilla cambia de veredicto
+# los PERFILES MEDIDOS de marca (`patrones_inicial/*.json`), algún caso inicial cambia de veredicto
 # y este pipeline lo detecta.
 #
 # BARATO y DETERMINISTA: cero `claude -p`, SIN Postgres ni red (los checks son puros y el perfil de
@@ -17,10 +17,10 @@ when:
       include:
         - "consola/evals/**"
         - "consola/src/keni_consola/evals/**"
-        - "consola/tests/test_evals_semilla.py"
+        - "consola/tests/test_evals_inicial.py"
         # Maquinaria de verificación reutilizada por el harness: un cambio aquí puede mover veredictos.
         - "consola/src/keni_consola/patrones_marca.py"
-        - "consola/src/keni_consola/patrones_semilla/*.json"
+        - "consola/src/keni_consola/patrones_inicial/*.json"
         - "consola/src/keni_consola/pipeline_contenido/_calidad.py"
         - "consola/src/keni_consola/dominio/copy.py"
         - "keni-shared/src/keni_shared/limites_plataforma.py"
@@ -32,7 +32,7 @@ steps:
     commands:
       - python -m pip install --upgrade pip
       - python -m pip install -e './keni-shared[dev]' -e './mcp-metricas[dev]' -e './consola[dev]'
-      # Red de regresión (autoridad): los casos semilla deben mantener su veredicto. Sin Postgres.
-      - python -m pytest consola/tests/test_evals_semilla.py -q
+      # Red de regresión (autoridad): los casos inicial deben mantener su veredicto. Sin Postgres.
+      - python -m pytest consola/tests/test_evals_inicial.py -q
       # Reporte legible en el log + gate redundante (--estricto: exit!=0 si algún caso ya no cuadra).
       - python -m keni_consola.evals --estricto --verboso

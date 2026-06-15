@@ -16,7 +16,7 @@ from ._comun import (
     TextoError,
 )
 from ._crud import listar
-from ._semilla import cuerpo_efectivo
+from ._inicial import cuerpo_efectivo
 
 __all__ = [
     "editoriales_de_marca",

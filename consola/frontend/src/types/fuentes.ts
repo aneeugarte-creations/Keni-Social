@@ -61,7 +61,7 @@ export interface FuenteHub {
   ultima_actualizacion: string;
   ultimo_error: string;
   ultimo_conteo: number;
-  /** Id de la `fuentes_rss` de la que se sembró (vacío si nació en el hub). */
+  /** Id de la `fuentes_rss` de la que se inicializó (vacío si nació en el hub). */
   origen_rss_id: string;
 }
 

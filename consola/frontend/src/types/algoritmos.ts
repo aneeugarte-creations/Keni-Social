@@ -92,7 +92,7 @@ export interface RespuestaRefrescarAlgoritmos {
   resumen: ResumenRefrescoAlgoritmos;
 }
 
-export interface RespuestaSembrarAlgoritmos {
+export interface RespuestaInicializarAlgoritmos {
   creadas: FuenteAlgoritmo[];
   total: number;
 }

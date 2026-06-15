@@ -76,7 +76,7 @@ def agrupar_por_eje(
     "Sin …" siempre va al final (`id=""`). El engagement es la MEDIA de los engagement de
     las piezas del cubo (mismo criterio que `analitica_por_etiqueta`), 0.0 si no hay piezas.
     """
-    # Cubos sembrados con las etiquetas DEFINIDAS de la marca (aparecen aunque tengan 0
+    # Cubos inicializados con las etiquetas DEFINIDAS de la marca (aparecen aunque tengan 0
     # piezas) + el cubo "Sin …". Clave del acumulador = nombre del cubo.
     acum: dict[str, dict[str, Any]] = {}
     nombre_a_id: dict[str, str] = {}

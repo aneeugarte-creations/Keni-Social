@@ -1,8 +1,8 @@
 """Red de regresión del harness de EVALS (artefacto: el hueco "no hay eval de calidad de IA").
 
-Garantiza que los casos golden SEMILLA mantienen su veredicto esperado: un cambio que degrade
+Garantiza que los casos golden INICIAL mantienen su veredicto esperado: un cambio que degrade
 la MAQUINARIA DE VERIFICACIÓN (lint de `patrones_marca`, gate `_revisar`, límites de red) o los
-PERFILES MEDIDOS de marca (`patrones_semilla/*.json`) flipa algún caso y este test lo caza. NO
+PERFILES MEDIDOS de marca (`patrones_inicial/*.json`) flipa algún caso y este test lo caza. NO
 toca BD ni red (determinista, barato) — corre en cualquier pipeline sin Postgres.
 
 Alcance HONESTO: este test NO genera copy con el modelo, así que NO ve ediciones del TEXTO de un
@@ -22,15 +22,15 @@ def _casos():
     return cargar_casos()  # consola/evals/casos por defecto
 
 
-def test_hay_casos_semilla_de_ambos_signos():
-    """El set semilla debe tener casos que PASAN y casos que FALLAN (si no, no prueba nada)."""
+def test_hay_casos_inicial_de_ambos_signos():
+    """El set inicial debe tener casos que PASAN y casos que FALLAN (si no, no prueba nada)."""
     casos = _casos()
-    assert len(casos) >= 6, "se esperaban al menos 6 casos semilla"
+    assert len(casos) >= 6, "se esperaban al menos 6 casos inicial"
     assert any(c.espera == PASA for c in casos), "falta al menos un caso que deba PASAR"
     assert any(c.espera == FALLA for c in casos), "falta al menos un caso que deba FALLAR"
 
 
-def test_casos_semilla_cuadran_todos():
+def test_casos_inicial_cuadran_todos():
     """Veredicto efectivo == expectativa golden para TODOS los casos (score 100%).
 
     Esta es la afirmación central: las piezas marcadas `pasa` pasan los checks deterministas y
@@ -40,7 +40,7 @@ def test_casos_semilla_cuadran_todos():
         (r.caso.id, r.caso.espera, r.veredicto, r.dimensiones_fallidas)
         for r in reporte.discrepancias
     ]
-    assert reporte.score == 1.0, f"casos semilla que ya no cuadran: {discrepancias}"
+    assert reporte.score == 1.0, f"casos inicial que ya no cuadran: {discrepancias}"
 
 
 def test_cada_caso_falla_en_su_dimension_declarada():

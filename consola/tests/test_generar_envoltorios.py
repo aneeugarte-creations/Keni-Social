@@ -3,13 +3,13 @@
 Regla de producto: TODOS los prompts de IA se gestionan desde la Biblioteca. Estos tests
 verifican la generación de envoltorios del dominio:
 
-  - Salida byte-idéntica: con la semilla sin editar, cada instrucción compuesta es la
-    esperada. Si la semilla o el ensamblaje divergen, esto revienta.
-  - La SEMILLA es la ÚNICA fuente del texto: solo «sin emojis» conserva un respaldo MÍNIMO,
+  - Salida byte-idéntica: con la inicial sin editar, cada instrucción compuesta es la
+    esperada. Si la inicial o el ensamblaje divergen, esto revienta.
+  - La INICIAL es la ÚNICA fuente del texto: solo «sin emojis» conserva un respaldo MÍNIMO,
     `INSTRUCCION_SIN_EMOJIS`.
   - Un doc EDITADO en el store gana (el texto sale de la Biblioteca, los valores del código).
-  - Sin doc NI semilla, los envoltorios estructurales degradan a vacío con warning (camino
-    inalcanzable: lo cubre el test de cobertura semilla↔código).
+  - Sin doc NI inicial, los envoltorios estructurales degradan a vacío con warning (camino
+    inalcanzable: lo cubre el test de cobertura inicial↔código).
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from keni_consola.dominio import generar
 
 @pytest.fixture(autouse=True)
 def _store_tmp(monkeypatch, tmp_path):
-    """Store de la Biblioteca FALSO y VACÍO en tmp: el cuerpo efectivo cae a la SEMILLA."""
+    """Store de la Biblioteca FALSO y VACÍO en tmp: el cuerpo efectivo cae a la INICIAL."""
     monkeypatch.setenv("KENI_TEXTO_DIR", str(tmp_path / "texto"))
 
 
@@ -50,7 +50,7 @@ _FOTOS = [
 
 
 # --------------------------------------------------------------------------- #
-# Regresión de oro: semilla sin editar => composición byte-idéntica a la previa #
+# Regresión de oro: inicial sin editar => composición byte-idéntica a la previa #
 # --------------------------------------------------------------------------- #
 
 
@@ -87,16 +87,16 @@ def test_oro_copy_unico_con_carrusel_byte_identico():
 
 
 # --------------------------------------------------------------------------- #
-# La SEMILLA es la ÚNICA fuente del texto (ya no hay _FALLBACK_* duplicado)     #
+# La INICIAL es la ÚNICA fuente del texto (ya no hay _FALLBACK_* duplicado)     #
 # --------------------------------------------------------------------------- #
 
 
-def test_sin_emojis_semilla_coincide_con_su_fallback_minimo():
+def test_sin_emojis_inicial_coincide_con_su_fallback_minimo():
     """«sin emojis» conserva un respaldo MÍNIMO en código (`INSTRUCCION_SIN_EMOJIS`): debe
-    seguir coincidiendo con su semilla. Los envoltorios estructurales (redes/carrusel/copy
+    seguir coincidiendo con su inicial. Los envoltorios estructurales (redes/carrusel/copy
     unificado) ya no tienen copia en código; su byte-exactitud la fijan los tests de ORO."""
     assert (
-        libtexto.cuerpo_semilla(generar.PROMPT_ENVOLTORIO_SIN_EMOJIS).strip()
+        libtexto.cuerpo_inicial(generar.PROMPT_ENVOLTORIO_SIN_EMOJIS).strip()
         == generar.INSTRUCCION_SIN_EMOJIS
     )
 
@@ -133,26 +133,26 @@ def test_doc_editado_de_carrusel_y_copy_unico(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# Sin doc NI semilla: degradación (con warning). Camino inalcanzable en la       #
-# práctica (lo cubre el test de cobertura semilla↔código).                       #
+# Sin doc NI inicial: degradación (con warning). Camino inalcanzable en la       #
+# práctica (lo cubre el test de cobertura inicial↔código).                       #
 # --------------------------------------------------------------------------- #
 
 
 @pytest.fixture
 def biblioteca_rota(monkeypatch, tmp_path):
-    """Ni store ni semilla: `cuerpo_efectivo` revienta y la semilla apunta a un dir vacío."""
+    """Ni store ni inicial: `cuerpo_efectivo` revienta y la inicial apunta a un dir vacío."""
 
     def boom(_pid: str) -> str:
         raise RuntimeError("store roto (simulado)")
 
     monkeypatch.setattr(libtexto, "cuerpo_efectivo", boom)
-    monkeypatch.setenv("KENI_TEXTO_SEMILLA", str(tmp_path / "semilla-vacia"))
+    monkeypatch.setenv("KENI_TEXTO_INICIAL", str(tmp_path / "inicial-vacia"))
 
 
-def test_sin_doc_ni_semilla_degrada_con_warning(biblioteca_rota, caplog):
+def test_sin_doc_ni_inicial_degrada_con_warning(biblioteca_rota, caplog):
     """«sin emojis» conserva su fallback mínimo en código; los envoltorios estructurales
     (sin copia en código) degradan a vacío. Todos dejan warning. El test de cobertura
-    semilla↔código garantiza que la semilla SIEMPRE está, así que esto no pasa en producción."""
+    inicial↔código garantiza que la inicial SIEMPRE está, así que esto no pasa en producción."""
     with caplog.at_level("WARNING", logger="keni_consola.generar"):
         assert generar.instruccion_sin_emojis() == _GOLD_SIN_EMOJIS  # respaldo mínimo seguro
         assert generar.instruccion_redes(["x", "facebook"]) == ""

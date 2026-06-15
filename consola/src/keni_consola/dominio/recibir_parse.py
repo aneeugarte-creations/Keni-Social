@@ -63,7 +63,7 @@ _LISTA_MARCAS = ", ".join(etiqueta for _id, etiqueta in marcas.opciones()) or "(
 # Los prompts por cajón viven en la Biblioteca de Texto como prompts EDITABLES (carpeta
 # `insumos`, visibles en la pestaña «Prompts»), no hardcodeados. La RUTA del archivo a leer se
 # inserta donde el equipo ponga el marcador `_MARCA_RUTA`. Si la lectura del store fallara, la
-# red es la SEMILLA del paquete (`libtexto.cuerpo_semilla`), no un texto duplicado aquí. El
+# red es la INICIAL del paquete (`libtexto.cuerpo_inicial`), no un texto duplicado aquí. El
 # cajón usa "_" (p.ej. `eventos_claro`); el id de Biblioteca usa "-".
 _PROMPT_INSUMO_IDS: dict[str, str] = {
     "portal": "prompt/recibir/portal",
@@ -77,11 +77,11 @@ _MARCA_RUTA = "{{RUTA}}"
 
 
 def _prompt_de_cajon(cajon: str, ruta: str) -> str:
-    """Prompt EFECTIVO del cajón (Biblioteca: store del equipo > semilla del paquete).
+    """Prompt EFECTIVO del cajón (Biblioteca: store del equipo > inicial del paquete).
 
     Inserta `ruta` donde esté `_MARCA_RUTA`; si el equipo quitó el marcador, adjunta la ruta al
     final para no perderla. Import diferido de `libtexto` (evita ciclos); si el store fallara,
-    cae a la SEMILLA del paquete (fuente única del prompt, sin duplicados en el código).
+    cae a la INICIAL del paquete (fuente única del prompt, sin duplicados en el código).
     """
     from .. import libtexto
 
@@ -90,7 +90,7 @@ def _prompt_de_cajon(cajon: str, ruta: str) -> str:
     except Exception:  # noqa: BLE001 -- nunca dejar el parseo sin prompt por un fallo de lectura
         plantilla = ""
     if not plantilla:
-        plantilla = libtexto.cuerpo_semilla(_PROMPT_INSUMO_IDS[cajon]).strip()
+        plantilla = libtexto.cuerpo_inicial(_PROMPT_INSUMO_IDS[cajon]).strip()
     if _MARCA_RUTA in plantilla:
         return plantilla.replace(_MARCA_RUTA, ruta)
     return f"{plantilla}\n\nArchivo a leer: {ruta}"

@@ -1,7 +1,7 @@
-"""Tests de la lógica PURA de Algoritmos (clasificación + semilla). SIN red ni BD.
+"""Tests de la lógica PURA de Algoritmos (clasificación + inicial). SIN red ni BD.
 
 `clasificar`, `_detectar_plataforma`, `texto_propuesta_ficha`, `fuentes_pendientes` y la
-lista `FUENTES_SEMILLA` son deterministas y no tocan persistencia: se prueban directos.
+lista `FUENTES_INICIAL` son deterministas y no tocan persistencia: se prueban directos.
 La ingesta end-to-end (descarga + persistencia) vive en `test_api_algoritmos.py`.
 """
 
@@ -94,12 +94,12 @@ def test_fuentes_pendientes_declara_los_huecos_sin_feed_oficial():
     assert {"tiktok", "instagram", "x"} <= pendientes
 
 
-def test_fuentes_semilla_tienen_url_valida_y_vocabulario_correcto():
-    for s in algoritmos.FUENTES_SEMILLA:
+def test_fuentes_inicial_tienen_url_valida_y_vocabulario_correcto():
+    for s in algoritmos.FUENTES_INICIAL:
         assert s["nombre"] and s["url"].startswith("https://")
         assert algoritmos.es_plataforma(s["plataforma"])
         assert algoritmos.es_tipo(s["tipo"])
-        # La URL semilla pasa la validación de esquema del guard (sin tocar DNS aquí:
+        # La URL inicial pasa la validación de esquema del guard (sin tocar DNS aquí:
         # solo comprobamos que el esquema es http/https, no la resolución).
         assert s["url"].split("://", 1)[0] in ("http", "https")
 

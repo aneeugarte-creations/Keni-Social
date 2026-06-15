@@ -59,7 +59,7 @@ def test_bloque_tolera_fecha_invalida_sin_romper():
 # --------------------------------------------------------------------------- #
 
 
-def _sembrar_contexto(repos, items: list[dict]) -> None:
+def _inicializar_contexto(repos, items: list[dict]) -> None:
     """Siembra ítems en un lote del cajón `contexto` (defaults de indicación)."""
     lote = repos.crear_insumo_lote(fecha=items[0]["fecha"], cajon="contexto", estado="listo")
     repos.crear_insumo_items([
@@ -71,7 +71,7 @@ def test_vigentes_filtra_marca_ventana_y_tipo(entorno):
     from keni_consola import repos
 
     hoy = date(2026, 6, 11)
-    _sembrar_contexto(repos, [
+    _inicializar_contexto(repos, [
         {"fecha": "2026-06-11", "marca": "claro-sports", "titulo": "Prioridad al Mundial"},
         {"fecha": "2026-06-10", "marca": "", "titulo": "Sin marca aplica a todas"},
         {"fecha": "2026-06-04", "marca": "claro-sports", "titulo": "Justo en el borde (7 días)"},
@@ -94,7 +94,7 @@ def test_vigentes_respeta_el_tope_de_items(entorno):
     from keni_consola import repos
 
     hoy = date(2026, 6, 11)
-    _sembrar_contexto(repos, [
+    _inicializar_contexto(repos, [
         {"fecha": "2026-06-11", "marca": "claro-sports", "titulo": f"Indicación {i:02d}"}
         for i in range(indicaciones.TOPE_ITEMS + 5)
     ])
@@ -111,7 +111,7 @@ def test_componer_copy_inyecta_indicaciones_vigentes_de_la_marca(entorno):
     from keni_consola import repos
 
     hoy = hoy_utc()
-    _sembrar_contexto(repos, [
+    _inicializar_contexto(repos, [
         {
             "fecha": hoy.isoformat(),
             "marca": "claro-sports",

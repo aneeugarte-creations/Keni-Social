@@ -10,7 +10,7 @@ import type {
   RespuestaFuenteAlgoritmo,
   RespuestaMensaje,
   RespuestaRefrescarAlgoritmos,
-  RespuestaSembrarAlgoritmos,
+  RespuestaInicializarAlgoritmos,
 } from "@/types";
 
 export const apiAlgoritmos = {
@@ -33,8 +33,8 @@ export const apiAlgoritmos = {
       metodo: "POST",
       json: fuente ? { fuente } : {},
     }),
-  sembrarAlgoritmos: () =>
-    peticion<RespuestaSembrarAlgoritmos>("/algoritmos/sembrar", { metodo: "POST" }),
+  inicializarAlgoritmos: () =>
+    peticion<RespuestaInicializarAlgoritmos>("/algoritmos/inicializar", { metodo: "POST" }),
   crearFuenteAlgoritmo: (cuerpo: CuerpoFuenteAlgoritmo) =>
     peticion<RespuestaFuenteAlgoritmo>("/algoritmos/fuentes", { metodo: "POST", json: cuerpo }),
   actualizarFuenteAlgoritmo: (id: string, cuerpo: CuerpoFuenteAlgoritmo) =>

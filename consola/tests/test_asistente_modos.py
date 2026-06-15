@@ -1,7 +1,7 @@
 """Instrucciones por MODO del asistente del tablero (`dominio.asistente`). PURO, sin BD.
 
 Las instrucciones aditivas de los modos `variantes`/`resumir` viven SOLO en la Biblioteca/
-semilla (`prompt/asistente/<modo>`, editables).
+inicial (`prompt/asistente/<modo>`, editables).
 Solo se cubre la composición del texto base (el lanzamiento delega en `dominio.generar`,
 cubierto en sus propios tests).
 """
@@ -15,7 +15,7 @@ from keni_consola.dominio import asistente
 
 @pytest.fixture(autouse=True)
 def _texto_tmp(monkeypatch, tmp_path):
-    # Aislar el store de la Biblioteca: sin store, `cuerpo_efectivo` cae a la semilla del paquete.
+    # Aislar el store de la Biblioteca: sin store, `cuerpo_efectivo` cae a la inicial del paquete.
     monkeypatch.setenv("KENI_TEXTO_DIR", str(tmp_path / "texto"))
     return tmp_path
 
@@ -31,8 +31,8 @@ def test_modo_generar_no_anade_instruccion():
     ("variantes", "TRES variantes"),
     ("resumir", "BREVE"),
 ])
-def test_instruccion_del_modo_sale_de_la_semilla(modo, esperado):
-    # Sin store, la instrucción aditiva viene del doc semilla `prompt/asistente/<modo>`.
+def test_instruccion_del_modo_sale_de_la_inicial(modo, esperado):
+    # Sin store, la instrucción aditiva viene del doc inicial `prompt/asistente/<modo>`.
     base = asistente.construir_texto_base(
         modo=modo, titulo="Título", descripcion="Brief", notas=""
     )
@@ -43,7 +43,7 @@ def test_instruccion_del_modo_sale_de_la_semilla(modo, esperado):
 def test_instruccion_editada_en_biblioteca_gana():
     from keni_consola import libtexto
 
-    libtexto.importar_semilla()
+    libtexto.importar_inicial()
     libtexto.guardar("prompt/asistente/resumir", cuerpo="RESUME EN UNA LÍNEA.")
     base = asistente.construir_texto_base(
         modo="resumir", titulo="T", descripcion="D", notas=""
@@ -52,11 +52,11 @@ def test_instruccion_editada_en_biblioteca_gana():
     assert "BREVE" not in base
 
 
-def test_sin_doc_ni_semilla_degrada_sin_instruccion(monkeypatch, tmp_path):
-    # La semilla es la única fuente. Sin doc NI semilla, el modo degrada a SIN instrucción aditiva.
-    # El test de cobertura semilla↔código garantiza que la semilla SIEMPRE está,
+def test_sin_doc_ni_inicial_degrada_sin_instruccion(monkeypatch, tmp_path):
+    # La inicial es la única fuente. Sin doc NI inicial, el modo degrada a SIN instrucción aditiva.
+    # El test de cobertura inicial↔código garantiza que la inicial SIEMPRE está,
     # así que este camino es inalcanzable en producción.
-    monkeypatch.setenv("KENI_TEXTO_SEMILLA", str(tmp_path / "semilla-vacia"))
+    monkeypatch.setenv("KENI_TEXTO_INICIAL", str(tmp_path / "inicial-vacia"))
     base = asistente.construir_texto_base(
         modo="variantes", titulo="T", descripcion="D", notas=""
     )

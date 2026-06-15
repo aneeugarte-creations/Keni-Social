@@ -112,7 +112,7 @@ def main() -> int:
         d = libtexto.migrar_descripciones_editorial()
         if d:
             print(f"Texto: {d} editorial(es) con descripcion/titulo de plantilla vieja corregidos.")
-        n = libtexto.importar_semilla()
+        n = libtexto.importar_inicial()
         if n:
             print(f"Texto: {n} documento(s) base importados.")
         # Linea base en git: cada doc inicializado con HEAD (snapshot estable para los pipelines).

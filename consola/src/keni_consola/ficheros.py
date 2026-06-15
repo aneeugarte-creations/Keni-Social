@@ -4,7 +4,7 @@ Los YAML estan organizados POR MARCA (agente = marca = carpeta), raiz =
 `KENI_CONSOLA_RAIZ` (def `~/keni-proyectos`):
 
     <raiz>/<marca>/
-        marca.yaml                  # id, etiqueta, id_metricas (al sembrar la marca)
+        marca.yaml                  # id, etiqueta, id_metricas (al inicializar la marca)
         CLAUDE.md                   # minimo, si falta
         historial/<YYYY>/<MM>/<id>.yaml
 
@@ -89,11 +89,11 @@ def carpeta_marca(marca: str) -> Path:
     """Carpeta `<raiz>/<marca>/`, creando `marca.yaml` y `CLAUDE.md` minimos si faltan."""
     carpeta = raiz_datos() / _slug_marca(marca)
     carpeta.mkdir(parents=True, exist_ok=True)
-    _sembrar_marca(carpeta, marca)
+    _inicializar_marca(carpeta, marca)
     return carpeta
 
 
-def _sembrar_marca(carpeta: Path, marca: str) -> None:
+def _inicializar_marca(carpeta: Path, marca: str) -> None:
     """Crea `marca.yaml` (id/etiqueta/id_metricas) y un `CLAUDE.md` minimo si no existen."""
     meta = carpeta / "marca.yaml"
     if not meta.exists() and marca:

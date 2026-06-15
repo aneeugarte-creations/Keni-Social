@@ -187,7 +187,7 @@ if [ "$BACK_CAMBIO" = 1 ]; then
   # NO corre en su arranque: la materializamos aquí para que los prompts/editorial NUEVOS de la
   # imagen aparezcan en el estudio. Idempotente; no pisa ediciones del equipo.
   echo "==> [4b/6] inicializa Texto: importa prompts/editorial base que falten (idempotente)"
-  $DC run --rm --no-deps -T back python -m keni_consola.sembrar
+  $DC run --rm --no-deps -T back python -m keni_consola.inicializar
 else
   echo "==> [4/6] back sin cambios — esquema ya vigente, se omite la migración/inicialización"
 fi

@@ -66,7 +66,7 @@ export function DialogoCampania({
   const [hashtagsTexto, setHashtagsTexto] = React.useState("");
   const [marcasSel, setMarcasSel] = React.useState<string[]>([]);
 
-  // Al abrir, sembrar el formulario: en edición, con los datos de la campaña; en alta,
+  // Al abrir, inicializar el formulario: en edición, con los datos de la campaña; en alta,
   // preseleccionar la marca activa (si hay una concreta) como atajo.
   React.useEffect(() => {
     if (!abierto) return;

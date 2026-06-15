@@ -6,7 +6,7 @@ así que NO pasa por `__main__.main()` (donde vivía la inicialización para no 
 tests). Sin esto, los prompts/editorial NUEVOS que viajan en una imagen no aparecen en el estudio
 hasta que alguien los importa. `deploy.sh` lo ejecuta tras la migración de esquema. Ejecutar:
 
-    python -m keni_consola.sembrar
+    python -m keni_consola.inicializar
 """
 
 from __future__ import annotations
@@ -15,8 +15,8 @@ from __future__ import annotations
 def main() -> int:
     from . import libtexto
 
-    # ORDEN: la migración de nombres/ids (one-shot, por sentinela) va ANTES de importar_semilla.
-    # Si no, `importar_semilla` crearía los ids NUEVOS junto a los VIEJOS del store = DUPLICADOS.
+    # ORDEN: la migración de nombres/ids (one-shot, por sentinela) va ANTES de importar_inicial.
+    # Si no, `importar_inicial` crearía los ids NUEVOS junto a los VIEJOS del store = DUPLICADOS.
     # Esto corre en el DEPLOY (no en __main__, que el back-uvicorn no ejecuta).
     m = libtexto.migrar_nombres_biblioteca()
     if m:
@@ -27,7 +27,7 @@ def main() -> int:
     d = libtexto.migrar_descripciones_editorial()
     if d:
         print(f"Texto: {d} editorial(es) con descripcion/titulo de plantilla vieja corregidos.")
-    n = libtexto.importar_semilla()
+    n = libtexto.importar_inicial()
     print(f"Texto: {n} documento(s) base importados.")
     # Linea base en git: que cada doc inicial tenga HEAD (snapshot estable para los pipelines,
     # no el working copy que reescribe el autosave). Best-effort: 0 si el versionado esta off.

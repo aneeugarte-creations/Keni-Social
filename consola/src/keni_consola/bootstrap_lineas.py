@@ -124,7 +124,7 @@ def _backfill_ttl_si_defaults(*, nombre: str, clase: str, marca: str, ttl_dias: 
     return False
 
 
-def sembrar_lineas() -> int:
+def inicializar_lineas() -> int:
     """Inicializa líneas (vertical) por marca y orígenes (global). Devuelve cuántas creó.
 
     Idempotente y tolerante a fallos por etiqueta (no aborta el resto). Pensada para el
@@ -206,7 +206,7 @@ def _preset_va_en_seed(preset: dict) -> bool:
     return not _es_plantilla(preset) and not _es_google_news(preset)
 
 
-def sembrar_fuentes_ingesta() -> int:
+def inicializar_fuentes_ingesta() -> int:
     """Activa los presets de feeds como `fuentes_rss` SI el catálogo está vacío (idempotente).
 
     Garantiza cobertura inicial real para que el motor de ingesta no arranque vacío. Solo

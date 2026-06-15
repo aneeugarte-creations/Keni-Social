@@ -83,7 +83,7 @@ def clasificar_pieza(titulo: str, resumen: str, marca: str) -> dict[str, str | N
     """Clasifica una pieza de `marca`: devuelve `{"vertical": id|None, "origen": id|None}`.
 
     `vertical` None = sin línea (la pieza se marca con aviso, no se descarta). `origen` solo
-    es None si la marca no tiene ninguna etiqueta de origen sembrada.
+    es None si la marca no tiene ninguna etiqueta de origen inicializada.
     """
     from .. import repos  # import perezoso: mantiene `clasificar` puro/testeable
 

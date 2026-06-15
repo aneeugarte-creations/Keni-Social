@@ -10,8 +10,8 @@ Modos de salida (combinables):
              el doc `editorial/rrss/<marca>/patrones` en el STORE de texto (lo que
              inyecta el pipeline de copy). Es el modo de PRODUCCIÓN (re-derivación
              periódica sin tocar git).
-  --semilla  reescribe los ficheros del PAQUETE (`patrones_semilla/*.json` y
-             `texto_semilla/editorial/rrss/<marca>/patrones.md`): para versionar en git
+  --inicial  reescribe los ficheros del PAQUETE (`patrones_inicial/*.json` y
+             `texto_inicial/editorial/rrss/<marca>/patrones.md`): para versionar en git
              una nueva foto de los patrones (lo corre una persona/agente y commitea).
 
 Fuente de piezas:
@@ -162,11 +162,11 @@ def _doc_patrones(perfil: dict[str, object], marca_keni: str, *, creado: str, ah
     return front + cuerpo
 
 
-def escribir_semilla(perfil: dict[str, object], marca_keni: str, *, ahora: str) -> list[Path]:
+def escribir_inicial(perfil: dict[str, object], marca_keni: str, *, ahora: str) -> list[Path]:
     """Escribe perfil JSON + doc generado en el PAQUETE (para commitear). Devuelve rutas."""
     base = Path(__file__).resolve().parent
-    ruta_json = patrones_marca.dir_perfiles_semilla() / f"{marca_keni}.json"
-    ruta_doc = base / "texto_semilla" / "editorial" / "rrss" / marca_keni / "patrones.md"
+    ruta_json = patrones_marca.dir_perfiles_inicial() / f"{marca_keni}.json"
+    ruta_doc = base / "texto_inicial" / "editorial" / "rrss" / marca_keni / "patrones.md"
     ruta_json.parent.mkdir(parents=True, exist_ok=True)
     ruta_doc.parent.mkdir(parents=True, exist_ok=True)
     escribir_atomico(ruta_json, json.dumps(perfil, ensure_ascii=False, indent=1) + "\n")
@@ -226,7 +226,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--meses", type=int, default=MESES_DEFECTO, help="ventana hacia atrás")
     parser.add_argument("--jsonl", type=Path, default=None, help="volcado previo en vez de la API")
     parser.add_argument("--store", action="store_true", help="aplica al runtime (data dir + store)")
-    parser.add_argument("--semilla", action="store_true", help="reescribe la base del paquete")
+    parser.add_argument("--inicial", action="store_true", help="reescribe la base del paquete")
     parser.add_argument(
         "--salida", type=Path, default=None, help="además, escribe los perfiles JSON en este dir"
     )
@@ -268,8 +268,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.salida / f"{marca_keni}.json",
                 json.dumps(perfil, ensure_ascii=False, indent=1) + "\n",
             )
-        if args.semilla:
-            for ruta in escribir_semilla(perfil, marca_keni, ahora=ahora):
+        if args.inicial:
+            for ruta in escribir_inicial(perfil, marca_keni, ahora=ahora):
                 print(f"  base: {ruta}")
         if args.store:
             print(f"  store: {aplicar_store(perfil, marca_keni, ahora=ahora)}")

@@ -105,13 +105,13 @@ def test_bootstrap_respeta_admin_user_env(entorno, monkeypatch):
     assert auth.autenticar("jefe", CLAVE) is not None
 
 
-def test_sembrar_equipo_crea_los_16(entorno):
+def test_inicializar_equipo_crea_los_16(entorno):
     """El seed deja en la BD los 16 usuarios del organigrama del cliente.
 
     Tras la ola "feat/roles-marcas" el calendario de cobertura tiene 9 personas (la creativa
     de Fundación sale del calendario; va a Fundacion como creativo de vertical).
     """
-    auth.sembrar_equipo()
+    auth.inicializar_equipo()
     usuarios = {u["usuario"]: u for u in auth.listar_usuarios()}
     assert set(u for u, *_ in auth.EQUIPO_AMX) <= set(usuarios)
     # 9 cubren: 3 community managers ClaroSports + 2 content managers UnoTV + el coordinador
@@ -126,16 +126,16 @@ def test_sembrar_equipo_crea_los_16(entorno):
     assert usuarios["tezcu"]["cobertura"] is True
 
 
-def test_sembrar_equipo_es_idempotente(entorno):
+def test_inicializar_equipo_es_idempotente(entorno):
     """Re-correr el seed no duplica ni rompe; sigue habiendo 16 + el admin de bootstrap."""
-    auth.sembrar_equipo()
-    auth.sembrar_equipo()
+    auth.inicializar_equipo()
+    auth.inicializar_equipo()
     usuarios = auth.listar_usuarios()
     bernardos = [u for u in usuarios if u["usuario"] == "bernardo"]
     assert len(bernardos) == 1
 
 
-def test_sembrar_equipo_sincroniza_cargo_y_cobertura(entorno):
+def test_inicializar_equipo_sincroniza_cargo_y_cobertura(entorno):
     """Si un usuario ya existe con cargo del catalogo VIEJO, el seed lo pone al dia.
 
     Un community manager se crea sin cargo (""); como su cargo esta en el catalogo viejo (cadena vacia),
@@ -143,7 +143,7 @@ def test_sembrar_equipo_sincroniza_cargo_y_cobertura(entorno):
     La contrasena NO se pisa.
     """
     auth.crear_usuario("tezcu", "Otra-Pass-Fuerte-Lol-1234", "editor")
-    auth.sembrar_equipo()
+    auth.inicializar_equipo()
     tezcu = next(u for u in auth.listar_usuarios() if u["usuario"] == "tezcu")
     assert tezcu["cargo"] == "community_manager"
     assert tezcu["cobertura"] is True
@@ -152,7 +152,7 @@ def test_sembrar_equipo_sincroniza_cargo_y_cobertura(entorno):
     assert auth.autenticar("tezcu", "Otra-Pass-Fuerte-Lol-1234") is not None
 
 
-def test_sembrar_equipo_asigna_marcas_del_organigrama(entorno):
+def test_inicializar_equipo_asigna_marcas_del_organigrama(entorno):
     """Cada usuario del organigrama recibe SUS verticales (N:M).
 
     Casos clave:
@@ -161,7 +161,7 @@ def test_sembrar_equipo_asigna_marcas_del_organigrama(entorno):
       - Editorial de YouTube: ['claro-sports', 'piso-15', 'unotv'] (cubre 3 verticales).
       - El creativo de vertical: ['nacion-gamer'].
     """
-    auth.sembrar_equipo()
+    auth.inicializar_equipo()
     usuarios = {u["usuario"]: u for u in auth.listar_usuarios()}
 
     assert sorted(usuarios["bernardo"]["marcas"]) == sorted(
@@ -175,13 +175,13 @@ def test_sembrar_equipo_asigna_marcas_del_organigrama(entorno):
     assert usuarios["jonathan"]["marcas"] == ["nacion-gamer"]
 
 
-def test_sembrar_equipo_marca_puede_coordinar_para_los_tres(entorno):
+def test_inicializar_equipo_marca_puede_coordinar_para_los_tres(entorno):
     """El seed pone `puede_coordinar=True` para el coordinador de redes, fotografía/QA y la coordinadora operativa; False para el resto.
 
     Es el listado canonico de candidatos a coordinador (ola "coord"). Los tres se
     sobreescriben INCONDICIONALMENTE; el resto del equipo queda con el default `False`.
     """
-    auth.sembrar_equipo()
+    auth.inicializar_equipo()
     usuarios = {u["usuario"]: u for u in auth.listar_usuarios()}
     assert usuarios["elias"]["puede_coordinar"] is True
     assert usuarios["ale"]["puede_coordinar"] is True
@@ -191,39 +191,39 @@ def test_sembrar_equipo_marca_puede_coordinar_para_los_tres(entorno):
         assert usuarios[usuario]["puede_coordinar"] is False
 
 
-def test_sembrar_equipo_respeta_puede_coordinar_personalizado(entorno):
+def test_inicializar_equipo_respeta_puede_coordinar_personalizado(entorno):
     """Si el admin marca `puede_coordinar=True` a alguien fuera del seed, NO se revierte.
 
     Un community manager no esta en el listado canonico pero si el admin lo habilita como coordinador,
     re-correr el seed no debe quitarselo.
     """
-    auth.sembrar_equipo()
+    auth.inicializar_equipo()
     tezcu = next(u for u in auth.listar_usuarios() if u["usuario"] == "tezcu")
     auth.actualizar_perfil(tezcu["id"], puede_coordinar=True)
-    auth.sembrar_equipo()
+    auth.inicializar_equipo()
     tezcu_post = next(u for u in auth.listar_usuarios() if u["usuario"] == "tezcu")
     assert tezcu_post["puede_coordinar"] is True
 
 
-def test_sembrar_equipo_corrige_puede_coordinar_de_los_tres(entorno):
+def test_inicializar_equipo_corrige_puede_coordinar_de_los_tres(entorno):
     """Si el coordinador de redes, fotografía/QA o la coordinadora operativa tienen `puede_coordinar=False` por error, el seed lo restaura.
 
     Los tres son los canonicos (`_USUARIOS_PUEDE_COORDINAR_FORZADO`): el seed los
     sobreescribe INCONDICIONALMENTE a True tras cada deploy.
     """
-    auth.sembrar_equipo()
+    auth.inicializar_equipo()
     ale = next(u for u in auth.listar_usuarios() if u["usuario"] == "ale")
     # Simula un admin que se lo quitara por error.
     auth.actualizar_perfil(ale["id"], puede_coordinar=False)
     asegurado = next(u for u in auth.listar_usuarios() if u["usuario"] == "ale")
     assert asegurado["puede_coordinar"] is False
     # Re-correr el seed lo restaura.
-    auth.sembrar_equipo()
+    auth.inicializar_equipo()
     ale_post = next(u for u in auth.listar_usuarios() if u["usuario"] == "ale")
     assert ale_post["puede_coordinar"] is True
 
 
-def test_sembrar_equipo_corrige_daiana_aunque_este_editada(entorno):
+def test_inicializar_equipo_corrige_daiana_aunque_este_editada(entorno):
     """La correccion de la creativa de Fundación es INCONDICIONAL: sale del calendario tras este seed.
 
     Aunque el admin la hubiera dejado mal (CM cubriendo claro-sports), el bootstrap la
@@ -238,26 +238,26 @@ def test_sembrar_equipo_corrige_daiana_aunque_este_editada(entorno):
         cobertura=True,
         marcas=["claro-sports"],
     )
-    auth.sembrar_equipo()
+    auth.inicializar_equipo()
     daiana = next(u for u in auth.listar_usuarios() if u["usuario"] == "daiana")
     assert daiana["cargo"] == "creativo_vertical"
     assert daiana["cobertura"] is False
     assert daiana["marcas"] == ["fundacion"]
 
 
-def test_sembrar_equipo_respeta_cargos_personalizados_del_nuevo_catalogo(entorno):
+def test_inicializar_equipo_respeta_cargos_personalizados_del_nuevo_catalogo(entorno):
     """Si el admin ya migro el cargo a uno del catalogo NUEVO, el seed lo respeta.
 
     Salvo la creativa de Fundación, que tiene la correccion incondicional. Para el resto, si un admin
     cambio el cargo a un valor distinto del catalogo nuevo (p. ej. `coordinador_invitados`),
     re-correr el seed no debe revertirlo.
     """
-    auth.sembrar_equipo()
+    auth.inicializar_equipo()
     # Admin migra a la coordinadora de redes a un cargo del catalogo nuevo distinto del organigrama.
     diana = next(u for u in auth.listar_usuarios() if u["usuario"] == "diana")
     auth.actualizar_perfil(diana["id"], cargo="coordinador_invitados")
     # Re-correr el seed.
-    auth.sembrar_equipo()
+    auth.inicializar_equipo()
     diana_post = next(u for u in auth.listar_usuarios() if u["usuario"] == "diana")
     # El cargo del catalogo NUEVO se respeta (no se revierte a `coordinador_redes`).
     assert diana_post["cargo"] == "coordinador_invitados"
@@ -426,7 +426,7 @@ def test_logout_invalida_server_side_aunque_se_reuse_la_cookie(entorno):
     _crear("ana", CLAVE)
     c = _cli()
     _login(c, "ana", CLAVE)
-    # Capturamos el token de sesion sembrado.
+    # Capturamos el token de sesion inicializado.
     token_sesion = c.cookies.get(auth.COOKIE_SESION)
     assert token_sesion
     c.post("/api/auth/logout", headers=_ORIGIN)
@@ -931,9 +931,9 @@ def test_crear_usuario_api_con_nombre(entorno):
     assert por_nombre["nuevo"]["nombre"] == "Nuevo Nombre"
 
 
-def test_sembrar_equipo_define_organigrama(entorno):
+def test_inicializar_equipo_define_organigrama(entorno):
     """El seed deja nombre + linea de reporte: el coordinador de redes reporta a la dirección; un community manager al coordinador de redes."""
-    auth.sembrar_equipo()
+    auth.inicializar_equipo()
     por_usuario = {u["usuario"]: u for u in auth.listar_usuarios()}
     assert por_usuario["bernardo"]["nombre"] == "Bernardo Vázquez"
     assert por_usuario["bernardo"]["manager_id"] == ""  # raiz
@@ -944,13 +944,13 @@ def test_sembrar_equipo_define_organigrama(entorno):
     assert por_usuario["yustine"]["manager_id"] == por_usuario["laloyt"]["id"]
 
 
-def test_sembrar_equipo_no_pisa_organigrama_editado(entorno):
+def test_inicializar_equipo_no_pisa_organigrama_editado(entorno):
     """Idempotencia: si el admin reasigna un superior, el re-seed NO lo revierte."""
-    auth.sembrar_equipo()
+    auth.inicializar_equipo()
     por_usuario = {u["usuario"]: u for u in auth.listar_usuarios()}
     # El admin mueve a un community manager para que reporte a la dirección (excepcion puntual).
     auth.actualizar_perfil(por_usuario["tezcu"]["id"], manager_id=por_usuario["bernardo"]["id"])
-    auth.sembrar_equipo()  # segunda corrida no debe revertir
+    auth.inicializar_equipo()  # segunda corrida no debe revertir
     tezcu = {u["usuario"]: u for u in auth.listar_usuarios()}["tezcu"]
     assert tezcu["manager_id"] == por_usuario["bernardo"]["id"]
 
@@ -1222,7 +1222,7 @@ def test_token_bootstrap_crea_primer_admin_con_bd_vacia(entorno):
 def test_token_bootstrap_solo_admin_no_editor(entorno):
     """#150: el bootstrap por token SOLO crea admin; un editor con BD vacia -> 403.
 
-    Sembrar un editor con la BD vacia dejaria la consola sin admin (y sin recuperacion).
+    Inicializar un editor con la BD vacia dejaria la consola sin admin (y sin recuperacion).
     """
     c = _cli()
     h = {**_ORIGIN, "Authorization": f"Bearer {TOKEN_PRUEBA}"}

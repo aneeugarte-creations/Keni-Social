@@ -28,7 +28,7 @@ from .bootstrap import (
     bootstrap_admin,
     hay_usuarios,
 )
-from .bootstrap_equipo import EQUIPO_AMX, sembrar_equipo
+from .bootstrap_equipo import EQUIPO_AMX, inicializar_equipo
 from .hashing import (
     LONGITUD_MAX_PASSWORD,
     LONGITUD_MAX_USUARIO,
@@ -136,7 +136,7 @@ __all__ = [
     # Bootstrap
     "hay_usuarios",
     "bootstrap_admin",
-    "sembrar_equipo",
+    "inicializar_equipo",
     "EQUIPO_AMX",
     "ENV_ADMIN_USER",
     "ENV_ADMIN_PASS",

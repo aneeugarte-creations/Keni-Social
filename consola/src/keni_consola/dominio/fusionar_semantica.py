@@ -41,7 +41,7 @@ _MAX_CHARS_ITEM = 240        # recorte de titulo+resumen por historia
 
 
 # La plantilla vive en la Biblioteca de Texto como prompt EDITABLE (pestaña «Prompts»). La lista
-# JSON de historias se inserta en `{{HISTORIAS}}`. Si el store fallara, la red es la SEMILLA del
+# JSON de historias se inserta en `{{HISTORIAS}}`. Si el store fallara, la red es la INICIAL del
 # paquete (fuente única, sin texto duplicado aquí).
 _PROMPT_ID = "prompt/fusionar"
 _PROMPT_VERIFICACION_ID = "prompt/fusionar-verificar"
@@ -49,14 +49,14 @@ _MARCA_HISTORIAS = "{{HISTORIAS}}"
 
 
 def _plantilla(prompt_id: str = _PROMPT_ID) -> str:
-    """Cuerpo EFECTIVO de la plantilla (store del equipo > semilla del paquete)."""
+    """Cuerpo EFECTIVO de la plantilla (store del equipo > inicial del paquete)."""
     from .. import libtexto
 
     try:
         cuerpo = (libtexto.cuerpo_efectivo(prompt_id) or "").strip()
     except Exception:  # noqa: BLE001 -- nunca dejar Fusionar sin prompt por un fallo de lectura
         cuerpo = ""
-    return cuerpo or libtexto.cuerpo_semilla(prompt_id).strip()
+    return cuerpo or libtexto.cuerpo_inicial(prompt_id).strip()
 
 
 def _construir_prompt(payload_json: str, prompt_id: str = _PROMPT_ID) -> str:

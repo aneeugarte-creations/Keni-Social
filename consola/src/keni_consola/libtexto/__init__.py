@@ -32,7 +32,7 @@ La raiz se sobreescribe con `KENI_TEXTO_DIR` (los tests lo apuntan a un tmp).
 --
 
 ESTE MÓDULO ES UN BARREL. La implementación vive en submódulos por categoría
-(`_comun`, `_rutas`, `_io`, `_validacion`, `_crud`, `_versiones`, `_semilla`,
+(`_comun`, `_rutas`, `_io`, `_validacion`, `_crud`, `_versiones`, `_inicial`,
 `_editorial`); aquí se re-exporta la superficie pública (Y los privados que algún
 consumidor importa, p.ej. `_ruta_de_id` en los tests) para no cambiar nada de cara afuera.
 """
@@ -116,16 +116,16 @@ from ._rutas import (
     migrar_dir_legacy,
     raiz,
 )
-from ._semilla import (
+from ._inicial import (
     asegurar_linea_base,
     cuerpo_efectivo,
-    cuerpo_semilla,
-    dir_semilla,
-    importar_semilla,
+    cuerpo_inicial,
+    dir_inicial,
+    importar_inicial,
     limpiar_prompts_obsoletos,
     migrar_descripciones_editorial,
     migrar_nombres_biblioteca,
-    obtener_semilla,
+    obtener_inicial,
 )
 from ._variables import catalogo_variables
 from ._validacion import (
@@ -225,12 +225,12 @@ __all__ = [
     "prompt_base_de",
     "previsualizar_pipeline",
     "validacion_editorial",
-    # semilla (_semilla)
-    "dir_semilla",
-    "obtener_semilla",
+    # inicial (_inicial)
+    "dir_inicial",
+    "obtener_inicial",
     "cuerpo_efectivo",
-    "cuerpo_semilla",
-    "importar_semilla",
+    "cuerpo_inicial",
+    "importar_inicial",
     "asegurar_linea_base",
     "migrar_nombres_biblioteca",
     "limpiar_prompts_obsoletos",

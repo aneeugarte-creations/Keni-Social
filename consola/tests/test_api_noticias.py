@@ -1,6 +1,6 @@
 """Tests de la API del motor de ingesta (/api/noticias). OFFLINE: nunca se toca la red.
 
-Sembramos `noticias_items` directo en `repos` (el daemon de ingesta no corre en la suite) y
+Inicializamos `noticias_items` directo en `repos` (el daemon de ingesta no corre en la suite) y
 ejercitamos: listado recientes-primero, filtros (marca/categoria/estado/q), paginación
 (limit/offset + total), `usar` (lleva al tablero con origen='noticia' + estado=usado),
 `descartar` y el resumen de `cobertura`.
@@ -15,7 +15,7 @@ from keni_consola import repos
 from .conftest import _cliente  # noqa: F401  (usado por la fixture `cliente`)
 
 
-def _sembrar(**campos):
+def _inicializar(**campos):
     """Crea un item de archivo con defaults razonables; devuelve su dict ya persistido."""
     base = {
         "fuente_id": "f1",
@@ -42,8 +42,8 @@ def test_listar_vacio(cliente):
 
 
 def test_listar_recientes_primero_y_total(cliente):
-    _sembrar(fuente_id="a", clave="k1", capturado_en="2026-06-01T00:00:00+00:00", titulo="vieja")
-    _sembrar(fuente_id="b", clave="k2", capturado_en="2026-06-05T00:00:00+00:00", titulo="nueva")
+    _inicializar(fuente_id="a", clave="k1", capturado_en="2026-06-01T00:00:00+00:00", titulo="vieja")
+    _inicializar(fuente_id="b", clave="k2", capturado_en="2026-06-05T00:00:00+00:00", titulo="nueva")
     datos = cliente.get("/api/noticias").json()
     assert datos["total"] == 2
     assert [it["titulo"] for it in datos["items"]] == ["nueva", "vieja"]
@@ -52,8 +52,8 @@ def test_listar_recientes_primero_y_total(cliente):
 
 
 def test_filtra_por_marca(cliente):
-    _sembrar(fuente_id="a", clave="k1", marca="unotv")
-    _sembrar(fuente_id="b", clave="k2", marca="claro-sports")
+    _inicializar(fuente_id="a", clave="k1", marca="unotv")
+    _inicializar(fuente_id="b", clave="k2", marca="claro-sports")
     datos = cliente.get("/api/noticias", params={"marca": "claro-sports"}).json()
     assert datos["total"] == 1
     assert datos["items"][0]["marca"] == "claro-sports"
@@ -65,8 +65,8 @@ def test_marca_invalida_400(cliente):
 
 def test_filtra_por_estado(cliente):
     # Ya NO se filtra por categoría (el eje es marca/línea editorial): solo estado.
-    _sembrar(fuente_id="a", clave="k1", categoria="deportes")
-    _sembrar(fuente_id="b", clave="k2", categoria="mx")
+    _inicializar(fuente_id="a", clave="k1", categoria="deportes")
+    _inicializar(fuente_id="b", clave="k2", categoria="mx")
     assert cliente.get("/api/noticias", params={"estado": "nuevo"}).json()["total"] == 2
     assert cliente.get("/api/noticias", params={"estado": "usado"}).json()["total"] == 0
 
@@ -76,23 +76,23 @@ def test_estado_invalido_400(cliente):
 
 
 def test_busqueda_q_en_titulo_y_resumen(cliente):
-    _sembrar(fuente_id="a", clave="k1", titulo="Reforma energética aprobada")
-    _sembrar(fuente_id="b", clave="k2", titulo="Otra cosa", resumen="habla de la Reforma")
-    _sembrar(fuente_id="c", clave="k3", titulo="Nada que ver", resumen="deportes")
+    _inicializar(fuente_id="a", clave="k1", titulo="Reforma energética aprobada")
+    _inicializar(fuente_id="b", clave="k2", titulo="Otra cosa", resumen="habla de la Reforma")
+    _inicializar(fuente_id="c", clave="k3", titulo="Nada que ver", resumen="deportes")
     datos = cliente.get("/api/noticias", params={"q": "reforma"}).json()
     assert datos["total"] == 2
 
 
 def test_filtra_desde(cliente):
-    _sembrar(fuente_id="a", clave="k1", capturado_en="2026-06-01T00:00:00+00:00")
-    _sembrar(fuente_id="b", clave="k2", capturado_en="2026-06-05T00:00:00+00:00")
+    _inicializar(fuente_id="a", clave="k1", capturado_en="2026-06-01T00:00:00+00:00")
+    _inicializar(fuente_id="b", clave="k2", capturado_en="2026-06-05T00:00:00+00:00")
     datos = cliente.get("/api/noticias", params={"desde": "2026-06-03T00:00:00+00:00"}).json()
     assert datos["total"] == 1
 
 
 def test_paginacion_limit_offset(cliente):
     for i in range(5):
-        _sembrar(fuente_id=f"f{i}", clave=f"k{i}",
+        _inicializar(fuente_id=f"f{i}", clave=f"k{i}",
                  capturado_en=f"2026-06-0{i + 1}T00:00:00+00:00")
     pag1 = cliente.get("/api/noticias", params={"limit": 2, "offset": 0}).json()
     pag2 = cliente.get("/api/noticias", params={"limit": 2, "offset": 2}).json()
@@ -108,7 +108,7 @@ def test_paginacion_limit_offset(cliente):
 
 
 def test_usar_crea_borrador_y_marca_usado(cliente):
-    it = _sembrar(fuente_id="a", clave="k1", marca="unotv", titulo="Noticia para usar")
+    it = _inicializar(fuente_id="a", clave="k1", marca="unotv", titulo="Noticia para usar")
     r = cliente.post(f"/api/noticias/{it['id']}/usar", json={"generar": False})
     assert r.status_code == 200, r.text
     cont = r.json()["contenido"]
@@ -126,7 +126,7 @@ def test_usar_crea_borrador_y_marca_usado(cliente):
 
 
 def test_usar_con_redes_crea_plataformas(cliente):
-    it = _sembrar(fuente_id="a", clave="k1")
+    it = _inicializar(fuente_id="a", clave="k1")
     r = cliente.post(
         f"/api/noticias/{it['id']}/usar", json={"redes": ["x", "instagram"], "generar": False}
     )
@@ -135,7 +135,7 @@ def test_usar_con_redes_crea_plataformas(cliente):
 
 
 def test_usar_idempotente_si_ya_usado(cliente):
-    it = _sembrar(fuente_id="a", clave="k1")
+    it = _inicializar(fuente_id="a", clave="k1")
     primero = cliente.post(f"/api/noticias/{it['id']}/usar", json={"generar": False}).json()
     segundo = cliente.post(f"/api/noticias/{it['id']}/usar", json={"generar": False}).json()
     assert segundo.get("ya_usada") is True
@@ -147,7 +147,7 @@ def test_usar_inexistente_404(cliente):
 
 
 def test_descartar_marca_descartado(cliente):
-    it = _sembrar(fuente_id="a", clave="k1")
+    it = _inicializar(fuente_id="a", clave="k1")
     r = cliente.post(f"/api/noticias/{it['id']}/descartar")
     assert r.status_code == 200, r.text
     assert r.json()["item"]["estado"] == "descartado"
@@ -169,8 +169,8 @@ def test_cobertura_resume_salud(cliente):
     ahora = datetime.now(UTC).isoformat()
     # Una fuente activa + items recientes (capturados AHORA, dentro de la ventana de 24h).
     repos.crear_fuente_rss("Demo", "https://example.com/feed.xml", categoria="mx")
-    _sembrar(fuente_id="a", clave="k1", categoria="mx", capturado_en=ahora)
-    _sembrar(fuente_id="b", clave="k2", categoria="deportes", capturado_en=ahora)
+    _inicializar(fuente_id="a", clave="k1", categoria="mx", capturado_en=ahora)
+    _inicializar(fuente_id="b", clave="k2", categoria="deportes", capturado_en=ahora)
     datos = cliente.get("/api/noticias/cobertura").json()
     assert datos["feeds_activos"] >= 1
     assert datos["items_total"] == 2
@@ -242,7 +242,7 @@ def test_salud_endpoint_shape_y_filtro_marca(cliente):
 
     ahora = datetime.now(UTC).isoformat()
     repos.crear_fuente_rss("FeedUno", "https://example.com/f1.xml", marca="unotv", categoria="mx")
-    _sembrar(fuente_id="z", clave="kz", categoria="mx", marca="unotv", capturado_en=ahora)
+    _inicializar(fuente_id="z", clave="kz", categoria="mx", marca="unotv", capturado_en=ahora)
     datos = cliente.get("/api/noticias/salud?marca=unotv").json()
     assert "resumen" in datos
     assert "feeds" in datos

@@ -35,9 +35,9 @@ def ejecutar_barrido() -> dict[str, Any]:
     (`{fuentes, insertadas, actualizadas, errores}`) para el historial del daemon.
     """
     if repos.contar_fuentes_algoritmo() == 0:
-        creadas = algoritmos.sembrar()
+        creadas = algoritmos.inicializar()
         if creadas:
-            _log.info("Algoritmos: sembradas %d fuente(s) recomendada(s).", len(creadas))
+            _log.info("Algoritmos: inicializadas %d fuente(s) recomendada(s).", len(creadas))
     resumen = algoritmos.refrescar()
     _log.info(
         "Algoritmos: ingesta de %d fuente(s) -> %d nueva(s), %d actualizada(s), %d error(es).",

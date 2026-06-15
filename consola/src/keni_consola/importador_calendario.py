@@ -445,7 +445,7 @@ def _plantilla() -> str:
         cuerpo = (libtexto.cuerpo_efectivo(_PROMPT_ID) or "").strip()
     except Exception:  # noqa: BLE001 -- nunca dejar la extracción sin prompt por un fallo de lectura
         cuerpo = ""
-    return cuerpo or libtexto.cuerpo_semilla(_PROMPT_ID).strip()
+    return cuerpo or libtexto.cuerpo_inicial(_PROMPT_ID).strip()
 
 
 def _prompt_extraccion(ruta: str) -> str:

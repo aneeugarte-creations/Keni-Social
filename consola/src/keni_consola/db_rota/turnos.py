@@ -10,7 +10,7 @@ from ._comun import (
     ESTADOS_ROTA,
     Any,
     _conectar,
-    _sembrar_franjas_por_defecto_en,
+    _inicializar_franjas_por_defecto_en,
     ahora_iso,
     date,
     timedelta,
@@ -92,10 +92,10 @@ def crear_turno_rota(
     """
     if franja_id == "" and franja is not None:
         franja_norm = (franja or "").strip().lower()
-        # Sembramos en la conexion local (sin pasar por `repos` para evitar ciclos).
+        # Inicializamos en la conexion local (sin pasar por `repos` para evitar ciclos).
         con_t = _conectar()
         try:
-            mapa = _sembrar_franjas_por_defecto_en(con_t, semana, marca)
+            mapa = _inicializar_franjas_por_defecto_en(con_t, semana, marca)
             con_t.commit()
         finally:
             con_t.close()

@@ -13,7 +13,7 @@ pregunta) en un PERFIL JSON por marca. Ese perfil alimenta dos consumidores:
     bloquea, se ANOTA y degrada el veredicto `listo` -> `revisar`.
 
 El perfil es REGENERABLE (`keni_consola.patrones_derivar`, CLI + daemon opcional): la
-base viaja en el paquete (`patrones_semilla/<marca>.json`) y el runtime puede
+base viaja en el paquete (`patrones_inicial/<marca>.json`) y el runtime puede
 sobrescribirla bajo el dir de datos (`<dir_config>/patrones/<marca>.json`), misma
 filosofía base/store que `libtexto`. Sin perfil para una marca/red el verificador
 NO inventa: devuelve sin avisos (degradación honesta).
@@ -35,7 +35,7 @@ __all__ = [
     "verificar_pieza",
     "renderizar_doc",
     "dir_perfiles_data",
-    "dir_perfiles_semilla",
+    "dir_perfiles_inicial",
 ]
 
 # Versión del esquema del perfil. Un cambio de forma incompatible la sube; el cargador
@@ -300,16 +300,16 @@ def derivar_perfil(
 # --- Carga del perfil (data dir > base del paquete) ----------------------------
 
 
-def dir_perfiles_semilla() -> Path:
-    """Dir de los perfiles BASE que viajan en el paquete (`patrones_semilla/`)."""
-    return Path(__file__).resolve().parent / "patrones_semilla"
+def dir_perfiles_inicial() -> Path:
+    """Dir de los perfiles BASE que viajan en el paquete (`patrones_inicial/`)."""
+    return Path(__file__).resolve().parent / "patrones_inicial"
 
 
 def dir_perfiles_data() -> Path:
     """Dir de perfiles del RUNTIME (`<dir_config>/patrones`): lo escribe la re-derivación.
 
     Override por `KENI_PATRONES_DIR` (tests). Gana sobre la base, igual que el
-    store de texto gana sobre `texto_semilla`.
+    store de texto gana sobre `texto_inicial`.
     """
     import os
 
@@ -329,7 +329,7 @@ def cargar_perfil(marca: str) -> dict[str, object] | None:
     """
     if not isinstance(marca, str) or not re.fullmatch(r"[a-z0-9-]+", marca or ""):
         return None
-    for base in (dir_perfiles_data(), dir_perfiles_semilla()):
+    for base in (dir_perfiles_data(), dir_perfiles_inicial()):
         ruta = base / f"{marca}.json"
         if not ruta.is_file():
             continue

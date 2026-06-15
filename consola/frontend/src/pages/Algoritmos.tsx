@@ -66,8 +66,8 @@ export default function Algoritmos() {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const sembrar = useMutation({
-    mutationFn: () => api.sembrarAlgoritmos(),
+  const inicializar = useMutation({
+    mutationFn: () => api.inicializarAlgoritmos(),
     onSuccess: (r) => {
       toast.success(`${r.total} fuente(s) recomendada(s) añadida(s).`);
       void invalidar();
@@ -220,7 +220,7 @@ export default function Algoritmos() {
                     titulo="Sin fuentes todavía"
                     texto="Configura fuentes para ver noticias."
                     accion={
-                      <Button onClick={() => sembrar.mutate()} disabled={sembrar.isPending} size="sm">
+                      <Button onClick={() => inicializar.mutate()} disabled={inicializar.isPending} size="sm">
                         <Sparkles className="mr-1 h-4 w-4" aria-hidden="true" />
                         Añadir fuentes recomendadas
                       </Button>
@@ -247,8 +247,8 @@ export default function Algoritmos() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => sembrar.mutate()}
-                      disabled={sembrar.isPending}
+                      onClick={() => inicializar.mutate()}
+                      disabled={inicializar.isPending}
                     >
                       <Sparkles className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
                       Recomendadas

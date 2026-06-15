@@ -17,7 +17,7 @@ _CANDIDATAS = [("unotv", "UnoTV"), ("claro-sports", "Claro Sports"), ("nacion-ga
 @pytest.fixture(autouse=True)
 def _texto_tmp(monkeypatch, tmp_path):
     # El prompt sale ahora de la Biblioteca de Texto: aislar el store en tmp para que ningún
-    # test lea el store REAL (sin store, `cuerpo_efectivo` cae a la semilla del paquete).
+    # test lea el store REAL (sin store, `cuerpo_efectivo` cae a la inicial del paquete).
     monkeypatch.setenv("KENI_TEXTO_DIR", str(tmp_path / "texto"))
     return tmp_path
 
@@ -156,7 +156,7 @@ def test_clasificar_marca_ia_wiring_usa_candidatas_validas(monkeypatch):
 
 
 def test_prompt_sale_de_la_biblioteca_y_sustituye_variables():
-    # Sin store, el cuerpo EFECTIVO es la semilla del paquete: las variables {{MARCAS}},
+    # Sin store, el cuerpo EFECTIVO es la inicial del paquete: las variables {{MARCAS}},
     # {{MARCA_FALLBACK}} y {{NOTICIA}} no pueden quedar crudas en la llamada a la IA.
     ej = _ejecutor_que_devuelve('{"marca": "unotv"}')
     clasificador_marca.clasificar_marca(
@@ -174,7 +174,7 @@ def test_prompt_editado_en_la_biblioteca_gana():
     # El equipo edita el doc en el store: la siguiente clasificación usa SU texto.
     from keni_consola import libtexto
 
-    libtexto.importar_semilla()
+    libtexto.importar_inicial()
     libtexto.guardar(
         "prompt/clasificar-marca",
         cuerpo="PERSONALIZADO\n{{MARCAS}}\nfallback={{MARCA_FALLBACK}}\n{{NOTICIA}}",
@@ -188,8 +188,8 @@ def test_prompt_editado_en_la_biblioteca_gana():
     assert "fallback=unotv" in p and "{{MARCAS}}" not in p
 
 
-def test_sin_doc_ni_semilla_degrada_pero_sigue_clasificando(monkeypatch, tmp_path):
-    monkeypatch.setenv("KENI_TEXTO_SEMILLA", str(tmp_path / "semilla-vacia"))
+def test_sin_doc_ni_inicial_degrada_pero_sigue_clasificando(monkeypatch, tmp_path):
+    monkeypatch.setenv("KENI_TEXTO_INICIAL", str(tmp_path / "inicial-vacia"))
     ej = _ejecutor_que_devuelve('{"marca": "claro-sports"}')
     marca = clasificador_marca.clasificar_marca(
         "Gol agónico", "", _CANDIDATAS, fallback="unotv", ejecutor=ej,

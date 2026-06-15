@@ -10,7 +10,7 @@ de Recolección; este módulo es neutro (lee/escribe el cache y, si se le pide, 
 
 Patrón de Haiku SÍNCRONO POR LOTES idéntico a `dominio.traducir` (ejecutor inyectable en tests).
 BEST-EFFORT: ante cualquier fallo (sin claude, JSON inválido, sin editorial) NO toca el cache y
-devuelve lo que hubiera (o vacío); el daemon cae entonces al vocabulario semilla.
+devuelve lo que hubiera (o vacío); el daemon cae entonces al vocabulario inicial.
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ def _ruta_cache() -> Path | None:
         from .. import libtexto
 
         return libtexto.raiz() / "perfiles_editoriales.json"
-    except Exception:  # noqa: BLE001 -- sin dir de texto no hay cache (se cae a semilla)
+    except Exception:  # noqa: BLE001 -- sin dir de texto no hay cache (se cae a inicial)
         return None
 
 
@@ -101,14 +101,14 @@ _PROMPT_ID = "prompt/priorizar"
 
 
 def _plantilla() -> str:
-    """Cuerpo EFECTIVO de la plantilla (store del equipo > semilla del paquete)."""
+    """Cuerpo EFECTIVO de la plantilla (store del equipo > inicial del paquete)."""
     from .. import libtexto
 
     try:
         cuerpo = (libtexto.cuerpo_efectivo(_PROMPT_ID) or "").strip()
     except Exception:  # noqa: BLE001 -- nunca dejar el perfil sin prompt por un fallo de lectura
         cuerpo = ""
-    return cuerpo or libtexto.cuerpo_semilla(_PROMPT_ID).strip()
+    return cuerpo or libtexto.cuerpo_inicial(_PROMPT_ID).strip()
 
 
 def _construir_prompt(marca: str, texto_editorial: str) -> str:

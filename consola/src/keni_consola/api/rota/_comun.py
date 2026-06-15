@@ -225,11 +225,11 @@ def _franjas_de_semana(
 
     GRID POR MARCA: con `marca` concreta lista (y SIEMBRA por defecto si vacio) la rejilla de
     esa marca. En "Todas" (`marca` None) lista las franjas de TODAS las marcas (union, columnas
-    etiquetadas) y NO siembra (sin una marca concreta no hay rejilla que sembrar).
+    etiquetadas) y NO siembra (sin una marca concreta no hay rejilla que inicializar).
     """
     franjas = repos.listar_franjas_semana(lunes_iso, marca) if lunes_iso else []
     if not franjas and lunes_iso and marca:
-        franjas = repos.sembrar_franjas_por_defecto(lunes_iso, marca)
+        franjas = repos.inicializar_franjas_por_defecto(lunes_iso, marca)
     return franjas, {f["id"]: f for f in franjas}
 
 

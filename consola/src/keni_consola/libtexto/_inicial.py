@@ -1,6 +1,6 @@
-"""SEMILLA: documentos por defecto que viajan en el paquete y se copian al store.
+"""INICIAL: documentos por defecto que viajan en el paquete y se copian al store.
 
-La semilla vive DENTRO del paquete (`texto_semilla/`) para viajar con el código (a
+La inicial vive DENTRO del paquete (`texto_inicial/`) para viajar con el código (a
 diferencia del store, que es estado de usuario).
 """
 
@@ -24,7 +24,7 @@ from ._publicacion import cuerpo_publicado
 from ._rutas import raiz
 
 __all__ = [
-    "dir_semilla", "obtener_semilla", "cuerpo_efectivo", "cuerpo_semilla", "importar_semilla",
+    "dir_inicial", "obtener_inicial", "cuerpo_efectivo", "cuerpo_inicial", "importar_inicial",
     "asegurar_linea_base",
     "migrar_nombres_biblioteca", "limpiar_prompts_obsoletos", "migrar_descripciones_editorial",
 ]
@@ -38,12 +38,12 @@ _PROMPTS_OBSOLETOS_BIBLIOTECA: tuple[str, ...] = (
 _SENTINELA_OBSOLETOS = ".prompts-obsoletos-v1"
 
 # Migración ONE-SHOT del rediseño de nombres/ids de la Biblioteca: el store en vivo ya tiene los
-# docs del sistema con ids/títulos VIEJOS, y `importar_semilla` no pisa lo existente, así que los
+# docs del sistema con ids/títulos VIEJOS, y `importar_inicial` no pisa lo existente, así que los
 # nombres nuevos + descripción + cuerpos limpios no llegarían. Esta migración (a) borra del store
 # las copias con el id viejo de los prompts renombrados y (b) RE-SIEMBRA todos los docs del sistema
-# desde la semilla nueva, EXCEPTO los `patrones.md` (los gestiona `patrones_derivar --store`). One-
+# desde la inicial nueva, EXCEPTO los `patrones.md` (los gestiona `patrones_derivar --store`). One-
 # shot por SENTINELA: tras correr no vuelve a tocar el store, así que las ediciones futuras del
-# equipo se respetan. El contenido viejo es recuperable (historial git de la semilla).
+# equipo se respetan. El contenido viejo es recuperable (historial git de la inicial).
 #
 # OLA v2 (rediseño de ETAPAS a verbos C): los ids que ARRIBA quedaron en su forma «v1» (prompt/copy,
 # prompt/validacion, prompt/editorial, prompt/fusion, prompt/insumos/*, …) NOMBRABAN una etapa de la
@@ -68,7 +68,7 @@ _RENOMBRES_PROMPT_BIBLIOTECA: tuple[tuple[str, str], ...] = (
 )
 # OLA v2: ids del sistema cuyo nombre nombraba una ETAPA por su nombre viejo y que ahora pasa al
 # verbo C. Se BORRAN del store (su id con verbo C se re-siembra en el mismo paso). El cuerpo viejo es
-# recuperable (historial git de la semilla). El destino renombrado: prompt/fusion→fusionar,
+# recuperable (historial git de la inicial). El destino renombrado: prompt/fusion→fusionar,
 # prompt/fusion-verificacion→fusionar-verificar, prompt/traduccion→traducir,
 # prompt/clasificacion-marca→clasificar-marca, prompt/editorial→priorizar, prompt/validacion→verificar,
 # prompt/copy→redactar, prompt/arte→ilustrar, prompt/evergreen→idear, prompt/insumos/*→recibir/*.
@@ -122,32 +122,32 @@ _TITULOS_VIEJOS_EDITORIAL: tuple[tuple[str, str], ...] = (
 _SENTINELA_DESCRIPCIONES = ".descripciones-v1"
 
 
-def dir_semilla() -> Path:
-    """Dir de la SEMILLA (documentos por defecto que se copian al store en el 1er arranque).
+def dir_inicial() -> Path:
+    """Dir de la INICIAL (documentos por defecto que se copian al store en el 1er arranque).
 
-    Vive DENTRO del paquete (`texto_semilla/`) para viajar con el código (a diferencia
-    del store, que es estado de usuario). Override por `KENI_TEXTO_SEMILLA` (tests).
+    Vive DENTRO del paquete (`texto_inicial/`) para viajar con el código (a diferencia
+    del store, que es estado de usuario). Override por `KENI_TEXTO_INICIAL` (tests).
     """
     import os
 
-    env = os.environ.get("KENI_TEXTO_SEMILLA")
+    env = os.environ.get("KENI_TEXTO_INICIAL")
     if env:
         return Path(env).expanduser()
-    # La semilla viaja junto al paquete `keni_consola`; este módulo vive un nivel más
+    # La inicial viaja junto al paquete `keni_consola`; este módulo vive un nivel más
     # abajo (paquete `libtexto`), así que se sube al directorio del paquete padre.
-    return Path(__file__).resolve().parent.parent / "texto_semilla"
+    return Path(__file__).resolve().parent.parent / "texto_inicial"
 
 
-def obtener_semilla(doc_id: str) -> Documento | None:
-    """Lee un documento de la SEMILLA del paquete (no del store). None si no existe."""
+def obtener_inicial(doc_id: str) -> Documento | None:
+    """Lee un documento de la INICIAL del paquete (no del store). None si no existe."""
     if not isinstance(doc_id, str) or not doc_id.strip():
         return None
     partes = doc_id.strip().strip("/").split("/")
     if len(partes) < 2 or partes[0] not in TIPOS or not _segmentos_validos(partes):
         return None
-    base = dir_semilla()
+    base = dir_inicial()
     ruta = base.joinpath(*partes).with_suffix(".md")
-    # Anti-traversal robusto: el destino DEBE caer estrictamente dentro de la semilla
+    # Anti-traversal robusto: el destino DEBE caer estrictamente dentro de la inicial
     # (resolver + relative_to lanza si se escapa) y ser un fichero.
     try:
         ruta.resolve().relative_to(base.resolve())
@@ -176,46 +176,46 @@ def obtener_semilla(doc_id: str) -> Documento | None:
 
 
 def cuerpo_efectivo(prompt_id: str) -> str | None:
-    """Cuerpo de un prompt: version PUBLICADA > working copy del store > SEMILLA.
+    """Cuerpo de un prompt: version PUBLICADA > working copy del store > INICIAL.
 
     Es la fuente de verdad para las features que se apoyan en un prompt base. Con el
     modelo de PUBLICACION (rediseno de la Biblioteca), si el documento tiene puntero de
     produccion los pipelines inyectan ESA version (sha git inmutable), no la working
     copy: editar es libre, pero lo que corre es lo publicado. Sin puntero (o si la BD/
     git no estan disponibles) gana la working copy del store, como siempre; y si el doc
-    no existe en el store, la semilla del paquete. None si no existe en ninguno.
+    no existe en el store, la inicial del paquete. None si no existe en ninguno.
     """
     doc = obtener(prompt_id)
     if doc is not None:
         publicado = cuerpo_publicado(prompt_id)
         return publicado if publicado is not None else doc.cuerpo
-    semilla = obtener_semilla(prompt_id)
-    return semilla.cuerpo if semilla is not None else None
+    inicial = obtener_inicial(prompt_id)
+    return inicial.cuerpo if inicial is not None else None
 
 
-def cuerpo_semilla(prompt_id: str) -> str:
-    """Cuerpo del documento en la SEMILLA del paquete ("" si no existe). NUNCA lanza.
+def cuerpo_inicial(prompt_id: str) -> str:
+    """Cuerpo del documento en la INICIAL del paquete ("" si no existe). NUNCA lanza.
 
     Red de los módulos que componen prompts: si la lectura del store fallara
     (`cuerpo_efectivo` lanza), el fallback es el seed que viaja en el paquete, no un
     string duplicado en el código.
     """
     try:
-        doc = obtener_semilla(prompt_id)
+        doc = obtener_inicial(prompt_id)
     except Exception:  # noqa: BLE001 -- el fallback nunca debe propagar un fallo de lectura
         return ""
     return doc.cuerpo if doc is not None else ""
 
 
-def importar_semilla(origen: Path | None = None) -> int:
-    """Copia los documentos de la semilla al store que AÚN NO existan. Idempotente.
+def importar_inicial(origen: Path | None = None) -> int:
+    """Copia los documentos de la inicial al store que AÚN NO existan. Idempotente.
 
     Pensado para el PRIMER arranque (poblar la Texto con la línea editorial y los
     prompts base). No pisa nada: un documento ya presente en el store se respeta. Devuelve
-    cuántos documentos se importaron. Los ficheros de la semilla ya vienen en formato de
+    cuántos documentos se importaron. Los ficheros de la inicial ya vienen en formato de
     store (frontmatter + cuerpo, ruta `tipo/.../slug.md`).
     """
-    base = origen or dir_semilla()
+    base = origen or dir_inicial()
     if not base.is_dir():
         return 0
     destino_raiz = raiz()
@@ -242,7 +242,7 @@ def asegurar_linea_base() -> int:
     """Fija en git una linea base de los documentos del store que aun no tengan commit.
 
     La siembra/migracion escribe los `.md` directo a disco (atomico) sin commitear, asi que
-    un documento recien sembrado no tiene HEAD git y el modelo de publicacion caeria a su
+    un documento recien inicializado no tiene HEAD git y el modelo de publicacion caeria a su
     working copy. Esto registra esos documentos como una linea base versionada, de modo que
     los pipelines sirvan su snapshot estable. Best-effort e idempotente. Se llama al final de
     la siembra. Devuelve cuantos documentos quedaron versionados por primera vez.
@@ -255,8 +255,8 @@ def asegurar_linea_base() -> int:
 def migrar_nombres_biblioteca(origen: Path | None = None) -> int:
     """Aplica el rediseño de nombres/ids de la Biblioteca al store (ONE-SHOT por sentinela).
 
-    Pensado para el arranque del servidor, ANTES de `importar_semilla`. Devuelve cuántos
-    documentos tocó (0 si ya se aplicó o no hay semilla). Idempotente: tras la primera pasada
+    Pensado para el arranque del servidor, ANTES de `importar_inicial`. Devuelve cuántos
+    documentos tocó (0 si ya se aplicó o no hay inicial). Idempotente: tras la primera pasada
     deja un sentinela y no vuelve a pisar el store (respeta ediciones futuras del equipo).
 
     Corre DOS olas en la misma pasada: la v1 (renombres de ids ya planos) y la v2 (rediseño de
@@ -264,7 +264,7 @@ def migrar_nombres_biblioteca(origen: Path | None = None) -> int:
     que un store que solo pasó la v1 (sentinela `.migracion-nombres-v1`) vuelve a entrar aquí y
     recibe la v2 sin tocar el call site.
     """
-    base = origen or dir_semilla()
+    base = origen or dir_inicial()
     if not base.is_dir():
         return 0
     destino_raiz = raiz()
@@ -285,7 +285,7 @@ def migrar_nombres_biblioteca(origen: Path | None = None) -> int:
         if ruta_vieja.is_file():
             ruta_vieja.unlink()
             n += 1
-    # (2) Re-siembra desde la semilla NUEVA todos los docs del sistema (ids nuevos + editoriales con
+    # (2) Re-siembra desde la inicial NUEVA todos los docs del sistema (ids nuevos + editoriales con
     #     título/descr/cuerpo limpios), EXCEPTO patrones.md (lo gestiona `patrones_derivar --store`).
     for ruta in sorted(base.rglob("*.md")):
         rel = ruta.relative_to(base)

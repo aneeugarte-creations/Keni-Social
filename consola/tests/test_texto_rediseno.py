@@ -171,7 +171,7 @@ def test_previsualizar_pipeline_copy_es_fiel_al_lanzamiento():
 
 
 def test_previsualizar_pipeline_sin_prompt_base():
-    # Sin store ni semilla del prompt de qa -> falta_base True (no revienta).
+    # Sin store ni inicial del prompt de qa -> falta_base True (no revienta).
     prev = libtexto.previsualizar_pipeline("verificar", "unotv")
     assert "falta_base" in prev
 

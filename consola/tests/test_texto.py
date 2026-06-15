@@ -209,39 +209,39 @@ def test_carpeta_con_traversal_lanza():
 
 
 # --------------------------------------------------------------------------- #
-# Siembra (importar_semilla)                                                    #
+# Siembra (importar_inicial)                                                    #
 # --------------------------------------------------------------------------- #
 
 
-def test_importar_semilla_puebla_y_es_idempotente():
-    # La semilla del paquete trae editorial (línea editorial) + prompts base.
-    n = libtexto.importar_semilla()
+def test_importar_inicial_puebla_y_es_idempotente():
+    # La inicial del paquete trae editorial (línea editorial) + prompts base.
+    n = libtexto.importar_inicial()
     assert n > 0
     # Hay al menos un prompt y un editorial tras importar.
-    assert libtexto.listar(tipo="prompt"), "la semilla debe traer prompts"
-    assert libtexto.listar(tipo="editorial"), "la semilla debe traer editorial"
+    assert libtexto.listar(tipo="prompt"), "la inicial debe traer prompts"
+    assert libtexto.listar(tipo="editorial"), "la inicial debe traer editorial"
     # Idempotente: una segunda importación no duplica (no pisa lo existente).
-    assert libtexto.importar_semilla() == 0
+    assert libtexto.importar_inicial() == 0
 
 
-def test_semilla_trae_prompt_qa_fuente_editable():
+def test_inicial_trae_prompt_qa_fuente_editable():
     # La criba pre-copy de la FUENTE es un prompt EDITABLE de la Biblioteca cuyo cuerpo efectivo
-    # lo trae la semilla del paquete (visible en «Prompts»).
+    # lo trae la inicial del paquete (visible en «Prompts»).
     cuerpo = libtexto.cuerpo_efectivo("prompt/verificar")
     assert cuerpo and "CRIBA PREVIA" in cuerpo
 
 
-def test_importar_semilla_no_pisa_lo_editado():
-    docs = libtexto.importar_semilla()
+def test_importar_inicial_no_pisa_lo_editado():
+    docs = libtexto.importar_inicial()
     assert docs > 0
     prompt = libtexto.listar(tipo="prompt")[0]
     libtexto.guardar(prompt.id, cuerpo="EDITADO POR EL EQUIPO")
-    libtexto.importar_semilla()  # no debe restaurar el original
+    libtexto.importar_inicial()  # no debe restaurar el original
     assert libtexto.obtener(prompt.id).cuerpo.strip() == "EDITADO POR EL EQUIPO"
 
 
-def test_semilla_trae_los_prompts_migrados_del_codigo():
-    # Los prompts son semilla EDITABLE con sus variables {{...}} en el cuerpo (las sustituye
+def test_inicial_trae_los_prompts_migrados_del_codigo():
+    # Los prompts son inicial EDITABLE con sus variables {{...}} en el cuerpo (las sustituye
     # el módulo que los inyecta).
     casos = {
         "prompt/clasificar-marca": ("{{MARCAS}}", "{{MARCA_FALLBACK}}", "{{NOTICIA}}"),
@@ -251,22 +251,22 @@ def test_semilla_trae_los_prompts_migrados_del_codigo():
     }
     for doc_id, marcadores in casos.items():
         cuerpo = libtexto.cuerpo_efectivo(doc_id)
-        assert cuerpo and cuerpo.strip(), f"semilla vacía o ausente: {doc_id}"
+        assert cuerpo and cuerpo.strip(), f"inicial vacía o ausente: {doc_id}"
         for m in marcadores:
             assert m in cuerpo, f"{doc_id} sin el marcador {m}"
 
 
-def test_importar_semilla_materializa_docs_nuevos_en_store_existente():
+def test_importar_inicial_materializa_docs_nuevos_en_store_existente():
     # SEED-SYNC: un store YA inicializado (deploy viejo) recibe los seeds NUEVOS en el
-    # siguiente `python -m keni_consola.sembrar` (deploy.sh lo corre en cada deploy):
-    # `importar_semilla` copia SOLO lo que falta, sin pisar lo editado por el equipo.
+    # siguiente `python -m keni_consola.inicializar` (deploy.sh lo corre en cada deploy):
+    # `importar_inicial` copia SOLO lo que falta, sin pisar lo editado por el equipo.
     from keni_consola.libtexto._rutas import raiz
 
-    assert libtexto.importar_semilla() > 0
+    assert libtexto.importar_inicial() > 0
     # Simula el store viejo: aún no tenía uno de los docs nuevos, y otro está editado.
     (raiz() / "prompt" / "clasificar-marca.md").unlink()
     libtexto.guardar("prompt/hashtags", cuerpo="EDITADO POR EL EQUIPO")
-    assert libtexto.importar_semilla() == 1  # solo el que faltaba
+    assert libtexto.importar_inicial() == 1  # solo el que faltaba
     cuerpo = libtexto.cuerpo_efectivo("prompt/clasificar-marca")
     assert cuerpo and "{{MARCAS}}" in cuerpo
     assert libtexto.obtener("prompt/hashtags").cuerpo.strip() == "EDITADO POR EL EQUIPO"
@@ -274,7 +274,7 @@ def test_importar_semilla_materializa_docs_nuevos_en_store_existente():
 
 def test_migrar_nombres_biblioteca_renombra_refresca_y_preserva():
     # Simula un store con el ID VIEJO, un patrones (script) y un doc del
-    # equipo que NO está en la semilla (termometro). La migración renombra/refresca sin pisar esos.
+    # equipo que NO está en la inicial (termometro). La migración renombra/refresca sin pisar esos.
     from keni_consola.libtexto._rutas import raiz
     (raiz() / "prompt").mkdir(parents=True, exist_ok=True)
     (raiz() / "prompt" / "qa-fuente.md").write_text("---\ntitulo: QA fuente\n---\nVIEJO", encoding="utf-8")
@@ -296,16 +296,16 @@ def test_migrar_nombres_biblioteca_renombra_refresca_y_preserva():
     assert libtexto.migrar_nombres_biblioteca() == 0
 
 
-def test_sembrar_migra_antes_de_importar_sin_duplicar():
-    # REGRESIÓN del bug de duplicados: el paso de DEPLOY (`sembrar`, que corre bajo uvicorn, no
-    # `__main__`) DEBE migrar los ids ANTES de importar. Si no, `importar_semilla` crea el id NUEVO
+def test_inicializar_migra_antes_de_importar_sin_duplicar():
+    # REGRESIÓN del bug de duplicados: el paso de DEPLOY (`inicializar`, que corre bajo uvicorn, no
+    # `__main__`) DEBE migrar los ids ANTES de importar. Si no, `importar_inicial` crea el id NUEVO
     # junto al VIEJO del store = duplicado.
-    from keni_consola import sembrar
+    from keni_consola import inicializar
     from keni_consola.libtexto._rutas import raiz
 
     (raiz() / "prompt").mkdir(parents=True, exist_ok=True)
     (raiz() / "prompt" / "qa-fuente.md").write_text("---\ntitulo: QA fuente\n---\nVIEJO", encoding="utf-8")
-    sembrar.main()
+    inicializar.main()
     ids = {d.id for d in libtexto.listar(tipo="prompt")}
     assert "prompt/verificar" in ids
     assert "prompt/qa-fuente" not in ids  # el viejo NO sobrevive (no se duplica)

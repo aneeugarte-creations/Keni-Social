@@ -146,22 +146,22 @@ def test_equipo_incluye_marcas_de_cada_miembro(cliente):
     assert por_nombre["ng"]["marcas"] == ["nacion-gamer"]
 
 
-def test_equipo_incluye_puede_coordinar_tras_sembrar(cliente):
+def test_equipo_incluye_puede_coordinar_tras_inicializar(cliente):
     """`/api/rota/equipo?todos=1` expone `puede_coordinar` por miembro (ola "coord").
 
-    Tras `sembrar_equipo`, los tres canónicos (el coordinador de redes, fotografía/QA y la coordinadora operativa) quedan con
+    Tras `inicializar_equipo`, los tres canónicos (el coordinador de redes, fotografía/QA y la coordinadora operativa) quedan con
     `puede_coordinar=True`; el resto del equipo de redes queda en `False`. El frontend
     necesita este campo para listar candidatos a coordinador por celda en el
     calendario (sin él, el dropdown muestra "Sin candidatos").
     """
-    auth.sembrar_equipo()
+    auth.inicializar_equipo()
     r = cliente.get("/api/rota/equipo?todos=1")
     assert r.status_code == 200
     por_nombre = {m["nombre"]: m for m in r.json()["equipo"]}
     for canonico in ("elias", "ale", "mariana"):
-        assert canonico in por_nombre, f"falta {canonico} tras sembrar_equipo"
+        assert canonico in por_nombre, f"falta {canonico} tras inicializar_equipo"
         assert por_nombre[canonico]["puede_coordinar"] is True, (
-            f"{canonico} debe tener puede_coordinar=True tras sembrar_equipo"
+            f"{canonico} debe tener puede_coordinar=True tras inicializar_equipo"
         )
     # Un miembro no canónico debe quedar en False (sanity: no se cuela el flag).
     assert por_nombre["bernardo"]["puede_coordinar"] is False
@@ -914,7 +914,7 @@ def test_cobertura_semana_derivada(cliente):
     luis, tescu = equipo[0], equipo[1]
     ev_tarde = _crear_evento(cliente, titulo="Final", fecha=SAB1, hora="18:00")
     ev_madru = _crear_evento(cliente, titulo="Madrugada", fecha=SAB1, hora="03:00")
-    # Sembramos: tescu vespertino SAB1 (cubre el de 18:00), luis vespertino SAB1 tambien.
+    # Inicializamos: tescu vespertino SAB1 (cubre el de 18:00), luis vespertino SAB1 tambien.
     _crear_turno(LUNES1, SAB1, tescu, franja="vespertino")
     _crear_turno(LUNES1, SAB1, luis, franja="vespertino")
     # luis tambien tiene matutino otro dia (no cubre nada el sabado).
@@ -1188,7 +1188,7 @@ def _cli_admin(app) -> TestClient:
 
 
 def test_franjas_independientes_por_marca_misma_semana(cliente):
-    """(a) Dos marcas tienen franjas INDEPENDIENTES la misma semana (sembrado por marca).
+    """(a) Dos marcas tienen franjas INDEPENDIENTES la misma semana (inicializado por marca).
 
     GET con `?marca=` siembra y devuelve SOLO la rejilla de esa marca; cada marca recibe sus
     propias franjas por defecto (la "Mañana" de una NO es la "Mañana" de la otra).
@@ -1248,7 +1248,7 @@ def test_vista_todas_agrega_ambas_marcas(cliente):
     assert todas["total"] == 2
     marcas_turnos = {t["marca"] for t in todas["turnos"]}
     assert marcas_turnos == {"claro-sports", "unotv"}
-    # Las franjas sembradas de ambas rejillas tambien se apilan en "Todas".
+    # Las franjas inicializadas de ambas rejillas tambien se apilan en "Todas".
     marcas_franjas = {f["marca"] for f in todas["franjas"]}
     assert {"claro-sports", "unotv"} <= marcas_franjas
 

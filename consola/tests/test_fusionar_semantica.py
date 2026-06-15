@@ -112,7 +112,7 @@ def test_extraer_grupos_tolera_fences():
 # --------------------------------------------------------------------------- #
 
 
-def _sembrar(cid, *, marca="unotv", n_fuentes=1, score=0.3, fuente_id="f", url="https://e.com/x"):
+def _inicializar(cid, *, marca="unotv", n_fuentes=1, score=0.3, fuente_id="f", url="https://e.com/x"):
     repos.upsert_noticia_cluster({
         "id": cid, "titulo": f"Historia {cid}", "resumen": "r", "marca": marca,
         "categoria": "mx", "geo": "MX", "clave": f"t:{cid}", "n_items": 1, "n_fuentes": n_fuentes,
@@ -133,8 +133,8 @@ def _sembrar(cid, *, marca="unotv", n_fuentes=1, score=0.3, fuente_id="f", url="
 def test_paso_fusion_funde_grupo_del_mismo_evento(entorno, monkeypatch):
     monkeypatch.setenv("KENI_PIPELINE_FUSIONAR", "1")
     # c1 (2 fuentes) es la canónica; c2 (1 fuente) se absorbe. Fuentes distintas -> n_fuentes 2.
-    _sembrar("c1", n_fuentes=2, score=0.6, fuente_id="medioA", url="https://a.com/1")
-    _sembrar("c2", n_fuentes=1, score=0.2, fuente_id="medioB", url="https://b.com/1")
+    _inicializar("c1", n_fuentes=2, score=0.6, fuente_id="medioA", url="https://a.com/1")
+    _inicializar("c2", n_fuentes=1, score=0.2, fuente_id="medioB", url="https://b.com/1")
 
     res = recolectar_daemon.paso_fusionar_semantica(ejecutor=_ej([["c1", "c2"]]))
 
@@ -147,15 +147,15 @@ def test_paso_fusion_funde_grupo_del_mismo_evento(entorno, monkeypatch):
 
 def test_paso_fusion_gateado_off_no_hace_nada(entorno, monkeypatch):
     monkeypatch.delenv("KENI_PIPELINE_FUSIONAR", raising=False)
-    _sembrar("c1")
-    _sembrar("c2")
+    _inicializar("c1")
+    _inicializar("c2")
     res = recolectar_daemon.paso_fusionar_semantica(ejecutor=_ej([["c1", "c2"]]))
     assert res == {"grupos": 0, "fusionadas": 0}
     assert repos.obtener_noticia_cluster("c2") is not None       # nada se fundió
 
 
 def test_construir_prompt_inserta_historias_y_contrato():
-    # La plantilla viene de la Biblioteca (semilla): la lista JSON sustituye al marcador (que NO
+    # La plantilla viene de la Biblioteca (inicial): la lista JSON sustituye al marcador (que NO
     # debe quedar crudo) y se conserva el contrato JSON {"grupos": [...]}.
     p = fusionar_semantica._construir_prompt('[{"id":"a"}]')
     assert '[{"id":"a"}]' in p

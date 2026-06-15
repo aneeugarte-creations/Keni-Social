@@ -33,7 +33,7 @@ from ._comun import (
     Any,
     IntegrityError,
     _conectar,
-    _sembrar_franjas_por_defecto_en,
+    _inicializar_franjas_por_defecto_en,
     ahora_iso,
     date,
     timedelta,
@@ -84,7 +84,7 @@ from .franjas_semana import (
     crear_franja_semana,
     listar_franjas_semana,
     obtener_franja_semana,
-    sembrar_franjas_por_defecto,
+    inicializar_franjas_por_defecto,
 )
 from .programas import (
     _CAMPOS_EDITABLES_PROGRAMA_ROTA,
@@ -152,7 +152,7 @@ __all__ = [
     "Any",
     "IntegrityError",
     "_conectar",
-    "_sembrar_franjas_por_defecto_en",
+    "_inicializar_franjas_por_defecto_en",
     "ahora_iso",
     "date",
     "timedelta",
@@ -219,7 +219,7 @@ __all__ = [
     "crear_franja_semana",
     "listar_franjas_semana",
     "obtener_franja_semana",
-    "sembrar_franjas_por_defecto",
+    "inicializar_franjas_por_defecto",
     # Swaps.
     "_CAMPOS_EDITABLES_SWAP",
     "_COLS_SWAP_TURNO",

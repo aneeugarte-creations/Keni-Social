@@ -374,7 +374,7 @@ from .repos_rota import (  # noqa: F401
     obtener_turno_rota,
     quitar_coordinador_rota,
     reclamar_oferta_turno,
-    sembrar_franjas_por_defecto,
+    inicializar_franjas_por_defecto,
 )
 from .repos_webhooks import (  # noqa: F401
     actualizar_webhook,

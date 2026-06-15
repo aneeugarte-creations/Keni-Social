@@ -11,7 +11,7 @@ Anclas de peso (el rango editable va de PESO_MIN a PESO_MAX):
   - PESO_BAJO    (0.5): fuentes de baja confiabilidad (coherente con la verificación
     `dudosa` de clustering, que ya castiga aparte).
 
-`PESOS_HOST_SEMILLA` es el seed por HOST: al crear una fuente (o backfillear las
+`PESOS_HOST_INICIAL` es el seed por HOST: al crear una fuente (o backfillear las
 existentes) se le asigna el peso de su host si está en la lista; el equipo puede
 corregirlo después desde la UI de Fuentes. Lista corta y editable a propósito: solo
 cabeceras donde la potencia es indiscutible.
@@ -36,7 +36,7 @@ _UMBRAL_BAJO = 0.6
 
 # Seed de peso por HOST (sin esquema ni `www.`; casa también subdominios). Solo cabeceras
 # de potencia indiscutible: agencias globales + primer nivel internacional/nacional MX.
-PESOS_HOST_SEMILLA: dict[str, float] = {
+PESOS_HOST_INICIAL: dict[str, float] = {
     # Agencias globales.
     "reuters.com": PESO_POTENTE,
     "apnews.com": PESO_POTENTE,
@@ -92,14 +92,14 @@ def _host_de_url(url: str) -> str:
 
 
 def peso_de_url(url: str) -> float:
-    """Peso semilla por el HOST de la url ('' o desconocido -> PESO_NORMAL).
+    """Peso inicial por el HOST de la url ('' o desconocido -> PESO_NORMAL).
 
     Casa el host exacto o cualquier subdominio (`feeds.reuters.com` -> reuters.com).
     """
     host = _host_de_url(url)
     if not host:
         return PESO_NORMAL
-    for semilla, peso in PESOS_HOST_SEMILLA.items():
-        if host == semilla or host.endswith("." + semilla):
+    for inicial, peso in PESOS_HOST_INICIAL.items():
+        if host == inicial or host.endswith("." + inicial):
             return peso
     return PESO_NORMAL

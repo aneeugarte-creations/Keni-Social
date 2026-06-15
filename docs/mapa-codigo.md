@@ -86,7 +86,7 @@ Cada uno exporta un `iniciar_*`; casi todos GATEADOS por env var (OFF por defect
 - `limites_plataforma.py` — límites de caracteres (REEXPORTA `keni_shared.limites_plataforma`).
 - `agentes.py` — dominio AGENTES: el conjunto ABIERTO de agentes.
 - `agencias.py` — adaptadores de agencias de noticias (Reuters/AFP) como fuentes.
-- `bootstrap_lineas.py` — semilla idempotente de LÍNEAS de contenido y orígenes.
+- `bootstrap_lineas.py` — inicial idempotente de LÍNEAS de contenido y orígenes.
 
 ## Cola de jobs y worker (generación IA)
 - `cola.py` — cola de jobs: el back ENCOLA, un WORKER clava y ejecuta (#130 Fase 2).

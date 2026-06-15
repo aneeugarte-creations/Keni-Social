@@ -57,7 +57,7 @@ function documentoOverlay(doc: ComposicionVideo, marca: string, capas: Capa[]): 
 }
 
 export function PanelOverlay({ doc, marca, capas, onCapas }: PanelOverlayProps) {
-  // Un store POR montaje, sembrado con las capas actuales. Se recrea si cambia el formato del
+  // Un store POR montaje, inicializado con las capas actuales. Se recrea si cambia el formato del
   // lienzo (las capas se preservan vía el documento).
   const storeRef = React.useRef<StoreEditor | null>(null);
   const formatoClave = `${doc.formato.w}x${doc.formato.h}`;

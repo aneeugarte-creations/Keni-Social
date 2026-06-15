@@ -263,7 +263,7 @@ from .migraciones_modelo import (
     _migrar_modelo_turnos as _migrar_modelo_turnos,
 )
 from .migraciones_modelo import (
-    _sembrar_franjas_por_defecto_en as _sembrar_franjas_por_defecto_en,
+    _inicializar_franjas_por_defecto_en as _inicializar_franjas_por_defecto_en,
 )
 
 __all__ = [
@@ -329,7 +329,7 @@ __all__ = [
     '_migrar_modelo_franjas',
     '_migrar_modelo_turnos',
     '_parsear_hora_a_minutos',
-    '_sembrar_franjas_por_defecto_en',
+    '_inicializar_franjas_por_defecto_en',
     '_tabla_existe',
     'arrancar_persistencia',
     'conectar',

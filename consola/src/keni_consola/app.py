@@ -268,23 +268,23 @@ def crear_app(
         except Exception:  # noqa: BLE001 -- el arranque no debe romper por el bootstrap
             _logger.warning("No se pudo ejecutar el bootstrap del admin inicial.", exc_info=True)
         try:
-            auth.sembrar_equipo()
+            auth.inicializar_equipo()
         except Exception:  # noqa: BLE001 -- idem: no impide el arranque
-            _logger.warning("No se pudo sembrar el equipo AMX.", exc_info=True)
+            _logger.warning("No se pudo inicializar el equipo AMX.", exc_info=True)
         try:
             from . import bootstrap_lineas
 
-            bootstrap_lineas.sembrar_lineas()
+            bootstrap_lineas.inicializar_lineas()
         except Exception:  # noqa: BLE001 -- idem: no impide el arranque
-            _logger.warning("No se pudieron sembrar las líneas/orígenes.", exc_info=True)
+            _logger.warning("No se pudieron inicializar las líneas/orígenes.", exc_info=True)
         try:
             # Motor de ingesta (Ola A): si el catálogo de feeds está vacío, activa los presets
             # como `fuentes_rss` para que el motor tenga de dónde leer. Idempotente por URL.
             from . import bootstrap_lineas
 
-            bootstrap_lineas.sembrar_fuentes_ingesta()
+            bootstrap_lineas.inicializar_fuentes_ingesta()
         except Exception:  # noqa: BLE001 -- idem: no impide el arranque
-            _logger.warning("No se pudieron sembrar las fuentes del motor de ingesta.", exc_info=True)
+            _logger.warning("No se pudieron inicializar las fuentes del motor de ingesta.", exc_info=True)
         # Lleva tareas, piezas de la rota y
         # publicaciones al modelo `contenido` para que el tablero las muestre.
         # Idempotente (marca el origen / preserva ids) y best-effort: no impide el arranque.

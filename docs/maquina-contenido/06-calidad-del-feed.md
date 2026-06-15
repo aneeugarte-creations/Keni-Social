@@ -48,7 +48,7 @@ El panel lista TODO el pool jerarquizado, pero **promover** exige un umbral más
      cajón: el humano ya decidió) y **breaking corroboradas** (evento mayor confirmado
      por varias fuentes a la vez, cuyo vocabulario puede ser nuevo).
 - `keni_consola/noticias_umbral.py` es la **fuente única de la decisión** (umbral vivo
-  de config + vocabulario efectivo perfil-Haiku-vs-semilla): la usan la promoción CI
+  de config + vocabulario efectivo perfil-Haiku-vs-inicial): la usan la promoción CI
   (`pipeline_contenido.clusters_para_promover`, fail-closed) y la API del panel
   (`promovible`/`promovible_motivo` por historia). Si el panel dijera una cosa y el
   pipeline hiciera otra, sería un bug aquí.
@@ -69,7 +69,7 @@ explicación junto al score (`noticias_clusters.score_razon` / `score_desglose`)
 - El re-score periódico refresca TAMBIÉN la explicación (si no, la razón explicaría un
   score viejo). La UI (Cobertura) la enseña en el tooltip del badge de score y en los
   badges «Auto-producible» / «Bajo el umbral».
-- El vocabulario semilla por marca vive en `relevancia_marca.py` (~80–190 términos por
+- El vocabulario inicial por marca vive en `relevancia_marca.py` (~80–190 términos por
   marca del piloto, criterio documentado ahí: términos de una palabra solo si
   identifican la agenda sin ambigüedad; nombres genéricos en frase — `club leon` — para
   no arrastrar historias al asignar marca por vocabulario). El perfil editorial Haiku

@@ -275,7 +275,7 @@ def test_analisis_y_comparar_llevan_generado_en(cliente):
 
 
 def test_estado_devuelve_contrato_y_generado_en_del_combo(cliente):
-    # Sembramos la cache del combo leyéndolo una vez.
+    # Inicializamos la cache del combo leyéndolo una vez.
     rep = cliente.get("/api/metricas/reporte?rango=mes").json()
     est = cliente.get("/api/metricas/estado?rango=mes").json()
     assert est["corriendo"] is False
@@ -348,7 +348,7 @@ def test_token_mal_formado_devuelve_400(cliente):
 # --------------------------------------------------------------------------- #
 
 
-def _sembrar_pieza_publicada(marca: str, red: str, id_post: str, titulo: str = "Gol") -> str:
+def _inicializar_pieza_publicada(marca: str, red: str, id_post: str, titulo: str = "Gol") -> str:
     """Crea una pieza publicada (contenido + plataforma con id_post_metricool). Devuelve contenido_id."""
     from keni_consola import repos
 
@@ -362,7 +362,7 @@ def _sembrar_pieza_publicada(marca: str, red: str, id_post: str, titulo: str = "
 def test_piezas_rendimiento_lista_publicadas_con_rendimiento(cliente):
     # claro-sports (Consola) -> claro_sports (id_metricas). La muestra devuelve datos
     # deterministas por id_post, así que la pieza sale como `encontrado`.
-    contenido_id = _sembrar_pieza_publicada("claro-sports", "facebook", "post-123")
+    contenido_id = _inicializar_pieza_publicada("claro-sports", "facebook", "post-123")
     r = cliente.get("/api/metricas/piezas-rendimiento?marca=claro_sports")
     assert r.status_code == 200
     data = r.json()
@@ -387,8 +387,8 @@ def test_piezas_rendimiento_sin_id_post_se_omite(cliente):
 
 
 def test_piezas_rendimiento_acota_por_marca(cliente):
-    _sembrar_pieza_publicada("claro-sports", "facebook", "post-a")
-    _sembrar_pieza_publicada("unotv", "instagram", "post-b")
+    _inicializar_pieza_publicada("claro-sports", "facebook", "post-a")
+    _inicializar_pieza_publicada("unotv", "instagram", "post-b")
     # Acotado a una marca: solo sus piezas.
     r = cliente.get("/api/metricas/piezas-rendimiento?marca=claro_sports")
     assert r.status_code == 200

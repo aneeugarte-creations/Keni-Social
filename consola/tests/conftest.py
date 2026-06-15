@@ -98,7 +98,7 @@ def _aislar_patrones(monkeypatch, tmp_path):
 
     Sin esto, un test que aplica un perfil (re-derivación, verificador de voz)
     escribiría en la config REAL (`~/.config/keni-social/patrones`) y el verificador
-    leería perfiles del runtime del desarrollador en vez de la semilla del paquete.
+    leería perfiles del runtime del desarrollador en vez de la inicial del paquete.
     """
     monkeypatch.setenv("KENI_PATRONES_DIR", str(tmp_path / "patrones"))
 

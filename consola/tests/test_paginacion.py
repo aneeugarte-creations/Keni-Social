@@ -218,7 +218,7 @@ def _agregados_full_scan() -> dict:
     }
 
 
-def _sembrar_runs_variados():
+def _inicializar_runs_variados():
     """Varios runs con costes/tokens/dias/agentes distintos (costes unicos por agente)."""
     _run("unotv", "2026-05-24T10:00:00", coste=0.0123, tin=130, tout=50)
     _run("unotv", "2026-05-24T11:00:00", coste=0.0050, tin=77, tout=33)
@@ -246,7 +246,7 @@ def _como_mapas(agg: dict) -> dict:
 
 def test_agregados_paridad_full_scan_vs_indexado(base):
     """La agregacion SQL indexada == el full-scan, numero a numero (total/agente/dia)."""
-    _sembrar_runs_variados()
+    _inicializar_runs_variados()
     esperado = _agregados_full_scan()
     obtenido = agentes.agregados_runs()
     # Numeros identicos (comparados como mapas, orden-independiente).
@@ -263,7 +263,7 @@ def test_agregados_paridad_full_scan_vs_indexado(base):
 
 def test_agregados_paridad_tras_backfill_desde_disco(base):
     """Tras borrar el indice, el backfill desde disco reproduce los MISMOS agregados."""
-    _sembrar_runs_variados()
+    _inicializar_runs_variados()
     esperado = _agregados_full_scan()
     # Indice borrado: agregados_runs debe reconstruirlo y NO sub-contar.
     indice.ruta_indice().unlink()
@@ -272,7 +272,7 @@ def test_agregados_paridad_tras_backfill_desde_disco(base):
 
 
 def test_reindexar_runs_explicito(base):
-    _sembrar_runs_variados()
+    _inicializar_runs_variados()
     indice.reemplazar_tipo("run", [])  # vacia el indice de runs sin tocar disco
     assert indice.contar("run") == 0
     agentes.reindexar_runs()

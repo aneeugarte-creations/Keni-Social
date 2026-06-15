@@ -77,9 +77,9 @@ export function PanelPlan({
     queryFn: ({ signal }) => api.franjas(signal),
   });
 
-  // Estado del formulario, sembrado al montar desde el plan + las franjas actuales.
+  // Estado del formulario, inicializado al montar desde el plan + las franjas actuales.
   const [filas, setFilas] = React.useState<Record<string, FilaLinea>>({});
-  const [sembrado, setSembrado] = React.useState(false);
+  const [inicializado, setInicializado] = React.useState(false);
 
   const valorPlan = React.useMemo(() => {
     for (const g of ajustes.data?.grupos ?? []) {
@@ -98,7 +98,7 @@ export function PanelPlan({
   );
 
   React.useEffect(() => {
-    if (sembrado || ajustes.isPending || franjasQuery.isPending) return;
+    if (inicializado || ajustes.isPending || franjasQuery.isPending) return;
     const plan = parsearPlan(valorPlan);
     const horasPorLinea = new Map<string, Set<string>>();
     for (const f of franjasMarca) {
@@ -107,16 +107,16 @@ export function PanelPlan({
       horasPorLinea.set(f.categoria, set);
     }
     const lineas = new Set([...LINEAS_BASE, ...Object.keys(plan), ...horasPorLinea.keys()]);
-    const sembradas: Record<string, FilaLinea> = {};
+    const inicializadas: Record<string, FilaLinea> = {};
     for (const linea of lineas) {
-      sembradas[linea] = {
+      inicializadas[linea] = {
         cupo: String(plan[linea] ?? 0),
         horas: [...(horasPorLinea.get(linea) ?? [])].sort().join(", "),
       };
     }
-    setFilas(sembradas);
-    setSembrado(true);
-  }, [sembrado, ajustes.isPending, franjasQuery.isPending, valorPlan, franjasMarca]);
+    setFilas(inicializadas);
+    setInicializado(true);
+  }, [inicializado, ajustes.isPending, franjasQuery.isPending, valorPlan, franjasMarca]);
 
   const guardar = useMutation({
     mutationFn: async () => {

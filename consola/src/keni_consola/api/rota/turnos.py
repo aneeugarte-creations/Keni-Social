@@ -188,7 +188,7 @@ def _validar_y_resolver_turno(
         fecha_final = campos.get("fecha", (actual or {}).get("fecha", ""))
         semana_legacy = dominio.lunes_de_semana_iso(fecha_final) if fecha_final else ""
         if semana_legacy:
-            defaults = repos.sembrar_franjas_por_defecto(semana_legacy)
+            defaults = repos.inicializar_franjas_por_defecto(semana_legacy)
             nombre_buscado = ""
             if legacy_franja == "matutino":
                 nombre_buscado = "Mañana"

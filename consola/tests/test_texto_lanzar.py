@@ -246,7 +246,7 @@ def _prompt_piezas(titulo: str = "Copy desde nota"):
     return doc
 
 
-def _sembrar_indicacion(repos, *, fecha: str, marca: str, titulo: str) -> None:
+def _inicializar_indicacion(repos, *, fecha: str, marca: str, titulo: str) -> None:
     """Siembra una indicación en el cajón `contexto` (mismo patrón que test_indicaciones_copy)."""
     lote = repos.crear_insumo_lote(fecha=fecha, cajon="contexto", estado="listo")
     repos.crear_insumo_items([
@@ -257,14 +257,14 @@ def _sembrar_indicacion(repos, *, fecha: str, marca: str, titulo: str) -> None:
 
 def test_lanzar_piezas_inyecta_indicaciones_vigentes_de_la_marca(entorno, encolado):
     """MODO PIEZAS crea piezas REALES, así que (como el resto del copy, cuyo punto único es
-    `componer_copy`) inyecta las indicaciones VIGENTES del equipo. Con una indicación sembrada
+    `componer_copy`) inyecta las indicaciones VIGENTES del equipo. Con una indicación inicializada
     para claro-sports el prompt encolado lleva el bloque OBLIGATORIO; una marca sin
     indicaciones no cambia ni un byte (best-effort)."""
     from keni_consola import repos
     from keni_consola.dominio import indicaciones
     from keni_consola.tiempo import hoy_utc
 
-    _sembrar_indicacion(
+    _inicializar_indicacion(
         repos, fecha=hoy_utc().isoformat(), marca="claro-sports",
         titulo="Hoy prioridad al Mundial",
     )
@@ -310,7 +310,7 @@ def test_lanzar_prompt_piezas_sin_redes_cae_a_identidad(encolado):
 
 def test_lanzar_copy_adjunta_reglas_de_imagen_y_sin_hardcode_de_emojis(encolado):
     """El copy redacta el `copy_in` (texto sobre la placa): adjunta las reglas de imagen
-    (best-effort, de la semilla si el store no las tiene) y NO inyecta el hardcode de
+    (best-effort, de la inicial si el store no las tiene) y NO inyecta el hardcode de
     emojis (la política vive en el prompt + editorial adjunta)."""
     from keni_consola.dominio import generar
 

@@ -97,10 +97,10 @@ def _contexto_editorial(marca: str) -> str:
 
 
 def _componer_prompt(*, pub: dict[str, Any], marca: str, red: str, ruta_arte: str) -> str:
-    """Renderiza el prompt semilla `prompt/critica` con los datos de la pieza + contexto editorial."""
+    """Renderiza el prompt inicial `prompt/critica` con los datos de la pieza + contexto editorial."""
     from .. import libtexto
 
-    cuerpo = libtexto.cuerpo_efectivo(PROMPT_CRITICA) or libtexto.cuerpo_semilla(PROMPT_CRITICA)
+    cuerpo = libtexto.cuerpo_efectivo(PROMPT_CRITICA) or libtexto.cuerpo_inicial(PROMPT_CRITICA)
     if ruta_arte:
         arte = (
             "Hay una imagen adjunta. LÉELA con la herramienta Read en esta ruta y JÚZGALA "

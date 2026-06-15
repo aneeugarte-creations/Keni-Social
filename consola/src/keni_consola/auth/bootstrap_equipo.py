@@ -107,7 +107,7 @@ EQUIPO_AMX: tuple[
 # Usuarios cuyo `puede_coordinar` se sobreescribe INCONDICIONALMENTE en cada seed (ola
 # "coord"). Es el listado canonico que pide el negocio: el coordinador de redes (admin de redes
 # ClaroSports), fotografía/QA, la coordinadora operativa. El resto se rellena
-# correctivamente solo si nadie lo ha tocado (ver `sembrar_equipo`).
+# correctivamente solo si nadie lo ha tocado (ver `inicializar_equipo`).
 _USUARIOS_PUEDE_COORDINAR_FORZADO: frozenset[str] = frozenset({"elias", "ale", "mariana"})
 
 
@@ -118,7 +118,7 @@ _CARGOS_VIEJOS_CATALOGO: frozenset[str] = frozenset({
 })
 
 
-def sembrar_equipo() -> None:
+def inicializar_equipo() -> None:
     """Asegura los 16 usuarios del equipo de redes en la BD (idempotente).
 
     - Usuarios nuevos: se crean con `PASSWORD_INICIAL` y `debe_cambiar_password=True`,

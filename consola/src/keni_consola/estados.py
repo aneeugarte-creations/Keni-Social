@@ -146,7 +146,7 @@ TIPOS_SWAP: tuple[str, ...] = (
 )
 
 # Mientras quedan tests que pasan estos strings al crear un turno, los aceptamos por
-# retrocompat y el repos los traduce a un `franja_id` real sembrando la semana por defecto
+# retrocompat y el repos los traduce a un `franja_id` real inicializando la semana por defecto
 # (Mañana 08:00-16:00, Tarde 16:00-24:00). Codigo nuevo debe pasar `franja_id` directamente.
 FRANJAS_TURNO_LEGACY: tuple[str, ...] = ("matutino", "vespertino", "descanso")
 FRANJA_MATUTINO_LEGACY = "matutino"

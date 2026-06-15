@@ -192,7 +192,7 @@ def _token_de_la_peticion(scope: Scope) -> str | None:
     if x_token:
         return x_token
 
-    # Cookie (sembrada por el index del SPA). Parseo minimal sin dependencias.
+    # Cookie (inicializada por el index del SPA). Parseo minimal sin dependencias.
     cookie = cabeceras.get("cookie", "")
     for parte in cookie.split(";"):
         nombre, _, valor = parte.strip().partition("=")

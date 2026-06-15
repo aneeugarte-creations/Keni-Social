@@ -22,7 +22,7 @@ def test_listar_siembra_la_idea_de_partida(cliente):
     cuerpo = r.json()
     # La primera lectura siembra la idea del moderador de YouTube.
     ids = [s["id"] for s in cuerpo["sugerencias"]]
-    assert "semilla-moderacion-youtube" in ids
+    assert "inicial-moderacion-youtube" in ids
     # Los catálogos para la UI vienen en la respuesta.
     assert cuerpo["categorias"] == list(sugerencias.CATEGORIAS)
     assert cuerpo["estados"] == list(sugerencias.ESTADOS)
@@ -99,8 +99,8 @@ def store(monkeypatch, tmp_path):
     return ruta
 
 
-def test_vaciar_no_vuelve_a_sembrar(store):
-    # Tras sembrar y borrar todo, el archivo queda vacío y NO se re-siembra.
+def test_vaciar_no_vuelve_a_inicializar(store):
+    # Tras inicializar y borrar todo, el archivo queda vacío y NO se re-siembra.
     inicial = sugerencias.listar()
     for s in list(inicial):
         sugerencias.borrar(s["id"])

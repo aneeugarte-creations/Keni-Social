@@ -16,7 +16,7 @@ const COLOR_RESPALDO = "#000000";
 // Konva usa puntos relativos al nodo (origen 0,0), así que el centro de la caja es (w/2,h/2).
 export function puntosGradiente(w: number, h: number, angulo: number = ANGULO_DEFECTO) {
   // DEFENSA: un `angulo` NO finito (NaN de un valor no numérico, Infinity de "1e999", o un dato
-  // malformado de una plantilla sembrada en la BD / doc auto-producido o importado que NO pasó por
+  // malformado de una plantilla inicializada en la BD / doc auto-producido o importado que NO pasó por
   // el control `Num`) daría start/end {x:NaN,y:NaN}; Konva los pasa a `ctx.createLinearGradient(NaN…)`,
   // que por la spec del canvas LANZA y deja el relleno —y a veces las capas hermanas del Layer— SIN
   // PINTAR: el degradado "desaparece y no se sabe a dónde va". Caemos al vertical 180 (igual que el

@@ -2,7 +2,7 @@
 
 Cada transicion del swap deja una notificacion en el "cajon" de la campana del
 destinatario correcto (best-effort, sin tumbar la accion). Reusa los fixtures del test
-de la API de swaps (`test_api_rota_swaps`) para sembrar horario + sesiones.
+de la API de swaps (`test_api_rota_swaps`) para inicializar horario + sesiones.
 
 Reparto esperado:
   - solicitud        -> al destinatario

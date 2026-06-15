@@ -1,6 +1,6 @@
 """Tests de la API de HISTORIAS (/api/noticias/historias). OFFLINE: nunca se toca la red.
 
-Sembramos `noticias_clusters` + sus `noticias_items` directo en `repos` (el daemon de ingesta
+Inicializamos `noticias_clusters` + sus `noticias_items` directo en `repos` (el daemon de ingesta
 no corre en la suite) y ejercitamos: listado por recencia (`ultimo_visto` desc, `score` desempate)
 + filtros (marca/categoria/estado) + total, detalle con items, `usar` (lleva al tablero con
 origen='historia', marca cluster + sus items usados) y `descartar`.
@@ -13,7 +13,7 @@ from keni_consola import repos
 from .conftest import _cliente  # noqa: F401  (usado por la fixture `cliente`)
 
 
-def _sembrar_cluster(cid, *, score=0.5, marca="unotv", categoria="mx", estado="nuevo",
+def _inicializar_cluster(cid, *, score=0.5, marca="unotv", categoria="mx", estado="nuevo",
                      titulo="Historia de prueba", n_fuentes=2, breaking=0,
                      ultimo_visto="2026-06-05T12:00:00+00:00", items=None):
     """Crea un cluster + (opcional) sus items enlazados; devuelve el cluster persistido."""
@@ -70,9 +70,9 @@ def test_historias_vacio(cliente):
 def test_historias_orden_por_score_desc_y_total(cliente):
     # La de MAYOR score va primero aunque sea más vieja: la jerarquización (algoritmo de
     # ponderación) es el criterio primario; la recencia solo desempata.
-    _sembrar_cluster("vieja", score=0.9, titulo="Historia vieja con score alto",
+    _inicializar_cluster("vieja", score=0.9, titulo="Historia vieja con score alto",
                      ultimo_visto="2026-06-01T12:00:00+00:00")
-    _sembrar_cluster("nueva", score=0.2, titulo="Historia nueva con score bajo",
+    _inicializar_cluster("nueva", score=0.2, titulo="Historia nueva con score bajo",
                      ultimo_visto="2026-06-05T12:00:00+00:00")
     datos = cliente.get("/api/noticias/historias").json()
     assert datos["total"] == 2
@@ -82,16 +82,16 @@ def test_historias_orden_por_score_desc_y_total(cliente):
 
 def test_historias_recencia_desempata_mismo_score(cliente):
     # Con el mismo `score`, la más reciente (`ultimo_visto`) desempata primero.
-    _sembrar_cluster("vieja", score=0.5, titulo="Mismo score, más vieja",
+    _inicializar_cluster("vieja", score=0.5, titulo="Mismo score, más vieja",
                      ultimo_visto="2026-06-01T12:00:00+00:00")
-    _sembrar_cluster("nueva", score=0.5, titulo="Mismo score, más nueva",
+    _inicializar_cluster("nueva", score=0.5, titulo="Mismo score, más nueva",
                      ultimo_visto="2026-06-05T12:00:00+00:00")
     datos = cliente.get("/api/noticias/historias").json()
     assert [h["id"] for h in datos["historias"]] == ["nueva", "vieja"]
 
 
 def test_historias_incluye_enlaces_corroborantes(cliente):
-    _sembrar_cluster("c1", items=[
+    _inicializar_cluster("c1", items=[
         {"fuente_nombre": "Medio A", "url": "https://a.com/1", "titulo": "Titular A"},
         {"fuente_nombre": "Medio B", "url": "https://b.com/1", "titulo": "Titular B"},
     ])
@@ -103,8 +103,8 @@ def test_historias_incluye_enlaces_corroborantes(cliente):
 
 
 def test_historias_filtra_por_marca(cliente):
-    _sembrar_cluster("u", marca="unotv")
-    _sembrar_cluster("c", marca="claro-sports")
+    _inicializar_cluster("u", marca="unotv")
+    _inicializar_cluster("c", marca="claro-sports")
     datos = cliente.get("/api/noticias/historias", params={"marca": "claro-sports"}).json()
     assert datos["total"] == 1
     assert datos["historias"][0]["marca"] == "claro-sports"
@@ -112,8 +112,8 @@ def test_historias_filtra_por_marca(cliente):
 
 def test_historias_filtra_por_estado(cliente):
     # Ya NO se filtra por categoría (el eje es marca/línea editorial): solo estado.
-    _sembrar_cluster("a")
-    _sembrar_cluster("b")
+    _inicializar_cluster("a")
+    _inicializar_cluster("b")
     assert cliente.get("/api/noticias/historias", params={"estado": "nuevo"}).json()["total"] == 2
     assert cliente.get("/api/noticias/historias", params={"estado": "usado"}).json()["total"] == 0
 
@@ -153,32 +153,32 @@ def _pieza_estado(cliente, cid):
 
 
 def test_pieza_estado_en_pool_si_nueva(cliente):
-    _sembrar_cluster("c1")  # estado 'nuevo'
+    _inicializar_cluster("c1")  # estado 'nuevo'
     assert _pieza_estado(cliente, "c1") == "en_pool"
 
 
 def test_pieza_estado_descartada(cliente):
-    _sembrar_cluster("c1", estado="descartado")
+    _inicializar_cluster("c1", estado="descartado")
     assert _pieza_estado(cliente, "c1") == "descartada"
 
 
 def test_pieza_estado_en_cola_si_usada_sin_pieza(cliente):
     # Usada pero sin fila de plataforma (dedup / sin redes / copy por encolar): NO está en el
     # feed -> 'en_cola'. Es el bug del piloto: antes el badge decía "En el feed" igualmente.
-    _sembrar_cluster("c1")
+    _inicializar_cluster("c1")
     _usar_sin_pieza("c1")
     assert _pieza_estado(cliente, "c1") == "en_cola"
 
 
 def test_pieza_estado_generando_si_pieza_sin_copy(cliente):
-    _sembrar_cluster("c1")
+    _inicializar_cluster("c1")
     cont = _usar_sin_pieza("c1")
     _anadir_pieza(cont["id"], falta_copy=True)
     assert _pieza_estado(cliente, "c1") == "generando"
 
 
 def test_pieza_estado_en_feed_solo_con_pieza_y_copy(cliente):
-    _sembrar_cluster("c1")
+    _inicializar_cluster("c1")
     cont = _usar_sin_pieza("c1")
     _anadir_pieza(cont["id"], falta_copy=False)
     assert _pieza_estado(cliente, "c1") == "en_feed"
@@ -186,9 +186,9 @@ def test_pieza_estado_en_feed_solo_con_pieza_y_copy(cliente):
 
 def test_pieza_estado_en_listado_batch(cliente):
     # El listado computa `pieza_estado` en batch (sin N+1): una usada-sin-pieza y una nueva.
-    _sembrar_cluster("c1", score=0.9)
+    _inicializar_cluster("c1", score=0.9)
     _usar_sin_pieza("c1")
-    _sembrar_cluster("c2", score=0.1)
+    _inicializar_cluster("c2", score=0.1)
     historias = cliente.get("/api/noticias/historias").json()["historias"]
     por_id = {h["id"]: h["pieza_estado"] for h in historias}
     assert por_id == {"c1": "en_cola", "c2": "en_pool"}
@@ -200,7 +200,7 @@ def test_pieza_estado_en_listado_batch(cliente):
 
 
 def test_detalle_devuelve_historia_y_items(cliente):
-    _sembrar_cluster("c1", items=[
+    _inicializar_cluster("c1", items=[
         {"url": "https://a.com/1", "titulo": "Titular A"},
         {"url": "https://b.com/1", "titulo": "Titular B"},
     ])
@@ -254,12 +254,12 @@ def test_historia_expone_timeline_de_fuentes_y_peso(cliente):
 
 
 def test_enlaces_traen_publicado_en_y_tier(cliente):
-    _sembrar_cluster("c1", items=[
+    _inicializar_cluster("c1", items=[
         {"fuente_nombre": "Medio A", "url": "https://a.com/1", "titulo": "Titular A"},
     ])
     enlaces = cliente.get("/api/noticias/historias").json()["historias"][0]["enlaces"]
     assert enlaces[0]["publicado_en"]  # cae a capturado_en si el feed no traía pubDate
-    assert enlaces[0]["tier"] == "normal"  # items sembrados sin fuente_peso -> 1.0
+    assert enlaces[0]["tier"] == "normal"  # items inicializados sin fuente_peso -> 1.0
 
 
 # --------------------------------------------------------------------------- #
@@ -267,7 +267,7 @@ def test_enlaces_traen_publicado_en_y_tier(cliente):
 # --------------------------------------------------------------------------- #
 
 
-def _sembrar_para_stats():
+def _inicializar_para_stats():
     """Dos historias (una usada) y dos fuentes: `fa` abrió la usada; `fb` corrobora ambas."""
     repos.upsert_noticia_cluster({
         "id": "h1", "titulo": "Historia usada", "marca": "unotv", "clave": "t:h1",
@@ -293,7 +293,7 @@ def _sembrar_para_stats():
 
 
 def test_stats_fuentes_cuenta_historias_primeras_y_usadas(cliente):
-    _sembrar_para_stats()
+    _inicializar_para_stats()
     datos = cliente.get("/api/noticias/fuentes/stats", params={"marca": "unotv"}).json()
     por_fuente = {f["fuente_id"]: f for f in datos["fuentes"]}
     fa, fb = por_fuente["fa"], por_fuente["fb"]
@@ -319,7 +319,7 @@ def test_stats_fuentes_marca_invalida_400(cliente):
 def test_cluster_por_url_canonica_cruza_items_de_cualquier_fuente(cliente):
     # Cruce exacto del clustering a NIVEL DE ITEM: encuentra el cluster aunque la url no sea
     # la clave del representativo (igualdad o prefijo `?` sobre la canónica de dedup).
-    _sembrar_cluster("c1")
+    _inicializar_cluster("c1")
     repos.crear_noticias_items([{
         "fuente_id": "fx", "fuente_nombre": "Medio X", "titulo": "Titular",
         "clave": "a.com/nota?id=7", "cluster_id": "c1",
@@ -336,7 +336,7 @@ def test_cluster_por_url_canonica_cruza_items_de_cualquier_fuente(cliente):
 
 
 def test_usar_crea_borrador_con_origen_historia_y_marca_usado(cliente):
-    _sembrar_cluster("c1", marca="unotv", titulo="Historia para usar", items=[
+    _inicializar_cluster("c1", marca="unotv", titulo="Historia para usar", items=[
         {"url": "https://a.com/1", "titulo": "Titular A"},
     ])
     r = cliente.post("/api/noticias/historias/c1/usar", json={"generar": False})
@@ -361,7 +361,7 @@ def test_usar_crea_borrador_con_origen_historia_y_marca_usado(cliente):
 
 
 def test_usar_con_redes_crea_plataformas(cliente):
-    _sembrar_cluster("c1")
+    _inicializar_cluster("c1")
     r = cliente.post(
         "/api/noticias/historias/c1/usar", json={"redes": ["x", "instagram"], "generar": False}
     )
@@ -370,7 +370,7 @@ def test_usar_con_redes_crea_plataformas(cliente):
 
 
 def test_usar_idempotente_si_ya_usada(cliente):
-    _sembrar_cluster("c1")
+    _inicializar_cluster("c1")
     primero = cliente.post("/api/noticias/historias/c1/usar", json={"generar": False}).json()
     segundo = cliente.post("/api/noticias/historias/c1/usar", json={"generar": False}).json()
     assert segundo.get("ya_usada") is True
@@ -382,7 +382,7 @@ def test_usar_inexistente_404(cliente):
 
 
 def test_descartar_marca_descartada(cliente):
-    _sembrar_cluster("c1")
+    _inicializar_cluster("c1")
     r = cliente.post("/api/noticias/historias/c1/descartar")
     assert r.status_code == 200, r.text
     assert r.json()["historia"]["estado"] == "descartado"
@@ -399,9 +399,9 @@ def test_descartar_inexistente_404(cliente):
 
 
 def test_descartar_lote_marca_solo_las_pasadas(cliente):
-    _sembrar_cluster("a")
-    _sembrar_cluster("b")
-    _sembrar_cluster("c")
+    _inicializar_cluster("a")
+    _inicializar_cluster("b")
+    _inicializar_cluster("c")
     r = cliente.post(
         "/api/noticias/historias/descartar-lote", json={"ids": ["a", "b", "a", "nope"]}
     )
@@ -414,7 +414,7 @@ def test_descartar_lote_marca_solo_las_pasadas(cliente):
 
 
 def test_descartar_lote_lista_vacia_no_borra_nada(cliente):
-    _sembrar_cluster("a")
+    _inicializar_cluster("a")
     r = cliente.post("/api/noticias/historias/descartar-lote", json={"ids": []})
     assert r.status_code == 200
     assert r.json() == {"descartadas": 0}
@@ -432,8 +432,8 @@ def test_descartar_lote_ids_no_lista_400(cliente):
 
 
 def test_borrar_lote_elimina_clusters_y_articulos(cliente):
-    _sembrar_cluster("a", items=[{"url": "https://a.com/1"}])
-    _sembrar_cluster("b")
+    _inicializar_cluster("a", items=[{"url": "https://a.com/1"}])
+    _inicializar_cluster("b")
     r = cliente.post("/api/noticias/historias/borrar-lote", json={"ids": ["a", "nope"]})
     assert r.status_code == 200, r.text
     assert r.json() == {"borradas": 1}  # 'nope' inexistente, ignorada
@@ -449,9 +449,9 @@ def test_borrar_lote_ids_no_lista_400(cliente):
 
 
 def test_borrar_todo_vacia_solo_la_marca(cliente):
-    _sembrar_cluster("u1", marca="unotv", items=[{"url": "https://a.com/1"}])
-    _sembrar_cluster("u2", marca="unotv")
-    _sembrar_cluster("c1", marca="claro-sports")
+    _inicializar_cluster("u1", marca="unotv", items=[{"url": "https://a.com/1"}])
+    _inicializar_cluster("u2", marca="unotv")
+    _inicializar_cluster("c1", marca="claro-sports")
     r = cliente.post("/api/noticias/historias/borrar-todo", json={"marca": "unotv"})
     assert r.status_code == 200, r.text
     assert r.json() == {"borradas": 2}
@@ -462,8 +462,8 @@ def test_borrar_todo_vacia_solo_la_marca(cliente):
 
 
 def test_borrar_todo_respeta_filtro_estado(cliente):
-    _sembrar_cluster("n", marca="unotv", estado="nuevo")
-    _sembrar_cluster("d", marca="unotv", estado="descartado")
+    _inicializar_cluster("n", marca="unotv", estado="nuevo")
+    _inicializar_cluster("d", marca="unotv", estado="descartado")
     r = cliente.post(
         "/api/noticias/historias/borrar-todo", json={"marca": "unotv", "estado": "descartado"}
     )
@@ -521,7 +521,7 @@ def test_historias_umbral_no_promovible_explica_por_que(cliente):
     legible lo explica."""
     from datetime import UTC, datetime
 
-    _sembrar_cluster(
+    _inicializar_cluster(
         "sin-encaje", titulo="Celebrity gossip from Hollywood",
         ultimo_visto=datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="seconds"),
     )
@@ -542,7 +542,7 @@ def test_historia_expone_verificar_veredicto_y_marca_por_ia(cliente):
         clase="contenido", titulo="Tema verificado", marca="unotv", categoria="mx",
         verificar_veredicto="no_verificado",
     )
-    _sembrar_cluster("h-qa", marca="unotv")
+    _inicializar_cluster("h-qa", marca="unotv")
     repos.actualizar_noticia_cluster("h-qa", estado="usado", contenido_id=cont["id"])
     repos.marcar_cluster_marca_ia("h-qa")
 
@@ -555,7 +555,7 @@ def test_historia_expone_verificar_veredicto_y_marca_por_ia(cliente):
 
 
 def test_historia_sin_contenido_ni_ia_trae_campos_vacios(cliente):
-    _sembrar_cluster("h-plain", marca="unotv")
+    _inicializar_cluster("h-plain", marca="unotv")
     h = next(
         x for x in cliente.get("/api/noticias/historias", params={"marca": "unotv"}).json()["historias"]
         if x["id"] == "h-plain"
@@ -567,7 +567,7 @@ def test_historia_sin_contenido_ni_ia_trae_campos_vacios(cliente):
 def test_historia_expone_qa_nativo_del_cluster_sin_contenido(cliente):
     """ADR 0011 F3: la QA vive en la HISTORIA. Una 'problema' SIN contenido (no se materializó)
     expone su veredicto igual — así la Mesa de Investigación la muestra ❗, no como 'sin QA'."""
-    _sembrar_cluster("h-prob", marca="unotv")
+    _inicializar_cluster("h-prob", marca="unotv")
     repos.marcar_cluster_qa("h-prob", "problema", '{"resumen": "dato falso"}')
 
     historias = cliente.get(
@@ -584,13 +584,13 @@ def test_historia_expone_qa_nativo_del_cluster_sin_contenido(cliente):
 def test_marcar_cluster_qa_persiste_y_no_se_pisa_en_recalc(entorno):
     """ADR 0011 F3: `marcar_cluster_qa` sella el veredicto en la historia y un recalc (upsert) sin
     veredicto NO lo borra (`verificar_veredicto`/`verificar_hallazgos` en `_NO_PISAR`)."""
-    _sembrar_cluster("h-v", marca="unotv")
+    _inicializar_cluster("h-v", marca="unotv")
     repos.marcar_cluster_qa("h-v", "no_verificado", '{"resumen":"ok"}')
     c = repos.obtener_noticia_cluster("h-v")
     assert c["verificar_veredicto"] == "no_verificado"
     assert c["verificar_hallazgos"] == '{"resumen":"ok"}'
     # Recalc del daemon (mismo id, sin veredicto): no debe revertir la verificación.
-    _sembrar_cluster("h-v", marca="unotv", titulo="Historia re-puntuada")
+    _inicializar_cluster("h-v", marca="unotv", titulo="Historia re-puntuada")
     c2 = repos.obtener_noticia_cluster("h-v")
     assert c2["verificar_veredicto"] == "no_verificado"  # preservado pese al upsert
     assert c2["titulo"] == "Historia re-puntuada"  # el resto del recalc sí entra

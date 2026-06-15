@@ -17,7 +17,7 @@ from keni_consola.dominio import recibir_parse as ip
 
 
 def test_prompt_archivo_inserta_ruta_y_contrato_json():
-    # El prompt del cajón sale de la Biblioteca (semilla del paquete): inserta la RUTA donde
+    # El prompt del cajón sale de la Biblioteca (inicial del paquete): inserta la RUTA donde
     # estaba el marcador (que NO debe quedar crudo) y conserva el contrato JSON {"items": [...]}.
     prompt = ip.construir_prompt_archivo("portal", "/tmp/insumo.txt")
     assert "/tmp/insumo.txt" in prompt
@@ -31,8 +31,8 @@ def test_prompt_texto_incrusta_contenido():
     assert "INSUMO" in prompt  # delimitadores del bloque a procesar
 
 
-def test_fallback_de_cajon_sale_de_la_semilla(monkeypatch):
-    # Red de seguridad: si la lectura del store falla, el prompt sale de la SEMILLA del
+def test_fallback_de_cajon_sale_de_la_inicial(monkeypatch):
+    # Red de seguridad: si la lectura del store falla, el prompt sale de la INICIAL del
     # paquete (sin strings duplicados en el código) y conserva el contrato JSON parseable.
     from keni_consola import libtexto
 

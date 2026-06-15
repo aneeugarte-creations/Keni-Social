@@ -49,8 +49,8 @@ def test_peso_de_url_host_potente():
     assert fuentes_pesos.peso_de_url("https://bbc.com/mundo") == fuentes_pesos.PESO_POTENTE
 
 
-def test_peso_de_url_subdominio_casa_con_el_host_semilla():
-    # `feeds.bbc.co.uk` debe casar con la semilla `bbc.co.uk`.
+def test_peso_de_url_subdominio_casa_con_el_host_inicial():
+    # `feeds.bbc.co.uk` debe casar con la inicial `bbc.co.uk`.
     assert fuentes_pesos.peso_de_url("https://feeds.bbc.co.uk/news/rss.xml") == fuentes_pesos.PESO_POTENTE
 
 

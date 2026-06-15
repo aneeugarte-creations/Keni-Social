@@ -170,7 +170,7 @@ def _persistir_formato(pub: dict[str, Any], rend: dict[str, Any]) -> None:
     pub["formato"] = formato
 
 
-def sembrar_historico(pub: dict[str, Any], *, hasta: datetime | None = None) -> int:
+def inicializar_historico(pub: dict[str, Any], *, hasta: datetime | None = None) -> int:
     """Arranca la serie con su primer punto real ("ahora"). Devuelve cuantos inserto.
 
     No se puede reconstruir el pasado (Metricool solo da el valor actual del post):
@@ -249,7 +249,7 @@ def registrar(url: str = "", *, id_post_metricool: str = "", **campos: Any) -> d
     REAL desde la fuente (`_capturar_en`). Devuelve la pieza ya con `aviso_en` resuelto.
     """
     pub = repos.crear_publicacion_comercial(url, id_post_metricool=id_post_metricool, **campos)
-    sembrar_historico(pub)
+    inicializar_historico(pub)
     evaluar_aviso(pub)
     return repos.obtener_publicacion_comercial(pub["id"]) or pub
 

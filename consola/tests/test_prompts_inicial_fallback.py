@@ -1,8 +1,8 @@
-"""Los prompts FALLBACK de cada módulo salen de la SEMILLA del paquete, no de strings duplicados.
+"""Los prompts FALLBACK de cada módulo salen de la INICIAL del paquete, no de strings duplicados.
 
 PURO, sin Postgres: se apunta el store de la Texto a un tmp VACÍO y se hace reventar
 `libtexto.cuerpo_efectivo` (lectura del store rota); cada módulo debe resolver su plantilla
-desde `libtexto.cuerpo_semilla` (el .md que viaja en `texto_semilla/`).
+desde `libtexto.cuerpo_inicial` (el .md que viaja en `texto_inicial/`).
 """
 
 from __future__ import annotations
@@ -23,15 +23,15 @@ from keni_consola.dominio import (
 )
 
 
-def _semilla(prompt_id: str) -> str:
-    doc = libtexto.obtener_semilla(prompt_id)
-    assert doc is not None, f"falta la semilla {prompt_id}"
+def _inicial(prompt_id: str) -> str:
+    doc = libtexto.obtener_inicial(prompt_id)
+    assert doc is not None, f"falta la inicial {prompt_id}"
     return doc.cuerpo.strip()
 
 
 @pytest.fixture
 def store_roto(monkeypatch, tmp_path):
-    """Store vacío + lectura efectiva reventando: solo queda la SEMILLA del paquete."""
+    """Store vacío + lectura efectiva reventando: solo queda la INICIAL del paquete."""
     monkeypatch.setenv("KENI_TEXTO_DIR", str(tmp_path / "texto"))
 
     def boom(_prompt_id: str) -> str:
@@ -51,10 +51,10 @@ _CASOS = [
     (clasificador_marca._plantilla, "prompt/clasificar-marca"),
 ]
 
-# Ids de prompt que el CÓDIGO espera encontrar en la semilla (la semilla es la única fuente).
-# Si alguien borra un .md de `texto_semilla/`, este test lo caza ANTES del deploy: sin la semilla,
-# la generación se quedaría sin ese prompt y degradaría a vacío. CONTRATO semilla↔código.
-_IDS_SEMILLA_OBLIGATORIA = [
+# Ids de prompt que el CÓDIGO espera encontrar en la inicial (la inicial es la única fuente).
+# Si alguien borra un .md de `texto_inicial/`, este test lo caza ANTES del deploy: sin la inicial,
+# la generación se quedaría sin ese prompt y degradaría a vacío. CONTRATO inicial↔código.
+_IDS_INICIAL_OBLIGATORIA = [
     generar.PROMPT_ENVOLTORIO_SIN_EMOJIS,
     generar.PROMPT_ENVOLTORIO_REDES,
     generar.PROMPT_ENVOLTORIO_CARRUSEL,
@@ -66,46 +66,46 @@ _IDS_SEMILLA_OBLIGATORIA = [
 ]
 
 
-def test_semilla_cubre_todos_los_prompts_que_el_codigo_espera():
-    """La semilla provee CADA prompt cuyo `_FALLBACK_*` se eliminó (cobertura semilla↔código)."""
-    for pid in _IDS_SEMILLA_OBLIGATORIA:
-        doc = libtexto.obtener_semilla(pid)
-        assert doc is not None and doc.cuerpo.strip(), f"falta o está vacía la semilla {pid}"
+def test_inicial_cubre_todos_los_prompts_que_el_codigo_espera():
+    """La inicial provee CADA prompt cuyo `_FALLBACK_*` se eliminó (cobertura inicial↔código)."""
+    for pid in _IDS_INICIAL_OBLIGATORIA:
+        doc = libtexto.obtener_inicial(pid)
+        assert doc is not None and doc.cuerpo.strip(), f"falta o está vacía la inicial {pid}"
 
 
-def test_envoltorios_y_modos_resuelven_desde_la_semilla(store_roto):
+def test_envoltorios_y_modos_resuelven_desde_la_inicial(store_roto):
     """Con el store roto, los envoltorios de `generar` y las instrucciones del asistente
-    resuelven su texto desde la SEMILLA del paquete (no de un string duplicado en código)."""
+    resuelven su texto desde la INICIAL del paquete (no de un string duplicado en código)."""
     for doc_id in (
         generar.PROMPT_ENVOLTORIO_SIN_EMOJIS, generar.PROMPT_ENVOLTORIO_REDES,
         generar.PROMPT_ENVOLTORIO_CARRUSEL, generar.PROMPT_ENVOLTORIO_COPY_UNICO,
     ):
-        assert generar._plantilla_envoltorio(doc_id) == _semilla(doc_id), doc_id
+        assert generar._plantilla_envoltorio(doc_id) == _inicial(doc_id), doc_id
     for modo in ("variantes", "resumir"):
-        assert asistente._instruccion_modo(modo) == _semilla(f"prompt/asistente/{modo}"), modo
+        assert asistente._instruccion_modo(modo) == _inicial(f"prompt/asistente/{modo}"), modo
 
 
-def test_cuerpo_semilla_lee_el_paquete_y_nunca_lanza():
-    assert "traducciones" in libtexto.cuerpo_semilla("prompt/traducir")
-    assert libtexto.cuerpo_semilla("prompt/no-existe") == ""
-    assert libtexto.cuerpo_semilla("") == ""
+def test_cuerpo_inicial_lee_el_paquete_y_nunca_lanza():
+    assert "traducciones" in libtexto.cuerpo_inicial("prompt/traducir")
+    assert libtexto.cuerpo_inicial("prompt/no-existe") == ""
+    assert libtexto.cuerpo_inicial("") == ""
 
 
-def test_fallback_de_cada_modulo_resuelve_desde_la_semilla(store_roto):
+def test_fallback_de_cada_modulo_resuelve_desde_la_inicial(store_roto):
     for plantilla, prompt_id in _CASOS:
-        assert plantilla() == _semilla(prompt_id), prompt_id
+        assert plantilla() == _inicial(prompt_id), prompt_id
 
 
-def test_fallback_insumos_por_cajon_resuelve_desde_la_semilla(store_roto):
+def test_fallback_insumos_por_cajon_resuelve_desde_la_inicial(store_roto):
     for cajon, prompt_id in recibir_parse._PROMPT_INSUMO_IDS.items():
         prompt = recibir_parse._prompt_de_cajon(cajon, "/tmp/insumo.txt")
-        assert prompt == _semilla(prompt_id).replace("{{RUTA}}", "/tmp/insumo.txt"), cajon
+        assert prompt == _inicial(prompt_id).replace("{{RUTA}}", "/tmp/insumo.txt"), cajon
         # El contrato JSON del cajón sobrevive al fallback.
         assert '{"items"' in prompt, cajon
 
 
 def test_fallback_perfil_sigue_sustituyendo_placeholders(store_roto):
-    # {{MAX_KEYWORDS}} / {{MARCA}} / {{EDITORIAL}} se aplican igual sobre la semilla.
+    # {{MAX_KEYWORDS}} / {{MARCA}} / {{EDITORIAL}} se aplican igual sobre la inicial.
     p = perfil_editorial._construir_prompt("unotv", "Cubrimos política y deportes.")
     assert str(perfil_editorial._MAX_KEYWORDS) in p
     assert "unotv" in p

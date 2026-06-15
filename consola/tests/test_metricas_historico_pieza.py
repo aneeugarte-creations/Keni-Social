@@ -221,7 +221,7 @@ def test_recalcular_no_escribe_historico_si_no_encontrado(pg, monkeypatch):
 # --------------------------------------------------------------------------- #
 
 
-def _sembrar_serie(pieza_id: str, n: int) -> list[str]:
+def _inicializar_serie(pieza_id: str, n: int) -> list[str]:
     """Inserta `n` snapshots de una pieza con ts crecientes; devuelve los ts en orden ASC."""
     tss = [f"2026-06-01T{h // 60:02d}:{h % 60:02d}:00" for h in range(n)]
     for i, ts in enumerate(tss):
@@ -233,7 +233,7 @@ def test_serie_pieza_capada_al_maximo_con_ultimo_punto(pg, monkeypatch):
     # Con un tope bajo, una serie más larga que el tope devuelve a lo sumo `tope` puntos, y
     # SIEMPRE incluye el ÚLTIMO (el más reciente, el dato actual) en orden ASC de graficado.
     monkeypatch.setenv("KENI_METRICAS_SERIE_MAX", "5")
-    tss = _sembrar_serie("cap", 20)
+    tss = _inicializar_serie("cap", 20)
     serie = db.serie_pieza("cap")
     assert len(serie) == 5
     # Son los 5 MÁS RECIENTES, en orden ascendente, con el último punto presente.
@@ -245,7 +245,7 @@ def test_serie_pieza_capada_al_maximo_con_ultimo_punto(pg, monkeypatch):
 def test_serie_pieza_por_debajo_del_tope_intacta(pg, monkeypatch):
     # Si la serie es más corta que el tope, se devuelve completa (sin recortar) y ordenada ASC.
     monkeypatch.setenv("KENI_METRICAS_SERIE_MAX", "100")
-    tss = _sembrar_serie("corta", 3)
+    tss = _inicializar_serie("corta", 3)
     serie = db.serie_pieza("corta")
     assert [s["ts"] for s in serie] == tss
 
@@ -254,7 +254,7 @@ def test_serie_pieza_limite_cero_devuelve_completa(pg, monkeypatch):
     # `limite<=0` => SIN tope: serie COMPLETA aunque exceda el cap por defecto (ruta para
     # barridos/exportaciones que necesitan todo el histórico).
     monkeypatch.setenv("KENI_METRICAS_SERIE_MAX", "5")
-    tss = _sembrar_serie("full", 12)
+    tss = _inicializar_serie("full", 12)
     serie = db.serie_pieza("full", limite=0)
     assert [s["ts"] for s in serie] == tss
 
@@ -262,7 +262,7 @@ def test_serie_pieza_limite_cero_devuelve_completa(pg, monkeypatch):
 def test_serie_pieza_limite_explicito(pg, monkeypatch):
     # Un `limite>0` explícito gana al cap por defecto (los N más recientes).
     monkeypatch.setenv("KENI_METRICAS_SERIE_MAX", "500")
-    tss = _sembrar_serie("explic", 10)
+    tss = _inicializar_serie("explic", 10)
     serie = db.serie_pieza("explic", limite=3)
     assert [s["ts"] for s in serie] == tss[-3:]
 
@@ -270,7 +270,7 @@ def test_serie_pieza_limite_explicito(pg, monkeypatch):
 def test_listar_snapshots_piezas_capada(pg, monkeypatch):
     # El cap también aplica al agregado filtrado, conservando el punto más reciente del conjunto.
     monkeypatch.setenv("KENI_METRICAS_SERIE_MAX", "4")
-    tss = _sembrar_serie("agg", 15)
+    tss = _inicializar_serie("agg", 15)
     filas = db.listar_snapshots_piezas(marca="m")
     assert len(filas) == 4
     assert [s["ts"] for s in filas] == tss[-4:]

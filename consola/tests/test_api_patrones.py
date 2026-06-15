@@ -6,7 +6,7 @@ from __future__ import annotations
 def test_indice_marcas_con_perfil(cliente):
     datos = cliente.get("/api/patrones").json()
     por_marca = {m["marca"]: m["tiene_perfil"] for m in datos["marcas"]}
-    # Las marcas del piloto con datos en Metricool viajan con perfil semilla.
+    # Las marcas del piloto con datos en Metricool viajan con perfil inicial.
     assert por_marca["unotv"] is True
     assert por_marca["claro-sports"] is True
     # Fundación no tiene piezas en Metricool: sin perfil (honesto).

@@ -1,13 +1,13 @@
 """Tests del catálogo de presets de fuentes (dominio/fuentes_presets.py). OFFLINE/PURO.
 
-No requiere Postgres ni red: fuentes_presets es un módulo de datos puro (carga la semilla
+No requiere Postgres ni red: fuentes_presets es un módulo de datos puro (carga la inicial
 `fuentes_presets.json`). Cubre:
-  - listar_presets() y categorias(): tamaño de la semilla, campos obligatorios, ids únicos.
+  - listar_presets() y categorias(): tamaño de la inicial, campos obligatorios, ids únicos.
   - filtro por categoría y por marca.
   - obtener_preset() por id (existe / no existe).
-  - vocabulario editorial canónico (CATEGORIAS_VALIDAS) DESACOPLADO de la semilla.
+  - vocabulario editorial canónico (CATEGORIAS_VALIDAS) DESACOPLADO de la inicial.
 
-La semilla es el conjunto curado que el equipo dejó valioso en producción (marcas del piloto
+La inicial es el conjunto curado que el equipo dejó valioso en producción (marcas del piloto
 UnoTV / Claro Sports / Nación Gamer + externas con tráfico real), NO un catálogo de cientos.
 """
 
@@ -20,24 +20,24 @@ from keni_consola.dominio import fuentes_presets
 # --------------------------------------------------------------------------- #
 
 
-def test_listar_todos_devuelve_la_semilla_curada():
-    """La semilla es un conjunto curado y pequeño (no cientos de presets)."""
+def test_listar_todos_devuelve_la_inicial_curada():
+    """La inicial es un conjunto curado y pequeño (no cientos de presets)."""
     todos = fuentes_presets.listar_presets()
-    assert 15 <= len(todos) <= 50, f"Semilla fuera de rango esperado: {len(todos)}"
+    assert 15 <= len(todos) <= 50, f"Inicial fuera de rango esperado: {len(todos)}"
 
 
 def test_categorias_son_subconjunto_del_vocabulario_canonico():
-    """Las categorías de la semilla deben pertenecer al vocabulario editorial canónico."""
+    """Las categorías de la inicial deben pertenecer al vocabulario editorial canónico."""
     cats = set(fuentes_presets.categorias())
     assert cats <= set(fuentes_presets.CATEGORIAS_VALIDAS), (
         f"Categorías fuera del vocabulario: {cats - set(fuentes_presets.CATEGORIAS_VALIDAS)}"
     )
-    # Las marcas del piloto deben tener cobertura en la semilla.
+    # Las marcas del piloto deben tener cobertura en la inicial.
     assert {"mx", "internacional", "deportes", "gaming"} <= cats
 
 
-def test_categorias_validas_es_estable_y_no_depende_de_la_semilla():
-    """CATEGORIAS_VALIDAS es el vocabulario editorial completo, traiga lo que traiga la semilla."""
+def test_categorias_validas_es_estable_y_no_depende_de_la_inicial():
+    """CATEGORIAS_VALIDAS es el vocabulario editorial completo, traiga lo que traiga la inicial."""
     esperadas = {
         "mx",
         "regional",
@@ -55,7 +55,7 @@ def test_categorias_validas_es_estable_y_no_depende_de_la_semilla():
 def test_ids_unicos():
     todos = fuentes_presets.listar_presets()
     ids = [p["id"] for p in todos]
-    assert len(ids) == len(set(ids)), "Hay ids duplicados en la semilla"
+    assert len(ids) == len(set(ids)), "Hay ids duplicados en la inicial"
 
 
 _IDIOMAS_VALIDOS = {"es", "en", "pt", "fr"}
@@ -81,7 +81,7 @@ def test_campos_obligatorios_presentes():
 
 
 def test_urls_concretas_sin_placeholders():
-    """La semilla solo trae URLs concretas listas para sondear (sin plantillas)."""
+    """La inicial solo trae URLs concretas listas para sondear (sin plantillas)."""
     placeholders = ("TEMA", "SUBREDDIT", "CHANNEL_ID", "<query>", "{")
     for preset in fuentes_presets.listar_presets():
         for ph in placeholders:
@@ -112,19 +112,19 @@ def test_filtro_marca_oculta_otras_marcas_y_mantiene_genericos():
     sugeridas = {(p.get("marca_sugerida") or "") for p in de_unotv}
     # No aparece ninguna preset sugerida a otra marca.
     assert sugeridas <= {"", "unotv"}
-    # Las presets de unotv que existen en la semilla se conservan.
+    # Las presets de unotv que existen en la inicial se conservan.
     todas_unotv = {
         p["id"] for p in fuentes_presets.listar_presets() if p.get("marca_sugerida") == "unotv"
     }
     assert todas_unotv <= {p["id"] for p in de_unotv}
-    # Sin marca -> semilla completa (incluye presets de claro-sports).
+    # Sin marca -> inicial completa (incluye presets de claro-sports).
     todos = fuentes_presets.listar_presets()
     assert any(p.get("marca_sugerida") == "claro-sports" for p in todos)
     assert all(p.get("marca_sugerida") != "claro-sports" for p in de_unotv)
 
 
 def test_listar_devuelve_copia_superficial():
-    """listar_presets devuelve copias: mutar el resultado no altera la semilla."""
+    """listar_presets devuelve copias: mutar el resultado no altera la inicial."""
     antes = fuentes_presets.listar_presets()
     antes[0]["nombre"] = "MUTADO"
     despues = fuentes_presets.listar_presets()
@@ -153,14 +153,14 @@ def test_obtener_preset_inexistente_devuelve_none():
 # --------------------------------------------------------------------------- #
 
 
-def test_seed_activa_la_semilla_entera():
-    """La semilla YA es el conjunto curado: el auto-seed la activa entera (no es un subset)."""
+def test_seed_activa_la_inicial_entera():
+    """La inicial YA es el conjunto curado: el auto-seed la activa entera (no es un subset)."""
     from keni_consola import bootstrap_lineas as bl
 
     todos = fuentes_presets.listar_presets()
     seed = [p for p in todos if bl._preset_va_en_seed(p)]
     assert seed, "El auto-seed no debería quedar vacío"
-    assert len(seed) == len(todos), "Toda la semilla curada debe entrar al auto-seed"
+    assert len(seed) == len(todos), "Toda la inicial curada debe entrar al auto-seed"
 
 
 def test_seed_cubre_las_marcas_del_piloto():
@@ -177,7 +177,7 @@ def test_seed_cubre_las_marcas_del_piloto():
 
 
 def test_seed_excluye_plantillas_sinteticas():
-    """El guarda defensivo `_es_plantilla` sigue vetando plantillas (aunque la semilla no traiga)."""
+    """El guarda defensivo `_es_plantilla` sigue vetando plantillas (aunque la inicial no traiga)."""
     from keni_consola import bootstrap_lineas as bl
 
     plantilla = {

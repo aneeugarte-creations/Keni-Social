@@ -257,7 +257,7 @@ def _entre(r: float, a: float, b: float) -> float:
     return a + (b - a) * r
 
 
-# Formato determinista por (cuenta, plataforma, semilla): plausible por red.
+# Formato determinista por (cuenta, plataforma, inicial): plausible por red.
 # IG/FB favorecen foto/reel/carrusel; YouTube vídeo; X texto/link; TikTok reel.
 _FORMATOS_POR_PLAT: dict[Plataforma, tuple[str, ...]] = {
     Plataforma.facebook: ("foto", "video", "carrusel", "link"),
@@ -279,9 +279,9 @@ def _granulares_muestra(
     """Desglose granular DETERMINISTA y coherente con (vistas, interacciones).
 
     Reparte las `inter` (total homogéneo) entre likes/comentarios/compartidos/
-    guardados con pesos sembrados que SIEMPRE suman <= inter (likes son la mayoría).
+    guardados con pesos inicializados que SIEMPRE suman <= inter (likes son la mayoría).
     Vídeo y clics se derivan de las vistas. Sin random ni fecha actual: el mismo
-    (cuenta, plataforma, semilla) da siempre los mismos números.
+    (cuenta, plataforma, inicial) da siempre los mismos números.
     """
     formato_opts = _FORMATOS_POR_PLAT.get(plat, ("foto",))
     formato = formato_opts[int(_rand(cuenta_id, plat, sem, "fmt") * len(formato_opts))]
@@ -334,9 +334,9 @@ def _pieza(
     desde: date,
     titulo: str,
 ) -> Pieza:
-    """Construye una pieza sembrada y determinista para (cuenta, rango, plataforma, idx).
+    """Construye una pieza inicializada y determinista para (cuenta, rango, plataforma, idx).
 
-    Las "mejores piezas" baten la media de engagement de su plataforma. La semilla
+    Las "mejores piezas" baten la media de engagement de su plataforma. La inicial
     incluye la plataforma para que dos piezas con el mismo idx en plataformas
     distintas no compartan cifras.
     """
@@ -365,7 +365,7 @@ def _pieza(
 
 
 class FuenteMuestra:
-    """Implementa FuenteMetricas con datos sembrados deterministas."""
+    """Implementa FuenteMetricas con datos inicializados deterministas."""
 
     # UNICA fuente de verdad del nombre: `formato.FUENTE_MUESTRA`. Los renders
     # comparan `fuente.nombre` contra ese valor para anteponer el aviso de
@@ -488,7 +488,7 @@ class FuenteMuestra:
         """Rendimiento sintetico y determinista de UN post (por id) para demo/tests offline.
 
         Como la muestra no tiene un "almacen" de posts reales por id, deriva cifras
-        creibles y ESTABLES sembrando con (cuenta, red, id): el mismo id devuelve
+        creibles y ESTABLES inicializando con (cuenta, red, id): el mismo id devuelve
         siempre los mismos numeros. Asi la tarjeta del tablero pinta rendimiento
         consistente sin fuente real. `dias` se ignora (no hay ventana real). Devuelve
         None si la cuenta no existe (la marca no esta en alcance), igual que el resto.
@@ -537,7 +537,7 @@ class FuenteMuestra:
         """Serie diaria sintetica y determinista para demo/tests offline.
 
         Reparte los totales del periodo (de `resumen`) sobre los dias con un jitter
-        sembrado por (cuenta, fecha), de forma estable entre ejecuciones. Permite que la
+        inicializado por (cuenta, fecha), de forma estable entre ejecuciones. Permite que la
         tendencia diaria pinte algo coherente sin fuente real.
         """
         res = self.resumen(cuenta_id, rango)
@@ -563,8 +563,8 @@ class FuenteMuestra:
     def serie_seguidores(self, cuenta_id: str, rango: str) -> list[dict]:
         """Stock DIARIO de followers por red, determinista (demo/tests offline).
 
-        Modela, por cada red de la marca, una BASE de comunidad sembrada por
-        (cuenta, red) y un crecimiento neto del periodo (también sembrado) repartido
+        Modela, por cada red de la marca, una BASE de comunidad inicializada por
+        (cuenta, red) y un crecimiento neto del periodo (también inicializado) repartido
         de forma estable sobre los días, de modo que el stock crezca de forma
         plausible (monótono no estricto). Sin random ni fecha actual: el mismo
         (cuenta, red, día) da siempre el mismo valor. Devuelve:
@@ -585,7 +585,7 @@ class FuenteMuestra:
             for plat in plats:
                 # base de comunidad por red (orden de magnitud anclado al volumen).
                 base = int(base_mes * _PESO[plat] * _entre(_rand(cuenta_id, plat, "segbase"), 0.004, 0.02))
-                # crecimiento neto del periodo, sembrado por (cuenta, red, rango).
+                # crecimiento neto del periodo, inicializado por (cuenta, red, rango).
                 neto = int(base * _entre(_rand(cuenta_id, plat, rango, "segneto"), 0.005, 0.04))
                 # reparto lineal del neto sobre los días (estable, no decreciente).
                 ganado = int(neto * (i / (dias - 1))) if dias > 1 else neto

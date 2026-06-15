@@ -97,7 +97,7 @@ def _envejecer_intento(tema_id, campo):
     repos.actualizar_contenido(tema_id, {"copy_pendiente": json.dumps(pend)})
 
 
-def _sembrar_cluster(
+def _inicializar_cluster(
     cid, *, marca="unotv", titulo="Historia X", score=0.5, estado="nuevo",
     resumen="México: el gobierno informa de seguridad en la CDMX", ultimo_visto=None,
     verificacion="corroborada", n_fuentes=2, categoria="mx", breaking=0,
@@ -111,7 +111,7 @@ def _sembrar_cluster(
 
     `verificar_veredicto`: estado de la criba del cluster. Por defecto "" (sin cribar, el estado del que
     parte Verificar en investigación). La ADMISIÓN solo promueve las VERIFICADAS, así que los tests
-    que llaman DIRECTO a la promoción (sin pasar por la fase Verificar) deben sembrar el cluster ya
+    que llaman DIRECTO a la promoción (sin pasar por la fase Verificar) deben inicializar el cluster ya
     verificado (`VERDICTO_NO_VERIFICADO`) — es el camino real, no el atajo sin filtro.
     """
     from datetime import UTC, datetime
@@ -549,7 +549,7 @@ def test_admitir_url_fuente_vacia_si_enlace_no_http(entorno, monkeypatch):
 
 def _tema_pipeline(titulo="Tema", marca="unotv", **campos):
     # `copy_pendiente` lo fija ADMITIR (`crear_tema_de`) en producción: parámetros del copy a lanzar
-    # SOLO si Verificar la fuente pasa. La fase Redactar exige que esté presente; lo sembramos aquí.
+    # SOLO si Verificar la fuente pasa. La fase Redactar exige que esté presente; lo inicializamos aquí.
     campos.setdefault(
         "copy_pendiente",
         json.dumps({"nota": "Nota de origen a cribar.", "redes_ids": ["x"]}),
@@ -656,7 +656,7 @@ def test_verificar_cluster_problema_no_se_admite(entorno, monkeypatch):
     monkeypatch.setenv("KENI_PIPELINE_MAX", "5")
     cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_QA_PROBLEMA))  # noqa: F841
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    _sembrar_cluster("c-malo", titulo="Historia dudosa", score=0.8)
+    _inicializar_cluster("c-malo", titulo="Historia dudosa", score=0.8)
 
     # Un tick de investigación: Verificar (síncrona en test) marca el cluster, la admisión decide.
     res = pc._ejecutar_investigacion()
@@ -675,7 +675,7 @@ def test_verificar_cluster_ok_se_admite_heredando_veredicto(entorno, monkeypatch
     monkeypatch.setenv("KENI_PIPELINE_MAX", "5")
     cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_QA_OK))  # noqa: F841
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    _sembrar_cluster("c-ok", titulo="Historia verificada", score=0.8)
+    _inicializar_cluster("c-ok", titulo="Historia verificada", score=0.8)
 
     res = pc._ejecutar_investigacion()
 
@@ -695,7 +695,7 @@ def test_verificar_cluster_acotada_por_el_admision(entorno, monkeypatch):
     cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_QA_OK))  # noqa: F841
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     for i in range(3):
-        _sembrar_cluster(f"c{i}", titulo=f"Historia {i}", score=0.9 - i * 0.1)
+        _inicializar_cluster(f"c{i}", titulo=f"Historia {i}", score=0.9 - i * 0.1)
 
     cribados = pc.ejecutar_verificar_clusters(autor=None)
 
@@ -831,7 +831,7 @@ def test_solo_noticias_promueve_cluster_qa_saltada_cd_no(entorno, monkeypatch):
     monkeypatch.setenv("KENI_PIPELINE_MAX", "5")
     llamadas = _mock_lanzar_copy(monkeypatch)
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    _sembrar_cluster("c1", titulo="Historia caliente", score=0.8)
+    _inicializar_cluster("c1", titulo="Historia caliente", score=0.8)
 
     resumen = pc.ejecutar_barrido()
 
@@ -859,7 +859,7 @@ def test_dos_loops_investigacion_y_produccion_separan_fases(entorno, monkeypatch
     monkeypatch.setenv("KENI_PIPELINE_MAX", "5")
     _mock_lanzar_copy(monkeypatch)
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    _sembrar_cluster("c1", titulo="Historia caliente", score=0.8)
+    _inicializar_cluster("c1", titulo="Historia caliente", score=0.8)
 
     # INVESTIGACIÓN: admite (ADMITIR) + criba (VERIFICAR). Solo expone {temas, cribados}.
     inv = pc._ejecutar_investigacion()
@@ -880,9 +880,9 @@ def test_promover_clusters_top_n_por_score(entorno, monkeypatch):
     """`promover_clusters_marca` promueve las top-N historias por score y las marca usado."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     # Verificadas (estado real tras Verificar): la admisión SIEMPRE criba — solo promueve verificadas.
-    _sembrar_cluster("baja", titulo="Score bajo", score=0.1, verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
-    _sembrar_cluster("alta", titulo="Score alto", score=0.9, verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
-    _sembrar_cluster("media", titulo="Score medio", score=0.5, verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    _inicializar_cluster("baja", titulo="Score bajo", score=0.1, verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    _inicializar_cluster("alta", titulo="Score alto", score=0.9, verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    _inicializar_cluster("media", titulo="Score medio", score=0.5, verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
 
     temas = pc.promover_clusters_marca("unotv", maximo=2)
 
@@ -899,8 +899,8 @@ def test_promover_clusters_marca_filtra_sin_cribar_por_defecto(entorno, monkeypa
     '') NO se promueve aunque gane en score/umbral — no existe un camino que promueva sin verificar.
     """
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    _sembrar_cluster("sin_cribar", titulo="Aún sin Verificar", score=0.9)  # verificar_veredicto='' por defecto
-    _sembrar_cluster("verificada", titulo="Ya verificada", score=0.5,
+    _inicializar_cluster("sin_cribar", titulo="Aún sin Verificar", score=0.9)  # verificar_veredicto='' por defecto
+    _inicializar_cluster("verificada", titulo="Ya verificada", score=0.5,
                      verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
 
     temas = pc.promover_clusters_marca("unotv", maximo=5)  # SIN qa_estados: cae al filtro por defecto
@@ -912,8 +912,8 @@ def test_promover_clusters_marca_filtra_sin_cribar_por_defecto(entorno, monkeypa
 def test_crear_tema_de_cluster_dedup_no_repromueve(entorno, monkeypatch):
     """Una historia cuyo título ya está en el tablero reciente no crea un segundo tema."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    cluster = _sembrar_cluster("c1", titulo="Historia repetida", score=0.7)
-    # Sembramos la clave del título como ya vista para forzar el dedup.
+    cluster = _inicializar_cluster("c1", titulo="Historia repetida", score=0.7)
+    # Inicializamos la clave del título como ya vista para forzar el dedup.
     from keni_consola.dominio import dedup as _dedup
     claves = {_dedup.clave("Historia repetida")}
 
@@ -937,7 +937,7 @@ def test_crear_tema_de_cluster_copia_fuente_y_fecha_de_la_nota(entorno, monkeypa
     puede borrar el cluster y la pieza debe conservar fuente y fecha para la UI.
     """
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    cluster = _sembrar_cluster("cf1", titulo="Historia con medio", score=0.7)
+    cluster = _inicializar_cluster("cf1", titulo="Historia con medio", score=0.7)
     items = [{
         "titulo": "Historia con medio", "url": "https://record.com.mx/nota-1",
         "url_canonica": "record.com.mx/nota-1", "fuente_nombre": "Récord",
@@ -957,7 +957,7 @@ def test_crear_tema_de_cluster_fecha_cae_a_primer_visto(entorno, monkeypatch):
     """Si el medio no traía fecha (`publicado_en` vacío), `fecha_fuente` cae al `primer_visto`
     del cluster (cuándo capturó la historia el Radar). Sin items, también."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    cluster = _sembrar_cluster("cf2", titulo="Historia sin fecha de medio", score=0.7)
+    cluster = _inicializar_cluster("cf2", titulo="Historia sin fecha de medio", score=0.7)
     items = [{
         "titulo": "Historia sin fecha de medio", "url": "https://medio.test/n",
         "url_canonica": "medio.test/n", "fuente_nombre": "Medio", "publicado_en": "",
@@ -968,7 +968,7 @@ def test_crear_tema_de_cluster_fecha_cae_a_primer_visto(entorno, monkeypatch):
 
     assert tema is not None
     guardado = repos.obtener_contenido(tema["id"])
-    # `primer_visto` del cluster sembrado por `_sembrar_cluster`.
+    # `primer_visto` del cluster inicializado por `_inicializar_cluster`.
     assert (guardado.get("fecha_fuente") or "") == "2026-06-01T00:00:00+00:00"
 
 
@@ -982,7 +982,7 @@ def test_crear_tema_de_cluster_resuelve_og_image_de_fuente_propia(entorno, monke
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     fuente = repos.crear_fuente_rss("Casa", _URL_OK, marca="unotv", propia=True)
     _mock_og_image(monkeypatch, "https://casa.test/foto-nota.jpg")
-    cluster = _sembrar_cluster("cp1", titulo="Historia propia", score=0.7)
+    cluster = _inicializar_cluster("cp1", titulo="Historia propia", score=0.7)
     items = [{
         "titulo": "Historia propia", "url": "https://unotv.test/nota", "url_canonica": "unotv.test/nota",
         "fuente_id": fuente["id"], "fuente_nombre": "UnoTV", "publicado_en": "", "imagen": "",
@@ -1005,7 +1005,7 @@ def test_crear_tema_de_cluster_no_resuelve_og_image_de_fuente_ajena(entorno, mon
     fuente = repos.crear_fuente_rss("Ajeno", _URL_OK, marca="unotv", propia=False)
     # Si llegara a resolverse, sería esta URL; el test verifica que NO se usa.
     _mock_og_image(monkeypatch, "https://ajeno.test/foto.jpg")
-    cluster = _sembrar_cluster("ca1", titulo="Historia ajena", score=0.7)
+    cluster = _inicializar_cluster("ca1", titulo="Historia ajena", score=0.7)
     items = [{
         "titulo": "Historia ajena", "url": "https://medio.test/nota", "url_canonica": "medio.test/nota",
         "fuente_id": fuente["id"], "fuente_nombre": "Medio", "publicado_en": "", "imagen": "",
@@ -1029,7 +1029,7 @@ def test_crear_tema_de_cluster_no_usa_imagen_de_feed_ajeno(entorno, monkeypatch)
 
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     fuente = repos.crear_fuente_rss("Ajeno2", _URL_OK, marca="unotv", propia=False)
-    cluster = _sembrar_cluster("ca2", titulo="Historia ajena con foto", score=0.7)
+    cluster = _inicializar_cluster("ca2", titulo="Historia ajena con foto", score=0.7)
     items = [{
         "titulo": "Historia ajena con foto", "url": "https://medio.test/nota2",
         "url_canonica": "medio.test/nota2", "fuente_id": fuente["id"],
@@ -1129,7 +1129,7 @@ def test_caducado_libera_hueco_para_lo_fresco_del_ranking(entorno, monkeypatch):
     monkeypatch.delenv("KENI_PIPELINE_REDACTAR", raising=False)
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
     _tema_pipeline(titulo="Backlog vencido", verificar_veredicto="", copy_pendiente=pend)
-    _sembrar_cluster("hot", titulo="Lo fresco de hoy", score=0.9)
+    _inicializar_cluster("hot", titulo="Lo fresco de hoy", score=0.9)
     # Con el backlog en proceso, el cupo (1) está agotado: no entra nada.
     assert pc._ejecutar_barrido()["temas"] == []
     # Caduca el backlog (reloj adelantado > TTL) y el siguiente tick admite lo fresco.
@@ -1149,7 +1149,7 @@ def test_admitir_serial_no_promueve_si_marca_llena(entorno, monkeypatch):
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
     _tema_pipeline(titulo="En proceso 1", verificar_veredicto="", copy_pendiente=pend)
     _tema_pipeline(titulo="En proceso 2", verificar_veredicto="", copy_pendiente=pend)
-    _sembrar_cluster("hot", titulo="Historia caliente", score=0.9)
+    _inicializar_cluster("hot", titulo="Historia caliente", score=0.9)
 
     res = pc._ejecutar_barrido()
 
@@ -1167,9 +1167,9 @@ def test_admitir_serial_promueve_solo_hasta_el_cupo(entorno, monkeypatch):
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
     _tema_pipeline(titulo="En proceso 1", verificar_veredicto="", copy_pendiente=pend)
     _tema_pipeline(titulo="En proceso 2", verificar_veredicto="", copy_pendiente=pend)
-    _sembrar_cluster("c1", titulo="Hist 1", score=0.9)
-    _sembrar_cluster("c2", titulo="Hist 2", score=0.8)
-    _sembrar_cluster("c3", titulo="Hist 3", score=0.7)
+    _inicializar_cluster("c1", titulo="Hist 1", score=0.9)
+    _inicializar_cluster("c2", titulo="Hist 2", score=0.8)
+    _inicializar_cluster("c3", titulo="Hist 3", score=0.7)
 
     res = pc._ejecutar_barrido()
 
@@ -1193,7 +1193,7 @@ def test_cupo_dia_corta_la_admision(entorno, monkeypatch):
         titulo="Producido hoy", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend
     )
     repos.crear_contenido_plataforma(contenido_id=t["id"], red="x", copy="Copy listo")
-    _sembrar_cluster("hot", titulo="Historia caliente", score=0.9)
+    _inicializar_cluster("hot", titulo="Historia caliente", score=0.9)
 
     res = pc._ejecutar_barrido()
 
@@ -1207,13 +1207,13 @@ def test_plan_llena_cupos_por_categoria_con_lo_mejor(entorno, monkeypatch):
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_MAX", "10")
     monkeypatch.setenv("KENI_PLAN_DIA", "mx:1,internacional:1")
-    _sembrar_cluster("mx1", titulo="Nacional floja", score=0.5, categoria="mx")
-    _sembrar_cluster("mx2", titulo="Nacional top", score=0.9, categoria="mx")
-    _sembrar_cluster(
+    _inicializar_cluster("mx1", titulo="Nacional floja", score=0.5, categoria="mx")
+    _inicializar_cluster("mx2", titulo="Nacional top", score=0.9, categoria="mx")
+    _inicializar_cluster(
         "int1", titulo="Internacional unica historia", score=0.4, categoria="internacional",
         resumen="México observa la cumbre internacional",
     )
-    _sembrar_cluster("dep1", titulo="Deportiva fuera de plan", score=0.95, categoria="deportes")
+    _inicializar_cluster("dep1", titulo="Deportiva fuera de plan", score=0.95, categoria="deportes")
 
     res = pc._ejecutar_barrido()
 
@@ -1230,8 +1230,8 @@ def test_plan_breaking_consume_slot_breaking(entorno, monkeypatch):
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_MAX", "10")
     monkeypatch.setenv("KENI_PLAN_DIA", "breaking:1")
-    _sembrar_cluster("br1", titulo="Ultima hora corroborada", score=0.8, categoria="mx", breaking=1)
-    _sembrar_cluster("mx9", titulo="Nacional normal", score=0.9, categoria="mx")
+    _inicializar_cluster("br1", titulo="Ultima hora corroborada", score=0.8, categoria="mx", breaking=1)
+    _inicializar_cluster("mx9", titulo="Nacional normal", score=0.9, categoria="mx")
 
     res = pc._ejecutar_barrido()
 
@@ -1251,7 +1251,7 @@ def test_plan_descuenta_lo_ya_generado_hoy(entorno, monkeypatch):
     repos.crear_contenido_plataforma(
         contenido_id=ya["id"], red="facebook", marca="unotv", copy="P", es_publicacion=True
     )
-    _sembrar_cluster("hoy", titulo="Nacional nueva", score=0.9, categoria="mx")
+    _inicializar_cluster("hoy", titulo="Nacional nueva", score=0.9, categoria="mx")
 
     res = pc._ejecutar_barrido()
 
@@ -1267,9 +1267,9 @@ def test_promocion_persiste_categoria_en_el_contenido(entorno, monkeypatch):
     # 'breaking' en el plan, una última hora competiría por el cupo 'mx' (ver
     # test_plan_sin_linea_breaking_compite_por_su_feed) y desplazaría a la nacional.
     monkeypatch.setenv("KENI_PLAN_DIA", "mx:1,breaking:1")
-    _sembrar_cluster("cat1", titulo="Nacional persistida", score=0.9, categoria="mx",
+    _inicializar_cluster("cat1", titulo="Nacional persistida", score=0.9, categoria="mx",
                      verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
-    _sembrar_cluster("cat2", titulo="Urgente persistida", score=0.9, categoria="mx", breaking=1,
+    _inicializar_cluster("cat2", titulo="Urgente persistida", score=0.9, categoria="mx", breaking=1,
                      verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
 
     temas = pc.promover_clusters_marca(
@@ -1357,7 +1357,7 @@ def test_plan_sin_linea_breaking_compite_por_su_feed(entorno, monkeypatch):
     """Si el plan no declara 'breaking', la última hora no queda invisible: compite por el
     cupo de su categoría de FEED."""
     monkeypatch.setenv("KENI_PLAN_DIA", "mx:1")
-    _sembrar_cluster("brx", titulo="Ultima hora sin linea propia", score=0.9,
+    _inicializar_cluster("brx", titulo="Ultima hora sin linea propia", score=0.9,
                      categoria="mx", breaking=1, verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
 
     elegidos = pc.clusters_para_promover("unotv", maximo=5, cupos_categoria={"mx": 1})
@@ -1492,11 +1492,11 @@ def test_ejecutar_arte_sin_proveedor_no_ilustra(entorno, monkeypatch):
 
 def test_clusters_para_promover_diversifica_titulos_casi_identicos(entorno):
     """Un macro-tema (dos historias casi idénticas) no se come todas las plazas del barrido."""
-    _sembrar_cluster("dup1", titulo="Messi gana el premio en París", score=0.9,
+    _inicializar_cluster("dup1", titulo="Messi gana el premio en París", score=0.9,
                      verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
-    _sembrar_cluster("dup2", titulo="Messi gana el premio en París hoy", score=0.8,
+    _inicializar_cluster("dup2", titulo="Messi gana el premio en París hoy", score=0.8,
                      verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
-    _sembrar_cluster("otra", titulo="Sismo de magnitud en la capital", score=0.5,
+    _inicializar_cluster("otra", titulo="Sismo de magnitud en la capital", score=0.5,
                      verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
 
     elegidos = pc.clusters_para_promover("unotv", maximo=2)
@@ -1506,9 +1506,9 @@ def test_clusters_para_promover_diversifica_titulos_casi_identicos(entorno):
 
 def test_clusters_para_promover_suave_rellena_si_solo_hay_duplicados(entorno):
     """Si todo el pool es el mismo macro-tema, se rellena igual (nunca devuelve menos)."""
-    _sembrar_cluster("dup1", titulo="Messi gana el premio en París", score=0.9,
+    _inicializar_cluster("dup1", titulo="Messi gana el premio en París", score=0.9,
                      verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
-    _sembrar_cluster("dup2", titulo="Messi gana el premio en París hoy", score=0.8,
+    _inicializar_cluster("dup2", titulo="Messi gana el premio en París hoy", score=0.8,
                      verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
     elegidos = pc.clusters_para_promover("unotv", maximo=2)
     assert {c["id"] for c in elegidos} == {"dup1", "dup2"}
@@ -1526,18 +1526,18 @@ def test_clusters_para_promover_respeta_el_umbral(entorno):
 
     # Todas VERIFICADAS (pasaron la criba): así el ÚNICO discriminante de la promoción es el
     # umbral, no el filtro de Verificar (que ya cribó a todas por igual).
-    _sembrar_cluster("apta", titulo="Sismo sacude la CDMX", score=0.9,
+    _inicializar_cluster("apta", titulo="Sismo sacude la CDMX", score=0.9,
                      verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
     # Sin encaje de marca: ni el título ni el resumen casan el vocabulario unotv.
-    _sembrar_cluster(
+    _inicializar_cluster(
         "irrelevante", titulo="Gossip de celebridades en Hollywood", score=0.8,
         resumen="Rumores del espectáculo extranjero", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO,
     )
     # Verificación dudosa: jamás dispara producción automática, puntúe lo que puntúe.
-    _sembrar_cluster("dudosa", titulo="Increíble suceso en México hoy", score=0.7,
+    _inicializar_cluster("dudosa", titulo="Increíble suceso en México hoy", score=0.7,
                      verificacion="dudosa", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
     # Vieja sin señales: su score persistido era alto, pero el umbral recalcula AHORA.
-    _sembrar_cluster(
+    _inicializar_cluster(
         "vieja", titulo="México: nota de hace una semana", score=0.95, n_fuentes=1,
         ultimo_visto=(datetime.now(UTC) - timedelta(days=7)).replace(tzinfo=None)
         .isoformat(timespec="seconds"), verificar_veredicto=pc.VERDICTO_NO_VERIFICADO,
@@ -1552,9 +1552,9 @@ def test_clusters_para_promover_respeta_el_umbral(entorno):
 def test_promover_clusters_marca_no_promueve_bajo_umbral(entorno, monkeypatch):
     """El barrido ADMITIR deja en el pool (estado `nuevo`) lo que no supera el umbral: ni tema ni copy."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    _sembrar_cluster("apta", titulo="Sismo sacude la CDMX", score=0.9,
+    _inicializar_cluster("apta", titulo="Sismo sacude la CDMX", score=0.9,
                      verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
-    _sembrar_cluster(
+    _inicializar_cluster(
         "irrelevante", titulo="Gossip de celebridades en Hollywood", score=0.8,
         resumen="Rumores del espectáculo extranjero", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO,
     )
@@ -1570,7 +1570,7 @@ def test_promover_clusters_marca_no_promueve_bajo_umbral(entorno, monkeypatch):
 def test_upsert_cluster_no_revierte_estado_ni_contenido_id(entorno):
     """Anti-TOCTOU daemon↔pipeline: un recalc del daemon (upsert con datos stale) NO puede
     devolver a 'nuevo' una historia ya promovida ni borrar su enlace al tema."""
-    _sembrar_cluster("c1", titulo="Historia promovida", score=0.7)
+    _inicializar_cluster("c1", titulo="Historia promovida", score=0.7)
     repos.actualizar_noticia_cluster("c1", estado="usado", contenido_id="tema-77")
 
     # El daemon recalcula con una foto VIEJA (estado 'nuevo', sin contenido_id) y upsertea.

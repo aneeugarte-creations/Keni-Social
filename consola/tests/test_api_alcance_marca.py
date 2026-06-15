@@ -9,7 +9,7 @@ todo. Cubre los handlers reales de contenido / publicaciones / aprobacion / metr
 Patron de auth (igual que test_api_rota / test_api_conexiones_permisos): se crea el usuario
 con `auth.crear_usuario(..., marcas=[...])` y se entra por SESION (cookie de login). El
 ADMIN entra por sesion admin (sin marcas => sin foco). Las creaciones de datos se hacen con
-el TOKEN de mantenimiento (sin foco) para sembrar piezas de AMBAS marcas.
+el TOKEN de mantenimiento (sin foco) para inicializar piezas de AMBAS marcas.
 
 Requiere Postgres de pruebas (fixture `entorno`): si no hay, SE SALTA (consistente con la
 suite). Marca de scope CI: app_operacion (toca publicaciones/aprobacion).

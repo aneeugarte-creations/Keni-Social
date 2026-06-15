@@ -5,7 +5,7 @@ analítica se computa al vuelo sobre el listado de piezas del periodo de cada ma
 fuente de muestra NO inventa hashtags (los datos reales ya existen), así que en modo
 muestra una campaña sale sin piezas: la mayoría de tests valida la FORMA de la respuesta y
 el CRUD; el matching por hashtag y la agregación multimarca se prueban con un listado
-inyectado (`monkeypatch`), sin depender de datos sembrados.
+inyectado (`monkeypatch`), sin depender de datos inicializados.
 """
 
 from __future__ import annotations

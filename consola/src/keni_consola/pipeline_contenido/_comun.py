@@ -121,7 +121,7 @@ _FORMATO_PIPELINE = redes.FORMATO_FOTO
 # El equipo NO usa skills: la criba pre-copy de la FUENTE se hace adjuntando un DOCUMENTO de la
 # Texto con los criterios. Regla del dueño: "si el documento existe, adjúntalo; si no existe,
 # créalo y adjúntalo." Apunta al prompt EDITABLE `prompt/verificar` (pestaña «Prompts»), cuyo
-# cuerpo base viaja en la semilla. El título DEBE sluggear al id (`crear` deriva el id del
+# cuerpo base viaja en la inicial. El título DEBE sluggear al id (`crear` deriva el id del
 # slug del título): "Verificar" -> "prompt/verificar". DISTINTO de Revisar el COPY (`prompt/qa-editorial`).
 PROMPT_QA_ID = "prompt/verificar"
 _TITULO_QA = "Verificar"
@@ -152,7 +152,7 @@ VERDICTO_NO_VERIFICADO = dom_verificar.VERDICTO_NO_VERIFICADO  # ⚠️ OK para 
 VERDICTO_PROBLEMA = dom_verificar.VERDICTO_PROBLEMA  # ❗ algo de peso en contra: NO se genera copy
 
 # Criterios por defecto del documento QA que se CREA si aún no existe (idempotente). MISMO
-# cuerpo que la semilla `prompt/verificar` del paquete (último recurso si la semilla no se
+# cuerpo que la inicial `prompt/verificar` del paquete (último recurso si la inicial no se
 # pudiera leer; si tocas uno, toca el otro). REDISEÑO: la QA es PRE-COPY y criba la NOTA DE
 # ORIGEN (no el copy, que aún no existe). Es PERMISIVA: solo levanta `problema` ante algo de
 # PESO (dato falso evidente, problema legal/ético claro); ante la duda, `no_verificado`.

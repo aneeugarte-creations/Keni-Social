@@ -8,7 +8,7 @@ las mas importantes.
 
   - `GET  /api/algoritmos`                 -> noticias + fuentes + huecos + vocabulario.
   - `POST /api/algoritmos/refrescar`       -> ingiere los feeds (todas o `{fuente}`).
-  - `POST /api/algoritmos/sembrar`         -> crea las fuentes recomendadas que falten.
+  - `POST /api/algoritmos/inicializar`         -> crea las fuentes recomendadas que falten.
   - `POST /api/algoritmos/fuentes`         -> alta de fuente `{nombre,url,plataforma,tipo}`.
   - `PUT  /api/algoritmos/fuentes/{id}`    -> edicion parcial.
   - `DELETE /api/algoritmos/fuentes/{id}`  -> baja (borra tambien sus noticias).
@@ -119,9 +119,9 @@ async def refrescar(request: Request) -> Response:
     return JSONResponse({"resumen": resumen})
 
 
-async def sembrar(request: Request) -> Response:
-    """POST /api/algoritmos/sembrar: crea las fuentes recomendadas que falten (idempotente)."""
-    creadas = algoritmos.sembrar()
+async def inicializar(request: Request) -> Response:
+    """POST /api/algoritmos/inicializar: crea las fuentes recomendadas que falten (idempotente)."""
+    creadas = algoritmos.inicializar()
     return JSONResponse(
         {"creadas": [_fuente_a_dict(f) for f in creadas], "total": len(creadas)}
     )
@@ -246,7 +246,7 @@ async def archivar(request: Request) -> Response:
 RUTAS = [
     Route("/api/algoritmos", listar, methods=["GET"]),
     Route("/api/algoritmos/refrescar", refrescar, methods=["POST"]),
-    Route("/api/algoritmos/sembrar", sembrar, methods=["POST"]),
+    Route("/api/algoritmos/inicializar", inicializar, methods=["POST"]),
     Route("/api/algoritmos/fuentes", crear_fuente, methods=["POST"]),
     Route("/api/algoritmos/fuentes/{fuente_id}", actualizar_fuente, methods=["PUT"]),
     Route("/api/algoritmos/fuentes/{fuente_id}", borrar_fuente, methods=["DELETE"]),

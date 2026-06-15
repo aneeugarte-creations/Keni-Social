@@ -29,7 +29,7 @@ _log = logging.getLogger("keni_consola.generar")
 #
 # Regla de producto: TODOS los prompts de IA se gestionan desde la Biblioteca. Los textos de
 # los envoltorios que `componer` concatena al prompt base viven como prompts EDITABLES en
-# `prompt/envoltorios/*` (SEMILLA en `texto_semilla/`, ÚNICA fuente del texto); el código
+# `prompt/envoltorios/*` (INICIAL en `texto_inicial/`, ÚNICA fuente del texto); el código
 # conserva la LÓGICA (cuándo se inyecta cada bloque, qué valor lleva cada `{{VARIABLE}}` —
 # límites de red, ids válidos, catálogo de fotos…). El ORDEN de concatenación de `componer` NO cambia
 # (prompt caching: estable-primero); solo de dónde sale el texto.
@@ -40,23 +40,23 @@ PROMPT_ENVOLTORIO_COPY_UNICO = "prompt/envoltorios/copy-unico"
 
 
 def _plantilla_envoltorio(doc_id: str, fallback: str = "") -> str:
-    """Cuerpo EFECTIVO del envoltorio: versión publicada > store > SEMILLA > `fallback`.
+    """Cuerpo EFECTIVO del envoltorio: versión publicada > store > INICIAL > `fallback`.
 
-    La SEMILLA del paquete (`texto_semilla/`) es la fuente del texto; `cuerpo_efectivo` ya cae
-    a ella cuando el doc no está en el store, y `cuerpo_semilla` es la red final si la lectura
+    La INICIAL del paquete (`texto_inicial/`) es la fuente del texto; `cuerpo_efectivo` ya cae
+    a ella cuando el doc no está en el store, y `cuerpo_inicial` es la red final si la lectura
     del store revienta (NUNCA lanza). `fallback` es un respaldo MÍNIMO en código (por defecto
     "", solo lo usa «sin emojis»): para los envoltorios estructurales (redes/carrusel/copy
-    unificado) NO hay copia en código, así que sin semilla quedan vacíos (con warning). El test
-    de cobertura semilla↔código garantiza que ese camino degradado es inalcanzable en la práctica."""
+    unificado) NO hay copia en código, así que sin inicial quedan vacíos (con warning). El test
+    de cobertura inicial↔código garantiza que ese camino degradado es inalcanzable en la práctica."""
     try:
         cuerpo = (libtexto.cuerpo_efectivo(doc_id) or "").strip()
     except Exception:  # noqa: BLE001 -- nunca dejar una generación sin envoltorio por un fallo de lectura
         cuerpo = ""
     if not cuerpo:
-        cuerpo = libtexto.cuerpo_semilla(doc_id).strip()
+        cuerpo = libtexto.cuerpo_inicial(doc_id).strip()
     if not cuerpo:
         _log.warning(
-            "envoltorio %s no disponible en la Biblioteca ni en la semilla; uso el respaldo (%r)",
+            "envoltorio %s no disponible en la Biblioteca ni en la inicial; uso el respaldo (%r)",
             doc_id, fallback[:40],
         )
         return fallback
@@ -67,7 +67,7 @@ def _plantilla_envoltorio(doc_id: str, fallback: str = "") -> str:
 # llevar emojis, p. ej. evergreen/termómetro). Su política de emojis vive en el prompt
 # (`copy-desde-nota` §4) + la editorial adjunta de la marca, la única fuente. El texto
 # EDITABLE vive en la Biblioteca (`PROMPT_ENVOLTORIO_SIN_EMOJIS`); esta constante es el
-# fallback (== semilla).
+# fallback (== inicial).
 INSTRUCCION_SIN_EMOJIS = "No uses emojis en el copy."
 
 
@@ -187,7 +187,7 @@ def instruccion_redes(redes_ids: list[str]) -> str:
     """Instrucción ADITIVA: limita las redes, ancla sus límites técnicos (desde el código)
     y pide el bloque json con las piezas por red (contrato, incluidas piezas compuestas).
 
-    El TEXTO vive SOLO en la Biblioteca/semilla (`PROMPT_ENVOLTORIO_REDES`); los VALORES de
+    El TEXTO vive SOLO en la Biblioteca/inicial (`PROMPT_ENVOLTORIO_REDES`); los VALORES de
     las variables los sigue calculando el código desde sus fuentes (`redes`, `limites_plataforma`)."""
     plantilla = _plantilla_envoltorio(PROMPT_ENVOLTORIO_REDES)
     return (
@@ -244,7 +244,7 @@ def _bloque_decision_carrusel(n_notas: int, fotos_notas: list[dict[str, str]]) -
     )
 
 
-# ESQUELETO común del copy unificado: vive en la Biblioteca/semilla
+# ESQUELETO común del copy unificado: vive en la Biblioteca/inicial
 # (`prompt/envoltorios/copy-unico`). Las partes ESTRUCTURALMENTE CONDICIONALES (qué versiones
 # se piden, la forma exacta del bloque json) las monta el código en
 # `{{MODO_PUBLICACION}}`/`{{VERSIONES}}`/`{{CIERRE_JSON}}` desde los sub-bloques de abajo; la
@@ -672,7 +672,7 @@ def lanzar_arte(
     return generaciones.obtener(gen["id"]) or gen
 
 
-# Prompt base por defecto para la generación de copy (piezas por red). Viaja en la semilla.
+# Prompt base por defecto para la generación de copy (piezas por red). Viaja en la inicial.
 PROMPT_COPY = "prompt/redactar"
 
 
@@ -681,7 +681,7 @@ def adjuntos_copy(marca: str) -> list[libtexto.Documento]:
 
     Las reglas de imagen (`editorial/reglas/imagen`) no entran por el auto-adjunto clásico
     (su carpeta no es global ni de marca), pero el modelo de copy redacta el `copy_in` (texto
-    sobre la placa), así que se adjuntan aquí. Best-effort: store o, si no, semilla; si el
+    sobre la placa), así que se adjuntan aquí. Best-effort: store o, si no, inicial; si el
     documento falta o está vacío, no se adjunta y el lanzamiento NO se rompe.
     """
     adjuntos = list(libtexto.editoriales_de_marca(marca, pipeline="redactar"))
@@ -691,7 +691,7 @@ def adjuntos_copy(marca: str) -> list[libtexto.Documento]:
     if any(d.id == REGLAS_IMAGEN for d in adjuntos):
         return adjuntos
     try:
-        doc = libtexto.obtener(REGLAS_IMAGEN) or libtexto.obtener_semilla(REGLAS_IMAGEN)
+        doc = libtexto.obtener(REGLAS_IMAGEN) or libtexto.obtener_inicial(REGLAS_IMAGEN)
     except Exception:  # noqa: BLE001 -- las reglas de imagen son un extra; nunca rompen el copy
         doc = None
     if doc is not None and not cuerpo_sin_texto(doc.cuerpo):
@@ -763,7 +763,7 @@ def lanzar_copy(
 ) -> dict[str, Any]:
     """Lanza una generación de COPY (piezas por red -> borradores). Camino unificado.
 
-    Compone el prompt autocontenido (copy-desde-nota semilla + editorial + contexto + redes)
+    Compone el prompt autocontenido (copy-desde-nota inicial + editorial + contexto + redes)
     y lanza con el post-procesado de PIEZAS (parsea piezas/veredicto, registra historial,
     AUTO-CREA borradores). `fuente_id`/`clave` (RSS): además marca el item del feed como usado
     al completar. El `procesar` se reconstruye del MISMO `spec` que usa el worker (sin duplicar).

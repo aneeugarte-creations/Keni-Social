@@ -1,4 +1,4 @@
-"""Catálogo de fuentes RSS sugeridas (semilla de onboarding), cargado desde datos.
+"""Catálogo de fuentes RSS sugeridas (inicial de onboarding), cargado desde datos.
 
 El catálogo es DATOS, no lógica. El equipo da de alta las fuentes desde la UI
 (`POST /api/rss/fuentes`), que acepta cualquier categoría de `CATEGORIAS_VALIDAS`.
@@ -8,10 +8,10 @@ linea_sugerida, idioma, region, descripcion. Opcional: `intervalo_min`, `peso`.
 
 API pública (módulo PURO: sin red, sin BD):
   - `listar_presets(categoria=None, marca=None)` -> list[dict]
-  - `categorias()` -> list[str]  (las presentes en la semilla, en orden de aparición)
+  - `categorias()` -> list[str]  (las presentes en la inicial, en orden de aparición)
   - `obtener_preset(id)` -> dict | None
   - `CATEGORIAS_VALIDAS` -> tuple[str, ...]  (vocabulario editorial canónico, DESACOPLADO de la
-    semilla: el equipo puede crear una fuente `gaming` aunque la semilla no traiga ninguna).
+    inicial: el equipo puede crear una fuente `gaming` aunque la inicial no traiga ninguna).
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from typing import Any
 
 # Vocabulario editorial canónico de categorías. Manda la cadencia de sondeo del motor
 # (`config_noticias.ingesta_intervalo_categoria`) y la validación al crear fuentes a mano
-# (`api.rss`). DESACOPLADO de las categorías presentes en la semilla: que la semilla no traiga
+# (`api.rss`). DESACOPLADO de las categorías presentes en la inicial: que la inicial no traiga
 # una categoría no debe impedir que el equipo cree fuentes en ella. 'breaking' (la cadencia más
 # agresiva) se añade en la capa API, no es de catálogo.
 CATEGORIAS_VALIDAS: tuple[str, ...] = (
@@ -36,12 +36,12 @@ CATEGORIAS_VALIDAS: tuple[str, ...] = (
     "tendencias",
 )
 
-_RUTA_SEMILLA = Path(__file__).resolve().parent / "fuentes_presets.json"
+_RUTA_INICIAL = Path(__file__).resolve().parent / "fuentes_presets.json"
 
 
 def _cargar() -> list[dict[str, Any]]:
-    """Lee la semilla del paquete (`fuentes_presets.json`). Falla de forma visible si está corrupta."""
-    datos = json.loads(_RUTA_SEMILLA.read_text(encoding="utf-8"))
+    """Lee la inicial del paquete (`fuentes_presets.json`). Falla de forma visible si está corrupta."""
+    datos = json.loads(_RUTA_INICIAL.read_text(encoding="utf-8"))
     if not isinstance(datos, list):
         raise ValueError("fuentes_presets.json debe ser una lista de presets")
     return datos
@@ -52,7 +52,7 @@ _PRESETS: list[dict[str, Any]] = _cargar()
 # Índice por id para búsqueda O(1).
 _PRESETS_POR_ID: dict[str, dict[str, Any]] = {p["id"]: p for p in _PRESETS}
 
-# Orden de presentación de categorías (de aparición en la semilla).
+# Orden de presentación de categorías (de aparición en la inicial).
 _CATEGORIAS: list[str] = []
 _vistas: set[str] = set()
 for _p in _PRESETS:
@@ -93,7 +93,7 @@ def listar_presets(
 
 
 def categorias() -> list[str]:
-    """Categorías presentes en la semilla, en orden de aparición."""
+    """Categorías presentes en la inicial, en orden de aparición."""
     return list(_CATEGORIAS)
 
 

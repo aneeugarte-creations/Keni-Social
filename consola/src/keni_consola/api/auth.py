@@ -540,7 +540,7 @@ async def cambiar_password(request: Request) -> Response:
     auth.establecer_password(usuario["id"], nueva, debe_cambiar_password=False)
     # `establecer_password` invalida TODAS las sesiones del usuario (seguridad). Para no
     # forzar un re-login en el cambio voluntario, reabrimos UNA sesion nueva (rotacion)
-    # y la sembramos en la cookie del dispositivo actual.
+    # y la inicializamos en la cookie del dispositivo actual.
     token = auth.crear_sesion(usuario["id"])
     resp = Response(status_code=204)
     _set_cookie_sesion(resp, token)

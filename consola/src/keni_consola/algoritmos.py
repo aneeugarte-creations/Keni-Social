@@ -307,14 +307,14 @@ def refrescar(solo_fuente: str | None = None) -> dict[str, Any]:
 
 
 # --------------------------------------------------------------------------- #
-# Fuentes SEMILLA (verificadas con feed RSS real) + huecos honestos             #
+# Fuentes INICIAL (verificadas con feed RSS real) + huecos honestos             #
 # --------------------------------------------------------------------------- #
 #
 # Solo feeds RSS COMPROBADOS (se valido que devuelven XML de feed). El equipo puede
 # añadir/editar mas desde la UI. TikTok, Instagram y X NO publican un feed oficial: su
 # cobertura llega via los agregadores; el hueco se declara en `fuentes_pendientes()`.
 
-FUENTES_SEMILLA: tuple[dict[str, str], ...] = (
+FUENTES_INICIAL: tuple[dict[str, str], ...] = (
     {
         "nombre": "Meta Newsroom",
         "url": "https://about.fb.com/news/feed/",
@@ -367,23 +367,23 @@ def fuentes_pendientes() -> list[dict[str, str]]:
     ]
 
 
-def sembrar() -> list[dict[str, Any]]:
-    """Crea las fuentes SEMILLA que aun no existan (idempotente por URL). Devuelve las nuevas.
+def inicializar() -> list[dict[str, Any]]:
+    """Crea las fuentes INICIAL que aun no existan (idempotente por URL). Devuelve las nuevas.
 
     No borra ni toca las que el equipo haya añadido. Pensado para el primer arranque y para
     un boton "restaurar fuentes recomendadas" desde la UI.
     """
     existentes = {f.get("url", "").strip() for f in repos.listar_fuentes_algoritmo()}
     creadas: list[dict[str, Any]] = []
-    for semilla in FUENTES_SEMILLA:
-        if semilla["url"] in existentes:
+    for inicial in FUENTES_INICIAL:
+        if inicial["url"] in existentes:
             continue
         creadas.append(
             repos.crear_fuente_algoritmo(
-                semilla["nombre"],
-                semilla["url"],
-                plataforma=semilla["plataforma"],
-                tipo=semilla["tipo"],
+                inicial["nombre"],
+                inicial["url"],
+                plataforma=inicial["plataforma"],
+                tipo=inicial["tipo"],
             )
         )
     return creadas

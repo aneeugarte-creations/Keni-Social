@@ -229,7 +229,7 @@ Implementada como **job `claude` puntual**: `POST /api/imagenes/revisar` lanza u
 - **Prompts de imagen** = documentos `tipo: prompt` (p. ej. `prompt/ilustrar-ilustracion`). El Estudio los carga con `texto.cuerpo_efectivo(id)` (mismo seam que `dominio/generar.py:180`).
 - **Dirección de arte por marca** = documentos `tipo: editorial, clase: marca` (`editorial/marcas/unotv`, `editorial/marcas/claro-sports`), auto-adjuntos por marca con `texto.editoriales_de_marca(marca)` (igual que el copy). Editables por el equipo; sustituyen al `ESTILO_MARCA` hard-coded.
 - **Reglas legales de imagen** = `editorial/reglas/imagen` (clase `reglas`, global), adjunta al job de revisión.
-- Estos documentos viajan en la **semilla** de la Texto (`keni_consola/texto_semilla/{prompt,editorial}/`), igual que ya viajan los prompts de copy.
+- Estos documentos viajan en la **inicial** de la Texto (`keni_consola/texto_inicial/{prompt,editorial}/`), igual que ya viajan los prompts de copy.
 
 ---
 

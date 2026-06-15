@@ -46,14 +46,14 @@ def _cli_de(app, usuario: str) -> TestClient:
 def _crear_horario(app, equipo: list[dict]) -> dict[str, str]:
     """Siembra turnos de trabajo en LUNES para los dos primeros miembros (ana, beto).
 
-    Tests siembran directo via `repos.crear_turno_rota`. Sembramos a cada miembro su
+    Tests siembran directo via `repos.crear_turno_rota`. Inicializamos a cada miembro su
     turno en DIA_A y DIA_B (franjas distintas por persona para no solaparse): asi
     cualquier `_payload_swap(X, Y)` con X, Y en (ana, beto) — incluido `(ana, ana)` que se
     usa en los tests de "consigo mismo" / "destinatario inexistente" — encuentra los
     turnos en BD antes de tirar la peticion al endpoint.
 
     Devuelve el mapa `{nombre_legacy -> franja_id}` para usar en `_payload_swap` (Mañana
-    y Tarde de la semana LUNES, sembradas al crear el primer turno).
+    y Tarde de la semana LUNES, inicializadas al crear el primer turno).
     """
     del app
     primero, segundo = equipo[0], equipo[1]

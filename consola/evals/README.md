@@ -30,8 +30,8 @@ python -m keni_consola.evals --json       # salida JSON (tooling)
 python -m keni_consola.evals --estricto   # exit!=0 si algún caso ya no cuadra
 ```
 
-La red de regresión vive en `consola/tests/test_evals_semilla.py` (corre en CI, sin Postgres):
-falla si algún caso semilla cambia de veredicto.
+La red de regresión vive en `consola/tests/test_evals_inicial.py` (corre en CI, sin Postgres):
+falla si algún caso inicial cambia de veredicto.
 
 ## Cómo añadir un caso
 
@@ -62,7 +62,7 @@ Buenas prácticas:
 
 **Aporta**: caza al instante (a) que alguien **debilite la maquinaria de verificación**
 (lint de voz, gate de coherencia, límites de red) y (b) cambios en los **perfiles medidos**
-de marca (`patrones_semilla/*.json`) que muevan las bandas. Es barato y determinista.
+de marca (`patrones_inicial/*.json`) que muevan las bandas. Es barato y determinista.
 
 **NO sustituye la revisión humana.** El principio rector es "el humano decide qué se publica";
 esto es el cinturón, no el conductor. Mide lo MEDIBLE; la calidad editorial fina (plano vs con
@@ -72,7 +72,7 @@ gancho, tropicalización natural, alucinación sutil) sigue siendo criterio huma
 copys FIJOS, no copy recién generado; por eso una edición del prompt no cambia su resultado.
 Para cazar regresiones del prompt hace falta el **modo live** (abajo), que sí genera copy real.
 
-**Necesita datos reales de AMX para ser potente.** Los casos semilla son un arranque realista
+**Necesita datos reales de AMX para ser potente.** Los casos inicial son un arranque realista
 pero NO son los "golden" definitivos: esos los aporta la mesa de AMX (UnoTV / Claro Sports) con
 copys reales etiquetados (aprobado/rechazado y por qué). Con esas etiquetas, este harness pasa
 de "no rompas lo medible" a "mide tu acuerdo con el criterio humano real".
@@ -90,5 +90,5 @@ deterministas (por eso no van en CI):
    LLM (p.ej. el crítico de producción `dominio.critica_ia`, o un prompt de juez dedicado) con la
    etiqueta humana. La métrica clave son los **falsos positivos** (el juez deja pasar lo que el
    humano rechaza): un juez solo es de fiar con falsos positivos ~0. Hoy se calibra con la
-   `espera` de los casos semilla como proxy; se sustituye por etiquetas reales de AMX en cuanto
+   `espera` de los casos inicial como proxy; se sustituye por etiquetas reales de AMX en cuanto
    las haya.

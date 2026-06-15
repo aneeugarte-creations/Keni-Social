@@ -114,6 +114,6 @@ def test_cargar_perfil_ignora_version_desconocida(tmp_path, monkeypatch):
     (tmp_path / "fundacion.json").write_text(
         json.dumps({"version": 99, "marca": "fundacion", "redes": {}}), encoding="utf-8"
     )
-    # Versión mayor a la conocida y sin semilla del paquete (fundación no tiene datos
+    # Versión mayor a la conocida y sin inicial del paquete (fundación no tiene datos
     # en Metricool): None (no se inventa).
     assert patrones_marca.cargar_perfil("fundacion") is None

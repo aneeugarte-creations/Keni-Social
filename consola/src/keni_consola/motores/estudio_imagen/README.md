@@ -13,7 +13,7 @@ scripts CLI invocables por subproceso con el python de la consola, sin depender 
   spec de `plantillas_marca` y las fuentes embebidas de `fuentes/`. (Sustituyó al viejo
   `componer.py` de Pillow, retirado.)
 - `fuentes/` — tipografías embebidas (SIL OFL) del catálogo de la plantilla.
-- `marcas.json` — tokens de marca (semilla del spec por defecto y geometría de formatos).
+- `marcas.json` — tokens de marca (inicial del spec por defecto y geometría de formatos).
 
 Estos motores son el cimiento del **Estudio de imagen**, ya EN PRODUCCIÓN: la API
 `api/imagenes.py` (`POST /api/imagenes/{generar,editar,expandir,retocar,componer,revisar,set}`

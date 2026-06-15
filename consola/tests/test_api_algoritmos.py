@@ -144,12 +144,12 @@ def test_fuente_crud_y_validacion_url(cliente):
     assert cliente.get("/api/algoritmos").json()["fuentes"] == []
 
 
-def test_sembrar_crea_recomendadas_y_es_idempotente(cliente):
-    creadas = cliente.post("/api/algoritmos/sembrar", json={}).json()
+def test_inicializar_crea_recomendadas_y_es_idempotente(cliente):
+    creadas = cliente.post("/api/algoritmos/inicializar", json={}).json()
     assert creadas["total"] == 4
     assert len(cliente.get("/api/algoritmos").json()["fuentes"]) == 4
     # Segunda siembra no duplica (idempotente por URL).
-    de_nuevo = cliente.post("/api/algoritmos/sembrar", json={}).json()
+    de_nuevo = cliente.post("/api/algoritmos/inicializar", json={}).json()
     assert de_nuevo["total"] == 0
 
 

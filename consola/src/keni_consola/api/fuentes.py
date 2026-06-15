@@ -3,7 +3,7 @@
 Convierte "Fuentes" en el lugar donde se dan de alta fuentes de cualquier `tipo`
 (rss/idea/interna), cada una con su `config` (JSON especifico del tipo),
 `prioridad` y `etiquetas`. Es ADITIVO: `fuentes_rss` sigue siendo la fuente de verdad del
-Radar v1; este hub se siembra de ella (migracion idempotente en `db._sembrar_fuentes_hub_
+Radar v1; este hub se siembra de ella (migracion idempotente en `db._inicializar_fuentes_hub_
 desde_rss`) y NO la sustituye.
 
   - GET  /api/fuentes?tipo=         -> {fuentes:[...], agencias:[...], pendientes:[...]}

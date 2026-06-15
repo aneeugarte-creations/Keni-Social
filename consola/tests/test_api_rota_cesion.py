@@ -1,6 +1,6 @@
 """Verbo CEDER (#175, Fase 1): A ofrece su turno (una vía), otro lo RECLAMA, el admin aprueba.
 
-Reutiliza los fixtures del test de swaps (mismo horario sembrado). Flujo:
+Reutiliza los fixtures del test de swaps (mismo horario inicializado). Flujo:
   crear cesión (propuesto, sin destinatario) -> reclamar (aceptado, destinatario=quien reclama)
   -> aprobar (aplicado: el turno de A pasa a ser del que reclamó).
 """

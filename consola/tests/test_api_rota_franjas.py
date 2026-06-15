@@ -232,7 +232,7 @@ def test_crear_turno_descanso_explicito_y_no_cubre(cliente):
     """Una persona con turno en la franja Descanso de un dia NO aparece como cobertura de
     ningun evento de ese dia."""
     ana = auth.crear_usuario("ana", CLAVE, "editor", cobertura=True)
-    # Asegura defaults sembrados (Mañana, Tarde, Descanso).
+    # Asegura defaults inicializados (Mañana, Tarde, Descanso).
     cliente.get(f"/api/rota/semana/{LUNES}/franjas?marca={MARCA}")
     franjas = cliente.get(f"/api/rota/semana/{LUNES}/franjas?marca={MARCA}").json()["franjas"]
     descanso = next(f for f in franjas if f["es_descanso"])
@@ -270,7 +270,7 @@ def test_cobertura_evento_con_solape_es_union(entorno):
     b = auth.crear_usuario("b", CLAVE, "editor", cobertura=True)
     c = auth.crear_usuario("c", CLAVE, "editor", cobertura=True)
 
-    # Sembrar las 3 franjas en la semana del Mundial (Mañana, Tarde, Descanso).
+    # Inicializar las 3 franjas en la semana del Mundial (Mañana, Tarde, Descanso).
     cli.get(f"/api/rota/semana/{LUNES}/franjas?marca={MARCA}")
     franjas = cli.get(f"/api/rota/semana/{LUNES}/franjas?marca={MARCA}").json()["franjas"]
     manana = next(f for f in franjas if f["nombre"] == "Mañana")
@@ -303,7 +303,7 @@ def test_cobertura_evento_con_solape_es_union(entorno):
         headers=_ORIGIN,
     ).json()["evento"]
 
-    # Sembramos: a en Mañana, b en Tarde, c en Noche (Noche no aplica a las 14:00).
+    # Inicializamos: a en Mañana, b en Tarde, c en Noche (Noche no aplica a las 14:00).
     repos.crear_turno_rota(
         LUNES, miercoles, miembro_id=a["id"], miembro_nombre="a",
         franja_id=manana["id"],

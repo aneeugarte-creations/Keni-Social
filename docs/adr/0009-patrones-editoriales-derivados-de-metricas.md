@@ -3,8 +3,8 @@
 - **Estado:** Aceptado
 - **Fecha:** 2026-06-10
 - **Decisores:** equipo keni-social
-- **Componente:** `keni-consola` (`patrones_marca.py`, `patrones_derivar.py`, `patrones_refresco.py`, `dominio/copy.py`, `texto_semilla/editorial/rrss/*/patrones.md`, `patrones_semilla/*.json`)
-- **Relación:** consume la API de Metricool vía `keni_metricas` (ADR 0005 §B: B es la fuente única de métricas). Sigue el patrón semilla/store de la Biblioteca de Texto.
+- **Componente:** `keni-consola` (`patrones_marca.py`, `patrones_derivar.py`, `patrones_refresco.py`, `dominio/copy.py`, `texto_inicial/editorial/rrss/*/patrones.md`, `patrones_inicial/*.json`)
+- **Relación:** consume la API de Metricool vía `keni_metricas` (ADR 0005 §B: B es la fuente única de métricas). Sigue el patrón inicial/store de la Biblioteca de Texto.
 
 ---
 
@@ -31,8 +31,8 @@ medimos además que parte de la intuición de la primera pasada NO aguanta la mu
 
 Separar el ciclo editorial en TRES artefactos con dueños distintos:
 
-1. **Perfil de patrones por marca** (`patrones_semilla/<marca>.json` semilla en el paquete;
-   override runtime en `<dir_config>/patrones/<marca>.json`, mismo principio semilla/store
+1. **Perfil de patrones por marca** (`patrones_inicial/<marca>.json` inicial en el paquete;
+   override runtime en `<dir_config>/patrones/<marca>.json`, mismo principio inicial/store
    que la Texto). Lo deriva código determinista (`patrones_marca.derivar_perfil`): por
    marca×red, compara el cuartil TOP por engagement contra el FONDO en rasgos medibles
    (longitud, emojis, hashtags, gancho en MAYÚSCULAS, pregunta, formatos) y destila reglas
@@ -62,7 +62,7 @@ vacía NUNCA pisa un perfil bueno.
   auditable. El LLM ya tiene su canal para PROPONER (sugerencias editoriales).
 - **Lint con umbrales hardcodeados por marca.** Rechazada: vuelve a la intuición; el perfil
   JSON hace los umbrales auditables, regenerables y corregibles por humanos (el runtime
-  gana a la semilla).
+  gana a la inicial).
 - **Persistir las piezas crudas en Postgres y derivar de ahí.** Rechazada por ahora:
   Metricool ya es el archivo histórico (12 meses disponibles); duplicarlo serían ~70k
   filas×texto sin un consumidor más allá de esta derivación. Si aparecen más consumidores,

@@ -6,8 +6,8 @@ from keni_consola import libtexto, prompts_procesos as pp
 
 
 def _ids_seed_prompt() -> set[str]:
-    """Ids de TODOS los prompts que viajan en la semilla del paquete (derivados de la ruta)."""
-    base = libtexto.dir_semilla() / "prompt"
+    """Ids de TODOS los prompts que viajan en la inicial del paquete (derivados de la ruta)."""
+    base = libtexto.dir_inicial() / "prompt"
     return {
         "prompt/" + p.relative_to(base).with_suffix("").as_posix()
         for p in base.rglob("*.md")
@@ -15,7 +15,7 @@ def _ids_seed_prompt() -> set[str]:
 
 
 def test_todo_seed_prompt_esta_catalogado():
-    # COBERTURA TOTAL: cada prompt que viaja en la semilla DEBE estar en el catálogo, para que la
+    # COBERTURA TOTAL: cada prompt que viaja en la inicial DEBE estar en el catálogo, para que la
     # pestaña «Prompts» muestre siempre a qué proceso se inyecta. Si añades un seed de prompt
     # nuevo y olvidas catalogarlo, este test lo caza.
     sin_catalogar = _ids_seed_prompt() - set(pp.PROCESOS_POR_PROMPT)
@@ -23,7 +23,7 @@ def test_todo_seed_prompt_esta_catalogado():
 
 
 def test_catalogo_no_tiene_ids_fantasma():
-    # Inverso: ninguna clave del catálogo apunta a un prompt que no existe como semilla (evita
+    # Inverso: ninguna clave del catálogo apunta a un prompt que no existe como inicial (evita
     # etiquetas sueltas si se renombra/borra un seed).
     fantasma = set(pp.PROCESOS_POR_PROMPT) - _ids_seed_prompt()
     assert not fantasma, f"catálogo con ids sin seed: {fantasma}"

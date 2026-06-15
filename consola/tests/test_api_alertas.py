@@ -11,7 +11,7 @@ from __future__ import annotations
 from keni_consola import db
 
 
-def _sembrar(tipo, **campos):
+def _inicializar(tipo, **campos):
     """Inserta un evento interno en la bitacora (clave_idempotencia unica por defecto)."""
     return db.registrar_evento_interno(tipo=tipo, **campos)
 
@@ -25,13 +25,13 @@ def test_respuesta_tiene_forma_esperada(cliente):
 
 def test_devuelve_alertas_de_rendimiento_filtradas(cliente):
     # Una alerta de rendimiento + un evento de OTRO tipo que NO debe salir.
-    _sembrar(
+    _inicializar(
         "pieza.bajo_rendimiento",
         contenido_id="c1",
         plataforma_id="p1",
         payload={"resumen": "Engagement bajo"},
     )
-    _sembrar("pieza.publicada", contenido_id="c3")  # otro tipo: NO es alerta
+    _inicializar("pieza.publicada", contenido_id="c3")  # otro tipo: NO es alerta
 
     alertas = cliente.get("/api/alertas").json()["alertas"]
     tipos = {a["tipo"] for a in alertas}
@@ -48,12 +48,12 @@ def test_devuelve_alertas_de_rendimiento_filtradas(cliente):
 
 def test_sin_alertas_devuelve_lista_vacia(cliente):
     # Solo hay eventos de otros tipos: el endpoint no devuelve ninguno.
-    _sembrar("contenido.vencido", contenido_id="cx")
+    _inicializar("contenido.vencido", contenido_id="cx")
     assert cliente.get("/api/alertas").json()["alertas"] == []
 
 
 def test_limite_acota_el_numero_de_alertas(cliente):
     for i in range(5):
-        _sembrar("pieza.bajo_rendimiento", contenido_id=f"c{i}")
+        _inicializar("pieza.bajo_rendimiento", contenido_id=f"c{i}")
     alertas = cliente.get("/api/alertas?limite=2").json()["alertas"]
     assert len(alertas) == 2

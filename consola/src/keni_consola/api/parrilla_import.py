@@ -380,7 +380,7 @@ async def aplicar_propuesta(request: Request) -> Response:
     Re-construye el contexto del RANGO (las semanas tocadas por las fechas; las filas pudieron
     cambiar desde que se generó) y re-valida con el dominio puro. Si hay errores de validacion o
     CONFLICTOS (celda ocupada / turno desaparecido), devuelve 409 SIN aplicar. Si todo cuadra,
-    aplica TODAS las operaciones en UNA transaccion (`origen='import-doc'`, sembrando las franjas
+    aplica TODAS las operaciones en UNA transaccion (`origen='import-doc'`, inicializando las franjas
     por defecto de cada semana nueva) y marca la propuesta `aplicada`.
     """
     propuesta_id = request.path_params["propuesta_id"]

@@ -1,6 +1,6 @@
-"""Tests del vocabulario semilla por marca (`relevancia_marca`) — PUROS, sin DB ni red.
+"""Tests del vocabulario inicial por marca (`relevancia_marca`) — PUROS, sin DB ni red.
 
-No fijan la lista palabra a palabra (es semilla editable), sino las PROPIEDADES que el
+No fijan la lista palabra a palabra (es inicial editable), sino las PROPIEDADES que el
 ranking y el umbral necesitan: cobertura mínima por marca del piloto, normalización
 (minúsculas, sin acentos) y desambiguación (nombres genéricos solo como frase).
 """
@@ -16,7 +16,7 @@ _MARCAS_PILOTO = ("unotv", "claro-sports", "nacion-gamer")
 
 
 def test_marcas_del_piloto_tienen_vocabulario_amplio():
-    """El umbral exige encaje por vocabulario: una semilla raquítica mata el feed."""
+    """El umbral exige encaje por vocabulario: una inicial raquítica mata el feed."""
     for marca in _MARCAS_PILOTO:
         assert len(relevancia_marca.palabras_de_marca(marca)) >= 80, marca
 

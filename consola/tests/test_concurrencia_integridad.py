@@ -298,7 +298,7 @@ _DIA_A = "2026-05-25"  # lunes
 _DIA_B = "2026-05-26"  # martes
 
 
-def _sembrar_swap_aplicable():
+def _inicializar_swap_aplicable():
     """Siembra dos turnos (ana@A, beto@B) y un swap ACEPTADO entre ellos.
 
     Devuelve `(swap_id, franja_id, fecha_a, fecha_b)`. Mismo patrón que `test_api_rota_swaps`:
@@ -308,7 +308,7 @@ def _sembrar_swap_aplicable():
     repos.crear_turno_rota(_LUNES, _DIA_B, miembro_id="beto", miembro_nombre="Beto", franja="matutino")
     franjas = {f["nombre"]: f["id"] for f in repos.listar_franjas_semana(_LUNES)}
     franja_id = franjas.get("Mañana", "")
-    assert franja_id, f"no se sembró la franja Mañana: {franjas}"
+    assert franja_id, f"no se inicializó la franja Mañana: {franjas}"
     swap = repos.crear_swap_turno(
         "ana", "beto", _DIA_A, franja_id, _DIA_B, franja_id,
         solicitante_nombre="Ana", destinatario_nombre="Beto",
@@ -318,7 +318,7 @@ def _sembrar_swap_aplicable():
 
 
 def test_aplicar_swap_dos_veces_es_idempotente(entorno):
-    swap_id, franja_id = _sembrar_swap_aplicable()
+    swap_id, franja_id = _inicializar_swap_aplicable()
 
     def _aplicar():
         return repos.aplicar_swap_turno(

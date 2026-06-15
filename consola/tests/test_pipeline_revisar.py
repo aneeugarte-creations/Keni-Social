@@ -3,7 +3,7 @@
 Cubre:
   - COHERENCIA (pura): avisa sólo cuando el copy no comparte NINGÚN término de contenido con su
     nota y ambos son sustanciales; calla si comparten algo o si son cortos.
-  - VOZ (pura, perfil sembrado): reusa `patrones_marca.verificar_pieza` con `copy_unico=False`
+  - VOZ (pura, perfil inicializado): reusa `patrones_marca.verificar_pieza` con `copy_unico=False`
     (el borrador ya lleva sus hashtags), avisa fuera de patrón.
   - `verificar_calidad_pieza` (DB): ADVISORY — degrada `listo`→`revisar` y anota el tema, sin
     bloquear; un copy limpio no se toca.
@@ -65,11 +65,11 @@ def test_coherencia_calla_sin_nota():
 
 
 # --------------------------------------------------------------------------- #
-# VOZ (pura, perfil de patrones sembrado en disco)                            #
+# VOZ (pura, perfil de patrones inicializado en disco)                            #
 # --------------------------------------------------------------------------- #
 
 
-def _sembrar_perfil(monkeypatch, tmp_path, *, red: str = "x") -> None:
+def _inicializar_perfil(monkeypatch, tmp_path, *, red: str = "x") -> None:
     """Perfil mínimo de patrones para `_MARCA`/`red` con `emojis_max=0` (la marca va sin emojis)."""
     monkeypatch.setenv("KENI_PATRONES_DIR", str(tmp_path / "patrones"))
     base = patrones_marca.dir_perfiles_data()
@@ -87,13 +87,13 @@ def _sembrar_perfil(monkeypatch, tmp_path, *, red: str = "x") -> None:
 
 
 def test_voz_avisa_emoji_fuera_de_patron(monkeypatch, tmp_path):
-    _sembrar_perfil(monkeypatch, tmp_path)
+    _inicializar_perfil(monkeypatch, tmp_path)
     avisos = _revisar.avisos_voz(_MARCA, "x", "Un copy con un emoji 🔥 al final")
     assert avisos and "emoji" in avisos[0]
 
 
 def test_voz_calla_copy_en_patron(monkeypatch, tmp_path):
-    _sembrar_perfil(monkeypatch, tmp_path)
+    _inicializar_perfil(monkeypatch, tmp_path)
     assert _revisar.avisos_voz(_MARCA, "x", "Un copy sobrio sin emojis ni adornos") == []
 
 
@@ -132,7 +132,7 @@ def _borrador(cli: TestClient, *, contenido: str, veredicto: str = "listo", con_
 
 
 def test_verificar_calidad_degrada_listo_y_anota(entorno, monkeypatch, tmp_path):
-    _sembrar_perfil(monkeypatch, tmp_path)
+    _inicializar_perfil(monkeypatch, tmp_path)
     pub = _borrador(_cli(), contenido="Copy con emoji 🔥 fuera de patrón")
 
     avisos = _revisar.verificar_calidad_pieza(pub)
@@ -145,7 +145,7 @@ def test_verificar_calidad_degrada_listo_y_anota(entorno, monkeypatch, tmp_path)
 
 
 def test_verificar_calidad_no_toca_copy_limpio(entorno, monkeypatch, tmp_path):
-    _sembrar_perfil(monkeypatch, tmp_path)
+    _inicializar_perfil(monkeypatch, tmp_path)
     pub = _borrador(_cli(), contenido="Copy sobrio dentro de patrón, sin emojis")
 
     assert _revisar.verificar_calidad_pieza(pub) == []
@@ -163,7 +163,7 @@ def _encender_maquina(monkeypatch) -> None:
 
 
 def test_avance_con_calidad_on_marca_pero_no_bloquea(entorno, monkeypatch, tmp_path):
-    _sembrar_perfil(monkeypatch, tmp_path)
+    _inicializar_perfil(monkeypatch, tmp_path)
     _encender_maquina(monkeypatch)
     monkeypatch.setenv("KENI_PIPELINE_REVISAR", "1")
     pub = _borrador(_cli(), contenido="Copy con emoji 🔥 que se sale del patrón")
@@ -177,7 +177,7 @@ def test_avance_con_calidad_on_marca_pero_no_bloquea(entorno, monkeypatch, tmp_p
 
 
 def test_avance_con_calidad_off_no_marca(entorno, monkeypatch, tmp_path):
-    _sembrar_perfil(monkeypatch, tmp_path)
+    _inicializar_perfil(monkeypatch, tmp_path)
     _encender_maquina(monkeypatch)
     monkeypatch.delenv("KENI_PIPELINE_REVISAR", raising=False)
     pub = _borrador(_cli(), contenido="Copy con emoji 🔥 que se sale del patrón")

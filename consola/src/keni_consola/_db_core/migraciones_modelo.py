@@ -206,7 +206,7 @@ def _migrar_modelo_turnos(con: Any) -> None:
     con.commit()
 
 
-# Nombres por defecto para sembrar las 2 franjas iniciales de una semana. Coherentes con
+# Nombres por defecto para inicializar las 2 franjas iniciales de una semana. Coherentes con
 # `estados.NOMBRE_FRANJA_*_DEFAULT` (los re-importamos arriba). Mantener una sola fuente.
 _NOMBRE_FRANJA_MANANA = NOMBRE_FRANJA_MANANA_DEFAULT
 _NOMBRE_FRANJA_TARDE = NOMBRE_FRANJA_TARDE_DEFAULT
@@ -214,7 +214,7 @@ _NOMBRE_FRANJA_TARDE = NOMBRE_FRANJA_TARDE_DEFAULT
 
 def _config_franjas_template(con: Any, marca: str = "") -> tuple[str, str, str, str]:
     """Devuelve `(matutino_inicio, matutino_fin, vespertino_inicio, vespertino_fin)` para
-    sembrar las 2 franjas por defecto de una semana nueva.
+    inicializar las 2 franjas por defecto de una semana nueva.
 
     GRID POR MARCA: la config de franjas es POR MARCA — `rota_config_franjas.id` guarda el id
     de la marca (antes era el singleton `'default'`). Con `marca` leemos la fila de esa marca;
@@ -243,10 +243,10 @@ def _config_franjas_template(con: Any, marca: str = "") -> tuple[str, str, str, 
 _NOMBRE_FRANJA_DESCANSO = "Descanso"
 
 
-def _sembrar_franjas_por_defecto_en(con: Any, lunes: str, marca: str = "") -> dict[str, str]:
+def _inicializar_franjas_por_defecto_en(con: Any, lunes: str, marca: str = "") -> dict[str, str]:
     """Inserta (Mañana, Tarde, Descanso) en `rota_franjas` para `(marca, lunes)` si no existen.
 
-    Devuelve el mapa `{nombre -> id}` con las franjas vigentes (sembradas o ya existentes) de
+    Devuelve el mapa `{nombre -> id}` con las franjas vigentes (inicializadas o ya existentes) de
     ESA marca. La franja "Descanso" se siembra con `es_descanso=true`, `inicio='00:00'`/
     `fin='00:00'` (sin rango horario real: nadie cubre eventos en descanso) y un `orden` alto
     (999) para que la UI la pinte siempre al final.
@@ -279,12 +279,12 @@ def _sembrar_franjas_por_defecto_en(con: Any, lunes: str, marca: str = "") -> di
         return por_nombre
     mat_ini, mat_fin, ves_ini, ves_fin = _config_franjas_template(con, marca)
     # (nombre, inicio, fin, orden, es_descanso)
-    semilla = [
+    inicial = [
         (_NOMBRE_FRANJA_MANANA, mat_ini, mat_fin, 0, False),
         (_NOMBRE_FRANJA_TARDE, ves_ini, ves_fin, 1, False),
         (_NOMBRE_FRANJA_DESCANSO, "00:00", "00:00", 999, True),
     ]
-    for nombre, inicio, fin, orden, es_descanso in semilla:
+    for nombre, inicio, fin, orden, es_descanso in inicial:
         if nombre in por_nombre:
             continue
         nuevo_id = uuid.uuid4().hex[:12]
@@ -302,7 +302,7 @@ def _sembrar_franjas_por_defecto_en(con: Any, lunes: str, marca: str = "") -> di
             )
         por_nombre[nombre] = nuevo_id
     # Releemos para coger los `id` reales (el ON CONFLICT pudo descartar el INSERT si otra
-    # transaccion sembro a la vez): el dict en memoria puede traer un id que no esta.
+    # transaccion inicializo a la vez): el dict en memoria puede traer un id que no esta.
     if tiene_marca:
         filas = con.execute(
             "SELECT id, nombre FROM rota_franjas WHERE lunes = ? AND marca = ?",
@@ -357,7 +357,7 @@ def _migrar_modelo_franjas(con: Any) -> None:
     con.execute("CREATE INDEX IF NOT EXISTS idx_rota_franjas_lunes ON rota_franjas (lunes)")
 
     # PASO 1: columna `es_descanso` en `rota_franjas` (idempotente). Necesario antes de
-    # sembrar para que el INSERT no falle en instancias legadas que crearon la tabla sin
+    # inicializar para que el INSERT no falle en instancias legadas que crearon la tabla sin
     # ese campo (predicado defensivo: tras PASO 0 siempre existira, pero mantenemos por si
     # el CREATE IF NOT EXISTS encuentra una tabla previa).
     cols_franjas = _columnas_existentes(con, "rota_franjas")
@@ -384,7 +384,7 @@ def _migrar_modelo_franjas(con: Any) -> None:
             "ALTER TABLE rota_turnos ADD COLUMN franja_id TEXT NOT NULL DEFAULT ''"
         )
 
-    # PASO 3 y 4: por cada semana con turnos legados, sembrar las 3 franjas por defecto y
+    # PASO 3 y 4: por cada semana con turnos legados, inicializar las 3 franjas por defecto y
     # asignar `franja_id`. Un solo SELECT de lunes distintos con cualquier franja literal
     # legada que aun no tenga `franja_id`.
     if tiene_franja_literal:
@@ -397,7 +397,7 @@ def _migrar_modelo_franjas(con: Any) -> None:
             lunes = (fila["semana"] or "").strip()
             if not lunes:
                 continue
-            mapa = _sembrar_franjas_por_defecto_en(con, lunes)
+            mapa = _inicializar_franjas_por_defecto_en(con, lunes)
             manana_id = mapa.get(_NOMBRE_FRANJA_MANANA, "")
             tarde_id = mapa.get(_NOMBRE_FRANJA_TARDE, "")
             descanso_id = mapa.get(_NOMBRE_FRANJA_DESCANSO, "")

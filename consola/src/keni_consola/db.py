@@ -434,7 +434,7 @@ from .db_rota import (  # noqa: F401
     obtener_turno_rota,
     quitar_coordinador_rota,
     reclamar_oferta_turno,
-    sembrar_franjas_por_defecto,
+    inicializar_franjas_por_defecto,
 )
 from .db_texto_pub import (  # noqa: F401
     ESTADO_SOLICITUD_ABIERTA,
@@ -585,7 +585,7 @@ __all__ = [
     "registrar_salud_fuente_rss",
     "registrar_snapshot_comercial",
     "registrar_snapshot_pieza",
-    "sembrar_franjas_por_defecto",
+    "inicializar_franjas_por_defecto",
     "serie_pieza",
     "terminar_job",
     "ultimo_snapshot_comercial",

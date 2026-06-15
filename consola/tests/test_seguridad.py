@@ -186,7 +186,7 @@ def test_index_siembra_cookie_e_inyecta_token(entorno):
     c = _cli_sin_auth()
     r = c.get("/")
     assert r.status_code == 200
-    # Cookie sembrada con el token.
+    # Cookie inicializada con el token.
     assert seguridad.COOKIE_TOKEN in r.headers.get("set-cookie", "")
     # Token inyectado en el HTML para que el SPA lo mande por cabecera.
     assert "__KENI_TOKEN__" in r.text

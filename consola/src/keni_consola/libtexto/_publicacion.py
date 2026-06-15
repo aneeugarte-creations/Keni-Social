@@ -27,9 +27,9 @@ Este modulo es la CAPA DE LECTURA de ese modelo para libtexto y el ensamblaje:
     (`produccion`, `sha_actual`, `sin_publicar`).
 
 NOTA (alcance del snapshot estable): cubre los docs con AL MENOS un commit git. Los creados
-via API/movidos/publicados ya tienen HEAD; los de la SEMILLA, que el import escribe sin
+via API/movidos/publicados ya tienen HEAD; los de la INICIAL, que el import escribe sin
 commitear, reciben una linea base versionada al final de la siembra
-(`_semilla.asegurar_linea_base`), asi que tambien sirven snapshot estable. Solo cae al working
+(`_inicial.asegurar_linea_base`), asi que tambien sirven snapshot estable. Solo cae al working
 copy si el versionado esta apagado o no hay repo (migracion suave).
 
 La ESCRITURA (publicar/solicitar/aprobar/rechazar) vive en `api/texto.py` + `db_texto_pub`
@@ -112,7 +112,7 @@ def cuerpo_publicado(doc_id: str) -> str | None:
          crear/mover/una publicacion previa). El autosave NO commitea, asi que es un snapshot
          estable que no refleja un borrador a medio escribir.
       3. None: ni puntero ni commit legibles (versionado apagado / sin repo / doc sin commits,
-         p. ej. los de la semilla nunca commiteados). El llamante cae entonces al working copy.
+         p. ej. los de la inicial nunca commiteados). El llamante cae entonces al working copy.
 
     Lo usan `cuerpo_efectivo` (prompts base) y `texto_lanzar` (prompt elegido a mano).
     """

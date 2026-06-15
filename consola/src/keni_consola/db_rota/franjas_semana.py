@@ -5,7 +5,7 @@ from ._comun import (
     Any,
     IntegrityError,
     _conectar,
-    _sembrar_franjas_por_defecto_en,
+    _inicializar_franjas_por_defecto_en,
     uuid,
 )
 
@@ -219,20 +219,20 @@ def borrar_franja_semana(franja_id: str, *, forzar: bool = False) -> dict[str, A
         con.close()
 
 
-def sembrar_franjas_por_defecto(lunes: str, marca: str = "") -> list[dict[str, Any]]:
+def inicializar_franjas_por_defecto(lunes: str, marca: str = "") -> list[dict[str, Any]]:
     """Idempotente: siembra ("Mañana", "Tarde", "Descanso") para `(marca, lunes)` si faltan.
 
-    Devuelve la lista de franjas de ESA marca tras el sembrado (orden ASC). Si ya estan las
+    Devuelve la lista de franjas de ESA marca tras el inicializado (orden ASC). Si ya estan las
     tres, no toca nada.
 
     GRID POR MARCA: siembra la rejilla de UNA marca. La API NO siembra en "Todas" (sin marca
-    concreta no hay rejilla que sembrar).
+    concreta no hay rejilla que inicializar).
     """
     if not lunes:
         return []
     con = _conectar()
     try:
-        _sembrar_franjas_por_defecto_en(con, lunes, marca)
+        _inicializar_franjas_por_defecto_en(con, lunes, marca)
         con.commit()
     finally:
         con.close()

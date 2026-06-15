@@ -88,7 +88,7 @@ def crear_turno_rota(
 
     Retrocompat para tests legados: acepta `franja` (literal 'matutino'/'vespertino'/
     'descanso'). El shim vive en `db.crear_turno_rota` (la traduccion necesita conexion BD
-    para sembrar franjas por defecto). Codigo NUEVO debe pasar `franja_id` directamente.
+    para inicializar franjas por defecto). Codigo NUEVO debe pasar `franja_id` directamente.
     """
     return db.crear_turno_rota(
         semana,
@@ -450,8 +450,8 @@ def contar_turnos_de_franja(franja_id: str) -> int:
     return db.contar_turnos_de_franja(franja_id)
 
 
-def sembrar_franjas_por_defecto(lunes: str, marca: str = "") -> list[dict[str, Any]]:
-    return db.sembrar_franjas_por_defecto(lunes, marca)
+def inicializar_franjas_por_defecto(lunes: str, marca: str = "") -> list[dict[str, Any]]:
+    return db.inicializar_franjas_por_defecto(lunes, marca)
 
 
 

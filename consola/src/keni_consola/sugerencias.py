@@ -39,9 +39,9 @@ _MAX_AUTOR = 120
 
 # Idea de partida: la moderación de lives de YouTube, planteada como producto
 # APARTE de keni-social (que es gestión de redes con LLM, menos específica).
-_SEMILLA: list[dict[str, Any]] = [
+_INICIAL: list[dict[str, Any]] = [
     {
-        "id": "semilla-moderacion-youtube",
+        "id": "inicial-moderacion-youtube",
         "titulo": "Moderador de lives de YouTube (herramienta aparte)",
         "detalle": (
             "Idea surgida en la demo de AMX (Fundación, evento **México Siglo XXI**): "
@@ -132,9 +132,9 @@ def _escribir(lista: list[dict[str, Any]]) -> None:
 def listar() -> list[dict[str, Any]]:
     """Lista de sugerencias. La PRIMERA vez (sin archivo) inicializa la idea de partida."""
     if not ruta_sugerencias().exists():
-        semilla = [dict(s) for s in _SEMILLA]
-        _escribir(semilla)
-        return semilla
+        inicial = [dict(s) for s in _INICIAL]
+        _escribir(inicial)
+        return inicial
     return _leer()
 
 

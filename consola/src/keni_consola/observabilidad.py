@@ -163,7 +163,7 @@ class RegistroPeticiones:
 
         rid = _request_id_entrante(scope)
         # Disponible para los handlers via `request.state.request_id`. Starlette expone
-        # `request.state` desde `scope["state"]`; lo sembramos por si no existe aun.
+        # `request.state` desde `scope["state"]`; lo inicializamos por si no existe aun.
         estado_scope = scope.setdefault("state", {})
         if isinstance(estado_scope, dict):
             estado_scope["request_id"] = rid

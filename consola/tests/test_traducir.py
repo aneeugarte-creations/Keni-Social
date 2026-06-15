@@ -174,7 +174,7 @@ def test_texto_largo_no_rompe():
 
 
 def test_construir_prompt_inserta_items_y_contrato():
-    # La plantilla viene de la Biblioteca (semilla): la lista JSON sustituye al marcador (que
+    # La plantilla viene de la Biblioteca (inicial): la lista JSON sustituye al marcador (que
     # NO debe quedar crudo) y se conserva el contrato JSON {"traducciones": [...]}.
     p = traducir._construir_prompt('[{"id":"1","titulo":"Hi"}]')
     assert '[{"id":"1","titulo":"Hi"}]' in p
@@ -188,7 +188,7 @@ def test_construir_prompt_inserta_items_y_contrato():
 # --------------------------------------------------------------------------- #
 
 
-def _sembrar_cluster_idioma(cid, *, idioma, traducido=0, estado="nuevo"):
+def _inicializar_cluster_idioma(cid, *, idioma, traducido=0, estado="nuevo"):
     from keni_consola import repos
 
     repos.upsert_noticia_cluster({
@@ -220,11 +220,11 @@ def test_clusters_extranjeros_sin_traducir_no_revienta_con_like(cliente):  # noq
     """
     from keni_consola import repos
 
-    _sembrar_cluster_idioma("en1", idioma="en")  # extranjero sin traducir -> candidato
-    _sembrar_cluster_idioma("es1", idioma="es")  # español -> excluido por el NOT LIKE 'es%'
-    _sembrar_cluster_idioma("en2", idioma="en", traducido=1)  # ya traducido -> excluido
+    _inicializar_cluster_idioma("en1", idioma="en")  # extranjero sin traducir -> candidato
+    _inicializar_cluster_idioma("es1", idioma="es")  # español -> excluido por el NOT LIKE 'es%'
+    _inicializar_cluster_idioma("en2", idioma="en", traducido=1)  # ya traducido -> excluido
 
-    # Ventana enorme para que el corte temporal no descarte la semilla; min_score bajo.
+    # Ventana enorme para que el corte temporal no descarte la inicial; min_score bajo.
     candidatos = repos.clusters_extranjeros_sin_traducir(24 * 365 * 100, min_score=0.0, limite=40)
     ids = {c["id"] for c in candidatos}
     assert "en1" in ids

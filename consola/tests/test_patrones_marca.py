@@ -96,19 +96,19 @@ def test_derivar_perfil_descarta_sin_texto_o_sin_visualizaciones():
 
 
 # --------------------------------------------------------------------------- #
-# Carga de perfiles (runtime > semilla)                                        #
+# Carga de perfiles (runtime > inicial)                                        #
 # --------------------------------------------------------------------------- #
 
 
-def test_cargar_perfil_semilla_del_paquete():
-    # Las 3 marcas del piloto viajan con perfil semilla derivado de Metricool.
+def test_cargar_perfil_inicial_del_paquete():
+    # Las 3 marcas del piloto viajan con perfil inicial derivado de Metricool.
     for marca in ("unotv", "claro-sports", "nacion-gamer"):
         perfil = patrones_marca.cargar_perfil(marca)
         assert perfil is not None, marca
         assert perfil["redes"], marca
 
 
-def test_cargar_perfil_runtime_gana_a_semilla(tmp_path, monkeypatch):
+def test_cargar_perfil_runtime_gana_a_inicial(tmp_path, monkeypatch):
     monkeypatch.setenv("KENI_PATRONES_DIR", str(tmp_path))
     propio = {"version": 1, "marca": "unotv", "redes": {"x": {"lint": {"emojis_max": 0}}}}
     (tmp_path / "unotv.json").write_text(json.dumps(propio), encoding="utf-8")
@@ -116,11 +116,11 @@ def test_cargar_perfil_runtime_gana_a_semilla(tmp_path, monkeypatch):
     assert perfil is not None and "x" in perfil["redes"]
 
 
-def test_cargar_perfil_invalido_cae_a_semilla(tmp_path, monkeypatch):
+def test_cargar_perfil_invalido_cae_a_inicial(tmp_path, monkeypatch):
     monkeypatch.setenv("KENI_PATRONES_DIR", str(tmp_path))
     (tmp_path / "unotv.json").write_text("{json roto", encoding="utf-8")
     perfil = patrones_marca.cargar_perfil("unotv")
-    assert perfil is not None and perfil["marca"] == "unotv"  # la semilla del paquete
+    assert perfil is not None and perfil["marca"] == "unotv"  # la inicial del paquete
 
 
 def test_cargar_perfil_marca_desconocida_o_invalida():

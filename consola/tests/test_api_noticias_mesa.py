@@ -12,7 +12,7 @@ from keni_consola import repos
 from .conftest import _cliente  # noqa: F401  (usado por la fixture `cliente`)
 
 
-def _sembrar(cid, *, score=0.5, categoria="mx", breaking=0, estado="nuevo", marca="unotv",
+def _inicializar(cid, *, score=0.5, categoria="mx", breaking=0, estado="nuevo", marca="unotv",
              titulo="Historia de prueba"):
     repos.upsert_noticia_cluster({
         "id": cid, "titulo": titulo, "resumen": "Resumen", "marca": marca,
@@ -54,14 +54,14 @@ def test_mesa_requiere_marca_concreta(cliente):
 
 def test_mesa_segmenta_por_lineas_del_plan(cliente, monkeypatch):
     monkeypatch.setenv("KENI_PLAN_DIA", "mx:2,internacional:1,breaking:1")
-    _sembrar("mx-top", score=0.9, categoria="mx", titulo="Nacional top")
-    _sembrar("mx-baja", score=0.3, categoria="mx", titulo="Nacional floja")
+    _inicializar("mx-top", score=0.9, categoria="mx", titulo="Nacional top")
+    _inicializar("mx-baja", score=0.3, categoria="mx", titulo="Nacional floja")
     # Breaking: compite por la línea 'breaking' aunque su feed sea deportes.
-    _sembrar("br1", score=0.8, categoria="deportes", breaking=1, titulo="Última hora")
+    _inicializar("br1", score=0.8, categoria="deportes", breaking=1, titulo="Última hora")
     # Sin línea en el plan: va a fuera_de_plan.
-    _sembrar("dep1", score=0.7, categoria="gaming", titulo="Gaming sin línea")
+    _inicializar("dep1", score=0.7, categoria="gaming", titulo="Gaming sin línea")
     # Usada/descartada: no son candidatas (estado != nuevo).
-    _sembrar("usada", estado="usado", categoria="mx")
+    _inicializar("usada", estado="usado", categoria="mx")
 
     datos = cliente.get("/api/noticias/mesa", params={"marca": "unotv"}).json()
     assert datos["marca"] == "unotv"
@@ -86,7 +86,7 @@ def test_mesa_segmenta_por_lineas_del_plan(cliente, monkeypatch):
 def test_mesa_respeta_top_n_por_linea(cliente, monkeypatch):
     monkeypatch.setenv("KENI_PLAN_DIA", "mx:2")
     for i in range(4):
-        _sembrar(f"m{i}", score=0.9 - i * 0.1, categoria="mx", titulo=f"Nacional {i}")
+        _inicializar(f"m{i}", score=0.9 - i * 0.1, categoria="mx", titulo=f"Nacional {i}")
     datos = cliente.get(
         "/api/noticias/mesa", params={"marca": "unotv", "por_linea": 2}
     ).json()
@@ -98,7 +98,7 @@ def test_mesa_respeta_top_n_por_linea(cliente, monkeypatch):
 def test_mesa_sin_plan_degrada_a_fuera_de_plan(cliente, monkeypatch):
     monkeypatch.delenv("KENI_PLAN_DIA", raising=False)
     monkeypatch.delenv("KENI_PLAN_DIA::unotv", raising=False)
-    _sembrar("c1", categoria="mx")
+    _inicializar("c1", categoria="mx")
     datos = cliente.get("/api/noticias/mesa", params={"marca": "unotv"}).json()
     assert datos["plan"] is False
     assert datos["lineas"] == []
@@ -146,7 +146,7 @@ def test_mesa_solo_cuenta_la_jornada_mx_no_lo_de_dias_previos(cliente, monkeypat
 
 
 def test_restaurar_devuelve_descartada_al_pool(cliente):
-    _sembrar("c1", estado="nuevo")
+    _inicializar("c1", estado="nuevo")
     cliente.post("/api/noticias/historias/c1/descartar")
     assert repos.obtener_noticia_cluster("c1")["estado"] == "descartado"
     r = cliente.post("/api/noticias/historias/c1/restaurar")
@@ -156,14 +156,14 @@ def test_restaurar_devuelve_descartada_al_pool(cliente):
 
 
 def test_restaurar_es_idempotente_sobre_una_nueva(cliente):
-    _sembrar("c1", estado="nuevo")
+    _inicializar("c1", estado="nuevo")
     r = cliente.post("/api/noticias/historias/c1/restaurar")
     assert r.status_code == 200
     assert r.json()["historia"]["estado"] == "nuevo"
 
 
 def test_restaurar_usada_400_e_inexistente_404(cliente):
-    _sembrar("c1", estado="nuevo")
+    _inicializar("c1", estado="nuevo")
     cont = repos.crear_contenido(clase="contenido", titulo="Tema", marca="unotv")
     repos.actualizar_noticia_cluster("c1", estado="usado", contenido_id=cont["id"])
     assert cliente.post("/api/noticias/historias/c1/restaurar").status_code == 400

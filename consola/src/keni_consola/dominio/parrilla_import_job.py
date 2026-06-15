@@ -249,19 +249,19 @@ _ESQUEMA_JSON = (
 # La plantilla del prompt vive en la Biblioteca de Texto como prompt EDITABLE (pestaña
 # «Prompts»). Los fragmentos calculados (fuente/reglas según el modo, roster, slots, esquema y la
 # cola con el documento embebido) se insertan en sus marcadores `{{...}}`. Si el store fallara,
-# la red es la SEMILLA del paquete (fuente única, sin texto duplicado aquí).
+# la red es la INICIAL del paquete (fuente única, sin texto duplicado aquí).
 _PROMPT_ID = "prompt/importar/parrilla"
 
 
 def _plantilla() -> str:
-    """Cuerpo EFECTIVO de la plantilla (store del equipo > semilla del paquete)."""
+    """Cuerpo EFECTIVO de la plantilla (store del equipo > inicial del paquete)."""
     from .. import libtexto
 
     try:
         cuerpo = (libtexto.cuerpo_efectivo(_PROMPT_ID) or "").strip()
     except Exception:  # noqa: BLE001 -- nunca dejar la importación sin prompt por un fallo de lectura
         cuerpo = ""
-    return cuerpo or libtexto.cuerpo_semilla(_PROMPT_ID).strip()
+    return cuerpo or libtexto.cuerpo_inicial(_PROMPT_ID).strip()
 
 
 def componer_prompt(
@@ -298,9 +298,9 @@ def componer_prompt(
         else ""
     )
     # Encuadre GENÉRICO inyectado por CÓDIGO (no por la plantilla editable): la plantilla viva en
-    # el store de un equipo ya desplegado pudo sembrarse cuando esto solo importaba PARRILLAS de
-    # turnos —y remataba con «si no es una parrilla, vacío»—. Como `importar_semilla` no pisa el
-    # store, editar la SEMILLA no llega a ese equipo. Estos fragmentos sí (van en {{FUENTE}} y
+    # el store de un equipo ya desplegado pudo inicializarse cuando esto solo importaba PARRILLAS de
+    # turnos —y remataba con «si no es una parrilla, vacío»—. Como `importar_inicial` no pisa el
+    # store, editar la INICIAL no llega a ese equipo. Estos fragmentos sí (van en {{FUENTE}} y
     # {{COLA_FUENTE}}, marcadores que toda versión de la plantilla conserva): generalizan el
     # encuadre y ANULAN ese corte para que UN solo evento (cartelera, nota, frase) también cuente.
     encuadre = (

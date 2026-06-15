@@ -7,7 +7,7 @@ persona las APRUEBA o las DESCARTA; y solo para las aprobadas se genera la pieza
   - `parsear_ideas`: dominio PURO. Saca las ideas del `{"ideas":[{"titulo","descripcion"}]}`
     que devuelve `claude -p` (tolera bloques ```json cercados y razonamiento alrededor), las
     repara (titulo obligatorio, recortes, sin duplicados por titulo) y las devuelve como dicts.
-  - `lanzar_propuesta`: compone el prompt (semilla `brainstorming-evergreen` + editorial de marca +
+  - `lanzar_propuesta`: compone el prompt (inicial `brainstorming-evergreen` + editorial de marca +
     contexto opcional) y ENCOLA el job con el lanzador NEUTRO (`generar.lanzar`).
   - `construir_procesar_evergreen_ideas`: el callback que corre en el WORKER al terminar: parsea la
     salida y crea las filas `evergreen_ideas` (estado `propuesta`, origen `ia`), enlazadas al
@@ -30,7 +30,7 @@ from . import generar
 
 _log = logging.getLogger("keni_consola.evergreen")
 
-# Prompt semilla que pide N ideas evergreen como JSON. Viaja en la texto semilla.
+# Prompt inicial que pide N ideas evergreen como JSON. Viaja en la texto inicial.
 PROMPT_BRAINSTORMING = "prompt/idear"
 
 # Topes defensivos: cuantas ideas importamos de una salida y longitudes maximas por campo.
