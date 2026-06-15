@@ -5,7 +5,7 @@
 # harness determinista (`keni_consola.evals`) sobre los casos golden semilla: si alguien debilita
 # la MAQUINARIA DE VERIFICACIÓN (lint de `patrones_marca`, gate `_calidad`, límites de red) o mueve
 # los PERFILES MEDIDOS de marca (`patrones_semilla/*.json`), algún caso semilla cambia de veredicto
-# y este pipeline lo caza.
+# y este pipeline lo detecta.
 #
 # BARATO y DETERMINISTA: cero `claude -p`, SIN Postgres ni red (los checks son puros y el perfil de
 # patrones se lee de disco). Por eso es un job aparte, ligero, que corre en cualquier cambio de la

@@ -1,5 +1,5 @@
 ---
-description: Corre el autodiagnóstico del entorno de métricas y explica en claro cada ❌ y cómo arreglarlo. Solo lectura.
+description: Corre el autodiagnóstico del entorno de métricas y explica en claro cada ❌ y cómo corregirlo. Solo lectura.
 allowed-tools: Bash(uvx *) Bash(uv *) Bash(python -m keni_metricas.doctor *) Bash(python -m keni_metricas.asistente --validar *) Bash(python -m keni_metricas.asistente --solo-mostrar *) Bash(uv --version) Bash(uvx --version) Bash(python --version)
 ---
 
@@ -7,7 +7,7 @@ allowed-tools: Bash(uvx *) Bash(uv *) Bash(python -m keni_metricas.doctor *) Bas
 
 Comprueba que el entorno de **métricas** está listo (intérprete, `uv`/`uvx`,
 configuración y conectividad), y traduce cada fallo a una frase entendible con el
-paso para arreglarlo.
+paso para corregirlo.
 
 Esto es **solo lectura**: no escribe configuración, no toca la red salvo una llamada
 de prueba de conectividad, y nunca publica.
@@ -30,7 +30,7 @@ de prueba de conectividad, y nunca publica.
 
 3. Resume el resultado como una lista de checks. Para cada **❌**:
    - Di en una frase qué falta o falla.
-   - Da el paso exacto para arreglarlo (instalar `uv`, correr
+   - Da el paso exacto para corregirlo (instalar `uv`, correr
      `/keni-social:keni-doctor` de nuevo, o lanzar el asistente de configuración
      con `python -m keni_metricas.asistente`).
 

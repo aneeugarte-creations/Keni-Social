@@ -30,7 +30,7 @@ leer_env() {
 # bootstrap (superusuario). En hosted eso es un agujero de minimo privilegio: la app debe
 # conectar como `keni_app` (rol sin superuser que crea postgres/initdb/10-app-role.sh).
 # Este deploy FALLA si la URL efectiva apunta al superusuario, salvo override explicito
-# KENI_PERMITIR_SUPERUSER=1 (en el .env o exportado), pensado solo para bootstrap/rescate.
+# KENI_PERMITIR_SUPERUSER=1 (en el .env o exportado), pensado solo para bootstrap/recuperacion.
 DB_URL_EFECTIVA="$(leer_env DATABASE_URL)"
 PG_SUPERUSER="$(leer_env POSTGRES_USER)"
 PERMITIR_SUPER="$(leer_env KENI_PERMITIR_SUPERUSER)"
@@ -46,7 +46,7 @@ if [ -z "$DB_URL_EFECTIVA" ] || { [ -n "$PG_SUPERUSER" ] && [ "$USUARIO_URL" = "
     printf '\033[31m==> ERROR: DATABASE_URL apunta al superusuario de Postgres (o esta vacia y se derivaria de POSTGRES_*).\033[0m\n' >&2
     printf '\033[31m    Fija en %s:  DATABASE_URL=postgresql://keni_app:<APP_DB_PASSWORD>@db:5432/<POSTGRES_DB>\033[0m\n' "$ENVFILE" >&2
     printf '\033[31m    (rol keni_app: ver deploy/postgres/initdb/10-app-role.sh y deploy/.env.example). Para forzar\033[0m\n' >&2
-    printf '\033[31m    EXPRESAMENTE el superusuario (bootstrap/rescate): KENI_PERMITIR_SUPERUSER=1.\033[0m\n' >&2
+    printf '\033[31m    EXPRESAMENTE el superusuario (bootstrap/recuperacion): KENI_PERMITIR_SUPERUSER=1.\033[0m\n' >&2
     exit 1
   fi
 fi
@@ -60,7 +60,7 @@ fi
 RAIZ="$(cd .. && pwd)"   # raíz del repo (deploy/ es el cwd; el contexto de build es `..`)
 # SEGURIDAD ante "deploy perdido": el hash debe incluir TODO lo que afecta al runtime de la
 # imagen; si se dejara una entrada fuera, un cambio real no cambiaría el hash y el código viejo
-# se quedaría en prod. Por eso solo PODAMOS artefactos/VCS que NUNCA son fuente (node_modules,
+# se quedaría en prod. Por eso solo BORRAMOS artefactos/VCS que NUNCA son fuente (node_modules,
 # __pycache__, .git, caches, y las salidas de build webapp/dist) y, vía `$2`, la ÚNICA exclusión
 # de fuente justificada: `consola/frontend` para las imágenes Python (ver abajo). Todo lo demás
 # se hashea, incluidos ficheros NUEVOS a nivel `consola/` (p.ej. un MANIFEST.in futuro).
@@ -183,13 +183,13 @@ fi
 if [ "$BACK_CAMBIO" = 1 ]; then
   echo "==> [4/6] asegura esquema Postgres (idempotente; ADR 0004)"
   $DC run --rm --no-deps -T back python -m keni_consola.migracion --solo-db
-  # El `back` arranca uvicorn-factory (no pasa por `__main__`), así que la siembra de la Texto
+  # El `back` arranca uvicorn-factory (no pasa por `__main__`), así que la inicialización de la Texto
   # NO corre en su arranque: la materializamos aquí para que los prompts/editorial NUEVOS de la
   # imagen aparezcan en el estudio. Idempotente; no pisa ediciones del equipo.
-  echo "==> [4b/6] siembra Texto: importa prompts/editorial base que falten (idempotente)"
+  echo "==> [4b/6] inicializa Texto: importa prompts/editorial base que falten (idempotente)"
   $DC run --rm --no-deps -T back python -m keni_consola.sembrar
 else
-  echo "==> [4/6] back sin cambios — esquema ya vigente, se omite la migración/siembra"
+  echo "==> [4/6] back sin cambios — esquema ya vigente, se omite la migración/inicialización"
 fi
 
 # ── ROLLBACK AUTOMATICO ───────────────────────────────────────────────────────────────

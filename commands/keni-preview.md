@@ -1,11 +1,11 @@
 ---
-description: Guía el pre-vuelo (dry-run) de una publicación con la skill publica-meta. Muestra qué se publicaría; NO publica.
+description: Guía la comprobación previa (dry-run) de una publicación con la skill publica-meta. Muestra qué se publicaría; NO publica.
 argument-hint: "[copy aprobado] [plataformas] [media]"
 ---
 
 # Preview de publicación (dry-run)
 
-Acompaña al usuario en el **pre-vuelo final** de una publicación: mostrar EXACTO qué
+Acompaña al usuario en la **comprobación final** de una publicación: mostrar EXACTO qué
 se enviaría por cada plataforma (texto final, conteo de caracteres, hashtags,
 hilo/carrusel, media referenciada) más avisos y una checklist humana.
 

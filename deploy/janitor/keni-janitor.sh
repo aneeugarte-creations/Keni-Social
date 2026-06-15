@@ -19,8 +19,8 @@ KEEP="${KEEP:-5}"
 THRESHOLD="${THRESHOLD:-50}"
 REPO_REGEX="${REPO_REGEX:-^keni-social/}"
 LOG="${LOG:-/var/log/keni-janitor.log}"
-# Belt-and-suspenders (#128): poda de registros YAML de generacion viejos en el volumen de
-# datos. La fuente de verdad de la poda es el daemon (reaper -> generaciones.podar_generaciones,
+# Belt-and-suspenders (#128): borrado de registros YAML de generacion viejos en el volumen de
+# datos. La fuente de verdad del borrado es el daemon (reaper -> generaciones.podar_generaciones,
 # que respeta el piso de los N mas recientes); esto es solo una red de seguridad por si el
 # daemon estuviera caido. SOLO actua si GEN_DIR apunta a un dir existente (def: el subdir de
 # generaciones del volumen `keni-data`). Borra por MTIME mas viejo que GEN_DIAS dias (def 30,
@@ -74,7 +74,7 @@ fi
 
 # 2b) CAP del build cache AUNQUE el disco vaya sobrado (audit 2026-06): el cache de buildx
 #     crece sin limite (41 GB medidos con el disco al 9%) y la regla de arriba solo lo
-#     vaciaba al cruzar THRESHOLD. `--keep-storage` poda por LRU dejando los
+#     vaciaba al cruzar THRESHOLD. `--keep-storage` limpia por LRU dejando los
 #     BUILD_CACHE_KEEP mas recientes: los builds del CI siguen calientes y el cache deja
 #     de acumular capas muertas. No toca imagenes ni contenedores; las capas en uso por
 #     un build en vuelo Docker no las suelta.
@@ -86,7 +86,7 @@ if [ "$aggressive" != 1 ]; then
   log "  build cache capado a ${BUILD_CACHE_KEEP} (antes: ${antes_cache:-?}, despues: ${despues_cache:-?})"
 fi
 
-# 3) Poda de registros de generacion viejos (belt-and-suspenders, #128). Solo registros
+# 3) Borrado de registros de generacion viejos (belt-and-suspenders, #128). Solo registros
 #    `<12hex>.yaml` mas viejos que GEN_DIAS dias; nunca toca temporales `.tmp-*` ni nada mas.
 #    El daemon es la via principal (respeta el piso de los N mas recientes); esto es respaldo.
 if [ -d "$GEN_DIR" ]; then
@@ -95,6 +95,6 @@ if [ -d "$GEN_DIR" ]; then
       -regex '.*/[0-9a-f]{12}\.yaml' -mtime "+${GEN_DIAS}" -print -delete 2>/dev/null | wc -l | tr -d ' ')"
   log "  generaciones: ${deleted:-0} registro(s) viejo(s) (>${GEN_DIAS}d) borrado(s) de ${before:-0} en $GEN_DIR"
 else
-  log "  generaciones: GEN_DIR no existe ($GEN_DIR), se omite poda de registros"
+  log "  generaciones: GEN_DIR no existe ($GEN_DIR), se omite borrado de registros"
 fi
 log "== janitor fin =="

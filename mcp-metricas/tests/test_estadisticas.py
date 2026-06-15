@@ -63,7 +63,7 @@ def test_buckets_engagement_cuenta_por_tramo():
     assert por_etiqueta["0–2%"] == 1
     assert por_etiqueta["2–4%"] == 2
     assert por_etiqueta["10%+"] == 1
-    # el tramo abierto superior no tiene fin.
+    # el intervalo abierto superior no tiene fin.
     assert buckets[-1].fin is None
 
 

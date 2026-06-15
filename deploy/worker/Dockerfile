@@ -4,7 +4,7 @@
 # la CLI `claude` (la del back ya no). Consume la MISMA cola que el back (tabla `jobs` en
 # el Postgres compartido) y corre `python -m keni_consola.worker` (bucle: clava un job,
 # reconstruye prompt+post-procesado desde el `spec` y corre el runner #137: grupo de
-# procesos propio, kill del arbol al timeout/cancel, tope de concurrencia, sin huerfanos).
+# procesos propio, kill del arbol al timeout/cancel, tope de concurrencia, sin procesos sueltos).
 #
 # Comparte el mismo CODIGO y el mismo VOLUMEN de estado que el back (skills bundleadas en
 # /app, secretos.toml/media en /data), porque el post-procesado escribe el historial y las

@@ -43,7 +43,7 @@ Esto **dockeriza la arquitectura objetivo**, pero el código aún no la consume 
   `claude -p`: **ENCOLA** un job (tabla `jobs` en Postgres) y responde al instante. El
   servicio **`worker`** clava el job, reconstruye prompt + post-procesado desde el `spec`
   serializado y corre **`claude -p`** (con todo el endurecimiento #137: grupo de procesos
-  propio, kill del árbol al timeout/cancel, tope de concurrencia, sin huérfanos). Por eso
+  propio, kill del árbol al timeout/cancel, tope de concurrencia, sin procesos sueltos). Por eso
   **`worker` lleva Node + la CLI `claude` y `back` ya no** (`KENI_WORKER_EXTERNO=1` en el
   back evita que levante su worker in-proceso). La generación **sigue siendo `claude -p`**
   (ADR 0001): el worker **no** usa la API de Claude. *Reiniciar el back NO mata los jobs en
@@ -234,7 +234,7 @@ El comando es **idempotente**: si se interrumpe, vuelve a correrlo sin miedo (lo
 ya presentes se saltan). **No migra el YAML editorial** (fuera de alcance): ese viaja con
 el volumen `keni-data`. Tras el cutover, mantén el backup hasta verificar.
 
-## Encender la tubería automática para VALIDACIÓN (Flujo C, Fase 2)
+## Encender el pipeline automático para VALIDACIÓN (Flujo C, Fase 2)
 
 La "máquina de contenido" lleva cada tema de entrada a **borrador completo en la cola de
 revisión** a través del **pipeline** (un único espinazo): `news-pool → etapa de copy → etapa de
@@ -257,7 +257,7 @@ hasta el borrador. Cada pieza nace `borrador`/`pendiente` y **para en la cola de
 multinivel) sigue intacto. **Nada sale a redes** sin que el humano lo autorice: el posteo real
 va por Metricool y está gated por `KENI_PUBLICAR_REAL`, que se queda **OFF**. Además el pipeline
 tiene cap por barrido (`KENI_PIPELINE_MAX`, `KENI_AUTOGEN_ARTE_MAX`, def 3) y dedup por
-etiqueta, así que no hay avalanchas. La etapa de arte **degrada** si no hay proveedor de imagen
+etiqueta, así que no hay ráfagas. La etapa de arte **degrada** si no hay proveedor de imagen
 configurado (no hace nada). Los **defaults siguen OFF en código**: encender es una decisión de
 operación, no un cambio de fuente.
 

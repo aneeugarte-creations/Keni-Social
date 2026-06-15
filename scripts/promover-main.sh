@@ -3,7 +3,7 @@
 # Promueve la rama del worktree ACTUAL a `main` de forma SEGURA (flujo del repo:
 # worktree -> push a `main`, sin PR; ver CLAUDE.md).
 #
-# Por qué existe: el footgun real es borrar la rama/worktree ANTES de confirmar el
+# Por qué existe: el peligro real es borrar la rama/worktree ANTES de confirmar el
 # push. Con varios autores empujando directo a `main`, un push paralelo puede
 # rechazar el tuyo (no fast-forward); si ya borraste la rama, el commit queda sin
 # referencia. Este script hace, en orden: fetch -> rebase sobre origin/main ->
@@ -32,7 +32,7 @@ if ! git rebase origin/main; then
 fi
 
 # ── Guardia anti-regresión ────────────────────────────────────────────────────
-# El segundo footgun (visto en producción): resolver un conflicto del rebase
+# El segundo peligro (visto en producción): resolver un conflicto del rebase
 # "con mi versión", o promover una reescritura integral hecha sobre una base
 # vieja, BORRA en silencio trabajo que otro agente acababa de meter en main.
 # Detección: por cada línea que este push elimina, `git blame` sobre origin/main

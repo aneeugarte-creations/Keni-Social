@@ -287,11 +287,11 @@ class EstadisticasNumericas(BaseModel):
 
 
 class DistribucionBucket(BaseModel):
-    """Un tramo del histograma de engagement (cuantas piezas caen en [inicio, fin))."""
+    """Un intervalo del histograma de engagement (cuantas piezas caen en [inicio, fin))."""
 
     etiqueta: str
     inicio: float
-    # fin: None = tramo abierto superior ("10%+").
+    # fin: None = intervalo abierto superior ("10%+").
     fin: float | None = None
     n: int
 

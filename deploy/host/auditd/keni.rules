@@ -19,7 +19,7 @@
 -w /etc/ssh/sshd_config   -p wa -k sshd
 -w /etc/ssh/sshd_config.d -p wa -k sshd
 
-## Configuracion del demonio Docker (NO el data-root, que es ruidoso)
+## Configuracion del demonio Docker (NO el data-root, que genera demasiados eventos)
 -w /etc/docker          -p wa -k docker
 -w /usr/bin/dockerd     -p wa -k docker
 -w /usr/bin/docker      -p x  -k docker_exec

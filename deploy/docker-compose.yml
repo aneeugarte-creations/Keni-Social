@@ -345,7 +345,7 @@ services:
     # con el back, cuyo Dockerfile define un HEALTHCHECK `curl :8765/healthz`. Heredado aqui
     # daria SIEMPRE "unhealthy" (no hay servidor en 8765). En su lugar sondeamos el FICHERO
     # DE LATIDO que el bucle principal de `keni_consola.daemons` toca cada ~30s
-    # (`latidos.tocar_fichero`): si lleva >120s sin tocarse, el proceso esta colgado/zombi
+    # (`latidos.tocar_fichero`): si lleva >120s sin tocarse, el proceso esta colgado/atascado
     # (no muerto: ese caso ya lo cubre `restart: unless-stopped`) y autoheal lo reinicia.
     # Sin dependencia de la BD: un Postgres caido NO marca unhealthy a los daemons.
     healthcheck:
@@ -547,7 +547,7 @@ services:
     # (2 workers × 20g no caben con holgura junto a db+CI en 61 GiB).
     # APAGADO LIMPIO: al recibir SIGTERM el pool del worker deja de reclamar, cancela los
     # `claude` en vuelo y RE-ENCOLA cada job capturado (worker.py `_Pool.detener`, timeout
-    # interno 10s). El default de Docker (10s a SIGKILL) cortaba ese drenaje JUSTO al
+    # interno 10s). El default de Docker (10s a SIGKILL) cortaba ese cierre JUSTO al
     # limite; 30s le da margen real para devolver los jobs a `pendiente` sin perder nada.
     stop_grace_period: 30s
     mem_limit: ${WORKER_MEM_LIMIT:-20g}
