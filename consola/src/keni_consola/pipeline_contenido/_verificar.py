@@ -23,7 +23,6 @@ from ._comun import (
     TIPO_PIPELINE,
     _log,
     registrar_etapa,
-    temas_pipeline,
 )
 
 __all__ = [
@@ -32,7 +31,6 @@ __all__ = [
     "dom_qa_titulo",
     "_contexto_qa_fuente",
     "lanzar_verificar_cluster",
-    "temas_sin_verificar",
 ]
 
 
@@ -211,13 +209,3 @@ def lanzar_verificar_cluster(
     )
     return gen
 
-
-def temas_sin_verificar(marca: str | None = None) -> list[dict[str, Any]]:
-    """Temas del pipeline SIN veredicto de QA todavía (verificación pendiente). Best-effort.
-
-    Excluye los `en_curso` (su QA está en curso) y los ya verificados (`no_verificado`/`problema`).
-    SIN recorte: el volumen lo acota la ADMISIÓN (el gate serial en curso por marca); aquí solo
-    puede haber, como mucho, lo admitido. La cola de generación pone el backpressure real
-    (`ColaLlenaError` corta la fase y el siguiente tick reintenta).
-    """
-    return [t for t in temas_pipeline(marca) if not (t.get("verificar_veredicto") or "").strip()]

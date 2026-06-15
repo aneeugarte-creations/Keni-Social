@@ -55,7 +55,7 @@ def _reparar_qa_en_curso() -> int:
     """Reparación de temas del pipeline COLGADOS en `verificar_veredicto='en_curso'`. Devuelve cuántos tocó.
 
     La fase QA marca el tema `en_curso` ANTES de lanzar la verificación; si el lanzamiento o la
-    generación mueren sin finalizador, el tema quedaba excluido PARA SIEMPRE de `temas_sin_verificar`
+    generación mueren sin finalizador, el tema quedaba sin re-verificar PARA SIEMPRE
     y contando en `temas_en_proceso` (bloquea el cupo serial de su marca). Por cada colgado más
     viejo que el TTL (`_ttl_qa_en_curso_seg`, vs `actualizado`):
       - etapa Verificar ACTIVA para la marca -> se resetea a "" (re-verificación en el barrido);

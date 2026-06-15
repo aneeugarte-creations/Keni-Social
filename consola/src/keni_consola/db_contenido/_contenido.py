@@ -461,7 +461,7 @@ def reparar_qa_en_curso_sueltos(umbral_iso: str) -> int:
 
     Limpieza del recolector: la fase QA marca el tema `en_curso` antes de lanzar la verificación; si
     la generacion muere sin finalizador, el sentinel quedaba para siempre (tema excluido de
-    `temas_sin_verificar` y contando en `temas_en_proceso`). Compara contra `actualizado` (lo refresca
+    sin re-verificar y contando en `temas_en_proceso`). Compara contra `actualizado` (lo refresca
     cada escritura, incluida la que puso `en_curso`): un `en_curso` legitimo y reciente NUNCA
     se toca (el umbral es muy superior al timeout de la verificación). Devuelve cuantos reseteo.
     """

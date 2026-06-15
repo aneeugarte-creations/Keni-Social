@@ -155,7 +155,6 @@ from ._verificar import (
     dom_qa_titulo,
     lanzar_verificar_cluster,
     qa_lexico,
-    temas_sin_verificar,
 )
 
 # Superficie pública reexportada. Incluye los módulos/seams que la forma histórica del módulo
@@ -248,7 +247,6 @@ __all__ = [
     "dom_qa_titulo",
     "_contexto_qa_fuente",
     "lanzar_verificar_cluster",
-    "temas_sin_verificar",
     # CD
     "lanzar_redactar_de_tema",
     "temas_para_redactar",

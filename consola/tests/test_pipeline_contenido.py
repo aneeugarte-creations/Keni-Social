@@ -68,6 +68,12 @@ def _envejecer_intento(tema_id, campo):
     repos.actualizar_contenido(tema_id, {"copy_pendiente": json.dumps(pend)})
 
 
+def _temas_sin_verdicto(marca=None):
+    """Temas del pipeline sin veredicto de QA (pendientes). Local del test: el barrido F3
+    selecciona por CLUSTER, así que el filtro por-tema ya no vive en producción."""
+    return [t for t in pc.temas_pipeline(marca) if not (t.get("verificar_veredicto") or "").strip()]
+
+
 def _inicializar_cluster(
     cid, *, marca="unotv", titulo="Historia X", score=0.5, estado="nuevo",
     resumen="México: el gobierno informa de seguridad en la CDMX", ultimo_visto=None,
@@ -476,20 +482,7 @@ def test_copy_fallido_se_reintenta_tras_el_backoff(entorno, monkeypatch):
 def test_verificar_no_relanza_tema_ya_verificado(entorno, monkeypatch):
     """Un tema con veredicto ya no se re-verificación (idempotente)."""
     _tema_pipeline(titulo="Ya verificado", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
-    assert pc.temas_sin_verificar() == []
-
-
-def test_temas_sin_verificar_devuelve_todos_los_pendientes(entorno):
-    """FLUJO CONTINUO: sin recorte por etapa; los pendientes entran TODOS (los verificados no).
-
-    El volumen lo acota la ADMISIÓN (gate serial en proceso por marca), no una ventana de revisión:
-    aquí solo puede haber, como mucho, lo admitido.
-    """
-    _tema_pipeline(titulo="Viejo 1", id="v1", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
-    _tema_pipeline(titulo="Viejo 2", id="v2", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
-    _tema_pipeline(titulo="Nuevo A", id="n1")  # sin veredicto -> pendiente
-    _tema_pipeline(titulo="Nuevo B", id="n2")
-    assert {t["id"] for t in pc.temas_sin_verificar()} == {"n1", "n2"}
+    assert _temas_sin_verdicto() == []
 
 
 def test_temas_para_copy_devuelve_todos_los_listos(entorno):
@@ -821,7 +814,7 @@ def test_caducidad_libera_el_gate_y_excluye_de_las_fases(entorno):
 
     # Liberan el gate, no se re-verifican ni generan copy, y quedan marcados con el motivo.
     assert pc.temas_en_proceso("unotv") == 0
-    assert pc.temas_sin_verificar() == []
+    assert _temas_sin_verdicto() == []
     assert pc.temas_para_redactar() == []
     temas = {t["titulo"]: t for t in pc.temas_pipeline()}
     assert temas["Atascado"]["verificar_veredicto"] == pc.QA_CADUCADA
@@ -1375,7 +1368,7 @@ def test_reparar_qa_en_curso_sueltos_resetea_solo_viejos(entorno):
     """El reparador devuelve a re-verificación ('') SOLO los `en_curso` más viejos que el umbral.
 
     Cierra el ATASCADA: si la verificación muere sin finalizador, el tema quedaba `en_curso` para
-    siempre (excluido de `temas_sin_verificar` y contando en el cupo en proceso de su marca).
+    siempre (sin re-verificar y contando en el cupo en proceso de su marca).
     NOTA: el limpiador usa ahora su reparación PER-TEMA (`limpiador_generaciones._reparar_qa_en_curso`,
     con WARN por tema y destino según el toggle); esta primitiva SQL en lote sigue en repos.
     """
