@@ -329,7 +329,7 @@ _MAX_SLIDES = 9
 
 
 def _slides_de(crudo: object) -> list[dict[str, object]]:
-    """Sanea el array `slides` del json del copy a `[{titular, foto}, …]` (PURA).
+    """Repara el array `slides` del json del copy a `[{titular, foto}, …]` (PURA).
 
     `titular` se limpia con `quitar_emojis` (es texto DE PLACA, como `copy_in`); slides sin
     titular útil se omiten. `foto` es el NÚMERO del catálogo numerado que vio el modelo

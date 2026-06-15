@@ -2,7 +2,7 @@
 
 PURO (sin DB ni red): `publicacion_a_dict` solo transforma un dict usando catálogos y lógica
 pura. El bug que cubre: los flags `falta_copy`/`falta_imagen` se desincronizan del contenido
-(la tubería rellena copy/imagen sin tocar el flag), y el label del feed mentía.
+(la pipeline rellena copy/imagen sin tocar el flag), y el label del feed mentía.
 """
 
 from __future__ import annotations

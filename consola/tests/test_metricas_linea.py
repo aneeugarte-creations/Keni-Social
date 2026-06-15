@@ -203,4 +203,4 @@ def test_lineas_por_pieza_mapea_solo_las_atribuibles(monkeypatch):
         {"id": "M2", "titulo": "Pieza sin contenido"},
     ]
     salida = metricas_linea.lineas_por_pieza("unotv", piezas)
-    assert salida == {"M1": "Virales"}  # M2 no enlaza -> no aparece (Sin línea aguas arriba)
+    assert salida == {"M1": "Virales"}  # M2 no enlaza -> no aparece (Sin línea antes (en el flujo))

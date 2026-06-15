@@ -56,7 +56,7 @@ Cada uno exporta un `iniciar_*`; casi todos GATEADOS por env var (OFF por defect
 - `transcripcion.py` — transcripción local de video/audio (whisper.cpp), capa SHELL.
 
 ## Pipeline de contenido (automatización, Flujo C)
-- `pipeline_contenido.py` — pipeline CI→CD→QA por marca (la "tubería").
+- `pipeline_contenido.py` — pipeline CI→CD→QA por marca (la "pipeline").
 - `pipeline_estado.py` — observabilidad: en qué ETAPA está cada tema.
 
 ## Persistencia / repos

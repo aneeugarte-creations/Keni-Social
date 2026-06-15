@@ -127,7 +127,7 @@ def guardar_contexto(marca_id: str, nombre: str, contenido: str) -> Path:
 
 
 def borrar_contexto(marca_id: str, nombre: str) -> bool:
-    """Borra un sub-contexto; True si existia, False si no. Saneado y defensivo."""
+    """Borra un sub-contexto; True si existia, False si no. Reparado y defensivo."""
     destino = _resolver_contexto(marca_id, nombre)
     if not destino.is_file():
         return False

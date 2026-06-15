@@ -45,7 +45,7 @@ _log = logging.getLogger("keni_consola.runner")
 # Máximo de líneas de stderr que retenemos del subproceso (las ÚLTIMAS): para loguear el
 # motivo de un fallo sin crecer sin límite. El stderr se DRENA en un hilo daemon desde el
 # arranque (ver `_DrenadorStderr` / `lanzar_proc`); si no, `claude --verbose` puede llenar
-# el buffer de la tubería (~64 KB) y BLOQUEARSE escribiendo en stderr → deja de producir
+# el buffer de la pipeline (~64 KB) y BLOQUEARSE escribiendo en stderr → deja de producir
 # stdout → `leer_stream` espera para siempre (deadlock). Drenar en paralelo lo evita.
 _MAX_STDERR_LINEAS = 2000
 
@@ -53,7 +53,7 @@ _MAX_STDERR_LINEAS = 2000
 class _DrenadorStderr:
     """Drena el stderr de un subproceso en un hilo daemon, reteniendo las últimas líneas.
 
-    Evita el deadlock por buffer de tubería lleno (claude bloqueado escribiendo en stderr
+    Evita el deadlock por buffer de pipeline lleno (claude bloqueado escribiendo en stderr
     mientras `leer_stream` espera stdout). `texto()` espera brevemente al hilo y devuelve lo
     capturado (acotado a `_MAX_STDERR_LINEAS`)."""
 
@@ -206,7 +206,7 @@ def lanzar_proc(
     capturan para loguearlos si returncode != 0. CRÍTICO: el stderr se DRENA EN PARALELO
     desde el arranque (hilo daemon `_DrenadorStderr`), NO solo al cerrar. Con `--verbose` y
     un prompt grande, `claude` puede escribir > 64 KB en stderr; si nadie lo drena, el buffer
-    de la tubería se llena, `claude` se BLOQUEA escribiendo en stderr y deja de producir
+    de la pipeline se llena, `claude` se BLOQUEA escribiendo en stderr y deja de producir
     stdout → `leer_stream` espera para siempre (deadlock observado en imports grandes). El
     drenador retiene las últimas líneas para `_loguear_stderr`.
     """
@@ -220,7 +220,7 @@ def lanzar_proc(
         bufsize=1,
         start_new_session=True,
     )
-    # Drena stderr YA (hilo daemon): evita el deadlock por buffer de tubería lleno.
+    # Drena stderr YA (hilo daemon): evita el deadlock por buffer de pipeline lleno.
     proc._keni_stderr = _DrenadorStderr(proc.stderr)  # type: ignore[attr-defined]
     return proc
 

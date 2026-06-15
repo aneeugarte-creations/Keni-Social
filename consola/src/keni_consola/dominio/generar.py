@@ -805,7 +805,7 @@ def lanzar_copy(
         n_notas=max(0, int(n_notas or 0)), fotos_notas=fotos,
     )
     # Defensivo: solo propagamos fuente_id/clave si AMBOS vienen (un caso parcial no debe
-    # marcar el item del feed). Saneamos y enviamos ambos o ninguno.
+    # marcar el item del feed). Reparamos y enviamos ambos o ninguno.
     fuente = fuente_id.strip() if isinstance(fuente_id, str) and fuente_id.strip() else None
     clave_item = clave.strip() if isinstance(clave, str) and clave.strip() else None
     procesar_spec = jobspec.construir_copy(

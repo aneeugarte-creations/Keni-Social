@@ -104,7 +104,7 @@ def test_maestros_son_investigacion_produccion_y_arte(store):
 
     «Investigación» y «Producción» son claves VIRTUALES (`KENI_INVESTIGACION`/`KENI_PRODUCCION`):
     agrupan sus etapas internas con fan-out (ver `claves_fisicas`) y se conservan para las
-    excepciones por marca, el respaldo de lectura del riel de Noticias y la API/MCP. La tira
+    excepciones por marca, el respaldo de lectura del flujo de Noticias y la API/MCP. La tira
     «Pipeline en vivo» opera las FÍSICAS: Recolectar/Verificar/Redactar/Ilustrar, cada una su clave."""
     maestros = [
         a for a in ajustes_catalogo.catalogo()

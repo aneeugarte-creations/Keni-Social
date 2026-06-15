@@ -2,7 +2,7 @@
 
 Specs de los motores que alimentan el tablero de contenido (ingesta de noticias,
 agrupar, verificar, video). Cada doc es autocontenido; léelos en orden para
-entender la tubería de "reutilizar lo que ya existe".
+entender la pipeline de "reutilizar lo que ya existe".
 
 > **Modelo de máquina de contenido (Fase 1):** 1 master (`KENI_MAQUINA`) + 3 etapas, todas
 > colgando del pipeline: «Crear noticias» (`KENI_PIPELINE_RECOLECTAR`, global), «Generar copy»

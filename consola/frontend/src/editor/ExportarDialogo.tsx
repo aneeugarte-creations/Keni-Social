@@ -37,7 +37,7 @@ const ESCALAS: { valor: number; etiqueta: string }[] = [
   { valor: 2, etiqueta: "2x" },
 ];
 
-/** Saneo del nombre de archivo: minúsculas, sin acentos ni símbolos raros; fallback `diseno`. */
+/** Reparación del nombre de archivo: minúsculas, sin acentos ni símbolos raros; fallback `diseno`. */
 function repararNombre(nombre: string | undefined): string {
   const base = (nombre || "")
     .normalize("NFD")

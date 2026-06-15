@@ -953,19 +953,19 @@ def test_esperar_terminal_despierta_por_senal_sin_sondear_disco(entorno, monkeyp
 def test_reparar_qa_si_fallo_devuelve_el_tema_a_recriba(entorno):
     """Un job de QA-FUENTE que termina en ERROR resetea el sentinel `en_curso` del tema.
 
-    CIERRA EL ZOMBI: la fase QA marca `en_curso` ANTES de lanzar y solo el `procesar` (exito)
+    CIERRA EL ATASCADA: la fase QA marca `en_curso` ANTES de lanzar y solo el `procesar` (exito)
     escribe el veredicto real; si la generacion muere, el tema quedaba excluido para siempre
     de la re-criba (y contando en el cupo en proceso de su marca).
     """
     from keni_consola import pipeline_contenido as pc
 
     tema = repos.crear_contenido(
-        clase="contenido", titulo="Zombi QA", marca=_MARCA, origen=pc.ORIGEN_PIPELINE,
+        clase="contenido", titulo="Atascada QA", marca=_MARCA, origen=pc.ORIGEN_PIPELINE,
         verificar_veredicto=pc.QA_EN_CURSO,
     )
     spec = {
         "procesar": jobspec.construir_qa_fuente(
-            marca=_MARCA, titulo="Zombi QA", autor=None, contenido_id=tema["id"],
+            marca=_MARCA, titulo="Atascada QA", autor=None, contenido_id=tema["id"],
         )
     }
     gen = generaciones.crear({"tipo": "pipeline", "marca": _MARCA, "etiqueta": "VERIFICAR"})

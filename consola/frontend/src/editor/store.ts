@@ -499,7 +499,7 @@ export function crearStoreEditor(inicial: Documento) {
           if (s.pasado.length === 0) return {};
           const previo = s.pasado[s.pasado.length - 1];
           const idsPresentes = new Set(previo.capas.map((c) => c.id));
-          // Sanea la selección: filtra seleccionMulti a ids que existan en el documento restaurado,
+          // Repara la selección: filtra seleccionMulti a ids que existan en el documento restaurado,
           // y pone seleccion a null si ya no existe.
           const seleccionMulti = s.seleccionMulti.filter((id) => idsPresentes.has(id));
           const seleccion = s.seleccion && idsPresentes.has(s.seleccion) ? s.seleccion : null;
@@ -517,7 +517,7 @@ export function crearStoreEditor(inicial: Documento) {
           if (s.futuro.length === 0) return {};
           const siguiente = s.futuro[0];
           const idsPresentes = new Set(siguiente.capas.map((c) => c.id));
-          // Sanea la selección: filtra seleccionMulti a ids que existan en el documento restaurado,
+          // Repara la selección: filtra seleccionMulti a ids que existan en el documento restaurado,
           // y pone seleccion a null si ya no existe.
           const seleccionMulti = s.seleccionMulti.filter((id) => idsPresentes.has(id));
           const seleccion = s.seleccion && idsPresentes.has(s.seleccion) ? s.seleccion : null;

@@ -585,7 +585,7 @@ _MAX_IDS_LOTE = 200
 
 
 def _ids_de_lote(crudos: Any) -> list[str] | None:
-    """Sanea una lista de ids (strings no vacios, sin duplicados, con tope). None si invalida."""
+    """Repara una lista de ids (strings no vacios, sin duplicados, con tope). None si invalida."""
     if not isinstance(crudos, list):
         return None
     ids = list(dict.fromkeys(i.strip() for i in crudos if isinstance(i, str) and i.strip()))

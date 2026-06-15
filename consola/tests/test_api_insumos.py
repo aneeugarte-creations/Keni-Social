@@ -766,7 +766,7 @@ def test_solo_frescos_mantiene_items_sin_ttl():
 
 
 # --------------------------------------------------------------------------- #
-# Saneo de lotes ZOMBI atascados en `parseando` (worker muerto)               #
+# Reparación de lotes ATASCADA atascados en `parseando` (worker muerto)               #
 # --------------------------------------------------------------------------- #
 
 _FUTURO = "2999-01-01T00:00:00.000000"  # umbral por encima de cualquier `creado` real

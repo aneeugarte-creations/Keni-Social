@@ -30,7 +30,7 @@ saturaba pool y panel y competía por promoción. Ahora **la puerta filtra**:
 - Exentos: feeds **propios** (su contenido ES la marca), feeds **sin marca**
   (compartidos/agencias/trends) y marcas sin vocabulario.
 - **Fail-open**: si el filtro revienta, se archiva todo (perder cobertura es peor que
-  archivar ruido; el umbral aguas abajo contiene el coste).
+  archivar ruido; el umbral después (en el flujo) contiene el coste).
 - Observable, no silencioso: `fuentes_rss.ultimo_filtrados` por sondeo (columna nueva),
   visible en `/api/noticias/salud` y en la tabla de Salud de fuentes («Filtrados»), y
   agregado en el log/resumen del barrido (`items_filtrados`).

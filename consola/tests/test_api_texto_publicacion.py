@@ -1,5 +1,5 @@
 """Tests del MODELO DE PUBLICACIÓN de la Biblioteca (rediseño): versiones inmutables +
-puntero "producción" + solicitudes + catálogo de variables + riel de la máquina.
+puntero "producción" + solicitudes + catálogo de variables + flujo de la máquina.
 
 Estrategia mixta:
   - Igual que `test_api_texto`: app Starlette mínima con `api.texto.RUTAS` (sin el
@@ -473,7 +473,7 @@ def test_sin_postgres_todo_degrada_a_working_copy(entorno_sin_pg):
 
 
 # --------------------------------------------------------------------------- #
-# Catálogo de variables + riel de la máquina                                   #
+# Catálogo de variables + flujo de la máquina                                   #
 # --------------------------------------------------------------------------- #
 
 
@@ -491,7 +491,7 @@ def test_variables_catalogo(entorno_sin_pg):
 
 
 def test_maquina_tres_maquinas(entorno_sin_pg):
-    """La forma nueva del riel (ADR 0011): tres máquinas, etapas mecánicas + prompts."""
+    """La forma nueva del flujo (ADR 0011): tres máquinas, etapas mecánicas + prompts."""
     c = _cliente()
     r = c.get("/api/texto/maquina", params={"marca": _MARCA})
     assert r.status_code == 200
@@ -507,7 +507,7 @@ def test_maquina_tres_maquinas(entorno_sin_pg):
 
     # Investigación: el proceso COMPLETO en orden (la frontera del ADR: Verificar la fuente es
     # Investigación), con las etapas sin prompt de la Biblioteca como `mecanica` (contexto).
-    # Ids/títulos de las etapas compartidas casan 1:1 con el riel de la página Investigación
+    # Ids/títulos de las etapas compartidas casan 1:1 con el flujo de la página Investigación
     # (verbos C: Recolectar · Fusionar · Clasificar · Priorizar · Verificar).
     assert [(e["tipo"], e["id"]) for e in inv["etapas"]] == [
         ("mecanica", "recolectar"),

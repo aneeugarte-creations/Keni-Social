@@ -126,7 +126,7 @@ def _request_id_entrante(scope: Scope) -> str:
     """Reusa el `X-Request-ID` que mande un proxy/cliente; si no, genera uno nuevo.
 
     Reusar el id entrante encadena la traza con la del proxy (Traefik) cuando este lo
-    propaga. Se SANEA (solo hex/guion, <= 64 chars) para que un valor ajeno no inyecte
+    propaga. Se REPARA (solo hex/guion, <= 64 chars) para que un valor ajeno no inyecte
     nada raro en los logs; si no es valido, se genera uno limpio.
     """
     for nombre, valor in scope.get("headers", []):

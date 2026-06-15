@@ -1637,14 +1637,14 @@ def test_encadenar_arte_tras_copy_respeta_gates(entorno, monkeypatch):
 def test_reparar_qa_en_curso_sueltos_resetea_solo_viejos(entorno):
     """El reparador devuelve a re-criba ('') SOLO los `en_curso` más viejos que el umbral.
 
-    Cierra el ZOMBI: si la criba muere sin finalizador, el tema quedaba `en_curso` para
+    Cierra el ATASCADA: si la criba muere sin finalizador, el tema quedaba `en_curso` para
     siempre (excluido de `temas_sin_verificar` y contando en el cupo en proceso de su marca).
     NOTA: el limpiador usa ahora su reparación PER-TEMA (`limpiador_generaciones._reparar_qa_en_curso`,
     con WARN por tema y destino según el toggle); esta primitiva SQL en lote sigue en repos.
     """
     from keni_consola import db
 
-    atascada = _tema_pipeline(titulo="Zombi", verificar_veredicto=pc.QA_EN_CURSO)
+    atascada = _tema_pipeline(titulo="Atascada", verificar_veredicto=pc.QA_EN_CURSO)
     vivo = _tema_pipeline(titulo="Vivo", verificar_veredicto=pc.QA_EN_CURSO)
     # Envejecemos el `actualizado` del atascada más allá del umbral (el del vivo queda reciente).
     con = db._conectar()
@@ -1681,7 +1681,7 @@ def test_limpiador_qa_atascada_re_criba_con_validacion_activa(entorno, monkeypat
     from keni_consola import limpiador_generaciones
 
     monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")
-    atascada = _tema_pipeline(titulo="Zombi", verificar_veredicto=pc.QA_EN_CURSO)
+    atascada = _tema_pipeline(titulo="Atascada", verificar_veredicto=pc.QA_EN_CURSO)
     vivo = _tema_pipeline(titulo="Vivo", verificar_veredicto=pc.QA_EN_CURSO)
     _envejecer_actualizado(atascada["id"])
 
@@ -1697,7 +1697,7 @@ def test_limpiador_qa_atascada_saltada_con_validacion_apagada(entorno, monkeypat
     from keni_consola import limpiador_generaciones
 
     monkeypatch.delenv("KENI_PIPELINE_VERIFICAR", raising=False)  # etapa off (def)
-    atascada = _tema_pipeline(titulo="Zombi sin QA", verificar_veredicto=pc.QA_EN_CURSO)
+    atascada = _tema_pipeline(titulo="Atascada sin QA", verificar_veredicto=pc.QA_EN_CURSO)
     _envejecer_actualizado(atascada["id"])
 
     n = limpiador_generaciones._reparar_qa_en_curso()

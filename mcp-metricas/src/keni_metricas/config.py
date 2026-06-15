@@ -306,7 +306,7 @@ def cargar_config() -> Config:
     Antes cada llamada por-pieza re-parseaba el TOML; ahora se reusa la última `Config`
     mientras la clave (`_clave_cache_config`) no cambie. Un cambio de token en disco
     (mtime distinto) se sigue captando sin reiniciar el proceso. El `Config` es
-    efectivamente inmutable aguas abajo (los consumidores no lo mutan), por lo que es
+    efectivamente inmutable después (en el flujo) (los consumidores no lo mutan), por lo que es
     seguro compartir la misma instancia entre llamadas/hilos.
     """
     global _cache_config
@@ -399,7 +399,7 @@ class FuenteScoped:
     `cuentas()` solo lista las marcas en alcance; `resumen`/`mejores_piezas`
     rechazan ids fuera de alcance con `CuentaNoEncontrada` (incluso si existen en
     la fuente subyacente). Aplica a CUALQUIER fuente (muestra o real), por lo que
-    todo lo aguas abajo —reporte_consolidado, picos, etc.— queda acotado.
+    todo lo después (en el flujo) —reporte_consolidado, picos, etc.— queda acotado.
     """
 
     def __init__(self, fuente: FuenteMetricas, marcas: list[str]):

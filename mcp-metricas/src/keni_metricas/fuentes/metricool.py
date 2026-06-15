@@ -411,7 +411,7 @@ class FuenteMetricool:
         "blog_id": ..., "nombre": ..., "plataformas": [Plataforma...]}``. Solo
         deben pasarse marcas con credenciales completas (``config.py`` ya filtra
         y resuelve los defaults antes de construir la fuente); las demás se omiten
-        aguas arriba.
+        antes (en el flujo).
       - ``cliente``: ``httpx.Client`` inyectable (tests con respx).
     """
 
