@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Hand, Pencil, Plus, Trash2, Zap } from "lucide-react";
+import { ChevronDown, ChevronRight, Hand, Pencil, Plus, Trash2, UserPlus, Zap } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -21,11 +21,12 @@ import type { CatalogosContenido, Contenido, EventoRota, PrioridadEvento } from 
 
 import { AvatarPersona } from "./AvatarPersona";
 import { CLAVE_TAREAS } from "./claves";
-import { DialogoAnadirPersona } from "./dialogos";
+import { DialogoAnadirPersona, DialogoAsignar } from "./dialogos";
 import { IconoEvento } from "./icono-evento";
-import { etiquetaRol } from "./roles";
+import { etiquetaRol, type RolCobertura } from "./roles";
 import {
   RolesCubiertos,
+  SelectorRol,
   SemaforoCobertura,
   TarjetaCobertura,
   TarjetaEventoLibre,
@@ -288,11 +289,19 @@ function AccionUrgente({ item }: { item: Item }) {
  *  - tarea/encargo → borra la tarea; si es una cobertura soltada (lleva `evento_id`) borra también
  *    el evento para que no resurja como «Por cubrir».
  */
-function AccionesItem({ item }: { item: Item }) {
+function AccionesItem({
+  item,
+  catalogos,
+}: {
+  item: Item;
+  catalogos: CatalogosContenido | undefined;
+}) {
   const queryClient = useQueryClient();
   const usuario = React.useContext(SesionContexto)?.usuario ?? null;
   const esManager = usuario?.rol === "admin";
   const [editarAbierto, setEditarAbierto] = React.useState(false);
+  const [asignarAbierto, setAsignarAbierto] = React.useState(false);
+  const [rol, setRol] = React.useState<RolCobertura>("foto");
 
   // Evento editable (lápiz) y tareas a borrar en cascada, según el tipo de fila.
   const evento =
@@ -304,6 +313,35 @@ function AccionesItem({ item }: { item: Item }) {
   const tareasVinculadas =
     item.kind === "cobertura" ? [...item.cobertura.cubridores, ...item.cobertura.libres] : [];
   const titulo = tituloItem(item);
+
+  // Asignar (UserPlus): para un EVENTO/COBERTURA se cubre con un rol (cubrirEvento); para una
+  // TAREA suelta se asigna el responsable directo (asignarContenido). El rol se elige en el
+  // propio diálogo cuando aplica.
+  const usuarios = catalogos?.usuarios ?? [];
+  const necesitaRol = item.kind === "evento" || item.kind === "cobertura";
+  const responsableActual = item.kind === "tarea" ? item.tarea.responsable_id ?? "" : "";
+  const asignar = useMutation({
+    mutationFn: (personaId: string) =>
+      item.kind === "tarea"
+        ? api.asignarContenido(item.tarea.id, personaId)
+        : api.cubrirEvento(
+            item.kind === "evento" ? item.evento.id : item.cobertura.eventoId,
+            personaId,
+            rol,
+          ),
+    onSuccess: (res) => {
+      setAsignarAbierto(false);
+      void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
+      const nombre =
+        (res as { contenido?: { responsable_nombre?: string } })?.contenido?.responsable_nombre ||
+        "esa persona";
+      toast.success(`«${titulo}» asignada a ${nombre}: se le avisa en la app.`);
+    },
+    onError: (e) => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
+      toast.error(mensajeError(e));
+    },
+  });
 
   const borrar = useMutation({
     mutationFn: async (): Promise<void> => {
@@ -354,6 +392,18 @@ function AccionesItem({ item }: { item: Item }) {
 
   return (
     <span className="flex shrink-0 items-center gap-1">
+      {/* Asignar (UserPlus): encarga el evento/tarea a alguien sin desplegar la fila. */}
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        className="h-7 w-7 shrink-0"
+        aria-label="Asignar"
+        title="Asignar"
+        onClick={() => setAsignarAbierto(true)}
+      >
+        <UserPlus className="h-3.5 w-3.5" />
+      </Button>
       {/* Lápiz: solo si hay evento detrás (partidos); abre el diálogo del calendario. */}
       {evento && (
         <Button
@@ -389,6 +439,24 @@ function AccionesItem({ item }: { item: Item }) {
           onCambio={() => void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS })}
         />
       )}
+
+      <DialogoAsignar
+        titulo={titulo}
+        abierto={asignarAbierto}
+        onOpenChange={setAsignarAbierto}
+        usuarios={usuarios}
+        responsableActual={responsableActual}
+        onElegir={(id) => asignar.mutate(id)}
+        enviando={asignar.isPending}
+        extra={
+          necesitaRol ? (
+            <div className="space-y-1.5">
+              <p className="text-sm font-medium">Rol con que se cubre</p>
+              <SelectorRol rol={rol} onRol={setRol} disabled={asignar.isPending} />
+            </div>
+          ) : undefined
+        }
+      />
     </span>
   );
 }
@@ -550,18 +618,18 @@ function FilaAgenda({
         {/* Acciones de la fila: editar (lápiz) + borrar (papelera) + ⚡ escalar/des-escalar.
             La papelera queda pegada al ⚡; el lápiz abre el diálogo de edición del calendario. */}
         <span className="flex items-center gap-1 px-1.5">
-          <AccionesItem item={item} />
+          <AccionesItem item={item} catalogos={catalogos} />
           <AccionUrgente item={item} />
         </span>
       </div>
       {abierta && (
         <div className="border-t border-border/60 bg-muted/20 p-2">
           {cob ? (
-            <TarjetaCobertura cobertura={cob} catalogos={catalogos} />
+            <TarjetaCobertura cobertura={cob} catalogos={catalogos} sinMenu />
           ) : tarea ? (
-            <TarjetaTarea tarea={tarea} catalogos={catalogos} />
+            <TarjetaTarea tarea={tarea} catalogos={catalogos} sinMenu />
           ) : (
-            <TarjetaEventoLibre evento={evento!} catalogos={catalogos} />
+            <TarjetaEventoLibre evento={evento!} catalogos={catalogos} sinMenu />
           )}
         </div>
       )}

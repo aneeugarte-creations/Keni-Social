@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ export function DialogoAsignar({
   responsableActual,
   onElegir,
   enviando,
+  extra,
 }: {
   titulo: string;
   abierto: boolean;
@@ -33,6 +35,8 @@ export function DialogoAsignar({
   responsableActual: string;
   onElegir: (personaId: string) => void;
   enviando: boolean;
+  /** Controles extra sobre la lista (p. ej. el rol con que se cubre, al asignar un evento). */
+  extra?: ReactNode;
 }) {
   return (
     <Dialog open={abierto} onOpenChange={onOpenChange}>
@@ -43,6 +47,7 @@ export function DialogoAsignar({
         <p className="text-sm text-muted-foreground">
           Elige a quién se la encargas; se le avisa en la app.
         </p>
+        {extra && <div className="pb-1">{extra}</div>}
         <div className="max-h-72 space-y-1 overflow-y-auto py-1">
           {usuarios.length === 0 && (
             <p className="px-1 text-sm text-muted-foreground">No hay compañeros para asignar.</p>

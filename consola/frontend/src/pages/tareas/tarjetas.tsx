@@ -220,7 +220,7 @@ export function GuionPartido({
  * Selector pequeño de ROL de cobertura (Foto/Video/Texto/Live), estilo plataforma (outline gris):
  * cuatro botones segmentados, uno marcado. Decide el `formato` con que se cubre/apunta a alguien.
  */
-function SelectorRol({
+export function SelectorRol({
   rol,
   onRol,
   disabled,
@@ -309,9 +309,13 @@ function RolLibre({ tarea }: { tarea: Contenido }) {
 export function TarjetaEventoLibre({
   evento,
   catalogos,
+  sinMenu = false,
 }: {
   evento: EventoRota;
   catalogos: CatalogosContenido | undefined;
+  /** Oculta el kebab «⋮» (las acciones siguen accesibles por click derecho/teclado). Lo usa
+   *  el Panorama, donde Asignar/Editar/Borrar ya viven como iconos en la propia fila. */
+  sinMenu?: boolean;
 }) {
   const queryClient = useQueryClient();
   const usuario = React.useContext(SesionContexto)?.usuario ?? null;
@@ -374,7 +378,7 @@ export function TarjetaEventoLibre({
   return (
     <FilaConAcciones
       como="div"
-      kebab="siempre"
+      kebab={sinMenu ? "nunca" : "siempre"}
       realce
       onPrimaria={() => cubrir.mutate(undefined)}
       acciones={accionesEvento}
@@ -440,11 +444,14 @@ export function TarjetaTarea({
   tarea,
   catalogos,
   enCobertura = false,
+  sinMenu = false,
 }: {
   tarea: Contenido;
   catalogos: CatalogosContenido | undefined;
   /** Dentro de una cobertura: oculta «Soltar»/«Reasignar» (se gestionan a nivel de evento). */
   enCobertura?: boolean;
+  /** Oculta el kebab «⋮» (acciones siguen por click derecho/teclado). Lo usa el Panorama. */
+  sinMenu?: boolean;
 }) {
   const queryClient = useQueryClient();
   const usuario = React.useContext(SesionContexto)?.usuario ?? null;
@@ -551,7 +558,7 @@ export function TarjetaTarea({
   return (
     <FilaConAcciones
       como="div"
-      kebab="siempre"
+      kebab={sinMenu ? "nunca" : "siempre"}
       realce
       onPrimaria={primaria}
       acciones={accionesTarea}
@@ -681,9 +688,12 @@ export function TarjetaTarea({
 export function TarjetaCobertura({
   cobertura,
   catalogos,
+  sinMenu = false,
 }: {
   cobertura: Cobertura;
   catalogos: CatalogosContenido | undefined;
+  /** Oculta el kebab «⋮» (acciones siguen por click derecho/teclado). Lo usa el Panorama. */
+  sinMenu?: boolean;
 }) {
   const queryClient = useQueryClient();
   const usuario = React.useContext(SesionContexto)?.usuario ?? null;
@@ -783,7 +793,7 @@ export function TarjetaCobertura({
   return (
     <FilaConAcciones
       como="div"
-      kebab="siempre"
+      kebab={sinMenu ? "nunca" : "siempre"}
       realce
       onPrimaria={!yaApuntado ? () => cubrir.mutate(undefined) : undefined}
       acciones={accionesCobertura}

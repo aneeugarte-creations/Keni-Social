@@ -170,6 +170,28 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect(cubrir).toHaveBeenCalledWith("ev9", undefined, "foto");
   });
 
+  it("PANORAMA: el icono «Asignar» de la fila encarga el evento sin desplegar (cubrirEvento con rol)", async () => {
+    const cubrir = vi
+      .spyOn(apiMod.api, "cubrirEvento")
+      .mockResolvedValue({ contenido: { responsable_nombre: "luis" } } as never);
+    renderTareas([], [evento({ id: "ev-asig", titulo: "Tigres vs Rayados" })], usuario("admin", "u-admin"));
+
+    // El icono vive en la fila COMPACTA (no hay que desplegar) y solo lo ve un manager.
+    await screen.findByText("Tigres vs Rayados");
+    fireEvent.click(screen.getByRole("button", { name: "Asignar" }));
+
+    // El diálogo deja elegir persona (y el rol viaja con el default «foto»).
+    fireEvent.click(await screen.findByRole("button", { name: "luis" }));
+    await waitFor(() => expect(cubrir).toHaveBeenCalledTimes(1));
+    expect(cubrir).toHaveBeenCalledWith("ev-asig", "u-luis", "foto");
+  });
+
+  it("PANORAMA: un editor NO ve el icono «Asignar» de la fila", async () => {
+    renderTareas([], [evento({ id: "ev-ed", titulo: "Partido editor" })], usuario("editor", "u2"));
+    await screen.findByText("Partido editor");
+    expect(screen.queryByRole("button", { name: "Asignar" })).toBeNull();
+  });
+
   it("un evento 'no_cubrir' NO aparece en la lista", async () => {
     renderTareas([], [evento({ id: "ev-x", titulo: "Amistoso sin señal", tipo_cobertura: "no_cubrir" })]);
     await waitFor(() => expect(apiMod.api.rotaEventos).toHaveBeenCalled());
