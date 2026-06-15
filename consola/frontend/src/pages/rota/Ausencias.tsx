@@ -84,7 +84,10 @@ export function NuevaAusencia({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const puedeCrear = miembroId !== "" && desde !== "" && hasta !== "" && !crear.isPending;
+  // Las fechas ISO se comparan como string (AAAA-MM-DD = orden cronológico).
+  const rangoInvalido = desde !== "" && hasta !== "" && hasta < desde;
+  const puedeCrear =
+    miembroId !== "" && desde !== "" && hasta !== "" && !rangoInvalido && !crear.isPending;
 
   // Sin wrapper Card: lo aporta el caller (CambiosYAusencias monta el formulario
   // colapsable dentro de su propio recuadro y elige el titulo segun el tipo).
@@ -135,6 +138,11 @@ export function NuevaAusencia({
           <Input id="au-hasta" type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
         </div>
       </div>
+      {rangoInvalido && (
+        <p className="text-xs text-destructive">
+          La fecha de fin no puede ser anterior a la de inicio.
+        </p>
+      )}
       <div className="space-y-1.5">
         <Label htmlFor="au-motivo">Motivo</Label>
         <Input
@@ -301,7 +309,8 @@ export function DialogoEditarAusencia({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const puedeGuardar = desde !== "" && hasta !== "" && !guardar.isPending;
+  const rangoInvalido = desde !== "" && hasta !== "" && hasta < desde;
+  const puedeGuardar = desde !== "" && hasta !== "" && !rangoInvalido && !guardar.isPending;
 
   return (
     <Dialog open={abierto} onOpenChange={(o) => !o && onCerrar()}>
@@ -349,6 +358,11 @@ export function DialogoEditarAusencia({
               />
             </div>
           </div>
+          {rangoInvalido && (
+            <p className="text-xs text-destructive">
+              La fecha de fin no puede ser anterior a la de inicio.
+            </p>
+          )}
           <div className="space-y-1.5">
             <Label htmlFor="au-edit-motivo">Motivo</Label>
             <Input

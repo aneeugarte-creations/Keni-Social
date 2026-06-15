@@ -381,7 +381,7 @@ export function CambiosYAusencias({ esAdmin }: { esAdmin: boolean }) {
           <CardContent className="space-y-4 p-6">
             <div className="space-y-1.5">
               <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                Tipo
+                ¿Qué quieres registrar?
               </Label>
               <div className="flex flex-wrap gap-2">
                 <ChipToggle
@@ -680,6 +680,17 @@ export function FormularioNuevoSwap({
           </div>
         )}
       </div>
+      {miTurno && turnoDeseado && (
+        // Cierra el bucle "¿qué estoy pidiendo?" antes de enviar, con el mismo lenguaje
+        // de resultado que la tarjeta.
+        <p className="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+          Pedirás: entregas tu{" "}
+          <span className="font-medium text-foreground">{etiquetaTurnoPropio(miTurno)}</span> y te
+          llevas el{" "}
+          <span className="font-medium text-foreground">{etiquetaTurnoPropio(turnoDeseado)}</span> de{" "}
+          {turnoDeseado.miembro_nombre}.
+        </p>
+      )}
       <div className="flex justify-end">
         <Button variant="secondary" onClick={() => crear.mutate()} disabled={!puedeCrear}>
           {crear.isPending ? (
