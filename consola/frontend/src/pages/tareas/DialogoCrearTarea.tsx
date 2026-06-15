@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, Link2, Loader2, Sparkles, Trophy, Upload } from "lucide-react";
+import { CalendarDays, Check, Link2, Loader2, Sparkles, Upload } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -31,15 +31,16 @@ import { CLAVE_TAREAS } from "./claves";
 
 const SIN_RESPONSABLE = "__libre__";
 
-type Modo = "partido" | "encargo";
+type Modo = "evento" | "encargo";
 
 const esUrl = (s: string) => /^https?:\/\/\S+/i.test(s.trim());
 
 /**
  * Añadir a la lista de Tareas:
- *  - Partido/evento: pega un ENLACE o el texto de la programación, o sube un DOCUMENTO
- *    (PDF/Excel/imagen) y la IA propone los partidos → revisas → «Aceptar» los crea. O
- *    escríbelo a mano (un solo partido).
+ *  - Evento: pega un ENLACE, suelta/sube un DOCUMENTO o PDF (Excel/imagen también), o
+ *    escribe una FRASE y la IA propone los eventos → revisas → «Aceptar» los crea. O
+ *    escríbelo a mano (un solo evento). Sirve para cualquier cosa: partido, concierto,
+ *    rueda de prensa, estreno…
  *  - Encargo del equipo: una tarea suelta (sin evento).
  */
 export function DialogoCrearTarea({
@@ -54,7 +55,8 @@ export function DialogoCrearTarea({
   marca: string | undefined;
 }) {
   const queryClient = useQueryClient();
-  const [modo, setModo] = React.useState<Modo>("partido");
+  const [modo, setModo] = React.useState<Modo>("evento");
+  const [arrastrando, setArrastrando] = React.useState(false);
   // Manual.
   const [titulo, setTitulo] = React.useState("");
   const [fecha, setFecha] = React.useState("");
@@ -84,6 +86,7 @@ export function DialogoCrearTarea({
     setResponsable(SIN_RESPONSABLE);
     setPegado("");
     setArchivo(null);
+    setArrastrando(false);
     setPropuestaId(null);
   };
   const cerrar = () => {
@@ -112,7 +115,7 @@ export function DialogoCrearTarea({
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
       toast.success(
-        `${eventosPropuestos.length} ${eventosPropuestos.length === 1 ? "partido añadido" : "partidos añadidos"} a la lista.`,
+        `${eventosPropuestos.length} ${eventosPropuestos.length === 1 ? "evento añadido" : "eventos añadidos"} a la lista.`,
       );
       cerrar();
     },
@@ -124,10 +127,10 @@ export function DialogoCrearTarea({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  // --- Manual: crear un partido (evento) o un encargo (tarea) ---
+  // --- Manual: crear un evento o un encargo (tarea) ---
   const crear = useMutation({
     mutationFn: async () => {
-      if (modo === "partido") {
+      if (modo === "evento") {
         await api.crearEventoRota({
           titulo: titulo.trim(),
           fecha,
@@ -152,7 +155,7 @@ export function DialogoCrearTarea({
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
       toast.success(
-        modo === "partido"
+        modo === "evento"
           ? `"${titulo.trim()}" añadido: está en «Por cubrir».`
           : `"${titulo.trim()}" creado.`,
       );
@@ -161,11 +164,11 @@ export function DialogoCrearTarea({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const incompletoManual = !titulo.trim() || (modo === "partido" && !fecha);
+  const incompletoManual = !titulo.trim() || (modo === "evento" && !fecha);
   const nadaQueAnalizar = !archivo && !pegado.trim();
   const enRevision = propuestaId !== null;
 
-  // Selectores reutilizados: en partido la prioridad cabalga junto a Día/Hora (una fila
+  // Selectores reutilizados: en evento la prioridad cabalga junto a Día/Hora (una fila
   // menos = el diálogo entra sin scroll); en encargo va junto a la fecha.
   const campoPrioridad = (
     <div className="space-y-1.5">
@@ -216,7 +219,7 @@ export function DialogoCrearTarea({
             {generando || !propuesta ? (
               <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Analizando los partidos… esto puede tardar un momento.
+                Analizando… esto puede tardar un momento.
               </div>
             ) : propuesta.estado === "error" ? (
               <p className="py-4 text-sm text-red-700 dark:text-red-300">
@@ -224,13 +227,13 @@ export function DialogoCrearTarea({
               </p>
             ) : eventosPropuestos.length === 0 ? (
               <p className="py-4 text-sm text-muted-foreground">
-                No encontré partidos ahí. Prueba con otro enlace/documento o escríbelo a mano.
+                No encontré eventos ahí. Prueba con otro enlace/documento o escríbelo a mano.
               </p>
             ) : (
               <>
                 <p className="text-sm text-muted-foreground">
                   Encontré <span className="font-medium text-foreground">{eventosPropuestos.length}</span>{" "}
-                  {eventosPropuestos.length === 1 ? "partido" : "partidos"}. Revisa y acepta:
+                  {eventosPropuestos.length === 1 ? "evento" : "eventos"}. Revisa y acepta:
                 </p>
                 <div className="max-h-72 space-y-1.5 overflow-y-auto">
                   {eventosPropuestos.map((ev, i) => (
@@ -238,7 +241,7 @@ export function DialogoCrearTarea({
                       key={`${ev.titulo}-${ev.fecha}-${i}`}
                       className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"
                     >
-                      <Trophy className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <CalendarDays className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                       <span className="truncate font-medium">{ev.titulo}</span>
                       <span className="ml-auto shrink-0 text-muted-foreground">
                         {ev.fecha ? formatearFecha(ev.fecha) : ""}
@@ -269,7 +272,7 @@ export function DialogoCrearTarea({
           <>
             {/* Qué se añade. Segmentado claro (píldora blanca sobre pista gris), no bloque negro. */}
             <div className="inline-flex rounded-md border border-border bg-muted p-0.5">
-              {(["partido", "encargo"] as Modo[]).map((m) => (
+              {(["evento", "encargo"] as Modo[]).map((m) => (
                 <button
                   key={m}
                   type="button"
@@ -281,21 +284,43 @@ export function DialogoCrearTarea({
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  {m === "partido" ? "Partido / evento" : "Encargo del equipo"}
+                  {m === "evento" ? "Evento" : "Encargo del equipo"}
                 </button>
               ))}
             </div>
 
-            {modo === "partido" && (
-              <div className="space-y-2 rounded-lg border border-dashed border-border p-3">
+            {modo === "evento" && (
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setArrastrando(true);
+                }}
+                onDragLeave={() => setArrastrando(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setArrastrando(false);
+                  const f = e.dataTransfer.files?.[0];
+                  if (f) {
+                    setArchivo(f);
+                    return;
+                  }
+                  const texto =
+                    e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain");
+                  if (texto) setPegado(texto.trim());
+                }}
+                className={cn(
+                  "space-y-2 rounded-lg border border-dashed p-3 transition-colors",
+                  arrastrando ? "border-foreground/40 bg-muted" : "border-border",
+                )}
+              >
                 <div className="flex items-center gap-1.5 text-sm font-medium">
                   <Sparkles className="h-4 w-4 text-primary" />
-                  Pega un enlace o sube un documento y lo creo solo
+                  Pega un enlace, suelta un documento o PDF, o escribe una frase y lo creo solo
                 </div>
                 <Textarea
                   value={pegado}
                   onChange={(e) => setPegado(e.target.value)}
-                  placeholder="Pega el enlace de la programación, o el texto con los partidos…"
+                  placeholder="Pega un enlace, o escribe el evento en una frase…"
                   rows={2}
                 />
                 <div className="flex flex-wrap items-center gap-2">
@@ -338,7 +363,7 @@ export function DialogoCrearTarea({
               </div>
             )}
 
-            {modo === "partido" && (
+            {modo === "evento" && (
               <div className="relative py-1 text-center text-xs text-muted-foreground">
                 — o escríbelo a mano —
               </div>
@@ -347,21 +372,21 @@ export function DialogoCrearTarea({
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <Label htmlFor="tarea-titulo">
-                  {modo === "partido" ? "Qué partido / evento" : "Qué hay que hacer"}
+                  {modo === "evento" ? "Qué evento" : "Qué hay que hacer"}
                 </Label>
                 <Input
                   id="tarea-titulo"
                   value={titulo}
                   onChange={(e) => setTitulo(e.target.value)}
                   placeholder={
-                    modo === "partido"
-                      ? "Cruz Azul vs América, final de la Copa…"
+                    modo === "evento"
+                      ? "Final de la Copa, un concierto, una rueda de prensa…"
                       : "Editar el clip del gol, subir fotos del entreno…"
                   }
                 />
               </div>
 
-              {modo === "partido" ? (
+              {modo === "evento" ? (
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="tarea-fecha">Día</Label>
@@ -400,15 +425,15 @@ export function DialogoCrearTarea({
 
               <div className="space-y-1.5">
                 <Label htmlFor="tarea-desc">
-                  {modo === "partido" ? "Qué sacar (opcional)" : "Detalle (opcional)"}
+                  {modo === "evento" ? "Qué sacar (opcional)" : "Detalle (opcional)"}
                 </Label>
                 <Textarea
                   id="tarea-desc"
                   value={contenido}
                   onChange={(e) => setContenido(e.target.value)}
                   placeholder={
-                    modo === "partido"
-                      ? "Gol, reacciones, entrada del estadio…"
+                    modo === "evento"
+                      ? "Reacciones, ambiente, momentos clave…"
                       : "Notas, lugar, qué se espera entregar…"
                   }
                   rows={2}
@@ -429,8 +454,8 @@ export function DialogoCrearTarea({
               >
                 {crear.isPending
                   ? "Añadiendo…"
-                  : modo === "partido"
-                    ? "Añadir partido"
+                  : modo === "evento"
+                    ? "Añadir evento"
                     : "Crear encargo"}
               </Button>
             </DialogFooter>
