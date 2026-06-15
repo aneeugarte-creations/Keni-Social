@@ -129,7 +129,6 @@ from ._revisar import (
 )
 from ._redactar import (
     encadenar_ilustrar_tras_redactar,
-    encadenar_redactar_tras_verificar,
     lanzar_redactar_de_tema,
     temas_autogen_sin_copy,
     temas_para_redactar,
@@ -251,7 +250,6 @@ __all__ = [
     "lanzar_redactar_de_tema",
     "temas_para_redactar",
     "temas_autogen_sin_copy",
-    "encadenar_redactar_tras_verificar",
     "encadenar_ilustrar_tras_redactar",
     # CALIDAD del copy (verificación advisory pre-avance)
     "avisos_voz",

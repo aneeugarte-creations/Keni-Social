@@ -234,7 +234,6 @@ def construir_procesar_qa_fuente(  # noqa: ANN201
     titulo: str,
     autor: dict[str, str] | None = None,
     *,
-    contenido_id: str = "",
     cluster_id: str = "",
 ):
     """Callback de post-procesado de la QA de la FUENTE: persiste el veredicto donde toque.
@@ -243,11 +242,9 @@ def construir_procesar_qa_fuente(  # noqa: ANN201
     historial (trazabilidad, sin piezas: esto SEÑALA, no publica) y ESCRIBE el veredicto +
     hallazgos en el destino:
 
-      • `cluster_id` (ADR 0011 F3): QA sobre la HISTORIA, ANTES de materializar contenido. Sella
-        `noticias_clusters.verificar_veredicto` (`repos.marcar_cluster_qa`); la admisión solo promueve
-        las verificadas. NO encadena copy (la pieza aún no existe; nace en la admisión).
-      • `contenido_id` (camino legado/manual): QA sobre un TEMA ya materializado
-        (`repos.actualizar_contenido`); si pasa, encadena el copy de ESE tema.
+    El veredicto se sella en la HISTORIA (`cluster_id`, ADR 0011 F3): QA sobre la fuente ANTES de
+    materializar contenido (`repos.marcar_cluster_qa`); la admisión solo promueve las verificadas.
+    NO encadena copy (la pieza aún no existe; nace en la admisión).
 
     Devuelve el veredicto/informe para el sondeo del frontend. Se reconstruye igual en el worker
     (vía spec).
@@ -261,32 +258,12 @@ def construir_procesar_qa_fuente(  # noqa: ANN201
             metricas=stream.metricas_a_dict(metricas), autor=autor,
         )
         verdicto = str(informe.get("verdicto") or VERDICTO_NO_VERIFICADO)
+        # QA sobre la HISTORIA (cluster, pre-admisión, ADR 0011 F3): el veredicto vive en el
+        # cluster. La admisión del barrido de investigación promueve las `no_verificado` (hereda
+        # el veredicto al contenido) y deja fuera las `problema`. NO se encadena copy aquí (la
+        # pieza aún no existe; nace en la admisión).
         if cluster_id:
-            # QA sobre la HISTORIA (pre-admisión): el veredicto vive en el cluster. La admisión
-            # del barrido de investigación promueve las `no_verificado` (hereda el veredicto al
-            # contenido) y deja fuera las `problema`. NO se encadena copy aquí (no hay pieza aún).
             repos.marcar_cluster_qa(cluster_id, verdicto, serializar_hallazgos(informe))
-        elif contenido_id:
-            repos.actualizar_contenido(
-                contenido_id,
-                {"verificar_veredicto": verdicto, "verificar_hallazgos": serializar_hallazgos(informe)},
-            )
-            # ENCADENADO QA->copy (por eventos): si la fuente paso la verificación, dispara el copy
-            # de ESE tema YA, sin esperar al siguiente barrido de 20 min (el barrido queda de
-            # red de seguridad: recoge lo que el encadenado pierda, p. ej. con la cola llena).
-            # Respeta los mismos gates que la fase CD (toggle copy global + por marca) dentro
-            # de `encadenar_redactar_tras_verificar`. Best-effort: nunca rompe el post-procesado de QA.
-            if verdicto != VERDICTO_PROBLEMA:
-                try:
-                    from ..pipeline_contenido import encadenar_redactar_tras_verificar
-
-                    encadenar_redactar_tras_verificar(contenido_id, autor=autor)
-                except Exception:  # noqa: BLE001 -- el barrido lo recogera
-                    import logging
-
-                    logging.getLogger("keni_consola.verificar_fuente").warning(
-                        "QA fuente: fallo el encadenado a copy (%s)", contenido_id, exc_info=True
-                    )
         return {
             "informe": informe,
             "verdicto": verdicto,

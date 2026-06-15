@@ -30,7 +30,6 @@ __all__ = [
     "lanzar_redactar_de_tema",
     "temas_para_redactar",
     "temas_autogen_sin_copy",
-    "encadenar_redactar_tras_verificar",
     "encadenar_ilustrar_tras_redactar",
 ]
 
@@ -189,47 +188,6 @@ def temas_autogen_sin_copy() -> list[dict[str, Any]]:
 # --------------------------------------------------------------------------- #
 # Encadenado por EVENTOS (QA -> copy -> arte), sin esperar al siguiente barrido #
 # --------------------------------------------------------------------------- #
-
-
-def encadenar_redactar_tras_verificar(
-    contenido_id: str, *, autor: dict[str, str] | None = None
-) -> dict[str, Any] | None:
-    """Dispara el copy de UN tema justo tras persistirse su veredicto de QA (por eventos).
-
-    Lo llama el POST-PROCESADO de la QA de la fuente (worker) cuando el veredicto sale
-    `no_verificado`: antes cada etapa esperaba al siguiente barrido de 20 min (40-60 min en
-    total para 3-8 min de LLM). El barrido queda como RED DE SEGURIDAD (recoge lo que el
-    encadenado pierda). Respeta los MISMOS gates que la fase CD: toggle global de copy
-    (`KENI_PIPELINE_REDACTAR`), exclusión por marca y las guardas de dedup (`copy_pendiente`
-    presente + sin piezas aún). `ColaLlenaError` NO rompe el procesar de la QA: se loguea y
-    el barrido lo reintenta. Devuelve la generación lanzada o None si se omite.
-    """
-    if not contenido_id or not config.pipeline_activo():
-        return None
-    try:
-        tema = repos.obtener_contenido(contenido_id)
-    except Exception:  # noqa: BLE001 -- sin tema legible, el barrido lo recogerá
-        return None
-    if not tema:
-        return None
-    if (tema.get("verificar_veredicto") or "") not in (VERDICTO_NO_VERIFICADO, QA_SALTADA):
-        return None
-    if not (tema.get("copy_pendiente") or "").strip():
-        return None
-    if config.marca_apagada(config.ENV_PIPELINE_REDACTAR, tema.get("marca") or ""):
-        return None
-    if _tiene_copy(tema.get("id", "") or ""):
-        return None
-    try:
-        return lanzar_redactar_de_tema(tema, autor=autor)
-    except generaciones.ColaLlenaError:
-        # SEGURO perderlo aquí: el tema conserva veredicto apto + `copy_pendiente` y sigue sin
-        # piezas, así que `temas_para_redactar` lo selecciona en el siguiente tick del barrido.
-        _log.warning(
-            "pipeline: cola llena al encadenar copy del tema %s (marca %s); el barrido lo recogerá.",
-            contenido_id, tema.get("marca", ""),
-        )
-        return None
 
 
 def encadenar_ilustrar_tras_redactar(contenido_id: str) -> dict[str, Any] | None:

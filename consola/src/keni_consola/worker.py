@@ -120,40 +120,6 @@ def _finalizar_error(gen_id: str, mensaje: str) -> None:
     )
 
 
-def _reparar_qa_si_fallo(gen_id: str, spec: object) -> None:
-    """Si un job de QA-FUENTE termino en ERROR, devuelve su tema a "sin veredicto" (re-verificación).
-
-    CIERRA EL ATASCO `verificar_veredicto='en_curso'`: la fase QA marca el tema `en_curso` ANTES de
-    lanzar, y solo el `procesar` (exito) escribe el veredicto real. Si la generacion muere en
-    error/timeout/cancelacion, nada lo reseteaba: el tema quedaba excluido PARA SIEMPRE de
-    sin re-verificar y contando en `temas_en_proceso` (bloqueando el cupo serial de su marca).
-    Aqui, al cerrar un job cuyo `procesar` es `qa-fuente` con el registro en ERROR, se resetea
-    el sentinel a "" para que el siguiente barrido lo re-verifique. El limpiador cubre ademas los
-    casos donde esta reparación no llega a correr (muerte no graciosa del worker). Best-effort.
-    """
-    try:
-        p = (spec.get("procesar") if isinstance(spec, dict) else None) or {}
-        if p.get("kind") != jobspec.PROC_QA_FUENTE:
-            return
-        contenido_id = (p.get("contenido_id") or "").strip()
-        if not contenido_id:
-            return
-        g = generaciones.obtener(gen_id)
-        if g is not None and g.get("estado") != generaciones.ESTADO_ERROR:
-            return  # completo bien (el procesar ya escribio el veredicto real) o sigue vivo
-        from . import repos
-        from .pipeline_contenido import QA_EN_CURSO
-
-        tema = repos.obtener_contenido(contenido_id)
-        if tema is not None and (tema.get("verificar_veredicto") or "") == QA_EN_CURSO:
-            repos.actualizar_contenido(contenido_id, {"verificar_veredicto": ""})
-            _log.info(
-                "worker: QA de la fuente fallida; tema %s devuelto a re-verificación", contenido_id
-            )
-    except Exception:  # noqa: BLE001 -- reparación best-effort; el limpiador es la red de seguridad
-        _log.warning("worker: fallo la reparación del tema de QA (gen %s)", gen_id, exc_info=True)
-
-
 def _vigilar_cancelacion(job_id: str, gen_id: str, parar: threading.Event) -> None:
     """Hilo vigia: sondea el flag de cancelacion de la cola y propaga al runner local.
 
@@ -255,7 +221,6 @@ def procesar_job(job: dict, worker_id: str = "") -> None:
     # Job ya cancelado (lo marcaron antes de clavarlo) o spec corrupto: finalizar SIN claude.
     if cola.cancelado(job_id):
         _finalizar_cancelado(gen_id)
-        _reparar_qa_si_fallo(gen_id, spec)
         generaciones.runner.liberar_admision()  # el cupo lo tomo el encolado; liberar
         cola.terminar(job_id)
         return
@@ -283,7 +248,6 @@ def procesar_job(job: dict, worker_id: str = "") -> None:
     except Exception:  # noqa: BLE001 -- spec mal formado: error claro, sin traceback al cliente
         _log.exception("worker: no se pudo reconstruir el job %s (gen %s)", job_id, gen_id)
         _finalizar_error(gen_id, "No se pudo iniciar la generación.")
-        _reparar_qa_si_fallo(gen_id, spec)
         generaciones.runner.liberar_admision()
         cola.terminar(job_id)
         return
@@ -315,9 +279,6 @@ def procesar_job(job: dict, worker_id: str = "") -> None:
             dir_temporal=dir_temporal, ya_admitido=True, endurecer=endurecer,
         )
         _esperar_terminal(gen_id)
-        # Corrección del pipeline: una QA de la fuente que TERMINO EN ERROR devuelve su tema a
-        # "sin veredicto" (re-verificación), en vez de dejarlo `en_curso` colgado para siempre.
-        _reparar_qa_si_fallo(gen_id, spec)
     finally:
         _desmarcar_job_en_curso(job_id)
         parar.set()
