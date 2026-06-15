@@ -9,10 +9,7 @@ import { useSearchParams } from "react-router-dom";
 import { TituloPagina } from "@/components/layout/encabezado";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSesion } from "@/hooks/sesion-contexto";
-import {
-  lunesDeSemana,
-  lunesSiguiente,
-} from "@/lib/rota-calendario";
+import { lunesDeSemana } from "@/lib/rota-calendario";
 import { TareasBoard } from "@/pages/tareas/Tareas";
 
 import { Calendario } from "./Calendario";
@@ -28,8 +25,8 @@ const PESTANAS = ["calendario", "cobertura", "mis-turnos", "cambios-ausencias"];
 export default function Rota() {
   const { usuario } = useSesion();
   const esAdmin = usuario?.rol === "admin";
-  // Por defecto: la próxima semana (la que más le importa al equipo, B4).
-  const [lunes, setLunes] = React.useState(() => lunesSiguiente(lunesDeSemana(new Date()), 1));
+  // Por defecto: la semana ACTUAL (la que contiene hoy, en zona CDMX).
+  const [lunes, setLunes] = React.useState(() => lunesDeSemana(new Date()));
   // Pestaña activa (controlada). La gestión de EVENTOS se mudó al hub de Fuentes
   // (ola "Calendario = turnos / Fuentes = eventos"); aquí el Calendario es solo turnos
   // + su cobertura derivada.

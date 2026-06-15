@@ -89,7 +89,24 @@ function renderRota() {
 }
 
 describe("Turnos — integra el tablero de Tareas en la pestaña «Cobertura»", () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("abre en la semana ACTUAL (la que contiene hoy), no en la siguiente", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-06-15T12:00:00Z")); // lunes 15 jun 2026 (CDMX)
+    renderRota();
+    // El Calendario pide los turnos de la semana por defecto: el lunes de HOY (no el siguiente).
+    await vi.waitFor(() =>
+      expect(
+        vi
+          .mocked(apiMod.api.listarTurnos)
+          .mock.calls.some(([arg]) => (arg as { lunes?: string })?.lunes === "2026-06-15"),
+      ).toBe(true),
+    );
+  });
 
   it("muestra la pestaña «Cobertura» junto a «Calendario», con el Calendario por defecto", async () => {
     renderRota();
