@@ -266,8 +266,8 @@ export function Calendario({
   const fin = semana?.fin ?? coberturaQ.data?.fin ?? dias[6] ?? "";
   const nCambiados = eventosCobertura.filter((e) => e.cambiado).length;
   // `editable` requiere admin + semana no aprobada. Los CMs no admin siempre ven la vista
-  // en solo-lectura. La edición es inline: click en el chip abre el menú (Editar/Duplicar/
-  // Eliminar); click en "Sin turno asignado" o "Sin turno a esa hora" abre el dropdown.
+  // en solo-lectura. La edición que queda es inline en el chip de turno (click → menú
+  // Editar/Duplicar/Eliminar); la cobertura se asigna desde el Panorama, no aquí.
   const editable = esAdmin && !semana?.aprobada;
   const cargando =
     coberturaQ.isPending ||
@@ -488,7 +488,6 @@ export function Calendario({
                             <CeldaDeRejilla
                               key={`${franja.id}-${fecha}`}
                               fecha={fecha}
-                              franja={franja}
                               personas={personas}
                               eventos={eventos}
                               equipo={equipo}

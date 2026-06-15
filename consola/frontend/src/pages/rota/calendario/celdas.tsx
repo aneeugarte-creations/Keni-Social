@@ -4,7 +4,6 @@ import { cn } from "@/lib/utils";
 import type {
   AusenciaRota,
   EventoRota,
-  FranjaSemana,
   MiembroRota,
   TurnoRota,
 } from "@/types";
@@ -23,7 +22,6 @@ import { ChipEventoCalendario, ChipTurnoCM } from "./chips";
  */
 export function CeldaDeRejilla({
   fecha,
-  franja,
   personas,
   eventos,
   equipo,
@@ -34,7 +32,6 @@ export function CeldaDeRejilla({
   onCambio,
 }: {
   fecha: string;
-  franja: FranjaSemana;
   /** Personas de TURNO en esta franja ese día (CAPACIDAD). */
   personas: TurnoRota[];
   /** Eventos de esta franja/día, cada uno UNA vez, con su titularidad real (claims). */
@@ -54,24 +51,23 @@ export function CeldaDeRejilla({
       )}
     >
       {/* CAPACIDAD: quién está de turno esta franja (avatares con CRUD). NO cuelga eventos:
-          el evento ya no es «de la persona», es del día/franja (ver bloque de eventos). */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        {personas.map((t) => (
-          <ChipTurnoCM
-            key={t.id}
-            turno={t}
-            equipo={equipo}
-            ausencia={ausenciaDe(t.miembro_id, fecha)}
-            editable={editable}
-            onCambio={onCambio}
-          />
-        ))}
-        {personas.length === 0 && (
-          <span className="text-[11px] text-muted-foreground/60">
-            {franja.es_descanso ? "—" : "Sin turno asignado"}
-          </span>
-        )}
-      </div>
+          el evento ya no es «de la persona», es del día/franja (ver bloque de eventos).
+          Si nadie tiene turno NO pintamos nada: la cobertura se asigna desde Panorama y se
+          ve en los eventos; un «Sin turno asignado» en cada celda sería ruido vacío. */}
+      {personas.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {personas.map((t) => (
+            <ChipTurnoCM
+              key={t.id}
+              turno={t}
+              equipo={equipo}
+              ausencia={ausenciaDe(t.miembro_id, fecha)}
+              editable={editable}
+              onCambio={onCambio}
+            />
+          ))}
+        </div>
+      )}
 
       {/* EVENTOS: cada uno UNA vez, con quién lo COGIÓ (titularidad real) o «Por cubrir». */}
       {eventos.length > 0 && (

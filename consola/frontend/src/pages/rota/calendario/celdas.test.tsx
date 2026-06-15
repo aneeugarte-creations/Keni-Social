@@ -5,7 +5,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import type {
   EventoRota,
-  FranjaSemana,
   TurnoRota,
 } from "@/types";
 
@@ -18,21 +17,6 @@ import { CeldaDeRejilla } from "./celdas";
 vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), info: vi.fn() }),
 }));
-
-function franja(over: Partial<FranjaSemana> = {}): FranjaSemana {
-  return {
-    id: "f-manana",
-    lunes: "2026-06-15",
-    nombre: "Mañana",
-    inicio: "08:00",
-    fin: "14:00",
-    orden: 0,
-    es_descanso: false,
-    marca: "",
-    marca_nombre: "",
-    ...over,
-  };
-}
 
 function conProvider(ui: React.ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -92,7 +76,6 @@ function renderCelda(
   return conProvider(
     <CeldaDeRejilla
       fecha="2026-06-15"
-      franja={franja()}
       personas={over.personas ?? []}
       eventos={over.eventos ?? []}
       equipo={[]}
