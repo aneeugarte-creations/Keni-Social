@@ -45,7 +45,11 @@ def _parsear(texto: str) -> tuple[dict[str, object], str]:
             except yaml.YAMLError:
                 meta = None
             if isinstance(meta, dict):
-                return meta, cuerpo.lstrip("\n")
+                # Simétrico con `_serializar` (que escribe `cuerpo.rstrip()` + "\n"): al leer
+                # se descarta ese "\n" de cierre para que el round-trip sea estable
+                # (`guardar(cuerpo="x")` -> `obtener().cuerpo == "x"`) y la comparación de
+                # `sin_publicar` no marque diffs espurios contra el working copy del front.
+                return meta, cuerpo.strip("\n")
     return {}, texto
 
 
