@@ -10,7 +10,6 @@ import {
   Plane,
   ShieldCheck,
   Trash2,
-  User,
   X,
 } from "lucide-react";
 import * as React from "react";
@@ -293,10 +292,12 @@ export function ChipTurnoCM({
   const etiquetaTooltip = tooltipPartes.join(" · ");
 
   if (!editable) {
+    // Cabecera del recuadro = SOLO el avatar redondo (color + inicial; nombre en su
+    // `title`). El nombre escrito ya vive en los chips de evento de debajo, así que el
+    // píldora gris «👤 nombre» sobraba: una persona = su avatar, sin texto repetido.
     const chip = (
-      <span className="inline-flex max-w-full items-center gap-1 rounded border bg-muted/40 px-1.5 py-0.5 text-xs">
-        <User className="h-3 w-3 shrink-0 text-muted-foreground" />
-        <span className="truncate">{turno.miembro_nombre}</span>
+      <span className="inline-flex max-w-full items-center gap-1 text-xs">
+        <AvatarPersona id={turno.miembro_id} nombre={turno.miembro_nombre} size="sm" />
         {turno.override && (
           <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600" aria-label="override" />
         )}
@@ -341,9 +342,10 @@ export function ChipTurnoCM({
 
   const chip = (
     <MenuContextual items={itemsMenu} disparador="ambos">
-      <span className="inline-flex max-w-full cursor-pointer items-center gap-1 rounded border bg-background px-1.5 py-0.5 text-xs hover:bg-accent">
-        <User className="h-3 w-3 shrink-0 text-muted-foreground" />
-        <span className="truncate">{turno.miembro_nombre}</span>
+      {/* Igual que en solo-lectura: solo el avatar (sin «👤 nombre»), + la × para
+          quitar el turno. El click en el avatar abre el menú (editar/duplicar/borrar). */}
+      <span className="inline-flex max-w-full cursor-pointer items-center gap-1 rounded-full text-xs hover:opacity-80">
+        <AvatarPersona id={turno.miembro_id} nombre={turno.miembro_nombre} size="sm" />
         {turno.override && (
           <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600" aria-label="override" />
         )}

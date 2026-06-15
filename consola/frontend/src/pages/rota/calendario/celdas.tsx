@@ -5,7 +5,6 @@ import {
   AlertTriangle,
   Loader2,
   Plus,
-  User,
 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
@@ -28,6 +27,7 @@ import {
 } from "@/components/ui/select";
 import { ApiError, api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { AvatarPersona } from "@/pages/tareas/AvatarPersona";
 import type {
   AusenciaRota,
   CoordinacionTurno,
@@ -236,11 +236,10 @@ export function RecuadroPersonaCalendario({
           />
         ) : (
           // Coverage suelta: el backend devolvió un cubridor cuyo TurnoRota local no
-          // tenemos (carrera de invalidación). Mostramos el nombre sin menú; la acción
+          // tenemos (carrera de invalidación). Solo el avatar (sin menú); la acción
           // CRUD vuelve disponible al siguiente refetch.
-          <span className="inline-flex max-w-full items-center gap-1 rounded border bg-muted/40 px-1.5 py-0.5 text-xs">
-            <User className="h-3 w-3 shrink-0 text-muted-foreground" />
-            <span className="truncate">{recuadro.miembro_nombre}</span>
+          <span className="inline-flex max-w-full items-center gap-1 text-xs">
+            <AvatarPersona id={recuadro.miembro_id} nombre={recuadro.miembro_nombre} size="sm" />
           </span>
         )}
         {recuadro.eventos.length > 0 && (

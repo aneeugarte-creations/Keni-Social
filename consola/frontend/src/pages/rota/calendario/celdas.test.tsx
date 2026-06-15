@@ -9,6 +9,7 @@ import type {
   FranjaSemana,
   MiembroRota,
   TurnoCobertura,
+  TurnoRota,
 } from "@/types";
 
 import { franjasSolapan, type ConflictoCandidato } from "../comun";
@@ -65,6 +66,27 @@ function cubridor(over: Partial<TurnoCobertura> = {}): TurnoCobertura {
     franja_id: "f-manana",
     franja_nombre: "Mañana",
     override: false,
+    ...over,
+  };
+}
+
+function turno(over: Partial<TurnoRota> = {}): TurnoRota {
+  return {
+    id: "tr1",
+    semana: "2026-06-15",
+    fecha: "2026-06-15",
+    miembro_id: "u-tezcu",
+    miembro_nombre: "Tezcucano Pérez",
+    franja_id: "f-manana",
+    franja_nombre: "Mañana",
+    franja: "matutino",
+    estado: "aprobado",
+    override: false,
+    motivo: "",
+    nota_relevo: "",
+    es_sabado: false,
+    marca: "",
+    marca_nombre: "",
     ...over,
   };
 }
@@ -171,6 +193,53 @@ describe("ChipEventoCalendario — cubridores en el evento del calendario", () =
     );
     expect(screen.getByText("Amistoso sin señal")).toBeInTheDocument();
     expect(screen.queryByText("Ramiro")).toBeNull();
+  });
+});
+
+describe("RecuadroPersonaCalendario — cabecera = solo avatar (sin nombre escrito)", () => {
+  it("un turno real muestra el avatar de la persona, NO su nombre como texto", () => {
+    conProvider(
+      <RecuadroPersonaCalendario
+        recuadro={{
+          miembro_id: "u-tezcu",
+          miembro_nombre: "Tezcucano Pérez",
+          turno: turno(),
+          sinCubrir: false,
+          eventos: [],
+        }}
+        franja={franja()}
+        equipo={[]}
+        editable={false}
+        onEditarEvento={vi.fn()}
+        onCambio={vi.fn()}
+      />,
+    );
+    // El nombre vive en el `title` del avatar (hover), no como texto plano.
+    expect(screen.getByTitle("Tezcucano Pérez")).toBeInTheDocument();
+    expect(screen.queryByText("Tezcucano Pérez")).toBeNull();
+    // La inicial del avatar sí se pinta.
+    expect(screen.getByText("T")).toBeInTheDocument();
+  });
+
+  it("la coverage huérfana (sin TurnoRota local) también es solo avatar", () => {
+    render(
+      <RecuadroPersonaCalendario
+        recuadro={{
+          miembro_id: "u-ana",
+          miembro_nombre: "Ana",
+          turno: null,
+          sinCubrir: false,
+          eventos: [],
+        }}
+        franja={franja()}
+        equipo={[]}
+        editable={false}
+        onEditarEvento={vi.fn()}
+        onCambio={vi.fn()}
+      />,
+    );
+    expect(screen.getByTitle("Ana")).toBeInTheDocument();
+    expect(screen.queryByText("Ana")).toBeNull();
   });
 });
 
