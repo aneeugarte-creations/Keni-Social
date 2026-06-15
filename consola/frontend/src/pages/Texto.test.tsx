@@ -416,13 +416,20 @@ describe("Biblioteca de Prompts (tres máquinas + estrategia)", () => {
 
     // Cabecera: título editable, línea de deployment, badge sin publicar y acciones.
     expect(await screen.findByDisplayValue("Prompt de copy")).toBeInTheDocument();
-    expect(screen.getByText(/Publicado .* desde/)).toBeInTheDocument();
+    expect(screen.getByText("Publicado")).toBeInTheDocument();
+    expect(screen.getByText(/lo que ven los agentes/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Publicar/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Probar/ })).toBeInTheDocument();
 
-    // Pestaña «Uso»: la posición nueva, máquina → etapa (del endpoint nuevo).
+    // Pestaña «Uso»: la posición nueva, máquina → etapa (del endpoint nuevo). El nuevo
+    // PanelUso pinta máquina, flecha y etapa en spans separados, así que comparamos el
+    // textContent normalizado de la fila (sin espacios ni flecha).
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Uso" }), { button: 0 });
-    expect(await screen.findByText("Producción → Copy")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        (_t, el) => el?.tagName === "LI" && el.textContent?.replace(/[\s→]/g, "") === "ProducciónCopy",
+      ),
+    ).toBeInTheDocument();
 
     // Volver regresa a la pestaña de origen (Producción), no a la vista por defecto.
     fireEvent.click(screen.getByRole("button", { name: "Volver a la biblioteca" }));
