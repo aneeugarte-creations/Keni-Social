@@ -310,9 +310,23 @@ export function CambiosYAusencias({ esAdmin }: { esAdmin: boolean }) {
         lista.push({ tipo: "ausencia", orden: a.desde || "", ausencia: a });
       }
     }
-    lista.sort((x, y) => (y.orden || "").localeCompare(x.orden || ""));
+    // Lo ACCIONABLE primero: lo que espera TU respuesta (eres el destinatario de un
+    // `propuesto`) o, si eres admin, TU aprobación (`aceptado`). El resto, por fecha desc
+    // como antes. En "Historial" todo es terminal -> es un no-op (nada necesita acción).
+    const miId = usuario?.id ?? "";
+    const necesitaMiAccion = (it: ItemSolicitud) =>
+      it.tipo === "cambio" &&
+      ((it.swap.estado === "propuesto" && it.swap.destinatario_id === miId) ||
+        (esAdmin && it.swap.estado === "aceptado"))
+        ? 1
+        : 0;
+    lista.sort(
+      (x, y) =>
+        necesitaMiAccion(y) - necesitaMiAccion(x) ||
+        (y.orden || "").localeCompare(x.orden || ""),
+    );
     return lista;
-  }, [swapsQ.data, ausenciasQ.data, filtroTipo, filtroEstado]);
+  }, [swapsQ.data, ausenciasQ.data, filtroTipo, filtroEstado, usuario?.id, esAdmin]);
 
   // Sin sesion no hay "yo": el backend devuelve [] para `mio=true` y la creacion
   // de swap requiere usuario logueado. Avisamos honestamente.
