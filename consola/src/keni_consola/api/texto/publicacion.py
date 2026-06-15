@@ -40,7 +40,11 @@ async def version(request: Request) -> Response:
 
 
 async def revertir(request: Request) -> Response:
-    """`POST /api/texto/{doc_id}/revertir/{sha}` -> revierte (commit nuevo) -> `{documento}`."""
+    """`POST /api/texto/{doc_id}/revertir/{sha}` -> "Traer al borrador" -> `{documento}`.
+
+    Rediseño del versionado intencionado: NO crea un commit ni publica; CARGA el contenido de
+    esa versión en el working copy (borrador). El usuario decide después si lo publica.
+    """
     try:
         doc = libtexto.restaurar_version(
             request.path_params["doc_id"], request.path_params["sha"],
@@ -49,6 +53,22 @@ async def revertir(request: Request) -> Response:
     except libtexto.TextoError as e:
         codigo = 404 if ("no existe" in str(e) or "esa versión" in str(e)) else 400
         return JSONResponse({"error": str(e)}, status_code=codigo)
+    return JSONResponse({"documento": _doc_json(doc)})
+
+
+async def descartar(request: Request) -> Response:
+    """`POST /api/texto/{doc_id}/descartar` -> resetea el borrador a lo PUBLICADO -> `{documento}`.
+
+    Reescribe el working copy con el contenido del puntero de producción SIN crear commit.
+    404 si el doc no existe; 400 si no hay versión publicada a la que volver.
+    """
+    doc_id = request.path_params["doc_id"]
+    if libtexto.obtener(doc_id) is None:
+        return JSONResponse({"error": "Ese documento no existe."}, status_code=404)
+    try:
+        doc = libtexto.descartar_borrador(doc_id)
+    except libtexto.TextoError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
     return JSONResponse({"documento": _doc_json(doc)})
 
 
@@ -66,21 +86,25 @@ def _autor_nombre(request: Request) -> str:
 
 
 def _resolver_sha(doc_id: str, datos: dict) -> tuple[str | None, Response | None]:
-    """Resuelve el sha del body (o el HEAD git del doc por defecto) y lo VALIDA.
+    """Resuelve un sha EXPLÍCITO del body (fijar una versión existente) y lo VALIDA.
 
-    Devuelve `(sha, None)` o `(None, respuesta_de_error)`. El sha debe corresponder a una
-    versión LEGIBLE del documento (`libtexto.version`); sin versionado git no hay nada que
-    fijar (400 accionable).
+    Devuelve:
+      - `(sha, None)`   : el body trajo un sha que SÍ corresponde a una versión legible.
+      - `(None, error)` : el body trajo un sha inválido o inexistente (400).
+      - `(None, None)`  : el body NO trajo sha -> el llamante debe COMITEAR el borrador como
+                          versión nueva (commit intencionado con la nota, ver `fijar_version`).
+
+    Rediseño del versionado intencionado: el autosave ya NO commitea, así que el caso normal
+    de "Publicar" es comitear el working copy ahora (no fijar un HEAD preexistente).
     """
     sha = datos.get("sha")
-    if sha is not None and not isinstance(sha, str):
+    if sha is None:
+        return None, None
+    if not isinstance(sha, str):
         return None, JSONResponse({"error": "El sha no es válido."}, status_code=400)
-    sha = (sha or "").strip() or libtexto.sha_actual(doc_id)
+    sha = sha.strip()
     if not sha:
-        return None, JSONResponse(
-            {"error": "Este documento no tiene versiones (el versionado git no está disponible)."},
-            status_code=400,
-        )
+        return None, None
     if libtexto.version(doc_id, sha) is None:
         return None, JSONResponse(
             {"error": "No se encontró esa versión del documento."}, status_code=400
@@ -88,11 +112,36 @@ def _resolver_sha(doc_id: str, datos: dict) -> tuple[str | None, Response | None
     return sha, None
 
 
+def _sha_a_publicar(
+    doc_id: str, datos: dict, *, autor: dict[str, str] | None
+) -> tuple[str | None, Response | None]:
+    """Sha que se va a fijar como producción/propuesta: el EXPLÍCITO del body, o uno NUEVO
+    comiteando el working copy con la `nota` como mensaje (commit intencionado).
+
+    Una VERSIÓN = una publicación: sin sha explícito, publicar/solicitar CREA la versión.
+    """
+    sha, error = _resolver_sha(doc_id, datos)
+    if error is not None:
+        return None, error
+    if sha is not None:
+        return sha, None
+    nota = datos.get("nota") if isinstance(datos.get("nota"), str) else ""
+    sha = libtexto.fijar_version(doc_id, nota=nota, autor=autor)
+    if not sha:
+        return None, JSONResponse(
+            {"error": "Este documento no se puede versionar (el versionado git no está disponible)."},
+            status_code=400,
+        )
+    return sha, None
+
+
 async def publicar(request: Request) -> Response:
     """`POST /api/texto/{doc_id}/publicar` body `{sha?, nota}` -> `{documento}`. SOLO ADMIN.
 
-    Mueve el puntero de PRODUCCIÓN del documento al `sha` (por defecto, el HEAD git del
-    doc). 403 si no es admin; 404 si el doc no existe; 400 si el sha no es una versión.
+    Versionado INTENCIONADO: sin `sha` en el body, COMITEA el working copy (la `nota` del
+    usuario es el mensaje del commit) y mueve el puntero de PRODUCCIÓN a ese sha nuevo (una
+    versión = una publicación). Con `sha` explícito, fija esa versión existente. 403 si no es
+    admin; 404 si el doc no existe; 400 si el sha no es una versión o no hay versionado.
     """
     if not permisos.es_admin(request):
         return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN_PUBLICAR)
@@ -101,7 +150,7 @@ async def publicar(request: Request) -> Response:
     if doc is None:
         return JSONResponse({"error": "Ese documento no existe."}, status_code=404)
     datos = await leer_json(request)
-    sha, error = _resolver_sha(doc_id, datos)
+    sha, error = _sha_a_publicar(doc_id, datos, autor=autor_de_peticion(request))
     if error is not None:
         return error
     from ... import db
@@ -111,7 +160,9 @@ async def publicar(request: Request) -> Response:
         autor=_autor_nombre(request),
         nota=datos.get("nota") if isinstance(datos.get("nota"), str) else "",
     )
-    return JSONResponse({"documento": _doc_json(doc)})
+    # Relee el doc: el commit del borrador no cambió el working copy, pero `_doc_json`
+    # recalcula el estado de publicación (ahora con puntero y `sin_publicar` actualizado).
+    return JSONResponse({"documento": _doc_json(libtexto.obtener(doc_id) or doc)})
 
 
 async def solicitar(request: Request) -> Response:
@@ -125,7 +176,9 @@ async def solicitar(request: Request) -> Response:
     if doc is None:
         return JSONResponse({"error": "Ese documento no existe."}, status_code=404)
     datos = await leer_json(request)
-    sha, error = _resolver_sha(doc_id, datos)
+    # Igual que publicar: sin sha explícito, COMITEA el borrador actual para proponer ESA
+    # versión (no un HEAD preexistente, que el autosave ya no mueve).
+    sha, error = _sha_a_publicar(doc_id, datos, autor=autor_de_peticion(request))
     if error is not None:
         return error
     from ... import db

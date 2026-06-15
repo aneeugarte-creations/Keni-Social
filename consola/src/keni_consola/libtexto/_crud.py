@@ -233,7 +233,20 @@ def guardar(
         rol=nuevo_rol, prioridad=nueva_prioridad,
     )
 
-    # ¿Cambia la RUTA (titulo o carpeta)? Si si, calculamos id/ruta nuevos y movemos.
+    # VERSIONADO INTENCIONADO (rediseño "commit como GitHub"): GUARDAR es un AUTOSAVE de
+    # BORRADOR y NO crea versión. Antes cada autosave (debounce 600ms) commiteaba "editar X",
+    # generando decenas de commits basura por edición; el HEAD git ya no se mueve al teclear.
+    # Una VERSIÓN solo nace al PUBLICAR/SOLICITAR (commit intencional con la nota del usuario,
+    # ver `_versiones.fijar_version`). El cálculo de `sin_publicar` pasa a ser por CONTENIDO
+    # (working copy vs cuerpo publicado), no por divergencia de HEAD (ver `_publicacion`).
+    #
+    # DECISIÓN sobre el RENAME: el MOVER (cambio de título/carpeta) SÍ deja UN commit de
+    # movimiento. Es barato (uno por rename, no por tecla) y conserva el rastro del fichero a
+    # través del renombrado para `git --follow`, de modo que las versiones publicadas con un
+    # sha anterior al rename siguen siendo legibles. El contenido de un rename no es "una
+    # versión publicable": solo es el efecto colateral de mover el `.md` en git.
+    # TODO concurrencia optimista: aceptar un `rev`/hash base opcional y devolver 409 si el
+    # fichero cambió debajo (se omite por ahora para no arriesgar el merge).
     cambia_titulo = titulo is not None and _slug(nuevo_titulo) != actual.id.split("/")[-1]
     cambia_carpeta = carpeta is not None and "/".join(partes_carpeta) != actual.carpeta
     ruta_actual = _ruta_de_id(actual.id)
@@ -244,8 +257,8 @@ def guardar(
         ruta_actual.unlink(missing_ok=True)
         versionado.registrar(ruta_nueva, f"mover {actual.id} -> {nuevo.id}", ruta_previa=ruta_actual)
     else:
+        # Autosave de borrador: escritura atómica, SIN commit (no versiona).
         escribir_atomico(ruta_actual, _serializar(nuevo))
-        versionado.registrar(ruta_actual, f"editar {nuevo.id}")
     return nuevo
 
 

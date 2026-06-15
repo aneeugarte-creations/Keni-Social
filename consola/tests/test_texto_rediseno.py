@@ -202,25 +202,56 @@ def _git_activo(monkeypatch):
     monkeypatch.setenv("KENI_TEXTO_GIT", "1")
 
 
-def test_versionado_historial_y_rollback(_git_activo):
+def test_autosave_no_versiona_solo_fijar_version_comitea(_git_activo):
+    """Versionado INTENCIONADO: `guardar` (autosave) NO crea commit; solo `crear` y
+    `fijar_version` (publicar/solicitar) comitean. El HEAD git no se mueve al teclear."""
+    from keni_consola import versionado
+
     doc = libtexto.crear("Doc versionado", tipo="prompt", cuerpo="VERSION 1")
+    # Tras crear: UN commit (la creación).
+    assert len(versionado.historial(doc.id)) == 1
+    sha_v1 = versionado.sha_documento(doc.id)
+
+    # Dos autosaves: el working copy cambia, pero NO hay commits nuevos.
     libtexto.guardar(doc.id, cuerpo="VERSION 2")
     libtexto.guardar(doc.id, cuerpo="VERSION 3")
+    assert len(versionado.historial(doc.id)) == 1
+    assert versionado.sha_documento(doc.id) == sha_v1  # HEAD intacto
 
-    hist = libtexto.historial(doc.id)
-    assert len(hist) >= 3
-    assert all(h["sha"] and h["fecha"] and h["autor"] for h in hist)
+    # `fijar_version` (lo que dispara publicar/solicitar) SÍ comitea el working copy.
+    sha_v3 = libtexto.fijar_version(doc.id, nota="congelo V3")
+    assert sha_v3 and sha_v3 != sha_v1
+    assert len(versionado.historial(doc.id)) == 2
+    assert versionado.historial(doc.id)[0]["mensaje"] == "congelo V3"
 
-    # La version mas antigua (ultima de la lista) contiene "VERSION 1".
-    sha_inicial = hist[-1]["sha"]
-    antiguo = libtexto.version(doc.id, sha_inicial)
-    assert antiguo is not None and "VERSION 1" in antiguo.cuerpo
 
-    # Rollback NO destructivo: el cuerpo vuelve a V1 y crece el historial.
-    revertido = libtexto.restaurar_version(doc.id, sha_inicial)
-    assert "VERSION 1" in revertido.cuerpo
+def test_version_lee_un_sha_y_restaurar_trae_al_borrador(_git_activo):
+    """`version` lee el `.md` de un sha; `restaurar_version` ("Traer al borrador") carga ese
+    contenido en el working copy SIN crear commit (no es un rollback con commit)."""
+    from keni_consola import versionado
+
+    doc = libtexto.crear("Doc", tipo="prompt", cuerpo="VERSION 1")
+    sha_v1 = versionado.sha_documento(doc.id)
+    libtexto.guardar(doc.id, cuerpo="VERSION 2")
+    sha_v2 = libtexto.fijar_version(doc.id, nota="v2")
+    assert sha_v2 != sha_v1
+
+    assert "VERSION 1" in (libtexto.version(doc.id, sha_v1).cuerpo)
+    assert "VERSION 2" in (libtexto.version(doc.id, sha_v2).cuerpo)
+
+    # Traer V1 al borrador: el working copy vuelve a V1 SIN nuevo commit (HEAD sigue en V2).
+    traido = libtexto.restaurar_version(doc.id, sha_v1)
+    assert "VERSION 1" in traido.cuerpo
     assert libtexto.obtener(doc.id).cuerpo.strip() == "VERSION 1"
-    assert len(libtexto.historial(doc.id)) >= 4
+    assert versionado.sha_documento(doc.id) == sha_v2  # no se commiteó nada
+
+
+def test_historial_sin_postgres_es_vacio(_git_activo):
+    """`libtexto.historial` es el de PUBLICACIONES: sin Postgres devuelve [] (best-effort),
+    aunque haya commits git de creación/versión por debajo."""
+    doc = libtexto.crear("Sin BD", tipo="prompt", cuerpo="x")
+    libtexto.fijar_version(doc.id, nota="v1")
+    assert libtexto.historial(doc.id) == []
 
 
 def test_versionado_apagado_no_da_historial(monkeypatch):

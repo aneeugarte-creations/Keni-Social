@@ -11,7 +11,8 @@ Este modulo es la CAPA DE LECTURA de ese modelo para libtexto y el ensamblaje:
   - `produccion_de` / `producciones`: puntero(s) vigente(s), BEST-EFFORT (si Postgres no
     esta disponible devuelven None/{}; la composicion de prompts NUNCA se rompe por la BD,
     simplemente cae a la working copy).
-  - `sha_actual` / `shas_actuales`: "HEAD" git de cada documento (para `sin_publicar`).
+  - `sha_actual` / `shas_actuales`: "HEAD" git de cada documento (referencia; con el
+    versionado intencional NO se mueve en autosave, solo al publicar/renombrar).
   - `cuerpo_publicado`: cuerpo del documento EN su version publicada (None sin puntero).
   - `aplicar_produccion`: mapea una lista de `Documento` a sus cuerpos publicados (por
     lote); es el gancho que usa `dominio.generar.componer` con los adjuntos editoriales.
@@ -140,23 +141,50 @@ def estado_publicacion(
     *,
     punteros: dict[str, dict[str, Any]] | None = None,
     shas: dict[str, str] | None = None,
+    cuerpo_actual: str | None = None,
 ) -> dict[str, Any]:
     """Los campos de publicacion del JSON de documento de la API.
 
     Forma (CONTRATO con el frontend; tambien en el listado `GET /api/texto`):
       - `produccion`: `{sha, autor, nota, creado}` del puntero vigente, o `null`.
-      - `sha_actual`: sha git del ultimo commit del doc, o `null` (sin repo/commits).
-      - `sin_publicar`: True si hay puntero Y HEAD y difieren (hay cambios sin publicar);
-        False si no hay puntero (la working copy ES lo que se inyecta) o si coinciden.
+      - `sha_actual`: sha del ULTIMO commit del doc (crear/mover/publicar), o `null`. Con el
+        versionado INTENCIONADO ya NO se mueve al teclear (el autosave no commitea): solo
+        cambia al publicar/solicitar o renombrar. El frontend lo conserva como referencia.
+      - `sin_publicar`: hay cambios de BORRADOR sin publicar. Se calcula por CONTENIDO (no por
+        divergencia de HEAD, que ya no se mueve en autosave):
+          * CON puntero: True si el cuerpo del working copy != cuerpo publicado (o la versión
+            publicada ya no es legible).
+          * SIN puntero: True si el doc tiene contenido (nunca se publicó -> mostrar
+            "Publicar"); False si el cuerpo está en blanco.
 
-    `punteros`/`shas` (opcionales) permiten resolver POR LOTE en los listados (una consulta
-    SQL + una llamada git para N documentos) en vez de pagar una por documento.
+    `punteros`/`shas` (opcionales) resuelven POR LOTE en los listados (una consulta SQL +
+    una llamada git de HEADs para N documentos). El cálculo de `sin_publicar` es EXACTO tanto
+    en el detalle como en el lote: lee el cuerpo del working copy (de `cuerpo_actual` si se
+    pasa, o releyendo el `.md`) y, solo para los docs PUBLICADOS, su cuerpo publicado con un
+    `git show` (los docs sin puntero no pagan git). El repo de la Biblioteca es pequeño, así
+    que ese `git show` por doc publicado es asumible; si hiciera falta, el lote podría caer a
+    una aproximación más barata sin tocar el detalle.
     """
     pub = punteros.get(doc_id) if punteros is not None else produccion_de(doc_id)
     sha = shas.get(doc_id) if shas is not None else sha_actual(doc_id)
     puntero = _puntero_json(pub)
+
+    if cuerpo_actual is None:
+        from ._crud import obtener  # perezoso: evita ciclo de import en la carga del barrel
+
+        doc = obtener(doc_id)
+        cuerpo_wc = doc.cuerpo if doc is not None else ""
+    else:
+        cuerpo_wc = cuerpo_actual
+
+    if pub and pub.get("sha"):
+        cuerpo_pub = _cuerpo_en_sha(doc_id, str(pub["sha"]))
+        sin_publicar = cuerpo_pub is None or cuerpo_wc != cuerpo_pub
+    else:
+        sin_publicar = bool(cuerpo_wc.strip())
+
     return {
         "produccion": puntero,
         "sha_actual": sha,
-        "sin_publicar": bool(puntero and sha and sha != puntero["sha"]),
+        "sin_publicar": sin_publicar,
     }

@@ -135,7 +135,13 @@ from ._validacion import (
     _validar_prioridad,
     _validar_rol,
 )
-from ._versiones import historial, restaurar_version, version
+from ._versiones import (
+    descartar_borrador,
+    fijar_version,
+    historial,
+    restaurar_version,
+    version,
+)
 
 # `__all__` lista TODA la superficie re-exportada por el barrel: la pública Y los
 # privados que algún consumidor importa (p.ej. tests hacen `from libtexto import
@@ -192,10 +198,12 @@ __all__ = [
     "vaciar_papelera",
     "_coincide_busqueda",
     "_coincide_carpeta",
-    # versiones (_versiones)
+    # versiones (_versiones): versionado INTENCIONADO (commit como GitHub)
     "historial",
     "version",
     "restaurar_version",
+    "descartar_borrador",
+    "fijar_version",
     # publicacion (_publicacion): versiones inmutables + puntero "produccion"
     "produccion_de",
     "producciones",

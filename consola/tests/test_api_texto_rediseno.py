@@ -106,11 +106,14 @@ def test_editoriales_filtra_por_pipeline(cliente):
 
 
 # --------------------------------------------------------------------------- #
-# Versionado git                                                             #
+# Versionado INTENCIONADO (historial = publicaciones; revertir = al borrador)  #
 # --------------------------------------------------------------------------- #
 
 
-def test_historial_y_revertir(cliente, monkeypatch):
+def test_historial_vacio_sin_publicaciones_y_revertir_al_borrador(cliente, monkeypatch):
+    """Sin Postgres ni publicaciones el historial es VACÍO (es el de publicaciones, no el
+    git log de autosaves). `version/{sha}` y `revertir/{sha}` siguen operando por git: el
+    sha del commit de creación se lee de `sha_actual` (el autosave ya no commitea)."""
     if shutil.which("git") is None:
         pytest.skip("git no disponible")
     monkeypatch.setenv("KENI_TEXTO_GIT", "1")
@@ -119,17 +122,19 @@ def test_historial_y_revertir(cliente, monkeypatch):
 
     r = cliente.get(f"/api/texto/{doc['id']}/historial")
     assert r.status_code == 200
-    hist = r.json()["historial"]
-    assert len(hist) >= 2
+    assert r.json()["historial"] == []  # historial = publicaciones; aquí no hay ninguna
 
-    sha = hist[-1]["sha"]
-    r = cliente.get(f"/api/texto/{doc['id']}/version/{sha}")
+    sha_v1 = cliente.get(f"/api/texto/{doc['id']}").json()["documento"]["sha_actual"]
+    assert sha_v1  # commit de creación (V1); el autosave de V2 no movió el HEAD
+    r = cliente.get(f"/api/texto/{doc['id']}/version/{sha_v1}")
     assert r.status_code == 200
     assert "V1" in r.json()["documento"]["cuerpo"]
 
-    r = cliente.post(f"/api/texto/{doc['id']}/revertir/{sha}")
+    # "Traer al borrador": el working copy vuelve a V1 sin publicar ni añadir versión.
+    r = cliente.post(f"/api/texto/{doc['id']}/revertir/{sha_v1}")
     assert r.status_code == 200
     assert "V1" in r.json()["documento"]["cuerpo"]
+    assert "V1" in cliente.get(f"/api/texto/{doc['id']}").json()["documento"]["cuerpo"]
 
 
 def test_historial_doc_inexistente_404(cliente, monkeypatch):

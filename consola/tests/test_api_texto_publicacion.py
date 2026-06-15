@@ -84,9 +84,15 @@ def _crear_doc(c: TestClient, titulo="Doc", cuerpo="V1", tipo="prompt", **extra)
 
 
 def _head(c: TestClient, doc_id: str) -> str:
-    hist = c.get(f"/api/texto/{doc_id}/historial").json()["historial"]
-    assert hist, "el doc debería tener al menos un commit"
-    return hist[0]["sha"]
+    """SHA del último commit git del doc (`sha_actual`).
+
+    Tras el rediseño del versionado intencionado, `/historial` devuelve PUBLICACIONES (no el
+    git log), así que un doc recién creado tiene historial vacío; el sha del commit de
+    creación se lee de `sha_actual` del propio documento.
+    """
+    d = c.get(f"/api/texto/{doc_id}").json()["documento"]
+    assert d["sha_actual"], "el doc debería tener al menos un commit (creación)"
+    return d["sha_actual"]
 
 
 # --------------------------------------------------------------------------- #
@@ -99,10 +105,11 @@ def test_publicar_mueve_el_puntero_y_expone_campos(entorno_pub):
     doc = _crear_doc(c)
     head = _head(c, doc["id"])
 
-    # Antes de publicar: sin puntero, sin_publicar False (la working copy ES lo inyectado).
+    # Antes de publicar: sin puntero pero CON contenido nunca publicado -> sin_publicar True
+    # (rediseño intencionado: aparece el botón "Publicar").
     d = c.get(f"/api/texto/{doc['id']}").json()["documento"]
     assert d["produccion"] is None
-    assert d["sin_publicar"] is False
+    assert d["sin_publicar"] is True
     assert d["sha_actual"] == head
 
     r = c.post(f"/api/texto/{doc['id']}/publicar", json={"nota": "primera"})
@@ -115,11 +122,13 @@ def test_publicar_mueve_el_puntero_y_expone_campos(entorno_pub):
     assert d["sha_actual"] == head
     assert d["sin_publicar"] is False
 
-    # Editar tras publicar: el puntero NO se mueve y el doc queda "sin publicar".
+    # Editar tras publicar: el puntero NO se mueve y el doc queda "sin publicar" (por
+    # CONTENIDO: working copy V2 != cuerpo publicado V1). `sha_actual` (HEAD git) NO se mueve
+    # con el autosave: el versionado intencionado ya no commitea al teclear.
     c.put(f"/api/texto/{doc['id']}", json={"cuerpo": "V2"})
     d = c.get(f"/api/texto/{doc['id']}").json()["documento"]
     assert d["produccion"]["sha"] == head
-    assert d["sha_actual"] != head
+    assert d["sha_actual"] == head
     assert d["sin_publicar"] is True
 
     # El LISTADO trae los mismos campos (resueltos por lote).
@@ -161,6 +170,89 @@ def test_publicar_doc_inexistente_404(entorno_pub):
     c = _cliente(_ADMIN)
     r = c.post("/api/texto/prompt/no-existe/publicar", json={"nota": "x"})
     assert r.status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# Historial = PUBLICACIONES (no git log) + commit intencionado                 #
+# --------------------------------------------------------------------------- #
+
+
+def test_historial_son_publicaciones_no_git_log(entorno_pub):
+    """El historial es el de PUBLICACIONES (nota = mensaje), no el git log de autosaves."""
+    c = _cliente(_ADMIN)
+    doc = _crear_doc(c, cuerpo="V1")
+    # Un borrador NO es versión: sin publicar -> historial vacío.
+    assert c.get(f"/api/texto/{doc['id']}/historial").json()["historial"] == []
+
+    # Publicar crea la versión: una entrada con la NOTA como mensaje.
+    c.post(f"/api/texto/{doc['id']}/publicar", json={"nota": "primera versión"})
+    hist = c.get(f"/api/texto/{doc['id']}/historial").json()["historial"]
+    assert len(hist) == 1
+    assert hist[0]["mensaje"] == "primera versión"
+    assert hist[0]["autor"] == "Root"
+    assert hist[0]["sha"] and hist[0]["sha_corto"] == hist[0]["sha"][:8]
+    assert hist[0]["fecha"]
+
+    # Editar (autosave) NO añade versión al historial.
+    c.put(f"/api/texto/{doc['id']}", json={"cuerpo": "V2"})
+    assert len(c.get(f"/api/texto/{doc['id']}/historial").json()["historial"]) == 1
+
+    # Publicar de nuevo -> dos versiones, la más reciente primero.
+    c.post(f"/api/texto/{doc['id']}/publicar", json={"nota": "segunda"})
+    hist = c.get(f"/api/texto/{doc['id']}/historial").json()["historial"]
+    assert [h["mensaje"] for h in hist] == ["segunda", "primera versión"]
+
+
+def test_revertir_trae_al_borrador_sin_publicar(entorno_pub):
+    """`revertir/{sha}` = "Traer al borrador": carga la versión en el working copy SIN
+    publicar ni añadir versión (el puntero de producción no se mueve)."""
+    c = _cliente(_ADMIN)
+    doc = _crear_doc(c, cuerpo="V1")
+    c.post(f"/api/texto/{doc['id']}/publicar", json={"nota": "v1"})
+    sha_v1 = c.get(f"/api/texto/{doc['id']}/historial").json()["historial"][0]["sha"]
+    c.put(f"/api/texto/{doc['id']}", json={"cuerpo": "V2"})
+    c.post(f"/api/texto/{doc['id']}/publicar", json={"nota": "v2"})
+
+    r = c.post(f"/api/texto/{doc['id']}/revertir/{sha_v1}")
+    assert r.status_code == 200
+    assert "V1" in r.json()["documento"]["cuerpo"]
+    d = c.get(f"/api/texto/{doc['id']}").json()["documento"]
+    assert "V1" in d["cuerpo"]
+    assert d["produccion"]["nota"] == "v2"  # el puntero sigue en v2
+    assert d["sin_publicar"] is True        # el borrador (v1) difiere de lo publicado (v2)
+    # No se publicó nada: siguen siendo dos versiones.
+    assert len(c.get(f"/api/texto/{doc['id']}/historial").json()["historial"]) == 2
+
+
+def test_descartar_resetea_al_publicado(entorno_pub):
+    """`descartar` reescribe el borrador con el contenido publicado, sin crear versión."""
+    c = _cliente(_ADMIN)
+    doc = _crear_doc(c, cuerpo="PUBLICADA")
+    c.post(f"/api/texto/{doc['id']}/publicar", json={"nota": "v1"})
+    c.put(f"/api/texto/{doc['id']}", json={"cuerpo": "BORRADOR SUCIO"})
+    d = c.get(f"/api/texto/{doc['id']}").json()["documento"]
+    assert "BORRADOR SUCIO" in d["cuerpo"] and d["sin_publicar"] is True
+
+    r = c.post(f"/api/texto/{doc['id']}/descartar")
+    assert r.status_code == 200
+    doc2 = r.json()["documento"]
+    assert "PUBLICADA" in doc2["cuerpo"]
+    assert doc2["sin_publicar"] is False  # vuelve a coincidir con lo publicado
+    # No crea versión: sigue habiendo UNA publicación.
+    assert len(c.get(f"/api/texto/{doc['id']}/historial").json()["historial"]) == 1
+
+
+def test_descartar_sin_publicacion_400(entorno_pub):
+    c = _cliente(_ADMIN)
+    doc = _crear_doc(c, cuerpo="X")
+    r = c.post(f"/api/texto/{doc['id']}/descartar")
+    assert r.status_code == 400
+    assert "publicada" in r.json()["error"].lower()
+
+
+def test_descartar_doc_inexistente_404(entorno_pub):
+    c = _cliente(_ADMIN)
+    assert c.post("/api/texto/prompt/no-existe/descartar").status_code == 404
 
 
 # --------------------------------------------------------------------------- #
@@ -285,7 +377,8 @@ def test_sin_puntero_se_inyecta_la_working_copy(entorno_pub):
     assert "WORKING COPY" in libtexto.cuerpo_efectivo(doc["id"])
     d = c.get(f"/api/texto/{doc['id']}").json()["documento"]
     assert d["produccion"] is None
-    assert d["sin_publicar"] is False
+    # Con contenido y sin publicar nunca -> sin_publicar True (mostrar "Publicar").
+    assert d["sin_publicar"] is True
 
 
 def test_sin_postgres_todo_degrada_a_working_copy(entorno_sin_pg):
@@ -294,11 +387,12 @@ def test_sin_postgres_todo_degrada_a_working_copy(entorno_sin_pg):
     doc = _crear_doc(c, cuerpo="SOLO WORKING")
     d = c.get(f"/api/texto/{doc['id']}").json()["documento"]
     assert d["produccion"] is None
-    assert d["sin_publicar"] is False
+    # Sin BD no hay puntero; con contenido -> sin_publicar True (nunca publicado).
+    assert d["sin_publicar"] is True
     assert "SOLO WORKING" in (libtexto.cuerpo_efectivo(doc["id"]) or "")
     # El listado también responde con los campos nuevos degradados.
     fila = c.get("/api/texto").json()["documentos"][0]
-    assert fila["produccion"] is None and fila["sin_publicar"] is False
+    assert fila["produccion"] is None and fila["sin_publicar"] is True
 
 
 # --------------------------------------------------------------------------- #
