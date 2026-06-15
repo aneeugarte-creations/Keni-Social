@@ -61,6 +61,10 @@ def crear_texto_publicacion(
 
     Devuelve la fila creada. NO borra las publicaciones anteriores: son el audit log
     (quien publico que y cuando); el puntero vigente es siempre la fila mas reciente.
+
+    IDEMPOTENTE por sha: si la publicacion MAS RECIENTE de `doc_id` ya apunta a este mismo
+    `sha`, no inserta otra fila (devuelve la vigente). Publicar dos veces sin cambios (mismo
+    sha) no duplica "versiones" identicas en el historial.
     """
     fila = {
         "id": uuid4().hex[:12],
@@ -72,6 +76,13 @@ def crear_texto_publicacion(
     }
     con = _conectar()
     try:
+        vigente = con.execute(
+            f"SELECT {', '.join(_COLS_PUBLICACION)} FROM texto_publicaciones "
+            "WHERE doc_id = ? ORDER BY creado DESC, id DESC LIMIT 1",
+            (doc_id,),
+        ).fetchone()
+        if vigente is not None and vigente["sha"] == sha:
+            return _fila_a_dict(vigente, _COLS_PUBLICACION)
         marcadores = ", ".join("?" for _ in _COLS_PUBLICACION)
         con.execute(
             f"INSERT INTO texto_publicaciones ({', '.join(_COLS_PUBLICACION)}) VALUES ({marcadores})",

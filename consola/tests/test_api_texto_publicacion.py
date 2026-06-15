@@ -172,6 +172,39 @@ def test_publicar_doc_inexistente_404(entorno_pub):
     assert r.status_code == 404
 
 
+def test_publicar_dos_veces_sin_cambios_no_duplica_historial(entorno_pub):
+    """Publicar dos veces SIN cambios (mismo sha) no crea dos "versiones" idénticas: el log
+    de publicaciones es idempotente por sha."""
+    c = _cliente(_ADMIN)
+    doc = _crear_doc(c, cuerpo="ESTABLE")
+    assert c.post(f"/api/texto/{doc['id']}/publicar", json={"nota": "v1"}).status_code == 200
+    # Segunda publicación sin tocar el documento: mismo sha -> NO añade fila.
+    assert c.post(f"/api/texto/{doc['id']}/publicar", json={"nota": "otra vez"}).status_code == 200
+    hist = c.get(f"/api/texto/{doc['id']}/historial").json()["historial"]
+    assert len(hist) == 1
+    assert hist[0]["mensaje"] == "v1"  # se conserva la publicación original
+
+
+def test_publicar_vacio_400(entorno_pub):
+    """No se puede publicar un cuerpo en blanco (sin frontmatter): 400 accionable."""
+    c = _cliente(_ADMIN)
+    doc = _crear_doc(c, cuerpo="ALGO")
+    c.put(f"/api/texto/{doc['id']}", json={"cuerpo": "   "})
+    r = c.post(f"/api/texto/{doc['id']}/publicar", json={"nota": "x"})
+    assert r.status_code == 400
+    assert "vacío" in r.json()["error"].lower()
+
+
+def test_solicitar_vacio_400(entorno_pub):
+    """Solicitar publicación de un cuerpo en blanco también se rechaza (400)."""
+    c = _cliente(_EDITOR)
+    doc = _crear_doc(c, cuerpo="ALGO")
+    c.put(f"/api/texto/{doc['id']}", json={"cuerpo": ""})
+    r = c.post(f"/api/texto/{doc['id']}/solicitar", json={"nota": "x"})
+    assert r.status_code == 400
+    assert "vacío" in r.json()["error"].lower()
+
+
 # --------------------------------------------------------------------------- #
 # Historial = PUBLICACIONES (no git log) + commit intencionado                 #
 # --------------------------------------------------------------------------- #
@@ -370,15 +403,37 @@ def test_ensamblaje_inyecta_la_version_publicada(entorno_pub, monkeypatch):
     assert "CUERPO NUEVO V2" not in capturado["prompt"]
 
 
-def test_sin_puntero_se_inyecta_la_working_copy(entorno_pub):
+def test_sin_puntero_sirve_snapshot_estable_no_borrador_vivo(entorno_pub):
+    """Sin puntero de producción, los pipelines sirven el SNAPSHOT ESTABLE (último commit
+    git), NUNCA el working copy que el autosave reescribe en vivo: un borrador a medias no
+    entra a una generación. El doc sigue figurando como NO publicado (produccion None)."""
     c = _cliente(_ADMIN)
-    doc = _crear_doc(c, cuerpo="WORKING COPY")
-    assert libtexto.cuerpo_efectivo(doc["id"]) is not None
-    assert "WORKING COPY" in libtexto.cuerpo_efectivo(doc["id"])
+    doc = _crear_doc(c, cuerpo="SNAPSHOT V1")
+    # Recién creado (un commit "crear"): el cuerpo efectivo es ese snapshot.
+    assert "SNAPSHOT V1" in (libtexto.cuerpo_efectivo(doc["id"]) or "")
+
+    # Autosave (PUT) reescribe el working copy SIN commitear ni publicar.
+    c.put(f"/api/texto/{doc['id']}", json={"cuerpo": "BORRADOR VIVO V2"})
     d = c.get(f"/api/texto/{doc['id']}").json()["documento"]
-    assert d["produccion"] is None
-    # Con contenido y sin publicar nunca -> sin_publicar True (mostrar "Publicar").
-    assert d["sin_publicar"] is True
+    assert d["produccion"] is None                 # sigue sin publicar
+    assert "BORRADOR VIVO V2" in d["cuerpo"]        # el working copy sí refleja la edición
+    assert d["sin_publicar"] is True               # con contenido y sin publicar -> "Publicar"
+
+    # Pero los pipelines NO ven el borrador a medias: sirven el snapshot estable (HEAD).
+    efectivo = libtexto.cuerpo_efectivo(doc["id"]) or ""
+    assert "SNAPSHOT V1" in efectivo
+    assert "BORRADOR VIVO V2" not in efectivo
+
+
+def test_adjunto_sin_puntero_sirve_snapshot_estable(entorno_pub):
+    """El ensamblaje de adjuntos editoriales también sirve el snapshot estable (HEAD) de un
+    adjunto sin publicar, no su working copy editado en vivo."""
+    c = _cliente(_ADMIN)
+    edi = _crear_doc(c, titulo="Reglas", cuerpo="EDITORIAL HEAD", tipo="editorial", clase="reglas")
+    c.put(f"/api/texto/{edi['id']}", json={"cuerpo": "EDITORIAL BORRADOR"})
+    prompt = generar.componer("haz algo", [libtexto.obtener(edi["id"])], "")
+    assert "EDITORIAL HEAD" in prompt
+    assert "EDITORIAL BORRADOR" not in prompt
 
 
 def test_sin_postgres_todo_degrada_a_working_copy(entorno_sin_pg):

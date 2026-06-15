@@ -169,6 +169,10 @@ def fijar_version(doc_id: str, *, nota: str = "", autor: dict[str, str] | None =
     justo tras crear), git no crea commit nuevo y se devuelve el sha vigente: igualmente válido
     para fijar el puntero.
 
+    Rechaza versionar un documento VACÍO: si el cuerpo (sin frontmatter) está en blanco lanza
+    `TextoError` (el llamante lo traduce a un 400 accionable), para no publicar/solicitar una
+    versión sin contenido.
+
     Best-effort git (como todo `versionado`): devuelve None si el versionado está apagado o
     no hay repo/commits, y el llamante traduce eso a un 400 accionable. Lanza si el documento
     no existe.
@@ -176,6 +180,11 @@ def fijar_version(doc_id: str, *, nota: str = "", autor: dict[str, str] | None =
     ruta = _ruta_de_id(doc_id)
     if not ruta.is_file():
         raise TextoError("Ese documento no existe.")
+    actual = obtener(doc_id)
+    if actual is None or not actual.cuerpo.strip():
+        raise TextoError(
+            "No se puede publicar un documento vacío: escribe contenido antes de publicar o solicitar."
+        )
     mensaje = nota.strip() if isinstance(nota, str) and nota.strip() else f"publicar {doc_id}"
     versionado.registrar(ruta, mensaje, autor=autor)
     return versionado.sha_documento(doc_id)

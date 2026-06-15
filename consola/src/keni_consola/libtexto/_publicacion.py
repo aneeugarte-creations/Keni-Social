@@ -1,23 +1,36 @@
 """Modelo de PUBLICACION de la Biblioteca: versiones inmutables + puntero "produccion".
 
-EDITAR es libre (working copy + commits git), pero los PIPELINES inyectan SIEMPRE la
-version PUBLICADA de cada documento (un
-sha git fijado por un admin). Publicar = mover el puntero (tabla `texto_publicaciones`,
-solo admin; los editores proponen via `texto_solicitudes`). Sin puntero para un doc, el
-fallback es la working copy: la migracion es suave y nada se rompe.
+EDITAR es libre (working copy + commits git), pero los PIPELINES inyectan SIEMPRE un cuerpo
+ESTABLE de cada documento, NUNCA el working copy mutable que el autosave reescribe en vivo:
+
+  - Con puntero de produccion: la version PUBLICADA (sha git fijado por un admin).
+  - Sin puntero, pero con historial git: el cuerpo del ULTIMO commit (HEAD). El autosave NO
+    commitea (versionado intencional), asi que ese cuerpo no refleja un borrador a medias.
+  - Sin puntero NI commit legible (versionado apagado / sin repo / doc aun sin commits): el
+    llamante cae al working copy. Es la migracion suave y nada se rompe.
+
+Publicar = mover el puntero (tabla `texto_publicaciones`, solo admin; los editores proponen
+via `texto_solicitudes`).
 
 Este modulo es la CAPA DE LECTURA de ese modelo para libtexto y el ensamblaje:
 
   - `produccion_de` / `producciones`: puntero(s) vigente(s), BEST-EFFORT (si Postgres no
     esta disponible devuelven None/{}; la composicion de prompts NUNCA se rompe por la BD,
-    simplemente cae a la working copy).
+    simplemente cae al snapshot estable o al working copy).
   - `sha_actual` / `shas_actuales`: "HEAD" git de cada documento (referencia; con el
     versionado intencional NO se mueve en autosave, solo al publicar/renombrar).
-  - `cuerpo_publicado`: cuerpo del documento EN su version publicada (None sin puntero).
-  - `aplicar_produccion`: mapea una lista de `Documento` a sus cuerpos publicados (por
-    lote); es el gancho que usa `dominio.generar.componer` con los adjuntos editoriales.
+  - `cuerpo_publicado`: cuerpo ESTABLE del documento (version publicada o, sin puntero, el
+    HEAD git; None si no hay ni puntero ni commit legible -> el llamante usa el working copy).
+  - `aplicar_produccion`: mapea una lista de `Documento` a su cuerpo estable (por lote); es
+    el gancho que usa `dominio.generar.componer` con los adjuntos editoriales.
   - `estado_publicacion`: los 3 campos nuevos del JSON de documento de la API
     (`produccion`, `sha_actual`, `sin_publicar`).
+
+NOTA (alcance del snapshot estable): solo cubre docs con AL MENOS un commit git (creados via
+API, movidos o publicados antes). Los docs de la SEMILLA que nunca se commitearon (el import
+escribe el `.md` pero no commitea) no tienen HEAD: para ellos el llamante sigue cayendo al
+working copy. TODO: commitear una linea base al importar la semilla cerraria tambien ese
+caso, pero eso vive en `_semilla.py` (fuera de la capa de lectura).
 
 La ESCRITURA (publicar/solicitar/aprobar/rechazar) vive en `api/texto.py` + `db_texto_pub`
 (validaciones de rol y de sha en la API; persistencia pura en db).
@@ -91,35 +104,49 @@ def _cuerpo_en_sha(doc_id: str, sha: str) -> str | None:
 
 
 def cuerpo_publicado(doc_id: str) -> str | None:
-    """Cuerpo del documento EN PRODUCCION (su version publicada), o None.
+    """Cuerpo ESTABLE del documento para los pipelines (NUNCA el working copy mutable), o None.
 
-    None significa "sin puntero o version no legible": el llamante debe caer a la working
-    copy (fallback de la migracion suave). Lo usan `cuerpo_efectivo` (prompts base) y
-    `texto_lanzar` (prompt elegido a mano).
+    Resuelve, en orden:
+      1. Con puntero de produccion: el cuerpo en ese sha (version PUBLICADA).
+      2. Sin puntero pero con historial git: el cuerpo en su HEAD (ultimo commit:
+         crear/mover/una publicacion previa). El autosave NO commitea, asi que es un snapshot
+         estable que no refleja un borrador a medio escribir.
+      3. None: ni puntero ni commit legibles (versionado apagado / sin repo / doc sin commits,
+         p. ej. los de la semilla nunca commiteados). El llamante cae entonces al working copy.
+
+    Lo usan `cuerpo_efectivo` (prompts base) y `texto_lanzar` (prompt elegido a mano).
     """
     pub = produccion_de(doc_id)
-    if not pub or not pub.get("sha"):
-        return None
-    return _cuerpo_en_sha(doc_id, str(pub["sha"]))
+    if pub and pub.get("sha"):
+        return _cuerpo_en_sha(doc_id, str(pub["sha"]))
+    sha = sha_actual(doc_id)
+    if sha:
+        return _cuerpo_en_sha(doc_id, sha)
+    return None
 
 
 def aplicar_produccion(docs: list[Documento]) -> list[Documento]:
-    """Sustituye el cuerpo de cada doc por su version PUBLICADA (si tiene puntero legible).
+    """Sustituye el cuerpo de cada doc por su cuerpo ESTABLE (version publicada o HEAD git).
 
-    POR LOTE: una sola consulta de punteros (`producciones`) + un `git show` por doc
-    publicado. Los docs sin puntero (o cuya version no se pueda leer) quedan INTACTOS
-    (working copy). Devuelve copias; no muta los documentos de entrada. Es el gancho del
-    ensamblaje de adjuntos editoriales (`dominio.generar.componer`).
+    POR LOTE: una sola consulta de punteros (`producciones`) + una llamada git de HEADs
+    (`shas_actuales`) + un `git show` por doc resuelto. Para cada doc: el cuerpo del puntero
+    de produccion si lo hay, si no el del HEAD git (snapshot estable que el autosave no toca).
+    Los docs sin puntero NI commit legible quedan INTACTOS (working copy: migracion suave).
+    Devuelve copias; no muta los documentos de entrada. Es el gancho del ensamblaje de adjuntos
+    editoriales (`dominio.generar.componer`).
     """
     if not docs:
         return list(docs)
     punteros = producciones()
-    if not punteros:
-        return list(docs)
+    shas = shas_actuales()
     resultado: list[Documento] = []
     for d in docs:
         pub = punteros.get(d.id)
-        cuerpo = _cuerpo_en_sha(d.id, str(pub["sha"])) if pub and pub.get("sha") else None
+        if pub and pub.get("sha"):
+            cuerpo = _cuerpo_en_sha(d.id, str(pub["sha"]))
+        else:
+            sha = shas.get(d.id)
+            cuerpo = _cuerpo_en_sha(d.id, sha) if sha else None
         resultado.append(replace(d, cuerpo=cuerpo) if cuerpo is not None else d)
     return resultado
 

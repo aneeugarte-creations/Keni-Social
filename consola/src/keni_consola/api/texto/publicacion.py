@@ -1,10 +1,11 @@
 """Versionado (git) y PUBLICACIÓN inmutable + solicitudes.
 
 Historial/versión/revertir (lectura del historial git del doc) y el modelo de publicación
-de la Biblioteca: EDITAR es libre (working copy + commits git); los pipelines
-inyectan SIEMPRE la versión PUBLICADA (sha git fijado). Publicar = mover el puntero
+de la Biblioteca: EDITAR es libre (working copy + commits git); los pipelines inyectan
+SIEMPRE un cuerpo ESTABLE (la versión PUBLICADA si hay puntero, si no el HEAD git), nunca el
+working copy mutable que el autosave reescribe en vivo. Publicar = mover el puntero
 "producción" (solo ADMIN). Un editor PROPONE publicar vía una SOLICITUD que el admin aprueba
-(publica) o rechaza. Sin puntero, fallback a working copy (migración suave).
+(publica) o rechaza. Sin puntero ni commit legible, fallback a working copy (migración suave).
 """
 
 from __future__ import annotations
@@ -77,6 +78,7 @@ async def descartar(request: Request) -> Response:
 # --------------------------------------------------------------------------- #
 
 _MSG_SOLO_ADMIN_PUBLICAR = "Solo un administrador puede publicar a producción."
+_MSG_VACIO = "No se puede publicar un documento vacío: escribe contenido antes de publicar o solicitar."
 
 
 def _autor_nombre(request: Request) -> str:
@@ -119,14 +121,22 @@ def _sha_a_publicar(
     comiteando el working copy con la `nota` como mensaje (commit intencionado).
 
     Una VERSIÓN = una publicación: sin sha explícito, publicar/solicitar CREA la versión.
+    Rechaza (400) publicar/solicitar un cuerpo VACÍO, tanto fijando un sha existente sin
+    contenido como comiteando un working copy en blanco.
     """
     sha, error = _resolver_sha(doc_id, datos)
     if error is not None:
         return None, error
     if sha is not None:
+        pieza = libtexto.version(doc_id, sha)
+        if pieza is None or not pieza.cuerpo.strip():
+            return None, JSONResponse({"error": _MSG_VACIO}, status_code=400)
         return sha, None
     nota = datos.get("nota") if isinstance(datos.get("nota"), str) else ""
-    sha = libtexto.fijar_version(doc_id, nota=nota, autor=autor)
+    try:
+        sha = libtexto.fijar_version(doc_id, nota=nota, autor=autor)
+    except libtexto.TextoError as e:
+        return None, JSONResponse({"error": str(e)}, status_code=400)
     if not sha:
         return None, JSONResponse(
             {"error": "Este documento no se puede versionar (el versionado git no está disponible)."},
