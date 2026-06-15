@@ -31,7 +31,7 @@ import { CLAVE_TAREAS } from "./claves";
 
 const SIN_RESPONSABLE = "__libre__";
 
-type Modo = "evento" | "encargo";
+type Modo = "evento" | "tarea";
 
 const esUrl = (s: string) => /^https?:\/\/\S+/i.test(s.trim());
 
@@ -41,7 +41,7 @@ const esUrl = (s: string) => /^https?:\/\/\S+/i.test(s.trim());
  *    escribe una FRASE y la IA propone los eventos → revisas → «Aceptar» los crea. O
  *    escríbelo a mano (un solo evento). Sirve para cualquier cosa: partido, concierto,
  *    rueda de prensa, estreno…
- *  - Encargo del equipo: una tarea suelta (sin evento).
+ *  - Tarea: un encargo suelto (sin evento), que puedes asignar a alguien ahí mismo.
  */
 export function DialogoCrearTarea({
   abierto,
@@ -127,7 +127,7 @@ export function DialogoCrearTarea({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  // --- Manual: crear un evento o un encargo (tarea) ---
+  // --- Manual: crear un evento o una tarea ---
   const crear = useMutation({
     mutationFn: async () => {
       if (modo === "evento") {
@@ -169,7 +169,7 @@ export function DialogoCrearTarea({
   const enRevision = propuestaId !== null;
 
   // Selectores reutilizados: en evento la prioridad cabalga junto a Día/Hora (una fila
-  // menos = el diálogo entra sin scroll); en encargo va junto a la fecha.
+  // menos = el diálogo entra sin scroll); en tarea va junto a la fecha.
   const campoPrioridad = (
     <div className="space-y-1.5">
       <Label>Prioridad</Label>
@@ -189,7 +189,7 @@ export function DialogoCrearTarea({
   );
   const campoResponsable = (
     <div className="space-y-1.5">
-      <Label>Responsable</Label>
+      <Label>Asignar a</Label>
       <Select value={responsable} onValueChange={setResponsable}>
         <SelectTrigger>
           <SelectValue />
@@ -275,7 +275,7 @@ export function DialogoCrearTarea({
           <>
             {/* Qué se añade. Segmentado claro (píldora blanca sobre pista gris), no bloque negro. */}
             <div className="inline-flex rounded-md border border-border bg-muted p-0.5">
-              {(["evento", "encargo"] as Modo[]).map((m) => (
+              {(["evento", "tarea"] as Modo[]).map((m) => (
                 <button
                   key={m}
                   type="button"
@@ -287,7 +287,7 @@ export function DialogoCrearTarea({
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  {m === "evento" ? "Evento" : "Encargo del equipo"}
+                  {m === "evento" ? "Evento" : "Tarea"}
                 </button>
               ))}
             </div>
@@ -443,7 +443,7 @@ export function DialogoCrearTarea({
                 />
               </div>
 
-              {modo === "encargo" && campoResponsable}
+              {modo === "tarea" && campoResponsable}
             </div>
 
             <DialogFooter>
@@ -459,7 +459,7 @@ export function DialogoCrearTarea({
                   ? "Añadiendo…"
                   : modo === "evento"
                     ? "Añadir evento"
-                    : "Crear encargo"}
+                    : "Crear tarea"}
               </Button>
             </DialogFooter>
           </>
