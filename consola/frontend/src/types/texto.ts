@@ -47,6 +47,11 @@ export interface DocumentoTexto {
   sha_actual?: string | null;
   /** `true` si el borrador actual difiere de lo publicado (hay cambios sin publicar). */
   sin_publicar?: boolean;
+  /**
+   * Hash de revisión (estilo ETag) del working copy: el cliente lo echa al guardar y el
+   * backend rechaza con 409 si otro editor guardó debajo (concurrencia optimista).
+   */
+  rev?: string;
 }
 
 /** Resumen de facetas para poblar los filtros de navegación. */
@@ -275,6 +280,8 @@ export interface CuerpoGuardarDocumento {
   pipelines?: string[];
   rol?: string;
   prioridad?: number;
+  /** Revisión base (ETag) que cargó el cliente: el backend devuelve 409 si cambió debajo. */
+  rev?: string;
 }
 
 /** Target sobre el que se lanza un prompt. */

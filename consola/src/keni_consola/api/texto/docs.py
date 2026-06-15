@@ -115,8 +115,16 @@ async def guardar(request: Request) -> Response:
             kwargs[clave] = [m for m in datos[clave] if isinstance(m, str)]
     if isinstance(datos.get("prioridad"), int) and not isinstance(datos.get("prioridad"), bool):
         kwargs["prioridad"] = datos["prioridad"]
+    # Concurrencia optimista (opcional): el cliente echa el `rev` que cargo; si falta, no hay
+    # chequeo (autosave legado, last-write-wins).
+    rev_base = datos.get("rev")
+    if isinstance(rev_base, str):
+        kwargs["rev_base"] = rev_base
     try:
         doc = libtexto.guardar(doc_id, **kwargs)
+    except libtexto.ConflictoEdicion as e:
+        # El working copy cambio debajo: 409 para que el frontend avise "recarga, no pises".
+        return JSONResponse({"error": str(e)}, status_code=409)
     except libtexto.TextoError as e:
         # "no existe" -> 404; el resto (validacion) -> 400.
         codigo = 404 if "no existe" in str(e) else 400

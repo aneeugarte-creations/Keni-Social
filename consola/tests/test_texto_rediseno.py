@@ -258,3 +258,43 @@ def test_versionado_apagado_no_da_historial(monkeypatch):
     monkeypatch.setenv("KENI_TEXTO_GIT", "0")
     doc = libtexto.crear("Sin git", tipo="prompt", cuerpo="x")
     assert libtexto.historial(doc.id) == []
+
+
+# --------------------------------------------------------------------------- #
+# Concurrencia optimista (rev / ETag) — pura, sin git ni Postgres            #
+# --------------------------------------------------------------------------- #
+
+
+def test_rev_documento_estable_y_cambia_al_guardar():
+    """El `rev` es estable entre lecturas del mismo fichero y cambia tras cada guardado."""
+    doc = libtexto.crear("Rev", tipo="prompt", cuerpo="uno")
+    rev1 = libtexto.rev_documento(libtexto.obtener(doc.id))
+    assert libtexto.rev_documento(libtexto.obtener(doc.id)) == rev1  # releer sin cambios
+    libtexto.guardar(doc.id, cuerpo="dos")
+    assert libtexto.rev_documento(libtexto.obtener(doc.id)) != rev1
+
+
+def test_guardar_con_rev_correcto_ok():
+    """Guardar con el `rev` que se cargó procede sin conflicto."""
+    doc = libtexto.crear("Rev ok", tipo="prompt", cuerpo="uno")
+    rev = libtexto.rev_documento(libtexto.obtener(doc.id))
+    libtexto.guardar(doc.id, cuerpo="dos", rev_base=rev)
+    assert libtexto.obtener(doc.id).cuerpo == "dos"
+
+
+def test_guardar_con_rev_obsoleto_lanza_conflicto():
+    """Si el working copy cambió debajo, guardar con el rev viejo lanza ConflictoEdicion y NO escribe."""
+    doc = libtexto.crear("Rev choque", tipo="prompt", cuerpo="uno")
+    rev_viejo = libtexto.rev_documento(libtexto.obtener(doc.id))
+    libtexto.guardar(doc.id, cuerpo="dos")  # otro editor guarda primero (mueve el rev)
+    with pytest.raises(libtexto.ConflictoEdicion):
+        libtexto.guardar(doc.id, cuerpo="tres", rev_base=rev_viejo)
+    assert libtexto.obtener(doc.id).cuerpo == "dos"  # no se pisó al otro editor
+
+
+def test_guardar_sin_rev_no_chequea():
+    """Sin `rev_base` no hay chequeo (autosave legado / last-write-wins)."""
+    doc = libtexto.crear("Rev legado", tipo="prompt", cuerpo="uno")
+    libtexto.guardar(doc.id, cuerpo="dos")  # sin rev_base
+    libtexto.guardar(doc.id, cuerpo="tres")
+    assert libtexto.obtener(doc.id).cuerpo == "tres"

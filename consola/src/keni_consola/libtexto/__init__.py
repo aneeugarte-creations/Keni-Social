@@ -69,6 +69,7 @@ from ._comun import (
     ROLES_PROMPT,
     SALIDAS,
     TIPOS,
+    ConflictoEdicion,
     Documento,
     TextoError,
     _ahora_iso,
@@ -97,7 +98,7 @@ from ._editorial import (
     prompt_base_de,
     validacion_editorial,
 )
-from ._io import _leer, _parsear, _serializar
+from ._io import _leer, _parsear, _serializar, rev_documento
 from ._publicacion import (
     aplicar_produccion,
     cuerpo_publicado,
@@ -159,6 +160,7 @@ __all__ = [
     "PILARES_EDITORIALES",
     "Documento",
     "TextoError",
+    "ConflictoEdicion",
     "_CARPETAS_GLOBALES",
     "_CLASES_GLOBALES",
     "_PAPELERA",
@@ -178,6 +180,7 @@ __all__ = [
     "_leer",
     "_parsear",
     "_serializar",
+    "rev_documento",
     # validacion (_validacion)
     "_validar_clase",
     "_validar_estado",

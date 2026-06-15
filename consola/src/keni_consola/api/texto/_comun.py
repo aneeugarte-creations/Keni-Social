@@ -29,4 +29,11 @@ def _doc_json(
     """
     if estado_pub is None:
         estado_pub = libtexto.estado_publicacion(doc.id)
-    return {**doc.a_dict(), "procesos": prompts_procesos.procesos_de(doc.id), **estado_pub}
+    return {
+        **doc.a_dict(),
+        "procesos": prompts_procesos.procesos_de(doc.id),
+        # `rev` (concurrencia optimista, estilo ETag): el cliente lo echa al guardar para que
+        # el servidor rechace (409) si otro editor guardo debajo. Ver `libtexto.rev_documento`.
+        "rev": libtexto.rev_documento(doc),
+        **estado_pub,
+    }

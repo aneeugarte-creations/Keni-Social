@@ -12,12 +12,13 @@ from ._comun import (
     _CLASES_GLOBALES,
     _PAPELERA,
     TIPOS,
+    ConflictoEdicion,
     Documento,
     TextoError,
     _ahora_iso,
     _slug,
 )
-from ._io import _leer, _parsear, _serializar
+from ._io import _leer, _parsear, _serializar, rev_documento
 from ._rutas import _carpeta_relativa, _id_unico, _ruta_de_id, raiz
 from ._validacion import (
     _validar_clase,
@@ -202,15 +203,26 @@ def guardar(
     pipelines: list[str] | None = None,
     rol: str | None = None,
     prioridad: int | None = None,
+    rev_base: str | None = None,
 ) -> Documento:
     """Actualiza un documento (atomico). Si cambia titulo/carpeta, MUEVE el fichero (nuevo id).
 
     Devuelve el documento resultante (con el id posiblemente NUEVO). Conserva `creado`.
     Solo se aplican los campos pasados (no-None).
+
+    `rev_base` (concurrencia optimista): si se pasa, es el `rev_documento` que el cliente
+    cargo; si el working copy cambio debajo (otro editor guardo antes), se lanza
+    `ConflictoEdicion` (la API -> 409) y NO se escribe. `None` (autosave legado / sin rev)
+    desactiva el chequeo: last-write-wins, como antes.
     """
     actual = obtener(doc_id)
     if actual is None:
         raise TextoError("Ese documento no existe.")
+    if rev_base is not None and rev_documento(actual) != rev_base:
+        raise ConflictoEdicion(
+            "Alguien mas edito este documento mientras lo trabajabas. "
+            "Recarga para no pisar sus cambios."
+        )
 
     nuevo_titulo = titulo.strip() if isinstance(titulo, str) and titulo.strip() else actual.titulo
     nueva_descripcion = actual.descripcion if descripcion is None else (descripcion.strip() if isinstance(descripcion, str) else "")
@@ -245,8 +257,7 @@ def guardar(
     # través del renombrado para `git --follow`, de modo que las versiones publicadas con un
     # sha anterior al rename siguen siendo legibles. El contenido de un rename no es "una
     # versión publicable": solo es el efecto colateral de mover el `.md` en git.
-    # TODO concurrencia optimista: aceptar un `rev`/hash base opcional y devolver 409 si el
-    # fichero cambió debajo (se omite por ahora para no arriesgar el merge).
+    # (Concurrencia optimista: el chequeo de `rev_base` esta arriba, antes de tocar disco.)
     cambia_titulo = titulo is not None and _slug(nuevo_titulo) != actual.id.split("/")[-1]
     cambia_carpeta = carpeta is not None and "/".join(partes_carpeta) != actual.carpeta
     ruta_actual = _ruta_de_id(actual.id)

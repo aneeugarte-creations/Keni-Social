@@ -41,7 +41,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useMenuContextual } from "@/hooks/use-menu-contextual";
 import { useEsAdmin } from "@/hooks/use-biblioteca";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
-import { api, mensajeError } from "@/lib/api";
+import { ApiError, api, mensajeError } from "@/lib/api";
 import { tiempoRelativo } from "@/lib/fecha";
 import type { DocumentoTexto, EtapaPrompt, RespuestaMaquinaTexto } from "@/types";
 
@@ -319,11 +319,20 @@ export function DetalleDocumento({
   const [borrador, setBorrador] = React.useState<DocumentoTexto | null>(null);
   const [frontmatterOculto, setFrontmatterOculto] = React.useState("");
   const sincronizado = React.useRef<string | null>(null);
+  // ── Concurrencia optimista: `rev` (ETag) que cargamos / último confirmado. Se echa en cada
+  // autosave; si otro editor guardó debajo el backend devuelve 409 y mostramos un aviso. Va en
+  // refs (no estado) para que el timer con debounce lea siempre el último valor sin re-cerrar. ──
+  const revRef = React.useRef<string | null>(null);
+  const conflictoRef = React.useRef(false);
+  const [conflicto, setConflicto] = React.useState(false);
   React.useEffect(() => {
     if (sincronizado.current !== docId) {
       sincronizado.current = null;
       setBorrador(null);
       setFrontmatterOculto("");
+      revRef.current = null;
+      conflictoRef.current = false;
+      setConflicto(false);
     }
   }, [docId]);
   React.useEffect(() => {
@@ -332,7 +341,19 @@ export function DetalleDocumento({
     const { oculto, visible } = separarFrontmatter(doc.cuerpo);
     setBorrador({ ...doc, cuerpo: visible });
     setFrontmatterOculto(oculto);
+    revRef.current = doc.rev ?? null;
+    conflictoRef.current = false;
+    setConflicto(false);
   }, [doc]);
+
+  // Recarga el doc desde el servidor descartando el borrador local (tras un conflicto 409).
+  const recargarDesdeServidor = React.useCallback(() => {
+    sincronizado.current = null;
+    revRef.current = null;
+    conflictoRef.current = false;
+    setConflicto(false);
+    qc.invalidateQueries({ queryKey: ["texto-doc", docId] });
+  }, [qc, docId]);
 
   const guardarTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const guardarMut = useMutation({
@@ -346,6 +367,8 @@ export function DetalleDocumento({
       if (r.documento.tipo !== "prompt") {
         qc.invalidateQueries({ queryKey: claveEstrategiaBase });
       }
+      // Confirmado: este `rev` pasa a ser la base del siguiente autosave.
+      revRef.current = r.documento.rev ?? null;
       if (r.documento.id !== docId) {
         // Renombrado/movido: el id cambia; resincroniza la URL y la caché del nuevo id.
         qc.setQueryData(["texto-doc", r.documento.id], r);
@@ -355,13 +378,27 @@ export function DetalleDocumento({
         qc.setQueryData(["texto-doc", docId], r);
       }
     },
-    onError: (e) => toast.error(mensajeError(e)),
+    onError: (e) => {
+      // 409 = otro editor guardó debajo (concurrencia optimista): avisa UNA vez y bloquea
+      // el autosave hasta que la persona recargue, para no pisar el trabajo ajeno.
+      if (e instanceof ApiError && e.status === 409) {
+        if (!conflictoRef.current) {
+          conflictoRef.current = true;
+          setConflicto(true);
+          toast.error("Alguien más editó este documento. Recarga para no pisar sus cambios.");
+        }
+        return;
+      }
+      toast.error(mensajeError(e));
+    },
   });
 
   function editar(parcial: Partial<DocumentoTexto>) {
     if (!borrador) return;
     const siguiente = { ...borrador, ...parcial };
     setBorrador(siguiente);
+    // En conflicto, no seguimos guardando (pisaría al otro editor): hay que recargar antes.
+    if (conflictoRef.current) return;
     if (guardarTimer.current) clearTimeout(guardarTimer.current);
     guardarTimer.current = setTimeout(() => {
       guardarMut.mutate({
@@ -378,6 +415,7 @@ export function DetalleDocumento({
           pipelines: siguiente.pipelines,
           rol: siguiente.rol,
           prioridad: siguiente.prioridad,
+          rev: revRef.current ?? undefined,
         },
       });
     }, 600);
@@ -571,11 +609,32 @@ export function DetalleDocumento({
           </span>
         ) : null}
         <span className="ml-auto">
-          {guardarMut.isPending
-            ? "Guardando borrador…"
-            : `Borrador guardado ${tiempoRelativo(borrador.actualizado) || borrador.actualizado || ""}`.trim()}
+          {conflicto
+            ? "Sin guardar — recarga"
+            : guardarMut.isPending
+              ? "Guardando borrador…"
+              : `Borrador guardado ${tiempoRelativo(borrador.actualizado) || borrador.actualizado || ""}`.trim()}
         </span>
       </div>
+
+      {/* Conflicto de edición (otro editor guardó debajo): el autosave queda en pausa. */}
+      {conflicto ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span>
+            Alguien más editó este documento. Tus cambios dejaron de guardarse para no pisar los
+            suyos.
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            className="ml-auto h-7"
+            onClick={recargarDesdeServidor}
+          >
+            Recargar
+          </Button>
+        </div>
+      ) : null}
 
       {/* ───────── Cuerpo + panel lateral ───────── */}
       <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">

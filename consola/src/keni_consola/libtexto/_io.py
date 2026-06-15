@@ -6,6 +6,7 @@ metadatos (título, fechas, clase, marcas, etc.).
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import yaml
@@ -80,6 +81,18 @@ def _serializar(doc: Documento) -> str:
         meta["prioridad"] = doc.prioridad
     cabecera = yaml.safe_dump(meta, default_flow_style=False, allow_unicode=True, sort_keys=False)
     return f"---\n{cabecera}---\n\n{doc.cuerpo.rstrip()}\n"
+
+
+def rev_documento(doc: Documento) -> str:
+    """Hash de revision (estilo ETag) del estado persistido de un documento.
+
+    DETERMINISTA a partir del CONTENIDO serializado: dos lecturas del mismo fichero sin
+    cambios dan el MISMO `rev`, y cualquier escritura lo cambia (el frontmatter incluye
+    `actualizado`, que se refresca en cada guardado). Lo usa la concurrencia optimista: el
+    cliente echa el `rev` que cargo y el servidor rechaza con 409 (`ConflictoEdicion`) si el
+    working copy cambio debajo. Barato: no toca disco, hashea la serializacion en memoria.
+    """
+    return hashlib.sha1(_serializar(doc).encode("utf-8")).hexdigest()
 
 
 def _leer(ruta: Path) -> Documento | None:

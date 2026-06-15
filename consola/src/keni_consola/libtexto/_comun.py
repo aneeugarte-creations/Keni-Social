@@ -119,6 +119,13 @@ class TextoError(RuntimeError):
     """Error de la texto con mensaje ya en espanol, apto para mostrar al usuario."""
 
 
+class ConflictoEdicion(TextoError):
+    """El working copy cambio debajo entre que el cliente lo cargo y guardo (concurrencia
+    optimista). La API la traduce a 409 para que el frontend avise "recarga, no pises". Es
+    subclase de `TextoError` (mensaje listo para el usuario), pero se captura ANTES para no
+    confundirla con una validacion (400)."""
+
+
 # --------------------------------------------------------------------------- #
 # Dataclass                                                                    #
 # --------------------------------------------------------------------------- #

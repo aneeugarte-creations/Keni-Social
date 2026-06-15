@@ -141,3 +141,40 @@ def test_historial_doc_inexistente_404(cliente, monkeypatch):
     monkeypatch.setenv("KENI_TEXTO_GIT", "1")
     r = cliente.get("/api/texto/prompt/no-existe/historial")
     assert r.status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# Concurrencia optimista (rev / ETag) por HTTP                               #
+# --------------------------------------------------------------------------- #
+
+
+def _crear_doc(cliente):
+    r = cliente.post("/api/texto", json={"titulo": "Rev HTTP", "tipo": "prompt", "cuerpo": "uno"})
+    assert r.status_code == 200
+    return r.json()["documento"]
+
+
+def test_get_documento_incluye_rev(cliente):
+    doc = _crear_doc(cliente)
+    assert isinstance(doc.get("rev"), str) and doc["rev"]
+
+
+def test_put_con_rev_obsoleto_da_409(cliente):
+    doc = _crear_doc(cliente)
+    rev_viejo = doc["rev"]
+    # Otro editor guarda primero (sin rev): mueve el working copy.
+    assert cliente.put(f"/api/texto/{doc['id']}", json={"cuerpo": "dos"}).status_code == 200
+    # Guardar con el rev viejo: conflicto.
+    r = cliente.put(f"/api/texto/{doc['id']}", json={"cuerpo": "tres", "rev": rev_viejo})
+    assert r.status_code == 409
+    # No se pisó: sigue el contenido del otro editor.
+    assert "dos" in cliente.get(f"/api/texto/{doc['id']}").json()["documento"]["cuerpo"]
+
+
+def test_put_con_rev_correcto_ok(cliente):
+    doc = _crear_doc(cliente)
+    r = cliente.put(f"/api/texto/{doc['id']}", json={"cuerpo": "dos", "rev": doc["rev"]})
+    assert r.status_code == 200
+    assert "dos" in r.json()["documento"]["cuerpo"]
+    # El rev devuelto es nuevo (cambió tras escribir).
+    assert r.json()["documento"]["rev"] != doc["rev"]
