@@ -165,9 +165,47 @@ export function DialogoCrearTarea({
   const nadaQueAnalizar = !archivo && !pegado.trim();
   const enRevision = propuestaId !== null;
 
+  // Selectores reutilizados: en partido la prioridad cabalga junto a Día/Hora (una fila
+  // menos = el diálogo entra sin scroll); en encargo va junto a la fecha.
+  const campoPrioridad = (
+    <div className="space-y-1.5">
+      <Label>Prioridad</Label>
+      <Select value={prioridad} onValueChange={setPrioridad}>
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {prioridades.map((p) => (
+            <SelectItem key={p} value={p}>
+              {p.charAt(0).toUpperCase() + p.slice(1)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+  const campoResponsable = (
+    <div className="space-y-1.5">
+      <Label>Responsable</Label>
+      <Select value={responsable} onValueChange={setResponsable}>
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={SIN_RESPONSABLE}>Por coger</SelectItem>
+          {usuarios.map((u) => (
+            <SelectItem key={u.id} value={u.id}>
+              {u.usuario}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+
   return (
     <Dialog open={abierto} onOpenChange={(o) => (o ? onOpenChange(o) : cerrar())}>
-      <DialogContent>
+      <DialogContent className="gap-3">
         <DialogHeader>
           <DialogTitle>Añadir a la lista</DialogTitle>
         </DialogHeader>
@@ -220,7 +258,7 @@ export function DialogoCrearTarea({
                 Volver
               </Button>
               {eventosPropuestos.length > 0 && !generando && (
-                <Button onClick={() => aceptar.mutate()} disabled={aceptar.isPending}>
+                <Button variant="secondary" onClick={() => aceptar.mutate()} disabled={aceptar.isPending}>
                   <Check className="mr-1 h-4 w-4" />
                   {aceptar.isPending ? "Añadiendo…" : "Aceptar y añadir"}
                 </Button>
@@ -229,18 +267,18 @@ export function DialogoCrearTarea({
           </div>
         ) : (
           <>
-            {/* Qué se añade. */}
-            <div className="inline-flex overflow-hidden rounded-md border border-border">
+            {/* Qué se añade. Segmentado claro (píldora blanca sobre pista gris), no bloque negro. */}
+            <div className="inline-flex rounded-md border border-border bg-muted p-0.5">
               {(["partido", "encargo"] as Modo[]).map((m) => (
                 <button
                   key={m}
                   type="button"
                   onClick={() => setModo(m)}
                   className={cn(
-                    "px-3 py-1 text-sm transition-colors",
+                    "rounded-[5px] px-3 py-1 text-sm transition-colors",
                     modo === m
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-card text-muted-foreground hover:bg-muted",
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
                   )}
                 >
                   {m === "partido" ? "Partido / evento" : "Encargo del equipo"}
@@ -282,6 +320,7 @@ export function DialogoCrearTarea({
                   )}
                   <Button
                     size="sm"
+                    variant="secondary"
                     className="ml-auto"
                     onClick={() => analizar.mutate()}
                     disabled={nadaQueAnalizar || analizar.isPending}
@@ -305,7 +344,7 @@ export function DialogoCrearTarea({
               </div>
             )}
 
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div className="space-y-1.5">
                 <Label htmlFor="tarea-titulo">
                   {modo === "partido" ? "Qué partido / evento" : "Qué hay que hacer"}
@@ -323,7 +362,7 @@ export function DialogoCrearTarea({
               </div>
 
               {modo === "partido" ? (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="tarea-fecha">Día</Label>
                     <Input
@@ -342,16 +381,20 @@ export function DialogoCrearTarea({
                       onChange={(e) => setHora(e.target.value)}
                     />
                   </div>
+                  {campoPrioridad}
                 </div>
               ) : (
-                <div className="space-y-1.5">
-                  <Label htmlFor="tarea-fecha">Para cuándo (opcional)</Label>
-                  <Input
-                    id="tarea-fecha"
-                    type="date"
-                    value={fecha}
-                    onChange={(e) => setFecha(e.target.value)}
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="tarea-fecha">Para cuándo (opcional)</Label>
+                    <Input
+                      id="tarea-fecha"
+                      type="date"
+                      value={fecha}
+                      onChange={(e) => setFecha(e.target.value)}
+                    />
+                  </div>
+                  {campoPrioridad}
                 </div>
               )}
 
@@ -372,48 +415,18 @@ export function DialogoCrearTarea({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Prioridad</Label>
-                  <Select value={prioridad} onValueChange={setPrioridad}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {prioridades.map((p) => (
-                        <SelectItem key={p} value={p}>
-                          {p.charAt(0).toUpperCase() + p.slice(1)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {modo === "encargo" && (
-                  <div className="space-y-1.5">
-                    <Label>Responsable</Label>
-                    <Select value={responsable} onValueChange={setResponsable}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={SIN_RESPONSABLE}>Por coger</SelectItem>
-                        {usuarios.map((u) => (
-                          <SelectItem key={u.id} value={u.id}>
-                            {u.usuario}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </div>
+              {modo === "encargo" && campoResponsable}
             </div>
 
             <DialogFooter>
               <Button variant="outline" onClick={cerrar} disabled={crear.isPending}>
                 Cancelar
               </Button>
-              <Button onClick={() => crear.mutate()} disabled={crear.isPending || incompletoManual}>
+              <Button
+                variant="secondary"
+                onClick={() => crear.mutate()}
+                disabled={crear.isPending || incompletoManual}
+              >
                 {crear.isPending
                   ? "Añadiendo…"
                   : modo === "partido"
