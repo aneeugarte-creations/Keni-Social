@@ -72,12 +72,13 @@ ENV_MCP_USUARIO = "KENI_MCP_USUARIO"
 # Listener de CONTROL del proceso `daemons` (gestion de la cuenta de Claude: estado/uso/
 # login/logout, ver `cuenta_claude` + `control`). Solo el `daemons` (imagen del worker, con
 # `claude`) lo levanta; el `back` lo alcanza por la red interna y lo protege con el bearer.
-# Si `KENI_CONTROL_BEARER` no esta, el listener NO se monta (apagado por defecto).
+# ACTIVO por defecto: el bearer back<->daemons se AUTO-PERSISTE en /data
+# (`cuenta_claude.bearer_efectivo`). `KENI_CONTROL_BEARER` es un OVERRIDE opcional (avanzado).
 ENV_CONTROL_BEARER = "KENI_CONTROL_BEARER"
 # Puerto del listener de control (interno, nunca por Traefik). Def 8770.
 ENV_CONTROL_PORT = "KENI_CONTROL_PORT"
 # URL base con que el `back` alcanza el control del `daemons` (red interna docker). Def
-# `http://daemons:8770`. Vacia => el back asume que no hay control (degrada la seccion).
+# `http://daemons:8770`.
 ENV_CONTROL_URL = "KENI_CONTROL_URL"
 
 # Observabilidad.

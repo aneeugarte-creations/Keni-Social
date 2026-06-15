@@ -4,8 +4,8 @@ El `back` NO ejecuta `claude` (solo encola); quien gestiona la cuenta es el proc
 `daemons` por su listener de CONTROL (`control.py` + `cuenta_claude.py`). Estas rutas son la
 cara ADMIN de ese control: validan la sesion admin (la info y, sobre todo, el CAMBIO de
 cuenta son sensibles) y REENVIAN por la red interna a `KENI_CONTROL_URL` con el bearer
-`KENI_CONTROL_BEARER`. Sin control configurado (sin bearer), degradan con un payload claro
-(`disponible:false`) en vez de 500: la seccion avisa "no configurado".
+efectivo (auto-persistido en /data; sin configurar nada). ACTIVO por defecto: si el control no
+responde (daemons caido), `disponible:false` con el error, en vez de 500.
 
 Endpoints (bajo `/api/sistema/cuenta`, CONTRATO con el frontend):
   - GET  /api/sistema/cuenta              -> {disponible, auth:{...}, uso:{...}}
@@ -21,16 +21,12 @@ from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from ... import config
+from ... import config, cuenta_claude
 from ._comun import _es_admin, _logger, _rechazo_no_admin
 
 # Timeout del proxy al control. Generoso: `login/iniciar` espera a que `claude` emita la URL
 # (roundtrip OAuth) y `login/codigo` a que cierre el login.
 _TIMEOUT_PROXY = 90.0
-
-
-def _control_configurado() -> bool:
-    return bool(config.control_bearer())
 
 
 def _llamar_control(metodo: str, ruta: str, json: dict | None = None) -> tuple[int, dict]:
@@ -41,7 +37,7 @@ def _llamar_control(metodo: str, ruta: str, json: dict | None = None) -> tuple[i
     import httpx
 
     base = config.control_url().rstrip("/")
-    bearer = config.control_bearer() or ""
+    bearer = cuenta_claude.bearer_efectivo()
     url = f"{base}{ruta}"
     cabeceras = {"Authorization": f"Bearer {bearer}"}
     try:
@@ -61,14 +57,9 @@ def _llamar_control(metodo: str, ruta: str, json: dict | None = None) -> tuple[i
 
 
 async def _proxy(request: Request, metodo: str, ruta: str, *, leer_cuerpo: bool) -> Response:
-    """Patron comun: admin-gated + control configurado + reenvio al control."""
+    """Patron comun: admin-gated + reenvio al control del daemons."""
     if not _es_admin(request):
         return _rechazo_no_admin()
-    if not _control_configurado():
-        return JSONResponse(
-            {"disponible": False, "error": "gestion de cuenta no configurada en este servidor"},
-            status_code=200,
-        )
     cuerpo: dict | None = None
     if leer_cuerpo:
         try:
@@ -84,8 +75,6 @@ async def cuenta(request: Request) -> Response:
     """GET /api/sistema/cuenta: estado de auth + medidor de uso (admin)."""
     if not _es_admin(request):
         return _rechazo_no_admin()
-    if not _control_configurado():
-        return JSONResponse({"disponible": False})
     status, payload = await run_in_threadpool(_llamar_control, "GET", "/control/cuenta/estado")
     payload["disponible"] = status == 200
     return JSONResponse(payload, status_code=200 if status == 200 else status)

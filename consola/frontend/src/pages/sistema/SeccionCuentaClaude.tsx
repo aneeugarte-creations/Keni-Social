@@ -350,9 +350,9 @@ export function SeccionCuentaClaude() {
       </CardHeader>
       <CardContent className="space-y-4 p-4 pt-0">
         {!data.disponible ? (
-          <p className="text-sm text-muted-foreground">
-            La gestión de cuenta no está configurada en este servidor (falta el control del
-            proceso de generación).
+          <p className="text-sm text-amber-600 dark:text-amber-400">
+            No se pudo contactar el servicio de generación (daemons).{" "}
+            {data.error ?? "Reintenta en unos segundos."}
           </p>
         ) : (
           <>

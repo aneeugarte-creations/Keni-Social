@@ -75,18 +75,16 @@ Esto **dockeriza la arquitectura objetivo**, pero el código aún no la consume 
 El panel **Sistema** (admin) trae una sección **Cuenta de Claude del servidor**: ve el estado
 de auth y el medidor de uso (`/usage`), y permite **cambiar de cuenta** (login: URL → pegar
 código) y cerrar sesión, **sin SSH**. Lo sirve el `daemons` (tiene `claude`; instancia única)
-por un listener de control interno protegido con `KENI_CONTROL_BEARER`; el `back` lo proxea
-(admin-gated). Sin ese bearer la sección queda "no configurada" (apagado por defecto).
+por un listener de control interno; el `back` lo proxea (admin-gated). Está **ACTIVO por
+defecto**: el bearer interno back↔daemons se auto-persiste en `/data`, sin configurar nada.
 
 Las credenciales viven en el volumen compartido `/data/claude-cfg`
 (`CLAUDE_CONFIG_DIR`), así que un login aplica **en caliente** a `worker`+`daemons` sin
 reiniciar. NO hay token por entorno: la cuenta se fija únicamente por login.
 
-**Activar + fijar la cuenta:**
-1. `KENI_CONTROL_BEARER=$(openssl rand -base64 24)` en `deploy/.env` y `bash deploy.sh`.
-2. En el panel (Sistema → Cuenta de Claude) → **Cambiar cuenta**: abre la URL, inicia sesión
-   y pega el código. Las credenciales se escriben en `/data/claude-cfg`; la generación y el
-   medidor `/usage` quedan operativos al instante.
+**Fijar la cuenta (única acción):** en el panel (Sistema → Cuenta de Claude) → **Cambiar
+cuenta**: abre la URL, inicia sesión y pega el código. Las credenciales se escriben en
+`/data/claude-cfg`; la generación y el medidor `/usage` quedan operativos al instante.
 
 > `claude auth logout` desde el panel deja al servidor SIN cuenta hasta el siguiente login (la
 > generación para): úsalo solo para cambiar de cuenta.

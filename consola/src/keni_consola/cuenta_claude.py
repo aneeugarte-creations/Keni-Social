@@ -46,6 +46,65 @@ _log = logging.getLogger("keni_consola.cuenta_claude")
 # Binario del CLI (mismo nombre que usa el runner de generacion). PATH del contenedor.
 _CLAUDE = "claude"
 
+# Nombre del fichero donde se persiste el bearer del control (en el volumen COMPARTIDO /data,
+# bajo `rutas.dir_config()`): back y daemons lo leen/crean ahi, asi que comparten el secreto
+# sin que el operador configure nada. La gestion de cuenta esta ACTIVA por defecto.
+_FICHERO_BEARER = "control-bearer.secret"
+
+
+def bearer_efectivo() -> str:
+    """Bearer del listener de control. SIEMPRE devuelve uno (gestion de cuenta activa por def).
+
+    Precedencia: un `KENI_CONTROL_BEARER` explicito (override avanzado, opcional) gana; si no,
+    un bearer AUTO-PERSISTIDO en el volumen compartido `/data` que back y daemons comparten.
+    Asi la seccion funciona sin configurar nada y el secreto sigue protegiendo el listener.
+    """
+    from . import config, rutas
+
+    explicito = config.control_bearer()
+    if explicito:
+        return explicito
+    return _bearer_persistido(rutas.dir_config())
+
+
+def _bearer_persistido(dir_base) -> str:
+    """Lee (o crea atomicamente) el bearer compartido en `<dir_base>/control-bearer.secret`.
+
+    Creacion ATOMICA por `os.link` (falla si el destino existe): si dos procesos arrancan a la
+    vez, uno gana y el otro lee el token del ganador. 0600. Si `/data` no fuese escribible,
+    cae a un token efimero del proceso (degrada: back y daemons no se entenderian, pero no
+    casca; en hosted `/data` SIEMPRE es escribible y compartido)."""
+    import secrets
+    from pathlib import Path
+
+    dir_base = Path(dir_base)
+    ruta = dir_base / _FICHERO_BEARER
+    if actual := _leer_bearer(ruta):
+        return actual
+    token = secrets.token_urlsafe(32)
+    try:
+        dir_base.mkdir(parents=True, exist_ok=True)
+        tmp = dir_base / f".{_FICHERO_BEARER}.{os.getpid()}.tmp"
+        tmp.write_text(token, encoding="utf-8")
+        os.chmod(tmp, 0o600)
+        try:
+            os.link(tmp, ruta)  # atomico: falla si ya existe (otro proceso gano la carrera)
+        except FileExistsError:
+            pass
+        finally:
+            tmp.unlink(missing_ok=True)
+    except OSError:
+        _log.warning("no se pudo persistir el bearer de control en %s; uso uno efimero.", ruta)
+        return token
+    return _leer_bearer(ruta) or token
+
+
+def _leer_bearer(ruta) -> str | None:
+    try:
+        return ruta.read_text(encoding="utf-8").strip() or None
+    except OSError:
+        return None
+
 # Wall-timeouts (s) de las operaciones no interactivas: cortas, el CLI responde rapido.
 _TIMEOUT_ESTADO = 30
 _TIMEOUT_USO = 120  # /usage hace un roundtrip a Anthropic; margen amplio.

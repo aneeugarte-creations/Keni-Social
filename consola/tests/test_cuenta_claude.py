@@ -67,3 +67,24 @@ def test_argv_login_variantes():
     assert cc._argv_login(console=True, email="a@b.com", sso=True) == [
         "claude", "auth", "login", "--console", "--email", "a@b.com", "--sso",
     ]
+
+
+def test_bearer_persistido_estable_y_compartido(tmp_path):
+    # Crea el bearer la primera vez y lo REUSA (mismo valor) en llamadas posteriores: back y
+    # daemons, apuntando al mismo /data, comparten el secreto sin configurar nada.
+    b1 = cc._bearer_persistido(tmp_path)
+    b2 = cc._bearer_persistido(tmp_path)
+    assert b1 and b1 == b2
+    fichero = tmp_path / cc._FICHERO_BEARER
+    assert fichero.read_text().strip() == b1
+    # 0600: solo el dueño.
+    assert (fichero.stat().st_mode & 0o777) == 0o600
+
+
+def test_bearer_efectivo_respeta_override(monkeypatch, tmp_path):
+    # Un KENI_CONTROL_BEARER explícito GANA sobre el auto-persistido.
+    monkeypatch.setattr(cc, "_bearer_persistido", lambda _dir: "auto")
+    monkeypatch.setenv("KENI_CONTROL_BEARER", "explicito")
+    assert cc.bearer_efectivo() == "explicito"
+    monkeypatch.delenv("KENI_CONTROL_BEARER", raising=False)
+    assert cc.bearer_efectivo() == "auto"

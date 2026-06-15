@@ -12,8 +12,9 @@ from starlette.testclient import TestClient
 from keni_consola import control
 
 
-def _cli(monkeypatch, *, bearer: str | None = "tok") -> TestClient:
-    monkeypatch.setattr(control.config, "control_bearer", lambda: bearer)
+def _cli(monkeypatch, *, bearer: str = "tok") -> TestClient:
+    # El bearer efectivo (auto-persistido) se parchea a un valor fijo para los tests.
+    monkeypatch.setattr(control.cuenta_claude, "bearer_efectivo", lambda: bearer)
     return TestClient(control.crear_app_control())
 
 

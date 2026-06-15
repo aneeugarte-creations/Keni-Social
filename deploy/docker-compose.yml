@@ -208,9 +208,8 @@ services:
       KENI_MCP_BEARER_FILE: /run/secrets/mcp_bearer
       KENI_MCP_USUARIO: ${KENI_MCP_USUARIO:-}
       # Gestion de la cuenta de Claude (panel admin -> Sistema): el back PROXEA al listener
-      # de control del daemons (quien tiene `claude`). MISMO bearer que exige el daemons +
-      # la URL interna del servicio. Sin bearer, la seccion degrada a "no configurada".
-      KENI_CONTROL_BEARER_FILE: /run/secrets/control_bearer
+      # de control del daemons (quien tiene `claude`) por la red interna. ACTIVO por defecto:
+      # el bearer que comparten back y daemons se auto-persiste en /data (sin configurar nada).
       KENI_CONTROL_URL: http://daemons:8770
       KENI_MAX_JOBS: ${KENI_MAX_JOBS}
       # El back solo ENCOLA (#130 Fase 2): NO arranca su worker in-proceso (lo hace el
@@ -253,7 +252,6 @@ services:
       - consola_token
       - consola_admin_pass
       - mcp_bearer
-      - control_bearer
     networks:
       # `data` (internal) para alcanzar db/files; `internal`/`edge` conservan egress (NAT).
       - edge
@@ -384,9 +382,8 @@ services:
       # fija con `claude auth login` desde el panel (lo corre el daemons) y vive aquí, así que
       # worker+daemons la usan y un cambio de cuenta aplica EN CALIENTE, sin reiniciar.
       CLAUDE_CONFIG_DIR: /data/claude-cfg
-      # Bearer del listener de CONTROL (gestion de la cuenta de Claude). Sin el, el listener
-      # NO se monta. Solo el daemons (instancia unica) lo levanta; el back lo envia al proxear.
-      KENI_CONTROL_BEARER_FILE: /run/secrets/control_bearer
+      # Listener de CONTROL (gestion de la cuenta de Claude): el daemons (instancia unica) lo
+      # levanta SIEMPRE; el bearer que comparte con el back se auto-persiste en /data.
       # Store EDITABLE de ajustes compartido con back/worker (mismo volumen keni-data): los
       # daemons leen aqui los flags/tuning cambiados en caliente (store > env > defecto).
       KENI_CONSOLA_AJUSTES: /data/ajustes.toml
@@ -436,7 +433,6 @@ services:
       - s3_access_key
       - s3_secret_key
       - anthropic_api_key
-      - control_bearer
     networks:
       # `data` para alcanzar db/files; `internal` conserva egress (Metricool, noticias).
       - internal
@@ -802,10 +798,6 @@ secrets:
     file: ./secrets/consola_token
   mcp_bearer:
     file: ./secrets/mcp_bearer
-  # Bearer del listener de CONTROL del daemons (gestion de la cuenta de Claude desde el
-  # panel admin). Lo comparten daemons (lo exige) y back (lo envia al proxear).
-  control_bearer:
-    file: ./secrets/control_bearer
   garage_rpc_secret:
     file: ./secrets/garage_rpc_secret
   garage_admin_token:

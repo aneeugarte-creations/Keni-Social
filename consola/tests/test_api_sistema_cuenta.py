@@ -52,21 +52,27 @@ def test_token_mantenimiento_no_es_admin_403(entorno):
     assert c.post("/api/sistema/cuenta/logout", headers=_ORIGIN).status_code == 403
 
 
-# --- Degradacion: control NO configurado ----------------------------------- #
+# --- Degradacion: control NO contactable (daemons caido) -------------------- #
 
 
-def test_admin_cuenta_no_configurada(entorno, monkeypatch):
-    monkeypatch.setattr(api_sistema.cuenta.config, "control_bearer", lambda: None)
+def test_admin_cuenta_control_caido(entorno, monkeypatch):
+    # ACTIVO por defecto: si el control no responde, disponible=false con el error (no 500).
+    monkeypatch.setattr(
+        api_sistema.cuenta,
+        "_llamar_control",
+        lambda metodo, ruta, json=None: (502, {"error": "no se pudo contactar el control del servidor"}),
+    )
     r = _cli_como("admin").get("/api/sistema/cuenta")
-    assert r.status_code == 200
-    assert r.json() == {"disponible": False}
+    assert r.status_code == 502
+    cuerpo = r.json()
+    assert cuerpo["disponible"] is False
+    assert "error" in cuerpo
 
 
 # --- Reenvio al control (parcheado) ---------------------------------------- #
 
 
 def test_admin_cuenta_proxia(entorno, monkeypatch):
-    monkeypatch.setattr(api_sistema.cuenta.config, "control_bearer", lambda: "tok")
     monkeypatch.setattr(
         api_sistema.cuenta,
         "_llamar_control",
@@ -80,7 +86,6 @@ def test_admin_cuenta_proxia(entorno, monkeypatch):
 
 
 def test_admin_login_iniciar_proxia(entorno, monkeypatch):
-    monkeypatch.setattr(api_sistema.cuenta.config, "control_bearer", lambda: "tok")
     capturado: dict = {}
 
     def _fake(metodo, ruta, json=None):

@@ -39,10 +39,12 @@ El CLI sí ofrece lo necesario (verificado): `claude auth status --json`
 2. **Listener de control en `daemons`.** El cambio de cuenta ejecuta `claude`; el `back` no
    lo tiene. El `daemons` (imagen del worker, con `claude`; **instancia única**, no escala
    como el worker) levanta un Starlette mínimo (`control.py`) en la red interna, protegido por
-   `KENI_CONTROL_BEARER`. El login interactivo (URL → pegar código) mantiene un proceso
+   este bearer. El login interactivo (URL → pegar código) mantiene un proceso
    `claude auth login` vivo en un **PTY** entre dos peticiones (`cuenta_claude.py`).
-3. **El `back` proxea, admin-gated.** `/api/sistema/cuenta/*` exige sesión admin y reenvía al
-   control con el bearer. Sin bearer configurado, la sección degrada a "no configurada".
+3. **El `back` proxea, admin-gated. ACTIVO por defecto.** `/api/sistema/cuenta/*` exige sesión
+   admin y reenvía al control con el bearer. El bearer back↔daemons se AUTO-PERSISTE en `/data`
+   (fichero compartido `control-bearer.secret`, creado atómicamente vía `os.link`): la sección
+   funciona sin configurar nada. `KENI_CONTROL_BEARER` queda como override opcional.
 4. **`/usage` como medidor.** Se parsea la salida de `claude -p /usage` a campos
    estructurados (sesión / semana / Sonnet, con sus resets). La identidad de la cuenta
    (email/org) NO la expone el CLI por ningún medio headless: no se muestra.
@@ -59,5 +61,6 @@ El CLI sí ofrece lo necesario (verificado): `claude auth status --json`
 - **Riesgo no cubierto por CI:** el handshake del PTY de `claude auth login` (parseo de URL +
   envío de código) se validó en un contenedor local con una cuenta de prueba; no es
   ejercitable en CI sin una cuenta real.
-- **Apagado por defecto:** sin `KENI_CONTROL_BEARER`, el listener no se monta y la sección
-  degrada a "no configurada".
+- **Activo por defecto, zero-config:** el bearer back↔daemons se auto-persiste en `/data`; no
+  hay opt-in. La única acción del operador es fijar la cuenta con un login desde el panel. Si
+  el `daemons` está caído, la sección muestra el error de contacto (no "no configurada").

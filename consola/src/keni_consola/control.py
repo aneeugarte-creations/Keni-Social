@@ -39,10 +39,11 @@ _log = logging.getLogger("keni_consola.control")
 
 
 def _autorizado(request: Request) -> bool:
-    """True si la peticion trae `Authorization: Bearer <KENI_CONTROL_BEARER>` (tiempo cte.)."""
-    esperado = config.control_bearer()
-    if not esperado:
-        return False
+    """True si la peticion trae `Authorization: Bearer <bearer>` valido (tiempo constante).
+
+    El bearer es el efectivo (`cuenta_claude.bearer_efectivo`): override explicito o el
+    auto-persistido compartido en /data. Siempre hay uno (gestion de cuenta activa por def)."""
+    esperado = cuenta_claude.bearer_efectivo()
     cabecera = request.headers.get("authorization", "")
     if not cabecera.lower().startswith("bearer "):
         return False
@@ -132,16 +133,12 @@ def crear_app_control() -> Starlette:
 
 
 def iniciar_control() -> threading.Thread | None:
-    """Arranca el listener de control en un hilo daemon, SI hay bearer configurado.
+    """Arranca el listener de control en un hilo daemon. ACTIVO por defecto.
 
-    Sin `KENI_CONTROL_BEARER` no se monta (apagado por defecto): devuelve None. Escucha en
-    `0.0.0.0:KENI_CONTROL_PORT` (red interna docker; nunca por Traefik). uvicorn NO instala
+    Escucha en `0.0.0.0:KENI_CONTROL_PORT` (red interna docker; nunca por Traefik), protegido
+    por el bearer efectivo (auto-persistido en /data; sin configurar nada). uvicorn NO instala
     manejadores de senal fuera del hilo principal, asi que corre limpio en un hilo daemon.
     """
-    if not config.control_bearer():
-        _log.info("listener de control: sin KENI_CONTROL_BEARER -> no se monta (apagado).")
-        return None
-
     import uvicorn
 
     puerto = config.control_puerto()

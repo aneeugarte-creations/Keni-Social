@@ -119,12 +119,12 @@ def mcp_bearer() -> str | None:
 
 
 def control_bearer() -> str | None:
-    """Bearer del listener de CONTROL del `daemons` (`KENI_CONTROL_BEARER`; None si no esta).
+    """Override OPCIONAL del bearer del control (`KENI_CONTROL_BEARER`; None si no esta).
 
-    None/vacio => el listener NO se monta (apagado por defecto) y el `back` degrada la
-    seccion de cuenta. Cuando esta, el `daemons` exige `Authorization: Bearer <este valor>`
-    y el `back` lo envia al proxear (comparacion en tiempo constante). Soporta el secreto por
-    fichero `KENI_CONTROL_BEARER_FILE` (via `_crudo`)."""
+    La gestion de cuenta esta ACTIVA por defecto: si esto es None, el bearer efectivo lo
+    resuelve `cuenta_claude.bearer_efectivo` con un valor AUTO-PERSISTIDO en /data (compartido
+    por back y daemons). Esto solo sirve para fijar/rotar el bearer a mano. Soporta el secreto
+    por fichero `KENI_CONTROL_BEARER_FILE` (via `_crudo`)."""
     return _crudo(ENV_CONTROL_BEARER) or None
 
 
