@@ -42,12 +42,14 @@ from ._repos_comun import (  # noqa: F401
     Any,
     Iterator,
     Path,
+    PiezaPublicadaInmutable,
     annotations,
     arrancar_persistencia,
     conectar,
     db,
     ficheros,
     raiz_datos,
+    verificar_publicacion_inmutable,
 )
 from .repos_colaboracion import (  # noqa: F401
     actualizar_comentario,

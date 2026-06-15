@@ -7,6 +7,7 @@ from ._repos_comun import (
     Any,
     Iterator,
     db,
+    verificar_publicacion_inmutable,
 )
 
 # --------------------------------------------------------------------------- #
@@ -116,6 +117,10 @@ def actualizar_publicacion(
 ) -> dict[str, Any] | None:
     # `estado_esperado` (opcional): CAS sobre el estado actual; si otro flujo movio la pieza
     # entre el snapshot del caller y esta escritura, devuelve None sin tocar nada.
+    # INMUTABILIDAD: una pieza ya `publicado` es read-only en lo editorial/visual (lo que salió
+    # no puede diferir de lo mostrado). La transición A `publicado` no se bloquea: en ese momento
+    # la pieza aún NO está publicada, así que el guard la deja pasar.
+    verificar_publicacion_inmutable(db.obtener_publicacion(publicacion_id), campos)
     return db.actualizar_publicacion(
         publicacion_id, campos, estado_esperado=estado_esperado
     )

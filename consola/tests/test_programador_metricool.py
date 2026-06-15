@@ -449,6 +449,51 @@ def test_real_x_sin_media_publica_solo_texto(entorno, monkeypatch):
     assert cuerpo_enviado["text"] == "Tweet directo"
 
 
+def test_boton_manual_publica_ahora_y_sella_hora_real(entorno, monkeypatch):
+    """El botón manual sobre una pieza programada AL FUTURO publica YA, no la agenda.
+
+    Regresión: una pieza con `fecha_programada` futura se enviaba al scheduler con esa hora
+    + autoPublish y la consola la marcaba `publicado` antes de salir -> "publicada en el
+    futuro". Ahora el botón fuerza `publicar_en=ahora` (Metricool publica ya) y persiste
+    `fecha_programada=ahora` (la hora real), de modo que nunca queda una publicada al futuro.
+    """
+    monkeypatch.setenv("KENI_PUBLICAR_REAL", "1")
+    monkeypatch.delenv("KENI_CONSOLA_URL_PUBLICA", raising=False)
+
+    # Pieza programada DOS HORAS en el futuro (red X: no necesita media ni URL pública).
+    pub = repos.crear_publicacion(
+        "unotv", "x", titulo="Test", contenido="Publicar ya", estado="programado",
+    )
+    futuro = "2026-06-15T21:45"  # UTC naive
+    pub = repos.actualizar_publicacion(pub["id"], {"fecha_programada": futuro})
+
+    ahora = datetime(2026, 6, 15, 19, 15, tzinfo=timezone.utc)  # 13:15 CDMX
+    cuerpo_enviado: dict | None = None
+
+    def capturar(request, route):  # noqa: ANN001
+        import json
+        nonlocal cuerpo_enviado
+        cuerpo_enviado = json.loads(request.content)
+        return Response(200, json=_RESP_OK)
+
+    with patch(
+        "keni_consola.programador._creds_metricool", return_value=_CREDS_PRUEBA,
+    ), respx.mock() as mc:
+        mc.post(_METRICOOL_URL).mock(side_effect=capturar)
+        res = programar_pieza_metricool(pub, ahora=ahora)
+
+    assert res["ok"] is True
+    assert res["dry_run"] is False
+    # Lo que se mandó a Metricool publica AHORA (hora de pared CDMX de `ahora`), no a las 21:45.
+    assert cuerpo_enviado is not None
+    assert cuerpo_enviado["publicationDate"]["dateTime"] == "2026-06-15T13:15:00"
+    # La fila ya no apunta al futuro: estado publicado y `fecha_programada` = hora real.
+    actualizada = repos.obtener_publicacion(pub["id"])
+    assert actualizada["estado"] == "publicado"
+    assert actualizada["fecha_programada"] == "2026-06-15T19:15:00"
+    assert actualizada["id_post_metricool"] == "mc-post-id-001"
+
+
 # --------------------------------------------------------------------------- #
 # Test 3: DEGRADACION honesta si la marca no tiene credenciales               #
 # --------------------------------------------------------------------------- #

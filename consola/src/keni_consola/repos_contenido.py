@@ -4,6 +4,7 @@ from __future__ import annotations
 from ._repos_comun import (
     Any,
     db,
+    verificar_publicacion_inmutable,
 )
 
 # --------------------------------------------------------------------------- #
@@ -277,6 +278,9 @@ def estado_pieza_por_contenido(contenido_ids: list[str]) -> dict[str, str]:
 def actualizar_contenido_plataforma(
     plataforma_id: str, campos: dict[str, Any], *, version_esperada: int | None = None
 ) -> dict[str, Any] | None:
+    # INMUTABILIDAD: una pieza ya `publicado` no se edita (copy/imagen/foto/plantilla…); lo
+    # que salió a redes no puede diferir de lo mostrado. Escrituras operativas siguen pasando.
+    verificar_publicacion_inmutable(db.obtener_contenido_plataforma(plataforma_id), campos)
     return db.actualizar_contenido_plataforma(
         plataforma_id, campos, version_esperada=version_esperada
     )

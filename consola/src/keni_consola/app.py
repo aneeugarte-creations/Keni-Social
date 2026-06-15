@@ -35,6 +35,7 @@ from starlette.responses import FileResponse, HTMLResponse, JSONResponse, PlainT
 from starlette.routing import Mount, Route
 
 from . import api, config, db, proyectos, seguridad
+from ._repos_comun import PiezaPublicadaInmutable
 from .dominio.runner import ColaLlenaError
 from .observabilidad import NOMBRE_LOGGER, RegistroPeticiones, manejar_excepcion
 
@@ -178,6 +179,18 @@ async def _manejar_cola_llena(request: Request, exc: ColaLlenaError) -> Response
         {"error": str(exc) or "Hay demasiadas generaciones en curso; inténtalo en unos segundos."},
         status_code=429,
         headers={"Retry-After": "5"},
+    )
+
+
+async def _manejar_pieza_inmutable(request: Request, exc: PiezaPublicadaInmutable) -> Response:
+    """Edición de una pieza ya `publicado` -> 409 JSON claro.
+
+    Manejador CENTRAL por TIPO: cualquier mutador que deje propagar `PiezaPublicadaInmutable`
+    (la lanza la fachada `repos.actualizar_publicacion`/`actualizar_contenido_plataforma`)
+    responde 409 con el detalle de qué campo se intentó cambiar."""
+    return JSONResponse(
+        {"error": str(exc) or "Una pieza ya publicada es inmutable."},
+        status_code=409,
     )
 
 
@@ -360,6 +373,7 @@ def crear_app(
         # especifico, pero lo dejamos explicito (#137: cola al tope -> 429, no 500).
         exception_handlers={
             ColaLlenaError: _manejar_cola_llena,
+            PiezaPublicadaInmutable: _manejar_pieza_inmutable,
             Exception: manejar_excepcion,
         },
     )

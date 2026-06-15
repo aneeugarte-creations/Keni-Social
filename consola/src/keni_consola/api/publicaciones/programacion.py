@@ -81,6 +81,20 @@ def calcular_hueco_para(
         and otra["marca"] == pub["marca"]
         and otra["red"] == pub["red"]
     }
+    # DEFENSA en profundidad: el índice de unicidad de slot es PARCIAL (solo `estado='programado'`),
+    # así que una pieza marcada `publicado` con fecha FUTURA libera su hueco a ojos del cálculo y
+    # otra caería en el mismo minuto (así dos historias acabaron a la misma hora). Una pieza
+    # publicada cuya fecha sigue en el futuro AÚN reserva ese hueco: lo tratamos como ocupado.
+    clave_ahora = ahora.strftime("%Y-%m-%dT%H:%M")
+    for otra in repos.listar_publicaciones(estado="publicado", desde=clave_ahora):
+        fecha = otra.get("fecha_programada") or ""
+        if (
+            otra.get("id") != pub["id"]
+            and fecha > clave_ahora
+            and otra.get("marca") == pub["marca"]
+            and otra.get("red") == pub["red"]
+        ):
+            ocupados_mr.add(fecha)
     categoria = categoria_de_pieza(pub)
     # 0) BREAKING: la última hora no espera al siguiente hueco del plan — sale YA (con un
     # margen corto), en el primer minuto libre de su (marca, red).

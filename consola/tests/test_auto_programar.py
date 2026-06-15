@@ -58,6 +58,24 @@ def test_aprobada_se_programa_en_proximo_hueco(cliente, ahora_fijo):
     assert actualizada["fecha_programada"] == "2026-05-20T15:00"
 
 
+def test_no_reusa_hueco_de_una_publicada_con_fecha_futura(cliente, ahora_fijo):
+    """Una pieza `publicado` cuya fecha sigue en el FUTURO aún reserva su hueco: una nueva
+    aprobada NO debe caer en el mismo minuto. (El índice de unicidad es parcial —solo
+    'programado'—, así que el cálculo de hueco lo cubre explícitamente.)"""
+    cliente.post("/api/franjas", json={"dia_semana": 2, "hora": "15:00"})  # mié 15:00
+    cliente.post("/api/franjas", json={"dia_semana": 2, "hora": "16:00"})  # mié 16:00
+    # Publicada (misma marca/red) ocupando el slot de las 15:00, con fecha aún futura.
+    repos.crear_publicacion(
+        "unotv", "x", titulo="Pub futura", contenido="C",
+        estado="publicado", fecha_programada="2026-05-20T15:00",
+    )
+    pid = _crear_aprobada(cliente)
+    actualizada = auto_programar.programar_si_aprobada(pid)
+    assert actualizada is not None
+    # 15:00 está ocupado por la publicada-futura -> cae en el siguiente hueco (16:00).
+    assert actualizada["fecha_programada"] == "2026-05-20T16:00"
+
+
 def _vincular_cluster(pid: str, *, categoria: str = "mx", breaking: int = 0) -> None:
     """Vincula la pieza a una HISTORIA del pool (cluster→contenido), como al promoverla."""
     plat = repos.obtener_contenido_plataforma(pid)

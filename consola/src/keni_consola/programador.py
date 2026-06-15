@@ -509,6 +509,14 @@ def programar_pieza_metricool(
             "motivo": "No se pudo construir el borrador (¿sin contenido o red no soportada?).",
         }
 
+    # El botón manual es "publicar AHORA", no "agendar": fuerza la salida inmediata
+    # ignorando la `fecha_programada` (que `_borrador_de_publicacion` había copiado a
+    # `publicar_en`). Sin esto, una pieza programada al futuro se enviaba al scheduler de
+    # Metricool con su hora futura + autoPublish y la consola la marcaba `publicado` antes
+    # de que saliera de verdad: aparecía "publicada en el futuro". Con `publicar_en=ahora`,
+    # Metricool publica ya y persistimos abajo `fecha_programada=ahora` (la hora real).
+    borrador = borrador.model_copy(update={"publicar_en": ahora})
+
     try:
         from keni_metricas.publicacion.metricool import AdaptadorPublicacionMetricool
     except ImportError:
@@ -533,6 +541,9 @@ def programar_pieza_metricool(
             {
                 "preparado_en": iso_utc(ahora),
                 "estado": "publicado",
+                # Hora real de publicación (ver nota al construir el borrador): salió ahora,
+                # no a su `fecha_programada` original; reflejarlo para no mostrar futuro.
+                "fecha_programada": iso_utc(ahora),
                 "id_post_metricool": ID_POST_INCIERTO,
             },
         )
@@ -568,6 +579,9 @@ def programar_pieza_metricool(
             # estamparia "+00:00" y romperia el orden lexicografico del TEXT.
             "preparado_en": iso_utc(ahora),
             "estado": "publicado",
+            # Hora real de publicación (ver nota al construir el borrador): el botón publica
+            # ahora, así que `fecha_programada` deja de ser la hora futura agendada.
+            "fecha_programada": iso_utc(ahora),
             "id_post_metricool": id_post,
         },
     )
