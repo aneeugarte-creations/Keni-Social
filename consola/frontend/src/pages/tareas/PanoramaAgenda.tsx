@@ -843,7 +843,7 @@ export function PanoramaAgenda({
                 <div
                   className={cn(
                     "h-full rounded-full transition-all",
-                    hoyCompleto ? "bg-emerald-500" : "bg-sky-500",
+                    hoyCompleto ? "bg-emerald-500" : "bg-keni-500",
                   )}
                   style={{ width: `${pctHoy}%` }}
                 />
