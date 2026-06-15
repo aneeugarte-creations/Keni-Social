@@ -491,6 +491,24 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect(vivo.compareDocumentPosition(temprano) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("ORDEN: el cajón «Hoy» va ANTES que un día pasado en el Panorama", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-15T12:00:00Z")); // hoy = 2026-06-15 (CDMX)
+    const hoy = hoyCDMX();
+    renderPanorama({
+      eventos: [
+        evento({ id: "ev-pasado", titulo: "Partido pasado", fecha: "2026-06-12", hora: "13:00" }),
+        evento({ id: "ev-hoy", titulo: "Partido de hoy", fecha: hoy, hora: "10:00" }),
+      ],
+    });
+    const elHoy = screen.getByText("Partido de hoy");
+    const elPasado = screen.getByText("Partido pasado");
+    // «Hoy» primero: el de hoy va ANTES en el DOM que el del día pasado, aunque sea más tarde por fecha.
+    expect(
+      elHoy.compareDocumentPosition(elPasado) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("AÑADIR-RÁPIDO + ⚡ Urgente: crea el ítem con prioridad «alta»", async () => {
     const crear = vi.spyOn(apiMod.api, "crearEventoRota").mockResolvedValue({} as never);
     renderTareas([]);

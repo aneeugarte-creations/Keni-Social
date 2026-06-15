@@ -199,6 +199,25 @@ function esUrgenteAhora(i: Item, hoy: string): boolean {
 }
 
 /**
+ * Orden de los CAJONES de día: HOY siempre primero, luego los días futuros (más próximo
+ * antes), después los pasados (más reciente antes) y, al final, «Sin fecha». Devuelve la
+ * clave de orden de un día («AAAA-MM-DD» o «9999-99-99»).
+ */
+function ordenDiaAgenda(dia: string, hoy: string): [number, string] {
+  if (!dia || dia === "9999-99-99") return [3, dia]; // sin fecha → al final
+  if (dia === hoy) return [0, dia]; // hoy → primero
+  if (dia > hoy) return [1, dia]; // futuro → asc (la clave compara ascendente)
+  return [2, invertirIso(dia)]; // pasado → desc (más reciente primero)
+}
+
+/** Clave que invierte el orden de una fecha ISO para ordenarla DESCENDENTE como string. */
+function invertirIso(iso: string): string {
+  let out = "";
+  for (const ch of iso) out += /[0-9]/.test(ch) ? String(9 - Number(ch)) : ch;
+  return out;
+}
+
+/**
  * Escalar / des-escalar un ítem del tablero: ⚡ que mueve su prioridad alta↔media reusando la API
  * que toque (sin backend nuevo). Evento por cubrir → PATCH del evento; cobertura → PATCH del EVENTO
  * subyacente (las tareas de cobertura no llevan prioridad propia); tarea/encargo → PATCH del
@@ -545,7 +564,11 @@ export function PanoramaAgenda({
     lista.push(it);
     porDia.set(it.orden, lista);
   }
-  const diasOrdenados = [...porDia.keys()].sort();
+  const diasOrdenados = [...porDia.keys()].sort((a, b) => {
+    const [ra, ka] = ordenDiaAgenda(a, hoy);
+    const [rb, kb] = ordenDiaAgenda(b, hoy);
+    return ra - rb || ka.localeCompare(kb);
+  });
   for (const d of diasOrdenados) {
     const lista = porDia.get(d)!;
     if (d === hoy) {
