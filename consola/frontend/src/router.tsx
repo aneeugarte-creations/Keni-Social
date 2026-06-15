@@ -28,6 +28,8 @@ const ContenidosHub = lazy(() => import("@/pages/ContenidosHub"));
 
 const Metricas = lazy(() => import("@/pages/Metricas"));
 const Comercial = lazy(() => import("@/pages/Comercial"));
+// Marcas: dashboard en vivo de todas las marcas × redes × cuentas.
+const Marcas = lazy(() => import("@/pages/Marcas"));
 
 const Rota = lazy(() => import("@/pages/rota"));
 // Feed de ideación (Flujo D, Fase 4): la "red social interna" dentro del AppShell.
@@ -365,6 +367,10 @@ export const router = createBrowserRouter([
       // URL directa). Estuvo consolidada como pestaña «Salud» del Monitor; el Monitor
       // redirige aquí los deep-links viejos (?tab=salud).
       { path: "sistema", element: <Sistema /> },
+      // Marcas: dashboard en vivo de marcas × redes × cuentas. La entrada de nav del
+      // sidebar la sirve el catálogo del backend (GET /api/catalogo, ADR 0005); aquí
+      // solo se registra la ruta del SPA.
+      { path: "marcas", element: <Marcas /> },
 
       // ===== Redirecciones de rutas legacy =====
       // Rutas planas anteriores → su nuevo path con prefijo de bloque (preservando

@@ -438,3 +438,157 @@ def test_construir_fuente_carga_config_si_no_se_pasa(monkeypatch, tmp_path):
     monkeypatch.delenv("KENI_METRICAS_MARCAS", raising=False)
     fuente = construir_fuente()
     assert isinstance(fuente, FuenteMuestra)
+
+
+# --------------------------------------------------------------------------- #
+# Postproxy: api_key GLOBAL + profile_group_id POR MARCA                       #
+# --------------------------------------------------------------------------- #
+def test_postproxy_sin_seccion_queda_vacio(monkeypatch, tmp_path):
+    """Sin `[postproxy]` el config trae una PostproxyConfig vacía, no configurada."""
+    monkeypatch.delenv("POSTPROXY_API_KEY", raising=False)
+    monkeypatch.setenv("KENI_METRICAS_CONFIG", str(tmp_path / "noexiste.toml"))
+    monkeypatch.setenv("KENI_METRICAS_FUENTE", "muestra")
+    cfg = cargar_config()
+    assert cfg.postproxy.api_key == ""
+    assert cfg.postproxy.marcas == {}
+    assert cfg.postproxy.configurada is False
+
+
+def test_postproxy_credenciales_por_toml(monkeypatch, tmp_path):
+    """api_key global + profile_group_id por marca se leen del TOML."""
+    monkeypatch.delenv("POSTPROXY_API_KEY", raising=False)
+    _escribir_config(
+        monkeypatch,
+        tmp_path,
+        'fuente = "muestra"\n'
+        "[postproxy]\n"
+        'api_key = "PP_KEY"\n'
+        "[postproxy.marcas.claro_sports]\n"
+        'profile_group_id = "42"\n'
+        "[postproxy.marcas.unotv]\n"
+        'profile_group_id = "7"\n',
+    )
+    cfg = cargar_config()
+    assert cfg.postproxy.api_key == "PP_KEY"
+    assert cfg.postproxy.marcas["claro_sports"]["profile_group_id"] == "42"
+    configuradas = cfg.postproxy.marcas_configuradas()
+    assert set(configuradas) == {"claro_sports", "unotv"}
+    assert cfg.postproxy.configurada is True
+
+
+def test_postproxy_marca_sin_grupo_no_configurada(monkeypatch, tmp_path):
+    """Una marca declarada SIN profile_group_id se conserva pero NO cuenta como configurada."""
+    monkeypatch.delenv("POSTPROXY_API_KEY", raising=False)
+    _escribir_config(
+        monkeypatch,
+        tmp_path,
+        'fuente = "muestra"\n'
+        "[postproxy]\n"
+        'api_key = "PP_KEY"\n'
+        "[postproxy.marcas.claro_sports]\n"
+        'profile_group_id = "42"\n'
+        "[postproxy.marcas.unotv]\n"  # sin grupo
+        'nombre = "UnoTV"\n',
+    )
+    cfg = cargar_config()
+    assert "unotv" in cfg.postproxy.marcas  # se conserva para el estado per-marca
+    assert set(cfg.postproxy.marcas_configuradas()) == {"claro_sports"}
+
+
+def test_postproxy_sin_api_key_ninguna_configurada(monkeypatch, tmp_path):
+    """Sin api_key global ninguna marca puede publicar (secreto compartido ausente)."""
+    monkeypatch.delenv("POSTPROXY_API_KEY", raising=False)
+    _escribir_config(
+        monkeypatch,
+        tmp_path,
+        'fuente = "muestra"\n'
+        "[postproxy.marcas.claro_sports]\n"
+        'profile_group_id = "42"\n',
+    )
+    cfg = cargar_config()
+    assert cfg.postproxy.api_key == ""
+    assert cfg.postproxy.marcas_configuradas() == {}
+    assert cfg.postproxy.configurada is False
+
+
+def test_postproxy_env_pisa_toml(monkeypatch, tmp_path):
+    """POSTPROXY_API_KEY tiene PRIORIDAD sobre el TOML (igual que Metricool)."""
+    _escribir_config(
+        monkeypatch,
+        tmp_path,
+        'fuente = "muestra"\n'
+        "[postproxy]\n"
+        'api_key = "DEL_TOML"\n'
+        "[postproxy.marcas.m]\n"
+        'profile_group_id = "1"\n',
+    )
+    monkeypatch.setenv("POSTPROXY_API_KEY", "DEL_ENV")
+    cfg = cargar_config()
+    assert cfg.postproxy.api_key == "DEL_ENV"
+
+
+# --------------------------------------------------------------------------- #
+# Postproxy: CANAL de publicación por marca (default metricool, valida)        #
+# --------------------------------------------------------------------------- #
+def test_postproxy_canal_default_metricool(monkeypatch, tmp_path):
+    """Una marca SIN `canal` declarado usa `metricool` (default, cero regresión)."""
+    monkeypatch.delenv("POSTPROXY_API_KEY", raising=False)
+    _escribir_config(
+        monkeypatch,
+        tmp_path,
+        'fuente = "muestra"\n'
+        "[postproxy]\n"
+        'api_key = "K"\n'
+        "[postproxy.marcas.claro_sports]\n"
+        'profile_group_id = "42"\n',
+    )
+    cfg = cargar_config()
+    assert cfg.postproxy.canal_marca("claro_sports") == "metricool"
+    # Una marca NO declarada también cae a metricool.
+    assert cfg.postproxy.canal_marca("inexistente") == "metricool"
+
+
+def test_postproxy_canal_postproxy_explicito(monkeypatch, tmp_path):
+    """`canal = "postproxy"` se lee tal cual."""
+    monkeypatch.delenv("POSTPROXY_API_KEY", raising=False)
+    _escribir_config(
+        monkeypatch,
+        tmp_path,
+        'fuente = "muestra"\n'
+        "[postproxy]\n"
+        'api_key = "K"\n'
+        "[postproxy.marcas.claro_sports]\n"
+        'profile_group_id = "42"\n'
+        'canal = "postproxy"\n',
+    )
+    cfg = cargar_config()
+    assert cfg.postproxy.canal_marca("claro_sports") == "postproxy"
+
+
+def test_postproxy_canal_invalido_cae_a_metricool(monkeypatch, tmp_path):
+    """Un `canal` desconocido cae a `metricool` (no rompe, no inventa un canal raro)."""
+    monkeypatch.delenv("POSTPROXY_API_KEY", raising=False)
+    _escribir_config(
+        monkeypatch,
+        tmp_path,
+        'fuente = "muestra"\n'
+        "[postproxy]\n"
+        'api_key = "K"\n'
+        "[postproxy.marcas.claro_sports]\n"
+        'profile_group_id = "42"\n'
+        'canal = "buffer"\n',
+    )
+    cfg = cargar_config()
+    assert cfg.postproxy.canal_marca("claro_sports") == "metricool"
+
+
+def test_normalizar_canal_funcion_pura():
+    """`normalizar_canal`: case-insensitive, default metricool ante basura/None."""
+    from keni_metricas.config import normalizar_canal
+
+    assert normalizar_canal("postproxy") == "postproxy"
+    assert normalizar_canal("  Postproxy ") == "postproxy"
+    assert normalizar_canal("metricool") == "metricool"
+    assert normalizar_canal("") == "metricool"
+    assert normalizar_canal(None) == "metricool"
+    assert normalizar_canal("loquesea") == "metricool"

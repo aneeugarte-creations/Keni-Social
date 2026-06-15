@@ -155,6 +155,97 @@ class MetricoolConfig:
         return bool(self.marcas_configuradas())
 
 
+# Canales de publicación por marca. Metricool es el DEFAULT (cero cambio de
+# comportamiento histórico); Postproxy es el canal alternativo opt-in por marca.
+CANAL_METRICOOL: str = "metricool"
+CANAL_POSTPROXY: str = "postproxy"
+CANALES_PUBLICACION: frozenset[str] = frozenset({CANAL_METRICOOL, CANAL_POSTPROXY})
+CANAL_DEFECTO: str = CANAL_METRICOOL
+
+
+def normalizar_canal(valor: object) -> str:
+    """Canal válido a partir de un valor crudo: default `metricool` ante cualquier otro.
+
+    Fuente ÚNICA de la validación del canal: un valor desconocido (o vacío, o no-str) cae
+    a `metricool` — el default que NO cambia el comportamiento histórico.
+    """
+    canal = str(valor or "").strip().lower()
+    return canal if canal in CANALES_PUBLICACION else CANAL_DEFECTO
+
+
+@dataclass
+class PostproxyConfig:
+    """Credenciales para PUBLICAR via **Postproxy** (canal alternativo a Metricool).
+
+    Espejo de `MetricoolConfig` pero con un modelo de secreto distinto: Postproxy usa
+    UNA sola `api_key` GLOBAL (header `Authorization: Bearer <api_key>`), no un token por
+    marca. Lo que varía por marca es a qué GRUPO DE PERFILES (`profile_group_id`) se
+    publica. Por eso:
+
+    - `api_key`: secreto GLOBAL (`[postproxy] api_key`, o env `POSTPROXY_API_KEY` con
+      prioridad — igual que Metricool con `METRICOOL_USER_TOKEN`).
+    - `marcas`: id_metricas -> {"profile_group_id": str, "canal": str}
+      (`[postproxy.marcas.<id>]`).
+
+    Cada marca elige su CANAL de publicación (`canal` ∈ {metricool, postproxy}, default
+    `metricool`): es el selector que decide a qué adaptador entrega el programador. El
+    grupo/credenciales de Postproxy se quedan guardados aunque el canal sea metricool,
+    para poder alternar sin reconfigurar.
+
+    Una marca está CONFIGURADA (publicable VIA Postproxy) si tiene `profile_group_id` Y
+    hay `api_key` global (el secreto es compartido; sin él ninguna marca puede publicar).
+    El `canal` es ortogonal a "configurada": una marca puede tener canal=postproxy sin
+    grupo aún (no publicará hasta tenerlo) o canal=metricool con grupo guardado.
+    """
+
+    # Secreto GLOBAL (header Bearer). Compartido por todas las marcas.
+    api_key: str = ""
+    # id_marca_keni -> {"profile_group_id": str, "canal": str}
+    marcas: dict[str, dict] = field(default_factory=dict)
+
+    def grupo_de(self, marca: dict) -> str:
+        """profile_group_id de una marca ('' si no lo tiene)."""
+        return str(marca.get("profile_group_id") or "")
+
+    def canal_de(self, marca: dict) -> str:
+        """Canal de publicación de una marca (validado): default `metricool`."""
+        return normalizar_canal(marca.get("canal"))
+
+    def canal_marca(self, id_metricas: str) -> str:
+        """Canal de publicación de la marca por su `id_metricas`: default `metricool`.
+
+        Una marca no declarada (o sin `canal`) usa `metricool` — el default que preserva
+        el comportamiento histórico (cero regresión cuando no se ha tocado nada).
+        """
+        return self.canal_de(self.marcas.get(id_metricas) or {})
+
+    def marca_configurada(self, marca: dict) -> bool:
+        """True si la marca tiene profile_group_id Y hay api_key global."""
+        return bool(self.api_key and self.grupo_de(marca))
+
+    def marcas_configuradas(self) -> dict[str, dict]:
+        """Subconjunto de `marcas` con grupo asignado (y api_key global presente).
+
+        Cada entrada se devuelve con `profile_group_id` ya resuelto (str). Si no hay
+        api_key global, devuelve vacío (ninguna marca puede publicar sin el secreto).
+        """
+        if not self.api_key:
+            return {}
+        salida: dict[str, dict] = {}
+        for mid, m in self.marcas.items():
+            if not self.marca_configurada(m):
+                continue
+            resuelta = dict(m)
+            resuelta["profile_group_id"] = self.grupo_de(m)
+            salida[mid] = resuelta
+        return salida
+
+    @property
+    def configurada(self) -> bool:
+        """True si AL MENOS UNA marca tiene grupo (y hay api_key global)."""
+        return bool(self.marcas_configuradas())
+
+
 @dataclass
 class Config:
     fuente: str = FUENTE_DEFECTO  # "metricool" (única) | "muestra" (demo) | "real" (fallback)
@@ -164,6 +255,8 @@ class Config:
     marcas: list[str] = field(default_factory=list)
     # Identidad + mapeo de marcas para la fuente `metricool`.
     metricool: MetricoolConfig = field(default_factory=MetricoolConfig)
+    # Credenciales para PUBLICAR via Postproxy (canal alternativo a Metricool).
+    postproxy: PostproxyConfig = field(default_factory=PostproxyConfig)
 
 
 def _parsear_cuenta(idx: int, c: object) -> CuentaConfig:
@@ -262,6 +355,41 @@ def _parsear_metricool(datos: dict) -> MetricoolConfig:
     return MetricoolConfig(user_token=str(user_token or ""), user_id=user_id, marcas=marcas)
 
 
+def _parsear_postproxy(datos: dict) -> PostproxyConfig:
+    """Lee la sección `[postproxy]` del config: api_key GLOBAL + grupo POR MARCA.
+
+    Modelo de secreto (espejo NO idéntico de Metricool): Postproxy usa UNA `api_key`
+    global (header Bearer), no un token por marca. La env `POSTPROXY_API_KEY` tiene
+    PRIORIDAD sobre el TOML (igual que `METRICOOL_USER_TOKEN`).
+
+    Cada `[postproxy.marcas.<id>]` trae su `profile_group_id` (el grupo de perfiles de
+    Postproxy donde publica esa marca) y su `canal` ∈ {metricool, postproxy} (default
+    `metricool`; cualquier valor desconocido cae a `metricool`). Se conservan TODAS las
+    marcas declaradas aunque les falte el grupo, así el estado per-marca (consola GET)
+    sabe que existen pero están "sin grupo"; la omisión real la hace `marcas_configuradas()`.
+    El `canal` se NORMALIZA siempre (la entrada lleva un `canal` válido garantizado).
+    """
+    seccion = datos.get("postproxy", {}) if isinstance(datos.get("postproxy"), dict) else {}
+    api_key = os.environ.get("POSTPROXY_API_KEY") or seccion.get("api_key", "")
+
+    marcas: dict[str, dict] = {}
+    crudas = seccion.get("marcas", {})
+    if isinstance(crudas, dict):
+        for mid, m in crudas.items():
+            if not isinstance(m, dict):
+                continue
+            entrada: dict = {}
+            grupo = m.get("profile_group_id") or m.get("profileGroupId") or m.get("grupo")
+            if grupo not in (None, ""):
+                entrada["profile_group_id"] = str(grupo)
+            # Canal SIEMPRE presente y validado (default metricool): facilita el estado
+            # per-marca y el despacho del programador sin re-validar aguas abajo.
+            entrada["canal"] = normalizar_canal(m.get("canal"))
+            marcas[str(mid)] = entrada
+
+    return PostproxyConfig(api_key=str(api_key or ""), marcas=marcas)
+
+
 # Env vars que cambian el RESULTADO de `cargar_config` sin tocar el mtime del fichero.
 # Forman parte de la clave de cache: si cualquiera cambia, re-parseamos. (En proceso
 # raramente cambian, pero los tests las monkeypatchean entre llamadas.)
@@ -271,6 +399,7 @@ _ENV_RELEVANTES: tuple[str, ...] = (
     "KENI_METRICAS_MARCAS",
     "METRICOOL_USER_TOKEN",
     "METRICOOL_USER_ID",
+    "POSTPROXY_API_KEY",
     ENV_PERMITIR_REAL,
     "XDG_CONFIG_HOME",
 )
@@ -390,6 +519,7 @@ def _cargar_config_desde_disco() -> Config:
         credenciales=datos.get("credenciales", {}),
         marcas=marcas,
         metricool=_parsear_metricool(datos),
+        postproxy=_parsear_postproxy(datos),
     )
 
 

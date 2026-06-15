@@ -22,9 +22,11 @@ from .metricool import (
     ResultadoProgramacion,
 )
 from .modelos import Borrador, MediaRef, TipoMedia
+from .postproxy import AdaptadorPublicacionPostproxy
 
 __all__ = [
     "AdaptadorPublicacionMetricool",
+    "AdaptadorPublicacionPostproxy",
     "Borrador",
     "BorradorMetricool",
     "MediaRef",

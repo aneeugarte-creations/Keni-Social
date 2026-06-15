@@ -68,6 +68,24 @@ ID_POST_INCIERTO = "incierto-timeout"
 # granularidad de las fechas programadas es el minuto.
 INTERVALO_SEGUNDOS_DEF = 60.0
 
+# Canal de publicación POSTPROXY (el alternativo a Metricool). El default es Metricool
+# (cero cambio de comportamiento): solo se desvía al camino Postproxy una marca que lo
+# elija explícitamente en `[postproxy.marcas.<id>].canal`. Valor espejo de
+# `keni_metricas.config.CANAL_POSTPROXY` (se duplica para NO importar keni_metricas a
+# nivel de módulo: todo el acceso a keni_metricas es perezoso aquí, ver imports abajo).
+_CANAL_POSTPROXY = "postproxy"
+
+# Plataforma keni (`pub["red"]`) -> nombre de plataforma en Postproxy. Idéntico salvo X,
+# que en Postproxy se llama "twitter" (igual que en Metricool). Las demás coinciden. Se
+# usa como destino en `profiles` cuando no se resuelve un profile_id concreto.
+_RED_POSTPROXY: dict[str, str] = {
+    "facebook": "facebook",
+    "instagram": "instagram",
+    "x": "twitter",
+    "tiktok": "tiktok",
+    "youtube": "youtube",
+}
+
 
 def _a_utc(dt: datetime) -> datetime:
     """Normaliza un datetime a UTC consciente. Naive → se asume UTC (convención del
@@ -145,6 +163,66 @@ def _creds_metricool(marca_id: str) -> dict | None:
     if not creds:
         return None
     return creds
+
+
+# --------------------------------------------------------------------------- #
+# Resolucion de credenciales/perfiles Postproxy por marca (canal alternativo)  #
+# --------------------------------------------------------------------------- #
+
+
+def _creds_postproxy(marca_id: str) -> tuple[str | None, str | None]:
+    """`(api_key, profile_group_id)` de la marca para Postproxy, o `(None, None)`.
+
+    api_key es GLOBAL (`[postproxy] api_key`); el grupo es por marca
+    (`[postproxy.marcas.<id_metricas>] profile_group_id`). Devuelve None en cualquier
+    pieza que falte para que el llamante DEGRADE igual que con creds Metricool ausentes.
+    """
+    try:
+        from keni_metricas.config import cargar_config
+    except ImportError:
+        _log.warning("keni_metricas no disponible; no se puede resolver creds Postproxy.")
+        return None, None
+
+    id_mc = marcas.id_metricas_de(marca_id)  # slug-guion -> guion_bajo
+    try:
+        cfg = cargar_config()
+    except Exception:  # noqa: BLE001 -- config rota no debe romper el barrido
+        _log.exception("Error cargando config de Postproxy para marca %r.", marca_id)
+        return None, None
+
+    pp = cfg.postproxy
+    api_key = pp.api_key or None
+    group_id = pp.grupo_de(pp.marcas.get(id_mc) or {}) or None
+    return api_key, group_id
+
+
+def _red_postproxy(pub: dict[str, Any]) -> str:
+    """Nombre de plataforma Postproxy de la pieza (x->twitter); cae al id crudo si no mapea."""
+    red = pub.get("red") or ""
+    return _RED_POSTPROXY.get(red, red)
+
+
+def _profiles_postproxy(pub: dict[str, Any], api_key: str, group_id: str) -> list[str]:
+    """Destinos `profiles` para Postproxy: profile_id resuelto o, si no, nombre de plataforma.
+
+    Best-effort: intenta resolver el profile_id REAL de la plataforma de la pieza vía
+    `listar_perfiles(api_key, group_id)` (Postproxy acepta ids o plataformas en `profiles`).
+    Si la consulta falla o no hay match, cae al NOMBRE de plataforma (camino siempre válido).
+    Nunca lanza: ante cualquier fallo, fallback al nombre de plataforma.
+    """
+    plataforma = _red_postproxy(pub)
+    try:
+        from keni_metricas.fuentes.postproxy import listar_perfiles
+
+        ok, _msg, perfiles = listar_perfiles(api_key, group_id)
+        if ok:
+            for p in perfiles:
+                if p.get("platform") == plataforma and p.get("id"):
+                    return [str(p["id"])]
+    except Exception:  # noqa: BLE001 -- resolver el id es best-effort; fallback a plataforma
+        _log.debug("Pieza %r: no se pudo resolver el profile_id Postproxy; uso plataforma %r.",
+                   pub.get("id"), plataforma)
+    return [plataforma]
 
 
 # --------------------------------------------------------------------------- #
@@ -354,6 +432,81 @@ def _borrador_de_publicacion(pub: dict[str, Any]) -> object | None:
 # --------------------------------------------------------------------------- #
 
 
+def _preparar_postproxy(
+    pub: dict[str, Any], ahora: datetime, campos_base: dict[str, Any], marca_id: str
+) -> dict[str, Any] | None:
+    """Camino REAL del barrido para una marca con canal=postproxy. Análogo a Metricool.
+
+    Misma postura de degradación honesta y mismo manejo de timeout/fallo que el camino
+    Metricool de `_preparar`: si faltan credenciales (api_key global o grupo de la marca)
+    o el borrador es inviable, la pieza se prepara en dry-run y SIGUE en `programado`; un
+    TIMEOUT marca `publicado` (incierto) para no duplicar; un fallo de entrega claro LIBERA
+    `preparado_en` para reintentar. El id del post de Postproxy se guarda en la columna
+    EXISTENTE `id_post_metricool` (reusada como "id de post externo"; NO se cambia el
+    esquema: con canal=postproxy esa columna contiene el id de Postproxy).
+    """
+    pub_id = pub["id"]
+
+    api_key, group_id = _creds_postproxy(marca_id)
+    if not api_key or not group_id:
+        _log.warning(
+            "Pieza %r (marca %r): sin credenciales Postproxy (api_key global y/o "
+            "profile_group_id); se prepara en dry-run y sigue en 'programado'. Configura "
+            "[postproxy] api_key y [postproxy.marcas.%s] profile_group_id.",
+            pub_id, marca_id, marcas.id_metricas_de(marca_id),
+        )
+        return repos.actualizar_publicacion(pub_id, campos_base)
+
+    # Reusa la MISMA construcción de borrador que Metricool (texto+hashtags, media,
+    # video/carrusel, publicar_en). El adaptador Postproxy lee de él lo que necesita.
+    borrador = _borrador_de_publicacion(pub)
+    if borrador is None:
+        return repos.actualizar_publicacion(pub_id, campos_base)
+
+    try:
+        from keni_metricas.publicacion.postproxy import AdaptadorPublicacionPostproxy
+    except ImportError:
+        _log.warning("keni_metricas no disponible; publicacion real imposible.")
+        return repos.actualizar_publicacion(pub_id, campos_base)
+
+    profiles = _profiles_postproxy(pub, api_key, group_id)
+    try:
+        adaptador = AdaptadorPublicacionPostproxy(api_key=api_key)
+        resultado = adaptador.programar(borrador, dry_run=False, profiles=profiles)
+    except httpx.TimeoutException:
+        _log.warning(
+            "Pieza %r: TIMEOUT al enviar a Postproxy; el post pudo entregarse. Se marca "
+            "'publicado' (incierto) para NO reenviar y evitar doble-post. Verificar en redes.",
+            pub_id,
+        )
+        return repos.actualizar_publicacion(
+            pub_id,
+            {**campos_base, "estado": "publicado", "id_post_metricool": ID_POST_INCIERTO},
+        )
+    except Exception:  # noqa: BLE001 -- cualquier fallo de red/auth no mata el barrido
+        _log.exception(
+            "Pieza %r: fallo al enviar a Postproxy; se libera la preparacion y se "
+            "reintentara en el proximo barrido.",
+            pub_id,
+        )
+        try:
+            repos.actualizar_publicacion(pub_id, {"preparado_en": ""})
+        except Exception:  # noqa: BLE001 -- si ni esto entra, el log ya dejo rastro
+            _log.exception("Pieza %r: no se pudo liberar la preparacion.", pub_id)
+        return None
+
+    id_post = resultado.id_post or ""
+    estados_str = ", ".join(f"{r}={s}" for r, s in resultado.estados.items())
+    _log.info(
+        "Pieza %r publicada en Postproxy: id_post=%r redes=[%s] estados={%s}",
+        pub_id, id_post, ", ".join(resultado.redes), estados_str,
+    )
+    return repos.actualizar_publicacion(
+        pub_id,
+        {**campos_base, "estado": "publicado", "id_post_metricool": id_post},
+    )
+
+
 def _preparar(pub: dict[str, Any], ahora: datetime) -> dict[str, Any] | None:
     """Prepara UNA pieza vencida: estampa `preparado_en` y, si el gate esta activo,
     entrega el borrador a Metricool.
@@ -383,7 +536,12 @@ def _preparar(pub: dict[str, Any], ahora: datetime) -> dict[str, Any] | None:
         # DRY-RUN (maestro OFF o marca excluida): comportamiento original intacto.
         return repos.actualizar_publicacion(pub["id"], campos_base)
 
-    # --- camino REAL: intentar entregar a Metricool ---------------------------
+    # --- camino REAL: DESPACHO por canal de publicación de la marca ----------
+    # Default "metricool" (cero regresión): solo una marca con canal=postproxy se desvía.
+    if config.canal_publicacion_para(marca_id) == _CANAL_POSTPROXY:
+        return _preparar_postproxy(pub, ahora, campos_base, marca_id)
+
+    # --- camino REAL Metricool (comportamiento histórico, INTACTO) ------------
     pub_id = pub["id"]
 
     creds = _creds_metricool(marca_id)
@@ -487,8 +645,13 @@ def programar_pieza_metricool(
         return {
             "ok": False,
             "dry_run": dry_run,
-            "motivo": "Esta pieza ya fue publicada en Metricool; no se vuelve a publicar.",
+            "motivo": "Esta pieza ya fue publicada; no se vuelve a publicar.",
         }
+
+    # DESPACHO por canal de la marca: default "metricool" (intacto). Solo una marca con
+    # canal=postproxy se desvía al adaptador alternativo (misma forma de resultado).
+    if config.canal_publicacion_para(marca_id) == _CANAL_POSTPROXY:
+        return _programar_pieza_postproxy(pub, ahora, dry_run)
 
     creds = _creds_metricool(marca_id)
     if not creds:
@@ -581,6 +744,102 @@ def programar_pieza_metricool(
             "estado": "publicado",
             # Hora real de publicación (ver nota al construir el borrador): el botón publica
             # ahora, así que `fecha_programada` deja de ser la hora futura agendada.
+            "fecha_programada": iso_utc(ahora),
+            "id_post_metricool": id_post,
+        },
+    )
+    return {**base, "id_post": id_post, "estados": dict(resultado.estados)}
+
+
+def _programar_pieza_postproxy(
+    pub: dict[str, Any], ahora: datetime, dry_run: bool
+) -> dict[str, Any]:
+    """Botón manual para una marca con canal=postproxy. Análogo a la rama Metricool.
+
+    MISMA forma de resultado (`{ok, dry_run, motivo?, redes, cuerpo?, id_post?, estados?}`)
+    y mismo trato de timeout/fallo. En dry-run NO toca red: usa el nombre de plataforma
+    como destino para previsualizar el cuerpo exacto que se enviaría. En real resuelve el
+    profile_id (best-effort) y persiste el id de Postproxy en `id_post_metricool`.
+    """
+    marca_id = pub.get("marca") or ""
+
+    api_key, group_id = _creds_postproxy(marca_id)
+    if not api_key or not group_id:
+        return {
+            "ok": False,
+            "dry_run": dry_run,
+            "motivo": (
+                f"La marca {marca_id!r} no tiene Postproxy configurado (api_key global y "
+                f"profile_group_id en [postproxy.marcas.{marcas.id_metricas_de(marca_id)}])."
+            ),
+        }
+
+    borrador = _borrador_de_publicacion(pub)
+    if borrador is None:
+        return {
+            "ok": False,
+            "dry_run": dry_run,
+            "motivo": "No se pudo construir el borrador (¿sin contenido o red no soportada?).",
+        }
+
+    # Botón = "publicar AHORA": fuerza la salida inmediata (mismo criterio que Metricool).
+    borrador = borrador.model_copy(update={"publicar_en": ahora})
+
+    try:
+        from keni_metricas.publicacion.postproxy import AdaptadorPublicacionPostproxy
+    except ImportError:
+        return {"ok": False, "dry_run": dry_run, "motivo": "keni_metricas no está disponible."}
+
+    # En dry-run NO tocamos la red ni para resolver profile_ids: el nombre de plataforma
+    # basta para previsualizar el cuerpo. En real, resolvemos el profile_id (best-effort).
+    profiles = [_red_postproxy(pub)] if dry_run else _profiles_postproxy(pub, api_key, group_id)
+
+    try:
+        adaptador = AdaptadorPublicacionPostproxy(api_key=api_key)
+        resultado = adaptador.programar(borrador, dry_run=dry_run, profiles=profiles)
+    except httpx.TimeoutException:
+        _log.warning(
+            "Pieza %r: TIMEOUT al publicar en Postproxy a demanda; se marca 'publicado' "
+            "(incierto) para no duplicar. Verificar en redes.",
+            pub.get("id"),
+        )
+        repos.actualizar_publicacion(
+            pub["id"],
+            {
+                "preparado_en": iso_utc(ahora),
+                "estado": "publicado",
+                "fecha_programada": iso_utc(ahora),
+                "id_post_metricool": ID_POST_INCIERTO,
+            },
+        )
+        return {
+            "ok": True,
+            "dry_run": False,
+            "incierto": True,
+            "motivo": (
+                "La publicación se envió pero Postproxy no respondió a tiempo (timeout). "
+                "Se marcó como publicada para no duplicarla; verifica en redes que haya salido."
+            ),
+        }
+    except Exception as e:  # noqa: BLE001 -- degrada con mensaje, no rompe el endpoint
+        _log.exception("Pieza %r: fallo al programar en Postproxy a demanda.", pub.get("id"))
+        return {"ok": False, "dry_run": dry_run, "motivo": f"Fallo al contactar Postproxy: {e}"}
+
+    base = {
+        "ok": True,
+        "dry_run": resultado.dry_run,
+        "redes": list(resultado.redes),
+        "cuerpo": resultado.peticion.body,
+    }
+    if resultado.dry_run:
+        return base  # Preview: NO se persiste nada.
+
+    id_post = resultado.id_post or ""
+    repos.actualizar_publicacion(
+        pub["id"],
+        {
+            "preparado_en": iso_utc(ahora),
+            "estado": "publicado",
             "fecha_programada": iso_utc(ahora),
             "id_post_metricool": id_post,
         },

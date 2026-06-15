@@ -25,6 +25,10 @@ modulos_backend = [
   "estado",
   "sistema",
   "conexiones",
+  # api/marcas.py: dashboard "Marcas" (admin) — estado de conexiones por marca
+  # (Metricool + Postproxy) + métricas agregadas via la fachada de métricas. Vista
+  # transversal de configuración/estado, hermana de `conexiones`.
+  "marcas",
   "limites",
   "media",
   "artes",
@@ -45,6 +49,7 @@ rutas_frontend = [
   "/mi-cuenta",
   "/configuracion",
   "/sugerencias",
+  "/marcas",
   "/usuarios",
   "/sistema",
 ]

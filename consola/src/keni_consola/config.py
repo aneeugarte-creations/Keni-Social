@@ -520,6 +520,7 @@ from .config_programadores import (  # noqa: F401
     algoritmos_auto_activo,
     algoritmos_intervalo_horas,
     auto_preaprobacion,
+    canal_publicacion_para,
     comercial_intervalo_horas,
     comercial_intervalo_segundos,
     eventos_intervalo_segundos,

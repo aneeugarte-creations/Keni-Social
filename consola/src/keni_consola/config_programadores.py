@@ -202,6 +202,30 @@ def publicar_real_para(marca: str) -> bool:
     return publicar_real() and not marca_apagada(ENV_PUBLICAR_REAL, marca)
 
 
+def canal_publicacion_para(marca: str) -> str:
+    """Canal de publicación de `marca` (id canónico slug-guion): "metricool" | "postproxy".
+
+    DEFAULT "metricool" (cero cambio de comportamiento histórico): es el canal que usa
+    el programador salvo que la marca elija "postproxy" en `[postproxy.marcas.<id>].canal`
+    del config.toml de métricas. Coherente con `publicar_real_para`: un accesor puro que
+    el programador consulta para decidir a qué adaptador entrega el borrador.
+
+    Traduce el `id` canónico (slug-guion) al `id_metricas` (guion_bajo) que indexa la
+    config de Postproxy. Degrada a "metricool" ante CUALQUIER fallo (keni_metricas no
+    disponible, config rota): el despacho nunca rompe por no poder resolver el canal.
+    """
+    try:
+        from keni_metricas.config import cargar_config
+        from keni_shared.marcas import id_metricas_de
+    except ImportError:
+        return "metricool"
+    try:
+        cfg = cargar_config()
+    except Exception:  # noqa: BLE001 -- config rota no debe romper el despacho
+        return "metricool"
+    return cfg.postproxy.canal_marca(id_metricas_de(marca))
+
+
 def auto_preaprobacion() -> bool:
     """True si la pre-aprobacion de piezas de bajo riesgo esta activa (`KENI_AUTO_PREAPROBACION`).
 

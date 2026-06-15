@@ -396,3 +396,79 @@ export interface RespuestaProbarMetricool {
   ok: boolean;
   detalle: string;
 }
+
+// ── Conexión Postproxy (publicación multi-red) ──────────────────────────────
+// Postproxy tiene UNA api_key GLOBAL (no por marca) + un grupo de perfiles por
+// marca. La api_key es write-only (solo se envía); del servidor llega el estado
+// (configurado + pista no sensible) y, por marca, su grupo de perfiles.
+
+/** Canal por el que una marca PUBLICA sus piezas. */
+export type CanalPublicacion = "metricool" | "postproxy";
+
+/** Estado de la conexión Postproxy de UNA marca dentro de la respuesta global. */
+export interface MarcaPostproxy {
+  marca: string;
+  etiqueta: string;
+  /** Grupo de perfiles de Postproxy de la marca (null si aún no se ha creado). */
+  profile_group_id: string | null;
+  /** Canal de publicación activo de la marca (default "metricool"). */
+  canal: CanalPublicacion;
+}
+
+/** Respuesta de `GET /conexiones/postproxy`: estado global + marcas. */
+export interface RespuestaPostproxy {
+  configurado: boolean;
+  /** Pista no sensible de la api_key (solo si está configurada). */
+  pista: string | null;
+  marcas: MarcaPostproxy[];
+}
+
+/** Cuerpo para guardar la api_key global de Postproxy (write-only). */
+export interface CuerpoGuardarPostproxy {
+  api_key: string;
+}
+
+/** Respuesta al guardar la api_key de Postproxy. */
+export interface RespuestaGuardarPostproxy {
+  configurado: true;
+  mensaje: string;
+}
+
+/** Respuesta de la prueba en vivo de la conexión Postproxy. */
+export interface RespuestaProbarPostproxy {
+  ok: boolean;
+  mensaje: string;
+}
+
+/** Cuerpo para fijar (o regenerar) el grupo de perfiles de una marca. */
+export interface CuerpoGrupoPostproxy {
+  profile_group_id?: string;
+}
+
+/** Respuesta al fijar el grupo de perfiles de una marca. */
+export interface RespuestaGrupoPostproxy {
+  profile_group_id: string;
+  mensaje: string;
+}
+
+/** Cuerpo para iniciar el OAuth de conexión de una red de una marca. */
+export interface CuerpoConectarPostproxy {
+  platform: string;
+  redirect_url: string;
+}
+
+/** Respuesta con la URL de OAuth a abrir en una pestaña nueva. */
+export interface RespuestaConectarPostproxy {
+  url: string;
+}
+
+/** Cuerpo para fijar el canal de publicación de una marca. */
+export interface CuerpoCanalPostproxy {
+  canal: CanalPublicacion;
+}
+
+/** Respuesta al fijar el canal de publicación de una marca. */
+export interface RespuestaCanalPostproxy {
+  canal: CanalPublicacion;
+  mensaje: string;
+}

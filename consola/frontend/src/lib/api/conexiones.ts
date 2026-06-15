@@ -2,19 +2,29 @@
 // El objeto compuesto vive en ./index.ts; aquí solo el fragmento + sus imports.
 import { peticion } from "./_core";
 import type {
+  CuerpoCanalPostproxy,
+  CuerpoConectarPostproxy,
+  CuerpoGrupoPostproxy,
   CuerpoGuardarConexionImagen,
   CuerpoGuardarMetricool,
   CuerpoGuardarModeloImagen,
+  CuerpoGuardarPostproxy,
   CuerpoPerfilesMetricool,
+  RespuestaCanalPostproxy,
+  RespuestaConectarPostproxy,
   RespuestaConexionImagen,
+  RespuestaGrupoPostproxy,
   RespuestaGuardarConexionImagen,
   RespuestaGuardarMetricool,
   RespuestaGuardarModeloImagen,
+  RespuestaGuardarPostproxy,
   RespuestaMensaje,
   RespuestaMetricool,
   RespuestaPerfilesMetricool,
+  RespuestaPostproxy,
   RespuestaProbarConexionImagen,
   RespuestaProbarMetricool,
+  RespuestaProbarPostproxy,
 } from "@/types";
 
 export const apiConexiones = {
@@ -60,4 +70,42 @@ export const apiConexiones = {
       { metodo: "POST" },
     ),
 
+  // Postproxy: UNA api_key GLOBAL (write-only) + un grupo de perfiles por marca.
+  // La api_key solo se envía (PUT); del servidor llega el estado + una pista no
+  // sensible. Conectar una red es un OAuth: el back devuelve la URL a abrir.
+  conexionesPostproxy: (signal?: AbortSignal) =>
+    peticion<RespuestaPostproxy>("/conexiones/postproxy", { signal }),
+  guardarPostproxy: (cuerpo: CuerpoGuardarPostproxy) =>
+    peticion<RespuestaGuardarPostproxy>("/conexiones/postproxy", {
+      metodo: "PUT",
+      json: cuerpo,
+    }),
+  eliminarPostproxy: () =>
+    peticion<RespuestaMensaje>("/conexiones/postproxy", { metodo: "DELETE" }),
+  probarPostproxy: () =>
+    peticion<RespuestaProbarPostproxy>("/conexiones/postproxy/probar", { metodo: "POST" }),
+  // Crea (o regenera) el grupo de perfiles de una marca en Postproxy.
+  grupoPostproxy: (marca: string, cuerpo: CuerpoGrupoPostproxy = {}) =>
+    peticion<RespuestaGrupoPostproxy>(
+      `/conexiones/postproxy/${encodeURIComponent(marca)}/grupo`,
+      { metodo: "PUT", json: cuerpo },
+    ),
+  // Inicia el OAuth para conectar una red de una marca; devuelve la URL a abrir.
+  conectarPostproxy: (marca: string, cuerpo: CuerpoConectarPostproxy) =>
+    peticion<RespuestaConectarPostproxy>(
+      `/conexiones/postproxy/${encodeURIComponent(marca)}/conectar`,
+      { metodo: "POST", json: cuerpo },
+    ),
+  // Fija el canal de publicación de una marca (Metricool | Postproxy).
+  canalPostproxy: (marca: string, canal: string) =>
+    peticion<RespuestaCanalPostproxy>(
+      `/conexiones/postproxy/${encodeURIComponent(marca)}/canal`,
+      { metodo: "PUT", json: { canal } as CuerpoCanalPostproxy },
+    ),
+  // Desconecta un perfil concreto de Postproxy (por su id de perfil).
+  eliminarPerfilPostproxy: (perfilId: string) =>
+    peticion<RespuestaMensaje>(
+      `/conexiones/postproxy/perfil/${encodeURIComponent(perfilId)}`,
+      { metodo: "DELETE" },
+    ),
 };

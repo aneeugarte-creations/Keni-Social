@@ -108,3 +108,4 @@ export * from "./auth";
 export * from "./catalogo";
 export * from "./texto";
 export * from "./noticias";
+export * from "./marcas";

@@ -516,6 +516,314 @@ async def metricool_perfiles(request: Request) -> Response:
     return JSONResponse({"marcas": marcas})
 
 
+# --------------------------------------------------------------------------- #
+# Postproxy (canal de publicacion alternativo a Metricool)                    #
+# --------------------------------------------------------------------------- #
+#
+# Modelo de secreto distinto al de Metricool: Postproxy usa UNA api_key GLOBAL
+# (header Bearer), tratada como un SECRETO GLOBAL — igual de delicado que el
+# user_token de Metricool: NUNCA se devuelve, solo una pista `····last4`. Lo que
+# varia por marca es el `profile_group_id` (a que grupo de perfiles publica). Mismo
+# patron que Metricool: helpers `_config_existente` (compartido), escritura atomica
+# `_escribir_postproxy_global` / `_escribir_marca_postproxy`, guard SOLO ADMIN, y un
+# punto INYECTABLE por operacion de red (`_PROBADOR_PP_*`) que los tests parchean.
+
+from keni_metricas.fuentes import postproxy as _pp_cliente  # noqa: E402
+
+
+def _postproxy_global(cfg: dict) -> dict:
+    """Tabla `[postproxy]` del config ({} si no existe)."""
+    pp = cfg.get("postproxy")
+    return pp if isinstance(pp, dict) else {}
+
+
+def _postproxy_api_key(cfg: dict) -> str:
+    """api_key global GUARDADA en el config ('' si no hay). Solo uso interno."""
+    return _credencial(_postproxy_global(cfg), "api_key")
+
+
+def _marca_postproxy(cfg: dict, marca: str) -> dict:
+    """Tabla `[postproxy.marcas.<marca>]` del config ({} si no existe)."""
+    pp = _postproxy_global(cfg)
+    marcas = pp.get("marcas")
+    marcas = marcas if isinstance(marcas, dict) else {}
+    tabla = marcas.get(marca)
+    return tabla if isinstance(tabla, dict) else {}
+
+
+def _pista_secreto(valor: str) -> str | None:
+    """Pista NO sensible de un secreto: `····last4` (None si no hay valor)."""
+    if not valor:
+        return None
+    return "····" + valor[-4:] if len(valor) >= 4 else "····"
+
+
+def _canal_marca_postproxy(tabla: dict) -> str:
+    """Canal de publicación GUARDADO para una marca (validado): default `metricool`.
+
+    Fuente única de la validación: `keni_metricas.config.normalizar_canal` (un valor
+    desconocido o ausente cae a `metricool`, el default sin cambio de comportamiento).
+    """
+    from keni_metricas.config import normalizar_canal
+
+    return normalizar_canal(tabla.get("canal"))
+
+
+def estado_postproxy() -> dict:
+    """Estado de Postproxy: api_key configurada (solo pista) + grupo y canal por marca.
+
+    `{configurado, pista, marcas: [{marca, etiqueta, profile_group_id, canal}]}`. NUNCA
+    expone la api_key (solo `····last4`). Una entrada por marca del catalogo de metricas.
+    `canal` ∈ {metricool, postproxy} (default `metricool`): el canal de publicación de
+    esa marca, ortogonal a tener grupo o no.
+    """
+    cfg = _config_existente()
+    api_key = _postproxy_api_key(cfg)
+    marcas = []
+    for mid, etiqueta in _marcas_metricool():
+        tabla = _marca_postproxy(cfg, mid)
+        grupo = _credencial(tabla, "profile_group_id") or None
+        marcas.append({
+            "marca": mid,
+            "etiqueta": etiqueta,
+            "profile_group_id": grupo,
+            "canal": _canal_marca_postproxy(tabla),
+        })
+    return {
+        "configurado": bool(api_key),
+        "pista": _pista_secreto(api_key),
+        "marcas": marcas,
+    }
+
+
+async def postproxy_estado(request: Request) -> Response:
+    """GET: estado de Postproxy (api_key como pista) + grupo por marca. SOLO ADMIN (#153)."""
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    return JSONResponse(estado_postproxy())
+
+
+def _escribir_postproxy_global(api_key: str) -> None:
+    """Persiste `[postproxy] api_key` en el config.toml (atomico 0600).
+
+    REUTILIZA los helpers del asistente: lee el existente, fusiona SOLO la api_key (sin
+    clobberar `[postproxy.marcas]` ni otras secciones) y escribe de forma atomica.
+    """
+    ruta = ruta_config()
+    existente = asistente.leer_config_existente(ruta)
+    fusionado = asistente.fusionar_config(existente, {"postproxy": {"api_key": api_key}})
+    asistente.escribir_config_atomico(ruta, fusionado)
+
+
+def _escribir_marca_postproxy(marca: str, valores: dict[str, str]) -> None:
+    """Persiste `[postproxy.marcas.<marca>]` en el config.toml (atomico 0600).
+
+    Espejo de `_escribir_marca_metricool`: fusiona SOLO esta marca (sin tocar la api_key
+    global, otras marcas ni otras secciones).
+    """
+    ruta = ruta_config()
+    existente = asistente.leer_config_existente(ruta)
+    nuevo = {"postproxy": {"marcas": {marca: valores}}}
+    fusionado = asistente.fusionar_config(existente, nuevo)
+    asistente.escribir_config_atomico(ruta, fusionado)
+
+
+async def postproxy_guardar(request: Request) -> Response:
+    """PUT: guarda la api_key GLOBAL de Postproxy (JSON `{api_key}`). SOLO ADMIN (#153).
+
+    No la devuelve. Valida que no este vacia.
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    datos = await leer_json(request)
+    api_key = datos.get("api_key")
+    if not isinstance(api_key, str) or not api_key.strip():
+        return JSONResponse({"error": "Falta la API key de Postproxy."}, status_code=400)
+    try:
+        _escribir_postproxy_global(api_key.strip())
+    except OSError:
+        return JSONResponse(
+            {"error": "No se pudo guardar la API key de Postproxy."}, status_code=500
+        )
+    return JSONResponse({"configurado": True, "mensaje": "API key de Postproxy guardada."})
+
+
+async def postproxy_borrar(request: Request) -> Response:
+    """DELETE: borra la api_key GLOBAL de Postproxy. SOLO ADMIN (#153).
+
+    Solo borra la api_key (preserva los `profile_group_id` por marca).
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    ruta = ruta_config()
+    try:
+        cfg = asistente.leer_config_existente(ruta)
+        pp = cfg.get("postproxy") if isinstance(cfg.get("postproxy"), dict) else None
+        if isinstance(pp, dict) and "api_key" in pp:
+            del pp["api_key"]
+            asistente.escribir_config_atomico(ruta, cfg)
+    except OSError:
+        return JSONResponse(
+            {"error": "No se pudo borrar la API key de Postproxy."}, status_code=500
+        )
+    return JSONResponse({"mensaje": "API key de Postproxy eliminada."})
+
+
+# Puntos INYECTABLES: lo unico que toca la red. Los tests los parchean.
+_PROBADOR_PP = _pp_cliente.probar
+_PP_CREAR_GRUPO = _pp_cliente.crear_grupo
+_PP_INICIAR_CONEXION = _pp_cliente.initialize_connection
+_PP_DESCONECTAR = _pp_cliente.desconectar_perfil
+
+
+async def postproxy_probar(request: Request) -> Response:
+    """POST: prueba EN VIVO la api_key GUARDADA (GET /profile_groups). SOLO ADMIN (#153).
+
+    Usa la api_key ya guardada (nunca llega por el body ni sale por la respuesta). Si no
+    hay api_key, responde `{ok:false}` con mensaje claro.
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    api_key = _postproxy_api_key(_config_existente())
+    if not api_key:
+        return JSONResponse({"ok": False, "mensaje": "No hay API key de Postproxy configurada."})
+    ok, mensaje = _PROBADOR_PP(api_key)
+    return JSONResponse({"ok": ok, "mensaje": mensaje})
+
+
+async def postproxy_grupo(request: Request) -> Response:
+    """PUT: fija el grupo de perfiles de una marca. SOLO ADMIN (#153).
+
+    Body `{profile_group_id?}`. Si viene, se guarda tal cual. Si NO viene, se CREA un
+    grupo en Postproxy (con la etiqueta de la marca) y se guarda su id. Devuelve
+    `{profile_group_id, mensaje}`. La api_key nunca sale.
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    marca = request.path_params["marca"]
+    if not _es_marca_metricool(marca):
+        return JSONResponse({"error": "Marca desconocida."}, status_code=400)
+    datos = await leer_json(request)
+    grupo = datos.get("profile_group_id")
+    if isinstance(grupo, str) and grupo.strip():
+        grupo = grupo.strip()
+        mensaje = "Grupo de perfiles guardado."
+    else:
+        # No viene: hay que CREARLO en Postproxy. Requiere api_key.
+        api_key = _postproxy_api_key(_config_existente())
+        if not api_key:
+            return JSONResponse(
+                {"error": "Configura primero la API key de Postproxy."}, status_code=400
+            )
+        etiqueta = dict(_marcas_metricool()).get(marca, marca)
+        ok, msg, datos_grupo = _PP_CREAR_GRUPO(api_key, etiqueta)
+        if not ok or not datos_grupo:
+            return JSONResponse({"error": msg}, status_code=502)
+        grupo = str(datos_grupo["id"])
+        mensaje = "Grupo de perfiles creado."
+    try:
+        _escribir_marca_postproxy(marca, {"profile_group_id": grupo})
+    except OSError:
+        return JSONResponse(
+            {"error": "No se pudo guardar el grupo de perfiles."}, status_code=500
+        )
+    return JSONResponse({"profile_group_id": grupo, "mensaje": mensaje})
+
+
+async def postproxy_conectar(request: Request) -> Response:
+    """POST: inicia la conexion OAuth de una red para una marca. SOLO ADMIN (#153).
+
+    Body `{platform, redirect_url}`. Valida la plataforma y que haya api_key. Si la marca
+    no tiene grupo aun, lo CREA primero. Llama a initialize_connection y devuelve `{url}`.
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    marca = request.path_params["marca"]
+    if not _es_marca_metricool(marca):
+        return JSONResponse({"error": "Marca desconocida."}, status_code=400)
+    datos = await leer_json(request)
+    platform = datos.get("platform")
+    redirect_url = datos.get("redirect_url")
+    if platform not in _pp_cliente.PLATAFORMAS:
+        validas = ", ".join(_pp_cliente.PLATAFORMAS)
+        return JSONResponse(
+            {"error": f"Plataforma no válida. Válidas: {validas}."}, status_code=400
+        )
+    if not isinstance(redirect_url, str) or not redirect_url.strip():
+        return JSONResponse({"error": "Falta la URL de redirección."}, status_code=400)
+    api_key = _postproxy_api_key(_config_existente())
+    if not api_key:
+        return JSONResponse(
+            {"error": "Configura primero la API key de Postproxy."}, status_code=400
+        )
+    grupo = _credencial(_marca_postproxy(_config_existente(), marca), "profile_group_id")
+    if not grupo:
+        # No hay grupo aun: crearlo primero (con la etiqueta de la marca) y persistirlo.
+        etiqueta = dict(_marcas_metricool()).get(marca, marca)
+        ok, msg, datos_grupo = _PP_CREAR_GRUPO(api_key, etiqueta)
+        if not ok or not datos_grupo:
+            return JSONResponse({"error": msg}, status_code=502)
+        grupo = str(datos_grupo["id"])
+        try:
+            _escribir_marca_postproxy(marca, {"profile_group_id": grupo})
+        except OSError:
+            return JSONResponse(
+                {"error": "No se pudo guardar el grupo de perfiles."}, status_code=500
+            )
+    ok, msg, url = _PP_INICIAR_CONEXION(api_key, grupo, platform, redirect_url.strip())
+    if not ok or not url:
+        return JSONResponse({"error": msg}, status_code=502)
+    return JSONResponse({"url": url})
+
+
+async def postproxy_desconectar_perfil(request: Request) -> Response:
+    """DELETE: desconecta un perfil de Postproxy por su id. SOLO ADMIN (#153)."""
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    perfil_id = request.path_params["perfil_id"]
+    api_key = _postproxy_api_key(_config_existente())
+    if not api_key:
+        return JSONResponse(
+            {"error": "Configura primero la API key de Postproxy."}, status_code=400
+        )
+    ok, msg = _PP_DESCONECTAR(api_key, perfil_id)
+    if not ok:
+        return JSONResponse({"error": msg}, status_code=502)
+    return JSONResponse({"mensaje": msg})
+
+
+async def postproxy_canal(request: Request) -> Response:
+    """PUT: fija el CANAL de publicación de una marca. SOLO ADMIN (#153).
+
+    Body `{canal}` con `canal` ∈ {metricool, postproxy}. Persiste en
+    `[postproxy.marcas.<id>].canal` (sin tocar el grupo). El selector decide a qué
+    adaptador entrega el programador esa marca; default histórico es `metricool`.
+    Responde `{canal, mensaje}`. NO toca la red.
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    marca = request.path_params["marca"]
+    if not _es_marca_metricool(marca):
+        return JSONResponse({"error": "Marca desconocida."}, status_code=400)
+    from keni_metricas.config import CANALES_PUBLICACION
+
+    datos = await leer_json(request)
+    canal = datos.get("canal")
+    if not isinstance(canal, str) or canal.strip().lower() not in CANALES_PUBLICACION:
+        validos = ", ".join(sorted(CANALES_PUBLICACION))
+        return JSONResponse(
+            {"error": f"Canal no válido. Válidos: {validos}."}, status_code=400
+        )
+    canal = canal.strip().lower()
+    try:
+        _escribir_marca_postproxy(marca, {"canal": canal})
+    except OSError:
+        return JSONResponse(
+            {"error": "No se pudo guardar el canal de publicación."}, status_code=500
+        )
+    return JSONResponse({"canal": canal, "mensaje": "Canal de publicación guardado."})
+
+
 RUTAS = [
     Route("/api/conexiones/imagen", imagen_estado, methods=["GET"]),
     Route("/api/conexiones/imagen", imagen_guardar, methods=["PUT"]),
@@ -527,4 +835,13 @@ RUTAS = [
     Route("/api/conexiones/metricool/{marca}", metricool_guardar, methods=["PUT"]),
     Route("/api/conexiones/metricool/{marca}", metricool_borrar, methods=["DELETE"]),
     Route("/api/conexiones/metricool/{marca}/probar", metricool_probar, methods=["POST"]),
+    # Postproxy (canal alternativo): api_key global + grupo/conexion por marca.
+    Route("/api/conexiones/postproxy", postproxy_estado, methods=["GET"]),
+    Route("/api/conexiones/postproxy", postproxy_guardar, methods=["PUT"]),
+    Route("/api/conexiones/postproxy", postproxy_borrar, methods=["DELETE"]),
+    Route("/api/conexiones/postproxy/probar", postproxy_probar, methods=["POST"]),
+    Route("/api/conexiones/postproxy/perfil/{perfil_id}", postproxy_desconectar_perfil, methods=["DELETE"]),
+    Route("/api/conexiones/postproxy/{marca}/grupo", postproxy_grupo, methods=["PUT"]),
+    Route("/api/conexiones/postproxy/{marca}/canal", postproxy_canal, methods=["PUT"]),
+    Route("/api/conexiones/postproxy/{marca}/conectar", postproxy_conectar, methods=["POST"]),
 ]
