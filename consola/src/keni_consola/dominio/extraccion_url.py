@@ -29,6 +29,7 @@ from __future__ import annotations
 import ipaddress
 import re
 import socket
+import time
 from html.parser import HTMLParser
 from urllib.parse import urlsplit
 
@@ -36,6 +37,9 @@ from urllib.parse import urlsplit
 # los de `api.rss` (mismo orden de magnitud).
 _TIMEOUT = 15.0  # segundos
 _MAX_BYTES = 5 * 1024 * 1024  # 5 MB de HTML
+# Backoff entre reintentos de descarga (misma idea que el motor de feeds de Fuentes): solo
+# para fallos TRANSITORIOS (timeout/conexión); un 4xx o "sin texto" no se reintenta.
+_ESPERA_REINTENTO_SEG = (3.0, 8.0, 15.0)
 # Tope del texto extraido que se pasa a la skill (margen de sobra bajo `_MAX_TEXTO`=60k).
 _MAX_TEXTO_EXTRAIDO = 40_000
 
@@ -156,49 +160,67 @@ def es_host_de_video(url: str) -> bool:
 # --------------------------------------------------------------------------- #
 
 
-def _descargar_real(url: str, timeout: float | None = None) -> str:
+def _un_intento_descarga(url: str, timeout: float | None) -> str:
+    """UN intento de descarga con `httpx` (timeout + tope de tamaño). Lo separa del bucle de
+    reintentos para poder mockear el intento en tests. Lanza `ExtraccionError` con mensaje en
+    español; deja escapar `httpx.TimeoutException`/`httpx.HTTPError` para que el bucle decida si
+    reintenta (transitorio) o se rinde."""
+    import httpx
+
+    cabeceras = {"User-Agent": "Mozilla/5.0 (compatible; KeniSocial/1.0; +operativo)"}
+    with httpx.Client(
+        timeout=timeout or _TIMEOUT, follow_redirects=True, headers=cabeceras
+    ) as cliente:
+        with cliente.stream("GET", url) as respuesta:
+            if respuesta.status_code != 200:
+                raise ExtraccionError(
+                    f"La página respondió con un error (HTTP {respuesta.status_code})."
+                )
+            trozos: list[bytes] = []
+            total = 0
+            for trozo in respuesta.iter_bytes():
+                total += len(trozo)
+                if total > _MAX_BYTES:
+                    raise ExtraccionError("La página es demasiado grande y se canceló la descarga.")
+                trozos.append(trozo)
+            codificacion = respuesta.encoding or "utf-8"
+    try:
+        return b"".join(trozos).decode(codificacion, errors="replace")
+    except (LookupError, ValueError):
+        return b"".join(trozos).decode("utf-8", errors="replace")
+
+
+def _descargar_real(url: str, timeout: float | None = None, reintentos: int = 1) -> str:
     """Descarga la pagina con `httpx` respetando timeout y tamano maximo.
 
-    Lee en trozos y corta si supera `_MAX_BYTES`. Import diferido de httpx (dependencia
-    transitiva via keni-metricas), igual que en `api.rss`/`media`. Sigue redirects (las
-    notas suelen redirigir a https/canonical), pero el guard SSRF ya se aplico al host
-    de partida. `timeout` (opcional) sube el tope por defecto (`_TIMEOUT`) cuando la descarga
-    ocurre FUERA de una petición HTTP (p. ej. el import en segundo plano). Lanza
-    `ExtraccionError` con mensaje en espanol ante cualquier fallo.
+    Sigue redirects (las notas suelen redirigir a https/canonical), pero el guard SSRF ya se
+    aplico al host de partida. `timeout` (opcional) sube el tope por defecto (`_TIMEOUT`) cuando la
+    descarga ocurre FUERA de una petición HTTP. `reintentos` (≥1) REINTENTA con backoff los fallos
+    TRANSITORIOS (timeout/conexión) —misma resiliencia que el motor de feeds de Fuentes—; un 4xx,
+    una página demasiado grande o "sin texto" NO se reintentan. Lanza `ExtraccionError` (español).
     """
     try:
         import httpx
     except ImportError as e:  # pragma: no cover -- httpx es dependencia transitiva
         raise ExtraccionError("Falta la librería para leer páginas en este equipo.") from e
 
-    cabeceras = {"User-Agent": "Mozilla/5.0 (compatible; KeniSocial/1.0; +operativo)"}
-    try:
-        with httpx.Client(
-            timeout=timeout or _TIMEOUT, follow_redirects=True, headers=cabeceras
-        ) as cliente:
-            with cliente.stream("GET", url) as respuesta:
-                if respuesta.status_code != 200:
-                    raise ExtraccionError(
-                        f"La página respondió con un error (HTTP {respuesta.status_code})."
-                    )
-                trozos: list[bytes] = []
-                total = 0
-                for trozo in respuesta.iter_bytes():
-                    total += len(trozo)
-                    if total > _MAX_BYTES:
-                        raise ExtraccionError("La página es demasiado grande y se canceló la descarga.")
-                    trozos.append(trozo)
-                codificacion = respuesta.encoding or "utf-8"
-    except ExtraccionError:
-        raise
-    except httpx.TimeoutException as e:
-        raise ExtraccionError("La página tardó demasiado y se canceló.") from e
-    except httpx.HTTPError as e:
-        raise ExtraccionError("No se pudo contactar con la página.") from e
-    try:
-        return b"".join(trozos).decode(codificacion, errors="replace")
-    except (LookupError, ValueError):
-        return b"".join(trozos).decode("utf-8", errors="replace")
+    intentos = max(1, reintentos)
+    for i in range(intentos):
+        try:
+            return _un_intento_descarga(url, timeout)
+        except ExtraccionError:
+            raise  # HTTP 4xx/5xx o demasiado grande: definitivo, no reintentar.
+        except (httpx.TimeoutException, httpx.TransportError) as e:
+            # Transitorio (lento/cortó/no contactó): espera con backoff y reintenta.
+            if i < intentos - 1:
+                time.sleep(_ESPERA_REINTENTO_SEG[min(i, len(_ESPERA_REINTENTO_SEG) - 1)])
+                continue
+            if isinstance(e, httpx.TimeoutException):
+                raise ExtraccionError("La página tardó demasiado y se canceló.") from e
+            raise ExtraccionError("No se pudo contactar con la página.") from e
+        except httpx.HTTPError as e:
+            raise ExtraccionError("No se pudo contactar con la página.") from e
+    raise ExtraccionError("No se pudo contactar con la página.")  # pragma: no cover -- inalcanzable
 
 
 # Punto INYECTABLE: lo unico que toca la red. Los tests lo parchean (sin red real).
@@ -385,16 +407,19 @@ def _texto_de_html(html: str) -> tuple[str, str]:
     return titulo, cuerpo
 
 
-def extraer_texto(url: str, *, timeout: float | None = None) -> tuple[str, str]:
+def extraer_texto(
+    url: str, *, timeout: float | None = None, reintentos: int = 1
+) -> tuple[str, str]:
     """Descarga `url` y devuelve `(titulo, cuerpo)` legible. Lanza `ExtraccionError`.
 
     NO valida la URL (eso es de `validar_url`, que el endpoint llama antes para el guard
     SSRF). Lanza si la pagina es de video/streaming (no se puede leer como articulo) o si
     no se obtiene texto util. La descarga real vive en `_DESCARGADOR` (mockeable).
 
-    `timeout` (opcional) sube el tope de descarga; solo aplica con el descargador REAL (cuando
-    `_DESCARGADOR` está mockeado en tests, se respeta el mock y se ignora el timeout). Lo usa el
-    import en segundo plano, que descarga FUERA de la petición HTTP y puede esperar más.
+    `timeout` (opcional) sube el tope de descarga y `reintentos` (≥1) REINTENTA con backoff los
+    fallos transitorios (timeout/conexión) —resiliencia del motor de feeds de Fuentes—. Ambos solo
+    aplican con el descargador REAL; si `_DESCARGADOR` está mockeado (tests) se respeta el mock. Los
+    usa el import en segundo plano, que descarga FUERA de la petición HTTP y puede esperar más.
     """
     if es_host_de_video(url):
         raise ExtraccionError(
@@ -402,8 +427,8 @@ def extraer_texto(url: str, *, timeout: float | None = None) -> tuple[str, str]:
             "Para video, descarga el clip y úsalo en «Clip a copy» (se transcribe en tu "
             "equipo); o pega el texto en «Copy desde nota»."
         )
-    if timeout is not None and _DESCARGADOR is _descargar_real:
-        html = _descargar_real(url, timeout=timeout)
+    if (timeout is not None or reintentos != 1) and _DESCARGADOR is _descargar_real:
+        html = _descargar_real(url, timeout=timeout, reintentos=reintentos)
     else:
         html = _DESCARGADOR(url)
     titulo, cuerpo = _texto_de_html(html)

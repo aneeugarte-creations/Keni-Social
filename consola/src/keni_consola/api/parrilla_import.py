@@ -45,8 +45,10 @@ _log = logging.getLogger("keni_consola.parrilla_import")
 
 # Descarga de un ENLACE en segundo plano: como NO bloquea la petición (corre tras responder, en
 # un hilo), puede esperar más que el tope por defecto de `extraccion_url` (15 s, pensado para
-# peticiones síncronas). Una página lenta desde el datacenter ya no revienta por timeout corto.
-_TIMEOUT_ENLACE = 45.0
+# peticiones síncronas) y REINTENTAR con backoff los fallos transitorios (lento/cortó), igual que
+# el motor de feeds de Fuentes. Una página lenta/intermitente desde el datacenter ya no se pierde.
+_TIMEOUT_ENLACE = 25.0
+_REINTENTOS_ENLACE = 3
 
 
 # --------------------------------------------------------------------------- #
@@ -236,7 +238,7 @@ async def importar(request: Request) -> Response:
             propuesta en `error` con un mensaje claro; el frontend lo muestra al sondear."""
             try:
                 titulo_url, cuerpo_url = extraccion_url.extraer_texto(
-                    url_limpia, timeout=_TIMEOUT_ENLACE
+                    url_limpia, timeout=_TIMEOUT_ENLACE, reintentos=_REINTENTOS_ENLACE
                 )
             except extraccion_url.ExtraccionError as e:
                 repos.actualizar_propuesta_parrilla(
