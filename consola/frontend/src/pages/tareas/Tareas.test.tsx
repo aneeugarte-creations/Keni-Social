@@ -398,6 +398,22 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     await waitFor(() => expect(soltar).toHaveBeenCalledWith("t-mia"));
   });
 
+  it("QUITAR-A-OTRO: el × del chip «Cubren:» suelta a esa persona (solo manager)", async () => {
+    const soltar = vi
+      .spyOn(apiMod.api, "soltarContenido")
+      .mockResolvedValue({ contenido: {} } as never);
+    // Soy manager (admin) y NO soy la cubridora: el chip de «tezcu» ofrece la × para quitarla.
+    renderTareas(
+      [tarea({ id: "t-tezcu", titulo: "Cruz Azul vs América", evento_id: "ev1", responsable_id: "u-tezcu", responsable_nombre: "tezcu", formato: "foto", fecha_objetivo: "2026-07-01" })],
+      [],
+      usuario("admin", "u-mgr"),
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /Cruz Azul vs América/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Quitar a tezcu" }));
+    await waitFor(() => expect(soltar).toHaveBeenCalledWith("t-tezcu"));
+  });
+
   it("'Añadir' (barra) abre el diálogo grande de la lista", async () => {
     renderTareas([]);
     // Hay dos «Añadir»: el atajo inline del Panorama (dentro de su <form>) y el de la barra.

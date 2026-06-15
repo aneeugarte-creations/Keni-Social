@@ -12,6 +12,7 @@ import {
   UserCheck,
   UserMinus,
   UserPlus,
+  X,
 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
@@ -285,14 +286,14 @@ function RolLibre({ tarea }: { tarea: Contenido }) {
       <span className="text-sm text-muted-foreground">{etiquetaRol(tarea.formato)}</span>
       <Button
         variant="outline"
-        size="sm"
-        className="ml-auto h-7"
+        size="icon"
+        className="ml-auto h-7 w-7"
         onClick={() => coger.mutate()}
         disabled={coger.isPending}
         title="La cubro yo"
+        aria-label="La cubro yo"
       >
-        <Hand className="mr-1 h-3.5 w-3.5" />
-        La cubro yo
+        <Hand className="h-3.5 w-3.5" />
       </Button>
     </div>
   );
@@ -662,6 +663,19 @@ export function TarjetaCobertura({
     },
   });
 
+  // Quitar a un cubridor (× del chip): suelta SU pieza; el rol vuelve a «Por cubrir».
+  const soltar = useMutation({
+    mutationFn: (v: { id: string; nombre: string; rol: string }) => api.soltarContenido(v.id),
+    onSuccess: (_res, v) => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
+      toast.success(`${v.nombre} ya no cubre (${etiquetaRol(v.rol)}); el rol vuelve a «Por cubrir».`);
+    },
+    onError: (e) => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
+      toast.error(mensajeError(e));
+    },
+  });
+
   const accionesCobertura: EntradaMenuContextual[] = [];
   if (esManager) {
     accionesCobertura.push({
@@ -682,13 +696,34 @@ export function TarjetaCobertura({
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm text-muted-foreground">Cubren:</span>
-        {cobertura.cubridores.map((t) => (
-          <span key={t.id} className="inline-flex items-center gap-1 text-sm">
-            <AvatarPersona id={t.responsable_id} nombre={t.responsable_nombre} size="sm" />
-            {t.responsable_nombre}
-            <span className="text-muted-foreground">· {etiquetaRol(t.formato)}</span>
-          </span>
-        ))}
+        {cobertura.cubridores.map((t) => {
+          const esMio = t.responsable_id === usuario?.id;
+          const puedeQuitar = esManager || esMio;
+          return (
+            <span
+              key={t.id}
+              className="inline-flex items-center gap-1 rounded-full border border-border bg-card py-0.5 pl-1 pr-2 text-sm"
+            >
+              <AvatarPersona id={t.responsable_id} nombre={t.responsable_nombre} size="sm" />
+              {t.responsable_nombre}
+              <span className="text-muted-foreground">· {etiquetaRol(t.formato)}</span>
+              {puedeQuitar && (
+                <button
+                  type="button"
+                  aria-label={esMio ? "Soltar (dejar de cubrir)" : `Quitar a ${t.responsable_nombre}`}
+                  title={esMio ? "Soltar (dejar de cubrir)" : `Quitar a ${t.responsable_nombre}`}
+                  disabled={soltar.isPending}
+                  onClick={() =>
+                    soltar.mutate({ id: t.id, nombre: t.responsable_nombre, rol: t.formato })
+                  }
+                  className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </span>
+          );
+        })}
         {/* Semáforo agregado por rol del evento (qué roles están cubiertos). */}
         <RolesCubiertos cubridores={cobertura.cubridores} />
       </div>
