@@ -21,7 +21,6 @@ from ._comun import (
     PROMPT_QA_ID,
     QA_EN_CURSO,
     TIPO_PIPELINE,
-    _copy_pendiente_leido,
     _log,
     registrar_etapa,
     temas_pipeline,
@@ -32,7 +31,6 @@ __all__ = [
     "asegurar_documento_qa",
     "dom_qa_titulo",
     "_contexto_qa_fuente",
-    "lanzar_verificar_fuente",
     "lanzar_verificar_cluster",
     "temas_sin_verificar",
 ]
@@ -134,99 +132,6 @@ def _endurecer_qa_fuente() -> dict[str, Any] | None:
     return overrides or None
 
 
-def lanzar_verificar_fuente(
-    tema: dict[str, Any], *, autor: dict[str, str] | None
-) -> dict[str, Any] | None:
-    """QA de la FUENTE via `claude -p`: verifica la NOTA de origen de un TEMA contra el doc de Texto.
-
-    Rediseño QPC (pre-copy, por TEMA): evalúa el material de origen (no el copy: aún no existe) y
-    persiste un veredicto ESTRUCTURADO (`no_verificado`/`problema`) + hallazgos sobre el TEMA
-    (`construir_procesar_qa_fuente`). Reutiliza el camino PROBADO de generaciones (`gen_dom.lanzar`).
-    El stream queda en la generación; el marcador QA la enlaza por `gen_id` (su proceso se ve en
-    el detalle del pipeline).
-
-    ASÍNCRONO: encola y devuelve la generación; marca el tema `verificar_veredicto='en_curso'` para que
-    la fase QA no lo re-lance y la etapa QA se vea "en curso" hasta que el `procesar` persista el
-    veredicto real al completar. None si no se pudo lanzar (sin doc / sin marca / sin nota). La
-    `ColaLlenaError` se PROPAGA (el barrido corta la fase QA de esa marca).
-    """
-    tema_id = (tema.get("id") or "").strip()
-    if not tema_id:
-        return None
-    marca = (tema.get("marca") or "").strip()
-    if not marca or not marcas.es_marca(marca):
-        return None
-    pend = _copy_pendiente_leido(tema)
-    nota = (pend.get("nota") or tema.get("descripcion") or "").strip()
-    if not nota:
-        return None
-
-    # Regla del dueño: asegura (crea si falta) el documento de criterios y adjúntalo.
-    doc_id = _ref.asegurar_documento_qa()
-    cuerpo = libtexto.cuerpo_efectivo(doc_id) if doc_id else None
-    if not cuerpo:
-        return None  # sin documento de QA no hay verificación: el tema queda sin veredicto (sin copy).
-
-    titulo = (tema.get("titulo") or "").strip() or dom_qa_titulo(nota)
-    prompt = gen_dom.componer(
-        cuerpo,
-        libtexto.editoriales_de_marca(marca, pipeline="verificar"),
-        _contexto_qa_fuente(nota),
-    )
-    # Marca el tema en curso ANTES de lanzar (para que la fase QA no lo re-lance). CLAVE con el
-    # lanzador SÍNCRONO de los tests: el `procesar` corre DURANTE `lanzar` y persiste el veredicto
-    # real; si marcáramos en_curso DESPUÉS, sobrescribiría ese veredicto. En prod (async) el orden
-    # es indiferente; así queda correcto en ambos. El `procesar` lo sustituye por el real al fin.
-    try:
-        repos.actualizar_contenido(tema_id, {"verificar_veredicto": QA_EN_CURSO})
-    except Exception:  # noqa: BLE001 -- best-effort; sin esto el doble-lanzamiento lo evita el sweep
-        _log.warning("pipeline: no se pudo marcar el tema en_curso para QA (%s)", tema_id, exc_info=True)
-    gen = gen_dom.lanzar(
-        tipo=TIPO_PIPELINE,
-        # Etiqueta HUMANA en Actividad: el nombre de la etapa ("Verificar", como en la vista
-        # Pipelines) + el TEMA verificado. Sin el tema, N verificaciones simultáneas eran N filas idénticas
-        # en el feed ("Verificar la fuente · UnoTV" ×16) imposibles de distinguir.
-        titulo=f"Verificar · {titulo}",
-        marca=marca,
-        prompt=prompt,
-        # Correlación con el TEMA: Producción suma las métricas de la verificación en su run.
-        contenido_id=tema_id,
-        # CLAVE ESTABLE por tema: el prompt lleva un nonce por llamada (anti-inyección) y la
-        # clave por defecto (hash del prompt) nunca coincidiría. Con esta, un re-lanzamiento de
-        # la verificación del MISMO tema mientras hay una en curso devuelve ese run (cinturón además
-        # del marcador `en_curso`, que una reparación/reset puede limpiar a destiempo).
-        clave_idem=generaciones.clave_idempotencia(
-            (autor or {}).get("id", ""), TIPO_PIPELINE, marca, "qa-fuente", tema_id
-        ),
-        procesar=dom_verificar.construir_procesar_qa_fuente(
-            marca, titulo, autor, contenido_id=tema_id,
-        ),
-        procesar_spec=jobspec.construir_qa_fuente(
-            marca=marca, titulo=titulo, autor=autor, contenido_id=tema_id,
-        ),
-        autor=autor,
-        # Verificación QA de la FUENTE = VERIFICACIÓN con SALIDA ESTRUCTURADA (veredicto
-        # `no_verificado`/`problema` + hallazgos, parseados; el usuario no ve la salida cruda).
-        # Corroborar el material puede requerir LEER la fuente: NO se le veta la web. Queda la
-        # veta global `Bash Write Edit`.
-        # VERIFICACIÓN BARATA: la QA de la fuente es un filtro permisivo, no redacción. Corre con un
-        # modelo rápido (def Haiku), esfuerzo bajo y timeout corto (def 180 s), configurables
-        # por env (`KENI_QA_FUENTE_MODELO`/`_ESFUERZO`/`_TIMEOUT`). Solo endurece; vacío = global.
-        endurecer=_endurecer_qa_fuente(),
-        # Frontera ADR 0011: la verificación/QA de la fuente es INVESTIGACION (motor de noticias), no
-        # produccion. Se sella en el registro para medir el coste de investigar por separado.
-        proceso=generaciones.PROCESO_INVESTIGACION,
-    )
-    registrar_etapa(
-        ETAPA_VERIFICAR,
-        marca,
-        f"Verificación de la fuente (claude) — '{titulo[:120]}'",
-        contenido_id=tema_id,
-        gen_id=gen.get("id", "") if isinstance(gen, dict) else "",
-    )
-    return gen
-
-
 def lanzar_verificar_cluster(
     cluster: dict[str, Any], *, autor: dict[str, str] | None
 ) -> dict[str, Any] | None:
@@ -239,7 +144,7 @@ def lanzar_verificar_cluster(
     investigación admite luego solo las `no_verificado` (hereda el veredicto al contenido) y deja
     fuera las `problema`. ASÍNCRONO: marca el cluster `en_curso` y devuelve la generación; None si
     no se pudo lanzar (sin doc / sin marca / sin nota). `ColaLlenaError` se PROPAGA (corta la fase
-    QA de esa marca). Mismo runtime barato (Haiku/low/timeout corto) que `lanzar_verificar_fuente`.
+    QA de esa marca). Runtime barato (Haiku/low/timeout corto, `_endurecer_qa_fuente`).
     """
     from . import _admitir
 

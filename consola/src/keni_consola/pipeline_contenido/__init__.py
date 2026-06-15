@@ -187,7 +187,6 @@ from ._verificar import (
     asegurar_documento_qa,
     dom_qa_titulo,
     lanzar_verificar_cluster,
-    lanzar_verificar_fuente,
     qa_lexico,
     temas_sin_verificar,
 )
@@ -290,7 +289,6 @@ __all__ = [
     "asegurar_documento_qa",
     "dom_qa_titulo",
     "_contexto_qa_fuente",
-    "lanzar_verificar_fuente",
     "lanzar_verificar_cluster",
     "temas_sin_verificar",
     # CD

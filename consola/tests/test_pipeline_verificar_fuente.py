@@ -2,11 +2,12 @@
 
 El equipo NO usa skills: la QA se hace adjuntando un DOCUMENTO de la Texto con los criterios.
 Regla del dueño: "si el documento existe, adjúntalo; si no existe, créalo y adjúntalo." La QA
-corre ANTES del copy y por TEMA (fuente): verifica la NOTA de origen y persiste un veredicto
-ESTRUCTURADO (`no_verificado`/`problema`) sobre el TEMA. Aquí cubrimos, OFFLINE (mock de claude):
+corre ANTES del copy y sobre la HISTORIA (cluster, ADR 0011 F3): verifica la NOTA de origen y
+persiste un veredicto ESTRUCTURADO (`no_verificado`/`problema`) en el cluster. Aquí cubrimos,
+OFFLINE (mock de claude):
   - `asegurar_documento_qa` crea el documento si falta (idempotente).
-  - `lanzar_verificar_fuente` enlaza una generación a la etapa Verificar (`gen_id`) y deja el tema `en_curso`.
-  - el `procesar` (vía lanzador completo) persiste el veredicto estructurado sobre el tema.
+  - `lanzar_verificar_cluster` enlaza una generación, deja el cluster `en_curso` y corre barato.
+  - el `procesar` (vía lanzador completo) persiste el veredicto estructurado sobre el cluster.
 
 Usa la fixture `entorno` (Postgres aislado + Texto en tmp) y construye el cliente con un
 lanzador de generación inyectado (NUNCA se llama a `claude`).
@@ -14,19 +15,31 @@ lanzador de generación inyectado (NUNCA se llama a `claude`).
 
 from __future__ import annotations
 
-from keni_consola import generaciones, libtexto, repos
+from datetime import UTC, datetime
+
+from keni_consola import libtexto, repos
 from keni_consola import pipeline_contenido as pc
-from keni_consola.pipeline_contenido import ORIGEN_PIPELINE
 
 from .conftest import _cliente, lanzador_generacion_completa
 
 
-def _tema(titulo: str = "Tema QA", marca: str = "unotv") -> dict:
-    """Crea un tema del pipeline con su nota de origen en `descripcion`, y lo devuelve."""
-    return repos.crear_contenido(
-        clase="contenido", titulo=titulo, marca=marca, origen=ORIGEN_PIPELINE,
-        descripcion="Nota de origen: título + resumen + enlace.",
-    )
+def _cluster(
+    cid: str = "c-qa",
+    *,
+    marca: str = "unotv",
+    titulo: str = "Historia QA",
+    resumen: str = "México: el gobierno informa de seguridad en la CDMX",
+) -> dict:
+    """Siembra un cluster del pool (sin items): la nota de QA = título + resumen."""
+    repos.upsert_noticia_cluster({
+        "id": cid, "titulo": titulo, "resumen": resumen, "marca": marca,
+        "categoria": "mx", "geo": "MX", "clave": f"t:{cid}", "n_items": 1,
+        "n_fuentes": 2, "idiomas": ["es"], "senal": 100, "score": 0.5,
+        "breaking": 0, "primer_visto": "2026-06-01T00:00:00+00:00",
+        "ultimo_visto": datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="seconds"),
+        "estado": "nuevo", "verificacion": "corroborada",
+    })
+    return repos.obtener_noticia_cluster(cid)
 
 
 def test_asegurar_documento_qa_lo_crea_si_falta(entorno):
@@ -46,46 +59,46 @@ def test_asegurar_documento_qa_lo_crea_si_falta(entorno):
     assert len(docs) == 1
 
 
-def test_lanzar_qa_fuente_enlaza_generacion_y_marca_en_curso(entorno):
-    """`lanzar_verificar_fuente` lanza una generación, la enlaza a la etapa Verificar y deja el tema en_curso."""
+def test_lanzar_qa_cluster_enlaza_generacion_y_marca_en_curso(entorno):
+    """`lanzar_verificar_cluster` lanza una generación y deja el cluster en_curso (lanzador noop)."""
     cliente = _cliente()  # noqa: F841 -- el lanzador noop deja la generación en `ejecutando`
-    tema = _tema()
-    gen = pc.lanzar_verificar_fuente(tema, autor=None)
+    cluster = _cluster()
+    gen = pc.lanzar_verificar_cluster(cluster, autor=None)
     assert gen is not None
-    gen_id = gen["id"]
 
-    # El tema queda en_curso (no se re-lanzará en la fase Verificar).
-    actual = repos.obtener_contenido(tema["id"])
+    # El cluster queda en_curso (no se re-lanzará en la fase Verificar) hasta que el procesar lo selle.
+    actual = repos.obtener_noticia_cluster(cluster["id"])
     assert (actual.get("verificar_veredicto") or "") == pc.QA_EN_CURSO
 
-    # El marcador de etapa Verificar enlaza la generación por `gen_id` (su stream se ve en el detalle).
-    marcadores = [
-        g for g in generaciones.listar(limite=None)
-        if g.get("tipo") == pc.TIPO_ACTIVIDAD
-        and (g.get("contenido_id") or "") == tema["id"]
-    ]
-    assert any((m.get("gen_id") or "") == gen_id for m in marcadores)
 
-    # El detalle del pipeline surface el stream de la etapa Verificar.
-    d = cliente.get(f"/api/pipelines/{tema['id']}")
-    assert d.status_code == 200
-    por_etapa = d.json()["generaciones_por_etapa"]
-    assert "VERIFICAR" in por_etapa
-    assert por_etapa["VERIFICAR"]["id"] == gen_id
-
-
-def test_qa_fuente_persiste_veredicto_no_verificado(entorno):
-    """Una verificación 🟢 sin hallazgos -> veredicto `no_verificado` persistido en el tema."""
+def test_qa_cluster_persiste_veredicto_no_verificado(entorno):
+    """Una verificación 🟢 sin hallazgos -> veredicto `no_verificado` persistido en el cluster."""
     salida = (
         "🟢 Fuente apta.\n\n"
         '```json\n{"veredicto": "🟢", "resumen": "OK", "hallazgos": []}\n```\n'
     )
     cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(salida))  # noqa: F841
-    tema = _tema()
-    gen = pc.lanzar_verificar_fuente(tema, autor=None)
+    cluster = _cluster()
+    gen = pc.lanzar_verificar_cluster(cluster, autor=None)
     assert gen is not None
-    actual = repos.obtener_contenido(tema["id"])
+    actual = repos.obtener_noticia_cluster(cluster["id"])
     assert (actual.get("verificar_veredicto") or "") == pc.VERDICTO_NO_VERIFICADO
+
+
+def test_qa_cluster_persiste_veredicto_problema(entorno):
+    """Una verificación 🔴 con hallazgo de error -> veredicto `problema` + hallazgos persistidos."""
+    salida = (
+        "🔴 Problema de peso.\n\n"
+        '```json\n{"veredicto": "🔴", "resumen": "Dato falso", '
+        '"hallazgos": [{"tipo": "dato", "gravedad": "error", "explicacion": "inventado"}]}\n```\n'
+    )
+    cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(salida))  # noqa: F841
+    cluster = _cluster()
+    gen = pc.lanzar_verificar_cluster(cluster, autor=None)
+    assert gen is not None
+    actual = repos.obtener_noticia_cluster(cluster["id"])
+    assert (actual.get("verificar_veredicto") or "") == pc.VERDICTO_PROBLEMA
+    assert "inventado" in (actual.get("verificar_hallazgos") or "")
 
 
 def test_endurecer_qa_fuente_barato_por_defecto(monkeypatch):
@@ -127,8 +140,8 @@ def test_qa_en_curso_ttl_configurable_con_minimo(monkeypatch):
     assert config.qa_en_curso_ttl_seg() == 5 * 60  # suelo
 
 
-def test_lanzar_qa_fuente_lanza_con_endurecer_barato(entorno, monkeypatch):
-    """`lanzar_verificar_fuente` pasa el `endurecer` barato (modelo/esfuerzo/timeout) al lanzador."""
+def test_lanzar_qa_cluster_lanza_con_endurecer_barato(entorno, monkeypatch):
+    """`lanzar_verificar_cluster` pasa el `endurecer` barato (modelo/esfuerzo/timeout) al lanzador."""
     from keni_consola.pipeline_contenido import _verificar
 
     cliente = _cliente()  # noqa: F841 -- inicializa stores; el lanzador real se intercepta abajo
@@ -136,29 +149,13 @@ def test_lanzar_qa_fuente_lanza_con_endurecer_barato(entorno, monkeypatch):
 
     def _fake_lanzar(**kw):
         capturado.update(kw)
-        return {"id": "gen-qa-1"}
+        return {"id": "gen-qa-c1"}
 
     monkeypatch.setattr(_verificar.gen_dom, "lanzar", _fake_lanzar)
-    tema = _tema()
+    cluster = _cluster()
 
-    gen = pc.lanzar_verificar_fuente(tema, autor=None)
+    gen = pc.lanzar_verificar_cluster(cluster, autor=None)
 
-    assert gen is not None and gen["id"] == "gen-qa-1"
+    assert gen is not None and gen["id"] == "gen-qa-c1"
     assert capturado["tipo"] == "pipeline"  # trabajo de la máquina: un solo tipo en Actividad
     assert capturado["endurecer"] == {"modelo": "haiku", "esfuerzo": "low", "timeout": 180}
-
-
-def test_qa_fuente_persiste_veredicto_problema(entorno):
-    """Una verificación 🔴 con hallazgo de error -> veredicto `problema` + hallazgos persistidos."""
-    salida = (
-        "🔴 Problema de peso.\n\n"
-        '```json\n{"veredicto": "🔴", "resumen": "Dato falso", '
-        '"hallazgos": [{"tipo": "dato", "gravedad": "error", "explicacion": "inventado"}]}\n```\n'
-    )
-    cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(salida))  # noqa: F841
-    tema = _tema()
-    gen = pc.lanzar_verificar_fuente(tema, autor=None)
-    assert gen is not None
-    actual = repos.obtener_contenido(tema["id"])
-    assert (actual.get("verificar_veredicto") or "") == pc.VERDICTO_PROBLEMA
-    assert "inventado" in (actual.get("verificar_hallazgos") or "")
