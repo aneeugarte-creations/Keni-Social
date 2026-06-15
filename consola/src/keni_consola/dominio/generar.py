@@ -202,11 +202,14 @@ def instruccion_redes(redes_ids: list[str]) -> str:
 
 
 # Una red es "estrecha" si su límite la obliga a un copy mucho más corto que el de las redes
-# amplias (X = 280). Mezclar X con Instagram (2200)/Facebook (sin tope) en UN solo copy forzaba
-# todo a 280 = un tuit publicado en IG/FB. Por debajo de esto pedimos un `texto_corto` aparte
-# para esas redes, dejando el copy completo para las amplias. La asignación final por red la hace
-# `stream.parsear_salida_unificada` por longitud real, no por este umbral (que solo decide el
-# fraseo del prompt).
+# amplias. El caso histórico era X (cuenta gratis, 280): mezclar X con Instagram (2200)/Facebook
+# (sin tope) en UN solo copy forzaba todo a 280 = un tuit publicado en IG/FB. Por debajo de este
+# umbral pedimos un `texto_corto` aparte para esas redes, dejando el copy completo para las amplias.
+# NOTA (X Premium): desde que X vale 25.000 (la cuenta de AMX tiene Premium), NINGUNA de las 5 redes
+# canónicas es estrecha (todas ≥ 600 o sin tope), así que la rama de `texto_corto` queda DORMIDA en
+# la práctica. Se conserva como mecanismo GENÉRICO: si alguna red volviera a tener un tope < 600, se
+# reactiva sola. La asignación final por red la hace `stream.parsear_salida_unificada` por longitud
+# real, no por este umbral (que solo decide el fraseo del prompt).
 UMBRAL_COPY_ESTRECHO = 600
 
 
@@ -299,10 +302,10 @@ def instruccion_copy_unico(
     El `copy_in` se reutiliza en cada red pedida (así X nunca queda sin él). El copy sale SIN
     hashtags (el equipo los añade aparte). Pide un único bloque ```json con un OBJETO PLANO.
 
-    Cuando se mezclan redes AMPLIAS (Instagram, Facebook…) con ESTRECHAS (X), pide DOS versiones
-    del mismo mensaje: `texto` (completa, para las amplias) y `texto_corto` (condensada ≤ límite
-    de las estrechas). Antes anclaba TODO al límite más estricto (X=280) y publicaba un tuit en
-    Instagram/Facebook. Si todas las redes son del mismo tipo, pide un único `texto`.
+    Cuando se mezclan redes AMPLIAS con ESTRECHAS (límite < `UMBRAL_COPY_ESTRECHO`), pide DOS
+    versiones del mismo mensaje: `texto` (completa, para las amplias) y `texto_corto` (condensada
+    ≤ límite de las estrechas). Con X Premium (25.000) ninguna red canónica es estrecha, así que
+    hoy siempre cae en el caso de un único `texto` (rama doble dormida, ver `UMBRAL_COPY_ESTRECHO`).
 
     TODA generación SUGIERE el formato (`tipo`: post|carrusel): el modelo dice si la pieza luce
     mejor como post de foto o como carrusel (explainer/lista). `n_notas` (pipeline, historias):

@@ -32,7 +32,7 @@ def test_limites_endpoint_orden_y_forma(cliente):
     # mismo orden fijo que el catalogo de redes
     assert ids == ["x", "instagram", "facebook", "tiktok", "youtube"]
     por_id = {r["id"]: r for r in datos["limites"]}
-    assert por_id["x"] == {"id": "x", "nombre": "X", "limite": 280}
+    assert por_id["x"] == {"id": "x", "nombre": "X", "limite": 25000}
     assert por_id["instagram"]["limite"] == 2200
     assert por_id["facebook"]["limite"] is None
     assert por_id["tiktok"]["limite"] == 4000  # caption ampliado 2023-24 (#112)

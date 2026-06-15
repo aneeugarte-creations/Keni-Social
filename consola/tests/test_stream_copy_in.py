@@ -86,14 +86,16 @@ def test_unificada_contenido_conserva_emojis_y_copy_in_no():
     assert all(p["copy_in"] == "GOLAZO" for p in piezas)
 
 
-def test_unificada_texto_corto_va_a_x_y_el_largo_a_ig_fb():
-    # X (límite 280) recibe `texto_corto`; Instagram/Facebook reciben el copy COMPLETO.
-    largo = "L" * 400  # supera el límite de X (280), no el de Instagram (2200)
+def test_unificada_texto_corto_va_a_la_red_estrecha_y_el_largo_a_las_anchas():
+    # La red cuyo tope NO admite el largo recibe `texto_corto`; las más anchas, el copy COMPLETO.
+    # Con X Premium (25000) la estrecha pasa a ser Instagram (2200): un copy >2200 se condensa
+    # SOLO para Instagram; X (25000) y Facebook (sin tope) conservan el largo.
+    largo = "L" * 2300  # supera el límite de Instagram (2200), no el de X (25000) ni Facebook
     salida = '```json\n{"texto": "' + largo + '", "texto_corto": "Versión breve", "copy_in": "T"}\n```'
     piezas = stream.parsear_salida_unificada(salida, ["x", "instagram", "facebook"])["piezas"]
     por_red = {p["red"]: p["contenido"] for p in piezas}
-    assert por_red["x"] == "Versión breve"
-    assert por_red["instagram"] == largo
+    assert por_red["instagram"] == "Versión breve"
+    assert por_red["x"] == largo
     assert por_red["facebook"] == largo
     # Todas comparten el mismo copy_in.
     assert all(p["copy_in"] == "T" for p in piezas)
@@ -107,8 +109,8 @@ def test_unificada_texto_corto_se_ignora_si_el_largo_cabe():
 
 
 def test_unificada_sin_texto_corto_el_largo_no_se_trunca():
-    # Sin `texto_corto`, X hereda el copy largo TAL CUAL (la validación de longitud lo cribará
-    # después; el parser no trunca). Comportamiento previo intacto.
+    # Sin `texto_corto`, todas las redes heredan el copy largo TAL CUAL (el parser no trunca; si
+    # alguna lo excediera, lo cribaría después la validación de longitud). Comportamiento previo intacto.
     largo = "L" * 400
     salida = '```json\n{"texto": "' + largo + '", "copy_in": ""}\n```'
     piezas = stream.parsear_salida_unificada(salida, ["x", "instagram"])["piezas"]

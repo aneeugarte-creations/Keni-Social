@@ -1,0 +1,38 @@
+id: unotv-ig-largo
+descripcion: "Copy de UnoTV para Instagram que se pasa del límite técnico DURO de 2200 caracteres del caption. (Antes este golden cubría X=280; con X Premium=25000 el tope duro más estricto pasó a ser Instagram.)"
+marca: unotv
+red: instagram
+espera: falla
+falla_esperada_en: limite_red
+copy: >
+  El gobierno federal presentó este jueves el nuevo paquete de medidas económicas que
+  busca contener la inflación y proteger el poder adquisitivo de las familias mexicanas
+  durante los próximos meses, con apoyos directos, controles de precios en la canasta
+  básica y estímulos fiscales para las pequeñas y medianas empresas de todo el país. La
+  Secretaría de Hacienda detalló que el plan se aplicará en tres etapas escalonadas, con
+  un primer bloque de transferencias que llegará a los hogares de menores ingresos antes
+  de que termine el mes, mientras que los controles de precios sobre el maíz, el frijol,
+  el arroz y el aceite entrarán en vigor de manera inmediata en las principales cadenas
+  comerciales del país. Las autoridades explicaron que los estímulos fiscales incluyen
+  reducciones temporales de cuotas para las micro y pequeñas empresas, facilidades de
+  pago para quienes acumularon adeudos durante el último año y un programa de créditos
+  blandos canalizado a través de la banca de desarrollo para sostener el empleo formal
+  en los sectores más golpeados por el alza de costos. El paquete también contempla un
+  refuerzo al gasto en salud y educación, la ampliación de las becas para estudiantes de
+  nivel medio superior y un fondo de apoyo al campo orientado a garantizar el abasto de
+  granos básicos de cara a la próxima temporada agrícola, según el documento entregado a
+  los legisladores. En conferencia, los funcionarios subrayaron que las medidas serán
+  revisadas cada trimestre y ajustadas según el comportamiento de la inflación, el tipo
+  de cambio y la recaudación, y pidieron a la población consultar los canales oficiales
+  para conocer fechas, requisitos y montos exactos de cada apoyo antes de acudir a los
+  módulos de registro que se instalarán en las próximas semanas en todo el territorio
+  nacional para atender a quienes resulten elegibles según los criterios publicados.
+  Especialistas consultados por distintos medios coincidieron en que el éxito del plan
+  dependerá de su correcta ejecución, de la coordinación entre los gobiernos estatales y
+  federal y de la capacidad de las dependencias para vigilar que los controles de precios
+  realmente se respeten en los puntos de venta, evitando el desabasto o el acaparamiento
+  de productos básicos. Organizaciones de la sociedad civil pidieron transparencia en la
+  asignación de los apoyos y mecanismos claros de rendición de cuentas, mientras que
+  cámaras empresariales celebraron los estímulos fiscales pero advirtieron que la certeza
+  jurídica y la estabilidad de las reglas serán determinantes para que la inversión y el
+  empleo se recuperen de forma sostenida en lo que resta del año en todas las regiones.

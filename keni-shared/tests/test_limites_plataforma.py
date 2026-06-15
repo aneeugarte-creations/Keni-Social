@@ -11,7 +11,7 @@ def test_tabla_canonica_tiene_las_cinco_redes_en_orden():
 
 def test_valores_canonicos():
     assert limites_plataforma.LIMITES == {
-        "x": 280,
+        "x": 25000,  # X Premium (la cuenta de AMX lo tiene); antes 280 (cuenta gratis)
         "instagram": 2200,
         "facebook": None,
         "tiktok": 4000,  # caption ampliado 2023-24 (#112)
@@ -20,7 +20,7 @@ def test_valores_canonicos():
 
 
 def test_limite_de():
-    assert limites_plataforma.limite_de("x") == 280
+    assert limites_plataforma.limite_de("x") == 25000
     assert limites_plataforma.limite_de("tiktok") == 4000
     assert limites_plataforma.limite_de("facebook") is None
     # red desconocida -> None (defensivo: no inventamos un tope)
@@ -30,7 +30,7 @@ def test_limite_de():
 def test_como_lista_respeta_orden():
     lista = limites_plataforma.como_lista()
     assert [r["id"] for r in lista] == ["x", "instagram", "facebook", "tiktok", "youtube"]
-    assert lista[0] == {"id": "x", "limite": 280}
+    assert lista[0] == {"id": "x", "limite": 25000}
 
 
 def test_video_specs_cubren_las_cinco_redes_en_orden():

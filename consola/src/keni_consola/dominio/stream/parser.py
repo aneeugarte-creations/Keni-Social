@@ -190,10 +190,10 @@ def parsear_salida_unificada(salida: str, redes_ids: list[str]) -> dict[str, obj
     + copy_in se EMITE para CADA red de `redes_ids`. Así X nunca queda sin `copy_in`.
 
     `texto_corto` (opcional): versión condensada para las redes ESTRECHAS. Cada red usa
-    `texto_corto` SOLO si su límite técnico es menor que la longitud de `texto` (p. ej. X=280
-    frente a un copy largo); las amplias (Instagram, Facebook…) usan `texto` completo. Sin
-    `texto_corto`, todas heredan `texto` (comportamiento previo): un copy demasiado largo para X
-    lo descartará luego la validación de longitud, no este parser.
+    `texto_corto` SOLO si su límite técnico es menor que la longitud de `texto` (p. ej. Instagram
+    =2200 frente a un copy más largo); las más anchas (X Premium=25000, Facebook sin tope…) usan
+    `texto` completo. Sin `texto_corto`, todas heredan `texto` (comportamiento previo): un copy
+    demasiado largo para una red lo descartará luego la validación de longitud, no este parser.
 
     `tipo` (opcional, DOS tipos de output del pipeline): cuando la historia trae varias fotos
     de fuente, el prompt deja al modelo DECIDIR entre `"post"` (una imagen, lo de siempre) y
@@ -269,8 +269,8 @@ def parsear_salida_unificada(salida: str, redes_ids: list[str]) -> dict[str, obj
     copy_in_base = quitar_emojis(copy_in_base)
     piezas: list[dict[str, object]] = []
     for r in redes_ids:
-        # Una red usa el copy CORTO solo si su límite técnico no admite el largo (X=280 vs un copy
-        # de Instagram/Facebook). Sin `texto_corto`, todas usan el largo (comportamiento previo).
+        # Una red usa el copy CORTO solo si su límite técnico no admite el largo (p. ej. Instagram
+        # =2200 vs un copy más largo). Sin `texto_corto`, todas usan el largo (comportamiento previo).
         limite = limites_plataforma.limite_de(r)
         usar_corto = bool(contenido_corto) and limite is not None and len(contenido_largo) > limite
         contenido = contenido_corto if usar_corto else contenido_largo

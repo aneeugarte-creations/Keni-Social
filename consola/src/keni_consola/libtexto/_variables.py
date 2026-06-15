@@ -163,7 +163,7 @@ _CATALOGO: tuple[dict[str, str], ...] = (
         "nombre": "LIMITES",
         "descripcion": "Frase con el límite técnico de caracteres de cada red pedida, desde la fuente única "
         "del código (keni-shared).",
-        "ejemplo": "X máx 280 caracteres, Facebook sin tope técnico",
+        "ejemplo": "X máx 25000 caracteres, Facebook sin tope técnico",
         "origen": "Pipeline de copy · envoltorio de redes (prompt/envoltorios/redes)",
     },
     {
@@ -202,7 +202,7 @@ _CATALOGO: tuple[dict[str, str], ...] = (
         "nombre": "VERSIONES",
         "descripcion": "Sub-bloque ya montado por el código con qué versiones escribir: dos (texto + "
         "texto_corto) si se mezclan redes amplias y estrechas, una si no.",
-        "ejemplo": "Escribe DOS versiones del MISMO mensaje (…) máximo 280 caracteres.",
+        "ejemplo": "Escribe DOS versiones del MISMO mensaje (…) máximo 2200 caracteres.",
         "origen": "Pipeline de copy · copy unificado (prompt/envoltorios/copy-unico)",
     },
     {
@@ -223,13 +223,13 @@ _CATALOGO: tuple[dict[str, str], ...] = (
         "nombre": "REDES_ESTRECHAS",
         "descripcion": "Nombres de las redes con límite corto (reciben `texto_corto`), dentro del sub-bloque "
         "de versiones.",
-        "ejemplo": "X",
+        "ejemplo": "Instagram",
         "origen": "Pipeline de copy · copy unificado (sub-bloque {{VERSIONES}} montado en dominio/generar.py)",
     },
     {
         "nombre": "TOPE_CORTO",
         "descripcion": "Límite técnico más estricto (en caracteres) que acota el copy o su versión corta.",
-        "ejemplo": "280",
+        "ejemplo": "2200",
         "origen": "Pipeline de copy · copy unificado (sub-bloque {{VERSIONES}} montado en dominio/generar.py)",
     },
 )

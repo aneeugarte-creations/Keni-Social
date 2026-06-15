@@ -25,7 +25,7 @@ def test_opciones(cliente):
     ids = [r["id"] for r in datos["redes"]]
     assert ids == ["x", "instagram", "facebook", "tiktok", "youtube"]
     x = datos["redes"][0]
-    assert x == {"id": "x", "nombre": "X", "limite": 280}
+    assert x == {"id": "x", "nombre": "X", "limite": 25000}
     assert datos["redes"][2]["limite"] is None  # facebook
     # estados con nombre legible
     estados = {e["id"]: e["nombre"] for e in datos["estados"]}

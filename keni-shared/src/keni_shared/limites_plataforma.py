@@ -18,6 +18,13 @@ TikTok: el caption admite hasta 4.000 caracteres desde la ampliacion de 2023-24
 sigue siendo corto; eso lo dice la skill, no este tope). Ver el porque en el
 docstring de `LIMITES` y en `plataformas.md`.
 
+X: con la suscripcion Premium (la cuenta de AMX la tiene) el limite del post sube
+de 280 a 25.000 caracteres. Tomamos 25.000 como el limite tecnico ACTUAL real de la
+cuenta. Lo editorial sigue mandando concision (un tuit suele querer ser corto: eso
+lo dice `plataformas.md`, no este tope). Consecuencia de diseno: X deja de ser una
+red "estrecha" (ver `UMBRAL_COPY_ESTRECHO` en `dominio.generar`), asi que el copy
+unificado ya no se condensa a un tuit de 280 para acomodar a X.
+
 Sin estado ni I/O: solo datos y funciones puras. El orden es FIJO (igual que en
 `redes.REDES`): X, Instagram, Facebook, TikTok, YouTube.
 """
@@ -27,7 +34,10 @@ from __future__ import annotations
 # Limites tecnicos duros por id de red (None = sin tope practico).
 #
 # Justificacion de cada valor:
-#   - x          280   : limite duro del tuit (cuerpo del post).
+#   - x          25000 : limite duro del post con X Premium (la cuenta de AMX lo tiene).
+#                        Antes 280 (cuenta gratis); Premium lo sube a 25.000. Con esto X
+#                        deja de ser "estrecha" y el copy unificado ya no se recorta a un
+#                        tuit. Lo editorial (concision) lo dice `plataformas.md`, no el tope.
 #   - instagram  2200  : limite del caption.
 #   - facebook   None  : el tope es enorme (~63k); a efectos editoriales, sin tope.
 #   - tiktok     4000  : caption ampliado (2023-24). Antes 2200; ahora 4000 es el
@@ -37,7 +47,7 @@ from __future__ import annotations
 #                        tiene tope (100) pero ese es un campo distinto del cuerpo de
 #                        copy; no se modela aqui como "limite de la red".
 LIMITES: dict[str, int | None] = {
-    "x": 280,
+    "x": 25000,
     "instagram": 2200,
     "facebook": None,
     "tiktok": 4000,

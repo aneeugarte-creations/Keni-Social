@@ -49,7 +49,7 @@ const _VISUAL_REDES: Record<string, VisualRed> = {
  * la copia que el guard de CI mantiene alineada con el backend.
  */
 const _LIMITES_SEMILLA: Record<string, number | null> = {
-  x: 280,
+  x: 25000,
   instagram: 2200,
   facebook: null,
   tiktok: 4000,

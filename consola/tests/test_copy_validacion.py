@@ -59,18 +59,19 @@ def test_motivo_texto_vacio():
 
 
 def test_motivo_excede_limite_de_la_red():
-    motivo = dom_copy._motivo_invalida({"red": "x", "contenido": "a" * 281})
-    assert "límite 280" in motivo
+    # X Premium = 25000; un cuerpo por encima del tope invalida la pieza.
+    motivo = dom_copy._motivo_invalida({"red": "x", "contenido": "a" * 25001})
+    assert "límite 25000" in motivo
 
 
 def test_hilo_valida_por_tuit_no_por_total():
-    # Un hilo de 3 tuits ≤280 supera los 280 totales y AUN ASI es válido (límite por tramo).
-    hilo = "\n".join(f"{i}/3 " + "a" * 200 for i in (1, 2, 3))
-    assert len(hilo) > 280
+    # Un hilo de 3 tuits ≤25000 supera los 25000 totales y AUN ASI es válido (límite por tramo).
+    hilo = "\n".join(f"{i}/3 " + "a" * 10000 for i in (1, 2, 3))
+    assert len(hilo) > 25000
     assert dom_copy._motivo_invalida({"red": "x", "contenido": hilo}) is None
-    # Pero un tuit individual pasado de 280 invalida la pieza.
-    roto = "1/2 " + "a" * 300 + "\n2/2 corto"
-    assert "límite 280" in dom_copy._motivo_invalida({"red": "x", "contenido": roto})
+    # Pero un tuit individual pasado de 25000 invalida la pieza.
+    roto = "1/2 " + "a" * 25001 + "\n2/2 corto"
+    assert "límite 25000" in dom_copy._motivo_invalida({"red": "x", "contenido": roto})
 
 
 def test_sin_tope_tecnico_no_invalida_por_longitud():
@@ -102,15 +103,15 @@ def test_inyecta_hashtags_dedup_case_insensitive():
 
 
 def test_inyecta_hashtags_respeta_el_limite_de_la_red():
-    # En X (límite 280) un texto casi al tope solo admite los hashtags que QUEPAN.
-    base = "a" * 270  # 270 chars; "#Nacional" (9) cabe (=280), "#Finanzas" ya no
+    # En X (límite 25000) un texto casi al tope solo admite los hashtags que QUEPAN.
+    base = "a" * 24990  # 24990 chars; " #Nacional" (10) cabe (=25000), " #Finanzas" ya no
     out = dom_copy._inyectar_hashtags(base, ["Nacional", "Finanzas"], red="x")
     assert out == f"{base} #Nacional"
-    assert len(out) <= 280
+    assert len(out) <= 25000
 
 
 def test_inyecta_hashtags_si_ninguno_cabe_deja_el_texto_igual():
-    base = "a" * 280  # ya en el tope de X: no cabe ningún hashtag
+    base = "a" * 25000  # ya en el tope de X: no cabe ningún hashtag
     assert dom_copy._inyectar_hashtags(base, ["Nacional"], red="x") == base
 
 
@@ -122,7 +123,7 @@ def test_inyecta_hashtags_si_ninguno_cabe_deja_el_texto_igual():
 def test_pieza_invalida_no_crea_borrador_y_respeta_las_validas(entorno):
     creadas = dom_copy.crear_publicaciones_desde_piezas(
         [
-            {"red": "x", "contenido": "a" * 500, "copy_in": ""},  # excede el límite de X
+            {"red": "x", "contenido": "a" * 25001, "copy_in": ""},  # excede el límite de X (25000)
             {"red": "instagram", "contenido": "", "copy_in": ""},  # texto vacío
             {"red": "facebook", "contenido": "Hola FB", "copy_in": ""},  # válida
         ],
@@ -136,13 +137,13 @@ def test_pieza_invalida_no_crea_borrador_y_respeta_las_validas(entorno):
 def test_pieza_invalida_deja_nota_en_el_tema(entorno):
     tema = repos.crear_contenido(clase="contenido", titulo="Tema", marca=_MARCA, notas="previa")
     dom_copy.crear_publicaciones_desde_piezas(
-        [{"red": "x", "contenido": "a" * 500, "copy_in": ""}],
+        [{"red": "x", "contenido": "a" * 25001, "copy_in": ""}],
         marca=_MARCA, titulo="T", verdicto="", origen="h1", contenido_id=tema["id"],
     )
     releido = repos.obtener_contenido(tema["id"])
     assert "previa" in releido["notas"]  # no pisa las notas existentes
     assert "Copy descartado" in releido["notas"]
-    assert "límite 280" in releido["notas"]
+    assert "límite 25000" in releido["notas"]
 
 
 def test_redes_filtro_no_cuenta_como_descarte(entorno):
