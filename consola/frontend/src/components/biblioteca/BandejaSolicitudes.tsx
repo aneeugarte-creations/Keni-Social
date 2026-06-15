@@ -13,16 +13,10 @@ import { toast } from "sonner";
 
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import { DiffProsa } from "@/components/biblioteca/DiffProsa";
+import { VistaRevisarCambios } from "@/components/biblioteca/VistaRevisarCambios";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { claveSolicitudes, useSolicitudes } from "@/hooks/use-biblioteca";
 import { api, mensajeError } from "@/lib/api";
@@ -78,12 +72,8 @@ function DiffSolicitud({
 function FilaSolicitud({ solicitud }: { solicitud: SolicitudPublicacion }) {
   const qc = useQueryClient();
   const [diffAbierto, setDiffAbierto] = React.useState(false);
-  const [soloCambios, setSoloCambios] = React.useState(true);
   const [comentario, setComentario] = React.useState("");
-  const abrirDiff = () => {
-    setSoloCambios(true);
-    setDiffAbierto(true);
-  };
+  const abrirDiff = () => setDiffAbierto(true);
 
   const refrescar = () => {
     qc.invalidateQueries({ queryKey: claveSolicitudes("abierta") });
@@ -160,28 +150,18 @@ function FilaSolicitud({ solicitud }: { solicitud: SolicitudPublicacion }) {
         />
       </div>
 
-      {/* Revisar cambios (diff ancho), igual que PanelVersiones. */}
-      <Dialog open={diffAbierto} onOpenChange={(v) => !v && setDiffAbierto(false)}>
-        <DialogContent className="flex max-h-[85vh] max-w-4xl flex-col gap-3 overflow-hidden">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Eye className="h-4 w-4" /> Revisar cambios
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span className="min-w-0 truncate">{solicitud.titulo}</span>
-            <label className="flex shrink-0 cursor-pointer items-center gap-1.5">
-              Solo cambios
-              <Switch checked={soloCambios} onCheckedChange={setSoloCambios} />
-            </label>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border p-4">
-            {diffAbierto ? (
-              <DiffSolicitud solicitud={solicitud} soloCambios={soloCambios} />
-            ) : null}
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Revisar cambios a pantalla completa (estilo Pull Request). */}
+      <VistaRevisarCambios
+        abierto={diffAbierto}
+        onCerrar={() => setDiffAbierto(false)}
+        titulo="Revisar cambios"
+        subtitulo={`${solicitud.titulo} · ${solicitud.autor}`}
+        renderDiff={(soloCambios) =>
+          diffAbierto ? (
+            <DiffSolicitud solicitud={solicitud} soloCambios={soloCambios} />
+          ) : null
+        }
+      />
     </FilaConAcciones>
   );
 }
