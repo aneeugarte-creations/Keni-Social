@@ -1,12 +1,12 @@
 /**
  * PanelVersiones para un equipo de redes NO técnico: un CTA prominente «Revisar y publicar»
- * cuando hay cambios sin publicar, una fila sintética «Tu borrador», la lista de
- * PUBLICACIONES por su nota (sin SHA) con la que está EN VIVO marcada, y por fila las
- * acciones «Ver» (diff a pantalla completa de esa versión ↔ tu borrador) y «Restaurar».
- * Ya NO hay dropdown de «Comparar con»: la comparación es por versión.
+ * cuando hay cambios sin publicar, la lista de PUBLICACIONES por su nota (sin SHA) con la que
+ * está EN VIVO marcada, y por versión: clic en la fila → ver ESA versión en solo lectura, y
+ * «Restaurar» → revertir en un clic (publica si admin, solicita si editor). La fila sintética
+ * «Tu borrador» solo aparece cuando hay cambios sin publicar.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -54,10 +54,13 @@ function stubFetch() {
       if (path.endsWith("/historial")) return json({ historial: HISTORIAL });
       if (path.endsWith("/descartar"))
         return json({ documento: { id: "doc", cuerpo: "Publicado" } });
+      if (path.endsWith("/publicar"))
+        return json({ documento: { id: "doc", cuerpo: "Texto publicado." } });
+      if (path.endsWith("/solicitar")) return json({ solicitud: { id: "s1" } });
       if (path.includes("/revertir/"))
         return json({ documento: { id: "doc", cuerpo: "Texto publicado." } });
       if (path.includes("/version/"))
-        return json({ documento: { id: "doc", cuerpo: "Texto publicado." } });
+        return json({ documento: { id: "doc", cuerpo: "Texto de esa versión." } });
       return json({ error: `sin stub: ${metodo} ${path}` }, 404);
     }),
   );
@@ -75,7 +78,6 @@ function montar(props: Partial<React.ComponentProps<typeof PanelVersiones>> = {}
       <PanelVersiones
         docId="editorial/rrss/unotv/voz"
         produccionSha="aaa111"
-        cuerpoBorrador="Texto del borrador en edición."
         sinPublicar
         onPublicar={onPublicar}
         onBorradorActualizado={onBorradorActualizado}
@@ -98,14 +100,14 @@ describe("PanelVersiones", () => {
     expect(await screen.findByText("Tono más directo en titulares")).toBeInTheDocument();
     expect(screen.getByText("Primera versión de la voz")).toBeInTheDocument();
     expect(screen.getByText("EN VIVO")).toBeInTheDocument();
-    // Fila sintética del borrador con su badge humano.
+    // Fila sintética del borrador con su badge humano (hay cambios sin publicar).
     expect(screen.getByText("Tu borrador")).toBeInTheDocument();
     expect(screen.getByText("Cambios sin publicar")).toBeInTheDocument();
     // El SHA no aparece como texto visible (solo en title/tooltip).
     expect(screen.queryByText(/aaa111/)).not.toBeInTheDocument();
   });
 
-  it("ya NO ofrece un dropdown «Comparar con»", async () => {
+  it("ya NO ofrece un dropdown «Comparar con» ni un botón «Ver qué cambió»", async () => {
     stubFetch();
     montar();
     await screen.findByText("Tono más directo en titulares");
@@ -122,13 +124,14 @@ describe("PanelVersiones", () => {
     expect(onPublicar).toHaveBeenCalledTimes(1);
   });
 
-  it("oculta las acciones del borrador y marca «Al día» cuando no hay cambios sin publicar", async () => {
+  it("sin cambios: «sin acciones» y SIN fila «Tu borrador»", async () => {
     stubFetch();
     montar({ sinPublicar: false });
     await screen.findByText("Tono más directo en titulares");
     expect(screen.queryByRole("button", { name: /Revisar y publicar/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Descartar cambios/ })).not.toBeInTheDocument();
-    expect(screen.getByText("Al día")).toBeInTheDocument();
+    // La fila «Tu borrador» sobra cuando no hay cambios: no se muestra.
+    expect(screen.queryByText("Tu borrador")).not.toBeInTheDocument();
   });
 
   it("«Descartar cambios» llama a descartar y avisa al contenedor", async () => {
@@ -141,38 +144,40 @@ describe("PanelVersiones", () => {
     await waitFor(() => expect(onBorradorActualizado).toHaveBeenCalled());
   });
 
-  it("«Ver» abre el diff a pantalla completa de esa versión ↔ tu borrador", async () => {
-    stubFetch();
-    montar();
-    await screen.findByText("Tono más directo en titulares");
-    const botones = screen.getAllByRole("button", { name: "Ver" });
-    expect(botones.length).toBe(HISTORIAL.length);
-    // La 1ª publicación es la que está EN VIVO → subtítulo «desde lo publicado».
-    fireEvent.click(botones[0]);
-    expect(await screen.findByText(/Cambios desde lo publicado/)).toBeInTheDocument();
-    // La vista de revisión a pantalla completa trae su toggle «Solo cambios».
-    expect(await screen.findByLabelText("Solo cambios")).toBeInTheDocument();
-  });
-
-  it("«Ver» de una versión NO en vivo usa el subtítulo «desde esta versión»", async () => {
+  it("clic en una versión abre SU contenido en solo lectura (no un diff)", async () => {
     stubFetch();
     montar();
     await screen.findByText("Primera versión de la voz");
-    const botones = screen.getAllByRole("button", { name: "Ver" });
-    fireEvent.click(botones[1]);
-    expect(await screen.findByText(/Cambios desde esta versión/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Primera versión de la voz/ }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Primera versión de la voz")).toBeInTheDocument();
+    // No es un diff: no hay toggle «Solo cambios».
+    expect(screen.queryByLabelText("Solo cambios")).not.toBeInTheDocument();
   });
 
-  it("«Restaurar» trae la versión al borrador y avisa al contenedor", async () => {
+  it("«Restaurar» (admin) revierte en un clic: revierte y publica", async () => {
     const llamadas = stubFetch();
-    const { onBorradorActualizado } = montar();
-    await screen.findByText("Tono más directo en titulares");
-    const botones = screen.getAllByRole("button", { name: "Restaurar" });
-    expect(botones.length).toBe(HISTORIAL.length);
-    fireEvent.click(botones[0]);
+    const { onBorradorActualizado } = montar({ esAdmin: true });
+    await screen.findByText("Primera versión de la voz");
+    // Solo la versión que NO está EN VIVO ofrece «Restaurar».
+    fireEvent.click(screen.getByRole("button", { name: "Restaurar" }));
     await waitFor(() =>
       expect(llamadas.some((l) => l.metodo === "POST" && l.path.includes("/revertir/"))).toBe(true),
     );
+    await waitFor(() =>
+      expect(llamadas.some((l) => l.metodo === "POST" && l.path.endsWith("/publicar"))).toBe(true),
+    );
     await waitFor(() => expect(onBorradorActualizado).toHaveBeenCalled());
+  });
+
+  it("«Restaurar» (editor) envía una solicitud en vez de publicar", async () => {
+    const llamadas = stubFetch();
+    montar({ esAdmin: false });
+    await screen.findByText("Primera versión de la voz");
+    fireEvent.click(screen.getByRole("button", { name: "Restaurar" }));
+    await waitFor(() =>
+      expect(llamadas.some((l) => l.metodo === "POST" && l.path.endsWith("/solicitar"))).toBe(true),
+    );
+    expect(llamadas.some((l) => l.path.endsWith("/publicar"))).toBe(false);
   });
 });

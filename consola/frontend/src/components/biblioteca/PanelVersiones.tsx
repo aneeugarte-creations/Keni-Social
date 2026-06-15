@@ -4,24 +4,31 @@
  *
  * Jerarquía: cuando hay cambios sin publicar, una zona de acciones con un CTA prominente
  * «Revisar y publicar» (abre el flujo de publicación a pantalla completa) y «Descartar
- * cambios». Debajo, la línea de tiempo: una fila «Tu borrador» (lo que se edita ahora) y la
- * lista de PUBLICACIONES, cada una con su nota como título, autor + fecha y la que está EN
- * VIVO marcada. No se muestran SHAs (van en `title`).
+ * cambios». Debajo, la línea de tiempo: la lista de PUBLICACIONES, cada una con su nota como
+ * título, autor + fecha y la que está EN VIVO marcada. No se muestran SHAs (van en `title`).
  *
- * El diff se LEE en grande: «Ver» abre `VistaRevisarCambios` a pantalla completa comparando
- * ESA versión contra tu borrador (un único punto de diff en toda la app). «Restaurar» trae
- * esa versión al borrador SIN publicar.
+ * Interacción por versión:
+ *  - Clic en la fila → abre ESA versión a pantalla completa, en SOLO LECTURA (LectorProsa).
+ *  - «Restaurar» → revierte en un clic: esa versión vuelve a estar EN VIVO al instante (admin)
+ *    o se envía la solicitud (editor), con una nota automática «Restauración de «X»». No hay
+ *    paso de publicar a mano.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Check, Eye, History, Rocket, RotateCcw } from "lucide-react";
+import { ArrowRight, Check, FileText, History, Rocket, RotateCcw } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
-import { DiffProsa } from "@/components/biblioteca/DiffProsa";
-import { VistaRevisarCambios } from "@/components/biblioteca/VistaRevisarCambios";
+import { LectorProsa } from "@/components/biblioteca/LectorProsa";
 import { confirmar } from "@/components/comunes/confirmar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, mensajeError } from "@/lib/api";
 import { tiempoRelativo } from "@/lib/fecha";
@@ -31,13 +38,13 @@ export interface PanelVersionesProps {
   docId: string;
   /** SHA publicado (lo que está EN VIVO), si lo hay. */
   produccionSha?: string | null;
-  /** Cuerpo (markdown) del borrador en edición: lado derecho del diff («Tu borrador»). */
-  cuerpoBorrador: string;
   /** Hay cambios en el borrador todavía sin publicar. */
   sinPublicar?: boolean;
+  /** El usuario puede publicar directo (admin); si no, restaurar envía una solicitud. */
+  esAdmin?: boolean;
   /** Abre el flujo de publicación a pantalla completa (vive en el contenedor). */
   onPublicar?: () => void;
-  /** Avisa al contenedor tras traer al borrador o descartar (resincronizar el doc abierto). */
+  /** Avisa al contenedor tras restaurar o descartar (resincronizar el doc abierto). */
   onBorradorActualizado?: () => void;
   className?: string;
 }
@@ -45,8 +52,8 @@ export interface PanelVersionesProps {
 export function PanelVersiones({
   docId,
   produccionSha,
-  cuerpoBorrador,
   sinPublicar = false,
+  esAdmin = false,
   onPublicar,
   onBorradorActualizado,
   className,
@@ -62,9 +69,7 @@ export function PanelVersiones({
     [histQuery.data],
   );
 
-  // ── «Ver»: diff a pantalla completa de una versión ↔ tu borrador. ──
-  // `verSha` es la versión cuyo cuerpo cargamos como lado «antes»; el «después» es siempre
-  // el borrador en edición. Único punto de diff de la app (VistaRevisarCambios).
+  // ── Ver una versión: su contenido a pantalla completa, en SOLO LECTURA. ──
   const [verSha, setVerSha] = React.useState<string | null>(null);
   const verVersion = historial.find((v) => v.sha === verSha) ?? null;
   const verQuery = useQuery({
@@ -73,25 +78,41 @@ export function PanelVersiones({
     enabled: !!verSha,
   });
 
-  // ── Restaurar: trae esa versión al borrador SIN publicar (no crea commit). ──
-  const traerMut = useMutation({
-    mutationFn: (sha: string) => api.revertirTexto(docId, sha),
-    onSuccess: () => {
-      toast.success("Versión traída al borrador. Revísala y publica cuando quieras.");
-      qc.invalidateQueries({ queryKey: ["texto"] });
-      qc.invalidateQueries({ queryKey: ["texto-historial", docId] });
-      onBorradorActualizado?.();
+  const invalidar = () => {
+    qc.invalidateQueries({ queryKey: ["texto"] });
+    qc.invalidateQueries({ queryKey: ["texto-historial", docId] });
+    onBorradorActualizado?.();
+  };
+
+  // ── Restaurar: revierte en un clic (vuelve EN VIVO admin / solicita editor). ──
+  // Carga esa versión en el working copy y la fija como producción (nota automática). Sin
+  // paso de publicar a mano; lo que ven los agentes cambia al instante (para un admin).
+  const restaurarMut = useMutation({
+    mutationFn: async ({ sha, nombre }: { sha: string; nombre: string }) => {
+      await api.revertirTexto(docId, sha);
+      const nota = `Restauración de «${nombre}»`;
+      if (esAdmin) await api.publicarTexto(docId, { nota });
+      else await api.solicitarPublicacionTexto(docId, { nota });
+    },
+    onSuccess: (_d, { nombre }) => {
+      toast.success(
+        esAdmin
+          ? `Restaurado: «${nombre}» vuelve a estar EN VIVO.`
+          : `Solicitud enviada para restaurar «${nombre}».`,
+      );
+      invalidar();
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
-  const onRestaurar = async (sha: string) => {
+  const onRestaurar = async (sha: string, nombre: string) => {
     const ok = await confirmar({
-      titulo: "Restaurar al borrador",
-      mensaje:
-        "Cargaremos esta versión en tu borrador y se sobrescribirá tu borrador actual sin publicar. No se publica: revísala y publica cuando quieras.",
-      textoConfirmar: "Restaurar",
+      titulo: `Restaurar «${nombre}»`,
+      mensaje: esAdmin
+        ? "Esta versión volverá a estar EN VIVO ahora mismo: es lo que verán los agentes en todas las generaciones."
+        : "Se enviará una solicitud para volver a esta versión. Un admin debe aprobarla antes de que vuelva a estar EN VIVO.",
+      textoConfirmar: esAdmin ? "Restaurar y publicar" : "Solicitar restauración",
     });
-    if (ok) traerMut.mutate(sha);
+    if (ok) restaurarMut.mutate({ sha, nombre });
   };
 
   // ── Descartar cambios: el borrador vuelve a lo publicado. ──
@@ -99,9 +120,7 @@ export function PanelVersiones({
     mutationFn: () => api.descartarTexto(docId),
     onSuccess: () => {
       toast.success("Borrador descartado: vuelve a la versión publicada.");
-      qc.invalidateQueries({ queryKey: ["texto"] });
-      qc.invalidateQueries({ queryKey: ["texto-historial", docId] });
-      onBorradorActualizado?.();
+      invalidar();
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -125,14 +144,9 @@ export function PanelVersiones({
     );
   }
 
-  const subtituloVer =
-    verSha === produccionSha
-      ? "Cambios desde lo publicado hasta tu borrador"
-      : "Cambios desde esta versión hasta tu borrador";
-
   return (
     <div className={cn("flex min-h-0 flex-col gap-4", className)}>
-      {/* ───────── Acciones del borrador (CTA prominente) ───────── */}
+      {/* ───────── Acciones del borrador (CTA prominente, solo si hay cambios) ───────── */}
       {sinPublicar ? (
         <div className="space-y-2 rounded-lg border border-keni/30 bg-keni/5 p-3">
           <p className="text-sm font-medium">Tienes cambios sin publicar</p>
@@ -158,46 +172,35 @@ export function PanelVersiones({
         </div>
       ) : null}
 
-      {/* ───────── Línea de tiempo: tu borrador + publicaciones ───────── */}
+      {/* ───────── Línea de tiempo: publicaciones ───────── */}
       <section className="space-y-2">
         <h4 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           <History className="h-3.5 w-3.5 text-keni" aria-hidden /> Historial
         </h4>
         <div className="overflow-hidden rounded-md border border-border">
           <ol className="max-h-[28rem] divide-y divide-border overflow-y-auto">
-            {/* Fila: tu borrador (lo que se edita ahora). */}
-            <li className="flex items-start gap-2.5 px-3 py-2.5">
-              <span
-                className={cn(
-                  "mt-1.5 block h-2 w-2 shrink-0 rounded-full",
-                  sinPublicar ? "bg-keni" : "bg-border",
-                )}
-                aria-hidden
-              />
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="font-medium">Tu borrador</span>
-                  {sinPublicar ? (
+            {/* Fila «Tu borrador»: SOLO cuando hay cambios sin publicar (si no, sobra). */}
+            {sinPublicar ? (
+              <li className="flex items-start gap-2.5 px-3 py-2.5">
+                <span className="mt-1.5 block h-2 w-2 shrink-0 rounded-full bg-keni" aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-medium">Tu borrador</span>
                     <Badge variant="aviso" className="shrink-0 rounded-full px-2">
                       Cambios sin publicar
                     </Badge>
-                  ) : (
-                    <Badge variant="secondary" className="shrink-0 rounded-full px-2">
-                      Al día
-                    </Badge>
-                  )}
+                  </div>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Lo que estás editando ahora, todavía sin publicar.
+                  </p>
                 </div>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {sinPublicar
-                    ? "Lo que estás editando ahora, todavía sin publicar."
-                    : "Igual que lo publicado."}
-                </p>
-              </div>
-            </li>
+              </li>
+            ) : null}
 
             {/* Publicaciones (historial), de más reciente a más antigua. */}
             {historial.map((v) => {
               const esEnVivo = !!produccionSha && v.sha === produccionSha;
+              const nombre = v.mensaje || "Publicación";
               return (
                 <li
                   key={v.sha}
@@ -211,42 +214,45 @@ export function PanelVersiones({
                     aria-hidden
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="truncate font-medium" title={v.sha_corto}>
-                        {v.mensaje || "Publicación"}
-                      </span>
-                      {esEnVivo ? (
-                        <Badge variant="ok" className="shrink-0 gap-1 rounded-full px-2">
-                          <Check className="h-3 w-3" aria-hidden /> EN VIVO
-                        </Badge>
-                      ) : null}
-                    </div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                      <span>{v.autor}</span>
-                      <span aria-hidden>·</span>
-                      <span title={v.fecha}>
-                        {tiempoRelativo(v.fecha) || v.fecha.slice(0, 16).replace("T", " ")}
-                      </span>
-                    </div>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 px-2 text-xs"
-                        onClick={() => setVerSha(v.sha)}
-                      >
-                        <Eye className="mr-1 h-3.5 w-3.5" /> Ver
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs"
-                        disabled={traerMut.isPending}
-                        onClick={() => void onRestaurar(v.sha)}
-                      >
-                        <RotateCcw className="mr-1 h-3.5 w-3.5" /> Restaurar
-                      </Button>
-                    </div>
+                    {/* Clic en la fila → abre ESA versión (solo lectura). */}
+                    <button
+                      type="button"
+                      onClick={() => setVerSha(v.sha)}
+                      className="block w-full rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      title="Ver esta versión"
+                    >
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="truncate font-medium" title={v.sha_corto}>
+                          {nombre}
+                        </span>
+                        {esEnVivo ? (
+                          <Badge variant="ok" className="shrink-0 gap-1 rounded-full px-2">
+                            <Check className="h-3 w-3" aria-hidden /> EN VIVO
+                          </Badge>
+                        ) : null}
+                      </div>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                        <span>{v.autor}</span>
+                        <span aria-hidden>·</span>
+                        <span title={v.fecha}>
+                          {tiempoRelativo(v.fecha) || v.fecha.slice(0, 16).replace("T", " ")}
+                        </span>
+                      </div>
+                    </button>
+                    {/* Restaurar: no tiene sentido sobre la versión que ya está EN VIVO. */}
+                    {!esEnVivo ? (
+                      <div className="mt-1.5">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          disabled={restaurarMut.isPending}
+                          onClick={() => void onRestaurar(v.sha, nombre)}
+                        >
+                          <RotateCcw className="mr-1 h-3.5 w-3.5" /> Restaurar
+                        </Button>
+                      </div>
+                    ) : null}
                   </div>
                 </li>
               );
@@ -263,24 +269,39 @@ export function PanelVersiones({
         ) : null}
       </section>
 
-      {/* ───────── Ver: diff a pantalla completa (versión ↔ tu borrador) ───────── */}
-      <VistaRevisarCambios
-        abierto={!!verSha}
-        onCerrar={() => setVerSha(null)}
-        titulo={verVersion?.mensaje || "Versión publicada"}
-        subtitulo={subtituloVer}
-        renderDiff={(soloCambios) =>
-          verQuery.isPending ? (
-            <Skeleton className="h-24 w-full" />
-          ) : (
-            <DiffProsa
-              antes={verQuery.data?.documento.cuerpo ?? ""}
-              despues={cuerpoBorrador}
-              soloCambios={soloCambios}
-            />
-          )
-        }
-      />
+      {/* ───────── Ver una versión: su contenido a pantalla completa, solo lectura ───────── */}
+      <Dialog open={!!verSha} onOpenChange={(o) => !o && setVerSha(null)}>
+        <DialogContent className="flex h-screen w-screen max-w-none flex-col gap-0 rounded-none p-0">
+          <DialogHeader className="border-b border-border px-4 py-3 text-left sm:text-left">
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <FileText className="h-4 w-4 text-keni" aria-hidden />
+              {verVersion?.mensaje || "Versión publicada"}
+              {verSha && verSha === produccionSha ? (
+                <Badge variant="ok" className="gap-1 rounded-full px-2">
+                  <Check className="h-3 w-3" aria-hidden /> EN VIVO
+                </Badge>
+              ) : null}
+            </DialogTitle>
+            <DialogDescription>
+              {verVersion
+                ? `${verVersion.autor} · ${
+                    tiempoRelativo(verVersion.fecha) ||
+                    verVersion.fecha.slice(0, 16).replace("T", " ")
+                  }`
+                : "Versión publicada del documento."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
+            <div className="mx-auto max-w-3xl">
+              {verQuery.isPending ? (
+                <Skeleton className="h-40 w-full" />
+              ) : (
+                <LectorProsa cuerpo={verQuery.data?.documento.cuerpo ?? ""} />
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

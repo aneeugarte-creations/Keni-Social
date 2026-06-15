@@ -538,8 +538,8 @@ export function DetalleDocumento({
               <PanelVersiones
                 docId={borrador.id}
                 produccionSha={produccion?.sha ?? null}
-                cuerpoBorrador={frontmatterOculto + borrador.cuerpo}
                 sinPublicar={sinPublicar}
+                esAdmin={esAdmin}
                 onPublicar={() => setPublicarAbierto(true)}
                 onBorradorActualizado={() => {
                   // Fuerza la RE-SINCRONIZACIÓN del borrador con el cuerpo cargado.
