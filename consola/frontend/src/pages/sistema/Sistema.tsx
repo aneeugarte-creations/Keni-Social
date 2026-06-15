@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError, api } from "@/lib/api";
 
 import { SeccionMetricool } from "@/pages/configuracion/SeccionMetricool";
+import { SeccionPostproxy } from "@/pages/configuracion/SeccionPostproxy";
 
 import { AvisosDoctor } from "./Doctor";
 import { SeccionCuentaClaude } from "./SeccionCuentaClaude";
@@ -83,6 +84,7 @@ export default function Sistema() {
           <TabsContent value="proveedores" className="space-y-6">
             <SeccionCuentaClaude />
             <SeccionMetricool />
+            <SeccionPostproxy />
           </TabsContent>
           {/* SERVIDOR: hardware + servicios de sistema (clase=sistema): pura infraestructura
               (limpiador, GC de media, métricas, alertas, patrones, comercial). Los servicios de la

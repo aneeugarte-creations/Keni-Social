@@ -1,25 +1,40 @@
-import { useQuery } from "@tanstack/react-query";
-import { LayoutGrid, Link2, Network, Plug, RefreshCw, Send, Users } from "lucide-react";
-import { Link } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  Check,
+  LayoutGrid,
+  Loader2,
+  Network,
+  Plug,
+  Plus,
+  RefreshCw,
+  Send,
+  Unplug,
+  Users,
+} from "lucide-react";
+import * as React from "react";
+import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { TituloPagina } from "@/components/layout/encabezado";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
-import { mensajeError } from "@/lib/api";
-import { api } from "@/lib/api";
+import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { formatearNumero, iconoPlataforma, nombrePlataforma } from "@/pages/marcas/plataformas";
 import { tiempoRelativo } from "@/pages/publicaciones/meta";
-import type { MarcaDashboard, RedMarca, TotalesMarcas } from "@/types";
+import type { CanalPublicacion, MarcaDashboard, RedMarca, TotalesMarcas } from "@/types";
 
 const CLAVE_MARCAS = ["marcas", "dashboard"];
 
-// Ruta a la sección de conexiones (drawer de ajustes de Producción, donde vive Postproxy).
-const RUTA_CONEXIONES = "/maquina/produccion?tab=ajustes";
+// Ruta de retorno del OAuth: una ventana mínima de Keni que avisa al panel y se cierra.
+const RUTA_OAUTH_RETORNO = "/oauth/conectado";
+
+// Mensaje que la ventana de retorno del OAuth envía al panel para que refresque.
+const MSG_OAUTH = "keni-oauth-conectado";
 
 /** Tarjeta de un total del encabezado. */
 function TarjetaResumen({
@@ -57,107 +72,237 @@ function FilaResumen({ totales }: { totales: TotalesMarcas }) {
         valor={formatearNumero(totales.redes_conectadas)}
         icono={Network}
       />
-      <TarjetaResumen
-        etiqueta="Seguidores"
-        valor={formatearNumero(totales.seguidores)}
-        icono={Users}
-      />
-      <TarjetaResumen
-        etiqueta="Posts totales"
-        valor={formatearNumero(totales.posts_totales)}
-        icono={Plug}
-      />
-      <TarjetaResumen
-        etiqueta="Posts / día"
-        valor={formatearNumero(totales.posts_dia)}
-        icono={RefreshCw}
-      />
+      <TarjetaResumen etiqueta="Seguidores" valor={formatearNumero(totales.seguidores)} icono={Users} />
+      <TarjetaResumen etiqueta="Posts totales" valor={formatearNumero(totales.posts_totales)} icono={Plug} />
+      <TarjetaResumen etiqueta="Posts / día" valor={formatearNumero(totales.posts_dia)} icono={RefreshCw} />
     </div>
   );
 }
 
-// Clases del chip de red según su estado: verde=active, ámbar=expired, gris=resto.
-function clasesChip(red: RedMarca): string {
-  if (red.conectado && red.estado === "active") {
-    return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
-  }
-  if (red.estado === "expired") {
-    return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
-  }
-  return "border-border bg-muted/40 text-muted-foreground";
-}
+/** Opciones del selector de canal de publicación. */
+const CANALES: { id: CanalPublicacion; etiqueta: string }[] = [
+  { id: "metricool", etiqueta: "Metricool" },
+  { id: "postproxy", etiqueta: "Postproxy" },
+];
 
-/** Texto del tooltip de un chip de red. */
-function tooltipRed(red: RedMarca): string {
-  const partes: string[] = [nombrePlataforma(red.plataforma)];
-  if (red.nombre_cuenta) partes.push(red.nombre_cuenta);
-  if (red.estado === "active") partes.push("conectada");
-  else if (red.estado === "expired") partes.push("token caducado");
-  else partes.push("sin conectar");
-  if (red.post_count != null) partes.push(`${formatearNumero(red.post_count)} posts`);
-  return partes.join(" · ");
-}
-
-/** Chip de UNA red de una marca. No conectada → enlace a conexiones. */
-function ChipRed({ red }: { red: RedMarca }) {
-  const Icono = iconoPlataforma(red.plataforma);
-  const contenido = (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium",
-        clasesChip(red),
-      )}
-    >
-      <Icono className="h-3.5 w-3.5" aria-hidden="true" />
-      <span>{nombrePlataforma(red.plataforma)}</span>
-      {!red.conectado && (
-        <Link2 className="h-3 w-3 opacity-70" aria-hidden="true" />
-      )}
-    </span>
-  );
-
-  // Red no conectada (o sin estado activo): CTA que enlaza a la sección de conexiones.
-  const enlazable = !red.conectado;
-
+/**
+ * Control segmentado «Publica por: ( Metricool | Postproxy )». Postproxy se
+ * deshabilita (con tooltip) hasta que la marca tenga al menos una red conectada:
+ * no se fija un canal sin destino real.
+ */
+function SelectorCanal({
+  canal,
+  postproxyDisponible,
+  deshabilitado,
+  onCambiar,
+}: {
+  canal: CanalPublicacion;
+  postproxyDisponible: boolean;
+  deshabilitado: boolean;
+  onCambiar: (canal: CanalPublicacion) => void;
+}) {
   return (
-    <Tooltip label={tooltipRed(red)}>
-      {enlazable ? (
-        <Link to={RUTA_CONEXIONES} aria-label={`Conectar ${nombrePlataforma(red.plataforma)}`}>
-          {contenido}
-        </Link>
-      ) : (
-        contenido
-      )}
-    </Tooltip>
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-muted-foreground">Publica por:</span>
+      <div className="inline-flex rounded-md border border-border p-0.5">
+        {CANALES.map((opcion) => {
+          const activo = canal === opcion.id;
+          const bloqueado = opcion.id === "postproxy" && !postproxyDisponible;
+          const boton = (
+            <button
+              type="button"
+              role="radio"
+              aria-checked={activo}
+              disabled={deshabilitado || bloqueado || activo}
+              onClick={() => onCambiar(opcion.id)}
+              className={cn(
+                "rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                activo ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                bloqueado && "cursor-not-allowed opacity-50",
+              )}
+            >
+              {opcion.etiqueta}
+            </button>
+          );
+          return bloqueado ? (
+            <Tooltip key={opcion.id} label="Conecta al menos una red para publicar por Postproxy.">
+              {boton}
+            </Tooltip>
+          ) : (
+            <React.Fragment key={opcion.id}>{boton}</React.Fragment>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
-/** Tarjeta de UNA marca con sus conexiones, redes y métricas. */
+// Clases del punto de estado de una red: verde=active, ámbar=expired, gris=resto.
+function clasesPunto(red: RedMarca): string {
+  if (red.conectado && red.estado === "active") return "bg-emerald-500";
+  if (red.estado === "expired") return "bg-amber-500";
+  return "bg-muted-foreground/40";
+}
+
+/** Texto de estado legible de una red. */
+function textoEstado(red: RedMarca): string {
+  if (red.conectado && red.estado === "active") return red.nombre_cuenta || "Conectada";
+  if (red.estado === "expired") return "Token caducado — reconecta";
+  return "Sin conectar";
+}
+
+/**
+ * Fila de UNA red de una marca: estado + acción. Sin conectar → «Conectar» (abre el
+ * OAuth oficial de la red en una ventana de Keni). Conectada → cuenta + «Desconectar».
+ * Caducada → «Reconectar». En ningún punto se menciona el proveedor: el equipo solo ve
+ * la red (Instagram, Facebook…) y Keni.
+ */
+function FilaRed({
+  red,
+  ocupada,
+  onConectar,
+  onDesconectar,
+}: {
+  red: RedMarca;
+  ocupada: boolean;
+  onConectar: (plataforma: string) => void;
+  onDesconectar: (red: RedMarca) => void;
+}) {
+  const Icono = iconoPlataforma(red.plataforma);
+  const conectada = red.conectado && red.estado === "active";
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-md border border-border px-2.5 py-1.5">
+      <div className="flex min-w-0 items-center gap-2">
+        <Icono className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <div className="min-w-0">
+          <p className="truncate text-sm leading-tight">{nombrePlataforma(red.plataforma)}</p>
+          <p className="flex items-center gap-1 truncate text-[11px] text-muted-foreground">
+            <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", clasesPunto(red))} aria-hidden="true" />
+            {textoEstado(red)}
+          </p>
+        </div>
+      </div>
+      {conectada ? (
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 shrink-0 px-2 text-xs text-muted-foreground hover:text-destructive"
+          disabled={ocupada || !red.perfil_id}
+          onClick={() => onDesconectar(red)}
+        >
+          {ocupada ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unplug className="h-3.5 w-3.5" />}
+          Desconectar
+        </Button>
+      ) : (
+        <Button
+          size="sm"
+          variant={red.estado === "expired" ? "outline" : "default"}
+          className="h-7 shrink-0 px-2 text-xs"
+          disabled={ocupada}
+          onClick={() => onConectar(red.plataforma)}
+        >
+          {ocupada ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+          {red.estado === "expired" ? "Reconectar" : "Conectar"}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/** Tarjeta de UNA marca con sus conexiones, redes (accionables) y métricas. */
 function TarjetaMarca({ marca }: { marca: MarcaDashboard }) {
+  const queryClient = useQueryClient();
+  const [accion, setAccion] = React.useState<string | null>(null);
+
+  const conectadas = marca.redes.filter((r) => r.conectado && r.estado === "active").length;
+
+  const refrescar = () => queryClient.invalidateQueries({ queryKey: CLAVE_MARCAS });
+
+  function conectar(plataforma: string) {
+    // Abrimos la ventana SINCRÓNICAMENTE en el clic (los bloqueadores de popups exigen
+    // que nazca del gesto del usuario); luego la apuntamos a la URL del OAuth al llegar.
+    const popup = window.open("about:blank", "keni_conectar_red", "width=620,height=760");
+    setAccion(plataforma);
+    api
+      .conectarPostproxy(marca.marca, {
+        platform: plataforma,
+        redirect_url: window.location.origin + RUTA_OAUTH_RETORNO,
+      })
+      .then((res) => {
+        if (popup) popup.location.href = res.url;
+        else window.open(res.url, "_blank", "noopener,noreferrer");
+      })
+      .catch((e) => {
+        popup?.close();
+        toast.error(mensajeError(e));
+      })
+      .finally(() => setAccion(null));
+  }
+
+  function desconectar(red: RedMarca) {
+    if (!red.perfil_id) return;
+    setAccion(red.plataforma);
+    api
+      .eliminarPerfilPostproxy(red.perfil_id)
+      .then(() => {
+        toast.success(`${nombrePlataforma(red.plataforma)} desconectada.`);
+        void refrescar();
+      })
+      .catch((e) => toast.error(mensajeError(e)))
+      .finally(() => setAccion(null));
+  }
+
+  function cambiarCanal(canal: CanalPublicacion) {
+    setAccion("__canal__");
+    api
+      .canalPostproxy(marca.marca, canal)
+      .then((res) => {
+        toast.success(res.mensaje || `Canal de ${marca.etiqueta}: ${res.canal}.`);
+        void refrescar();
+      })
+      .catch((e) => toast.error(mensajeError(e)))
+      .finally(() => setAccion(null));
+  }
+
+  const ocupado = accion !== null;
+
   return (
     <Card>
       <CardHeader className="gap-2 p-4 pb-2">
         <div className="flex items-center justify-between gap-3">
           <CardTitle className="truncate">{marca.etiqueta}</CardTitle>
           <div className="flex shrink-0 items-center gap-1.5">
-            <Badge variant={marca.metricool.conectado ? "ok" : "secondary"}>Metricool</Badge>
-            <Badge variant={marca.postproxy.conectado ? "ok" : "secondary"}>Postproxy</Badge>
+            <Tooltip label={marca.metricool.conectado ? "Métricas vía Metricool" : "Metricool sin conectar"}>
+              <Badge variant={marca.metricool.conectado ? "ok" : "secondary"}>
+                {marca.metricool.conectado ? <Check className="h-3 w-3" /> : null} Métricas
+              </Badge>
+            </Tooltip>
+            <Badge variant={conectadas > 0 ? "ok" : "secondary"}>
+              <Network className="h-3 w-3" /> {conectadas} {conectadas === 1 ? "red" : "redes"}
+            </Badge>
           </div>
         </div>
-        {/* Canal de publicación activo de la marca (por dónde salen sus piezas). */}
-        <Badge variant="outline" className="w-fit gap-1">
-          <Send className="h-3 w-3" aria-hidden="true" />
-          Publica por {marca.canal_publicacion === "postproxy" ? "Postproxy" : "Metricool"}
-        </Badge>
+        <SelectorCanal
+          canal={marca.canal_publicacion}
+          postproxyDisponible={conectadas > 0}
+          deshabilitado={ocupado}
+          onCambiar={cambiarCanal}
+        />
       </CardHeader>
       <CardContent className="space-y-4 p-4 pt-2">
-        {/* Redes: una fila de chips de estado. */}
+        {/* Redes: una fila accionable por red (conectar / desconectar / reconectar). */}
         {marca.redes.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Sin redes configuradas.</p>
+          <p className="text-xs text-muted-foreground">Sin redes disponibles.</p>
         ) : (
-          <div className="flex flex-wrap gap-1.5">
+          <div className="space-y-1.5">
             {marca.redes.map((red) => (
-              <ChipRed key={red.plataforma} red={red} />
+              <FilaRed
+                key={red.plataforma}
+                red={red}
+                ocupada={accion === red.plataforma}
+                onConectar={conectar}
+                onDesconectar={desconectar}
+              />
             ))}
           </div>
         )}
@@ -165,21 +310,15 @@ function TarjetaMarca({ marca }: { marca: MarcaDashboard }) {
         {/* Métricas agregadas de la marca. */}
         <div className="grid grid-cols-3 gap-2 border-t border-border pt-3">
           <div>
-            <p className="text-sm font-semibold leading-tight">
-              {formatearNumero(marca.metricas.seguidores)}
-            </p>
+            <p className="text-sm font-semibold leading-tight">{formatearNumero(marca.metricas.seguidores)}</p>
             <p className="text-[11px] text-muted-foreground">Seguidores</p>
           </div>
           <div>
-            <p className="text-sm font-semibold leading-tight">
-              {formatearNumero(marca.metricas.posts_totales)}
-            </p>
+            <p className="text-sm font-semibold leading-tight">{formatearNumero(marca.metricas.posts_totales)}</p>
             <p className="text-[11px] text-muted-foreground">Posts</p>
           </div>
           <div>
-            <p className="text-sm font-semibold leading-tight">
-              {formatearNumero(marca.metricas.posts_dia)}
-            </p>
+            <p className="text-sm font-semibold leading-tight">{formatearNumero(marca.metricas.posts_dia)}</p>
             <p className="text-[11px] text-muted-foreground">Posts / día</p>
           </div>
         </div>
@@ -189,16 +328,31 @@ function TarjetaMarca({ marca }: { marca: MarcaDashboard }) {
 }
 
 /**
- * Página MARCAS: la foto EN VIVO de todas las marcas × redes × cuentas. Arriba, los
- * totales globales; debajo, una tarjeta por marca con su estado de conexiones
- * (Metricool/Postproxy), sus redes (verde=conectada, ámbar=token caducado,
- * gris=sin conectar) y sus métricas. Cada red sin conectar enlaza a Conexiones.
+ * Página MARCAS (admin): el centro de control EN VIVO de todas las marcas × redes ×
+ * cuentas. Arriba, los totales; debajo, una tarjeta por marca donde se CONECTA cada
+ * red en un par de clics (OAuth oficial de la red dentro de una ventana de Keni; el
+ * equipo nunca sale a un tercero), se desconecta, se ve el estado real y se elige el
+ * canal por el que publica la marca. Las métricas se leen de Metricool.
  */
 export default function Marcas() {
+  const queryClient = useQueryClient();
   const { data, isPending, isError, error, refetch, isFetching } = useQuery({
     queryKey: CLAVE_MARCAS,
     queryFn: ({ signal }) => api.getMarcas(signal),
   });
+
+  // La ventana de retorno del OAuth nos avisa al terminar: refrescamos el panel para
+  // que la red recién conectada aparezca al instante (sin esperar al refetch por foco).
+  React.useEffect(() => {
+    function alMensaje(e: MessageEvent) {
+      if (e.origin !== window.location.origin) return;
+      if (e.data?.tipo !== MSG_OAUTH) return;
+      void queryClient.invalidateQueries({ queryKey: CLAVE_MARCAS });
+      if (e.data.ok) toast.success("Red conectada.");
+    }
+    window.addEventListener("message", alMensaje);
+    return () => window.removeEventListener("message", alMensaje);
+  }, [queryClient]);
 
   return (
     <>
@@ -213,7 +367,7 @@ export default function Marcas() {
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-52 w-full rounded-xl" />
+                <Skeleton key={i} className="h-72 w-full rounded-xl" />
               ))}
             </div>
           </>
@@ -239,7 +393,8 @@ export default function Marcas() {
               ))}
             </div>
             {data.generado_en && (
-              <p className="text-right text-xs text-muted-foreground">
+              <p className="flex items-center justify-end gap-1 text-right text-xs text-muted-foreground">
+                <Send className="h-3 w-3" aria-hidden="true" />
                 Actualizado {tiempoRelativo(data.generado_en)}
               </p>
             )}

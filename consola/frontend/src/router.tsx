@@ -64,6 +64,10 @@ const Actividad = lazy(() => import("@/pages/Produccion"));
 // enlace directo (no se registra en el catálogo de apps).
 const MobileFeed = lazy(() => import("@/pages/MobileFeed"));
 
+// Ventana de retorno del OAuth de redes (popup de «Marcas»). Layout propio, fuera del
+// AppShell: se abre, avisa al panel y se cierra. No se registra en el catálogo de apps.
+const OauthConectado = lazy(() => import("@/pages/OauthConectado"));
+
 // Ajustes (ahora solo accesibles via dropdown del avatar).
 const Sugerencias = lazy(() => import("@/pages/Sugerencias"));
 const Webhooks = lazy(() => import("@/pages/Webhooks"));
@@ -102,6 +106,24 @@ export const router = createBrowserRouter([
           }
         >
           <MobileFeed />
+        </Suspense>
+      </FronteraError>
+    ),
+  },
+  // Retorno del OAuth de redes: ventana emergente efímera de «Marcas». Hermana del
+  // AppShell (layout propio, sin sidebar): su propia frontera de error + Suspense.
+  {
+    path: "/oauth/conectado",
+    element: (
+      <FronteraError>
+        <Suspense
+          fallback={
+            <div className="flex min-h-dvh items-center justify-center text-muted-foreground">
+              <Loader2 className="h-6 w-6 animate-spin" aria-label="Cargando" />
+            </div>
+          }
+        >
+          <OauthConectado />
         </Suspense>
       </FronteraError>
     ),

@@ -14,7 +14,6 @@ import { api } from "@/lib/api";
 import { INTERVALO_VIVO_MS } from "@/lib/refresco";
 import { PanelAjustes, PanelMaquinaContenido } from "@/pages/configuracion/SeccionFuncionalidad";
 import { SeccionImagen } from "@/pages/configuracion/SeccionImagen";
-import { SeccionPostproxy } from "@/pages/configuracion/SeccionPostproxy";
 import { PanelLanzarArte } from "@/pages/maquina/PanelLanzarArte";
 import { PanelPipeline, type FasePipeline } from "@/pages/monitor/PanelPipeline";
 import { SeccionDaemons } from "@/pages/sistema/SeccionDaemons";
@@ -176,7 +175,6 @@ export default function CockpitProduccion() {
                   «Sistema» (automatismos + tuning). Sin presupuesto/economía (vive en Agentes). */}
               <PanelMaquinaContenido />
               <SeccionImagen />
-              <SeccionPostproxy />
               <PanelAjustes
                 grupos={GRUPOS_SISTEMA}
                 titulo="Sistema"
