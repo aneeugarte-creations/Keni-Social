@@ -1,5 +1,5 @@
-// Chips del calendario de la rota: badge de coordinador, chip de evento y chip de turno
-// (con menú contextual de CRUD).
+// Chips del calendario de la rota: chip de evento y chip de turno (con menú contextual
+// de CRUD).
 import { useMutation } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -8,7 +8,6 @@ import {
   Loader2,
   Pencil,
   Plane,
-  ShieldCheck,
   Trash2,
   X,
 } from "lucide-react";
@@ -22,24 +21,14 @@ import {
   type EntradaMenuContextual,
 } from "@/components/comunes/MenuContextual";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
 import { ApiError, api, mensajeError } from "@/lib/api";
 import {
   COBERTURA,
   COLOR_PRIORIDAD,
 } from "@/lib/rota-calendario";
-import { cn } from "@/lib/utils";
 import { AvatarPersona } from "@/pages/tareas/AvatarPersona";
 import type {
   AusenciaRota,
-  CoordinacionTurno,
-  FranjaSemana,
   MiembroRota,
   TurnoRota,
 } from "@/types";
@@ -47,131 +36,6 @@ import type {
 import { BotonMarcarAvisado, type ItemEventoCalendario } from "../comun";
 import { DialogEditarTurno } from "./dialogs";
 
-
-export function BadgeCoordinador({
-  lunes,
-  fecha,
-  franja,
-  coordinacion,
-  candidatos,
-  editable,
-  onCambio,
-}: {
-  lunes: string;
-  fecha: string;
-  franja: FranjaSemana;
-  coordinacion?: CoordinacionTurno;
-  candidatos: MiembroRota[];
-  editable: boolean;
-  onCambio: () => void;
-}) {
-  const [open, setOpen] = React.useState(false);
-
-  const asignar = useMutation({
-    mutationFn: (coordinador_id: string) =>
-      api.setCoordinador({
-        lunes,
-        fecha,
-        franja_id: franja.id,
-        coordinador_id,
-      }),
-    onSuccess: () => {
-      toast.success("Coordinador asignado.");
-      onCambio();
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  const quitar = useMutation({
-    mutationFn: () =>
-      api.quitarCoordinador({ fecha, franja_id: franja.id }),
-    onSuccess: () => {
-      toast.success("Coordinador quitado.");
-      onCambio();
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  const cargando = asignar.isPending || quitar.isPending;
-
-  if (!editable) {
-    // Solo lectura: si hay coordinador, lo mostramos; si no, badge muted "Sin coord".
-    return coordinacion ? (
-      <span
-        className="inline-flex max-w-full items-center gap-1 rounded border border-sky-300/70 bg-sky-50 px-1.5 py-0.5 text-[10px] font-medium text-sky-800 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-300"
-        title={`Coordina: ${coordinacion.coordinador_nombre}`}
-      >
-        <ShieldCheck className="h-3 w-3 shrink-0" />
-        <span className="truncate">
-          Coord: {coordinacion.coordinador_nombre || "—"}
-        </span>
-      </span>
-    ) : (
-      <span className="inline-flex max-w-full items-center gap-1 rounded border border-dashed border-border/60 bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground/60">
-        Sin coord
-      </span>
-    );
-  }
-
-  // Editable: Select para asignar/cambiar + X para borrar (si hay).
-  return (
-    <div className="flex items-center gap-1">
-      <Select
-        value={coordinacion?.coordinador_id ?? ""}
-        open={open}
-        onOpenChange={setOpen}
-        onValueChange={(id) => {
-          if (!id) return;
-          asignar.mutate(id);
-        }}
-        disabled={cargando || candidatos.length === 0}
-      >
-        <SelectTrigger
-          aria-label={`Coordinador de ${franja.nombre} del ${fecha}`}
-          className={cn(
-            "h-6 flex-1 gap-1 px-1.5 text-[10px]",
-            coordinacion
-              ? "border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-300"
-              : "border-dashed border-border bg-background text-muted-foreground",
-          )}
-        >
-          <ShieldCheck className="h-3 w-3 shrink-0" />
-          <span className="truncate">
-            {coordinacion
-              ? `Coord: ${coordinacion.coordinador_nombre || "—"}`
-              : candidatos.length === 0
-                ? "Sin candidatos"
-                : "Sin coord"}
-          </span>
-        </SelectTrigger>
-        <SelectContent>
-          {candidatos.map((c) => (
-            <SelectItem key={c.id} value={c.id}>
-              {c.nombre}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      {coordinacion && (
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-6 w-6 text-muted-foreground hover:text-destructive"
-          aria-label="Quitar coordinador"
-          title="Quitar coordinador"
-          onClick={() => quitar.mutate()}
-          disabled={cargando}
-        >
-          {quitar.isPending ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : (
-            <X className="h-3 w-3" />
-          )}
-        </Button>
-      )}
-    </div>
-  );
-}
 
 /** Primer nombre (lo que cabe en el chip): "Tezcucano Pérez" → "Tezcucano". */
 const primerNombre = (n: string) => n.trim().split(/\s+/)[0] || n;

@@ -29,13 +29,11 @@ import {
 import { ImportarDocumentoParrilla } from "@/components/parrilla/ImportarDocumentoParrilla";
 import type {
   AusenciaRota,
-  CoordinacionTurno,
   EventoRota,
-  FranjaSemana,
   TurnoRota,
 } from "@/types";
 
-import { CeldaDeRejilla, cmsDeMarca, DialogCargaEquipo, DialogEditarEvento } from "./CalendarioPiezas";
+import { CeldaDeRejilla, DialogCargaEquipo, DialogEditarEvento } from "./CalendarioPiezas";
 import {
   AyudaLeyenda,
   BadgeEstadoSemana,
@@ -46,9 +44,7 @@ import {
   ausenciaTocaDia,
   filtrarEquipoPorMarca,
   franjaIdParaHoraEvento,
-  franjasSolapan,
   presentacionFranja,
-  type ConflictoCandidato,
   type CubridorEvento,
   type ItemEventoCalendario,
 } from "./comun";
@@ -99,45 +95,16 @@ export function Calendario({
     queryKey: ["rota", "equipo"],
     queryFn: ({ signal }) => api.rotaEquipo(signal),
   });
-  // Equipo completo (incluye sin cobertura): necesario para resolver candidatos a
-  // coordinador (ola "coord") como la coordinadora operativa o fotografía/QA, que tienen `cobertura=false`.
-  const equipoTodosQ = useQuery({
-    queryKey: ["rota", "equipo", "todos"],
-    queryFn: ({ signal }) => api.rotaEquipoTodos(signal),
-  });
   const ausenciasQ = useQuery({
     queryKey: ["rota", "ausencias"] as const,
     queryFn: ({ signal }) => api.rotaAusencias({}, signal),
-  });
-  // Coordinador por celda (ola "coord"): un PUT por celda, lista por semana.
-  const coordinacionQ = useQuery({
-    queryKey: ["rota", "coordinacion", lunes, marcaActiva] as const,
-    queryFn: ({ signal }) =>
-      api.listarCoordinacionSemana(lunes, marcaActiva ?? undefined, signal),
   });
 
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: ["rota"] });
 
   // `equipo` para la edición avanzada del chip (DialogEditarTurno admite reasignar a
-  // cualquier miembro de la rota), y `cms` para el dropdown "+ Añadir persona" (sólo
-  // CMs activos de la marca activa). Mismo desglose que la rejilla Turnos anterior.
+  // cualquier miembro de la rota).
   const equipo = filtrarEquipoPorMarca(equipoQ.data?.equipo ?? [], marcaActiva);
-  const cms = cmsDeMarca(equipoQ.data?.equipo ?? [], marcaActiva);
-  // Candidatos a coordinador (ola "coord"): usuarios con `puede_coordinar=true`. Se
-  // sacan del equipo COMPLETO (no solo cobertura) porque hoy son el coordinador de redes
-  // (cubre), fotografía/QA y la coordinadora operativa (NO cubren). El admin gestiona el flag desde /usuarios.
-  const candidatosCoordinador = React.useMemo(
-    () => (equipoTodosQ.data?.equipo ?? []).filter((m) => m.puede_coordinar),
-    [equipoTodosQ.data?.equipo],
-  );
-  // Index de coordinaciones por (fecha|franja_id) -> CoordinacionTurno.
-  const coordinacionPorCelda = React.useMemo(() => {
-    const m = new Map<string, CoordinacionTurno>();
-    for (const c of coordinacionQ.data?.coordinacion ?? []) {
-      m.set(`${c.fecha}|${c.franja_id}`, c);
-    }
-    return m;
-  }, [coordinacionQ.data?.coordinacion]);
   const semana = turnosQ.data;
   const turnos = React.useMemo(() => semana?.turnos ?? [], [semana?.turnos]);
   // Franjas vivas de la semana, ordenadas por `orden` (la franja Descanso suele ir al
@@ -259,43 +226,6 @@ export function Calendario({
     [ausenciasPorMiembro],
   );
 
-  // Turnos indexados por (miembro_id, fecha): base para detectar SOLAPES (la misma
-  // persona ya con un turno ese día en otra franja que comparte horas con la candidata).
-  const turnosPorMiembroFecha = React.useMemo(() => {
-    const m = new Map<string, TurnoRota[]>();
-    for (const t of turnos) {
-      const k = `${t.miembro_id}|${t.fecha}`;
-      const lista = m.get(k) ?? [];
-      lista.push(t);
-      m.set(k, lista);
-    }
-    return m;
-  }, [turnos]);
-  const franjaPorId = React.useMemo(() => {
-    const m = new Map<string, FranjaSemana>();
-    for (const f of franjasSemana) m.set(f.id, f);
-    return m;
-  }, [franjasSemana]);
-
-  // Aviso inline NO bloqueante al asignar: ¿la persona está de ausencia ese día, o ya
-  // tiene un turno que solapa? El admin lo ve en el dropdown y puede forzar igualmente.
-  const conflictoCandidato = React.useCallback(
-    (miembroId: string, fecha: string, franja: FranjaSemana): ConflictoCandidato => {
-      const ausencia = ausenciaDe(miembroId, fecha);
-      let solapa = false;
-      if (!franja.es_descanso) {
-        const susTurnos = turnosPorMiembroFecha.get(`${miembroId}|${fecha}`) ?? [];
-        solapa = susTurnos.some((t) => {
-          if (t.franja_id === franja.id) return false; // misma celda: no es un solape nuevo
-          const otra = franjaPorId.get(t.franja_id);
-          return Boolean(otra && !otra.es_descanso && franjasSolapan(franja, otra));
-        });
-      }
-      return { ausencia, solapa };
-    },
-    [ausenciaDe, turnosPorMiembroFecha, franjaPorId],
-  );
-
   // TITULARIDAD: quién COGIÓ cada evento, derivada de las tareas de cobertura (la MISMA
   // fuente que el Panorama) y NO de quién está de turno. Antes el calendario usaba la
   // cobertura DERIVADA de turnos (`evento.cobertura`): metía el evento bajo CADA persona
@@ -343,11 +273,9 @@ export function Calendario({
     coberturaQ.isPending ||
     turnosQ.isPending ||
     ausenciasQ.isPending ||
-    equipoQ.isPending ||
-    coordinacionQ.isPending;
+    equipoQ.isPending;
   const error =
-    coberturaQ.error || turnosQ.error || ausenciasQ.error || equipoQ.error ||
-    coordinacionQ.error;
+    coberturaQ.error || turnosQ.error || ausenciasQ.error || equipoQ.error;
 
   return (
     <div className="space-y-4">
@@ -448,17 +376,15 @@ export function Calendario({
         <BloqueError
           titulo="No se pudo cargar el calendario"
           mensaje={mensajeError(error)}
-          // `error` incluye `coordinacionQ.error`, así que el reintento debe recargar TODA la
-          // familia de queries de la rota (incl. coordinación): refetchear solo cobertura/
-          // turnos/ausencias/equipo dejaba el error de coordinación atascado. `invalidar`
-          // invalida la clave `["rota"]` -> refetch de todas las queries activas.
+          // `invalidar` invalida la clave `["rota"]` -> refetch de todas las queries activas
+          // de la rota, así el reintento recarga toda la familia (cobertura/turnos/ausencias/
+          // equipo) y no deja ninguna atascada.
           onReintentar={invalidar}
           cargando={
             coberturaQ.isFetching ||
             turnosQ.isFetching ||
             ausenciasQ.isFetching ||
-            equipoQ.isFetching ||
-            coordinacionQ.isFetching
+            equipoQ.isFetching
           }
         />
       ) : (
@@ -558,33 +484,17 @@ export function Calendario({
                             personasPorCelda.get(`${franja.id}|${fecha}`) ?? [];
                           const eventos =
                             eventosPorCelda.get(`${franja.id}|${fecha}`) ?? [];
-                          // CMs disponibles para añadir aquí: los de ClaroSports que no
-                          // estén ya de turno en esta celda. La franja Descanso también
-                          // admite asignaciones (turno de no-laboral explícito).
-                          const yaEnCelda = new Set(personas.map((t) => t.miembro_id));
-                          const cmsDisponibles = cms.filter(
-                            (m) => !yaEnCelda.has(m.id),
-                          );
-                          const coordinacionCelda = coordinacionPorCelda.get(
-                            `${fecha}|${franja.id}`,
-                          );
                           return (
                             <CeldaDeRejilla
                               key={`${franja.id}-${fecha}`}
-                              lunes={lunes}
                               fecha={fecha}
                               franja={franja}
                               personas={personas}
                               eventos={eventos}
                               equipo={equipo}
-                              cmsDisponibles={cmsDisponibles}
                               editable={editable}
                               finde={esFinDeSemana(fecha)}
                               ausenciaDe={ausenciaDe}
-                              conflictoCandidato={conflictoCandidato}
-                              coordinacion={coordinacionCelda}
-                              candidatosCoordinador={candidatosCoordinador}
-                              coordinacionEditable={esAdmin && !semana?.aprobada}
                               onEditarEvento={(e) => setEventoSeleccionado(e)}
                               onCambio={invalidar}
                             />
@@ -614,10 +524,3 @@ export function Calendario({
     </div>
   );
 }
-
-/**
- * Badge de COORDINADOR por celda (ola "coord"): muestra "Coord: <nombre>" o "Sin coord".
- * Click (si editable) abre un Select con los candidatos (`puede_coordinar=true`); la X
- * inline (solo si hay coordinador y editable) borra la asignación. Si la semana está
- * aprobada o el usuario no es admin, queda en modo solo-lectura (sin Select ni X).
- */
