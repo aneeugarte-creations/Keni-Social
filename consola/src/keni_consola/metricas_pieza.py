@@ -352,7 +352,7 @@ def refrescar_piezas_recientes(
     # invalida el barrido (los puntos ya quedaron escritos).
     try:
         retencion = config.metricas_historico_retencion_dias()
-        borrados = repos.podar_snapshots_piezas(retencion, ahora.isoformat(timespec="seconds"))
+        borrados = repos.purgar_snapshots_piezas(retencion, ahora.isoformat(timespec="seconds"))
         if borrados:
             _log.info(
                 "Limpieza del histórico por pieza: %d snapshot(s) > %d días eliminados.",

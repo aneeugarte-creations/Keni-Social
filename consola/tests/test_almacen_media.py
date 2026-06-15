@@ -3,7 +3,7 @@
 Dos backends, OFFLINE:
   - DISCO (sin S3 cableado): comportamiento historico (guardar/leer/anti-traversal).
   - S3 (con S3_* cableado): S3 SIMULADO con `moto` (NO toca la red). Cubre que con S3
-    cableado la media va al bucket y se lee de ahi, y que el nombre de objeto se sanea.
+    cableado la media va al bucket y se lee de ahi, y que el nombre de objeto se repara.
 
 El swap de backend lo decide `config.s3_configurado()` segun los env `S3_*`.
 """

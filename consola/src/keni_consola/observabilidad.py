@@ -132,9 +132,9 @@ def _request_id_entrante(scope: Scope) -> str:
     for nombre, valor in scope.get("headers", []):
         if nombre == b"x-request-id":
             crudo = valor.decode("latin-1", "replace").strip()
-            saneado = "".join(c for c in crudo if c.isalnum() or c in "-_")[:64]
-            if saneado:
-                return saneado
+            reparado = "".join(c for c in crudo if c.isalnum() or c in "-_")[:64]
+            if reparado:
+                return reparado
             break
     return nuevo_request_id()
 

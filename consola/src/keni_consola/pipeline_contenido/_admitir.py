@@ -354,7 +354,7 @@ def clusters_para_promover(
     marca: str, *, maximo: int, cupos_categoria: dict[str, int] | None = None,
     qa_estados: tuple[str, ...] = VERIFICADAS_QA,
 ) -> list[dict[str, Any]]:
-    """Top-N historias (`estado='nuevo'`) de la marca por SCORE, con LISTÓN y DIVERSIDAD. Best-effort.
+    """Top-N historias (`estado='nuevo'`) de la marca por SCORE, con UMBRAL y DIVERSIDAD. Best-effort.
 
     `qa_estados` (ADR 0011 F3): el filtro de QA es OBLIGATORIO — por defecto a las VERIFICADAS
     (`VERIFICADAS_QA` = `no_verificado`/`saltada`), así la admisión SIEMPRE criba: las `problema`
@@ -366,13 +366,13 @@ def clusters_para_promover(
     score (mayor primero). Así el pipeline produce las pocas historias más relevantes por marca
     —no un tema por cada item RSS—, que es lo que limita el volumen y respeta la jerarquización.
 
-    LISTÓN de producción automática (`noticias_liston.evaluar`): promover acaba en QA+copy
+    UMBRAL de producción automática (`noticias_umbral.evaluar`): promover acaba en QA+copy
     (`claude -p`: coste real de tokens), así que antes de competir por plaza cada candidata debe
-    superar el listón — verificación no dudosa, score recalculado ≥ `KENI_PROMOVER_MIN_SCORE` y
+    superar el umbral — verificación no dudosa, score recalculado ≥ `KENI_PROMOVER_MIN_SCORE` y
     encaje con el vocabulario de la marca ≥ `KENI_PROMOVER_MIN_MARCA` (exentas las curadas por
     el equipo y las breaking corroboradas). Las que no lo superan se quedan `nuevo` en el pool
     (visibles en el panel con su motivo; el humano puede usarlas a mano y la caducidad las
-    expira sola). Se loguea cuántas quedaron bajo el listón: la criba es auditable.
+    expira sola). Se loguea cuántas quedaron bajo el umbral: la criba es auditable.
 
     DIVERSIDAD (MMR suave): se sobremuestrea el top y `agrupar.seleccionar_diversos` salta
     las historias cuyo título es casi idéntico (ratio fuzzy ≥ `KENI_PROMOVER_DIVERSIDAD_UMBRAL`,
@@ -380,11 +380,11 @@ def clusters_para_promover(
     plazas. Suave: si faltan plazas se rellenan con las saltadas (nunca devuelve menos). Con el
     umbral a 0 se desactiva (top-N puro, comportamiento anterior).
     """
-    from .. import config, noticias_liston
+    from .. import config, noticias_umbral
     from ..dominio import agrupar
 
     umbral = config.promover_diversidad_umbral()
-    # Sobremuestra acotada: suficientes candidatas para listón+diversidad sin recorrer el pool.
+    # Sobremuestra acotada: suficientes candidatas para umbral+diversidad sin recorrer el pool.
     # Con PLAN (cupos por categoría) la muestra crece: las categorías minoritarias del plan
     # pueden vivir lejos del top global del pool.
     limite = max(maximo * 4, maximo + 8) if cupos_categoria is None else max(maximo * 10, 80)
@@ -401,25 +401,25 @@ def clusters_para_promover(
     # Filtro de QA OBLIGATORIO: solo cruzan las historias con un veredicto admitido.
     clusters = [c for c in clusters if (c.get("verificar_veredicto") or "").strip() in qa_estados]
     aptas: list[dict[str, Any]] = []
-    bajo_liston = 0
+    bajo_umbral = 0
     for c in clusters:
         try:
-            supera, motivo = noticias_liston.evaluar(c)
-        except Exception:  # noqa: BLE001 -- ante un fallo del listón, NO se promueve (fail-closed:
+            supera, motivo = noticias_umbral.evaluar(c)
+        except Exception:  # noqa: BLE001 -- ante un fallo del umbral, NO se promueve (fail-closed:
             # promover cuesta tokens; una historia retenida de más la recoge el humano o el
             # siguiente barrido, una promovida de más ya gastó el claude -p).
-            _log.warning("pipeline: fallo al evaluar el listón de una historia (%s)", c.get("id"), exc_info=True)
+            _log.warning("pipeline: fallo al evaluar el umbral de una historia (%s)", c.get("id"), exc_info=True)
             continue
         if supera:
             aptas.append(c)
         else:
-            bajo_liston += 1
-            _log.debug("pipeline: historia bajo el listón (%s): %s", c.get("id"), motivo)
-    if bajo_liston:
+            bajo_umbral += 1
+            _log.debug("pipeline: historia bajo el umbral (%s): %s", c.get("id"), motivo)
+    if bajo_umbral:
         _log.info(
-            "pipeline: %d historia(s) de %s bajo el listón de producción automática "
+            "pipeline: %d historia(s) de %s bajo el umbral de producción automática "
             "(quedan en el pool, visibles en el panel).",
-            bajo_liston, marca,
+            bajo_umbral, marca,
         )
     if cupos_categoria is not None:
         # PLAN EDITORIAL: greedy por score con cupo por categoría — el pool viene rankeado,
@@ -454,16 +454,16 @@ def clusters_para_promover(
 
 def clusters_pendientes_verificar(marca: str, *, maximo: int) -> list[dict[str, Any]]:
     """Top-N historias (`estado='nuevo'`) de la marca SIN cribar aún (`verificar_veredicto`==''), que
-    pasan el LISTÓN — las candidatas a las que lanzar la QA de la fuente (ADR 0011 F3).
+    pasan el UMBRAL — las candidatas a las que lanzar la QA de la fuente (ADR 0011 F3).
 
-    El listón evita gastar `claude -p` cribando historias que jamás se admitirían (score/marca
+    El umbral evita gastar `claude -p` cribando historias que jamás se admitirían (score/marca
     bajo umbral). Las ya `en_curso`/`no_verificado`/`saltada`/`problema` quedan fuera (su QA ya
     corrió o está en curso). Ordenadas por score (el pool ya viene rankeado); se recorta a
     `maximo` (el presupuesto del embudo de verificación). Best-effort: [] ante fallo o maximo<=0.
     """
     if maximo <= 0:
         return []
-    from .. import noticias_liston
+    from .. import noticias_umbral
 
     limite = max(maximo * 4, 80)
     try:
@@ -478,8 +478,8 @@ def clusters_pendientes_verificar(marca: str, *, maximo: int) -> list[dict[str, 
         if (c.get("verificar_veredicto") or "").strip():
             continue  # ya cribada / en curso
         try:
-            supera, _motivo = noticias_liston.evaluar(c)
-        except Exception:  # noqa: BLE001 -- fail-closed: ante fallo del listón no se criba
+            supera, _motivo = noticias_umbral.evaluar(c)
+        except Exception:  # noqa: BLE001 -- fail-closed: ante fallo del umbral no se criba
             continue
         if supera:
             pendientes.append(c)
@@ -827,7 +827,7 @@ def caducar_qa_clusters_en_curso(*, ahora: datetime | None = None) -> int:
     momento = ahora or datetime.now(timezone.utc)
     umbral = momento - timedelta(seconds=config.qa_en_curso_ttl_seg())
     try:
-        n = repos.sanear_qa_clusters_en_curso(umbral.astimezone(timezone.utc).isoformat())
+        n = repos.reparar_qa_clusters_en_curso(umbral.astimezone(timezone.utc).isoformat())
     except Exception:  # noqa: BLE001 -- la reparación es best-effort; nunca rompe el barrido
         _log.exception("pipeline: fallo el limpiador de QA de clusters en curso.")
         return 0

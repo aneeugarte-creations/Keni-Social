@@ -399,7 +399,7 @@ export function VistaLista({
     </div>
   );
 
-  // Poda las ids seleccionadas que ya no aparecen en la lista (cambió el filtro o la página).
+  // Purga las ids seleccionadas que ya no aparecen en la lista (cambió el filtro o la página).
   React.useEffect(() => {
     setSeleccionadas((prev) => {
       if (prev.size === 0) return prev;

@@ -23,7 +23,7 @@ from typing import Any
 
 import keni_consola.recolectar_daemon as _pkg
 
-from .. import config, generaciones, marcas, noticias_liston, repos
+from .. import config, generaciones, marcas, noticias_umbral, repos
 from ..dominio import agrupar, traducir
 from ..tiempo import ahora_iso
 
@@ -49,11 +49,11 @@ _ultima_caducidad = 0.0  # time.monotonic() de la última pasada completada
 def _palabras_relevancia(marca: str, perfil_activo: bool) -> frozenset[str]:
     """Keywords de relevancia de la marca (perfil editorial Haiku si está activo; si no, la base inicial).
 
-    Delegado en `noticias_liston.palabras_relevancia` (fuente única perfil-vs-base, la misma
+    Delegado en `noticias_umbral.palabras_relevancia` (fuente única perfil-vs-base, la misma
     que usan el umbral de promoción y la API del panel; si divergieran, el panel explicaría un
     score que la priorización no calculó).
     """
-    return noticias_liston.palabras_relevancia(marca, perfil_activo)
+    return noticias_umbral.palabras_relevancia(marca, perfil_activo)
 
 
 def _rendimiento_top_lineas(marca: str) -> tuple[set[str], dict[str, str], list[dict[str, Any]]]:

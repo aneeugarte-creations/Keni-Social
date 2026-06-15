@@ -36,7 +36,7 @@ red (NUNCA se llama a `claude` ni a un proveedor de imagen real en tests). El
 `procesar` (callback que parsea la salida y crea los artefactos) SI corre en los tests
 (con una salida canned), asi se cubre el post-procesado real.
 
-SEGURIDAD: escritura atomica (tmp + os.replace); el id de un registro se sanea contra
+SEGURIDAD: escritura atomica (tmp + os.replace); el id de un registro se repara contra
 traversal al leer; sin shell (argv como lista). Errores en espanol, sin tracebacks.
 
 ENDURECIMIENTO PERMANENTE (#137): la generacion se hace —y se SEGUIRA haciendo— con el
@@ -101,9 +101,9 @@ from ._almacen import (
     crear_idempotente,
     listar,
     obtener,
-    podar_generaciones,
+    purgar_generaciones,
     raiz,
-    reclamar_zombis,
+    reclamar_atascadas,
 )
 
 # --- Re-exportación de la superficie del dominio (submódulos internos) --------------- #
@@ -186,8 +186,8 @@ __all__ = [
     "obtener",
     "listar",
     "contar",
-    "podar_generaciones",
-    "reclamar_zombis",
+    "purgar_generaciones",
+    "reclamar_atascadas",
     "nuevo_id",
     "ahora_iso",
     # Señalización in-proceso del fin de un job (la usa `worker._esperar_terminal`).

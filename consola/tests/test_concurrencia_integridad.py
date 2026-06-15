@@ -10,7 +10,7 @@ Cubre los seis arreglos de la ronda de endurecimiento (cada uno con su test foca
   3. Swap de rota: re-aplicar un swap ya `aplicado` es un no-op idempotente (no doble-swap).
   4. Parrilla: el índice parcial único impide doble-reserva del mismo (red, fecha) y el
      encolado RECALCULA el siguiente hueco ante un choque (retry).
-  5. Job huérfano cuyo registro ya es terminal NO se re-ejecuta (evita el borrador duplicado).
+  5. Job suelto cuyo registro ya es terminal NO se re-ejecuta (evita el borrador duplicado).
   6. Single-flight de barridos: un segundo `lock_barrido` concurrente NO obtiene el lock.
 
 NO se llama a `claude` ni a la red. Las pruebas con hilos están acotadas (timeout) para no
@@ -345,12 +345,12 @@ def test_aplicar_swap_dos_veces_es_idempotente(entorno):
 
 
 # --------------------------------------------------------------------------- #
-# 5) Job huérfano cuyo registro ya es terminal NO se re-ejecuta               #
+# 5) Job suelto cuyo registro ya es terminal NO se re-ejecuta               #
 # --------------------------------------------------------------------------- #
 
 
-def test_reclamar_no_reejecuta_huerfano_terminal(entorno):
-    """Un job `reclamado` huérfano cuyo `gen_id` YA es terminal se cierra sin relanzarse."""
+def test_reclamar_no_reejecuta_suelto_terminal(entorno):
+    """Un job `reclamado` suelto cuyo `gen_id` YA es terminal se cierra sin relanzarse."""
     from datetime import datetime, timedelta
 
     from keni_consola import config
@@ -364,7 +364,7 @@ def test_reclamar_no_reejecuta_huerfano_terminal(entorno):
     generaciones.actualizar(
         gen["id"], {"estado": generaciones.ESTADO_COMPLETADO, "fecha_fin": "z"}
     )
-    # Envejecemos `claimed_at` para que cuente como huérfano.
+    # Envejecemos `claimed_at` para que cuente como suelto.
     viejo = (
         datetime.now() - timedelta(seconds=config.claude_timeout() + db_jobs._RECLAIM_STALE_MARGEN_S + 60)
     ).isoformat(timespec="seconds")
@@ -387,8 +387,8 @@ def test_reclamar_no_reejecuta_huerfano_terminal(entorno):
     assert fila["estado"] == db.JOB_TERMINADO
 
 
-def test_reclamar_si_reejecuta_huerfano_no_terminal(entorno):
-    """Salvaguarda: un huérfano cuyo registro sigue `ejecutando` SÍ se re-reclama (no se pierde)."""
+def test_reclamar_si_reejecuta_suelto_no_terminal(entorno):
+    """Salvaguarda: un suelto cuyo registro sigue `ejecutando` SÍ se re-reclama (no se pierde)."""
     from datetime import datetime, timedelta
 
     from keni_consola import config
@@ -406,7 +406,7 @@ def test_reclamar_si_reejecuta_huerfano_no_terminal(entorno):
         con.commit()
     finally:
         con.close()
-    # El registro sigue `ejecutando`: el huérfano se re-reclama para sacarlo adelante.
+    # El registro sigue `ejecutando`: el suelto se re-reclama para sacarlo adelante.
     rereclamado = repos.reclamar_job("w-nuevo")
     assert rereclamado is not None and rereclamado["gen_id"] == gen["id"]
 

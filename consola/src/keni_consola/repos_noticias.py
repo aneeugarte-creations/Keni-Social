@@ -297,8 +297,8 @@ def contar_clusters_funnel_qa(marca: str, estados: tuple[str, ...]) -> int:
     return db.contar_clusters_funnel_qa(marca, estados)
 
 
-def sanear_qa_clusters_en_curso(umbral_iso: str) -> int:
-    return db.sanear_qa_clusters_en_curso(umbral_iso)
+def reparar_qa_clusters_en_curso(umbral_iso: str) -> int:
+    return db.reparar_qa_clusters_en_curso(umbral_iso)
 
 
 def marcar_cluster_traducido(

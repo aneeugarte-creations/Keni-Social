@@ -3,7 +3,7 @@
 Vista por HISTORIA (cluster) del archivo: listar/detalle, la Mesa segmentada por las líneas
 del plan, la promoción al tablero (`usar`), y la curación a escala (descartar/restaurar +
 lotes de descarte/borrado/vaciado). Aquí viven sus handlers y los helpers de serialización de
-una historia (`_historia_a_dict` y satélites: estado de pieza, listón de producción, pesos del
+una historia (`_historia_a_dict` y satélites: estado de pieza, umbral de producción, pesos del
 score, timeline de fuentes). El pool a nivel de ITEM vive en `items.py`.
 """
 
@@ -95,23 +95,23 @@ def _pieza_estado_de(cluster: dict[str, Any]) -> str:
     )
 
 
-def _evaluar_liston(
+def _evaluar_umbral(
     cluster: dict[str, Any], vocab_memo: dict[str, frozenset[str]]
 ) -> tuple[bool, str]:
-    """Listón de producción automática de UNA historia, con memo de vocabulario por marca.
+    """Umbral de producción automática de UNA historia, con memo de vocabulario por marca.
 
-    La MISMA evaluación que usa la promoción CI (`noticias_liston.evaluar`): el panel nunca
+    La MISMA evaluación que usa la promoción CI (`noticias_umbral.evaluar`): el panel nunca
     dice una cosa y el pipeline hace otra. `vocab_memo` evita releer el cache del perfil
     editorial por cada historia del listado. Best-effort: ante un fallo se reporta NO
     promovible con motivo genérico (el panel no falla por una historia rara).
     """
-    from ... import noticias_liston
+    from ... import noticias_umbral
 
     try:
         marca = str(cluster.get("marca") or "")
         if marca not in vocab_memo:
-            vocab_memo[marca] = noticias_liston.palabras_relevancia(marca)
-        return noticias_liston.evaluar(cluster, palabras_marca=vocab_memo[marca])
+            vocab_memo[marca] = noticias_umbral.palabras_relevancia(marca)
+        return noticias_umbral.evaluar(cluster, palabras_marca=vocab_memo[marca])
     except Exception:  # noqa: BLE001 -- la explicación es informativa; nunca rompe el listado
         return False, "no evaluable"
 
@@ -140,7 +140,7 @@ def _historia_a_dict(
     enlaces: list[dict[str, Any]],
     *,
     pieza_estado: str = "en_pool",
-    liston: tuple[bool, str] | None = None,
+    umbral: tuple[bool, str] | None = None,
 ) -> dict[str, Any]:
     """Serializa una historia (cluster) a la forma `Historia` (snake_case) del contrato.
 
@@ -206,10 +206,10 @@ def _historia_a_dict(
         # persiste el daemon al puntuar; ver `agrupar.puntuar_detalle`).
         "score_razon": cluster.get("score_razon") or "",
         "score_desglose": cluster.get("score_desglose") or {},
-        # LISTÓN de producción automática (la MISMA evaluación que la promoción CI): si esta
+        # UMBRAL de producción automática (la MISMA evaluación que la promoción CI): si esta
         # historia dispararía QA+copy solos, y el porqué (o el porqué no), legible.
-        "promovible": bool(liston[0]) if liston else False,
-        "promovible_motivo": (liston[1] if liston else ""),
+        "promovible": bool(umbral[0]) if umbral else False,
+        "promovible_motivo": (umbral[1] if umbral else ""),
         "breaking": int(cluster.get("breaking") or 0),
         "verificacion": cluster.get("verificacion") or "unica_fuente",
         # Etapas de INVESTIGACIÓN visibles por historia (ADR 0011): el veredicto de
@@ -291,7 +291,7 @@ async def listar_historias(request: Request) -> Response:
             pieza_estado=_pieza_estado(
                 c.get("estado") or "nuevo", c.get("contenido_id") or "", resumen_pieza
             ),
-            liston=_evaluar_liston(c, vocab_memo),
+            umbral=_evaluar_umbral(c, vocab_memo),
         )
         for c in clusters
     ]
@@ -370,7 +370,7 @@ async def mesa(request: Request) -> Response:
                 pieza_estado=_pieza_estado(
                     c.get("estado") or "nuevo", c.get("contenido_id") or "", resumen_pieza
                 ),
-                liston=_evaluar_liston(c, vocab_memo),
+                umbral=_evaluar_umbral(c, vocab_memo),
             )
             for c in lote[:por_linea]
         ]
@@ -423,7 +423,7 @@ async def detalle_historia(request: Request) -> Response:
     )
     historia = _historia_a_dict(
         {**cluster, "verificar_veredicto": verificar_veredicto}, items, pieza_estado=_pieza_estado_de(cluster),
-        liston=_evaluar_liston(cluster, {}),
+        umbral=_evaluar_umbral(cluster, {}),
     )
     return JSONResponse({"historia": historia, "items": [_item_a_dict(it) for it in items]})
 
@@ -548,7 +548,7 @@ async def restaurar_historia(request: Request) -> Response:
     items = repos.items_de_cluster(cluster_id, limite=_MAX_ENLACES_HISTORIA)
     historia = _historia_a_dict(
         cluster, items, pieza_estado=_pieza_estado_de(cluster),
-        liston=_evaluar_liston(cluster, {}),
+        umbral=_evaluar_umbral(cluster, {}),
     )
     return JSONResponse({"historia": historia})
 

@@ -12,7 +12,7 @@ export interface SlideCarrusel {
   objeto: string;
 }
 
-/** Parsea el JSON persistido a slides saneados (orden preservado; basura -> []). */
+/** Parsea el JSON persistido a slides reparados (orden preservado; basura -> []). */
 export function parsearCarrusel(crudo: string | null | undefined): SlideCarrusel[] {
   if (!crudo || !crudo.trim()) return [];
   let datos: unknown;

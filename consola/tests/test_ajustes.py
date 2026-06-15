@@ -138,7 +138,7 @@ def test_cache_no_relee_si_mtime_igual(store, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# Migracion de claves RENOMBRADAS (renames sin retrocompat -> store huerfano)  #
+# Migracion de claves RENOMBRADAS (renames sin retrocompat -> store suelto)  #
 # --------------------------------------------------------------------------- #
 
 
@@ -146,7 +146,7 @@ def test_migrar_claves_legado_mueve_global_y_por_marca(store):
     """El toggle guardado con el nombre VIEJO (global + `::marca`) se mueve al nombre NUEVO.
 
     Es el bug real de prod: el equipo encendio `KENI_QA`/`KENI_QA::unotv` desde la UI, el
-    rename a `KENI_PIPELINE_VERIFICAR` dejo esas claves huerfanas y la etapa aparecia
+    rename a `KENI_PIPELINE_VERIFICAR` dejo esas claves sueltas y la etapa aparecia
     apagada aunque la UI la habia mostrado encendida.
     """
     ajustes.guardar("KENI_QA", "1")
@@ -164,7 +164,7 @@ def test_migrar_claves_legado_mueve_global_y_por_marca(store):
 
 
 def test_migrar_no_pisa_el_nombre_nuevo_pero_limpia_el_viejo(store):
-    """Si el nombre NUEVO ya esta escrito, gana (es mas reciente); el huerfano se borra igual."""
+    """Si el nombre NUEVO ya esta escrito, gana (es mas reciente); el suelto se borra igual."""
     ajustes.guardar("KENI_PIPELINE", "1")       # legado (Copy)
     ajustes.guardar("KENI_PIPELINE_REDACTAR", "0")  # nuevo ya escrito: NO se pisa
     assert ajustes.migrar_claves_legado() == 0

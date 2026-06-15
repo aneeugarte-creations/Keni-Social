@@ -337,7 +337,7 @@ describe("MobileFeed · feed móvil de revisión", () => {
     const { rerender } = render(arbol(sesion({ marcas: [] }), client));
     await screen.findByText("Feed de revisión");
     // La sesión aterriza con UNA marca: el filtro se preselecciona solo (sin tocar el selector),
-    // y el listado pasa a pedirse acotado a esa marca (las altas rápidas ya no nacen huérfanas).
+    // y el listado pasa a pedirse acotado a esa marca (las altas rápidas ya no nacen sueltas).
     rerender(arbol(sesion({ marcas: ["unotv"] }), client));
     await waitFor(() => expect(urls.some((u) => u.includes("marca=unotv"))).toBe(true));
   });

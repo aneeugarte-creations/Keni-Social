@@ -412,14 +412,14 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     // Tarea de cobertura HUÉRFANA (evento_id pero sin responsable, como tras «Soltar»): el
     // partido NO se borró, debe reaparecer como «Por cubrir» y poder re-cogerse.
     renderTareas([
-      tarea({ id: "t-huerfana", titulo: "Brasil vs Marruecos", evento_id: "ev2", responsable_id: "", responsable_nombre: "", fecha_objetivo: "2026-07-02" }),
+      tarea({ id: "t-suelta", titulo: "Brasil vs Marruecos", evento_id: "ev2", responsable_id: "", responsable_nombre: "", fecha_objetivo: "2026-07-02" }),
     ]);
 
     fireEvent.click(await screen.findByText("Brasil vs Marruecos"));
-    // Item-first: la cobertura huérfana muestra badge «Libre»; click en la tarjeta = coger.
+    // Item-first: la cobertura suelta muestra badge «Libre»; click en la tarjeta = coger.
     const libreHuerfana = await screen.findByText("Libre");
     fireEvent.click(libreHuerfana.closest("[role='button']")!);
-    await waitFor(() => expect(coger).toHaveBeenCalledWith("t-huerfana"));
+    await waitFor(() => expect(coger).toHaveBeenCalledWith("t-suelta"));
   });
 
   it("SEMÁFORO POR ROLES: la fila del evento muestra qué roles están cubiertos (Foto · Video)", async () => {

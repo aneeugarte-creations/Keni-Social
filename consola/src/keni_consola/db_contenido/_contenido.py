@@ -456,7 +456,7 @@ def verificar_veredicto_por_contenido(contenido_ids: list[str]) -> dict[str, str
     return {f["id"]: (f["verificar_veredicto"] or "") for f in filas if (f["verificar_veredicto"] or "")}
 
 
-def sanear_qa_en_curso_huerfanos(umbral_iso: str) -> int:
+def reparar_qa_en_curso_sueltos(umbral_iso: str) -> int:
     """Devuelve a re-criba (verificar_veredicto='') los temas COLGADOS en 'en_curso' mas viejos que `umbral_iso`.
 
     Limpieza del recolector: la fase QA marca el tema `en_curso` antes de lanzar la criba; si

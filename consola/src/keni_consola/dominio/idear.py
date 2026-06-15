@@ -6,7 +6,7 @@ persona las APRUEBA o las DESCARTA; y solo para las aprobadas se genera la pieza
 
   - `parsear_ideas`: dominio PURO. Saca las ideas del `{"ideas":[{"titulo","descripcion"}]}`
     que devuelve `claude -p` (tolera bloques ```json cercados y razonamiento alrededor), las
-    sanea (titulo obligatorio, recortes, sin duplicados por titulo) y las devuelve como dicts.
+    repara (titulo obligatorio, recortes, sin duplicados por titulo) y las devuelve como dicts.
   - `lanzar_propuesta`: compone el prompt (semilla `brainstorming-evergreen` + editorial de marca +
     contexto opcional) y ENCOLA el job con el lanzador NEUTRO (`generar.lanzar`).
   - `construir_procesar_evergreen_ideas`: el callback que corre en el WORKER al terminar: parsea la

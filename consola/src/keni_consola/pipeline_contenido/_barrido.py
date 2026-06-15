@@ -154,7 +154,7 @@ def _ejecutar_investigacion() -> dict[str, Any]:
     Rediseño F3 (la frontera "QA = investigación" en los datos): la QA corre sobre la HISTORIA
     (cluster) ANTES de materializar contenido, y la admisión solo promueve las VERIFICADAS:
       0) FRESCURA: caduca los temas en curso (TTL) y resetea las QA de cluster `en_curso` atascadas.
-      1) QA: criba las candidatas sin veredicto (top del ranking que pasan el listón), acotada
+      1) QA: criba las candidatas sin veredicto (top del ranking que pasan el umbral), acotada
          por el embudo. Asíncrona; persiste el veredicto en el cluster.
       2) ADMISIÓN: promueve a tema (con copy pendiente) las historias ya verificadas, heredando
          su veredicto al contenido. Las `problema` no se materializan.
@@ -230,7 +230,7 @@ def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[
     candidatas ANTES de materializar contenido.
 
     Por marca con admisión activa (`KENI_PIPELINE_RECOLECTAR`): toma las candidatas sin veredicto
-    que pasan el listón (`clusters_pendientes_verificar`), acotadas por el presupuesto del EMBUDO
+    que pasan el umbral (`clusters_pendientes_verificar`), acotadas por el presupuesto del EMBUDO
     (`tope en vuelo − embudo`) para no cribar todo el pool. Si la Validación está activa, lanza
     la criba `claude -p` y marca el cluster `en_curso` (asíncrona: el veredicto lo persiste el
     `procesar` sobre el cluster). Si la Validación está OFF para la marca, marca el cluster

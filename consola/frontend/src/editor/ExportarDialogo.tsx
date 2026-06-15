@@ -38,7 +38,7 @@ const ESCALAS: { valor: number; etiqueta: string }[] = [
 ];
 
 /** Saneo del nombre de archivo: minúsculas, sin acentos ni símbolos raros; fallback `diseno`. */
-function sanearNombre(nombre: string | undefined): string {
+function repararNombre(nombre: string | undefined): string {
   const base = (nombre || "")
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
@@ -142,7 +142,7 @@ export function ExportarDialogo({
       }
       const res = await api.imagenRender(doc, bindings, opciones);
       const url = urlMedia(res.url || res.id);
-      const archivo = `${sanearNombre(nombre || doc.marca)}.${formato}`;
+      const archivo = `${repararNombre(nombre || doc.marca)}.${formato}`;
       await descargarArchivo(url, archivo);
       setUltimaUrl(url);
       toast.success("Imagen descargada.");

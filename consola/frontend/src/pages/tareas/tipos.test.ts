@@ -61,7 +61,7 @@ describe("agrupar — coberturas, roles soltados y recuperables", () => {
     expect(recuperables.map((r) => r.formato).sort()).toEqual(["foto", "video"]);
   });
 
-  it("varias huérfanas del MISMO rol se deduplican a una recuperable", () => {
+  it("varias sueltas del MISMO rol se deduplican a una recuperable", () => {
     const { recuperables } = agrupar(
       [
         t({ id: "a", responsable_id: "", formato: "foto" }),

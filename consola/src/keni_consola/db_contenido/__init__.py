@@ -49,7 +49,7 @@ from ._contenido import (
     listar_contenido_origenes,
     listar_contenido_vencido,
     obtener_contenido,
-    sanear_qa_en_curso_huerfanos,
+    reparar_qa_en_curso_sueltos,
     publicados_marca_cache,
     titulos_recientes_marca,
 )

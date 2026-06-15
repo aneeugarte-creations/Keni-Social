@@ -80,5 +80,5 @@ def test_fallo_de_escritura_borra_temporal_y_no_toca_destino(tmp_path: Path, mon
     monkeypatch.setattr("keni_shared.io_atomico.os.replace", original_replace)
 
     assert destino.read_text(encoding="utf-8") == "intacto"
-    huerfanos = [p.name for p in tmp_path.iterdir() if p.name.startswith(".tmp-")]
-    assert huerfanos == []
+    sueltos = [p.name for p in tmp_path.iterdir() if p.name.startswith(".tmp-")]
+    assert sueltos == []

@@ -134,9 +134,9 @@ def verificar_veredicto_por_contenido(contenido_ids: list[str]) -> dict[str, str
     return db.verificar_veredicto_por_contenido(contenido_ids)
 
 
-def sanear_qa_en_curso_huerfanos(umbral_iso: str) -> int:
+def reparar_qa_en_curso_sueltos(umbral_iso: str) -> int:
     """Resetea a "" los `verificar_veredicto='en_curso'` atascados (limpiador). Delegado en `db.py`."""
-    return db.sanear_qa_en_curso_huerfanos(umbral_iso)
+    return db.reparar_qa_en_curso_sueltos(umbral_iso)
 
 
 def resumen_plan_por_categoria(marca: str, desde_iso: str) -> dict[str, dict[str, int]]:
@@ -631,8 +631,8 @@ def borrar_insumo_lote(lote_id: str) -> bool:
     return db.borrar_insumo_lote(lote_id)
 
 
-def sanear_lotes_parseando_huerfanos(antes_de: str) -> int:
-    return db.sanear_lotes_parseando_huerfanos(antes_de)
+def reparar_lotes_parseando_sueltos(antes_de: str) -> int:
+    return db.reparar_lotes_parseando_sueltos(antes_de)
 
 
 def crear_insumo_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:

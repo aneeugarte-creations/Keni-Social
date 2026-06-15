@@ -235,7 +235,7 @@ export function RecuadroPersonaCalendario({
             onCambio={onCambio}
           />
         ) : (
-          // Coverage huérfana: el backend devolvió un cubridor cuyo TurnoRota local no
+          // Coverage suelta: el backend devolvió un cubridor cuyo TurnoRota local no
           // tenemos (carrera de invalidación). Mostramos el nombre sin menú; la acción
           // CRUD vuelve disponible al siguiente refetch.
           <span className="inline-flex max-w-full items-center gap-1 rounded border bg-muted/40 px-1.5 py-0.5 text-xs">

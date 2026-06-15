@@ -1,4 +1,4 @@
-# 06 — Calidad del feed: filtro de entrada, listón, explicabilidad y caducidad
+# 06 — Calidad del feed: filtro de entrada, umbral, explicabilidad y caducidad
 
 El pool de noticias es la materia prima de la producción automática: cada historia
 promovida acaba en Verificar + Redactar (`claude -p` ×2, coste real de tokens de la suscripción).
@@ -14,7 +14,7 @@ RSS/agencias/trends ──► [1 FILTRO DE ENTRADA] ──► noticias_items ─
                                                        │
               [4 CADUCIDAD TTL] ◄──(reloj)──           │
                                                        ▼
-                                    [2 LISTÓN] ──► promoción Admitir ──► Verificar ──► Redactar ($)
+                                    [2 UMBRAL] ──► promoción Admitir ──► Verificar ──► Redactar ($)
 ```
 
 ## 1. Filtro de ENTRADA por agenda de marca (`KENI_INGESTA_FILTRO`, def ON)
@@ -30,16 +30,16 @@ saturaba pool y panel y competía por promoción. Ahora **la puerta filtra**:
 - Exentos: feeds **propios** (su contenido ES la marca), feeds **sin marca**
   (compartidos/agencias/trends) y marcas sin vocabulario.
 - **Fail-open**: si el filtro revienta, se archiva todo (perder cobertura es peor que
-  archivar ruido; el listón aguas abajo contiene el coste).
+  archivar ruido; el umbral aguas abajo contiene el coste).
 - Observable, no silencioso: `fuentes_rss.ultimo_filtrados` por sondeo (columna nueva),
   visible en `/api/noticias/salud` y en la tabla de Salud de fuentes («Filtrados»), y
   agregado en el log/resumen del barrido (`items_filtrados`).
 
-## 2. LISTÓN de producción automática (`noticias_liston` — fuente única)
+## 2. UMBRAL de producción automática (`noticias_umbral` — fuente única)
 
-El panel lista TODO el pool jerarquizado, pero **promover** exige un listón más alto:
+El panel lista TODO el pool jerarquizado, pero **promover** exige un umbral más alto:
 
-- Regla PURA en `dominio/clustering.evaluar_liston(cluster, ...) -> (supera, motivo)`:
+- Regla PURA en `dominio/clustering.evaluar_umbral(cluster, ...) -> (supera, motivo)`:
   1. la verificación no es `dudosa` (única fuente no fiable / clickbait → jamás);
   2. el score **recalculado AHORA** (no el persistido, que envejece) alcanza
      `KENI_PROMOVER_MIN_SCORE` (def 0.35);
@@ -47,7 +47,7 @@ El panel lista TODO el pool jerarquizado, pero **promover** exige un listón má
      término en el título). Exentas: historias **curadas** por el equipo (señal de
      cajón: el humano ya decidió) y **breaking corroboradas** (evento mayor confirmado
      por varias fuentes a la vez, cuyo vocabulario puede ser nuevo).
-- `keni_consola/noticias_liston.py` es la **fuente única de la decisión** (umbral vivo
+- `keni_consola/noticias_umbral.py` es la **fuente única de la decisión** (umbral vivo
   de config + vocabulario efectivo perfil-Haiku-vs-semilla): la usan la promoción CI
   (`pipeline_contenido.clusters_para_promover`, fail-closed) y la API del panel
   (`promovible`/`promovible_motivo` por historia). Si el panel dijera una cosa y el
@@ -68,7 +68,7 @@ explicación junto al score (`noticias_clusters.score_razon` / `score_desglose`)
   explican cuánto cuenta cada cosa.
 - El re-score periódico refresca TAMBIÉN la explicación (si no, la razón explicaría un
   score viejo). La UI (Cobertura) la enseña en el tooltip del badge de score y en los
-  badges «Auto-producible» / «Bajo el listón».
+  badges «Auto-producible» / «Bajo el umbral».
 - El vocabulario semilla por marca vive en `relevancia_marca.py` (~80–190 términos por
   marca del piloto, criterio documentado ahí: términos de una palabra solo si
   identifican la agenda sin ambigüedad; nombres genéricos en frase — `club leon` — para
@@ -105,11 +105,11 @@ cubriendo los titulares de sintaxis distinta.
 | Knob | Def | Grupo | Qué controla |
 |------|-----|-------|--------------|
 | `KENI_INGESTA_FILTRO` | ON | noticias_entrada | filtro de entrada por agenda de marca |
-| `KENI_PROMOVER_MIN_SCORE` | 0.35 | noticias_produccion | score mínimo del listón |
-| `KENI_PROMOVER_MIN_MARCA` | 0.2 | noticias_produccion | encaje de marca mínimo del listón |
+| `KENI_PROMOVER_MIN_SCORE` | 0.35 | noticias_produccion | score mínimo del umbral |
+| `KENI_PROMOVER_MIN_MARCA` | 0.2 | noticias_produccion | encaje de marca mínimo del umbral |
 | `KENI_NOTICIAS_TTL_H` | 72 | tuning | caducidad del pool (0 = off) |
 | `KENI_NOTICIAS_RETENCION_H` | 336 | tuning | borrado de lo caducado (0 = nunca) |
 
-Defaults de los umbrales del listón en `dominio/clustering.py`
-(`LISTON_MIN_SCORE_DEF` / `LISTON_MIN_MARCA_DEF`); contrato del catálogo en
+Defaults de los umbrales del umbral en `dominio/clustering.py`
+(`UMBRAL_MIN_SCORE_DEF` / `UMBRAL_MIN_MARCA_DEF`); contrato del catálogo en
 `tests/test_ajustes_catalogo.py`.

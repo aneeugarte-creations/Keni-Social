@@ -195,7 +195,7 @@ async def crear(request: Request) -> Response:
 
     # --- FASE 3 auto-operativa: auto-asignacion de responsable desde la rota -------------
     # Si no se fijo responsable, lo deriva la rota del dia para que la pieza no quede
-    # huerfana (el equipo solo crea; el reparto es automatico). Override manual: si el
+    # suelta (el equipo solo crea; el reparto es automatico). Override manual: si el
     # cliente mando `responsable_id`, se respeta y NO se toca. Degrada a None sin romper.
     # [MERGE] bloque propio y autocontenido; no toca la validacion de arriba.
     if responsable is None and marca:

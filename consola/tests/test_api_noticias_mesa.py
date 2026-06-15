@@ -78,7 +78,7 @@ def test_mesa_segmenta_por_lineas_del_plan(cliente, monkeypatch):
     assert por_linea["internacional"]["en_pool"] == 0
     assert datos["fuera_de_plan"]["en_pool"] == 1
     assert datos["fuera_de_plan"]["historias"][0]["id"] == "dep1"
-    # Cada historia trae el contrato Historia (listón + estado de pieza incluidos).
+    # Cada historia trae el contrato Historia (umbral + estado de pieza incluidos).
     h = por_linea["mx"]["historias"][0]
     assert "promovible" in h and "pieza_estado" in h and "score_desglose" in h
 

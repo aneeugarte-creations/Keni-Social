@@ -16,7 +16,7 @@ aquí se gestiona el CATÁLOGO de etiquetas (crear/editar/borrar).
 SEGURIDAD:
   - Multiusuario via middleware (sesión o token). Tablero compartido (como Tareas).
   - `clase` debe ser del catálogo (`estados.CLASES_ETIQUETA`); `marca`, si llega, del
-    catálogo de marcas (`consola.marcas`) o vacía (global). `color` se sanea a un token
+    catálogo de marcas (`consola.marcas`) o vacía (global). `color` se repara a un token
     hex corto. Unicidad por (nombre, clase, marca). Nada se confía del cliente.
   - SQL parametrizado en `repos`/`db`.
 """
@@ -86,7 +86,7 @@ _RE_TAG_NO_PALABRA = re.compile(r"[^\w]", re.UNICODE)
 def _normalizar_hashtags(valor: object) -> str:
     """CSV de hashtags propios de la línea/estrategia, SIN el '#' (se añade al inyectar).
 
-    Cada tag se sanea a un token de palabra (sin espacios ni símbolos: «Mundial 2026» →
+    Cada tag se repara a un token de palabra (sin espacios ni símbolos: «Mundial 2026» →
     «Mundial2026»), se admite un '#' inicial opcional, se deduplica case-insensitive y se
     PRESERVA el casing (los hashtags se estilizan: #Nacional, #Finanzas). Acepta separadores
     por coma o espacio. Se inyectan al final del copy de las piezas de esta línea."""

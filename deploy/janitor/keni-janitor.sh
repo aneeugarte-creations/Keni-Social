@@ -20,7 +20,7 @@ THRESHOLD="${THRESHOLD:-50}"
 REPO_REGEX="${REPO_REGEX:-^keni-social/}"
 LOG="${LOG:-/var/log/keni-janitor.log}"
 # Belt-and-suspenders (#128): borrado de registros YAML de generacion viejos en el volumen de
-# datos. La fuente de verdad del borrado es el daemon (reaper -> generaciones.podar_generaciones,
+# datos. La fuente de verdad del borrado es el daemon (reaper -> generaciones.purgar_generaciones,
 # que respeta el piso de los N mas recientes); esto es solo una red de seguridad por si el
 # daemon estuviera caido. SOLO actua si GEN_DIR apunta a un dir existente (def: el subdir de
 # generaciones del volumen `keni-data`). Borra por MTIME mas viejo que GEN_DIAS dias (def 30,

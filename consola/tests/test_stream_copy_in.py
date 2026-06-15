@@ -139,7 +139,7 @@ def test_unificada_tipo_desconocido_cae_a_post():
 
 def test_unificada_slides_se_sanean_y_exponen():
     # Carrusel EDITORIAL: cada slide trae su titular (texto de placa, sin emojis) y el
-    # NÚMERO de la foto del catálogo (0 = sin foto). Valores raros se sanean.
+    # NÚMERO de la foto del catálogo (0 = sin foto). Valores raros se reparan.
     salida = (
         '```json\n{"texto": "Copy", "copy_in": "PANEL", "tipo": "carrusel", '
         '"slides": ['

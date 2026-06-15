@@ -167,7 +167,7 @@ def _url_media_publica(nombre_imagen: str) -> str | None:
 
 
 def slides_de_carrusel(crudo: object) -> list[dict[str, str]]:
-    """Parsea el campo `carrusel` (JSON) a una lista saneada de slides (PURA, testeable).
+    """Parsea el campo `carrusel` (JSON) a una lista reparada de slides (PURA, testeable).
 
     Forma de entrada: `[{"tipo":"imagen"|"video","objeto":"<media id>"}, …]`. Devuelve solo
     los elementos bien formados, preservando el orden; tipo desconocido/vacío cae a "imagen"

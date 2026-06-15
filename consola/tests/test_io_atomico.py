@@ -49,7 +49,7 @@ def test_modo_aplica_permisos_0600(tmp_path: Path):
 def test_no_deja_temporales_al_terminar(tmp_path: Path):
     destino = tmp_path / "f.yaml"
     escribir_atomico(destino, "ok")
-    # Solo el destino: ningun `.tmp-*` huerfano en el directorio.
+    # Solo el destino: ningun `.tmp-*` suelto en el directorio.
     restantes = [p.name for p in tmp_path.iterdir()]
     assert restantes == ["f.yaml"]
 
@@ -86,7 +86,7 @@ def test_fallo_de_escritura_borra_temporal_y_no_toca_destino(tmp_path: Path, mon
         escribir_atomico(destino, "nuevo")
     monkeypatch.setattr("keni_shared.io_atomico.os.replace", original_replace)
 
-    # El destino queda intacto y no hay temporales huerfanos.
+    # El destino queda intacto y no hay temporales sueltos.
     assert destino.read_text(encoding="utf-8") == "intacto"
-    huerfanos = [p.name for p in tmp_path.iterdir() if p.name.startswith(".tmp-")]
-    assert huerfanos == []
+    sueltos = [p.name for p in tmp_path.iterdir() if p.name.startswith(".tmp-")]
+    assert sueltos == []

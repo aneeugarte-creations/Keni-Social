@@ -71,7 +71,7 @@ def test_no_borra_por_edad_sola(entorno):
     assert "vieja_buena" in _ids()
 
 
-def test_purga_items_huerfanos_viejos(entorno):
+def test_purga_items_sueltos_viejos(entorno):
     """Items `nuevo` viejos y sin cluster (o cuyo cluster ya no existe) se purgan; recientes no."""
     repos.crear_noticias_items([
         {"fuente_id": "f", "fuente_nombre": "F", "categoria": "mx", "marca": "unotv",

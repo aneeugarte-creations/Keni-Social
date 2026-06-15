@@ -17,7 +17,7 @@ entender la tubería de "reutilizar lo que ya existe".
 | 03 | [motor-ingesta](03-motor-ingesta.md) | Motor de ingesta persistente (núcleo de cobertura) | `ingesta_daemon.py`, `dominio/ingesta.py` |
 | 04 | [agrupar-historias](04-agrupar-historias.md) | Agrupar historias + scoring | `dominio/clustering.py` |
 | 05 | [cobertura-verificacion](05-cobertura-verificacion.md) | Monitor de cobertura + auto-verificación | `api/noticias.py` (`/salud`), `dominio/clustering.py` |
-| 06 | [calidad-del-feed](06-calidad-del-feed.md) | Filtro de entrada + listón de auto-producción + score explicable + caducidad TTL | `noticias_liston.py`, `dominio/clustering.py`, `ingesta_daemon.py` |
+| 06 | [calidad-del-feed](06-calidad-del-feed.md) | Filtro de entrada + umbral de auto-producción + score explicable + caducidad TTL | `noticias_umbral.py`, `dominio/clustering.py`, `ingesta_daemon.py` |
 | 07 | [video-formato](07-video-formato.md) | Aceptar video como formato (no solo foto) | `api/media.py`, `media.py` |
 | 08 | [video-engine](08-video-engine.md) | Motor de edición de video (toque RRSS) | `motores/estudio_video/`, `motores/transcripcion/`, `api/video.py` |
 

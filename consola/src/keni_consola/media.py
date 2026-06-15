@@ -9,7 +9,7 @@ Nada de eso cambia el flujo de IA: el prompt de generacion solo sale hacia el pr
 imagen configurado (OpenRouter por defecto), y SOLO si hay clave.
 
 SEGURIDAD:
-  - El NOMBRE del objeto SIEMPRE lo generamos nosotros (uuid + extension saneada); NUNCA el
+  - El NOMBRE del objeto SIEMPRE lo generamos nosotros (uuid + extension reparada); NUNCA el
     del cliente. Asi un nombre malicioso (`../../etc/passwd`) jamas se usa.
   - En disco, `resolver_media` valida ANTI-TRAVERSAL que el archivo caiga DENTRO del dir; en
     S3 el almacen rechaza cualquier nombre con separadores (defensa en profundidad).

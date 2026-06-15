@@ -131,7 +131,7 @@ Puntos clave de 1.B que el Estudio debe **preservar** como capacidades:
 
 ### 1.C — Texto de medios (catálogo interno, ya existe)
 
-`api/catalogo_media.py` cataloga objetos del almacén con metadatos editoriales y etiquetas (`GET/POST /api/catalogo-media`, `POST /api/catalogo-media/catalogar` para catalogar un objeto YA generado). Es la "cosecha de imágenes": el activo aprobado, reutilizable, etiquetable. El Estudio escribe aquí cuando el usuario marca una variante como reutilizable.
+`api/catalogo_media.py` cataloga objetos del almacén con metadatos editoriales y etiquetas (`GET/POST /api/catalogo-media`, `POST /api/catalogo-media/catalogar` para catalogar un objeto YA generado). Es la "recolección de imágenes": el activo aprobado, reutilizable, etiquetable. El Estudio escribe aquí cuando el usuario marca una variante como reutilizable.
 
 ---
 
@@ -143,7 +143,7 @@ Puntos clave de 1.B que el Estudio debe **preservar** como capacidades:
 - `keni_consola/secretos.py` — clave/proveedor/modelo de imagen, `0600`. **Sin cambios.**
 - `keni_consola/generaciones.py:lanzar_job_imagen` — runner genérico de un callable en hilo + sondeo. **Es el motor de ejecución del Estudio.**
 - `api/media.py` (`/api/media`, `/api/media/{nombre}`, `/api/media/generar`) — subir, servir, generar. **Se queda viva** (es el camino que no debe romperse).
-- `api/catalogo_media.py` (`/api/catalogo-media`) — cosecha/catálogo. **Se queda.**
+- `api/catalogo_media.py` (`/api/catalogo-media`) — recolección/catálogo. **Se queda.**
 - `EditorImagen.tsx` — sigue funcionando contra `/api/media/generar`. El Estudio es un "modo avanzado"; el editor inline simple no desaparece.
 
 ### Motor en `keni_consola/motores/estudio_imagen/` (hecho)
@@ -218,7 +218,7 @@ inmediato con un registro de generación y el front sondea `GET /api/generacione
 | `POST /api/imagenes/revisar` | revisión legal/editorial de un objeto media (cierre opcional, gate humano) | `claude -p` con `editorial/reglas/imagen` adjunta |
 
 "Usar en la pieza" no es endpoint propio: reutiliza `PUT /api/publicaciones/{id}` (`imagen`).
-Subir/servir/cosechar siguen en `/api/media` y `/api/catalogo-media` (sin duplicar). `/api/media/generar` se mantiene como caso simple (1 variante) para no romper `EditorImagen.tsx`.
+Subir/servir/recolectar siguen en `/api/media` y `/api/catalogo-media` (sin duplicar). `/api/media/generar` se mantiene como caso simple (1 variante) para no romper `EditorImagen.tsx`.
 
 Las operaciones deterministas (`editar`) NO necesitan `claude`: corren el motor con el python de la consola (`sys.executable motores/estudio_imagen/editar.py …`), exactamente como `api/verificaciones.py:_ruta_motor`/`analizar` corre `analiza-video.py`. La clave de imagen para `expandir`/`generar` se transporta al subproceso reutilizando el mapeo de `generaciones._entorno_skill` (proveedor → `OPENROUTER/OPENAI/GEMINI_API_KEY`).
 
@@ -259,7 +259,7 @@ La migración descrita por este documento ya se completó. Resumen del estado ac
 - **Clave del proveedor (OpenRouter):** fuente única `secretos.toml` (`0600`) con fallback a entorno. Sin clave, lo generativo degrada a "dirección de arte" (prompt para herramienta externa) como hoy (`generar.py:salida_sin_key`). Riesgo: que el subproceso del motor no reciba la clave → mitigado reusando `_entorno_skill` (`generaciones.py:375`). NUNCA loguear la clave (ya respetado en `media.py`/`secretos.py`).
 - **Pillow en el back:** con el motor en el paquete, **Pillow es dependencia del back** (del worker que ejecuta los motores deterministas). Asegurar que el entorno de ejecución y de test lo tiene.
 - **ffmpeg / tesseract / yt-dlp:** NO los necesita imagen (son del motor de video `verifica_video`). Imagen solo necesita Pillow + httpx. No introducir esa dependencia aquí.
-- **Tamaño de media:** límite vigente 15 MB por imagen (`media.LIMITE_IMAGEN`). Generar N variantes multiplica el almacenamiento; sin recolección, el almacén crece. Mitigar: las variantes NO elegidas son objetos huérfanos — definir una política (TTL/limpieza de objetos no referenciados por ninguna pieza ni catalogados en texto). Hoy `catalogo_media.borrar` ya borra el binario al descatalogar; falta un GC de huérfanos del Estudio.
+- **Tamaño de media:** límite vigente 15 MB por imagen (`media.LIMITE_IMAGEN`). Generar N variantes multiplica el almacenamiento; sin recolección, el almacén crece. Mitigar: las variantes NO elegidas son objetos sueltos — definir una política (TTL/limpieza de objetos no referenciados por ninguna pieza ni catalogados en texto). Hoy `catalogo_media.borrar` ya borra el binario al descatalogar; falta un GC de sueltos del Estudio.
 - **Coste por imagen:** cada variante generativa cuesta. El determinista (recortar/comprimir/extender uniforme/placa) es gratis y debe ser el camino por defecto cuando aplica. La UI debe empujar a lo determinista y limitar el nº de variantes generativas por defecto.
 - **S3/Garage:** en hosted la media va a bucket; el motor determinista escribe en un **temporal local** y `media.importar_imagen` lo sube al backend activo. Verificar que el subproceso del motor tiene acceso al temporal (patrón `--add-dir` / `tempfile.mkdtemp` de `verificaciones.analizar`).
 - **Outpainting fiel:** `expandir.py` re-compone el sujeto pixel a pixel — es la línea roja editorial: la IA no inventa sobre el sujeto de una foto real. Conservar esa garantía en cualquier cambio del motor.

@@ -129,9 +129,9 @@ _DAEMONS: list[tuple[str, str, str | None, str, str]] = [
     ("algoritmos", "Feeds de algoritmo", "algoritmos_auto_activo",
      "Refresca los feeds de algoritmo por marca.", config.ENV_ALGORITMOS_AUTO),
     ("media_gc", "GC de media", "media_gc_activo",
-     "Recoge media huérfana (no borra salvo toggle).", config.ENV_MEDIA_GC),
+     "Recoge media suelta (no borra salvo toggle).", config.ENV_MEDIA_GC),
     ("noticias_gc", "GC de noticias", "noticias_gc_activo",
-     "Poda el pool de noticias por relevancia/inactividad.", config.ENV_NOTICIAS_GC),
+     "Purga el pool de noticias por relevancia/inactividad.", config.ENV_NOTICIAS_GC),
     ("alertas", "Alertas de rendimiento", "alertas_rendimiento_activas",
      "Lee métricas y emite eventos de alerta.", config.ENV_ALERTAS_ACTIVAS),
     ("patrones", "Patrones de marca", "patrones_auto_activo",
@@ -139,7 +139,7 @@ _DAEMONS: list[tuple[str, str, str | None, str, str]] = [
     ("publicar_real", "Publicación real", "publicar_real",
      "Si está OFF, el programador corre en DRY-RUN (no publica).", config.ENV_PUBLICAR_REAL),
     ("reaper", "Reaper de generaciones", None,
-     "Siempre activo: cierra como error las generaciones zombi.", ""),
+     "Siempre activo: cierra como error las generaciones atascada.", ""),
 ]
 
 

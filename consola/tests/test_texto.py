@@ -2,7 +2,7 @@
 
 PUROS (sin Postgres): solo aislan `KENI_TEXTO_DIR` en un tmp. Cubren el CRUD, la
 papelera (borrar/restaurar), el filtro por tipo, el auto-adjunto editorial por marca y el
-saneo contra path-traversal.
+reparación contra path-traversal.
 """
 
 from __future__ import annotations

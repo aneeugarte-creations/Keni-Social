@@ -347,7 +347,7 @@ function AccionesItem({
     mutationFn: async (): Promise<void> => {
       if (item.kind === "tarea") {
         await api.eliminarContenido(item.tarea.id);
-        // Cobertura soltada (huérfana con `evento_id`): borra también el evento para que no
+        // Cobertura soltada (suelta con `evento_id`): borra también el evento para que no
         // reaparezca como «Por cubrir». Si el evento ya no existe, ignoramos el 404.
         if (item.tarea.evento_id) {
           try {

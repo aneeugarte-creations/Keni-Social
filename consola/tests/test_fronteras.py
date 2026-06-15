@@ -117,7 +117,7 @@ def _routers() -> dict[str, str]:
 
     Solo los módulos que exportan `RUTAS` son routers; los helpers de `api/` (sin
     `RUTAS`) se ignoran (no se les asigna app). `api/catalogo.py` es del shell pero
-    no figura en un manifest: se trata como shell para no marcarlo huérfano.
+    no figura en un manifest: se trata como shell para no marcarlo suelto.
     """
     mapa_modulos = registro.modulo_a_app()
     routers: dict[str, str] = {}

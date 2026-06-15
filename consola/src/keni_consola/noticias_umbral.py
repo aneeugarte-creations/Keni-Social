@@ -9,7 +9,7 @@ CI cogía el top-N por score SIN umbral: con un pool lleno de basura, esa basura
 producción automática?» para que la promoción (pipeline), el panel (API `promovible`) y
 cualquier otro consumidor respondan EXACTAMENTE igual:
 
-  - la regla PURA vive en `dominio.agrupar.evaluar_liston` (verificación no dudosa +
+  - la regla PURA vive en `dominio.agrupar.evaluar_umbral` (verificación no dudosa +
     score recalculado ≥ mínimo + encaje de marca por vocabulario, con exenciones para lo
     curado por el equipo y las breaking corroboradas);
   - los umbrales vivos vienen de `config` (`KENI_PROMOVER_MIN_SCORE` /
@@ -58,7 +58,7 @@ def evaluar(
     """¿`cluster` supera el umbral de producción automática AHORA? `(supera, motivo)`.
 
     Lee los umbrales vivos de config y el vocabulario efectivo de la marca del cluster, y
-    delega la regla en `agrupar.evaluar_liston` (pura). `ahora` inyectable para tests.
+    delega la regla en `agrupar.evaluar_umbral` (pura). `ahora` inyectable para tests.
     `palabras_marca` admite el vocabulario YA resuelto (un llamante que evalúa un LOTE — la
     API del panel — lo memoiza por marca para no releer el cache del perfil por historia);
     None = resolverlo aquí.
@@ -66,7 +66,7 @@ def evaluar(
     marca = str(cluster.get("marca") or "")
     if palabras_marca is None:
         palabras_marca = palabras_relevancia(marca)
-    return agrupar.evaluar_liston(
+    return agrupar.evaluar_umbral(
         cluster,
         palabras_marca=palabras_marca,
         min_score=config.promover_min_score(),

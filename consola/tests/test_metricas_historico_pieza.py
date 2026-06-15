@@ -2,7 +2,7 @@
 
 Serie temporal GENERAL (todas las piezas, no solo el módulo Comercial), alimentada por el
 daemon de refresco. Cubre: escritura/lectura con los campos correctos, idempotencia por
-`(pieza_id, ts)`, filtros de `listar_snapshots_piezas`, poda por retención (corte recibido
+`(pieza_id, ts)`, filtros de `listar_snapshots_piezas`, purga por retención (corte recibido
 como parámetro, sin reloj del sistema en db.py) y el hook del refresco. SKIP sin Postgres
 (fixture `pg` autodescubierta vía `pytest_plugins` en conftest).
 """
@@ -116,32 +116,32 @@ def test_listar_snapshots_piezas_filtros(pg):
 
 
 # --------------------------------------------------------------------------- #
-# Poda por retención (corte recibido como parámetro)                          #
+# Purga por retención (corte recibido como parámetro)                          #
 # --------------------------------------------------------------------------- #
 
 
-def test_podar_borra_antiguos_conserva_recientes(pg):
+def test_purgar_borra_antiguos_conserva_recientes(pg):
     # ahora = 2026-06-10; retención 90 días -> corte = 2026-03-12.
     db.registrar_snapshot_pieza("viejo", "m", "r", "reel", "2026-01-01T00:00:00", {})  # > 90d
     db.registrar_snapshot_pieza("borde", "m", "r", "reel", "2026-03-01T00:00:00", {})  # > 90d
     db.registrar_snapshot_pieza("nuevo", "m", "r", "reel", "2026-06-09T00:00:00", {})  # reciente
 
-    borrados = db.podar_snapshots_piezas(90, "2026-06-10T00:00:00")
+    borrados = db.purgar_snapshots_piezas(90, "2026-06-10T00:00:00")
     assert borrados == 2
 
     restantes = {s["pieza_id"] for s in db.listar_snapshots_piezas()}
     assert restantes == {"nuevo"}
 
 
-def test_podar_retencion_no_positiva_no_borra(pg):
+def test_purgar_retencion_no_positiva_no_borra(pg):
     db.registrar_snapshot_pieza("x", "m", "r", "reel", "2020-01-01T00:00:00", {})
-    assert db.podar_snapshots_piezas(0, "2026-06-10T00:00:00") == 0
+    assert db.purgar_snapshots_piezas(0, "2026-06-10T00:00:00") == 0
     assert len(db.listar_snapshots_piezas()) == 1
 
 
-def test_podar_ahora_invalido_no_borra(pg):
+def test_purgar_ahora_invalido_no_borra(pg):
     db.registrar_snapshot_pieza("x", "m", "r", "reel", "2020-01-01T00:00:00", {})
-    assert db.podar_snapshots_piezas(90, "no-es-iso") == 0
+    assert db.purgar_snapshots_piezas(90, "no-es-iso") == 0
     assert len(db.listar_snapshots_piezas()) == 1
 
 
@@ -157,7 +157,7 @@ def test_repos_wrappers_delegan(pg):
     serie = repos.serie_pieza("rp")
     assert len(serie) == 1 and serie[0]["interacciones"] == 7
     assert [s["pieza_id"] for s in repos.listar_snapshots_piezas(marca="m")] == ["rp"]
-    assert repos.podar_snapshots_piezas(1, "2030-01-01T00:00:00") == 1
+    assert repos.purgar_snapshots_piezas(1, "2030-01-01T00:00:00") == 1
 
 
 # --------------------------------------------------------------------------- #

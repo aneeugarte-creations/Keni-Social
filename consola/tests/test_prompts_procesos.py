@@ -24,7 +24,7 @@ def test_todo_seed_prompt_esta_catalogado():
 
 def test_catalogo_no_tiene_ids_fantasma():
     # Inverso: ninguna clave del catálogo apunta a un prompt que no existe como semilla (evita
-    # etiquetas huérfanas si se renombra/borra un seed).
+    # etiquetas sueltas si se renombra/borra un seed).
     fantasma = set(pp.PROCESOS_POR_PROMPT) - _ids_seed_prompt()
     assert not fantasma, f"catálogo con ids sin seed: {fantasma}"
 

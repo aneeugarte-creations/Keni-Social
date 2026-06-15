@@ -2,7 +2,7 @@
 
 Un ARTE es una imagen del almacen de media (subida, generada con IA o trabajada en el
 Estudio) que el equipo decide CONSERVAR para reutilizar en publicaciones. Catalogarla:
-  - la PROTEGE del GC de media huerfana (`dominio/media_gc.py` ya cuenta los objetos
+  - la PROTEGE del GC de media suelta (`dominio/media_gc.py` ya cuenta los objetos
     catalogados como referencias vivas: un arte no se borra a las 24h), y
   - la hace SELECCIONABLE desde el editor de imagen de una pieza (galeria por marca).
 

@@ -49,9 +49,9 @@ from .corroboracion import (
     recalcular,
 )
 from .promocion import (
-    LISTON_MIN_MARCA_DEF,
-    LISTON_MIN_SCORE_DEF,
-    evaluar_liston,
+    UMBRAL_MIN_MARCA_DEF,
+    UMBRAL_MIN_SCORE_DEF,
+    evaluar_umbral,
 )
 from .relevancia import UMBRAL_MARCA_VOCABULARIO, marca_por_vocabulario, relevancia_marca_detalle
 from .relevancia import _relevancia_marca as _relevancia_marca  # re-export para tests
@@ -65,8 +65,8 @@ from .scoring import (
 __all__ = [
     "BREAKING_PESO_DEF",
     "BREAKING_VENTANA_H_DEF",
-    "LISTON_MIN_MARCA_DEF",
-    "LISTON_MIN_SCORE_DEF",
+    "UMBRAL_MIN_MARCA_DEF",
+    "UMBRAL_MIN_SCORE_DEF",
     "UMBRAL_MARCA_VOCABULARIO",
     "Asignador",
     "PesosScore",
@@ -74,7 +74,7 @@ __all__ = [
     "clasificar_verificacion",
     "clave_cluster",
     "dedup",
-    "evaluar_liston",
+    "evaluar_umbral",
     "fuentes_detalle",
     "grupos_lexicos",
     "marca_por_vocabulario",

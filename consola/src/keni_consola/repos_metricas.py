@@ -39,8 +39,8 @@ def listar_snapshots_piezas(
     )
 
 
-def podar_snapshots_piezas(retencion_dias: int, ahora_iso: str) -> int:
-    return db.podar_snapshots_piezas(retencion_dias, ahora_iso)
+def purgar_snapshots_piezas(retencion_dias: int, ahora_iso: str) -> int:
+    return db.purgar_snapshots_piezas(retencion_dias, ahora_iso)
 
 
 

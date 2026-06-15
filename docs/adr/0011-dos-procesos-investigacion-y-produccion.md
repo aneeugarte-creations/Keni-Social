@@ -125,7 +125,7 @@ etapa; los maestros son una capa de agrupación encima, no reemplazan los flags 
   alineó con la frontera: la QA verifica la HISTORIA (`noticias_clusters.qa_veredicto`, sellada
   por `marcar_cluster_qa`) ANTES de materializar contenido; Admitir solo promueve las
   verificadas (heredando el veredicto al `contenido`) y las `problema` no cruzan a producción.
-  La criba se acota por un EMBUDO (tope en vuelo) y un reaper sanea las QA `en_curso` zombi. Las
+  La criba se acota por un EMBUDO (tope en vuelo) y un reaper repara las QA `en_curso` atascada. Las
   vistas de historias leen el veredicto NATIVO del cluster (fallback al contenido heredado para
   lo admitido antes de F3). Queda como evolución posible separar también la CADENCIA de los dos
   loops (hoy ambos 15 s) si conviene investigar más rápido que producir.

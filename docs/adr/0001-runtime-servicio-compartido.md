@@ -112,7 +112,7 @@ que produce y mide.
 
 Como la generación sigue siendo subprocesos `claude -p` (en el sandbox), el runner de subprocesos
 **no desaparece**: hay que endurecerlo bien y de forma permanente — cola con tope/backpressure, lanzar
-en su propio grupo de procesos y **matar el árbol completo** en timeout/cancelación (sin huérfanos), y
+en su propio grupo de procesos y **matar el árbol completo** en timeout/cancelación (sin sueltos), y
 no tragar excepciones. **#137 es permanente, no interina.**
 
 ### Distribución (#133): resuelta
@@ -165,11 +165,11 @@ La generación **sigue** por `claude -p` por debajo (aún en local, no en sandbo
   **suscripción global**; el sandbox lleva las skills.
 - El **gateway despacha** la generación al sandbox y **transmite el stream-json** a la UI.
 - **Endurecer el runner (#137) como permanente:** cola con tope, grupo de procesos propio, kill del
-  árbol, sin huérfanos.
+  árbol, sin sueltos.
 - **Criterios:**
   - Generar copy **no requiere `claude` en la máquina del usuario** (corre en su sandbox); entra por
     navegador/móvil con sesión autenticada.
-  - Un timeout o cancelación **no deja procesos huérfanos** en el sandbox.
+  - Un timeout o cancelación **no deja procesos sueltos** en el sandbox.
   - La cola **rechaza con backpressure** por encima de un tope configurable.
   - "Actividad IA" muestra **tokens/coste/duración por job y usuario** (observabilidad, no bloqueo).
 

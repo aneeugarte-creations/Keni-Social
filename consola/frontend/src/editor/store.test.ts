@@ -47,8 +47,8 @@ describe("Store del editor (Zustand)", () => {
     });
   });
 
-  describe("Deshacer y rehacer sanean selección", () => {
-    it("deshacer poda seleccionMulti a ids que existan en el documento restaurado", () => {
+  describe("Deshacer y rehacer reparan selección", () => {
+    it("deshacer purga seleccionMulti a ids que existan en el documento restaurado", () => {
       const doc = documentoVacio({ w: 1080, h: 1350, safe_top: 60, safe_bottom: 96 }, "test");
       const store = crearStoreEditor(doc);
 
@@ -72,7 +72,7 @@ describe("Store del editor (Zustand)", () => {
       // El documento debe tener ambas capas de nuevo
       expect(store.getState().documento.capas.map((c) => c.id)).toContain("texto-1");
       expect(store.getState().documento.capas.map((c) => c.id)).toContain("texto-2");
-      // La seleccionMulti debe haber sido saneada si era necesario (aquí ambas existen, así que se conserva)
+      // La seleccionMulti debe haber sido reparada si era necesario (aquí ambas existen, así que se conserva)
       expect(store.getState().seleccionMulti.length).toBeGreaterThan(0);
     });
 
@@ -98,7 +98,7 @@ describe("Store del editor (Zustand)", () => {
       // La selección debe restaurarse también (porque deshacer está en el pasado donde existía)
     });
 
-    it("rehacer poda seleccionMulti de la misma manera", () => {
+    it("rehacer purga seleccionMulti de la misma manera", () => {
       const doc = documentoVacio({ w: 1080, h: 1350, safe_top: 60, safe_bottom: 96 }, "test");
       const store = crearStoreEditor(doc);
 

@@ -479,12 +479,12 @@ def test_borrar_todo_marca_invalida_400(cliente):
 
 
 # --------------------------------------------------------------------------- #
-# Relevancia EXPLICABLE + listón en el contrato de la API                       #
+# Relevancia EXPLICABLE + umbral en el contrato de la API                       #
 # --------------------------------------------------------------------------- #
 
 
-def test_historias_exponen_explicacion_y_liston(cliente):
-    """Cada historia trae score_razon/score_desglose persistidos y la evaluación del listón."""
+def test_historias_exponen_explicacion_y_umbral(cliente):
+    """Cada historia trae score_razon/score_desglose persistidos y la evaluación del umbral."""
     from datetime import UTC, datetime
 
     repos.upsert_noticia_cluster({
@@ -508,16 +508,16 @@ def test_historias_exponen_explicacion_y_liston(cliente):
     # Explicación persistida del score (razón humana + desglose por señal).
     assert "relevante para la marca" in h["score_razon"]
     assert h["score_desglose"]["palabras"] == ["cdmx", "sismo"]
-    # Listón: la MISMA evaluación que la promoción CI (fresca+corroborada+con marca → supera).
+    # Umbral: la MISMA evaluación que la promoción CI (fresca+corroborada+con marca → supera).
     assert h["promovible"] is True
     assert h["promovible_motivo"]
 
 
-def test_historias_liston_no_promovible_explica_por_que(cliente):
+def test_historias_umbral_no_promovible_explica_por_que(cliente):
     """Una historia sin encaje de marca expone promovible=False con el motivo legible.
 
-    Sin vocabulario de marca el score RECALCULADO no alcanza el listón de producción, así
-    que la PRIMERA regla que falla es la del score (`evaluar_liston` rules 3<4): el motivo
+    Sin vocabulario de marca el score RECALCULADO no alcanza el umbral de producción, así
+    que la PRIMERA regla que falla es la del score (`evaluar_umbral` rules 3<4): el motivo
     legible lo explica."""
     from datetime import UTC, datetime
 
@@ -528,7 +528,7 @@ def test_historias_liston_no_promovible_explica_por_que(cliente):
     datos = cliente.get("/api/noticias/historias").json()
     h = next(x for x in datos["historias"] if x["id"] == "sin-encaje")
     assert h["promovible"] is False
-    assert "listón de producción" in h["promovible_motivo"]
+    assert "umbral de producción" in h["promovible_motivo"]
 
 
 # --------------------------------------------------------------------------- #

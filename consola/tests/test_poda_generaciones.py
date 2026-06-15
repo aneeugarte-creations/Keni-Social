@@ -1,7 +1,7 @@
-"""Tests de la PODA de retencion de registros de generacion (`podar_generaciones`).
+"""Tests de la PODA de retencion de registros de generacion (`purgar_generaciones`).
 
 Las generaciones viven en ficheros YAML (no Postgres), así que estos tests aíslan el almacén
-en `tmp_path` vía `KENI_CONSOLA_GENERACIONES` y NO necesitan base de datos. La poda juzga la
+en `tmp_path` vía `KENI_CONSOLA_GENERACIONES` y NO necesitan base de datos. La purga juzga la
 edad por el MTIME del fichero (barato, sin parsear el YAML), así que los tests fijan el mtime
 con `os.utime` en vez de depender del reloj o del campo `fecha_inicio` del YAML.
 
@@ -45,7 +45,7 @@ def _crear(raiz, *, edad_dias: float, sufijo: str = "") -> str:
 def test_conserva_recientes(almacen):
     """Registros dentro de la ventana de días no se tocan, aunque haya muchos."""
     ids = [_crear(almacen, edad_dias=1) for _ in range(5)]
-    podados = generaciones.podar_generaciones(dias=30, maximo=2)
+    podados = generaciones.purgar_generaciones(dias=30, maximo=2)
     assert podados == 0
     for gen_id in ids:
         assert generaciones.obtener(gen_id) is not None
@@ -57,7 +57,7 @@ def test_borra_viejos_fuera_del_piso(almacen):
     nuevos = [_crear(almacen, edad_dias=1) for _ in range(2)]
     # piso=2 -> conserva los 2 más recientes (los nuevos); los 4 viejos están fuera del piso
     # y fuera de la ventana de días -> se borran.
-    podados = generaciones.podar_generaciones(dias=30, maximo=2)
+    podados = generaciones.purgar_generaciones(dias=30, maximo=2)
     assert podados == 4
     for gen_id in viejos:
         assert generaciones.obtener(gen_id) is None
@@ -73,7 +73,7 @@ def test_piso_protege_viejos(almacen):
         gen_id = _crear(almacen, edad_dias=90 + i)  # más antiguo cuanto mayor i
         ids.append(gen_id)
     # piso=3 -> conserva los 3 más recientes (i=0,1,2) aunque viejos; borra los 2 más antiguos.
-    podados = generaciones.podar_generaciones(dias=30, maximo=3)
+    podados = generaciones.purgar_generaciones(dias=30, maximo=3)
     assert podados == 2
     vivos = [g for g in ids if generaciones.obtener(g) is not None]
     assert len(vivos) == 3
@@ -85,9 +85,9 @@ def test_idempotente(almacen):
     """Un segundo barrido inmediato no borra nada nuevo."""
     [_crear(almacen, edad_dias=60) for _ in range(4)]
     [_crear(almacen, edad_dias=1) for _ in range(2)]
-    primero = generaciones.podar_generaciones(dias=30, maximo=2)
+    primero = generaciones.purgar_generaciones(dias=30, maximo=2)
     assert primero == 4
-    segundo = generaciones.podar_generaciones(dias=30, maximo=2)
+    segundo = generaciones.purgar_generaciones(dias=30, maximo=2)
     assert segundo == 0
 
 
@@ -95,11 +95,11 @@ def test_por_debajo_del_piso_no_poda(almacen):
     """Con menos registros que el piso no se borra nada, aunque sean viejos."""
     _crear(almacen, edad_dias=90)
     _crear(almacen, edad_dias=90)
-    assert generaciones.podar_generaciones(dias=30, maximo=2000) == 0
+    assert generaciones.purgar_generaciones(dias=30, maximo=2000) == 0
 
 
 def test_almacen_vacio_no_rompe(almacen):
-    assert generaciones.podar_generaciones(dias=30, maximo=2000) == 0
+    assert generaciones.purgar_generaciones(dias=30, maximo=2000) == 0
 
 
 def test_ignora_ficheros_ajenos_y_temporales(almacen):
@@ -117,7 +117,7 @@ def test_ignora_ficheros_ajenos_y_temporales(almacen):
     for f in ajenos:
         f.write_text("x: 1\n", encoding="utf-8")
         os.utime(f, (viejo, viejo))
-    podados = generaciones.podar_generaciones(dias=30, maximo=0)
+    podados = generaciones.purgar_generaciones(dias=30, maximo=0)
     assert podados == 1  # solo el registro de generación real
     assert generaciones.obtener(gen_id) is None
     for f in ajenos:
@@ -130,7 +130,7 @@ def test_no_parsea_yaml_corrupto(almacen):
     ruta.write_text(": : : no es yaml válido : :\n", encoding="utf-8")
     viejo = time.time() - 90 * 86400.0
     os.utime(ruta, (viejo, viejo))
-    podados = generaciones.podar_generaciones(dias=30, maximo=0)
+    podados = generaciones.purgar_generaciones(dias=30, maximo=0)
     assert podados == 1
     assert not ruta.exists()
 
@@ -141,7 +141,7 @@ def test_lee_knobs_del_entorno(almacen, monkeypatch):
     # Ventana de 5 días -> los de 10 d están fuera; piso 1 -> conserva 1, borra 2.
     monkeypatch.setenv("KENI_GENERACIONES_RETENCION_DIAS", "5")
     monkeypatch.setenv("KENI_GENERACIONES_RETENCION_MAX", "1")
-    assert generaciones.podar_generaciones() == 2
+    assert generaciones.purgar_generaciones() == 2
 
 
 def test_env_invalido_cae_al_default(almacen, monkeypatch):
@@ -150,4 +150,4 @@ def test_env_invalido_cae_al_default(almacen, monkeypatch):
     monkeypatch.setenv("KENI_GENERACIONES_RETENCION_DIAS", "no-numero")
     monkeypatch.setenv("KENI_GENERACIONES_RETENCION_MAX", "")
     # Con defaults (30 d / 2000) y registros de 1 d: no se borra nada.
-    assert generaciones.podar_generaciones() == 0
+    assert generaciones.purgar_generaciones() == 0

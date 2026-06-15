@@ -8,7 +8,7 @@ limite. Aqui un barrido CONSERVADOR localiza y borra los objetos HUERFANOS.
 
 DEFINICION DE HUERFANO (conservadora; ante la duda, NO se borra)
 ================================================================
-Un objeto del almacen es huerfano si y SOLO si cumple las DOS condiciones:
+Un objeto del almacen es suelto si y SOLO si cumple las DOS condiciones:
   1. NO es una REFERENCIA VIVA: ni el `imagen` (composite horneado) ni la `foto` cruda de
      ninguna publicacion (normales — TODOS los estados/marcas — ni comerciales), ni un recurso
      que alimente el render on-demand (miniatura/media_id de plantillas del estudio, activos de
@@ -18,7 +18,7 @@ Un objeto del almacen es huerfano si y SOLO si cumple las DOS condiciones:
 
 Con el render ON-DEMAND la imagen publicable se DERIVA de la receta (foto + copy_in +
 plantilla/marca) y NO se persiste un composite por edicion; esos renders sin referencia son
-huerfanos RECICLABLES (caché reconstruible). Por eso protegemos los ORIGINALES (foto, logos,
+sueltos RECICLABLES (caché reconstruible). Por eso protegemos los ORIGINALES (foto, logos,
 tipografías, plantillas), no los composites.
 
 Las referencias vivas se calculan SIEMPRE sobre el catalogo completo (sin filtros de
@@ -40,7 +40,7 @@ SEGURO POR DISENO
   - SIEMPRE loguea cuantos borro y cuantos conservo (sin caps silenciosos).
   - `dry_run` permite ver que se borraria sin tocar nada.
 
-`referencias_vivas` y `huerfanos` son consultas de SOLO LECTURA; `limpiar` es la unica que
+`referencias_vivas` y `sueltos` son consultas de SOLO LECTURA; `limpiar` es la unica que
 muta el almacen, y solo si `dry_run` es False.
 """
 
@@ -204,7 +204,7 @@ def _refs_documento_versiones() -> set[str]:
         referencias a media (objeto, media_id, fondos, etc.).
 
     Sin esta protección, el GC borraría:
-      - Los PNG renderizados de versiones antiguas (quedando versiones huérfanas),
+      - Los PNG renderizados de versiones antiguas (quedando versiones sueltas),
       - Los media originales (imagenes, logos, fondos) que las capas del documento
         referenciaban (el restore de la versión no podría renderizar).
 
@@ -293,7 +293,7 @@ def referencias_vivas() -> set[str]:
     return vivas
 
 
-def huerfanos(antiguedad_horas: float = 24) -> list[str]:
+def sueltos(antiguedad_horas: float = 24) -> list[str]:
     """Objetos HUERFANOS borrables: ni referenciados/catalogados ni recientes.
 
     Devuelve los nombres de objeto de `almacen_media.listar_objetos()` que NO estan en
@@ -312,23 +312,23 @@ def huerfanos(antiguedad_horas: float = 24) -> list[str]:
 
 
 def limpiar(antiguedad_horas: float = 24, dry_run: bool = False) -> dict[str, Any]:
-    """Borra (o simula) los objetos huerfanos. Devuelve un resumen y loguea SIEMPRE.
+    """Borra (o simula) los objetos sueltos. Devuelve un resumen y loguea SIEMPRE.
 
     Resultado: `{borrados, conservados, dry_run, nombres}` donde `nombres` son los objetos
-    huerfanos detectados (borrados o que se borrarian en `dry_run`). `conservados` es el
-    total de objetos del almacen MENOS los huerfanos (lo que se mantiene: referenciados,
+    sueltos detectados (borrados o que se borrarian en `dry_run`). `conservados` es el
+    total de objetos del almacen MENOS los sueltos (lo que se mantiene: referenciados,
     catalogados o recientes).
 
     Robusto ante errores por objeto: si `borrar_objeto` falla para uno, loguea y sigue con
     los demas (ese objeto NO cuenta como borrado). En `dry_run` no toca el almacen.
     """
     total = len(almacen_media.listar_objetos())
-    a_borrar = huerfanos(antiguedad_horas)
+    a_borrar = sueltos(antiguedad_horas)
     conservados = total - len(a_borrar)
 
     if dry_run:
         _log.info(
-            "GC media (DRY-RUN): %d huerfano(s) se borrarian, %d conservado(s) "
+            "GC media (DRY-RUN): %d suelto(s) se borrarian, %d conservado(s) "
             "(umbral=%.1fh).",
             len(a_borrar), conservados, antiguedad_horas,
         )
@@ -339,11 +339,11 @@ def limpiar(antiguedad_horas: float = 24, dry_run: bool = False) -> dict[str, An
             "nombres": list(a_borrar),
         }
 
-    # RE-VERIFICACION anti-TOCTOU: entre el calculo de `huerfanos()` y el borrado pudo
+    # RE-VERIFICACION anti-TOCTOU: entre el calculo de `sueltos()` y el borrado pudo
     # nacer una referencia nueva (una pieza que fija `imagen`/`foto` a uno de estos
     # objetos). Se recalcula el set de referencias JUSTO antes del bucle de borrado y se
     # re-comprueba cada objeto contra ese snapshot fresco: el que se volvio referenciado
-    # se CONSERVA (y se descuenta de los huerfanos reportados).
+    # se CONSERVA (y se descuenta de los sueltos reportados).
     vivas_ahora = referencias_vivas()
     rescatados = [n for n in a_borrar if n in vivas_ahora]
     if rescatados:
@@ -362,9 +362,9 @@ def limpiar(antiguedad_horas: float = 24, dry_run: bool = False) -> dict[str, An
             almacen_media.borrar_objeto(nombre)
             borrados += 1
         except Exception:  # noqa: BLE001 -- un fallo por objeto no debe abortar el barrido
-            _log.exception("GC media: fallo al borrar el objeto huerfano %r.", nombre)
+            _log.exception("GC media: fallo al borrar el objeto suelto %r.", nombre)
     _log.info(
-        "GC media: %d huerfano(s) borrado(s), %d conservado(s) (umbral=%.1fh).",
+        "GC media: %d suelto(s) borrado(s), %d conservado(s) (umbral=%.1fh).",
         borrados, conservados, antiguedad_horas,
     )
     return {

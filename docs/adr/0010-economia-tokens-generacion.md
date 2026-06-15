@@ -16,7 +16,7 @@ avalancha informativa puede saturar la cola y **agotar los tokens de todos** —
 incluidos— sin que nadie lo vea venir. Antes de este ADR existían topes *de capacidad*
 (`KENI_MAX_JOBS`, `KENI_MAX_COLA`, prioridad manual>pipeline, backpressure de admisión),
 pero ninguno *de consumo*: nada medía cuántos tokens gastaba el sistema por día ni cortaba
-al llegar a un límite, no había freno de mano global, y un job huérfano podía re-reclamarse
+al llegar a un límite, no había freno de mano global, y un job suelto podía re-reclamarse
 para siempre quemando tokens en cada vuelta.
 
 ## Decisión
@@ -50,7 +50,7 @@ Gobernar el consumo en **tres capas**, todas visibles y editables en caliente:
 
 Complementos de la misma capa de economía:
 
-- **Tope de intentos** (`jobs.intentos`, `KENI_JOBS_MAX_INTENTOS`, def 3): un huérfano que
+- **Tope de intentos** (`jobs.intentos`, `KENI_JOBS_MAX_INTENTOS`, def 3): un suelto que
   agotó sus intentos se **descarta** con error claro (`motivo=interrumpido`) en vez de
   re-reclamarse para siempre. `reencolar_job` (decisión humana) y la resurrección de
   `encolar_job` (trabajo nuevo) resetean el contador.

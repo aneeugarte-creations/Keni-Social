@@ -203,7 +203,7 @@ def test_borrar_programa_forzar_true(cliente):
     r = cliente.delete(f"/api/rota/programas/{p['id']}?forzar=true")
     assert r.status_code == 200
     assert r.json()["piezas_afectadas"] == 1
-    # La pieza huerfana sigue accesible y conserva el texto del programa.
+    # La pieza suelta sigue accesible y conserva el texto del programa.
     piezas = repos.listar_piezas_rota()
-    huerfana = next(p for p in piezas if p["id"] == pieza_id)
-    assert huerfana["programa"] == "MUNDIAL"
+    suelta = next(p for p in piezas if p["id"] == pieza_id)
+    assert suelta["programa"] == "MUNDIAL"

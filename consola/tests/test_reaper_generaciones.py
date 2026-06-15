@@ -1,4 +1,4 @@
-"""Tests del reaper de generaciones zombi (`generaciones.reclamar_zombis`).
+"""Tests del reaper de generaciones atascada (`generaciones.reclamar_atascadas`).
 
 Las generaciones viven en ficheros YAML (no Postgres), así que estos tests usan `tmp_path`
 vía `KENI_CONSOLA_GENERACIONES` y NO necesitan base de datos. La hora se inyecta para no
@@ -37,7 +37,7 @@ def _hace(horas: float) -> str:
 
 def test_cierra_la_ejecutando_vieja(almacen):
     g = _crear(generaciones.ESTADO_EJECUTANDO, _hace(3))  # 3 h colgada
-    n = generaciones.reclamar_zombis(3600, ahora=AHORA)  # TTL 1 h
+    n = generaciones.reclamar_atascadas(3600, ahora=AHORA)  # TTL 1 h
     assert n == 1
     cerrada = generaciones.obtener(g["id"])
     assert cerrada["estado"] == generaciones.ESTADO_ERROR
@@ -48,7 +48,7 @@ def test_cierra_la_ejecutando_vieja(almacen):
 def test_respeta_la_ejecutando_reciente(almacen):
     """Una `ejecutando` dentro del TTL podría seguir viva: NO se toca."""
     g = _crear(generaciones.ESTADO_EJECUTANDO, _hace(0.1))  # 6 min
-    n = generaciones.reclamar_zombis(3600, ahora=AHORA)
+    n = generaciones.reclamar_atascadas(3600, ahora=AHORA)
     assert n == 0
     assert generaciones.obtener(g["id"])["estado"] == generaciones.ESTADO_EJECUTANDO
 
@@ -57,7 +57,7 @@ def test_no_toca_las_terminales(almacen):
     """`completado`/`error` viejas no se reclaman (ya están cerradas)."""
     c = _crear(generaciones.ESTADO_COMPLETADO, _hace(10))
     e = _crear(generaciones.ESTADO_ERROR, _hace(10))
-    n = generaciones.reclamar_zombis(3600, ahora=AHORA)
+    n = generaciones.reclamar_atascadas(3600, ahora=AHORA)
     assert n == 0
     assert generaciones.obtener(c["id"])["estado"] == generaciones.ESTADO_COMPLETADO
     assert generaciones.obtener(e["id"])["estado"] == generaciones.ESTADO_ERROR
@@ -67,15 +67,15 @@ def test_devuelve_cuantas_reclamo(almacen):
     _crear(generaciones.ESTADO_EJECUTANDO, _hace(5))
     _crear(generaciones.ESTADO_EJECUTANDO, _hace(5))
     _crear(generaciones.ESTADO_EJECUTANDO, _hace(0.05))  # reciente, no cuenta
-    assert generaciones.reclamar_zombis(3600, ahora=AHORA) == 2
+    assert generaciones.reclamar_atascadas(3600, ahora=AHORA) == 2
 
 
 def test_almacen_vacio_no_rompe(almacen):
-    assert generaciones.reclamar_zombis(3600, ahora=AHORA) == 0
+    assert generaciones.reclamar_atascadas(3600, ahora=AHORA) == 0
 
 
 # --------------------------------------------------------------------------- #
-# TTL del saneo de QA 'en_curso' (derivado del timeout real; sin BD)            #
+# TTL del reparación de QA 'en_curso' (derivado del timeout real; sin BD)            #
 # --------------------------------------------------------------------------- #
 
 

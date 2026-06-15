@@ -22,7 +22,7 @@ los cientos de call-sites. La consecuencia es que **la paridad SQLite ya no impo
 esquema puede usar las garantías de integridad y los tipos ricos de Postgres.
 
 Una crítica de arquitectura señaló los riesgos de seguir con "TEXT-para-todo, sin FKs":
-- borrados que dejan **filas huérfanas** (sin FK, nada propaga ni impide referencias rotas);
+- borrados que dejan **filas sueltas** (sin FK, nada propaga ni impide referencias rotas);
 - columnas de **estado** que aceptan cualquier string (un bug escribe un estado inválido y se
   detecta tarde, en lectura);
 - **last-write-wins** en las ediciones del hub `contenido`: el avance del pipeline puede pisar
@@ -36,7 +36,7 @@ producción), con migraciones versionadas idempotentes (ADR 0008) que **limpian/
 de cada constraint** para que el deploy no falle contra datos heredados sucios.
 
 1. **FOREIGN KEYS** en las relaciones OBLIGATORIAS de alto valor del hub `contenido` y afines,
-   todas `ON DELETE CASCADE` (la hija es dependiente), precedidas de limpieza de huérfanos
+   todas `ON DELETE CASCADE` (la hija es dependiente), precedidas de limpieza de sueltos
    (incluido el sentinel `''`): `contenido_plataforma`, `contenido_comentarios`,
    `contenido_copy_versiones`, `contenido_aprobaciones`, `documento_versiones`,
    `video_subtitulos`, `insumos_item`, `comercial_snapshots` → su padre.

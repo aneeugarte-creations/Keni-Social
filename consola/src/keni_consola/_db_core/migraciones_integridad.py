@@ -235,7 +235,7 @@ def _migrar_tipos_jsonb(con: Any) -> None:
 # prompt/razonamiento/stream). Listar Actividad IA / Pipelines parseaba TODOS los ~2000 YAML por
 # peticion (glob + parse + sort en memoria). Esta tabla replica los campos LIGEROS del listado
 # para paginar por SQL sin tocar disco; el YAML se lee solo para el detalle. La mantiene
-# `generaciones._almacen` (al crear/actualizar/borrar/podar) + un backfill idempotente al primer
+# `generaciones._almacen` (al crear/actualizar/borrar/purgar) + un backfill idempotente al primer
 # uso. `payload` (jsonb) guarda el dict publico ligero (sin prompt/razonamiento) que `listar`
 # devuelve, asi la forma del listado es identica con o sin indice.
 

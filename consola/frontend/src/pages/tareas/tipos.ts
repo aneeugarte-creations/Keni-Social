@@ -65,7 +65,7 @@ export function agrupar(tareas: Contenido[], eventos: EventoRota[]) {
     porEvento.set(t.evento_id, lista);
   }
   const coberturas: Cobertura[] = [];
-  // `recuperables`: eventos cuya cobertura se SOLTÓ (solo tareas huérfanas, sin dueño). El
+  // `recuperables`: eventos cuya cobertura se SOLTÓ (solo tareas sueltas, sin dueño). El
   // partido sigue ahí; se pinta como «Por cubrir» (una tarea, re-cogible) para que no parezca
   // borrado. Así se recuperan los partidos que se soltaron por error.
   const recuperables: Contenido[] = [];
@@ -88,7 +88,7 @@ export function agrupar(tareas: Contenido[], eventos: EventoRota[]) {
     } else {
       // Sin cubridores: el partido sigue y resurge como «Por cubrir». Si quedaron varios ROLES
       // soltados (distinto `formato`), resurge UNO por rol para no perder ninguno de vista
-      // (dedupe por rol: si hay varias huérfanas del mismo rol, basta una re-cogible).
+      // (dedupe por rol: si hay varias sueltas del mismo rol, basta una re-cogible).
       const rolesVistos = new Set<string>();
       for (const t of lista) {
         const rol = t.formato || "";

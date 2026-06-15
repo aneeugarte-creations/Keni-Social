@@ -19,7 +19,7 @@ def _cruda():
 
 
 # --------------------------------------------------------------------------- #
-# Bloque 1: FOREIGN KEYS (cascada + rechazo de huerfanos + limpieza previa)     #
+# Bloque 1: FOREIGN KEYS (cascada + rechazo de sueltos + limpieza previa)     #
 # --------------------------------------------------------------------------- #
 
 
@@ -54,7 +54,7 @@ def test_fk_cascade_borra_hijas(pg):
     assert db.listar_copy_versiones(p["id"]) == []
 
 
-def test_fk_rechaza_plataforma_huerfana(pg):
+def test_fk_rechaza_plataforma_suelta(pg):
     db.listar_swaps_turno()  # esquema
     con = _cruda()
     try:
@@ -69,12 +69,12 @@ def test_fk_rechaza_plataforma_huerfana(pg):
         con.close()
 
 
-def test_fks_idempotentes_y_limpian_huerfanos(pg):
+def test_fks_idempotentes_y_limpian_sueltos(pg):
     """Re-aplicar la migracion de FKs sobre una BD con HUERFANOS los borra y recrea la FK."""
     c = db.crear_contenido(titulo="t")
     con = _cruda()
     try:
-        # Suelta la FK y mete huerfanos (id inexistente + sentinel '').
+        # Suelta la FK y mete sueltos (id inexistente + sentinel '').
         con.execute("ALTER TABLE contenido_plataforma DROP CONSTRAINT fk_contenido_plataforma_contenido_id")
         con.execute(
             "INSERT INTO contenido_plataforma (id, contenido_id, creado, actualizado) "
@@ -85,7 +85,7 @@ def test_fks_idempotentes_y_limpian_huerfanos(pg):
             "VALUES ('o2', '', 'x', 'x')"
         )
         con.commit()
-        # Re-aplica la migracion: limpia huerfanos y recrea la FK.
+        # Re-aplica la migracion: limpia sueltos y recrea la FK.
         _migrar_fks_hub(con)
         con.commit()
         n = con.execute(

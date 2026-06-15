@@ -100,7 +100,7 @@ from ._comun import (  # noqa: F401
 from ._contexto import (  # noqa: F401
     _dir_contexto,
     _resolver_contexto,
-    _sanear_nombre_contexto,
+    _reparar_nombre_contexto,
     borrar_contexto,
     guardar_claude_md,
     guardar_contexto,

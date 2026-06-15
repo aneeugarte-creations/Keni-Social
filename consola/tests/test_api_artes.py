@@ -3,7 +3,7 @@
 Cubre: catalogar un objeto de media existente, idempotencia por `objeto` UNIQUE,
 validaciones (objeto inexistente, marca desconocida, tipo invalido), filtros de listado
 (marca, busqueda `q`), descatalogado con y sin `purgar`, y que un arte catalogado es una
-REFERENCIA VIVA para el GC de media huerfana (no se borra aunque nadie lo use).
+REFERENCIA VIVA para el GC de media suelta (no se borra aunque nadie lo use).
 """
 
 from __future__ import annotations

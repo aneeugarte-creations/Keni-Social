@@ -392,19 +392,19 @@ ENV_PROMOVER_MIN_MARCA = "KENI_PROMOVER_MIN_MARCA"
 def promover_min_score() -> float:
     """Score mínimo [0,1] para que una historia dispare producción automática
     (`KENI_PROMOVER_MIN_SCORE`, def 0.35). `0` desactiva el umbral de score. Valor inválido → def."""
-    from .dominio.agrupar import LISTON_MIN_SCORE_DEF
+    from .dominio.agrupar import UMBRAL_MIN_SCORE_DEF
 
-    return _peso01(ENV_PROMOVER_MIN_SCORE, LISTON_MIN_SCORE_DEF)
+    return _peso01(ENV_PROMOVER_MIN_SCORE, UMBRAL_MIN_SCORE_DEF)
 
 
 def promover_min_marca() -> float:
     """Encaje de marca mínimo [0,1] (relevancia por vocabulario) para la producción automática
     (`KENI_PROMOVER_MIN_MARCA`, def 0.2 ≈ 1 término del vocabulario). `0` desactiva el umbral de
     marca. Exentas: historias curadas por el equipo y breaking corroboradas (ver
-    `agrupar.evaluar_liston`). Valor inválido → def."""
-    from .dominio.agrupar import LISTON_MIN_MARCA_DEF
+    `agrupar.evaluar_umbral`). Valor inválido → def."""
+    from .dominio.agrupar import UMBRAL_MIN_MARCA_DEF
 
-    return _peso01(ENV_PROMOVER_MIN_MARCA, LISTON_MIN_MARCA_DEF)
+    return _peso01(ENV_PROMOVER_MIN_MARCA, UMBRAL_MIN_MARCA_DEF)
 
 
 # --------------------------------------------------------------------------- #
@@ -425,7 +425,7 @@ ENV_PLAN_DIA = "KENI_PLAN_DIA"
 def promover_maduracion_min() -> int:
     """Minutos mínimos de una historia en el pool antes de poder promoverse
     (`KENI_PROMOVER_MADURACION_MIN`, def 45, min 0; `0` desactiva). Exentas las curadas y las
-    breaking corroboradas (regla en `agrupar.evaluar_liston`): la urgencia real no espera.
+    breaking corroboradas (regla en `agrupar.evaluar_umbral`): la urgencia real no espera.
     Dedicar este tiempo a "elegir" deja que la corroboración se acumule y que Admitir
     compare historias maduras, no primeras llegadas."""
     return _entero(ENV_PROMOVER_MADURACION_MIN, PROMOVER_MADURACION_MIN_DEF, minimo=0)

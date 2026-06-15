@@ -467,7 +467,7 @@ def _detalle(*entradas):
 
 def test_puntuar_dos_potentes_simultaneas_rankean_top_y_breaking():
     # 2 fuentes potentes a la vez → corroboración 0.67 + velocidad 1.0 + frescura ≈ score 0.6+
-    # y flag breaking EN VIVO: tiene que salir al top del pool y al feed (vía listón).
+    # y flag breaking EN VIVO: tiene que salir al top del pool y al feed (vía umbral).
     cl = _cluster(
         n_fuentes=2, peso_fuentes=4.0, ultimo_visto=_T0.isoformat(),
         fuentes_detalle=_detalle((2.0, _T0 - timedelta(minutes=20)), (2.0, _T0 - timedelta(minutes=5))),
@@ -501,11 +501,11 @@ def test_puntuar_corroboracion_pondera_el_peso_no_solo_el_conteo():
     assert s2 > s3
 
 
-def test_puntuar_unica_fuente_fresca_queda_bajo_el_liston():
-    # Una sola fuente recién llegada, sin encaje de marca, NO debe abrir el listón (0.35).
+def test_puntuar_unica_fuente_fresca_queda_bajo_el_umbral():
+    # Una sola fuente recién llegada, sin encaje de marca, NO debe abrir el umbral (0.35).
     sola = _cluster(n_fuentes=1, peso_fuentes=1.0, senal=0, ultimo_visto=_T0.isoformat())
     score = agrupar.puntuar(sola, ahora=_T0)[0]
-    assert score < agrupar.LISTON_MIN_SCORE_DEF
+    assert score < agrupar.UMBRAL_MIN_SCORE_DEF
 
 
 def test_puntuar_fallback_a_n_fuentes_sin_peso_persistido():
@@ -607,12 +607,12 @@ def test_puntuar_detalle_casa_vocabulario_pese_a_la_puntuacion():
 
 
 # --------------------------------------------------------------------------- #
-# evaluar_liston: el listón de producción automática                            #
+# evaluar_umbral: el umbral de producción automática                            #
 # --------------------------------------------------------------------------- #
 
 
 def _cluster_apto(**campos):
-    """Cluster que SUPERA el listón por defecto: fresco, corroborado y con encaje de marca."""
+    """Cluster que SUPERA el umbral por defecto: fresco, corroborado y con encaje de marca."""
     base = _cluster(
         n_fuentes=3, senal=100, ultimo_visto=_T0.isoformat(),
         titulo="Sismo sacude la CDMX esta mañana", verificacion="corroborada",
@@ -624,105 +624,105 @@ def _cluster_apto(**campos):
 _PAL = frozenset({"sismo", "cdmx", "mexico"})
 
 
-def test_liston_supera_con_motivo_explicable():
-    ok, motivo = agrupar.evaluar_liston(_cluster_apto(), palabras_marca=_PAL, ahora=_T0)
+def test_umbral_supera_con_motivo_explicable():
+    ok, motivo = agrupar.evaluar_umbral(_cluster_apto(), palabras_marca=_PAL, ahora=_T0)
     assert ok
     assert "sismo" in motivo  # el motivo nombra las palabras que casaron
 
 
-def test_liston_rechaza_verificacion_dudosa():
-    ok, motivo = agrupar.evaluar_liston(
+def test_umbral_rechaza_verificacion_dudosa():
+    ok, motivo = agrupar.evaluar_umbral(
         _cluster_apto(verificacion="dudosa"), palabras_marca=_PAL, ahora=_T0
     )
     assert not ok
     assert "dudosa" in motivo
 
 
-def test_liston_rechaza_score_bajo():
+def test_umbral_rechaza_score_bajo():
     vieja_sin_senales = _cluster_apto(
         n_fuentes=1, senal=0, ultimo_visto=(_T0 - timedelta(hours=70)).isoformat()
     )
-    ok, motivo = agrupar.evaluar_liston(vieja_sin_senales, palabras_marca=_PAL, ahora=_T0)
+    ok, motivo = agrupar.evaluar_umbral(vieja_sin_senales, palabras_marca=_PAL, ahora=_T0)
     assert not ok
     assert "score" in motivo
 
 
-def test_liston_recalcula_el_score_no_usa_el_persistido():
-    """Un score persistido alto NO cuela: el listón evalúa las señales DE AHORA (envejece)."""
+def test_umbral_recalcula_el_score_no_usa_el_persistido():
+    """Un score persistido alto NO cuela: el umbral evalúa las señales DE AHORA (envejece)."""
     vieja = _cluster_apto(
         score=0.95, n_fuentes=1, senal=0,
         ultimo_visto=(_T0 - timedelta(hours=70)).isoformat(),
     )
-    ok, _motivo = agrupar.evaluar_liston(vieja, palabras_marca=_PAL, ahora=_T0)
+    ok, _motivo = agrupar.evaluar_umbral(vieja, palabras_marca=_PAL, ahora=_T0)
     assert not ok
 
 
-def test_liston_rechaza_sin_encaje_de_marca():
-    ok, motivo = agrupar.evaluar_liston(
+def test_umbral_rechaza_sin_encaje_de_marca():
+    ok, motivo = agrupar.evaluar_umbral(
         _cluster_apto(titulo="Celebrity gossip news today"), palabras_marca=_PAL, ahora=_T0
     )
     assert not ok
     assert "marca" in motivo
 
 
-def test_liston_madura_antes_de_promover():
+def test_umbral_madura_antes_de_promover():
     """Con maduración, una historia recién vista NO se promueve aún (motivo explicable)."""
     recien = _cluster_apto(primer_visto=(_T0 - timedelta(minutes=10)).isoformat())
-    ok, motivo = agrupar.evaluar_liston(
+    ok, motivo = agrupar.evaluar_umbral(
         recien, palabras_marca=_PAL, min_maduracion_min=45, ahora=_T0
     )
     assert not ok
     assert "madurando" in motivo
 
 
-def test_liston_madurada_se_promueve():
+def test_umbral_madurada_se_promueve():
     madura = _cluster_apto(primer_visto=(_T0 - timedelta(minutes=50)).isoformat())
-    ok, _motivo = agrupar.evaluar_liston(
+    ok, _motivo = agrupar.evaluar_umbral(
         madura, palabras_marca=_PAL, min_maduracion_min=45, ahora=_T0
     )
     assert ok
 
 
-def test_liston_maduracion_exime_breaking_corroborada_y_curadas():
+def test_umbral_maduracion_exime_breaking_corroborada_y_curadas():
     from keni_consola.dominio.ingesta import SENAL_CURADO
 
     breaking = _cluster_apto(breaking=1, primer_visto=(_T0 - timedelta(minutes=1)).isoformat())
-    ok, _m = agrupar.evaluar_liston(
+    ok, _m = agrupar.evaluar_umbral(
         breaking, palabras_marca=_PAL, min_maduracion_min=45, ahora=_T0
     )
     assert ok  # la urgencia real no espera
     curada = _cluster_apto(
         senal=SENAL_CURADO, primer_visto=(_T0 - timedelta(minutes=1)).isoformat()
     )
-    ok, _m = agrupar.evaluar_liston(
+    ok, _m = agrupar.evaluar_umbral(
         curada, palabras_marca=_PAL, min_maduracion_min=45, ahora=_T0
     )
     assert ok  # el humano ya decidió
 
 
-def test_liston_maduracion_sin_primer_visto_no_retiene():
+def test_umbral_maduracion_sin_primer_visto_no_retiene():
     """Un dato ausente no castiga: sin `primer_visto` parseable la regla no aplica."""
-    ok, _m = agrupar.evaluar_liston(
+    ok, _m = agrupar.evaluar_umbral(
         _cluster_apto(), palabras_marca=_PAL, min_maduracion_min=45, ahora=_T0
     )
     assert ok
 
 
-def test_liston_exime_de_marca_a_lo_curado_por_el_equipo():
+def test_umbral_exime_de_marca_a_lo_curado_por_el_equipo():
     from keni_consola.dominio.ingesta import SENAL_CURADO
 
     curada = _cluster_apto(titulo="Apunte del equipo sin vocabulario", senal=SENAL_CURADO)
-    ok, _motivo = agrupar.evaluar_liston(curada, palabras_marca=_PAL, ahora=_T0)
+    ok, _motivo = agrupar.evaluar_umbral(curada, palabras_marca=_PAL, ahora=_T0)
     assert ok  # el humano ya decidió: no se le exige vocabulario
 
 
-def test_liston_exime_de_marca_a_breaking_corroborada():
+def test_umbral_exime_de_marca_a_breaking_corroborada():
     breaking = _cluster_apto(titulo="Evento inesperado sin vocabulario aun", breaking=1)
-    ok, _motivo = agrupar.evaluar_liston(breaking, palabras_marca=_PAL, ahora=_T0)
+    ok, _motivo = agrupar.evaluar_umbral(breaking, palabras_marca=_PAL, ahora=_T0)
     assert ok  # evento mayor confirmado por varias fuentes a la vez
 
 
-def test_liston_dos_potentes_recien_nacida_sale_sin_madurar():
+def test_umbral_dos_potentes_recien_nacida_sale_sin_madurar():
     # El caso de diseño: una nota en 2 fuentes potentes A LA VEZ sube al top y sale al feed
     # sin esperar maduración ni encaje de marca (breaking derivado EN VIVO del timeline).
     detalle = [
@@ -735,29 +735,29 @@ def test_liston_dos_potentes_recien_nacida_sale_sin_madurar():
         n_fuentes=2, peso_fuentes=4.0, fuentes_detalle=detalle, verificacion="corroborada",
         titulo="Evento inesperado sin vocabulario", ultimo_visto=_T0.isoformat(),
         primer_visto=(_T0 - timedelta(minutes=2)).isoformat(),
-        breaking=0,  # flag persistido desfasado: el listón deriva el vivo del timeline
+        breaking=0,  # flag persistido desfasado: el umbral deriva el vivo del timeline
     )
-    ok, motivo = agrupar.evaluar_liston(
+    ok, motivo = agrupar.evaluar_umbral(
         cl, palabras_marca=_PAL, min_maduracion_min=45, ahora=_T0
     )
     assert ok
     assert "score" in motivo
 
 
-def test_liston_breaking_sin_corroborar_no_queda_exenta():
+def test_umbral_breaking_sin_corroborar_no_queda_exenta():
     breaking_unica = _cluster_apto(
         titulo="Evento inesperado sin vocabulario", breaking=1, verificacion="unica_fuente"
     )
-    ok, _motivo = agrupar.evaluar_liston(breaking_unica, palabras_marca=_PAL, ahora=_T0)
+    ok, _motivo = agrupar.evaluar_umbral(breaking_unica, palabras_marca=_PAL, ahora=_T0)
     assert not ok
 
 
-def test_liston_umbral_cero_desactiva_cada_regla():
+def test_umbral_umbral_cero_desactiva_cada_regla():
     sin_encaje = _cluster_apto(titulo="Celebrity gossip news today")
-    ok, _ = agrupar.evaluar_liston(
+    ok, _ = agrupar.evaluar_umbral(
         sin_encaje, palabras_marca=_PAL, min_marca=0.0, ahora=_T0
     )
-    assert ok  # min_marca=0 apaga el listón de marca (el de score se mantiene)
+    assert ok  # min_marca=0 apaga el umbral de marca (el de score se mantiene)
 
 
 # --------------------------------------------------------------------------- #

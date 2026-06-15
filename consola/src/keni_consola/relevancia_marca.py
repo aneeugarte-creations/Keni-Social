@@ -11,7 +11,7 @@ este vocabulario a configuracion por marca (gestionable desde la Consola) sin ca
 el contrato de `palabras_de_marca`. Honestidad: si una marca no tiene vocabulario, la
 relevancia de marca no aplica (la parrilla cae a su scoring general, sin inventar).
 Cuando la etapa Priorizar (perfil Haiku) esta activa, ese perfil SUSTITUYE esta
-base (ver `noticias_liston.palabras_relevancia`); la base es el suelo fiable.
+base (ver `noticias_umbral.palabras_relevancia`); la base es el suelo fiable.
 
 Las palabras son tokens o frases en minuscula y SIN ACENTOS (el matching normaliza el
 texto antes de comparar): tokens por igualdad exacta de token, frases por limite de

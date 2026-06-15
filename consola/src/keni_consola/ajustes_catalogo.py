@@ -22,8 +22,8 @@ from typing import Any
 
 from . import ajustes, config, marcas, preferencias
 from .dominio.agrupar import (
-    LISTON_MIN_MARCA_DEF as _LISTON_MIN_MARCA_DEF,
-    LISTON_MIN_SCORE_DEF as _LISTON_MIN_SCORE_DEF,
+    UMBRAL_MIN_MARCA_DEF as _UMBRAL_MIN_MARCA_DEF,
+    UMBRAL_MIN_SCORE_DEF as _UMBRAL_MIN_SCORE_DEF,
 )
 
 # Conjuntos de verdad/falsedad para flags (mismos que `config`, fuente del parseo de bool).
@@ -542,7 +542,7 @@ def _construir_catalogo() -> list[Ajuste]:
         # --- Producción automática (grupo `noticias_produccion`) -------------------------- #
         # UMBRAL de producción automática: el panel lista TODO el pool jerarquizado, pero promover
         # una historia a tema dispara Verificar+Redactar (claude -p: coste real de tokens). Estos dos umbrales
-        # son ese mínimo (la regla vive en `dominio.agrupar.evaluar_liston`, explicable).
+        # son ese mínimo (la regla vive en `dominio.agrupar.evaluar_umbral`, explicable).
         Ajuste(
             clave=config.ENV_PROMOVER_MIN_SCORE,
             tipo="float",
@@ -550,7 +550,7 @@ def _construir_catalogo() -> list[Ajuste]:
             ayuda="Una historia solo dispara la producción automática si su relevancia llega a "
             "este valor; 0 = sin umbral (de 0 a 1).",
             grupo="noticias_produccion",
-            defecto=_LISTON_MIN_SCORE_DEF,
+            defecto=_UMBRAL_MIN_SCORE_DEF,
             minimo=0,
             maximo=1,
         ),
@@ -561,7 +561,7 @@ def _construir_catalogo() -> list[Ajuste]:
             ayuda="Cuánto debe encajar la historia con los temas de la marca para producirse en "
             "automático (0.2 ≈ un término de la marca en el título); 0 = sin umbral (de 0 a 1).",
             grupo="noticias_produccion",
-            defecto=_LISTON_MIN_MARCA_DEF,
+            defecto=_UMBRAL_MIN_MARCA_DEF,
             minimo=0,
             maximo=1,
         ),

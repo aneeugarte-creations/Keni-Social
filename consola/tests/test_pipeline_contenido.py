@@ -105,9 +105,9 @@ def _sembrar_cluster(
 ):
     """Siembra un cluster del pool (Ola B) para los tests de promoción ADMITIR→tema.
 
-    Por defecto el cluster SUPERA el listón de producción automática (`noticias_liston`):
+    Por defecto el cluster SUPERA el umbral de producción automática (`noticias_umbral`):
     FRESCO (`ultimo_visto` ≈ ahora), corroborado y con encaje de marca unotv por el resumen.
-    Los tests del propio listón pasan valores que lo incumplen a propósito.
+    Los tests del propio umbral pasan valores que lo incumplen a propósito.
 
     `verificar_veredicto`: estado de la criba del cluster. Por defecto "" (sin cribar, el estado del que
     parte Verificar en investigación). La ADMISIÓN solo promueve las VERIFICADAS, así que los tests
@@ -896,7 +896,7 @@ def test_promover_clusters_top_n_por_score(entorno, monkeypatch):
 
 def test_promover_clusters_marca_filtra_sin_cribar_por_defecto(entorno, monkeypatch):
     """El filtro de Verificar es OBLIGATORIO por defecto (ADR 0011 F3): un cluster SIN cribar (veredicto
-    '') NO se promueve aunque gane en score/listón — no existe un camino que promueva sin verificar.
+    '') NO se promueve aunque gane en score/umbral — no existe un camino que promueva sin verificar.
     """
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     _sembrar_cluster("sin_cribar", titulo="Aún sin Verificar", score=0.9)  # verificar_veredicto='' por defecto
@@ -1515,17 +1515,17 @@ def test_clusters_para_promover_suave_rellena_si_solo_hay_duplicados(entorno):
 
 
 # --------------------------------------------------------------------------- #
-# LISTÓN de producción automática: promover cuesta tokens (Verificar+copy con IA); #
+# UMBRAL de producción automática: promover cuesta tokens (Verificar+copy con IA); #
 # el ruido se queda en el pool aunque haya plazas libres.                       #
 # --------------------------------------------------------------------------- #
 
 
-def test_clusters_para_promover_respeta_el_liston(entorno):
-    """Solo las historias que superan el listón compiten por plaza; el ruido queda en el pool."""
+def test_clusters_para_promover_respeta_el_umbral(entorno):
+    """Solo las historias que superan el umbral compiten por plaza; el ruido queda en el pool."""
     from datetime import UTC, datetime, timedelta
 
     # Todas VERIFICADAS (pasaron la criba): así el ÚNICO discriminante de la promoción es el
-    # listón, no el filtro de Verificar (que ya cribó a todas por igual).
+    # umbral, no el filtro de Verificar (que ya cribó a todas por igual).
     _sembrar_cluster("apta", titulo="Sismo sacude la CDMX", score=0.9,
                      verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
     # Sin encaje de marca: ni el título ni el resumen casan el vocabulario unotv.
@@ -1536,7 +1536,7 @@ def test_clusters_para_promover_respeta_el_liston(entorno):
     # Verificación dudosa: jamás dispara producción automática, puntúe lo que puntúe.
     _sembrar_cluster("dudosa", titulo="Increíble suceso en México hoy", score=0.7,
                      verificacion="dudosa", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
-    # Vieja sin señales: su score persistido era alto, pero el listón recalcula AHORA.
+    # Vieja sin señales: su score persistido era alto, pero el umbral recalcula AHORA.
     _sembrar_cluster(
         "vieja", titulo="México: nota de hace una semana", score=0.95, n_fuentes=1,
         ultimo_visto=(datetime.now(UTC) - timedelta(days=7)).replace(tzinfo=None)
@@ -1545,12 +1545,12 @@ def test_clusters_para_promover_respeta_el_liston(entorno):
 
     elegidos = pc.clusters_para_promover("unotv", maximo=4)
 
-    # Hay 4 plazas, pero solo la apta supera el listón (el resto NO rellena plazas libres).
+    # Hay 4 plazas, pero solo la apta supera el umbral (el resto NO rellena plazas libres).
     assert [c["id"] for c in elegidos] == ["apta"]
 
 
-def test_promover_clusters_marca_no_promueve_bajo_liston(entorno, monkeypatch):
-    """El barrido ADMITIR deja en el pool (estado `nuevo`) lo que no supera el listón: ni tema ni copy."""
+def test_promover_clusters_marca_no_promueve_bajo_umbral(entorno, monkeypatch):
+    """El barrido ADMITIR deja en el pool (estado `nuevo`) lo que no supera el umbral: ni tema ni copy."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     _sembrar_cluster("apta", titulo="Sismo sacude la CDMX", score=0.9,
                      verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
@@ -1584,7 +1584,7 @@ def test_upsert_cluster_no_revierte_estado_ni_contenido_id(entorno):
 
 
 # --------------------------------------------------------------------------- #
-# Encadenado copy→arte por eventos + saneadores y helpers SQL del pipeline      #
+# Encadenado copy→arte por eventos + reparadores y helpers SQL del pipeline      #
 # --------------------------------------------------------------------------- #
 
 
@@ -1634,38 +1634,38 @@ def test_encadenar_arte_tras_copy_respeta_gates(entorno, monkeypatch):
     assert pc.encadenar_ilustrar_tras_redactar(tema["id"]) is None
 
 
-def test_sanear_qa_en_curso_huerfanos_resetea_solo_viejos(entorno):
-    """El saneador devuelve a re-criba ('') SOLO los `en_curso` más viejos que el umbral.
+def test_reparar_qa_en_curso_sueltos_resetea_solo_viejos(entorno):
+    """El reparador devuelve a re-criba ('') SOLO los `en_curso` más viejos que el umbral.
 
     Cierra el ZOMBI: si la criba muere sin finalizador, el tema quedaba `en_curso` para
     siempre (excluido de `temas_sin_verificar` y contando en el cupo en vuelo de su marca).
-    NOTA: el reaper usa ahora su saneo PER-TEMA (`reaper_generaciones._sanear_qa_en_curso`,
+    NOTA: el reaper usa ahora su reparación PER-TEMA (`reaper_generaciones._reparar_qa_en_curso`,
     con WARN por tema y destino según el toggle); esta primitiva SQL en lote sigue en repos.
     """
     from keni_consola import db
 
-    zombi = _tema_pipeline(titulo="Zombi", verificar_veredicto=pc.QA_EN_CURSO)
+    atascada = _tema_pipeline(titulo="Zombi", verificar_veredicto=pc.QA_EN_CURSO)
     vivo = _tema_pipeline(titulo="Vivo", verificar_veredicto=pc.QA_EN_CURSO)
-    # Envejecemos el `actualizado` del zombi más allá del umbral (el del vivo queda reciente).
+    # Envejecemos el `actualizado` del atascada más allá del umbral (el del vivo queda reciente).
     con = db._conectar()
     try:
         con.execute(
             "UPDATE contenido SET actualizado = ? WHERE id = ?",
-            ("2020-01-01T00:00:00", zombi["id"]),
+            ("2020-01-01T00:00:00", atascada["id"]),
         )
         con.commit()
     finally:
         con.close()
 
-    n = repos.sanear_qa_en_curso_huerfanos("2025-01-01T00:00:00")
+    n = repos.reparar_qa_en_curso_sueltos("2025-01-01T00:00:00")
 
     assert n == 1
-    assert (repos.obtener_contenido(zombi["id"])["verificar_veredicto"] or "") == ""  # a re-criba
+    assert (repos.obtener_contenido(atascada["id"])["verificar_veredicto"] or "") == ""  # a re-criba
     assert repos.obtener_contenido(vivo["id"])["verificar_veredicto"] == pc.QA_EN_CURSO  # intacto
 
 
 def _envejecer_actualizado(tema_id, fecha="2020-01-01T00:00:00"):
-    """Retrasa el `actualizado` de un tema (lo vuelve zombi para los saneadores)."""
+    """Retrasa el `actualizado` de un tema (lo vuelve atascada para los reparadores)."""
     from keni_consola import db
 
     con = db._conectar()
@@ -1676,34 +1676,34 @@ def _envejecer_actualizado(tema_id, fecha="2020-01-01T00:00:00"):
         con.close()
 
 
-def test_reaper_qa_zombi_re_criba_con_validacion_activa(entorno, monkeypatch):
-    """El saneo del reaper devuelve a re-criba ('') SOLO los `en_curso` zombis (per-tema)."""
+def test_reaper_qa_atascada_re_criba_con_validacion_activa(entorno, monkeypatch):
+    """El reparación del reaper devuelve a re-criba ('') SOLO los `en_curso` atascadas (per-tema)."""
     from keni_consola import reaper_generaciones
 
     monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")
-    zombi = _tema_pipeline(titulo="Zombi", verificar_veredicto=pc.QA_EN_CURSO)
+    atascada = _tema_pipeline(titulo="Zombi", verificar_veredicto=pc.QA_EN_CURSO)
     vivo = _tema_pipeline(titulo="Vivo", verificar_veredicto=pc.QA_EN_CURSO)
-    _envejecer_actualizado(zombi["id"])
+    _envejecer_actualizado(atascada["id"])
 
-    n = reaper_generaciones._sanear_qa_en_curso()
+    n = reaper_generaciones._reparar_qa_en_curso()
 
     assert n == 1
-    assert (repos.obtener_contenido(zombi["id"])["verificar_veredicto"] or "") == ""  # a re-criba
+    assert (repos.obtener_contenido(atascada["id"])["verificar_veredicto"] or "") == ""  # a re-criba
     assert repos.obtener_contenido(vivo["id"])["verificar_veredicto"] == pc.QA_EN_CURSO  # intacto
 
 
-def test_reaper_qa_zombi_saltada_con_validacion_apagada(entorno, monkeypatch):
-    """Con la etapa de Verificar APAGADA, el zombi pasa a 'saltada' (REDACTAR lo recoge), no a re-criba."""
+def test_reaper_qa_atascada_saltada_con_validacion_apagada(entorno, monkeypatch):
+    """Con la etapa de Verificar APAGADA, el atascada pasa a 'saltada' (REDACTAR lo recoge), no a re-criba."""
     from keni_consola import reaper_generaciones
 
     monkeypatch.delenv("KENI_PIPELINE_VERIFICAR", raising=False)  # etapa off (def)
-    zombi = _tema_pipeline(titulo="Zombi sin QA", verificar_veredicto=pc.QA_EN_CURSO)
-    _envejecer_actualizado(zombi["id"])
+    atascada = _tema_pipeline(titulo="Zombi sin QA", verificar_veredicto=pc.QA_EN_CURSO)
+    _envejecer_actualizado(atascada["id"])
 
-    n = reaper_generaciones._sanear_qa_en_curso()
+    n = reaper_generaciones._reparar_qa_en_curso()
 
     assert n == 1
-    assert repos.obtener_contenido(zombi["id"])["verificar_veredicto"] == pc.QA_SALTADA
+    assert repos.obtener_contenido(atascada["id"])["verificar_veredicto"] == pc.QA_SALTADA
 
 
 def test_ejecutar_arte_fallo_masivo_emite_un_error_agregado(entorno, monkeypatch, caplog):

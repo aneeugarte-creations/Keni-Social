@@ -113,7 +113,7 @@ def test_endurecer_qa_fuente_barato_por_defecto(monkeypatch):
 
 
 def test_qa_en_curso_ttl_configurable_con_minimo(monkeypatch):
-    """El TTL del saneador de `en_curso` zombi es configurable, con suelo de 5 min.
+    """El TTL del reparador de `en_curso` atascada es configurable, con suelo de 5 min.
 
     El suelo evita que un TTL absurdo resetee QAs VIVAS (debe superar el timeout de la criba).
     """

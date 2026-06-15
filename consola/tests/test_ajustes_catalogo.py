@@ -71,7 +71,7 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         # diario + margen manual. Editables en caliente desde el Monitor.
         config.ENV_GENERACION_PAUSADA,
         config.ENV_PRESUPUESTO_TOKENS_DIA, config.ENV_PRESUPUESTO_MARGEN_MANUAL,
-        # Listón de auto-producción del ranking de noticias (umbrales de promoción a tema)
+        # Umbral de auto-producción del ranking de noticias (umbrales de promoción a tema)
         # + maduración y cupos de volumen (día móvil / franja horaria).
         config.ENV_PROMOVER_MIN_SCORE, config.ENV_PROMOVER_MIN_MARCA,
         config.ENV_PROMOVER_MADURACION_MIN,
@@ -224,7 +224,7 @@ def test_noticias_reparto_en_secciones(store):
     """Los ajustes del motor de noticias se reparten EXACTAMENTE en los grupos de la sección
     «Investigación» del drawer del Monitor. Tras la auditoría 2026-06 solo quedan los
     controles de OPERACIÓN: el filtro editorial de entrada, el master de rendimiento, el
-    listón/cupos de producción automática y el TTL del perfil editorial. Los pesos del
+    umbral/cupos de producción automática y el TTL del perfil editorial. Los pesos del
     score, los umbrales de clustering/última hora y el batch/concurrencia de ingesta se
     degradaron a solo-env (siguen vivos en `config`, fuera de la UI)."""
     reparto = {
@@ -234,7 +234,7 @@ def test_noticias_reparto_en_secciones(store):
         "noticias_rendimiento": {
             config.ENV_RENDIMIENTO_RANKING,
         },
-        # Listón de auto-producción (dominio.agrupar.evaluar_liston): umbrales que deciden
+        # Umbral de auto-producción (dominio.agrupar.evaluar_umbral): umbrales que deciden
         # qué historias del pool disparan QA+copy automáticos (coste real de tokens).
         "noticias_produccion": {
             config.ENV_PROMOVER_MIN_SCORE,

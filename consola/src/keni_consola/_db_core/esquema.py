@@ -698,7 +698,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         worker      TEXT NOT NULL DEFAULT '',
         -- FECHAS NATIVAS (migracion 0033): timestamptz, UTC. `creado` ordena el despacho
         -- (FIFO por prioridad); `claimed_at` es NULL mientras el job no se ha reclamado (antes
-        -- el sentinel ''). El re-reclamo de huerfanos compara `claimed_at` de forma nativa.
+        -- el sentinel ''). El re-reclamo de sueltos compara `claimed_at` de forma nativa.
         creado      timestamptz,
         claimed_at  timestamptz
     )
@@ -758,7 +758,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # YAML (fuente de verdad del DETALLE: prompt/razonamiento/stream). Listar Actividad IA /
     # Pipelines parseaba TODOS los ~2000 YAML por peticion. Este indice replica los campos LIGEROS
     # del listado para paginar por SQL sin tocar disco; el YAML se lee solo para el detalle. Lo
-    # mantiene `generaciones._almacen` al crear/actualizar/borrar/podar (best-effort; el YAML
+    # mantiene `generaciones._almacen` al crear/actualizar/borrar/purgar (best-effort; el YAML
     # manda) y un backfill idempotente al primer uso. `payload` (jsonb) = el dict publico ligero
     # (sin prompt/razonamiento) que devuelve `listar`. Migracion 0032 para BDs ya creadas.
     """

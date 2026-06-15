@@ -13,7 +13,7 @@ SOLUCION
 ========
 Un hilo demonio que barre periodicamente (y al arrancar) las generaciones `ejecutando` cuyo
 `fecha_inicio` es mas viejo que `KENI_GENERACIONES_TTL_HORAS` (def 1 h) y las cierra como
-`error`/`interrumpido` (`generaciones.reclamar_zombis`). El TTL es MUY superior al wall-timeout
+`error`/`interrumpido` (`generaciones.reclamar_atascadas`). El TTL es MUY superior al wall-timeout
 (~10 min), asi una generacion realmente viva nunca se marca por error. El barrido al arrancar
 limpia de inmediato los sueltos que dejo el crash/deploy anterior.
 
@@ -51,7 +51,7 @@ def _ttl_qa_en_curso_seg() -> int:
     return _FACTOR_TTL_QA_EN_CURSO * (config.qa_fuente_timeout() or config.claude_timeout())
 
 
-def _sanear_qa_en_curso() -> int:
+def _reparar_qa_en_curso() -> int:
     """Reparación de temas del pipeline COLGADOS en `verificar_veredicto='en_curso'`. Devuelve cuántos tocó.
 
     La fase QA marca el tema `en_curso` ANTES de lanzar la criba; si el lanzamiento o la
@@ -61,7 +61,7 @@ def _sanear_qa_en_curso() -> int:
       - etapa Verificar ACTIVA para la marca -> se resetea a "" (re-criba en el barrido);
       - APAGADA (`KENI_PIPELINE_VERIFICAR` off, global o `::marca`) -> se marca `saltada`
         (CD lo recoge sin re-cribar; re-cribar con la etapa apagada lo dejaría colgado otra vez).
-    WARN por tema (tema_id + marca + destino). El worker además sanea en caliente al cerrar un
+    WARN por tema (tema_id + marca + destino). El worker además repara en caliente al cerrar un
     job de QA en error; esto es la red para las muertes no limpias.
     """
     from . import repos
@@ -103,17 +103,17 @@ def ejecutar_barrido() -> int:
     """Un barrido: reclama las colgadas y BORRA registros viejos. Devuelve cuantas colgadas cerro.
 
     Dos reparaciones en el mismo tick (reusa el scheduling del reaper, no abre un proceso
-    nuevo): (1) cierra las `ejecutando` sueltas (`reclamar_zombis`); (2) BORRA los registros
-    YAML fuera de la politica de retencion (`podar_generaciones`, #128), que acota disco +
+    nuevo): (1) cierra las `ejecutando` sueltas (`reclamar_atascadas`); (2) BORRA los registros
+    YAML fuera de la politica de retencion (`purgar_generaciones`, #128), que acota disco +
     el escaneo de `_todas_ordenadas`. El borrado es best-effort y NO afecta al valor devuelto
     (que sigue siendo el numero de colgadas cerradas, contrato del reaper); un fallo se loguea
-    y no aborta el barrido (asi un problema de borrado nunca impide reclamar zombis).
+    y no aborta el barrido (asi un problema de borrado nunca impide reclamar atascadas).
     """
-    n = generaciones.reclamar_zombis(config.generaciones_ttl_seg())
+    n = generaciones.reclamar_atascadas(config.generaciones_ttl_seg())
     if n:
         _log.info("Reaper de generaciones: %d generacion(es) colgada(s) cerrada(s) como error.", n)
     try:
-        generaciones.podar_generaciones()
+        generaciones.purgar_generaciones()
     except Exception:  # noqa: BLE001 -- el borrado es best-effort; no debe tumbar el barrido
         _log.warning("Reaper de generaciones: fallo el borrado de registros viejos.", exc_info=True)
     # Tercera reparación: lotes de cajones COLGADOS atascados en `parseando`. Si el worker muere
@@ -127,16 +127,16 @@ def ejecutar_barrido() -> int:
         umbral = iso_utc(
             datetime.now(UTC) - timedelta(seconds=config.generaciones_ttl_seg())
         )
-        m = repos.sanear_lotes_parseando_huerfanos(umbral)
+        m = repos.reparar_lotes_parseando_sueltos(umbral)
         if m:
             _log.info("Reaper de generaciones: %d lote(s) de cajón colgado reconciliado(s).", m)
     except Exception:  # noqa: BLE001 -- reparación aditiva; un fallo no debe tumbar el barrido
         _log.warning("Reaper de generaciones: fallo la reparación de lotes de cajón.", exc_info=True)
     # Cuarta reparación: temas del pipeline COLGADOS en `verificar_veredicto='en_curso'` (detalle en
-    # `_sanear_qa_en_curso`): TTL derivado del timeout real de la criba (~2×) y, con la etapa
+    # `_reparar_qa_en_curso`): TTL derivado del timeout real de la criba (~2×) y, con la etapa
     # de Validación apagada, el colgado pasa a `saltada` (CD lo recoge) en vez de re-cribarse.
     try:
-        z = _sanear_qa_en_curso()
+        z = _reparar_qa_en_curso()
         if z:
             _log.info(
                 "Reaper de generaciones: %d tema(s) con QA 'en_curso' colgada reparado(s).", z

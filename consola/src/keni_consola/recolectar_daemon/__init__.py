@@ -46,7 +46,7 @@ from .. import (  # noqa: F401  (re-export de superficie pública)
     db,
     generaciones,
     marcas,
-    noticias_liston,
+    noticias_umbral,
     repos,
 )
 from ..dominio import (  # noqa: F401  (re-export de superficie pública)

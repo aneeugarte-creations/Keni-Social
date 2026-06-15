@@ -7,7 +7,7 @@ subproceso de python que emite NDJSON canned). Cubre:
   - Worker: clava un job y corre el runner (con #137) -> el registro completa y el
     post-procesado real corre (historial/publicaciones).
   - Reclamacion concurrente NO doble-ejecuta un mismo job (varios hilos worker).
-  - Cancelacion cross-proceso mata el ARBOL (proceso que lanza un hijo; sin huerfanos).
+  - Cancelacion cross-proceso mata el ARBOL (proceso que lanza un hijo; sin sueltos).
   - Reiniciar el back NO mata un job en vuelo del worker (el proceso sigue vivo).
 
 Las pruebas que ejercitan el subproceso real usan `_LANZAR_CLAUDE_REAL` (referencia
@@ -210,7 +210,7 @@ def test_encolar_gen_id_con_fila_terminada_resucita_el_job(entorno):
     assert clavado["spec"]["prompt"] == "v2"  # corre el trabajo NUEVO
 
 
-def test_reclama_job_huerfano_de_worker_muerto(entorno):
+def test_reclama_job_suelto_de_worker_muerto(entorno):
     """Un job `reclamado` cuyo worker murio (claimed_at viejo) lo RE-RECLAMA otro worker.
 
     Un job recien reclamado (worker vivo) NO se re-reclama: solo al pasar el umbral.
@@ -221,7 +221,7 @@ def test_reclama_job_huerfano_de_worker_muerto(entorno):
     assert primero is not None
     # Recien reclamado: un segundo worker NO lo roba (el primero podria seguir vivo).
     assert cola.reclamar("worker-2") is None
-    # Envejecemos `claimed_at` mas alla del umbral de huerfano (wall-timeout + margen).
+    # Envejecemos `claimed_at` mas alla del umbral de suelto (wall-timeout + margen).
     viejo = (
         datetime.now()
         - timedelta(seconds=config.claude_timeout() + db_jobs._RECLAIM_STALE_MARGEN_S + 60)
@@ -277,7 +277,7 @@ def test_reclamar_pendiente_no_lee_yaml_de_generacion(entorno, monkeypatch):
     """RENDIMIENTO: clavar un job `pendiente` NO lee el YAML de generacion (cero disco bajo lock).
 
     La guardia anti-duplicado (`_gen_ya_terminal`, que parsea un YAML) SOLO aplica a los
-    huerfanos. Un `pendiente` nunca corrio su post-procesado, asi que no debe pagar ese I/O —
+    sueltos. Un `pendiente` nunca corrio su post-procesado, asi que no debe pagar ese I/O —
     y, sobre todo, no debe hacerlo mientras retiene el `FOR UPDATE` de la fila.
     """
     llamadas = {"n": 0}
@@ -293,8 +293,8 @@ def test_reclamar_pendiente_no_lee_yaml_de_generacion(entorno, monkeypatch):
     assert llamadas["n"] == 0, "clavar un pendiente no debe leer el YAML de generacion"
 
 
-def test_huerfano_con_registro_terminal_se_cierra_sin_relanzar(entorno):
-    """La guardia anti-duplicado: un huerfano cuyo registro YA es terminal se cierra sin correr.
+def test_suelto_con_registro_terminal_se_cierra_sin_relanzar(entorno):
+    """La guardia anti-duplicado: un suelto cuyo registro YA es terminal se cierra sin correr.
 
     Tras el commit del claim (fuera del lock) se comprueba el estado del registro; si es
     terminal (su post-procesado ya corrio antes de que el worker muriera), el job se marca
@@ -305,7 +305,7 @@ def test_huerfano_con_registro_terminal_se_cierra_sin_relanzar(entorno):
     primero = cola.reclamar("w1")
     assert primero is not None
     # El registro alcanza un estado TERMINAL (el post-procesado ya corrio) y el worker MUERE
-    # sin cerrar el job: queda `reclamado` con claimed_at viejo (huerfano).
+    # sin cerrar el job: queda `reclamado` con claimed_at viejo (suelto).
     generaciones.actualizar(gen["id"], {"estado": generaciones.ESTADO_COMPLETADO})
     _envejecer_claim(primero["id"])
     # El re-reclamo NO lo devuelve (su trabajo ya se hizo) y lo deja cerrado.
@@ -314,7 +314,7 @@ def test_huerfano_con_registro_terminal_se_cierra_sin_relanzar(entorno):
 
 
 def _envejecer_claim(job_id: str) -> None:
-    """Retrasa `claimed_at` mas alla del umbral de huerfano (simula un worker muerto)."""
+    """Retrasa `claimed_at` mas alla del umbral de suelto (simula un worker muerto)."""
     viejo = (
         datetime.now()
         - timedelta(seconds=config.claude_timeout() + db_jobs._RECLAIM_STALE_MARGEN_S + 60)
@@ -327,11 +327,11 @@ def _envejecer_claim(job_id: str) -> None:
         con.close()
 
 
-def test_huerfano_agota_intentos_y_se_descarta(entorno, monkeypatch):
+def test_suelto_agota_intentos_y_se_descarta(entorno, monkeypatch):
     """ANTI CRASH-LOOP: un job que mata repetidamente a su worker NO se re-reclama para siempre.
 
     Con KENI_JOBS_MAX_INTENTOS=2: intento 1 (reclamo normal) + intento 2 (re-reclamo de
-    huerfano); al quedar huerfano OTRA vez, el siguiente reclamo lo DESCARTA: cierra el job
+    suelto); al quedar suelto OTRA vez, el siguiente reclamo lo DESCARTA: cierra el job
     (libera el cupo) y deja el registro en error claro con motivo `interrumpido`.
     """
     monkeypatch.setenv("KENI_JOBS_MAX_INTENTOS", "2")
@@ -341,7 +341,7 @@ def test_huerfano_agota_intentos_y_se_descarta(entorno, monkeypatch):
     primero = cola.reclamar("w1")  # intento 1
     assert primero is not None
     _envejecer_claim(primero["id"])
-    segundo = cola.reclamar("w2")  # intento 2 (re-reclamo de huerfano)
+    segundo = cola.reclamar("w2")  # intento 2 (re-reclamo de suelto)
     assert segundo is not None and segundo["id"] == primero["id"]
     _envejecer_claim(primero["id"])
 
@@ -809,7 +809,7 @@ def test_worker_inproceso_procesa_un_job(entorno, monkeypatch, pool_limpio):
 
 
 # --------------------------------------------------------------------------- #
-# CANCELACION cross-proceso: mata el ARBOL (sin huerfanos)                     #
+# CANCELACION cross-proceso: mata el ARBOL (sin sueltos)                     #
 # --------------------------------------------------------------------------- #
 
 
@@ -828,7 +828,7 @@ def test_cancelacion_cross_proceso_mata_el_arbol(entorno, monkeypatch):
 
     Simula el camino hosted: el back marca `cola.cancelar(gen_id)` (cross-proceso) y el
     vigia del worker lo ve y mata el arbol del subproceso `claude` (que lanzo un hijo). El
-    hijo debe morir (sin huerfanos) y el registro quedar `cancelado`.
+    hijo debe morir (sin sueltos) y el registro quedar `cancelado`.
     """
     monkeypatch.setattr(generaciones.shutil, "which", lambda _n: "/usr/bin/claude")
 
@@ -950,7 +950,7 @@ def test_esperar_terminal_despierta_por_senal_sin_sondear_disco(entorno, monkeyp
     assert lecturas["n"] <= 3, f"sondeo de disco excesivo ({lecturas['n']} lecturas)"
 
 
-def test_sanear_qa_si_fallo_devuelve_el_tema_a_recriba(entorno):
+def test_reparar_qa_si_fallo_devuelve_el_tema_a_recriba(entorno):
     """Un job de QA-FUENTE que termina en ERROR resetea el sentinel `en_curso` del tema.
 
     CIERRA EL ZOMBI: la fase QA marca `en_curso` ANTES de lanzar y solo el `procesar` (exito)
@@ -970,14 +970,14 @@ def test_sanear_qa_si_fallo_devuelve_el_tema_a_recriba(entorno):
     }
     gen = generaciones.crear({"tipo": "pipeline", "marca": _MARCA, "etiqueta": "VERIFICAR"})
 
-    # Registro aun NO en error: el saneo no toca el sentinel (la QA podria seguir viva).
+    # Registro aun NO en error: el reparación no toca el sentinel (la QA podria seguir viva).
     generaciones.actualizar(gen["id"], {"estado": generaciones.ESTADO_COMPLETADO})
-    worker._sanear_qa_si_fallo(gen["id"], spec)
+    worker._reparar_qa_si_fallo(gen["id"], spec)
     assert repos.obtener_contenido(tema["id"])["verificar_veredicto"] == pc.QA_EN_CURSO
 
-    # Registro en ERROR: el saneo devuelve el tema a "" (re-criba en el proximo barrido).
+    # Registro en ERROR: el reparación devuelve el tema a "" (re-criba en el proximo barrido).
     generaciones.actualizar(gen["id"], {"estado": generaciones.ESTADO_ERROR})
-    worker._sanear_qa_si_fallo(gen["id"], spec)
+    worker._reparar_qa_si_fallo(gen["id"], spec)
     assert (repos.obtener_contenido(tema["id"])["verificar_veredicto"] or "") == ""
 
 

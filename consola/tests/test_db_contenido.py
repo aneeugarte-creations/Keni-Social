@@ -147,7 +147,7 @@ def test_borrar_publicacion_suelta_borra_el_padre(entorno):
     padre_id = db.obtener_contenido_plataforma(pub["id"])["contenido_id"]
 
     assert db.borrar_publicacion(pub["id"]) is True
-    # La fila y su padre 1:1 desaparecen (no queda un contenido huerfano y vacio).
+    # La fila y su padre 1:1 desaparecen (no queda un contenido suelto y vacio).
     assert db.obtener_publicacion(pub["id"]) is None
     assert db.obtener_contenido(padre_id) is None
 

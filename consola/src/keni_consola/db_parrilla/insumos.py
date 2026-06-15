@@ -155,14 +155,14 @@ def borrar_insumo_lote(lote_id: str) -> bool:
         con.close()
 
 
-def sanear_lotes_parseando_huerfanos(antes_de: str) -> int:
+def reparar_lotes_parseando_sueltos(antes_de: str) -> int:
     """Reconcilia lotes atascados en `parseando` creados antes de `antes_de` (ISO).
 
     Un lote nace `parseando` y solo pasa a `listo`/`error` cuando el worker termina su
     callback (inserta ítems y actualiza el lote). Si el PROCESO muere entre el INSERT de
     los ítems y ese UPDATE (deploy, OOM, worker matado), el lote queda `parseando` PARA
     SIEMPRE: el SPA muestra "Procesando con Haiku…" indefinidamente y el lote ni siquiera
-    es borrable (la UI solo ofrece borrar lotes terminales). Esto barre esos huérfanos:
+    es borrable (la UI solo ofrece borrar lotes terminales). Esto barre esos sueltos:
     si ya tienen ítems insertados → `listo` (+ `total_items` real); si no → `error`.
 
     `antes_de` es un umbral ISO (típicamente `now - TTL`) para NO tocar un parseo realmente
@@ -174,7 +174,7 @@ def sanear_lotes_parseando_huerfanos(antes_de: str) -> int:
             f"{_SELECT_INSUMO_LOTE} WHERE estado = ? AND creado < ?",  # noqa: S608 -- allowlist fija
             ("parseando", antes_de),
         ).fetchall()
-        saneados = 0
+        reparados = 0
         for fila in filas:
             lote_id = fila["id"]
             n = con.execute(
@@ -190,9 +190,9 @@ def sanear_lotes_parseando_huerfanos(antes_de: str) -> int:
                     "UPDATE insumos_lote SET estado = ?, error = ? WHERE id = ?",
                     ("error", "Parseo interrumpido (worker reiniciado); sin ítems.", lote_id),
                 )
-            saneados += 1
+            reparados += 1
         con.commit()
-        return saneados
+        return reparados
     finally:
         con.close()
 

@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 _log = logging.getLogger("keni_consola.copy")
 
 # --------------------------------------------------------------------------- #
-# Cosecha de IMAGENES de salida (skills/prompts de imagen)                     #
+# Recolección de IMAGENES de salida (skills/prompts de imagen)                     #
 # --------------------------------------------------------------------------- #
 
 # Extensiones de imagen que reconocemos en la salida.
@@ -54,7 +54,7 @@ def _rutas_imagen_en_texto(salida: str) -> list[str]:
     return vistas
 
 
-def cosechar_imagenes(salida: str) -> list[dict[str, str]]:
+def recolectar_imagenes(salida: str) -> list[dict[str, str]]:
     """Importa al almacen de media las imagenes que la salida menciona por ruta.
 
     Tolerante: una ruta inexistente o no importable se OMITE (la previsualizacion es un
@@ -625,7 +625,7 @@ def construir_procesar_copy(
             "avisos_voz": avisos_voz,
         }
         if con_imagenes:
-            resultado["imagenes"] = cosechar_imagenes(salida)
+            resultado["imagenes"] = recolectar_imagenes(salida)
         return resultado
 
     return procesar
@@ -662,7 +662,7 @@ def construir_procesar_documento(
             "publicaciones": [],
         }
         if con_imagenes:
-            resultado["imagenes"] = cosechar_imagenes(salida)
+            resultado["imagenes"] = recolectar_imagenes(salida)
         return resultado
 
     return procesar

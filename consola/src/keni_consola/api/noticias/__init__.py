@@ -38,7 +38,7 @@ from starlette.routing import Route
 
 from ._comun import _item_a_dict, _redes_iniciales, _validar_marca
 from .historias import (
-    _evaluar_liston,
+    _evaluar_umbral,
     _fuentes_timeline,
     _historia_a_dict,
     _pesos_score_publicos,
@@ -94,7 +94,7 @@ __all__ = [
     "_fuentes_timeline",
     "_pieza_estado",
     "_pieza_estado_de",
-    "_evaluar_liston",
+    "_evaluar_umbral",
     "_pesos_score_publicos",
 ]
 

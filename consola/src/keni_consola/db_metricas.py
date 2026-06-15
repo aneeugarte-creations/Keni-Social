@@ -104,7 +104,7 @@ def ultimo_snapshot_comercial(publicacion_id: str) -> dict[str, Any] | None:
 # del modulo comercial). Habilita analisis temporales por marca×red×formato. Relacion con
 # las otras dos series: `metricas_cache` guarda el valor ACTUAL (sobrescrito); esta guarda
 # la SERIE; `comercial_snapshots` sigue para el seguimiento de OBJETIVOS comerciales. Ver
-# ADR 0007. El crecimiento lo acota la limpieza por retencion (`podar_snapshots_piezas`).
+# ADR 0007. El crecimiento lo acota la limpieza por retencion (`purgar_snapshots_piezas`).
 
 # Metricas que el snapshot por pieza captura ademas de la clave (pieza/marca/red/formato/ts).
 # Una sola tupla DRY mantiene alineados INSERT y SELECT: anadir una metrica = anadir aqui +
@@ -281,7 +281,7 @@ def listar_snapshots_piezas(
     return [_fila_a_snapshot_pieza(f) for f in filas]
 
 
-def podar_snapshots_piezas(retencion_dias: int, ahora_iso: str) -> int:
+def purgar_snapshots_piezas(retencion_dias: int, ahora_iso: str) -> int:
     """Borra los snapshots por pieza con `ts` < (`ahora_iso` - `retencion_dias`). Devuelve nº borrados.
 
     El corte se calcula a partir del `ahora_iso` que pasa el LLAMANTE (el daemon ya tiene un

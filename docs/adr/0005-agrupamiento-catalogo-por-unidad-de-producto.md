@@ -1,6 +1,6 @@
 # ADR 0005 — Agrupamiento del catálogo por unidad de producto (A/B/C) + shell
 
-- **Estado:** Aceptado e implementado (2026-05-29) — manifests + catálogo data-driven + lint de fronteras + seams saneados + `FuenteMetricol` en `main`.
+- **Estado:** Aceptado e implementado (2026-05-29) — manifests + catálogo data-driven + lint de fronteras + seams reparados + `FuenteMetricol` en `main`.
 - **Fecha:** 2026-05-29
 - **Decisores:** equipo keni-social / innovación
 - **Componente:** organización del catálogo de apps (`consola/`)
@@ -92,7 +92,7 @@ fronteras los codifica como allowlist explícita:
 1. **A → C (handoff de contenido):** una generación de copy puede crear un *borrador* en
    `publicaciones`. Va por endpoint/evento del gateway, no import.
 2. **`reciclaje` (A) lee `publicaciones` (C):** consume la API de lectura de C; hoy importa de C
-   y hay que sanearlo (T1.1 del plan).
+   y hay que repararlo (T1.1 del plan).
 3. **`panel` (shell) lee métricas (B) + cola de aprobación (C):** el shell agrega por las fachadas
    de solo-lectura (`keni_metricas.servicio` y la cola de C). Cruce shell→app permitido.
 4. **`media` (shell)** la consumen A (generar/adjuntar) y C (adjuntar): media es shell.
@@ -148,7 +148,7 @@ tocada + el contrato + `keni-shared`**:
 - **Disciplina de fronteras.** Sin el lint que codifica estos seams, la decisión degenera en
   monolito enmarañado. El lint es parte de la Fase 0 del plan, no opcional.
 - **Clasificación de `reciclaje` y `panel`.** Son los dos módulos con cruce real hoy; el plan los
-  trata como tareas de saneo explícitas (T1.1, T1.2) antes de declarar las fronteras "limpias".
+  trata como tareas de reparación explícitas (T1.1, T1.2) antes de declarar las fronteras "limpias".
 
 ## Enlaces
 

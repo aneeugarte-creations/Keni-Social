@@ -35,7 +35,7 @@ from .clusters import (
     marcar_cluster_traducido,
     marcar_items_cluster_usados,
     obtener_noticia_cluster,
-    sanear_qa_clusters_en_curso,
+    reparar_qa_clusters_en_curso,
     upsert_noticia_cluster,
 )
 from .fuentes_algoritmo import (
@@ -145,7 +145,7 @@ __all__ = [
     "marcar_cluster_traducido",
     "marcar_items_cluster_usados",
     "obtener_noticia_cluster",
-    "sanear_qa_clusters_en_curso",
+    "reparar_qa_clusters_en_curso",
     "upsert_noticia_cluster",
     # Fuentes de algoritmo
     "actualizar_fuente_algoritmo",

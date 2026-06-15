@@ -1,9 +1,9 @@
-"""Tests OFFLINE de la GC de media huerfana (`dominio.media_gc` + daemon).
+"""Tests OFFLINE de la GC de media suelta (`dominio.media_gc` + daemon).
 
 Mockean `almacen_media.listar_objetos`/`borrar_objeto` y los repos de referencias
 (`listar_publicaciones`, `listar_publicaciones_comerciales`, `listar_media_catalogo`),
-asi NO necesitan Postgres ni almacen real. Verifican la definicion CONSERVADORA de huerfano:
-no borra referenciados, ni catalogados, ni recientes (umbral); SI borra el huerfano viejo; y
+asi NO necesitan Postgres ni almacen real. Verifican la definicion CONSERVADORA de suelto:
+no borra referenciados, ni catalogados, ni recientes (umbral); SI borra el suelto viejo; y
 `dry_run` no toca nada. Mas un test de que el daemon respeta el gate (`KENI_MEDIA_GC` off).
 """
 
@@ -44,7 +44,7 @@ _NUEVO = _AHORA - 1 * 3600.0
 
 @pytest.fixture
 def repos_vacios(monkeypatch):
-    """Por defecto: sin publicaciones, sin comerciales, sin texto (todo huerfano)."""
+    """Por defecto: sin publicaciones, sin comerciales, sin texto (todo suelto)."""
     monkeypatch.setattr(media_gc.repos, "listar_publicaciones", lambda *a, **k: [])
     monkeypatch.setattr(
         media_gc.repos, "listar_publicaciones_comerciales", lambda *a, **k: []
@@ -107,11 +107,11 @@ def test_gc_no_falla_si_catalogo_media_no_existe(monkeypatch):
     )
     monkeypatch.delattr(media_gc.repos, "listar_media_catalogo", raising=False)
     assert media_gc.referencias_vivas() == set()
-    # Y un huerfano viejo se borra igual (sin la red de seguridad de catalogo-media).
-    _objetos(monkeypatch, [("huerfano.png", _VIEJO)])
+    # Y un suelto viejo se borra igual (sin la red de seguridad de catalogo-media).
+    _objetos(monkeypatch, [("suelto.png", _VIEJO)])
     borrados = _captura_borrados(monkeypatch)
     res = media_gc.limpiar(antiguedad_horas=24)
-    assert borrados == ["huerfano.png"] and res["borrados"] == 1
+    assert borrados == ["suelto.png"] and res["borrados"] == 1
 
 
 def test_protege_foto_cruda_de_publicacion(monkeypatch):
@@ -155,7 +155,7 @@ def test_protege_recursos_de_marca_y_plantillas(monkeypatch):
 
 def test_protege_fotos_de_collage(monkeypatch):
     # Fotos de collage: JSON array `[{objeto, foco, zoom}, …]` en el campo `fotos`. Todas
-    # las fotos del collage deben ser referencias vivas (no huérfanas borrables).
+    # las fotos del collage deben ser referencias vivas (no sueltas borrables).
     monkeypatch.setattr(
         media_gc.repos, "listar_publicaciones",
         lambda *a, **k: [
@@ -200,7 +200,7 @@ def test_protege_collage_json_malformado(monkeypatch):
 
 def test_protege_documento_versiones_render_objeto(monkeypatch):
     # Cada versión del documento tiene `render_objeto` (PNG renderizado). Estos PNGs son
-    # referencias vivas (no huérfanos borrables).
+    # referencias vivas (no sueltos borrables).
     def _listar_docs(cid, pid):
         return [
             {
@@ -237,7 +237,7 @@ def test_protege_documento_versiones_render_objeto(monkeypatch):
 
 def test_protege_documento_versiones_media_del_documento(monkeypatch):
     # El JSON `documento` de cada versión contiene referencias a media (capas con objeto,
-    # fondos con imagen.media_id, logos, etc.). Estas referencias son vivas (no huérfanas).
+    # fondos con imagen.media_id, logos, etc.). Estas referencias son vivas (no sueltas).
     doc_v1 = (
         '{"fondo":{"tipo":"imagen","imagen":{"media_id":"fondo-v1.jpg"}},'
         '"capas":[{"tipo":"imagen","objeto":"imagen-v1.png"}]}'
@@ -319,7 +319,7 @@ def test_documento_versiones_malformado_es_ignorado(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# huerfanos / limpiar: la definicion conservadora                              #
+# sueltos / limpiar: la definicion conservadora                              #
 # --------------------------------------------------------------------------- #
 
 
@@ -352,7 +352,7 @@ def test_no_borra_catalogado_en_texto(monkeypatch, repos_vacios):
     assert res["borrados"] == 0 and res["conservados"] == 1
 
 
-def test_no_borra_reciente_aunque_huerfano(monkeypatch, repos_vacios):
+def test_no_borra_reciente_aunque_suelto(monkeypatch, repos_vacios):
     # Sin referencias, pero el objeto es NUEVO (1h < umbral 24h): se conserva.
     _objetos(monkeypatch, [("nuevo.png", _NUEVO)])
     borrados = _captura_borrados(monkeypatch)
@@ -362,17 +362,17 @@ def test_no_borra_reciente_aunque_huerfano(monkeypatch, repos_vacios):
     assert res["borrados"] == 0 and res["conservados"] == 1
 
 
-def test_borra_el_huerfano_viejo(monkeypatch, repos_vacios):
-    _objetos(monkeypatch, [("huerfano.png", _VIEJO)])
+def test_borra_el_suelto_viejo(monkeypatch, repos_vacios):
+    _objetos(monkeypatch, [("suelto.png", _VIEJO)])
     borrados = _captura_borrados(monkeypatch)
 
     res = media_gc.limpiar(antiguedad_horas=24)
-    assert borrados == ["huerfano.png"]
+    assert borrados == ["suelto.png"]
     assert res["borrados"] == 1 and res["conservados"] == 0
-    assert res["nombres"] == ["huerfano.png"] and res["dry_run"] is False
+    assert res["nombres"] == ["suelto.png"] and res["dry_run"] is False
 
 
-def test_mezcla_solo_borra_el_huerfano_viejo(monkeypatch):
+def test_mezcla_solo_borra_el_suelto_viejo(monkeypatch):
     monkeypatch.setattr(
         media_gc.repos, "listar_publicaciones", lambda *a, **k: [{"imagen": "viva.png"}]
     )
@@ -387,8 +387,8 @@ def test_mezcla_solo_borra_el_huerfano_viejo(monkeypatch):
         [
             ("viva.png", _VIEJO),       # referenciada -> conservar
             ("cat.png", _VIEJO),        # catalogada -> conservar
-            ("reciente.png", _NUEVO),   # huerfana pero reciente -> conservar
-            ("basura.png", _VIEJO),     # huerfana y vieja -> BORRAR
+            ("reciente.png", _NUEVO),   # suelta pero reciente -> conservar
+            ("basura.png", _VIEJO),     # suelta y vieja -> BORRAR
         ],
     )
     borrados = _captura_borrados(monkeypatch)
@@ -399,18 +399,18 @@ def test_mezcla_solo_borra_el_huerfano_viejo(monkeypatch):
 
 
 def test_dry_run_no_borra(monkeypatch, repos_vacios):
-    _objetos(monkeypatch, [("huerfano.png", _VIEJO)])
+    _objetos(monkeypatch, [("suelto.png", _VIEJO)])
     borrados = _captura_borrados(monkeypatch)
 
     res = media_gc.limpiar(antiguedad_horas=24, dry_run=True)
     assert borrados == []  # NO se llamo a borrar_objeto
     assert res["dry_run"] is True
     assert res["borrados"] == 0 and res["conservados"] == 0
-    assert res["nombres"] == ["huerfano.png"]
+    assert res["nombres"] == ["suelto.png"]
 
 
 def test_limpiar_robusto_ante_fallo_por_objeto(monkeypatch, repos_vacios):
-    # Dos huerfanos viejos: el primer borrado falla, el segundo debe seguir adelante.
+    # Dos sueltos viejos: el primer borrado falla, el segundo debe seguir adelante.
     _objetos(monkeypatch, [("falla.png", _VIEJO), ("ok.png", _VIEJO)])
     borrados: list[str] = []
 
@@ -474,12 +474,12 @@ def test_daemon_barre_si_gate_encendido(monkeypatch):
 
 
 def test_limpiar_reverifica_referencias_antes_de_borrar(monkeypatch, repos_vacios):
-    """Anti-TOCTOU: si un objeto se vuelve REFERENCIADO entre el calculo de huerfanos y el
+    """Anti-TOCTOU: si un objeto se vuelve REFERENCIADO entre el calculo de sueltos y el
     borrado (una pieza nueva lo fija como imagen), el barrido lo RESCATA (no lo borra)."""
-    _objetos(monkeypatch, [("rescatado.png", _VIEJO), ("huerfano.png", _VIEJO)])
+    _objetos(monkeypatch, [("rescatado.png", _VIEJO), ("suelto.png", _VIEJO)])
     borrados = _captura_borrados(monkeypatch)
 
-    # 1a llamada (dentro de `huerfanos`): nada referenciado. 2a llamada (re-verificacion
+    # 1a llamada (dentro de `sueltos`): nada referenciado. 2a llamada (re-verificacion
     # previa al borrado): "rescatado.png" ya esta referenciado por una pieza nueva.
     llamadas = {"n": 0}
 
@@ -490,7 +490,7 @@ def test_limpiar_reverifica_referencias_antes_de_borrar(monkeypatch, repos_vacio
     monkeypatch.setattr(media_gc, "referencias_vivas", _vivas_cambiantes)
 
     res = media_gc.limpiar(antiguedad_horas=24)
-    assert borrados == ["huerfano.png"]  # el rescatado NO se borro
+    assert borrados == ["suelto.png"]  # el rescatado NO se borro
     assert res["borrados"] == 1
     assert res["conservados"] == 1  # el rescatado cuenta como conservado
     assert "rescatado.png" not in res["nombres"]

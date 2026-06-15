@@ -47,7 +47,7 @@ def _revertir(ids: list[str]) -> None:
 
     Sin transacción cross-fila en la capa de datos (cada borrador se persiste por su
     cuenta): si la creación de una pieza falla a mitad, deshacemos las anteriores para no
-    dejar publicaciones rotas/huérfanas. Tolerante: un borrado que falle no relanza.
+    dejar publicaciones rotas/sueltas. Tolerante: un borrado que falle no relanza.
     """
     for pid in ids:
         try:

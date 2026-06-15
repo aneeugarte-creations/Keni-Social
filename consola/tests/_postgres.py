@@ -104,7 +104,7 @@ _TABLAS = (
     # aserciones de estado/contadores del siguiente.
     "daemon_latidos",
     # Historial por barrido de daemons (observabilidad): sin truncar, las filas de un test
-    # contaminan el listado/poda del siguiente.
+    # contaminan el listado/purga del siguiente.
     "daemon_barridos",
     # Publicaciones y solicitudes de la Biblioteca de Texto (modelo "versión publicada").
     # Sin truncar, un puntero de producción de un test contaminaría el `produccion`/

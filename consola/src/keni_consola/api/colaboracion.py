@@ -120,7 +120,7 @@ async def crear_comentario(request: Request) -> Response:
             return JSONResponse({"error": "Esa plataforma no es de este contenido."}, status_code=400)
 
     # Menciones (@): ids de usuario unicos y no vacios (cap defensivo). El front los manda
-    # resueltos por el autocompletado; aqui solo saneamos la forma.
+    # resueltos por el autocompletado; aqui solo reparamos la forma.
     menciones_raw = datos.get("menciones")
     menciones = (
         list(dict.fromkeys(m for m in menciones_raw if isinstance(m, str) and m.strip()))[:20]

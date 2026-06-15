@@ -284,7 +284,7 @@ def esperar(proc: subprocess.Popen, timeout: int) -> bool:
     """Espera al proceso con wall-timeout; si lo supera mata el ARBOL y devuelve True.
 
     PERMANENTE (#137): el timeout ahora mata el GRUPO de procesos (via `matar_arbol`), no
-    solo el padre, para no dejar herramientas hijas huerfanas. Al cerrar, si el proceso
+    solo el padre, para no dejar herramientas hijas sueltas. Al cerrar, si el proceso
     acabo con returncode != 0, loguea su stderr (`_loguear_stderr`) para no perder el
     motivo del fallo (antes iba a DEVNULL).
     """

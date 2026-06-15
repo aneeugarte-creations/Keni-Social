@@ -76,14 +76,14 @@ mismo reloj del daemon (`ahora.isoformat`), lo que da la idempotencia por `(piez
 escritura es **best-effort**: si falla, se loguea y el refresco continúa (el cache ya quedó
 actualizado).
 
-### Retención y poda
+### Retención y purga
 
 Tras cada barrido, `refrescar_piezas_recientes` dispara
-`repos.podar_snapshots_piezas(retención, ahora_iso)`, que borra las filas con
+`repos.purgar_snapshots_piezas(retención, ahora_iso)`, que borra las filas con
 `ts < (ahora − retención)`. La retención es configurable
 (`KENI_METRICAS_HISTORICO_RETENCION_DIAS`, **default 90 días**). El "ahora" lo pasa el
 llamante (el daemon ya tiene un reloj): **db.py no genera la hora del sistema**, para que la
-poda sea testeable de forma determinista.
+purga sea testeable de forma determinista.
 
 ### Cadencia y crecimiento acotado
 
@@ -91,7 +91,7 @@ La cadencia es la del daemon (**4h**), que ya casa con el TTL del cache por piez
 rendimiento de un post no cambia minuto a minuto, y 6 puntos/día capturan bien la curva de las
 primeras horas/días (la fase interesante). Con 90 días de retención son ~540 puntos por pieza
 viva; el daemon solo refresca las piezas de los últimos 30 días, así que las piezas frías
-dejan de recibir puntos nuevos y la poda las vacía progresivamente. El crecimiento queda
+dejan de recibir puntos nuevos y la purga las vacía progresivamente. El crecimiento queda
 **acotado** por (piezas activas) × (puntos en la ventana de retención), no es ilimitado.
 
 ### Relación con las otras dos series
@@ -114,7 +114,7 @@ dejan de recibir puntos nuevos y la poda las vacía progresivamente. El crecimie
 
 **Negativas / coste a asumir**
 
-- Una tabla más que crece con la actividad (acotada, pero no nula). Mitigado por la poda.
+- Una tabla más que crece con la actividad (acotada, pero no nula). Mitigado por la purga.
 - Best-effort en la escritura: en un fallo transitorio se puede perder un punto puntual de
   una pieza; aceptable (la serie es densa y el siguiente barrido recupera la tendencia).
 - El solape de datos con `comercial_snapshots` para las piezas comerciales es deliberado

@@ -5,7 +5,7 @@ Submódulo interno del paquete `generaciones`. El registro YAML es la FUENTE DE 
 sondeo; aquí vive todo lo que LEE/ESCRIBE ese store (un `<id>.yaml` por generación) y las
 políticas que lo acotan (limpieza #128, recolector de `ejecutando` colgadas). El `__init__.py`
 re-exporta la superficie pública estable (`crear`, `actualizar`, `obtener`, `listar`,
-`contar`, `crear_idempotente`, `podar_generaciones`, `reclamar_zombis`, `raiz`,
+`contar`, `crear_idempotente`, `purgar_generaciones`, `reclamar_atascadas`, `raiz`,
 `clave_idempotencia`).
 
 SEGURIDAD: escritura atomica (tmp + os.replace); el id de un registro se valida contra
@@ -55,9 +55,9 @@ __all__ = [
     "crear_idempotente",
     "listar",
     "obtener",
-    "podar_generaciones",
+    "purgar_generaciones",
     "raiz",
-    "reclamar_zombis",
+    "reclamar_atascadas",
     "_RETENCION_DIAS_DEF",
     "_RETENCION_MAX_DEF",
     "_TIPO",
@@ -92,7 +92,7 @@ def raiz() -> Path:
 
 
 def _ruta(gen_id: str) -> Path:
-    """Ruta `<raiz>/<id>.yaml` saneada (solo el nombre base; anti-traversal)."""
+    """Ruta `<raiz>/<id>.yaml` reparada (solo el nombre base; anti-traversal)."""
     base = raiz()
     seguro = Path(gen_id).name
     if not seguro or seguro != gen_id or seguro in (".", ".."):
@@ -331,7 +331,7 @@ def clave_idempotencia(*partes: Any) -> str:
 
 
 def _ruta_idem(clave: str) -> Path:
-    """Ruta `<raiz>/idem-<clave>.idx` saneada (solo hex; anti-traversal). El indice clave->gen_id."""
+    """Ruta `<raiz>/idem-<clave>.idx` reparada (solo hex; anti-traversal). El indice clave->gen_id."""
     base = raiz()
     seguro = re.sub(r"[^0-9a-f]", "", (clave or "").lower())
     if not seguro:
@@ -488,7 +488,7 @@ def _todas_ordenadas() -> list[dict[str, Any]]:
 
     Las generaciones NO viven en el indice SQLite (son estado efimero de ejecucion en
     su propio almacen), asi que el orden/recorte se hace en memoria sobre el glob. El
-    volumen lo ACOTA la limpieza de retencion (`podar_generaciones`, #128): sin ella el
+    volumen lo ACOTA la limpieza de retencion (`purgar_generaciones`, #128): sin ella el
     almacen y este escaneo crecian sin tope. Con la limpieza activa el conjunto queda en el
     orden de `KENI_GENERACIONES_RETENCION_MAX` (def 2000), un escaneo barato.
 
@@ -607,7 +607,7 @@ def _entero_env(nombre: str, defecto: int, *, minimo: int = 0) -> int:
     return valor if valor >= minimo else defecto
 
 
-def podar_generaciones(
+def purgar_generaciones(
     *,
     dias: int | None = None,
     maximo: int | None = None,
@@ -679,7 +679,7 @@ def podar_generaciones(
     return podados
 
 
-def reclamar_zombis(max_edad_seg: float, *, ahora: datetime | None = None) -> int:
+def reclamar_atascadas(max_edad_seg: float, *, ahora: datetime | None = None) -> int:
     """Marca como `error` (interrumpida) las generaciones colgadas en `ejecutando`.
 
     Una generacion nace `ejecutando` y solo pasa a terminal cuando corre su finalizador. Si

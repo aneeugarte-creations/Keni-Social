@@ -118,7 +118,7 @@ def test_nombre_de_sweep_alias():
     assert latidos.nombre_de_sweep(sweep) == "test_latidos"
     assert latidos._ALIAS["recolectar_daemon"] == "ingesta"
     # "pipeline" se partio en "investigacion"+"produccion": el nombre viejo esta
-    # RETIRADO (la sonda ignora su fila huerfana) y ya no hay alias que lo resucite.
+    # RETIRADO (la sonda ignora su fila suelta) y ya no hay alias que lo resucite.
     assert "pipeline" in latidos.RETIRADOS
     assert "pipeline" not in latidos._ALIAS.values()
 
@@ -223,12 +223,12 @@ def _envejecer_latido(daemon: str) -> None:
 
 def test_endpoint_daemons_atrasado(entorno):
     # Un latido ACTIVO con `visto` viejo (mas alla del umbral) debe salir "atrasado".
-    db.latido_barrido("zombi", ok=True, intervalo_seg=60.0, tick_seg=60.0)
-    _envejecer_latido("zombi")
+    db.latido_barrido("atascada", ok=True, intervalo_seg=60.0, tick_seg=60.0)
+    _envejecer_latido("atascada")
     c = _cli_admin()
     r = c.get("/api/sistema/daemons")
     por_nombre = {d["daemon"]: d for d in r.json()["daemons"]}
-    assert por_nombre["zombi"]["estado"] == "atrasado"
+    assert por_nombre["atascada"]["estado"] == "atrasado"
 
 
 def test_endpoint_daemons_inactivo_viejo_no_es_atrasado(entorno):
@@ -534,7 +534,7 @@ def test_endpoint_barrer_desconocido_404(entorno):
 
 
 def test_endpoint_barrer_retirado_404(entorno):
-    # La fila huerfana de un daemon RETIRADO no acepta solicitudes: nadie las consumiria.
+    # La fila suelta de un daemon RETIRADO no acepta solicitudes: nadie las consumiria.
     db.latido_barrido("pipeline", ok=True, intervalo_seg=60.0, tick_seg=60.0)
     c = _cli_admin()
     assert c.post("/api/sistema/daemons/pipeline/barrer", headers=_ORIGIN).status_code == 404
@@ -554,7 +554,7 @@ def test_endpoint_barrer_apagado_409(entorno):
 
 def test_endpoint_barrer_no_barrible_409(entorno):
     # Un daemon LEGADO (fuera de latidos.BARRIBLES) late pero su bucle NO consume el
-    # flag: aceptar la solicitud la dejaria huerfana para siempre. 409 sin encolarla.
+    # flag: aceptar la solicitud la dejaria suelta para siempre. 409 sin encolarla.
     db.latido_barrido("programador", ok=True, intervalo_seg=60.0, tick_seg=60.0)
     c = _cli_admin()
     r = c.post("/api/sistema/daemons/programador/barrer", headers=_ORIGIN)
@@ -576,7 +576,7 @@ def test_endpoint_barrer_solo_admin(entorno):
 
 
 # --------------------------------------------------------------------------- #
-# Historial por barrido: daemon_barridos (insercion + poda + listado + endpoint) #
+# Historial por barrido: daemon_barridos (insercion + purga + listado + endpoint) #
 # --------------------------------------------------------------------------- #
 
 
@@ -604,7 +604,7 @@ def test_registrar_barrido_poda_cota_dura(entorno, monkeypatch):
     for i in range(6):
         db.registrar_barrido("demo", ok=True, ts_inicio=f"2026-06-01T00:00:0{i}")
     barridos = db.listar_barridos("demo", limite=50)
-    # Solo quedan los 3 mas recientes (poda en cada insercion).
+    # Solo quedan los 3 mas recientes (purga en cada insercion).
     assert [b["ts_inicio"] for b in barridos] == [
         "2026-06-01T00:00:05", "2026-06-01T00:00:04", "2026-06-01T00:00:03",
     ]
@@ -734,7 +734,7 @@ def test_endpoint_barridos_desconocido_404(entorno):
 
 
 def test_endpoint_barridos_retirado_404(entorno):
-    # La fila huerfana de un daemon RETIRADO no tiene historial consultable.
+    # La fila suelta de un daemon RETIRADO no tiene historial consultable.
     db.latido_barrido("pipeline", ok=True, intervalo_seg=60.0, tick_seg=60.0)
     c = _cli_admin()
     assert c.get("/api/sistema/daemons/pipeline/barridos").status_code == 404

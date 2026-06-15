@@ -1,11 +1,11 @@
 """Contexto editorial del agente: `CLAUDE.md` principal y sub-contextos `contexto/*.md`.
 
   - CLAUDE.md (memoria principal): `leer_claude_md`, `guardar_claude_md`.
-  - Sub-contextos: `_dir_contexto`, `_sanear_nombre_contexto`, `_resolver_contexto`,
+  - Sub-contextos: `_dir_contexto`, `_reparar_nombre_contexto`, `_resolver_contexto`,
     `listar_contextos`, `guardar_contexto`, `borrar_contexto`.
 
 Toda escritura es DEFENSIVA (dentro de la carpeta del agente / de `contexto/`) y
-ATOMICA; los nombres de sub-contexto se sanean (anti-traversal) antes de tocar disco.
+ATOMICA; los nombres de sub-contexto se reparan (anti-traversal) antes de tocar disco.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ __all__ = [
     "leer_claude_md",
     "guardar_claude_md",
     "_dir_contexto",
-    "_sanear_nombre_contexto",
+    "_reparar_nombre_contexto",
     "_resolver_contexto",
     "listar_contextos",
     "guardar_contexto",
@@ -67,7 +67,7 @@ def _dir_contexto(marca_id: str) -> Path:
     return carpeta
 
 
-def _sanear_nombre_contexto(nombre: str) -> str:
+def _reparar_nombre_contexto(nombre: str) -> str:
     """Valida/normaliza el nombre de un sub-contexto y devuelve su nombre de fichero.
 
     Solo `*.md`: si no trae extension se le anade `.md`; si trae `.md` se respeta.
@@ -95,7 +95,7 @@ def _sanear_nombre_contexto(nombre: str) -> str:
 def _resolver_contexto(marca_id: str, nombre: str) -> Path:
     """Ruta de un sub-contexto DENTRO de `contexto/` (defensa anti-traversal)."""
     carpeta = _dir_contexto(marca_id)
-    destino = (carpeta / _sanear_nombre_contexto(nombre)).resolve()
+    destino = (carpeta / _reparar_nombre_contexto(nombre)).resolve()
     base = carpeta.resolve()
     if destino.parent != base or not destino.is_relative_to(base):
         raise NombreContextoInvalido("El nombre del contexto saldría de la carpeta de contexto.")
@@ -120,7 +120,7 @@ def listar_contextos(marca_id: str) -> list[dict[str, str]]:
 
 
 def guardar_contexto(marca_id: str, nombre: str, contenido: str) -> Path:
-    """Escribe un sub-contexto `*.md` (saneado) DENTRO de `contexto/` (atomico)."""
+    """Escribe un sub-contexto `*.md` (reparado) DENTRO de `contexto/` (atomico)."""
     destino = _resolver_contexto(marca_id, nombre)
     _escribir_texto_atomico(destino, contenido)
     return destino

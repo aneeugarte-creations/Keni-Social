@@ -2,7 +2,7 @@
 
 Dos bloques:
   - `parsear_ideas`: dominio PURO (sin BD). Cubre el JSON cercado, el dict envoltorio, el
-    saneo (título obligatorio, recortes), la deduplicación y el tope `MAX_IDEAS`.
+    reparación (título obligatorio, recortes), la deduplicación y el tope `MAX_IDEAS`.
   - CRUD de `evergreen_ideas` en `db.py` (requiere el Postgres de pruebas, fixture `entorno`; se
     salta si no hay).
 """

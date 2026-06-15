@@ -226,7 +226,7 @@ def reclamar_job(
     (sin disco).
     """
     ahora = ahora_iso()
-    limite_huerfano = iso_utc(
+    limite_suelto = iso_utc(
         datetime.now(UTC) - timedelta(seconds=config.claude_timeout() + _RECLAIM_STALE_MARGEN_S)
     )
     filtro_prioridad = "" if prioridad_minima is None else "AND prioridad >= ? "
@@ -251,17 +251,17 @@ def reclamar_job(
                 + filtro_prioridad + filtro_kind +
                 # Prioridad primero (manual > pipeline/autogen), luego FIFO por antiguedad.
                 "ORDER BY prioridad DESC, creado ASC, id ASC LIMIT 1 FOR UPDATE SKIP LOCKED",
-                (JOB_PENDIENTE, JOB_RECLAMADO, limite_huerfano, *params_prio, *params_kind),
+                (JOB_PENDIENTE, JOB_RECLAMADO, limite_suelto, *params_prio, *params_kind),
             ).fetchone()
             if fila is None:
                 con.commit()
                 return None
             # Solo un JOB SIN DUEÑO (estado `reclamado`) pudo haber corrido ya su post-procesado.
-            es_huerfano = fila["estado"] == JOB_RECLAMADO
+            es_suelto = fila["estado"] == JOB_RECLAMADO
             # TOPE DE INTENTOS (anti crash-loop): un job sin dueño que ya agoto sus intentos NO se
             # re-ejecuta. Es DB-puro (sin disco): se decide DENTRO del lock. Se cierra el job y
             # el registro queda en error claro (best-effort, ya fuera del lock tras el commit).
-            if es_huerfano and int(fila["intentos"] or 0) >= config.jobs_max_intentos():
+            if es_suelto and int(fila["intentos"] or 0) >= config.jobs_max_intentos():
                 con.execute(
                     "UPDATE jobs SET estado = ? WHERE id = ?", (JOB_TERMINADO, fila["id"])
                 )
@@ -280,7 +280,7 @@ def reclamar_job(
             # SIN relanzarlo (evita el borrador duplicado) y buscamos el siguiente. Con el
             # `claimed_at` fresco que acabamos de fijar, ningun otro worker lo re-reclama mientras
             # tanto, asi que esta segunda escritura es segura sin retener el lock.
-            if es_huerfano and _gen_ya_terminal(fila["gen_id"]):
+            if es_suelto and _gen_ya_terminal(fila["gen_id"]):
                 con.execute(
                     "UPDATE jobs SET estado = ? WHERE id = ?", (JOB_TERMINADO, fila["id"])
                 )

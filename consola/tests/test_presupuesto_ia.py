@@ -350,7 +350,7 @@ def test_reclamar_prioridad_minima_corta_el_fondo_encolado(entorno):
 
 
 def test_reaper_respeta_generaciones_con_job_pendiente(entorno):
-    """Una generacion cuyo job sigue PENDIENTE no es zombi: puede esperar mas que el TTL
+    """Una generacion cuyo job sigue PENDIENTE no es atascada: puede esperar mas que el TTL
     (retenida por el corte de presupuesto, el kill switch o una cola cargada) y el reaper
     NO debe segarla (la guardia anti-duplicado cerraria luego su job sin ejecutarlo)."""
     from datetime import datetime, timedelta
@@ -361,12 +361,12 @@ def test_reaper_respeta_generaciones_con_job_pendiente(entorno):
     cola.encolar(encolada, jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags()))
     generaciones.actualizar(encolada, {"fecha_inicio": viejo})  # mas vieja que el TTL
 
-    zombi = _gen()  # vieja y SIN job en cola: zombi de verdad
-    generaciones.actualizar(zombi, {"fecha_inicio": viejo})
+    atascada = _gen()  # vieja y SIN job en cola: atascada de verdad
+    generaciones.actualizar(atascada, {"fecha_inicio": viejo})
 
-    assert generaciones.reclamar_zombis(3600) == 1  # solo la zombi
+    assert generaciones.reclamar_atascadas(3600) == 1  # solo la atascada
     assert generaciones.obtener(encolada)["estado"] == "ejecutando"  # la encolada espera
-    assert generaciones.obtener(zombi)["estado"] == generaciones.ESTADO_ERROR
+    assert generaciones.obtener(atascada)["estado"] == generaciones.ESTADO_ERROR
 
 
 # --------------------------------------------------------------------------- #

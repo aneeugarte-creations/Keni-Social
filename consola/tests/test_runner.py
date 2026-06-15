@@ -163,7 +163,7 @@ def test_matar_arbol_mata_el_hijo_no_solo_el_padre():
 
     El padre (python) lanza un HIJO (otro python que duerme) en el MISMO grupo, imprime
     su PID y espera. `matar_arbol` debe matar el grupo entero: tras el kill, el HIJO ya
-    no debe estar vivo (antes, un `proc.kill()` del padre lo dejaba huerfano/zombi).
+    no debe estar vivo (antes, un `proc.kill()` del padre lo dejaba suelto/atascada).
     """
     # El padre imprime el PID del hijo y se queda esperando; el hijo duerme 300s.
     guion = (

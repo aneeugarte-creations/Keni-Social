@@ -201,6 +201,6 @@ def test_normaliza_hashtags_quita_almohadilla_simbolos_y_dedup():
     from keni_consola.api.etiquetas import _normalizar_hashtags
 
     assert _normalizar_hashtags("#Nacional, nacional, Finanzas") == "Nacional, Finanzas"
-    # Sin '#', sin símbolos: cada token se sanea (los hashtags no llevan espacios).
+    # Sin '#', sin símbolos: cada token se repara (los hashtags no llevan espacios).
     assert _normalizar_hashtags("Mundial-2026!, @x") == "Mundial2026, x"
     assert _normalizar_hashtags(None) == ""

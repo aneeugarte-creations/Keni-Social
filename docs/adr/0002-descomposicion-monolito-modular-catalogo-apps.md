@@ -182,7 +182,7 @@ Incremental y sin parar el piloto. No mueve la IP de dominio; reordena y formali
 - **Criterios de aceptación (cumplidos):**
   - La generación corre **fuera del proceso del gateway** (en el worker); reiniciar el gateway
     **no mata** los jobs en curso (en hosted el worker es otro contenedor).
-  - Un timeout/cancelación **no deja procesos huérfanos** (kill del árbol del grupo de procesos);
+  - Un timeout/cancelación **no deja procesos sueltos** (kill del árbol del grupo de procesos);
     la cancelación funciona **cross-proceso** (flag en la cola que el worker sondea).
   - "Actividad IA" registra **tokens/coste/duración por job y usuario** (ya lo hacía el runner; el
     worker lo conserva al reusar `lanzar_job_claude`).

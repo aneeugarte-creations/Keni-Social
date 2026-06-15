@@ -23,7 +23,7 @@ FRONTMATTER (minimo; todo lo demas es el cuerpo):
     titulo, tipo, carpeta, creado, actualizado
     (solo editorial) clase ∈ {marca,voz,plataforma,tropicalizacion,reglas}, marcas: [ids]
 
-SEGURIDAD: el id se sanea contra traversal (segmentos `[a-z0-9-]`, primer segmento = tipo
+SEGURIDAD: el id se repara contra traversal (segmentos `[a-z0-9-]`, primer segmento = tipo
 valido, sin `..`); las rutas se resuelven y se comprueba que caen ESTRICTAMENTE dentro de
 `raiz()`; las escrituras son ATOMICAS (`io_atomico`). Todo error sale en espanol.
 

@@ -21,16 +21,16 @@ from .scoring import puntuar_detalle
 # distintos a propósito: el panel muestra el pool jerarquizado (todo lo que pasó la entrada),
 # pero encolar Verificar+Redactar (`claude -p`, coste real de tokens) exige un umbral MÁS ALTO y
 # EXPLICABLE. Defaults conservadores; editables en caliente desde la consola.
-LISTON_MIN_SCORE_DEF = 0.35
-LISTON_MIN_MARCA_DEF = 0.2
+UMBRAL_MIN_SCORE_DEF = 0.35
+UMBRAL_MIN_MARCA_DEF = 0.2
 
 
-def evaluar_liston(
+def evaluar_umbral(
     cluster: dict[str, Any],
     *,
     palabras_marca: frozenset[str] = frozenset(),
-    min_score: float = LISTON_MIN_SCORE_DEF,
-    min_marca: float = LISTON_MIN_MARCA_DEF,
+    min_score: float = UMBRAL_MIN_SCORE_DEF,
+    min_marca: float = UMBRAL_MIN_MARCA_DEF,
     min_maduracion_min: int = 0,
     ahora: datetime | None = None,
     breaking_peso: float = BREAKING_PESO_DEF,
@@ -64,10 +64,10 @@ def evaluar_liston(
     # Breaking EN VIVO si hay timeline (misma derivación que el scoring: masa ponderada en la
     # ventana actual, decae sola); sin timeline se respeta el flag persistido. Así el umbral
     # no depende de un flag desfasado entre re-scores.
-    detalle_liston = cluster.get("fuentes_detalle") or []
-    if isinstance(detalle_liston, list) and detalle_liston:
+    detalle_umbral = cluster.get("fuentes_detalle") or []
+    if isinstance(detalle_umbral, list) and detalle_umbral:
         masa_v, n_v = peso_ventana_actual(
-            detalle_liston, ventana_h=breaking_ventana_h, ahora=ahora
+            detalle_umbral, ventana_h=breaking_ventana_h, ahora=ahora
         )
         es_breaking_vivo = n_v >= 2 and masa_v >= breaking_peso
     else:
@@ -92,7 +92,7 @@ def evaluar_liston(
         breaking_peso=breaking_peso, breaking_ventana_h=breaking_ventana_h,
     )
     if score < min_score:
-        return False, f"score {score:.2f} < {min_score:.2f} (listón de producción)"
+        return False, f"score {score:.2f} < {min_score:.2f} (umbral de producción)"
     s_marca = float(desglose["marca"])
     if s_marca < min_marca:
         if not curada and not breaking_corroborada:
