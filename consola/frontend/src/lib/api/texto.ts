@@ -110,6 +110,9 @@ export const apiTexto = {
     peticion<RespuestaDocumento>(`/texto/${id}/version/${sha}`, { signal }),
   revertirTexto: (id: string, sha: string) =>
     peticion<RespuestaDocumento>(`/texto/${id}/revertir/${sha}`, { metodo: "POST" }),
+  // Resetea el borrador al contenido publicado (descarta los cambios sin publicar).
+  descartarTexto: (id: string) =>
+    peticion<RespuestaDocumento>(`/texto/${id}/descartar`, { metodo: "POST" }),
   validacionTexto: (marca: string, signal?: AbortSignal) =>
     peticion<ValidacionEditorial>(`/texto/validacion${query({ marca })}`, { signal }),
   areasTexto: (signal?: AbortSignal) =>

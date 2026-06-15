@@ -91,7 +91,7 @@ export function DialogPublicar({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {esAdmin ? <Rocket className="h-4 w-4" /> : <Send className="h-4 w-4" />}
-            {esAdmin ? "Publicar a producción" : "Solicitar publicación"}
+            {esAdmin ? "Publicar cambios" : "Solicitar publicación"}
           </DialogTitle>
         </DialogHeader>
 
@@ -103,7 +103,7 @@ export function DialogPublicar({
 
         {/* Qué cambia respecto a lo que hay en producción. */}
         <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>{antes ? "Cambios respecto a la versión en producción" : "Primera publicación de este documento"}</span>
+          <span>{antes ? "Cambios respecto a lo publicado" : "Primera publicación de este documento"}</span>
           <label className="flex cursor-pointer items-center gap-1.5">
             Solo cambios
             <Switch checked={soloCambios} onCheckedChange={setSoloCambios} />
@@ -137,7 +137,7 @@ export function DialogPublicar({
               onClick={() => publicarMut.mutate()}
             >
               <Rocket className="mr-1 h-3.5 w-3.5" />
-              {publicarMut.isPending ? "Publicando…" : "Publicar a producción"}
+              {publicarMut.isPending ? "Publicando…" : "Publicar cambios"}
             </Button>
           ) : (
             <Button

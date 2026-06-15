@@ -4,7 +4,7 @@
  * Cabecera de estado (título editable + línea de deployment + acciones), cuerpo SIEMPRE
  * WYSIWYG (EditorWysiwyg con chips de variables; la edición es libre: producción no
  * cambia hasta publicar), y panel lateral con pestañas:
- *   - Versiones (PanelVersiones: timeline git + diff + restaurar),
+ *   - Versiones (PanelVersiones: publicado ↔ tu borrador, diff ancho, traer/descartar),
  *   - Uso (dónde entra el doc: procesos, pipelines y su sitio en el riel de la máquina),
  *   - Compilado (solo prompts base de pipeline: el prompt ENSAMBLADO que verá el modelo),
  *   - Ficha (metadata: descripción, carpeta, clase, marcas, etiquetas, prioridad).
@@ -476,7 +476,7 @@ export function DetalleDocumento({
         />
         {sinPublicar ? (
           <Badge variant="aviso" className="gap-1 rounded-full">
-            <AlertTriangle className="h-3 w-3" aria-hidden /> sin publicar
+            <AlertTriangle className="h-3 w-3" aria-hidden /> Cambios sin publicar
           </Badge>
         ) : null}
         {esAdmin ? (
@@ -484,7 +484,7 @@ export function DetalleDocumento({
             variant="brand"
             size="sm"
             disabled={!puedePublicar}
-            title={puedePublicar ? "Publicar esta versión a producción" : "No hay cambios respecto a producción"}
+            title={puedePublicar ? "Publicar para que lo usen los agentes" : "No hay cambios sin publicar"}
             onClick={() => setPublicarAbierto(true)}
           >
             <Rocket className="mr-1 h-3.5 w-3.5" /> Publicar
@@ -494,7 +494,7 @@ export function DetalleDocumento({
             variant="brand"
             size="sm"
             disabled={!puedePublicar}
-            title={puedePublicar ? "Proponer esta versión para producción" : "No hay cambios respecto a producción"}
+            title={puedePublicar ? "Proponer estos cambios para publicar" : "No hay cambios sin publicar"}
             onClick={() => setPublicarAbierto(true)}
           >
             <Send className="mr-1 h-3.5 w-3.5" /> Solicitar publicación
@@ -552,13 +552,17 @@ export function DetalleDocumento({
       {/* Línea de deployment + nota de inyección. */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
         {produccion ? (
-          <span className="inline-flex items-center gap-1.5">
+          <span
+            className="inline-flex items-center gap-1.5"
+            title="Lo publicado es lo que ven los agentes en todas las generaciones."
+          >
             <span className="text-emerald-600 dark:text-emerald-400" aria-hidden>●</span>
-            v. producción desde {tiempoRelativo(produccion.creado) || produccion.creado.slice(0, 10)}{" "}
+            Publicado (lo que ven los agentes) desde{" "}
+            {tiempoRelativo(produccion.creado) || produccion.creado.slice(0, 10)}{" "}
             ({produccion.autor || "—"})
           </span>
         ) : (
-          <span>Sin publicar aún — los pipelines usan la copia de trabajo.</span>
+          <span>Sin publicar aún — los agentes usan tu borrador.</span>
         )}
         {procesos.length > 0 ? (
           <span className="inline-flex items-center gap-1" title={procesos.join("\n")}>
@@ -567,7 +571,9 @@ export function DetalleDocumento({
           </span>
         ) : null}
         <span className="ml-auto">
-          {guardarMut.isPending ? "Guardando…" : `Actualizado ${tiempoRelativo(borrador.actualizado) || borrador.actualizado || "—"}`}
+          {guardarMut.isPending
+            ? "Guardando borrador…"
+            : `Borrador guardado ${tiempoRelativo(borrador.actualizado) || borrador.actualizado || ""}`.trim()}
         </span>
       </div>
 
@@ -601,9 +607,11 @@ export function DetalleDocumento({
               <PanelVersiones
                 docId={borrador.id}
                 produccionSha={produccion?.sha ?? null}
-                shaActual={doc?.sha_actual ?? null}
-                onRestaurado={() => {
-                  // Fuerza la RE-SINCRONIZACIÓN del borrador con el cuerpo restaurado.
+                cuerpoBorrador={frontmatterOculto + borrador.cuerpo}
+                sinPublicar={sinPublicar}
+                onPublicar={() => setPublicarAbierto(true)}
+                onBorradorActualizado={() => {
+                  // Fuerza la RE-SINCRONIZACIÓN del borrador con el cuerpo cargado.
                   sincronizado.current = null;
                   qc.invalidateQueries({ queryKey: ["texto-doc", docId] });
                   qc.invalidateQueries({ queryKey: ["texto-maquina"] });
