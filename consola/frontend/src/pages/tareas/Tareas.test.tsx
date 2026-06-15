@@ -225,6 +225,24 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect(screen.getAllByText("Partido viejo").length).toBeGreaterThan(0);
   });
 
+  it("PANORAMA: el marcador de HOY muestra «hechos/total» del día (en vivo)", async () => {
+    const hoy = hoyCDMX();
+    renderTareas([
+      // Cobertura de HOY ya pasada (01:00) → hecha.
+      tarea({ id: "cA", evento_id: "evA", responsable_id: "u-luis", responsable_nombre: "luis", fecha_objetivo: hoy, hora_objetivo: "01:00" }),
+      // Cobertura de HOY futura (23:59) → pendiente.
+      tarea({ id: "cB", evento_id: "evB", responsable_id: "u-ana", responsable_nombre: "ana", fecha_objetivo: hoy, hora_objetivo: "23:59" }),
+      // Encargo de HOY hecho → cuenta como hecho.
+      tarea({ id: "eC", titulo: "Encargo hecho", fecha_objetivo: hoy, estado: "hecha", responsable_id: "u-luis", responsable_nombre: "luis" }),
+      // Encargo de HOY pendiente.
+      tarea({ id: "eD", titulo: "Encargo pendiente", fecha_objetivo: hoy, estado: "pendiente" }),
+    ]);
+
+    // 4 cosas hoy, 2 hechas (el partido pasado + el encargo hecho) → «2/4».
+    const marcador = await screen.findByLabelText(/Progreso de hoy/);
+    expect(marcador).toHaveTextContent("2/4");
+  });
+
   it("un evento 'no_cubrir' NO aparece en la lista", async () => {
     renderTareas([], [evento({ id: "ev-x", titulo: "Amistoso sin señal", tipo_cobertura: "no_cubrir" })]);
     await waitFor(() => expect(apiMod.api.rotaEventos).toHaveBeenCalled());
