@@ -87,7 +87,7 @@ export function DialogPublicar({
 
   return (
     <Dialog open={abierto} onOpenChange={(v) => !v && onCerrar()}>
-      <DialogContent className="flex max-h-[88vh] max-w-3xl flex-col gap-3 overflow-hidden">
+      <DialogContent className="flex max-h-[88vh] max-w-4xl flex-col gap-3 overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {esAdmin ? <Rocket className="h-4 w-4" /> : <Send className="h-4 w-4" />}
