@@ -42,6 +42,11 @@ const esUrl = (s: string) => /^https?:\/\/\S+/i.test(s.trim());
  *    escríbelo a mano (un solo evento). Sirve para cualquier cosa: partido, concierto,
  *    rueda de prensa, estreno…
  *  - Tarea: un encargo suelto (sin evento), que puedes asignar a alguien ahí mismo.
+ *    NO va al calendario de Turnos; vive solo en el tablero de Cobertura (Panorama / Mis tareas).
+ *
+ * La diferencia es de DESTINO: un evento es una unidad de cobertura con fecha/hora que
+ * cae en la rejilla del calendario (`crearEventoRota`); una tarea es trabajo suelto que
+ * el equipo coge o se reparte (`crearContenido`, clase='tarea'), nunca en el calendario.
  */
 export function DialogoCrearTarea({
   abierto,
@@ -127,7 +132,7 @@ export function DialogoCrearTarea({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  // --- Manual: crear un evento o una tarea ---
+  // --- Manual: crear un evento (calendario) o una tarea (solo tablero) ---
   const crear = useMutation({
     mutationFn: async () => {
       if (modo === "evento") {
@@ -291,6 +296,14 @@ export function DialogoCrearTarea({
                 </button>
               ))}
             </div>
+
+            {/* La distinción que pidió el equipo: un evento aterriza en el calendario de
+                Turnos; una tarea no, solo vive en el tablero de Cobertura. */}
+            <p className="text-xs text-muted-foreground">
+              {modo === "evento"
+                ? "Va al calendario de Turnos y a «Por cubrir»."
+                : "No va al calendario: solo en Panorama y Mis tareas."}
+            </p>
 
             {modo === "evento" && (
               <div
