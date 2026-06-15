@@ -25,6 +25,8 @@ import { api, mensajeError, urlMedia } from "@/lib/api";
 import { cabecerasAuth } from "@/lib/api/_core";
 import type { OpcionesExport } from "@/lib/api/imagen";
 
+import { conFotoEnHuecosVacios, type Documento, tieneHuecoFotoVacio } from "./documento";
+import { getFotoMuestraSrc, getObjetoMuestraExport, setObjetoMuestraExport } from "./muestra";
 import type { StoreEditor } from "./store";
 
 type Formato = "png" | "jpg";
@@ -62,11 +64,49 @@ async function descargarArchivo(url: string, nombreArchivo: string): Promise<voi
   URL.revokeObjectURL(objUrl);
 }
 
+/** dataURL (`data:image/png;base64,…`) -> Blob, sin `fetch` (robusto y testeable). */
+function dataUrlABlob(dataUrl: string): Blob {
+  const coma = dataUrl.indexOf(",");
+  const cabecera = dataUrl.slice(5, coma); // tras "data:"
+  const datos = dataUrl.slice(coma + 1);
+  const mime = cabecera.split(";")[0] || "image/png";
+  const esBase64 = /;base64/i.test(cabecera);
+  const binario = esBase64 ? atob(datos) : decodeURIComponent(datos);
+  const bytes = new Uint8Array(binario.length);
+  for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
+
+/**
+ * Objeto S3 con el que HORNEAR la foto de muestra en la descarga, o `null` si no hay foto real
+ * (superficie gris por defecto). La sube una vez (dataURL -> `subirMedia`; URL pegada ->
+ * `mediaDesdeUrl`) y CACHEA su objeto en el módulo `muestra` para no resubirla en cada descarga.
+ */
+async function objetoFotoMuestra(): Promise<string | null> {
+  const src = getFotoMuestraSrc().trim();
+  if (!src) return null; // sin foto real: el hueco se queda gris (igual que en el lienzo)
+  const cacheado = getObjetoMuestraExport();
+  if (cacheado) return cacheado;
+  let id: string;
+  if (src.startsWith("data:")) {
+    const blob = dataUrlABlob(src);
+    const ext = (blob.type.split("/")[1] || "png").replace("jpeg", "jpg");
+    const archivo = new File([blob], `foto-muestra.${ext}`, { type: blob.type || "image/png" });
+    id = (await api.subirMedia(archivo, "plantillas")).id;
+  } else {
+    // URL externa (pegada): el back la descarga al almacén y devuelve su objeto.
+    id = (await api.mediaDesdeUrl(src)).id;
+  }
+  setObjetoMuestraExport(id);
+  return id;
+}
+
 export function ExportarDialogo({
   store,
   bindings,
   nombre,
   variante = "primario",
+  muestraFoto = false,
 }: {
   store: StoreEditor;
   // Titular/pleca REAL de la pieza (cuando la pestaña está anclada a una publicación). Sin pieza
@@ -77,6 +117,9 @@ export function ExportarDialogo({
   // Jerarquía del botón disparador: "primario" (acción principal del editor) u "outline" cuando la
   // acción primaria del contexto es otra (p. ej. «Guardar en pieza»).
   variante?: "primario" | "secundario";
+  // "Vista con muestra (foto)" activa: si lo está y hay foto de muestra real, se HORNEA en el hueco
+  // de foto vacío al descargar, para que el archivo salga WYSIWYG (la foto que se ve, no el gris).
+  muestraFoto?: boolean;
 }) {
   const [abierto, setAbierto] = useState(false);
   const [formato, setFormato] = useState<Formato>("png");
@@ -90,9 +133,16 @@ export function ExportarDialogo({
     try {
       const opciones: OpcionesExport = { formato, escala };
       if (formato === "jpg") opciones.calidad = calidad;
-      const res = await api.imagenRender(store.getState().documento, bindings, opciones);
+      // WYSIWYG: si la "Vista con muestra (foto)" está activa y el hueco de foto sigue vacío, hornea
+      // la foto de muestra en el hueco para que la descarga la incluya (en vez del gris del export).
+      let doc: Documento = store.getState().documento;
+      if (muestraFoto && tieneHuecoFotoVacio(doc)) {
+        const objeto = await objetoFotoMuestra();
+        if (objeto) doc = conFotoEnHuecosVacios(doc, objeto);
+      }
+      const res = await api.imagenRender(doc, bindings, opciones);
       const url = urlMedia(res.url || res.id);
-      const archivo = `${sanearNombre(nombre || store.getState().documento.marca)}.${formato}`;
+      const archivo = `${sanearNombre(nombre || doc.marca)}.${formato}`;
       await descargarArchivo(url, archivo);
       setUltimaUrl(url);
       toast.success("Imagen descargada.");

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { altoVisual, bandaOverlay, cajaVisual, documentoVacio, nuevaCapaMarco, nuevaCapaOverlay, nuevaCapaTexto } from "./documento";
+import { altoVisual, bandaOverlay, cajaVisual, conFotoEnHuecosVacios, documentoVacio, nuevaCapaImagen, nuevaCapaMarco, nuevaCapaOverlay, nuevaCapaTexto, tieneHuecoFotoVacio } from "./documento";
 
 describe("documentoVacio", () => {
   it("nace transparente y con el hueco de foto OCULTO (marcado y bloqueado)", () => {
@@ -63,5 +63,53 @@ describe("cajaVisual / bandaOverlay / altoVisual", () => {
     const m = nuevaCapaMarco({ x: 10, y: 20, w: 30, h: 40 });
     expect(cajaVisual(m)).toEqual({ x: 10, y: 20, w: 30, h: 40 });
     expect(altoVisual(nuevaCapaOverlay({ h: 1000, alto_frac: 0.5 }))).toBe(500);
+  });
+});
+
+describe("tieneHuecoFotoVacio / conFotoEnHuecosVacios (hornear foto de muestra en la descarga)", () => {
+  const fmt = { w: 1080, h: 1350, safe_top: 60, safe_bottom: 96 };
+
+  it("detecta el hueco de foto (`es_foto`) vacío y lo da por lleno cuando ya tiene objeto", () => {
+    const doc = documentoVacio(fmt, "claro-sports"); // nace con un hueco es_foto vacío
+    expect(tieneHuecoFotoVacio(doc)).toBe(true);
+    // Una imagen vacía que NO es hueco no cuenta (solo el hueco recibe la muestra).
+    const conImagenSuelta = { ...doc, capas: [...doc.capas, nuevaCapaImagen("")] };
+    expect(tieneHuecoFotoVacio(conImagenSuelta)).toBe(true); // sigue habiendo hueco vacío
+    const soloImagenSuelta = { ...doc, capas: [nuevaCapaImagen("")] };
+    expect(tieneHuecoFotoVacio(soloImagenSuelta)).toBe(false); // no hay hueco es_foto
+    // Hueco ya con foto real => nada que hornear.
+    const lleno = conFotoEnHuecosVacios(doc, "media-123");
+    expect(tieneHuecoFotoVacio(lleno)).toBe(false);
+  });
+
+  it("hornea el objeto SOLO en los huecos `es_foto` vacíos, sin mutar el documento original", () => {
+    const doc = documentoVacio(fmt, "uno-tv");
+    const out = conFotoEnHuecosVacios(doc, "media-xyz");
+    const huecoOrig = doc.capas.find((c) => c.tipo === "imagen" && c.es_foto);
+    const huecoOut = out.capas.find((c) => c.tipo === "imagen" && c.es_foto);
+    expect(huecoOrig && huecoOrig.tipo === "imagen" && huecoOrig.objeto).toBe(""); // original intacto
+    expect(huecoOut && huecoOut.tipo === "imagen" && huecoOut.objeto).toBe("media-xyz");
+    expect(out).not.toBe(doc);
+  });
+
+  it("no pisa un hueco que ya trae foto real ni toca imágenes que no son hueco (collage)", () => {
+    const base = documentoVacio(fmt, "claro-sports");
+    // Collage: hueco0 vacío (heredado), hueco1 con foto real, + una imagen normal (no hueco).
+    const doc = {
+      ...base,
+      capas: [
+        ...base.capas,
+        nuevaCapaImagen("foto-real", { es_foto: true }),
+        nuevaCapaImagen("logo-deco"),
+      ],
+    };
+    const out = conFotoEnHuecosVacios(doc, "muestra-1");
+    const objetos = out.capas
+      .filter((c) => c.tipo === "imagen")
+      .map((c) => (c.tipo === "imagen" ? c.objeto : ""));
+    expect(objetos).toContain("muestra-1"); // el hueco vacío recibió la muestra
+    expect(objetos).toContain("foto-real"); // el hueco con foto real intacto
+    expect(objetos).toContain("logo-deco"); // la imagen no-hueco intacta
+    expect(objetos.filter((o) => o === "muestra-1")).toHaveLength(1); // solo un hueco rellenado
   });
 });

@@ -378,6 +378,29 @@ export function zTope(doc: Documento): number {
   return doc.capas.reduce((m, c) => Math.max(m, c.z ?? 0), 0) + 1;
 }
 
+// ¿Tiene el documento algún HUECO DE FOTO (`es_foto`) sin `objeto` asignado? Los huecos viven al
+// NIVEL SUPERIOR de `capas` (mismo contrato que `capas_foto` del back y que la "Vista con muestra":
+// `CapaNodo` solo rellena con la muestra los `es_foto` de nivel superior, no los anidados en grupos).
+export function tieneHuecoFotoVacio(doc: Documento): boolean {
+  return doc.capas.some(
+    (c) => c.tipo === "imagen" && c.es_foto === true && !(c.objeto || "").trim(),
+  );
+}
+
+// Copia del documento con `objeto` puesto en cada HUECO DE FOTO vacío de nivel superior. Sirve para
+// HORNEAR la foto de muestra SOLO en la descarga (export WYSIWYG): no muta el documento editable ni
+// lo que se guarda como plantilla/pieza, donde el hueco debe seguir vacío para recibir la foto real.
+export function conFotoEnHuecosVacios(doc: Documento, objeto: string): Documento {
+  return {
+    ...doc,
+    capas: doc.capas.map((c) =>
+      c.tipo === "imagen" && c.es_foto === true && !(c.objeto || "").trim()
+        ? { ...c, objeto }
+        : c,
+    ),
+  };
+}
+
 // Alto VISUAL de una capa para centrar/repartir: los textos sin caja (h<=0) ocupan una línea
 // (tamano × interlineado); el overlay solo pinta su BANDA inferior; el resto usa su h del modelo.
 export function altoVisual(c: Capa): number {

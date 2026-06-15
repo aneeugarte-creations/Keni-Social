@@ -4,8 +4,11 @@ import {
   copyMuestra,
   ETIQUETA_MUESTRA_DEFECTO,
   getEtiquetaMuestra,
+  getObjetoMuestraExport,
   getTitularMuestra,
   setEtiquetaMuestra,
+  setFotoMuestra,
+  setObjetoMuestraExport,
   setTitularMuestra,
   TITULAR_MUESTRA_DEFECTO,
 } from "./muestra";
@@ -15,6 +18,7 @@ import {
 afterEach(() => {
   setTitularMuestra(TITULAR_MUESTRA_DEFECTO);
   setEtiquetaMuestra(ETIQUETA_MUESTRA_DEFECTO);
+  setFotoMuestra("");
 });
 
 describe("copyMuestra", () => {
@@ -45,5 +49,16 @@ describe("copy de muestra editable", () => {
     setEtiquetaMuestra("ÚLTIMA HORA");
     expect(getEtiquetaMuestra()).toBe("ÚLTIMA HORA");
     expect(copyMuestra("etiqueta_default")).toBe("ÚLTIMA HORA");
+  });
+});
+
+describe("objeto S3 de la foto de muestra para hornear en la descarga", () => {
+  it("se cachea y se INVALIDA al cambiar la foto de muestra", () => {
+    expect(getObjetoMuestraExport()).toBeNull();
+    setObjetoMuestraExport("muestra-obj-1");
+    expect(getObjetoMuestraExport()).toBe("muestra-obj-1");
+    // Cambiar la foto de muestra invalida el objeto horneado anterior (ya no corresponde).
+    setFotoMuestra("data:image/png;base64,abc");
+    expect(getObjetoMuestraExport()).toBeNull();
   });
 });

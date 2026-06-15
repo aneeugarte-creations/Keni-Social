@@ -154,7 +154,23 @@ export function setFotoMuestra(src: string): void {
   _img = null;
   _imgSrc = null;
   _pendiente = null;
+  _objetoExport = null; // la foto cambió: el objeto S3 horneado anterior ya no corresponde
   notificar();
+}
+
+// ── Objeto S3 de la foto de muestra para HORNEARLA en la descarga ────────────────────────────────
+//
+// El export es server-side y la foto de muestra vive como dataURL/URL en cliente. Para que la
+// descarga sea WYSIWYG (incluya la foto que el equipo ve en el hueco), `ExportarDialogo` la sube al
+// almacén una vez y CACHEA aquí su objeto, para no resubirla en cada descarga. Se invalida al
+// cambiar la foto de muestra (`setFotoMuestra`). `null` = aún no subida (o sin foto real).
+
+let _objetoExport: string | null = null;
+export function getObjetoMuestraExport(): string | null {
+  return _objetoExport;
+}
+export function setObjetoMuestraExport(objeto: string): void {
+  _objetoExport = objeto;
 }
 
 export function getTitularMuestra(): string {

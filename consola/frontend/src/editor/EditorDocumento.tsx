@@ -560,6 +560,7 @@ export function EditorDocumento({
           bindings={exportar.bindings}
           nombre={exportar.nombre}
           variante={exportar.primario === false ? "secundario" : "primario"}
+          muestraFoto={muestraFoto}
         />
       )}
       {accionesFin}
