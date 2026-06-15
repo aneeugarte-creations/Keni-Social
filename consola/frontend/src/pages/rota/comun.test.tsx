@@ -26,6 +26,7 @@ function swap(over: Partial<SwapTurno> = {}): SwapTurno {
     aplicado: "",
     marca: "",
     marca_nombre: "",
+    tipo: "intercambio",
     ...over,
   };
 }

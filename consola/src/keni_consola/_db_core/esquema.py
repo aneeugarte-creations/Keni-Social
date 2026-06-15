@@ -605,7 +605,8 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         decidido_destinatario    TEXT NOT NULL DEFAULT '',
         decidido_admin           TEXT NOT NULL DEFAULT '',
         aplicado                 TEXT NOT NULL DEFAULT '',
-        marca                    TEXT NOT NULL DEFAULT ''
+        marca                    TEXT NOT NULL DEFAULT '',
+        tipo                     TEXT NOT NULL DEFAULT 'intercambio'
     )
     """,
     # GRID POR MARCA: el swap es entre turnos de la rejilla de UNA marca. `marca` se

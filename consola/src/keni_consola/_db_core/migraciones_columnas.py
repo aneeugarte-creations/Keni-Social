@@ -628,7 +628,12 @@ def _migrar_columnas_campanias(con: Any) -> None:
 # coherencia con el patron de `_migrar_columnas_*` (tareas, eventos): cuando aparezca una
 # columna nueva, se agrega aqui como (col, tipo) y este migrador la pondra a las bases
 # viejas sin reescribir nada. Idempotente.
-_COLUMNAS_SWAP_AMPLIADAS: tuple[tuple[str, str], ...] = ()
+_COLUMNAS_SWAP_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    # VERBOS (#175): discriminador intercambio|cesion|abierto. Las filas viejas reciben el
+    # DEFAULT 'intercambio' (su semántica actual) -> inerte para el swap existente. Al cambiar
+    # esta tupla, la migración 0015-columnas-swaps (re_aplicar_si_cambia) hace el ALTER en prod.
+    ("tipo", "TEXT NOT NULL DEFAULT 'intercambio'"),
+)
 
 
 def _migrar_columnas_swaps(con: Any) -> None:

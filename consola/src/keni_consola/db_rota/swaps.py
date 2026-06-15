@@ -41,6 +41,8 @@ _COLS_SWAP_TURNO = (
     "aplicado",
     # GRID POR MARCA: marca de la rejilla del swap (denormalizada del turno A al crear).
     "marca",
+    # VERBO del cambio (#175): intercambio|cesion|abierto. DEFAULT 'intercambio'.
+    "tipo",
 )
 _SELECT_SWAP_TURNO = f"SELECT {', '.join(_COLS_SWAP_TURNO)} FROM rota_swaps_turno"
 
@@ -73,6 +75,7 @@ def crear_swap_turno(
     destinatario_nombre: str = "",
     motivo: str = "",
     marca: str = "",
+    tipo: str = "intercambio",
 ) -> dict[str, Any]:
     """Inserta una solicitud de swap (estado `propuesto`) y la devuelve.
 
@@ -104,6 +107,7 @@ def crear_swap_turno(
         "decidido_admin": "",
         "aplicado": "",
         "marca": marca or "",
+        "tipo": tipo or "intercambio",
     }
     con = _conectar()
     try:

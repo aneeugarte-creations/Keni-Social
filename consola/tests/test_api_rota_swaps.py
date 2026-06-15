@@ -158,6 +158,8 @@ def test_crear_swap_basico(entorno):
     assert swap["solicitante_id"] == ana["id"]
     assert swap["destinatario_id"] == beto["id"]
     assert swap["motivo"] == "Cita médica"
+    # Fase 0 de los verbos: un cambio nace como 'intercambio' por defecto (inerte).
+    assert swap["tipo"] == "intercambio"
 
 
 def test_crear_swap_sin_sesion_401(entorno):

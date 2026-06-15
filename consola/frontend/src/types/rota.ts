@@ -419,6 +419,10 @@ export type EstadoSwap =
   | "rechazado_admin"
   | "cancelado";
 
+/** Verbo del cambio de turno (#175): intercambio (trueque de dos turnos) · cesion (doy mi
+ *  turno y me quedo libre) · abierto (turno sin dueño que se reclama del pool). */
+export type TipoSwap = "intercambio" | "cesion" | "abierto";
+
 /** Una solicitud de cambio de turno entre dos compañeros (snapshot de un swap). */
 export interface SwapTurno {
   id: string;
@@ -457,6 +461,8 @@ export interface SwapTurno {
   /** GRID POR MARCA: rejilla (marca) del swap; la UI la etiqueta en "Todas". */
   marca: string;
   marca_nombre: string;
+  /** Verbo del cambio: intercambio (trueque) · cesion · abierto. */
+  tipo: TipoSwap;
 }
 
 /** Cuerpo de `POST /api/rota/swaps`: A pide un cambio con B. `franja_a`/`franja_b` son

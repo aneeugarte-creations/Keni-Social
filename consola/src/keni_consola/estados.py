@@ -131,6 +131,20 @@ ESTADOS_SWAP_TERMINALES: tuple[str, ...] = (
     ESTADO_SWAP_CANCELADO,
 )
 
+# VERBOS del cambio de turno (#175, Fase 0): discriminador de `rota_swaps_turno.tipo`.
+#   intercambio -> trueque de dos turnos (el único hasta ahora; DEFAULT).
+#   cesion      -> doy mi turno y me quedo libre; lo reclama un compañero elegible.
+#   abierto     -> turno sin dueño que se reclama del pool.
+# `intercambio` es el DEFAULT en BD: las filas y el flujo existentes NO cambian (inerte).
+TIPO_SWAP_INTERCAMBIO = "intercambio"
+TIPO_SWAP_CESION = "cesion"
+TIPO_SWAP_ABIERTO = "abierto"
+TIPOS_SWAP: tuple[str, ...] = (
+    TIPO_SWAP_INTERCAMBIO,
+    TIPO_SWAP_CESION,
+    TIPO_SWAP_ABIERTO,
+)
+
 # Mientras quedan tests que pasan estos strings al crear un turno, los aceptamos por
 # retrocompat y el repos los traduce a un `franja_id` real sembrando la semana por defecto
 # (Mañana 08:00-16:00, Tarde 16:00-24:00). Codigo nuevo debe pasar `franja_id` directamente.
