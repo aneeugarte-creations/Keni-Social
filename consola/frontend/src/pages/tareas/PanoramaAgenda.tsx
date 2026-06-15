@@ -10,13 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SesionContexto } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
-import {
-  formatearDia,
-  hoyCDMX,
-  minutosHastaEvento,
-  posicionTemporal,
-  tiempoRelativo,
-} from "@/lib/fecha";
+import { formatearDia, hoyCDMX, minutosHastaEvento, posicionTemporal } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
 import type { CatalogosContenido, Contenido, EventoRota, PrioridadEvento } from "@/types";
 
@@ -459,39 +453,6 @@ function AccionesItem({
         }
       />
     </span>
-  );
-}
-
-/** Banda superior: lo ÚLTIMO que ha cogido el equipo (por momento de asignación), para ver el pulso. */
-function BandaReciente({ tareas }: { tareas: Contenido[] }) {
-  const recientes = tareas
-    .filter((t) => t.responsable_id)
-    .slice()
-    .sort((a, b) => (b.actualizado || "").localeCompare(a.actualizado || ""))
-    .slice(0, 5);
-  if (recientes.length === 0) return null;
-  return (
-    <section className="space-y-1.5">
-      <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        Lo último que ha cogido el equipo
-      </h2>
-      <div className="flex flex-wrap gap-2">
-        {recientes.map((t) => {
-          const rel = t.actualizado ? tiempoRelativo(t.actualizado) : "";
-          return (
-            <div
-              key={t.id}
-              className="flex items-center gap-1.5 rounded-full border border-border bg-card px-2 py-1 text-xs shadow-sm"
-            >
-              <AvatarPersona id={t.responsable_id} nombre={t.responsable_nombre} size="sm" />
-              <span className="font-medium">{t.responsable_nombre}</span>
-              <span className="max-w-[12rem] truncate text-muted-foreground">{t.titulo}</span>
-              {rel && <span className="shrink-0 text-muted-foreground">· {rel}</span>}
-            </div>
-          );
-        })}
-      </div>
-    </section>
   );
 }
 
@@ -946,8 +907,6 @@ export function PanoramaAgenda({
           </div>
         </section>
       )}
-
-      {!filtro && <BandaReciente tareas={tareas} />}
 
       {urgentes.length === 0 && diasMostrados.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border p-8 text-center">

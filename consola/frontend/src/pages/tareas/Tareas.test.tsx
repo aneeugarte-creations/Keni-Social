@@ -274,7 +274,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
       [],
       usuario("editor", "u1"),
     );
-    // En el Panorama el título sale en la fila Y en la banda «lo último cogido», así que hay ≥1.
+    // Ambas tareas aparecen en el Panorama (vista por defecto) antes de filtrar.
     expect((await screen.findAllByText("Mía")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("De Ana").length).toBeGreaterThan(0);
 
@@ -302,7 +302,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect(screen.queryByRole("menuitem", { name: /Asignar/ })).toBeNull();
   });
 
-  it("el 'Panorama' (por defecto) mezcla eventos por cubrir y tareas con dueño, y muestra lo último cogido", async () => {
+  it("el 'Panorama' (por defecto) mezcla eventos por cubrir y tareas con dueño", async () => {
     renderTareas(
       [
         tarea({
@@ -317,14 +317,12 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
       [evento({ id: "ev-pool", titulo: "Partido por cubrir", fecha: "2026-07-01" })],
     );
 
-    // El Panorama es la vista por defecto: no hay que cambiar de pestaña. El evento (sin dueño)
-    // sale una sola vez; «Clip de Luis» sale en su fila Y en la banda de lo recién cogido.
+    // El Panorama es la vista por defecto: no hay que cambiar de pestaña.
     expect(await screen.findByText("Partido por cubrir")).toBeInTheDocument();
-    expect(screen.getAllByText("Clip de Luis").length).toBeGreaterThan(0);
+    expect(screen.getByText("Clip de Luis")).toBeInTheDocument();
 
-    // El evento sin dueño se marca «Por cubrir» y la banda de lo recién cogido aparece.
+    // El evento sin dueño se marca «Por cubrir».
     expect(screen.getAllByText("Por cubrir").length).toBeGreaterThan(0);
-    expect(screen.getByText(/Lo último que ha cogido el equipo/)).toBeInTheDocument();
 
     // La carga por persona deja filtrar; «luis» aparece como chip.
     expect(screen.getByRole("button", { name: "Ver solo lo de luis" })).toBeInTheDocument();
@@ -906,8 +904,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
       usuario("admin", "u-admin"),
     );
 
-    // El título sale en la fila Y en la banda «lo último cogido»: desplegamos la fila (la que
-    // está dentro de un <button> de la agenda, no el chip de la banda).
+    // Desplegamos la fila de la agenda (el título vive dentro de su <button> de toggle).
     const titulos = await screen.findAllByText("Cruz Azul vs América");
     const filaBtn = titulos.map((t) => t.closest("button")).find(Boolean)!;
     fireEvent.click(filaBtn);
