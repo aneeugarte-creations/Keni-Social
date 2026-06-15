@@ -16,12 +16,16 @@ export function useMarquee({
   modoImagen,
   escala,
   store,
+  salirDeModoImagen,
 }: {
   stageRef: RefObject<Konva.Stage | null>;
   espacioRef: RefObject<boolean>;
   modoImagen: Capa | null;
   escala: number;
   store: StoreEditor;
+  // Sale del modo de imagen activo (encuadre/recorte). Se llama al clicar en el VACÍO durante ese
+  // modo, para salir y deseleccionar "clicando fuera de la foto" (como en Canva), no solo con Esc.
+  salirDeModoImagen?: () => void;
 }) {
   // Selección por rectángulo (marquee): caja en coordenadas del DOCUMENTO (mismo sistema que el Stage
   // escalado). `null` = inactiva. Se dibuja en su propia Layer no interactiva.
@@ -29,8 +33,16 @@ export function useMarquee({
 
   const onMouseDownStage = (e: Konva.KonvaEventObject<MouseEvent>) => {
     const stage = stageRef.current;
-    if (!stage || espacioRef.current || modoImagen) return;
+    if (!stage || espacioRef.current) return;
     if (e.evt.button !== 0 || e.target !== stage) return;
+    // Editando la foto (encuadre/recorte): un clic en el VACÍO —fuera de la foto, cuyo gesto captura
+    // su propio overlay— sale del modo y deselecciona, como clicar fuera en Canva. Antes el guard de
+    // `modoImagen` lo ignoraba y solo se salía con Esc o el botón "Listo".
+    if (modoImagen) {
+      salirDeModoImagen?.();
+      store.getState().seleccionar(null);
+      return;
+    }
     const rect = stage.container().getBoundingClientRect();
     const aDoc = (cx: number, cy: number) => ({ x: (cx - rect.left) / escala, y: (cy - rect.top) / escala });
     const inicio = aDoc(e.evt.clientX, e.evt.clientY);

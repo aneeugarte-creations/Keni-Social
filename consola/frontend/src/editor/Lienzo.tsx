@@ -203,8 +203,15 @@ export function Lienzo({
   // Inserción de imágenes (portapapeles, arrastre del escritorio, activos de la galería): hook.
   const { onDrop } = useInsercionImagen({ store, documento, escala, w, h, scrollRef, lienzoApi });
 
+  // Sale del modo de imagen activo: el recorte se CONFIRMA (como su botón "Hecho"); el reencuadre se
+  // aplica en vivo, así que solo se cierra. Lo usa el marquee para "clicar fuera de la foto" y salir.
+  const salirDeModoImagen = () => {
+    if (capaRecorte) confirmarRecorte();
+    else if (capaReencuadre) onSalirReencuadre?.();
+  };
+
   // Selección por rectángulo (marquee) sobre el fondo vacío del Stage: hook.
-  const { marquee, onMouseDownStage } = useMarquee({ stageRef, espacioRef, modoImagen, escala, store });
+  const { marquee, onMouseDownStage } = useMarquee({ stageRef, espacioRef, modoImagen, escala, store, salirDeModoImagen });
 
   // HOVER affordance (contorno fino de acento sobre la capa bajo el cursor antes de seleccionar).
   const { setHoverId, onMouseOverStage, hoverBox } = useHover({
