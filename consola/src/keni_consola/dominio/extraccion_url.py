@@ -156,13 +156,15 @@ def es_host_de_video(url: str) -> bool:
 # --------------------------------------------------------------------------- #
 
 
-def _descargar_real(url: str) -> str:
+def _descargar_real(url: str, timeout: float | None = None) -> str:
     """Descarga la pagina con `httpx` respetando timeout y tamano maximo.
 
     Lee en trozos y corta si supera `_MAX_BYTES`. Import diferido de httpx (dependencia
     transitiva via keni-metricas), igual que en `api.rss`/`media`. Sigue redirects (las
     notas suelen redirigir a https/canonical), pero el guard SSRF ya se aplico al host
-    de partida. Lanza `ExtraccionError` con mensaje en espanol ante cualquier fallo.
+    de partida. `timeout` (opcional) sube el tope por defecto (`_TIMEOUT`) cuando la descarga
+    ocurre FUERA de una petición HTTP (p. ej. el import en segundo plano). Lanza
+    `ExtraccionError` con mensaje en espanol ante cualquier fallo.
     """
     try:
         import httpx
@@ -171,7 +173,9 @@ def _descargar_real(url: str) -> str:
 
     cabeceras = {"User-Agent": "Mozilla/5.0 (compatible; KeniSocial/1.0; +operativo)"}
     try:
-        with httpx.Client(timeout=_TIMEOUT, follow_redirects=True, headers=cabeceras) as cliente:
+        with httpx.Client(
+            timeout=timeout or _TIMEOUT, follow_redirects=True, headers=cabeceras
+        ) as cliente:
             with cliente.stream("GET", url) as respuesta:
                 if respuesta.status_code != 200:
                     raise ExtraccionError(
@@ -381,12 +385,16 @@ def _texto_de_html(html: str) -> tuple[str, str]:
     return titulo, cuerpo
 
 
-def extraer_texto(url: str) -> tuple[str, str]:
+def extraer_texto(url: str, *, timeout: float | None = None) -> tuple[str, str]:
     """Descarga `url` y devuelve `(titulo, cuerpo)` legible. Lanza `ExtraccionError`.
 
     NO valida la URL (eso es de `validar_url`, que el endpoint llama antes para el guard
     SSRF). Lanza si la pagina es de video/streaming (no se puede leer como articulo) o si
     no se obtiene texto util. La descarga real vive en `_DESCARGADOR` (mockeable).
+
+    `timeout` (opcional) sube el tope de descarga; solo aplica con el descargador REAL (cuando
+    `_DESCARGADOR` está mockeado en tests, se respeta el mock y se ignora el timeout). Lo usa el
+    import en segundo plano, que descarga FUERA de la petición HTTP y puede esperar más.
     """
     if es_host_de_video(url):
         raise ExtraccionError(
@@ -394,7 +402,10 @@ def extraer_texto(url: str) -> tuple[str, str]:
             "Para video, descarga el clip y úsalo en «Clip a copy» (se transcribe en tu "
             "equipo); o pega el texto en «Copy desde nota»."
         )
-    html = _DESCARGADOR(url)
+    if timeout is not None and _DESCARGADOR is _descargar_real:
+        html = _descargar_real(url, timeout=timeout)
+    else:
+        html = _DESCARGADOR(url)
     titulo, cuerpo = _texto_de_html(html)
     if not cuerpo.strip():
         raise ExtraccionError(

@@ -25,8 +25,10 @@ la propuesta a `pendiente` (o `error`).
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
+from starlette.background import BackgroundTask
 from starlette.datastructures import UploadFile
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -38,6 +40,13 @@ from ..dominio import extraccion_url
 from ..dominio import parrilla_import as pi
 from ..dominio import parrilla_import_job as job
 from ..seguridad import autor_de_peticion
+
+_log = logging.getLogger("keni_consola.parrilla_import")
+
+# Descarga de un ENLACE en segundo plano: como NO bloquea la petición (corre tras responder, en
+# un hilo), puede esperar más que el tope por defecto de `extraccion_url` (15 s, pensado para
+# peticiones síncronas). Una página lenta desde el datacenter ya no revienta por timeout corto.
+_TIMEOUT_ENLACE = 45.0
 
 
 # --------------------------------------------------------------------------- #
@@ -196,13 +205,20 @@ async def importar(request: Request) -> Response:
         url_limpia, err = extraccion_url.validar_url(url_crudo)
         if err or url_limpia is None:
             return JSONResponse({"error": err or "Enlace no válido."}, status_code=400)
-        try:
-            titulo_url, cuerpo_url = extraccion_url.extraer_texto(url_limpia)
-        except extraccion_url.ExtraccionError as e:
-            # Vídeo/streaming o página sin texto: no se puede leer como artículo. Mensaje claro;
-            # el equipo puede teclear el partido a mano o pegar el texto.
-            return JSONResponse({"error": str(e)}, status_code=422)
-        texto = f"{titulo_url}\n\n{cuerpo_url}".strip() if titulo_url else cuerpo_url
+        # Vídeo/streaming: no hay artículo que leer. Chequeo BARATO (solo el host), así que se
+        # resuelve YA con un 422 claro, sin crear propuesta ni bajar nada.
+        if extraccion_url.es_host_de_video(url_limpia):
+            return JSONResponse(
+                {
+                    "error": "Ese enlace es de un video o transmisión: no se puede leer como nota. "
+                    "Pega el texto del evento a mano.",
+                },
+                status_code=422,
+            )
+        # La DESCARGA de la página (red, puede tardar o colgarse) NO bloquea la petición: creamos
+        # la propuesta (estado generando), respondemos al INSTANTE y bajamos+encolamos en segundo
+        # plano —igual que «Cajones del día» hace el trabajo pesado fuera del handler—. El frontend
+        # sondea la propuesta hasta `pendiente` o `error`; ya no ve un timeout de la petición.
         propuesta = repos.crear_propuesta_parrilla(
             semana=semana,
             doc_nombre=url_limpia[:200],
@@ -212,14 +228,53 @@ async def importar(request: Request) -> Response:
             autor_nombre=(autor or {}).get("usuario", ""),
             estado=pi.ESTADO_GENERANDO,
         )
+        pid = propuesta["id"]
+        roster = _roster()
 
-        def _encolar() -> dict[str, Any]:
-            return job.lanzar_desde_texto(
-                propuesta_id=propuesta["id"],
-                texto=texto,
-                nombres_miembros=_roster(),
-                autor=autor,
-            )
+        def _descargar_y_encolar() -> None:
+            """Baja el enlace y encola el job (fuera de la petición). Cualquier fallo deja la
+            propuesta en `error` con un mensaje claro; el frontend lo muestra al sondear."""
+            try:
+                titulo_url, cuerpo_url = extraccion_url.extraer_texto(
+                    url_limpia, timeout=_TIMEOUT_ENLACE
+                )
+            except extraccion_url.ExtraccionError as e:
+                repos.actualizar_propuesta_parrilla(
+                    pid, {"estado": pi.ESTADO_ERROR, "error": str(e)}
+                )
+                return
+            except Exception:  # noqa: BLE001 -- red imprevista: no dejar la propuesta colgada
+                _log.exception("import enlace: la descarga falló (propuesta %s)", pid)
+                repos.actualizar_propuesta_parrilla(
+                    pid, {"estado": pi.ESTADO_ERROR, "error": "No se pudo leer el enlace."}
+                )
+                return
+            texto = f"{titulo_url}\n\n{cuerpo_url}".strip() if titulo_url else cuerpo_url
+            try:
+                gen = job.lanzar_desde_texto(
+                    propuesta_id=pid, texto=texto, nombres_miembros=roster, autor=autor
+                )
+            except generaciones.ColaLlenaError:
+                repos.actualizar_propuesta_parrilla(
+                    pid,
+                    {
+                        "estado": pi.ESTADO_ERROR,
+                        "error": "Hay demasiadas generaciones en curso; inténtalo en unos segundos.",
+                    },
+                )
+                return
+            except job.ParrillaImportError as e:
+                repos.actualizar_propuesta_parrilla(
+                    pid, {"estado": pi.ESTADO_ERROR, "error": str(e)}
+                )
+                return
+            repos.actualizar_propuesta_parrilla(pid, {"gen_id": gen.get("id", "")})
+
+        return JSONResponse(
+            {"propuesta_id": pid, "gen_id": ""},
+            status_code=202,
+            background=BackgroundTask(_descargar_y_encolar),
+        )
 
     elif texto_pegado:
         propuesta = repos.crear_propuesta_parrilla(
