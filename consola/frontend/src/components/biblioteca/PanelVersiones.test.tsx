@@ -1,8 +1,9 @@
 /**
- * PanelVersiones para un equipo de redes NO técnico: comparación «Tu borrador ↔ versión
- * elegida», fila sintética del borrador, lista de PUBLICACIONES por su nota (sin SHA), la
- * que está EN VIVO marcada, diff ancho «Revisar cambios», acciones VISIBLES por fila
- * («Abrir versión», «Restaurar») y «Descartar cambios».
+ * PanelVersiones para un equipo de redes NO técnico: un CTA prominente «Revisar y publicar»
+ * cuando hay cambios sin publicar, una fila sintética «Tu borrador», la lista de
+ * PUBLICACIONES por su nota (sin SHA) con la que está EN VIVO marcada, y por fila las
+ * acciones «Ver» (diff a pantalla completa de esa versión ↔ tu borrador) y «Restaurar».
+ * Ya NO hay dropdown de «Comparar con»: la comparación es por versión.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -95,8 +96,7 @@ describe("PanelVersiones", () => {
     stubFetch();
     montar();
     expect(await screen.findByText("Tono más directo en titulares")).toBeInTheDocument();
-    // Aparece como fila y como opción del selector «Comparar con»; basta con que esté.
-    expect(screen.getAllByText("Primera versión de la voz").length).toBeGreaterThan(0);
+    expect(screen.getByText("Primera versión de la voz")).toBeInTheDocument();
     expect(screen.getByText("EN VIVO")).toBeInTheDocument();
     // Fila sintética del borrador con su badge humano.
     expect(screen.getByText("Tu borrador")).toBeInTheDocument();
@@ -105,19 +105,30 @@ describe("PanelVersiones", () => {
     expect(screen.queryByText(/aaa111/)).not.toBeInTheDocument();
   });
 
-  it("«Revisar y publicar» dispara el flujo de publicación", async () => {
+  it("ya NO ofrece un dropdown «Comparar con»", async () => {
+    stubFetch();
+    montar();
+    await screen.findByText("Tono más directo en titulares");
+    expect(
+      screen.queryByLabelText("Versión publicada a comparar con tu borrador"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Ver qué cambió/ })).not.toBeInTheDocument();
+  });
+
+  it("muestra el CTA «Revisar y publicar» y dispara el flujo de publicación", async () => {
     stubFetch();
     const { onPublicar } = montar();
     fireEvent.click(await screen.findByRole("button", { name: /Revisar y publicar/ }));
     expect(onPublicar).toHaveBeenCalledTimes(1);
   });
 
-  it("«Ver qué cambió» abre el diff ancho «Revisar cambios»", async () => {
+  it("oculta las acciones del borrador y marca «Al día» cuando no hay cambios sin publicar", async () => {
     stubFetch();
-    montar();
-    fireEvent.click(await screen.findByRole("button", { name: /Ver qué cambió/ }));
-    expect(await screen.findByText("Revisar cambios")).toBeInTheDocument();
-    expect(screen.getByText(/Cambios desde lo publicado/)).toBeInTheDocument();
+    montar({ sinPublicar: false });
+    await screen.findByText("Tono más directo en titulares");
+    expect(screen.queryByRole("button", { name: /Revisar y publicar/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Descartar cambios/ })).not.toBeInTheDocument();
+    expect(screen.getByText("Al día")).toBeInTheDocument();
   });
 
   it("«Descartar cambios» llama a descartar y avisa al contenedor", async () => {
@@ -130,18 +141,29 @@ describe("PanelVersiones", () => {
     await waitFor(() => expect(onBorradorActualizado).toHaveBeenCalled());
   });
 
-  it("«Abrir versión» (botón visible) abre el lector renderizado de esa versión", async () => {
+  it("«Ver» abre el diff a pantalla completa de esa versión ↔ tu borrador", async () => {
     stubFetch();
     montar();
     await screen.findByText("Tono más directo en titulares");
-    // Nombre exacto: la fila también es role=button, pero su nombre es el texto completo.
-    const botones = screen.getAllByRole("button", { name: "Abrir versión" });
+    const botones = screen.getAllByRole("button", { name: "Ver" });
     expect(botones.length).toBe(HISTORIAL.length);
+    // La 1ª publicación es la que está EN VIVO → subtítulo «desde lo publicado».
     fireEvent.click(botones[0]);
-    expect(await screen.findByText("Texto publicado.")).toBeInTheDocument();
+    expect(await screen.findByText(/Cambios desde lo publicado/)).toBeInTheDocument();
+    // La vista de revisión a pantalla completa trae su toggle «Solo cambios».
+    expect(await screen.findByLabelText("Solo cambios")).toBeInTheDocument();
   });
 
-  it("«Restaurar» (botón visible) trae la versión al borrador y avisa al contenedor", async () => {
+  it("«Ver» de una versión NO en vivo usa el subtítulo «desde esta versión»", async () => {
+    stubFetch();
+    montar();
+    await screen.findByText("Primera versión de la voz");
+    const botones = screen.getAllByRole("button", { name: "Ver" });
+    fireEvent.click(botones[1]);
+    expect(await screen.findByText(/Cambios desde esta versión/)).toBeInTheDocument();
+  });
+
+  it("«Restaurar» trae la versión al borrador y avisa al contenedor", async () => {
     const llamadas = stubFetch();
     const { onBorradorActualizado } = montar();
     await screen.findByText("Tono más directo en titulares");
@@ -152,30 +174,5 @@ describe("PanelVersiones", () => {
       expect(llamadas.some((l) => l.metodo === "POST" && l.path.includes("/revertir/"))).toBe(true),
     );
     await waitFor(() => expect(onBorradorActualizado).toHaveBeenCalled());
-  });
-
-  it("abrir el diff de una fila NO cambia el selector «Comparar con»", async () => {
-    stubFetch();
-    montar();
-    await screen.findAllByText("Primera versión de la voz");
-    const selector = screen.getByLabelText(
-      "Versión publicada a comparar con tu borrador",
-    ) as HTMLSelectElement;
-    // Por defecto el selector apunta a lo publicado (en vivo).
-    expect(selector.value).toBe("aaa111");
-    // Clic en el cuerpo de la 2ª publicación (su autor es único en esa fila).
-    fireEvent.click(screen.getByText("luis"));
-    expect(await screen.findByText("Revisar cambios")).toBeInTheDocument();
-    // El diff muestra ESA versión, no la del selector…
-    expect(screen.getByText(/Cambios desde esta versión/)).toBeInTheDocument();
-    // …y el selector del sidebar sigue intacto.
-    expect(selector.value).toBe("aaa111");
-  });
-
-  it("«Ver qué cambió» se deshabilita cuando no hay cambios sin publicar", async () => {
-    stubFetch();
-    montar({ sinPublicar: false });
-    const boton = await screen.findByRole("button", { name: /Ver qué cambió/ });
-    expect(boton).toBeDisabled();
   });
 });

@@ -23,7 +23,9 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { DialogPublicar } from "@/components/biblioteca/DialogPublicar";
-import { LectorProsa } from "@/components/biblioteca/LectorProsa";
+import { PanelCompilado } from "@/components/biblioteca/PanelCompilado";
+import { PanelFicha } from "@/components/biblioteca/PanelFicha";
+import { PanelUso } from "@/components/biblioteca/PanelUso";
 import { PanelVersiones } from "@/components/biblioteca/PanelVersiones";
 import { confirmar } from "@/components/comunes/confirmar";
 import { MenuFlotante } from "@/components/comunes/MenuContextual";
@@ -31,260 +33,21 @@ import { EditorWysiwyg } from "@/components/editor/EditorWysiwyg";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useMenuContextual } from "@/hooks/use-menu-contextual";
 import { useEsAdmin } from "@/hooks/use-biblioteca";
-import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { ApiError, api, mensajeError } from "@/lib/api";
 import { tiempoRelativo } from "@/lib/fecha";
-import type { DocumentoTexto, EtapaPrompt, RespuestaMaquinaTexto } from "@/types";
+import type { DocumentoTexto, RespuestaMaquinaTexto } from "@/types";
 
 import { claveEstrategiaBase } from "./estrategia/api";
 import { separarFrontmatter } from "./lib";
 import { PanelLanzar } from "./PanelLanzar";
 
 const ESTADOS_DOC = ["activo", "borrador", "archivado"] as const;
-const CLASES_EDITORIAL = ["marca", "voz", "plataforma", "tropicalizacion", "reglas"] as const;
 
 type PestanaPanel = "versiones" | "uso" | "compilado" | "ficha";
-
-/** Pestaña "Uso": dónde entra este documento (procesos, pipelines y su etapa en las máquinas). */
-function PanelUso({ doc, maquina }: { doc: DocumentoTexto; maquina?: RespuestaMaquinaTexto }) {
-  // Posición del doc en las TRES máquinas: etapas `prompt` cuyo doc_id es este doc.
-  const etapas = React.useMemo(
-    () =>
-      (maquina?.maquinas ?? []).flatMap((m) =>
-        m.etapas
-          .filter((e): e is EtapaPrompt => e.tipo === "prompt" && e.doc_id === doc.id)
-          .map((e) => `${m.titulo} → ${e.titulo}`),
-      ),
-    [maquina, doc.id],
-  );
-  const procesos = doc.procesos ?? [];
-  const pipelines = doc.pipelines ?? [];
-  const nada =
-    procesos.length === 0 && pipelines.length === 0 && etapas.length === 0 && !doc.rol;
-
-  return (
-    <div className="space-y-4 text-sm">
-      {procesos.length > 0 ? (
-        <section>
-          <h4 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            <Zap className="h-3.5 w-3.5 text-keni" /> Procesos donde se inyecta
-          </h4>
-          <ul className="mt-1.5 space-y-1">
-            {procesos.map((p) => (
-              <li key={p} className="flex gap-2">
-                <span className="text-keni">→</span>
-                <span>{p}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-      {pipelines.length > 0 || doc.rol ? (
-        <section>
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Pipelines
-          </h4>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {doc.rol ? (
-              <span className="rounded-full bg-keni/10 px-2 py-0.5 text-xs font-medium text-keni">
-                rol: {doc.rol}
-              </span>
-            ) : null}
-            {pipelines.map((p) => (
-              <span key={p} className="rounded-full bg-muted px-2 py-0.5 text-xs">
-                {p}
-              </span>
-            ))}
-          </div>
-        </section>
-      ) : null}
-      {etapas.length > 0 ? (
-        <section>
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            En las máquinas
-          </h4>
-          <ul className="mt-1.5 space-y-1 text-sm">
-            {etapas.map((e) => (
-              <li key={e}>{e}</li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-      {nada ? (
-        <p className="text-sm text-muted-foreground">
-          Se ejecuta a mano con «Probar» o se adjunta según su clase y marcas.
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-/** Pestaña "Compilado": el prompt ENSAMBLADO del pipeline (lo que verá el modelo). */
-function PanelCompilado({ pipelineId }: { pipelineId: string }) {
-  const { marcaActiva } = useMarcaActiva();
-  const previewQuery = useQuery({
-    queryKey: ["texto-preview", pipelineId, marcaActiva],
-    queryFn: ({ signal }) => api.previewPipeline(pipelineId, marcaActiva as string, undefined, signal),
-    enabled: !!marcaActiva,
-  });
-
-  if (!marcaActiva) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        Elige una marca para ver el prompt ensamblado de ese modelo.
-      </p>
-    );
-  }
-  if (previewQuery.isPending) return <Skeleton className="h-24 w-full" />;
-  if (previewQuery.isError) {
-    return <p className="text-sm text-muted-foreground">{mensajeError(previewQuery.error)}</p>;
-  }
-  const preview = previewQuery.data;
-  return (
-    <div className="space-y-3">
-      <p className="text-xs text-muted-foreground">
-        Prompt ensamblado para esta marca
-      </p>
-      {preview.adjuntos.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5">
-          {preview.adjuntos.map((a) => (
-            <span key={a.id} className="rounded-full bg-muted px-2 py-0.5 text-xs" title={a.clase}>
-              {a.titulo}
-            </span>
-          ))}
-        </div>
-      ) : null}
-      <div className="rounded-md border border-border bg-muted/20 p-3">
-        <LectorProsa cuerpo={preview.prompt_efectivo} />
-      </div>
-    </div>
-  );
-}
-
-/** Pestaña "Ficha": metadata editable del documento (vive en el panel, no estorba al cuerpo). */
-function PanelFicha({
-  borrador,
-  marcas,
-  onEditar,
-}: {
-  borrador: DocumentoTexto;
-  marcas: { id: string; nombre: string }[];
-  onEditar: (parcial: Partial<DocumentoTexto>) => void;
-}) {
-  const esEditorial = borrador.tipo !== "prompt";
-  return (
-    <div className="space-y-3 text-sm">
-      <div className="space-y-1">
-        <Label htmlFor="ficha-descripcion" className="text-xs">
-          Descripción
-        </Label>
-        <Input
-          id="ficha-descripcion"
-          value={borrador.descripcion ?? ""}
-          onChange={(e) => onEditar({ descripcion: e.target.value })}
-          placeholder="Qué es y para qué"
-          className="h-8 text-xs"
-        />
-      </div>
-      <div className="space-y-1">
-        <Label htmlFor="ficha-carpeta" className="text-xs">
-          Carpeta
-        </Label>
-        <Input
-          id="ficha-carpeta"
-          value={borrador.carpeta}
-          onChange={(e) => onEditar({ carpeta: e.target.value })}
-          placeholder="sin carpeta"
-          className="h-8 text-xs"
-        />
-      </div>
-      {esEditorial ? (
-        <div className="space-y-1">
-          <Label htmlFor="ficha-clase" className="text-xs">
-            Clase
-          </Label>
-          <select
-            id="ficha-clase"
-            value={borrador.clase || ""}
-            onChange={(e) => onEditar({ clase: e.target.value })}
-            className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
-          >
-            <option value="">(sin clase)</option>
-            {CLASES_EDITORIAL.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </div>
-      ) : null}
-      {esEditorial && marcas.length > 0 ? (
-        <fieldset className="space-y-1">
-          <legend className="text-xs font-medium">Marcas a las que aplica</legend>
-          <div className="space-y-1">
-            {marcas.map((m) => {
-              const activa = (borrador.marcas ?? []).includes(m.id);
-              return (
-                <label key={m.id} className="flex cursor-pointer items-center gap-2 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={activa}
-                    onChange={(e) => {
-                      const set = new Set(borrador.marcas ?? []);
-                      if (e.target.checked) set.add(m.id);
-                      else set.delete(m.id);
-                      onEditar({ marcas: [...set] });
-                    }}
-                    className="h-3.5 w-3.5 accent-foreground"
-                  />
-                  {m.nombre}
-                </label>
-              );
-            })}
-          </div>
-        </fieldset>
-      ) : null}
-      <div className="space-y-1">
-        <Label htmlFor="ficha-etiquetas" className="text-xs">
-          Etiquetas
-        </Label>
-        <Input
-          id="ficha-etiquetas"
-          defaultValue={(borrador.etiquetas ?? []).join(", ")}
-          onBlur={(e) =>
-            onEditar({
-              etiquetas: e.target.value
-                .split(",")
-                .map((t) => t.trim())
-                .filter(Boolean),
-            })
-          }
-          placeholder="ej. breaking, deportes"
-          className="h-8 text-xs"
-        />
-      </div>
-      {esEditorial ? (
-        <div className="space-y-1">
-          <Label htmlFor="ficha-prioridad" className="text-xs">
-            Prioridad de ensamblaje (menor = antes)
-          </Label>
-          <Input
-            id="ficha-prioridad"
-            type="number"
-            value={borrador.prioridad ?? 0}
-            onChange={(e) => onEditar({ prioridad: Number(e.target.value) })}
-            className="h-8 w-24 text-xs"
-          />
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 export function DetalleDocumento({
   docId,
@@ -663,33 +426,57 @@ export function DetalleDocumento({
         ) : null}
       </div>
 
-      {/* Línea de deployment + nota de inyección. */}
+      {/* Línea de deployment + nota de inyección + estado de guardado. */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
         {produccion ? (
           <span
             className="inline-flex items-center gap-1.5"
             title="Lo publicado es lo que ven los agentes en todas las generaciones."
           >
-            <span className="text-emerald-600 dark:text-emerald-400" aria-hidden>●</span>
-            Publicado (lo que ven los agentes) desde{" "}
-            {tiempoRelativo(produccion.creado) || produccion.creado.slice(0, 10)}{" "}
-            ({produccion.autor || "—"})
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
+            <span>
+              <span className="font-medium text-foreground">Publicado</span>
+              <span className="text-muted-foreground"> — lo que ven los agentes</span>, desde{" "}
+              {tiempoRelativo(produccion.creado) || produccion.creado.slice(0, 10)} (
+              {produccion.autor || "—"})
+            </span>
           </span>
         ) : (
-          <span>Sin publicar aún — los agentes usan tu borrador.</span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" aria-hidden />
+            Sin publicar aún — los agentes usan tu borrador.
+          </span>
         )}
         {procesos.length > 0 ? (
-          <span className="inline-flex items-center gap-1" title={procesos.join("\n")}>
+          <span
+            className="inline-flex items-center gap-1 border-l border-border pl-3"
+            title={procesos.join("\n")}
+          >
             <Zap className="h-3 w-3 text-keni" aria-hidden />
             Inyectado en: {procesos.join(" · ")}
           </span>
         ) : null}
-        <span className="ml-auto">
-          {conflicto
-            ? "Sin guardar — conflicto (elige abajo)"
-            : guardarMut.isPending
-              ? "Guardando borrador…"
-              : `Borrador guardado ${tiempoRelativo(borrador.actualizado) || borrador.actualizado || ""}`.trim()}
+        <span
+          className={`ml-auto inline-flex items-center gap-1.5 ${
+            conflicto ? "text-amber-600 dark:text-amber-400" : ""
+          }`}
+        >
+          {conflicto ? (
+            <>
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden />
+              Sin guardar — conflicto (elige abajo)
+            </>
+          ) : guardarMut.isPending ? (
+            <>
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-keni" aria-hidden />
+              Guardando borrador…
+            </>
+          ) : (
+            <>
+              <span className="h-1.5 w-1.5 rounded-full bg-border" aria-hidden />
+              {`Borrador guardado ${tiempoRelativo(borrador.actualizado) || borrador.actualizado || ""}`.trim()}
+            </>
+          )}
         </span>
       </div>
 
@@ -725,32 +512,28 @@ export function DetalleDocumento({
         </div>
       ) : null}
 
-      {/* ───────── Cuerpo + panel lateral ───────── */}
+      {/* ───────── Panel lateral (izquierda) + cuerpo (derecha) ───────── */}
       <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-md border border-border p-3">
-          <EditorWysiwyg
-            key={borrador.id}
-            value={borrador.cuerpo}
-            onContenido={(md) => editar({ cuerpo: md })}
-            conVariables
-            placeholder={
-              esPrompt
-                ? "Escribe el prompt… ({{ para insertar una variable)"
-                : "Escribe la pieza editorial (voz, reglas, plataforma…)…"
-            }
-          />
-        </div>
-
         <aside className="flex w-full shrink-0 flex-col gap-2 lg:w-96">
           <Tabs value={pestana} onValueChange={(v) => setPestana(v as PestanaPanel)}>
-            <TabsList className={`grid w-full ${pipelineBase ? "grid-cols-4" : "grid-cols-3"}`}>
-              <TabsTrigger value="versiones">Versiones</TabsTrigger>
-              <TabsTrigger value="uso">Uso</TabsTrigger>
-              {pipelineBase ? <TabsTrigger value="compilado">Compilado</TabsTrigger> : null}
-              <TabsTrigger value="ficha">Ficha</TabsTrigger>
+            <TabsList className={`grid h-auto w-full gap-1 p-1 ${pipelineBase ? "grid-cols-4" : "grid-cols-3"}`}>
+              <TabsTrigger value="versiones" className="text-xs">
+                Versiones
+              </TabsTrigger>
+              <TabsTrigger value="uso" className="text-xs">
+                Uso
+              </TabsTrigger>
+              {pipelineBase ? (
+                <TabsTrigger value="compilado" className="text-xs">
+                  Compilado
+                </TabsTrigger>
+              ) : null}
+              <TabsTrigger value="ficha" className="text-xs">
+                Ficha
+              </TabsTrigger>
             </TabsList>
           </Tabs>
-          <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border p-3">
+          <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border bg-muted/20 p-3">
             {pestana === "versiones" ? (
               <PanelVersiones
                 docId={borrador.id}
@@ -781,6 +564,20 @@ export function DetalleDocumento({
             )}
           </div>
         </aside>
+
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-md border border-border p-3">
+          <EditorWysiwyg
+            key={borrador.id}
+            value={borrador.cuerpo}
+            onContenido={(md) => editar({ cuerpo: md })}
+            conVariables
+            placeholder={
+              esPrompt
+                ? "Escribe el prompt… ({{ para insertar una variable)"
+                : "Escribe la pieza editorial (voz, reglas, plataforma…)…"
+            }
+          />
+        </div>
       </div>
 
       {/* ───────── Publicar / solicitar ───────── */}
