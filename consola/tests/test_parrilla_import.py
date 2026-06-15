@@ -135,6 +135,56 @@ def test_crear_evento_enum_invalido_es_error():
 
 
 # --------------------------------------------------------------------------- #
+# crear_tarea (modo tareas)                                                   #
+# --------------------------------------------------------------------------- #
+
+
+def test_crear_tarea_valida():
+    txt = (
+        '{"operaciones": [{"tipo": "crear_tarea", "titulo": "Editar el clip del gol", '
+        '"detalle": "subir a IG", "prioridad": "alta", "fecha_objetivo": "2026-06-20"}]}'
+    )
+    validas, errores = pi.parsear_y_validar(txt, _ctx())
+    assert errores == []
+    assert len(validas) == 1
+    assert validas[0]["tipo"] == "crear_tarea"
+    assert validas[0]["titulo"] == "Editar el clip del gol"
+    assert validas[0]["fecha_objetivo"] == "2026-06-20"
+
+
+def test_crear_tarea_sin_fecha_es_valida():
+    # Un encargo puede no tener deadline: `fecha_objetivo` es opcional.
+    txt = '[{"tipo": "crear_tarea", "titulo": "Revisar el copy del post"}]'
+    validas, errores = pi.parsear_y_validar(txt, _ctx())
+    assert errores == []
+    assert len(validas) == 1
+    assert validas[0]["tipo"] == "crear_tarea"
+
+
+def test_crear_tarea_sin_titulo_es_error():
+    txt = '[{"tipo": "crear_tarea", "titulo": "   "}]'
+    validas, errores = pi.parsear_y_validar(txt, _ctx())
+    assert validas == []
+    assert "título" in errores[0]["error"]
+
+
+def test_crear_tarea_fecha_invalida_es_error():
+    txt = '[{"tipo": "crear_tarea", "titulo": "X", "fecha_objetivo": "no-es-fecha"}]'
+    validas, errores = pi.parsear_y_validar(txt, _ctx())
+    assert validas == []
+    assert "Fecha inválida" in errores[0]["error"]
+
+
+def test_prompt_modo_tareas_pide_crear_tarea_no_eventos():
+    p = pij.componer_prompt(
+        ctx=_ctx(), texto_documento="editar clip, subir fotos del entreno", modo="tareas"
+    )
+    assert "crear_tarea" in p
+    assert "crear_evento" not in p  # el modo tareas NO mezcla eventos
+    assert "editar clip" in p  # el texto fuente queda embebido
+
+
+# --------------------------------------------------------------------------- #
 # crear_turno                                                                 #
 # --------------------------------------------------------------------------- #
 

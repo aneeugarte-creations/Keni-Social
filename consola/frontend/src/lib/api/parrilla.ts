@@ -33,12 +33,16 @@ export const apiParrilla = {
     url?: string;
     texto?: string;
     marca?: string;
+    // "eventos" (defecto) extrae eventos a cubrir; "tareas" extrae encargos sueltos
+    // (clase='tarea', no van al calendario). Cambia el prompt y el tipo de operación.
+    modo?: "eventos" | "tareas";
   }) => {
     const form = new FormData();
     if (entrada.archivo) form.set("archivo", entrada.archivo);
     if (entrada.url) form.set("url", entrada.url);
     if (entrada.texto) form.set("texto", entrada.texto);
     if (entrada.marca) form.set("marca", entrada.marca);
+    if (entrada.modo) form.set("modo", entrada.modo);
     return peticion<RespuestaImportarParrilla>("/parrilla/importar", {
       metodo: "POST",
       form,

@@ -82,6 +82,24 @@ class CrearEvento(BaseModel):
     prioridad: str | None = None
 
 
+class CrearTarea(BaseModel):
+    """Alta de una TAREA suelta del equipo (encargo, `clase='tarea'`, sin evento ni calendario).
+
+    La emite el modo `tareas` del import: a diferencia de `crear_evento` (unidad de cobertura
+    con fecha/hora que cae en el calendario), una tarea es trabajo que alguien tiene que HACER
+    (editar un clip, subir fotos, redactar un copy…). La fecha es OPCIONAL (un encargo puede no
+    tener fecha límite); si viene es `fecha_objetivo` (deadline), no la clava al calendario.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    tipo: Literal["crear_tarea"]
+    titulo: str
+    detalle: str | None = None
+    prioridad: str | None = None
+    fecha_objetivo: str | None = None
+
+
 class CrearTurno(BaseModel):
     """Alta de un turno (horario `(fecha, franja)` para un miembro existente).
 
@@ -130,7 +148,7 @@ class ModificarTurno(BaseModel):
 
 
 Operacion = Annotated[
-    Union[CrearEvento, CrearTurno, ModificarTurno],
+    Union[CrearEvento, CrearTarea, CrearTurno, ModificarTurno],
     Field(discriminator="tipo"),
 ]
 
@@ -282,6 +300,16 @@ def _validar_semantica(op: Operacion, ctx: Contexto) -> str | None:
             return f"Hora inválida: {op.hora!r} (usa HH:MM)."
         if op.tipo_cobertura not in (None, "") and op.tipo_cobertura not in TIPOS_COBERTURA:
             return f"Tipo de cobertura inválido: {op.tipo_cobertura!r}."
+        if op.prioridad not in (None, "") and op.prioridad not in PRIORIDADES_EVENTO:
+            return f"Prioridad inválida: {op.prioridad!r}."
+        return None
+
+    if isinstance(op, CrearTarea):
+        if not op.titulo.strip():
+            return "La tarea necesita un título."
+        # La fecha es OPCIONAL (un encargo puede no tener deadline); si viene, ISO válida.
+        if op.fecha_objetivo not in (None, "") and not _fecha_iso_valida(op.fecha_objetivo or ""):
+            return f"Fecha inválida: {op.fecha_objetivo!r} (usa AAAA-MM-DD)."
         if op.prioridad not in (None, "") and op.prioridad not in PRIORIDADES_EVENTO:
             return f"Prioridad inválida: {op.prioridad!r}."
         return None

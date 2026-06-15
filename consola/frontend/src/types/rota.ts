@@ -676,6 +676,18 @@ export interface OperacionCrearEvento {
   prioridad?: PrioridadEvento;
 }
 
+/** Crear una TAREA suelta del equipo (encargo, clase='tarea'; no va al calendario). */
+export interface OperacionCrearTarea {
+  tipo: "crear_tarea";
+  /** Una tarea nunca choca con el calendario (no ocupa celda de turno). */
+  conflicto: boolean;
+  titulo: string;
+  detalle?: string;
+  prioridad?: PrioridadEvento;
+  /** Deadline opcional (ISO AAAA-MM-DD); puede no traerla. */
+  fecha_objetivo?: string;
+}
+
 /** Crear un turno (persona × día × franja) (verde = nuevo). */
 export interface OperacionCrearTurno {
   tipo: "crear_turno";
@@ -719,6 +731,7 @@ export interface OperacionModificarTurno {
 /** Una operación propuesta del diff. El `tipo` discrimina la forma. */
 export type OperacionPropuesta =
   | OperacionCrearEvento
+  | OperacionCrearTarea
   | OperacionCrearTurno
   | OperacionModificarTurno;
 

@@ -264,12 +264,73 @@ def _plantilla() -> str:
     return cuerpo or libtexto.cuerpo_inicial(_PROMPT_ID).strip()
 
 
+def _prompt_tareas(
+    *, ruta_doc: str | None, texto_documento: str | None, hoy: str | None
+) -> str:
+    """Prompt AUTOCONTENIDO (en código, sin plantilla editable) para el modo `tareas`: extrae
+    ENCARGOS sueltos del equipo (`clase='tarea'`), no eventos. Reusa la misma lógica de FUENTE
+    (texto embebido vs fichero leído) que el modo eventos, pero pide `crear_tarea`.
+
+    Va por código (no por la Biblioteca como el de eventos) porque es nuevo y simple: así el
+    camino de eventos —con su plantilla editable y tuneada— queda intacto.
+    """
+    ancla_hoy = (
+        f"Hoy es {hoy} (zona horaria de Ciudad de México); resuelve cualquier fecha relativa o "
+        "sin año respecto a hoy. "
+        if hoy
+        else ""
+    )
+    esquema = (
+        '{"operaciones": [\n'
+        '  {"tipo": "crear_tarea", "titulo": "<qué hay que hacer, conciso e imperativo>", '
+        '"detalle": "<notas/contexto/lugar>"?, "prioridad": "alta|media|baja"?, '
+        '"fecha_objetivo": "AAAA-MM-DD"?}\n'
+        "]}"
+    )
+    encuadre = (
+        "EXTRAES TAREAS (encargos sueltos del equipo de redes) de lo que te den: una lista de "
+        "pendientes, un mensaje, una nota, un documento o una sola frase. Cada tarea es algo que "
+        "ALGUIEN tiene que HACER (editar un clip, subir fotos, redactar un copy, diseñar una "
+        "pieza, revisar algo…), NO un evento ni un partido a cubrir. Aunque haya UNA SOLA tarea, "
+        "extráela."
+    )
+    recordatorio = (
+        "\n\nIMPORTANTE: un `crear_tarea` por CADA pendiente, aunque sea uno solo. NO inventes "
+        "fechas: si no hay deadline explícito, OMITE `fecha_objetivo`. Devuelve "
+        '`{"operaciones": []}` ÚNICAMENTE si no hay ninguna tarea.'
+    )
+    if texto_documento is not None:
+        fuente = (
+            f"{ancla_hoy}{encuadre} El texto de la fuente está más abajo (ya transcrito). Trabaja "
+            "EXCLUSIVAMENTE con ese texto; NO abras ni leas ningún fichero ni uses herramientas."
+        )
+        cola = f"\n\nFUENTE (texto):\n```\n{texto_documento}\n```{recordatorio}"
+    else:
+        fuente = (
+            f"{ancla_hoy}{encuadre} Lee EXCLUSIVAMENTE el documento en la ruta {ruta_doc} "
+            "(PDF, imagen/captura o Word) y extrae de ahí las tareas."
+        )
+        cola = recordatorio
+    return (
+        "Conviertes lo que te den en una lista de TAREAS (encargos) en JSON. NO escribes en "
+        "ninguna base de datos: SOLO devuelves un bloque JSON.\n\n"
+        f"{fuente}\n\n"
+        "Devuelve EXCLUSIVAMENTE un objeto JSON con esta forma (la única clave es `operaciones`):"
+        f"\n{esquema}\n"
+        "- `titulo` es obligatorio y conciso (lo que hay que hacer).\n"
+        "- `prioridad` y `fecha_objetivo` son opcionales; omítelos si la fuente no los indica.\n"
+        "- No añadas texto fuera del JSON."
+        f"{cola}"
+    )
+
+
 def componer_prompt(
     *,
     ctx: pi.Contexto,
     ruta_doc: str | None = None,
     texto_documento: str | None = None,
     hoy: str | None = None,
+    modo: str = "eventos",
 ) -> str:
     """Prompt para que claude convierta el documento en operaciones JSON. PURO.
 
@@ -284,7 +345,15 @@ def componer_prompt(
 
     NO se ata a una semana: embebe el roster (id+nombre) y los enums, y pide extraer TODO el
     documento (cualquier fecha, cualquier nº de franjas/día), cada operación con fecha ISO.
+
+    `modo="tareas"` cambia por completo el encargo: extrae ENCARGOS sueltos (`crear_tarea`) en
+    vez de eventos, con un prompt autocontenido (no usa la plantilla editable). El roster/slots
+    no aplican (una tarea no lleva miembro ni franja).
     """
+    if modo == "tareas":
+        return _prompt_tareas(
+            ruta_doc=ruta_doc, texto_documento=texto_documento, hoy=hoy
+        )
     lineas_miembros = "\n".join(
         f'  - id="{mid}" nombre="{nombre}"' for mid, nombre in ctx.miembros.items()
     ) or "  (no hay miembros asignables)"
@@ -365,6 +434,7 @@ def lanzar(
     doc_ext: str,
     nombres_miembros: dict[str, str],
     autor: dict[str, str] | None = None,
+    modo: str = "eventos",
 ) -> dict[str, Any]:
     """Compone el prompt y ENCOLA el job READ-ONLY. Dos caminos según el FORMATO del documento:
 
@@ -392,7 +462,7 @@ def lanzar(
             tipo="parrilla-import",
             titulo="Importar parrilla",
             marca="",
-            prompt=componer_prompt(ctx=ctx, texto_documento=texto, hoy=_hoy_cdmx()),
+            prompt=componer_prompt(ctx=ctx, texto_documento=texto, hoy=_hoy_cdmx(), modo=modo),
             procesar=procesar,
             procesar_spec=procesar_spec,
             autor=autor,
@@ -411,7 +481,7 @@ def lanzar(
         tipo="parrilla-import",
         titulo="Importar parrilla",
         marca="",
-        prompt=componer_prompt(ctx=ctx, ruta_doc=ruta_doc, hoy=_hoy_cdmx()),
+        prompt=componer_prompt(ctx=ctx, ruta_doc=ruta_doc, hoy=_hoy_cdmx(), modo=modo),
         procesar=procesar,
         procesar_spec=procesar_spec,
         dir_temporal=carpeta,
@@ -427,6 +497,7 @@ def lanzar_desde_texto(
     texto: str,
     nombres_miembros: dict[str, str],
     autor: dict[str, str] | None = None,
+    modo: str = "eventos",
 ) -> dict[str, Any]:
     """Encola el job READ-ONLY a partir de TEXTO ya extraído (un enlace o texto pegado), sin
     fichero. Es la MISMA rama "texto embebido" de `lanzar` (transformación texto→JSON sin tools
@@ -439,7 +510,7 @@ def lanzar_desde_texto(
         tipo="parrilla-import",
         titulo="Importar parrilla",
         marca="",
-        prompt=componer_prompt(ctx=ctx, texto_documento=texto, hoy=_hoy_cdmx()),
+        prompt=componer_prompt(ctx=ctx, texto_documento=texto, hoy=_hoy_cdmx(), modo=modo),
         procesar=procesar,
         procesar_spec=procesar_spec,
         autor=autor,
@@ -522,11 +593,14 @@ def _roster_miembros() -> dict[str, str]:
 def _resumen(validas: list[dict[str, Any]], errores: list[dict[str, Any]]) -> str:
     """Frase corta para la UI: cuántas operaciones de cada tipo + omitidas."""
     n_ev = sum(1 for o in validas if o.get("tipo") == "crear_evento")
+    n_ta = sum(1 for o in validas if o.get("tipo") == "crear_tarea")
     n_tu = sum(1 for o in validas if o.get("tipo") == "crear_turno")
     n_mo = sum(1 for o in validas if o.get("tipo") == "modificar_turno")
     partes: list[str] = []
     if n_ev:
         partes.append(f"{n_ev} evento(s) nuevo(s)")
+    if n_ta:
+        partes.append(f"{n_ta} tarea(s) nueva(s)")
     if n_tu:
         partes.append(f"{n_tu} turno(s) nuevo(s)")
     if n_mo:

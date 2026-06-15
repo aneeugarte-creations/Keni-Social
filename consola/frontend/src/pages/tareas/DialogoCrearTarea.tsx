@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, Check, Link2, Loader2, Sparkles, Upload } from "lucide-react";
+import { CalendarDays, Check, Link2, ListChecks, Loader2, Sparkles, Upload } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -25,7 +25,7 @@ import { usePropuestaParrilla } from "@/hooks/use-propuesta-parrilla";
 import { api, mensajeError } from "@/lib/api";
 import { formatearFecha } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
-import type { CatalogosContenido, OperacionCrearEvento } from "@/types";
+import type { CatalogosContenido, OperacionCrearEvento, OperacionCrearTarea } from "@/types";
 
 import { CLAVE_TAREAS } from "./claves";
 
@@ -41,8 +41,10 @@ const esUrl = (s: string) => /^https?:\/\/\S+/i.test(s.trim());
  *    escribe una FRASE y la IA propone los eventos → revisas → «Aceptar» los crea. O
  *    escríbelo a mano (un solo evento). Sirve para cualquier cosa: partido, concierto,
  *    rueda de prensa, estreno…
- *  - Tarea: un encargo suelto (sin evento), que puedes asignar a alguien ahí mismo.
- *    NO va al calendario de Turnos; vive solo en el tablero de Cobertura (Panorama / Mis tareas).
+ *  - Tarea: un encargo suelto (sin evento), que puedes asignar a alguien ahí mismo. Igual que
+ *    Evento, acepta la MISMA caja inteligente (pega enlace / sube documento / escribe frase y la
+ *    IA propone las tareas → revisas → «Aceptar»), pero el modo `tareas` extrae ENCARGOS, no
+ *    eventos. NO va al calendario de Turnos; vive solo en el tablero de Cobertura (Panorama / Mis tareas).
  *
  * La diferencia es de DESTINO: un evento es una unidad de cobertura con fecha/hora que
  * cae en la rejilla del calendario (`crearEventoRota`); una tarea es trabajo suelto que
@@ -78,9 +80,17 @@ export function DialogoCrearTarea({
   const prioridades = catalogos?.prioridades ?? ["alta", "media", "baja"];
 
   const { propuesta, generando } = usePropuestaParrilla(propuestaId);
-  const eventosPropuestos = (propuesta?.operaciones ?? []).filter(
+  const ops = propuesta?.operaciones ?? [];
+  // La IA propone eventos (modo Evento) o tareas (modo Tarea); filtramos por el tipo del modo.
+  const eventosPropuestos = ops.filter(
     (o): o is OperacionCrearEvento => o.tipo === "crear_evento",
   );
+  const tareasPropuestas = ops.filter(
+    (o): o is OperacionCrearTarea => o.tipo === "crear_tarea",
+  );
+  const propuestos: (OperacionCrearEvento | OperacionCrearTarea)[] =
+    modo === "evento" ? eventosPropuestos : tareasPropuestas;
+  const etiquetaTipo = modo === "evento" ? "evento" : "tarea";
 
   const reiniciar = () => {
     setTitulo("");
@@ -108,6 +118,7 @@ export function DialogoCrearTarea({
         url: !archivo && esUrl(texto) ? texto : undefined,
         texto: !archivo && texto && !esUrl(texto) ? texto : undefined,
         marca: marca || undefined,
+        modo: modo === "tarea" ? "tareas" : "eventos",
       });
       return res.propuesta_id;
     },
@@ -119,9 +130,10 @@ export function DialogoCrearTarea({
     mutationFn: () => api.aplicarPropuestaParrilla(propuestaId!),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
-      toast.success(
-        `${eventosPropuestos.length} ${eventosPropuestos.length === 1 ? "evento añadido" : "eventos añadidos"} a la lista.`,
-      );
+      const n = propuestos.length;
+      const plural = modo === "evento" ? "eventos añadidos" : "tareas añadidas";
+      const singular = modo === "evento" ? "evento añadido" : "tarea añadida";
+      toast.success(`${n} ${n === 1 ? singular : plural} a la lista.`);
       cerrar();
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -230,30 +242,38 @@ export function DialogoCrearTarea({
               <p className="py-4 text-sm text-red-700 dark:text-red-300">
                 No pude leerlo: {propuesta.error || "inténtalo con otro enlace o documento."}
               </p>
-            ) : eventosPropuestos.length === 0 ? (
+            ) : propuestos.length === 0 ? (
               <p className="py-4 text-sm text-muted-foreground">
-                No encontré eventos ahí. Prueba con otro enlace/documento o escríbelo a mano.
+                No encontré {etiquetaTipo === "evento" ? "eventos" : "tareas"} ahí. Prueba con otro
+                enlace/documento o escríbelo a mano.
               </p>
             ) : (
               <>
                 <p className="text-sm text-muted-foreground">
-                  Encontré <span className="font-medium text-foreground">{eventosPropuestos.length}</span>{" "}
-                  {eventosPropuestos.length === 1 ? "evento" : "eventos"}. Revisa y acepta:
+                  Encontré <span className="font-medium text-foreground">{propuestos.length}</span>{" "}
+                  {propuestos.length === 1 ? etiquetaTipo : `${etiquetaTipo}s`}. Revisa y acepta:
                 </p>
                 <div className="max-h-72 space-y-1.5 overflow-y-auto">
-                  {eventosPropuestos.map((ev, i) => (
+                  {propuestos.map((op, i) => (
                     <div
-                      key={`${ev.titulo}-${ev.fecha}-${i}`}
+                      key={`${op.titulo}-${i}`}
                       className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"
                     >
-                      <CalendarDays className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      {op.tipo === "crear_evento" ? (
+                        <CalendarDays className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      ) : (
+                        <ListChecks className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      )}
                       {/* min-w-0 + flex-1: sin esto, un título largo con `truncate` (nowrap) NO
                           encoge en el flex y estira la fila más allá del diálogo, empujando el botón
                           «Aceptar y añadir» fuera de pantalla (había que deslizar a la derecha). */}
-                      <span className="min-w-0 flex-1 truncate font-medium">{ev.titulo}</span>
+                      <span className="min-w-0 flex-1 truncate font-medium">{op.titulo}</span>
                       <span className="shrink-0 whitespace-nowrap text-muted-foreground">
-                        {ev.fecha ? formatearFecha(ev.fecha) : ""}
-                        {ev.hora ? ` · ${ev.hora}` : ""}
+                        {op.tipo === "crear_evento"
+                          ? `${op.fecha ? formatearFecha(op.fecha) : ""}${op.hora ? ` · ${op.hora}` : ""}`
+                          : op.fecha_objetivo
+                            ? formatearFecha(op.fecha_objetivo)
+                            : ""}
                       </span>
                     </div>
                   ))}
@@ -268,7 +288,7 @@ export function DialogoCrearTarea({
               >
                 Volver
               </Button>
-              {eventosPropuestos.length > 0 && !generando && (
+              {propuestos.length > 0 && !generando && (
                 <Button variant="secondary" onClick={() => aceptar.mutate()} disabled={aceptar.isPending}>
                   <Check className="mr-1 h-4 w-4" />
                   {aceptar.isPending ? "Añadiendo…" : "Aceptar y añadir"}
@@ -284,7 +304,14 @@ export function DialogoCrearTarea({
                 <button
                   key={m}
                   type="button"
-                  onClick={() => setModo(m)}
+                  onClick={() => {
+                    setModo(m);
+                    // Una propuesta es de UN tipo (evento o tarea): al cambiar de modo se
+                    // descarta el import a medias para no mezclar tipos en la revisión.
+                    setPropuestaId(null);
+                    setPegado("");
+                    setArchivo(null);
+                  }}
                   className={cn(
                     "rounded-[5px] px-3 py-1 text-sm transition-colors",
                     modo === m
@@ -305,85 +332,87 @@ export function DialogoCrearTarea({
                 : "No va al calendario: solo en Panorama y Mis tareas."}
             </p>
 
-            {modo === "evento" && (
-              <div
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setArrastrando(true);
-                }}
-                onDragLeave={() => setArrastrando(false)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setArrastrando(false);
-                  const f = e.dataTransfer.files?.[0];
-                  if (f) {
-                    setArchivo(f);
-                    return;
-                  }
-                  const texto =
-                    e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain");
-                  if (texto) setPegado(texto.trim());
-                }}
-                className={cn(
-                  "space-y-2 rounded-lg border border-dashed p-3 transition-colors",
-                  arrastrando ? "border-foreground/40 bg-muted" : "border-border",
-                )}
-              >
-                <div className="flex items-center gap-1.5 text-sm font-medium">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  Pega un enlace, suelta un documento o PDF, o escribe una frase y lo creo solo
-                </div>
-                <Textarea
-                  value={pegado}
-                  onChange={(e) => setPegado(e.target.value)}
-                  placeholder="Pega un enlace, o escribe el evento en una frase…"
-                  rows={2}
-                />
-                <div className="flex flex-wrap items-center gap-2">
-                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm hover:bg-accent">
-                    <Upload className="h-3.5 w-3.5" />
-                    {archivo ? archivo.name : "Subir documento"}
-                    <input
-                      type="file"
-                      className="hidden"
-                      accept=".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.csv,.docx,.txt"
-                      onChange={(e) => setArchivo(e.target.files?.[0] ?? null)}
-                    />
-                  </label>
-                  {archivo && (
-                    <button
-                      type="button"
-                      className="text-xs text-muted-foreground underline-offset-2 hover:underline"
-                      onClick={() => setArchivo(null)}
-                    >
-                      quitar
-                    </button>
-                  )}
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    className="ml-auto"
-                    onClick={() => analizar.mutate()}
-                    disabled={nadaQueAnalizar || analizar.isPending}
+            {/* Caja inteligente: en AMBOS modos. En Evento la IA propone eventos; en Tarea
+                propone encargos sueltos (mismo flujo: pega/sube/escribe → revisa → acepta). */}
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setArrastrando(true);
+              }}
+              onDragLeave={() => setArrastrando(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setArrastrando(false);
+                const f = e.dataTransfer.files?.[0];
+                if (f) {
+                  setArchivo(f);
+                  return;
+                }
+                const texto =
+                  e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain");
+                if (texto) setPegado(texto.trim());
+              }}
+              className={cn(
+                "space-y-2 rounded-lg border border-dashed p-3 transition-colors",
+                arrastrando ? "border-foreground/40 bg-muted" : "border-border",
+              )}
+            >
+              <div className="flex items-center gap-1.5 text-sm font-medium">
+                <Sparkles className="h-4 w-4 text-primary" />
+                Pega un enlace, suelta un documento o PDF, o escribe una frase y lo creo solo
+              </div>
+              <Textarea
+                value={pegado}
+                onChange={(e) => setPegado(e.target.value)}
+                placeholder={
+                  modo === "evento"
+                    ? "Pega un enlace, o escribe el evento en una frase…"
+                    : "Pega un enlace, o escribe la tarea en una frase…"
+                }
+                rows={2}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm hover:bg-accent">
+                  <Upload className="h-3.5 w-3.5" />
+                  {archivo ? archivo.name : "Subir documento"}
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept=".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.csv,.docx,.txt"
+                    onChange={(e) => setArchivo(e.target.files?.[0] ?? null)}
+                  />
+                </label>
+                {archivo && (
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+                    onClick={() => setArchivo(null)}
                   >
-                    {analizar.isPending ? (
-                      <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                    ) : esUrl(pegado) ? (
-                      <Link2 className="mr-1 h-3.5 w-3.5" />
-                    ) : (
-                      <Sparkles className="mr-1 h-3.5 w-3.5" />
-                    )}
-                    Analizar
-                  </Button>
-                </div>
+                    quitar
+                  </button>
+                )}
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="ml-auto"
+                  onClick={() => analizar.mutate()}
+                  disabled={nadaQueAnalizar || analizar.isPending}
+                >
+                  {analizar.isPending ? (
+                    <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                  ) : esUrl(pegado) ? (
+                    <Link2 className="mr-1 h-3.5 w-3.5" />
+                  ) : (
+                    <Sparkles className="mr-1 h-3.5 w-3.5" />
+                  )}
+                  Analizar
+                </Button>
               </div>
-            )}
+            </div>
 
-            {modo === "evento" && (
-              <div className="relative py-1 text-center text-xs text-muted-foreground">
-                — o escríbelo a mano —
-              </div>
-            )}
+            <div className="relative py-1 text-center text-xs text-muted-foreground">
+              — o escríbelo a mano —
+            </div>
 
             <div className="space-y-3">
               <div className="space-y-1.5">

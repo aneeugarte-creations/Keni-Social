@@ -170,6 +170,9 @@ async def importar(request: Request) -> Response:
     # lista de Tareas (filtrada por marca) los muestre. Vacío si no es una marca válida.
     marca_crudo = str(form.get("marca") or "").strip()
     marca = marca_crudo if marca_crudo and marcas.es_marca(marca_crudo) else ""
+    # Modo: "eventos" (por defecto) extrae eventos a cubrir; "tareas" extrae encargos sueltos
+    # (clase='tarea', no van al calendario). Cambia el prompt y el tipo de operación generada.
+    modo = "tareas" if str(form.get("modo") or "").strip() == "tareas" else "eventos"
     autor = autor_de_peticion(request)
 
     archivo = form.get("archivo")
@@ -201,6 +204,7 @@ async def importar(request: Request) -> Response:
                 doc_ext=doc_ext,
                 nombres_miembros=_roster(),
                 autor=autor,
+                modo=modo,
             )
 
     elif url_crudo:
@@ -254,7 +258,7 @@ async def importar(request: Request) -> Response:
             texto = f"{titulo_url}\n\n{cuerpo_url}".strip() if titulo_url else cuerpo_url
             try:
                 gen = job.lanzar_desde_texto(
-                    propuesta_id=pid, texto=texto, nombres_miembros=roster, autor=autor
+                    propuesta_id=pid, texto=texto, nombres_miembros=roster, autor=autor, modo=modo
                 )
             except generaciones.ColaLlenaError:
                 repos.actualizar_propuesta_parrilla(
@@ -295,6 +299,7 @@ async def importar(request: Request) -> Response:
                 texto=texto_pegado,
                 nombres_miembros=_roster(),
                 autor=autor,
+                modo=modo,
             )
 
     else:

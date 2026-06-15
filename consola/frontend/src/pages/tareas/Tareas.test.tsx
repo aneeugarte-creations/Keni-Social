@@ -528,6 +528,19 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect(await screen.findByText("Añadir a la lista")).toBeInTheDocument();
   });
 
+  it("en modo Tarea también aparece la caja inteligente de import (pega/sube/escribe → IA)", async () => {
+    renderTareas([]);
+    const botones = await screen.findAllByRole("button", { name: /Añadir/ });
+    fireEvent.click(botones.find((b) => !b.closest("form"))!);
+    await screen.findByText("Añadir a la lista");
+    // Cambia al modo Tarea: la caja inteligente (antes solo en Evento) debe seguir ahí.
+    fireEvent.click(screen.getByRole("button", { name: "Tarea" }));
+    expect(screen.getByRole("button", { name: /Analizar/ })).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText("Pega un enlace, o escribe la tarea en una frase…"),
+    ).toBeInTheDocument();
+  });
+
   it("AÑADIR-RÁPIDO: el atajo del Panorama crea un ítem «por cubrir» HOY (CDMX) con crearEventoRota", async () => {
     const crear = vi.spyOn(apiMod.api, "crearEventoRota").mockResolvedValue({} as never);
     renderTareas([]);

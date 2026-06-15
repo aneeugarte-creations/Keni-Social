@@ -4,6 +4,7 @@ Ver barrel `db.py`."""
 from __future__ import annotations
 
 from .._db_json import a_json_lista
+from ..db_contenido import _fila_contenido_nueva, _insertar_contenido
 from ..tiempo import ahora_iso
 from ._comun import (
     ESTADO_ROTA_PROPUESTO,
@@ -211,6 +212,7 @@ def aplicar_propuesta_parrilla(
     """
     ahora = ahora_iso()
     eventos_creados: list[str] = []
+    tareas_creadas: list[str] = []
     turnos_creados: list[str] = []
     turnos_modificados: list[str] = []
     # Cache por semana del mapa {nombre_normalizado -> franja_id} (inicializa defaults una vez).
@@ -284,6 +286,21 @@ def aplicar_propuesta_parrilla(
                     ),
                 )
                 eventos_creados.append(eid)
+            elif tipo == "crear_tarea":
+                # Encargo suelto (clase='tarea'): se inserta en `contenido` DENTRO de la misma
+                # transacción (build fila + INSERT sin commit, como los lotes de publicaciones).
+                # Nace SIN responsable («por coger»); el equipo lo asigna luego.
+                fila = _fila_contenido_nueva(
+                    clase="tarea",
+                    titulo=str(op.get("titulo", "")),
+                    descripcion=str(op.get("detalle") or ""),
+                    prioridad=str(op.get("prioridad") or "media"),
+                    fecha_objetivo=str(op.get("fecha_objetivo") or ""),
+                    marca=marca or "",
+                    origen=origen,
+                )
+                _insertar_contenido(con, fila)
+                tareas_creadas.append(str(fila["id"]))
             elif tipo == "crear_turno":
                 tid = uuid.uuid4().hex[:12]
                 miembro_id = str(op.get("miembro_id", ""))
@@ -371,10 +388,12 @@ def aplicar_propuesta_parrilla(
         con.close()
     return {
         "eventos_creados": len(eventos_creados),
+        "tareas_creadas": len(tareas_creadas),
         "turnos_creados": len(turnos_creados),
         "turnos_modificados": len(turnos_modificados),
         "ids": {
             "eventos": eventos_creados,
+            "tareas": tareas_creadas,
             "turnos": turnos_creados,
             "turnos_modificados": turnos_modificados,
         },
