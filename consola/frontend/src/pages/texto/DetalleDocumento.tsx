@@ -539,6 +539,7 @@ export function DetalleDocumento({
                 docId={borrador.id}
                 produccionSha={produccion?.sha ?? null}
                 sinPublicar={sinPublicar}
+                cuerpoBorrador={frontmatterOculto + borrador.cuerpo}
                 esAdmin={esAdmin}
                 onPublicar={() => setPublicarAbierto(true)}
                 onBorradorActualizado={() => {

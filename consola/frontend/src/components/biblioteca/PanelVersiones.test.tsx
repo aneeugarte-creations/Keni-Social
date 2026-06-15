@@ -155,6 +155,20 @@ describe("PanelVersiones", () => {
     expect(screen.queryByLabelText("Solo cambios")).not.toBeInTheDocument();
   });
 
+  it("dentro del visor se puede COMPARAR la versión con otra (muestra el diff)", async () => {
+    stubFetch();
+    montar();
+    await screen.findByText("Primera versión de la voz");
+    fireEvent.click(screen.getByRole("button", { name: /Primera versión de la voz/ }));
+    const dialog = await screen.findByRole("dialog");
+    // Por defecto solo se ve el contenido (sin barra de diff).
+    expect(within(dialog).queryByText("Solo cambios")).not.toBeInTheDocument();
+    // Elegir comparar con otra versión → aparece el diff, su subtítulo y el toggle.
+    fireEvent.change(within(dialog).getByRole("combobox"), { target: { value: "aaa111" } });
+    expect(await within(dialog).findByText("Solo cambios")).toBeInTheDocument();
+    expect(within(dialog).getByText(/Cambios desde/)).toBeInTheDocument();
+  });
+
   it("«Restaurar» (admin) revierte en un clic: revierte y publica", async () => {
     const llamadas = stubFetch();
     const { onBorradorActualizado } = montar({ esAdmin: true });

@@ -18,6 +18,7 @@ import { ArrowRight, Check, FileText, History, Rocket, RotateCcw } from "lucide-
 import * as React from "react";
 import { toast } from "sonner";
 
+import { DiffProsa } from "@/components/biblioteca/DiffProsa";
 import { LectorProsa } from "@/components/biblioteca/LectorProsa";
 import { confirmar } from "@/components/comunes/confirmar";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +31,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { api, mensajeError } from "@/lib/api";
 import { tiempoRelativo } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
@@ -40,6 +42,8 @@ export interface PanelVersionesProps {
   produccionSha?: string | null;
   /** Hay cambios en el borrador todavía sin publicar. */
   sinPublicar?: boolean;
+  /** Cuerpo (markdown) del borrador en edición: para comparar una versión con «Tu borrador». */
+  cuerpoBorrador?: string;
   /** El usuario puede publicar directo (admin); si no, restaurar envía una solicitud. */
   esAdmin?: boolean;
   /** Abre el flujo de publicación a pantalla completa (vive en el contenedor). */
@@ -53,6 +57,7 @@ export function PanelVersiones({
   docId,
   produccionSha,
   sinPublicar = false,
+  cuerpoBorrador,
   esAdmin = false,
   onPublicar,
   onBorradorActualizado,
@@ -77,6 +82,46 @@ export function PanelVersiones({
     queryFn: ({ signal }) => api.versionTexto(docId, verSha as string, signal),
     enabled: !!verSha,
   });
+
+  // ── Comparar: dentro del visor, contra «Tu borrador», EN VIVO u otra versión. ──
+  // `comparaCon`: "" = solo ver contenido · "borrador" = el borrador en edición · un sha.
+  const [comparaCon, setComparaCon] = React.useState<string>("");
+  const [soloCambios, setSoloCambios] = React.useState(true);
+  const abrirVersion = (sha: string) => {
+    setComparaCon("");
+    setSoloCambios(true);
+    setVerSha(sha);
+  };
+  const comparandoSha = comparaCon && comparaCon !== "borrador" ? comparaCon : null;
+  const objetivoQuery = useQuery({
+    queryKey: ["texto-version", docId, comparandoSha],
+    queryFn: ({ signal }) => api.versionTexto(docId, comparandoSha as string, signal),
+    enabled: !!comparandoSha,
+  });
+  const objetivoVersion = historial.find((v) => v.sha === comparaCon) ?? null;
+  const objetivoLabel =
+    comparaCon === "borrador"
+      ? "Tu borrador"
+      : objetivoVersion
+        ? objetivoVersion.mensaje || "Publicación"
+        : "";
+  // Lado «después» del diff (el «antes» es siempre la versión que abriste).
+  const cuerpoObjetivo =
+    comparaCon === "borrador"
+      ? cuerpoBorrador ?? ""
+      : objetivoQuery.data?.documento.cuerpo ?? "";
+  const cargandoComparacion =
+    !!comparandoSha && objetivoQuery.isPending;
+  // Opciones de comparación: el borrador (si lo tenemos) + el resto de versiones.
+  const opcionesCompara = [
+    ...(cuerpoBorrador !== undefined ? [{ value: "borrador", label: "Tu borrador" }] : []),
+    ...historial
+      .filter((v) => v.sha !== verSha)
+      .map((v) => ({
+        value: v.sha,
+        label: `${v.mensaje || "Publicación"}${v.sha === produccionSha ? " (EN VIVO)" : ""}`,
+      })),
+  ];
 
   const invalidar = () => {
     qc.invalidateQueries({ queryKey: ["texto"] });
@@ -217,7 +262,7 @@ export function PanelVersiones({
                     {/* Clic en la fila → abre ESA versión (solo lectura). */}
                     <button
                       type="button"
-                      onClick={() => setVerSha(v.sha)}
+                      onClick={() => abrirVersion(v.sha)}
                       className="block w-full rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       title="Ver esta versión"
                     >
@@ -269,10 +314,10 @@ export function PanelVersiones({
         ) : null}
       </section>
 
-      {/* ───────── Ver una versión: su contenido a pantalla completa, solo lectura ───────── */}
+      {/* ───────── Ver/comparar una versión: a pantalla completa ───────── */}
       <Dialog open={!!verSha} onOpenChange={(o) => !o && setVerSha(null)}>
         <DialogContent className="flex h-screen w-screen max-w-none flex-col gap-0 rounded-none p-0">
-          <DialogHeader className="border-b border-border px-4 py-3 text-left sm:text-left">
+          <DialogHeader className="space-y-2 border-b border-border px-4 py-3 text-left sm:text-left">
             <DialogTitle className="flex items-center gap-2 text-base">
               <FileText className="h-4 w-4 text-keni" aria-hidden />
               {verVersion?.mensaje || "Versión publicada"}
@@ -283,18 +328,50 @@ export function PanelVersiones({
               ) : null}
             </DialogTitle>
             <DialogDescription>
-              {verVersion
-                ? `${verVersion.autor} · ${
-                    tiempoRelativo(verVersion.fecha) ||
-                    verVersion.fecha.slice(0, 16).replace("T", " ")
-                  }`
-                : "Versión publicada del documento."}
+              {comparaCon
+                ? `Cambios desde «${verVersion?.mensaje || "esta versión"}» hasta «${objetivoLabel}»`
+                : verVersion
+                  ? `${verVersion.autor} · ${
+                      tiempoRelativo(verVersion.fecha) ||
+                      verVersion.fecha.slice(0, 16).replace("T", " ")
+                    }`
+                  : "Versión publicada del documento."}
             </DialogDescription>
+            {/* Barra de comparación: contra el borrador, EN VIVO u otra versión. */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-0.5 text-xs">
+              <label className="flex items-center gap-1.5">
+                <span className="text-muted-foreground">Comparar con</span>
+                <select
+                  value={comparaCon}
+                  onChange={(e) => setComparaCon(e.target.value)}
+                  className="h-8 rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="">— Solo ver el contenido</option>
+                  {opcionesCompara.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {comparaCon ? (
+                <label className="flex cursor-pointer items-center gap-1.5">
+                  <span className="text-muted-foreground">Solo cambios</span>
+                  <Switch checked={soloCambios} onCheckedChange={setSoloCambios} />
+                </label>
+              ) : null}
+            </div>
           </DialogHeader>
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
             <div className="mx-auto max-w-3xl">
-              {verQuery.isPending ? (
+              {verQuery.isPending || cargandoComparacion ? (
                 <Skeleton className="h-40 w-full" />
+              ) : comparaCon ? (
+                <DiffProsa
+                  antes={verQuery.data?.documento.cuerpo ?? ""}
+                  despues={cuerpoObjetivo}
+                  soloCambios={soloCambios}
+                />
               ) : (
                 <LectorProsa cuerpo={verQuery.data?.documento.cuerpo ?? ""} />
               )}
