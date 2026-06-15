@@ -7,6 +7,8 @@ import { TituloPagina } from "@/components/layout/encabezado";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiError, api } from "@/lib/api";
 
+import { SeccionMetricool } from "@/pages/configuracion/SeccionMetricool";
+
 import { AvisosDoctor } from "./Doctor";
 import { SeccionCuentaClaude } from "./SeccionCuentaClaude";
 import { SeccionDaemons } from "./SeccionDaemons";
@@ -20,7 +22,9 @@ import { INTERVALO_RECURSOS_MS } from "./lib";
 /**
  * Página SISTEMA (admin, dropdown del avatar): el HARDWARE, el ALMACENAMIENTO y los SERVICIOS DE
  * SISTEMA que sostienen la consola. Repartido en tres pestañas:
- * - Proveedor IA: la cuenta de Claude (auth, estado del token, uso) que alimenta la generación.
+ * - Proveedores: las conexiones a proveedores externos — la cuenta de Claude (auth, estado del
+ *   token, uso) que alimenta la generación y Metricool (token por marca) del que se leen las
+ *   métricas de audiencia.
  * - Servidor: recursos del servidor (CPU/RAM/disco), daemons de pura infraestructura
  *   (clase=sistema: limpiador, GC de media, métricas, alertas, patrones, comercial), backups y
  *   latencias de la API.
@@ -34,7 +38,7 @@ import { INTERVALO_RECURSOS_MS } from "./lib";
  * (la entrada del avatar ya se oculta a un editor, esto cubre la URL directa /sistema).
  */
 const PESTANAS = [
-  { valor: "ia", etiqueta: "Proveedor IA" },
+  { valor: "proveedores", etiqueta: "Proveedores" },
   { valor: "servidor", etiqueta: "Servidor" },
   { valor: "s3", etiqueta: "S3" },
 ] as const;
@@ -55,7 +59,7 @@ export default function Sistema() {
   const tabParam = searchParams.get("tab");
   const tabInicial = PESTANAS.some((p) => p.valor === tabParam)
     ? (tabParam as string)
-    : "ia";
+    : "proveedores";
 
   if (esProhibido) {
     return <EstadoVacio icono={ShieldAlert} titulo="No tienes permiso" />;
@@ -73,9 +77,12 @@ export default function Sistema() {
               </TabsTrigger>
             ))}
           </TabsList>
-          {/* PROVEEDOR IA: la cuenta de Claude que alimenta toda la generación de copy. */}
-          <TabsContent value="ia" className="space-y-6">
+          {/* PROVEEDORES: conexiones a servicios externos. La cuenta de Claude que alimenta la
+              generación de copy y Metricool (token por marca) del que se leen las métricas de
+              audiencia. Metricool se gestiona aquí (antes vivía en el «⋮» de Analíticas). */}
+          <TabsContent value="proveedores" className="space-y-6">
             <SeccionCuentaClaude />
+            <SeccionMetricool />
           </TabsContent>
           {/* SERVIDOR: hardware + servicios de sistema (clase=sistema): pura infraestructura
               (limpiador, GC de media, métricas, alertas, patrones, comercial). Los servicios de la
