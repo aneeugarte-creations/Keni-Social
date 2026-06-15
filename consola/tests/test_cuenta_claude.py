@@ -81,6 +81,23 @@ def test_bearer_persistido_estable_y_compartido(tmp_path):
     assert (fichero.stat().st_mode & 0o777) == 0o600
 
 
+def test_leer_disponible_corta_al_ver_url():
+    # REGRESION del timeout: con `hasta`, _leer_disponible devuelve EN CUANTO aparece la URL
+    # (claude auth login imprime la URL en <1s pero NO cierra), sin esperar al deadline.
+    import os
+    import time
+
+    r, w = os.pipe()
+    os.write(w, b"Opening browser...\nvisit: https://claude.com/x?code=true&a=1 \nPaste code >")
+    t0 = time.monotonic()
+    txt = cc._leer_disponible(r, deadline=t0 + 5.0, hasta=cc._RE_URL_COMPLETA)
+    transcurrido = time.monotonic() - t0
+    os.close(r)
+    os.close(w)
+    assert transcurrido < 2.0, f"no cortó pronto: {transcurrido}s"
+    assert "https://claude.com/x?code=true&a=1" in txt
+
+
 def test_bearer_efectivo_respeta_override(monkeypatch, tmp_path):
     # Un KENI_CONTROL_BEARER explícito GANA sobre el auto-persistido.
     monkeypatch.setattr(cc, "_bearer_persistido", lambda _dir: "auto")

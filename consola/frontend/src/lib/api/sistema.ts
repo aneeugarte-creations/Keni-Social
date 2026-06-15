@@ -70,11 +70,16 @@ export const apiSistema = {
     peticion<RespuestaLoginIniciar>("/sistema/cuenta/login/iniciar", {
       metodo: "POST",
       json: opts,
+      // El back lanza `claude auth login` y espera a que imprima la URL: techo amplio
+      // (el default de 30 s se queda corto si Anthropic tarda en responder).
+      timeoutMs: 120_000,
     }),
   cuentaLoginCodigo: (sesion: string, codigo: string) =>
     peticion<RespuestaCuentaAccion>("/sistema/cuenta/login/codigo", {
       metodo: "POST",
       json: { sesion, codigo },
+      // Validar el código contra Anthropic + persistir credenciales puede tardar: techo amplio.
+      timeoutMs: 120_000,
     }),
   cuentaLoginCancelar: (sesion: string) =>
     peticion<{ ok: boolean }>("/sistema/cuenta/login/cancelar", {

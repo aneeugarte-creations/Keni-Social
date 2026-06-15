@@ -46,8 +46,6 @@ import { INTERVALO_RECURSOS_MS, colorUso } from "./lib";
 /** Etiqueta legible del método de auth que reporta el CLI. */
 function metodoLegible(metodo: string | null): string {
   switch (metodo) {
-    case "oauth_token":
-      return "Token de entorno";
     case "claudeai":
     case "subscription":
       return "Suscripción (login)";
@@ -67,11 +65,11 @@ function BadgeAuth({ auth }: { auth: CuentaAuth | undefined }) {
   if (auth.logueado) {
     return (
       <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">
-        Sesión activa
+        Cuenta conectada
       </Badge>
     );
   }
-  return <Badge variant="destructive">Sin sesión</Badge>;
+  return <Badge variant="destructive">Sin cuenta</Badge>;
 }
 
 /** Barra + texto de un medidor de uso (sesión 5h / semana / …). */
@@ -106,8 +104,8 @@ function BloqueUso({ uso }: { uso: CuentaUso | undefined }) {
           {uso.mensaje || "El medidor de uso no está disponible."}
         </p>
         <p className="text-xs text-muted-foreground/80">
-          El detalle de uso (sesión / semana) solo aparece con sesión de suscripción
-          iniciada. Con token de entorno no se publica.
+          El detalle de uso (sesión / semana) solo aparece con una cuenta de suscripción
+          conectada.
         </p>
       </div>
     );
@@ -121,8 +119,15 @@ function BloqueUso({ uso }: { uso: CuentaUso | undefined }) {
   );
 }
 
-/** Flujo de cambio de cuenta: obtener URL → abrir/copiar → pegar código → confirmar. */
-function DialogoCambiarCuenta({ onCambiada }: { onCambiada: () => void }) {
+/** Flujo de conectar/cambiar cuenta: obtener URL → abrir/copiar → pegar código → confirmar. */
+function DialogoCambiarCuenta({
+  conectado,
+  onCambiada,
+}: {
+  conectado: boolean;
+  onCambiada: () => void;
+}) {
+  const verbo = conectado ? "Cambiar cuenta" : "Conectar cuenta";
   const [abierto, setAbierto] = React.useState(false);
   const [sesion, setSesion] = React.useState<string | null>(null);
   const [url, setUrl] = React.useState<string | null>(null);
@@ -153,7 +158,7 @@ function DialogoCambiarCuenta({ onCambiada }: { onCambiada: () => void }) {
     mutationFn: () => api.cuentaLoginCodigo(sesion as string, codigo),
     onSuccess: (r) => {
       if (r.ok) {
-        toast.success("Cuenta de Claude cambiada.");
+        toast.success("Cuenta de Claude conectada.");
         setAbierto(false);
         reset();
         onCambiada();
@@ -185,16 +190,16 @@ function DialogoCambiarCuenta({ onCambiada }: { onCambiada: () => void }) {
 
   return (
     <Dialog open={abierto} onOpenChange={cerrar}>
-      <Button variant="outline" size="sm" onClick={() => setAbierto(true)}>
+      <Button variant={conectado ? "outline" : "default"} size="sm" onClick={() => setAbierto(true)}>
         <UserCog className="mr-2 h-4 w-4" aria-hidden="true" />
-        Cambiar cuenta
+        {verbo}
       </Button>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Cambiar la cuenta de Claude</DialogTitle>
+          <DialogTitle>{verbo === "Cambiar cuenta" ? "Cambiar la cuenta de Claude" : "Conectar una cuenta de Claude"}</DialogTitle>
           <DialogDescription>
-            Cambia la cuenta que usa el servidor para generar contenido. Aplica en caliente,
-            sin reiniciar.
+            La cuenta que usa el servidor para generar contenido. Aplica en caliente, sin
+            reiniciar.
           </DialogDescription>
         </DialogHeader>
 
@@ -260,7 +265,7 @@ function DialogoCambiarCuenta({ onCambiada }: { onCambiada: () => void }) {
                 ) : (
                   <BadgeCheck className="mr-2 h-4 w-4" aria-hidden="true" />
                 )}
-                Confirmar y cambiar cuenta
+                Confirmar
               </Button>
             </DialogFooter>
           </div>
@@ -336,6 +341,7 @@ export function SeccionCuentaClaude() {
 
   const data = query.data;
   const refrescar = () => void query.refetch();
+  const conectado = data.auth?.logueado === true;
 
   return (
     <Card>
@@ -345,7 +351,7 @@ export function SeccionCuentaClaude() {
             <KeyRound className="h-4 w-4" aria-hidden="true" />
             Cuenta de Claude del servidor
           </span>
-          <BadgeAuth auth={data.auth} />
+          {data.disponible && <BadgeAuth auth={data.auth} />}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 p-4 pt-0">
@@ -354,6 +360,20 @@ export function SeccionCuentaClaude() {
             No se pudo contactar el servicio de generación (daemons).{" "}
             {data.error ?? "Reintenta en unos segundos."}
           </p>
+        ) : !conectado ? (
+          // SIN CUENTA: dejarlo MUY claro y ofrecer SOLO conectar (nada de cerrar sesión).
+          <div className="space-y-3">
+            <p className="text-sm">
+              <span className="font-medium">No hay ninguna cuenta de Claude conectada.</span>{" "}
+              <span className="text-muted-foreground">
+                La generación de contenido (copy y arte) no funcionará hasta conectar una.
+              </span>
+            </p>
+            {data.auth?.error && (
+              <p className="text-xs text-muted-foreground">{data.auth.error}</p>
+            )}
+            <DialogoCambiarCuenta conectado={false} onCambiada={refrescar} />
+          </div>
         ) : (
           <>
             <dl className="grid grid-cols-1 gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2">
@@ -366,14 +386,11 @@ export function SeccionCuentaClaude() {
                 <dd className="font-medium">{data.auth?.proveedor ?? "—"}</dd>
               </div>
             </dl>
-            {data.auth?.error && (
-              <p className="text-sm text-amber-600 dark:text-amber-400">{data.auth.error}</p>
-            )}
 
             <BloqueUso uso={data.uso} />
 
             <div className="flex items-center gap-2 pt-1">
-              <DialogoCambiarCuenta onCambiada={refrescar} />
+              <DialogoCambiarCuenta conectado onCambiada={refrescar} />
               <BotonLogout onHecho={refrescar} />
             </div>
           </>

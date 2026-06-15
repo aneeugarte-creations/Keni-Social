@@ -119,6 +119,9 @@ _TTL_SESION_LOGIN = 600.0
 
 # URL de autorizacion que imprime `claude auth login` (la primera https que emita).
 _RE_URL = re.compile(r"https://\S+")
+# Para CORTAR la lectura: la URL SEGUIDA de un espacio/salto -> garantiza que llego ENTERA
+# (no un trozo a medias por un chunk del PTY). Solo para el corte; la URL se extrae con _RE_URL.
+_RE_URL_COMPLETA = re.compile(r"https://\S+\s")
 # Secuencias ANSI (colores/posicion) que `claude` mete en una TTY: se quitan para parsear.
 _RE_ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 
@@ -166,8 +169,8 @@ def parsear_estado(stdout: str) -> dict:
 def parsear_uso(stdout: str) -> dict:
     """Parsea `claude -p /usage` -> {disponible, mensaje, medidores:[{etiqueta,pct,reset}], crudo}.
 
-    `disponible` es False cuando el CLI solo devuelve la frase generica (caso del token de
-    entorno: no hay medidor). Cada medidor mantiene la etiqueta tal cual la da el CLI
+    `disponible` es False cuando el CLI solo devuelve la frase generica sin medidor (p.ej. con
+    auth por API key). Cada medidor mantiene la etiqueta tal cual la da el CLI
     ("Current session", "Current week (all models)", ...): el front la traduce/pinta.
     """
     crudo = _limpiar(stdout).strip()
@@ -292,8 +295,14 @@ _sesiones: dict[str, _SesionLogin] = {}
 _sesiones_lock = threading.Lock()
 
 
-def _leer_disponible(fd: int, *, deadline: float) -> str:
-    """Lee del PTY lo que haya hasta `deadline` (no bloquea mas alla del select). Limpio ANSI."""
+def _leer_disponible(fd: int, *, deadline: float, hasta=None) -> str:
+    """Lee del PTY (limpio ANSI) hasta `deadline`, EOF, o —si se da `hasta`— hasta que el
+    texto acumulado case ese patron compilado.
+
+    `hasta` es CLAVE para `iniciar_login`: `claude auth login` imprime la URL en <1s pero NO
+    cierra (se queda esperando el codigo), asi que sin corte temprano leeriamos hasta el
+    deadline entero. Con `hasta=<regex de URL>` devolvemos en cuanto aparece la URL.
+    """
     trozos: list[str] = []
     while time.monotonic() < deadline:
         restante = max(0.0, deadline - time.monotonic())
@@ -307,6 +316,8 @@ def _leer_disponible(fd: int, *, deadline: float) -> str:
         if not datos:
             break
         trozos.append(datos.decode("utf-8", errors="replace"))
+        if hasta is not None and hasta.search(_limpiar("".join(trozos))):
+            break  # ya tenemos lo que buscabamos (p.ej. la URL): no esperes mas
     return _limpiar("".join(trozos))
 
 
@@ -359,7 +370,7 @@ def iniciar_login(*, console: bool = False, email: str | None = None, sso: bool 
         return {"error": "claude no disponible en este servidor"}
     os.close(slave_fd)  # el hijo ya tiene su copia; el padre lee/escribe por master_fd
 
-    salida = _leer_disponible(master_fd, deadline=time.monotonic() + _TIMEOUT_URL)
+    salida = _leer_disponible(master_fd, deadline=time.monotonic() + _TIMEOUT_URL, hasta=_RE_URL_COMPLETA)
     m = _RE_URL.search(salida)
     if not m:
         # Sin URL: aborta y reporta. (proc pudo morir o pedir algo inesperado.)

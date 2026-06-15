@@ -766,7 +766,7 @@ export interface RespuestaBorrarLoteS3 {
 export interface CuentaAuth {
   /** ¿Hay sesión iniciada? null = desconocido (el CLI no respondió como se esperaba). */
   logueado: boolean | null;
-  /** Método de auth: "oauth_token" (token de entorno) | "claudeai" (login) | … */
+  /** Método de auth: "claudeai" (login de suscripción) | "api_key" | … */
   metodo: string | null;
   /** Proveedor: "firstParty" (suscripción) | "console" (API) | … */
   proveedor: string | null;
@@ -788,7 +788,7 @@ export interface MedidorUso {
 
 /** Medidor de uso de la suscripción (`claude -p /usage`). */
 export interface CuentaUso {
-  /** `false` cuando el CLI solo devuelve la frase genérica (caso del token de entorno). */
+  /** `false` cuando el CLI solo devuelve la frase genérica sin medidor (p.ej. auth por API key). */
   disponible: boolean;
   /** Frase de cabecera ("You are currently using your subscription…"). */
   mensaje: string;
