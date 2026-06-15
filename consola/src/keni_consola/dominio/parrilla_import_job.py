@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .. import importador_calendario, media, repos, rota, rutas
@@ -28,6 +29,14 @@ from . import generar, jobspec
 from . import parrilla_import as pi
 
 _log = logging.getLogger("keni_consola.parrilla_import_job")
+
+# CDMX (America/Mexico_City) ya no usa horario de verano (desde 2022): offset fijo -6.
+_TZ_CDMX = timezone(timedelta(hours=-6))
+
+
+def _hoy_cdmx() -> str:
+    """Fecha de HOY en CDMX (AAAA-MM-DD). Ancla las fechas relativas/sin año del import."""
+    return datetime.now(_TZ_CDMX).date().isoformat()
 
 # Nombres de slot por defecto (plantilla de la rota), solo como REFERENCIA en el prompt: el
 # documento puede usar estos u otros (un día puede tener 3+ franjas). NO se restringe a ellos;
@@ -262,6 +271,7 @@ def componer_prompt(
     ctx: pi.Contexto,
     ruta_doc: str | None = None,
     texto_documento: str | None = None,
+    hoy: str | None = None,
 ) -> str:
     """Prompt para que claude convierta el documento en operaciones JSON. PURO.
 
@@ -270,6 +280,10 @@ def componer_prompt(
         prompt; el run es una transformación texto→JSON sin abrir ficheros (rápido y barato).
       - `ruta_doc`: claude LEE el fichero en disco (PDF, imagen, Word) con su tool de lectura.
 
+    `hoy` (AAAA-MM-DD, CDMX) ANCLA las fechas relativas/sin año: una nota o una frase suelta
+    («el sábado», «20 de junio») no traen año; sin ancla no se pueden resolver. Si no se pasa,
+    el prompt no incluye la frase de anclaje (los documentos de parrilla traen fechas explícitas).
+
     NO se ata a una semana: embebe el roster (id+nombre) y los enums, y pide extraer TODO el
     documento (cualquier fecha, cualquier nº de franjas/día), cada operación con fecha ISO.
     """
@@ -277,20 +291,29 @@ def componer_prompt(
         f'  - id="{mid}" nombre="{nombre}"' for mid, nombre in ctx.miembros.items()
     ) or "  (no hay miembros asignables)"
     lineas_slots = "\n".join(f'  - "{n}"' for n in _SLOTS_DEFECTO)
+    # Ancla de fecha: solo si el llamador la pasa (los tests de composición pura no lo hacen).
+    ancla_hoy = (
+        f"Hoy es {hoy} (zona horaria de Ciudad de México). Resuelve cualquier fecha relativa o "
+        "sin año respecto a hoy: si una fecha no trae año, asume el año en curso (o el próximo si "
+        "ese día ya pasó). "
+        if hoy
+        else ""
+    )
 
     if texto_documento is not None:
         fuente = (
-            "El documento ya está TRANSCRITO a texto más abajo (es una hoja de cálculo/CSV o "
-            "texto plano). Trabaja EXCLUSIVAMENTE con ese texto; NO abras ni leas ningún "
-            "fichero ni uses herramientas. IMPORTANTE: el documento puede tener VARIAS HOJAS/"
-            "secciones, cada una marcada con una línea «### HOJA: <nombre>»; recórrelas TODAS y "
-            "extrae las operaciones de CADA hoja (no te quedes solo en la primera)."
+            f"{ancla_hoy}El documento ya está TRANSCRITO a texto más abajo (es una hoja de "
+            "cálculo/CSV, una página web o texto plano). Trabaja EXCLUSIVAMENTE con ese texto; NO "
+            "abras ni leas ningún fichero ni uses herramientas. IMPORTANTE: el documento puede "
+            "tener VARIAS HOJAS/secciones, cada una marcada con una línea «### HOJA: <nombre>»; "
+            "recórrelas TODAS y extrae las operaciones de CADA hoja (no te quedes solo en la primera)."
         )
         regla_fuente = "- No uses herramientas: todo lo que necesitas está en el texto de abajo."
         cola_fuente = f"\n\nDOCUMENTO (transcripción):\n```\n{texto_documento}\n```"
     else:
         fuente = (
-            f"Lee EXCLUSIVAMENTE el documento en la ruta {ruta_doc} (PDF, imagen/captura o Word)."
+            f"{ancla_hoy}Lee EXCLUSIVAMENTE el documento en la ruta {ruta_doc} "
+            "(PDF, imagen/captura o Word)."
         )
         regla_fuente = "- No uses herramientas más allá de LEER el documento de la ruta indicada."
         cola_fuente = ""
@@ -353,7 +376,7 @@ def lanzar(
             tipo="parrilla-import",
             titulo="Importar parrilla",
             marca="",
-            prompt=componer_prompt(ctx=ctx, texto_documento=texto),
+            prompt=componer_prompt(ctx=ctx, texto_documento=texto, hoy=_hoy_cdmx()),
             procesar=procesar,
             procesar_spec=procesar_spec,
             autor=autor,
@@ -372,7 +395,7 @@ def lanzar(
         tipo="parrilla-import",
         titulo="Importar parrilla",
         marca="",
-        prompt=componer_prompt(ctx=ctx, ruta_doc=ruta_doc),
+        prompt=componer_prompt(ctx=ctx, ruta_doc=ruta_doc, hoy=_hoy_cdmx()),
         procesar=procesar,
         procesar_spec=procesar_spec,
         dir_temporal=carpeta,
@@ -400,7 +423,7 @@ def lanzar_desde_texto(
         tipo="parrilla-import",
         titulo="Importar parrilla",
         marca="",
-        prompt=componer_prompt(ctx=ctx, texto_documento=texto),
+        prompt=componer_prompt(ctx=ctx, texto_documento=texto, hoy=_hoy_cdmx()),
         procesar=procesar,
         procesar_spec=procesar_spec,
         autor=autor,
