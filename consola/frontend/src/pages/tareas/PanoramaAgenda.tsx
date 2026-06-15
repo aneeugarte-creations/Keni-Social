@@ -1,11 +1,13 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Hand, Plus, Zap } from "lucide-react";
+import { ChevronDown, ChevronRight, Hand, Pencil, Plus, Trash2, Zap } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { confirmar } from "@/components/comunes/confirmar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SesionContexto } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 import {
   formatearDia,
@@ -30,6 +32,8 @@ import {
   TarjetaTarea,
 } from "./tarjetas";
 import { agrupar, type Item } from "./tipos";
+
+import { DialogEditarEvento } from "@/pages/rota/calendario/dialogs";
 
 /** Etiqueta del encabezado de día: «Hoy» / «Mañana» / día legible / «Sin fecha». */
 function sumarDias(iso: string, n: number): string {
@@ -272,6 +276,123 @@ function AccionUrgente({ item }: { item: Item }) {
   );
 }
 
+/**
+ * EDITAR / BORRAR en la PROPIA fila (sin desplegar), junto al ⚡: un lápiz que abre el mismo
+ * diálogo de edición que el calendario (solo para partidos/eventos) y una papelera para borrar
+ * cualquier fila. Solo admin (igual que editar en el calendario).
+ *
+ * Cada tipo de fila resuelve su evento editable y qué borrar:
+ *  - evento «por cubrir» → edita/borra el evento (no tiene cobertura aún).
+ *  - cobertura (partido cubierto) → edita el evento y propaga/cascada a sus tareas (la fila se
+ *    deriva de ellas, no del evento); borrar = cancelar el partido (evento + tareas).
+ *  - tarea/encargo → borra la tarea; si es una cobertura soltada (lleva `evento_id`) borra también
+ *    el evento para que no resurja como «Por cubrir».
+ */
+function AccionesItem({ item }: { item: Item }) {
+  const queryClient = useQueryClient();
+  const usuario = React.useContext(SesionContexto)?.usuario ?? null;
+  const esManager = usuario?.rol === "admin";
+  const [editarAbierto, setEditarAbierto] = React.useState(false);
+
+  // Evento editable (lápiz) y tareas a borrar en cascada, según el tipo de fila.
+  const evento =
+    item.kind === "evento"
+      ? item.evento
+      : item.kind === "cobertura"
+        ? item.cobertura.evento ?? null
+        : null;
+  const tareasVinculadas =
+    item.kind === "cobertura" ? [...item.cobertura.cubridores, ...item.cobertura.libres] : [];
+  const titulo = tituloItem(item);
+
+  const borrar = useMutation({
+    mutationFn: async (): Promise<void> => {
+      if (item.kind === "tarea") {
+        await api.eliminarContenido(item.tarea.id);
+        // Cobertura soltada (huérfana con `evento_id`): borra también el evento para que no
+        // reaparezca como «Por cubrir». Si el evento ya no existe, ignoramos el 404.
+        if (item.tarea.evento_id) {
+          try {
+            await api.eliminarEventoRota(item.tarea.evento_id);
+          } catch {
+            /* el evento podía no existir ya */
+          }
+        }
+        return;
+      }
+      if (evento) await api.eliminarEventoRota(evento.id);
+      if (tareasVinculadas.length > 0) {
+        await Promise.all(tareasVinculadas.map((t) => api.eliminarContenido(t.id)));
+      }
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
+      toast.success(`«${titulo}» borrado.`);
+    },
+    onError: (e) => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
+      toast.error(mensajeError(e));
+    },
+  });
+  const pedirBorrar = async () => {
+    const n = item.kind === "cobertura" ? item.cobertura.cubridores.length : 0;
+    if (
+      await confirmar({
+        mensaje:
+          n > 0
+            ? `¿Borrar «${titulo}»? Cancelará la cobertura de ${n} ${n === 1 ? "persona" : "personas"}.`
+            : `¿Borrar «${titulo}»? Desaparece de la lista para todos.`,
+        destructivo: true,
+        textoConfirmar: "Borrar",
+      })
+    )
+      borrar.mutate();
+  };
+
+  // Sin permisos de coordinación no se editan ni borran partidos del tablero compartido.
+  if (!esManager) return null;
+
+  return (
+    <span className="flex shrink-0 items-center gap-1">
+      {/* Lápiz: solo si hay evento detrás (partidos); abre el diálogo del calendario. */}
+      {evento && (
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="h-7 w-7 shrink-0"
+          aria-label="Editar"
+          title="Editar"
+          onClick={() => setEditarAbierto(true)}
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </Button>
+      )}
+      {/* Papelera: borra cualquier fila (con confirmación). */}
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        className="h-7 w-7 shrink-0 text-muted-foreground hover:border-destructive/50 hover:text-destructive"
+        aria-label="Borrar"
+        title="Borrar"
+        disabled={borrar.isPending}
+        onClick={() => void pedirBorrar()}
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </Button>
+      {editarAbierto && evento && (
+        <DialogEditarEvento
+          evento={evento}
+          tareasVinculadas={tareasVinculadas}
+          onCerrar={() => setEditarAbierto(false)}
+          onCambio={() => void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS })}
+        />
+      )}
+    </span>
+  );
+}
+
 /** Banda superior: lo ÚLTIMO que ha cogido el equipo (por momento de asignación), para ver el pulso. */
 function BandaReciente({ tareas }: { tareas: Contenido[] }) {
   const recientes = tareas
@@ -426,8 +547,10 @@ function FilaAgenda({
           </span>
         )}
       </button>
-        {/* ⚡ Escalar/des-escalar: salta al tope (banda «Urgente ahora») o vuelve a su día. */}
-        <span className="px-1.5">
+        {/* Acciones de la fila: editar (lápiz) + borrar (papelera) + ⚡ escalar/des-escalar.
+            La papelera queda pegada al ⚡; el lápiz abre el diálogo de edición del calendario. */}
+        <span className="flex items-center gap-1 px-1.5">
+          <AccionesItem item={item} />
           <AccionUrgente item={item} />
         </span>
       </div>
