@@ -2,6 +2,7 @@ import { CircleCheck, CircleX, Trash2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { confirmar } from "@/components/comunes/confirmar";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import type { FuenteAlgoritmo } from "@/types";
@@ -22,7 +23,16 @@ export function FilaFuente({
     {
       etiqueta: "Borrar",
       icono: Trash2,
-      onClick: () => onBorrar(fuente),
+      onClick: async () => {
+        if (
+          await confirmar({
+            mensaje: `¿Borrar la fuente "${fuente.nombre}"? Esta acción no se puede deshacer.`,
+            destructivo: true,
+            textoConfirmar: "Borrar",
+          })
+        )
+          onBorrar(fuente);
+      },
       destructivo: true,
     },
   ];

@@ -442,7 +442,7 @@ describe("CajonesDia", () => {
     expect(toast.warning).not.toHaveBeenCalled();
   });
 
-  it("el botón 'Descartar' llama a api.insumos.descartarItem tras confirmar", async () => {
+  it("'Descartar' (menú contextual) llama a api.insumos.descartarItem tras confirmar", async () => {
     const descartarMock = vi
       .spyOn(apiMod.api.insumos, "descartarItem")
       .mockResolvedValue({ ok: true } as never);
@@ -452,11 +452,27 @@ describe("CajonesDia", () => {
     renderConProviders(<CajonesDia />);
 
     await screen.findByText("Sismo en CDMX de 5.4 grados");
-    fireEvent.click(screen.getByRole("button", { name: "Descartar ítem" }));
+    // "Descartar" vive ahora en el menú contextual (click derecho) de la tarjeta canónica.
+    fireEvent.contextMenu(screen.getByTestId("insumo-item"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /descartar/i }));
 
     await waitFor(() => {
       expect(descartarMock).toHaveBeenCalledWith("item-1");
     });
+  });
+
+  it("click izquierdo en la tarjeta (no en un botón) abre el editor del ítem", async () => {
+    vi.spyOn(apiMod.api.insumos, "listar").mockResolvedValue(INSUMOS_CON_ITEM as never);
+    vi.spyOn(apiMod.api.insumos, "dias").mockResolvedValue({ dias: [] } as never);
+
+    renderConProviders(<CajonesDia />);
+
+    // La acción primaria (click izquierdo sobre el cuerpo) edita el ítem.
+    fireEvent.click(await screen.findByText("Sismo en CDMX de 5.4 grados"));
+
+    expect(
+      await screen.findByRole("heading", { name: "Editar ítem" }),
+    ).toBeInTheDocument();
   });
 
   it("un ítem usado NO ofrece 'Descartar' (su pieza ya vive en el tablero)", async () => {
@@ -475,7 +491,11 @@ describe("CajonesDia", () => {
     renderConProviders(<CajonesDia />);
 
     await screen.findByText("Sismo en CDMX de 5.4 grados");
-    expect(screen.queryByRole("button", { name: "Descartar ítem" })).not.toBeInTheDocument();
+    // Un ítem usado no tiene acciones: el click derecho no abre menú contextual.
+    fireEvent.contextMenu(screen.getByTestId("insumo-item"));
+    expect(
+      screen.queryByRole("menuitem", { name: /descartar/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("ítem en pool muestra badge 'En el pool'", async () => {

@@ -21,6 +21,8 @@ import { toast } from "sonner";
 import { DiffProsa } from "@/components/biblioteca/DiffProsa";
 import { LectorProsa } from "@/components/biblioteca/LectorProsa";
 import { confirmar } from "@/components/comunes/confirmar";
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -250,10 +252,26 @@ export function PanelVersiones({
           {historial.map((v) => {
             const esEnVivo = !!produccionSha && v.sha === produccionSha;
             const nombre = v.mensaje || "Publicación";
+            // Restaurar: no tiene sentido sobre la versión que ya está EN VIVO.
+            // `onRestaurar` ya confirma internamente; no añadimos otro diálogo.
+            const accionesVersion: EntradaMenuContextual[] = esEnVivo
+              ? []
+              : [
+                  {
+                    etiqueta: "Restaurar",
+                    icono: RotateCcw,
+                    deshabilitado: restaurarMut.isPending,
+                    onClick: () => void onRestaurar(v.sha, nombre),
+                  },
+                ];
             return (
-              <li
+              <FilaConAcciones
                 key={v.sha}
-                className="group flex items-center gap-2 py-2 whitespace-nowrap transition-colors hover:bg-muted/40"
+                como="li"
+                onPrimaria={() => abrirVersion(v.sha)}
+                acciones={accionesVersion}
+                kebab="hover"
+                className="group flex items-center gap-2 py-2 whitespace-nowrap"
               >
                 <span
                   className={cn(
@@ -262,43 +280,22 @@ export function PanelVersiones({
                   )}
                   aria-hidden
                 />
-                {/* Clic → abre ESA versión (solo lectura). */}
-                <button
-                  type="button"
-                  onClick={() => abrirVersion(v.sha)}
-                  className="flex min-w-0 flex-1 items-center gap-1.5 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  title={`Ver esta versión · ${v.autor} · ${v.fecha}`}
-                >
-                  <span className="truncate font-medium" title={v.sha_corto}>
-                    {nombre}
-                  </span>
+                {/* Contenido: nombre + badge EN VIVO (la fila abre esa versión al clicar). */}
+                <span className="flex min-w-0 flex-1 items-center gap-1.5" title={v.sha_corto}>
+                  <span className="truncate font-medium">{nombre}</span>
                   {esEnVivo ? (
                     <Badge variant="ok" className="shrink-0 gap-1 rounded-full px-2">
                       <Check className="h-3 w-3" aria-hidden /> EN VIVO
                     </Badge>
                   ) : null}
-                </button>
+                </span>
                 <span
                   className="shrink-0 text-xs tabular-nums text-muted-foreground"
                   title={`${v.autor} · ${v.fecha}`}
                 >
                   {tiempoRelativo(v.fecha) || v.fecha.slice(0, 10)}
                 </span>
-                {/* Restaurar: no tiene sentido sobre la versión que ya está EN VIVO. */}
-                {!esEnVivo ? (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 shrink-0"
-                    aria-label="Restaurar"
-                    title="Restaurar esta versión"
-                    disabled={restaurarMut.isPending}
-                    onClick={() => void onRestaurar(v.sha, nombre)}
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" />
-                  </Button>
-                ) : null}
-              </li>
+              </FilaConAcciones>
             );
           })}
         </ol>

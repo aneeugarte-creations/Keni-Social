@@ -18,6 +18,9 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { confirmar } from "@/components/comunes/confirmar";
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { TituloPagina } from "@/components/layout/encabezado";
 import { SeccionApariencia } from "@/pages/configuracion/SeccionApariencia";
 import { Button } from "@/components/ui/button";
@@ -324,26 +327,43 @@ function SeccionMfa({ activo, debeInscribir }: { activo: boolean; debeInscribir:
         {/* Lista de llaves registradas. */}
         {activo && credenciales.length > 0 && (
           <ul className="divide-y divide-border rounded-lg border border-border">
-            {credenciales.map((c) => (
-              <li key={c.id} className="flex items-center justify-between gap-3 p-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{c.nombre || "Llave sin nombre"}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Creada {formatearFechaHora(c.creada)}
-                    {c.ultimo_uso ? ` · Último uso ${formatearFechaHora(c.ultimo_uso)}` : ""}
-                  </p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Eliminar llave"
-                  disabled={borrar.isPending}
-                  onClick={() => borrar.mutate(c.id)}
+            {credenciales.map((c) => {
+              const accionesLlave: EntradaMenuContextual[] = [
+                {
+                  etiqueta: "Eliminar llave",
+                  icono: Trash2,
+                  destructivo: true,
+                  deshabilitado: borrar.isPending,
+                  onClick: async () => {
+                    if (
+                      await confirmar({
+                        mensaje: `¿Eliminar la llave "${c.nombre || "Llave sin nombre"}"? Esta acción no se puede deshacer.`,
+                        destructivo: true,
+                        textoConfirmar: "Eliminar",
+                      })
+                    )
+                      borrar.mutate(c.id);
+                  },
+                },
+              ];
+              return (
+                <FilaConAcciones
+                  key={c.id}
+                  como="li"
+                  kebab="hover"
+                  acciones={accionesLlave}
+                  className="flex items-center justify-between gap-3 p-3 pr-10"
                 >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </li>
-            ))}
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{c.nombre || "Llave sin nombre"}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Creada {formatearFechaHora(c.creada)}
+                      {c.ultimo_uso ? ` · Último uso ${formatearFechaHora(c.ultimo_uso)}` : ""}
+                    </p>
+                  </div>
+                </FilaConAcciones>
+              );
+            })}
           </ul>
         )}
 

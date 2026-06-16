@@ -14,6 +14,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { confirmar } from "@/components/comunes/confirmar";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { api, mensajeError, urlMedia } from "@/lib/api";
@@ -106,7 +107,16 @@ export function EditorVideo({
               {
                 etiqueta: "Quitar video",
                 icono: Trash2,
-                onClick: quitar,
+                onClick: async () => {
+                  if (
+                    await confirmar({
+                      mensaje: "¿Quitar el video?",
+                      destructivo: true,
+                      textoConfirmar: "Quitar",
+                    })
+                  )
+                    quitar();
+                },
                 destructivo: true,
                 deshabilitado: ocupado,
               } as EntradaMenuContextual,

@@ -24,7 +24,7 @@ export function TarjetaMiembro({
     <button
       type="button"
       onClick={() => onAbrir(usuario.id)}
-      className="org-tarjeta flex w-full items-start gap-2.5 rounded-md border bg-card py-2 pl-2.5 pr-2 text-left shadow-sm transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="org-tarjeta flex w-full items-start gap-2.5 rounded-md border bg-card py-2 pl-2.5 pr-2 text-left shadow-sm transition-shadow transition-colors hover:shadow-md hover:border-keni-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       aria-label={`Editar a ${nombre}`}
     >
       <span

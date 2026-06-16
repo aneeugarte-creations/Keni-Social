@@ -285,7 +285,7 @@ export function DialogoEtiquetas({
                         },
                       },
                     ]}
-                    className="flex items-center gap-2 rounded-md border border-border/60 px-2 py-1.5 pr-10 text-sm transition-colors hover:border-foreground/20"
+                    className="flex items-center gap-2 rounded-md border border-border/60 px-2 py-1.5 pr-10 text-sm transition-colors"
                   >
                     <Tag className="h-3.5 w-3.5 text-muted-foreground" />
                     <span className="font-medium">{e.nombre}</span>

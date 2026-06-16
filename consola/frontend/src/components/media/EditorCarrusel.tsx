@@ -26,6 +26,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { confirmar } from "@/components/comunes/confirmar";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { api, mensajeError, urlMedia } from "@/lib/api";
@@ -222,7 +223,16 @@ export function EditorCarrusel({
             acciones.push({
               etiqueta: "Quitar",
               icono: Trash2,
-              onClick: () => quitar(i),
+              onClick: async () => {
+                if (
+                  await confirmar({
+                    mensaje: "¿Quitar el slide?",
+                    destructivo: true,
+                    textoConfirmar: "Quitar",
+                  })
+                )
+                  quitar(i);
+              },
               destructivo: true,
               deshabilitado: disabled,
             });

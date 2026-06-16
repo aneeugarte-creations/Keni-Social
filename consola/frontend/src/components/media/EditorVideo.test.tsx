@@ -12,6 +12,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EditorVideo } from "./EditorVideo";
 
+vi.mock("@/components/comunes/confirmar", () => ({ confirmar: () => Promise.resolve(true) }));
+
 /** Respuesta de subirVideo */
 const MEDIA_RESP = { id: "vid-001", url: "/api/media/vid-001" };
 
@@ -81,7 +83,7 @@ describe("EditorVideo · Ola F", () => {
     expect(url).toContain("/api/media/video");
   });
 
-  it("botón quitar llama a onCambio('', '')", () => {
+  it("botón quitar llama a onCambio('', '')", async () => {
     const onCambio = vi.fn();
     renderEditor({ video: "clip.mp4", videoUrl: "/api/media/clip.mp4", onCambio });
 
@@ -92,7 +94,7 @@ describe("EditorVideo · Ola F", () => {
     const menuItemQuitar = screen.getByRole("menuitem", { name: /quitar video/i });
     fireEvent.click(menuItemQuitar);
 
-    expect(onCambio).toHaveBeenCalledWith("", "");
+    await waitFor(() => expect(onCambio).toHaveBeenCalledWith("", ""));
   });
 
   it("muestra sugerencia de límite para la red dada", () => {

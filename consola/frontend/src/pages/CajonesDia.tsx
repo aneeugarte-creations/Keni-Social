@@ -16,7 +16,6 @@ import {
   CalendarPlus,
   CheckCircle2,
   Clock,
-  Edit2,
   EyeOff,
   Inbox,
   Loader2,
@@ -30,6 +29,8 @@ import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { confirmar } from "@/components/comunes/confirmar";
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -328,52 +329,49 @@ function ItemCard({ item, fecha }: PropsItemCard) {
     void queryClient.invalidateQueries({ queryKey: CLAVE_INSUMOS_PREFIJO(fecha) });
   }
 
+  // Acción primaria = editar el ítem (click izquierdo sobre el cuerpo). "Descartar" pasa al
+  // menú contextual (click derecho / long-press / teclado). Un ítem usado ya tiene su pieza en
+  // el tablero: ni se edita ni se descarta, así que va sin primaria ni acciones.
+  const acciones: EntradaMenuContextual[] = item.usado
+    ? []
+    : [
+        {
+          etiqueta: "Descartar",
+          icono: Trash2,
+          onClick: async () => {
+            // Confirmación ligera: el descarte borra el apunte (la gemela del
+            // pool se aparta en el back para que el auto-feed no la recoja).
+            if (
+              await confirmar({
+                mensaje: `¿Descartar "${item.titulo || "(sin título)"}"?`,
+                destructivo: true,
+                textoConfirmar: "Descartar",
+              })
+            )
+              descartarMut.mutate();
+          },
+          destructivo: true,
+          deshabilitado: descartarMut.isPending,
+        },
+      ];
+
   return (
     <>
-      <div
-        className={`rounded-md border p-3 text-sm ${item.usado ? "bg-muted/40" : esCaducado ? "bg-amber-50/60 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800" : "bg-card"}`}
-        data-testid="insumo-item"
+      <FilaConAcciones
+        como="div"
+        realce
+        kebab="nunca"
+        onPrimaria={item.usado ? undefined : () => setEditando(true)}
+        acciones={acciones}
+        etiquetaAcciones={`Acciones de "${item.titulo || "(sin título)"}"`}
+        className={`rounded-md border p-3 pr-10 text-sm ${item.usado ? "bg-muted/40" : esCaducado ? "bg-amber-50/60 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800" : "bg-card"}`}
       >
+        <div data-testid="insumo-item">
         <div className="flex items-start justify-between gap-2">
           <p className="font-medium leading-snug">{item.titulo || "(sin título)"}</p>
           <div className="flex shrink-0 items-center gap-1">
             {!item.usado && (
               <>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 gap-1 px-2 text-xs"
-                  onClick={() => setEditando(true)}
-                  aria-label="Editar ítem"
-                >
-                  <Edit2 className="h-3 w-3" />
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-destructive"
-                  onClick={async () => {
-                    // Confirmación ligera: el descarte borra el apunte (la gemela del
-                    // pool se aparta en el back para que el auto-feed no la recoja).
-                    if (
-                      await confirmar({
-                        mensaje: `¿Descartar "${item.titulo || "(sin título)"}"?`,
-                        destructivo: true,
-                        textoConfirmar: "Descartar",
-                      })
-                    )
-                      descartarMut.mutate();
-                  }}
-                  disabled={descartarMut.isPending}
-                  aria-label="Descartar ítem"
-                  title="Descartar (no entra al feed)"
-                >
-                  {descartarMut.isPending ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-3 w-3" />
-                  )}
-                </Button>
                 {esContexto ? (
                   // Vigencia de 7 días: el back marca `indicacion_vigente=false` cuando la guía
                   // caducó. `undefined` (campo opcional, aún sin desplegar) cuenta como vigente.
@@ -496,7 +494,8 @@ function ItemCard({ item, fecha }: PropsItemCard) {
             </Badge>
           )}
         </div>
-      </div>
+        </div>
+      </FilaConAcciones>
 
       {editando && (
         <DialogoEditarItem

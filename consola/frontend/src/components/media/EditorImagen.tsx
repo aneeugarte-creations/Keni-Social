@@ -25,6 +25,7 @@ import * as React from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
+import { confirmar } from "@/components/comunes/confirmar";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { MarcaIA } from "@/components/comunes/MarcaIA";
@@ -262,7 +263,16 @@ export function EditorImagen({
                 {
                   etiqueta: "Quitar imagen",
                   icono: Trash2,
-                  onClick: quitar,
+                  onClick: async () => {
+                    if (
+                      await confirmar({
+                        mensaje: "¿Quitar la imagen?",
+                        destructivo: true,
+                        textoConfirmar: "Quitar",
+                      })
+                    )
+                      quitar();
+                  },
                   destructivo: true,
                   deshabilitado: ocupado,
                 },

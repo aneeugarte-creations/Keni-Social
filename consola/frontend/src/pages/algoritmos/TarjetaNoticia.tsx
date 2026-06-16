@@ -1,6 +1,7 @@
 import { Archive, ExternalLink } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { confirmar } from "@/components/comunes/confirmar";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import type { NoticiaAlgoritmo } from "@/types";
@@ -25,7 +26,16 @@ export function TarjetaNoticia({
     {
       etiqueta: "Archivar",
       icono: Archive,
-      onClick: () => onArchivar(noticia),
+      onClick: async () => {
+        if (
+          await confirmar({
+            mensaje: `¿Archivar la noticia "${noticia.titulo || "(sin título)"}"?`,
+            destructivo: true,
+            textoConfirmar: "Archivar",
+          })
+        )
+          onArchivar(noticia);
+      },
       destructivo: true,
       deshabilitado: archivando,
     },

@@ -13,6 +13,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EditorCarrusel } from "./EditorCarrusel";
 import type { SlideCarrusel } from "@/lib/carrusel";
 
+vi.mock("@/components/comunes/confirmar", () => ({ confirmar: () => Promise.resolve(true) }));
+
 const SLIDES: SlideCarrusel[] = [
   { tipo: "imagen", objeto: "artes/a.png" },
   { tipo: "imagen", objeto: "artes/b.png" },
@@ -58,11 +60,13 @@ describe("EditorCarrusel · acciones por slide", () => {
     ]);
   });
 
-  it("'Quitar' elimina solo ese slide", () => {
+  it("'Quitar' elimina solo ese slide", async () => {
     const { onCambio } = renderEditor();
     abrirMenu(1);
     fireEvent.click(screen.getByRole("menuitem", { name: "Quitar" }));
-    expect(onCambio).toHaveBeenCalledWith([{ tipo: "imagen", objeto: "artes/a.png" }]);
+    await waitFor(() =>
+      expect(onCambio).toHaveBeenCalledWith([{ tipo: "imagen", objeto: "artes/a.png" }]),
+    );
   });
 
   it("'Reemplazar media' sube un archivo y SUSTITUYE el media del slide elegido", async () => {

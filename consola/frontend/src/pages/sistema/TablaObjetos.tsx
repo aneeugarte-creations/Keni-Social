@@ -11,8 +11,9 @@ import {
 } from "lucide-react";
 import * as React from "react";
 
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import {
   Table,
   TableBody,
@@ -222,12 +223,34 @@ export function TablaObjetos({
         {objetosOrdenados.map((obj) => {
           const fechaCorta = obj.modificado ? formatearFecha(obj.modificado) : "—";
           const seleccionado = seleccion.has(obj.key);
+          // Acciones secundarias: viven en el menú contextual (click derecho) y el kebab.
+          // El click izquierdo de la fila previsualiza (acción primaria).
+          const accionesObj: EntradaMenuContextual[] = [
+            {
+              etiqueta: "Descargar",
+              icono: Download,
+              onClick: () =>
+                window.open(urlS3Objeto(obj.key, true), "_blank", "noopener,noreferrer"),
+            },
+            {
+              etiqueta: "Borrar",
+              // Mientras se borra ESTE objeto, muestra el spinner en vez de la papelera.
+              icono: keyBorrando === obj.key ? Loader2 : Trash2,
+              destructivo: true,
+              // `onBorrar` (confirmarBorrar en NavegadorS3) ya pide confirmación.
+              deshabilitado: borrando,
+              onClick: () => onBorrar(obj),
+            },
+          ];
           return (
-            <TableRow
+            <FilaConAcciones
               key={obj.key}
-              data-state={seleccionado ? "selected" : undefined}
-              className="cursor-pointer hover:bg-muted/50 data-[state=selected]:bg-muted"
-              onClick={() => onPreview(obj)}
+              como="tr"
+              onPrimaria={() => onPreview(obj)}
+              acciones={accionesObj}
+              kebab="hover"
+              etiquetaAcciones={`Acciones de ${obj.nombre}`}
+              className={cn("hover:bg-muted/50", seleccionado && "bg-muted")}
             >
               <TableCell onClick={(e) => e.stopPropagation()}>
                 <Checkbox
@@ -246,47 +269,7 @@ export function TablaObjetos({
               <TableCell className="hidden text-right text-muted-foreground sm:table-cell">
                 {fechaCorta}
               </TableCell>
-              <TableCell>
-                <div className="flex items-center justify-end gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`Descargar ${obj.nombre}`}
-                    onClick={(e) => {
-                      // No abrir el preview al pulsar descargar.
-                      e.stopPropagation();
-                      window.open(
-                        urlS3Objeto(obj.key, true),
-                        "_blank",
-                        "noopener,noreferrer",
-                      );
-                    }}
-                  >
-                    <Download className="h-4 w-4" aria-hidden="true" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`Borrar ${obj.nombre}`}
-                    disabled={borrando}
-                    onClick={(e) => {
-                      // No abrir el preview al pulsar borrar. Sin confirmación: borra directo.
-                      e.stopPropagation();
-                      onBorrar(obj);
-                    }}
-                  >
-                    {keyBorrando === obj.key ? (
-                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                    ) : (
-                      <Trash2
-                        className="h-4 w-4 text-destructive"
-                        aria-hidden="true"
-                      />
-                    )}
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
+            </FilaConAcciones>
           );
         })}
       </TableBody>
