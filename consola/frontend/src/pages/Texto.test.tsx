@@ -397,7 +397,9 @@ describe("Biblioteca de Prompts (tres máquinas + estrategia)", () => {
     montar("/?vista=documentos");
 
     await waitFor(() => expect(screen.getByText("Prompt de copy")).toBeInTheDocument());
-    expect(screen.getByText("Fusionar historias")).toBeInTheDocument();
+    // Los nombres de doc salen del listado (carga aparte), igual que arriba: ESPERA a que
+    // aparezcan (findByText) en vez de leerlos síncronos — si no, hay carrera y flakea en CI.
+    expect(await screen.findByText("Fusionar historias")).toBeInTheDocument();
     expect(screen.getByText("Voz UnoTV")).toBeInTheDocument();
     // Estado de publicación en la tabla: punteros de producción y aviso sin publicar.
     expect(screen.getAllByText("● prod").length).toBe(2);
