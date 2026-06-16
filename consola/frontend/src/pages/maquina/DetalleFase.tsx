@@ -13,24 +13,34 @@
  * diálogo) y los hashtags su propio diálogo.
  */
 import { useQuery } from "@tanstack/react-query";
+import { ChevronDown, Save } from "lucide-react";
 import * as React from "react";
 
 import { EditorPromptOverlay } from "@/components/prompts/EditorPromptOverlay";
+import { PanelAcerca } from "@/components/prompts/PanelAcerca";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
 import { tiempoRelativo } from "@/lib/fecha";
+import { cn } from "@/lib/utils";
 import type { FasePipeline } from "@/pages/monitor/PanelPipeline";
 import { GestionHashtags } from "@/pages/publicaciones/GestionHashtags";
-import { DetalleDocumento } from "@/pages/prompts/DetalleDocumento";
+import {
+  type AccionesPublicarSubpagina,
+  DetalleDocumento,
+} from "@/pages/prompts/DetalleDocumento";
 import { EstrategiaMarca } from "@/pages/prompts/estrategia/EstrategiaMarca";
 import { PanelClase } from "@/pages/prompts/gestion-lineas/PanelClase";
 import type { ColaJob, ColaMonitor } from "@/types";
 
 type Proceso = "investigacion" | "produccion";
 type PestanaFase = "prompt" | "contexto" | "logs";
+
+/** Estado abierto/colapsado de la tarjeta «Acerca de» (recordado entre sesiones). */
+const CLAVE_ACERCA = "keni.fase.acerca-abierto";
 
 const VARIANTE_ESTADO: Record<string, "ok" | "aviso" | "error" | "secondary"> = {
   ok: "ok",
@@ -225,29 +235,119 @@ export function DetalleFase({
   const inicial: PestanaFase = tieneprompt ? "prompt" : tieneContexto ? "contexto" : "logs";
   const [pestana, setPestana] = React.useState<PestanaFase>(inicial);
 
+  // Documento (para la tarjeta «Acerca de»). Misma queryKey que el editor → React Query dedupe.
+  const docQuery = useQuery({
+    queryKey: ["prompts-doc", fase.doc],
+    queryFn: ({ signal }) => api.documento(fase.doc as string, signal),
+    enabled: tieneprompt,
+  });
+  const doc = docQuery.data?.documento ?? null;
+
+  // El botón Publicar del editor sube AQUÍ (a la fila de pestañas) como icono Guardar. El editor
+  // reporta su estado/acción vía callback ESTABLE; al desmontarse (otra pestaña) reporta `null`.
+  const [acciones, setAcciones] = React.useState<AccionesPublicarSubpagina | null>(null);
+  const reportarAcciones = React.useCallback((a: AccionesPublicarSubpagina | null) => {
+    setAcciones(a);
+  }, []);
+
+  // «Acerca de» colapsable: recuerda el estado en localStorage; por defecto, expandida.
+  const [acercaAbierto, setAcercaAbierto] = React.useState(() => {
+    try {
+      return localStorage.getItem(CLAVE_ACERCA) !== "false";
+    } catch {
+      return true;
+    }
+  });
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(CLAVE_ACERCA, String(acercaAbierto));
+    } catch {
+      /* almacenamiento no disponible: el estado vive solo en memoria */
+    }
+  }, [acercaAbierto]);
+
+  const tituloPublicar = acciones?.puedePublicar
+    ? acciones.esAdmin
+      ? "Publicar para que lo usen los agentes"
+      : "Proponer estos cambios para publicar"
+    : acciones?.cuerpoVacio
+      ? "El cuerpo está vacío"
+      : "No hay cambios sin publicar";
+
   return (
-    <div>
+    <div className="space-y-4">
+      {/* ───────── «Acerca de»: permanente sobre las pestañas (visible en Prompt/Contexto/Logs),
+          colapsable. Solo cuando la fase tiene documento de prompt. ───────── */}
+      {tieneprompt && doc ? (
+        <Card>
+          <button
+            type="button"
+            aria-expanded={acercaAbierto}
+            onClick={() => setAcercaAbierto((v) => !v)}
+            className="flex w-full items-center justify-between gap-2 p-3 text-left"
+          >
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Acerca de
+            </span>
+            <ChevronDown
+              className={cn(
+                "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+                !acercaAbierto && "-rotate-90",
+              )}
+              aria-hidden
+            />
+          </button>
+          {acercaAbierto ? (
+            <div className="px-3 pb-3">
+              <PanelAcerca doc={doc} maquina={maquinaQuery.data} />
+            </div>
+          ) : null}
+        </Card>
+      ) : null}
+
       <Tabs value={pestana} onValueChange={(v) => setPestana(v as PestanaFase)}>
-        <TabsList>
-          {tieneprompt ? <TabsTrigger value="prompt">Prompt</TabsTrigger> : null}
-          {tieneContexto ? <TabsTrigger value="contexto">Contexto</TabsTrigger> : null}
-          <TabsTrigger value="logs">Logs</TabsTrigger>
-        </TabsList>
+        {/* Fila de pestañas: a su derecha, el botón Guardar (publicar) monocromo del editor. */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <TabsList>
+            {tieneprompt ? <TabsTrigger value="prompt">Prompt</TabsTrigger> : null}
+            {tieneContexto ? <TabsTrigger value="contexto">Contexto</TabsTrigger> : null}
+            <TabsTrigger value="logs">Logs</TabsTrigger>
+          </TabsList>
+          {tieneprompt && acciones ? (
+            <div className="flex items-center gap-2">
+              {acciones.sinPublicar ? (
+                <Badge variant="aviso" className="hidden rounded-full sm:inline-flex">
+                  Cambios sin publicar
+                </Badge>
+              ) : null}
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 shrink-0 text-foreground"
+                disabled={!acciones.puedePublicar}
+                title={tituloPublicar}
+                aria-label={acciones.esAdmin ? "Publicar" : "Solicitar publicación"}
+                onClick={acciones.publicar}
+              >
+                <Save className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : null}
+        </div>
 
         {tieneprompt ? (
           <TabsContent value="prompt" className="mt-3">
-            {/* Editor completo embebido, SIN su cabecera: el atrás y el nombre de la fase los
-                pinta la subpágina (FaseDetalle), así no se duplican. `onCerrar` es noop. */}
-            <div className="h-[60vh] min-h-0">
-              <DetalleDocumento
-                key={fase.doc}
-                docId={fase.doc as string}
-                maquina={maquinaQuery.data}
-                onCerrar={() => {}}
-                onIdCambiado={() => {}}
-                ocultarCabecera
-              />
-            </div>
+            {/* Editor completo embebido, SIN su cabecera ni su «Acerca de» (los pinta la subpágina);
+                sin alto fijo ni scroll interno: crece y scrollea la página. `onCerrar` es noop. */}
+            <DetalleDocumento
+              key={fase.doc}
+              docId={fase.doc as string}
+              maquina={maquinaQuery.data}
+              onCerrar={() => {}}
+              onIdCambiado={() => {}}
+              ocultarCabecera
+              onAccionesPublicar={reportarAcciones}
+            />
           </TabsContent>
         ) : null}
 

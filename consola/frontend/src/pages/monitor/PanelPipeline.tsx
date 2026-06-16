@@ -13,10 +13,10 @@
  * Genérico: el llamante le pasa las FASES (`fases`), el mapa tipo-de-job→fase para los conteos
  * (`queuePorTipo`) y opcionalmente qué fase muestra el admision de verificación (`admisionEn`). Cada
  * fase resuelve su switch por la PRIMERA de sus `claves` presente en el catálogo; las que solo
- * tienen el maestro virtual del proceso lo indican con `heredada`.
+ * tienen el maestro virtual del proceso NO pintan switch por fila (lo gobierna la cabecera).
  */
 import { useQuery } from "@tanstack/react-query";
-import { Bot, ChevronDown, ChevronRight, Cog, Users } from "lucide-react";
+import { Bot, ChevronDown, Cog, Users } from "lucide-react";
 import * as React from "react";
 
 import { EditorPromptOverlay } from "@/components/prompts/EditorPromptOverlay";
@@ -58,7 +58,7 @@ export interface FasePipeline {
   /** Clave BASE de los toggles por marca (grupo `automatizacion_marca_*`) + nota de alcance. */
   excepciones?: { base: string; nota: string };
   /** Nota descriptiva extra junto a la fase (p. ej. qué hace su switch: «el switch auto-aprueba las
-   *  de bajo riesgo»). Las fases que SIGUEN a otro control ya se marcan solas («· sigue …»). */
+   *  de bajo riesgo»). Se añade a la línea de ayuda de la fila. */
   heredada?: string;
   /** `true` si la fase inyecta el CONTEXTO editorial de la marca (voz, líneas, tropicalización,
    *  reglas): la pestaña «Contexto» del detalle muestra la estrategia de marca. */
@@ -169,7 +169,7 @@ export function FilaFasePipeline({
       kebab="nunca"
       realce
       etiquetaAcciones={etiquetaAcciones}
-      className="flex items-center justify-between gap-3 rounded-lg border border-border/70 px-3.5 py-2.5"
+      className="flex items-center justify-between gap-3 rounded-lg border border-border/70 bg-card px-3.5 py-2.5"
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 text-sm font-medium">
@@ -216,8 +216,8 @@ export function PanelPipeline({
   chip?: React.ReactNode;
   /** Maestro VIRTUAL del proceso (`KENI_INVESTIGACION`/`KENI_PRODUCCION`): apaga TODAS sus fases a la
    *  vez. Las fases que resuelven su switch a ESTA clave (las que no tienen flag físico propio) NO
-   *  muestran un switch por fila —eso colapsaría el proceso entero al tocar una sola fase—: se
-   *  marcan «sigue al maestro» y el maestro se surfacea UNA vez como control único en la cabecera. */
+   *  muestran un switch por fila —eso colapsaría el proceso entero al tocar una sola fase—: NO
+   *  pintan nada a la derecha y el maestro se surfacea UNA vez como control único en la cabecera. */
   claveMaestro?: string;
   /** Si se pasa, el click izquierdo de cada fila NAVEGA al detalle de esa fase (su subpágina
    *  Prompt · Contexto · Logs) en vez de abrir el overlay de prompt. Es el modo de «Contexto». */
@@ -337,12 +337,6 @@ export function PanelPipeline({
           const esMaestroProceso = claveEfectiva !== undefined && claveEfectiva === claveMaestro;
           const esDuena = claveEfectiva !== undefined && duenoDeClave.get(claveEfectiva) === i;
           const switchEditable = Boolean(ajuste) && esDuena && !esMaestroProceso;
-          const sigueA =
-            ajuste && !switchEditable
-              ? esMaestroProceso
-                ? "al maestro"
-                : `a ${fases[duenoDeClave.get(claveEfectiva!)!].nombre}`
-              : undefined;
           const doc = esAdmin ? e.doc : undefined;
           const deEtapa = e.excepciones
             ? porMarca.filter((a) => a.clave.startsWith(`${e.excepciones!.base}::`))
@@ -398,12 +392,6 @@ export function PanelPipeline({
                         ajuste={ajuste}
                         ariaLabel={`${ajuste.etiqueta} (switch de la fase ${e.nombre})`}
                       />
-                    )}
-                    {sigueA && (
-                      <span className="text-xs text-muted-foreground">· sigue {sigueA}</span>
-                    )}
-                    {navegable && (
-                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
                     )}
                   </>
                 }

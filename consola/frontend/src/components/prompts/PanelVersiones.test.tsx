@@ -1,12 +1,13 @@
 /**
  * PanelVersiones para un equipo de redes NO técnico: un CTA prominente «Revisar y publicar»
  * cuando hay cambios sin publicar, la lista de PUBLICACIONES por su nota (sin SHA) con la que
- * está EN VIVO marcada, y por versión: clic en la fila → ver ESA versión en solo lectura, y
+ * está EN VIVO marcada SOLO por el punto verde (sin texto «EN VIVO»), y por versión: clic en la
+ * fila → pide al contenedor cargar ESA versión en la caja de texto (`onVerVersion`, sin popup), y
  * «Restaurar» → revertir en un clic (publica si admin, solicita si editor). La fila sintética
  * «Tu borrador» solo aparece cuando hay cambios sin publicar.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -94,12 +95,14 @@ afterEach(() => {
 });
 
 describe("PanelVersiones", () => {
-  it("lista las publicaciones por su nota, marca EN VIVO y no muestra SHAs", async () => {
+  it("lista las publicaciones por su nota, marca EN VIVO con el punto (sin texto) y no muestra SHAs", async () => {
     stubFetch();
     montar();
     expect(await screen.findByText("Tono más directo en titulares")).toBeInTheDocument();
     expect(screen.getByText("Primera versión de la voz")).toBeInTheDocument();
-    expect(screen.getByText("EN VIVO")).toBeInTheDocument();
+    // El EN VIVO ya NO es texto: lo indica el punto verde (aria-label «En vivo»).
+    expect(screen.queryByText("EN VIVO")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("En vivo")).toBeInTheDocument();
     // Fila sintética del borrador con su badge humano (hay cambios sin publicar).
     expect(screen.getByText("Tu borrador")).toBeInTheDocument();
     expect(screen.getByText("Cambios sin publicar")).toBeInTheDocument();
@@ -144,44 +147,23 @@ describe("PanelVersiones", () => {
     await waitFor(() => expect(onBorradorActualizado).toHaveBeenCalled());
   });
 
-  it("clic en una versión abre SU contenido en solo lectura (no un diff)", async () => {
+  it("clic en una versión pide al contenedor cargarla (onVerVersion), sin abrir popup", async () => {
     stubFetch();
-    montar();
+    const onVerVersion = vi.fn();
+    montar({ onVerVersion });
     await screen.findByText("Primera versión de la voz");
     fireEvent.click(screen.getByRole("button", { name: /Primera versión de la voz/ }));
-    const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText("Primera versión de la voz")).toBeInTheDocument();
-    // No es un diff: no hay toggle «Solo cambios».
-    expect(screen.queryByLabelText("Solo cambios")).not.toBeInTheDocument();
+    // Carga esa versión en la caja de texto (su SHA), no abre ningún diálogo.
+    expect(onVerVersion).toHaveBeenCalledWith("bbb222");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  // Subtítulo cronológico esperado SIEMPRE: la más antigua (1 jun) es el «antes».
-  const SUBTITULO_CRONOLOGICO =
-    "Cambios desde «Primera versión de la voz» hasta «Tono más directo en titulares»";
-
-  it("comparar muestra el diff con su toggle, y el sentido es cronológico (abro la antigua)", async () => {
+  it("clic en «Tu borrador» vuelve a editar el borrador (onVerVersion(null))", async () => {
     stubFetch();
-    montar();
-    // Abro la ANTIGUA (bbb222, 1 jun) y comparo con la NUEVA (aaa111, 10 jun).
-    await screen.findByText("Primera versión de la voz");
-    fireEvent.click(screen.getByRole("button", { name: /Primera versión de la voz/ }));
-    const dialog = await screen.findByRole("dialog");
-    // Por defecto solo se ve el contenido (sin barra de diff).
-    expect(within(dialog).queryByText("Solo cambios")).not.toBeInTheDocument();
-    fireEvent.change(within(dialog).getByRole("combobox"), { target: { value: "aaa111" } });
-    expect(await within(dialog).findByText("Solo cambios")).toBeInTheDocument();
-    expect(within(dialog).getByText(SUBTITULO_CRONOLOGICO)).toBeInTheDocument();
-  });
-
-  it("el sentido del diff NO depende de cuál abras (abro la nueva, comparo con la antigua)", async () => {
-    stubFetch();
-    montar();
-    // Abro la NUEVA (aaa111) y comparo con la ANTIGUA (bbb222) → MISMO sentido cronológico.
-    await screen.findByText("Tono más directo en titulares");
-    fireEvent.click(screen.getByRole("button", { name: /Tono más directo en titulares/ }));
-    const dialog = await screen.findByRole("dialog");
-    fireEvent.change(within(dialog).getByRole("combobox"), { target: { value: "bbb222" } });
-    expect(await within(dialog).findByText(SUBTITULO_CRONOLOGICO)).toBeInTheDocument();
+    const onVerVersion = vi.fn();
+    montar({ onVerVersion, versionActiva: "bbb222" });
+    fireEvent.click(await screen.findByRole("button", { name: /Tu borrador/ }));
+    expect(onVerVersion).toHaveBeenCalledWith(null);
   });
 
   it("«Restaurar» (admin) revierte en un clic: revierte y publica", async () => {

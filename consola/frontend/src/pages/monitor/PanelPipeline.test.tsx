@@ -5,7 +5,8 @@
  * (`KENI_INVESTIGACION`). Antes cada una pintaba un switch que ERA el maestro: tocar cualquiera
  * apagaba el proceso entero. Ahora esas fases NO muestran switch («· sigue al maestro»), el maestro
  * se surfacea UNA sola vez en la cabecera, y solo las fases dueñas de un flag propio
- * (Recolectar/Verificar) tienen su switch por fila.
+ * (Recolectar/Verificar) tienen su switch por fila. Las seguidoras NO pintan nada a la derecha
+ * (ni texto «· sigue …» ni chevron): la fila sigue siendo clicable, solo desaparecen esos adornos.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
@@ -79,7 +80,7 @@ describe("PanelPipeline · toggles independientes", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("solo las fases con flag propio tienen switch; el resto «sigue»", async () => {
+  it("solo las fases con flag propio tienen switch; las seguidoras no pintan nada", async () => {
     renderPanel();
     expect(
       await screen.findByRole("switch", { name: /Recolectar \(switch de la fase Recolectar\)/ }),
@@ -87,8 +88,7 @@ describe("PanelPipeline · toggles independientes", () => {
     expect(
       screen.getByRole("switch", { name: /Verificar \(switch de la fase Verificar\)/ }),
     ).toBeInTheDocument();
-    // Fusionar/Traducir/Clasificar/Priorizar/Admitir siguen al maestro; Agrupar sigue a Recolectar.
-    const seguidoras = screen.getAllByText(/· sigue (al maestro|a Recolectar)/);
-    expect(seguidoras.length).toBe(6);
+    // Las seguidoras YA NO muestran el texto «· sigue …» a la derecha.
+    expect(screen.queryByText(/· sigue (al maestro|a Recolectar)/)).not.toBeInTheDocument();
   });
 });

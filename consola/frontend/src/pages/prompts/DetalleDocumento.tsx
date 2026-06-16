@@ -13,6 +13,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowLeft,
+  Eye,
   Lock,
   MoreHorizontal,
   PanelLeftClose,
@@ -26,6 +27,7 @@ import { toast } from "sonner";
 
 import { PanelAcerca } from "@/components/prompts/PanelAcerca";
 import { DialogPublicar } from "@/components/prompts/DialogPublicar";
+import { LectorProsa } from "@/components/prompts/LectorProsa";
 import { PanelVersiones } from "@/components/prompts/PanelVersiones";
 import { confirmar } from "@/components/comunes/confirmar";
 import { MenuFlotante } from "@/components/comunes/MenuContextual";
@@ -51,12 +53,27 @@ import {
 /** Clave de persistencia del estado abierto/colapsado del panel lateral. */
 const CLAVE_PANEL = "keni.prompts.panel-abierto";
 
+/**
+ * Estado + acción de publicación que la subpágina de una fase (DetalleFase) iza a su fila de
+ * pestañas para pintar ahí el botón Guardar (en vez de en la cabecera de este editor). `null`
+ * mientras no hay documento cargado o el editor se desmonta.
+ */
+export interface AccionesPublicarSubpagina {
+  esAdmin: boolean;
+  puedePublicar: boolean;
+  cuerpoVacio: boolean;
+  sinPublicar: boolean;
+  /** Abre el flujo de publicación (mismo destino que el botón de la cabecera). */
+  publicar: () => void;
+}
+
 export function DetalleDocumento({
   docId,
   maquina,
   onCerrar,
   onIdCambiado,
   ocultarCabecera = false,
+  onAccionesPublicar,
 }: {
   docId: string;
   /** Línea de la máquina (para situar el doc en la pestaña "Uso"). */
@@ -65,11 +82,17 @@ export function DetalleDocumento({
   /** El id puede cambiar al renombrar/mover: el contenedor actualiza la URL. */
   onIdCambiado: (id: string) => void;
   /**
-   * Oculta la cabecera (botón atrás + título editable + menú ⋯) cuando el contenedor ya
-   * pinta la suya (la subpágina de una fase): así no se duplican atrás ni título. Se mantiene
-   * la acción de publicar; el atrás vive en el contenedor.
+   * Oculta la cabecera (botón atrás + título editable + menú ⋯ + publicar) cuando el contenedor
+   * ya pinta la suya (la subpágina de una fase): así no se duplican atrás ni título, y la acción
+   * de publicar sube a la fila de pestañas vía `onAccionesPublicar`. También suelta las alturas
+   * fijas / scroll interno para que el editor crezca y scrollee la página entera.
    */
   ocultarCabecera?: boolean;
+  /**
+   * Solo con `ocultarCabecera`: reporta al contenedor el estado/acciones de publicación para que
+   * pinte el botón Guardar en su fila de pestañas. Debe ser ESTABLE (useCallback) para no relanzar.
+   */
+  onAccionesPublicar?: (acciones: AccionesPublicarSubpagina | null) => void;
 }) {
   const qc = useQueryClient();
   const esAdmin = useEsAdmin();
@@ -287,6 +310,42 @@ export function DetalleDocumento({
 
   const esPrompt = borrador?.tipo === "prompt";
 
+  // ── Estado de publicación (lo usa el botón de la cabecera y, en subpágina, el contenedor). ──
+  const sinPublicar = !!doc?.sin_publicar;
+  const cuerpoVacio = !(borrador?.cuerpo ?? "").trim();
+  const puedePublicar = !!borrador && (!produccion || sinPublicar) && !cuerpoVacio;
+
+  // Subpágina: el botón de publicar vive en la fila de pestañas del contenedor; le reportamos el
+  // estado + un disparador estable. Se limpia al desmontar para que no quede un botón huérfano.
+  const publicar = React.useCallback(() => setPublicarAbierto(true), []);
+  const hayBorrador = !!borrador;
+  React.useEffect(() => {
+    if (!ocultarCabecera || !onAccionesPublicar) return;
+    onAccionesPublicar(
+      hayBorrador ? { esAdmin, puedePublicar, cuerpoVacio, sinPublicar, publicar } : null,
+    );
+  }, [
+    ocultarCabecera,
+    onAccionesPublicar,
+    hayBorrador,
+    esAdmin,
+    puedePublicar,
+    cuerpoVacio,
+    sinPublicar,
+    publicar,
+  ]);
+  React.useEffect(() => () => onAccionesPublicar?.(null), [onAccionesPublicar]);
+
+  // ── Preview de una versión anterior en la caja de la derecha (solo lectura). `null` = se edita
+  // el borrador. Clicar una versión en el panel la carga aquí; «Volver a tu borrador» la cierra. ──
+  const [previewSha, setPreviewSha] = React.useState<string | null>(null);
+  React.useEffect(() => setPreviewSha(null), [docId]);
+  const previewQuery = useQuery({
+    queryKey: ["prompts-version", docId, previewSha],
+    queryFn: ({ signal }) => api.versionPrompts(docId, previewSha as string, signal),
+    enabled: !!previewSha,
+  });
+
   // ── Panel lateral colapsable: con el panel oculto el editor ocupa todo el ancho
   // (legibilidad). El estado se recuerda entre sesiones en localStorage. ──
   const [panelAbierto, setPanelAbierto] = React.useState(() => {
@@ -324,115 +383,105 @@ export function DetalleDocumento({
     );
   }
 
-  const sinPublicar = !!doc?.sin_publicar;
-  const cuerpoVacio = !(borrador.cuerpo ?? "").trim();
-  const puedePublicar = (!produccion || sinPublicar) && !cuerpoVacio;
-
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
+    <div className={cn("flex flex-col gap-3", !ocultarCabecera && "h-full min-h-0")}>
       {/* ───────── Cabecera de estado ─────────
-          Con `ocultarCabecera` el contenedor ya pinta atrás + título (subpágina de fase): aquí
-          solo queda la acción de publicar, alineada a la derecha; sin atrás, sin título, sin ⋯. */}
-      <div className={cn("flex flex-wrap items-center gap-2", ocultarCabecera && "justify-end")}>
-        {!ocultarCabecera ? (
-          <>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8"
-              onClick={onCerrar}
-              aria-label="Volver a la prompts"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <Input
-              value={borrador.titulo}
-              onChange={(e) => editar({ titulo: e.target.value })}
-              className="min-w-[12rem] flex-1 border-transparent text-base font-medium shadow-none hover:border-input focus-visible:border-input"
-              placeholder="Título"
-              aria-label="Título del documento"
-            />
-          </>
-        ) : null}
-        {sinPublicar ? (
-          <Badge variant="aviso" className="gap-1 rounded-full">
-            <AlertTriangle className="h-3 w-3" aria-hidden /> Cambios sin publicar
-          </Badge>
-        ) : null}
-        {esAdmin ? (
+          Con `ocultarCabecera` el contenedor (subpágina de fase) ya pinta atrás + título y, vía
+          `onAccionesPublicar`, el botón Guardar en su fila de pestañas: aquí no se pinta cabecera. */}
+      {!ocultarCabecera ? (
+        <div className="flex flex-wrap items-center gap-2">
           <Button
-            variant="brand"
-            size="sm"
-            disabled={!puedePublicar}
-            title={
-              puedePublicar
-                ? "Publicar para que lo usen los agentes"
-                : cuerpoVacio
-                  ? "El cuerpo está vacío"
-                  : "No hay cambios sin publicar"
-            }
-            onClick={() => setPublicarAbierto(true)}
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8"
+            onClick={onCerrar}
+            aria-label="Volver a la prompts"
           >
-            <Rocket className="mr-1 h-3.5 w-3.5" /> Publicar
+            <ArrowLeft className="h-4 w-4" />
           </Button>
-        ) : (
-          <Button
-            variant="brand"
-            size="sm"
-            disabled={!puedePublicar}
-            title={
-              puedePublicar
-                ? "Proponer estos cambios para publicar"
-                : cuerpoVacio
-                  ? "El cuerpo está vacío"
-                  : "No hay cambios sin publicar"
-            }
-            onClick={() => setPublicarAbierto(true)}
-          >
-            <Send className="mr-1 h-3.5 w-3.5" /> Solicitar publicación
-          </Button>
-        )}
-        {!ocultarCabecera ? (
-          <>
+          <Input
+            value={borrador.titulo}
+            onChange={(e) => editar({ titulo: e.target.value })}
+            className="min-w-[12rem] flex-1 border-transparent text-base font-medium shadow-none hover:border-input focus-visible:border-input"
+            placeholder="Título"
+            aria-label="Título del documento"
+          />
+          {sinPublicar ? (
+            <Badge variant="aviso" className="gap-1 rounded-full">
+              <AlertTriangle className="h-3 w-3" aria-hidden /> Cambios sin publicar
+            </Badge>
+          ) : null}
+          {esAdmin ? (
             <Button
-              ref={botonMenuRef}
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8"
-              aria-label="Más acciones"
-              onClick={(e) => menu.abrirEn(e, botonMenuRef.current)}
+              variant="brand"
+              size="sm"
+              disabled={!puedePublicar}
+              title={
+                puedePublicar
+                  ? "Publicar para que lo usen los agentes"
+                  : cuerpoVacio
+                    ? "El cuerpo está vacío"
+                    : "No hay cambios sin publicar"
+              }
+              onClick={() => setPublicarAbierto(true)}
             >
-              <MoreHorizontal className="h-4 w-4" />
+              <Rocket className="mr-1 h-3.5 w-3.5" /> Publicar
             </Button>
-            {menu.abierto && menu.pos ? (
-              <MenuFlotante
-                pos={menu.pos}
-                onClose={menu.cerrar}
-                etiqueta="Acciones del documento"
-                items={[
-                  {
-                    etiqueta: "Mover a la papelera",
-                    icono: Trash2,
-                    destructivo: true,
-                    onClick: () => {
-                      void (async () => {
-                        if (
-                          await confirmar({
-                            mensaje: "¿Mover este documento a la papelera?",
-                            destructivo: true,
-                            textoConfirmar: "Mover",
-                          })
-                        )
-                          eliminarMut.mutate(borrador.id);
-                      })();
-                    },
+          ) : (
+            <Button
+              variant="brand"
+              size="sm"
+              disabled={!puedePublicar}
+              title={
+                puedePublicar
+                  ? "Proponer estos cambios para publicar"
+                  : cuerpoVacio
+                    ? "El cuerpo está vacío"
+                    : "No hay cambios sin publicar"
+              }
+              onClick={() => setPublicarAbierto(true)}
+            >
+              <Send className="mr-1 h-3.5 w-3.5" /> Solicitar publicación
+            </Button>
+          )}
+          <Button
+            ref={botonMenuRef}
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8"
+            aria-label="Más acciones"
+            onClick={(e) => menu.abrirEn(e, botonMenuRef.current)}
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+          {menu.abierto && menu.pos ? (
+            <MenuFlotante
+              pos={menu.pos}
+              onClose={menu.cerrar}
+              etiqueta="Acciones del documento"
+              items={[
+                {
+                  etiqueta: "Mover a la papelera",
+                  icono: Trash2,
+                  destructivo: true,
+                  onClick: () => {
+                    void (async () => {
+                      if (
+                        await confirmar({
+                          mensaje: "¿Mover este documento a la papelera?",
+                          destructivo: true,
+                          textoConfirmar: "Mover",
+                        })
+                      )
+                        eliminarMut.mutate(borrador.id);
+                    })();
                   },
-                ]}
-              />
-            ) : null}
-          </>
-        ) : null}
-      </div>
+                },
+              ]}
+            />
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Conflicto de edición (otro editor guardó debajo): el autosave queda en pausa, pero tu
           borrador local sigue intacto. Decides tú: sobrescribir con lo tuyo o descartar y recargar. */}
@@ -466,16 +515,20 @@ export function DetalleDocumento({
         </div>
       ) : null}
 
-      {/* ───────── «Acerca de»: tarjeta a ancho completo, bajo el título y sobre el editor ───────── */}
-      <section className="rounded-md border border-border bg-muted/20 p-3">
-        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Acerca de
-        </h4>
-        <PanelAcerca doc={borrador} maquina={maquina} />
-      </section>
+      {/* ───────── «Acerca de»: tarjeta a ancho completo, bajo el título y sobre el editor ─────────
+          En subpágina (`ocultarCabecera`) la pinta el contenedor (DetalleFase) ENCIMA de las
+          pestañas, permanente entre ellas, así que aquí no se duplica. */}
+      {!ocultarCabecera ? (
+        <section className="rounded-md border border-border bg-card p-3">
+          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Acerca de
+          </h4>
+          <PanelAcerca doc={borrador} maquina={maquina} />
+        </section>
+      ) : null}
 
       {/* ───────── Panel de versiones (izquierda, colapsable) + cuerpo (derecha) ───────── */}
-      <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
+      <div className={cn("flex flex-col gap-3 lg:flex-row", !ocultarCabecera && "min-h-0 flex-1")}>
         {panelAbierto ? (
           <aside className="flex w-full shrink-0 flex-col gap-2 lg:w-96">
             <div className="flex items-center justify-between gap-1">
@@ -494,19 +547,23 @@ export function DetalleDocumento({
                 <PanelLeftClose className="h-4 w-4" />
               </Button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border bg-muted/20 p-3">
+            <div
+              className={cn(
+                "rounded-md border border-border bg-card p-3",
+                !ocultarCabecera && "min-h-0 flex-1 overflow-y-auto",
+              )}
+            >
               <PanelVersiones
                 docId={borrador.id}
                 produccionSha={produccion?.sha ?? null}
                 sinPublicar={sinPublicar}
-                cuerpoBorrador={componerCuerpoTexto(
-                  frontmatterOculto,
-                  borrador.cuerpo,
-                  contratoInline,
-                )}
                 esAdmin={esAdmin}
                 onPublicar={() => setPublicarAbierto(true)}
+                onVerVersion={setPreviewSha}
+                versionActiva={previewSha}
                 onBorradorActualizado={() => {
+                  // Vuelve a editar el borrador (cierra cualquier preview de versión).
+                  setPreviewSha(null);
                   // Fuerza la RE-SINCRONIZACIÓN del borrador con el cuerpo cargado.
                   sincronizado.current = null;
                   qc.invalidateQueries({ queryKey: ["prompts-doc", docId] });
@@ -532,31 +589,58 @@ export function DetalleDocumento({
           </Button>
         )}
 
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-md border border-border p-3">
-          <EditorWysiwyg
-            key={borrador.id}
-            value={borrador.cuerpo}
-            onContenido={(md) => editar({ cuerpo: md })}
-            conVariables
-            placeholder={
-              esPrompt
-                ? "Escribe el prompt… ({{ para insertar una variable)"
-                : "Escribe la pieza editorial (voz, reglas, plataforma…)…"
-            }
-          />
-          {/* Contrato de salida (prompts estructurados): NO editable, lo gestiona el sistema.
-              Va siempre al FINAL del prompt que ve el modelo. */}
-          {borrador.contrato_salida ? (
-            <div className="mt-4 rounded-md border border-dashed border-border bg-muted/30 p-3">
-              <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <Lock className="h-3 w-3" aria-hidden />
-                Salida · formato fijo (lo gestiona el sistema, no editable)
+        <div
+          className={cn(
+            "min-w-0 flex-1 rounded-md border border-border bg-card p-3",
+            !ocultarCabecera && "min-h-0 overflow-y-auto",
+          )}
+        >
+          {previewSha ? (
+            // Preview de una versión anterior: solo lectura, con vuelta al borrador.
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/30 px-3 py-2">
+                <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <Eye className="h-3.5 w-3.5" aria-hidden /> Viendo una versión anterior · solo
+                  lectura
+                </span>
+                <Button size="sm" variant="outline" className="h-7" onClick={() => setPreviewSha(null)}>
+                  Volver a tu borrador
+                </Button>
               </div>
-              <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-foreground/80">
-                {borrador.contrato_salida}
-              </pre>
+              {previewQuery.isPending ? (
+                <Skeleton className="h-40 w-full" />
+              ) : (
+                <LectorProsa cuerpo={previewQuery.data?.documento.cuerpo ?? ""} />
+              )}
             </div>
-          ) : null}
+          ) : (
+            <>
+              <EditorWysiwyg
+                key={borrador.id}
+                value={borrador.cuerpo}
+                onContenido={(md) => editar({ cuerpo: md })}
+                conVariables
+                placeholder={
+                  esPrompt
+                    ? "Escribe el prompt… ({{ para insertar una variable)"
+                    : "Escribe la pieza editorial (voz, reglas, plataforma…)…"
+                }
+              />
+              {/* Contrato de salida (prompts estructurados): NO editable, lo gestiona el sistema.
+                  Va siempre al FINAL del prompt que ve el modelo. */}
+              {borrador.contrato_salida ? (
+                <div className="mt-4 rounded-md border border-dashed border-border bg-muted/30 p-3">
+                  <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                    <Lock className="h-3 w-3" aria-hidden />
+                    Salida · formato fijo (lo gestiona el sistema, no editable)
+                  </div>
+                  <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-foreground/80">
+                    {borrador.contrato_salida}
+                  </pre>
+                </div>
+              ) : null}
+            </>
+          )}
         </div>
       </div>
 

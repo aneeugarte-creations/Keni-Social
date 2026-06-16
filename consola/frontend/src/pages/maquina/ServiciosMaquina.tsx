@@ -5,7 +5,6 @@
  * `clave_gate`). La gestión completa (barridos, histórico) sigue en Agentes › Sistema.
  */
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { Switch } from "@/components/ui/switch";
@@ -74,7 +73,6 @@ export function ServiciosMaquina({ motor }: { motor: Proceso }) {
                   ) : (
                     <span className="text-xs text-muted-foreground">Siempre activo</span>
                   )}
-                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
                 </>
               }
             />

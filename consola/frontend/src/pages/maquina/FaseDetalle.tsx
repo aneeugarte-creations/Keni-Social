@@ -54,8 +54,8 @@ export default function FaseDetalle() {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="min-w-0">
-          {/* Solo icono + nombre: la descripción vive en la tarjeta «Acerca de» del editor
-              (debajo), para no duplicarla aquí y en el panel. */}
+          {/* Solo icono + nombre: la descripción vive en la tarjeta «Acerca de» (debajo, sobre
+              las pestañas), para no duplicarla aquí. */}
           <div className="flex items-center gap-1.5 text-lg font-semibold leading-tight">
             {fase.es_ia ? (
               <Bot className="h-5 w-5 shrink-0" aria-label="IA" />

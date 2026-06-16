@@ -8,32 +8,24 @@
  * título, autor + fecha y la que está EN VIVO marcada. No se muestran SHAs (van en `title`).
  *
  * Interacción por versión:
- *  - Clic en la fila → abre ESA versión a pantalla completa, en SOLO LECTURA (LectorProsa).
+ *  - Clic en la fila → carga ESA versión en la caja de texto de la derecha (preview en SOLO
+ *    LECTURA, vía `onVerVersion`); el contenedor pinta el lector y la forma de volver al borrador.
+ *    No se abre ningún popup.
  *  - «Restaurar» → revierte en un clic: esa versión vuelve a estar EN VIVO al instante (admin)
  *    o se envía la solicitud (editor), con una nota automática «Restauración de «X»». No hay
  *    paso de publicar a mano.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Check, FileText, Rocket, RotateCcw } from "lucide-react";
+import { ArrowRight, Rocket, RotateCcw } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
-import { DiffProsa } from "@/components/prompts/DiffProsa";
-import { LectorProsa } from "@/components/prompts/LectorProsa";
 import { confirmar } from "@/components/comunes/confirmar";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
 import { api, mensajeError } from "@/lib/api";
 import { tiempoRelativo } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
@@ -44,14 +36,18 @@ export interface PanelVersionesProps {
   produccionSha?: string | null;
   /** Hay cambios en el borrador todavía sin publicar. */
   sinPublicar?: boolean;
-  /** Cuerpo (markdown) del borrador en edición: para comparar una versión con «Tu borrador». */
-  cuerpoBorrador?: string;
   /** El usuario puede publicar directo (admin); si no, restaurar envía una solicitud. */
   esAdmin?: boolean;
   /** Abre el flujo de publicación a pantalla completa (vive en el contenedor). */
   onPublicar?: () => void;
   /** Avisa al contenedor tras restaurar o descartar (resincronizar el doc abierto). */
   onBorradorActualizado?: () => void;
+  /** Pide al contenedor que cargue ESA versión en la caja de texto de la derecha (preview en
+   *  solo lectura); `null` = volver al borrador actual. Sin él, la fila no es seleccionable. */
+  onVerVersion?: (sha: string | null) => void;
+  /** SHA de la versión que el contenedor está previsualizando (resalta su fila). `null`/ausente
+   *  = se está editando el borrador (resalta «Tu borrador»). */
+  versionActiva?: string | null;
   className?: string;
 }
 
@@ -59,10 +55,11 @@ export function PanelVersiones({
   docId,
   produccionSha,
   sinPublicar = false,
-  cuerpoBorrador,
   esAdmin = false,
   onPublicar,
   onBorradorActualizado,
+  onVerVersion,
+  versionActiva,
   className,
 }: PanelVersionesProps) {
   const qc = useQueryClient();
@@ -76,67 +73,9 @@ export function PanelVersiones({
     [histQuery.data],
   );
 
-  // ── Ver una versión: su contenido a pantalla completa, en SOLO LECTURA. ──
-  const [verSha, setVerSha] = React.useState<string | null>(null);
-  const verVersion = historial.find((v) => v.sha === verSha) ?? null;
-  const verQuery = useQuery({
-    queryKey: ["prompts-version", docId, verSha],
-    queryFn: ({ signal }) => api.versionPrompts(docId, verSha as string, signal),
-    enabled: !!verSha,
-  });
-
-  // ── Comparar: dentro del visor, contra «Tu borrador», EN VIVO u otra versión. ──
-  // `comparaCon`: "" = solo ver contenido · "borrador" = el borrador en edición · un sha.
-  const [comparaCon, setComparaCon] = React.useState<string>("");
-  const [soloCambios, setSoloCambios] = React.useState(true);
-  const abrirVersion = (sha: string) => {
-    setComparaCon("");
-    setSoloCambios(true);
-    setVerSha(sha);
-  };
-  const comparandoSha = comparaCon && comparaCon !== "borrador" ? comparaCon : null;
-  const objetivoQuery = useQuery({
-    queryKey: ["prompts-version", docId, comparandoSha],
-    queryFn: ({ signal }) => api.versionPrompts(docId, comparandoSha as string, signal),
-    enabled: !!comparandoSha,
-  });
-  const objetivoVersion = historial.find((v) => v.sha === comparaCon) ?? null;
-  const objetivoLabel =
-    comparaCon === "borrador"
-      ? "Tu borrador"
-      : objetivoVersion
-        ? objetivoVersion.mensaje || "Publicación"
-        : "";
-  const cuerpoObjetivo =
-    comparaCon === "borrador"
-      ? cuerpoBorrador ?? ""
-      : objetivoQuery.data?.documento.cuerpo ?? "";
-  const cargandoComparacion =
-    !!comparandoSha && objetivoQuery.isPending;
-
-  // El diff se lee CRONOLÓGICAMENTE: el lado más ANTIGUO es «antes» y el más nuevo «después»,
-  // así borrar una línea sale en ROJO y añadir en VERDE, sin importar cuál de las dos abriste.
-  // («Tu borrador» es siempre lo más reciente.) Las fechas son ISO: comparan como string.
-  const aperturaLabel = verVersion?.mensaje || "esta versión";
-  const aperturaCuerpo = verQuery.data?.documento.cuerpo ?? "";
-  const fechaApertura = verVersion?.fecha ?? "";
-  const fechaObjetivo =
-    comparaCon === "borrador" ? "9999-12-31T23:59:59" : objetivoVersion?.fecha ?? "";
-  const aperturaEsAntes = fechaApertura <= fechaObjetivo;
-  const diffAntes = aperturaEsAntes ? aperturaCuerpo : cuerpoObjetivo;
-  const diffDespues = aperturaEsAntes ? cuerpoObjetivo : aperturaCuerpo;
-  const labelAntes = aperturaEsAntes ? aperturaLabel : objetivoLabel;
-  const labelDespues = aperturaEsAntes ? objetivoLabel : aperturaLabel;
-  // Opciones de comparación: el borrador (si lo tenemos) + el resto de versiones.
-  const opcionesCompara = [
-    ...(cuerpoBorrador !== undefined ? [{ value: "borrador", label: "Tu borrador" }] : []),
-    ...historial
-      .filter((v) => v.sha !== verSha)
-      .map((v) => ({
-        value: v.sha,
-        label: `${v.mensaje || "Publicación"}${v.sha === produccionSha ? " (EN VIVO)" : ""}`,
-      })),
-  ];
+  // Ver una versión: NO abre popup; pide al contenedor cargarla en la caja de texto de la derecha.
+  const seleccionable = typeof onVerVersion === "function";
+  const verVersion = (sha: string | null) => onVerVersion?.(sha);
 
   const invalidar = () => {
     qc.invalidateQueries({ queryKey: ["prompts"] });
@@ -237,14 +176,26 @@ export function PanelVersiones({
           nombre truncado y la meta + restaurar a la derecha. */}
       <section className="space-y-2">
         <ol className="max-h-[28rem] divide-y divide-border overflow-y-auto">
-          {/* Fila «Tu borrador»: SOLO cuando hay cambios sin publicar (si no, sobra). */}
+          {/* Fila «Tu borrador»: SOLO cuando hay cambios sin publicar (si no, sobra). Clicarla
+              vuelve a editar el borrador (sale del preview de una versión). */}
           {sinPublicar ? (
-            <li className="flex items-center gap-2 py-2 whitespace-nowrap">
-              <span className="block h-2 w-2 shrink-0 rounded-full bg-keni" aria-hidden />
-              <span className="min-w-0 flex-1 truncate font-medium">Tu borrador</span>
-              <Badge variant="aviso" className="shrink-0 rounded-full px-2">
-                Cambios sin publicar
-              </Badge>
+            <li>
+              <button
+                type="button"
+                onClick={seleccionable ? () => verVersion(null) : undefined}
+                disabled={!seleccionable}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-md py-2 pl-1 pr-2 text-left whitespace-nowrap",
+                  seleccionable && "hover:bg-accent",
+                  seleccionable && versionActiva == null && "bg-accent",
+                )}
+              >
+                <span className="block h-2 w-2 shrink-0 rounded-full bg-keni" aria-hidden />
+                <span className="min-w-0 flex-1 truncate font-medium">Tu borrador</span>
+                <Badge variant="aviso" className="shrink-0 rounded-full px-2">
+                  Cambios sin publicar
+                </Badge>
+              </button>
             </li>
           ) : null}
 
@@ -264,30 +215,30 @@ export function PanelVersiones({
                     onClick: () => void onRestaurar(v.sha, nombre),
                   },
                 ];
+            const activa = versionActiva === v.sha;
             return (
               <FilaConAcciones
                 key={v.sha}
                 como="li"
-                onPrimaria={() => abrirVersion(v.sha)}
+                onPrimaria={seleccionable ? () => verVersion(v.sha) : undefined}
                 acciones={accionesVersion}
                 kebab="hover"
-                className="group flex items-center gap-2 py-2 whitespace-nowrap"
+                className={cn(
+                  "group flex items-center gap-2 rounded-md py-2 pl-1 pr-2 whitespace-nowrap",
+                  seleccionable && "hover:bg-accent",
+                  activa && "bg-accent",
+                )}
               >
+                {/* El punto verde (●) marca la versión EN VIVO; ya no hace falta el texto. */}
                 <span
                   className={cn(
                     "block h-2 w-2 shrink-0 rounded-full",
                     esEnVivo ? "bg-emerald-500" : "bg-border",
                   )}
-                  aria-hidden
+                  aria-label={esEnVivo ? "En vivo" : undefined}
                 />
-                {/* Contenido: nombre + badge EN VIVO (la fila abre esa versión al clicar). */}
-                <span className="flex min-w-0 flex-1 items-center gap-1.5" title={v.sha_corto}>
-                  <span className="truncate font-medium">{nombre}</span>
-                  {esEnVivo ? (
-                    <Badge variant="ok" className="shrink-0 gap-1 rounded-full px-2">
-                      <Check className="h-3 w-3" aria-hidden /> EN VIVO
-                    </Badge>
-                  ) : null}
+                <span className="min-w-0 flex-1 truncate font-medium" title={v.sha_corto}>
+                  {nombre}
                 </span>
                 <span
                   className="shrink-0 text-xs tabular-nums text-muted-foreground"
@@ -308,68 +259,6 @@ export function PanelVersiones({
           </p>
         ) : null}
       </section>
-
-      {/* ───────── Ver/comparar una versión: a pantalla completa ───────── */}
-      <Dialog open={!!verSha} onOpenChange={(o) => !o && setVerSha(null)}>
-        <DialogContent className="flex h-screen w-screen max-w-none flex-col gap-0 rounded-none p-0">
-          <DialogHeader className="space-y-2 border-b border-border px-4 py-3 text-left sm:text-left">
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <FileText className="h-4 w-4 text-keni" aria-hidden />
-              {verVersion?.mensaje || "Versión publicada"}
-              {verSha && verSha === produccionSha ? (
-                <Badge variant="ok" className="gap-1 rounded-full px-2">
-                  <Check className="h-3 w-3" aria-hidden /> EN VIVO
-                </Badge>
-              ) : null}
-            </DialogTitle>
-            <DialogDescription>
-              {comparaCon
-                ? `Cambios desde «${labelAntes}» hasta «${labelDespues}»`
-                : verVersion
-                  ? `${verVersion.autor} · ${
-                      tiempoRelativo(verVersion.fecha) ||
-                      verVersion.fecha.slice(0, 16).replace("T", " ")
-                    }`
-                  : "Versión publicada del documento."}
-            </DialogDescription>
-            {/* Barra de comparación: contra el borrador, EN VIVO u otra versión. */}
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-0.5 text-xs">
-              <label className="flex items-center gap-1.5">
-                <span className="text-muted-foreground">Comparar con</span>
-                <select
-                  value={comparaCon}
-                  onChange={(e) => setComparaCon(e.target.value)}
-                  className="h-8 rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <option value="">— Solo ver el contenido</option>
-                  {opcionesCompara.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {comparaCon ? (
-                <label className="flex cursor-pointer items-center gap-1.5">
-                  <span className="text-muted-foreground">Solo cambios</span>
-                  <Switch checked={soloCambios} onCheckedChange={setSoloCambios} />
-                </label>
-              ) : null}
-            </div>
-          </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
-            <div className="mx-auto max-w-3xl">
-              {verQuery.isPending || cargandoComparacion ? (
-                <Skeleton className="h-40 w-full" />
-              ) : comparaCon ? (
-                <DiffProsa antes={diffAntes} despues={diffDespues} soloCambios={soloCambios} />
-              ) : (
-                <LectorProsa cuerpo={verQuery.data?.documento.cuerpo ?? ""} />
-              )}
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
