@@ -324,20 +324,17 @@ export function ContenidoPlantillas({
               )}
             </div>
           </button>
-          {/* Badge de categoría sobre la tarjeta (el de tipo va abajo, junto al nombre). En modo
-              gestión el badge abre un mini-editor que también renombra la plantilla AHÍ MISMO. */}
-          <div className="absolute left-1.5 top-1.5 flex max-w-[calc(100%-3.75rem)] flex-wrap items-start gap-1">
+          {/* Pie: tipo + categoría (chips) + título, FUERA de la miniatura para no taparla. En
+              gestión la categoría abre el mini-editor (cambiar etiqueta y renombrar). Clic en el
+              título renombra inline; la miniatura de arriba abre la plantilla. */}
+          <div className="flex items-center gap-1 px-1.5 py-1">
+            <BadgeTipo tipo={p.tipo ?? "foto"} />
             <BadgeCategoria
               categoria={p.categoria}
               onCambiar={onCategorizar ? (slug) => onCategorizar(p, slug) : undefined}
               nombre={p.nombre}
               onRenombrar={onRenombrar ? (nombre) => onRenombrar(p, nombre) : undefined}
             />
-          </div>
-          {/* Pie: etiqueta de tipo + título, fuera de la miniatura. Clic en el título
-              renombra inline (la miniatura de arriba abre la plantilla). */}
-          <div className="flex items-center gap-1 px-1.5 py-1">
-            <BadgeTipo tipo={p.tipo ?? "foto"} />
             {onRenombrar && editId === p.id ? (
               <input
                 autoFocus
