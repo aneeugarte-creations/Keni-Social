@@ -435,7 +435,7 @@ export function VistaCalendario({
   }
 
   return (
-    <Card>
+    <Card className="overflow-hidden">
       <CardContent className="space-y-3 py-4">
         {programadas.length === 0 && (
           <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
@@ -452,17 +452,20 @@ export function VistaCalendario({
         )}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <div className="inline-flex overflow-hidden rounded-md border border-border">
+            {/* Control segmentado al estilo de la plataforma (mismo look que `TabsList`/
+                `TabsTrigger`): pista gris `bg-muted` con pastilla activa blanca + sombra,
+                en lugar de la pastilla negra (`bg-primary`) que rompía con el resto. */}
+            <div className="inline-flex h-9 items-center rounded-lg bg-muted p-1">
               {(["mes", "semana"] as const).map((v) => (
                 <button
                   key={v}
                   type="button"
                   onClick={() => setVista(v)}
                   className={cn(
-                    "px-3 py-1 text-sm capitalize transition-colors",
+                    "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium capitalize transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     vista === v || (v === "semana" && vista === "dia")
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-card text-muted-foreground hover:bg-muted",
+                      ? "bg-background text-foreground shadow"
+                      : "text-muted-foreground hover:text-foreground",
                   )}
                 >
                   {v}
@@ -561,7 +564,7 @@ function VistaMes({
       {DIAS_SEMANA.map((d) => (
         <div
           key={d}
-          className="bg-muted/60 px-2 py-1.5 text-center text-xs font-medium text-muted-foreground"
+          className="bg-background px-2 py-2 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground"
         >
           {d}
         </div>
@@ -570,6 +573,8 @@ function VistaMes({
         const clave = claveDia(dia);
         const delMes = dia.getMonth() === mesActual;
         const esHoy = clave === hoy;
+        // Fin de semana: mismo tinte ámbar suave que la rejilla de Turnos / la parrilla.
+        const finde = dia.getDay() === 0 || dia.getDay() === 6;
         const items = porDia.get(clave) ?? [];
         const porRed = conteoPorRed(items);
         return (
@@ -579,6 +584,7 @@ function VistaMes({
             onClick={() => onAbrirDia(dia)}
             className={cn(
               "min-h-[5.5rem] space-y-1 bg-card p-1.5 text-left transition-colors hover:bg-accent/30",
+              delMes && finde && "bg-amber-50/40 dark:bg-amber-950/10",
               !delMes && "bg-muted/30 text-muted-foreground",
             )}
           >
@@ -712,6 +718,8 @@ function VistaSemana({
       {dias.map((dia, i) => {
         const clave = claveDia(dia);
         const esHoy = clave === hoy;
+        // Fin de semana: mismo tinte ámbar suave que la rejilla de Turnos / la parrilla.
+        const finde = dia.getDay() === 0 || dia.getDay() === 6;
         const items = porDia.get(clave) ?? [];
         return (
           <div
@@ -729,6 +737,7 @@ function VistaSemana({
             }}
             className={cn(
               "flex min-h-[18rem] flex-col bg-card transition-colors",
+              finde && "bg-amber-50/40 dark:bg-amber-950/10",
               colActiva === clave && "bg-primary/10",
             )}
           >
@@ -737,7 +746,7 @@ function VistaSemana({
               onClick={() => onAbrirDia(dia)}
               className="flex items-center justify-between border-b border-border px-2 py-1.5 text-left hover:bg-accent/30"
             >
-              <span className="text-xs font-medium text-muted-foreground">
+              <span className="text-xs font-semibold capitalize text-muted-foreground">
                 {DIAS_SEMANA[i]}{" "}
                 <span
                   className={cn(
