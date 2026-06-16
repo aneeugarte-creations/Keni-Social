@@ -17,6 +17,16 @@ export function slugFase(nombre: string): string {
     .toLowerCase();
 }
 
+/**
+ * Una fase TIENE CONTENIDO propio (algo que mostrar en su subpágina Prompt · Contexto · Logs) si
+ * tiene prompt (`doc`), contexto editorial de marca (`contextoMarca`), histórico de runs por etapa
+ * (`etapa`) o cola viva (`queue`). Sin nada de esto la subpágina no aporta: no es navegable y, si
+ * además no tiene toggle propio, NO es una etapa (no debe pintarse como fila).
+ */
+export function tieneContenido(fase: FasePipeline): boolean {
+  return Boolean(fase.doc || fase.contextoMarca || fase.etapa || fase.queue);
+}
+
 /** Maestro VIRTUAL de Investigación: respaldo de las fases sin flag físico propio. */
 export const MAESTRO_INVESTIGACION = "KENI_INVESTIGACION";
 /** Maestro VIRTUAL de Producción: respaldo de las fases sin flag físico propio. */
@@ -28,15 +38,9 @@ export const FASES_INVESTIGACION: readonly FasePipeline[] = [
     nombre: "Recolectar",
     es_ia: false,
     claves: ["KENI_PIPELINE_RECOLECTAR", MAESTRO_INVESTIGACION],
-    ayuda: "Recolecta artículos de las fuentes",
+    ayuda: "Recolecta artículos de las fuentes y agrupa las notas parecidas del mismo evento",
     queue: "recolectar",
     excepciones: { base: MAESTRO_INVESTIGACION, nota: "Apaga Recolectar y Verificar juntas." },
-  },
-  {
-    nombre: "Agrupar",
-    es_ia: false,
-    claves: ["KENI_PIPELINE_RECOLECTAR", MAESTRO_INVESTIGACION],
-    ayuda: "Agrupa las notas parecidas del mismo evento",
   },
   {
     // Cotejo previo a la fusión: corre por grupo propuesto ANTES de fundir. Seguidora del flag de
@@ -114,7 +118,8 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
     nombre: "Redactar",
     es_ia: true,
     claves: ["KENI_PIPELINE_REDACTAR", MAESTRO_PRODUCCION],
-    ayuda: "Redacta el copy que convierte la noticia verificada en pieza",
+    ayuda:
+      "Redacta el copy que convierte la noticia verificada en pieza y revisa su voz y calidad antes de avanzar",
     doc: "prompt/redactar",
     contextoMarca: true,
     queue: "redactar",
@@ -123,12 +128,6 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
       base: MAESTRO_PRODUCCION,
       nota: "Apagar «Producción» en una marca la deja sin copy automático.",
     },
-  },
-  {
-    nombre: "Revisar",
-    es_ia: false,
-    claves: ["KENI_PIPELINE_REVISAR", MAESTRO_PRODUCCION],
-    ayuda: "Verifica la voz y la calidad del copy antes de avanzar",
   },
   {
     nombre: "Ilustrar",

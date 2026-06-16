@@ -9,10 +9,15 @@
  * (ni texto «· sigue …» ni chevron): la fila sigue siendo clicable, solo desaparecen esos adornos.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { FASES_INVESTIGACION, MAESTRO_INVESTIGACION } from "@/pages/maquina/fases";
+import {
+  FASES_INVESTIGACION,
+  FASES_PRODUCCION,
+  MAESTRO_INVESTIGACION,
+  MAESTRO_PRODUCCION,
+} from "@/pages/maquina/fases";
 import { PanelPipeline } from "@/pages/monitor/PanelPipeline";
 import type { AjusteAdmin } from "@/types";
 
@@ -42,6 +47,11 @@ vi.mock("@/lib/api", () => ({
             aj("KENI_INVESTIGACION", "Investigación"),
             aj("KENI_PIPELINE_RECOLECTAR", "Recolectar"),
             aj("KENI_PIPELINE_VERIFICAR", "Verificar"),
+            aj("KENI_PRODUCCION", "Producción"),
+            aj("KENI_PIPELINE_REDACTAR", "Redactar"),
+            aj("KENI_PIPELINE_ILUSTRAR", "Ilustrar"),
+            aj("KENI_AUTO_PREAPROBACION", "Aprobar"),
+            aj("KENI_PUBLICAR_REAL", "Publicar"),
           ],
         },
       ],
@@ -63,6 +73,29 @@ function renderPanel() {
       />
     </QueryClientProvider>,
   );
+}
+
+function renderProduccion(onAbrirFase = vi.fn()) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={qc}>
+      <PanelPipeline
+        titulo="Producción"
+        fases={FASES_PRODUCCION}
+        queuePorTipo={{}}
+        claveMaestro={MAESTRO_PRODUCCION}
+        onAbrirFase={onAbrirFase}
+      />
+    </QueryClientProvider>,
+  );
+  return onAbrirFase;
+}
+
+/** La fila (li) de una fase por su nombre, para inspeccionar su rol/click. */
+function filaDe(nombre: string): HTMLElement {
+  const li = screen.getByText(nombre).closest("li");
+  if (!li) throw new Error(`fila ${nombre} no encontrada`);
+  return li as HTMLElement;
 }
 
 describe("PanelPipeline · toggles independientes", () => {
@@ -90,5 +123,35 @@ describe("PanelPipeline · toggles independientes", () => {
     ).toBeInTheDocument();
     // Las seguidoras YA NO muestran el texto «· sigue …» a la derecha.
     expect(screen.queryByText(/· sigue (al maestro|a Recolectar)/)).not.toBeInTheDocument();
+  });
+});
+
+describe("PanelPipeline · solo las filas con contenido son clicables", () => {
+  it("una fila con contenido (Redactar) navega; una con solo toggle (Publicar) no es clicable pero mantiene su switch", async () => {
+    const onAbrir = renderProduccion();
+    // Espera a que el catálogo cargue (Publicar pinta su switch).
+    expect(
+      await screen.findByRole("switch", { name: /Publicar \(switch de la fase Publicar\)/ }),
+    ).toBeInTheDocument();
+
+    // Redactar tiene prompt + contexto + cola + etapa: su fila es clicable (role button) y navega.
+    const redactar = within(filaDe("Redactar")).getByRole("button");
+    redactar.click();
+    expect(onAbrir).toHaveBeenCalledTimes(1);
+    expect(onAbrir.mock.calls[0][0].nombre).toBe("Redactar");
+
+    // Publicar solo tiene su switch (sin prompt/contexto/logs/cola): su fila NO es clicable…
+    const fila = filaDe("Publicar");
+    expect(within(fila).queryByRole("button")).not.toBeInTheDocument();
+    // …pero sigue mostrando su interruptor.
+    expect(
+      within(fila).getByRole("switch", { name: /Publicar \(switch de la fase Publicar\)/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("ninguna fila vacía: ya no se pintan Agrupar (Investigación) ni Revisar (Producción)", () => {
+    renderProduccion();
+    expect(screen.queryByText("Revisar")).not.toBeInTheDocument();
+    expect(screen.queryByText("Agrupar")).not.toBeInTheDocument();
   });
 });

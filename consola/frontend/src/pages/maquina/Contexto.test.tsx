@@ -79,6 +79,8 @@ describe("Contexto · la máquina en una página", () => {
     expect(screen.getByText("Recolectar")).toBeInTheDocument();
     expect(screen.getByText("Cotejar")).toBeInTheDocument();
     expect(screen.getByText("Verificar")).toBeInTheDocument();
+    // «Agrupar» ya NO es una fila: es un sub-paso determinista dentro de Recolectar.
+    expect(screen.queryByText("Agrupar")).not.toBeInTheDocument();
   });
 
   it("en la pestaña Producción muestra sus fases (incl. Idear)", () => {
@@ -86,6 +88,8 @@ describe("Contexto · la máquina en una página", () => {
     expect(screen.getByText("Redactar")).toBeInTheDocument();
     expect(screen.getByText("Publicar")).toBeInTheDocument();
     expect(screen.getByText("Idear")).toBeInTheDocument();
+    // «Revisar» ya NO es una fila: corre dentro de Redactar (sin prompt/logs/toggle propios).
+    expect(screen.queryByText("Revisar")).not.toBeInTheDocument();
   });
 
   it("Importación y Herramientas listan sus prompts independientes", () => {

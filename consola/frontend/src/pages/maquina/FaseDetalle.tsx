@@ -19,6 +19,7 @@ import {
   QUEUE_INVESTIGACION,
   QUEUE_PRODUCCION,
   slugFase,
+  tieneContenido,
 } from "@/pages/maquina/fases";
 
 export default function FaseDetalle() {
@@ -36,8 +37,9 @@ export default function FaseDetalle() {
     refetchInterval: INTERVALO_VIVO_MS,
   });
 
-  // Fase inexistente (slug roto): vuelve a la pestaña del proceso.
-  if (!fase) {
+  // Fase inexistente (slug roto) o SIN contenido propio (su subpágina Prompt · Contexto · Logs no
+  // aportaría nada, p. ej. Publicar: solo tiene su switch): vuelve a la pestaña del proceso.
+  if (!fase || !tieneContenido(fase)) {
     return <Navigate to={`/maquina/contexto?proceso=${proceso}`} replace />;
   }
 

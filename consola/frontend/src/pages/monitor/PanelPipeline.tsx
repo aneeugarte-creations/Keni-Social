@@ -33,6 +33,7 @@ import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { CLAVE_AJUSTES } from "@/pages/configuracion/lib";
+import { tieneContenido } from "@/pages/maquina/fases";
 import {
   ExcepcionesPorMarca,
   useGuardarAjuste,
@@ -352,6 +353,10 @@ export function PanelPipeline({
               onClick: () => setExcepNombre(e.nombre),
             });
           }
+          // Una fila SOLO es clicable/navegable si la fase tiene contenido propio que mostrar en su
+          // subpágina (Prompt · Contexto · Logs). Las que solo tienen toggle (p. ej. Publicar) se
+          // pintan como fila CON su switch, pero sin click izquierdo (su detalle no aportaría nada).
+          const navegableFase = navegable && tieneContenido(e);
           const conCola = e.queue !== undefined;
           const enCursoN = conCola ? (enCurso[e.queue!] ?? 0) : 0;
           const esperaN = conCola ? (esperando[e.queue!] ?? 0) : 0;
@@ -373,7 +378,7 @@ export function PanelPipeline({
                     {e.heredada && <span className="text-muted-foreground/70"> · {e.heredada}</span>}
                   </>
                 }
-                onPrimaria={navegable ? () => onAbrirFase!(e) : editarPrompt}
+                onPrimaria={navegableFase ? () => onAbrirFase!(e) : navegable ? undefined : editarPrompt}
                 acciones={acciones}
                 etiquetaAcciones={`Acciones de ${e.nombre}`}
                 derecha={
