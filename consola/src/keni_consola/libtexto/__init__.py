@@ -62,8 +62,6 @@ from ._comun import (
     _PAPELERA,
     _RE_SLUG,
     CLASES,
-    ESTADO_DEFECTO,
-    ESTADOS,
     PILARES_EDITORIALES,
     PIPELINES,
     ROLES_PROMPT,
@@ -132,7 +130,6 @@ from ._inicial import (
 from ._variables import catalogo_variables
 from ._validacion import (
     _validar_clase,
-    _validar_estado,
     _validar_etiquetas,
     _validar_marcas,
     _validar_pipelines,
@@ -156,8 +153,6 @@ __all__ = [
     "TIPOS",
     "CLASES",
     "SALIDAS",
-    "ESTADOS",
-    "ESTADO_DEFECTO",
     "ROLES_PROMPT",
     "PIPELINES",
     "PILARES_EDITORIALES",
@@ -186,7 +181,6 @@ __all__ = [
     "rev_documento",
     # validacion (_validacion)
     "_validar_clase",
-    "_validar_estado",
     "_validar_etiquetas",
     "_validar_marcas",
     "_validar_pipelines",

@@ -20,8 +20,6 @@ from .. import versionado
 from ..io_atomico import escribir_atomico
 from ._comun import (
     CLASES,
-    ESTADO_DEFECTO,
-    ESTADOS,
     ROLES_PROMPT,
     Documento,
     TextoError,
@@ -94,7 +92,6 @@ def version(doc_id: str, sha: str) -> Documento | None:
         cuerpo=cuerpo, creado=meta.get("creado", "") if isinstance(meta.get("creado"), str) else "",
         actualizado=meta.get("actualizado", "") if isinstance(meta.get("actualizado"), str) else "",
         clase=clase, marcas=_lista_str(meta.get("marcas")), salida=meta.get("salida", "") if isinstance(meta.get("salida"), str) else "",
-        estado=meta.get("estado", ESTADO_DEFECTO) if isinstance(meta.get("estado"), str) else ESTADO_DEFECTO,
         etiquetas=_lista_str(meta.get("etiquetas")), pipelines=_lista_str(meta.get("pipelines")),
         rol=meta.get("rol", "") if isinstance(meta.get("rol"), str) else "",
         prioridad=meta.get("prioridad", 0) if isinstance(meta.get("prioridad"), int) and not isinstance(meta.get("prioridad"), bool) else 0,
@@ -122,7 +119,6 @@ def _escribir_desde_texto(doc_id: str, texto: str) -> Documento:
         clase=meta.get("clase", actual.clase) if isinstance(meta.get("clase"), str) and meta.get("clase") in CLASES else actual.clase,
         marcas=_lista_str(meta.get("marcas")) or actual.marcas,
         salida=actual.salida,
-        estado=meta.get("estado", actual.estado) if isinstance(meta.get("estado"), str) and meta.get("estado") in ESTADOS else actual.estado,
         etiquetas=_lista_str(meta.get("etiquetas")),
         pipelines=_lista_str(meta.get("pipelines")),
         rol=meta.get("rol", actual.rol) if isinstance(meta.get("rol"), str) and meta.get("rol") in ROLES_PROMPT else actual.rol,

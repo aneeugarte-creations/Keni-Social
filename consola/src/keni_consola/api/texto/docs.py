@@ -23,17 +23,14 @@ from ._comun import _doc_json
 def _facetas(docs: list[libtexto.Documento]) -> dict[str, object]:
     """Resumen de facetas (conteos) para poblar los filtros de navegacion del SPA."""
     etiquetas: dict[str, int] = {}
-    estados: dict[str, int] = {}
     pipelines: dict[str, int] = {}
     for d in docs:
-        estados[d.estado] = estados.get(d.estado, 0) + 1
         for e in d.etiquetas:
             etiquetas[e] = etiquetas.get(e, 0) + 1
         for p in d.pipelines:
             pipelines[p] = pipelines.get(p, 0) + 1
     return {
         "etiquetas": sorted(({"valor": k, "total": v} for k, v in etiquetas.items()), key=lambda x: x["valor"]),
-        "estados": estados,
         "pipelines": pipelines,
     }
 
@@ -41,8 +38,8 @@ def _facetas(docs: list[libtexto.Documento]) -> dict[str, object]:
 async def listar(request: Request) -> Response:
     """`GET /api/texto` -> `{documentos, carpetas, facetas}` con facetas opcionales.
 
-    Filtros (query, todos opcionales): `tipo`, `carpeta`, `q`, `estado`, `etiqueta`, `marca`,
-    `clase`, `pipeline`. Las `facetas` resumen etiquetas/estados/pipelines del resultado para
+    Filtros (query, todos opcionales): `tipo`, `carpeta`, `q`, `etiqueta`, `marca`,
+    `clase`, `pipeline`. Las `facetas` resumen etiquetas/pipelines del resultado para
     poblar los filtros de la nueva navegacion.
     """
     qp = request.query_params
@@ -50,7 +47,6 @@ async def listar(request: Request) -> Response:
         tipo=qp.get("tipo") or None,
         carpeta=qp.get("carpeta") or None,
         q=qp.get("q") or None,
-        estado=qp.get("estado") or None,
         etiqueta=qp.get("etiqueta") or None,
         marca=qp.get("marca") or None,
         clase=qp.get("clase") or None,
@@ -77,7 +73,7 @@ async def crear(request: Request) -> Response:
     if not isinstance(titulo, str) or not titulo.strip():
         return JSONResponse({"error": "El título es obligatorio."}, status_code=400)
     kwargs: dict[str, object] = {}
-    for clave in ("descripcion", "tipo", "carpeta", "cuerpo", "clase", "estado", "rol"):
+    for clave in ("descripcion", "tipo", "carpeta", "cuerpo", "clase", "rol"):
         valor = datos.get(clave)
         if isinstance(valor, str):
             kwargs[clave] = valor
@@ -106,7 +102,7 @@ async def guardar(request: Request) -> Response:
     doc_id = request.path_params["doc_id"]
     datos = await leer_json(request)
     kwargs: dict[str, object] = {}
-    for clave in ("titulo", "descripcion", "cuerpo", "carpeta", "clase", "estado", "rol"):
+    for clave in ("titulo", "descripcion", "cuerpo", "carpeta", "clase", "rol"):
         valor = datos.get(clave)
         if isinstance(valor, str):
             kwargs[clave] = valor

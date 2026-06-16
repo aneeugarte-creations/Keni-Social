@@ -9,8 +9,6 @@ import re
 
 from ._comun import (
     CLASES,
-    ESTADO_DEFECTO,
-    ESTADOS,
     PIPELINES,
     ROLES_PROMPT,
     TextoError,
@@ -18,7 +16,6 @@ from ._comun import (
 
 __all__ = [
     "_validar_clase",
-    "_validar_estado",
     "_validar_etiquetas",
     "_validar_pipelines",
     "_validar_rol",
@@ -37,18 +34,6 @@ def _validar_clase(tipo: str, clase: str) -> str:
     if clase not in CLASES:
         raise TextoError(f"La clase editorial debe ser una de: {', '.join(CLASES)}.")
     return clase
-
-
-def _validar_estado(estado: str | None) -> str:
-    """Valida el estado del ciclo de vida; vacio/None -> defecto."""
-    if estado is None:
-        return ESTADO_DEFECTO
-    estado = estado.strip()
-    if not estado:
-        return ESTADO_DEFECTO
-    if estado not in ESTADOS:
-        raise TextoError(f"El estado debe ser uno de: {', '.join(ESTADOS)}.")
-    return estado
 
 
 def _validar_etiquetas(etiquetas: list[str] | None) -> list[str]:

@@ -15,8 +15,6 @@ __all__ = [
     "TIPOS",
     "CLASES",
     "SALIDAS",
-    "ESTADOS",
-    "ESTADO_DEFECTO",
     "ROLES_PROMPT",
     "PIPELINES",
     "_CLASES_GLOBALES",
@@ -45,13 +43,6 @@ CLASES = ("marca", "voz", "plataforma", "tropicalizacion", "reglas")
 # Tipo de SALIDA de un PROMPT: "" / "documento" = texto markdown (no crea artefactos);
 # "piezas" = copy por red que se parsea y crea borradores en Parrilla (selector de redes).
 SALIDAS = ("", "documento", "piezas")
-
-# Estado del CICLO DE VIDA de un documento (cualquier tipo). Gobierna navegacion y inyeccion:
-#   - `activo`    : en uso; se lista por defecto y SE INYECTA en sus pipelines.
-#   - `borrador`  : trabajo en curso; se lista (filtrable) pero NO se inyecta en pipelines.
-#   - `archivado` : retirado; oculto por defecto y NO se inyecta. No es papelera (sigue vivo).
-ESTADOS = ("activo", "borrador", "archivado")
-ESTADO_DEFECTO = "activo"
 
 # ROL de un PROMPT base: ata un prompt al rol que un pipeline espera (redactar/verificar/idear/...).
 # "" = prompt generico (lanzable a mano, no es base de ningun pipeline). Permite re-bindear
@@ -150,7 +141,6 @@ class Documento:
     # Solo prompt: "" | "documento" (texto) | "piezas" (copy por red -> borradores en Parrilla).
     salida: str = ""
     # --- Metadatos transversales (cualquier tipo) ---
-    estado: str = ESTADO_DEFECTO  # activo | borrador | archivado (ver ESTADOS)
     etiquetas: list[str] = field(default_factory=list)  # tags transversales (navegacion/facetas)
     # Atribucion a PIPELINES: en que procesos participa este doc. Para EDITORIALES filtra el
     # auto-adjunto por pipeline ([] = aplica a TODOS, retrocompat). Para PROMPTS marca de que
@@ -172,7 +162,6 @@ class Documento:
             "clase": self.clase,
             "marcas": list(self.marcas),
             "salida": self.salida,
-            "estado": self.estado,
             "etiquetas": list(self.etiquetas),
             "pipelines": list(self.pipelines),
             "rol": self.rol,

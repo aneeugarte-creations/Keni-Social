@@ -9,7 +9,6 @@ from __future__ import annotations
 from ._comun import (
     _CARPETAS_GLOBALES,
     _CLASES_GLOBALES,
-    ESTADO_DEFECTO,
     PILARES_EDITORIALES,
     PIPELINES,
     Documento,
@@ -46,8 +45,7 @@ def editoriales_de_marca(marca: str, *, pipeline: str | None = None) -> list[Doc
     marcas) y (b) los especificos de la marca (clase marca/voz cuyo `marcas` incluye `marca`).
     El usuario puede luego anadir/quitar en la UI; esto es solo el conjunto por defecto.
 
-    Filtros del rediseno (retrocompatibles):
-      - ESTADO: solo se adjuntan documentos `activo` (un `borrador`/`archivado` no inyecta).
+    Filtro del rediseno (retrocompatible):
       - PIPELINE (opcional): si se pasa, un doc se incluye solo si NO acota pipelines
         (`pipelines == []`, aplica a todos -> comportamiento clasico) o si incluye `pipeline`.
         Asi un editorial puede entrar en `copy` pero no en `verificación`, sin romper a los docs viejos
@@ -58,8 +56,6 @@ def editoriales_de_marca(marca: str, *, pipeline: str | None = None) -> list[Doc
     """
     seleccion: list[Documento] = []
     for doc in listar(tipo="editorial"):
-        if doc.estado != ESTADO_DEFECTO:
-            continue
         if pipeline is not None and doc.pipelines and pipeline not in doc.pipelines:
             continue
         # La pertenencia a marca se deriva de la CARPETA (la marca es una carpeta): un doc bajo
@@ -78,9 +74,9 @@ def editoriales_de_marca(marca: str, *, pipeline: str | None = None) -> list[Doc
 def prompt_base_de(pipeline: str) -> str:
     """Id del prompt base EFECTIVO de un pipeline.
 
-    Resolucion: si EXISTE un prompt `activo` que declara `rol == registro.rol` y lista este
-    `pipeline` en sus `pipelines`, ese REBINDEA al pipeline (gana el de menor `prioridad`,
-    luego id). Si nadie rebindea, cae al `prompt_defecto` del registro (comportamiento actual).
+    Resolucion: si EXISTE un prompt que declara `rol == registro.rol` y lista este `pipeline`
+    en sus `pipelines`, ese REBINDEA al pipeline (gana el de menor `prioridad`, luego id). Si
+    nadie rebindea, cae al `prompt_defecto` del registro (comportamiento actual).
     """
     spec = PIPELINES.get(pipeline)
     if spec is None:
@@ -88,7 +84,7 @@ def prompt_base_de(pipeline: str) -> str:
     rol = spec.get("rol", "")
     candidatos = [
         d for d in listar(tipo="prompt")
-        if d.estado == ESTADO_DEFECTO and rol and d.rol == rol and pipeline in d.pipelines
+        if rol and d.rol == rol and pipeline in d.pipelines
     ]
     if candidatos:
         candidatos.sort(key=lambda d: (d.prioridad, d.id))

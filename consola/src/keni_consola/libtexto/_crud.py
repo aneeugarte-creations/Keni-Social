@@ -22,7 +22,6 @@ from ._io import _leer, _parsear, _serializar, rev_documento
 from ._rutas import _carpeta_relativa, _id_unico, _ruta_de_id, raiz
 from ._validacion import (
     _validar_clase,
-    _validar_estado,
     _validar_etiquetas,
     _validar_marcas,
     _validar_pipelines,
@@ -50,7 +49,6 @@ def listar(
     carpeta: str | None = None,
     q: str | None = None,
     *,
-    estado: str | None = None,
     etiqueta: str | None = None,
     marca: str | None = None,
     clase: str | None = None,
@@ -62,7 +60,6 @@ def listar(
       - `tipo`     : prompt | editorial.
       - `carpeta`  : prefijo de carpeta (jerarquia clasica de navegacion).
       - `q`        : busqueda por subcadena en titulo + cuerpo.
-      - `estado`   : activo | borrador | archivado (sin filtro -> todos).
       - `etiqueta` : tag transversal (debe estar en `etiquetas`).
       - `marca`    : id de marca (editoriales cuyo `marcas` la incluye, o globales).
       - `clase`    : clase editorial.
@@ -86,8 +83,6 @@ def listar(
             if carpeta is not None and not _coincide_carpeta(doc.carpeta, carpeta):
                 continue
             if q and not _coincide_busqueda(doc, q):
-                continue
-            if estado and doc.estado != estado:
                 continue
             if etiqueta and etiqueta not in doc.etiquetas:
                 continue
@@ -157,7 +152,6 @@ def crear(
     cuerpo: str = "",
     clase: str = "",
     marcas: list[str] | None = None,
-    estado: str | None = None,
     etiquetas: list[str] | None = None,
     pipelines: list[str] | None = None,
     rol: str | None = None,
@@ -179,7 +173,7 @@ def crear(
         tipo=tipo, carpeta="/".join(partes),
         cuerpo=cuerpo if isinstance(cuerpo, str) else "", creado=ahora, actualizado=ahora,
         clase=clase, marcas=_validar_marcas(marcas),
-        estado=_validar_estado(estado), etiquetas=_validar_etiquetas(etiquetas),
+        etiquetas=_validar_etiquetas(etiquetas),
         pipelines=_validar_pipelines(pipelines), rol=_validar_rol(tipo, rol),
         prioridad=_validar_prioridad(prioridad),
     )
@@ -198,7 +192,6 @@ def guardar(
     carpeta: str | None = None,
     clase: str | None = None,
     marcas: list[str] | None = None,
-    estado: str | None = None,
     etiquetas: list[str] | None = None,
     pipelines: list[str] | None = None,
     rol: str | None = None,
@@ -229,7 +222,6 @@ def guardar(
     nuevo_cuerpo = cuerpo if isinstance(cuerpo, str) else actual.cuerpo
     nueva_clase = actual.clase if clase is None else _validar_clase(actual.tipo, clase)
     nuevas_marcas = actual.marcas if marcas is None else _validar_marcas(marcas)
-    nuevo_estado = actual.estado if estado is None else _validar_estado(estado)
     nuevas_etiquetas = actual.etiquetas if etiquetas is None else _validar_etiquetas(etiquetas)
     nuevos_pipelines = actual.pipelines if pipelines is None else _validar_pipelines(pipelines)
     nuevo_rol = actual.rol if rol is None else _validar_rol(actual.tipo, rol)
@@ -241,7 +233,7 @@ def guardar(
         carpeta="/".join(partes_carpeta),
         cuerpo=nuevo_cuerpo, creado=actual.creado, actualizado=_ahora_iso(),
         clase=nueva_clase, marcas=nuevas_marcas, salida=actual.salida,
-        estado=nuevo_estado, etiquetas=nuevas_etiquetas, pipelines=nuevos_pipelines,
+        etiquetas=nuevas_etiquetas, pipelines=nuevos_pipelines,
         rol=nuevo_rol, prioridad=nueva_prioridad,
     )
 

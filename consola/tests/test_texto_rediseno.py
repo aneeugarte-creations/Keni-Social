@@ -2,8 +2,8 @@
 versionado git. PUROS (sin Postgres): solo aislan `KENI_TEXTO_DIR` en un tmp.
 
 Cubren:
-  - round-trip de los campos nuevos (estado/etiquetas/pipelines/rol/prioridad) por frontmatter.
-  - auto-adjunto editorial filtrado por ESTADO y por PIPELINE + orden por PRIORIDAD.
+  - round-trip de los campos nuevos (etiquetas/pipelines/rol/prioridad) por frontmatter.
+  - auto-adjunto editorial filtrado por PIPELINE + orden por PRIORIDAD.
   - resolucion del prompt base de un pipeline (defecto del registro + rebindeo por doc).
   - preview del prompt ensamblado ("lo que inyectas es lo que ves").
   - listado con facetas.
@@ -33,11 +33,10 @@ def _texto_tmp(monkeypatch, tmp_path):
 def test_campos_nuevos_round_trip_editorial():
     doc = libtexto.crear(
         "Voz UnoTV", tipo="editorial", clase="voz", marcas=["unotv"], cuerpo="Tono cercano.",
-        estado="borrador", etiquetas=["Tono", "tono", "  Piloto "], pipelines=["redactar"], prioridad=5,
+        etiquetas=["Tono", "tono", "  Piloto "], pipelines=["redactar"], prioridad=5,
     )
     leido = libtexto.obtener(doc.id)
     assert leido is not None
-    assert leido.estado == "borrador"
     assert leido.etiquetas == ["tono", "piloto"]  # normalizadas + de-dup
     assert leido.pipelines == ["redactar"]
     assert leido.prioridad == 5
@@ -49,14 +48,13 @@ def test_rol_solo_para_prompt_y_defaults():
     assert libtexto.obtener(p.id).rol == "redactar"
     # Un editorial ignora rol (queda vacio aunque se intente).
     e = libtexto.crear("Reglas", tipo="editorial", clase="reglas", cuerpo="...")
-    assert e.estado == "activo" and e.etiquetas == [] and e.prioridad == 0
+    assert e.etiquetas == [] and e.prioridad == 0
 
 
 def test_guardar_preserva_y_actualiza_campos():
     doc = libtexto.crear("Marca", tipo="editorial", clase="marca", marcas=["unotv"], cuerpo="x")
-    libtexto.guardar(doc.id, estado="archivado", etiquetas=["clave"], prioridad=-3)
+    libtexto.guardar(doc.id, etiquetas=["clave"], prioridad=-3)
     leido = libtexto.obtener(doc.id)
-    assert leido.estado == "archivado"
     assert leido.etiquetas == ["clave"]
     assert leido.prioridad == -3
     assert leido.clase == "marca"  # no se toco
@@ -67,22 +65,9 @@ def test_pipeline_desconocido_lanza():
         libtexto.crear("X", tipo="editorial", clase="reglas", pipelines=["inexistente"])
 
 
-def test_estado_invalido_lanza():
-    with pytest.raises(libtexto.TextoError):
-        libtexto.crear("X", tipo="prompt", estado="raro")
-
-
 # --------------------------------------------------------------------------- #
-# Auto-adjunto: filtro por estado / pipeline + orden por prioridad           #
+# Auto-adjunto: filtro por pipeline + orden por prioridad                     #
 # --------------------------------------------------------------------------- #
-
-
-def test_editoriales_excluye_no_activos():
-    libtexto.crear("Reglas", tipo="editorial", clase="reglas", cuerpo="r")
-    libtexto.crear("Borrador", tipo="editorial", clase="tropicalizacion", cuerpo="t", estado="borrador")
-    ids = {d.id for d in libtexto.editoriales_de_marca("unotv")}
-    assert "editorial/reglas" in ids
-    assert "editorial/borrador" not in ids  # borrador no inyecta
 
 
 def test_editoriales_filtra_por_pipeline():
@@ -136,9 +121,6 @@ def test_prompt_base_rebindeo_por_documento():
     # Un prompt activo con rol=redactar que declara el pipeline redactar GANA al defecto del registro.
     nuevo = libtexto.crear("Copy v2", tipo="prompt", cuerpo="...", rol="redactar", pipelines=["redactar"])
     assert libtexto.prompt_base_de("redactar") ==nuevo.id
-    # Un borrador NO rebindea (estado != activo).
-    libtexto.guardar(nuevo.id, estado="borrador")
-    assert libtexto.prompt_base_de("redactar") =="prompt/redactar"
 
 
 def test_previsualizar_pipeline_ensambla_base_y_adjuntos():
@@ -181,11 +163,9 @@ def test_previsualizar_pipeline_sin_prompt_base():
 # --------------------------------------------------------------------------- #
 
 
-def test_listar_filtra_por_estado_y_etiqueta():
+def test_listar_filtra_por_etiqueta():
     libtexto.crear("A", tipo="prompt", cuerpo="x", etiquetas=["destacado"])
-    libtexto.crear("B", tipo="prompt", cuerpo="y", estado="archivado")
-    activos = libtexto.listar(estado="activo")
-    assert {d.id for d in activos} == {"prompt/a"}
+    libtexto.crear("B", tipo="prompt", cuerpo="y")
     etiquetados = libtexto.listar(etiqueta="destacado")
     assert {d.id for d in etiquetados} == {"prompt/a"}
 

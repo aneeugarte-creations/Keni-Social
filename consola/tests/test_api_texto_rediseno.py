@@ -37,11 +37,10 @@ def cliente(monkeypatch, tmp_path):
 def test_crear_con_campos_nuevos(cliente):
     r = cliente.post("/api/texto", json={
         "titulo": "Voz", "tipo": "editorial", "clase": "voz", "marcas": [_MARCA],
-        "estado": "borrador", "etiquetas": ["piloto"], "pipelines": ["redactar"], "prioridad": 4,
+        "etiquetas": ["piloto"], "pipelines": ["redactar"], "prioridad": 4,
     })
     assert r.status_code == 200
     doc = r.json()["documento"]
-    assert doc["estado"] == "borrador"
     assert doc["etiquetas"] == ["piloto"]
     assert doc["pipelines"] == ["redactar"]
     assert doc["prioridad"] == 4
@@ -49,8 +48,8 @@ def test_crear_con_campos_nuevos(cliente):
 
 def test_listar_devuelve_facetas_y_filtra(cliente):
     cliente.post("/api/texto", json={"titulo": "A", "tipo": "prompt", "etiquetas": ["x"]})
-    cliente.post("/api/texto", json={"titulo": "B", "tipo": "prompt", "estado": "archivado"})
-    r = cliente.get("/api/texto", params={"estado": "activo"})
+    cliente.post("/api/texto", json={"titulo": "B", "tipo": "prompt"})
+    r = cliente.get("/api/texto", params={"etiqueta": "x"})
     datos = r.json()
     assert [d["id"] for d in datos["documentos"]] == ["prompt/a"]
     assert "facetas" in datos

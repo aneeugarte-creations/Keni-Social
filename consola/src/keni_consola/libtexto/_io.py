@@ -13,8 +13,6 @@ import yaml
 
 from ._comun import (
     CLASES,
-    ESTADO_DEFECTO,
-    ESTADOS,
     ROLES_PROMPT,
     SALIDAS,
     TIPOS,
@@ -75,8 +73,6 @@ def _serializar(doc: Documento) -> str:
             meta["rol"] = doc.rol
     # Metadatos transversales: solo se escriben si NO son el defecto, para no ensuciar el
     # frontmatter de los documentos existentes (que siguen leyendose con los defaults).
-    if doc.estado and doc.estado != ESTADO_DEFECTO:
-        meta["estado"] = doc.estado
     if doc.etiquetas:
         meta["etiquetas"] = list(doc.etiquetas)
     if doc.pipelines:
@@ -129,8 +125,6 @@ def _leer(ruta: Path) -> Documento | None:
     actualizado = meta.get("actualizado") if isinstance(meta.get("actualizado"), str) else creado
     salida = meta.get("salida")
     salida = salida if isinstance(salida, str) and salida in SALIDAS else ""
-    estado = meta.get("estado")
-    estado = estado if isinstance(estado, str) and estado in ESTADOS else ESTADO_DEFECTO
     etiquetas = _lista_str(meta.get("etiquetas"))
     pipelines = _lista_str(meta.get("pipelines"))
     rol = meta.get("rol")
@@ -140,6 +134,6 @@ def _leer(ruta: Path) -> Documento | None:
     return Documento(
         id=doc_id, titulo=titulo, descripcion=descripcion, tipo=tipo, carpeta=carpeta,
         cuerpo=cuerpo, creado=creado, actualizado=actualizado, clase=clase, marcas=marcas,
-        salida=salida, estado=estado, etiquetas=etiquetas, pipelines=pipelines, rol=rol,
+        salida=salida, etiquetas=etiquetas, pipelines=pipelines, rol=rol,
         prioridad=prioridad,
     )
