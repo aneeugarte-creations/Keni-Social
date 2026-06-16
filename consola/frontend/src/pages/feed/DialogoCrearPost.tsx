@@ -78,6 +78,9 @@ export function DialogoCrearPost({
     enabled: abierto,
   });
   const marcas = opcionesQuery.data?.marcas ?? [];
+  // La marca de un post nuevo SIGUE la marca activa global: si hay una concreta activa, se
+  // usa esa y NO se muestra selector (ya existe el switch global). Solo en "Todas" se elige.
+  const marcaFija = marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : null;
   const redesCatalogo = React.useMemo(
     () => opcionesQuery.data?.redes ?? [],
     [opcionesQuery.data],
@@ -235,19 +238,23 @@ export function DialogoCrearPost({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="crear-post-marca">Marca</Label>
-            <SelectorMarca
-              id="crear-post-marca"
-              marcas={marcas}
-              valor={marca}
-              onCambio={setMarca}
-              incluirTodas={false}
-              placeholder="Elige una marca"
-              className="w-full"
-              disabled={crear.isPending}
-            />
-          </div>
+          {/* Selector de marca SOLO cuando no hay una marca concreta activa (vista "Todas"):
+              con una marca activa, el post va a esa marca y no se pregunta de nuevo. */}
+          {marcaFija ? null : (
+            <div className="space-y-1.5">
+              <Label htmlFor="crear-post-marca">Marca</Label>
+              <SelectorMarca
+                id="crear-post-marca"
+                marcas={marcas}
+                valor={marca}
+                onCambio={setMarca}
+                incluirTodas={false}
+                placeholder="Elige una marca"
+                className="w-full"
+                disabled={crear.isPending}
+              />
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">

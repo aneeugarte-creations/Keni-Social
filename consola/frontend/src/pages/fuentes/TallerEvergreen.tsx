@@ -168,9 +168,11 @@ export function TallerEvergreen({
 function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
   const queryClient = useQueryClient();
   const { marcaActiva } = useMarcaActiva();
-  const [marca, setMarca] = React.useState(
-    marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : "",
-  );
+  // La idea/contenido nuevo SIGUE la marca activa global: con una marca concreta activa se
+  // usa esa y NO se muestra selector (ya existe el switch global). Solo en "Todas" se elige.
+  const marcaFija = marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : null;
+  const [marcaElegida, setMarcaElegida] = React.useState("");
+  const marca = marcaFija ?? marcaElegida;
   const [contexto, setContexto] = React.useState("");
 
   // Aportación manual al MISMO banco (antes vivían en Fuentes-Internas como "Idea" e
@@ -237,21 +239,25 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="evergreen-marca">Marca</Label>
-            <Select value={marca} onValueChange={setMarca}>
-              <SelectTrigger id="evergreen-marca">
-                <SelectValue placeholder="Elige una marca" />
-              </SelectTrigger>
-              <SelectContent>
-                {marcas.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.nombre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Selector de marca SOLO en la vista "Todas" (sin marca concreta activa): con una
+              marca activa, la idea va a esa marca y no se pregunta de nuevo. */}
+          {marcaFija ? null : (
+            <div className="space-y-1.5">
+              <Label htmlFor="evergreen-marca">Marca</Label>
+              <Select value={marcaElegida} onValueChange={setMarcaElegida}>
+                <SelectTrigger id="evergreen-marca">
+                  <SelectValue placeholder="Elige una marca" />
+                </SelectTrigger>
+                <SelectContent>
+                  {marcas.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label htmlFor="evergreen-contexto">Contexto</Label>
