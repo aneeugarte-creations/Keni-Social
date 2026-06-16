@@ -787,7 +787,7 @@ export default function Imagen() {
     // FULL-BLEED: anula el padding del `<main>` del shell para que el lienzo aproveche todo el
     // alto/ancho bajo la cabecera (h-12 = 3rem). Entre cabecera y lienzo solo queda la tira de
     // pestañas (única franja fina).
-    <div className="-mx-4 -my-4 flex h-[calc(100dvh-3rem)] flex-col overflow-hidden sm:-mx-6 sm:-my-6 lg:-mx-8">
+    <div className="-mx-4 -mt-2 -mb-4 flex h-[calc(100dvh-3rem)] flex-col overflow-hidden sm:-mx-6 sm:-mb-6 lg:-mx-8">
       {/* Título de sección (portaliza a la barra de cabecera unificada del shell). */}
       <TituloPagina titulo="Imagen" icono={Image} />
 

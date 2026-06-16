@@ -223,8 +223,11 @@ export function AppShell() {
             pasa a `auto`), y un hijo más ancho que el viewport (una tarjeta del feed, una URL
             larga) deja arrastrar TODA la superficie de lado en móvil. Clampar X lo impide. */}
         <main className={cn("min-w-0 flex-1 overflow-y-auto overflow-x-hidden")}>
-          {/* Contenido a ancho completo (estilo Vercel/edit-consola), no centrado. */}
-          <div className="w-full min-w-0 px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
+          {/* Contenido a ancho completo (estilo Vercel/edit-consola), no centrado. El gap
+              SUPERIOR (barra → primer control de la página) es ajustado (`pt-2` = 8px) para
+              que TODAS las páginas respiren igual que la galería del editor (Fotos/Miniaturas
+              pega bajo la barra); el inferior se mantiene holgado (`pb-4 sm:pb-6`). */}
+          <div className="w-full min-w-0 px-4 pt-2 pb-4 sm:px-6 sm:pb-6 lg:px-8">
             {/* Las páginas portalizan su título/acciones a los huecos de la barra superior vía
                 el proveedor de contexto, que envuelve al `<Outlet/>`. La cabecera de sección
                 (pestañas/título) ya se pinta en el header, no aquí. */}

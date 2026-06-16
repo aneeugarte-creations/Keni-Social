@@ -397,7 +397,7 @@ export default function Video() {
     // FULL-BLEED (mismo patrón que Imagen.tsx): anula el padding del `<main>` del shell para
     // ocupar exactamente el alto bajo la cabecera (h-12 = 3rem). `overflow-hidden` aquí: la
     // página NUNCA scrollea; el scroll vive DENTRO de cada panel (estilo Canva).
-    <div className="-mx-4 -my-4 flex h-[calc(100dvh-3rem)] flex-col overflow-hidden sm:-mx-6 sm:-my-6 lg:-mx-8">
+    <div className="-mx-4 -mt-2 -mb-4 flex h-[calc(100dvh-3rem)] flex-col overflow-hidden sm:-mx-6 sm:-mb-6 lg:-mx-8">
       {/* Título de sección (portaliza a la barra de cabecera unificada del shell). */}
       <TituloPagina titulo="Video" icono={VideoIcon} />
 
