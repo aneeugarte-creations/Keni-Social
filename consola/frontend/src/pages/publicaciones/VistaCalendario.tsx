@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  CalendarClock,
   CalendarOff,
   CalendarX,
   ChevronLeft,
@@ -22,6 +23,7 @@ import { cn } from "@/lib/utils";
 import type { Publicacion } from "@/types";
 
 import { CLAVE_PUBLICACIONES } from "./claves";
+import { DialogoReprogramar } from "./DialogoReprogramar";
 import {
   datetimeLocalAIso,
   formatearHora,
@@ -125,12 +127,14 @@ function PildoraPub({
   publicacion,
   onAbrir,
   onDesprogramar,
+  onReprogramar,
   onPublicarYa,
   ocupado,
 }: {
   publicacion: Publicacion;
   onAbrir: (p: Publicacion) => void;
   onDesprogramar: (p: Publicacion) => void;
+  onReprogramar: (p: Publicacion) => void;
   onPublicarYa: (p: Publicacion) => void;
   ocupado: boolean;
 }) {
@@ -166,6 +170,13 @@ function PildoraPub({
         },
         ...(!publicado
           ? [
+              {
+                // Reprograma a un instante CUALQUIERA (fuera de los cajones fijos del plan).
+                etiqueta: "Reprogramar a otra hora",
+                icono: CalendarClock,
+                deshabilitado: ocupado,
+                onClick: () => onReprogramar(publicacion),
+              },
               {
                 etiqueta: "Desprogramar",
                 icono: CalendarX,
@@ -262,6 +273,8 @@ export function VistaCalendario({
   const setAncla = onAncla ?? setAnclaLocal;
   const [diaSel, setDiaSel] = React.useState<string | null>(null);
   const [colActiva, setColActiva] = React.useState<string | null>(null);
+  // Pieza con el diálogo de "Reprogramar a otra hora" abierto (null = cerrado).
+  const [reprogramarPub, setReprogramarPub] = React.useState<Publicacion | null>(null);
   const queryClient = useQueryClient();
 
   const invalidar = () => {
@@ -274,6 +287,7 @@ export function VistaCalendario({
     onSuccess: () => {
       invalidar();
       toast.success("Pieza reprogramada.");
+      setReprogramarPub(null);
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -304,6 +318,7 @@ export function VistaCalendario({
   });
   const ocupado = reprogramar.isPending || desprogramar.isPending || publicarYa.isPending;
   const haciaDesprogramar = (p: Publicacion) => desprogramar.mutate(p.id);
+  const haciaReprogramar = (p: Publicacion) => setReprogramarPub(p);
   const haciaPublicarYa = async (p: Publicacion) => {
     if (
       await confirmar({
@@ -488,6 +503,7 @@ export function VistaCalendario({
             setColActiva={setColActiva}
             onAbrir={onEditar}
             onDesprogramar={haciaDesprogramar}
+            onReprogramar={haciaReprogramar}
             onPublicarYa={haciaPublicarYa}
             onAbrirDia={abrirDia}
             onSoltarEnDia={moverADia}
@@ -501,12 +517,21 @@ export function VistaCalendario({
             porDia={porDia}
             onAbrir={onEditar}
             onDesprogramar={haciaDesprogramar}
+            onReprogramar={haciaReprogramar}
             onPublicarYa={haciaPublicarYa}
             onVolver={() => setVista("semana")}
             ocupado={ocupado}
           />
         )}
       </CardContent>
+      <DialogoReprogramar
+        publicacion={reprogramarPub}
+        ocupado={reprogramar.isPending}
+        onConfirmar={(iso) => {
+          if (reprogramarPub) reprogramar.mutate({ id: reprogramarPub.id, iso });
+        }}
+        onCerrar={() => setReprogramarPub(null)}
+      />
     </Card>
   );
 }
@@ -659,6 +684,7 @@ function VistaSemana({
   setColActiva,
   onAbrir,
   onDesprogramar,
+  onReprogramar,
   onPublicarYa,
   onAbrirDia,
   onSoltarEnDia,
@@ -672,6 +698,7 @@ function VistaSemana({
   setColActiva: (v: string | null) => void;
   onAbrir: (p: Publicacion) => void;
   onDesprogramar: (p: Publicacion) => void;
+  onReprogramar: (p: Publicacion) => void;
   onPublicarYa: (p: Publicacion) => void;
   onAbrirDia: (d: Date) => void;
   onSoltarEnDia: (diaClave: string, id: string) => void;
@@ -734,6 +761,7 @@ function VistaSemana({
                     publicacion={e.p}
                     onAbrir={onAbrir}
                     onDesprogramar={onDesprogramar}
+                    onReprogramar={onReprogramar}
                     onPublicarYa={onPublicarYa}
                     ocupado={ocupado}
                   />
@@ -757,6 +785,7 @@ function VistaDia({
   porDia,
   onAbrir,
   onDesprogramar,
+  onReprogramar,
   onPublicarYa,
   onVolver,
   ocupado,
@@ -766,6 +795,7 @@ function VistaDia({
   porDia: Map<string, Publicacion[]>;
   onAbrir: (p: Publicacion) => void;
   onDesprogramar: (p: Publicacion) => void;
+  onReprogramar: (p: Publicacion) => void;
   onPublicarYa: (p: Publicacion) => void;
   onVolver: () => void;
   ocupado: boolean;
@@ -806,6 +836,7 @@ function VistaDia({
                 publicacion={e.p}
                 onAbrir={onAbrir}
                 onDesprogramar={onDesprogramar}
+                onReprogramar={onReprogramar}
                 onPublicarYa={onPublicarYa}
                 ocupado={ocupado}
               />
