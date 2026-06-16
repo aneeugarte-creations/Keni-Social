@@ -24,7 +24,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bot,
   CalendarClock,
-  Copy,
   GitBranch,
   Loader2,
   MessageSquare,
@@ -54,7 +53,6 @@ import {
   claveCadenaAprobacion,
   remplazarPublicacionEnCaches,
 } from "@/pages/publicaciones/claves";
-import { DialogoClonar } from "@/pages/publicaciones/DialogoClonar";
 import { DialogoEditar } from "@/pages/publicaciones/DialogoEditar";
 import { tiempoRelativo } from "@/pages/publicaciones/meta";
 import type { Publicacion, RespuestaPublicacion } from "@/types";
@@ -71,7 +69,6 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   const { usuario } = useSesion();
   const [comentariosAbierto, setComentariosAbierto] = React.useState(false);
   const [editando, setEditando] = React.useState(false);
-  const [clonando, setClonando] = React.useState(false);
   // El hilo se abre al FONDO de la tarjeta (fuera del viewport en tarjetas altas): al abrirlo,
   // acércalo a la vista. Llamada opcional: jsdom no implementa scrollIntoView.
   const comentariosRef = React.useRef<HTMLDivElement>(null);
@@ -403,17 +400,38 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
     setEditando(true);
   };
 
+  // CLICK IZQUIERDO sobre la tarjeta = abrir el editor (acción primaria del modelo "item-first").
+  // Ignora los clics nacidos en controles internos (botones sociales y de borrar, enlaces, la
+  // imagen —que abre el editor por su cuenta y es `role="button"`—, e inputs del hilo): se
+  // detectan subiendo del target al host. Sin este guard, el clic en la imagen dispararía DOS
+  // veces `abrirEditor` (y, con aprobaciones, dos confirmaciones).
+  const onClickTarjeta = (e: React.MouseEvent) => {
+    const host = e.currentTarget as HTMLElement;
+    let nodo: HTMLElement | null = e.target as HTMLElement;
+    while (nodo && nodo !== host) {
+      if (
+        nodo.matches('button, a, input, select, textarea, label, [role="button"], [data-no-primaria]')
+      )
+        return;
+      nodo = nodo.parentElement;
+    }
+    void abrirEditor();
+  };
+
   // El cuerpo del post: el copy que la IA generó (`contenido`); si aún no hay, mostramos
   // el material original como marcador para que el post no quede vacío en "generando copy".
   const cuerpo = publicacion.contenido || publicacion.titulo;
   const imagen = publicacion.imagen_url || publicacion.imagen || publicacion.imagen_fuente;
 
   return (
-    // El editor se abre SOLO al pulsar la imagen (área interactiva de la pieza). La cabecera, el
-    // copy (con su "leer más"), las acciones y los comentarios NO abren el editor.
+    // CLICK IZQUIERDO sobre la tarjeta abre el editor (modelo "item-first"); `onClickTarjeta`
+    // ignora los clics nacidos en controles internos (botones sociales/borrar, enlaces, la
+    // imagen —role="button" con su propio handler—, inputs del hilo). Hover/foco viran el borde
+    // a naranja de marca como pista de que la tarjeta es accionable.
     <article
       aria-label={publicacion.titulo}
-      className="rounded-xl border border-border bg-card text-left text-card-foreground shadow-sm"
+      onClick={onClickTarjeta}
+      className="cursor-pointer rounded-xl border border-border bg-card text-left text-card-foreground shadow-sm transition-colors hover:border-keni-300 focus-within:border-keni-300"
     >
       {/* Cabecera EN UNA SOLA LÍNEA (orden del rediseño aprobado): distintivo de FORMATO + RED
           (iconos pelados, sin nombre ni dos burbujas) → quién posteó (IA/autor) · tiempo. El
@@ -681,27 +699,6 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
               )}
             </Button>
           </Tooltip>
-          {/* Clonar a OTRA RED de la misma idea (copy + copy-in + foto): abre el diálogo con
-              el selector de red destino. Sin `contenido_id` no hay idea padre de la que
-              colgar la copia: deshabilitado (fila estable, mismo criterio que Comentar). */}
-          <Tooltip
-            label={
-              !publicacion.contenido_id
-                ? "Esta pieza no tiene idea padre: no se puede clonar entre redes"
-                : "Clonar a otra red (copy, texto en imagen y foto)"
-            }
-          >
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-10 w-10 text-muted-foreground hover:text-foreground sm:h-8 sm:w-8"
-              onClick={() => setClonando(true)}
-              disabled={!publicacion.contenido_id}
-              aria-label="Clonar a otra red"
-            >
-              <Copy className="h-4 w-4" />
-            </Button>
-          </Tooltip>
           {/* Quitar de ESTA red: borra solo la pieza de esta red (con confirmación); la idea
               y sus demás redes se conservan. Así una idea sale solo en las redes que quieras. */}
           <Tooltip label={`Quitar de ${publicacion.red_nombre}`}>
@@ -726,11 +723,6 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
       {/* Editor rico (reusa el de Publicaciones): copy + imagen (placa con titular inline). Se MONTA
           solo al editar. Es un modal (portal): los clics dentro no abren otra vez la tarjeta. */}
       {editando && <DialogoEditar publicacion={publicacion} onCerrar={() => setEditando(false)} />}
-
-      {/* Clonado entre redes (copy + copy-in + foto, misma idea). Modal: se monta al pedirlo. */}
-      {clonando && (
-        <DialogoClonar publicacion={publicacion} onCerrar={() => setClonando(false)} />
-      )}
 
       {/* Panel de ESTADO (solo en revisión y con cadena): revision de IA + OK del equipo
           (cuántos y de quién) + lo que falta (comentarios sin resolver). El override de

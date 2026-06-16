@@ -12,6 +12,7 @@ import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { ChipEstado } from "@/components/comunes/ChipEstado";
+import { confirmar } from "@/components/comunes/confirmar";
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -124,7 +125,20 @@ export default function GeneracionDetalle() {
               variant="ghost"
               size="sm"
               className="gap-1 text-destructive"
-              onClick={() => cancelar.mutate()}
+              onClick={async () => {
+                if (
+                  await confirmar({
+                    titulo: "Cancelar el trabajo",
+                    mensaje:
+                      "¿Cancelar este trabajo en curso? Se detiene la generación; para volver a ejecutarlo tendrás que reintentarlo.",
+                    destructivo: true,
+                    textoConfirmar: "Cancelar trabajo",
+                    textoCancelar: "Seguir",
+                  })
+                ) {
+                  cancelar.mutate();
+                }
+              }}
               disabled={cancelar.isPending}
             >
               <Square className="h-4 w-4" aria-hidden="true" />

@@ -10,9 +10,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Crown, Loader2, Send } from "lucide-react";
 import * as React from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import { EditorCarrusel } from "@/components/media/EditorCarrusel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,7 @@ function BadgeEstadoPieza({ nota }: { nota: NotaPresidencia }) {
 
 export default function CajonPresidencia() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { marcaActiva } = useMarcaActiva();
   const [titulo, setTitulo] = React.useState("");
   const [texto, setTexto] = React.useState("");
@@ -166,12 +168,17 @@ export default function CajonPresidencia() {
             </p>
             <ul className="space-y-2">
               {notas.map((n) => (
-                <li
+                // Click izquierdo = ir al feed (la pieza vive ahí, agrupada por idea). El
+                // realce naranja del borde al hover/foco es la pista de que es accionable.
+                <FilaConAcciones
                   key={n.id}
+                  como="li"
+                  realce
+                  acciones={[]}
+                  onPrimaria={() => navigate("/operacion/feed")}
                   className="flex items-start justify-between gap-2 rounded-md border p-2.5 text-sm"
-                  data-testid="nota-presidencia"
                 >
-                  <div className="min-w-0">
+                  <div className="min-w-0" data-testid="nota-presidencia">
                     <p className="truncate font-medium leading-snug">
                       {n.titulo || "(sin título)"}
                     </p>
@@ -183,12 +190,8 @@ export default function CajonPresidencia() {
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
                     <BadgeEstadoPieza nota={n} />
-                    {/* La pieza vive en el feed (agrupada por idea, con el título de la nota). */}
-                    <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-xs">
-                      <Link to="/operacion/feed">Ver en el feed</Link>
-                    </Button>
                   </div>
-                </li>
+                </FilaConAcciones>
               ))}
             </ul>
           </div>

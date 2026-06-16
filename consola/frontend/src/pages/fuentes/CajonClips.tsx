@@ -10,9 +10,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Clapperboard, Film, Images, Loader2, Send } from "lucide-react";
 import * as React from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import { EditorCarrusel } from "@/components/media/EditorCarrusel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,7 @@ function BadgeEstadoPieza({ clip }: { clip: Clip }) {
 
 export default function CajonClips() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { marcaActiva } = useMarcaActiva();
   const [titulo, setTitulo] = React.useState("");
   const [texto, setTexto] = React.useState("");
@@ -167,12 +169,17 @@ export default function CajonClips() {
             </p>
             <ul className="space-y-2">
               {clips.map((c) => (
-                <li
+                // Click izquierdo = ir al feed (la acción natural del clip ya volcado). El
+                // realce naranja del borde al hover/foco es la pista de que es accionable.
+                <FilaConAcciones
                   key={c.id}
+                  como="li"
+                  realce
+                  acciones={[]}
+                  onPrimaria={() => navigate("/operacion/feed")}
                   className="flex items-start justify-between gap-2 rounded-md border p-2.5 text-sm"
-                  data-testid="clip-item"
                 >
-                  <div className="min-w-0">
+                  <div className="min-w-0" data-testid="clip-item">
                     <p className="truncate font-medium leading-snug">{c.titulo || "(sin título)"}</p>
                     {c.texto && (
                       <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{c.texto}</p>
@@ -190,11 +197,8 @@ export default function CajonClips() {
                       </Badge>
                     )}
                     <BadgeEstadoPieza clip={c} />
-                    <Button asChild size="sm" variant="ghost" className="h-7 px-2 text-xs">
-                      <Link to="/operacion/feed">Ver en el feed</Link>
-                    </Button>
                   </div>
-                </li>
+                </FilaConAcciones>
               ))}
             </ul>
           </div>
