@@ -1289,58 +1289,58 @@ def test_post_franja_sin_marca_400(entorno):
 
 
 def test_patch_config_franjas_sin_marca_400(entorno):
-    """(d) PATCH config de franjas SIN una marca concreta -> 400 (config es por marca)."""
+    """(d) PATCH plantilla de franjas SIN una marca concreta -> 400 (la plantilla es por marca)."""
     app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
     cli = _cli_admin(app)
     r = cli.patch(
         "/api/rota/config/franjas",
-        json={
-            "matutino_inicio": "08:00",
-            "matutino_fin": "16:00",
-            "vespertino_inicio": "16:00",
-            "vespertino_fin": "24:00",
-        },
+        json={"franjas": [{"nombre": "Mañana", "inicio": "08:00", "fin": "16:00"}]},
         headers=_ORIGIN,
     )
     assert r.status_code == 400
 
 
 def test_patch_config_franjas_con_marca_ok(entorno):
-    """PATCH config con una marca concreta guarda la rejilla de esa marca."""
+    """PATCH plantilla con una marca concreta guarda la LISTA de franjas de esa marca."""
     app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
     cli = _cli_admin(app)
     r = cli.patch(
         "/api/rota/config/franjas?marca=claro-sports",
         json={
-            "matutino_inicio": "09:00",
-            "matutino_fin": "15:00",
-            "vespertino_inicio": "15:00",
-            "vespertino_fin": "23:00",
+            "franjas": [
+                {"nombre": "Mañana", "inicio": "09:00", "fin": "15:00"},
+                {"nombre": "Tarde", "inicio": "15:00", "fin": "23:00"},
+            ]
         },
         headers=_ORIGIN,
     )
     assert r.status_code == 200, r.text
-    assert r.json()["franjas"]["matutino_inicio"] == "09:00"
+    franjas = r.json()["franjas"]
+    assert franjas[0]["nombre"] == "Mañana"
+    assert franjas[0]["inicio"] == "09:00"
 
 
 def test_patch_config_franjas_solape_permitido(entorno):
-    """Matutino y vespertino PUEDEN solaparse (#185): la cobertura hace UNION, no excluye.
+    """Dos franjas con rangos que SE SOLAPAN son plantilla válida (#185): la cobertura hace UNION.
 
-    El modelo viejo exigia `matutino_fin <= vespertino_inicio`; se eliminó. Una franja
-    matutina que termina DESPUÉS de que empieza la vespertina es config válida -> 200.
+    El modelo viejo exigia franjas excluyentes; se eliminó. Una franja que termina DESPUÉS de
+    que empieza otra es válida -> 200. (Solo se valida `inicio < fin` por franja.)
     """
     app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
     cli = _cli_admin(app)
     r = cli.patch(
         "/api/rota/config/franjas?marca=claro-sports",
         json={
-            "matutino_inicio": "08:00",
-            "matutino_fin": "18:00",  # solapa con el vespertino (12:00-22:00)
-            "vespertino_inicio": "12:00",
-            "vespertino_fin": "22:00",
+            "franjas": [
+                {"nombre": "Mañana", "inicio": "08:00", "fin": "18:00"},  # solapa con Tarde
+                {"nombre": "Tarde", "inicio": "12:00", "fin": "22:00"},
+            ]
         },
         headers=_ORIGIN,
     )
     assert r.status_code == 200, r.text
-    assert r.json()["franjas"]["matutino_fin"] == "18:00"
-    assert r.json()["franjas"]["vespertino_inicio"] == "12:00"
+    franjas = r.json()["franjas"]
+    manana = next(f for f in franjas if f["nombre"] == "Mañana")
+    tarde = next(f for f in franjas if f["nombre"] == "Tarde")
+    assert manana["fin"] == "18:00"
+    assert tarde["inicio"] == "12:00"
