@@ -19,11 +19,14 @@ from keni_consola import rota as r
 from keni_consola.dominio import eventos
 
 # --------------------------------------------------------------------------- #
-# 1. Auto-asignación de responsable desde la rota                              #
+# 1. Núcleo puro de reparto desde la rota                                      #
 #                                                                              #
-# Los ejemplos usan `unotv`: `claro-sports` es ahora de reparto PULL («la      #
-# lista», `auto_responsable.MARCAS_REPARTO_PULL`) y la capa de I/O ni consulta #
-# la rota para esa marca (tests al final de esta sección).                     #
+# `rota.responsable_por_marca_hoy` es el kernel determinista del reparto PUSH  #
+# (quién cubre una marca hoy). Hoy NO está cableado a la creación de contenido #
+# —el modelo operativo es «la lista» (PULL) para TODAS las marcas— pero se     #
+# conserva como el gancho de un eventual PUSH por marca, así que lo dejamos    #
+# clavado. La capa de I/O (`responsable_automatico`) devuelve None siempre     #
+# (test al final de esta sección).                                            #
 # --------------------------------------------------------------------------- #
 
 HOY = "2026-05-30"  # sábado real (irrelevante para esta función, pero estable)
@@ -73,32 +76,16 @@ def test_responsable_sin_marca_o_sin_turnos_es_none():
     )
 
 
-def test_responsable_automatico_marca_pull_nace_libre(monkeypatch):
-    """claro-sports (reparto PULL, «la lista»): nunca auto-asigna, ni consulta la rota."""
-    llamadas: list[int] = []
-    monkeypatch.setattr(
-        auto_responsable.repos, "listar_turnos_rota", lambda **k: llamadas.append(1) or []
-    )
-    assert "claro-sports" in auto_responsable.MARCAS_REPARTO_PULL
+def test_responsable_automatico_nace_libre_en_todas_las_marcas():
+    """«La lista» (reparto PULL) es universal: ninguna marca auto-asigna; la pieza nace LIBRE.
+
+    Antes solo claro-sports devolvía None y el resto auto-asignaba desde la rota; ahora el
+    modelo es uniforme y `responsable_automatico` devuelve None para CUALQUIER marca (y sin
+    marca), sin consultar la rota."""
     assert auto_responsable.responsable_automatico("claro-sports", HOY) is None
-    assert llamadas == []  # la guarda corta ANTES de leer la rota
-
-
-def test_responsable_automatico_sigue_asignando_en_otras_marcas(monkeypatch):
-    """Las marcas fuera de `MARCAS_REPARTO_PULL` siguen con la rota (sin DB: I/O fakeado)."""
-    monkeypatch.setattr(
-        auto_responsable.repos, "listar_turnos_rota", lambda **k: [_turno(HOY, "f1", "u1")]
-    )
-    monkeypatch.setattr(auto_responsable.repos, "listar_franjas_semana", lambda lunes: [])
-    monkeypatch.setattr(
-        auto_responsable.auth,
-        "listar_usuarios",
-        lambda: [{"id": "u1", "usuario": "ana", "cobertura": True, "marcas": ["unotv"]}],
-    )
-    monkeypatch.setattr(
-        auto_responsable.auth, "obtener_usuario_por_id", lambda i: {"id": "u1", "usuario": "ana"}
-    )
-    assert auto_responsable.responsable_automatico("unotv", HOY) == {"id": "u1", "usuario": "ana"}
+    assert auto_responsable.responsable_automatico("unotv", HOY) is None
+    assert auto_responsable.responsable_automatico("piso-15") is None
+    assert auto_responsable.responsable_automatico("") is None
 
 
 # --------------------------------------------------------------------------- #

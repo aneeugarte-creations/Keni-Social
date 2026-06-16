@@ -95,8 +95,8 @@ async def crear_post_directo(request: Request) -> Response:
         prioridad="media",
         fecha_objetivo=hoy_utc().isoformat(),
         autor=autor_de_peticion(request),
-        # Reparto automático desde la rota del día (mismo patrón que `aportar`): el equipo
-        # solo crea; el reparto es automático. Degrada a None sin romper.
+        # «La lista» (reparto PULL, todas las marcas): la pieza nace LIBRE y el equipo la coge
+        # desde «Por cubrir» (`responsable_automatico` → None; ver su docstring).
         responsable=auto_responsable.responsable_automatico(marca),
         origen=ORIGEN_POST_DIRECTO,
         formato="foto",

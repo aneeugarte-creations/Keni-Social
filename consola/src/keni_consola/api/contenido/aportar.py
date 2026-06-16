@@ -207,8 +207,9 @@ async def aportar(request: Request) -> Response:
             status_code=400,
         )
 
-    # Reparto automatico de responsable desde la rota del dia (mismo patron que `crear`):
-    # el equipo solo aporta; el reparto es automatico. Degrada a None sin romper.
+    # «La lista» (reparto PULL, todas las marcas): la pieza nace LIBRE y el equipo la coge
+    # desde «Por cubrir». `responsable_automatico` devuelve None hoy (el gancho de un futuro
+    # PUSH por marca vive en él, no aquí).
     responsable = auto_responsable.responsable_automatico(marca)
 
     item = repos.crear_contenido(

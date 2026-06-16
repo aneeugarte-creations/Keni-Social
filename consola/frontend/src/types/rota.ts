@@ -3,8 +3,8 @@
 /** Un miembro del equipo (un usuario de la consola) disponible para la rota.
  *
  * `marcas` viene del organigrama del cliente (ola `feat/roles-marcas`): ids canónicos de las
- * verticales a las que pertenece (claro-sports, unotv...). La rota hoy solo cubre
- * ClaroSports; el front filtra por `marcas.includes("claro-sports")`.
+ * verticales a las que pertenece (claro-sports, unotv...). La rota cubre TODAS las marcas
+ * (rejilla GRID POR MARCA); el front filtra el equipo por la marca activa (`marcas.includes`).
  *
  * `cargo` (funcion en el organigrama, p.ej. `community_manager`, `coordinador_redes`) y
  * `cobertura` (¿esta miembro disponible para cubrir turnos?) permiten al frontend

@@ -786,7 +786,7 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
   });
 });
 
-describe("PostFeed · responsable («la lista» de ClaroSports)", () => {
+describe("PostFeed · responsable («la lista», todas las marcas)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -814,11 +814,11 @@ describe("PostFeed · responsable («la lista» de ClaroSports)", () => {
     expect(screen.queryByTitle(/la llevas?\b/i)).not.toBeInTheDocument();
   });
 
-  it("en otra marca (no ClaroSports) nunca pinta el badge de responsable", () => {
+  it("en cualquier marca pinta el badge de responsable («la lista» es universal)", () => {
     renderPost(
       pub({ marca: "piso-15", responsable_id: "u2", responsable_nombre: "Mariana" }),
     );
-    expect(screen.queryByText("Mariana")).not.toBeInTheDocument();
-    expect(screen.queryByTitle(/la lleva/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Mariana")).toBeInTheDocument();
+    expect(screen.getByTitle("Esta pieza la lleva Mariana")).toBeInTheDocument();
   });
 });

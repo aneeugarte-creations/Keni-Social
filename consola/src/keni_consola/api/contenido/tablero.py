@@ -193,14 +193,14 @@ async def crear(request: Request) -> Response:
     if not valido:
         return JSONResponse({"error": "El responsable no es un usuario válido."}, status_code=400)
 
-    # --- FASE 3 auto-operativa: auto-asignacion de responsable desde la rota -------------
-    # Si no se fijo responsable, lo deriva la rota del dia para que la pieza no quede
-    # suelta (el equipo solo crea; el reparto es automatico). Override manual: si el
-    # cliente mando `responsable_id`, se respeta y NO se toca. Degrada a None sin romper.
-    # [MERGE] bloque propio y autocontenido; no toca la validacion de arriba.
+    # --- «La lista» (reparto PULL, todas las marcas) -------------------------------------
+    # Si el cliente NO fijó `responsable_id`, la pieza queda LIBRE («por cubrir») y el equipo
+    # la coge desde Cobertura; nadie nace asignado por la máquina. `responsable_automatico`
+    # devuelve None hoy (es el gancho de un eventual PUSH por marca). Override manual: si el
+    # cliente mandó `responsable_id`, se respeta y NO se toca.
     if responsable is None and marca:
         responsable = auto_responsable.responsable_automatico(marca)
-    # --- fin bloque auto-operativa -------------------------------------------------------
+    # --- fin bloque «la lista» -----------------------------------------------------------
 
     # FORMATO de la pieza (foto|video): si se indica, DECIDE las redes destino
     # (`redes.redes_de_formato`: foto=3, video=5) en vez de la lista cruda `redes`. Vacío/

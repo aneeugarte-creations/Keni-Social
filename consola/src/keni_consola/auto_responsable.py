@@ -1,88 +1,30 @@
-"""Auto-asignacion de responsable desde la rota (Fase 3 · auto-operativa).
+"""Responsable por defecto de una pieza nueva (Fase 3 · auto-operativa).
 
-Resuelve QUIEN debe ser el responsable por defecto de una pieza nueva cuando quien la
-crea no fija uno: lo deriva de la ROTA del dia. Asi una pieza nunca queda SUELTA y el
-equipo solo tiene que CREAR el contenido; el reparto operativo lo hace la consola.
+El modelo operativo del equipo es «la lista» (reparto PULL): una pieza nueva NACE LIBRE
+(«por cubrir») y es el equipo quien la COGE —o el coordinador quien la reparte— desde el
+tablero de Cobertura. Nadie nace asignado por la máquina, así el claim atómico (coger/soltar)
+nunca choca ni el 409 miente («Ya la cogió X» cuando en realidad fue la rota).
 
-Este modulo es la CAPA DE I/O (lee `repos`/`auth`) sobre la funcion PURA del dominio
-`rota.responsable_por_marca_hoy`: arma los turnos del dia, las marcas de cada miembro y
-las franjas de descanso de la semana, y delega la decision (determinista) en el dominio.
+Esto vale para TODAS las marcas. Antes solo ClaroSports usaba «la lista» y el resto auto-asignaba
+desde la rota del día (reparto PUSH); ahora el modelo es uniforme: `responsable_automatico`
+devuelve None SIEMPRE. Las marcas que aún no tenían rota cargada ya se comportaban así (None);
+las que la tuvieran dejan de auto-asignar y pasan también a «la lista».
 
-Degradacion honesta: si no hay rota cargada, nadie cubre la marca hoy, o la pieza no
-tiene marca, devuelve None (sin lanzar): la pieza se crea sin responsable, igual que
-antes de esta automatizacion. NO inventa un responsable que no este de turno.
-
-Lo consume `api/contenido.py` (creacion de contenido) con UNA sola llamada, para
-mantener el cambio en ese fichero minimo y localizado (coordinacion de fase 3).
+Se conserva como el ÚNICO punto de decisión de «quién posee una pieza nueva»: lo llaman
+`api/contenido/{aportar,post_directo,tablero}.py` con una sola llamada. Si algún día una marca
+quisiera volver al reparto PUSH (auto-asignar desde la rota), este es el sitio para reintroducirlo;
+el núcleo puro `rota.responsable_por_marca_hoy` sigue disponible para ello.
 """
 
 from __future__ import annotations
 
-import logging
-
-from . import auth, repos
-from . import rota as dominio
-from .tiempo import hoy_utc
-
-_log = logging.getLogger("keni_consola.auto_responsable")
-
-# Marcas con reparto PULL ("la lista"): la gente COGE las tareas, nadie nace asignado.
-# En el piloto de ClaroSports una pieza nacida ya asignada jamás aparece en «Por coger»
-# y el 409 de coger/PATCH mentiría («Ya la cogió X» cuando fue la rota). Para estas
-# marcas `responsable_automatico` devuelve None SIEMPRE; las demás siguen con la rota.
-MARCAS_REPARTO_PULL = frozenset({"claro-sports"})
-
 
 def responsable_automatico(marca: str, fecha_iso: str | None = None) -> dict[str, str] | None:
-    """`{"id","usuario"}` del responsable que la rota asigna a `marca` HOY, o None.
+    """Responsable por defecto de una pieza nueva de `marca`: SIEMPRE None («la lista»).
 
-    `fecha_iso` (def hoy) permite testear sin tocar el reloj. Lee:
-      - los turnos del dia (de la semana que contiene `fecha_iso`),
-      - las franjas de descanso de esa semana (para excluir turnos no laborales),
-      - las marcas de cada miembro del equipo (organigrama del cliente).
-    y delega la eleccion determinista en `rota.responsable_por_marca_hoy`. Devuelve la
-    forma `{"id","usuario"}` lista para `repos.crear_contenido(responsable=...)`, o None
-    si la pieza no tiene marca, la marca es de reparto PULL (`MARCAS_REPARTO_PULL`),
-    no hay rota, o nadie cubre la marca hoy.
-
-    NUNCA lanza: cualquier fallo de lectura se degrada a None (la pieza se crea sin
-    responsable, como antes), para no romper la creacion de contenido.
+    Bajo el reparto PULL —universal para todas las marcas— una pieza nace LIBRE y el equipo la
+    coge desde «Por cubrir». No se consulta la rota ni se inventa un responsable. `marca` y
+    `fecha_iso` se aceptan por compatibilidad con los llamadores (hoy no se usan; son el gancho
+    para un eventual reparto PUSH por marca).
     """
-    if not marca:
-        return None
-    # Reparto PULL: en estas marcas las piezas nacen LIBRES y el equipo las coge de
-    # «la lista» (claim atómico vía coger/soltar). No se consulta la rota.
-    if marca in MARCAS_REPARTO_PULL:
-        return None
-    dia = (fecha_iso or hoy_utc().isoformat()).strip()
-    if not dia:
-        return None
-    try:
-        lunes = dominio.lunes_de_semana_iso(dia)
-        if not lunes:
-            return None
-        turnos = repos.listar_turnos_rota(semana=lunes)
-        if not turnos:
-            return None
-        franjas = repos.listar_franjas_semana(lunes)
-        franjas_descanso = {f["id"] for f in franjas if f.get("es_descanso")}
-        # Marcas por miembro: solo los usuarios con cobertura entran en la rota, pero
-        # filtrar por marca ya es suficiente (un usuario sin la marca no es candidato).
-        miembros_marcas = {
-            u["id"]: list(u.get("marcas") or [])
-            for u in auth.listar_usuarios()
-            if u.get("cobertura")
-        }
-    except Exception:  # noqa: BLE001 -- una pieza sin responsable es preferible a romper el alta
-        _log.exception("auto_responsable: fallo al resolver la rota para marca=%s; sin asignar.", marca)
-        return None
-
-    miembro_id = dominio.responsable_por_marca_hoy(
-        marca, dia, turnos, miembros_marcas, franjas_descanso
-    )
-    if not miembro_id:
-        return None
-    usuario = auth.obtener_usuario_por_id(miembro_id)
-    if usuario is None:
-        return None
-    return {"id": usuario["id"], "usuario": usuario["usuario"]}
+    return None

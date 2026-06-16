@@ -435,10 +435,9 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
             className="text-xs font-medium text-foreground"
           />
         )}
-        {/* "La lista" (ClaroSports): quién lleva la pieza, SOLO LECTURA (coger/soltar vive en la
-            Lista). Invisible en otras marcas o si nadie la ha cogido. */}
+        {/* «La lista» (todas las marcas): quién lleva la pieza, SOLO LECTURA (coger/soltar vive
+            en Cobertura). Invisible si nadie la ha cogido. */}
         <BadgeResponsable
-          marca={publicacion.marca}
           responsableId={publicacion.responsable_id}
           responsableNombre={publicacion.responsable_nombre}
         />
