@@ -290,6 +290,76 @@ describe("GaleriaPlantillas — búsqueda y categorías", () => {
       "Promo especial",
     );
   });
+
+  it("con onRenombrar el mini-editor edita el NOMBRE ahí mismo (Enter)", () => {
+    const onRenombrar = vi.fn();
+    render(
+      <GaleriaPlantillas
+        plantillas={[ULTIMA]}
+        onCargar={vi.fn()}
+        onCategorizar={vi.fn()}
+        onRenombrar={onRenombrar}
+        onCerrar={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByTitle("Editar nombre y etiqueta"));
+    const nombre = screen.getByLabelText("Nombre");
+    fireEvent.change(nombre, { target: { value: "Roja portada" } });
+    fireEvent.keyDown(nombre, { key: "Enter" });
+    expect(onRenombrar).toHaveBeenCalledWith(expect.objectContaining({ id: "cat-1" }), "Roja portada");
+  });
+
+  it("el mini-editor cambia nombre Y etiqueta en una sola interacción", () => {
+    const onRenombrar = vi.fn();
+    const onCategorizar = vi.fn();
+    render(
+      <GaleriaPlantillas
+        plantillas={[ULTIMA]}
+        onCargar={vi.fn()}
+        onCategorizar={onCategorizar}
+        onRenombrar={onRenombrar}
+        onCerrar={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByTitle("Editar nombre y etiqueta"));
+    fireEvent.change(screen.getByLabelText("Nombre"), { target: { value: "Nuevo nombre" } });
+    fireEvent.click(screen.getByRole("option", { name: "Marcador" }));
+    expect(onCategorizar).toHaveBeenCalledWith(expect.objectContaining({ id: "cat-1" }), "marcador");
+    expect(onRenombrar).toHaveBeenCalledWith(expect.objectContaining({ id: "cat-1" }), "Nuevo nombre");
+  });
+
+  it("sin cambiar el nombre, cerrar el mini-editor no dispara renombrado", () => {
+    const onRenombrar = vi.fn();
+    render(
+      <GaleriaPlantillas
+        plantillas={[ULTIMA]}
+        onCargar={vi.fn()}
+        onCategorizar={vi.fn()}
+        onRenombrar={onRenombrar}
+        onCerrar={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByTitle("Editar nombre y etiqueta"));
+    fireEvent.click(screen.getByRole("option", { name: "Marcador" }));
+    expect(onRenombrar).not.toHaveBeenCalled();
+  });
+
+  it("teclear el nombre y clicar FUERA lo persiste (sin closure obsoleto)", () => {
+    const onRenombrar = vi.fn();
+    render(
+      <GaleriaPlantillas
+        plantillas={[ULTIMA]}
+        onCargar={vi.fn()}
+        onCategorizar={vi.fn()}
+        onRenombrar={onRenombrar}
+        onCerrar={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByTitle("Editar nombre y etiqueta"));
+    fireEvent.change(screen.getByLabelText("Nombre"), { target: { value: "Editado fuera" } });
+    fireEvent.mouseDown(document.body);
+    expect(onRenombrar).toHaveBeenCalledWith(expect.objectContaining({ id: "cat-1" }), "Editado fuera");
+  });
 });
 
 // ── ContenidoPlantillas como panel «Diseño» del rail (sin modal) ────────────────────────────────

@@ -324,11 +324,14 @@ export function ContenidoPlantillas({
               )}
             </div>
           </button>
-          {/* Badge de categoría sobre la tarjeta (el de tipo va abajo, junto al nombre) */}
+          {/* Badge de categoría sobre la tarjeta (el de tipo va abajo, junto al nombre). En modo
+              gestión el badge abre un mini-editor que también renombra la plantilla AHÍ MISMO. */}
           <div className="absolute left-1.5 top-1.5 flex max-w-[calc(100%-3.75rem)] flex-wrap items-start gap-1">
             <BadgeCategoria
               categoria={p.categoria}
               onCambiar={onCategorizar ? (slug) => onCategorizar(p, slug) : undefined}
+              nombre={p.nombre}
+              onRenombrar={onRenombrar ? (nombre) => onRenombrar(p, nombre) : undefined}
             />
           </div>
           {/* Pie: etiqueta de tipo + título, fuera de la miniatura. Clic en el título

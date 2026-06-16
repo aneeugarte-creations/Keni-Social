@@ -6,6 +6,7 @@
 import { Check, ChevronDown, Plus, Search, Tag } from "lucide-react";
 import {
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -244,25 +245,31 @@ function _sinAcentos(texto: string): string {
 }
 
 /**
- * Selector EDITABLE de categoría con el diseño de la plataforma (NO el `<select>` nativo del SO):
- * un panel portaleado —para que no lo recorte el `overflow` de la galería— con buscador arriba que
- * FILTRA el catálogo y, como la categoría es texto libre, permite CREAR una etiqueta nueva
- * escribiéndola. Teclado completo (flechas/Enter/Esc) y cierre por clic-fuera/scroll. Mismos tokens
- * visuales que `ui/select` (`bg-popover`, `border`, `shadow-md`, check de la activa).
+ * Mini-editor EDITABLE de tarjeta con el diseño de la plataforma (NO el `<select>` nativo del SO):
+ * un panel portaleado —para que no lo recorte el `overflow` de la galería— que permite, EN EL MISMO
+ * sitio, (1) editar el NOMBRE/título de la plantilla (si llega `onRenombrar`) y (2) elegir la
+ * etiqueta del catálogo o CREAR una nueva escribiéndola (la categoría es texto libre). Teclado
+ * completo (flechas/Enter/Esc) y cierre por clic-fuera/scroll. Mismos tokens visuales que `ui/select`
+ * (`bg-popover`, `border`, `shadow-md`, check de la activa).
  */
 function SelectorCategoria({
   slug,
   etiqueta,
   onCambiar,
+  nombre,
+  onRenombrar,
   children,
 }: {
   slug: string;
   etiqueta: string;
   onCambiar: (valor: string) => void;
+  nombre?: string;
+  onRenombrar?: (nombre: string) => void;
   children: ReactNode;
 }) {
   const [abierto, setAbierto] = useState(false);
   const [query, setQuery] = useState("");
+  const [nombreEdit, setNombreEdit] = useState("");
   const [activo, setActivo] = useState(0);
   const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number; maxH: number } | null>(
     null,
@@ -270,6 +277,14 @@ function SelectorCategoria({
   const refTrigger = useRef<HTMLButtonElement>(null);
   const refPanel = useRef<HTMLDivElement>(null);
   const refInput = useRef<HTMLInputElement>(null);
+  // Último nombre ENVIADO en esta apertura: evita un segundo PATCH idéntico (blur + cierre).
+  const refUltimoNombre = useRef<string | null>(null);
+  // Siempre apunta al `cerrar` del último render: los handlers de clic-fuera/scroll se suscriben
+  // solo al abrir (deps [abierto]) y, sin esto, cerrarían con un `nombreEdit` viejo (capturado al
+  // abrir) → el nombre tecleado se perdería al clicar fuera. Con el ref persisten el valor actual.
+  const refCerrar = useRef<() => void>(() => {});
+  const idNombre = useId();
+  const idEtiqueta = useId();
 
   // Opciones: catálogo completo + el valor libre actual (si no está en el catálogo), filtradas por
   // el buscador (acento-insensible, por etiqueta y por slug).
@@ -307,15 +322,41 @@ function SelectorCategoria({
       setPos({ left, bottom: window.innerHeight - r.top + 4, maxH: Math.max(180, arriba - 12) });
     }
     setQuery("");
+    setNombreEdit(nombre ?? "");
+    refUltimoNombre.current = null;
     setActivo(0);
     setAbierto(true);
   }
+  // Persiste el nombre si cambió (no vacío, distinto del original y no reenviado). Se llama al
+  // cerrar por cualquier vía, así un nombre tecleado no se pierde al clicar fuera o elegir etiqueta.
+  function commitNombre() {
+    if (!onRenombrar) return;
+    const n = nombreEdit.trim();
+    if (!n || n === (nombre ?? "") || refUltimoNombre.current === n) return;
+    refUltimoNombre.current = n;
+    onRenombrar(n);
+  }
   function cerrar() {
+    commitNombre();
     setAbierto(false);
   }
+  refCerrar.current = cerrar;
   function elegir(valor: string) {
     onCambiar(valor);
     cerrar();
+  }
+  function alTeclearNombre(e: ReactKeyboardEvent) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      e.stopPropagation();
+      cerrar();
+    } else if (e.key === "Escape") {
+      // Descarta el nombre tecleado: reset al original y cierra SIN commit.
+      e.preventDefault();
+      e.stopPropagation();
+      setNombreEdit(nombre ?? "");
+      setAbierto(false);
+    }
   }
 
   // Reinicia el resaltado al cambiar el filtro.
@@ -328,27 +369,29 @@ function SelectorCategoria({
     if (abierto) refInput.current?.focus();
   }, [abierto]);
 
-  // Cierre por clic-fuera / scroll / resize mientras está abierto.
+  // Cierre por clic-fuera / scroll / resize mientras está abierto. Cierra vía `refCerrar.current`
+  // (último render) para no perder el nombre tecleado por un closure obsoleto.
   useEffect(() => {
     if (!abierto) return;
+    const cerrarYa = () => refCerrar.current();
     const fuera = (e: MouseEvent) => {
       const t = e.target as Node;
       if (refPanel.current?.contains(t) || refTrigger.current?.contains(t)) return;
-      cerrar();
+      cerrarYa();
     };
     // El scroll DENTRO de la propia lista de opciones no debe cerrar (la lista desborda y se
     // desplaza); solo cierra el scroll de la página/galería bajo el panel.
     const alScroll = (e: Event) => {
       if (e.target instanceof Node && refPanel.current?.contains(e.target)) return;
-      cerrar();
+      cerrarYa();
     };
     document.addEventListener("mousedown", fuera, true);
     window.addEventListener("scroll", alScroll, true);
-    window.addEventListener("resize", cerrar);
+    window.addEventListener("resize", cerrarYa);
     return () => {
       document.removeEventListener("mousedown", fuera, true);
       window.removeEventListener("scroll", alScroll, true);
-      window.removeEventListener("resize", cerrar);
+      window.removeEventListener("resize", cerrarYa);
     };
   }, [abierto]);
 
@@ -378,9 +421,9 @@ function SelectorCategoria({
       <button
         ref={refTrigger}
         type="button"
-        aria-haspopup="listbox"
+        aria-haspopup="dialog"
         aria-expanded={abierto}
-        title="Cambiar categoría"
+        title={onRenombrar ? "Editar nombre y etiqueta" : "Cambiar categoría"}
         onClick={(e) => {
           e.stopPropagation();
           if (abierto) cerrar();
@@ -394,23 +437,54 @@ function SelectorCategoria({
         createPortal(
           <div
             ref={refPanel}
-            role="listbox"
+            role="dialog"
+            aria-label="Editar plantilla"
             onClick={(e) => e.stopPropagation()}
             className="fixed z-50 flex w-60 flex-col overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md"
             style={{ left: pos.left, top: pos.top, bottom: pos.bottom, maxHeight: pos.maxH }}
           >
-            <div className="relative border-b border-border p-1.5">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <input
-                ref={refInput}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={alTeclear}
-                placeholder="Buscar o crear etiqueta…"
-                className="h-8 w-full rounded-sm bg-transparent pl-7 pr-2 text-sm outline-none placeholder:text-muted-foreground"
-              />
+            {onRenombrar && (
+              <div className="border-b border-border p-2">
+                <label
+                  htmlFor={idNombre}
+                  className="mb-1 block text-[11px] font-medium text-muted-foreground"
+                >
+                  Nombre
+                </label>
+                <input
+                  id={idNombre}
+                  value={nombreEdit}
+                  onChange={(e) => setNombreEdit(e.target.value)}
+                  onKeyDown={alTeclearNombre}
+                  onBlur={commitNombre}
+                  placeholder="Nombre de la plantilla"
+                  className="h-8 w-full rounded-sm border border-input bg-background px-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                />
+              </div>
+            )}
+            <div className="border-b border-border p-1.5">
+              {onRenombrar && (
+                <label
+                  htmlFor={idEtiqueta}
+                  className="mb-1 block px-0.5 text-[11px] font-medium text-muted-foreground"
+                >
+                  Etiqueta
+                </label>
+              )}
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  id={idEtiqueta}
+                  ref={refInput}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={alTeclear}
+                  placeholder="Buscar o crear etiqueta…"
+                  className="h-8 w-full rounded-sm bg-transparent pl-7 pr-2 text-sm outline-none placeholder:text-muted-foreground"
+                />
+              </div>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-1">
+            <div role="listbox" aria-label="Etiquetas" className="min-h-0 flex-1 overflow-y-auto p-1">
               {opciones.map((c, i) => {
                 const sel = c.slug === slug;
                 return (
@@ -459,15 +533,20 @@ function SelectorCategoria({
 
 /**
  * Badge de categoría en la tarjeta. Con `onCambiar` (modo GESTIÓN) el badge es el disparador de un
- * selector EDITABLE con el diseño de la plataforma ({@link SelectorCategoria}): elegir del catálogo
- * o escribir una etiqueta nueva, sin el `<select>` nativo del SO.
+ * mini-editor con el diseño de la plataforma ({@link SelectorCategoria}): elegir del catálogo o
+ * escribir una etiqueta nueva y —si llega `onRenombrar`— editar AHÍ MISMO el nombre/título de la
+ * plantilla, sin el `<select>` nativo del SO.
  */
 export function BadgeCategoria({
   categoria,
   onCambiar,
+  nombre,
+  onRenombrar,
 }: {
   categoria?: string | null;
   onCambiar?: (slug: string) => void;
+  nombre?: string;
+  onRenombrar?: (nombre: string) => void;
 }) {
   const slug = normalizarCategoria(categoria);
   const etiqueta = etiquetaCategoria(slug);
@@ -485,7 +564,13 @@ export function BadgeCategoria({
   if (!onCambiar) return badge;
   return (
     <span className="group/badge inline-flex min-w-0">
-      <SelectorCategoria slug={slug} etiqueta={etiqueta} onCambiar={onCambiar}>
+      <SelectorCategoria
+        slug={slug}
+        etiqueta={etiqueta}
+        onCambiar={onCambiar}
+        nombre={nombre}
+        onRenombrar={onRenombrar}
+      >
         {badge}
       </SelectorCategoria>
     </span>
