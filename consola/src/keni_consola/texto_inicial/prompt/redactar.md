@@ -39,7 +39,11 @@ línea, en pocas palabras, qué hay que revisar si no está listo.
 ## Pasos
 
 1. **Extrae el núcleo** de la fuente: titular real, dato/cifra con su fuente si aparece,
-   ángulo más fuerte. **No inventes nada que no esté en la fuente.** Si falta un dato, dilo;
+   ángulo más fuerte. **No inventes nada que no esté en la fuente.** **Nunca cites la fuente
+   original cuando sea otro medio de comunicación o portal de noticias** (no des visibilidad a
+   otros medios): da el dato sin atribuirlo a ese medio (evita «de acuerdo a un reporte de BBC
+   Mundo», «según X»). Sí se atribuye a fuentes oficiales (Fiscalía, autoridades, organismos).
+   Si falta un dato, dilo;
    no lo rellenes. Si hay varias fuentes del mismo tema, trátalas como UNA historia: sintetiza
    lo común y **cruza los datos** (cifras, fechas, nombres, cargos). Si discrepan, usa la
    formulación más prudente o ninguna cifra, y anota la discrepancia para la auto-verificación.
