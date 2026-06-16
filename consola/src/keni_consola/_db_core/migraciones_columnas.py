@@ -648,6 +648,47 @@ def _renombrar_comercial_campanias_a_campanias(con: Any) -> None:
         con.execute("ALTER TABLE comercial_campanias RENAME TO campanias")
 
 
+def _recuperar_campanias_de_comercial(con: Any) -> None:
+    """Rescata las campañas varadas en `comercial_campanias` y consolida en `campanias`.
+
+    Repara el bug del rename inerte (introducido al pasar el DDL a crear `campanias`
+    directamente mientras `0040-rename-campanias` seguía en POST_DDL): el DDL creaba una
+    `campanias` VACÍA antes de que el rename corriera, así que su guarda `not existe campanias`
+    ya era falsa y las filas se quedaban en `comercial_campanias`. Como `0040` quedó marcado
+    aplicado en el journal (no-op), la reparación necesita ESTE id nuevo para correr.
+
+    Esta migración va en PRE-DDL (antes de que el DDL recree `campanias` vacía) y es el camino
+    canónico tanto para BDs sanas como rotas; deja `0040` redundante/inerte:
+      - solo `comercial_campanias`: la renombra a `campanias` (preserva todo).
+      - ambas tablas (estado-bug): copia de `comercial_campanias` las filas cuyo id NO esté ya
+        en `campanias` (respeta lo creado tras el bug) y descarta la tabla vieja.
+      - solo `campanias` (BD nueva/ya reparada): no-op.
+    Idempotente: tras correr, `comercial_campanias` no existe y vuelve a ser no-op.
+    """
+    if not _tabla_existe(con, "comercial_campanias"):
+        return
+    # Asegura `marcas` (multimarca) en la tabla vieja antes de moverla: el DDL declara
+    # `campanias` con esa columna, pero un CREATE TABLE IF NOT EXISTS no la añade a una tabla
+    # ya renombrada. Idempotente y no-op si ya existe.
+    _migrar_columnas_campanias(con)
+    if not _tabla_existe(con, "campanias"):
+        con.execute("ALTER TABLE comercial_campanias RENAME TO campanias")
+        return
+    # Ambas existen: mueve las filas que falten por las columnas COMUNES y suelta la vieja.
+    comunes = [
+        c
+        for c in _columnas_existentes(con, "campanias")
+        if c in _columnas_existentes(con, "comercial_campanias")
+    ]
+    if comunes:
+        cols = ", ".join(comunes)
+        con.execute(
+            f"INSERT INTO campanias ({cols}) SELECT {cols} FROM comercial_campanias "
+            "WHERE id NOT IN (SELECT id FROM campanias)"
+        )
+    con.execute("DROP TABLE comercial_campanias")
+
+
 # Columnas que se podrian anadir a `rota_swaps_turno` en futuras ampliaciones. Hoy esta
 # tupla esta VACIA: la primera version del swap nace ya con todo el esquema declarado en
 # el `CREATE TABLE IF NOT EXISTS` (sin previas en produccion). Se conserva el hook por

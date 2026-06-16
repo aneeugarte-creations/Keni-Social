@@ -61,6 +61,7 @@ from .migraciones_columnas import (
     _migrar_renombre_columnas_etapas,
     _migrar_renombre_columnas_veredicto,
     _normalizar_timestamps_texto,
+    _recuperar_campanias_de_comercial,
     _renombrar_comercial_campanias_a_campanias,
 )
 from .migraciones_integridad import (
@@ -267,6 +268,13 @@ MIGRACIONES_PRE_DDL: tuple[Migracion, ...] = (
     # cuya tupla ya apunta a `verificacion_fuente`) re-evaluen y creen una columna vacia suelta.
     # One-shot pero idempotente (RENAME guardado por la existencia de la columna).
     Migracion("0039-renombre-columnas-veredicto", _migrar_renombre_columnas_veredicto),
+    # RECUPERA Campañas: el rename `comercial_campanias`->`campanias` se publicó en POST_DDL
+    # (0040) a la vez que el DDL pasaba a crear `campanias` directamente; el DDL creaba la tabla
+    # nueva VACIA antes del rename, que entonces quedaba inerte y dejaba las campañas varadas en
+    # `comercial_campanias` (0040 igualmente se registró aplicado, así que su id no las rescata).
+    # En PRE-DDL renombra/fusiona ANTES de que el DDL recree `campanias` vacía; deja 0040 inerte.
+    # One-shot pero idempotente (tras correr, `comercial_campanias` ya no existe -> no-op).
+    Migracion("0041-recuperar-campanias", _recuperar_campanias_de_comercial),
 )
 
 # POST-DDL: ALTER/backfill sobre tablas que el DDL ya garantiza (anaden columnas a BDs

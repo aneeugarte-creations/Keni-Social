@@ -164,6 +164,9 @@ from .migraciones_columnas import (
     _migrar_columnas_campanias as _migrar_columnas_campanias,
 )
 from .migraciones_columnas import (
+    _recuperar_campanias_de_comercial as _recuperar_campanias_de_comercial,
+)
+from .migraciones_columnas import (
     _migrar_columnas_contenido as _migrar_columnas_contenido,
 )
 from .migraciones_columnas import (

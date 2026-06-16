@@ -191,3 +191,85 @@ def test_asegurado_concurrente_aplica_la_pendiente_una_sola_vez(pg, monkeypatch)
     assert not errores
     assert llamadas == ["9004-prueba-concurrente"]  # exactamente una ejecucion total
     assert "9004-prueba-concurrente" in _ids_journal()
+
+
+# --------------------------------------------------------------------------- #
+# 0041: recuperar Campañas varadas en `comercial_campanias`                    #
+# --------------------------------------------------------------------------- #
+
+
+def _crear_comercial_campanias_legacy(con) -> None:  # noqa: ANN001
+    """Recrea la tabla vieja `comercial_campanias` (con `marcas` ya backfilleada)."""
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS comercial_campanias (
+            id                   TEXT PRIMARY KEY,
+            marca                TEXT NOT NULL DEFAULT '',
+            marcas               TEXT NOT NULL DEFAULT '[]',
+            nombre               TEXT NOT NULL DEFAULT '',
+            hashtags             TEXT NOT NULL DEFAULT '[]',
+            activa               INTEGER NOT NULL DEFAULT 1,
+            fecha_creacion       TEXT NOT NULL DEFAULT '',
+            fecha_actualizacion  TEXT NOT NULL DEFAULT ''
+        )
+        """
+    )
+
+
+def test_recuperar_campanias_fusiona_cuando_ambas_existen(pg):
+    """Estado-bug (el rename inerte dejó las dos tablas): las campañas varadas en
+    `comercial_campanias` se mueven a `campanias` sin pisar lo creado tras el bug, y la
+    tabla vieja se descarta."""
+    db.listar_campanias()  # asegura el esquema (crea `campanias` vacía)
+    con = motor_db.conectar_cruda()
+    try:
+        _crear_comercial_campanias_legacy(con)
+        # 4 campañas varadas en la vieja + 1 ya creada en la nueva tras el bug (id distinto).
+        for i in range(4):
+            con.execute(
+                "INSERT INTO comercial_campanias (id, nombre, marcas, hashtags) "
+                "VALUES (?, ?, ?, ?)",
+                (f"vieja{i}", f"Camp {i}", '["unotv"]', '["#x"]'),
+            )
+        con.execute(
+            "INSERT INTO campanias (id, nombre, marcas, hashtags) VALUES (?, ?, ?, ?)",
+            ("nueva0", "Post-bug", '["unotv"]', '["#y"]'),
+        )
+        con.commit()
+
+        _db_core._recuperar_campanias_de_comercial(con)
+        con.commit()
+
+        ids = {f["id"] for f in con.execute("SELECT id FROM campanias").fetchall()}
+        assert ids == {"vieja0", "vieja1", "vieja2", "vieja3", "nueva0"}  # nada se perdió
+        assert not _db_core._tabla_existe(con, "comercial_campanias")  # vieja descartada
+    finally:
+        con.execute("DROP TABLE IF EXISTS comercial_campanias")  # no fuga si el test cae antes
+        con.commit()
+        con.close()
+
+
+def test_recuperar_campanias_renombra_cuando_solo_existe_la_vieja(pg):
+    """BD vieja sin reparar (solo `comercial_campanias`): se renombra a `campanias`."""
+    db.listar_campanias()  # asegura el esquema
+    con = motor_db.conectar_cruda()
+    try:
+        con.execute("DROP TABLE IF EXISTS campanias")
+        _crear_comercial_campanias_legacy(con)
+        con.execute(
+            "INSERT INTO comercial_campanias (id, nombre, marcas, hashtags) "
+            "VALUES (?, ?, ?, ?)",
+            ("c1", "Única", '["unotv"]', '["#z"]'),
+        )
+        con.commit()
+
+        _db_core._recuperar_campanias_de_comercial(con)
+        con.commit()
+
+        assert not _db_core._tabla_existe(con, "comercial_campanias")
+        ids = {f["id"] for f in con.execute("SELECT id FROM campanias").fetchall()}
+        assert ids == {"c1"}
+    finally:
+        con.execute("DROP TABLE IF EXISTS comercial_campanias")
+        con.commit()
+        con.close()
