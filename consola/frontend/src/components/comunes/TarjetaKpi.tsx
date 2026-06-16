@@ -1,12 +1,12 @@
 /**
  * Tarjeta KPI genérica: etiqueta pequeña + valor destacado.
  *
- * Unifica el componente local `TarjetaKpi` de `pages/comercial/Detalle.tsx`
+ * Unifica el componente local `TarjetaKpi` del panel de Campañas
  * con la tarjeta inline equivalente que usaban varias páginas de métricas,
  * evitando la duplicación de estilos y estructura.
  *
  * Modos:
- * - `variante="borde"` (por defecto): borde sutil, sin fondo; usada en Comercial.
+ * - `variante="borde"` (por defecto): borde sutil, sin fondo; usada en Campañas.
  * - `variante="card"` : envuelta en Card de shadcn; usada en el dashboard de Métricas.
  */
 import * as React from "react";

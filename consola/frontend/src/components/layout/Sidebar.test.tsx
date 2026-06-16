@@ -40,7 +40,7 @@ const CATALOGO = {
       id: "metricas",
       etiqueta: "Analíticas",
       icono: "BarChart3",
-      descripcion: "Métricas, comercial y reportes",
+      descripcion: "Métricas, campañas y reportes",
       permisos: ["editor", "admin"],
       rutas_frontend: ["/datos/analiticas"],
       nav: [

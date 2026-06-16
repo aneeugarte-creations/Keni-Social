@@ -2,8 +2,7 @@
 
 Una campaña define un FILTRO (marcas + hashtags); su analítica (KPIs, tendencia, tabla de
 piezas, comparativa) se computa AL VUELO en `consola.campanias` sobre el listado de Métricas.
-Este módulo solo es la frontera HTTP. (El antiguo apartado "Comercial" de seguimiento por
-snapshots se retiró; queda `comercial.fuente_actual` solo para etiquetar la procedencia.)
+Este módulo solo es la frontera HTTP.
 """
 
 from __future__ import annotations
@@ -14,7 +13,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import campanias, comercial, marcas, redes
+from .. import campanias, marcas, redes
 from .._http_json import leer_json
 
 _MARCAS_IDS = {mid for mid, _ in marcas.opciones()}
@@ -52,7 +51,7 @@ async def listar_campanias(request: Request) -> Response:
     return JSONResponse(
         {
             "campanias": campanias.listar_campanias(marca=marca),
-            "fuente": comercial.fuente_actual(),
+            "fuente": campanias.fuente_actual(),
         }
     )
 
@@ -147,14 +146,14 @@ async def analitica_campania(request: Request) -> Response:
 
 
 RUTAS = [
-    Route("/api/comercial/opciones", opciones, methods=["GET"]),
-    Route("/api/comercial/campanias", listar_campanias, methods=["GET"]),
-    Route("/api/comercial/campanias", crear_campania, methods=["POST"]),
-    Route("/api/comercial/campanias/{campania_id}", detalle_campania, methods=["GET"]),
-    Route("/api/comercial/campanias/{campania_id}", actualizar_campania, methods=["PUT"]),
-    Route("/api/comercial/campanias/{campania_id}", eliminar_campania, methods=["DELETE"]),
+    Route("/api/campanias/opciones", opciones, methods=["GET"]),
+    Route("/api/campanias", listar_campanias, methods=["GET"]),
+    Route("/api/campanias", crear_campania, methods=["POST"]),
+    Route("/api/campanias/{campania_id}", detalle_campania, methods=["GET"]),
+    Route("/api/campanias/{campania_id}", actualizar_campania, methods=["PUT"]),
+    Route("/api/campanias/{campania_id}", eliminar_campania, methods=["DELETE"]),
     Route(
-        "/api/comercial/campanias/{campania_id}/analitica",
+        "/api/campanias/{campania_id}/analitica",
         analitica_campania,
         methods=["GET"],
     ),

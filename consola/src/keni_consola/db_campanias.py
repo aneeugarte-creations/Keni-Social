@@ -25,7 +25,7 @@ _COLS_CAMPANIA = (
     "fecha_creacion",
     "fecha_actualizacion",
 )
-_SELECT_CAMPANIA = f"SELECT {', '.join(_COLS_CAMPANIA)} FROM comercial_campanias"
+_SELECT_CAMPANIA = f"SELECT {', '.join(_COLS_CAMPANIA)} FROM campanias"
 _CAMPOS_EDITABLES_CAMPANIA = ("nombre", "marcas", "hashtags", "activa")
 
 
@@ -43,7 +43,7 @@ def _fila_a_campania(fila: Any) -> dict[str, Any]:
     return cam
 
 
-def crear_campania_comercial(
+def crear_campania(
     *,
     marcas: list[str],
     nombre: str,
@@ -65,7 +65,7 @@ def crear_campania_comercial(
     try:
         marcadores = ", ".join("?" for _ in _COLS_CAMPANIA)
         con.execute(
-            f"INSERT INTO comercial_campanias ({', '.join(_COLS_CAMPANIA)}) "
+            f"INSERT INTO campanias ({', '.join(_COLS_CAMPANIA)}) "
             f"VALUES ({marcadores})",
             tuple(fila[col] for col in _COLS_CAMPANIA),
         )
@@ -75,7 +75,7 @@ def crear_campania_comercial(
     return _fila_a_campania(fila)
 
 
-def listar_campanias_comerciales(marca: str | None = None) -> list[dict[str, Any]]:
+def listar_campanias(marca: str | None = None) -> list[dict[str, Any]]:
     """Campañas (más recientes primero).
 
     `marca` (opcional) filtra a las campañas que INCLUYEN esa marca. Como `marcas` es un
@@ -93,7 +93,7 @@ def listar_campanias_comerciales(marca: str | None = None) -> list[dict[str, Any
     return cams
 
 
-def obtener_campania_comercial(campania_id: str) -> dict[str, Any] | None:
+def obtener_campania(campania_id: str) -> dict[str, Any] | None:
     """Una campaña por id (None si no existe)."""
     con = _conectar()
     try:
@@ -105,7 +105,7 @@ def obtener_campania_comercial(campania_id: str) -> dict[str, Any] | None:
     return _fila_a_campania(fila) if fila is not None else None
 
 
-def actualizar_campania_comercial(
+def actualizar_campania(
     campania_id: str, campos: dict[str, Any]
 ) -> dict[str, Any] | None:
     """Edita parcialmente una campaña; None si el id no existe.
@@ -120,7 +120,7 @@ def actualizar_campania_comercial(
     if "activa" in cambios:
         cambios["activa"] = 1 if cambios["activa"] else 0
     if not cambios:
-        return obtener_campania_comercial(campania_id)
+        return obtener_campania(campania_id)
     asignaciones = [f"{k} = ?" for k in cambios]
     asignaciones.append("fecha_actualizacion = ?")
     params: list[Any] = list(cambios.values())
@@ -129,7 +129,7 @@ def actualizar_campania_comercial(
     con = _conectar()
     try:
         cur = con.execute(
-            f"UPDATE comercial_campanias SET {', '.join(asignaciones)} WHERE id = ?",
+            f"UPDATE campanias SET {', '.join(asignaciones)} WHERE id = ?",
             tuple(params),
         )
         con.commit()
@@ -143,12 +143,12 @@ def actualizar_campania_comercial(
     return _fila_a_campania(fila) if fila is not None else None
 
 
-def borrar_campania_comercial(campania_id: str) -> bool:
+def borrar_campania(campania_id: str) -> bool:
     """Borra una campaña; True si existía, False si no."""
     con = _conectar()
     try:
         cur = con.execute(
-            "DELETE FROM comercial_campanias WHERE id = ?", (campania_id,)
+            "DELETE FROM campanias WHERE id = ?", (campania_id,)
         )
         con.commit()
         return cur.rowcount > 0

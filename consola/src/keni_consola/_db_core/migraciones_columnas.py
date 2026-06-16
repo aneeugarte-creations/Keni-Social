@@ -620,6 +620,15 @@ def _migrar_columnas_campanias(con: Any) -> None:
             )
 
 
+def _renombrar_comercial_campanias_a_campanias(con: Any) -> None:
+    """Renombra `comercial_campanias` -> `campanias` (el apartado "Comercial" se retiró; las
+    campañas dejan de colgar de ese namespace). RENAME solo si la vieja existe y la nueva no
+    (re-ejecuciones seguras). Corre DESPUÉS de `_migrar_columnas_campanias` (que ya añadió
+    `marcas` a la tabla vieja). En BDs nuevas es no-op: el DDL ya crea `campanias`."""
+    if _tabla_existe(con, "comercial_campanias") and not _tabla_existe(con, "campanias"):
+        con.execute("ALTER TABLE comercial_campanias RENAME TO campanias")
+
+
 # Columnas que se podrian anadir a `rota_swaps_turno` en futuras ampliaciones. Hoy esta
 # tupla esta VACIA: la primera version del swap nace ya con todo el esquema declarado en
 # el `CREATE TABLE IF NOT EXISTS` (sin previas en produccion). Se conserva el hook por

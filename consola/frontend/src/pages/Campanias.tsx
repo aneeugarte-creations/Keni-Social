@@ -28,11 +28,11 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, mensajeError } from "@/lib/api";
-import type { CampaniaComercial } from "@/types";
+import type { Campania } from "@/types";
 
-import { CLAVE_COMERCIAL } from "./comercial/claves";
-import { DialogoCampania } from "./comercial/DialogoCampania";
-import { PanelCampania } from "./comercial/PanelCampania";
+import { CLAVE_CAMPANIAS } from "./campanias/claves";
+import { DialogoCampania } from "./campanias/DialogoCampania";
+import { PanelCampania } from "./campanias/PanelCampania";
 import { SelectorTiempo } from "./metricas/Controles";
 
 /**
@@ -59,7 +59,7 @@ const RANGOS: { id: string; etiqueta: string }[] = [
   { id: tokenUltimosDias(180), etiqueta: "Últimos 6 meses" },
 ];
 
-export default function Comercial() {
+export default function Campanias() {
   const queryClient = useQueryClient();
   const [rango, setRango] = React.useState("mes");
   const [seleccionada, setSeleccionada] = React.useState<string | null>(null);
@@ -72,12 +72,12 @@ export default function Comercial() {
     localStorage.setItem("keni:campanias:ocultarAds", ocultarAds ? "1" : "0");
   }, [ocultarAds]);
   const [dialogoAbierto, setDialogoAbierto] = React.useState(false);
-  const [editando, setEditando] = React.useState<CampaniaComercial | null>(null);
+  const [editando, setEditando] = React.useState<Campania | null>(null);
 
   // Las campañas son MULTIMARCA: no se acotan al switch de marca de la barra; se listan
   // todas. La elección de marcas vive en el diálogo (sobre las marcas de la persona).
   const listaQuery = useQuery({
-    queryKey: [...CLAVE_COMERCIAL, "lista"],
+    queryKey: [...CLAVE_CAMPANIAS, "lista"],
     queryFn: ({ signal }) => api.campanias({}, signal),
   });
 
@@ -102,7 +102,7 @@ export default function Comercial() {
   const eliminar = useMutation({
     mutationFn: (id: string) => api.eliminarCampania(id),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: CLAVE_COMERCIAL });
+      void queryClient.invalidateQueries({ queryKey: CLAVE_CAMPANIAS });
       toast.success("Campaña eliminada");
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -112,7 +112,7 @@ export default function Comercial() {
     setEditando(null);
     setDialogoAbierto(true);
   };
-  const abrirEdicion = (c: CampaniaComercial) => {
+  const abrirEdicion = (c: Campania) => {
     setEditando(c);
     setDialogoAbierto(true);
   };

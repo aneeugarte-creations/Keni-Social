@@ -15,7 +15,7 @@ from keni_consola import campanias
 
 def _crear(cli, **campos):
     cuerpo = {"marcas": ["unotv"], "nombre": "Chihuahua", "hashtags": ["#Chihuahua"], **campos}
-    return cli.post("/api/comercial/campanias", json=cuerpo)
+    return cli.post("/api/campanias", json=cuerpo)
 
 
 def test_crear_listar_y_detalle(cliente):
@@ -28,11 +28,11 @@ def test_crear_listar_y_detalle(cliente):
     assert cam["hashtags"] == ["Chihuahua"]
     assert cam["activa"] is True
 
-    lista = cliente.get("/api/comercial/campanias")
+    lista = cliente.get("/api/campanias")
     assert lista.status_code == 200
     assert any(c["id"] == cam["id"] for c in lista.json()["campanias"])
 
-    d = cliente.get(f"/api/comercial/campanias/{cam['id']}")
+    d = cliente.get(f"/api/campanias/{cam['id']}")
     assert d.status_code == 200
     assert d.json()["campania"]["id"] == cam["id"]
 
@@ -44,7 +44,7 @@ def test_crear_multimarca(cliente):
     assert cam["marcas"] == ["unotv", "claro-sports"]
     assert cam["marcas_nombres"] == ["UnoTV", "Claro Sports"]
     # El filtro por marca devuelve la campaña si la INCLUYE.
-    incluida = cliente.get("/api/comercial/campanias?marca=claro-sports").json()["campanias"]
+    incluida = cliente.get("/api/campanias?marca=claro-sports").json()["campanias"]
     assert any(c["id"] == cam["id"] for c in incluida)
 
 
@@ -74,7 +74,7 @@ def test_crear_marca_invalida_es_400(cliente):
 def test_actualizar_y_borrar(cliente):
     cam = _crear(cliente).json()["campania"]
     u = cliente.put(
-        f"/api/comercial/campanias/{cam['id']}",
+        f"/api/campanias/{cam['id']}",
         json={
             "nombre": "Chihuahua 2026",
             "marcas": ["unotv", "claro-sports"],
@@ -86,14 +86,14 @@ def test_actualizar_y_borrar(cliente):
     assert u.json()["campania"]["marcas"] == ["unotv", "claro-sports"]
     assert u.json()["campania"]["hashtags"] == ["Chihuahua", "Turismo"]
 
-    b = cliente.delete(f"/api/comercial/campanias/{cam['id']}")
+    b = cliente.delete(f"/api/campanias/{cam['id']}")
     assert b.status_code == 200
-    assert cliente.get(f"/api/comercial/campanias/{cam['id']}").status_code == 404
+    assert cliente.get(f"/api/campanias/{cam['id']}").status_code == 404
 
 
 def test_analitica_devuelve_forma_kpis_tabla_tendencia_comparativa(cliente):
     cam = _crear(cliente).json()["campania"]
-    r = cliente.get(f"/api/comercial/campanias/{cam['id']}/analitica?rango=mes")
+    r = cliente.get(f"/api/campanias/{cam['id']}/analitica?rango=mes")
     assert r.status_code == 200, r.text
     datos = r.json()
     # Forma del contrato: KPIs, piezas (lista), tendencia (puntos) y comparativa completa.
@@ -130,7 +130,7 @@ def test_desglose_por_red_agrega_e_iguala_los_kpis(cliente, monkeypatch):
         ]
 
     monkeypatch.setattr(campanias.servicio, "construir_listado_piezas", _listado_falso)
-    datos = cliente.get(f"/api/comercial/campanias/{cam['id']}/analitica?rango=mes").json()
+    datos = cliente.get(f"/api/campanias/{cam['id']}/analitica?rango=mes").json()
     desglose = {f["red"]: f for f in datos["desglose_red"]}
     assert set(desglose) == {"instagram", "tiktok"}
     # Ordenado por visualizaciones desc: tiktok (2000) antes que instagram (1500).
@@ -163,7 +163,7 @@ def test_cross_post_incluye_gemelas_sin_hashtag(cliente, monkeypatch):
         ]
 
     monkeypatch.setattr(campanias.servicio, "construir_listado_piezas", _listado_falso)
-    datos = cliente.get(f"/api/comercial/campanias/{cam['id']}/analitica?rango=mes").json()
+    datos = cliente.get(f"/api/campanias/{cam['id']}/analitica?rango=mes").json()
     filas = {p["id"]: p for p in datos["piezas"]}
     assert set(filas) == {"ig1", "tk1"}  # x1 (no relacionada) queda fuera
     assert datos["cross_posts"] == 1
@@ -187,7 +187,7 @@ def test_cross_post_no_empareja_captions_genericos_cortos(cliente, monkeypatch):
         ]
 
     monkeypatch.setattr(campanias.servicio, "construir_listado_piezas", _listado_falso)
-    datos = cliente.get(f"/api/comercial/campanias/{cam['id']}/analitica?rango=mes").json()
+    datos = cliente.get(f"/api/campanias/{cam['id']}/analitica?rango=mes").json()
     assert {p["id"] for p in datos["piezas"]} == {"ig1"}
     assert datos["cross_posts"] == 0
 
@@ -207,7 +207,7 @@ def test_pieza_trae_marca_de_origen(cliente, monkeypatch):
         }]
 
     monkeypatch.setattr(campanias.servicio, "construir_listado_piezas", _listado_falso)
-    datos = cliente.get(f"/api/comercial/campanias/{cam['id']}/analitica?rango=mes").json()
+    datos = cliente.get(f"/api/campanias/{cam['id']}/analitica?rango=mes").json()
     marca_por_id = {p["id"]: p["marca"] for p in datos["piezas"]}
     assert marca_por_id == {"p-unotv": "UnoTV", "p-claro_sports": "Claro Sports"}
 
@@ -229,7 +229,7 @@ def test_analitica_matchea_hashtag_sin_importar_casing(cliente, monkeypatch):
         ]
 
     monkeypatch.setattr(campanias.servicio, "construir_listado_piezas", _listado_falso)
-    r = cliente.get(f"/api/comercial/campanias/{cam['id']}/analitica?rango=mes")
+    r = cliente.get(f"/api/campanias/{cam['id']}/analitica?rango=mes")
     assert r.status_code == 200, r.text
     datos = r.json()
     ids = {p["id"] for p in datos["piezas"]}
@@ -251,7 +251,7 @@ def test_analitica_multimarca_agrega_todas_las_marcas(cliente, monkeypatch):
         }]
 
     monkeypatch.setattr(campanias.servicio, "construir_listado_piezas", _listado_falso)
-    datos = cliente.get(f"/api/comercial/campanias/{cam['id']}/analitica?rango=mes").json()
+    datos = cliente.get(f"/api/campanias/{cam['id']}/analitica?rango=mes").json()
     # Dos marcas -> dos piezas distintas agregadas (una por marca).
     assert datos["kpis"]["piezas"] == 2
     assert datos["kpis"]["visualizaciones"] == 2000
@@ -287,7 +287,7 @@ def test_inorganico_boost_es_fila_propia_y_campanias_con_nombre_se_excluyen(clie
 
     monkeypatch.setattr(campanias.servicio, "construir_listado_piezas", _listado_falso)
     monkeypatch.setattr(campanias.servicio, "construir_ads", _ads_falso)
-    datos = cliente.get(f"/api/comercial/campanias/{cam['id']}/analitica?rango=mes").json()
+    datos = cliente.get(f"/api/campanias/{cam['id']}/analitica?rango=mes").json()
 
     filas = {p["id"]: p for p in datos["piezas"]}
     # La pieza orgánica NO lleva pagadas; el boost es una fila aparte (id 'ad:...').
@@ -307,5 +307,5 @@ def test_inorganico_boost_es_fila_propia_y_campanias_con_nombre_se_excluyen(clie
 
 
 def test_analitica_campania_inexistente_es_404(cliente):
-    r = cliente.get("/api/comercial/campanias/nada/analitica")
+    r = cliente.get("/api/campanias/nada/analitica")
     assert r.status_code == 404

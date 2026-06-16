@@ -4,7 +4,7 @@
  * publicación, así la suma de la serie cuadra con el total de los KPIs.
  *
  * Usa Tremor (mismo stack que Métricas) y los formateadores compactos es-MX. Recibe los
- * puntos ya calculados por el backend (`/api/comercial/campanias/{id}/analitica`), no
+ * puntos ya calculados por el backend (`/api/campanias/{id}/analitica`), no
  * vuelve a pegar a la fuente.
  */
 import { AreaChart } from "@tremor/react";

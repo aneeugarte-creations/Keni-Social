@@ -51,16 +51,4 @@ describe("validarContrato (#120)", () => {
     expect(out).toBe(mala);
     expect(avisarDriftContrato).toHaveBeenCalledTimes(1);
   });
-
-  it("valida el contrato comercial con fuente (#124)", () => {
-    const ok = {
-      publicaciones: [],
-      fuente: "metricool",
-    };
-    expect(validarContrato("RespuestaPublicacionesComercial", ok)).toBe(ok);
-    // Falta `fuente` => drift en DEV.
-    expect(() =>
-      validarContrato("RespuestaPublicacionesComercial", { publicaciones: [] }),
-    ).toThrow(ContratoDriftError);
-  });
 });

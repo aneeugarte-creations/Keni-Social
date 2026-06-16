@@ -102,9 +102,9 @@ def test_publicaciones_persisten_en_postgres_no_en_yaml(entorno, monkeypatch):
 
 def test_delega_en_db_campania(entorno):
     # Las campañas viven en Postgres: escribir por repos -> leer por db.
-    cam = repos.crear_campania_comercial(marcas=["unotv"], nombre="Camp", hashtags=["x"])
-    assert db.obtener_campania_comercial(cam["id"])["nombre"] == "Camp"
-    assert repos.borrar_campania_comercial(cam["id"]) is True
+    cam = repos.crear_campania(marcas=["unotv"], nombre="Camp", hashtags=["x"])
+    assert db.obtener_campania(cam["id"])["nombre"] == "Camp"
+    assert repos.borrar_campania(cam["id"]) is True
 
 
 def test_delega_en_db_publicaciones(entorno):

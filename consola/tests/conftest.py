@@ -408,10 +408,9 @@ _APP_POR_STEM: dict[str, str] = {
     # Contrato compartido (corre en los tres pipelines scoped).
     "test_fronteras": "contrato",
     "test_catalogo": "contrato",
-    # App B · Metricas (api/metricas, comercial).
+    # App B · Metricas (api/metricas, campanias).
     "test_api_metricas": "app_metricas",
-    "test_api_comercial": "app_metricas",
-    "test_comercial": "app_metricas",
+    "test_api_campanias": "app_metricas",
     # App C · Operacion (publicaciones, aprobacion, franjas, rota...).
     "test_api_publicaciones": "app_operacion",
     "test_api_publicaciones_contenido": "app_operacion",

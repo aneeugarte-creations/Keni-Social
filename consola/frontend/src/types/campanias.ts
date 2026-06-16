@@ -2,7 +2,7 @@
 // Tipos a mano (como las rutas ad-hoc): el backend de campañas no está en el
 // subconjunto estable generado, así que estos no salen de `types.gen`.
 
-export interface CampaniaComercial {
+export interface Campania {
   id: string;
   /** Marcas que abarca la campaña (ids canónicos). Multimarca. */
   marcas: string[];
@@ -17,12 +17,12 @@ export interface CampaniaComercial {
 }
 
 export interface RespuestaCampanias {
-  campanias: CampaniaComercial[];
+  campanias: Campania[];
   fuente: string;
 }
 
 export interface RespuestaCampania {
-  campania: CampaniaComercial;
+  campania: Campania;
 }
 
 /** Una pieza del periodo que entra en la campaña (fila de la tabla). */
@@ -93,7 +93,7 @@ export interface InorganicoCampania {
 }
 
 export interface AnaliticaCampania {
-  campania: CampaniaComercial;
+  campania: Campania;
   rango: string;
   periodo: { desde: string; hasta: string };
   fuente: string;

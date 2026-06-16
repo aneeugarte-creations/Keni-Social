@@ -39,7 +39,7 @@ _TABLAS = (
     "webauthn_credenciales",
     "sesiones",
     "usuarios",
-    "comercial_campanias",
+    "campanias",
     "gasto_ia",
     "metricas_pieza_snapshots",
     "rota_turnos",

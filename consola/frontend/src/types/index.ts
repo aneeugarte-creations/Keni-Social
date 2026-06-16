@@ -95,7 +95,7 @@ export * from "./metricas";
 export * from "./publicaciones";
 export * from "./media";
 export * from "./buzon";
-export * from "./comercial";
+export * from "./campanias";
 export * from "./auth";
 export * from "./catalogo";
 export * from "./texto";

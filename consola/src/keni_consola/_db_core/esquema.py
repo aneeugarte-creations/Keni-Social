@@ -40,14 +40,15 @@ def arrancar_persistencia() -> None:
 # todos validos en Postgres 16. Los ids son TEXT generados por la app (uuid), no
 # autoincrementales: no hay `AUTOINCREMENT`/`SERIAL`.
 _DDL_ESQUEMA: tuple[str, ...] = (
-    # Campañas comerciales: agrupan piezas por uno o varios HASHTAGS configurables, y
-    # pueden abarcar VARIAS marcas (multimarca). Definen un filtro (marcas + hashtags) y
-    # la analítica se computa AL VUELO sobre el listado de piezas del periodo
-    # (`servicio.construir_listado_piezas`, por cada marca), cruzando por los hashtags del
-    # caption (`Pieza.texto`). `marcas` y `hashtags` son arrays JSON (ids de marca; tags sin
-    # '#', con su casing); portables SQLite/Postgres como TEXT.
+    # Campañas: agrupan piezas por uno o varios HASHTAGS configurables, y pueden abarcar
+    # VARIAS marcas (multimarca). Definen un filtro (marcas + hashtags) y la analítica se
+    # computa AL VUELO sobre el listado de piezas del periodo (`servicio.construir_listado_piezas`,
+    # por cada marca), cruzando por los hashtags del caption (`Pieza.texto`). `marcas` y
+    # `hashtags` son arrays JSON (ids de marca; tags sin '#', con su casing); portables
+    # SQLite/Postgres como TEXT. (`marca` singular es vestigial: backfilleado a `marcas` en
+    # BDs viejas, ver `_migrar_columnas_campanias`.)
     """
-    CREATE TABLE IF NOT EXISTS comercial_campanias (
+    CREATE TABLE IF NOT EXISTS campanias (
         id                   TEXT PRIMARY KEY,
         marca                TEXT NOT NULL DEFAULT '',
         marcas               TEXT NOT NULL DEFAULT '[]',

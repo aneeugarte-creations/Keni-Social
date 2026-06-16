@@ -27,7 +27,7 @@ import { INTERVALO_RECURSOS_MS } from "./lib";
  *   token, uso) que alimenta la generación y Metricool (token por marca) del que se leen las
  *   métricas de audiencia.
  * - Servidor: recursos del servidor (CPU/RAM/disco), daemons de pura infraestructura
- *   (clase=sistema: limpiador, GC de media, métricas, alertas, patrones, comercial), backups y
+ *   (clase=sistema: limpiador, GC de media, métricas, alertas, patrones), backups y
  *   latencias de la API.
  * - S3: almacenamiento de media (Garage) — estado + explorador.
  * Los agentes IA y los servicios de la máquina de contenido (ingesta/trends/programador/…) viven
@@ -87,7 +87,7 @@ export default function Sistema() {
             <SeccionPostproxy />
           </TabsContent>
           {/* SERVIDOR: hardware + servicios de sistema (clase=sistema): pura infraestructura
-              (limpiador, GC de media, métricas, alertas, patrones, comercial). Los servicios de la
+              (limpiador, GC de media, métricas, alertas, patrones). Los servicios de la
               máquina de contenido (clase=maquina) viven en los cockpits; los agentes IA (clase=ia)
               son los cockpits. Más backups y latencias de la API. */}
           <TabsContent value="servidor" className="space-y-6">

@@ -56,12 +56,12 @@ from .repos_colaboracion import (  # noqa: F401
     listar_comentarios,
     obtener_comentario,
 )
-from .repos_comercial import (  # noqa: F401
-    actualizar_campania_comercial,
-    borrar_campania_comercial,
-    crear_campania_comercial,
-    listar_campanias_comerciales,
-    obtener_campania_comercial,
+from .repos_campanias import (  # noqa: F401
+    actualizar_campania,
+    borrar_campania,
+    crear_campania,
+    listar_campanias,
+    obtener_campania,
 )
 from .repos_contenido import (  # noqa: F401
     actualizar_contenido,

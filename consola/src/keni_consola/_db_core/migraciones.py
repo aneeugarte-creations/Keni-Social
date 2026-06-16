@@ -61,6 +61,7 @@ from .migraciones_columnas import (
     _migrar_renombre_columnas_etapas,
     _migrar_renombre_columnas_veredicto,
     _normalizar_timestamps_texto,
+    _renombrar_comercial_campanias_a_campanias,
 )
 from .migraciones_integridad import (
     _COLUMNAS_FECHA_NATIVA,
@@ -427,6 +428,10 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # métricas vivas). Esta migración elimina sus tablas sueltas en BDs ya creadas. One-shot e
     # idempotente (`DROP TABLE IF EXISTS`). `comercial_campanias` (vivas) NO se toca.
     Migracion("0039-drop-comercial-snapshots", _drop_tablas_comercial_snapshots),
+    # RENAME: `comercial_campanias` -> `campanias` (las campañas dejan de colgar del namespace
+    # "comercial", retirado). Corre tras 0014 (que ya añadió `marcas` a la tabla vieja). One-shot
+    # e idempotente (RENAME solo si la vieja existe y la nueva no). Ver `_renombrar_comercial_campanias_a_campanias`.
+    Migracion("0040-rename-campanias", _renombrar_comercial_campanias_a_campanias),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.

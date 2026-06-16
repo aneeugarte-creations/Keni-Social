@@ -60,7 +60,7 @@ export const TABS_INVESTIGACION: ItemTabHub[] = [
 
 export const TABS_ANALITICAS: ItemTabHub[] = [
   { ruta: "/datos/analiticas/metricas", etiqueta: "Métricas", icono: BarChart3 },
-  { ruta: "/datos/analiticas/comercial", etiqueta: "Campañas", icono: Megaphone },
+  { ruta: "/datos/analiticas/campanias", etiqueta: "Campañas", icono: Megaphone },
 ];
 
 export const TABS_FEED: ItemTabHub[] = [

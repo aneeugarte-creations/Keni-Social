@@ -1,7 +1,7 @@
 """Persistencia OPERACIONAL de la Consola Keni: Postgres (ADR 0004).
 
-Cubre las `tareas`, el apartado `comercial` (seguimiento de piezas + su serie temporal de
-snapshots), la `rota`, via `auth/` los `usuarios`/`sesiones`, y el CONTENIDO editorial ya
+Cubre las `tareas`, las `campanias` (filtro por hashtag), la `rota`, via `auth/` los
+`usuarios`/`sesiones`, y el CONTENIDO editorial ya
 migrado a Postgres (publicaciones, plantillas, fuentes RSS, hashtags, franjas; ADR
 0004/0006). Lo UNICO que sigue file-backed es el HISTORIAL de prompts (YAML por marca en
 `ficheros.py`, con un indice regenerable `indice.py`). La fachada `repos.py` enruta cada
@@ -29,13 +29,9 @@ Tablas:
     responsable_id, responsable_nombre, enlace)
     [tablero de pendientes compartido del equipo (#145): autor = quien la creo;
     responsable = a quien se le asigna; enlace = ruta/URL opcional para actuar]
-  - `comercial_publicaciones`(id, url, id_post_metricool, titulo, marca, cliente,
-    campania, red, metrica_objetivo, objetivo, estado, publicado, notas, aviso_en,
-    fecha_creacion, fecha_actualizacion)
-    [seguimiento de UNA publicacion comercial por su `id_post_metricool` (post real de
-    Metricool); estado activa|pausada|cerrada]
-  - `comercial_snapshots`(id, publicacion_id, ts, interacciones, visualizaciones, alcance)
-    [serie temporal de cada publicacion; UNIQUE(publicacion_id, ts)]
+  - `campanias`(id, marcas, nombre, hashtags, activa, fecha_creacion, fecha_actualizacion)
+    [agrupan piezas YA publicadas por uno o varios hashtags (multimarca); su analitica se
+    computa al vuelo en `campanias.py`, no se persiste]
   - `usuarios`(id, usuario UNICO, rol, salt, hash, debe_cambiar_password,
     intentos_fallidos, bloqueo_hasta, creado, ultimo_acceso)
     [auth multiusuario (#130): el `salt`/`hash` son scrypt; NUNCA texto plano]
@@ -117,12 +113,12 @@ from .db_colaboracion import (  # noqa: F401
     obtener_copy_version,
     registrar_copy_version,
 )
-from .db_comercial import (  # noqa: F401
-    actualizar_campania_comercial,
-    borrar_campania_comercial,
-    crear_campania_comercial,
-    listar_campanias_comerciales,
-    obtener_campania_comercial,
+from .db_campanias import (  # noqa: F401
+    actualizar_campania,
+    borrar_campania,
+    crear_campania,
+    listar_campanias,
+    obtener_campania,
 )
 from .db_contenido import (  # noqa: F401
     ConflictoVersion,

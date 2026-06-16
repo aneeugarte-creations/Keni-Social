@@ -27,7 +27,7 @@ const Fuentes = lazy(() => import("@/pages/Fuentes"));
 const ContenidosHub = lazy(() => import("@/pages/ContenidosHub"));
 
 const Metricas = lazy(() => import("@/pages/Metricas"));
-const Comercial = lazy(() => import("@/pages/Comercial"));
+const Campanias = lazy(() => import("@/pages/Campanias"));
 // Marcas: dashboard en vivo de todas las marcas × redes × cuentas.
 const Marcas = lazy(() => import("@/pages/Marcas"));
 
@@ -302,13 +302,15 @@ export const router = createBrowserRouter([
               },
             ],
           },
-          // Hub Analíticas: métricas, comercial y deck deportivo.
+          // Hub Analíticas: métricas, campañas y deck deportivo.
           {
             path: "analiticas",
             children: [
               { index: true, element: <Navigate to="metricas" replace /> },
               { path: "metricas", element: <Metricas /> },
-              { path: "comercial", element: <Comercial /> },
+              { path: "campanias", element: <Campanias /> },
+              // Bookmark viejo: el apartado se llamaba "comercial".
+              { path: "comercial", element: <Navigate to="/datos/analiticas/campanias" replace /> },
             ],
           },
           // Producción (antes «Actividad IA»): el FEED unificado (runs del pipeline + actividad
@@ -425,7 +427,7 @@ export const router = createBrowserRouter([
       { path: "revision-editorial", element: <Navigate to="/operacion/feed" replace /> },
       { path: "verificacion", element: <Navigate to="/operacion/feed" replace /> },
       { path: "metricas", element: <Navigate to="/datos/analiticas/metricas" replace /> },
-      { path: "comercial", element: <Navigate to="/datos/analiticas/comercial" replace /> },
+      { path: "comercial", element: <Navigate to="/datos/analiticas/campanias" replace /> },
       { path: "tareas", element: <Navigate to="/operacion/turnos" replace /> },
       { path: "rota", element: <Navigate to="/operacion/turnos" replace /> },
       // Publicaciones se FUSIONÓ en el contenido (#fase2); ahora vive en la Lista del Feed.

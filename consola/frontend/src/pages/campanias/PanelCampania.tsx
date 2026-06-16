@@ -2,7 +2,7 @@
  * Dashboard de UNA campaña en un periodo: KPIs con comparativa (incluido el nº de
  * publicaciones), tendencia diaria, desglose por red y la tabla de piezas del periodo
  * —filtrable por red/formato y ordenable por cualquier columna—. Es la vista de
- * seguimiento de una campaña por hashtag para analizar su rendimiento comercial.
+ * seguimiento de una campaña por hashtag para analizar su rendimiento.
  */
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -46,7 +46,7 @@ import type {
 
 import { CabeceraOrdenable } from "@/pages/metricas/CabeceraOrdenable";
 import { useOrdenTabla } from "@/pages/metricas/useOrdenTabla";
-import { CLAVE_COMERCIAL } from "./claves";
+import { CLAVE_CAMPANIAS } from "./claves";
 import { GraficaTendencia } from "./GraficaTendencia";
 import { fechaCorta } from "./formato";
 
@@ -104,7 +104,7 @@ export function PanelCampania({
   ocultarAds?: boolean;
 }) {
   const consulta = useQuery({
-    queryKey: [...CLAVE_COMERCIAL, "analitica", campaniaId, rango],
+    queryKey: [...CLAVE_CAMPANIAS, "analitica", campaniaId, rango],
     queryFn: ({ signal }) => api.analiticaCampania(campaniaId, { rango }, signal),
   });
 

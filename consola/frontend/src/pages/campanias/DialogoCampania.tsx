@@ -25,9 +25,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
-import type { CampaniaComercial } from "@/types";
+import type { Campania } from "@/types";
 
-import { CLAVE_COMERCIAL } from "./claves";
+import { CLAVE_CAMPANIAS } from "./claves";
 
 /**
  * Limpia un texto de hashtags (separados por espacios/comas) a una lista única,
@@ -55,7 +55,7 @@ export function DialogoCampania({
 }: {
   abierto: boolean;
   /** Campaña a editar, o `null` para crear una nueva. */
-  campania: CampaniaComercial | null;
+  campania: Campania | null;
   onCerrar: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -88,7 +88,7 @@ export function DialogoCampania({
         : api.crearCampania(cuerpo);
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: CLAVE_COMERCIAL });
+      void queryClient.invalidateQueries({ queryKey: CLAVE_CAMPANIAS });
       toast.success(editando ? "Campaña actualizada" : "Campaña creada");
       onCerrar();
     },

@@ -25,10 +25,22 @@ from typing import Any
 from keni_metricas import servicio
 
 from . import marcas, metricas_cache, repos
-from .comercial import fuente_actual
 from .tiempo import ahora_iso
 
 _log = logging.getLogger("keni_consola.campanias")
+
+
+def fuente_actual() -> str:
+    """Nombre de la fuente activa de las cifras (procedencia, p. ej. "metricool").
+
+    Deriva de la configuración de métricas (la misma fuente que alimenta el tablero).
+    "" si no se puede resolver (config incompleto): aquí NUNCA se inventan cifras, así que
+    la procedencia desconocida no degrada a datos de demostración.
+    """
+    try:
+        return servicio.nombre_fuente()
+    except Exception:  # noqa: BLE001 -- sin fuente válida, procedencia desconocida
+        return ""
 
 # Rango por defecto de la analítica (ventana rodante de 30 días, igual que Métricas).
 RANGO_DEF = "mes"
@@ -107,18 +119,18 @@ def crear_campania(*, marcas_ids: list[str], nombre: str, hashtags: list[str]) -
     tags = _normalizar_lista(hashtags)
     if not tags:
         raise CampaniaInvalida("La campaña necesita al menos un hashtag.")
-    cam = repos.crear_campania_comercial(marcas=marcas_validas, nombre=nombre, hashtags=tags)
+    cam = repos.crear_campania(marcas=marcas_validas, nombre=nombre, hashtags=tags)
     return _enriquecer(cam)
 
 
 def listar_campanias(marca: str | None = None) -> list[dict[str, Any]]:
     """Campañas (más recientes primero); `marca` filtra a las que la INCLUYEN."""
-    return [_enriquecer(c) for c in repos.listar_campanias_comerciales(marca=marca)]
+    return [_enriquecer(c) for c in repos.listar_campanias(marca=marca)]
 
 
 def obtener_campania(campania_id: str) -> dict[str, Any] | None:
     """Una campaña por id (None si no existe)."""
-    cam = repos.obtener_campania_comercial(campania_id)
+    cam = repos.obtener_campania(campania_id)
     return _enriquecer(cam) if cam is not None else None
 
 
@@ -139,13 +151,13 @@ def actualizar_campania(campania_id: str, campos: dict[str, Any]) -> dict[str, A
         cambios["hashtags"] = tags
     if "activa" in campos:
         cambios["activa"] = bool(campos["activa"])
-    cam = repos.actualizar_campania_comercial(campania_id, cambios)
+    cam = repos.actualizar_campania(campania_id, cambios)
     return _enriquecer(cam) if cam is not None else None
 
 
 def borrar_campania(campania_id: str) -> bool:
     """Borra una campaña; True si existía."""
-    return repos.borrar_campania_comercial(campania_id)
+    return repos.borrar_campania(campania_id)
 
 
 # --- Analítica al vuelo -------------------------------------------------------
