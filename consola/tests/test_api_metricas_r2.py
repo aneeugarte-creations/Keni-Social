@@ -393,12 +393,26 @@ def test_ads_vacio_sin_inversion(cliente, monkeypatch):
 def _listado_estancado(rango="mes", marca=None):
     base = {"titulo": "x", "url": "", "engagement_pct": 1.0, "interacciones": 1,
             "visualizaciones": 100, "cuenta": "claro_sports"}
-    return [
-        {**base, "id": "1", "red": "facebook", "formato": "foto", "publicado": "2026-06-08"},
-        # FB reel estancado: 24 días por detrás del resto del feed de la marca.
-        {**base, "id": "2", "red": "facebook", "formato": "reel", "publicado": "2026-05-15"},
-        {**base, "id": "3", "red": "instagram", "formato": "reel", "publicado": "2026-06-07"},
+    piezas = [
+        # FB foto al día (última = pieza más fresca de la marca) -> no alerta.
+        {**base, "id": "f1", "red": "facebook", "formato": "foto", "publicado": "2026-06-08"},
+        # IG reel al día -> no alerta.
+        {**base, "id": "i1", "red": "instagram", "formato": "reel", "publicado": "2026-06-07"},
     ]
+    # FB reel ESTANCADO de verdad: publicaba CADA 2 DÍAS y se cortó el 15-may; 24d de silencio,
+    # muy por encima de su ritmo normal. Cadencia fiable -> debe alertar.
+    for i, d in enumerate(
+        ["2026-05-05", "2026-05-07", "2026-05-09", "2026-05-11", "2026-05-13", "2026-05-15"]
+    ):
+        piezas.append({**base, "id": f"r{i}", "red": "facebook", "formato": "reel", "publicado": d})
+    # TikTok foto: el equipo apenas lo usa (2 piezas/mes); su última quedó vieja PERO es baja
+    # cadencia, no un atasco -> NO debe alertar (falso positivo que arreglamos).
+    piezas.append({**base, "id": "t1", "red": "tiktok", "formato": "foto", "publicado": "2026-05-10"})
+    piezas.append({**base, "id": "t2", "red": "tiktok", "formato": "foto", "publicado": "2026-05-20"})
+    # FB sin formato clasificado (residuo de Metricool): no es un canal atribuible -> ignorado.
+    piezas.append({**base, "id": "u1", "red": "facebook", "formato": None, "publicado": "2026-05-12"})
+    piezas.append({**base, "id": "u2", "red": "facebook", "formato": None, "publicado": "2026-05-18"})
+    return piezas
 
 
 def test_ingesta_detecta_canal_estancado(cliente, monkeypatch):
@@ -406,12 +420,34 @@ def test_ingesta_detecta_canal_estancado(cliente, monkeypatch):
     r = cliente.get("/api/metricas/ingesta?rango=mes&marca=claro_sports")
     assert r.status_code == 200, r.text
     alertas = r.json()["alertas"]
-    # Solo FB/reel está estancado (24d de rezago >= umbral); foto e IG-reel van al día.
+    # Solo FB/reel: cadencia de 2 días rota desde el 15-may (24d de rezago, ≥3× su ritmo). Lo
+    # demás va al día, es baja cadencia (TikTok foto) o sin formato (residuo): no son atascos.
     assert len(alertas) == 1
     a = alertas[0]
     assert a["red"] == "facebook" and a["formato"] == "reel"
     assert a["marca"] == "Claro Sports"
     assert a["ultima_pieza"] == "2026-05-15" and a["rezago_dias"] >= 7
+
+
+def test_ingesta_no_alerta_baja_cadencia_ni_sin_formato(cliente, monkeypatch):
+    """Regresión de falsos positivos: un canal que el equipo apenas usa (pocas piezas, ritmo
+    lento) o el residuo sin formato clasificado SIEMPRE quedan por detrás de una marca que
+    publica a diario; no es un atasco de ingesta y no debe disparar la alerta."""
+    def _baja_cadencia(rango="mes", marca=None):
+        base = {"titulo": "x", "url": "", "engagement_pct": 1.0, "interacciones": 1,
+                "visualizaciones": 100, "cuenta": "claro_sports"}
+        return [
+            {**base, "id": "a", "red": "facebook", "formato": "foto", "publicado": "2026-06-08"},
+            # TikTok foto: 2 piezas en el mes, la última vieja -> baja cadencia, no atasco.
+            {**base, "id": "b", "red": "tiktok", "formato": "foto", "publicado": "2026-05-10"},
+            {**base, "id": "c", "red": "tiktok", "formato": "foto", "publicado": "2026-05-20"},
+            # FB sin formato (Metricool no clasificó): no es un canal atribuible.
+            {**base, "id": "d", "red": "facebook", "formato": None, "publicado": "2026-05-12"},
+            {**base, "id": "e", "red": "facebook", "formato": None, "publicado": "2026-05-18"},
+        ]
+    _mock_servicio(monkeypatch, construir_listado_piezas=_baja_cadencia)
+    r = cliente.get("/api/metricas/ingesta?rango=mes&marca=claro_sports")
+    assert r.status_code == 200 and r.json()["alertas"] == []
 
 
 def test_ingesta_sin_estancados_lista_vacia(cliente, monkeypatch):

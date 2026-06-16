@@ -13,6 +13,7 @@ añaden `etiqueta_rango` + `generado_en` al payload.
 from __future__ import annotations
 
 from datetime import date
+from statistics import median
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -32,6 +33,14 @@ __all__ = ["tendencia", "seguidores", "desglose", "crosstab", "correlacion", "ad
 # MÁS VIEJA que la última pieza de su marca: el resto del feed avanza y este se quedó atrás
 # (p.ej. los Reels de FB de una marca dejan de sincronizar mientras el resto entra al día).
 _UMBRAL_ESTANCADO_DIAS = 7
+
+# El rezago contra el resto del feed NO basta: una marca que publica a diario deja por detrás
+# a CUALQUIER canal de baja frecuencia (TikTok foto que el equipo apenas usa, residuo sin
+# formato que Metricool no clasifica…). Eso son falsos positivos, no atascos de ingesta. Para
+# distinguir "se atascó" de "se publica poco" pedimos: (1) volumen suficiente para fijar una
+# cadencia fiable y (2) que el rezago supere VARIAS VECES el ritmo normal del propio canal.
+_MIN_PIEZAS_CADENCIA = 4  # nº mínimo de piezas en el periodo para estimar su cadencia
+_FACTOR_CADENCIA = 3  # el rezago debe superar ≥3× la cadencia mediana del canal para alertar
 
 
 def _fecha(s: str) -> date | None:
@@ -94,12 +103,15 @@ async def ads(request: Request) -> Response:
 
 async def ingesta(request: Request) -> Response:
     """GET /api/metricas/ingesta: detecta canales (marca×red×formato) con la ingesta
-    ESTANCADA — su última pieza quedó muy por detrás del resto del feed de su marca.
+    ESTANCADA — un canal que PUBLICABA con regularidad y se quedó muy por detrás del resto.
 
     Caza casos como "los Reels de Facebook de Claro Sports no entran desde el 15-mayo
     mientras el resto sí": un problema de sincronización de la fuente (Metricool) que de otro
-    modo solo se descubre a mano. Se computa sobre el listado de piezas (cache, lazy fill);
-    sin coste de API extra. `?marca=` acota; sin marca, todas."""
+    modo solo se descubre a mano. Para no confundirlo con un canal de baja frecuencia (que por
+    naturaleza queda por detrás de una marca que publica a diario), solo alerta si el canal
+    tiene cadencia fiable (`_MIN_PIEZAS_CADENCIA`) y su rezago supera varias veces su ritmo
+    normal (`_FACTOR_CADENCIA`); el residuo sin formato clasificado se ignora. Se computa
+    sobre el listado de piezas (cache, lazy fill); sin coste de API extra. `?marca=` acota."""
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     marca, rechazo = _gate_marca_metricas(request, request.query_params.get("marca") or None)
     if rechazo is not None:
@@ -113,19 +125,25 @@ async def ingesta(request: Request) -> Response:
         return JSONResponse({"error": "No se pudo evaluar la ingesta."}, status_code=500)
 
     piezas = payload.get("piezas") or []
-    ult_combo: dict[tuple[str, str, str], date] = {}  # (cuenta, red, formato) -> última fecha
+    # Acumulamos TODAS las fechas de cada combo (no solo la última): su cadencia propia es lo
+    # que separa un atasco de un canal de baja frecuencia.
+    fechas_combo: dict[tuple[str, str, str], list[date]] = {}
     ult_marca: dict[str, date] = {}  # cuenta -> última fecha (cualquier red/formato)
     for p in piezas:
         f = _fecha(p.get("publicado"))
-        red = p.get("red") or ""
-        if f is None or not red:
+        if f is None:
             continue
         cuenta = str(p.get("cuenta") or "")
-        clave = (cuenta, red, str(p.get("formato") or ""))
-        if f > ult_combo.get(clave, date.min):
-            ult_combo[clave] = f
-        if f > ult_marca.get(cuenta, date.min):
-            ult_marca[cuenta] = f
+        if cuenta and f > ult_marca.get(cuenta, date.min):
+            ult_marca[cuenta] = f  # frescura de la marca: cuenta cualquier pieza, formato o no
+        red = p.get("red") or ""
+        formato = str(p.get("formato") or "")
+        # Sin red o sin formato CLASIFICADO no hay canal atribuible: las piezas que Metricool
+        # no logra clasificar (formato vacío) son residuo, no un canal que vigilar. Suman a la
+        # frescura de la marca (arriba) pero no generan su propio combo/alerta.
+        if not red or not formato:
+            continue
+        fechas_combo.setdefault((cuenta, red, formato), []).append(f)
 
     # Referencia temporal: el FIN del periodo del listado (no el reloj de pared). Si la
     # entrada de cache viene con retraso, medir contra "hoy" inflaría dias_sin_piezas con
@@ -136,20 +154,36 @@ async def ingesta(request: Request) -> Response:
         or date.today()
     )
     alertas = []
-    for (cuenta, red, formato), f_combo in ult_combo.items():
+    for (cuenta, red, formato), fechas in fechas_combo.items():
         f_marca = ult_marca.get(cuenta)
         if f_marca is None:
             continue
-        rezago = (f_marca - f_combo).days  # cuánto se quedó atrás vs el resto del feed
-        if rezago >= _UMBRAL_ESTANCADO_DIAS:
-            alertas.append({
-                "marca": marcas.etiqueta_por_id_metricas(cuenta),
-                "red": red,
-                "formato": formato,
-                "ultima_pieza": f_combo.isoformat(),
-                "dias_sin_piezas": (referencia - f_combo).days,
-                "rezago_dias": rezago,
-            })
+        # Con una o dos piezas no se puede afirmar que el canal "se atascó", solo que se
+        # publica poco: sin cadencia fiable, no alertamos (evita el falso positivo de
+        # formatos que el equipo apenas usa).
+        if len(fechas) < _MIN_PIEZAS_CADENCIA:
+            continue
+        fechas.sort()
+        f_combo = fechas[-1]
+        rezago = (f_marca - f_combo).days  # silencio del canal medido contra el dato más fresco
+        if rezago < _UMBRAL_ESTANCADO_DIAS:
+            continue
+        # Cadencia propia (mediana de huecos entre piezas consecutivas): un canal que publica
+        # cada ~10 días no está estancado por ir 12 por detrás; uno que publica cada 2 y va 24
+        # por detrás, sí. El rezago debe superar varias veces su ritmo normal.
+        huecos = [(b - a).days for a, b in zip(fechas, fechas[1:]) if b > a]
+        if not huecos:  # todas el mismo día: ráfaga sin ritmo, no podemos juzgar atasco
+            continue
+        if rezago < _FACTOR_CADENCIA * median(huecos):
+            continue
+        alertas.append({
+            "marca": marcas.etiqueta_por_id_metricas(cuenta),
+            "red": red,
+            "formato": formato,
+            "ultima_pieza": f_combo.isoformat(),
+            "dias_sin_piezas": (referencia - f_combo).days,
+            "rezago_dias": rezago,
+        })
     alertas.sort(key=lambda a: a["rezago_dias"], reverse=True)
     return JSONResponse(
         {"alertas": alertas, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en}
