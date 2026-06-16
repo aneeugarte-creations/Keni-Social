@@ -14,8 +14,8 @@ Devuelve entre 10 y {{MAX_KEYWORDS}} términos:
 - en minúsculas y sin acentos;
 - concretos (p. ej. 'liga mx', 'seleccion mexicana', 'box'), no genéricos ('noticia', 'contenido').
 
-Responde EXCLUSIVAMENTE con un objeto JSON con la forma `{"keywords": ["...", "..."]}`, sin ningún texto adicional ni ```json.
-
 ## Línea editorial de «{{MARCA}}»
 
 {{EDITORIAL}}
+
+{{CONTRATO_SALIDA}}

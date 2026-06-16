@@ -36,15 +36,4 @@ Cuando rechaces, tu `comentario` debe ser BREVE y ACCIONABLE para el equipo huma
 
 ## Salida
 
-Responde EXCLUSIVAMENTE con un objeto JSON válido, sin texto antes ni después, con esta forma:
-
-```json
-{
-  "veredicto": "aprueba" | "rechaza",
-  "problemas": [
-    {"tipo": "arte_sintetico|coherencia|sustancia|rigor|hashtags|voz|otro", "severidad": "alta|media|baja", "detalle": "frase concreta"}
-  ],
-  "comentario": "mensaje breve y accionable para el equipo (vacío si apruebas sin objeciones)",
-  "recomendacion_formato": "carrusel" | "foto" | "video" | ""
-}
-```
+{{CONTRATO_SALIDA}}

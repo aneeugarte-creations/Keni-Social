@@ -33,7 +33,7 @@ def _ejecutor_ok(prompt: str, dir_permitido: str) -> str:
     # Aísla la lista REAL de ítems (va tras "## Lista de ítems"); el prompt también
     # contiene un ejemplo con corchetes en las instrucciones que confundía al regex.
     cola = prompt.partition("## Lista de ítems")[2] or prompt
-    m = re.search(r"\[.*\]", cola, re.DOTALL)
+    m = re.search(r"\[.*?\]", cola, re.DOTALL)
     if not m:
         return json.dumps({"traducciones": []})
     try:
@@ -66,7 +66,7 @@ def _ejecutor_respuesta_parcial(prompt: str, dir_permitido: str) -> str:
     # Aísla la lista REAL de ítems (va tras "## Lista de ítems"); el prompt también
     # contiene un ejemplo con corchetes en las instrucciones que confundía al regex.
     cola = prompt.partition("## Lista de ítems")[2] or prompt
-    m = re.search(r"\[.*\]", cola, re.DOTALL)
+    m = re.search(r"\[.*?\]", cola, re.DOTALL)
     if not m:
         return json.dumps({"traducciones": []})
     try:

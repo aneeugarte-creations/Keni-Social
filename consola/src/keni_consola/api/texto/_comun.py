@@ -6,7 +6,7 @@ contexto). Cada área (`docs`, `publicacion`, `pipelines`, `lanzar`) los importa
 
 from __future__ import annotations
 
-from ... import libtexto, prompts_procesos
+from ... import libtexto, prompts_contratos, prompts_procesos
 
 # Tope de tamano del bloque de contexto (texto pegado / leido de archivo / url) en chars.
 _MAX_TEXTO = 200_000
@@ -32,6 +32,10 @@ def _doc_json(
     return {
         **doc.a_dict(),
         "procesos": prompts_procesos.procesos_de(doc.id),
+        # Contrato de salida (forma del JSON que exige el parser): SOLO LECTURA, sale del
+        # catálogo en código (`prompts_contratos`), no del cuerpo editable. null si el prompt
+        # no es estructurado. El editor lo pinta read-only y oculta su placeholder del cuerpo.
+        "contrato_salida": prompts_contratos.contrato_de(doc.id),
         # `rev` (concurrencia optimista, estilo ETag): el cliente lo echa al guardar para que
         # el servidor rechace (409) si otro editor guardo debajo. Ver `libtexto.rev_documento`.
         "rev": libtexto.rev_documento(doc),

@@ -37,11 +37,4 @@ No uses el amarillo: o es apta (🟢) o tiene un problema de peso (🔴).
 
 ## Salida
 
-Tras el semáforo, cierra con un bloque ```json con la forma:
-{"veredicto": "apta", "resumen": "una frase",
- "hallazgos": [{"tipo": "dato|legal|voz", "gravedad": "error|aviso",
-                "fragmento": "...", "explicacion": "...", "sugerencia": "..."}]}
-El campo "veredicto" va SIEMPRE en slug ASCII: "apta" (seguir) o "problema" (de peso, NO
-generar copy). El semáforo 🟢/🔴 es solo la línea humana de arriba, NO un valor del JSON.
-Usa gravedad "error" SOLO para lo de peso (lo que hace "problema"). Sin emojis en el cuerpo
-ni en el JSON.
+{{CONTRATO_SALIDA}}

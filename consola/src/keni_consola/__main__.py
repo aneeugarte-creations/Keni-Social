@@ -120,6 +120,11 @@ def main() -> int:
         r = libtexto.reformatear_prompts()
         if r:
             print(f"Texto: {r} prompt(s) reformateados en el store.")
+        # Saca el contrato de salida del cuerpo editable a un placeholder gestionado por codigo
+        # (`{{CONTRATO_SALIDA}}`); el editor lo muestra read-only. One-shot, re-publica los que toca.
+        cs = libtexto.migrar_contrato_salida()
+        if cs:
+            print(f"Texto: {cs} prompt(s) con el contrato de salida movido a placeholder.")
         # Linea base en git: cada doc inicializado con HEAD (snapshot estable para los pipelines).
         b = libtexto.asegurar_linea_base()
         if b:

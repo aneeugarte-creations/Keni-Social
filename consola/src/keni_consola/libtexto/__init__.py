@@ -121,6 +121,7 @@ from ._inicial import (
     dir_inicial,
     importar_inicial,
     limpiar_prompts_obsoletos,
+    migrar_contrato_salida,
     migrar_descripciones_editorial,
     migrar_nombres_biblioteca,
     obtener_inicial,
@@ -233,4 +234,5 @@ __all__ = [
     "migrar_descripciones_editorial",
     "reformatear_prompts",
     "publicar_linea_base",
+    "migrar_contrato_salida",
 ]

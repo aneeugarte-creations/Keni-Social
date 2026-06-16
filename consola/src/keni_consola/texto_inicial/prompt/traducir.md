@@ -11,8 +11,8 @@ Eres un traductor y localizador para el equipo de redes sociales de UnoTV en Mé
 
 Tradúcelos al español mexicano (MX): usa vocabulario natural de México, tropicaliza nombres/referencias si corresponde, sé conciso y periodístico. No inventes ni añadas información que no esté en el original.
 
-Devuelve EXCLUSIVAMENTE un objeto JSON con la forma `{"traducciones": [{"id": "...", "titulo_es": "...", "resumen_es": "..."}, ...]}`, sin ningún texto adicional ni ```json. Incluye TODOS los ítems de la lista en `traducciones` (uno por cada id, sin omitir ninguno), aunque el resumen vaya vacío; si un resumen está vacío, devuelve `resumen_es` vacío también.
-
 ## Lista de ítems
 
 {{ITEMS}}
+
+{{CONTRATO_SALIDA}}

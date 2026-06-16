@@ -31,15 +31,4 @@ y en que cada idea sea concreta y accionable, no un tema vago.
 
 ## Formato de salida
 
-Responde con **UN ÚNICO bloque de código cercado ```json** con esta forma EXACTA, y **NADA de
-texto antes ni después**:
-
-```json
-{"ideas": [
-  {"titulo": "...", "descripcion": "..."},
-  {"titulo": "...", "descripcion": "..."}
-]}
-```
-
-Incluye entre 5 y 10 ideas. Si por alguna razón no puedes proponer ninguna, devuelve
-`{"ideas": []}`.
+{{CONTRATO_SALIDA}}

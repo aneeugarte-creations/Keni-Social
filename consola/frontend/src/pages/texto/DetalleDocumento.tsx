@@ -12,6 +12,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowLeft,
+  Lock,
   MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
@@ -40,7 +41,7 @@ import { ApiError, api, mensajeError } from "@/lib/api";
 import type { DocumentoTexto, RespuestaMaquinaTexto } from "@/types";
 
 import { claveEstrategiaBase } from "./estrategia/api";
-import { separarFrontmatter } from "./lib";
+import { componerCuerpoTexto, quitarContratoSalida, separarFrontmatter } from "./lib";
 
 /** Clave de persistencia del estado abierto/colapsado del panel lateral. */
 const CLAVE_PANEL = "keni.biblioteca.panel-abierto";
@@ -111,7 +112,9 @@ export function DetalleDocumento({
     if (!doc || sincronizado.current === doc.id) return;
     sincronizado.current = doc.id;
     const { oculto, visible } = separarFrontmatter(doc.cuerpo);
-    setBorrador({ ...doc, cuerpo: visible });
+    // El contrato de salida (prompts estructurados) no se edita: se oculta su placeholder del
+    // editor y se pinta read-only aparte. Se readjunta al guardar (`construirPayload`).
+    setBorrador({ ...doc, cuerpo: quitarContratoSalida(visible) });
     setFrontmatterOculto(oculto);
     revRef.current = doc.rev ?? null;
     conflictoRef.current = false;
@@ -187,7 +190,7 @@ export function DetalleDocumento({
       cuerpo: {
         titulo: b.titulo,
         descripcion: b.descripcion ?? "",
-        cuerpo: frontmatterOculto + b.cuerpo,
+        cuerpo: componerCuerpoTexto(frontmatterOculto, b.cuerpo, !!b.contrato_salida),
         carpeta: b.carpeta,
         clase: b.clase,
         marcas: b.marcas,
@@ -491,7 +494,11 @@ export function DetalleDocumento({
                   docId={borrador.id}
                   produccionSha={produccion?.sha ?? null}
                   sinPublicar={sinPublicar}
-                  cuerpoBorrador={frontmatterOculto + borrador.cuerpo}
+                  cuerpoBorrador={componerCuerpoTexto(
+                    frontmatterOculto,
+                    borrador.cuerpo,
+                    !!borrador.contrato_salida,
+                  )}
                   esAdmin={esAdmin}
                   onPublicar={() => setPublicarAbierto(true)}
                   onBorradorActualizado={() => {
@@ -537,6 +544,19 @@ export function DetalleDocumento({
                 : "Escribe la pieza editorial (voz, reglas, plataforma…)…"
             }
           />
+          {/* Contrato de salida (prompts estructurados): NO editable, lo gestiona el sistema.
+              Va siempre al FINAL del prompt que ve el modelo. */}
+          {borrador.contrato_salida ? (
+            <div className="mt-4 rounded-md border border-dashed border-border bg-muted/30 p-3">
+              <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <Lock className="h-3 w-3" aria-hidden />
+                Salida · formato fijo (lo gestiona el sistema, no editable)
+              </div>
+              <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-foreground/80">
+                {borrador.contrato_salida}
+              </pre>
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -547,7 +567,7 @@ export function DetalleDocumento({
         onCerrar={() => setPublicarAbierto(false)}
         esAdmin={esAdmin}
         antes={produccion ? antesQuery.data?.documento.cuerpo ?? "" : ""}
-        despues={frontmatterOculto + borrador.cuerpo}
+        despues={componerCuerpoTexto(frontmatterOculto, borrador.cuerpo, !!borrador.contrato_salida)}
         onHecho={() => {
           qc.invalidateQueries({ queryKey: ["texto-doc", docId] });
           qc.invalidateQueries({ queryKey: ["texto-maquina"] });

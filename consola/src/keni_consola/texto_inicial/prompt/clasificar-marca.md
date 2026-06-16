@@ -15,8 +15,8 @@ Marcas disponibles (id — nombre):
 
 Si la noticia es de interés general y no encaja claramente en una temática específica (p. ej. deportes o videojuegos), elige la marca de noticias generales: «{{MARCA_FALLBACK}}».
 
-Responde SOLO con un JSON: `{"marca": "<id>", "confianza": <0..1>}`. El id debe ser uno de los listados.
-
 ## Noticia
 
 {{NOTICIA}}
+
+{{CONTRATO_SALIDA}}

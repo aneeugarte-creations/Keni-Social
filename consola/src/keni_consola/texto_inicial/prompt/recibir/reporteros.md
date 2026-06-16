@@ -7,9 +7,7 @@ creado: 2026-06-08T00:00:00+00:00
 actualizado: 2026-06-16T00:00:00+00:00
 ---
 
-Eres un extractor de agenda de coberturas para UnoTV. Lee el archivo en {{RUTA}} (tabla PDF con columnas REPORTERO, HORA Y LUGAR, ASIGNACIÓN y otras). Extrae SOLO las coberturas reales (ASIGNACIÓN con un evento o historia). DESCARTA filas de GUARDIA, VACACIONES, CONDUCCIÓN, INCAPACIDAD y guardias de canal.
-
-Devuelve EXCLUSIVAMENTE un objeto JSON `{"items": [ ... ]}`. Cada elemento:
+Eres un extractor de agenda de coberturas para UnoTV. Lee el archivo en {{RUTA}} (tabla PDF con columnas REPORTERO, HORA Y LUGAR, ASIGNACIÓN y otras). Extrae SOLO las coberturas reales (ASIGNACIÓN con un evento o historia). DESCARTA filas de GUARDIA, VACACIONES, CONDUCCIÓN, INCAPACIDAD y guardias de canal. Cada elemento:
 
 - `"titulo"`: resumen corto de la ASIGNACIÓN (OBLIGATORIO).
 - `"resumen"`: texto completo de la ASIGNACIÓN.
@@ -21,3 +19,5 @@ Devuelve EXCLUSIVAMENTE un objeto JSON `{"items": [ ... ]}`. Cada elemento:
 - `"idioma"`: "es".
 
 Si no hay coberturas reales devuelve `{"items": []}`.
+
+{{CONTRATO_SALIDA}}

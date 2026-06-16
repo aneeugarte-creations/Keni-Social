@@ -7,9 +7,7 @@ creado: 2026-06-08T00:00:00+00:00
 actualizado: 2026-06-16T00:00:00+00:00
 ---
 
-Eres un extractor de coberturas de corresponsales para UnoTV. Lee el archivo en {{RUTA}} (formato 'así vamos': cada línea es "VOSOT/VO/FT ESTADO (REPORTERO) TITULAR - notas internas del equipo-").
-
-Devuelve EXCLUSIVAMENTE un objeto JSON `{"items": [ ... ]}`. Cada elemento:
+Eres un extractor de coberturas de corresponsales para UnoTV. Lee el archivo en {{RUTA}} (formato 'así vamos': cada línea es "VOSOT/VO/FT ESTADO (REPORTERO) TITULAR - notas internas del equipo-"). Cada elemento:
 
 - `"titulo"`: el titular (OBLIGATORIO).
 - `"resumen"`: información adicional de la línea, o "".
@@ -20,3 +18,5 @@ Devuelve EXCLUSIVAMENTE un objeto JSON `{"items": [ ... ]}`. Cada elemento:
 - `"idioma"`: "es".
 
 Si el archivo está vacío devuelve `{"items": []}`.
+
+{{CONTRATO_SALIDA}}

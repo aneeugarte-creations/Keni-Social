@@ -11,6 +11,7 @@ def _silenciar_migraciones(monkeypatch):
         "migrar_nombres_biblioteca",
         "limpiar_prompts_obsoletos",
         "migrar_descripciones_editorial",
+        "migrar_contrato_salida",
         "asegurar_linea_base",
     ):
         monkeypatch.setattr(libtexto, nombre, lambda: 0)

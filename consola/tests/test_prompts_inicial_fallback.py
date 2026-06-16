@@ -24,9 +24,13 @@ from keni_consola.dominio import (
 
 
 def _inicial(prompt_id: str) -> str:
+    from keni_consola.prompts_contratos import resolver_contrato
+
     doc = libtexto.obtener_inicial(prompt_id)
     assert doc is not None, f"falta la inicial {prompt_id}"
-    return doc.cuerpo.strip()
+    # El cuerpo efectivo (lo que componen los módulos) resuelve el contrato de salida; el helper
+    # debe espejarlo para comparar `plantilla()` (resuelta) con la inicial.
+    return resolver_contrato(prompt_id, doc.cuerpo).strip()
 
 
 @pytest.fixture

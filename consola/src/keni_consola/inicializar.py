@@ -35,6 +35,12 @@ def main() -> int:
     r = libtexto.reformatear_prompts()
     if r:
         print(f"Texto: {r} prompt(s) reformateados en el store.")
+    # Saca el contrato de salida (forma del JSON) del cuerpo editable a un placeholder gestionado
+    # por codigo (`{{CONTRATO_SALIDA}}`); el editor lo muestra read-only. One-shot; re-publica los
+    # que toca para no dejarlos "sin publicar". El prompt que ve el modelo queda byte-identico.
+    cs = libtexto.migrar_contrato_salida()
+    if cs:
+        print(f"Texto: {cs} prompt(s) con el contrato de salida movido a placeholder.")
     # Linea base en git: que cada doc inicial tenga HEAD (snapshot estable para los pipelines,
     # no el working copy que reescribe el autosave). Best-effort: 0 si el versionado esta off.
     b = libtexto.asegurar_linea_base()

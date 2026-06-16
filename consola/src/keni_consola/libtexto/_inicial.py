@@ -28,7 +28,7 @@ __all__ = [
     "dir_inicial", "obtener_inicial", "cuerpo_efectivo", "cuerpo_inicial", "importar_inicial",
     "asegurar_linea_base",
     "migrar_nombres_biblioteca", "limpiar_prompts_obsoletos", "migrar_descripciones_editorial",
-    "reformatear_prompts", "publicar_linea_base",
+    "reformatear_prompts", "publicar_linea_base", "migrar_contrato_salida",
 ]
 
 _PROMPTS_OBSOLETOS_BIBLIOTECA: tuple[str, ...] = (
@@ -148,6 +148,7 @@ _REFORMATO_PROMPTS_V1: tuple[tuple[str, str], ...] = (
     ("prompt/traducir", "7f1a14bef37042b33b90500c40d943113f3c173e0ef860710dd4587f3a3965f2"),
 )
 _SENTINELA_REFORMATO = ".reformato-prompts-v1"
+_SENTINELA_CONTRATO = ".contrato-salida-v1"
 
 
 def dir_inicial() -> Path:
@@ -216,9 +217,23 @@ def cuerpo_efectivo(prompt_id: str) -> str | None:
     doc = obtener(prompt_id)
     if doc is not None:
         publicado = cuerpo_publicado(prompt_id)
-        return publicado if publicado is not None else doc.cuerpo
+        return _con_contrato(prompt_id, publicado if publicado is not None else doc.cuerpo)
     inicial = obtener_inicial(prompt_id)
-    return inicial.cuerpo if inicial is not None else None
+    return _con_contrato(prompt_id, inicial.cuerpo) if inicial is not None else None
+
+
+def _con_contrato(prompt_id: str, cuerpo: str | None) -> str | None:
+    """Rellena el placeholder `{{CONTRATO_SALIDA}}` del cuerpo con el contrato de salida del prompt.
+
+    El cuerpo EDITABLE (lo que ve la Biblioteca vía `obtener`) lleva el placeholder al final; el
+    cuerpo EFECTIVO que ven los pipelines / el "Compilado" lleva el contrato ya resuelto al final
+    del prompt. No-op para prompts sin placeholder o no estructurados.
+    """
+    if cuerpo is None:
+        return None
+    from ..prompts_contratos import resolver_contrato
+
+    return resolver_contrato(prompt_id, cuerpo)
 
 
 def cuerpo_inicial(prompt_id: str) -> str:
@@ -232,7 +247,7 @@ def cuerpo_inicial(prompt_id: str) -> str:
         doc = obtener_inicial(prompt_id)
     except Exception:  # noqa: BLE001 -- el fallback nunca debe propagar un fallo de lectura
         return ""
-    return doc.cuerpo if doc is not None else ""
+    return _con_contrato(prompt_id, doc.cuerpo) or "" if doc is not None else ""
 
 
 def importar_inicial(origen: Path | None = None) -> int:
@@ -475,4 +490,52 @@ def publicar_linea_base(*, nota: str = "first commit") -> int:
             n += 1
         except Exception:  # noqa: BLE001 -- best-effort: un doc no publicable no aborta el resto
             continue
+    return n
+
+
+def migrar_contrato_salida() -> int:
+    """Sustituye el contrato de salida INLINE por el placeholder `{{CONTRATO_SALIDA}}` en el store.
+
+    ONE-SHOT por sentinela. Para cada prompt ESTRUCTURADO del registro (`prompts_contratos`), si su
+    cuerpo en el store contiene el substring EXACTO del contrato, lo reemplaza por el placeholder
+    (la composición lo rellena de vuelta: el prompt que ve el modelo queda BYTE-IDÉNTICO). Respeta
+    ediciones del equipo: si el contrato no casa exacto, no toca ese doc. Tras reescribir, RE-PUBLICA
+    el doc (mueve el puntero a la versión con placeholder) para que no aparezca "sin publicar"
+    espuriamente. Idempotente; best-effort (la re-publicación necesita BD). Devuelve cuántos migró.
+    """
+    from .. import db
+    from ..prompts_contratos import CONTRATO_POR_PROMPT, PLACEHOLDER
+    from ._versiones import fijar_version
+
+    destino_raiz = raiz()
+    sentinela = destino_raiz / _SENTINELA_CONTRATO
+    if sentinela.exists():
+        return 0
+    n = 0
+    for doc_id, contrato in CONTRATO_POR_PROMPT.items():
+        ruta = destino_raiz.joinpath(*f"{doc_id}.md".split("/"))
+        if not ruta.is_file():
+            continue
+        try:
+            texto = ruta.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if PLACEHOLDER in texto or contrato not in texto:
+            continue  # ya migrado, o editado por el equipo (no casa exacto): respetar
+        # Quita el contrato de su sitio y deja el placeholder al FINAL del cuerpo (espejo de la
+        # semilla): la composición lo rellena allí, el editor lo oculta y lo pinta read-only.
+        nuevo = texto.replace("\n\n" + contrato, "").replace(contrato, "")
+        while "\n\n\n" in nuevo:
+            nuevo = nuevo.replace("\n\n\n", "\n\n")
+        nuevo = nuevo.rstrip("\n") + "\n\n" + PLACEHOLDER + "\n"
+        escribir_atomico(ruta, nuevo)
+        n += 1
+        try:  # re-publica la nueva versión (con placeholder) para no dejarlo "sin publicar"
+            sha = fijar_version(doc_id, nota="contrato de salida")
+            if sha:
+                db.crear_texto_publicacion(doc_id=doc_id, sha=sha, autor="", nota="contrato de salida")
+        except Exception:  # noqa: BLE001 -- best-effort: sin BD se queda "sin publicar", no rompe
+            pass
+    sentinela.parent.mkdir(parents=True, exist_ok=True)
+    escribir_atomico(sentinela, "ok\n")
     return n

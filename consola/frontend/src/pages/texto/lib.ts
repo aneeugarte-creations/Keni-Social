@@ -18,3 +18,33 @@ export function separarFrontmatter(cuerpo: string): { oculto: string; visible: s
   if (!pareceMeta) return { oculto: "", visible: cuerpo };
   return { oculto: m[0], visible: cuerpo.slice(m[0].length) };
 }
+
+/** Placeholder del contrato de salida (lo gestiona el backend; el editor lo oculta). */
+export const PLACEHOLDER_CONTRATO = "{{CONTRATO_SALIDA}}";
+
+/**
+ * Quita el placeholder `{{CONTRATO_SALIDA}}` del FINAL del cuerpo: en los prompts estructurados
+ * el contrato de salida no se edita desde la Biblioteca (vive en código y se pinta read-only
+ * aparte), así que el editor no debe mostrar su placeholder. Se readjunta al guardar con
+ * `componerCuerpoTexto`. No-op si el cuerpo no lo lleva.
+ */
+export function quitarContratoSalida(cuerpo: string): string {
+  return cuerpo.replace(
+    new RegExp(`\\s*${PLACEHOLDER_CONTRATO.replace(/[{}]/g, "\\$&")}\\s*$`),
+    "",
+  );
+}
+
+/**
+ * Recompone el cuerpo COMPLETO que se persiste: frontmatter oculto + lo visible (editado) +,
+ * si el doc es estructurado, el placeholder del contrato al final. Espejo de `separarFrontmatter`
+ * + `quitarContratoSalida`.
+ */
+export function componerCuerpoTexto(
+  frontmatterOculto: string,
+  visible: string,
+  conContrato: boolean,
+): string {
+  const base = frontmatterOculto + visible;
+  return conContrato ? `${base.replace(/\s+$/, "")}\n\n${PLACEHOLDER_CONTRATO}\n` : base;
+}

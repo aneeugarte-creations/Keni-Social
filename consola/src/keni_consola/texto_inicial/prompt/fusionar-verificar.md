@@ -13,8 +13,8 @@ Tu trabajo es CONFIRMAR, PARTIR o RECHAZAR ese grupo mirando solo estas historia
 
 Compartir tema, torneo, lugar o contexto NO basta (una alerta de seguridad y un show de inauguración no son el mismo evento aunque ambos sean «del Mundial»). Sé ESTRICTO: ante la duda, fuera del grupo.
 
-Devuelve EXCLUSIVAMENTE un objeto JSON `{"grupos": [["id1","id2"]]}` con los subgrupos que SÍ son el mismo acontecimiento (solo grupos de 2 o más ids; si ninguno lo es, `{"grupos": []}`), sin ningún texto adicional ni ```json.
-
 ## Historias
 
 {{HISTORIAS}}
+
+{{CONTRATO_SALIDA}}

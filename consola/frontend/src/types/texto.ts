@@ -37,6 +37,12 @@ export interface DocumentoTexto {
    */
   procesos?: string[];
   /**
+   * SOLO LECTURA: contrato de salida (forma del JSON que exige el parser) de un prompt
+   * ESTRUCTURADO, o `null`/ausente si su salida es prosa. Vive en código (`prompts_contratos`),
+   * NO en el cuerpo editable: el editor oculta su placeholder y lo pinta read-only aparte.
+   */
+  contrato_salida?: string | null;
+  /**
    * Versión PUBLICADA (la que sirven los pipelines), o `null` si nunca se publicó.
    * Opcionales mientras el backend del flujo de publicación se despliega en paralelo.
    */
