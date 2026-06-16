@@ -26,9 +26,9 @@ export function BannerReencuadre({ onListo }: { onListo?: () => void }) {
   );
 }
 
-// Banner del modo RECORTE estilo Canva: "Hecho" CONFIRMA (Enter) y "Cancelar" RESTAURA el recorte
-// de entrada (Esc). Las instrucciones reflejan la interacción del CropOverlay (arrastrar la foto
-// para reencuadrar; esquinas o rueda para escalarla dentro del marco).
+// Banner del modo RECORTE: "Hecho" CONFIRMA (Enter) y "Cancelar" RESTAURA el recorte de entrada
+// (Esc). Las instrucciones reflejan la interacción del CropOverlay (arrastrar los bordes recorta esa
+// franja dentro del marco fijo; arrastrar la foto la reencuadra y la rueda hace zoom).
 export function BannerRecorte({ onListo, onCancelar }: { onListo?: () => void; onCancelar?: () => void }) {
   return (
     <div
@@ -37,7 +37,7 @@ export function BannerRecorte({ onListo, onCancelar }: { onListo?: () => void; o
     >
       <CropIcon aria-hidden="true" className="h-3.5 w-3.5 text-muted-foreground" />
       <span className="sr-only">Modo recorte activo.</span>
-      <span>Arrastra la foto · esquinas o rueda para escalar</span>
+      <span>Arrastra los bordes para recortar · la foto o rueda para encuadrar</span>
       <button
         onClick={() => onCancelar?.()}
         className="ml-1 flex items-center gap-1 rounded-full border border-border px-2 py-0.5 hover:bg-muted"

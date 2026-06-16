@@ -34,7 +34,7 @@ import { tieneCursiva } from "../lib/placa/dibujar.mjs";
 
 import { familiaReal } from "./capas/tipografia";
 import { ColorControl } from "./ColorControl";
-import type { Capa, CapaLogo, CapaMarco, CapaOverlay, CapaTexto } from "./documento";
+import type { Capa, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto } from "./documento";
 import { CATALOGO_FUENTES } from "./documento";
 import { useEditor, useStoreEditor } from "./usarEditor";
 
@@ -147,6 +147,15 @@ function IconoTablero({ className }: { className?: string }) {
       <rect x="1.25" y="1.25" width="13.5" height="13.5" rx="2" stroke="currentColor" strokeWidth="1.5" />
       <rect x="2.5" y="2.5" width="5.5" height="5.5" fill="currentColor" />
       <rect x="8" y="8" width="5.5" height="5.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+// Icono de "redondeo de esquina": una esquina con su radio (como el glifo de corner-radius de Canva).
+function IconoRedondeo({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" className={className} aria-hidden="true" fill="none">
+      <path d="M2.5 13.5 V6.5 A4 4 0 0 1 6.5 2.5 H13.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   );
 }
@@ -288,6 +297,18 @@ function FilaSlider({ etiqueta, valor, min, max, paso, decimales = 0, onChange }
         className="w-full"
       />
     </div>
+  );
+}
+
+// Control de REDONDEO de esquinas (radio uniforme) en la barra: popover con slider. Quitar el
+// redondeo = ponerlo a 0; al editar el radio uniforme se descartan las esquinas independientes
+// (`radios`), que son un ajuste avanzado del Inspector. Solo para rects (imagen/marco).
+function ControlRedondeo({ radio, w, h, onChange }: { radio: number; w: number; h: number; onChange: (radio: number) => void }) {
+  const max = Math.max(0, Math.round(Math.min(w, h) / 2));
+  return (
+    <BotonPopover titulo="Redondeo" ariaLabel="Redondeo de esquinas" activo={radio > 0} ancho={224} icono={<IconoRedondeo className="h-4 w-4" />}>
+      <FilaSlider etiqueta="Redondeo" valor={Math.min(radio, max)} min={0} max={max} paso={1} onChange={onChange} />
+    </BotonPopover>
   );
 }
 
@@ -489,6 +510,14 @@ export function BarraContextual({
         <>
           <BotonIcono titulo="Reemplazar imagen" onClick={onReemplazar}><Replace className="h-4 w-4" /> Reemplazar</BotonIcono>
           <BotonIcono titulo="Reencuadrar (arrastra la foto dentro del marco)" onClick={onReencuadrar}><Crop className="h-4 w-4" /> Reencuadrar</BotonIcono>
+          {((capa as CapaImagen).forma ?? "rect") === "rect" && (
+            <ControlRedondeo
+              radio={(capa as CapaImagen).radio ?? 0}
+              w={capa.w}
+              h={capa.h}
+              onChange={(radio) => set({ radio, radios: undefined } as Partial<Capa>)}
+            />
+          )}
         </>
       )}
 
@@ -513,6 +542,14 @@ export function BarraContextual({
                 valor={borde.color}
                 onChange={(v) => set({ borde: { ...borde, color: v } } as Partial<Capa>)}
                 titulo="Color del borde"
+              />
+            )}
+            {c.forma === "rect" && (
+              <ControlRedondeo
+                radio={c.radio ?? 0}
+                w={c.w}
+                h={c.h}
+                onChange={(radio) => set({ radio, radios: undefined } as Partial<Capa>)}
               />
             )}
           </>

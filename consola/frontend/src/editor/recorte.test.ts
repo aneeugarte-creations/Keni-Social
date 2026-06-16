@@ -12,9 +12,9 @@ import {
   moverAsa,
   recortarCaja,
   recortarCajaRotada,
-  recortarMarcoFoto,
   recorteLateral,
   vistaRecorte,
+  zoomMarcoFoto,
 } from "./recorte";
 
 describe("clampCrop", () => {
@@ -369,60 +369,45 @@ describe("recortarCajaRotada (recorte a lo largo de los ejes locales del objeto)
   });
 });
 
-describe("recortarMarcoFoto (tiradores del marco en el modo recorte de foto)", () => {
-  type Rect = { x: number; y: number; w: number; h: number };
-  // Caso canónico: caja == foto (cover, fuente completa). Caja y foto en px del documento.
-  const m = (extra: { caja?: Rect; img?: Rect; flipH?: boolean; flipV?: boolean } = {}) => ({
-    caja: { x: 0, y: 0, w: 400, h: 300 },
-    img: { x: 0, y: 0, w: 400, h: 300 },
-    ...extra,
+describe("zoomMarcoFoto (tiradores del marco: ACERCAR/alejar con el marco FIJO)", () => {
+  // Caja 100×100; foto == caja (cover, fuente completa, crop {0,0,1,1}, escala 1:1).
+  const vv = { fx: 0, fy: 0, fw: 100, fh: 100, escalaSrc: 1 };
+  const full = { cx: 0, cy: 0, cw: 1, ch: 1 };
+
+  it("'mover' no cambia el crop (lo cubre el pan)", () => {
+    expect(zoomMarcoFoto(full, 100, 100, vv, "mover", 10, 10)).toEqual(full);
   });
 
-  it("'mover' no es un gesto de marco (lo cubre el pan)", () => {
-    expect(recortarMarcoFoto(m(), "mover", 10, 10)).toBeNull();
+  it("borde derecho hacia dentro acerca anclado a la IZQUIERDA (centrado en vertical)", () => {
+    // dx=-50 => factor 100/(100-50)=2 alrededor de (0, 0.5): se queda la mitad izquierda, centrada.
+    expect(zoomMarcoFoto(full, 100, 100, vv, "e", -50, 0)).toEqual({ cx: 0, cy: 0.25, cw: 0.5, ch: 0.5 });
   });
 
-  it("borde derecho hacia dentro recorta ese lado (caja y crop), zoom 1", () => {
-    const r = recortarMarcoFoto(m(), "e", -100, 0)!;
-    expect(r).toMatchObject({ x: 0, y: 0, w: 300, h: 300, zoom: 1 });
-    expect(r.crop).toEqual({ cx: 0, cy: 0, cw: 0.75, ch: 1 });
+  it("borde izquierdo hacia dentro acerca anclado a la DERECHA", () => {
+    expect(zoomMarcoFoto(full, 100, 100, vv, "w", 50, 0)).toEqual({ cx: 0.5, cy: 0.25, cw: 0.5, ch: 0.5 });
   });
 
-  it("borde superior baja el origen y compensa cy/ch", () => {
-    const r = recortarMarcoFoto(m(), "n", 0, 75)!;
-    expect(r).toMatchObject({ x: 0, y: 75, w: 400, h: 225 });
-    expect(r.crop).toEqual({ cx: 0, cy: 0.25, cw: 1, ch: 0.75 });
+  it("borde inferior hacia dentro acerca anclado ARRIBA", () => {
+    expect(zoomMarcoFoto(full, 100, 100, vv, "s", 0, -50)).toEqual({ cx: 0.25, cy: 0, cw: 0.5, ch: 0.5 });
   });
 
-  it("una esquina mueve los DOS bordes que la tocan", () => {
-    const r = recortarMarcoFoto(m(), "se", -100, -75)!;
-    expect(r).toMatchObject({ x: 0, y: 0, w: 300, h: 225 });
-    expect(r.crop).toEqual({ cx: 0, cy: 0, cw: 0.75, ch: 0.75 });
+  it("una esquina acerca anclada a la esquina OPUESTA", () => {
+    expect(zoomMarcoFoto(full, 100, 100, vv, "se", -50, -50)).toEqual({ cx: 0, cy: 0, cw: 0.5, ch: 0.5 });
   });
 
-  it("hacia fuera des-recorta hasta el material y ahí se clava (clamp)", () => {
-    // Foto más ancha que la caja (80px ocultos a cada lado): arrastrar 'w' mucho a la izquierda
-    // revela hasta el borde del material y se clava.
-    const r = recortarMarcoFoto(m({ img: { x: -80, y: 0, w: 480, h: 300 } }), "w", -999, 0)!;
-    expect(r.x).toBeCloseTo(-80);
-    expect(r.w).toBeCloseTo(480);
-    expect(r.crop.cx).toBeCloseTo(0);
-    expect(r.crop.cw).toBeCloseTo(1);
+  it("hacia fuera (alejar) se clava en la foto completa (no se sale de la fuente)", () => {
+    expect(zoomMarcoFoto(full, 100, 100, vv, "e", 1000, 0)).toEqual({ cx: 0, cy: 0, cw: 1, ch: 1 });
   });
 
-  it("respeta el tamaño mínimo al recortar a fondo", () => {
-    const r = recortarMarcoFoto(m(), "e", -9999, 0)!;
-    expect(r.w).toBeGreaterThanOrEqual(MIN_LADO_PX);
-    expect(r.crop.cw).toBeGreaterThanOrEqual(MIN_CROP - 1e-9);
-  });
-
-  it("con flipH, recortar el borde derecho (pantalla) recorta el lado IZQUIERDO de la fuente", () => {
-    const r = recortarMarcoFoto(m({ flipH: true }), "e", -100, 0)!;
-    expect(r.w).toBe(300);
-    expect(r.crop).toEqual({ cx: 0.25, cy: 0, cw: 0.75, ch: 1 });
-  });
-
-  it("sin foto (img sin tamaño) no hay gesto", () => {
-    expect(recortarMarcoFoto(m({ img: { x: 0, y: 0, w: 0, h: 0 } }), "e", -10, 0)).toBeNull();
+  it("siempre devuelve un crop válido ∈ [0,1] sea cual sea el tirador", () => {
+    for (const asa of ["nw", "n", "ne", "e", "se", "s", "sw", "w"] as const) {
+      const c = zoomMarcoFoto({ cx: 0.1, cy: 0.1, cw: 0.8, ch: 0.8 }, 100, 100, vv, asa, -30, -30);
+      expect(c.cx).toBeGreaterThanOrEqual(0);
+      expect(c.cy).toBeGreaterThanOrEqual(0);
+      expect(c.cx + c.cw).toBeLessThanOrEqual(1 + 1e-9);
+      expect(c.cy + c.ch).toBeLessThanOrEqual(1 + 1e-9);
+      expect(c.cw).toBeGreaterThan(0);
+      expect(c.ch).toBeGreaterThan(0);
+    }
   });
 });

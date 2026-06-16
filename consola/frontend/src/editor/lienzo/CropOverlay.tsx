@@ -1,10 +1,10 @@
-// Capa HTML sobre la imagen en MODO RECORTE estilo Canva: se ve la imagen ORIGINAL COMPLETA —nítida
-// dentro del marco, ATENUADA fuera— y los 8 tiradores van SOBRE EL MARCO (como en Canva). Arrastrar
-// un tirador del marco REDIMENSIONA EL RECORTE: mueve ese borde de la caja y compensa el crop para
-// que los píxeles no se muevan (= recortar/des-recortar desde ese borde, hasta el material). Arrastrar
-// la IMAGEN la reencuadra (mueve cx/cy del crop) y la rueda hace ZOOM dentro del marco. El crop sigue
-// siendo {cx,cy,cw,ch} normalizado sobre la fuente: NUNCA destruye píxeles. Todo gesto cuenta como UN
-// paso de deshacer. Confirmar/cancelar viven fuera (banner Hecho/Cancelar + Enter/Esc en el Lienzo).
+// Capa HTML sobre la imagen en MODO RECORTE: se ve la imagen ORIGINAL COMPLETA —nítida dentro del
+// marco, ATENUADA fuera— y los 8 tiradores van SOBRE EL MARCO. El MARCO (la caja de la capa) NO
+// cambia de tamaño: arrastrar un tirador ACERCA/ALEJA la foto dentro del marco anclado al borde
+// opuesto (= recorta esa franja y el resto rellena el marco; la foto no se hace más pequeña).
+// Arrastrar la IMAGEN la reencuadra (mueve cx/cy del crop) y la rueda hace ZOOM al centro. El crop
+// sigue siendo {cx,cy,cw,ch} normalizado sobre la fuente: NUNCA destruye píxeles. Todo gesto cuenta
+// como UN paso de deshacer. Confirmar/cancelar viven fuera (banner Hecho/Cancelar + Enter/Esc).
 
 import {
   type PointerEvent as PointerEventReact,
@@ -15,7 +15,7 @@ import {
 
 import type { Capa, CapaImagen, Crop } from "../documento";
 import { fotoMuestra } from "../muestra";
-import { type AsaRecorte, type CajaRecorte, escalarCrop, moverAsa, recortarMarcoFoto, vistaRecorte } from "../recorte";
+import { type AsaRecorte, type VistaRecorte, escalarCrop, moverAsa, vistaRecorte, zoomMarcoFoto } from "../recorte";
 import type { StoreEditor } from "../store";
 import { useImagen } from "../useImagen";
 import { asasMarco, claseTirador, etiquetaAsa } from "./tiradoresRecorte";
@@ -42,12 +42,12 @@ export function CropOverlay({
   const img = imgReal ?? (muestraFoto && capa.es_foto ? fotoMuestra(() => redibujar()) : null);
   const gestoActivo = useRef(false);
   const finZoom = useRef<number | undefined>(undefined);
-  // Gesto en curso: PAN de la imagen (mueve cx/cy del crop) o MARCO (redimensiona el recorte desde un
-  // borde). Se parte de la instantánea del inicio del gesto (los deltas no se acumulan sobre estados
-  // intermedios).
+  // Gesto en curso: PAN de la imagen (mueve cx/cy del crop) o MARCO (acerca/aleja la foto dentro del
+  // marco FIJO). Se parte de la instantánea del inicio del gesto (los deltas no se acumulan sobre
+  // estados intermedios).
   const drag = useRef<
     | { modo: "pan"; crop: Crop; px: number; py: number; fw: number; fh: number }
-    | { modo: "marco"; asa: AsaRecorte; caja: CajaRecorte; img: CajaRecorte; flipH: boolean; flipV: boolean; px: number; py: number }
+    | { modo: "marco"; asa: AsaRecorte; crop: Crop; vv: VistaRecorte; w: number; h: number; px: number; py: number }
     | null
   >(null);
 
@@ -82,7 +82,8 @@ export function CropOverlay({
     drag.current = { modo: "pan", crop: c.crop ?? SIN_CROP, px: e.clientX, py: e.clientY, fw: fW, fh: fH };
   };
 
-  // Arrastrar un tirador del MARCO: redimensiona el recorte desde ese borde (caja + crop compensado).
+  // Arrastrar un tirador del MARCO: ACERCA/ALEJA la foto dentro del marco FIJO (anclado al borde
+  // opuesto). NO cambia la caja; solo el `crop` → la foto rellena el marco y no se hace más pequeña.
   const onDownMarco = (asa: AsaRecorte) => (e: PointerEventReact) => {
     e.stopPropagation();
     try {
@@ -95,20 +96,7 @@ export function CropOverlay({
     if (!c || !img || !(img.width > 0) || !(img.height > 0)) return;
     const vv = vistaRecorte(img.width, img.height, c.w, c.h, c.ajuste, c.foco, c.zoom, c.crop);
     if (!(vv.fw > 0) || !(vv.fh > 0)) return;
-    // Rect de la foto completa en px del documento, con el flip aplicado a su posición (como en
-    // pantalla); `recortarMarcoFoto` mapea el crop deshaciendo el flip.
-    const ix = c.flip_h ? c.w - vv.fx - vv.fw : vv.fx;
-    const iy = c.flip_v ? c.h - vv.fy - vv.fh : vv.fy;
-    drag.current = {
-      modo: "marco",
-      asa,
-      caja: { x: c.x, y: c.y, w: c.w, h: c.h },
-      img: { x: c.x + ix, y: c.y + iy, w: vv.fw, h: vv.fh },
-      flipH: !!c.flip_h,
-      flipV: !!c.flip_v,
-      px: e.clientX,
-      py: e.clientY,
-    };
+    drag.current = { modo: "marco", asa, crop: c.crop ?? SIN_CROP, vv, w: c.w, h: c.h, px: e.clientX, py: e.clientY };
   };
 
   const onMove = (e: PointerEventReact) => {
@@ -122,12 +110,7 @@ export function CropOverlay({
     }
     const dx = (e.clientX - d.px) / escala;
     const dy = (e.clientY - d.py) / escala;
-    const r = recortarMarcoFoto({ caja: d.caja, img: d.img, flipH: d.flipH, flipV: d.flipV }, d.asa, dx, dy);
-    if (r) {
-      store
-        .getState()
-        .actualizar(capa.id, { x: r.x, y: r.y, w: r.w, h: r.h, crop: r.crop, zoom: r.zoom, foco: r.foco } as Partial<Capa>, false);
-    }
+    store.getState().actualizar(capa.id, { crop: zoomMarcoFoto(d.crop, d.w, d.h, d.vv, d.asa, dx, dy) } as Partial<Capa>, false);
   };
 
   const onUp = () => {
