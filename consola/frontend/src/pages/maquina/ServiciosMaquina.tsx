@@ -5,10 +5,13 @@
  * `clave_gate`). La gestión completa (barridos, histórico) sigue en Agentes › Sistema.
  */
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ChevronRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api";
 import { useGuardarAjuste } from "@/pages/configuracion/SeccionFuncionalidad";
+import { FASES_INVESTIGACION, FASES_PRODUCCION } from "@/pages/maquina/fases";
 import { FilaFasePipeline } from "@/pages/monitor/PanelPipeline";
 import { ChipEstadoDaemon, formatoIntervalo } from "@/pages/sistema/SeccionDaemons";
 import { INTERVALO_RECURSOS_MS } from "@/pages/sistema/lib";
@@ -16,6 +19,7 @@ import type { Proceso } from "@/types";
 
 export function ServiciosMaquina({ motor }: { motor: Proceso }) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const query = useQuery({
     queryKey: ["sistema", "daemons"],
     queryFn: ({ signal }) => api.sistemaDaemons(signal),
@@ -29,8 +33,17 @@ export function ServiciosMaquina({ motor }: { motor: Proceso }) {
       { onSuccess: () => void qc.invalidateQueries({ queryKey: ["sistema", "daemons"] }) },
     );
 
+  // Claves que YA gobierna alguna FASE del pipeline de este motor: un daemon cuyo gate sea una de
+  // ellas es la MISMA cosa que esa fase (p. ej. el daemon «Recolección» == fase «Recolectar», ambos
+  // KENI_PIPELINE_RECOLECTAR). Lo excluimos de Servicios para no ver el mismo servicio dos veces.
+  const clavesDeFases = new Set(
+    (motor === "investigacion" ? FASES_INVESTIGACION : FASES_PRODUCCION).flatMap((f) => f.claves),
+  );
   const daemons = (query.data?.daemons ?? []).filter(
-    (d) => d.clase === "maquina" && d.motor === motor,
+    (d) =>
+      d.clase === "maquina" &&
+      d.motor === motor &&
+      !(d.clave_gate && clavesDeFases.has(d.clave_gate)),
   );
   // Sin servicios (o aún cargando): nada que separar — no pintamos la línea.
   if (daemons.length === 0) return null;
@@ -46,6 +59,8 @@ export function ServiciosMaquina({ motor }: { motor: Proceso }) {
               esIa={false}
               nombre={d.etiqueta}
               ayuda={`cada ${formatoIntervalo(d.intervalo_seg)}`}
+              // Mismo comportamiento que las etapas: hover + click que abre la subpágina del daemon.
+              onPrimaria={() => navigate(`/maquina/agentes/${d.daemon}`)}
               derecha={
                 <>
                   <ChipEstadoDaemon estado={d.estado} />
@@ -59,6 +74,7 @@ export function ServiciosMaquina({ motor }: { motor: Proceso }) {
                   ) : (
                     <span className="text-xs text-muted-foreground">Siempre activo</span>
                   )}
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
                 </>
               }
             />

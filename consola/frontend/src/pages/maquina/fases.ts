@@ -37,7 +37,6 @@ export const FASES_INVESTIGACION: readonly FasePipeline[] = [
     es_ia: false,
     claves: ["KENI_PIPELINE_RECOLECTAR", MAESTRO_INVESTIGACION],
     ayuda: "Agrupa las notas parecidas del mismo evento",
-    heredada: "junto con Recolectar",
   },
   {
     nombre: "Fusionar",
@@ -53,7 +52,6 @@ export const FASES_INVESTIGACION: readonly FasePipeline[] = [
     claves: [MAESTRO_INVESTIGACION],
     ayuda: "Adapta el texto al español de México",
     doc: "prompt/traducir",
-    heredada: "con Investigación",
   },
   {
     nombre: "Clasificar",
@@ -77,7 +75,6 @@ export const FASES_INVESTIGACION: readonly FasePipeline[] = [
     es_ia: false,
     claves: [MAESTRO_INVESTIGACION],
     ayuda: "Crea el tema admitido en la mesa de redacción",
-    heredada: "con Investigación",
     etapa: "admitir",
   },
   {
@@ -123,7 +120,6 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
     es_ia: false,
     claves: ["KENI_PIPELINE_REVISAR", MAESTRO_PRODUCCION],
     ayuda: "Verifica la voz y la calidad del copy antes de avanzar",
-    heredada: "con Producción",
   },
   {
     nombre: "Ilustrar",

@@ -30,6 +30,8 @@ import { SeccionImagen } from "@/pages/configuracion/SeccionImagen";
 import {
   FASES_INVESTIGACION,
   FASES_PRODUCCION,
+  MAESTRO_INVESTIGACION,
+  MAESTRO_PRODUCCION,
   QUEUE_INVESTIGACION,
   QUEUE_PRODUCCION,
   slugFase,
@@ -118,6 +120,7 @@ export default function Contexto() {
             admisionEn="verificar"
             cola={cola.data}
             esAdmin={esAdmin}
+            claveMaestro={MAESTRO_INVESTIGACION}
             onAbrirFase={(fase: FasePipeline) =>
               navigate(`/maquina/contexto/investigacion/${slugFase(fase.nombre)}`)
             }
@@ -132,6 +135,7 @@ export default function Contexto() {
             queuePorTipo={QUEUE_PRODUCCION}
             cola={cola.data}
             esAdmin={esAdmin}
+            claveMaestro={MAESTRO_PRODUCCION}
             onAbrirFase={(fase: FasePipeline) =>
               navigate(`/maquina/contexto/produccion/${slugFase(fase.nombre)}`)
             }

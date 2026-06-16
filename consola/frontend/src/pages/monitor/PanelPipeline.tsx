@@ -57,7 +57,8 @@ export interface FasePipeline {
   queue?: string;
   /** Clave BASE de los toggles por marca (grupo `automatizacion_marca_*`) + nota de alcance. */
   excepciones?: { base: string; nota: string };
-  /** Nota cuando el switch gobierna un flag COMPARTIDO (fase sin flag propio). */
+  /** Nota descriptiva extra junto a la fase (p. ej. qué hace su switch: «el switch auto-aprueba las
+   *  de bajo riesgo»). Las fases que SIGUEN a otro control ya se marcan solas («· sigue …»). */
   heredada?: string;
   /** `true` si la fase inyecta el CONTEXTO editorial de la marca (voz, líneas, tropicalización,
    *  reglas): la pestaña «Contexto» del detalle muestra la estrategia de marca. */
@@ -196,6 +197,7 @@ export function PanelPipeline({
   cola,
   esAdmin = true,
   chip,
+  claveMaestro,
   onAbrirFase,
 }: {
   /** Título de la cabecera del panel. */
@@ -212,6 +214,11 @@ export function PanelPipeline({
   esAdmin?: boolean;
   /** Indicador opcional en la cabecera (p. ej. jobs en curso del proceso). */
   chip?: React.ReactNode;
+  /** Maestro VIRTUAL del proceso (`KENI_INVESTIGACION`/`KENI_PRODUCCION`): apaga TODAS sus fases a la
+   *  vez. Las fases que resuelven su switch a ESTA clave (las que no tienen flag físico propio) NO
+   *  muestran un switch por fila —eso colapsaría el proceso entero al tocar una sola fase—: se
+   *  marcan «sigue al maestro» y el maestro se surfacea UNA vez como control único en la cabecera. */
+  claveMaestro?: string;
   /** Si se pasa, el click izquierdo de cada fila NAVEGA al detalle de esa fase (su subpágina
    *  Prompt · Contexto · Logs) en vez de abrir el overlay de prompt. Es el modo de «Contexto». */
   onAbrirFase?: (fase: FasePipeline) => void;
@@ -242,11 +249,31 @@ export function PanelPipeline({
     [data],
   );
 
+  // Clave efectiva (primera presente en el catálogo) de cada fase, en orden. Sirve para detectar
+  // SEGUIDORAS: fases cuyo switch NO debe ser editable por fila porque lo gobierna otro control —el
+  // maestro de proceso (cabecera) o la fase DUEÑA de un flag granular compartido—. Sin esto, varias
+  // fases pintaban el switch del maestro y tocar una apagaba el proceso entero (bug «apaga todos»).
+  const efectivas = React.useMemo(
+    () => fases.map((e) => e.claves.find((c) => porClave.has(c))),
+    [fases, porClave],
+  );
+  // Índice de la PRIMERA fase que gobierna cada clave efectiva (su «dueña»): solo ella la edita.
+  const duenoDeClave = React.useMemo(() => {
+    const m = new Map<string, number>();
+    efectivas.forEach((c, i) => {
+      if (c && !m.has(c)) m.set(c, i);
+    });
+    return m;
+  }, [efectivas]);
+
   const enCurso = cola ? contar(cola.en_curso, queuePorTipo) : {};
   const esperando = cola ? contar(cola.esperando, queuePorTipo) : {};
 
   const maquina = esAdmin ? porClave.get(CLAVE_MAQUINA) : undefined;
   const maquinaOn = Boolean(maquina?.valor);
+  // Maestro del proceso como CONTROL ÚNICO de la cabecera (su switch enciende/apaga todas las fases).
+  const maestro = esAdmin && claveMaestro ? porClave.get(claveMaestro) : undefined;
+  const maestroOn = Boolean(maestro?.valor);
 
   return (
     <section data-testid="panel-pipeline">
@@ -255,6 +282,26 @@ export function PanelPipeline({
         <h3 className="text-sm font-semibold">{titulo}</h3>
         <div className="flex flex-wrap items-center gap-3">
           {chip}
+          {maestro && (
+            <label className="flex items-center gap-2 text-sm">
+              <span className="text-muted-foreground">
+                {maestro.etiqueta}
+                <span
+                  className={cn(
+                    "ml-1.5 text-xs font-medium",
+                    maestroOn ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400",
+                  )}
+                >
+                  · {maestroOn ? "on" : "off"}
+                </span>
+              </span>
+              <SwitchAjuste
+                ajuste={maestro}
+                ariaLabel={`${maestro.etiqueta} (maestro del proceso: enciende/apaga todas sus fases)`}
+                tono="estado"
+              />
+            </label>
+          )}
           {maquina && (
             <label className="flex items-center gap-2 text-sm">
               <span className="text-muted-foreground">
@@ -281,8 +328,21 @@ export function PanelPipeline({
       {/* Secuencia VERTICAL de fases, unidas por un conector (↓): el flujo se lee arriba→abajo. */}
       <ol className="w-full">
         {fases.map((e, i) => {
-          const claveEfectiva = e.claves.find((c) => porClave.has(c));
+          const claveEfectiva = efectivas[i];
           const ajuste = claveEfectiva ? porClave.get(claveEfectiva) : undefined;
+          // El switch de la fila es editable SOLO si la fase es la DUEÑA de su clave efectiva y esa
+          // clave NO es el maestro de proceso (compartido): así Recolectar/Verificar/Redactar/Ilustrar
+          // controlan cada uno SU clave y el maestro queda como control único de la cabecera. El resto
+          // SIGUE a otro control (el maestro, o la fase dueña de un flag granular compartido).
+          const esMaestroProceso = claveEfectiva !== undefined && claveEfectiva === claveMaestro;
+          const esDuena = claveEfectiva !== undefined && duenoDeClave.get(claveEfectiva) === i;
+          const switchEditable = Boolean(ajuste) && esDuena && !esMaestroProceso;
+          const sigueA =
+            ajuste && !switchEditable
+              ? esMaestroProceso
+                ? "al maestro"
+                : `a ${fases[duenoDeClave.get(claveEfectiva!)!].nombre}`
+              : undefined;
           const doc = esAdmin ? e.doc : undefined;
           const deEtapa = e.excepciones
             ? porMarca.filter((a) => a.clave.startsWith(`${e.excepciones!.base}::`))
@@ -333,11 +393,14 @@ export function PanelPipeline({
                         {admision && <> · admision {admision.en_proceso}</>}
                       </span>
                     )}
-                    {ajuste && (
+                    {switchEditable && ajuste && (
                       <SwitchAjuste
                         ajuste={ajuste}
                         ariaLabel={`${ajuste.etiqueta} (switch de la fase ${e.nombre})`}
                       />
+                    )}
+                    {sigueA && (
+                      <span className="text-xs text-muted-foreground">· sigue {sigueA}</span>
                     )}
                     {navegable && (
                       <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
