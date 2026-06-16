@@ -35,7 +35,7 @@ import { EditorDocumento } from "@/editor/EditorDocumento";
 import { ContenidoPlantillas } from "@/editor/GaleriaPlantillas";
 import { DialogoFotoMuestra } from "@/editor/DialogoFotoMuestra";
 import { dataUrlAArchivo } from "@/editor/dataUrl";
-import { conFotoEnHuecosVacios, documentoVacio, type Documento } from "@/editor/documento";
+import { conFotoEnHuecosVacios, conTextosHorneados, documentoVacio, type Documento } from "@/editor/documento";
 import { crearStoreEditor, type StoreEditor } from "@/editor/store";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, urlMedia, type PlantillaDiseno } from "@/lib/api";
@@ -486,7 +486,11 @@ export default function Imagen() {
   // Si la plantilla tiene `fotoMuestra`, la HORNEA en los huecos vacíos (galería «tal cual quedaría»);
   // sin muestra, los huecos quedan grises. El documento editable NO se toca (solo esta copia).
   const miniaturaDe = async (documento: Documento, fotoMuestra = ""): Promise<string> => {
-    const doc = fotoMuestra ? conFotoEnHuecosVacios(documento, fotoMuestra) : documento;
+    let doc = fotoMuestra ? conFotoEnHuecosVacios(documento, fotoMuestra) : documento;
+    // Revela el subtítulo/pleca (binding `etiqueta_default`) con su texto literal: el binding llega
+    // vacío en el overview y el render omitiría la capa, así que la desvinculamos para que se vea en
+    // la galería. El titular (`copy_in`) sigue con el placeholder "TITULAR".
+    doc = conTextosHorneados(doc, (c) => (c.binding === "etiqueta_default" ? c.texto : null));
     try {
       return (await api.imagenRender(doc, { copy_in: "TITULAR", etiqueta_default: "" })).id;
     } catch {

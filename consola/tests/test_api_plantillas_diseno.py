@@ -336,3 +336,21 @@ def test_hornear_muestra_solo_rellena_huecos_vacios():
     assert out["capas"][3] == {"tipo": "texto"}
     # Sin objeto de muestra, el documento se devuelve tal cual (sin copia).
     assert _hornear_muestra(doc, "") is doc
+
+
+def test_revelar_pleca_desvincula_solo_etiqueta_default():
+    """`_revelar_pleca` quita el binding a la pleca/subtítulo (`etiqueta_default`) para que su texto
+    se vea en el overview; no toca el titular (`copy_in`), los textos fijos ni otras capas."""
+    from keni_consola.api.plantillas_diseno import _revelar_pleca
+
+    doc = {"capas": [
+        {"tipo": "texto", "binding": "etiqueta_default", "texto": "1945-2026"},  # subtítulo -> sin binding
+        {"tipo": "texto", "binding": "copy_in", "texto": "x"},                   # titular -> intacto
+        {"tipo": "texto", "binding": None, "texto": "fijo"},                     # fijo -> intacto
+        {"tipo": "imagen", "es_foto": True},                                     # no es texto -> intacto
+    ]}
+    out = _revelar_pleca(doc)
+    assert out["capas"][0] == {"tipo": "texto", "binding": None, "texto": "1945-2026"}
+    assert out["capas"][1]["binding"] == "copy_in"
+    assert out["capas"][2]["binding"] is None
+    assert out["capas"][3] == {"tipo": "imagen", "es_foto": True}

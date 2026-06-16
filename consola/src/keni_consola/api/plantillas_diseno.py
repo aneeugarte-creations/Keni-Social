@@ -298,11 +298,30 @@ def _hornear_muestra(doc: dict, objeto: str) -> dict:
     }
 
 
+def _revelar_pleca(doc: dict) -> dict:
+    """Copia del documento con las capas de texto atadas a `etiqueta_default` (pleca/SUBTÍTULO)
+    DESvinculadas (binding -> None), para que el render las pinte con su `texto` literal en el
+    overview de la galería (un binding sin valor se omite). Así el subtítulo se ve «tal cual
+    quedaría». El titular (`copy_in`) NO se toca: sigue con el placeholder de ejemplo ("TITULAR")."""
+    capas = doc.get("capas")
+    if not isinstance(capas, list):
+        return doc
+    return {
+        **doc,
+        "capas": [
+            {**c, "binding": None}
+            if (isinstance(c, dict) and c.get("tipo") == "texto" and c.get("binding") == "etiqueta_default")
+            else c
+            for c in capas
+        ],
+    }
+
+
 async def preview(request: Request) -> Response:
     """GET /api/plantillas-diseno/{id}/preview: MINIATURA on-demand del diseño (sin persistir).
 
-    Renderiza el DOCUMENTO de la plantilla (con su `foto_muestra` horneada en los huecos vacíos + un
-    titular de ejemplo) a PNG. Es el RESPALDO de la galería cuando la plantilla no tiene `miniatura`
+    Renderiza el DOCUMENTO de la plantilla (con su `foto_muestra` horneada en los huecos vacíos, un
+    titular de ejemplo y el subtítulo/pleca con su texto) a PNG. Es el RESPALDO de la galería cuando la plantilla no tiene `miniatura`
     guardada —p. ej. las creadas por API/agente, que no pasan por el guardado del estudio (es ahí
     donde se genera la miniatura)—. Así se ven todas sin tener que abrir+editar cada una. ETag por
     hash del documento + `foto_muestra` (cambiar la muestra invalida la caché); cacheable (304 sin
@@ -320,6 +339,7 @@ async def preview(request: Request) -> Response:
     try:
         doc = json.loads(documento) if isinstance(documento, str) else documento
         doc = _hornear_muestra(doc, foto_muestra)
+        doc = _revelar_pleca(doc)  # el subtítulo (etiqueta_default) se ve con su texto en la galería
         datos = estudio_imagen.renderizar_documento_bytes(
             doc, bindings={"copy_in": "TITULAR", "etiqueta_default": ""}
         )
