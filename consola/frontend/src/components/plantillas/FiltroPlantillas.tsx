@@ -271,12 +271,17 @@ function SelectorCategoria({
   const [query, setQuery] = useState("");
   const [nombreEdit, setNombreEdit] = useState("");
   const [activo, setActivo] = useState(0);
+  // Creación de etiqueta: campo APARTE del buscador (botón «Crear etiqueta» → input). No se mezcla
+  // con la búsqueda para que cada acción sea inequívoca.
+  const [creando, setCreando] = useState(false);
+  const [nuevaEtiqueta, setNuevaEtiqueta] = useState("");
   const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number; maxH: number } | null>(
     null,
   );
   const refTrigger = useRef<HTMLButtonElement>(null);
   const refPanel = useRef<HTMLDivElement>(null);
   const refInput = useRef<HTMLInputElement>(null);
+  const refCrear = useRef<HTMLInputElement>(null);
   // Último nombre ENVIADO en esta apertura: evita un segundo PATCH idéntico (blur + cierre).
   const refUltimoNombre = useRef<string | null>(null);
   // Siempre apunta al `cerrar` del último render: los handlers de clic-fuera/scroll se suscriben
@@ -297,16 +302,6 @@ function SelectorCategoria({
     return base.filter((c) => _sinAcentos(c.etiqueta).includes(q) || c.slug.includes(qSlug));
   }, [slug, etiqueta, query]);
 
-  const queryTrim = query.trim();
-  const slugNuevo = normalizarCategoria(queryTrim);
-  const existe =
-    !slugNuevo ||
-    slugNuevo === slug ||
-    CATEGORIAS_PLANTILLA.some((c) => c.slug === slugNuevo);
-  const mostrarCrear = !!queryTrim && !existe;
-  // Lista navegable por teclado: opciones + (fila «Crear» si procede).
-  const navegables = mostrarCrear ? [...opciones.map((o) => o.slug), " crear"] : opciones.map((o) => o.slug);
-
   function abrir() {
     const r = refTrigger.current?.getBoundingClientRect();
     if (!r) return;
@@ -324,6 +319,8 @@ function SelectorCategoria({
     setQuery("");
     setNombreEdit(nombre ?? "");
     refUltimoNombre.current = null;
+    setCreando(false);
+    setNuevaEtiqueta("");
     setActivo(0);
     setAbierto(true);
   }
@@ -344,6 +341,33 @@ function SelectorCategoria({
   function elegir(valor: string) {
     onCambiar(valor);
     cerrar();
+  }
+  // Crear etiqueta nueva: acción SEPARADA del buscador. El botón abre un campo propio; confirmar
+  // crea la etiqueta (el back normaliza el texto a slug) y cierra.
+  function abrirCrear() {
+    setNuevaEtiqueta("");
+    setCreando(true);
+  }
+  function cancelarCrear() {
+    setCreando(false);
+    setNuevaEtiqueta("");
+  }
+  function confirmarCrear() {
+    const n = nuevaEtiqueta.trim();
+    if (!n) return;
+    elegir(n);
+  }
+  function alTeclearCrear(e: ReactKeyboardEvent) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      e.stopPropagation();
+      confirmarCrear();
+    } else if (e.key === "Escape") {
+      // Cancela SOLO el creador, sin cerrar el popover.
+      e.preventDefault();
+      e.stopPropagation();
+      cancelarCrear();
+    }
   }
   function alTeclearNombre(e: ReactKeyboardEvent) {
     if (e.key === "Enter") {
@@ -368,6 +392,11 @@ function SelectorCategoria({
   useEffect(() => {
     if (abierto) refInput.current?.focus();
   }, [abierto]);
+
+  // Enfoca el campo de creación al abrirlo.
+  useEffect(() => {
+    if (creando) refCrear.current?.focus();
+  }, [creando]);
 
   // Cierre por clic-fuera / scroll / resize mientras está abierto. Cierra vía `refCerrar.current`
   // (último render) para no perder el nombre tecleado por un closure obsoleto.
@@ -398,23 +427,19 @@ function SelectorCategoria({
   function alTeclear(e: ReactKeyboardEvent) {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActivo((i) => Math.min(i + 1, navegables.length - 1));
+      setActivo((i) => Math.min(i + 1, opciones.length - 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActivo((i) => Math.max(i - 1, 0));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      const sel = navegables[activo];
-      if (sel === " crear") elegir(queryTrim);
-      else if (sel) elegir(sel);
-      else if (mostrarCrear) elegir(queryTrim);
+      const sel = opciones[activo]?.slug;
+      if (sel) elegir(sel);
     } else if (e.key === "Escape") {
       e.preventDefault();
       cerrar();
     }
   }
-
-  const idxCrear = opciones.length; // posición de la fila «Crear» en la lista navegable
 
   return (
     <>
@@ -471,6 +496,38 @@ function SelectorCategoria({
                   Etiqueta
                 </label>
               )}
+              {/* Crear etiqueta nueva: acción APARTE del buscador (campo propio). */}
+              {creando ? (
+                <div className="mb-1.5 flex items-center gap-1">
+                  <input
+                    ref={refCrear}
+                    value={nuevaEtiqueta}
+                    onChange={(e) => setNuevaEtiqueta(e.target.value)}
+                    onKeyDown={alTeclearCrear}
+                    aria-label="Nombre de la etiqueta nueva"
+                    placeholder="Nombre de la etiqueta…"
+                    className="h-8 min-w-0 flex-1 rounded-sm border border-input bg-background px-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  />
+                  <button
+                    type="button"
+                    onClick={confirmarCrear}
+                    disabled={!nuevaEtiqueta.trim()}
+                    title="Crear etiqueta"
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-sm border border-input bg-background text-foreground hover:bg-accent disabled:opacity-40"
+                  >
+                    <Check className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={abrirCrear}
+                  className="mb-1.5 flex h-8 w-full items-center justify-center gap-1.5 rounded-sm border border-input bg-background text-sm text-foreground hover:bg-accent"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Crear etiqueta
+                </button>
+              )}
               <div className="relative">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <input
@@ -479,7 +536,7 @@ function SelectorCategoria({
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={alTeclear}
-                  placeholder="Buscar o crear etiqueta…"
+                  placeholder="Buscar etiqueta…"
                   className="h-8 w-full rounded-sm bg-transparent pl-7 pr-2 text-sm outline-none placeholder:text-muted-foreground"
                 />
               </div>
@@ -504,23 +561,7 @@ function SelectorCategoria({
                   </button>
                 );
               })}
-              {mostrarCrear && (
-                <button
-                  type="button"
-                  role="option"
-                  onMouseEnter={() => setActivo(idxCrear)}
-                  onClick={() => elegir(queryTrim)}
-                  className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm ${
-                    activo === idxCrear ? "bg-accent text-accent-foreground" : ""
-                  }`}
-                >
-                  <Plus className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">
-                    Crear «{etiquetaCategoria(queryTrim)}»
-                  </span>
-                </button>
-              )}
-              {opciones.length === 0 && !mostrarCrear && (
+              {opciones.length === 0 && (
                 <p className="px-2 py-1.5 text-sm text-muted-foreground">Sin coincidencias</p>
               )}
             </div>

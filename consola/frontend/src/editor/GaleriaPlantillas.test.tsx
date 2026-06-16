@@ -263,14 +263,14 @@ describe("GaleriaPlantillas — búsqueda y categorías", () => {
       />,
     );
     fireEvent.click(screen.getByTitle("Cambiar categoría"));
-    fireEvent.change(screen.getByPlaceholderText("Buscar o crear etiqueta…"), {
+    fireEvent.change(screen.getByPlaceholderText("Buscar etiqueta…"), {
       target: { value: "marc" },
     });
     expect(screen.getByRole("option", { name: "Marcador" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "Efemérides" })).not.toBeInTheDocument();
   });
 
-  it("el selector permite CREAR una etiqueta nueva escribiéndola (texto libre)", () => {
+  it("el buscador NO crea: el botón «Crear etiqueta» abre un campo aparte y crea", () => {
     const onCategorizar = vi.fn();
     render(
       <GaleriaPlantillas
@@ -281,10 +281,16 @@ describe("GaleriaPlantillas — búsqueda y categorías", () => {
       />,
     );
     fireEvent.click(screen.getByTitle("Cambiar categoría"));
-    fireEvent.change(screen.getByPlaceholderText("Buscar o crear etiqueta…"), {
+    // Escribir en el buscador NO ofrece crear (solo filtra).
+    fireEvent.change(screen.getByPlaceholderText("Buscar etiqueta…"), {
       target: { value: "Promo especial" },
     });
-    fireEvent.click(screen.getByRole("option", { name: /Crear «Promo especial»/ }));
+    expect(screen.getByText("Sin coincidencias")).toBeInTheDocument();
+    // La creación va por su propio botón → campo aparte.
+    fireEvent.click(screen.getByRole("button", { name: "Crear etiqueta" }));
+    const campo = screen.getByPlaceholderText("Nombre de la etiqueta…");
+    fireEvent.change(campo, { target: { value: "Promo especial" } });
+    fireEvent.keyDown(campo, { key: "Enter" });
     expect(onCategorizar).toHaveBeenCalledWith(
       expect.objectContaining({ id: "cat-1" }),
       "Promo especial",
