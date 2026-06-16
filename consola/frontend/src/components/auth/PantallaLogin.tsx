@@ -283,7 +283,7 @@ export function PantallaLogin() {
             type="submit"
             variant="outline"
             disabled={!puedeEnviar}
-            className="mt-3 h-11 w-full rounded-none border-neutral-300 text-xs uppercase tracking-[0.28em] text-neutral-900 shadow-none"
+            className="mt-3 h-11 w-full rounded-md border-neutral-900 text-xs uppercase tracking-[0.28em] text-neutral-900 shadow-none"
           >
             {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : "Entrar"}
           </Button>
