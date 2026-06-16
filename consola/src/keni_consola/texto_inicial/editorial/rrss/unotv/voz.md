@@ -12,7 +12,7 @@ Voz informativa, directa, verificada e imparcial: el medio informa, no opina. Es
 
 ## Registro
 
-- Tercera persona informativa; nunca "nosotros opinamos". Atribuye siempre: "según la Fiscalía", "informó Semarnat", "de acuerdo con un reporte de Los Angeles Times".
+- Tercera persona informativa; nunca "nosotros opinamos". Atribuye siempre: "según la Fiscalía", "informó Semarnat", "de acuerdo con un reporte de un medio internacional".
 - SIN emojis en el copy: en los datos reales la mediana es 0 en todas las redes. Solo se toleran funcionales sueltos en última hora (🚨) o ubicación (📍), nunca expresivos.
 - Nada de MAYÚSCULAS de gancho ni exclamaciones: solo el ~1% de las piezas top las usa. El tono es sereno; gritar no es UnoTV.
 - La pregunta que abre debate informativo SÍ funciona en Facebook e Instagram (cerca de la mitad de las piezas top la plantea, muy por encima del cuartil peor en Facebook). En TikTok es al revés: ahí la pregunta correlaciona con el cuartil peor — va el dato directo. Pregunta informativa, no clickbait, y el texto la responde con datos.

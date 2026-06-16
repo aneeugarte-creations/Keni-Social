@@ -13,7 +13,7 @@ Da el dato verificado primero y cita la fuente; distingue hecho de versión ("se
 ## Sí
 
 - ✅ "El presunto responsable fue detenido, informó la Fiscalía de Jalisco."
-- ✅ "Según un reporte de Los Angeles Times, habría recibido recursos…" (versión atribuida, en condicional).
+- ✅ "Según un reporte de un medio internacional, habría recibido recursos…" (versión atribuida, en condicional).
 - ✅ Cifras con fuente: "quedan menos de 1,600 ejemplares, de acuerdo con la NOAA".
 - ✅ Plantear el debate con las dos posturas y dejar la conclusión al lector.
 - ✅ Retomar investigaciones de otros medios cuando son exclusivas o contienen entrevistas que solo maneja ese medio y son de vital interés — siempre con crédito explícito al medio.
