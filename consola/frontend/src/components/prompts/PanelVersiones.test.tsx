@@ -158,6 +158,25 @@ describe("PanelVersiones", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  it("sin cambios: clic en la versión EN VIVO vuelve al documento actual (onVerVersion(null), no preview read-only)", async () => {
+    stubFetch();
+    const onVerVersion = vi.fn();
+    // produccionSha=aaa111 («Tono más directo…») es la EN VIVO; sin cambios sin publicar el
+    // borrador YA es esa versión: clicarla NO debe abrir un preview read-only de lo mismo.
+    montar({ onVerVersion, sinPublicar: false });
+    fireEvent.click(await screen.findByRole("button", { name: /Tono más directo en titulares/ }));
+    expect(onVerVersion).toHaveBeenCalledWith(null);
+  });
+
+  it("con cambios: clic en la versión EN VIVO sí la previsualiza (difiere del borrador)", async () => {
+    stubFetch();
+    const onVerVersion = vi.fn();
+    // Con cambios sin publicar el borrador difiere de la EN VIVO: clicarla SÍ la previsualiza.
+    montar({ onVerVersion, sinPublicar: true });
+    fireEvent.click(await screen.findByRole("button", { name: /Tono más directo en titulares/ }));
+    expect(onVerVersion).toHaveBeenCalledWith("aaa111");
+  });
+
   it("clic en «Tu borrador» vuelve a editar el borrador (onVerVersion(null))", async () => {
     stubFetch();
     const onVerVersion = vi.fn();

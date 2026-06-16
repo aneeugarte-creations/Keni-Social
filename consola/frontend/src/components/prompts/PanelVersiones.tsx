@@ -80,7 +80,14 @@ export function PanelVersiones({
 
   // Ver una versión: NO abre popup; pide al contenedor cargarla en la caja de texto de la derecha.
   const seleccionable = typeof onVerVersion === "function";
-  const verVersion = (sha: string | null) => onVerVersion?.(sha);
+  // Clicar la versión EN VIVO equivale a «volver al documento actual»: si esa versión ya ES lo que
+  // edita el borrador (no hay cambios sin publicar), no tiene sentido un preview read-only de lo
+  // mismo. Mandamos `null` para que el editor quede EDITABLE y sin banner. Una versión EN VIVO con
+  // cambios sin publicar SÍ difiere del borrador, así que se previsualiza como cualquier otra.
+  const esVivoSinCambios = (sha: string) =>
+    !sinPublicar && !!produccionSha && sha === produccionSha;
+  const verVersion = (sha: string | null) =>
+    onVerVersion?.(sha != null && esVivoSinCambios(sha) ? null : sha);
 
   const invalidar = () => {
     qc.invalidateQueries({ queryKey: ["prompts"] });
@@ -171,7 +178,9 @@ export function PanelVersiones({
         ) : null}
         {historial.map((v) => {
           const esEnVivo = !!produccionSha && v.sha === produccionSha;
-          const activa = versionActiva === v.sha;
+          // Sin cambios sin publicar, el borrador ES la versión EN VIVO: resáltala cuando no se
+          // previsualiza nada (`versionActiva == null`), igual que «Tu borrador» cuando los hay.
+          const activa = versionActiva === v.sha || (versionActiva == null && esVivoSinCambios(v.sha));
           const nombre = v.mensaje || "Publicación";
           return (
             <button
@@ -272,7 +281,8 @@ export function PanelVersiones({
                     onClick: () => void onRestaurar(v.sha, nombre),
                   },
                 ];
-            const activa = versionActiva === v.sha;
+            const activa =
+              versionActiva === v.sha || (versionActiva == null && esVivoSinCambios(v.sha));
             return (
               <FilaConAcciones
                 key={v.sha}

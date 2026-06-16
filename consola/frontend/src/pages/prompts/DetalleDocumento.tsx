@@ -532,22 +532,30 @@ export function DetalleDocumento({
         </section>
       ) : null}
 
-      {/* ───────── Panel de versiones (izquierda, colapsable) + cuerpo (derecha) ───────── */}
-      <div className={cn("flex flex-col gap-3 lg:flex-row", !ocultarCabecera && "min-h-0 flex-1")}>
-        {/* Panel de versiones: SIEMPRE presente. Expandido = lista al tamaño del texto; colapsado =
-            raíl estrecho con un icono-doc por versión (sigue clicable/navegable). El toggle `‹`/`›`
-            va al pie. Sin cabecera «Versiones»: la sección ya se entiende. */}
+      {/* ───────── Panel de versiones (izquierda, colapsable) + cuerpo (derecha) ─────────
+          `items-stretch` (por defecto en flex-row) hace que AMBOS cajones igualen la altura de la
+          fila: el de versiones acompaña al de texto, no se ajusta solo a su contenido. */}
+      <div
+        className={cn(
+          "flex flex-col gap-3 lg:flex-row lg:items-stretch",
+          !ocultarCabecera && "min-h-0 flex-1",
+        )}
+      >
+        {/* Panel de versiones: SIEMPRE presente. Expandido = lista; colapsado = raíl estrecho con un
+            icono-doc por versión (sigue clicable/navegable). El toggle `‹`/`›` va al pie DENTRO del
+            cajón blanco. Sin cabecera «Versiones»: la sección ya se entiende. */}
         <aside
           className={cn(
-            "flex shrink-0 flex-col gap-2",
+            "flex shrink-0 flex-col",
             panelAbierto ? "w-full lg:w-fit lg:max-w-xs" : "w-auto",
           )}
         >
+          {/* Un solo cajón blanco a la altura completa de la fila (`h-full`): contenido arriba
+              (crece/scrollea) y el toggle anclado al pie, DENTRO del mismo borde/`bg-card`. */}
           <div
             className={cn(
-              "rounded-md border border-border bg-card",
+              "flex h-full min-h-0 flex-col rounded-md border border-border bg-card",
               panelAbierto ? "p-3" : "p-1",
-              !ocultarCabecera && "min-h-0 flex-1 overflow-y-auto",
             )}
           >
             {/* Pestañas Versiones | Contexto: solo en prompts y solo con el panel expandido (colapsado
@@ -574,9 +582,12 @@ export function DetalleDocumento({
               </div>
             ) : null}
             {panelAbierto && esPrompt && pestanaPanel === "contexto" ? (
-              <PanelContextoInyectado docId={borrador.id} />
+              <div className={cn("min-h-0 flex-1", !ocultarCabecera && "overflow-y-auto")}>
+                <PanelContextoInyectado docId={borrador.id} />
+              </div>
             ) : (
               <PanelVersiones
+                className={cn("min-h-0 flex-1", !ocultarCabecera && "overflow-y-auto")}
                 docId={borrador.id}
                 produccionSha={produccion?.sha ?? null}
                 sinPublicar={sinPublicar}
@@ -598,22 +609,22 @@ export function DetalleDocumento({
                 }}
               />
             )}
+            {/* Toggle al PIE, dentro del cajón blanco: `‹` colapsa (no oculta, deja el raíl); `›` expande. */}
+            <Button
+              size="icon"
+              variant="ghost"
+              className="mt-2 h-8 w-8 shrink-0 self-center"
+              aria-label={panelAbierto ? "Colapsar versiones" : "Expandir versiones"}
+              title={panelAbierto ? "Colapsar" : "Expandir"}
+              onClick={() => setPanelAbierto((v) => !v)}
+            >
+              {panelAbierto ? (
+                <ChevronLeft className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+            </Button>
           </div>
-          {/* Un solo toggle al PIE: `‹` colapsa (no oculta, deja el raíl); `›` expande. */}
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-8 w-8 self-center shrink-0"
-            aria-label={panelAbierto ? "Colapsar versiones" : "Expandir versiones"}
-            title={panelAbierto ? "Colapsar" : "Expandir"}
-            onClick={() => setPanelAbierto((v) => !v)}
-          >
-            {panelAbierto ? (
-              <ChevronLeft className="h-4 w-4" />
-            ) : (
-              <ChevronRight className="h-4 w-4" />
-            )}
-          </Button>
         </aside>
 
         <div
