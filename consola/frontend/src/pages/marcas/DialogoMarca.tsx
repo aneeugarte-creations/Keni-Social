@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -8,7 +8,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -33,7 +32,8 @@ function invalidarMarcas(qc: ReturnType<typeof useQueryClient>) {
 /**
  * Diálogo de CREAR o EDITAR una marca del catálogo (la fuente única editable). Al crear,
  * `id` e `id_metricas` se derivan del nombre si se dejan vacíos. Al editar, el `id`
- * canónico es inmutable (referencia el contenido); solo cambian nombre e id_metricas.
+ * canónico es inmutable (referencia el contenido); solo cambian nombre e id_metricas, y
+ * desde aquí mismo se puede BORRAR la marca (con una confirmación en línea).
  */
 export function DialogoMarca({
   abierto,
@@ -50,12 +50,14 @@ export function DialogoMarca({
   const [etiqueta, setEtiqueta] = React.useState("");
   const [id, setId] = React.useState("");
   const [idMetricas, setIdMetricas] = React.useState("");
+  const [confirmandoBorrado, setConfirmandoBorrado] = React.useState(false);
 
   React.useEffect(() => {
     if (abierto) {
       setEtiqueta(inicial?.etiqueta ?? "");
       setId(inicial?.id ?? "");
       setIdMetricas(inicial?.id_metricas ?? "");
+      setConfirmandoBorrado(false);
     }
   }, [abierto, inicial]);
 
@@ -80,7 +82,17 @@ export function DialogoMarca({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const guardando = crear.isPending || editar.isPending;
+  const borrar = useMutation({
+    mutationFn: () => api.borrarMarca(inicial!.id),
+    onSuccess: (r) => {
+      toast.success(r?.mensaje ?? "Marca eliminada.");
+      invalidarMarcas(qc);
+      onCerrar();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const ocupado = crear.isPending || editar.isPending || borrar.isPending;
   const valido = etiqueta.trim() !== "";
 
   return (
@@ -102,7 +114,7 @@ export function DialogoMarca({
               value={etiqueta}
               onChange={(e) => setEtiqueta(e.target.value)}
               placeholder="Ej. Claro Sports"
-              disabled={guardando}
+              disabled={ocupado}
               autoFocus
             />
           </div>
@@ -119,7 +131,7 @@ export function DialogoMarca({
                 value={id}
                 onChange={(e) => setId(e.target.value)}
                 placeholder="se genera del nombre (claro-sports)"
-                disabled={guardando}
+                disabled={ocupado}
               />
             </div>
           )}
@@ -130,65 +142,52 @@ export function DialogoMarca({
               value={idMetricas}
               onChange={(e) => setIdMetricas(e.target.value)}
               placeholder="se genera del id (claro_sports)"
-              disabled={guardando}
+              disabled={ocupado}
             />
           </div>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onCerrar} disabled={guardando}>
-            Cancelar
-          </Button>
-          <Button
-            onClick={() => (esEditar ? editar.mutate() : crear.mutate())}
-            disabled={guardando || !valido}
-          >
-            {guardando ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            {esEditar ? "Guardar" : "Crear"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
-/** Diálogo de confirmación de borrado de una marca. */
-export function DialogoBorrarMarca({
-  marca,
-  onCerrar,
-}: {
-  /** null = cerrado; con valor = confirmar borrado de esa marca. */
-  marca: MarcaEditable | null;
-  onCerrar: () => void;
-}) {
-  const qc = useQueryClient();
-  const borrar = useMutation({
-    mutationFn: () => api.borrarMarca(marca!.id),
-    onSuccess: (r) => {
-      toast.success(r?.mensaje ?? "Marca eliminada.");
-      invalidarMarcas(qc);
-      onCerrar();
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  return (
-    <Dialog open={marca !== null} onOpenChange={(o) => !o && onCerrar()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Borrar “{marca?.etiqueta}”</DialogTitle>
-          <DialogDescription>
-            La marca desaparecerá del catálogo y de todos los selectores. El contenido y las
-            credenciales ya existentes no se borran (quedan inertes). ¿Continuar?
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button variant="outline" onClick={onCerrar} disabled={borrar.isPending}>
-            Cancelar
-          </Button>
-          <Button variant="destructive" onClick={() => borrar.mutate()} disabled={borrar.isPending}>
-            {borrar.isPending ? "Borrando…" : "Borrar"}
-          </Button>
-        </DialogFooter>
+        {/* Pie: en edición, «Borrar marca» a la izquierda (con confirmación en línea). */}
+        {confirmandoBorrado ? (
+          <div className="space-y-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+            <p className="text-sm text-muted-foreground">
+              ¿Borrar “{inicial?.etiqueta}”? Desaparece del catálogo y de los selectores. El
+              contenido y las credenciales ya existentes no se borran (quedan inertes).
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setConfirmandoBorrado(false)} disabled={borrar.isPending}>
+                Cancelar
+              </Button>
+              <Button variant="destructive" size="sm" onClick={() => borrar.mutate()} disabled={borrar.isPending}>
+                {borrar.isPending ? "Borrando…" : "Sí, borrar"}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <div>
+              {esEditar && (
+                <Button
+                  variant="ghost"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setConfirmandoBorrado(true)}
+                  disabled={ocupado}
+                >
+                  <Trash2 className="h-4 w-4" /> Borrar marca
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={onCerrar} disabled={ocupado}>
+                Cancelar
+              </Button>
+              <Button onClick={() => (esEditar ? editar.mutate() : crear.mutate())} disabled={ocupado || !valido}>
+                {crear.isPending || editar.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {esEditar ? "Guardar" : "Crear"}
+              </Button>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
