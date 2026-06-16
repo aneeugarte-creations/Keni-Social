@@ -51,34 +51,40 @@ export function TarjetaMiembro({
         </span>
       </span>
 
-      {/* Insignias en columnas alineadas entre filas: marcas (variable, pueden ocupar más)
-          a la izquierda y luego Coord./Turnos/Admin en huecos fijos —misma posición en todas
-          las filas, hueco vacío si la persona no tiene esa insignia—. */}
-      <span className="flex shrink-0 items-start gap-1">
+      {/* Insignias en columnas alineadas entre filas: las marcas (variables, borde
+          derecho fijo pegado a las columnas de rol) a la izquierda y luego
+          Coord./Turnos/Admin en huecos fijos —misma posición en todas las filas,
+          hueco vacío si la persona no tiene esa insignia—. El bloque se centra en
+          vertical contra el nombre+cargo para no quedar pegado arriba. */}
+      <span className="flex shrink-0 items-center gap-1 self-center">
         {marcas.length > 0 && (
-          <span className="flex max-w-[12rem] flex-wrap justify-end gap-1">
+          <span className="flex max-w-[14rem] flex-wrap items-center justify-end gap-1">
             {marcas.map((m) => (
-              <Badge key={m} variant="outline" className="h-5 px-1.5 text-[10px] font-normal">
+              <Badge
+                key={m}
+                variant="outline"
+                className="h-5 shrink-0 whitespace-nowrap px-1.5 text-[10px] font-normal"
+              >
                 {metaZona(m).etiqueta}
               </Badge>
             ))}
           </span>
         )}
-        <span className="flex w-16 justify-center">
+        <span className="flex w-14 justify-center">
           {usuario.puede_coordinar && (
             <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-normal">
               Coord.
             </Badge>
           )}
         </span>
-        <span className="flex w-16 justify-center">
+        <span className="flex w-14 justify-center">
           {usuario.cobertura && (
             <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-normal">
               Turnos
             </Badge>
           )}
         </span>
-        <span className="flex w-16 justify-center">
+        <span className="flex w-14 justify-center">
           {usuario.rol === "admin" && (
             <Badge variant="default" className="h-5 px-1.5 text-[10px] font-medium">
               Admin
