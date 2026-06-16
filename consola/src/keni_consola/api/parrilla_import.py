@@ -294,12 +294,16 @@ async def importar(request: Request) -> Response:
         )
 
         def _encolar() -> dict[str, Any]:
+            # FRASE escrita a mano: el texto es el NOMBRE de un evento (p. ej. «la velada del año
+            # VI»), no una transcripción con fecha. Habilitamos la web (`permitir_web`) para que el
+            # job lo IDENTIFIQUE y DATE online; el camino de ENLACE NO lo hace (ya trae el artículo).
             return job.lanzar_desde_texto(
                 propuesta_id=propuesta["id"],
                 texto=texto_pegado,
                 nombres_miembros=_roster(),
                 autor=autor,
                 modo=modo,
+                permitir_web=True,
             )
 
     else:

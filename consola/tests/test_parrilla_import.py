@@ -448,3 +448,43 @@ def test_componer_prompt_ancla_la_fecha_de_hoy_cuando_se_pasa():
     assert "2026-06-15" in con and "Hoy es 2026-06-15" in con
     sin = pij.componer_prompt(ctx=_ctx(), texto_documento="fila")
     assert "Hoy es" not in sin
+
+
+def test_componer_prompt_frase_con_web_pide_identificar_y_datar():
+    # FRASE escrita a mano (`permitir_web=True`): el texto es el NOMBRE de un evento sin fecha; el
+    # prompt debe pedir BUSCARLO en la web y datarlo, NO tratarlo como una transcripción cerrada.
+    p = pij.componer_prompt(
+        ctx=_ctx(), texto_documento="la velada del año vi", permitir_web=True
+    )
+    assert "WebSearch" in p                       # se habilita y se nombra la búsqueda web
+    assert "FRASE A IDENTIFICAR" in p             # el texto va etiquetado como frase, no documento
+    assert "la velada del año vi" in p            # la frase del usuario queda embebida
+    # NO debe arrastrar el corte de transcripción cerrada que impedía buscar.
+    assert "NO abras ni leas ningún fichero ni uses herramientas" not in p
+    assert "{{" not in p                          # todos los marcadores sustituidos
+
+
+def test_componer_prompt_sin_web_trata_el_texto_como_transcripcion_cerrada():
+    # Sin `permitir_web` (enlace ya extraído / documento transcrito): comportamiento previo intacto
+    # — trabaja solo con el texto, sin herramientas; no menciona la búsqueda web.
+    p = pij.componer_prompt(ctx=_ctx(), texto_documento="### HOJA: A\nfila")
+    assert "WebSearch" not in p
+    assert "FRASE A IDENTIFICAR" not in p
+    assert "No uses herramientas" in p
+
+
+def test_endurecer_permitir_web_habilita_busqueda_y_sube_esfuerzo():
+    # Camino de FRASE: NO veta WebSearch/WebFetch (hay que identificar el evento online) y sube el
+    # esfuerzo a `medium` (ya no es transcripción mecánica). Bash/Write/Edit SIGUEN vetados.
+    e = pij._endurecer(lee_fichero=False, permitir_web=True)
+    vetadas = e["disallowed_tools"]
+    assert "WebSearch" not in vetadas and "WebFetch" not in vetadas
+    assert "Bash" in vetadas and "Write" in vetadas
+    assert e["esfuerzo"] == "medium"
+
+
+def test_endurecer_por_defecto_veta_la_web_y_es_mecanico():
+    # Documento/enlace: la web sigue vetada y el run es mecánico (`low`), como antes.
+    e = pij._endurecer(lee_fichero=False)
+    assert "WebSearch" in e["disallowed_tools"] and "WebFetch" in e["disallowed_tools"]
+    assert e["esfuerzo"] == "low"

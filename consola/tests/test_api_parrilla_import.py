@@ -59,6 +59,8 @@ def test_importar_desde_enlace_crea_propuesta_con_marca_y_encola(entorno, monkey
     assert prop["doc_tipo"] == "enlace"
     assert prop["gen_id"] == "gen-1"  # el gen_id lo estampa el job en 2º plano, no la respuesta
     assert "Cruz Azul" in capturado.get("texto", "")
+    # El ENLACE ya trae el artículo extraído: NO se habilita la web (solo la frase escrita a mano).
+    assert capturado.get("permitir_web") is not True
 
 
 def test_importar_enlace_de_video_da_422_con_mensaje(entorno, monkeypatch):
@@ -111,6 +113,8 @@ def test_importar_desde_texto_pegado_encola(entorno, monkeypatch):
     assert prop["doc_tipo"] == "texto"
     assert prop["marca"] == "claro-sports"
     assert "Cruz Azul" in capturado.get("texto", "")
+    # FRASE escrita a mano: se habilita la web para identificar/datar el evento nombrado.
+    assert capturado.get("permitir_web") is True
 
 
 def test_importar_sin_nada_da_400(entorno):

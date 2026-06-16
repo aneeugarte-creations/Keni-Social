@@ -74,7 +74,7 @@ _TOOLS_VETADAS: tuple[str, ...] = (
 _TOOLS_LECTURA: tuple[str, ...] = ("Read", "Glob", "Grep")
 
 
-def _endurecer(*, lee_fichero: bool) -> dict[str, Any]:
+def _endurecer(*, lee_fichero: bool, permitir_web: bool = False) -> dict[str, Any]:
     """Config de endurecimiento del job. `lee_fichero=False` (texto embebido) veta tambien las
     tools de lectura: el modelo solo transforma el texto del prompt en JSON.
 
@@ -82,13 +82,23 @@ def _endurecer(*, lee_fichero: bool) -> dict[str, Any]:
     razonamiento profundo. Medido en el server: con effort `low` el run es ~3× mas rapido
     (primer token y total) con la MISMA cobertura de operaciones; con el default el modelo
     "piensa" minutos sobre el documento antes de emitir nada. Override por-job: NO toca el
-    effort global (copy/otros siguen con su preferencia)."""
-    vetadas = list(_TOOLS_VETADAS) + ([] if lee_fichero else list(_TOOLS_LECTURA))
+    effort global (copy/otros siguen con su preferencia).
+
+    `permitir_web=True` (SOLO el camino de FRASE escrita a mano): NO veta WebSearch/WebFetch,
+    para que el modelo pueda IDENTIFICAR y DATAR online un evento nombrado por su titulo (p. ej.
+    «la velada del año VI»), que no trae fecha en el propio texto. Sube el esfuerzo a `medium`:
+    ya no es transcripcion mecanica, hay que buscar y razonar la fecha/recinto. El resto de
+    vetos (Bash/Write/Edit + MCP de escritura) sigue en pie: el job solo LEE web y emite JSON."""
+    vetadas = list(_TOOLS_VETADAS)
+    if permitir_web:
+        vetadas = [t for t in vetadas if t not in ("WebSearch", "WebFetch")]
+    if not lee_fichero:
+        vetadas += list(_TOOLS_LECTURA)
     return {
         "disallowed_tools": vetadas,
         "max_turns": 40,
         "max_budget_usd": 10.0,
-        "esfuerzo": "low",
+        "esfuerzo": "medium" if permitir_web else "low",
     }
 
 
@@ -331,6 +341,7 @@ def componer_prompt(
     texto_documento: str | None = None,
     hoy: str | None = None,
     modo: str = "eventos",
+    permitir_web: bool = False,
 ) -> str:
     """Prompt para que claude convierta el documento en operaciones JSON. PURO.
 
@@ -345,6 +356,12 @@ def componer_prompt(
 
     NO se ata a una semana: embebe el roster (id+nombre) y los enums, y pide extraer TODO el
     documento (cualquier fecha, cualquier nº de franjas/día), cada operación con fecha ISO.
+
+    `permitir_web=True` (solo con `texto_documento`, en el camino de FRASE escrita a mano): trata
+    el texto embebido como una FRASE/BÚSQUEDA que NOMBRA un evento del mundo real (sin fecha en el
+    propio texto) y pide IDENTIFICARLO y DATARLO con la web (WebSearch/WebFetch) en vez de extraer
+    solo lo literal. Así «la velada del año VI» se resuelve a su fecha/recinto reales. Sin el flag,
+    el texto se trata como una transcripción cerrada (NO uses herramientas), comportamiento previo.
 
     `modo="tareas"` cambia por completo el encargo: extrae ENCARGOS sueltos (`crear_tarea`) en
     vez de eventos, con un prompt autocontenido (no usa la plantilla editable). El roster/slots
@@ -385,7 +402,29 @@ def componer_prompt(
         '`{"operaciones": []}` ÚNICAMENTE si no hay NINGÚN evento (ni turno) con fecha.'
     )
 
-    if texto_documento is not None:
+    if texto_documento is not None and permitir_web:
+        # FRASE escrita a mano: NO es un documento cerrado, es el NOMBRE de un evento real (sin
+        # fecha en el propio texto). Pedimos identificarlo y datarlo con la web; sin esto el
+        # modelo no puede resolver la fecha y devuelve `{"operaciones": []}` («no lo encuentra»).
+        fuente = (
+            f"{ancla_hoy}{encuadre}Lo que viene MÁS ABAJO NO es un documento completo: es una FRASE "
+            "o BÚSQUEDA escrita a mano que NOMBRA uno o más eventos del mundo real (un combate, un "
+            "concierto, un partido, un estreno, una gala…), normalmente SIN su fecha. USA la "
+            "búsqueda web (WebSearch) para IDENTIFICAR cada evento nombrado y AVERIGUAR su fecha "
+            "exacta, hora, recinto/ciudad y de qué trata; si hace falta, abre una fuente con "
+            "WebFetch para confirmar la fecha. Con esos datos, emite el `crear_evento` con su fecha "
+            "ISO real. Si el nombre es ambiguo o recurrente, prefiere la edición/fecha FUTURA más "
+            "próxima a hoy. Si tras buscar NO encuentras una fecha creíble para un evento nombrado, "
+            "ese evento NO se emite."
+        )
+        regla_fuente = (
+            "- La frase de abajo casi nunca trae la fecha: BÚSCALA en la web (WebSearch/WebFetch) "
+            "antes de descartar nada. No inventes fechas; usa solo las que confirme la web."
+        )
+        cola_fuente = (
+            f"\n\nFRASE A IDENTIFICAR:\n```\n{texto_documento}\n```{recordatorio_final}"
+        )
+    elif texto_documento is not None:
         fuente = (
             f"{ancla_hoy}{encuadre}El documento ya está TRANSCRITO a texto más abajo (es una hoja "
             "de cálculo/CSV, una página web o texto plano). Trabaja EXCLUSIVAMENTE con ese texto; NO "
@@ -498,11 +537,17 @@ def lanzar_desde_texto(
     nombres_miembros: dict[str, str],
     autor: dict[str, str] | None = None,
     modo: str = "eventos",
+    permitir_web: bool = False,
 ) -> dict[str, Any]:
     """Encola el job READ-ONLY a partir de TEXTO ya extraído (un enlace o texto pegado), sin
     fichero. Es la MISMA rama "texto embebido" de `lanzar` (transformación texto→JSON sin tools
     de lectura): el texto se EMBEBE en el prompt y `claude -p` propone los eventos/turnos.
+
+    `permitir_web=True` (lo pasa el camino de FRASE escrita a mano, NO el de enlace ya extraído):
+    el texto es el NOMBRE de un evento, no una transcripción; se habilita la web para que el
+    modelo lo IDENTIFIQUE y DATE online. Solo aplica al modo `eventos` (una tarea no se busca).
     """
+    web = permitir_web and modo == "eventos"
     ctx = construir_contexto_prompt(nombres_miembros=nombres_miembros)
     procesar_spec = jobspec.construir_parrilla_import(propuesta_id=propuesta_id)
     procesar = jobspec.reconstruir_procesar({"procesar": procesar_spec})
@@ -510,11 +555,13 @@ def lanzar_desde_texto(
         tipo="parrilla-import",
         titulo="Importar parrilla",
         marca="",
-        prompt=componer_prompt(ctx=ctx, texto_documento=texto, hoy=_hoy_cdmx(), modo=modo),
+        prompt=componer_prompt(
+            ctx=ctx, texto_documento=texto, hoy=_hoy_cdmx(), modo=modo, permitir_web=web
+        ),
         procesar=procesar,
         procesar_spec=procesar_spec,
         autor=autor,
-        endurecer=_endurecer(lee_fichero=False),
+        endurecer=_endurecer(lee_fichero=False, permitir_web=web),
     )
 
 
