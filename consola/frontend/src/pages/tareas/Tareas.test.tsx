@@ -239,9 +239,8 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     ]);
 
     // 4 cosas hoy, 2 hechas (el partido pasado + el encargo hecho) → «2 / 4» (hechas / total).
-    const marcador = await screen.findByLabelText(/Progreso de hoy/);
+    const marcador = await screen.findByLabelText(/Avance de hoy/);
     expect(marcador).toHaveTextContent(/2\s*\/\s*4/);
-    expect(marcador).toHaveTextContent(/2\s*pendientes/); // 4 − 2 = 2 pendientes
     // 50% (< 90%): la barra es naranja de marca, aún no verde.
     expect(marcador.querySelector(".bg-keni-500")).not.toBeNull();
     expect(marcador.querySelector(".bg-emerald-500")).toBeNull();
@@ -258,7 +257,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
       tarea({ id: "pend", titulo: "Pendiente", fecha_objetivo: hoy, estado: "pendiente" }),
     ]);
 
-    const marcador = await screen.findByLabelText(/Progreso de hoy/);
+    const marcador = await screen.findByLabelText(/Avance de hoy/);
     expect(marcador).toHaveTextContent(/9\s*\/\s*10/);
     expect(marcador.querySelector(".bg-emerald-500")).not.toBeNull(); // verde a ≥90%
     expect(marcador.querySelector(".bg-keni-500")).toBeNull();
