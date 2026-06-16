@@ -238,27 +238,33 @@ async def importar(request: Request) -> Response:
         roster = _roster()
 
         def _descargar_y_encolar() -> None:
-            """Baja el enlace y encola el job (fuera de la petición). Cualquier fallo deja la
-            propuesta en `error` con un mensaje claro; el frontend lo muestra al sondear."""
+            """Baja el enlace y encola el job (fuera de la petición).
+
+            DOS intentos para no rendirse ante un 403/bloqueo (muchas notas/medios bloquean el
+            fetch del datacenter): 1) el SERVIDOR lee la página (rápido, con guard SSRF ya hecho);
+            2) si falla, encolamos con la URL y la WEB habilitada para que el asistente la lea
+            (WebFetch desde otra infra) o identifique el evento (WebSearch). Solo si el ENCOLADO
+            falla queda la propuesta en `error`."""
+            permitir_web = False
             try:
                 titulo_url, cuerpo_url = extraccion_url.extraer_texto(
                     url_limpia, timeout=_TIMEOUT_ENLACE, reintentos=_REINTENTOS_ENLACE
                 )
-            except extraccion_url.ExtraccionError as e:
-                repos.actualizar_propuesta_parrilla(
-                    pid, {"estado": pi.ESTADO_ERROR, "error": str(e)}
+                texto = f"{titulo_url}\n\n{cuerpo_url}".strip() if titulo_url else cuerpo_url
+            except Exception as e:  # noqa: BLE001 -- 403/bloqueo/timeout: caemos al fallback web
+                _log.info(
+                    "import enlace: el servidor no pudo leer %s (%s); fallback a web", pid, e
                 )
-                return
-            except Exception:  # noqa: BLE001 -- red imprevista: no dejar la propuesta colgada
-                _log.exception("import enlace: la descarga falló (propuesta %s)", pid)
-                repos.actualizar_propuesta_parrilla(
-                    pid, {"estado": pi.ESTADO_ERROR, "error": "No se pudo leer el enlace."}
-                )
-                return
-            texto = f"{titulo_url}\n\n{cuerpo_url}".strip() if titulo_url else cuerpo_url
+                texto = url_limpia
+                permitir_web = True
             try:
                 gen = job.lanzar_desde_texto(
-                    propuesta_id=pid, texto=texto, nombres_miembros=roster, autor=autor, modo=modo
+                    propuesta_id=pid,
+                    texto=texto,
+                    nombres_miembros=roster,
+                    autor=autor,
+                    modo=modo,
+                    permitir_web=permitir_web,
                 )
             except generaciones.ColaLlenaError:
                 repos.actualizar_propuesta_parrilla(

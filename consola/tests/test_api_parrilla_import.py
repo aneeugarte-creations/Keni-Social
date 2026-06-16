@@ -76,25 +76,32 @@ def test_importar_enlace_de_video_da_422_con_mensaje(entorno, monkeypatch):
     assert "v" in r.json()["error"].lower()  # "vídeo" en el mensaje
 
 
-def test_importar_enlace_lento_deja_la_propuesta_en_error(entorno, monkeypatch):
-    # La descarga falla EN 2º PLANO (página lenta/ilegible): ya no es un timeout de la petición,
-    # sino una propuesta en `error` con mensaje claro que el frontend muestra al sondear.
+def test_importar_enlace_que_el_servidor_no_puede_leer_cae_a_web(entorno, monkeypatch):
+    # El SERVIDOR no puede leer la página (403/bloqueo/timeout): ya NO se rinde con `error`. Cae al
+    # fallback WEB — encola con la URL como texto y `permitir_web=True` para que el asistente la lea
+    # (WebFetch, desde otra infra) o identifique el evento (WebSearch).
     monkeypatch.setattr(extraccion_url, "validar_url", lambda u: (u, None))
 
     def _revienta(url: str, **_kw):
-        raise extraccion_url.ExtraccionError("La página tardó demasiado y se canceló.")
+        raise extraccion_url.ExtraccionError("La página respondió con un error (HTTP 403).")
 
     monkeypatch.setattr(extraccion_url, "extraer_texto", _revienta)
+    capturado: dict = {}
+    monkeypatch.setattr(
+        job, "lanzar_desde_texto", lambda **kw: capturado.update(kw) or {"id": "gen-web"}
+    )
     c = _cli()
     r = c.post(
         "/api/parrilla/importar",
-        data={"url": "https://lenta.test/cartelera"},
+        data={"url": "https://bloqueada.test/cartelera"},
         headers=_ORIGIN,
     )
     assert r.status_code == 202, r.text
     prop = repos.obtener_propuesta_parrilla(r.json()["propuesta_id"])
-    assert prop["estado"] == "error"
-    assert "tardó" in prop["error"]
+    assert prop["estado"] != "error"  # ya no se rinde: cae al fallback web
+    assert prop["gen_id"] == "gen-web"
+    assert capturado.get("permitir_web") is True
+    assert "bloqueada.test" in capturado.get("texto", "")  # la URL viaja como texto a identificar
 
 
 def test_importar_desde_texto_pegado_encola(entorno, monkeypatch):

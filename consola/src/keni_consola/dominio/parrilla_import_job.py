@@ -316,20 +316,20 @@ def _prompt_tareas(
         '`{"operaciones": []}` ÚNICAMENTE si no hay ninguna tarea.'
     )
     if texto_documento is not None and permitir_web:
-        # FRASE escrita a mano: NOMBRA un evento real. Identificarlo y datarlo con la web; la
-        # fecha resuelta va en `fecha_objetivo` para que la tarea quede fechada (igual que en
-        # eventos), no descartada por «no traer deadline».
+        # FRASE escrita a mano o ENLACE que el servidor no pudo leer: NOMBRA/apunta a un evento
+        # real. Identificarlo y datarlo con la web; la fecha resuelta va en `fecha_objetivo` para
+        # que la tarea quede fechada (igual que en eventos), no descartada por «no traer deadline».
         fuente = (
-            f"{ancla_hoy}Lo que viene MÁS ABAJO es una FRASE o BÚSQUEDA escrita a mano que NOMBRA "
-            "un evento del mundo real (un combate, un concierto, un partido, un estreno, una "
-            "gala…), normalmente SIN su fecha. USA la búsqueda web (WebSearch) para IDENTIFICARLO "
-            "y AVERIGUAR su fecha exacta, hora, recinto/ciudad y de qué trata; si hace falta, abre "
-            "una fuente con WebFetch para confirmar la fecha. Crea UNA `crear_tarea` cuyo `titulo` "
-            "sea el evento, con su fecha real en `fecha_objetivo` (AAAA-MM-DD) y el recinto/ciudad "
-            "en `detalle`. Si el nombre es ambiguo o recurrente, prefiere la edición FUTURA más "
-            "próxima a hoy. Si tras buscar NO encuentras una fecha creíble, omite `fecha_objetivo`."
+            f"{ancla_hoy}Lo que viene MÁS ABAJO es una FRASE que NOMBRA un evento del mundo real "
+            "(un combate, un concierto, un partido, un estreno, una gala…) o un ENLACE a su página. "
+            "Si es un ENLACE (empieza por http), ÁBRELO con WebFetch; si es un nombre, IDENTIFÍCALO "
+            "con WebSearch. AVERIGUA su fecha exacta, hora, recinto/ciudad y de qué trata. Crea UNA "
+            "`crear_tarea` cuyo `titulo` sea el evento, con su fecha real en `fecha_objetivo` "
+            "(AAAA-MM-DD) y el recinto/ciudad en `detalle`. Si el nombre es ambiguo o recurrente, "
+            "prefiere la edición FUTURA más próxima a hoy. Si tras buscar NO encuentras una fecha "
+            "creíble, omite `fecha_objetivo`."
         )
-        cola = f"\n\nFRASE A IDENTIFICAR:\n```\n{texto_documento}\n```{recordatorio}"
+        cola = f"\n\nFRASE O ENLACE A IDENTIFICAR:\n```\n{texto_documento}\n```{recordatorio}"
     elif texto_documento is not None:
         fuente = (
             f"{ancla_hoy}{encuadre} El texto de la fuente está más abajo (ya transcrito). Trabaja "
@@ -425,26 +425,25 @@ def componer_prompt(
     )
 
     if texto_documento is not None and permitir_web:
-        # FRASE escrita a mano: NO es un documento cerrado, es el NOMBRE de un evento real (sin
-        # fecha en el propio texto). Pedimos identificarlo y datarlo con la web; sin esto el
-        # modelo no puede resolver la fecha y devuelve `{"operaciones": []}` («no lo encuentra»).
+        # FRASE escrita a mano o ENLACE que el servidor no pudo leer (403/bloqueo): NO es un
+        # documento cerrado. Hay que identificarlo/datarlo con la web; sin esto el modelo no
+        # resuelve la fecha y devuelve `{"operaciones": []}` («no lo encuentra»).
         fuente = (
             f"{ancla_hoy}{encuadre}Lo que viene MÁS ABAJO NO es un documento completo: es una FRASE "
-            "o BÚSQUEDA escrita a mano que NOMBRA uno o más eventos del mundo real (un combate, un "
-            "concierto, un partido, un estreno, una gala…), normalmente SIN su fecha. USA la "
-            "búsqueda web (WebSearch) para IDENTIFICAR cada evento nombrado y AVERIGUAR su fecha "
-            "exacta, hora, recinto/ciudad y de qué trata; si hace falta, abre una fuente con "
-            "WebFetch para confirmar la fecha. Con esos datos, emite el `crear_evento` con su fecha "
-            "ISO real. Si el nombre es ambiguo o recurrente, prefiere la edición/fecha FUTURA más "
-            "próxima a hoy. Si tras buscar NO encuentras una fecha creíble para un evento nombrado, "
-            "ese evento NO se emite."
+            "que NOMBRA uno o más eventos del mundo real (un combate, un concierto, un partido, un "
+            "estreno, una gala…) o un ENLACE a la página de un evento. Si es un ENLACE (empieza por "
+            "http), ÁBRELO con WebFetch y extrae el evento de esa página; si es un nombre, "
+            "IDENTIFÍCALO con WebSearch. En ambos casos AVERIGUA su fecha exacta, hora, "
+            "recinto/ciudad y de qué trata, y emite el `crear_evento` con su fecha ISO real. Si el "
+            "nombre es ambiguo o recurrente, prefiere la edición/fecha FUTURA más próxima a hoy. Si "
+            "tras buscar NO encuentras una fecha creíble para un evento, ese evento NO se emite."
         )
         regla_fuente = (
-            "- La frase de abajo casi nunca trae la fecha: BÚSCALA en la web (WebSearch/WebFetch) "
+            "- Lo de abajo casi nunca trae la fecha: BÚSCALA/LÉELA en la web (WebSearch/WebFetch) "
             "antes de descartar nada. No inventes fechas; usa solo las que confirme la web."
         )
         cola_fuente = (
-            f"\n\nFRASE A IDENTIFICAR:\n```\n{texto_documento}\n```{recordatorio_final}"
+            f"\n\nFRASE O ENLACE A IDENTIFICAR:\n```\n{texto_documento}\n```{recordatorio_final}"
         )
     elif texto_documento is not None:
         fuente = (

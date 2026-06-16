@@ -481,7 +481,8 @@ def test_componer_prompt_frase_con_web_pide_identificar_y_datar():
         ctx=_ctx(), texto_documento="la velada del año vi", permitir_web=True
     )
     assert "WebSearch" in p                       # se habilita y se nombra la búsqueda web
-    assert "FRASE A IDENTIFICAR" in p             # el texto va etiquetado como frase, no documento
+    assert "WebFetch" in p                        # un ENLACE se lee con WebFetch (fallback de 403)
+    assert "FRASE O ENLACE A IDENTIFICAR" in p    # etiquetado como frase/enlace, no documento
     assert "la velada del año vi" in p            # la frase del usuario queda embebida
     # NO debe arrastrar el corte de transcripción cerrada que impedía buscar.
     assert "NO abras ni leas ningún fichero ni uses herramientas" not in p
@@ -493,7 +494,7 @@ def test_componer_prompt_sin_web_trata_el_texto_como_transcripcion_cerrada():
     # — trabaja solo con el texto, sin herramientas; no menciona la búsqueda web.
     p = pij.componer_prompt(ctx=_ctx(), texto_documento="### HOJA: A\nfila")
     assert "WebSearch" not in p
-    assert "FRASE A IDENTIFICAR" not in p
+    assert "FRASE O ENLACE A IDENTIFICAR" not in p
     assert "No uses herramientas" in p
 
 

@@ -167,7 +167,18 @@ def _un_intento_descarga(url: str, timeout: float | None) -> str:
     reintenta (transitorio) o se rinde."""
     import httpx
 
-    cabeceras = {"User-Agent": "Mozilla/5.0 (compatible; KeniSocial/1.0; +operativo)"}
+    # UA de NAVEGADOR REAL (+ Accept/Accept-Language): muchas notas y páginas de eventos
+    # responden 403 a un User-Agent que se delata como bot («KeniSocial/1.0»). Con cabeceras
+    # de navegador, una fracción grande de esos 403 desaparece. Los que bloqueen por IP de
+    # datacenter siguen fallando aquí, pero entonces cae al fallback web del asistente.
+    cabeceras = {
+        "User-Agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "es-MX,es;q=0.9,en;q=0.8",
+    }
     with httpx.Client(
         timeout=timeout or _TIMEOUT, follow_redirects=True, headers=cabeceras
     ) as cliente:
