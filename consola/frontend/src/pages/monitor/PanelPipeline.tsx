@@ -70,7 +70,9 @@ function contar(jobs: ColaJob[], queuePorTipo: Record<string, string>): Record<s
   return c;
 }
 
-/** Switch de UN ajuste bool con su PROPIA mutación (el «guardando» es de este control). */
+/** Switch de UN ajuste bool con su PROPIA mutación (el «guardando» es de este control).
+ *  Tono GRIS (`neutral`): los toggles del pipeline encajan con el cromo gris de la
+ *  plataforma en vez del negro Geist (encendido = `muted-foreground`). */
 function SwitchAjuste({ ajuste, ariaLabel }: { ajuste: AjusteAdmin; ariaLabel: string }) {
   const guardar = useGuardarAjuste();
   return (
@@ -79,6 +81,7 @@ function SwitchAjuste({ ajuste, ariaLabel }: { ajuste: AjusteAdmin; ariaLabel: s
       disabled={guardar.isPending}
       onCheckedChange={(v) => guardar.mutate({ clave: ajuste.clave, valor: v })}
       aria-label={ariaLabel}
+      tono="neutral"
     />
   );
 }
