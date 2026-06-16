@@ -51,56 +51,45 @@ export function TarjetaMiembro({
         </span>
       </span>
 
-      {/* Insignias en columnas alineadas entre filas: las marcas (variables, borde
-          derecho fijo pegado a las columnas de rol) a la izquierda y luego
-          Coord./Turnos/Admin en huecos fijos —misma posición en todas las filas,
-          hueco vacío si la persona no tiene esa insignia—. El bloque se centra en
-          vertical contra el nombre+cargo para no quedar pegado arriba. */}
-      <span className="flex shrink-0 items-center gap-1 self-center">
-        {marcas.length > 0 && (
-          <span className="flex max-w-[14rem] flex-wrap items-center justify-end gap-1">
-            {marcas.map((m) => {
-              const meta = metaZona(m);
-              // Tinte por equipo: color de marca en texto y borde, con un fondo
-              // suave (mismo patrón que las variantes ok/aviso/error del Badge).
-              return (
-                <Badge
-                  key={m}
-                  variant="outline"
-                  className="h-5 shrink-0 whitespace-nowrap px-1.5 text-[10px] font-medium"
-                  style={{
-                    color: meta.color,
-                    borderColor: hexAlpha(meta.color, 0.35),
-                    backgroundColor: hexAlpha(meta.color, 0.12),
-                  }}
-                >
-                  {meta.etiqueta}
-                </Badge>
-              );
-            })}
-          </span>
+      {/* Insignias empaquetadas una detrás de otra (sin columnas fijas): primero
+          las marcas y luego Coord./Turnos/Admin, todas pegadas con el mismo hueco
+          y alineadas a la derecha. Envuelven en varias líneas si no caben. El
+          bloque se centra en vertical contra el nombre+cargo. */}
+      <span className="flex max-w-[20rem] shrink-0 flex-wrap items-center justify-end gap-1 self-center">
+        {marcas.map((m) => {
+          const meta = metaZona(m);
+          // Tinte por equipo: color de marca en texto y borde, con un fondo
+          // suave (mismo patrón que las variantes ok/aviso/error del Badge).
+          return (
+            <Badge
+              key={m}
+              variant="outline"
+              className="h-5 shrink-0 whitespace-nowrap px-1.5 text-[10px] font-medium"
+              style={{
+                color: meta.color,
+                borderColor: hexAlpha(meta.color, 0.35),
+                backgroundColor: hexAlpha(meta.color, 0.12),
+              }}
+            >
+              {meta.etiqueta}
+            </Badge>
+          );
+        })}
+        {usuario.puede_coordinar && (
+          <Badge variant="secondary" className="h-5 shrink-0 px-1.5 text-[10px] font-normal">
+            Coord.
+          </Badge>
         )}
-        <span className="flex w-14 justify-center">
-          {usuario.puede_coordinar && (
-            <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-normal">
-              Coord.
-            </Badge>
-          )}
-        </span>
-        <span className="flex w-14 justify-center">
-          {usuario.cobertura && (
-            <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-normal">
-              Turnos
-            </Badge>
-          )}
-        </span>
-        <span className="flex w-14 justify-center">
-          {usuario.rol === "admin" && (
-            <Badge variant="default" className="h-5 px-1.5 text-[10px] font-medium">
-              Admin
-            </Badge>
-          )}
-        </span>
+        {usuario.cobertura && (
+          <Badge variant="secondary" className="h-5 shrink-0 px-1.5 text-[10px] font-normal">
+            Turnos
+          </Badge>
+        )}
+        {usuario.rol === "admin" && (
+          <Badge variant="default" className="h-5 shrink-0 px-1.5 text-[10px] font-medium">
+            Admin
+          </Badge>
+        )}
       </span>
     </button>
   );
