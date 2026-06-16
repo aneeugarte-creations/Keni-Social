@@ -197,6 +197,22 @@ describe("Organigrama · administración", () => {
     });
   });
 
+  it("edita el nombre de cuenta desde el panel (PATCH usuario)", async () => {
+    const capturas: Captura[] = [];
+    stubFetch({ capturas });
+    renderUsuarios();
+
+    const dialogo = await abrirPanel(/editar a ana lópez/i);
+    const campo = within(dialogo).getByLabelText("Usuario (inicio de sesión)");
+    fireEvent.change(campo, { target: { value: "ana2" } });
+    fireEvent.blur(campo);
+
+    await waitFor(() => {
+      const patch = capturas.find((c) => c.url.includes("/api/usuarios/u1") && c.metodo === "PATCH");
+      expect(patch?.body).toMatchObject({ usuario: "ana2" });
+    });
+  });
+
   it("edita una marca desde el panel (PATCH marcas)", async () => {
     const capturas: Captura[] = [];
     stubFetch({ capturas });

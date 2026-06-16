@@ -390,6 +390,27 @@ def cambiar_rol(usuario_id: str, rol: str) -> bool:
         con.close()
 
 
+def cambiar_usuario(usuario_id: str, nuevo_usuario: str) -> bool | None:
+    """Cambia el NOMBRE DE CUENTA (login) de un usuario. NO aplica guardas (lo hace la API).
+
+    Tri-estado: `True` si existia y se renombro; `False` si el id no existe; `None` si el
+    nuevo nombre YA esta en uso por otra cuenta (columna `usuario` UNIQUE -> IntegrityError).
+    Las sesiones se referencian por `usuario_id` (no por el login), asi que renombrar NO
+    invalida la sesion activa de esa persona; solo cambia con que nombre inicia sesion.
+    """
+    con = db.conectar()
+    try:
+        cur = con.execute(
+            "UPDATE usuarios SET usuario = ? WHERE id = ?", (nuevo_usuario, usuario_id)
+        )
+        con.commit()
+        return cur.rowcount > 0
+    except motor_db.IntegrityError:
+        return None  # nombre de cuenta ya en uso (UNIQUE; neutro SQLite/Postgres)
+    finally:
+        con.close()
+
+
 def establecer_password(
     usuario_id: str, password: str, *, debe_cambiar_password: bool = False
 ) -> bool:

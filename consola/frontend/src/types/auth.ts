@@ -251,6 +251,8 @@ export interface CuerpoCrearUsuario {
  * cambia). `marcas` reemplaza el conjunto entero (lista vacía = desasignar todas).
  */
 export interface CuerpoActualizarUsuario {
+  /** Nombre de cuenta (login); no vacío. 409 si otra cuenta ya lo usa. */
+  usuario?: string;
   rol?: RolUsuario;
   password?: string;
   /** Cargo del catálogo (`CARGOS_USUARIO`); "" desclasifica. */

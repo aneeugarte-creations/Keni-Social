@@ -607,6 +607,42 @@ def test_patch_cambia_rol(entorno):
     assert auth.contar_admins() == 2
 
 
+def test_patch_cambia_nombre_de_cuenta(entorno):
+    """El admin renombra el login; la cuenta inicia sesion con el nombre nuevo (mismo id)."""
+    _crear("jefa", CLAVE, "admin")
+    ed = _crear("ed", CLAVE, "editor")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    r = c.patch(f"/api/usuarios/{ed['id']}", json={"usuario": "edu"}, headers=_ORIGIN)
+    assert r.status_code == 200 and r.json()["usuario"] == "edu"
+    # El nombre viejo ya no autentica; el nuevo si, y conserva el id.
+    assert auth.autenticar("ed", CLAVE) is None
+    nuevo = auth.autenticar("edu", CLAVE)
+    assert nuevo is not None and nuevo["id"] == ed["id"]
+
+
+def test_patch_nombre_de_cuenta_duplicado_da_409(entorno):
+    """Renombrar al login de OTRA cuenta existente choca con el UNIQUE -> 409."""
+    _crear("jefa", CLAVE, "admin")
+    _crear("otra", CLAVE, "editor")
+    ed = _crear("ed", CLAVE, "editor")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    r = c.patch(f"/api/usuarios/{ed['id']}", json={"usuario": "otra"}, headers=_ORIGIN)
+    assert r.status_code == 409
+    # No se cambio: "ed" sigue autenticando.
+    assert auth.autenticar("ed", CLAVE) is not None
+
+
+def test_patch_nombre_de_cuenta_vacio_da_400(entorno):
+    _crear("jefa", CLAVE, "admin")
+    ed = _crear("ed", CLAVE, "editor")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    r = c.patch(f"/api/usuarios/{ed['id']}", json={"usuario": "   "}, headers=_ORIGIN)
+    assert r.status_code == 400
+
+
 def test_patch_resetea_password_y_fuerza_cambio(entorno):
     _crear("jefa", CLAVE, "admin")
     ed = _crear("ed", CLAVE, "editor")

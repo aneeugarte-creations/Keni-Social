@@ -208,9 +208,12 @@ async def crear(request: Request) -> Response:
 
 
 async def actualizar(request: Request) -> Response:
-    """PATCH /api/usuarios/{id}: cambia rol/contrasena/cargo/cobertura/puede_coordinar/marcas.
+    """PATCH /api/usuarios/{id}: cambia usuario/rol/contrasena/cargo/cobertura/puede_coordinar/marcas.
 
     Cuerpo (todo opcional, manda solo lo que cambia):
+      - `usuario`          nombre de cuenta (login): texto no vacio, <= LONGITUD_MAX_USUARIO;
+                           409 si otra cuenta ya lo usa. Renombrar NO invalida la sesion activa
+                           (las sesiones se atan al id, no al login).
       - `rol`              admin|editor (allowlist `ROLES_USUARIO`).
       - `password`         contrasena nueva (reset por admin; obliga al cambio al proximo login).
       - `cargo`            allowlist `CARGOS_USUARIO`; "" para desclasificar.
@@ -221,6 +224,7 @@ async def actualizar(request: Request) -> Response:
 
     Guardas:
       - No degradar al ULTIMO admin a editor (dejaria 0 admins).
+      - Nombre de cuenta vacio/largo -> 400; duplicado -> 409.
       - Cargos invalidos -> 400 con la allowlist.
       - Marcas invalidas -> 400 con la lista canonica.
     """
@@ -232,6 +236,7 @@ async def actualizar(request: Request) -> Response:
         return JSONResponse({"error": "El usuario no existe."}, status_code=404)
 
     datos = await leer_json(request)
+    nuevo_usuario = datos.get("usuario")
     nuevo_rol = datos.get("rol")
     nueva_password = datos.get("password")
     nuevo_cargo = datos.get("cargo")
@@ -245,7 +250,8 @@ async def actualizar(request: Request) -> Response:
     # contrasena para cuando alguien pierde sus dispositivos. Mismo guard admin que el PATCH.
     reset_mfa = datos.get("mfa_reset")
     if (
-        nuevo_rol is None
+        nuevo_usuario is None
+        and nuevo_rol is None
         and nueva_password is None
         and nuevo_cargo is None
         and nueva_cobertura is None
@@ -258,12 +264,33 @@ async def actualizar(request: Request) -> Response:
         return JSONResponse(
             {
                 "error": (
-                    "Indica un campo a modificar (rol, contraseña, cargo, cobertura, "
+                    "Indica un campo a modificar (usuario, rol, contraseña, cargo, cobertura, "
                     "puede_coordinar, nombre, manager_id, marcas o mfa_reset)."
                 )
             },
             status_code=400,
         )
+
+    # Nombre de cuenta (login): texto no vacio y dentro del limite. La unicidad la decide la
+    # BD al aplicar (UNIQUE -> 409 mas abajo); aqui solo forma y longitud.
+    if nuevo_usuario is not None:
+        if not isinstance(nuevo_usuario, str):
+            return JSONResponse({"error": "El usuario debe ser texto."}, status_code=400)
+        nuevo_usuario = nuevo_usuario.strip()
+        if not nuevo_usuario:
+            return JSONResponse(
+                {"error": "El nombre de usuario no puede estar vacío."}, status_code=400
+            )
+        if len(nuevo_usuario) > auth.LONGITUD_MAX_USUARIO:
+            return JSONResponse(
+                {
+                    "error": (
+                        f"El nombre de usuario no puede superar "
+                        f"{auth.LONGITUD_MAX_USUARIO} caracteres."
+                    )
+                },
+                status_code=400,
+            )
 
     if reset_mfa is not None and not isinstance(reset_mfa, bool):
         return JSONResponse(
@@ -371,6 +398,12 @@ async def actualizar(request: Request) -> Response:
                 status_code=400,
             )
 
+    if nuevo_usuario is not None and nuevo_usuario != objetivo["usuario"]:
+        cambiado = auth.cambiar_usuario(usuario_id, nuevo_usuario)
+        if cambiado is None:
+            return JSONResponse(
+                {"error": "Ya existe un usuario con ese nombre."}, status_code=409
+            )
     if nuevo_rol is not None:
         auth.cambiar_rol(usuario_id, nuevo_rol)
     if nueva_password is not None:

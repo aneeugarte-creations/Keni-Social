@@ -83,6 +83,13 @@ export function DialogoMiembro({
     setNombre((usuario?.nombre ?? "").trim());
   }, [usuario]);
 
+  // Estado local del nombre de cuenta (login). Igual que el nombre, se guarda al salir del
+  // campo; si el backend rechaza (vacío/duplicado), revertimos al valor real.
+  const [login, setLogin] = React.useState("");
+  React.useEffect(() => {
+    setLogin(usuario?.usuario ?? "");
+  }, [usuario]);
+
   const guardar = useMutation({
     mutationFn: (cuerpo: Parameters<typeof api.actualizarUsuario>[1]) =>
       api.actualizarUsuario(usuario!.id, cuerpo),
@@ -91,6 +98,21 @@ export function DialogoMiembro({
       toast.success("Cambios guardados");
     },
     onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  // Cambio del login: mutación propia para poder REVERTIR el campo si falla (409 duplicado,
+  // 400 vacío). Reusar `guardar` no permitiría devolver el input a su valor anterior.
+  const guardarUsuario = useMutation({
+    mutationFn: (nuevoUsuario: string) =>
+      api.actualizarUsuario(usuario!.id, { usuario: nuevoUsuario }),
+    onSuccess: () => {
+      invalidar();
+      toast.success("Nombre de usuario actualizado");
+    },
+    onError: (e) => {
+      setLogin(usuario?.usuario ?? "");
+      toast.error(mensajeError(e));
+    },
   });
 
   const eliminar = useMutation({
@@ -139,6 +161,16 @@ export function DialogoMiembro({
     if (limpio !== (usuario.nombre ?? "").trim()) guardar.mutate({ nombre: limpio });
   };
 
+  const guardarLogin = () => {
+    const limpio = login.trim();
+    if (limpio === usuario.usuario) return;
+    if (!limpio) {
+      setLogin(usuario.usuario); // vacío no es válido: revertimos sin llamar al backend
+      return;
+    }
+    guardarUsuario.mutate(limpio);
+  };
+
   return (
     <Dialog open onOpenChange={(v) => (!v ? onCerrar() : undefined)}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
@@ -170,6 +202,27 @@ export function DialogoMiembro({
                 if (e.key === "Enter") (e.target as HTMLInputElement).blur();
               }}
             />
+          </div>
+
+          {/* Nombre de cuenta (login con el que inicia sesión) */}
+          <div className="space-y-1.5">
+            <Label htmlFor="m-usuario">Usuario (inicio de sesión)</Label>
+            <Input
+              id="m-usuario"
+              value={login}
+              maxLength={64}
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              onChange={(e) => setLogin(e.target.value)}
+              onBlur={guardarLogin}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+              }}
+            />
+            <p className="text-xs text-muted-foreground">
+              Con este nombre inicia sesión. Debe ser único; cambiarlo no cierra su sesión.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
