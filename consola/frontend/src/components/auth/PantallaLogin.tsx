@@ -1,4 +1,4 @@
-import { Eye, EyeOff, Fingerprint, KeyRound, Loader2, LogIn, ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, Fingerprint, KeyRound, Loader2, ShieldCheck } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -217,14 +217,19 @@ export function PantallaLogin() {
   }
 
   return (
-    <div className="flex min-h-dvh w-full items-center justify-center bg-background px-4">
-      <div className="w-full max-w-sm">
-        <h1 className="mb-10 pl-[0.18em] text-center text-6xl font-light tracking-[0.18em] text-foreground">
+    <div className="flex min-h-dvh w-full items-center justify-center bg-[#F3EFE9] px-6">
+      <div className="w-full max-w-xs">
+        <h1 className="mb-16 pl-[0.4em] text-center text-5xl font-light uppercase tracking-[0.4em] text-[#2B2722]">
           KENI
         </h1>
-        <form className="space-y-4" onSubmit={alEnviar} noValidate>
-          <div className="space-y-1.5">
-            <Label htmlFor="login-usuario">Usuario</Label>
+        <form className="space-y-8" onSubmit={alEnviar} noValidate>
+          <div className="space-y-2">
+            <Label
+              htmlFor="login-usuario"
+              className="text-[0.7rem] font-normal uppercase tracking-[0.22em] text-[#9A8F82]"
+            >
+              Usuario
+            </Label>
             <Input
               id="login-usuario"
               name="username"
@@ -233,20 +238,26 @@ export function PantallaLogin() {
               value={usuario}
               onChange={(e) => setUsuario(e.target.value)}
               disabled={enviando}
+              className="h-11 rounded-none border-x-0 border-t-0 border-b border-[#CFC7BA] bg-transparent px-0 text-[#2B2722] shadow-none transition-colors focus-visible:border-[#2B2722] focus-visible:ring-0"
             />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="login-password">Contraseña</Label>
+          <div className="space-y-2">
+            <Label
+              htmlFor="login-password"
+              className="text-[0.7rem] font-normal uppercase tracking-[0.22em] text-[#9A8F82]"
+            >
+              Contraseña
+            </Label>
             <div className="relative">
               <Input
                 id="login-password"
                 name="password"
                 type={verPassword ? "text" : "password"}
                 autoComplete="current-password"
-                className="pr-10"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={enviando}
+                className="h-11 rounded-none border-x-0 border-t-0 border-b border-[#CFC7BA] bg-transparent px-0 pr-9 text-[#2B2722] shadow-none transition-colors focus-visible:border-[#2B2722] focus-visible:ring-0"
               />
               <button
                 type="button"
@@ -255,7 +266,7 @@ export function PantallaLogin() {
                 disabled={enviando}
                 aria-pressed={verPassword}
                 aria-label={verPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-                className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-[#B3A99B] transition-colors hover:text-[#2B2722] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {verPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
@@ -263,18 +274,17 @@ export function PantallaLogin() {
           </div>
 
           {error && (
-            <p role="alert" className="text-sm text-destructive">
+            <p role="alert" className="text-sm text-[#9B4A39]">
               {error}
             </p>
           )}
 
-          <Button type="submit" className="w-full" disabled={!puedeEnviar}>
-            {enviando ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <LogIn className="h-4 w-4" />
-            )}
-            Entrar
+          <Button
+            type="submit"
+            disabled={!puedeEnviar}
+            className="mt-2 h-12 w-full rounded-none bg-[#2B2722] text-xs uppercase tracking-[0.28em] text-[#F3EFE9] shadow-none transition-colors hover:bg-[#15110D]"
+          >
+            {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : "Entrar"}
           </Button>
         </form>
       </div>
