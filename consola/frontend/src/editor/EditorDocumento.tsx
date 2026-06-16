@@ -142,6 +142,7 @@ export function EditorDocumento({
   accionesInicio,
   accionesFin,
   menuExtra,
+  onFotoMuestra,
 }: {
   store: StoreEditor;
   marca: string;
@@ -167,6 +168,10 @@ export function EditorDocumento({
   accionesFin?: ReactNode;
   // Entradas extra para el menú «Más» (terciarias de la página, p. ej. «Guardar como…»).
   menuExtra?: ReactNode;
+  // Si la pestaña edita una PLANTILLA: el fotón de «Vista con muestra» además PERSISTE la foto que
+  // se sube/pega como `foto_muestra` de esa plantilla (se hornea en la galería). `""` la limpia.
+  // Ausente (pieza / lienzo suelto) => el fotón es solo presentación local, como siempre.
+  onFotoMuestra?: (src: string) => void;
 }) {
   const fuentesExtra = useFuentesMarca(marca);
   // Stage de Konva + escala actual (publicados por el Lienzo) para muestrear píxeles (legibilidad).
@@ -438,6 +443,7 @@ export function EditorDocumento({
           setVerFoto={setMuestraFoto}
           verCopy={muestraCopy}
           setVerCopy={setMuestraCopy}
+          onFotoMuestra={onFotoMuestra}
         />
       </div>
       {/* ADAPTAR A OTRO FORMATO — el «Redimensionar» de Canva: control propio y VISIBLE (icono de

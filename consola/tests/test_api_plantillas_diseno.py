@@ -280,3 +280,59 @@ def test_reordenar_ignora_ids_inexistentes(cliente):
 def test_reordenar_cuerpo_invalido_400(cliente):
     assert cliente.post("/api/plantillas-diseno/reordenar", json={"ids": "no-es-lista"}).status_code == 400
     assert cliente.post("/api/plantillas-diseno/reordenar", json={"ids": [1, 2]}).status_code == 400
+
+
+# --------------------------------------------------------------------------- #
+# Tests de campo `foto_muestra` (foto representativa horneada en la galería)    #
+# --------------------------------------------------------------------------- #
+
+def test_foto_muestra_default_vacia(cliente):
+    """Sin enviar `foto_muestra`, la plantilla nace sin muestra (huecos grises en la galería)."""
+    p = cliente.post("/api/plantillas-diseno", json={"marca": "unotv", "documento": _DOC}).json()["plantilla"]
+    assert p["foto_muestra"] == ""
+    assert p["foto_muestra_url"] == ""
+
+
+def test_foto_muestra_round_trip_y_url(cliente):
+    """Se crea con `foto_muestra`, persiste y expone `foto_muestra_url`. (El objeto no existe en el
+    almacén de test, así que `promover_objeto` lo deja igual: basta para verificar el round-trip.)"""
+    p = cliente.post("/api/plantillas-diseno", json={
+        "marca": "unotv", "documento": _DOC, "foto_muestra": "muestra.jpg",
+    }).json()["plantilla"]
+    assert p["foto_muestra"] == "muestra.jpg"
+    assert p["foto_muestra_url"] == "/api/media/muestra.jpg"
+    p2 = cliente.get(f"/api/plantillas-diseno/{p['id']}").json()["plantilla"]
+    assert p2["foto_muestra"] == "muestra.jpg"
+
+
+def test_patch_foto_muestra_set_y_limpia(cliente):
+    """PATCH fija la muestra y `""` la limpia (vuelve a huecos grises)."""
+    pid = cliente.post("/api/plantillas-diseno", json={"marca": "unotv", "documento": _DOC}).json()["plantilla"]["id"]
+    r = cliente.patch(f"/api/plantillas-diseno/{pid}", json={"foto_muestra": "otra.png"})
+    assert r.status_code == 200
+    assert r.json()["plantilla"]["foto_muestra"] == "otra.png"
+    assert r.json()["plantilla"]["foto_muestra_url"] == "/api/media/otra.png"
+
+    r2 = cliente.patch(f"/api/plantillas-diseno/{pid}", json={"foto_muestra": ""})
+    assert r2.status_code == 200
+    assert r2.json()["plantilla"]["foto_muestra"] == ""
+    assert r2.json()["plantilla"]["foto_muestra_url"] == ""
+
+
+def test_hornear_muestra_solo_rellena_huecos_vacios():
+    """`_hornear_muestra` pone la muestra en los huecos `es_foto` VACÍOS y no toca el resto."""
+    from keni_consola.api.plantillas_diseno import _hornear_muestra
+
+    doc = {"capas": [
+        {"tipo": "imagen", "es_foto": True, "objeto": ""},        # hueco vacío -> recibe muestra
+        {"tipo": "imagen", "es_foto": True, "objeto": "ya.jpg"},  # hueco ocupado -> intacto
+        {"tipo": "imagen", "es_foto": False, "objeto": ""},       # imagen normal (no hueco) -> intacto
+        {"tipo": "texto"},                                        # otra capa -> intacta
+    ]}
+    out = _hornear_muestra(doc, "muestra.jpg")
+    assert out["capas"][0]["objeto"] == "muestra.jpg"
+    assert out["capas"][1]["objeto"] == "ya.jpg"
+    assert out["capas"][2]["objeto"] == ""
+    assert out["capas"][3] == {"tipo": "texto"}
+    # Sin objeto de muestra, el documento se devuelve tal cual (sin copia).
+    assert _hornear_muestra(doc, "") is doc

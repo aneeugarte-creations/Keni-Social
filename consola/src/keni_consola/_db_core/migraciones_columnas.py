@@ -177,6 +177,14 @@ def _migrar_columnas_plantillas_diseno(con: Any) -> None:
         con.execute(
             "ALTER TABLE plantillas_diseno ADD COLUMN IF NOT EXISTS orden INTEGER NOT NULL DEFAULT 0"
         )
+    # `foto_muestra`: objeto de media de una foto representativa por plantilla, que se hornea en los
+    # huecos `es_foto` vacíos al generar la miniatura/preview (galería «tal cual quedaría»). Las
+    # existentes reciben "" (sin muestra → huecos grises, comportamiento previo) hasta que el equipo
+    # le asigna una desde la galería o el editor.
+    if "foto_muestra" not in cols:
+        con.execute(
+            "ALTER TABLE plantillas_diseno ADD COLUMN IF NOT EXISTS foto_muestra TEXT NOT NULL DEFAULT ''"
+        )
     # `categoria` pasa de DEFAULT 'post' a 'general' (el fallback del catálogo de categorías).
     # Solo cambia el DEFAULT (metadato): las filas existentes NO se reescriben (el legado "post"
     # se trata como "general" en API y frontend). Idempotente.

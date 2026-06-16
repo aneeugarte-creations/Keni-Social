@@ -340,6 +340,12 @@ export interface PlantillaDiseno {
   documento: unknown;
   miniatura: string;
   miniatura_url: string;
+  /** Objeto de media de una foto representativa de ESTA plantilla (o ""): se hornea en los huecos
+   * `es_foto` vacíos al generar la miniatura/preview para que la GALERÍA se vea «tal cual quedaría».
+   * NO entra al documento editable (el editor arranca limpio; la muestra solo aparece al pulsar el
+   * fotón). Independiente por plantilla; configurable desde la galería y el editor. */
+  foto_muestra: string;
+  foto_muestra_url: string;
   lineas: string[];
   activo: boolean;
   /** Entra en la ROTACIÓN automática de la marca (cada post nuevo se lleva la siguiente del grupo). */

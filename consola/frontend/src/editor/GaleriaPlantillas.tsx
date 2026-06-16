@@ -10,7 +10,7 @@
 //  - `ContenidoPlantillas` a página completa: estado vacío del editor (pages/Imagen) con
 //    `agruparPorMarca` (vista «Todas») y tarjeta «Lienzo en blanco» al final (`onLienzoBlanco`).
 
-import { Copy, Image, Plus, Repeat, Trash2, Video, X } from "lucide-react";
+import { Copy, Image, ImagePlus, Plus, Repeat, Trash2, Video, X } from "lucide-react";
 import { Fragment, useRef, useState } from "react";
 
 import {
@@ -89,6 +89,13 @@ interface PropsContenido {
   /** Si se omite, el badge de categoría es solo informativo (modo SELECTOR). */
   onCategorizar?: (p: PlantillaDiseno, categoria: string) => void;
   /**
+   * Si se pasa (modo GESTIÓN), cada tarjeta ofrece «Foto de muestra…»: asignar una foto
+   * representativa a ESA plantilla que se hornea en su miniatura/preview, para que la galería se vea
+   * «tal cual quedaría». No entra al documento editable. Es la PUERTA de galería al mismo
+   * `foto_muestra` que el fotón del editor.
+   */
+  onFotoMuestra?: (p: PlantillaDiseno) => void;
+  /**
    * Si se pasa (modo GESTIÓN), las tarjetas se pueden REORDENAR arrastrándolas dentro de su sección
    * (misma marca + categoría), en una rejilla uniforme. Recibe la lista COMPLETA de ids en el nuevo
    * orden (el llamante la persiste). Se desactiva mientras hay una búsqueda activa (subconjunto
@@ -119,6 +126,7 @@ export function ContenidoPlantillas({
   onRenombrar,
   onRotar,
   onCategorizar,
+  onFotoMuestra,
   onReordenar,
   maxColumnas,
   tipoFijo,
@@ -214,10 +222,18 @@ export function ContenidoPlantillas({
   // Tarjeta de plantilla: miniatura con la relación de aspecto REAL del documento (la caja
   // reserva el alto exacto antes de cargar la imagen: placeholder sin layout shift y altura
   // variable del masonry) + título/acciones debajo. Hover: elevación + scale sutil (~150ms).
-  // Acciones secundarias (Duplicar, Borrar) viven en el menú contextual, accesible por click
-  // derecho, long-press, Shift+F10 o teclado (FilaConAcciones).
+  // Acciones secundarias (Foto de muestra…, Duplicar, Borrar) viven en el kebab «⋮» (visible al
+  // hover en modo gestión) y en el menú contextual, accesible por click derecho, long-press,
+  // Shift+F10 o teclado (FilaConAcciones).
   const tarjeta = (p: PlantillaDiseno) => {
     const accionesMenuContextual: EntradaMenuContextual[] = [];
+    if (onFotoMuestra) {
+      accionesMenuContextual.push({
+        etiqueta: p.foto_muestra ? "Cambiar foto de muestra…" : "Foto de muestra…",
+        icono: ImagePlus,
+        onClick: () => onFotoMuestra(p),
+      });
+    }
     if (onDuplicar) {
       accionesMenuContextual.push({
         etiqueta: "Duplicar",
@@ -277,7 +293,9 @@ export function ContenidoPlantillas({
       >
         <FilaConAcciones
           como="div"
-          kebab="nunca"
+          // Kebab «⋮» visible al hover (modo gestión): «Foto de muestra…», Duplicar, Borrar. En
+          // modo SELECTOR no hay acciones, así que no aparece. Touch: long-press abre el mismo menú.
+          kebab="hover"
           realce
           onPrimaria={() => onCargar(p)}
           acciones={accionesMenuContextual}

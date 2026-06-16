@@ -53,6 +53,8 @@ const FOTO: PlantillaDiseno = {
   documento: {},
   miniatura: "",
   miniatura_url: "",
+  foto_muestra: "",
+  foto_muestra_url: "",
   lineas: [],
   activo: true,
   rotar: false,
@@ -488,5 +490,33 @@ describe("ContenidoPlantillas — agrupación por marca y «Lienzo en blanco»",
   it("sin onReordenar (modo selector) las tarjetas no son arrastrables", () => {
     const { container } = render(<ContenidoPlantillas plantillas={[FOTO]} onCargar={vi.fn()} />);
     expect(container.querySelector(`[data-plantilla-id="${FOTO.id}"]`)).not.toHaveAttribute("draggable");
+  });
+});
+
+// ── Foto de muestra (puerta de galería) ──────────────────────────────────────────────────────────
+// En modo GESTIÓN la tarjeta lleva varias acciones (Foto de muestra…, Duplicar, Borrar) en el
+// kebab «⋮» (aria-label «Más acciones»); en modo SELECTOR no hay acciones, así que no aparece.
+describe("ContenidoPlantillas — foto de muestra", () => {
+  const gestion = { onDuplicar: vi.fn(), onBorrar: vi.fn() };
+
+  it("ofrece «Foto de muestra…» en el kebab de la tarjeta y lo invoca con la plantilla", async () => {
+    const onFotoMuestra = vi.fn();
+    render(<ContenidoPlantillas plantillas={[FOTO]} onCargar={vi.fn()} onFotoMuestra={onFotoMuestra} {...gestion} />);
+    fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /^Foto de muestra/ }));
+    expect(onFotoMuestra).toHaveBeenCalledWith(FOTO);
+  });
+
+  it("con foto_muestra ya asignada la entrada dice «Cambiar foto de muestra…»", async () => {
+    const conMuestra: PlantillaDiseno = { ...FOTO, foto_muestra: "plantillas/m.jpg", foto_muestra_url: "/api/media/plantillas/m.jpg" };
+    render(<ContenidoPlantillas plantillas={[conMuestra]} onCargar={vi.fn()} onFotoMuestra={vi.fn()} {...gestion} />);
+    fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
+    expect(await screen.findByRole("menuitem", { name: /Cambiar foto de muestra/ })).toBeInTheDocument();
+  });
+
+  it("en modo selector (sin acciones de gestión) no hay kebab ni «foto de muestra»", () => {
+    render(<ContenidoPlantillas plantillas={[FOTO]} onCargar={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Más acciones" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: /foto de muestra/i })).toBeNull();
   });
 });

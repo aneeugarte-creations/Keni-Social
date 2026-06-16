@@ -10,7 +10,7 @@ el frontend (`lib/categoriasPlantilla.ts`); el legado "post" se trata como "gene
   - `GET    /api/plantillas-diseno`        lista (filtros `?marca=&categoria=&tipo=&linea=&q=`).
   - `POST   /api/plantillas-diseno`        crea una plantilla a partir de un documento (validado).
   - `GET    /api/plantillas-diseno/{id}`   una plantilla (con su documento listo para cargar).
-  - `PATCH  /api/plantillas-diseno/{id}`   edita nombre/categoria/tipo/documento/lineas/miniatura/activo/rotar.
+  - `PATCH  /api/plantillas-diseno/{id}`   edita nombre/categoria/tipo/documento/lineas/miniatura/foto_muestra/activo/rotar.
   - `DELETE /api/plantillas-diseno/{id}`   borra.
 
 SEGURIDAD: `marca` (si llega) del catálogo único; el `documento` se valida en el dominio
@@ -68,6 +68,14 @@ def _normalizar_lineas(valor: object) -> list[str]:
     return vistas
 
 
+def _promover_foto_muestra(valor: object) -> str:
+    """Normaliza el objeto de `foto_muestra` (foto representativa de la plantilla, horneada en la
+    galería): vacío => "" (sin muestra), si hay objeto lo promueve a `plantillas/` (asset REUSABLE,
+    no efímero en `fotos/`). Idempotente vía `promover_objeto`."""
+    objeto = valor.strip() if isinstance(valor, str) else ""
+    return almacen_media.promover_objeto(objeto, "plantillas") if objeto else ""
+
+
 def _plantilla_a_dict(item: dict) -> dict:
     """Serializa una plantilla: documento/lineas como objeto/lista, url de miniatura y marca_nombre."""
     try:
@@ -81,11 +89,13 @@ def _plantilla_a_dict(item: dict) -> dict:
     if not isinstance(lineas, list):
         lineas = []
     miniatura = item.get("miniatura") or ""
+    foto_muestra = item.get("foto_muestra") or ""
     return {
         **item,
         "documento": doc,
         "lineas": [x for x in lineas if isinstance(x, str)],
         "miniatura_url": f"/api/media/{miniatura}" if miniatura else "",
+        "foto_muestra_url": f"/api/media/{foto_muestra}" if foto_muestra else "",
         "marca_nombre": marcas.etiqueta_de(item["marca"]) if item.get("marca") else "",
     }
 
@@ -164,6 +174,7 @@ async def crear(request: Request) -> Response:
     if miniatura:
         # La miniatura es un asset REUSABLE de la plantilla: a la carpeta `plantillas/`.
         miniatura = almacen_media.promover_objeto(miniatura, "plantillas")
+    foto_muestra = _promover_foto_muestra(datos.get("foto_muestra"))
     lineas = _normalizar_lineas(datos.get("lineas"))
 
     plantilla = repos.crear_plantilla_diseno(
@@ -173,6 +184,7 @@ async def crear(request: Request) -> Response:
         tipo=tipo,
         documento=json.dumps(doc_ok, ensure_ascii=False),
         miniatura=miniatura,
+        foto_muestra=foto_muestra,
         lineas=json.dumps(lineas, ensure_ascii=False),
         rotar=bool(datos.get("rotar")),
         autor=autor_de_peticion(request),
@@ -224,6 +236,9 @@ async def actualizar(request: Request) -> Response:
         campos["tipo"] = tipo_raw if tipo_raw in _TIPOS_VALIDOS else "foto"
     if "miniatura" in datos:
         campos["miniatura"] = (datos.get("miniatura") or "").strip()
+    if "foto_muestra" in datos:
+        # "" limpia la muestra (huecos grises de nuevo); cualquier objeto se promueve a `plantillas/`.
+        campos["foto_muestra"] = _promover_foto_muestra(datos.get("foto_muestra"))
     if "lineas" in datos:
         campos["lineas"] = json.dumps(_normalizar_lineas(datos.get("lineas")), ensure_ascii=False)
     if "activo" in datos:
@@ -258,25 +273,53 @@ async def borrar(request: Request) -> Response:
     return JSONResponse({"mensaje": "Plantilla borrada."})
 
 
+def _hornear_muestra(doc: dict, objeto: str) -> dict:
+    """Copia del documento con el `objeto` de la foto de muestra puesto en cada HUECO de foto
+    (`es_foto`) VACÍO de nivel superior, para que la miniatura/preview de la galería se vea «tal cual
+    quedaría». Espejo server-side del horneado client-side `conFotoEnHuecosVacios`. No persiste."""
+    if not objeto:
+        return doc
+    capas = doc.get("capas")
+    if not isinstance(capas, list):
+        return doc
+    return {
+        **doc,
+        "capas": [
+            {**c, "objeto": objeto}
+            if (
+                isinstance(c, dict)
+                and c.get("tipo") == "imagen"
+                and c.get("es_foto")
+                and not str(c.get("objeto") or "").strip()
+            )
+            else c
+            for c in capas
+        ],
+    }
+
+
 async def preview(request: Request) -> Response:
     """GET /api/plantillas-diseno/{id}/preview: MINIATURA on-demand del diseño (sin persistir).
 
-    Renderiza el DOCUMENTO de la plantilla (sus huecos vacíos + un titular de ejemplo) a PNG. Es el
-    RESPALDO de la galería cuando la plantilla no tiene `miniatura` guardada —p. ej. las creadas por
-    API/agente, que no pasan por el guardado del estudio (es ahí donde se genera la miniatura)—. Así
-    se ven todas sin tener que abrir+editar cada una. ETag por hash del documento; cacheable (304 sin
+    Renderiza el DOCUMENTO de la plantilla (con su `foto_muestra` horneada en los huecos vacíos + un
+    titular de ejemplo) a PNG. Es el RESPALDO de la galería cuando la plantilla no tiene `miniatura`
+    guardada —p. ej. las creadas por API/agente, que no pasan por el guardado del estudio (es ahí
+    donde se genera la miniatura)—. Así se ven todas sin tener que abrir+editar cada una. ETag por
+    hash del documento + `foto_muestra` (cambiar la muestra invalida la caché); cacheable (304 sin
     recomponer si no cambió). 404 si no existe; 422 si el render falla.
     """
     item = repos.obtener_plantilla_diseno(request.path_params["plantilla_id"])
     if item is None:
         return JSONResponse({"error": "Esa plantilla no existe."}, status_code=404)
     documento = item.get("documento") or "{}"
-    etag = '"' + hashlib.sha256(str(documento).encode("utf-8")).hexdigest()[:32] + '"'
+    foto_muestra = item.get("foto_muestra") or ""
+    etag = '"' + hashlib.sha256(f"{documento}|{foto_muestra}".encode()).hexdigest()[:32] + '"'
     cache = "private, max-age=300"
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers={"ETag": etag, "Cache-Control": cache})
     try:
         doc = json.loads(documento) if isinstance(documento, str) else documento
+        doc = _hornear_muestra(doc, foto_muestra)
         datos = estudio_imagen.renderizar_documento_bytes(
             doc, bindings={"copy_in": "TITULAR", "etiqueta_default": ""}
         )

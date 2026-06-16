@@ -823,6 +823,10 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # línea editorial.
     # `miniatura` es el objeto de media (uuid+ext) de una previa, o "". A diferencia de
     # `plantillas_marca` (1 plantilla por defecto por marca), aquí hay MUCHAS.
+    # `foto_muestra` es el objeto de media de una foto REPRESENTATIVA por plantilla (o ""): se hornea
+    # en los huecos `es_foto` vacíos al generar la miniatura/preview, para que la GALERÍA se vea «tal
+    # cual quedaría». NO entra al documento editable: el editor arranca con el hueco vacío (la muestra
+    # solo aparece al pulsar el fotón). Independiente por plantilla; configurable desde galería y editor.
     # `tipo` ("foto" | "miniatura") es un eje ORTOGONAL a `categoria`: foto = plantilla para
     # fotos/imagenes; miniatura = portada/thumbnail de video. Las BDs existentes reciben el
     # DEFAULT "foto" via `_migrar_columnas_plantillas_diseno`.
@@ -835,6 +839,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         tipo         TEXT NOT NULL DEFAULT 'foto',
         documento    TEXT NOT NULL DEFAULT '{}',
         miniatura    TEXT NOT NULL DEFAULT '',
+        foto_muestra TEXT NOT NULL DEFAULT '',
         lineas       TEXT NOT NULL DEFAULT '[]',
         activo       INTEGER NOT NULL DEFAULT 1,
         rotar        INTEGER NOT NULL DEFAULT 0,

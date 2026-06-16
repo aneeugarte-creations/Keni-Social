@@ -23,12 +23,15 @@ export const apiPlantillasDiseno = {
     tipo?: "foto" | "miniatura";
     documento: unknown;
     miniatura?: string;
+    /** Objeto de media de la foto de muestra de la plantilla (horneada en la galería). */
+    foto_muestra?: string;
     lineas?: string[];
   }) => peticion<{ plantilla: PlantillaDiseno }>("/plantillas-diseno", { metodo: "POST", json: cuerpo }),
   // Actualiza una plantilla existente (PATCH): «Guardar» sobre la plantilla ya creada.
+  // `foto_muestra: ""` limpia la muestra (la galería vuelve a huecos grises).
   actualizarPlantillaDiseno: (
     id: string,
-    cuerpo: { nombre?: string; categoria?: string; tipo?: "foto" | "miniatura"; documento?: unknown; miniatura?: string; lineas?: string[]; activo?: boolean; rotar?: boolean },
+    cuerpo: { nombre?: string; categoria?: string; tipo?: "foto" | "miniatura"; documento?: unknown; miniatura?: string; foto_muestra?: string; lineas?: string[]; activo?: boolean; rotar?: boolean },
   ) => peticion<{ plantilla: PlantillaDiseno }>(`/plantillas-diseno/${encodeURIComponent(id)}`, { metodo: "PATCH", json: cuerpo }),
   borrarPlantillaDiseno: (id: string) =>
     peticion<{ mensaje: string }>(`/plantillas-diseno/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
