@@ -11,18 +11,9 @@ export function Leyenda({ zonas }: { zonas: Set<string> }) {
       <span className="inline-flex items-center gap-1.5">
         <Network className="h-3.5 w-3.5" /> Áreas:
       </span>
-      {ids.map((z) => {
-        const meta = metaZona(z);
-        return (
-          <span key={z} className="inline-flex items-center gap-1.5">
-            <span
-              className="inline-block h-2.5 w-2.5 rounded-full"
-              style={{ backgroundColor: meta.color }}
-            />
-            {meta.etiqueta}
-          </span>
-        );
-      })}
+      {ids.map((z) => (
+        <span key={z}>{metaZona(z).etiqueta}</span>
+      ))}
     </div>
   );
 }

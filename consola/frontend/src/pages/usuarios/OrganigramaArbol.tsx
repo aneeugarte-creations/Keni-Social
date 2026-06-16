@@ -18,8 +18,6 @@ import { TarjetaMiembro } from "./TarjetaMiembro";
 
 interface Fila {
   usuario: UsuarioAdmin;
-  /** Zona (marca) heredada de su cabeza de área, para el acento de color. */
-  zona: string;
   /** Tiene personas a su cargo → marca de coordinación/dirección. */
   tieneReportes: boolean;
 }
@@ -27,7 +25,7 @@ interface Fila {
 /**
  * Organigrama como lista plana: cada persona en su propia línea con nombre, cargo y marcas.
  * El orden replica la lógica del árbol (Dirección → cada área por marca → cabeza y sus
- * reportes en profundidad) para que cada zona quede contigua, pero sin indentación. Al hacer
+ * reportes en profundidad) para que cada área quede contigua, pero sin indentación. Al hacer
  * clic en una persona se abre el panel de edición. Quien tiene reportes lleva un icono.
  */
 export function OrganigramaArbol({
@@ -47,14 +45,14 @@ export function OrganigramaArbol({
   const filas = React.useMemo<Fila[]>(() => {
     const out: Fila[] = [];
     const tiene = (u: UsuarioAdmin) => (hijos.get(u.id)?.length ?? 0) > 0;
-    const visitar = (u: UsuarioAdmin, zona: string) => {
-      out.push({ usuario: u, zona, tieneReportes: tiene(u) });
-      for (const h of hijos.get(u.id) ?? []) visitar(h, zona);
+    const visitar = (u: UsuarioAdmin) => {
+      out.push({ usuario: u, tieneReportes: tiene(u) });
+      for (const h of hijos.get(u.id) ?? []) visitar(h);
     };
     for (const raiz of cima) {
-      out.push({ usuario: raiz, zona: ZONA_DIRECCION, tieneReportes: tiene(raiz) });
-      for (const { zona, cabezas } of zonasOrdenadas(hijos.get(raiz.id) ?? [])) {
-        for (const cabeza of cabezas) visitar(cabeza, zona);
+      out.push({ usuario: raiz, tieneReportes: tiene(raiz) });
+      for (const { cabezas } of zonasOrdenadas(hijos.get(raiz.id) ?? [])) {
+        for (const cabeza of cabezas) visitar(cabeza);
       }
     }
     return out;
@@ -78,11 +76,10 @@ export function OrganigramaArbol({
       <Leyenda zonas={zonasPresentes} />
 
       <ul className="flex flex-col gap-1.5">
-        {filas.map(({ usuario, zona, tieneReportes }) => (
+        {filas.map(({ usuario, tieneReportes }) => (
           <li key={usuario.id}>
             <TarjetaMiembro
               usuario={usuario}
-              zona={zona}
               tieneReportes={tieneReportes}
               esYoMismo={usuario.id === idActual}
               onAbrir={setSeleccionado}
