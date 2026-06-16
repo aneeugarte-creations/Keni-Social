@@ -35,18 +35,4 @@ Valores de enum válidos: tipo_cobertura ∈ {transmision, imagenes, no_cubrir};
 - Respeta las franjas del documento (nombre y horario); no las reduzcas ni renombres.
 - Emite TODO lo que refleje el documento; no inventes eventos ni turnos que no estén.
 
-## Salida
-
-Responde con UN ÚNICO bloque de código cercado ```json con esta forma EXACTA, y NADA de texto antes ni después:
-
-```json
-{{ESQUEMA_JSON}}
-```
-
-Si NO encuentras ningún evento ni turno con fecha, devuelve:
-
-```json
-{"operaciones": []}
-```
-
-Pero basta UN evento: si hay aunque sea uno con fecha, EMÍTELO (no exijas que la fuente sea una parrilla completa).{{COLA_FUENTE}}
+{{COLA_FUENTE}}

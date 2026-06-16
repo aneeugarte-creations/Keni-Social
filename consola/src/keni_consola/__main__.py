@@ -129,6 +129,9 @@ def main() -> int:
         rd = libtexto.migrar_redactar_v1()
         if rd:
             print("Texto: redactar re-sembrado (simplificado + contrato) y publicado.")
+        pa = libtexto.migrar_parrilla_v1()
+        if pa:
+            print("Texto: parrilla re-sembrada (contrato de salida a codigo) y publicada.")
         # Linea base en git: cada doc inicializado con HEAD (snapshot estable para los pipelines).
         b = libtexto.asegurar_linea_base()
         if b:

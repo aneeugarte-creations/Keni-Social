@@ -255,6 +255,19 @@ _ESQUEMA_JSON = (
     ']}'
 )
 
+# CONTRATO DE SALIDA (lo que lee el parser): se INYECTA en la composición (no vive en el cuerpo
+# editable, para que el equipo no pueda romper la forma del JSON). Va JUSTO ANTES del documento
+# embebido (`cola_fuente`), que debe quedar al final del prompt. `prompts_contratos.contrato_de`
+# lo expone para que el editor lo pinte read-only. Fuente única: usa `_ESQUEMA_JSON`.
+_CONTRATO_SALIDA = (
+    "## Salida\n\n"
+    "Responde con UN ÚNICO bloque de código cercado ```json con esta forma EXACTA, y NADA de "
+    "texto antes ni después:\n\n```json\n" + _ESQUEMA_JSON + "\n```\n\n"
+    'Si NO encuentras ningún evento ni turno con fecha, devuelve:\n\n```json\n{"operaciones": []}\n```\n\n'
+    "Pero basta UN evento: si hay aunque sea uno con fecha, EMÍTELO (no exijas que la fuente sea "
+    "una parrilla completa)."
+)
+
 
 # La plantilla del prompt vive en la Biblioteca de Texto como prompt EDITABLE (pestaña
 # «Prompts»). Los fragmentos calculados (fuente/reglas según el modo, roster, slots, esquema y la
@@ -473,8 +486,10 @@ def componer_prompt(
         .replace("{{MIEMBROS}}", lineas_miembros)
         .replace("{{SLOTS}}", lineas_slots)
         .replace("{{REGLA_FUENTE}}", regla_fuente)
-        .replace("{{ESQUEMA_JSON}}", _ESQUEMA_JSON)
-        .replace("{{COLA_FUENTE}}", cola_fuente)
+        # El contrato de salida (forma del JSON) se inyecta desde código JUSTO ANTES del documento
+        # embebido: no vive en el cuerpo editable (el equipo no puede romperlo) y el documento queda
+        # al final del prompt, como exige `cola_fuente`.
+        .replace("{{COLA_FUENTE}}", _CONTRATO_SALIDA + cola_fuente)
     )
 
 

@@ -29,6 +29,7 @@ __all__ = [
     "asegurar_linea_base",
     "migrar_nombres_biblioteca", "limpiar_prompts_obsoletos", "migrar_descripciones_editorial",
     "reformatear_prompts", "publicar_linea_base", "migrar_contrato_salida", "migrar_redactar_v1",
+    "migrar_parrilla_v1",
 ]
 
 _PROMPTS_OBSOLETOS_BIBLIOTECA: tuple[str, ...] = (
@@ -150,6 +151,7 @@ _REFORMATO_PROMPTS_V1: tuple[tuple[str, str], ...] = (
 _SENTINELA_REFORMATO = ".reformato-prompts-v1"
 _SENTINELA_CONTRATO = ".contrato-salida-v1"
 _SENTINELA_REDACTAR = ".redactar-contrato-v1"
+_SENTINELA_PARRILLA = ".parrilla-contrato-v1"
 
 
 def dir_inicial() -> Path:
@@ -569,6 +571,41 @@ def migrar_redactar_v1() -> int:
             if sha:
                 db.crear_texto_publicacion(
                     doc_id="prompt/redactar", sha=sha, autor="", nota="redactar simplificado + contrato"
+                )
+        except Exception:  # noqa: BLE001 -- best-effort: no debe abortar la inicialización
+            pass
+    sentinela.parent.mkdir(parents=True, exist_ok=True)
+    escribir_atomico(sentinela, "ok\n")
+    return n
+
+
+def migrar_parrilla_v1() -> int:
+    """Re-siembra `importar/parrilla` (sin la sección «## Salida» editable) en el store y la publica.
+
+    El contrato de salida de parrilla (el esquema de operaciones) pasa a INYECTARSE desde código
+    (`dominio.parrilla_import_job`) justo antes del documento, para que el equipo no pueda romperlo
+    desde la Biblioteca; el editor lo muestra read-only. Esto pone el cuerpo del store al día desde la
+    inicial nueva y lo publica. ONE-SHOT por sentinela. Best-effort. Devuelve 1 si lo migró, 0 si no.
+    """
+    from .. import db
+    from ._versiones import fijar_version
+
+    destino_raiz = raiz()
+    sentinela = destino_raiz / _SENTINELA_PARRILLA
+    if sentinela.exists():
+        return 0
+    n = 0
+    ruta = destino_raiz / "prompt" / "importar" / "parrilla.md"
+    ruta_inicial = dir_inicial() / "prompt" / "importar" / "parrilla.md"
+    if ruta.is_file() and ruta_inicial.is_file():
+        try:
+            escribir_atomico(ruta, ruta_inicial.read_text(encoding="utf-8"))
+            n = 1
+            sha = fijar_version("prompt/importar/parrilla", nota="parrilla: contrato de salida a código")
+            if sha:
+                db.crear_texto_publicacion(
+                    doc_id="prompt/importar/parrilla", sha=sha, autor="",
+                    nota="parrilla: contrato de salida a código",
                 )
         except Exception:  # noqa: BLE001 -- best-effort: no debe abortar la inicialización
             pass

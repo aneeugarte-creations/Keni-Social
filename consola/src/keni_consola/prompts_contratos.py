@@ -44,7 +44,17 @@ CONTRATO_POR_PROMPT: dict[str, str] = {
 
 
 def contrato_de(prompt_id: str) -> str | None:
-    """Contrato de salida de `prompt_id`, o `None` si el prompt no es estructurado."""
+    """Contrato de salida de `prompt_id`, o `None` si el prompt no es estructurado.
+
+    `prompt/importar/parrilla` es un caso especial: su contrato lo INYECTA su módulo de dominio
+    (el documento a parsear debe quedar al final del prompt, así que el esquema no puede ir por el
+    placeholder común); aquí se expone SOLO para que el editor lo pinte read-only. Import diferido
+    para no cargar el dominio salvo que se pida (y evitar ciclos).
+    """
+    if prompt_id == "prompt/importar/parrilla":
+        from .dominio.parrilla_import_job import _CONTRATO_SALIDA
+
+        return _CONTRATO_SALIDA
     return CONTRATO_POR_PROMPT.get(prompt_id)
 
 

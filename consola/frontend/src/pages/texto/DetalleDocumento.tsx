@@ -39,7 +39,12 @@ import { ApiError, api, mensajeError } from "@/lib/api";
 import type { DocumentoTexto, RespuestaMaquinaTexto } from "@/types";
 
 import { claveEstrategiaBase } from "./estrategia/api";
-import { componerCuerpoTexto, quitarContratoSalida, separarFrontmatter } from "./lib";
+import {
+  componerCuerpoTexto,
+  PLACEHOLDER_CONTRATO,
+  quitarContratoSalida,
+  separarFrontmatter,
+} from "./lib";
 
 /** Clave de persistencia del estado abierto/colapsado del panel lateral. */
 const CLAVE_PANEL = "keni.biblioteca.panel-abierto";
@@ -74,6 +79,10 @@ export function DetalleDocumento({
   // cambiar de documento o cuando se pide explícitamente (restaurar versión).
   const [borrador, setBorrador] = React.useState<DocumentoTexto | null>(null);
   const [frontmatterOculto, setFrontmatterOculto] = React.useState("");
+  // `true` si el cuerpo cargado llevaba el placeholder `{{CONTRATO_SALIDA}}` (prompts cuyo
+  // contrato se inyecta por placeholder). Decide si se readjunta al guardar: parrilla tiene
+  // `contrato_salida` (para el bloque read-only) pero NO usa el placeholder, así que NO se readjunta.
+  const [contratoInline, setContratoInline] = React.useState(false);
   const sincronizado = React.useRef<string | null>(null);
   // ── Concurrencia optimista: `rev` (ETag) que cargamos / último confirmado. Se echa en cada
   // autosave; si otro editor guardó debajo el backend devuelve 409 y mostramos un aviso. Va en
@@ -99,6 +108,7 @@ export function DetalleDocumento({
       sincronizado.current = null;
       setBorrador(null);
       setFrontmatterOculto("");
+      setContratoInline(false);
       revRef.current = null;
       conflictoRef.current = false;
       setConflicto(false);
@@ -114,6 +124,7 @@ export function DetalleDocumento({
     // editor y se pinta read-only aparte. Se readjunta al guardar (`construirPayload`).
     setBorrador({ ...doc, cuerpo: quitarContratoSalida(visible) });
     setFrontmatterOculto(oculto);
+    setContratoInline(visible.includes(PLACEHOLDER_CONTRATO));
     revRef.current = doc.rev ?? null;
     conflictoRef.current = false;
     setConflicto(false);
@@ -188,7 +199,7 @@ export function DetalleDocumento({
       cuerpo: {
         titulo: b.titulo,
         descripcion: b.descripcion ?? "",
-        cuerpo: componerCuerpoTexto(frontmatterOculto, b.cuerpo, !!b.contrato_salida),
+        cuerpo: componerCuerpoTexto(frontmatterOculto, b.cuerpo, contratoInline),
         carpeta: b.carpeta,
         clase: b.clase,
         marcas: b.marcas,
@@ -474,7 +485,7 @@ export function DetalleDocumento({
                   cuerpoBorrador={componerCuerpoTexto(
                     frontmatterOculto,
                     borrador.cuerpo,
-                    !!borrador.contrato_salida,
+                    contratoInline,
                   )}
                   esAdmin={esAdmin}
                   onPublicar={() => setPublicarAbierto(true)}
@@ -542,7 +553,7 @@ export function DetalleDocumento({
         onCerrar={() => setPublicarAbierto(false)}
         esAdmin={esAdmin}
         antes={produccion ? antesQuery.data?.documento.cuerpo ?? "" : ""}
-        despues={componerCuerpoTexto(frontmatterOculto, borrador.cuerpo, !!borrador.contrato_salida)}
+        despues={componerCuerpoTexto(frontmatterOculto, borrador.cuerpo, contratoInline)}
         onHecho={() => {
           qc.invalidateQueries({ queryKey: ["texto-doc", docId] });
           qc.invalidateQueries({ queryKey: ["texto-maquina"] });

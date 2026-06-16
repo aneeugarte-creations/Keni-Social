@@ -13,6 +13,7 @@ def _silenciar_migraciones(monkeypatch):
         "migrar_descripciones_editorial",
         "migrar_contrato_salida",
         "migrar_redactar_v1",
+        "migrar_parrilla_v1",
         "asegurar_linea_base",
     ):
         monkeypatch.setattr(libtexto, nombre, lambda: 0)

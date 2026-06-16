@@ -36,8 +36,15 @@ def test_resolver_contrato_rellena_y_es_noop_sin_placeholder():
 
 
 def test_contrato_de_none_para_no_estructurados():
-    for pid in ("prompt/ilustrar", "prompt/hashtags", "prompt/importar/parrilla", "prompt/asistente/resumir"):
+    for pid in ("prompt/ilustrar", "prompt/hashtags", "prompt/asistente/resumir", "prompt/asistente/variantes"):
         assert contrato_de(pid) is None, pid
+
+
+def test_parrilla_tiene_contrato_inyectado_desde_codigo():
+    # parrilla es caso especial: su contrato lo expone `contrato_de` (para el bloque read-only) pero
+    # se inyecta desde su módulo (no por placeholder); debe traer el esquema de operaciones.
+    c = contrato_de("prompt/importar/parrilla")
+    assert c and '"operaciones"' in c and "crear_evento" in c
 
 
 @pytest.mark.parametrize("prompt_id", list(CONTRATO_POR_PROMPT))
