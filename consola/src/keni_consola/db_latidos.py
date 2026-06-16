@@ -51,25 +51,33 @@ def latido_barrido(
     tick_seg: float,
     duracion_ms: int = 0,
     error_txt: str = "",
+    resumen: str = "",
 ) -> None:
-    """Registra el RESULTADO de un barrido ejecutado (ok o error) + contadores."""
+    """Registra el RESULTADO de un barrido ejecutado (ok o error) + contadores.
+
+    `resumen` (texto corto de qué hizo / nº items) se guarda como `ultimo_resumen` para que
+    el panel distinga "corre y TRABAJA" de "corre EN VACIO" sin abrir el historial. En un
+    barrido con error se conserva el resumen previo (no se pisa con '').
+    """
     ahora = ahora_iso()
     err = (error_txt or "")[:_MAX_ERROR_TXT]
+    res = (resumen or "")[:_MAX_RESUMEN]
     con = _conectar()
     try:
         if ok:
             con.execute(
                 "INSERT INTO daemon_latidos (daemon, visto, activo, intervalo_seg, tick_seg, "
-                "ultimo_barrido, ultimo_ok, duracion_ms, barridos) "
-                "VALUES (?, ?, 1, ?, ?, ?, ?, ?, 1) "
+                "ultimo_barrido, ultimo_ok, duracion_ms, barridos, ultimo_resumen) "
+                "VALUES (?, ?, 1, ?, ?, ?, ?, ?, 1, ?) "
                 "ON CONFLICT (daemon) DO UPDATE SET "
                 "visto = EXCLUDED.visto, activo = 1, "
                 "intervalo_seg = EXCLUDED.intervalo_seg, tick_seg = EXCLUDED.tick_seg, "
                 "ultimo_barrido = EXCLUDED.ultimo_barrido, ultimo_ok = EXCLUDED.ultimo_ok, "
                 "duracion_ms = EXCLUDED.duracion_ms, "
+                "ultimo_resumen = EXCLUDED.ultimo_resumen, "
                 "barridos = daemon_latidos.barridos + 1",
                 (daemon, ahora, float(intervalo_seg), float(tick_seg), ahora, ahora,
-                 int(duracion_ms)),
+                 int(duracion_ms), res),
             )
         else:
             con.execute(
@@ -170,7 +178,7 @@ def listar_latidos() -> list[dict[str, Any]]:
         filas = con.execute(
             "SELECT daemon, visto, activo, intervalo_seg, tick_seg, ultimo_barrido, "
             "ultimo_ok, ultimo_error, error_txt, duracion_ms, barridos, errores, "
-            "barrido_solicitado "
+            "barrido_solicitado, ultimo_resumen "
             "FROM daemon_latidos ORDER BY daemon"
         ).fetchall()
     finally:
@@ -192,6 +200,9 @@ def listar_latidos() -> list[dict[str, Any]]:
             # ISO de la solicitud de barrido forzado pendiente, o '' (el panel puede pintar
             # "barrido solicitado" hasta que el daemon la consuma en su siguiente tick).
             "barrido_solicitado": f["barrido_solicitado"],
+            # Resumen del último barrido (qué hizo / nº items), o '' si no aportó: el panel lo
+            # muestra para ver de un vistazo si el daemon TRABAJA o corre EN VACIO.
+            "ultimo_resumen": f["ultimo_resumen"],
         }
         for f in filas
     ]

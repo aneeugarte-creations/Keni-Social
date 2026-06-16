@@ -895,6 +895,10 @@ _COLUMNAS_DAEMON_LATIDOS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # Lo escribe POST /api/sistema/daemons/{d}/barrer; lo consume `bucle_gateado` en su
     # siguiente tick (ejecuta el sweep YA y lo limpia con un UPDATE atomico).
     ("barrido_solicitado", "TEXT NOT NULL DEFAULT ''"),
+    # RESUMEN del ultimo barrido (texto corto: que hizo / nº items, o '' si no aporto
+    # resumen): el panel lo muestra para distinguir "corre y TRABAJA" de "corre EN VACIO".
+    # El historial por barrido vive en `daemon_barridos`; esto es el acumulado del ultimo.
+    ("ultimo_resumen", "TEXT NOT NULL DEFAULT ''"),
 )
 
 

@@ -74,6 +74,25 @@ def test_error_txt_truncado(entorno):
     assert len(fila["error_txt"]) == 500
 
 
+def test_latido_barrido_persiste_ultimo_resumen(entorno):
+    # `ultimo_resumen` guarda QUÉ HIZO el último barrido (distinguir trabajó vs vacío). Un
+    # barrido OK lo actualiza; uno con error NO lo pisa (conserva el último resumen útil).
+    db.latido_barrido(
+        "demo", ok=True, intervalo_seg=60.0, tick_seg=60.0, resumen="ingirió 42 artículos"
+    )
+    (fila,) = [f for f in db.listar_latidos() if f["daemon"] == "demo"]
+    assert fila["ultimo_resumen"] == "ingirió 42 artículos"
+    db.latido_barrido("demo", ok=False, intervalo_seg=60.0, tick_seg=60.0, error_txt="boom")
+    (fila,) = [f for f in db.listar_latidos() if f["daemon"] == "demo"]
+    assert fila["ultimo_resumen"] == "ingirió 42 artículos"  # el error no borra el resumen
+
+
+def test_resumen_truncado(entorno):
+    db.latido_barrido("demo", ok=True, intervalo_seg=1.0, tick_seg=1.0, resumen="x" * 5000)
+    (fila,) = [f for f in db.listar_latidos() if f["daemon"] == "demo"]
+    assert len(fila["ultimo_resumen"]) == 300
+
+
 # --------------------------------------------------------------------------- #
 # Fachada latidos: best-effort SIN BD + throttle + fichero                     #
 # --------------------------------------------------------------------------- #
@@ -525,6 +544,16 @@ def test_endpoint_daemons_expone_etiqueta_y_prompts(entorno):
     ]
     assert por_nombre["ingesta"]["etiqueta"] == "Recolección de noticias"
     assert por_nombre["ingesta"]["prompts"] == []
+    # `descripcion` (para qué sirve) y `ultimo_resumen` (qué hizo el último barrido) salen en el
+    # contrato para que el panel no muestre solo el nombre crudo ni oculte si trabajó o fue vacío.
+    assert "noticias" in por_nombre["ingesta"]["descripcion"].lower()
+    assert por_nombre["produccion"]["ultimo_resumen"] == ""  # barrido sin resumen aportado
+
+
+def test_descripcion_de_explica_para_que_sirve():
+    # Cada daemon clasificado tiene una frase de "para qué sirve"; uno sin describir cae a "".
+    assert latidos.descripcion_de("ingesta")
+    assert latidos.descripcion_de("daemon_nuevo") == ""
 
 
 # --------------------------------------------------------------------------- #

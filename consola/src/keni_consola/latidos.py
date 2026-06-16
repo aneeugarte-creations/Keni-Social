@@ -249,6 +249,34 @@ def etiqueta_de(daemon: str) -> str:
     return ETIQUETA.get(daemon) or (daemon[:1].upper() + daemon[1:])
 
 
+# DESCRIPCION de UNA LINEA de qué hace cada daemon y cuándo: lo que el panel Sistema muestra
+# bajo la etiqueta para que un humano sepa PARA QUÉ SIRVE sin leer el código. Fuente única
+# (igual que ETIQUETA/clasificación), keyed por el nombre CANÓNICO (tras `_ALIAS`). Un daemon
+# no mapeado cae a '' (ver `descripcion_de`): el panel no queda mudo (ya tiene etiqueta), solo
+# sin la frase explicativa. Al añadir un daemon, descríbelo aquí.
+DESCRIPCION = {
+    "investigacion": "Verifica las historias del pool (fuentes, con IA) antes de admitirlas a producción.",
+    "produccion": "Genera borradores con IA: redacta el copy e ilustra el arte de cada pieza.",
+    "ingesta": "Recolecta noticias de feeds RSS y agencias al pool, las agrupa y traduce.",
+    "trends": "Trae tendencias de Google Trends como fuente para el pool de noticias.",
+    "algoritmos": "Refresca los feeds de algoritmo de cada plataforma.",
+    "noticias_gc": "Purga el pool de noticias por antigüedad y baja relevancia.",
+    "programador": "Publica la parrilla programada (dry-run salvo que KENI_PUBLICAR_REAL esté ON).",
+    "vencimientos": "Escanea eventos y dispara producción por caducidad o recordatorio.",
+    "metricas": "Refresca las métricas por cuenta desde Metricool.",
+    "metricas_piezas": "Refresca las métricas por pieza publicada desde Metricool.",
+    "alertas_rendimiento": "Detecta caídas de rendimiento de las piezas y emite alertas.",
+    "media_gc": "Borra de S3 la media sin dueño (no referenciada por ninguna pieza).",
+    "patrones": "Deriva los patrones editoriales de cada marca desde Metricool (sin IA).",
+    "limpiador": "Repara la cola: reencola o cancela generaciones colgadas.",
+}
+
+
+def descripcion_de(daemon: str) -> str:
+    """Frase de una línea de qué hace el daemon para el panel; '' si no está descrito."""
+    return DESCRIPCION.get(daemon, "")
+
+
 # PROMPTS de la Biblioteca que gobiernan cada agente IA (clase=ia): lo que el panel ofrece editar
 # in-place (cada uno abre su doc en el editor). Cada entrada es {etiqueta, doc}, con `doc` = id del
 # documento en la Biblioteca. SOLO los daemons IA tienen prompt (el resto no corre `claude -p`).
@@ -462,6 +490,7 @@ def barrido(
             tick_seg=tick_seg,
             duracion_ms=duracion_ms,
             error_txt=error,
+            resumen=resumen,
         )
         _ultimo_ciclo[daemon] = time.monotonic()
     except Exception as e:  # noqa: BLE001 -- un latido jamás rompe un barrido

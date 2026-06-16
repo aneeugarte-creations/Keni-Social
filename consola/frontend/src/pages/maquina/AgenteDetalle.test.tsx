@@ -36,6 +36,8 @@ function latido(parcial: Partial<LatidoDaemon>): LatidoDaemon {
     motor: "investigacion",
     gasta_tokens: true,
     etiqueta: "Investigación",
+    descripcion: "Verifica las historias del pool antes de admitirlas a producción.",
+    ultimo_resumen: "verificó 3 historias",
     prompts: [{ etiqueta: "Verificar", doc: "prompt/verificar" }],
     clave_gate: "KENI_INVESTIGACION",
     gate_activo: true,

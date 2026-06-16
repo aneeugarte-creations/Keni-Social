@@ -150,6 +150,10 @@ def sonda_daemons() -> dict:
                 # NO hardcodear el nombre ni el mapeo de prompts en el front. Fuente única en
                 # `latidos`.
                 "etiqueta": latidos.etiqueta_de(f["daemon"]),
+                # `descripcion`: frase de una línea de PARA QUÉ SIRVE el daemon (fuente única
+                # en `latidos`), para que el panel no muestre solo el nombre crudo. El
+                # `ultimo_resumen` (qué hizo el último barrido) ya entra por `**f`.
+                "descripcion": latidos.descripcion_de(f["daemon"]),
                 "prompts": latidos.prompts_de(f["daemon"]),
                 # `clave_gate`: la clave de ajuste (KENI_*) que enciende/apaga el daemon
                 # desde su fila (toggle in-place; el front la pasa a POST /api/ajustes).

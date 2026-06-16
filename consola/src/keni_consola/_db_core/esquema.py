@@ -1442,7 +1442,8 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         duracion_ms    INTEGER NOT NULL DEFAULT 0,
         barridos       INTEGER NOT NULL DEFAULT 0,
         errores        INTEGER NOT NULL DEFAULT 0,
-        barrido_solicitado TEXT NOT NULL DEFAULT ''
+        barrido_solicitado TEXT NOT NULL DEFAULT '',
+        ultimo_resumen TEXT NOT NULL DEFAULT ''
     )
     """,
     # HISTORIAL por barrido (observabilidad): `daemon_latidos` solo guarda el RESUMEN acumulado

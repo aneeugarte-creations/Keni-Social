@@ -565,6 +565,12 @@ export interface LatidoDaemon {
   /** Nombre humano del daemon para el panel (cae al nombre crudo capitalizado si no está mapeado).
    *  Lo da el backend (`latidos.etiqueta_de`); el front ya no hardcodea el mapeo. */
   etiqueta: string;
+  /** Frase de una línea de PARA QUÉ SIRVE el daemon (`latidos.descripcion_de`); "" si no está
+   *  descrito. El panel la muestra bajo la etiqueta para no enseñar solo el nombre crudo. */
+  descripcion: string;
+  /** Resumen del último barrido (qué hizo / nº items) o "" si no aportó: distingue de un vistazo
+   *  "corre y TRABAJA" de "corre EN VACIO". Lo da el backend (`daemon_latidos.ultimo_resumen`). */
+  ultimo_resumen: string;
   /** Prompts de la Biblioteca que gobiernan este agente IA (lo que el panel ofrece editar
    *  in-place); `[]` si no es IA. Lo da el backend (`latidos.prompts_de`). */
   prompts: PromptDaemon[];

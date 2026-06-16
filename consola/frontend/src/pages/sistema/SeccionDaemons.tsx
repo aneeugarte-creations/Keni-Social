@@ -116,7 +116,15 @@ function FilaDaemon({
       onPrimaria={() => navigate(`/maquina/agentes/${latido.daemon}`)}
       etiquetaAcciones={`Acciones de ${latido.daemon}`}
     >
-      <TableCell className="font-medium">{latido.daemon}</TableCell>
+      <TableCell>
+        {/* Nombre HUMANO (etiqueta) + para qué SIRVE (descripción) + nombre crudo en mono:
+            así el panel no muestra solo "ingesta"/"media_gc" sin contexto. */}
+        <div className="font-medium">{latido.etiqueta}</div>
+        {latido.descripcion && (
+          <div className="text-xs text-muted-foreground">{latido.descripcion}</div>
+        )}
+        <div className="font-mono text-[10px] text-muted-foreground/60">{latido.daemon}</div>
+      </TableCell>
       <TableCell>
         <span className="inline-flex flex-wrap items-center gap-1.5">
           <ChipEstadoDaemon estado={latido.estado} />
@@ -133,9 +141,23 @@ function FilaDaemon({
         </span>
       </TableCell>
       <TableCell className="text-muted-foreground">
-        {barrido}
-        {latido.ultimo_barrido && latido.duracion_ms > 0 && (
-          <span className="text-muted-foreground/70"> · {latido.duracion_ms} ms</span>
+        <div>
+          {barrido}
+          {latido.ultimo_barrido && latido.duracion_ms > 0 && (
+            <span className="text-muted-foreground/70"> · {latido.duracion_ms} ms</span>
+          )}
+        </div>
+        {/* Qué HIZO el último barrido (`ultimo_resumen`): distingue "corre y TRABAJA" de
+            "corre EN VACIO". Si el barrido corrió pero no aportó resumen, lo decimos. */}
+        {latido.ultimo_barrido && (
+          <div
+            className="max-w-[34ch] truncate text-xs"
+            title={latido.ultimo_resumen || undefined}
+          >
+            {latido.ultimo_resumen || (
+              <span className="italic text-muted-foreground/60">sin resumen</span>
+            )}
+          </div>
         )}
       </TableCell>
       <TableCell className="text-muted-foreground">
