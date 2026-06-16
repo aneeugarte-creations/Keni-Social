@@ -239,8 +239,8 @@ function CopyConLeerMas({ contenido }: { contenido: string }) {
  * Carrusel DESLIZABLE de la variante limpia (piezas `formato='carrusel'`): la PORTADA
  * (imagen compuesta) + los slides en crudo, en un strip horizontal con scroll-snap —se
  * desliza con el dedo/trackpad como en las redes de verdad— más flechas (escritorio),
- * contador "n/N" y puntos de posición. Solo la PORTADA abre el editor (los slides en
- * crudo no: un video necesita sus propios controles).
+ * contador "n/N" y puntos de posición. La PORTADA y los slides de IMAGEN abren el editor
+ * al hacer clic; los slides de VIDEO no (el clic controla su reproducción).
  */
 function CarruselLimpio({
   portada,
@@ -327,33 +327,67 @@ function CarruselLimpio({
             </span>
           )}
         </div>
-        {/* Slides EN CRUDO, en su orden de publicación. Los videos llevan sus controles. */}
-        {slides.map((s, i) => (
-          <div
-            key={`${s.objeto}-${i}`}
-            className="relative h-full w-full shrink-0 snap-center bg-black"
-            aria-label={`Slide ${i + 2} de ${total}`}
-          >
-            {s.tipo === "video" ? (
-              <video
-                src={urlMedia(s.objeto)}
-                controls
-                playsInline
-                preload="metadata"
-                className="h-full w-full object-contain"
-                onClick={(e) => e.stopPropagation()}
-              />
-            ) : (
-              <img
-                src={urlMedia(s.objeto)}
-                alt={`Slide ${i + 2}`}
-                loading="lazy"
-                decoding="async"
-                className="h-full w-full object-cover"
-              />
-            )}
-          </div>
-        ))}
+        {/* Slides EN CRUDO, en su orden de publicación. Las IMÁGENES abren el editor al
+            hacer clic (igual que la portada); los VIDEOS no: ahí el clic controla la
+            reproducción (llevan sus propios controles). */}
+        {slides.map((s, i) => {
+          const clicable = !!onAbrir && s.tipo !== "video";
+          return (
+            <div
+              key={`${s.objeto}-${i}`}
+              className={cn(
+                "relative h-full w-full shrink-0 snap-center bg-black",
+                clicable &&
+                  "group cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+              )}
+              role={clicable ? "button" : undefined}
+              tabIndex={clicable ? 0 : undefined}
+              title={clicable ? etiquetaAbrir : undefined}
+              aria-label={
+                clicable ? `${etiquetaAbrir} (slide ${i + 2} de ${total})` : `Slide ${i + 2} de ${total}`
+              }
+              onClick={clicable ? onAbrir : undefined}
+              onKeyDown={
+                clicable
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onAbrir!();
+                      }
+                    }
+                  : undefined
+              }
+            >
+              {s.tipo === "video" ? (
+                <video
+                  src={urlMedia(s.objeto)}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  className="h-full w-full object-contain"
+                  onClick={(e) => e.stopPropagation()}
+                />
+              ) : (
+                <img
+                  src={urlMedia(s.objeto)}
+                  alt={`Slide ${i + 2}`}
+                  loading="lazy"
+                  decoding="async"
+                  className="h-full w-full object-cover"
+                />
+              )}
+              {clicable && (
+                <span
+                  className="pointer-events-none absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-md bg-background/85 px-2 py-1 text-xs font-medium text-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
+                  aria-hidden="true"
+                >
+                  <Pencil className="h-3 w-3" />
+                  Editar
+                </span>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* Contador "n/N" (arriba a la derecha, como IG). */}

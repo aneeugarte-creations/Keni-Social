@@ -77,13 +77,14 @@ describe("VistaPreviaRed · copy con 'leer más' (feed limpio)", () => {
 /**
  * Carrusel DESLIZABLE de la variante limpia (piezas `formato='carrusel'`): con slides
  * (`carrusel` JSON), la tarjeta pinta el strip portada+slides con contador "n/N", los
- * slides en crudo (img/video) y SOLO la portada abre el editor.
+ * slides en crudo (img/video): la portada y los slides de IMAGEN abren el editor; los
+ * slides de VIDEO no (el clic controla su reproducción).
  */
 describe("VistaPreviaRed · carrusel deslizable (feed limpio)", () => {
   const SLIDES =
     '[{"tipo":"imagen","objeto":"s2.jpg"},{"tipo":"video","objeto":"videos/s3.mp4"}]';
 
-  it("pinta portada + slides con contador y solo la portada abre el editor", () => {
+  it("pinta portada + slides con contador; portada e imagen abren el editor, el video no", () => {
     const onAbrir = vi.fn();
     const { container } = render(
       <VistaPreviaRed
@@ -106,11 +107,23 @@ describe("VistaPreviaRed · carrusel deslizable (feed limpio)", () => {
       container.querySelector('img[src="/api/media/s2.jpg"]'),
     ).toBeInTheDocument();
     expect(container.querySelector("video")).not.toBeNull();
-    // SOLO la portada es interactiva (abre el editor).
+    // La portada abre el editor.
     fireEvent.click(
       screen.getByRole("button", { name: "Abrir para editar: Nota de presidencia" }),
     );
     expect(onAbrir).toHaveBeenCalledTimes(1);
+    // El slide de IMAGEN (no portada) también abre el editor al hacer clic.
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Abrir para editar: Nota de presidencia (slide 2 de 3)",
+      }),
+    );
+    expect(onAbrir).toHaveBeenCalledTimes(2);
+    // El slide de VIDEO no es interactivo (no abre el editor): solo hay 2 botones de
+    // apertura (portada + imagen), no uno por el video.
+    expect(
+      screen.getAllByRole("button", { name: /Abrir para editar/ }),
+    ).toHaveLength(2);
   });
 
   it("sin slides (carrusel vacío o ilegible) cae a la imagen única de siempre", () => {
