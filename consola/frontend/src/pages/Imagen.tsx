@@ -34,6 +34,7 @@ import { Input } from "@/components/ui/input";
 import { EditorDocumento } from "@/editor/EditorDocumento";
 import { ContenidoPlantillas } from "@/editor/GaleriaPlantillas";
 import { DialogoFotoMuestra } from "@/editor/DialogoFotoMuestra";
+import { dataUrlAArchivo } from "@/editor/dataUrl";
 import { conFotoEnHuecosVacios, documentoVacio, type Documento } from "@/editor/documento";
 import { crearStoreEditor, type StoreEditor } from "@/editor/store";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
@@ -574,12 +575,12 @@ export default function Imagen() {
   const [muestraDe, setMuestraDe] = useState<PlantillaDiseno | null>(null);
 
   // Sube la foto elegida (dataURL subida o URL pegada) al almacén y devuelve su objeto; "" la limpia.
+  // La foto subida llega como dataURL: se decodifica a File SIN `fetch` (la CSP `connect-src 'self'`
+  // bloquea `fetch('data:…')` → "Failed to fetch"). La URL externa la descarga el back (`mediaDesdeUrl`).
   const subirMuestra = async (src: string): Promise<string> => {
     if (!src) return "";
     if (src.startsWith("data:")) {
-      const blob = await (await fetch(src)).blob();
-      const archivo = new File([blob], "muestra", { type: blob.type || "image/png" });
-      return (await api.subirMedia(archivo, "plantillas")).id;
+      return (await api.subirMedia(dataUrlAArchivo(src, "muestra"), "plantillas")).id;
     }
     return (await api.mediaDesdeUrl(src)).id;
   };

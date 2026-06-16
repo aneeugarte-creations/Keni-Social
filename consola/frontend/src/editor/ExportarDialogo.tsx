@@ -25,6 +25,7 @@ import { api, mensajeError, urlMedia } from "@/lib/api";
 import { cabecerasAuth } from "@/lib/api/_core";
 import type { OpcionesExport } from "@/lib/api/imagen";
 
+import { dataUrlABlob } from "./dataUrl";
 import { type CapaTexto, conFotoEnHuecosVacios, conTextosHorneados, type Documento, tieneHuecoFotoVacio } from "./documento";
 import { copyMuestra, getFotoMuestraSrc, getObjetoMuestraExport, setObjetoMuestraExport } from "./muestra";
 import type { StoreEditor } from "./store";
@@ -62,19 +63,6 @@ async function descargarArchivo(url: string, nombreArchivo: string): Promise<voi
   a.click();
   a.remove();
   URL.revokeObjectURL(objUrl);
-}
-
-/** dataURL (`data:image/png;base64,…`) -> Blob, sin `fetch` (robusto y testeable). */
-function dataUrlABlob(dataUrl: string): Blob {
-  const coma = dataUrl.indexOf(",");
-  const cabecera = dataUrl.slice(5, coma); // tras "data:"
-  const datos = dataUrl.slice(coma + 1);
-  const mime = cabecera.split(";")[0] || "image/png";
-  const esBase64 = /;base64/i.test(cabecera);
-  const binario = esBase64 ? atob(datos) : decodeURIComponent(datos);
-  const bytes = new Uint8Array(binario.length);
-  for (let i = 0; i < binario.length; i++) bytes[i] = binario.charCodeAt(i);
-  return new Blob([bytes], { type: mime });
 }
 
 /**
