@@ -172,6 +172,39 @@ def test_checks_normalizan_valores_invalidos_preexistentes(pg):
         con.close()
 
 
+def test_check_normaliza_aunque_el_check_viejo_prohiba_el_default(pg):
+    """Regresion (colapso 2026-06): el CHECK heredado prohibia 'borrador' (el valor NUEVO de
+    normalizacion de plataforma). La migracion debe DROPear el CHECK viejo ANTES de normalizar;
+    si no, el UPDATE que escribe 'borrador' falla con CheckViolation sobre el constraint viejo
+    (lo que tumbaba el deploy en hosted)."""
+    from keni_consola._db_core.migraciones_integridad import _migrar_checks_dominio
+
+    c = db.crear_contenido(titulo="t")
+    p = db.crear_contenido_plataforma(contenido_id=c["id"], red="x")  # nace 'borrador' (valido hoy)
+    con = _cruda()
+    try:
+        # Reproduce el estado HEREDADO en hosted: el CHECK con la allowlist VIEJA (sin 'borrador',
+        # con el retirado 'aprobado') y una fila en ese estado retirado que la allowlist permitia.
+        # Orden: quita el CHECK actual, pon la fila en 'aprobado', y SOLO entonces aplica el CHECK
+        # viejo (que prohibe el 'borrador' con el que nacio la fila).
+        con.execute("ALTER TABLE contenido_plataforma DROP CONSTRAINT ck_contenido_plataforma_estado")
+        con.execute("UPDATE contenido_plataforma SET estado = 'aprobado' WHERE id = ?", (p["id"],))
+        con.execute(
+            "ALTER TABLE contenido_plataforma ADD CONSTRAINT ck_contenido_plataforma_estado "
+            "CHECK (estado IN ('aprobado', 'en_revision', 'programado', 'publicado'))"
+        )
+        con.commit()
+        # NO debe lanzar: DROP del viejo -> normaliza 'aprobado'->'borrador' -> ADD del nuevo.
+        _migrar_checks_dominio(con)
+        con.commit()
+        v = con.execute(
+            "SELECT estado FROM contenido_plataforma WHERE id = ?", (p["id"],)
+        ).fetchone()["estado"]
+        assert v == "borrador"
+    finally:
+        con.close()
+
+
 # --------------------------------------------------------------------------- #
 # Bloque 3: CONCURRENCIA OPTIMISTA (`version`)                                   #
 # --------------------------------------------------------------------------- #

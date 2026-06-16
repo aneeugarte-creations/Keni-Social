@@ -147,6 +147,12 @@ def _migrar_checks_dominio(con: Any) -> None:
     )
     for tabla, columna, allowlist, normal in checks:
         nombre = f"ck_{tabla}_{columna}"
+        # DROP ANTES de normalizar: el CHECK VIEJO (allowlist anterior) puede PROHIBIR el propio
+        # valor de normalizacion. Tras el colapso 2026-06, `borrador` es NUEVO en la allowlist de
+        # plataforma; el CHECK viejo aun en la tabla lo rechazaba, asi que el UPDATE que escribe
+        # `borrador` fallaba con CheckViolation antes de poder re-crear el constraint. Sin
+        # constraint, la normalizacion SIEMPRE entra; luego se re-aplica el CHECK nuevo.
+        con.execute(f"ALTER TABLE {tabla} DROP CONSTRAINT IF EXISTS {nombre}")  # noqa: S608
         # Normaliza los valores fuera de la allowlist al default (idempotente). El default
         # esta en la allowlist, asi que tras esto ninguna fila viola el CHECK.
         tocadas = con.execute(
@@ -159,7 +165,6 @@ def _migrar_checks_dominio(con: Any) -> None:
                 "CHECK %s: %d fila(s) con %s.%s invalido normalizadas a %r.",
                 nombre, tocadas, tabla, columna, normal,
             )
-        con.execute(f"ALTER TABLE {tabla} DROP CONSTRAINT IF EXISTS {nombre}")  # noqa: S608
         con.execute(
             f"ALTER TABLE {tabla} ADD CONSTRAINT {nombre} "  # noqa: S608
             f"CHECK ({columna} IN {_en_sql(allowlist)})"
