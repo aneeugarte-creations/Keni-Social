@@ -78,7 +78,7 @@ def _inicializar_cluster(
     cid, *, marca="unotv", titulo="Historia X", score=0.5, estado="nuevo",
     resumen="México: el gobierno informa de seguridad en la CDMX", ultimo_visto=None,
     verificacion="corroborada", n_fuentes=2, categoria="mx", breaking=0,
-    verificacion_fuente="",
+    verificacion_fuente="", primera_fuente="",
 ):
     """Siembra un cluster del pool (Ola B) para los tests de promoción ADMITIR→tema.
 
@@ -90,6 +90,9 @@ def _inicializar_cluster(
     parte Verificar en investigación). La ADMISIÓN solo promueve las VERIFICADAS, así que los tests
     que llaman DIRECTO a la promoción (sin pasar por la fase Verificar) deben inicializar el cluster ya
     verificado (`VERIFICACION_NO_VERIFICADO`) — es el camino real, no el atajo sin filtro.
+
+    `primera_fuente`: id de la fuente PRIMARIA de la historia (para el fast path de marca propia,
+    que mira si esa fuente es `propia`). Por defecto "" (sin fuente -> no es propia).
     """
     from datetime import UTC, datetime
 
@@ -100,7 +103,7 @@ def _inicializar_cluster(
         "breaking": breaking, "primer_visto": "2026-06-01T00:00:00+00:00",
         "ultimo_visto": ultimo_visto
         or datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="seconds"),
-        "estado": estado, "verificacion": verificacion,
+        "estado": estado, "verificacion": verificacion, "primera_fuente": primera_fuente,
     })
     if verificacion_fuente:
         repos.marcar_cluster_verificacion(cid, verificacion_fuente)
@@ -445,6 +448,30 @@ def test_verificar_cluster_acotada_por_el_admision(entorno, monkeypatch):
     # Con tope en proceso = 1, solo se verificación 1 historia en este tick (la mejor del ranking).
     assert len(verificados) == 1
     assert verificados[0]["id"] == "c0"
+
+
+def test_fast_path_marca_propia_salta_verificacion(entorno, monkeypatch):
+    """FAST PATH marca PROPIA: una historia cuya fuente PRIMARIA es del portal propio se marca
+    `saltada` (sin `claude -p`) AUNQUE la Validación esté ON; las de fuentes AJENAS sí se verifican.
+
+    El equipo editorial del portal ya hizo la investigación, así que estas piezas van directas
+    a producción/feed; el flag `propia` del feed es el interruptor."""
+    monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
+    monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")  # Validación ON para la marca
+    monkeypatch.setenv("KENI_PIPELINE_EN_PROCESO_MAX", "5")
+    cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_VERIFICACION_OK))  # noqa: F841
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    propia = repos.crear_fuente_rss("Portal propio", _URL_OK, marca="unotv", propia=True)
+    ajena = repos.crear_fuente_rss("Tercero", "https://otro.test/feed.xml", marca="unotv")
+    _inicializar_cluster("c-propia", titulo="Nota del portal", score=0.9, primera_fuente=propia["id"])
+    _inicializar_cluster("c-ajena", titulo="Nota de tercero", score=0.8, primera_fuente=ajena["id"])
+
+    pc.ejecutar_verificar_clusters(autor=None)
+
+    # La PROPIA salta la verificación (fast path), pese a que la Validación está ON.
+    assert repos.obtener_noticia_cluster("c-propia")["verificacion_fuente"] == pc.VERIFICACION_SALTADA
+    # La AJENA pasa por `claude -p` (lanzador síncrono de tests -> no_verificado).
+    assert repos.obtener_noticia_cluster("c-ajena")["verificacion_fuente"] == pc.VERIFICACION_NO_VERIFICADO
 
 
 def test_copy_fallido_se_reintenta_tras_el_backoff(entorno, monkeypatch):

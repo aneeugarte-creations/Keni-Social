@@ -237,6 +237,13 @@ def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[
     `saltada` (sin `claude -p`) para que la admisión lo promueva igual. Best-effort por historia;
     `ColaLlenaError` corta la verificación de esa marca (el siguiente tick reintenta). Devuelve los
     verificados (`{id, gen_id, verificacion_fuente}`).
+
+    FAST PATH de MARCA PROPIA: una historia cuyo ORIGEN es el portal propio (su fuente primaria
+    tiene `fuentes_rss.propia=1`) YA viene verificada por la REDACCIÓN del portal; se SALTA la
+    verificación `claude -p` (se marca `saltada`) y la admisión la promueve igual —directa al feed—,
+    aunque la Validación esté ON para la marca. Las historias de fuentes AJENAS de la misma marca
+    sí pasan por verificación. El interruptor es el propio flag `propia` del feed (`propia=0` la
+    re-mete en la cola de verificación).
     """
     if autor is None:
         autor = _ref._autor_pipeline()
@@ -264,11 +271,17 @@ def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[
         # Validación OFF para la marca: se SALTA la verificación; el cluster se marca `saltada` para que
         # la admisión lo promueva igual (sin verificar). Misma FUENTE ÚNICA (config.etapa_activa).
         validacion_on = config.etapa_activa(config.ENV_PIPELINE_VERIFICAR, marca)
+        # Cache por barrido del lookup `fuentes_rss.propia` (memoiza por fuente_id; ver `_es_fuente_propia`).
+        cache_propia: dict[str, bool] = {}
         for cluster in pendientes:
             cid = (cluster.get("id") or "").strip()
             if not cid:
                 continue
-            if not validacion_on:
+            # FAST PATH de marca PROPIA: si la fuente PRIMARIA de la historia es del portal propio,
+            # ya viene verificada por su redacción -> se salta la verificación igual que con la
+            # Validación OFF (se marca `saltada` y la admisión la promueve directa al feed).
+            es_propia = _admitir._es_fuente_propia(cluster.get("primera_fuente") or "", cache_propia)
+            if not validacion_on or es_propia:
                 try:
                     repos.marcar_cluster_verificacion(cid, VERIFICACION_SALTADA)
                 except Exception:  # noqa: BLE001 -- un fallo al marcar saltada no mata la fase
