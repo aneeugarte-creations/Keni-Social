@@ -236,7 +236,8 @@ export function DetalleFase({
 
         {tieneprompt ? (
           <TabsContent value="prompt" className="mt-3">
-            {/* Editor completo embebido. `onCerrar` es noop: el panel se colapsa desde la fila. */}
+            {/* Editor completo embebido, SIN su cabecera: el atrás y el nombre de la fase los
+                pinta la subpágina (FaseDetalle), así no se duplican. `onCerrar` es noop. */}
             <div className="h-[60vh] min-h-0">
               <DetalleDocumento
                 key={fase.doc}
@@ -244,6 +245,7 @@ export function DetalleFase({
                 maquina={maquinaQuery.data}
                 onCerrar={() => {}}
                 onIdCambiado={() => {}}
+                ocultarCabecera
               />
             </div>
           </TabsContent>

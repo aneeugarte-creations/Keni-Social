@@ -14,7 +14,7 @@
  *    paso de publicar a mano.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Check, FileText, History, Rocket, RotateCcw } from "lucide-react";
+import { ArrowRight, Check, FileText, Rocket, RotateCcw } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -230,93 +230,78 @@ export function PanelVersiones({
         </div>
       ) : null}
 
-      {/* ───────── Línea de tiempo: publicaciones ───────── */}
+      {/* ───────── Línea de tiempo: publicaciones ─────────
+          Sin caja propia (la sección ya es «Versiones»): cada versión en UNA sola línea, con el
+          nombre truncado y la meta + restaurar a la derecha. */}
       <section className="space-y-2">
-        <h4 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          <History className="h-3.5 w-3.5 text-keni" aria-hidden /> Historial
-        </h4>
-        <div className="overflow-hidden rounded-md border border-border">
-          <ol className="max-h-[28rem] divide-y divide-border overflow-y-auto">
-            {/* Fila «Tu borrador»: SOLO cuando hay cambios sin publicar (si no, sobra). */}
-            {sinPublicar ? (
-              <li className="flex items-start gap-2.5 px-3 py-2.5">
-                <span className="mt-1.5 block h-2 w-2 shrink-0 rounded-full bg-keni" aria-hidden />
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="font-medium">Tu borrador</span>
-                    <Badge variant="aviso" className="shrink-0 rounded-full px-2">
-                      Cambios sin publicar
-                    </Badge>
-                  </div>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    Lo que estás editando ahora, todavía sin publicar.
-                  </p>
-                </div>
-              </li>
-            ) : null}
+        <ol className="max-h-[28rem] divide-y divide-border overflow-y-auto">
+          {/* Fila «Tu borrador»: SOLO cuando hay cambios sin publicar (si no, sobra). */}
+          {sinPublicar ? (
+            <li className="flex items-center gap-2 py-2 whitespace-nowrap">
+              <span className="block h-2 w-2 shrink-0 rounded-full bg-keni" aria-hidden />
+              <span className="min-w-0 flex-1 truncate font-medium">Tu borrador</span>
+              <Badge variant="aviso" className="shrink-0 rounded-full px-2">
+                Cambios sin publicar
+              </Badge>
+            </li>
+          ) : null}
 
-            {/* Publicaciones (historial), de más reciente a más antigua. */}
-            {historial.map((v) => {
-              const esEnVivo = !!produccionSha && v.sha === produccionSha;
-              const nombre = v.mensaje || "Publicación";
-              return (
-                <li
-                  key={v.sha}
-                  className="group flex items-start gap-2.5 px-3 py-2.5 transition-colors hover:bg-muted/40"
+          {/* Publicaciones (historial), de más reciente a más antigua. */}
+          {historial.map((v) => {
+            const esEnVivo = !!produccionSha && v.sha === produccionSha;
+            const nombre = v.mensaje || "Publicación";
+            return (
+              <li
+                key={v.sha}
+                className="group flex items-center gap-2 py-2 whitespace-nowrap transition-colors hover:bg-muted/40"
+              >
+                <span
+                  className={cn(
+                    "block h-2 w-2 shrink-0 rounded-full",
+                    esEnVivo ? "bg-emerald-500" : "bg-border",
+                  )}
+                  aria-hidden
+                />
+                {/* Clic → abre ESA versión (solo lectura). */}
+                <button
+                  type="button"
+                  onClick={() => abrirVersion(v.sha)}
+                  className="flex min-w-0 flex-1 items-center gap-1.5 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  title={`Ver esta versión · ${v.autor} · ${v.fecha}`}
                 >
-                  <span
-                    className={cn(
-                      "mt-1.5 block h-2 w-2 shrink-0 rounded-full",
-                      esEnVivo ? "bg-emerald-500" : "bg-border",
-                    )}
-                    aria-hidden
-                  />
-                  <div className="min-w-0 flex-1">
-                    {/* Clic en la fila → abre ESA versión (solo lectura). */}
-                    <button
-                      type="button"
-                      onClick={() => abrirVersion(v.sha)}
-                      className="block w-full rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      title="Ver esta versión"
-                    >
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="truncate font-medium" title={v.sha_corto}>
-                          {nombre}
-                        </span>
-                        {esEnVivo ? (
-                          <Badge variant="ok" className="shrink-0 gap-1 rounded-full px-2">
-                            <Check className="h-3 w-3" aria-hidden /> EN VIVO
-                          </Badge>
-                        ) : null}
-                      </div>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                        <span>{v.autor}</span>
-                        <span aria-hidden>·</span>
-                        <span title={v.fecha}>
-                          {tiempoRelativo(v.fecha) || v.fecha.slice(0, 16).replace("T", " ")}
-                        </span>
-                      </div>
-                    </button>
-                    {/* Restaurar: no tiene sentido sobre la versión que ya está EN VIVO. */}
-                    {!esEnVivo ? (
-                      <div className="mt-1.5">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-xs"
-                          disabled={restaurarMut.isPending}
-                          onClick={() => void onRestaurar(v.sha, nombre)}
-                        >
-                          <RotateCcw className="mr-1 h-3.5 w-3.5" /> Restaurar
-                        </Button>
-                      </div>
-                    ) : null}
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-        </div>
+                  <span className="truncate font-medium" title={v.sha_corto}>
+                    {nombre}
+                  </span>
+                  {esEnVivo ? (
+                    <Badge variant="ok" className="shrink-0 gap-1 rounded-full px-2">
+                      <Check className="h-3 w-3" aria-hidden /> EN VIVO
+                    </Badge>
+                  ) : null}
+                </button>
+                <span
+                  className="shrink-0 text-xs tabular-nums text-muted-foreground"
+                  title={`${v.autor} · ${v.fecha}`}
+                >
+                  {tiempoRelativo(v.fecha) || v.fecha.slice(0, 10)}
+                </span>
+                {/* Restaurar: no tiene sentido sobre la versión que ya está EN VIVO. */}
+                {!esEnVivo ? (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 shrink-0"
+                    aria-label="Restaurar"
+                    title="Restaurar esta versión"
+                    disabled={restaurarMut.isPending}
+                    onClick={() => void onRestaurar(v.sha, nombre)}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </Button>
+                ) : null}
+              </li>
+            );
+          })}
+        </ol>
 
         {historial.length === 0 ? (
           <p className="px-1 text-sm text-muted-foreground">

@@ -1,11 +1,13 @@
 /**
  * Vista DETALLE de un documento de la Biblioteca de Prompts.
  *
- * Cabecera (título editable + acciones), cuerpo SIEMPRE WYSIWYG (EditorWysiwyg con chips
- * de variables; la edición es libre: producción no cambia hasta publicar), y panel lateral
- * COLAPSABLE (estado en localStorage; colapsado el editor ocupa todo el ancho) con pestañas:
- *   - Versiones (PanelVersiones: publicado ↔ tu borrador, diff ancho, traer/descartar),
- *   - Acerca de (PanelAcerca: en prosa, qué es el doc y dónde entra en el pipeline),
+ * Cabecera (título editable + acciones; se puede ocultar con `ocultarCabecera` cuando el
+ * contenedor ya pinta su propia cabecera —p. ej. la subpágina de una fase—), una tarjeta
+ * «Acerca de» a ancho completo (PanelAcerca: en prosa, qué es el doc y dónde entra en el
+ * pipeline), el cuerpo SIEMPRE WYSIWYG (EditorWysiwyg con chips de variables; la edición es
+ * libre: producción no cambia hasta publicar) y un panel lateral COLAPSABLE de Versiones
+ * (PanelVersiones: publicado ↔ tu borrador, diff ancho, traer/descartar; estado en
+ * localStorage, colapsado el editor ocupa todo el ancho).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -32,10 +34,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useMenuContextual } from "@/hooks/use-menu-contextual";
 import { useEsAdmin } from "@/hooks/use-biblioteca";
 import { ApiError, api, mensajeError } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import type { DocumentoTexto, RespuestaMaquinaTexto } from "@/types";
 
 import { claveEstrategiaBase } from "./estrategia/api";
@@ -49,13 +51,12 @@ import {
 /** Clave de persistencia del estado abierto/colapsado del panel lateral. */
 const CLAVE_PANEL = "keni.biblioteca.panel-abierto";
 
-type PestanaPanel = "versiones" | "acerca";
-
 export function DetalleDocumento({
   docId,
   maquina,
   onCerrar,
   onIdCambiado,
+  ocultarCabecera = false,
 }: {
   docId: string;
   /** Línea de la máquina (para situar el doc en la pestaña "Uso"). */
@@ -63,6 +64,12 @@ export function DetalleDocumento({
   onCerrar: () => void;
   /** El id puede cambiar al renombrar/mover: el contenedor actualiza la URL. */
   onIdCambiado: (id: string) => void;
+  /**
+   * Oculta la cabecera (botón atrás + título editable + menú ⋯) cuando el contenedor ya
+   * pinta la suya (la subpágina de una fase): así no se duplican atrás ni título. Se mantiene
+   * la acción de publicar; el atrás vive en el contenedor.
+   */
+  ocultarCabecera?: boolean;
 }) {
   const qc = useQueryClient();
   const esAdmin = useEsAdmin();
@@ -297,8 +304,6 @@ export function DetalleDocumento({
     }
   }, [panelAbierto]);
 
-  const [pestana, setPestana] = React.useState<PestanaPanel>("versiones");
-
   if (docQuery.isPending || !borrador) {
     return (
       <div className="space-y-3" data-testid="detalle-cargando">
@@ -325,18 +330,30 @@ export function DetalleDocumento({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      {/* ───────── Cabecera de estado ───────── */}
-      <div className="flex flex-wrap items-center gap-2">
-        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={onCerrar} aria-label="Volver a la biblioteca">
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <Input
-          value={borrador.titulo}
-          onChange={(e) => editar({ titulo: e.target.value })}
-          className="min-w-[12rem] flex-1 border-transparent text-base font-medium shadow-none hover:border-input focus-visible:border-input"
-          placeholder="Título"
-          aria-label="Título del documento"
-        />
+      {/* ───────── Cabecera de estado ─────────
+          Con `ocultarCabecera` el contenedor ya pinta atrás + título (subpágina de fase): aquí
+          solo queda la acción de publicar, alineada a la derecha; sin atrás, sin título, sin ⋯. */}
+      <div className={cn("flex flex-wrap items-center gap-2", ocultarCabecera && "justify-end")}>
+        {!ocultarCabecera ? (
+          <>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8"
+              onClick={onCerrar}
+              aria-label="Volver a la biblioteca"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <Input
+              value={borrador.titulo}
+              onChange={(e) => editar({ titulo: e.target.value })}
+              className="min-w-[12rem] flex-1 border-transparent text-base font-medium shadow-none hover:border-input focus-visible:border-input"
+              placeholder="Título"
+              aria-label="Título del documento"
+            />
+          </>
+        ) : null}
         {sinPublicar ? (
           <Badge variant="aviso" className="gap-1 rounded-full">
             <AlertTriangle className="h-3 w-3" aria-hidden /> Cambios sin publicar
@@ -375,41 +392,45 @@ export function DetalleDocumento({
             <Send className="mr-1 h-3.5 w-3.5" /> Solicitar publicación
           </Button>
         )}
-        <Button
-          ref={botonMenuRef}
-          size="icon"
-          variant="ghost"
-          className="h-8 w-8"
-          aria-label="Más acciones"
-          onClick={(e) => menu.abrirEn(e, botonMenuRef.current)}
-        >
-          <MoreHorizontal className="h-4 w-4" />
-        </Button>
-        {menu.abierto && menu.pos ? (
-          <MenuFlotante
-            pos={menu.pos}
-            onClose={menu.cerrar}
-            etiqueta="Acciones del documento"
-            items={[
-              {
-                etiqueta: "Mover a la papelera",
-                icono: Trash2,
-                destructivo: true,
-                onClick: () => {
-                  void (async () => {
-                    if (
-                      await confirmar({
-                        mensaje: "¿Mover este documento a la papelera?",
-                        destructivo: true,
-                        textoConfirmar: "Mover",
-                      })
-                    )
-                      eliminarMut.mutate(borrador.id);
-                  })();
-                },
-              },
-            ]}
-          />
+        {!ocultarCabecera ? (
+          <>
+            <Button
+              ref={botonMenuRef}
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8"
+              aria-label="Más acciones"
+              onClick={(e) => menu.abrirEn(e, botonMenuRef.current)}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+            {menu.abierto && menu.pos ? (
+              <MenuFlotante
+                pos={menu.pos}
+                onClose={menu.cerrar}
+                etiqueta="Acciones del documento"
+                items={[
+                  {
+                    etiqueta: "Mover a la papelera",
+                    icono: Trash2,
+                    destructivo: true,
+                    onClick: () => {
+                      void (async () => {
+                        if (
+                          await confirmar({
+                            mensaje: "¿Mover este documento a la papelera?",
+                            destructivo: true,
+                            textoConfirmar: "Mover",
+                          })
+                        )
+                          eliminarMut.mutate(borrador.id);
+                      })();
+                    },
+                  },
+                ]}
+              />
+            ) : null}
+          </>
         ) : null}
       </div>
 
@@ -445,26 +466,23 @@ export function DetalleDocumento({
         </div>
       ) : null}
 
-      {/* ───────── Panel lateral (izquierda, colapsable) + cuerpo (derecha) ───────── */}
+      {/* ───────── «Acerca de»: tarjeta a ancho completo, bajo el título y sobre el editor ───────── */}
+      <section className="rounded-md border border-border bg-muted/20 p-3">
+        <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Acerca de
+        </h4>
+        <PanelAcerca doc={borrador} maquina={maquina} />
+      </section>
+
+      {/* ───────── Panel de versiones (izquierda, colapsable) + cuerpo (derecha) ───────── */}
       <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
         {panelAbierto ? (
           <aside className="flex w-full shrink-0 flex-col gap-2 lg:w-96">
-            <div className="flex items-center gap-1">
-              <Tabs
-                value={pestana}
-                onValueChange={(v) => setPestana(v as PestanaPanel)}
-                className="min-w-0 flex-1"
-              >
-                <TabsList className="grid h-auto w-full grid-cols-2 gap-1 p-1">
-                  <TabsTrigger value="versiones" className="text-xs">
-                    Versiones
-                  </TabsTrigger>
-                  <TabsTrigger value="acerca" className="text-xs">
-                    Acerca de
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-              {/* Colapsar va A LA PAR de las pestañas que oculta. */}
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Versiones
+              </span>
+              {/* Colapsar va A LA PAR de la sección que oculta. */}
               <Button
                 size="icon"
                 variant="ghost"
@@ -477,31 +495,27 @@ export function DetalleDocumento({
               </Button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border bg-muted/20 p-3">
-              {pestana === "versiones" ? (
-                <PanelVersiones
-                  docId={borrador.id}
-                  produccionSha={produccion?.sha ?? null}
-                  sinPublicar={sinPublicar}
-                  cuerpoBorrador={componerCuerpoTexto(
-                    frontmatterOculto,
-                    borrador.cuerpo,
-                    contratoInline,
-                  )}
-                  esAdmin={esAdmin}
-                  onPublicar={() => setPublicarAbierto(true)}
-                  onBorradorActualizado={() => {
-                    // Fuerza la RE-SINCRONIZACIÓN del borrador con el cuerpo cargado.
-                    sincronizado.current = null;
-                    qc.invalidateQueries({ queryKey: ["texto-doc", docId] });
-                    qc.invalidateQueries({ queryKey: ["texto-maquina"] });
-                    if (borrador.tipo !== "prompt") {
-                      qc.invalidateQueries({ queryKey: claveEstrategiaBase });
-                    }
-                  }}
-                />
-              ) : (
-                <PanelAcerca doc={borrador} maquina={maquina} />
-              )}
+              <PanelVersiones
+                docId={borrador.id}
+                produccionSha={produccion?.sha ?? null}
+                sinPublicar={sinPublicar}
+                cuerpoBorrador={componerCuerpoTexto(
+                  frontmatterOculto,
+                  borrador.cuerpo,
+                  contratoInline,
+                )}
+                esAdmin={esAdmin}
+                onPublicar={() => setPublicarAbierto(true)}
+                onBorradorActualizado={() => {
+                  // Fuerza la RE-SINCRONIZACIÓN del borrador con el cuerpo cargado.
+                  sincronizado.current = null;
+                  qc.invalidateQueries({ queryKey: ["texto-doc", docId] });
+                  qc.invalidateQueries({ queryKey: ["texto-maquina"] });
+                  if (borrador.tipo !== "prompt") {
+                    qc.invalidateQueries({ queryKey: claveEstrategiaBase });
+                  }
+                }}
+              />
             </div>
           </aside>
         ) : (
