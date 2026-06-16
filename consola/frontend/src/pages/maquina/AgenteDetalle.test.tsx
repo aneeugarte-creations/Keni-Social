@@ -100,8 +100,10 @@ describe("AgenteDetalle", () => {
   it("pinta cabecera, controles y log por barrido", async () => {
     stubFetch({ daemons: [latido({})], barridos: [barrido({}), barrido({ id: "b2", ok: false, resumen: "", error_txt: "timeout" })] });
     renderEn("investigacion");
-    // Cabecera: nombre legible + estado + clase.
+    // Cabecera: nombre legible (en la barra superior, vía TituloPagina) + estado + clase. El «←»
+    // (volver) vive ahora en esa misma cabecera, no como fila del cuerpo.
     expect(await screen.findByText("Investigación")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Volver" })).toBeInTheDocument();
     expect(screen.getByText("OK")).toBeInTheDocument();
     expect(screen.getByText("IA")).toBeInTheDocument();
     // Log por barrido: el resumen de la primera fila y, en la segunda (sin resumen), el error.

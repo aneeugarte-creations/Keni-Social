@@ -6,12 +6,13 @@
  * Es el detalle al que lleva la tarjeta de un item `clase="actividad"` de Producción.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, RefreshCw, RotateCcw, Square } from "lucide-react";
-import { Link, useParams } from "react-router-dom";
+import { RefreshCw, RotateCcw, Square } from "lucide-react";
+import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { ChipEstado } from "@/components/comunes/ChipEstado";
+import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -34,6 +35,7 @@ function estadoEtapa(estado: string): string {
 
 export default function GeneracionDetalle() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { usuario } = useSesion();
   const esAdmin = usuario?.rol === "admin";
   const queryClient = useQueryClient();
@@ -95,16 +97,15 @@ export default function GeneracionDetalle() {
       }
     : null;
 
+  // El título del trabajo y el «←» (volver a Actividad) viven en la BARRA SUPERIOR del shell.
+  const titulo = gen ? gen.etiqueta || etiquetaTipoGeneracion(gen.tipo) : "Trabajo";
+
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between gap-2">
-        <Link
-          to="/maquina/actividad"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          Actividad
-        </Link>
+      {/* Cabecera (← Actividad + título) en la barra superior; las acciones (Reintentar /
+          Cancelar / Actualizar) a la derecha de esa misma barra. */}
+      <TituloPagina titulo={titulo} onAtras={() => navigate("/maquina/actividad")} />
+      <AccionesPagina>
         <div className="flex items-center gap-1">
           {esAdmin && gen?.estado === "error" && (
             <Button
@@ -141,7 +142,7 @@ export default function GeneracionDetalle() {
             Actualizar
           </Button>
         </div>
-      </div>
+      </AccionesPagina>
 
       {q.isPending ? (
         <div className="space-y-3">
@@ -162,7 +163,7 @@ export default function GeneracionDetalle() {
         />
       ) : (
         <>
-          {/* Cabecera: qué trabajo es, de qué marca, cómo va y cuánto costó. */}
+          {/* Cabecera: de qué marca, cómo va y cuánto costó (el título va en la barra superior). */}
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded border px-2 py-0.5 text-xs">{gen.marca || "—"}</span>
@@ -186,9 +187,6 @@ export default function GeneracionDetalle() {
                 }
               />
             </div>
-            <h1 className="text-lg font-semibold leading-snug">
-              {gen.etiqueta || etiquetaTipoGeneracion(gen.tipo)}
-            </h1>
           </div>
 
           {/* El trabajo, expandido: entrada (prompt) → salida (razonamiento + resultado). */}

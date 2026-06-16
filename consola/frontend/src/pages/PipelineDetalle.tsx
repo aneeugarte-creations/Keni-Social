@@ -5,10 +5,11 @@
  * componentes de la lista (`Pipelines`), que exporta la maquinaria de render.
  */
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, RefreshCw } from "lucide-react";
-import { Link, useParams } from "react-router-dom";
+import { RefreshCw } from "lucide-react";
+import { useNavigate, useParams } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, ApiError } from "@/lib/api";
@@ -20,6 +21,7 @@ import { INTERVALO_DETALLE_MS } from "@/lib/refresco";
 
 export default function PipelineDetalle() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const q = useQuery({
     queryKey: ["pipelines", "detalle", id],
     queryFn: ({ signal }) => api.pipelineDetalle(id as string, signal),
@@ -43,21 +45,19 @@ export default function PipelineDetalle() {
     return cod ? datos?.prompts_por_etapa?.[cod] : undefined;
   };
 
+  // El título de la run y el «←» (volver a Actividad) viven en la BARRA SUPERIOR del shell.
+  const titulo = run ? run.titulo : "Pipeline";
+
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between gap-2">
-        <Link
-          to="/maquina/actividad"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          Actividad
-        </Link>
+      {/* Cabecera (← Actividad + título) en la barra superior; «Actualizar» a su derecha. */}
+      <TituloPagina titulo={titulo} onAtras={() => navigate("/maquina/actividad")} />
+      <AccionesPagina>
         <Button variant="ghost" size="sm" className="gap-1" onClick={() => q.refetch()} disabled={q.isFetching}>
           <RefreshCw className="h-4 w-4" aria-hidden="true" />
           Actualizar
         </Button>
-      </div>
+      </AccionesPagina>
 
       {q.isPending ? (
         <div className="space-y-3">
@@ -73,7 +73,7 @@ export default function PipelineDetalle() {
         />
       ) : (
         <>
-          {/* Cabecera. */}
+          {/* Cabecera: marca, estado y coste (el título va en la barra superior). */}
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded border px-2 py-0.5 text-xs">{run.marca_nombre || run.marca}</span>
@@ -82,7 +82,6 @@ export default function PipelineDetalle() {
               {/* Coste real de la run: tokens/coste/duración sumados de sus generaciones. */}
               <MetricasPipeline metricas={run.metricas} className="ml-auto" />
             </div>
-            <h1 className="text-lg font-semibold leading-snug">{run.titulo}</h1>
           </div>
 
           {/* Tira de etapas (vista de flujo, estilo GitLab/Azure). */}

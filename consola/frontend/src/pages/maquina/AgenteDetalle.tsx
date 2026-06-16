@@ -14,7 +14,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   AlertTriangle,
-  ArrowLeft,
   CheckCircle2,
   Clock,
   Coins,
@@ -32,9 +31,9 @@ import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import { TituloPagina } from "@/components/layout/encabezado";
 import { EditorPromptOverlay } from "@/components/prompts/EditorPromptOverlay";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
@@ -419,34 +418,34 @@ export default function AgenteDetalle() {
   });
 
   // El detalle se abre desde las tablas de daemons (Sistema / cockpits): «Atrás» vuelve a su
-  // origen en vez de a una página fija (ya no hay lista de Agentes).
-  const volver = (
-    <Button variant="ghost" size="sm" className="mb-2 -ml-2 w-fit" onClick={() => navigate(-1)}>
-      <ArrowLeft className="mr-1 h-4 w-4" aria-hidden="true" />
-      Atrás
-    </Button>
-  );
+  // origen en vez de a una página fija (ya no hay lista de Agentes). El «←» vive ahora en la
+  // BARRA SUPERIOR del shell (vía TituloPagina), no como fila del cuerpo.
+  const atras = () => navigate(-1);
 
   if (query.isPending) {
     return (
-      <div className="space-y-4 p-4">
-        {volver}
-        <Skeleton className="h-24 w-full rounded-xl" />
-        <Skeleton className="h-48 w-full rounded-xl" />
-      </div>
+      <>
+        <TituloPagina titulo="Agente" onAtras={atras} />
+        <div className="space-y-4 p-4">
+          <Skeleton className="h-24 w-full rounded-xl" />
+          <Skeleton className="h-48 w-full rounded-xl" />
+        </div>
+      </>
     );
   }
   if (query.isError) {
     return (
-      <div className="space-y-4 p-4">
-        {volver}
-        <BloqueError
-          titulo="No se pudo leer el estado de los agentes"
-          mensaje={mensajeError(query.error)}
-          onReintentar={() => void query.refetch()}
-          cargando={query.isFetching}
-        />
-      </div>
+      <>
+        <TituloPagina titulo="Agente" onAtras={atras} />
+        <div className="space-y-4 p-4">
+          <BloqueError
+            titulo="No se pudo leer el estado de los agentes"
+            mensaje={mensajeError(query.error)}
+            onReintentar={() => void query.refetch()}
+            cargando={query.isFetching}
+          />
+        </div>
+      </>
     );
   }
 
@@ -455,15 +454,17 @@ export default function AgenteDetalle() {
   // Daemon inexistente: ni en la lista (retirado, mal escrito o nunca registrado).
   if (!latido) {
     return (
-      <div className="space-y-4 p-4">
-        {volver}
-        <BloqueError
-          titulo="Agente no encontrado"
-          mensaje={`No hay ningún agente registrado con el nombre «${agente}». Puede haber sido renombrado o retirado.`}
-          onReintentar={() => void query.refetch()}
-          cargando={query.isFetching}
-        />
-      </div>
+      <>
+        <TituloPagina titulo="Agente" onAtras={atras} />
+        <div className="space-y-4 p-4">
+          <BloqueError
+            titulo="Agente no encontrado"
+            mensaje={`No hay ningún agente registrado con el nombre «${agente}». Puede haber sido renombrado o retirado.`}
+            onReintentar={() => void query.refetch()}
+            cargando={query.isFetching}
+          />
+        </div>
+      </>
     );
   }
 
@@ -472,14 +473,15 @@ export default function AgenteDetalle() {
     : "nunca";
 
   return (
-    <div className="space-y-4 p-4">
-      {volver}
-
-      {/* Cabecera: nombre legible + badges (clase, motor, estado) + último barrido e intervalo. */}
+    <>
+      {/* Cabecera (← volver + nombre legible) en la BARRA SUPERIOR del shell, no como fila del
+          cuerpo. El nombre no se repite en la tarjeta de abajo (que conserva id, badges y métricas). */}
+      <TituloPagina titulo={latido.etiqueta} onAtras={atras} />
+      <div className="space-y-4 p-4">
+      {/* Cabecera: id + badges (clase, motor, estado) + último barrido e intervalo. */}
       <Card>
         <CardHeader className="p-4 pb-2">
           <div className="flex flex-wrap items-center gap-2">
-            <CardTitle className="text-lg">{latido.etiqueta}</CardTitle>
             <span className="font-mono text-xs text-muted-foreground">{latido.daemon}</span>
             <Badge variant="secondary">{ETIQUETA_CLASE[latido.clase]}</Badge>
             {latido.motor && (
@@ -517,6 +519,7 @@ export default function AgenteDetalle() {
       <AjustesDaemon ajustes={latido.ajustes.filter((a) => a.clave !== latido.clave_gate)} />
       <LogBarridos daemon={latido.daemon} />
       <Analizar latido={latido} />
-    </div>
+      </div>
+    </>
   );
 }

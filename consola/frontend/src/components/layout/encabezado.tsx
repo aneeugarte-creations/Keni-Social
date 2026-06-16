@@ -1,5 +1,8 @@
+import { ArrowLeft } from "lucide-react";
 import * as React from "react";
 import { createPortal } from "react-dom";
+
+import { Button } from "@/components/ui/button";
 
 import type { LucideIcon } from "lucide-react";
 
@@ -54,8 +57,23 @@ function useEncabezado(): EncabezadoCtx | null {
  * Título de una página PLANA (sin pestañas). Se portaliza al hueco izquierdo de la barra
  * de cabecera con el MISMO formato que el trigger del dropdown de sección: icono + texto
  * `text-sm font-medium`. Así una página con título y un hub con dropdown arrancan idénticos.
+ *
+ * SUBPÁGINA de detalle: con `onAtras` pinta una flecha «←» (volver) ANTES del icono+título,
+ * dentro del mismo hueco. Así una página de detalle lleva su «atrás» en la barra superior
+ * (el header persistente), no como una fila suelta en el cuerpo. Sin `onAtras` se comporta
+ * igual que antes (solo icono + título). La PRESENTACIÓN del «atrás» vive aquí; la LÓGICA
+ * de a dónde se vuelve la pone la página en el callback.
  */
-export function TituloPagina({ titulo, icono: Icono }: { titulo: string; icono?: LucideIcon }) {
+export function TituloPagina({
+  titulo,
+  icono: Icono,
+  onAtras,
+}: {
+  titulo: string;
+  icono?: LucideIcon;
+  /** Si está presente, pinta una flecha «←» (volver) antes del icono+título. */
+  onAtras?: () => void;
+}) {
   const ctx = useEncabezado();
   React.useEffect(() => ctx?.registrarTitulo(), [ctx]);
   const elemento = (
@@ -63,6 +81,20 @@ export function TituloPagina({ titulo, icono: Icono }: { titulo: string; icono?:
     // contenido y el `truncate` del texto nunca actúa (en móvil el control de marca de la
     // topbar acababa pisando el título).
     <span className="flex h-8 min-w-0 items-center gap-2 px-2 text-sm font-medium text-foreground">
+      {onAtras && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          // El cromo de la barra mide 32px (h-8): encogemos el botón a 28px para que entre sin
+          // estirar la fila; `-ml-1` lo pega al borde izquierdo del hueco.
+          className="-ml-1 h-7 w-7 shrink-0"
+          aria-label="Volver"
+          onClick={onAtras}
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+        </Button>
+      )}
       {Icono && <Icono className="h-4 w-4 shrink-0" aria-hidden="true" />}
       <span className="truncate">{titulo}</span>
     </span>

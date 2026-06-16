@@ -5,10 +5,10 @@
  * El interruptor on/off de la fase vive en la fila de la lista (Contexto), no aquí.
  */
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Bot, Cog } from "lucide-react";
+import { Bot, Cog } from "lucide-react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 
-import { Button } from "@/components/ui/button";
+import { TituloPagina } from "@/components/layout/encabezado";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api } from "@/lib/api";
 import { INTERVALO_VIVO_MS } from "@/lib/refresco";
@@ -42,30 +42,15 @@ export default function FaseDetalle() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4">
-      <div className="flex items-start gap-3">
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-8 w-8 shrink-0"
-          aria-label="Volver a Contexto"
-          onClick={() => navigate(`/maquina/contexto?proceso=${proceso}`)}
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div className="min-w-0">
-          {/* Solo icono + nombre: la descripción vive en la tarjeta «Acerca de» (debajo, sobre
-              las pestañas), para no duplicarla aquí. */}
-          <div className="flex items-center gap-1.5 text-lg font-semibold leading-tight">
-            {fase.es_ia ? (
-              <Bot className="h-5 w-5 shrink-0" aria-label="IA" />
-            ) : (
-              <Cog className="h-5 w-5 shrink-0 text-muted-foreground" aria-label="determinista" />
-            )}
-            {fase.nombre}
-          </div>
-        </div>
-      </div>
+    <div className="flex h-full min-h-0 flex-col">
+      {/* La cabecera (← volver + icono + nombre de la fase) vive en la BARRA SUPERIOR del shell,
+          no como fila del cuerpo. La descripción vive en la tarjeta «Acerca de» (dentro de
+          DetalleFase, sobre las pestañas), así que aquí no se duplica. */}
+      <TituloPagina
+        titulo={fase.nombre}
+        icono={fase.es_ia ? Bot : Cog}
+        onAtras={() => navigate(`/maquina/contexto?proceso=${proceso}`)}
+      />
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <DetalleFase
