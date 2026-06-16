@@ -14,14 +14,14 @@ from keni_shared.esquema_yaml import VERSIONES, migrar, sellar
 
 
 def test_sellar_estampa_version_actual():
-    sellado = sellar("publicacion", {"titulo": "Hola"})
-    assert sellado["version"] == VERSIONES["publicacion"] == 1
+    sellado = sellar("pieza", {"titulo": "Hola"})
+    assert sellado["version"] == VERSIONES["pieza"] == 1
     assert sellado["titulo"] == "Hola"
 
 
 def test_sellar_no_muta_la_entrada():
     original = {"titulo": "Hola"}
-    sellar("publicacion", original)
+    sellar("pieza", original)
     assert "version" not in original  # copia, no mutacion
 
 
@@ -72,7 +72,7 @@ def test_migrar_no_muta_la_entrada():
 
 
 def test_migrar_aplica_migraciones_registradas_en_orden(monkeypatch):
-    # Registro temporal: tipo "publicacion" sube a v3 con dos migraciones encadenadas.
+    # Registro temporal: tipo "pieza" sube a v3 con dos migraciones encadenadas.
     pasos: list[int] = []
 
     def m_1_a_2(datos: dict) -> dict:
@@ -83,17 +83,17 @@ def test_migrar_aplica_migraciones_registradas_en_orden(monkeypatch):
         pasos.append(2)
         return {**datos, "b": 2}
 
-    monkeypatch.setitem(esquema_yaml.VERSIONES, "publicacion", 3)
-    monkeypatch.setitem(esquema_yaml.MIGRACIONES, "publicacion", [m_1_a_2, m_2_a_3])
+    monkeypatch.setitem(esquema_yaml.VERSIONES, "pieza", 3)
+    monkeypatch.setitem(esquema_yaml.MIGRACIONES, "pieza", [m_1_a_2, m_2_a_3])
 
     # Sin version (=0): 0->1 identidad, 1->2 (m_1_a_2), 2->3 (m_2_a_3).
-    migrado = migrar("publicacion", {"titulo": "T"})
+    migrado = migrar("pieza", {"titulo": "T"})
     assert pasos == [1, 2]
     assert migrado == {"titulo": "T", "a": 1, "b": 2, "version": 3}
 
     # Partiendo de v2 solo corre el ultimo paso.
     pasos.clear()
-    migrado2 = migrar("publicacion", {"titulo": "T", "version": 2})
+    migrado2 = migrar("pieza", {"titulo": "T", "version": 2})
     assert pasos == [2]
     assert migrado2["version"] == 3
 
@@ -113,7 +113,7 @@ def test_todos_los_tipos_en_v1():
     assert all(v == 1 for v in VERSIONES.values())
     assert all(esquema_yaml.MIGRACIONES[t] == [] for t in VERSIONES)
     esperados = {
-        "publicacion", "plantilla", "fuente_rss", "grupo_hashtags",
+        "pieza", "plantilla", "fuente_rss", "grupo_hashtags",
         "historial_prompt", "marca", "franjas", "rss_vistos", "run",
         "agente", "generacion", "prompt",
     }

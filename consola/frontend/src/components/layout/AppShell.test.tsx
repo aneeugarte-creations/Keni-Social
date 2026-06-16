@@ -211,7 +211,7 @@ describe("AppShell · sidebar siempre presente", () => {
             <Routes>
               <Route path="/" element={<AppShell />}>
                 <Route
-                  path="contenido/imagen"
+                  path="publicaciones/imagen"
                   element={
                     <div>
                       editor imagen

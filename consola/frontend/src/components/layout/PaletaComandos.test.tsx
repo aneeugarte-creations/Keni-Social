@@ -108,8 +108,8 @@ describe("PaletaComandos", () => {
     renderPaleta();
     fireEvent.keyDown(window, { key: "k", metaKey: true });
     const input = await screen.findByRole("combobox");
-    // "publi" (sin acento) matchea Piezas; descarta el resto.
-    fireEvent.change(input, { target: { value: "publi" } });
+    // "piez" matchea Piezas; descarta el resto.
+    fireEvent.change(input, { target: { value: "piez" } });
     await waitFor(() => {
       expect(screen.getByRole("option", { name: /piezas/i })).toBeInTheDocument();
       expect(screen.queryByRole("option", { name: /generación/i })).not.toBeInTheDocument();
