@@ -1,15 +1,11 @@
-// Fragmento del cliente API: dominio «marcas» (dashboard en vivo).
+// Fragmento del cliente API: dominio «marcas» (vista única por marca × red).
 // El objeto compuesto vive en ./index.ts; aquí solo el fragmento + sus imports.
 import { peticion } from "./_core";
-import type { RespuestaMarcas, RespuestaNumeros } from "@/types";
+import type { RespuestaMarcas } from "@/types";
 
 export const apiMarcas = {
-  // Estado en vivo de todas las marcas × redes × cuentas (control de conexiones).
-  // Rápido: solo estado, sin métricas (las métricas viven en Analíticas).
+  // Vista única: por marca, sus redes (estado de conexión + números de Postproxy) y el
+  // sumatorio. Solo tienen números las cuentas conectadas en Postproxy.
   getMarcas: (signal?: AbortSignal) =>
     peticion<RespuestaMarcas>("/marcas", { signal }),
-  // Monitor de conteos por marca × red (seguidores/posts/posts-día) desde Postproxy.
-  // Solo aparecen las cuentas conectadas en Postproxy.
-  getMarcasNumeros: (signal?: AbortSignal) =>
-    peticion<RespuestaNumeros>("/marcas/numeros", { signal }),
 };
