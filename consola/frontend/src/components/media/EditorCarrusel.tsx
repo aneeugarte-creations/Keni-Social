@@ -1,10 +1,16 @@
 /**
- * Editor de SLIDES de un carrusel: el media EN CRUDO que va detrás de la portada.
+ * Editor de SLIDES de un carrusel: el media que va detrás de la portada.
  *
  * La portada (slide 1) se edita arriba con la maquinaria de imagen de siempre (foto +
- * placa de marca); aquí se gestionan los slides EXTRA: subir imágenes/videos, quitarlos
- * y reordenarlos. Se publican tal cual (sin placa), en este orden, en el post multi-media.
- * Reusado por el editor de pieza (DialogoEditar) y por el cajón Presidencia.
+ * placa de marca); aquí se gestionan los slides EXTRA: subir imágenes/videos, REEMPLAZAR
+ * el media de uno, quitarlos y reordenarlos. Cada slide se publica TAL CUAL (su PNG/MP4,
+ * sin recomponer la placa), en este orden, en el post multi-media. En un carrusel editorial
+ * cada slide ya es una placa horneada (`artes/…png`): aquí se reordena/sustituye/quita, pero
+ * la placa de un slide concreto no se recompone (su procedencia —foto+titular+plantilla— no
+ * se guarda; solo el PNG). Reusado por el editor de pieza (DialogoEditar) y el cajón Presidencia.
+ *
+ * Las acciones de cada fila (reemplazar/reordenar/quitar/portada) viven en el menú "⋮"
+ * SIEMPRE visible, no escondidas tras click-derecho.
  */
 import {
   ArrowDown,
@@ -12,6 +18,7 @@ import {
   Film,
   ImagePlus,
   Loader2,
+  RefreshCw,
   Star,
   Trash2,
   Video,
@@ -62,6 +69,11 @@ export function EditorCarrusel({
 }) {
   const [subiendo, setSubiendo] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
+  // Reemplazo de UN slide: un único input file recuerda (en un ref) a qué índice apunta el
+  // archivo elegido; `reemplazando` deja en spinner ESE slide mientras sube.
+  const reemplazoRef = React.useRef<HTMLInputElement>(null);
+  const idxReemplazoRef = React.useRef<number | null>(null);
+  const [reemplazando, setReemplazando] = React.useState<number | null>(null);
 
   // Sube cada archivo elegido por su endpoint (imagen o video) y AÑADE los slides en el
   // orden de selección. Best-effort por archivo: uno que falle no tira el resto.
@@ -86,6 +98,36 @@ export function EditorCarrusel({
       if (inputRef.current) inputRef.current.value = "";
     }
     if (nuevos.length) onCambio([...slides, ...nuevos]);
+  };
+
+  // Sube UN archivo y SUSTITUYE el media del slide `idxReemplazoRef` (cambia objeto y tipo).
+  // No reordena: el slide se queda en su sitio con el nuevo media.
+  const reemplazar = async (archivos: FileList | null) => {
+    const i = idxReemplazoRef.current;
+    idxReemplazoRef.current = null;
+    const archivo = archivos?.[0];
+    if (reemplazoRef.current) reemplazoRef.current.value = "";
+    if (i === null || !archivo) return;
+    setReemplazando(i);
+    try {
+      const esVideo = archivo.type.startsWith("video/");
+      const resp = esVideo
+        ? await api.subirVideo(archivo)
+        : await api.subirMedia(archivo, "fotos");
+      const copia = [...slides];
+      copia[i] = { tipo: esVideo ? "video" : "imagen", objeto: resp.id };
+      onCambio(copia);
+    } catch (e) {
+      toast.error(`${archivo.name}: ${mensajeError(e)}`);
+    } finally {
+      setReemplazando(null);
+    }
+  };
+
+  // Apunta el input de reemplazo al slot `i` y abre el selector de archivo.
+  const pedirReemplazo = (i: number) => {
+    idxReemplazoRef.current = i;
+    reemplazoRef.current?.click();
   };
 
   const mover = (i: number, delta: -1 | 1) => {
@@ -133,6 +175,15 @@ export function EditorCarrusel({
           onChange={(e) => void subir(e.target.files)}
           aria-label="Archivos del carrusel"
         />
+        {/* Input ÚNICO para "Reemplazar media": el índice destino vive en idxReemplazoRef. */}
+        <input
+          ref={reemplazoRef}
+          type="file"
+          accept="image/*,video/*"
+          className="hidden"
+          onChange={(e) => void reemplazar(e.target.files)}
+          aria-label="Reemplazar media del slide"
+        />
       </div>
 
       {slides.length === 0 ? (
@@ -143,6 +194,12 @@ export function EditorCarrusel({
         <ul className="space-y-1.5">
           {slides.map((s, i) => {
             const acciones: EntradaMenuContextual[] = [];
+            acciones.push({
+              etiqueta: "Reemplazar media",
+              icono: RefreshCw,
+              onClick: () => pedirReemplazo(i),
+              deshabilitado: disabled || reemplazando !== null,
+            });
             if (onPortada && s.tipo === "imagen") {
               acciones.push({
                 etiqueta: "Marcar portada",
@@ -175,12 +232,12 @@ export function EditorCarrusel({
               <FilaConAcciones
                 key={`${s.objeto}-${i}`}
                 como="li"
-                kebab="nunca"
+                kebab="siempre"
                 realce
                 acciones={acciones}
                 etiquetaAcciones={`Acciones del slide ${i + base}`}
               >
-                <div className="flex items-center gap-2 rounded-md border bg-card p-1.5" data-testid="slide-carrusel">
+                <div className="flex items-center gap-2 rounded-md border bg-card p-1.5 pr-9" data-testid="slide-carrusel">
                   <span className="w-5 shrink-0 text-center text-xs text-muted-foreground">
                     {i + base}
                   </span>
@@ -189,11 +246,18 @@ export function EditorCarrusel({
                       <Film className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
                     </span>
                   ) : (
-                    <img
-                      src={urlMedia(s.objeto)}
-                      alt={`Slide ${i + base}`}
-                      className="h-12 w-12 shrink-0 rounded object-cover"
-                    />
+                    <span className="relative h-12 w-12 shrink-0">
+                      <img
+                        src={urlMedia(s.objeto)}
+                        alt={`Slide ${i + base}`}
+                        className="h-12 w-12 rounded object-cover"
+                      />
+                      {reemplazando === i && (
+                        <span className="absolute inset-0 flex items-center justify-center rounded bg-background/70">
+                          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                        </span>
+                      )}
+                    </span>
                   )}
                   <span className="flex min-w-0 flex-1 items-center gap-1 text-xs text-muted-foreground">
                     {s.tipo === "video" && <Video className="h-3 w-3 shrink-0" aria-hidden="true" />}
