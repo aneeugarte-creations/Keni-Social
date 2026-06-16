@@ -407,6 +407,22 @@ def _normalizar_titulo(titulo: str) -> str:
     return re.sub(r"\s+", " ", s)
 
 
+# Prefijos de `id_post_metricool` que NO son un id real de post de Metricool, sino sellos de
+# degradación: el timeout de publicación (`programador.ID_POST_INCIERTO = "incierto-timeout"`)
+# y las reconciliaciones manuales que ops ha escrito sobre piezas inciertas ("reconc-timeout-…").
+# Un id real de Metricool/Postproxy nunca empieza así. Hay que excluirlos del índice de enlace:
+# al ser un valor COMPARTIDO entre todas las piezas que expiraron, varias piezas distintas
+# colisionarían bajo la misma clave ficticia (gana la primera por `setdefault`) y se podrían
+# atribuir métricas a la pieza equivocada. Excluirlos no pierde ningún enlace real —un sello
+# nunca casa con el feed de Metricool— y la pieza sigue enlazando por el fallback de título.
+_SELLOS_ID_POST = ("incierto-", "reconc-")
+
+
+def _es_id_post_real(id_post: str) -> bool:
+    """True si `id_post` es un id de post utilizable como clave de enlace (no un sello)."""
+    return bool(id_post) and not id_post.startswith(_SELLOS_ID_POST)
+
+
 def _indice_contenido_por_post(
     contenidos: list[dict[str, Any]],
     plataformas: list[dict[str, Any]],
@@ -414,9 +430,11 @@ def _indice_contenido_por_post(
     """Construye los índices de enlace `id_post_metricool -> contenido_id` y `titulo_norm -> contenido_id`.
 
     El índice por id usa tanto `contenido_plataforma.id_post_metricool` (enlace real por red)
-    como `contenido.id_post_metricool` (acceso directo a nivel pieza, si está relleno). El
-    índice por título normalizado es el fallback heurístico. En empates de título (dos piezas
-    con el mismo título) gana la primera vista: el fuzzy-match es best-effort, no autoritativo.
+    como `contenido.id_post_metricool` (acceso directo a nivel pieza, si está relleno); los
+    sellos de timeout/reconciliación (`_es_id_post_real`) se descartan para que no colisionen
+    bajo una clave ficticia compartida. El índice por título normalizado es el fallback
+    heurístico. En empates de título (dos piezas con el mismo título) gana la primera vista:
+    el fuzzy-match es best-effort, no autoritativo.
     """
     por_id: dict[str, str] = {}
     por_titulo: dict[str, str] = {}
@@ -425,7 +443,7 @@ def _indice_contenido_por_post(
         if not cid:
             continue
         id_directo = (c.get("id_post_metricool") or "").strip()
-        if id_directo:
+        if _es_id_post_real(id_directo):
             por_id.setdefault(id_directo, cid)
         titulo_norm = _normalizar_titulo(c.get("titulo", ""))
         if titulo_norm:
@@ -433,7 +451,7 @@ def _indice_contenido_por_post(
     for plat in plataformas:
         id_post = (plat.get("id_post_metricool") or "").strip()
         cid = plat.get("contenido_id") or ""
-        if id_post and cid:
+        if _es_id_post_real(id_post) and cid:
             por_id.setdefault(id_post, cid)
     return por_id, por_titulo
 
