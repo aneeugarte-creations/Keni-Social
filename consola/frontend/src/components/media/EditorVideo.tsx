@@ -127,7 +127,7 @@ export function EditorVideo({
                 src={src}
                 controls
                 muted
-                className="w-full rounded-md border border-border"
+                className="w-full rounded-md border border-border transition-colors hover:border-keni-300 focus-within:border-keni-300"
                 aria-label="Previsualización del video"
               />
             </div>

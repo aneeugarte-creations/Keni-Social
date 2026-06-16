@@ -183,7 +183,7 @@ export function TarjetaHistoria({
       acciones={accionesMenu}
     >
       <Card
-        className={`text-sm transition-opacity ${esDescartada ? "opacity-60" : ""} ${
+        className={`text-sm transition hover:border-keni-300 focus-within:border-keni-300 ${esDescartada ? "opacity-60" : ""} ${
           seleccionada ? "ring-2 ring-primary/40" : ""
         } ${esUltimaHora ? "border-red-500/60" : ""}`}
         data-testid="historia-item"

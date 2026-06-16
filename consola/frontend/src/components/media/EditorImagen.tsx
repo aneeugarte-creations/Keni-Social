@@ -286,7 +286,7 @@ export function EditorImagen({
                 onLoad={(e) =>
                   setRatioReal(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight)
                 }
-                className="max-h-56 w-auto rounded-md border border-border object-contain"
+                className="max-h-56 w-auto rounded-md border border-border object-contain transition-colors hover:border-keni-300 focus-within:border-keni-300"
               />
             </div>
           </FilaConAcciones>

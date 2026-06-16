@@ -272,7 +272,7 @@ export default function Algoritmos() {
               </CardHeader>
               <CardContent>
                 {fuentes.length > 0 ? (
-                  <ul>
+                  <ul className="space-y-2">
                     {fuentes.map((f) => (
                       <FilaFuente
                         key={f.id}
