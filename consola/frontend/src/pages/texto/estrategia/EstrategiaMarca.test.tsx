@@ -119,7 +119,6 @@ const DOC_CREADO = {
   actualizado: "2026-06-11T10:00:00",
   clase: "tropicalizacion",
   marcas: ["unotv"],
-  estado: "activo",
   produccion: null,
   sha_actual: null,
   sin_publicar: false,
@@ -167,7 +166,6 @@ function stubFetch(opciones: { estrategia?: RespuestaEstrategia | null } = {}) {
               actualizado: "2026-06-02T10:00:00",
               clase: "voz",
               marcas: ["unotv"],
-              estado: "activo",
               prioridad: 2,
               produccion: null,
               sha_actual: null,
@@ -183,7 +181,6 @@ function stubFetch(opciones: { estrategia?: RespuestaEstrategia | null } = {}) {
               actualizado: "2026-06-01T10:00:00",
               clase: "marca",
               marcas: ["unotv"],
-              estado: "activo",
               prioridad: 1,
               produccion: PROD,
               sha_actual: "a1",
@@ -319,7 +316,6 @@ describe("EstrategiaMarca", () => {
       carpeta: "rrss/unotv",
       clase: "tropicalizacion",
       marcas: ["unotv"],
-      estado: "activo",
     });
   });
 

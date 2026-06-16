@@ -43,9 +43,7 @@ const DOC_COPY: DocumentoTexto = {
   actualizado: "2026-06-10T10:00:00",
   clase: "",
   marcas: [],
-  salida: "piezas",
-  estado: "activo",
-  etiquetas: ["copy"],
+  salida: "piezas",  etiquetas: ["copy"],
   pipelines: [],
   rol: "copy",
   prioridad: 0,
@@ -64,9 +62,7 @@ const DOC_FUSION: DocumentoTexto = {
   creado: "2026-05-01T10:00:00",
   actualizado: "2026-06-01T10:00:00",
   clase: "",
-  marcas: [],
-  estado: "activo",
-  produccion: { sha: "a1", autor: "ana", nota: "v1", creado: "2026-05-20T09:00:00" },
+  marcas: [],  produccion: { sha: "a1", autor: "ana", nota: "v1", creado: "2026-05-20T09:00:00" },
   sha_actual: "a1",
   sin_publicar: false,
 };
@@ -80,9 +76,7 @@ const DOC_VOZ: DocumentoTexto = {
   creado: "2026-05-01T10:00:00",
   actualizado: "2026-06-02T10:00:00",
   clase: "voz",
-  marcas: ["unotv"],
-  estado: "activo",
-  produccion: null,
+  marcas: ["unotv"],  produccion: null,
   sha_actual: null,
   sin_publicar: false,
 };
@@ -230,7 +224,6 @@ function stubFetch() {
         });
       if (path === "/api/texto/marcas")
         return json({ marcas: [{ id: "unotv", nombre: "UnoTV" }] });
-      if (path === "/api/texto/areas") return json({ areas: [] });
       if (path === "/api/texto/pipelines")
         return json({
           pipelines: [

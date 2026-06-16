@@ -379,7 +379,6 @@ export function EstrategiaMarca({
         carpeta: `rrss/${marca}`,
         clase,
         marcas: [marca],
-        estado: "activo",
       }),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["texto"] });

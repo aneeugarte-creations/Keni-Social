@@ -41,7 +41,6 @@ export function PanelLanzar({
   promptId,
   salida,
   marcas,
-  areas,
   open,
   onOpenChange,
   marcaForzada,
@@ -50,7 +49,6 @@ export function PanelLanzar({
   promptId: string;
   salida: string;
   marcas: { id: string; nombre: string }[];
-  areas: { id: string; nombre: string }[];
   open: boolean;
   onOpenChange: (v: boolean) => void;
   /** Marca LOCAL que prevalece sobre el switch global: el cockpit de Producción puede lanzar
@@ -142,9 +140,7 @@ export function PanelLanzar({
           ? { tipo: "contenido", valor: valorTarget }
           : tipoTarget === "url"
             ? { tipo: "url", valor: valorTarget }
-            : tipoTarget === "area"
-              ? { tipo: "area", valor: valorTarget }
-              : { tipo: "ninguno" };
+            : { tipo: "ninguno" };
       return api.lanzarTexto({
         prompt_id: promptId,
         marca,
@@ -250,7 +246,6 @@ export function PanelLanzar({
           <SelectContent>
             <SelectItem value="contenido">Contenido (pegar texto)</SelectItem>
             <SelectItem value="url">URL</SelectItem>
-            <SelectItem value="area">Sección de la Consola</SelectItem>
             <SelectItem value="archivo">Archivo</SelectItem>
             <SelectItem value="ninguno">Nada (solo el prompt)</SelectItem>
           </SelectContent>
@@ -267,15 +262,6 @@ export function PanelLanzar({
         />
       ) : tipoTarget === "url" ? (
         <Input value={valorTarget} onChange={(e) => setValorTarget(e.target.value)} placeholder="https://…" />
-      ) : tipoTarget === "area" ? (
-        <Select value={valorTarget} onValueChange={setValorTarget}>
-          <SelectTrigger><SelectValue placeholder="Elige sección" /></SelectTrigger>
-          <SelectContent>
-            {areas.map((a) => (
-              <SelectItem key={a.id} value={a.id}>{a.nombre}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       ) : tipoTarget === "archivo" ? (
         <Input type="file" onChange={(e) => setArchivo(e.target.files?.[0] ?? null)} />
       ) : null}

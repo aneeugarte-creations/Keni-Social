@@ -21,7 +21,6 @@ function docEditorial(parcial: Partial<DocumentoTexto>): DocumentoTexto {
     actualizado: "2026-06-01T10:00:00",
     clase: "",
     marcas: ["unotv"],
-    estado: "activo",
     ...parcial,
   };
 }

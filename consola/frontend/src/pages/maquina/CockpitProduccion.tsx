@@ -134,10 +134,6 @@ export default function CockpitProduccion() {
     queryKey: ["texto-marcas"],
     queryFn: ({ signal }) => api.marcasTexto(signal),
   });
-  const areasQuery = useQuery({
-    queryKey: ["texto-areas"],
-    queryFn: ({ signal }) => api.areasTexto(signal),
-  });
   // La salida del prompt de Redactar decide el modo de lanzamiento (piezas → borradores por red).
   const docRedactarQuery = useQuery({
     queryKey: ["texto-doc", PROMPT_REDACTAR],
@@ -265,7 +261,6 @@ export default function CockpitProduccion() {
         promptId={PROMPT_REDACTAR}
         salida={docRedactarQuery.data?.documento.salida ?? "piezas"}
         marcas={marcasLanzar}
-        areas={areasQuery.data?.areas ?? []}
         open={redactarAbierto}
         onOpenChange={setRedactarAbierto}
         onEditarPrompt={() => setPromptEditando(PROMPT_REDACTAR)}

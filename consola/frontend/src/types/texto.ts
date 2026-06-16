@@ -23,8 +23,6 @@ export interface DocumentoTexto {
   marcas: string[];
   /** Solo prompt: "" | "documento" (texto) | "piezas" (copy por red -> borradores). */
   salida?: string;
-  /** Ciclo de vida: activo | borrador | archivado. Solo `activo` se inyecta en pipelines. */
-  estado?: string;
   /** Tags transversales (navegación / facetas). */
   etiquetas?: string[];
   /** Pipelines a los que se ata el doc (atribución). [] = aplica a todos los pipelines. */
@@ -57,7 +55,6 @@ export interface DocumentoTexto {
 /** Resumen de facetas para poblar los filtros de navegación. */
 export interface FacetasTexto {
   etiquetas: { valor: string; total: number }[];
-  estados: Record<string, number>;
   pipelines: Record<string, number>;
 }
 
@@ -240,15 +237,6 @@ export interface ValidacionEditorial {
   pilares: Record<string, boolean>;
 }
 
-export interface AreaTexto {
-  id: string;
-  nombre: string;
-}
-
-export interface RespuestaAreas {
-  areas: AreaTexto[];
-}
-
 export interface RespuestaMarcasTexto {
   marcas: MarcaDisponible[];
 }
@@ -261,7 +249,6 @@ export interface CuerpoCrearDocumento {
   cuerpo?: string;
   clase?: string;
   marcas?: string[];
-  estado?: string;
   etiquetas?: string[];
   pipelines?: string[];
   rol?: string;
@@ -275,7 +262,6 @@ export interface CuerpoGuardarDocumento {
   carpeta?: string;
   clase?: string;
   marcas?: string[];
-  estado?: string;
   etiquetas?: string[];
   pipelines?: string[];
   rol?: string;

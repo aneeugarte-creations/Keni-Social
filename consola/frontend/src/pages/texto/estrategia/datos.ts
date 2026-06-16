@@ -188,16 +188,14 @@ export function desdeFallback(
   validacion?: ValidacionEditorial,
 ): EstrategiaNormalizada {
   const editoriales = documentos.filter((d) => d.tipo === "editorial");
-  const activos = editoriales.filter((d) => (d.estado ?? "activo") === "activo");
 
   const usados = new Set<string>();
   const pilares: PilarNormalizado[] = CLASES_PILAR.map((clase) => {
-    // Candidato por clase: activos primero, marca-específico antes que global.
+    // Candidato por clase: marca-específico antes que global.
     const candidatos = [...editoriales]
       .filter((d) => d.clase === clase)
       .sort(
         (a, b) =>
-          Number((b.estado ?? "activo") === "activo") - Number((a.estado ?? "activo") === "activo") ||
           Number(esGlobal(a)) - Number(esGlobal(b)) ||
           (a.prioridad ?? 0) - (b.prioridad ?? 0) ||
           a.id.localeCompare(b.id),
@@ -237,9 +235,9 @@ export function desdeFallback(
     }));
 
   // Orden de inyección aproximado al del backend (`editoriales_de_marca`):
-  // prioridad (menor antes), luego pilar, luego id. Solo docs ACTIVOS (los que inyectan).
+  // prioridad (menor antes), luego pilar, luego id.
   const conocidos = [...pilares, ...extras];
-  const orden = [...activos]
+  const orden = [...editoriales]
     .sort(
       (a, b) =>
         (a.prioridad ?? 0) - (b.prioridad ?? 0) ||

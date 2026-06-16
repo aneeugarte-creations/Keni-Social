@@ -8,7 +8,6 @@ import type {
   CuerpoPublicarTexto,
   CuerpoResolverSolicitud,
   PreviewPipeline,
-  RespuestaAreas,
   RespuestaTexto,
   RespuestaDocumento,
   RespuestaEditoriales,
@@ -33,7 +32,6 @@ export const apiTexto = {
       tipo?: string;
       carpeta?: string;
       q?: string;
-      estado?: string;
       etiqueta?: string;
       marca?: string;
       clase?: string;
@@ -46,7 +44,6 @@ export const apiTexto = {
         tipo: filtros?.tipo,
         carpeta: filtros?.carpeta,
         q: filtros?.q,
-        estado: filtros?.estado,
         etiqueta: filtros?.etiqueta,
         marca: filtros?.marca,
         clase: filtros?.clase,
@@ -115,8 +112,6 @@ export const apiTexto = {
     peticion<RespuestaDocumento>(`/texto/${id}/descartar`, { metodo: "POST" }),
   validacionTexto: (marca: string, signal?: AbortSignal) =>
     peticion<ValidacionEditorial>(`/texto/validacion${query({ marca })}`, { signal }),
-  areasTexto: (signal?: AbortSignal) =>
-    peticion<RespuestaAreas>("/texto/areas", { signal }),
   marcasTexto: (signal?: AbortSignal) =>
     peticion<RespuestaMarcasTexto>("/texto/marcas", { signal }),
   lanzarTexto: (cuerpo: CuerpoLanzarTexto) =>
