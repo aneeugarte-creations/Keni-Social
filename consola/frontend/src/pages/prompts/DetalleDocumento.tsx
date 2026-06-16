@@ -13,11 +13,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
   Eye,
   Lock,
   MoreHorizontal,
-  PanelLeftClose,
-  PanelLeftOpen,
   Rocket,
   Send,
   Trash2,
@@ -529,65 +529,60 @@ export function DetalleDocumento({
 
       {/* ───────── Panel de versiones (izquierda, colapsable) + cuerpo (derecha) ───────── */}
       <div className={cn("flex flex-col gap-3 lg:flex-row", !ocultarCabecera && "min-h-0 flex-1")}>
-        {panelAbierto ? (
-          <aside className="flex w-full shrink-0 flex-col gap-2 lg:w-96">
-            <div className="flex items-center justify-between gap-1">
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Versiones
-              </span>
-              {/* Colapsar va A LA PAR de la sección que oculta. */}
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8 shrink-0"
-                aria-label="Colapsar panel lateral"
-                title="Colapsar panel"
-                onClick={() => setPanelAbierto(false)}
-              >
-                <PanelLeftClose className="h-4 w-4" />
-              </Button>
-            </div>
-            <div
-              className={cn(
-                "rounded-md border border-border bg-card p-3",
-                !ocultarCabecera && "min-h-0 flex-1 overflow-y-auto",
-              )}
-            >
-              <PanelVersiones
-                docId={borrador.id}
-                produccionSha={produccion?.sha ?? null}
-                sinPublicar={sinPublicar}
-                esAdmin={esAdmin}
-                onPublicar={() => setPublicarAbierto(true)}
-                onVerVersion={setPreviewSha}
-                versionActiva={previewSha}
-                onBorradorActualizado={() => {
-                  // Vuelve a editar el borrador (cierra cualquier preview de versión).
-                  setPreviewSha(null);
-                  // Fuerza la RE-SINCRONIZACIÓN del borrador con el cuerpo cargado.
-                  sincronizado.current = null;
-                  qc.invalidateQueries({ queryKey: ["prompts-doc", docId] });
-                  qc.invalidateQueries({ queryKey: ["prompts-maquina"] });
-                  if (borrador.tipo !== "prompt") {
-                    qc.invalidateQueries({ queryKey: claveEstrategiaBase });
-                  }
-                }}
-              />
-            </div>
-          </aside>
-        ) : (
-          // Panel colapsado: botón pequeño para reabrirlo (el editor ocupa el resto del ancho).
+        {/* Panel de versiones: SIEMPRE presente. Expandido = lista al tamaño del texto; colapsado =
+            raíl estrecho con un icono-doc por versión (sigue clicable/navegable). El toggle `‹`/`›`
+            va al pie. Sin cabecera «Versiones»: la sección ya se entiende. */}
+        <aside
+          className={cn(
+            "flex shrink-0 flex-col gap-2",
+            panelAbierto ? "w-full lg:w-fit lg:max-w-xs" : "w-auto",
+          )}
+        >
+          <div
+            className={cn(
+              "rounded-md border border-border bg-card",
+              panelAbierto ? "p-3" : "p-1",
+              !ocultarCabecera && "min-h-0 flex-1 overflow-y-auto",
+            )}
+          >
+            <PanelVersiones
+              docId={borrador.id}
+              produccionSha={produccion?.sha ?? null}
+              sinPublicar={sinPublicar}
+              esAdmin={esAdmin}
+              colapsado={!panelAbierto}
+              onPublicar={() => setPublicarAbierto(true)}
+              onVerVersion={setPreviewSha}
+              versionActiva={previewSha}
+              onBorradorActualizado={() => {
+                // Vuelve a editar el borrador (cierra cualquier preview de versión).
+                setPreviewSha(null);
+                // Fuerza la RE-SINCRONIZACIÓN del borrador con el cuerpo cargado.
+                sincronizado.current = null;
+                qc.invalidateQueries({ queryKey: ["prompts-doc", docId] });
+                qc.invalidateQueries({ queryKey: ["prompts-maquina"] });
+                if (borrador.tipo !== "prompt") {
+                  qc.invalidateQueries({ queryKey: claveEstrategiaBase });
+                }
+              }}
+            />
+          </div>
+          {/* Un solo toggle al PIE: `‹` colapsa (no oculta, deja el raíl); `›` expande. */}
           <Button
             size="icon"
-            variant="outline"
-            className="h-8 w-8 shrink-0 self-start"
-            aria-label="Abrir panel lateral"
-            title="Abrir panel"
-            onClick={() => setPanelAbierto(true)}
+            variant="ghost"
+            className="h-8 w-8 self-center shrink-0"
+            aria-label={panelAbierto ? "Colapsar versiones" : "Expandir versiones"}
+            title={panelAbierto ? "Colapsar" : "Expandir"}
+            onClick={() => setPanelAbierto((v) => !v)}
           >
-            <PanelLeftOpen className="h-4 w-4" />
+            {panelAbierto ? (
+              <ChevronLeft className="h-4 w-4" />
+            ) : (
+              <ChevronRight className="h-4 w-4" />
+            )}
           </Button>
-        )}
+        </aside>
 
         <div
           className={cn(

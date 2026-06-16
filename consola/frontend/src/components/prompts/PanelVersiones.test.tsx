@@ -191,4 +191,18 @@ describe("PanelVersiones", () => {
     );
     expect(llamadas.some((l) => l.path.endsWith("/publicar"))).toBe(false);
   });
+
+  it("modo RAÍL (colapsado): un icono-doc por versión, sigue navegable y NO muestra el nombre en texto", async () => {
+    stubFetch();
+    const onVerVersion = vi.fn();
+    montar({ colapsado: true, onVerVersion });
+    // El raíl usa aria-label por versión (el nombre va en title/aria, no como texto visible).
+    const item = await screen.findByRole("button", { name: "Primera versión de la voz" });
+    expect(screen.queryByText("Primera versión de la voz")).not.toBeInTheDocument();
+    // Sigue clicable/navegable: carga esa versión en el editor.
+    fireEvent.click(item);
+    expect(onVerVersion).toHaveBeenCalledWith("bbb222");
+    // El EN VIVO sigue marcado (aria-label incluye «(en vivo)») aun colapsado.
+    expect(screen.getByRole("button", { name: /\(en vivo\)/ })).toBeInTheDocument();
+  });
 });

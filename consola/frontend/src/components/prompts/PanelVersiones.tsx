@@ -16,7 +16,7 @@
  *    paso de publicar a mano.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Rocket, RotateCcw } from "lucide-react";
+import { ArrowRight, FileText, Rocket, RotateCcw } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -48,6 +48,10 @@ export interface PanelVersionesProps {
   /** SHA de la versión que el contenedor está previsualizando (resalta su fila). `null`/ausente
    *  = se está editando el borrador (resalta «Tu borrador»). */
   versionActiva?: string | null;
+  /** Modo RAÍL: en vez de la lista completa, una columna estrecha con un icono de documento por
+   *  versión (el EN VIVO en verde), clicable/navegable igual que la fila. Lo usa el contenedor al
+   *  colapsar el panel: colapsar NO oculta, deja este raíl. */
+  colapsado?: boolean;
   className?: string;
 }
 
@@ -60,6 +64,7 @@ export function PanelVersiones({
   onBorradorActualizado,
   onVerVersion,
   versionActiva,
+  colapsado = false,
   className,
 }: PanelVersionesProps) {
   const qc = useQueryClient();
@@ -137,8 +142,60 @@ export function PanelVersiones({
   if (histQuery.isPending) {
     return (
       <div className={cn("space-y-2", className)}>
-        <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-10 w-full" />
+        <Skeleton className={colapsado ? "h-8 w-8" : "h-10 w-full"} />
+        <Skeleton className={colapsado ? "h-8 w-8" : "h-10 w-full"} />
+      </div>
+    );
+  }
+
+  // ── Modo RAÍL (panel colapsado): solo iconos de documento, uno por versión, el EN VIVO en
+  //    verde. Sigue clicable/navegable: clicar carga esa versión en el editor (como la fila). ──
+  if (colapsado) {
+    return (
+      <div className={cn("flex flex-col items-center gap-1", className)}>
+        {sinPublicar ? (
+          <button
+            type="button"
+            onClick={seleccionable ? () => verVersion(null) : undefined}
+            disabled={!seleccionable}
+            title="Tu borrador (cambios sin publicar)"
+            aria-label="Tu borrador"
+            className={cn(
+              "flex h-8 w-8 items-center justify-center rounded-md",
+              seleccionable && "hover:bg-accent",
+              versionActiva == null && "bg-accent",
+            )}
+          >
+            <FileText className="h-4 w-4 text-keni" />
+          </button>
+        ) : null}
+        {historial.map((v) => {
+          const esEnVivo = !!produccionSha && v.sha === produccionSha;
+          const activa = versionActiva === v.sha;
+          const nombre = v.mensaje || "Publicación";
+          return (
+            <button
+              key={v.sha}
+              type="button"
+              onClick={seleccionable ? () => verVersion(v.sha) : undefined}
+              disabled={!seleccionable}
+              title={`${nombre} · ${v.autor} · ${tiempoRelativo(v.fecha) || v.fecha.slice(0, 10)}${esEnVivo ? " · en vivo" : ""}`}
+              aria-label={`${nombre}${esEnVivo ? " (en vivo)" : ""}`}
+              className={cn(
+                "flex h-8 w-8 items-center justify-center rounded-md",
+                seleccionable && "hover:bg-accent",
+                activa && "bg-accent",
+              )}
+            >
+              <FileText
+                className={cn(
+                  "h-4 w-4",
+                  esEnVivo ? "text-emerald-500" : "text-muted-foreground",
+                )}
+              />
+            </button>
+          );
+        })}
       </div>
     );
   }
