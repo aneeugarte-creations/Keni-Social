@@ -254,6 +254,13 @@ def _avisar_voz(avisos: list[str], *, publicacion_id: str, marca: str) -> None:
 TIPO_ARTE_ORIGINAL = "original"
 
 
+# Lado mínimo (px) que exigimos a la foto ORIGINAL del artículo para inyectarla automáticamente:
+# descarta iconos/emojis/thumbnails que algunos portales sirven como og:image (p. ej. el
+# emoji-fallback de WordPress 72×72). Por debajo, la pieza queda sin foto (criterio humano) en
+# vez de auto-publicar una imagen rota. Una og:image real de portada supera esto de sobra.
+_MIN_LADO_FOTO_ORIGINAL = 320
+
+
 def _descargar_original_a_biblioteca(
     imagen_fuente: str, *, marca: str, titulo: str, autor: dict[str, str] | None
 ) -> str:
@@ -262,14 +269,18 @@ def _descargar_original_a_biblioteca(
     La foto de una fuente PROPIA se baja a S3, se promueve a la carpeta protegida `artes` y se
     registra en el catalogo (`tipo="original"`, por marca): asi APARECE en la Galeria de Artes
     bajo su carpeta "Originales", el GC no la borra y la pieza nace con ESA key auto-inyectada
-    al feed. Tolerante: "" si la descarga falla (la pieza cae a `imagen_fuente`); si solo falla
-    el catalogo, se devuelve igualmente la key promovida (la imagen sirve en la pieza).
+    al feed COMO `foto` (foto cruda real: cuenta como imagen y la placa de marca se compone
+    sobre ella). Tolerante: "" si la descarga falla o la imagen es demasiado pequeña (la pieza
+    queda sin foto, a criterio humano); si solo falla el catalogo, se devuelve igualmente la key
+    promovida (la imagen sirve en la pieza).
     """
     from .. import almacen_media
     from . import extraccion_url
 
     try:
-        objeto = extraccion_url.descargar_imagen_a_media(imagen_fuente)
+        objeto = extraccion_url.descargar_imagen_a_media(
+            imagen_fuente, min_lado=_MIN_LADO_FOTO_ORIGINAL
+        )
     except Exception:  # noqa: BLE001 -- la descarga es un extra; nunca rompe la generacion
         return ""
     try:
@@ -486,26 +497,36 @@ def crear_publicaciones_desde_piezas(
             copy_in = pieza.get("copy_in")
             if not isinstance(copy_in, str):
                 copy_in = ""
-            # Con imagen ORIGINAL de fuente usamos la descargada a media (asset propio
-            # publicable); si la descarga falló, "" y la pieza cae a la URL original. Sin
-            # fuente, NO se hornea placa al crear: la placa de marca se RENDERIZA ON-DEMAND
-            # desde la receta (marca + copy_in) cuando se muestra/publica (ver `render_pieza`).
-            # Así no se duplica un PNG por cada pieza con el mismo logo/pleca y solo cambia el texto.
-            imagen = imagen_descargada if imagen_fuente else ""
+            # PORTADA de la pieza desde la foto ORIGINAL descargada de la fuente PROPIA:
+            #   - POST normal: va a `foto` (foto cruda real). Así CUENTA como imagen
+            #     (`_hay_imagen_real`) — la pieza nace LISTA, sin "Falta imagen" — y la placa de
+            #     marca se compone SOBRE ella on-demand (`render_pieza`), igual que una foto
+            #     subida por el equipo. NO a `imagen` (ese campo es la placa horneada y en piezas
+            #     de marca no cuenta como foto real).
+            #   - CARRUSEL: la portada se queda en `imagen` (la cubierta del carrusel, ya
+            #     resuelta como sus slides); no se reencuadra como foto de placa.
+            # Si la descarga falló o la imagen era basura/diminuta, ambas quedan "" y la pieza cae
+            # a la URL `imagen_fuente` como referencia (criterio humano para poner la foto).
+            if imagen_fuente and quiere_carrusel:
+                imagen_portada, foto_portada = imagen_descargada, ""
+            elif imagen_fuente:
+                imagen_portada, foto_portada = "", imagen_descargada
+            else:
+                imagen_portada, foto_portada = "", ""
             creada: dict[str, object] | None = None
             if publicacion_id:
                 # Nido bajo el tema: adjunta la pieza al `contenido` existente. Devuelve None si
                 # el tema no existe (entonces caemos al borrador suelto).
                 creada = contrato_publicaciones.crear_borrador_en(
                     publicacion_id, marca, red, titulo=titulo, contenido=contenido,
-                    copy_in=copy_in, revision=verdicto, imagen=imagen,
+                    copy_in=copy_in, revision=verdicto, imagen=imagen_portada, foto=foto_portada,
                     imagen_fuente=imagen_fuente, carrusel=carrusel_json,
                 )
             if creada is None:
                 creada = contrato_publicaciones.crear_borrador(
                     marca, red, titulo=titulo, contenido=contenido, copy_in=copy_in,
-                    revision=verdicto, origen=origen, autor=autor, imagen=imagen,
-                    imagen_fuente=imagen_fuente, tipo_contenido=tipo_contenido,
+                    revision=verdicto, origen=origen, autor=autor, imagen=imagen_portada,
+                    foto=foto_portada, imagen_fuente=imagen_fuente, tipo_contenido=tipo_contenido,
                 )
             creadas.append(creada)
     except Exception:

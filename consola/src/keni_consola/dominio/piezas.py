@@ -339,6 +339,7 @@ def crear_borrador(
     origen: str = "",
     imagen: str = "",
     imagen_fuente: str = "",
+    foto: str = "",
     tipo_contenido: str = "",
     evergreen: bool = False,
     autor: dict[str, str] | None = None,
@@ -351,7 +352,9 @@ def crear_borrador(
     el resto del flujo (revisión, programación, publicación) es responsabilidad de C.
 
     `imagen_fuente` + `tipo_contenido='fuente'` permiten que un handoff desde un RSS de
-    marca propia nazca con la imagen original del artículo lista para usarse.
+    marca propia nazca con la imagen original del artículo lista para usarse. `foto` (foto
+    cruda ya descargada a media, p. ej. la og:image original): la pieza nace con foto real
+    (cuenta como imagen; la placa se compone sobre ella), sin "Falta imagen".
     """
     pub = repos.crear_pieza(
         marca,
@@ -364,6 +367,7 @@ def crear_borrador(
         origen=origen,
         imagen=imagen,
         imagen_fuente=imagen_fuente,
+        foto=foto,
         tipo_contenido=tipo_contenido,
         evergreen=evergreen,
         autor=autor,
@@ -382,6 +386,7 @@ def crear_borrador_en(
     revision: str = "",
     imagen: str = "",
     imagen_fuente: str = "",
+    foto: str = "",
     carrusel: str = "",
     evergreen: bool = False,
 ) -> dict[str, Any] | None:
@@ -390,7 +395,9 @@ def crear_borrador_en(
     `carrusel` (pipeline, output carrusel): JSON de slides EXTRA en crudo
     (`[{tipo:"imagen",objeto}, …]`, mismo contrato que el cajón presidencia). La portada
     sigue siendo `imagen`/`imagen_fuente`. "" = pieza de foto normal (no se pisa la media
-    que un placeholder ya traiga).
+    que un placeholder ya traiga). `foto` (foto cruda ya descargada, p. ej. la og:image
+    original de marca propia): cuenta como imagen real → la pieza nace LISTA (sin "Falta
+    imagen") y la placa de marca se compone sobre ella on-demand.
 
     Variante de `crear_borrador` que NIDA la pieza bajo un tema del tablero en vez de crear
     su propio padre (peticion de un content manager: el borrador auto-generado cuelga del tema origen).
@@ -441,8 +448,14 @@ def crear_borrador_en(
         # copy solo se escribe si trae algo (no pisar con "").
         if imagen:
             campos["imagen"] = imagen
+        # Foto cruda real (og:image descargada): cuenta como imagen → la pieza queda LISTA.
+        if foto:
+            campos["foto"] = foto
+            campos["falta_imagen"] = False
         if imagen_fuente:
             campos["imagen_fuente"] = imagen_fuente
+            # Con foto real ya no falta imagen; con solo la URL de fuente, también se considera
+            # provista (referencia del artículo). `foto` manda si ambas vienen.
             campos["falta_imagen"] = False
         if carrusel:
             campos["carrusel"] = carrusel
@@ -455,12 +468,13 @@ def crear_borrador_en(
             # DERIVADO del copy real (no `False` fijo): un copy vacío => falta_copy=True. Evita el
             # drift "copy listo" sin copy que mentía en el label del feed y el gate de auto-avance.
             falta_copy=falta_copy,
-            # Con imagen de fuente (URL del artículo) la pieza YA tiene imagen.
-            falta_imagen=False if imagen_fuente else None,
+            # Con foto real (og:image descargada) o imagen de fuente (URL del artículo) la pieza YA tiene imagen.
+            falta_imagen=False if (imagen_fuente or foto) else None,
             copy=contenido,
             copy_in=copy_in,
             imagen=imagen,
             imagen_fuente=imagen_fuente,
+            foto=foto,
             carrusel=carrusel,
             revision=revision,
             evergreen=evergreen,

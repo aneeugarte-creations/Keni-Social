@@ -162,6 +162,7 @@ def crear_pieza(
     origen: str = "",
     imagen: str = "",
     imagen_fuente: str = "",
+    foto: str = "",
     # Default "" (no TIPO_CONTENIDO_DEFECTO) para que la firma sea IDÉNTICA a la de
     # `repos.crear_pieza` (test de paridad); el valor real se coalesce abajo.
     tipo_contenido: str = "",
@@ -179,7 +180,8 @@ def crear_pieza(
     legado, hoy retirado). El `estado` editorial se traduce al de
     plataforma. `imagen_fuente` (URL original, p.ej. de un RSS de marca propia) +
     `tipo_contenido='fuente'` nacen juntos: hay imagen (la del artículo), así que la pieza
-    no queda con `falta_imagen`.
+    no queda con `falta_imagen`. `foto` (foto cruda ya descargada, p.ej. la og:image original):
+    foto real → cuenta como imagen y la placa se compone sobre ella; la pieza nace lista.
     """
     con = _conectar()
     try:
@@ -196,6 +198,7 @@ def crear_pieza(
             origen=origen,
             imagen=imagen,
             imagen_fuente=imagen_fuente,
+            foto=foto,
             tipo_contenido=tipo_contenido,
             evergreen=evergreen,
             autor=autor,
@@ -220,6 +223,7 @@ def _insertar_publicacion_con_pieza(
     evergreen = bool(campos.get("evergreen"))
     fecha_creacion = campos.get("fecha_creacion") or ""
     imagen_fuente = campos.get("imagen_fuente") or ""
+    foto = campos.get("foto") or ""
     padre = _fila_publicacion_nueva(
         clase="contenido",
         flujo="evergreen" if evergreen else "",
@@ -247,8 +251,9 @@ def _insertar_publicacion_con_pieza(
         copy_in=campos.get("copy_in") or "",
         imagen=campos.get("imagen") or "",
         imagen_fuente=imagen_fuente,
-        # Si hay imagen de fuente (URL del artículo), la pieza YA tiene imagen.
-        falta_imagen=False if imagen_fuente else None,
+        foto=foto,
+        # Con foto real (og:image descargada) o imagen de fuente (URL del artículo), la pieza YA tiene imagen.
+        falta_imagen=False if (imagen_fuente or foto) else None,
         revision=campos.get("revision") or "",
         fecha_programada=campos.get("fecha_programada") or "",
         evergreen=evergreen,

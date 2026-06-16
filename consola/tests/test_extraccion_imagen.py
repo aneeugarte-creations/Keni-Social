@@ -65,6 +65,94 @@ def test_ext_imagen_no_imagen_none():
 
 
 # --------------------------------------------------------------------------- #
+# _dimensiones_imagen: medir el lado por la cabecera (sin Pillow)             #
+# --------------------------------------------------------------------------- #
+
+
+def _png_dim(ancho: int, alto: int) -> bytes:
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + b"\x00\x00\x00\x0dIHDR"
+        + ancho.to_bytes(4, "big")
+        + alto.to_bytes(4, "big")
+        + b"\x08\x06\x00\x00\x00"
+    )
+
+
+def _jpg_dim(ancho: int, alto: int) -> bytes:
+    return (
+        b"\xff\xd8"
+        + b"\xff\xc0\x00\x11\x08"
+        + alto.to_bytes(2, "big")
+        + ancho.to_bytes(2, "big")
+        + b"\x00" * 6
+    )
+
+
+def _gif_dim(ancho: int, alto: int) -> bytes:
+    return b"GIF89a" + ancho.to_bytes(2, "little") + alto.to_bytes(2, "little") + b"\x00" * 3
+
+
+def _webp_vp8x_dim(ancho: int, alto: int) -> bytes:
+    return (
+        b"RIFF" + b"\x00\x00\x00\x00" + b"WEBP" + b"VP8X"
+        + b"\x00\x00\x00\x0a" + b"\x00\x00\x00\x00"
+        + (ancho - 1).to_bytes(3, "little")
+        + (alto - 1).to_bytes(3, "little")
+    )
+
+
+def test_dimensiones_imagen_por_formato():
+    assert extraccion_url._dimensiones_imagen(_png_dim(640, 480)) == (640, 480)
+    assert extraccion_url._dimensiones_imagen(_jpg_dim(640, 480)) == (640, 480)
+    assert extraccion_url._dimensiones_imagen(_gif_dim(640, 480)) == (640, 480)
+    assert extraccion_url._dimensiones_imagen(_webp_vp8x_dim(640, 480)) == (640, 480)
+
+
+def test_dimensiones_imagen_no_medible_none():
+    # No es imagen reconocible -> None.
+    assert extraccion_url._dimensiones_imagen(b"<html>") is None
+    # PNG con firma valida pero cabecera truncada (no llega al IHDR) -> None (no medible).
+    assert extraccion_url._dimensiones_imagen(b"\x89PNG\r\n\x1a\n" + b"\x00\x00") is None
+
+
+# --------------------------------------------------------------------------- #
+# descargar_imagen_a_media: filtro de tamano minimo (min_lado)                #
+# --------------------------------------------------------------------------- #
+
+
+def test_descargar_rechaza_imagen_pequena(almacen_disco, monkeypatch):
+    """`min_lado` rechaza la basura diminuta (p. ej. el emoji-fallback 72x72)."""
+    monkeypatch.setattr(extraccion_url, "_DESCARGADOR_BYTES", lambda url: _png_dim(72, 72))
+    with pytest.raises(extraccion_url.ExtraccionError):
+        extraccion_url.descargar_imagen_a_media("https://example.com/emoji.png", min_lado=320)
+
+
+def test_descargar_acepta_imagen_grande(almacen_disco, monkeypatch):
+    """Una imagen que supera `min_lado` se guarda con normalidad."""
+    grande = _png_dim(800, 600)
+    monkeypatch.setattr(extraccion_url, "_DESCARGADOR_BYTES", lambda url: grande)
+    nombre = extraccion_url.descargar_imagen_a_media("https://example.com/foto.png", min_lado=320)
+    assert nombre.startswith("fotos/") and nombre.endswith(".png")
+    assert media.leer_media(nombre) == grande
+
+
+def test_descargar_sin_min_lado_no_filtra(almacen_disco, monkeypatch):
+    """`min_lado=0` (por defecto) NO filtra por tamano: los callers manuales no cambian."""
+    monkeypatch.setattr(extraccion_url, "_DESCARGADOR_BYTES", lambda url: _png_dim(10, 10))
+    nombre = extraccion_url.descargar_imagen_a_media("https://example.com/x.png")
+    assert nombre.startswith("fotos/")
+
+
+def test_descargar_no_medible_no_se_bloquea(almacen_disco, monkeypatch):
+    """Si la cabecera no es medible, `min_lado` NO bloquea (no rechazamos lo que no medimos)."""
+    indeterminada = b"\x89PNG\r\n\x1a\n" + b"\x00\x00"  # PNG valido pero sin IHDR completo
+    monkeypatch.setattr(extraccion_url, "_DESCARGADOR_BYTES", lambda url: indeterminada)
+    nombre = extraccion_url.descargar_imagen_a_media("https://example.com/x.png", min_lado=320)
+    assert nombre.startswith("fotos/")
+
+
+# --------------------------------------------------------------------------- #
 # descargar_imagen_a_media: camino feliz (guardado + lectura)                 #
 # --------------------------------------------------------------------------- #
 

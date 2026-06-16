@@ -19,6 +19,17 @@ _MARCA = "unotv"
 _PNG = b"\x89PNG\r\n\x1a\n" + b"\x00\x01\x02\x03" * 4
 
 
+def _png(ancho: int, alto: int) -> bytes:
+    """PNG mínimo con `ancho`×`alto` en su IHDR (suficiente para medir dimensiones)."""
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + b"\x00\x00\x00\x0dIHDR"
+        + ancho.to_bytes(4, "big")
+        + alto.to_bytes(4, "big")
+        + b"\x08\x06\x00\x00\x00"
+    )
+
+
 def _almacen_disco(monkeypatch):
     """Fuerza backend de media en DISCO (sin S3 ni red), como en test_extraccion_imagen."""
     for var in ("S3_ENDPOINT", "S3_ACCESS_KEY", "S3_SECRET_KEY", "S3_REGION", "S3_BUCKET"):
@@ -40,17 +51,44 @@ def test_imagen_fuente_se_cataloga_como_original_y_se_inyecta(entorno, monkeypat
         tipo_contenido="fuente",
     )
 
-    # La pieza nace con la foto en la carpeta protegida `artes` (auto-inyectada al feed).
+    # La pieza nace con la foto ORIGINAL como `foto` (foto cruda real, en la carpeta protegida
+    # `artes`): así CUENTA como imagen y la pieza queda LISTA (sin "Falta imagen"). NO va a
+    # `imagen` (ese campo es la placa horneada y en marca no cuenta como foto real).
     assert len(creadas) == 1
-    imagen = str(creadas[0].get("imagen") or "")
-    assert imagen.startswith("artes/")
+    foto = str(creadas[0].get("foto") or "")
+    assert foto.startswith("artes/")
+    assert str(creadas[0].get("imagen") or "") == ""
+    assert creadas[0].get("falta_imagen") is False
 
     # Y queda CATALOGADA en la Prompts con tipo="original" y marca de la pieza.
     catalogo = repos.listar_media_catalogo()
-    fila = next((c for c in catalogo if (c.get("objeto") or "") == imagen), None)
+    fila = next((c for c in catalogo if (c.get("objeto") or "") == foto), None)
     assert fila is not None
     assert fila.get("tipo") == dom_copy.TIPO_ARTE_ORIGINAL
     assert fila.get("marca") == _MARCA
+
+
+def test_imagen_fuente_basura_diminuta_no_inyecta_y_queda_sin_foto(entorno, monkeypatch):
+    """Una og:image basura/diminuta (p. ej. el emoji-fallback 72×72) NO se inyecta: la pieza
+    queda SIN foto y con "Falta imagen" (criterio humano), en vez de auto-publicar algo roto."""
+    _almacen_disco(monkeypatch)
+    monkeypatch.setattr(extraccion_url, "_DESCARGADOR_BYTES", lambda url: _png(72, 72))
+
+    creadas = dom_copy.crear_publicaciones_desde_piezas(
+        [{"red": "x", "contenido": "Hola", "copy_in": ""}],
+        marca=_MARCA,
+        titulo="Nota con og:image basura",
+        verdicto="",
+        origen="hist-basura",
+        imagen_fuente="https://example.com/emoji.png",
+        tipo_contenido="fuente",
+    )
+
+    assert len(creadas) == 1
+    assert str(creadas[0].get("foto") or "") == ""
+    assert creadas[0].get("falta_imagen") is True
+    # No se cataloga nada (no hubo descarga válida que promover a "Originales").
+    assert repos.listar_media_catalogo() == []
 
 
 def test_sin_imagen_fuente_no_cataloga_ni_pone_imagen(entorno, monkeypatch):

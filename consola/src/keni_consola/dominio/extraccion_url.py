@@ -303,13 +303,76 @@ def _ext_imagen(datos: bytes) -> str | None:
     return None
 
 
-def descargar_imagen_a_media(url: str) -> str:
+def _dimensiones_imagen(datos: bytes) -> tuple[int, int] | None:
+    """`(ancho, alto)` en px leídos de la CABECERA, o None si no se pudo medir. PURA.
+
+    Lee solo los bytes de cabecera de cada formato (png/gif/webp/jpeg) — no decodifica la
+    imagen ni depende de Pillow. None cuando el formato no se reconoce o la cabecera está
+    truncada: el llamante trata "no medible" como "no bloquear" (solo rechazamos cuando
+    MEDIMOS que es demasiado pequeña), así nunca descartamos una imagen válida que no supimos leer.
+    """
+    if datos.startswith(b"\x89PNG\r\n\x1a\n"):
+        if len(datos) >= 24:
+            return (int.from_bytes(datos[16:20], "big"), int.from_bytes(datos[20:24], "big"))
+        return None
+    if datos[:6] in (b"GIF87a", b"GIF89a"):
+        if len(datos) >= 10:
+            return (int.from_bytes(datos[6:8], "little"), int.from_bytes(datos[8:10], "little"))
+        return None
+    if datos[:4] == b"RIFF" and datos[8:12] == b"WEBP":
+        if len(datos) < 30:
+            return None
+        fourcc = datos[12:16]
+        if fourcc == b"VP8X":
+            return (
+                int.from_bytes(datos[24:27], "little") + 1,
+                int.from_bytes(datos[27:30], "little") + 1,
+            )
+        if fourcc == b"VP8 ":
+            return (
+                int.from_bytes(datos[26:28], "little") & 0x3FFF,
+                int.from_bytes(datos[28:30], "little") & 0x3FFF,
+            )
+        if fourcc == b"VP8L":
+            bits = int.from_bytes(datos[21:26], "little")
+            return ((bits & 0x3FFF) + 1, ((bits >> 14) & 0x3FFF) + 1)
+        return None
+    if datos.startswith(b"\xff\xd8\xff"):
+        return _dimensiones_jpeg(datos)
+    return None
+
+
+def _dimensiones_jpeg(datos: bytes) -> tuple[int, int] | None:
+    """`(ancho, alto)` de un JPEG recorriendo sus marcadores hasta el SOF. None si no se halla."""
+    i, n = 2, len(datos)
+    while i + 9 < n:
+        if datos[i] != 0xFF:
+            i += 1
+            continue
+        marcador = datos[i + 1]
+        # Marcadores sin segmento de longitud (SOI/EOI/RSTn/relleno): se saltan en 2 bytes.
+        if marcador in (0xD8, 0xD9, 0x01) or 0xD0 <= marcador <= 0xD7:
+            i += 2
+            continue
+        # SOF (alto/ancho): C0–CF salvo DHT(C4), JPG(C8) y DAC(CC).
+        if marcador in (0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF):
+            return (int.from_bytes(datos[i + 7:i + 9], "big"), int.from_bytes(datos[i + 5:i + 7], "big"))
+        i += 2 + int.from_bytes(datos[i + 2:i + 4], "big")
+    return None
+
+
+def descargar_imagen_a_media(url: str, *, min_lado: int = 0) -> str:
     """Descarga una imagen desde `url` (SSRF guard) y la GUARDA en media (S3/disco).
 
     Devuelve el nombre del objeto guardado (servible en `/api/media/{nombre}`), ya un
     asset propio publicable. Lanza `ExtraccionError` (mensaje en español) si la URL es
     inválida/insegura, la descarga falla, o el contenido no es una imagen soportada
     (png/jpg/gif/webp).
+
+    `min_lado` (px, 0 = sin filtro): rechaza imágenes cuyo lado MEDIDO sea menor (filtra
+    basura tipo el emoji-fallback de WordPress 72×72 que algunas notas traen como og:image).
+    Solo bloquea cuando se PUEDE medir y es pequeña; una cabecera que no sabemos leer NO se
+    descarta (no rechazamos una imagen válida por no medirla).
     """
     from .. import media
 
@@ -322,6 +385,12 @@ def descargar_imagen_a_media(url: str) -> str:
     ext = _ext_imagen(datos)
     if ext is None:
         raise ExtraccionError("El contenido descargado no es una imagen (png/jpg/gif/webp).")
+    if min_lado > 0:
+        dims = _dimensiones_imagen(datos)
+        if dims is not None and min(dims) < min_lado:
+            raise ExtraccionError(
+                f"La imagen es demasiado pequeña ({dims[0]}×{dims[1]} px; mínimo {min_lado} px de lado)."
+            )
     try:
         # Es la foto ORIGINAL de un articulo (RSS de marca): va a la carpeta `fotos` como
         # cualquier foto cruda, no a `generadas`.
