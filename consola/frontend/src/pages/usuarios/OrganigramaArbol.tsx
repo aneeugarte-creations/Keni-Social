@@ -1,6 +1,5 @@
 import * as React from "react";
 
-import "@/components/organigrama/org-tree.css";
 import {
   hijosPorManager,
   indexarPorId,
@@ -13,11 +12,24 @@ import { type MarcaDisponible, type UsuarioAdmin } from "@/types";
 
 import { DialogoMiembro } from "./DialogoMiembro";
 import { Leyenda } from "./Leyenda";
-import { NodoVertical } from "./NodoVertical";
 import { TarjetaMiembro } from "./TarjetaMiembro";
 
-// --- Árbol vertical (indentado) ----------------------------------------------
+// --- Lista plana (una persona por línea) -------------------------------------
 
+interface Fila {
+  usuario: UsuarioAdmin;
+  /** Zona (marca) heredada de su cabeza de área, para el acento de color. */
+  zona: string;
+  /** Tiene personas a su cargo → marca de coordinación/dirección. */
+  tieneReportes: boolean;
+}
+
+/**
+ * Organigrama como lista plana: cada persona en su propia línea con nombre, cargo y marcas.
+ * El orden replica la lógica del árbol (Dirección → cada área por marca → cabeza y sus
+ * reportes en profundidad) para que cada zona quede contigua, pero sin indentación. Al hacer
+ * clic en una persona se abre el panel de edición. Quien tiene reportes lleva un icono.
+ */
 export function OrganigramaArbol({
   usuarios,
   idActual,
@@ -30,6 +42,23 @@ export function OrganigramaArbol({
   const porId = React.useMemo(() => indexarPorId(usuarios), [usuarios]);
   const hijos = React.useMemo(() => hijosPorManager(usuarios), [usuarios]);
   const cima = React.useMemo(() => raices(usuarios, porId), [usuarios, porId]);
+
+  // Aplana el árbol en una lista ordenada, conservando la agrupación por área (zona).
+  const filas = React.useMemo<Fila[]>(() => {
+    const out: Fila[] = [];
+    const tiene = (u: UsuarioAdmin) => (hijos.get(u.id)?.length ?? 0) > 0;
+    const visitar = (u: UsuarioAdmin, zona: string) => {
+      out.push({ usuario: u, zona, tieneReportes: tiene(u) });
+      for (const h of hijos.get(u.id) ?? []) visitar(h, zona);
+    };
+    for (const raiz of cima) {
+      out.push({ usuario: raiz, zona: ZONA_DIRECCION, tieneReportes: tiene(raiz) });
+      for (const { zona, cabezas } of zonasOrdenadas(hijos.get(raiz.id) ?? [])) {
+        for (const cabeza of cabezas) visitar(cabeza, zona);
+      }
+    }
+    return out;
+  }, [cima, hijos]);
 
   // Zonas presentes (para la leyenda): las marcas/transversal que tengan a alguien.
   const zonasPresentes = React.useMemo(() => {
@@ -48,41 +77,19 @@ export function OrganigramaArbol({
     <div className="space-y-4">
       <Leyenda zonas={zonasPresentes} />
 
-      <div className="org-v overflow-x-auto rounded-lg border bg-muted/20">
-        <ul className="org-v-root">
-          {cima.map((raiz) => {
-            // Hijos del director ordenados por ÁREA (marca) para que cada zona quede
-            // contigua; cada cabeza lleva su zona para colorear su rama.
-            const areas = zonasOrdenadas(hijos.get(raiz.id) ?? []);
-            return (
-              <li key={raiz.id} className="org-v-node">
-                <TarjetaMiembro
-                  usuario={raiz}
-                  zona={ZONA_DIRECCION}
-                  esYoMismo={raiz.id === idActual}
-                  onAbrir={setSeleccionado}
-                />
-                {areas.length > 0 && (
-                  <ul className="org-v-children">
-                    {areas.flatMap(({ zona, cabezas }) =>
-                      cabezas.map((cabeza) => (
-                        <NodoVertical
-                          key={cabeza.id}
-                          nodo={cabeza}
-                          zona={zona}
-                          hijos={hijos}
-                          idActual={idActual}
-                          onAbrir={setSeleccionado}
-                        />
-                      )),
-                    )}
-                  </ul>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </div>
+      <ul className="flex flex-col gap-1.5">
+        {filas.map(({ usuario, zona, tieneReportes }) => (
+          <li key={usuario.id}>
+            <TarjetaMiembro
+              usuario={usuario}
+              zona={zona}
+              tieneReportes={tieneReportes}
+              esYoMismo={usuario.id === idActual}
+              onAbrir={setSeleccionado}
+            />
+          </li>
+        ))}
+      </ul>
 
       <DialogoMiembro
         usuario={usuarioSel}

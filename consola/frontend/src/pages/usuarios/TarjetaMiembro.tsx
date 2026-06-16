@@ -1,16 +1,21 @@
+import { Users } from "lucide-react";
+
 import { Badge } from "@/components/ui/badge";
 import { hexAlpha, iniciales, metaZona, nombreVisible } from "@/lib/organigrama";
 import { type CargoUsuario, etiquetaCargo, type UsuarioAdmin } from "@/types";
 
-/** Tarjeta de una persona. Clic = abrir el panel de edición. */
+/** Tarjeta-fila de una persona. Clic = abrir el panel de edición. */
 export function TarjetaMiembro({
   usuario,
   zona,
+  tieneReportes,
   esYoMismo,
   onAbrir,
 }: {
   usuario: UsuarioAdmin;
   zona: string;
+  /** Tiene personas a su cargo → muestra el icono de coordinación/dirección. */
+  tieneReportes: boolean;
   esYoMismo: boolean;
   onAbrir: (id: string) => void;
 }) {
@@ -22,7 +27,7 @@ export function TarjetaMiembro({
     <button
       type="button"
       onClick={() => onAbrir(usuario.id)}
-      className="org-tarjeta flex w-[21rem] items-start gap-2.5 rounded-md border bg-card py-2 pl-2.5 pr-2 text-left shadow-sm transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="org-tarjeta flex w-full items-start gap-2.5 rounded-md border bg-card py-2 pl-2.5 pr-2 text-left shadow-sm transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       style={{ borderLeftColor: meta.color, borderLeftWidth: 4 }}
       aria-label={`Editar a ${nombre}`}
     >
@@ -34,10 +39,16 @@ export function TarjetaMiembro({
         {iniciales(nombre)}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-semibold leading-tight">
-          {nombre}
+        <span className="flex items-center gap-1 text-sm font-semibold leading-tight">
+          {tieneReportes && (
+            <Users
+              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+              aria-label="Tiene personas a su cargo"
+            />
+          )}
+          <span className="truncate">{nombre}</span>
           {esYoMismo && (
-            <span className="ml-1 text-xs font-normal text-muted-foreground">(tú)</span>
+            <span className="text-xs font-normal text-muted-foreground">(tú)</span>
           )}
         </span>
         <span className="block truncate text-xs text-muted-foreground">
@@ -45,7 +56,7 @@ export function TarjetaMiembro({
         </span>
       </span>
 
-      <span className="flex max-w-[8.5rem] shrink-0 flex-wrap justify-end gap-1">
+      <span className="flex shrink-0 flex-wrap justify-end gap-1">
         {usuario.rol === "admin" && (
           <Badge variant="default" className="h-5 px-1.5 text-[10px] font-medium">
             Admin

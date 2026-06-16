@@ -137,17 +137,19 @@ describe("Organigrama · administración", () => {
     vi.unstubAllGlobals();
   });
 
-  it("pinta el árbol con nombres, áreas por marca y la relación de reporte", async () => {
+  it("lista a cada persona con nombre, área por marca e icono de quien tiene reportes", async () => {
     stubFetch();
     renderUsuarios();
 
-    // Nombres humanos (no el login) en las tarjetas.
+    // Nombres humanos (no el login) en las filas.
     expect(await screen.findByText("Ana López")).toBeInTheDocument();
     expect(screen.getByText("Dir Admin")).toBeInTheDocument();
     // El área de Ana (community manager de Claro Sports) define una zona "Claro Sports".
     expect(screen.getAllByText(/claro sports/i).length).toBeGreaterThan(0);
-    // Cada tarjeta es accionable (abre el panel de edición).
+    // Cada fila es accionable (abre el panel de edición).
     expect(screen.getByRole("button", { name: /editar a ana lópez/i })).toBeInTheDocument();
+    // Solo el director (tiene a Ana a su cargo) lleva el icono; Ana, sin reportes, no.
+    expect(screen.getAllByLabelText("Tiene personas a su cargo")).toHaveLength(1);
   });
 
   it("muestra aviso de permiso ante un 403", async () => {
