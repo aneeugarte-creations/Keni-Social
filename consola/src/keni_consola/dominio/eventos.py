@@ -25,7 +25,7 @@ El POST es best-effort: un webhook caido NO rompe la transicion del tablero ni e
 para no bloquear la respuesta HTTP del tablero.
 
 TIPOS DE EVENTO (estables; el frontend y los webhooks se suscriben por nombre):
-  - `pieza.aprobada`    una fila por plataforma pasa a `aprobado`.
+  - `pieza.aprobada`    la cadena de una pieza junta sus 2 OK (gate humano superado).
   - `pieza.publicada`   una fila por plataforma pasa a `publicado`.
   - `contenido.vencido` un contenido pasa su `fecha_entrega` sin estar cerrado.
   - `pieza.bajo_rendimiento`    una pieza publicada cae por debajo del umbral de engagement.

@@ -27,9 +27,9 @@ import type { Publicacion } from "@/types";
 
 import { etapaDePublicacion } from "./etapa";
 
-/** Las piezas cuya cadena importa (mismo gate que `PostFeed`): en revisión o ya aprobadas. */
+/** Las piezas cuya cadena importa (mismo gate que `PostFeed`): en revisión o ya programadas. */
 function necesitaCadena(p: Publicacion): boolean {
-  return p.estado === "en_revision" || etapaDePublicacion(p) === "aprobada";
+  return p.estado === "en_revision" || etapaDePublicacion(p) === "programada";
 }
 
 const NINGUNA: ReadonlySet<string> = new Set();

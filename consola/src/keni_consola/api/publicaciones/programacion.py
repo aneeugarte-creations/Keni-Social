@@ -174,11 +174,11 @@ def _encolar_en_hueco_libre(
 
     `estado_esperado` (opcional): CAS sobre el `estado` actual de la pieza. El encolado MANUAL lo
     deja en None (override deliberado: re-encola venga del estado del que venga). La
-    AUTO-programación pasa `ESTADO_APROBADO`: si entre que leyó la pieza `aprobado` y esta
-    escritura otro flujo la movió (edición que la resetea a borrador, "deshacer aprobación",
-    reprograma manual), el UPDATE condicional NO aplica y `actualizar_publicacion` devuelve None;
-    devolvemos `(None, True)` SIN reintentar (la pieza dejó de ser candidata; reintentar volvería
-    a fallar). Así la auto-programación no RESUCITA a `programado` algo que el humano ya movió.
+    AUTO-programación pasa `ESTADO_EN_REVISION`: si entre que leyó la pieza `en_revision` y esta
+    escritura otro flujo la movió (edición que la resetea a borrador, reprograma manual), el
+    UPDATE condicional NO aplica y `actualizar_publicacion` devuelve None; devolvemos
+    `(None, True)` SIN reintentar (la pieza dejó de ser candidata; reintentar volvería a fallar).
+    Así la auto-programación no RESUCITA a `programado` algo que el humano ya movió.
     """
     for _ in range(_MAX_REINTENTOS_HUECO):
         hueco = calcular_hueco_para(pub, ahora)

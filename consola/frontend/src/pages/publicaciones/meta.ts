@@ -146,12 +146,12 @@ export function iconoRed(id: string): LucideIcon {
 /** Orden de avance del ciclo de vida de una publicación.
  *
  * El flujo de aprobación de equipo (#9) intercala `en_revision` entre el borrador y
- * el aprobado: borrador → en revisión → aprobado → programado → publicado.
+ * la salida: borrador → en revisión → programado → publicado. Ya no hay estado de
+ * reposo `aprobado` (juntar los 2 likes auto-programa, no crea un estado intermedio).
  */
 export const ORDEN_ESTADOS: EstadoPublicacion[] = [
   "borrador",
   "en_revision",
-  "aprobado",
   "programado",
   "publicado",
 ];
@@ -170,10 +170,6 @@ export const META_ESTADOS: Record<EstadoPublicacion, MetaEstado> = {
   en_revision: {
     nombre: "En revisión",
     clase: "border-transparent bg-violet-500/15 text-violet-700 dark:text-violet-300",
-  },
-  aprobado: {
-    nombre: "Aprobado",
-    clase: "border-transparent bg-blue-500/15 text-blue-700 dark:text-blue-300",
   },
   programado: {
     nombre: "Programado",

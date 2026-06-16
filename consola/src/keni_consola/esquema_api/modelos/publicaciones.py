@@ -19,9 +19,10 @@ __all__ = [
     "RespuestaColaAprobacion",
 ]
 
-# El flujo de aprobacion de equipo (#9, Fase 3) intercala `en_revision` entre el
-# borrador y el aprobado.
-EstadoPublicacion = Literal["borrador", "en_revision", "aprobado", "programado", "publicado"]
+# Vocabulario ÚNICO de estado de una pieza (COLAPSO 2026-06): el flujo de aprobación de equipo
+# intercala `en_revision` entre el borrador y la salida; ya no hay estado de reposo `aprobado`
+# (juntar los 2 likes auto-programa, no crea un estado intermedio).
+EstadoPublicacion = Literal["borrador", "en_revision", "programado", "publicado"]
 # Etapa REAL del flujo de IA de una pieza (Flujo C), derivada por
 # `pipeline_estado.etapa_de_pieza`. La consume el Feed de ideación (Flujo D): es el
 # estado-por-etapa "en vivo" de la pieza, más rico que `estado` (incluye el gate humano).
@@ -32,7 +33,6 @@ EtapaIa = Literal[
     "falta_copy_in",
     "falta_hashtags",
     "lista_para_revisar",
-    "aprobada",
     "programada",
     "publicada",
 ]

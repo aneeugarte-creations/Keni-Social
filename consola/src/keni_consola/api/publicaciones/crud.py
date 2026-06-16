@@ -1,8 +1,8 @@
 """CRUD de publicaciones: alta (individual y lote), listado/paginacion, detalle, edicion,
 borrado (individual y lote), cadenas batch, duplicar/clonar y programar en Metricool.
 
-El ciclo de vida editorial de cada pieza (borrador -> en_revision -> aprobado -> programado
--> publicado), con validacion de marca/red/estado y maquina de transiciones del PUT. Extraido
+El ciclo de vida editorial de cada pieza (borrador -> en_revision -> programado -> publicado),
+con validacion de marca/red/estado y maquina de transiciones del PUT. Extraido
 TAL CUAL del modulo `publicaciones.py` original (refactor de pura reubicacion, sin cambio de
 comportamiento).
 """
@@ -25,7 +25,6 @@ from ..._http_json import (
     tope_listado,
 )
 from ...estados import (
-    ESTADO_APROBADO,
     ESTADO_BORRADOR,
     ESTADO_EN_REVISION,
     ESTADO_PROGRAMADO,
@@ -49,7 +48,6 @@ from .espejo import _propagar_espejo
 _ESTADO_NOMBRE: dict[str, str] = {
     "borrador": "Borrador",
     "en_revision": "En revisión",
-    "aprobado": "Aprobado",
     "programado": "Programado",
     "publicado": "Publicado",
 }
@@ -61,10 +59,9 @@ _MARCAS_IDS = {m[0] for m in _MARCAS}
 
 
 _TRANSICIONES_PUT: dict[str, frozenset[str]] = {
-    ESTADO_BORRADOR: frozenset({ESTADO_EN_REVISION, ESTADO_APROBADO, ESTADO_PROGRAMADO, ESTADO_PUBLICADO}),
-    ESTADO_EN_REVISION: frozenset({ESTADO_BORRADOR, ESTADO_APROBADO, ESTADO_PROGRAMADO, ESTADO_PUBLICADO}),
-    ESTADO_APROBADO: frozenset({ESTADO_BORRADOR, ESTADO_PROGRAMADO, ESTADO_PUBLICADO}),
-    ESTADO_PROGRAMADO: frozenset({ESTADO_BORRADOR, ESTADO_APROBADO, ESTADO_PUBLICADO}),
+    ESTADO_BORRADOR: frozenset({ESTADO_EN_REVISION, ESTADO_PROGRAMADO, ESTADO_PUBLICADO}),
+    ESTADO_EN_REVISION: frozenset({ESTADO_BORRADOR, ESTADO_PROGRAMADO, ESTADO_PUBLICADO}),
+    ESTADO_PROGRAMADO: frozenset({ESTADO_BORRADOR, ESTADO_PUBLICADO}),
     ESTADO_PUBLICADO: frozenset(),
 }
 

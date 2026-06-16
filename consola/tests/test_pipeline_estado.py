@@ -58,8 +58,8 @@ def test_lista_para_revisar_con_copy_e_imagen():
 
 
 def test_lista_para_revisar_si_ya_en_revision():
-    """Una pieza ya en revision/aprobado salio de produccion -> lista para revisar."""
-    for estado in ("en_revision", "aprobado", "programado", "publicado"):
+    """Una pieza ya en revision/programada salio de produccion -> lista para revisar."""
+    for estado in ("en_revision", "programado", "publicado"):
         etapa = pe.etapa_de_tema(_item(), [_plat(estado=estado, copy="x")])
         assert etapa == pe.ETAPA_LISTA_REVISAR, estado
 
@@ -220,12 +220,11 @@ def test_pieza_falta_copy_in_en_la_placa():
 
 
 def test_pieza_estados_terminales_mapean_a_etapa():
-    assert pe.etapa_de_pieza(_pieza(estado="aprobado")) == pe.ETAPA_APROBADA
     assert pe.etapa_de_pieza(_pieza(estado="programado")) == pe.ETAPA_PROGRAMADA
     assert pe.etapa_de_pieza(_pieza(estado="publicado")) == pe.ETAPA_PUBLICADA
 
 
 def test_pieza_etapa_siempre_de_etapas_pieza():
     """Sea cual sea la entrada, la etapa devuelta es un literal del contrato del feed."""
-    for estado in ("borrador", "en_revision", "aprobado", "programado", "publicado"):
+    for estado in ("borrador", "en_revision", "programado", "publicado"):
         assert pe.etapa_de_pieza(_pieza(estado=estado)) in pe.ETAPAS_PIEZA

@@ -40,8 +40,9 @@ async def agregar_plataforma(request: Request) -> Response:
 
 
 # Estado de plataforma -> evento interno que se emite al ENTRAR en ese estado.
+# `pieza.aprobada` NO está aquí: ya no hay estado de reposo `aprobado`; ese evento lo emite el
+# flujo de aprobación (`api.aprobacion`) cuando la cadena junta sus 2 OK.
 _EVENTO_POR_ESTADO: dict[str, str] = {
-    "aprobado": "pieza.aprobada",
     "publicado": "pieza.publicada",
 }
 

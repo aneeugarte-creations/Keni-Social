@@ -52,7 +52,7 @@ def test_aislamiento_por_marca(entorno):
 def test_no_publicado_no_cuenta(entorno):
     """Contenido sin plataforma 'publicado' no dispara el dedup."""
     c = db.crear_contenido(titulo="Borrador del América", marca="unotv")
-    db.crear_contenido_plataforma(contenido_id=c["id"], red="x", estado="pendiente")
+    db.crear_contenido_plataforma(contenido_id=c["id"], red="x", estado="borrador")
     assert db.existe_publicado_similar("unotv", "Borrador del América") is False
 
 

@@ -423,7 +423,7 @@ def crear_borrador_en(
             p
             for p in repos.listar_contenido_plataforma(contenido_id)
             if (p.get("red") or "") == red
-            and (p.get("estado") or "pendiente") == "pendiente"
+            and (p.get("estado") or "borrador") == "borrador"
             and not str(p.get("copy") or "").strip()
             and not str(p.get("video") or "").strip()
         ),
@@ -451,7 +451,7 @@ def crear_borrador_en(
         plat = repos.crear_contenido_plataforma(
             contenido_id=contenido_id,
             red=red,
-            estado="pendiente",
+            estado="borrador",
             # DERIVADO del copy real (no `False` fijo): un copy vacío => falta_copy=True. Evita el
             # drift "copy listo" sin copy que mentía en el label del feed y el gate de auto-avance.
             falta_copy=falta_copy,

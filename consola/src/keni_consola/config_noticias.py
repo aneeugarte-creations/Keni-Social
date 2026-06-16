@@ -901,10 +901,10 @@ def etapa_activa(env_flag: str, marca: str) -> bool:
 
 
 def auto_programar_activo() -> bool:
-    """True si una pieza APROBADA debe encolarse SOLA a su próximo hueco (`KENI_AUTO_PROGRAMAR`).
+    """True si una pieza con sus 2 OK debe encolarse SOLA a su próximo hueco (`KENI_AUTO_PROGRAMAR`).
 
     Def ON (a diferencia de las demás etapas auto, que son OFF): programar no gasta recursos ni
-    publica —solo asigna un hueco, reversible—, y "aprobado => programado" es el flujo deseado.
+    publica —solo asigna un hueco, reversible—, y "2 OK => programado" es el flujo deseado.
     Respeta precedencia store>env>defecto; `KENI_AUTO_PROGRAMAR=0`/`no`/`off` lo apaga.
     """
     crudo = _crudo(ENV_AUTO_PROGRAMAR).lower()

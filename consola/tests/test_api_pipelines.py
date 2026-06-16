@@ -122,7 +122,7 @@ def test_run_aprobado(cliente):
     """Pieza aprobada con VERIFICAR `no_verificado` -> aprobación ok y estado_global ok."""
     tema = _tema_pipeline("Tema aprobado", verificacion_fuente="no_verificado")
     repos.crear_contenido_plataforma(
-        contenido_id=tema["id"], red="x", estado="aprobado",
+        contenido_id=tema["id"], red="x", estado="programado",
         copy="Copy.", revision="no_verificado",
     )
     run = _run_por_titulo(cliente, "Tema aprobado")
@@ -179,7 +179,7 @@ def test_etapas_ejecutadas_no_se_repintan_con_toggles_off(cliente, monkeypatch):
     tema = _tema_pipeline("Run histórica", verificacion_fuente="no_verificado")
     _historia_de(tema["id"], n_fuentes=3, n_items=4, score=0.8)
     repos.crear_contenido_plataforma(
-        contenido_id=tema["id"], red="x", estado="aprobado",
+        contenido_id=tema["id"], red="x", estado="programado",
         copy="Copy hecho.", revision="no_verificado",
     )
     for env in (config.ENV_PIPELINE_FUSIONAR, config.ENV_PRIORIZAR_PERFIL_IA,
@@ -303,7 +303,7 @@ def test_etapa_actual_y_filtro_por_etapa(cliente):
     """`etapa_actual` = la etapa donde está parada; `?etapa=` filtra por ella."""
     aprob = _tema_pipeline("Run aprobada", verificacion_fuente="no_verificado")
     repos.crear_contenido_plataforma(
-        contenido_id=aprob["id"], red="x", estado="aprobado", copy="C.", revision="no_verificado",
+        contenido_id=aprob["id"], red="x", estado="programado", copy="C.", revision="no_verificado",
     )
     _tema_pipeline("Run en VERIFICAR")  # sin verificacion: la VERIFICAR queda 'pendiente'
     en_qa = _run_por_titulo(cliente, "Run en VERIFICAR")

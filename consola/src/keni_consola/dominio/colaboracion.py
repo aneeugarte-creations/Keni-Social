@@ -38,7 +38,6 @@ from ..estados import (
     DECISION_APROBADO,
     DECISION_PENDIENTE,
     DECISION_RECHAZADO,
-    ESTADO_APROBADO,
     ESTADO_EN_REVISION,
     ROL_ADMIN,
 )
@@ -80,9 +79,10 @@ def cadena_simple() -> list[str]:
     """Etiquetas de la cadena de aprobacion por defecto al mandar a revision (los dos OK).
 
     Defecto razonable para una PUBLICACION suelta: DOS niveles `pendiente` ("Edición" y
-    "Coordinación") = los dos OK del equipo que la pieza necesita. Cada uno lo da una persona
-    distinta (nunca el autor, salvo admin); con los dos, la pieza pasa sola a `aprobado`. Si
-    el revisión editorial actua como aprobador automatico, el llamante antepone el nivel de IA.
+    "Coordinación") = los dos OK del equipo que la pieza necesita. Cada OK lo da una persona
+    distinta (cuatro ojos), pudiendo el autor dar uno de ellos; con los dos, la pieza se
+    auto-programa al próximo hueco. Si la revisión editorial actúa como aprobador automático,
+    el llamante antepone el nivel de IA.
     Expresado sobre el mismo modelo multinivel (cadena vacia = sin aprobacion; cadena de N
     = N niveles).
     """
@@ -92,17 +92,15 @@ def cadena_simple() -> list[str]:
 def estado_publicacion_para(estado_global: str) -> str | None:
     """Traduce el estado GLOBAL de la cadena al `estado` editorial de la PUBLICACION.
 
-    Es el puente PURO entre el modelo de aprobacion (cadena multinivel) y los estados que
-    el programador entiende (`programador.py` lee `aprobado`/`programado`): cuando la cadena
-    queda totalmente `aprobado`, la pieza pasa a `aprobado`; mientras quedan niveles por
-    decidir, esta `en_revision`; un `rechazado` la devuelve a `borrador`. Una cadena vacia
-    ("sin_cadena") no toca el estado editorial: devuelve None (sin aprobacion configurada).
+    Es el puente PURO entre el modelo de aprobacion (los 2 likes) y los estados canónicos.
+    COLAPSO 2026-06: ya no hay estado de reposo `aprobado`. Cuando se juntan los 2 likes la
+    pieza queda `en_revision` y es el caller (`auto_programar`) quien la mueve a `programado`
+    al encontrar hueco; mientras faltan likes sigue `en_revision`; un `rechazado` la devuelve
+    a `borrador`. Una cadena vacia ("sin_cadena") no toca el estado editorial: devuelve None.
 
     Devuelve el estado editorial a aplicar, o None si la cadena no debe alterarlo.
     """
-    if estado_global == DECISION_APROBADO:
-        return ESTADO_APROBADO
-    if estado_global == DECISION_PENDIENTE:
+    if estado_global in (DECISION_APROBADO, DECISION_PENDIENTE):
         return ESTADO_EN_REVISION
     if estado_global == DECISION_RECHAZADO:
         return "borrador"
@@ -243,16 +241,16 @@ def decidir(
     *,
     rol: str | None,
     comentario: str = "",
-    autor_pieza_id: str = "",
     cargo_decisor: str = "",
 ) -> tuple[dict[str, Any] | None, str | None]:
     """Decide (aprueba/rechaza) UN nivel de la cadena. Devuelve `(campos, None)` o `(None, error)`.
 
     Valida que: la decision sea aprobado/rechazado; el nivel sea el que TOCA (el primer
-    pendiente por orden); el nivel no este ya decidido; el decisor no sea el autor de la
-    pieza (salvo admin); y, si el nivel exige un `cargo_requerido` (item C), que el cargo
-    del decisor lo satisfaga (salvo admin, que puede desatascar). `campos` son los cambios
-    a aplicar al registro del nivel.
+    pendiente por orden); el nivel no este ya decidido; los dos OK los den DOS personas
+    distintas (cuatro ojos); y, si el nivel exige un `cargo_requerido` (cadena del tablero),
+    que el cargo del decisor lo satisfaga (salvo admin, que puede desatascar). El AUTOR SÍ
+    puede dar uno de los dos OK (el otro lo da otra persona). `campos` son los cambios a
+    aplicar al registro del nivel.
     """
     if decision not in (DECISION_APROBADO, DECISION_RECHAZADO):
         return None, "La decisión debe ser aprobar o rechazar."
@@ -273,8 +271,6 @@ def decidir(
     ):
         return None, "Ya diste tu OK en esta pieza; el otro OK lo da otra persona."
     if not _es_admin(rol, decisor):
-        if decisor_id and autor_pieza_id and decisor_id == autor_pieza_id:
-            return None, "No puedes aprobar tu propia pieza; debe revisarla otra persona."
         cargo_req = (nivel.get("cargo_requerido") or "").strip()
         if cargo_req and not cargo_satisface(cargo_req, cargo_decisor):
             return None, (

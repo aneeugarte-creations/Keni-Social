@@ -1,12 +1,18 @@
 """Tests de la cola de aprobacion de equipo (#9, Fase 3). OFFLINE, DB en tmp.
 
-Cubre el flujo borrador -> en_revision -> aprobado, con identidad real (login):
-quien envia, quien aprueba (otro par de ojos), la regla de equipo (no auto-aprobar),
-el rechazo (vuelta a borrador) y la cola que lista lo pendiente con quien/cuando.
+Cubre el flujo borrador -> en_revision con identidad real (login): quien envia, quien da
+los OK (cuatro ojos), la regla de dos personas distintas, el rechazo (vuelta a borrador) y la
+cola que lista lo pendiente con quien/cuando.
+
+COLAPSO 2026-06: ya no hay estado de reposo `aprobado`. Cuando la cadena junta sus 2 OK, la
+pieza se AUTO-PROGRAMA si hay franja/hueco; si no (como en este entorno OFFLINE sin franjas),
+se queda `en_revision` con la cadena ya aprobada. Aquí comprobamos esa lógica de cadena (el
+camino "se auto-programa al hueco" vive en `test_auto_programar.py`). Además, el AUTOR puede dar
+uno de los dos OK: la única regla es que los dos OK los den DOS personas distintas.
 
 Reusa el aislamiento de `entorno` y los patrones de `test_atribucion` (login real para
 sesiones distintas). La auth/CSRF/sesion NO se toca; el acceso por TOKEN de bootstrap
-cuenta como mantenimiento (admin) y puede saltarse la regla de "otro par de ojos".
+cuenta como mantenimiento (admin) y puede saltarse la regla de cargo (no la de dos personas).
 """
 
 from __future__ import annotations
@@ -14,7 +20,7 @@ from __future__ import annotations
 from starlette.testclient import TestClient
 
 from keni_consola import app as app_modulo
-from keni_consola import auth
+from keni_consola import auth, repos
 
 from .conftest import TOKEN_PRUEBA
 
@@ -49,8 +55,14 @@ def _crear_borrador(cli: TestClient, **campos) -> dict:
     return r.json()["publicacion"]
 
 
+def _cadena_aprobada(pid: str) -> bool:
+    """True si la cadena de la pieza juntó TODOS sus OK (los niveles humanos en `aprobado`)."""
+    niveles = repos.listar_aprobaciones(pid)
+    return bool(niveles) and all(n["decision"] == "aprobado" for n in niveles)
+
+
 # --------------------------------------------------------------------------- #
-# Flujo feliz: enviar -> aprobar por OTRA persona                             #
+# Flujo feliz: enviar -> los 2 OK de personas distintas cierran la cadena      #
 # --------------------------------------------------------------------------- #
 
 
@@ -66,11 +78,12 @@ def test_enviar_a_revision_pasa_a_en_revision_con_autor(entorno):
     assert actualizada["enviado_a_revision_en"]  # marca de tiempo puesta
 
 
-def test_dos_ok_de_personas_distintas_pasan_a_aprobado(entorno):
-    """Ana envia; Beto da el 1er OK (sigue en revision) y Caro el 2o: pasa a aprobado.
+def test_dos_ok_de_personas_distintas_cierran_la_cadena(entorno):
+    """Ana envia; Beto da el 1er OK (sigue en revision) y Caro el 2o: cadena aprobada.
 
     La cadena por defecto del flujo "dale el OK" son DOS niveles humanos (Edición +
-    Coordinación): hace falta el OK de DOS personas distintas para quedar aprobada.
+    Coordinación): hace falta el OK de DOS personas distintas para cerrarla. Sin franja
+    configurada la pieza se queda `en_revision` (la cadena ya aprobada espera hueco).
     """
     autora = _cli_usuario("ana")
     pub = _crear_borrador(autora)
@@ -81,13 +94,15 @@ def test_dos_ok_de_personas_distintas_pasan_a_aprobado(entorno):
     r1 = beto.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
     assert r1.status_code == 200, r1.text
     assert r1.json()["publicacion"]["estado"] == "en_revision"
+    assert not _cadena_aprobada(pub["id"])  # falta el 2o OK
 
-    # 2o OK (Caro, otra persona): completa la cadena -> aprobado, con el último revisor.
+    # 2o OK (Caro, otra persona): cierra la cadena. Sin franja -> sigue en_revision.
     caro = _cli_usuario("caro")
     r2 = caro.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
     assert r2.status_code == 200, r2.text
     aprobada = r2.json()["publicacion"]
-    assert aprobada["estado"] == "aprobado"
+    assert aprobada["estado"] == "en_revision"
+    assert _cadena_aprobada(pub["id"])  # los 2 OK ya están
     assert aprobada["revisor_nombre"] == "caro"
     assert aprobada["revisado_en"]
     # La autoria original se conserva (la envio ana).
@@ -96,8 +111,6 @@ def test_dos_ok_de_personas_distintas_pasan_a_aprobado(entorno):
 
 def test_enviar_a_revision_monta_los_dos_niveles_de_ok(entorno):
     """Mandar a revisión crea la cadena por defecto: dos OK (Edición + Coordinación)."""
-    from keni_consola import repos
-
     autora = _cli_usuario("ana")
     pub = _crear_borrador(autora)
     autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
@@ -122,14 +135,37 @@ def test_misma_persona_no_puede_dar_los_dos_ok(entorno):
 
 
 # --------------------------------------------------------------------------- #
+# El AUTOR puede dar uno de los dos OK (cuatro ojos = dos personas distintas)  #
+# --------------------------------------------------------------------------- #
+
+
+def test_autor_puede_dar_un_ok_pero_no_los_dos(entorno):
+    """El autor SÍ da uno de los OK; el otro lo da otra persona (la regla es DOS personas)."""
+    autora = _cli_usuario("ana")
+    pub = _crear_borrador(autora)
+    autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
+    # 1er OK: la propia autora (ya permitido: cualquiera, incluido el autor).
+    r1 = autora.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
+    assert r1.status_code == 200, r1.text
+    assert r1.json()["publicacion"]["estado"] == "en_revision"
+    # La autora NO puede dar también el 2o OK (misma persona): 409.
+    r2 = autora.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
+    assert r2.status_code == 409
+    assert "otra persona" in r2.json()["error"].lower()
+    # Otra persona cierra la cadena.
+    beto = _cli_usuario("beto")
+    r3 = beto.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
+    assert r3.status_code == 200, r3.text
+    assert _cadena_aprobada(pub["id"])
+
+
+# --------------------------------------------------------------------------- #
 # Reset de aprobaciones al EDITAR el contenido (como reescribir un PR aprobado) #
 # --------------------------------------------------------------------------- #
 
 
 def test_editar_contenido_con_ok_humano_resetea_a_borrador_y_limpia_cadena(entorno):
     """Editar el CONTENIDO de una pieza con un OK humano la devuelve a borrador y borra la cadena."""
-    from keni_consola import repos
-
     autora = _cli_usuario("ana")
     pub = _crear_borrador(autora)
     autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
@@ -163,14 +199,19 @@ def test_editar_en_revision_sin_ok_humano_no_resetea(entorno):
 
 
 def test_admin_fuerza_aprobacion_saltando_la_cadena(entorno):
-    """Un admin fuerza: la pieza en revisión pasa a aprobada sin el segundo par de ojos."""
+    """Un admin fuerza: la pieza en revisión cierra su cadena sin el segundo par de ojos.
+
+    Sin franja la pieza se queda `en_revision`, pero la cadena queda aprobada (el override
+    selló todos los niveles); el camino "se auto-programa" lo cubre `test_auto_programar.py`.
+    """
     autora = _cli_usuario("ana")
     pub = _crear_borrador(autora)
     autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
     admin = _cli_usuario("jefa", rol="admin")
     r = admin.post(f"/api/aprobacion/{pub['id']}/forzar", headers=_ORIGIN)
     assert r.status_code == 200, r.text
-    assert r.json()["publicacion"]["estado"] == "aprobado"
+    assert r.json()["publicacion"]["estado"] == "en_revision"
+    assert _cadena_aprobada(pub["id"])
 
 
 def test_coordinador_puede_forzar(entorno):
@@ -181,7 +222,7 @@ def test_coordinador_puede_forzar(entorno):
     coord = _cli_usuario("elias", rol="editor", cargo="coordinador_redes")
     r = coord.post(f"/api/aprobacion/{pub['id']}/forzar", headers=_ORIGIN)
     assert r.status_code == 200, r.text
-    assert r.json()["publicacion"]["estado"] == "aprobado"
+    assert _cadena_aprobada(pub["id"])
 
 
 def test_editor_normal_no_puede_forzar_403(entorno):
@@ -204,32 +245,20 @@ def test_forzar_solo_en_revision_409(entorno):
 
 
 # --------------------------------------------------------------------------- #
-# Regla de equipo: no auto-aprobar (otro par de ojos)                         #
+# Regla de equipo: dos personas distintas (ni el admin firma los dos OK)       #
 # --------------------------------------------------------------------------- #
-
-
-def test_autor_no_puede_aprobar_su_propia_pieza_409(entorno):
-    """La misma cuenta que envio NO puede aprobar (separacion de funciones)."""
-    autora = _cli_usuario("ana")
-    pub = _crear_borrador(autora)
-    autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
-    r = autora.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
-    assert r.status_code == 409
-    assert "tu propia pieza" in r.json()["error"].lower()
-    # Sigue en revision (no se aprobo).
-    assert autora.get(f"/api/publicaciones/{pub['id']}").json()["publicacion"]["estado"] == "en_revision"
 
 
 def test_admin_no_puede_dar_los_dos_ok_el_mismo(entorno):
     """Ni el admin da los DOS OK: el segundo par de ojos no vale si es la misma persona.
 
-    El admin desatasca otras reglas (aprobar pieza propia, cargo), pero NO puede firmar ambos OK:
-    el 1er OK pasa; el 2o (mismo admin) lo bloquea (409). El 2o lo da OTRA persona.
+    El admin desatasca otras reglas (cargo), pero NO puede firmar ambos OK: el 1er OK pasa; el
+    2o (mismo admin) lo bloquea (409). El 2o lo da OTRA persona y cierra la cadena.
     """
     admin = _cli_usuario("jefa", rol="admin")
     pub = _crear_borrador(admin)
     admin.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
-    # 1er OK (admin sobre su propia pieza): desatasca, sigue en revisión.
+    # 1er OK (admin sobre su propia pieza): permitido, sigue en revisión.
     assert admin.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN).status_code == 200
     # 2o OK (mismo admin): bloqueado, hace falta otra persona.
     r = admin.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
@@ -240,7 +269,7 @@ def test_admin_no_puede_dar_los_dos_ok_el_mismo(entorno):
     jefe2 = _cli_usuario("jefe2", rol="admin")
     r2 = jefe2.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
     assert r2.status_code == 200, r2.text
-    assert r2.json()["publicacion"]["estado"] == "aprobado"
+    assert _cadena_aprobada(pub["id"])
 
 
 def test_token_de_mantenimiento_puede_aprobar(entorno):
@@ -252,7 +281,7 @@ def test_token_de_mantenimiento_puede_aprobar(entorno):
     assert mantenimiento.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN).status_code == 200
     r = mantenimiento.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
     assert r.status_code == 200, r.text
-    assert r.json()["publicacion"]["estado"] == "aprobado"
+    assert _cadena_aprobada(pub["id"])
 
 
 # --------------------------------------------------------------------------- #
@@ -288,8 +317,6 @@ def test_dos_dislikes_de_personas_distintas_devuelven_a_borrador(entorno):
 
 def test_deshacer_quita_el_ok_y_vuelve_a_revision(entorno):
     """Beto da su OK y luego lo RETIRA (deshacer): su nivel vuelve a pendiente, pieza en revisión."""
-    from keni_consola import repos
-
     autora = _cli_usuario("ana")
     pub = _crear_borrador(autora)
     autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
@@ -342,10 +369,10 @@ def test_no_se_puede_aprobar_un_borrador(entorno):
     assert "revisión" in r.json()["error"].lower()
 
 
-def test_no_se_puede_enviar_a_revision_lo_ya_aprobado(entorno):
-    """Solo un borrador entra a revision; una pieza ya aprobada no."""
+def test_no_se_puede_enviar_a_revision_lo_no_borrador(entorno):
+    """Solo un borrador entra a revision; una pieza ya programada no."""
     mantenimiento = _cli_token()
-    pub = _crear_borrador(mantenimiento, estado="aprobado")
+    pub = _crear_borrador(mantenimiento, estado="programado")
     r = mantenimiento.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
     assert r.status_code == 409
 
@@ -393,9 +420,9 @@ def test_cola_vacia_cuando_no_hay_nada_en_revision(entorno):
 
 
 def test_programar_sin_cadena_no_aplica_el_minimo(entorno):
-    """Una pieza `aprobado` SIN cadena (atajo) se programa sin exigir el minimo."""
+    """Una pieza `en_revision` SIN cadena (atajo) se programa sin exigir el minimo."""
     mantenimiento = _cli_token()
-    pub = _crear_borrador(mantenimiento, estado="aprobado")
+    pub = _crear_borrador(mantenimiento, estado="en_revision")
     from datetime import datetime, timedelta
 
     fecha = (datetime.now() + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M")
@@ -411,7 +438,7 @@ def test_programar_bloquea_si_faltan_aprobaciones_para_el_minimo(entorno, monkey
     autora = _cli_usuario("ana")
     pub = _crear_borrador(autora)
     autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
-    # Los dos OK (Beto + Caro) dejan la pieza aprobada con 2 firmas, pero el mínimo pide 3.
+    # Los dos OK (Beto + Caro) cierran la cadena con 2 firmas, pero el mínimo pide 3.
     _cli_usuario("beto").post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
     caro = _cli_usuario("caro")
     caro.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
@@ -426,7 +453,7 @@ def test_programar_bloquea_si_faltan_aprobaciones_para_el_minimo(entorno, monkey
 
 
 def test_programar_pasa_con_los_dos_ok(entorno, monkeypatch):
-    """KENI_MIN_APROBACIONES=2: los dos OK (editor + coordinador) bastan para programar."""
+    """KENI_MIN_APROBACIONES=2: los dos OK (de dos personas) bastan para programar a mano."""
     monkeypatch.setenv("KENI_MIN_APROBACIONES", "2")
     autora = _cli_usuario("ana")
     pub = _crear_borrador(autora)
@@ -441,6 +468,7 @@ def test_programar_pasa_con_los_dos_ok(entorno, monkeypatch):
         f"/api/aprobacion/{pub['id']}/programar", json={"fecha": fecha}, headers=_ORIGIN
     )
     assert r.status_code == 200, r.text
+    assert r.json()["publicacion"]["estado"] == "programado"
 
 
 # --------------------------------------------------------------------------- #
@@ -449,13 +477,11 @@ def test_programar_pasa_con_los_dos_ok(entorno, monkeypatch):
 
 
 def test_comentario_sin_resolver_bloquea_programar(entorno, monkeypatch):
-    """Un comentario abierto en el item da 409 al programar, aunque la pieza este aprobada."""
+    """Un comentario abierto en el item da 409 al programar, aunque la pieza esté lista."""
     monkeypatch.setenv("KENI_MIN_APROBACIONES", "0")  # aislar el gate B del gate A
     autora = _cli_usuario("ana")
-    pub = _crear_borrador(autora, estado="aprobado")
+    pub = _crear_borrador(autora, estado="en_revision")
     # El contenido padre de la publicacion (su contenido_id) recibe un comentario abierto.
-    from keni_consola import repos
-
     plat = repos.obtener_contenido_plataforma(pub["id"])
     contenido_id = plat["contenido_id"]
     autora.post(
@@ -485,8 +511,6 @@ def test_segundo_enviar_a_revision_da_409_sin_duplicar_cadena(entorno):
     borrador->en_revision (CAS) y monta la cadena; el segundo ya no esta en `borrador`, asi que
     el CAS no aplica -> 409, y NO crea una segunda cadena (no se duplican niveles).
     """
-    from keni_consola import repos
-
     autora = _cli_usuario("ana")
     pub = _crear_borrador(autora)
     r1 = autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
@@ -501,17 +525,17 @@ def test_segundo_enviar_a_revision_da_409_sin_duplicar_cadena(entorno):
     assert [n["id"] for n in cadena_2] == [n["id"] for n in cadena_1]
 
 
-def test_segundo_programar_da_409_si_ya_no_esta_aprobada(entorno, monkeypatch):
-    """Programar dos veces: el primero mueve aprobado->programado (CAS); el segundo da 409.
+def test_segundo_programar_da_409_si_ya_no_esta_en_revision(entorno, monkeypatch):
+    """Programar dos veces: el primero mueve en_revision->programado (CAS); el segundo da 409.
 
-    Tras programar, la pieza ya no esta `aprobado`; el CAS de la transicion no aplica y el
+    Tras programar, la pieza ya no esta `en_revision`; el CAS de la transicion no aplica y el
     segundo intento recibe 409 ("el estado cambió"), sin re-escribir la fecha.
     """
     monkeypatch.setenv("KENI_MIN_APROBACIONES", "0")  # aislar del gate A
     from datetime import datetime, timedelta
 
     autora = _cli_usuario("ana")
-    pub = _crear_borrador(autora, estado="aprobado")
+    pub = _crear_borrador(autora, estado="en_revision")
     fecha = (datetime.now() + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M")
 
     r1 = autora.post(
@@ -523,4 +547,4 @@ def test_segundo_programar_da_409_si_ya_no_esta_aprobada(entorno, monkeypatch):
     r2 = autora.post(
         f"/api/aprobacion/{pub['id']}/programar", json={"fecha": fecha}, headers=_ORIGIN
     )
-    assert r2.status_code == 409  # ya no está aprobada: el CAS no aplica
+    assert r2.status_code == 409  # ya no está en revisión: el CAS no aplica

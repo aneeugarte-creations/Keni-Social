@@ -34,8 +34,8 @@ def test_migra_pieza_con_redes_y_checklist(entorno):
     assert item["programa"] == "Mundial"
     plats = db.listar_contenido_plataforma(item["id"])
     assert {x["red"] for x in plats} == {"facebook", "instagram", "x"}
-    # listo -> aprobado; material entregado -> no falta imagen; copy no -> falta copy.
-    assert all(x["estado"] == "aprobado" for x in plats)
+    # listo -> en_revision; material entregado -> no falta imagen; copy no -> falta copy.
+    assert all(x["estado"] == "en_revision" for x in plats)
     assert all(x["falta_imagen"] is False for x in plats)
     assert all(x["falta_copy"] is True for x in plats)
 

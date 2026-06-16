@@ -36,7 +36,6 @@ from ..estados import (
     DECISION_APROBADO,
     DECISION_PENDIENTE,
     DECISION_RECHAZADO,
-    ESTADO_APROBADO,
     ESTADO_EN_REVISION,
     ESTADO_PROGRAMADO,
     ROL_ADMIN,
@@ -112,8 +111,6 @@ async def _decidir(request: Request, decision: str) -> Response:
             status_code=409,
         )
 
-    # El autor de la pieza es quien la mando a revision (autor_id de la publicacion).
-    autor_pieza_id = pub.get("autor_id", "") or ""
     decisor = autor_de_peticion(request)
     rol = _rol_de_peticion(request)
 
@@ -127,7 +124,6 @@ async def _decidir(request: Request, decision: str) -> Response:
             decision,
             decisor,
             rol=rol,
-            autor_pieza_id=autor_pieza_id,
         )
 
     # ATÓMICO: bloquea la cadena, re-valida con `_validar` y aplica el CAS, todo en una sola
@@ -151,13 +147,20 @@ async def _decidir(request: Request, decision: str) -> Response:
 
 
 def _responder_aprobada(publicacion_id: str, actualizada: dict[str, Any]) -> Response:
-    """Auto-programa si la cadena quedó APROBADA y devuelve la pieza (estado final) como JSON.
+    """Auto-programa si la cadena juntó sus 2 likes y devuelve la pieza (estado final) como JSON.
 
-    Aprobado => programado: si la cadena quedó aprobada, encola SOLA al próximo hueco (mismos
+    2 likes => programado: si la cadena quedó aprobada, encola SOLA al próximo hueco (mismos
     gates que `programar`; def ON `KENI_AUTO_PROGRAMAR`). Best-effort; no publica. Lo comparten la
-    decisión normal (`_decidir`) y el override (`forzar`).
+    decisión normal (`_decidir`) y el override (`forzar`). COLAPSO 2026-06: ya no hay estado de
+    reposo `aprobado`; se mira el estado de la CADENA, no el `estado` de la pieza (que sigue
+    `en_revision` hasta que la auto-programación encuentre hueco).
     """
-    if actualizada.get("estado") == ESTADO_APROBADO:
+    cadena = repos.listar_aprobaciones(publicacion_id)
+    if colaboracion.estado_cadena(cadena) == DECISION_APROBADO:
+        # Evento público `pieza.aprobada`: el momento REAL de la aprobación es juntar los 2 OK
+        # (ya no hay estado de reposo `aprobado` que dispare el evento). Se emite ANTES de la
+        # auto-programación. Best-effort: nunca rompe el OK ya registrado.
+        _emitir_pieza_aprobada(actualizada)
         from .. import auto_programar
 
         try:
@@ -165,8 +168,41 @@ def _responder_aprobada(publicacion_id: str, actualizada: dict[str, Any]) -> Res
             if programada is not None:
                 actualizada = programada
         except Exception:  # noqa: BLE001 — encolar es secundario al OK ya registrado.
-            _log.exception("Auto-programación falló para %s (queda aprobada).", publicacion_id)
+            _log.exception("Auto-programación falló para %s (queda en revisión).", publicacion_id)
     return JSONResponse({"publicacion": publicacion_a_dict(actualizada)})
+
+
+def _emitir_pieza_aprobada(pub: dict[str, Any]) -> None:
+    """Emite el evento público `pieza.aprobada` (best-effort) al juntarse los 2 OK de la cadena.
+
+    COLAPSO 2026-06: el evento ya no se dispara al ENTRAR en un estado `aprobado` (no existe);
+    se emite aquí, en el momento real de la aprobación, antes de que la auto-programación mueva
+    la pieza a `programado`. Un fallo de notificación nunca tumba la aprobación ya registrada.
+    """
+    try:
+        from .. import marcas, redes
+        from ..dominio import eventos
+
+        marca = pub.get("marca", "") or ""
+        red = pub.get("red", "") or ""
+        padre = repos.obtener_contenido(pub.get("contenido_id", "") or "") or {}
+        eventos.emitir(
+            "pieza.aprobada",
+            {
+                "contenido_id": pub.get("contenido_id", "") or "",
+                "plataforma_id": pub.get("id", "") or "",
+                "red": red,
+                "red_nombre": redes.nombre_por_id(red) if red else "",
+                "titulo": padre.get("titulo", "") or "",
+                "marca": marca,
+                "marca_nombre": marcas.etiqueta_de(marca) if marca else "",
+                "estado": pub.get("estado", "") or "",
+            },
+            contenido_id=pub.get("contenido_id", "") or "",
+            plataforma_id=pub.get("id", "") or "",
+        )
+    except Exception:  # noqa: BLE001 — notificar es secundario al OK ya registrado.
+        _log.exception("No se pudo emitir pieza.aprobada para %s.", pub.get("id"))
 
 
 async def cola(request: Request) -> Response:
@@ -460,9 +496,10 @@ async def programar(request: Request) -> Response:
     pub = repos.obtener_publicacion(publicacion_id)
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    if pub.get("estado") != ESTADO_APROBADO:
+    if pub.get("estado") != ESTADO_EN_REVISION:
         return JSONResponse(
-            {"error": "Solo se puede programar una pieza aprobada."}, status_code=409
+            {"error": "Solo se puede programar una pieza en revisión con sus likes."},
+            status_code=409,
         )
 
     # GATE A (gobernanza): no se programa sin un MINIMO de aprobaciones acumuladas en la
@@ -502,13 +539,13 @@ async def programar(request: Request) -> Response:
         return JSONResponse({"error": error}, status_code=400)
 
     try:
-        # CAS de la transicion aprobado->programado: cierra el TOCTOU (los gates de arriba se
+        # CAS de la transicion en_revision->programado: cierra el TOCTOU (los gates de arriba se
         # evaluaron sobre un snapshot; entre la lectura y la escritura la pieza pudo dejar de
-        # estar `aprobado` —p.ej. un deshacer concurrente—). El estado se mueve EN EL MISMO
-        # UPDATE que fija `fecha_programada`/`preparado_en`, condicionado a que SIGA `aprobado`.
+        # estar `en_revision` —p.ej. un deshacer concurrente—). El estado se mueve EN EL MISMO
+        # UPDATE que fija `fecha_programada`/`preparado_en`, condicionado a que SIGA `en_revision`.
         actualizada = repos.transicionar_estado_publicacion(
             publicacion_id,
-            ESTADO_APROBADO,
+            ESTADO_EN_REVISION,
             ESTADO_PROGRAMADO,
             {"fecha_programada": fecha, "preparado_en": ""},
         )
@@ -521,7 +558,7 @@ async def programar(request: Request) -> Response:
             status_code=409,
         )
     if actualizada is None:
-        # El CAS no aplicó: la pieza ya no está `aprobado` (transición concurrente) o se borró.
+        # El CAS no aplicó: la pieza ya no está `en_revision` (transición concurrente) o se borró.
         return JSONResponse(
             {"error": "El estado de la pieza cambió; recarga e inténtalo de nuevo."},
             status_code=409,

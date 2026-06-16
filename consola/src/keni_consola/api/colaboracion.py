@@ -415,8 +415,8 @@ async def decidir_nivel(request: Request) -> Response:
     """POST /api/aprobacion-nivel/{id}/decidir {decision, comentario?}: aprueba/rechaza un nivel.
 
     Se decide POR ORDEN (solo el nivel pendiente más bajo). Un `rechazado` para la cadena.
-    Cuando todos los niveles quedan `aprobado`, la pieza pasa a estado `aprobado` (se refleja
-    en `contenido_plataforma.estado` y se baja el check `falta_revision`).
+    Cuando todos los niveles quedan `aprobado` (los 2 OK), la pieza se auto-programa al próximo
+    hueco; mientras tanto sigue `en_revision` (ya no hay estado de reposo `aprobado`).
     """
     aprobacion_id = request.path_params["aprobacion_id"]
     nivel = repos.obtener_aprobacion(aprobacion_id)
@@ -431,12 +431,6 @@ async def decidir_nivel(request: Request) -> Response:
     comentario = datos.get("comentario", "")
     comentario = comentario.strip()[:_MAX_TEXTO] if isinstance(comentario, str) else ""
 
-    autor_pieza_id = (plat or {}).get("revisor_id", "") or ""  # quien la mandó a revisión
-    if not autor_pieza_id and plat is not None:
-        # Fallback: autor del contenido padre (quien la creó).
-        padre = repos.obtener_contenido(plat.get("contenido_id", ""))
-        autor_pieza_id = (padre or {}).get("autor_id", "") or ""
-
     campos, error = colaboracion.decidir(
         nivel,
         cadena,
@@ -444,7 +438,6 @@ async def decidir_nivel(request: Request) -> Response:
         autor_de_peticion(request),
         rol=_rol_de_peticion(request),
         comentario=comentario,
-        autor_pieza_id=autor_pieza_id,
         cargo_decisor=_cargo_de_peticion(request),
     )
     if error is not None:
@@ -461,22 +454,27 @@ async def decidir_nivel(request: Request) -> Response:
             plat, contenido_padre, actualizado.get("decision", ""), autor_de_peticion(request)
         )
 
-    # Reflejar el estado GLOBAL de la cadena en la pieza (si quedó totalmente aprobada).
+    # Reflejar el estado GLOBAL de la cadena en la pieza y, si juntó los 2 OK, auto-programar.
+    # COLAPSO 2026-06: ya no hay estado de reposo `aprobado`; la cadena aprobada deja la pieza
+    # `en_revision` y es la auto-programación quien la mueve a `programado` al hallar hueco.
     cadena = repos.listar_aprobaciones(plataforma_id)
     estado_global = colaboracion.estado_cadena(cadena)
-    if estado_global == "aprobado" and plat is not None:
-        repos.actualizar_contenido_plataforma(
-            plataforma_id, {"estado": "aprobado", "falta_revision": False}
-        )
-        # Aprobado => programado: la pieza se encola SOLA a su próximo hueco (def ON,
-        # `KENI_AUTO_PROGRAMAR`), respetando los gates de la programación manual. Sin franja
-        # se queda aprobado. NO publica. Best-effort: un fallo aquí no tumba la aprobación.
-        from .. import auto_programar
+    if plat is not None:
+        estado_pieza = colaboracion.estado_publicacion_para(estado_global)
+        if estado_pieza is not None:
+            repos.actualizar_contenido_plataforma(plataforma_id, {"estado": estado_pieza})
+        if estado_global == "aprobado":
+            # 2 OK => programado: la pieza se encola SOLA a su próximo hueco (def ON,
+            # `KENI_AUTO_PROGRAMAR`), respetando los gates de la programación manual. Sin franja
+            # se queda en revisión. NO publica. Best-effort: un fallo aquí no tumba la aprobación.
+            from .. import auto_programar
 
-        try:
-            auto_programar.programar_si_aprobada(plataforma_id)
-        except Exception:  # noqa: BLE001 — encolar es secundario al OK ya registrado.
-            _log.exception("Auto-programación falló para %s (queda aprobada).", plataforma_id)
+            try:
+                auto_programar.programar_si_aprobada(plataforma_id)
+            except Exception:  # noqa: BLE001 — encolar es secundario al OK ya registrado.
+                _log.exception(
+                    "Auto-programación falló para %s (queda en revisión).", plataforma_id
+                )
     return JSONResponse(
         {"nivel": actualizado, "estado": estado_global, "niveles": cadena}
     )

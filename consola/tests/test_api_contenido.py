@@ -190,12 +190,12 @@ def test_actualizar_plataforma_estado_y_checklist(entorno):
     plat_id = cont["plataformas"][0]["id"]
     r = c.patch(
         f"/api/contenido/{cont['id']}/plataformas/{plat_id}",
-        json={"estado": "aprobado", "falta_copy": False, "copy": "¡Listo!"},
+        json={"estado": "en_revision", "falta_copy": False, "copy": "¡Listo!"},
         headers=_ORIGIN,
     )
     assert r.status_code == 200
     plat = r.json()["plataforma"]
-    assert plat["estado"] == "aprobado"
+    assert plat["estado"] == "en_revision"
     assert plat["falta_copy"] is False
     assert plat["copy"] == "¡Listo!"
 

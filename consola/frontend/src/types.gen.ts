@@ -638,7 +638,7 @@ export interface Publicacion {
   red_nombre: string;
   contenido: string;
   copy_in: string;
-  estado: "borrador" | "en_revision" | "aprobado" | "programado" | "publicado";
+  estado: "borrador" | "en_revision" | "programado" | "publicado";
   revision: string;
   autor_id: string;
   autor_nombre: string;
@@ -667,7 +667,6 @@ export interface Publicacion {
     | "falta_copy_in"
     | "falta_hashtags"
     | "lista_para_revisar"
-    | "aprobada"
     | "programada"
     | "publicada";
   fecha_creacion: string;

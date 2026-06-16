@@ -189,7 +189,7 @@ def test_revision_aprueba_completa_la_cadena(entorno, monkeypatch):
     assert decision == "aprobado"
     pub = repos.obtener_publicacion(pid)
     # Sin franja no se inventa fecha: queda aprobada (programar es ortogonal, ya cubierto aparte).
-    assert pub["estado"] in ("aprobado", "programado")
+    assert pub["estado"] in ("en_revision", "programado")
     ia = colaboracion.nivel_critica_ia(repos.listar_aprobaciones(pid))
     assert ia["decision"] == "aprobado"
     assert ia["decisor_id"] == colaboracion.DECISOR_CRITICA_ID
@@ -232,6 +232,6 @@ def test_forzar_override_de_un_dislike_de_ia(entorno, monkeypatch):
     coord = _cli_usuario("jefa", rol="admin")
     r = coord.post(f"/api/aprobacion/{pid}/forzar", headers=_ORIGIN)
     assert r.status_code == 200, r.text
-    assert r.json()["publicacion"]["estado"] in ("aprobado", "programado")
+    assert r.json()["publicacion"]["estado"] in ("en_revision", "programado")
     plat = repos.obtener_contenido_plataforma(pid)
     assert repos.comentarios_sin_resolver(plat["contenido_id"], pid) == 0

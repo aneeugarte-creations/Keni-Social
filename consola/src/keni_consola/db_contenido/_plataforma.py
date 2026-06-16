@@ -100,7 +100,7 @@ def _fila_a_contenido_plataforma(fila: Any) -> dict[str, Any]:
     plat: dict[str, Any] = {col: fila[col] for col in _COLS_CONTENIDO_PLATAFORMA}
     for col in _BOOLS_CONTENIDO_PLATAFORMA:
         plat[col] = bool(fila[col])
-    plat["estado"] = fila["estado"] or "pendiente"
+    plat["estado"] = fila["estado"] or "borrador"
     # `imagen` es el NOMBRE de archivo en el dir de media; `imagen_url` es su ruta
     # servible. La UI debe usar SIEMPRE `imagen_url` en un <img>; `imagen` a secas no es
     # navegable. Si no hay media adjunta pero la pieza es de tipo "fuente" (trae la URL de
@@ -205,7 +205,7 @@ def _insertar_contenido_plataforma(
     contenido_id: str,
     red: str,
     marca: str | None = None,
-    estado: str = "pendiente",
+    estado: str = "borrador",
     falta_copy: bool | None = None,
     falta_imagen: bool | None = None,
     falta_revision: bool = True,
@@ -261,7 +261,7 @@ def _insertar_contenido_plataforma(
         # Marca denormalizada: la del padre salvo override explicito. La derivacion real (lookup)
         # se hace abajo dentro de la conexion para que vea el padre ya commiteado.
         "marca": marca or "",
-        "estado": estado if estado in ESTADOS_CONTENIDO_PLATAFORMA else "pendiente",
+        "estado": estado if estado in ESTADOS_CONTENIDO_PLATAFORMA else "borrador",
         "falta_copy": 1 if falta_copy else 0,
         "falta_imagen": 1 if falta_imagen else 0,
         "falta_revision": 1 if falta_revision else 0,
@@ -324,7 +324,7 @@ def crear_contenido_plataforma(
     contenido_id: str,
     red: str,
     marca: str | None = None,
-    estado: str = "pendiente",
+    estado: str = "borrador",
     falta_copy: bool | None = None,
     falta_imagen: bool | None = None,
     falta_revision: bool = True,

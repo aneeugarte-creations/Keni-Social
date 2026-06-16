@@ -2101,7 +2101,6 @@
           "enum": [
             "borrador",
             "en_revision",
-            "aprobado",
             "programado",
             "publicado"
           ]
@@ -2179,7 +2178,6 @@
             "falta_copy_in",
             "falta_hashtags",
             "lista_para_revisar",
-            "aprobada",
             "programada",
             "publicada"
           ]

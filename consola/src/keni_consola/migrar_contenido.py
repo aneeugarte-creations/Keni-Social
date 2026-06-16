@@ -37,12 +37,13 @@ _TOKENS_RED: dict[str, str] = {
     "WEB": "web",
 }
 
-# Estado de una PIEZA (pendiente/en_curso/listo/publicado) -> estado de una fila por
-# plataforma del tablero. `listo` mapea a `aprobado` (lista para publicar).
+# Estado de una PIEZA (pendiente/en_curso/listo/publicado) -> estado de una fila por plataforma
+# del tablero, en el vocabulario ÚNICO actual (COLAPSO 2026-06): los estados de trabajo previos a
+# revisión colapsan en `borrador`; `listo` (lista para publicar) entra como `en_revision`.
 _ESTADO_PIEZA_A_PLATAFORMA: dict[str, str] = {
-    "pendiente": "pendiente",
-    "en_curso": "en_curso",
-    "listo": "aprobado",
+    "pendiente": "borrador",
+    "en_curso": "borrador",
+    "listo": "en_revision",
     "publicado": "publicado",
 }
 

@@ -166,7 +166,7 @@ def test_duplicar_copia_borrador(cliente):
     # programamos el original para verificar que la copia NO hereda estado/fecha
     cliente.put(
         f"/api/publicaciones/{orig['id']}",
-        json={"estado": "aprobado"},
+        json={"estado": "en_revision"},
     )
     r = cliente.post(f"/api/publicaciones/{orig['id']}/duplicar")
     assert r.status_code == 200

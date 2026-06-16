@@ -16,9 +16,9 @@
  * última red antes de programar; el equipo necesita verla (y su comentario, vía `sinResolver`).
  * Ambos niveles automáticos se EXCLUYEN del conteo de OK humanos.
  *
- * Componente PURO de presentación: sin estado, sin mutaciones, sin sesión. El gate (no apruebas
- * tu propia pieza, "otro par de ojos") lo resuelven el backend y `elegibilidadOK` (sobre el botón
- * de la fila de acciones). NO crea backend.
+ * Componente PURO de presentación: sin estado, sin mutaciones, sin sesión. El gate ("otro par
+ * de ojos": dos personas distintas, el autor incluido) lo resuelven el backend y `elegibilidadOK`
+ * (sobre el botón de la fila de acciones). NO crea backend.
  */
 import { Bot, Check, MessageSquare, ThumbsDown, ThumbsUp } from "lucide-react";
 

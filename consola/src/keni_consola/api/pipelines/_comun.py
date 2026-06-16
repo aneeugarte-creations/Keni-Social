@@ -84,10 +84,11 @@ _METRICAS_CERO = {"items": 0, "tokens": 0, "coste_usd": 0.0, "duration_ms": 0}
 # más recientes). `log()` no aplica aquí: la paginación reporta el `total` ya acotado a esto.
 _UNIVERSO_MAX = 500
 
-# Estados de plataforma que cuentan como "aprobado" para la etapa de Aprobar.
-_ESTADOS_APROBADOS = frozenset({"aprobado", "programado", "publicado"})
+# Estados de plataforma que cuentan como "aprobado" para la etapa de Aprobar: la pieza ya pasó
+# el gate humano (COLAPSO 2026-06: ya no hay estado de reposo `aprobado`; cuenta lo que salió).
+_ESTADOS_APROBADOS = frozenset({"programado", "publicado"})
 # Estados de plataforma "en curso" de revisión humana (aún no aprobados).
-_ESTADOS_EN_CURSO = frozenset({"en_curso", "en_revision"})
+_ESTADOS_EN_CURSO = frozenset({"en_revision"})
 
 
 def _red_nombre(red: str) -> str:

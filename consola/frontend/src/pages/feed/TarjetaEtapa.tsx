@@ -6,7 +6,7 @@
  * bucle: el feed enseña muchas piezas a la vez y un icono girando en cada una distrae.
  *
  * LENGUAJE DE COLOR UNIFICADO con la Lista (`META_ESTADOS`): la misma pieza luce el MISMO
- * color en el Feed y en la Lista del hub — para-revisar=violeta, aprobada=azul,
+ * color en el Feed y en la Lista del hub — para-revisar=violeta,
  * programada=ámbar, publicada=esmeralda. El cian (sky) queda EXCLUSIVO de "en preparación"
  * (la IA o el equipo aún trabajan la pieza), que no existe como estado en la Lista.
  * La etapa la deriva `etapaDePublicacion` (ver `etapa.ts`), o el backend la trae resuelta.
@@ -19,7 +19,6 @@ import { etiquetaEtapa, META_ETAPA, type EtapaIa } from "./etapa";
 
 /** Etapas "cerradas" → estado canónico de `META_ESTADOS` (hereda su color exacto). */
 const ESTADO_DE_ETAPA = {
-  aprobada: "aprobado",
   programada: "programado",
   publicada: "publicado",
   lista_para_revisar: "en_revision",
@@ -37,7 +36,6 @@ const PUNTO_DE_ETAPA: Record<EtapaIa, string> = {
   falta_copy_in: "bg-amber-500",
   falta_hashtags: "bg-amber-500",
   lista_para_revisar: "bg-violet-500",
-  aprobada: "bg-blue-500",
   programada: "bg-amber-500",
   publicada: "bg-emerald-500",
 };

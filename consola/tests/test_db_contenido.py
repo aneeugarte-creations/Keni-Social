@@ -90,9 +90,9 @@ def test_actualizar_plataforma_estado_y_checklist(entorno):
     c = db.crear_contenido(titulo="C")
     p = db.crear_contenido_plataforma(contenido_id=c["id"], red="x")
     actualizada = db.actualizar_contenido_plataforma(
-        p["id"], {"estado": "aprobado", "falta_copy": False, "red": "hackeo"}
+        p["id"], {"estado": "en_revision", "falta_copy": False, "red": "hackeo"}
     )
-    assert actualizada["estado"] == "aprobado"
+    assert actualizada["estado"] == "en_revision"
     assert actualizada["falta_copy"] is False
     # `red` NO es editable (lista blanca): se ignora.
     assert actualizada["red"] == "x"

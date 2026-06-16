@@ -32,7 +32,6 @@ def test_opciones(cliente):
     assert estados == {
         "borrador": "Borrador",
         "en_revision": "En revisión",
-        "aprobado": "Aprobado",
         "programado": "Programado",
         "publicado": "Publicado",
     }
@@ -58,8 +57,8 @@ def test_crear_y_listar(cliente):
 
 
 def test_crear_estado_explicito(cliente):
-    pub = _crear(cliente, estado="aprobado").json()["publicacion"]
-    assert pub["estado"] == "aprobado"
+    pub = _crear(cliente, estado="en_revision").json()["publicacion"]
+    assert pub["estado"] == "en_revision"
 
 
 def test_crear_marca_invalida_400(cliente):
@@ -104,11 +103,11 @@ def test_crear_titulo_no_texto_400(cliente):
 
 def test_filtros(cliente):
     _crear(cliente, red="x", estado="borrador")
-    _crear(cliente, red="instagram", estado="aprobado")
+    _crear(cliente, red="instagram", estado="en_revision")
     _crear(cliente, marca="piso-15", red="x")
     assert len(cliente.get("/api/publicaciones?marca=unotv").json()["publicaciones"]) == 2
     assert len(cliente.get("/api/publicaciones?red=x").json()["publicaciones"]) == 2
-    assert len(cliente.get("/api/publicaciones?estado=aprobado").json()["publicaciones"]) == 1
+    assert len(cliente.get("/api/publicaciones?estado=en_revision").json()["publicaciones"]) == 1
     assert (
         len(cliente.get("/api/publicaciones?marca=unotv&red=x").json()["publicaciones"]) == 1
     )
@@ -118,14 +117,14 @@ def test_filtro_pendiente_pseudo_estado(cliente):
     """`?estado=pendiente` = TODO lo que aún no salió (cualquier estado salvo `publicado`);
     su complementario EXACTO es `?estado=publicado`, de modo que pendiente + publicado = total.
     Es la partición binaria del feed/lista (Pendientes · Publicadas · Todas)."""
-    for estado in ("borrador", "en_revision", "aprobado", "programado", "publicado"):
+    for estado in ("borrador", "en_revision", "programado", "publicado"):
         _crear(cliente, red="x", estado=estado)
     total = cliente.get("/api/publicaciones?marca=unotv").json()["paginacion"]["total"]
     pend = cliente.get("/api/publicaciones?marca=unotv&estado=pendiente").json()
     pub = cliente.get("/api/publicaciones?marca=unotv&estado=publicado").json()
-    assert total == 5
-    # Pendientes = los 4 no publicados; Publicadas = solo el publicado.
-    assert pend["paginacion"]["total"] == 4
+    assert total == 4
+    # Pendientes = los 3 no publicados; Publicadas = solo el publicado.
+    assert pend["paginacion"]["total"] == 3
     assert pub["paginacion"]["total"] == 1
     # Partición exacta: ninguna pieza publicada se cuela en pendientes y la suma cuadra.
     assert all(p["estado"] != "publicado" for p in pend["publicaciones"])
@@ -303,12 +302,12 @@ def test_detalle_404(cliente):
 def test_actualizar_parcial(cliente):
     pid = _crear(cliente, titulo="Viejo").json()["publicacion"]["id"]
     r = cliente.put(
-        f"/api/publicaciones/{pid}", json={"titulo": "Nuevo", "estado": "aprobado"}
+        f"/api/publicaciones/{pid}", json={"titulo": "Nuevo", "estado": "en_revision"}
     )
     assert r.status_code == 200
     pub = r.json()["publicacion"]
     assert pub["titulo"] == "Nuevo"
-    assert pub["estado"] == "aprobado"
+    assert pub["estado"] == "en_revision"
 
 
 def test_crear_y_editar_copy_in(cliente):
@@ -619,33 +618,33 @@ def test_put_publicado_es_terminal_400(cliente):
     """Una pieza `publicado` NO se mueve por el PUT generico (ni a borrador ni a otro)."""
     pid = _crear(cliente).json()["publicacion"]["id"]
     assert cliente.put(f"/api/publicaciones/{pid}", json={"estado": "publicado"}).status_code == 200
-    for destino in ("borrador", "en_revision", "aprobado", "programado"):
+    for destino in ("borrador", "en_revision", "programado"):
         r = cliente.put(f"/api/publicaciones/{pid}", json={"estado": destino})
         assert r.status_code == 400, destino
         assert "Transición" in r.json()["error"]
 
 
 def test_put_retroceso_invalido_400(cliente):
-    """Retroceder solo se permite a `borrador` (o programado->aprobado): `aprobado ->
-    en_revision` por el PUT generico se rechaza (eso lo hace el flujo de revision)."""
-    pid = _crear(cliente, estado="aprobado").json()["publicacion"]["id"]
+    """Retroceder a revisión NO se permite por el PUT genérico: `programado -> en_revision`
+    se rechaza (desprogramar va a `borrador`; volver a revisión lo hace el flujo de revisión)."""
+    pid = _crear(cliente, estado="programado").json()["publicacion"]["id"]
     r = cliente.put(f"/api/publicaciones/{pid}", json={"estado": "en_revision"})
     assert r.status_code == 400
     assert "Transición" in r.json()["error"]
 
 
 def test_put_mismo_estado_es_noop_permitido(cliente):
-    pid = _crear(cliente, estado="aprobado").json()["publicacion"]["id"]
-    r = cliente.put(f"/api/publicaciones/{pid}", json={"estado": "aprobado"})
+    pid = _crear(cliente, estado="en_revision").json()["publicacion"]["id"]
+    r = cliente.put(f"/api/publicaciones/{pid}", json={"estado": "en_revision"})
     assert r.status_code == 200
-    assert r.json()["publicacion"]["estado"] == "aprobado"
+    assert r.json()["publicacion"]["estado"] == "en_revision"
 
 
-def test_put_desprogramar_a_aprobado_permitido(cliente):
+def test_put_desprogramar_a_borrador_permitido(cliente):
     pid = _crear(cliente, estado="programado").json()["publicacion"]["id"]
-    r = cliente.put(f"/api/publicaciones/{pid}", json={"estado": "aprobado"})
+    r = cliente.put(f"/api/publicaciones/{pid}", json={"estado": "borrador"})
     assert r.status_code == 200
-    assert r.json()["publicacion"]["estado"] == "aprobado"
+    assert r.json()["publicacion"]["estado"] == "borrador"
 
 
 # --------------------------------------------------------------------------- #

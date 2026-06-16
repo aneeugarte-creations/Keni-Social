@@ -11,12 +11,12 @@ export interface UsuarioTarea {
 
 /** Flujo editorial del tablero: lo importante del día, evergreen o cobertura de evento. */
 export type FlujoContenido = "importante" | "evergreen" | "evento" | "";
-/** Una fila por red lleva su propio estado en este ciclo unificado. */
+/** Una fila por red lleva su propio estado en este ciclo unificado. Vocabulario ÚNICO
+ *  (colapso 2026-06): la misma lista canónica que `EstadoPublicacion` (sin reposo `aprobado`;
+ *  juntar los 2 OKs auto-programa). */
 export type EstadoContenidoPlataforma =
-  | "pendiente"
-  | "en_curso"
+  | "borrador"
   | "en_revision"
-  | "aprobado"
   | "programado"
   | "publicado";
 

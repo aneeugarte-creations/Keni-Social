@@ -28,7 +28,7 @@ export const TOPE_PAGINAS_PIEZA = 3 * PAGINAS_POR_LOTE;
 /**
  * Pestañas del feed: una PARTICIÓN BINARIA del ciclo por ESTADO, con "Todas" como unión.
  * "Pendientes" es TODO lo que aún no salió (cualquier estado salvo `publicado`: borrador,
- * en_revision, aprobado, programado); "Publicadas" es exactamente lo `publicado`. Ambas van
+ * en_revision, programado); "Publicadas" es exactamente lo `publicado`. Ambas van
  * con consulta DEDICADA al servidor (pseudo-estados `pendiente`/`publicado`, ver
  * `ESTADO_SERVIDOR_DE_VISTA`), así la paginación y los totales son exactos en las dos
  * superficies (feed por keyset y lista por offset). `filtra` repite la misma regla en cliente
@@ -61,7 +61,7 @@ export const VISTAS: VistaFeed[] = [
     etiquetaCorta: "Pendientes",
     icono: Clock,
     // Pendiente = TODO lo que aún no salió: cualquier estado que no sea `publicado`
-    // (borrador, en_revision, aprobado, programado). El servidor ya filtra igual.
+    // (borrador, en_revision, programado). El servidor ya filtra igual.
     filtra: (p) => p.estado !== "publicado",
     vacio: {
       titulo: "Nada pendiente",

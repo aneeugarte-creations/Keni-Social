@@ -22,18 +22,18 @@ FLUJOS_CONTENIDO: tuple[str, ...] = ("importante", "evergreen", "evento")
 # libre). Cubre el ciclo de una tarea (pendiente/en_curso/hecha) y sirve de resumen.
 ESTADOS_CONTENIDO: tuple[str, ...] = ("pendiente", "en_curso", "hecha")
 
-# Estado de UNA fila por plataforma (`contenido_plataforma.estado`). Ciclo unificado que
-# fusiona el de pieza (pendiente/en_curso/listo/publicado) y el editorial de publicacion
-# (borrador/en_revision/aprobado/programado/publicado):
+# Estado de UNA fila por plataforma (`contenido_plataforma.estado`). LISTA CANONICA UNICA
+# (colapso 2026-06): se fundió el vocabulario editorial y el del tablero en una sola lista,
+# y se retiró `aprobado` (aprobar = juntar los 2 likes -> auto-programa al siguiente hueco):
 #
-#   pendiente -> en_curso -> en_revision -> aprobado -> programado -> publicado
+#   borrador -> en_revision -> programado -> publicado
 #
-# Mapeos de migracion: `borrador` -> `pendiente`; `listo` (pieza) -> `aprobado`.
+# `borrador` es la fase "en preparación": su detalle son los flags `falta_*` (copy/imagen/
+# hashtags/...). Las filas viejas se migran: pendiente/en_curso -> borrador; aprobado ->
+# en_revision (conserva sus likes en `contenido_aprobaciones`; se re-programa al avanzar).
 ESTADOS_CONTENIDO_PLATAFORMA: tuple[str, ...] = (
-    "pendiente",
-    "en_curso",
+    "borrador",
     "en_revision",
-    "aprobado",
     "programado",
     "publicado",
 )

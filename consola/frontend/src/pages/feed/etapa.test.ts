@@ -157,8 +157,7 @@ describe("etapaDePublicacion · etapa IA derivada (degradación, sin `etapa_ia`)
     ).toBe("lista_para_revisar");
   });
 
-  it("aprobado / programado / publicado mapean a sus etapas", () => {
-    expect(etapaDePublicacion(pub({ estado: "aprobado", etapa_ia: undefined }))).toBe("aprobada");
+  it("programado / publicado mapean a sus etapas (ya no hay etapa 'aprobada')", () => {
     expect(etapaDePublicacion(pub({ estado: "programado", etapa_ia: undefined }))).toBe("programada");
     expect(etapaDePublicacion(pub({ estado: "publicado", etapa_ia: undefined }))).toBe("publicada");
   });
@@ -185,7 +184,6 @@ describe("etapaDePublicacion · etapa IA derivada (degradación, sin `etapa_ia`)
       "falta_copy_in",
       "falta_hashtags",
       "lista_para_revisar",
-      "aprobada",
       "programada",
       "publicada",
     ] as const) {

@@ -81,7 +81,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
 
   const etapa = etapaDePublicacion(publicacion);
   const enRevision = publicacion.estado === "en_revision";
-  const yaAprobada = etapa === "aprobada" || etapa === "programada" || etapa === "publicada";
+  const yaAprobada = etapa === "programada" || etapa === "publicada";
   // Autogenerada por la IA: sin autor humano (las piezas de la pipeline —pipeline/rss/radar— no
   // tienen autor; las que postea el equipo SÍ). En ese caso la firma es "IA", no "desconocido".
   const generadaPorIA = !publicacion.autor_nombre?.trim();
@@ -90,7 +90,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   // orden) como los avisos de gobernanza (firmas / comentarios sin resolver). Se carga
   // perezosamente cuando la pieza está en revisión (es cuando importa el gate). Si NO hay
   // cadena, el motor simple `aprobar`/`rechazar` forwardea a la cadena multinivel.
-  // Se carga en revisión (cuando importa el OK) y también en piezas aprobadas pendientes de salir
+  // Se carga en revisión (cuando importa el OK) y también en piezas ya programadas pendientes de salir
   // (ahí el gate de comentarios sin resolver bloquea PROGRAMAR/publicar, como el "merge" de un PR).
   //
   // ANTI-N+1: dentro del feed, el padre pide las cadenas de la página en UN lote
@@ -103,7 +103,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
     queryKey: claveCadenaAprobacion(publicacion.id),
     queryFn: ({ signal }) => api.cadenaAprobacion(publicacion.id, signal),
     enabled:
-      (enRevision || etapa === "aprobada") && !(lote?.pendiente(publicacion.id) ?? false),
+      (enRevision || etapa === "programada") && !(lote?.pendiente(publicacion.id) ?? false),
     staleTime: 30_000,
   });
   const cadena = cadenaQuery.data;
@@ -158,7 +158,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
     onSuccess: (res) => {
       const cerrada =
         !!res?.publicacion &&
-        ["aprobado", "programado", "publicado"].includes(res.publicacion.estado);
+        ["programado", "publicado"].includes(res.publicacion.estado);
       actualizarCaches(res);
       // "ok": el spinner gira en el pulgar de ARRIBA y el toast final dice "Quitamos tu OK."
       // Si quien dio el OK puede FORZAR (admin/coordinación), el override vive AQUÍ, en el
@@ -286,7 +286,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   // ¿Puede ESTE usuario dar su "me gusta" (OK humano) ahora? Lo decide el backend; aquí
   // habilitamos/explicamos antes de pedirlo. `aprobar`/`rechazar` (legado) forwardean al
   // nivel ACTUAL de la cadena, así que un OK cierra el nivel humano que toca.
-  const { puedeDar, motivo } = elegibilidadOK(cadena, usuario, publicacion.autor_id);
+  const { puedeDar, motivo } = elegibilidadOK(cadena, usuario);
 
   // Por qué el "me gusta" está bloqueado (qué falta): FUENTE ÚNICA del tooltip del botón y del
   // toast al pulsarlo cuando no toca. Explica el gate (en revisión: tu pieza / ya diste OK /

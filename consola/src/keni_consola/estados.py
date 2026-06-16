@@ -16,24 +16,24 @@ from keni_shared import estados as _estados_compartidos
 # es el ciclo de vida: pendiente -> en curso -> hecha (#145, F5).
 ESTADOS_TAREA: tuple[str, ...] = ("pendiente", "en_curso", "hecha")
 
-# Estados validos de una publicacion (flujo editorial; YAML). El flujo de aprobacion
-# de equipo (#9, Fase 3) intercala `en_revision` entre el borrador y el aprobado:
+# Estados válidos de una pieza/publicación. LISTA CANÓNICA ÚNICA (colapso 2026-06): el
+# vocabulario editorial y el del tablero se fundieron en una sola lista y se retiró
+# `aprobado` (aprobar = juntar los 2 likes -> auto-programa al siguiente hueco):
 #
-#   borrador -> en_revision -> aprobado -> programado -> publicado
+#   borrador -> en_revision -> programado -> publicado
 #                   |
 #                   +-> (rechazo) -> borrador
 #
-# Estados del flujo de publicación (fuente única; usar estas constantes, no literales).
+# `borrador` es la fase "en preparación" (detalle = flags `falta_*`). Es la MISMA lista que
+# `ESTADOS_CONTENIDO_PLATAFORMA` (keni-shared): ya no hay dos vocabularios ni mapeo entre ellos.
 ESTADO_BORRADOR = "borrador"
 ESTADO_EN_REVISION = "en_revision"
-ESTADO_APROBADO = "aprobado"
 ESTADO_PROGRAMADO = "programado"
 ESTADO_PUBLICADO = "publicado"
 
 ESTADOS_PUBLICACION: tuple[str, ...] = (
     ESTADO_BORRADOR,
     ESTADO_EN_REVISION,
-    ESTADO_APROBADO,
     ESTADO_PROGRAMADO,
     ESTADO_PUBLICADO,
 )
@@ -333,13 +333,13 @@ ORIGEN_PIEZA_DEFECTO = "interno"
 # Canonica en keni-shared (re-exportada aqui, ver CLASES_CONTENIDO).
 ESTADOS_CONTENIDO: tuple[str, ...] = _estados_compartidos.ESTADOS_CONTENIDO
 
-# Estado de UNA fila por plataforma (`contenido_plataforma.estado`). Ciclo unificado que
-# fusiona el de pieza (pendiente/en_curso/listo/publicado) y el editorial de publicacion
-# (borrador/en_revision/aprobado/programado/publicado):
+# Estado de UNA fila por plataforma (`contenido_plataforma.estado`). Vocabulario ÚNICO canónico
+# (COLAPSO 2026-06): una sola lista, sin estado de reposo `aprobado` ni estados de trabajo
+# legados (pendiente/en_curso):
 #
-#   pendiente -> en_curso -> en_revision -> aprobado -> programado -> publicado
+#   borrador -> en_revision -> programado -> publicado
 #
-# Mapeos de migracion: `borrador` -> `pendiente`; `listo` (pieza) -> `aprobado`.
+# Mapeos de migración (datos legados): pendiente/en_curso/listo/aprobado -> `borrador`.
 # Canonica en keni-shared (re-exportada aqui, ver CLASES_CONTENIDO).
 ESTADOS_CONTENIDO_PLATAFORMA: tuple[str, ...] = _estados_compartidos.ESTADOS_CONTENIDO_PLATAFORMA
 

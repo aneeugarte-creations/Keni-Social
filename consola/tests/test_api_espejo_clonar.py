@@ -106,7 +106,7 @@ def test_espejo_no_toca_hermanas_publicadas(cliente):
 
 def test_espejo_resetea_hermana_con_aprobaciones(cliente):
     _cont, por_red = _crear_idea(cliente)
-    r = cliente.put(f"/api/publicaciones/{por_red['instagram']}", json={"estado": "aprobado"})
+    r = cliente.put(f"/api/publicaciones/{por_red['instagram']}", json={"estado": "en_revision"})
     assert r.status_code == 200, r.text
     r = cliente.put(f"/api/publicaciones/{por_red['x']}", json={"contenido": "Editado"})
     assert r.status_code == 200, r.text

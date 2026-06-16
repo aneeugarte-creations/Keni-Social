@@ -154,12 +154,12 @@ describe("VistaLista — selección múltiple y borrado en masa", () => {
   });
 });
 
-describe("VistaLista — 'Añadir a la cola' solo en piezas aprobadas/programadas", () => {
+describe("VistaLista — 'Añadir a la cola' solo en piezas programadas", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("una pieza APROBADA ofrece 'Añadir a la cola' en el menú", async () => {
-    renderLista([pub({ id: "p1", titulo: "Aprobada", estado: "aprobado" })]);
-    fireEvent.contextMenu(screen.getByText("Aprobada").closest('[role="button"]')!);
+  it("una pieza PROGRAMADA ofrece 'Añadir a la cola' en el menú", async () => {
+    renderLista([pub({ id: "p1", titulo: "Programada", estado: "programado" })]);
+    fireEvent.contextMenu(screen.getByText("Programada").closest('[role="button"]')!);
     expect(
       await screen.findByRole("menuitem", { name: /Añadir a la cola/ }),
     ).toBeInTheDocument();

@@ -119,7 +119,6 @@ def test_decidir_aprueba_el_nivel_actual():
     cadena = [_nivel("a", 1)]
     campos, error = colaboracion.decidir(
         cadena[0], cadena, "aprobado", {"id": "u2", "usuario": "beto"}, rol="editor",
-        autor_pieza_id="u1",
     )
     assert error is None
     assert campos is not None
@@ -153,20 +152,21 @@ def test_decidir_no_permite_redecidir_un_nivel():
     assert error is not None and "ya fue decidido" in error.lower()
 
 
-def test_decidir_otro_par_de_ojos_bloquea_al_autor():
+def test_decidir_autor_puede_dar_un_ok():
+    """COLAPSO 2026-06: ya no se bloquea al autor; cualquiera puede dar un OK (la regla es que
+    los DOS OK los den dos personas distintas, no que el autor no participe)."""
     cadena = [_nivel("a", 1)]
-    _, error = colaboracion.decidir(
+    campos, error = colaboracion.decidir(
         cadena[0], cadena, "aprobado", {"id": "u1", "usuario": "ana"}, rol="editor",
-        autor_pieza_id="u1",
     )
-    assert error is not None and "tu propia pieza" in error.lower()
+    assert error is None and campos is not None
+    assert campos["decision"] == "aprobado"
 
 
 def test_decidir_admin_puede_aprobar_su_propia_pieza():
     cadena = [_nivel("a", 1)]
     campos, error = colaboracion.decidir(
         cadena[0], cadena, "aprobado", {"id": "u1", "usuario": "jefa"}, rol="admin",
-        autor_pieza_id="u1",
     )
     assert error is None and campos is not None
 
@@ -174,7 +174,7 @@ def test_decidir_admin_puede_aprobar_su_propia_pieza():
 def test_decidir_token_mantenimiento_puede_decidir():
     cadena = [_nivel("a", 1)]
     campos, error = colaboracion.decidir(
-        cadena[0], cadena, "aprobado", None, rol=None, autor_pieza_id="u1",
+        cadena[0], cadena, "aprobado", None, rol=None,
     )
     assert error is None and campos is not None
 
@@ -197,7 +197,6 @@ def test_decidir_misma_persona_no_da_los_dos_ok():
     ]
     _, error = colaboracion.decidir(
         cadena[1], cadena, "aprobado", {"id": "u2", "usuario": "beto"}, rol="editor",
-        autor_pieza_id="u1",
     )
     assert error is not None and "otra persona" in error.lower()
 
@@ -210,7 +209,6 @@ def test_decidir_admin_no_puede_dar_los_dos_ok_el_mismo():
     ]
     campos, error = colaboracion.decidir(
         cadena[1], cadena, "aprobado", {"id": "u2", "usuario": "jefa"}, rol="admin",
-        autor_pieza_id="u1",
     )
     assert campos is None and error is not None and "otra persona" in error.lower()
 
@@ -220,7 +218,6 @@ def test_decidir_admin_da_un_ok_de_pieza_propia():
     cadena = [_nivel("n1", 1, "pendiente"), _nivel("n2", 2, "pendiente")]
     campos, error = colaboracion.decidir(
         cadena[0], cadena, "aprobado", {"id": "u1", "usuario": "jefa"}, rol="admin",
-        autor_pieza_id="u1",
     )
     assert error is None and campos is not None
 
@@ -284,8 +281,10 @@ def test_campos_nivel_pendiente_resetea_decisor_y_sello():
 # --------------------------------------------------------------------------- #
 
 
-def test_estado_publicacion_para_aprobado():
-    assert colaboracion.estado_publicacion_para("aprobado") == "aprobado"
+def test_estado_publicacion_para_aprobado_queda_en_revision():
+    # COLAPSO 2026-06: una cadena aprobada deja la pieza `en_revision` (la auto-programación
+    # la mueve luego a `programado`); ya no hay estado de reposo `aprobado`.
+    assert colaboracion.estado_publicacion_para("aprobado") == "en_revision"
 
 
 def test_estado_publicacion_para_pendiente_es_en_revision():
@@ -375,7 +374,7 @@ def test_decidir_bloquea_si_el_cargo_no_satisface():
     cadena = [{"id": "a", "nivel": 1, "decision": "pendiente", "cargo_requerido": "director"}]
     _, error = colaboracion.decidir(
         cadena[0], cadena, "aprobado", {"id": "u2", "usuario": "beto"}, rol="editor",
-        autor_pieza_id="u1", cargo_decisor="redactor",
+        cargo_decisor="redactor",
     )
     assert error is not None and "cargo" in error.lower()
 
@@ -384,7 +383,7 @@ def test_decidir_permite_si_el_cargo_satisface():
     cadena = [{"id": "a", "nivel": 1, "decision": "pendiente", "cargo_requerido": "coordinador"}]
     campos, error = colaboracion.decidir(
         cadena[0], cadena, "aprobado", {"id": "u2", "usuario": "beto"}, rol="editor",
-        autor_pieza_id="u1", cargo_decisor="coordinador_redes",
+        cargo_decisor="coordinador_redes",
     )
     assert error is None and campos is not None
 
@@ -393,7 +392,7 @@ def test_decidir_admin_ignora_el_cargo_requerido():
     cadena = [{"id": "a", "nivel": 1, "decision": "pendiente", "cargo_requerido": "director"}]
     campos, error = colaboracion.decidir(
         cadena[0], cadena, "aprobado", {"id": "u2", "usuario": "jefa"}, rol="admin",
-        autor_pieza_id="u1", cargo_decisor="redactor",
+        cargo_decisor="redactor",
     )
     assert error is None and campos is not None
 

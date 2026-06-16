@@ -895,16 +895,15 @@ def iniciar_programador(intervalo_segundos: float | None = None) -> threading.Th
         while True:
             t0 = time.monotonic()
             try:
-                # RECUPERACIÓN de aprobadas sin hueco: la auto-programación síncrona (al aprobar)
-                # se queda sin efecto si EN ESE MOMENTO no había cadencia/franja aplicable
-                # (p. ej. se configuró después). Sin este barrido no había NINGÚN reintento:
-                # la pieza moría en `aprobado`. Best-effort e idempotente (solo toca piezas
-                # `aprobado` que pasan los mismos gates que el encolado manual); gateado por
-                # `KENI_AUTO_PROGRAMAR` dentro de `barrer_aprobadas`.
-                # EVERGREEN DIARIO: si a una marca con línea evergreen le falta el green de
-                # hoy, reemite uno aleatorio del banco aprobado (piezas en `aprobado` que el
-                # barrido de abajo programa al hueco de las 8:00). ANTES de barrer aprobadas,
-                # para que la reemisión se programe en este mismo tick.
+                # RECUPERACIÓN de piezas con sus 2 likes sin hueco: la auto-programación síncrona
+                # (al juntar el segundo like) se queda sin efecto si EN ESE MOMENTO no había franja
+                # aplicable (p. ej. se configuró después). Sin este barrido no habría reintento: la
+                # pieza se quedaría `en_revision` para siempre. Best-effort e idempotente (solo toca
+                # piezas `en_revision` con sus likes que pasan los mismos gates que el encolado
+                # manual); gateado por `KENI_AUTO_PROGRAMAR` dentro de `barrer_aprobadas`.
+                # EVERGREEN DIARIO: si a una marca con línea evergreen le falta el green de hoy,
+                # reemite uno aleatorio del banco (programado/publicado) y lo encola EN EL ACTO a su
+                # hueco de las 8:00 (la reemisión se auto-programa sola, no depende del barrido).
                 try:
                     from . import idear_diario
 

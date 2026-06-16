@@ -418,7 +418,7 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
         marca: str = "", red: str = "", estado: str = "", limite: int = 50
     ) -> dict:
         """Lista publicaciones (un post por plataforma). `estado` ∈
-        {borrador,en_revision,aprobado,programado,publicado}. Devuelve cada post con su
+        {borrador,en_revision,programado,publicado}. Devuelve cada post con su
         copy, imagen y estado."""
         cli = _cli()
         if cli is None:
@@ -457,8 +457,8 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
 
     @mcp.tool()
     async def keni_aprobar(publicacion_id: str) -> dict:
-        """Aprueba una publicación que está en revisión (decide el nivel actual de la
-        cadena). NO publica: la deja aprobada, lista para programar desde la UI."""
+        """Da un OK (like) a una publicación en revisión (decide el nivel actual de la cadena).
+        Con los 2 OK de personas distintas la pieza se auto-programa al próximo hueco. NO publica."""
         cli = _cli()
         if cli is None:
             return {"error": _MSG_NO_INIT}
@@ -724,7 +724,7 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
     @mcp.tool()
     async def keni_produccion_dia(marca: str = "") -> dict:
         """Producción del DÍA de una marca, de un vistazo: el flujo de las últimas 24 h
-        (temas creados → generando → en borrador → en revisión → aprobado → programado →
+        (temas creados → generando → en borrador → en revisión → programado →
         publicado), desglosado por vertical y por origen, contra el objetivo diario
         (`KENI_CUPO_DIA`); más la cola de generación y la de programación (programadas con
         su hora y próximos huecos de franja por red). Para monitorizar el objetivo de N

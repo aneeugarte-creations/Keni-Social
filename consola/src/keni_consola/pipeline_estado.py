@@ -61,7 +61,7 @@ ETAPAS: tuple[str, ...] = (
 # Estados de fila por plataforma que YA estan en revision o mas alla: la pieza salio de la
 # fase de produccion automatica y vive en el gate humano (cola de revision/aprobacion).
 _ESTADOS_EN_REVISION_O_MAS = frozenset(
-    {"en_revision", "aprobado", "programado", "publicado"}
+    {"en_revision", "programado", "publicado"}
 )
 
 _ORIGENES_AUTOGEN = frozenset(ORIGENES_AUTOGEN)
@@ -82,7 +82,7 @@ def _tiene_imagen(plataforma: dict[str, Any]) -> bool:
 
 
 def _en_revision_o_mas(plataforma: dict[str, Any]) -> bool:
-    """True si la fila por plataforma ya esta en revision/aprobado/programado/publicado."""
+    """True si la fila por plataforma ya esta en revision/programado/publicado."""
     return _norm(plataforma.get("estado")) in _ESTADOS_EN_REVISION_O_MAS
 
 
@@ -98,7 +98,7 @@ def etapa_de_tema(
       - clase != 'contenido' (una tarea) o estado padre 'hecha' (cerrado) -> FUERA.
       - origen NO auto-generable (alta tecleada legada `origen=""`, etc.) -> FUERA: la
         auto-generacion no lo toca (lo lleva el equipo a mano).
-      - alguna plataforma en revision/aprobado/... O (con copy Y con imagen) -> LISTA_PARA_REVISAR.
+      - alguna plataforma en revision/programado/... O (con copy Y con imagen) -> LISTA_PARA_REVISAR.
       - alguna plataforma con copy pero SIN imagen -> GENERANDO_ARTE.
       - sin copy aun, pero ya etiquetado `autogen` (copy encolado) -> GENERANDO_COPY.
       - sin copy y sin encolar todavia -> PRIORIZADA (en cola de trabajo de la IA).
@@ -134,13 +134,12 @@ def etapa_de_tema(
 # Etapa POR PIEZA (no por tema): la etapa IA de UNA fila por plataforma         #
 # (`contenido_plataforma` / publicacion), para el Feed de ideacion (Flujo D).   #
 # Es un enum mas RICO que el de tema: el tema solo llega a "lista_para_revisar", #
-# pero una pieza concreta avanza por el gate humano (aprobada / programada /    #
-# publicada). Misma derivacion que documenta el front (`feed/etapa.ts`); este    #
-# modulo es la FUENTE UNICA en backend para no duplicar la heuristica en la UI.  #
+# pero una pieza concreta avanza por el gate humano (programada / publicada).   #
+# Misma derivacion que documenta el front (`feed/etapa.ts`); este modulo es la   #
+# FUENTE UNICA en backend para no duplicar la heuristica en la UI.               #
 # --------------------------------------------------------------------------- #
 # Etapas terminales por-pieza, ademas de las tres de produccion de arriba
 # (GENERANDO_COPY / GENERANDO_ARTE / LISTA_REVISAR, que se reusan tal cual).
-ETAPA_APROBADA = "aprobada"
 ETAPA_PROGRAMADA = "programada"
 ETAPA_PUBLICADA = "publicada"
 
@@ -152,7 +151,6 @@ ETAPAS_PIEZA: tuple[str, ...] = (
     ETAPA_FALTA_COPY_IN,
     ETAPA_FALTA_HASHTAGS,
     ETAPA_LISTA_REVISAR,
-    ETAPA_APROBADA,
     ETAPA_PROGRAMADA,
     ETAPA_PUBLICADA,
 )
@@ -162,16 +160,16 @@ def etapa_de_pieza(pieza: dict[str, Any]) -> str:
     """Etapa IA de UNA pieza serializada (publicacion), PURA. Devuelve un literal de `ETAPAS_PIEZA`.
 
     `pieza` es la forma publica de una publicacion (`publicacion_a_dict`): usa su `estado`
-    editorial (`borrador`/`en_revision`/`aprobado`/`programado`/`publicado`) y la checklist
+    editorial (`borrador`/`en_revision`/`programado`/`publicado`) y la checklist
     `falta_copy`/`falta_imagen`/`falta_copy_in`/`falta_hashtags`. ESPEJO de la derivacion del
     front (`etapaDePublicacion` en `feed/etapa.ts`).
 
     «Revisión» NO es una etapa que se enseñe como tal: es interna y significa "hay que hacer
-    algo". Por eso, MIENTRAS la pieza no esté aprobada/programada/publicada, la etapa enseña la
+    algo". Por eso, MIENTRAS la pieza no esté programada/publicada, la etapa enseña la
     PRIMERA ACCIÓN PENDIENTE (no un "para revisar" que oculte lo que falta), tanto en borrador
     como en revisión:
 
-      - estado `publicado` / `programado` / `aprobado` -> etapa terminal (ya pasó el gate)
+      - estado `publicado` / `programado` -> etapa terminal (ya pasó el gate)
       - falta copy                      -> generando_copy   ("Falta copy")
       - falta el ASSET del formato (foto: `falta_imagen`; vídeo: `falta_video`) -> generando_arte
       - EN REVISIÓN y falta la placa     -> falta_copy_in    ("Falta copy-in")
@@ -194,8 +192,6 @@ def etapa_de_pieza(pieza: dict[str, Any]) -> str:
         return ETAPA_PUBLICADA
     if estado == "programado":
         return ETAPA_PROGRAMADA
-    if estado == "aprobado":
-        return ETAPA_APROBADA
     if pieza.get("falta_copy", True):
         return ETAPA_GENERANDO_COPY
     # El ASSET que falta depende del formato (espejo del front): una pieza de VÍDEO necesita el

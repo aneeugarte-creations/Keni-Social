@@ -132,7 +132,13 @@ def _migrar_checks_dominio(con: Any) -> None:
 
     checks: tuple[tuple[str, str, tuple[str, ...], str], ...] = (
         ("contenido", "estado", ESTADOS_CONTENIDO, "pendiente"),
-        ("contenido_plataforma", "estado", ESTADOS_CONTENIDO_PLATAFORMA, "pendiente"),
+        # Colapso 2026-06: la allowlist de pieza pasó a (borrador/en_revision/programado/
+        # publicado). El default de normalización es `borrador`: las filas viejas con valores
+        # retirados (pendiente/en_curso/aprobado) se normalizan a `borrador` ANTES de re-aplicar
+        # el CHECK (vuelven a preparación; conservan sus likes en `contenido_aprobaciones`).
+        # Editar este default cambia el source de la fn -> su huella cambia -> la migración 0029
+        # (re_aplicar_si_cambia) se RE-APLICA en hosted con la allowlist nueva.
+        ("contenido_plataforma", "estado", ESTADOS_CONTENIDO_PLATAFORMA, "borrador"),
         ("contenido_aprobaciones", "decision", DECISIONES_APROBACION, "pendiente"),
         ("usuarios", "rol", ROLES_USUARIO, "editor"),
         # verificación de la FUENTE: '' es valido (sin verificar). NO se aplica a `noticias_clusters.verificacion_fuente`

@@ -246,7 +246,7 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
   });
 
   it("aprobar que CIERRA la cadena confirma 'lista para publicar' y ofrece Deshacer", async () => {
-    stubFetchAprobacion("aprobado");
+    stubFetchAprobacion("programado");
     renderPost(pub({ estado: "en_revision", etapa_ia: "lista_para_revisar" }));
     // Espera la cadena (el panel pinta el conteo 0/1) para que el like sea elegible.
     expect(await screen.findByText("0/1")).toBeInTheDocument();
@@ -330,7 +330,7 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
   });
 
   it("«Forzar» NO es un botón de la tarjeta: se ofrece en el toast del primer OK (admin)", async () => {
-    stubFetchAprobacion("aprobado");
+    stubFetchAprobacion("programado");
     renderPost(pub({ estado: "en_revision", etapa_ia: "lista_para_revisar" }), { rol: "admin" });
     expect(await screen.findByText("0/1")).toBeInTheDocument();
     // La tarjeta queda limpia: ni el panel ni la fila de acciones ofrecen el override.
@@ -408,7 +408,7 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
   });
 
   it("el like SIN pulsar va en gris de reposo (nada de acento rojo de marca)", async () => {
-    stubFetchAprobacion("aprobado");
+    stubFetchAprobacion("programado");
     renderPost(pub({ estado: "en_revision", etapa_ia: "lista_para_revisar" }));
     const like = await screen.findByRole("button", { name: "Dale tu OK" });
     // El acento keni (#d12d07) se leía como un like ROJO sin pulsar; el color queda
@@ -496,7 +496,7 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
         ),
       ),
     );
-    renderPost(pub({ estado: "aprobado", etapa_ia: "aprobada", revisor_nombre: "Leo" }));
+    renderPost(pub({ estado: "programado", etapa_ia: "programada", revisor_nombre: "Leo" }));
     // Nada de un Check enfocable que solo lanza un toast: el botón no existe.
     expect(screen.queryByRole("button", { name: /me gusta/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /tu ok/i })).not.toBeInTheDocument();
@@ -547,8 +547,8 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
     renderPost(
       pub({
-        estado: "aprobado",
-        etapa_ia: "aprobada",
+        estado: "programado",
+        etapa_ia: "programada",
         revisor_nombre: "Coordinadora Editorial Larguísima De Verdad",
       }),
     );
@@ -757,7 +757,7 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
   });
 
   it("una reacción que CAMBIA el estado invalida los conteos de las pestañas (el badge no miente)", async () => {
-    stubFetchAprobacion("aprobado"); // la pieza pasa de en_revision -> aprobado
+    stubFetchAprobacion("programado"); // la pieza pasa de en_revision -> programado (auto-programa al juntar los 2 OKs)
     const { client } = renderPost(pub({ estado: "en_revision", etapa_ia: "lista_para_revisar" }));
     const spy = vi.spyOn(client, "invalidateQueries");
     expect(await screen.findByText("0/1")).toBeInTheDocument();

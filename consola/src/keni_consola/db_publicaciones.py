@@ -30,27 +30,12 @@ from .db_rota import (
 # `contenido` padre (1:1). Estas funciones conservan EXACTAMENTE la firma y la forma del
 # dict que antes producía `ficheros.py` (YAML), de modo que `api/publicaciones`,
 # `api/aprobacion`, `programador` (Metricool), `dominio/publicaciones` y el frontend de
-# Publicaciones siguen funcionando sin cambios (van por la fachada `repos`). El ciclo
-# editorial (borrador→en_revision→aprobado→programado→publicado) se traduce al ciclo
-# unificado de plataforma: `borrador` ⇆ `pendiente`/`en_curso`.
+# Publicaciones siguen funcionando sin cambios (van por la fachada `repos`). El estado de la
+# pieza usa el vocabulario único canónico (borrador→en_revision→programado→publicado).
 
-# pub -> plataforma: el `borrador` editorial es el `pendiente` del tablero; el resto 1:1.
-_ESTADO_PUB_A_PLAT: dict[str, str] = {
-    "borrador": "pendiente",
-    "en_revision": "en_revision",
-    "aprobado": "aprobado",
-    "programado": "programado",
-    "publicado": "publicado",
-}
-# plataforma -> pub: el vocabulario editorial solo conoce `borrador` para "en progreso".
-_ESTADO_PLAT_A_PUB: dict[str, str] = {
-    "pendiente": "borrador",
-    "en_curso": "borrador",
-    "en_revision": "en_revision",
-    "aprobado": "aprobado",
-    "programado": "programado",
-    "publicado": "publicado",
-}
+# Colapso 2026-06: el estado de PUBLICACION y el de la fila por plataforma son AHORA el
+# MISMO vocabulario canónico (borrador/en_revision/programado/publicado), así que ya no hay
+# traducción entre ellos: la fila guarda el estado tal cual.
 
 # Columnas de la fila por plataforma que mapean campos editables de una publicacion.
 # (El `contenido` de la publicacion es el `copy` de la plataforma; ver `_campos_pub_a_plat`.)
@@ -95,7 +80,7 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
         "red": f["red"] or "",
         "contenido": f["copy"] or "",
         "copy_in": f["copy_in"] or "",
-        "estado": _ESTADO_PLAT_A_PUB.get(f["pestado"] or "pendiente", "borrador"),
+        "estado": f["pestado"] or "borrador",
         "revision": f["revision"] or "",
         "autor_id": f["autor_id"] or "",
         "autor_nombre": f["autor_nombre"] or "",
@@ -257,7 +242,7 @@ def _insertar_publicacion(
         red=red,
         # Marca denormalizada explicita: la del padre recien insertado (evita un lookup extra).
         marca=padre["marca"],
-        estado=_ESTADO_PUB_A_PLAT.get(campos.get("estado") or "borrador", "pendiente"),
+        estado=campos.get("estado") or "borrador",
         copy=campos.get("contenido") or "",
         copy_in=campos.get("copy_in") or "",
         imagen=campos.get("imagen") or "",
@@ -402,18 +387,15 @@ def _filtros_publicacion(
         )
         params.append(linea)
     if estado:
-        # `borrador` casa los estados "en progreso" del tablero (pendiente/en_curso).
-        if estado == "borrador":
-            clausulas.append("cp.estado IN ('pendiente', 'en_curso')")
-        # PSEUDO-ESTADO `pendiente` (no es un estado de publicación: borrador/en_revision/
-        # aprobado/programado/publicado): la partición "Pendientes" del feed = TODO lo que aún
+        # PSEUDO-ESTADO `pendiente` (NO es un estado real: el vocabulario es borrador/
+        # en_revision/programado/publicado): la partición "Pendientes" del feed = TODO lo que aún
         # no salió, esto es, cualquier estado que no sea `publicado` (incluido un estado nulo).
         # Su complementario exacto es `estado=publicado`, así "Pendientes + Publicadas = Todas".
-        elif estado == "pendiente":
+        if estado == "pendiente":
             clausulas.append("(cp.estado IS NULL OR cp.estado != 'publicado')")
         else:
             clausulas.append("cp.estado = ?")
-            params.append(_ESTADO_PUB_A_PLAT.get(estado, estado))
+            params.append(estado)
     if evergreen is not None:
         clausulas.append("cp.evergreen = ?")
         params.append(1 if evergreen else 0)
@@ -585,7 +567,7 @@ def actualizar_publicacion(
                 valor = 1 if valor else 0
             cambios_plat[columna] = valor
     if "estado" in campos:
-        cambios_plat["estado"] = _ESTADO_PUB_A_PLAT.get(campos["estado"], "pendiente")
+        cambios_plat["estado"] = campos["estado"]
 
     cambios_padre: dict[str, Any] = {}
     if "titulo" in campos:
@@ -609,16 +591,10 @@ def actualizar_publicacion(
                 "WHERE id = ?"
             )
             if estado_esperado is not None:
-                # El estado de PUBLICACION es una proyeccion del de plataforma y NO es 1:1
-                # (tanto `pendiente` como `en_curso` proyectan a `borrador`): el CAS acepta
-                # CUALQUIER estado de plataforma que proyecte al esperado, o un en_curso
-                # quedaria bloqueado para siempre por un falso "estado movido".
-                plat_esperados = [
-                    p for p, e in _ESTADO_PLAT_A_PUB.items() if e == estado_esperado
-                ] or [estado_esperado]
-                marcadores_cas = ", ".join("?" for _ in plat_esperados)
-                sql += f" AND estado IN ({marcadores_cas})"
-                params.extend(plat_esperados)
+                # Vocabulario único (colapso 2026-06): el estado de la fila ES el estado de
+                # publicación, así que el CAS compara contra el esperado tal cual (1:1).
+                sql += " AND estado = ?"
+                params.append(estado_esperado)
             cur = con.execute(sql, tuple(params))
             if cur.rowcount == 0:
                 # No existe o el CAS no aplico (estado movido): nada que commitear.
@@ -675,17 +651,17 @@ def transicionar_estado_publicacion(
     dos peticiones simultaneas (doble-click, dos revisores) NO pasan ambas: la primera gana y la
     segunda ve `rowcount == 0` y recibe `None` (el caller lo traduce a 409 "el estado cambió").
 
-    `estado_origen`/`estado_destino` son estados de PUBLICACION (`borrador`/`en_revision`/
-    `aprobado`/`programado`/...); se mapean a los de la fila por plataforma con `_ESTADO_PUB_A_PLAT`
-    (espejo del CAS de `actualizar_publicacion`). `campos_extra` son campos de PUBLICACION
-    adicionales a sellar EN EL MISMO UPDATE (p.ej. `enviado_a_revision_en`, `fecha_programada`,
-    `revisor_*`, `preparado_en`); solo se aceptan los que mapean a columnas de la fila por
-    plataforma via `_CAMPOS_PUB_A_PLAT` (el resto se ignora). Igual que `reclamar_preparacion`,
-    una `IntegrityError` (p.ej. el indice de slot de parrilla) se PROPAGA al caller para que la
+    `estado_origen`/`estado_destino` son estados canónicos (`borrador`/`en_revision`/
+    `programado`/`publicado`); con el vocabulario único (colapso 2026-06) la fila los guarda
+    tal cual (sin traducción). `campos_extra` son campos de PUBLICACION adicionales a sellar EN
+    EL MISMO UPDATE (p.ej. `enviado_a_revision_en`, `fecha_programada`, `revisor_*`,
+    `preparado_en`); solo se aceptan los que mapean a columnas de la fila por plataforma via
+    `_CAMPOS_PUB_A_PLAT` (el resto se ignora). Igual que `reclamar_preparacion`, una
+    `IntegrityError` (p.ej. el indice de slot de parrilla) se PROPAGA al caller para que la
     traduzca (no la traga). Devuelve la publicacion actualizada o None (no existe / CAS no aplicó).
     """
-    plat_origen = _ESTADO_PUB_A_PLAT.get(estado_origen, estado_origen)
-    plat_destino = _ESTADO_PUB_A_PLAT.get(estado_destino, estado_destino)
+    plat_origen = estado_origen
+    plat_destino = estado_destino
     asignaciones = ["estado = ?", "actualizado = ?"]
     params: list[Any] = [plat_destino, ahora_iso()]
     for clave, valor in (campos_extra or {}).items():

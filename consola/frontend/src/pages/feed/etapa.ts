@@ -2,12 +2,12 @@
  * ETAPA de la cadena IA de una pieza, para el Feed de ideación (Flujo D, Fase 4).
  *
  * La visión de la "red social interna" pide ver el estado de la IA EN VIVO por pieza:
- * "generando copy → generando arte → lista para revisar → aprobada". Hoy NO existe un
+ * "generando copy → generando arte → lista para revisar → programada". Hoy NO existe un
  * endpoint dedicado de estado-por-etapa: lo PROVEERÁ el Flujo C (Orquestación, Fase 2),
  * que encadena los daemons con "estado visible por pieza" (ver plan §Fase 2).
  *
  * Mientras tanto, DERIVAMOS la etapa de lo que ya trae cada `Publicacion`:
- *  - `estado` (pendiente/en_curso/en_revision/aprobado/programado/publicado), y
+ *  - `estado` (borrador/en_revision/programado/publicado), y
  *  - la checklist `falta_copy` / `falta_imagen` / `falta_revision`.
  *
  * CABLEADO CON C (follow-up #3, ya en producción):
@@ -29,7 +29,6 @@ export type EtapaIa =
   | "falta_copy_in"
   | "falta_hashtags"
   | "lista_para_revisar"
-  | "aprobada"
   | "programada"
   | "publicada";
 
@@ -40,7 +39,7 @@ export interface MetaEtapa {
   enCurso: boolean;
 }
 
-// GÉNERO deliberado: las etiquetas van en FEMENINO («Aprobada/Programada/Publicada») porque la
+// GÉNERO deliberado: las etiquetas van en FEMENINO («Programada/Publicada») porque la
 // unidad del feed es «la pieza». NO «corregirlas» hacia el masculino de `META_ESTADOS` (que
 // califica a «el estado»): la divergencia es intencional, no un typo.
 export const META_ETAPA: Record<EtapaIa, MetaEtapa> = {
@@ -56,7 +55,6 @@ export const META_ETAPA: Record<EtapaIa, MetaEtapa> = {
   falta_hashtags: { etiqueta: "Faltan hashtags", enCurso: false },
   // "Para revisar" (no "Lista"): no colisiona con la pestaña "Lista" del hub y dice la acción.
   lista_para_revisar: { etiqueta: "Para revisar", enCurso: false },
-  aprobada: { etiqueta: "Aprobada", enCurso: false },
   programada: { etiqueta: "Programada", enCurso: false },
   publicada: { etiqueta: "Publicada", enCurso: false },
 };
@@ -98,11 +96,11 @@ function faltaHashtags(p: Publicacion): boolean {
 
 /**
  * Deriva la etapa IA de una pieza a partir de su estado + checklist. «Revisión» NO se enseña
- * como tal (es interno): mientras la pieza no esté aprobada/programada/publicada, la etapa
+ * como tal (es interno): mientras la pieza no esté programada/publicada, la etapa
  * muestra la PRIMERA ACCIÓN PENDIENTE, también en revisión.
  *
  * Reglas (de "más avanzado" a "menos"):
- *  - `publicado` / `programado` / `aprobado` → etapa terminal
+ *  - `publicado` / `programado` → etapa terminal
  *  - falta copy                → generando_copy ("Falta copy")
  *  - falta la FOTO real (o el vídeo) → generando_arte ("Falta imagen"/"Falta video")
  *  - EN REVISIÓN, falta la placa → falta_copy_in ("Falta copy-in")
@@ -135,7 +133,6 @@ function etapaBruta(p: Publicacion): EtapaIa {
 
   if (p.estado === "publicado") return "publicada";
   if (p.estado === "programado") return "programada";
-  if (p.estado === "aprobado") return "aprobada";
   // ESPEJO del backend. Solo "generando_copy" si DE VERDAD falta el copy.
   if (!p.contenido?.trim()) return "generando_copy";
   // Ola F: las piezas VIDEO necesitan el asset de video (no una foto).

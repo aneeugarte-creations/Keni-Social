@@ -158,12 +158,12 @@ function TarjetaPublicacion({
         ]
       : []),
     { separador: true },
-    // "Añadir a la cola" SOLO para piezas APROBADAS o ya programadas (re-encolar). Programar
+    // "Añadir a la cola" SOLO para piezas ya programadas (re-encolar). Programar
     // una pre-aprobación (borrador/en_revisión) saltaría la revisión: el camino de esas piezas
-    // es el flujo de aprobación, que auto-programa al aprobarse (auto_programar) con sus gates
-    // (mínimo de OKs + verificación). Así el botón no es un footgun de un clic en la pantalla diaria. Una
-    // publicada es terminal (su post ya salió): tampoco se re-encola.
-    ...(publicacion.estado === "aprobado" || publicacion.estado === "programado"
+    // es el flujo de aprobación, que auto-programa al juntar los 2 OKs (auto_programar) con sus
+    // gates (mínimo de OKs + verificación). Así el botón no es un footgun de un clic en la pantalla
+    // diaria. Una publicada es terminal (su post ya salió): tampoco se re-encola.
+    ...(publicacion.estado === "programado"
       ? [
           {
             etiqueta: "Añadir a la cola",
@@ -173,7 +173,7 @@ function TarjetaPublicacion({
           },
         ]
       : []),
-    ...(publicacion.estado === "aprobado" || publicacion.estado === "programado"
+    ...(publicacion.estado === "programado"
       ? [
           {
             etiqueta: "Programar en Metricool",

@@ -13,7 +13,7 @@ ventana de producción (las mismas 24 h móviles del cupo de Admitir):
       "marca", "ventana": {desde, hasta},
       "objetivo": {"dia": cupo_dia|None, "plan": plan_dia|None},
       "admision": {"total", "generando", "en_borrador", "en_revision",
-                  "aprobado", "programado", "publicado"},
+                  "programado", "publicado"},
       "por_vertical": [{"vertical", "total", "en_revision", "programado", "publicado"}],
       "por_origen": {"pipeline": n, "historia": n, ...},
       "cola_generacion": {"pendientes", "en_curso"},
@@ -24,7 +24,7 @@ ventana de producción (las mismas 24 h móviles del cupo de Admitir):
 
 El ADMISION cuenta TEMAS (contenido padre), no filas por red: el objetivo diario se mide en
 contenidos, y cada tema se clasifica por su pieza MÁS AVANZADA (publicado > programado >
-aprobado > en_revision > borrador con copy > generando). `objetivo.dia` es el MISMO
+en_revision > borrador con copy > generando). `objetivo.dia` es el MISMO
 `KENI_CUPO_DIA` que regula Admitir: una sola fuente de verdad para "cuántos al día".
 
 Lo consumen la UI (panel de producción) y el MCP operativo (`keni_produccion_dia`), para
@@ -49,7 +49,7 @@ _log = logging.getLogger("keni_consola.api.produccion")
 # Escalera de estados de plataforma, de menos a más avanzado: el tema se clasifica por el
 # MÁXIMO que alcanza cualquiera de sus redes (una pieza publicada en X ya "cuenta" aunque
 # la de Instagram siga en revisión).
-_ESCALERA = ("pendiente", "en_curso", "en_revision", "aprobado", "programado", "publicado")
+_ESCALERA = ("borrador", "en_revision", "programado", "publicado")
 _RANGO = {e: i for i, e in enumerate(_ESCALERA)}
 
 # Redes sociales candidatas para el cálculo de próximos huecos de programación.
@@ -68,11 +68,11 @@ def _peldano_admision(filas: list[dict[str, Any]]) -> str:
     """Peldaño del admision de un tema: estados editoriales o 'generando'/'en_borrador'.
 
     'generando' = tiene redes pero NINGUNA con copy todavía (la IA trabaja);
-    'en_borrador' = hay copy pero ninguna red pasó de pendiente/en_curso (reposo del
+    'en_borrador' = hay copy pero ninguna red pasó de `borrador` (reposo del
     avance o pieza incompleta de asset).
     """
     estado = _estado_max(filas)
-    if estado in ("", "pendiente", "en_curso"):
+    if estado in ("", "borrador"):
         con_copy = any(str(f.get("copy") or "").strip() for f in filas)
         return "en_borrador" if con_copy else "generando"
     return estado
@@ -121,7 +121,6 @@ async def dia(request: Request) -> Response:
         "generando": 0,
         "en_borrador": 0,
         "en_revision": 0,
-        "aprobado": 0,
         "programado": 0,
         "publicado": 0,
     }

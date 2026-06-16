@@ -13,7 +13,6 @@ from ... import repos
 from ...dominio import colaboracion
 from ...dominio.publicaciones import flags_falta_de_contenido, publicacion_a_dict
 from ...estados import (
-    ESTADO_APROBADO,
     ESTADO_EN_REVISION,
     ESTADO_PROGRAMADO,
 )
@@ -73,7 +72,7 @@ def _pierde_aprobaciones(actual: dict[str, Any], campos: dict[str, Any]) -> bool
     if not cambia_contenido or "estado" in campos:
         return False
     estado_actual = actual.get("estado") or ""
-    if estado_actual in (ESTADO_APROBADO, ESTADO_PROGRAMADO):
+    if estado_actual == ESTADO_PROGRAMADO:
         return True
     if estado_actual == ESTADO_EN_REVISION:
         cadena = repos.listar_aprobaciones(actual["id"])

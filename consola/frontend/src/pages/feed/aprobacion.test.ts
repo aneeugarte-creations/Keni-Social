@@ -40,47 +40,31 @@ function cadenaOK(over: Partial<CadenaAprobacion> = {}): CadenaAprobacion {
 
 describe("elegibilidadOK · quién puede dar el OK (me gusta)", () => {
   it("sin cadena (o vacía) no se puede dar OK, sin motivo (aún no aplica)", () => {
-    expect(elegibilidadOK(undefined, { id: "u1", rol: "editor" }, "autorX")).toEqual({
+    expect(elegibilidadOK(undefined, { id: "u1" })).toEqual({
       puedeDar: false,
       motivo: "",
     });
   });
 
-  it("una persona distinta del autor que no ha dado OK SÍ puede", () => {
-    const e = elegibilidadOK(cadenaOK(), { id: "u1", rol: "editor" }, "autorX");
+  it("una persona que no ha dado OK SÍ puede (cualquiera del equipo, sin requisito de cargo)", () => {
+    const e = elegibilidadOK(cadenaOK(), { id: "u1" });
     expect(e.puedeDar).toBe(true);
   });
 
-  it("el autor (no admin) NO puede dar OK a su propia pieza", () => {
-    const e = elegibilidadOK(cadenaOK(), { id: "u1", rol: "editor" }, "u1");
-    expect(e.puedeDar).toBe(false);
-    expect(e.motivo).toMatch(/tu propia pieza/i);
+  it("el AUTOR ya no está bloqueado: puede dar uno de los dos OK", () => {
+    // Antes se pasaba el id del autor para bloquearlo; ahora no existe esa restricción.
+    // El único gate es que los dos OK los den personas DISTINTAS.
+    expect(elegibilidadOK(cadenaOK(), { id: "u1" }).puedeDar).toBe(true);
   });
 
-  it("quien ya dio un OK NO puede dar el otro", () => {
+  it("quien ya dio un OK NO puede dar el otro (dos personas distintas)", () => {
     const c = cadenaOK({
       niveles: [
         nivel({ id: "n1", nivel: 1, etiqueta: "Edición", decision: "aprobado", decisor_id: "u1", decisor_nombre: "Yo" }),
         nivel({ id: "n2", nivel: 2, etiqueta: "Coordinación" }),
       ],
     });
-    const e = elegibilidadOK(c, { id: "u1", rol: "editor" }, "autorX");
-    expect(e.puedeDar).toBe(false);
-    expect(e.motivo).toMatch(/ya diste tu ok/i);
-  });
-
-  it("un admin SÍ puede aunque sea el autor (desatascar)", () => {
-    expect(elegibilidadOK(cadenaOK(), { id: "u1", rol: "admin" }, "u1").puedeDar).toBe(true);
-  });
-
-  it("un admin que YA dio un OK TAMPOCO puede dar el otro (segundo par de ojos)", () => {
-    const c = cadenaOK({
-      niveles: [
-        nivel({ id: "n1", nivel: 1, etiqueta: "Edición", decision: "aprobado", decisor_id: "u1", decisor_nombre: "Yo" }),
-        nivel({ id: "n2", nivel: 2, etiqueta: "Coordinación" }),
-      ],
-    });
-    const e = elegibilidadOK(c, { id: "u1", rol: "admin" }, "autorX");
+    const e = elegibilidadOK(c, { id: "u1" });
     expect(e.puedeDar).toBe(false);
     expect(e.motivo).toMatch(/ya diste tu ok/i);
   });
@@ -93,7 +77,7 @@ describe("elegibilidadOK · quién puede dar el OK (me gusta)", () => {
       ],
       nivel_actual: "revision",
     });
-    const e = elegibilidadOK(c, { id: "u1", rol: "editor" }, "autorX");
+    const e = elegibilidadOK(c, { id: "u1" });
     expect(e.puedeDar).toBe(false);
     expect(e.motivo).toMatch(/verificación de la IA/i);
   });

@@ -1,4 +1,8 @@
-"""Auto-programación: una pieza APROBADA se encola SOLA a su próximo hueco.
+"""Auto-programación: una pieza con sus 2 OK se encola SOLA a su próximo hueco.
+
+COLAPSO 2026-06: ya no hay estado de reposo `aprobado`. Una pieza queda `en_revision` con su
+cadena de likes; cuando junta el mínimo de OK, `programar_si_aprobada` la mueve a `programado`
+si hay hueco (si no, sigue `en_revision`). Los helpers de aquí montan esa cadena ya aprobada.
 
 OFFLINE (Postgres de pruebas vía fixture `cliente`). Igual que los tests de `encolar`,
 inyectamos un "ahora" fijo parcheando el `datetime` del módulo de publicaciones (de donde
@@ -33,20 +37,48 @@ def ahora_fijo(monkeypatch):
     return _AHORA
 
 
+def _sellar_cadena_aprobada(pid: str) -> None:
+    """Monta una cadena de 2 niveles y los SELLA aprobados (los 2 OK), lista para auto-programar."""
+    plat = repos.obtener_contenido_plataforma(pid)
+    repos.crear_cadena_aprobacion(
+        plataforma_id=pid,
+        contenido_id=plat["contenido_id"],
+        etiquetas=["Edición", "Coordinación"],
+        cargos=["", ""],
+    )
+    for i, nivel in enumerate(repos.listar_aprobaciones(pid)):
+        repos.actualizar_aprobacion(
+            nivel["id"],
+            {
+                "decision": "aprobado",
+                "decisor_id": f"rev{i}",
+                "decisor_nombre": f"Rev{i}",
+                "decidido_en": "2026-05-20T09:00",
+            },
+        )
+
+
 def _crear_aprobada(cliente, **campos) -> str:
-    """Crea una publicación directamente en `aprobado` (sin cadena) y devuelve su id."""
-    base = {"marca": "unotv", "red": "x", "titulo": "T", "contenido": "C", "estado": "aprobado"}
+    """Crea una pieza `en_revision` con su cadena de 2 OK YA aprobada (lista para auto-programar).
+
+    Si se pasa otro `estado` (p. ej. `borrador`), se crea tal cual SIN cadena (para los tests que
+    comprueban que la auto-programación no toca lo que no está en revisión con sus likes).
+    """
+    base = {"marca": "unotv", "red": "x", "titulo": "T", "contenido": "C", "estado": "en_revision"}
     base.update(campos)
     r = cliente.post("/api/publicaciones", json=base)
     assert r.status_code == 200, r.text
-    return r.json()["publicacion"]["id"]
+    pid = r.json()["publicacion"]["id"]
+    if base["estado"] == "en_revision":
+        _sellar_cadena_aprobada(pid)
+    return pid
 
 
-def test_aprobada_sin_franja_se_queda_aprobada(cliente, ahora_fijo):
-    # Sin franja aplicable NO se inventa fecha: la pieza se queda aprobada.
+def test_aprobada_sin_franja_se_queda_en_revision(cliente, ahora_fijo):
+    # Sin franja aplicable NO se inventa fecha: la pieza se queda en revisión (con sus likes).
     pid = _crear_aprobada(cliente)
     assert auto_programar.programar_si_aprobada(pid) is None
-    assert repos.obtener_publicacion(pid)["estado"] == "aprobado"
+    assert repos.obtener_publicacion(pid)["estado"] == "en_revision"
 
 
 def test_aprobada_se_programa_en_proximo_hueco(cliente, ahora_fijo):
@@ -126,7 +158,7 @@ def test_redes_de_un_tema_comparten_hora(cliente, ahora_fijo):
 
 
 def test_no_programa_si_no_esta_aprobada(cliente, ahora_fijo):
-    # Solo actúa sobre `aprobado`: un borrador con franja disponible NO se toca.
+    # Solo actúa sobre `en_revision` con sus likes: un borrador con franja disponible NO se toca.
     cliente.post("/api/franjas", json={"dia_semana": 2, "hora": "15:00"})
     pid = _crear_aprobada(cliente, estado="borrador")
     assert auto_programar.programar_si_aprobada(pid) is None
@@ -134,7 +166,7 @@ def test_no_programa_si_no_esta_aprobada(cliente, ahora_fijo):
 
 
 def test_no_resucita_si_dejo_de_estar_aprobada(cliente, ahora_fijo, monkeypatch):
-    """CARRERA (CAS): entre que la auto-programación lee la pieza `aprobado` y escribe
+    """CARRERA (CAS): entre que la auto-programación lee la pieza `en_revision` y escribe
     `programado`, otro flujo la movió (p. ej. una edición la resetea a `borrador`). El CAS sobre
     `estado` evita RESUCITARLA a `programado` pisando el estado/fecha que dejó el humano."""
     cliente.post("/api/franjas", json={"dia_semana": 2, "hora": "15:00"})
@@ -143,8 +175,8 @@ def test_no_resucita_si_dejo_de_estar_aprobada(cliente, ahora_fijo, monkeypatch)
     real_hueco = ap.programacion.calcular_hueco_para
 
     def _hueco_con_carrera(pub, ahora=None):  # noqa: ANN001
-        # Simula la carrera: la pieza deja de estar aprobada (vuelve a borrador) JUSTO antes de la
-        # escritura, como si otro flujo la editara entre la lectura y el UPDATE condicional.
+        # Simula la carrera: la pieza deja de estar en revisión (vuelve a borrador) JUSTO antes de
+        # la escritura, como si otro flujo la editara entre la lectura y el UPDATE condicional.
         repos.actualizar_publicacion(pid, {"estado": "borrador", "fecha_programada": ""})
         return real_hueco(pub, ahora)
 
@@ -165,7 +197,7 @@ def test_flag_off_no_programa(cliente, ahora_fijo, monkeypatch):
     pid = _crear_aprobada(cliente)
     assert auto_programar.programar_si_aprobada(pid) is None
     assert auto_programar.barrer_aprobadas() == 0
-    assert repos.obtener_publicacion(pid)["estado"] == "aprobado"
+    assert repos.obtener_publicacion(pid)["estado"] == "en_revision"
 
 
 def test_barrer_aprobadas_programa_las_existentes(cliente, ahora_fijo):
@@ -217,7 +249,9 @@ def test_evergreen_diario_reemite_uno_del_banco(cliente, ahora_fijo, monkeypatch
     assert copia["titulo"] == original["titulo"]
     assert copia["categoria"] == "evergreen"
     piezas = repos.listar_contenido_plataforma(copia["id"])
-    assert len(piezas) == 1 and piezas[0]["estado"] == "aprobado"
+    # Sin franja aplicable en este test, la reemisión se queda `en_revision` (pre-aprobada,
+    # esperando hueco): ya no existe el estado de reposo `aprobado`.
+    assert len(piezas) == 1 and piezas[0]["estado"] == "en_revision"
     assert piezas[0]["copy"] == "Copy green"
     # IDEMPOTENTE en la ventana: la reemision cuenta como generado -> no se anade otra hoy.
     assert idear_diario.barrer() == 0
@@ -235,7 +269,7 @@ def test_evergreen_diario_no_reemite_si_hoy_ya_hay_green(cliente, ahora_fijo, mo
         clase="contenido", titulo="Green de hoy", marca="unotv", flujo="evergreen",
     )
     repos.crear_contenido_plataforma(
-        contenido_id=green_hoy["id"], red="x", copy="Green de hoy", estado="aprobado",
+        contenido_id=green_hoy["id"], red="x", copy="Green de hoy", estado="en_revision",
         falta_revision=False,
     )
     assert idear_diario.barrer() == 0
@@ -257,7 +291,8 @@ def test_evergreen_diario_sin_banco_o_sin_plan_no_hace_nada(cliente, ahora_fijo,
 def test_evergreen_diario_reemision_se_programa_al_hueco_de_su_categoria(
     cliente, ahora_fijo, monkeypatch
 ):
-    """Cadena completa: reemision (aprobado) -> barrer_aprobadas -> franja evergreen."""
+    """La reemisión (pre-aprobada por construcción) se auto-programa SOLA a su franja evergreen
+    dentro de `idear_diario.barrer()`: ya no depende de `barrer_aprobadas` (no tiene cadena)."""
     from keni_consola import idear_diario
 
     monkeypatch.setenv("KENI_MAQUINA", "1")
@@ -270,8 +305,9 @@ def test_evergreen_diario_reemision_se_programa_al_hueco_de_su_categoria(
     _green_aprobado()
 
     assert idear_diario.barrer() == 1
-    assert auto_programar.barrer_aprobadas() == 1
 
+    # La reemisión quedó YA programada en su franja evergreen (encolada en el acto, sin pasar
+    # por la cola de likes); `barrer_aprobadas` no tiene nada nuevo que hacer.
     programadas = repos.listar_publicaciones(estado="programado")
     assert len(programadas) == 1
     assert programadas[0]["fecha_programada"] == "2026-05-20T14:00"

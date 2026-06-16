@@ -68,10 +68,10 @@ def test_crear_publicaciones_lote_es_atomico(entorno):
 def test_actualizar_publicacion_cas_aplica_si_el_estado_coincide(entorno):
     pub = db.crear_publicacion("unotv", "x", titulo="T", contenido="c")
     out = db.actualizar_publicacion(
-        pub["id"], {"estado": "aprobado", "titulo": "T2"}, estado_esperado="borrador"
+        pub["id"], {"estado": "en_revision", "titulo": "T2"}, estado_esperado="borrador"
     )
     assert out is not None
-    assert out["estado"] == "aprobado"
+    assert out["estado"] == "en_revision"
     assert out["titulo"] == "T2"
 
 
@@ -80,7 +80,7 @@ def test_actualizar_publicacion_cas_no_toca_nada_si_el_estado_se_movio(entorno):
     padre): cierra el TOCTOU del PUT generico."""
     pub = db.crear_publicacion("unotv", "x", titulo="Original", contenido="c")
     # Otro flujo la movio a aprobado entre el snapshot del caller y su escritura:
-    assert db.actualizar_publicacion(pub["id"], {"estado": "aprobado"}) is not None
+    assert db.actualizar_publicacion(pub["id"], {"estado": "en_revision"}) is not None
     out = db.actualizar_publicacion(
         pub["id"],
         {"estado": "programado", "titulo": "Pisada"},
@@ -88,15 +88,15 @@ def test_actualizar_publicacion_cas_no_toca_nada_si_el_estado_se_movio(entorno):
     )
     assert out is None
     releida = db.obtener_publicacion(pub["id"])
-    assert releida["estado"] == "aprobado"  # no se piso
+    assert releida["estado"] == "en_revision"  # no se piso
     assert releida["titulo"] == "Original"  # el padre TAMPOCO se toco (atomicidad)
 
 
 def test_actualizar_publicacion_atomica_plataforma_y_padre(entorno):
     """Titulo (padre) + estado (plataforma) en una sola llamada quedan ambos aplicados."""
     pub = db.crear_publicacion("unotv", "x", titulo="V1", contenido="c")
-    out = db.actualizar_publicacion(pub["id"], {"titulo": "V2", "estado": "aprobado"})
-    assert out["titulo"] == "V2" and out["estado"] == "aprobado"
+    out = db.actualizar_publicacion(pub["id"], {"titulo": "V2", "estado": "en_revision"})
+    assert out["titulo"] == "V2" and out["estado"] == "en_revision"
 
 
 # --------------------------------------------------------------------------- #

@@ -299,13 +299,13 @@ describe("FeedIdeacion · feed de ideación interno", () => {
       estado: "borrador",
       etapa_ia: "lista_para_revisar",
     };
-    const APROBADA = {
+    const PROGRAMADA = {
       ...PUBLICACION,
       id: "p3",
       contenido_id: "c3",
-      contenido: "Aprobada sin hueco",
-      estado: "aprobado",
-      etapa_ia: "aprobada",
+      contenido: "Programada sin salir",
+      estado: "programado",
+      etapa_ia: "programada",
     };
     const PUBLICADA = {
       ...PUBLICACION,
@@ -315,20 +315,20 @@ describe("FeedIdeacion · feed de ideación interno", () => {
       estado: "publicado",
       etapa_ia: "publicada",
     };
-    stubFetch([PUBLICACION, BORRADOR, APROBADA, PUBLICADA]);
+    stubFetch([PUBLICACION, BORRADOR, PROGRAMADA, PUBLICADA]);
     renderFeed();
     expect(await screen.findByText("Borrador completo")).toBeInTheDocument();
     expect(screen.getAllByText("Para revisar").length).toBeGreaterThan(0);
     expect(screen.queryByText("En borrador")).not.toBeInTheDocument();
-    // 'Pendientes' = TODO lo que aún no salió: borrador y aprobado SÍ, lo publicado NO.
+    // 'Pendientes' = TODO lo que aún no salió: borrador y programado SÍ, lo publicado NO.
     fireEvent.mouseDown(screen.getByRole("tab", { name: /Pendientes/ }), { button: 0 });
-    expect(await screen.findByText("Aprobada sin hueco")).toBeInTheDocument();
+    expect(await screen.findByText("Programada sin salir")).toBeInTheDocument();
     expect(screen.getByText("Borrador completo")).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText("Ya salió")).not.toBeInTheDocument());
-    // 'Publicadas' = SOLO lo publicado: ni borrador ni aprobado.
+    // 'Publicadas' = SOLO lo publicado: ni borrador ni programado.
     fireEvent.mouseDown(screen.getByRole("tab", { name: /Publicadas/ }), { button: 0 });
     expect(await screen.findByText("Ya salió")).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByText("Aprobada sin hueco")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText("Programada sin salir")).not.toBeInTheDocument());
     expect(screen.queryByText("Borrador completo")).not.toBeInTheDocument();
   });
 
@@ -487,8 +487,8 @@ describe("FeedIdeacion · feed de ideación interno", () => {
       id: "p2",
       contenido_id: "c2",
       contenido: "Segunda en cola",
-      estado: "aprobado",
-      etapa_ia: "aprobada",
+      estado: "programado",
+      etapa_ia: "programada",
     };
     const urls: string[] = [];
     vi.stubGlobal(
