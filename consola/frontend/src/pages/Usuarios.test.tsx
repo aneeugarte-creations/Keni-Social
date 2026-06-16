@@ -129,7 +129,7 @@ async function abrirPanel(nombre: RegExp) {
   return screen.findByRole("dialog");
 }
 
-describe("Organigrama · administración", () => {
+describe("Usuarios · administración", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });

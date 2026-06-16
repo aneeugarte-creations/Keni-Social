@@ -51,27 +51,40 @@ export function TarjetaMiembro({
         </span>
       </span>
 
-      <span className="flex shrink-0 flex-wrap justify-end gap-1">
-        {usuario.rol === "admin" && (
-          <Badge variant="default" className="h-5 px-1.5 text-[10px] font-medium">
-            Admin
-          </Badge>
+      {/* Insignias en columnas alineadas entre filas: marcas (variable, pueden ocupar más)
+          a la izquierda y luego Coord./Turnos/Admin en huecos fijos —misma posición en todas
+          las filas, hueco vacío si la persona no tiene esa insignia—. */}
+      <span className="flex shrink-0 items-start gap-1">
+        {marcas.length > 0 && (
+          <span className="flex max-w-[12rem] flex-wrap justify-end gap-1">
+            {marcas.map((m) => (
+              <Badge key={m} variant="outline" className="h-5 px-1.5 text-[10px] font-normal">
+                {metaZona(m).etiqueta}
+              </Badge>
+            ))}
+          </span>
         )}
-        {usuario.cobertura && (
-          <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-normal">
-            Turnos
-          </Badge>
-        )}
-        {usuario.puede_coordinar && (
-          <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-normal">
-            Coord.
-          </Badge>
-        )}
-        {marcas.map((m) => (
-          <Badge key={m} variant="outline" className="h-5 px-1.5 text-[10px] font-normal">
-            {metaZona(m).etiqueta}
-          </Badge>
-        ))}
+        <span className="flex w-16 justify-center">
+          {usuario.puede_coordinar && (
+            <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-normal">
+              Coord.
+            </Badge>
+          )}
+        </span>
+        <span className="flex w-16 justify-center">
+          {usuario.cobertura && (
+            <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-normal">
+              Turnos
+            </Badge>
+          )}
+        </span>
+        <span className="flex w-16 justify-center">
+          {usuario.rol === "admin" && (
+            <Badge variant="default" className="h-5 px-1.5 text-[10px] font-medium">
+              Admin
+            </Badge>
+          )}
+        </span>
       </span>
     </button>
   );

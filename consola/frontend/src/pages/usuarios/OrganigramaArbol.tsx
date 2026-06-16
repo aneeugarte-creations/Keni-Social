@@ -4,14 +4,11 @@ import {
   hijosPorManager,
   indexarPorId,
   raices,
-  ZONA_DIRECCION,
-  zonaDe,
   zonasOrdenadas,
 } from "@/lib/organigrama";
 import { type MarcaDisponible, type UsuarioAdmin } from "@/types";
 
 import { DialogoMiembro } from "./DialogoMiembro";
-import { Leyenda } from "./Leyenda";
 import { TarjetaMiembro } from "./TarjetaMiembro";
 
 // --- Lista plana (una persona por línea) -------------------------------------
@@ -58,23 +55,11 @@ export function OrganigramaArbol({
     return out;
   }, [cima, hijos]);
 
-  // Zonas presentes (para la leyenda): las marcas/transversal que tengan a alguien.
-  const zonasPresentes = React.useMemo(() => {
-    const set = new Set<string>();
-    for (const u of usuarios) {
-      const z = zonaDe(u, porId);
-      if (z !== ZONA_DIRECCION) set.add(z);
-    }
-    return set;
-  }, [usuarios, porId]);
-
   const [seleccionado, setSeleccionado] = React.useState<string | null>(null);
   const usuarioSel = seleccionado ? (porId.get(seleccionado) ?? null) : null;
 
   return (
     <div className="space-y-4">
-      <Leyenda zonas={zonasPresentes} />
-
       <ul className="flex flex-col gap-1.5">
         {filas.map(({ usuario, tieneReportes }) => (
           <li key={usuario.id}>

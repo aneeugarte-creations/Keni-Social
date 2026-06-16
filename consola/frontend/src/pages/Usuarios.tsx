@@ -44,7 +44,7 @@ export default function Usuarios() {
 
   return (
     <>
-      <TituloPagina titulo="Organigrama" icono={Users} />
+      <TituloPagina titulo="Usuarios" icono={Users} />
       {puedeCrear && (
         <AccionesPagina>
           <MenuAcciones>
