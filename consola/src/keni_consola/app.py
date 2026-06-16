@@ -70,9 +70,9 @@ _ARCHIVOS_RAIZ = frozenset(
 # Placeholder amable cuando aun no hay build del frontend (caso normal aqui).
 _PLACEHOLDER = (
     "<!DOCTYPE html><html lang='es'><head><meta charset='utf-8'>"
-    "<title>Consola Keni</title></head><body>"
+    "<title>KENI</title></head><body>"
     "<main style='font-family:system-ui,sans-serif;max-width:40rem;margin:4rem auto;padding:0 1rem'>"
-    "<h1>Consola Keni</h1>"
+    "<h1>KENI</h1>"
     "<p>La interfaz aún no está construida; ejecuta el build del frontend.</p>"
     "</main></body></html>"
 )

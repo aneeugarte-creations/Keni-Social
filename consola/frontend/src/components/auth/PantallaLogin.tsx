@@ -219,7 +219,7 @@ export function PantallaLogin() {
     <div className="flex min-h-dvh w-full items-center justify-center bg-background px-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="space-y-1.5 text-center">
-          <CardTitle className="text-xl">Consola</CardTitle>
+          <CardTitle className="text-xl">KENI</CardTitle>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={alEnviar} noValidate>
