@@ -127,16 +127,15 @@ export function MonitorNumeros() {
             </tr>
           </thead>
           <tbody>
+            {/* Total global ARRIBA, encima de las marcas. */}
+            <tr className="border-b-2 border-border font-semibold">
+              <td className="py-2 pl-3 pr-2">Total</td>
+              <CeldasNumero c={data.totales} />
+            </tr>
             {data.marcas.map((marca) => (
               <BloqueMarca key={marca.marca} marca={marca} />
             ))}
           </tbody>
-          <tfoot>
-            <tr className="border-t-2 border-border font-semibold">
-              <td className="py-2 pl-3 pr-2">Total</td>
-              <CeldasNumero c={data.totales} />
-            </tr>
-          </tfoot>
         </table>
       </div>
     </Card>
