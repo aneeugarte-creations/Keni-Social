@@ -43,6 +43,8 @@ const CockpitInvestigacion = lazy(() => import("@/pages/maquina/CockpitInvestiga
 // «Contexto» (`/maquina/contexto`): la página única de la máquina — el pipeline de cada motor como
 // estructura, con cada fase desplegable a Prompt · Contexto · Logs y su on/off.
 const Contexto = lazy(() => import("@/pages/maquina/Contexto"));
+// Subpágina de UNA fase (`/maquina/contexto/:proceso/:fase`): su Prompt · Contexto · Logs.
+const FaseDetalle = lazy(() => import("@/pages/maquina/FaseDetalle"));
 // Detalle de UN daemon (`/maquina/agentes/:agente`): su estado y log por barrido; lo abren las
 // tablas de daemons (Sistema + cockpits). La LISTA «Agentes» se retiró: los dos agentes IA son
 // los dos cockpits (su on/off y prompts viven ahí; su salud, en el doctor).
@@ -339,6 +341,7 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <Navigate to="/maquina/computo" replace /> },
           { path: "contexto", element: <Contexto /> },
+          { path: "contexto/:proceso/:fase", element: <FaseDetalle /> },
           { path: "investigacion", element: <CockpitInvestigacion /> },
           // El cockpit de Producción se fusionó en «Contexto» (su pipeline + ajustes); redirige allí.
           { path: "produccion", element: <Navigate to="/maquina/contexto?proceso=produccion" replace /> },

@@ -16,7 +16,7 @@
  * tienen el maestro virtual del proceso lo indican con `heredada`.
  */
 import { useQuery } from "@tanstack/react-query";
-import { Bot, ChevronDown, Cog, Users } from "lucide-react";
+import { Bot, ChevronDown, ChevronRight, Cog, Users } from "lucide-react";
 import * as React from "react";
 
 import { EditorPromptOverlay } from "@/components/biblioteca/EditorPromptOverlay";
@@ -138,6 +138,56 @@ function DialogoExcepciones({
   );
 }
 
+/**
+ * Fila VISUAL de una entrada del pipeline (alto uniforme): icono de tipo (🤖/⚙) + nombre (línea 1)
+ * y ayuda (línea 2) a la izquierda; un slot `derecha` (conteos, switch, chevron…) a la derecha.
+ * La comparten las ETAPAS del pipeline y los SERVICIOS no-IA (mismo formato).
+ */
+export function FilaFasePipeline({
+  esIa,
+  nombre,
+  ayuda,
+  derecha,
+  onPrimaria,
+  acciones = [],
+  etiquetaAcciones,
+}: {
+  esIa: boolean;
+  nombre: string;
+  ayuda?: React.ReactNode;
+  derecha?: React.ReactNode;
+  onPrimaria?: () => void;
+  acciones?: ItemMenuContextual[];
+  etiquetaAcciones?: string;
+}) {
+  return (
+    <FilaConAcciones
+      como="div"
+      acciones={acciones}
+      onPrimaria={onPrimaria}
+      kebab="nunca"
+      realce
+      etiquetaAcciones={etiquetaAcciones}
+      className="flex items-center justify-between gap-3 rounded-lg border border-border/70 px-3.5 py-2.5"
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 text-sm font-medium">
+          {esIa ? (
+            <Bot className="h-4 w-4 shrink-0" aria-label="IA" />
+          ) : (
+            <Cog className="h-4 w-4 shrink-0 text-muted-foreground" aria-label="determinista" />
+          )}
+          <span className="truncate">{nombre}</span>
+        </div>
+        {ayuda != null && (
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">{ayuda}</p>
+        )}
+      </div>
+      {derecha != null && <div className="flex shrink-0 items-center gap-3">{derecha}</div>}
+    </FilaConAcciones>
+  );
+}
+
 export function PanelPipeline({
   titulo,
   fases,
@@ -146,7 +196,7 @@ export function PanelPipeline({
   cola,
   esAdmin = true,
   chip,
-  renderDetalle,
+  onAbrirFase,
 }: {
   /** Título de la cabecera del panel. */
   titulo: string;
@@ -162,26 +212,15 @@ export function PanelPipeline({
   esAdmin?: boolean;
   /** Indicador opcional en la cabecera (p. ej. jobs en curso del proceso). */
   chip?: React.ReactNode;
-  /** Si se pasa, cada fila es DESPLEGABLE: el click izquierdo expande/colapsa un panel inline
-   *  con el detalle de la fase (Prompt · Contexto · Logs) en vez de abrir el overlay de prompt.
-   *  Es el modo de la página «Contexto» (el pipeline como esqueleto de la página). */
-  renderDetalle?: (fase: FasePipeline) => React.ReactNode;
+  /** Si se pasa, el click izquierdo de cada fila NAVEGA al detalle de esa fase (su subpágina
+   *  Prompt · Contexto · Logs) en vez de abrir el overlay de prompt. Es el modo de «Contexto». */
+  onAbrirFase?: (fase: FasePipeline) => void;
 }) {
   // Doc abierto en el overlay «Editar prompt» (in-place, sin sacarte del cockpit).
   const [docEditando, setDocEditando] = React.useState<string | null>(null);
   // Fase cuyo diálogo de «Excepciones por marca» está abierto (o null).
   const [excepNombre, setExcepNombre] = React.useState<string | null>(null);
-  // Modo «Contexto»: nombres de fase con el detalle inline desplegado.
-  const [expandidas, setExpandidas] = React.useState<ReadonlySet<string>>(() => new Set());
-  const expandible = renderDetalle !== undefined;
-  const alternarExpandida = React.useCallback((nombre: string) => {
-    setExpandidas((prev) => {
-      const s = new Set(prev);
-      if (s.has(nombre)) s.delete(nombre);
-      else s.add(nombre);
-      return s;
-    });
-  }, []);
+  const navegable = onAbrirFase !== undefined;
 
   // Catálogo de ajustes (solo admin: /api/ajustes devuelve 403 a un editor). Misma queryKey que
   // Configuración/drawer → React Query dedupe (cero peticiones extra).
@@ -263,7 +302,6 @@ export function PanelPipeline({
           const enCursoN = conCola ? (enCurso[e.queue!] ?? 0) : 0;
           const esperaN = conCola ? (esperando[e.queue!] ?? 0) : 0;
           const admision = e.queue !== undefined && e.queue === admisionEn ? cola?.admision_verificacion : undefined;
-          const abierta = expandible && expandidas.has(e.nombre);
           return (
             <li key={e.nombre}>
               {/* Conector de flujo entre fases. */}
@@ -272,74 +310,51 @@ export function PanelPipeline({
                   <ChevronDown className="h-4 w-4 text-muted-foreground/40" />
                 </div>
               )}
-              <FilaConAcciones
-                como="div"
-                acciones={acciones}
-                onPrimaria={expandible ? () => alternarExpandida(e.nombre) : editarPrompt}
-                kebab="nunca"
-                realce
-                etiquetaAcciones={`Acciones de ${e.nombre}`}
-                className="flex items-center justify-between gap-3 rounded-lg border border-border/70 px-3.5 py-2.5"
-              >
-                {/* Izquierda: icono + nombre (línea 1) y ayuda/heredada (línea 2). Alto UNIFORME. */}
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5 text-sm font-medium">
-                    {e.es_ia ? (
-                      <Bot className="h-4 w-4 shrink-0" aria-label="IA" />
-                    ) : (
-                      <Cog className="h-4 w-4 shrink-0 text-muted-foreground" aria-label="determinista" />
-                    )}
-                    <span className="truncate">{e.nombre}</span>
-                  </div>
-                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+              <FilaFasePipeline
+                esIa={e.es_ia}
+                nombre={e.nombre}
+                ayuda={
+                  <>
                     {e.ayuda}
                     {e.heredada && <span className="text-muted-foreground/70"> · {e.heredada}</span>}
-                  </p>
-                </div>
-                {/* Derecha: conteos de cola (1 línea) + el switch (indicador de estado). */}
-                <div className="flex shrink-0 items-center gap-3">
-                  {conCola && (
-                    <span className="hidden text-right text-xs tabular-nums text-muted-foreground sm:block">
-                      <span className={enCursoN > 0 ? "font-medium text-foreground" : undefined}>
-                        {enCursoN} en curso
-                      </span>{" "}
-                      · {esperaN} en cola
-                      {admision && <> · admision {admision.en_proceso}</>}
-                    </span>
-                  )}
-                  {ajuste && (
-                    <SwitchAjuste
-                      ajuste={ajuste}
-                      ariaLabel={`${ajuste.etiqueta} (switch de la fase ${e.nombre})`}
-                    />
-                  )}
-                  {expandible && (
-                    <ChevronDown
-                      className={cn(
-                        "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
-                        abierta && "rotate-180",
-                      )}
-                      aria-hidden
-                    />
-                  )}
-                </div>
-                {ajuste && e.excepciones && deEtapa.length > 0 && (
-                  <DialogoExcepciones
-                    etiqueta={e.nombre}
-                    base={e.excepciones.base}
-                    nota={e.excepciones.nota}
-                    deEtapa={deEtapa}
-                    etapaActiva={Boolean(ajuste.valor)}
-                    abierto={excepNombre === e.nombre}
-                    onOpenChange={(v) => setExcepNombre(v ? e.nombre : null)}
-                  />
-                )}
-              </FilaConAcciones>
-              {/* Detalle inline de la fase (modo «Contexto»): Prompt · Contexto · Logs. */}
-              {abierta && (
-                <div className="mt-1.5 rounded-lg border border-border/60 bg-muted/20 p-3">
-                  {renderDetalle!(e)}
-                </div>
+                  </>
+                }
+                onPrimaria={navegable ? () => onAbrirFase!(e) : editarPrompt}
+                acciones={acciones}
+                etiquetaAcciones={`Acciones de ${e.nombre}`}
+                derecha={
+                  <>
+                    {conCola && (
+                      <span className="hidden text-right text-xs tabular-nums text-muted-foreground sm:block">
+                        <span className={enCursoN > 0 ? "font-medium text-foreground" : undefined}>
+                          {enCursoN} en curso
+                        </span>{" "}
+                        · {esperaN} en cola
+                        {admision && <> · admision {admision.en_proceso}</>}
+                      </span>
+                    )}
+                    {ajuste && (
+                      <SwitchAjuste
+                        ajuste={ajuste}
+                        ariaLabel={`${ajuste.etiqueta} (switch de la fase ${e.nombre})`}
+                      />
+                    )}
+                    {navegable && (
+                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                    )}
+                  </>
+                }
+              />
+              {ajuste && e.excepciones && deEtapa.length > 0 && (
+                <DialogoExcepciones
+                  etiqueta={e.nombre}
+                  base={e.excepciones.base}
+                  nota={e.excepciones.nota}
+                  deEtapa={deEtapa}
+                  etapaActiva={Boolean(ajuste.valor)}
+                  abierto={excepNombre === e.nombre}
+                  onOpenChange={(v) => setExcepNombre(v ? e.nombre : null)}
+                />
               )}
             </li>
           );

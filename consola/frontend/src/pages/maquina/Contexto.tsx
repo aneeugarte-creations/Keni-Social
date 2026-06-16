@@ -17,7 +17,6 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api } from "@/lib/api";
 import { INTERVALO_VIVO_MS } from "@/lib/refresco";
@@ -28,15 +27,15 @@ import {
   PanelMaquinaContenido,
 } from "@/pages/configuracion/SeccionFuncionalidad";
 import { SeccionImagen } from "@/pages/configuracion/SeccionImagen";
-import { DetalleFase } from "@/pages/maquina/DetalleFase";
 import {
   FASES_INVESTIGACION,
   FASES_PRODUCCION,
   QUEUE_INVESTIGACION,
   QUEUE_PRODUCCION,
+  slugFase,
 } from "@/pages/maquina/fases";
-import { PanelPipeline } from "@/pages/monitor/PanelPipeline";
-import { SeccionDaemons } from "@/pages/sistema/SeccionDaemons";
+import { ServiciosMaquina } from "@/pages/maquina/ServiciosMaquina";
+import { type FasePipeline, PanelPipeline } from "@/pages/monitor/PanelPipeline";
 
 type Proceso = "investigacion" | "produccion";
 
@@ -44,19 +43,9 @@ type Proceso = "investigacion" | "produccion";
 // drawer del propio Contexto (la misma página que vigila sus efectos).
 const GRUPOS_SISTEMA = ["automatismos_generales", "tuning"] as const;
 
-/** Bloque «Servicios (no consumen IA)»: los daemons clase=maquina del motor (solo admin). */
-function ServiciosMaquina({ motor }: { motor: Proceso }) {
-  return (
-    <div className="mt-6 rounded-xl border border-dashed border-border/70 bg-muted/30 p-2">
-      <SeccionDaemons clases={["maquina"]} motor={motor} titulo="Servicios (no consumen IA)" />
-    </div>
-  );
-}
-
 export default function Contexto() {
   const { usuario } = useSesion();
   const esAdmin = usuario?.rol === "admin";
-  const { marcaActiva } = useMarcaActiva();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const proceso: Proceso =
@@ -129,15 +118,9 @@ export default function Contexto() {
             admisionEn="verificar"
             cola={cola.data}
             esAdmin={esAdmin}
-            renderDetalle={(fase) => (
-              <DetalleFase
-                fase={fase}
-                proceso="investigacion"
-                marca={marcaActiva}
-                cola={cola.data}
-                queuePorTipo={QUEUE_INVESTIGACION}
-              />
-            )}
+            onAbrirFase={(fase: FasePipeline) =>
+              navigate(`/maquina/contexto/investigacion/${slugFase(fase.nombre)}`)
+            }
           />
           {esAdmin && <ServiciosMaquina motor="investigacion" />}
         </TabsContent>
@@ -149,15 +132,9 @@ export default function Contexto() {
             queuePorTipo={QUEUE_PRODUCCION}
             cola={cola.data}
             esAdmin={esAdmin}
-            renderDetalle={(fase) => (
-              <DetalleFase
-                fase={fase}
-                proceso="produccion"
-                marca={marcaActiva}
-                cola={cola.data}
-                queuePorTipo={QUEUE_PRODUCCION}
-              />
-            )}
+            onAbrirFase={(fase: FasePipeline) =>
+              navigate(`/maquina/contexto/produccion/${slugFase(fase.nombre)}`)
+            }
           />
           {esAdmin && <ServiciosMaquina motor="produccion" />}
         </TabsContent>

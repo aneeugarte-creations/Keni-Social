@@ -9,6 +9,14 @@
  */
 import type { FasePipeline } from "@/pages/monitor/PanelPipeline";
 
+/** Slug estable de una fase para su subpágina (`/maquina/contexto/:proceso/:fase`). */
+export function slugFase(nombre: string): string {
+  return nombre
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
+}
+
 /** Maestro VIRTUAL de Investigación: respaldo de las fases sin flag físico propio. */
 export const MAESTRO_INVESTIGACION = "KENI_INVESTIGACION";
 /** Maestro VIRTUAL de Producción: respaldo de las fases sin flag físico propio. */
