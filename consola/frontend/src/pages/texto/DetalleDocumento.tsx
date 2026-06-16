@@ -1,31 +1,30 @@
 /**
  * Vista DETALLE de un documento de la Biblioteca de Prompts.
  *
- * Cabecera de estado (título editable + línea de deployment + acciones), cuerpo SIEMPRE
- * WYSIWYG (EditorWysiwyg con chips de variables; la edición es libre: producción no
- * cambia hasta publicar), y panel lateral con pestañas:
+ * Cabecera (título editable + acciones), cuerpo SIEMPRE WYSIWYG (EditorWysiwyg con chips
+ * de variables; la edición es libre: producción no cambia hasta publicar), y panel lateral
+ * COLAPSABLE (estado en localStorage; colapsado el editor ocupa todo el ancho) con pestañas:
  *   - Versiones (PanelVersiones: publicado ↔ tu borrador, diff ancho, traer/descartar),
- *   - Uso (dónde entra el doc: procesos, pipelines y su sitio en la línea de la máquina),
- *   - Compilado (solo prompts base de pipeline: el prompt ENSAMBLADO que verá el modelo),
- *   - Ficha (metadata: descripción, carpeta, clase, marcas, etiquetas, prioridad).
+ *   - Acerca de (PanelAcerca: en prosa, qué es el doc y dónde entra en el pipeline),
+ *   - Compilado (solo prompts base de pipeline: el prompt ENSAMBLADO que verá el modelo).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowLeft,
   MoreHorizontal,
+  PanelLeftClose,
+  PanelLeftOpen,
   Rocket,
   Send,
   Trash2,
-  Zap,
 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { PanelAcerca } from "@/components/biblioteca/PanelAcerca";
 import { DialogPublicar } from "@/components/biblioteca/DialogPublicar";
 import { PanelCompilado } from "@/components/biblioteca/PanelCompilado";
-import { PanelFicha } from "@/components/biblioteca/PanelFicha";
-import { PanelUso } from "@/components/biblioteca/PanelUso";
 import { PanelVersiones } from "@/components/biblioteca/PanelVersiones";
 import { confirmar } from "@/components/comunes/confirmar";
 import { MenuFlotante } from "@/components/comunes/MenuContextual";
@@ -38,16 +37,15 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useMenuContextual } from "@/hooks/use-menu-contextual";
 import { useEsAdmin } from "@/hooks/use-biblioteca";
 import { ApiError, api, mensajeError } from "@/lib/api";
-import { tiempoRelativo } from "@/lib/fecha";
 import type { DocumentoTexto, RespuestaMaquinaTexto } from "@/types";
 
 import { claveEstrategiaBase } from "./estrategia/api";
 import { separarFrontmatter } from "./lib";
-import { PanelLanzar } from "./PanelLanzar";
 
-const ESTADOS_DOC = ["activo", "borrador", "archivado"] as const;
+/** Clave de persistencia del estado abierto/colapsado del panel lateral. */
+const CLAVE_PANEL = "keni.biblioteca.panel-abierto";
 
-type PestanaPanel = "versiones" | "uso" | "compilado" | "ficha";
+type PestanaPanel = "versiones" | "acerca" | "compilado";
 
 export function DetalleDocumento({
   docId,
@@ -193,7 +191,6 @@ export function DetalleDocumento({
         carpeta: b.carpeta,
         clase: b.clase,
         marcas: b.marcas,
-        estado: b.estado,
         etiquetas: b.etiquetas,
         pipelines: b.pipelines,
         rol: b.rol,
@@ -269,18 +266,24 @@ export function DetalleDocumento({
     enabled: publicarAbierto && !!produccion?.sha,
   });
 
-  // ── Probar (PanelLanzar) — solo prompts. ──
   const esPrompt = borrador?.tipo === "prompt";
-  const [lanzarAbierto, setLanzarAbierto] = React.useState(false);
-  const marcasQuery = useQuery({
-    queryKey: ["texto-marcas"],
-    queryFn: ({ signal }) => api.marcasTexto(signal),
+
+  // ── Panel lateral colapsable: con el panel oculto el editor ocupa todo el ancho
+  // (legibilidad). El estado se recuerda entre sesiones en localStorage. ──
+  const [panelAbierto, setPanelAbierto] = React.useState(() => {
+    try {
+      return localStorage.getItem(CLAVE_PANEL) !== "false";
+    } catch {
+      return true;
+    }
   });
-  const areasQuery = useQuery({
-    queryKey: ["texto-areas"],
-    queryFn: ({ signal }) => api.areasTexto(signal),
-    enabled: esPrompt,
-  });
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(CLAVE_PANEL, String(panelAbierto));
+    } catch {
+      /* almacenamiento no disponible: el estado vive solo en memoria */
+    }
+  }, [panelAbierto]);
 
   // ── Compilado: solo prompts BASE de un pipeline del registro. ──
   const pipelinesQuery = useQuery({
@@ -321,7 +324,6 @@ export function DetalleDocumento({
   }
 
   const sinPublicar = !!doc?.sin_publicar;
-  const procesos = borrador.procesos ?? [];
   const cuerpoVacio = !(borrador.cuerpo ?? "").trim();
   const puedePublicar = (!produccion || sinPublicar) && !cuerpoVacio;
 
@@ -377,11 +379,20 @@ export function DetalleDocumento({
             <Send className="mr-1 h-3.5 w-3.5" /> Solicitar publicación
           </Button>
         )}
-        {esPrompt ? (
-          <Button variant="outline" size="sm" onClick={() => setLanzarAbierto(true)}>
-            <Send className="mr-1 h-3.5 w-3.5" /> Probar
-          </Button>
-        ) : null}
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-8 w-8"
+          aria-label={panelAbierto ? "Colapsar panel lateral" : "Abrir panel lateral"}
+          title={panelAbierto ? "Colapsar panel" : "Abrir panel"}
+          onClick={() => setPanelAbierto((v) => !v)}
+        >
+          {panelAbierto ? (
+            <PanelLeftClose className="h-4 w-4" />
+          ) : (
+            <PanelLeftOpen className="h-4 w-4" />
+          )}
+        </Button>
         <Button
           ref={botonMenuRef}
           size="icon"
@@ -398,12 +409,6 @@ export function DetalleDocumento({
             onClose={menu.cerrar}
             etiqueta="Acciones del documento"
             items={[
-              ...ESTADOS_DOC.map((s) => ({
-                etiqueta: `Estado: ${s}`,
-                activo: (borrador.estado || "activo") === s,
-                onClick: () => editar({ estado: s }),
-              })),
-              { separador: true as const },
               {
                 etiqueta: "Mover a la papelera",
                 icono: Trash2,
@@ -424,60 +429,6 @@ export function DetalleDocumento({
             ]}
           />
         ) : null}
-      </div>
-
-      {/* Línea de deployment + nota de inyección + estado de guardado. */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-        {produccion ? (
-          <span
-            className="inline-flex items-center gap-1.5"
-            title="Lo publicado es lo que ven los agentes en todas las generaciones."
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
-            <span>
-              <span className="font-medium text-foreground">Publicado</span>
-              <span className="text-muted-foreground"> — lo que ven los agentes</span>, desde{" "}
-              {tiempoRelativo(produccion.creado) || produccion.creado.slice(0, 10)} (
-              {produccion.autor || "—"})
-            </span>
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" aria-hidden />
-            Sin publicar aún — los agentes usan tu borrador.
-          </span>
-        )}
-        {procesos.length > 0 ? (
-          <span
-            className="inline-flex items-center gap-1 border-l border-border pl-3"
-            title={procesos.join("\n")}
-          >
-            <Zap className="h-3 w-3 text-keni" aria-hidden />
-            Inyectado en: {procesos.join(" · ")}
-          </span>
-        ) : null}
-        <span
-          className={`ml-auto inline-flex items-center gap-1.5 ${
-            conflicto ? "text-amber-600 dark:text-amber-400" : ""
-          }`}
-        >
-          {conflicto ? (
-            <>
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden />
-              Sin guardar — conflicto (elige abajo)
-            </>
-          ) : guardarMut.isPending ? (
-            <>
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-keni" aria-hidden />
-              Guardando borrador…
-            </>
-          ) : (
-            <>
-              <span className="h-1.5 w-1.5 rounded-full bg-border" aria-hidden />
-              {`Borrador guardado ${tiempoRelativo(borrador.actualizado) || borrador.actualizado || ""}`.trim()}
-            </>
-          )}
-        </span>
       </div>
 
       {/* Conflicto de edición (otro editor guardó debajo): el autosave queda en pausa, pero tu
@@ -512,59 +463,52 @@ export function DetalleDocumento({
         </div>
       ) : null}
 
-      {/* ───────── Panel lateral (izquierda) + cuerpo (derecha) ───────── */}
+      {/* ───────── Panel lateral (izquierda, colapsable) + cuerpo (derecha) ───────── */}
       <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
-        <aside className="flex w-full shrink-0 flex-col gap-2 lg:w-96">
-          <Tabs value={pestana} onValueChange={(v) => setPestana(v as PestanaPanel)}>
-            <TabsList className={`grid h-auto w-full gap-1 p-1 ${pipelineBase ? "grid-cols-4" : "grid-cols-3"}`}>
-              <TabsTrigger value="versiones" className="text-xs">
-                Versiones
-              </TabsTrigger>
-              <TabsTrigger value="uso" className="text-xs">
-                Uso
-              </TabsTrigger>
-              {pipelineBase ? (
-                <TabsTrigger value="compilado" className="text-xs">
-                  Compilado
+        {panelAbierto ? (
+          <aside className="flex w-full shrink-0 flex-col gap-2 lg:w-96">
+            <Tabs value={pestana} onValueChange={(v) => setPestana(v as PestanaPanel)}>
+              <TabsList className={`grid h-auto w-full gap-1 p-1 ${pipelineBase ? "grid-cols-3" : "grid-cols-2"}`}>
+                <TabsTrigger value="versiones" className="text-xs">
+                  Versiones
                 </TabsTrigger>
-              ) : null}
-              <TabsTrigger value="ficha" className="text-xs">
-                Ficha
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-          <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border bg-muted/20 p-3">
-            {pestana === "versiones" ? (
-              <PanelVersiones
-                docId={borrador.id}
-                produccionSha={produccion?.sha ?? null}
-                sinPublicar={sinPublicar}
-                cuerpoBorrador={frontmatterOculto + borrador.cuerpo}
-                esAdmin={esAdmin}
-                onPublicar={() => setPublicarAbierto(true)}
-                onBorradorActualizado={() => {
-                  // Fuerza la RE-SINCRONIZACIÓN del borrador con el cuerpo cargado.
-                  sincronizado.current = null;
-                  qc.invalidateQueries({ queryKey: ["texto-doc", docId] });
-                  qc.invalidateQueries({ queryKey: ["texto-maquina"] });
-                  if (borrador.tipo !== "prompt") {
-                    qc.invalidateQueries({ queryKey: claveEstrategiaBase });
-                  }
-                }}
-              />
-            ) : pestana === "uso" ? (
-              <PanelUso doc={borrador} maquina={maquina} />
-            ) : pestana === "compilado" && pipelineBase ? (
-              <PanelCompilado pipelineId={pipelineBase.id} />
-            ) : (
-              <PanelFicha
-                borrador={borrador}
-                marcas={marcasQuery.data?.marcas ?? []}
-                onEditar={editar}
-              />
-            )}
-          </div>
-        </aside>
+                <TabsTrigger value="acerca" className="text-xs">
+                  Acerca de
+                </TabsTrigger>
+                {pipelineBase ? (
+                  <TabsTrigger value="compilado" className="text-xs">
+                    Compilado
+                  </TabsTrigger>
+                ) : null}
+              </TabsList>
+            </Tabs>
+            <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border bg-muted/20 p-3">
+              {pestana === "versiones" ? (
+                <PanelVersiones
+                  docId={borrador.id}
+                  produccionSha={produccion?.sha ?? null}
+                  sinPublicar={sinPublicar}
+                  cuerpoBorrador={frontmatterOculto + borrador.cuerpo}
+                  esAdmin={esAdmin}
+                  onPublicar={() => setPublicarAbierto(true)}
+                  onBorradorActualizado={() => {
+                    // Fuerza la RE-SINCRONIZACIÓN del borrador con el cuerpo cargado.
+                    sincronizado.current = null;
+                    qc.invalidateQueries({ queryKey: ["texto-doc", docId] });
+                    qc.invalidateQueries({ queryKey: ["texto-maquina"] });
+                    if (borrador.tipo !== "prompt") {
+                      qc.invalidateQueries({ queryKey: claveEstrategiaBase });
+                    }
+                  }}
+                />
+              ) : pestana === "compilado" && pipelineBase ? (
+                <PanelCompilado pipelineId={pipelineBase.id} />
+              ) : (
+                <PanelAcerca doc={borrador} maquina={maquina} />
+              )}
+            </div>
+          </aside>
+        ) : null}
 
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-md border border-border p-3">
           <EditorWysiwyg
@@ -597,19 +541,6 @@ export function DetalleDocumento({
           }
         }}
       />
-
-      {/* ───────── Probar (panel lanzar, solo prompts) ───────── */}
-      {esPrompt ? (
-        <PanelLanzar
-          key={borrador.id}
-          promptId={borrador.id}
-          salida={borrador.salida ?? ""}
-          marcas={marcasQuery.data?.marcas ?? []}
-          areas={areasQuery.data?.areas ?? []}
-          open={lanzarAbierto}
-          onOpenChange={setLanzarAbierto}
-        />
-      ) : null}
     </div>
   );
 }

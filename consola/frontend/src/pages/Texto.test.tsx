@@ -408,28 +408,22 @@ describe("Biblioteca de Prompts (tres máquinas + estrategia)", () => {
     expect(screen.getByRole("button", { name: /Papelera/ })).toBeInTheDocument();
   });
 
-  it("abre el detalle desde el flujo, «Uso» sitúa máquina → etapa y vuelve a la pestaña de origen", async () => {
+  it("abre el detalle desde el flujo, «Acerca de» sitúa el doc en la máquina y vuelve a la pestaña de origen", async () => {
     stubFetch();
     montar("/?vista=produccion");
 
     await screen.findByText("La máquina de contenido");
     fireEvent.click(screen.getByTitle("Redactar — abrir el prompt"));
 
-    // Cabecera: título editable, línea de deployment, badge sin publicar y acciones.
+    // Cabecera: título editable, badge sin publicar y acciones.
     expect(await screen.findByDisplayValue("Prompt de copy")).toBeInTheDocument();
-    expect(screen.getByText("Publicado")).toBeInTheDocument();
-    expect(screen.getByText(/lo que ven los agentes/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Publicar/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Probar/ })).toBeInTheDocument();
 
-    // Pestaña «Uso»: la posición nueva, máquina → etapa (del endpoint nuevo). El nuevo
-    // PanelUso pinta máquina, flecha y etapa en spans separados, así que comparamos el
-    // textContent normalizado de la fila (sin espacios ni flecha).
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Uso" }), { button: 0 });
+    // Pestaña «Acerca de»: prosa que sitúa el doc en la línea de la máquina (Redactar /
+    // Producción), compuesta a partir del endpoint de máquina.
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Acerca de" }), { button: 0 });
     expect(
-      await screen.findByText(
-        (_t, el) => el?.tagName === "LI" && el.textContent?.replace(/[\s→]/g, "") === "ProducciónRedactar",
-      ),
+      await screen.findByText((t) => t.includes("Redactar (Producción)")),
     ).toBeInTheDocument();
 
     // Volver regresa a la pestaña de origen (Producción), no a la vista por defecto.

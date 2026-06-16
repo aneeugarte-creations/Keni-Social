@@ -106,7 +106,7 @@ export function EditorWysiwyg({
   const editor = useEditor({
     extensions: [
       StarterKit,
-      Markdown.configure({ html: false, linkify: true, breaks: true, transformPastedText: true }),
+      Markdown.configure({ html: false, linkify: true, breaks: false, transformPastedText: true }),
       ...(conVariables
         ? [ChipVariable.configure({ obtenerVariables: () => variablesRef.current })]
         : []),

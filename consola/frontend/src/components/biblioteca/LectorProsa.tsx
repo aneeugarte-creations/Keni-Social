@@ -30,7 +30,7 @@ export function LectorProsa({ cuerpo, className }: LectorProsaProps) {
     editable: false,
     extensions: [
       StarterKit,
-      Markdown.configure({ html: false, linkify: true, breaks: true }),
+      Markdown.configure({ html: false, linkify: true, breaks: false }),
       ChipVariable,
     ],
     content: cuerpo,

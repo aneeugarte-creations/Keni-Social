@@ -1,8 +1,8 @@
 /**
  * Vista "Todos los documentos" de la Biblioteca: tabla plana para GESTIÓN y búsqueda
  * (sustituye al antiguo finder de carpetas). Columnas útiles (título, tipo, clase,
- * carpeta, estado, marcas, publicación, actualizado), filtros por tipo/estado/etiqueta,
- * filtro "solo sin publicar" (enlazado desde el indicador del header) y papelera con
+ * carpeta, marcas, publicación, actualizado), filtros por tipo/etiqueta, filtro
+ * "solo sin publicar" (enlazado desde el indicador del header) y papelera con
  * restauración. Mover/renombrar viven en la ficha del documento (panel de metadata).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -80,7 +80,6 @@ export function TablaDocumentos({
 }) {
   const qc = useQueryClient();
   const [tipo, setTipo] = React.useState(TODOS);
-  const [estado, setEstado] = React.useState(TODOS);
   const [etiqueta, setEtiqueta] = React.useState(TODOS);
   const [papeleraAbierta, setPapeleraAbierta] = React.useState(false);
 
@@ -95,11 +94,10 @@ export function TablaDocumentos({
       documentos.filter(
         (d) =>
           (tipo === TODOS || d.tipo === tipo) &&
-          (estado === TODOS || (d.estado || "activo") === estado) &&
           (etiqueta === TODOS || (d.etiquetas ?? []).includes(etiqueta)) &&
           (!soloSinPublicar || d.sin_publicar),
       ),
-    [documentos, tipo, estado, etiqueta, soloSinPublicar],
+    [documentos, tipo, etiqueta, soloSinPublicar],
   );
 
   // ── Papelera (listar + restaurar) y borrado desde la fila. ──
@@ -138,17 +136,6 @@ export function TablaDocumentos({
             <SelectItem value={TODOS}>Todo tipo</SelectItem>
             <SelectItem value="prompt">Prompts</SelectItem>
             <SelectItem value="editorial">Editoriales</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={estado} onValueChange={setEstado}>
-          <SelectTrigger className="h-8 w-32 text-xs" aria-label="Filtrar por estado">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={TODOS}>Todo estado</SelectItem>
-            <SelectItem value="activo">activo</SelectItem>
-            <SelectItem value="borrador">borrador</SelectItem>
-            <SelectItem value="archivado">archivado</SelectItem>
           </SelectContent>
         </Select>
         {etiquetas.length > 0 ? (
@@ -209,7 +196,6 @@ export function TablaDocumentos({
                 <TableHead>Tipo</TableHead>
                 <TableHead>Clase</TableHead>
                 <TableHead>Carpeta</TableHead>
-                <TableHead>Estado</TableHead>
                 <TableHead>Marcas</TableHead>
                 <TableHead>Publicación</TableHead>
                 <TableHead>Actualizado</TableHead>
@@ -258,7 +244,6 @@ export function TablaDocumentos({
                   <TableCell className="max-w-[10rem] truncate text-xs text-muted-foreground">
                     {d.carpeta || "—"}
                   </TableCell>
-                  <TableCell className="text-xs">{d.estado || "activo"}</TableCell>
                   <TableCell className="max-w-[10rem] truncate text-xs text-muted-foreground">
                     {(d.marcas ?? []).join(", ") || "—"}
                   </TableCell>
