@@ -175,13 +175,7 @@ export function DialogoMiembro({
     <Dialog open onOpenChange={(v) => (!v ? onCerrar() : undefined)}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <span
-              className="inline-block h-2.5 w-2.5 rounded-full"
-              style={{ backgroundColor: meta.color }}
-            />
-            {nombreVisible(usuario)}
-          </DialogTitle>
+          <DialogTitle>{nombreVisible(usuario)}</DialogTitle>
           <DialogDescription>
             @{usuario.usuario} · {meta.etiqueta}
           </DialogDescription>
