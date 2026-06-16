@@ -200,7 +200,7 @@ export function PanelPipeline({
       </div>
 
       {/* Secuencia VERTICAL de fases, unidas por un conector (↓): el flujo se lee arriba→abajo. */}
-      <ol className="mx-auto max-w-3xl">
+      <ol className="w-full">
         {fases.map((e, i) => {
           const claveEfectiva = e.claves.find((c) => porClave.has(c));
           const ajuste = claveEfectiva ? porClave.get(claveEfectiva) : undefined;
