@@ -250,12 +250,12 @@ export function DetalleFase({
     setAcciones(a);
   }, []);
 
-  // «Acerca de» colapsable: recuerda el estado en localStorage; por defecto, expandida.
+  // «Acerca» colapsable: recuerda el estado en localStorage; por defecto, colapsada.
   const [acercaAbierto, setAcercaAbierto] = React.useState(() => {
     try {
-      return localStorage.getItem(CLAVE_ACERCA) !== "false";
+      return localStorage.getItem(CLAVE_ACERCA) === "true";
     } catch {
-      return true;
+      return false;
     }
   });
   React.useEffect(() => {
@@ -276,18 +276,26 @@ export function DetalleFase({
 
   return (
     <div className="space-y-4">
-      {/* ───────── «Acerca de»: permanente sobre las pestañas (visible en Prompt/Contexto/Logs),
-          colapsable. Solo cuando la fase tiene documento de prompt. ───────── */}
+      {/* ───────── «Acerca»: permanente sobre las pestañas (visible en Prompt/Contexto/Logs),
+          colapsable. Click en TODA la tarjeta colapsa/expande. Solo cuando la fase tiene
+          documento de prompt. ───────── */}
       {tieneprompt && doc ? (
-        <Card>
-          <button
-            type="button"
-            aria-expanded={acercaAbierto}
-            onClick={() => setAcercaAbierto((v) => !v)}
-            className="flex w-full items-center justify-between gap-2 p-3 text-left"
-          >
+        <Card
+          role="button"
+          tabIndex={0}
+          aria-expanded={acercaAbierto}
+          onClick={() => setAcercaAbierto((v) => !v)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setAcercaAbierto((v) => !v);
+            }
+          }}
+          className="cursor-pointer"
+        >
+          <div className="flex w-full items-center justify-between gap-2 p-3">
             <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Acerca de
+              Acerca
             </span>
             <ChevronDown
               className={cn(
@@ -296,7 +304,7 @@ export function DetalleFase({
               )}
               aria-hidden
             />
-          </button>
+          </div>
           {acercaAbierto ? (
             <div className="px-3 pb-3">
               <PanelAcerca doc={doc} maquina={maquinaQuery.data} />
