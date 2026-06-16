@@ -1,7 +1,7 @@
 import { Users } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { iniciales, metaZona, nombreVisible } from "@/lib/organigrama";
+import { hexAlpha, iniciales, metaZona, nombreVisible } from "@/lib/organigrama";
 import { type CargoUsuario, etiquetaCargo, type UsuarioAdmin } from "@/types";
 
 /** Tarjeta-fila de una persona. Clic = abrir el panel de edición. */
@@ -59,15 +59,25 @@ export function TarjetaMiembro({
       <span className="flex shrink-0 items-center gap-1 self-center">
         {marcas.length > 0 && (
           <span className="flex max-w-[14rem] flex-wrap items-center justify-end gap-1">
-            {marcas.map((m) => (
-              <Badge
-                key={m}
-                variant="outline"
-                className="h-5 shrink-0 whitespace-nowrap px-1.5 text-[10px] font-normal"
-              >
-                {metaZona(m).etiqueta}
-              </Badge>
-            ))}
+            {marcas.map((m) => {
+              const meta = metaZona(m);
+              // Tinte por equipo: color de marca en texto y borde, con un fondo
+              // suave (mismo patrón que las variantes ok/aviso/error del Badge).
+              return (
+                <Badge
+                  key={m}
+                  variant="outline"
+                  className="h-5 shrink-0 whitespace-nowrap px-1.5 text-[10px] font-medium"
+                  style={{
+                    color: meta.color,
+                    borderColor: hexAlpha(meta.color, 0.35),
+                    backgroundColor: hexAlpha(meta.color, 0.12),
+                  }}
+                >
+                  {meta.etiqueta}
+                </Badge>
+              );
+            })}
           </span>
         )}
         <span className="flex w-14 justify-center">
