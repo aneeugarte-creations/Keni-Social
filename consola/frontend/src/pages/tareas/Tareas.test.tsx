@@ -614,6 +614,33 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     ).toBeTruthy();
   });
 
+  it("SIN FECHA: un encargo suelto sin «Para cuándo» SIGUE visible aunque la agenda pagine los días", () => {
+    // Regresión (lo que el equipo veía como «la tarea no se guarda»): una tarea sin fecha cae en el
+    // cajón «Sin fecha» (orden "9999-99-99"), que `ordenDiaAgenda` manda al FINAL. Con ≥5 días de
+    // eventos por delante quedaba FUERA de la ventana `diasVisibles` (5), oculta tras «Cargar más
+    // días» —parecía que no se había guardado—. Ahora «Sin fecha» se ancla al fondo y NO se pagina.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-15T12:00:00Z")); // hoy = 2026-06-15 (CDMX)
+    renderPanorama({
+      // 6 días FUTUROS distintos (más que la ventana de 5) → el 6º queda tras «Cargar más días».
+      eventos: [
+        evento({ id: "d1", titulo: "Día 1", fecha: "2026-06-16" }),
+        evento({ id: "d2", titulo: "Día 2", fecha: "2026-06-17" }),
+        evento({ id: "d3", titulo: "Día 3", fecha: "2026-06-18" }),
+        evento({ id: "d4", titulo: "Día 4", fecha: "2026-06-19" }),
+        evento({ id: "d5", titulo: "Día 5", fecha: "2026-06-20" }),
+        evento({ id: "d6", titulo: "Día 6", fecha: "2026-06-21" }),
+      ],
+      tareas: [tarea({ id: "t-sin", titulo: "Encargo sin fecha", fecha_objetivo: "" })],
+    });
+
+    // La paginación está activa (hay un 6º día oculto)…
+    expect(screen.getByRole("button", { name: "Cargar más días" })).toBeInTheDocument();
+    // …pero el encargo SIN fecha se muestra igual, bajo su cajón «Sin fecha» anclado al fondo.
+    expect(screen.getByText("Encargo sin fecha")).toBeInTheDocument();
+    expect(screen.getByText("Sin fecha")).toBeInTheDocument();
+  });
+
   it("AÑADIR-RÁPIDO + ⚡ Urgente: crea el ítem con prioridad «alta»", async () => {
     const crear = vi.spyOn(apiMod.api, "crearEventoRota").mockResolvedValue({} as never);
     renderTareas([]);

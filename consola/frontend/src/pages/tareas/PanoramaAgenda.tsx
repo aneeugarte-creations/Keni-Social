@@ -763,8 +763,16 @@ export function PanoramaAgenda({
       lista.sort((a, b) => horaDe(a).localeCompare(horaDe(b)));
     }
   }
-  const diasMostrados = diasOrdenados.slice(0, diasVisibles);
-  const hayMas = diasOrdenados.length > diasVisibles;
+  // La cesta «Sin fecha» (encargos sueltos sin «Para cuándo») NO es un día del rundown: se ancla
+  // SIEMPRE al fondo y queda EXENTA de la paginación de días. Si no, un encargo sin fecha (orden
+  // "9999-99-99", siempre el último cajón por `ordenDiaAgenda`) cae más allá de la ventana de
+  // `diasVisibles` y parece que «no se guardó» —aunque sí está en el tablero—. Solo los días CON
+  // fecha se paginan; lo sin fecha es trabajo pendiente que nunca debe esconderse.
+  const SIN_FECHA = "9999-99-99";
+  const diasConFecha = diasOrdenados.filter((d) => d && d !== SIN_FECHA);
+  const diasMostrados = diasConFecha.slice(0, diasVisibles);
+  const hayMas = diasConFecha.length > diasVisibles;
+  const sinFechaItems = porDia.get(SIN_FECHA) ?? [];
 
   return (
     <div className="space-y-4">
@@ -890,7 +898,7 @@ export function PanoramaAgenda({
         </section>
       )}
 
-      {urgentes.length === 0 && diasMostrados.length === 0 ? (
+      {urgentes.length === 0 && diasMostrados.length === 0 && sinFechaItems.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border p-8 text-center">
           <p className="text-sm text-muted-foreground">
             {filtro
@@ -898,7 +906,7 @@ export function PanoramaAgenda({
               : "Aún no hay partidos ni tareas. Súbelos en Fuentes o añádelos aquí."}
           </p>
         </div>
-      ) : diasMostrados.length === 0 ? null : (
+      ) : diasMostrados.length === 0 && sinFechaItems.length === 0 ? null : (
         <div className="space-y-4">
           {diasMostrados.map((dia) => (
             <section key={dia} className="space-y-1.5">
@@ -927,6 +935,29 @@ export function PanoramaAgenda({
                 Cargar más días
               </Button>
             </div>
+          )}
+          {/* «Sin fecha»: anclada al fondo y SIEMPRE visible (no la pagina «Cargar más días»).
+              Son encargos sueltos sin «Para cuándo» — trabajo pendiente que no debe esconderse. */}
+          {sinFechaItems.length > 0 && (
+            <section key={SIN_FECHA} className="space-y-1.5">
+              <h2 className="sticky top-0 z-10 bg-background/95 py-1 text-sm font-semibold backdrop-blur">
+                {etiquetaDia(SIN_FECHA, hoy)}
+                <span className="ml-1.5 font-normal tabular-nums text-muted-foreground">
+                  ({sinFechaItems.length})
+                </span>
+              </h2>
+              <div className="space-y-1.5">
+                {sinFechaItems.map((it) => (
+                  <FilaAgenda
+                    key={it.clave}
+                    item={it}
+                    abierta={abiertas.has(it.clave)}
+                    onToggle={() => alternar(it.clave)}
+                    catalogos={catalogos}
+                  />
+                ))}
+              </div>
+            </section>
           )}
         </div>
       )}
