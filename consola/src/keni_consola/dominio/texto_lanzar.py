@@ -75,11 +75,6 @@ AREAS: dict[str, tuple[str, Callable[[str], str]]] = {
 }
 
 
-def areas_disponibles() -> list[dict[str, str]]:
-    """Areas que un prompt puede usar como contexto (para el selector del SPA)."""
-    return [{"id": k, "nombre": etiqueta} for k, (etiqueta, _) in AREAS.items()]
-
-
 def area_contexto(area: str, marca: str) -> str:
     """Texto de contexto de un area. Lanza `TextoError` si el area no existe."""
     entrada = AREAS.get(area)

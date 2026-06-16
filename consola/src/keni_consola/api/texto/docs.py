@@ -1,7 +1,7 @@
 """CRUD del almacén único de documentos markdown + papelera + línea editorial.
 
 Documentos (`texto`): listar/crear/obtener/guardar/borrar (a papelera) y restaurar; y los
-catálogos editoriales de apoyo (auto-adjunto por marca, validación de pilares, áreas y marcas
+catálogos editoriales de apoyo (auto-adjunto por marca, validación de pilares y marcas
 disponibles) que pueblan los selectores del SPA. Errores como JSON en español.
 """
 
@@ -12,7 +12,6 @@ from starlette.responses import JSONResponse, Response
 
 from ... import libtexto, marcas
 from ..._http_json import leer_json
-from ...dominio import texto_lanzar
 from ._comun import _doc_json
 
 # --------------------------------------------------------------------------- #
@@ -158,7 +157,7 @@ async def papelera_restaurar(request: Request) -> Response:
 
 
 # --------------------------------------------------------------------------- #
-# Linea editorial: auto-adjunto + areas disponibles                            #
+# Linea editorial: auto-adjunto + marcas disponibles                           #
 # --------------------------------------------------------------------------- #
 
 
@@ -184,11 +183,6 @@ async def validacion(request: Request) -> Response:
     """
     marca = request.query_params.get("marca") or ""
     return JSONResponse(libtexto.validacion_editorial(marca))
-
-
-async def areas(request: Request) -> Response:
-    """`GET /api/texto/areas` -> `{areas: [{id, nombre}]}` (secciones como contexto)."""
-    return JSONResponse({"areas": texto_lanzar.areas_disponibles()})
 
 
 async def marcas_disponibles(request: Request) -> Response:

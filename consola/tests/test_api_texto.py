@@ -1,8 +1,8 @@
 """Tests HTTP del API de la Texto, montando solo sus RUTAS (sin auth/Postgres).
 
 Construye una app Starlette minima con `api.texto.RUTAS` y un TestClient, e intercepta
-`encolar_job_claude` (no toca cola ni `claude`). Cubre el CRUD, papelera, editoriales, areas
-y el lanzar (contenido / area / errores). El harness completo (auth + Postgres) cubre estos
+`encolar_job_claude` (no toca cola ni `claude`). Cubre el CRUD, papelera, editoriales y
+el lanzar (contenido / area / errores). El harness completo (auth + Postgres) cubre estos
 endpoints en CI; aqui validamos el contrato HTTP de forma aislada.
 """
 
@@ -104,7 +104,7 @@ def test_borrar_papelera_restaurar(cliente):
 
 
 # --------------------------------------------------------------------------- #
-# Editorial + areas                                                            #
+# Editorial                                                                    #
 # --------------------------------------------------------------------------- #
 
 
@@ -161,12 +161,6 @@ def test_validacion_cuerpo_vacio_no_cubre_pilar(cliente):
     cliente.post("/api/texto", json={"titulo": "Voz", "tipo": "editorial", "clase": "voz", "marcas": [_MARCA]})
     r = cliente.get("/api/texto/validacion", params={"marca": _MARCA})
     assert "voz" in r.json()["faltan"]
-
-
-def test_areas_disponibles(cliente):
-    r = cliente.get("/api/texto/areas")
-    ids = {a["id"] for a in r.json()["areas"]}
-    assert {"parrilla", "pendientes"} <= ids
 
 
 # --------------------------------------------------------------------------- #

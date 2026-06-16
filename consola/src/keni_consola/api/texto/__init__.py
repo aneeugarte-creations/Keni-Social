@@ -14,13 +14,13 @@ ESTRUCTURA (refactor de pura reubicacion; CERO cambio de comportamiento). El mod
 troceo en un paquete por areas; este `__init__.py` es la FACHADA que re-exporta la
 superficie publica y ENSAMBLA `RUTAS` identico (paths/metodos/orden):
   - `docs`        : CRUD de documentos + papelera + linea editorial (editoriales/validacion/
-                    areas/marcas).
+                    marcas).
   - `publicacion` : historial/version/revertir (git) + publicacion inmutable + solicitudes.
   - `pipelines`   : registro/preview de pipelines + variables + la "maquina" + estrategia.
   - `lanzar`      : `lanzar` (JSON) y `lanzar-archivo` (multipart): disparo de generacion.
   - `_comun`      : helpers compartidos (`_doc_json`, `_MAX_TEXTO`).
 
-ORDEN DE RUTAS: las estaticas (`/papelera`, `/editoriales`, `/validacion`, `/areas`,
+ORDEN DE RUTAS: las estaticas (`/papelera`, `/editoriales`, `/validacion`, `/marcas`,
 `/lanzar`, `/lanzar-archivo`, `/maquina`, `/estrategia`) van ANTES que la parametrica
 `/{doc_id:path}` (que captura barras) para que Starlette las case primero.
 """
@@ -32,7 +32,6 @@ from starlette.routing import Route
 from ._comun import _MAX_TEXTO, _doc_json
 from .docs import (
     _facetas,
-    areas,
     borrar,
     crear,
     editoriales,
@@ -99,7 +98,6 @@ __all__ = [
     "papelera_restaurar",
     "editoriales",
     "validacion",
-    "areas",
     "marcas_disponibles",
     "_facetas",
     # pipelines
@@ -150,7 +148,6 @@ RUTAS = [
     Route("/api/texto/papelera/{pid}/restaurar", papelera_restaurar, methods=["POST"]),
     Route("/api/texto/editoriales", editoriales, methods=["GET"]),
     Route("/api/texto/validacion", validacion, methods=["GET"]),
-    Route("/api/texto/areas", areas, methods=["GET"]),
     Route("/api/texto/marcas", marcas_disponibles, methods=["GET"]),
     Route("/api/texto/pipelines", pipelines_listar, methods=["GET"]),
     Route("/api/texto/pipelines/{pid}/preview", pipeline_preview, methods=["GET"]),
