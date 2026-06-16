@@ -31,7 +31,7 @@ def test_auto_descubrimiento_monta_todas_las_areas():
         "/api/proyectos",
         "/api/carpetas",
         "/api/prompts",
-        "/api/contenido",
+        "/api/publicaciones",
         "/api/metricas/reporte",
     ):
         assert esperada in paths

@@ -67,7 +67,7 @@ export function serializarEncuadre(e: EncuadreFoto | null): string {
 // orden de `capas`. `foco:null` = el humano no reencuadró ese hueco (se respeta el diseño). Estos
 // helpers parsean/serializan ese JSON; las matemáticas de foco/zoom viven en el editor.
 
-/** Parsea el JSON persistido (`publicacion.fotos`) a un array de FotoCollage; [] si vacío/inválido. */
+/** Parsea el JSON persistido (`pieza.fotos`) a un array de FotoCollage; [] si vacío/inválido. */
 export function parsearFotos(json: string | undefined | null): FotoCollage[] {
   if (!json || !json.trim()) return [];
   try {
@@ -92,7 +92,7 @@ export function parsearFotos(json: string | undefined | null): FotoCollage[] {
   }
 }
 
-/** Serializa un array de FotoCollage a JSON para persistir (`publicacion.fotos`). */
+/** Serializa un array de FotoCollage a JSON para persistir (`pieza.fotos`). */
 export function serializarFotos(fotos: FotoCollage[]): string {
   return JSON.stringify(
     fotos.map((f) => ({ objeto: f.objeto || "", foco: f.foco ?? null, zoom: f.zoom || 0 })),

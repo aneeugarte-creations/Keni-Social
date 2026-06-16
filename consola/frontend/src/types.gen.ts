@@ -51,7 +51,7 @@ export interface TotalMetricas {
   alcance: number;
   interacciones: number;
   engagement_pct: number;
-  publicaciones: number;
+  piezas: number;
 }
 export interface CuentaMetrica {
   marca_id: string;
@@ -329,13 +329,13 @@ export interface TendenciaDiaria {
  *
  * A diferencia de `PiezaMetrica` (mejores/peores del periodo descubiertas desde la
  * lista de posts), esto es el rendimiento de una pieza CONCRETA que el equipo publicó
- * desde la Consola, leído de Metricool por su `id_post_metricool`. `contenido_id` enlaza
+ * desde la Consola, leído de Metricool por su `id_post_metricool`. `publicacion_id` enlaza
  * a la pieza en el tablero (`/operacion/feed/lista`). `encontrado=False` => Metricool aún
  * no tiene datos (recién publicada): la UI muestra "sin datos todavía", no ceros falsos.
  */
 export interface PiezaRendimiento {
-  contenido_id: string;
-  plataforma_id: string;
+  publicacion_id: string;
+  pieza_id: string;
   titulo: string;
   marca: string;
   marca_nombre: string;
@@ -585,7 +585,7 @@ export interface CorrelacionSeguidores {
 /**
  * Envelope ADITIVO de paginacion (offset-based, #121).
  *
- * Lo añaden los listados pesados (publicaciones/runs/generaciones) junto a su
+ * Lo añaden los listados pesados (piezas/runs/generaciones) junto a su
  * clave de lista. `total` = filas existentes sin paginar; `limite` = tamaño de
  * pagina efectivo (igual a `total` si no se paginó); `desplazamiento` = offset.
  *
@@ -614,7 +614,7 @@ export interface MetricasRun {
   modelo: string;
 }
 /**
- * Una publicacion serializada (`dominio.publicaciones.publicacion_a_dict`).
+ * Una pieza serializada (`dominio.piezas.pieza_a_dict`).
  *
  * `marca_nombre`/`red_nombre` se resuelven en servidor. `imagen` es el nombre de
  * archivo ("" si no hay) e `imagen_url` su ruta servible ("" si no hay).
@@ -627,9 +627,9 @@ export interface MetricasRun {
  * DRY-RUN del programador (instante en que quedo "lista para publicar"; el posteo real
  * via Metricool esta gated por `KENI_PUBLICAR_REAL`); "" hasta que vence su `fecha_programada`.
  */
-export interface Publicacion {
+export interface Pieza {
   id: string;
-  contenido_id: string;
+  publicacion_id: string;
   pipeline_id: string;
   titulo: string;
   marca: string;
@@ -686,26 +686,26 @@ export interface Publicacion {
   carrusel?: string;
 }
 /**
- * Listado de `GET /api/publicaciones` con el envelope de paginacion (#121).
+ * Listado de `GET /api/piezas` con el envelope de paginacion (#121).
  */
-export interface RespuestaPublicaciones {
-  publicaciones: Publicacion[];
+export interface RespuestaPiezas {
+  piezas: Pieza[];
   paginacion: Paginacion;
 }
 /**
- * Respuesta de los endpoints que devuelven UNA publicacion (`{publicacion}`).
+ * Respuesta de los endpoints que devuelven UNA pieza (`{pieza}`).
  */
-export interface RespuestaPublicacion {
-  publicacion: Publicacion;
+export interface RespuestaPieza {
+  pieza: Pieza;
 }
 /**
  * Cola de aprobacion (`GET /api/aprobacion/cola`): piezas en revision, FIFO.
  *
- * Cada item es una `Publicacion` completa (incluye `autor_nombre`/
+ * Cada item es una `Pieza` completa (incluye `autor_nombre`/
  * `enviado_a_revision_en`: quien la envio y desde cuando espera). `total` = nº en cola.
  */
 export interface RespuestaColaAprobacion {
-  cola: Publicacion[];
+  cola: Pieza[];
   total: number;
 }
 export interface RespuestaMensaje {

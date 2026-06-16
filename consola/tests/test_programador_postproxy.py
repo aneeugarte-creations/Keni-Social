@@ -36,11 +36,11 @@ _RESP_PP_OK = {"id": "pp-post-001"}
 def _pub_programada(
     red: str = "x", contenido: str = "Texto", imagen: str = "", minutos_atras: int = 5
 ) -> dict[str, Any]:
-    pub = repos.crear_publicacion(
+    pub = repos.crear_pieza(
         "unotv", red, titulo="Test", contenido=contenido, estado="programado", imagen=imagen,
     )
     pasado = (datetime.now() - timedelta(minutes=minutos_atras)).strftime("%Y-%m-%dT%H:%M")
-    return repos.actualizar_publicacion(pub["id"], {"fecha_programada": pasado})
+    return repos.actualizar_pieza(pub["id"], {"fecha_programada": pasado})
 
 
 def _canal(valor: str):
@@ -89,7 +89,7 @@ def test_barrido_postproxy_publica_y_guarda_id(entorno, monkeypatch):
     assert cuerpo_enviado is not None
     assert cuerpo_enviado["post"]["body"] == "Tweet PP"
     assert cuerpo_enviado["profiles"] == ["twitter"]
-    actualizada = repos.obtener_publicacion(pub["id"])
+    actualizada = repos.obtener_pieza(pub["id"])
     assert actualizada["estado"] == "publicado"
     assert actualizada["id_post_metricool"] == "pp-post-001"
 
@@ -107,7 +107,7 @@ def test_barrido_postproxy_sin_creds_degrada(entorno, monkeypatch):
 
     assert preparadas == 1
     assert not ruta.called
-    actualizada = repos.obtener_publicacion(pub["id"])
+    actualizada = repos.obtener_pieza(pub["id"])
     assert actualizada["estado"] == "programado"
     assert actualizada["preparado_en"]
     assert actualizada.get("id_post_metricool", "") == ""
@@ -129,7 +129,7 @@ def test_barrido_metricool_por_defecto_no_toca_postproxy(entorno, monkeypatch):
 
     assert mc.called
     assert not pp.called
-    assert repos.obtener_publicacion(pub["id"])["id_post_metricool"] == "mc-1"
+    assert repos.obtener_pieza(pub["id"])["id_post_metricool"] == "mc-1"
 
 
 def test_barrido_postproxy_timeout_marca_incierto(entorno, monkeypatch):
@@ -145,7 +145,7 @@ def test_barrido_postproxy_timeout_marca_incierto(entorno, monkeypatch):
         assert preparar_vencidas(datetime.now()) == 0  # no reintenta
         assert ruta.call_count == 1
 
-    actualizada = repos.obtener_publicacion(pub["id"])
+    actualizada = repos.obtener_pieza(pub["id"])
     assert actualizada["estado"] == "publicado"
     assert actualizada["id_post_metricool"] == ID_POST_INCIERTO
 
@@ -159,7 +159,7 @@ def test_barrido_postproxy_error_libera_claim(entorno, monkeypatch):
         mock.post(_POSTPROXY_URL).mock(Response(500, json={"error": "boom"}))
         assert preparar_vencidas(datetime.now()) == 0
 
-    actualizada = repos.obtener_publicacion(pub["id"])
+    actualizada = repos.obtener_pieza(pub["id"])
     assert actualizada["estado"] == "programado"
     assert actualizada["preparado_en"] == ""  # claim liberado
 
@@ -183,7 +183,7 @@ def test_boton_manual_postproxy_dry_run_previsualiza(entorno, monkeypatch):
     assert res["cuerpo"]["post"]["body"] == "Hola PP"
     assert not ruta.called
     # No persiste.
-    assert repos.obtener_publicacion(pub["id"])["estado"] == "programado"
+    assert repos.obtener_pieza(pub["id"])["estado"] == "programado"
 
 
 def test_boton_manual_postproxy_real_publica(entorno, monkeypatch):
@@ -198,7 +198,7 @@ def test_boton_manual_postproxy_real_publica(entorno, monkeypatch):
     assert res["ok"] is True
     assert res["dry_run"] is False
     assert res["id_post"] == "pp-post-001"
-    actualizada = repos.obtener_publicacion(pub["id"])
+    actualizada = repos.obtener_pieza(pub["id"])
     assert actualizada["estado"] == "publicado"
     assert actualizada["id_post_metricool"] == "pp-post-001"
 

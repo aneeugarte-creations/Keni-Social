@@ -4,7 +4,7 @@
  * números (de Postproxy). El backend construye dicts ad-hoc, así que estos tipos se
  * mantienen a mano (espejo del contrato). Metricool NO aparece (vive en Analíticas).
  */
-import type { CanalPublicacion } from "./publicaciones";
+import type { CanalPieza } from "./piezas";
 
 /** Estado de conexión de una red en Postproxy. */
 export type EstadoRed = "active" | "expired" | "inactive";
@@ -39,7 +39,7 @@ export interface MarcaDashboard {
   id: string;
   etiqueta: string;
   /** Canal por el que la marca publica sus piezas. */
-  canal_publicacion: CanalPublicacion;
+  canal_publicacion: CanalPieza;
   postproxy: PostproxyMarca;
   redes: RedMarca[];
   total: ConteoCuenta;

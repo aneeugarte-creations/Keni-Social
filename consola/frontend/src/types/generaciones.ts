@@ -1,4 +1,4 @@
-import type { MetricasRun, Paginacion, Publicacion } from "../types.gen";
+import type { MetricasRun, Paginacion, Pieza } from "../types.gen";
 import type { PiezaGenerada, Veredicto } from "./comun";
 import type { ErrorImportCalendario } from "./catalogo";
 
@@ -27,7 +27,7 @@ export type FaseGeneracion = "razonando" | "generando" | "completado" | "";
 /**
  * Resultado de una generación COMPLETADA. Los campos presentes dependen del
  * `tipo`: copy/rss traen `{resultado, historial_id, verdicto, piezas,
- * publicaciones}`; hashtags trae `{hashtags}`; imagen trae `{id, url}`.
+ * piezas}`; hashtags trae `{hashtags}`; imagen trae `{id, url}`.
  */
 export interface ResultadoGeneracion {
   // copy / rss
@@ -35,7 +35,8 @@ export interface ResultadoGeneracion {
   historial_id?: string;
   verdicto?: Veredicto;
   piezas?: PiezaGenerada[];
-  publicaciones?: Publicacion[];
+  /** Items de tablero creados desde las piezas generadas (no leído hoy por el SPA). */
+  piezas_creadas?: Pieza[];
   /** Documento Markdown completo (prompts con `salida === "documento"`). */
   documento?: string;
   // hashtags

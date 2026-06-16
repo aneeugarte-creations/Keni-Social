@@ -130,17 +130,17 @@ def test_pieza_invalida_no_crea_borrador_y_respeta_las_validas(entorno):
         marca=_MARCA, titulo="T", verdicto="", origen="h1",
     )
     assert [str(p["red"]) for p in creadas] == ["facebook"]
-    pubs = repos.listar_publicaciones(marca=_MARCA)
+    pubs = repos.listar_piezas(marca=_MARCA)
     assert all(p.get("red") != "x" for p in pubs)
 
 
 def test_pieza_invalida_deja_nota_en_el_tema(entorno):
-    tema = repos.crear_contenido(clase="contenido", titulo="Tema", marca=_MARCA, notas="previa")
+    tema = repos.crear_publicacion(clase="contenido", titulo="Tema", marca=_MARCA, notas="previa")
     dom_copy.crear_publicaciones_desde_piezas(
         [{"red": "x", "contenido": "a" * 25001, "copy_in": ""}],
-        marca=_MARCA, titulo="T", verdicto="", origen="h1", contenido_id=tema["id"],
+        marca=_MARCA, titulo="T", verdicto="", origen="h1", publicacion_id=tema["id"],
     )
-    releido = repos.obtener_contenido(tema["id"])
+    releido = repos.obtener_publicacion(tema["id"])
     assert "previa" in releido["notas"]  # no pisa las notas existentes
     assert "Copy descartado" in releido["notas"]
     assert "límite 25000" in releido["notas"]
@@ -148,13 +148,13 @@ def test_pieza_invalida_deja_nota_en_el_tema(entorno):
 
 def test_redes_filtro_no_cuenta_como_descarte(entorno):
     # Excluir una red por filtro del llamante NO es una pieza inválida: ni nota ni WARN.
-    tema = repos.crear_contenido(clase="contenido", titulo="Tema", marca=_MARCA)
+    tema = repos.crear_publicacion(clase="contenido", titulo="Tema", marca=_MARCA)
     dom_copy.crear_publicaciones_desde_piezas(
         [{"red": "x", "contenido": "Hola X", "copy_in": ""}],
         marca=_MARCA, titulo="T", verdicto="", origen="h1",
-        redes_filtro={"instagram"}, contenido_id=tema["id"],
+        redes_filtro={"instagram"}, publicacion_id=tema["id"],
     )
-    assert "Copy descartado" not in (repos.obtener_contenido(tema["id"])["notas"] or "")
+    assert "Copy descartado" not in (repos.obtener_publicacion(tema["id"])["notas"] or "")
 
 
 # --------------------------------------------------------------------------- #
@@ -164,31 +164,31 @@ def test_redes_filtro_no_cuenta_como_descarte(entorno):
 
 def test_inyecta_hashtags_de_la_linea_en_el_copy(entorno):
     # La línea asignada al tema gobierna los hashtags: se añaden al final de cada pieza.
-    tema = repos.crear_contenido(clase="contenido", titulo="Tema", marca=_MARCA)
+    tema = repos.crear_publicacion(clase="contenido", titulo="Tema", marca=_MARCA)
     linea = repos.crear_etiqueta(
         nombre="Nacional", clase="vertical", marca=_MARCA, hashtags="Nacional, Finanzas"
     )
     repos.asignar_etiqueta(tema["id"], linea["id"])
     creadas = dom_copy.crear_publicaciones_desde_piezas(
         [{"red": "facebook", "contenido": "Cuerpo del post", "copy_in": ""}],
-        marca=_MARCA, titulo="T", verdicto="", origen="h1", contenido_id=tema["id"],
+        marca=_MARCA, titulo="T", verdicto="", origen="h1", publicacion_id=tema["id"],
     )
     assert str(creadas[0]["contenido"]) == "Cuerpo del post #Nacional #Finanzas"
 
 
 def test_no_inyecta_si_la_linea_no_tiene_hashtags(entorno):
-    tema = repos.crear_contenido(clase="contenido", titulo="Tema", marca=_MARCA)
+    tema = repos.crear_publicacion(clase="contenido", titulo="Tema", marca=_MARCA)
     linea = repos.crear_etiqueta(nombre="Sin tags", clase="vertical", marca=_MARCA, hashtags="")
     repos.asignar_etiqueta(tema["id"], linea["id"])
     creadas = dom_copy.crear_publicaciones_desde_piezas(
         [{"red": "facebook", "contenido": "Cuerpo", "copy_in": ""}],
-        marca=_MARCA, titulo="T", verdicto="", origen="h1", contenido_id=tema["id"],
+        marca=_MARCA, titulo="T", verdicto="", origen="h1", publicacion_id=tema["id"],
     )
     assert str(creadas[0]["contenido"]) == "Cuerpo"
 
 
 def test_hashtags_de_contenido_junta_las_lineas_sin_duplicar(entorno):
-    tema = repos.crear_contenido(clase="contenido", titulo="Tema", marca=_MARCA)
+    tema = repos.crear_publicacion(clase="contenido", titulo="Tema", marca=_MARCA)
     a = repos.crear_etiqueta(nombre="Nacional", clase="vertical", marca=_MARCA, hashtags="Nacional")
     b = repos.crear_etiqueta(nombre="UltimaHora", clase="campania", marca=_MARCA, hashtags="Nacional, UnoTV")
     repos.asignar_etiqueta(tema["id"], a["id"])

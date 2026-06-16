@@ -11,7 +11,7 @@ Mapa de submódulos:
   - `_documento` : render del DOCUMENTO de capas (editor pro), plantilla con fotos, fronteras.
 
 El arte PERTENECE a la pieza: una imagen es un objeto del almacen de media (`<uuid>.png`) y se
-asocia a la publicacion por `publicacion.imagen`. La GENERACIÓN por IA NO vive aquí: corre por
+asocia a la pieza por `pieza.imagen`. La GENERACIÓN por IA NO vive aquí: corre por
 `media.generar_imagen` (auto-ilustración del pipeline y botón «Generar con IA»); este paquete solo
 COMPONE/RENDERIZA de forma determinista (plantilla de marca + documento de capas) y RECORTA.
 """

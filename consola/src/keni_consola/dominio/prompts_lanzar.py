@@ -5,7 +5,7 @@ prompt (de la texto o ad-hoc), le ADJUNTA la linea editorial elegida (auto por m
 ajustable) y un BLOQUE DE CONTEXTO del target (contenido pegado / archivo / url / area de la
 consola), compone el prompt final y lo ENCOLA reutilizando la infra de generaciones
 (`encolar_job_claude` + worker + sondeo). El post-procesado es IDENTIDAD (`jobspec.PROC_PROMPT`):
-el resultado es el TEXTO markdown del modelo; no crea piezas ni publicaciones.
+el resultado es el TEXTO markdown del modelo; no crea piezas ni piezas.
 
 La RESOLUCION de los targets (leer la url, guardar el archivo, leer el area) vive en la capa
 que llama (API): aqui el contexto llega ya como TEXTO en `bloque_contexto`, de modo que el
@@ -36,7 +36,7 @@ _MAX_FILAS_AREA = 20
 
 
 def _resumen_pieza(p: dict[str, Any]) -> str:
-    """Una linea legible de una publicacion (tolerante a la forma del dict)."""
+    """Una linea legible de una pieza (tolerante a la forma del dict)."""
     red = p.get("red") or "?"
     titulo = p.get("titulo") or (p.get("contenido") or "")[:80]
     cuando = p.get("fecha_programada") or ""
@@ -45,22 +45,22 @@ def _resumen_pieza(p: dict[str, Any]) -> str:
 
 
 def _area_parrilla(marca: str) -> str:
-    """Contexto de la PARRILLA: proximas publicaciones programadas (de la marca)."""
-    from . import publicaciones
+    """Contexto de la PARRILLA: proximas piezas programadas (de la marca)."""
+    from . import piezas
 
-    items, total = publicaciones.proximas_programadas(_MAX_FILAS_AREA)
+    items, total = piezas.proximas_programadas(_MAX_FILAS_AREA)
     if marca:
         items = [p for p in items if p.get("marca") == marca]
     if not items:
-        return "No hay publicaciones programadas próximas para esta marca."
-    return f"Próximas publicaciones programadas (total {total}):\n" + "\n".join(_resumen_pieza(p) for p in items)
+        return "No hay piezas programadas próximas para esta marca."
+    return f"Próximas piezas programadas (total {total}):\n" + "\n".join(_resumen_pieza(p) for p in items)
 
 
 def _area_pendientes(marca: str) -> str:
     """Contexto de PENDIENTES: piezas en cola de aprobacion (de la marca)."""
-    from . import publicaciones
+    from . import piezas
 
-    cola = publicaciones.cola_de_aprobacion()
+    cola = piezas.cola_de_aprobacion()
     if marca:
         cola = [p for p in cola if p.get("marca") == marca]
     if not cola:
@@ -124,7 +124,7 @@ def lanzar(
         doc = libprompts.obtener(prompt_id)
         if doc is None or doc.tipo != "prompt":
             raise libprompts.PromptsError("Ese prompt no existe.")
-        # MODELO DE PUBLICACION: si el prompt tiene puntero de produccion se inyecta ESA
+        # MODELO DE PIEZA: si el prompt tiene puntero de produccion se inyecta ESA
         # version (sha fijado); sin puntero, la working copy como siempre (fallback suave).
         publicado = libprompts.cuerpo_publicado(prompt_id)
         cuerpo_prompt = publicado if publicado is not None else doc.cuerpo

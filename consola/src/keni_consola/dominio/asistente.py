@@ -6,7 +6,7 @@ prompts de copy ya existentes (`copy-desde-nota`, voz de marca + tropicalizacion
 auto-verificacion) para producir el copy por red. Tres modos:
 
   - `generar`    : copy nuevo, UNA pieza por red (las redes del propio contenido). El
-                   frontend aplica cada pieza al `copy` de su fila `contenido_plataforma`.
+                   frontend aplica cada pieza al `copy` de su fila `pieza`.
   - `variantes`  : TRES opciones del copy para el contenido (en el `resultado` libre), para
                    que el community elija; sigue dando `piezas` por red como punto de
                    partida aplicable.
@@ -15,8 +15,8 @@ auto-verificacion) para producir el copy por red. Tres modos:
 NO es un transporte: arma el "texto base" (brief) y la instruccion ADITIVA por modo, y
 delega el lanzamiento en `dominio.generar.lanzar_copy` (misma pipeline que copy/RSS: encola
 un `claude -p` con el prompt de copy autocontenido + editorial, post-procesa a `{resultado,
-piezas, verdicto, publicaciones}`, seguible token a token via `GET /api/generaciones/{id}`).
-El handler HTTP (`api/contenido`) solo valida y llama aqui.
+piezas, verdicto, piezas}`, seguible token a token via `GET /api/generaciones/{id}`).
+El handler HTTP (`api/publicaciones`) solo valida y llama aqui.
 """
 
 from __future__ import annotations

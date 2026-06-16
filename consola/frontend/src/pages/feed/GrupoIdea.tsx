@@ -24,8 +24,8 @@ import * as React from "react";
 import { DistintivoRed } from "@/components/comunes/DistintivoRed";
 import { formatearFechaHoraCorta } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
-import { iconoRed, nombreRed } from "@/pages/publicaciones/meta";
-import type { Publicacion } from "@/types";
+import { iconoRed, nombreRed } from "@/pages/piezas/meta";
+import type { Pieza } from "@/types";
 
 import { GRID_COLS, normalizarFormato, REDES_POR_FORMATO } from "./formato";
 import { PostFeed } from "./PostFeed";
@@ -35,7 +35,7 @@ export interface GrupoDeIdea {
   id: string;
   titulo: string;
   marca_nombre: string;
-  piezas: Publicacion[];
+  piezas: Pieza[];
 }
 
 /** Hueco de una red SIN pieza generada para esta idea: la MISMA anatomía que un post real
@@ -140,12 +140,12 @@ export function GrupoIdea({
   redes: string[];
   columnas: number;
   /** Vista filtrada: solo las piezas que cumplen, sin huecos "No generado" ni tarjetas ajenas. */
-  filtra?: (p: Publicacion) => boolean;
+  filtra?: (p: Pieza) => boolean;
   /** false con una marca activa en la topbar: el dato ya vive en el switch global. */
   mostrarMarca?: boolean;
 }) {
   const porRed = React.useMemo(() => {
-    const m = new Map<string, Publicacion>();
+    const m = new Map<string, Pieza>();
     for (const p of grupo.piezas) {
       if (filtra && !filtra(p)) continue;
       if (!m.has(p.red)) m.set(p.red, p);
@@ -209,7 +209,7 @@ export function GrupoIdea({
           // dentro de la idea (estilo Shorts), no solo de idea a idea.
           return (
             <div key={r} className="snap-start">
-              <PostFeed publicacion={p} />
+              <PostFeed pieza={p} />
             </div>
           );
         })}

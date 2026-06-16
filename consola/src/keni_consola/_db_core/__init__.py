@@ -86,7 +86,7 @@ from .migraciones_columnas import (
     _COLUMNAS_APROBACIONES_AMPLIADAS as _COLUMNAS_APROBACIONES_AMPLIADAS,
 )
 from .migraciones_columnas import (
-    _COLUMNAS_CONTENIDO_AMPLIADAS as _COLUMNAS_CONTENIDO_AMPLIADAS,
+    _COLUMNAS_PUBLICACION_AMPLIADAS as _COLUMNAS_PUBLICACION_AMPLIADAS,
 )
 from .migraciones_columnas import (
     _COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS as _COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS,
@@ -167,10 +167,10 @@ from .migraciones_columnas import (
     _recuperar_campanias_de_comercial as _recuperar_campanias_de_comercial,
 )
 from .migraciones_columnas import (
-    _migrar_columnas_contenido as _migrar_columnas_contenido,
+    _migrar_columnas_publicacion as _migrar_columnas_publicacion,
 )
 from .migraciones_columnas import (
-    _migrar_columnas_contenido_plataforma as _migrar_columnas_contenido_plataforma,
+    _migrar_columnas_pieza as _migrar_columnas_pieza,
 )
 from .migraciones_columnas import (
     _migrar_columnas_daemon_latidos as _migrar_columnas_daemon_latidos,
@@ -262,7 +262,7 @@ from .migraciones_modelo import (
 
 __all__ = [
     '_COLUMNAS_APROBACIONES_AMPLIADAS',
-    '_COLUMNAS_CONTENIDO_AMPLIADAS',
+    '_COLUMNAS_PUBLICACION_AMPLIADAS',
     '_COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS',
     '_COLUMNAS_EVENTO_ROTA_AMPLIADAS',
     '_COLUMNAS_FUENTES_RSS_AMPLIADAS',
@@ -302,8 +302,8 @@ __all__ = [
     '_franja_para_hora_migracion',
     '_lock_esquemas',
     '_migrar_columnas_aprobaciones',
-    '_migrar_columnas_contenido',
-    '_migrar_columnas_contenido_plataforma',
+    '_migrar_columnas_publicacion',
+    '_migrar_columnas_pieza',
     '_migrar_columnas_etiquetas',
     '_migrar_columnas_eventos_rota',
     '_migrar_columnas_fuentes_rss',

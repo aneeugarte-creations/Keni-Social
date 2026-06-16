@@ -211,7 +211,7 @@ def crear_video_composicion(
     *,
     marca: str,
     documento: str = "{}",
-    contenido_id: str = "",
+    publicacion_id: str = "",
     titulo: str = "",
     estado: str = "borrador",
     id: str = "",
@@ -221,7 +221,7 @@ def crear_video_composicion(
     return db.crear_video_composicion(
         marca=marca,
         documento=documento,
-        contenido_id=contenido_id,
+        publicacion_id=publicacion_id,
         titulo=titulo,
         estado=estado,
         id=id,
@@ -231,9 +231,9 @@ def crear_video_composicion(
 
 
 def listar_video_composiciones(
-    *, marca: str | None = None, contenido_id: str | None = None
+    *, marca: str | None = None, publicacion_id: str | None = None
 ) -> list[dict[str, Any]]:
-    return db.listar_video_composiciones(marca=marca, contenido_id=contenido_id)
+    return db.listar_video_composiciones(marca=marca, publicacion_id=publicacion_id)
 
 
 def obtener_video_composicion(composicion_id: str) -> dict[str, Any] | None:
@@ -333,8 +333,8 @@ def borrar_bloque(bloque_id: str) -> dict[str, Any] | None:
 
 def crear_documento_version(
     *,
-    contenido_id: str,
-    plataforma_id: str,
+    publicacion_id: str,
+    pieza_id: str,
     documento: str,
     render_objeto: str = "",
     autor: dict[str, str] | None = None,
@@ -342,8 +342,8 @@ def crear_documento_version(
     creado: str = "",
 ) -> dict[str, Any]:
     return db.crear_documento_version(
-        contenido_id=contenido_id,
-        plataforma_id=plataforma_id,
+        publicacion_id=publicacion_id,
+        pieza_id=pieza_id,
         documento=documento,
         render_objeto=render_objeto,
         autor=autor,
@@ -352,9 +352,9 @@ def crear_documento_version(
     )
 
 
-def listar_documento_versiones(contenido_id: str, plataforma_id: str) -> list[dict[str, Any]]:
-    return db.listar_documento_versiones(contenido_id, plataforma_id)
+def listar_documento_versiones(publicacion_id: str, pieza_id: str) -> list[dict[str, Any]]:
+    return db.listar_documento_versiones(publicacion_id, pieza_id)
 
 
-def ultima_documento_version(contenido_id: str, plataforma_id: str) -> dict[str, Any] | None:
-    return db.ultima_documento_version(contenido_id, plataforma_id)
+def ultima_documento_version(publicacion_id: str, pieza_id: str) -> dict[str, Any] | None:
+    return db.ultima_documento_version(publicacion_id, pieza_id)

@@ -34,7 +34,7 @@ __all__ = [
 ]
 
 
-def verificacion_lexica(publicacion: dict[str, Any]) -> dict[str, Any]:
+def verificacion_lexica(pieza: dict[str, Any]) -> dict[str, Any]:
     """Verificación léxico de UN borrador (PURO, testeable): `{verificacion, observaciones:[..]}`.
 
     Comprobaciones DETERMINISTAS y baratas (no editorial; el gancho al prompt `revision`
@@ -46,8 +46,8 @@ def verificacion_lexica(publicacion: dict[str, Any]) -> dict[str, Any]:
     léxica solo SEÑALA; el humano decide). Determinista.
     """
     observaciones: list[str] = []
-    copy = (publicacion.get("contenido") or "").strip()
-    red = (publicacion.get("red") or "").strip()
+    copy = (pieza.get("contenido") or "").strip()
+    red = (pieza.get("red") or "").strip()
     if not copy:
         observaciones.append("El copy está vacío.")
     limite = None
@@ -187,7 +187,7 @@ def lanzar_verificar_cluster(
         marca=marca,
         prompt=prompt,
         # Sin contenido aún (verificación pre-admisión): se correla por cluster vía la spec/procesar.
-        contenido_id="",
+        publicacion_id="",
         clave_idem=generaciones.clave_idempotencia(
             (autor or {}).get("id", ""), TIPO_PIPELINE, marca, "verificación-cluster", cid
         ),

@@ -15,7 +15,7 @@ RECURSOS:
                                                  el job completa (en el worker).
   - `POST   /api/evergreen/ideas/{id}/generar`       SOLO si `estado='aprobada'`: crea una pieza
                                                  `flujo='evergreen'` en el tablero y lanza su copy;
-                                                 guarda `contenido_id` en la idea.
+                                                 guarda `publicacion_id` en la idea.
 
 SEGURIDAD / VALIDACION:
   - Multiusuario via middleware (sesión o token), igual que el resto del tablero.
@@ -204,8 +204,8 @@ async def generar_pieza(request: Request) -> Response:
     """POST /api/evergreen/ideas/{id}/generar -> `{idea, generacion}`.
 
     SOLO si la idea está `aprobada`: crea una pieza `flujo='evergreen'` en el tablero
-    (`repos.crear_contenido`), lanza su copy con el lanzador existente (`generar.lanzar_copy`,
-    EN SEGUNDO PLANO) anidado bajo esa pieza, y guarda el `contenido_id` en la idea. Opcional:
+    (`repos.crear_publicacion`), lanza su copy con el lanzador existente (`generar.lanzar_copy`,
+    EN SEGUNDO PLANO) anidado bajo esa pieza, y guarda el `publicacion_id` en la idea. Opcional:
     `{redes:[..]}` para acotar las redes del copy (por defecto, todas las canónicas).
     """
     idea_id = request.path_params["idea_id"]
@@ -232,7 +232,7 @@ async def generar_pieza(request: Request) -> Response:
     nota = "\n\n".join(p for p in (titulo, descripcion) if p)[: gen_dom.MAX_TEXTO]
 
     # Pieza padre del tablero: evergreen, origen "evergreen" (taller de brainstorming).
-    contenido = repos.crear_contenido(
+    contenido = repos.crear_publicacion(
         clase="contenido",
         flujo=FLUJO_EVERGREEN,
         titulo=titulo,
@@ -253,7 +253,7 @@ async def generar_pieza(request: Request) -> Response:
             titulo_dado=titulo,
             texto_base=nota,
             autor=autor,
-            contenido_id=contenido["id"],
+            publicacion_id=contenido["id"],
         )
     except generaciones.ColaLlenaError:
         return JSONResponse(
@@ -264,7 +264,7 @@ async def generar_pieza(request: Request) -> Response:
     # TERMINAL feliz: la idea pasa a `generada` (cajón histórico del taller, sin más
     # acciones) y queda enlazada a su pieza. Volver a generarla = duplicar contenido.
     actualizada = repos.actualizar_evergreen_idea(
-        idea_id, {"contenido_id": contenido["id"], "estado": ESTADO_EVERGREEN_GENERADA}
+        idea_id, {"publicacion_id": contenido["id"], "estado": ESTADO_EVERGREEN_GENERADA}
     )
     return JSONResponse(
         {"idea": _idea_a_dict(actualizada or idea), "generacion": gen}

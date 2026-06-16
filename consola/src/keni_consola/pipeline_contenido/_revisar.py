@@ -108,15 +108,15 @@ def avisos_calidad(marca: str, red: str, copy_texto: str, *, nota_origen: str = 
 # --- Aplicación ADVISORY sobre el borrador (efectos; nunca lanza) ------------------------- #
 
 
-def _nota_origen(contenido_id: str) -> str:
+def _nota_origen(publicacion_id: str) -> str:
     """Nota de origen del tema padre (`contenido.descripcion`) para el chequeo de coherencia.
 
     Best-effort: "" si no hay tema legible o no trae descripción. Sin nota, la coherencia se
     omite (el chequeo de voz sí corre)."""
-    if not contenido_id:
+    if not publicacion_id:
         return ""
     try:
-        tema = repos.obtener_contenido(contenido_id)
+        tema = repos.obtener_publicacion(publicacion_id)
     except Exception:  # noqa: BLE001 -- sin tema legible, sólo se omite la coherencia
         return ""
     return str((tema or {}).get("descripcion") or "").strip()
@@ -131,29 +131,29 @@ def _degradar_revision(pub_id: str, revision_actual: object) -> None:
     if str(revision_actual or "").strip().lower() != REVISION_LISTO:
         return
     try:
-        repos.actualizar_publicacion(pub_id, {"revision": REVISION_REVISAR})
+        repos.actualizar_pieza(pub_id, {"revision": REVISION_REVISAR})
     except Exception:  # noqa: BLE001 -- la degradación es advisory; la nota ya avisa
         _log.warning("calidad: no se pudo degradar el revision de la pieza %s", pub_id, exc_info=True)
 
 
-def _anotar(avisos: list[str], *, contenido_id: str, marca: str) -> None:
+def _anotar(avisos: list[str], *, publicacion_id: str, marca: str) -> None:
     """Deja rastro de los avisos de calidad: WARN + nota en el tema padre (si lo hay).
 
     Mismo patrón best-effort que `dominio.copy._avisar_voz`: la nota acompaña a la revisión
     humana, nunca rompe el avance."""
     detalle = "; ".join(avisos)
-    _log.warning("calidad: copy fuera de calidad tema=%s marca=%s: %s", contenido_id or "-", marca, detalle)
-    if not contenido_id:
+    _log.warning("calidad: copy fuera de calidad tema=%s marca=%s: %s", publicacion_id or "-", marca, detalle)
+    if not publicacion_id:
         return
     nota = f"⚠ Revisión del copy (voz/coherencia, IA hacia adentro): {detalle}."
     try:
-        tema = repos.obtener_contenido(contenido_id)
+        tema = repos.obtener_publicacion(publicacion_id)
         if tema is None:
             return
         previas = str(tema.get("notas") or "").strip()
-        repos.actualizar_contenido(contenido_id, {"notas": f"{previas}\n{nota}" if previas else nota})
+        repos.actualizar_publicacion(publicacion_id, {"notas": f"{previas}\n{nota}" if previas else nota})
     except Exception:  # noqa: BLE001 -- la nota es un extra; nunca rompe el avance
-        _log.warning("calidad: no se pudo anotar el tema %s", contenido_id, exc_info=True)
+        _log.warning("calidad: no se pudo anotar el tema %s", publicacion_id, exc_info=True)
 
 
 def verificar_calidad_pieza(pub: dict[str, Any]) -> list[str]:
@@ -167,16 +167,16 @@ def verificar_calidad_pieza(pub: dict[str, Any]) -> list[str]:
     red = str(pub.get("red") or "").strip()
     texto = str(pub.get("contenido") or "")
     pub_id = str(pub.get("id") or "")
-    contenido_id = str(pub.get("contenido_id") or "")
+    publicacion_id = str(pub.get("publicacion_id") or "")
     if not marca or not red or not texto.strip() or not pub_id:
         return []
     try:
-        avisos = avisos_calidad(marca, red, texto, nota_origen=_nota_origen(contenido_id))
+        avisos = avisos_calidad(marca, red, texto, nota_origen=_nota_origen(publicacion_id))
     except Exception:  # noqa: BLE001 -- la verificación de calidad jamás rompe el avance
         _log.warning("calidad: verificación del copy falló para la pieza %s", pub_id, exc_info=True)
         return []
     if not avisos:
         return []
     _degradar_revision(pub_id, pub.get("revision"))
-    _anotar(avisos, contenido_id=contenido_id, marca=marca)
+    _anotar(avisos, publicacion_id=publicacion_id, marca=marca)
     return avisos

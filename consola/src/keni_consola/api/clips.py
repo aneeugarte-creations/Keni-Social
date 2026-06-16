@@ -109,11 +109,11 @@ def _clip_a_dict(item: dict[str, Any], estado_pieza: str) -> dict[str, Any]:
 async def listar(request: Request) -> Response:
     """GET /api/clips: clips volcados, recientes primero. Filtro: `marca`."""
     marca = request.query_params.get("marca") or None
-    items = repos.listar_contenido_origenes([ORIGEN_CLIPS])
+    items = repos.listar_publicaciones_origenes([ORIGEN_CLIPS])
     if marca:
         items = [it for it in items if (it.get("marca") or "") == marca]
     items.sort(key=lambda it: it.get("creado") or "", reverse=True)
-    estados = repos.estado_pieza_por_contenido([it["id"] for it in items])
+    estados = repos.estado_pieza_por_publicacion([it["id"] for it in items])
     return JSONResponse(
         {
             "clips": [_clip_a_dict(it, estados.get(it["id"], "sin_pieza")) for it in items],
@@ -125,7 +125,7 @@ async def listar(request: Request) -> Response:
 async def crear(request: Request) -> Response:
     """POST /api/clips: vuelca el clip y genera su pieza (video o carrusel) en el feed.
 
-    Cuerpo `{marca, texto, titulo?, media:[{tipo,objeto}]}` -> `{clip, contenido_id,
+    Cuerpo `{marca, texto, titulo?, media:[{tipo,objeto}]}` -> `{clip, publicacion_id,
     generacion}`. Crea el tema (`origen='clips'`), las filas por red de su formato (vídeo en
     crudo, o portada con placa + slides) y lanza el copy EN SEGUNDO PLANO con el texto.
     """
@@ -150,7 +150,7 @@ async def crear(request: Request) -> Response:
         return JSONResponse({"error": "El clip necesita un título."}, status_code=400)
 
     autor = autor_de_peticion(request)
-    item = repos.crear_contenido(
+    item = repos.crear_publicacion(
         clase="contenido",
         flujo=FLUJO_IMPORTANTE,
         titulo=titulo,
@@ -168,8 +168,8 @@ async def crear(request: Request) -> Response:
         # El vídeo ES la pieza: una fila por red de vídeo con el media en crudo.
         video_obj = slides[0]["objeto"]
         for red in redes.redes_de_formato(redes.FORMATO_VIDEO):
-            repos.crear_contenido_plataforma(
-                contenido_id=item["id"],
+            repos.crear_pieza_fila(
+                publicacion_id=item["id"],
                 red=red,
                 falta_copy=True,
                 falta_imagen=False,  # la pieza de vídeo no espera imagen
@@ -184,8 +184,8 @@ async def crear(request: Request) -> Response:
         extras = [s for s in slides if s is not portada]
         carrusel_json = json.dumps(extras, ensure_ascii=False) if extras else ""
         for red in redes.redes_de_formato(redes.FORMATO_CARRUSEL):
-            repos.crear_contenido_plataforma(
-                contenido_id=item["id"],
+            repos.crear_pieza_fila(
+                publicacion_id=item["id"],
                 red=red,
                 falta_copy=True,
                 falta_imagen=False,  # la portada ya está (foto cruda + placa on-demand)
@@ -206,7 +206,7 @@ async def crear(request: Request) -> Response:
             titulo_dado=titulo,
             texto_base=texto[: gen_dom.MAX_TEXTO],
             autor=autor,
-            contenido_id=item["id"],
+            publicacion_id=item["id"],
             urgente=True,
         )
     except generaciones.ColaLlenaError:
@@ -217,7 +217,7 @@ async def crear(request: Request) -> Response:
                     "El clip se guardó pero hay demasiadas generaciones en curso; "
                     "lanza el copy desde la pieza del feed en unos segundos."
                 ),
-                "contenido_id": item["id"],
+                "publicacion_id": item["id"],
             },
             status_code=429,
         )
@@ -225,7 +225,7 @@ async def crear(request: Request) -> Response:
     return JSONResponse(
         {
             "clip": _clip_a_dict(item, "generando"),
-            "contenido_id": item["id"],
+            "publicacion_id": item["id"],
             "generacion": gen,
         }
     )

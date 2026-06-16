@@ -5,7 +5,7 @@ import type {
   CuerpoGuardarHistorial,
   RespuestaGeneracion,
   RespuestaGeneraciones,
-  RespuestaPublicaciones,
+  RespuestaPiezas,
 } from "@/types";
 
 export const apiGeneraciones = {
@@ -24,9 +24,9 @@ export const apiGeneraciones = {
     }),
 
   // --- Historial de generaciones (NEUTRO; común a copy/documento) ---
-  // Guardar una entrada del historial como publicaciones (borradores).
+  // Guardar una entrada del historial como piezas (borradores).
   guardarHistorial: (id: string, cuerpo: CuerpoGuardarHistorial = {}) =>
-    peticion<RespuestaPublicaciones>(`/prompts/historial/${encodeURIComponent(id)}/guardar`, {
+    peticion<RespuestaPiezas>(`/prompts/historial/${encodeURIComponent(id)}/guardar`, {
       metodo: "POST",
       json: cuerpo,
     }),

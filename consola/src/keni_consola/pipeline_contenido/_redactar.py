@@ -39,7 +39,7 @@ def lanzar_redactar_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | Non
 
     Reutiliza el lanzador PROBADO `dominio.generar.lanzar_copy` con los parámetros que CI guardó
     en `copy_pendiente` (nota, redes, imagen ya resuelta, fuente, clave). El borrador resultante
-    cuelga del tema (`contenido_id`) y hereda su origen. Para marca PROPIA con `og:image`, la
+    cuelga del tema (`publicacion_id`) y hereda su origen. Para marca PROPIA con `og:image`, la
     pieza nace con esa imagen (`tipo_contenido='fuente'`). Registra la etapa CD. None si se
     omite (sin parámetros / marca inválida).
 
@@ -90,7 +90,7 @@ def lanzar_redactar_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | Non
         autor=autor,
         fuente_id=fuente_id,
         clave=clave,
-        contenido_id=tema_id,
+        publicacion_id=tema_id,
         imagen_fuente=imagen,
         fotos_notas=fotos_notas,
         n_notas=n_notas,
@@ -107,7 +107,7 @@ def lanzar_redactar_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | Non
         ETAPA_REDACTAR,
         marca,
         f"Generación de copy+arte de marca — '{titulo[:120]}'",
-        contenido_id=tema_id,
+        publicacion_id=tema_id,
         # Ata el marcador CD a la generación REAL de copy: su STREAM (proceso del agente)
         # se muestra en el detalle del pipeline.
         gen_id=gen.get("id", "") if isinstance(gen, dict) else "",
@@ -156,7 +156,7 @@ def temas_autogen_sin_copy() -> list[dict[str, Any]]:
     from .. import autogen_redactar
 
     try:
-        items = repos.listar_contenido_origenes(
+        items = repos.listar_publicaciones_origenes(
             sorted(ORIGENES_AUTOGEN), excluir_estado="hecha"
         )
     except Exception:  # noqa: BLE001 -- sin tablero legible, la etapa no actúa sobre el pool
@@ -190,7 +190,7 @@ def temas_autogen_sin_copy() -> list[dict[str, Any]]:
 # --------------------------------------------------------------------------- #
 
 
-def encadenar_ilustrar_tras_redactar(contenido_id: str) -> dict[str, Any] | None:
+def encadenar_ilustrar_tras_redactar(publicacion_id: str) -> dict[str, Any] | None:
     """Dispara la etapa de Ilustrar de UN tema justo tras crearse sus borradores (por eventos).
 
     Lo llama el POST-PROCESADO del copy (worker) cuando el copy nidó piezas bajo un tema:
@@ -199,7 +199,7 @@ def encadenar_ilustrar_tras_redactar(contenido_id: str) -> dict[str, Any] | None
     configurado, exclusión por marca y dedup por etiqueta `autogen-arte`. Best-effort: un
     fallo se loguea y lo recogerá el barrido. Devuelve lo adjuntado o None si se omite.
     """
-    if not contenido_id:
+    if not publicacion_id:
         return None
     if not config.gate_maquina(config.ilustrar_activo)():
         return None
@@ -208,7 +208,7 @@ def encadenar_ilustrar_tras_redactar(contenido_id: str) -> dict[str, Any] | None
     try:
         if not media.proveedor_configurado():
             return None
-        tema = repos.obtener_contenido(contenido_id)
+        tema = repos.obtener_publicacion(publicacion_id)
         if not tema:
             return None
         if (tema.get("clase") or CLASE_CONTENIDO) != CLASE_CONTENIDO:
@@ -228,6 +228,6 @@ def encadenar_ilustrar_tras_redactar(contenido_id: str) -> dict[str, Any] | None
         # un fallo deja el tema SIN etiqueta y el barrido de arte lo vuelve a elegir con certeza.
         _log.warning(
             "pipeline: fallo el encadenado copy->arte del tema %s; el barrido lo recogerá.",
-            contenido_id, exc_info=True,
+            publicacion_id, exc_info=True,
         )
         return None

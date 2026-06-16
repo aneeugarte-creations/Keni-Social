@@ -4,7 +4,7 @@ El historial es el registro DURADERO de las generaciones de copy/documento (lo e
 post-procesado vía `repos.registrar_historial_prompt`). Lo consumen TODAS las generaciones
 (copy, termómetro, verificación…), por eso vive en su propio módulo NEUTRO.
 
-  - `POST /api/prompts/historial/{id}/guardar`  -> crea publicaciones (borradores) desde la
+  - `POST /api/prompts/historial/{id}/guardar`  -> crea piezas (borradores) desde la
                                                   entrada (una por pieza, o una con `red`).
 
 (El listado y el detalle del historial por HTTP se retiraron en la consolidación: la
@@ -21,7 +21,7 @@ from starlette.routing import Route
 from .. import redes, repos
 from .._http_json import leer_json
 from ..dominio import copy as dom_copy
-from ..dominio import publicaciones as dom_publicaciones
+from ..dominio import piezas as dom_publicaciones
 from ..dominio import stream
 from ..seguridad import autor_de_peticion
 
@@ -43,21 +43,21 @@ def _redes_pedidas(datos: dict[str, object]) -> set[str] | None:
 
 
 def _revertir(ids: list[str]) -> None:
-    """Borra las publicaciones ya creadas (rollback best-effort de un guardado a medias).
+    """Borra las piezas ya creadas (rollback best-effort de un guardado a medias).
 
     Sin transacción cross-fila en la capa de datos (cada borrador se persiste por su
     cuenta): si la creación de una pieza falla a mitad, deshacemos las anteriores para no
-    dejar publicaciones rotas/sueltas. Tolerante: un borrado que falle no relanza.
+    dejar piezas rotas/sueltas. Tolerante: un borrado que falle no relanza.
     """
     for pid in ids:
         try:
-            repos.borrar_publicacion(pid)
+            repos.borrar_pieza(pid)
         except Exception:  # noqa: BLE001 -- el rollback nunca debe enmascarar el error original
             continue
 
 
 async def historial_guardar(request: Request) -> Response:
-    """`POST /api/prompts/historial/{id}/guardar` -> crea publicaciones (borradores).
+    """`POST /api/prompts/historial/{id}/guardar` -> crea piezas (borradores).
 
     Con piezas: UNA publicación (borrador) por pieza, acotadas a las `redes` pedidas
     (selector multi-red). Sin piezas (entradas antiguas): requiere `red`/`redes` ∈ redes
@@ -65,7 +65,7 @@ async def historial_guardar(request: Request) -> Response:
     existe; 400 si no hay ninguna red válida o si las pedidas no casan ninguna pieza.
 
     Garantía TODO-O-NADA: si la creación de alguna pieza falla a mitad, se revierten las
-    ya creadas (no quedan publicaciones rotas) y se devuelve un 500 en español.
+    ya creadas (no quedan piezas rotas) y se devuelve un 500 en español.
     """
     historial_id = request.path_params["historial_id"]
     entrada = repos.obtener_historial_prompt(historial_id)
@@ -101,16 +101,16 @@ async def historial_guardar(request: Request) -> Response:
                 status_code=400,
             )
         try:
-            publicaciones = dom_copy.crear_publicaciones_desde_piezas(
+            piezas = dom_copy.crear_publicaciones_desde_piezas(
                 piezas, marca=marca, titulo=titulo, verdicto=verdicto, origen=historial_id,
                 redes_filtro=redes_filtro, autor=autor, atomico=True,
             )
         except Exception:  # noqa: BLE001 -- creación a medias: ya revirtió; error en español
             return JSONResponse(
-                {"error": "No se pudieron guardar todas las publicaciones; no se guardó ninguna."},
+                {"error": "No se pudieron guardar todas las piezas; no se guardó ninguna."},
                 status_code=500,
             )
-        return JSONResponse({"publicaciones": publicaciones})
+        return JSONResponse({"piezas": piezas})
 
     # Entrada antigua sin piezas: requiere red(es) explícitas; el documento entero va a cada una.
     if redes_filtro is None:
@@ -128,10 +128,10 @@ async def historial_guardar(request: Request) -> Response:
     except Exception:  # noqa: BLE001 -- guardado a medias: revierte y error en español
         _revertir([str(p.get("id")) for p in creadas if p.get("id")])
         return JSONResponse(
-            {"error": "No se pudieron guardar todas las publicaciones; no se guardó ninguna."},
+            {"error": "No se pudieron guardar todas las piezas; no se guardó ninguna."},
             status_code=500,
         )
-    return JSONResponse({"publicaciones": creadas})
+    return JSONResponse({"piezas": creadas})
 
 
 RUTAS = [

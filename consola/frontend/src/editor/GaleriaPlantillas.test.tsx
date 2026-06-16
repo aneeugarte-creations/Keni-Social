@@ -4,14 +4,14 @@
  *  - Organización estilo Canva: búsqueda (nombre/categoría), chips de categoría, agrupación por
  *    categoría y badge-selector de categoría (modo gestión vs selector).
  *  - Vacío de búsqueda con salida de un clic («Borrar búsqueda»).
- *  - `ContenidoPlantillas` reutilizable como panel «Diseño» del rail (sin envoltorio modal).
+ *  - `PublicacionPlantillas` reutilizable como panel «Diseño» del rail (sin envoltorio modal).
  *  - Masonry (2 columnas en compacto, aspecto real del documento) + carga perezosa por lotes
  *    (sentinel + IntersectionObserver falso controlable).
  */
 import { act, render, screen, fireEvent } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ContenidoPlantillas, GaleriaPlantillas } from "./GaleriaPlantillas";
+import { PublicacionPlantillas, GaleriaPlantillas } from "./GaleriaPlantillas";
 import { ratioPlantilla, repartirMasonry } from "@/components/plantillas/FiltroPlantillas";
 import type { PlantillaDiseno } from "@/lib/api";
 
@@ -358,12 +358,12 @@ describe("GaleriaPlantillas — búsqueda y categorías", () => {
   });
 });
 
-// ── ContenidoPlantillas como panel «Diseño» del rail (sin modal) ────────────────────────────────
+// ── PublicacionPlantillas como panel «Diseño» del rail (sin modal) ────────────────────────────────
 
-describe("ContenidoPlantillas — modo panel del rail", () => {
+describe("PublicacionPlantillas — modo panel del rail", () => {
   it("renderiza búsqueda + tarjetas SIN envoltorio de diálogo y cargar funciona", () => {
     const onCargar = vi.fn();
-    render(<ContenidoPlantillas compacto plantillas={[ULTIMA, MARCADOR]} onCargar={onCargar} />);
+    render(<PublicacionPlantillas compacto plantillas={[ULTIMA, MARCADOR]} onCargar={onCargar} />);
     // No hay modal: ni role dialog ni backdrop de cierre.
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Cerrar galería de plantillas")).not.toBeInTheDocument();
@@ -377,7 +377,7 @@ describe("ContenidoPlantillas — modo panel del rail", () => {
 
   it("en modo compacto el masonry es fijo de 2 columnas", () => {
     const { container } = render(
-      <ContenidoPlantillas compacto plantillas={[ULTIMA]} onCargar={vi.fn()} />,
+      <PublicacionPlantillas compacto plantillas={[ULTIMA]} onCargar={vi.fn()} />,
     );
     const masonry = container.querySelector("[data-masonry]");
     expect(masonry).toHaveAttribute("data-masonry", "2");
@@ -393,10 +393,10 @@ const MUCHAS: PlantillaDiseno[] = Array.from({ length: 30 }, (_, i) => ({
   nombre: `Plantilla ${i}`,
 }));
 
-describe("ContenidoPlantillas — masonry y carga perezosa", () => {
+describe("PublicacionPlantillas — masonry y carga perezosa", () => {
   it("reparte las tarjetas entre las 2 columnas del panel compacto", () => {
     const { container } = render(
-      <ContenidoPlantillas compacto plantillas={MUCHAS.slice(0, 4)} onCargar={vi.fn()} />,
+      <PublicacionPlantillas compacto plantillas={MUCHAS.slice(0, 4)} onCargar={vi.fn()} />,
     );
     const cols = container.querySelectorAll("[data-col]");
     expect(cols).toHaveLength(2);
@@ -412,13 +412,13 @@ describe("ContenidoPlantillas — masonry y carga perezosa", () => {
       nombre: "Story vertical",
       documento: { formato: { w: 1080, h: 1920 } },
     };
-    render(<ContenidoPlantillas compacto plantillas={[VERTICAL]} onCargar={vi.fn()} />);
+    render(<PublicacionPlantillas compacto plantillas={[VERTICAL]} onCargar={vi.fn()} />);
     const caja = screen.getByTitle("Cargar «Story vertical»").firstElementChild as HTMLElement;
     expect(caja.style.aspectRatio).toBe(String(1080 / 1920));
   });
 
   it("sin formato en el documento cae al 4/5 histórico", () => {
-    render(<ContenidoPlantillas compacto plantillas={[FOTO]} onCargar={vi.fn()} />);
+    render(<PublicacionPlantillas compacto plantillas={[FOTO]} onCargar={vi.fn()} />);
     const caja = screen.getByTitle(`Cargar «${FOTO.nombre}»`).firstElementChild as HTMLElement;
     expect(caja.style.aspectRatio).toBe(String(4 / 5));
     expect(ratioPlantilla(FOTO)).toBeCloseTo(0.8);
@@ -433,7 +433,7 @@ describe("ContenidoPlantillas — masonry y carga perezosa", () => {
 
   it("renderiza el primer lote (24) con sentinel; la intersección suelta el resto", () => {
     const { container } = render(
-      <ContenidoPlantillas compacto plantillas={MUCHAS} onCargar={vi.fn()} />,
+      <PublicacionPlantillas compacto plantillas={MUCHAS} onCargar={vi.fn()} />,
     );
     expect(screen.getAllByTitle(/^Cargar «/)).toHaveLength(24);
     expect(container.querySelector("[data-sentinela]")).toBeInTheDocument();
@@ -444,14 +444,14 @@ describe("ContenidoPlantillas — masonry y carga perezosa", () => {
   });
 
   it("buscar reinicia el lote: una plantilla más allá del primer lote aparece al filtrar", () => {
-    render(<ContenidoPlantillas compacto plantillas={MUCHAS} onCargar={vi.fn()} />);
+    render(<PublicacionPlantillas compacto plantillas={MUCHAS} onCargar={vi.fn()} />);
     expect(screen.queryByTitle("Cargar «Plantilla 29»")).not.toBeInTheDocument();
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Plantilla 29" } });
     expect(screen.getByTitle("Cargar «Plantilla 29»")).toBeInTheDocument();
   });
 
   it("hover de tarjeta: elevación + escala sutil en ~150ms y foco visible por teclado", () => {
-    render(<ContenidoPlantillas compacto plantillas={[FOTO]} onCargar={vi.fn()} />);
+    render(<PublicacionPlantillas compacto plantillas={[FOTO]} onCargar={vi.fn()} />);
     const tarjeta = screen.getByTitle(`Cargar «${FOTO.nombre}»`);
     expect(tarjeta.className).toContain("duration-150");
     expect(tarjeta.className).toContain("hover:shadow-lg");
@@ -470,10 +470,10 @@ const CLARO: PlantillaDiseno = {
   nombre: "Placa Claro",
 };
 
-describe("ContenidoPlantillas — agrupación por marca y «Lienzo en blanco»", () => {
+describe("PublicacionPlantillas — agrupación por marca y «Lienzo en blanco»", () => {
   it("agruparPorMarca divide en secciones por marca, en orden alfabético", () => {
     render(
-      <ContenidoPlantillas agruparPorMarca plantillas={[FOTO, CLARO]} onCargar={vi.fn()} />,
+      <PublicacionPlantillas agruparPorMarca plantillas={[FOTO, CLARO]} onCargar={vi.fn()} />,
     );
     const cabeceras = screen.getAllByRole("heading").map((h) => h.textContent);
     expect(cabeceras).toEqual(["Claro Sports", "UnoTV"]);
@@ -483,7 +483,7 @@ describe("ContenidoPlantillas — agrupación por marca y «Lienzo en blanco»",
 
   it("dentro de una sección de marca, las categorías llevan cabecera propia solo si hay varias", () => {
     render(
-      <ContenidoPlantillas
+      <PublicacionPlantillas
         agruparPorMarca
         plantillas={[ULTIMA, MARCADOR, CLARO]}
         onCargar={vi.fn()}
@@ -498,20 +498,20 @@ describe("ContenidoPlantillas — agrupación por marca y «Lienzo en blanco»",
   it("onLienzoBlanco añade la tarjeta «Lienzo en blanco» al final y dispara el handler", () => {
     const onLienzoBlanco = vi.fn();
     render(
-      <ContenidoPlantillas plantillas={[FOTO]} onCargar={vi.fn()} onLienzoBlanco={onLienzoBlanco} />,
+      <PublicacionPlantillas plantillas={[FOTO]} onCargar={vi.fn()} onLienzoBlanco={onLienzoBlanco} />,
     );
     fireEvent.click(screen.getByRole("button", { name: /lienzo en blanco/i }));
     expect(onLienzoBlanco).toHaveBeenCalledTimes(1);
   });
 
   it("sin onLienzoBlanco no aparece la tarjeta (modo selector/panel)", () => {
-    render(<ContenidoPlantillas plantillas={[FOTO]} onCargar={vi.fn()} />);
+    render(<PublicacionPlantillas plantillas={[FOTO]} onCargar={vi.fn()} />);
     expect(screen.queryByRole("button", { name: /lienzo en blanco/i })).not.toBeInTheDocument();
   });
 
   it("galería vacía: copy unificado + la tarjeta «Lienzo en blanco» como CTA", () => {
     const onLienzoBlanco = vi.fn();
-    render(<ContenidoPlantillas plantillas={[]} onCargar={vi.fn()} onLienzoBlanco={onLienzoBlanco} />);
+    render(<PublicacionPlantillas plantillas={[]} onCargar={vi.fn()} onLienzoBlanco={onLienzoBlanco} />);
     expect(screen.getByText(/aún no hay plantillas para esta marca/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /lienzo en blanco/i }));
     expect(onLienzoBlanco).toHaveBeenCalledTimes(1);
@@ -526,7 +526,7 @@ describe("ContenidoPlantillas — agrupación por marca y «Lienzo en blanco»",
     const f2 = { ...FOTO, id: "f2", nombre: "Dos" };
     const f3 = { ...FOTO, id: "f3", nombre: "Tres" };
     const { container } = render(
-      <ContenidoPlantillas plantillas={[f1, f2, f3]} onCargar={vi.fn()} onReordenar={onReordenar} />,
+      <PublicacionPlantillas plantillas={[f1, f2, f3]} onCargar={vi.fn()} onReordenar={onReordenar} />,
     );
     const card = (id: string) => container.querySelector(`[data-plantilla-id="${id}"]`)!;
     expect(card("f1")).toHaveAttribute("draggable", "true"); // modo reordenable
@@ -544,7 +544,7 @@ describe("ContenidoPlantillas — agrupación por marca y «Lienzo en blanco»",
     const general = { ...FOTO, id: "g1", categoria: "post" };
     const deportes = { ...FOTO, id: "d1", categoria: "deportes" };
     const { container } = render(
-      <ContenidoPlantillas plantillas={[general, deportes]} onCargar={vi.fn()} onReordenar={onReordenar} />,
+      <PublicacionPlantillas plantillas={[general, deportes]} onCargar={vi.fn()} onReordenar={onReordenar} />,
     );
     const card = (id: string) => container.querySelector(`[data-plantilla-id="${id}"]`)!;
     const dt = dtFalso();
@@ -554,7 +554,7 @@ describe("ContenidoPlantillas — agrupación por marca y «Lienzo en blanco»",
   });
 
   it("sin onReordenar (modo selector) las tarjetas no son arrastrables", () => {
-    const { container } = render(<ContenidoPlantillas plantillas={[FOTO]} onCargar={vi.fn()} />);
+    const { container } = render(<PublicacionPlantillas plantillas={[FOTO]} onCargar={vi.fn()} />);
     expect(container.querySelector(`[data-plantilla-id="${FOTO.id}"]`)).not.toHaveAttribute("draggable");
   });
 });
@@ -562,12 +562,12 @@ describe("ContenidoPlantillas — agrupación por marca y «Lienzo en blanco»",
 // ── Foto de muestra (puerta de galería) ──────────────────────────────────────────────────────────
 // En modo GESTIÓN la tarjeta lleva varias acciones (Foto de muestra…, Duplicar, Borrar) en el
 // kebab «⋮» (aria-label «Más acciones»); en modo SELECTOR no hay acciones, así que no aparece.
-describe("ContenidoPlantillas — foto de muestra", () => {
+describe("PublicacionPlantillas — foto de muestra", () => {
   const gestion = { onDuplicar: vi.fn(), onBorrar: vi.fn() };
 
   it("ofrece «Foto y texto de muestra…» en el kebab de la tarjeta y lo invoca con la plantilla", async () => {
     const onFotoMuestra = vi.fn();
-    render(<ContenidoPlantillas plantillas={[FOTO]} onCargar={vi.fn()} onFotoMuestra={onFotoMuestra} {...gestion} />);
+    render(<PublicacionPlantillas plantillas={[FOTO]} onCargar={vi.fn()} onFotoMuestra={onFotoMuestra} {...gestion} />);
     fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
     fireEvent.click(await screen.findByRole("menuitem", { name: /Foto y texto de muestra/ }));
     expect(onFotoMuestra).toHaveBeenCalledWith(FOTO);
@@ -575,20 +575,20 @@ describe("ContenidoPlantillas — foto de muestra", () => {
 
   it("con muestra ya asignada la entrada dice «Editar muestra…»", async () => {
     const conMuestra: PlantillaDiseno = { ...FOTO, foto_muestra: "plantillas/m.jpg", foto_muestra_url: "/api/media/plantillas/m.jpg" };
-    render(<ContenidoPlantillas plantillas={[conMuestra]} onCargar={vi.fn()} onFotoMuestra={vi.fn()} {...gestion} />);
+    render(<PublicacionPlantillas plantillas={[conMuestra]} onCargar={vi.fn()} onFotoMuestra={vi.fn()} {...gestion} />);
     fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
     expect(await screen.findByRole("menuitem", { name: /Editar muestra/ })).toBeInTheDocument();
   });
 
   it("con solo titular_muestra (sin foto) también dice «Editar muestra…»", async () => {
     const conTitular: PlantillaDiseno = { ...FOTO, titular_muestra: "LEO MESSI" };
-    render(<ContenidoPlantillas plantillas={[conTitular]} onCargar={vi.fn()} onFotoMuestra={vi.fn()} {...gestion} />);
+    render(<PublicacionPlantillas plantillas={[conTitular]} onCargar={vi.fn()} onFotoMuestra={vi.fn()} {...gestion} />);
     fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
     expect(await screen.findByRole("menuitem", { name: /Editar muestra/ })).toBeInTheDocument();
   });
 
   it("en modo selector (sin acciones de gestión) no hay kebab ni «muestra»", () => {
-    render(<ContenidoPlantillas plantillas={[FOTO]} onCargar={vi.fn()} />);
+    render(<PublicacionPlantillas plantillas={[FOTO]} onCargar={vi.fn()} />);
     expect(screen.queryByRole("button", { name: "Más acciones" })).toBeNull();
     expect(screen.queryByRole("menuitem", { name: /muestra/i })).toBeNull();
   });

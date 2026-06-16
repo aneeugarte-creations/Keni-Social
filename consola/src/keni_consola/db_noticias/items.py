@@ -34,7 +34,7 @@ _COLS_NOTICIA_ITEM: tuple[str, ...] = (
     "senal",
     "geo",
     "estado",
-    "contenido_id",
+    "publicacion_id",
     "fuente_peso",
     "creado",
 )
@@ -65,7 +65,7 @@ def _fila_a_noticia_item(fila: Any) -> dict[str, Any]:
         "senal": int(fila["senal"] or 0),
         "geo": fila["geo"] or "",
         "estado": fila["estado"] or "nuevo",
-        "contenido_id": fila["contenido_id"] or "",
+        "publicacion_id": fila["publicacion_id"] or "",
         # Peso de la fuente del item, denormalizado al archivar (ranking ponderado).
         "fuente_peso": float(fila["fuente_peso"] or 1.0),
         "creado": fila["creado"] or "",
@@ -112,7 +112,7 @@ def crear_noticias_items(items: list[dict[str, Any]]) -> int:
                 "senal": int(it.get("senal") or 0),
                 "geo": it.get("geo") or "",
                 "estado": it.get("estado") or "nuevo",
-                "contenido_id": it.get("contenido_id") or "",
+                "publicacion_id": it.get("publicacion_id") or "",
                 "fuente_peso": float(it.get("fuente_peso") or 1.0),
                 "creado": it.get("creado") or ahora,
             }
@@ -214,15 +214,15 @@ def actualizar_noticia_item(
     item_id: str,
     *,
     estado: str | None = None,
-    contenido_id: str | None = None,
+    publicacion_id: str | None = None,
     cluster_id: str | None = None,
 ) -> dict[str, Any] | None:
-    """Edita `estado` / `contenido_id` / `cluster_id` de un item (None si no existe)."""
+    """Edita `estado` / `publicacion_id` / `cluster_id` de un item (None si no existe)."""
     cambios: dict[str, Any] = {}
     if estado is not None:
         cambios["estado"] = estado
-    if contenido_id is not None:
-        cambios["contenido_id"] = contenido_id
+    if publicacion_id is not None:
+        cambios["publicacion_id"] = publicacion_id
     if cluster_id is not None:
         cambios["cluster_id"] = cluster_id
     if not cambios:

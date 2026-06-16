@@ -86,7 +86,7 @@ def _crear_doc(c: TestClient, titulo="Doc", cuerpo="V1", tipo="prompt", **extra)
 def _head(c: TestClient, doc_id: str) -> str:
     """SHA del último commit git del doc (`sha_actual`).
 
-    Tras el rediseño del versionado intencionado, `/historial` devuelve PUBLICACIONES (no el
+    Tras el rediseño del versionado intencionado, `/historial` devuelve PIEZAS (no el
     git log), así que un doc recién creado tiene historial vacío; el sha del commit de
     creación se lee de `sha_actual` del propio documento.
     """
@@ -174,7 +174,7 @@ def test_publicar_doc_inexistente_404(entorno_pub):
 
 def test_publicar_dos_veces_sin_cambios_no_duplica_historial(entorno_pub):
     """Publicar dos veces SIN cambios (mismo sha) no crea dos "versiones" idénticas: el log
-    de publicaciones es idempotente por sha."""
+    de piezas es idempotente por sha."""
     c = _cliente(_ADMIN)
     doc = _crear_doc(c, cuerpo="ESTABLE")
     assert c.post(f"/api/prompts/{doc['id']}/publicar", json={"nota": "v1"}).status_code == 200
@@ -206,12 +206,12 @@ def test_solicitar_vacio_400(entorno_pub):
 
 
 # --------------------------------------------------------------------------- #
-# Historial = PUBLICACIONES (no git log) + commit intencionado                 #
+# Historial = PIEZAS (no git log) + commit intencionado                 #
 # --------------------------------------------------------------------------- #
 
 
 def test_historial_son_publicaciones_no_git_log(entorno_pub):
-    """El historial es el de PUBLICACIONES (nota = mensaje), no el git log de autosaves."""
+    """El historial es el de PIEZAS (nota = mensaje), no el git log de autosaves."""
     c = _cliente(_ADMIN)
     doc = _crear_doc(c, cuerpo="V1")
     # Un borrador NO es versión: sin publicar -> historial vacío.

@@ -6,7 +6,7 @@ SIEMPRE y, gateado por `KENI_MEDIA_GC` (def OFF), barre cada N horas SOLO cuando
 activo. Asi encender/apagar en runtime (desde la API de ajustes) aplica sin reiniciar.
 
 SEGURO POR DEFECTO (CONSERVADOR): sin `KENI_MEDIA_GC` el hilo no borra nada. El barrido solo
-elimina objetos SIN DUEÑO (no referenciados por ninguna publicacion) y mas viejos que el
+elimina objetos SIN DUEÑO (no referenciados por ninguna pieza) y mas viejos que el
 umbral (`dominio.media_gc.limpiar`).
 """
 

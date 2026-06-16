@@ -110,7 +110,7 @@ def test_slides_carrusel_arman_pieza_carrusel_nidada(entorno, monkeypatch):
     _almacen_disco(monkeypatch)
     monkeypatch.setattr(extraccion_url, "_DESCARGADOR_BYTES", lambda url: _PNG)
     llamadas = _mock_componer_slide(monkeypatch)
-    tema = repos.crear_contenido(clase="contenido", titulo="Panel", marca=_MARCA)
+    tema = repos.crear_publicacion(clase="contenido", titulo="Panel", marca=_MARCA)
 
     creadas = dom_copy.crear_publicaciones_desde_piezas(
         _piezas_tres_redes(),
@@ -118,7 +118,7 @@ def test_slides_carrusel_arman_pieza_carrusel_nidada(entorno, monkeypatch):
         titulo="Panel",
         verdicto="",
         origen="hist-3",
-        contenido_id=tema["id"],
+        publicacion_id=tema["id"],
         imagen_fuente="https://example.com/portada.png",
         tipo_contenido="fuente",
         slides_carrusel=[
@@ -134,7 +134,7 @@ def test_slides_carrusel_arman_pieza_carrusel_nidada(entorno, monkeypatch):
     ]
     # El FORMATO decide las redes: carrusel -> X/IG/FB (igual que foto; nunca yt/tiktok).
     assert sorted(str(c["red"]) for c in creadas) == ["facebook", "instagram", "x"]
-    assert repos.obtener_contenido(tema["id"])["formato"] == redes.FORMATO_CARRUSEL
+    assert repos.obtener_publicacion(tema["id"])["formato"] == redes.FORMATO_CARRUSEL
     # Cada borrador lleva los slides horneados detrás de la portada (que va en `imagen`).
     for creada in creadas:
         slides = json.loads(str(creada.get("carrusel") or "[]"))
@@ -156,7 +156,7 @@ def test_carrusel_degrada_a_post_si_ningun_slide_compone(entorno, monkeypatch):
     _almacen_disco(monkeypatch)
     monkeypatch.setattr(extraccion_url, "_DESCARGADOR_BYTES", lambda url: _PNG)
     _mock_componer_slide(monkeypatch, falla=("Concierto A", "Concierto B"))
-    tema = repos.crear_contenido(clase="contenido", titulo="Panel", marca=_MARCA)
+    tema = repos.crear_publicacion(clase="contenido", titulo="Panel", marca=_MARCA)
 
     creadas = dom_copy.crear_publicaciones_desde_piezas(
         _piezas_tres_redes(),
@@ -164,7 +164,7 @@ def test_carrusel_degrada_a_post_si_ningun_slide_compone(entorno, monkeypatch):
         titulo="Panel",
         verdicto="",
         origen="hist-4",
-        contenido_id=tema["id"],
+        publicacion_id=tema["id"],
         imagen_fuente="https://example.com/portada.png",
         tipo_contenido="fuente",
         slides_carrusel=[
@@ -174,7 +174,7 @@ def test_carrusel_degrada_a_post_si_ningun_slide_compone(entorno, monkeypatch):
     )
 
     assert sorted(str(c["red"]) for c in creadas) == ["facebook", "instagram", "x"]
-    assert repos.obtener_contenido(tema["id"])["formato"] == redes.FORMATO_FOTO
+    assert repos.obtener_publicacion(tema["id"])["formato"] == redes.FORMATO_FOTO
     assert all(not str(c.get("carrusel") or "") for c in creadas)
 
 
@@ -187,7 +187,7 @@ def test_procesar_copy_arma_carrusel_si_el_modelo_lo_elige(entorno, monkeypatch)
     _almacen_disco(monkeypatch)
     monkeypatch.setattr(extraccion_url, "_DESCARGADOR_BYTES", lambda url: _PNG)
     llamadas = _mock_componer_slide(monkeypatch)
-    tema = repos.crear_contenido(clase="contenido", titulo="Panel", marca=_MARCA)
+    tema = repos.crear_publicacion(clase="contenido", titulo="Panel", marca=_MARCA)
     fotos = [
         {"titulo": "Concierto A", "imagen": "https://example.com/a.png"},
         {"titulo": "Concierto B", "imagen": "https://example.com/b.png"},
@@ -196,7 +196,7 @@ def test_procesar_copy_arma_carrusel_si_el_modelo_lo_elige(entorno, monkeypatch)
     procesar = dom_copy.construir_procesar_copy(
         "copy-desde-nota", _MARCA,
         redes_ids=["instagram", "x", "facebook"], titulo_dado="Panel", texto_base="nota",
-        contenido_id=tema["id"], imagen_fuente=fotos[0]["imagen"], fotos_notas=fotos,
+        publicacion_id=tema["id"], imagen_fuente=fotos[0]["imagen"], fotos_notas=fotos,
         tipo_contenido="fuente",
     )
     salida = (
@@ -213,9 +213,9 @@ def test_procesar_copy_arma_carrusel_si_el_modelo_lo_elige(entorno, monkeypatch)
         (_MARCA, "Sin foto", ""),
         (_MARCA, "Fuera de rango", ""),
     ]
-    assert sorted(str(p["red"]) for p in resultado["publicaciones"]) == ["facebook", "instagram", "x"]
-    assert repos.obtener_contenido(tema["id"])["formato"] == redes.FORMATO_CARRUSEL
-    slides = json.loads(str(resultado["publicaciones"][0].get("carrusel") or "[]"))
+    assert sorted(str(p["red"]) for p in resultado["piezas"]) == ["facebook", "instagram", "x"]
+    assert repos.obtener_publicacion(tema["id"])["formato"] == redes.FORMATO_CARRUSEL
+    slides = json.loads(str(resultado["piezas"][0].get("carrusel") or "[]"))
     assert len(slides) == 3
 
 
@@ -231,12 +231,12 @@ def test_procesar_copy_carrusel_sin_panel_es_sugerencia_de_formato(entorno, monk
     _almacen_disco(monkeypatch)
     monkeypatch.setattr(extraccion_url, "_DESCARGADOR_BYTES", lambda url: _PNG)
     llamadas = _mock_componer_slide(monkeypatch)
-    tema = repos.crear_contenido(clase="contenido", titulo="Biomas", marca=_MARCA)
+    tema = repos.crear_publicacion(clase="contenido", titulo="Biomas", marca=_MARCA)
 
     procesar = dom_copy.construir_procesar_copy(
         "copy-desde-nota", _MARCA,
         redes_ids=["instagram", "x"], titulo_dado="Biomas", texto_base="nota",
-        contenido_id=tema["id"], imagen_fuente="https://example.com/portada.png",
+        publicacion_id=tema["id"], imagen_fuente="https://example.com/portada.png",
         fotos_notas=[], tipo_contenido="fuente",
     )
     salida = (
@@ -247,11 +247,11 @@ def test_procesar_copy_carrusel_sin_panel_es_sugerencia_de_formato(entorno, monk
 
     # Ningún slide horneado (no es panel), pero el formato SÍ flip-ea a carrusel (sugerencia)...
     assert llamadas == []
-    assert repos.obtener_contenido(tema["id"])["formato"] == redes.FORMATO_CARRUSEL
+    assert repos.obtener_publicacion(tema["id"])["formato"] == redes.FORMATO_CARRUSEL
     # ...y eso fija las redes del carrusel (X/IG; nunca yt/tiktok). X se conserva como en foto.
-    assert sorted(str(p["red"]) for p in resultado["publicaciones"]) == ["instagram", "x"]
+    assert sorted(str(p["red"]) for p in resultado["piezas"]) == ["instagram", "x"]
     # Sin panel horneado, el campo `carrusel` de la pieza queda vacío (las fotos llegan después).
-    assert all(not str(p.get("carrusel") or "") for p in resultado["publicaciones"])
+    assert all(not str(p.get("carrusel") or "") for p in resultado["piezas"])
 
 
 def test_procesar_copy_carrusel_de_tema_unico_sin_slides_flip_de_formato(entorno, monkeypatch):
@@ -265,12 +265,12 @@ def test_procesar_copy_carrusel_de_tema_unico_sin_slides_flip_de_formato(entorno
     _almacen_disco(monkeypatch)
     monkeypatch.setattr(extraccion_url, "_DESCARGADOR_BYTES", lambda url: _PNG)
     llamadas = _mock_componer_slide(monkeypatch)
-    tema = repos.crear_contenido(clase="contenido", titulo="Biomas de México", marca=_MARCA)
+    tema = repos.crear_publicacion(clase="contenido", titulo="Biomas de México", marca=_MARCA)
 
     procesar = dom_copy.construir_procesar_copy(
         "copy-desde-nota", _MARCA,
         redes_ids=["instagram", "x", "facebook"], titulo_dado="Biomas", texto_base="nota",
-        contenido_id=tema["id"], imagen_fuente="https://example.com/portada.png",
+        publicacion_id=tema["id"], imagen_fuente="https://example.com/portada.png",
         fotos_notas=[], tipo_contenido="fuente",
     )
     # Sugerencia pura: `tipo: carrusel` y NI SIQUIERA clave `slides`.
@@ -278,9 +278,9 @@ def test_procesar_copy_carrusel_de_tema_unico_sin_slides_flip_de_formato(entorno
     resultado = procesar(salida, None)
 
     assert llamadas == []  # nada que hornear
-    assert repos.obtener_contenido(tema["id"])["formato"] == redes.FORMATO_CARRUSEL
-    assert sorted(str(p["red"]) for p in resultado["publicaciones"]) == ["facebook", "instagram", "x"]
-    assert all(not str(p.get("carrusel") or "") for p in resultado["publicaciones"])
+    assert repos.obtener_publicacion(tema["id"])["formato"] == redes.FORMATO_CARRUSEL
+    assert sorted(str(p["red"]) for p in resultado["piezas"]) == ["facebook", "instagram", "x"]
+    assert all(not str(p.get("carrusel") or "") for p in resultado["piezas"])
 
 
 def test_procesar_copy_tipo_post_no_arma_carrusel(entorno, monkeypatch):
@@ -290,7 +290,7 @@ def test_procesar_copy_tipo_post_no_arma_carrusel(entorno, monkeypatch):
     _almacen_disco(monkeypatch)
     monkeypatch.setattr(extraccion_url, "_DESCARGADOR_BYTES", lambda url: _PNG)
     llamadas = _mock_componer_slide(monkeypatch)
-    tema = repos.crear_contenido(clase="contenido", titulo="Panel", marca=_MARCA)
+    tema = repos.crear_publicacion(clase="contenido", titulo="Panel", marca=_MARCA)
     fotos = [
         {"titulo": "Concierto A", "imagen": "https://example.com/a.png"},
         {"titulo": "Concierto B", "imagen": "https://example.com/b.png"},
@@ -299,22 +299,22 @@ def test_procesar_copy_tipo_post_no_arma_carrusel(entorno, monkeypatch):
     procesar = dom_copy.construir_procesar_copy(
         "copy-desde-nota", _MARCA,
         redes_ids=["instagram", "x", "facebook"], titulo_dado="Panel", texto_base="nota",
-        contenido_id=tema["id"], imagen_fuente=fotos[0]["imagen"], fotos_notas=fotos,
+        publicacion_id=tema["id"], imagen_fuente=fotos[0]["imagen"], fotos_notas=fotos,
         tipo_contenido="fuente",
     )
     salida = '```json\n{"texto": "Copy", "copy_in": "T"}\n```'
     resultado = procesar(salida, None)
 
     assert llamadas == []
-    assert sorted(str(p["red"]) for p in resultado["publicaciones"]) == [
+    assert sorted(str(p["red"]) for p in resultado["piezas"]) == [
         "facebook", "instagram", "x",
     ]
-    assert repos.obtener_contenido(tema["id"])["formato"] == redes.FORMATO_FOTO
-    assert all(not str(p.get("carrusel") or "") for p in resultado["publicaciones"])
+    assert repos.obtener_publicacion(tema["id"])["formato"] == redes.FORMATO_FOTO
+    assert all(not str(p.get("carrusel") or "") for p in resultado["piezas"])
 
 
 def test_slides_carrusel_sin_tema_se_ignoran(entorno, monkeypatch):
-    """Sin `contenido_id` no hay carrusel que nidar: borradores sueltos de foto, como hoy."""
+    """Sin `publicacion_id` no hay carrusel que nidar: borradores sueltos de foto, como hoy."""
     _almacen_disco(monkeypatch)
     monkeypatch.setattr(extraccion_url, "_DESCARGADOR_BYTES", lambda url: _PNG)
     llamadas = _mock_componer_slide(monkeypatch)

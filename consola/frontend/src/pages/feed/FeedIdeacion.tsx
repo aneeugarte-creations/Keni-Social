@@ -18,7 +18,7 @@
  * Marca, Red y Línea los mandan los switches GLOBALES de la topbar y filtran en servidor.
  *
  * Reutiliza lo existente sin tocar backend:
- *  - `GET /api/publicaciones` (keyset con `feed=1`; `estado=` en las vistas dedicadas).
+ *  - `GET /api/piezas` (keyset con `feed=1`; `estado=` en las vistas dedicadas).
  *  - `PostFeed`: cada pieza como post + aprobación en línea + comentarios.
  *  - El alta de material la implementa el Flujo A (acción de alta): este feed NO la duplica.
  */
@@ -35,11 +35,11 @@ import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip } from "@/components/ui/tooltip";
-import { FILTRO_TODOS, useFiltrosContenido } from "@/hooks/filtros-contenido-contexto";
+import { FILTRO_TODOS, useFiltrosPublicacion } from "@/hooks/filtros-contenido-contexto";
 import { MARCA_ACTIVA_TODAS, useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
+import { CLAVE_PIEZAS } from "@/pages/piezas/claves";
 
 import { DialogoCrearPost } from "./DialogoCrearPost";
 import { GRID_COLS, MAX_W_FEED, REDES_POR_FORMATO } from "./formato";
@@ -48,7 +48,7 @@ import { PieFeed, SkeletonPost, useSentinelInfinito } from "./infinito";
 import { PostFeed } from "./PostFeed";
 import { CadenasLoteContexto, useCadenasLote } from "./use-cadenas-lote";
 import {
-  ContenidoPestanaVista,
+  PublicacionPestanaVista,
   ESTADO_SERVIDOR_DE_VISTA,
   PAGINAS_POR_LOTE,
   TOPE_PAGINAS_PIEZA,
@@ -68,7 +68,7 @@ const ANCHO_MIN_CELDA = 240;
 
 /**
  * Id del ancla DOM de una idea en el feed (deep-link desde las notificaciones). El cajón
- * de la campana navega a `?pieza=<contenido_id>` y aquí hacemos scroll a `#<este id>`.
+ * de la campana navega a `?pieza=<publicacion_id>` y aquí hacemos scroll a `#<este id>`.
  */
 function anclaFeed(ideaId: string): string {
   return `feed-pieza-${ideaId}`;
@@ -101,7 +101,7 @@ export default function FeedIdeacion() {
   const { marcaActiva } = useMarcaActiva();
   // Filtros de Red + Línea editorial: los mandan los selectores GLOBALES de la topbar.
   // Se aplican en SERVIDOR (van en la query), igual que el `estado` de las vistas dedicadas.
-  const { red, linea } = useFiltrosContenido();
+  const { red, linea } = useFiltrosPublicacion();
 
   const rootRef = React.useRef<HTMLDivElement>(null);
 
@@ -201,7 +201,7 @@ export default function FeedIdeacion() {
   // Catálogo de redes (para la MATRIZ por idea: cada idea se enseña en todas las redes,
   // con huecos en las que falte pieza). Las líneas editoriales viven en el switch global.
   const opcionesQuery = useQuery({
-    queryKey: ["publicaciones", "opciones"],
+    queryKey: ["piezas", "opciones"],
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),
   });
 
@@ -214,7 +214,7 @@ export default function FeedIdeacion() {
   // `paginacion.cursor_siguiente` mientras haya más; al omitirlo, `hasNextPage` se apaga.
   const feedQuery = useInfiniteQuery({
     queryKey: [
-      ...CLAVE_PUBLICACIONES,
+      ...CLAVE_PIEZAS,
       "feed-ideacion",
       marcaActiva ?? MARCA_ACTIVA_TODAS,
       red,
@@ -224,7 +224,7 @@ export default function FeedIdeacion() {
     ],
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam, signal }) =>
-      api.publicaciones(
+      api.piezas(
         {
           marca: marcaActiva ?? undefined,
           red: red === FILTRO_TODOS ? undefined : red,
@@ -256,7 +256,7 @@ export default function FeedIdeacion() {
   // El backend ya acota por la marca activa (o devuelve todo en la vista "Todas" de admin).
   // Aplanamos TODAS las páginas cargadas en un único listado que el resto de la UI consume igual.
   const piezas = React.useMemo(
-    () => (feedQuery.data?.pages ?? []).flatMap((p) => p.publicaciones),
+    () => (feedQuery.data?.pages ?? []).flatMap((p) => p.piezas),
     [feedQuery.data],
   );
 
@@ -285,13 +285,13 @@ export default function FeedIdeacion() {
   const cargandoCatalogo =
     red === FILTRO_TODOS && opcionesQuery.isLoading && !opcionesQuery.data;
 
-  // Agrupa TODAS las piezas por IDEA (`contenido_id`), preservando el orden de aparición
+  // Agrupa TODAS las piezas por IDEA (`publicacion_id`), preservando el orden de aparición
   // (`creado DESC`). Cada idea es un bloque; así NUNCA se mezclan posts de ideas distintas en una
   // misma fila. Cada idea conoce qué redes tiene generadas y cuáles faltan.
   const grupos = React.useMemo(() => {
     const mapa = new Map<string, GrupoDeIdea>();
     for (const p of piezas) {
-      const clave = p.contenido_id || p.id;
+      const clave = p.publicacion_id || p.id;
       let g = mapa.get(clave);
       if (!g) {
         g = { id: clave, titulo: p.titulo, marca_nombre: p.marca_nombre, piezas: [] };
@@ -302,7 +302,7 @@ export default function FeedIdeacion() {
     return [...mapa.values()];
   }, [piezas]);
 
-  // DEEP-LINK desde las notificaciones (`?pieza=<contenido_id>`): al entrar, salta a esa idea
+  // DEEP-LINK desde las notificaciones (`?pieza=<publicacion_id>`): al entrar, salta a esa idea
   // y la resalta un instante. La búsqueda encadenada corre sobre el LISTADO BASE: si la URL
   // traía otra vista, se fuerza "todo" primero (que siempre la muestra, esté como esté).
   //
@@ -403,9 +403,9 @@ export default function FeedIdeacion() {
   const refrescar = () => {
     const scroller = rootRef.current?.closest("main");
     if (scroller) scroller.scrollTop = 0;
-    void queryClient.resetQueries({ queryKey: [...CLAVE_PUBLICACIONES, "feed-ideacion"] });
-    void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES, refetchType: "none" });
-    void queryClient.invalidateQueries({ queryKey: [...CLAVE_PUBLICACIONES, "conteo-feed"] });
+    void queryClient.resetQueries({ queryKey: [...CLAVE_PIEZAS, "feed-ideacion"] });
+    void queryClient.invalidateQueries({ queryKey: CLAVE_PIEZAS, refetchType: "none" });
+    void queryClient.invalidateQueries({ queryKey: [...CLAVE_PIEZAS, "conteo-feed"] });
   };
 
   // El número del stepper "por fila" es la PREFERENCIA, a secas (nada de "2/5"): si el
@@ -507,7 +507,7 @@ export default function FeedIdeacion() {
             <TabsList className="w-fit gap-1" aria-label="Vista del feed">
               {VISTAS.map((v) => (
                 <TabsTrigger key={v.id} value={v.id} className="gap-1.5">
-                  <ContenidoPestanaVista
+                  <PublicacionPestanaVista
                     vista={v}
                     conteo={conteoVista[v.id]}
                     // Énfasis pasivo "te toca decidir" (mismo acento keni que el pulgar de
@@ -637,7 +637,7 @@ export default function FeedIdeacion() {
                     tamano="micro"
                   />
                   {p ? (
-                    <PostFeed publicacion={p} />
+                    <PostFeed pieza={p} />
                   ) : (
                     <PlaceholderRed red={redesAMostrar[0]} titulo={g.titulo} />
                   )}

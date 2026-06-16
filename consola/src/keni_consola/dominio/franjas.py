@@ -1,11 +1,11 @@
-"""Dominio de FRANJAS: logica PURA de scheduling de huecos de publicacion.
+"""Dominio de FRANJAS: logica PURA de scheduling de huecos de pieza.
 
 Una FRANJA es una plantilla de hueco recurrente: (marca?, red?, dia_semana, hora).
-Las publicaciones se ENCOLAN buscando el proximo hueco futuro de las franjas que
+Las piezas se ENCOLAN buscando el proximo hueco futuro de las franjas que
 apliquen a su (marca, red). Aqui vive la logica de NEGOCIO (aplicabilidad + calculo del
 proximo hueco + validacion de hora), separada del router `api/franjas.py` (transporte):
 es PURA y DETERMINISTA (recibe "ahora" inyectado, sin reloj real), reutilizable por
-`api/publicaciones.py` y `api/sugerencias_hora.py` sin acoplarse a Starlette.
+`api/piezas.py` y `api/sugerencias_hora.py` sin acoplarse a Starlette.
 
 dia_semana: 0=lunes .. 6=domingo (igual que `datetime.weekday()`).
 hora:       "HH:MM" en 24h.
@@ -84,7 +84,7 @@ def proximo_hueco(
 
     - Considera SOLO las `franjas_aplican` (ya filtradas por aplicabilidad).
     - Estrictamente FUTURO respecto a `ahora` (los huecos <= ahora se descartan).
-    - Evita los datetimes en `ocupados` (ISO 'YYYY-MM-DDTHH:MM' de otras publicaciones
+    - Evita los datetimes en `ocupados` (ISO 'YYYY-MM-DDTHH:MM' de otras piezas
       ya `programado`): avanza a la siguiente repeticion semanal de esa misma franja.
     - Devuelve el datetime mas temprano disponible, o None si no aplica ninguna franja.
 

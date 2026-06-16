@@ -259,7 +259,7 @@ def lanzador_generacion_completa(salida: str, metricas=None):  # noqa: ANN001
     """Fake del lanzador de claude que COMPLETA la generacion SINCRONAMENTE.
 
     Llama al `procesar` REAL con una `salida` canned (asi se cubre el post-procesado:
-    piezas/publicaciones/historial/hashtags) y fija el registro en `completado`. Sin
+    piezas/piezas/historial/hashtags) y fija el registro en `completado`. Sin
     Popen ni red.
     """
     import shutil as _sh
@@ -411,7 +411,7 @@ _APP_POR_STEM: dict[str, str] = {
     # App B · Metricas (api/metricas, campanias).
     "test_api_metricas": "app_metricas",
     "test_api_campanias": "app_metricas",
-    # App C · Operacion (publicaciones, aprobacion, franjas, rota...).
+    # App C · Operacion (piezas, aprobacion, franjas, rota...).
     "test_api_publicaciones": "app_operacion",
     "test_api_publicaciones_contenido": "app_operacion",
     "test_api_aprobacion": "app_operacion",

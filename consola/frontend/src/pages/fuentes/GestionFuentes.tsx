@@ -23,7 +23,7 @@ import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { FuenteRss, MarcaDisponible } from "@/types";
 
-import { formatearFechaHora, tiempoRelativo } from "../publicaciones/meta";
+import { formatearFechaHora, tiempoRelativo } from "../piezas/meta";
 import { DialogoFuente } from "./DialogoFuente";
 import { CLAVE_FUENTES, CLAVE_ITEMS } from "./lib";
 

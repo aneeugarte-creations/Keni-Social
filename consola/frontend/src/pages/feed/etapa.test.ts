@@ -1,20 +1,20 @@
 import { describe, expect, it } from "vitest";
 
-import type { Publicacion } from "@/types";
+import type { Pieza } from "@/types";
 
-import { etapaDePublicacion, META_ETAPA } from "./etapa";
+import { etapaDePieza, META_ETAPA } from "./etapa";
 
 /**
- * Base mínima de una `Publicacion` para variar solo lo relevante a la etapa.
+ * Base mínima de una `Pieza` para variar solo lo relevante a la etapa.
  *
  * El backend YA sirve `etapa_ia` (Flujo C). Para probar la DERIVACIÓN local (el camino
  * de degradación) la limpiamos con `etapa_ia: undefined` en esos casos; para probar la
  * PREFERENCIA, se pasa un `etapa_ia` explícito en el override.
  */
-function pub(overrides: Partial<Publicacion>): Publicacion {
+function pub(overrides: Partial<Pieza>): Pieza {
   return {
     id: "p1",
-    contenido_id: "c1",
+    publicacion_id: "c1",
     pipeline_id: "",
     titulo: "Tema",
     marca: "unotv",
@@ -63,17 +63,17 @@ function pub(overrides: Partial<Publicacion>): Publicacion {
   };
 }
 
-describe("etapaDePublicacion · etapa IA derivada (degradación, sin `etapa_ia`)", () => {
+describe("etapaDePieza · etapa IA derivada (degradación, sin `etapa_ia`)", () => {
   // `etapa_ia: undefined` fuerza el camino de derivación local (pieza legada/parcial).
   it("aún sin copy → generando_copy", () => {
     expect(
-      etapaDePublicacion(pub({ estado: "borrador", contenido: "", etapa_ia: undefined })),
+      etapaDePieza(pub({ estado: "borrador", contenido: "", etapa_ia: undefined })),
     ).toBe("generando_copy");
   });
 
   it("lleva imagen (copy-in) pero sin foto real → generando_arte (falta imagen)", () => {
     expect(
-      etapaDePublicacion(
+      etapaDePieza(
         pub({ estado: "borrador", contenido: "copy", copy_in: "TITULAR", foto: "", etapa_ia: undefined }),
       ),
     ).toBe("generando_arte");
@@ -81,7 +81,7 @@ describe("etapaDePublicacion · etapa IA derivada (degradación, sin `etapa_ia`)
 
   it("sin foto NO está lista, aunque no lleve copy-in → generando_arte (falta imagen)", () => {
     expect(
-      etapaDePublicacion(
+      etapaDePieza(
         pub({ estado: "borrador", contenido: "copy", copy_in: "", foto: "", imagen: "", etapa_ia: undefined }),
       ),
     ).toBe("generando_arte");
@@ -91,7 +91,7 @@ describe("etapaDePublicacion · etapa IA derivada (degradación, sin `etapa_ia`)
     // Pieza de marca con la imagen de la nota original pero sin foto propia inyectada: sigue
     // en "Falta imagen" (la URL de la nota es referencia, no la foto de la pieza).
     expect(
-      etapaDePublicacion(
+      etapaDePieza(
         pub({ estado: "en_revision", contenido: "copy #x", copy_in: "TITULAR", foto: "", imagen_fuente: "https://nota.test/o.jpg", etapa_ia: undefined }),
       ),
     ).toBe("generando_arte");
@@ -101,7 +101,7 @@ describe("etapaDePublicacion · etapa IA derivada (degradación, sin `etapa_ia`)
     // Completa de verdad (copy + imagen propia): el pipeline la mueve sola a la cola de
     // revisión, así que el feed la pinta directa como "Para revisar" (sin etapa intermedia).
     expect(
-      etapaDePublicacion(
+      etapaDePieza(
         pub({ estado: "borrador", marca: "", contenido: "copy", copy_in: "", foto: "", imagen: "subida.png", etapa_ia: undefined }),
       ),
     ).toBe("lista_para_revisar");
@@ -109,7 +109,7 @@ describe("etapaDePublicacion · etapa IA derivada (degradación, sin `etapa_ia`)
 
   it("completa (copy + foto real) aún en borrador → lista_para_revisar (avance incondicional)", () => {
     expect(
-      etapaDePublicacion(
+      etapaDePieza(
         pub({ estado: "borrador", contenido: "copy", copy_in: "TITULAR", foto: "bg.png", etapa_ia: undefined }),
       ),
     ).toBe("lista_para_revisar");
@@ -117,7 +117,7 @@ describe("etapaDePublicacion · etapa IA derivada (degradación, sin `etapa_ia`)
 
   it("en revisión COMPLETA (copy+foto+placa+hashtags) → lista_para_revisar (te toca el OK)", () => {
     expect(
-      etapaDePublicacion(
+      etapaDePieza(
         pub({ estado: "en_revision", contenido: "copy #Mundial2026", copy_in: "TITULAR", foto: "bg.png", etapa_ia: undefined }),
       ),
     ).toBe("lista_para_revisar");
@@ -126,15 +126,15 @@ describe("etapaDePublicacion · etapa IA derivada (degradación, sin `etapa_ia`)
   it("en revisión enseña la acción pendiente (revisión es interno): sin foto / sin placa / sin hashtags", () => {
     // Sin foto real: "Falta imagen" aunque ya esté en revisión (antes cortocircuitaba a lista).
     expect(
-      etapaDePublicacion(pub({ estado: "en_revision", contenido: "copy #x", copy_in: "TITULAR", foto: "", etapa_ia: undefined })),
+      etapaDePieza(pub({ estado: "en_revision", contenido: "copy #x", copy_in: "TITULAR", foto: "", etapa_ia: undefined })),
     ).toBe("generando_arte");
     // Con foto pero sin el texto en la imagen (placa, marca): "Falta copy-in".
     expect(
-      etapaDePublicacion(pub({ estado: "en_revision", contenido: "copy #x", copy_in: "", foto: "bg.png", etapa_ia: undefined })),
+      etapaDePieza(pub({ estado: "en_revision", contenido: "copy #x", copy_in: "", foto: "bg.png", etapa_ia: undefined })),
     ).toBe("falta_copy_in");
     // Completa pero sin hashtags: "Faltan hashtags" (clave para campañas/líneas).
     expect(
-      etapaDePublicacion(pub({ estado: "en_revision", contenido: "copy sin tags", copy_in: "TITULAR", foto: "bg.png", etapa_ia: undefined })),
+      etapaDePieza(pub({ estado: "en_revision", contenido: "copy sin tags", copy_in: "TITULAR", foto: "bg.png", etapa_ia: undefined })),
     ).toBe("falta_hashtags");
   });
 
@@ -142,7 +142,7 @@ describe("etapaDePublicacion · etapa IA derivada (degradación, sin `etapa_ia`)
     // Borrador con copy+foto pero sin placa ni hashtags: sigue "lista" (el avance la mueve y se
     // piden ya en revisión); no se sacan como pendientes antes de la cola.
     expect(
-      etapaDePublicacion(pub({ estado: "borrador", contenido: "copy sin tags", copy_in: "", foto: "bg.png", etapa_ia: undefined })),
+      etapaDePieza(pub({ estado: "borrador", contenido: "copy sin tags", copy_in: "", foto: "bg.png", etapa_ia: undefined })),
     ).toBe("lista_para_revisar");
   });
 
@@ -150,22 +150,22 @@ describe("etapaDePublicacion · etapa IA derivada (degradación, sin `etapa_ia`)
     // «borrador» no es un estado donde descanse una pieza completa: el pipeline la avanza sola,
     // así que "Para revisar" es honesto desde que tiene todo el contenido (sin etapa intermedia).
     expect(
-      etapaDePublicacion(pub({ estado: "borrador", etapa_ia: "lista_para_revisar" })),
+      etapaDePieza(pub({ estado: "borrador", etapa_ia: "lista_para_revisar" })),
     ).toBe("lista_para_revisar");
     expect(
-      etapaDePublicacion(pub({ estado: "en_revision", etapa_ia: "lista_para_revisar" })),
+      etapaDePieza(pub({ estado: "en_revision", etapa_ia: "lista_para_revisar" })),
     ).toBe("lista_para_revisar");
   });
 
   it("programado / publicado mapean a sus etapas (ya no hay etapa 'aprobada')", () => {
-    expect(etapaDePublicacion(pub({ estado: "programado", etapa_ia: undefined }))).toBe("programada");
-    expect(etapaDePublicacion(pub({ estado: "publicado", etapa_ia: undefined }))).toBe("publicada");
+    expect(etapaDePieza(pub({ estado: "programado", etapa_ia: undefined }))).toBe("programada");
+    expect(etapaDePieza(pub({ estado: "publicado", etapa_ia: undefined }))).toBe("publicada");
   });
 
   it("prefiere el `etapa_ia` REAL del backend (Flujo C) sobre la derivación", () => {
     // Aunque el estado diría 'generando_copy', el campo real del backend manda.
     const conEtapa = pub({ estado: "borrador", falta_copy: true, etapa_ia: "generando_arte" });
-    expect(etapaDePublicacion(conEtapa)).toBe("generando_arte");
+    expect(etapaDePieza(conEtapa)).toBe("generando_arte");
   });
 
   it("ignora un `etapa_ia` desconocido y cae a la derivación", () => {
@@ -174,7 +174,7 @@ describe("etapaDePublicacion · etapa IA derivada (degradación, sin `etapa_ia`)
       ...pub({ estado: "en_revision", contenido: "copy #x", copy_in: "TITULAR", foto: "bg.png" }),
       etapa_ia: "no_existe",
     };
-    expect(etapaDePublicacion(conBasura as unknown as Publicacion)).toBe("lista_para_revisar");
+    expect(etapaDePieza(conBasura as unknown as Pieza)).toBe("lista_para_revisar");
   });
 
   it("toda etapa derivable tiene metadatos", () => {

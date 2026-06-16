@@ -180,7 +180,7 @@ def eventos_vencimientos_activos() -> bool:
 
 
 def publicar_real() -> bool:
-    """True si `KENI_PUBLICAR_REAL` esta a un valor afirmativo (gate de publicacion real).
+    """True si `KENI_PUBLICAR_REAL` esta a un valor afirmativo (gate de pieza real).
 
     Por defecto OFF (False): el programador opera en DRY-RUN. Pon `KENI_PUBLICAR_REAL=1`
     (o `true`/`yes`/`on`) para activar el posteo real al scheduler de Metricool.

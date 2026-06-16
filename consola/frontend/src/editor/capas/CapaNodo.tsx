@@ -311,8 +311,8 @@ function NodoImagenAjustada({
   // de selección la sigue) y el tinte duotono pinta toda la caja, igual que el export. Con `cover`
   // el rect visible YA es la caja; esto solo cambia el caso `contain` letterboxed, donde el marco
   // y el área clicable se ciñen a la foto (el letterbox vacío deja de capturar clics, como Canva).
-  const abrazaContenido = !formaNoRect(forma, r, radios);
-  const hit = abrazaContenido && !duo
+  const abrazaPublicacion = !formaNoRect(forma, r, radios);
+  const hit = abrazaPublicacion && !duo
     ? { x: g.vx, y: g.vy, width: g.vw, height: g.vh }
     : { x: 0, y: 0, width: w, height: h };
   return (

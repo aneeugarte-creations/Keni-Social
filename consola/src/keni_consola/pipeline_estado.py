@@ -5,7 +5,7 @@ PROBLEMA QUE RESUELVE
 Los daemons (`radar_auto` -> `autogen_redactar` -> `autogen_ilustrar` -> revision) llevan cada tema
 de "entrada" a "borrador completo en cola de revision", pero hoy NO hay forma de ver EN QUE
 PUNTO esta cada pieza a lo largo de la cadena. Este modulo deriva, de las senales que YA
-existen (estado de `contenido_plataforma`, presencia de copy/imagen, etiquetas de dedup
+existen (estado de `pieza`, presencia de copy/imagen, etiquetas de dedup
 `autogen`/`autogen-arte`, origen auto-generable), la ETAPA de cada tema y CUENTA piezas por
 etapa para un panel de un vistazo.
 
@@ -17,7 +17,7 @@ el disco. El que las usa lee `repos.*` y se las pasa. Determinista.
 
 NO reescribe estados ni inventa un enum nuevo en `estados.py` (frontera con la coordinacion):
 las etapas son una LECTURA derivada, no un campo persistido. El ciclo de vida real de una
-fila sigue siendo `estados.ESTADOS_CONTENIDO_PLATAFORMA`.
+fila sigue siendo `estados.ESTADOS_PIEZA`.
 """
 
 from __future__ import annotations
@@ -132,7 +132,7 @@ def etapa_de_tema(
 
 # --------------------------------------------------------------------------- #
 # Etapa POR PIEZA (no por tema): la etapa IA de UNA fila por plataforma         #
-# (`contenido_plataforma` / publicacion), para el Feed de ideacion (Flujo D).   #
+# (`pieza` / pieza), para el Feed de ideacion (Flujo D).   #
 # Es un enum mas RICO que el de tema: el tema solo llega a "lista_para_revisar", #
 # pero una pieza concreta avanza por el gate humano (programada / publicada).   #
 # Misma derivacion que documenta el front (`feed/etapa.ts`); este modulo es la   #
@@ -157,9 +157,9 @@ ETAPAS_PIEZA: tuple[str, ...] = (
 
 
 def etapa_de_pieza(pieza: dict[str, Any]) -> str:
-    """Etapa IA de UNA pieza serializada (publicacion), PURA. Devuelve un literal de `ETAPAS_PIEZA`.
+    """Etapa IA de UNA pieza serializada (pieza), PURA. Devuelve un literal de `ETAPAS_PIEZA`.
 
-    `pieza` es la forma publica de una publicacion (`publicacion_a_dict`): usa su `estado`
+    `pieza` es la forma publica de una pieza (`pieza_a_dict`): usa su `estado`
     editorial (`borrador`/`en_revision`/`programado`/`publicado`) y la checklist
     `falta_copy`/`falta_imagen`/`falta_copy_in`/`falta_hashtags`. ESPEJO de la derivacion del
     front (`etapaDePublicacion` en `feed/etapa.ts`).
@@ -220,7 +220,7 @@ def contar_por_etapa(
 ) -> dict[str, int]:
     """Cuenta temas por ETAPA del pipeline (PURA). Devuelve un dict etapa -> n.
 
-    `plataformas_por_item`: id de contenido -> sus filas `contenido_plataforma`.
+    `plataformas_por_item`: id de contenido -> sus filas `pieza`.
     `etiquetas_por_item`:    id de contenido -> NOMBRES de etiqueta resueltos.
     Ambos se inyectan (los lee la capa API), de modo que esta funcion no toca la BD.
 

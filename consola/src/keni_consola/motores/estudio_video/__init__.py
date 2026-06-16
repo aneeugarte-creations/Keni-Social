@@ -147,14 +147,14 @@ def _render(gen_id: str, spec: dict) -> None:
         clave = _guardar_render(salida.read_bytes())
 
         # 8) Cablear el mp4 a la pieza ligada (si la hay): sin esto el render es un callejon sin
-        #    salida (no fluye a feed/aprobacion/publicacion). Va ANTES de marcar COMPLETADO porque
+        #    salida (no fluye a feed/aprobacion/pieza). Va ANTES de marcar COMPLETADO porque
         #    `_adjuntar_a_pieza` reporta su propia fase (`_fase` -> estado EJECUTANDO); si corriera
         #    DESPUES, pisaria el estado terminal y la generacion quedaria colgada en "ejecutando".
         #    Es best-effort: un fallo aqui se loggea + se avisa en `salida`, pero NO degrada a
         #    error (el mp4 ya existe y queda en `resultado`).
-        contenido_id = str(comp.get("contenido_id") or "").strip()
-        if contenido_id:
-            _adjuntar_a_pieza(gen_id, contenido_id, clave)
+        publicacion_id = str(comp.get("publicacion_id") or "").strip()
+        if publicacion_id:
+            _adjuntar_a_pieza(gen_id, publicacion_id, clave)
 
         # 9) Completar (estado terminal, EL ULTIMO paso para que ninguna fase posterior lo pise).
         generaciones.actualizar(
@@ -173,7 +173,7 @@ def _render(gen_id: str, spec: dict) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def _adjuntar_a_pieza(gen_id: str, contenido_id: str, clave: str) -> None:
+def _adjuntar_a_pieza(gen_id: str, publicacion_id: str, clave: str) -> None:
     """Adjunta el mp4 renderizado a las plataformas de video de la pieza ligada.
 
     Best-effort: el render YA esta completado. Si el adjuntado falla, se loggea y se refleja un
@@ -181,11 +181,11 @@ def _adjuntar_a_pieza(gen_id: str, contenido_id: str, clave: str) -> None:
     """
     _fase(gen_id, "adjuntando a la pieza", "Adjuntando el video renderizado a la pieza.")
     try:
-        tocadas = repos.adjuntar_video_a_pieza(contenido_id, clave)
+        tocadas = repos.adjuntar_video_a_pieza(publicacion_id, clave)
     except Exception as exc:  # noqa: BLE001 - el render no debe degradarse por el cableado
         _log.exception(
             "estudio_video: fallo al adjuntar el render a la pieza %s (gen %s)",
-            contenido_id,
+            publicacion_id,
             gen_id,
         )
         generaciones.actualizar(
@@ -202,13 +202,13 @@ def _adjuntar_a_pieza(gen_id: str, contenido_id: str, clave: str) -> None:
         _log.info(
             "estudio_video: video %s adjuntado a la pieza %s (%s redes)",
             clave,
-            contenido_id,
+            publicacion_id,
             len(tocadas),
         )
     else:
         _log.info(
             "estudio_video: la pieza %s no tiene plataformas de video; render no adjuntado",
-            contenido_id,
+            publicacion_id,
         )
 
 

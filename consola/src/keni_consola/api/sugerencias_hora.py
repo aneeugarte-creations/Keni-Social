@@ -5,7 +5,7 @@ Objetivo de producto ("el equipo solo crea piezas; la operativa es automatica"):
 
   - el HISTORICO de engagement de la marca/red (de `metricas_cache` -> Metricool, UNICA
     fuente: la serie diaria de interacciones, que da el "que dia rinde mejor"), y
-  - las FRANJAS de publicacion configuradas (colas `(dia_semana, hora)` aplicables) con sus
+  - las FRANJAS de pieza configuradas (colas `(dia_semana, hora)` aplicables) con sus
     HUECOS libres (se evitan los datetimes ya `programado`, igual que el encolado normal).
 
 La logica PURA vive en `dominio.planificacion`; aqui solo se traen los datos (cache de
@@ -39,12 +39,12 @@ from . import franjas as api_franjas
 def _ocupados_programados() -> set[str]:
     """Datetimes ISO ('YYYY-MM-DDTHH:MM') ya ocupados por piezas en estado `programado`.
 
-    Mismo criterio que `api.publicaciones.calcular_hueco_para`: no proponer un hueco que
-    ya tiene otra publicacion programada encima.
+    Mismo criterio que `api.piezas.calcular_hueco_para`: no proponer un hueco que
+    ya tiene otra pieza programada encima.
     """
     return {
         otra["fecha_programada"]
-        for otra in repos.listar_publicaciones(estado="programado")
+        for otra in repos.listar_piezas(estado="programado")
         if otra.get("fecha_programada")
     }
 

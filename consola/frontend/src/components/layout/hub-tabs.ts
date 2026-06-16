@@ -34,7 +34,7 @@ export interface ItemTabHub {
  * Cada hub (Investigación, Revisión, Analíticas, Feed, Calendario, Texto) declara
  * aquí sus pestañas, una sola vez, para que las consuman tanto la página del hub
  * como la barra de pestañas in-page (`SubnavHub`). El mapa de abajo las indexa por
- * la ruta PADRE del hub (con su prefijo de bloque: `/operacion`, `/contenido`,
+ * la ruta PADRE del hub (con su prefijo de bloque: `/operacion`, `/publicaciones`,
  * `/datos`).
  */
 // Investigación = la máquina de contenido de la marca, colapsada a TRES PIEZAS,
@@ -44,9 +44,9 @@ export interface ItemTabHub {
 //     pool persistente de cobertura + el descubrimiento/plan del Investigador.
 //   - CONTENIDOS: piezas educativas/curiosas/atemporales (reportajes internos,
 //     producciones propias). Everevergreen (banco EVERGREEN).
-//   - FUENTES: ajustes de TODOS los canales que alimentan Noticias y Contenidos
+//   - FUENTES: ajustes de TODOS los canales que alimentan Noticias y Publicaciones
 //     (RSS, buzones, agentes de investigación, eventos/programas, cajón evergreen,
-//     agencias, Trends). Cada fuente declara si alimenta Noticias o Contenidos.
+//     agencias, Trends). Cada fuente declara si alimenta Noticias o Publicaciones.
 // (Termómetro, Cajones, Eventos, Agentes y Cobertura siguen vivos como rutas
 // durante la transición, pero ya NO son pestañas de la subnav; se fusionarán y
 // redirigirán en fases posteriores. Algoritmos pasó a la Texto.)
@@ -54,7 +54,7 @@ export const TABS_INVESTIGACION: ItemTabHub[] = [
   // `end: true`: comparte prefijo con `/contenidos` y `/fuentes`, así que el tab
   // raíz (Noticias) solo se marca activo en la coincidencia exacta del índice.
   { ruta: "/datos/investigacion", etiqueta: "Noticias", icono: Newspaper, end: true },
-  { ruta: "/datos/investigacion/contenidos", etiqueta: "Contenidos", icono: Sparkles },
+  { ruta: "/datos/investigacion/contenidos", etiqueta: "Publicaciones", icono: Sparkles },
   { ruta: "/datos/investigacion/fuentes", etiqueta: "Fuentes", icono: Rss },
 ];
 
@@ -70,8 +70,8 @@ export const TABS_FEED: ItemTabHub[] = [
 
 export const TABS_TEXTO: ItemTabHub[] = [
   // Documentos: prompts + línea editorial + plantillas, con filtros.
-  { ruta: "/contenido/texto/documentos", etiqueta: "Documentos", icono: BookText },
-  { ruta: "/contenido/texto/estrategia", etiqueta: "Estrategia de marcas", icono: Target },
+  { ruta: "/publicaciones/texto/documentos", etiqueta: "Documentos", icono: BookText },
+  { ruta: "/publicaciones/texto/estrategia", etiqueta: "Estrategia de marcas", icono: Target },
 ];
 
 // «Sala de máquinas»: la observabilidad y el control de la máquina, separados de las páginas de
@@ -96,7 +96,7 @@ export const HUB_TABS: Record<string, ItemTabHub[]> = {
   "/operacion/feed": TABS_FEED,
   // Bajo /operacion, Programación y Turnos son páginas planas (sin pestañas), no hubs;
   // por eso no figuran aquí. Igual que Imagen/Video bajo /contenido.
-  "/contenido/texto": TABS_TEXTO,
+  "/publicaciones/texto": TABS_TEXTO,
   // «Sala de máquinas»: la clave es la pestaña de aterrizaje (Cómputo), la MISMA ruta que el
   // catálogo entrega para esa entrada de nav. Los cockpits (Investigación/Producción) NO están
   // aquí: son páginas de trabajo planas (y los dos agentes IA), ajenas a este hub.

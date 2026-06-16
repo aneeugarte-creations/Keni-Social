@@ -16,8 +16,8 @@ def crear_notificacion(
     usuario_id: str,
     marca_id: str,
     tipo: str,
-    contenido_id: str = "",
-    plataforma_id: str = "",
+    publicacion_id: str = "",
+    pieza_id: str = "",
     actor: dict[str, str] | None = None,
     resumen: str = "",
     enlace: str = "",
@@ -26,8 +26,8 @@ def crear_notificacion(
         usuario_id=usuario_id,
         marca_id=marca_id,
         tipo=tipo,
-        contenido_id=contenido_id,
-        plataforma_id=plataforma_id,
+        publicacion_id=publicacion_id,
+        pieza_id=pieza_id,
         actor=actor,
         resumen=resumen,
         enlace=enlace,
@@ -58,23 +58,23 @@ def marcar_notificaciones_leidas(
 
 def registrar_copy_version(
     *,
-    plataforma_id: str,
-    contenido_id: str,
+    pieza_id: str,
+    publicacion_id: str,
     copy: str,
     autor: dict[str, str] | None = None,
     nota: str = "",
 ) -> dict[str, Any]:
     return db.registrar_copy_version(
-        plataforma_id=plataforma_id,
-        contenido_id=contenido_id,
+        pieza_id=pieza_id,
+        publicacion_id=publicacion_id,
         copy=copy,
         autor=autor,
         nota=nota,
     )
 
 
-def listar_copy_versiones(plataforma_id: str) -> list[dict[str, Any]]:
-    return db.listar_copy_versiones(plataforma_id)
+def listar_copy_versiones(pieza_id: str) -> list[dict[str, Any]]:
+    return db.listar_copy_versiones(pieza_id)
 
 
 def obtener_copy_version(version_id: str) -> dict[str, Any] | None:
@@ -83,21 +83,21 @@ def obtener_copy_version(version_id: str) -> dict[str, Any] | None:
 
 def crear_cadena_aprobacion(
     *,
-    plataforma_id: str,
-    contenido_id: str,
+    pieza_id: str,
+    publicacion_id: str,
     etiquetas: list[str],
     cargos: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     return db.crear_cadena_aprobacion(
-        plataforma_id=plataforma_id,
-        contenido_id=contenido_id,
+        pieza_id=pieza_id,
+        publicacion_id=publicacion_id,
         etiquetas=etiquetas,
         cargos=cargos,
     )
 
 
-def listar_aprobaciones(plataforma_id: str) -> list[dict[str, Any]]:
-    return db.listar_aprobaciones(plataforma_id)
+def listar_aprobaciones(pieza_id: str) -> list[dict[str, Any]]:
+    return db.listar_aprobaciones(pieza_id)
 
 
 def obtener_aprobacion(aprobacion_id: str) -> dict[str, Any] | None:

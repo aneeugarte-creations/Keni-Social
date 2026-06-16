@@ -82,7 +82,7 @@ export const apiInsumos = {
      * el toast debe avisar en vez de prometer "Copy en marcha".
      */
     usarItem: (id: string, body: { redes?: string[]; generar?: boolean }) =>
-      peticion<{ item: InsumoItem; contenido_id: string; copy_en_proceso: boolean }>(
+      peticion<{ item: InsumoItem; publicacion_id: string; copy_en_proceso: boolean }>(
         `/insumos/item/${encodeURIComponent(id)}/usar`,
         { metodo: "POST", json: body, muestrear: false },
       ),
@@ -90,7 +90,7 @@ export const apiInsumos = {
     /**
      * Convierte un ítem del cajón `eventos_claro` (tipo='evento') en un evento de la
      * rota (`/api/rota/eventos`): mapea titulo/fecha/hora/resumen→nota y marca el ítem
-     * como usado guardando el id del evento en `contenido_id`. Devuelve el evento creado.
+     * como usado guardando el id del evento en `publicacion_id`. Devuelve el evento creado.
      */
     crearEvento: (
       id: string,

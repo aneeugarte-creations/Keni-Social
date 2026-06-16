@@ -1,4 +1,4 @@
-"""Tests del programador de publicaciones (#9, Fase 3). OFFLINE, DB en tmp.
+"""Tests del programador de piezas (#9, Fase 3). OFFLINE, DB en tmp.
 
 Cubre las dos mitades del scheduling:
   1) La API `POST /api/aprobacion/{id}/programar`: solo una pieza `en_revision` (con sus likes), fecha futura.
@@ -37,9 +37,9 @@ def _cli() -> TestClient:
 def _crear(cli: TestClient, estado: str = "en_revision", **campos) -> dict:
     base = {"marca": _MARCA, "red": "x", "titulo": "T", "contenido": "C", "estado": estado}
     base.update(campos)
-    r = cli.post("/api/publicaciones", json=base, headers=_ORIGIN)
+    r = cli.post("/api/piezas", json=base, headers=_ORIGIN)
     assert r.status_code == 200, r.text
-    return r.json()["publicacion"]
+    return r.json()["pieza"]
 
 
 def _futuro_iso(minutos: int = 60) -> str:
@@ -57,7 +57,7 @@ def test_programar_en_revision_pasa_a_programado(entorno):
     fecha = _futuro_iso()
     r = cli.post(f"/api/aprobacion/{pub['id']}/programar", json={"fecha": fecha}, headers=_ORIGIN)
     assert r.status_code == 200, r.text
-    prog = r.json()["publicacion"]
+    prog = r.json()["pieza"]
     assert prog["estado"] == "programado"
     assert prog["fecha_programada"] == fecha
     assert prog["preparado_en"] == ""  # aun no vencio: NO preparada
@@ -115,15 +115,15 @@ def test_preparar_vencidas_marca_dry_run_sin_publicar(entorno):
     cli = _cli()
     pub = _crear(cli, estado="programado", fecha_programada=_futuro_iso(-30))  # ya pasada
     # `_crear` no admite fecha pasada por la API de aprobacion; aqui la pusimos directa
-    # en el alta (la API de publicaciones no valida que sea futura), simulando una pieza
+    # en el alta (la API de piezas no valida que sea futura), simulando una pieza
     # cuya hora ya llego.
     futuro_pasado = (datetime.now() - timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M")
-    repos.actualizar_publicacion(pub["id"], {"fecha_programada": futuro_pasado})
+    repos.actualizar_pieza(pub["id"], {"fecha_programada": futuro_pasado})
 
     preparadas = preparar_vencidas(datetime.now())
     assert preparadas == 1
 
-    actualizada = repos.obtener_publicacion(pub["id"])
+    actualizada = repos.obtener_pieza(pub["id"])
     assert actualizada["estado"] == "programado"  # NO publicado (gating KENI_PUBLICAR_REAL)
     assert actualizada["preparado_en"]  # marca dry-run puesta
 
@@ -133,7 +133,7 @@ def test_preparar_vencidas_idempotente(entorno):
     cli = _cli()
     pub = _crear(cli, estado="programado")
     pasado = (datetime.now() - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M")
-    repos.actualizar_publicacion(pub["id"], {"fecha_programada": pasado})
+    repos.actualizar_pieza(pub["id"], {"fecha_programada": pasado})
     assert preparar_vencidas(datetime.now()) == 1
     assert preparar_vencidas(datetime.now()) == 0  # ya preparada
 
@@ -144,7 +144,7 @@ def test_preparar_no_toca_futuras(entorno):
     pub = _crear(cli, estado="en_revision")
     cli.post(f"/api/aprobacion/{pub['id']}/programar", json={"fecha": _futuro_iso(120)}, headers=_ORIGIN)
     assert preparar_vencidas(datetime.now()) == 0
-    assert repos.obtener_publicacion(pub["id"])["preparado_en"] == ""
+    assert repos.obtener_pieza(pub["id"])["preparado_en"] == ""
 
 
 def test_reprogramar_limpia_la_marca_dry_run(entorno):
@@ -152,14 +152,14 @@ def test_reprogramar_limpia_la_marca_dry_run(entorno):
     cli = _cli()
     pub = _crear(cli, estado="programado")
     pasado = (datetime.now() - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M")
-    repos.actualizar_publicacion(pub["id"], {"fecha_programada": pasado})
+    repos.actualizar_pieza(pub["id"], {"fecha_programada": pasado})
     preparar_vencidas(datetime.now())
-    assert repos.obtener_publicacion(pub["id"])["preparado_en"]
+    assert repos.obtener_pieza(pub["id"])["preparado_en"]
 
     # Volvemos a en_revision y reprogramamos a futuro: la marca dry-run se limpia.
-    repos.actualizar_publicacion(pub["id"], {"estado": "en_revision"})
+    repos.actualizar_pieza(pub["id"], {"estado": "en_revision"})
     cli.post(f"/api/aprobacion/{pub['id']}/programar", json={"fecha": _futuro_iso()}, headers=_ORIGIN)
-    assert repos.obtener_publicacion(pub["id"])["preparado_en"] == ""
+    assert repos.obtener_pieza(pub["id"])["preparado_en"] == ""
 
 
 def test_intervalo_configurable_por_entorno(entorno, monkeypatch):

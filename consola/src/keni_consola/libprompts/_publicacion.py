@@ -1,4 +1,4 @@
-"""Modelo de PUBLICACION de la Prompts: versiones inmutables + puntero "produccion".
+"""Modelo de PIEZA de la Prompts: versiones inmutables + puntero "produccion".
 
 EDITAR es libre (working copy + commits git), pero los PIPELINES inyectan SIEMPRE un cuerpo
 ESTABLE de cada documento, NUNCA el working copy mutable que el autosave reescribe en vivo:
@@ -109,7 +109,7 @@ def cuerpo_publicado(doc_id: str) -> str | None:
     Resuelve, en orden:
       1. Con puntero de produccion: el cuerpo en ese sha (version PUBLICADA).
       2. Sin puntero pero con historial git: el cuerpo en su HEAD (ultimo commit:
-         crear/mover/una publicacion previa). El autosave NO commitea, asi que es un snapshot
+         crear/mover/una pieza previa). El autosave NO commitea, asi que es un snapshot
          estable que no refleja un borrador a medio escribir.
       3. None: ni puntero ni commit legibles (versionado apagado / sin repo / doc sin commits,
          p. ej. los de la inicial nunca commiteados). El llamante cae entonces al working copy.
@@ -170,7 +170,7 @@ def estado_publicacion(
     shas: dict[str, str] | None = None,
     cuerpo_actual: str | None = None,
 ) -> dict[str, Any]:
-    """Los campos de publicacion del JSON de documento de la API.
+    """Los campos de pieza del JSON de documento de la API.
 
     Forma (CONTRATO con el frontend; tambien en el listado `GET /api/prompts`):
       - `produccion`: `{sha, autor, nota, creado}` del puntero vigente, o `null`.

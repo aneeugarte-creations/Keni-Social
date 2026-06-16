@@ -30,7 +30,7 @@ type PestanaTipo = {
 // Solo hay DOS clases de fuente, y la barra lo refleja:
 //   • Externas — lo que llega de fuera: feeds RSS (+ catálogo) y el estado del motor.
 //   • Internas — lo que pone el equipo: buzones del día (Cajones). (Las aportaciones manuales
-//     "Idea" e "Interno AMX" se mudaron a Contenidos, al banco de ideas evergreen.)
+//     "Idea" e "Interno AMX" se mudaron a Publicaciones, al banco de ideas evergreen.)
 const PESTANAS_TIPO: PestanaTipo[] = [
   { valor: "externas", etiqueta: "Externas" },
   { valor: "internas", etiqueta: "Internas" },
@@ -39,15 +39,15 @@ const PESTANAS_TIPO: PestanaTipo[] = [
 ];
 
 /**
- * Página de Fuentes: ajustes de los canales de los que se alimentan Noticias y Contenidos.
+ * Página de Fuentes: ajustes de los canales de los que se alimentan Noticias y Publicaciones.
  * Dos clases, dos pestañas:
  *   • Externas — feeds RSS (alta/edición con salud inline), catálogo y estado del motor.
  *   • Internas — buzones del equipo (Cajones) y aportes a mano (idea/interno).
  */
 export default function Fuentes() {
-  // Las marcas y redes viven en el catálogo de opciones de publicaciones.
+  // Las marcas y redes viven en el catálogo de opciones de piezas.
   const opcionesQuery = useQuery({
-    queryKey: ["publicaciones", "opciones"],
+    queryKey: ["piezas", "opciones"],
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),
   });
   const marcas = opcionesQuery.data?.marcas ?? [];
@@ -82,7 +82,7 @@ export default function Fuentes() {
         </TabsContent>
         {/* INTERNAS: lo que pone el equipo. Buzones del día (listas tipo portal/WhatsApp/
             corresponsales y Excel), filtrados por la marca activa. Las aportaciones a mano
-            ("Idea" e "Interno AMX") se mudaron a Contenidos, fusionadas con el generador de ideas. */}
+            ("Idea" e "Interno AMX") se mudaron a Publicaciones, fusionadas con el generador de ideas. */}
         <TabsContent value="internas" className="space-y-8">
           <CajonPresidencia />
           <CajonClips />

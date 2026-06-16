@@ -423,7 +423,7 @@ function GruposAjustes({
         // (el maestro autoriza el posteo real global; debajo, las excepciones por marca lo restan).
         // Su peligrosidad la señala el acento ámbar de la SECCIÓN y el badge «Publica de verdad» de
         // la fila: una franja a la izquierda, NO una caja anidada. `publicacion_marca` se pinta aquí.
-        if (grupo.id === "publicacion") {
+        if (grupo.id === "pieza") {
           const maestroPub = grupo.ajustes[0];
           const maestroPubOn = Boolean(maestroPub?.valor);
           const exMarca = grupos.find((g) => g.id === "publicacion_marca")?.ajustes ?? [];
@@ -453,7 +453,7 @@ function GruposAjustes({
             </div>
           );
         }
-        // Las excepciones de publicación se pintan dentro del bloque «publicacion» de arriba.
+        // Las excepciones de publicación se pintan dentro del bloque «pieza» de arriba.
         if (grupo.id === "publicacion_marca") return null;
 
         // Resto (maestros de etapa, automatismos, topes, noticias, técnico, tuning…): sub-cabecera
@@ -599,7 +599,7 @@ export function PanelInvestigacion() {
  * (`maestros_produccion`), en la propia tira; y las excepciones por marca, en el diálogo de
  * cada etapa (sin duplicar el control aquí). Mismo motor que Configuración (`/api/ajustes`);
  * aplican en caliente. */
-export function PanelMaquinaContenido() {
+export function PanelMaquinaPublicacion() {
   const { data, isPending, isError, error, refetch, isFetching, guardar } = useAjustesAdmin();
   const grupos = (data?.grupos ?? []).filter(
     (g) =>

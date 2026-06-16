@@ -13,7 +13,7 @@ ESTADOS_VIDEO_COMPOSICION = ("borrador", "listo")
 
 _COLS_VIDEO_COMPOSICIONES = (
     "id",
-    "contenido_id",
+    "publicacion_id",
     "marca",
     "titulo",
     "estado",
@@ -25,7 +25,7 @@ _SELECT_VIDEO_COMPOSICIONES = (
     f"SELECT {', '.join(_COLS_VIDEO_COMPOSICIONES)} FROM video_composiciones"
 )
 _CAMPOS_EDITABLES_VIDEO_COMPOSICIONES: tuple[str, ...] = (
-    "contenido_id",
+    "publicacion_id",
     "marca",
     "titulo",
     "estado",
@@ -46,7 +46,7 @@ def crear_video_composicion(
     *,
     marca: str,
     documento: str = "{}",
-    contenido_id: str = "",
+    publicacion_id: str = "",
     titulo: str = "",
     estado: str = "borrador",
     id: str = "",
@@ -57,7 +57,7 @@ def crear_video_composicion(
     ahora = ahora_iso()
     fila = {
         "id": id or uuid.uuid4().hex[:12],
-        "contenido_id": contenido_id or "",
+        "publicacion_id": publicacion_id or "",
         "marca": marca or "",
         "titulo": titulo or "",
         "estado": estado if estado in ESTADOS_VIDEO_COMPOSICION else "borrador",
@@ -79,7 +79,7 @@ def crear_video_composicion(
 
 
 def listar_video_composiciones(
-    *, marca: str | None = None, contenido_id: str | None = None
+    *, marca: str | None = None, publicacion_id: str | None = None
 ) -> list[dict[str, Any]]:
     """Composiciones de video, filtros combinables (AND). Mas recientes primero."""
     clausulas: list[str] = []
@@ -87,9 +87,9 @@ def listar_video_composiciones(
     if marca:
         clausulas.append("marca = ?")
         params.append(marca)
-    if contenido_id:
-        clausulas.append("contenido_id = ?")
-        params.append(contenido_id)
+    if publicacion_id:
+        clausulas.append("publicacion_id = ?")
+        params.append(publicacion_id)
     sql = _SELECT_VIDEO_COMPOSICIONES
     if clausulas:
         sql += " WHERE " + " AND ".join(clausulas)

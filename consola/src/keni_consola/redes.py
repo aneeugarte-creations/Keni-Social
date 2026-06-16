@@ -3,7 +3,7 @@
 Cada red tiene:
   - `id`      identificador estable en minusculas que usan API y persistencia
               (p.ej. `x`, `instagram`). Es lo que viaja en JSON y en la columna
-              `red` de `publicaciones`.
+              `red` de `piezas`.
   - `nombre`  nombre HUMANO legible (p.ej. "X", "Instagram"). Lo unico que ve la
               persona en la UI.
   - `limite`  limite DURO de caracteres de la red, o `None` cuando no hay un tope

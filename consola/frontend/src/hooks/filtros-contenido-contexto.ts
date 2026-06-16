@@ -1,11 +1,11 @@
 import * as React from "react";
 
-import type { LineaEditorialOpcion, RedPublicacion } from "@/types";
+import type { LineaEditorialOpcion, RedPieza } from "@/types";
 
 /**
  * Contexto de los FILTROS GLOBALES de contenido (Red + Línea editorial), hermanos
  * del switch de MARCA (`marca-activa-contexto`). Son los filtros que antes vivían
- * por página en el Feed y en Gestión de publicaciones (Lista/Calendario): ahora la
+ * por página en el Feed y en Gestión de piezas (Lista/Calendario): ahora la
  * elección la mandan DOS selectores globales de la barra superior, igual que la
  * marca, y las páginas solo leen de aquí.
  *
@@ -20,16 +20,16 @@ import type { LineaEditorialOpcion, RedPublicacion } from "@/types";
  *
  * Visibilidad: el provider es global, pero los filtros de Red/Línea solo se ofrecen (dentro
  * del control de contexto unificado de la topbar, `ControlContexto`) en las rutas de
- * contenido/feed donde aplican (ver `RUTAS_FILTROS_CONTENIDO` y `rutaUsaFiltrosContenido`);
+ * contenido/feed donde aplican (ver `RUTAS_FILTROS_CONTENIDO` y `rutaUsaFiltrosPublicacion`);
  * en métricas/ajustes/usuarios no aparecen.
  */
-export interface ValorFiltrosContenido {
+export interface ValorFiltrosPublicacion {
   /** Red activa (id), o `FILTRO_TODOS` para no filtrar por red. */
   red: string;
   /** Línea editorial activa (id), o `FILTRO_TODOS` para no filtrar por línea. */
   linea: string;
-  /** Catálogo de redes para el selector (de `/api/publicaciones/opciones`). */
-  redes: RedPublicacion[];
+  /** Catálogo de redes para el selector (de `/api/piezas/opciones`). */
+  redes: RedPieza[];
   /**
    * Líneas elegibles con la marca activa actual: las de la marca + las globales
    * (`marca === ""`). En la vista "Todas" (marca activa null) son todas.
@@ -41,17 +41,17 @@ export interface ValorFiltrosContenido {
   cambiarLinea: (id: string) => void;
 }
 
-export const FiltrosContenidoContexto = React.createContext<ValorFiltrosContenido | null>(null);
+export const FiltrosPublicacionContexto = React.createContext<ValorFiltrosPublicacion | null>(null);
 
 /**
  * Hook para leer los filtros globales de contenido. Debe usarse dentro del
- * `FiltrosContenidoProvider`. Las páginas de contenido/feed lo usan para acotar sus
+ * `FiltrosPublicacionProvider`. Las páginas de contenido/feed lo usan para acotar sus
  * queries: `red === FILTRO_TODOS ? undefined : red` (igual con `linea`).
  */
-export function useFiltrosContenido(): ValorFiltrosContenido {
-  const valor = React.useContext(FiltrosContenidoContexto);
+export function useFiltrosPublicacion(): ValorFiltrosPublicacion {
+  const valor = React.useContext(FiltrosPublicacionContexto);
   if (!valor) {
-    throw new Error("useFiltrosContenido debe usarse dentro de <FiltrosContenidoProvider>.");
+    throw new Error("useFiltrosPublicacion debe usarse dentro de <FiltrosPublicacionProvider>.");
   }
   return valor;
 }
@@ -87,7 +87,7 @@ export const RUTAS_FILTROS_CONTENIDO = [
 ];
 
 /** ¿La ruta actual usa los filtros globales de contenido (Red/Línea)? */
-export function rutaUsaFiltrosContenido(pathname: string): boolean {
+export function rutaUsaFiltrosPublicacion(pathname: string): boolean {
   return RUTAS_FILTROS_CONTENIDO.some(
     (ruta) => pathname === ruta || pathname.startsWith(`${ruta}/`),
   );

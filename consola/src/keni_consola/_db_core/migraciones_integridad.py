@@ -47,27 +47,27 @@ def _en_sql(valores: tuple[str, ...]) -> str:
 # dependiente (su vida se ata a la del padre).
 #
 # Eleccion del PADRE cuando la hija tiene varias columnas-referencia:
-#   - `contenido_comentarios` -> `contenido_id` (su `plataforma_id` es OPCIONAL: ''=hilo del item).
-#   - `contenido_copy_versiones` / `contenido_aprobaciones` -> `plataforma_id` (SIEMPRE real al
-#     insertar; su `contenido_id` se guarda como `contenido_id or ''`, opcional). El borrado del
-#     `contenido` las arrastra IGUAL por transitividad (contenido -> contenido_plataforma -> …).
-#   - `documento_versiones` -> `contenido_id` (la version pertenece a la pieza del tablero).
+#   - `publicacion_comentarios` -> `publicacion_id` (su `pieza_id` es OPCIONAL: ''=hilo del item).
+#   - `pieza_copy_versiones` / `pieza_aprobaciones` -> `pieza_id` (SIEMPRE real al
+#     insertar; su `publicacion_id` se guarda como `publicacion_id or ''`, opcional). El borrado del
+#     `contenido` las arrastra IGUAL por transitividad (contenido -> pieza -> …).
+#   - `documento_versiones` -> `publicacion_id` (la version pertenece a la pieza del tablero).
 #
 # NO migradas a FK (decisiones documentadas, ver ADR 0012):
-#   - `metricas_pieza_snapshots.pieza_id`: NO es un `contenido_plataforma.id`. Se rellena con el
+#   - `metricas_pieza_snapshots.pieza_id`: NO es un `pieza.id`. Se rellena con el
 #     `id_post_metricool` (id del post en Metricool), ver `metricas_pieza._registrar_historico`.
-#     Una FK a `contenido_plataforma` BORRARIA en cascada/limpieza todo el historico de metricas.
-#   - Referencias OPCIONALES con sentinel '' (`contenido.evento_id`, `noticias_items.contenido_id`,
+#     Una FK a `pieza` BORRARIA en cascada/limpieza todo el historico de metricas.
+#   - Referencias OPCIONALES con sentinel '' (`contenido.evento_id`, `noticias_items.publicacion_id`,
 #     `noticias_items.cluster_id`): el esquema usa '' (no NULL) para "sin referencia". Una FK de
 #     Postgres exige que CADA valor no-nulo exista en el padre, e '' no es NULL -> requeriria un
 #     padre con id=''. Convertir '' -> NULL implica volver nullable la columna y tocar los muchos
 #     call-sites que comparan/filtran por '' (riesgo alto sobre datos vivos). Se difiere.
 _FKS: tuple[tuple[str, str, str, str, str], ...] = (
-    ("contenido_plataforma", "contenido_id", "contenido", "id", "CASCADE"),
-    ("contenido_comentarios", "contenido_id", "contenido", "id", "CASCADE"),
-    ("contenido_copy_versiones", "plataforma_id", "contenido_plataforma", "id", "CASCADE"),
-    ("contenido_aprobaciones", "plataforma_id", "contenido_plataforma", "id", "CASCADE"),
-    ("documento_versiones", "contenido_id", "contenido", "id", "CASCADE"),
+    ("pieza", "publicacion_id", "publicacion", "id", "CASCADE"),
+    ("publicacion_comentarios", "publicacion_id", "publicacion", "id", "CASCADE"),
+    ("pieza_copy_versiones", "pieza_id", "pieza", "id", "CASCADE"),
+    ("pieza_aprobaciones", "pieza_id", "pieza", "id", "CASCADE"),
+    ("documento_versiones", "publicacion_id", "publicacion", "id", "CASCADE"),
     ("video_subtitulos", "composicion_id", "video_composiciones", "id", "CASCADE"),
     ("insumos_item", "lote_id", "insumos_lote", "id", "CASCADE"),
 )
@@ -124,26 +124,26 @@ def _migrar_checks_dominio(con: Any) -> None:
     """
     from ..estados import (
         DECISIONES_APROBACION,
-        ESTADOS_CONTENIDO,
-        ESTADOS_CONTENIDO_PLATAFORMA,
+        ESTADOS_PUBLICACION,
+        ESTADOS_PIEZA,
         ROLES_USUARIO,
         VERIFICACIONES_CONTENIDO,
     )
 
     checks: tuple[tuple[str, str, tuple[str, ...], str], ...] = (
-        ("contenido", "estado", ESTADOS_CONTENIDO, "pendiente"),
+        ("publicacion", "estado", ESTADOS_PUBLICACION, "pendiente"),
         # Colapso 2026-06: la allowlist de pieza pasó a (borrador/en_revision/programado/
         # publicado). El default de normalización es `borrador`: las filas viejas con valores
         # retirados (pendiente/en_curso/aprobado) se normalizan a `borrador` ANTES de re-aplicar
-        # el CHECK (vuelven a preparación; conservan sus likes en `contenido_aprobaciones`).
+        # el CHECK (vuelven a preparación; conservan sus likes en `pieza_aprobaciones`).
         # Editar este default cambia el source de la fn -> su huella cambia -> la migración 0029
         # (re_aplicar_si_cambia) se RE-APLICA en hosted con la allowlist nueva.
-        ("contenido_plataforma", "estado", ESTADOS_CONTENIDO_PLATAFORMA, "borrador"),
-        ("contenido_aprobaciones", "decision", DECISIONES_APROBACION, "pendiente"),
+        ("pieza", "estado", ESTADOS_PIEZA, "borrador"),
+        ("pieza_aprobaciones", "decision", DECISIONES_APROBACION, "pendiente"),
         ("usuarios", "rol", ROLES_USUARIO, "editor"),
         # verificación de la FUENTE: '' es valido (sin verificar). NO se aplica a `noticias_clusters.verificacion_fuente`
         # a proposito (su set de valores aun no esta centralizado; se difiere a la ola siguiente).
-        ("contenido", "verificacion_fuente", VERIFICACIONES_CONTENIDO, ""),
+        ("publicacion", "verificacion_fuente", VERIFICACIONES_CONTENIDO, ""),
     )
     for tabla, columna, allowlist, normal in checks:
         nombre = f"ck_{tabla}_{columna}"
@@ -172,18 +172,18 @@ def _migrar_checks_dominio(con: Any) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Bloque 3: CONCURRENCIA OPTIMISTA (`version`) en contenido y contenido_plataforma
+# Bloque 3: CONCURRENCIA OPTIMISTA (`version`) en contenido y pieza
 # --------------------------------------------------------------------------- #
 
 
 def _migrar_version_optimista(con: Any) -> None:
-    """Anade `version INTEGER NOT NULL DEFAULT 0` a `contenido` y `contenido_plataforma`.
+    """Anade `version INTEGER NOT NULL DEFAULT 0` a `contenido` y `pieza`.
 
     Para BDs ya creadas por versiones anteriores (el DDL declarativo ya la trae en las nuevas).
     Idempotente (`ADD COLUMN IF NOT EXISTS`). El cableado (incremento + comprobacion) vive en
-    las funciones de actualizacion del repo (`db_contenido`/`db_publicaciones`).
+    las funciones de actualizacion del repo (`db_publicacion`/`db_piezas`).
     """
-    for tabla in ("contenido", "contenido_plataforma"):
+    for tabla in ("publicacion", "pieza"):
         con.execute(
             f"ALTER TABLE {tabla} ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0"  # noqa: S608
         )
@@ -263,7 +263,7 @@ def _migrar_indice_generaciones(con: Any) -> None:
         "gen_id TEXT PRIMARY KEY, fecha_inicio TEXT NOT NULL DEFAULT '', "
         "estado TEXT NOT NULL DEFAULT '', tipo TEXT NOT NULL DEFAULT '', "
         "marca TEXT NOT NULL DEFAULT '', proceso TEXT NOT NULL DEFAULT '', "
-        "contenido_id TEXT NOT NULL DEFAULT '', payload jsonb NOT NULL DEFAULT '{}', "
+        "publicacion_id TEXT NOT NULL DEFAULT '', payload jsonb NOT NULL DEFAULT '{}', "
         "actualizado TEXT NOT NULL DEFAULT '')"
     )
     con.execute(
@@ -345,8 +345,8 @@ def _drop_tablas_comercial_snapshots(con: Any) -> None:
 #
 # Cada tupla: (tabla, columna, tipo_destino, nullable). El cast `USING` se compone abajo.
 _COLUMNAS_FECHA_NATIVA: tuple[tuple[str, str, str, bool], ...] = (
-    ("contenido", "creado", "timestamptz", True),
-    ("contenido", "actualizado", "timestamptz", True),
+    ("publicacion", "creado", "timestamptz", True),
+    ("publicacion", "actualizado", "timestamptz", True),
     ("jobs", "creado", "timestamptz", True),
     ("jobs", "claimed_at", "timestamptz", True),
     ("metricas_pieza_snapshots", "ts", "timestamptz", False),

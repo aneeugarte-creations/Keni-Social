@@ -10,23 +10,23 @@ export interface UsuarioTarea {
 }
 
 /** Flujo editorial del tablero: lo importante del día, evergreen o cobertura de evento. */
-export type FlujoContenido = "importante" | "evergreen" | "evento" | "";
+export type FlujoPublicacion = "importante" | "evergreen" | "evento" | "";
 /** Una fila por red lleva su propio estado en este ciclo unificado. Vocabulario ÚNICO
- *  (colapso 2026-06): la misma lista canónica que `EstadoPublicacion` (sin reposo `aprobado`;
+ *  (colapso 2026-06): la misma lista canónica que `EstadoPieza` (sin reposo `aprobado`;
  *  juntar los 2 OKs auto-programa). */
-export type EstadoContenidoPlataforma =
+export type EstadoPublicacionPlataforma =
   | "borrador"
   | "en_revision"
   | "programado"
   | "publicado";
 
 /** Una fila por plataforma (red) de un contenido: estado propio + checklist "falta X". */
-export interface ContenidoPlataforma {
+export interface PublicacionPlataforma {
   id: string;
-  contenido_id: string;
+  publicacion_id: string;
   red: string;
   red_nombre: string;
-  estado: EstadoContenidoPlataforma;
+  estado: EstadoPublicacionPlataforma;
   falta_copy: boolean;
   falta_imagen: boolean;
   falta_revision: boolean;
@@ -75,8 +75,8 @@ export interface MetricaPieza {
   generado_en: string;
 }
 
-/** Respuesta de `GET /api/contenido/metricas`: rendimiento por `contenido_plataforma.id`. */
-export interface RespuestaMetricasContenido {
+/** Respuesta de `GET /api/publicaciones/metricas`: rendimiento por `pieza.id`. */
+export interface RespuestaMetricasPublicacion {
   /** Mapa id de fila por plataforma → su rendimiento (solo las que tienen id_post_metricool). */
   metricas: Record<string, MetricaPieza>;
 }
@@ -175,7 +175,7 @@ export interface IdeaEvergreen {
   /** De dónde salió la idea (p. ej. "ia" cuando la propuso el asistente, "manual"). */
   origen: string;
   /** Id del contenido generado a partir de la idea (vacío si aún no se generó). */
-  contenido_id: string;
+  publicacion_id: string;
   creado: string;
 }
 
@@ -244,12 +244,12 @@ export interface MetricasLineas {
  *   - `galeria`: se sube/elige de la galería de medios.
  *   - `fuente`:  se usa la imagen de la FUENTE original (nota/clip), vía su URL.
  */
-export type TipoContenido = "ia" | "galeria" | "fuente";
+export type TipoPublicacion = "ia" | "galeria" | "fuente";
 
-export interface Contenido {
+export interface Publicacion {
   id: string;
   clase: "contenido" | "tarea";
-  flujo: FlujoContenido;
+  flujo: FlujoPublicacion;
   titulo: string;
   descripcion: string;
   marca: string;
@@ -267,7 +267,7 @@ export interface Contenido {
   origen: string;
   notas: string;
   /** De dónde sale la imagen (IA / galería / fuente original). */
-  tipo_contenido: TipoContenido;
+  tipo_contenido: TipoPublicacion;
   /** Formato de la pieza — "foto" (3 redes), "video" (5) o "carrusel" (2: IG/FB). */
   formato: string;
   /** Derivado: deadline pasado y aún sin cerrar. */
@@ -276,13 +276,13 @@ export interface Contenido {
   actualizado?: string;
   /** Marca de tiempo (ISO) de creación. */
   creado?: string;
-  plataformas: ContenidoPlataforma[];
+  plataformas: PublicacionPlataforma[];
   /** Ids de las etiquetas asignadas (resolver contra `catalogos.etiquetas`). */
   etiquetas: string[];
 }
 
 /** Catálogos para los selects del tablero. */
-export interface CatalogosContenido {
+export interface CatalogosPublicacion {
   usuarios: UsuarioTarea[];
   marcas: { id: string; nombre: string }[];
   redes: { id: string; nombre: string; limite: number | null }[];
@@ -306,15 +306,15 @@ export interface VariableCopy {
   etiqueta: string;
 }
 
-export interface RespuestaContenido {
-  contenidos: Contenido[];
-  catalogos: CatalogosContenido;
+export interface RespuestaPublicacion {
+  contenidos: Publicacion[];
+  catalogos: CatalogosPublicacion;
 }
 
-export interface CuerpoCrearContenido {
+export interface CuerpoCrearPublicacion {
   titulo: string;
   clase?: "contenido" | "tarea";
-  flujo?: FlujoContenido;
+  flujo?: FlujoPublicacion;
   marca?: string;
   evento_id?: string;
   programa?: string;
@@ -326,7 +326,7 @@ export interface CuerpoCrearContenido {
   responsable_id?: string;
   notas?: string;
   /** De dónde sale la imagen (IA / galería / fuente original). Def 'ia'. */
-  tipo_contenido?: TipoContenido;
+  tipo_contenido?: TipoPublicacion;
   /** Redes para crear una fila por plataforma por cada una. */
   redes?: string[];
   /** Ids de etiquetas a asignar al crear. */
@@ -334,14 +334,14 @@ export interface CuerpoCrearContenido {
 }
 
 /** Respuesta de asignar/quitar una etiqueta a un contenido: el set actualizado de ids. */
-export interface RespuestaEtiquetasContenido {
+export interface RespuestaEtiquetasPublicacion {
   etiquetas: string[];
 }
 
 /** Cambios parciales sobre el padre; cada campo es opcional. */
-export interface CuerpoActualizarContenido {
+export interface CuerpoActualizarPublicacion {
   titulo?: string;
-  flujo?: FlujoContenido;
+  flujo?: FlujoPublicacion;
   marca?: string;
   evento_id?: string;
   programa?: string;
@@ -359,7 +359,7 @@ export interface CuerpoActualizarContenido {
 
 /** Cambios parciales sobre una fila por plataforma; cada campo es opcional. */
 export interface CuerpoActualizarPlataforma {
-  estado?: EstadoContenidoPlataforma;
+  estado?: EstadoPublicacionPlataforma;
   falta_copy?: boolean;
   falta_imagen?: boolean;
   falta_revision?: boolean;
@@ -377,27 +377,27 @@ export interface CuerpoActualizarPlataforma {
   video?: string;
 }
 
-export interface RespuestaContenidoItem {
-  contenido: Contenido;
+export interface RespuestaPublicacionItem {
+  contenido: Publicacion;
   /** Ola F: presente cuando el flip foto↔video conservó redes con contenido (aviso al usuario). */
   aviso?: string;
 }
 
 export interface RespuestaPlataforma {
-  plataforma: ContenidoPlataforma;
+  plataforma: PublicacionPlataforma;
 }
 
-/** `POST /api/contenido/{id}/preview`: copy con sus variables `{...}` ya sustituidas. */
-export interface RespuestaPreviewContenido {
+/** `POST /api/publicaciones/{id}/preview`: copy con sus variables `{...}` ya sustituidas. */
+export interface RespuestaPreviewPublicacion {
   preview: string;
 }
 
 /** Modo del asistente IA del tablero. */
-export type ModoAsistenteContenido = "generar" | "variantes" | "resumir";
+export type ModoAsistentePublicacion = "generar" | "variantes" | "resumir";
 
-/** `POST /api/contenido/{id}/asistente`: lanza el asistente IA sobre un contenido. */
-export interface CuerpoAsistenteContenido {
-  modo: ModoAsistenteContenido;
+/** `POST /api/publicaciones/{id}/asistente`: lanza el asistente IA sobre un contenido. */
+export interface CuerpoAsistentePublicacion {
+  modo: ModoAsistentePublicacion;
   /** Redes a generar; por defecto, las redes sociales del propio contenido. */
   redes?: string[];
 }
@@ -413,7 +413,7 @@ export interface CuerpoDesdeRadar {
 /** Intención editorial opcional al aportar material (mapea el flujo del tablero). */
 export type IntencionMaterial = "breaking" | "evergreen" | "hilo";
 
-/** `POST /api/contenido/aportar` (multipart): la PUERTA CREATIVA del equipo (Fase 1).
+/** `POST /api/publicaciones/aportar` (multipart): la PUERTA CREATIVA del equipo (Fase 1).
  *  El equipo sube material ORIGINAL con marca y eso enciende la auto-generación de copy
  *  (origen='equipo'). La marca es OBLIGATORIA (sin voz no hay generación). */
 export interface CuerpoAportarMaterial {
@@ -437,7 +437,7 @@ export interface CuerpoAportarMaterial {
   clip?: File;
 }
 
-/** `POST /api/contenido/post-directo`: ALTA DIRECTA de un post desde el feed.
+/** `POST /api/publicaciones/post-directo`: ALTA DIRECTA de un post desde el feed.
  *  El equipo teclea el COPY FINAL y nace un borrador por red por el MISMO motor que el
  *  copy generado (origen='post-directo', excluido de la auto-generación: no hay nada que
  *  redactar). La pieza sigue el flujo normal (arte, revisión, programación). */
@@ -510,6 +510,6 @@ export interface RespuestaBandejaRadarAuto {
 
 /** Respuesta de `POST /api/radar/auto/ejecutar`: piezas promovidas a "importante". */
 export interface RespuestaEjecutarRadarAuto {
-  promovidos: Contenido[];
+  promovidos: Publicacion[];
   total: number;
 }

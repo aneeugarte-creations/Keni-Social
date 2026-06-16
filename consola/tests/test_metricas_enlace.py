@@ -37,10 +37,10 @@ def test_sellos_no_colisionan_entre_piezas():
 
 
 def test_plataforma_id_real_si_enlaza_sello_no():
-    """El enlace por red (`contenido_plataforma.id_post_metricool`) aplica el mismo filtro."""
+    """El enlace por red (`pieza.id_post_metricool`) aplica el mismo filtro."""
     plataformas = [
-        {"contenido_id": "c1", "id_post_metricool": "148786388488561_1011295324604797"},
-        {"contenido_id": "c2", "id_post_metricool": ID_POST_INCIERTO},
+        {"publicacion_id": "c1", "id_post_metricool": "148786388488561_1011295324604797"},
+        {"publicacion_id": "c2", "id_post_metricool": ID_POST_INCIERTO},
     ]
     por_id, _ = metricas_pieza._indice_contenido_por_post([], plataformas)
     assert por_id == {"148786388488561_1011295324604797": "c1"}

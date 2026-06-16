@@ -65,16 +65,16 @@ def borrar_webhook(webhook_id: str) -> bool:
 def registrar_evento_interno(
     *,
     tipo: str,
-    contenido_id: str = "",
-    plataforma_id: str = "",
+    publicacion_id: str = "",
+    pieza_id: str = "",
     clave_idempotencia: str = "",
     payload: dict[str, Any] | None = None,
 ) -> bool:
     """Registra un evento interno (False si su clave de idempotencia ya existia)."""
     return db.registrar_evento_interno(
         tipo=tipo,
-        contenido_id=contenido_id,
-        plataforma_id=plataforma_id,
+        publicacion_id=publicacion_id,
+        pieza_id=pieza_id,
         clave_idempotencia=clave_idempotencia,
         payload=payload,
     )

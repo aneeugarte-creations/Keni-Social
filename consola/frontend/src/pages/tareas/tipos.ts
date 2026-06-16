@@ -1,4 +1,4 @@
-import type { Contenido, EventoRota, PrioridadEvento, TipoCoberturaEvento } from "@/types";
+import type { Publicacion, EventoRota, PrioridadEvento, TipoCoberturaEvento } from "@/types";
 
 /** La COBERTURA de un evento: el partido + TODAS las personas que lo cubren (multi-cobertura). */
 export type Cobertura = {
@@ -27,21 +27,21 @@ export type Cobertura = {
    * (la acción de editar/borrar no se ofrece).
    */
   evento?: EventoRota;
-  cubridores: Contenido[];
+  cubridores: Publicacion[];
   /**
    * ROLES soltados de un evento que SIGUE cubierto por otros: tareas de cobertura SUELTAS
    * (sin responsable, su `formato` conserva el rol). Resurgen como «Por cubrir · <rol>»
    * re-cogibles DENTRO de la cobertura — el partido nunca desaparece (lo sostienen los demás
    * cubridores) y el rol liberado no se pierde de vista.
    */
-  libres: Contenido[];
+  libres: Publicacion[];
 };
 
 /** Un ítem de la lista: un evento por cubrir, su cobertura (≥1 dueño), o un encargo suelto. */
 export type Item =
   | { kind: "evento"; clave: string; orden: string; evento: EventoRota }
   | { kind: "cobertura"; clave: string; orden: string; cobertura: Cobertura }
-  | { kind: "tarea"; clave: string; orden: string; tarea: Contenido };
+  | { kind: "tarea"; clave: string; orden: string; tarea: Publicacion };
 
 /**
  * Reparte tareas + eventos en las tres formas que pinta la lista:
@@ -52,12 +52,12 @@ export type Item =
  * Una tarea de cobertura SOLTADA (sin responsable) queda SUELTA: su evento vuelve a «Por
  * cubrir» (se devuelve como `recuperable`, re-cogible) — el partido NUNCA se borra.
  */
-export function agrupar(tareas: Contenido[], eventos: EventoRota[]) {
+export function agrupar(tareas: Publicacion[], eventos: EventoRota[]) {
   const encargos = tareas.filter((t) => !t.evento_id);
   // EVENTO por id: para resolver `tipo_cobertura` de cada cobertura (vive en el evento, no en la tarea).
   const eventoPorId = new Map(eventos.map((e) => [e.id, e]));
   // Todas las tareas de cobertura (con `evento_id`) agrupadas por evento.
-  const porEvento = new Map<string, Contenido[]>();
+  const porEvento = new Map<string, Publicacion[]>();
   for (const t of tareas) {
     if (!t.evento_id) continue;
     const lista = porEvento.get(t.evento_id) ?? [];
@@ -68,7 +68,7 @@ export function agrupar(tareas: Contenido[], eventos: EventoRota[]) {
   // `recuperables`: eventos cuya cobertura se SOLTÓ (solo tareas sueltas, sin dueño). El
   // partido sigue ahí; se pinta como «Por cubrir» (una tarea, re-cogible) para que no parezca
   // borrado. Así se recuperan los partidos que se soltaron por error.
-  const recuperables: Contenido[] = [];
+  const recuperables: Publicacion[] = [];
   for (const [eventoId, lista] of porEvento) {
     const cubridores = lista.filter((t) => t.responsable_id);
     if (cubridores.length > 0) {

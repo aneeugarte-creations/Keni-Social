@@ -72,7 +72,7 @@ function docConBase(): ComposicionVideo {
   };
 }
 
-function renderVideo(rutaInicial = "/contenido/video") {
+function renderVideo(rutaInicial = "/publicaciones/video") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
@@ -88,8 +88,8 @@ describe("Video", () => {
     marcaMock.actual = { marcaActiva: "unotv", marcaPrimaria: "unotv" };
     // El gestor (sección por defecto) lista composiciones + piezas: stubs vacíos por defecto.
     vi.spyOn(apiMod.api.video, "listarComposiciones").mockResolvedValue({ composiciones: [] });
-    vi.spyOn(apiMod.api, "publicaciones").mockResolvedValue({
-      publicaciones: [],
+    vi.spyOn(apiMod.api, "piezas").mockResolvedValue({
+      piezas: [],
       paginacion: { total: 0, limite: 0, desplazamiento: 0 },
     } as never);
     vi.spyOn(apiMod.api.video, "subtitulosDe").mockResolvedValue({ subtitulo: null });
@@ -178,7 +178,7 @@ describe("Video", () => {
       .mockResolvedValue({
         composicion: { id: "comp-7", documento: docConBase(), titulo: "Mi clip", estado: "borrador" },
       });
-    renderVideo("/contenido/video?composicion=comp-7");
+    renderVideo("/publicaciones/video?composicion=comp-7");
     // Tras cargar, abre la sección Base con el clip ya presente: el reencuadre (que exige base)
     // y las secciones que requieren base quedan habilitadas.
     await waitFor(() => expect(composicion).toHaveBeenCalledWith("comp-7"));
@@ -191,7 +191,7 @@ describe("Video", () => {
     vi.spyOn(apiMod.api.video, "composicion").mockResolvedValue({
       composicion: { id: "comp-7", documento: docConBase(), titulo: "Mi clip", estado: "borrador" },
     });
-    renderVideo("/contenido/video?composicion=comp-7");
+    renderVideo("/publicaciones/video?composicion=comp-7");
     // El timeline vive bajo el preview: playhead accesible y asas de trim del clip base.
     await waitFor(() =>
       expect(screen.getByLabelText("Línea de tiempo de la composición")).toBeInTheDocument(),
@@ -206,7 +206,7 @@ describe("Video", () => {
       composiciones: [
         {
           id: "comp-existente",
-          contenido_id: "cont-5",
+          publicacion_id: "cont-5",
           marca: "unotv",
           marca_nombre: "UnoTV",
           titulo: "Pieza ligada",
@@ -218,9 +218,9 @@ describe("Video", () => {
       ],
     });
     const crear = vi.spyOn(apiMod.api.video, "crearComposicion");
-    renderVideo("/contenido/video?contenido=cont-5");
+    renderVideo("/publicaciones/video?contenido=cont-5");
     await waitFor(() =>
-      expect(listar).toHaveBeenCalledWith({ marca: "unotv", contenido_id: "cont-5" }),
+      expect(listar).toHaveBeenCalledWith({ marca: "unotv", publicacion_id: "cont-5" }),
     );
     // Existía: NO crea una nueva.
     expect(crear).not.toHaveBeenCalled();
@@ -234,12 +234,12 @@ describe("Video", () => {
     const crear = vi
       .spyOn(apiMod.api.video, "crearComposicion")
       .mockResolvedValue({ id: "comp-nueva" });
-    renderVideo("/contenido/video?contenido=cont-9");
+    renderVideo("/publicaciones/video?contenido=cont-9");
     await waitFor(() => expect(crear).toHaveBeenCalledTimes(1));
-    // La nueva composición se crea LIGADA a la pieza (contenido_id) y con título por defecto.
+    // La nueva composición se crea LIGADA a la pieza (publicacion_id) y con título por defecto.
     expect(crear.mock.calls[0][0]).toMatchObject({
       marca: "unotv",
-      contenido_id: "cont-9",
+      publicacion_id: "cont-9",
       estado: "borrador",
     });
     expect(crear.mock.calls[0][0].titulo).toMatch(/^Borrador/);
@@ -269,7 +269,7 @@ describe("Video", () => {
           <ProveedorEncabezado
             value={{ slotInicio: null, slotAcciones: slot, registrarTitulo: () => () => {} }}
           >
-            <MemoryRouter initialEntries={["/contenido/video"]}>
+            <MemoryRouter initialEntries={["/publicaciones/video"]}>
               <Video />
             </MemoryRouter>
           </ProveedorEncabezado>
@@ -308,7 +308,7 @@ describe("Video", () => {
       .mockImplementation(
         () => new Promise<never>((res) => { resolverPut = () => res({} as never); }),
       );
-    renderVideo("/contenido/video?composicion=comp-7");
+    renderVideo("/publicaciones/video?composicion=comp-7");
     const asa = await screen.findByRole("button", { name: /recortar fin del clip/i });
     // jsdom no tiene layout: banda de 100px (1px = 1% del eje de 30 s).
     const banda = screen.getByLabelText("Línea de tiempo de la composición");
@@ -358,7 +358,7 @@ describe("Video", () => {
       composicion: { id: "comp-7", documento: docPip, titulo: "T", estado: "borrador" },
     });
     const put = vi.spyOn(apiMod.api.video, "guardarComposicion").mockResolvedValue({} as never);
-    renderVideo("/contenido/video?composicion=comp-7");
+    renderVideo("/publicaciones/video?composicion=comp-7");
     const tabPip = await screen.findByRole("button", { name: /^pip$/i });
     await waitFor(() => expect(tabPip).not.toBeDisabled());
     fireEvent.click(tabPip);
@@ -387,7 +387,7 @@ describe("Video", () => {
     const actualizar = vi
       .spyOn(apiMod.api.video, "actualizarComposicion")
       .mockResolvedValue({ composicion: { id: "comp-7", titulo: "T", estado: "listo" } });
-    renderVideo("/contenido/video?composicion=comp-7");
+    renderVideo("/publicaciones/video?composicion=comp-7");
     const boton = await screen.findByRole("button", { name: /marcar listo/i });
     fireEvent.click(boton);
     await waitFor(() => expect(actualizar).toHaveBeenCalledWith("comp-7", { estado: "listo" }));

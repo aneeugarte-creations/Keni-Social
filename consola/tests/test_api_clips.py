@@ -26,18 +26,18 @@ def test_clip_de_video_genera_pieza_video(cliente):
     resp = _crear(cliente, [{"tipo": "video", "objeto": "videos/gol.mp4"}])
     assert resp.status_code == 200, resp.text
     datos = resp.json()
-    cid = datos["contenido_id"]
+    cid = datos["publicacion_id"]
     assert datos["clip"]["estado_pieza"] == "generando"
     assert datos["clip"]["formato"] == "video"
     assert datos["generacion"]["id"]
 
-    item = repos.obtener_contenido(cid)
+    item = repos.obtener_publicacion(cid)
     assert item["origen"] == "clips"
     assert item["formato"] == "video"
     assert item["flujo"] == "importante"
     assert item["descripcion"] == _TEXTO
 
-    plataformas = repos.listar_contenido_plataforma(cid)
+    plataformas = repos.listar_piezas_fila(cid)
     assert {p["red"] for p in plataformas} == set(redes.redes_de_formato(redes.FORMATO_VIDEO))
     for p in plataformas:
         assert p["video"] == "videos/gol.mp4"
@@ -52,13 +52,13 @@ def test_clip_de_fotos_genera_pieza_carrusel(cliente):
     ]
     resp = _crear(cliente, media)
     assert resp.status_code == 200, resp.text
-    cid = resp.json()["contenido_id"]
+    cid = resp.json()["publicacion_id"]
     assert resp.json()["clip"]["formato"] == "carrusel"
 
-    item = repos.obtener_contenido(cid)
+    item = repos.obtener_publicacion(cid)
     assert item["formato"] == "carrusel"
 
-    plataformas = repos.listar_contenido_plataforma(cid)
+    plataformas = repos.listar_piezas_fila(cid)
     assert {p["red"] for p in plataformas} == set(redes.redes_de_formato(redes.FORMATO_CARRUSEL))
     for p in plataformas:
         assert p["foto"] == "fotos/1.jpg"  # portada = primera imagen
@@ -69,14 +69,14 @@ def test_clip_de_fotos_genera_pieza_carrusel(cliente):
 
 def test_titulo_se_deriva_de_la_primera_linea(cliente):
     resp = _crear(cliente, [{"tipo": "video", "objeto": "v.mp4"}])
-    cid = resp.json()["contenido_id"]
-    assert repos.obtener_contenido(cid)["titulo"] == "Golazo de la Selección Mexicana."
+    cid = resp.json()["publicacion_id"]
+    assert repos.obtener_publicacion(cid)["titulo"] == "Golazo de la Selección Mexicana."
 
 
 def test_titulo_explicito_manda(cliente):
     resp = _crear(cliente, [{"tipo": "video", "objeto": "v.mp4"}], titulo="Gol del minuto 90")
-    cid = resp.json()["contenido_id"]
-    assert repos.obtener_contenido(cid)["titulo"] == "Gol del minuto 90"
+    cid = resp.json()["publicacion_id"]
+    assert repos.obtener_publicacion(cid)["titulo"] == "Gol del minuto 90"
 
 
 def test_validaciones_de_entrada(cliente):

@@ -3,7 +3,7 @@
  * (`RED_TODAS`, definido en `./selectores`) para "todas las redes" / "cualquier
  * red".
  *
- * El catálogo de redes SIEMPRE llega de la API (`/api/publicaciones/opciones`);
+ * El catálogo de redes SIEMPRE llega de la API (`/api/piezas/opciones`);
  * aquí solo se renderiza, sin hardcodear ids.
  */
 import {
@@ -17,7 +17,7 @@ import { NINGUNA, RED_TODAS } from "./selectores";
 
 /**
  * Forma mínima que el selector necesita de una red. Aceptamos cualquier objeto
- * con `id`/`nombre` (`RedPublicacion`, `RedComercial`, …) para que el componente
+ * con `id`/`nombre` (`RedPieza`, `RedComercial`, …) para que el componente
  * sea el contrato único sin acoplarse a una sola variante de red.
  */
 type RedSeleccionable = { id: string; nombre: string };

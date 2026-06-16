@@ -4,14 +4,14 @@ import * as React from "react";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api } from "@/lib/api";
-import type { LineaEditorialOpcion, RedPublicacion } from "@/types";
+import type { LineaEditorialOpcion, RedPieza } from "@/types";
 
 import {
   claveLineaActiva,
   claveRedActiva,
   FILTRO_TODOS,
-  FiltrosContenidoContexto,
-  type ValorFiltrosContenido,
+  FiltrosPublicacionContexto,
+  type ValorFiltrosPublicacion,
 } from "./filtros-contenido-contexto";
 
 /** Lee un filtro persistido de este usuario (o `FILTRO_TODOS` si no hay / falla). */
@@ -34,14 +34,14 @@ function guardarPersistido(clave: string, valor: string): void {
 
 /**
  * Provider de los FILTROS GLOBALES de contenido (Red + Línea), hermano del de marca.
- * Deriva las opciones del catálogo canónico (`/api/publicaciones/opciones`, que ya
+ * Deriva las opciones del catálogo canónico (`/api/piezas/opciones`, que ya
  * consumen las páginas de contenido, así que no añade carga) y persiste la elección
  * por usuario. Por defecto ambos en "Todas" → no cambia el comportamiento inicial.
  *
  * Se monta DEBAJO del provider de marca: las líneas elegibles dependen de la marca
  * activa, y si la línea persistida deja de serlo, cae a "Todas".
  */
-export function FiltrosContenidoProvider({ children }: { children: React.ReactNode }) {
+export function FiltrosPublicacionProvider({ children }: { children: React.ReactNode }) {
   const { usuario } = useSesion();
   const usuarioId = usuario?.id ?? "";
   const { marcaActiva } = useMarcaActiva();
@@ -49,11 +49,11 @@ export function FiltrosContenidoProvider({ children }: { children: React.ReactNo
   // Catálogo de redes + líneas. Se cachea (mismo queryKey que las páginas), así se
   // resuelve una sola vez. Mientras carga, los selectores quedan con solo "Todas".
   const opcionesQuery = useQuery({
-    queryKey: ["publicaciones", "opciones"],
+    queryKey: ["piezas", "opciones"],
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),
     staleTime: Infinity,
   });
-  const redes = React.useMemo<RedPublicacion[]>(
+  const redes = React.useMemo<RedPieza[]>(
     () => opcionesQuery.data?.redes ?? [],
     [opcionesQuery.data],
   );
@@ -112,12 +112,12 @@ export function FiltrosContenidoProvider({ children }: { children: React.ReactNo
     [usuarioId],
   );
 
-  const valor = React.useMemo<ValorFiltrosContenido>(
+  const valor = React.useMemo<ValorFiltrosPublicacion>(
     () => ({ red, linea, redes, lineasElegibles, cambiarRed, cambiarLinea }),
     [red, linea, redes, lineasElegibles, cambiarRed, cambiarLinea],
   );
 
   return (
-    <FiltrosContenidoContexto.Provider value={valor}>{children}</FiltrosContenidoContexto.Provider>
+    <FiltrosPublicacionContexto.Provider value={valor}>{children}</FiltrosPublicacionContexto.Provider>
   );
 }

@@ -62,7 +62,7 @@ export function DialogoEtiquetas({
 
   const invalidar = () => {
     void queryClient.invalidateQueries({ queryKey: CLAVE_ETIQUETAS });
-    // El catálogo de etiquetas viaja también dentro de /api/contenido.
+    // El catálogo de etiquetas viaja también dentro de /api/publicaciones.
     void queryClient.invalidateQueries({ queryKey: ["contenido"] });
   };
 

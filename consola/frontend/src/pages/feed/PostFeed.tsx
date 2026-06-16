@@ -49,22 +49,22 @@ import { formatearFechaHora, formatearFechaHoraCorta } from "@/lib/fecha";
 import { plural } from "@/lib/formato";
 import { cn } from "@/lib/utils";
 import {
-  CLAVE_PUBLICACIONES,
+  CLAVE_PIEZAS,
   claveCadenaAprobacion,
-  remplazarPublicacionEnCaches,
-} from "@/pages/publicaciones/claves";
-import { DialogoEditar } from "@/pages/publicaciones/DialogoEditar";
-import { tiempoRelativo } from "@/pages/publicaciones/meta";
-import type { Publicacion, RespuestaPublicacion } from "@/types";
+  remplazarPiezaEnCaches,
+} from "@/pages/piezas/claves";
+import { DialogoEditar } from "@/pages/piezas/DialogoEditar";
+import { tiempoRelativo } from "@/pages/piezas/meta";
+import type { Pieza, RespuestaPieza } from "@/types";
 
 import { elegibilidadOK, esDislikeDecisivo } from "./aprobacion";
 import { CadenaAprobacion } from "./CadenaAprobacion";
-import { etapaDePublicacion } from "./etapa";
+import { etapaDePieza } from "./etapa";
 import { TEXTO_AVISO, TEXTO_ERROR, TEXTO_OK } from "./formato";
 import { BadgeEtapa } from "./TarjetaEtapa";
 import { CadenasLoteContexto } from "./use-cadenas-lote";
 
-export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
+export function PostFeed({ pieza }: { pieza: Pieza }) {
   const queryClient = useQueryClient();
   const { usuario } = useSesion();
   const [comentariosAbierto, setComentariosAbierto] = React.useState(false);
@@ -76,12 +76,12 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
     if (comentariosAbierto) comentariosRef.current?.scrollIntoView?.({ block: "nearest" });
   }, [comentariosAbierto]);
 
-  const etapa = etapaDePublicacion(publicacion);
-  const enRevision = publicacion.estado === "en_revision";
+  const etapa = etapaDePieza(pieza);
+  const enRevision = pieza.estado === "en_revision";
   const yaAprobada = etapa === "programada" || etapa === "publicada";
   // Autogenerada por la IA: sin autor humano (las piezas de la pipeline —pipeline/rss/radar— no
   // tienen autor; las que postea el equipo SÍ). En ese caso la firma es "IA", no "desconocido".
-  const generadaPorIA = !publicacion.autor_nombre?.trim();
+  const generadaPorIA = !pieza.autor_nombre?.trim();
 
   // Cadena de aprobación: alimenta tanto la UI MULTINIVEL (estado por nivel + decisión por
   // orden) como los avisos de gobernanza (firmas / comentarios sin resolver). Se carga
@@ -97,10 +97,10 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   // feed (sin contexto) o si el lote falla, carga individual como siempre.
   const lote = React.useContext(CadenasLoteContexto);
   const cadenaQuery = useQuery({
-    queryKey: claveCadenaAprobacion(publicacion.id),
-    queryFn: ({ signal }) => api.cadenaAprobacion(publicacion.id, signal),
+    queryKey: claveCadenaAprobacion(pieza.id),
+    queryFn: ({ signal }) => api.cadenaAprobacion(pieza.id, signal),
     enabled:
-      (enRevision || etapa === "programada") && !(lote?.pendiente(publicacion.id) ?? false),
+      (enRevision || etapa === "programada") && !(lote?.pendiente(pieza.id) ?? false),
     staleTime: 30_000,
   });
   const cadena = cadenaQuery.data;
@@ -120,27 +120,27 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   const tieneCadena = (cadena?.niveles?.length ?? 0) > 0;
 
   // Tras una reacción: actualiza SOLO la pieza afectada en las cachés de listados (antes se
-  // invalidaba `CLAVE_PUBLICACIONES` entero, que refetcheaba TODAS las páginas del scroll
+  // invalidaba `CLAVE_PIEZAS` entero, que refetcheaba TODAS las páginas del scroll
   // infinito por cada like) e invalida únicamente SU cadena. El kanban (`contenido`) se marca
   // stale en bloque: es otra superficie y se refresca al montarse.
-  const actualizarCaches = (res?: RespuestaPublicacion) => {
-    if (res?.publicacion) {
-      remplazarPublicacionEnCaches(queryClient, res.publicacion);
-      if (res.publicacion.estado !== publicacion.estado) {
+  const actualizarCaches = (res?: RespuestaPieza) => {
+    if (res?.pieza) {
+      remplazarPiezaEnCaches(queryClient, res.pieza);
+      if (res.pieza.estado !== pieza.estado) {
         // El cambio de ESTADO mueve la pieza de pestaña: refresca los conteos exactos de los
         // badges (3 queries `limite=1`, baratas; lo mismo que hace el botón Actualizar). Si no,
         // el número viejo desmiente la acción que el usuario acaba de ver.
         void queryClient.invalidateQueries({
-          queryKey: [...CLAVE_PUBLICACIONES, "conteo-feed"],
+          queryKey: [...CLAVE_PIEZAS, "conteo-feed"],
         });
       }
     } else {
-      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+      void queryClient.invalidateQueries({ queryKey: CLAVE_PIEZAS });
     }
     void queryClient.invalidateQueries({ queryKey: ["contenido"] });
-    void queryClient.invalidateQueries({ queryKey: claveCadenaAprobacion(publicacion.id) });
+    void queryClient.invalidateQueries({ queryKey: claveCadenaAprobacion(pieza.id) });
   };
-  const tras = (mensaje: string) => (res?: RespuestaPublicacion) => {
+  const tras = (mensaje: string) => (res?: RespuestaPieza) => {
     actualizarCaches(res);
     toast.success(mensaje);
   };
@@ -151,11 +151,11 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   // cerrar la cadena (queda aprobada/lista para salir). Como tu reacción siempre se puede
   // retirar, el toast ofrece "Deshacer" (patrón Gmail) salvo en estados finales distintos.
   const aprobar = useMutation({
-    mutationFn: () => api.aprobarPublicacion(publicacion.id),
+    mutationFn: () => api.aprobarPieza(pieza.id),
     onSuccess: (res) => {
       const cerrada =
-        !!res?.publicacion &&
-        ["programado", "publicado"].includes(res.publicacion.estado);
+        !!res?.pieza &&
+        ["programado", "publicado"].includes(res.pieza.estado);
       actualizarCaches(res);
       // "ok": el spinner gira en el pulgar de ARRIBA y el toast final dice "Quitamos tu OK."
       // Si quien dio el OK puede FORZAR (admin/coordinación), el override vive AQUÍ, en el
@@ -176,13 +176,13 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
     onError,
   });
   const rechazar = useMutation({
-    mutationFn: () => api.rechazarPublicacion(publicacion.id),
+    mutationFn: () => api.rechazarPieza(pieza.id),
     // Un dislike NO devuelve a borrador por sí solo: hacen falta dos (de dos personas). El back
     // refleja el desenlace; el toast lo cuenta tal cual. "Deshacer" solo mientras la pieza siga
     // en revisión (devuelta a redacción es otro estado: no se deshace desde un toast).
     onSuccess: (res) => {
       actualizarCaches(res);
-      if (res?.publicacion?.estado === "borrador") {
+      if (res?.pieza?.estado === "borrador") {
         // Rechazo definitivo: la tarjeta sale de la vista filtrada al instante; no se abre el
         // hilo (el confirm previo ya invitó a comentar antes).
         toast.success("Pieza rechazada: vuelve a redacción.");
@@ -201,7 +201,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   // afina el toast: "ok" = togglear tu like; "like" = pulsaste OK teniendo un dislike puesto
   // (explica el paso intermedio y ofrece completar el OK en un clic); sin origen, el genérico.
   const deshacer = useMutation({
-    mutationFn: (_origen?: "like" | "ok") => api.deshacerAprobacion(publicacion.id),
+    mutationFn: (_origen?: "like" | "ok") => api.deshacerAprobacion(pieza.id),
     onSuccess: (res, origen) => {
       if (origen === "like") {
         actualizarCaches(res);
@@ -217,7 +217,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   // OVERRIDE: forzar la aprobación saltándose la cadena (admin/coordinador). Lo decide el backend;
   // aquí solo mostramos la acción y avisamos con un pop-up de que se salta el visto bueno del equipo.
   const forzar = useMutation({
-    mutationFn: () => api.forzarAprobacion(publicacion.id),
+    mutationFn: () => api.forzarAprobacion(pieza.id),
     onSuccess: tras("Aprobación forzada (cadena saltada)."),
     onError,
   });
@@ -225,23 +225,23 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   // sus demás redes se conservan. Si era la única red, el backend se lleva también la idea
   // (no deja un tema vacío). Es la forma de "salir solo en 3 redes": quitar las otras 2.
   const borrar = useMutation({
-    mutationFn: () => api.eliminarPublicacion(publicacion.id),
+    mutationFn: () => api.eliminarPieza(pieza.id),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+      void queryClient.invalidateQueries({ queryKey: CLAVE_PIEZAS });
       void queryClient.invalidateQueries({ queryKey: ["contenido"] });
       // Borrar la (última) pieza de un tema baja su `contenido` padre, que es lo que
       // cuenta el plan del día: refresca el contador de la Mesa y del monitor de Producción.
       void queryClient.invalidateQueries({ queryKey: ["noticias", "mesa"] });
       void queryClient.invalidateQueries({ queryKey: ["produccion"] });
-      toast.success(`Pieza quitada de ${publicacion.red_nombre}.`);
+      toast.success(`Pieza quitada de ${pieza.red_nombre}.`);
     },
     onError,
   });
   const onBorrar = async () => {
     const ok = await confirmar({
-      titulo: `Quitar de ${publicacion.red_nombre}`,
+      titulo: `Quitar de ${pieza.red_nombre}`,
       mensaje:
-        `Se borra solo la pieza de ${publicacion.red_nombre}; la idea y sus demás redes se ` +
+        `Se borra solo la pieza de ${pieza.red_nombre}; la idea y sus demás redes se ` +
         "conservan. Si es la única red, se borra la idea entera. ¿Continuar?",
       textoConfirmar: "Quitar",
     });
@@ -289,10 +289,10 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   // toast al pulsarlo cuando no toca. Explica el gate (en revisión: tu pieza / ya diste OK /
   // espera turno) o, antes, qué le falta a la pieza. Si la cadena no pudo cargarse, lo dice
   // (sin inventarse un "espera tu turno" que no consta).
-  const esVideo = (publicacion.formato ?? "").trim().toLowerCase() === "video";
+  const esVideo = (pieza.formato ?? "").trim().toLowerCase() === "video";
   const motivoBloqueo = yaAprobada
-    ? publicacion.revisor_nombre
-      ? `Ya aprobada · último OK: ${publicacion.revisor_nombre}`
+    ? pieza.revisor_nombre
+      ? `Ya aprobada · último OK: ${pieza.revisor_nombre}`
       : ""
     : enRevision
       ? cadenaQuery.isError
@@ -420,8 +420,8 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
 
   // El cuerpo del post: el copy que la IA generó (`contenido`); si aún no hay, mostramos
   // el material original como marcador para que el post no quede vacío en "generando copy".
-  const cuerpo = publicacion.contenido || publicacion.titulo;
-  const imagen = publicacion.imagen_url || publicacion.imagen || publicacion.imagen_fuente;
+  const cuerpo = pieza.contenido || pieza.titulo;
+  const imagen = pieza.imagen_url || pieza.imagen || pieza.imagen_fuente;
 
   return (
     // CLICK IZQUIERDO sobre la tarjeta abre el editor (modelo "item-first"); `onClickTarjeta`
@@ -429,7 +429,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
     // imagen —role="button" con su propio handler—, inputs del hilo). Hover/foco viran el borde
     // a naranja de marca como pista de que la tarjeta es accionable.
     <article
-      aria-label={publicacion.titulo}
+      aria-label={pieza.titulo}
       onClick={onClickTarjeta}
       className="cursor-pointer rounded-xl border border-border bg-card text-left text-card-foreground shadow-sm transition-colors hover:border-keni-300 focus-within:border-keni-300"
     >
@@ -437,7 +437,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           (iconos pelados, sin nombre ni dos burbujas) → quién posteó (IA/autor) · tiempo. El
           distintivo va en la cabecera, no sobre la imagen, para no taparla. */}
       <header className="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 pb-2 pt-3 text-xs text-muted-foreground">
-        <DistintivoRed red={publicacion.red} formato={publicacion.formato} />
+        <DistintivoRed red={pieza.red} formato={pieza.formato} />
         {generadaPorIA ? (
           <span
             className="inline-flex items-center gap-1 text-xs font-medium text-foreground"
@@ -448,7 +448,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           </span>
         ) : (
           <Autor
-            nombre={publicacion.autor_nombre}
+            nombre={pieza.autor_nombre}
             conPrefijo={false}
             className="text-xs font-medium text-foreground"
           />
@@ -456,31 +456,31 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         {/* «La lista» (todas las marcas): quién lleva la pieza, SOLO LECTURA (coger/soltar vive
             en Cobertura). Invisible si nadie la ha cogido. */}
         <BadgeResponsable
-          responsableId={publicacion.responsable_id}
-          responsableNombre={publicacion.responsable_nombre}
+          responsableId={pieza.responsable_id}
+          responsableNombre={pieza.responsable_nombre}
         />
         <span className="ml-auto inline-flex items-center gap-2">
           {/* Antigüedad de la pieza: cuándo entró a revisión o, si aún no (en preparación),
               cuándo se creó. El `title` aclara QUÉ fecha es al hover; el `sr-only` lleva la
               misma aclaración a lectores de pantalla (patrón de `DistintivoRed`). */}
-          {publicacion.enviado_a_revision_en ? (
+          {pieza.enviado_a_revision_en ? (
             <span
               className="tabular-nums"
-              title={`Enviada a revisión: ${formatearFechaHoraCorta(publicacion.enviado_a_revision_en)}`}
+              title={`Enviada a revisión: ${formatearFechaHoraCorta(pieza.enviado_a_revision_en)}`}
             >
-              {tiempoRelativo(publicacion.enviado_a_revision_en)}
+              {tiempoRelativo(pieza.enviado_a_revision_en)}
               <span className="sr-only">
-                {` (enviada a revisión el ${formatearFechaHoraCorta(publicacion.enviado_a_revision_en)})`}
+                {` (enviada a revisión el ${formatearFechaHoraCorta(pieza.enviado_a_revision_en)})`}
               </span>
             </span>
-          ) : publicacion.fecha_creacion ? (
+          ) : pieza.fecha_creacion ? (
             <span
               className="tabular-nums"
-              title={`Creada: ${formatearFechaHoraCorta(publicacion.fecha_creacion)}`}
+              title={`Creada: ${formatearFechaHoraCorta(pieza.fecha_creacion)}`}
             >
-              {tiempoRelativo(publicacion.fecha_creacion)}
+              {tiempoRelativo(pieza.fecha_creacion)}
               <span className="sr-only">
-                {` (creada el ${formatearFechaHoraCorta(publicacion.fecha_creacion)})`}
+                {` (creada el ${formatearFechaHoraCorta(pieza.fecha_creacion)})`}
               </span>
             </span>
           ) : null}
@@ -488,10 +488,10 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
               en la cabecera. GitBranch es el icono canónico del destino (pestaña Pipelines);
               Sparkles ya significa "usa IA" en esta misma tarjeta. La caja h-8/w-8 con márgenes
               negativos da target táctil sin mover el layout. */}
-          {publicacion.pipeline_id && (
+          {pieza.pipeline_id && (
             <Tooltip label="Ver proceso de generación">
               <Link
-                to={`/maquina/actividad/pipelines/${encodeURIComponent(publicacion.pipeline_id)}`}
+                to={`/maquina/actividad/pipelines/${encodeURIComponent(pieza.pipeline_id)}`}
                 onClick={(e) => e.stopPropagation()}
                 className="-my-2 -mr-2 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
                 aria-label="Ver proceso IA"
@@ -508,13 +508,13 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           imagen va a sangre (sin gutter); el copy ya trae su propio padding interno. (El título
           del material original NO se pinta: es el tema que "posteó" el equipo, no el copy.) */}
       <VistaPreviaRed
-        red={publicacion.red}
-        marca={publicacion.marca_nombre}
+        red={pieza.red}
+        marca={pieza.marca_nombre}
         contenido={cuerpo}
-        copy_in={publicacion.copy_in}
+        copy_in={pieza.copy_in}
         imagen_url={imagen || undefined}
-        carrusel={publicacion.carrusel}
-        titulo={publicacion.titulo}
+        carrusel={pieza.carrusel}
+        titulo={pieza.titulo}
         onAbrir={() => void abrirEditor()}
         variante="limpia"
       />
@@ -526,49 +526,49 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         className="flex flex-wrap items-center gap-2 gap-y-1 px-4 pb-2 pt-1"
         onClick={(e) => e.stopPropagation()}
       >
-        <BadgeEtapa etapa={etapa} formato={publicacion.formato} />
+        <BadgeEtapa etapa={etapa} formato={pieza.formato} />
         {/* Cuándo sale/salió: la fecha de salida con CalendarClock, SIEMPRE en gris neutro (el
             ámbar semántico de "programada" ya lo porta el badge de etapa: dos señales cromáticas
             idénticas del mismo dato eran doble codificación). El hover (`title`/tooltip) da la
             fecha COMPLETA con año. En piezas programadas la fecha es el PUENTE a Programación
             (mismo tratamiento discreto que el enlace del proceso IA de la cabecera). */}
         {(etapa === "programada" || etapa === "publicada") &&
-          publicacion.fecha_programada &&
+          pieza.fecha_programada &&
           (etapa === "programada" ? (
             <Tooltip label="Ver en Programación">
               <Link
                 to="/operacion/programacion"
                 onClick={(e) => e.stopPropagation()}
                 className="inline-flex items-center gap-1 rounded-md text-xs tabular-nums text-muted-foreground hover:text-foreground"
-                aria-label={`Programada para ${formatearFechaHora(publicacion.fecha_programada)} — ver en Programación`}
+                aria-label={`Programada para ${formatearFechaHora(pieza.fecha_programada)} — ver en Programación`}
               >
                 <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
-                {formatearFechaHoraCorta(publicacion.fecha_programada)}
+                {formatearFechaHoraCorta(pieza.fecha_programada)}
               </Link>
             </Tooltip>
           ) : (
             <span
               className="inline-flex items-center gap-1 text-xs tabular-nums text-muted-foreground"
-              title={`Publicada el ${formatearFechaHora(publicacion.fecha_programada)}`}
+              title={`Publicada el ${formatearFechaHora(pieza.fecha_programada)}`}
             >
               <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
               <span aria-hidden="true">
-                {formatearFechaHoraCorta(publicacion.fecha_programada)}
+                {formatearFechaHoraCorta(pieza.fecha_programada)}
               </span>
               <span className="sr-only">
-                {`Publicada el ${formatearFechaHora(publicacion.fecha_programada)}`}
+                {`Publicada el ${formatearFechaHora(pieza.fecha_programada)}`}
               </span>
             </span>
           ))}
         {/* En estados cerrados el botón de like NO se pinta (sería un falso affordance): el
             dato del último OK se conserva aquí, como metadato legible (truncado: en celdas
             estrechas un nombre largo no debe desbordar la tarjeta). */}
-        {yaAprobada && publicacion.revisor_nombre && (
+        {yaAprobada && pieza.revisor_nombre && (
           <span
             className="min-w-0 max-w-[12rem] truncate text-xs text-muted-foreground"
             title="Último OK"
           >
-            OK: {publicacion.revisor_nombre}
+            OK: {pieza.revisor_nombre}
           </span>
         )}
         <div className="ml-auto flex items-center gap-1">
@@ -659,11 +659,11 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
               RESOLVER se tiñe de ámbar y muestra la burbuja con el conteo: conversación
               pendiente que bloquea publicar (como en un PR). Abierto, queda marcado con
               `bg-accent` (el hilo puede abrirse fuera del viewport en tarjetas altas). Sin
-              `contenido_id` no hay hilo donde escribir: visible pero DESHABILITADO (la fila
+              `pieza_id` no hay hilo donde escribir: visible pero DESHABILITADO (la fila
               se mantiene estable, mismo criterio que el dislike) y el rótulo lo explica. */}
           <Tooltip
             label={
-              !publicacion.contenido_id
+              !pieza.publicacion_id
                 ? "Esta pieza no tiene hilo de comentarios"
                 : sinResolver > 0
                   ? `Comentar (${plural(sinResolver, "comentario")} sin resolver)`
@@ -681,10 +681,10 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
                 comentariosAbierto && "bg-accent text-foreground",
               )}
               onClick={() => setComentariosAbierto((v) => !v)}
-              disabled={!publicacion.contenido_id}
+              disabled={!pieza.publicacion_id}
               aria-expanded={comentariosAbierto}
               aria-label={
-                !publicacion.contenido_id
+                !pieza.publicacion_id
                   ? "Esta pieza no tiene hilo de comentarios"
                   : sinResolver > 0
                     ? `Comentar (${plural(sinResolver, "comentario")} sin resolver)`
@@ -701,14 +701,14 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           </Tooltip>
           {/* Quitar de ESTA red: borra solo la pieza de esta red (con confirmación); la idea
               y sus demás redes se conservan. Así una idea sale solo en las redes que quieras. */}
-          <Tooltip label={`Quitar de ${publicacion.red_nombre}`}>
+          <Tooltip label={`Quitar de ${pieza.red_nombre}`}>
             <Button
               variant="ghost"
               size="icon"
               className="h-10 w-10 text-muted-foreground hover:text-red-600 dark:hover:text-red-400 sm:h-8 sm:w-8"
               onClick={() => void onBorrar()}
               disabled={borrar.isPending}
-              aria-label={`Quitar de ${publicacion.red_nombre}`}
+              aria-label={`Quitar de ${pieza.red_nombre}`}
             >
               {borrar.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -720,9 +720,9 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         </div>
       </div>
 
-      {/* Editor rico (reusa el de Publicaciones): copy + imagen (placa con titular inline). Se MONTA
+      {/* Editor rico (reusa el de Piezas): copy + imagen (placa con titular inline). Se MONTA
           solo al editar. Es un modal (portal): los clics dentro no abren otra vez la tarjeta. */}
-      {editando && <DialogoEditar publicacion={publicacion} onCerrar={() => setEditando(false)} />}
+      {editando && <DialogoEditar pieza={pieza} onCerrar={() => setEditando(false)} />}
 
       {/* Panel de ESTADO (solo en revisión y con cadena): revision de IA + OK del equipo
           (cuántos y de quién) + lo que falta (comentarios sin resolver). El override de
@@ -759,7 +759,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
       {/* Hilo de comentarios del equipo. No abre el editor (para la propagación: tiene inputs).
           Los comentarios cuelgan del CONTENIDO padre: el mismo hilo aparece en las tarjetas
           hermanas (otras redes de la misma idea); la línea de contexto lo aclara. */}
-      {comentariosAbierto && publicacion.contenido_id && (
+      {comentariosAbierto && pieza.publicacion_id && (
         <div
           ref={comentariosRef}
           className="border-t border-border px-4 py-3"
@@ -768,7 +768,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           <p className="mb-2 text-xs text-muted-foreground">
             Conversación de la idea
           </p>
-          <Comentarios contenidoId={publicacion.contenido_id} />
+          <Comentarios publicacionId={pieza.publicacion_id} />
         </div>
       )}
     </article>

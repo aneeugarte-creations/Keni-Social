@@ -67,10 +67,10 @@ const SelectContent = React.forwardRef<
   // con su capa tragándose TODOS los toques: la app entera parecía bloqueada (Métricas,
   // o cualquier página con un select). Escape SÍ cierra (verificado), así que mientras el
   // contenido esté montado convertimos cualquier `touchend` FUERA de él en un Escape.
-  const refContenido = React.useRef<HTMLDivElement | null>(null);
+  const refPublicacion = React.useRef<HTMLDivElement | null>(null);
   React.useEffect(() => {
     const cerrarSiFuera = (e: TouchEvent) => {
-      const cont = refContenido.current;
+      const cont = refPublicacion.current;
       if (!cont) return;
       if (e.target instanceof Node && cont.contains(e.target)) return;
       cont.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
@@ -80,7 +80,7 @@ const SelectContent = React.forwardRef<
   }, []);
   const refCompuesta = React.useCallback(
     (nodo: React.ElementRef<typeof SelectPrimitive.Content> | null) => {
-      refContenido.current = nodo;
+      refPublicacion.current = nodo;
       if (typeof ref === "function") ref(nodo);
       else if (ref) ref.current = nodo;
     },

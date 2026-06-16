@@ -27,9 +27,9 @@ const CATALOGO = {
       icono: "Send",
       descripcion: "",
       permisos: ["editor", "admin"],
-      rutas_frontend: ["/publicaciones"],
+      rutas_frontend: ["/piezas"],
       nav: [
-        { ruta: "/publicaciones", etiqueta: "Publicaciones", icono: "Send", descripcion: "", grupo: "op", grupo_orden: 30, orden: 10 },
+        { ruta: "/piezas", etiqueta: "Piezas", icono: "Send", descripcion: "", grupo: "op", grupo_orden: 30, orden: 10 },
       ],
     },
   ],
@@ -89,7 +89,7 @@ describe("PaletaComandos", () => {
     expect(await screen.findByRole("listbox")).toBeInTheDocument();
     // Las hojas de cada app del catálogo.
     expect(await screen.findByRole("option", { name: /producción.*generación/i })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: /operación.*publicaciones/i })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /operación.*piezas/i })).toBeInTheDocument();
     // ⌘K de nuevo togglea cerrado.
     fireEvent.keyDown(window, { key: "k", metaKey: true });
     await waitFor(() => expect(screen.queryByRole("listbox")).not.toBeInTheDocument());
@@ -108,10 +108,10 @@ describe("PaletaComandos", () => {
     renderPaleta();
     fireEvent.keyDown(window, { key: "k", metaKey: true });
     const input = await screen.findByRole("combobox");
-    // "publi" (sin acento) matchea Publicaciones; descarta el resto.
+    // "publi" (sin acento) matchea Piezas; descarta el resto.
     fireEvent.change(input, { target: { value: "publi" } });
     await waitFor(() => {
-      expect(screen.getByRole("option", { name: /publicaciones/i })).toBeInTheDocument();
+      expect(screen.getByRole("option", { name: /piezas/i })).toBeInTheDocument();
       expect(screen.queryByRole("option", { name: /generación/i })).not.toBeInTheDocument();
     });
     // Sin resultados muestra el aviso.
@@ -124,12 +124,12 @@ describe("PaletaComandos", () => {
     fireEvent.keyDown(window, { key: "k", metaKey: true });
     const input = await screen.findByRole("combobox");
     // Filtra a una sola opción para navegar de forma determinista.
-    fireEvent.change(input, { target: { value: "publicaciones" } });
-    await screen.findByRole("option", { name: /publicaciones/i });
+    fireEvent.change(input, { target: { value: "piezas" } });
+    await screen.findByRole("option", { name: /piezas/i });
     // ↓ mantiene la selección en la única opción; ↵ navega.
     fireEvent.keyDown(input, { key: "ArrowDown" });
     fireEvent.keyDown(input, { key: "Enter" });
-    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/publicaciones"));
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/piezas"));
     // Tras navegar, la paleta se cierra.
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
   });
@@ -145,7 +145,7 @@ describe("PaletaComandos", () => {
   it("hace clic en una opción para navegar", async () => {
     renderPaleta();
     fireEvent.keyDown(window, { key: "k", metaKey: true });
-    fireEvent.click(await screen.findByRole("option", { name: /operación.*publicaciones/i }));
-    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/publicaciones"));
+    fireEvent.click(await screen.findByRole("option", { name: /operación.*piezas/i }));
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/piezas"));
   });
 });

@@ -22,7 +22,7 @@ from keni_consola import limites_plataforma, redes
 
 # Raiz del monorepo: consola/tests/test_api_limites.py -> parents[2].
 _REPO = Path(__file__).resolve().parents[2]
-_META_TS = _REPO / "consola" / "frontend" / "src" / "pages" / "publicaciones" / "meta.ts"
+_META_TS = _REPO / "consola" / "frontend" / "src" / "pages" / "piezas" / "meta.ts"
 
 
 def test_limites_endpoint_orden_y_forma(cliente):

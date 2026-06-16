@@ -1,4 +1,4 @@
-import type { Publicacion } from "../types.gen";
+import type { Pieza } from "../types.gen";
 import type { Veredicto, PiezaGenerada } from "./comun";
 import type { Generacion } from "./generaciones";
 
@@ -20,7 +20,7 @@ export interface BreakingItem {
   enlaces: { titulo: string; url: string; fuente: string }[];
   fecha: string;
   estado_borrador: "ninguno" | "generando" | "listo";
-  contenido_id: string;
+  publicacion_id: string;
   generacion_id: string;
 }
 
@@ -38,7 +38,7 @@ export interface CuerpoPreparar {
 
 /** Respuesta de POST /api/breaking/preparar. */
 export interface RespuestaPreparar {
-  contenido_id: string;
+  publicacion_id: string;
   generacion_id: string;
 }
 
@@ -346,7 +346,7 @@ export interface CuerpoGenerarDesdeItem {
 }
 
 /**
- * Respuesta de generar copy desde un item (auto-guarda como Publicaciones).
+ * Respuesta de generar copy desde un item (auto-guarda como Piezas).
  * Misma forma que ejecutar un prompt.
  */
 export interface RespuestaGenerarDesdeItem {
@@ -354,7 +354,8 @@ export interface RespuestaGenerarDesdeItem {
   historial_id: string;
   verdicto: Veredicto;
   piezas: PiezaGenerada[];
-  publicaciones: Publicacion[];
+  /** Items de tablero creados desde las piezas generadas (no leído hoy por el SPA). */
+  piezas_creadas?: Pieza[];
 }
 
 // --- Cajón PRESIDENCIA (Fuentes → Internas): nota de WhatsApp -> pieza carrusel ---
@@ -395,7 +396,7 @@ export interface RespuestaNotasPresidencia {
 /** Respuesta de `POST /api/presidencia/notas`. */
 export interface RespuestaCrearNotaPresidencia {
   nota: NotaPresidencia;
-  contenido_id: string;
+  publicacion_id: string;
   generacion: Generacion;
 }
 
@@ -433,6 +434,6 @@ export interface RespuestaClips {
 /** Respuesta de `POST /api/clips`. */
 export interface RespuestaCrearClip {
   clip: Clip;
-  contenido_id: string;
+  publicacion_id: string;
   generacion: Generacion;
 }

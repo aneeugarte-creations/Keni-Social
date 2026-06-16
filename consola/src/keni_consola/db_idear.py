@@ -25,7 +25,7 @@ _COLS_EVERGREEN_IDEA = (
     "estado",
     "origen",
     "generacion_id",
-    "contenido_id",
+    "publicacion_id",
     "creado",
     "actualizado",
 )
@@ -34,7 +34,7 @@ _CAMPOS_EDITABLES_EVERGREEN_IDEA: tuple[str, ...] = (
     "titulo",
     "descripcion",
     "estado",
-    "contenido_id",
+    "publicacion_id",
 )
 
 
@@ -51,7 +51,7 @@ def crear_evergreen_idea(
     estado: str = "propuesta",
     origen: str = "ia",
     generacion_id: str = "",
-    contenido_id: str = "",
+    publicacion_id: str = "",
     creado: str = "",
     actualizado: str = "",
     id: str = "",
@@ -70,7 +70,7 @@ def crear_evergreen_idea(
         "estado": estado or "propuesta",
         "origen": origen or "ia",
         "generacion_id": generacion_id or "",
-        "contenido_id": contenido_id or "",
+        "publicacion_id": publicacion_id or "",
         "creado": creado or ahora,
         "actualizado": actualizado or ahora,
     }
@@ -156,27 +156,27 @@ def borrar_evergreen_idea(idea_id: str) -> bool:
         con.close()
 
 
-def asignar_etiqueta(contenido_id: str, etiqueta_id: str) -> None:
+def asignar_etiqueta(publicacion_id: str, etiqueta_id: str) -> None:
     """Asigna una etiqueta a un contenido (idempotente: ignora si ya existe)."""
     con = _conectar()
     try:
         con.execute(
-            "INSERT INTO contenido_etiquetas (contenido_id, etiqueta_id) VALUES (?, ?) "
+            "INSERT INTO publicacion_etiquetas (publicacion_id, etiqueta_id) VALUES (?, ?) "
             "ON CONFLICT DO NOTHING",
-            (contenido_id, etiqueta_id),
+            (publicacion_id, etiqueta_id),
         )
         con.commit()
     finally:
         con.close()
 
 
-def quitar_etiqueta(contenido_id: str, etiqueta_id: str) -> bool:
+def quitar_etiqueta(publicacion_id: str, etiqueta_id: str) -> bool:
     """Quita una etiqueta de un contenido. True si estaba asignada."""
     con = _conectar()
     try:
         cur = con.execute(
-            "DELETE FROM contenido_etiquetas WHERE contenido_id = ? AND etiqueta_id = ?",
-            (contenido_id, etiqueta_id),
+            "DELETE FROM publicacion_etiquetas WHERE publicacion_id = ? AND etiqueta_id = ?",
+            (publicacion_id, etiqueta_id),
         )
         con.commit()
         return cur.rowcount > 0
@@ -185,17 +185,17 @@ def quitar_etiqueta(contenido_id: str, etiqueta_id: str) -> bool:
 
 
 def etiquetas_por_contenido() -> dict[str, list[str]]:
-    """Mapa `contenido_id -> [etiqueta_id, ...]` de TODAS las asignaciones (una lectura)."""
+    """Mapa `publicacion_id -> [etiqueta_id, ...]` de TODAS las asignaciones (una lectura)."""
     con = _conectar()
     try:
         filas = con.execute(
-            "SELECT contenido_id, etiqueta_id FROM contenido_etiquetas"
+            "SELECT publicacion_id, etiqueta_id FROM publicacion_etiquetas"
         ).fetchall()
     finally:
         con.close()
     mapa: dict[str, list[str]] = {}
     for f in filas:
-        mapa.setdefault(f["contenido_id"], []).append(f["etiqueta_id"])
+        mapa.setdefault(f["publicacion_id"], []).append(f["etiqueta_id"])
     return mapa
 
 
@@ -204,9 +204,9 @@ def ids_contenido_con_etiqueta(etiqueta_id: str) -> set[str]:
     con = _conectar()
     try:
         filas = con.execute(
-            "SELECT contenido_id FROM contenido_etiquetas WHERE etiqueta_id = ?",
+            "SELECT publicacion_id FROM publicacion_etiquetas WHERE etiqueta_id = ?",
             (etiqueta_id,),
         ).fetchall()
     finally:
         con.close()
-    return {f["contenido_id"] for f in filas}
+    return {f["publicacion_id"] for f in filas}

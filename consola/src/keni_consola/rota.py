@@ -525,7 +525,7 @@ def resumen_carga(
 # de los miembros que entran a trabajar HOY (turno en una franja NO-descanso) y cubren la
 # MARCA de la pieza, se elige uno de forma DETERMINISTA. Esta funcion es PURA y testeable
 # (recibe los turnos, los miembros con sus marcas y el dia); la capa de API
-# (`api/contenido.py`) construye sus entradas desde `repos`/`auth` y aplica el resultado.
+# (`api/publicaciones.py`) construye sus entradas desde `repos`/`auth` y aplica el resultado.
 
 
 def responsable_por_marca_hoy(

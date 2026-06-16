@@ -51,7 +51,7 @@ def paso_agrupar_lexico(
     # re-verifica anti-TOCTOU por si el pipeline promueve entre la lectura y fusionar).
     candidatos = [
         c for c in clusters
-        if (c.get("estado") or "nuevo") == "nuevo" and not (c.get("contenido_id") or "")
+        if (c.get("estado") or "nuevo") == "nuevo" and not (c.get("publicacion_id") or "")
     ]
     grupos = agrupar.grupos_lexicos(candidatos, umbral=umbral)
     if not grupos:

@@ -2,7 +2,7 @@
 
 Cubre las `tareas`, las `campanias` (filtro por hashtag), la `rota`, via `auth/` los
 `usuarios`/`sesiones`, y el CONTENIDO editorial ya
-migrado a Postgres (publicaciones, plantillas, fuentes RSS, hashtags, franjas; ADR
+migrado a Postgres (piezas, plantillas, fuentes RSS, hashtags, franjas; ADR
 0004/0006). Lo UNICO que sigue file-backed es el HISTORIAL de prompts (YAML por marca en
 `ficheros.py`, con un indice regenerable `indice.py`). La fachada `repos.py` enruta cada
 cosa a su almacen.
@@ -66,9 +66,9 @@ from ._db_comun import (  # noqa: F401
     ESTADO_ROTA_APROBADO,
     ESTADO_ROTA_PROPUESTO,
     ESTADO_SWAP_PROPUESTO,
-    ESTADOS_CONTENIDO,
-    ESTADOS_CONTENIDO_PLATAFORMA,
+    ESTADOS_PUBLICACION,
     ESTADOS_PIEZA,
+    ESTADOS_PIEZA_PARRILLA,
     ESTADOS_ROTA,
     ESTADOS_SWAP,
     ESTADOS_TAREA,
@@ -120,39 +120,39 @@ from .db_campanias import (  # noqa: F401
     listar_campanias,
     obtener_campania,
 )
-from .db_contenido import (  # noqa: F401
+from .db_publicacion import (  # noqa: F401
     ConflictoVersion,
-    actualizar_contenido,
-    actualizar_contenido_plataforma,
+    actualizar_publicacion,
+    actualizar_pieza_fila,
     actualizar_etiqueta,
-    borrar_contenido,
-    borrar_contenido_plataforma,
+    borrar_publicacion,
+    borrar_pieza_fila,
     borrar_etiqueta,
-    contar_contenido_origen_desde,
-    crear_contenido,
-    crear_contenido_plataforma,
+    contar_publicacion_origen_desde,
+    crear_publicacion,
+    crear_pieza_fila,
     crear_etiqueta,
-    estado_pieza_por_contenido,
+    estado_pieza_por_publicacion,
     existe_etiqueta_nombre,
     existe_publicado_similar,
     existe_publicado_similar_en_cache,
     hashtags_de_contenido,
-    ids_contenido_con_copy,
-    listar_contenido,
-    listar_contenido_origenes,
-    listar_contenido_plataforma,
-    listar_contenido_vencido,
+    ids_publicacion_con_copy,
+    listar_publicacion,
+    listar_publicaciones_origenes,
+    listar_piezas_fila,
+    listar_publicaciones_vencido,
     listar_etiquetas,
-    obtener_contenido,
-    obtener_contenido_plataforma,
+    obtener_publicacion,
+    obtener_pieza_fila,
     obtener_etiqueta,
     obtener_etiqueta_por_nombre,
     publicados_marca_cache,
-    reclamar_contenido,
+    reclamar_publicacion,
     reparar_verificacion_en_curso_sueltos,
     resumen_plan_por_categoria,
     titulos_recientes_marca,
-    verificacion_fuente_por_contenido,
+    verificacion_fuente_por_publicacion,
 )
 from .db_editor import (  # noqa: F401
     ESTADOS_VIDEO_COMPOSICION,
@@ -351,18 +351,18 @@ from .db_parrilla import (  # noqa: F401
     obtener_propuesta_parrilla,
     reparar_lotes_parseando_sueltos,
 )
-from .db_publicaciones import (  # noqa: F401
-    actualizar_publicacion,
-    borrar_publicacion,
-    contar_publicaciones,
-    crear_publicacion,
+from .db_piezas import (  # noqa: F401
+    actualizar_pieza,
+    borrar_pieza,
+    contar_piezas,
+    crear_pieza,
     crear_publicaciones,
     duplicar_evento_rota,
     existe_cadena_aprobacion,
-    listar_publicaciones,
-    obtener_publicacion,
+    listar_piezas,
+    obtener_pieza,
     reclamar_preparacion,
-    transicionar_estado_publicacion,
+    transicionar_estado_pieza,
 )
 from .db_rota import (  # noqa: F401
     actualizar_ausencia_rota,
@@ -446,7 +446,7 @@ from .db_webhooks import (  # noqa: F401
 __all__ = [
     "ESTADO_ROTA_APROBADO",
     "ESTADO_ROTA_PROPUESTO",
-    "ESTADO_SWAP_PROPUESTO",    "ESTADOS_PIEZA",
+    "ESTADO_SWAP_PROPUESTO",    "ESTADOS_PIEZA_PARRILLA",
     "ESTADOS_ROTA",
     "ESTADOS_SWAP",
     "ESTADOS_TAREA",    "PRIORIDADES_EVENTO",

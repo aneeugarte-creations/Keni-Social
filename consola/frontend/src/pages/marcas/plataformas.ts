@@ -1,6 +1,6 @@
 /**
  * Metadatos visuales de las plataformas del dashboard de Marcas y de la conexión
- * Postproxy. El catálogo visual de publicaciones (`pages/publicaciones/meta.ts`)
+ * Postproxy. El catálogo visual de piezas (`pages/piezas/meta.ts`)
  * solo cubre las 5 redes que el equipo PUBLICA (x/instagram/facebook/tiktok/
  * youtube); Postproxy soporta más (linkedin, threads, pinterest, bluesky,
  * telegram, google_business, twitter). Aquí completamos nombre + icono para TODAS

@@ -20,7 +20,7 @@ const Video = lazy(() => import("@/pages/Video"));
 // ruta-padre se deja sin `element` y react-router renderiza `<Outlet/>` por defecto;
 // la subnav entre sub-rutas vive in-page (SubnavHub, via HUB_TABS).
 const Fuentes = lazy(() => import("@/pages/Fuentes"));
-const ContenidosHub = lazy(() => import("@/pages/ContenidosHub"));
+const PublicacionesHub = lazy(() => import("@/pages/PublicacionesHub"));
 
 const Metricas = lazy(() => import("@/pages/Metricas"));
 const Campanias = lazy(() => import("@/pages/Campanias"));
@@ -30,8 +30,8 @@ const Marcas = lazy(() => import("@/pages/Marcas"));
 const Rota = lazy(() => import("@/pages/rota"));
 // Feed de ideación (Flujo D, Fase 4): la "red social interna" dentro del AppShell.
 const FeedIdeacion = lazy(() => import("@/pages/feed/FeedIdeacion"));
-const ListaContenido = lazy(() => import("@/pages/feed/ListaContenido"));
-const CalendarioContenido = lazy(() => import("@/pages/calendario/CalendarioContenido"));
+const ListaPublicacion = lazy(() => import("@/pages/feed/ListaPublicacion"));
+const CalendarioPublicacion = lazy(() => import("@/pages/calendario/CalendarioPublicacion"));
 
 const PipelineDetalle = lazy(() => import("@/pages/PipelineDetalle"));
 const GeneracionDetalle = lazy(() => import("@/pages/GeneracionDetalle"));
@@ -80,7 +80,7 @@ const Sistema = lazy(() => import("@/pages/sistema/Sistema"));
 /**
  * Rutas del SPA. El AppShell es el layout raiz (sidebar + topbar); las paginas
  * cuelgan de el. La navegación se agrupa por MOMENTO DEL FLUJO y ese bloque vive
- * TAMBIÉN en la URL: `/operacion/*` (checkpoints diarios), `/contenido/*`
+ * TAMBIÉN en la URL: `/operacion/*` (checkpoints diarios), `/publicaciones/*`
  * (herramientas de creación) y `/datos/*` (entradas y señales). La home es el
  * feed del equipo (`/operacion/feed`). Los hubs que quedan (Feed, Investigación,
  * Analíticas, Texto, Producción) son una ruta-layout sin componente:
@@ -155,14 +155,14 @@ export const router = createBrowserRouter([
               // estado de la cadena IA en vivo y aprobación en línea (Flujo D, Fase 4).
               { path: "feed", element: <FeedIdeacion /> },
               // Lista de contenido (header de acciones: aportar/crear/gestionar).
-              { path: "lista", element: <ListaContenido /> },
+              { path: "lista", element: <ListaPublicacion /> },
             ],
           },
           // El hub "Calendario" se separó en DOS páginas planas del sidebar (sin pestañas):
-          // Programación (calendario de publicaciones, por marca activa) y Turnos (rota de
+          // Programación (calendario de piezas, por marca activa) y Turnos (rota de
           // cobertura del equipo, por marca activa). Ambas respetan el switch global de marca;
           // "Todas" agrega. Las rutas legacy /operacion/calendario/* redirigen abajo.
-          { path: "programacion", element: <CalendarioContenido /> },
+          { path: "programacion", element: <CalendarioPublicacion /> },
           { path: "turnos", element: <Rota /> },
           // Compat: el antiguo hub `/operacion/calendario/*` (Programación/Turnos como pestañas)
           // se separó en las dos páginas planas de arriba. Redirigimos sus sub-rutas.
@@ -200,7 +200,7 @@ export const router = createBrowserRouter([
       {
         path: "contenido",
         children: [
-          { index: true, element: <Navigate to="/contenido/imagen" replace /> },
+          { index: true, element: <Navigate to="/publicaciones/imagen" replace /> },
           // CONTENIDO = TRES páginas planas por tipo: Imagen · Video · Texto. El nombre de la
           // página coincide con su ruta y con su API (`/api/imagen`, `/api/video`, `/api/prompts`).
           // Página IMAGEN: editor profesional por capas (Konva); diseña/edita el Documento.
@@ -209,12 +209,12 @@ export const router = createBrowserRouter([
           { path: "video", element: <Video /> },
           // Página TEXTO/Prompts: RETIRADA. Los prompts viven en cada fase del pipeline en
           // «Contexto» (Máquina) y el contexto editorial se inyecta desde ahí. Todo
-          // `/contenido/texto*` (incl. la vieja pestaña de algoritmos) redirige a Contexto.
+          // `/publicaciones/texto*` (incl. la vieja pestaña de algoritmos) redirige a Contexto.
           { path: "texto", element: <Navigate to="/maquina/contexto" replace /> },
           { path: "texto/*", element: <Navigate to="/maquina/contexto" replace /> },
           // Compatibilidad: los paths antiguos (estudio/editor) redirigen a Imagen.
-          { path: "estudio", element: <Navigate to="/contenido/imagen" replace /> },
-          { path: "editor", element: <Navigate to="/contenido/imagen" replace /> },
+          { path: "estudio", element: <Navigate to="/publicaciones/imagen" replace /> },
+          { path: "editor", element: <Navigate to="/publicaciones/imagen" replace /> },
         ],
       },
 
@@ -226,7 +226,7 @@ export const router = createBrowserRouter([
           // Hub Investigación: la pieza «Noticias» (la MESA DE REDACCIÓN: el pool persistente de
           // cobertura) se RELOCALIZÓ al cockpit de Investigación (`/maquina/investigacion`,
           // pestaña «Mesa de redacción»). El índice y las hojas que la componían redirigen allí.
-          // Quedan vivas Contenidos (banco evergreen) y Fuentes como sub-rutas del hub.
+          // Quedan vivas Publicaciones (banco evergreen) y Fuentes como sub-rutas del hub.
           {
             path: "investigacion",
             children: [
@@ -234,7 +234,7 @@ export const router = createBrowserRouter([
                 index: true,
                 element: <Navigate to="/maquina/investigacion?seccion=mesa" replace />,
               },
-              { path: "contenidos", element: <ContenidosHub /> },
+              { path: "contenidos", element: <PublicacionesHub /> },
               { path: "fuentes", element: <Fuentes /> },
               // El armado MANUAL del Termómetro (galería internacional) se retiró: la galería se
               // genera sola. El deep-link cae en la mesa del cockpit.
@@ -390,9 +390,9 @@ export const router = createBrowserRouter([
       // ===== Redirecciones de rutas legacy =====
       // Rutas planas anteriores → su nuevo path con prefijo de bloque (preservando
       // la pestaña con `RedirigirPrefijo` donde aplica).
-      { path: "imagenes", element: <Navigate to="/contenido/imagen" replace /> },
-      { path: "estudio", element: <Navigate to="/contenido/imagen" replace /> },
-      { path: "texto/*", element: <RedirigirPrefijo a="/contenido/texto" /> },
+      { path: "imagenes", element: <Navigate to="/publicaciones/imagen" replace /> },
+      { path: "estudio", element: <Navigate to="/publicaciones/imagen" replace /> },
+      { path: "texto/*", element: <RedirigirPrefijo a="/publicaciones/texto" /> },
       { path: "investigacion/parrilla-dia", element: <Navigate to="/datos/investigacion" replace /> },
       { path: "investigacion/*", element: <RedirigirPrefijo a="/datos/investigacion" /> },
       // La página "Revisión" se retiró (obsoleta): sus rutas planas legacy caen en el Feed.
@@ -408,8 +408,8 @@ export const router = createBrowserRouter([
       { path: "parrilla/*", element: <Navigate to="/operacion/feed" replace /> },
       { path: "actividad", element: <Navigate to="/datos/produccion" replace /> },
       // "Activos"/"Plantillas" quedaron obsoletas; sus rutas redirigen a la Texto.
-      { path: "activos", element: <Navigate to="/contenido/texto/documentos" replace /> },
-      { path: "activos/plantillas", element: <Navigate to="/contenido/texto/documentos" replace /> },
+      { path: "activos", element: <Navigate to="/publicaciones/texto/documentos" replace /> },
+      { path: "activos/plantillas", element: <Navigate to="/publicaciones/texto/documentos" replace /> },
       // Hojas planas antiguas (pre-hub) y fusiones previas:
       { path: "fuentes", element: <Navigate to="/datos/investigacion/fuentes" replace /> },
       { path: "termometro", element: <Navigate to="/datos/investigacion" replace /> },
@@ -421,8 +421,8 @@ export const router = createBrowserRouter([
       { path: "comercial", element: <Navigate to="/datos/analiticas/campanias" replace /> },
       { path: "tareas", element: <Navigate to="/operacion/turnos" replace /> },
       { path: "rota", element: <Navigate to="/operacion/turnos" replace /> },
-      // Publicaciones se FUSIONÓ en el contenido (#fase2); ahora vive en la Lista del Feed.
-      { path: "publicaciones", element: <Navigate to="/operacion/feed/lista" replace /> },
+      // Piezas se FUSIONÓ en el contenido (#fase2); ahora vive en la Lista del Feed.
+      { path: "piezas", element: <Navigate to="/operacion/feed/lista" replace /> },
       // El antiguo Monitor se relocalizó a «Máquina»; el deep-link plano `/monitor` cae en la
       // Cola (preservando `?tab=`/`?proceso=` vía el mismo redirector que la ruta anidada).
       { path: "monitor", element: <RedirigirMonitor /> },
@@ -430,8 +430,8 @@ export const router = createBrowserRouter([
       { path: "agentes/actividad", element: <Navigate to="/datos/produccion" replace /> },
       // El copy se generaba en /generacion (motor antiguo, retirado): ahora vive en
       // la Texto; el catálogo de prompts también vive en la Texto.
-      { path: "generar-copy", element: <Navigate to="/contenido/texto" replace /> },
-      { path: "generacion", element: <Navigate to="/contenido/texto" replace /> },
+      { path: "generar-copy", element: <Navigate to="/publicaciones/texto" replace /> },
+      { path: "generacion", element: <Navigate to="/publicaciones/texto" replace /> },
       { path: "conexiones", element: <Navigate to="/configuracion" replace /> },
       { path: "estado", element: <Navigate to="/configuracion" replace /> },
       { path: "proyectos", element: <Navigate to="/datos/produccion" replace /> },

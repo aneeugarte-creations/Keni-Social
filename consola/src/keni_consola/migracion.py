@@ -10,7 +10,7 @@ Uso:
 IDEMPOTENTE: re-ejecutar no duplica ni pisa. La media salta el objeto si la key ya existe
 en el bucket. Asi se puede correr de nuevo sin miedo si algo se interrumpio.
 
-ALCANCE (lo que NO migra, a proposito): el almacen YAML de publicaciones/historial
+ALCANCE (lo que NO migra, a proposito): el almacen YAML de piezas/historial
 (`ficheros.py`, `<raiz>/<marca>/...`) y su indice regenerable (`indice.py`) NO se tocan: el
 cutover de #130 es DB operacional + media. El contenido editorial viaja con su volumen
 (`keni-data`/`KENI_DATA_DIR`) como hasta ahora; migrarlo es trabajo futuro aparte.

@@ -33,7 +33,7 @@ function guardarPersistida(usuarioId: string, marca: string | null): void {
 /**
  * Provider de la marca activa. Deriva el estado inicial del perfil de la sesión
  * (`usuario.marcas`) y de la preferencia persistida por usuario, y resuelve los
- * nombres legibles desde el catálogo canónico (`/api/publicaciones/opciones`,
+ * nombres legibles desde el catálogo canónico (`/api/piezas/opciones`,
  * que entrega `{id, nombre}` con ids canónicos para todo editor).
  *
  * Se monta DEBAJO de la puerta de sesión, así que normalmente hay usuario; aun
@@ -48,7 +48,7 @@ export function MarcaActivaProvider({ children }: { children: React.ReactNode })
   const marcaPrimaria = marcasUsuario[0] ?? null;
 
   // Catálogo canónico de marcas (id → nombre). Se cachea indefinidamente: es el
-  // mismo que ya consumen Estudio/Publicaciones, así que no añade carga.
+  // mismo que ya consumen Estudio/Piezas, así que no añade carga.
   const catalogoQuery = useQuery({
     queryKey: ["marcas-catalogo"],
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),

@@ -2,22 +2,22 @@
 // El objeto compuesto vive en ./index.ts; aquí solo el fragmento + sus imports.
 import { peticion } from "./_core";
 import type {
-  CuerpoActualizarContenido,
+  CuerpoActualizarPublicacion,
   CuerpoActualizarPlataforma,
   CuerpoAportarMaterial,
-  CuerpoCrearContenido,
+  CuerpoCrearPublicacion,
   CuerpoCrearPostDirecto,
   CuerpoSugerirHora,
   EventoRota,
-  RespuestaContenido,
-  RespuestaContenidoItem,
-  RespuestaEtiquetasContenido,
+  RespuestaPublicacion,
+  RespuestaPublicacionItem,
+  RespuestaEtiquetasPublicacion,
   RespuestaMensaje,
   RespuestaPlataforma,
   RespuestaSugerirHora,
 } from "@/types";
 
-export const apiContenido = {
+export const apiPublicacion = {
   // --- Tablero de contenido unificado (herramienta de community manager) ---
   contenido: (
     params: {
@@ -37,34 +37,34 @@ export const apiContenido = {
       if (v !== undefined && v !== null && v !== "") qs.set(k, String(v));
     }
     const cola = qs.toString();
-    return peticion<RespuestaContenido>(`/contenido${cola ? `?${cola}` : ""}`, { signal });
+    return peticion<RespuestaPublicacion>(`/publicaciones${cola ? `?${cola}` : ""}`, { signal });
   },
-  crearContenido: (cuerpo: CuerpoCrearContenido) =>
-    peticion<RespuestaContenidoItem>("/contenido", { metodo: "POST", json: cuerpo }),
-  actualizarContenido: (id: string, cuerpo: CuerpoActualizarContenido) =>
-    peticion<RespuestaContenidoItem>(`/contenido/${encodeURIComponent(id)}`, {
+  crearPublicacion: (cuerpo: CuerpoCrearPublicacion) =>
+    peticion<RespuestaPublicacionItem>("/publicaciones", { metodo: "POST", json: cuerpo }),
+  actualizarPublicacion: (id: string, cuerpo: CuerpoActualizarPublicacion) =>
+    peticion<RespuestaPublicacionItem>(`/publicaciones/${encodeURIComponent(id)}`, {
       metodo: "PATCH",
       json: cuerpo,
     }),
-  eliminarContenido: (id: string) =>
-    peticion<RespuestaMensaje>(`/contenido/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+  eliminarPublicacion: (id: string) =>
+    peticion<RespuestaMensaje>(`/publicaciones/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
   /** "La lista" (reparto ClaroSports): COGE el tema (claim atómico sobre el `contenido`
    *  padre: todas sus redes pasan a ser tuyas). 409 si otra persona ya lo cogió. */
-  cogerContenido: (contenidoId: string) =>
-    peticion<RespuestaContenidoItem>(`/contenido/${encodeURIComponent(contenidoId)}/coger`, {
+  cogerPublicacion: (publicacionId: string) =>
+    peticion<RespuestaPublicacionItem>(`/publicaciones/${encodeURIComponent(publicacionId)}/coger`, {
       metodo: "POST",
     }),
   /** Suelta el tema (vuelve a "por coger"). Solo quien lo cogió, o un admin. */
-  soltarContenido: (contenidoId: string) =>
-    peticion<RespuestaContenidoItem>(`/contenido/${encodeURIComponent(contenidoId)}/soltar`, {
+  soltarPublicacion: (publicacionId: string) =>
+    peticion<RespuestaPublicacionItem>(`/publicaciones/${encodeURIComponent(publicacionId)}/soltar`, {
       metodo: "POST",
     }),
   /** "La lista" (reparto ClaroSports): el MANAGER (admin) EMPUJA el tema a una persona
    *  concreta —o lo REASIGNA pisando a quien lo tuviera—. Es la otra puerta del mismo
-   *  responsable: `cogerContenido` es el self-claim del empleado; esto es el push del coordinador de redes.
+   *  responsable: `cogerPublicacion` es el self-claim del empleado; esto es el push del coordinador de redes.
    *  El asignado recibe aviso in-app. 403 si no eres manager; 400 sin persona (libera con soltar). */
-  asignarContenido: (contenidoId: string, responsableId: string) =>
-    peticion<RespuestaContenidoItem>(`/contenido/${encodeURIComponent(contenidoId)}/asignar`, {
+  asignarPublicacion: (publicacionId: string, responsableId: string) =>
+    peticion<RespuestaPublicacionItem>(`/publicaciones/${encodeURIComponent(publicacionId)}/asignar`, {
       metodo: "POST",
       json: { responsable_id: responsableId },
     }),
@@ -74,42 +74,42 @@ export const apiContenido = {
    *  `formato` (opcional) es el ROL de cobertura (foto/video/texto/live): la clave find-or-create
    *  pasa a (evento, persona, rol), así una persona puede llevar varios roles sin pisarse. */
   cubrirEvento: (eventoId: string, responsableId?: string, formato?: string) =>
-    peticion<RespuestaContenidoItem>("/contenido/cubrir-evento", {
+    peticion<RespuestaPublicacionItem>("/publicaciones/cubrir-evento", {
       metodo: "POST",
       json: { evento_id: eventoId, responsable_id: responsableId, formato },
     }),
   /** Promueve una tarea-PROPUESTA (tarea suelta con fecha) al calendario de Turnos: crea el
    *  evento de la rota y consume la tarea. Es el «Aceptar» de la bandeja de notificaciones del
-   *  calendario. Para rechazarla se usa `eliminarContenido` (DELETE), que no crea evento. */
-  aceptarContenido: (contenidoId: string) =>
+   *  calendario. Para rechazarla se usa `eliminarPublicacion` (DELETE), que no crea evento. */
+  aceptarPublicacion: (publicacionId: string) =>
     peticion<{ aceptada: boolean; evento: EventoRota }>(
-      `/contenido/${encodeURIComponent(contenidoId)}/aceptar`,
+      `/publicaciones/${encodeURIComponent(publicacionId)}/aceptar`,
       { metodo: "POST" },
     ),
-  agregarPlataforma: (contenidoId: string, red: string) =>
+  agregarPlataforma: (publicacionId: string, red: string) =>
     peticion<RespuestaPlataforma>(
-      `/contenido/${encodeURIComponent(contenidoId)}/plataformas`,
+      `/publicaciones/${encodeURIComponent(publicacionId)}/plataformas`,
       { metodo: "POST", json: { red } },
     ),
   actualizarPlataforma: (
-    contenidoId: string,
-    plataformaId: string,
+    publicacionId: string,
+    piezaId: string,
     cuerpo: CuerpoActualizarPlataforma,
   ) =>
     peticion<RespuestaPlataforma>(
-      `/contenido/${encodeURIComponent(contenidoId)}/plataformas/${encodeURIComponent(plataformaId)}`,
+      `/publicaciones/${encodeURIComponent(publicacionId)}/plataformas/${encodeURIComponent(piezaId)}`,
       { metodo: "PATCH", json: cuerpo },
     ),
   // Genera una imagen adaptada por red (recorte al formato + plantilla de marca) a partir de
   // `imagen` y la asigna a CADA plataforma de la pieza, de forma determinista.
-  adaptarImagenContenido: (contenidoId: string, imagen: string) =>
+  adaptarImagenPublicacion: (publicacionId: string, imagen: string) =>
     peticion<{ adaptadas: number }>(
-      `/contenido/${encodeURIComponent(contenidoId)}/adaptar-imagen`,
+      `/publicaciones/${encodeURIComponent(publicacionId)}/adaptar-imagen`,
       { metodo: "POST", json: { imagen } },
     ),
-  eliminarPlataforma: (contenidoId: string, plataformaId: string) =>
+  eliminarPlataforma: (publicacionId: string, piezaId: string) =>
     peticion<RespuestaMensaje>(
-      `/contenido/${encodeURIComponent(contenidoId)}/plataformas/${encodeURIComponent(plataformaId)}`,
+      `/publicaciones/${encodeURIComponent(publicacionId)}/plataformas/${encodeURIComponent(piezaId)}`,
       { metodo: "DELETE" },
     ),
   // PUERTA CREATIVA (Fase 1 / Flujo A): el equipo "postea" material ORIGINAL (foto/nota/idea/
@@ -127,7 +127,7 @@ export const apiContenido = {
     if (cuerpo.imagen) form.set("imagen", cuerpo.imagen);
     // Vídeo/audio: se transcribe EN LOCAL en el back y el texto alimenta el auto-copy.
     if (cuerpo.clip) form.set("clip", cuerpo.clip);
-    return peticion<RespuestaContenidoItem>("/contenido/aportar", {
+    return peticion<RespuestaPublicacionItem>("/publicaciones/aportar", {
       metodo: "POST",
       form,
       timeoutMs: 120_000,
@@ -137,18 +137,18 @@ export const apiContenido = {
   // borrador por red por el MISMO motor que el copy generado (sin generación: el copy es
   // del humano). La pieza sigue el flujo normal (arte, revisión, programación).
   crearPostDirecto: (cuerpo: CuerpoCrearPostDirecto) =>
-    peticion<RespuestaContenidoItem>("/contenido/post-directo", { metodo: "POST", json: cuerpo }),
+    peticion<RespuestaPublicacionItem>("/publicaciones/post-directo", { metodo: "POST", json: cuerpo }),
   // Fase3 auto-planificación: sugerir la mejor hora de publicación (1 clic en la UI).
   sugerirHora: (cuerpo: CuerpoSugerirHora) =>
     peticion<RespuestaSugerirHora>("/planificacion/sugerir-hora", { metodo: "POST", json: cuerpo }),
-  asignarEtiquetaContenido: (contenidoId: string, etiqueta_id: string) =>
-    peticion<RespuestaEtiquetasContenido>(
-      `/contenido/${encodeURIComponent(contenidoId)}/etiquetas`,
+  asignarEtiquetaPublicacion: (publicacionId: string, etiqueta_id: string) =>
+    peticion<RespuestaEtiquetasPublicacion>(
+      `/publicaciones/${encodeURIComponent(publicacionId)}/etiquetas`,
       { metodo: "POST", json: { etiqueta_id } },
     ),
-  quitarEtiquetaContenido: (contenidoId: string, etiquetaId: string) =>
-    peticion<RespuestaEtiquetasContenido>(
-      `/contenido/${encodeURIComponent(contenidoId)}/etiquetas/${encodeURIComponent(etiquetaId)}`,
+  quitarEtiquetaPublicacion: (publicacionId: string, etiquetaId: string) =>
+    peticion<RespuestaEtiquetasPublicacion>(
+      `/publicaciones/${encodeURIComponent(publicacionId)}/etiquetas/${encodeURIComponent(etiquetaId)}`,
       { metodo: "DELETE" },
     ),
 

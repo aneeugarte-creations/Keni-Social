@@ -46,7 +46,7 @@ def _tope_serie_metricas(limite: int | None) -> int | None:
 # --------------------------------------------------------------------------- #
 #
 # `metricas_pieza_snapshots`: una fila por pieza por refresco del daemon
-# (`metricas_piezas_refresco`, cada 4h) para TODAS las publicaciones recientes (no solo las
+# (`metricas_piezas_refresco`, cada 4h) para TODAS las piezas recientes (no solo las
 # del modulo comercial). Habilita analisis temporales por marca×red×formato. Relacion con
 # las otras dos series: `metricas_cache` guarda el valor ACTUAL (sobrescrito); esta guarda
 # la SERIE; `comercial_snapshots` sigue para el seguimiento de OBJETIVOS comerciales. Ver

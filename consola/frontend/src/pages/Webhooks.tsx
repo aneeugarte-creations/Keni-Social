@@ -60,7 +60,7 @@ const CLAVE = ["webhooks"] as const;
 const ETIQUETA_EVENTO: Record<TipoEventoInterno, string> = {
   "pieza.aprobada": "Pieza aprobada",
   "pieza.publicada": "Pieza publicada",
-  "contenido.vencido": "Contenido vencido",
+  "contenido.vencido": "Publicacion vencido",
   "pieza.bajo_rendimiento": "Pieza con bajo rendimiento",
 };
 

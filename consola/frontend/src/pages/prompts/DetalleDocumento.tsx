@@ -656,7 +656,7 @@ export function DetalleDocumento({
               <EditorWysiwyg
                 key={borrador.id}
                 value={borrador.cuerpo}
-                onContenido={(md) => editar({ cuerpo: md })}
+                onPublicacion={(md) => editar({ cuerpo: md })}
                 conVariables
                 placeholder={
                   esPrompt

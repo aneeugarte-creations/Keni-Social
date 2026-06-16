@@ -9,7 +9,7 @@
  *    markdown (`editor.storage.markdown.getMarkdown()`), que es lo que persistimos.
  *
  * SINCRONÍA SIN BUCLES: `value` es la fuente externa (cambia al cambiar de documento). Al
- * teclear emitimos markdown por `onContenido` y guardamos el último emitido en un ref; el
+ * teclear emitimos markdown por `onPublicacion` y guardamos el último emitido en un ref; el
  * efecto que sincroniza `value -> editor` se SALTA cuando `value` coincide con ese ref, así
  * el propio tecleo no provoca un `setContent` (que movería el cursor).
  */
@@ -71,12 +71,12 @@ export const ESTILO_CONTENIDO = cn(
 
 export function EditorWysiwyg({
   value,
-  onContenido,
+  onPublicacion,
   placeholder,
   conVariables = false,
 }: {
   value: string;
-  onContenido: (markdown: string) => void;
+  onPublicacion: (markdown: string) => void;
   placeholder?: string;
   /**
    * Activa los chips de variables `{{NOMBRE}}` de la Prompts (nodo atómico + tooltip
@@ -94,11 +94,11 @@ export function EditorWysiwyg({
   // `null` fuerza la carga inicial (el primer efecto hace setContent). Luego guarda lo último
   // emitido al teclear para no re-cargar (evita bucle setContent->salto de cursor).
   const ultimoEmitido = React.useRef<string | null>(null);
-  // `onContenido` por REF: `useEditor` fija `onUpdate` UNA sola vez (deps []); sin esto el
+  // `onPublicacion` por REF: `useEditor` fija `onUpdate` UNA sola vez (deps []); sin esto el
   // handler llamaría al callback VIEJO (capturado al montar) -> al cambiar de documento se
   // guardaba en el ANTERIOR y la selección saltaba ("aparece y desaparece"). El ref apunta al actual.
-  const onContenidoRef = React.useRef(onContenido);
-  onContenidoRef.current = onContenido;
+  const onPublicacionRef = React.useRef(onPublicacion);
+  onPublicacionRef.current = onPublicacion;
   // Marca el `onUpdate` que dispara NUESTRO setContent programático (cargar/cambiar de doc).
   // ProseMirror lo emite SÍNCRONO dentro de setContent, así que basta un flag a su alrededor.
   const cargando = React.useRef(false);
@@ -119,7 +119,7 @@ export function EditorWysiwyg({
       if (cargando.current) return; // update provocado por el setContent de carga, no por el usuario
       const md = aMarkdown(editor);
       ultimoEmitido.current = md;
-      onContenidoRef.current(md);
+      onPublicacionRef.current(md);
     },
   });
 

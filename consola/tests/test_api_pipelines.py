@@ -1,7 +1,7 @@
 """Tests del endpoint `/api/pipelines` (vista estilo GitLab del pipeline de contenido).
 
 Cada `contenido` con `origen='pipeline'` es una RUN; sus etapas (ADMITIR/REDACTAR/VERIFICAR/Aprobar) se
-DERIVAN del estado real de la pieza y sus publicaciones por plataforma. Aquí montamos ese
+DERIVAN del estado real de la pieza y sus piezas por plataforma. Aquí montamos ese
 estado a mano (sin daemon ni `claude`) y comprobamos la derivación + el detalle + la
 exclusión de lo que NO es del pipeline. Usa la fixture `cliente` (entorno aislado + Postgres).
 """
@@ -34,7 +34,7 @@ def _etapas_activas(monkeypatch):
 
 
 def _tema_pipeline(titulo: str, marca: str = "unotv", **campos) -> dict:
-    return repos.crear_contenido(
+    return repos.crear_publicacion(
         clase="contenido", titulo=titulo, marca=marca, origen=ORIGEN_PIPELINE, **campos
     )
 
@@ -51,8 +51,8 @@ def test_run_verificacion_no_verificado_con_copy(cliente):
     Orden NUEVO (rediseño QPC): ADMITIR -> Verificación de la fuente (VERIFICAR) -> Copy (REDACTAR) -> Aprobar.
     """
     tema = _tema_pipeline("Tema apto", verificacion_fuente="no_verificado")
-    repos.crear_contenido_plataforma(
-        contenido_id=tema["id"], red="x", estado="borrador",
+    repos.crear_pieza_fila(
+        publicacion_id=tema["id"], red="x", estado="borrador",
         copy="Copy válido y corto.", revision="no_verificado",
     )
     run = _run_por_titulo(cliente, "Tema apto")
@@ -76,8 +76,8 @@ def test_run_verificacion_no_verificado_con_copy(cliente):
 def test_run_sin_verificacion_todo_pendiente(cliente):
     """Tema sin verificacion de VERIFICAR todavía: VERIFICAR y REDACTAR pendientes (la VERIFICAR va antes del copy)."""
     tema = _tema_pipeline("Tema sin verificación")
-    repos.crear_contenido_plataforma(
-        contenido_id=tema["id"], red="x", estado="borrador", copy="",
+    repos.crear_pieza_fila(
+        publicacion_id=tema["id"], red="x", estado="borrador", copy="",
     )
     run = _run_por_titulo(cliente, "Tema sin verificación")
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
@@ -107,8 +107,8 @@ def test_aprobacion_esperando_humano_es_pendiente(cliente):
     """Piezas EN REVISIÓN sin ninguna aprobada = la run espera al HUMANO: 'pendiente' (con el
     detalle 'En revisión'), no 'en_curso' — la máquina no está haciendo nada."""
     tema = _tema_pipeline("Run en revisión", verificacion_fuente="no_verificado")
-    repos.crear_contenido_plataforma(
-        contenido_id=tema["id"], red="x", estado="en_revision",
+    repos.crear_pieza_fila(
+        publicacion_id=tema["id"], red="x", estado="en_revision",
         copy="Copy.", revision="no_verificado",
     )
     run = _run_por_titulo(cliente, "Run en revisión")
@@ -121,8 +121,8 @@ def test_aprobacion_esperando_humano_es_pendiente(cliente):
 def test_run_aprobado(cliente):
     """Pieza aprobada con VERIFICAR `no_verificado` -> aprobación ok y estado_global ok."""
     tema = _tema_pipeline("Tema aprobado", verificacion_fuente="no_verificado")
-    repos.crear_contenido_plataforma(
-        contenido_id=tema["id"], red="x", estado="programado",
+    repos.crear_pieza_fila(
+        publicacion_id=tema["id"], red="x", estado="programado",
         copy="Copy.", revision="no_verificado",
     )
     run = _run_por_titulo(cliente, "Tema aprobado")
@@ -139,8 +139,8 @@ def test_run_verificacion_saltada_genera_copy(cliente, monkeypatch):
         lambda clave: "0" if clave == config.clave_por_marca(config.ENV_PIPELINE_VERIFICAR, "unotv") else None,
     )
     tema = _tema_pipeline("Tema sin VERIFICAR", verificacion_fuente="saltada")
-    repos.crear_contenido_plataforma(
-        contenido_id=tema["id"], red="x", estado="borrador",
+    repos.crear_pieza_fila(
+        publicacion_id=tema["id"], red="x", estado="borrador",
         copy="Copy generado sin verificación.", revision="no_verificado",
     )
     run = _run_por_titulo(cliente, "Tema sin VERIFICAR")
@@ -178,8 +178,8 @@ def test_etapas_ejecutadas_no_se_repintan_con_toggles_off(cliente, monkeypatch):
     apagados: encender/apagar interruptores no ilumina ni apaga la historia de las runs."""
     tema = _tema_pipeline("Run histórica", verificacion_fuente="no_verificado")
     _historia_de(tema["id"], n_fuentes=3, n_items=4, score=0.8)
-    repos.crear_contenido_plataforma(
-        contenido_id=tema["id"], red="x", estado="programado",
+    repos.crear_pieza_fila(
+        publicacion_id=tema["id"], red="x", estado="programado",
         copy="Copy hecho.", revision="no_verificado",
     )
     for env in (config.ENV_PIPELINE_FUSIONAR, config.ENV_PRIORIZAR_PERFIL_IA,
@@ -209,11 +209,11 @@ def test_run_caducada_se_pinta_cerrada(cliente):
 
 
 def _historia_de(tema_id: str, marca: str = "unotv", **campos) -> dict:
-    """Crea una HISTORIA (cluster) enlazada a un tema del pipeline (`contenido_id`)."""
+    """Crea una HISTORIA (cluster) enlazada a un tema del pipeline (`publicacion_id`)."""
     base = {
         "marca": marca, "titulo": "Historia", "n_items": 1, "n_fuentes": 1,
         "score": 0.5, "breaking": 0, "verificacion": "unica_fuente",
-        "estado": "usado", "contenido_id": tema_id,
+        "estado": "usado", "publicacion_id": tema_id,
     }
     base.update(campos)
     return repos.upsert_noticia_cluster(base)
@@ -266,7 +266,7 @@ def test_estado_global_saltada_no_bloquea():
 
 def test_excluye_contenido_no_pipeline(cliente):
     """Un contenido de otro origen NO aparece como pipeline."""
-    repos.crear_contenido(clase="contenido", titulo="Manual", marca="unotv", origen="equipo")
+    repos.crear_publicacion(clase="contenido", titulo="Manual", marca="unotv", origen="equipo")
     r = cliente.get("/api/pipelines")
     assert all(x["titulo"] != "Manual" for x in r.json()["pipelines"])
 
@@ -302,8 +302,8 @@ def test_paginacion_envelope_y_offset(cliente):
 def test_etapa_actual_y_filtro_por_etapa(cliente):
     """`etapa_actual` = la etapa donde está parada; `?etapa=` filtra por ella."""
     aprob = _tema_pipeline("Run aprobada", verificacion_fuente="no_verificado")
-    repos.crear_contenido_plataforma(
-        contenido_id=aprob["id"], red="x", estado="programado", copy="C.", revision="no_verificado",
+    repos.crear_pieza_fila(
+        publicacion_id=aprob["id"], red="x", estado="programado", copy="C.", revision="no_verificado",
     )
     _tema_pipeline("Run en VERIFICAR")  # sin verificacion: la VERIFICAR queda 'pendiente'
     en_qa = _run_por_titulo(cliente, "Run en VERIFICAR")
@@ -329,8 +329,8 @@ def test_filtro_por_estado_global_e_invalido_se_ignora(cliente):
 
 def test_detalle_run(cliente):
     tema = _tema_pipeline("Tema detalle")
-    repos.crear_contenido_plataforma(
-        contenido_id=tema["id"], red="x", estado="borrador", copy="Copy.",
+    repos.crear_pieza_fila(
+        publicacion_id=tema["id"], red="x", estado="borrador", copy="Copy.",
     )
     d = cliente.get(f"/api/pipelines/{tema['id']}")
     assert d.status_code == 200
@@ -376,8 +376,8 @@ def test_etapa_arte_exige_evidencia_de_arte_ia(cliente, monkeypatch):
     el toggle apagado (encendida estando apagada)."""
     # Toggle Ilustrar off (default) + pieza CON imagen (foto de fuente): saltada, NO ok.
     tema = _tema_pipeline("Tema foto de fuente")
-    repos.crear_contenido_plataforma(
-        contenido_id=tema["id"], red="x", estado="borrador", copy="C.",
+    repos.crear_pieza_fila(
+        publicacion_id=tema["id"], red="x", estado="borrador", copy="C.",
         imagen="foto-fuente.png", falta_imagen=False,
     )
     run = _run_por_titulo(cliente, "Tema foto de fuente")
@@ -386,12 +386,12 @@ def test_etapa_arte_exige_evidencia_de_arte_ia(cliente, monkeypatch):
     # Con EVIDENCIA de arte IA (la generación que deja el auto-arte) -> ok, aunque el toggle
     # de HOY esté apagado (la evidencia no se re-pinta con interruptores).
     tema2 = _tema_pipeline("Tema arte ia")
-    repos.crear_contenido_plataforma(
-        contenido_id=tema2["id"], red="x", estado="borrador", copy="C.",
+    repos.crear_pieza_fila(
+        publicacion_id=tema2["id"], red="x", estado="borrador", copy="C.",
         imagen="arte-ia.png", falta_imagen=False,
     )
     generaciones.crear({
-        "tipo": "pipeline", "marca": "unotv", "contenido_id": tema2["id"],
+        "tipo": "pipeline", "marca": "unotv", "publicacion_id": tema2["id"],
         "etiqueta": "Arte — Tema arte ia", "estado": generaciones.ESTADO_COMPLETADO,
     })
     run2 = _run_por_titulo(cliente, "Tema arte ia")
@@ -400,8 +400,8 @@ def test_etapa_arte_exige_evidencia_de_arte_ia(cliente, monkeypatch):
     # Toggle ON pero sin evidencia: pendiente (el arte aún no corrió), tampoco 'ok'.
     monkeypatch.setenv(config.ENV_PIPELINE_ILUSTRAR, "1")
     tema3 = _tema_pipeline("Tema arte pendiente")
-    repos.crear_contenido_plataforma(
-        contenido_id=tema3["id"], red="x", estado="borrador", copy="C.",
+    repos.crear_pieza_fila(
+        publicacion_id=tema3["id"], red="x", estado="borrador", copy="C.",
         imagen="foto-fuente.png", falta_imagen=False,
     )
     run3 = _run_por_titulo(cliente, "Tema arte pendiente")
@@ -508,7 +508,7 @@ def test_detalle_expone_stream_de_la_etapa(cliente):
         "estado": generaciones.ESTADO_COMPLETADO,
     })
     registrar_etapa(
-        ETAPA_REDACTAR, "unotv", "Generación de copy", contenido_id=tema["id"], gen_id=gen["id"],
+        ETAPA_REDACTAR, "unotv", "Generación de copy", publicacion_id=tema["id"], gen_id=gen["id"],
     )
 
     d = cliente.get(f"/api/pipelines/{tema['id']}")
@@ -526,7 +526,7 @@ def test_detalle_expone_stream_de_la_etapa(cliente):
 def test_detalle_sin_gen_id_no_trae_generacion(cliente):
     """Back-compat: un marcador SIN `gen_id` no añade nada a `generaciones_por_etapa`."""
     tema = _tema_pipeline("Tema sin stream")
-    registrar_etapa(ETAPA_REDACTAR, "unotv", "Generación de copy", contenido_id=tema["id"])
+    registrar_etapa(ETAPA_REDACTAR, "unotv", "Generación de copy", publicacion_id=tema["id"])
     body = cliente.get(f"/api/pipelines/{tema['id']}").json()
     assert body["generaciones_por_etapa"] == {}
 
@@ -573,11 +573,11 @@ def test_feed_unificado_mezcla_runs_y_actividad_suelta(cliente):
 
 
 def test_run_suma_metricas_de_sus_generaciones(cliente):
-    """Una generación correlacionada a la run (contenido_id) NO sale suelta: su coste se
+    """Una generación correlacionada a la run (publicacion_id) NO sale suelta: su coste se
     SUMA en `metricas` de la run."""
     tema = _tema_pipeline("Run con coste")
-    _gen_suelta("Copy de la run", contenido_id=tema["id"])
-    _gen_suelta("Ilustrar de la run", tipo="imagen", contenido_id=tema["id"],
+    _gen_suelta("Copy de la run", publicacion_id=tema["id"])
+    _gen_suelta("Ilustrar de la run", tipo="imagen", publicacion_id=tema["id"],
                 metricas={"tokens_in": 10, "tokens_out": 10, "total_cost_usd": 0.005,
                           "duration_ms": 1000})
     items = cliente.get("/api/pipelines").json()["pipelines"]
@@ -647,7 +647,7 @@ def test_lista_trae_sumatorio_de_metricas(cliente):
     """La lista responde `totales`: la SUMA de métricas de todos los items que casan el filtro
     (no solo la página), para el sumatorio de la página Producción."""
     tema = _tema_pipeline("Run sumada")
-    _gen_suelta("Copy de la run sumada", contenido_id=tema["id"])
+    _gen_suelta("Copy de la run sumada", publicacion_id=tema["id"])
     _gen_suelta("Suelta sumada")
     body = cliente.get("/api/pipelines").json()
     t = body["totales"]
@@ -670,14 +670,14 @@ def test_tema_de_tablero_trabajado_sale_como_run(cliente):
     """Un tema del tablero (origen de `ORIGENES_AUTOGEN`) que la etapa de copy REDACTÓ es una
     RUN del feed (no una entrada suelta "Auto-copy"): su trabajo se ve dentro de la run, con
     etapas honestas (Fusionar/Priorizar/Verificación "no aplica": no pasó por el pool)."""
-    tema = repos.crear_contenido(
+    tema = repos.crear_publicacion(
         clase="contenido", titulo="Breaking usada a mano", marca="unotv", origen="historia",
     )
-    repos.crear_contenido_plataforma(
-        contenido_id=tema["id"], red="x", estado="borrador", copy="Copy.",
+    repos.crear_pieza_fila(
+        publicacion_id=tema["id"], red="x", estado="borrador", copy="Copy.",
     )
     generaciones.crear({
-        "tipo": "pipeline", "marca": "unotv", "contenido_id": tema["id"],
+        "tipo": "pipeline", "marca": "unotv", "publicacion_id": tema["id"],
         "etiqueta": "Breaking usada a mano · UnoTV",
         "estado": generaciones.ESTADO_COMPLETADO,
         "metricas": {"tokens_in": 100, "tokens_out": 50, "total_cost_usd": 0.02,
@@ -715,11 +715,11 @@ def test_tema_de_tablero_trabajado_sale_como_run(cliente):
 def test_autogen_legacy_correlacionado_se_pliega_en_su_run(cliente):
     """Una generación LEGADA `tipo='autogen'` correlacionada a un tema del tablero también
     convierte el tema en run y se pliega en sus métricas (no queda suelta como "Auto-copy")."""
-    tema = repos.crear_contenido(
+    tema = repos.crear_publicacion(
         clase="contenido", titulo="Tema con autogen legado", marca="unotv", origen="equipo",
     )
     generaciones.crear({
-        "tipo": "autogen", "marca": "unotv", "contenido_id": tema["id"],
+        "tipo": "autogen", "marca": "unotv", "publicacion_id": tema["id"],
         "etiqueta": "Auto-copy · UnoTV", "estado": generaciones.ESTADO_COMPLETADO,
         "metricas": {"tokens_in": 10, "tokens_out": 5, "total_cost_usd": 0.001,
                      "duration_ms": 500},
@@ -732,31 +732,31 @@ def test_autogen_legacy_correlacionado_se_pliega_en_su_run(cliente):
 
 
 def test_metricas_de_run_via_marcador_sin_contenido_id(cliente):
-    """Una generación SIN `contenido_id` en el registro (los previos a sellarlo en `lanzar`)
-    se atribuye a su run por el MARCADOR de etapa (`gen_id` -> `contenido_id`): la tarjeta
+    """Una generación SIN `publicacion_id` en el registro (los previos a sellarlo en `lanzar`)
+    se atribuye a su run por el MARCADOR de etapa (`gen_id` -> `publicacion_id`): la tarjeta
     suma sus métricas en vez de salir a cero (el bug visible: runs sin tokens/coste/tiempo)."""
     tema = _tema_pipeline("Run correlada por marcador")
     gen = generaciones.crear({
-        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Copy · UnoTV",  # SIN contenido_id
+        "tipo": "pipeline", "marca": "unotv", "etiqueta": "Copy · UnoTV",  # SIN publicacion_id
         "estado": generaciones.ESTADO_COMPLETADO,
         "metricas": {"tokens_in": 200, "tokens_out": 100, "total_cost_usd": 0.03,
                      "duration_ms": 5000},
     })
     registrar_etapa(
-        ETAPA_REDACTAR, "unotv", "Generación de copy", contenido_id=tema["id"], gen_id=gen["id"],
+        ETAPA_REDACTAR, "unotv", "Generación de copy", publicacion_id=tema["id"], gen_id=gen["id"],
     )
     run = _run_por_titulo(cliente, "Run correlada por marcador")
     assert run["metricas"]["items"] == 1
     assert run["metricas"]["tokens"] == 300
     assert run["metricas"]["coste_usd"] == pytest.approx(0.03)
     assert run["metricas"]["duration_ms"] == 5000
-    # Si ADEMÁS el registro llevara contenido_id, no se duplica (dedup por generación).
+    # Si ADEMÁS el registro llevara publicacion_id, no se duplica (dedup por generación).
     det = cliente.get(f"/api/pipelines/{tema['id']}").json()["pipeline"]
     assert det["metricas"] == run["metricas"]
 
 
 def test_lanzar_sella_contenido_id_en_el_registro(cliente, monkeypatch):
-    """`dominio.generar.lanzar` persiste `contenido_id` en el REGISTRO de la generación (no
+    """`dominio.generar.lanzar` persiste `publicacion_id` en el REGISTRO de la generación (no
     solo en el spec del job): es la correlación que usa Producción para sumar por run."""
     from keni_consola.dominio import generar as dom_generar
     from keni_consola.dominio import jobspec
@@ -769,9 +769,9 @@ def test_lanzar_sella_contenido_id_en_el_registro(cliente, monkeypatch):
         tipo="pipeline", titulo="t", marca="unotv", prompt="p",
         procesar=jobspec.reconstruir_procesar({"procesar": spec_proc}),
         procesar_spec=spec_proc, clave_idem="k-correlacion",
-        contenido_id="tema-xyz",
+        publicacion_id="tema-xyz",
     )
-    assert (generaciones.obtener(gen["id"]) or {}).get("contenido_id") == "tema-xyz"
+    assert (generaciones.obtener(gen["id"]) or {}).get("publicacion_id") == "tema-xyz"
 
 
 def test_run_de_pipeline_suma_tambien_las_etapas_de_pool(cliente):
@@ -780,7 +780,7 @@ def test_run_de_pipeline_suma_tambien_las_etapas_de_pool(cliente):
     enlaza (la Fusionar y el Priorizar más recientes de la marca). Un tema del TABLERO no las suma
     (el pool no le aplica)."""
     tema = _tema_pipeline("Run con pool sumado")
-    _gen_suelta("Copy de la run", contenido_id=tema["id"])  # 150 tok · 0.02 · 3000 ms
+    _gen_suelta("Copy de la run", publicacion_id=tema["id"])  # 150 tok · 0.02 · 3000 ms
     generaciones.crear({
         "tipo": "pipeline", "marca": "unotv", "etiqueta": "Fusionar historias — UnoTV",
         "estado": generaciones.ESTADO_COMPLETADO,
@@ -802,10 +802,10 @@ def test_run_de_pipeline_suma_tambien_las_etapas_de_pool(cliente):
     det = cliente.get(f"/api/pipelines/{tema['id']}").json()["pipeline"]
     assert det["metricas"] == run["metricas"]
     # Un tema del TABLERO trabajado NO hereda el pool de la marca.
-    tablero = repos.crear_contenido(
+    tablero = repos.crear_publicacion(
         clase="contenido", titulo="Tablero sin pool", marca="unotv", origen="equipo",
     )
-    _gen_suelta("Copy tablero", tipo="pipeline", contenido_id=tablero["id"])
+    _gen_suelta("Copy tablero", tipo="pipeline", publicacion_id=tablero["id"])
     run_t = _run_por_titulo(cliente, "Tablero sin pool")
     assert run_t["metricas"]["items"] == 1
     assert run_t["metricas"]["tokens"] == 150

@@ -89,7 +89,7 @@ def test_receta_viva_gana_a_imagen_vieja(monkeypatch):
     pub = {"id": "p1", "imagen": "vieja.png", "marca": "unotv", "red": "x",
            "copy_in": "T", "foto": "f.jpg", "foto_encuadre": "", "estado": "en_revision"}
     assert render_pieza.imagen_compuesta_id(pub) == "fresca.png"
-    assert render_pieza.imagen_url_de(pub) == "/api/publicaciones/p1/compuesta"
+    assert render_pieza.imagen_url_de(pub) == "/api/piezas/p1/compuesta"
 
 
 def test_publicada_conserva_imagen_congelada(monkeypatch):
@@ -280,7 +280,7 @@ def test_url_imagen_horneada(monkeypatch):
 def test_url_receta_apunta_a_compuesta(monkeypatch):
     _sin_plantilla_de_marca(monkeypatch, True)
     pub = {"id": "p1", "imagen": "", "marca": "unotv"}
-    assert render_pieza.imagen_url_de(pub) == "/api/publicaciones/p1/compuesta"
+    assert render_pieza.imagen_url_de(pub) == "/api/piezas/p1/compuesta"
 
 
 def test_url_compuesta_lleva_sufijo_cache_por_actualizado(monkeypatch):
@@ -290,7 +290,7 @@ def test_url_compuesta_lleva_sufijo_cache_por_actualizado(monkeypatch):
     base = {"id": "p1", "imagen": "", "marca": "unotv"}
     u1 = render_pieza.imagen_url_de({**base, "actualizado": "2026-06-04T10:00:00"})
     u2 = render_pieza.imagen_url_de({**base, "actualizado": "2026-06-04T11:30:00"})
-    assert u1.startswith("/api/publicaciones/p1/compuesta?v=")
+    assert u1.startswith("/api/piezas/p1/compuesta?v=")
     assert u1 != u2  # otro `actualizado` => otra URL => el navegador recarga
 
 

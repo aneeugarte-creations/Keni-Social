@@ -24,10 +24,10 @@ const fecha = (iso: string): string => formatearFechaHoraCorta(iso);
 // detectar el disparador `@…` mientras se escribe y para saber qué menciones siguen en pie.
 const TOKEN_MENCION = /@([\w.-]*)$/;
 
-export function Comentarios({ contenidoId }: { contenidoId: string }) {
+export function Comentarios({ publicacionId }: { publicacionId: string }) {
   const queryClient = useQueryClient();
   const { marcaActiva } = useMarcaActiva();
-  const clave = ["comentarios", contenidoId] as const;
+  const clave = ["comentarios", publicacionId] as const;
   const [texto, setTexto] = React.useState("");
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 
@@ -59,8 +59,8 @@ export function Comentarios({ contenidoId }: { contenidoId: string }) {
 
   const query = useQuery({
     queryKey: clave,
-    queryFn: ({ signal }) => api.comentarios(contenidoId, undefined, signal),
-    enabled: !!contenidoId,
+    queryFn: ({ signal }) => api.comentarios(publicacionId, undefined, signal),
+    enabled: !!publicacionId,
   });
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: clave });
 
@@ -115,7 +115,7 @@ export function Comentarios({ contenidoId }: { contenidoId: string }) {
 
   const crear = useMutation({
     mutationFn: () =>
-      api.crearComentario(contenidoId, texto.trim(), undefined, mencionesVigentes()),
+      api.crearComentario(publicacionId, texto.trim(), undefined, mencionesVigentes()),
     onSuccess: () => {
       setTexto("");
       setSeleccionadas(new Map());
@@ -138,7 +138,7 @@ export function Comentarios({ contenidoId }: { contenidoId: string }) {
 
   const comentarios = query.data?.comentarios ?? [];
 
-  if (!contenidoId) {
+  if (!publicacionId) {
     return <EstadoVacio titulo="Sin tema" texto="Asigna un tema" />;
   }
 

@@ -36,7 +36,7 @@ const TOTAL: TotalMetricas = {
   alcance: 0,
   interacciones: 500,
   engagement_pct: 1.8,
-  publicaciones: 1234,
+  piezas: 1234,
 };
 
 /** Comparativa A (antes) vs B (actual) con los tres criterios de insignia:

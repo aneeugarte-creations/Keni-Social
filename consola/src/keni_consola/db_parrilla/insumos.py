@@ -19,7 +19,7 @@ _SELECT_INSUMO_LOTE = f"SELECT {', '.join(_COLS_INSUMO_LOTE)} FROM insumos_lote"
 _COLS_INSUMO_ITEM = (
     "id", "lote_id", "fecha", "cajon", "marca", "linea",
     "titulo", "resumen", "hora", "lugar", "estado_material",
-    "tipo", "idioma", "usado", "contenido_id", "orden", "creado",
+    "tipo", "idioma", "usado", "publicacion_id", "orden", "creado",
 )
 _SELECT_INSUMO_ITEM = f"SELECT {', '.join(_COLS_INSUMO_ITEM)} FROM insumos_item"
 
@@ -62,7 +62,7 @@ def _fila_a_insumo_item(fila: Any) -> dict[str, Any]:
         "tipo": fila["tipo"] or "nota",
         "idioma": fila["idioma"] or "es",
         "usado": bool(fila["usado"]),
-        "contenido_id": fila["contenido_id"] or "",
+        "publicacion_id": fila["publicacion_id"] or "",
         "orden": int(fila["orden"] or 0),
         "creado": fila["creado"] or "",
     }
@@ -225,7 +225,7 @@ def crear_insumo_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "tipo": item.get("tipo") or "nota",
                 "idioma": item.get("idioma") or "es",
                 "usado": 0,
-                "contenido_id": "",
+                "publicacion_id": "",
                 "orden": item.get("orden", i),
                 "creado": ahora,
             }
@@ -323,14 +323,14 @@ def borrar_insumo_item(item_id: str) -> bool:
 
 
 def marcar_insumo_item_usado(
-    item_id: str, *, contenido_id: str
+    item_id: str, *, publicacion_id: str
 ) -> dict[str, Any] | None:
-    """Marca un ítem como usado y guarda el `contenido_id`. None si no existe."""
+    """Marca un ítem como usado y guarda el `publicacion_id`. None si no existe."""
     con = _conectar()
     try:
         cur = con.execute(
-            "UPDATE insumos_item SET usado = 1, contenido_id = ? WHERE id = ?",
-            (contenido_id, item_id),
+            "UPDATE insumos_item SET usado = 1, publicacion_id = ? WHERE id = ?",
+            (publicacion_id, item_id),
         )
         con.commit()
         if cur.rowcount == 0:

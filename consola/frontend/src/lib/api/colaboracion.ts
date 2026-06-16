@@ -14,22 +14,22 @@ import type {
 
 export const apiColaboracion = {
   // --- Ola COLABORACIÓN: comentarios + versiones de copy + aprobación multinivel ---
-  comentarios: (contenidoId: string, plataformaId?: string, signal?: AbortSignal) => {
-    const qs = plataformaId !== undefined ? `?plataforma_id=${encodeURIComponent(plataformaId)}` : "";
+  comentarios: (publicacionId: string, piezaId?: string, signal?: AbortSignal) => {
+    const qs = piezaId !== undefined ? `?pieza_id=${encodeURIComponent(piezaId)}` : "";
     return peticion<RespuestaComentarios>(
-      `/contenido/${encodeURIComponent(contenidoId)}/comentarios${qs}`,
+      `/publicaciones/${encodeURIComponent(publicacionId)}/comentarios${qs}`,
       { signal },
     );
   },
   crearComentario: (
-    contenidoId: string,
+    publicacionId: string,
     texto: string,
-    plataformaId?: string,
+    piezaId?: string,
     menciones?: string[],
   ) =>
-    peticion<RespuestaComentario>(`/contenido/${encodeURIComponent(contenidoId)}/comentarios`, {
+    peticion<RespuestaComentario>(`/publicaciones/${encodeURIComponent(publicacionId)}/comentarios`, {
       metodo: "POST",
-      json: { texto, plataforma_id: plataformaId ?? "", menciones: menciones ?? [] },
+      json: { texto, pieza_id: piezaId ?? "", menciones: menciones ?? [] },
     }),
   actualizarComentario: (id: string, cuerpo: { texto?: string; resuelto?: boolean }) =>
     peticion<RespuestaComentario>(`/comentarios/${encodeURIComponent(id)}`, {
@@ -39,24 +39,24 @@ export const apiColaboracion = {
   eliminarComentario: (id: string) =>
     peticion<RespuestaMensaje>(`/comentarios/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
 
-  copyVersiones: (plataformaId: string, signal?: AbortSignal) =>
+  copyVersiones: (piezaId: string, signal?: AbortSignal) =>
     peticion<RespuestaCopyVersiones>(
-      `/plataformas/${encodeURIComponent(plataformaId)}/copy/versiones`,
+      `/plataformas/${encodeURIComponent(piezaId)}/copy/versiones`,
       { signal },
     ),
-  guardarCopy: (plataformaId: string, copy: string, nota?: string) =>
-    peticion<RespuestaCopyGuardado>(`/plataformas/${encodeURIComponent(plataformaId)}/copy`, {
+  guardarCopy: (piezaId: string, copy: string, nota?: string) =>
+    peticion<RespuestaCopyGuardado>(`/plataformas/${encodeURIComponent(piezaId)}/copy`, {
       metodo: "POST",
       json: { copy, nota: nota ?? "" },
     }),
-  revertirCopy: (plataformaId: string, versionId: string) =>
+  revertirCopy: (piezaId: string, versionId: string) =>
     peticion<RespuestaCopyGuardado>(
-      `/plataformas/${encodeURIComponent(plataformaId)}/copy/revertir`,
+      `/plataformas/${encodeURIComponent(piezaId)}/copy/revertir`,
       { metodo: "POST", json: { version_id: versionId } },
     ),
 
-  cadenaAprobacion: (plataformaId: string, signal?: AbortSignal) =>
-    peticion<CadenaAprobacion>(`/plataformas/${encodeURIComponent(plataformaId)}/aprobacion`, {
+  cadenaAprobacion: (piezaId: string, signal?: AbortSignal) =>
+    peticion<CadenaAprobacion>(`/plataformas/${encodeURIComponent(piezaId)}/aprobacion`, {
       signal,
     }),
   /**
@@ -65,11 +65,11 @@ export const apiColaboracion = {
    */
   cadenasAprobacion: (plataformaIds: string[], signal?: AbortSignal) =>
     peticion<RespuestaCadenasLote>(
-      `/publicaciones/cadenas?ids=${encodeURIComponent(plataformaIds.join(","))}`,
+      `/piezas/cadenas?ids=${encodeURIComponent(plataformaIds.join(","))}`,
       { signal },
     ),
-  crearCadenaAprobacion: (plataformaId: string, etiquetas?: string[]) =>
-    peticion<CadenaAprobacion>(`/plataformas/${encodeURIComponent(plataformaId)}/aprobacion`, {
+  crearCadenaAprobacion: (piezaId: string, etiquetas?: string[]) =>
+    peticion<CadenaAprobacion>(`/plataformas/${encodeURIComponent(piezaId)}/aprobacion`, {
       metodo: "POST",
       json: etiquetas !== undefined ? { etiquetas } : {},
     }),

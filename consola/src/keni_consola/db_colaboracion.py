@@ -24,8 +24,8 @@ from .tiempo import ahora_iso
 
 _COLS_COMENTARIO = (
     "id",
-    "contenido_id",
-    "plataforma_id",
+    "publicacion_id",
+    "pieza_id",
     "autor_id",
     "autor_nombre",
     "texto",
@@ -34,11 +34,11 @@ _COLS_COMENTARIO = (
     "actualizado",
     "menciones",
 )
-_SELECT_COMENTARIO = f"SELECT {', '.join(_COLS_COMENTARIO)} FROM contenido_comentarios"
+_SELECT_COMENTARIO = f"SELECT {', '.join(_COLS_COMENTARIO)} FROM publicacion_comentarios"
 
 
 def _fila_a_comentario(fila: Any) -> dict[str, Any]:
-    """Convierte una fila de `contenido_comentarios` en dict (`resuelto` bool, `menciones` lista)."""
+    """Convierte una fila de `publicacion_comentarios` en dict (`resuelto` bool, `menciones` lista)."""
     item: dict[str, Any] = {col: fila[col] for col in _COLS_COMENTARIO}
     item["resuelto"] = bool(fila["resuelto"])
     item["menciones"] = [m for m in (fila["menciones"] or "").split(",") if m]
@@ -47,8 +47,8 @@ def _fila_a_comentario(fila: Any) -> dict[str, Any]:
 
 def crear_comentario(
     *,
-    contenido_id: str,
-    plataforma_id: str = "",
+    publicacion_id: str,
+    pieza_id: str = "",
     texto: str,
     autor: dict[str, str] | None = None,
     menciones: list[str] | None = None,
@@ -62,8 +62,8 @@ def crear_comentario(
     ahora = ahora_iso()
     fila = {
         "id": uuid.uuid4().hex[:12],
-        "contenido_id": contenido_id,
-        "plataforma_id": plataforma_id or "",
+        "publicacion_id": publicacion_id,
+        "pieza_id": pieza_id or "",
         "autor_id": autor.get("id", "") or "",
         "autor_nombre": autor.get("usuario", "") or "",
         "texto": texto or "",
@@ -76,7 +76,7 @@ def crear_comentario(
     try:
         marcadores = ", ".join("?" for _ in _COLS_COMENTARIO)
         con.execute(
-            f"INSERT INTO contenido_comentarios ({', '.join(_COLS_COMENTARIO)}) "
+            f"INSERT INTO publicacion_comentarios ({', '.join(_COLS_COMENTARIO)}) "
             f"VALUES ({marcadores})",
             tuple(fila[col] for col in _COLS_COMENTARIO),
         )
@@ -87,14 +87,14 @@ def crear_comentario(
 
 
 def listar_comentarios(
-    contenido_id: str, plataforma_id: str | None = None
+    publicacion_id: str, pieza_id: str | None = None
 ) -> list[dict[str, Any]]:
-    """Comentarios de un contenido, mas antiguos primero. `plataforma_id` filtra una red."""
-    sql = f"{_SELECT_COMENTARIO} WHERE contenido_id = ?"
-    params: list[Any] = [contenido_id]
-    if plataforma_id is not None:
-        sql += " AND plataforma_id = ?"
-        params.append(plataforma_id)
+    """Comentarios de un contenido, mas antiguos primero. `pieza_id` filtra una red."""
+    sql = f"{_SELECT_COMENTARIO} WHERE publicacion_id = ?"
+    params: list[Any] = [publicacion_id]
+    if pieza_id is not None:
+        sql += " AND pieza_id = ?"
+        params.append(pieza_id)
     sql += " ORDER BY creado ASC, id ASC"
     con = _conectar()
     try:
@@ -132,7 +132,7 @@ def actualizar_comentario(
     con = _conectar()
     try:
         cur = con.execute(
-            f"UPDATE contenido_comentarios SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
+            f"UPDATE publicacion_comentarios SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
             tuple(params),
         )
         con.commit()
@@ -151,7 +151,7 @@ def borrar_comentario(comentario_id: str) -> bool:
     con = _conectar()
     try:
         cur = con.execute(
-            "DELETE FROM contenido_comentarios WHERE id = ?", (comentario_id,)
+            "DELETE FROM publicacion_comentarios WHERE id = ?", (comentario_id,)
         )
         con.commit()
         return cur.rowcount > 0
@@ -169,8 +169,8 @@ def borrar_comentario(comentario_id: str) -> bool:
 
 _COLS_COPY_VERSION = (
     "id",
-    "plataforma_id",
-    "contenido_id",
+    "pieza_id",
+    "publicacion_id",
     "version",
     "copy",
     "autor_id",
@@ -178,7 +178,7 @@ _COLS_COPY_VERSION = (
     "nota",
     "creado",
 )
-_SELECT_COPY_VERSION = f"SELECT {', '.join(_COLS_COPY_VERSION)} FROM contenido_copy_versiones"
+_SELECT_COPY_VERSION = f"SELECT {', '.join(_COLS_COPY_VERSION)} FROM pieza_copy_versiones"
 
 
 def _fila_a_copy_version(fila: Any) -> dict[str, Any]:
@@ -187,8 +187,8 @@ def _fila_a_copy_version(fila: Any) -> dict[str, Any]:
 
 def registrar_copy_version(
     *,
-    plataforma_id: str,
-    contenido_id: str,
+    pieza_id: str,
+    publicacion_id: str,
     copy: str,
     autor: dict[str, str] | None = None,
     nota: str = "",
@@ -198,7 +198,7 @@ def registrar_copy_version(
     El numero de version se calcula como `MAX(version)+1` sobre esa plataforma (1 si es el
     primero). NO valida: la API decide cuando snapshotear (antes de pisar el copy vivo).
 
-    CONTADOR SEGURO ANTE CONCURRENCIA: bajo el indice UNICO `(plataforma_id, version)`, dos
+    CONTADOR SEGURO ANTE CONCURRENCIA: bajo el indice UNICO `(pieza_id, version)`, dos
     snapshots simultaneos no pueden compartir version. Si chocan, una gana y la otra REINTENTA
     (bucle acotado) recalculando el siguiente numero (en vez de duplicar la version).
     """
@@ -210,14 +210,14 @@ def registrar_copy_version(
         ultimo_error: Exception | None = None
         for _ in range(_MAX_REINTENTOS_VERSION):
             fila_max = con.execute(
-                "SELECT MAX(version) AS m FROM contenido_copy_versiones WHERE plataforma_id = ?",
-                (plataforma_id,),
+                "SELECT MAX(version) AS m FROM pieza_copy_versiones WHERE pieza_id = ?",
+                (pieza_id,),
             ).fetchone()
             siguiente = (fila_max["m"] or 0) + 1 if fila_max is not None else 1
             fila = {
                 "id": fila_id,
-                "plataforma_id": plataforma_id,
-                "contenido_id": contenido_id or "",
+                "pieza_id": pieza_id,
+                "publicacion_id": publicacion_id or "",
                 "version": siguiente,
                 "copy": copy or "",
                 "autor_id": autor.get("id", "") or "",
@@ -228,7 +228,7 @@ def registrar_copy_version(
             marcadores = ", ".join("?" for _ in _COLS_COPY_VERSION)
             try:
                 con.execute(
-                    f"INSERT INTO contenido_copy_versiones ({', '.join(_COLS_COPY_VERSION)}) "
+                    f"INSERT INTO pieza_copy_versiones ({', '.join(_COLS_COPY_VERSION)}) "
                     f"VALUES ({marcadores})",
                     tuple(fila[col] for col in _COLS_COPY_VERSION),
                 )
@@ -238,19 +238,19 @@ def registrar_copy_version(
                 ultimo_error = e  # otra version gano la carrera; el shim ya hizo rollback.
         raise RuntimeError(
             "No se pudo asignar una version de copy tras varios reintentos "
-            f"(plataforma={plataforma_id})"
+            f"(plataforma={pieza_id})"
         ) from ultimo_error
     finally:
         con.close()
 
 
-def listar_copy_versiones(plataforma_id: str) -> list[dict[str, Any]]:
+def listar_copy_versiones(pieza_id: str) -> list[dict[str, Any]]:
     """Historial de versiones del copy de una plataforma, mas RECIENTE primero."""
     con = _conectar()
     try:
         filas = con.execute(
-            f"{_SELECT_COPY_VERSION} WHERE plataforma_id = ? ORDER BY version DESC, id DESC",
-            (plataforma_id,),
+            f"{_SELECT_COPY_VERSION} WHERE pieza_id = ? ORDER BY version DESC, id DESC",
+            (pieza_id,),
         ).fetchall()
     finally:
         con.close()
@@ -278,8 +278,8 @@ def obtener_copy_version(version_id: str) -> dict[str, Any] | None:
 
 _COLS_APROBACION = (
     "id",
-    "plataforma_id",
-    "contenido_id",
+    "pieza_id",
+    "publicacion_id",
     "nivel",
     "etiqueta",
     "decision",
@@ -290,7 +290,7 @@ _COLS_APROBACION = (
     "decidido_en",
     "cargo_requerido",
 )
-_SELECT_APROBACION = f"SELECT {', '.join(_COLS_APROBACION)} FROM contenido_aprobaciones"
+_SELECT_APROBACION = f"SELECT {', '.join(_COLS_APROBACION)} FROM pieza_aprobaciones"
 
 
 def _fila_a_aprobacion(fila: Any) -> dict[str, Any]:
@@ -299,8 +299,8 @@ def _fila_a_aprobacion(fila: Any) -> dict[str, Any]:
 
 def crear_cadena_aprobacion(
     *,
-    plataforma_id: str,
-    contenido_id: str,
+    pieza_id: str,
+    publicacion_id: str,
     etiquetas: list[str],
     cargos: list[str] | None = None,
 ) -> list[dict[str, Any]]:
@@ -316,15 +316,15 @@ def crear_cadena_aprobacion(
     con = _conectar()
     try:
         con.execute(
-            "DELETE FROM contenido_aprobaciones WHERE plataforma_id = ?", (plataforma_id,)
+            "DELETE FROM pieza_aprobaciones WHERE pieza_id = ?", (pieza_id,)
         )
         creados: list[dict[str, Any]] = []
         for indice, etiqueta in enumerate(etiquetas, start=1):
             cargo = cargos[indice - 1] if indice - 1 < len(cargos) else ""
             fila = {
                 "id": uuid.uuid4().hex[:12],
-                "plataforma_id": plataforma_id,
-                "contenido_id": contenido_id or "",
+                "pieza_id": pieza_id,
+                "publicacion_id": publicacion_id or "",
                 "nivel": indice,
                 "etiqueta": etiqueta or f"Nivel {indice}",
                 "decision": "pendiente",
@@ -337,7 +337,7 @@ def crear_cadena_aprobacion(
             }
             marcadores = ", ".join("?" for _ in _COLS_APROBACION)
             con.execute(
-                f"INSERT INTO contenido_aprobaciones ({', '.join(_COLS_APROBACION)}) "
+                f"INSERT INTO pieza_aprobaciones ({', '.join(_COLS_APROBACION)}) "
                 f"VALUES ({marcadores})",
                 tuple(fila[col] for col in _COLS_APROBACION),
             )
@@ -348,13 +348,13 @@ def crear_cadena_aprobacion(
     return creados
 
 
-def listar_aprobaciones(plataforma_id: str) -> list[dict[str, Any]]:
+def listar_aprobaciones(pieza_id: str) -> list[dict[str, Any]]:
     """Cadena de aprobacion de una plataforma, por nivel ascendente."""
     con = _conectar()
     try:
         filas = con.execute(
-            f"{_SELECT_APROBACION} WHERE plataforma_id = ? ORDER BY nivel ASC, id ASC",
-            (plataforma_id,),
+            f"{_SELECT_APROBACION} WHERE pieza_id = ? ORDER BY nivel ASC, id ASC",
+            (pieza_id,),
         ).fetchall()
     finally:
         con.close()
@@ -403,7 +403,7 @@ def actualizar_aprobacion(
     con = _conectar()
     try:
         cur = con.execute(
-            f"UPDATE contenido_aprobaciones SET {', '.join(asignaciones)} "  # noqa: S608 -- allowlist
+            f"UPDATE pieza_aprobaciones SET {', '.join(asignaciones)} "  # noqa: S608 -- allowlist
             f"WHERE id = ?{where_cas}",
             tuple(params),
         )
@@ -419,7 +419,7 @@ def actualizar_aprobacion(
 
 
 def decidir_nivel_aprobacion_tx(
-    plataforma_id: str,
+    pieza_id: str,
     nivel_id: str,
     validar: Any,
 ) -> tuple[dict[str, Any] | None, str | None]:
@@ -432,7 +432,7 @@ def decidir_nivel_aprobacion_tx(
     consta, pasar las dos el chequeo de "decisor distinto" y dejar a una persona dando los dos
     OK. Aqui:
 
-      1) Bloqueamos las filas de la cadena (`SELECT ... FOR UPDATE`) de `plataforma_id`: la otra
+      1) Bloqueamos las filas de la cadena (`SELECT ... FOR UPDATE`) de `pieza_id`: la otra
          decision concurrente sobre la misma cadena ESPERA aqui (no lee un snapshot obsoleto).
       2) Re-leemos la cadena ya consistente y llamamos `validar(nivel_actual, cadena)` —la regla
          PURA del dominio (`colaboracion.decidir`)— sobre datos frescos. Devuelve `(campos, None)`
@@ -448,14 +448,14 @@ def decidir_nivel_aprobacion_tx(
     try:
         # 1) Bloqueo de la cadena: serializa las decisiones concurrentes de la MISMA pieza.
         con.execute(
-            "SELECT id FROM contenido_aprobaciones WHERE plataforma_id = ? "
+            "SELECT id FROM pieza_aprobaciones WHERE pieza_id = ? "
             "ORDER BY nivel ASC, id ASC FOR UPDATE",
-            (plataforma_id,),
+            (pieza_id,),
         ).fetchall()
         # 2) Re-lectura consistente de la cadena + del nivel objetivo.
         filas = con.execute(
-            f"{_SELECT_APROBACION} WHERE plataforma_id = ? ORDER BY nivel ASC, id ASC",
-            (plataforma_id,),
+            f"{_SELECT_APROBACION} WHERE pieza_id = ? ORDER BY nivel ASC, id ASC",
+            (pieza_id,),
         ).fetchall()
         cadena = [_fila_a_aprobacion(f) for f in filas]
         nivel = next((n for n in cadena if n.get("id") == nivel_id), None)
@@ -472,7 +472,7 @@ def decidir_nivel_aprobacion_tx(
         asignaciones = [f"{k} = ?" for k in cambios]
         params: list[Any] = [*cambios.values(), nivel_id, DECISION_PENDIENTE]
         cur = con.execute(
-            f"UPDATE contenido_aprobaciones SET {', '.join(asignaciones)} "  # noqa: S608 -- allowlist
+            f"UPDATE pieza_aprobaciones SET {', '.join(asignaciones)} "  # noqa: S608 -- allowlist
             "WHERE id = ? AND decision = ?",
             tuple(params),
         )

@@ -15,7 +15,7 @@ flag_activacion = "KENI_APP_OPERACION"
 permisos = ["editor", "admin"]
 
 modulos_backend = [
-  "publicaciones",
+  "piezas",
   "aprobacion",
   "franjas",
   # Cadencia por (marca?, red?): scheduling por margen entre posts (sustituye franjas-caja
@@ -29,7 +29,7 @@ modulos_backend = [
   # eventos/turnos; el back valida y aplica tras la previsualización. Usa la infra
   # de jobs `generaciones` (A) en segundo plano (seam #7 en test_fronteras).
   "parrilla_import",
-  "contenido",
+  "publicaciones",
   # Sub-features del tablero de contenido (sin nav propia; cuelgan de la tarjeta):
   "etiquetas",
   "colaboracion",

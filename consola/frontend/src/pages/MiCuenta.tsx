@@ -440,7 +440,7 @@ function SeccionMfa({ activo, debeInscribir }: { activo: boolean; debeInscribir:
 /* Página                                                             */
 /* ------------------------------------------------------------------ */
 
-function ContenidoMiCuenta() {
+function PublicacionMiCuenta() {
   // Un solo `me` decide qué pintar; la sección de MFA solo aparece si el flag del servidor
   // (`mfa_habilitado`) está ON. Con el flag OFF, la UI no muestra nada de MFA.
   const { data } = useQuery({ queryKey: CLAVE_ME, queryFn: ({ signal }) => api.me(signal) });
@@ -465,7 +465,7 @@ export default function MiCuenta() {
       <div className="mb-4">
         <SeccionApariencia />
       </div>
-      <ContenidoMiCuenta />
+      <PublicacionMiCuenta />
     </>
   );
 }

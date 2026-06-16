@@ -66,8 +66,8 @@ def _pub_programada(
     imagen: str = "abc123.jpg",
     minutos_atras: int = 5,
 ) -> dict[str, Any]:
-    """Crea una publicacion programada con fecha ya vencida (en repos directamente)."""
-    pub = repos.crear_publicacion(
+    """Crea una pieza programada con fecha ya vencida (en repos directamente)."""
+    pub = repos.crear_pieza(
         "unotv",
         red,
         titulo="Test",
@@ -76,7 +76,7 @@ def _pub_programada(
         imagen=imagen,
     )
     pasado = (datetime.now() - timedelta(minutes=minutos_atras)).strftime("%Y-%m-%dT%H:%M")
-    return repos.actualizar_publicacion(pub["id"], {"fecha_programada": pasado})
+    return repos.actualizar_pieza(pub["id"], {"fecha_programada": pasado})
 
 
 # --------------------------------------------------------------------------- #
@@ -141,7 +141,7 @@ def test_borrador_instagram_con_media_url_publica(monkeypatch):
         "id": "x3", "red": "instagram", "contenido": "texto de prueba",
         "imagen": "foto.jpg", "fecha_programada": "2026-05-30T18:00",
     }
-    from keni_metricas.publicacion.metricool import BorradorMetricool
+    from keni_metricas.pieza.metricool import BorradorMetricool
 
     borrador = _borrador_de_publicacion(pub)
     assert isinstance(borrador, BorradorMetricool)
@@ -156,7 +156,7 @@ def test_borrador_x_sin_media(monkeypatch):
         "id": "x4", "red": "x", "contenido": "Tweet de prueba",
         "imagen": "", "fecha_programada": "2026-05-30T18:00",
     }
-    from keni_metricas.publicacion.metricool import BorradorMetricool
+    from keni_metricas.pieza.metricool import BorradorMetricool
 
     borrador = _borrador_de_publicacion(pub)
     assert isinstance(borrador, BorradorMetricool)
@@ -171,8 +171,8 @@ def test_borrador_video_construye_media_video(monkeypatch):
         "formato": "video", "video": "videos/abc.mp4",
         "fecha_programada": "2026-05-30T18:00",
     }
-    from keni_metricas.publicacion.metricool import BorradorMetricool
-    from keni_metricas.publicacion.modelos import TipoMedia
+    from keni_metricas.pieza.metricool import BorradorMetricool
+    from keni_metricas.pieza.modelos import TipoMedia
 
     borrador = _borrador_de_publicacion(pub)
     assert isinstance(borrador, BorradorMetricool)
@@ -212,8 +212,8 @@ def test_borrador_carrusel_portada_mas_slides(monkeypatch):
         ),
         "fecha_programada": "2026-06-10T18:00",
     }
-    from keni_metricas.publicacion.metricool import BorradorMetricool
-    from keni_metricas.publicacion.modelos import TipoMedia
+    from keni_metricas.pieza.metricool import BorradorMetricool
+    from keni_metricas.pieza.modelos import TipoMedia
 
     borrador = _borrador_de_publicacion(pub)
     assert isinstance(borrador, BorradorMetricool)
@@ -309,7 +309,7 @@ def test_dryrun_no_llama_metricool(entorno, monkeypatch):
         preparadas = preparar_vencidas(datetime.now())
 
     assert preparadas == 1
-    actualizada = repos.obtener_publicacion(pub["id"])
+    actualizada = repos.obtener_pieza(pub["id"])
     # Dry-run: sigue en programado, preparado_en puesto, NO publicado
     assert actualizada["estado"] == "programado"
     assert actualizada["preparado_en"]  # estampado
@@ -327,7 +327,7 @@ def test_dryrun_flag_false_no_llama_metricool(entorno, monkeypatch):
         ruta = mock_routes.post(_METRICOOL_URL, name="post").mock(Response(200, json=_RESP_OK))
         preparar_vencidas(datetime.now())
 
-    actualizada = repos.obtener_publicacion(pub["id"])
+    actualizada = repos.obtener_pieza(pub["id"])
     assert actualizada["estado"] == "programado"
     assert not ruta.called
 
@@ -351,7 +351,7 @@ def test_programar_pieza_metricool_dry_run_previsualiza(entorno, monkeypatch):
     assert res["cuerpo"]["providers"] == [{"network": "facebook"}]
     assert not ruta.called  # dry-run NO toca la red
     # No persiste: sigue en programado, sin id_post.
-    actualizada = repos.obtener_publicacion(pub["id"])
+    actualizada = repos.obtener_pieza(pub["id"])
     assert actualizada["estado"] == "programado"
     assert actualizada.get("id_post_metricool", "") == ""
 
@@ -387,7 +387,7 @@ def test_real_postea_a_metricool_y_marca_publicado(entorno, monkeypatch):
         preparadas = preparar_vencidas(datetime.now())
 
     assert preparadas == 1
-    actualizada = repos.obtener_publicacion(pub["id"])
+    actualizada = repos.obtener_pieza(pub["id"])
     # Publicado de verdad
     assert actualizada["estado"] == "publicado"
     assert actualizada["preparado_en"]
@@ -461,11 +461,11 @@ def test_boton_manual_publica_ahora_y_sella_hora_real(entorno, monkeypatch):
     monkeypatch.delenv("KENI_CONSOLA_URL_PUBLICA", raising=False)
 
     # Pieza programada DOS HORAS en el futuro (red X: no necesita media ni URL pública).
-    pub = repos.crear_publicacion(
+    pub = repos.crear_pieza(
         "unotv", "x", titulo="Test", contenido="Publicar ya", estado="programado",
     )
     futuro = "2026-06-15T21:45"  # UTC naive
-    pub = repos.actualizar_publicacion(pub["id"], {"fecha_programada": futuro})
+    pub = repos.actualizar_pieza(pub["id"], {"fecha_programada": futuro})
 
     ahora = datetime(2026, 6, 15, 19, 15, tzinfo=timezone.utc)  # 13:15 CDMX
     cuerpo_enviado: dict | None = None
@@ -488,7 +488,7 @@ def test_boton_manual_publica_ahora_y_sella_hora_real(entorno, monkeypatch):
     assert cuerpo_enviado is not None
     assert cuerpo_enviado["publicationDate"]["dateTime"] == "2026-06-15T13:15:00"
     # La fila ya no apunta al futuro: estado publicado y `fecha_programada` = hora real.
-    actualizada = repos.obtener_publicacion(pub["id"])
+    actualizada = repos.obtener_pieza(pub["id"])
     assert actualizada["estado"] == "publicado"
     assert actualizada["fecha_programada"] == "2026-06-15T19:15:00"
     assert actualizada["id_post_metricool"] == "mc-post-id-001"
@@ -515,7 +515,7 @@ def test_sin_creds_sigue_en_programado_no_rompe_barrido(entorno, monkeypatch):
         preparadas = preparar_vencidas(datetime.now())
 
     assert preparadas == 1
-    actualizada = repos.obtener_publicacion(pub["id"])
+    actualizada = repos.obtener_pieza(pub["id"])
     # Degradacion honesta: preparado pero NO publicado
     assert actualizada["estado"] == "programado"
     assert actualizada["preparado_en"]
@@ -553,8 +553,8 @@ def test_varias_piezas_una_sin_creds_no_rompe_otras(entorno, monkeypatch):
         preparadas = preparar_vencidas(datetime.now())
 
     assert preparadas == 2  # ambas quedan "preparadas" (aunque una en modo sin-creds)
-    a1 = repos.obtener_publicacion(pub1["id"])
-    a2 = repos.obtener_publicacion(pub2["id"])
+    a1 = repos.obtener_pieza(pub1["id"])
+    a2 = repos.obtener_pieza(pub2["id"])
     assert a1["preparado_en"]  # la sin-creds si quedo preparada
     assert a2["preparado_en"]  # la con-creds tambien
 
@@ -576,7 +576,7 @@ def test_error_de_red_libera_la_preparacion_y_no_rompe_barrido(entorno, monkeypa
 
     # El fallo de ENTREGA no cuenta como preparada y deja la pieza reintentable.
     assert preparadas == 0
-    actualizada = repos.obtener_publicacion(pub["id"])
+    actualizada = repos.obtener_pieza(pub["id"])
     assert actualizada["estado"] == "programado"
     assert actualizada["preparado_en"] == ""  # claim liberado: se reintentara
     assert actualizada.get("id_post_metricool", "") == ""
@@ -604,7 +604,7 @@ def test_error_de_red_se_reintenta_en_el_siguiente_barrido(entorno, monkeypatch)
         assert preparar_vencidas(datetime.now()) == 0
         assert preparar_vencidas(datetime.now()) == 1
 
-    actualizada = repos.obtener_publicacion(pub["id"])
+    actualizada = repos.obtener_pieza(pub["id"])
     assert actualizada["estado"] == "publicado"
     assert actualizada["preparado_en"]
     assert actualizada["id_post_metricool"] == "mc-post-id-001"
@@ -616,7 +616,7 @@ def test_error_de_red_se_reintenta_en_el_siguiente_barrido(entorno, monkeypatch)
 
 
 def test_timeout_marca_publicado_incierto_y_no_reenvia(entorno, monkeypatch):
-    """Un TIMEOUT del POST de publicacion NO libera el claim: el post pudo entregarse.
+    """Un TIMEOUT del POST de pieza NO libera el claim: el post pudo entregarse.
 
     A diferencia de un 5xx (entrega fallida, se reintenta), un ReadTimeout salta tras
     enviar la peticion entera, asi que Metricool casi seguro la recibio. Reenviar
@@ -640,7 +640,7 @@ def test_timeout_marca_publicado_incierto_y_no_reenvia(entorno, monkeypatch):
         assert preparar_vencidas(datetime.now()) == 0
         assert ruta.call_count == 1  # un solo intento real: no hubo doble-envio
 
-    actualizada = repos.obtener_publicacion(pub["id"])
+    actualizada = repos.obtener_pieza(pub["id"])
     assert actualizada["estado"] == "publicado"
     assert actualizada["preparado_en"]  # claim conservado (no liberado)
     assert actualizada["id_post_metricool"] == ID_POST_INCIERTO
@@ -663,11 +663,11 @@ def test_boton_manual_timeout_marca_publicado_incierto(entorno, monkeypatch):
     assert res["ok"] is True
     assert res["incierto"] is True
     assert res["motivo"]
-    actualizada = repos.obtener_publicacion(pub["id"])
+    actualizada = repos.obtener_pieza(pub["id"])
     assert actualizada["estado"] == "publicado"
     assert actualizada["id_post_metricool"] == ID_POST_INCIERTO
-    # La guarda de re-publicacion ahora bloquea un segundo click (ya esta publicado).
-    res2 = programar_pieza_metricool(repos.obtener_publicacion(pub["id"]))
+    # La guarda de re-pieza ahora bloquea un segundo click (ya esta publicado).
+    res2 = programar_pieza_metricool(repos.obtener_pieza(pub["id"]))
     assert res2["ok"] is False
 
 

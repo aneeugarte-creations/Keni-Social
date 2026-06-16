@@ -45,7 +45,7 @@ export function DialogoPropuesta({
             Copiar
           </Button>
           <Button asChild>
-            <Link to="/contenido/texto">Abrir Texto</Link>
+            <Link to="/publicaciones/texto">Abrir Texto</Link>
           </Button>
         </DialogFooter>
       </DialogContent>

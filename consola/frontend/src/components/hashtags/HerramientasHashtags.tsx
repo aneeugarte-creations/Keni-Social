@@ -1,5 +1,5 @@
 /**
- * Herramientas de hashtags para el compositor/editor de publicaciones.
+ * Herramientas de hashtags para el compositor/editor de piezas.
  *
  * Una sola acción: **Insertar grupo** — elige un grupo guardado (`/api/hashtags`)
  * y se añaden sus hashtags al final del contenido. Solo se ofrecen los grupos de
@@ -23,13 +23,13 @@ import {
 } from "@/components/ui/select";
 import { api } from "@/lib/api";
 
-import { agregarHashtags, CLAVE_HASHTAGS } from "../../pages/publicaciones/hashtags";
+import { agregarHashtags, CLAVE_HASHTAGS } from "../../pages/piezas/hashtags";
 
 export interface HerramientasHashtagsProps {
-  /** Contenido actual (para detectar duplicados al insertar). */
+  /** Publicacion actual (para detectar duplicados al insertar). */
   contenido: string;
   /** Inserta el contenido resultante (con hashtags añadidos). */
-  onContenido: (nuevo: string) => void;
+  onPublicacion: (nuevo: string) => void;
   marca: string;
   /** Abre la gestión de grupos (CRUD). */
   onGestionar: () => void;
@@ -37,7 +37,7 @@ export interface HerramientasHashtagsProps {
 
 export function HerramientasHashtags({
   contenido,
-  onContenido,
+  onPublicacion,
   marca,
   onGestionar,
 }: HerramientasHashtagsProps) {
@@ -58,7 +58,7 @@ export function HerramientasHashtags({
   function insertarGrupo(id: string) {
     const grupo = grupos.find((g) => g.id === id);
     if (!grupo) return;
-    onContenido(agregarHashtags(contenido, grupo.hashtags));
+    onPublicacion(agregarHashtags(contenido, grupo.hashtags));
     toast.success(`Insertado: ${grupo.nombre}`);
   }
 

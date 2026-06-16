@@ -36,7 +36,7 @@ export interface InvCandidato {
   /** Estado del candidato: "nuevo" | "aceptado" | "descartado". */
   estado: "nuevo" | "aceptado" | "descartado" | string;
   /** Id del contenido en el tablero (si fue aceptado). */
-  contenido_id: string;
+  publicacion_id: string;
   creado: string;
 }
 
@@ -57,7 +57,7 @@ export interface RespuestaInvCandidatos {
 export interface RespuestaInvCandidato {
   candidato: InvCandidato;
   /** Id del contenido en el tablero (para aceptar). */
-  contenido_id?: string;
+  publicacion_id?: string;
 }
 
 /** Respuesta de `POST /api/investigacion/correr`. Async: devuelve la generación a sondear. */
@@ -145,7 +145,7 @@ export interface Historia {
   /** Estado editorial: 'nuevo' | 'usado' | 'descartado'. */
   estado: "nuevo" | "usado" | "descartado" | string;
   /** Id del contenido en el tablero cuando `estado='usado'`. '' si no. */
-  contenido_id: string;
+  publicacion_id: string;
   /**
    * Estado REAL de cara al feed (derivado de la PIEZA, no solo del cluster). El badge se
    * pinta con esto para no mentir: `estado='usado'` solo significa "promovida".
@@ -254,7 +254,7 @@ export interface NoticiaItem {
   /** Estado editorial: 'nuevo' | 'usado' | 'descartado'. */
   estado: "nuevo" | "usado" | "descartado" | string;
   /** Id del contenido en el tablero cuando `estado='usado'`. '' si no. */
-  contenido_id: string;
+  publicacion_id: string;
 }
 
 /** Respuesta paginada de `GET /api/noticias`. */

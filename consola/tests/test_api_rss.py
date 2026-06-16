@@ -16,7 +16,7 @@ import pytest
 
 from keni_consola.api import rss
 from keni_consola.dominio import http_feed
-from keni_consola.dominio.publicaciones import publicacion_a_dict
+from keni_consola.dominio.piezas import pieza_a_dict
 
 # IP publica literal: pasa el guard SSRF sin tocar DNS. example.com no se resuelve aqui.
 _URL_OK = "https://93.184.216.34/feed.xml"
@@ -817,7 +817,7 @@ def test_put_fuente_propia_no_se_toca_si_ausente(cliente):
 
 
 # --------------------------------------------------------------------------- #
-# Serializacion: publicacion_a_dict expone tipo_contenido + imagen_fuente, y     #
+# Serializacion: pieza_a_dict expone tipo_contenido + imagen_fuente, y     #
 # imagen_url cae a imagen_fuente cuando no hay archivo subido. Funcion PURA       #
 # (catalogos marcas/redes), sin DB.                                             #
 # --------------------------------------------------------------------------- #
@@ -839,7 +839,7 @@ _PUB_BASE: dict = {
 
 def test_publicacion_a_dict_expone_tipo_e_imagen_fuente():
     """tipo_contenido='fuente' + imagen_fuente se serializan tal cual."""
-    d = publicacion_a_dict(
+    d = pieza_a_dict(
         {**_PUB_BASE, "tipo_contenido": "fuente", "imagen_fuente": "https://e.com/orig.jpg"}
     )
     assert d["tipo_contenido"] == "fuente"
@@ -852,7 +852,7 @@ def test_publicacion_a_dict_imagen_url_cae_a_imagen_fuente():
     (Con receta de marca, `imagen_url` apunta al render on-demand `/compuesta`; eso lo cubre
     `test_render_pieza`. Aquí probamos el respaldo a `imagen_fuente` cuando NO hay composición.)
     """
-    d = publicacion_a_dict(
+    d = pieza_a_dict(
         {**_PUB_BASE, "tipo_contenido": "fuente", "imagen_fuente": "https://e.com/orig.jpg",
          "placa_oculta": True}
     )
@@ -862,7 +862,7 @@ def test_publicacion_a_dict_imagen_url_cae_a_imagen_fuente():
 
 def test_publicacion_a_dict_archivo_subido_gana_a_imagen_fuente():
     """Con archivo subido, imagen_url sirve el archivo local (no la URL externa)."""
-    d = publicacion_a_dict(
+    d = pieza_a_dict(
         {**_PUB_BASE, "tipo_contenido": "fuente", "imagen_fuente": "https://e.com/orig.jpg",
          "imagen": "subida.jpg"}
     )
@@ -871,7 +871,7 @@ def test_publicacion_a_dict_archivo_subido_gana_a_imagen_fuente():
 
 def test_publicacion_a_dict_defaults_sin_imagen_de_fuente():
     """Sin receta, tipo ni imagen_fuente: tipo_contenido cae a 'ia' e imagen_fuente/imagen_url vacios."""
-    d = publicacion_a_dict({**_PUB_BASE, "placa_oculta": True})
+    d = pieza_a_dict({**_PUB_BASE, "placa_oculta": True})
     assert d["tipo_contenido"] == "ia"
     assert d["imagen_fuente"] == ""
     assert d["imagen_url"] == ""
@@ -879,7 +879,7 @@ def test_publicacion_a_dict_defaults_sin_imagen_de_fuente():
 
 def test_publicacion_a_dict_fuente_original_prefiere_nombre_del_medio():
     """`fuente_original` expone el nombre del medio copiado en la promoción (`fuente_nombre`)."""
-    d = publicacion_a_dict(
+    d = pieza_a_dict(
         {**_PUB_BASE, "fuente_nombre": "Récord", "url_fuente": "record.com.mx/nota-1?id=7"}
     )
     assert d["fuente_original"] == "Récord"
@@ -891,15 +891,15 @@ def test_publicacion_a_dict_fuente_original_deriva_dominio_de_url():
     La URL se guarda CANÓNICA (sin esquema ni www), pero el helper es defensivo ante una
     URL completa con esquema y `www.`.
     """
-    d = publicacion_a_dict({**_PUB_BASE, "url_fuente": "record.com.mx/nota-1?id=7"})
+    d = pieza_a_dict({**_PUB_BASE, "url_fuente": "record.com.mx/nota-1?id=7"})
     assert d["fuente_original"] == "record.com.mx"
-    d = publicacion_a_dict({**_PUB_BASE, "url_fuente": "https://www.Record.com.mx/nota-1"})
+    d = pieza_a_dict({**_PUB_BASE, "url_fuente": "https://www.Record.com.mx/nota-1"})
     assert d["fuente_original"] == "record.com.mx"
 
 
 def test_publicacion_a_dict_fuente_original_vacia_sin_nota_de_origen():
     """Creación propia (sin nota de origen): `fuente_original` vacía (la UI omite fuente/fecha)."""
-    d = publicacion_a_dict(_PUB_BASE)
+    d = pieza_a_dict(_PUB_BASE)
     assert d["fuente_original"] == ""
 
 
@@ -909,14 +909,14 @@ def test_publicacion_a_dict_expone_etapa_ia():
 
     # La etapa se deriva del CONTENIDO REAL (¿hay copy?, ¿hay imagen?), no de los flags
     # almacenados (a54a3267): sin copy real -> generando_copy.
-    d = publicacion_a_dict({**_PUB_BASE, "contenido": ""})
+    d = pieza_a_dict({**_PUB_BASE, "contenido": ""})
     assert d["etapa_ia"] == pe.ETAPA_GENERANDO_COPY
     # con copy y copy-in (la pieza LLEVA imagen) pero sin foto real -> generando_arte
     # ("Falta imagen"): la placa/plantilla no cuenta, hace falta foto subida o de fuente (95c28829).
-    d = publicacion_a_dict({**_PUB_BASE, "copy_in": "TITULAR"})
+    d = pieza_a_dict({**_PUB_BASE, "copy_in": "TITULAR"})
     assert d["etapa_ia"] == pe.ETAPA_GENERANDO_ARTE
     # estado terminal manda sobre la checklist
-    d = publicacion_a_dict({**_PUB_BASE, "estado": "publicado"})
+    d = pieza_a_dict({**_PUB_BASE, "estado": "publicado"})
     assert d["etapa_ia"] == pe.ETAPA_PUBLICADA
     # toda etapa serializada pertenece al contrato del feed
     assert d["etapa_ia"] in pe.ETAPAS_PIEZA

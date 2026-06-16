@@ -183,7 +183,7 @@ def _indexar(pub: dict[str, Any]) -> None:
             tipo=pub.get("tipo", "") or "",
             marca=pub.get("marca", "") or "",
             proceso=proceso_de(pub),
-            contenido_id=pub.get("contenido_id", "") or "",
+            publicacion_id=pub.get("publicacion_id", "") or "",
             payload=_pub_ligero(pub),
         )
     except Exception:  # noqa: BLE001 -- el indice es un cache derivado; nunca rompe el registro
@@ -261,7 +261,7 @@ def _publico(datos: dict[str, Any], gen_id: str) -> dict[str, Any]:
         # Contenido correlacionado (opcional): las generaciones-marcador del pipeline
         # (`tipo='pipeline'`) lo sellan para que la vista Pipelines ate cada etapa a su run.
         # Ausente en registros legados/normales => "" (lo filtra `_cuerpo`, así no engorda).
-        "contenido_id": _str("contenido_id"),
+        "publicacion_id": _str("publicacion_id"),
         # Generación correlacionada (opcional): un MARCADOR de etapa del pipeline (CD/verificación)
         # apunta con `gen_id` a la generación REAL de `claude -p` de esa etapa, para que la
         # vista Pipelines pueda mostrar su STREAM (el proceso de pensamiento del agente).

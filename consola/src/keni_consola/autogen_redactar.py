@@ -4,7 +4,7 @@ PROBLEMA QUE RESUELVE
 Varios caminos del producto necesitan ENCOLAR la generacion de copy de un tema del tablero
 por el MISMO camino que el boton manual del asistente (el lanzador NEUTRO
 `dominio.generar.lanzar_copy`): los endpoints manuales (api/fuentes, api/noticias,
-api/contenido, api/breaking, api/insumos) y la ETAPA de Redactar del pipeline, que es el ÚNICO
+api/publicaciones, api/breaking, api/insumos) y la ETAPA de Redactar del pipeline, que es el ÚNICO
 motor de copy automático (ver `pipeline_contenido.ejecutar_redactar`). Este módulo expone esa
 función única (`lanzar_para_topic`) + su dedup por etiqueta (`autogen`).
 
@@ -19,7 +19,7 @@ Redactar del pipeline (`pipeline_contenido.temas_autogen_sin_copy`), gateada por
     éxito —no al encolar— para que un copy fallido se REINTENTE en el siguiente barrido; el
     doble lanzamiento en curso lo evita la clave de idempotencia de `dominio.generar.lanzar`.
   - NO PUBLICA: el borrador nace `borrador` y pasa por la MISMA revision/aprobacion humana;
-    la publicacion real (vía Metricool) sigue gated por `KENI_PUBLICAR_REAL`.
+    la pieza real (vía Metricool) sigue gated por `KENI_PUBLICAR_REAL`.
 """
 
 from __future__ import annotations
@@ -89,7 +89,7 @@ def _nota_de(item: dict[str, Any]) -> str:
 def _redes_de(item: dict[str, Any]) -> list[str]:
     """Redes objetivo: las del propio tema si las tiene; si no, las redes por defecto."""
     try:
-        plataformas = repos.listar_contenido_plataforma(item["id"])
+        plataformas = repos.listar_piezas_fila(item["id"])
     except Exception:  # noqa: BLE001 -- sin plataformas legibles, caemos al defecto
         plataformas = []
     reds = [p.get("red") for p in plataformas if redes.es_red(p.get("red") or "")]
@@ -106,7 +106,7 @@ def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
     Reutiliza el lanzador NEUTRO `dominio.generar.lanzar_copy` (mismo camino que el boton
     manual del asistente y que `api/rss.generar`): compone el prompt copy-desde-nota
     autocontenido (prompt base + editorial de la marca + la nota del tema), encola en background
-    y el borrador entra a la cola de revision. `contenido_id` NIDA el borrador bajo el tema.
+    y el borrador entra a la cola de revision. `publicacion_id` NIDA el borrador bajo el tema.
 
     Es trabajo del PIPELINE (su etapa de Redactar redactando un tema del tablero), asi que se
     sella IGUAL que el copy de un tema ingerido: `tipo="pipeline"` + marcador de etapa CD
@@ -140,7 +140,7 @@ def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
         autor=None,
         # Lista viva: el borrador auto-generado cuelga del tema origen (su tarjeta lo
         # muestra y sigue fluyendo por aprobacion/programador), no como contenido suelto.
-        contenido_id=item.get("id") or "",
+        publicacion_id=item.get("id") or "",
         # DEDUP AL EXITO (no al encolar): la etiqueta `autogen` la asigna el POST-PROCESADO
         # del copy al completar con exito. Antes se etiquetaba tras encolar y un copy FALLIDO
         # jamas se reintentaba (el tema quedaba excluido para siempre de la seleccion).
@@ -167,7 +167,7 @@ def _registrar_etapa_redactar(item: dict[str, Any], gen: dict[str, Any] | None) 
             ETAPA_REDACTAR,
             item.get("marca") or "",
             f"Generación de copy (tablero) — '{(item.get('titulo') or '')[:120]}'",
-            contenido_id=item.get("id") or "",
+            publicacion_id=item.get("id") or "",
             gen_id=gen.get("id", "") if isinstance(gen, dict) else "",
         )
     except Exception:  # noqa: BLE001 -- la traza es observabilidad; nunca rompe el copy

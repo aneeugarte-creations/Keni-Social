@@ -344,7 +344,7 @@ def _contar(carpeta: Path, patron: str) -> int:
 def resumen_agente(agente_id: str) -> dict[str, Any]:
     """Resumen ligero de un agente (marca o generico). NO crea la carpeta si no existe.
 
-    Cuenta publicaciones (siempre 0 en genericos: no son marcas) y runs leyendo el
+    Cuenta piezas (siempre 0 en genericos: no son marcas) y runs leyendo el
     disco; reporta si el `CLAUDE.md` existe y si `es_marca`. No inicializa nada
     (`crear=False`) para que el LISTADO no materialice carpetas.
     """
@@ -352,12 +352,12 @@ def resumen_agente(agente_id: str) -> dict[str, Any]:
     una_marca = marcas.es_marca(agente_id)
     if una_marca:
         nombre = marcas.etiqueta_de(agente_id)
-        n_pub = _contar(carpeta / "publicaciones", "*.yaml")
+        n_pub = _contar(carpeta / "piezas", "*.yaml")
     else:
         manifiesto = _leer_manifiesto(agente_id) or {}
         crudo = manifiesto.get("nombre")
         nombre = crudo.strip() if isinstance(crudo, str) and crudo.strip() else agente_id
-        n_pub = 0  # un generico no es una marca: no produce publicaciones
+        n_pub = 0  # un generico no es una marca: no produce piezas
     n_runs = _contar(carpeta / _DIR_RUNS, "*.yaml")
     return {
         "id": agente_id,

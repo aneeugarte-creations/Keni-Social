@@ -35,7 +35,7 @@ _COLS_NOTICIA_CLUSTER: tuple[str, ...] = (
     "primer_visto",
     "ultimo_visto",
     "estado",
-    "contenido_id",
+    "publicacion_id",
     "verificacion",
     "titulo_es",
     "resumen_es",
@@ -86,7 +86,7 @@ def _fila_a_noticia_cluster(fila: Any) -> dict[str, Any]:
         "primer_visto": fila["primer_visto"] or "",
         "ultimo_visto": fila["ultimo_visto"] or "",
         "estado": fila["estado"] or "nuevo",
-        "contenido_id": fila["contenido_id"] or "",
+        "publicacion_id": fila["publicacion_id"] or "",
         # Auto-verificación por corroboración (Ola D).
         "verificacion": fila["verificacion"] or "unica_fuente",
         # Traducción completa de historias extranjeras (Ola D).
@@ -119,7 +119,7 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
     Si falta `id`, lo genera. `idiomas` se serializa a JSON. `creado` se fija solo en el alta;
     `actualizado` siempre se sella al instante actual. Los agregados (`n_items`/`n_fuentes`/
     `senal`/`score`/`breaking`/`titulo`/...) los calcula el dominio (`clustering`) y aquí solo
-    se persisten. `estado`/`contenido_id` se fijan SOLO en el alta: un upsert posterior NUNCA
+    se persisten. `estado`/`publicacion_id` se fijan SOLO en el alta: un upsert posterior NUNCA
     los pisa (mutarlos es trabajo exclusivo de `actualizar_noticia_cluster`; protege contra el
     TOCTOU daemon↔pipeline que revertía clusters promovidos a 'nuevo').
     """
@@ -150,7 +150,7 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
         "primer_visto": cluster.get("primer_visto") or "",
         "ultimo_visto": cluster.get("ultimo_visto") or "",
         "estado": cluster.get("estado") or "nuevo",
-        "contenido_id": cluster.get("contenido_id") or "",
+        "publicacion_id": cluster.get("publicacion_id") or "",
         # Verificación: la recalcula el clustering en cada upsert (sí entra al SET de conflicto).
         "verificacion": cluster.get("verificacion") or "unica_fuente",
         # Traducción: el ALTA la nace vacía; el paso de traducir la escribe aparte
@@ -181,13 +181,13 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
         "actualizado": ahora,
     }
     # En conflicto por id, actualiza casi todo MENOS `id`/`creado`, los campos de TRADUCCIÓN
-    # (que escribe `marcar_cluster_traducido`) y `estado`/`contenido_id` (que muta SOLO
+    # (que escribe `marcar_cluster_traducido`) y `estado`/`publicacion_id` (que muta SOLO
     # `actualizar_noticia_cluster`): un recalc del daemon con datos leídos ANTES de que el
     # pipeline promoviera la historia (TOCTOU daemon↔pipeline) ya no puede revertir un cluster
     # 'usado' a 'nuevo' ni borrar su enlace al tema (lo que duplicaba el tema en el tablero).
     _NO_PISAR = (
         "id", "creado", "titulo_es", "resumen_es", "titulo_original", "idioma", "traducido",
-        "estado", "contenido_id", "marca_clasificada_por_ia", "verificacion_fuente", "verificar_hallazgos",
+        "estado", "publicacion_id", "marca_clasificada_por_ia", "verificacion_fuente", "verificar_hallazgos",
     )
     actualizables = [c for c in _COLS_NOTICIA_CLUSTER if c not in _NO_PISAR]
     set_clause = ", ".join(f"{c} = excluded.{c}" for c in actualizables)
@@ -262,43 +262,43 @@ def obtener_noticia_cluster(cluster_id: str) -> dict[str, Any] | None:
     return _fila_a_noticia_cluster(fila) if fila is not None else None
 
 
-def cluster_por_contenido(contenido_id: str) -> dict[str, Any] | None:
-    """La historia que se promovió a un tema del pipeline (`contenido_id` -> cluster), o None.
+def cluster_por_contenido(publicacion_id: str) -> dict[str, Any] | None:
+    """La historia que se promovió a un tema del pipeline (`publicacion_id` -> cluster), o None.
 
-    Lookup REVERSO del enlace que sella `crear_tema_de_cluster` (cluster.contenido_id apunta al
+    Lookup REVERSO del enlace que sella `crear_tema_de_cluster` (cluster.publicacion_id apunta al
     tema). La vista de pipelines lo usa para mostrar la PROCEDENCIA IA del tema (corroboración,
     score, verificación) en las etapas Jerarquización/Ingesta. Si por algún motivo varias
     historias apuntaran al mismo tema (no debería), gana la actualizada más recientemente.
     """
-    if not contenido_id:
+    if not publicacion_id:
         return None
     con = _conectar()
     try:
         fila = con.execute(
-            f"{_SELECT_NOTICIA_CLUSTER} WHERE contenido_id = ? "
+            f"{_SELECT_NOTICIA_CLUSTER} WHERE publicacion_id = ? "
             "ORDER BY actualizado DESC, id DESC LIMIT 1",
-            (contenido_id,),
+            (publicacion_id,),
         ).fetchone()
     finally:
         con.close()
     return _fila_a_noticia_cluster(fila) if fila is not None else None
 
 
-def clusters_por_contenidos(contenido_ids: list[str]) -> dict[str, dict[str, Any]]:
-    """Mapa `contenido_id -> historia` para un lote de temas (1 query; los "" se ignoran).
+def clusters_por_contenidos(publicacion_ids: list[str]) -> dict[str, dict[str, Any]]:
+    """Mapa `publicacion_id -> historia` para un lote de temas (1 query; los "" se ignoran).
 
     Versión por LOTE de `cluster_por_contenido` para la LISTA de pipelines (evita N consultas).
     Un tema que no nació de una historia no aparece en el mapa. Ante empates (varias historias
     por tema, no debería), gana la primera que devuelve la consulta (orden `actualizado` desc).
     """
-    ids = [i for i in dict.fromkeys(contenido_ids) if i]
+    ids = [i for i in dict.fromkeys(publicacion_ids) if i]
     if not ids:
         return {}
     marcadores = ",".join("?" for _ in ids)
     con = _conectar()
     try:
         filas = con.execute(  # noqa: S608 -- marcadores parametrizados; ids deduplicados/depurados
-            f"{_SELECT_NOTICIA_CLUSTER} WHERE contenido_id IN ({marcadores}) "
+            f"{_SELECT_NOTICIA_CLUSTER} WHERE publicacion_id IN ({marcadores}) "
             "ORDER BY actualizado DESC, id DESC",
             tuple(ids),
         ).fetchall()
@@ -307,7 +307,7 @@ def clusters_por_contenidos(contenido_ids: list[str]) -> dict[str, dict[str, Any
     out: dict[str, dict[str, Any]] = {}
     for fila in filas:
         cluster = _fila_a_noticia_cluster(fila)
-        cid = cluster["contenido_id"]
+        cid = cluster["publicacion_id"]
         if cid and cid not in out:  # la primera (más reciente) gana
             out[cid] = cluster
     return out
@@ -317,14 +317,14 @@ def actualizar_noticia_cluster(
     cluster_id: str,
     *,
     estado: str | None = None,
-    contenido_id: str | None = None,
+    publicacion_id: str | None = None,
 ) -> dict[str, Any] | None:
-    """Edita `estado` / `contenido_id` de una historia (None si no existe)."""
+    """Edita `estado` / `publicacion_id` de una historia (None si no existe)."""
     cambios: dict[str, Any] = {}
     if estado is not None:
         cambios["estado"] = estado
-    if contenido_id is not None:
-        cambios["contenido_id"] = contenido_id
+    if publicacion_id is not None:
+        cambios["publicacion_id"] = publicacion_id
     if not cambios:
         return obtener_noticia_cluster(cluster_id)
     cambios["actualizado"] = ahora_iso()
@@ -712,14 +712,14 @@ def actualizar_scores_clusters(scores: dict[str, float | dict[str, Any]]) -> int
     return n
 
 
-def marcar_items_cluster_usados(cluster_id: str, contenido_id: str) -> None:
-    """Marca TODOS los items de un cluster como `usado` + enlaza el `contenido_id` (una escritura)."""
+def marcar_items_cluster_usados(cluster_id: str, publicacion_id: str) -> None:
+    """Marca TODOS los items de un cluster como `usado` + enlaza el `publicacion_id` (una escritura)."""
     con = _conectar()
     try:
         con.execute(
-            "UPDATE noticias_items SET estado = 'usado', contenido_id = ? "
+            "UPDATE noticias_items SET estado = 'usado', publicacion_id = ? "
             "WHERE cluster_id = ? AND estado <> 'descartado'",
-            (contenido_id, cluster_id),
+            (publicacion_id, cluster_id),
         )
         con.commit()
     finally:

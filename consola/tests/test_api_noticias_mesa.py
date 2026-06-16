@@ -29,14 +29,14 @@ def _contenido_con_post(*, marca="unotv", categoria="mx", titulo="Generada", cre
 
     Es lo que el plan cuenta: solo los temas que YA produjeron una publicación. Un
     `contenido` sin piezas (promovido pero con el copy aún sin generar, o fallido/borrado)
-    NO cuenta — para eso se crea con `repos.crear_contenido` a secas en los tests.
+    NO cuenta — para eso se crea con `repos.crear_publicacion` a secas en los tests.
     """
     kw = {"clase": "contenido", "titulo": titulo, "marca": marca, "categoria": categoria}
     if creado:
         kw["creado"] = creado
-    contenido = repos.crear_contenido(**kw)
-    repos.crear_contenido_plataforma(
-        contenido_id=contenido["id"], red="facebook", marca=marca, copy="Post",
+    contenido = repos.crear_publicacion(**kw)
+    repos.crear_pieza_fila(
+        publicacion_id=contenido["id"], red="facebook", marca=marca, copy="Post",
         es_publicacion=True,
     )
     return contenido
@@ -112,7 +112,7 @@ def test_mesa_descuenta_lo_generado_en_el_progreso(cliente, monkeypatch):
     _contenido_con_post(categoria="mx", titulo="Ya generada")
     # ...pero un tema SIN ningún post (promovido y con el copy sin generar, o fallido) NO:
     # es el "fantasma" que antes inflaba el plan (6 en el conteo con 5 posts visibles).
-    repos.crear_contenido(clase="contenido", titulo="Sin post", marca="unotv", categoria="mx")
+    repos.crear_publicacion(clase="contenido", titulo="Sin post", marca="unotv", categoria="mx")
     datos = cliente.get("/api/noticias/mesa", params={"marca": "unotv"}).json()
     linea = datos["lineas"][0]
     assert linea["generados"] == 1  # solo el que tiene post; el fantasma no cuenta
@@ -164,7 +164,7 @@ def test_restaurar_es_idempotente_sobre_una_nueva(cliente):
 
 def test_restaurar_usada_400_e_inexistente_404(cliente):
     _inicializar("c1", estado="nuevo")
-    cont = repos.crear_contenido(clase="contenido", titulo="Tema", marca="unotv")
-    repos.actualizar_noticia_cluster("c1", estado="usado", contenido_id=cont["id"])
+    cont = repos.crear_publicacion(clase="contenido", titulo="Tema", marca="unotv")
+    repos.actualizar_noticia_cluster("c1", estado="usado", publicacion_id=cont["id"])
     assert cliente.post("/api/noticias/historias/c1/restaurar").status_code == 400
     assert cliente.post("/api/noticias/historias/nope/restaurar").status_code == 404

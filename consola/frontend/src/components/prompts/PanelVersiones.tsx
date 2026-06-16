@@ -4,7 +4,7 @@
  *
  * Jerarquía: cuando hay cambios sin publicar, una zona de acciones con un CTA prominente
  * «Revisar y publicar» (abre el flujo de publicación a pantalla completa) y «Descartar
- * cambios». Debajo, la línea de tiempo: la lista de PUBLICACIONES, cada una con su nota como
+ * cambios». Debajo, la línea de tiempo: la lista de PIEZAS, cada una con su nota como
  * título, autor + fecha y la que está EN VIVO marcada. No se muestran SHAs (van en `title`).
  *
  * Interacción por versión:
@@ -237,7 +237,7 @@ export function PanelVersiones({
         </div>
       ) : null}
 
-      {/* ───────── Línea de tiempo: publicaciones ─────────
+      {/* ───────── Línea de tiempo: piezas ─────────
           Sin caja propia (la sección ya es «Versiones»): cada versión en UNA sola línea, con el
           nombre truncado y la meta + restaurar a la derecha. */}
       <section className="space-y-2">
@@ -265,7 +265,7 @@ export function PanelVersiones({
             </li>
           ) : null}
 
-          {/* Publicaciones (historial), de más reciente a más antigua. */}
+          {/* Piezas (historial), de más reciente a más antigua. */}
           {historial.map((v) => {
             const esEnVivo = !!produccionSha && v.sha === produccionSha;
             const nombre = v.mensaje || "Publicación";
@@ -321,8 +321,8 @@ export function PanelVersiones({
         {historial.length === 0 ? (
           <p className="px-1 text-sm text-muted-foreground">
             {sinPublicar
-              ? "Aún no hay publicaciones: tu borrador será la primera."
-              : "Aún no hay publicaciones."}
+              ? "Aún no hay piezas: tu borrador será la primera."
+              : "Aún no hay piezas."}
           </p>
         ) : null}
       </section>

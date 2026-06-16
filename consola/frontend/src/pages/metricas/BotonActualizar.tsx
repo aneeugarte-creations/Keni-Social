@@ -25,7 +25,7 @@ import { toast } from "sonner";
 import { ItemMenu } from "@/components/layout/MenuAcciones";
 import { api, mensajeError } from "@/lib/api";
 
-import { tiempoRelativo } from "../publicaciones/meta";
+import { tiempoRelativo } from "../piezas/meta";
 
 export function useActualizarMetricas({
   rango,

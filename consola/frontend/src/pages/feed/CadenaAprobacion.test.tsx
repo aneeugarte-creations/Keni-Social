@@ -9,8 +9,8 @@ import { CadenaAprobacion } from "./CadenaAprobacion";
 function nivel(over: Partial<NivelAprobacion>): NivelAprobacion {
   return {
     id: "n?",
-    plataforma_id: "p1",
-    contenido_id: "c1",
+    pieza_id: "p1",
+    publicacion_id: "c1",
     nivel: 1,
     etiqueta: "Edición",
     decision: "pendiente",

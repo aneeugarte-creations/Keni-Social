@@ -152,7 +152,7 @@ def test_modulo_a_app_cubre_todos_los_routers_sin_solapes():
     # Reparto canónico de ADR 0005 (muestra representativa por unidad).
     assert mapa["generaciones"] == "produccion"
     assert mapa["metricas"] == "metricas"
-    assert mapa["publicaciones"] == "operacion"
+    assert mapa["piezas"] == "operacion"
     assert mapa["auth"] == "shell"
     # Sin solapes: tantas claves como módulos sumados de los manifests.
     total = sum(len(a.modulos_backend) for a in registro.cargar_apps())

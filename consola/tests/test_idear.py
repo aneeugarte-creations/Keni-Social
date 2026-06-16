@@ -70,7 +70,7 @@ def test_crear_listar_obtener_evergreen_idea(entorno):
     )
     assert set(idea) == {
         "id", "marca", "titulo", "descripcion", "estado", "origen",
-        "generacion_id", "contenido_id", "creado", "actualizado",
+        "generacion_id", "publicacion_id", "creado", "actualizado",
     }
     assert idea["estado"] == "propuesta"
     assert idea["origen"] == "ia"
@@ -117,10 +117,10 @@ def test_listar_evergreen_ideas_recientes_primero(entorno):
 def test_actualizar_evergreen_idea(entorno):
     idea = db.crear_evergreen_idea(marca="unotv", titulo="X", estado="propuesta")
     edit = db.actualizar_evergreen_idea(
-        idea["id"], {"estado": "aprobada", "contenido_id": "pieza123"}
+        idea["id"], {"estado": "aprobada", "publicacion_id": "pieza123"}
     )
     assert edit["estado"] == "aprobada"
-    assert edit["contenido_id"] == "pieza123"
+    assert edit["publicacion_id"] == "pieza123"
     # Campo NO editable (marca/origen) se ignora, no rompe.
     sin_cambio = db.actualizar_evergreen_idea(idea["id"], {"marca": "claro", "origen": "manual"})
     assert sin_cambio["marca"] == "unotv"
@@ -156,9 +156,9 @@ def test_generar_pieza_sella_la_idea_como_generada(cliente, monkeypatch):
     assert r.status_code == 200, r.text
     datos = r.json()
     assert datos["idea"]["estado"] == "generada"
-    assert datos["idea"]["contenido_id"]
+    assert datos["idea"]["publicacion_id"]
     # La pieza nace evergreen con su LÍNEA del plan persistida (cuenta y hereda horarios).
-    cont = repos.obtener_contenido(datos["idea"]["contenido_id"])
+    cont = repos.obtener_publicacion(datos["idea"]["publicacion_id"])
     assert cont["flujo"] == "evergreen" and cont["categoria"] == "evergreen"
     # Una idea ya generada NO se puede volver a generar (no está `aprobada`).
     assert cliente.post(

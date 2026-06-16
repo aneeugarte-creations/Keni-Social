@@ -119,9 +119,9 @@ def test_usar_crea_borrador_y_marca_usado(cliente):
     # El item quedó usado + enlazado al contenido.
     refrescado = repos.obtener_noticia_item(it["id"])
     assert refrescado["estado"] == "usado"
-    assert refrescado["contenido_id"] == cont["id"]
+    assert refrescado["publicacion_id"] == cont["id"]
     # Aparece en el tablero con origen 'noticia'.
-    tablero = cliente.get("/api/contenido").json()["contenidos"]
+    tablero = cliente.get("/api/publicaciones").json()["contenidos"]
     assert any(c["origen"] == "noticia" for c in tablero)
 
 

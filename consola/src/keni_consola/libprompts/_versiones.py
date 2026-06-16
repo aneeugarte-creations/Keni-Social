@@ -2,7 +2,7 @@
 
 Una VERSIÓN nace solo al PUBLICAR/SOLICITAR (`fijar_version`), no en cada autosave. Por eso:
 
-  - `historial` devuelve el HISTORIAL DE PUBLICACIONES (tabla `texto_publicaciones`), no el
+  - `historial` devuelve el HISTORIAL DE PIEZAS (tabla `texto_publicaciones`), no el
     `git log` crudo (que solo tiene "crear"/"mover" + los commits de publicación). Es lo que
     ve el usuario como "versiones".
   - `version` lee el `.md` completo de un sha git (es git por debajo).
@@ -41,14 +41,14 @@ __all__ = [
 
 
 def historial(doc_id: str, *, limite: int = 50) -> list[dict[str, str]]:
-    """Historial de PUBLICACIONES de un documento (recientes primero).
+    """Historial de PIEZAS de un documento (recientes primero).
 
     Cada entrada conserva la forma `RespuestaHistorialTexto` del contrato con el frontend
     (`{sha, sha_corto, fecha, autor, mensaje}`), mapeada desde una publicación:
     `mensaje`=nota de publicación, `fecha`=`creado`, `autor`=autor, `sha_corto`=`sha[:8]`.
 
     Una VERSIÓN = una publicación: el "borrador" (working copy) NO es una versión y el
-    frontend lo sintetiza aparte. Si el doc no tiene publicaciones -> lista vacía.
+    frontend lo sintetiza aparte. Si el doc no tiene piezas -> lista vacía.
 
     BEST-EFFORT (como el resto del modelo de publicación): si Postgres no está disponible,
     cae a lista vacía (NO al `git log`, que son commits irrelevantes de "crear"/"mover").
@@ -59,7 +59,7 @@ def historial(doc_id: str, *, limite: int = 50) -> list[dict[str, str]]:
         from .. import db  # perezoso: no cargar la persistencia para usos puros de ficheros
 
         filas = db.historial_texto_publicaciones(doc_id, limite=limite)
-    except Exception:  # noqa: BLE001 -- sin BD no hay publicaciones; nunca rompemos la lectura
+    except Exception:  # noqa: BLE001 -- sin BD no hay piezas; nunca rompemos la lectura
         return []
     return [
         {

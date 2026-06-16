@@ -47,39 +47,39 @@ def _migrar_columnas_noticias_algoritmo(con: Any) -> None:
         )
 
 
-def _migrar_columnas_contenido_plataforma(con: Any) -> None:
-    """Anade `copy_in_exento` y `verificar_auto_hash` a `contenido_plataforma` (idempotente).
+def _migrar_columnas_pieza(con: Any) -> None:
+    """Anade `copy_in_exento` y `verificar_auto_hash` a `pieza` (idempotente).
 
     Columnas del auto-avance (Flujo: "dale el OK" automatico): `copy_in_exento` marca una
     pieza como exenta de copy-in (imagen dramatica/autoexplicativa que no lo necesita);
     `verificar_auto_hash` guarda el hash del copy para el que se lanzo la verificación automatica, para no
     relanzarla en cada barrido. `ADD COLUMN IF NOT EXISTS` es seguro y no-op si ya estan.
     """
-    if not _tabla_existe(con, "contenido_plataforma"):
+    if not _tabla_existe(con, "pieza"):
         return
-    cols = _columnas_existentes(con, "contenido_plataforma")
+    cols = _columnas_existentes(con, "pieza")
     if "copy_in_exento" not in cols:
         con.execute(
-            "ALTER TABLE contenido_plataforma "
+            "ALTER TABLE pieza "
             "ADD COLUMN IF NOT EXISTS copy_in_exento INTEGER NOT NULL DEFAULT 0"
         )
     if "verificar_auto_hash" not in cols:
         con.execute(
-            "ALTER TABLE contenido_plataforma "
+            "ALTER TABLE pieza "
             "ADD COLUMN IF NOT EXISTS verificar_auto_hash TEXT NOT NULL DEFAULT ''"
         )
     # `placa_oculta`: la pieza se publica SOLO con la foto, sin la plantilla/placa de marca
     # encima ("quitar plantilla" del editor). Persiste la elección entre reaperturas.
     if "placa_oculta" not in cols:
         con.execute(
-            "ALTER TABLE contenido_plataforma "
+            "ALTER TABLE pieza "
             "ADD COLUMN IF NOT EXISTS placa_oculta INTEGER NOT NULL DEFAULT 0"
         )
     # `plantilla_diseno_id`: la plantilla del estudio (PlantillaDiseno) que la pieza usa para
     # componer su imagen. "" = sin plantilla del estudio (placa de marca por defecto).
     if "plantilla_diseno_id" not in cols:
         con.execute(
-            "ALTER TABLE contenido_plataforma "
+            "ALTER TABLE pieza "
             "ADD COLUMN IF NOT EXISTS plantilla_diseno_id TEXT NOT NULL DEFAULT ''"
         )
     # `foto_encuadre`: reencuadre manual de la foto dentro del marco 4:5 (JSON
@@ -87,7 +87,7 @@ def _migrar_columnas_contenido_plataforma(con: Any) -> None:
     # la elección humana del recorte entre reaperturas y se aplica también al render por plantilla.
     if "foto_encuadre" not in cols:
         con.execute(
-            "ALTER TABLE contenido_plataforma "
+            "ALTER TABLE pieza "
             "ADD COLUMN IF NOT EXISTS foto_encuadre TEXT NOT NULL DEFAULT ''"
         )
     # `fotos`: COLLAGE multi-hueco. JSON array `[{"objeto":media_id,"foco":[x,y],"zoom":z}, …]`,
@@ -95,7 +95,7 @@ def _migrar_columnas_contenido_plataforma(con: Any) -> None:
     # hueco 0 se deriva del par legado `foto`/`foto_encuadre` (retrocompat con la foto única).
     if "fotos" not in cols:
         con.execute(
-            "ALTER TABLE contenido_plataforma "
+            "ALTER TABLE pieza "
             "ADD COLUMN IF NOT EXISTS fotos TEXT NOT NULL DEFAULT ''"
         )
     # `carrusel`: slides EXTRA de una pieza `formato='carrusel'` (JSON array
@@ -104,7 +104,7 @@ def _migrar_columnas_contenido_plataforma(con: Any) -> None:
     # EN CRUDO detrás de ella en el post multi-media (Metricool `media[]`).
     if "carrusel" not in cols:
         con.execute(
-            "ALTER TABLE contenido_plataforma "
+            "ALTER TABLE pieza "
             "ADD COLUMN IF NOT EXISTS carrusel TEXT NOT NULL DEFAULT ''"
         )
     # `video` / `falta_video` (Ola VIDEO): asset de video y su checklist, espejo de
@@ -112,39 +112,39 @@ def _migrar_columnas_contenido_plataforma(con: Any) -> None:
     # el video es N/A (`falta_video` queda en 0). ADD COLUMN IF NOT EXISTS es no-op si ya estan.
     if "video" not in cols:
         con.execute(
-            "ALTER TABLE contenido_plataforma "
+            "ALTER TABLE pieza "
             "ADD COLUMN IF NOT EXISTS video TEXT NOT NULL DEFAULT ''"
         )
     if "falta_video" not in cols:
         con.execute(
-            "ALTER TABLE contenido_plataforma "
+            "ALTER TABLE pieza "
             "ADD COLUMN IF NOT EXISTS falta_video INTEGER NOT NULL DEFAULT 0"
         )
     # `marca`: DENORMALIZADA del padre `contenido`. Habilita el indice unico parcial de parrilla
     # POR MARCA (`idx_parrilla_slot_uniq`, en `_INDICES_UNICOS_IDEMPOTENCIA`): dos marcas distintas
     # SI pueden programar la misma (red, fecha); la MISMA marca no puede doble-reservar el slot.
     # Un indice parcial no puede cruzar el join al padre, de ahi la denormalizacion. Las escrituras
-    # la mantienen en sync (`crear_contenido_plataforma` la deriva del padre; `actualizar_contenido`
+    # la mantienen en sync (`crear_pieza_fila` la deriva del padre; `actualizar_publicacion`
     # la propaga al reasignar la marca del padre). El backfill abajo la rellena en BDs ya creadas.
     if "marca" not in cols:
         con.execute(
-            "ALTER TABLE contenido_plataforma "
+            "ALTER TABLE pieza "
             "ADD COLUMN IF NOT EXISTS marca TEXT NOT NULL DEFAULT ''"
         )
     # BACKFILL one-shot desde el padre: alinea TODA fila cuya `marca` denormalizada difiera de la
     # del `contenido` padre (incluye filas recien migradas con ""). La app no esta en produccion-
     # uso, asi que el volumen es minimo; un UPDATE...FROM basta. Idempotente: re-ejecutarlo no toca
     # nada si ya estan alineadas (el WHERE filtra las que difieren).
-    if _tabla_existe(con, "contenido"):
+    if _tabla_existe(con, "publicacion"):
         con.execute(
-            "UPDATE contenido_plataforma AS cp SET marca = c.marca "
-            "FROM contenido AS c WHERE cp.contenido_id = c.id AND cp.marca <> c.marca"
+            "UPDATE pieza AS cp SET marca = c.marca "
+            "FROM publicacion AS c WHERE cp.publicacion_id = c.id AND cp.marca <> c.marca"
         )
     # Indice plano por `marca` (filtros del tablero/feed por marca denormalizada). Se crea AQUI
     # (no en el DDL declarativo) porque en BDs viejas la columna `marca` la añade esta migracion:
     # un CREATE INDEX en el DDL correria ANTES y reventaria ("column marca does not exist").
     con.execute(
-        "CREATE INDEX IF NOT EXISTS idx_contenido_plataforma_marca ON contenido_plataforma (marca)"
+        "CREATE INDEX IF NOT EXISTS idx_publicacion_plataforma_marca ON pieza (marca)"
     )
 
 
@@ -295,11 +295,11 @@ def _migrar_green_a_evergreen(con: Any) -> None:
 # son claves dentro del JSON de `copy_pendiente` (ya renombradas en el código a `verificar_*`/
 # `redactar_intentos`).
 _RENOMBRES_COLUMNAS_ETAPAS: tuple[tuple[str, str, str], ...] = (
-    ("contenido", "verificacion_veredicto", "verificar_veredicto"),
-    ("contenido", "verificacion_hallazgos", "verificar_hallazgos"),
+    ("publicacion", "verificacion_veredicto", "verificar_veredicto"),
+    ("publicacion", "verificacion_hallazgos", "verificar_hallazgos"),
     ("noticias_clusters", "verificacion_veredicto", "verificar_veredicto"),
     ("noticias_clusters", "verificacion_hallazgos", "verificar_hallazgos"),
-    ("contenido_plataforma", "qa_auto_hash", "verificar_auto_hash"),
+    ("pieza", "qa_auto_hash", "verificar_auto_hash"),
 )
 
 
@@ -324,8 +324,8 @@ def _migrar_renombre_columnas_etapas(con: Any) -> None:
         cols = _columnas_existentes(con, tabla)
         if viejo in cols and nuevo not in cols:
             con.execute(f"ALTER TABLE {tabla} RENAME COLUMN {viejo} TO {nuevo}")  # noqa: S608 -- allowlist fija
-    if _tabla_existe(con, "contenido"):
-        con.execute("ALTER TABLE contenido DROP CONSTRAINT IF EXISTS ck_contenido_qa_veredicto")
+    if _tabla_existe(con, "publicacion"):
+        con.execute("ALTER TABLE publicacion DROP CONSTRAINT IF EXISTS ck_contenido_qa_veredicto")
 
 
 # ETAPAS CON NOMBRE PROPIO (limpieza de jerga `veredicto`/`verdicto`): el "veredicto" estaba
@@ -334,12 +334,12 @@ def _migrar_renombre_columnas_etapas(con: Any) -> None:
 #   - VERIFICAR (verificación de la FUENTE, pre-copy): `verificar_veredicto` -> `verificacion_fuente` en
 #     `contenido` y `noticias_clusters` (NO se usa `verificacion` a secas: `noticias_clusters`
 #     ya tiene esa columna para la corroboración corroborada/unica_fuente/dudosa).
-#   - REVISAR (revisión editorial del COPY ya redactado): `contenido_plataforma.veredicto` -> `revision`.
+#   - REVISAR (revisión editorial del COPY ya redactado): `pieza.veredicto` -> `revision`.
 # `verificar_hallazgos` NO se toca (no era jerga `veredicto`).
 _RENOMBRES_COLUMNAS_VEREDICTO: tuple[tuple[str, str, str], ...] = (
-    ("contenido", "verificar_veredicto", "verificacion_fuente"),
+    ("publicacion", "verificar_veredicto", "verificacion_fuente"),
     ("noticias_clusters", "verificar_veredicto", "verificacion_fuente"),
-    ("contenido_plataforma", "veredicto", "revision"),
+    ("pieza", "veredicto", "revision"),
 )
 
 
@@ -364,8 +364,8 @@ def _migrar_renombre_columnas_veredicto(con: Any) -> None:
         cols = _columnas_existentes(con, tabla)
         if viejo in cols and nuevo not in cols:
             con.execute(f"ALTER TABLE {tabla} RENAME COLUMN {viejo} TO {nuevo}")  # noqa: S608 -- allowlist fija
-    if _tabla_existe(con, "contenido"):
-        con.execute("ALTER TABLE contenido DROP CONSTRAINT IF EXISTS ck_contenido_verificar_veredicto")
+    if _tabla_existe(con, "publicacion"):
+        con.execute("ALTER TABLE publicacion DROP CONSTRAINT IF EXISTS ck_contenido_verificar_veredicto")
 
 
 # Columnas que se anadieron a `rota_eventos` despues de su esquema original (ola B, #144).
@@ -518,7 +518,7 @@ def _migrar_columnas_eventos_rota(con: Any) -> None:
 #   - comentarios: texto LIBRE de coordinacion PRE/durante (distinto de `notas`, que es
 #     post-mortem). En el Excel evergreen aparece como columna "Comentarios". Legado -> "".
 #   - fecha_entrega_material: deadline INTERNO de cuando debe llegar el material a Tescu
-#     antes de la fecha de publicacion. Columna "Fecha de Entrega (Material)" del Excel.
+#     antes de la fecha de pieza. Columna "Fecha de Entrega (Material)" del Excel.
 #     Legado -> "".
 #   - always_on: pieza siempre activa sin fecha concreta (ej. "ALWAYS ON" de PATY CANTU,
 #     teaser/promo evergreen). Si esta marcada, la fecha `dia` es opcional/ignorada por la
@@ -546,11 +546,11 @@ def _migrar_columnas_piezas_rota(con: Any) -> None:
             con.execute(f"ALTER TABLE rota_piezas ADD COLUMN IF NOT EXISTS {columna} {tipo}")
 
 
-# Columnas ampliadas de `contenido` / `contenido_plataforma` (tablero unificado). Hoy
+# Columnas ampliadas de `contenido` / `pieza` (tablero unificado). Hoy
 # ambas tablas nacen enteras en el DDL declarativo (sin previas en produccion); estos
 # hooks existen por coherencia con `_migrar_columnas_*` para futuras ampliaciones sin
 # reescribir el esquema en bases hosted. Idempotentes; vacios no hacen nada.
-_COLUMNAS_CONTENIDO_AMPLIADAS: tuple[tuple[str, str], ...] = (
+_COLUMNAS_PUBLICACION_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # Tipo de contenido (ia|galeria|fuente): de dónde sale la imagen de la pieza.
     ("tipo_contenido", "TEXT NOT NULL DEFAULT 'ia'"),
     # FORMATO de la pieza (foto|video): decide a qué redes va (regla del dueño). `foto` -> 3
@@ -560,7 +560,7 @@ _COLUMNAS_CONTENIDO_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # id_post_metricool a NIVEL pieza (Item C, métricas↔contenido): el id de Metricool
     # "principal" de la pieza, para enlazar el rendimiento de una pieza de Metricool de
     # vuelta a su `contenido` (y resolver sus etiquetas/tipo en las gráficas por serie).
-    # El id REAL por red sigue viviendo en `contenido_plataforma.id_post_metricool` (una
+    # El id REAL por red sigue viviendo en `pieza.id_post_metricool` (una
     # pieza publica en N redes); este es un acceso directo a NIVEL contenido. Legado -> "".
     ("id_post_metricool", "TEXT NOT NULL DEFAULT ''"),
     # Señal de VIRALIDAD del Radar (Fase 5, loop de aprendizaje): el trafico aproximado REAL
@@ -590,7 +590,7 @@ _COLUMNAS_CONTENIDO_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # ESPEJO entre redes (default ON): al editar el contenido de una pieza por red (copy,
     # copy-in, foto/collage, plantilla), los mismos campos se propagan a sus redes hermanas
     # (las piezas suelen ir parejas en todas las redes). 0 = cada red se edita por separado.
-    # Lo aplica `api/publicaciones.actualizar` (no la capa db). BD vieja -> 1 (espejado).
+    # Lo aplica `api/piezas.actualizar` (no la capa db). BD vieja -> 1 (espejado).
     ("espejo", "INTEGER NOT NULL DEFAULT 1"),
 )
 _COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS: tuple[tuple[str, str], ...] = (
@@ -602,16 +602,16 @@ _COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # `imagen` (la placa ya compuesta y publicable). Permite recomponer la placa en vivo.
     ("foto", "TEXT NOT NULL DEFAULT ''"),
     # Texto que va DENTRO de la imagen (copy-in: titular/claim sobre la placa), distinto
-    # del `copy` que acompana a la publicacion. Se genera por marca con sus reglas/plantilla.
+    # del `copy` que acompana a la pieza. Se genera por marca con sus reglas/plantilla.
     ("copy_in", "TEXT NOT NULL DEFAULT ''"),
 )
 
 
-def _migrar_columnas_contenido(con: Any) -> None:
-    """Anade a `contenido`/`contenido_plataforma` columnas que una BD vieja no tuviera."""
+def _migrar_columnas_publicacion(con: Any) -> None:
+    """Anade a `contenido`/`pieza` columnas que una BD vieja no tuviera."""
     for tabla, ampliadas in (
-        ("contenido", _COLUMNAS_CONTENIDO_AMPLIADAS),
-        ("contenido_plataforma", _COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS),
+        ("publicacion", _COLUMNAS_PUBLICACION_AMPLIADAS),
+        ("pieza", _COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS),
     ):
         if not ampliadas:
             continue
@@ -621,7 +621,7 @@ def _migrar_columnas_contenido(con: Any) -> None:
                 con.execute(f"ALTER TABLE {tabla} ADD COLUMN IF NOT EXISTS {columna} {tipo}")
 
 
-# Columnas que se anaden a `contenido_aprobaciones` en bases creadas por una version
+# Columnas que se anaden a `pieza_aprobaciones` en bases creadas por una version
 # anterior (el Postgres hosted persiste entre despliegues). `cargo_requerido` (item C: cargo
 # del organigrama exigido por nivel) nace en el `CREATE TABLE` de las bases NUEVAS; este
 # migrador la inyecta a las VIEJAS. Idempotente (no-op si ya esta o si la tabla no existe).
@@ -631,14 +631,14 @@ _COLUMNAS_APROBACIONES_AMPLIADAS: tuple[tuple[str, str], ...] = (
 
 
 def _migrar_columnas_aprobaciones(con: Any) -> None:
-    """Anade a `contenido_aprobaciones` las columnas que una BD vieja no tuviera (idempotente)."""
-    if not _tabla_existe(con, "contenido_aprobaciones"):
+    """Anade a `pieza_aprobaciones` las columnas que una BD vieja no tuviera (idempotente)."""
+    if not _tabla_existe(con, "pieza_aprobaciones"):
         return
-    columnas = _columnas_existentes(con, "contenido_aprobaciones")
+    columnas = _columnas_existentes(con, "pieza_aprobaciones")
     for columna, tipo in _COLUMNAS_APROBACIONES_AMPLIADAS:
         if columna not in columnas:
             con.execute(
-                f"ALTER TABLE contenido_aprobaciones ADD COLUMN IF NOT EXISTS {columna} {tipo}"
+                f"ALTER TABLE pieza_aprobaciones ADD COLUMN IF NOT EXISTS {columna} {tipo}"
             )
 
 
@@ -1085,10 +1085,10 @@ _COLUMNAS_TS_CANON: tuple[tuple[str, str, int], ...] = (
     # de Postgres (timestamptz), que ordenan/comparan por valor (no por texto). Normalizar TEXT
     # sobre ellas (`left()`, `~`) reventaria (ya no son text); su correctitud temporal la
     # garantiza el tipo nativo. Aqui solo quedan las columnas que SIGUEN siendo TEXT.
-    ("contenido_plataforma", "creado", 19),
-    ("contenido_plataforma", "actualizado", 19),
-    ("contenido_plataforma", "preparado_en", 19),
-    ("contenido_plataforma", "fecha_programada", 16),
+    ("pieza", "creado", 19),
+    ("pieza", "actualizado", 19),
+    ("pieza", "preparado_en", 19),
+    ("pieza", "fecha_programada", 16),
     # Motor de noticias: estas columnas se comparan/ordenan como texto (ventanas 24h,
     # GC del pool, `ultimo_visto >= ?`, `capturado_en >= ?`, `proximo_sondeo <= ahora`,
     # `MAX(ultima_actualizacion)`) y se escribian con `datetime.now(UTC).isoformat()`
@@ -1222,22 +1222,22 @@ _INDICES_UNICOS_IDEMPOTENCIA: tuple[tuple[str, str], ...] = (
     # y, sin unicidad, insertaban la MISMA version (historial duplicado/roto). El indice unico
     # convierte ese choque en una UniqueViolation que el INSERT REINTENTA con el numero siguiente
     # (ver `crear_documento_version` / `registrar_copy_version`).
-    ("idx_documento_versiones_uniq", "documento_versiones (contenido_id, plataforma_id, version)"),
-    ("idx_copy_versiones_uniq", "contenido_copy_versiones (plataforma_id, version)"),
+    ("idx_documento_versiones_uniq", "documento_versiones (publicacion_id, pieza_id, version)"),
+    ("idx_copy_versiones_uniq", "pieza_copy_versiones (pieza_id, version)"),
     # PARRILLA — doble-reserva POR MARCA (fix implementado). El slot correcto es por (marca, red,
     # fecha): dos marcas distintas SI pueden publicar en la misma red a la misma hora, pero la
     # MISMA marca no puede doble-reservar el mismo slot. Una version previa puso un UNIQUE solo por
     # (red, fecha) y hubo que retirarlo: chocaba ENTRE MARCAS porque `marca` vivia en `contenido`
     # (padre) y un indice PARCIAL no puede cruzar el join. La solucion: DENORMALIZAR `marca` en
-    # `contenido_plataforma` (columna mantenida en sync en toda escritura: derivada del padre al
-    # insertar, propagada al reasignar la marca del padre; ver `crear_contenido_plataforma` y
-    # `actualizar_contenido`) y entonces SI cabe el UNIQUE parcial por (marca, red, fecha). El
+    # `pieza` (columna mantenida en sync en toda escritura: derivada del padre al
+    # insertar, propagada al reasignar la marca del padre; ver `crear_pieza_fila` y
+    # `actualizar_publicacion`) y entonces SI cabe el UNIQUE parcial por (marca, red, fecha). El
     # predicado exige `estado='programado'` (solo lo programado reserva slot) Y `fecha_programada
     # <> ''` (borradores sin fecha no chocan entre si). El backstop+reintento de la carrera vive en
-    # `api.publicaciones._encolar_en_hueco_libre` y en el PUT (`api.publicaciones.actualizar`).
+    # `api.piezas._encolar_en_hueco_libre` y en el PUT (`api.piezas.actualizar`).
     (
         "idx_parrilla_slot_uniq",
-        "contenido_plataforma (marca, red, fecha_programada) "
+        "pieza (marca, red, fecha_programada) "
         "WHERE estado = 'programado' AND fecha_programada <> ''",
     ),
     # ROTA — turnos duplicables (check-then-insert sin constraint): dos peticiones simultaneas
@@ -1275,3 +1275,76 @@ def _crear_indices_unicos_idempotencia(con: Any) -> None:
                 destino,
                 e,
             )
+# --------------------------------------------------------------------------- #
+# RENOMBRE de ENTIDADES (alineación del código con el lenguaje del producto).  #
+#   contenido            -> publicacion   (material padre; 1 publicacion = N piezas)
+#   contenido_plataforma -> pieza         (un item por red)
+#   + tablas dependientes y columnas FK  (contenido_id -> publicacion_id ;
+#                                          plataforma_id -> pieza_id)
+# Idempotente y guardada por existencia. Va en PRE-DDL a propósito: debe correr ANTES de
+# que el DDL declarativo cree las tablas NUEVAS vacías (que, con la vieja aún presente,
+# dejarían sueltos los datos). Mismo motivo que `_renombrar_comercial_campanias_a_campanias`
+# y el renombre green->evergreen. En BDs nuevas es no-op (aún no hay tablas viejas).
+# --------------------------------------------------------------------------- #
+
+# Tablas (vieja -> nueva). RENAME solo si la vieja existe y la nueva aún no.
+_RENOMBRES_TABLAS_ENTIDADES: tuple[tuple[str, str], ...] = (
+    ("contenido", "publicacion"),
+    ("contenido_plataforma", "pieza"),
+    ("contenido_comentarios", "publicacion_comentarios"),
+    ("contenido_etiquetas", "publicacion_etiquetas"),
+    ("contenido_copy_versiones", "pieza_copy_versiones"),
+    ("contenido_aprobaciones", "pieza_aprobaciones"),
+)
+
+# Columnas FK (vieja -> nueva) en CUALQUIER tabla que aún las tenga: la referencia al padre
+# (`contenido_id`) y al ítem por red (`plataforma_id`) está repartida por varias tablas
+# (pieza, *_comentarios, *_copy_versiones, *_aprobaciones, documento_versiones,
+# eventos_internos, webhooks, generaciones_indice, noticias_items, video_composiciones...).
+_RENOMBRES_COLUMNAS_ENTIDADES: tuple[tuple[str, str], ...] = (
+    ("contenido_id", "publicacion_id"),
+    ("plataforma_id", "pieza_id"),
+)
+
+# Índices cuyo NOMBRE lleva el prefijo viejo: el DDL nuevo los crea con el prefijo nuevo, así
+# que renombrarlos evita índices DUPLICADOS sobre las mismas columnas en BDs ya existentes.
+_RENOMBRES_INDICES_ENTIDADES: tuple[tuple[str, str], ...] = (
+    ("idx_contenido_flujo", "idx_publicacion_flujo"),
+    ("idx_contenido_marca", "idx_publicacion_marca"),
+    ("idx_contenido_evento", "idx_publicacion_evento"),
+    ("idx_contenido_responsable", "idx_publicacion_responsable"),
+    ("idx_contenido_creado_id", "idx_publicacion_creado_id"),
+    ("idx_contenido_plat_contenido", "idx_pieza_contenido"),
+    ("idx_contenido_plat_red", "idx_pieza_red"),
+    ("idx_contenido_plat_estado", "idx_pieza_estado"),
+    ("idx_contenido_plat_programada", "idx_pieza_programada"),
+)
+
+
+def _migrar_renombre_entidades(con: Any) -> None:
+    """Renombra el hub `contenido`/`contenido_plataforma` (+ tablas dependientes y columnas
+    FK) al lenguaje del producto (`publicacion`/`pieza`). Idempotente, guardada por existencia.
+    PRE-DDL (corre antes de que el DDL cree las tablas nuevas vacías). No-op en BDs nuevas."""
+    # 1) Tablas
+    for vieja, nueva in _RENOMBRES_TABLAS_ENTIDADES:
+        if _tabla_existe(con, vieja) and not _tabla_existe(con, nueva):
+            con.execute(f"ALTER TABLE {vieja} RENAME TO {nueva}")  # noqa: S608 -- allowlist fija
+    # 2) Columnas FK (sobre las tablas YA renombradas; el RENAME COLUMN actualiza solo sus
+    #    índices/constraints dependientes). Solo si la vieja sigue y la nueva no está.
+    for col_vieja, col_nueva in _RENOMBRES_COLUMNAS_ENTIDADES:
+        filas = con.execute(
+            "SELECT table_name FROM information_schema.columns "
+            "WHERE table_schema = current_schema() AND column_name = ?",
+            (col_vieja,),
+        ).fetchall()
+        for fila in filas:
+            tabla = fila["table_name"]
+            if col_nueva in _columnas_existentes(con, tabla):
+                continue
+            con.execute(
+                f'ALTER TABLE "{tabla}" RENAME COLUMN {col_vieja} TO {col_nueva}'  # noqa: S608 -- tabla de information_schema
+            )
+    # 3) Índices (best-effort: evita duplicados con los que crea el DDL nuevo)
+    for idx_viejo, idx_nuevo in _RENOMBRES_INDICES_ENTIDADES:
+        con.execute(f"ALTER INDEX IF EXISTS {idx_viejo} RENAME TO {idx_nuevo}")  # noqa: S608 -- allowlist fija
+

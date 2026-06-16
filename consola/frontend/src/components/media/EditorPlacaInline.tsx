@@ -12,7 +12,7 @@
  *  - Origen de la FOTO (por hueco): Subir · Texto · IA · Usar imagen original.
  *  - El canvas es SOLO previa en vivo: al guardar NO se hornea ningún PNG. La pieza guarda su
  *    RECETA (fotos + copy_in + plantilla) y la imagen publicable se renderiza on-demand en el
- *    servidor (`/api/publicaciones/{id}/compuesta`).
+ *    servidor (`/api/piezas/{id}/compuesta`).
  *
  * Composición: la cabecera (`CabeceraPlaca`), la barra de reencuadre (`BarraReencuadre`) y el
  * diálogo de origen de la foto (`DialogoFuenteFoto`) viven en `components/media/placa/`; los
@@ -49,7 +49,7 @@ export type { EditorPlacaInlineProps } from "@/components/media/placa/tipos";
 
 export function EditorPlacaInline({
   marca,
-  publicacionId,
+  piezaId,
   documento,
   copyIn,
   onCopyInCambio,
@@ -269,7 +269,7 @@ export function EditorPlacaInline({
   }, [slotActivo]);
 
   const generar = useMutation({
-    mutationFn: () => api.generarMedia({ prompt: prompt.trim(), publicacion_id: publicacionId }),
+    mutationFn: () => api.generarMedia({ prompt: prompt.trim(), pieza_id: piezaId }),
     onSuccess: (d) => {
       setAvisoGenerar("");
       iniciarIA(d.generacion);

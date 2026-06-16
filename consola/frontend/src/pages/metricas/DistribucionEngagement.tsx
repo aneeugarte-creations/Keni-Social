@@ -78,7 +78,7 @@ export function DistribucionEngagement({
   );
 }
 
-/** Contenido del estado con datos: KPIs del servidor + histograma + línea de vistas. */
+/** Publicacion del estado con datos: KPIs del servidor + histograma + línea de vistas. */
 function Cuerpo({ data }: { data: AnaliticaPiezas }) {
   const e = data.engagement;
   const v = data.visualizaciones;

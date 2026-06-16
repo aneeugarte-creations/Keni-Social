@@ -1,6 +1,6 @@
 """Transcripcion LOCAL de video/audio (whisper.cpp), capa transversal (SHELL).
 
-La PUERTA CREATIVA (`api/contenido.py:aportar`, Fase 1 / Flujo A) acepta foto y nota; este
+La PUERTA CREATIVA (`api/publicaciones.py:aportar`, Fase 1 / Flujo A) acepta foto y nota; este
 modulo le anade VIDEO/AUDIO: el equipo sube un clip, se transcribe EN LOCAL y el texto entra
 como material base del auto-copy (igual que el flujo clip-a-copy de la skill). El texto sale
 del audio del propio equipo, asi que se trata como contenido NO verificado (como cualquier

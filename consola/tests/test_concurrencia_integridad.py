@@ -39,15 +39,15 @@ _MARCA = "unotv"
 # --------------------------------------------------------------------------- #
 
 
-def _cadena_un_nivel(plataforma_id: str) -> dict:
+def _cadena_un_nivel(pieza_id: str) -> dict:
     cadena = repos.crear_cadena_aprobacion(
-        plataforma_id=plataforma_id, contenido_id="", etiquetas=["Edición"]
+        pieza_id=pieza_id, publicacion_id="", etiquetas=["Edición"]
     )
     return cadena[0]
 
 
 def test_aprobar_dos_veces_el_mismo_nivel_el_segundo_no_aplica(entorno):
-    pub = repos.crear_publicacion(_MARCA, "x", titulo="T", contenido="C")
+    pub = repos.crear_pieza(_MARCA, "x", titulo="T", contenido="C")
     nivel = _cadena_un_nivel(pub["id"])
     campos = {
         "decision": DECISION_APROBADO,
@@ -71,7 +71,7 @@ def test_aprobar_dos_veces_el_mismo_nivel_el_segundo_no_aplica(entorno):
 
 
 def test_aprobar_tras_rechazar_no_aplica(entorno):
-    pub = repos.crear_publicacion(_MARCA, "x", titulo="T", contenido="C")
+    pub = repos.crear_pieza(_MARCA, "x", titulo="T", contenido="C")
     nivel = _cadena_un_nivel(pub["id"])
     base = {"decisor_id": "u1", "decisor_nombre": "Ana", "comentario": "", "decidido_en": "z"}
     assert db.actualizar_aprobacion(nivel["id"], {**base, "decision": DECISION_RECHAZADO}) is not None
@@ -82,7 +82,7 @@ def test_aprobar_tras_rechazar_no_aplica(entorno):
 
 def test_deshacer_resetea_sin_guardia_cas(entorno):
     # Resetear a `pendiente` (deshacer) NO lleva guardia CAS: siempre puede deshacerse.
-    pub = repos.crear_publicacion(_MARCA, "x", titulo="T", contenido="C")
+    pub = repos.crear_pieza(_MARCA, "x", titulo="T", contenido="C")
     nivel = _cadena_un_nivel(pub["id"])
     db.actualizar_aprobacion(
         nivel["id"],
@@ -100,9 +100,9 @@ def test_decidir_tx_revalida_bajo_lock_otro_par_de_ojos(entorno):
     nivel 2: la regla "el otro OK lo da otra persona" debe rechazar el segundo (error, no
     se aplica), aunque sea otra fila distinta (invariante CRUZADO entre filas).
     """
-    pub = repos.crear_publicacion(_MARCA, "x", titulo="T", contenido="C")
+    pub = repos.crear_pieza(_MARCA, "x", titulo="T", contenido="C")
     cadena = repos.crear_cadena_aprobacion(
-        plataforma_id=pub["id"], contenido_id="", etiquetas=["Edición", "Coordinación"]
+        pieza_id=pub["id"], publicacion_id="", etiquetas=["Edición", "Coordinación"]
     )
     decisor = {"id": "u1", "usuario": "Ana"}
 
@@ -146,11 +146,11 @@ def _en_paralelo(trabajo, n=12, timeout=15):
 
 @pytest.mark.timeout(40)
 def test_copy_versiones_concurrentes_sin_duplicar_version(entorno):
-    pub = repos.crear_publicacion(_MARCA, "x", titulo="T", contenido="C")
+    pub = repos.crear_pieza(_MARCA, "x", titulo="T", contenido="C")
     n = 12
     _en_paralelo(
         lambda i: repos.registrar_copy_version(
-            plataforma_id=pub["id"], contenido_id="", copy=f"copy {i}"
+            pieza_id=pub["id"], publicacion_id="", copy=f"copy {i}"
         ),
         n=n,
     )
@@ -162,32 +162,32 @@ def test_copy_versiones_concurrentes_sin_duplicar_version(entorno):
 
 @pytest.mark.timeout(40)
 def test_documento_versiones_concurrentes_sin_duplicar_version(entorno):
-    pub = repos.crear_publicacion(_MARCA, "x", titulo="T", contenido="C")
-    plat = repos.obtener_contenido_plataforma(pub["id"])
-    contenido_id = plat["contenido_id"]
+    pub = repos.crear_pieza(_MARCA, "x", titulo="T", contenido="C")
+    plat = repos.obtener_pieza_fila(pub["id"])
+    publicacion_id = plat["publicacion_id"]
     n = 12
     _en_paralelo(
         lambda i: db.crear_documento_version(
-            contenido_id=contenido_id, plataforma_id=pub["id"], documento=f'{{"v": {i}}}'
+            publicacion_id=publicacion_id, pieza_id=pub["id"], documento=f'{{"v": {i}}}'
         ),
         n=n,
     )
-    versiones = [v["version"] for v in db.listar_documento_versiones(contenido_id, pub["id"])]
+    versiones = [v["version"] for v in db.listar_documento_versiones(publicacion_id, pub["id"])]
     assert sorted(versiones) == list(range(1, n + 1))
     assert len(versiones) == len(set(versiones))
 
 
 def test_indice_unico_copy_version_rechaza_duplicado(entorno):
-    # El índice único (plataforma_id, version) es un backstop duro: un INSERT manual con una
+    # El índice único (pieza_id, version) es un backstop duro: un INSERT manual con una
     # versión ya existente revienta con IntegrityError.
-    pub = repos.crear_publicacion(_MARCA, "x", titulo="T", contenido="C")
-    repos.registrar_copy_version(plataforma_id=pub["id"], contenido_id="", copy="v1")
+    pub = repos.crear_pieza(_MARCA, "x", titulo="T", contenido="C")
+    repos.registrar_copy_version(pieza_id=pub["id"], publicacion_id="", copy="v1")
     con = db._conectar()
     try:
         with pytest.raises(db.IntegrityError):
             con.execute(
-                "INSERT INTO contenido_copy_versiones "
-                "(id, plataforma_id, contenido_id, version, copy, autor_id, autor_nombre, nota, creado) "
+                "INSERT INTO pieza_copy_versiones "
+                "(id, pieza_id, publicacion_id, version, copy, autor_id, autor_nombre, nota, creado) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 ("dup1", pub["id"], "", 1, "choca", "", "", "", "2026-06-05T10:00"),
             )
@@ -199,7 +199,7 @@ def test_indice_unico_copy_version_rechaza_duplicado(entorno):
 # --------------------------------------------------------------------------- #
 # 4) Parrilla: doble-reserva de slot POR MARCA (fix implementado)             #
 # --------------------------------------------------------------------------- #
-# `marca` ahora está DENORMALIZADA en `contenido_plataforma`, así que el índice parcial único
+# `marca` ahora está DENORMALIZADA en `pieza`, así que el índice parcial único
 # `idx_parrilla_slot_uniq (marca, red, fecha_programada) WHERE estado='programado' AND
 # fecha_programada<>''` puede scope-arse por marca. Invariantes:
 #   - la MISMA marca NO puede programar dos piezas en el mismo (red, fecha) -> IntegrityError;
@@ -212,7 +212,7 @@ _FECHA_SLOT = "2026-06-10T15:00"
 
 def _programar(pub_id: str, fecha: str):
     """Pone una publicación en estado `programado` con `fecha_programada` (vía API de repos)."""
-    return repos.actualizar_publicacion(
+    return repos.actualizar_pieza(
         pub_id, {"estado": "programado", "fecha_programada": fecha}
     )
 
@@ -220,8 +220,8 @@ def _programar(pub_id: str, fecha: str):
 def test_misma_marca_mismo_slot_es_rechazado(entorno):
     # Dos piezas de la MISMA marca/red programadas a la misma fecha: la segunda choca con el
     # índice único parcial de parrilla (doble-reserva intra-marca).
-    a = repos.crear_publicacion(_MARCA, _RED_PARRILLA, titulo="A", contenido="ca")
-    b = repos.crear_publicacion(_MARCA, _RED_PARRILLA, titulo="B", contenido="cb")
+    a = repos.crear_pieza(_MARCA, _RED_PARRILLA, titulo="A", contenido="ca")
+    b = repos.crear_pieza(_MARCA, _RED_PARRILLA, titulo="B", contenido="cb")
     assert _programar(a["id"], _FECHA_SLOT) is not None
     with pytest.raises(db.IntegrityError):
         _programar(b["id"], _FECHA_SLOT)
@@ -230,8 +230,8 @@ def test_misma_marca_mismo_slot_es_rechazado(entorno):
 def test_marcas_distintas_comparten_slot(entorno):
     # Dos MARCAS distintas SÍ pueden publicar en la misma red a la misma hora: el slot es por
     # marca. Antes (UNIQUE solo por red+fecha) esto chocaba y rompía el programador multi-marca.
-    a = repos.crear_publicacion(_MARCA, _RED_PARRILLA, titulo="A", contenido="ca")
-    b = repos.crear_publicacion("clarosports", _RED_PARRILLA, titulo="B", contenido="cb")
+    a = repos.crear_pieza(_MARCA, _RED_PARRILLA, titulo="A", contenido="ca")
+    b = repos.crear_pieza("clarosports", _RED_PARRILLA, titulo="B", contenido="cb")
     assert _programar(a["id"], _FECHA_SLOT) is not None
     # No debe lanzar: marca distinta, slot independiente.
     prog_b = _programar(b["id"], _FECHA_SLOT)
@@ -244,19 +244,19 @@ def test_marca_denormalizada_se_propaga_al_reasignar(entorno):
     # La marca denormalizada de la fila por plataforma sigue al padre cuando se REASIGNA la marca
     # del `contenido`: si no, el índice quedaría mal-scope-ado. Tras reasignar A->otra marca, A y
     # una pieza de la marca ORIGINAL pueden compartir slot (ya no comparten marca).
-    a = repos.crear_publicacion(_MARCA, _RED_PARRILLA, titulo="A", contenido="ca")
+    a = repos.crear_pieza(_MARCA, _RED_PARRILLA, titulo="A", contenido="ca")
     # Reasigna la marca del padre de A; la denormalizada de su fila debe seguirla.
-    repos.actualizar_contenido(a["contenido_id"], {"marca": "clarosports"})
+    repos.actualizar_publicacion(a["publicacion_id"], {"marca": "clarosports"})
     fila = db._conectar()
     try:
         got = fila.execute(
-            "SELECT marca FROM contenido_plataforma WHERE id = ?", (a["id"],)
+            "SELECT marca FROM pieza WHERE id = ?", (a["id"],)
         ).fetchone()
     finally:
         fila.close()
     assert got["marca"] == "clarosports"
     # Ahora A (clarosports) y B (unotv) comparten slot sin chocar.
-    b = repos.crear_publicacion(_MARCA, _RED_PARRILLA, titulo="B", contenido="cb")
+    b = repos.crear_pieza(_MARCA, _RED_PARRILLA, titulo="B", contenido="cb")
     assert _programar(a["id"], _FECHA_SLOT) is not None
     assert _programar(b["id"], _FECHA_SLOT) is not None
 
@@ -266,12 +266,12 @@ def test_encolar_recalcula_hueco_ante_choque(entorno, monkeypatch):
     # hueco y la escritura otra pieza (misma marca) tomó el slot, el UPDATE lanza IntegrityError
     # y aquí RECALCULAMOS el siguiente hueco. Forzamos esa carrera devolviendo primero un slot
     # YA ocupado por una pieza de la misma marca, y luego uno libre.
-    from keni_consola.api import publicaciones as api_pub
+    from keni_consola.api import piezas as api_pub
 
-    ocupada = repos.crear_publicacion(_MARCA, _RED_PARRILLA, titulo="OCUP", contenido="x")
+    ocupada = repos.crear_pieza(_MARCA, _RED_PARRILLA, titulo="OCUP", contenido="x")
     assert _programar(ocupada["id"], _FECHA_SLOT) is not None  # ese slot ya está tomado
 
-    nueva = repos.crear_publicacion(_MARCA, _RED_PARRILLA, titulo="NUEVA", contenido="y")
+    nueva = repos.crear_pieza(_MARCA, _RED_PARRILLA, titulo="NUEVA", contenido="y")
     libre = "2026-06-10T18:00"
     huecos = iter([_FECHA_SLOT, libre])  # 1er intento choca; 2º hueco está libre
 

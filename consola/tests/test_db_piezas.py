@@ -52,8 +52,8 @@ def test_crear_pieza_con_workflow_excel(entorno):
 
 
 def test_crear_pieza_estado_invalido_cae_a_pendiente(entorno):
-    """El layer DB valida `estado` contra `ESTADOS_PIEZA`; un valor raro cae a default."""
-    assert "publicado" in db.ESTADOS_PIEZA
+    """El layer DB valida `estado` contra `ESTADOS_PIEZA_PARRILLA`; un valor raro cae a default."""
+    assert "publicado" in db.ESTADOS_PIEZA_PARRILLA
     p = db.crear_pieza_rota(programa="X", estado="raro")
     assert p["estado"] == "pendiente"
 

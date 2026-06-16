@@ -11,7 +11,7 @@ devuelve None SIEMPRE. Las marcas que aún no tenían rota cargada ya se comport
 las que la tuvieran dejan de auto-asignar y pasan también a «la lista».
 
 Se conserva como el ÚNICO punto de decisión de «quién posee una pieza nueva»: lo llaman
-`api/contenido/{aportar,post_directo,tablero}.py` con una sola llamada. Si algún día una marca
+`api/publicaciones/{aportar,post_directo,tablero}.py` con una sola llamada. Si algún día una marca
 quisiera volver al reparto PUSH (auto-asignar desde la rota), este es el sitio para reintroducirlo;
 el núcleo puro `rota.responsable_por_marca_hoy` sigue disponible para ello.
 """

@@ -36,7 +36,7 @@ export const apiImagen = {
   // y guardar (render + nueva versión + fija la imagen de la publicación). Cuando no hay versión
   // guardada, `plantilla` trae el documento EFECTIVO (el mismo que compone el feed) y `fotos` las
   // fotos por hueco de la pieza, para arrancar del documento real con su foto.
-  imagenPieza: (contenidoId: string, plataformaId: string, signal?: AbortSignal) =>
+  imagenPieza: (publicacionId: string, piezaId: string, signal?: AbortSignal) =>
     peticion<{
       documento: unknown;
       versiones: number;
@@ -44,17 +44,17 @@ export const apiImagen = {
       plantilla: unknown | null;
       fotos: { objeto: string; foco: [number, number] | null; zoom: number }[];
     }>(
-      `/imagen/pieza/${encodeURIComponent(contenidoId)}/${encodeURIComponent(plataformaId)}`,
+      `/imagen/pieza/${encodeURIComponent(publicacionId)}/${encodeURIComponent(piezaId)}`,
       { signal },
     ),
   imagenPiezaGuardar: (
-    contenidoId: string,
-    plataformaId: string,
+    publicacionId: string,
+    piezaId: string,
     documento: unknown,
     bindings?: Record<string, string>,
   ) =>
     peticion<{ id: string; url: string; version: number }>(
-      `/imagen/pieza/${encodeURIComponent(contenidoId)}/${encodeURIComponent(plataformaId)}`,
+      `/imagen/pieza/${encodeURIComponent(publicacionId)}/${encodeURIComponent(piezaId)}`,
       { metodo: "POST", json: { documento, bindings }, timeoutMs: 120_000 },
     ),
 

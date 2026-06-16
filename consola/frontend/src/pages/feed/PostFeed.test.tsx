@@ -8,18 +8,18 @@ import { ContenedorConfirmacion } from "@/components/comunes/ContenedorConfirmac
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
 import { MarcaActivaProvider } from "@/hooks/use-marca-activa";
 import { formatearFechaHora, formatearFechaHoraCorta } from "@/lib/fecha";
-import type { Publicacion, UsuarioSesion } from "@/types";
+import type { Pieza, UsuarioSesion } from "@/types";
 
 import { PostFeed } from "./PostFeed";
 
 // Los avisos de bloqueo del "me gusta" son toasts (no texto fijo): mockeamos sonner para asertarlos.
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }) }));
 
-/** Una `Publicacion` completa con valores por defecto (sobreescribibles). */
-function pub(over: Partial<Publicacion> = {}): Publicacion {
+/** Una `Pieza` completa con valores por defecto (sobreescribibles). */
+function pub(over: Partial<Pieza> = {}): Pieza {
   return {
     id: "p1",
-    contenido_id: "c1",
+    publicacion_id: "c1",
     titulo: "Tema",
     marca: "piso-15",
     marca_nombre: "Piso 15",
@@ -58,10 +58,10 @@ function pub(over: Partial<Publicacion> = {}): Publicacion {
     evergreen: false,
     etapa_ia: "generando_arte",
     ...over,
-  } as Publicacion;
+  } as Pieza;
 }
 
-function renderPost(publicacion: Publicacion, usuario: Partial<UsuarioSesion> = {}) {
+function renderPost(pieza: Pieza, usuario: Partial<UsuarioSesion> = {}) {
   const valor: ValorSesion = {
     usuario: { id: "u1", usuario: "revisor", rol: "editor", debe_cambiar_password: false, ...usuario } as UsuarioSesion,
     cargando: false,
@@ -78,7 +78,7 @@ function renderPost(publicacion: Publicacion, usuario: Partial<UsuarioSesion> = 
         <SesionContexto.Provider value={valor}>
           {/* Comentarios (el hilo en línea) consume la marca activa. */}
           <MarcaActivaProvider>
-            <PostFeed publicacion={publicacion} />
+            <PostFeed pieza={pieza} />
             {/* La confirmación imperativa (`confirmar`) necesita su contenedor montado. */}
             <ContenedorConfirmacion />
           </MarcaActivaProvider>
@@ -92,14 +92,14 @@ function renderPost(publicacion: Publicacion, usuario: Partial<UsuarioSesion> = 
 
 /** Stub de fetch para los flujos de aprobación: cadena de UN nivel humano pendiente (el
  *  revisor u1 ≠ autor puede dar OK) y POST /aprobar que devuelve la pieza en `estadoFinal`. */
-function stubFetchAprobacion(estadoFinal: Publicacion["estado"]) {
+function stubFetchAprobacion(estadoFinal: Pieza["estado"]) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string | URL) => {
       const ruta = String(url);
       if (ruta.includes("/aprobar")) {
         return new Response(
-          JSON.stringify({ publicacion: pub({ estado: estadoFinal }) }),
+          JSON.stringify({ pieza: pub({ estado: estadoFinal }) }),
           { status: 200 },
         );
       }
@@ -109,8 +109,8 @@ function stubFetchAprobacion(estadoFinal: Publicacion["estado"]) {
             niveles: [
               {
                 id: "n1",
-                plataforma_id: "p1",
-                contenido_id: "c1",
+                pieza_id: "p1",
+                publicacion_id: "c1",
                 nivel: 1,
                 etiqueta: "Edición",
                 decision: "pendiente",
@@ -282,7 +282,7 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
         urls.push(ruta);
         if (ruta.includes("/deshacer")) {
           return new Response(
-            JSON.stringify({ publicacion: pub({ estado: "en_revision" }) }),
+            JSON.stringify({ pieza: pub({ estado: "en_revision" }) }),
             { status: 200 },
           );
         }
@@ -292,8 +292,8 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
               niveles: [
                 {
                   id: "n1",
-                  plataforma_id: "p1",
-                  contenido_id: "c1",
+                  pieza_id: "p1",
+                  publicacion_id: "c1",
                   nivel: 1,
                   etiqueta: "Edición",
                   decision: "aprobado",
@@ -352,8 +352,8 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
               niveles: [
                 {
                   id: "n1",
-                  plataforma_id: "p1",
-                  contenido_id: "c1",
+                  pieza_id: "p1",
+                  publicacion_id: "c1",
                   nivel: 1,
                   etiqueta: "Edición",
                   decision: "pendiente",
@@ -428,13 +428,13 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
         // OJO al orden: /aprobacion/p1/deshacer contiene también "/aprobacion".
         if (ruta.includes("/deshacer")) {
           return new Response(
-            JSON.stringify({ publicacion: pub({ estado: "en_revision" }) }),
+            JSON.stringify({ pieza: pub({ estado: "en_revision" }) }),
             { status: 200 },
           );
         }
         if (ruta.includes("/aprobar")) {
           return new Response(
-            JSON.stringify({ publicacion: pub({ estado: "en_revision" }) }),
+            JSON.stringify({ pieza: pub({ estado: "en_revision" }) }),
             { status: 200 },
           );
         }
@@ -444,8 +444,8 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
               niveles: [
                 {
                   id: "n1",
-                  plataforma_id: "p1",
-                  contenido_id: "c1",
+                  pieza_id: "p1",
+                  publicacion_id: "c1",
                   nivel: 1,
                   etiqueta: "Edición",
                   decision: "pendiente",
@@ -569,7 +569,7 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
         urls.push(ruta);
         if (ruta.includes("/rechazar")) {
           return new Response(
-            JSON.stringify({ publicacion: pub({ estado: "borrador" }) }),
+            JSON.stringify({ pieza: pub({ estado: "borrador" }) }),
             { status: 200 },
           );
         }
@@ -579,8 +579,8 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
               niveles: [
                 {
                   id: "n1",
-                  plataforma_id: "p1",
-                  contenido_id: "c1",
+                  pieza_id: "p1",
+                  publicacion_id: "c1",
                   nivel: 1,
                   etiqueta: "Edición",
                   decision: "pendiente",
@@ -626,7 +626,7 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
         const ruta = String(url);
         if (ruta.includes("/rechazar")) {
           return new Response(
-            JSON.stringify({ publicacion: pub({ estado: "en_revision" }) }),
+            JSON.stringify({ pieza: pub({ estado: "en_revision" }) }),
             { status: 200 },
           );
         }
@@ -639,8 +639,8 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
               niveles: [
                 {
                   id: "n1",
-                  plataforma_id: "p1",
-                  contenido_id: "c1",
+                  pieza_id: "p1",
+                  publicacion_id: "c1",
                   nivel: 1,
                   etiqueta: "Edición",
                   decision: "pendiente",
@@ -653,8 +653,8 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
                 },
                 {
                   id: "n2",
-                  plataforma_id: "p1",
-                  contenido_id: "c1",
+                  pieza_id: "p1",
+                  publicacion_id: "c1",
                   nivel: 2,
                   etiqueta: "Coordinación",
                   decision: "pendiente",
@@ -703,7 +703,7 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
         const ruta = String(url);
         if (ruta.includes("/deshacer")) {
           return new Response(
-            JSON.stringify({ publicacion: pub({ estado: "en_revision" }) }),
+            JSON.stringify({ pieza: pub({ estado: "en_revision" }) }),
             { status: 200 },
           );
         }
@@ -713,8 +713,8 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
               niveles: [
                 {
                   id: "n1",
-                  plataforma_id: "p1",
-                  contenido_id: "c1",
+                  pieza_id: "p1",
+                  publicacion_id: "c1",
                   nivel: 1,
                   etiqueta: "Edición",
                   decision: "aprobado",
@@ -748,9 +748,9 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     );
   });
 
-  it("sin contenido_id, Comentar queda visible pero DESHABILITADO y lo explica", () => {
+  it("sin publicacion_id, Comentar queda visible pero DESHABILITADO y lo explica", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
-    renderPost(pub({ contenido_id: "" }));
+    renderPost(pub({ publicacion_id: "" }));
     const boton = screen.getByRole("button", {
       name: "Esta pieza no tiene hilo de comentarios",
     });

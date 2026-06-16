@@ -117,7 +117,7 @@ const ITEM_PARSED = {
   tipo: "nota" as const,
   idioma: "es",
   usado: false,
-  contenido_id: "",
+  publicacion_id: "",
   orden: 1,
   creado: "2026-06-05T06:00:00",
   frescura: "fresco" as const,
@@ -381,7 +381,7 @@ describe("CajonesDia", () => {
     // Configurar mocks antes de renderizar
     const usarMock = vi.spyOn(apiMod.api.insumos, "usarItem").mockResolvedValue({
       item: { ...ITEM_PARSED, usado: true },
-      contenido_id: "c-nuevo",
+      publicacion_id: "c-nuevo",
     } as never);
     vi.spyOn(apiMod.api.insumos, "listar").mockResolvedValue(INSUMOS_CON_ITEM as never);
     vi.spyOn(apiMod.api.insumos, "dias").mockResolvedValue({ dias: [] } as never);
@@ -403,7 +403,7 @@ describe("CajonesDia", () => {
   it("«Empujar ya» con copy_en_proceso=false AVISA (no miente con 'Copy en marcha')", async () => {
     vi.spyOn(apiMod.api.insumos, "usarItem").mockResolvedValue({
       item: { ...ITEM_PARSED, usado: true },
-      contenido_id: "c-nuevo",
+      publicacion_id: "c-nuevo",
       copy_en_proceso: false,
     } as never);
     vi.spyOn(apiMod.api.insumos, "listar").mockResolvedValue(INSUMOS_CON_ITEM as never);
@@ -425,7 +425,7 @@ describe("CajonesDia", () => {
   it("«Empujar ya» con copy_en_proceso=true confirma 'Copy en marcha'", async () => {
     vi.spyOn(apiMod.api.insumos, "usarItem").mockResolvedValue({
       item: { ...ITEM_PARSED, usado: true },
-      contenido_id: "c-nuevo",
+      publicacion_id: "c-nuevo",
       copy_en_proceso: true,
     } as never);
     vi.spyOn(apiMod.api.insumos, "listar").mockResolvedValue(INSUMOS_CON_ITEM as never);
@@ -476,7 +476,7 @@ describe("CajonesDia", () => {
   });
 
   it("un ítem usado NO ofrece 'Descartar' (su pieza ya vive en el tablero)", async () => {
-    const itemUsado = { ...ITEM_PARSED, usado: true, contenido_id: "c-99" };
+    const itemUsado = { ...ITEM_PARSED, usado: true, publicacion_id: "c-99" };
     vi.spyOn(apiMod.api.insumos, "listar").mockResolvedValue({
       ...INSUMOS_CON_ITEM,
       cajones: [
@@ -509,7 +509,7 @@ describe("CajonesDia", () => {
   });
 
   it("ítem ya usado muestra badge 'En el feed' (sin 'Empujar ya')", async () => {
-    const itemUsado = { ...ITEM_PARSED, usado: true, contenido_id: "c-99" };
+    const itemUsado = { ...ITEM_PARSED, usado: true, publicacion_id: "c-99" };
     vi.spyOn(apiMod.api.insumos, "listar").mockResolvedValue({
       ...INSUMOS_CON_ITEM,
       cajones: [
@@ -544,7 +544,7 @@ describe("CajonesDia", () => {
 
   it("el botón 'Crear evento' llama a api.insumos.crearEvento", async () => {
     const crearMock = vi.spyOn(apiMod.api.insumos, "crearEvento").mockResolvedValue({
-      item: { ...ITEM_EVENTO, usado: true, contenido_id: "ev-nuevo" },
+      item: { ...ITEM_EVENTO, usado: true, publicacion_id: "ev-nuevo" },
       evento: { id: "ev-nuevo" },
       evento_id: "ev-nuevo",
     } as never);

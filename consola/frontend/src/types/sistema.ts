@@ -687,7 +687,7 @@ export interface RespuestaBackups {
 
 /** Latencias agregadas de una ruta de la API. */
 export interface RutaRendimiento {
-  /** "GET /api/contenido/{id}" (método + ruta con ids colapsados). */
+  /** "GET /api/publicaciones/{id}" (método + ruta con ids colapsados). */
   ruta: string;
   /** Peticiones totales desde el arranque del proceso. */
   n: number;

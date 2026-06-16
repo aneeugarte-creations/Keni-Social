@@ -4,7 +4,7 @@ multidisciplinar: un usuario enfocado en la marca A PUEDE leer/editar/aprobar/pu
 reasignar recursos de la marca B (sin 404/403/400 por marca). Por DEFECTO los listados y
 metricas se enfocan en SUS marcas para reducir la mezcla de contexto, pero ese foco es
 SIEMPRE sobreescribible pasando una `marca` explicita (cualquiera). Un admin (sin foco) ve
-todo. Cubre los handlers reales de contenido / publicaciones / aprobacion / metricas.
+todo. Cubre los handlers reales de contenido / piezas / aprobacion / metricas.
 
 Patron de auth (igual que test_api_rota / test_api_conexiones_permisos): se crea el usuario
 con `auth.crear_usuario(..., marcas=[...])` y se entra por SESION (cookie de login). El
@@ -12,7 +12,7 @@ ADMIN entra por sesion admin (sin marcas => sin foco). Las creaciones de datos s
 el TOKEN de mantenimiento (sin foco) para inicializar piezas de AMBAS marcas.
 
 Requiere Postgres de pruebas (fixture `entorno`): si no hay, SE SALTA (consistente con la
-suite). Marca de scope CI: app_operacion (toca publicaciones/aprobacion).
+suite). Marca de scope CI: app_operacion (toca piezas/aprobacion).
 """
 
 from __future__ import annotations
@@ -61,19 +61,19 @@ def _admin_cli(app, nombre: str = "jefa") -> TestClient:
 
 
 def _crear_contenido(cli: TestClient, marca: str, titulo: str) -> dict:
-    r = cli.post("/api/contenido", json={"titulo": titulo, "marca": marca}, headers=_ORIGIN)
+    r = cli.post("/api/publicaciones", json={"titulo": titulo, "marca": marca}, headers=_ORIGIN)
     assert r.status_code == 200, r.text
     return r.json()["contenido"]
 
 
 def _crear_publicacion(cli: TestClient, marca: str, titulo: str) -> dict:
     r = cli.post(
-        "/api/publicaciones",
+        "/api/piezas",
         json={"titulo": titulo, "marca": marca, "red": "instagram", "contenido": "x"},
         headers=_ORIGIN,
     )
     assert r.status_code == 200, r.text
-    return r.json()["publicacion"]
+    return r.json()["pieza"]
 
 
 # --------------------------------------------------------------------------- #
@@ -86,7 +86,7 @@ def test_editor_ve_detalle_publicacion_de_otra_marca(entorno):
     siembra = _token_cli(app)
     pub_b = _crear_publicacion(siembra, MARCA_B, "de claro")
     editor_a = _editor_de_marca(app, "ed_a", MARCA_A)
-    r = editor_a.get(f"/api/publicaciones/{pub_b['id']}")
+    r = editor_a.get(f"/api/piezas/{pub_b['id']}")
     assert r.status_code == 200, r.text
 
 
@@ -96,10 +96,10 @@ def test_editor_edita_publicacion_de_otra_marca(entorno):
     pub_b = _crear_publicacion(siembra, MARCA_B, "de claro")
     editor_a = _editor_de_marca(app, "ed_a", MARCA_A)
     r = editor_a.put(
-        f"/api/publicaciones/{pub_b['id']}", json={"titulo": "colaboro"}, headers=_ORIGIN
+        f"/api/piezas/{pub_b['id']}", json={"titulo": "colaboro"}, headers=_ORIGIN
     )
     assert r.status_code == 200, r.text
-    assert r.json()["publicacion"]["titulo"] == "colaboro"
+    assert r.json()["pieza"]["titulo"] == "colaboro"
 
 
 def test_editor_borra_publicacion_de_otra_marca(entorno):
@@ -107,7 +107,7 @@ def test_editor_borra_publicacion_de_otra_marca(entorno):
     siembra = _token_cli(app)
     pub_b = _crear_publicacion(siembra, MARCA_B, "de claro")
     editor_a = _editor_de_marca(app, "ed_a", MARCA_A)
-    r = editor_a.delete(f"/api/publicaciones/{pub_b['id']}", headers=_ORIGIN)
+    r = editor_a.delete(f"/api/piezas/{pub_b['id']}", headers=_ORIGIN)
     assert r.status_code == 200, r.text
 
 
@@ -117,7 +117,7 @@ def test_editor_edita_contenido_de_otra_marca(entorno):
     cont_b = _crear_contenido(siembra, MARCA_B, "tablero claro")
     editor_a = _editor_de_marca(app, "ed_a", MARCA_A)
     r = editor_a.patch(
-        f"/api/contenido/{cont_b['id']}", json={"titulo": "ayudo"}, headers=_ORIGIN
+        f"/api/publicaciones/{cont_b['id']}", json={"titulo": "ayudo"}, headers=_ORIGIN
     )
     assert r.status_code == 200, r.text
     assert r.json()["contenido"]["titulo"] == "ayudo"
@@ -128,7 +128,7 @@ def test_editor_borra_contenido_de_otra_marca(entorno):
     siembra = _token_cli(app)
     cont_b = _crear_contenido(siembra, MARCA_B, "tablero claro")
     editor_a = _editor_de_marca(app, "ed_a", MARCA_A)
-    r = editor_a.delete(f"/api/contenido/{cont_b['id']}", headers=_ORIGIN)
+    r = editor_a.delete(f"/api/publicaciones/{cont_b['id']}", headers=_ORIGIN)
     assert r.status_code == 200, r.text
 
 
@@ -157,10 +157,10 @@ def test_admin_ve_y_edita_cualquier_marca(entorno):
     siembra = _token_cli(app)
     pub_b = _crear_publicacion(siembra, MARCA_B, "de claro")
     admin = _admin_cli(app)
-    r = admin.get(f"/api/publicaciones/{pub_b['id']}")
+    r = admin.get(f"/api/piezas/{pub_b['id']}")
     assert r.status_code == 200, r.text
     r = admin.put(
-        f"/api/publicaciones/{pub_b['id']}", json={"titulo": "editada por admin"}, headers=_ORIGIN
+        f"/api/piezas/{pub_b['id']}", json={"titulo": "editada por admin"}, headers=_ORIGIN
     )
     assert r.status_code == 200, r.text
 
@@ -171,10 +171,10 @@ def test_editor_si_accede_a_su_propia_marca(entorno):
     siembra = _token_cli(app)
     pub_a = _crear_publicacion(siembra, MARCA_A, "de unotv")
     editor_a = _editor_de_marca(app, "ed_a", MARCA_A)
-    r = editor_a.get(f"/api/publicaciones/{pub_a['id']}")
+    r = editor_a.get(f"/api/piezas/{pub_a['id']}")
     assert r.status_code == 200, r.text
     r = editor_a.put(
-        f"/api/publicaciones/{pub_a['id']}", json={"titulo": "ok"}, headers=_ORIGIN
+        f"/api/piezas/{pub_a['id']}", json={"titulo": "ok"}, headers=_ORIGIN
     )
     assert r.status_code == 200, r.text
 
@@ -191,9 +191,9 @@ def test_listar_publicaciones_enfoca_a_marca_del_editor_por_defecto(entorno):
     pub_b = _crear_publicacion(siembra, MARCA_B, "de claro")
     editor_a = _editor_de_marca(app, "ed_a", MARCA_A)
     # Sin `?marca=`: foco por defecto en su marca (A).
-    r = editor_a.get("/api/publicaciones")
+    r = editor_a.get("/api/piezas")
     assert r.status_code == 200, r.text
-    ids = {p["id"] for p in r.json()["publicaciones"]}
+    ids = {p["id"] for p in r.json()["piezas"]}
     assert pub_a["id"] in ids
     assert pub_b["id"] not in ids
 
@@ -204,9 +204,9 @@ def test_listar_publicaciones_marca_explicita_otra_marca_ok(entorno):
     siembra = _token_cli(app)
     pub_b = _crear_publicacion(siembra, MARCA_B, "de claro")
     editor_a = _editor_de_marca(app, "ed_a", MARCA_A)
-    r = editor_a.get("/api/publicaciones", params={"marca": MARCA_B})
+    r = editor_a.get("/api/piezas", params={"marca": MARCA_B})
     assert r.status_code == 200, r.text
-    ids = {p["id"] for p in r.json()["publicaciones"]}
+    ids = {p["id"] for p in r.json()["piezas"]}
     assert pub_b["id"] in ids
 
 
@@ -216,7 +216,7 @@ def test_listar_contenido_enfoca_a_marca_del_editor_por_defecto(entorno):
     cont_a = _crear_contenido(siembra, MARCA_A, "tablero unotv")
     cont_b = _crear_contenido(siembra, MARCA_B, "tablero claro")
     editor_a = _editor_de_marca(app, "ed_a", MARCA_A)
-    r = editor_a.get("/api/contenido")
+    r = editor_a.get("/api/publicaciones")
     assert r.status_code == 200, r.text
     ids = {c["id"] for c in r.json()["contenidos"]}
     assert cont_a["id"] in ids
@@ -228,7 +228,7 @@ def test_listar_contenido_marca_explicita_otra_marca_ok(entorno):
     siembra = _token_cli(app)
     cont_b = _crear_contenido(siembra, MARCA_B, "tablero claro")
     editor_a = _editor_de_marca(app, "ed_a", MARCA_A)
-    r = editor_a.get("/api/contenido", params={"marca": MARCA_B})
+    r = editor_a.get("/api/publicaciones", params={"marca": MARCA_B})
     assert r.status_code == 200, r.text
     ids = {c["id"] for c in r.json()["contenidos"]}
     assert cont_b["id"] in ids
@@ -240,9 +240,9 @@ def test_admin_ve_ambas_marcas_en_listado(entorno):
     pub_a = _crear_publicacion(siembra, MARCA_A, "de unotv")
     pub_b = _crear_publicacion(siembra, MARCA_B, "de claro")
     admin = _admin_cli(app)
-    r = admin.get("/api/publicaciones")
+    r = admin.get("/api/piezas")
     assert r.status_code == 200, r.text
-    ids = {p["id"] for p in r.json()["publicaciones"]}
+    ids = {p["id"] for p in r.json()["piezas"]}
     assert {pub_a["id"], pub_b["id"]} <= ids
 
 
@@ -258,7 +258,7 @@ def test_editor_reasigna_contenido_a_otra_marca(entorno):
     editor_a = _editor_de_marca(app, "ed_a", MARCA_A)
     # Mover una pieza HACIA la marca B es legitimo: la marca es un foco, no un cerrojo.
     r = editor_a.patch(
-        f"/api/contenido/{cont_a['id']}", json={"marca": MARCA_B}, headers=_ORIGIN
+        f"/api/publicaciones/{cont_a['id']}", json={"marca": MARCA_B}, headers=_ORIGIN
     )
     assert r.status_code == 200, r.text
     assert r.json()["contenido"]["marca"] == MARCA_B
@@ -270,7 +270,7 @@ def test_admin_si_reasigna_marca(entorno):
     cont_a = _crear_contenido(siembra, MARCA_A, "mio")
     admin = _admin_cli(app)
     r = admin.patch(
-        f"/api/contenido/{cont_a['id']}", json={"marca": MARCA_B}, headers=_ORIGIN
+        f"/api/publicaciones/{cont_a['id']}", json={"marca": MARCA_B}, headers=_ORIGIN
     )
     assert r.status_code == 200, r.text
     assert r.json()["contenido"]["marca"] == MARCA_B

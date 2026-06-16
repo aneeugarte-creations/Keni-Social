@@ -1,4 +1,4 @@
-"""Programador de publicaciones (#9, Fase 3): prepara/publica las piezas vencidas.
+"""Programador de piezas (#9, Fase 3): prepara/publica las piezas vencidas.
 
 Que hace y, sobre todo, que NO hace
 ===================================
@@ -22,7 +22,7 @@ GATING (frontera del producto, CRITICO):
     vence esa fecha. Metricool luego publica en las redes sociales al momento
     programado (autoPublish=true).
 
-FLOW: fila publicacion -> BorradorMetricool -> AdaptadorPublicacionMetricool -> Metricool
+FLOW: fila pieza -> BorradorMetricool -> AdaptadorPublicacionMetricool -> Metricool
   1. `pub["red"]` (id canonico, p.ej. "x") -> `Plataforma` de keni_metricas.
   2. `pub["marca"]` (slug-guion, p.ej. "claro-sports") ->
      `marcas.id_metricas_de(...)` (guion_bajo, p.ej. "claro_sports") ->
@@ -56,7 +56,7 @@ from .tiempo import iso_utc
 
 _log = logging.getLogger("keni_consola.programador")
 
-# Marcador de `id_post_metricool` cuando el POST de publicacion se va por TIMEOUT.
+# Marcador de `id_post_metricool` cuando el POST de pieza se va por TIMEOUT.
 # Un ReadTimeout salta DESPUES de enviar la peticion entera (body incluido): Metricool
 # casi seguro recibio el post, pero la respuesta con el id real no llego. En ese caso
 # marcamos la pieza `publicado` con ESTE marcador en vez de reintentar: reenviar a ciegas
@@ -226,7 +226,7 @@ def _profiles_postproxy(pub: dict[str, Any], api_key: str, group_id: str) -> lis
 
 
 # --------------------------------------------------------------------------- #
-# Construccion del BorradorMetricool desde la fila de publicacion              #
+# Construccion del BorradorMetricool desde la fila de pieza              #
 # --------------------------------------------------------------------------- #
 
 
@@ -291,7 +291,7 @@ def _slides_carrusel(pub: dict[str, Any], media_ref: Any, tipo_media: Any) -> li
 
 
 def _borrador_de_publicacion(pub: dict[str, Any]) -> object | None:
-    """Construye un `BorradorMetricool` desde la fila de publicacion, o None si no aplica.
+    """Construye un `BorradorMetricool` desde la fila de pieza, o None si no aplica.
 
     Devuelve None (sin lanzar) si:
       - La red no es soportada por Metricool (no esta en Plataforma).
@@ -300,8 +300,8 @@ def _borrador_de_publicacion(pub: dict[str, Any]) -> object | None:
     Todos los casos se loguean a nivel WARNING para que sean trazables.
     """
     try:
-        from keni_metricas.publicacion.metricool import BorradorMetricool
-        from keni_metricas.publicacion.modelos import MediaRef, TipoMedia
+        from keni_metricas.pieza.metricool import BorradorMetricool
+        from keni_metricas.pieza.modelos import MediaRef, TipoMedia
         from keni_metricas.schema import Plataforma
         from pydantic import ValidationError
     except ImportError:
@@ -383,7 +383,7 @@ def _borrador_de_publicacion(pub: dict[str, Any]) -> object | None:
     # —no un re-render que podría diferir si luego se edita la receta—.
     if nombre_imagen and nombre_imagen != imagen_previa and render_pieza.tiene_receta(pub):
         try:
-            repos.actualizar_publicacion(pub["id"], {"imagen": nombre_imagen})
+            repos.actualizar_pieza(pub["id"], {"imagen": nombre_imagen})
         except Exception:  # noqa: BLE001 -- referenciar es best-effort; no debe abortar el posteo
             _log.warning("Pieza %r: no se pudo fijar la imagen publicada.", pub.get("id"))
     media: list[MediaRef] = []
@@ -455,19 +455,19 @@ def _preparar_postproxy(
             "[postproxy] api_key y [postproxy.marcas.%s] profile_group_id.",
             pub_id, marca_id, marcas.id_metricas_de(marca_id),
         )
-        return repos.actualizar_publicacion(pub_id, campos_base)
+        return repos.actualizar_pieza(pub_id, campos_base)
 
     # Reusa la MISMA construcción de borrador que Metricool (texto+hashtags, media,
     # video/carrusel, publicar_en). El adaptador Postproxy lee de él lo que necesita.
     borrador = _borrador_de_publicacion(pub)
     if borrador is None:
-        return repos.actualizar_publicacion(pub_id, campos_base)
+        return repos.actualizar_pieza(pub_id, campos_base)
 
     try:
-        from keni_metricas.publicacion.postproxy import AdaptadorPublicacionPostproxy
+        from keni_metricas.pieza.postproxy import AdaptadorPublicacionPostproxy
     except ImportError:
-        _log.warning("keni_metricas no disponible; publicacion real imposible.")
-        return repos.actualizar_publicacion(pub_id, campos_base)
+        _log.warning("keni_metricas no disponible; pieza real imposible.")
+        return repos.actualizar_pieza(pub_id, campos_base)
 
     profiles = _profiles_postproxy(pub, api_key, group_id)
     try:
@@ -479,7 +479,7 @@ def _preparar_postproxy(
             "'publicado' (incierto) para NO reenviar y evitar doble-post. Verificar en redes.",
             pub_id,
         )
-        return repos.actualizar_publicacion(
+        return repos.actualizar_pieza(
             pub_id,
             {**campos_base, "estado": "publicado", "id_post_metricool": ID_POST_INCIERTO},
         )
@@ -490,7 +490,7 @@ def _preparar_postproxy(
             pub_id,
         )
         try:
-            repos.actualizar_publicacion(pub_id, {"preparado_en": ""})
+            repos.actualizar_pieza(pub_id, {"preparado_en": ""})
         except Exception:  # noqa: BLE001 -- si ni esto entra, el log ya dejo rastro
             _log.exception("Pieza %r: no se pudo liberar la preparacion.", pub_id)
         return None
@@ -501,7 +501,7 @@ def _preparar_postproxy(
         "Pieza %r publicada en Postproxy: id_post=%r redes=[%s] estados={%s}",
         pub_id, id_post, ", ".join(resultado.redes), estados_str,
     )
-    return repos.actualizar_publicacion(
+    return repos.actualizar_pieza(
         pub_id,
         {**campos_base, "estado": "publicado", "id_post_metricool": id_post},
     )
@@ -534,7 +534,7 @@ def _preparar(pub: dict[str, Any], ahora: datetime) -> dict[str, Any] | None:
 
     if not publicar_real_flag:
         # DRY-RUN (maestro OFF o marca excluida): comportamiento original intacto.
-        return repos.actualizar_publicacion(pub["id"], campos_base)
+        return repos.actualizar_pieza(pub["id"], campos_base)
 
     # --- camino REAL: DESPACHO por canal de publicación de la marca ----------
     # Default "metricool" (cero regresión): solo una marca con canal=postproxy se desvía.
@@ -552,18 +552,18 @@ def _preparar(pub: dict[str, Any], ahora: datetime) -> dict[str, Any] | None:
             "user_token + user_id + blog_id.",
             pub_id, marca_id, marcas.id_metricas_de(marca_id),
         )
-        return repos.actualizar_publicacion(pub_id, campos_base)
+        return repos.actualizar_pieza(pub_id, campos_base)
 
     borrador = _borrador_de_publicacion(pub)
     if borrador is None:
         # Motivo ya logueado en `_borrador_de_publicacion`.
-        return repos.actualizar_publicacion(pub_id, campos_base)
+        return repos.actualizar_pieza(pub_id, campos_base)
 
     try:
-        from keni_metricas.publicacion.metricool import AdaptadorPublicacionMetricool
+        from keni_metricas.pieza.metricool import AdaptadorPublicacionMetricool
     except ImportError:
-        _log.warning("keni_metricas no disponible; publicacion real imposible.")
-        return repos.actualizar_publicacion(pub_id, campos_base)
+        _log.warning("keni_metricas no disponible; pieza real imposible.")
+        return repos.actualizar_pieza(pub_id, campos_base)
 
     try:
         adaptador = AdaptadorPublicacionMetricool(creds=creds)
@@ -579,7 +579,7 @@ def _preparar(pub: dict[str, Any], ahora: datetime) -> dict[str, Any] | None:
             "'publicado' (incierto) para NO reenviar y evitar doble-post. Verificar en redes.",
             pub_id,
         )
-        return repos.actualizar_publicacion(
+        return repos.actualizar_pieza(
             pub_id,
             {**campos_base, "estado": "publicado", "id_post_metricool": ID_POST_INCIERTO},
         )
@@ -595,7 +595,7 @@ def _preparar(pub: dict[str, Any], ahora: datetime) -> dict[str, Any] | None:
             pub_id,
         )
         try:
-            repos.actualizar_publicacion(pub_id, {"preparado_en": ""})
+            repos.actualizar_pieza(pub_id, {"preparado_en": ""})
         except Exception:  # noqa: BLE001 -- si ni esto entra, el log ya dejo rastro
             _log.exception("Pieza %r: no se pudo liberar la preparacion.", pub_id)
         return None
@@ -612,7 +612,7 @@ def _preparar(pub: dict[str, Any], ahora: datetime) -> dict[str, Any] | None:
         "estado": "publicado",
         "id_post_metricool": id_post,
     }
-    return repos.actualizar_publicacion(pub_id, campos_publicado)
+    return repos.actualizar_pieza(pub_id, campos_publicado)
 
 
 def programar_pieza_metricool(
@@ -636,7 +636,7 @@ def programar_pieza_metricool(
     # Mismo gate que el barrido: maestro global + excepción por marca (marca excluida -> dry-run).
     dry_run = not config.publicar_real_para(marca_id)
 
-    # GUARDA DE RE-PUBLICACION (solo camino REAL): el barrido automatico evita el doble envio
+    # GUARDA DE RE-PIEZA (solo camino REAL): el barrido automatico evita el doble envio
     # via `preparado_en` (claim atomico), pero el boton manual no pasaba por ahi. Si la pieza
     # YA fue publicada (tiene `id_post_metricool` o estado `publicado`), no la re-enviamos a
     # Metricool. En dry-run NO bloqueamos: previsualizar el cuerpo de una pieza ya publicada
@@ -681,7 +681,7 @@ def programar_pieza_metricool(
     borrador = borrador.model_copy(update={"publicar_en": ahora})
 
     try:
-        from keni_metricas.publicacion.metricool import AdaptadorPublicacionMetricool
+        from keni_metricas.pieza.metricool import AdaptadorPublicacionMetricool
     except ImportError:
         return {"ok": False, "dry_run": dry_run, "motivo": "keni_metricas no está disponible."}
 
@@ -699,7 +699,7 @@ def programar_pieza_metricool(
             "(incierto) para no duplicar. Verificar en redes.",
             pub.get("id"),
         )
-        repos.actualizar_publicacion(
+        repos.actualizar_pieza(
             pub["id"],
             {
                 "preparado_en": iso_utc(ahora),
@@ -735,7 +735,7 @@ def programar_pieza_metricool(
 
     # Camino REAL: Metricool aceptó el post -> persistir y marcar publicado.
     id_post = resultado.id_post or ""
-    repos.actualizar_publicacion(
+    repos.actualizar_pieza(
         pub["id"],
         {
             # Canon UTC sin offset (ver `tiempo.py`): `ahora` es aware; isoformat directo
@@ -786,7 +786,7 @@ def _programar_pieza_postproxy(
     borrador = borrador.model_copy(update={"publicar_en": ahora})
 
     try:
-        from keni_metricas.publicacion.postproxy import AdaptadorPublicacionPostproxy
+        from keni_metricas.pieza.postproxy import AdaptadorPublicacionPostproxy
     except ImportError:
         return {"ok": False, "dry_run": dry_run, "motivo": "keni_metricas no está disponible."}
 
@@ -803,7 +803,7 @@ def _programar_pieza_postproxy(
             "(incierto) para no duplicar. Verificar en redes.",
             pub.get("id"),
         )
-        repos.actualizar_publicacion(
+        repos.actualizar_pieza(
             pub["id"],
             {
                 "preparado_en": iso_utc(ahora),
@@ -835,7 +835,7 @@ def _programar_pieza_postproxy(
         return base  # Preview: NO se persiste nada.
 
     id_post = resultado.id_post or ""
-    repos.actualizar_publicacion(
+    repos.actualizar_pieza(
         pub["id"],
         {
             "preparado_en": iso_utc(ahora),
@@ -856,7 +856,7 @@ def preparar_vencidas(ahora: datetime | None = None) -> int:
     ahora = _a_utc(ahora) if ahora is not None else datetime.now(UTC)
     # Canon UTC sin offset (ver `tiempo.py`): el claim `preparado_en` se compara como TEXT.
     ts = iso_utc(ahora)
-    programadas = repos.listar_publicaciones(estado=ESTADO_PROGRAMADO)
+    programadas = repos.listar_piezas(estado=ESTADO_PROGRAMADO)
     preparadas = 0
     for pub in piezas_vencidas(programadas, ahora):
         # CLAIM ATOMICO antes de publicar: estampa `preparado_en` solo si nadie lo hizo ya
@@ -936,11 +936,11 @@ def iniciar_programador(intervalo_segundos: float | None = None) -> threading.Th
                 )
             time.sleep(intervalo)
 
-    hilo = threading.Thread(target=bucle, name="programador-publicaciones", daemon=True)
+    hilo = threading.Thread(target=bucle, name="programador-piezas", daemon=True)
     hilo.start()
     modo = "REAL (Metricool)" if config.publicar_real() else "DRY-RUN (sin publicar)"
     _log.info(
-        "Programador de publicaciones activo cada %.0f s (modo: %s).",
+        "Programador de piezas activo cada %.0f s (modo: %s).",
         intervalo, modo,
     )
     return hilo

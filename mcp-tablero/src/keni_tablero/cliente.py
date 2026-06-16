@@ -1,4 +1,4 @@
-"""Cliente HTTP fino contra la API de la Consola (`/api/contenido`, `/api/webhooks`).
+"""Cliente HTTP fino contra la API de la Consola (`/api/publicaciones`, `/api/webhooks`).
 
 Encapsula la autenticacion (token por `Authorization: Bearer` y `X-Keni-Token`, ambas
 admitidas por `seguridad.py` de la Consola) y la traduccion de errores HTTP a un dict
@@ -108,27 +108,27 @@ class ClienteConsola:
 
     # --- Contenido (tablero) -------------------------------------------------- #
 
-    def listar_contenido(self, params: dict[str, str] | None = None) -> dict[str, Any]:
+    def listar_publicacion(self, params: dict[str, str] | None = None) -> dict[str, Any]:
         # `params=` de httpx url-encodea los valores.
         filtrados = {k: v for k, v in (params or {}).items() if v}
-        return self._peticion("GET", "/api/contenido", params=filtrados or None)
+        return self._peticion("GET", "/api/publicaciones", params=filtrados or None)
 
-    def crear_contenido(self, cuerpo: dict[str, Any]) -> dict[str, Any]:
-        return self._peticion("POST", "/api/contenido", json=cuerpo)
+    def crear_publicacion(self, cuerpo: dict[str, Any]) -> dict[str, Any]:
+        return self._peticion("POST", "/api/publicaciones", json=cuerpo)
 
-    def actualizar_contenido(self, contenido_id: str, cuerpo: dict[str, Any]) -> dict[str, Any]:
-        return self._peticion("PATCH", f"/api/contenido/{contenido_id}", json=cuerpo)
+    def actualizar_publicacion(self, publicacion_id: str, cuerpo: dict[str, Any]) -> dict[str, Any]:
+        return self._peticion("PATCH", f"/api/publicaciones/{publicacion_id}", json=cuerpo)
 
     def actualizar_plataforma(
-        self, contenido_id: str, plataforma_id: str, cuerpo: dict[str, Any]
+        self, publicacion_id: str, pieza_id: str, cuerpo: dict[str, Any]
     ) -> dict[str, Any]:
         return self._peticion(
             "PATCH",
-            f"/api/contenido/{contenido_id}/plataformas/{plataforma_id}",
+            f"/api/publicaciones/{publicacion_id}/plataformas/{pieza_id}",
             json=cuerpo,
         )
 
-    def agregar_plataforma(self, contenido_id: str, red: str) -> dict[str, Any]:
+    def agregar_plataforma(self, publicacion_id: str, red: str) -> dict[str, Any]:
         return self._peticion(
-            "POST", f"/api/contenido/{contenido_id}/plataformas", json={"red": red}
+            "POST", f"/api/publicaciones/{publicacion_id}/plataformas", json={"red": red}
         )

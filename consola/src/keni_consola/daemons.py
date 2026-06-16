@@ -7,7 +7,7 @@ Pensado para el deploy HOSTED: ahi el `back` corre `uvicorn keni_consola.app:cre
 solo procesa la cola de jobs. Sin un proceso como este, los hilos demonio de fondo
 NO correrian en produccion. Este proceso aparte los mantiene vivos:
 
-  - programador de publicaciones (DRY-RUN salvo `KENI_PUBLICAR_REAL=1`),
+  - programador de piezas (DRY-RUN salvo `KENI_PUBLICAR_REAL=1`),
   - scanner de vencimientos (emite `contenido.vencido` a los webhooks),
   - refresco de metricas por cuenta y POR PIEZA (cache caliente desde Metricool),
   - alertas de rendimiento (solo leen + emiten eventos internos),

@@ -196,7 +196,7 @@ def test_grupos_lexicos_umbral_cero_apaga():
 
 
 def _base_cluster():
-    return {"id": "c1", "estado": "nuevo", "contenido_id": "", "creado": ""}
+    return {"id": "c1", "estado": "nuevo", "publicacion_id": "", "creado": ""}
 
 
 def test_recalcular_agrega_fuentes_idiomas_y_senal():
@@ -297,11 +297,11 @@ def test_recalcular_no_breaking_si_fuentes_dispersas_en_el_tiempo():
 
 
 def test_recalcular_conserva_identidad_del_cluster():
-    base = {"id": "c9", "estado": "usado", "contenido_id": "x123", "creado": "2026-01-01"}
+    base = {"id": "c9", "estado": "usado", "publicacion_id": "x123", "creado": "2026-01-01"}
     r = agrupar.recalcular(base, [_item(fuente_id="a")])
     assert r["id"] == "c9"
     assert r["estado"] == "usado"
-    assert r["contenido_id"] == "x123"
+    assert r["publicacion_id"] == "x123"
     assert r["creado"] == "2026-01-01"
 
 

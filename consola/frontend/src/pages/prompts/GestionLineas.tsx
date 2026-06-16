@@ -20,7 +20,7 @@ import * as React from "react";
 import { AccionesPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { api } from "@/lib/api";
-import { GestionHashtags } from "@/pages/publicaciones/GestionHashtags";
+import { GestionHashtags } from "@/pages/piezas/GestionHashtags";
 
 import { DialogoEtiquetas } from "./gestion-lineas/DialogoEtiquetas";
 import { PanelClase } from "./gestion-lineas/PanelClase";

@@ -14,8 +14,8 @@ import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { DialogoMarca, type MarcaEditable } from "@/pages/marcas/DialogoMarca";
 import { iconoPlataforma, nombrePlataforma } from "@/pages/marcas/plataformas";
-import { tiempoRelativo } from "@/pages/publicaciones/meta";
-import type { CanalPublicacion, ConteoCuenta, MarcaDashboard, RedMarca } from "@/types";
+import { tiempoRelativo } from "@/pages/piezas/meta";
+import type { CanalPieza, ConteoCuenta, MarcaDashboard, RedMarca } from "@/types";
 
 /** Convierte una marca del dashboard a la forma editable del catálogo (id/etiqueta/id_metricas). */
 function aEditable(m: MarcaDashboard): MarcaEditable {
@@ -52,7 +52,7 @@ function CeldasNumero({ c }: { c: ConteoCuenta }) {
 }
 
 /** Opciones del selector de canal de publicación. */
-const CANALES: { id: CanalPublicacion; etiqueta: string }[] = [
+const CANALES: { id: CanalPieza; etiqueta: string }[] = [
   { id: "metricool", etiqueta: "Metricool" },
   { id: "postproxy", etiqueta: "Postproxy" },
 ];
@@ -64,10 +64,10 @@ function SelectorCanal({
   deshabilitado,
   onCambiar,
 }: {
-  canal: CanalPublicacion;
+  canal: CanalPieza;
   postproxyDisponible: boolean;
   deshabilitado: boolean;
-  onCambiar: (canal: CanalPublicacion) => void;
+  onCambiar: (canal: CanalPieza) => void;
 }) {
   return (
     <div className="inline-flex rounded-md border border-border p-0.5">
@@ -163,7 +163,7 @@ function BloqueMarca({
   pendiente: string | null;
   onConectar: (marca: string, plataforma: string) => void;
   onDesconectar: (marca: string, red: RedMarca) => void;
-  onCanal: (marca: string, canal: CanalPublicacion) => void;
+  onCanal: (marca: string, canal: CanalPieza) => void;
   onEditar: (marca: MarcaDashboard) => void;
 }) {
   const conectadas = marca.redes.filter((r) => r.conectado && r.estado === "active").length;
@@ -291,7 +291,7 @@ export default function Marcas() {
       .finally(() => setPendiente(null));
   }
 
-  function cambiarCanal(marca: string, canal: CanalPublicacion) {
+  function cambiarCanal(marca: string, canal: CanalPieza) {
     setPendiente(`${marca}:canal`);
     api
       .canalPostproxy(marca, canal)

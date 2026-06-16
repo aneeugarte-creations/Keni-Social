@@ -28,7 +28,7 @@ from ..dominio import jobspec
 from ..seguridad import autor_de_peticion
 
 # Marcas validas: TODAS las del catalogo unico (por su id canonico). Mismo criterio
-# que publicaciones.
+# que piezas.
 _MARCAS: tuple[tuple[str, str], ...] = tuple(marcas.opciones())
 _MARCAS_IDS = {m[0] for m in _MARCAS}
 

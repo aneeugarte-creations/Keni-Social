@@ -1,132 +1,109 @@
-"""API Publicaciones: CRUD de posts a gestionar (titulo, marca, red, estado, fechas).
+"""API del TABLERO de contenido unificado (herramienta de community manager).
 
-El SPA gestiona el ciclo de vida de cada pieza: nace como borrador (a mano o desde
-una generacion por red de Skills), se edita, se aprueba, se programa y se publica.
-Persistencia en SQLite (`consola.db`, via `consola.db`). Nada se publica de verdad
-aqui: solo se administra el estado editorial.
+Un item de `contenido` es el padre del tablero: lo IMPORTANTE del dia, contenido EVERGREEN,
+cobertura de un EVENTO previsto, o una TAREA libre del equipo (relevo/recado). Cada contenido
+publicable lleva N filas `pieza` (una por red) con su propio estado y checklist
+"falta copy / imagen / revision / publicar".
 
-SEGURIDAD / VALIDACION (no duplica logica; reusa las fuentes de verdad):
-  - `marca` SOLO puede ser una marca del catalogo unico (`consola.marcas`), por
-    su `id` canonico (slug-guion), el mismo `value` que usa la generacion de copy.
-  - `red` SOLO puede ser una red canonica (`consola.redes`).
-  - `estado` SOLO puede ser uno de `repos.ESTADOS_PUBLICACION`.
-  - SQL parametrizado en `consola.db`; los errores salen como JSON en espanol, sin
-    tracebacks crudos.
+El tablero es UNICO y compartido (como Tareas): todo usuario autenticado lo ve y lo edita.
 
-`marca_nombre` y `red_nombre` se resuelven EN SERVIDOR (la UI solo muestra nombres).
+SEGURIDAD:
+  - Multiusuario via middleware (sesion o token); `autor`/`responsable` se atribuyen al usuario.
+  - `marca` debe ser del catalogo (`consola.marcas`); `red` una red canonica (`consola.redes`)
+    o el canal extra "web". `evento_id`, si llega, debe existir en la rota. El RESPONSABLE
+    solo puede ser un usuario REAL. Nada se confia del cliente.
+  - SQL parametrizado en `repos`/`db` (nunca f-strings con datos).
 """
 
 from __future__ import annotations
 
 from starlette.routing import Route
 
-from ._comun import (
-    _CAMPOS_CONTENIDO_FALTA,
-    _CAMPOS_ESPEJO,
-    _RESET_APROBACIONES,
-    _inyectar_flags_falta,
-    _limpiar_cadena,
-    _pierde_aprobaciones,
-    _publicacion_a_dict,
+from .aportar import aportar
+from .asistente import asistente_ia, previsualizar
+from .etiquetas import asignar_etiqueta, quitar_etiqueta
+from .importar import importar
+from .metricas import metricas
+from .plataformas import (
+    actualizar_plataforma,
+    adaptar_imagen,
+    agregar_plataforma,
+    borrar_plataforma,
 )
-from .composicion import aplicar_plantilla, componer_slide, compuesta, integrar_foto
-from .crud import (
-    _ESTADO_NOMBRE,
-    _MARCAS,
-    _MARCAS_IDS,
-    _TRANSICIONES_PUT,
-    _feed_pagina_defecto,
-    _ids_de_lote,
-    _normalizar_fecha_programada,
-    _parsear_bool_query,
-    _validar_nueva,
+from .post_directo import crear_post_directo
+from .radar import desde_radar
+from .tablero import (
+    aceptar,
     actualizar,
+    asignar,
     borrar,
-    borrar_lote,
-    cadenas_lote,
-    clonar,
+    coger,
     crear,
-    crear_lote,
-    detalle,
-    duplicar,
+    cubrir_evento,
     listar,
-    opciones,
-    programar_metricool,
-)
-from .espejo import _propagar_espejo
-from .programacion import (
-    _encolar_en_hueco_libre,
-    calcular_hueco_para,
-    categoria_de_pieza,
-    encolar,
+    soltar,
 )
 
 __all__ = [
     "RUTAS",
-    # CRUD
-    "opciones",
     "listar",
     "crear",
-    "crear_lote",
-    "detalle",
     "actualizar",
     "borrar",
-    "borrar_lote",
-    "cadenas_lote",
-    "duplicar",
-    "clonar",
-    "programar_metricool",
-    # Programación
-    "encolar",
-    "categoria_de_pieza",
-    "calcular_hueco_para",
-    "_encolar_en_hueco_libre",
-    # Composición
-    "integrar_foto",
-    "aplicar_plantilla",
-    "componer_slide",
-    "compuesta",
-    # Espejo
-    "_propagar_espejo",
-    # Helpers compartidos / consumidos por tests
-    "_publicacion_a_dict",
-    "_CAMPOS_ESPEJO",
-    "_CAMPOS_CONTENIDO_FALTA",
-    "_inyectar_flags_falta",
-    "_RESET_APROBACIONES",
-    "_pierde_aprobaciones",
-    "_limpiar_cadena",
-    "_ESTADO_NOMBRE",
-    "_MARCAS",
-    "_MARCAS_IDS",
-    "_TRANSICIONES_PUT",
-    "_normalizar_fecha_programada",
-    "_validar_nueva",
-    "_parsear_bool_query",
-    "_feed_pagina_defecto",
-    "_ids_de_lote",
+    "coger",
+    "soltar",
+    "asignar",
+    "aceptar",
+    "cubrir_evento",
+    "metricas",
+    "desde_radar",
+    "aportar",
+    "crear_post_directo",
+    "importar",
+    "previsualizar",
+    "asistente_ia",
+    "adaptar_imagen",
+    "agregar_plataforma",
+    "actualizar_plataforma",
+    "borrar_plataforma",
+    "asignar_etiqueta",
+    "quitar_etiqueta",
 ]
 
 
-# El orden importa: las rutas literales batch (`cadenas`, `borrar-lote`, `{id}/compuesta`) van
-# ANTES de la genérica `/{publicacion_id}` para que no se interpreten como un id.
 RUTAS = [
-    Route("/api/publicaciones/opciones", opciones, methods=["GET"]),
-    # Batch del feed: ANTES de "/{publicacion_id}" para que "cadenas" no matchee como id.
-    Route("/api/publicaciones/cadenas", cadenas_lote, methods=["GET"]),
-    Route("/api/publicaciones/borrar-lote", borrar_lote, methods=["POST"]),
-    Route("/api/publicaciones/{publicacion_id}/compuesta", compuesta, methods=["GET"]),
     Route("/api/publicaciones", listar, methods=["GET"]),
     Route("/api/publicaciones", crear, methods=["POST"]),
-    Route("/api/publicaciones/lote", crear_lote, methods=["POST"]),
-    Route("/api/publicaciones/{publicacion_id}/encolar", encolar, methods=["POST"]),
-    Route("/api/publicaciones/{publicacion_id}/duplicar", duplicar, methods=["POST"]),
-    Route("/api/publicaciones/{publicacion_id}/clonar", clonar, methods=["POST"]),
-    Route("/api/publicaciones/{publicacion_id}/metricool", programar_metricool, methods=["POST"]),
-    Route("/api/publicaciones/{publicacion_id}/integrar-foto", integrar_foto, methods=["POST"]),
-    Route("/api/publicaciones/{publicacion_id}/aplicar-plantilla", aplicar_plantilla, methods=["POST"]),
-    Route("/api/publicaciones/{publicacion_id}/componer-slide", componer_slide, methods=["POST"]),
-    Route("/api/publicaciones/{publicacion_id}", detalle, methods=["GET"]),
-    Route("/api/publicaciones/{publicacion_id}", actualizar, methods=["PUT"]),
+    Route("/api/publicaciones/metricas", metricas, methods=["GET"]),
+    Route("/api/publicaciones/desde-radar", desde_radar, methods=["POST"]),
+    Route("/api/publicaciones/aportar", aportar, methods=["POST"]),
+    Route("/api/publicaciones/cubrir-evento", cubrir_evento, methods=["POST"]),
+    Route("/api/publicaciones/post-directo", crear_post_directo, methods=["POST"]),
+    Route("/api/publicaciones/importar", importar, methods=["POST"]),
+    Route("/api/publicaciones/{publicacion_id}/preview", previsualizar, methods=["POST"]),
+    Route("/api/publicaciones/{publicacion_id}/asistente", asistente_ia, methods=["POST"]),
+    Route("/api/publicaciones/{publicacion_id}/adaptar-imagen", adaptar_imagen, methods=["POST"]),
+    Route("/api/publicaciones/{publicacion_id}", actualizar, methods=["PATCH"]),
     Route("/api/publicaciones/{publicacion_id}", borrar, methods=["DELETE"]),
+    Route("/api/publicaciones/{publicacion_id}/coger", coger, methods=["POST"]),
+    Route("/api/publicaciones/{publicacion_id}/soltar", soltar, methods=["POST"]),
+    Route("/api/publicaciones/{publicacion_id}/asignar", asignar, methods=["POST"]),
+    Route("/api/publicaciones/{publicacion_id}/aceptar", aceptar, methods=["POST"]),
+    Route("/api/publicaciones/{publicacion_id}/plataformas", agregar_plataforma, methods=["POST"]),
+    Route(
+        "/api/publicaciones/{publicacion_id}/plataformas/{pieza_id}",
+        actualizar_plataforma,
+        methods=["PATCH"],
+    ),
+    Route(
+        "/api/publicaciones/{publicacion_id}/plataformas/{pieza_id}",
+        borrar_plataforma,
+        methods=["DELETE"],
+    ),
+    Route("/api/publicaciones/{publicacion_id}/etiquetas", asignar_etiqueta, methods=["POST"]),
+    Route(
+        "/api/publicaciones/{publicacion_id}/etiquetas/{etiqueta_id}",
+        quitar_etiqueta,
+        methods=["DELETE"],
+    ),
 ]

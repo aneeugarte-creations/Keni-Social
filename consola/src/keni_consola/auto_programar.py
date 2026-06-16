@@ -3,7 +3,7 @@
 COLAPSO 2026-06: ya no hay estado de reposo `aprobado`. Una pieza queda `en_revision` hasta
 que junta los 2 likes (los OK humanos); en ese momento, en vez de esperar una programación
 manual, se ENCOLA al próximo hueco libre de sus franjas (la misma lógica del botón "encolar":
-`api.publicaciones.calcular_hueco_para`), respetando los gates de la programación manual:
+`api.piezas.calcular_hueco_para`), respetando los gates de la programación manual:
 
   - Gate A (gobernanza): la pieza debe tener su cadena de likes CUMPLIENDO el mínimo
     (`config.min_aprobaciones`, def 2 = "cuatro ojos"). Sin cadena o sin los likes -> no programa.
@@ -33,7 +33,7 @@ from .estados import ESTADO_EN_REVISION
 _log = logging.getLogger("keni_consola.auto_programar")
 
 
-def programar_si_aprobada(publicacion_id: str) -> dict[str, Any] | None:
+def programar_si_aprobada(pieza_id: str) -> dict[str, Any] | None:
     """Si la pieza está `en_revision` con sus 2 likes y pasa los gates, la encola a su hueco.
 
     Devuelve la publicación ya `programado` si la encoló; `None` si no aplicaba (no está en
@@ -44,13 +44,13 @@ def programar_si_aprobada(publicacion_id: str) -> dict[str, Any] | None:
     if not config.auto_programar_activo():
         return None
 
-    pub = repos.obtener_publicacion(publicacion_id)
+    pub = repos.obtener_pieza(pieza_id)
     if pub is None or pub.get("estado") != ESTADO_EN_REVISION:
         return None
 
     # Gate A (gobernanza): la pieza debe tener su cadena de likes cumpliendo el mínimo (los 2 OK).
     # Sin cadena (no se mandó a revisión por el flujo) o sin los likes acumulados -> no programa.
-    cadena = repos.listar_aprobaciones(publicacion_id)
+    cadena = repos.listar_aprobaciones(pieza_id)
     if not cadena:
         return None
     cumple, _ = colaboracion.cumple_minimo_aprobaciones(cadena, config.min_aprobaciones())
@@ -58,16 +58,16 @@ def programar_si_aprobada(publicacion_id: str) -> dict[str, Any] | None:
         return None
 
     # Gate B (verificación): un comentario sin resolver es una objeción pendiente; no programar.
-    plat = repos.obtener_contenido_plataforma(publicacion_id)
-    if repos.comentarios_sin_resolver((plat or {}).get("contenido_id", "") or "", publicacion_id):
+    plat = repos.obtener_pieza_fila(pieza_id)
+    if repos.comentarios_sin_resolver((plat or {}).get("publicacion_id", "") or "", pieza_id):
         return None
 
     # Próximo hueco libre de sus franjas (reusa la lógica del encolado manual). Import perezoso:
-    # `api.publicaciones` es capa API; importarlo a nivel de módulo enredaría el grafo de imports.
+    # `api.piezas` es capa API; importarlo a nivel de módulo enredaría el grafo de imports.
     # `_encolar_en_hueco_libre` calcula el hueco Y escribe con el BACKSTOP de unicidad de slot
     # (índice parcial `idx_parrilla_slot_uniq`) + reintento: si otra pieza (o el encolado manual
     # de un humano) toma el slot a la vez, recalcula y reintenta en vez de doble-reservarlo.
-    from .api.publicaciones import _encolar_en_hueco_libre
+    from .api.piezas import _encolar_en_hueco_libre
 
     # CAS `estado_esperado=ESTADO_EN_REVISION`: la AUTO-programación solo escribe `programado` si la
     # pieza SIGUE `en_revision` en el momento de la escritura. Entre la lectura de arriba y aquí otro
@@ -83,7 +83,7 @@ def programar_si_aprobada(publicacion_id: str) -> dict[str, Any] | None:
     if actualizada is not None:
         _log.info(
             "Auto-programada pieza %s en %s.",
-            publicacion_id, actualizada.get("fecha_programada"),
+            pieza_id, actualizada.get("fecha_programada"),
         )
     return actualizada
 
@@ -97,7 +97,7 @@ def barrer_aprobadas() -> int:
     if not config.auto_programar_activo():
         return 0
     programadas = 0
-    for pub in repos.listar_publicaciones(estado=ESTADO_EN_REVISION):
+    for pub in repos.listar_piezas(estado=ESTADO_EN_REVISION):
         if programar_si_aprobada(pub["id"]) is not None:
             programadas += 1
     if programadas:

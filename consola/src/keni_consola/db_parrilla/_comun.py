@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from .._db_comun import (
     ESTADO_ROTA_PROPUESTO,
-    ESTADOS_PIEZA,
+    ESTADOS_PIEZA_PARRILLA,
     UTC,
     Any,
     _conectar,
@@ -22,7 +22,7 @@ from .._db_comun import (
 __all__ = [
     "UTC",
     "ESTADO_ROTA_PROPUESTO",
-    "ESTADOS_PIEZA",
+    "ESTADOS_PIEZA_PARRILLA",
     "Any",
     "_conectar",
     "date",

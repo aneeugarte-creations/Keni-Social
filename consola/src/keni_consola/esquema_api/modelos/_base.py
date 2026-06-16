@@ -27,7 +27,7 @@ class MarcaDisponible(TypedDict):
 class Paginacion(TypedDict):
     """Envelope ADITIVO de paginacion (offset-based, #121).
 
-    Lo añaden los listados pesados (publicaciones/runs/generaciones) junto a su
+    Lo añaden los listados pesados (piezas/runs/generaciones) junto a su
     clave de lista. `total` = filas existentes sin paginar; `limite` = tamaño de
     pagina efectivo (igual a `total` si no se paginó); `desplazamiento` = offset.
 

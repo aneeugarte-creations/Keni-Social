@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { CLAVE_TAREAS } from "@/pages/tareas/claves";
-import type { Contenido } from "@/types";
+import type { Publicacion } from "@/types";
 
 function Fila({
   propuesta,
@@ -26,9 +26,9 @@ function Fila({
   onDescartar,
   ocupada,
 }: {
-  propuesta: Contenido;
-  onAceptar: (p: Contenido) => void;
-  onDescartar: (p: Contenido) => void;
+  propuesta: Publicacion;
+  onAceptar: (p: Publicacion) => void;
+  onDescartar: (p: Publicacion) => void;
   ocupada: boolean;
 }) {
   const detalle = (propuesta.descripcion || "").trim();
@@ -80,7 +80,7 @@ function Fila({
  * tareas ya cargada. Aceptar/descartar invalidan tanto la familia `["rota"]` (para que el evento
  * nuevo salga en la rejilla) como `CLAVE_TAREAS` (para que la propuesta deje la bandeja).
  */
-export function PropuestasCalendario({ propuestas }: { propuestas: Contenido[] }) {
+export function PropuestasCalendario({ propuestas }: { propuestas: Publicacion[] }) {
   const queryClient = useQueryClient();
   const [abierto, setAbierto] = React.useState(false);
   const contenedorRef = React.useRef<HTMLDivElement>(null);
@@ -92,7 +92,7 @@ export function PropuestasCalendario({ propuestas }: { propuestas: Contenido[] }
   };
 
   const aceptar = useMutation({
-    mutationFn: (id: string) => api.aceptarContenido(id),
+    mutationFn: (id: string) => api.aceptarPublicacion(id),
     onSuccess: () => {
       toast.success("Aceptada: ya está en el calendario «Por cubrir».");
       refrescar();
@@ -100,7 +100,7 @@ export function PropuestasCalendario({ propuestas }: { propuestas: Contenido[] }
     onError: (e) => toast.error(mensajeError(e)),
   });
   const descartar = useMutation({
-    mutationFn: (id: string) => api.eliminarContenido(id),
+    mutationFn: (id: string) => api.eliminarPublicacion(id),
     onSuccess: () => {
       toast.success("Propuesta descartada.");
       refrescar();

@@ -9,11 +9,11 @@
  * color en el Feed y en la Lista del hub — para-revisar=violeta,
  * programada=ámbar, publicada=esmeralda. El cian (sky) queda EXCLUSIVO de "en preparación"
  * (la IA o el equipo aún trabajan la pieza), que no existe como estado en la Lista.
- * La etapa la deriva `etapaDePublicacion` (ver `etapa.ts`), o el backend la trae resuelta.
+ * La etapa la deriva `etapaDePieza` (ver `etapa.ts`), o el backend la trae resuelta.
  */
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { metaEstado } from "@/pages/publicaciones/meta";
+import { metaEstado } from "@/pages/piezas/meta";
 
 import { etiquetaEtapa, META_ETAPA, type EtapaIa } from "./etapa";
 

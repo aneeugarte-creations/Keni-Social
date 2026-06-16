@@ -23,7 +23,7 @@ propio back (UX de una sola maquina intacta, sin servicio aparte); en HOSTED cor
 contenedor `worker` que SI tiene `claude` (la imagen del back ya no lleva Node).
 
 El registro YAML es la FUENTE DE VERDAD del sondeo. Los ARTEFACTOS durables (historial
-de skills, publicaciones, imagenes) se guardan en su sitio de siempre; el registro de
+de skills, piezas, imagenes) se guardan en su sitio de siempre; el registro de
 generacion es estado de ejecucion (efimero, inspeccionable), por eso vive aparte de los
 datos editoriales:
 

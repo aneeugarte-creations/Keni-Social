@@ -31,17 +31,17 @@ def test_crear_nota_genera_pieza_carrusel(cliente):
     resp = _crear(cliente)
     assert resp.status_code == 200, resp.text
     datos = resp.json()
-    cid = datos["contenido_id"]
+    cid = datos["publicacion_id"]
     assert datos["nota"]["estado_pieza"] == "generando"
     assert datos["generacion"]["id"]
 
-    item = repos.obtener_contenido(cid)
+    item = repos.obtener_publicacion(cid)
     assert item["origen"] == "presidencia"
     assert item["formato"] == "carrusel"
     assert item["flujo"] == "importante"
     assert item["descripcion"] == _NOTA  # la nota íntegra queda trazada en el tema
 
-    plataformas = repos.listar_contenido_plataforma(cid)
+    plataformas = repos.listar_piezas_fila(cid)
     assert {p["red"] for p in plataformas} == set(
         redes.redes_de_formato(redes.FORMATO_CARRUSEL)
     )
@@ -60,21 +60,21 @@ def test_crear_nota_genera_pieza_carrusel(cliente):
 
 def test_titulo_se_deriva_de_la_primera_linea(cliente):
     resp = _crear(cliente)
-    cid = resp.json()["contenido_id"]
-    assert repos.obtener_contenido(cid)["titulo"] == "Inauguración del nuevo hospital."
+    cid = resp.json()["publicacion_id"]
+    assert repos.obtener_publicacion(cid)["titulo"] == "Inauguración del nuevo hospital."
 
 
 def test_titulo_explicito_manda(cliente):
     resp = _crear(cliente, titulo="Nota de presidencia")
-    cid = resp.json()["contenido_id"]
-    assert repos.obtener_contenido(cid)["titulo"] == "Nota de presidencia"
+    cid = resp.json()["publicacion_id"]
+    assert repos.obtener_publicacion(cid)["titulo"] == "Nota de presidencia"
 
 
 def test_portada_es_la_primera_imagen_aunque_abra_un_video(cliente):
     media = [{"tipo": "video", "objeto": "videos/abre.mp4"}, *_MEDIA]
     resp = _crear(cliente, media=media)
     assert resp.status_code == 200, resp.text
-    plataformas = repos.listar_contenido_plataforma(resp.json()["contenido_id"])
+    plataformas = repos.listar_piezas_fila(resp.json()["publicacion_id"])
     p = plataformas[0]
     assert p["foto"] == "fotos/p1.jpg"  # primera IMAGEN, no el video que abre
     # El video que abría la nota sigue en los slides, en su posición original.

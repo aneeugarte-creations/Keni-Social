@@ -1,14 +1,14 @@
-import type { ContenidoPlataforma } from "./contenido";
+import type { PublicacionPlataforma } from "./contenido";
 
 // --- Ola COLABORACIÓN: comentarios internos + versiones de copy + aprobación
 //     multinivel sobre el tablero de contenido (inspirado en Planable). ---
 
-/** Un comentario del hilo de discusión de una pieza. `plataforma_id` vacío = comentario
+/** Un comentario del hilo de discusión de una pieza. `pieza_id` vacío = comentario
  *  del item entero; con valor = atado a una red concreta. `resuelto` marca el hilo cerrado. */
-export interface ComentarioContenido {
+export interface ComentarioPublicacion {
   id: string;
-  contenido_id: string;
-  plataforma_id: string;
+  publicacion_id: string;
+  pieza_id: string;
   autor_id: string;
   autor_nombre: string;
   texto: string;
@@ -20,20 +20,20 @@ export interface ComentarioContenido {
 }
 
 export interface RespuestaComentarios {
-  comentarios: ComentarioContenido[];
+  comentarios: ComentarioPublicacion[];
   total: number;
 }
 
 export interface RespuestaComentario {
-  comentario: ComentarioContenido;
+  comentario: ComentarioPublicacion;
 }
 
 /** Un snapshot inmutable del copy de una plataforma (historial de versiones). `version`
  *  es el contador incremental 1-based por plataforma. */
 export interface CopyVersion {
   id: string;
-  plataforma_id: string;
-  contenido_id: string;
+  pieza_id: string;
+  publicacion_id: string;
   version: number;
   copy: string;
   autor_id: string;
@@ -50,7 +50,7 @@ export interface RespuestaCopyVersiones {
 
 /** Respuesta al guardar/revertir copy: la plataforma actualizada (+ la versión creada). */
 export interface RespuestaCopyGuardado {
-  plataforma: ContenidoPlataforma;
+  plataforma: PublicacionPlataforma;
   version: CopyVersion | null;
 }
 
@@ -59,8 +59,8 @@ export type DecisionAprobacion = "pendiente" | "aprobado" | "rechazado";
 /** Un nivel de la cadena de aprobación multinivel de una pieza, con su decisión y traza. */
 export interface NivelAprobacion {
   id: string;
-  plataforma_id: string;
-  contenido_id: string;
+  pieza_id: string;
+  publicacion_id: string;
   nivel: number;
   etiqueta: string;
   decision: DecisionAprobacion;
@@ -101,7 +101,7 @@ export interface RespuestaDecisionAprobacion {
 }
 
 /**
- * Respuesta del batch de cadenas del feed (`GET /api/publicaciones/cadenas?ids=`):
+ * Respuesta del batch de cadenas del feed (`GET /api/piezas/cadenas?ids=`):
  * SIEMPRE una entrada por id pedida (las piezas sin cadena/inexistentes salen con
  * `estado="sin_cadena"` y `niveles=[]`, nunca se omiten).
  */

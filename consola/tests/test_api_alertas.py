@@ -27,33 +27,33 @@ def test_devuelve_alertas_de_rendimiento_filtradas(cliente):
     # Una alerta de rendimiento + un evento de OTRO tipo que NO debe salir.
     _inicializar(
         "pieza.bajo_rendimiento",
-        contenido_id="c1",
-        plataforma_id="p1",
+        publicacion_id="c1",
+        pieza_id="p1",
         payload={"resumen": "Engagement bajo"},
     )
-    _inicializar("pieza.publicada", contenido_id="c3")  # otro tipo: NO es alerta
+    _inicializar("pieza.publicada", publicacion_id="c3")  # otro tipo: NO es alerta
 
     alertas = cliente.get("/api/alertas").json()["alertas"]
     tipos = {a["tipo"] for a in alertas}
     assert tipos == {"pieza.bajo_rendimiento"}
-    # No se cuela ningun evento ajeno (la publicacion).
+    # No se cuela ningun evento ajeno (la pieza).
     assert all(a["tipo"] != "pieza.publicada" for a in alertas)
     # Cada alerta trae los campos del contrato.
     una = next(a for a in alertas if a["tipo"] == "pieza.bajo_rendimiento")
-    assert una["contenido_id"] == "c1"
-    assert una["plataforma_id"] == "p1"
+    assert una["publicacion_id"] == "c1"
+    assert una["pieza_id"] == "p1"
     assert una["payload"]["resumen"] == "Engagement bajo"
     assert una["id"] and una["creado"]
 
 
 def test_sin_alertas_devuelve_lista_vacia(cliente):
     # Solo hay eventos de otros tipos: el endpoint no devuelve ninguno.
-    _inicializar("contenido.vencido", contenido_id="cx")
+    _inicializar("contenido.vencido", publicacion_id="cx")
     assert cliente.get("/api/alertas").json()["alertas"] == []
 
 
 def test_limite_acota_el_numero_de_alertas(cliente):
     for i in range(5):
-        _inicializar("pieza.bajo_rendimiento", contenido_id=f"c{i}")
+        _inicializar("pieza.bajo_rendimiento", publicacion_id=f"c{i}")
     alertas = cliente.get("/api/alertas?limite=2").json()["alertas"]
     assert len(alertas) == 2

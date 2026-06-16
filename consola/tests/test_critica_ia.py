@@ -117,9 +117,9 @@ def _cli_usuario(usuario: str, rol: str = "editor") -> TestClient:
 def _crear_borrador(cli: TestClient, **campos) -> dict:
     base = {"marca": _MARCA, "red": "x", "titulo": "T", "contenido": "C"}
     base.update(campos)
-    r = cli.post("/api/publicaciones", json=base, headers=_ORIGIN)
+    r = cli.post("/api/piezas", json=base, headers=_ORIGIN)
     assert r.status_code == 200, r.text
-    return r.json()["publicacion"]
+    return r.json()["pieza"]
 
 
 def _activar_flag(monkeypatch, *, encolado=None):
@@ -166,7 +166,7 @@ def test_sin_flag_la_cadena_es_de_dos_niveles(entorno, monkeypatch):
 
 def test_dos_ok_humanos_no_programan_y_encolan_la_critica(entorno, monkeypatch):
     pid, llamadas = _a_ia_pendiente(monkeypatch)
-    pub = repos.obtener_publicacion(pid)
+    pub = repos.obtener_pieza(pid)
     # La pieza NO pasa a aprobado/programado: queda en revisión esperando a la IA.
     assert pub["estado"] == "en_revision"
     # El hook encoló la crítica exactamente una vez al cerrarse la parte humana.
@@ -187,7 +187,7 @@ def test_revision_aprueba_completa_la_cadena(entorno, monkeypatch):
     pid, _ = _a_ia_pendiente(monkeypatch)
     decision = critica_ia.aplicar_revision(pid, {"veredicto": "aprueba", "problemas": []})
     assert decision == "aprobado"
-    pub = repos.obtener_publicacion(pid)
+    pub = repos.obtener_pieza(pid)
     # Sin franja no se inventa fecha: queda aprobada (programar es ortogonal, ya cubierto aparte).
     assert pub["estado"] in ("en_revision", "programado")
     ia = colaboracion.nivel_critica_ia(repos.listar_aprobaciones(pid))
@@ -206,21 +206,21 @@ def test_revision_rechaza_deja_dislike_y_comentario_que_frena(entorno, monkeypat
         },
     )
     assert decision == "rechazado"
-    pub = repos.obtener_publicacion(pid)
+    pub = repos.obtener_pieza(pid)
     # Dislike de IA: la pieza NO se aprueba; queda en revisión con la objeción.
     assert pub["estado"] == "en_revision"
     ia = colaboracion.nivel_critica_ia(repos.listar_aprobaciones(pid))
     assert ia["decision"] == "rechazado"
     # Hay un comentario SIN resolver (gate B): frena la programación.
-    plat = repos.obtener_contenido_plataforma(pid)
-    assert repos.comentarios_sin_resolver(plat["contenido_id"], pid) >= 1
+    plat = repos.obtener_pieza_fila(pid)
+    assert repos.comentarios_sin_resolver(plat["publicacion_id"], pid) >= 1
 
 
 def test_revision_ilegible_rechaza_por_seguridad(entorno, monkeypatch):
     pid, _ = _a_ia_pendiente(monkeypatch)
     decision = critica_ia.aplicar_revision(pid, None)
     assert decision == "rechazado"
-    assert repos.obtener_publicacion(pid)["estado"] == "en_revision"
+    assert repos.obtener_pieza(pid)["estado"] == "en_revision"
 
 
 def test_forzar_override_de_un_dislike_de_ia(entorno, monkeypatch):
@@ -232,6 +232,6 @@ def test_forzar_override_de_un_dislike_de_ia(entorno, monkeypatch):
     coord = _cli_usuario("jefa", rol="admin")
     r = coord.post(f"/api/aprobacion/{pid}/forzar", headers=_ORIGIN)
     assert r.status_code == 200, r.text
-    assert r.json()["publicacion"]["estado"] in ("en_revision", "programado")
-    plat = repos.obtener_contenido_plataforma(pid)
-    assert repos.comentarios_sin_resolver(plat["contenido_id"], pid) == 0
+    assert r.json()["pieza"]["estado"] in ("en_revision", "programado")
+    plat = repos.obtener_pieza_fila(pid)
+    assert repos.comentarios_sin_resolver(plat["publicacion_id"], pid) == 0

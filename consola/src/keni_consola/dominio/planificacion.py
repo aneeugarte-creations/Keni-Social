@@ -1,18 +1,18 @@
-"""Dominio PLANIFICACION: sugerir el MEJOR momento de publicacion (logica PURA).
+"""Dominio PLANIFICACION: sugerir el MEJOR momento de pieza (logica PURA).
 
 Objetivo de producto ("el equipo solo crea piezas; la operativa es automatica"): que el
 community manager no tenga que ADIVINAR a que hora publicar. Esta capa, dado:
 
   1. el HISTORICO de engagement de la marca/red (de `metricas_cache` -> Metricool, unica
      fuente: la serie diaria de interacciones del periodo), y
-  2. las FRANJAS de publicacion configuradas (colas `(dia_semana, hora)` aplicables a esa
+  2. las FRANJAS de pieza configuradas (colas `(dia_semana, hora)` aplicables a esa
      marca/red) con sus HUECOS libres (los datetimes ya `programado` se evitan),
 
 elige el hueco FUTURO libre cuyo DIA DE LA SEMANA rinde mejor historicamente.
 
 POR QUE DIA-DE-SEMANA (y no hora exacta)
 ----------------------------------------
-La fuente de metricas (Metricool, via `keni_metricas`) expone la fecha de publicacion de
+La fuente de metricas (Metricool, via `keni_metricas`) expone la fecha de pieza de
 cada pieza/serie con granularidad de DIA (`publicado: date` / serie diaria), no de hora.
 Asi que la señal HONESTA que tenemos es "que dia de la semana interactua mas la audiencia".
 La HORA la aportan las franjas (las define el equipo: 09:00, 13:00, ...). Combinamos ambas:
@@ -49,7 +49,7 @@ _DIAS = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domin
 
 @dataclass(frozen=True)
 class Sugerencia:
-    """Una sugerencia de fecha-hora de publicacion (resultado PURO).
+    """Una sugerencia de fecha-hora de pieza (resultado PURO).
 
     `fecha` es ISO 'YYYY-MM-DDTHH:MM' (lo que entiende el programador). `score` es el peso
     historico del dia de la semana de esa fecha (mayor = mejor; 0.0 si no hay historico).

@@ -1,13 +1,13 @@
 /**
  * CONTROL DE CONTEXTO unificado de la barra superior: junta en UN solo dropdown los tres
- * selectores que antes vivían sueltos (`SwitchMarca` + Red + Línea de `SwitchFiltrosContenido`).
+ * selectores que antes vivían sueltos (`SwitchMarca` + Red + Línea de `SwitchFiltrosPublicacion`).
  *
  *   - MARCA (workspace): la consola entera trabaja sobre la marca activa. Si el usuario es de
  *     una sola marca y la ruta no usa filtros, se muestra un chip fijo (nada que cambiar). Si
  *     está FUERA de su marca de casa, el trigger se resalta en ámbar y el panel ofrece "Volver",
  *     para no publicar en la marca equivocada por inercia.
  *   - RED y LÍNEA: filtros globales de la superficie de contenido/feed. Solo aparecen en las
- *     rutas donde aplican (`rutaUsaFiltrosContenido`).
+ *     rutas donde aplican (`rutaUsaFiltrosPublicacion`).
  *
  * Es un popover hand-rolled (como `MenuAcciones`): cierra al hacer clic fuera o con Escape. No
  * anida `Select` de Radix (que portaliza) para evitar conflictos con el clic-fuera; pinta sus
@@ -19,8 +19,8 @@ import { useLocation } from "react-router-dom";
 
 import {
   FILTRO_TODOS,
-  rutaUsaFiltrosContenido,
-  useFiltrosContenido,
+  rutaUsaFiltrosPublicacion,
+  useFiltrosPublicacion,
 } from "@/hooks/filtros-contenido-contexto";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useFuentesDeMarcas } from "@/hooks/use-fuentes-marcas";
@@ -84,7 +84,7 @@ export function ControlContexto() {
     cambiarMarca,
     volverAPrimaria,
   } = useMarcaActiva();
-  const { red, linea, redes, lineasElegibles, cambiarRed, cambiarLinea } = useFiltrosContenido();
+  const { red, linea, redes, lineasElegibles, cambiarRed, cambiarLinea } = useFiltrosPublicacion();
 
   const [abierto, setAbierto] = React.useState(false);
   const ref = React.useRef<HTMLDivElement>(null);
@@ -116,7 +116,7 @@ export function ControlContexto() {
   const fuentesMarca = useFuentesDeMarcas(idsFuentes);
   const fuenteActiva = marcaActiva ? fuentesMarca.get(marcaActiva) : undefined;
 
-  const usaFiltros = rutaUsaFiltrosContenido(pathname);
+  const usaFiltros = rutaUsaFiltrosPublicacion(pathname);
   const fueraDeCasa = !enMarcaPrimaria && marcaPrimaria !== null;
   const filtrosActivos = usaFiltros && (red !== FILTRO_TODOS || linea !== FILTRO_TODOS);
   const etiquetaMarca = marcaActiva ? (nombreActiva ?? marcaActiva) : "Todas las marcas";

@@ -4,7 +4,7 @@
  * Dado `{red, marca, contenido, imagen_url?}` renderiza un mockup reconocible de
  * cómo se vería la pieza en esa red: X, Instagram, Facebook, TikTok y YouTube.
  * Reutilizado por "Generar copy" (ResultadoRedes) y por el diálogo de edición de
- * Publicaciones. Modo claro/oscuro; texto es-MX.
+ * Piezas. Modo claro/oscuro; texto es-MX.
  *
  * Importante sobre el texto: las redes NO renderizan Markdown. Por eso aquí el
  * cuerpo se muestra TAL CUAL —respetando saltos de línea y enlazando URLs—, sin
@@ -33,7 +33,7 @@ import { urlMedia } from "@/lib/api";
 import { parsearCarrusel, type SlideCarrusel } from "@/lib/carrusel";
 import { cn } from "@/lib/utils";
 
-import { iconoRed, nombreRed, tamanoRed } from "../../pages/publicaciones/meta";
+import { iconoRed, nombreRed, tamanoRed } from "../../pages/piezas/meta";
 
 export interface VistaPreviaRedProps {
   red: string;
@@ -45,7 +45,7 @@ export interface VistaPreviaRedProps {
   imagen_url?: string;
   /**
    * Slides EXTRA de una pieza `formato='carrusel'` (JSON `[{tipo,objeto}, …]`, campo
-   * `Publicacion.carrusel`). Con slides, la variante LIMPIA pinta un carrusel DESLIZABLE
+   * `Pieza.carrusel`). Con slides, la variante LIMPIA pinta un carrusel DESLIZABLE
    * (scroll lateral con snap, como en las redes de verdad): portada + slides en orden.
    * Vacío/ausente = imagen única de siempre.
    */

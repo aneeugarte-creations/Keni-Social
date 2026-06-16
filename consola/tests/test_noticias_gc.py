@@ -19,14 +19,14 @@ def _ahora() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def _cluster(cid, *, score=0.05, n_fuentes=1, estado="nuevo", contenido_id="",
+def _cluster(cid, *, score=0.05, n_fuentes=1, estado="nuevo", publicacion_id="",
              ultimo_visto=_VIEJO, marca="unotv"):
     repos.upsert_noticia_cluster({
         "id": cid, "titulo": f"Historia {cid}", "resumen": "r", "marca": marca,
         "categoria": "mx", "geo": "MX", "clave": f"t:{cid}", "n_items": 1, "n_fuentes": n_fuentes,
         "idiomas": ["es"], "senal": 0, "score": score, "breaking": 0,
         "primer_visto": _VIEJO, "ultimo_visto": ultimo_visto, "estado": estado,
-        "contenido_id": contenido_id,
+        "publicacion_id": publicacion_id,
     })
     return cid
 
@@ -42,7 +42,7 @@ def test_purga_ruido_conserva_lo_valioso(entorno):
     _cluster("corroborada", score=0.05, n_fuentes=3)             # multi-fuente -> conservar
     _cluster("score_alto", score=0.9, n_fuentes=1)              # score alto -> conservar
     _cluster("usada", score=0.05, n_fuentes=1, estado="usado")  # usada -> conservar
-    _cluster("ligada", score=0.05, n_fuentes=1, contenido_id="c123")  # ligada -> conservar
+    _cluster("ligada", score=0.05, n_fuentes=1, publicacion_id="c123")  # ligada -> conservar
     _cluster("reciente", score=0.05, n_fuentes=1, ultimo_visto=_ahora())  # reciente -> conservar
 
     resumen = repos.purgar_pool_irrelevante(score_umbral=0.15, inactividad_horas=1)
@@ -103,7 +103,7 @@ def test_caducar_pool_expira_lo_viejo_y_conserva_lo_vivo(entorno):
     _cluster("vieja", ultimo_visto=_VIEJO, score=0.9, n_fuentes=3)  # ni el score alto la salva
     _cluster("reciente", ultimo_visto=_ahora())
     _cluster("usada", ultimo_visto=_VIEJO, estado="usado")
-    _cluster("ligada", ultimo_visto=_VIEJO, contenido_id="c123")
+    _cluster("ligada", ultimo_visto=_VIEJO, publicacion_id="c123")
 
     resumen = repos.caducar_pool(ttl_horas=72, retencion_horas=0)
 

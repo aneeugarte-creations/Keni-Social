@@ -125,7 +125,7 @@ function historiaItem(overrides: Partial<Historia> = {}): Historia {
     primer_visto: "2026-06-05T09:00:00",
     ultimo_visto: "2026-06-05T10:30:00",
     estado: "nuevo",
-    contenido_id: "",
+    publicacion_id: "",
     enlaces: [
       { titulo: "Fuente 1", url: "https://example.com/1", fuente: "Reforma" },
       { titulo: "Fuente 2", url: "https://example.com/2", fuente: "El Universal" },
@@ -217,7 +217,7 @@ beforeEach(() => {
     .mockResolvedValue(RESPUESTA_HISTORIAS_VACIA);
   mockUsarHistoria = vi
     .spyOn(apiMod.api.noticias, "usarHistoria")
-    .mockResolvedValue({ ok: true, contenido_id: "c-hist-nuevo" });
+    .mockResolvedValue({ ok: true, publicacion_id: "c-hist-nuevo" });
   mockDescartarHistoria = vi
     .spyOn(apiMod.api.noticias, "descartarHistoria")
     .mockResolvedValue({ ok: true });
@@ -370,7 +370,7 @@ describe("Cobertura · pestañas de flujo", () => {
   it("«En marcha» lista las usadas (estado=usado) con su pieza_estado", async () => {
     mockHistorias.mockResolvedValue({
       historias: [
-        historiaItem({ estado: "usado", contenido_id: "c-1", pieza_estado: "en_feed" }),
+        historiaItem({ estado: "usado", publicacion_id: "c-1", pieza_estado: "en_feed" }),
       ],
       total: 1,
     });
@@ -493,7 +493,7 @@ describe("Cobertura · vista Todas (lista plana clásica)", () => {
   it("la tarjeta dice la verdad de la pieza: 'En cola' cuando aún no hay pieza en el feed", async () => {
     mockHistorias.mockResolvedValue({
       historias: [
-        historiaItem({ estado: "usado", contenido_id: "c-98", pieza_estado: "en_cola" }),
+        historiaItem({ estado: "usado", publicacion_id: "c-98", pieza_estado: "en_cola" }),
       ],
       total: 1,
     });

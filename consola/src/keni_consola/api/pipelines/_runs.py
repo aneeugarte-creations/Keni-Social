@@ -168,7 +168,7 @@ def _etapas_de_run(
     marca) las pintan como corridas sin grupo/score, no "saltada". Las togglables
     (Admitir/Verificar/Redactar/Ilustrar) están activas o "saltada"
     según su toggle por-marca; si activas, su estado se deriva del estado real (no de logs): el
-    `verificacion_fuente` del tema y las publicaciones por plataforma (auto-curativo). La etapa Verificar
+    `verificacion_fuente` del tema y las piezas por plataforma (auto-curativo). La etapa Verificar
     (verificación pre-copy) va ANTES del copy; un `problema` NO genera copy. Ilustrar exige `arte_ia`
     (evidencia de arte GENERADO: marcador/generación de arte de la run): una imagen de fuente
     propia en la pieza no enciende la etapa. Aprobar es el
@@ -350,7 +350,7 @@ def _run_de(
         "verificacion": _verificacion_fuente_de(item),
         # Procedencia IA del tema (historia/cluster): None si se creó a mano o pre-priorización.
         "cluster": _cluster_publico(cluster),
-        # Coste real de la run: la suma de sus generaciones (`contenido_id` correlacionado).
+        # Coste real de la run: la suma de sus generaciones (`publicacion_id` correlacionado).
         "metricas": metricas or dict(_METRICAS_CERO),
         "piezas": [_pieza_detalle(p) for p in piezas_plat] if completo else base,
     }

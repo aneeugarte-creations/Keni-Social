@@ -10,7 +10,7 @@ background (`recolectar_daemon`); aquí el equipo VE el flujo continuo, filtra, 
   - GET  /api/noticias/cobertura  -> resumen de salud del motor (feeds, items 24h, frescura).
 
 MARCA-AWARE: `marca` filtra el archivo; '' o ausente = todas (vista admin). El alta del
-borrador (`usar`) reusa el MISMO camino que la aportación manual (`crear_contenido` +
+borrador (`usar`) reusa el MISMO camino que la aportación manual (`crear_publicacion` +
 `autogen_redactar.lanzar_para_topic`, `origen='noticia'`). Validación: `marca`/`estado` de
 allowlist; SQL parametrizado en `db`. Errores en español, sin tracebacks.
 

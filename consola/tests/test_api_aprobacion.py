@@ -50,9 +50,9 @@ def _cli_token() -> TestClient:
 def _crear_borrador(cli: TestClient, **campos) -> dict:
     base = {"marca": _MARCA, "red": "x", "titulo": "T", "contenido": "C"}
     base.update(campos)
-    r = cli.post("/api/publicaciones", json=base, headers=_ORIGIN)
+    r = cli.post("/api/piezas", json=base, headers=_ORIGIN)
     assert r.status_code == 200, r.text
-    return r.json()["publicacion"]
+    return r.json()["pieza"]
 
 
 def _cadena_aprobada(pid: str) -> bool:
@@ -72,7 +72,7 @@ def test_enviar_a_revision_pasa_a_en_revision_con_autor(entorno):
     pub = _crear_borrador(autora)
     r = autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
     assert r.status_code == 200, r.text
-    actualizada = r.json()["publicacion"]
+    actualizada = r.json()["pieza"]
     assert actualizada["estado"] == "en_revision"
     assert actualizada["autor_nombre"] == "ana"
     assert actualizada["enviado_a_revision_en"]  # marca de tiempo puesta
@@ -93,14 +93,14 @@ def test_dos_ok_de_personas_distintas_cierran_la_cadena(entorno):
     beto = _cli_usuario("beto")
     r1 = beto.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
     assert r1.status_code == 200, r1.text
-    assert r1.json()["publicacion"]["estado"] == "en_revision"
+    assert r1.json()["pieza"]["estado"] == "en_revision"
     assert not _cadena_aprobada(pub["id"])  # falta el 2o OK
 
     # 2o OK (Caro, otra persona): cierra la cadena. Sin franja -> sigue en_revision.
     caro = _cli_usuario("caro")
     r2 = caro.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
     assert r2.status_code == 200, r2.text
-    aprobada = r2.json()["publicacion"]
+    aprobada = r2.json()["pieza"]
     assert aprobada["estado"] == "en_revision"
     assert _cadena_aprobada(pub["id"])  # los 2 OK ya están
     assert aprobada["revisor_nombre"] == "caro"
@@ -131,7 +131,7 @@ def test_misma_persona_no_puede_dar_los_dos_ok(entorno):
     r = beto.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
     assert r.status_code == 409
     assert "otra persona" in r.json()["error"].lower()
-    assert autora.get(f"/api/publicaciones/{pub['id']}").json()["publicacion"]["estado"] == "en_revision"
+    assert autora.get(f"/api/piezas/{pub['id']}").json()["pieza"]["estado"] == "en_revision"
 
 
 # --------------------------------------------------------------------------- #
@@ -147,7 +147,7 @@ def test_autor_puede_dar_un_ok_pero_no_los_dos(entorno):
     # 1er OK: la propia autora (ya permitido: cualquiera, incluido el autor).
     r1 = autora.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
     assert r1.status_code == 200, r1.text
-    assert r1.json()["publicacion"]["estado"] == "en_revision"
+    assert r1.json()["pieza"]["estado"] == "en_revision"
     # La autora NO puede dar también el 2o OK (misma persona): 409.
     r2 = autora.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
     assert r2.status_code == 409
@@ -173,10 +173,10 @@ def test_editar_contenido_con_ok_humano_resetea_a_borrador_y_limpia_cadena(entor
     assert beto.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN).status_code == 200
     # Hay un OK humano (Edición de beto); editar el contenido lo invalida -> vuelve a borrador.
     r = autora.put(
-        f"/api/publicaciones/{pub['id']}", json={"contenido": "Cuerpo reescrito"}, headers=_ORIGIN
+        f"/api/piezas/{pub['id']}", json={"contenido": "Cuerpo reescrito"}, headers=_ORIGIN
     )
     assert r.status_code == 200, r.text
-    assert r.json()["publicacion"]["estado"] == "borrador"
+    assert r.json()["pieza"]["estado"] == "borrador"
     # La cadena queda LIMPIA: las aprobaciones previas dejan de existir.
     assert repos.listar_aprobaciones(pub["id"]) == []
 
@@ -187,10 +187,10 @@ def test_editar_en_revision_sin_ok_humano_no_resetea(entorno):
     pub = _crear_borrador(autora)
     autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
     r = autora.put(
-        f"/api/publicaciones/{pub['id']}", json={"contenido": "Solo retoque"}, headers=_ORIGIN
+        f"/api/piezas/{pub['id']}", json={"contenido": "Solo retoque"}, headers=_ORIGIN
     )
     assert r.status_code == 200, r.text
-    assert r.json()["publicacion"]["estado"] == "en_revision"
+    assert r.json()["pieza"]["estado"] == "en_revision"
 
 
 # --------------------------------------------------------------------------- #
@@ -210,7 +210,7 @@ def test_admin_fuerza_aprobacion_saltando_la_cadena(entorno):
     admin = _cli_usuario("jefa", rol="admin")
     r = admin.post(f"/api/aprobacion/{pub['id']}/forzar", headers=_ORIGIN)
     assert r.status_code == 200, r.text
-    assert r.json()["publicacion"]["estado"] == "en_revision"
+    assert r.json()["pieza"]["estado"] == "en_revision"
     assert _cadena_aprobada(pub["id"])
 
 
@@ -233,7 +233,7 @@ def test_editor_normal_no_puede_forzar_403(entorno):
     beto = _cli_usuario("beto")  # editor, sin cargo
     r = beto.post(f"/api/aprobacion/{pub['id']}/forzar", headers=_ORIGIN)
     assert r.status_code == 403
-    assert autora.get(f"/api/publicaciones/{pub['id']}").json()["publicacion"]["estado"] == "en_revision"
+    assert autora.get(f"/api/piezas/{pub['id']}").json()["pieza"]["estado"] == "en_revision"
 
 
 def test_forzar_solo_en_revision_409(entorno):
@@ -264,7 +264,7 @@ def test_admin_no_puede_dar_los_dos_ok_el_mismo(entorno):
     r = admin.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
     assert r.status_code == 409
     assert "otra persona" in r.json()["error"].lower()
-    assert admin.get(f"/api/publicaciones/{pub['id']}").json()["publicacion"]["estado"] == "en_revision"
+    assert admin.get(f"/api/piezas/{pub['id']}").json()["pieza"]["estado"] == "en_revision"
     # Otra persona (otro admin distinto) sí cierra la cadena.
     jefe2 = _cli_usuario("jefe2", rol="admin")
     r2 = jefe2.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
@@ -297,7 +297,7 @@ def test_un_dislike_no_devuelve_a_borrador(entorno):
     beto = _cli_usuario("beto")
     r = beto.post(f"/api/aprobacion/{pub['id']}/rechazar", headers=_ORIGIN)
     assert r.status_code == 200, r.text
-    assert r.json()["publicacion"]["estado"] == "en_revision"
+    assert r.json()["pieza"]["estado"] == "en_revision"
 
 
 def test_dos_dislikes_de_personas_distintas_devuelven_a_borrador(entorno):
@@ -310,7 +310,7 @@ def test_dos_dislikes_de_personas_distintas_devuelven_a_borrador(entorno):
     caro = _cli_usuario("caro")
     r = caro.post(f"/api/aprobacion/{pub['id']}/rechazar", headers=_ORIGIN)
     assert r.status_code == 200, r.text
-    rechazada = r.json()["publicacion"]
+    rechazada = r.json()["pieza"]
     assert rechazada["estado"] == "borrador"
     assert rechazada["revisor_nombre"] == "caro"
 
@@ -325,7 +325,7 @@ def test_deshacer_quita_el_ok_y_vuelve_a_revision(entorno):
     # Beto retira su OK: su nivel vuelve a pendiente (sin decisor) y no queda ningún OK humano.
     r = beto.post(f"/api/aprobacion/{pub['id']}/deshacer", headers=_ORIGIN)
     assert r.status_code == 200, r.text
-    assert r.json()["publicacion"]["estado"] == "en_revision"
+    assert r.json()["pieza"]["estado"] == "en_revision"
     niveles = repos.listar_aprobaciones(pub["id"])
     assert all(n["decision"] == "pendiente" and not n["decisor_id"] for n in niveles)
 
@@ -341,7 +341,7 @@ def test_deshacer_dislike_tras_like_y_remarcar(entorno):
     # Ya sin su OK, Beto marca un dislike: válido (un solo dislike no rechaza todavía).
     r = beto.post(f"/api/aprobacion/{pub['id']}/rechazar", headers=_ORIGIN)
     assert r.status_code == 200, r.text
-    assert r.json()["publicacion"]["estado"] == "en_revision"
+    assert r.json()["pieza"]["estado"] == "en_revision"
 
 
 def test_deshacer_sin_decision_propia_da_409(entorno):
@@ -468,7 +468,7 @@ def test_programar_pasa_con_los_dos_ok(entorno, monkeypatch):
         f"/api/aprobacion/{pub['id']}/programar", json={"fecha": fecha}, headers=_ORIGIN
     )
     assert r.status_code == 200, r.text
-    assert r.json()["publicacion"]["estado"] == "programado"
+    assert r.json()["pieza"]["estado"] == "programado"
 
 
 # --------------------------------------------------------------------------- #
@@ -481,11 +481,11 @@ def test_comentario_sin_resolver_bloquea_programar(entorno, monkeypatch):
     monkeypatch.setenv("KENI_MIN_APROBACIONES", "0")  # aislar el gate B del gate A
     autora = _cli_usuario("ana")
     pub = _crear_borrador(autora, estado="en_revision")
-    # El contenido padre de la publicacion (su contenido_id) recibe un comentario abierto.
-    plat = repos.obtener_contenido_plataforma(pub["id"])
-    contenido_id = plat["contenido_id"]
+    # El contenido padre de la pieza (su publicacion_id) recibe un comentario abierto.
+    plat = repos.obtener_pieza_fila(pub["id"])
+    publicacion_id = plat["publicacion_id"]
     autora.post(
-        f"/api/contenido/{contenido_id}/comentarios",
+        f"/api/publicaciones/{publicacion_id}/comentarios",
         json={"texto": "Revisar el dato de la fecha"},
         headers=_ORIGIN,
     )
@@ -542,7 +542,7 @@ def test_segundo_programar_da_409_si_ya_no_esta_en_revision(entorno, monkeypatch
         f"/api/aprobacion/{pub['id']}/programar", json={"fecha": fecha}, headers=_ORIGIN
     )
     assert r1.status_code == 200, r1.text
-    assert r1.json()["publicacion"]["estado"] == "programado"
+    assert r1.json()["pieza"]["estado"] == "programado"
 
     r2 = autora.post(
         f"/api/aprobacion/{pub['id']}/programar", json={"fecha": fecha}, headers=_ORIGIN

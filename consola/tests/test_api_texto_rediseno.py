@@ -123,12 +123,12 @@ def test_editoriales_filtra_por_pipeline(cliente):
 
 
 # --------------------------------------------------------------------------- #
-# Versionado INTENCIONADO (historial = publicaciones; revertir = al borrador)  #
+# Versionado INTENCIONADO (historial = piezas; revertir = al borrador)  #
 # --------------------------------------------------------------------------- #
 
 
 def test_historial_vacio_sin_publicaciones_y_revertir_al_borrador(cliente, monkeypatch):
-    """Sin Postgres ni publicaciones el historial es VACÍO (es el de publicaciones, no el
+    """Sin Postgres ni piezas el historial es VACÍO (es el de piezas, no el
     git log de autosaves). `version/{sha}` y `revertir/{sha}` siguen operando por git: el
     sha del commit de creación se lee de `sha_actual`."""
     if shutil.which("git") is None:
@@ -139,7 +139,7 @@ def test_historial_vacio_sin_publicaciones_y_revertir_al_borrador(cliente, monke
 
     r = cliente.get(f"/api/prompts/{doc['id']}/historial")
     assert r.status_code == 200
-    assert r.json()["historial"] == []  # historial = publicaciones; aquí no hay ninguna
+    assert r.json()["historial"] == []  # historial = piezas; aquí no hay ninguna
 
     sha_v1 = cliente.get(f"/api/prompts/{doc['id']}").json()["documento"]["sha_actual"]
     assert sha_v1  # commit de creación (V1); el autosave de V2 no movió el HEAD

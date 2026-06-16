@@ -4,7 +4,7 @@
  * Una sola caja donde el equipo PEGA lo que sea —una nota, un enlace, el texto de un doc, o
  * directamente una imagen (Cmd+V) o un archivo arrastrado— y la IA lo convierte en un post.
  * No hace falta escribir el copy final: lo que se aporta es MATERIAL y el motor `aportar`
- * (`POST /api/contenido/aportar`, origen='equipo') enciende la auto-generación; el borrador
+ * (`POST /api/publicaciones/aportar`, origen='equipo') enciende la auto-generación; el borrador
  * nace por red y PARA en la cola de revisión. De cara a las redes no sale nada sin tu OK.
  *
  * Enrutado por lo que pegas, sin que el equipo elija "modo":
@@ -14,7 +14,7 @@
  *  - archivo de texto (.txt/.md/.csv) soltado -> se lee y entra como `material`.
  *  - .pdf/.docx soltado -> aviso honesto: el backend aún no los ingiere (pega el texto o el enlace).
  *
- * Marca y redes salen del MISMO catálogo que el resto del feed (`/publicaciones/opciones`,
+ * Marca y redes salen del MISMO catálogo que el resto del feed (`/piezas/opciones`,
  * query ya cacheada por FeedIdeacion). Por defecto: la marca activa de la topbar y las
  * redes del formato foto. NO hay campo de título: el backend lo DERIVA siempre (del titular
  * de la página del enlace, de la 1ª línea del material o, si solo hay foto, un genérico).
@@ -40,7 +40,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
+import { CLAVE_PIEZAS } from "@/pages/piezas/claves";
 
 import { REDES_POR_FORMATO } from "./formato";
 
@@ -73,7 +73,7 @@ export function DialogoCrearPost({
 
   // Mismo catálogo (y misma query cacheada) que el feed: marcas y redes reales del backend.
   const opcionesQuery = useQuery({
-    queryKey: ["publicaciones", "opciones"],
+    queryKey: ["piezas", "opciones"],
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),
     enabled: abierto,
   });
@@ -208,9 +208,9 @@ export function DialogoCrearPost({
       });
     },
     onSuccess: (data) => {
-      // Refresca TODO el árbol de publicaciones: el feed (feed-ideacion), los conteos de
+      // Refresca TODO el árbol de piezas: el feed (feed-ideacion), los conteos de
       // las pestañas y las demás superficies (lista, kanban) que cuelgan de la misma clave.
-      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+      void queryClient.invalidateQueries({ queryKey: CLAVE_PIEZAS });
       const n = data.contenido.plataformas?.length ?? 0;
       toast.success(
         n === 1
@@ -223,8 +223,8 @@ export function DialogoCrearPost({
   });
 
   // Hay algo que aportar si hay texto o una imagen; la marca y al menos una red son obligatorias.
-  const hayContenido = texto.trim() !== "" || imagen !== null;
-  const puedeCrear = hayContenido && marca !== "" && redes.size > 0 && !crear.isPending;
+  const hayPublicacion = texto.trim() !== "" || imagen !== null;
+  const puedeCrear = hayPublicacion && marca !== "" && redes.size > 0 && !crear.isPending;
 
   return (
     <Dialog open={abierto} onOpenChange={(o) => { if (!o) onCerrar(); }}>

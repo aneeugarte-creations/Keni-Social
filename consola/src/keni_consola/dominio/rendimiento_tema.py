@@ -1,6 +1,6 @@
 """Señal de RENDIMIENTO para el ranking: prioriza noticias de las líneas que MEJOR funcionan.
 
-Idea (simple y honesta): de las publicaciones ya medidas (Metricool), sacamos las LÍNEAS
+Idea (simple y honesta): de las piezas ya medidas (Metricool), sacamos las LÍNEAS
 editoriales con mejor rendimiento y damos un empujón a las historias del pool que caen en esas
 líneas. ANTI-SESGO incorporado: una línea solo cuenta como "top" si tiene una MUESTRA mínima de
 piezas (`minimo_piezas`) — así "funcionó UNA vez" no la encarama — y se limita a un top-N (no se

@@ -8,7 +8,7 @@ import type { ItemTabHub } from "@/components/layout/hub-tabs";
 
 const PESTANAS: ItemTabHub[] = [
   { ruta: "/datos/investigacion", etiqueta: "Noticias", icono: Newspaper, end: true },
-  { ruta: "/datos/investigacion/contenidos", etiqueta: "Contenidos", icono: Sparkles },
+  { ruta: "/datos/investigacion/contenidos", etiqueta: "Publicaciones", icono: Sparkles },
   { ruta: "/datos/investigacion/fuentes", etiqueta: "Fuentes", icono: Rss },
 ];
 
@@ -28,7 +28,7 @@ describe("SelectorSeccion · sección activa", () => {
 
   it("matchea sub-rutas de una pestaña no-`end`", () => {
     renderEn("/datos/investigacion/contenidos/algo");
-    expect(screen.getByRole("combobox", { name: /sección/i })).toHaveTextContent("Contenidos");
+    expect(screen.getByRole("combobox", { name: /sección/i })).toHaveTextContent("Publicaciones");
   });
 
   it("elige la coincidencia más específica (ruta más larga), no el tab raíz", () => {

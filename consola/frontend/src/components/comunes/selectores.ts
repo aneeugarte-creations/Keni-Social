@@ -63,7 +63,7 @@ export function desdeRed(red: string | null | undefined): string {
  * consola (slug-guion, p. ej. `claro-sports`).
  *
  * La frontera de Métricas habla en `id_metricas`, mientras que Generar copy y
- * Publicaciones trabajan con el id canónico (ver `keni_consola/marcas.py`). La
+ * Piezas trabajan con el id canónico (ver `keni_consola/marcas.py`). La
  * única diferencia entre ambas formas es el separador, así que basta cambiar
  * `_` por `-`. La página destino valida el id contra su propio catálogo: si no
  * existe, su selector simplemente no preselecciona nada (sin inventar datos).
@@ -75,7 +75,7 @@ export function marcaCanonicaDesdeMetricas(idMetricas: string): string {
 /**
  * Traducción inversa de `marcaCanonicaDesdeMetricas`: del `id` canónico
  * (slug-guion) al `id_metricas` (guion_bajo) que usa el catálogo de Métricas.
- * Útil para enlazar desde Publicaciones (id canónico) hacia Métricas.
+ * Útil para enlazar desde Piezas (id canónico) hacia Métricas.
  */
 export function marcaMetricasDesdeCanonica(idCanonico: string): string {
   return idCanonico.replace(/-/g, "_");

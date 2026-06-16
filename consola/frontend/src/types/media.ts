@@ -13,8 +13,8 @@ export interface RespuestaMedia {
 export interface CuerpoGenerarMedia {
   prompt: string;
   /** Pieza a la que pertenece la imagen: la generación se correlaciona a su pipeline (etapa Arte). */
+  pieza_id?: string;
   publicacion_id?: string;
-  contenido_id?: string;
 }
 
 // --- Estudio de imagen ---
@@ -69,7 +69,7 @@ export interface RespuestaPlantillaMarca {
 export type TipoArte = "estudio" | "subida" | "ia" | "original";
 
 /**
- * Un ARTE: una imagen del almacén que el equipo CONSERVA para reutilizar en publicaciones.
+ * Un ARTE: una imagen del almacén que el equipo CONSERVA para reutilizar en piezas.
  * Catalogarla la protege del GC de media sin dueño y la hace seleccionable por marca.
  */
 export interface Arte {

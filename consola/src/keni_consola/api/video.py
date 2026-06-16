@@ -152,7 +152,7 @@ async def listar_composiciones(request: Request) -> Response:
     items = [
         _composicion_a_dict(item)
         for item in repos.listar_video_composiciones(
-            marca=marca, contenido_id=q.get("contenido_id") or None
+            marca=marca, publicacion_id=q.get("publicacion_id") or None
         )
     ]
     return JSONResponse({"composiciones": items})
@@ -161,7 +161,7 @@ async def listar_composiciones(request: Request) -> Response:
 async def crear_composicion(request: Request) -> Response:
     """POST /api/video/composiciones: crea una composicion. -> `{id}` | 400.
 
-    Cuerpo: `marca` (obligatoria, del catalogo), `contenido_id` (opcional, liga al tablero),
+    Cuerpo: `marca` (obligatoria, del catalogo), `publicacion_id` (opcional, liga al tablero),
     `documento` (objeto de composicion, se valida con `keni_shared.video.validar_composicion`).
     """
     datos = await leer_json(request)
@@ -178,8 +178,8 @@ async def crear_composicion(request: Request) -> Response:
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
-    contenido_id = datos.get("contenido_id")
-    contenido_id = contenido_id.strip() if isinstance(contenido_id, str) else ""
+    publicacion_id = datos.get("publicacion_id")
+    publicacion_id = publicacion_id.strip() if isinstance(publicacion_id, str) else ""
 
     titulo = datos.get("titulo")
     titulo = titulo.strip() if isinstance(titulo, str) else ""
@@ -191,7 +191,7 @@ async def crear_composicion(request: Request) -> Response:
     comp = repos.crear_video_composicion(
         marca=marca,
         documento=json.dumps(doc_norm, ensure_ascii=False),
-        contenido_id=contenido_id,
+        publicacion_id=publicacion_id,
         titulo=titulo,
         estado=estado,
     )

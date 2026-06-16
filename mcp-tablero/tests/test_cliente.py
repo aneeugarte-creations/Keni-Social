@@ -30,8 +30,8 @@ def cliente(monkeypatch) -> ClienteConsola:
 
 @respx.mock
 def test_manda_token_en_ambas_cabeceras(cliente):
-    ruta = respx.get(f"{BASE}/api/contenido").respond(json={"contenidos": []})
-    cliente.listar_contenido()
+    ruta = respx.get(f"{BASE}/api/publicaciones").respond(json={"contenidos": []})
+    cliente.listar_publicacion()
     peticion = ruta.calls.last.request
     assert peticion.headers["Authorization"] == "Bearer tok-123"
     assert peticion.headers["X-Keni-Token"] == "tok-123"
@@ -40,8 +40,8 @@ def test_manda_token_en_ambas_cabeceras(cliente):
 @respx.mock
 def test_listar_urlencodea_los_filtros(cliente):
     """Filtros con espacios/acentos/&: va por `params=` de httpx (encoding correcto)."""
-    ruta = respx.get(f"{BASE}/api/contenido").respond(json={"contenidos": []})
-    cliente.listar_contenido({"marca": "claro sports & más", "flujo": "evento", "clase": ""})
+    ruta = respx.get(f"{BASE}/api/publicaciones").respond(json={"contenidos": []})
+    cliente.listar_publicacion({"marca": "claro sports & más", "flujo": "evento", "clase": ""})
     url = ruta.calls.last.request.url
     assert url.params["marca"] == "claro sports & más"
     assert url.params["flujo"] == "evento"
@@ -57,8 +57,8 @@ def test_listar_urlencodea_los_filtros(cliente):
 
 @respx.mock
 def test_listar_sin_filtros_no_manda_query(cliente):
-    ruta = respx.get(f"{BASE}/api/contenido").respond(json={"contenidos": []})
-    cliente.listar_contenido()
+    ruta = respx.get(f"{BASE}/api/publicaciones").respond(json={"contenidos": []})
+    cliente.listar_publicacion()
     assert not ruta.calls.last.request.url.query
 
 
@@ -67,41 +67,41 @@ def test_listar_sin_filtros_no_manda_query(cliente):
 
 @respx.mock
 def test_error_usa_mensaje_de_la_api_clave_error(cliente):
-    respx.post(f"{BASE}/api/contenido").respond(400, json={"error": "Falta el titulo."})
+    respx.post(f"{BASE}/api/publicaciones").respond(400, json={"error": "Falta el titulo."})
     with pytest.raises(ErrorConsola, match="Falta el titulo."):
-        cliente.crear_contenido({})
+        cliente.crear_publicacion({})
 
 
 @respx.mock
 def test_error_usa_clave_mensaje_si_no_hay_error(cliente):
     """Algunos endpoints responden `{"mensaje": ...}`: tambien se aprovecha."""
-    respx.post(f"{BASE}/api/contenido").respond(409, json={"mensaje": "Ya existe."})
+    respx.post(f"{BASE}/api/publicaciones").respond(409, json={"mensaje": "Ya existe."})
     with pytest.raises(ErrorConsola, match="Ya existe."):
-        cliente.crear_contenido({"titulo": "x"})
+        cliente.crear_publicacion({"titulo": "x"})
 
 
 @respx.mock
 def test_error_sin_cuerpo_json_cae_al_generico(cliente):
-    respx.post(f"{BASE}/api/contenido").respond(500, text="boom")
+    respx.post(f"{BASE}/api/publicaciones").respond(500, text="boom")
     with pytest.raises(ErrorConsola, match="HTTP 500"):
-        cliente.crear_contenido({"titulo": "x"})
+        cliente.crear_publicacion({"titulo": "x"})
 
 
 @respx.mock
 def test_401_y_403_tienen_mensaje_propio(cliente):
-    respx.get(f"{BASE}/api/contenido").respond(401)
+    respx.get(f"{BASE}/api/publicaciones").respond(401)
     with pytest.raises(ErrorConsola, match="KENI_CONSOLA_TOKEN"):
-        cliente.listar_contenido()
-    respx.get(f"{BASE}/api/contenido").respond(403)
+        cliente.listar_publicacion()
+    respx.get(f"{BASE}/api/publicaciones").respond(403)
     with pytest.raises(ErrorConsola, match="403"):
-        cliente.listar_contenido()
+        cliente.listar_publicacion()
 
 
 @respx.mock
 def test_respuesta_no_json_es_error_claro(cliente):
-    respx.get(f"{BASE}/api/contenido").respond(200, text="<html>")
+    respx.get(f"{BASE}/api/publicaciones").respond(200, text="<html>")
     with pytest.raises(ErrorConsola, match="no-JSON"):
-        cliente.listar_contenido()
+        cliente.listar_publicacion()
 
 
 # --- reintentos: solo GET ------------------------------------------------------ #
@@ -109,37 +109,37 @@ def test_respuesta_no_json_es_error_claro(cliente):
 
 @respx.mock
 def test_get_reintenta_ante_fallo_de_transporte(cliente):
-    ruta = respx.get(f"{BASE}/api/contenido")
+    ruta = respx.get(f"{BASE}/api/publicaciones")
     ruta.side_effect = [httpx.ConnectError("caida"), httpx.Response(200, json={"contenidos": []})]
-    assert cliente.listar_contenido() == {"contenidos": []}
+    assert cliente.listar_publicacion() == {"contenidos": []}
     assert ruta.call_count == 2
 
 
 @respx.mock
 def test_get_agota_reintentos_y_da_error_en_espanol(cliente):
-    ruta = respx.get(f"{BASE}/api/contenido")
+    ruta = respx.get(f"{BASE}/api/publicaciones")
     ruta.side_effect = httpx.ConnectError("caida")
     with pytest.raises(ErrorConsola, match="No se pudo conectar"):
-        cliente.listar_contenido()
+        cliente.listar_publicacion()
     assert ruta.call_count == 3  # _INTENTOS_GET
 
 
 @respx.mock
 def test_post_no_reintenta(cliente):
     """Una mutacion NUNCA se reintenta a ciegas (podria duplicar el contenido)."""
-    ruta = respx.post(f"{BASE}/api/contenido")
+    ruta = respx.post(f"{BASE}/api/publicaciones")
     ruta.side_effect = httpx.ConnectError("caida")
     with pytest.raises(ErrorConsola, match="No se pudo conectar"):
-        cliente.crear_contenido({"titulo": "x"})
+        cliente.crear_publicacion({"titulo": "x"})
     assert ruta.call_count == 1
 
 
 @respx.mock
 def test_timeout_da_mensaje_propio(cliente):
-    ruta = respx.post(f"{BASE}/api/contenido")
+    ruta = respx.post(f"{BASE}/api/publicaciones")
     ruta.side_effect = httpx.ReadTimeout("lento")
     with pytest.raises(ErrorConsola, match="no respondio a tiempo"):
-        cliente.crear_contenido({"titulo": "x"})
+        cliente.crear_publicacion({"titulo": "x"})
 
 
 # --- cliente persistente -------------------------------------------------------- #
@@ -150,14 +150,14 @@ def test_reusa_un_httpx_client_por_instancia(monkeypatch):
     transporte = httpx.MockTransport(lambda req: httpx.Response(200, json={"contenidos": []}))
     cli = ClienteConsola(Config(url=BASE), cliente=httpx.Client(transport=transporte))
     primero = cli._cli
-    cli.listar_contenido()
-    cli.listar_contenido()
+    cli.listar_publicacion()
+    cli.listar_publicacion()
     assert cli._cli is primero
 
 
 @respx.mock
 def test_rutas_de_mutacion_componen_url_y_cuerpo(cliente):
-    ruta = respx.patch(f"{BASE}/api/contenido/c1/plataformas/p1").respond(
+    ruta = respx.patch(f"{BASE}/api/publicaciones/c1/plataformas/p1").respond(
         json={"plataforma": {"id": "p1", "estado": "aprobado"}}
     )
     out = cliente.actualizar_plataforma("c1", "p1", {"estado": "aprobado"})

@@ -5,7 +5,7 @@ Esta capa existe para DESACOPLAR los `api/*.py` del almacen concreto. Cada
 enruta cada entidad a su almacen de forma FIJA (no hay conmutador ni env var):
 
   - POSTGRES (`db.py`, via `motor_db`; ADR 0004/0006) es hoy el almacen de casi todo:
-    publicaciones y plantillas (editoriales), `comercial` (piezas + serie temporal de
+    piezas y plantillas (editoriales), `comercial` (piezas + serie temporal de
     snapshots), `rota`, `usuarios`/`sesiones` (via `auth/`), la cola de `jobs`, y las
     entidades que cerraron su rezago file->pg (ADR 0006): `fuentes_rss` + items vistos +
     salud, `grupos_hashtags` y `franjas` editoriales.
@@ -18,7 +18,7 @@ Uso en las features:
 
     from .. import repos
 
-    repos.crear_publicacion(marca="unotv", red="x", titulo="Hola")  # -> Postgres
+    repos.crear_pieza(marca="unotv", red="x", titulo="Hola")  # -> Postgres
     repos.registrar_historial_prompt(prompt_id, marca, resultado)   # -> ficheros
 """
 # repos.py es un BARREL: la implementación vive en `_repos_comun` + `repos_<dominio>`.
@@ -28,8 +28,8 @@ from ._repos_comun import (  # noqa: F401
     ESTADO_ROTA_APROBADO,
     ESTADO_ROTA_PROPUESTO,
     ESTADO_SWAP_PROPUESTO,
+    ESTADOS_PIEZA_PARRILLA,
     ESTADOS_PIEZA,
-    ESTADOS_PUBLICACION,
     ESTADOS_ROTA,
     ESTADOS_SWAP,
     ESTADOS_TAREA,
@@ -63,9 +63,9 @@ from .repos_campanias import (  # noqa: F401
     listar_campanias,
     obtener_campania,
 )
-from .repos_contenido import (  # noqa: F401
-    actualizar_contenido,
-    actualizar_contenido_plataforma,
+from .repos_publicacion import (  # noqa: F401
+    actualizar_publicacion,
+    actualizar_pieza_fila,
     actualizar_etiqueta,
     actualizar_evergreen_idea,
     actualizar_insumo_item,
@@ -73,50 +73,50 @@ from .repos_contenido import (  # noqa: F401
     adjuntar_video_a_pieza,
     ajustar_plataformas_por_formato,
     asignar_etiqueta,
-    borrar_contenido,
-    borrar_contenido_plataforma,
+    borrar_publicacion,
+    borrar_pieza_fila,
     borrar_etiqueta,
     borrar_evergreen_idea,
     borrar_insumo_item,
     borrar_insumo_lote,
-    contar_contenido_origen_desde,
-    crear_contenido,
-    crear_contenido_plataforma,
+    contar_publicacion_origen_desde,
+    crear_publicacion,
+    crear_pieza_fila,
     crear_etiqueta,
     crear_evergreen_idea,
     crear_insumo_items,
     crear_insumo_lote,
     dias_con_insumos,
-    estado_pieza_por_contenido,
+    estado_pieza_por_publicacion,
     etiquetas_por_contenido,
     existe_etiqueta_nombre,
     existe_publicado_similar,
     hashtags_de_contenido,
-    ids_contenido_con_copy,
+    ids_publicacion_con_copy,
     ids_contenido_con_etiqueta,
-    listar_contenido,
-    listar_contenido_origenes,
-    listar_contenido_plataforma,
-    listar_contenido_vencido,
+    listar_publicacion,
+    listar_publicaciones_origenes,
+    listar_piezas_fila,
+    listar_publicaciones_vencido,
     listar_etiquetas,
     listar_evergreen_ideas,
     listar_insumo_items,
     listar_lotes,
     marcar_insumo_item_usado,
-    obtener_contenido,
-    obtener_contenido_plataforma,
+    obtener_publicacion,
+    obtener_pieza_fila,
     obtener_etiqueta,
     obtener_etiqueta_por_nombre,
     obtener_evergreen_idea,
     obtener_insumo_item,
     obtener_insumo_lote,
     quitar_etiqueta,
-    reclamar_contenido,
+    reclamar_publicacion,
     reparar_lotes_parseando_sueltos,
     reparar_verificacion_en_curso_sueltos,
     resumen_plan_por_categoria,
     titulos_recientes_marca,
-    verificacion_fuente_por_contenido,
+    verificacion_fuente_por_publicacion,
 )
 from .repos_editor import (  # noqa: F401
     actualizar_bloque,
@@ -295,18 +295,18 @@ from .repos_parrilla import (  # noqa: F401
     obtener_propuesta_parrilla,
 )
 from .repos_publicaciones import (  # noqa: F401
-    actualizar_publicacion,
-    borrar_publicacion,
-    contar_publicaciones,
-    crear_publicacion,
+    actualizar_pieza,
+    borrar_pieza,
+    contar_piezas,
+    crear_pieza,
     crear_publicaciones,
     decidir_nivel_aprobacion_tx,
     existe_cadena_aprobacion,
-    listar_publicaciones,
+    listar_piezas,
     lock_barrido,
-    obtener_publicacion,
+    obtener_pieza,
     reclamar_preparacion,
-    transicionar_estado_publicacion,
+    transicionar_estado_pieza,
 )
 from .repos_rota import (  # noqa: F401
     actualizar_ausencia_rota,

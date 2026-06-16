@@ -69,7 +69,7 @@ def _reparar_verificacion_en_curso() -> int:
 
     umbral = iso_utc(datetime.now(UTC) - timedelta(seconds=_ttl_verificacion_en_curso_seg()))
     tocados = 0
-    for tema in repos.listar_contenido():
+    for tema in repos.listar_publicacion():
         if (tema.get("origen") or "") != ORIGEN_PIPELINE:
             continue
         if (tema.get("verificacion_fuente") or "") != VERIFICACION_EN_CURSO:
@@ -84,7 +84,7 @@ def _reparar_verificacion_en_curso() -> int:
         verificar_activa = config.etapa_activa(config.ENV_PIPELINE_VERIFICAR, marca)
         nuevo = "" if verificar_activa else VERIFICACION_SALTADA
         try:
-            repos.actualizar_contenido(tema_id, {"verificacion_fuente": nuevo})
+            repos.actualizar_publicacion(tema_id, {"verificacion_fuente": nuevo})
         except Exception:  # noqa: BLE001 -- best-effort por tema; el resto de la reparación sigue
             _log.warning(
                 "Limpiador de generaciones: no se pudo reparar la verificación colgada del tema %s.",

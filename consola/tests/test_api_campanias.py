@@ -263,7 +263,7 @@ def test_inorganico_boost_es_fila_propia_y_campanias_con_nombre_se_excluyen(clie
     campaña entra como FILA PROPIA (publicación inorgánica), con sus impresiones en la columna
     "Ads" y `es_inorganico=True`. Las campañas de pago con NOMBRE PROPIO (aunque contengan la
     palabra 'campaña') NO entran: viven en la sección Ads del dashboard. El conteo de
-    publicaciones incluye el inorgánico; las visualizaciones orgánicas no se inflan."""
+    piezas incluye el inorgánico; las visualizaciones orgánicas no se inflan."""
     cam = _crear(cliente, hashtags=["#Chihuahua"]).json()["campania"]
     cuerpo = "Gran reportaje en la sierra tarahumara este fin de semana"
 
@@ -298,7 +298,7 @@ def test_inorganico_boost_es_fila_propia_y_campanias_con_nombre_se_excluyen(clie
     assert inorg[0]["red"] == "facebook" and inorg[0]["marca"] == "Claro Sports"
     # ASUS (nombre propio) NO aparece como pieza.
     assert all("ASUS" not in p["titulo"] for p in datos["piezas"])
-    # Totales inorgánicos = solo el boost; el conteo de publicaciones lo incluye (1 org + 1 inorg).
+    # Totales inorgánicos = solo el boost; el conteo de piezas lo incluye (1 org + 1 inorg).
     assert datos["inorganico"]["visualizaciones"] == 5000
     assert datos["inorganico"]["campanias"] == 1
     assert datos["kpis"]["piezas"] == 2

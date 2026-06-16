@@ -32,7 +32,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { EditorDocumento } from "@/editor/EditorDocumento";
-import { ContenidoPlantillas } from "@/editor/GaleriaPlantillas";
+import { PublicacionPlantillas } from "@/editor/GaleriaPlantillas";
 import { DialogoFotoMuestra } from "@/editor/DialogoFotoMuestra";
 import { dataUrlAArchivo } from "@/editor/dataUrl";
 import { conFotoEnHuecosVacios, conTextosHorneados, documentoVacio, type Documento } from "@/editor/documento";
@@ -124,7 +124,7 @@ function leerWorkspace(): WorkspaceGuardado | null {
 
 export default function Imagen() {
   const opciones = useQuery({
-    queryKey: ["publicaciones", "opciones"],
+    queryKey: ["piezas", "opciones"],
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),
   });
   const marcas = opciones.data?.marcas ?? [];
@@ -926,7 +926,7 @@ export default function Imagen() {
             // Panel «Diseño» del rail (galería de plantillas como COLUMNA estilo Canva, no modal):
             // aplicar una plantilla a la pestaña activa + gestión (renombrar/duplicar/borrar/rotar).
             panelDiseno={
-              <ContenidoPlantillas
+              <PublicacionPlantillas
                 compacto
                 plantillas={plantillas}
                 onCargar={(p) => void cargarPlantillaEnActiva(p)}
@@ -968,7 +968,7 @@ export default function Imagen() {
             }
           />
         ) : (
-          // GALERÍA del estado vacío (sin pestañas): el MISMO `ContenidoPlantillas` del rail y de
+          // GALERÍA del estado vacío (sin pestañas): el MISMO `PublicacionPlantillas` del rail y de
           // la modal, a página completa (una sola fuente de verdad): ocupa TODO el ancho (sin
           // `max-w` centrado: los lados ya no quedan vacíos), con más columnas en pantallas grandes,
           // gestión completa, agrupación por marca en «Todas» y «Lienzo en blanco» al final.
@@ -976,7 +976,7 @@ export default function Imagen() {
             {plantillasQ.isLoading ? (
               <p className="py-8 text-center text-sm text-muted-foreground">Cargando plantillas…</p>
             ) : (
-              <ContenidoPlantillas
+              <PublicacionPlantillas
                 plantillas={plantillas}
                 agruparPorMarca={marcaActiva === null}
                 onCargar={abrirPlantilla}

@@ -10,7 +10,7 @@
  *
  * Este barrel preserva la superficie de import `@/types`: re-exporta los tipos
  * GENERADOS desde el backend (`../types.gen`) y los tipos a mano repartidos por
- * dominio en ficheros hermanos (`./metricas`, `./publicaciones`, …).
+ * dominio en ficheros hermanos (`./metricas`, `./piezas`, …).
  *
  * ── Tipos DERIVADOS del backend (#101 / H5/E6) ──────────────────────────────
  * Un SUBCONJUNTO ESTABLE del contrato (estado, config, límites/redes, métricas y
@@ -70,9 +70,9 @@ export type {
   CorrelacionSeguidores,
   Paginacion,
   MetricasRun,
-  Publicacion,
-  RespuestaPublicaciones,
-  RespuestaPublicacion,
+  Pieza,
+  RespuestaPiezas,
+  RespuestaPieza,
   RespuestaColaAprobacion,
   RespuestaMensaje,
   ErrorApi,
@@ -92,7 +92,7 @@ export * from "./colaboracion";
 export * from "./notificaciones";
 export * from "./rota";
 export * from "./metricas";
-export * from "./publicaciones";
+export * from "./piezas";
 export * from "./media";
 export * from "./buzon";
 export * from "./campanias";

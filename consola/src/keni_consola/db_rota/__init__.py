@@ -13,7 +13,7 @@ Barrel del paquete: re-exporta la MISMA superficie pública (y privada) que el m
   - `coordinacion`   — coordinador por celda (`rota_coordinacion`).
 Lo compartido (fundación de `_db_comun`) vive en `_comun` y se re-exporta aquí. Importa
 explícito (nunca `*`) para que `from .db_rota import X` e `import keni_consola.db_rota`
-sigan funcionando igual y los consumidores (`db.py`, `db_publicaciones.py`) no cambien."""
+sigan funcionando igual y los consumidores (`db.py`, `db_piezas.py`) no cambien."""
 from __future__ import annotations
 
 # Fundación compartida re-exportada (preserva `db_rota.<nombre>` para los consumidores).

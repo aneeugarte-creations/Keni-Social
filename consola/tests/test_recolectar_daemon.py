@@ -690,8 +690,8 @@ def test_paso_rescore_ignora_historias_usadas(monkeypatch):
 def test_fusionar_grupo_no_absorbe_historia_promovida_entre_lectura_y_fusion(monkeypatch):
     c1 = {"id": "c1", "titulo": "A", "n_fuentes": 2, "score": 0.6, "estado": "nuevo"}
     c2 = {"id": "c2", "titulo": "B", "n_fuentes": 1, "score": 0.2, "estado": "nuevo"}
-    # Entre la lectura del lote y la fusión, el pipeline PROMOVIÓ c2 (contenido_id sellado).
-    promovida = dict(c2, estado="usado", contenido_id="tema-9")
+    # Entre la lectura del lote y la fusión, el pipeline PROMOVIÓ c2 (publicacion_id sellado).
+    promovida = dict(c2, estado="usado", publicacion_id="tema-9")
     monkeypatch.setattr(recolectar_daemon.repos, "obtener_noticia_cluster",
                         lambda cid: {"c1": dict(c1), "c2": promovida}.get(cid))
     def _no_tocar(*a, **k):  # noqa: ANN002, ANN003
@@ -714,12 +714,12 @@ def test_fusionar_grupo_no_absorbe_historia_promovida_entre_lectura_y_fusion(mon
 
 def test_paso_merge_lexico_funde_duplicados_y_excluye_promovidas(monkeypatch):
     c1 = {"id": "c1", "titulo": "El presidente anuncia una nueva reforma para los estados",
-          "categoria": "mx", "estado": "nuevo", "contenido_id": ""}
+          "categoria": "mx", "estado": "nuevo", "publicacion_id": ""}
     c2 = {"id": "c2", "titulo": "El presidente anuncia nueva reforma para los estados",
-          "categoria": "mx", "estado": "nuevo", "contenido_id": ""}
+          "categoria": "mx", "estado": "nuevo", "publicacion_id": ""}
     # Promovida: aunque su título case, NO entra al merge (lo usado no se toca).
     c3 = {"id": "c3", "titulo": "El presidente anuncia nueva reforma para los estados",
-          "categoria": "mx", "estado": "usado", "contenido_id": "tema-1"}
+          "categoria": "mx", "estado": "usado", "publicacion_id": "tema-1"}
     llamadas: list[list[str]] = []
     monkeypatch.setattr(
         recolectar_daemon, "_fusionar_grupo",

@@ -16,7 +16,7 @@ CONTRATO:
 Tabla unica `entradas`:
   id, tipo, marca, ruta, mtime, red, estado, evergreen, fecha, fecha_creacion
 
-`tipo` ∈ {publicacion, plantilla, historial, run}. Las fuentes RSS y los grupos de
+`tipo` ∈ {pieza, plantilla, historial, run}. Las fuentes RSS y los grupos de
 hashtags ya NO se indexan: migraron a Postgres (ADR 0006), donde son la fuente de
 verdad y se consultan directo (no via este indice de ficheros). Las franjas tampoco se
 indexan (operacionales en Postgres). Los items RSS vistos viven tambien en Postgres.
@@ -42,7 +42,7 @@ from . import config, rutas
 # agente, mas las columnas extra (`agente`, `coste_usd`, `tokens_in`, `tokens_out`,
 # `fecha_inicio`, `dia`). El resto de tipos no usa esas columnas (quedan a 0/'').
 TIPOS: tuple[str, ...] = (
-    "publicacion", "plantilla", "historial", "run",
+    "pieza", "plantilla", "historial", "run",
 )
 
 

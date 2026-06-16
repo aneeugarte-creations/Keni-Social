@@ -118,17 +118,17 @@ def _cli(usuario: str = "ana") -> TestClient:
 
 def _borrador(cli: TestClient, *, contenido: str, revision: str = "listo", con_foto: bool = True) -> dict:
     r = cli.post(
-        "/api/publicaciones",
+        "/api/piezas",
         json={"marca": _MARCA, "red": "x", "titulo": "T", "contenido": contenido},
         headers=_ORIGIN,
     )
     assert r.status_code == 200, r.text
-    pub = r.json()["publicacion"]
+    pub = r.json()["pieza"]
     cambios = {"revision": revision}
     if con_foto:
         cambios["foto"] = "fotos/prueba.jpg"
-    repos.actualizar_publicacion(pub["id"], cambios)
-    return repos.obtener_publicacion(pub["id"])
+    repos.actualizar_pieza(pub["id"], cambios)
+    return repos.obtener_pieza(pub["id"])
 
 
 def test_verificar_calidad_degrada_listo_y_anota(entorno, monkeypatch, tmp_path):
@@ -138,9 +138,9 @@ def test_verificar_calidad_degrada_listo_y_anota(entorno, monkeypatch, tmp_path)
     avisos = _revisar.verificar_calidad_pieza(pub)
 
     assert avisos  # encontró algo (voz)
-    actual = repos.obtener_publicacion(pub["id"])
+    actual = repos.obtener_pieza(pub["id"])
     assert actual["revision"] == "revisar"  # degradado (advisory), no bloqueado
-    tema = repos.obtener_contenido(pub["contenido_id"])
+    tema = repos.obtener_publicacion(pub["publicacion_id"])
     assert "Revisión del copy" in (tema.get("notas") or "")
 
 
@@ -149,7 +149,7 @@ def test_verificar_calidad_no_toca_copy_limpio(entorno, monkeypatch, tmp_path):
     pub = _borrador(_cli(), contenido="Copy sobrio dentro de patrón, sin emojis")
 
     assert _revisar.verificar_calidad_pieza(pub) == []
-    assert repos.obtener_publicacion(pub["id"])["revision"] == "listo"  # intacto
+    assert repos.obtener_pieza(pub["id"])["revision"] == "listo"  # intacto
 
 
 # --------------------------------------------------------------------------- #
@@ -171,7 +171,7 @@ def test_avance_con_calidad_on_marca_pero_no_bloquea(entorno, monkeypatch, tmp_p
     enviadas = _avance.ejecutar_avance()
 
     assert [p["id"] for p in enviadas] == [pub["id"]]  # AVANZA igual (no bloquea)
-    actual = repos.obtener_publicacion(pub["id"])
+    actual = repos.obtener_pieza(pub["id"])
     assert actual["estado"] == "en_revision"
     assert actual["revision"] == "revisar"  # ...pero marcada para que el humano decida
 
@@ -185,6 +185,6 @@ def test_avance_con_calidad_off_no_marca(entorno, monkeypatch, tmp_path):
     enviadas = _avance.ejecutar_avance()
 
     assert [p["id"] for p in enviadas] == [pub["id"]]
-    actual = repos.obtener_publicacion(pub["id"])
+    actual = repos.obtener_pieza(pub["id"])
     assert actual["estado"] == "en_revision"
     assert actual["revision"] == "listo"  # sin verificación, no se toca el revision

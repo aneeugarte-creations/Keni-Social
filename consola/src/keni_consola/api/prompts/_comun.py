@@ -1,7 +1,7 @@
 """Helpers compartidos por los submódulos de `api/prompts`.
 
 Sin rutas: solo utilidades que cruzan áreas (serialización de documentos y el tope de
-contexto). Cada área (`docs`, `publicacion`, `pipelines`, `lanzar`) los importa de aquí.
+contexto). Cada área (`docs`, `pieza`, `pipelines`, `lanzar`) los importa de aquí.
 """
 
 from __future__ import annotations

@@ -15,7 +15,7 @@ notificar cuando pasa algo en una pieza. Reglas (acordadas con el equipo de rede
 Todo es BEST-EFFORT: un fallo aqui NUNCA debe tumbar la accion que lo provoco (comentar,
 aprobar, publicar). Cada entrada publica atrapa y loguea.
 
-TIPOS: `mencion` · `comentario` · `aprobacion` · `rechazo` · `publicacion` · `asignacion`.
+TIPOS: `mencion` · `comentario` · `aprobacion` · `rechazo` · `pieza` · `asignacion`.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ TIPOS: tuple[str, ...] = (
     "comentario",
     "aprobacion",
     "rechazo",
-    "publicacion",
+    "pieza",
     "asignacion",
 )
 
@@ -59,7 +59,7 @@ def _resumen(tipo: str, actor_nombre: str, titulo: str, red_nombre: str = "") ->
         return f"{quien} dio su OK a {pieza}"
     if tipo == "rechazo":
         return f"{quien} rechazó {pieza}"
-    if tipo == "publicacion":
+    if tipo == "pieza":
         cola = f" en {red_nombre}" if red_nombre else ""
         return f"Se publicó {pieza}{cola}"
     if tipo == "asignacion":
@@ -68,20 +68,20 @@ def _resumen(tipo: str, actor_nombre: str, titulo: str, red_nombre: str = "") ->
 
 
 def interesados_en(
-    contenido_id: str, contenido: dict[str, Any] | None = None
+    publicacion_id: str, contenido: dict[str, Any] | None = None
 ) -> set[str]:
     """Ids de usuarios SUSCRITOS a una pieza: autor + comentaristas + decisores + mencionados."""
     ids: set[str] = set()
-    cont = contenido or repos.obtener_contenido(contenido_id) or {}
+    cont = contenido or repos.obtener_publicacion(publicacion_id) or {}
     if cont.get("autor_id"):
         ids.add(cont["autor_id"])
-    for c in repos.listar_comentarios(contenido_id):
+    for c in repos.listar_comentarios(publicacion_id):
         if c.get("autor_id"):
             ids.add(c["autor_id"])
         for m in c.get("menciones") or []:
             if m:
                 ids.add(m)
-    for plat in repos.listar_contenido_plataforma(contenido_id):
+    for plat in repos.listar_piezas_fila(publicacion_id):
         for nivel in repos.listar_aprobaciones(plat.get("id", "")):
             decisor = nivel.get("decisor_id") or ""
             if decisor and decisor != "auto":
@@ -112,8 +112,8 @@ def _repartir(
     marca_id: str,
     tipo: str,
     resumen: str,
-    contenido_id: str = "",
-    plataforma_id: str = "",
+    publicacion_id: str = "",
+    pieza_id: str = "",
     actor: dict[str, Any] | None = None,
     enlace: str = "",
     excluir: Iterable[str] = (),
@@ -130,8 +130,8 @@ def _repartir(
                 usuario_id=uid,
                 marca_id=marca_id,
                 tipo=tipo,
-                contenido_id=contenido_id,
-                plataforma_id=plataforma_id,
+                publicacion_id=publicacion_id,
+                pieza_id=pieza_id,
                 actor=actor,
                 resumen=resumen,
                 enlace=enlace,
@@ -154,12 +154,12 @@ def tras_comentario(
 ) -> None:
     """Un comentario nuevo: notifica a los MENCIONADOS (mencion) y al resto de interesados."""
     try:
-        contenido_id = contenido.get("id", "") or ""
+        publicacion_id = contenido.get("id", "") or ""
         marca_id = contenido.get("marca", "") or ""
         titulo = _titulo(contenido)
         nombre = _nombre_actor(actor)
         actor_id = (actor or {}).get("id", "") or ""
-        plataforma_id = comentario.get("plataforma_id", "") or ""
+        pieza_id = comentario.get("pieza_id", "") or ""
         menciones = {m for m in (comentario.get("menciones") or []) if m}
 
         # 1) Mencionados: prioridad mencion (incluye al director si lo etiquetan).
@@ -168,19 +168,19 @@ def tras_comentario(
             marca_id=marca_id,
             tipo="mencion",
             resumen=_resumen("mencion", nombre, titulo),
-            contenido_id=contenido_id,
-            plataforma_id=plataforma_id,
+            publicacion_id=publicacion_id,
+            pieza_id=pieza_id,
             actor=actor,
             excluir={actor_id},
         )
         # 2) Resto de suscritos: comentario (sin duplicar a los ya mencionados ni al actor).
         _repartir(
-            interesados_en(contenido_id, contenido),
+            interesados_en(publicacion_id, contenido),
             marca_id=marca_id,
             tipo="comentario",
             resumen=_resumen("comentario", nombre, titulo),
-            contenido_id=contenido_id,
-            plataforma_id=plataforma_id,
+            publicacion_id=publicacion_id,
+            pieza_id=pieza_id,
             actor=actor,
             excluir={actor_id} | menciones,
         )
@@ -196,13 +196,13 @@ def tras_decision(
 ) -> None:
     """Una decision de aprobacion: OK -> interesados + coordinador; rechazo -> interesados."""
     try:
-        contenido_id = contenido.get("id", "") or ""
+        publicacion_id = contenido.get("id", "") or ""
         marca_id = contenido.get("marca", "") or ""
         titulo = _titulo(contenido)
         nombre = _nombre_actor(actor)
         actor_id = (actor or {}).get("id", "") or ""
-        plataforma_id = plataforma.get("id", "") or ""
-        interesados = interesados_en(contenido_id, contenido)
+        pieza_id = plataforma.get("id", "") or ""
+        interesados = interesados_en(publicacion_id, contenido)
 
         if decision == "aprobado":
             destinatarios = interesados | _coordinadores_de_marca(marca_id)
@@ -211,8 +211,8 @@ def tras_decision(
                 marca_id=marca_id,
                 tipo="aprobacion",
                 resumen=_resumen("aprobacion", nombre, titulo),
-                contenido_id=contenido_id,
-                plataforma_id=plataforma_id,
+                publicacion_id=publicacion_id,
+                pieza_id=pieza_id,
                 actor=actor,
                 excluir={actor_id},
             )
@@ -222,8 +222,8 @@ def tras_decision(
                 marca_id=marca_id,
                 tipo="rechazo",
                 resumen=_resumen("rechazo", nombre, titulo),
-                contenido_id=contenido_id,
-                plataforma_id=plataforma_id,
+                publicacion_id=publicacion_id,
+                pieza_id=pieza_id,
                 actor=actor,
                 excluir={actor_id},
             )
@@ -233,8 +233,8 @@ def tras_decision(
 
 def tras_publicacion(
     *,
-    contenido_id: str,
-    plataforma_id: str,
+    publicacion_id: str,
+    pieza_id: str,
     marca_id: str,
     titulo: str,
     red_nombre: str = "",
@@ -242,15 +242,15 @@ def tras_publicacion(
     """Una pieza se publico: notifica a todos sus interesados (sin actor: la dispara el sistema)."""
     try:
         _repartir(
-            interesados_en(contenido_id),
+            interesados_en(publicacion_id),
             marca_id=marca_id,
-            tipo="publicacion",
-            resumen=_resumen("publicacion", "", titulo or "una pieza", red_nombre),
-            contenido_id=contenido_id,
-            plataforma_id=plataforma_id,
+            tipo="pieza",
+            resumen=_resumen("pieza", "", titulo or "una pieza", red_nombre),
+            publicacion_id=publicacion_id,
+            pieza_id=pieza_id,
         )
-    except Exception:  # noqa: BLE001 -- notificar nunca rompe la publicacion
-        log.exception("Fallo notificando la publicacion de %s.", contenido_id)
+    except Exception:  # noqa: BLE001 -- notificar nunca rompe la pieza
+        log.exception("Fallo notificando la pieza de %s.", publicacion_id)
 
 
 def tras_asignacion(
@@ -273,7 +273,7 @@ def tras_asignacion(
             marca_id=contenido.get("marca", "") or "",
             tipo="asignacion",
             resumen=_resumen("asignacion", _nombre_actor(actor), _titulo(contenido)),
-            contenido_id=contenido.get("id", "") or "",
+            publicacion_id=contenido.get("id", "") or "",
             actor=actor,
             excluir={(actor or {}).get("id", "") or ""},
         )

@@ -3,7 +3,7 @@
 `test_esquema_api.py` solo ancla TS ↔ esquema (que el `types.gen.ts` siga al
 `TypedDict`). NO comprueba que el handler HTTP emita de verdad esa forma: los
 handlers arman dicts ad-hoc. Este módulo cierra ese hueco para las entidades de
-mayor churn (publicaciones, runs, comercial): ejercita el endpoint REAL (TestClient,
+mayor churn (piezas, runs, comercial): ejercita el endpoint REAL (TestClient,
 todo OFFLINE) y comprueba que el JSON emitido CUMPLE su `$def`:
 
   - todas las claves REQUERIDAS del `$def` están presentes, y
@@ -46,39 +46,39 @@ def _conforma(datos: dict, def_nombre: str) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Publicaciones                                                                #
+# Piezas                                                                #
 # --------------------------------------------------------------------------- #
 
 
 def _crear_pub(cli, **campos):
     base = {"marca": "unotv", "red": "x", "titulo": "T", "contenido": "C"}
     base.update(campos)
-    return cli.post("/api/publicaciones", json=base)
+    return cli.post("/api/piezas", json=base)
 
 
 def test_publicacion_conforma(cliente):
     _crear_pub(cliente)
-    pub = cliente.get("/api/publicaciones").json()["publicaciones"][0]
-    _conforma(pub, "Publicacion")
+    pub = cliente.get("/api/piezas").json()["piezas"][0]
+    _conforma(pub, "Pieza")
 
 
 def test_respuesta_publicaciones_conforma(cliente):
     _crear_pub(cliente)
-    resp = cliente.get("/api/publicaciones").json()
-    _conforma(resp, "RespuestaPublicaciones")
+    resp = cliente.get("/api/piezas").json()
+    _conforma(resp, "RespuestaPiezas")
     _conforma(resp["paginacion"], "Paginacion")
 
 
 def test_respuesta_publicacion_detalle_conforma(cliente):
-    pid = _crear_pub(cliente).json()["publicacion"]["id"]
-    resp = cliente.get(f"/api/publicaciones/{pid}").json()
-    _conforma(resp, "RespuestaPublicacion")
-    _conforma(resp["publicacion"], "Publicacion")
+    pid = _crear_pub(cliente).json()["pieza"]["id"]
+    resp = cliente.get(f"/api/piezas/{pid}").json()
+    _conforma(resp, "RespuestaPieza")
+    _conforma(resp["pieza"], "Pieza")
 
 
 def test_publicacion_fecha_programada_y_origen_son_cadena(cliente):
     """El backend SIEMPRE emite `fecha_programada`/`origen` como cadena (nunca null)."""
-    pub = _crear_pub(cliente).json()["publicacion"]
+    pub = _crear_pub(cliente).json()["pieza"]
     assert pub["fecha_programada"] == ""
     assert pub["origen"] == ""
     assert isinstance(pub["fecha_programada"], str)

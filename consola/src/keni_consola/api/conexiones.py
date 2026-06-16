@@ -517,7 +517,7 @@ async def metricool_perfiles(request: Request) -> Response:
 
 
 # --------------------------------------------------------------------------- #
-# Postproxy (canal de publicacion alternativo a Metricool)                    #
+# Postproxy (canal de pieza alternativo a Metricool)                    #
 # --------------------------------------------------------------------------- #
 #
 # Modelo de secreto distinto al de Metricool: Postproxy usa UNA api_key GLOBAL

@@ -31,7 +31,7 @@ const RETARDO_HORNEADO_MS = 1200;
 
 export function EditorCarruselLateral({
   marca,
-  publicacionId,
+  piezaId,
   plantillas,
   copy = "",
   imagenFuente,
@@ -48,7 +48,7 @@ export function EditorCarruselLateral({
   disabled = false,
 }: {
   marca: string;
-  publicacionId: string;
+  piezaId: string;
   plantillas: PlantillaDiseno[];
   /** Copy del post: sugerencia del prompt al generar foto con IA. */
   copy?: string;
@@ -90,7 +90,7 @@ export function EditorCarruselLateral({
       if (!s || !slidePlacaEditable(s)) return;
       setHorneando(i);
       try {
-        const resp = await api.componerSlide(publicacionId, {
+        const resp = await api.componerSlide(piezaId, {
           foto: s.foto ?? "",
           titular: s.titular ?? "",
           plantilla_id: s.sinPlaca ? "" : s.plantillaId ?? "",
@@ -105,7 +105,7 @@ export function EditorCarruselLateral({
         setHorneando((h) => (h === i ? null : h));
       }
     },
-    [publicacionId, onSlides],
+    [piezaId, onSlides],
   );
 
   const programarHornear = React.useCallback(
@@ -308,7 +308,7 @@ export function EditorCarruselLateral({
             // `key` por slide: remonta el editor al cambiar de página (estado interno limpio).
             key="portada"
             marca={marca}
-            publicacionId={publicacionId}
+            piezaId={piezaId}
             documento={documentoDe(portadaPlantillaId, portadaPlacaOculta)}
             copyIn={portadaCopyIn}
             onCopyInCambio={onPortadaCopyIn}
@@ -324,7 +324,7 @@ export function EditorCarruselLateral({
           <EditorPlacaInline
             key={`extra-${activo}`}
             marca={marca}
-            publicacionId={publicacionId}
+            piezaId={piezaId}
             documento={documentoDe(slideExtra?.plantillaId ?? "", slideExtra?.sinPlaca ?? false)}
             copyIn={slideExtra?.titular ?? ""}
             onCopyInCambio={(t) => editarExtra(activo - 1, { titular: t })}

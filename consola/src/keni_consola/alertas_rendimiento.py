@@ -29,10 +29,10 @@ def _emitir_bajo_rendimiento(hoy_iso: str, umbral: float) -> int:
     recien publicada) NO dispara alerta: no hay rendimiento que juzgar. Devuelve NUEVAS.
     """
     try:
-        items = repos.listar_contenido()
+        items = repos.listar_publicacion()
         por_contenido: dict[str, list[dict]] = {}
-        for plat in repos.listar_contenido_plataforma():
-            por_contenido.setdefault(plat["contenido_id"], []).append(plat)
+        for plat in repos.listar_piezas_fila():
+            por_contenido.setdefault(plat["publicacion_id"], []).append(plat)
     except Exception:  # noqa: BLE001 -- un fallo de lectura no debe matar el barrido
         _log.exception("alertas: fallo al leer el tablero para bajo rendimiento.")
         return 0
@@ -60,8 +60,8 @@ def _emitir_bajo_rendimiento(hoy_iso: str, umbral: float) -> int:
             nuevo = eventos.emitir(
                 "pieza.bajo_rendimiento",
                 {
-                    "contenido_id": it["id"],
-                    "plataforma_id": plat["id"],
+                    "publicacion_id": it["id"],
+                    "pieza_id": plat["id"],
                     "titulo": it.get("titulo", ""),
                     "marca": marca,
                     "marca_nombre": marcas.etiqueta_de(marca) if marca else "",
@@ -71,8 +71,8 @@ def _emitir_bajo_rendimiento(hoy_iso: str, umbral: float) -> int:
                     "engagement_pct": eng,
                     "umbral": umbral,
                 },
-                contenido_id=it["id"],
-                plataforma_id=plat["id"],
+                publicacion_id=it["id"],
+                pieza_id=plat["id"],
                 clave_idempotencia=clave,
             )
             if nuevo:

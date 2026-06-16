@@ -262,7 +262,7 @@ def recalcular(
         1 potente + 1 normal, o 3 normales). Anclado en AHORA: decae solo al envejecer.
       - `velocidad`: la señal [0,1] de esa misma masa (la lee el scoring y la UI).
       - `verificacion`: corroborada / unica_fuente / dudosa (corroboración multi-outlet).
-    Conserva `id`/`estado`/`contenido_id`/`creado` del cluster existente.
+    Conserva `id`/`estado`/`publicacion_id`/`creado` del cluster existente.
     """
     if not items:
         # Cluster sin items: deja los agregados a cero pero conserva identidad.

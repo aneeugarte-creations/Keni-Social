@@ -64,7 +64,7 @@ def test_aplicar_propuesta_crea_tareas(entorno):
     )
     assert resumen["tareas_creadas"] == 1
     assert resumen["eventos_creados"] == 0
-    tarea = repos.obtener_contenido(resumen["ids"]["tareas"][0])
+    tarea = repos.obtener_publicacion(resumen["ids"]["tareas"][0])
     assert tarea is not None
     assert tarea["clase"] == "tarea"
     assert tarea["titulo"] == "Editar el clip del gol"

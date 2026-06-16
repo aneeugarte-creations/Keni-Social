@@ -16,7 +16,7 @@ function docEditorial(parcial: Partial<DocumentoTexto>): DocumentoTexto {
     titulo: "Doc",
     tipo: "editorial",
     carpeta: "rrss/unotv",
-    cuerpo: "Contenido.",
+    cuerpo: "Publicacion.",
     creado: "2026-05-01T10:00:00",
     actualizado: "2026-06-01T10:00:00",
     clase: "",

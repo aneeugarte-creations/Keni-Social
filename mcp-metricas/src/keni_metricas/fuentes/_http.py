@@ -51,7 +51,7 @@ def post_json(
     json: dict | None = None,
     headers: dict | None = None,
 ) -> dict:
-    """POST simple (para endpoints de token / TikTok / publicacion). Sin reintentos.
+    """POST simple (para endpoints de token / TikTok / pieza). Sin reintentos.
 
     A proposito NO reintenta (a diferencia de `get_json`): un POST no es idempotente,
     asi que reintentar un fallo transitorio podria duplicar el efecto (p.ej. publicar

@@ -61,11 +61,11 @@ def _fuentes_timeline(detalle: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return salida
 
 
-def _pieza_estado(estado: str, contenido_id: str, resumen: dict[str, str]) -> str:
+def _pieza_estado(estado: str, publicacion_id: str, resumen: dict[str, str]) -> str:
     """Estado REAL de la historia DE CARA AL FEED, derivado de la pieza (no solo del cluster).
 
     El cluster `usado` significa "promovida a la máquina de contenido", NO "en el feed": la
-    pieza sale REAL en el feed solo cuando existe su fila `contenido_plataforma` CON copy. Para
+    pieza sale REAL en el feed solo cuando existe su fila `pieza` CON copy. Para
     que el badge no mienta, derivamos 5 estados:
       - 'en_pool'    -> aún no promovida (cluster 'nuevo'),
       - 'descartada' -> cluster 'descartado',
@@ -73,13 +73,13 @@ def _pieza_estado(estado: str, contenido_id: str, resumen: dict[str, str]) -> st
                         aún por encolar / etapa Redactar detenida),
       - 'generando'  -> pieza creada, copy en proceso (fila sin `copy` aún),
       - 'en_feed'    -> pieza con copy: visible REAL en el feed.
-    `resumen` = mapa `contenido_id -> 'lista'|'generando'` de `repos.estado_pieza_por_contenido`.
+    `resumen` = mapa `publicacion_id -> 'lista'|'generando'` de `repos.estado_pieza_por_publicacion`.
     """
     if estado == "descartado":
         return "descartada"
     if estado != "usado":
         return "en_pool"
-    pieza = resumen.get(contenido_id) if contenido_id else None
+    pieza = resumen.get(publicacion_id) if publicacion_id else None
     if pieza == "lista":
         return "en_feed"
     if pieza == "generando":
@@ -89,9 +89,9 @@ def _pieza_estado(estado: str, contenido_id: str, resumen: dict[str, str]) -> st
 
 def _pieza_estado_de(cluster: dict[str, Any]) -> str:
     """`_pieza_estado` para UN cluster (un lookup); en listados usa la versión batch."""
-    cid = cluster.get("contenido_id") or ""
+    cid = cluster.get("publicacion_id") or ""
     return _pieza_estado(
-        cluster.get("estado") or "nuevo", cid, repos.estado_pieza_por_contenido([cid])
+        cluster.get("estado") or "nuevo", cid, repos.estado_pieza_por_publicacion([cid])
     )
 
 
@@ -223,7 +223,7 @@ def _historia_a_dict(
         "primer_visto": cluster.get("primer_visto") or "",
         "ultimo_visto": cluster.get("ultimo_visto") or "",
         "estado": cluster.get("estado") or "nuevo",
-        "contenido_id": cluster.get("contenido_id") or "",
+        "publicacion_id": cluster.get("publicacion_id") or "",
         # Estado REAL de cara al feed (derivado de la pieza, no solo del cluster). El front
         # pinta el badge con ESTE campo: nunca dice "En el feed" si la pieza no está.
         "pieza_estado": pieza_estado,
@@ -280,16 +280,16 @@ async def listar_historias(request: Request) -> Response:
     # (`noticias_clusters.verificacion_fuente`, ADR 0011 F3): la verificación corre sobre el cluster ANTES de
     # admitir. Se prefiere el verificacion NATIVO del cluster y se cae al del `contenido` heredado
     # (batch, evita N+1) solo para historias admitidas ANTES de F3 (cluster sin verificacion propio).
-    cids = [c.get("contenido_id") or "" for c in clusters]
-    resumen_pieza = repos.estado_pieza_por_contenido(cids)
-    verificacion_map = repos.verificacion_fuente_por_contenido(cids)
+    cids = [c.get("publicacion_id") or "" for c in clusters]
+    resumen_pieza = repos.estado_pieza_por_publicacion(cids)
+    verificacion_map = repos.verificacion_fuente_por_publicacion(cids)
     vocab_memo: dict[str, frozenset[str]] = {}  # vocabulario por marca, 1 lectura por request
     historias = [
         _historia_a_dict(
-            {**c, "verificacion_fuente": (c.get("verificacion_fuente") or "") or verificacion_map.get(c.get("contenido_id") or "", "")},
+            {**c, "verificacion_fuente": (c.get("verificacion_fuente") or "") or verificacion_map.get(c.get("publicacion_id") or "", "")},
             repos.items_de_cluster(c["id"], limite=_MAX_ENLACES_HISTORIA),
             pieza_estado=_pieza_estado(
-                c.get("estado") or "nuevo", c.get("contenido_id") or "", resumen_pieza
+                c.get("estado") or "nuevo", c.get("publicacion_id") or "", resumen_pieza
             ),
             umbral=_evaluar_umbral(c, vocab_memo),
         )
@@ -355,20 +355,20 @@ async def mesa(request: Request) -> Response:
         destino = cat if cat in plan else "__fuera__"
         por_linea_pool.setdefault(destino, []).append(c)
 
-    cids = [c.get("contenido_id") or "" for c in clusters]
-    resumen_pieza = repos.estado_pieza_por_contenido(cids)
+    cids = [c.get("publicacion_id") or "" for c in clusters]
+    resumen_pieza = repos.estado_pieza_por_publicacion(cids)
     # Verificacion de verificación por historia: NATIVO del cluster (ADR 0011 F3), con fallback al
     # contenido heredado para historias admitidas antes de F3 (cluster sin verificacion propio).
-    verificacion_map = repos.verificacion_fuente_por_contenido(cids)
+    verificacion_map = repos.verificacion_fuente_por_publicacion(cids)
     vocab_memo: dict[str, frozenset[str]] = {}
 
     def _historias(lote: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return [
             _historia_a_dict(
-                {**c, "verificacion_fuente": (c.get("verificacion_fuente") or "") or verificacion_map.get(c.get("contenido_id") or "", "")},
+                {**c, "verificacion_fuente": (c.get("verificacion_fuente") or "") or verificacion_map.get(c.get("publicacion_id") or "", "")},
                 repos.items_de_cluster(c["id"], limite=_MAX_ENLACES_HISTORIA),
                 pieza_estado=_pieza_estado(
-                    c.get("estado") or "nuevo", c.get("contenido_id") or "", resumen_pieza
+                    c.get("estado") or "nuevo", c.get("publicacion_id") or "", resumen_pieza
                 ),
                 umbral=_evaluar_umbral(c, vocab_memo),
             )
@@ -415,11 +415,11 @@ async def detalle_historia(request: Request) -> Response:
     if cluster is None:
         return JSONResponse({"error": "Esa historia ya no existe."}, status_code=404)
     items = repos.items_de_cluster(cluster_id)
-    cid = cluster.get("contenido_id") or ""
+    cid = cluster.get("publicacion_id") or ""
     # Verificacion NATIVO del cluster (ADR 0011 F3: la verificación corre sobre la historia); fallback al
     # contenido heredado para historias admitidas antes de F3 (cluster sin verificacion propio).
     verificacion_fuente = (cluster.get("verificacion_fuente") or "") or (
-        repos.verificacion_fuente_por_contenido([cid]).get(cid, "") if cid else ""
+        repos.verificacion_fuente_por_publicacion([cid]).get(cid, "") if cid else ""
     )
     historia = _historia_a_dict(
         {**cluster, "verificacion_fuente": verificacion_fuente}, items, pieza_estado=_pieza_estado_de(cluster),
@@ -434,17 +434,17 @@ async def usar_historia(request: Request) -> Response:
     Cuerpo `{redes?: [ids], generar?: bool}`. Reusa el camino de la aportación manual: crea un
     `contenido` (`flujo='importante'`, `origen='historia'`, `tipo_contenido='fuente'`) con el
     título/resumen representativos de la historia y sus enlaces corroborantes en la nota; si
-    hay marca y `generar` (def True), encola copy. Marca el cluster `usado` + `contenido_id` y
+    hay marca y `generar` (def True), encola copy. Marca el cluster `usado` + `publicacion_id` y
     todos sus items `usado`. Idempotente-amistoso: si ya estaba usado, devuelve lo enlazado.
     """
     cluster_id = request.path_params["cluster_id"]
     cluster = repos.obtener_noticia_cluster(cluster_id)
     if cluster is None:
         return JSONResponse({"error": "Esa historia ya no existe."}, status_code=404)
-    if cluster.get("estado") == "usado" and cluster.get("contenido_id"):
+    if cluster.get("estado") == "usado" and cluster.get("publicacion_id"):
         return JSONResponse(
             {
-                "contenido": {"id": cluster["contenido_id"]},
+                "contenido": {"id": cluster["publicacion_id"]},
                 "copy_en_proceso": False,
                 "ya_usada": True,
             }
@@ -469,7 +469,7 @@ async def usar_historia(request: Request) -> Response:
 
     from ...pipeline_contenido import _admitir as _pc_ingesta
 
-    contenido = repos.crear_contenido(
+    contenido = repos.crear_publicacion(
         clase="contenido",
         flujo="importante",
         # LÍNEA del plan con la que nació ('breaking' si lo era): la curación humana también
@@ -487,8 +487,8 @@ async def usar_historia(request: Request) -> Response:
         url_fuente=url_fuente or "",
     )
     for red in redes_iniciales:
-        repos.crear_contenido_plataforma(
-            contenido_id=contenido["id"], red=red, falta_copy=True, falta_imagen=True
+        repos.crear_pieza_fila(
+            publicacion_id=contenido["id"], red=red, falta_copy=True, falta_imagen=True
         )
 
     generar = datos.get("generar", True)
@@ -499,9 +499,9 @@ async def usar_historia(request: Request) -> Response:
         except Exception:  # noqa: BLE001 -- la generación es opcional; nunca tumba el uso
             genero = False
 
-    repos.actualizar_noticia_cluster(cluster_id, estado="usado", contenido_id=contenido["id"])
+    repos.actualizar_noticia_cluster(cluster_id, estado="usado", publicacion_id=contenido["id"])
     repos.marcar_items_cluster_usados(cluster_id, contenido["id"])
-    plataformas = repos.listar_contenido_plataforma(contenido["id"])
+    plataformas = repos.listar_piezas_fila(contenido["id"])
     return JSONResponse(
         {
             "contenido": {**contenido, "plataformas": plataformas},
@@ -538,7 +538,7 @@ async def restaurar_historia(request: Request) -> Response:
     if cluster is None:
         return JSONResponse({"error": "Esa historia ya no existe."}, status_code=404)
     estado = cluster.get("estado") or "nuevo"
-    if estado == "usado" or (cluster.get("contenido_id") or ""):
+    if estado == "usado" or (cluster.get("publicacion_id") or ""):
         return JSONResponse(
             {"error": "Esa historia ya se usó: vive en el tablero, no en el pool."},
             status_code=400,

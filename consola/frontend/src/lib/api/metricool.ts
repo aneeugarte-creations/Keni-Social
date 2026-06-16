@@ -8,9 +8,9 @@ import type {
 export const apiMetricool = {
   // --- Programar/previsualizar una pieza en Metricool (respeta KENI_PUBLICAR_REAL) ---
   // Con el gate OFF (default) es DRY-RUN: previsualiza el cuerpo, NO publica nada.
-  programarEnMetricool: (publicacionId: string) =>
+  programarEnMetricool: (piezaId: string) =>
     peticion<RespuestaProgramarMetricool>(
-      `/publicaciones/${encodeURIComponent(publicacionId)}/metricool`,
+      `/piezas/${encodeURIComponent(piezaId)}/metricool`,
       { metodo: "POST" },
     ),
 

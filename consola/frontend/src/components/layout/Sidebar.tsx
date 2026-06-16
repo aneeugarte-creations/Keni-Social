@@ -59,7 +59,7 @@ function clasesIconoRail(activa: boolean) {
  * Barra lateral fija de la consola. La navegación se agrupa por MOMENTO DEL FLUJO
  * (no por dueño de app): el backend (`/api/catalogo` → `navegacion`, ADR 0005)
  * entrega los bloques ya ordenados y etiquetados — `Operación` (checkpoints diarios) ·
- * `Contenido` (herramientas para crear/editar a mano) · `Datos` (lo que alimenta o
+ * `Publicacion` (herramientas para crear/editar a mano) · `Datos` (lo que alimenta o
  * refleja la automatización). Cada bloque pinta su encabezado y, debajo,
  * sus entradas como enlaces (icono + nombre). Los hubs (Investigación, Revisión,
  * Analíticas, Parrilla) son UNA entrada; su sub-navegación vive como pestañas

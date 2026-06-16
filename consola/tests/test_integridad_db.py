@@ -2,11 +2,11 @@
 
 Cubre los fixes de la auditoria de integridad:
   - lotes todo-o-nada (`crear_publicaciones` en UNA transaccion),
-  - CAS de estado en `actualizar_publicacion` (`estado_esperado`),
-  - filtro multi-marca en SQL (`listar/contar_publicaciones(marca=[...])`),
+  - CAS de estado en `actualizar_pieza` (`estado_esperado`),
+  - filtro multi-marca en SQL (`listar/contar_piezas(marca=[...])`),
   - UNIQUE de turnos de rota (carrera del check-then-insert),
   - normalizacion idempotente de timestamps TEXT al canon UTC-sin-offset,
-  - `listar_contenido_vencido` (filtro de vencimientos en SQL),
+  - `listar_publicaciones_vencido` (filtro de vencimientos en SQL),
   - ids de snapshots de pieza a hex completo (32).
 
 Usa el Postgres de pruebas via la fixture `entorno` (skip si no hay).
@@ -23,7 +23,7 @@ from keni_consola.motor_db import IntegrityError
 
 
 # --------------------------------------------------------------------------- #
-# Lote de publicaciones: TODO-O-NADA                                           #
+# Lote de piezas: TODO-O-NADA                                           #
 # --------------------------------------------------------------------------- #
 
 
@@ -36,7 +36,7 @@ def test_crear_publicaciones_lote_ok(entorno):
     )
     assert len(creadas) == 2
     assert all(p["id"] for p in creadas)
-    assert len(db.listar_publicaciones()) == 2
+    assert len(db.listar_piezas()) == 2
 
 
 def test_crear_publicaciones_lote_es_atomico(entorno):
@@ -57,17 +57,17 @@ def test_crear_publicaciones_lote_es_atomico(entorno):
     with pytest.raises(IntegrityError):
         db.crear_publicaciones(lote)
     # Todo-o-nada: ni la primera (valida) quedo.
-    assert db.listar_publicaciones() == []
+    assert db.listar_piezas() == []
 
 
 # --------------------------------------------------------------------------- #
-# CAS de estado en actualizar_publicacion                                      #
+# CAS de estado en actualizar_pieza                                      #
 # --------------------------------------------------------------------------- #
 
 
 def test_actualizar_publicacion_cas_aplica_si_el_estado_coincide(entorno):
-    pub = db.crear_publicacion("unotv", "x", titulo="T", contenido="c")
-    out = db.actualizar_publicacion(
+    pub = db.crear_pieza("unotv", "x", titulo="T", contenido="c")
+    out = db.actualizar_pieza(
         pub["id"], {"estado": "en_revision", "titulo": "T2"}, estado_esperado="borrador"
     )
     assert out is not None
@@ -78,24 +78,24 @@ def test_actualizar_publicacion_cas_aplica_si_el_estado_coincide(entorno):
 def test_actualizar_publicacion_cas_no_toca_nada_si_el_estado_se_movio(entorno):
     """Si el estado actual ya NO es el esperado, no se escribe NADA (ni plataforma ni
     padre): cierra el TOCTOU del PUT generico."""
-    pub = db.crear_publicacion("unotv", "x", titulo="Original", contenido="c")
+    pub = db.crear_pieza("unotv", "x", titulo="Original", contenido="c")
     # Otro flujo la movio a aprobado entre el snapshot del caller y su escritura:
-    assert db.actualizar_publicacion(pub["id"], {"estado": "en_revision"}) is not None
-    out = db.actualizar_publicacion(
+    assert db.actualizar_pieza(pub["id"], {"estado": "en_revision"}) is not None
+    out = db.actualizar_pieza(
         pub["id"],
         {"estado": "programado", "titulo": "Pisada"},
         estado_esperado="borrador",  # snapshot viejo
     )
     assert out is None
-    releida = db.obtener_publicacion(pub["id"])
+    releida = db.obtener_pieza(pub["id"])
     assert releida["estado"] == "en_revision"  # no se piso
     assert releida["titulo"] == "Original"  # el padre TAMPOCO se toco (atomicidad)
 
 
 def test_actualizar_publicacion_atomica_plataforma_y_padre(entorno):
     """Titulo (padre) + estado (plataforma) en una sola llamada quedan ambos aplicados."""
-    pub = db.crear_publicacion("unotv", "x", titulo="V1", contenido="c")
-    out = db.actualizar_publicacion(pub["id"], {"titulo": "V2", "estado": "en_revision"})
+    pub = db.crear_pieza("unotv", "x", titulo="V1", contenido="c")
+    out = db.actualizar_pieza(pub["id"], {"titulo": "V2", "estado": "en_revision"})
     assert out["titulo"] == "V2" and out["estado"] == "en_revision"
 
 
@@ -105,32 +105,32 @@ def test_actualizar_publicacion_atomica_plataforma_y_padre(entorno):
 
 
 def test_listar_y_contar_publicaciones_multi_marca(entorno):
-    db.crear_publicacion("unotv", "x", titulo="U1", contenido="c")
-    db.crear_publicacion("claro-sports", "x", titulo="C1", contenido="c")
-    db.crear_publicacion("nacion-gamer", "x", titulo="N1", contenido="c")
+    db.crear_pieza("unotv", "x", titulo="U1", contenido="c")
+    db.crear_pieza("claro-sports", "x", titulo="C1", contenido="c")
+    db.crear_pieza("nacion-gamer", "x", titulo="N1", contenido="c")
 
-    dos = db.listar_publicaciones(marca=["unotv", "claro-sports"])
+    dos = db.listar_piezas(marca=["unotv", "claro-sports"])
     assert {p["marca"] for p in dos} == {"unotv", "claro-sports"}
-    assert db.contar_publicaciones(marca=["unotv", "claro-sports"]) == 2
+    assert db.contar_piezas(marca=["unotv", "claro-sports"]) == 2
     # Una sola marca como lista equivale al filtro simple.
-    assert db.contar_publicaciones(marca=["unotv"]) == db.contar_publicaciones(marca="unotv")
+    assert db.contar_piezas(marca=["unotv"]) == db.contar_piezas(marca="unotv")
     # Lista vacia / solo vacios = sin filtro (como None).
-    assert db.contar_publicaciones(marca=[]) == 3
+    assert db.contar_piezas(marca=[]) == 3
 
 
 def test_keyset_multi_marca_pagina_sin_saltos(entorno):
     """El keyset con `marca IN (...)` recorre TODAS las piezas de las marcas del foco, sin
     paginas cortas ni filas saltadas (el bug del post-filtro en memoria)."""
     for i in range(3):
-        db.crear_publicacion("unotv", "x", titulo=f"U{i}", contenido="c")
-        db.crear_publicacion("claro-sports", "instagram", titulo=f"C{i}", contenido="c")
-        db.crear_publicacion("nacion-gamer", "x", titulo=f"N{i}", contenido="c")
+        db.crear_pieza("unotv", "x", titulo=f"U{i}", contenido="c")
+        db.crear_pieza("claro-sports", "instagram", titulo=f"C{i}", contenido="c")
+        db.crear_pieza("nacion-gamer", "x", titulo=f"N{i}", contenido="c")
 
     marcas = ["unotv", "claro-sports"]
     vistas: list[str] = []
     cursor = None
     for _ in range(10):  # tope defensivo
-        pagina = db.listar_publicaciones(marca=marcas, limite=2, cursor=cursor)
+        pagina = db.listar_piezas(marca=marcas, limite=2, cursor=cursor)
         if not pagina:
             break
         vistas.extend(p["id"] for p in pagina)
@@ -175,21 +175,21 @@ def test_normalizar_timestamps_texto_idempotente(entorno):
     """`_normalizar_timestamps_texto` lleva al canon (UTC sin offset) las columnas TEXT
     de forma idempotente. Las columnas timestamptz (nativas) están garantizadas por el tipo.
     Esta prueba cubre las columnas TEXT que quedan en `contenido`:
-    `contenido_plataforma.preparado_en` (canon segundos) y `fecha_programada` (canon minutos).
+    `pieza.preparado_en` (canon segundos) y `fecha_programada` (canon minutos).
     """
-    c = db.crear_contenido(titulo="TS", marca="unotv")
-    plat = db.crear_contenido_plataforma(contenido_id=c["id"], red="x")
+    c = db.crear_publicacion(titulo="TS", marca="unotv")
+    plat = db.crear_pieza_fila(publicacion_id=c["id"], red="x")
     con = db._conectar()
     try:
         # Columna NATIVA (timestamptz, 0033): un literal aware UTC entra por el cast del driver.
         con.execute(
-            "UPDATE contenido SET creado = ? WHERE id = ?",
+            "UPDATE publicacion SET creado = ? WHERE id = ?",
             ("2026-01-01T10:00:00+00:00", c["id"]),  # aware UTC
         )
         # Columnas que SIGUEN siendo TEXT: formatos legados (naive con microsegundos / segundos)
         # que la normalizacion debe recortar al canon.
         con.execute(
-            "UPDATE contenido_plataforma SET preparado_en = ?, fecha_programada = ? WHERE id = ?",
+            "UPDATE pieza SET preparado_en = ?, fecha_programada = ? WHERE id = ?",
             ("2026-01-01T10:00:00.123456", "2026-01-02T18:00:00", plat["id"]),
         )
         con.commit()
@@ -197,12 +197,12 @@ def test_normalizar_timestamps_texto_idempotente(entorno):
         _db_core._normalizar_timestamps_texto(con)  # idempotente: segunda pasada no rompe
         # `contenido.creado` es timestamptz: vuelve como `datetime` aware UTC (no string).
         creado = con.execute(
-            "SELECT creado FROM contenido WHERE id = ?", (c["id"],)
+            "SELECT creado FROM publicacion WHERE id = ?", (c["id"],)
         ).fetchone()["creado"]
         assert creado == datetime(2026, 1, 1, 10, 0, 0, tzinfo=timezone.utc)
         # Columnas TEXT: canon UTC-sin-offset, idempotente.
         fila_p = con.execute(
-            "SELECT preparado_en, fecha_programada FROM contenido_plataforma WHERE id = ?",
+            "SELECT preparado_en, fecha_programada FROM pieza WHERE id = ?",
             (plat["id"],),
         ).fetchone()
         assert fila_p["preparado_en"] == "2026-01-01T10:00:00"  # sin microsegundos
@@ -217,17 +217,17 @@ def test_contenido_actualizado_timestamptz_convierte_offsets_no_utc(entorno):
     la igualdad de datetimes aware compara por instante, asi que -06:00 a las 10:00 equivale
     a 16:00 UTC.
     """
-    c = db.crear_contenido(titulo="TS2", marca="unotv")
+    c = db.crear_publicacion(titulo="TS2", marca="unotv")
     con = db._conectar()
     try:
         con.execute(
-            "UPDATE contenido SET actualizado = ? WHERE id = ?",
+            "UPDATE publicacion SET actualizado = ? WHERE id = ?",
             ("2026-01-01T10:00:00-06:00", c["id"]),  # CDMX -> 16:00 UTC
         )
         con.commit()
         _db_core._normalizar_timestamps_texto(con)  # no-op para esta columna nativa
         actualizado = con.execute(
-            "SELECT actualizado FROM contenido WHERE id = ?", (c["id"],)
+            "SELECT actualizado FROM publicacion WHERE id = ?", (c["id"],)
         ).fetchone()["actualizado"]
         assert actualizado == datetime(2026, 1, 1, 16, 0, 0, tzinfo=timezone.utc)
     finally:
@@ -309,14 +309,14 @@ def test_items_sin_cluster_excluye_descartados(entorno):
 
 def test_listar_contenido_vencido_filtra_en_sql(entorno):
     hoy = "2026-06-09"
-    db.crear_contenido(titulo="Vencida", fecha_entrega="2026-06-01")
-    db.crear_contenido(titulo="Hoy (no vencida)", fecha_entrega=hoy)
-    db.crear_contenido(titulo="Futura", fecha_entrega="2026-07-01")
-    db.crear_contenido(titulo="Sin entrega")
-    cerrada = db.crear_contenido(titulo="Cerrada", fecha_entrega="2026-06-01")
-    db.actualizar_contenido(cerrada["id"], {"estado": "hecha"})
+    db.crear_publicacion(titulo="Vencida", fecha_entrega="2026-06-01")
+    db.crear_publicacion(titulo="Hoy (no vencida)", fecha_entrega=hoy)
+    db.crear_publicacion(titulo="Futura", fecha_entrega="2026-07-01")
+    db.crear_publicacion(titulo="Sin entrega")
+    cerrada = db.crear_publicacion(titulo="Cerrada", fecha_entrega="2026-06-01")
+    db.actualizar_publicacion(cerrada["id"], {"estado": "hecha"})
 
-    vencidos = db.listar_contenido_vencido(hoy)
+    vencidos = db.listar_publicaciones_vencido(hoy)
     assert [c["titulo"] for c in vencidos] == ["Vencida"]
 
 

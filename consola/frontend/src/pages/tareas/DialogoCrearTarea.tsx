@@ -25,7 +25,7 @@ import { usePropuestaParrilla } from "@/hooks/use-propuesta-parrilla";
 import { api, mensajeError } from "@/lib/api";
 import { formatearFecha } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
-import type { CatalogosContenido, OperacionCrearEvento, OperacionCrearTarea } from "@/types";
+import type { CatalogosPublicacion, OperacionCrearEvento, OperacionCrearTarea } from "@/types";
 
 import { CLAVE_TAREAS } from "./claves";
 
@@ -48,7 +48,7 @@ const esUrl = (s: string) => /^https?:\/\/\S+/i.test(s.trim());
  *
  * La diferencia es de DESTINO: un evento es una unidad de cobertura con fecha/hora que
  * cae en la rejilla del calendario (`crearEventoRota`); una tarea es trabajo suelto que
- * el equipo coge o se reparte (`crearContenido`, clase='tarea'), nunca en el calendario.
+ * el equipo coge o se reparte (`crearPublicacion`, clase='tarea'), nunca en el calendario.
  */
 export function DialogoCrearTarea({
   abierto,
@@ -58,7 +58,7 @@ export function DialogoCrearTarea({
 }: {
   abierto: boolean;
   onOpenChange: (abierto: boolean) => void;
-  catalogos: CatalogosContenido | undefined;
+  catalogos: CatalogosPublicacion | undefined;
   marca: string | undefined;
 }) {
   const queryClient = useQueryClient();
@@ -68,7 +68,7 @@ export function DialogoCrearTarea({
   const [titulo, setTitulo] = React.useState("");
   const [fecha, setFecha] = React.useState("");
   const [hora, setHora] = React.useState("");
-  const [contenido, setContenido] = React.useState("");
+  const [contenido, setPublicacion] = React.useState("");
   const [prioridad, setPrioridad] = React.useState("media");
   const [responsable, setResponsable] = React.useState(SIN_RESPONSABLE);
   // Import inteligente.
@@ -96,7 +96,7 @@ export function DialogoCrearTarea({
     setTitulo("");
     setFecha("");
     setHora("");
-    setContenido("");
+    setPublicacion("");
     setPrioridad("media");
     setResponsable(SIN_RESPONSABLE);
     setPegado("");
@@ -159,7 +159,7 @@ export function DialogoCrearTarea({
         });
         return;
       }
-      await api.crearContenido({
+      await api.crearPublicacion({
         clase: "tarea",
         titulo: titulo.trim(),
         descripcion: contenido.trim() || undefined,
@@ -485,7 +485,7 @@ export function DialogoCrearTarea({
                 <Textarea
                   id="tarea-desc"
                   value={contenido}
-                  onChange={(e) => setContenido(e.target.value)}
+                  onChange={(e) => setPublicacion(e.target.value)}
                   placeholder={
                     modo === "evento"
                       ? "Reacciones, ambiente, momentos clave…"

@@ -187,10 +187,10 @@ def test_lineas_por_pieza_mapea_solo_las_atribuibles(monkeypatch):
 
     monkeypatch.setattr(
         repos,
-        "listar_contenido",
+        "listar_publicacion",
         lambda marca=None: [{"id": "c1", "titulo": "Gol", "id_post_metricool": "M1"}],
     )
-    monkeypatch.setattr(repos, "listar_contenido_plataforma", lambda: [])
+    monkeypatch.setattr(repos, "listar_piezas_fila", lambda: [])
     monkeypatch.setattr(
         repos,
         "listar_etiquetas",

@@ -1,6 +1,6 @@
 """Dominio PLACEHOLDERS: variables `{...}` en el copy del tablero (PURO, sin HTTP).
 
-El community manager escribe el copy de una fila `contenido_plataforma` con VARIABLES
+El community manager escribe el copy de una fila `pieza` con VARIABLES
 entre llaves que se autocompletan con el contexto del contenido y su marca:
 
   - `{marca}`     nombre humano de la marca del contenido (vacio si no tiene).
@@ -14,7 +14,7 @@ entre llaves que se autocompletan con el contexto del contenido y su marca:
 Logica PURA: dado un `mapa` `var -> valor` ya resuelto, sustituye las variables del
 texto. La RESOLUCION del mapa (que toca marcas/repos para `{hashtags}`) vive en
 `resolver_variables`, que es la unica funcion con dependencias de catalogo. El handler
-HTTP (`api/contenido.py`) solo orquesta: pide el mapa y expande.
+HTTP (`api/publicaciones.py`) solo orquesta: pide el mapa y expande.
 
 Robustez:
   - Una variable DESCONOCIDA se deja TAL CUAL (`{loquesea}` no se toca): nunca rompe.
@@ -82,7 +82,7 @@ def _hashtags_de_marca(marca: str) -> str:
 def resolver_variables(contenido: dict, *, hoy: date | None = None) -> dict[str, str]:
     """Mapa `variable -> valor` para un item del tablero (toca marcas/repos).
 
-    `contenido` es un dict del tablero (`repos.obtener_contenido`). Devuelve SIEMPRE
+    `contenido` es un dict del tablero (`repos.obtener_publicacion`). Devuelve SIEMPRE
     todas las variables soportadas (valores vacios si el contenido no aporta el dato),
     para que el frontend pueda mostrar la previa completa.
     """

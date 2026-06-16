@@ -38,7 +38,7 @@ vi.mock("@/editor/GaleriaPlantillas", () => ({
 
 const BASE = {
   marca: "unotv",
-  publicacionId: "pub-1",
+  piezaId: "pub-1",
   plantillas: [],
   portadaFotos: [{ objeto: "portada.jpg", foco: null, zoom: 0 }],
   onPortadaFotos: vi.fn(),

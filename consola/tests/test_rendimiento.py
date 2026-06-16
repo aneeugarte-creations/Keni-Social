@@ -34,7 +34,7 @@ def _agregador_limpio():
 
 
 def test_normalizar_colapsa_ids():
-    assert rendimiento.normalizar_ruta("/api/contenido/0a1b2c3d4e5f") == "/api/contenido/{id}"
+    assert rendimiento.normalizar_ruta("/api/publicaciones/0a1b2c3d4e5f") == "/api/publicaciones/{id}"
     assert rendimiento.normalizar_ruta("/api/piezas/12345/comentarios") == "/api/piezas/{id}/comentarios"
     assert (
         rendimiento.normalizar_ruta(

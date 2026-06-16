@@ -35,7 +35,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { ApiError, api, mensajeError, urlMedia } from "@/lib/api";
-import { nombreRed, tamanoRed } from "@/pages/publicaciones/meta";
+import { nombreRed, tamanoRed } from "@/pages/piezas/meta";
 import type { Arte, TipoArte } from "@/types";
 
 /** Convierte una relación tipo "16:9" o "1.91:1" en un número (ancho/alto). */
@@ -65,7 +65,7 @@ export interface EditorImagenProps {
    * Contexto de la pieza, opcional: si se pasa, se muestra un enlace discreto
    * "Abrir en Estudio" que lleva al Estudio de imagen preconfigurado (router state).
    */
-  publicacionId?: string;
+  piezaId?: string;
   red?: string;
   copy?: string;
 }
@@ -76,7 +76,7 @@ export function EditorImagen({
   onCambio,
   disabled,
   idPrefijo = "img",
-  publicacionId,
+  piezaId,
   red,
   copy,
 }: EditorImagenProps) {
@@ -122,7 +122,7 @@ export function EditorImagen({
   // --- Generar el fondo con IA (job de imagen en background, sondeado) --- //
   const { generacion: genIA, ejecutando: generandoIA, iniciar: iniciarIA } = useGeneracion();
   const generar = useMutation({
-    mutationFn: () => api.generarMedia({ prompt: prompt.trim(), publicacion_id: publicacionId }),
+    mutationFn: () => api.generarMedia({ prompt: prompt.trim(), pieza_id: piezaId }),
     onSuccess: (data) => {
       setAvisoGenerar("");
       iniciarIA(data.generacion);
@@ -206,7 +206,7 @@ export function EditorImagen({
           <ImagePlus className="h-4 w-4 text-muted-foreground" />
           Imagen
         </Label>
-        {publicacionId && (
+        {piezaId && (
           <Button
             asChild={!disabled}
             type="button"
@@ -228,7 +228,7 @@ export function EditorImagen({
                 Abrir en Estudio
               </span>
             ) : (
-              <Link to="/contenido/estudio" state={{ publicacionId, red, copy, imagen: imagen || undefined }}>
+              <Link to="/publicaciones/estudio" state={{ piezaId, red, copy, imagen: imagen || undefined }}>
                 <Wand2 className="mr-1 h-3.5 w-3.5" />
                 Abrir en Estudio
               </Link>
@@ -296,7 +296,7 @@ export function EditorImagen({
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span>
                 La relación de aspecto no es la {tamRed.ratio} estándar de {nombreRed(red)}: se
-                recortará. {publicacionId ? "Adáptala en el Estudio" : "Recórtala"} a {tamRed.px} px.
+                recortará. {piezaId ? "Adáptala en el Estudio" : "Recórtala"} a {tamRed.px} px.
               </span>
             </p>
           )}

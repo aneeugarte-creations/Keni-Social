@@ -26,22 +26,22 @@ def _sumar_gen(acc: dict, g: dict) -> None:
 def _metricas_por_run(gens: list[dict], ids_runs: set[str]) -> dict[str, dict]:
     """Suma las métricas de las generaciones REALES (no marcadores) por run.
 
-    Devuelve `contenido_id -> {items, tokens, coste_usd, duration_ms}` solo para los ids de
+    Devuelve `publicacion_id -> {items, tokens, coste_usd, duration_ms}` solo para los ids de
     `ids_runs`. La correlación generación→run usa DOS vías (la unión, dedup por generación):
-      - el `contenido_id` del propio registro (lo sella `dominio.generar.lanzar`), y
-      - los MARCADORES de etapa (`gen_id` → `contenido_id`): los registros previos a sellar
-        `contenido_id` en el lanzamiento solo están atados por su marcador; sin esta vía,
+      - el `publicacion_id` del propio registro (lo sella `dominio.generar.lanzar`), y
+      - los MARCADORES de etapa (`gen_id` → `publicacion_id`): los registros previos a sellar
+        `publicacion_id` en el lanzamiento solo están atados por su marcador; sin esta vía,
         sus runs salían a CERO en el feed.
     La normalización de métricas es la del dominio `actividad` (la misma del feed):
     tokens_in+tokens_out -> tokens, total_cost_usd -> coste_usd. Los marcadores de etapa
     (sin coste) no suman.
     """
-    # gen_id -> contenido_id según los marcadores de etapa (CD/verificación/ARTE).
+    # gen_id -> publicacion_id según los marcadores de etapa (CD/verificación/ARTE).
     cid_por_gen: dict[str, str] = {}
     for g in gens:
         if not _es_marcador_pipeline(g):
             continue
-        cid = g.get("contenido_id") or ""
+        cid = g.get("publicacion_id") or ""
         gid = g.get("gen_id") or ""
         if cid in ids_runs and gid:
             cid_por_gen.setdefault(gid, cid)
@@ -49,7 +49,7 @@ def _metricas_por_run(gens: list[dict], ids_runs: set[str]) -> dict[str, dict]:
     for g in gens:
         if _es_marcador_pipeline(g):
             continue
-        cid = (g.get("contenido_id") or "") or cid_por_gen.get(g.get("id") or "", "")
+        cid = (g.get("publicacion_id") or "") or cid_por_gen.get(g.get("id") or "", "")
         if cid not in ids_runs:
             continue
         _sumar_gen(out.setdefault(cid, dict(_METRICAS_CERO)), g)
@@ -105,7 +105,7 @@ def _runs_con_arte_ia(gens: list[dict]) -> set[str]:
     """
     out: set[str] = set()
     for g in gens:
-        cid = g.get("contenido_id") or ""
+        cid = g.get("publicacion_id") or ""
         if not cid:
             continue
         etiqueta = (g.get("etiqueta", "") or "")

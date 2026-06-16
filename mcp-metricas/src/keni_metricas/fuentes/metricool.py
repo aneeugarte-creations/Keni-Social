@@ -29,7 +29,7 @@ Endpoints usados (documentados arriba):
   un periodo; trae además un ``aggregate`` (SUM/AVG) que usamos como total del
   periodo. Params: ``network``, ``metric``, ``from``, ``to`` (ISO 8601), más la
   identidad (``userId``/``blogId``/``X-Mc-Auth``).
-- ``GET /v2/analytics/posts/{network}`` → publicaciones del periodo por red, para
+- ``GET /v2/analytics/posts/{network}`` → piezas del periodo por red, para
   las "mejores piezas". Params: ``from``, ``to`` (ISO 8601) + identidad.
 
 SUPUESTOS SIN CONFIRMAR (no hay token real para validar contra la API en vivo;

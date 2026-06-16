@@ -13,7 +13,7 @@ from __future__ import annotations
 # Fundación compartida re-exportada (preserva `db_parrilla.<nombre>` para los consumidores).
 from ._comun import (
     ESTADO_ROTA_PROPUESTO,
-    ESTADOS_PIEZA,
+    ESTADOS_PIEZA_PARRILLA,
     Any,
     _conectar,
     date,
@@ -73,7 +73,7 @@ from .propuestas import (
 __all__ = [
     # Fundación re-exportada.
     "Any",
-    "ESTADOS_PIEZA",
+    "ESTADOS_PIEZA_PARRILLA",
     "ESTADO_ROTA_PROPUESTO",
     "_conectar",
     "date",

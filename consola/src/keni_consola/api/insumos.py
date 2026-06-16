@@ -17,7 +17,7 @@ Endpoints:
   GET  /api/insumos/lote/{id}        -> {lote, items}
   PATCH /api/insumos/item/{id}       -> {item}
   DELETE /api/insumos/item/{id}      -> {ok: true}  (descarta un ítem NO usado)
-  POST /api/insumos/item/{id}/usar   -> {item, contenido_id}
+  POST /api/insumos/item/{id}/usar   -> {item, publicacion_id}
   POST /api/insumos/item/{id}/crear-evento -> {item, evento}
   DELETE /api/insumos/lote/{id}      -> {ok: true}
 """
@@ -146,7 +146,7 @@ def _descartar_gemela_pool(item: dict[str, Any]) -> None:
     `fuente_id`+`clave`) para que el auto-feed NO la convierta en pieza; si su historia quedó
     SOLO con esa fuente (`n_fuentes<=1`, sin corroboración externa), también la apaga. Una
     historia corroborada por otras fuentes sigue viva (existe sin el cajón). Solo toca gemelas
-    `nuevo` SIN `contenido_id` (una ya usada/recogida por el auto-feed conserva su rastro).
+    `nuevo` SIN `publicacion_id` (una ya usada/recogida por el auto-feed conserva su rastro).
 
     Best-effort por diseño: NUNCA lanza. Un fallo aquí no debe impedir el borrado/descarte del
     ítem que lo invoca (`descartar_item`, `borrar_lote`) — el dedup por título del pipeline es la
@@ -154,7 +154,7 @@ def _descartar_gemela_pool(item: dict[str, Any]) -> None:
     """
     try:
         gemela = _noticia_pool_de_item(item)
-        if gemela is None or gemela.get("estado") != "nuevo" or gemela.get("contenido_id"):
+        if gemela is None or gemela.get("estado") != "nuevo" or gemela.get("publicacion_id"):
             return
         repos.actualizar_noticia_item(gemela["id"], estado="descartado")
         cid = str(gemela.get("cluster_id") or "")
@@ -164,7 +164,7 @@ def _descartar_gemela_pool(item: dict[str, Any]) -> None:
         if (
             cluster is not None
             and cluster.get("estado") == "nuevo"
-            and not cluster.get("contenido_id")
+            and not cluster.get("publicacion_id")
             and int(cluster.get("n_fuentes") or 0) <= 1
         ):
             repos.actualizar_noticia_cluster(cid, estado="descartado")
@@ -189,7 +189,7 @@ def _reenlazar_gemela_pool(item_previo: dict[str, Any], campos: dict[str, Any]) 
     """
     try:
         gemela = _noticia_pool_de_item(item_previo)
-        if gemela is None or gemela.get("estado") != "nuevo" or gemela.get("contenido_id"):
+        if gemela is None or gemela.get("estado") != "nuevo" or gemela.get("publicacion_id"):
             return
         nueva_fila = ingesta.noticia_item_de_insumo({**item_previo, **campos})
         # Si el título normalizado no cambió de hash, el enlace sigue vivo: nada que hacer.
@@ -259,20 +259,20 @@ async def listar(request: Request) -> Response:
         # Badge HONESTO de cara al feed (mismo patrón que las historias del pool): un ítem
         # `usado` significa "pieza creada", NO "en el feed" — la pieza sale real solo cuando
         # tiene copy. Derivamos `pieza_estado` (en_cola/generando/en_feed) en batch para los
-        # usados NO-evento (en eventos `contenido_id` guarda el id del EVENTO de la rota, no
+        # usados NO-evento (en eventos `publicacion_id` guarda el id del EVENTO de la rota, no
         # una pieza). Best-effort: si falla la lectura, el campo no viaja y la UI cae al texto
         # de siempre.
         try:
             ids_pieza = [
-                str(i.get("contenido_id") or "")
+                str(i.get("publicacion_id") or "")
                 for i in items_serializados
-                if i.get("usado") and i.get("contenido_id")
+                if i.get("usado") and i.get("publicacion_id")
                 and cajon != "eventos_claro" and str(i.get("tipo") or "") != "evento"
             ]
             if ids_pieza:
-                resumen_pieza = repos.estado_pieza_por_contenido(ids_pieza)
+                resumen_pieza = repos.estado_pieza_por_publicacion(ids_pieza)
                 for i in items_serializados:
-                    cid = str(i.get("contenido_id") or "")
+                    cid = str(i.get("publicacion_id") or "")
                     if not (i.get("usado") and cid):
                         continue
                     if cajon == "eventos_claro" or str(i.get("tipo") or "") == "evento":
@@ -548,11 +548,11 @@ async def editar_item(request: Request) -> Response:
 
 
 async def usar_item(request: Request) -> Response:
-    """`POST /api/insumos/item/{item_id}/usar` -> {item, contenido_id}.
+    """`POST /api/insumos/item/{item_id}/usar` -> {item, publicacion_id}.
 
-    Lleva el ítem al tablero (`repos.crear_contenido`, origen="insumo",
+    Lleva el ítem al tablero (`repos.crear_publicacion`, origen="insumo",
     flujo="importante"), opcionalmente lanza copy en segundo plano y marca el ítem
-    como usado con el `contenido_id` resultante.
+    como usado con el `publicacion_id` resultante.
 
     Guardas: 400 si el ítem no tiene marca (la pieza nacería invisible y sin copy);
     409 si su historia gemela del pool ya tiene pieza (el auto-feed la recogió).
@@ -573,7 +573,7 @@ async def usar_item(request: Request) -> Response:
         )
     if item.get("usado"):
         # Ya fue llevado al tablero; devuelve el estado actual.
-        return JSONResponse({"item": _item_a_dict(item), "contenido_id": item.get("contenido_id", "")})
+        return JSONResponse({"item": _item_a_dict(item), "publicacion_id": item.get("publicacion_id", "")})
     # Sin marca NO se empuja: la pieza nacería sin marca (invisible en los feeds por marca)
     # y el copy ni arrancaría (la generación se gatea por marca) — el toast "Copy en marcha"
     # sería mentira. Que el equipo asigne marca (editar ítem) y reintente.
@@ -583,9 +583,9 @@ async def usar_item(request: Request) -> Response:
         )
     # Dedup contra el AUTO-FEED: si la historia gemela del pool (la fila de noticias creada
     # al parsear) ya tiene pieza (el auto-feed la recogió y la marcó usada con su
-    # `contenido_id`), empujar crearía una SEGUNDA pieza del mismo tema. 409 honesto.
+    # `publicacion_id`), empujar crearía una SEGUNDA pieza del mismo tema. 409 honesto.
     gemela = _noticia_pool_de_item(item)
-    if gemela is not None and (gemela.get("estado") == "usado" or gemela.get("contenido_id")):
+    if gemela is not None and (gemela.get("estado") == "usado" or gemela.get("publicacion_id")):
         return JSONResponse(
             {"error": "Ya está en el feed: el auto-feed la recogió."}, status_code=409
         )
@@ -595,7 +595,7 @@ async def usar_item(request: Request) -> Response:
     generar = datos.get("generar", True)
     autor = autor_de_peticion(request)
 
-    contenido = repos.crear_contenido(
+    contenido = repos.crear_publicacion(
         clase="contenido",
         flujo="importante",
         titulo=item["titulo"],
@@ -609,8 +609,8 @@ async def usar_item(request: Request) -> Response:
         notas=f"Cajón: {item.get('cajon', '')} | Línea: {item.get('linea', '')}",
     )
     for red in redes_iniciales:
-        repos.crear_contenido_plataforma(
-            contenido_id=contenido["id"], red=red, falta_copy=True, falta_imagen=True
+        repos.crear_pieza_fila(
+            publicacion_id=contenido["id"], red=red, falta_copy=True, falta_imagen=True
         )
 
     # Copy en segundo plano (best-effort), gateado por marca y por generar.
@@ -622,7 +622,7 @@ async def usar_item(request: Request) -> Response:
             genero = False
 
     # Marca el ítem como usado.
-    item_actualizado = repos.marcar_insumo_item_usado(item_id, contenido_id=contenido["id"])
+    item_actualizado = repos.marcar_insumo_item_usado(item_id, publicacion_id=contenido["id"])
     if item_actualizado is None:
         item_actualizado = item
 
@@ -632,21 +632,21 @@ async def usar_item(request: Request) -> Response:
     try:
         if gemela is not None:
             repos.actualizar_noticia_item(
-                gemela["id"], estado="usado", contenido_id=contenido["id"]
+                gemela["id"], estado="usado", publicacion_id=contenido["id"]
             )
             cid = str(gemela.get("cluster_id") or "")
             if cid:
                 cluster = repos.obtener_noticia_cluster(cid)
                 if cluster is not None and cluster.get("estado") == "nuevo":
                     repos.actualizar_noticia_cluster(
-                        cid, estado="usado", contenido_id=contenido["id"]
+                        cid, estado="usado", publicacion_id=contenido["id"]
                     )
     except Exception:  # noqa: BLE001 -- el marcado del pool es dedup, nunca rompe el empujón
         _log.warning("insumos: no se pudo marcar la gemela del pool usada (%s)", item_id, exc_info=True)
 
     return JSONResponse({
         "item": _item_a_dict(item_actualizado, hoy=hoy_utc().isoformat()),
-        "contenido_id": contenido["id"],
+        "publicacion_id": contenido["id"],
         "copy_en_proceso": genero,
     })
 
@@ -662,7 +662,7 @@ async def crear_evento_item(request: Request) -> Response:
     Crea un evento de la rota (`rota_eventos`) a partir de un ítem del cajón
     `eventos_claro` (Excel/CSV de programación de Claro Sports): mapea
     titulo→titulo, fecha→fecha, hora→hora, resumen→nota, y marca el ítem como
-    usado guardando el id del evento creado en `contenido_id` (reutilizamos el
+    usado guardando el id del evento creado en `publicacion_id` (reutilizamos el
     campo existente, sin añadir columnas). Así el recorrido Excel → cajón →
     evento queda visible de punta a punta en Fuentes.
 
@@ -684,7 +684,7 @@ async def crear_evento_item(request: Request) -> Response:
     if item.get("usado"):
         # Ya fue convertido en evento (o llevado al tablero); devuelve el estado actual.
         return JSONResponse(
-            {"item": _item_a_dict(item), "evento_id": item.get("contenido_id", "")}
+            {"item": _item_a_dict(item), "evento_id": item.get("publicacion_id", "")}
         )
     if not (item.get("titulo") or "").strip():
         return JSONResponse({"error": "El ítem necesita un título."}, status_code=400)
@@ -709,8 +709,8 @@ async def crear_evento_item(request: Request) -> Response:
         marca=(item.get("marca") or ""),
     )
 
-    # Marca el ítem como usado, guardando el id del evento en `contenido_id`.
-    item_actualizado = repos.marcar_insumo_item_usado(item_id, contenido_id=evento["id"])
+    # Marca el ítem como usado, guardando el id del evento en `publicacion_id`.
+    item_actualizado = repos.marcar_insumo_item_usado(item_id, publicacion_id=evento["id"])
     if item_actualizado is None:
         item_actualizado = item
 

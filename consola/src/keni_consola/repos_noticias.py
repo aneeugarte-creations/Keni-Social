@@ -142,11 +142,11 @@ def actualizar_noticia_item(
     item_id: str,
     *,
     estado: str | None = None,
-    contenido_id: str | None = None,
+    publicacion_id: str | None = None,
     cluster_id: str | None = None,
 ) -> dict[str, Any] | None:
     return db.actualizar_noticia_item(
-        item_id, estado=estado, contenido_id=contenido_id, cluster_id=cluster_id
+        item_id, estado=estado, publicacion_id=publicacion_id, cluster_id=cluster_id
     )
 
 
@@ -154,9 +154,9 @@ def feeds_vencidos(ahora: str, limite: int) -> list[dict[str, Any]]:
     return db.feeds_vencidos(ahora, limite)
 
 
-def categoria_promovida_de_contenido(contenido_id: str) -> str:
+def categoria_promovida_de_contenido(publicacion_id: str) -> str:
     """Categoría del plan de un contenido promovido ('' si no aplica). Delegado en `db.py`."""
-    return db.categoria_promovida_de_contenido(contenido_id)
+    return db.categoria_promovida_de_contenido(publicacion_id)
 
 
 def registrar_sondeo_feed(
@@ -238,22 +238,22 @@ def obtener_noticia_cluster(cluster_id: str) -> dict[str, Any] | None:
     return db.obtener_noticia_cluster(cluster_id)
 
 
-def cluster_por_contenido(contenido_id: str) -> dict[str, Any] | None:
-    return db.cluster_por_contenido(contenido_id)
+def cluster_por_contenido(publicacion_id: str) -> dict[str, Any] | None:
+    return db.cluster_por_contenido(publicacion_id)
 
 
-def clusters_por_contenidos(contenido_ids: list[str]) -> dict[str, dict[str, Any]]:
-    return db.clusters_por_contenidos(contenido_ids)
+def clusters_por_contenidos(publicacion_ids: list[str]) -> dict[str, dict[str, Any]]:
+    return db.clusters_por_contenidos(publicacion_ids)
 
 
 def actualizar_noticia_cluster(
     cluster_id: str,
     *,
     estado: str | None = None,
-    contenido_id: str | None = None,
+    publicacion_id: str | None = None,
 ) -> dict[str, Any] | None:
     return db.actualizar_noticia_cluster(
-        cluster_id, estado=estado, contenido_id=contenido_id
+        cluster_id, estado=estado, publicacion_id=publicacion_id
     )
 
 
@@ -332,8 +332,8 @@ def actualizar_scores_clusters(scores: dict[str, float]) -> int:
     return db.actualizar_scores_clusters(scores)
 
 
-def marcar_items_cluster_usados(cluster_id: str, contenido_id: str) -> None:
-    return db.marcar_items_cluster_usados(cluster_id, contenido_id)
+def marcar_items_cluster_usados(cluster_id: str, publicacion_id: str) -> None:
+    return db.marcar_items_cluster_usados(cluster_id, publicacion_id)
 
 
 def claves_vistas(fuente_id: str) -> set[str]:

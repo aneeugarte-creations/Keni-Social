@@ -31,7 +31,7 @@ function historia(overrides: Partial<Historia> = {}): Historia {
     primer_visto: "2026-06-05T09:00:00",
     ultimo_visto: "2026-06-05T10:00:00",
     estado: "nuevo",
-    contenido_id: "",
+    publicacion_id: "",
     enlaces: [],
     ...overrides,
   };

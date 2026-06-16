@@ -57,7 +57,7 @@ PROC_HASHTAGS = "hashtags"
 # sobre el `contenido` (tema), para que CD genere copy SOLO de los `no_verificado`.
 PROC_VERIFICACION_FUENTE = "verificacion-fuente"
 # Texto de prompts: post-procesado IDENTIDAD. Un prompt de la texto devuelve el
-# texto markdown tal cual (ya queda en `salida` del registro); NO crea piezas/publicaciones.
+# texto markdown tal cual (ya queda en `salida` del registro); NO crea piezas/piezas.
 PROC_PROMPT = "prompt"
 # Importacion de PARRILLA desde documento: parsea el JSON de claude, re-construye el contexto
 # de la semana desde la BD, valida con `dominio.parrilla_import` y guarda las operaciones +
@@ -81,7 +81,7 @@ PROC_IMPORT_CALENDARIO = "import-calendario"
 # "Crítica IA" de la cadena. El worker baja el arte de S3 a un dir temporal (`prefetch_s3` +
 # `dir_temporal`, igual que la importación de parrilla) para que claude lo LEA. El post-procesado
 # parsea el verificación JSON y, vía `repos`, aprueba el nivel IA (→ se programa sola) o lo rechaza
-# con un comentario sin resolver (→ frena y queda en el feed). Solo el `publicacion_id` viaja.
+# con un comentario sin resolver (→ frena y queda en el feed). Solo el `pieza_id` viaja.
 PROC_CRITICA_IA = "critica-ia"
 
 # ------------------------------------------------------------------------------------------- #
@@ -181,7 +181,7 @@ def construir_copy(
     autor: dict[str, str] | None = None,
     fuente_id: str | None = None,
     clave: str | None = None,
-    contenido_id: str = "",
+    publicacion_id: str = "",
     imagen_fuente: str = "",
     fotos_notas: list[dict[str, str]] | None = None,
     tipo_contenido: str = "",
@@ -194,7 +194,7 @@ def construir_copy(
 
     `fuente_id`/`clave` (RSS): si vienen, ademas se MARCA el item del feed como usado al
     completar con exito (el wrap que antes hacia `api/rss.generar`). Sin ellos, es copy puro.
-    `contenido_id` (lista viva): si viene, el borrador se NIDA bajo ese tema del tablero al
+    `publicacion_id` (lista viva): si viene, el borrador se NIDA bajo ese tema del tablero al
     reconstruir el post-procesado en el worker; sin el, borrador suelto (back-compat).
     `imagen_fuente`/`tipo_contenido` (RSS de marca propia): si vienen, cada borrador nace con
     la imagen original del articulo (`tipo_contenido='fuente'`) lista para usarse.
@@ -227,7 +227,7 @@ def construir_copy(
         "autor": _autor_spec(autor),
         "fuente_id": fuente_id or "",
         "clave": clave or "",
-        "contenido_id": contenido_id or "",
+        "publicacion_id": publicacion_id or "",
         "imagen_fuente": imagen_fuente or "",
         "fotos_notas": [dict(f) for f in (fotos_notas or []) if isinstance(f, dict)],
         "tipo_contenido": tipo_contenido or "",
@@ -356,14 +356,14 @@ def construir_import_calendario(
     }
 
 
-def construir_critica_ia(*, publicacion_id: str) -> dict[str, Any]:
+def construir_critica_ia(*, pieza_id: str) -> dict[str, Any]:
     """Spec del post-procesado de la CRÍTICA IA: parsea el verificación y vota el nivel IA.
 
-    `publicacion_id` es la pieza (`plataforma_id`) cuyo nivel "Crítica IA" se decide. El worker
+    `pieza_id` es la pieza (`pieza_id`) cuyo nivel "Crítica IA" se decide. El worker
     reconstruye el callback (que toca `repos`) vía `dominio.critica_ia`; no lleva más estado: la
     pieza, su cadena y su contenido se releen frescos en el worker al aplicar el verificación.
     """
-    return {"kind": PROC_CRITICA_IA, "publicacion_id": publicacion_id}
+    return {"kind": PROC_CRITICA_IA, "pieza_id": pieza_id}
 
 
 def construir(
@@ -545,7 +545,7 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
         from . import critica_ia as dom_critica
 
         return dom_critica.construir_procesar_critica_ia(
-            publicacion_id=p["publicacion_id"]
+            pieza_id=p["pieza_id"]
         )
 
     if kind == PROC_VERIFICACION_FUENTE:
@@ -566,7 +566,7 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
             p["prompt_id"], p["marca"], redes_ids=list(p.get("redes_ids") or []),
             titulo_dado=p.get("titulo_dado", ""), texto_base=p.get("texto_base", ""),
             con_imagenes=bool(p.get("con_imagenes")), autor=autor,
-            contenido_id=p.get("contenido_id", "") or "",
+            publicacion_id=p.get("publicacion_id", "") or "",
             imagen_fuente=p.get("imagen_fuente", "") or "",
             fotos_notas=[f for f in (p.get("fotos_notas") or []) if isinstance(f, dict)],
             tipo_contenido=p.get("tipo_contenido", "") or "",
@@ -588,8 +588,8 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
 
             base = procesar_rss
 
-        contenido_id = p.get("contenido_id", "") or ""
-        if not contenido_id:
+        publicacion_id = p.get("publicacion_id", "") or ""
+        if not publicacion_id:
             return base
         # COPY NIDADO BAJO UN TEMA (pipeline/autogen): acciones POST-EXITO sobre el tema.
         #   - dedup AL EXITO (no al lanzar): limpiar `copy_pendiente` / etiquetar `autogen`
@@ -608,18 +608,18 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
 
             if limpiar_pendiente:
                 try:
-                    repos.actualizar_contenido(contenido_id, {"copy_pendiente": ""})
+                    repos.actualizar_publicacion(publicacion_id, {"copy_pendiente": ""})
                 except Exception:  # noqa: BLE001 -- dedup best-effort; el copy ya esta hecho
                     pass
             if etiqueta_exito:
                 try:
-                    _asignar_etiqueta_por_nombre(contenido_id, etiqueta_exito)
+                    _asignar_etiqueta_por_nombre(publicacion_id, etiqueta_exito)
                 except Exception:  # noqa: BLE001 -- dedup best-effort; el copy ya esta hecho
                     pass
             try:
                 from ..pipeline_contenido import encadenar_ilustrar_tras_redactar
 
-                encadenar_ilustrar_tras_redactar(contenido_id)
+                encadenar_ilustrar_tras_redactar(publicacion_id)
             except Exception:  # noqa: BLE001 -- el encadenado nunca rompe el post-procesado
                 pass
             return resultado
@@ -629,7 +629,7 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
     raise ValueError(f"kind de post-procesado desconocido: {kind!r}")
 
 
-def _asignar_etiqueta_por_nombre(contenido_id: str, nombre: str) -> None:
+def _asignar_etiqueta_por_nombre(publicacion_id: str, nombre: str) -> None:
     """Asigna al contenido la etiqueta llamada `nombre` (creandola si falta). Best-effort.
 
     Pequeno helper del dedup-al-exito del copy autogen (etiqueta `autogen`): mismo criterio
@@ -647,4 +647,4 @@ def _asignar_etiqueta_por_nombre(contenido_id: str, nombre: str) -> None:
     if not et_id:
         et_id = repos.crear_etiqueta(nombre=nombre).get("id", "")
     if et_id:
-        repos.asignar_etiqueta(contenido_id, et_id)
+        repos.asignar_etiqueta(publicacion_id, et_id)

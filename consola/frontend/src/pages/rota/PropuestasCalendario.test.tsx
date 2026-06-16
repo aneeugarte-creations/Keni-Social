@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import * as apiMod from "@/lib/api";
-import type { Contenido } from "@/types";
+import type { Publicacion } from "@/types";
 
 import { PropuestasCalendario } from "./PropuestasCalendario";
 
@@ -11,7 +11,7 @@ vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }),
 }));
 
-function tarea(over: Partial<Contenido> = {}): Contenido {
+function tarea(over: Partial<Publicacion> = {}): Publicacion {
   return {
     id: "t1",
     clase: "tarea",
@@ -41,7 +41,7 @@ function tarea(over: Partial<Contenido> = {}): Contenido {
   };
 }
 
-function montar(propuestas: Contenido[]) {
+function montar(propuestas: Publicacion[]) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
@@ -67,9 +67,9 @@ describe("PropuestasCalendario — bandeja de propuestas del calendario", () => 
     expect(screen.getByText("Otra gala")).toBeTruthy();
   });
 
-  it("«Aceptar» promueve la propuesta (llama a aceptarContenido con su id)", async () => {
+  it("«Aceptar» promueve la propuesta (llama a aceptarPublicacion con su id)", async () => {
     const aceptar = vi
-      .spyOn(apiMod.api, "aceptarContenido")
+      .spyOn(apiMod.api, "aceptarPublicacion")
       .mockResolvedValue({ aceptada: true, evento: { id: "ev1" } } as never);
     montar([tarea({ id: "t-aceptar" })]);
     fireEvent.click(screen.getByRole("button", { name: /Propuestas de calendario/ }));
@@ -78,9 +78,9 @@ describe("PropuestasCalendario — bandeja de propuestas del calendario", () => 
     expect(aceptar).toHaveBeenCalledWith("t-aceptar");
   });
 
-  it("«Descartar» borra la propuesta (llama a eliminarContenido con su id)", async () => {
+  it("«Descartar» borra la propuesta (llama a eliminarPublicacion con su id)", async () => {
     const eliminar = vi
-      .spyOn(apiMod.api, "eliminarContenido")
+      .spyOn(apiMod.api, "eliminarPublicacion")
       .mockResolvedValue({ mensaje: "ok" } as never);
     montar([tarea({ id: "t-descartar" })]);
     fireEvent.click(screen.getByRole("button", { name: /Propuestas de calendario/ }));

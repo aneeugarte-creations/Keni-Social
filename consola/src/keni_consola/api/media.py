@@ -1,6 +1,6 @@
 """API Media: subir imagenes, servirlas y generarlas con IA (si hay proveedor).
 
-El SPA adjunta imagenes a las publicaciones. Esta API:
+El SPA adjunta imagenes a las piezas. Esta API:
   - `POST /api/media`        guarda una imagen subida (multipart `archivo`).
   - `GET  /api/media/{n}`    sirve una imagen del dir de media (anti-traversal).
   - `POST /api/media/generar` genera una imagen con IA si HAY proveedor configurado;
@@ -107,7 +107,7 @@ def lanzar_generacion_imagen(
     prompt: str,
     modelo: str = "",
     marca: str = "",
-    contenido_id: str = "",
+    publicacion_id: str = "",
     titulo: str = "",
     autor: dict | None = None,
 ) -> dict:
@@ -118,7 +118,7 @@ def lanzar_generacion_imagen(
     (`media.generar_imagen_detallado`, con `modelo` opcional) + `lanzar_job_imagen`. Captura el
     COSTE real del proveedor y lo sella en `metricas` para que el cierre lo vuelque al ledger
     `gasto_ia` (tipo `imagen`, con el modelo) y poder estimar el coste medio por imagen. Si la
-    generación está correlada a una pieza (`contenido_id`), deja además la etapa ARTE en su
+    generación está correlada a una pieza (`publicacion_id`), deja además la etapa ARTE en su
     pipeline. El frontend sondea `GET /api/generaciones/{id}` y recoge `resultado={id,url,modelo,coste_usd}`.
     """
     autor = autor or {}
@@ -127,9 +127,9 @@ def lanzar_generacion_imagen(
         salida = media.generar_imagen_detallado(prompt, modelo=modelo)
         nombre = media.guardar_bytes(salida.datos, ext="png")
         # Para una pieza: deja la traza de la etapa ARTE en SU pipeline (prompt + salida reales).
-        if contenido_id:
+        if publicacion_id:
             autogen_ilustrar.registrar_arte(
-                contenido_id=contenido_id, marca=marca, titulo=titulo,
+                publicacion_id=publicacion_id, marca=marca, titulo=titulo,
                 prompt=prompt, imagen=nombre,
             )
         # Sella el gasto en el registro: el cierre lo vuelca al ledger por la vía única de
@@ -145,12 +145,12 @@ def lanzar_generacion_imagen(
 
     gen = generaciones.crear(
         {
-            # Con pieza, la generación pertenece a su pipeline (correlada por `contenido_id`); el
+            # Con pieza, la generación pertenece a su pipeline (correlada por `publicacion_id`); el
             # `prompt` viaja para que el detalle del pipeline lo muestre (no "prompt no disponible").
             "tipo": "imagen",
             "marca": marca,
-            "contenido_id": contenido_id,
-            "prompt": prompt if contenido_id else "",
+            "publicacion_id": publicacion_id,
+            "prompt": prompt if publicacion_id else "",
             "etiqueta": (f"Arte · {titulo[:40]}" if titulo else f"Imagen · {prompt[:40]}"),
             "autor_id": autor.get("id", ""),
             "autor_nombre": autor.get("usuario", ""),
@@ -170,9 +170,9 @@ def lanzar_generacion_imagen(
 async def generar(request: Request) -> Response:
     """Genera una imagen con IA EN SEGUNDO PLANO -> `{generacion}`.
 
-    Cuerpo JSON: `{prompt, contenido_id?|publicacion_id?}`. Si la imagen es PARA UNA PIEZA
-    (`contenido_id`, o `publicacion_id` que se resuelve a su contenido), la generación se
-    CORRELACIONA a esa pieza (`contenido_id` + marca) y al completarse registra la etapa ARTE
+    Cuerpo JSON: `{prompt, publicacion_id?|pieza_id?}`. Si la imagen es PARA UNA PIEZA
+    (`publicacion_id`, o `pieza_id` que se resuelve a su contenido), la generación se
+    CORRELACIONA a esa pieza (`publicacion_id` + marca) y al completarse registra la etapa ARTE
     de su pipeline (igual que el auto-arte): así sale DENTRO del pipeline de la pieza, no como
     una generación suelta. Sin pieza, es una generación de imagen suelta (caso sin pipeline).
 
@@ -193,25 +193,25 @@ async def generar(request: Request) -> Response:
         )
     prompt = prompt.strip()
 
-    # Pieza a la que pertenece (opcional): `contenido_id` directo o vía `publicacion_id`. De ella
+    # Pieza a la que pertenece (opcional): `publicacion_id` directo o vía `pieza_id`. De ella
     # sacamos marca y título para correlacionar la generación con el pipeline de la pieza.
-    contenido_id = str(datos.get("contenido_id") or "").strip()
     publicacion_id = str(datos.get("publicacion_id") or "").strip()
+    pieza_id = str(datos.get("pieza_id") or "").strip()
     marca, titulo_pieza = "", ""
-    if not contenido_id and publicacion_id:
-        pub = repos.obtener_publicacion(publicacion_id)
+    if not publicacion_id and pieza_id:
+        pub = repos.obtener_pieza(pieza_id)
         if pub:
-            contenido_id = str(pub.get("contenido_id") or "")
+            publicacion_id = str(pub.get("publicacion_id") or "")
             marca = str(pub.get("marca") or "")
-    if contenido_id:
-        cont = repos.obtener_contenido(contenido_id)
+    if publicacion_id:
+        cont = repos.obtener_publicacion(publicacion_id)
         if cont:
             marca = marca or str(cont.get("marca") or "")
             titulo_pieza = str(cont.get("titulo") or "")
 
     # Atribucion por usuario (#130 Fase 1): la imagen la genera el usuario de la peticion.
     gen = lanzar_generacion_imagen(
-        prompt=prompt, marca=marca, contenido_id=contenido_id,
+        prompt=prompt, marca=marca, publicacion_id=publicacion_id,
         titulo=titulo_pieza, autor=autor_de_peticion(request) or {},
     )
     return JSONResponse({"generacion": gen})

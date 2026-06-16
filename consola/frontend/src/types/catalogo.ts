@@ -54,7 +54,7 @@ export interface RespuestaCatalogo {
 }
 
 // ── Importador de calendario Excel/CSV (H1) ─────────────────────────────────
-// `POST /api/contenido/importar` (multipart). Con `previsualizar=1` devuelve las
+// `POST /api/publicaciones/importar` (multipart). Con `previsualizar=1` devuelve las
 // filas parseadas; sin él, importa y devuelve el resumen. Dicts ad-hoc (a mano).
 export interface FilaCalendarioImport {
   titulo: string;
@@ -151,7 +151,7 @@ export interface InsumoItem {
   idioma: string;
   /** `true` si ya se llevó al tablero. */
   usado: boolean;
-  contenido_id: string;
+  publicacion_id: string;
   orden: number;
   creado: string;
   /** Estado de frescura según la TTL de la línea. "caduco" = ítem vencido. */

@@ -1,7 +1,7 @@
-"""API Franjas: colas de publicacion (franjas horarias) CRUD + calculo de hueco.
+"""API Franjas: colas de pieza (franjas horarias) CRUD + calculo de hueco.
 
 Una FRANJA es una plantilla de hueco recurrente: (marca?, red?, dia_semana, hora).
-Las publicaciones se ENCOLAN buscando el proximo hueco futuro de las franjas que
+Las piezas se ENCOLAN buscando el proximo hueco futuro de las franjas que
 apliquen a su (marca, red). El calculo del hueco es una funcion PURA y DETERMINISTA
 (`proximo_hueco`) que recibe "ahora" inyectado para poder testearla sin reloj real.
 
@@ -27,7 +27,7 @@ from .._http_json import leer_json
 
 # La logica de scheduling (PURA y testeable) vive en el dominio `dominio.franjas`. Se
 # RE-EXPORTA aqui para no romper a quien la importe como `api.franjas.X` (en particular
-# `api/publicaciones.py` y `api/sugerencias_hora.py`, que hacen
+# `api/piezas.py` y `api/sugerencias_hora.py`, que hacen
 # `from . import franjas as api_franjas; api_franjas.proximo_hueco(...)`).
 from ..dominio.franjas import (  # noqa: F401  (re-export para compatibilidad)
     franjas_aplicables,
@@ -36,7 +36,7 @@ from ..dominio.franjas import (  # noqa: F401  (re-export para compatibilidad)
 from ..dominio.franjas import hora_valida
 
 # Marcas validas: TODAS las del catalogo unico (por su id canonico). Mismo criterio
-# que publicaciones.
+# que piezas.
 _MARCAS: tuple[tuple[str, str], ...] = tuple(marcas.opciones())
 _MARCAS_IDS = {m[0] for m in _MARCAS}
 

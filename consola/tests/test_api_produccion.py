@@ -29,9 +29,9 @@ def _cli() -> TestClient:
 def _crear(cli: TestClient, **campos) -> dict:
     base = {"marca": "unotv", "red": "x", "titulo": "T", "contenido": "C"}
     base.update(campos)
-    r = cli.post("/api/publicaciones", json=base, headers=_ORIGIN)
+    r = cli.post("/api/piezas", json=base, headers=_ORIGIN)
     assert r.status_code == 200, r.text
-    return r.json()["publicacion"]
+    return r.json()["pieza"]
 
 
 def test_produccion_dia_contrato_y_admision(entorno):
@@ -39,8 +39,8 @@ def test_produccion_dia_contrato_y_admision(entorno):
     cli = _cli()
     _crear(cli, titulo="Borrador con copy")  # copy sin avanzar -> en_borrador
     prog = _crear(cli, titulo="Programada")
-    repos.actualizar_publicacion(prog["id"], {"fecha_programada": "2030-01-01T10:00"})
-    repos.transicionar_estado_publicacion(prog["id"], "borrador", "programado", {})
+    repos.actualizar_pieza(prog["id"], {"fecha_programada": "2030-01-01T10:00"})
+    repos.transicionar_estado_pieza(prog["id"], "borrador", "programado", {})
 
     r = cli.get("/api/produccion/dia?marca=unotv")
     assert r.status_code == 200, r.text
@@ -75,15 +75,15 @@ def test_produccion_dia_lineas_del_plan(entorno, monkeypatch):
     cli = _cli()
     # Dos generados de mx (cada uno CON post real es_publicacion=1; un tema sin post no
     # cuenta en el plan); uno llega a PUBLICADO.
-    n1 = repos.crear_contenido(clase="contenido", titulo="Nacional 1", marca="unotv", categoria="mx")
-    repos.crear_contenido_plataforma(
-        contenido_id=n1["id"], red="x", copy="C", es_publicacion=True
+    n1 = repos.crear_publicacion(clase="contenido", titulo="Nacional 1", marca="unotv", categoria="mx")
+    repos.crear_pieza_fila(
+        publicacion_id=n1["id"], red="x", copy="C", es_publicacion=True
     )
-    publicado = repos.crear_contenido(
+    publicado = repos.crear_publicacion(
         clase="contenido", titulo="Nacional 2", marca="unotv", categoria="mx"
     )
-    repos.crear_contenido_plataforma(
-        contenido_id=publicado["id"], red="x", copy="C", estado="publicado", es_publicacion=True
+    repos.crear_pieza_fila(
+        publicacion_id=publicado["id"], red="x", copy="C", estado="publicado", es_publicacion=True
     )
     # Una manual sin categoría: fuera del plan (no cuenta en ninguna línea).
     _crear(cli, titulo="Manual sin línea")
@@ -106,26 +106,26 @@ def test_evergreen_cuenta_en_su_linea_desde_cualquier_camino(entorno, monkeypatc
     monkeypatch.setenv("KENI_PLAN_DIA::unotv", "evergreen:1,mx:4")
     # Cada tema lleva un post real (es_publicacion=1): el plan solo cuenta temas con post.
     def _con_post(contenido):
-        repos.crear_contenido_plataforma(
-            contenido_id=contenido["id"], red="x", copy="C", marca="unotv", es_publicacion=True
+        repos.crear_pieza_fila(
+            publicacion_id=contenido["id"], red="x", copy="C", marca="unotv", es_publicacion=True
         )
         return contenido
 
     # 1) Nace evergreen SIN categoría explícita (el camino del banco evergreen).
-    nacida = _con_post(repos.crear_contenido(
+    nacida = _con_post(repos.crear_publicacion(
         clase="contenido", titulo="RFC: para qué sirve", marca="unotv",
         flujo="evergreen", origen="evergreen",
     ))
     assert nacida["categoria"] == "evergreen"
     # 2) Una pieza normal CONVERTIDA a evergreen adopta la línea…
-    convertida = _con_post(repos.crear_contenido(clase="contenido", titulo="Normal", marca="unotv"))
-    tras = repos.actualizar_contenido(convertida["id"], {"flujo": "evergreen"})
+    convertida = _con_post(repos.crear_publicacion(clase="contenido", titulo="Normal", marca="unotv"))
+    tras = repos.actualizar_publicacion(convertida["id"], {"flujo": "evergreen"})
     assert tras["categoria"] == "evergreen"
     # …pero una con línea propia (mx) la CONSERVA al reconvertirse.
-    mx = _con_post(repos.crear_contenido(
+    mx = _con_post(repos.crear_publicacion(
         clase="contenido", titulo="Nacional", marca="unotv", categoria="mx"
     ))
-    tras_mx = repos.actualizar_contenido(mx["id"], {"flujo": "evergreen"})
+    tras_mx = repos.actualizar_publicacion(mx["id"], {"flujo": "evergreen"})
     assert tras_mx["categoria"] == "mx"
 
     data = _cli().get("/api/produccion/dia?marca=unotv").json()

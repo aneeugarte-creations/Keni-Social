@@ -4,7 +4,7 @@ Tras la consolidacion (#9 → aprobacion unica), la aprobacion multinivel es el 
 una cadena de niveles ordenados sobre una pieza. Este modulo prueba la logica PURA (sin DB
 ni HTTP): el resumen del estado global, que nivel toca decidir, la decision de un nivel
 (orden + "otro par de ojos"), la cadena SIMPLE (defecto longitud 1) y el puente cadena ->
-estado editorial de la publicacion (lo que lee el programador).
+estado editorial de la pieza (lo que lee el programador).
 
 Son funciones puras: no hay Postgres, asi que NO se saltan (corren siempre, tambien en CI).
 """

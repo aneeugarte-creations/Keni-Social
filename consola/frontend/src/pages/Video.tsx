@@ -91,7 +91,7 @@ export default function Video() {
   // Identidad backend de la composición.
   const [composicionId, setComposicionId] = React.useState<string | null>(null);
   // Pieza ligada (si la composición nació desde una pieza de video). Se pasa a `crearComposicion`.
-  const [contenidoId, setContenidoId] = React.useState<string | null>(null);
+  const [publicacionId, setPublicacionId] = React.useState<string | null>(null);
   const [segmentos, setSegmentos] = React.useState<SegmentoSub[]>([]);
 
   // Metadatos del borrador: título (nombre humano) y estado (borrador/listo, organización ≠ publicar).
@@ -115,7 +115,7 @@ export default function Video() {
   // Crea la composición en el backend en cuanto hay una edición significativa (NO espera al clip
   // base): así el borrador no se pierde si el usuario se va antes de subir el clip. `marca` es
   // obligatoria en la API: sin marca activa no se puede crear. Si la composición nació desde una
-  // pieza de video, se ENVÍA su `contenido_id` para ligarla. Persiste título (derivando uno por
+  // pieza de video, se ENVÍA su `publicacion_id` para ligarla. Persiste título (derivando uno por
   // defecto si está vacío) y estado.
   const crear = useMutation({
     mutationFn: (d: ComposicionVideo) => {
@@ -125,7 +125,7 @@ export default function Video() {
         documento: d,
         titulo: tit,
         estado,
-        ...(contenidoId ? { contenido_id: contenidoId } : {}),
+        ...(publicacionId ? { publicacion_id: publicacionId } : {}),
       });
     },
     onSuccess: (r, d) => {
@@ -185,13 +185,13 @@ export default function Video() {
       }
     }
 
-    async function abrirPorContenido(cid: string) {
+    async function abrirPorPublicacion(cid: string) {
       if (!marca) return; // sin marca no se puede crear; espera a que cargue la marca activa.
       cargando.current = true;
       try {
         const { composiciones } = await api.video.listarComposiciones({
           marca,
-          contenido_id: cid,
+          publicacion_id: cid,
         });
         if (composiciones.length > 0) {
           // Reabre la composición ya existente de esta pieza (la más reciente).
@@ -207,11 +207,11 @@ export default function Video() {
           const { id } = await api.video.crearComposicion({
             marca,
             documento: nueva,
-            contenido_id: cid,
+            publicacion_id: cid,
             titulo: tit,
             estado: "borrador",
           });
-          setContenidoId(cid);
+          setPublicacionId(cid);
           hidratar(nueva, id, { titulo: tit, estado: "borrador" });
         }
       } catch (e) {
@@ -224,9 +224,9 @@ export default function Video() {
 
     if (composicionParam && composicionParam !== composicionId) {
       void cargarComposicion(composicionParam);
-    } else if (contenidoParam && contenidoParam !== contenidoId) {
-      setContenidoId(contenidoParam);
-      void abrirPorContenido(contenidoParam);
+    } else if (contenidoParam && contenidoParam !== publicacionId) {
+      setPublicacionId(contenidoParam);
+      void abrirPorPublicacion(contenidoParam);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [composicionParam, contenidoParam, marca]);
@@ -308,7 +308,7 @@ export default function Video() {
   // Empieza una composición en BLANCO (descarta la pieza ligada y el estado actual).
   const nuevaComposicion = React.useCallback(() => {
     setComposicionId(null);
-    setContenidoId(null);
+    setPublicacionId(null);
     setBaseKey("");
     setBaseUrl("");
     setPipKey("");

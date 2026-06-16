@@ -61,7 +61,7 @@ interface Ctx {
 
 // Rectángulo de contenido = lienzo menos safe areas. Si las safe se solapan (rect inválido), cae al
 // lienzo completo para no dividir por cero ni invertir el mapa.
-function rectContenido(
+function rectPublicacion(
   w: number,
   h: number,
   st: number,
@@ -227,7 +227,7 @@ export function adaptarDocumento(doc: Documento, formatoDestino: Formato): Docum
   const hO = doc.formato.h;
   const wD = formatoDestino.w;
   const hD = formatoDestino.h;
-  const Co = rectContenido(
+  const Co = rectPublicacion(
     wO,
     hO,
     doc.formato.safe_top ?? 0,
@@ -235,7 +235,7 @@ export function adaptarDocumento(doc: Documento, formatoDestino: Formato): Docum
     doc.formato.safe_left ?? 0,
     doc.formato.safe_right ?? 0,
   );
-  const Cd = rectContenido(
+  const Cd = rectPublicacion(
     wD,
     hD,
     formatoDestino.safe_top ?? 0,

@@ -106,9 +106,9 @@ export function PanelLanzar({
     setAdjuntos(new Set(ids));
   }, [editorialesQuery.data]);
 
-  // Redes disponibles (catálogo de publicaciones); preselección = todas, solo en piezas.
+  // Redes disponibles (catálogo de piezas); preselección = todas, solo en piezas.
   const opcionesQuery = useQuery({
-    queryKey: ["publicaciones", "opciones"],
+    queryKey: ["piezas", "opciones"],
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),
     enabled: esPiezas,
   });
@@ -244,7 +244,7 @@ export function PanelLanzar({
         <Select value={tipoTarget} onValueChange={(v) => setTipoTarget(v as TipoTarget)}>
           <SelectTrigger><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="contenido">Contenido (pegar texto)</SelectItem>
+            <SelectItem value="contenido">Publicacion (pegar texto)</SelectItem>
             <SelectItem value="url">URL</SelectItem>
             <SelectItem value="archivo">Archivo</SelectItem>
             <SelectItem value="ninguno">Nada (solo el prompt)</SelectItem>

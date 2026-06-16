@@ -136,7 +136,7 @@ def test_contar_vacio_devuelve_etapas_en_cero():
 
 
 def _pieza(**kw):
-    """Forma pública mínima de una publicacion (lo que mira `etapa_de_pieza`)."""
+    """Forma pública mínima de una pieza (lo que mira `etapa_de_pieza`)."""
     base = {"estado": "borrador", "falta_copy": True, "falta_imagen": True}
     base.update(kw)
     return base

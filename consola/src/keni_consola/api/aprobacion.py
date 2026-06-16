@@ -1,4 +1,4 @@
-"""API Aprobacion de PUBLICACIONES (#9): cola de revision, decision y programacion.
+"""API Aprobacion de PIEZAS (#9): cola de revision, decision y programacion.
 
   - GET  /api/aprobacion/cola                  -> piezas en revision (sin cambios; lectura).
   - POST /api/aprobacion/{id}/enviar-a-revision -> crea una cadena SIMPLE (1 nivel) y deja
@@ -11,7 +11,7 @@
         es programacion: se conserva intacta porque el programador lee `programado`).
 
 La logica PURA (orden, "otro par de ojos", estado global) vive en `dominio.colaboracion`;
-la traduccion estado-cadena -> estado-publicacion en `colaboracion.estado_publicacion_para`.
+la traduccion estado-cadena -> estado-pieza en `colaboracion.estado_publicacion_para`.
 
 GATING (frontera del producto): programar NO publica en ninguna plataforma. Deja la pieza
 en `programado` con su `fecha_programada`; el programador del servidor (`programador.py`) la
@@ -31,7 +31,7 @@ from starlette.routing import Route
 from .. import config, db, permisos, repos
 from .._http_json import leer_json
 from ..dominio import colaboracion
-from ..dominio.publicaciones import publicacion_a_dict
+from ..dominio.piezas import pieza_a_dict
 from ..estados import (
     DECISION_APROBADO,
     DECISION_PENDIENTE,
@@ -57,17 +57,17 @@ def _rol_de_peticion(request: Request) -> str | None:
 
 
 def _reflejar_estado_pieza(
-    publicacion_id: str, nivel_decidido: dict[str, Any]
+    pieza_id: str, nivel_decidido: dict[str, Any]
 ) -> dict[str, Any] | None:
-    """Aplica el estado GLOBAL de la cadena al `estado` editorial de la publicacion.
+    """Aplica el estado GLOBAL de la cadena al `estado` editorial de la pieza.
 
     Lee la cadena de la pieza, la resume con `dominio.colaboracion` y traduce ese estado
     global al estado editorial que el resto del flujo (y el programador) entiende. Ademas,
-    propaga al registro publico de la publicacion los campos de revision legados
+    propaga al registro publico de la pieza los campos de revision legados
     (`revisor_*`/`revisado_en`) tomados de la ULTIMA decision, para que la cola/UI sigan
-    mostrando quien revisó y cuándo. Devuelve la publicacion actualizada.
+    mostrando quien revisó y cuándo. Devuelve la pieza actualizada.
     """
-    cadena = repos.listar_aprobaciones(publicacion_id)
+    cadena = repos.listar_aprobaciones(pieza_id)
     estado_global = colaboracion.estado_cadena(cadena)
     estado_pieza = colaboracion.estado_publicacion_para(estado_global)
     campos: dict[str, Any] = {
@@ -77,26 +77,26 @@ def _reflejar_estado_pieza(
     }
     if estado_pieza is not None:  # None == "sin_cadena": no se toca el estado editorial.
         campos["estado"] = estado_pieza
-    return repos.actualizar_publicacion(publicacion_id, campos)
+    return repos.actualizar_pieza(pieza_id, campos)
 
 
 async def _decidir(request: Request, decision: str) -> Response:
-    """Forwardea aprobar/rechazar al nivel ACTUAL de la cadena de la publicacion.
+    """Forwardea aprobar/rechazar al nivel ACTUAL de la cadena de la pieza.
 
     Centraliza el patron: 404 si la pieza no existe; 409 si no hay nivel pendiente que
     decidir (no se mando a revision o la cadena esta parada); delega la regla de "otro par
     de ojos" y de orden en `dominio.colaboracion.decidir`; refleja el estado resultante en
     la pieza.
     """
-    publicacion_id = request.path_params["publicacion_id"]
-    pub = repos.obtener_publicacion(publicacion_id)
+    pieza_id = request.path_params["pieza_id"]
+    pub = repos.obtener_pieza(pieza_id)
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
 
     # Pre-flight (solo para un mensaje claro): si no hay nivel pendiente, la pieza no está en
     # revisión. La validación REAL (orden, "otro par de ojos", estado) se re-hace bajo bloqueo
     # dentro de la transacción para no decidir sobre un snapshot obsoleto.
-    cadena = repos.listar_aprobaciones(publicacion_id)
+    cadena = repos.listar_aprobaciones(pieza_id)
     nivel = colaboracion.nivel_actual(cadena)
     if nivel is None:
         return JSONResponse(
@@ -130,23 +130,23 @@ async def _decidir(request: Request, decision: str) -> Response:
     # transacción (db.decidir_nivel_aprobacion_tx). Un `error` = 409 (estado cambió / regla);
     # un `None` sin error sólo ocurriría si la fila desapareció (carrera de borrado) -> 404.
     nivel_decidido, error = db.decidir_nivel_aprobacion_tx(
-        publicacion_id, nivel["id"], _validar
+        pieza_id, nivel["id"], _validar
     )
     if error is not None:
         return JSONResponse({"error": error}, status_code=409)
     if nivel_decidido is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
 
-    actualizada = _reflejar_estado_pieza(publicacion_id, nivel_decidido)
+    actualizada = _reflejar_estado_pieza(pieza_id, nivel_decidido)
     if actualizada is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
     # Si esta decision cerro la parte HUMANA y queda el nivel IA pendiente, encola al critico
     # (best-effort). La pieza queda `en_revision` hasta que el critico vote; no se programa aun.
-    _encolar_critica_si_corresponde(publicacion_id)
-    return _responder_aprobada(publicacion_id, actualizada)
+    _encolar_critica_si_corresponde(pieza_id)
+    return _responder_aprobada(pieza_id, actualizada)
 
 
-def _responder_aprobada(publicacion_id: str, actualizada: dict[str, Any]) -> Response:
+def _responder_aprobada(pieza_id: str, actualizada: dict[str, Any]) -> Response:
     """Auto-programa si la cadena juntó sus 2 likes y devuelve la pieza (estado final) como JSON.
 
     2 likes => programado: si la cadena quedó aprobada, encola SOLA al próximo hueco (mismos
@@ -155,7 +155,7 @@ def _responder_aprobada(publicacion_id: str, actualizada: dict[str, Any]) -> Res
     reposo `aprobado`; se mira el estado de la CADENA, no el `estado` de la pieza (que sigue
     `en_revision` hasta que la auto-programación encuentre hueco).
     """
-    cadena = repos.listar_aprobaciones(publicacion_id)
+    cadena = repos.listar_aprobaciones(pieza_id)
     if colaboracion.estado_cadena(cadena) == DECISION_APROBADO:
         # Evento público `pieza.aprobada`: el momento REAL de la aprobación es juntar los 2 OK
         # (ya no hay estado de reposo `aprobado` que dispare el evento). Se emite ANTES de la
@@ -164,12 +164,12 @@ def _responder_aprobada(publicacion_id: str, actualizada: dict[str, Any]) -> Res
         from .. import auto_programar
 
         try:
-            programada = auto_programar.programar_si_aprobada(publicacion_id)
+            programada = auto_programar.programar_si_aprobada(pieza_id)
             if programada is not None:
                 actualizada = programada
         except Exception:  # noqa: BLE001 — encolar es secundario al OK ya registrado.
-            _log.exception("Auto-programación falló para %s (queda en revisión).", publicacion_id)
-    return JSONResponse({"publicacion": publicacion_a_dict(actualizada)})
+            _log.exception("Auto-programación falló para %s (queda en revisión).", pieza_id)
+    return JSONResponse({"pieza": pieza_a_dict(actualizada)})
 
 
 def _emitir_pieza_aprobada(pub: dict[str, Any]) -> None:
@@ -185,12 +185,12 @@ def _emitir_pieza_aprobada(pub: dict[str, Any]) -> None:
 
         marca = pub.get("marca", "") or ""
         red = pub.get("red", "") or ""
-        padre = repos.obtener_contenido(pub.get("contenido_id", "") or "") or {}
+        padre = repos.obtener_publicacion(pub.get("publicacion_id", "") or "") or {}
         eventos.emitir(
             "pieza.aprobada",
             {
-                "contenido_id": pub.get("contenido_id", "") or "",
-                "plataforma_id": pub.get("id", "") or "",
+                "publicacion_id": pub.get("publicacion_id", "") or "",
+                "pieza_id": pub.get("id", "") or "",
                 "red": red,
                 "red_nombre": redes.nombre_por_id(red) if red else "",
                 "titulo": padre.get("titulo", "") or "",
@@ -198,8 +198,8 @@ def _emitir_pieza_aprobada(pub: dict[str, Any]) -> None:
                 "marca_nombre": marcas.etiqueta_de(marca) if marca else "",
                 "estado": pub.get("estado", "") or "",
             },
-            contenido_id=pub.get("contenido_id", "") or "",
-            plataforma_id=pub.get("id", "") or "",
+            publicacion_id=pub.get("publicacion_id", "") or "",
+            pieza_id=pub.get("id", "") or "",
         )
     except Exception:  # noqa: BLE001 — notificar es secundario al OK ya registrado.
         _log.exception("No se pudo emitir pieza.aprobada para %s.", pub.get("id"))
@@ -212,7 +212,7 @@ async def cola(request: Request) -> Response:
     (quien envio) y `enviado_a_revision_en` (cuando), para que el equipo vea que espera
     revision y desde cuando. Lectura: sin cambios respecto al flujo legado.
     """
-    pendientes = repos.listar_publicaciones(estado=ESTADO_EN_REVISION)
+    pendientes = repos.listar_piezas(estado=ESTADO_EN_REVISION)
     # FOCO POR DEFECTO (no es restriccion): la cola se ENFOCA en las marcas preferentes de la
     # sesion para reducir la mezcla de contexto. No bloquea: cualquiera puede revisar piezas de
     # cualquier marca (las verá filtrando por esa marca). Sin preferencia (admin/token/sin
@@ -224,7 +224,7 @@ async def cola(request: Request) -> Response:
         ]
     # Mas antiguas primero por `enviado_a_revision_en` (lo que lleva mas esperando, arriba).
     pendientes.sort(key=lambda p: p.get("enviado_a_revision_en") or "")
-    items = [publicacion_a_dict(p) for p in pendientes]
+    items = [pieza_a_dict(p) for p in pendientes]
     return JSONResponse({"cola": items, "total": len(items)})
 
 
@@ -234,8 +234,8 @@ async def enviar_a_revision(request: Request) -> Response:
     Equivale a la vieja transicion borrador->en_revision, pero montando una cadena de un
     solo nivel ("otro par de ojos") sobre la pieza. Solo desde `borrador`. 409 si no lo esta.
     """
-    publicacion_id = request.path_params["publicacion_id"]
-    pub = repos.obtener_publicacion(publicacion_id)
+    pieza_id = request.path_params["pieza_id"]
+    pub = repos.obtener_pieza(pieza_id)
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
     if pub.get("estado") != "borrador":
@@ -251,8 +251,8 @@ async def enviar_a_revision(request: Request) -> Response:
     # Nota: `revisor_*`/`revisado_en` se sellan en la fila por plataforma; `autor_*` viven en el
     # `contenido` PADRE (no son columnas por plataforma), asi que el CAS NO los puede tocar: el
     # autor ya quedo fijado al crear la pieza, y la cola muestra ese autor (no se re-escribe aqui).
-    actualizada = repos.transicionar_estado_publicacion(
-        publicacion_id,
+    actualizada = repos.transicionar_estado_pieza(
+        pieza_id,
         "borrador",
         ESTADO_EN_REVISION,
         {
@@ -268,9 +268,9 @@ async def enviar_a_revision(request: Request) -> Response:
             status_code=409,
         )
 
-    # `contenido_id` no viaja en el dict publico de la publicacion; se lee de la fila
-    # plataforma (la publicacion ES esa fila: su id es el `plataforma_id`).
-    plat = repos.obtener_contenido_plataforma(publicacion_id)
+    # `publicacion_id` no viaja en el dict publico de la pieza; se lee de la fila
+    # plataforma (la pieza ES esa fila: su id es el `pieza_id`).
+    plat = repos.obtener_pieza_fila(pieza_id)
     # Monta la cadena por defecto del flujo "dale el OK": dos niveles humanos (Edición +
     # Coordinación = los dos OK) y, si el flag lo activa, el nivel automatico "verificación Editorial"
     # (la aprobacion de IA) delante. SIN exigir cargo (`con_cargos=False`): cualquiera del
@@ -283,11 +283,11 @@ async def enviar_a_revision(request: Request) -> Response:
     etiquetas = colaboracion.cadena_simple()
     if config.critica_ia_activa():
         etiquetas = [*etiquetas, colaboracion.ETIQUETA_CRITICA_IA]
-    montar_cadena_aprobacion(publicacion_id, plat or {}, etiquetas, con_cargos=False)
-    return JSONResponse({"publicacion": publicacion_a_dict(actualizada)})
+    montar_cadena_aprobacion(pieza_id, plat or {}, etiquetas, con_cargos=False)
+    return JSONResponse({"pieza": pieza_a_dict(actualizada)})
 
 
-def _encolar_critica_si_corresponde(publicacion_id: str) -> None:
+def _encolar_critica_si_corresponde(pieza_id: str) -> None:
     """Tras una decision humana, encola la Crítica IA si toca (humanos OK, nivel IA pendiente).
 
     Best-effort y idempotente: solo dispara cuando todos los niveles humanos estan aprobados y el
@@ -297,28 +297,28 @@ def _encolar_critica_si_corresponde(publicacion_id: str) -> None:
     """
     if not config.critica_ia_activa():
         return
-    cadena = repos.listar_aprobaciones(publicacion_id)
+    cadena = repos.listar_aprobaciones(pieza_id)
     if not colaboracion.humanos_aprobados_ia_pendiente(cadena):
         return
     try:
         from ..dominio import critica_ia
 
-        critica_ia.lanzar_para_publicacion(publicacion_id)
+        critica_ia.lanzar_para_publicacion(pieza_id)
     except Exception:  # noqa: BLE001 — encolar la critica es secundario al OK ya registrado.
-        _log.exception("No se pudo encolar la crítica IA para %s.", publicacion_id)
+        _log.exception("No se pudo encolar la crítica IA para %s.", pieza_id)
 
 
-def _resolver_comentarios_critica_ia(publicacion_id: str) -> None:
+def _resolver_comentarios_critica_ia(pieza_id: str) -> None:
     """Resuelve los comentarios SIN resolver que dejó la Crítica IA (override de coordinación).
 
     Best-effort: cierra la objeción del crítico para que el gate B no siga frenando la
     programación cuando un coordinador FUERZA la pieza a pesar del dislike de IA.
     """
-    plat = repos.obtener_contenido_plataforma(publicacion_id)
-    contenido_id = (plat or {}).get("contenido_id", "") or ""
-    if not contenido_id:
+    plat = repos.obtener_pieza_fila(pieza_id)
+    publicacion_id = (plat or {}).get("publicacion_id", "") or ""
+    if not publicacion_id:
         return
-    for c in repos.listar_comentarios(contenido_id):
+    for c in repos.listar_comentarios(publicacion_id):
         if c.get("resuelto"):
             continue
         if (c.get("autor_id") or "") == colaboracion.DECISOR_CRITICA_ID:
@@ -351,12 +351,12 @@ async def deshacer(request: Request) -> Response:
     quita el like (deshacer) y el siguiente dislike lo marca (rechazar). 404 si la pieza no
     existe; 409 si no tienes ninguna decisión propia que deshacer (o hay una decisión posterior).
     """
-    publicacion_id = request.path_params["publicacion_id"]
-    pub = repos.obtener_publicacion(publicacion_id)
+    pieza_id = request.path_params["pieza_id"]
+    pub = repos.obtener_pieza(pieza_id)
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
 
-    cadena = repos.listar_aprobaciones(publicacion_id)
+    cadena = repos.listar_aprobaciones(pieza_id)
     decisor_id = (autor_de_peticion(request) or {}).get("id", "") or ""
     nivel_id, error = colaboracion.deshacer_decision(cadena, decisor_id)
     if error is not None:
@@ -368,11 +368,11 @@ async def deshacer(request: Request) -> Response:
     # Tras retirar la decisión NO hay "último revisor" que mostrar: se limpia (la pieza vuelve
     # a su estado según el resto de la cadena, normalmente `en_revision`).
     actualizada = _reflejar_estado_pieza(
-        publicacion_id, {"decisor_id": "", "decisor_nombre": "", "decidido_en": ""}
+        pieza_id, {"decisor_id": "", "decisor_nombre": "", "decidido_en": ""}
     )
     if actualizada is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    return JSONResponse({"publicacion": publicacion_a_dict(actualizada)})
+    return JSONResponse({"pieza": pieza_a_dict(actualizada)})
 
 
 def _puede_forzar(request: Request) -> bool:
@@ -404,8 +404,8 @@ async def forzar(request: Request) -> Response:
             {"error": "Solo un admin o coordinador puede forzar la aprobación."},
             status_code=403,
         )
-    publicacion_id = request.path_params["publicacion_id"]
-    pub = repos.obtener_publicacion(publicacion_id)
+    pieza_id = request.path_params["pieza_id"]
+    pub = repos.obtener_pieza(pieza_id)
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
     if pub.get("estado") != ESTADO_EN_REVISION:
@@ -419,7 +419,7 @@ async def forzar(request: Request) -> Response:
     decisor_nombre = autor.get("usuario", "") or "Override"
     ahora = ahora_iso()
     nivel_decidido: dict[str, Any] | None = None
-    for nivel in repos.listar_aprobaciones(publicacion_id):
+    for nivel in repos.listar_aprobaciones(pieza_id):
         # Aprueba los niveles PENDIENTES y, además, OVERRIDE de un DISLIKE de la Crítica IA
         # (su nivel rechazado): "publicar a pesar de la IA" es decisión humana de coordinación.
         # Los dislikes HUMANOS se respetan (no se voltean): el override salta la cadena, no
@@ -449,16 +449,16 @@ async def forzar(request: Request) -> Response:
         )
     # El override de la Crítica IA también CIERRA su objeción: resuelve los comentarios sin
     # resolver que dejó el crítico, para que el gate B no siga frenando la programación.
-    _resolver_comentarios_critica_ia(publicacion_id)
+    _resolver_comentarios_critica_ia(pieza_id)
     sello = nivel_decidido or {
         "decisor_id": decisor_id,
         "decisor_nombre": decisor_nombre,
         "decidido_en": ahora,
     }
-    actualizada = _reflejar_estado_pieza(publicacion_id, sello)
+    actualizada = _reflejar_estado_pieza(pieza_id, sello)
     if actualizada is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
-    return _responder_aprobada(publicacion_id, actualizada)
+    return _responder_aprobada(pieza_id, actualizada)
 
 
 def _validar_fecha_programada(valor: Any) -> tuple[str | None, str | None]:
@@ -492,8 +492,8 @@ async def programar(request: Request) -> Response:
     al vencer. Posteo real (vía Metricool) GATED por `KENI_PUBLICAR_REAL`. 404 si no existe;
     409 si no está aprobada; 400 si la fecha no es válida/futura.
     """
-    publicacion_id = request.path_params["publicacion_id"]
-    pub = repos.obtener_publicacion(publicacion_id)
+    pieza_id = request.path_params["pieza_id"]
+    pub = repos.obtener_pieza(pieza_id)
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
     if pub.get("estado") != ESTADO_EN_REVISION:
@@ -508,7 +508,7 @@ async def programar(request: Request) -> Response:
     # ya paso por su propio control y no se le exige el minimo (no hay nada que contar). Una
     # cadena simple de 1 nivel SI queda sujeta al minimo (debe acumular las firmas exigidas).
     minimo = config.min_aprobaciones()
-    cadena = repos.listar_aprobaciones(publicacion_id)
+    cadena = repos.listar_aprobaciones(pieza_id)
     if cadena:
         cumple, aprobados = colaboracion.cumple_minimo_aprobaciones(cadena, minimo)
         if not cumple:
@@ -518,9 +518,9 @@ async def programar(request: Request) -> Response:
 
     # GATE B (revisión editorial): un comentario sin resolver es una objecion pendiente; bloquea
     # programar hasta que el equipo lo cierre. Se cuentan los del item entero + los de esta red.
-    plat = repos.obtener_contenido_plataforma(publicacion_id)
+    plat = repos.obtener_pieza_fila(pieza_id)
     pendientes = repos.comentarios_sin_resolver(
-        (plat or {}).get("contenido_id", "") or "", publicacion_id
+        (plat or {}).get("publicacion_id", "") or "", pieza_id
     )
     if pendientes:
         return JSONResponse(
@@ -543,8 +543,8 @@ async def programar(request: Request) -> Response:
         # evaluaron sobre un snapshot; entre la lectura y la escritura la pieza pudo dejar de
         # estar `en_revision` —p.ej. un deshacer concurrente—). El estado se mueve EN EL MISMO
         # UPDATE que fija `fecha_programada`/`preparado_en`, condicionado a que SIGA `en_revision`.
-        actualizada = repos.transicionar_estado_publicacion(
-            publicacion_id,
+        actualizada = repos.transicionar_estado_pieza(
+            pieza_id,
             ESTADO_EN_REVISION,
             ESTADO_PROGRAMADO,
             {"fecha_programada": fecha, "preparado_en": ""},
@@ -563,15 +563,15 @@ async def programar(request: Request) -> Response:
             {"error": "El estado de la pieza cambió; recarga e inténtalo de nuevo."},
             status_code=409,
         )
-    return JSONResponse({"publicacion": publicacion_a_dict(actualizada)})
+    return JSONResponse({"pieza": pieza_a_dict(actualizada)})
 
 
 RUTAS = [
     Route("/api/aprobacion/cola", cola, methods=["GET"]),
-    Route("/api/aprobacion/{publicacion_id}/enviar-a-revision", enviar_a_revision, methods=["POST"]),
-    Route("/api/aprobacion/{publicacion_id}/aprobar", aprobar, methods=["POST"]),
-    Route("/api/aprobacion/{publicacion_id}/forzar", forzar, methods=["POST"]),
-    Route("/api/aprobacion/{publicacion_id}/rechazar", rechazar, methods=["POST"]),
-    Route("/api/aprobacion/{publicacion_id}/deshacer", deshacer, methods=["POST"]),
-    Route("/api/aprobacion/{publicacion_id}/programar", programar, methods=["POST"]),
+    Route("/api/aprobacion/{pieza_id}/enviar-a-revision", enviar_a_revision, methods=["POST"]),
+    Route("/api/aprobacion/{pieza_id}/aprobar", aprobar, methods=["POST"]),
+    Route("/api/aprobacion/{pieza_id}/forzar", forzar, methods=["POST"]),
+    Route("/api/aprobacion/{pieza_id}/rechazar", rechazar, methods=["POST"]),
+    Route("/api/aprobacion/{pieza_id}/deshacer", deshacer, methods=["POST"]),
+    Route("/api/aprobacion/{pieza_id}/programar", programar, methods=["POST"]),
 ]

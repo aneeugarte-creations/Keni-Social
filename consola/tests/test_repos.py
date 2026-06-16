@@ -72,7 +72,7 @@ def test_firmas_identicas_con_db():
 def test_reexporta_constantes_publicas():
     # Las constantes de dominio se reexportan desde el modulo neutro `estados`.
     assert repos.ESTADOS_TAREA == estados.ESTADOS_TAREA
-    assert repos.ESTADOS_PUBLICACION == estados.ESTADOS_PUBLICACION
+    assert repos.ESTADOS_PIEZA == estados.ESTADOS_PIEZA
 
 
 # --------------------------------------------------------------------------- #
@@ -88,11 +88,11 @@ def test_no_hay_conmutador():
 
 def test_publicaciones_persisten_en_postgres_no_en_yaml(entorno, monkeypatch):
     monkeypatch.setenv("KENI_CONSOLA_BACKEND", "sqlite")
-    pub = repos.crear_publicacion("unotv", "x", titulo="T", contenido="C")
+    pub = repos.crear_pieza("unotv", "x", titulo="T", contenido="C")
     yamls = list((entorno / "datos").rglob(f"{pub['id']}.yaml"))
-    assert not yamls, "la publicacion ya no debe escribirse como YAML"
-    assert repos.obtener_publicacion(pub["id"])["marca"] == "unotv"
-    assert db.obtener_publicacion(pub["id"])["titulo"] == "T"
+    assert not yamls, "la pieza ya no debe escribirse como YAML"
+    assert repos.obtener_pieza(pub["id"])["marca"] == "unotv"
+    assert db.obtener_pieza(pub["id"])["titulo"] == "T"
 
 
 # --------------------------------------------------------------------------- #
@@ -108,14 +108,14 @@ def test_delega_en_db_campania(entorno):
 
 
 def test_delega_en_db_publicaciones(entorno):
-    # Tras la fusión, las publicaciones viven en Postgres: escribir por repos -> leer por db.
-    pub = repos.crear_publicacion("unotv", "x", titulo="T", contenido="C")
-    leida = db.obtener_publicacion(pub["id"])
+    # Tras la fusión, las piezas viven en Postgres: escribir por repos -> leer por db.
+    pub = repos.crear_pieza("unotv", "x", titulo="T", contenido="C")
+    leida = db.obtener_pieza(pub["id"])
     assert leida is not None
     assert leida["marca"] == "unotv"
     # Editar por repos -> ver el cambio por db (misma fuente).
-    repos.actualizar_publicacion(pub["id"], {"titulo": "Z"})
-    assert db.obtener_publicacion(pub["id"])["titulo"] == "Z"
+    repos.actualizar_pieza(pub["id"], {"titulo": "Z"})
+    assert db.obtener_pieza(pub["id"])["titulo"] == "Z"
 
 
 def test_delega_en_db_editorial_reutilizable(entorno):

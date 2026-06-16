@@ -443,13 +443,13 @@ def borrar_usuario(usuario_id: str) -> bool:
     LIBERA además, en la MISMA transacción, las piezas que esa persona tenía COGIDAS
     (`contenido.responsable_id = su id`): vuelven a «Por coger» (responsable_id=''). Sin esto
     quedaban pegadas a un id FANTASMA —fuera de «Por coger» y de «Mis tareas» de cualquiera, e
-    irreclamables (`reclamar_contenido` exige responsable_id='')—, perdiendo trabajo del
+    irreclamables (`reclamar_publicacion` exige responsable_id='')—, perdiendo trabajo del
     equipo. Es la misma idea de cascada que el borrado de sesiones.
     """
     con = db.conectar()
     try:
         con.execute(
-            "UPDATE contenido SET responsable_id = '', responsable_nombre = '', actualizado = ? "
+            "UPDATE publicacion SET responsable_id = '', responsable_nombre = '', actualizado = ? "
             "WHERE responsable_id = ?",
             (_ahora_iso(), usuario_id),
         )

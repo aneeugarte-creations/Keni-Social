@@ -141,7 +141,7 @@ def registrar(
 def linea_base(mensaje: str = "linea base de la Prompts") -> int:
     """Registra UN commit con los `.md` del store que aun no esten versionados.
 
-    Garantiza que todo documento tenga un HEAD git, para que el modelo de publicacion sirva su
+    Garantiza que todo documento tenga un HEAD git, para que el modelo de pieza sirva su
     snapshot estable (no el working copy que el autosave reescribe). Pensado para correr tras
     la inicializacion/importacion, que escribe `.md` sin commitear. Best-effort e idempotente: si el
     versionado esta apagado, no hay repo posible o no hay nada pendiente, devuelve 0 sin tocar
@@ -227,7 +227,7 @@ def version(doc_id: str, sha: str) -> str | None:
 def sha_documento(doc_id: str) -> str | None:
     """SHA del ULTIMO commit que toco el `.md` de `doc_id` (el "HEAD" del documento).
 
-    Es el sha que el modelo de PUBLICACION compara contra el puntero de produccion
+    Es el sha que el modelo de PIEZA compara contra el puntero de produccion
     (`sin_publicar = sha_actual != produccion.sha`). None si el versionado esta apagado,
     no hay repo o el documento aun no tiene commits.
     """

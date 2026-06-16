@@ -10,7 +10,7 @@ y Claro Sports tienen sus propias campañas/verticales sin pisarse — o ser GLO
 la marca de las piezas y de sus etiquetas. El selector de etiquetas del tablero pide las
 de la marca activa + las globales.
 
-La asignación de etiquetas a un contenido vive en `api/contenido.py` (mismo recurso padre);
+La asignación de etiquetas a un contenido vive en `api/publicaciones.py` (mismo recurso padre);
 aquí se gestiona el CATÁLOGO de etiquetas (crear/editar/borrar).
 
 SEGURIDAD:

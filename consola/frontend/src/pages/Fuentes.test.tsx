@@ -143,7 +143,7 @@ function stubFetch(opts: { rssPayload?: object } = {}) {
     vi.fn(async (url: string | URL, init?: RequestInit) => {
       const ruta = String(url);
 
-      if (ruta.includes("/api/publicaciones/opciones")) {
+      if (ruta.includes("/api/piezas/opciones")) {
         return new Response(JSON.stringify(OPCIONES), { status: 200 });
       }
       if (ruta.includes("/api/fuentes/presets/activar")) {

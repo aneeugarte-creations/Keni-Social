@@ -10,7 +10,7 @@ DEFINICION DE SUELTO (conservadora; ante la duda, NO se borra)
 ================================================================
 Un objeto del almacen es suelto si y SOLO si cumple las DOS condiciones:
   1. NO es una REFERENCIA VIVA: ni el `imagen` (composite horneado) ni la `foto` cruda de
-     ninguna publicacion (normales — TODOS los estados/marcas — ni comerciales), ni un recurso
+     ninguna pieza (normales — TODOS los estados/marcas — ni comerciales), ni un recurso
      que alimente el render on-demand (miniatura/media_id de plantillas del estudio, activos de
      marca: logos, tipografías), ni un arte catalogado en la galería, Y
   2. es mas VIEJO que `antiguedad_horas` (def 24h): asi NO se borran las variantes recien
@@ -27,8 +27,8 @@ estado/marca): un objeto referenciado por CUALQUIER pieza, en cualquier estado, 
 GALERÍA DE ARTES (catalogo) — referencia viva (comprobacion DEFENSIVA y OPCIONAL)
 ====================================================================================
 La galería de ARTES (`api/artes.py` / `repos.listar_media_catalogo`) cataloga objetos
-que el equipo decide CONSERVAR para reutilizar en publicaciones. Un arte catalogado es una
-referencia viva: el GC NO lo borra aunque ninguna publicacion lo use todavia. El GC NO
+que el equipo decide CONSERVAR para reutilizar en piezas. Un arte catalogado es una
+referencia viva: el GC NO lo borra aunque ninguna pieza lo use todavia. El GC NO
 depende de forma DURA de ese repo: si existe en runtime sus objetos se anaden a las
 referencias vivas; si la funcion se eliminara, el GC sigue funcionando sin tocar esa fuente
 (no se importa a nivel de modulo nada propio de la galería; se consulta via `hasattr`).
@@ -208,7 +208,7 @@ def _refs_documento_versiones() -> set[str]:
       - Los media originales (imagenes, logos, fondos) que las capas del documento
         referenciaban (el restore de la versión no podría renderizar).
 
-    Itera sobre TODAS las publicaciones y acumula referencias
+    Itera sobre TODAS las piezas y acumula referencias
     desde todas sus versiones. Defensivo y opcional: si el repo de versiones no existe
     o falla, continúa sin tumbar el GC.
     """
@@ -220,16 +220,16 @@ def _refs_documento_versiones() -> set[str]:
         return refs
 
     try:
-        publicaciones = repos.listar_publicaciones()
+        piezas = repos.listar_piezas()
 
-        for pub in publicaciones:
-            contenido_id = pub.get("contenido_id", "")
-            plataforma_id = pub.get("id", "")
-            if not contenido_id or not plataforma_id:
+        for pub in piezas:
+            publicacion_id = pub.get("publicacion_id", "")
+            pieza_id = pub.get("id", "")
+            if not publicacion_id or not pieza_id:
                 continue
 
             try:
-                versiones = listar_versiones(contenido_id, plataforma_id)
+                versiones = listar_versiones(publicacion_id, pieza_id)
                 for v in versiones:
                     # Protege el PNG renderizado de la versión.
                     render_obj = (v.get("render_objeto") or "").strip()
@@ -256,25 +256,25 @@ def referencias_vivas() -> set[str]:
     """Conjunto de nombres de objeto REFERENCIADOS (NO borrables).
 
     Une:
-      - el `imagen` de TODAS las publicaciones (sin filtro de estado/marca),
+      - el `imagen` de TODAS las piezas (sin filtro de estado/marca),
       - el `foto` cruda (render on-demand; CRÍTICO),
       - las fotos de collage (`fotos` JSON array),
       - el PNG renderizado + media del documento en TODAS las versiones del editor,
       - DEFENSIVO Y OPCIONAL: el `objeto` de la galería de artes SOLO si ese repo existe
         en runtime (ver `_objetos_catalogo_media`).
 
-    Las publicaciones son la fuente de verdad de "media en uso"; la galería de artes anade
+    Las piezas son la fuente de verdad de "media en uso"; la galería de artes anade
     los objetos que el equipo decidio conservar para reutilizar. El historial de versiones
     protege los PNG renderizados y los media que cada versión referencia.
     """
     vivas: set[str] = set()
-    publicaciones = repos.listar_publicaciones()
-    vivas |= _imagenes_de(publicaciones)
+    piezas = repos.listar_piezas()
+    vivas |= _imagenes_de(piezas)
     # Con render on-demand la FOTO cruda ya no está horneada en `imagen`: protégela también, o
     # el GC borraría el original del que el render compone.
-    vivas |= _fotos_de(publicaciones)
+    vivas |= _fotos_de(piezas)
     # Fotos de collage: varias fotos en huecos distintos, almacenadas como JSON array.
-    vivas |= _fotos_de_collage(publicaciones)
+    vivas |= _fotos_de_collage(piezas)
     # Originales que alimentan el render: plantillas del estudio (miniatura + media_id) y
     # activos de marca (logos, tipografías). Defensivo y opcional.
     vivas |= _objetos_recursos_marca()

@@ -11,7 +11,7 @@ import { apiPipelines } from "./pipelines";
 import { apiGeneraciones } from "./generaciones";
 import { apiPrompts } from "./prompts";
 import { apiLimites } from "./limites";
-import { apiPublicaciones } from "./publicaciones";
+import { apiPiezas } from "./piezas";
 import { apiMedia } from "./media";
 import { apiImagen } from "./imagen";
 import { apiVideo } from "./video";
@@ -25,7 +25,7 @@ import { apiFuentes } from "./fuentes";
 import { apiAlgoritmos } from "./algoritmos";
 import { apiMetricool } from "./metricool";
 import { apiFranjas } from "./franjas";
-import { apiContenido } from "./contenido";
+import { apiPublicacion } from "./contenido";
 import { apiEtiquetas } from "./etiquetas";
 import { apiEvergreen } from "./evergreen";
 import { apiWebhooks } from "./webhooks";
@@ -57,7 +57,7 @@ export const api = {
   ...apiGeneraciones,
   ...apiPrompts,
   ...apiLimites,
-  ...apiPublicaciones,
+  ...apiPiezas,
   ...apiMedia,
   ...apiImagen,
   ...apiVideo,
@@ -71,7 +71,7 @@ export const api = {
   ...apiAlgoritmos,
   ...apiMetricool,
   ...apiFranjas,
-  ...apiContenido,
+  ...apiPublicacion,
   ...apiEtiquetas,
   ...apiEvergreen,
   ...apiWebhooks,

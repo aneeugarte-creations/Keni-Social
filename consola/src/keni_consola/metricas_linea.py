@@ -62,10 +62,10 @@ def agrupar_por_eje(
     Parámetros (todo en memoria, para ser testeable sin Postgres):
       - `piezas`: lista de piezas del periodo (forma de `servicio.construir_listado_piezas`,
         cada una con `id`, `titulo`, `visualizaciones`, `interacciones`, `engagement_pct`).
-      - `valor_por_contenido`: `contenido_id -> nombre de la etiqueta de ESTE eje` (vacío o
+      - `valor_por_contenido`: `publicacion_id -> nombre de la etiqueta de ESTE eje` (vacío o
         ausente = la pieza no tiene valor en el eje).
       - `enlace_por_id` / `enlace_por_titulo`: índices de enlace pieza→contenido
-        (`id_post_metricool -> contenido_id` y `titulo_normalizado -> contenido_id`),
+        (`id_post_metricool -> publicacion_id` y `titulo_normalizado -> publicacion_id`),
         idénticos a los de `metricas_pieza` (enlace fuerte por id; fallback fuzzy por título).
       - `etiquetas_definidas`: las etiquetas del eje de la marca (`[{"id","nombre"}, …]`),
         para que una LÍNEA definida SIN piezas en el periodo aparezca igualmente con ceros.
@@ -162,9 +162,9 @@ def _valor_por_contenido(
     asignaciones: dict[str, list[str]],
     etiquetas_de_clase: dict[str, str],
 ) -> dict[str, str]:
-    """`contenido_id -> nombre de la etiqueta de ESA clase` (la primera asignada que sea de la clase).
+    """`publicacion_id -> nombre de la etiqueta de ESA clase` (la primera asignada que sea de la clase).
 
-    `asignaciones` es `contenido_id -> [etiqueta_id…]` (`repos.etiquetas_por_contenido`);
+    `asignaciones` es `publicacion_id -> [etiqueta_id…]` (`repos.etiquetas_por_contenido`);
     `etiquetas_de_clase` es `etiqueta_id -> nombre` SOLO de las etiquetas de la clase del eje.
     El modelo garantiza nombre único por clase, así que basta con la primera coincidencia.
     """
@@ -192,8 +192,8 @@ def lineas_por_pieza(
     Las piezas SIN línea atribuible NO aparecen en el mapa (el llamante usa "Sin
     línea"): honesto, no se inventa una línea. La clave es el `id` de la pieza.
     """
-    contenidos = repos.listar_contenido(marca=marca_consola)
-    plataformas = repos.listar_contenido_plataforma()
+    contenidos = repos.listar_publicacion(marca=marca_consola)
+    plataformas = repos.listar_piezas_fila()
     enlace_por_id, enlace_por_titulo = _indice_contenido_por_post(contenidos, plataformas)
     vertical_por_id = {
         e.get("id", ""): e.get("nombre", "")
@@ -230,8 +230,8 @@ def lineas_y_origenes(
     piezas = servicio.construir_listado_piezas(rango, marca_metricas)
     fuente = servicio.nombre_fuente()
 
-    contenidos = repos.listar_contenido(marca=marca_consola)
-    plataformas = repos.listar_contenido_plataforma()
+    contenidos = repos.listar_publicacion(marca=marca_consola)
+    plataformas = repos.listar_piezas_fila()
     enlace_por_id, enlace_por_titulo = _indice_contenido_por_post(contenidos, plataformas)
 
     # Etiquetas DEFINIDAS de la marca por eje (incluye globales; `listar_etiquetas` ya las

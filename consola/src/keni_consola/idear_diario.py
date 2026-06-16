@@ -41,7 +41,7 @@ def _banco_de(marca: str) -> list[dict]:
     """Contenidos green APROBADOS de la marca: categoría 'evergreen', no-reemisión, con
     al menos una pieza por red en estado del banco. Best-effort: [] si algo falla."""
     try:
-        items = repos.listar_contenido(clase="contenido", marca=marca)
+        items = repos.listar_publicacion(clase="contenido", marca=marca)
     except Exception:  # noqa: BLE001 -- sin tablero legible, hoy no se reemite
         _log.exception("idear_diario: no se pudo leer el tablero (%s).", marca)
         return []
@@ -52,7 +52,7 @@ def _banco_de(marca: str) -> list[dict]:
         if (it.get("origen") or "") == ORIGEN_EVERGREEN_DIARIO:
             continue
         try:
-            piezas = repos.listar_contenido_plataforma(it.get("id") or "")
+            piezas = repos.listar_piezas_fila(it.get("id") or "")
         except Exception:  # noqa: BLE001 -- un item ilegible no tumba el barrido
             continue
         aprobadas = [p for p in piezas if (p.get("estado") or "") in _ESTADOS_BANCO]
@@ -70,12 +70,12 @@ def _reemitir(original: dict) -> dict | None:
     contenido pre-aprobado por construcción). Si no hay franja aplicable se queda `en_revision`
     (saldrá cuando se configure una). None si falla.
     """
-    # Import perezoso: `api.publicaciones` es capa API; importarla a nivel de módulo enredaría
+    # Import perezoso: `api.piezas` es capa API; importarla a nivel de módulo enredaría
     # el grafo de imports (mismo patrón que `auto_programar`).
-    from .api.publicaciones import _encolar_en_hueco_libre
+    from .api.piezas import _encolar_en_hueco_libre
 
     try:
-        nuevo = repos.crear_contenido(
+        nuevo = repos.crear_publicacion(
             clase="contenido",
             flujo="evergreen",
             categoria="evergreen",
@@ -87,8 +87,8 @@ def _reemitir(original: dict) -> dict | None:
             formato=original.get("formato") or "foto",
         )
         for p in original.get("_piezas") or []:
-            pieza = repos.crear_contenido_plataforma(
-                contenido_id=nuevo["id"],
+            pieza = repos.crear_pieza_fila(
+                publicacion_id=nuevo["id"],
                 red=p.get("red") or "",
                 estado="en_revision",
                 copy=p.get("copy") or "",
@@ -102,7 +102,7 @@ def _reemitir(original: dict) -> dict | None:
                 evergreen=True,
             )
             # Pre-aprobada por construcción: a su hueco evergreen sin pasar por la cola de likes.
-            pub = repos.obtener_publicacion(pieza["id"])
+            pub = repos.obtener_pieza(pieza["id"])
             if pub is not None:
                 _encolar_en_hueco_libre(pub)
         return nuevo

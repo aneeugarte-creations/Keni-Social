@@ -3,11 +3,11 @@
 // Pestaña de tipo: "Fotos" (default) / "Miniaturas" (portadas de video).
 // Organización estilo Canva: búsqueda + chips de categoría + rejilla agrupada por categoría.
 //
-// Envoltorios sobre el MISMO contenido (`ContenidoPlantillas`), una sola fuente de verdad:
+// Envoltorios sobre el MISMO contenido (`PublicacionPlantillas`), una sola fuente de verdad:
 //  - `GaleriaPlantillas`: diálogo modal (overlay) — flujos que interrumpen (DialogoEditar, vídeo).
-//  - `ContenidoPlantillas` directo: panel «Diseño» del rail del editor (columna ~350px), estilo
+//  - `PublicacionPlantillas` directo: panel «Diseño» del rail del editor (columna ~350px), estilo
 //    Canva: búsqueda y chips quedan FIJOS arriba (fuera del área con scroll).
-//  - `ContenidoPlantillas` a página completa: estado vacío del editor (pages/Imagen) con
+//  - `PublicacionPlantillas` a página completa: estado vacío del editor (pages/Imagen) con
 //    `agruparPorMarca` (vista «Todas») y tarjeta «Lienzo en blanco» al final (`onLienzoBlanco`).
 
 import { Copy, Image, ImagePlus, Plus, Repeat, Trash2, Video, X } from "lucide-react";
@@ -60,7 +60,7 @@ function agruparPlantillasPorMarca(plantillas: PlantillaDiseno[]): PlantillaDise
   );
 }
 
-interface PropsContenido {
+interface PropsPublicacion {
   plantillas: PlantillaDiseno[];
   onCargar: (p: PlantillaDiseno) => void;
   /** Si se omite, no se ofrece borrar (modo SELECTOR, p. ej. elegir plantilla para una pieza). */
@@ -100,10 +100,10 @@ interface PropsContenido {
 }
 
 /**
- * Contenido de la galería (filtro de tipo + búsqueda/chips fijos + rejilla con scroll), SIN
+ * Publicacion de la galería (filtro de tipo + búsqueda/chips fijos + rejilla con scroll), SIN
  * envoltorio modal: reutilizable como panel «Diseño» del rail del editor o dentro del diálogo.
  */
-export function ContenidoPlantillas({
+export function PublicacionPlantillas({
   plantillas,
   onCargar,
   onBorrar,
@@ -118,7 +118,7 @@ export function ContenidoPlantillas({
   compacto,
   agruparPorMarca,
   onLienzoBlanco,
-}: PropsContenido) {
+}: PropsPublicacion) {
   const [editId, setEditId] = useState<string | null>(null);
   const [editVal, setEditVal] = useState("");
   const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>(tipoFijo ?? "foto");
@@ -509,7 +509,7 @@ export function ContenidoPlantillas({
 export function GaleriaPlantillas({
   onCerrar,
   ...contenido
-}: PropsContenido & { onCerrar: () => void }) {
+}: PropsPublicacion & { onCerrar: () => void }) {
   // Escape cierra la galería esté donde esté el foco (overlay casero, sin Radix).
   useCerrarConEscape(true, onCerrar);
 
@@ -564,7 +564,7 @@ export function GaleriaPlantillas({
           </button>
         </div>
         {/* La modal es de ancho fijo (max-w-3xl): capa las columnas a 4 para no amontonar. */}
-        <ContenidoPlantillas maxColumnas={4} {...contenido} />
+        <PublicacionPlantillas maxColumnas={4} {...contenido} />
       </div>
     </div>
   );

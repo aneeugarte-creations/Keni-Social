@@ -21,15 +21,15 @@ def _render_mock(monkeypatch):
     )
 
 
-def _pieza(entorno, contenido_id="c1"):
-    """Crea el `contenido` padre + una fila por plataforma; devuelve (contenido_id, plataforma_id).
+def _pieza(entorno, publicacion_id="c1"):
+    """Crea el `contenido` padre + una fila por plataforma; devuelve (publicacion_id, pieza_id).
 
-    El padre se crea explicito (con su id) porque `contenido_plataforma.contenido_id` es ahora
+    El padre se crea explicito (con su id) porque `pieza.publicacion_id` es ahora
     una FK real a `contenido(id)` (ADR 0012): una fila por plataforma sin padre se rechaza.
     """
-    repos.crear_contenido(id=contenido_id, titulo="pieza de prueba")
-    plat = repos.crear_contenido_plataforma(contenido_id=contenido_id, red="facebook")
-    return contenido_id, plat["id"]
+    repos.crear_publicacion(id=publicacion_id, titulo="pieza de prueba")
+    plat = repos.crear_pieza_fila(publicacion_id=publicacion_id, red="facebook")
+    return publicacion_id, plat["id"]
 
 
 def test_pieza_documento_vacio(cliente, entorno):
@@ -64,7 +64,7 @@ def test_pieza_sin_version_trae_plantilla_efectiva_y_fotos(cliente, entorno, mon
         "foto": "", "foto_encuadre": "",
         "fotos": json.dumps([{"objeto": "foto/a.jpg", "foco": [0.4, 0.6], "zoom": 1.2}]),
     }
-    monkeypatch.setattr(repos, "obtener_publicacion", lambda _id: pub)
+    monkeypatch.setattr(repos, "obtener_pieza", lambda _id: pub)
     monkeypatch.setattr(repos, "obtener_plantilla_diseno", lambda _id: {"documento": json.dumps(doc)})
 
     r = cliente.get(f"/api/imagen/pieza/c1/{pid}").json()
@@ -81,7 +81,7 @@ def test_guardar_versiona_y_fija_imagen(cliente, entorno, _render_mock):
     assert r.json() == {"id": "render.png", "url": "/api/media/render.png", "version": 1}
 
     # La imagen de la pieza quedó fijada al PNG renderizado.
-    assert repos.obtener_contenido_plataforma(pid)["imagen"] == "render.png"
+    assert repos.obtener_pieza_fila(pid)["imagen"] == "render.png"
 
     # Cargar ahora devuelve el documento y 1 versión.
     cargado = cliente.get(f"/api/imagen/pieza/c1/{pid}").json()

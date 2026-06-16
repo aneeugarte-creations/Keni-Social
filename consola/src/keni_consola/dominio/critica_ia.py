@@ -41,8 +41,8 @@ _TOOLS_VETADAS: tuple[str, ...] = (
     "Bash",
     "WebFetch",
     "WebSearch",
-    "mcp__keni-social__keni_crear_contenido",
-    "mcp__keni-social__keni_actualizar_contenido",
+    "mcp__keni-social__keni_crear_publicacion",
+    "mcp__keni-social__keni_actualizar_publicacion",
     "mcp__keni-social__keni_enviar_a_revision",
     "mcp__keni-social__keni_aprobar",
     "mcp__keni-social__keni_rechazar",
@@ -128,7 +128,7 @@ def _componer_prompt(*, pub: dict[str, Any], marca: str, red: str, ruta_arte: st
     return cuerpo + _contexto_editorial(marca)
 
 
-def lanzar_para_publicacion(publicacion_id: str) -> dict[str, Any] | None:
+def lanzar_para_publicacion(pieza_id: str) -> dict[str, Any] | None:
     """ENCOLA la crítica IA de una pieza si toca (flag ON, humanos OK, nivel IA pendiente).
 
     Devuelve el registro de generación encolado, o None si no aplica. Idempotente: la clave
@@ -137,11 +137,11 @@ def lanzar_para_publicacion(publicacion_id: str) -> dict[str, Any] | None:
     """
     if not config.critica_ia_activa():
         return None
-    pub = repos.obtener_publicacion(publicacion_id)
-    plat = repos.obtener_contenido_plataforma(publicacion_id)
+    pub = repos.obtener_pieza(pieza_id)
+    plat = repos.obtener_pieza_fila(pieza_id)
     if pub is None or plat is None:
         return None
-    cadena = repos.listar_aprobaciones(publicacion_id)
+    cadena = repos.listar_aprobaciones(pieza_id)
     if not colaboracion.humanos_aprobados_ia_pendiente(cadena):
         return None
 
@@ -149,7 +149,7 @@ def lanzar_para_publicacion(publicacion_id: str) -> dict[str, Any] | None:
     red = str(pub.get("red") or "")
     clave_arte, ext = _arte_para_prefetch(pub)
 
-    procesar_spec = jobspec.construir_critica_ia(publicacion_id=publicacion_id)
+    procesar_spec = jobspec.construir_critica_ia(pieza_id=pieza_id)
     procesar = jobspec.reconstruir_procesar({"procesar": procesar_spec})
 
     dir_temporal: Path | None = None
@@ -175,8 +175,8 @@ def lanzar_para_publicacion(publicacion_id: str) -> dict[str, Any] | None:
         dir_temporal=dir_temporal,
         prefetch_s3=prefetch,
         endurecer=_endurecer(),
-        clave_idem=f"critica-ia:{publicacion_id}",
-        contenido_id=str(plat.get("contenido_id", "") or ""),
+        clave_idem=f"critica-ia:{pieza_id}",
+        publicacion_id=str(plat.get("publicacion_id", "") or ""),
     )
 
 
@@ -238,9 +238,9 @@ def _texto_comentario(revision: dict[str, Any] | None) -> str:
     return "\n".join(lineas)
 
 
-def _reflejar_y_programar(publicacion_id: str) -> None:
+def _reflejar_y_programar(pieza_id: str) -> None:
     """Aplica el estado de la cadena a la pieza y, si quedó aprobada, la programa (best-effort)."""
-    cadena = repos.listar_aprobaciones(publicacion_id)
+    cadena = repos.listar_aprobaciones(pieza_id)
     estado_global = colaboracion.estado_cadena(cadena)
     estado_pieza = colaboracion.estado_publicacion_para(estado_global)
     campos: dict[str, Any] = {
@@ -250,23 +250,23 @@ def _reflejar_y_programar(publicacion_id: str) -> None:
     }
     if estado_pieza is not None:
         campos["estado"] = estado_pieza
-    repos.actualizar_publicacion(publicacion_id, campos)
+    repos.actualizar_pieza(pieza_id, campos)
     if estado_global == DECISION_APROBADO:
         from .. import auto_programar
 
         try:
-            auto_programar.programar_si_aprobada(publicacion_id)
+            auto_programar.programar_si_aprobada(pieza_id)
         except Exception:  # noqa: BLE001 -- programar es secundario al voto ya registrado
-            _log.exception("Crítica IA: auto-programación falló para %s.", publicacion_id)
+            _log.exception("Crítica IA: auto-programación falló para %s.", pieza_id)
 
 
-def aplicar_revision(publicacion_id: str, revision: dict[str, Any] | None) -> str | None:
+def aplicar_revision(pieza_id: str, revision: dict[str, Any] | None) -> str | None:
     """Vota el nivel "Crítica IA" de la pieza según `revision`. Devuelve la decisión o None.
 
     None si la cadena ya no tiene el nivel IA pendiente (cadena cambió / ya votado): no hace
     nada. Si no hay revision legible, RECHAZA por seguridad (no se aprueba a ciegas).
     """
-    cadena = repos.listar_aprobaciones(publicacion_id)
+    cadena = repos.listar_aprobaciones(pieza_id)
     nivel = colaboracion.nivel_critica_ia(cadena)
     if nivel is None or nivel.get("decision") != DECISION_PENDIENTE:
         return None
@@ -286,11 +286,11 @@ def aplicar_revision(publicacion_id: str, revision: dict[str, Any] | None) -> st
     if not aprueba:
         # DISLIKE de IA: comentario SIN RESOLVER que frena la auto-programación (gate B) y deja
         # la pieza en el feed con el problema visible para que un humano la corrija.
-        plat = repos.obtener_contenido_plataforma(publicacion_id)
+        plat = repos.obtener_pieza_fila(pieza_id)
         try:
             repos.crear_comentario(
-                contenido_id=str((plat or {}).get("contenido_id", "") or ""),
-                plataforma_id=publicacion_id,
+                publicacion_id=str((plat or {}).get("publicacion_id", "") or ""),
+                pieza_id=pieza_id,
                 texto=_texto_comentario(revision),
                 autor={
                     "id": colaboracion.DECISOR_CRITICA_ID,
@@ -298,17 +298,17 @@ def aplicar_revision(publicacion_id: str, revision: dict[str, Any] | None) -> st
                 },
             )
         except Exception:  # noqa: BLE001 -- el voto ya quedó; el comentario es secundario
-            _log.exception("Crítica IA: no se pudo crear el comentario para %s.", publicacion_id)
-    _reflejar_y_programar(publicacion_id)
+            _log.exception("Crítica IA: no se pudo crear el comentario para %s.", pieza_id)
+    _reflejar_y_programar(pieza_id)
     return decision
 
 
-def construir_procesar_critica_ia(*, publicacion_id: str):  # noqa: ANN201
+def construir_procesar_critica_ia(*, pieza_id: str):  # noqa: ANN201
     """Devuelve el callback `procesar(salida, metricas) -> dict` del job de crítica (worker)."""
 
     def procesar(salida: str, _metricas: object) -> dict[str, object]:
         revision = _parsear_revision(salida)
-        decision = aplicar_revision(publicacion_id, revision)
+        decision = aplicar_revision(pieza_id, revision)
         return {"critica_ia": {"decision": decision or "", "veredicto": revision or {}}}
 
     return procesar

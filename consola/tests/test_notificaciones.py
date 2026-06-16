@@ -16,7 +16,7 @@ def test_tipos_canonicos():
         "comentario",
         "aprobacion",
         "rechazo",
-        "publicacion",
+        "pieza",
         "asignacion",
     )
 
@@ -27,7 +27,7 @@ def test_resumen_por_tipo():
     assert "dio su OK" in n._resumen("aprobacion", "Mariana", "Gol de último minuto")
     assert "rechazó" in n._resumen("rechazo", "Lalo", "Gol de último minuto")
     # La publicación no tiene actor humano; la red entra en el resumen si se pasa.
-    resumen_pub = n._resumen("publicacion", "", "Gol de último minuto", "Instagram")
+    resumen_pub = n._resumen("pieza", "", "Gol de último minuto", "Instagram")
     assert "Se publicó" in resumen_pub and "Instagram" in resumen_pub
     # Asignación: el manager te empuja una pieza (la señal que retira el "te paso esto").
     assert "te asignó" in n._resumen("asignacion", "Elías", "Gol de último minuto")

@@ -20,9 +20,9 @@ const OPCIONES = {
   ],
 };
 
-const PUBLICACION = {
+const PIEZA = {
   id: "p1",
-  contenido_id: "c1",
+  publicacion_id: "c1",
   pipeline_id: "",
   titulo: "Gol de último minuto",
   marca: "unotv",
@@ -72,10 +72,10 @@ function stubFetch() {
     "fetch",
     vi.fn(async (url: string | URL) => {
       const ruta = String(url);
-      if (ruta.includes("/api/publicaciones/opciones")) {
+      if (ruta.includes("/api/piezas/opciones")) {
         return new Response(JSON.stringify(OPCIONES), { status: 200 });
       }
-      if (ruta.includes("/api/publicaciones/cadenas")) {
+      if (ruta.includes("/api/piezas/cadenas")) {
         // Lote vacío: cada PostFeed cae a su query individual (/aprobacion).
         return new Response(JSON.stringify({ cadenas: {} }), { status: 200 });
       }
@@ -88,10 +88,10 @@ function stubFetch() {
       if (ruta.includes("/comentarios")) {
         return new Response(JSON.stringify({ comentarios: [], total: 0 }), { status: 200 });
       }
-      if (ruta.includes("/api/publicaciones")) {
+      if (ruta.includes("/api/piezas")) {
         return new Response(
           JSON.stringify({
-            publicaciones: [PUBLICACION],
+            piezas: [PIEZA],
             paginacion: { total: 1, limite: 50, desplazamiento: 0 },
           }),
           { status: 200 },
@@ -245,10 +245,10 @@ describe("MobileFeed · feed móvil de revisión", () => {
       "fetch",
       vi.fn(async (url: string | URL) => {
         const ruta = String(url);
-        if (ruta.includes("/api/publicaciones/opciones")) {
+        if (ruta.includes("/api/piezas/opciones")) {
           return new Response(JSON.stringify(OPCIONES), { status: 200 });
         }
-        if (ruta.includes("/api/publicaciones/cadenas")) {
+        if (ruta.includes("/api/piezas/cadenas")) {
           return new Response(JSON.stringify({ cadenas: {} }), { status: 200 });
         }
         if (ruta.includes("/aprobacion")) {
@@ -257,10 +257,10 @@ describe("MobileFeed · feed móvil de revisión", () => {
             { status: 200 },
           );
         }
-        if (ruta.includes("/api/publicaciones")) {
+        if (ruta.includes("/api/piezas")) {
           return new Response(
             JSON.stringify({
-              publicaciones: [{ ...PUBLICACION, marca: "otra-marca" }],
+              piezas: [{ ...PIEZA, marca: "otra-marca" }],
               paginacion: { total: 9, limite: 1, desplazamiento: 0, cursor_siguiente: "2026-01-01T00:00:00|p1" },
             }),
             { status: 200 },
@@ -280,19 +280,19 @@ describe("MobileFeed · feed móvil de revisión", () => {
       "fetch",
       vi.fn(async (url: string | URL, init?: RequestInit) => {
         const ruta = String(url);
-        if (ruta.includes("/api/contenido") && init?.method === "POST") {
+        if (ruta.includes("/api/publicaciones") && init?.method === "POST") {
           creadas.push(String(init.body));
           return new Response(JSON.stringify({ id: "c9" }), { status: 200 });
         }
-        if (ruta.includes("/api/publicaciones/opciones")) {
+        if (ruta.includes("/api/piezas/opciones")) {
           return new Response(JSON.stringify(OPCIONES), { status: 200 });
         }
-        if (ruta.includes("/api/publicaciones/cadenas")) {
+        if (ruta.includes("/api/piezas/cadenas")) {
           return new Response(JSON.stringify({ cadenas: {} }), { status: 200 });
         }
-        if (ruta.includes("/api/publicaciones")) {
+        if (ruta.includes("/api/piezas")) {
           return new Response(
-            JSON.stringify({ publicaciones: [], paginacion: { total: 0, limite: 50, desplazamiento: 0 } }),
+            JSON.stringify({ piezas: [], paginacion: { total: 0, limite: 50, desplazamiento: 0 } }),
             { status: 200 },
           );
         }
@@ -316,16 +316,16 @@ describe("MobileFeed · feed móvil de revisión", () => {
       "fetch",
       vi.fn(async (url: string | URL) => {
         const ruta = String(url);
-        if (ruta.includes("/api/publicaciones/opciones")) {
+        if (ruta.includes("/api/piezas/opciones")) {
           return new Response(JSON.stringify(OPCIONES), { status: 200 });
         }
-        if (ruta.includes("/api/publicaciones/cadenas")) {
+        if (ruta.includes("/api/piezas/cadenas")) {
           return new Response(JSON.stringify({ cadenas: {} }), { status: 200 });
         }
-        if (ruta.includes("/api/publicaciones")) {
+        if (ruta.includes("/api/piezas")) {
           urls.push(ruta);
           return new Response(
-            JSON.stringify({ publicaciones: [], paginacion: { total: 0, limite: 50, desplazamiento: 0 } }),
+            JSON.stringify({ piezas: [], paginacion: { total: 0, limite: 50, desplazamiento: 0 } }),
             { status: 200 },
           );
         }

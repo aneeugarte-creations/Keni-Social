@@ -69,7 +69,7 @@ def test_limite_red_es_nullable():
 
 
 # --------------------------------------------------------------------------- #
-# Areas de churn ampliadas (#120): publicaciones, runs                         #
+# Areas de churn ampliadas (#120): piezas, runs                         #
 # --------------------------------------------------------------------------- #
 
 
@@ -78,7 +78,7 @@ def test_churn_modelos_presentes():
     defs = set(esquema_json()["$defs"].keys())
     esperados = {
         "Paginacion", "MetricasRun",
-        "Publicacion", "RespuestaPublicaciones", "RespuestaPublicacion",
+        "Pieza", "RespuestaPiezas", "RespuestaPieza",
     }
     assert esperados <= defs
 
@@ -91,9 +91,9 @@ def test_generacion_deferida_no_esta_en_el_subconjunto():
 
 
 def test_paginacion_envelope_requerido_en_listados():
-    """Los listados pesados (publicaciones) traen `paginacion` REQUERIDA (#121)."""
+    """Los listados pesados (piezas) traen `paginacion` REQUERIDA (#121)."""
     defs = esquema_json()["$defs"]
-    assert "paginacion" in defs["RespuestaPublicaciones"]["required"]
+    assert "paginacion" in defs["RespuestaPiezas"]["required"]
     assert set(defs["Paginacion"]["required"]) == {"total", "limite", "desplazamiento"}
 
 

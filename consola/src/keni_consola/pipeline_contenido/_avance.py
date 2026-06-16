@@ -34,7 +34,7 @@ from typing import Any
 
 from .. import config, repos
 from ..dominio import colaboracion
-from ..dominio.publicaciones import publicacion_a_dict
+from ..dominio.piezas import pieza_a_dict
 from ..estados import ESTADO_EN_REVISION
 from ..tiempo import ahora_iso
 from . import _revisar
@@ -76,7 +76,7 @@ def piezas_para_avance(
         if not _en_reposo(pub, ahora):
             continue
         # Completa DE VERDAD (copy + asset del formato): la misma derivación del feed.
-        if publicacion_a_dict(pub).get("etapa_ia") != "lista_para_revisar":
+        if pieza_a_dict(pub).get("etapa_ia") != "lista_para_revisar":
             continue
         elegidas.append(pub)
         if len(elegidas) >= maximo:
@@ -91,7 +91,7 @@ def _enviar(pub: dict[str, Any]) -> bool:
     el snapshot y la escritura, no toca nada (False; no es un error). El autor de la pieza
     queda como remitente (vive en el contenido padre, fijado al crearla).
     """
-    actualizada = repos.transicionar_estado_publicacion(
+    actualizada = repos.transicionar_estado_pieza(
         pub["id"],
         "borrador",
         ESTADO_EN_REVISION,
@@ -108,7 +108,7 @@ def _enviar(pub: dict[str, Any]) -> bool:
     # HTTP; los tests del pipeline no la pagan hasta que de verdad se envía algo.
     from ..api.colaboracion import montar_cadena_aprobacion
 
-    plat = repos.obtener_contenido_plataforma(pub["id"])
+    plat = repos.obtener_pieza_fila(pub["id"])
     montar_cadena_aprobacion(pub["id"], plat or {}, colaboracion.cadena_simple(), con_cargos=False)
     return True
 
@@ -129,7 +129,7 @@ def ejecutar_avance() -> list[dict[str, Any]]:
     if not config.maquina_activa():
         return []
     try:
-        pubs = repos.listar_publicaciones(estado="borrador")
+        pubs = repos.listar_piezas(estado="borrador")
     except Exception:  # noqa: BLE001 -- sin tablero, la etapa no actúa
         _log.exception("pipeline: no se pudieron leer los borradores para la etapa de avance.")
         return []

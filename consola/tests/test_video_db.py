@@ -8,9 +8,9 @@ _MARCA = "claro-sports"
 
 
 def test_crud_composicion(entorno):
-    c = repos.crear_video_composicion(marca=_MARCA, documento='{"version":1}', contenido_id="t1")
+    c = repos.crear_video_composicion(marca=_MARCA, documento='{"version":1}', publicacion_id="t1")
     assert c["marca"] == _MARCA
-    assert c["contenido_id"] == "t1"
+    assert c["publicacion_id"] == "t1"
     assert c["documento"] == '{"version":1}'
 
     leida = repos.obtener_video_composicion(c["id"])
@@ -21,7 +21,7 @@ def test_crud_composicion(entorno):
 
     listadas = repos.listar_video_composiciones(marca=_MARCA)
     assert any(x["id"] == c["id"] for x in listadas)
-    assert repos.listar_video_composiciones(contenido_id="t1")[0]["id"] == c["id"]
+    assert repos.listar_video_composiciones(publicacion_id="t1")[0]["id"] == c["id"]
 
 
 def test_composicion_drafts_titulo_estado(entorno):

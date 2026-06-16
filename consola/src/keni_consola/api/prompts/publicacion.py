@@ -82,7 +82,7 @@ _MSG_VACIO = "No se puede publicar un documento vacío: escribe contenido antes 
 
 
 def _autor_nombre(request: Request) -> str:
-    """Nombre del usuario autenticado para la atribución de publicaciones/solicitudes."""
+    """Nombre del usuario autenticado para la atribución de piezas/solicitudes."""
     autor = autor_de_peticion(request)
     return (autor or {}).get("usuario", "") or ""
 

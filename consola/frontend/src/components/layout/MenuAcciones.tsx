@@ -26,7 +26,7 @@ export function MenuAcciones({
 }: {
   children?: React.ReactNode;
   etiqueta?: string;
-  /** Contenido del panel de ajustes. Si se pasa, el "⋮" muestra la entrada «Ajustes». */
+  /** Publicacion del panel de ajustes. Si se pasa, el "⋮" muestra la entrada «Ajustes». */
   ajustes?: React.ReactNode;
   ajustesTitulo?: string;
   /** Abre el panel ya desplegado al montar (deep-links, p. ej. `?horarios=1`). */

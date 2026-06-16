@@ -3,12 +3,12 @@
 import { peticion } from "./_core";
 import type {
   CuerpoActualizarWebhook,
-  CuerpoAsistenteContenido,
+  CuerpoAsistentePublicacion,
   CuerpoCrearWebhook,
   RespuestaGeneracion,
   RespuestaMensaje,
-  RespuestaMetricasContenido,
-  RespuestaPreviewContenido,
+  RespuestaMetricasPublicacion,
+  RespuestaPreviewPublicacion,
   RespuestaProbarWebhook,
   RespuestaWebhook,
   RespuestaWebhooks,
@@ -31,19 +31,19 @@ export const apiWebhooks = {
     peticion<RespuestaProbarWebhook>(`/webhooks/${encodeURIComponent(id)}/probar`, {
       metodo: "POST",
     }),
-  /** Rendimiento real (Metricool) por pieza publicada del tablero. Mapa por `contenido_plataforma.id`. */
-  metricasContenido: (signal?: AbortSignal) =>
-    peticion<RespuestaMetricasContenido>("/contenido/metricas", { signal }),
+  /** Rendimiento real (Metricool) por pieza publicada del tablero. Mapa por `pieza.id`. */
+  metricasPublicacion: (signal?: AbortSignal) =>
+    peticion<RespuestaMetricasPublicacion>("/publicaciones/metricas", { signal }),
   /** Previsualiza un copy con sus variables `{...}` ya sustituidas (no persiste). */
-  previewContenido: (contenidoId: string, texto: string, signal?: AbortSignal) =>
-    peticion<RespuestaPreviewContenido>(
-      `/contenido/${encodeURIComponent(contenidoId)}/preview`,
+  previewPublicacion: (publicacionId: string, texto: string, signal?: AbortSignal) =>
+    peticion<RespuestaPreviewPublicacion>(
+      `/publicaciones/${encodeURIComponent(publicacionId)}/preview`,
       { metodo: "POST", json: { texto }, signal },
     ),
   /** Lanza el asistente IA sobre un contenido (genera/resume/3 variantes). */
-  asistenteContenido: (contenidoId: string, cuerpo: CuerpoAsistenteContenido) =>
+  asistentePublicacion: (publicacionId: string, cuerpo: CuerpoAsistentePublicacion) =>
     peticion<RespuestaGeneracion>(
-      `/contenido/${encodeURIComponent(contenidoId)}/asistente`,
+      `/publicaciones/${encodeURIComponent(publicacionId)}/asistente`,
       { metodo: "POST", json: cuerpo },
     ),
 

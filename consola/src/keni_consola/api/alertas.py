@@ -10,12 +10,12 @@ EQUIPO (cualquier usuario autenticado): es LECTURA de avisos del propio tablero,
 gestion de secretos. La barrera de sesion la aplica el middleware `SeguridadConsola`;
 aqui no se relaja nada (igual que `/api/reciclaje` u otros endpoints de lectura).
 
-  GET /api/alertas[?limite=N]  -> {"alertas": [{id, tipo, contenido_id, plataforma_id,
+  GET /api/alertas[?limite=N]  -> {"alertas": [{id, tipo, publicacion_id, pieza_id,
                                                 payload, creado}, ...]}
 
 Lee la bitacora (`repos.listar_eventos_internos`) y FILTRA a los dos tipos de alerta de
 rendimiento (los `TIPOS_ALERTA`), descartando el resto de eventos internos (aprobaciones,
-publicaciones, vencimientos). `?limite=` acota cuantas filas se leen (def 50, max 200).
+piezas, vencimientos). `?limite=` acota cuantas filas se leen (def 50, max 200).
 
 Errores en espanol, sin tracebacks (contrato del paquete `api`).
 """

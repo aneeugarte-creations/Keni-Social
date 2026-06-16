@@ -2,7 +2,7 @@
  * GESTOR de composiciones de video (= gestor de transcripciones).
  *
  * Lista las composiciones de la MARCA ACTIVA con: formato, última edición, enlace a la pieza
- * ligada (si tiene `contenido_id`), el ESTADO de subtítulos (pendiente/transcrito/editado/listo)
+ * ligada (si tiene `publicacion_id`), el ESTADO de subtítulos (pendiente/transcrito/editado/listo)
  * y si la pieza ya tiene su video adjunto o le falta. Reabrir una composición la carga en el
  * editor navegando a `?composicion=<id>`.
  *
@@ -68,24 +68,24 @@ export function GestorComposiciones({ marca, onAbrir }: GestorComposicionesProps
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  // Piezas de la marca, para mapear `contenido_id -> falta_video` (¿ya tiene su mp4?).
+  // Piezas de la marca, para mapear `publicacion_id -> falta_video` (¿ya tiene su mp4?).
   const pubsQ = useQuery({
-    queryKey: ["publicaciones-falta-video", marca],
+    queryKey: ["piezas-falta-video", marca],
     queryFn: ({ signal }) =>
-      api.publicaciones({ marca }, signal).then((r) => r.publicaciones),
+      api.piezas({ marca }, signal).then((r) => r.piezas),
     enabled: !!marca,
   });
 
-  // Map contenido_id -> { faltaVideo, tieneVideo } a partir de las piezas de esa pieza/contenido.
+  // Map publicacion_id -> { faltaVideo, tieneVideo } a partir de las piezas de esa pieza/contenido.
   const estadoPieza = React.useMemo(() => {
     const m = new Map<string, { faltaVideo: boolean }>();
     for (const p of pubsQ.data ?? []) {
-      if (!p.contenido_id) continue;
-      const prev = m.get(p.contenido_id);
-      // Una pieza (contenido) tiene varias publicaciones (una por red); con que UNA tenga video,
+      if (!p.publicacion_id) continue;
+      const prev = m.get(p.publicacion_id);
+      // Una pieza (contenido) tiene varias piezas (una por red); con que UNA tenga video,
       // el contenido tiene su render. "falta" sólo si NINGUNA lo tiene.
       const faltaVideo = (prev?.faltaVideo ?? true) && !p.video;
-      m.set(p.contenido_id, { faltaVideo });
+      m.set(p.publicacion_id, { faltaVideo });
     }
     return m;
   }, [pubsQ.data]);
@@ -156,7 +156,7 @@ export function GestorComposiciones({ marca, onAbrir }: GestorComposicionesProps
             <FilaComposicion
               key={c.id}
               comp={c}
-              faltaVideo={c.contenido_id ? estadoPieza.get(c.contenido_id)?.faltaVideo : undefined}
+              faltaVideo={c.publicacion_id ? estadoPieza.get(c.publicacion_id)?.faltaVideo : undefined}
               onAbrir={() => onAbrir(c.id)}
               onRenombrar={(titulo) => renombrar.mutate({ id: c.id, titulo })}
               onEliminar={() => eliminar.mutate(c.id)}
@@ -278,7 +278,7 @@ function FilaComposicion({
             <Captions className="h-3 w-3" />
             {ETIQUETA_ESTADO_SUBS[estadoSubs] ?? estadoSubs}
           </span>
-          {comp.contenido_id ? (
+          {comp.publicacion_id ? (
             faltaVideo === true ? (
               <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400">
                 <VideoOff className="h-3 w-3" />
@@ -296,7 +296,7 @@ function FilaComposicion({
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        {comp.contenido_id && (
+        {comp.publicacion_id && (
           <Button asChild size="sm" variant="ghost">
             <Link to="/operacion/feed/lista" title="Ir a la lista de contenido">
               <ExternalLink className="mr-1 h-4 w-4" />

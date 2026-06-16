@@ -105,11 +105,11 @@ def _nota_a_dict(item: dict[str, Any], estado_pieza: str) -> dict[str, Any]:
 async def listar(request: Request) -> Response:
     """GET /api/presidencia/notas: notas volcadas, recientes primero. Filtro: `marca`."""
     marca = request.query_params.get("marca") or None
-    items = repos.listar_contenido_origenes([ORIGEN_PRESIDENCIA])
+    items = repos.listar_publicaciones_origenes([ORIGEN_PRESIDENCIA])
     if marca:
         items = [it for it in items if (it.get("marca") or "") == marca]
     items.sort(key=lambda it: it.get("creado") or "", reverse=True)
-    estados = repos.estado_pieza_por_contenido([it["id"] for it in items])
+    estados = repos.estado_pieza_por_publicacion([it["id"] for it in items])
     return JSONResponse(
         {
             "notas": [
@@ -123,7 +123,7 @@ async def listar(request: Request) -> Response:
 async def crear(request: Request) -> Response:
     """POST /api/presidencia/notas: vuelca la nota y genera la pieza carrusel del feed.
 
-    Cuerpo `{marca, texto, titulo?, media:[{tipo,objeto}]}` -> `{nota, contenido_id,
+    Cuerpo `{marca, texto, titulo?, media:[{tipo,objeto}]}` -> `{nota, publicacion_id,
     generacion}`. Crea el tema (`origen='presidencia'`, `formato='carrusel'`), una fila
     por red del carrusel con la PORTADA (primera imagen, como foto cruda para la placa)
     y los slides extra en crudo, y lanza el copy EN SEGUNDO PLANO con la nota íntegra.
@@ -153,7 +153,7 @@ async def crear(request: Request) -> Response:
     extras = [s for s in slides if s is not portada]
 
     autor = autor_de_peticion(request)
-    item = repos.crear_contenido(
+    item = repos.crear_publicacion(
         clase="contenido",
         flujo=FLUJO_IMPORTANTE,
         titulo=titulo,
@@ -168,8 +168,8 @@ async def crear(request: Request) -> Response:
     )
     carrusel_json = json.dumps(extras, ensure_ascii=False) if extras else ""
     for red in redes.redes_de_formato(redes.FORMATO_CARRUSEL):
-        repos.crear_contenido_plataforma(
-            contenido_id=item["id"],
+        repos.crear_pieza_fila(
+            publicacion_id=item["id"],
             red=red,
             falta_copy=True,
             # La portada YA está (foto cruda + placa on-demand): la pieza no espera imagen.
@@ -192,7 +192,7 @@ async def crear(request: Request) -> Response:
             titulo_dado=titulo,
             texto_base=texto[: gen_dom.MAX_TEXTO],
             autor=autor,
-            contenido_id=item["id"],
+            publicacion_id=item["id"],
             # Lo de presidencia corre prisa: adelanta al lote de fondo de la cola.
             urgente=True,
         )
@@ -205,7 +205,7 @@ async def crear(request: Request) -> Response:
                     "La nota se guardó pero hay demasiadas generaciones en curso; "
                     "lanza el copy desde la pieza del feed en unos segundos."
                 ),
-                "contenido_id": item["id"],
+                "publicacion_id": item["id"],
             },
             status_code=429,
         )
@@ -213,7 +213,7 @@ async def crear(request: Request) -> Response:
     return JSONResponse(
         {
             "nota": _nota_a_dict(item, "generando"),
-            "contenido_id": item["id"],
+            "publicacion_id": item["id"],
             "generacion": gen,
         }
     )

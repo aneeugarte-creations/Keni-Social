@@ -150,7 +150,7 @@ def test_lanzar_copy_converge_pese_al_nonce_del_prompt(entorno, cuenta_encolados
     autor = {"id": "u1", "usuario": "ana"}
     args = dict(
         marca=_MARCA, contexto="La nota de origen.", redes_ids=["x"],
-        titulo="Tema X", titulo_dado="Tema X", contenido_id="tema-1", autor=autor,
+        titulo="Tema X", titulo_dado="Tema X", publicacion_id="tema-1", autor=autor,
     )
     g1 = generar.lanzar_copy(**args)
     g2 = generar.lanzar_copy(**args)
@@ -160,7 +160,7 @@ def test_lanzar_copy_converge_pese_al_nonce_del_prompt(entorno, cuenta_encolados
     # Un trabajo DISTINTO (otro tema/nota) sí arranca el suyo.
     g3 = generar.lanzar_copy(
         marca=_MARCA, contexto="Otra nota distinta.", redes_ids=["x"],
-        titulo="Tema Y", titulo_dado="Tema Y", contenido_id="tema-2", autor=autor,
+        titulo="Tema Y", titulo_dado="Tema Y", publicacion_id="tema-2", autor=autor,
     )
     assert g3["id"] != g1["id"]
     assert len(cuenta_encolados) == 2

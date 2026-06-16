@@ -151,7 +151,7 @@ def main() -> int:
     except Exception:  # noqa: BLE001 -- la inicializacion nunca debe impedir el arranque
         pass
 
-    # Programador de publicaciones (#9, Fase 3): un hilo demonio que, al vencer la
+    # Programador de piezas (#9, Fase 3): un hilo demonio que, al vencer la
     # `fecha_programada` de una pieza `programado`, la PREPARA en dry-run (estampa
     # `preparado_en`). Por defecto NO publica: el posteo real (vía Metricool) esta gated por
     # `KENI_PUBLICAR_REAL` ("el humano aprueba; el sistema no publica solo"). Vive aqui
@@ -228,7 +228,7 @@ def main() -> int:
 
     # GC de MEDIA SUELTA (Estudio §5): un hilo demonio que, si `KENI_MEDIA_GC` esta activo
     # (def OFF), barre cada N horas el almacen de media y borra los objetos SUELTOS (no
-    # referenciados por ninguna publicacion) y mas viejos que el umbral. SAFE BY DEFAULT: sin
+    # referenciados por ninguna pieza) y mas viejos que el umbral. SAFE BY DEFAULT: sin
     # el flag no borra nada. Vive aqui (servidor real), NO en `crear_app`, para no arrancarlo
     # en los tests.
     from .media_gc_daemon import iniciar_media_gc

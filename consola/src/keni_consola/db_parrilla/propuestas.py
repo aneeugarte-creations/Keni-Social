@@ -4,7 +4,7 @@ Ver barrel `db.py`."""
 from __future__ import annotations
 
 from .._db_json import a_json_lista
-from ..db_contenido import _fila_contenido_nueva, _insertar_contenido
+from ..db_publicacion import _fila_publicacion_nueva, _insertar_publicacion
 from ..tiempo import ahora_iso
 from ._comun import (
     ESTADO_ROTA_PROPUESTO,
@@ -288,9 +288,9 @@ def aplicar_propuesta_parrilla(
                 eventos_creados.append(eid)
             elif tipo == "crear_tarea":
                 # Encargo suelto (clase='tarea'): se inserta en `contenido` DENTRO de la misma
-                # transacción (build fila + INSERT sin commit, como los lotes de publicaciones).
+                # transacción (build fila + INSERT sin commit, como los lotes de piezas).
                 # Nace SIN responsable («por coger»); el equipo lo asigna luego.
-                fila = _fila_contenido_nueva(
+                fila = _fila_publicacion_nueva(
                     clase="tarea",
                     titulo=str(op.get("titulo", "")),
                     descripcion=str(op.get("detalle") or ""),
@@ -299,7 +299,7 @@ def aplicar_propuesta_parrilla(
                     marca=marca or "",
                     origen=origen,
                 )
-                _insertar_contenido(con, fila)
+                _insertar_publicacion(con, fila)
                 tareas_creadas.append(str(fila["id"]))
             elif tipo == "crear_turno":
                 tid = uuid.uuid4().hex[:12]

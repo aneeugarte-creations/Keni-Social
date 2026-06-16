@@ -53,14 +53,14 @@ _TABLAS = (
     "rota_config_franjas",
     "parrilla_propuesta",
     # Sub-tablas del tablero de contenido (olas organizacion/colaboracion): se truncan
-    # ANTES que sus padres `contenido`/`contenido_plataforma` (CASCADE igual las cubre,
+    # ANTES que sus padres `contenido`/`pieza` (CASCADE igual las cubre,
     # pero a la cabeza evita sorpresas de orden).
-    "contenido_etiquetas",
-    "contenido_comentarios",
-    "contenido_copy_versiones",
-    "contenido_aprobaciones",
-    "contenido_plataforma",
-    "contenido",
+    "publicacion_etiquetas",
+    "publicacion_comentarios",
+    "pieza_copy_versiones",
+    "pieza_aprobaciones",
+    "pieza",
+    "publicacion",
     # Catálogos/activos operacionales independientes (olas organizacion/activos/automatizacion).
     "etiquetas",
     "catalogo_media",
@@ -104,7 +104,7 @@ _TABLAS = (
     # Historial por barrido de daemons (observabilidad): sin truncar, las filas de un test
     # contaminan el listado/purga del siguiente.
     "daemon_barridos",
-    # Publicaciones y solicitudes de la Prompts de Texto (modelo "versión publicada").
+    # Piezas y solicitudes de la Prompts de Texto (modelo "versión publicada").
     # Sin truncar, un puntero de producción de un test contaminaría el `produccion`/
     # `sin_publicar` (y el ensamblaje) del siguiente.
     "texto_publicaciones",

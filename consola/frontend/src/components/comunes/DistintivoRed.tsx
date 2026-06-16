@@ -11,7 +11,7 @@ import { Camera, Layers, Video } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { etiquetaFormato, normalizarFormato } from "@/pages/feed/formato";
-import { iconoRed, nombreRed } from "@/pages/publicaciones/meta";
+import { iconoRed, nombreRed } from "@/pages/piezas/meta";
 
 const ICONO_FORMATO = { foto: Camera, video: Video, carrusel: Layers } as const;
 

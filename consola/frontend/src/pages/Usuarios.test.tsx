@@ -38,7 +38,7 @@ const USUARIOS = [
   },
 ];
 
-const OPCIONES_PUBLICACIONES = {
+const OPCIONES_PIEZAS = {
   marcas: [
     { id: "claro-sports", nombre: "Claro Sports" },
     { id: "unotv", nombre: "UnoTV" },
@@ -72,9 +72,9 @@ function stubFetch(opciones: { usuariosStatus?: number; capturas?: Captura[] } =
       if (ruta.includes("/api/auth/me")) {
         return new Response(JSON.stringify({ usuario: ADMIN }), { status: 200 });
       }
-      // Catalogo de marcas para el selector multi (lo expone publicaciones/opciones).
-      if (ruta.includes("/api/publicaciones/opciones")) {
-        return new Response(JSON.stringify(OPCIONES_PUBLICACIONES), { status: 200 });
+      // Catalogo de marcas para el selector multi (lo expone piezas/opciones).
+      if (ruta.includes("/api/piezas/opciones")) {
+        return new Response(JSON.stringify(OPCIONES_PIEZAS), { status: 200 });
       }
       // POST /api/usuarios (crear)
       if (ruta.endsWith("/api/usuarios") && metodo === "POST") {

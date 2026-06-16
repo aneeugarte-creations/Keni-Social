@@ -3,7 +3,7 @@
 Postproxy (https://api.postproxy.dev/api/) es un canal de publicación alternativo a
 Metricool. Este módulo agrupa las llamadas de GESTIÓN de la conexión (grupos de
 perfiles, perfiles, conexión OAuth de una red, desconexión); la PUBLICACIÓN de un post
-vive aparte en `publicacion.postproxy`.
+vive aparte en `pieza.postproxy`.
 
 Contrato (header `Authorization: Bearer <api_key>` en TODAS):
     GET    /api/profile_groups                         -> [{id, name, profiles_count}]
@@ -326,7 +326,7 @@ _ALIAS_SEGUIDORES: tuple[str, ...] = (
     "followerCount", "followers_count", "follower_count", "fan_count",
     "followersCount", "subscriberCount", "subscriber_count", "subscribers", "followers",
 )
-# Nº de publicaciones de la cuenta en el snapshot (media/tweets/vídeos/pines…).
+# Nº de piezas de la cuenta en el snapshot (media/tweets/vídeos/pines…).
 _ALIAS_POSTS: tuple[str, ...] = (
     "media_count", "mediaCount", "tweet_count", "statuses_count", "video_count",
     "videoCount", "pin_count", "postsCount", "posts_count", "post_count",

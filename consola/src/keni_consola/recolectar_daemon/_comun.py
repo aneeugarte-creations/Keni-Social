@@ -189,7 +189,7 @@ def _fusionar_grupo(
 
     Salvaguardas:
       - ANTI-TOCTOU: antes de absorber, RE-LEE cada cluster absorbible; si entre la lectura del
-        lote y ahora adquirió `contenido_id` o dejó de ser `nuevo` (el pipeline lo promovió),
+        lote y ahora adquirió `publicacion_id` o dejó de ser `nuevo` (el pipeline lo promovió),
         NO se absorbe (se conserva intacto).
       - SIN ITEMS SUELTOS: los items se reasignan en LOTES de 500 HASTA VACIAR el cluster (antes el
         tope de 500 dejaba items colgando del cluster borrado si había más).
@@ -208,7 +208,7 @@ def _fusionar_grupo(
         actual = repos.obtener_noticia_cluster(cid)
         if actual is None:
             continue
-        if (actual.get("contenido_id") or "") or (actual.get("estado") or "nuevo") != "nuevo":
+        if (actual.get("publicacion_id") or "") or (actual.get("estado") or "nuevo") != "nuevo":
             continue
         # Reasigna TODOS los items, por lotes, hasta vaciar (cota dura de seguridad: 100 lotes).
         for _ in range(100):

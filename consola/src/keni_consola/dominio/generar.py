@@ -420,7 +420,7 @@ def componer(
     if sin_emojis:
         partes.append(instruccion_sin_emojis())
     if adjuntos:
-        # MODELO DE PUBLICACION (rediseno de la Prompts): los pipelines inyectan la
+        # MODELO DE PIEZA (rediseno de la Prompts): los pipelines inyectan la
         # version PUBLICADA de cada adjunto editorial (sha fijado por un admin), no la
         # working copy. Sin puntero (o sin BD/git) el doc queda intacto: fallback suave.
         # Este es el UNICO punto de ensamblaje de adjuntos (lo cruzan lanzamientos reales
@@ -483,7 +483,7 @@ def lanzar(
     endurecer: dict[str, Any] | None = None,
     clave_idem: str | None = None,
     urgente: bool = False,
-    contenido_id: str = "",
+    publicacion_id: str = "",
     proceso: str = generaciones.PROCESO_PRODUCCION,
 ) -> dict[str, Any]:
     """Crea el registro de generación, ENCOLA el trabajo y devuelve el registro (para sondeo).
@@ -517,9 +517,9 @@ def lanzar(
         "marca": marca,
         "etiqueta": f"{titulo} · {nombre_marca(marca)}",
         # Correlación con el TEMA del tablero/pipeline (cuando el trabajo nace de uno): el
-        # feed de Producción suma por `contenido_id` las métricas de la run. Antes solo
+        # feed de Producción suma por `publicacion_id` las métricas de la run. Antes solo
         # viajaba en el `procesar_spec` y el registro quedaba sin atar (runs a cero).
-        "contenido_id": contenido_id or "",
+        "publicacion_id": publicacion_id or "",
         # Proceso de la maquina (ADR 0011): por defecto PRODUCCION (la maquina de contenido:
         # copy/arte/manual). La verificación verificación de la fuente lo pasa "investigacion" (motor de noticias).
         "proceso": proceso or generaciones.PROCESO_PRODUCCION,
@@ -590,11 +590,11 @@ TIPO_ARTE = "autogen"
 
 def lanzar_arte(
     *,
-    contenido_id: str,
+    publicacion_id: str,
     marca: str,
     titulo: str,
     prompt: str,
-    plataforma_id: str = "",
+    pieza_id: str = "",
     autor: dict[str, str] | None = None,
     urgente: bool = False,
     clave_idem: str | None = None,
@@ -608,7 +608,7 @@ def lanzar_arte(
     por la cola le da el CARRIL de proceso (no bloquea el copy), los REINTENTOS/sueltos del limpiador
     y —lo principal— la IDEMPOTENCIA que faltaba.
 
-    IDEMPOTENCIA DE LANZAMIENTO: la clave es ESTABLE `(autor, "arte", marca, contenido_id, prompt)`
+    IDEMPOTENCIA DE LANZAMIENTO: la clave es ESTABLE `(autor, "arte", marca, publicacion_id, prompt)`
     —tema+marca+prompt-base, el MISMO patrón que el copy (`dominio.generar.lanzar`), SIN nonce—.
     Mientras un arte del MISMO tema está EN CURSO (registro no terminal), un re-encolado (otro
     barrido del pipeline, el encadenado copy→arte, o un limpiador que reintenta) DEVUELVE ese run y
@@ -622,13 +622,13 @@ def lanzar_arte(
     """
     prompt = (prompt or "").strip()
     clave = clave_idem or generaciones.clave_idempotencia(
-        _autor_campos(autor)["autor_id"], "arte", marca, contenido_id or "", prompt
+        _autor_campos(autor)["autor_id"], "arte", marca, publicacion_id or "", prompt
     )
     gen, nueva = generaciones.crear_idempotente(clave, {
         "tipo": TIPO_ARTE,
         "marca": marca,
         "etiqueta": f"Arte — {(titulo or '')[:80]} · {nombre_marca(marca)}",
-        "contenido_id": contenido_id or "",
+        "publicacion_id": publicacion_id or "",
         "proceso": generaciones.PROCESO_PRODUCCION,
         **_autor_campos(autor),
     })
@@ -639,8 +639,8 @@ def lanzar_arte(
     # `prioridad` viaja DENTRO del spec (`jobspec.prioridad`): el arte es FONDO y cede el paso a
     # lo manual; `urgente` (curación humana) adelanta al lote de fondo sin pisar lo manual.
     spec = jobspec.construir_proceso(jobspec.PROC_IMAGEN, {
-        "contenido_id": contenido_id or "",
-        "plataforma_id": plataforma_id or "",
+        "publicacion_id": publicacion_id or "",
+        "pieza_id": pieza_id or "",
         "marca": marca,
         "titulo": titulo or "",
         "prompt": prompt,
@@ -749,7 +749,7 @@ def lanzar_copy(
     fuente_id: str | None = None,
     clave: str | None = None,
     tipo: str = "copy",
-    contenido_id: str = "",
+    publicacion_id: str = "",
     imagen_fuente: str = "",
     fotos_notas: list[dict[str, str]] | None = None,
     n_notas: int = 0,
@@ -773,7 +773,7 @@ def lanzar_copy(
     prompt ("Copy desde nota"), que NO debe ser el título del historial; pasa `titulo_dado=""`
     para que se derive de la nota. RSS/asistente pasan el título del ítem como `titulo_dado`.
 
-    `contenido_id` (lista viva): si apunta a un tema del tablero, el borrador resultante se
+    `publicacion_id` (lista viva): si apunta a un tema del tablero, el borrador resultante se
     NIDA bajo ese tema (cuelga de su tarjeta) en vez de nacer como contenido suelto. Lo usa
     el auto-copy (`autogen_redactar`); sin el (default ""), borrador suelto como hoy.
 
@@ -812,7 +812,7 @@ def lanzar_copy(
         prompt_id=origen_historial, marca=marca, redes_ids=redes_ids, titulo_dado=titulo_dado,
         texto_base=texto_base or contexto, con_imagenes=con_imagenes, autor=autor,
         fuente_id=fuente if clave_item else None, clave=clave_item if fuente else None,
-        contenido_id=contenido_id or "",
+        publicacion_id=publicacion_id or "",
         imagen_fuente=imagen_fuente or "", fotos_notas=fotos,
         tipo_contenido=tipo_contenido or "",
         revision_inicial=revision_inicial or "",
@@ -833,13 +833,13 @@ def lanzar_copy(
     # re-lanzamiento legítimo (regenerar) vuelve a correr.
     clave_estable = generaciones.clave_idempotencia(
         _autor_campos(autor)["autor_id"], tipo, marca, prompt_efectivo,
-        contenido_id or "", titulo_dado or "", ",".join(redes_ids), contexto,
+        publicacion_id or "", titulo_dado or "", ",".join(redes_ids), contexto,
     )
     return lanzar(
         tipo=tipo, titulo=titulo or "Copy", marca=marca, prompt=prompt, urgente=urgente,
         procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
         procesar_spec=procesar_spec, dir_temporal=dir_temporal, autor=autor,
-        endurecer=endurecer, clave_idem=clave_estable, contenido_id=contenido_id or "",
+        endurecer=endurecer, clave_idem=clave_estable, publicacion_id=publicacion_id or "",
         # Copy = SALIDA ESTRUCTURADA (se parsea a piezas/revision; el usuario no ve la salida
         # cruda) y el prompt auto-verifica: puede necesitar la web para corroborar datos. No se
         # veta la web por-callsite; queda la veta global `Bash Write Edit`.

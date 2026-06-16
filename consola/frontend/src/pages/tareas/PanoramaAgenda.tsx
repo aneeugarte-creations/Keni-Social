@@ -11,7 +11,7 @@ import { SesionContexto } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { formatearDia, hoyCDMX, minutosHastaEvento, posicionTemporal } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
-import type { CatalogosContenido, Contenido, EventoRota, PrioridadEvento } from "@/types";
+import type { CatalogosPublicacion, Publicacion, EventoRota, PrioridadEvento } from "@/types";
 
 import { AvatarPersona } from "./AvatarPersona";
 import { CLAVE_TAREAS } from "./claves";
@@ -236,7 +236,7 @@ function AccionUrgente({ item }: { item: Item }) {
       } else if (item.kind === "cobertura") {
         await api.actualizarEventoRota(item.cobertura.eventoId, { prioridad: objetivo });
       } else {
-        await api.actualizarContenido(item.tarea.id, { prioridad: objetivo });
+        await api.actualizarPublicacion(item.tarea.id, { prioridad: objetivo });
       }
     },
     onSuccess: () => {
@@ -288,7 +288,7 @@ function AccionesItem({
   catalogos,
 }: {
   item: Item;
-  catalogos: CatalogosContenido | undefined;
+  catalogos: CatalogosPublicacion | undefined;
 }) {
   const queryClient = useQueryClient();
   const usuario = React.useContext(SesionContexto)?.usuario ?? null;
@@ -309,7 +309,7 @@ function AccionesItem({
   const titulo = tituloItem(item);
 
   // Asignar (UserPlus): para un EVENTO/COBERTURA se cubre con un rol (cubrirEvento); para una
-  // TAREA suelta se asigna el responsable directo (asignarContenido). El rol se elige en el
+  // TAREA suelta se asigna el responsable directo (asignarPublicacion). El rol se elige en el
   // propio diálogo cuando aplica.
   const usuarios = catalogos?.usuarios ?? [];
   const necesitaRol = item.kind === "evento" || item.kind === "cobertura";
@@ -317,7 +317,7 @@ function AccionesItem({
   const asignar = useMutation({
     mutationFn: (personaId: string) =>
       item.kind === "tarea"
-        ? api.asignarContenido(item.tarea.id, personaId)
+        ? api.asignarPublicacion(item.tarea.id, personaId)
         : api.cubrirEvento(
             item.kind === "evento" ? item.evento.id : item.cobertura.eventoId,
             personaId,
@@ -340,7 +340,7 @@ function AccionesItem({
   const borrar = useMutation({
     mutationFn: async (): Promise<void> => {
       if (item.kind === "tarea") {
-        await api.eliminarContenido(item.tarea.id);
+        await api.eliminarPublicacion(item.tarea.id);
         // Cobertura soltada (suelta con `evento_id`): borra también el evento para que no
         // reaparezca como «Por cubrir». Si el evento ya no existe, ignoramos el 404.
         if (item.tarea.evento_id) {
@@ -354,7 +354,7 @@ function AccionesItem({
       }
       if (evento) await api.eliminarEventoRota(evento.id);
       if (tareasVinculadas.length > 0) {
-        await Promise.all(tareasVinculadas.map((t) => api.eliminarContenido(t.id)));
+        await Promise.all(tareasVinculadas.map((t) => api.eliminarPublicacion(t.id)));
       }
     },
     onSuccess: () => {
@@ -456,7 +456,7 @@ function AccionesItem({
 }
 
 /** Avatares de los cubridores, apilados (-space) con «+N» si son muchos. */
-function AvataresApilados({ cubridores }: { cubridores: Contenido[] }) {
+function AvataresApilados({ cubridores }: { cubridores: Publicacion[] }) {
   const MAX = 4;
   const vis = cubridores.slice(0, MAX);
   const resto = cubridores.length - vis.length;
@@ -488,7 +488,7 @@ function FilaAgenda({
   item: Item;
   abierta: boolean;
   onToggle: () => void;
-  catalogos: CatalogosContenido | undefined;
+  catalogos: CatalogosPublicacion | undefined;
   /** En la banda «Urgente ahora»: acento ROJO en la fila (breaking), no el ámbar de «por cubrir». */
   urgente?: boolean;
 }) {
@@ -613,9 +613,9 @@ export function PanoramaAgenda({
   marca,
   esAdmin,
 }: {
-  tareas: Contenido[];
+  tareas: Publicacion[];
   eventos: EventoRota[];
-  catalogos: CatalogosContenido | undefined;
+  catalogos: CatalogosPublicacion | undefined;
   marca: string | undefined;
   esAdmin: boolean;
 }) {
@@ -649,7 +649,7 @@ export function PanoramaAgenda({
   // «ya pasó» que el semáforo «Cubierto» (posicionTemporal). Más cargados primero (cuello de botella).
   const yaPaso = (fecha?: string | null, hora?: string | null) =>
     posicionTemporal(fecha, hora) === "despues";
-  const esCargaActiva = (t: Contenido) =>
+  const esCargaActiva = (t: Publicacion) =>
     t.estado !== "hecha" && !(t.evento_id && yaPaso(t.fecha_objetivo, t.hora_objetivo));
   const idsPersona = new Set<string>(usuarios.map((u) => u.id));
   for (const t of conResponsable) idsPersona.add(t.responsable_id);

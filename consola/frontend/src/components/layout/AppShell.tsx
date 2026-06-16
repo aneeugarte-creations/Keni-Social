@@ -15,7 +15,7 @@ import { useEsEscritorio } from "@/hooks/use-media-query";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useDetectorActualizacion } from "@/lib/version";
-import { hidratarLimites } from "@/pages/publicaciones/meta";
+import { hidratarLimites } from "@/pages/piezas/meta";
 
 /** Fallback mientras se descarga el chunk de una pagina (lazy/Suspense). */
 function CargandoPagina() {
@@ -44,8 +44,8 @@ export function AppShell() {
   // del JSX más abajo; el color/cromo es idéntico (decisión de diseño: chrome sobrio, el naranja
   // queda como acento puntual, no como campo).
   const enEditor =
-    location.pathname.startsWith("/contenido/imagen") ||
-    location.pathname.startsWith("/contenido/video");
+    location.pathname.startsWith("/publicaciones/imagen") ||
+    location.pathname.startsWith("/publicaciones/video");
 
   // Detecta un deploy nuevo y recarga en la siguiente navegación (sin pedirlo a mano).
   useDetectorActualizacion();
@@ -223,7 +223,7 @@ export function AppShell() {
             pasa a `auto`), y un hijo más ancho que el viewport (una tarjeta del feed, una URL
             larga) deja arrastrar TODA la superficie de lado en móvil. Clampar X lo impide. */}
         <main className={cn("min-w-0 flex-1 overflow-y-auto overflow-x-hidden")}>
-          {/* Contenido a ancho completo (estilo Vercel/edit-consola), no centrado. El gap
+          {/* Publicacion a ancho completo (estilo Vercel/edit-consola), no centrado. El gap
               SUPERIOR (barra → primer control de la página) es ajustado (`pt-2` = 8px) para
               que TODAS las páginas respiren igual que la galería del editor (Fotos/Miniaturas
               pega bajo la barra); el inferior se mantiene holgado (`pb-4 sm:pb-6`). */}

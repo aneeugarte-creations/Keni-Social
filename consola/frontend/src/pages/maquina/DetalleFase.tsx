@@ -27,7 +27,7 @@ import { api } from "@/lib/api";
 import { tiempoRelativo } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
 import type { FasePipeline } from "@/pages/monitor/PanelPipeline";
-import { GestionHashtags } from "@/pages/publicaciones/GestionHashtags";
+import { GestionHashtags } from "@/pages/piezas/GestionHashtags";
 import {
   type AccionesPublicarSubpagina,
   DetalleDocumento,

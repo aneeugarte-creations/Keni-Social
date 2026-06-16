@@ -100,13 +100,13 @@ async def dia(request: Request) -> Response:
     # Temas (contenido padre) CREADOS en la ventana + sus filas por red.
     items = [
         it
-        for it in repos.listar_contenido(clase="contenido", marca=marca or None)
+        for it in repos.listar_publicacion(clase="contenido", marca=marca or None)
         if str(it.get("creado") or "") >= desde_iso
     ]
-    filas = repos.listar_contenido_plataforma(marca=marca or None)
+    filas = repos.listar_piezas_fila(marca=marca or None)
     filas_por_item: dict[str, list[dict[str, Any]]] = {}
     for f in filas:
-        filas_por_item.setdefault(str(f.get("contenido_id") or ""), []).append(f)
+        filas_por_item.setdefault(str(f.get("publicacion_id") or ""), []).append(f)
 
     etiquetas_por_item = repos.etiquetas_por_contenido()
     verticales = {
@@ -198,13 +198,13 @@ async def dia(request: Request) -> Response:
             "red": p.get("red") or "",
             "fecha_programada": p.get("fecha_programada") or "",
         }
-        for p in repos.listar_publicaciones(marca=marca or None, estado="programado")
+        for p in repos.listar_piezas(marca=marca or None, estado="programado")
     ]
     programadas.sort(key=lambda p: p["fecha_programada"])
     proximos_huecos: list[dict[str, str]] = []
     if marca:
         # Import perezoso: reusa el cálculo del encolado manual (franjas de horario).
-        from .publicaciones import calcular_hueco_para
+        from .piezas import calcular_hueco_para
 
         for red in _REDES_HUECO:
             if not redes.es_red(red):

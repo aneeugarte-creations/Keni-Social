@@ -27,7 +27,7 @@ from typing import Any
 # Version de esquema ACTUAL por tipo de entidad. Subir aqui al cambiar la forma de
 # un tipo (y registrar la migracion correspondiente en `MIGRACIONES`).
 VERSIONES: dict[str, int] = {
-    "publicacion": 1,
+    "pieza": 1,
     "plantilla": 1,
     "fuente_rss": 1,
     "grupo_hashtags": 1,

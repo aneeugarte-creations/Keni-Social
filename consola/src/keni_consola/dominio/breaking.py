@@ -10,7 +10,7 @@ CONTRATO
 --------
   - `items_breaking(marca, geo)` → lista de temas breaking del snapshot (pure, sin red).
   - `clave_de_titulo(titulo)` → clave de dedup para cruzar con contenido.
-  - `anotar_estado_borrador(items, marca)` → anota `estado_borrador`/`contenido_id`/
+  - `anotar_estado_borrador(items, marca)` → anota `estado_borrador`/`publicacion_id`/
     `generacion_id` IN-PLACE leyendo el tablero. Best-effort: si falla, deja "ninguno".
 
 Dependencias: `repos` y `generaciones` (lectura), `dominio.dedup` (clave).
@@ -101,36 +101,36 @@ def _borradores_breaking_de_marca(marca: str) -> list[dict[str, Any]]:
     try:
         from .. import repos
 
-        # `listar_contenido` no filtra por `origen`; post-filtramos en memoria (universo pequeño).
-        todos = repos.listar_contenido(marca=marca, clase="contenido")
+        # `listar_publicacion` no filtra por `origen`; post-filtramos en memoria (universo pequeño).
+        todos = repos.listar_publicacion(marca=marca, clase="contenido")
         return [it for it in todos if (it.get("origen") or "") == "breaking"]
     except Exception:  # noqa: BLE001
         _log.exception("breaking: no se pudo leer el tablero de borradores (marca=%s)", marca)
         return []
 
 
-def _generacion_reciente_de(contenido_id: str) -> tuple[str, str]:
+def _generacion_reciente_de(publicacion_id: str) -> tuple[str, str]:
     """Devuelve `(gen_id, estado_gen)` de la generación más reciente del contenido.
 
-    Escanea el almacén de generaciones buscando las que tienen `contenido_id` igual al
+    Escanea el almacén de generaciones buscando las que tienen `publicacion_id` igual al
     pasado y devuelve la más reciente (fecha_inicio desc). Best-effort → ("", "").
     """
-    if not contenido_id:
+    if not publicacion_id:
         return ("", "")
     try:
         from .. import generaciones
 
         todas = generaciones.listar(limite=None)  # ya ordenadas recientes primero
         for gen in todas:
-            if (gen.get("contenido_id") or "") == contenido_id:
+            if (gen.get("publicacion_id") or "") == publicacion_id:
                 return (gen.get("id") or "", gen.get("estado") or "")
     except Exception:  # noqa: BLE001
-        _log.exception("breaking: no se pudo leer generaciones (contenido_id=%s)", contenido_id)
+        _log.exception("breaking: no se pudo leer generaciones (publicacion_id=%s)", publicacion_id)
     return ("", "")
 
 
 def anotar_estado_borrador(items: list[dict[str, Any]], marca: str) -> None:
-    """Anota IN-PLACE `estado_borrador`, `contenido_id` y `generacion_id` en cada item.
+    """Anota IN-PLACE `estado_borrador`, `publicacion_id` y `generacion_id` en cada item.
 
     Cruza el título de cada tema (por clave de dedup) contra los contenidos con
     `origen='breaking'` de la marca. Una sola query al tablero (no N+1). Best-effort:
@@ -144,7 +144,7 @@ def anotar_estado_borrador(items: list[dict[str, Any]], marca: str) -> None:
     # Valores por defecto para todos los items (defensa ante cualquier fallo parcial).
     for item in items:
         item.setdefault("estado_borrador", "ninguno")
-        item.setdefault("contenido_id", "")
+        item.setdefault("publicacion_id", "")
         item.setdefault("generacion_id", "")
 
     if not marca or not items:
@@ -171,10 +171,10 @@ def anotar_estado_borrador(items: list[dict[str, Any]], marca: str) -> None:
         if borrador is None:
             continue
 
-        contenido_id = borrador.get("id") or ""
-        item["contenido_id"] = contenido_id
+        publicacion_id = borrador.get("id") or ""
+        item["publicacion_id"] = publicacion_id
 
-        gen_id, estado_gen = _generacion_reciente_de(contenido_id)
+        gen_id, estado_gen = _generacion_reciente_de(publicacion_id)
         item["generacion_id"] = gen_id
 
         if estado_gen == "ejecutando":

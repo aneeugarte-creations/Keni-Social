@@ -85,9 +85,9 @@ def _marca_consola_de_metricas(id_metricas: str | None) -> str | None:
     """Traduce un id de marca de la frontera de métricas (guion_bajo) al id de la Consola.
 
     Los selectores de Analíticas envían `?marca=` en forma `id_metricas` (igual que el
-    resto de endpoints de métricas). El tablero (`listar_contenido`) filtra por el id de
+    resto de endpoints de métricas). El tablero (`listar_publicacion`) filtra por el id de
     marca de la Consola, así que cruzamos la frontera con el catálogo único. Si no
-    resuelve (marca desconocida), devolvemos el valor tal cual: `listar_contenido`
+    resuelve (marca desconocida), devolvemos el valor tal cual: `listar_publicacion`
     simplemente no encontrará piezas (lista vacía, sin romper).
     """
     if not id_metricas:
@@ -103,10 +103,10 @@ def _listado_piezas_publicadas(marca_consola: str | None) -> list[dict]:
     hilo del executor desde `piezas_rendimiento`, no en el event loop. Aislado en una
     función síncrona para poder pasarlo a `run_in_executor`.
     """
-    items = repos.listar_contenido(marca=marca_consola)
+    items = repos.listar_publicacion(marca=marca_consola)
     por_contenido: dict[str, list[dict]] = {}
-    for plat in repos.listar_contenido_plataforma():
-        por_contenido.setdefault(plat["contenido_id"], []).append(plat)
+    for plat in repos.listar_piezas_fila():
+        por_contenido.setdefault(plat["publicacion_id"], []).append(plat)
     contenidos = [
         {
             "id": it["id"],
@@ -126,7 +126,7 @@ async def piezas_rendimiento(request: Request) -> Response:
     Lista las piezas YA PUBLICADAS (las que tienen `id_post_metricool`) con su
     rendimiento leído de Metricool —la MISMA fuente única que alimenta el dashboard y las
     tarjetas del tablero, sin desfase— para la sección "Piezas" de Analíticas. Cada fila
-    enlaza a la pieza en el tablero (`contenido_id` -> `/operacion/feed/lista`).
+    enlaza a la pieza en el tablero (`publicacion_id` -> `/operacion/feed/lista`).
 
     `?marca=` (en forma `id_metricas`, como el resto de Analíticas) acota a una marca;
     sin marca, agrega todas. Degradación honesta: las piezas que Metricool aún no tiene
@@ -169,7 +169,7 @@ async def piezas_listado(request: Request) -> Response:
     """GET /api/metricas/piezas-listado: listado COMPLETO de piezas del periodo.
 
     A diferencia de `/api/metricas/piezas` (estadísticas + top/peores) y de
-    `/api/metricas/piezas-rendimiento` (las publicaciones de la Consola con su
+    `/api/metricas/piezas-rendimiento` (las piezas de la Consola con su
     rendimiento real), esto devuelve TODAS las piezas de la(s) cuenta(s) del periodo
     tal como las emite la fuente única (`servicio.construir_listado_piezas`): cada una
     con su id de Metricool, granulares y url. Es el insumo de la tabla "Todas las piezas

@@ -1,8 +1,8 @@
 """Post-procesado de generaciones de COPY/DOCUMENTO (parseo + artefactos), NEUTRO.
 
 Estas fábricas convierten la salida cruda de `claude -p` en los ARTEFACTOS de la Consola
-(piezas por red, publicaciones-borrador, historial, imágenes previsualizadas). Son DOMINIO
-PURO: dependen de `stream` (parseo), `repos` (historial), `dominio.publicaciones` (handoff
+(piezas por red, piezas-borrador, historial, imágenes previsualizadas). Son DOMINIO
+PURO: dependen de `stream` (parseo), `repos` (historial), `dominio.piezas` (handoff
 A→C de borradores), `redes` y `media`. NO dependen del catálogo de skills.
 
 `jobspec.reconstruir_procesar` los reconstruye en el worker desde el `spec`.
@@ -15,7 +15,7 @@ import re
 from typing import TYPE_CHECKING
 
 from .. import limites_plataforma, patrones_marca, redes, repos
-from . import publicaciones as contrato_publicaciones
+from . import piezas as contrato_publicaciones
 from . import stream
 
 if TYPE_CHECKING:
@@ -170,7 +170,7 @@ def _inyectar_hashtags(texto: str, tags: list[str], *, red: str) -> str:
     return resultado
 
 
-def _avisar_piezas_descartadas(motivos: list[str], *, contenido_id: str, marca: str) -> None:
+def _avisar_piezas_descartadas(motivos: list[str], *, publicacion_id: str, marca: str) -> None:
     """Deja rastro de las piezas descartadas: WARN + nota en el tema (si lo hay).
 
     Sigue el patron de avisos en `contenido.notas` (ver `pipeline_contenido._admitir`).
@@ -179,21 +179,21 @@ def _avisar_piezas_descartadas(motivos: list[str], *, contenido_id: str, marca: 
     detalle = "; ".join(motivos)
     _log.warning(
         "copy: %d pieza(s) descartada(s) tema=%s marca=%s: %s",
-        len(motivos), contenido_id or "-", marca, detalle,
+        len(motivos), publicacion_id or "-", marca, detalle,
     )
-    if not contenido_id:
+    if not publicacion_id:
         return
     aviso = f"⚠ Copy descartado (pieza inválida): {detalle}."
     try:
-        tema = repos.obtener_contenido(contenido_id)
+        tema = repos.obtener_publicacion(publicacion_id)
         if tema is None:
             return
         previas = str(tema.get("notas") or "").strip()
-        repos.actualizar_contenido(
-            contenido_id, {"notas": f"{previas}\n{aviso}" if previas else aviso}
+        repos.actualizar_publicacion(
+            publicacion_id, {"notas": f"{previas}\n{aviso}" if previas else aviso}
         )
     except Exception:  # noqa: BLE001 -- el aviso es un extra; nunca rompe el post-procesado
-        _log.warning("copy: no se pudo anotar el tema %s", contenido_id, exc_info=True)
+        _log.warning("copy: no se pudo anotar el tema %s", publicacion_id, exc_info=True)
 
 
 # --------------------------------------------------------------------------- #
@@ -222,31 +222,31 @@ def verificar_voz(
     return verdicto, avisos
 
 
-def _avisar_voz(avisos: list[str], *, contenido_id: str, marca: str) -> None:
+def _avisar_voz(avisos: list[str], *, publicacion_id: str, marca: str) -> None:
     """Deja rastro de los avisos de voz: WARN + nota en el tema (si lo hay).
 
     Mismo patron best-effort que `_avisar_piezas_descartadas`: el aviso acompana a la
     revision humana, nunca rompe el post-procesado.
     """
     detalle = "; ".join(avisos)
-    _log.warning("copy: voz fuera de patron tema=%s marca=%s: %s", contenido_id or "-", marca, detalle)
-    if not contenido_id:
+    _log.warning("copy: voz fuera de patron tema=%s marca=%s: %s", publicacion_id or "-", marca, detalle)
+    if not publicacion_id:
         return
     nota = f"⚠ Verificación de voz (patrones medidos de la marca): {detalle}."
     try:
-        tema = repos.obtener_contenido(contenido_id)
+        tema = repos.obtener_publicacion(publicacion_id)
         if tema is None:
             return
         previas = str(tema.get("notas") or "").strip()
-        repos.actualizar_contenido(
-            contenido_id, {"notas": f"{previas}\n{nota}" if previas else nota}
+        repos.actualizar_publicacion(
+            publicacion_id, {"notas": f"{previas}\n{nota}" if previas else nota}
         )
     except Exception:  # noqa: BLE001 -- la nota es un extra; nunca rompe el post-procesado
-        _log.warning("copy: no se pudo anotar la voz en el tema %s", contenido_id, exc_info=True)
+        _log.warning("copy: no se pudo anotar la voz en el tema %s", publicacion_id, exc_info=True)
 
 
 # --------------------------------------------------------------------------- #
-# Creacion de publicaciones (borrador) por pieza                              #
+# Creacion de piezas (borrador) por pieza                              #
 # --------------------------------------------------------------------------- #
 
 # `tipo` de catalogo de la foto ORIGINAL del articulo (RSS de marca propia). La Biblioteca
@@ -355,38 +355,38 @@ def crear_publicaciones_desde_piezas(
     origen: str,
     redes_filtro: set[str] | None = None,
     autor: dict[str, str] | None = None,
-    contenido_id: str = "",
+    publicacion_id: str = "",
     atomico: bool = False,
     imagen_fuente: str = "",
     tipo_contenido: str = "",
     slides_carrusel: list[dict[str, str]] | None = None,
     sugiere_carrusel: bool = False,
 ) -> list[dict[str, object]]:
-    """Crea UNA publicacion (borrador) por pieza y devuelve sus dicts serializados.
+    """Crea UNA pieza (borrador) por pieza y devuelve sus dicts serializados.
 
     HANDOFF A->C (ADR 0005 §Seams #1): cada pieza se deposita como BORRADOR por la
-    funcion-contrato `dominio.publicaciones.crear_borrador` (nace `borrador`). Si
+    funcion-contrato `dominio.piezas.crear_borrador` (nace `borrador`). Si
     `redes_filtro` no es None, solo se crean las piezas cuya red este en el filtro.
 
-    NIDO BAJO EL TEMA (lista viva): si `contenido_id` apunta a un tema del tablero existente,
+    NIDO BAJO EL TEMA (lista viva): si `publicacion_id` apunta a un tema del tablero existente,
     cada pieza se ADJUNTA a ESE `contenido` (via `crear_borrador_en`) en vez de crear su
-    propio padre, de modo que el borrador cuelga de la tarjeta del tema. Sin `contenido_id`
+    propio padre, de modo que el borrador cuelga de la tarjeta del tema. Sin `publicacion_id`
     (default ""), o si el tema no existe, es EXACTAMENTE el comportamiento de hoy.
 
     `atomico` (default False): TODO-O-NADA. La capa de datos persiste cada borrador por su
     cuenta (sin transacción cross-fila); con `atomico=True`, si la creación de una pieza
-    falla a mitad, se BORRAN las ya creadas y se RELANZA, para no dejar publicaciones rotas.
+    falla a mitad, se BORRAN las ya creadas y se RELANZA, para no dejar piezas rotas.
     Lo usa el "Guardar como publicación" del termómetro; el auto-copy lo deja en False
     (best-effort, no debe abortar toda la generación por una pieza).
 
     VALIDACIÓN PRE-PERSISTENCIA: una pieza con red desconocida, texto vacío o que excede el
     límite técnico de su red (`limites_plataforma`; en hilos/carruseles, por intervalo) NO crea
     borrador. Se descarta SOLO esa pieza (las válidas del lote se crean igual), se loguea
-    WARN y, si hay tema (`contenido_id`), se deja una nota en él.
+    WARN y, si hay tema (`publicacion_id`), se deja una nota en él.
 
     `slides_carrusel` (pipeline, output CARRUSEL elegido por el modelo): slides EDITORIALES
     `[{titular, foto}, …]` —una tarjeta por SUB-HISTORIA, `foto` la URL de la nota o ""—.
-    Solo aplica NIDADO bajo un tema (`contenido_id`): cada slide se HORNEA como placa de la
+    Solo aplica NIDADO bajo un tema (`publicacion_id`): cada slide se HORNEA como placa de la
     marca (plantilla efectiva + titular + su foto) a la carpeta protegida `artes`, el tema
     pasa a `formato='carrusel'`, las piezas se acotan a las redes de ese formato (IG/FB) y
     cada borrador nace con esos slides en su campo `carrusel` (la PORTADA sigue siendo
@@ -416,7 +416,7 @@ def crear_publicaciones_desde_piezas(
     #     las fotos en diferido (o el motor de arte si su toggle está activo).
     # En AMBOS el formato manda las redes (carrusel -> IG/FB; la pieza de X del copy unificado se omite).
     carrusel_json = ""
-    if slides_carrusel and contenido_id:
+    if slides_carrusel and publicacion_id:
         slides_horneados: list[dict[str, str]] = []
         for s in slides_carrusel:
             titular = str(s.get("titular") or "")
@@ -442,17 +442,17 @@ def crear_publicaciones_desde_piezas(
         else:
             _log.warning(
                 "copy: carrusel sin slides componibles; queda como sugerencia de formato — tema %s",
-                contenido_id,
+                publicacion_id,
             )
     # FLIP a formato carrusel si hay carrusel HORNEADO o el modelo lo SUGIRIÓ (tema único). Requiere
-    # tema (`contenido_id`): el formato vive en el `contenido` padre, no en la fila por red.
-    quiere_carrusel = bool(contenido_id) and (bool(carrusel_json) or sugiere_carrusel)
+    # tema (`publicacion_id`): el formato vive en el `contenido` padre, no en la fila por red.
+    quiere_carrusel = bool(publicacion_id) and (bool(carrusel_json) or sugiere_carrusel)
     if quiere_carrusel:
         try:
-            repos.actualizar_contenido(contenido_id, {"formato": redes.FORMATO_CARRUSEL})
+            repos.actualizar_publicacion(publicacion_id, {"formato": redes.FORMATO_CARRUSEL})
         except Exception:  # noqa: BLE001 -- sin el flip, la pieza sigue valiendo como foto
             _log.warning(
-                "copy: no se pudo poner formato carrusel al tema %s", contenido_id, exc_info=True
+                "copy: no se pudo poner formato carrusel al tema %s", publicacion_id, exc_info=True
             )
             carrusel_json = ""
             quiere_carrusel = False
@@ -464,7 +464,7 @@ def crear_publicaciones_desde_piezas(
     # HASHTAGS DE LÍNEA: los hashtags propios de las líneas/estrategias asignadas al tema se
     # inyectan al final del copy de CADA pieza (un único sitio gobierna hashtags + estrategia).
     # Se calcula una vez (todas las piezas cuelgan del mismo tema). Sin tema, no hay línea -> [].
-    hashtags_linea = repos.hashtags_de_contenido(contenido_id) if contenido_id else []
+    hashtags_linea = repos.hashtags_de_contenido(publicacion_id) if publicacion_id else []
     descartes: list[str] = []
     try:
         for pieza in piezas:
@@ -493,11 +493,11 @@ def crear_publicaciones_desde_piezas(
             # Así no se duplica un PNG por cada pieza con el mismo logo/pleca y solo cambia el texto.
             imagen = imagen_descargada if imagen_fuente else ""
             creada: dict[str, object] | None = None
-            if contenido_id:
+            if publicacion_id:
                 # Nido bajo el tema: adjunta la pieza al `contenido` existente. Devuelve None si
                 # el tema no existe (entonces caemos al borrador suelto).
                 creada = contrato_publicaciones.crear_borrador_en(
-                    contenido_id, marca, red, titulo=titulo, contenido=contenido,
+                    publicacion_id, marca, red, titulo=titulo, contenido=contenido,
                     copy_in=copy_in, revision=verdicto, imagen=imagen,
                     imagen_fuente=imagen_fuente, carrusel=carrusel_json,
                 )
@@ -513,7 +513,7 @@ def crear_publicaciones_desde_piezas(
             _revertir_borradores([str(p.get("id")) for p in creadas if p.get("id")])
         raise
     if descartes:
-        _avisar_piezas_descartadas(descartes, contenido_id=contenido_id, marca=marca)
+        _avisar_piezas_descartadas(descartes, publicacion_id=publicacion_id, marca=marca)
     return creadas
 
 
@@ -521,28 +521,28 @@ def _revertir_borradores(ids: list[str]) -> None:
     """Borra borradores ya creados (rollback de un guardado a medias). Tolerante a fallos."""
     for pid in ids:
         try:
-            repos.borrar_publicacion(pid)
+            repos.borrar_pieza(pid)
         except Exception:  # noqa: BLE001 -- el rollback nunca debe enmascarar el error original
             continue
 
 
-def _persistir_url_fuente(publicaciones: list[dict[str, object]], url_fuente: str) -> None:
+def _persistir_url_fuente(piezas: list[dict[str, object]], url_fuente: str) -> None:
     """Persiste `url_fuente` en el `contenido` padre de cada borrador creado (dedup por URL).
 
-    POST-HOC: cada borrador serializado trae el `contenido_id` de su tema padre (sea uno nuevo
+    POST-HOC: cada borrador serializado trae el `publicacion_id` de su tema padre (sea uno nuevo
     creado por la pieza o uno existente al que se nidó). Escribimos la URL canónica en ese
-    `contenido` via `repos.actualizar_contenido` (campo `url_fuente`, editable). Deduplicamos
-    los `contenido_id` (varias piezas pueden colgar del mismo tema). Best-effort por tema: un
+    `contenido` via `repos.actualizar_publicacion` (campo `url_fuente`, editable). Deduplicamos
+    los `publicacion_id` (varias piezas pueden colgar del mismo tema). Best-effort por tema: un
     fallo NUNCA rompe el post-procesado (el copy ya está hecho).
     """
     vistos: set[str] = set()
-    for pub in publicaciones:
-        cid = str(pub.get("contenido_id") or "").strip()
+    for pub in piezas:
+        cid = str(pub.get("publicacion_id") or "").strip()
         if not cid or cid in vistos:
             continue
         vistos.add(cid)
         try:
-            repos.actualizar_contenido(cid, {"url_fuente": url_fuente})
+            repos.actualizar_publicacion(cid, {"url_fuente": url_fuente})
         except Exception:  # noqa: BLE001 -- la trazabilidad es un extra; nunca rompe el post-procesado
             continue
 
@@ -561,7 +561,7 @@ def construir_procesar_copy(
     texto_base: str,
     con_imagenes: bool = False,
     autor: dict[str, str] | None = None,
-    contenido_id: str = "",
+    publicacion_id: str = "",
     imagen_fuente: str = "",
     fotos_notas: list[dict[str, str]] | None = None,
     tipo_contenido: str = "",
@@ -571,10 +571,10 @@ def construir_procesar_copy(
     """Callback de post-procesado de una generacion de PIEZAS (copy/RSS).
 
     Parsea la salida en piezas/verdicto, registra el historial (con metricas), AUTO-GUARDA
-    una publicacion (borrador) por pieza y devuelve `{resultado, historial_id, verdicto,
-    piezas, publicaciones[, imagenes]}`. `prompt_id` es solo la etiqueta de origen del historial.
+    una pieza (borrador) por pieza y devuelve `{resultado, historial_id, verdicto,
+    piezas, piezas[, imagenes]}`. `prompt_id` es solo la etiqueta de origen del historial.
 
-    `contenido_id` (lista viva): si apunta a un tema del tablero existente, cada borrador se
+    `publicacion_id` (lista viva): si apunta a un tema del tablero existente, cada borrador se
     ADJUNTA a ese `contenido` (cuelga de su tarjeta); sin el (default ""), borrador suelto.
     `revision_inicial` (pipeline QPC): revision por DEFECTO de las piezas cuando la salida no
     trae uno propio (p. ej. `no_verificado`, para heredar el aviso de la verificación de la fuente).
@@ -602,7 +602,7 @@ def construir_procesar_copy(
         # `listo` del modelo baja a `revisar` y la nota viaja al tema (el humano decide).
         verdicto, avisos_voz = verificar_voz(marca, parsed["piezas"], verdicto)
         if avisos_voz:
-            _avisar_voz(avisos_voz, contenido_id=contenido_id, marca=marca)
+            _avisar_voz(avisos_voz, publicacion_id=publicacion_id, marca=marca)
         # CARRUSEL EDITORIAL solo si el MODELO lo eligió (`tipo`) Y emitió 2+ slides (un panel
         # de una tarjeta no es panel). Cada slide resuelve su foto por NÚMERO contra el
         # catálogo que vio en el prompt; la portada sigue viajando como `imagen_fuente`.
@@ -621,25 +621,25 @@ def construir_procesar_copy(
                     slides_resueltos.append(
                         {"titular": str(s.get("titular") or ""), "foto": foto}
                     )
-        publicaciones = crear_publicaciones_desde_piezas(
+        piezas = crear_publicaciones_desde_piezas(
             parsed["piezas"], marca=marca, titulo=titulo,
             verdicto=verdicto, origen=historial_id, autor=autor,
-            contenido_id=contenido_id,
+            publicacion_id=publicacion_id,
             imagen_fuente=imagen_fuente, tipo_contenido=tipo_contenido,
             slides_carrusel=slides_resueltos, sugiere_carrusel=sugiere_carrusel,
         )
         # Trazabilidad de la fuente (RSS): persiste la URL canonica en el `contenido` padre de
         # cada borrador creado. Best-effort: el copy YA esta hecho; un fallo aqui no debe romper
-        # el post-procesado. Se deduplican los `contenido_id` (varias piezas pueden compartir
+        # el post-procesado. Se deduplican los `publicacion_id` (varias piezas pueden compartir
         # tema cuando se nida bajo uno existente).
         if url_fuente:
-            _persistir_url_fuente(publicaciones, url_fuente)
+            _persistir_url_fuente(piezas, url_fuente)
         resultado: dict[str, object] = {
             "resultado": parsed["resultado"],
             "historial_id": historial_id,
             "verdicto": verdicto,
             "piezas": parsed["piezas"],
-            "publicaciones": publicaciones,
+            "piezas": piezas,
             "avisos_voz": avisos_voz,
         }
         if con_imagenes:
@@ -658,10 +658,10 @@ def construir_procesar_documento(
     con_imagenes: bool = False,
     autor: dict[str, str] | None = None,
 ) -> generaciones.Procesar:
-    """Callback de post-procesado de salida `documento` (sin piezas, sin publicaciones).
+    """Callback de post-procesado de salida `documento` (sin piezas, sin piezas).
 
     Limpia emojis, deriva verdicto/titulo, registra el historial SIN piezas. Devuelve
-    `{documento, verdicto, historial_id, piezas: [], publicaciones: []}` (+ `imagenes`).
+    `{documento, verdicto, historial_id, piezas: [], piezas: []}` (+ `imagenes`).
     """
 
     def procesar(salida: str, metricas: stream.MetricasRun | None) -> dict[str, object]:
@@ -677,7 +677,7 @@ def construir_procesar_documento(
             "verdicto": verdicto,
             "historial_id": historial_id,
             "piezas": [],
-            "publicaciones": [],
+            "piezas": [],
         }
         if con_imagenes:
             resultado["imagenes"] = recolectar_imagenes(salida)

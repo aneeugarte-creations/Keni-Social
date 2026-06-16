@@ -54,7 +54,7 @@ import type {
   EstadoIdeaEvergreen,
   IdeaEvergreen,
   MarcaDisponible,
-  RedPublicacion,
+  RedPieza,
 } from "@/types";
 
 const CLAVE_IDEAS = ["evergreen", "ideas"] as const;
@@ -70,9 +70,9 @@ const ESTADO_LABEL: Record<string, string> = {
 };
 
 /** ¿La idea ya está en su terminal feliz? (estado nuevo `generada`; las anteriores al estado
- *  solo llevan `contenido_id`). Sin acciones: vive en el cajón Histórico. */
+ *  solo llevan `publicacion_id`). Sin acciones: vive en el cajón Histórico. */
 function esGenerada(idea: IdeaEvergreen): boolean {
-  return idea.estado === "generada" || Boolean(idea.contenido_id);
+  return idea.estado === "generada" || Boolean(idea.publicacion_id);
 }
 
 /** Etiqueta del origen de la idea (badge). `manual` no lleva badge (alta rápida sin matiz). */
@@ -87,7 +87,7 @@ export function TallerEvergreen({
   redes,
 }: {
   marcas: MarcaDisponible[];
-  redes: RedPublicacion[];
+  redes: RedPieza[];
 }) {
   const [estadoFiltro, setEstadoFiltro] = React.useState(ESTADO_TODOS);
 
@@ -206,7 +206,7 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
       setTituloManual("");
       setDescManual("");
       toast.success(
-        tipoManual === "interna" ? "Contenido interno añadido al banco." : "Idea añadida al banco.",
+        tipoManual === "interna" ? "Publicacion interno añadido al banco." : "Idea añadida al banco.",
       );
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -332,7 +332,7 @@ function ProponerIdeas({ marcas }: { marcas: MarcaDisponible[] }) {
 
           <div className="space-y-1.5">
             <Label htmlFor="evergreen-desc-manual">
-              {tipoManual === "interna" ? "Contenido interno" : "Nota"}
+              {tipoManual === "interna" ? "Publicacion interno" : "Nota"}
             </Label>
             <Textarea
               id="evergreen-desc-manual"
@@ -383,7 +383,7 @@ function ListaIdeas({
 }: {
   ideas: IdeaEvergreen[];
   marcas: MarcaDisponible[];
-  redes: RedPublicacion[];
+  redes: RedPieza[];
   separarHistorico: boolean;
 }) {
   const historico = separarHistorico
@@ -425,7 +425,7 @@ function FilaIdea({
 }: {
   idea: IdeaEvergreen;
   marcas: MarcaDisponible[];
-  redes: RedPublicacion[];
+  redes: RedPieza[];
 }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -479,7 +479,7 @@ function FilaIdea({
     if (generacion.estado === "completado") {
       terminalRef.current = generacion.id;
       invalidar();
-      void queryClient.invalidateQueries({ queryKey: ["publicaciones"] });
+      void queryClient.invalidateQueries({ queryKey: ["piezas"] });
       toast.success("Pieza evergreen generada.", {
         action: {
           label: "Ver feed",
@@ -578,7 +578,7 @@ function FilaIdea({
             {ORIGEN_LABEL[idea.origen]}
           </Badge>
         )}
-        {idea.contenido_id && idea.estado !== "generada" && (
+        {idea.publicacion_id && idea.estado !== "generada" && (
           <Badge variant="outline" className="font-normal">
             Generada
           </Badge>

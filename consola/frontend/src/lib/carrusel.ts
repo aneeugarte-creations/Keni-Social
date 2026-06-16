@@ -3,7 +3,7 @@
  *
  * La PORTADA del carrusel es la imagen compuesta de siempre (foto cruda + placa); estos
  * slides van DETRÁS, en orden, dentro del mismo post multi-media. Se persisten como JSON
- * `[{tipo,objeto, …procedencia?}, …]` en `Publicacion.carrusel`.
+ * `[{tipo,objeto, …procedencia?}, …]` en `Pieza.carrusel`.
  *
  * `objeto` es el media PUBLICABLE del slide (su PNG/MP4). En un carrusel EDITORIAL cada slide
  * es una placa horneada; entonces lleva además su PROCEDENCIA (`foto`/`titular`/`plantillaId`/

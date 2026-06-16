@@ -1,7 +1,7 @@
 """Dominio AGENTES de la Consola Keni: el conjunto ABIERTO de agentes.
 
 La Ola 2a unifico el contenido por MARCA en `<KENI_CONSOLA_RAIZ>/<marca>/`
-(publicaciones, plantillas, RSS, hashtags, franjas, historial). Este modulo da el
+(piezas, plantillas, RSS, hashtags, franjas, historial). Este modulo da el
 salto conceptual: la carpeta de cada agente es su espacio de trabajo, con:
 
   - `CLAUDE.md`              contexto principal del agente (su "memoria").
@@ -12,7 +12,7 @@ DOS clases de agente conviven bajo la MISMA raiz:
 
   - MARCA-AGENTE: las 5 marcas del catalogo unico (`marcas.opciones()`) vienen DE
     SERIE. Su `id` = id de marca; `es_marca=True`; carpeta `<raiz>/<marca-id>/`;
-    nombre del catalogo. Producen copy/publicaciones/metricas. NO se borran ni se
+    nombre del catalogo. Producen copy/piezas/metricas. NO se borran ni se
     renombran. Se reconocen por `marcas.es_marca(carpeta.name)`.
 
   - AGENTE GENERICO: se puede CREAR/CONECTAR/RENOMBRAR/BORRAR. Vive en

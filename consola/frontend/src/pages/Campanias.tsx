@@ -3,7 +3,7 @@
  *
  * Se elige una campaña (definida por sus hashtags) y un periodo, y se ven KPIs
  * (visualizaciones, interacciones, engagement) con comparativa, la tendencia diaria
- * y la tabla de piezas del periodo —solo las publicaciones cuyo texto lleva alguno
+ * y la tabla de piezas del periodo —solo las piezas cuyo texto lleva alguno
  * de los hashtags—. La marca la fija el switch global de la barra superior; cada
  * campaña pertenece a una marca.
  */
@@ -162,7 +162,7 @@ export default function Campanias() {
         <EstadoVacio
           icono={Megaphone}
           titulo="Aún no hay campañas"
-          texto="Crea una campaña para dar seguimiento a publicaciones con sus hashtags."
+          texto="Crea una campaña para dar seguimiento a piezas con sus hashtags."
           accion={
             <Button onClick={abrirNueva}>
               <Plus className="h-4 w-4" />

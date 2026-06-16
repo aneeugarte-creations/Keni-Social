@@ -429,7 +429,7 @@ def ejecutar_ilustrar() -> list[dict[str, Any]]:
     try:
         # Solo la clase 'contenido' (el filtro va en SQL; las tareas nunca se ilustran).
         # `topics_sin_arte` aplica el resto de reglas (estado, copy sin imagen, dedup...).
-        items = repos.listar_contenido(clase="contenido")
+        items = repos.listar_publicacion(clase="contenido")
     except Exception:  # noqa: BLE001 -- sin tablero, la etapa de Ilustrar no actúa
         _log.exception("pipeline: no se pudo leer el tablero para la etapa de Ilustrar.")
         return []

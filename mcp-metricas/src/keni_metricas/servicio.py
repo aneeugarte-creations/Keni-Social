@@ -295,7 +295,7 @@ def construir_listado_piezas(rango: str = "mes", marca: str | None = None) -> li
 
     A diferencia de `construir_analitica_piezas` (top/peores + distribucion), esto
     devuelve el listado COMPLETO de piezas de la(s) cuenta(s) en alcance, ordenado por
-    fecha de publicacion descendente (lo mas reciente primero), pensado para un selector:
+    fecha de pieza descendente (lo mas reciente primero), pensado para un selector:
     el apartado Comercial lo usa para elegir QUE pieza monitorizar por su `id` de
     Metricool, sin que nadie pegue enlaces a mano.
 
@@ -685,18 +685,18 @@ def crosstab_desde_fuente(fuente, rango: str) -> dict:
 # el delta diario de followers NO es atribuible 1:1 a un post.
 _NOTA_CORRELACION = (
     "Correlación, no causalidad: el crecimiento diario de seguidores no es atribuible "
-    "1:1 a las publicaciones de ese día (influyen campañas, tendencias, recomendación "
+    "1:1 a las piezas de ese día (influyen campañas, tendencias, recomendación "
     "del algoritmo y arrastre de días previos). 'seguidores_por_post' es un reparto "
     "indicativo, no una métrica de atribución."
 )
 _NOTA_SIN_SERIE = (
     "La fuente activa no expone serie de seguidores, así que no se puede correlacionar "
-    "crecimiento de comunidad con publicaciones."
+    "crecimiento de comunidad con piezas."
 )
 
 
 def construir_correlacion_seguidores(rango: str = "mes", marca: str | None = None) -> dict:
-    """Correlación (NO causalidad) crecimiento de seguidores ↔ publicaciones.
+    """Correlación (NO causalidad) crecimiento de seguidores ↔ piezas.
 
     Por (marca, red, día): `seguidores_ganados` = delta diario de la serie de
     followers (punto N − N-1); `n_posts` = piezas publicadas ese día;
@@ -778,7 +778,7 @@ def construir_metricas_pieza(marca: str, red: str, id_post: str) -> dict:
     `marca` es el id_metricas (guion_bajo) de la cuenta; `red` la plataforma keni
     ('facebook'|'instagram'|'x'|'tiktok'|'youtube'); `id_post` el id que devolvio el
     scheduler de Metricool al programar (lo guarda la Consola en
-    `contenido_plataforma.id_post_metricool`). Lo consume el tablero para pintar el
+    `pieza.id_post_metricool`). Lo consume el tablero para pintar el
     rendimiento en cada tarjeta SIN adaptadores por red: una sola lectura sobre la
     fuente activa (Metricool de pago en prod; muestra en demo).
 

@@ -365,9 +365,9 @@ function BloqueIA({ gen, plantilla }: { gen?: PipelineGeneracion; plantilla?: st
   );
 }
 
-/** Contenido COMPLETO específico de cada etapa. Las etapas IA enseñan SIEMPRE el BloqueIA
+/** Publicacion COMPLETO específico de cada etapa. Las etapas IA enseñan SIEMPRE el BloqueIA
  *  (prompt + razonamiento + resultado); las no-IA muestran su dato propio. */
-function ContenidoEtapa({
+function PublicacionEtapa({
   clave,
   estado,
   run,
@@ -508,7 +508,7 @@ export function PanelEtapa({
         <div className="space-y-3 border-t p-3">
           {etapa.detalle && <p className="text-xs text-muted-foreground">{etapa.detalle}</p>}
           <EventosEtapa eventos={eventos} />
-          <ContenidoEtapa clave={etapa.clave} estado={etapa.estado} run={run} generacion={generacion} plantilla={plantilla} />
+          <PublicacionEtapa clave={etapa.clave} estado={etapa.estado} run={run} generacion={generacion} plantilla={plantilla} />
         </div>
       )}
     </div>

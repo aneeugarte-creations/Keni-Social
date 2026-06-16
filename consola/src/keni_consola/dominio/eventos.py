@@ -6,11 +6,11 @@
 ║  SAFE BY DEFAULT: si no hay NINGUN webhook activo, `emitir` no hace una    ║
 ║  sola peticion de red. El reparto ocurre SOLO hacia las URLs que un        ║
 ║  admin dio de alta (allowlist viva en la tabla `webhooks`). Misma          ║
-║  disciplina que `keni_metricas.notificaciones` y `publicacion/meta.py`:    ║
+║  disciplina que `keni_metricas.notificaciones` y `pieza/meta.py`:    ║
 ║  nada sale solo a destinos no configurados.                                ║
 ╚══════════════════════════════════════════════════════════════════════════╝
 
-El tablero (`api/contenido`) y el barrido de vencimientos (`eventos_scanner`) llaman a
+El tablero (`api/publicaciones`) y el barrido de vencimientos (`eventos_scanner`) llaman a
 `emitir(...)` cuando pasa algo notificable (una pieza se aprueba, un contenido vence).
 `emitir`:
 
@@ -189,8 +189,8 @@ def emitir(
     tipo: str,
     datos: dict[str, Any],
     *,
-    contenido_id: str = "",
-    plataforma_id: str = "",
+    publicacion_id: str = "",
+    pieza_id: str = "",
     clave_idempotencia: str = "",
     en_hilo: bool = True,
 ) -> bool:
@@ -210,8 +210,8 @@ def emitir(
     payload = construir_payload(tipo, datos)
     nuevo = repos.registrar_evento_interno(
         tipo=tipo,
-        contenido_id=contenido_id,
-        plataforma_id=plataforma_id,
+        publicacion_id=publicacion_id,
+        pieza_id=pieza_id,
         clave_idempotencia=clave_idempotencia,
         payload=payload,
     )
@@ -225,14 +225,14 @@ def emitir(
             from . import notificaciones as _notif
 
             _notif.tras_publicacion(
-                contenido_id=datos.get("contenido_id", "") or contenido_id,
-                plataforma_id=datos.get("plataforma_id", "") or plataforma_id,
+                publicacion_id=datos.get("publicacion_id", "") or publicacion_id,
+                pieza_id=datos.get("pieza_id", "") or pieza_id,
                 marca_id=datos.get("marca", "") or "",
                 titulo=datos.get("titulo", "") or "",
                 red_nombre=datos.get("red_nombre", "") or "",
             )
         except Exception:  # noqa: BLE001 -- notificar nunca rompe la emision del evento
-            log.exception("Fallo creando notificaciones in-app para %s.", contenido_id)
+            log.exception("Fallo creando notificaciones in-app para %s.", publicacion_id)
     if en_hilo:
         hilo = threading.Thread(
             target=_repartir, args=(tipo, payload), name=f"webhook-{tipo}", daemon=True

@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppShell } from "@/components/layout/AppShell";
 import { AccionesPagina, AccionesPaginaFin } from "@/components/layout/encabezado";
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
-import { FiltrosContenidoProvider } from "@/hooks/use-filtros-contenido";
+import { FiltrosPublicacionProvider } from "@/hooks/use-filtros-contenido";
 import { MarcaActivaProvider } from "@/hooks/use-marca-activa";
 
 /** Catálogo mínimo con una app activa (espejo de un manifest). */
@@ -102,7 +102,7 @@ function renderShell(ruta: string) {
     <QueryClientProvider client={client}>
       <SesionContexto.Provider value={sesion}>
         <MarcaActivaProvider>
-        <FiltrosContenidoProvider>
+        <FiltrosPublicacionProvider>
         <MemoryRouter initialEntries={[ruta]}>
           <Routes>
             <Route path="/" element={<AppShell />}>
@@ -112,7 +112,7 @@ function renderShell(ruta: string) {
             </Route>
           </Routes>
         </MemoryRouter>
-        </FiltrosContenidoProvider>
+        </FiltrosPublicacionProvider>
         </MarcaActivaProvider>
       </SesionContexto.Provider>
     </QueryClientProvider>,
@@ -168,7 +168,7 @@ describe("AppShell · sidebar siempre presente", () => {
       <QueryClientProvider client={client}>
         <SesionContexto.Provider value={sesion}>
           <MarcaActivaProvider>
-          <FiltrosContenidoProvider>
+          <FiltrosPublicacionProvider>
           <MemoryRouter initialEntries={["/generacion"]}>
             <Routes>
               <Route path="/" element={<AppShell />}>
@@ -186,7 +186,7 @@ describe("AppShell · sidebar siempre presente", () => {
               </Route>
             </Routes>
           </MemoryRouter>
-          </FiltrosContenidoProvider>
+          </FiltrosPublicacionProvider>
           </MarcaActivaProvider>
         </SesionContexto.Provider>
       </QueryClientProvider>,
@@ -206,8 +206,8 @@ describe("AppShell · sidebar siempre presente", () => {
       <QueryClientProvider client={client}>
         <SesionContexto.Provider value={sesion}>
           <MarcaActivaProvider>
-          <FiltrosContenidoProvider>
-          <MemoryRouter initialEntries={["/contenido/imagen"]}>
+          <FiltrosPublicacionProvider>
+          <MemoryRouter initialEntries={["/publicaciones/imagen"]}>
             <Routes>
               <Route path="/" element={<AppShell />}>
                 <Route
@@ -227,7 +227,7 @@ describe("AppShell · sidebar siempre presente", () => {
               </Route>
             </Routes>
           </MemoryRouter>
-          </FiltrosContenidoProvider>
+          </FiltrosPublicacionProvider>
           </MarcaActivaProvider>
         </SesionContexto.Provider>
       </QueryClientProvider>,
@@ -254,7 +254,7 @@ describe("AppShell · sidebar siempre presente", () => {
       <QueryClientProvider client={client}>
         <SesionContexto.Provider value={sesion}>
           <MarcaActivaProvider>
-          <FiltrosContenidoProvider>
+          <FiltrosPublicacionProvider>
           <MemoryRouter initialEntries={["/generacion"]}>
             <Routes>
               <Route path="/" element={<AppShell />}>
@@ -272,7 +272,7 @@ describe("AppShell · sidebar siempre presente", () => {
               </Route>
             </Routes>
           </MemoryRouter>
-          </FiltrosContenidoProvider>
+          </FiltrosPublicacionProvider>
           </MarcaActivaProvider>
         </SesionContexto.Provider>
       </QueryClientProvider>,

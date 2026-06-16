@@ -106,14 +106,14 @@ def test_cliente_opera_como_dueno_y_atribuye(entorno):
     cli = mcp_operativo.ClienteConsola(app, OWNER)
 
     async def flujo():
-        creado = await cli.post("/api/contenido", {"titulo": "Pieza MCP", "prioridad": "alta"})
+        creado = await cli.post("/api/publicaciones", {"titulo": "Pieza MCP", "prioridad": "alta"})
         assert "error" not in creado, creado
         pieza = creado["contenido"]
         assert pieza["titulo"] == "Pieza MCP"
         # ATRIBUCIÓN: el autor es el usuario del MCP (no "sin autor" como el token).
         assert pieza["autor_nombre"] == OWNER
         # Aparece al listar.
-        listado = await cli.get("/api/contenido")
+        listado = await cli.get("/api/publicaciones")
         ids = [c["id"] for c in listado["contenidos"]]
         assert pieza["id"] in ids
         await cli.aclose()
@@ -128,7 +128,7 @@ def test_cliente_token_token_vacio_sin_usuario(entorno):
 
     async def flujo():
         # Sin usuarios en la BD, `_mintar_sesion` no resuelve id -> error explicativo.
-        r = await cli.get("/api/contenido")
+        r = await cli.get("/api/publicaciones")
         assert "error" in r
         await cli.aclose()
 
@@ -142,11 +142,11 @@ def test_cliente_renueva_sesion_tras_401(entorno):
     cli = mcp_operativo.ClienteConsola(app, OWNER)
 
     async def flujo():
-        primera = await cli.get("/api/contenido")
+        primera = await cli.get("/api/publicaciones")
         assert "error" not in primera, primera
         # Invalida la sesión vigente: el siguiente request debe re-mintear y volver a pasar.
         auth.borrar_sesion(cli._cookie)
-        segunda = await cli.get("/api/contenido")
+        segunda = await cli.get("/api/publicaciones")
         assert "error" not in segunda, segunda
         await cli.aclose()
 
@@ -168,9 +168,9 @@ def test_tools_registradas(entorno):
     tools = anyio.run(nombres)
     esperadas = {
         "keni_contexto", "keni_metricas_opciones",
-        "keni_listar_contenido", "keni_crear_contenido", "keni_actualizar_contenido",
+        "keni_listar_publicaciones", "keni_crear_publicacion", "keni_actualizar_publicacion",
         "keni_generar_copy", "keni_estado_generacion", "keni_listar_generaciones",
-        "keni_listar_publicaciones", "keni_detalle_publicacion",
+        "keni_listar_piezas", "keni_detalle_pieza",
         "keni_cola_aprobacion", "keni_enviar_a_revision", "keni_aprobar", "keni_rechazar",
         "keni_metricas_reporte", "keni_metricas_analisis", "keni_metricas_piezas",
         "keni_metricas_seguidores", "keni_metricas_desglose",
@@ -190,7 +190,7 @@ def test_tools_registradas(entorno):
     assert not {n for n in tools if "publicar" in n or "programar" in n or "metricool" in n}
 
 
-@pytest.mark.parametrize("tool", ["keni_crear_contenido", "keni_aprobar", "keni_listar_contenido"])
+@pytest.mark.parametrize("tool", ["keni_crear_publicacion", "keni_aprobar", "keni_listar_publicaciones"])
 def test_tools_invocables_via_call_tool(entorno, tool):
     """`call_tool` invoca las tools en proceso (humo del registro + holder del cliente)."""
     _crear_owner_admin()
@@ -199,9 +199,9 @@ def test_tools_invocables_via_call_tool(entorno, tool):
     servidor.holder.cliente = mcp_operativo.ClienteConsola(api_app, OWNER)
 
     args = {
-        "keni_crear_contenido": {"titulo": "Desde call_tool", "prioridad": "media"},
-        "keni_aprobar": {"publicacion_id": "no-existe"},
-        "keni_listar_contenido": {},
+        "keni_crear_publicacion": {"titulo": "Desde call_tool", "prioridad": "media"},
+        "keni_aprobar": {"pieza_id": "no-existe"},
+        "keni_listar_publicaciones": {},
     }[tool]
 
     async def invocar():

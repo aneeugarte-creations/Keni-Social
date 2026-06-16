@@ -63,9 +63,9 @@ def _mock_og_image(monkeypatch, url=""):
 
 def _envejecer_intento(tema_id, campo):
     """Retrasa el timestamp del último intento de la etapa (saca el tema del backoff)."""
-    pend = json.loads(repos.obtener_contenido(tema_id)["copy_pendiente"])
+    pend = json.loads(repos.obtener_publicacion(tema_id)["copy_pendiente"])
     pend[f"{campo}_ts"] = "2020-01-01T00:00:00"
-    repos.actualizar_contenido(tema_id, {"copy_pendiente": json.dumps(pend)})
+    repos.actualizar_publicacion(tema_id, {"copy_pendiente": json.dumps(pend)})
 
 
 def _temas_sin_verdicto(marca=None):
@@ -351,7 +351,7 @@ def test_redactar_pasa_fotos_notas_y_n_notas_al_copy(entorno, monkeypatch):
             "tipo_contenido": "fuente",
         }),
     )
-    pc.lanzar_redactar_de_tema(repos.obtener_contenido(tema["id"]), autor=None)
+    pc.lanzar_redactar_de_tema(repos.obtener_publicacion(tema["id"]), autor=None)
     assert len(llamadas) == 1
     assert llamadas[0]["imagen_fuente"] == "https://casa.test/a.jpg"
     assert llamadas[0]["fotos_notas"] == fotos
@@ -369,7 +369,7 @@ def test_redactar_pendiente_viejo_sin_panel_no_ofrece_carrusel(entorno, monkeypa
             "nota": "Nota", "redes_ids": ["x"], "imagen": "https://casa.test/a.jpg",
         }),
     )
-    pc.lanzar_redactar_de_tema(repos.obtener_contenido(tema["id"]), autor=None)
+    pc.lanzar_redactar_de_tema(repos.obtener_publicacion(tema["id"]), autor=None)
     assert llamadas[0]["fotos_notas"] == []
     assert llamadas[0]["n_notas"] == 1
 
@@ -386,7 +386,7 @@ def _tema_pipeline(titulo="Tema", marca="unotv", **campos):
         "copy_pendiente",
         json.dumps({"nota": "Nota de origen a verificar.", "redes_ids": ["x"]}),
     )
-    return repos.crear_contenido(
+    return repos.crear_publicacion(
         clase="contenido", titulo=titulo, marca=marca, origen=pc.ORIGEN_PIPELINE,
         descripcion="Nota de origen a verificar.", **campos,
     )
@@ -426,7 +426,7 @@ def test_verificar_cluster_ok_se_admite_heredando_veredicto(entorno, monkeypatch
     assert len(res["temas"]) == 1
     tema = res["temas"][0]
     # El contenido nace VERIFICADO (frontera "Verificar = investigación" alineada en los datos).
-    assert repos.obtener_contenido(tema["id"])["verificacion_fuente"] == pc.VERIFICACION_NO_VERIFICADO
+    assert repos.obtener_publicacion(tema["id"])["verificacion_fuente"] == pc.VERIFICACION_NO_VERIFICADO
     assert repos.obtener_noticia_cluster("c-ok")["estado"] == "usado"
 
 
@@ -461,7 +461,7 @@ def test_copy_fallido_se_reintenta_tras_el_backoff(entorno, monkeypatch):
     pc.ejecutar_redactar(autor=None)
     assert len(llamadas) == 1
     # El lanzamiento NO limpió `copy_pendiente` (lo limpia el post-procesado al ÉXITO).
-    assert (repos.obtener_contenido(tema["id"])["copy_pendiente"] or "").strip()
+    assert (repos.obtener_publicacion(tema["id"])["copy_pendiente"] or "").strip()
 
     # El copy "falló" (no nació pieza), pero el tick INMEDIATO no relanza: backoff en curso.
     pc.ejecutar_redactar(autor=None)
@@ -473,7 +473,7 @@ def test_copy_fallido_se_reintenta_tras_el_backoff(entorno, monkeypatch):
     assert len(llamadas) == 2
 
     # Éxito (pieza creada): deja de relanzarse.
-    repos.crear_contenido_plataforma(contenido_id=tema["id"], red="x", copy="Listo")
+    repos.crear_pieza_fila(publicacion_id=tema["id"], red="x", copy="Listo")
     _envejecer_intento(tema["id"], "redactar_intentos")
     pc.ejecutar_redactar(autor=None)
     assert len(llamadas) == 2
@@ -525,7 +525,7 @@ def test_redactar_reintentos_agotados_marca_problema_sin_lanzar(entorno, monkeyp
     lanzados = pc.ejecutar_redactar(autor=None)
 
     assert lanzados == [] and llamadas == []
-    refrescado = repos.obtener_contenido(tema["id"])
+    refrescado = repos.obtener_publicacion(tema["id"])
     assert refrescado["verificacion_fuente"] == pc.VERIFICACION_PROBLEMA
     assert "falló" in (refrescado["verificar_hallazgos"] or "")
     assert pc.temas_en_proceso("unotv") == 0  # terminal: libera la admisión de su marca
@@ -544,7 +544,7 @@ def test_redactar_reintento_anota_intentos_acumulados(entorno, monkeypatch):
     pc.ejecutar_redactar(autor=None)  # 2º intento
 
     assert len(llamadas) == 2
-    pend = json.loads(repos.obtener_contenido(tema["id"])["copy_pendiente"])
+    pend = json.loads(repos.obtener_publicacion(tema["id"])["copy_pendiente"])
     assert pend["redactar_intentos"] == 2
 
 
@@ -677,7 +677,7 @@ def test_crear_tema_de_cluster_copia_fuente_y_fecha_de_la_nota(entorno, monkeypa
     tema = pc.crear_tema_de_cluster(cluster, items, claves_vistas=set())
 
     assert tema is not None
-    guardado = repos.obtener_contenido(tema["id"])
+    guardado = repos.obtener_publicacion(tema["id"])
     assert (guardado.get("fuente_nombre") or "") == "Récord"
     assert (guardado.get("fecha_fuente") or "") == "2026-06-09T21:21:00+00:00"
     assert (guardado.get("url_fuente") or "") == "record.com.mx/nota-1"
@@ -697,7 +697,7 @@ def test_crear_tema_de_cluster_fecha_cae_a_primer_visto(entorno, monkeypatch):
     tema = pc.crear_tema_de_cluster(cluster, items, claves_vistas=set())
 
     assert tema is not None
-    guardado = repos.obtener_contenido(tema["id"])
+    guardado = repos.obtener_publicacion(tema["id"])
     # `primer_visto` del cluster inicializado por `_inicializar_cluster`.
     assert (guardado.get("fecha_fuente") or "") == "2026-06-01T00:00:00+00:00"
 
@@ -721,7 +721,7 @@ def test_crear_tema_de_cluster_resuelve_og_image_de_fuente_propia(entorno, monke
     tema = pc.crear_tema_de_cluster(cluster, items, claves_vistas=set())
 
     assert tema is not None
-    pend = json.loads(repos.obtener_contenido(tema["id"])["copy_pendiente"])
+    pend = json.loads(repos.obtener_publicacion(tema["id"])["copy_pendiente"])
     assert pend["imagen"] == "https://casa.test/foto-nota.jpg"
     assert pend["tipo_contenido"] == "fuente"
 
@@ -744,7 +744,7 @@ def test_crear_tema_de_cluster_no_resuelve_og_image_de_fuente_ajena(entorno, mon
     tema = pc.crear_tema_de_cluster(cluster, items, claves_vistas=set())
 
     assert tema is not None
-    pend = json.loads(repos.obtener_contenido(tema["id"])["copy_pendiente"])
+    pend = json.loads(repos.obtener_publicacion(tema["id"])["copy_pendiente"])
     assert pend["imagen"] == ""
     assert pend["tipo_contenido"] == ""
 
@@ -770,7 +770,7 @@ def test_crear_tema_de_cluster_no_usa_imagen_de_feed_ajeno(entorno, monkeypatch)
     tema = pc.crear_tema_de_cluster(cluster, items, claves_vistas=set())
 
     assert tema is not None
-    pend = json.loads(repos.obtener_contenido(tema["id"])["copy_pendiente"])
+    pend = json.loads(repos.obtener_publicacion(tema["id"])["copy_pendiente"])
     assert pend["imagen"] == ""
     assert pend["tipo_contenido"] == ""
 
@@ -789,7 +789,7 @@ def test_temas_en_proceso_cuenta_pendientes_de_verificar_o_copy(entorno):
     _tema_pipeline(titulo="Problema", verificacion_fuente=pc.VERIFICACION_PROBLEMA, copy_pendiente=pend)  # terminal: 0
     con_copy = _tema_pipeline(titulo="Apto con copy", verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO, copy_pendiente=pend)
     # Una pieza por plataforma CON copy -> ya pasó la etapa de copy: no cuenta como en proceso.
-    repos.crear_contenido_plataforma(contenido_id=con_copy["id"], red="x", copy="Copy listo")
+    repos.crear_pieza_fila(publicacion_id=con_copy["id"], red="x", copy="Copy listo")
 
     assert pc.temas_en_proceso("unotv") == 4
 
@@ -832,7 +832,7 @@ def test_caducidad_respeta_lo_fresco_y_lo_terminal(entorno):
     con_copy = _tema_pipeline(
         titulo="Con copy", verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO, copy_pendiente=pend
     )
-    repos.crear_contenido_plataforma(contenido_id=con_copy["id"], red="x", copy="Copy listo")
+    repos.crear_pieza_fila(publicacion_id=con_copy["id"], red="x", copy="Copy listo")
 
     # Dentro del TTL: nada caduca (lo en proceso sigue siendo fresco).
     pronto = datetime.now(timezone.utc) + timedelta(hours=1)
@@ -922,7 +922,7 @@ def test_cupo_dia_corta_la_admision(entorno, monkeypatch):
     t = _tema_pipeline(
         titulo="Producido hoy", verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO, copy_pendiente=pend
     )
-    repos.crear_contenido_plataforma(contenido_id=t["id"], red="x", copy="Copy listo")
+    repos.crear_pieza_fila(publicacion_id=t["id"], red="x", copy="Copy listo")
     _inicializar_cluster("hot", titulo="Historia caliente", score=0.9)
 
     res = pc._ejecutar_barrido()
@@ -975,11 +975,11 @@ def test_plan_descuenta_lo_ya_generado_hoy(entorno, monkeypatch):
     monkeypatch.setenv("KENI_PLAN_DIA", "mx:1")
     # Generado previo de la línea mx (la categoría vive EN el contenido, no en el cluster),
     # CON post real (es_publicacion=1): un tema sin post no consumiría cupo (no cuenta).
-    ya = repos.crear_contenido(
+    ya = repos.crear_publicacion(
         clase="contenido", titulo="Ya generada", marca="unotv", categoria="mx"
     )
-    repos.crear_contenido_plataforma(
-        contenido_id=ya["id"], red="facebook", marca="unotv", copy="P", es_publicacion=True
+    repos.crear_pieza_fila(
+        publicacion_id=ya["id"], red="facebook", marca="unotv", copy="P", es_publicacion=True
     )
     _inicializar_cluster("hoy", titulo="Nacional nueva", score=0.9, categoria="mx")
 
@@ -1040,11 +1040,11 @@ def test_plan_breaking_excede_su_cupo_con_tope_extra(entorno, monkeypatch):
     monkeypatch.setenv("KENI_BREAKING_EXTRA_DIA", "1")
     # El cupo del plan (1) YA está consumido por una breaking generada hoy: tema CON post
     # real (pieza es_publicacion=1); un tema sin post no consumiría cupo (no cuenta).
-    breaking = repos.crear_contenido(
+    breaking = repos.crear_publicacion(
         clase="contenido", titulo="Breaking previa", marca="unotv", categoria="breaking"
     )
-    repos.crear_contenido_plataforma(
-        contenido_id=breaking["id"], red="facebook", marca="unotv", copy="P", es_publicacion=True
+    repos.crear_pieza_fila(
+        publicacion_id=breaking["id"], red="facebook", marca="unotv", copy="P", es_publicacion=True
     )
     # Queda el hueco EXTRA: una nueva última hora aún sale al feed.
     assert _admitir.cupos_categoria_restantes("unotv") == {"breaking": 1}
@@ -1065,20 +1065,20 @@ def test_cupos_solo_cuentan_la_jornada_mx_no_dias_previos(entorno, monkeypatch):
     monkeypatch.setenv("KENI_PLAN_DIA", "mx:1")
     # Ambos con post real (es_publicacion=1): lo ÚNICO que excluye al viejo es la fecha.
     # De otra jornada: NO consume el cupo de hoy -> queda el hueco íntegro.
-    ayer = repos.crear_contenido(
+    ayer = repos.crear_publicacion(
         clase="contenido", titulo="Nacional de ayer", marca="unotv", categoria="mx",
         creado="2020-01-01T00:00:00",
     )
-    repos.crear_contenido_plataforma(
-        contenido_id=ayer["id"], red="facebook", marca="unotv", copy="P", es_publicacion=True
+    repos.crear_pieza_fila(
+        publicacion_id=ayer["id"], red="facebook", marca="unotv", copy="P", es_publicacion=True
     )
     assert _admitir.cupos_categoria_restantes("unotv") == {"mx": 1}
     # De hoy: consume el cupo -> sin hueco.
-    hoy = repos.crear_contenido(
+    hoy = repos.crear_publicacion(
         clase="contenido", titulo="Nacional de hoy", marca="unotv", categoria="mx"
     )
-    repos.crear_contenido_plataforma(
-        contenido_id=hoy["id"], red="facebook", marca="unotv", copy="P", es_publicacion=True
+    repos.crear_pieza_fila(
+        publicacion_id=hoy["id"], red="facebook", marca="unotv", copy="P", es_publicacion=True
     )
     assert _admitir.cupos_categoria_restantes("unotv") == {}
 
@@ -1116,15 +1116,15 @@ def test_temas_autogen_sin_copy_selecciona_origenes_de_noticias(entorno):
 
     Un tema con origen en `ORIGENES_AUTOGEN`, con marca y sin copy entra; el de origen "" no.
     """
-    bueno = repos.crear_contenido(
+    bueno = repos.crear_publicacion(
         clase="contenido", titulo="Noticia rss", marca="unotv", origen="rss",
     )
-    repos.crear_contenido(
+    repos.crear_publicacion(
         clase="contenido", titulo="Tecleado a mano", marca="unotv", origen="",
     )
     # Una historia USADA desde el panel (curación humana) también entra: si su lanzamiento
     # síncrono falló (cola llena / generación pausada), este es su ÚNICO reintento.
-    historia = repos.crear_contenido(
+    historia = repos.crear_publicacion(
         clase="contenido", titulo="Breaking curada", marca="unotv", origen="historia",
     )
     ids = {t["id"] for t in pc.temas_autogen_sin_copy()}
@@ -1144,7 +1144,7 @@ def test_ejecutar_cd_funde_pool_via_autogen_lanzar(entorno, monkeypatch):
         autogen_redactar, "lanzar_para_topic",
         lambda item: lanzadas.append(item["id"]) or {"id": f"g-{item['id']}"},
     )
-    repos.crear_contenido(
+    repos.crear_publicacion(
         clase="contenido", titulo="Noticia pool", marca="unotv", origen="rss",
     )
     lanzados = pc.ejecutar_redactar(autor=None)
@@ -1163,7 +1163,7 @@ def test_ejecutar_cd_salta_pool_de_marca_apagada(entorno, monkeypatch):
         autogen_redactar, "lanzar_para_topic",
         lambda item: lanzadas.append(item["id"]) or {"id": "g"},
     )
-    repos.crear_contenido(
+    repos.crear_publicacion(
         clase="contenido", titulo="Apagada", marca="unotv", origen="rss",
     )
     pc.ejecutar_redactar(autor=None)
@@ -1190,7 +1190,7 @@ def test_ejecutar_arte_gateado_corre_seleccion_y_lanzamiento(entorno, monkeypatc
     monkeypatch.setenv(config.ENV_PIPELINE_ILUSTRAR, "1")
     monkeypatch.setattr(autogen_ilustrar.media, "proveedor_configurado", lambda: True)
     item = {"id": "t1", "titulo": "Tema", "marca": "unotv"}
-    monkeypatch.setattr(pc.repos, "listar_contenido", lambda **_k: [item])
+    monkeypatch.setattr(pc.repos, "listar_publicacion", lambda **_k: [item])
     monkeypatch.setattr(autogen_ilustrar, "_plataformas_por_item", lambda items: {})
     monkeypatch.setattr(autogen_ilustrar, "ids_ya_procesados", lambda: set())
     monkeypatch.setattr(autogen_ilustrar, "_etiquetas_por_item", lambda: {})
@@ -1198,7 +1198,7 @@ def test_ejecutar_arte_gateado_corre_seleccion_y_lanzamiento(entorno, monkeypatc
     adjuntados: list[str] = []
     monkeypatch.setattr(
         autogen_ilustrar, "lanzar_para_topic",
-        lambda it: adjuntados.append(it["id"]) or {"contenido_id": it["id"]},
+        lambda it: adjuntados.append(it["id"]) or {"publicacion_id": it["id"]},
     )
     res = pc.ejecutar_ilustrar()
     assert adjuntados == ["t1"]
@@ -1301,15 +1301,15 @@ def test_upsert_cluster_no_revierte_estado_ni_contenido_id(entorno):
     """Anti-TOCTOU daemon↔pipeline: un recalc del daemon (upsert con datos stale) NO puede
     devolver a 'nuevo' una historia ya promovida ni borrar su enlace al tema."""
     _inicializar_cluster("c1", titulo="Historia promovida", score=0.7)
-    repos.actualizar_noticia_cluster("c1", estado="usado", contenido_id="tema-77")
+    repos.actualizar_noticia_cluster("c1", estado="usado", publicacion_id="tema-77")
 
-    # El daemon recalcula con una foto VIEJA (estado 'nuevo', sin contenido_id) y upsertea.
-    stale = dict(repos.obtener_noticia_cluster("c1"), estado="nuevo", contenido_id="", score=0.9)
+    # El daemon recalcula con una foto VIEJA (estado 'nuevo', sin publicacion_id) y upsertea.
+    stale = dict(repos.obtener_noticia_cluster("c1"), estado="nuevo", publicacion_id="", score=0.9)
     repos.upsert_noticia_cluster(stale)
 
     tras = repos.obtener_noticia_cluster("c1")
     assert tras["estado"] == "usado"          # el estado promovido NO se revierte
-    assert tras["contenido_id"] == "tema-77"  # el enlace al tema NO se pierde
+    assert tras["publicacion_id"] == "tema-77"  # el enlace al tema NO se pierde
     assert tras["score"] == 0.9               # los agregados sí se actualizan
 
 
@@ -1329,9 +1329,9 @@ def test_encadenar_arte_tras_copy_ilustra_ese_tema(entorno, monkeypatch):
     lanzados: list[str] = []
     monkeypatch.setattr(
         autogen_ilustrar, "lanzar_para_topic",
-        lambda it: lanzados.append(it["id"]) or {"contenido_id": it["id"]},
+        lambda it: lanzados.append(it["id"]) or {"publicacion_id": it["id"]},
     )
-    tema = repos.crear_contenido(
+    tema = repos.crear_publicacion(
         clase="contenido", titulo="Ilustrable", marca="unotv", origen=pc.ORIGEN_PIPELINE,
     )
 
@@ -1353,7 +1353,7 @@ def test_encadenar_arte_tras_copy_respeta_gates(entorno, monkeypatch):
     # Toggle ON pero tema YA ilustrado (dedup por etiqueta): tampoco.
     monkeypatch.setenv(config.ENV_PIPELINE_ILUSTRAR, "1")
     monkeypatch.setattr(media, "proveedor_configurado", lambda: True)
-    tema = repos.crear_contenido(
+    tema = repos.crear_publicacion(
         clase="contenido", titulo="Ya ilustrado", marca="unotv", origen=pc.ORIGEN_PIPELINE,
     )
     monkeypatch.setattr(autogen_ilustrar, "ids_ya_procesados", lambda: {tema["id"]})
@@ -1380,7 +1380,7 @@ def test_reparar_verificacion_en_curso_sueltos_resetea_solo_viejos(entorno):
     con = db._conectar()
     try:
         con.execute(
-            "UPDATE contenido SET actualizado = ? WHERE id = ?",
+            "UPDATE publicacion SET actualizado = ? WHERE id = ?",
             ("2020-01-01T00:00:00", atascada["id"]),
         )
         con.commit()
@@ -1390,8 +1390,8 @@ def test_reparar_verificacion_en_curso_sueltos_resetea_solo_viejos(entorno):
     n = repos.reparar_verificacion_en_curso_sueltos("2025-01-01T00:00:00")
 
     assert n == 1
-    assert (repos.obtener_contenido(atascada["id"])["verificacion_fuente"] or "") == ""  # a re-verificación
-    assert repos.obtener_contenido(vivo["id"])["verificacion_fuente"] == pc.VERIFICACION_EN_CURSO  # intacto
+    assert (repos.obtener_publicacion(atascada["id"])["verificacion_fuente"] or "") == ""  # a re-verificación
+    assert repos.obtener_publicacion(vivo["id"])["verificacion_fuente"] == pc.VERIFICACION_EN_CURSO  # intacto
 
 
 def _envejecer_actualizado(tema_id, fecha="2020-01-01T00:00:00"):
@@ -1400,7 +1400,7 @@ def _envejecer_actualizado(tema_id, fecha="2020-01-01T00:00:00"):
 
     con = db._conectar()
     try:
-        con.execute("UPDATE contenido SET actualizado = ? WHERE id = ?", (fecha, tema_id))
+        con.execute("UPDATE publicacion SET actualizado = ? WHERE id = ?", (fecha, tema_id))
         con.commit()
     finally:
         con.close()
@@ -1418,8 +1418,8 @@ def test_limpiador_verificacion_atascada_re_verificacion_con_validacion_activa(e
     n = limpiador_generaciones._reparar_verificacion_en_curso()
 
     assert n == 1
-    assert (repos.obtener_contenido(atascada["id"])["verificacion_fuente"] or "") == ""  # a re-verificación
-    assert repos.obtener_contenido(vivo["id"])["verificacion_fuente"] == pc.VERIFICACION_EN_CURSO  # intacto
+    assert (repos.obtener_publicacion(atascada["id"])["verificacion_fuente"] or "") == ""  # a re-verificación
+    assert repos.obtener_publicacion(vivo["id"])["verificacion_fuente"] == pc.VERIFICACION_EN_CURSO  # intacto
 
 
 def test_limpiador_verificacion_atascada_saltada_con_validacion_apagada(entorno, monkeypatch):
@@ -1433,7 +1433,7 @@ def test_limpiador_verificacion_atascada_saltada_con_validacion_apagada(entorno,
     n = limpiador_generaciones._reparar_verificacion_en_curso()
 
     assert n == 1
-    assert repos.obtener_contenido(atascada["id"])["verificacion_fuente"] == pc.VERIFICACION_SALTADA
+    assert repos.obtener_publicacion(atascada["id"])["verificacion_fuente"] == pc.VERIFICACION_SALTADA
 
 
 def test_ejecutar_arte_fallo_masivo_emite_un_error_agregado(entorno, monkeypatch, caplog):
@@ -1449,7 +1449,7 @@ def test_ejecutar_arte_fallo_masivo_emite_un_error_agregado(entorno, monkeypatch
         {"id": "t1", "titulo": "Tema 1", "marca": "unotv"},
         {"id": "t2", "titulo": "Tema 2", "marca": "unotv"},
     ]
-    monkeypatch.setattr(pc.repos, "listar_contenido", lambda **_k: items)
+    monkeypatch.setattr(pc.repos, "listar_publicacion", lambda **_k: items)
     monkeypatch.setattr(autogen_ilustrar, "_plataformas_por_item", lambda items: {})
     monkeypatch.setattr(autogen_ilustrar, "ids_ya_procesados", lambda: set())
     monkeypatch.setattr(autogen_ilustrar, "_etiquetas_por_item", lambda: {})
@@ -1486,7 +1486,7 @@ def test_ejecutar_arte_fallo_aislado_sin_error_agregado(entorno, monkeypatch, ca
         {"id": "t1", "titulo": "Tema 1", "marca": "unotv"},
         {"id": "t2", "titulo": "Tema 2", "marca": "unotv"},
     ]
-    monkeypatch.setattr(pc.repos, "listar_contenido", lambda **_k: items)
+    monkeypatch.setattr(pc.repos, "listar_publicacion", lambda **_k: items)
     monkeypatch.setattr(autogen_ilustrar, "_plataformas_por_item", lambda items: {})
     monkeypatch.setattr(autogen_ilustrar, "ids_ya_procesados", lambda: set())
     monkeypatch.setattr(autogen_ilustrar, "_etiquetas_por_item", lambda: {})
@@ -1495,7 +1495,7 @@ def test_ejecutar_arte_fallo_aislado_sin_error_agregado(entorno, monkeypatch, ca
     def _solo_t1_falla(it):
         if it["id"] == "t1":
             raise RuntimeError("fallo puntual")
-        return {"contenido_id": it["id"]}
+        return {"publicacion_id": it["id"]}
 
     monkeypatch.setattr(autogen_ilustrar, "lanzar_para_topic", _solo_t1_falla)
 
@@ -1510,31 +1510,31 @@ def test_ejecutar_arte_fallo_aislado_sin_error_agregado(entorno, monkeypatch, ca
 
 
 def test_ids_contenido_con_copy_filtra_por_marca(entorno):
-    """`ids_contenido_con_copy` empuja el filtro a SQL: solo ids con pieza con copy redactado."""
-    a = repos.crear_contenido(clase="contenido", titulo="A", marca="unotv")
-    b = repos.crear_contenido(clase="contenido", titulo="B", marca="claro-sports")
-    sin_copy = repos.crear_contenido(clase="contenido", titulo="C", marca="unotv")
-    repos.crear_contenido_plataforma(contenido_id=a["id"], red="x", copy="hola")
-    repos.crear_contenido_plataforma(contenido_id=b["id"], red="x", copy="hola")
-    repos.crear_contenido_plataforma(contenido_id=sin_copy["id"], red="x", copy="")
+    """`ids_publicacion_con_copy` empuja el filtro a SQL: solo ids con pieza con copy redactado."""
+    a = repos.crear_publicacion(clase="contenido", titulo="A", marca="unotv")
+    b = repos.crear_publicacion(clase="contenido", titulo="B", marca="claro-sports")
+    sin_copy = repos.crear_publicacion(clase="contenido", titulo="C", marca="unotv")
+    repos.crear_pieza_fila(publicacion_id=a["id"], red="x", copy="hola")
+    repos.crear_pieza_fila(publicacion_id=b["id"], red="x", copy="hola")
+    repos.crear_pieza_fila(publicacion_id=sin_copy["id"], red="x", copy="")
 
-    assert repos.ids_contenido_con_copy("unotv") == {a["id"]}
-    assert {a["id"], b["id"]} <= repos.ids_contenido_con_copy()
-    assert sin_copy["id"] not in repos.ids_contenido_con_copy()
+    assert repos.ids_publicacion_con_copy("unotv") == {a["id"]}
+    assert {a["id"], b["id"]} <= repos.ids_publicacion_con_copy()
+    assert sin_copy["id"] not in repos.ids_publicacion_con_copy()
 
 
 def test_listar_contenido_origenes_filtra_en_sql(entorno):
-    """`listar_contenido_origenes` trae solo los orígenes pedidos y excluye el estado dado."""
-    rss = repos.crear_contenido(clase="contenido", titulo="R", marca="unotv", origen="rss")
-    repos.crear_contenido(clase="contenido", titulo="M", marca="unotv", origen="")
-    hecho = repos.crear_contenido(clase="contenido", titulo="H", marca="unotv", origen="rss")
-    repos.actualizar_contenido(hecho["id"], {"estado": "hecha"})
+    """`listar_publicaciones_origenes` trae solo los orígenes pedidos y excluye el estado dado."""
+    rss = repos.crear_publicacion(clase="contenido", titulo="R", marca="unotv", origen="rss")
+    repos.crear_publicacion(clase="contenido", titulo="M", marca="unotv", origen="")
+    hecho = repos.crear_publicacion(clase="contenido", titulo="H", marca="unotv", origen="rss")
+    repos.actualizar_publicacion(hecho["id"], {"estado": "hecha"})
 
-    ids = {t["id"] for t in repos.listar_contenido_origenes(["rss"], excluir_estado="hecha")}
+    ids = {t["id"] for t in repos.listar_publicaciones_origenes(["rss"], excluir_estado="hecha")}
     assert ids == {rss["id"]}
     # Sin exclusión, el 'hecha' también sale; con lista vacía, nada (y sin query).
-    assert hecho["id"] in {t["id"] for t in repos.listar_contenido_origenes(["rss"])}
-    assert repos.listar_contenido_origenes([]) == []
+    assert hecho["id"] in {t["id"] for t in repos.listar_publicaciones_origenes(["rss"])}
+    assert repos.listar_publicaciones_origenes([]) == []
 
 
 def test_lanzar_para_topic_sella_pipeline_y_marcador_redactar(entorno, monkeypatch):
@@ -1553,8 +1553,8 @@ def test_lanzar_para_topic_sella_pipeline_y_marcador_redactar(entorno, monkeypat
     marcadores: list[tuple] = []
     monkeypatch.setattr(
         pc, "registrar_etapa",
-        lambda etapa, marca, detalle, contenido_id="", gen_id="": marcadores.append(
-            (etapa, marca, detalle, contenido_id, gen_id)
+        lambda etapa, marca, detalle, publicacion_id="", gen_id="": marcadores.append(
+            (etapa, marca, detalle, publicacion_id, gen_id)
         ),
     )
 
@@ -1564,11 +1564,11 @@ def test_lanzar_para_topic_sella_pipeline_y_marcador_redactar(entorno, monkeypat
 
     assert gen == {"id": "gen-tablero-1"}
     assert capturas["tipo"] == "pipeline"
-    assert capturas["contenido_id"] == "tema-tablero"
+    assert capturas["publicacion_id"] == "tema-tablero"
     assert capturas["titulo"] == "Nota del equipo"  # etiqueta legible, no "Auto-copy"
     assert len(marcadores) == 1
-    etapa, marca, detalle, contenido_id, gen_id = marcadores[0]
+    etapa, marca, detalle, publicacion_id, gen_id = marcadores[0]
     assert etapa == pc.ETAPA_REDACTAR
     assert marca == "unotv"
-    assert contenido_id == "tema-tablero"
+    assert publicacion_id == "tema-tablero"
     assert gen_id == "gen-tablero-1"

@@ -196,7 +196,7 @@ _ESTADOS_TERMINALES = frozenset({ESTADO_COMPLETADO, ESTADO_ERROR})
 _ES_ID = re.compile(r"[0-9a-f]{12}")
 
 # `procesar(salida, metricas) -> dict`: parsea la salida final de claude y crea los
-# artefactos (historial, publicaciones, hashtags…), devolviendo el `resultado` que se
+# artefactos (historial, piezas, hashtags…), devolviendo el `resultado` que se
 # guarda en el registro. Corre en el hilo del trabajo al COMPLETARSE con exito.
 Procesar = Callable[[str, Any], dict[str, Any]]
 

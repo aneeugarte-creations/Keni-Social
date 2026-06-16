@@ -60,7 +60,7 @@ async def problemas(request: Request) -> Response:
 
     bloqueados = [
         it
-        for it in repos.listar_contenido(marca=marca or None)
+        for it in repos.listar_publicacion(marca=marca or None)
         if (it.get("origen") or "") == ORIGEN_PIPELINE
         and (it.get("verificacion_fuente") or "").strip() == VERIFICACION_PROBLEMA
     ]

@@ -59,13 +59,13 @@ export function DetallePieza({
   return (
     <Dialog open={abierto} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
-        {pieza ? <Contenido pieza={pieza} /> : null}
+        {pieza ? <Publicacion pieza={pieza} /> : null}
       </DialogContent>
     </Dialog>
   );
 }
 
-function Contenido({ pieza }: { pieza: PiezaMetrica }) {
+function Publicacion({ pieza }: { pieza: PiezaMetrica }) {
   const titulo = pieza.titulo || "(sin título)";
 
   return (

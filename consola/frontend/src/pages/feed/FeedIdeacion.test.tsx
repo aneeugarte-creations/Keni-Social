@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
-import { FiltrosContenidoProvider } from "@/hooks/use-filtros-contenido";
+import { FiltrosPublicacionProvider } from "@/hooks/use-filtros-contenido";
 import { MarcaActivaProvider } from "@/hooks/use-marca-activa";
 import { formatearFechaHoraCorta } from "@/lib/fecha";
 import type { UsuarioSesion } from "@/types";
@@ -20,9 +20,9 @@ const OPCIONES = {
   marcas: [{ id: "unotv", nombre: "Uno TV" }],
 };
 
-const PUBLICACION = {
+const PIEZA = {
   id: "p1",
-  contenido_id: "c1",
+  publicacion_id: "c1",
   pipeline_id: "",
   titulo: "Gol de último minuto",
   marca: "unotv",
@@ -83,15 +83,15 @@ function casaEstado(estado: string | null, piezaEstado: unknown): boolean {
  * El listado FILTRA por `estado=` como el backend (consultas dedicadas de las vistas y
  * conteos con `limite=1`, que devuelven `paginacion.total` exacto del filtro).
  */
-function stubFetch(publicaciones: Array<Record<string, unknown>> = [PUBLICACION]) {
+function stubFetch(piezas: Array<Record<string, unknown>> = [PIEZA]) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string | URL) => {
       const ruta = String(url);
-      if (ruta.includes("/api/publicaciones/opciones")) {
+      if (ruta.includes("/api/piezas/opciones")) {
         return new Response(JSON.stringify(OPCIONES), { status: 200 });
       }
-      if (ruta.includes("/api/publicaciones/cadenas")) {
+      if (ruta.includes("/api/piezas/cadenas")) {
         // Lote vacío: cada tarjeta cae a su query individual (/aprobacion).
         return new Response(JSON.stringify({ cadenas: {} }), { status: 200 });
       }
@@ -102,8 +102,8 @@ function stubFetch(publicaciones: Array<Record<string, unknown>> = [PUBLICACION]
             niveles: [
               {
                 id: "n1",
-                plataforma_id: "p1",
-                contenido_id: "c1",
+                pieza_id: "p1",
+                publicacion_id: "c1",
                 nivel: 1,
                 etiqueta: "Edición",
                 decision: "pendiente",
@@ -127,7 +127,7 @@ function stubFetch(publicaciones: Array<Record<string, unknown>> = [PUBLICACION]
       if (ruta.includes("/comentarios")) {
         return new Response(JSON.stringify({ comentarios: [], total: 0 }), { status: 200 });
       }
-      if (ruta.includes("/api/contenido/aportar")) {
+      if (ruta.includes("/api/publicaciones/aportar")) {
         // Puerta creativa: el back devuelve el tema con una pieza-borrador por red pedida
         // (la IA redactará el copy en segundo plano; aquí solo nace el contenido).
         return new Response(
@@ -137,13 +137,13 @@ function stubFetch(publicaciones: Array<Record<string, unknown>> = [PUBLICACION]
           { status: 200 },
         );
       }
-      if (ruta.includes("/api/publicaciones")) {
+      if (ruta.includes("/api/piezas")) {
         const params = new URL(ruta, "http://localhost").searchParams;
         const estado = params.get("estado");
-        const lista = publicaciones.filter((p) => casaEstado(estado, p.estado));
+        const lista = piezas.filter((p) => casaEstado(estado, p.estado));
         return new Response(
           JSON.stringify({
-            publicaciones: params.get("limite") === "1" ? lista.slice(0, 1) : lista,
+            piezas: params.get("limite") === "1" ? lista.slice(0, 1) : lista,
             paginacion: { total: lista.length, limite: 50, desplazamiento: 0 },
           }),
           { status: 200 },
@@ -176,11 +176,11 @@ function renderFeed(usuario: Partial<UsuarioSesion> = {}, ruta = "/") {
     <QueryClientProvider client={client}>
       <SesionContexto.Provider value={valor}>
         <MarcaActivaProvider>
-          <FiltrosContenidoProvider>
+          <FiltrosPublicacionProvider>
             <MemoryRouter initialEntries={[ruta]}>
               <FeedIdeacion />
             </MemoryRouter>
-          </FiltrosContenidoProvider>
+          </FiltrosPublicacionProvider>
         </MarcaActivaProvider>
       </SesionContexto.Provider>
     </QueryClientProvider>,
@@ -254,8 +254,8 @@ describe("FeedIdeacion · feed de ideación interno", () => {
   it("«Pendientes» va con consulta DEDICADA (estado=pendiente) y pinta tarjetas reales, sin rastreo en cliente", async () => {
     // El stub base enruta y filtra por estado; este wrapper solo captura las URLs pedidas.
     stubFetch([
-      PUBLICACION,
-      { ...PUBLICACION, id: "p2", contenido_id: "c2", contenido: "Ya salió", estado: "publicado", etapa_ia: "publicada" },
+      PIEZA,
+      { ...PIEZA, id: "p2", publicacion_id: "c2", contenido: "Ya salió", estado: "publicado", etapa_ia: "publicada" },
     ]);
     const base = globalThis.fetch as (url: string | URL) => Promise<Response>;
     const urls: string[] = [];
@@ -292,30 +292,30 @@ describe("FeedIdeacion · feed de ideación interno", () => {
 
   it("la partición es binaria por 'publicado': borrador y aprobado caen en 'Pendientes', solo lo publicado en 'Publicadas'", async () => {
     const BORRADOR = {
-      ...PUBLICACION,
+      ...PIEZA,
       id: "p2",
-      contenido_id: "c2",
+      publicacion_id: "c2",
       contenido: "Borrador completo",
       estado: "borrador",
       etapa_ia: "lista_para_revisar",
     };
     const PROGRAMADA = {
-      ...PUBLICACION,
+      ...PIEZA,
       id: "p3",
-      contenido_id: "c3",
+      publicacion_id: "c3",
       contenido: "Programada sin salir",
       estado: "programado",
       etapa_ia: "programada",
     };
     const PUBLICADA = {
-      ...PUBLICACION,
+      ...PIEZA,
       id: "p4",
-      contenido_id: "c4",
+      publicacion_id: "c4",
       contenido: "Ya salió",
       estado: "publicado",
       etapa_ia: "publicada",
     };
-    stubFetch([PUBLICACION, BORRADOR, PROGRAMADA, PUBLICADA]);
+    stubFetch([PIEZA, BORRADOR, PROGRAMADA, PUBLICADA]);
     renderFeed();
     expect(await screen.findByText("Borrador completo")).toBeInTheDocument();
     expect(screen.getAllByText("Para revisar").length).toBeGreaterThan(0);
@@ -337,10 +337,10 @@ describe("FeedIdeacion · feed de ideación interno", () => {
       "fetch",
       vi.fn(async (url: string | URL) => {
         const ruta = String(url);
-        if (ruta.includes("/api/publicaciones/opciones")) {
+        if (ruta.includes("/api/piezas/opciones")) {
           return new Response(JSON.stringify(OPCIONES), { status: 200 });
         }
-        if (ruta.includes("/api/publicaciones/cadenas")) {
+        if (ruta.includes("/api/piezas/cadenas")) {
           return new Response(JSON.stringify({ cadenas: {} }), { status: 200 });
         }
         if (ruta.includes("/aprobacion")) {
@@ -352,7 +352,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
         if (ruta.includes("/comentarios")) {
           return new Response(JSON.stringify({ comentarios: [], total: 0 }), { status: 200 });
         }
-        if (ruta.includes("/api/publicaciones")) {
+        if (ruta.includes("/api/piezas")) {
           const params = new URL(ruta, "http://localhost").searchParams;
           if (params.get("limite") === "1") {
             const estado = params.get("estado");
@@ -361,7 +361,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
             const total = estado === "pendiente" ? 6 : estado === "publicado" ? 3 : estado === "en_revision" ? 4 : 9;
             return new Response(
               JSON.stringify({
-                publicaciones: [PUBLICACION],
+                piezas: [PIEZA],
                 paginacion: { total, limite: 1, desplazamiento: 0 },
               }),
               { status: 200 },
@@ -369,7 +369,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
           }
           return new Response(
             JSON.stringify({
-              publicaciones: [PUBLICACION],
+              piezas: [PIEZA],
               paginacion: { total: 9, limite: 1, desplazamiento: 0, cursor_siguiente: "2026-01-01T00:00:00|p1" },
             }),
             { status: 200 },
@@ -396,7 +396,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     // Una IDEA (c1) con dos piezas: en revisión (X) y publicada (Instagram). El stub filtra por
     // estado= como el backend: la vista dedicada 'Pendientes' solo recibe la pieza no publicada.
     const PUB_PUBLICADA = {
-      ...PUBLICACION,
+      ...PIEZA,
       id: "p2",
       red: "instagram",
       contenido: "Ya publicada",
@@ -407,7 +407,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
       "fetch",
       vi.fn(async (url: string | URL) => {
         const ruta = String(url);
-        if (ruta.includes("/api/publicaciones/opciones")) {
+        if (ruta.includes("/api/piezas/opciones")) {
           return new Response(
             JSON.stringify({
               ...OPCIONES,
@@ -419,7 +419,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
             { status: 200 },
           );
         }
-        if (ruta.includes("/api/publicaciones/cadenas")) {
+        if (ruta.includes("/api/piezas/cadenas")) {
           return new Response(JSON.stringify({ cadenas: {} }), { status: 200 });
         }
         if (ruta.includes("/aprobacion")) {
@@ -431,14 +431,14 @@ describe("FeedIdeacion · feed de ideación interno", () => {
         if (ruta.includes("/comentarios")) {
           return new Response(JSON.stringify({ comentarios: [], total: 0 }), { status: 200 });
         }
-        if (ruta.includes("/api/publicaciones")) {
+        if (ruta.includes("/api/piezas")) {
           const params = new URL(ruta, "http://localhost").searchParams;
           const estado = params.get("estado");
-          const todas = [PUBLICACION, PUB_PUBLICADA];
+          const todas = [PIEZA, PUB_PUBLICADA];
           const lista = todas.filter((p) => casaEstado(estado, p.estado));
           return new Response(
             JSON.stringify({
-              publicaciones: lista,
+              piezas: lista,
               paginacion: { total: lista.length, limite: 50, desplazamiento: 0 },
             }),
             { status: 200 },
@@ -483,9 +483,9 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     // sin filtrar listas enteras en cliente. Página 1: una pieza no publicada + cursor. Página
     // 2: otra, última. Ambas deben verse al encadenar.
     const SEGUNDA = {
-      ...PUBLICACION,
+      ...PIEZA,
       id: "p2",
-      contenido_id: "c2",
+      publicacion_id: "c2",
       contenido: "Segunda en cola",
       estado: "programado",
       etapa_ia: "programada",
@@ -495,10 +495,10 @@ describe("FeedIdeacion · feed de ideación interno", () => {
       "fetch",
       vi.fn(async (url: string | URL) => {
         const ruta = String(url);
-        if (ruta.includes("/api/publicaciones/opciones")) {
+        if (ruta.includes("/api/piezas/opciones")) {
           return new Response(JSON.stringify(OPCIONES), { status: 200 });
         }
-        if (ruta.includes("/api/publicaciones/cadenas")) {
+        if (ruta.includes("/api/piezas/cadenas")) {
           return new Response(JSON.stringify({ cadenas: {} }), { status: 200 });
         }
         if (ruta.includes("/aprobacion")) {
@@ -510,17 +510,17 @@ describe("FeedIdeacion · feed de ideación interno", () => {
         if (ruta.includes("/comentarios")) {
           return new Response(JSON.stringify({ comentarios: [], total: 0 }), { status: 200 });
         }
-        if (ruta.includes("/api/publicaciones")) {
+        if (ruta.includes("/api/piezas")) {
           urls.push(ruta);
           if (ruta.includes("cursor=")) {
             return new Response(
-              JSON.stringify({ publicaciones: [SEGUNDA], paginacion: { total: 2, limite: 1, desplazamiento: 0 } }),
+              JSON.stringify({ piezas: [SEGUNDA], paginacion: { total: 2, limite: 1, desplazamiento: 0 } }),
               { status: 200 },
             );
           }
           return new Response(
             JSON.stringify({
-              publicaciones: [PUBLICACION],
+              piezas: [PIEZA],
               paginacion: { total: 2, limite: 1, desplazamiento: 0, cursor_siguiente: "2026-01-01T00:00:00|p1" },
             }),
             { status: 200 },
@@ -571,7 +571,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     );
   });
 
-  it("«Crear post»: abre el diálogo y aporta el material pegado a /api/contenido/aportar (la IA redacta)", async () => {
+  it("«Crear post»: abre el diálogo y aporta el material pegado a /api/publicaciones/aportar (la IA redacta)", async () => {
     stubFetch();
     renderFeed();
     // El botón de alta vive en las acciones de página (en tests, render inline sin AppShell).
@@ -586,7 +586,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     await waitFor(() => {
       const llamada = vi
         .mocked(globalThis.fetch)
-        .mock.calls.find((c) => String(c[0]).includes("/api/contenido/aportar"));
+        .mock.calls.find((c) => String(c[0]).includes("/api/publicaciones/aportar"));
       expect(llamada).toBeTruthy();
       const init = llamada?.[1] as RequestInit | undefined;
       expect(init?.method).toBe("POST");
@@ -606,10 +606,10 @@ describe("FeedIdeacion · feed de ideación interno", () => {
       "fetch",
       vi.fn(async (url: string | URL) => {
         const ruta = String(url);
-        if (ruta.includes("/api/publicaciones/opciones")) {
+        if (ruta.includes("/api/piezas/opciones")) {
           return new Response(JSON.stringify({ error: "boom" }), { status: 500 });
         }
-        if (ruta.includes("/api/publicaciones/cadenas")) {
+        if (ruta.includes("/api/piezas/cadenas")) {
           return new Response(JSON.stringify({ cadenas: {} }), { status: 200 });
         }
         if (ruta.includes("/aprobacion")) {
@@ -621,10 +621,10 @@ describe("FeedIdeacion · feed de ideación interno", () => {
         if (ruta.includes("/comentarios")) {
           return new Response(JSON.stringify({ comentarios: [], total: 0 }), { status: 200 });
         }
-        if (ruta.includes("/api/publicaciones")) {
+        if (ruta.includes("/api/piezas")) {
           return new Response(
             JSON.stringify({
-              publicaciones: [PUBLICACION],
+              piezas: [PIEZA],
               paginacion: { total: 1, limite: 50, desplazamiento: 0 },
             }),
             { status: 200 },
@@ -647,18 +647,18 @@ describe("FeedIdeacion · feed de ideación interno", () => {
       "fetch",
       vi.fn((url: string | URL) => {
         const ruta = String(url);
-        if (ruta.includes("/api/publicaciones/opciones")) {
+        if (ruta.includes("/api/piezas/opciones")) {
           return new Promise<Response>(() => {}); // /opciones nunca aterriza
         }
-        if (ruta.includes("/api/publicaciones/cadenas")) {
+        if (ruta.includes("/api/piezas/cadenas")) {
           return Promise.resolve(new Response(JSON.stringify({ cadenas: {} }), { status: 200 }));
         }
-        if (ruta.includes("/api/publicaciones")) {
+        if (ruta.includes("/api/piezas")) {
           feedServido = true;
           return Promise.resolve(
             new Response(
               JSON.stringify({
-                publicaciones: [PUBLICACION],
+                piezas: [PIEZA],
                 paginacion: { total: 1, limite: 50, desplazamiento: 0 },
               }),
               { status: 200 },
@@ -700,16 +700,16 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     }
     vi.stubGlobal("IntersectionObserver", IOFalso as unknown as typeof IntersectionObserver);
 
-    const PUB2 = { ...PUBLICACION, id: "p2", contenido_id: "c2", contenido: "Segunda página" };
+    const PUB2 = { ...PIEZA, id: "p2", publicacion_id: "c2", contenido: "Segunda página" };
     const urls: string[] = [];
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string | URL) => {
         const ruta = String(url);
-        if (ruta.includes("/api/publicaciones/opciones")) {
+        if (ruta.includes("/api/piezas/opciones")) {
           return new Response(JSON.stringify(OPCIONES), { status: 200 });
         }
-        if (ruta.includes("/api/publicaciones/cadenas")) {
+        if (ruta.includes("/api/piezas/cadenas")) {
           return new Response(JSON.stringify({ cadenas: {} }), { status: 200 });
         }
         if (ruta.includes("/aprobacion")) {
@@ -721,18 +721,18 @@ describe("FeedIdeacion · feed de ideación interno", () => {
         if (ruta.includes("/comentarios")) {
           return new Response(JSON.stringify({ comentarios: [], total: 0 }), { status: 200 });
         }
-        if (ruta.includes("/api/publicaciones")) {
+        if (ruta.includes("/api/piezas")) {
           urls.push(ruta);
           // Página 1 (sin cursor): trae cursor_siguiente. Página 2 (con cursor): última, sin cursor.
           if (ruta.includes("cursor=")) {
             return new Response(
-              JSON.stringify({ publicaciones: [PUB2], paginacion: { total: 2, limite: 1, desplazamiento: 0 } }),
+              JSON.stringify({ piezas: [PUB2], paginacion: { total: 2, limite: 1, desplazamiento: 0 } }),
               { status: 200 },
             );
           }
           return new Response(
             JSON.stringify({
-              publicaciones: [PUBLICACION],
+              piezas: [PIEZA],
               paginacion: { total: 2, limite: 1, desplazamiento: 0, cursor_siguiente: "2026-01-01T00:00:00|p1" },
             }),
             { status: 200 },
@@ -760,7 +760,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
       "fetch",
       vi.fn(async (url: string | URL) => {
         const ruta = String(url);
-        if (ruta.includes("/api/publicaciones/opciones")) {
+        if (ruta.includes("/api/piezas/opciones")) {
           return new Response(
             JSON.stringify({
               ...OPCIONES,
@@ -773,7 +773,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
             { status: 200 },
           );
         }
-        if (ruta.includes("/api/publicaciones/cadenas")) {
+        if (ruta.includes("/api/piezas/cadenas")) {
           return new Response(JSON.stringify({ cadenas: {} }), { status: 200 });
         }
         if (ruta.includes("/aprobacion")) {
@@ -785,12 +785,12 @@ describe("FeedIdeacion · feed de ideación interno", () => {
         if (ruta.includes("/comentarios")) {
           return new Response(JSON.stringify({ comentarios: [], total: 0 }), { status: 200 });
         }
-        if (ruta.includes("/api/publicaciones")) {
+        if (ruta.includes("/api/piezas")) {
           return new Response(
             JSON.stringify({
-              publicaciones: [
+              piezas: [
                 {
-                  ...PUBLICACION,
+                  ...PIEZA,
                   // Nota original (pipeline): fecha de publicación en el medio + medio.
                   fecha_fuente: "2026-06-09T21:21:00Z",
                   fuente_original: "Récord",
@@ -831,7 +831,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
       "fetch",
       vi.fn(async (url: string | URL) => {
         const ruta = String(url);
-        if (ruta.includes("/api/publicaciones/opciones")) {
+        if (ruta.includes("/api/piezas/opciones")) {
           return new Response(
             JSON.stringify({
               ...OPCIONES,
@@ -846,7 +846,7 @@ describe("FeedIdeacion · feed de ideación interno", () => {
             { status: 200 },
           );
         }
-        if (ruta.includes("/api/publicaciones/cadenas")) {
+        if (ruta.includes("/api/piezas/cadenas")) {
           return new Response(JSON.stringify({ cadenas: {} }), { status: 200 });
         }
         if (ruta.includes("/aprobacion")) {
@@ -858,10 +858,10 @@ describe("FeedIdeacion · feed de ideación interno", () => {
         if (ruta.includes("/comentarios")) {
           return new Response(JSON.stringify({ comentarios: [], total: 0 }), { status: 200 });
         }
-        if (ruta.includes("/api/publicaciones")) {
+        if (ruta.includes("/api/piezas")) {
           return new Response(
             JSON.stringify({
-              publicaciones: [{ ...PUBLICACION, formato: "video" }],
+              piezas: [{ ...PIEZA, formato: "video" }],
               paginacion: { total: 1, limite: 50, desplazamiento: 0 },
             }),
             { status: 200 },
@@ -907,10 +907,10 @@ describe("FeedIdeacion · feed de ideación interno", () => {
       "fetch",
       vi.fn(async (url: string | URL) => {
         const ruta = String(url);
-        if (ruta.includes("/api/publicaciones/opciones")) {
+        if (ruta.includes("/api/piezas/opciones")) {
           return new Response(JSON.stringify(OPCIONES), { status: 200 });
         }
-        if (ruta.includes("/api/publicaciones/cadenas")) {
+        if (ruta.includes("/api/piezas/cadenas")) {
           return new Response(JSON.stringify({ cadenas: {} }), { status: 200 });
         }
         if (ruta.includes("/aprobacion")) {
@@ -922,13 +922,13 @@ describe("FeedIdeacion · feed de ideación interno", () => {
         if (ruta.includes("/comentarios")) {
           return new Response(JSON.stringify({ comentarios: [], total: 0 }), { status: 200 });
         }
-        if (ruta.includes("/api/publicaciones")) {
+        if (ruta.includes("/api/piezas")) {
           if (ruta.includes("cursor=")) {
             return new Response(JSON.stringify({ error: "boom" }), { status: 500 });
           }
           return new Response(
             JSON.stringify({
-              publicaciones: [PUBLICACION],
+              piezas: [PIEZA],
               paginacion: { total: 2, limite: 1, desplazamiento: 0, cursor_siguiente: "2026-01-01T00:00:00|p1" },
             }),
             { status: 200 },

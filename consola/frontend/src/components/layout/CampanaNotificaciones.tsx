@@ -6,7 +6,7 @@
  * - Al ABRIR el cajón se marcan todas como leídas (se limpia el badge), pero la lista
  *   recién traída conserva el resaltado de "nuevas" hasta la próxima apertura.
  * - Cada fila resume el evento (mención / comentario / OK / rechazo / publicación) y, al
- *   pulsarla, NAVEGA a esa pieza en el feed (deep-link `?pieza=<contenido_id>`: el feed hace
+ *   pulsarla, NAVEGA a esa pieza en el feed (deep-link `?pieza=<publicacion_id>`: el feed hace
  *   scroll y la resalta). Se cierra al hacer clic fuera o con Escape.
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -41,7 +41,7 @@ const ICONO: Record<TipoNotificacion, React.ComponentType<{ className?: string }
   comentario: MessageSquare,
   aprobacion: ThumbsUp,
   rechazo: XCircle,
-  publicacion: Megaphone,
+  pieza: Megaphone,
   asignacion: UserPlus,
   cambio_turno: ArrowLeftRight,
 };
@@ -51,13 +51,13 @@ const RUTA_FEED = "/operacion/feed/feed";
 
 /**
  * Destino de una notificación. Preferimos el `enlace` que arme el backend si lo trae;
- * si no, hacemos DEEP-LINK al feed por `contenido_id` (`?pieza=…`): el feed lo lee,
- * hace scroll a esa idea y la resalta (ver `FeedIdeacion`). Sin `contenido_id` (no
+ * si no, hacemos DEEP-LINK al feed por `publicacion_id` (`?pieza=…`): el feed lo lee,
+ * hace scroll a esa idea y la resalta (ver `FeedIdeacion`). Sin `publicacion_id` (no
  * debería pasar) caemos al feed a secas.
  */
 function destinoNotificacion(n: Notificacion): string {
   if (n.enlace) return n.enlace;
-  if (n.contenido_id) return `${RUTA_FEED}?pieza=${encodeURIComponent(n.contenido_id)}`;
+  if (n.publicacion_id) return `${RUTA_FEED}?pieza=${encodeURIComponent(n.publicacion_id)}`;
   return RUTA_FEED;
 }
 

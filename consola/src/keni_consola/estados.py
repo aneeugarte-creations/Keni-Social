@@ -25,18 +25,14 @@ ESTADOS_TAREA: tuple[str, ...] = ("pendiente", "en_curso", "hecha")
 #                   +-> (rechazo) -> borrador
 #
 # `borrador` es la fase "en preparación" (detalle = flags `falta_*`). Es la MISMA lista que
-# `ESTADOS_CONTENIDO_PLATAFORMA` (keni-shared): ya no hay dos vocabularios ni mapeo entre ellos.
+# `ESTADOS_PIEZA` (keni-shared): ya no hay dos vocabularios ni mapeo entre ellos.
 ESTADO_BORRADOR = "borrador"
 ESTADO_EN_REVISION = "en_revision"
 ESTADO_PROGRAMADO = "programado"
 ESTADO_PUBLICADO = "publicado"
 
-ESTADOS_PUBLICACION: tuple[str, ...] = (
-    ESTADO_BORRADOR,
-    ESTADO_EN_REVISION,
-    ESTADO_PROGRAMADO,
-    ESTADO_PUBLICADO,
-)
+# `ESTADOS_PIEZA` (lista canónica de estados de una pieza por plataforma) se re-exporta
+# de keni-shared más abajo; no se redefine aquí para no duplicar la tupla.
 
 # Roles de usuario (auth multiusuario, #130). `admin` gestiona usuarios y todo lo
 # demas; `editor` usa la consola pero NO toca /api/usuarios.
@@ -186,7 +182,7 @@ TIPOS_COBERTURA_ASIGNABLES: tuple[str, ...] = (
 # varias piezas (pre-evento FB/IG/X, reel IG/TK, historia dia, post-evento); el flujo de
 # produccion va `pendiente` -> `en_curso` -> `listo` -> `publicado`. Operacional;
 # vive en Postgres (`rota_piezas.estado`).
-ESTADOS_PIEZA: tuple[str, ...] = ("pendiente", "en_curso", "listo", "publicado")
+ESTADOS_PIEZA_PARRILLA: tuple[str, ...] = ("pendiente", "en_curso", "listo", "publicado")
 
 # Prioridad de un evento del calendario (F4 · #144, ola B): pista visual para que el
 # equipo decida que cubre primero. DEFAULT `media`. Operacional (`rota_eventos.prioridad`).
@@ -196,15 +192,15 @@ PRIORIDAD_EVENTO_DEFECTO = "media"
 # --------------------------------------------------------------------------- #
 # Tablero de CONTENIDO unificado (herramienta de community manager)            #
 # --------------------------------------------------------------------------- #
-# Unifica el tablero de tareas, las piezas de la rota y las publicaciones en un
-# unico modelo padre+hijos (`contenido` + `contenido_plataforma`). Operacional;
-# vive en Postgres. Ver `db.py` y `api/contenido.py`.
+# Unifica el tablero de tareas, las piezas de la rota y las piezas en un
+# unico modelo padre+hijos (`contenido` + `pieza`). Operacional;
+# vive en Postgres. Ver `db.py` y `api/publicaciones.py`.
 
 # `clase` de un item del tablero: contenido publicable (con filas por plataforma) o
 # una tarea libre del equipo (relevo/recado, sin plataformas). Tupla CANONICA en
 # keni-shared (`keni_shared.estados`): la comparte el MCP de tablero; aqui se
 # RE-EXPORTA para no romper a los consumidores existentes de este modulo.
-CLASES_CONTENIDO: tuple[str, ...] = _estados_compartidos.CLASES_CONTENIDO
+CLASES_PUBLICACION: tuple[str, ...] = _estados_compartidos.CLASES_PUBLICACION
 CLASE_CONTENIDO = "contenido"
 CLASE_TAREA = "tarea"
 
@@ -219,7 +215,7 @@ ROLES_COBERTURA: tuple[str, ...] = ("foto", "video", "texto", "live")
 
 # `flujo` editorial de un contenido: lo importante del dia, evergreen (always-on) o
 # cobertura de un evento previsto. "" para tareas libres (clase=tarea). Canonica en
-# keni-shared (re-exportada aqui, ver CLASES_CONTENIDO).
+# keni-shared (re-exportada aqui, ver CLASES_PUBLICACION).
 FLUJOS_CONTENIDO: tuple[str, ...] = _estados_compartidos.FLUJOS_CONTENIDO
 FLUJO_IMPORTANTE = "importante"
 FLUJO_EVERGREEN = "evergreen"
@@ -258,7 +254,7 @@ TIPOS_CONTENIDO: tuple[str, ...] = ("ia", "galeria", "fuente")
 TIPO_CONTENIDO_DEFECTO = "ia"
 
 # `origen` de un item del tablero: de QUÉ fuente nació. Es texto libre en la DB (no hay
-# enum duro en `repos.crear_contenido`), pero las FUENTES que la auto-generación de copy
+# enum duro en `repos.crear_publicacion`), pero las FUENTES que la auto-generación de copy
 # considera "tema redactable" se enumeran aquí, en el módulo neutro, para que tanto el
 # daemon (`autogen_redactar.ORIGENES_TOPIC`) como los flujos transversales referencien UN
 # único valor en vez de literales sueltos.
@@ -274,7 +270,7 @@ ORIGEN_EQUIPO = "equipo"
 # curación HUMANA explícita (el equipo empujó esa historia, a menudo una breaking).
 ORIGEN_HISTORIA = "historia"
 
-# Tema creado por el ALTA DIRECTA de un post desde el feed (`api/contenido.post_directo`):
+# Tema creado por el ALTA DIRECTA de un post desde el feed (`api/publicaciones.post_directo`):
 # el equipo teclea el COPY FINAL de la publicación (no material para redactar). NO está en
 # `ORIGENES_AUTOGEN` a propósito: no hay nada que redactar (las piezas nacen con copy);
 # el resto del flujo (arte por red, revisión, programación) las trata como a cualquier
@@ -330,21 +326,21 @@ ORIGEN_PIEZA_DEFECTO = "interno"
 
 # Estado de un contenido a nivel PADRE (resumen editable / estado directo de una tarea
 # libre). Cubre el ciclo de una tarea (pendiente/en_curso/hecha) y sirve de resumen.
-# Canonica en keni-shared (re-exportada aqui, ver CLASES_CONTENIDO).
-ESTADOS_CONTENIDO: tuple[str, ...] = _estados_compartidos.ESTADOS_CONTENIDO
+# Canonica en keni-shared (re-exportada aqui, ver CLASES_PUBLICACION).
+ESTADOS_PUBLICACION: tuple[str, ...] = _estados_compartidos.ESTADOS_PUBLICACION
 
-# Estado de UNA fila por plataforma (`contenido_plataforma.estado`). Vocabulario ÚNICO canónico
+# Estado de UNA fila por plataforma (`pieza.estado`). Vocabulario ÚNICO canónico
 # (COLAPSO 2026-06): una sola lista, sin estado de reposo `aprobado` ni estados de trabajo
 # legados (pendiente/en_curso):
 #
 #   borrador -> en_revision -> programado -> publicado
 #
 # Mapeos de migración (datos legados): pendiente/en_curso/listo/aprobado -> `borrador`.
-# Canonica en keni-shared (re-exportada aqui, ver CLASES_CONTENIDO).
-ESTADOS_CONTENIDO_PLATAFORMA: tuple[str, ...] = _estados_compartidos.ESTADOS_CONTENIDO_PLATAFORMA
+# Canonica en keni-shared (re-exportada aqui, ver CLASES_PUBLICACION).
+ESTADOS_PIEZA: tuple[str, ...] = _estados_compartidos.ESTADOS_PIEZA
 
 # Items del checklist "falta X" que se siguen por plataforma. Cada uno es un booleano en
-# `contenido_plataforma` (`falta_copy`, `falta_imagen`, `falta_revision`, `falta_publicar`).
+# `pieza` (`falta_copy`, `falta_imagen`, `falta_revision`, `falta_publicar`).
 CHECKLIST_CONTENIDO: tuple[str, ...] = (
     "falta_copy",
     "falta_imagen",
@@ -358,7 +354,7 @@ CHECKLIST_CONTENIDO: tuple[str, ...] = (
 # --------------------------------------------------------------------------- #
 
 # Decision de UN nivel de la cadena de aprobacion multinivel de una pieza
-# (`contenido_aprobaciones.decision`). `pendiente` = aun sin decidir; `aprobado` /
+# (`pieza_aprobaciones.decision`). `pendiente` = aun sin decidir; `aprobado` /
 # `rechazado` = decision tomada (con decisor + sello de tiempo). Una pieza esta
 # TOTALMENTE aprobada cuando todos sus niveles estan en `aprobado`; un `rechazado`
 # en cualquier nivel para la cadena.

@@ -129,21 +129,21 @@ def test_historias_estado_invalido_400(cliente):
 # --------------------------------------------------------------------------- #
 # pieza_estado — transparencia del feed (el badge NO miente)                    #
 # Una historia 'usado' solo significa "promovida", NO "en el feed": la pieza sale REAL  #
-# en el feed cuando existe su fila contenido_plataforma CON copy. `pieza_estado` deriva  #
+# en el feed cuando existe su fila pieza CON copy. `pieza_estado` deriva  #
 # ese estado real para que la UI nunca diga "En el feed" si la pieza no está.            #
 # --------------------------------------------------------------------------- #
 
 
 def _usar_sin_pieza(cid):
     """Enlaza el cluster a un `contenido` usado SIN filas de plataforma (no sale en el feed)."""
-    cont = repos.crear_contenido(clase="contenido", titulo="Tema", marca="unotv")
-    repos.actualizar_noticia_cluster(cid, estado="usado", contenido_id=cont["id"])
+    cont = repos.crear_publicacion(clase="contenido", titulo="Tema", marca="unotv")
+    repos.actualizar_noticia_cluster(cid, estado="usado", publicacion_id=cont["id"])
     return cont
 
 
-def _anadir_pieza(contenido_id, *, falta_copy):
-    repos.crear_contenido_plataforma(
-        contenido_id=contenido_id, red="x", falta_copy=falta_copy, falta_imagen=True
+def _anadir_pieza(publicacion_id, *, falta_copy):
+    repos.crear_pieza_fila(
+        publicacion_id=publicacion_id, red="x", falta_copy=falta_copy, falta_imagen=True
     )
 
 
@@ -271,7 +271,7 @@ def _inicializar_para_stats():
     """Dos historias (una usada) y dos fuentes: `fa` abrió la usada; `fb` corrobora ambas."""
     repos.upsert_noticia_cluster({
         "id": "h1", "titulo": "Historia usada", "marca": "unotv", "clave": "t:h1",
-        "estado": "usado", "contenido_id": "cont-1", "primera_fuente": "fa",
+        "estado": "usado", "publicacion_id": "cont-1", "primera_fuente": "fa",
         "ultimo_visto": "2026-06-05T12:00:00+00:00",
     })
     repos.upsert_noticia_cluster({
@@ -351,12 +351,12 @@ def test_usar_crea_borrador_con_origen_historia_y_marca_usado(cliente):
     # El cluster quedó usado + enlazado.
     refrescado = repos.obtener_noticia_cluster("c1")
     assert refrescado["estado"] == "usado"
-    assert refrescado["contenido_id"] == cont["id"]
+    assert refrescado["publicacion_id"] == cont["id"]
     # Sus items quedaron usados + enlazados.
     items = repos.items_de_cluster("c1")
-    assert items and all(it["estado"] == "usado" and it["contenido_id"] == cont["id"] for it in items)
+    assert items and all(it["estado"] == "usado" and it["publicacion_id"] == cont["id"] for it in items)
     # Aparece en el tablero con origen 'historia'.
-    tablero = cliente.get("/api/contenido").json()["contenidos"]
+    tablero = cliente.get("/api/publicaciones").json()["contenidos"]
     assert any(c["origen"] == "historia" for c in tablero)
 
 
@@ -538,12 +538,12 @@ def test_historias_umbral_no_promovible_explica_por_que(cliente):
 
 def test_historia_expone_verificacion_fuente_y_marca_por_ia(cliente):
     """La historia trae el verificacion verificación de su contenido (verificación) y si la marca fue IA."""
-    cont = repos.crear_contenido(
+    cont = repos.crear_publicacion(
         clase="contenido", titulo="Tema verificado", marca="unotv", categoria="mx",
         verificacion_fuente="no_verificado",
     )
     _inicializar_cluster("h-verificación", marca="unotv")
-    repos.actualizar_noticia_cluster("h-verificación", estado="usado", contenido_id=cont["id"])
+    repos.actualizar_noticia_cluster("h-verificación", estado="usado", publicacion_id=cont["id"])
     repos.marcar_cluster_marca_ia("h-verificación")
 
     h = next(

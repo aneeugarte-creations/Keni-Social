@@ -45,7 +45,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { ApiError, api, mensajeError } from "@/lib/api";
 import type {
-  Contenido,
+  Publicacion,
   EventoRota,
   FranjaTurno,
   MiembroRota,
@@ -76,7 +76,7 @@ export function DialogEditarEvento({
   evento: EventoRota;
   onCerrar: () => void;
   onCambio: () => void;
-  tareasVinculadas?: Contenido[];
+  tareasVinculadas?: Publicacion[];
 }) {
   const [titulo, setTitulo] = React.useState(evento.titulo);
   const [fecha, setFecha] = React.useState(evento.fecha);
@@ -85,7 +85,7 @@ export function DialogEditarEvento({
     evento.tipo_cobertura,
   );
   const [prioridad, setPrioridad] = React.useState<PrioridadEvento>(evento.prioridad);
-  const [contenido, setContenido] = React.useState(evento.contenido);
+  const [contenido, setPublicacion] = React.useState(evento.contenido);
 
   const vinculadas = tareasVinculadas ?? [];
   const guardar = useMutation({
@@ -103,7 +103,7 @@ export function DialogEditarEvento({
       if (vinculadas.length > 0) {
         await Promise.all(
           vinculadas.map((t) =>
-            api.actualizarContenido(t.id, {
+            api.actualizarPublicacion(t.id, {
               titulo: titulo.trim(),
               fecha_objetivo: fecha,
               hora_objetivo: hora.trim(),
@@ -126,7 +126,7 @@ export function DialogEditarEvento({
       // Cascada: la fila de cobertura se deriva de estas tareas, no del evento; sin borrarlas
       // el partido seguiría apareciendo (ahora sin dueño claro). Borrar el evento = cancelarlo.
       if (vinculadas.length > 0) {
-        await Promise.all(vinculadas.map((t) => api.eliminarContenido(t.id)));
+        await Promise.all(vinculadas.map((t) => api.eliminarPublicacion(t.id)));
       }
     },
     onSuccess: () => {
@@ -220,7 +220,7 @@ export function DialogEditarEvento({
             <Textarea
               id="ce-contenido"
               value={contenido}
-              onChange={(e) => setContenido(e.target.value)}
+              onChange={(e) => setPublicacion(e.target.value)}
               rows={3}
               maxLength={2000}
             />

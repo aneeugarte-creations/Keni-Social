@@ -237,7 +237,7 @@ def test_version_lee_un_sha_y_restaurar_trae_al_borrador(_git_activo):
 
 
 def test_historial_sin_postgres_es_vacio(_git_activo):
-    """`libprompts.historial` es el de PUBLICACIONES: sin Postgres devuelve [] (best-effort),
+    """`libprompts.historial` es el de PIEZAS: sin Postgres devuelve [] (best-effort),
     aunque haya commits git de creación/versión por debajo."""
     doc = libprompts.crear("Sin BD", tipo="prompt", cuerpo="x")
     libprompts.fijar_version(doc.id, nota="v1")

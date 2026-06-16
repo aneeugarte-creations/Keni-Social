@@ -27,8 +27,8 @@ FORMA del ITEM (congelada; el frontend depende de ella):
       "metricas": {"tokens": int|None, "coste_usd": float|None,
                    "duration_ms": int|None, "num_turns": int|None},
       "resultado_url": str|None,  # ruta del SPA al resultado (solo generaciones COMPLETADAS)
-      "contenido_id": str,    # tema del pipeline que la origino ("" si no nacio de uno):
-                              # el front enlaza /datos/actividad/pipelines/{contenido_id}
+      "publicacion_id": str,    # tema del pipeline que la origino ("" si no nacio de uno):
+                              # el front enlaza /datos/actividad/pipelines/{publicacion_id}
       "proceso": str,         # SOLO generaciones: "investigacion"|"produccion" (loop de la
                               # maquina, ADR 0011). El llamante lo sella con `proceso_de` antes
                               # de agregar; default "produccion" si no viene. Los runs no lo traen.
@@ -154,8 +154,8 @@ def normalizar_generacion(g: dict[str, Any]) -> dict[str, Any]:
         "metricas": _metricas_generacion(g.get("metricas")),
         "resultado_url": _resultado_url(g),
         # Cruce con la vista Pipelines: una generacion nacida del pipeline lleva el tema
-        # que la origino (el id del pipeline ES el contenido_id). "" en las manuales.
-        "contenido_id": str(g.get("contenido_id", "") or ""),
+        # que la origino (el id del pipeline ES el publicacion_id). "" en las manuales.
+        "publicacion_id": str(g.get("publicacion_id", "") or ""),
         # Proceso de la maquina (ADR 0011): lo sella el llamante con `proceso_de`; default
         # produccion. Alimenta el desglose `por_proceso` de los agregados.
         "proceso": _proceso_de_gen(g),
@@ -195,7 +195,7 @@ def normalizar_run(r: dict[str, Any]) -> dict[str, Any]:
         "fecha": str(r.get("fecha_inicio", "") or ""),
         "metricas": _metricas_run(r.get("metricas")),
         "resultado_url": None,
-        "contenido_id": "",  # los runs de agente no nacen de un pipeline
+        "publicacion_id": "",  # los runs de agente no nacen de un pipeline
     }
 
 

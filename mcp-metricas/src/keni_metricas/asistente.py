@@ -67,7 +67,7 @@ GUIA_CREDENCIALES: dict[str, dict[str, str]] = {
         ),
         "docs": (
             'docs/credenciales.md (seccion "Meta: token de System User"), '
-            "docs/plataformas/publicacion-metricool.md, docs/despliegue-hosted.md"
+            "docs/plataformas/pieza-metricool.md, docs/despliegue-hosted.md"
         ),
     },
     "youtube": {

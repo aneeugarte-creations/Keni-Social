@@ -71,13 +71,13 @@ export function Kpis({
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Sin delta a propósito: /metricas/comparar no emite `publicaciones`
+        {/* Sin delta a propósito: /metricas/comparar no emite `piezas`
             (no está en _METRICAS_CONTEO_COMPARABLES del backend, ver
             consola/src/keni_consola/api/metricas/reporte.py). */}
         <TarjetaKpi
           variante="card"
           etiqueta="Piezas publicadas"
-          valor={numeroCompleto(total.publicaciones)}
+          valor={numeroCompleto(total.piezas)}
         />
         {METRICAS.map((m) => (
           <TarjetaKpi

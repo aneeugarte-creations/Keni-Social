@@ -59,7 +59,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         fecha_actualizacion  TEXT NOT NULL DEFAULT ''
     )
     """,
-    # Histórico de métricas por pieza para TODAS las publicaciones (no solo el módulo
+    # Histórico de métricas por pieza para TODAS las piezas (no solo el módulo
     # comercial): una fila por pieza por refresco del daemon, para análisis temporales
     # (velocidad, curvas de crecimiento, correlación) por marca×red×formato. A diferencia de
     # `metricas_cache` (valor ACTUAL, sobrescrito), esta tabla es la SERIE histórica; a
@@ -301,11 +301,11 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_rota_piezas_responsable ON rota_piezas (responsable_id)",
     # Tablero de CONTENIDO unificado (herramienta de community manager): un padre
     # `contenido` (item del tablero: importante del dia / evergreen / evento, o tarea
-    # libre) y N filas `contenido_plataforma` (una por red, con su estado y checklist).
-    # Una "publicacion" del flujo editorial = una fila `contenido_plataforma` unida a su
+    # libre) y N filas `pieza` (una por red, con su estado y checklist).
+    # Una "pieza" del flujo editorial = una fila `pieza` unida a su
     # padre (ver `ficheros.py`/`repos.py`). Operacional; Postgres (ADR 0004).
     """
-    CREATE TABLE IF NOT EXISTS contenido (
+    CREATE TABLE IF NOT EXISTS publicacion (
         id                  TEXT PRIMARY KEY,
         clase               TEXT NOT NULL DEFAULT 'contenido',
         flujo               TEXT NOT NULL DEFAULT '',
@@ -337,31 +337,31 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         url_fuente          TEXT NOT NULL DEFAULT '',
         fuente_nombre       TEXT NOT NULL DEFAULT '',
         -- FECHAS NATIVAS (migracion 0033): timestamptz, UTC. Vuelven como `datetime` aware con
-        -- `dict_row`; el serializador `_fila_a_contenido` las re-emite al canon ISO via
+        -- `dict_row`; el serializador `_fila_a_publicacion` las re-emite al canon ISO via
         -- `tiempo.iso_o_vacio` (contrato TEXT historico intacto). El keyset del feed compara
         -- `creado` de forma nativa; el repo siempre escribe un valor (nunca el sentinel vacio).
         creado              timestamptz,
         actualizado         timestamptz,
         -- CONCURRENCIA OPTIMISTA (ADR 0012): contador que sube en CADA escritura del repo
-        -- (`actualizar_contenido`/transiciones). El cliente puede pasar la `version` que leyo;
+        -- (`actualizar_publicacion`/transiciones). El cliente puede pasar la `version` que leyo;
         -- si llego obsoleta (otra escritura adelanto el contador), la actualizacion se rechaza
         -- con `ConflictoVersion` en vez de pisar el cambio (p. ej. el pipeline pisando un
         -- rechazo humano). Para BDs existentes lo anade la migracion 0030.
         version             INTEGER NOT NULL DEFAULT 0
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_contenido_flujo ON contenido (flujo)",
-    "CREATE INDEX IF NOT EXISTS idx_contenido_marca ON contenido (marca)",
-    "CREATE INDEX IF NOT EXISTS idx_contenido_evento ON contenido (evento_id)",
-    "CREATE INDEX IF NOT EXISTS idx_contenido_responsable ON contenido (responsable_id)",
+    "CREATE INDEX IF NOT EXISTS idx_publicacion_flujo ON publicacion (flujo)",
+    "CREATE INDEX IF NOT EXISTS idx_publicacion_marca ON publicacion (marca)",
+    "CREATE INDEX IF NOT EXISTS idx_publicacion_evento ON publicacion (evento_id)",
+    "CREATE INDEX IF NOT EXISTS idx_publicacion_responsable ON publicacion (responsable_id)",
     # Orden del feed/keyset (`ORDER BY c.creado DESC, cp.id DESC` + `c.creado < ?`) y de los
     # barridos por recencia (`titulos_recientes_marca`, dedup 90d): sin este indice cada pagina
     # del feed era un scan+sort de la tabla entera.
-    "CREATE INDEX IF NOT EXISTS idx_contenido_creado_id ON contenido (creado DESC, id DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_publicacion_creado_id ON publicacion (creado DESC, id DESC)",
     """
-    CREATE TABLE IF NOT EXISTS contenido_plataforma (
+    CREATE TABLE IF NOT EXISTS pieza (
         id                    TEXT PRIMARY KEY,
-        contenido_id          TEXT NOT NULL DEFAULT '',
+        publicacion_id          TEXT NOT NULL DEFAULT '',
         red                   TEXT NOT NULL DEFAULT '',
         -- `marca` DENORMALIZADA del padre `contenido`: existe SOLO para que el indice unico
         -- parcial de parrilla (idx_parrilla_slot_uniq) pueda scope-arse POR MARCA sin cruzar el
@@ -410,28 +410,28 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         creado                TEXT NOT NULL DEFAULT '',
         actualizado           TEXT NOT NULL DEFAULT '',
         -- CONCURRENCIA OPTIMISTA (ADR 0012): ver el comentario en `contenido.version`. Sube en
-        -- cada `actualizar_contenido_plataforma`/`transicionar_estado_publicacion`. Migracion 0030.
+        -- cada `actualizar_pieza_fila`/`transicionar_estado_pieza`. Migracion 0030.
         version               INTEGER NOT NULL DEFAULT 0
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_contenido_plat_contenido ON contenido_plataforma (contenido_id)",
-    "CREATE INDEX IF NOT EXISTS idx_contenido_plat_red ON contenido_plataforma (red)",
-    "CREATE INDEX IF NOT EXISTS idx_contenido_plat_estado ON contenido_plataforma (estado)",
-    "CREATE INDEX IF NOT EXISTS idx_contenido_plat_programada ON contenido_plataforma (fecha_programada)",
+    "CREATE INDEX IF NOT EXISTS idx_pieza_contenido ON pieza (publicacion_id)",
+    "CREATE INDEX IF NOT EXISTS idx_pieza_red ON pieza (red)",
+    "CREATE INDEX IF NOT EXISTS idx_pieza_estado ON pieza (estado)",
+    "CREATE INDEX IF NOT EXISTS idx_pieza_programada ON pieza (fecha_programada)",
     # OLA COLABORACION (inspirada en Planable: internal notes, version history, multi-level
-    # approval). Tres tablas APENDIDAS al modelo `contenido`/`contenido_plataforma`, sin
+    # approval). Tres tablas APENDIDAS al modelo `contenido`/`pieza`, sin
     # tocar su esquema: hilo de comentarios por pieza, historial de versiones del copy y
     # cadena de aprobacion multinivel con trazabilidad. Operacional; vive en Postgres.
     #
     # Comentarios internos: hilo de discusion de redaccion por item de `contenido` (el padre,
-    # asi cubre tanto contenido publicable como tarea libre). `plataforma_id` opcional ata el
+    # asi cubre tanto contenido publicable como tarea libre). `pieza_id` opcional ata el
     # comentario a UNA red concreta (""=comentario del item entero). `resuelto` marca un hilo
     # cerrado sin borrarlo (trazabilidad). Borrado real solo por el autor/admin (capa API).
     """
-    CREATE TABLE IF NOT EXISTS contenido_comentarios (
+    CREATE TABLE IF NOT EXISTS publicacion_comentarios (
         id            TEXT PRIMARY KEY,
-        contenido_id  TEXT NOT NULL DEFAULT '',
-        plataforma_id TEXT NOT NULL DEFAULT '',
+        publicacion_id  TEXT NOT NULL DEFAULT '',
+        pieza_id TEXT NOT NULL DEFAULT '',
         autor_id      TEXT NOT NULL DEFAULT '',
         autor_nombre  TEXT NOT NULL DEFAULT '',
         texto         TEXT NOT NULL DEFAULT '',
@@ -444,25 +444,25 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     )
     """,
     # `menciones` se anadio despues del CREATE original: ALTER idempotente para BD existentes.
-    "ALTER TABLE contenido_comentarios ADD COLUMN IF NOT EXISTS menciones TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE publicacion_comentarios ADD COLUMN IF NOT EXISTS menciones TEXT NOT NULL DEFAULT ''",
     # CATEGORÍA del plan editorial con la que nació el contenido ('' = sin línea: alta manual).
     # Copiada de la HISTORIA al promover/usar ('breaking' si lo era) o 'evergreen' al reciclar:
     # la relación fuente→tipo de contenido queda EN la pieza (el GC del pool borra clusters
     # viejos y el join dejaba de contar/programar bien). La leen el conteo del plan diario y
     # los horarios por categoría.
-    "ALTER TABLE contenido ADD COLUMN IF NOT EXISTS categoria TEXT NOT NULL DEFAULT ''",
-    "CREATE INDEX IF NOT EXISTS idx_coment_contenido ON contenido_comentarios (contenido_id)",
-    "CREATE INDEX IF NOT EXISTS idx_coment_plataforma ON contenido_comentarios (plataforma_id)",
+    "ALTER TABLE publicacion ADD COLUMN IF NOT EXISTS categoria TEXT NOT NULL DEFAULT ''",
+    "CREATE INDEX IF NOT EXISTS idx_coment_contenido ON publicacion_comentarios (publicacion_id)",
+    "CREATE INDEX IF NOT EXISTS idx_coment_plataforma ON publicacion_comentarios (pieza_id)",
     # Historial de versiones del COPY de una fila por plataforma. Cada vez que el copy de una
-    # `contenido_plataforma` cambia (via la API de versiones), se guarda un SNAPSHOT inmutable
+    # `pieza` cambia (via la API de versiones), se guarda un SNAPSHOT inmutable
     # del texto ANTERIOR antes de pisarlo, con quien y cuando. `version` es un contador
     # incremental por plataforma (1, 2, 3...). Revertir = aplicar el texto de una version vieja
     # como copy actual (que a su vez genera otro snapshot del que se pisa: nunca se pierde nada).
     """
-    CREATE TABLE IF NOT EXISTS contenido_copy_versiones (
+    CREATE TABLE IF NOT EXISTS pieza_copy_versiones (
         id            TEXT PRIMARY KEY,
-        plataforma_id TEXT NOT NULL DEFAULT '',
-        contenido_id  TEXT NOT NULL DEFAULT '',
+        pieza_id TEXT NOT NULL DEFAULT '',
+        publicacion_id  TEXT NOT NULL DEFAULT '',
         version       INTEGER NOT NULL DEFAULT 0,
         copy          TEXT NOT NULL DEFAULT '',
         autor_id      TEXT NOT NULL DEFAULT '',
@@ -471,7 +471,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         creado        TEXT NOT NULL DEFAULT ''
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_copyver_plataforma ON contenido_copy_versiones (plataforma_id)",
+    "CREATE INDEX IF NOT EXISTS idx_copyver_plataforma ON pieza_copy_versiones (pieza_id)",
     # Aprobacion MULTINIVEL de una fila por plataforma. La aprobacion editorial deja de ser un
     # unico "otro par de ojos" y pasa a una CADENA de niveles configurable (p. ej. edicion ->
     # coordinacion -> direccion). Cada registro es la decision de UN nivel sobre la pieza:
@@ -480,10 +480,10 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # La pieza queda totalmente aprobada cuando TODOS sus niveles estan en `aprobado`; un
     # `rechazado` en cualquier nivel para la cadena. Trazabilidad completa (quien, que, cuando).
     """
-    CREATE TABLE IF NOT EXISTS contenido_aprobaciones (
+    CREATE TABLE IF NOT EXISTS pieza_aprobaciones (
         id               TEXT PRIMARY KEY,
-        plataforma_id    TEXT NOT NULL DEFAULT '',
-        contenido_id     TEXT NOT NULL DEFAULT '',
+        pieza_id    TEXT NOT NULL DEFAULT '',
+        publicacion_id     TEXT NOT NULL DEFAULT '',
         nivel            INTEGER NOT NULL DEFAULT 1,
         etiqueta         TEXT NOT NULL DEFAULT '',
         decision         TEXT NOT NULL DEFAULT 'pendiente',
@@ -497,8 +497,8 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         cargo_requerido  TEXT NOT NULL DEFAULT ''
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_aprob_plataforma ON contenido_aprobaciones (plataforma_id)",
-    "CREATE INDEX IF NOT EXISTS idx_aprob_decision ON contenido_aprobaciones (decision)",
+    "CREATE INDEX IF NOT EXISTS idx_aprob_plataforma ON pieza_aprobaciones (pieza_id)",
+    "CREATE INDEX IF NOT EXISTS idx_aprob_decision ON pieza_aprobaciones (decision)",
     # Programas/campanas evergreen (#150). En el Excel cada hoja evergreen ("Álvaro Fidalgo",
     # "Real Oviedo", "Anfitriones", "PATY CANTU", "MUNDIAL", "LA SELECCIÓN EN TUS MANOS",
     # "IDEAS SIN DERECHOS") es un PROGRAMA con sus propias piezas. Aqui catalogamos los
@@ -732,7 +732,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         tipo          TEXT NOT NULL DEFAULT '',
         marca         TEXT NOT NULL DEFAULT '',
         proceso       TEXT NOT NULL DEFAULT '',
-        contenido_id  TEXT NOT NULL DEFAULT '',
+        publicacion_id  TEXT NOT NULL DEFAULT '',
         payload       jsonb NOT NULL DEFAULT '{}',
         actualizado   TEXT NOT NULL DEFAULT ''
     )
@@ -889,12 +889,12 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # VERSIONES DE DOCUMENTO (historial del editor por pieza): cada vez que se guarda el editor
     # sobre una publicación se APENDE una versión con el Documento de capas y el objeto del PNG
     # renderizado. Append-only (nunca se pisa): la última versión es el estado actual; las previas
-    # permiten restaurar. Clave lógica (contenido_id, plataforma_id) -> N versiones incrementales.
+    # permiten restaurar. Clave lógica (publicacion_id, pieza_id) -> N versiones incrementales.
     """
     CREATE TABLE IF NOT EXISTS documento_versiones (
         id            TEXT PRIMARY KEY,
-        contenido_id  TEXT NOT NULL DEFAULT '',
-        plataforma_id TEXT NOT NULL DEFAULT '',
+        publicacion_id  TEXT NOT NULL DEFAULT '',
+        pieza_id TEXT NOT NULL DEFAULT '',
         version       INTEGER NOT NULL DEFAULT 1,
         documento     TEXT NOT NULL DEFAULT '{}',
         render_objeto TEXT NOT NULL DEFAULT '',
@@ -904,7 +904,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_documento_versiones_pieza "
-    "ON documento_versiones (contenido_id, plataforma_id, version)",
+    "ON documento_versiones (publicacion_id, pieza_id, version)",
     # Webhooks SALIENTES (eventos internos del tablero): una fila por suscripcion. Cada
     # webhook escucha N tipos de evento (`eventos`, lista JSON; ""/[] = todos) y, al
     # dispararse, recibe un POST JSON a `url`. `secreto` (opcional) firma cada entrega con
@@ -936,8 +936,8 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     CREATE TABLE IF NOT EXISTS eventos_internos (
         id                  TEXT PRIMARY KEY,
         tipo                TEXT NOT NULL DEFAULT '',
-        contenido_id        TEXT NOT NULL DEFAULT '',
-        plataforma_id       TEXT NOT NULL DEFAULT '',
+        publicacion_id        TEXT NOT NULL DEFAULT '',
+        pieza_id       TEXT NOT NULL DEFAULT '',
         clave_idempotencia  TEXT NOT NULL DEFAULT '',
         payload             TEXT NOT NULL DEFAULT '',
         -- FECHA NATIVA (migracion 0033): timestamptz, UTC. Ordena la bitacora (recientes
@@ -950,7 +950,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "ON eventos_internos (clave_idempotencia)",
     # Notificaciones IN-APP por usuario (el "cajon" de la campana, junto al selector de marca).
     # Una fila = una noticia para UN destinatario (`usuario_id`) sobre una pieza. `tipo` clasifica
-    # el evento (mencion/comentario/aprobacion/rechazo/publicacion); `marca_id` ACOTA al workspace
+    # el evento (mencion/comentario/aprobacion/rechazo/pieza); `marca_id` ACOTA al workspace
     # activo (el cajon solo muestra la marca seleccionada). `actor_*` es quien lo provoco (no se
     # auto-notifica). `resumen` es la frase ya armada para la UI; `enlace` opcional para navegar.
     # `leida` se marca al abrir el cajon. Se BORRA en cascada logica? No: se purga por antiguedad
@@ -961,8 +961,8 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         usuario_id    TEXT NOT NULL DEFAULT '',
         marca_id      TEXT NOT NULL DEFAULT '',
         tipo          TEXT NOT NULL DEFAULT '',
-        contenido_id  TEXT NOT NULL DEFAULT '',
-        plataforma_id TEXT NOT NULL DEFAULT '',
+        publicacion_id  TEXT NOT NULL DEFAULT '',
+        pieza_id TEXT NOT NULL DEFAULT '',
         actor_id      TEXT NOT NULL DEFAULT '',
         actor_nombre  TEXT NOT NULL DEFAULT '',
         resumen       TEXT NOT NULL DEFAULT '',
@@ -1004,14 +1004,14 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # (campaña + vertical + tipo). Cascada manual al borrar contenido o etiqueta (sin FK,
     # igual que el resto del esquema). PK compuesta evita duplicados.
     """
-    CREATE TABLE IF NOT EXISTS contenido_etiquetas (
-        contenido_id  TEXT NOT NULL,
+    CREATE TABLE IF NOT EXISTS publicacion_etiquetas (
+        publicacion_id  TEXT NOT NULL,
         etiqueta_id   TEXT NOT NULL,
-        PRIMARY KEY (contenido_id, etiqueta_id)
+        PRIMARY KEY (publicacion_id, etiqueta_id)
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_contenido_etiquetas_etiqueta "
-    "ON contenido_etiquetas (etiqueta_id)",
+    "CREATE INDEX IF NOT EXISTS idx_publicacion_etiquetas_etiqueta "
+    "ON publicacion_etiquetas (etiqueta_id)",
     # CONTENIDO editorial reutilizable que ERA file-backed (YAML + indice SQLite de rutas
     # absolutas) y cerro su rezago a Postgres (ADR 0006). Antes vivian en `ficheros.py` con un
     # `indice.sqlite` de rutas ABSOLUTAS que, al recrear contenedores, quedaba apuntando a
@@ -1069,7 +1069,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # que el equipo aprueba o descarta ANTES de generar nada. La IA NO redacta a ciegas: primero
     # PROPONE ideas (`origen='ia'`, `estado='propuesta'`); una persona las marca `aprobada` o
     # `descartada`; solo para las APROBADAS se genera la pieza (`flujo='evergreen'` en el tablero)
-    # y se enlaza en `contenido_id`. `generacion_id` apunta a la generacion IA que las propuso
+    # y se enlaza en `publicacion_id`. `generacion_id` apunta a la generacion IA que las propuso
     # (para trazar el lote). `creado` preserva el orden "recientes primero".
     """
     CREATE TABLE IF NOT EXISTS evergreen_ideas (
@@ -1080,7 +1080,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         estado        TEXT NOT NULL DEFAULT 'propuesta',
         origen        TEXT NOT NULL DEFAULT 'ia',
         generacion_id TEXT NOT NULL DEFAULT '',
-        contenido_id  TEXT NOT NULL DEFAULT '',
+        publicacion_id  TEXT NOT NULL DEFAULT '',
         creado        TEXT NOT NULL DEFAULT '',
         actualizado   TEXT NOT NULL DEFAULT ''
     )
@@ -1187,7 +1187,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # cada feed se PERSISTE una vez (dedup por (fuente_id, clave)) para tener cobertura
     # newsroom-grade: el Radar/Plan y la UI leen del store y la red se sondea en background por
     # el `recolectar_daemon`. `clave` = url_canonica normalizada (o hash del título si no hay url);
-    # `categoria`/`marca` vienen de la fuente; `estado` nuevo|usado|descartado; `contenido_id`
+    # `categoria`/`marca` vienen de la fuente; `estado` nuevo|usado|descartado; `publicacion_id`
     # enlaza al tablero cuando el equipo lo usa; `cluster_id` lo llena la Ola B (historias).
     """
     CREATE TABLE IF NOT EXISTS noticias_items (
@@ -1211,7 +1211,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         senal          INTEGER NOT NULL DEFAULT 0,
         geo            TEXT NOT NULL DEFAULT '',
         estado         TEXT NOT NULL DEFAULT 'nuevo',
-        contenido_id   TEXT NOT NULL DEFAULT '',
+        publicacion_id   TEXT NOT NULL DEFAULT '',
         fuente_peso    REAL NOT NULL DEFAULT 1.0,
         creado         TEXT NOT NULL DEFAULT ''
     )
@@ -1250,7 +1250,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         primer_visto  TEXT NOT NULL DEFAULT '',
         ultimo_visto  TEXT NOT NULL DEFAULT '',
         estado        TEXT NOT NULL DEFAULT 'nuevo',
-        contenido_id  TEXT NOT NULL DEFAULT '',
+        publicacion_id  TEXT NOT NULL DEFAULT '',
         verificacion  TEXT NOT NULL DEFAULT 'unica_fuente',
         titulo_es     TEXT NOT NULL DEFAULT '',
         resumen_es    TEXT NOT NULL DEFAULT '',
@@ -1312,7 +1312,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         tipo             TEXT NOT NULL DEFAULT 'nota',
         idioma           TEXT NOT NULL DEFAULT 'es',
         usado            INTEGER NOT NULL DEFAULT 0,
-        contenido_id     TEXT NOT NULL DEFAULT '',
+        publicacion_id     TEXT NOT NULL DEFAULT '',
         orden            INTEGER NOT NULL DEFAULT 0,
         creado           TEXT NOT NULL DEFAULT ''
     )
@@ -1322,12 +1322,12 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_insumos_item_marca_fecha ON insumos_item (marca, fecha)",
     # MOTOR DE VIDEO (Ola VIDEO). `video_composiciones` guarda el JSON de COMPOSICION (pistas/
     # clips/overlay/subtitulos; esquema en `docs/maquina-contenido/G-video-engine.md`, validado
-    # por `keni_shared.video.validar_composicion`). `documento` es el JSON; `contenido_id` la liga
+    # por `keni_shared.video.validar_composicion`). `documento` es el JSON; `publicacion_id` la liga
     # opcionalmente a una pieza del tablero. Una composicion por video del Estudio de Video.
     """
     CREATE TABLE IF NOT EXISTS video_composiciones (
         id           TEXT PRIMARY KEY,
-        contenido_id TEXT NOT NULL DEFAULT '',
+        publicacion_id TEXT NOT NULL DEFAULT '',
         marca        TEXT NOT NULL DEFAULT '',
         titulo       TEXT NOT NULL DEFAULT '',
         estado       TEXT NOT NULL DEFAULT 'borrador',
@@ -1337,7 +1337,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_video_composiciones_marca ON video_composiciones (marca)",
-    "CREATE INDEX IF NOT EXISTS idx_video_composiciones_contenido ON video_composiciones (contenido_id)",
+    "CREATE INDEX IF NOT EXISTS idx_video_composiciones_contenido ON video_composiciones (publicacion_id)",
     # `video_subtitulos`: pista de subtitulos de una composicion. `segmentos` = JSON word-level
     # del ASR (faster-whisper); `ass` = el ASS renderizado para quemar con ffmpeg. `estado` ∈
     # {pendiente, transcrito, editado, listo}. La rellena el motor de ASR (motores/transcripcion).
@@ -1355,12 +1355,12 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     """,
     "CREATE INDEX IF NOT EXISTS idx_video_subtitulos_composicion ON video_subtitulos (composicion_id)",
     "CREATE INDEX IF NOT EXISTS idx_video_subtitulos_estado ON video_subtitulos (estado)",
-    # PUBLICACIONES de la Prompts de Texto (rediseno "version publicada"): cada fila es un
+    # PIEZAS de la Prompts de Texto (rediseno "version publicada"): cada fila es un
     # acto de PUBLICAR un documento (`doc_id` de libprompts) fijando un `sha` git inmutable. La
     # fila MAS RECIENTE por doc_id (creado DESC, id DESC) es el puntero de PRODUCCION vigente;
     # el resto queda como audit log (quien publico que y cuando). Sin filas para un doc, los
     # pipelines caen a la working copy (migracion suave). Timestamps ISO con MICROSEGUNDOS
-    # (desempatan publicaciones consecutivas; el id es uuid, no monotonico).
+    # (desempatan piezas consecutivas; el id es uuid, no monotonico).
     """
     CREATE TABLE IF NOT EXISTS texto_publicaciones (
         id      TEXT PRIMARY KEY,
@@ -1372,7 +1372,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_texto_publicaciones_doc ON texto_publicaciones (doc_id, creado)",
-    # SOLICITUDES de publicacion (flujo editor -> admin): un editor propone fijar `sha_propuesto`
+    # SOLICITUDES de pieza (flujo editor -> admin): un editor propone fijar `sha_propuesto`
     # como produccion de `doc_id`; un admin la aprueba (publica + marca `aprobada`) o la rechaza.
     # A lo sumo UNA solicitud `abierta` por doc (una nueva SUSTITUYE a la abierta anterior).
     # `revisor`/`comentario`/`resuelto` se rellenan al resolver ('' = aun abierta).

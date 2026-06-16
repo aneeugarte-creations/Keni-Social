@@ -21,14 +21,14 @@ SEGURO POR DISENO (CONSERVADOR)
 ===============================
   - GATEADO: la etapa solo ilustra con `KENI_PIPELINE_ILUSTRAR=1` (def OFF) + `KENI_MAQUINA=1`.
   - SOLO TEMAS CON COPY Y SIN IMAGEN: solo procesa contenido 'contenido' no cerrado que
-    tenga alguna `contenido_plataforma` con copy pero sin imagen. No inventa piezas.
+    tenga alguna `pieza` con copy pero sin imagen. No inventa piezas.
   - SIN CREDENCIALES, NO HACE NADA: si no hay proveedor de imagen configurado, no ilustra.
   - CAP por barrido (`KENI_AUTOGEN_ARTE_MAX`, def 3): cada item llama al proveedor de
     imagen (coste); el cap evita rafagas.
   - DEDUP: tras procesar, el tema se ETIQUETA `autogen-arte` para no re-generarlo. La
     seleccion lee esa etiqueta para saltarse lo ya hecho.
   - NO PUBLICA: solo adjunta el arte al borrador; la revision/aprobacion humana y la
-    publicacion real (`KENI_PUBLICAR_REAL`) siguen gated, igual que siempre.
+    pieza real (`KENI_PUBLICAR_REAL`) siguen gated, igual que siempre.
 
 La SELECCION (`topics_sin_arte`) es PURA y testeable: recibe las plataformas por item como
 un dict, asi no toca la DB. El LANZAMIENTO reutiliza `media.generar_imagen` (proveedor
@@ -128,7 +128,7 @@ def topics_sin_arte(
       - no ya procesados (dedup por id, etiqueta `autogen-arte`),
       - se RECORTA a `maximo` (cap de seguridad por barrido).
 
-    `plataformas_por_item` mapea id de contenido -> sus filas `contenido_plataforma`
+    `plataformas_por_item` mapea id de contenido -> sus filas `pieza`
     (dicts con al menos `copy` e `imagen`), inyectado para ser testeable sin DB.
 
     ORDEN (Flujo C): igual que en `autogen_redactar.topics_pendientes`, si se pasan
@@ -209,7 +209,7 @@ def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
         return None
     # Localiza la primera plataforma con copy pero sin imagen (la candidata a ilustrar).
     try:
-        plataformas = repos.listar_contenido_plataforma(item_id)
+        plataformas = repos.listar_piezas_fila(item_id)
     except Exception:  # noqa: BLE001 -- sin plataformas legibles, no hay donde adjuntar
         _log.exception("Auto-arte: no se pudieron leer las plataformas de un tema.")
         return None
@@ -225,8 +225,8 @@ def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
     from .dominio import generar
 
     return generar.lanzar_arte(
-        contenido_id=str(item_id),
-        plataforma_id=str(objetivo.get("id") or ""),
+        publicacion_id=str(item_id),
+        pieza_id=str(objetivo.get("id") or ""),
         marca=item.get("marca", "") or "",
         titulo=item.get("titulo", "") or "",
         prompt=prompt,
@@ -234,25 +234,25 @@ def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _resolver_objetivo_arte(
-    contenido_id: str, plataforma_id: str
+    publicacion_id: str, pieza_id: str
 ) -> dict[str, Any] | None:
     """Plataforma a ilustrar, RE-RESUELTA fresca en el worker (idempotencia natural).
 
-    Si `plataforma_id` sigue teniendo copy SIN imagen, ésa; si no (la ilustró un humano, o un
+    Si `pieza_id` sigue teniendo copy SIN imagen, ésa; si no (la ilustró un humano, o un
     intento previo del propio job antes de marcar terminal), la PRIMERA plataforma del tema con
     copy y sin imagen. None si ya no queda candidata: el ejecutor lo trata como un no-op idempotente
     (no re-genera ni re-sube). Best-effort: una lectura fallida devuelve None (el recolector lo recoge).
     """
-    if not contenido_id:
+    if not publicacion_id:
         return None
     try:
-        plataformas = repos.listar_contenido_plataforma(contenido_id)
+        plataformas = repos.listar_piezas_fila(publicacion_id)
     except Exception:  # noqa: BLE001 -- sin plataformas legibles, no hay donde adjuntar
-        _log.exception("Auto-arte: no se pudieron leer las plataformas del tema %s.", contenido_id)
+        _log.exception("Auto-arte: no se pudieron leer las plataformas del tema %s.", publicacion_id)
         return None
-    if plataforma_id:
+    if pieza_id:
         for p in plataformas:
-            if p.get("id") == plataforma_id and _tiene_copy(p) and _le_falta_imagen(p):
+            if p.get("id") == pieza_id and _tiene_copy(p) and _le_falta_imagen(p):
                 return p
     return next((p for p in plataformas if _tiene_copy(p) and _le_falta_imagen(p)), None)
 
@@ -271,8 +271,8 @@ def ejecutar_arte_job(gen_id: str, spec: dict[str, Any]) -> None:
     la ilustró), COMPLETA sin volver a llamar al proveedor —ni doble gasto ni doble subida—. El
     contrato de firma (`ejecutar(gen_id, spec)`) es el de todos los jobs de proceso.
     """
-    contenido_id = (spec.get("contenido_id") or "").strip()
-    plataforma_id = (spec.get("plataforma_id") or "").strip()
+    publicacion_id = (spec.get("publicacion_id") or "").strip()
+    pieza_id = (spec.get("pieza_id") or "").strip()
     marca = spec.get("marca") or ""
     titulo = spec.get("titulo") or ""
     prompt = (spec.get("prompt") or "").strip()
@@ -285,14 +285,14 @@ def ejecutar_arte_job(gen_id: str, spec: dict[str, Any]) -> None:
                 gen_id, "No hay proveedor de imagen configurado para generar el arte."
             )
             return
-        objetivo = _resolver_objetivo_arte(contenido_id, plataforma_id)
+        objetivo = _resolver_objetivo_arte(publicacion_id, pieza_id)
         if objetivo is None:
             # Sin candidata: idempotente. Completa SIN gastar el proveedor (la pieza ya está
             # ilustrada, o un intento previo la adjuntó). El barrido no la re-elige (etiqueta).
             generaciones.actualizar(gen_id, {
                 "estado": generaciones.ESTADO_COMPLETADO,
                 "resultado": {
-                    "contenido_id": contenido_id,
+                    "publicacion_id": publicacion_id,
                     "omitido": "el tema ya no tiene una plataforma con copy sin imagen",
                 },
                 "fecha_fin": generaciones.ahora_iso(),
@@ -303,21 +303,21 @@ def ejecutar_arte_job(gen_id: str, spec: dict[str, Any]) -> None:
         )
         crudos = media.generar_imagen(prompt)
         nombre = media.guardar_bytes(crudos, ext="png")
-        repos.actualizar_contenido_plataforma(
+        repos.actualizar_pieza_fila(
             objetivo["id"], {"imagen": nombre, "falta_imagen": False}
         )
         # Dedup: marca el tema como ya procesado (best-effort; un fallo no debe romper el cierre).
         et_id = _id_etiqueta_autogen_arte()
-        if et_id and contenido_id:
-            repos.asignar_etiqueta(contenido_id, et_id)
+        if et_id and publicacion_id:
+            repos.asignar_etiqueta(publicacion_id, et_id)
         registrar_arte(
-            contenido_id=contenido_id, marca=marca, titulo=titulo, prompt=prompt, imagen=nombre,
+            publicacion_id=publicacion_id, marca=marca, titulo=titulo, prompt=prompt, imagen=nombre,
         )
         generaciones.actualizar(gen_id, {
             "estado": generaciones.ESTADO_COMPLETADO,
             "resultado": {
-                "contenido_id": contenido_id,
-                "plataforma_id": objetivo["id"],
+                "publicacion_id": publicacion_id,
+                "pieza_id": objetivo["id"],
                 "imagen": nombre,
             },
             "fecha_fin": generaciones.ahora_iso(),
@@ -340,18 +340,18 @@ def _terminar_error_arte(gen_id: str, mensaje: str) -> None:
 
 
 def registrar_arte(
-    *, contenido_id: str, marca: str, titulo: str, prompt: str, imagen: str
+    *, publicacion_id: str, marca: str, titulo: str, prompt: str, imagen: str
 ) -> None:
-    """Registra una generación de ARTE en el pipeline de SU pieza (`contenido_id`).
+    """Registra una generación de ARTE en el pipeline de SU pieza (`publicacion_id`).
 
-    Deja DOS trazas correlacionadas por `contenido_id`: una generación `tipo='pipeline'` con el
+    Deja DOS trazas correlacionadas por `publicacion_id`: una generación `tipo='pipeline'` con el
     PROMPT real y la salida, y el marcador de etapa ARTE. Así el arte —tanto el auto-arte del
     pipeline como el botón manual «Generar con IA»— sale en Actividad IA y en el detalle del
-    pipeline de la pieza, NO como una generación suelta. Sin `contenido_id` no registra (no hay
+    pipeline de la pieza, NO como una generación suelta. Sin `publicacion_id` no registra (no hay
     pipeline al que colgar). Best-effort: un fallo de traza no rompe la generación. Import diferido
     de `pipeline_contenido` para no acoplar en carga (evita ciclo con `_barrido`).
     """
-    if not contenido_id:
+    if not publicacion_id:
         return
     marca = marca or ""
     try:
@@ -360,7 +360,7 @@ def registrar_arte(
         gen = generaciones.crear({
             "tipo": "pipeline",
             "marca": marca,
-            "contenido_id": contenido_id,
+            "publicacion_id": publicacion_id,
             "prompt": prompt[:20000],
             "salida": f"Imagen generada: {imagen}",
             "etiqueta": f"Ilustrar — {(titulo or '')[:80]}",
@@ -370,7 +370,7 @@ def registrar_arte(
         })
         registrar_etapa(
             ETAPA_ILUSTRAR, marca, "Generación de arte",
-            contenido_id=contenido_id, gen_id=(gen.get("id", "") if gen else ""),
+            publicacion_id=publicacion_id, gen_id=(gen.get("id", "") if gen else ""),
         )
     except Exception:  # noqa: BLE001 -- la traza de actividad no debe romper el arte
         _log.warning("Arte: no se pudo registrar la actividad del arte.", exc_info=True)
@@ -384,7 +384,7 @@ def _plataformas_por_item(items: list[dict[str, Any]]) -> dict[str, list[dict[st
         if not item_id:
             continue
         try:
-            mapa[item_id] = repos.listar_contenido_plataforma(item_id)
+            mapa[item_id] = repos.listar_piezas_fila(item_id)
         except Exception:  # noqa: BLE001 -- una lectura fallida deja el item sin plataformas
             mapa[item_id] = []
     return mapa

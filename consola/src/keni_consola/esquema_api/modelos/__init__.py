@@ -10,7 +10,7 @@ puede no venir). Convencion de NULABLES: `X | None` (la clave viene pero su valo
 puede ser `null`). Las dos cosas son distintas y se respetan tal cual en el TS.
 
 Este paquete agrupa los modelos por DOMINIO en submodulos (`estado`, `limites`,
-`metricas`, `publicaciones`, `comercial`, mas `_base` para los tipos
+`metricas`, `piezas`, `comercial`, mas `_base` para los tipos
 compartidos/auxiliares). Este `__init__` es un BARREL: re-exporta todos los modelos
 y mantiene la superficie publica historica (un solo modulo `modelos`).
 
@@ -82,13 +82,13 @@ from .metricas import (
     TotalMetricas,
     VelocidadPieza,
 )
-from .publicaciones import (
-    EstadoPublicacion,
+from .piezas import (
+    EstadoPieza,
     EtapaIa,
-    Publicacion,
+    Pieza,
     RespuestaColaAprobacion,
-    RespuestaPublicacion,
-    RespuestaPublicaciones,
+    RespuestaPieza,
+    RespuestaPiezas,
     Revision,
 )
 
@@ -150,13 +150,13 @@ __all__ = [
     # Compartidos / auxiliares.
     "Paginacion",
     "MetricasRun",
-    # Publicaciones.
-    "EstadoPublicacion",
+    # Piezas.
+    "EstadoPieza",
     "EtapaIa",
     "Revision",
-    "Publicacion",
-    "RespuestaPublicaciones",
-    "RespuestaPublicacion",
+    "Pieza",
+    "RespuestaPiezas",
+    "RespuestaPieza",
     "RespuestaColaAprobacion",
     # Respuestas genericas.
     "RespuestaMensaje",
@@ -224,10 +224,10 @@ MODELOS = [
     # Envelope/auxiliares compartidos.
     Paginacion,
     MetricasRun,
-    # Publicaciones (#101 ampliacion churn).
-    Publicacion,
-    RespuestaPublicaciones,
-    RespuestaPublicacion,
+    # Piezas (#101 ampliacion churn).
+    Pieza,
+    RespuestaPiezas,
+    RespuestaPieza,
     # Aprobacion de equipo (#9, Fase 3).
     RespuestaColaAprobacion,
     # Generaciones: DEFERIDAS (ver bloque arriba). Se mantienen a mano en types.ts.
@@ -240,6 +240,6 @@ MODELOS = [
 # `modelos.metricas`, ...). Se eliminan del namespace para preservar EXACTAMENTE la
 # superficie publica historica (cuando `modelos` era un unico fichero): el `dir()` no
 # debe ganar nombres de submodulo. Los modelos ya estan re-exportados arriba por nombre.
-for _submodulo in ("_base", "config", "estado", "limites", "metricas", "publicaciones"):
+for _submodulo in ("_base", "config", "estado", "limites", "metricas", "piezas"):
     globals().pop(_submodulo, None)
 del _submodulo

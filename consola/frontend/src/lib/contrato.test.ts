@@ -46,8 +46,8 @@ describe("validarContrato (#120)", () => {
 
   it("en PROD NO es fatal: avisa de drift y devuelve los datos", () => {
     vi.stubEnv("DEV", false);
-    const mala = { publicaciones: "no-es-una-lista" };
-    const out = validarContrato("RespuestaPublicaciones", mala);
+    const mala = { piezas: "no-es-una-lista" };
+    const out = validarContrato("RespuestaPiezas", mala);
     expect(out).toBe(mala);
     expect(avisarDriftContrato).toHaveBeenCalledTimes(1);
   });

@@ -581,7 +581,7 @@ def indexar_generacion(
     tipo: str = "",
     marca: str = "",
     proceso: str = "",
-    contenido_id: str = "",
+    publicacion_id: str = "",
     payload: dict[str, Any] | None = None,
 ) -> None:
     """UPSERT de la fila de indice de una generacion (idempotente por `gen_id`).
@@ -596,13 +596,13 @@ def indexar_generacion(
     try:
         con.execute(
             "INSERT INTO generaciones_indice (gen_id, fecha_inicio, estado, tipo, marca, "
-            "proceso, contenido_id, payload, actualizado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "proceso, publicacion_id, payload, actualizado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT (gen_id) DO UPDATE SET "
             "fecha_inicio = EXCLUDED.fecha_inicio, estado = EXCLUDED.estado, "
             "tipo = EXCLUDED.tipo, marca = EXCLUDED.marca, proceso = EXCLUDED.proceso, "
-            "contenido_id = EXCLUDED.contenido_id, payload = EXCLUDED.payload, "
+            "publicacion_id = EXCLUDED.publicacion_id, payload = EXCLUDED.payload, "
             "actualizado = EXCLUDED.actualizado",
-            (gen_id, fecha_inicio, estado, tipo, marca, proceso, contenido_id,
+            (gen_id, fecha_inicio, estado, tipo, marca, proceso, publicacion_id,
              json.dumps(payload or {}, ensure_ascii=False), ahora_iso()),
         )
         con.commit()

@@ -1,7 +1,7 @@
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
-import { iconoRed } from "@/pages/publicaciones/meta";
+import { iconoRed } from "@/pages/piezas/meta";
 
 /**
  * Selector de redes objetivo como chips (pastillas) de selección MÚLTIPLE.

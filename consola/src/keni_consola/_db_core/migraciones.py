@@ -19,7 +19,7 @@ from ._comun import _log
 from .migraciones_columnas import (
     _COLUMNAS_APROBACIONES_AMPLIADAS,
     _COLUMNAS_CONFIG_FRANJAS_AMPLIADAS,
-    _COLUMNAS_CONTENIDO_AMPLIADAS,
+    _COLUMNAS_PUBLICACION_AMPLIADAS,
     _COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS,
     _COLUMNAS_DAEMON_LATIDOS_AMPLIADAS,
     _COLUMNAS_EVENTO_ROTA_AMPLIADAS,
@@ -40,8 +40,8 @@ from .migraciones_columnas import (
     _migrar_columnas_aprobaciones,
     _migrar_columnas_campanias,
     _migrar_columnas_config_franjas,
-    _migrar_columnas_contenido,
-    _migrar_columnas_contenido_plataforma,
+    _migrar_columnas_publicacion,
+    _migrar_columnas_pieza,
     _migrar_columnas_daemon_latidos,
     _migrar_columnas_etiquetas,
     _migrar_columnas_eventos_rota,
@@ -64,6 +64,7 @@ from .migraciones_columnas import (
     _migrar_renombre_columnas_veredicto,
     _normalizar_timestamps_texto,
     _recuperar_campanias_de_comercial,
+    _migrar_renombre_entidades,
     _renombrar_comercial_campanias_a_campanias,
 )
 from .migraciones_integridad import (
@@ -265,7 +266,7 @@ MIGRACIONES_PRE_DDL: tuple[Migracion, ...] = (
     Migracion("0037-renombre-columnas-etapas", _migrar_renombre_columnas_etapas),
     # ETAPAS CON NOMBRE PROPIO (limpieza de jerga `veredicto`): renombra los verdict sobrecargados
     # a su etapa: `verificar_veredicto` -> `verificacion_fuente` (VERIFICAR; en `contenido` y
-    # `noticias_clusters`) y `contenido_plataforma.veredicto` -> `revision` (REVISAR). PRE-DDL por
+    # `noticias_clusters`) y `pieza.veredicto` -> `revision` (REVISAR). PRE-DDL por
     # el mismo motivo que 0037: debe correr ANTES de que las ADD COLUMN re-aplicables (0011/0019,
     # cuya tupla ya apunta a `verificacion_fuente`) re-evaluen y creen una columna vacia suelta.
     # One-shot pero idempotente (RENAME guardado por la existencia de la columna).
@@ -277,6 +278,10 @@ MIGRACIONES_PRE_DDL: tuple[Migracion, ...] = (
     # En PRE-DDL renombra/fusiona ANTES de que el DDL recree `campanias` vacía; deja 0040 inerte.
     # One-shot pero idempotente (tras correr, `comercial_campanias` ya no existe -> no-op).
     Migracion("0041-recuperar-campanias", _recuperar_campanias_de_comercial),
+    # RENOMBRE de ENTIDADES (contenido->publicacion, contenido_plataforma->pieza + tablas
+    # dependientes y columnas FK). PRE-DDL OBLIGATORIO: renombra ANTES de que el DDL cree las
+    # tablas nuevas vacías (mismo motivo que 0041-recuperar-campanias). Idempotente, guardada.
+    Migracion("0042-renombre-entidades", _migrar_renombre_entidades),
 )
 
 # POST-DDL: ALTER/backfill sobre tablas que el DDL ya garantiza (anaden columnas a BDs
@@ -296,9 +301,9 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     ),
     Migracion(
         "0011-columnas-contenido",
-        _migrar_columnas_contenido,
+        _migrar_columnas_publicacion,
         re_aplicar_si_cambia=True,
-        datos=(_COLUMNAS_CONTENIDO_AMPLIADAS, _COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS),
+        datos=(_COLUMNAS_PUBLICACION_AMPLIADAS, _COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS),
     ),
     Migracion(
         "0012-columnas-aprobaciones",
@@ -345,7 +350,7 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     Migracion("0021-columnas-etiquetas", _migrar_columnas_etiquetas, re_aplicar_si_cambia=True),
     Migracion(
         "0022-columnas-contenido-plataforma",
-        _migrar_columnas_contenido_plataforma,
+        _migrar_columnas_pieza,
         re_aplicar_si_cambia=True,
     ),
     Migracion(
@@ -392,7 +397,7 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # allowlist de dominio cambia la huella y re-normaliza + recrea el CHECK una vez.
     Migracion("0029-checks-dominio", _migrar_checks_dominio, re_aplicar_si_cambia=True),
     # INTEGRIDAD (ADR 0012): columna `version` para concurrencia optimista en `contenido` y
-    # `contenido_plataforma` (BDs existentes; las nuevas la traen del DDL). One-shot.
+    # `pieza` (BDs existentes; las nuevas la traen del DDL). One-shot.
     Migracion("0030-version-optimista", _migrar_version_optimista),
     # TIPOS (ADR 0012): TEXT-JSON -> jsonb en `jobs.spec` y `metricas_cache.payload` (BDs
     # existentes; las nuevas ya nacen jsonb por el DDL). Idempotente (guardada por el tipo

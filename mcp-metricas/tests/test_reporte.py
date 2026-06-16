@@ -27,8 +27,8 @@ def test_reporte_recorre_todas_las_cuentas():
     assert rep["total"]["visualizaciones"] == suma
     # cada marca trae sus mejores piezas (solo el top, aunque se cuenten todas)
     assert all(len(f["mejores_piezas"]) == 3 for f in rep["cuentas"])
-    # publicaciones = nº TOTAL de piezas del periodo (no solo el top); > nº de marcas.
-    assert rep["total"]["publicaciones"] > rep["total"]["cuentas"]
+    # piezas = nº TOTAL de piezas del periodo (no solo el top); > nº de marcas.
+    assert rep["total"]["piezas"] > rep["total"]["cuentas"]
 
 
 def test_render_markdown():

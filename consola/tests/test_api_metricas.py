@@ -352,12 +352,12 @@ def test_token_mal_formado_devuelve_400(cliente):
 
 
 def _inicializar_pieza_publicada(marca: str, red: str, id_post: str, titulo: str = "Gol") -> str:
-    """Crea una pieza publicada (contenido + plataforma con id_post_metricool). Devuelve contenido_id."""
+    """Crea una pieza publicada (contenido + plataforma con id_post_metricool). Devuelve publicacion_id."""
     from keni_consola import repos
 
-    item = repos.crear_contenido(clase="contenido", titulo=titulo, marca=marca)
-    repos.crear_contenido_plataforma(
-        contenido_id=item["id"], red=red, id_post_metricool=id_post, es_publicacion=True
+    item = repos.crear_publicacion(clase="contenido", titulo=titulo, marca=marca)
+    repos.crear_pieza_fila(
+        publicacion_id=item["id"], red=red, id_post_metricool=id_post, es_publicacion=True
     )
     return item["id"]
 
@@ -365,14 +365,14 @@ def _inicializar_pieza_publicada(marca: str, red: str, id_post: str, titulo: str
 def test_piezas_rendimiento_lista_publicadas_con_rendimiento(cliente):
     # claro-sports (Consola) -> claro_sports (id_metricas). La muestra devuelve datos
     # deterministas por id_post, así que la pieza sale como `encontrado`.
-    contenido_id = _inicializar_pieza_publicada("claro-sports", "facebook", "post-123")
+    publicacion_id = _inicializar_pieza_publicada("claro-sports", "facebook", "post-123")
     r = cliente.get("/api/metricas/piezas-rendimiento?marca=claro_sports")
     assert r.status_code == 200
     data = r.json()
     assert data["total"] == 1
     assert data["fuente"] == "muestra"
     pieza = data["piezas"][0]
-    assert pieza["contenido_id"] == contenido_id  # enlace al tablero
+    assert pieza["publicacion_id"] == publicacion_id  # enlace al tablero
     assert pieza["red"] == "facebook"
     assert pieza["encontrado"] is True
     assert pieza["visualizaciones"] > 0
@@ -382,8 +382,8 @@ def test_piezas_rendimiento_sin_id_post_se_omite(cliente):
     # Una pieza publicada SIN id_post_metricool no aparece (no se puede leer su rendimiento).
     from keni_consola import repos
 
-    item = repos.crear_contenido(clase="contenido", titulo="Borrador", marca="claro-sports")
-    repos.crear_contenido_plataforma(contenido_id=item["id"], red="facebook", es_publicacion=True)
+    item = repos.crear_publicacion(clase="contenido", titulo="Borrador", marca="claro-sports")
+    repos.crear_pieza_fila(publicacion_id=item["id"], red="facebook", es_publicacion=True)
     r = cliente.get("/api/metricas/piezas-rendimiento?marca=claro_sports")
     assert r.status_code == 200
     assert r.json()["total"] == 0
@@ -455,7 +455,7 @@ def test_piezas_por_etiqueta_enlaza_por_titulo_y_resuelve_etiqueta(cliente):
     from keni_consola import repos
 
     # Título idéntico a una pieza de la muestra de deportes -> fuzzy-match por título.
-    item = repos.crear_contenido(
+    item = repos.crear_publicacion(
         clase="contenido",
         titulo="Gol agónico en el último minuto",
         marca="claro-sports",

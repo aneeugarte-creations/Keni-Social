@@ -78,7 +78,7 @@ def leer_items_fuente(fuente: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 # Marcas validas: TODAS las del catalogo unico (por su id canonico). Mismo criterio
-# que publicaciones.
+# que piezas.
 _MARCAS: tuple[tuple[str, str], ...] = tuple(marcas.opciones())
 _MARCAS_IDS = {m[0] for m in _MARCAS}
 

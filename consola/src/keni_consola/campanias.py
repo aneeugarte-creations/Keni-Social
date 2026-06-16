@@ -474,7 +474,7 @@ async def analitica_campania(campania_id: str, rango: str = RANGO_DEF) -> dict[s
     anterior = _agregar(piezas_prev)
 
     # Inorgánico (Meta Ads): los BOOSTS (posts impulsados) que pertenecen a la campaña —los
-    # que casan por caption con una pieza orgánica— entran como FILAS propias (publicaciones
+    # que casan por caption con una pieza orgánica— entran como FILAS propias (piezas
     # inorgánicas), no como columna de otra fila: el contenido impulsado en una red donde no
     # hubo post orgánico (p.ej. una pauta de FB de un reel de IG) es una publicación más. Las
     # campañas de pago con nombre propio NO entran aquí (viven en la sección Ads del
@@ -483,7 +483,7 @@ async def analitica_campania(campania_id: str, rango: str = RANGO_DEF) -> dict[s
     ads = [a for lista in ads_crudos for a in lista]
     boosts = _boosts_de_campania(ads, piezas)
     filas_inorg = [_fila_inorganica(b) for b in boosts]
-    # Los inorgánicos cuentan como publicaciones (el equipo los cuenta), pero NO suman a las
+    # Los inorgánicos cuentan como piezas (el equipo los cuenta), pero NO suman a las
     # visualizaciones orgánicas (no las tenemos): su alcance vive en `inorganico` y la columna.
     actual["piezas"] += len(filas_inorg)
     inorganico = {

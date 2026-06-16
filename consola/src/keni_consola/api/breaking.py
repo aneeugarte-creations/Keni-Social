@@ -17,7 +17,7 @@ ENDPOINTS
     Crea un DRAFT `contenido` (flujo='importante', prioridad='alta', origen='breaking')
     y encola la generación de copy reusando `autogen_redactar.lanzar_para_topic` (el mismo
     camino que el botón manual del asistente y que el radar). NUNCA publica.
-    → `{ "contenido_id": str, "generacion_id": str }`
+    → `{ "publicacion_id": str, "generacion_id": str }`
 
 SEGURIDAD
 ---------
@@ -59,7 +59,7 @@ async def listar(request: Request) -> Response:
 
     Devuelve los temas del snapshot del Investigador marcados como `breaking=True`
     para la marca indicada, ordenados por señal descendente. Cada item incluye su
-    `estado_borrador` ("ninguno" | "generando" | "listo"), `contenido_id` y
+    `estado_borrador` ("ninguno" | "generando" | "listo"), `publicacion_id` y
     `generacion_id` (si hay borrador/generación activa).
 
     Si el Investigador no está activo (KENI_INVESTIGADOR off) o la marca no tiene
@@ -77,7 +77,7 @@ async def listar(request: Request) -> Response:
 
     items = dom_breaking.items_breaking(marca_crudo, geo)
 
-    # Anota IN-PLACE: estado_borrador / contenido_id / generacion_id.
+    # Anota IN-PLACE: estado_borrador / publicacion_id / generacion_id.
     dom_breaking.anotar_estado_borrador(items, marca_crudo)
 
     # Serializar: extraer sólo los campos públicos del contrato.
@@ -121,7 +121,7 @@ def _serializar_item(item: dict, marca: str) -> dict:
         "fecha": (item.get("actualizado") or item.get("creado") or "").strip(),
         # Estado del borrador: "ninguno" | "generando" | "listo"
         "estado_borrador": item.get("estado_borrador", "ninguno"),
-        "contenido_id": item.get("contenido_id", ""),
+        "publicacion_id": item.get("publicacion_id", ""),
         "generacion_id": item.get("generacion_id", ""),
     }
 
@@ -134,10 +134,10 @@ async def preparar(request: Request) -> Response:
     Crea un DRAFT `contenido` con `origen='breaking'`, `flujo='importante'`,
     `prioridad='alta'` y lanza la generación de copy en segundo plano reusando
     `autogen_redactar.lanzar_para_topic` (el mismo camino que el botón manual del
-    asistente y que `/api/contenido/desde-radar`). NUNCA publica: el borrador
+    asistente y que `/api/publicaciones/desde-radar`). NUNCA publica: el borrador
     nace sin aprobación y pasa por el flujo de revisión humana normal.
 
-    Devuelve `{ "contenido_id": str, "generacion_id": str }`.
+    Devuelve `{ "publicacion_id": str, "generacion_id": str }`.
     Si ya existe un borrador para ese título + marca (mismo `origen='breaking'`),
     lo devuelve sin crear uno duplicado (dedup por clave).
     """
@@ -165,7 +165,7 @@ async def preparar(request: Request) -> Response:
     existente_id = ""
     if clave:
         try:
-            todos = repos.listar_contenido(marca=marca_crudo, clase="contenido")
+            todos = repos.listar_publicacion(marca=marca_crudo, clase="contenido")
             for it in todos:
                 if (it.get("origen") or "") != ORIGEN_BREAKING:
                     continue
@@ -179,11 +179,11 @@ async def preparar(request: Request) -> Response:
     if existente_id:
         # Devuelve el existente con su generación activa.
         gen_id, _ = dom_breaking._generacion_reciente_de(existente_id)
-        return JSONResponse({"contenido_id": existente_id, "generacion_id": gen_id})
+        return JSONResponse({"publicacion_id": existente_id, "generacion_id": gen_id})
 
     # --- Crear el borrador ---
     autor = autor_de_peticion(request)
-    item = repos.crear_contenido(
+    item = repos.crear_publicacion(
         clase="contenido",
         flujo=FLUJO_IMPORTANTE,
         titulo=titulo,
@@ -198,8 +198,8 @@ async def preparar(request: Request) -> Response:
 
     # Crear plataformas (si se indicaron redes; si no, sin plataformas hasta que el copia llega).
     for red in dict.fromkeys(redes_ids):
-        repos.crear_contenido_plataforma(
-            contenido_id=item["id"], red=red, falta_copy=True, falta_imagen=True
+        repos.crear_pieza_fila(
+            publicacion_id=item["id"], red=red, falta_copy=True, falta_imagen=True
         )
 
     # --- Encolar generación de copy (reusa autogen_redactar.lanzar_para_topic) ---
@@ -210,10 +210,10 @@ async def preparar(request: Request) -> Response:
             gen_id = gen.get("id") or ""
     except Exception:  # noqa: BLE001 -- la generación es opcional; nunca tumba la preparación
         _log.exception(
-            "breaking/preparar: fallo al encolar la generación (contenido_id=%s)", item["id"]
+            "breaking/preparar: fallo al encolar la generación (publicacion_id=%s)", item["id"]
         )
 
-    return JSONResponse({"contenido_id": item["id"], "generacion_id": gen_id})
+    return JSONResponse({"publicacion_id": item["id"], "generacion_id": gen_id})
 
 
 RUTAS = [

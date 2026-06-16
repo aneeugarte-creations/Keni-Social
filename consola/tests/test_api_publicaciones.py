@@ -1,4 +1,4 @@
-"""Tests de la API Publicaciones (/api/publicaciones). OFFLINE, DB en tmp.
+"""Tests de la API Piezas (/api/piezas). OFFLINE, DB en tmp.
 
 Cubre: opciones (catalogos), CRUD, lote, filtros, validaciones (marca/red/estado),
 resolucion de nombres legibles y edicion parcial.
@@ -10,16 +10,16 @@ from __future__ import annotations
 def _crear(cliente, **campos):
     base = {"marca": "unotv", "red": "x", "titulo": "T", "contenido": "C"}
     base.update(campos)
-    return cliente.post("/api/publicaciones", json=base)
+    return cliente.post("/api/piezas", json=base)
 
 
 # --------------------------------------------------------------------------- #
-# GET /api/publicaciones/opciones                                             #
+# GET /api/piezas/opciones                                             #
 # --------------------------------------------------------------------------- #
 
 
 def test_opciones(cliente):
-    datos = cliente.get("/api/publicaciones/opciones").json()
+    datos = cliente.get("/api/piezas/opciones").json()
     assert {"redes", "estados", "marcas"} <= set(datos)
     # redes en orden fijo con limite
     ids = [r["id"] for r in datos["redes"]]
@@ -47,17 +47,17 @@ def test_opciones(cliente):
 def test_crear_y_listar(cliente):
     r = _crear(cliente)
     assert r.status_code == 200
-    pub = r.json()["publicacion"]
+    pub = r.json()["pieza"]
     assert pub["id"]
     assert pub["estado"] == "borrador"
     assert pub["marca_nombre"] == "UnoTV"
     assert pub["red_nombre"] == "X"
-    listado = cliente.get("/api/publicaciones").json()["publicaciones"]
+    listado = cliente.get("/api/piezas").json()["piezas"]
     assert len(listado) == 1
 
 
 def test_crear_estado_explicito(cliente):
-    pub = _crear(cliente, estado="en_revision").json()["publicacion"]
+    pub = _crear(cliente, estado="en_revision").json()["pieza"]
     assert pub["estado"] == "en_revision"
 
 
@@ -92,7 +92,7 @@ def test_crear_estado_invalido_400(cliente):
 
 
 def test_crear_titulo_no_texto_400(cliente):
-    r = cliente.post("/api/publicaciones", json={"marca": "unotv", "red": "x", "titulo": 5})
+    r = cliente.post("/api/piezas", json={"marca": "unotv", "red": "x", "titulo": 5})
     assert r.status_code == 400
 
 
@@ -105,11 +105,11 @@ def test_filtros(cliente):
     _crear(cliente, red="x", estado="borrador")
     _crear(cliente, red="instagram", estado="en_revision")
     _crear(cliente, marca="piso-15", red="x")
-    assert len(cliente.get("/api/publicaciones?marca=unotv").json()["publicaciones"]) == 2
-    assert len(cliente.get("/api/publicaciones?red=x").json()["publicaciones"]) == 2
-    assert len(cliente.get("/api/publicaciones?estado=en_revision").json()["publicaciones"]) == 1
+    assert len(cliente.get("/api/piezas?marca=unotv").json()["piezas"]) == 2
+    assert len(cliente.get("/api/piezas?red=x").json()["piezas"]) == 2
+    assert len(cliente.get("/api/piezas?estado=en_revision").json()["piezas"]) == 1
     assert (
-        len(cliente.get("/api/publicaciones?marca=unotv&red=x").json()["publicaciones"]) == 1
+        len(cliente.get("/api/piezas?marca=unotv&red=x").json()["piezas"]) == 1
     )
 
 
@@ -119,15 +119,15 @@ def test_filtro_pendiente_pseudo_estado(cliente):
     Es la partición binaria del feed/lista (Pendientes · Publicadas · Todas)."""
     for estado in ("borrador", "en_revision", "programado", "publicado"):
         _crear(cliente, red="x", estado=estado)
-    total = cliente.get("/api/publicaciones?marca=unotv").json()["paginacion"]["total"]
-    pend = cliente.get("/api/publicaciones?marca=unotv&estado=pendiente").json()
-    pub = cliente.get("/api/publicaciones?marca=unotv&estado=publicado").json()
+    total = cliente.get("/api/piezas?marca=unotv").json()["paginacion"]["total"]
+    pend = cliente.get("/api/piezas?marca=unotv&estado=pendiente").json()
+    pub = cliente.get("/api/piezas?marca=unotv&estado=publicado").json()
     assert total == 4
     # Pendientes = los 3 no publicados; Publicadas = solo el publicado.
     assert pend["paginacion"]["total"] == 3
     assert pub["paginacion"]["total"] == 1
     # Partición exacta: ninguna pieza publicada se cuela en pendientes y la suma cuadra.
-    assert all(p["estado"] != "publicado" for p in pend["publicaciones"])
+    assert all(p["estado"] != "publicado" for p in pend["piezas"])
     assert pend["paginacion"]["total"] + pub["paginacion"]["total"] == total
 
 
@@ -138,7 +138,7 @@ def test_opciones_incluye_lineas(cliente):
     repos.crear_etiqueta(nombre="Deportes", clase="vertical", marca="unotv")
     # Una etiqueta de OTRA clase no debe colarse como línea editorial.
     repos.crear_etiqueta(nombre="Mundial", clase="campania", marca="unotv")
-    lineas = cliente.get("/api/publicaciones/opciones").json()["lineas"]
+    lineas = cliente.get("/api/piezas/opciones").json()["lineas"]
     nombres = {l["nombre"] for l in lineas}
     assert "Deportes" in nombres
     assert "Mundial" not in nombres
@@ -149,21 +149,21 @@ def test_filtro_linea(cliente):
     from keni_consola import repos
 
     etiqueta = repos.crear_etiqueta(nombre="Política", clase="vertical", marca="unotv")
-    con_linea = _crear(cliente, titulo="Con línea").json()["publicacion"]
+    con_linea = _crear(cliente, titulo="Con línea").json()["pieza"]
     _crear(cliente, titulo="Sin línea")
-    repos.asignar_etiqueta(con_linea["contenido_id"], etiqueta["id"])
+    repos.asignar_etiqueta(con_linea["publicacion_id"], etiqueta["id"])
 
-    filtrado = cliente.get(f"/api/publicaciones?linea={etiqueta['id']}").json()
-    assert [p["titulo"] for p in filtrado["publicaciones"]] == ["Con línea"]
+    filtrado = cliente.get(f"/api/piezas?linea={etiqueta['id']}").json()
+    assert [p["titulo"] for p in filtrado["piezas"]] == ["Con línea"]
     assert filtrado["paginacion"]["total"] == 1
 
 
 def test_payload_incluye_responsable(cliente):
     """Toda publicación expone `responsable_id`/`responsable_nombre` ("" = libre)."""
-    pub = _crear(cliente).json()["publicacion"]
+    pub = _crear(cliente).json()["pieza"]
     assert pub["responsable_id"] == ""
     assert pub["responsable_nombre"] == ""
-    listado = cliente.get("/api/publicaciones").json()["publicaciones"]
+    listado = cliente.get("/api/piezas").json()["piezas"]
     assert listado[0]["responsable_id"] == ""
     assert listado[0]["responsable_nombre"] == ""
 
@@ -172,44 +172,44 @@ def test_filtro_responsable(cliente):
     """`?responsable=<id>` = piezas cogidas por ese usuario; `?responsable=sin` = libres.
 
     El responsable vive en el `contenido` PADRE (el reparto es del tema): cogerlo via
-    `repos.reclamar_contenido` se refleja en TODAS sus piezas por red.
+    `repos.reclamar_publicacion` se refleja en TODAS sus piezas por red.
     """
     from keni_consola import repos
 
-    cogida = _crear(cliente, titulo="Cogida").json()["publicacion"]
+    cogida = _crear(cliente, titulo="Cogida").json()["pieza"]
     _crear(cliente, titulo="Libre")
-    asignada = repos.reclamar_contenido(
-        cogida["contenido_id"], responsable_id="u-elias", responsable_nombre="Elías"
+    asignada = repos.reclamar_publicacion(
+        cogida["publicacion_id"], responsable_id="u-elias", responsable_nombre="Elías"
     )
     assert asignada is not None
 
-    mias = cliente.get("/api/publicaciones?responsable=u-elias").json()
-    assert [p["titulo"] for p in mias["publicaciones"]] == ["Cogida"]
-    assert mias["publicaciones"][0]["responsable_nombre"] == "Elías"
+    mias = cliente.get("/api/piezas?responsable=u-elias").json()
+    assert [p["titulo"] for p in mias["piezas"]] == ["Cogida"]
+    assert mias["piezas"][0]["responsable_nombre"] == "Elías"
     assert mias["paginacion"]["total"] == 1
 
-    libres = cliente.get("/api/publicaciones?responsable=sin").json()
-    assert [p["titulo"] for p in libres["publicaciones"]] == ["Libre"]
+    libres = cliente.get("/api/piezas?responsable=sin").json()
+    assert [p["titulo"] for p in libres["piezas"]] == ["Libre"]
     assert libres["paginacion"]["total"] == 1
 
     # Sin el filtro se ven TODAS (el reparto no oculta nada por defecto).
-    assert len(cliente.get("/api/publicaciones").json()["publicaciones"]) == 2
+    assert len(cliente.get("/api/piezas").json()["piezas"]) == 2
 
 
 def test_filtro_responsable_compone_con_marca(cliente):
     """El filtro de reparto compone con los demás (marca): la vista de ClaroSports."""
     from keni_consola import repos
 
-    cs = _crear(cliente, marca="claro-sports", titulo="CS cogida").json()["publicacion"]
+    cs = _crear(cliente, marca="claro-sports", titulo="CS cogida").json()["pieza"]
     _crear(cliente, marca="claro-sports", titulo="CS libre")
-    uno = _crear(cliente, marca="unotv", titulo="Uno cogida").json()["publicacion"]
-    repos.reclamar_contenido(cs["contenido_id"], responsable_id="u1", responsable_nombre="Ana")
-    repos.reclamar_contenido(uno["contenido_id"], responsable_id="u1", responsable_nombre="Ana")
+    uno = _crear(cliente, marca="unotv", titulo="Uno cogida").json()["pieza"]
+    repos.reclamar_publicacion(cs["publicacion_id"], responsable_id="u1", responsable_nombre="Ana")
+    repos.reclamar_publicacion(uno["publicacion_id"], responsable_id="u1", responsable_nombre="Ana")
 
-    r = cliente.get("/api/publicaciones?marca=claro-sports&responsable=u1").json()
-    assert [p["titulo"] for p in r["publicaciones"]] == ["CS cogida"]
-    r = cliente.get("/api/publicaciones?marca=claro-sports&responsable=sin").json()
-    assert [p["titulo"] for p in r["publicaciones"]] == ["CS libre"]
+    r = cliente.get("/api/piezas?marca=claro-sports&responsable=u1").json()
+    assert [p["titulo"] for p in r["piezas"]] == ["CS cogida"]
+    r = cliente.get("/api/piezas?marca=claro-sports&responsable=sin").json()
+    assert [p["titulo"] for p in r["piezas"]] == ["CS libre"]
 
 
 def test_filtro_rango_fecha_programada(cliente):
@@ -223,14 +223,14 @@ def test_filtro_rango_fecha_programada(cliente):
     _crear(cliente, titulo="Despues", estado="programado", fecha_programada="2026-08-01T18:00")
     _crear(cliente, titulo="Sin fecha")  # borrador sin fecha_programada
 
-    r = cliente.get("/api/publicaciones?desde=2026-06-01&hasta=2026-06-30").json()
-    assert [p["titulo"] for p in r["publicaciones"]] == ["Dentro"]
+    r = cliente.get("/api/piezas?desde=2026-06-01&hasta=2026-06-30").json()
+    assert [p["titulo"] for p in r["piezas"]] == ["Dentro"]
     # El total respeta el rango (no es el global): la paginación no miente por omisión.
     assert r["paginacion"]["total"] == 1
 
     # Sin el rango se ven TODAS (retrocompatible), incluida la pieza sin fecha.
-    todas = cliente.get("/api/publicaciones").json()
-    assert {p["titulo"] for p in todas["publicaciones"]} == {
+    todas = cliente.get("/api/piezas").json()
+    assert {p["titulo"] for p in todas["piezas"]} == {
         "Dentro", "Antes", "Despues", "Sin fecha",
     }
 
@@ -239,8 +239,8 @@ def test_filtro_solo_hasta_excluye_sin_fecha(cliente):
     """Con solo `?hasta=` la pieza sin fecha (cadena vacía) NO debe colarse en el rango."""
     _crear(cliente, titulo="Programada", estado="programado", fecha_programada="2026-06-15T18:00")
     _crear(cliente, titulo="Sin fecha")
-    r = cliente.get("/api/publicaciones?hasta=2026-12-31").json()
-    assert [p["titulo"] for p in r["publicaciones"]] == ["Programada"]
+    r = cliente.get("/api/piezas?hasta=2026-12-31").json()
+    assert [p["titulo"] for p in r["piezas"]] == ["Programada"]
 
 
 # --------------------------------------------------------------------------- #
@@ -250,24 +250,24 @@ def test_filtro_solo_hasta_excluye_sin_fecha(cliente):
 
 def test_crear_lote(cliente):
     r = cliente.post(
-        "/api/publicaciones/lote",
+        "/api/piezas/lote",
         json={
-            "publicaciones": [
+            "piezas": [
                 {"marca": "unotv", "red": "x", "contenido": "a"},
                 {"marca": "unotv", "red": "instagram", "contenido": "b"},
             ]
         },
     )
     assert r.status_code == 200
-    assert len(r.json()["publicaciones"]) == 2
-    assert len(cliente.get("/api/publicaciones").json()["publicaciones"]) == 2
+    assert len(r.json()["piezas"]) == 2
+    assert len(cliente.get("/api/piezas").json()["piezas"]) == 2
 
 
 def test_lote_una_invalida_no_inserta_nada(cliente):
     r = cliente.post(
-        "/api/publicaciones/lote",
+        "/api/piezas/lote",
         json={
-            "publicaciones": [
+            "piezas": [
                 {"marca": "unotv", "red": "x"},
                 {"marca": "unotv", "red": "myspace"},  # invalida
             ]
@@ -275,11 +275,11 @@ def test_lote_una_invalida_no_inserta_nada(cliente):
     )
     assert r.status_code == 400
     # todo o nada: no se inserto la primera
-    assert cliente.get("/api/publicaciones").json()["publicaciones"] == []
+    assert cliente.get("/api/piezas").json()["piezas"] == []
 
 
 def test_lote_vacio_400(cliente):
-    r = cliente.post("/api/publicaciones/lote", json={"publicaciones": []})
+    r = cliente.post("/api/piezas/lote", json={"piezas": []})
     assert r.status_code == 400
 
 
@@ -289,23 +289,23 @@ def test_lote_vacio_400(cliente):
 
 
 def test_detalle(cliente):
-    pid = _crear(cliente).json()["publicacion"]["id"]
-    r = cliente.get(f"/api/publicaciones/{pid}")
+    pid = _crear(cliente).json()["pieza"]["id"]
+    r = cliente.get(f"/api/piezas/{pid}")
     assert r.status_code == 200
-    assert r.json()["publicacion"]["id"] == pid
+    assert r.json()["pieza"]["id"] == pid
 
 
 def test_detalle_404(cliente):
-    assert cliente.get("/api/publicaciones/noexiste").status_code == 404
+    assert cliente.get("/api/piezas/noexiste").status_code == 404
 
 
 def test_actualizar_parcial(cliente):
-    pid = _crear(cliente, titulo="Viejo").json()["publicacion"]["id"]
+    pid = _crear(cliente, titulo="Viejo").json()["pieza"]["id"]
     r = cliente.put(
-        f"/api/publicaciones/{pid}", json={"titulo": "Nuevo", "estado": "en_revision"}
+        f"/api/piezas/{pid}", json={"titulo": "Nuevo", "estado": "en_revision"}
     )
     assert r.status_code == 200
-    pub = r.json()["publicacion"]
+    pub = r.json()["pieza"]
     assert pub["titulo"] == "Nuevo"
     assert pub["estado"] == "en_revision"
 
@@ -313,20 +313,20 @@ def test_actualizar_parcial(cliente):
 def test_crear_y_editar_copy_in(cliente):
     # El copy_in (texto EN imagen) se acepta al crear y se edita por PUT, independiente del
     # contenido. Nace "" si no se manda.
-    pub = _crear(cliente).json()["publicacion"]
+    pub = _crear(cliente).json()["pieza"]
     assert pub["copy_in"] == ""
     r = cliente.put(
-        f"/api/publicaciones/{pub['id']}", json={"copy_in": "TITULAR EN LA IMAGEN"}
+        f"/api/piezas/{pub['id']}", json={"copy_in": "TITULAR EN LA IMAGEN"}
     )
     assert r.status_code == 200
-    editada = r.json()["publicacion"]
+    editada = r.json()["pieza"]
     assert editada["copy_in"] == "TITULAR EN LA IMAGEN"
     assert editada["contenido"] == "C"  # el contenido no se toca
 
 
 def test_actualizar_copy_in_no_texto_400(cliente):
-    pid = _crear(cliente).json()["publicacion"]["id"]
-    r = cliente.put(f"/api/publicaciones/{pid}", json={"copy_in": 123})
+    pid = _crear(cliente).json()["pieza"]["id"]
+    r = cliente.put(f"/api/piezas/{pid}", json={"copy_in": 123})
     assert r.status_code == 400
 
 
@@ -343,9 +343,9 @@ def test_integrar_foto_marca_visual_recompone(cliente, monkeypatch):
 
     monkeypatch.setattr(estudio_imagen, "componer", _fake_componer)
 
-    pid = _crear(cliente, marca="unotv").json()["publicacion"]["id"]
-    cliente.put(f"/api/publicaciones/{pid}", json={"copy_in": "DATO CLAVE"})
-    r = cliente.post(f"/api/publicaciones/{pid}/integrar-foto", json={"imagen": "foto-real.jpg"})
+    pid = _crear(cliente, marca="unotv").json()["pieza"]["id"]
+    cliente.put(f"/api/piezas/{pid}", json={"copy_in": "DATO CLAVE"})
+    r = cliente.post(f"/api/piezas/{pid}/integrar-foto", json={"imagen": "foto-real.jpg"})
     assert r.status_code == 200
     body = r.json()
     assert body["imagen"] == "compuesta.png"
@@ -355,20 +355,20 @@ def test_integrar_foto_marca_visual_recompone(cliente, monkeypatch):
 
 def test_integrar_foto_marca_sin_plantilla_devuelve_foto(cliente):
     # Marca sin identidad visual (piso-15): no recompone; devuelve la foto tal cual.
-    pid = _crear(cliente, marca="piso-15").json()["publicacion"]["id"]
-    r = cliente.post(f"/api/publicaciones/{pid}/integrar-foto", json={"imagen": "foto-real.jpg"})
+    pid = _crear(cliente, marca="piso-15").json()["pieza"]["id"]
+    r = cliente.post(f"/api/piezas/{pid}/integrar-foto", json={"imagen": "foto-real.jpg"})
     assert r.status_code == 200
     assert r.json()["imagen"] == "foto-real.jpg"
 
 
 def test_integrar_foto_sin_imagen_400(cliente):
-    pid = _crear(cliente).json()["publicacion"]["id"]
-    r = cliente.post(f"/api/publicaciones/{pid}/integrar-foto", json={})
+    pid = _crear(cliente).json()["pieza"]["id"]
+    r = cliente.post(f"/api/piezas/{pid}/integrar-foto", json={})
     assert r.status_code == 400
 
 
 def test_integrar_foto_404(cliente):
-    r = cliente.post("/api/publicaciones/noexiste/integrar-foto", json={"imagen": "x.jpg"})
+    r = cliente.post("/api/piezas/noexiste/integrar-foto", json={"imagen": "x.jpg"})
     assert r.status_code == 404
 
 
@@ -385,18 +385,18 @@ def test_aplicar_plantilla_persiste_receta_no_hornea(cliente, monkeypatch):
     plantilla = repos.crear_plantilla_diseno(
         marca="unotv", nombre="P", categoria="post", documento="{}", miniatura="",
     )
-    pid = _crear(cliente, marca="unotv").json()["publicacion"]["id"]
+    pid = _crear(cliente, marca="unotv").json()["pieza"]["id"]
     r = cliente.post(
-        f"/api/publicaciones/{pid}/aplicar-plantilla",
+        f"/api/piezas/{pid}/aplicar-plantilla",
         json={"plantilla_id": plantilla["id"], "foto": "f.jpg", "copy_in": "Y"},
     )
     assert r.status_code == 200, r.text
-    pub = r.json()["publicacion"]
+    pub = r.json()["pieza"]
     assert pub["imagen"] == ""  # NO se hornea
     assert pub["plantilla_diseno_id"] == plantilla["id"]
     assert pub["foto"] == "f.jpg"
     # La URL puede llevar sufijo `?v=` (cache-bust por `actualizado`); comparamos solo la ruta.
-    assert pub["imagen_url"].split("?")[0] == f"/api/publicaciones/{pid}/compuesta"
+    assert pub["imagen_url"].split("?")[0] == f"/api/piezas/{pid}/compuesta"
 
 
 def test_componer_slide_hornea_y_devuelve_media(cliente, monkeypatch):
@@ -412,15 +412,15 @@ def test_componer_slide_hornea_y_devuelve_media(cliente, monkeypatch):
     plantilla = repos.crear_plantilla_diseno(
         marca="unotv", nombre="P", categoria="post", documento="{}", miniatura="",
     )
-    pid = _crear(cliente, marca="unotv").json()["publicacion"]["id"]
+    pid = _crear(cliente, marca="unotv").json()["pieza"]["id"]
     r = cliente.post(
-        f"/api/publicaciones/{pid}/componer-slide",
+        f"/api/piezas/{pid}/componer-slide",
         json={"plantilla_id": plantilla["id"], "foto": "f.jpg", "titular": "Clave 2"},
     )
     assert r.status_code == 200, r.text
     assert r.json() == {"id": "artes/x.png", "url": "/api/media/artes/x.png"}
     # NO toca la pieza: sigue sin imagen horneada propia.
-    assert cliente.get(f"/api/publicaciones/{pid}").json()["publicacion"]["imagen"] == ""
+    assert cliente.get(f"/api/piezas/{pid}").json()["pieza"]["imagen"] == ""
 
 
 def test_componer_slide_marca_sin_plantilla_promueve_foto(cliente, monkeypatch):
@@ -430,78 +430,78 @@ def test_componer_slide_marca_sin_plantilla_promueve_foto(cliente, monkeypatch):
 
     monkeypatch.setattr(render_pieza, "_plantilla_efectiva", lambda pub: None)
     monkeypatch.setattr(almacen_media, "promover_objeto", lambda clave, cat: f"{cat}/{clave}")
-    pid = _crear(cliente, marca="piso-15").json()["publicacion"]["id"]
-    r = cliente.post(f"/api/publicaciones/{pid}/componer-slide", json={"foto": "cruda.jpg"})
+    pid = _crear(cliente, marca="piso-15").json()["pieza"]["id"]
+    r = cliente.post(f"/api/piezas/{pid}/componer-slide", json={"foto": "cruda.jpg"})
     assert r.status_code == 200, r.text
     assert r.json()["id"] == "artes/cruda.jpg"
 
 
 def test_componer_slide_sin_foto_ni_titular_400(cliente):
-    pid = _crear(cliente).json()["publicacion"]["id"]
-    r = cliente.post(f"/api/publicaciones/{pid}/componer-slide", json={})
+    pid = _crear(cliente).json()["pieza"]["id"]
+    r = cliente.post(f"/api/piezas/{pid}/componer-slide", json={})
     assert r.status_code == 400
 
 
 def test_componer_slide_404(cliente):
-    r = cliente.post("/api/publicaciones/noexiste/componer-slide", json={"titular": "x"})
+    r = cliente.post("/api/piezas/noexiste/componer-slide", json={"titular": "x"})
     assert r.status_code == 404
 
 
 def test_actualizar_estado_invalido_400(cliente):
-    pid = _crear(cliente).json()["publicacion"]["id"]
-    r = cliente.put(f"/api/publicaciones/{pid}", json={"estado": "archivado"})
+    pid = _crear(cliente).json()["pieza"]["id"]
+    r = cliente.put(f"/api/piezas/{pid}", json={"estado": "archivado"})
     assert r.status_code == 400
 
 
 def test_actualizar_sin_campos_400(cliente):
-    pid = _crear(cliente).json()["publicacion"]["id"]
-    r = cliente.put(f"/api/publicaciones/{pid}", json={})
+    pid = _crear(cliente).json()["pieza"]["id"]
+    r = cliente.put(f"/api/piezas/{pid}", json={})
     assert r.status_code == 400
 
 
 def test_actualizar_404(cliente):
-    r = cliente.put("/api/publicaciones/noexiste", json={"titulo": "x"})
+    r = cliente.put("/api/piezas/noexiste", json={"titulo": "x"})
     assert r.status_code == 404
 
 
 def test_actualizar_no_toca_marca_ni_red(cliente):
     """La edicion parcial ignora marca/red aunque vengan en el body."""
-    pid = _crear(cliente, marca="unotv", red="x").json()["publicacion"]["id"]
+    pid = _crear(cliente, marca="unotv", red="x").json()["pieza"]["id"]
     r = cliente.put(
-        f"/api/publicaciones/{pid}", json={"titulo": "Z", "marca": "piso-15", "red": "youtube"}
+        f"/api/piezas/{pid}", json={"titulo": "Z", "marca": "piso-15", "red": "youtube"}
     )
-    pub = r.json()["publicacion"]
+    pub = r.json()["pieza"]
     assert pub["marca"] == "unotv"
     assert pub["red"] == "x"
 
 
 def test_borrar(cliente):
-    pid = _crear(cliente).json()["publicacion"]["id"]
-    assert cliente.delete(f"/api/publicaciones/{pid}").status_code == 200
-    assert cliente.get(f"/api/publicaciones/{pid}").status_code == 404
+    pid = _crear(cliente).json()["pieza"]["id"]
+    assert cliente.delete(f"/api/piezas/{pid}").status_code == 200
+    assert cliente.get(f"/api/piezas/{pid}").status_code == 404
 
 
 def test_borrar_404(cliente):
-    assert cliente.delete("/api/publicaciones/noexiste").status_code == 404
+    assert cliente.delete("/api/piezas/noexiste").status_code == 404
 
 
 # --------------------------------------------------------------------------- #
-# GET /api/publicaciones/{id}/compuesta (render on-demand)                     #
+# GET /api/piezas/{id}/compuesta (render on-demand)                     #
 # --------------------------------------------------------------------------- #
 
 
 def test_compuesta_404_si_no_existe(cliente):
-    assert cliente.get("/api/publicaciones/noexiste/compuesta").status_code == 404
+    assert cliente.get("/api/piezas/noexiste/compuesta").status_code == 404
 
 
 def test_compuesta_sirve_bytes_efimeros_con_etag(cliente, monkeypatch):
     """El endpoint renderiza ON-DEMAND, sirve los bytes con su mime y un ETag (sin persistir)."""
     from keni_consola.dominio import render_pieza
 
-    pid = _crear(cliente).json()["publicacion"]["id"]
+    pid = _crear(cliente).json()["pieza"]["id"]
     monkeypatch.setattr(render_pieza, "render_bytes", lambda pub: (b"PNG-BYTES", "image/png"))
 
-    r = cliente.get(f"/api/publicaciones/{pid}/compuesta")
+    r = cliente.get(f"/api/piezas/{pid}/compuesta")
     assert r.status_code == 200
     assert r.content == b"PNG-BYTES"
     assert r.headers["content-type"].startswith("image/png")
@@ -512,7 +512,7 @@ def test_compuesta_304_si_etag_coincide(cliente, monkeypatch):
     """Con If-None-Match igual al ETag (receta sin cambios) -> 304 SIN recomponer."""
     from keni_consola.dominio import render_pieza
 
-    pid = _crear(cliente).json()["publicacion"]["id"]
+    pid = _crear(cliente).json()["pieza"]["id"]
     llamadas = {"n": 0}
 
     def _render(pub):
@@ -521,9 +521,9 @@ def test_compuesta_304_si_etag_coincide(cliente, monkeypatch):
 
     monkeypatch.setattr(render_pieza, "render_bytes", _render)
 
-    r1 = cliente.get(f"/api/publicaciones/{pid}/compuesta")
+    r1 = cliente.get(f"/api/piezas/{pid}/compuesta")
     etag = r1.headers["etag"]
-    r2 = cliente.get(f"/api/publicaciones/{pid}/compuesta", headers={"If-None-Match": etag})
+    r2 = cliente.get(f"/api/piezas/{pid}/compuesta", headers={"If-None-Match": etag})
     assert r2.status_code == 304
     assert llamadas["n"] == 1  # el 304 NO recompuso (render solo en la 1ª)
 
@@ -531,27 +531,27 @@ def test_compuesta_304_si_etag_coincide(cliente, monkeypatch):
 def test_compuesta_404_si_no_hay_imagen_derivable(cliente, monkeypatch):
     from keni_consola.dominio import render_pieza
 
-    pid = _crear(cliente).json()["publicacion"]["id"]
+    pid = _crear(cliente).json()["pieza"]["id"]
     monkeypatch.setattr(render_pieza, "render_bytes", lambda pub: None)
-    assert cliente.get(f"/api/publicaciones/{pid}/compuesta").status_code == 404
+    assert cliente.get(f"/api/piezas/{pid}/compuesta").status_code == 404
 
 
 # --------------------------------------------------------------------------- #
-# POST /api/publicaciones/borrar-lote (borrado batch)                          #
+# POST /api/piezas/borrar-lote (borrado batch)                          #
 # --------------------------------------------------------------------------- #
 
 
 def test_borrar_lote(cliente):
-    ids = [_crear(cliente, titulo=f"T{i}").json()["publicacion"]["id"] for i in range(3)]
-    r = cliente.post("/api/publicaciones/borrar-lote", json={"ids": ids})
+    ids = [_crear(cliente, titulo=f"T{i}").json()["pieza"]["id"] for i in range(3)]
+    r = cliente.post("/api/piezas/borrar-lote", json={"ids": ids})
     assert r.status_code == 200
     assert r.json() == {"borradas": 3, "fallos": []}
-    assert cliente.get("/api/publicaciones").json()["publicaciones"] == []
+    assert cliente.get("/api/piezas").json()["piezas"] == []
 
 
 def test_borrar_lote_reporta_fallos_parciales(cliente):
-    pid = _crear(cliente).json()["publicacion"]["id"]
-    r = cliente.post("/api/publicaciones/borrar-lote", json={"ids": [pid, "no-existe"]})
+    pid = _crear(cliente).json()["pieza"]["id"]
+    r = cliente.post("/api/piezas/borrar-lote", json={"ids": [pid, "no-existe"]})
     assert r.status_code == 200
     datos = r.json()
     assert datos["borradas"] == 1
@@ -559,26 +559,26 @@ def test_borrar_lote_reporta_fallos_parciales(cliente):
 
 
 def test_borrar_lote_sin_ids_400(cliente):
-    assert cliente.post("/api/publicaciones/borrar-lote", json={}).status_code == 400
-    assert cliente.post("/api/publicaciones/borrar-lote", json={"ids": []}).status_code == 400
-    assert cliente.post("/api/publicaciones/borrar-lote", json={"ids": "x"}).status_code == 400
+    assert cliente.post("/api/piezas/borrar-lote", json={}).status_code == 400
+    assert cliente.post("/api/piezas/borrar-lote", json={"ids": []}).status_code == 400
+    assert cliente.post("/api/piezas/borrar-lote", json={"ids": "x"}).status_code == 400
 
 
 def test_borrar_lote_dedup_ids(cliente):
-    pid = _crear(cliente).json()["publicacion"]["id"]
-    r = cliente.post("/api/publicaciones/borrar-lote", json={"ids": [pid, pid]})
+    pid = _crear(cliente).json()["pieza"]["id"]
+    r = cliente.post("/api/piezas/borrar-lote", json={"ids": [pid, pid]})
     assert r.json() == {"borradas": 1, "fallos": []}
 
 
 # --------------------------------------------------------------------------- #
-# GET /api/publicaciones/cadenas (cadenas de aprobacion en batch, feed)        #
+# GET /api/piezas/cadenas (cadenas de aprobacion en batch, feed)        #
 # --------------------------------------------------------------------------- #
 
 
 def test_cadenas_lote_devuelve_entrada_por_id(cliente):
-    a = _crear(cliente, titulo="A").json()["publicacion"]["id"]
-    b = _crear(cliente, titulo="B").json()["publicacion"]["id"]
-    r = cliente.get(f"/api/publicaciones/cadenas?ids={a},{b}")
+    a = _crear(cliente, titulo="A").json()["pieza"]["id"]
+    b = _crear(cliente, titulo="B").json()["pieza"]["id"]
+    r = cliente.get(f"/api/piezas/cadenas?ids={a},{b}")
     assert r.status_code == 200
     cadenas = r.json()["cadenas"]
     assert set(cadenas) == {a, b}
@@ -589,24 +589,24 @@ def test_cadenas_lote_devuelve_entrada_por_id(cliente):
 
 
 def test_cadenas_lote_coincide_con_endpoint_individual(cliente):
-    pid = _crear(cliente).json()["publicacion"]["id"]
+    pid = _crear(cliente).json()["pieza"]["id"]
     # Monta una cadena real (la misma que veria el endpoint individual).
     assert cliente.post(f"/api/plataformas/{pid}/aprobacion", json={}).status_code == 201
     individual = cliente.get(f"/api/plataformas/{pid}/aprobacion").json()
-    lote = cliente.get(f"/api/publicaciones/cadenas?ids={pid}").json()["cadenas"][pid]
+    lote = cliente.get(f"/api/piezas/cadenas?ids={pid}").json()["cadenas"][pid]
     assert lote == individual
 
 
 def test_cadenas_lote_id_inexistente_sale_vacia_no_404(cliente):
     # El batch NUNCA omite ids (el cliente no debe reiterar "faltantes"): inexistente -> vacia.
-    r = cliente.get("/api/publicaciones/cadenas?ids=fantasma")
+    r = cliente.get("/api/piezas/cadenas?ids=fantasma")
     assert r.status_code == 200
     assert r.json()["cadenas"]["fantasma"]["estado"] == "sin_cadena"
 
 
 def test_cadenas_lote_sin_ids_400(cliente):
-    assert cliente.get("/api/publicaciones/cadenas").status_code == 400
-    assert cliente.get("/api/publicaciones/cadenas?ids=,,").status_code == 400
+    assert cliente.get("/api/piezas/cadenas").status_code == 400
+    assert cliente.get("/api/piezas/cadenas?ids=,,").status_code == 400
 
 
 # --------------------------------------------------------------------------- #
@@ -616,10 +616,10 @@ def test_cadenas_lote_sin_ids_400(cliente):
 
 def test_put_publicado_es_terminal_400(cliente):
     """Una pieza `publicado` NO se mueve por el PUT generico (ni a borrador ni a otro)."""
-    pid = _crear(cliente).json()["publicacion"]["id"]
-    assert cliente.put(f"/api/publicaciones/{pid}", json={"estado": "publicado"}).status_code == 200
+    pid = _crear(cliente).json()["pieza"]["id"]
+    assert cliente.put(f"/api/piezas/{pid}", json={"estado": "publicado"}).status_code == 200
     for destino in ("borrador", "en_revision", "programado"):
-        r = cliente.put(f"/api/publicaciones/{pid}", json={"estado": destino})
+        r = cliente.put(f"/api/piezas/{pid}", json={"estado": destino})
         assert r.status_code == 400, destino
         assert "Transición" in r.json()["error"]
 
@@ -627,24 +627,24 @@ def test_put_publicado_es_terminal_400(cliente):
 def test_put_retroceso_invalido_400(cliente):
     """Retroceder a revisión NO se permite por el PUT genérico: `programado -> en_revision`
     se rechaza (desprogramar va a `borrador`; volver a revisión lo hace el flujo de revisión)."""
-    pid = _crear(cliente, estado="programado").json()["publicacion"]["id"]
-    r = cliente.put(f"/api/publicaciones/{pid}", json={"estado": "en_revision"})
+    pid = _crear(cliente, estado="programado").json()["pieza"]["id"]
+    r = cliente.put(f"/api/piezas/{pid}", json={"estado": "en_revision"})
     assert r.status_code == 400
     assert "Transición" in r.json()["error"]
 
 
 def test_put_mismo_estado_es_noop_permitido(cliente):
-    pid = _crear(cliente, estado="en_revision").json()["publicacion"]["id"]
-    r = cliente.put(f"/api/publicaciones/{pid}", json={"estado": "en_revision"})
+    pid = _crear(cliente, estado="en_revision").json()["pieza"]["id"]
+    r = cliente.put(f"/api/piezas/{pid}", json={"estado": "en_revision"})
     assert r.status_code == 200
-    assert r.json()["publicacion"]["estado"] == "en_revision"
+    assert r.json()["pieza"]["estado"] == "en_revision"
 
 
 def test_put_desprogramar_a_borrador_permitido(cliente):
-    pid = _crear(cliente, estado="programado").json()["publicacion"]["id"]
-    r = cliente.put(f"/api/publicaciones/{pid}", json={"estado": "borrador"})
+    pid = _crear(cliente, estado="programado").json()["pieza"]["id"]
+    r = cliente.put(f"/api/piezas/{pid}", json={"estado": "borrador"})
     assert r.status_code == 200
-    assert r.json()["publicacion"]["estado"] == "borrador"
+    assert r.json()["pieza"]["estado"] == "borrador"
 
 
 # --------------------------------------------------------------------------- #
@@ -656,13 +656,13 @@ def test_encolar_publicado_es_terminal_409(cliente):
     """Una pieza ya publicada NO se re-encola: el endpoint la rechaza ANTES de tocar nada."""
     pub = _crear(
         cliente, estado="publicado", fecha_programada="2026-06-15T18:00"
-    ).json()["publicacion"]
+    ).json()["pieza"]
     pid = pub["id"]
-    r = cliente.post(f"/api/publicaciones/{pid}/encolar")
+    r = cliente.post(f"/api/piezas/{pid}/encolar")
     assert r.status_code == 409
     assert "publicada" in r.json()["error"].lower()
     # Sigue publicado, con su fecha intacta.
-    despues = cliente.get(f"/api/publicaciones/{pid}").json()["publicacion"]
+    despues = cliente.get(f"/api/piezas/{pid}").json()["pieza"]
     assert despues["estado"] == "publicado"
     assert despues["fecha_programada"] == "2026-06-15T18:00"
 
@@ -672,22 +672,22 @@ def test_put_fecha_programada_publicado_es_terminal_409(cliente):
     sin cambio. El no-op (misma fecha, distinto formato) SÍ se permite (guardado inocuo)."""
     pub = _crear(
         cliente, estado="publicado", fecha_programada="2026-06-15T18:00"
-    ).json()["publicacion"]
+    ).json()["pieza"]
     pid = pub["id"]
     r = cliente.put(
-        f"/api/publicaciones/{pid}", json={"fecha_programada": "2026-06-20T12:00"}
+        f"/api/piezas/{pid}", json={"fecha_programada": "2026-06-20T12:00"}
     )
     assert r.status_code == 409
     assert "publicada" in r.json()["error"].lower()
-    despues = cliente.get(f"/api/publicaciones/{pid}").json()["publicacion"]
+    despues = cliente.get(f"/api/piezas/{pid}").json()["pieza"]
     assert despues["estado"] == "publicado"
     assert despues["fecha_programada"] == "2026-06-15T18:00"
     # No-op: misma fecha con segundos -> tras el canon es idéntica -> 200 (no rompe).
     ok = cliente.put(
-        f"/api/publicaciones/{pid}", json={"fecha_programada": "2026-06-15T18:00:00"}
+        f"/api/piezas/{pid}", json={"fecha_programada": "2026-06-15T18:00:00"}
     )
     assert ok.status_code == 200
-    assert ok.json()["publicacion"]["fecha_programada"] == "2026-06-15T18:00"
+    assert ok.json()["pieza"]["fecha_programada"] == "2026-06-15T18:00"
 
 
 def test_put_mover_fecha_resetea_preparado_en(cliente):
@@ -698,16 +698,16 @@ def test_put_mover_fecha_resetea_preparado_en(cliente):
 
     pid = _crear(
         cliente, estado="programado", fecha_programada="2026-06-15T18:00"
-    ).json()["publicacion"]["id"]
+    ).json()["pieza"]["id"]
     # Estampa el claim de preparación (como hace el barrido al preparar la pieza).
     assert repos.reclamar_preparacion(pid, "2026-06-15T17:50:00")
-    assert repos.obtener_publicacion(pid)["preparado_en"] == "2026-06-15T17:50:00"
+    assert repos.obtener_pieza(pid)["preparado_en"] == "2026-06-15T17:50:00"
 
     r = cliente.put(
-        f"/api/publicaciones/{pid}", json={"fecha_programada": "2026-06-16T19:00"}
+        f"/api/piezas/{pid}", json={"fecha_programada": "2026-06-16T19:00"}
     )
     assert r.status_code == 200
-    despues = repos.obtener_publicacion(pid)
+    despues = repos.obtener_pieza(pid)
     assert despues["fecha_programada"] == "2026-06-16T19:00"
     assert despues["preparado_en"] == ""  # claim reseteado: el barrido la volverá a publicar
 
@@ -719,13 +719,13 @@ def test_put_misma_fecha_conserva_preparado_en(cliente):
 
     pid = _crear(
         cliente, estado="programado", fecha_programada="2026-06-15T18:00"
-    ).json()["publicacion"]["id"]
+    ).json()["pieza"]["id"]
     assert repos.reclamar_preparacion(pid, "2026-06-15T17:50:00")
     r = cliente.put(
-        f"/api/publicaciones/{pid}", json={"fecha_programada": "2026-06-15T18:00"}
+        f"/api/piezas/{pid}", json={"fecha_programada": "2026-06-15T18:00"}
     )
     assert r.status_code == 200
-    assert repos.obtener_publicacion(pid)["preparado_en"] == "2026-06-15T17:50:00"
+    assert repos.obtener_pieza(pid)["preparado_en"] == "2026-06-15T17:50:00"
 
 
 # --------------------------------------------------------------------------- #
@@ -736,29 +736,29 @@ def test_put_misma_fecha_conserva_preparado_en(cliente):
 def test_fecha_programada_se_normaliza_a_minutos(cliente):
     """El UNIQUE de parrilla compara el TEXT crudo: 'T18:00:00' y 'T18:00' deben quedar
     iguales tras la normalizacion."""
-    pid = _crear(cliente).json()["publicacion"]["id"]
+    pid = _crear(cliente).json()["pieza"]["id"]
     r = cliente.put(
-        f"/api/publicaciones/{pid}",
+        f"/api/piezas/{pid}",
         json={"estado": "programado", "fecha_programada": "2026-06-10T18:00:00"},
     )
     assert r.status_code == 200
-    assert r.json()["publicacion"]["fecha_programada"] == "2026-06-10T18:00"
+    assert r.json()["pieza"]["fecha_programada"] == "2026-06-10T18:00"
 
 
 def test_fecha_programada_con_offset_se_convierte_a_utc(cliente):
-    pid = _crear(cliente).json()["publicacion"]["id"]
+    pid = _crear(cliente).json()["pieza"]["id"]
     r = cliente.put(
-        f"/api/publicaciones/{pid}",
+        f"/api/piezas/{pid}",
         json={"estado": "programado", "fecha_programada": "2026-06-10T12:00:00-06:00"},
     )
     assert r.status_code == 200
-    assert r.json()["publicacion"]["fecha_programada"] == "2026-06-10T18:00"
+    assert r.json()["pieza"]["fecha_programada"] == "2026-06-10T18:00"
 
 
 def test_fecha_programada_invalida_400(cliente):
-    pid = _crear(cliente).json()["publicacion"]["id"]
+    pid = _crear(cliente).json()["pieza"]["id"]
     r = cliente.put(
-        f"/api/publicaciones/{pid}", json={"fecha_programada": "manana a las 6"}
+        f"/api/piezas/{pid}", json={"fecha_programada": "manana a las 6"}
     )
     assert r.status_code == 400
     assert "fecha" in r.json()["error"].lower()
@@ -767,22 +767,22 @@ def test_fecha_programada_invalida_400(cliente):
 def test_crear_normaliza_fecha_programada(cliente):
     pub = _crear(
         cliente, estado="programado", fecha_programada="2026-06-11T09:30:15"
-    ).json()["publicacion"]
+    ).json()["pieza"]
     assert pub["fecha_programada"] == "2026-06-11T09:30"
 
 
 def test_doble_reserva_mismo_slot_con_formatos_distintos_409(cliente):
     """Dos piezas al MISMO instante con formatos distintos ('T18:00' vs 'T18:00:00')
     chocan tras el canon: la segunda recibe 409."""
-    a = _crear(cliente).json()["publicacion"]["id"]
-    b = _crear(cliente).json()["publicacion"]["id"]
+    a = _crear(cliente).json()["pieza"]["id"]
+    b = _crear(cliente).json()["pieza"]["id"]
     r1 = cliente.put(
-        f"/api/publicaciones/{a}",
+        f"/api/piezas/{a}",
         json={"estado": "programado", "fecha_programada": "2026-06-12T18:00"},
     )
     assert r1.status_code == 200
     r2 = cliente.put(
-        f"/api/publicaciones/{b}",
+        f"/api/piezas/{b}",
         json={"estado": "programado", "fecha_programada": "2026-06-12T18:00:00"},
     )
     assert r2.status_code == 409
@@ -797,8 +797,8 @@ def test_listado_respeta_cap_de_servidor(cliente, monkeypatch):
     monkeypatch.setenv("KENI_LISTADO_MAX", "2")
     for i in range(4):
         _crear(cliente, titulo=f"Cap{i}")
-    datos = cliente.get("/api/publicaciones").json()
-    assert len(datos["publicaciones"]) == 2  # acotado por el cap
+    datos = cliente.get("/api/piezas").json()
+    assert len(datos["piezas"]) == 2  # acotado por el cap
     assert datos["paginacion"]["total"] == 4  # el total sigue siendo exacto
     assert datos["paginacion"]["limite"] == 2  # cap reportado (hubo truncado)
 
@@ -806,7 +806,7 @@ def test_listado_respeta_cap_de_servidor(cliente, monkeypatch):
 def test_body_json_gigante_413(cliente, monkeypatch):
     monkeypatch.setenv("KENI_JSON_MAX_BYTES", "1024")
     r = cliente.post(
-        "/api/publicaciones",
+        "/api/piezas",
         json={"marca": "unotv", "red": "x", "titulo": "T", "contenido": "x" * 5000},
     )
     assert r.status_code == 413

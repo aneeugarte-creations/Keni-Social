@@ -341,8 +341,8 @@ def test_usar_item_crea_contenido():
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["item"]["usado"] is True
-    assert data["contenido_id"] != ""
-    assert data["item"]["contenido_id"] == data["contenido_id"]
+    assert data["publicacion_id"] != ""
+    assert data["item"]["publicacion_id"] == data["publicacion_id"]
 
 
 def test_listar_expone_pieza_estado_honesto_del_item_usado():
@@ -367,7 +367,7 @@ def test_usar_item_doble_es_idempotente():
     r2 = cli.post(f"/api/insumos/item/{item_id}/usar", json={"generar": False})
     assert r1.status_code == 200
     assert r2.status_code == 200
-    assert r1.json()["contenido_id"] == r2.json()["contenido_id"]
+    assert r1.json()["publicacion_id"] == r2.json()["publicacion_id"]
 
 
 def test_usar_item_inexistente_404(cliente):
@@ -388,15 +388,15 @@ def test_usar_item_sin_marca_400_y_no_crea_contenido():
     # El ítem sigue SIN usar (re-empujable tras asignarle marca)…
     item = repos.obtener_insumo_item(item_id)
     assert item["usado"] is False
-    assert item["contenido_id"] == ""
+    assert item["publicacion_id"] == ""
     # …y NO quedó ninguna pieza fantasma en el tablero.
-    contenidos = repos.listar_contenido(clase="contenido")
+    contenidos = repos.listar_publicacion(clase="contenido")
     assert all(c["titulo"] != "Nota sin marca asignada" for c in contenidos)
 
 
 def test_usar_item_ya_recogido_por_autofeed_409():
     """Si la historia gemela del pool YA tiene pieza (el auto-feed la recogió y marcó sus
-    items `usado`+`contenido_id`), empujar de nuevo sería una SEGUNDA pieza del tema: 409."""
+    items `usado`+`publicacion_id`), empujar de nuevo sería una SEGUNDA pieza del tema: 409."""
     from keni_consola import repos
     from keni_consola.dominio import ingesta
 
@@ -408,19 +408,19 @@ def test_usar_item_ya_recogido_por_autofeed_409():
     gemela = repos.noticia_item_por_clave(fila["fuente_id"], fila["clave"])
     assert gemela is not None
     # Simula el auto-feed: la historia se promovió (marcar_items_cluster_usados).
-    repos.actualizar_noticia_item(gemela["id"], estado="usado", contenido_id="pieza-autofeed")
+    repos.actualizar_noticia_item(gemela["id"], estado="usado", publicacion_id="pieza-autofeed")
 
     r = cli.post(f"/api/insumos/item/{item_id}/usar", json={"generar": False})
     assert r.status_code == 409
     assert "auto-feed" in r.json()["error"]
     # El ítem NO quedó usado y no se creó una segunda pieza.
     assert repos.obtener_insumo_item(item_id)["usado"] is False
-    contenidos = repos.listar_contenido(clase="contenido")
+    contenidos = repos.listar_publicacion(clase="contenido")
     assert all(c["titulo"] != "Gol agónico del América" for c in contenidos)
 
 
 def test_usar_item_marca_la_gemela_del_pool_usada():
-    """El empujón manual también marca la gemela del pool `usado`+`contenido_id`: el
+    """El empujón manual también marca la gemela del pool `usado`+`publicacion_id`: el
     auto-feed ya no vuelve a promover el mismo tema después (dedup en ambos sentidos)."""
     from keni_consola import repos
     from keni_consola.dominio import ingesta
@@ -435,7 +435,7 @@ def test_usar_item_marca_la_gemela_del_pool_usada():
     gemela = repos.noticia_item_por_clave(fila["fuente_id"], fila["clave"])
     assert gemela is not None
     assert gemela["estado"] == "usado"
-    assert gemela["contenido_id"] == r.json()["contenido_id"]
+    assert gemela["publicacion_id"] == r.json()["publicacion_id"]
 
 
 def test_usar_item_contexto_rechazado_400():
@@ -484,7 +484,7 @@ def test_crear_evento_crea_evento_y_marca_item_usado():
     data = r.json()
     assert data["item"]["usado"] is True
     assert data["evento_id"] != ""
-    assert data["item"]["contenido_id"] == data["evento_id"]
+    assert data["item"]["publicacion_id"] == data["evento_id"]
     evento = data["evento"]
     assert evento["titulo"] == "Cruz Azul vs América"
     assert evento["fecha"] == "2026-06-10"

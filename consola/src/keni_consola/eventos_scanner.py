@@ -26,7 +26,7 @@ from .tiempo import hoy_utc
 
 _log = logging.getLogger("keni_consola.eventos_scanner")
 
-# Estados en los que un deadline vencido ya no importa (coincide con `api/contenido`).
+# Estados en los que un deadline vencido ya no importa (coincide con `api/publicaciones`).
 _ESTADOS_CERRADOS = ("publicado", "hecha")
 
 
@@ -56,7 +56,7 @@ def emitir_vencimientos(hoy: date | None = None) -> int:
     """
     hoy_iso = (hoy or hoy_utc()).isoformat()
     try:
-        items = repos.listar_contenido_vencido(hoy_iso)
+        items = repos.listar_publicaciones_vencido(hoy_iso)
     except Exception:  # noqa: BLE001 -- un fallo de lectura no debe matar el barrido
         _log.exception("No se pudo leer el tablero para el barrido de vencimientos.")
         return 0
@@ -69,7 +69,7 @@ def emitir_vencimientos(hoy: date | None = None) -> int:
         nuevo = eventos.emitir(
             "contenido.vencido",
             {
-                "contenido_id": it["id"],
+                "publicacion_id": it["id"],
                 "titulo": it.get("titulo", ""),
                 "marca": it.get("marca", ""),
                 "marca_nombre": marcas.etiqueta_de(it["marca"]) if it.get("marca") else "",
@@ -77,7 +77,7 @@ def emitir_vencimientos(hoy: date | None = None) -> int:
                 "responsable_nombre": it.get("responsable_nombre", ""),
                 "estado": it.get("estado", ""),
             },
-            contenido_id=it["id"],
+            publicacion_id=it["id"],
             clave_idempotencia=clave,
         )
         if nuevo:

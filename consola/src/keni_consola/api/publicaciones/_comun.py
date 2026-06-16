@@ -1,90 +1,197 @@
-"""Helpers e infraestructura COMPARTIDA del paquete `api.publicaciones`.
+"""Imports y helpers COMPARTIDOS por varios submódulos de `api/publicaciones/`.
 
-Reune lo que usan varias areas (CRUD y espejo) sin crear ciclos: la serializacion de
-piezas, las flags de readiness derivadas del contenido y el reset de aprobaciones al
-editar contenido ya aprobado.
+Este módulo NO exporta `RUTAS` (su nombre va con `_`, así que el descubridor de
+`api/__init__.py` ni lo escanea —vive dentro del subpaquete—). Reúne lo que más de
+un handler del tablero necesita: los puentes a los módulos de la Consola
+(`marcas`, `redes`, `repos`, `permisos`…), las constantes de límites/estados, el
+logger y los helpers transversales de red/serialización/validación de marca y
+responsable. Los submódulos importan de aquí EXPLÍCITAMENTE.
 """
 
 from __future__ import annotations
 
-from typing import Any
+import logging
 
-from ... import repos
-from ...dominio import colaboracion
-from ...dominio.publicaciones import flags_falta_de_contenido, publicacion_a_dict
+from starlette.requests import Request
+
+from ... import (
+    auth,
+    auto_responsable,
+    autogen_redactar,
+    config,
+    generaciones,
+    importador_calendario,
+    marcas,
+    media,
+    metricas_pieza,
+    permisos,
+    redes,
+    repos,
+    rutas,
+    transcripcion,
+)
+from ..._http_json import leer_json
+from ...dominio import asistente, estudio_imagen, eventos, jobspec, placeholders
 from ...estados import (
-    ESTADO_EN_REVISION,
-    ESTADO_PROGRAMADO,
+    CLASES_PUBLICACION,
+    ESTADOS_PUBLICACION,
+    ESTADOS_PIEZA,
+    FLUJOS_CONTENIDO,
+    ORIGEN_EQUIPO,
+    PRIORIDADES_CONTENIDO,
+    TIPOS_CONTENIDO,
 )
+from ...seguridad import autor_de_peticion
+from ...tiempo import hoy_utc
 
-# Alias local para los handlers de este modulo. La serializacion vive en el dominio
-# (`dominio.publicaciones.publicacion_a_dict`): asi `api/skills.py` la consume desde un
-# sitio comun y publico, sin importar un simbolo privado de este handler (H6/N7).
-_publicacion_a_dict = publicacion_a_dict
+__all__ = [
+    # Puentes a módulos de la Consola que usan los submódulos.
+    "auth",
+    "auto_responsable",
+    "autogen_redactar",
+    "config",
+    "generaciones",
+    "importador_calendario",
+    "marcas",
+    "media",
+    "metricas_pieza",
+    "permisos",
+    "redes",
+    "repos",
+    "rutas",
+    "transcripcion",
+    "leer_json",
+    "asistente",
+    "estudio_imagen",
+    "eventos",
+    "jobspec",
+    "placeholders",
+    "autor_de_peticion",
+    # Constantes de estados/clases.
+    "CLASES_PUBLICACION",
+    "ESTADOS_PUBLICACION",
+    "ESTADOS_PIEZA",
+    "FLUJOS_CONTENIDO",
+    "ORIGEN_EQUIPO",
+    "PRIORIDADES_CONTENIDO",
+    "TIPOS_CONTENIDO",
+    # Logger y constantes locales.
+    "_log",
+    "_RED_WEB",
+    "_ESTADOS_CERRADOS",
+    "_MAX_TITULO",
+    "_MAX_TEXTO",
+    # Helpers transversales.
+    "_orden_red",
+    "_red_valida",
+    "_red_nombre",
+    "_usuarios_asignables",
+    "_resolver_responsable",
+    "_plataforma_a_dict",
+    "_contenido_a_dict",
+    "_validar_marca",
+    "_enfocar_items_por_marca",
+]
+
+_log = logging.getLogger("keni_consola.api.publicaciones")
+
+# Canal extra del tablero que NO es una red social del catalogo (no entra en Metricool):
+# "web" cubre la nota en el sitio. Se admite como `red` de una fila por plataforma.
+_RED_WEB = "web"
+
+# Estados terminales para los que un deadline vencido ya no es relevante.
+_ESTADOS_CERRADOS = ("publicado", "hecha")
+
+_MAX_TITULO = 300
+_MAX_TEXTO = 8000
 
 
-# Campos de CONTENIDO que el espejo propaga entre redes hermanas (la "receta" completa de la
-# pieza: copy + copy-in + foto/collage + plantilla). Estado, fechas y flags NO se espejan.
-# También es la lista de campos cuyo cambio invalida aprobaciones (junto con `titulo`).
-_CAMPOS_ESPEJO: tuple[str, ...] = (
-    "contenido", "copy_in", "imagen", "foto", "fotos", "carrusel",
-    "plantilla_diseno_id", "foto_encuadre", "placa_oculta",
-)
-
-# Campos cuyo cambio altera las flags de readiness DERIVADAS del contenido (copy/foto): si la
-# edición toca alguno, hay que recalcular `falta_copy`/`falta_imagen`.
-_CAMPOS_CONTENIDO_FALTA: tuple[str, ...] = ("contenido", "foto", "imagen")
+def _orden_red(red: str) -> int:
+    """Indice de orden canonico de una red (las del catalogo primero, "web"/otros al final)."""
+    ids = redes.ids()
+    return ids.index(red) if red in ids else len(ids)
 
 
-def _inyectar_flags_falta(actual: dict[str, Any], campos: dict[str, Any]) -> None:
-    """Si la edición toca el contenido (copy/foto/imagen), recalcula e INYECTA en `campos` las
-    flags `falta_copy`/`falta_imagen` del estado RESULTANTE (fila + edición), para que la LISTA
-    del feed (que lee las flags ALMACENADAS) refleje el cambio sin abrir cada pieza —incluidas
-    las redes ESPEJO—. NO toca las flags de aprobación/publicación (eso no se espeja)."""
-    if not any(k in campos for k in _CAMPOS_CONTENIDO_FALTA):
-        return
-    campos.update(flags_falta_de_contenido({**actual, **campos}))
-
-# Reset al perder aprobaciones: la pieza vuelve a borrador con la revisión limpia (reentrará
-# sola a revisión cuando se reenvíe, exigiendo OK nuevos).
-_RESET_APROBACIONES: dict[str, Any] = {
-    "estado": "borrador",
-    "revisor_id": "",
-    "revisor_nombre": "",
-    "revisado_en": "",
-    "enviado_a_revision_en": "",
-    "fecha_programada": "",
-}
+def _red_valida(red: str) -> bool:
+    return redes.es_red(red) or red == _RED_WEB
 
 
-def _pierde_aprobaciones(actual: dict[str, Any], campos: dict[str, Any]) -> bool:
-    """True si aplicar `campos` a la pieza `actual` invalida aprobaciones YA dadas.
+def _red_nombre(red: str) -> str:
+    return "Web" if red == _RED_WEB else redes.nombre_por_id(red)
 
-    Editar el CONTENIDO de una pieza que acumula aprobaciones las invalida (como reescribir
-    un PR aprobado). Solo cuando hay aprobaciones REALES que perder (aprobada/programada, o
-    en revisión con un OK humano). No aplica si la propia petición fija `estado` (el flujo
-    la está moviendo a propósito).
+
+def _usuarios_asignables(marca: str | None = None) -> list[dict[str, str]]:
+    """Usuarios candidatos a RESPONSABLE: los de cobertura, ACOTADOS a la `marca` activa
+    (cada marca tiene SU equipo; sin marca = todos, p.ej. la vista «Todas» del admin).
+
+    Misma regla que el tablero de tareas: un contenido lo asume quien hace coberturas.
     """
-    cambia_contenido = any(
-        clave in campos and campos[clave] != actual.get(clave)
-        for clave in ("titulo", *_CAMPOS_ESPEJO)
-    )
-    if not cambia_contenido or "estado" in campos:
-        return False
-    estado_actual = actual.get("estado") or ""
-    if estado_actual == ESTADO_PROGRAMADO:
-        return True
-    if estado_actual == ESTADO_EN_REVISION:
-        cadena = repos.listar_aprobaciones(actual["id"])
-        return colaboracion.contar_aprobaciones_humanas(cadena) > 0
-    return False
+    return [
+        {"id": u["id"], "usuario": u["usuario"]}
+        for u in auth.listar_usuarios()
+        if u.get("cobertura") and (not marca or marca in (u.get("marcas") or []))
+    ]
 
 
-def _limpiar_cadena(publicacion_id: str) -> None:
-    """Recrea la cadena de aprobación VACÍA de la pieza (las aprobaciones previas se pierden)."""
-    plat = repos.obtener_contenido_plataforma(publicacion_id)
-    repos.crear_cadena_aprobacion(
-        plataforma_id=publicacion_id,
-        contenido_id=(plat or {}).get("contenido_id", "") or "",
-        etiquetas=[],
+def _resolver_responsable(
+    responsable_id: object,
+) -> tuple[dict[str, str] | None, bool]:
+    """Resuelve un `responsable_id` del cliente a `{"id","usuario"}`. Ver api/tareas."""
+    if responsable_id in (None, ""):
+        return None, True
+    if not isinstance(responsable_id, str):
+        return None, False
+    usuario = auth.obtener_usuario_por_id(responsable_id)
+    if usuario is None:
+        return None, False
+    return {"id": usuario["id"], "usuario": usuario["usuario"]}, True
+
+
+def _plataforma_a_dict(plat: dict) -> dict:
+    """Serializa una fila por plataforma anadiendo el nombre legible de la red."""
+    return {**plat, "red_nombre": _red_nombre(plat.get("red", ""))}
+
+
+def _contenido_a_dict(
+    item: dict, plataformas: list[dict], etiquetas: list[str] | None = None
+) -> dict:
+    """Serializa un item del tablero con sus plataformas (ordenadas), etiquetas y `vencido`."""
+    hoy = hoy_utc().isoformat()
+    entrega = item.get("fecha_entrega") or ""
+    vencido = bool(
+        entrega and entrega < hoy and item.get("estado") not in _ESTADOS_CERRADOS
     )
+    plats = sorted(plataformas, key=lambda p: (_orden_red(p.get("red", "")), p.get("creado", "")))
+    return {
+        **item,
+        "marca_nombre": marcas.etiqueta_de(item["marca"]) if item.get("marca") else "",
+        "vencido": vencido,
+        "plataformas": [_plataforma_a_dict(p) for p in plats],
+        "etiquetas": list(etiquetas or []),
+    }
+
+
+def _validar_marca(marca: object) -> tuple[str | None, str | None]:
+    if marca in (None, ""):
+        return "", None
+    if not isinstance(marca, str) or not marcas.es_marca(marca):
+        return None, "Marca no permitida."
+    return marca, None
+
+
+def _enfocar_items_por_marca(
+    request: Request, items: list[dict], marca_explicita: str | None
+) -> list[dict]:
+    """Enfoca un listado de contenidos en las marcas preferentes de la sesion (FOCO POR DEFECTO).
+
+    NO es una restriccion: solo reduce la mezcla de contexto cuando NO se pide marca explicita.
+    Si se pide una marca (cualquiera, de cualquier marca), se respeta tal cual (foco
+    sobreescrito). Sin preferencia (admin/token/sin marcas asignadas) devuelve la lista intacta.
+    Las filas sin marca se conservan. Pasar una `marca` explicita siempre puede ver otra marca.
+    """
+    if marca_explicita:
+        return items
+    preferentes = permisos.marcas_preferentes(request)
+    if preferentes is None:
+        return items
+    return [it for it in items if not it.get("marca") or it.get("marca") in preferentes]

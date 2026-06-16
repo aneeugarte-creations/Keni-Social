@@ -10,7 +10,7 @@ deslizante de las últimas `_MAX_MUESTRAS` peticiones.
 DISEÑO:
   - LATENCIA = tiempo hasta `http.response.start` (primer byte), NO la duración total:
     una conexión SSE abierta horas no debe contaminar los percentiles.
-  - Rutas NORMALIZADAS (`/api/contenido/abc123` -> `/api/contenido/{id}`) para acotar la
+  - Rutas NORMALIZADAS (`/api/publicaciones/abc123` -> `/api/publicaciones/{id}`) para acotar la
     cardinalidad; tope duro de `_MAX_RUTAS` rutas (al llegar, las nuevas van a "(otras)").
   - Por proceso y en memoria: se reinicia con el deploy (suficiente para operar; la
     persistencia histórica no es el objetivo). Thread-safe con un lock simple.

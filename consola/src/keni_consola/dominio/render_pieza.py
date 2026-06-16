@@ -216,9 +216,9 @@ def imagen_url_de(pub: dict[str, Any]) -> str:
     """URL servible de la imagen de la pieza para la UI/MCP (sin renderizar nada aquí).
 
     Precedencia (barata, sin componer):
-      - receta viva en pieza NO publicada   -> `/api/publicaciones/{id}/compuesta`.
+      - receta viva en pieza NO publicada   -> `/api/piezas/{id}/compuesta`.
       - `imagen` horneada (bespoke/legacy/publicada) -> `/api/media/{imagen}`.
-      - receta derivable                   -> `/api/publicaciones/{id}/compuesta` (on-demand).
+      - receta derivable                   -> `/api/piezas/{id}/compuesta` (on-demand).
       - foto cruda                          -> `/api/media/{foto}`.
       - imagen de fuente (URL externa)      -> esa URL.
       - nada                                -> "".
@@ -230,7 +230,7 @@ def imagen_url_de(pub: dict[str, Any]) -> str:
     if imagen and not _receta_manda(pub):
         return f"/api/media/{imagen}"
     if tiene_receta(pub):
-        return f"/api/publicaciones/{pub['id']}/compuesta{_sufijo_cache(pub)}"
+        return f"/api/piezas/{pub['id']}/compuesta{_sufijo_cache(pub)}"
     foto = (pub.get("foto") or "").strip()
     if foto:
         return f"/api/media/{foto}"

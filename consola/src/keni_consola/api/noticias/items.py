@@ -76,16 +76,16 @@ async def usar(request: Request) -> Response:
     Cuerpo `{redes?: [ids], generar?: bool}`. Reusa el camino de la aportación manual: crea un
     `contenido` (`flujo='importante'`, `origen='noticia'`, `tipo_contenido='fuente'`) con el
     título/resumen/url del item y, si hay marca y `generar` (def True), encola copy en segundo
-    plano. Marca el item `estado=usado` + `contenido_id`. Idempotente-amistoso: si ya estaba
+    plano. Marca el item `estado=usado` + `publicacion_id`. Idempotente-amistoso: si ya estaba
     usado, devuelve el contenido enlazado sin duplicar.
     """
     item_id = request.path_params["item_id"]
     item = repos.obtener_noticia_item(item_id)
     if item is None:
         return JSONResponse({"error": "Esa noticia ya no existe."}, status_code=404)
-    if item.get("estado") == "usado" and item.get("contenido_id"):
+    if item.get("estado") == "usado" and item.get("publicacion_id"):
         return JSONResponse(
-            {"contenido": {"id": item["contenido_id"]}, "copy_en_proceso": False, "ya_usada": True}
+            {"contenido": {"id": item["publicacion_id"]}, "copy_en_proceso": False, "ya_usada": True}
         )
 
     datos = await leer_json(request)
@@ -100,7 +100,7 @@ async def usar(request: Request) -> Response:
         # Deja el enlace de origen en la nota para trazar la fuente.
         descripcion = (descripcion + f"\n\nFuente: {item['url']}").strip()
 
-    contenido = repos.crear_contenido(
+    contenido = repos.crear_publicacion(
         clase="contenido",
         flujo="importante",
         # LÍNEA del plan: la categoría del ITEM (un item suelto no tiene señal de breaking).
@@ -117,8 +117,8 @@ async def usar(request: Request) -> Response:
         url_fuente=item.get("url_canonica") or "",
     )
     for red in redes_iniciales:
-        repos.crear_contenido_plataforma(
-            contenido_id=contenido["id"], red=red, falta_copy=True, falta_imagen=True
+        repos.crear_pieza_fila(
+            publicacion_id=contenido["id"], red=red, falta_copy=True, falta_imagen=True
         )
 
     # Copy en segundo plano (best-effort), gateado por marca + flag `generar` (def True).
@@ -130,8 +130,8 @@ async def usar(request: Request) -> Response:
         except Exception:  # noqa: BLE001 -- la generación es opcional; nunca tumba el uso
             genero = False
 
-    repos.actualizar_noticia_item(item_id, estado="usado", contenido_id=contenido["id"])
-    plataformas = repos.listar_contenido_plataforma(contenido["id"])
+    repos.actualizar_noticia_item(item_id, estado="usado", publicacion_id=contenido["id"])
+    plataformas = repos.listar_piezas_fila(contenido["id"])
     return JSONResponse(
         {
             "contenido": {**contenido, "plataformas": plataformas},

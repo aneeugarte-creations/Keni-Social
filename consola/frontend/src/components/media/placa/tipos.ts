@@ -12,7 +12,7 @@ export interface EditorPlacaInlineProps {
   marca: string;
   /** Id de la publicación que se edita: al generar imagen con IA, correlaciona la generación
    * con el pipeline de la pieza (etapa Arte) en vez de quedar como una generación suelta. */
-  publicacionId?: string;
+  piezaId?: string;
   /** Plantilla del estudio elegida (documento de capas). `null` = sin plantilla = foto cruda. */
   documento: Documento | null;
   /** Titular en vivo (texto DENTRO de la imagen / copy-in de la pieza). */

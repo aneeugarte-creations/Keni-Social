@@ -6,18 +6,18 @@
  * endpoint dedicado de estado-por-etapa: lo PROVEERÁ el Flujo C (Orquestación, Fase 2),
  * que encadena los daemons con "estado visible por pieza" (ver plan §Fase 2).
  *
- * Mientras tanto, DERIVAMOS la etapa de lo que ya trae cada `Publicacion`:
+ * Mientras tanto, DERIVAMOS la etapa de lo que ya trae cada `Pieza`:
  *  - `estado` (borrador/en_revision/programado/publicado), y
  *  - la checklist `falta_copy` / `falta_imagen` / `falta_revision`.
  *
  * CABLEADO CON C (follow-up #3, ya en producción):
- *  El backend (Flujo C) YA expone la etapa real por pieza en `Publicacion.etapa_ia`,
+ *  El backend (Flujo C) YA expone la etapa real por pieza en `Pieza.etapa_ia`,
  *  derivada por `pipeline_estado.etapa_de_pieza` (misma lógica que la derivación de abajo,
- *  pero como FUENTE ÚNICA en servidor). `etapaDePublicacion` la PREFIERE cuando viene; la
+ *  pero como FUENTE ÚNICA en servidor). `etapaDePieza` la PREFIERE cuando viene; la
  *  derivación en cliente queda solo como DEGRADACIÓN para piezas legadas/parciales que aún
  *  no la traigan. La forma de salida (`EtapaIa`) es el contrato del feed.
  */
-import type { Publicacion } from "@/types";
+import type { Pieza } from "@/types";
 
 /** Las etapas observables de la pipeline IA, en orden. Una pieza COMPLETA (copy + arte) está
  *  "lista para revisar" en cuanto tiene todo su contenido: el pipeline la mueve sola a la cola
@@ -81,7 +81,7 @@ const PAT_HASHTAG = /#[\p{L}\p{N}_]+/u;
 
 /** ¿Falta el TEXTO sobre la imagen (placa, `copy_in`)? Solo en piezas de MARCA con placa
  *  (foto/carrusel), no exentas ni con placa oculta. ESPEJO de `_falta_copy_in` del backend. */
-function faltaCopyIn(p: Publicacion): boolean {
+function faltaCopyIn(p: Pieza): boolean {
   if (!p.marca) return false;
   const fmt = (p.formato ?? "").trim().toLowerCase();
   if (fmt !== "foto" && fmt !== "carrusel") return false;
@@ -90,7 +90,7 @@ function faltaCopyIn(p: Publicacion): boolean {
 }
 
 /** ¿El copy no lleva ningún hashtag? Clave para monitorizar campañas y líneas de contenido. */
-function faltaHashtags(p: Publicacion): boolean {
+function faltaHashtags(p: Pieza): boolean {
   return !PAT_HASHTAG.test(p.contenido ?? "");
 }
 
@@ -115,19 +115,19 @@ function faltaHashtags(p: Publicacion): boolean {
  * (`imagen_fuente`) es solo una URL de referencia, NO una foto inyectada: una pieza sin `foto`
  * propia sigue en "Falta imagen" aunque traiga `imagen_fuente`.
  *
- * El backend (Flujo C) trae la etapa real en `p.etapa_ia`; `etapaDePublicacion` la PREFIERE
+ * El backend (Flujo C) trae la etapa real en `p.etapa_ia`; `etapaDePieza` la PREFIERE
  * cuando llega y es una etapa conocida. Esta derivación queda como degradación (piezas
  * legadas/parciales que no la traigan).
  */
-export function etapaDePublicacion(p: Publicacion): EtapaIa {
+export function etapaDePieza(p: Pieza): EtapaIa {
   return etapaBruta(p);
 }
 
 /** Etapa sin normalizar: la explícita del backend si llega, o la derivación local. */
-function etapaBruta(p: Publicacion): EtapaIa {
+function etapaBruta(p: Pieza): EtapaIa {
   // Etapa REAL de la pipeline (Flujo C, `pipeline_estado.etapa_de_pieza`): si llega y es una
   // etapa conocida, manda sobre la derivación local. El backend la sirve hoy en
-  // `Publicacion.etapa_ia`; el guard cubre respuestas legadas/parciales que la omitan.
+  // `Pieza.etapa_ia`; el guard cubre respuestas legadas/parciales que la omitan.
   const explicita = (p as { etapa_ia?: string }).etapa_ia;
   if (explicita && explicita in META_ETAPA) return explicita as EtapaIa;
 

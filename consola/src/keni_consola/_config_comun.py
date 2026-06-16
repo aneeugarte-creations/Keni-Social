@@ -136,7 +136,7 @@ ENV_ALERTAS_ACTIVAS = "KENI_ALERTAS_RENDIMIENTO"
 # rendimiento" y dispara una alerta. Def 1.0 (muy por debajo del ~2-3% tipico del piloto).
 ENV_ALERTAS_UMBRAL_ENGAGEMENT = "KENI_ALERTAS_UMBRAL_ENGAGEMENT"
 
-# Publicacion real via Metricool (gate de seguridad; def OFF = dry-run).
+# Pieza real via Metricool (gate de seguridad; def OFF = dry-run).
 # `KENI_PUBLICAR_REAL=1` activa el posteo real al scheduler de Metricool en el
 # barrido del programador. Sin este flag (o con valor falso) el barrido SOLO
 # estampa `preparado_en` (dry-run): ningun post se envia a Metricool.
@@ -164,7 +164,7 @@ ENV_MIN_APROBACIONES = "KENI_MIN_APROBACIONES"
 # NINGUN daemon de automatizacion de CONTENIDO corre, aunque su toggle individual este ON: es
 # la condicion necesaria que se ANDea con cada toggle (ver `gate_maquina`). Cuando esta ON,
 # cada subsistema sigue EXACTAMENTE su propio toggle, como hasta ahora. NO afecta a los daemons
-# de mantenimiento (metricas, alertas, vencimientos, limpiador, GC de media) ni a la publicacion.
+# de mantenimiento (metricas, alertas, vencimientos, limpiador, GC de media) ni a la pieza.
 ENV_MAQUINA = "KENI_MAQUINA"
 
 # Investigador (Fase 1): daemon que MATERIALIZA por marca un snapshot del Radar (temas
@@ -354,7 +354,7 @@ ENV_VERIFICACION_EN_CURSO_TTL_MIN = "KENI_VERIFICACION_EN_CURSO_TTL_MIN"
 # Recoleccion de basura (GC) de MEDIA SUELTA (Estudio de imagen, diseno §5). El Estudio
 # genera N variantes; las NO elegidas quedan como objetos sueltos en el almacen de media que
 # nadie borra. Un hilo demonio barre periodicamente el almacen y borra SOLO los objetos
-# SUELTOS: ni referenciados por una publicacion (`imagen`) ni catalogados en catalogo-media
+# SUELTOS: ni referenciados por una pieza (`imagen`) ni catalogados en catalogo-media
 # y mas VIEJOS que un umbral (def 24h, para no tocar variantes recien generadas que el usuario
 # aun revisa). CONSERVADOR por defecto (OFF): sin `KENI_MEDIA_GC` no se borra nada.
 ENV_MEDIA_GC = "KENI_MEDIA_GC"

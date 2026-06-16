@@ -65,7 +65,7 @@ function reporte(fuente: string): ReporteMetricas {
       alcance: 800,
       interacciones: 50,
       engagement_pct: 5,
-      publicaciones: 10,
+      piezas: 10,
     },
     cuentas: [],
     por_red: [],

@@ -340,7 +340,7 @@ class SerieDiaria(BaseModel):
 # Estructuras ricas que REUSAN datos ya consultados (serie de followers, piezas
 # granulares) para leer la estrategia digital: crecimiento de comunidad por día,
 # desglose de engagement por marca×red, cruce marca×red×formato y correlación
-# (no causalidad) entre crecimiento de seguidores y publicaciones.
+# (no causalidad) entre crecimiento de seguidores y piezas.
 
 
 class PuntoSeguidores(BaseModel):
@@ -463,7 +463,7 @@ class ItemCorrelacion(BaseModel):
 
 
 class CorrelacionSeguidores(BaseModel):
-    """Correlación entre crecimiento de seguidores y publicaciones (NO causalidad).
+    """Correlación entre crecimiento de seguidores y piezas (NO causalidad).
 
     `items` vacío = no hay serie de followers en la fuente (`nota` lo explica). El
     delta diario de followers NO es atribuible 1:1 a un post: es una lectura

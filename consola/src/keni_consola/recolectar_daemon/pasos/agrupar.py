@@ -108,7 +108,7 @@ def paso_agrupar() -> dict[str, Any]:
                     "titulo": item.get("titulo") or "",
                     "clave": agrupar.clave_cluster(item),
                     "estado": "nuevo",
-                    "contenido_id": "",
+                    "publicacion_id": "",
                     "creado": "",
                 }
                 repos.upsert_noticia_cluster(stub)

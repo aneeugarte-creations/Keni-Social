@@ -78,7 +78,7 @@ TIPO_CROSSTAB = "crosstab"
 TIPO_CORRELACION = "correlacion"
 # Listado COMPLETO de piezas del periodo (todas, no solo top/peores): mismo patrón de
 # lazy fill + persistencia; coste 0 de API extra (se construye sobre lo que ya descarga
-# el dashboard). Es el listado de `servicio.construir_listado_piezas`, no las publicaciones
+# el dashboard). Es el listado de `servicio.construir_listado_piezas`, no las piezas
 # de la Consola (eso es `piezas-rendimiento`).
 TIPO_PIEZAS_LISTADO = "piezas_listado"
 

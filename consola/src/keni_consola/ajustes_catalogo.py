@@ -44,7 +44,7 @@ GRUPOS: tuple[tuple[str, str], ...] = (
     ("maestros_produccion", "Todas las marcas"),
     ("automatizacion_marca_produccion", "Excepciones por marca"),
     ("pipeline_topes", "Admisión del flujo"),
-    ("publicacion", "Publicación"),
+    ("pieza", "Publicación"),
     ("publicacion_marca", "Excepciones por marca"),
     ("automatismos_generales", "Automatismos"),
     ("noticias_entrada", "Qué entra al pool"),
@@ -107,7 +107,7 @@ def _maestros_etapa() -> list[Ajuste]:
     aunque la tira ya no las pinte: son la base de las excepciones por marca
     (`KENI_INVESTIGACION::marca` apaga el proceso entero con un toggle), el respaldo de
     lectura del flujo de Noticias (etapas sin flag propio en catálogo: Fusionar/Clasificar/
-    Priorizar) y el interruptor «de proceso» para API/MCP. «Publicar» vive en `publicacion`.
+    Priorizar) y el interruptor «de proceso» para API/MCP. «Publicar» vive en `pieza`.
     """
     return [
         Ajuste(
@@ -265,7 +265,7 @@ class Ajuste:
     tipo: str  # 'bool' | 'int' | 'float' | 'select'
     etiqueta: str
     ayuda: str
-    grupo: str  # 'maestros_etapa' | 'automatizacion_marca_investigacion' | 'automatizacion_marca_produccion' | 'automatismos_generales' | 'publicacion' | 'tuning'
+    grupo: str  # 'maestros_etapa' | 'automatizacion_marca_investigacion' | 'automatizacion_marca_produccion' | 'automatismos_generales' | 'pieza' | 'tuning'
     defecto: Any
     peligroso: bool = False
     opciones: tuple[dict[str, str], ...] = ()  # solo 'select': [{id, etiqueta}, ...]
@@ -372,13 +372,13 @@ def _construir_catalogo() -> list[Ajuste]:
         # (`KENI_GENERAR`, virtual con fan-out; ver `claves_fisicas`). El master
         # «Priorizar por rendimiento» (KENI_RENDIMIENTO_RANKING) tampoco: NO es un daemon on/off,
         # sino un modulador de la priorización, así que vive con sus pesos en `noticias_ranking`.
-        # --- Publicacion (peligroso) ----------------------------------------------- #
+        # --- Pieza (peligroso) ----------------------------------------------- #
         Ajuste(
             clave=config.ENV_PUBLICAR_REAL,
             tipo="bool",
             etiqueta="Publicación real",
             ayuda="Envía las piezas programadas al scheduler real de Metricool; apagado = dry-run.",
-            grupo="publicacion",
+            grupo="pieza",
             defecto=False,
             peligroso=True,
         ),

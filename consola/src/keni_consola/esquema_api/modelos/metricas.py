@@ -71,8 +71,8 @@ class TotalMetricas(TypedDict):
     alcance: int
     interacciones: int
     engagement_pct: float
-    # Nº de publicaciones del periodo (todas las piezas, no solo las top).
-    publicaciones: int
+    # Nº de piezas del periodo (todas las piezas, no solo las top).
+    piezas: int
 
 
 class CuentaMetrica(TypedDict):
@@ -403,14 +403,14 @@ class PiezaRendimiento(TypedDict):
 
     A diferencia de `PiezaMetrica` (mejores/peores del periodo descubiertas desde la
     lista de posts), esto es el rendimiento de una pieza CONCRETA que el equipo publicó
-    desde la Consola, leído de Metricool por su `id_post_metricool`. `contenido_id` enlaza
+    desde la Consola, leído de Metricool por su `id_post_metricool`. `publicacion_id` enlaza
     a la pieza en el tablero (`/operacion/feed/lista`). `encontrado=False` => Metricool aún
     no tiene datos (recién publicada): la UI muestra "sin datos todavía", no ceros falsos.
     """
 
-    # contenido_id: id del item del tablero, para enlazar a la pieza en /operacion/feed/lista.
-    contenido_id: str
-    plataforma_id: str
+    # publicacion_id: id del item del tablero, para enlazar a la pieza en /operacion/feed/lista.
+    publicacion_id: str
+    pieza_id: str
     titulo: str
     # marca: id de marca de la Consola; marca_nombre: etiqueta legible.
     marca: str

@@ -23,14 +23,14 @@ import { api, mensajeError } from "@/lib/api";
 import { tiempoRelativo } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
-import type { SolicitudPublicacion } from "@/types";
+import type { SolicitudPieza } from "@/types";
 
 /** Diff producción ↔ sha propuesto de UNA solicitud (solo se monta al abrir el diálogo). */
 function DiffSolicitud({
   solicitud,
   soloCambios,
 }: {
-  solicitud: SolicitudPublicacion;
+  solicitud: SolicitudPieza;
   soloCambios: boolean;
 }) {
   // El sha en producción sale del documento (puede ser null: primera publicación).
@@ -69,7 +69,7 @@ function DiffSolicitud({
   );
 }
 
-function FilaSolicitud({ solicitud }: { solicitud: SolicitudPublicacion }) {
+function FilaSolicitud({ solicitud }: { solicitud: SolicitudPieza }) {
   const qc = useQueryClient();
   const [diffAbierto, setDiffAbierto] = React.useState(false);
   const [comentario, setComentario] = React.useState("");

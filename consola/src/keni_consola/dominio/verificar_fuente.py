@@ -269,7 +269,7 @@ def construir_procesar_verificacion_fuente(  # noqa: ANN201
             "verificacion_fuente": verificacion,
             "historial_id": historial_id,
             "piezas": [],
-            "publicaciones": [],
+            "piezas": [],
         }
 
     return procesar

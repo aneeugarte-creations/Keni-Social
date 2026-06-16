@@ -14,8 +14,8 @@ import { MARCA_ACTIVA_TODAS } from "@/hooks/marca-activa-contexto";
 import { api } from "@/lib/api";
 import { plural } from "@/lib/formato";
 import { cn } from "@/lib/utils";
-import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
-import type { Publicacion } from "@/types";
+import { CLAVE_PIEZAS } from "@/pages/piezas/claves";
+import type { Pieza } from "@/types";
 
 // Tope de la búsqueda encadenada de la vista filtrada EN CLIENTE vacía ("Aprobadas y
 // publicadas"): cada "lote" permite traer hasta N páginas más antes de parar y ofrecer
@@ -50,7 +50,7 @@ export interface VistaFeed {
   /** Etiqueta corta EXPLÍCITA para <sm: las 3 pestañas caben en una fila a 320px. */
   etiquetaCorta: string;
   icono: LucideIcon;
-  filtra: (p: Publicacion) => boolean;
+  filtra: (p: Pieza) => boolean;
   vacio: { titulo: string; texto: string };
 }
 
@@ -146,7 +146,7 @@ export function useConteosFeed(filtros: {
     : {};
   const claveConteo = (estado?: string) =>
     [
-      ...CLAVE_PUBLICACIONES,
+      ...CLAVE_PIEZAS,
       "conteo-feed",
       marca ?? MARCA_ACTIVA_TODAS,
       red ?? FILTRO_TODOS,
@@ -157,21 +157,21 @@ export function useConteosFeed(filtros: {
   const conteoPendiente = useQuery({
     queryKey: claveConteo("pendiente"),
     queryFn: ({ signal }) =>
-      api.publicaciones({ marca, red, linea, responsable, estado: "pendiente", limite: "1" }, signal),
+      api.piezas({ marca, red, linea, responsable, estado: "pendiente", limite: "1" }, signal),
     staleTime: 30_000,
     ...refrescoEnVivo,
   });
   const conteoPublicado = useQuery({
     queryKey: claveConteo("publicado"),
     queryFn: ({ signal }) =>
-      api.publicaciones({ marca, red, linea, responsable, estado: "publicado", limite: "1" }, signal),
+      api.piezas({ marca, red, linea, responsable, estado: "publicado", limite: "1" }, signal),
     staleTime: 30_000,
     ...refrescoEnVivo,
   });
   const conteoRevision = useQuery({
     queryKey: claveConteo("en_revision"),
     queryFn: ({ signal }) =>
-      api.publicaciones({ marca, red, linea, responsable, estado: "en_revision", limite: "1" }, signal),
+      api.piezas({ marca, red, linea, responsable, estado: "en_revision", limite: "1" }, signal),
     staleTime: 30_000,
     ...refrescoEnVivo,
   });
@@ -191,7 +191,7 @@ export function useConteosFeed(filtros: {
 }
 
 /**
- * Contenido de un `TabsTrigger` de vista (etiqueta responsive + badge de conteo), compartido
+ * Publicacion de un `TabsTrigger` de vista (etiqueta responsive + badge de conteo), compartido
  * por las pestañas de escritorio y las móviles.
  *
  * NOMBRE ACCESIBLE compuesto desde el DOM (sin `aria-label` que pise el conteo): en <sm la
@@ -203,7 +203,7 @@ export function useConteosFeed(filtros: {
  * `enfasis` (la pestaña "Pendientes" cuando hay algo realmente esperando aprobación) usa el
  * mismo acento keni del "te toca decidir" de `PostFeed`.
  */
-export function ContenidoPestanaVista({
+export function PublicacionPestanaVista({
   vista,
   conteo,
   enfasis = false,

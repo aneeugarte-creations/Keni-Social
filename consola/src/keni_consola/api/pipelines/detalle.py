@@ -88,10 +88,10 @@ def _generacion_pool_de_marca(marca: str, gens: list[dict], *, prefijo: str) -> 
     return _generacion_publica(pool[0].get("id", "") or "")
 
 
-def _actividad_y_generaciones(contenido_id: str, gens: list[dict]) -> tuple[list[dict], dict[str, dict]]:
+def _actividad_y_generaciones(publicacion_id: str, gens: list[dict]) -> tuple[list[dict], dict[str, dict]]:
     """Log de etapas (`tipo='pipeline'`) de un contenido + sus generaciones por etapa.
 
-    Lee TODAS las generaciones-marcador del pipeline y filtra por el `contenido_id` que
+    Lee TODAS las generaciones-marcador del pipeline y filtra por el `publicacion_id` que
     sella `pipeline_contenido.registrar_etapa` (REDACTAR/VERIFICAR lo llevan; ADMITIR es brand-level y no
     queda atado a un contenido). Recientes primero. Cada evento normaliza la etiqueta
     ("ADMITIR · ..."/"REDACTAR · ..."/"VERIFICAR · ...") a `{etapa, etiqueta, estado, fecha}`.
@@ -108,7 +108,7 @@ def _actividad_y_generaciones(contenido_id: str, gens: list[dict]) -> tuple[list
     for gen in gens:
         if gen.get("tipo") != TIPO_ACTIVIDAD:
             continue
-        if (gen.get("contenido_id") or "") != contenido_id:
+        if (gen.get("publicacion_id") or "") != publicacion_id:
             continue
         etiqueta = gen.get("etiqueta", "") or ""
         etapa = etiqueta.split(" · ", 1)[0].strip() if " · " in etiqueta else ""
@@ -143,11 +143,11 @@ async def detalle(request: Request) -> Response:
     etapa Redactar redacta (`ORIGENES_AUTOGEN`): ambos son runs del feed de Producción.
     """
     pipeline_id = request.path_params["pipeline_id"]
-    item = repos.obtener_contenido(pipeline_id)
+    item = repos.obtener_publicacion(pipeline_id)
     if item is None or (item.get("origen") or "") not in _ORIGENES_RUN:
         return JSONResponse({"error": "Ese pipeline ya no existe."}, status_code=404)
     es_pipeline = (item.get("origen") or "") == ORIGEN_PIPELINE
-    piezas = repos.listar_contenido_plataforma(pipeline_id)
+    piezas = repos.listar_piezas_fila(pipeline_id)
     cluster = repos.cluster_por_contenido(pipeline_id)
     gens = generaciones.listar(limite=None)
     eventos, generaciones_por_etapa = _actividad_y_generaciones(pipeline_id, gens)

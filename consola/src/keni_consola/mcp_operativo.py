@@ -300,8 +300,8 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
         cli = _cli()
         if cli is None:
             return {"error": _MSG_NO_INIT}
-        datos = await cli.get("/api/contenido")
-        # /api/contenido trae contenidos + catalogos; para contexto basta el catálogo.
+        datos = await cli.get("/api/publicaciones")
+        # /api/publicaciones trae contenidos + catalogos; para contexto basta el catálogo.
         return {"catalogos": datos.get("catalogos", datos)} if "error" not in datos else datos
 
     @mcp.tool()
@@ -316,7 +316,7 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
     # ---- Contenido (creación / gestión) --------------------------------- #
 
     @mcp.tool()
-    async def keni_listar_contenido(
+    async def keni_listar_publicaciones(
         marca: str = "", estado: str = "", flujo: str = "",
         responsable_id: str = "", desde: str = "", hasta: str = "", etiqueta: str = "",
     ) -> dict:
@@ -328,7 +328,7 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
         if cli is None:
             return {"error": _MSG_NO_INIT}
         datos = await cli.get(
-            "/api/contenido", marca=marca, estado=estado, flujo=flujo,
+            "/api/publicaciones", marca=marca, estado=estado, flujo=flujo,
             responsable_id=responsable_id, desde=desde, hasta=hasta, etiqueta=etiqueta,
         )
         # Recorta el catálogo (ya lo da `keni_contexto`): la lista de piezas es lo útil aquí.
@@ -337,7 +337,7 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
         return datos
 
     @mcp.tool()
-    async def keni_crear_contenido(
+    async def keni_crear_publicacion(
         titulo: str, marca: str = "", flujo: str = "", descripcion: str = "",
         prioridad: str = "media", redes: list[str] | None = None,
         fecha_objetivo: str = "", notas: str = "", tipo_contenido: str = "ia",
@@ -350,7 +350,7 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
         if cli is None:
             return {"error": _MSG_NO_INIT}
         return await cli.post(
-            "/api/contenido",
+            "/api/publicaciones",
             {
                 "titulo": titulo, "marca": marca, "flujo": flujo, "descripcion": descripcion,
                 "prioridad": prioridad, "redes": redes or [], "fecha_objetivo": fecha_objetivo,
@@ -359,8 +359,8 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
         )
 
     @mcp.tool()
-    async def keni_actualizar_contenido(
-        contenido_id: str, estado: str = "", titulo: str = "", descripcion: str = "",
+    async def keni_actualizar_publicacion(
+        publicacion_id: str, estado: str = "", titulo: str = "", descripcion: str = "",
         prioridad: str = "", flujo: str = "", marca: str = "", fecha_objetivo: str = "",
         notas: str = "",
     ) -> dict:
@@ -377,11 +377,11 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
         cuerpo = {k: v for k, v in cuerpo.items() if v != ""}
         if not cuerpo:
             return {"error": "Indica algún campo a actualizar."}
-        return await cli.patch(f"/api/contenido/{contenido_id}", cuerpo)
+        return await cli.patch(f"/api/publicaciones/{publicacion_id}", cuerpo)
 
     @mcp.tool()
     async def keni_generar_copy(
-        contenido_id: str, modo: str = "generar", redes: list[str] | None = None
+        publicacion_id: str, modo: str = "generar", redes: list[str] | None = None
     ) -> dict:
         """Lanza la generación de copy por IA para una pieza (asistente editorial). `modo` ∈
         {generar,variantes,resumir}. Requiere que la pieza tenga marca y al menos una red.
@@ -390,7 +390,7 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
         if cli is None:
             return {"error": _MSG_NO_INIT}
         return await cli.post(
-            f"/api/contenido/{contenido_id}/asistente", {"modo": modo, "redes": redes or []}
+            f"/api/publicaciones/{publicacion_id}/asistente", {"modo": modo, "redes": redes or []}
         )
 
     @mcp.tool()
@@ -411,36 +411,36 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
             return {"error": _MSG_NO_INIT}
         return await cli.get("/api/generaciones", limite=limite)
 
-    # ---- Publicaciones (posts por plataforma) --------------------------- #
+    # ---- Piezas (posts por plataforma) --------------------------- #
 
     @mcp.tool()
-    async def keni_listar_publicaciones(
+    async def keni_listar_piezas(
         marca: str = "", red: str = "", estado: str = "", limite: int = 50
     ) -> dict:
-        """Lista publicaciones (un post por plataforma). `estado` ∈
+        """Lista piezas (un post por plataforma). `estado` ∈
         {borrador,en_revision,programado,publicado}. Devuelve cada post con su
         copy, imagen y estado."""
         cli = _cli()
         if cli is None:
             return {"error": _MSG_NO_INIT}
         return await cli.get(
-            "/api/publicaciones", marca=marca, red=red, estado=estado, limite=limite
+            "/api/piezas", marca=marca, red=red, estado=estado, limite=limite
         )
 
     @mcp.tool()
-    async def keni_detalle_publicacion(publicacion_id: str) -> dict:
+    async def keni_detalle_pieza(pieza_id: str) -> dict:
         """Detalle completo de una publicación por su id (copy, imagen, estado, autor,
         revisor, fechas)."""
         cli = _cli()
         if cli is None:
             return {"error": _MSG_NO_INIT}
-        return await cli.get(f"/api/publicaciones/{publicacion_id}")
+        return await cli.get(f"/api/piezas/{pieza_id}")
 
     # ---- Aprobación (hasta aprobar/rechazar; NO publica) ---------------- #
 
     @mcp.tool()
     async def keni_cola_aprobacion() -> dict:
-        """Cola de publicaciones EN REVISIÓN, pendientes de aprobar o rechazar (con autor y
+        """Cola de piezas EN REVISIÓN, pendientes de aprobar o rechazar (con autor y
         fecha de envío)."""
         cli = _cli()
         if cli is None:
@@ -448,29 +448,29 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
         return await cli.get("/api/aprobacion/cola")
 
     @mcp.tool()
-    async def keni_enviar_a_revision(publicacion_id: str) -> dict:
+    async def keni_enviar_a_revision(pieza_id: str) -> dict:
         """Envía una publicación en borrador a revisión (entra en la cola de aprobación)."""
         cli = _cli()
         if cli is None:
             return {"error": _MSG_NO_INIT}
-        return await cli.post(f"/api/aprobacion/{publicacion_id}/enviar-a-revision")
+        return await cli.post(f"/api/aprobacion/{pieza_id}/enviar-a-revision")
 
     @mcp.tool()
-    async def keni_aprobar(publicacion_id: str) -> dict:
+    async def keni_aprobar(pieza_id: str) -> dict:
         """Da un OK (like) a una publicación en revisión (decide el nivel actual de la cadena).
         Con los 2 OK de personas distintas la pieza se auto-programa al próximo hueco. NO publica."""
         cli = _cli()
         if cli is None:
             return {"error": _MSG_NO_INIT}
-        return await cli.post(f"/api/aprobacion/{publicacion_id}/aprobar")
+        return await cli.post(f"/api/aprobacion/{pieza_id}/aprobar")
 
     @mcp.tool()
-    async def keni_rechazar(publicacion_id: str) -> dict:
+    async def keni_rechazar(pieza_id: str) -> dict:
         """Rechaza una publicación en revisión: vuelve a borrador para corregirla."""
         cli = _cli()
         if cli is None:
             return {"error": _MSG_NO_INIT}
-        return await cli.post(f"/api/aprobacion/{publicacion_id}/rechazar")
+        return await cli.post(f"/api/aprobacion/{pieza_id}/rechazar")
 
     # ---- Métricas (análisis, solo lectura) ----------------------------- #
 

@@ -1,6 +1,6 @@
 /**
  * PanelVersiones para un equipo de redes NO técnico: un CTA prominente «Revisar y publicar»
- * cuando hay cambios sin publicar, la lista de PUBLICACIONES por su nota (sin SHA) con la que
+ * cuando hay cambios sin publicar, la lista de PIEZAS por su nota (sin SHA) con la que
  * está EN VIVO marcada SOLO por el punto verde (sin texto «EN VIVO»), y por versión: clic en la
  * fila → pide al contenedor cargar ESA versión en la caja de texto (`onVerVersion`, sin popup), y
  * «Restaurar» → revertir en un clic (publica si admin, solicita si editor). La fila sintética
@@ -95,7 +95,7 @@ afterEach(() => {
 });
 
 describe("PanelVersiones", () => {
-  it("lista las publicaciones por su nota, marca EN VIVO con el punto (sin texto) y no muestra SHAs", async () => {
+  it("lista las piezas por su nota, marca EN VIVO con el punto (sin texto) y no muestra SHAs", async () => {
     stubFetch();
     montar();
     expect(await screen.findByText("Tono más directo en titulares")).toBeInTheDocument();

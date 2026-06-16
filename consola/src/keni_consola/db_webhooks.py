@@ -215,8 +215,8 @@ def borrar_webhook(webhook_id: str) -> bool:
 def registrar_evento_interno(
     *,
     tipo: str,
-    contenido_id: str = "",
-    plataforma_id: str = "",
+    publicacion_id: str = "",
+    pieza_id: str = "",
     clave_idempotencia: str = "",
     payload: dict[str, Any] | None = None,
 ) -> bool:
@@ -230,8 +230,8 @@ def registrar_evento_interno(
     fila = {
         "id": uuid.uuid4().hex[:12],
         "tipo": tipo,
-        "contenido_id": contenido_id or "",
-        "plataforma_id": plataforma_id or "",
+        "publicacion_id": publicacion_id or "",
+        "pieza_id": pieza_id or "",
         # Sin clave explicita, una unica por id: nunca desduplica (cada emision se registra).
         "clave_idempotencia": clave_idempotencia or uuid.uuid4().hex,
         "payload": json.dumps(payload or {}, ensure_ascii=False),
@@ -241,10 +241,10 @@ def registrar_evento_interno(
     try:
         con.execute(
             "INSERT INTO eventos_internos "
-            "(id, tipo, contenido_id, plataforma_id, clave_idempotencia, payload, creado) "
+            "(id, tipo, publicacion_id, pieza_id, clave_idempotencia, payload, creado) "
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
             (
-                fila["id"], fila["tipo"], fila["contenido_id"], fila["plataforma_id"],
+                fila["id"], fila["tipo"], fila["publicacion_id"], fila["pieza_id"],
                 fila["clave_idempotencia"], fila["payload"], fila["creado"],
             ),
         )
@@ -264,7 +264,7 @@ def listar_eventos_internos(*, limite: int = 50) -> list[dict[str, Any]]:
     con = _conectar()
     try:
         filas = con.execute(
-            "SELECT id, tipo, contenido_id, plataforma_id, clave_idempotencia, payload, creado "
+            "SELECT id, tipo, publicacion_id, pieza_id, clave_idempotencia, payload, creado "
             "FROM eventos_internos ORDER BY creado DESC, id DESC LIMIT ?",
             (limite,),
         ).fetchall()
@@ -280,8 +280,8 @@ def listar_eventos_internos(*, limite: int = 50) -> list[dict[str, Any]]:
             {
                 "id": f["id"],
                 "tipo": f["tipo"],
-                "contenido_id": f["contenido_id"],
-                "plataforma_id": f["plataforma_id"],
+                "publicacion_id": f["publicacion_id"],
+                "pieza_id": f["pieza_id"],
                 "payload": payload,
                 # `creado` es timestamptz (migracion 0033): se re-emite al canon ISO (lo que
                 # `api/alertas` y `api/webhooks` consumen como string).

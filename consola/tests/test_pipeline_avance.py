@@ -33,13 +33,13 @@ def _cli_usuario(usuario: str = "ana") -> TestClient:
 def _crear_borrador(cli: TestClient, *, con_foto: bool = True, **campos) -> dict:
     base = {"marca": _MARCA, "red": "x", "titulo": "T", "contenido": "C"}
     base.update(campos)
-    r = cli.post("/api/publicaciones", json=base, headers=_ORIGIN)
+    r = cli.post("/api/piezas", json=base, headers=_ORIGIN)
     assert r.status_code == 200, r.text
-    pub = r.json()["publicacion"]
+    pub = r.json()["pieza"]
     if con_foto:
         # La foto REAL es lo que completa la pieza (la placa/plantilla no cuenta).
-        repos.actualizar_publicacion(pub["id"], {"foto": "fotos/prueba.jpg"})
-    return repos.obtener_publicacion(pub["id"])
+        repos.actualizar_pieza(pub["id"], {"foto": "fotos/prueba.jpg"})
+    return repos.obtener_pieza(pub["id"])
 
 
 def _encender(monkeypatch, *, reposo_cero: bool = True):
@@ -57,7 +57,7 @@ def test_avance_envia_borrador_completo_y_monta_cadena(entorno, monkeypatch):
     enviadas = _avance.ejecutar_avance()
     assert [p["id"] for p in enviadas] == [pub["id"]]
 
-    actual = repos.obtener_publicacion(pub["id"])
+    actual = repos.obtener_pieza(pub["id"])
     assert actual["estado"] == "en_revision"
     assert actual["enviado_a_revision_en"]
     assert repos.listar_aprobaciones(pub["id"])  # cadena montada (los OK siguen siendo humanos)
@@ -74,8 +74,8 @@ def test_avance_no_toca_incompletas(entorno, monkeypatch):
     sin_copy = _crear_borrador(cli, contenido="")
 
     assert _avance.ejecutar_avance() == []
-    assert repos.obtener_publicacion(sin_foto["id"])["estado"] == "borrador"
-    assert repos.obtener_publicacion(sin_copy["id"])["estado"] == "borrador"
+    assert repos.obtener_pieza(sin_foto["id"])["estado"] == "borrador"
+    assert repos.obtener_pieza(sin_copy["id"])["estado"] == "borrador"
 
 
 def test_avance_reenvia_devueltas_tras_el_reposo(entorno, monkeypatch):
@@ -87,11 +87,11 @@ def test_avance_reenvia_devueltas_tras_el_reposo(entorno, monkeypatch):
     comportamiento que el re-envío humano)."""
     _encender(monkeypatch)
     pub = _crear_borrador(_cli_usuario())
-    repos.actualizar_publicacion(pub["id"], {"enviado_a_revision_en": "2026-06-01T00:00:00"})
+    repos.actualizar_pieza(pub["id"], {"enviado_a_revision_en": "2026-06-01T00:00:00"})
 
     enviadas = _avance.ejecutar_avance()
     assert [p["id"] for p in enviadas] == [pub["id"]]
-    actual = repos.obtener_publicacion(pub["id"])
+    actual = repos.obtener_pieza(pub["id"])
     assert actual["estado"] == "en_revision"
     assert actual["enviado_a_revision_en"] != "2026-06-01T00:00:00"  # sello re-estampado
 
@@ -102,7 +102,7 @@ def test_avance_respeta_reposo(entorno, monkeypatch):
     pub = _crear_borrador(_cli_usuario())
 
     assert _avance.ejecutar_avance() == []
-    assert repos.obtener_publicacion(pub["id"])["estado"] == "borrador"
+    assert repos.obtener_pieza(pub["id"])["estado"] == "borrador"
 
 
 def test_avance_no_tiene_exclusion_por_marca(entorno, monkeypatch):
@@ -115,7 +115,7 @@ def test_avance_no_tiene_exclusion_por_marca(entorno, monkeypatch):
 
     enviadas = _avance.ejecutar_avance()
     assert [p["id"] for p in enviadas] == [pub["id"]]
-    assert repos.obtener_publicacion(pub["id"])["estado"] == "en_revision"
+    assert repos.obtener_pieza(pub["id"])["estado"] == "en_revision"
 
 
 def test_avance_gateado_solo_por_maquina(entorno, monkeypatch):
@@ -126,10 +126,10 @@ def test_avance_gateado_solo_por_maquina(entorno, monkeypatch):
     # Máquina OFF: no avanza.
     monkeypatch.delenv("KENI_MAQUINA", raising=False)
     assert _avance.ejecutar_avance() == []
-    assert repos.obtener_publicacion(pub["id"])["estado"] == "borrador"
+    assert repos.obtener_pieza(pub["id"])["estado"] == "borrador"
 
     # Máquina ON: avanza (sin ningún toggle de etapa de por medio).
     monkeypatch.setenv("KENI_MAQUINA", "1")
     enviadas = _avance.ejecutar_avance()
     assert [p["id"] for p in enviadas] == [pub["id"]]
-    assert repos.obtener_publicacion(pub["id"])["estado"] == "en_revision"
+    assert repos.obtener_pieza(pub["id"])["estado"] == "en_revision"

@@ -11,7 +11,7 @@ import {
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
 import * as apiMod from "@/lib/api";
 import { hoyCDMX } from "@/lib/fecha";
-import type { CatalogosContenido, Contenido, EventoRota, UsuarioSesion } from "@/types";
+import type { CatalogosPublicacion, Publicacion, EventoRota, UsuarioSesion } from "@/types";
 
 import { PanoramaAgenda } from "./PanoramaAgenda";
 import Tareas from "./Tareas";
@@ -26,7 +26,7 @@ vi.mock("@/components/comunes/confirmar", () => ({
   confirmar: vi.fn().mockResolvedValue(true),
 }));
 
-function tarea(over: Partial<Contenido> = {}): Contenido {
+function tarea(over: Partial<Publicacion> = {}): Publicacion {
   return {
     id: "t1",
     clase: "tarea",
@@ -75,7 +75,7 @@ function evento(over: Partial<EventoRota> = {}): EventoRota {
   };
 }
 
-function catalogos(): CatalogosContenido {
+function catalogos(): CatalogosPublicacion {
   return {
     usuarios: [
       { id: "u-luis", usuario: "luis" },
@@ -123,7 +123,7 @@ function valorMarca(marcaActiva: string | null): ValorMarcaActiva {
   };
 }
 
-function renderTareas(tareas: Contenido[], eventos: EventoRota[] = [], u = usuario()) {
+function renderTareas(tareas: Publicacion[], eventos: EventoRota[] = [], u = usuario()) {
   vi.spyOn(apiMod.api, "contenido").mockResolvedValue({
     contenidos: tareas,
     catalogos: catalogos(),
@@ -269,9 +269,9 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect(screen.queryByText("Amistoso sin señal")).toBeNull();
   });
 
-  it("una tarea LIBRE (encargo) ofrece 'Coger' y llama a cogerContenido", async () => {
+  it("una tarea LIBRE (encargo) ofrece 'Coger' y llama a cogerPublicacion", async () => {
     const coger = vi
-      .spyOn(apiMod.api, "cogerContenido")
+      .spyOn(apiMod.api, "cogerPublicacion")
       .mockResolvedValue({ contenido: {} } as never);
     renderTareas([tarea({ id: "t9", titulo: "Grabar el saque" })]);
 
@@ -443,7 +443,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
 
   it("RECUPERACIÓN: una cobertura soltada (sin dueño) reaparece como «Por cubrir» y se re-coge", async () => {
     const coger = vi
-      .spyOn(apiMod.api, "cogerContenido")
+      .spyOn(apiMod.api, "cogerPublicacion")
       .mockResolvedValue({ contenido: {} } as never);
     // Tarea de cobertura SUELTA (evento_id pero sin responsable, como tras «Soltar»): el
     // partido NO se borró, debe reaparecer como «Por cubrir» y poder re-cogerse.
@@ -482,9 +482,9 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     await waitFor(() => expect(cubrir).toHaveBeenCalledWith("ev9", undefined, "video"));
   });
 
-  it("QUITARME: en MI cobertura libera mi rol con soltarContenido (NO borra el partido)", async () => {
+  it("QUITARME: en MI cobertura libera mi rol con soltarPublicacion (NO borra el partido)", async () => {
     const soltar = vi
-      .spyOn(apiMod.api, "soltarContenido")
+      .spyOn(apiMod.api, "soltarPublicacion")
       .mockResolvedValue({ contenido: {} } as never);
     // Soy la cubridora (responsable_id == id de mi sesión): mi tarjeta ofrece «Quitarme».
     renderTareas(
@@ -503,7 +503,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
 
   it("QUITAR-A-OTRO: el × del chip «Cubren:» suelta a esa persona (solo manager)", async () => {
     const soltar = vi
-      .spyOn(apiMod.api, "soltarContenido")
+      .spyOn(apiMod.api, "soltarPublicacion")
       .mockResolvedValue({ contenido: {} } as never);
     // Soy manager (admin) y NO soy la cubridora: el chip de «tezcu» ofrece la × para quitarla.
     renderTareas(
@@ -662,7 +662,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
 
   // Helper: renderiza el Panorama AISLADO (síncrono, sin react-query fetch) para probar el ⚡.
   function renderPanorama(props: {
-    tareas?: Contenido[];
+    tareas?: Publicacion[];
     eventos?: EventoRota[];
   }) {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -719,9 +719,9 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     );
   });
 
-  it("ESCALAR encargo: el ⚡ de una tarea la marca urgente vía actualizarContenido", async () => {
+  it("ESCALAR encargo: el ⚡ de una tarea la marca urgente vía actualizarPublicacion", async () => {
     const actualizar = vi
-      .spyOn(apiMod.api, "actualizarContenido")
+      .spyOn(apiMod.api, "actualizarPublicacion")
       .mockResolvedValue({} as never);
     renderPanorama({
       tareas: [
@@ -867,11 +867,11 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect(screen.queryByText(/No tienes nada asignado/)).toBeNull();
 
     // «Reintentar» relanza AMBAS queries (tareas y eventos), no solo una.
-    const antesContenido = contenido.mock.calls.length;
+    const antesPublicacion = contenido.mock.calls.length;
     const antesEventos = rotaEventos.mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: /Reintentar/ }));
     await waitFor(() => {
-      expect(contenido.mock.calls.length).toBeGreaterThan(antesContenido);
+      expect(contenido.mock.calls.length).toBeGreaterThan(antesPublicacion);
       expect(rotaEventos.mock.calls.length).toBeGreaterThan(antesEventos);
     });
   });
@@ -946,7 +946,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
       .spyOn(apiMod.api, "eliminarEventoRota")
       .mockResolvedValue({ mensaje: "ok" } as never);
     const borrarCont = vi
-      .spyOn(apiMod.api, "eliminarContenido")
+      .spyOn(apiMod.api, "eliminarPublicacion")
       .mockResolvedValue({} as never);
     renderTareas(
       [
@@ -1020,7 +1020,7 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
       .spyOn(apiMod.api, "eliminarEventoRota")
       .mockResolvedValue({ mensaje: "ok" } as never);
     const borrarCont = vi
-      .spyOn(apiMod.api, "eliminarContenido")
+      .spyOn(apiMod.api, "eliminarPublicacion")
       .mockResolvedValue({} as never);
     renderTareas(
       [
@@ -1042,8 +1042,8 @@ describe("Tareas — lista compartida de eventos + encargos", () => {
     expect(borrarCont).toHaveBeenCalledWith("t-cob");
   });
 
-  it("un ENCARGO (sin evento) muestra papelera pero NO lápiz; borra vía eliminarContenido", async () => {
-    const borrar = vi.spyOn(apiMod.api, "eliminarContenido").mockResolvedValue({} as never);
+  it("un ENCARGO (sin evento) muestra papelera pero NO lápiz; borra vía eliminarPublicacion", async () => {
+    const borrar = vi.spyOn(apiMod.api, "eliminarPublicacion").mockResolvedValue({} as never);
     renderTareas(
       [tarea({ id: "t9", titulo: "Grabar el saque" })],
       [],

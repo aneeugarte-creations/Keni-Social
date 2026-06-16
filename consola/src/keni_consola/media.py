@@ -1,6 +1,6 @@
 """Almacenamiento de media (imagenes) de la Consola Keni + generacion por IA.
 
-Las imagenes adjuntas a las publicaciones viven en el ALMACEN DE OBJETOS (`almacen_media`),
+Las imagenes adjuntas a las piezas viven en el ALMACEN DE OBJETOS (`almacen_media`),
 que elige backend segun la config S3:
   - SIN S3 cableado  -> disco local (`KENI_CONSOLA_MEDIA`; por defecto bajo la raiz de
     estado unica). Perfil privado/local: nada sale de la maquina.

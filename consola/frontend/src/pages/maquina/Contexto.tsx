@@ -23,7 +23,7 @@ import { INTERVALO_VIVO_MS } from "@/lib/refresco";
 import {
   PanelAjustes,
   PanelInvestigacion,
-  PanelMaquinaContenido,
+  PanelMaquinaPublicacion,
 } from "@/pages/configuracion/SeccionFuncionalidad";
 import { SeccionImagen } from "@/pages/configuracion/SeccionImagen";
 import {
@@ -79,7 +79,7 @@ export default function Contexto() {
   const ajustes =
     proceso === "produccion" ? (
       <>
-        <PanelMaquinaContenido />
+        <PanelMaquinaPublicacion />
         <SeccionImagen />
         <PanelAjustes
           grupos={GRUPOS_SISTEMA}

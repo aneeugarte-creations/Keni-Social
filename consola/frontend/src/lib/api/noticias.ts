@@ -49,14 +49,14 @@ export const apiNoticias = {
     /**
      * Lleva una noticia al tablero como pieza de contenido.
      * `redes` y `generar` son opcionales (igual que `insumos.usarItem`).
-     * Marca `estado=usado` y guarda el `contenido_id`.
+     * Marca `estado=usado` y guarda el `publicacion_id`.
      * POST /api/noticias/{id}/usar
      */
     usar: (
       id: string,
       body: { redes?: string[]; generar?: boolean } = {},
     ) =>
-      peticion<{ ok: boolean; contenido_id: string }>(
+      peticion<{ ok: boolean; publicacion_id: string }>(
         `/noticias/${encodeURIComponent(id)}/usar`,
         { metodo: "POST", json: body, muestrear: false },
       ),
@@ -143,7 +143,7 @@ export const apiNoticias = {
       id: string,
       body: { redes?: string[]; generar?: boolean } = {},
     ) =>
-      peticion<{ ok: boolean; contenido_id: string }>(
+      peticion<{ ok: boolean; publicacion_id: string }>(
         `/noticias/historias/${encodeURIComponent(id)}/usar`,
         { metodo: "POST", json: body, muestrear: false },
       ),

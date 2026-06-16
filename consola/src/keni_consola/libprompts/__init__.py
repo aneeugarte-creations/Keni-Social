@@ -209,7 +209,7 @@ __all__ = [
     "restaurar_version",
     "descartar_borrador",
     "fijar_version",
-    # publicacion (_publicacion): versiones inmutables + puntero "produccion"
+    # pieza (_publicacion): versiones inmutables + puntero "produccion"
     "produccion_de",
     "producciones",
     "sha_actual",

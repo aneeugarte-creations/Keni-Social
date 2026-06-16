@@ -1380,15 +1380,15 @@ def test_borrar_usuario_libera_sus_piezas_cogidas(entorno):
 
     u = _crear("mariana", CLAVE, "editor")
     assert u is not None
-    cont = repos.crear_contenido(titulo="Gol del Mundial", marca="claro-sports")
-    repos.reclamar_contenido(
+    cont = repos.crear_publicacion(titulo="Gol del Mundial", marca="claro-sports")
+    repos.reclamar_publicacion(
         cont["id"], responsable_id=u["id"], responsable_nombre="mariana"
     )
-    assert repos.obtener_contenido(cont["id"])["responsable_id"] == u["id"]
+    assert repos.obtener_publicacion(cont["id"])["responsable_id"] == u["id"]
 
     assert auth.borrar_usuario(u["id"]) is True
 
-    liberada = repos.obtener_contenido(cont["id"])
+    liberada = repos.obtener_publicacion(cont["id"])
     assert liberada is not None  # la pieza NO se borra; solo se suelta
     assert liberada["responsable_id"] == ""
     assert liberada["responsable_nombre"] == ""

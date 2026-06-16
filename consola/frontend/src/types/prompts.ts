@@ -131,7 +131,7 @@ export interface RespuestaVariablesTexto {
 export type EstadoSolicitud = "abierta" | "aprobada" | "rechazada";
 
 /** Solicitud de publicación de una versión de un documento (flujo no-admin). */
-export interface SolicitudPublicacion {
+export interface SolicitudPieza {
   id: string;
   doc_id: string;
   titulo: string;
@@ -146,16 +146,16 @@ export interface SolicitudPublicacion {
 }
 
 export interface RespuestaSolicitudesTexto {
-  solicitudes: SolicitudPublicacion[];
+  solicitudes: SolicitudPieza[];
 }
 
 export interface RespuestaSolicitudTexto {
-  solicitud: SolicitudPublicacion;
+  solicitud: SolicitudPieza;
 }
 
 /** Respuesta de aprobar una solicitud (rechazar no devuelve `documento`). */
 export interface RespuestaResolverSolicitud {
-  solicitud: SolicitudPublicacion;
+  solicitud: SolicitudPieza;
   documento?: DocumentoTexto;
 }
 
@@ -173,7 +173,7 @@ export interface CuerpoResolverSolicitud {
 }
 
 /** Campos de estado de publicación compartidos por etapas y capas de la máquina. */
-export interface EstadoPublicacionDoc {
+export interface EstadoPiezaDoc {
   produccion: ProduccionTexto | null;
   sha_actual: string | null;
   sin_publicar: boolean;
@@ -190,7 +190,7 @@ export interface EtapaMecanica {
 }
 
 /** Etapa con PROMPT editable: el documento de la Prompts que se inyecta en ese paso. */
-export interface EtapaPrompt extends EstadoPublicacionDoc {
+export interface EtapaPrompt extends EstadoPiezaDoc {
   tipo: "prompt";
   id: string;
   titulo: string;

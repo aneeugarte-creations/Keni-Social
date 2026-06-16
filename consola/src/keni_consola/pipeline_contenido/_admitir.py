@@ -107,7 +107,7 @@ def _auto_etiquetar_linea(tema: dict[str, Any], titulo: str, resumen: str) -> No
         if res.get("vertical"):
             repos.asignar_etiqueta(tema["id"], str(res["vertical"]))
         else:
-            repos.actualizar_contenido(tema["id"], {"notas": _AVISO_SIN_LINEA})
+            repos.actualizar_publicacion(tema["id"], {"notas": _AVISO_SIN_LINEA})
         if res.get("origen"):
             repos.asignar_etiqueta(tema["id"], str(res["origen"]))
     except Exception:  # noqa: BLE001 -- el etiquetado es best-effort; nunca rompe el barrido
@@ -417,7 +417,7 @@ def crear_tema_de_cluster(
     url_fuente = (items[0].get("url_canonica") if items else "") or ""
     try:
 
-        tema = repos.crear_contenido(
+        tema = repos.crear_publicacion(
             clase="contenido",
             titulo=titulo[:300],
             descripcion=nota[:5000],
@@ -452,7 +452,7 @@ def crear_tema_de_cluster(
         claves_vistas.add(dedup.clave(titulo))
     if cid:
         try:
-            repos.actualizar_noticia_cluster(cid, estado="usado", contenido_id=tema["id"])
+            repos.actualizar_noticia_cluster(cid, estado="usado", publicacion_id=tema["id"])
             repos.marcar_items_cluster_usados(cid, tema["id"])
         except Exception:  # noqa: BLE001 -- el marcado es dedup; un fallo no rompe el barrido
             _log.warning("pipeline: no se pudo marcar la historia usada (%s)", cid, exc_info=True)
@@ -473,9 +473,9 @@ def _temas_en_proceso_de(marca: str) -> list[dict[str, Any]]:
     if not temas:
         return []
     try:
-        # WHERE en SQL por marca (antes: tabla `contenido_plataforma` ENTERA por cada marca
+        # WHERE en SQL por marca (antes: tabla `pieza` ENTERA por cada marca
         # y barrido, filtrada en Python).
-        con_copy = repos.ids_contenido_con_copy(marca)
+        con_copy = repos.ids_publicacion_con_copy(marca)
     except Exception:  # noqa: BLE001 -- sin plataformas, contamos solo los pendientes de verificación
         con_copy = set()
     en_proceso: list[dict[str, Any]] = []
@@ -519,7 +519,7 @@ def cupo_produccion_restante(
     if cupo_d <= 0:
         return None
     try:
-        usados = repos.contar_contenido_origen_desde(
+        usados = repos.contar_publicacion_origen_desde(
             marca, ORIGEN_PIPELINE, inicio_dia_cdmx_iso_utc(momento)
         )
     except Exception:  # noqa: BLE001 -- fail-closed: sin contador fiable no se admite
@@ -606,7 +606,7 @@ def caducar_temas_viejos(*, ahora: datetime | None = None) -> int:
             )
             try:
                 previas = str(tema.get("notas") or "").strip()
-                repos.actualizar_contenido(
+                repos.actualizar_publicacion(
                     tema_id,
                     {
                         "verificacion_fuente": VERIFICACION_CADUCADA,

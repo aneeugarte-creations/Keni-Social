@@ -52,24 +52,24 @@ SEAMS_PERMITIDOS: frozenset[tuple[str, str]] = frozenset(
         # fachada de jobs del gateway. (ADR 0005 §Seams #4.)
         ("media", "generaciones"),
         # Seam #1 (A→C handoff de borrador): una generación de copy deposita un
-        # *borrador* en `publicaciones` (C) por la función-CONTRATO
-        # `dominio.publicaciones.crear_borrador` (C garantiza el estado inicial `borrador`),
-        # no por `repos.crear_publicacion` ni por tablas internas de C. Tras retirar el
+        # *borrador* en `piezas` (C) por la función-CONTRATO
+        # `dominio.piezas.crear_borrador` (C garantiza el estado inicial `borrador`),
+        # no por `repos.crear_pieza` ni por tablas internas de C. Tras retirar el
         # sistema de skills, el handoff lo realizan `dominio.copy` (post-procesado de copy) e
         # `api/historial.py` (guardar como publicación). El cruce vive en el dominio, no en
         # los routers, así que el lint no lo dispara; el seam de `historial` SÍ se ve abajo.
         # `api/historial.py` (A, NEUTRO) hereda ese mismo seam: "guardar como publicación"
-        # deposita borradores por el contrato `dominio.publicaciones.crear_borrador` (vía
+        # deposita borradores por el contrato `dominio.piezas.crear_borrador` (vía
         # `dominio.copy.crear_publicaciones_desde_piezas` o directo). Es el handoff A→C de
         # siempre, ahora desde el módulo de historial (al retirar el sistema de skills).
-        ("historial", "publicaciones"),
+        ("historial", "piezas"),
         # Seam (produccion lee la agenda de C): el panel "Producción del día"
         # (`api/produccion.py`) muestra la cola de programación con el PRÓXIMO HUECO por
         # red, y ese cálculo (franjas + ocupados) vive en
-        # `api.publicaciones.calcular_hueco_para` — la MISMA función del encolado manual y
+        # `api.piezas.calcular_hueco_para` — la MISMA función del encolado manual y
         # de la auto-programación, a propósito: si el panel calculara sus huecos aparte,
         # mentiría en cuanto divergieran. SOLO LECTURA (no muta nada de C).
-        ("produccion", "publicaciones"),
+        ("produccion", "piezas"),
         # Seam #7 (operación C usa la infra de jobs de A): `api/parrilla_import.py` (C)
         # importa documento a la rota con un `claude -p` READ-ONLY en SEGUNDO PLANO, y
         # para ello usa la infraestructura de jobs `generaciones` (A) — encolar y leer el
@@ -81,9 +81,9 @@ SEAMS_PERMITIDOS: frozenset[tuple[str, str]] = frozenset(
         # usa la infraestructura de jobs `generaciones` (A) — encolar y leer el estado del job.
         # Idéntico acoplamiento app→app que `parrilla_import`/`media`. T-futura puede moverlo tras
         # la fachada de jobs del gateway. (ADR 0005 §Seams.) NOTA: `contenido` se partió de
-        # `api/contenido.py` a un PAQUETE `api/contenido/`; el cruce vive hoy en `contenido/_comun.py`
+        # `api/publicaciones.py` a un PAQUETE `api/publicaciones/`; el cruce vive hoy en `contenido/_comun.py`
         # (`from ... import generaciones`) y el lint lo escanea recorriendo todos los `.py` del paquete.
-        ("contenido", "generaciones"),
+        ("publicaciones", "generaciones"),
         # Seam (shell lee señales de operación para el DOCTOR de salud): `api/estado.py`
         # (shell) absorbió los chequeos del banner (cola, presupuesto, daemons, disco…) y
         # para el de la COLA lee el snapshot de `api.actividad` (produccion) — SOLO LECTURA,
@@ -91,9 +91,9 @@ SEAMS_PERMITIDOS: frozenset[tuple[str, str]] = frozenset(
         # le importa a todo el equipo, no a una app. (ADR 0005 §Seams.)
         ("estado", "actividad"),
         # NOTA — seams RETIRADOS de la allowlist (T1.1 / T1.2 / borra-panel):
-        #   ("reciclaje", "publicaciones")  [T1.1]: `reciclaje` (A) ya NO lee el almacén
+        #   ("reciclaje", "piezas")  [T1.1]: `reciclaje` (A) ya NO lee el almacén
         #       de C en su router; pide el universo a la función-contrato de lectura de C
-        #       `dominio.publicaciones.listar_para_reciclaje` a través de su propio
+        #       `dominio.piezas.listar_para_reciclaje` a través de su propio
         #       `dominio.reciclaje`. El router quedó limpio: no hay cruce de frontera que
         #       permitir. (Era una entrada documental/precautoria; el seam sigue siendo
         #       legítimo pero ya no necesita allowlist porque no toca el router.)
@@ -101,7 +101,7 @@ SEAMS_PERMITIDOS: frozenset[tuple[str, str]] = frozenset(
         #       `keni_metricas.servicio` (infra de solo lectura, ADR 0005 §Seams #6), no
         #       por el router/internals de `metricas`. Nunca fue un cruce app↔app real;
         #       era una entrada documental.
-        #   ("panel", "publicaciones") [borra-panel]: se retiró el dashboard `/api/panel`
+        #   ("panel", "piezas") [borra-panel]: se retiró el dashboard `/api/panel`
         #       y su router `api/panel.py`; ya no existe el cruce shell→C.
     }
 )
@@ -170,7 +170,7 @@ def _modulos_destino(node: ast.ImportFrom) -> set[str]:
 
     OJO con `from ..dominio import <Y>` (forma "paquete import submódulo"): el módulo
     cruzado es `<Y>` (un submódulo de `dominio/`), NO el paquete `dominio`. Resolverlo
-    a `dominio` dejaba escapar cruces reales (p.ej. `from ..dominio import publicaciones`
+    a `dominio` dejaba escapar cruces reales (p.ej. `from ..dominio import piezas`
     desde un router de otra app); por eso aquí los NOMBRES importados son los módulos.
     """
     if node.level < 1:
@@ -292,24 +292,24 @@ def test_allowlist_no_tiene_seams_muertos():
 def test_el_lint_detecta_una_violacion_sintetica():
     """PRUEBA de que el lint MUERDE: una violación inventada DEBE ser detectada.
 
-    Simulamos que `api/metricas.py` (B) importa `from ..dominio.publicaciones import x`
+    Simulamos que `api/metricas.py` (B) importa `from ..dominio.piezas import x`
     (internals de C) y comprobamos que el clasificador lo marca como cruce prohibido
     fuera de la allowlist. No tocamos ningún fichero del repo: parseamos un fragmento.
     """
     mapa = registro.modulo_a_app()
     assert mapa.get("metricas") == "metricas"
-    assert mapa.get("publicaciones") == "operacion"
+    assert mapa.get("piezas") == "operacion"
 
-    # Las DOS formas de import deben resolverse a `publicaciones` (la dotada y la
+    # Las DOS formas de import deben resolverse a `piezas` (la dotada y la
     # "paquete import submódulo", que antes evadía el resolver y dejaba escapar cruces).
     for fragmento in (
-        "from ..dominio.publicaciones import publicacion_a_dict\n",
-        "from ..dominio import publicaciones\n",
+        "from ..dominio.piezas import pieza_a_dict\n",
+        "from ..dominio import piezas\n",
     ):
         arbol = ast.parse(fragmento)
         node = next(n for n in ast.walk(arbol) if isinstance(n, ast.ImportFrom))
         destinos = _modulos_destino(node)
-        assert "publicaciones" in destinos, (
+        assert "piezas" in destinos, (
             f"el resolver no detectó el módulo importado en: {fragmento!r}"
         )
 
@@ -318,5 +318,5 @@ def test_el_lint_detecta_una_violacion_sintetica():
         mapa.get(d) not in (None, app_origen, "shell") for d in destinos
     )
     assert cruce_prohibido, "el lint NO detectó el cruce B->C (debería)"
-    # Y, como (metricas, publicaciones) NO está en la allowlist, sería una violación.
-    assert ("metricas", "publicaciones") not in SEAMS_PERMITIDOS
+    # Y, como (metricas, piezas) NO está en la allowlist, sería una violación.
+    assert ("metricas", "piezas") not in SEAMS_PERMITIDOS

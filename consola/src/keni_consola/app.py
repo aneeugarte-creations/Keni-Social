@@ -186,7 +186,7 @@ async def _manejar_pieza_inmutable(request: Request, exc: PiezaPublicadaInmutabl
     """Edición de una pieza ya `publicado` -> 409 JSON claro.
 
     Manejador CENTRAL por TIPO: cualquier mutador que deje propagar `PiezaPublicadaInmutable`
-    (la lanza la fachada `repos.actualizar_publicacion`/`actualizar_contenido_plataforma`)
+    (la lanza la fachada `repos.actualizar_pieza`/`actualizar_pieza_fila`)
     responde 409 con el detalle de qué campo se intentó cambiar."""
     return JSONResponse(
         {"error": str(exc) or "Una pieza ya publicada es inmutable."},
@@ -286,12 +286,12 @@ def crear_app(
         except Exception:  # noqa: BLE001 -- idem: no impide el arranque
             _logger.warning("No se pudieron inicializar las fuentes del motor de ingesta.", exc_info=True)
         # Lleva tareas, piezas de la rota y
-        # publicaciones al modelo `contenido` para que el tablero las muestre.
+        # piezas al modelo `contenido` para que el tablero las muestre.
         # Idempotente (marca el origen / preserva ids) y best-effort: no impide el arranque.
         try:
-            from . import migrar_contenido
+            from . import migrar_publicacion
 
-            migrar_contenido.migrar()
+            migrar_publicacion.migrar()
         except Exception:  # noqa: BLE001 -- el arranque no debe romper por la migración
             _logger.warning("No se pudo migrar al tablero de contenido.", exc_info=True)
 

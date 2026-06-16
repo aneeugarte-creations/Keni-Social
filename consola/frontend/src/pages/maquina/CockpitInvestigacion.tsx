@@ -6,7 +6,7 @@ import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Algoritmos from "@/pages/Algoritmos";
 import Cobertura from "@/pages/Cobertura";
-import ContenidosHub from "@/pages/ContenidosHub";
+import PublicacionesHub from "@/pages/PublicacionesHub";
 import Fuentes from "@/pages/Fuentes";
 import { PanelInvestigacion } from "@/pages/configuracion/SeccionFuncionalidad";
 
@@ -17,7 +17,7 @@ import { PanelInvestigacion } from "@/pages/configuracion/SeccionFuncionalidad";
  *     revisa. Es la pestaña por defecto. (La ruta vieja `/datos/investigacion` redirige aquí.)
  *   · FUENTES (`Fuentes`): los canales que alimentan el pool.
  *   · ALGORITMOS (`Algoritmos`): inteligencia de plataforma + trends.
- *   · CONTENIDOS (`ContenidosHub`): el banco EVERGREEN —piezas que no caducan—.
+ *   · CONTENIDOS (`PublicacionesHub`): el banco EVERGREEN —piezas que no caducan—.
  *
  * El PIPELINE (recolectar → verificar) ya NO vive aquí: se enciende y se vigila en «Contexto»
  * (Máquina), donde cada fase trae su prompt, su contexto y sus logs. El menú «⋮» (oculto en
@@ -66,7 +66,7 @@ export default function CockpitInvestigacion() {
           <TabsTrigger value="mesa">Noticias</TabsTrigger>
           <TabsTrigger value="fuentes">Fuentes</TabsTrigger>
           <TabsTrigger value="algoritmos">Algoritmos</TabsTrigger>
-          <TabsTrigger value="contenidos">Contenidos</TabsTrigger>
+          <TabsTrigger value="contenidos">Publicaciones</TabsTrigger>
         </TabsList>
 
         {/* NOTICIAS: el pool con usar/descartar (Cobertura) — la pestaña por defecto. */}
@@ -84,9 +84,9 @@ export default function CockpitInvestigacion() {
           <Algoritmos />
         </TabsContent>
 
-        {/* CONTENIDOS: el banco EVERGREEN (ContenidosHub). */}
+        {/* CONTENIDOS: el banco EVERGREEN (PublicacionesHub). */}
         <TabsContent value="contenidos">
-          <ContenidosHub />
+          <PublicacionesHub />
         </TabsContent>
       </Tabs>
     </>

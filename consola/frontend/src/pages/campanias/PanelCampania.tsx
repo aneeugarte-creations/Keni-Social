@@ -1,6 +1,6 @@
 /**
  * Dashboard de UNA campaña en un periodo: KPIs con comparativa (incluido el nº de
- * publicaciones), tendencia diaria, desglose por red y la tabla de piezas del periodo
+ * piezas), tendencia diaria, desglose por red y la tabla de piezas del periodo
  * —filtrable por red/formato y ordenable por cualquier columna—. Es la vista de
  * seguimiento de una campaña por hashtag para analizar su rendimiento.
  */
@@ -138,7 +138,7 @@ export function PanelCampania({
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <TarjetaKpiComparada
-          etiqueta="Publicaciones"
+          etiqueta="Piezas"
           valor={numeroCompleto(kpis.piezas)}
           comp={comparativa.piezas}
         />
@@ -254,7 +254,7 @@ function DesgloseRedTabla({ filas }: { filas: DesgloseRedCampania[] }) {
           <TableHeader>
             <TableRow>
               <TableHead className="pl-6">Red</TableHead>
-              {col("piezas", "Publicaciones")}
+              {col("piezas", "Piezas")}
               {col("visualizaciones", "Vistas")}
               {col("interacciones", "Interacciones")}
               {col("likes", "Me gusta")}

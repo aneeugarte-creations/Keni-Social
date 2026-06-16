@@ -168,7 +168,7 @@
         "engagement_pct": {
           "type": "number"
         },
-        "publicaciones": {
+        "piezas": {
           "type": "integer"
         }
       },
@@ -177,7 +177,7 @@
         "alcance",
         "interacciones",
         "engagement_pct",
-        "publicaciones"
+        "piezas"
       ]
     },
     "CuentaMetrica": {
@@ -1171,10 +1171,10 @@
       "type": "object",
       "title": "PiezaRendimiento",
       "properties": {
-        "contenido_id": {
+        "publicacion_id": {
           "type": "string"
         },
-        "plataforma_id": {
+        "pieza_id": {
           "type": "string"
         },
         "titulo": {
@@ -1231,10 +1231,10 @@
           "type": "string"
         }
       },
-      "description": "Una pieza YA PUBLICADA del tablero con su rendimiento REAL (drill-down marca->pieza).\n\nA diferencia de `PiezaMetrica` (mejores/peores del periodo descubiertas desde la\nlista de posts), esto es el rendimiento de una pieza CONCRETA que el equipo publicó\ndesde la Consola, leído de Metricool por su `id_post_metricool`. `contenido_id` enlaza\na la pieza en el tablero (`/operacion/feed/lista`). `encontrado=False` => Metricool aún\nno tiene datos (recién publicada): la UI muestra \"sin datos todavía\", no ceros falsos.",
+      "description": "Una pieza YA PUBLICADA del tablero con su rendimiento REAL (drill-down marca->pieza).\n\nA diferencia de `PiezaMetrica` (mejores/peores del periodo descubiertas desde la\nlista de posts), esto es el rendimiento de una pieza CONCRETA que el equipo publicó\ndesde la Consola, leído de Metricool por su `id_post_metricool`. `publicacion_id` enlaza\na la pieza en el tablero (`/operacion/feed/lista`). `encontrado=False` => Metricool aún\nno tiene datos (recién publicada): la UI muestra \"sin datos todavía\", no ceros falsos.",
       "required": [
-        "contenido_id",
-        "plataforma_id",
+        "publicacion_id",
+        "pieza_id",
         "titulo",
         "marca",
         "marca_nombre",
@@ -2023,7 +2023,7 @@
           "type": "string"
         }
       },
-      "description": "Envelope ADITIVO de paginacion (offset-based, #121).\n\nLo añaden los listados pesados (publicaciones/runs/generaciones) junto a su\nclave de lista. `total` = filas existentes sin paginar; `limite` = tamaño de\npagina efectivo (igual a `total` si no se paginó); `desplazamiento` = offset.\n\n`cursor_siguiente` (KEYSET, feed de scroll infinito): clave `\"<creado>|<id>\"` para\npedir la SIGUIENTE pagina. Solo lo emite el feed cuando pagina por `?cursor=` y hay\nmas filas; se OMITE en la ultima pagina y en los modos offset/completo (opcional).",
+      "description": "Envelope ADITIVO de paginacion (offset-based, #121).\n\nLo añaden los listados pesados (piezas/runs/generaciones) junto a su\nclave de lista. `total` = filas existentes sin paginar; `limite` = tamaño de\npagina efectivo (igual a `total` si no se paginó); `desplazamiento` = offset.\n\n`cursor_siguiente` (KEYSET, feed de scroll infinito): clave `\"<creado>|<id>\"` para\npedir la SIGUIENTE pagina. Solo lo emite el feed cuando pagina por `?cursor=` y hay\nmas filas; se OMITE en la ultima pagina y en los modos offset/completo (opcional).",
       "required": [
         "total",
         "limite",
@@ -2063,14 +2063,14 @@
         "modelo"
       ]
     },
-    "Publicacion": {
+    "Pieza": {
       "type": "object",
-      "title": "Publicacion",
+      "title": "Pieza",
       "properties": {
         "id": {
           "type": "string"
         },
-        "contenido_id": {
+        "publicacion_id": {
           "type": "string"
         },
         "pipeline_id": {
@@ -2228,10 +2228,10 @@
           "type": "string"
         }
       },
-      "description": "Una publicacion serializada (`dominio.publicaciones.publicacion_a_dict`).\n\n`marca_nombre`/`red_nombre` se resuelven en servidor. `imagen` es el nombre de\narchivo (\"\" si no hay) e `imagen_url` su ruta servible (\"\" si no hay).\n`autor_id`/`autor_nombre` (atribucion por usuario, #130 Fase 1) identifican a quien\ncreo la pieza; \"\" en piezas legadas/anonimas (la UI las muestra como \"desconocido\").\n\nFlujo de aprobacion de equipo (#9, Fase 3): `enviado_a_revision_en`/`revisor_id`/\n`revisor_nombre`/`revisado_en` registran quien la envio/reviso y cuando; \"\" mientras\nno haya pasado por revision (incluidas las piezas legadas). `preparado_en` es la marca\nDRY-RUN del programador (instante en que quedo \"lista para publicar\"; el posteo real\nvia Metricool esta gated por `KENI_PUBLICAR_REAL`); \"\" hasta que vence su `fecha_programada`.",
+      "description": "Una pieza serializada (`dominio.piezas.pieza_a_dict`).\n\n`marca_nombre`/`red_nombre` se resuelven en servidor. `imagen` es el nombre de\narchivo (\"\" si no hay) e `imagen_url` su ruta servible (\"\" si no hay).\n`autor_id`/`autor_nombre` (atribucion por usuario, #130 Fase 1) identifican a quien\ncreo la pieza; \"\" en piezas legadas/anonimas (la UI las muestra como \"desconocido\").\n\nFlujo de aprobacion de equipo (#9, Fase 3): `enviado_a_revision_en`/`revisor_id`/\n`revisor_nombre`/`revisado_en` registran quien la envio/reviso y cuando; \"\" mientras\nno haya pasado por revision (incluidas las piezas legadas). `preparado_en` es la marca\nDRY-RUN del programador (instante en que quedo \"lista para publicar\"; el posteo real\nvia Metricool esta gated por `KENI_PUBLICAR_REAL`); \"\" hasta que vence su `fecha_programada`.",
       "required": [
         "id",
-        "contenido_id",
+        "publicacion_id",
         "pipeline_id",
         "titulo",
         "marca",
@@ -2274,37 +2274,37 @@
         "evergreen"
       ]
     },
-    "RespuestaPublicaciones": {
+    "RespuestaPiezas": {
       "type": "object",
-      "title": "RespuestaPublicaciones",
+      "title": "RespuestaPiezas",
       "properties": {
-        "publicaciones": {
+        "piezas": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/Publicacion"
+            "$ref": "#/$defs/Pieza"
           }
         },
         "paginacion": {
           "$ref": "#/$defs/Paginacion"
         }
       },
-      "description": "Listado de `GET /api/publicaciones` con el envelope de paginacion (#121).",
+      "description": "Listado de `GET /api/piezas` con el envelope de paginacion (#121).",
       "required": [
-        "publicaciones",
+        "piezas",
         "paginacion"
       ]
     },
-    "RespuestaPublicacion": {
+    "RespuestaPieza": {
       "type": "object",
-      "title": "RespuestaPublicacion",
+      "title": "RespuestaPieza",
       "properties": {
-        "publicacion": {
-          "$ref": "#/$defs/Publicacion"
+        "pieza": {
+          "$ref": "#/$defs/Pieza"
         }
       },
-      "description": "Respuesta de los endpoints que devuelven UNA publicacion (`{publicacion}`).",
+      "description": "Respuesta de los endpoints que devuelven UNA pieza (`{pieza}`).",
       "required": [
-        "publicacion"
+        "pieza"
       ]
     },
     "RespuestaColaAprobacion": {
@@ -2314,14 +2314,14 @@
         "cola": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/Publicacion"
+            "$ref": "#/$defs/Pieza"
           }
         },
         "total": {
           "type": "integer"
         }
       },
-      "description": "Cola de aprobacion (`GET /api/aprobacion/cola`): piezas en revision, FIFO.\n\nCada item es una `Publicacion` completa (incluye `autor_nombre`/\n`enviado_a_revision_en`: quien la envio y desde cuando espera). `total` = nº en cola.",
+      "description": "Cola de aprobacion (`GET /api/aprobacion/cola`): piezas en revision, FIFO.\n\nCada item es una `Pieza` completa (incluye `autor_nombre`/\n`enviado_a_revision_en`: quien la envio y desde cuando espera). `total` = nº en cola.",
       "required": [
         "cola",
         "total"
@@ -2496,13 +2496,13 @@
       "$ref": "#/$defs/MetricasRun"
     },
     {
-      "$ref": "#/$defs/Publicacion"
+      "$ref": "#/$defs/Pieza"
     },
     {
-      "$ref": "#/$defs/RespuestaPublicaciones"
+      "$ref": "#/$defs/RespuestaPiezas"
     },
     {
-      "$ref": "#/$defs/RespuestaPublicacion"
+      "$ref": "#/$defs/RespuestaPieza"
     },
     {
       "$ref": "#/$defs/RespuestaColaAprobacion"

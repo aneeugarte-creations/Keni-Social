@@ -90,7 +90,7 @@ ORIGEN_PIPELINE = "pipeline"
 # trabajo REAL con coste (verificación verificación, copy, arte, fusión/encaje del pool) se sella
 # `tipo='pipeline'` (TIPO_PIPELINE) y SÍ aparece en Actividad con sus tokens/coste/tiempo: TODO
 # lo que lanza la máquina es UN solo tipo; lo manual (copy a mano, imagen del Estudio) conserva
-# su tipo propio. La vista Pipelines lee los marcadores por `contenido_id`. La ETAPA viaja en la
+# su tipo propio. La vista Pipelines lee los marcadores por `publicacion_id`. La ETAPA viaja en la
 # `etiqueta` ("ADMITIR · ..."/"REDACTAR · ..."/"VERIFICAR · ...").
 TIPO_ACTIVIDAD = "pipeline_etapa"
 # `tipo` ÚNICO de toda generación REAL que lanza el pipeline (verificación verificación, copy, arte, Haiku del
@@ -442,7 +442,7 @@ _FETCH_ARTICULO = _fetch_articulo_real
 
 
 def registrar_etapa(
-    etapa: str, marca: str, detalle: str, contenido_id: str = "", gen_id: str = ""
+    etapa: str, marca: str, detalle: str, publicacion_id: str = "", gen_id: str = ""
 ) -> dict[str, Any] | None:
     """Sella una entrada de ACTIVIDAD de una etapa del pipeline (CI/CD/verificación). Best-effort.
 
@@ -451,7 +451,7 @@ def registrar_etapa(
     junto al resto de la actividad de IA. Un fallo al sellar NUNCA aborta el barrido (devuelve
     None y se loguea): la actividad es trazabilidad, no parte crítica del flujo.
 
-    `contenido_id` (opcional, def "") CORRELACIONA la etapa con la RUN (el `contenido` padre
+    `publicacion_id` (opcional, def "") CORRELACIONA la etapa con la RUN (el `contenido` padre
     del pipeline) para la vista Pipelines (`/api/pipelines/{id}`). CD/verificación lo pasan (la etapa va
     sobre un tema concreto); CI es brand-level y lo deja vacío. Es ADITIVO: vacío no engorda el
     registro (lo filtra `generaciones._cuerpo`) y los registros previos lo traen como "".
@@ -473,7 +473,7 @@ def registrar_etapa(
             "tipo": TIPO_ACTIVIDAD,
             "marca": marca or "",
             "proceso": proceso,
-            "contenido_id": contenido_id or "",
+            "publicacion_id": publicacion_id or "",
             "gen_id": gen_id or "",
             "etiqueta": etiqueta[:200],
             "estado": generaciones.ESTADO_COMPLETADO,
@@ -608,7 +608,7 @@ def anotar_intento(tema: dict[str, Any], campo: str) -> None:
     if not tema_id:
         return
     try:
-        fresco = repos.obtener_contenido(tema_id)
+        fresco = repos.obtener_publicacion(tema_id)
     except Exception:  # noqa: BLE001 -- sin lectura no anotamos (el tope simplemente no avanza)
         return
     if fresco is None or not (fresco.get("copy_pendiente") or "").strip():
@@ -617,7 +617,7 @@ def anotar_intento(tema: dict[str, Any], campo: str) -> None:
     pend[campo] = int(pend.get(campo) or 0) + 1
     pend[f"{campo}_ts"] = ahora_iso()
     try:
-        repos.actualizar_contenido(tema_id, {"copy_pendiente": json.dumps(pend, ensure_ascii=False)})
+        repos.actualizar_publicacion(tema_id, {"copy_pendiente": json.dumps(pend, ensure_ascii=False)})
     except Exception:  # noqa: BLE001 -- sin contador, el tope no aplica; el reintento sigue
         _log.warning("pipeline: no se pudo anotar el intento %s del tema %s", campo, tema_id, exc_info=True)
 
@@ -658,7 +658,7 @@ def marcar_fallo_etapa(tema_id: str, etapa: str, motivo: str) -> None:
         "explicacion": motivo, "sugerencia": "Revisa la generación o relanza a mano.",
     }]
     try:
-        repos.actualizar_contenido(tema_id, {
+        repos.actualizar_publicacion(tema_id, {
             "verificacion_fuente": VERIFICACION_PROBLEMA,
             "verificar_hallazgos": json.dumps(hallazgos, ensure_ascii=False),
         })
@@ -672,7 +672,7 @@ def _tiene_copy(tema_id: str) -> bool:
     if not tema_id:
         return False
     try:
-        return bool(repos.listar_contenido_plataforma(tema_id))
+        return bool(repos.listar_piezas_fila(tema_id))
     except Exception:  # noqa: BLE001 -- sin lectura, conservador: asumimos que NO para reintentar
         return False
 
@@ -681,11 +681,11 @@ def temas_pipeline(marca: str | None = None) -> list[dict[str, Any]]:
     """TODOS los temas del pipeline (origen `pipeline`), en orden FIFO. [] si la lectura falla.
 
     NO recorta: el volumen lo acota la ADMISIÓN (gate serial en curso por marca), así que aquí
-    solo puede haber, como mucho, lo admitido. `listar_contenido` ya ordena por prioridad y
+    solo puede haber, como mucho, lo admitido. `listar_publicacion` ya ordena por prioridad y
     `fecha_objetivo/creado ASC`, así que el más antiguo PENDIENTE se atiende primero (justo).
     """
     try:
-        items = repos.listar_contenido(marca=marca)
+        items = repos.listar_publicacion(marca=marca)
     except Exception:  # noqa: BLE001 -- sin temas legibles, el barrido no hace nada
         return []
     return [it for it in items if (it.get("origen") or "") == ORIGEN_PIPELINE]

@@ -40,7 +40,7 @@ def registrar(mcp: FastMCP, fuente: FuenteMetricas, historico: Historico | None 
 
     @mcp.tool()
     def mejores_piezas(cuenta: str, rango: str = "semana", n: int = 3) -> dict:
-        """Las N piezas (publicaciones) con mejor desempeno de una cuenta en el rango,
+        """Las N piezas (piezas) con mejor desempeno de una cuenta en el rango,
         ordenadas por engagement. Util para '¿que contenido funciono mejor?'."""
         n = max(1, min(int(n), 10))
         try:
@@ -186,7 +186,7 @@ def registrar(mcp: FastMCP, fuente: FuenteMetricas, historico: Historico | None 
     @mcp.tool()
     def correlacion_seguidores(rango: str = "mes") -> dict:
         """Correlación (NO causalidad) entre crecimiento de seguidores y
-        publicaciones: por marca×red×día, seguidores ganados, nº de posts,
+        piezas: por marca×red×día, seguidores ganados, nº de posts,
         seguidores por post y la pieza estrella del día. Incluye un caveat de
         atribución. Si no hay serie de followers, items vacío y la nota lo explica."""
         from . import servicio

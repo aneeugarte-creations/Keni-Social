@@ -17,9 +17,9 @@ from __future__ import annotations
 from typing import Any
 
 from keni_shared.estados import (
-    CLASES_CONTENIDO as CLASES,
-    ESTADOS_CONTENIDO,
-    ESTADOS_CONTENIDO_PLATAFORMA as ESTADOS_PLATAFORMA,
+    CLASES_PUBLICACION as CLASES,
+    ESTADOS_PUBLICACION,
+    ESTADOS_PIEZA as ESTADOS_PLATAFORMA,
     FLUJOS_CONTENIDO as FLUJOS,
 )
 from mcp.server.fastmcp import FastMCP
@@ -82,7 +82,7 @@ def registrar(mcp: FastMCP, cliente: ClienteConsola) -> None:
             "hasta": hasta,
         }
         try:
-            datos = cliente.listar_contenido(params)
+            datos = cliente.listar_publicacion(params)
         except ErrorConsola as e:
             return {"error": str(e)}
         contenidos = datos.get("contenidos", [])
@@ -102,7 +102,7 @@ def registrar(mcp: FastMCP, cliente: ClienteConsola) -> None:
         }
 
     @mcp.tool()
-    def crear_contenido(
+    def crear_publicacion(
         titulo: str,
         flujo: str = "importante",
         marca: str = "",
@@ -137,22 +137,22 @@ def registrar(mcp: FastMCP, cliente: ClienteConsola) -> None:
         if marca:
             cuerpo["marca"] = marca
         try:
-            datos = cliente.crear_contenido(cuerpo)
+            datos = cliente.crear_publicacion(cuerpo)
         except ErrorConsola as e:
             return {"error": str(e)}
         return {"contenido": _resumen_item(datos.get("contenido", {}))}
 
     @mcp.tool()
-    def mover_pieza(contenido_id: str, plataforma_id: str, estado: str) -> dict:
+    def mover_pieza(publicacion_id: str, pieza_id: str, estado: str) -> dict:
         """Mueve una pieza (una fila por plataforma) a otro estado del carril:
         pendiente|en_curso|en_revision|aprobado|programado|publicado. Es el equivalente a
         arrastrar la tarjeta en el tablero. Pasar a `aprobado` o `publicado` dispara los
         eventos internos/webhooks de la Consola. Usa `listar_tablero` para conocer
-        `contenido_id` y `plataforma_id`."""
+        `publicacion_id` y `pieza_id`."""
         if estado not in ESTADOS_PLATAFORMA:
             return {"error": f"Estado invalido. Usa uno de: {', '.join(ESTADOS_PLATAFORMA)}."}
         try:
-            datos = cliente.actualizar_plataforma(contenido_id, plataforma_id, {"estado": estado})
+            datos = cliente.actualizar_plataforma(publicacion_id, pieza_id, {"estado": estado})
         except ErrorConsola as e:
             return {"error": str(e)}
         plat = datos.get("plataforma", {})
@@ -166,8 +166,8 @@ def registrar(mcp: FastMCP, cliente: ClienteConsola) -> None:
         }
 
     @mcp.tool()
-    def actualizar_contenido(
-        contenido_id: str,
+    def actualizar_publicacion(
+        publicacion_id: str,
         estado: str = "",
         prioridad: str = "",
         responsable_id: str = "",
@@ -180,8 +180,8 @@ def registrar(mcp: FastMCP, cliente: ClienteConsola) -> None:
         Solo manda los campos que quieras cambiar (el resto se deja como esta)."""
         cuerpo: dict[str, Any] = {}
         if estado:
-            if estado not in ESTADOS_CONTENIDO:
-                return {"error": f"Estado invalido. Usa uno de: {', '.join(ESTADOS_CONTENIDO)}."}
+            if estado not in ESTADOS_PUBLICACION:
+                return {"error": f"Estado invalido. Usa uno de: {', '.join(ESTADOS_PUBLICACION)}."}
             cuerpo["estado"] = estado
         if prioridad:
             cuerpo["prioridad"] = prioridad
@@ -196,18 +196,18 @@ def registrar(mcp: FastMCP, cliente: ClienteConsola) -> None:
         if not cuerpo:
             return {"error": "Indica algun campo a actualizar."}
         try:
-            datos = cliente.actualizar_contenido(contenido_id, cuerpo)
+            datos = cliente.actualizar_publicacion(publicacion_id, cuerpo)
         except ErrorConsola as e:
             return {"error": str(e)}
         return {"contenido": _resumen_item(datos.get("contenido", {}))}
 
     @mcp.tool()
-    def agregar_plataforma(contenido_id: str, red: str) -> dict:
+    def agregar_plataforma(publicacion_id: str, red: str) -> dict:
         """Anade una fila por plataforma (una red) a un contenido ya creado, p.ej. cuando
         decides publicar tambien en TikTok una pieza que solo tenia Instagram. `red` es un id
         del catalogo (mira `listar_tablero`) o "web"."""
         try:
-            datos = cliente.agregar_plataforma(contenido_id, red)
+            datos = cliente.agregar_plataforma(publicacion_id, red)
         except ErrorConsola as e:
             return {"error": str(e)}
         plat = datos.get("plataforma", {})

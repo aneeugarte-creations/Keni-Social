@@ -2,10 +2,10 @@
 
 PROBLEMA QUE RESUELVE
 =====================
-El tablero (`api/contenido.py`) muestra el estado editorial de cada pieza (copy/imagen/
+El tablero (`api/publicaciones.py`) muestra el estado editorial de cada pieza (copy/imagen/
 revision/publicar) pero NO su rendimiento una vez publicada. Cuando el programador
 empuja una pieza a Metricool guarda su `id_post_metricool` por plataforma
-(`contenido_plataforma.id_post_metricool`). Aqui cerramos el bucle: con ese id se lee
+(`pieza.id_post_metricool`). Aqui cerramos el bucle: con ese id se lee
 el rendimiento REAL (visualizaciones, interacciones, engagement) desde la **API de
 Metricool** —la fuente PAGADA— y se pinta en cada tarjeta, SIN adaptadores por red.
 
@@ -152,7 +152,7 @@ def rendimiento(marca: str, red: str, id_post: str) -> dict[str, Any]:
 def rendimiento_de_tablero(
     contenidos: list[dict[str, Any]],
 ) -> dict[str, dict[str, Any]]:
-    """Mapa `contenido_plataforma.id -> rendimiento` para las filas con `id_post_metricool`.
+    """Mapa `pieza.id -> rendimiento` para las filas con `id_post_metricool`.
 
     Recibe los items del tablero (ya con sus `plataformas`) y devuelve solo las filas
     publicadas que tienen `id_post_metricool`: cada una con su rendimiento (cacheado).
@@ -183,14 +183,14 @@ def listado_piezas_publicadas(
 
     Recibe los items del tablero ya enriquecidos con `id`/`titulo`/`marca`/`marca_nombre`
     y sus `plataformas`. Cada elemento de la salida lleva la metadata para enlazar a la
-    pieza en `/operacion/feed/lista` (`contenido_id`) y su rendimiento aplanado. Ordena de
+    pieza en `/operacion/feed/lista` (`publicacion_id`) y su rendimiento aplanado. Ordena de
     mayor a menor engagement (las encontradas primero; las "sin datos" al final).
     Best-effort por pieza: un fallo de una no afecta a las demás.
     """
     filas: list[dict[str, Any]] = []
     for contenido in contenidos:
         marca = contenido.get("marca") or ""
-        contenido_id = contenido.get("id") or ""
+        publicacion_id = contenido.get("id") or ""
         titulo = contenido.get("titulo") or ""
         marca_nombre = contenido.get("marca_nombre") or marca
         for plat in contenido.get("plataformas", []):
@@ -201,8 +201,8 @@ def listado_piezas_publicadas(
             rend = rendimiento(marca, red, id_post)
             filas.append(
                 {
-                    "contenido_id": contenido_id,
-                    "plataforma_id": plat.get("id", ""),
+                    "publicacion_id": publicacion_id,
+                    "pieza_id": plat.get("id", ""),
                     "titulo": titulo,
                     "marca": marca,
                     "marca_nombre": marca_nombre,
@@ -323,10 +323,10 @@ def refrescar_piezas_recientes(
     """
     ahora = ahora or _ahora()
     try:
-        items = repos.listar_contenido()
+        items = repos.listar_publicacion()
         por_contenido: dict[str, list[dict[str, Any]]] = {}
-        for plat in repos.listar_contenido_plataforma():
-            por_contenido.setdefault(plat["contenido_id"], []).append(plat)
+        for plat in repos.listar_piezas_fila():
+            por_contenido.setdefault(plat["publicacion_id"], []).append(plat)
     except Exception:  # noqa: BLE001 -- un fallo de lectura no debe matar el barrido
         _log.exception("metricas_pieza: fallo al leer el tablero para el refresco proactivo.")
         return 0
@@ -372,7 +372,7 @@ def refrescar_piezas_recientes(
 # Para graficar el rendimiento POR SERIE/TIPO hay que ENLAZAR cada pieza de Metricool del
 # periodo con su `contenido` de la BD y leer ahí su clasificación. El enlace es:
 #
-#   1) PRIMARIO por id: `contenido_plataforma.id_post_metricool` (y, como acceso directo a
+#   1) PRIMARIO por id: `pieza.id_post_metricool` (y, como acceso directo a
 #      nivel pieza, `contenido.id_post_metricool`) -> el id que Metricool devuelve al
 #      programar. Es el enlace fuerte y sin ambigüedad.
 #   2) FALLBACK por título: si una pieza de Metricool no tiene id enlazado en la BD (p. ej.
@@ -382,11 +382,11 @@ def refrescar_piezas_recientes(
 #      en el grupo "Sin clasificar".
 #
 # TODO(captura del id al publicar): hoy el id de Metricool se guarda en
-# `contenido_plataforma.id_post_metricool` cuando el programador empuja la pieza (ver
+# `pieza.id_post_metricool` cuando el programador empuja la pieza (ver
 # `metricas_pieza.rendimiento` / el flujo de publicación). La columna
 # `contenido.id_post_metricool` (añadida en db.py) queda disponible como acceso directo a
 # nivel pieza para cuando el flujo de publicación la rellene; mientras no se rellene, el
-# enlace por `contenido_plataforma` ya cubre las piezas publicadas desde la Consola y el
+# enlace por `pieza` ya cubre las piezas publicadas desde la Consola y el
 # fuzzy-match por título cubre el resto. No requiere cambios en el publicador para funcionar.
 
 # Ejes de agrupación de la analítica por serie/tipo. El eje "tipo" sale de
@@ -427,9 +427,9 @@ def _indice_contenido_por_post(
     contenidos: list[dict[str, Any]],
     plataformas: list[dict[str, Any]],
 ) -> tuple[dict[str, str], dict[str, str]]:
-    """Construye los índices de enlace `id_post_metricool -> contenido_id` y `titulo_norm -> contenido_id`.
+    """Construye los índices de enlace `id_post_metricool -> publicacion_id` y `titulo_norm -> publicacion_id`.
 
-    El índice por id usa tanto `contenido_plataforma.id_post_metricool` (enlace real por red)
+    El índice por id usa tanto `pieza.id_post_metricool` (enlace real por red)
     como `contenido.id_post_metricool` (acceso directo a nivel pieza, si está relleno); los
     sellos de timeout/reconciliación (`_es_id_post_real`) se descartan para que no colisionen
     bajo una clave ficticia compartida. El índice por título normalizado es el fallback
@@ -450,7 +450,7 @@ def _indice_contenido_por_post(
             por_titulo.setdefault(titulo_norm, cid)
     for plat in plataformas:
         id_post = (plat.get("id_post_metricool") or "").strip()
-        cid = plat.get("contenido_id") or ""
+        cid = plat.get("publicacion_id") or ""
         if _es_id_post_real(id_post) and cid:
             por_id.setdefault(id_post, cid)
     return por_id, por_titulo
@@ -461,7 +461,7 @@ def _grupos_de_contenido(
 ) -> dict[str, str]:
     """Devuelve, para una pieza enlazada, su valor en cada eje (`tipo` + clases de etiqueta).
 
-    `etiquetas_por_cid` es `contenido_id -> {clase: nombre_etiqueta}`. Si la pieza no está
+    `etiquetas_por_cid` es `publicacion_id -> {clase: nombre_etiqueta}`. Si la pieza no está
     enlazada (`contenido is None`) o no tiene valor en un eje, ese eje queda "Sin clasificar".
     """
     grupos: dict[str, str] = {}
@@ -518,12 +518,12 @@ def analitica_por_etiqueta(
     piezas = servicio.construir_listado_piezas(rango, marca_metricas)
     fuente = servicio.nombre_fuente()
 
-    contenidos = repos.listar_contenido(marca=marca_consola)
-    plataformas = repos.listar_contenido_plataforma()
+    contenidos = repos.listar_publicacion(marca=marca_consola)
+    plataformas = repos.listar_piezas_fila()
     por_id, por_titulo = _indice_contenido_por_post(contenidos, plataformas)
     contenido_por_id = {c["id"]: c for c in contenidos if c.get("id")}
 
-    # Resuelve etiquetas: contenido_id -> {clase: nombre}. Solo nos interesa el nombre por
+    # Resuelve etiquetas: publicacion_id -> {clase: nombre}. Solo nos interesa el nombre por
     # clase (el primero asignado de cada clase; el modelo garantiza nombre único por clase).
     etiquetas = {e["id"]: e for e in repos.listar_etiquetas()}
     asignaciones = repos.etiquetas_por_contenido()

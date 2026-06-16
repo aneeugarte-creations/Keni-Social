@@ -14,8 +14,8 @@
  *    gates (`elegibilidadOK`, comentarios sin resolver), badge de etapa, editor y
  *    comentarios en línea. Sin duplicar lógica de aprobación aquí.
  *  - `useCadenasLote` (anti-N+1): las cadenas de la página en UNA llamada.
- *  - El alta rápida (`crearContenido`) en la barra inferior.
- *  - `GET /api/publicaciones` filtrado por estado/marca (sin backend nuevo).
+ *  - El alta rápida (`crearPublicacion`) en la barra inferior.
+ *  - `GET /api/piezas` filtrado por estado/marca (sin backend nuevo).
  *
  * Esta ruta vive FUERA del `AppShell` (layout propio, sin sidebar); es acceso directo
  * por enlace, así que no se registra en el catálogo de apps.
@@ -53,7 +53,7 @@ import { PieFeed, SkeletonPost, useSentinelInfinito } from "@/pages/feed/infinit
 import { PostFeed } from "@/pages/feed/PostFeed";
 import { CadenasLoteContexto, useCadenasLote } from "@/pages/feed/use-cadenas-lote";
 import {
-  ContenidoPestanaVista,
+  PublicacionPestanaVista,
   ESTADO_SERVIDOR_DE_VISTA,
   PAGINAS_POR_LOTE,
   useConteosFeed,
@@ -61,8 +61,8 @@ import {
   vistaDesdeParam,
   type Vista,
 } from "@/pages/feed/vistas";
-import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
-import type { CuerpoCrearContenido } from "@/types";
+import { CLAVE_PIEZAS } from "@/pages/piezas/claves";
+import type { CuerpoCrearPublicacion } from "@/types";
 
 // Mismo padding para el skeleton y el listado real: el propósito de `SkeletonPost` es que el
 // contenido aterrice SIN desplazarse (antes 4px de salto entre p-4 y p-3).
@@ -70,7 +70,7 @@ const CLASES_LISTA = "space-y-4 p-4";
 
 /**
  * Diálogo de creación RÁPIDA (a pantalla completa en móvil): título + nota.
- * Reusa `POST /api/contenido`; el equipo afina el copy luego en el editor. Mantenemos
+ * Reusa `POST /api/publicaciones`; el equipo afina el copy luego en el editor. Mantenemos
  * el alta mínima a propósito (el flujo completo vive en la consola de escritorio).
  *
  * La MARCA NO se elige aquí (ya no hay selector duplicado): la pieza nace en la marca
@@ -99,16 +99,16 @@ function DialogoCrear({
 
   const crear = useMutation({
     mutationFn: () => {
-      const cuerpo: CuerpoCrearContenido = {
+      const cuerpo: CuerpoCrearPublicacion = {
         titulo: titulo.trim(),
         clase: "contenido",
         marca: marcaInicial === MARCA_TODAS ? "" : marcaInicial,
         descripcion: descripcion.trim(),
       };
-      return api.crearContenido(cuerpo);
+      return api.crearPublicacion(cuerpo);
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+      void queryClient.invalidateQueries({ queryKey: CLAVE_PIEZAS });
       void queryClient.invalidateQueries({ queryKey: ["contenido"] });
       toast.success("Pieza creada.");
       onCerrar();
@@ -223,7 +223,7 @@ export default function MobileFeed() {
 
   // Opciones (estados + catálogo de marcas) para el filtro y el editor.
   const opcionesQuery = useQuery({
-    queryKey: ["publicaciones", "opciones"],
+    queryKey: ["piezas", "opciones"],
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),
   });
   const catalogoMarcas = opcionesQuery.data?.marcas ?? [];
@@ -242,10 +242,10 @@ export default function MobileFeed() {
   // `creado DESC`; se piden más al hacer scroll (sentinel + IntersectionObserver). El backend
   // devuelve `paginacion.cursor_siguiente` mientras haya más; al omitirlo se apaga `hasNextPage`.
   const feedQuery = useInfiniteQuery({
-    queryKey: [...CLAVE_PUBLICACIONES, "feed", estadoServidor ?? "todos", marca],
+    queryKey: [...CLAVE_PIEZAS, "feed", estadoServidor ?? "todos", marca],
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam, signal }) =>
-      api.publicaciones(
+      api.piezas(
         { estado: estadoServidor, marca: marcaParam(marca), feed: "1", cursor: pageParam },
         signal,
       ),
@@ -264,7 +264,7 @@ export default function MobileFeed() {
   // "todas", restringimos a sus marcas (defensa extra que puede dejar la página vacía → busca).
   const vistaActual = VISTAS.find((v) => v.id === vista) ?? VISTAS[0];
   const piezas = React.useMemo(() => {
-    let todas = (feedQuery.data?.pages ?? []).flatMap((p) => p.publicaciones);
+    let todas = (feedQuery.data?.pages ?? []).flatMap((p) => p.piezas);
     todas = todas.filter(vistaActual.filtra);
     if (marca === MARCA_TODAS && marcasUsuario.length > 0) {
       return todas.filter((p) => marcasUsuario.includes(p.marca));
@@ -353,9 +353,9 @@ export default function MobileFeed() {
   const refrescando = feedQuery.isRefetching && !feedQuery.isFetchingNextPage;
   const refrescar = () => {
     scrollerRef.current?.scrollTo?.(0, 0);
-    void queryClient.resetQueries({ queryKey: [...CLAVE_PUBLICACIONES, "feed"] });
-    void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES, refetchType: "none" });
-    void queryClient.invalidateQueries({ queryKey: [...CLAVE_PUBLICACIONES, "conteo-feed"] });
+    void queryClient.resetQueries({ queryKey: [...CLAVE_PIEZAS, "feed"] });
+    void queryClient.invalidateQueries({ queryKey: CLAVE_PIEZAS, refetchType: "none" });
+    void queryClient.invalidateQueries({ queryKey: [...CLAVE_PIEZAS, "conteo-feed"] });
   };
   const botonActualizar = (
     <Button
@@ -382,7 +382,7 @@ export default function MobileFeed() {
       <TabsList className="w-full" aria-label="Vista del feed">
         {VISTAS.map((v) => (
           <TabsTrigger key={v.id} value={v.id} className="flex-1 gap-1.5">
-            <ContenidoPestanaVista
+            <PublicacionPestanaVista
               vista={v}
               conteo={conteoVista[v.id]}
               enfasis={v.id === "pendiente" && (totalRevision ?? 0) > 0}
@@ -478,7 +478,7 @@ export default function MobileFeed() {
                       aria-label={p.titulo}
                       className="h-[calc(100dvh-var(--feed-top)-var(--feed-bottom))] snap-start snap-always overflow-y-auto"
                     >
-                      <PostFeed publicacion={p} />
+                      <PostFeed pieza={p} />
                     </div>
                   ))}
                 </div>

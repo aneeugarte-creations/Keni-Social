@@ -35,8 +35,8 @@ export interface Webhook {
 export interface EventoInterno {
   id: string;
   tipo: TipoEventoInterno;
-  contenido_id: string;
-  plataforma_id: string;
+  publicacion_id: string;
+  pieza_id: string;
   payload: Record<string, unknown>;
   creado: string;
 }
@@ -87,7 +87,7 @@ export type TipoNotificacion =
   | "comentario"
   | "aprobacion"
   | "rechazo"
-  | "publicacion"
+  | "pieza"
   // El manager te EMPUJÓ una pieza (la señal que retira el «te paso esto» del WhatsApp).
   | "asignacion"
   // Ciclo de vida de un CAMBIO DE TURNO (swap): te lo proponen, falta tu OK, o el desenlace.
@@ -99,8 +99,8 @@ export interface Notificacion {
   usuario_id: string;
   marca_id: string;
   tipo: TipoNotificacion;
-  contenido_id: string;
-  plataforma_id: string;
+  publicacion_id: string;
+  pieza_id: string;
   actor_id: string;
   actor_nombre: string;
   /** Frase ya armada para la UI (p. ej. "la coordinadora de redes te mencionó en «…»"). */
@@ -142,8 +142,8 @@ export interface AlertaRendimiento {
   id: string;
   /** Uno de `TipoAlerta`; se deja `string` por tolerancia ante tipos nuevos del backend. */
   tipo: string;
-  contenido_id: string;
-  plataforma_id: string;
+  publicacion_id: string;
+  pieza_id: string;
   /** Payload genérico del evento (`{evento, emitido_en, resumen, datos}`). */
   payload: {
     resumen?: string;

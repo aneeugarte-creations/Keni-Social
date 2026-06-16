@@ -15,7 +15,7 @@ troceo en un paquete por areas; este `__init__.py` es la FACHADA que re-exporta 
 superficie publica y ENSAMBLA `RUTAS` identico (paths/metodos/orden):
   - `docs`        : CRUD de documentos + papelera + linea editorial (editoriales/validacion/
                     marcas).
-  - `publicacion` : historial/version/revertir (git) + publicacion inmutable + solicitudes.
+  - `pieza` : historial/version/revertir (git) + pieza inmutable + solicitudes.
   - `pipelines`   : registro/preview de pipelines + variables + la "maquina" + estrategia.
   - `lanzar`      : `lanzar` (JSON) y `lanzar-archivo` (multipart): disparo de generacion.
   - `_comun`      : helpers compartidos (`_doc_json`, `_MAX_TEXTO`).
@@ -69,7 +69,7 @@ from .pipelines import (
     pipelines_listar,
     variables,
 )
-from .publicacion import (
+from .pieza import (
     _MSG_SOLO_ADMIN_PUBLICAR,
     _autor_nombre,
     _resolver_sha,
@@ -114,7 +114,7 @@ __all__ = [
     "_PILARES_ESTRATEGIA",
     "_PIPELINE_EDITORIAL_POR_PROMPT",
     "_doc_id_de_etapa",
-    # publicacion
+    # pieza
     "historial",
     "version",
     "revertir",

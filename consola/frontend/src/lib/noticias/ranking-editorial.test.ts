@@ -28,7 +28,7 @@ function historia(overrides: Partial<Historia> = {}): Historia {
     primer_visto: "2026-06-05T09:00:00",
     ultimo_visto: "2026-06-05T10:30:00",
     estado: "nuevo",
-    contenido_id: "",
+    publicacion_id: "",
     enlaces: [],
     fuentes: [
       { fuente: "Reuters", fuente_id: "a", peso: 2, tier: "potente", primer_visto: "2026-06-05T09:00:00", n_items: 1 },

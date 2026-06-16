@@ -239,7 +239,7 @@ def cuerpo_efectivo(prompt_id: str) -> str | None:
     """Cuerpo de un prompt: version PUBLICADA > working copy del store > INICIAL.
 
     Es la fuente de verdad para las features que se apoyan en un prompt base. Con el
-    modelo de PUBLICACION (rediseno de la Prompts), si el documento tiene puntero de
+    modelo de PIEZA (rediseno de la Prompts), si el documento tiene puntero de
     produccion los pipelines inyectan ESA version (sha git inmutable), no la working
     copy: editar es libre, pero lo que corre es lo publicado. Sin puntero (o si la BD/
     git no estan disponibles) gana la working copy del store, como siempre; y si el doc
@@ -316,7 +316,7 @@ def asegurar_linea_base() -> int:
     """Fija en git una linea base de los documentos del store que aun no tengan commit.
 
     La siembra/migracion escribe los `.md` directo a disco (atomico) sin commitear, asi que
-    un documento recien inicializado no tiene HEAD git y el modelo de publicacion caeria a su
+    un documento recien inicializado no tiene HEAD git y el modelo de pieza caeria a su
     working copy. Esto registra esos documentos como una linea base versionada, de modo que
     los pipelines sirvan su snapshot estable. Best-effort e idempotente. Se llama al final de
     la siembra. Devuelve cuantos documentos quedaron versionados por primera vez.

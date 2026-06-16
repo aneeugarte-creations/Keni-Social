@@ -437,7 +437,7 @@ export const ETIQUETA_ESTADO_COMPOSICION: Record<EstadoComposicion, string> = {
  */
 export interface ComposicionResumen {
   id: string;
-  contenido_id: string;
+  publicacion_id: string;
   marca: string;
   marca_nombre: string;
   titulo: string;

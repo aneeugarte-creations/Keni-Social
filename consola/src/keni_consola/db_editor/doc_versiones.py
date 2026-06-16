@@ -10,8 +10,8 @@ from ._comun import Any, IntegrityError, _conectar, uuid
 
 _COLS_DOC_VERSIONES = (
     "id",
-    "contenido_id",
-    "plataforma_id",
+    "publicacion_id",
+    "pieza_id",
     "version",
     "documento",
     "render_objeto",
@@ -38,8 +38,8 @@ _MAX_REINTENTOS_VERSION = 32
 
 def crear_documento_version(
     *,
-    contenido_id: str,
-    plataforma_id: str,
+    publicacion_id: str,
+    pieza_id: str,
     documento: str,
     render_objeto: str = "",
     autor: dict[str, str] | None = None,
@@ -49,7 +49,7 @@ def crear_documento_version(
     """Apende una versión del documento de una pieza (version = max+1 para esa pieza).
 
     CONTADOR SEGURO ANTE CONCURRENCIA: `MAX(version)+1` + INSERT bajo el indice UNICO
-    `(contenido_id, plataforma_id, version)`. Si dos ediciones simultaneas calculan el MISMO
+    `(publicacion_id, pieza_id, version)`. Si dos ediciones simultaneas calculan el MISMO
     numero, una gana y la otra recibe una UniqueViolation; aqui REINTENTAMOS (bucle acotado)
     recalculando el siguiente numero, en vez de duplicar la version (que rompia el historial).
     """
@@ -62,14 +62,14 @@ def crear_documento_version(
         for _ in range(_MAX_REINTENTOS_VERSION):
             fila_max = con.execute(
                 "SELECT COALESCE(MAX(version), 0) AS m FROM documento_versiones "
-                "WHERE contenido_id = ? AND plataforma_id = ?",
-                (contenido_id, plataforma_id),
+                "WHERE publicacion_id = ? AND pieza_id = ?",
+                (publicacion_id, pieza_id),
             ).fetchone()
             siguiente = int(fila_max["m"]) + 1
             fila = {
                 "id": fila_id,
-                "contenido_id": contenido_id or "",
-                "plataforma_id": plataforma_id or "",
+                "publicacion_id": publicacion_id or "",
+                "pieza_id": pieza_id or "",
                 "version": siguiente,
                 "documento": documento or "{}",
                 "render_objeto": render_objeto or "",
@@ -91,34 +91,34 @@ def crear_documento_version(
                 ultimo_error = e
         raise RuntimeError(
             "No se pudo asignar una version de documento tras varios reintentos "
-            f"(contenido={contenido_id}, plataforma={plataforma_id})"
+            f"(contenido={publicacion_id}, plataforma={pieza_id})"
         ) from ultimo_error
     finally:
         con.close()
 
 
-def listar_documento_versiones(contenido_id: str, plataforma_id: str) -> list[dict[str, Any]]:
+def listar_documento_versiones(publicacion_id: str, pieza_id: str) -> list[dict[str, Any]]:
     """Versiones de una pieza, mas reciente primero."""
     con = _conectar()
     try:
         filas = con.execute(
-            f"{_SELECT_DOC_VERSIONES} WHERE contenido_id = ? AND plataforma_id = ? "
+            f"{_SELECT_DOC_VERSIONES} WHERE publicacion_id = ? AND pieza_id = ? "
             "ORDER BY version DESC",
-            (contenido_id, plataforma_id),
+            (publicacion_id, pieza_id),
         ).fetchall()
     finally:
         con.close()
     return [_fila_a_doc_version(f) for f in filas]
 
 
-def ultima_documento_version(contenido_id: str, plataforma_id: str) -> dict[str, Any] | None:
+def ultima_documento_version(publicacion_id: str, pieza_id: str) -> dict[str, Any] | None:
     """La última versión del documento de una pieza (None si no hay)."""
     con = _conectar()
     try:
         fila = con.execute(
-            f"{_SELECT_DOC_VERSIONES} WHERE contenido_id = ? AND plataforma_id = ? "
+            f"{_SELECT_DOC_VERSIONES} WHERE publicacion_id = ? AND pieza_id = ? "
             "ORDER BY version DESC LIMIT 1",
-            (contenido_id, plataforma_id),
+            (publicacion_id, pieza_id),
         ).fetchone()
     finally:
         con.close()

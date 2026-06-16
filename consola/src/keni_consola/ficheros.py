@@ -37,17 +37,17 @@ import yaml
 from keni_shared.esquema_yaml import migrar, sellar
 
 from . import config, indice, marcas, rutas
-from .estados import ESTADOS_PUBLICACION, ESTADOS_TAREA  # re-export para la fachada
+from .estados import ESTADOS_PIEZA, ESTADOS_TAREA  # re-export para la fachada
 from .io_atomico import escribir_atomico
 from .tiempo import hoy_utc, iso_utc
 
 _log = logging.getLogger("keni_consola.ficheros")
 
-__all__ = ["ESTADOS_TAREA", "ESTADOS_PUBLICACION"]
+__all__ = ["ESTADOS_TAREA", "ESTADOS_PIEZA"]
 
 # Sub-carpetas por entidad dentro de la carpeta de cada marca.
 _SUBDIR = {
-    "publicacion": "publicaciones",
+    "pieza": "piezas",
     "plantilla": "plantillas",
 }
 
@@ -57,7 +57,7 @@ _MARCA_SIN = "_sin-marca"
 # Tipo de INDICE -> tipo de ESQUEMA (`keni_shared.esquema_yaml.VERSIONES`). Solo
 # difieren en `historial` (indice) vs `historial_prompt` (esquema); el resto coincide.
 _TIPO_ESQUEMA = {
-    "publicacion": "publicacion",
+    "pieza": "pieza",
     "plantilla": "plantilla",
     "historial": "historial_prompt",
 }
@@ -108,7 +108,7 @@ def _inicializar_marca(carpeta: Path, marca: str) -> None:
         claude.write_text(
             f"# {marcas.etiqueta_de(marca)}\n\n"
             "Carpeta de contenido de esta marca (agente = marca = carpeta).\n"
-            "El contenido (publicaciones, plantillas, RSS, hashtags, franjas, "
+            "El contenido (piezas, plantillas, RSS, hashtags, franjas, "
             "historial) vive aqui como ficheros YAML, fuente de verdad.\n",
             encoding="utf-8",
         )
@@ -327,7 +327,7 @@ def _listar_validado(
 
 
 # --------------------------------------------------------------------------- #
-# Publicaciones                                                                #
+# Piezas                                                                #
 # --------------------------------------------------------------------------- #
 
 

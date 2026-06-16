@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import type { Contenido, EventoRota } from "@/types";
+import type { Publicacion, EventoRota } from "@/types";
 
 import { agrupar } from "./tipos";
 
 // Factoría compacta de tarea de cobertura (cast por brevedad: agrupar solo lee unos campos).
-function t(over: Partial<Contenido>): Contenido {
+function t(over: Partial<Publicacion>): Publicacion {
   return {
     id: "x",
     clase: "tarea",
@@ -17,7 +17,7 @@ function t(over: Partial<Contenido>): Contenido {
     fecha_objetivo: "2026-07-01",
     hora_objetivo: "20:00",
     ...over,
-  } as unknown as Contenido;
+  } as unknown as Publicacion;
 }
 
 describe("agrupar — coberturas, roles soltados y recuperables", () => {

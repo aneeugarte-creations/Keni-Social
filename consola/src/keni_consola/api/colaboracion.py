@@ -4,16 +4,16 @@
   - Historial de versiones del copy de una plataforma (ver + revertir).
   - Aprobacion MULTINIVEL de una plataforma con roles y trazabilidad.
 
-Todo cuelga del modelo `contenido`/`contenido_plataforma` (api/contenido.py) SIN tocar
-su esquema: tres familias de tablas apendidas (`contenido_comentarios`,
-`contenido_copy_versiones`, `contenido_aprobaciones`). Multiusuario via el middleware
+Todo cuelga del modelo `contenido`/`pieza` (api/publicaciones.py) SIN tocar
+su esquema: tres familias de tablas apendidas (`publicacion_comentarios`,
+`pieza_copy_versiones`, `pieza_aprobaciones`). Multiusuario via el middleware
 (autoria/decisor desde `request.state.usuario`).
 
 ENDPOINTS
 
-  Comentarios (hilo por item de contenido; `plataforma_id` opcional ata una red):
-    GET    /api/contenido/{cid}/comentarios[?plataforma_id=]
-    POST   /api/contenido/{cid}/comentarios            {texto, plataforma_id?}
+  Comentarios (hilo por item de contenido; `pieza_id` opcional ata una red):
+    GET    /api/publicaciones/{cid}/comentarios[?pieza_id=]
+    POST   /api/publicaciones/{cid}/comentarios            {texto, pieza_id?}
     PATCH  /api/comentarios/{id}                        {texto?, resuelto?}  (autor o admin)
     DELETE /api/comentarios/{id}                        (autor o admin)
 
@@ -84,25 +84,25 @@ def _puede_gestionar(request: Request, autor_id: str) -> bool:
 
 
 async def listar_comentarios(request: Request) -> Response:
-    """GET /api/contenido/{cid}/comentarios: hilo del item (filtro opcional por plataforma)."""
-    contenido_id = request.path_params["contenido_id"]
-    if repos.obtener_contenido(contenido_id) is None:
+    """GET /api/publicaciones/{cid}/comentarios: hilo del item (filtro opcional por plataforma)."""
+    publicacion_id = request.path_params["publicacion_id"]
+    if repos.obtener_publicacion(publicacion_id) is None:
         return JSONResponse({"error": "Ese contenido ya no existe."}, status_code=404)
-    # `?plataforma_id=` presente (aunque vacio) filtra esa red; ausente = todo el hilo.
-    plataforma_id = request.query_params.get("plataforma_id")
-    comentarios = repos.listar_comentarios(contenido_id, plataforma_id)
+    # `?pieza_id=` presente (aunque vacio) filtra esa red; ausente = todo el hilo.
+    pieza_id = request.query_params.get("pieza_id")
+    comentarios = repos.listar_comentarios(publicacion_id, pieza_id)
     return JSONResponse({"comentarios": comentarios, "total": len(comentarios)})
 
 
 async def crear_comentario(request: Request) -> Response:
-    """POST /api/contenido/{cid}/comentarios: anade un comentario al hilo.
+    """POST /api/publicaciones/{cid}/comentarios: anade un comentario al hilo.
 
     `menciones` (opcional) es la lista de ids de usuarios etiquetados con @ en el texto: se
     guardan con el comentario y disparan una notificacion `mencion` a cada uno (y los dejan
     suscritos a la pieza). Tras crear el comentario notificamos tambien al resto de interesados.
     """
-    contenido_id = request.path_params["contenido_id"]
-    contenido = repos.obtener_contenido(contenido_id)
+    publicacion_id = request.path_params["publicacion_id"]
+    contenido = repos.obtener_publicacion(publicacion_id)
     if contenido is None:
         return JSONResponse({"error": "Ese contenido ya no existe."}, status_code=404)
     datos = await leer_json(request)
@@ -110,13 +110,13 @@ async def crear_comentario(request: Request) -> Response:
     if not isinstance(texto, str) or not texto.strip():
         return JSONResponse({"error": "El comentario no puede estar vacío."}, status_code=400)
 
-    plataforma_id = datos.get("plataforma_id", "") or ""
-    if not isinstance(plataforma_id, str):
-        plataforma_id = ""
-    plataforma_id = plataforma_id.strip()
-    if plataforma_id:
-        plat = repos.obtener_contenido_plataforma(plataforma_id)
-        if plat is None or plat.get("contenido_id") != contenido_id:
+    pieza_id = datos.get("pieza_id", "") or ""
+    if not isinstance(pieza_id, str):
+        pieza_id = ""
+    pieza_id = pieza_id.strip()
+    if pieza_id:
+        plat = repos.obtener_pieza_fila(pieza_id)
+        if plat is None or plat.get("publicacion_id") != publicacion_id:
             return JSONResponse({"error": "Esa plataforma no es de este contenido."}, status_code=400)
 
     # Menciones (@): ids de usuario unicos y no vacios (cap defensivo). El front los manda
@@ -130,8 +130,8 @@ async def crear_comentario(request: Request) -> Response:
 
     autor = autor_de_peticion(request)
     comentario = repos.crear_comentario(
-        contenido_id=contenido_id,
-        plataforma_id=plataforma_id,
+        publicacion_id=publicacion_id,
+        pieza_id=pieza_id,
         texto=texto.strip()[:_MAX_TEXTO],
         autor=autor,
         menciones=menciones,
@@ -188,11 +188,11 @@ async def borrar_comentario(request: Request) -> Response:
 
 async def listar_copy_versiones(request: Request) -> Response:
     """GET /api/plataformas/{pid}/copy/versiones: historial (más reciente primero)."""
-    plataforma_id = request.path_params["plataforma_id"]
-    plat = repos.obtener_contenido_plataforma(plataforma_id)
+    pieza_id = request.path_params["pieza_id"]
+    plat = repos.obtener_pieza_fila(pieza_id)
     if plat is None:
         return JSONResponse({"error": "Esa plataforma ya no existe."}, status_code=404)
-    versiones = repos.listar_copy_versiones(plataforma_id)
+    versiones = repos.listar_copy_versiones(pieza_id)
     return JSONResponse({"versiones": versiones, "total": len(versiones), "copy_actual": plat.get("copy", "")})
 
 
@@ -203,8 +203,8 @@ async def guardar_copy(request: Request) -> Response:
     y nota), de modo que el cambio quede en el historial y sea reversible. Si el copy no
     cambia, no hace nada (evita versiones duplicadas).
     """
-    plataforma_id = request.path_params["plataforma_id"]
-    plat = repos.obtener_contenido_plataforma(plataforma_id)
+    pieza_id = request.path_params["pieza_id"]
+    plat = repos.obtener_pieza_fila(pieza_id)
     if plat is None:
         return JSONResponse({"error": "Esa plataforma ya no existe."}, status_code=404)
     datos = await leer_json(request)
@@ -221,14 +221,14 @@ async def guardar_copy(request: Request) -> Response:
 
     # Snapshot del texto que se va a pisar (autoria = quien hace el cambio).
     version = repos.registrar_copy_version(
-        plataforma_id=plataforma_id,
-        contenido_id=plat.get("contenido_id", ""),
+        pieza_id=pieza_id,
+        publicacion_id=plat.get("publicacion_id", ""),
         copy=anterior,
         autor=autor_de_peticion(request),
         nota=nota,
     )
-    actualizada = repos.actualizar_contenido_plataforma(
-        plataforma_id, {"copy": nuevo, "falta_copy": not bool(nuevo.strip())}
+    actualizada = repos.actualizar_pieza_fila(
+        pieza_id, {"copy": nuevo, "falta_copy": not bool(nuevo.strip())}
     )
     if actualizada is None:
         return JSONResponse({"error": "Esa plataforma ya no existe."}, status_code=404)
@@ -241,8 +241,8 @@ async def revertir_copy(request: Request) -> Response:
     Revertir snapshotea PRIMERO el copy vivo actual (para no perderlo) y luego escribe el
     texto de la versión elegida como copy actual. Así el historial crece sin huecos.
     """
-    plataforma_id = request.path_params["plataforma_id"]
-    plat = repos.obtener_contenido_plataforma(plataforma_id)
+    pieza_id = request.path_params["pieza_id"]
+    plat = repos.obtener_pieza_fila(pieza_id)
     if plat is None:
         return JSONResponse({"error": "Esa plataforma ya no existe."}, status_code=404)
     datos = await leer_json(request)
@@ -250,21 +250,21 @@ async def revertir_copy(request: Request) -> Response:
     if not isinstance(version_id, str) or not version_id.strip():
         return JSONResponse({"error": "Indica la versión a revertir."}, status_code=400)
     version = repos.obtener_copy_version(version_id.strip())
-    if version is None or version.get("plataforma_id") != plataforma_id:
+    if version is None or version.get("pieza_id") != pieza_id:
         return JSONResponse({"error": "Esa versión no es de esta plataforma."}, status_code=400)
 
     objetivo = version.get("copy", "")
     actual = plat.get("copy", "")
     if objetivo != actual:
         repos.registrar_copy_version(
-            plataforma_id=plataforma_id,
-            contenido_id=plat.get("contenido_id", ""),
+            pieza_id=pieza_id,
+            publicacion_id=plat.get("publicacion_id", ""),
             copy=actual,
             autor=autor_de_peticion(request),
             nota=f"Antes de revertir a la versión {version.get('version', '')}",
         )
-    actualizada = repos.actualizar_contenido_plataforma(
-        plataforma_id, {"copy": objetivo, "falta_copy": not bool(objetivo.strip())}
+    actualizada = repos.actualizar_pieza_fila(
+        pieza_id, {"copy": objetivo, "falta_copy": not bool(objetivo.strip())}
     )
     if actualizada is None:
         return JSONResponse({"error": "Esa plataforma ya no existe."}, status_code=404)
@@ -276,17 +276,17 @@ async def revertir_copy(request: Request) -> Response:
 # --------------------------------------------------------------------------- #
 
 
-def _cadena_publica(plataforma_id: str) -> dict[str, object]:
+def _cadena_publica(pieza_id: str) -> dict[str, object]:
     """Cadena de aprobacion + su estado global resumido + gates de gobernanza (para la UI).
 
     Incluye `aprobados`/`minimo_aprobaciones` (gate A: cuantas firmas lleva vs cuantas exige
     programar) y `comentarios_sin_resolver` (gate B: objeciones abiertas que bloquean publicar),
     para que la UI muestre el contador y deshabilite el boton de programar cuando no cumple.
     """
-    cadena = repos.listar_aprobaciones(plataforma_id)
-    plat = repos.obtener_contenido_plataforma(plataforma_id)
+    cadena = repos.listar_aprobaciones(pieza_id)
+    plat = repos.obtener_pieza_fila(pieza_id)
     sin_resolver = repos.comentarios_sin_resolver(
-        (plat or {}).get("contenido_id", "") or "", plataforma_id
+        (plat or {}).get("publicacion_id", "") or "", pieza_id
     )
     return {
         "niveles": cadena,
@@ -298,19 +298,19 @@ def _cadena_publica(plataforma_id: str) -> dict[str, object]:
     }
 
 
-# Alias PUBLICO del armado de la cadena (la usa `api/publicaciones.cadenas_lote` para el
+# Alias PUBLICO del armado de la cadena (la usa `api/piezas.cadenas_lote` para el
 # endpoint batch del feed, sin importar un simbolo privado de este modulo).
-def cadena_publica(plataforma_id: str) -> dict[str, object]:
+def cadena_publica(pieza_id: str) -> dict[str, object]:
     """Cadena de aprobacion + estado global + gates, para UNA plataforma (ver `_cadena_publica`)."""
-    return _cadena_publica(plataforma_id)
+    return _cadena_publica(pieza_id)
 
 
 async def obtener_aprobacion_cadena(request: Request) -> Response:
     """GET /api/plataformas/{pid}/aprobacion: la cadena de niveles y su estado global."""
-    plataforma_id = request.path_params["plataforma_id"]
-    if repos.obtener_contenido_plataforma(plataforma_id) is None:
+    pieza_id = request.path_params["pieza_id"]
+    if repos.obtener_pieza_fila(pieza_id) is None:
         return JSONResponse({"error": "Esa plataforma ya no existe."}, status_code=404)
-    return JSONResponse(_cadena_publica(plataforma_id))
+    return JSONResponse(_cadena_publica(pieza_id))
 
 
 async def crear_aprobacion_cadena(request: Request) -> Response:
@@ -320,8 +320,8 @@ async def crear_aprobacion_cadena(request: Request) -> Response:
     defecto del organigrama (Edición → Coordinación → Dirección). Recrear reinicia las
     decisiones (todos los niveles vuelven a `pendiente`).
     """
-    plataforma_id = request.path_params["plataforma_id"]
-    plat = repos.obtener_contenido_plataforma(plataforma_id)
+    pieza_id = request.path_params["pieza_id"]
+    plat = repos.obtener_pieza_fila(pieza_id)
     if plat is None:
         return JSONResponse({"error": "Esa plataforma ya no existe."}, status_code=404)
     datos = await leer_json(request)
@@ -343,12 +343,12 @@ async def crear_aprobacion_cadena(request: Request) -> Response:
 
     # Cadena del TABLERO (recrear a mano): respeta el cargo del organigrama por nivel
     # (item C: Coordinación→coordinador, Dirección→director).
-    montar_cadena_aprobacion(plataforma_id, plat, etiquetas, con_cargos=True)
-    return JSONResponse(_cadena_publica(plataforma_id), status_code=201)
+    montar_cadena_aprobacion(pieza_id, plat, etiquetas, con_cargos=True)
+    return JSONResponse(_cadena_publica(pieza_id), status_code=201)
 
 
 def montar_cadena_aprobacion(
-    plataforma_id: str,
+    pieza_id: str,
     plat: dict,
     etiquetas: list[str],
     *,
@@ -371,26 +371,26 @@ def montar_cadena_aprobacion(
     DOS cadenas: el segundo encuentra la del primero y no la pisa. Devuelve True si montó la
     cadena, False si la saltó por existir ya.
     """
-    if solo_si_ausente and repos.existe_cadena_aprobacion(plataforma_id):
+    if solo_si_ausente and repos.existe_cadena_aprobacion(pieza_id):
         return False
     # Cargo por nivel: el organigrama si `con_cargos`; SIEMPRE el cargo reservado del nivel
     # "Crítica IA" (asi ninguna persona puede decidirlo por el feed, lo vota solo el critico).
     cargos = [colaboracion.cargo_de_nivel(e, con_cargos=con_cargos) for e in etiquetas]
     repos.crear_cadena_aprobacion(
-        plataforma_id=plataforma_id,
-        contenido_id=plat.get("contenido_id", "") or "",
+        pieza_id=pieza_id,
+        publicacion_id=plat.get("publicacion_id", "") or "",
         etiquetas=etiquetas,
         cargos=cargos,
     )
     # fase3 (auto-planificacion): pre-aprobacion de piezas de bajo riesgo (gateada, def OFF).
     # Auto-aprueba los niveles INFERIORES, dejando el ULTIMO a un humano (trazable, decisor
     # "auto"). Si todo lo demas queda aprobado, la cadena solo espera el OK final.
-    _aplicar_preaprobacion_bajo_riesgo(plataforma_id, plat)
+    _aplicar_preaprobacion_bajo_riesgo(pieza_id, plat)
     return True
 
 
 def _aplicar_preaprobacion_bajo_riesgo(
-    plataforma_id: str, plat: dict[str, object]
+    pieza_id: str, plat: dict[str, object]
 ) -> None:
     """Auto-aprueba los niveles inferiores si la pieza es de bajo riesgo y el flag esta ON.
 
@@ -401,10 +401,10 @@ def _aplicar_preaprobacion_bajo_riesgo(
     """
     if not config.auto_preaprobacion():
         return
-    contenido = repos.obtener_contenido(plat.get("contenido_id", "") or "")
+    contenido = repos.obtener_publicacion(plat.get("publicacion_id", "") or "")
     if not colaboracion.es_pieza_bajo_riesgo(plat, contenido):
         return
-    cadena = repos.listar_aprobaciones(plataforma_id)
+    cadena = repos.listar_aprobaciones(pieza_id)
     for nivel_id, campos in colaboracion.autoaprobaciones_iniciales(
         cadena, activa=True, bajo_riesgo=True
     ):
@@ -422,9 +422,9 @@ async def decidir_nivel(request: Request) -> Response:
     nivel = repos.obtener_aprobacion(aprobacion_id)
     if nivel is None:
         return JSONResponse({"error": "Ese nivel de aprobación ya no existe."}, status_code=404)
-    plataforma_id = nivel.get("plataforma_id", "")
-    cadena = repos.listar_aprobaciones(plataforma_id)
-    plat = repos.obtener_contenido_plataforma(plataforma_id)
+    pieza_id = nivel.get("pieza_id", "")
+    cadena = repos.listar_aprobaciones(pieza_id)
+    plat = repos.obtener_pieza_fila(pieza_id)
 
     datos = await leer_json(request)
     decision = datos.get("decision")
@@ -449,7 +449,7 @@ async def decidir_nivel(request: Request) -> Response:
     # Notificar la decision recien aplicada (OK -> interesados + coordinador; rechazo ->
     # interesados). Best-effort: nunca rompe el OK/rechazo ya registrado.
     if plat is not None:
-        contenido_padre = repos.obtener_contenido(plat.get("contenido_id", "") or "") or {}
+        contenido_padre = repos.obtener_publicacion(plat.get("publicacion_id", "") or "") or {}
         notificaciones.tras_decision(
             plat, contenido_padre, actualizado.get("decision", ""), autor_de_peticion(request)
         )
@@ -457,12 +457,12 @@ async def decidir_nivel(request: Request) -> Response:
     # Reflejar el estado GLOBAL de la cadena en la pieza y, si juntó los 2 OK, auto-programar.
     # COLAPSO 2026-06: ya no hay estado de reposo `aprobado`; la cadena aprobada deja la pieza
     # `en_revision` y es la auto-programación quien la mueve a `programado` al hallar hueco.
-    cadena = repos.listar_aprobaciones(plataforma_id)
+    cadena = repos.listar_aprobaciones(pieza_id)
     estado_global = colaboracion.estado_cadena(cadena)
     if plat is not None:
         estado_pieza = colaboracion.estado_publicacion_para(estado_global)
         if estado_pieza is not None:
-            repos.actualizar_contenido_plataforma(plataforma_id, {"estado": estado_pieza})
+            repos.actualizar_pieza_fila(pieza_id, {"estado": estado_pieza})
         if estado_global == "aprobado":
             # 2 OK => programado: la pieza se encola SOLA a su próximo hueco (def ON,
             # `KENI_AUTO_PROGRAMAR`), respetando los gates de la programación manual. Sin franja
@@ -470,10 +470,10 @@ async def decidir_nivel(request: Request) -> Response:
             from .. import auto_programar
 
             try:
-                auto_programar.programar_si_aprobada(plataforma_id)
+                auto_programar.programar_si_aprobada(pieza_id)
             except Exception:  # noqa: BLE001 — encolar es secundario al OK ya registrado.
                 _log.exception(
-                    "Auto-programación falló para %s (queda en revisión).", plataforma_id
+                    "Auto-programación falló para %s (queda en revisión).", pieza_id
                 )
     return JSONResponse(
         {"nivel": actualizado, "estado": estado_global, "niveles": cadena}
@@ -486,14 +486,14 @@ def _plat_publica(plat: dict) -> dict:
 
 
 RUTAS = [
-    Route("/api/contenido/{contenido_id}/comentarios", listar_comentarios, methods=["GET"]),
-    Route("/api/contenido/{contenido_id}/comentarios", crear_comentario, methods=["POST"]),
+    Route("/api/publicaciones/{publicacion_id}/comentarios", listar_comentarios, methods=["GET"]),
+    Route("/api/publicaciones/{publicacion_id}/comentarios", crear_comentario, methods=["POST"]),
     Route("/api/comentarios/{comentario_id}", actualizar_comentario, methods=["PATCH"]),
     Route("/api/comentarios/{comentario_id}", borrar_comentario, methods=["DELETE"]),
-    Route("/api/plataformas/{plataforma_id}/copy/versiones", listar_copy_versiones, methods=["GET"]),
-    Route("/api/plataformas/{plataforma_id}/copy", guardar_copy, methods=["POST"]),
-    Route("/api/plataformas/{plataforma_id}/copy/revertir", revertir_copy, methods=["POST"]),
-    Route("/api/plataformas/{plataforma_id}/aprobacion", obtener_aprobacion_cadena, methods=["GET"]),
-    Route("/api/plataformas/{plataforma_id}/aprobacion", crear_aprobacion_cadena, methods=["POST"]),
+    Route("/api/plataformas/{pieza_id}/copy/versiones", listar_copy_versiones, methods=["GET"]),
+    Route("/api/plataformas/{pieza_id}/copy", guardar_copy, methods=["POST"]),
+    Route("/api/plataformas/{pieza_id}/copy/revertir", revertir_copy, methods=["POST"]),
+    Route("/api/plataformas/{pieza_id}/aprobacion", obtener_aprobacion_cadena, methods=["GET"]),
+    Route("/api/plataformas/{pieza_id}/aprobacion", crear_aprobacion_cadena, methods=["POST"]),
     Route("/api/aprobacion-nivel/{aprobacion_id}/decidir", decidir_nivel, methods=["POST"]),
 ]

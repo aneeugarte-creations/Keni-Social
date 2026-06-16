@@ -292,7 +292,7 @@ export function SeccionNavegadorS3() {
   if (!datos.configurado) return null;
 
   const { carpetas, objetos, migas } = datos;
-  const hayContenido = carpetas.length > 0 || objetos.length > 0;
+  const hayPublicacion = carpetas.length > 0 || objetos.length > 0;
   // Bucket plano: en la raíz sin subcarpetas, lo decimos honestamente para que no
   // parezca roto. NO inventamos carpetas; son objetos en la raíz del bucket.
   const bucketPlano = prefijo === "" && carpetas.length === 0 && objetos.length > 0;
@@ -388,7 +388,7 @@ export function SeccionNavegadorS3() {
         )}
 
         {/* Tabla de carpetas y objetos */}
-        {!datos.error && !hayContenido ? (
+        {!datos.error && !hayPublicacion ? (
           <p className="text-sm text-muted-foreground">Esta carpeta está vacía.</p>
         ) : (
           <TablaObjetos

@@ -87,7 +87,7 @@ def _actividad_suelta(gens: list[dict], ids_runs: set[str], marca: str | None) -
 
     Excluye los marcadores de etapa (sin coste), el trabajo del POOL y de etapas del pipeline
     (`tipo='pipeline'`, y su nombre LEGADO `autogen`: ya está representado DENTRO de las runs)
-    y toda generación cuyo `contenido_id` apunte a una run de `ids_runs` (su coste ya viaja en
+    y toda generación cuyo `publicacion_id` apunte a una run de `ids_runs` (su coste ya viaja en
     la run; listarla otra vez sería la duplicación que teníamos con dos pestañas). Una
     generación correlacionada a un contenido que NO es run (p. ej. un copy manual sobre el
     tablero) SÍ sale suelta.
@@ -97,7 +97,7 @@ def _actividad_suelta(gens: list[dict], ids_runs: set[str], marca: str | None) -
         for g in gens
         if not _es_marcador_pipeline(g)
         and (g.get("tipo") or "") not in _TIPOS_TRABAJO_PIPELINE
-        and (g.get("contenido_id") or "") not in ids_runs
+        and (g.get("publicacion_id") or "") not in ids_runs
     ]
     runs_agente = agentes.listar_runs_globales()
     if marca:
@@ -116,9 +116,9 @@ def _temas_trabajados(gens: list[dict]) -> set[str]:
     trabajo debe verse DENTRO de la run de su tema, no como entradas sueltas.
     """
     return {
-        g.get("contenido_id") or ""
+        g.get("publicacion_id") or ""
         for g in gens
-        if (g.get("contenido_id") or "") and (g.get("tipo") or "") in _TIPOS_TRABAJO_PIPELINE
+        if (g.get("publicacion_id") or "") and (g.get("tipo") or "") in _TIPOS_TRABAJO_PIPELINE
     }
 
 
@@ -131,7 +131,7 @@ def _runs_del_pipeline(marca: str | None, trabajados: set[str]) -> list[dict]:
     y se muestra como run, no como entradas sueltas. Un alta manual sin trabajo IA no es
     una run (no aparece aquí; vive solo en el tablero).
 
-    `listar_contenido` no filtra por `origen`, así que filtramos en memoria. El listado de
+    `listar_publicacion` no filtra por `origen`, así que filtramos en memoria. El listado de
     contenido ya viene acotado al tablero del equipo; reordenamos por recencia (`creado` desc) y
     acotamos al universo máximo (los filtros y la paginación se aplican sobre este conjunto).
 
@@ -140,7 +140,7 @@ def _runs_del_pipeline(marca: str | None, trabajados: set[str]) -> list[dict]:
     el feed sin pipeline que encontrar). Con la marca apagada, la etapa CI se pinta "saltada"
     (lo refleja `_etapas_de_run`), pero la run NO desaparece de Pipelines.
     """
-    items = repos.listar_contenido(marca=marca or None)
+    items = repos.listar_publicacion(marca=marca or None)
     pipeline = [
         it
         for it in items
@@ -198,8 +198,8 @@ async def listar(request: Request) -> Response:
     arte_ia_runs = _runs_con_arte_ia(gens)
     # Una sola lectura de TODAS las plataformas, agrupadas por contenido (evita N consultas).
     por_contenido: dict[str, list[dict]] = {}
-    for plat in repos.listar_contenido_plataforma():
-        por_contenido.setdefault(plat.get("contenido_id", ""), []).append(plat)
+    for plat in repos.listar_piezas_fila():
+        por_contenido.setdefault(plat.get("publicacion_id", ""), []).append(plat)
     # Una sola lectura de las HISTORIAS (clusters) de estos temas (procedencia IA; evita N consultas).
     clusters = repos.clusters_por_contenidos([it.get("id", "") or "" for it in runs_items])
     pool_marca = _pool_por_marca(gens)

@@ -93,7 +93,7 @@ def construir_reporte(
             # vive por plataforma. None se muestra como "n/d".
             "engagement_pct": None,
             "cuentas": len(filas),
-            "publicaciones": tot_piezas,
+            "piezas": tot_piezas,
         },
         # cobertura global: marcas con datos parciales. Vacio = todas completas.
         # Hace explicito que los totales pueden no incluir todas las plataformas.
@@ -137,7 +137,7 @@ def render_markdown(rep: dict) -> str:
     out.append(f"- **Alcance:** {cifra(t['alcance'])}")
     out.append(f"- **Interacciones:** {miles(t['interacciones'])}")
     out.append(f"- **Engagement:** {pct(t['engagement_pct'])} (ver por plataforma)")
-    out.append(f"- **Publicaciones:** {miles(t.get('publicaciones', 0))}")
+    out.append(f"- **Piezas:** {miles(t.get('piezas', 0))}")
     out.append(f"- **Cuentas:** {t['cuentas']}")
     cob_global = rep.get("cobertura") or {}
     if cob_global.get("cuentas_parciales"):

@@ -5,7 +5,7 @@ subproceso de python que emite NDJSON canned). Cubre:
   - Cola: encolar -> reclamar (clava) -> terminar; reclamacion idempotente.
   - jobspec: round-trip de serializacion y reconstruccion del `procesar` por kind.
   - Worker: clava un job y corre el runner (con #137) -> el registro completa y el
-    post-procesado real corre (historial/publicaciones).
+    post-procesado real corre (historial/piezas).
   - Reclamacion concurrente NO doble-ejecuta un mismo job (varios hilos worker).
   - Cancelacion cross-proceso mata el ARBOL (proceso que lanza un hijo; sin sueltos).
   - Reiniciar el back NO mata un job en proceso del worker (el proceso sigue vivo).
@@ -397,26 +397,26 @@ def test_jobspec_roundtrip(entorno):
 
 
 def test_jobspec_copy_contenido_id_roundtrip_puro():
-    # PURO (sin DB): el `contenido_id` viaja en el spec del copy y sobrevive al round-trip
+    # PURO (sin DB): el `publicacion_id` viaja en el spec del copy y sobrevive al round-trip
     # de serializacion, para que el worker pueda NIDAR el borrador bajo el tema.
     spec = jobspec.construir(
         prompt="p",
         procesar=jobspec.construir_copy(
             prompt_id="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="T",
-            texto_base="nota", contenido_id="tema-123",
+            texto_base="nota", publicacion_id="tema-123",
         ),
     )
     vuelto = jobspec.deserializar(jobspec.serializar(spec))
-    assert vuelto["procesar"]["contenido_id"] == "tema-123"
+    assert vuelto["procesar"]["publicacion_id"] == "tema-123"
 
 
 def test_jobspec_copy_sin_contenido_id_default_vacio_puro():
-    # PURO (sin DB): sin `contenido_id`, el spec lleva "" (back-compat: borrador suelto).
+    # PURO (sin DB): sin `publicacion_id`, el spec lleva "" (back-compat: borrador suelto).
     spec = jobspec.construir_copy(
         prompt_id="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="T",
         texto_base="nota",
     )
-    assert spec["contenido_id"] == ""
+    assert spec["publicacion_id"] == ""
 
 
 def test_jobspec_copy_fotos_notas_roundtrip_puro():
@@ -463,18 +463,18 @@ def test_reconstruir_procesar_copy_crea_publicaciones(entorno):
     salida = 'Texto del copy\n\n```json\n{"piezas": [{"red": "x", "texto": "Hola X"}]}\n```'
     resultado = procesar(salida, None)
     assert resultado["historial_id"]
-    assert len(resultado["publicaciones"]) == 1
-    assert resultado["publicaciones"][0]["red"] == "x"
+    assert len(resultado["piezas"]) == 1
+    assert resultado["piezas"][0]["red"] == "x"
     # El borrador quedo guardado de verdad.
-    pubs = repos.listar_publicaciones(marca=_MARCA, red="x")
+    pubs = repos.listar_piezas(marca=_MARCA, red="x")
     assert any("Hola X" in (p.get("contenido") or "") for p in pubs)
-    # Sin `copy_in` en la pieza, la publicacion nace con copy_in == "" (no rompe).
-    assert resultado["publicaciones"][0]["copy_in"] == ""
+    # Sin `copy_in` en la pieza, la pieza nace con copy_in == "" (no rompe).
+    assert resultado["piezas"][0]["copy_in"] == ""
 
 
 def test_reconstruir_procesar_copy_guarda_copy_in(entorno):
     # El copy_in (texto EN imagen) viaja en la misma pieza que el copy y se persiste como
-    # campo propio de la publicacion (distinto del contenido), editable luego en C.
+    # campo propio de la pieza (distinto del contenido), editable luego en C.
     spec = jobspec.construir(
         prompt="p",
         procesar=jobspec.construir_copy(
@@ -488,11 +488,11 @@ def test_reconstruir_procesar_copy_guarda_copy_in(entorno):
         '{"piezas": [{"red": "x", "texto": "Hola X", "copy_in": "TITULAR EN LA IMAGEN"}]}\n```'
     )
     resultado = procesar(salida, None)
-    pub = resultado["publicaciones"][0]
+    pub = resultado["piezas"][0]
     assert pub["contenido"] == "Hola X"
     assert pub["copy_in"] == "TITULAR EN LA IMAGEN"
     # Persistido y editable: una relectura desde el repo lo conserva.
-    recargada = repos.obtener_publicacion(pub["id"])
+    recargada = repos.obtener_pieza(pub["id"])
     assert recargada["copy_in"] == "TITULAR EN LA IMAGEN"
 
 
@@ -519,7 +519,7 @@ def test_no_hornea_placa_al_crear_marca_visual(entorno, monkeypatch):
     salida = '```json\n{"piezas": [{"red": "x", "texto": "Hola X", "copy_in": "DATO CLAVE"}]}\n```'
     resultado = procesar(salida, None)
 
-    pub = resultado["publicaciones"][0]
+    pub = resultado["piezas"][0]
     assert pub["imagen"] == ""  # nada horneado al crear
     # Sin foto ni plantilla de estudio (el test no siembra ninguna), no hay imagen servible -> "".
     # (La placa de marca por SPEC se retiró; solo componen plantillas de la galería del estudio.)
@@ -539,65 +539,65 @@ def test_crear_marca_sin_plantilla_sin_imagen(entorno):
     procesar = jobspec.reconstruir_procesar(spec)
     salida = '```json\n{"piezas": [{"red": "x", "texto": "Hola", "copy_in": "X"}]}\n```'
     resultado = procesar(salida, None)
-    pub = resultado["publicaciones"][0]
+    pub = resultado["piezas"][0]
     assert pub["imagen"] == "" and pub["imagen_url"] == ""
 
 
 def test_reconstruir_procesar_copy_nida_bajo_el_tema(entorno):
-    # Lista viva: con `contenido_id` de un tema existente, el borrador se ADJUNTA a ese
-    # `contenido` (cuelga de su tarjeta) y aparece en publicaciones + cola de aprobacion.
-    from keni_consola.dominio import publicaciones as dom_pub
+    # Lista viva: con `publicacion_id` de un tema existente, el borrador se ADJUNTA a ese
+    # `contenido` (cuelga de su tarjeta) y aparece en piezas + cola de aprobacion.
+    from keni_consola.dominio import piezas as dom_pub
 
-    tema = repos.crear_contenido(
+    tema = repos.crear_publicacion(
         clase="contenido", titulo="Tema origen", marca=_MARCA, origen="import-calendario",
     )
     spec = jobspec.construir(
         prompt="p",
         procesar=jobspec.construir_copy(
             prompt_id="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="Titulo",
-            texto_base="nota", contenido_id=tema["id"],
+            texto_base="nota", publicacion_id=tema["id"],
         ),
     )
     procesar = jobspec.reconstruir_procesar(spec)
     salida = '```json\n{"piezas": [{"red": "x", "texto": "Hola X"}]}\n```'
     resultado = procesar(salida, None)
 
-    assert len(resultado["publicaciones"]) == 1
+    assert len(resultado["piezas"]) == 1
     # El borrador cuelga del tema: es una fila por plataforma de ESE contenido.
-    plats = repos.listar_contenido_plataforma(tema["id"])
+    plats = repos.listar_piezas_fila(tema["id"])
     assert len(plats) == 1
     assert plats[0]["copy"] == "Hola X"
     assert not plats[0]["falta_copy"]
-    # Aparece en /api/publicaciones (toda fila por plataforma de un contenido es publicacion) ...
-    pubs = repos.listar_publicaciones(marca=_MARCA, red="x")
+    # Aparece en /api/piezas (toda fila por plataforma de un contenido es pieza) ...
+    pubs = repos.listar_piezas(marca=_MARCA, red="x")
     assert any("Hola X" in (p.get("contenido") or "") for p in pubs)
     # ... y en la cola de aprobacion (estado borrador == pendiente de plataforma).
     cola_aprob = dom_pub.cola_de_aprobacion()  # estado en_revision: aun ninguna
     assert all(p["estado"] == "en_revision" for p in cola_aprob)
-    borradores = [p for p in repos.listar_publicaciones(estado="borrador") if p["red"] == "x"]
+    borradores = [p for p in repos.listar_piezas(estado="borrador") if p["red"] == "x"]
     assert any("Hola X" in (p.get("contenido") or "") for p in borradores)
 
 
 def test_reconstruir_procesar_copy_contenido_inexistente_cae_a_borrador_suelto(entorno):
-    # Robustez: si `contenido_id` no existe, NO se nida en el vacio; cae al borrador suelto
-    # (con su propio padre), igual que el camino sin contenido_id.
+    # Robustez: si `publicacion_id` no existe, NO se nida en el vacio; cae al borrador suelto
+    # (con su propio padre), igual que el camino sin publicacion_id.
     spec = jobspec.construir(
         prompt="p",
         procesar=jobspec.construir_copy(
             prompt_id="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="T",
-            texto_base="nota", contenido_id="no-existe",
+            texto_base="nota", publicacion_id="no-existe",
         ),
     )
     procesar = jobspec.reconstruir_procesar(spec)
     procesar('```json\n{"piezas": [{"red": "x", "texto": "Suelto"}]}\n```', None)
-    pubs = repos.listar_publicaciones(marca=_MARCA, red="x")
+    pubs = repos.listar_piezas(marca=_MARCA, red="x")
     assert any("Suelto" in (p.get("contenido") or "") for p in pubs)
 
 
 def test_reconstruir_procesar_copy_sin_contenido_id_back_compat(entorno):
-    # Back-compat: sin contenido_id, borrador suelto con padre propio (comportamiento de hoy);
+    # Back-compat: sin publicacion_id, borrador suelto con padre propio (comportamiento de hoy);
     # NO cuelga de ningun tema preexistente.
-    tema = repos.crear_contenido(clase="contenido", titulo="Tema", marca=_MARCA)
+    tema = repos.crear_publicacion(clase="contenido", titulo="Tema", marca=_MARCA)
     spec = jobspec.construir(
         prompt="p",
         procesar=jobspec.construir_copy(
@@ -608,11 +608,11 @@ def test_reconstruir_procesar_copy_sin_contenido_id_back_compat(entorno):
     procesar = jobspec.reconstruir_procesar(spec)
     procesar('```json\n{"piezas": [{"red": "x", "texto": "Suelto"}]}\n```', None)
     # El tema NO recibio ninguna fila por plataforma (el borrador no se nido en el).
-    assert repos.listar_contenido_plataforma(tema["id"]) == []
+    assert repos.listar_piezas_fila(tema["id"]) == []
     # Pero el borrador existe (con su propio padre).
     assert any(
         "Suelto" in (p.get("contenido") or "")
-        for p in repos.listar_publicaciones(marca=_MARCA, red="x")
+        for p in repos.listar_piezas(marca=_MARCA, red="x")
     )
 
 
@@ -958,7 +958,7 @@ def test_procesar_copy_dedup_al_exito_limpia_pendiente_y_etiqueta(entorno):
     """
     from keni_consola import autogen_redactar
 
-    tema = repos.crear_contenido(
+    tema = repos.crear_publicacion(
         clase="contenido", titulo="Tema pool", marca=_MARCA, origen="rss",
         copy_pendiente='{"nota": "n", "redes_ids": ["x"]}',
     )
@@ -966,14 +966,14 @@ def test_procesar_copy_dedup_al_exito_limpia_pendiente_y_etiqueta(entorno):
         prompt="p",
         procesar=jobspec.construir_copy(
             prompt_id="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="T",
-            texto_base="nota", contenido_id=tema["id"],
+            texto_base="nota", publicacion_id=tema["id"],
             limpiar_pendiente=True, etiqueta_exito=autogen_redactar.ETIQUETA_AUTOGEN,
         ),
     )
     procesar = jobspec.reconstruir_procesar(jobspec.deserializar(jobspec.serializar(spec)))
     procesar('```json\n{"piezas": [{"red": "x", "texto": "Hola"}]}\n```', None)
 
-    actual = repos.obtener_contenido(tema["id"])
+    actual = repos.obtener_publicacion(tema["id"])
     assert (actual["copy_pendiente"] or "") == ""  # dedup del pipeline, al exito
     assert tema["id"] in autogen_redactar.ids_ya_generados()  # dedup del autogen (etiqueta)
 

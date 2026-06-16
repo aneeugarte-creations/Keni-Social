@@ -1,7 +1,7 @@
 """Dominio COLABORACION: logica PURA de la aprobacion multinivel de una pieza.
 
 Capa de logica sin persistencia ni HTTP: recibe la cadena de niveles de aprobacion de
-una `contenido_plataforma` (lista de dicts tal cual la guarda `db`) + quien decide, y
+una `pieza` (lista de dicts tal cual la guarda `db`) + quien decide, y
 decide si una decision es valida, que campos aplicar al nivel y como queda el ESTADO
 GLOBAL de la cadena. El handler (`api/colaboracion.py`) la consume y delega la escritura
 en `repos`.
@@ -78,7 +78,7 @@ def umbral_rechazo(cadena: list[dict[str, Any]]) -> int:
 def cadena_simple() -> list[str]:
     """Etiquetas de la cadena de aprobacion por defecto al mandar a revision (los dos OK).
 
-    Defecto razonable para una PUBLICACION suelta: DOS niveles `pendiente` ("Edición" y
+    Defecto razonable para una PIEZA suelta: DOS niveles `pendiente` ("Edición" y
     "Coordinación") = los dos OK del equipo que la pieza necesita. Cada OK lo da una persona
     distinta (cuatro ojos), pudiendo el autor dar uno de ellos; con los dos, la pieza se
     auto-programa al próximo hueco. Si la revisión editorial actúa como aprobador automático,
@@ -90,7 +90,7 @@ def cadena_simple() -> list[str]:
 
 
 def estado_publicacion_para(estado_global: str) -> str | None:
-    """Traduce el estado GLOBAL de la cadena al `estado` editorial de la PUBLICACION.
+    """Traduce el estado GLOBAL de la cadena al `estado` editorial de la PIEZA.
 
     Es el puente PURO entre el modelo de aprobacion (los 2 likes) y los estados canónicos.
     COLAPSO 2026-06: ya no hay estado de reposo `aprobado`. Cuando se juntan los 2 likes la

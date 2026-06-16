@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from ..tiempo import ahora_iso
-from ._comun import ESTADOS_PIEZA, Any, _conectar, uuid
+from ._comun import ESTADOS_PIEZA_PARRILLA, Any, _conectar, uuid
 
 # --------------------------------------------------------------------------- #
 # Piezas de la parrilla (#150, PARRILLA 2026.xlsx)                              #
@@ -126,7 +126,7 @@ def crear_pieza_rota(
         "contenido_sugerido": contenido_sugerido or "",
         "dia": dia or "",
         "hora_post": hora_post or "",
-        "estado": estado if estado in ESTADOS_PIEZA else "pendiente",
+        "estado": estado if estado in ESTADOS_PIEZA_PARRILLA else "pendiente",
         "material_entregado": 1 if material_entregado else 0,
         "contenido_entregado": 1 if contenido_entregado else 0,
         "publicado": 1 if publicado else 0,

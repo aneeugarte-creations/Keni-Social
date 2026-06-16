@@ -27,7 +27,7 @@ import { SesionContexto } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { formatearFecha, minutosHastaEvento, posicionTemporal } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
-import type { CatalogosContenido, Contenido, EventoRota } from "@/types";
+import type { CatalogosPublicacion, Publicacion, EventoRota } from "@/types";
 
 import { AvatarPersona } from "./AvatarPersona";
 import { CLAVE_TAREAS } from "./claves";
@@ -170,7 +170,7 @@ export function SelectorRol({
 }
 
 /** Semáforo AGREGADO por rol: qué roles del evento están cubiertos ("Foto · Video" / "N roles"). */
-export function RolesCubiertos({ cubridores }: { cubridores: Contenido[] }) {
+export function RolesCubiertos({ cubridores }: { cubridores: Publicacion[] }) {
   const roles = rolesCubiertos(cubridores);
   if (roles.length === 0) return null;
   const texto = roles.length <= 2 ? roles.map(etiquetaRol).join(" · ") : `${roles.length} roles`;
@@ -185,10 +185,10 @@ export function RolesCubiertos({ cubridores }: { cubridores: Contenido[] }) {
  * Un ROL soltado dentro de una cobertura aún viva: tarea de cobertura SUELTA (sin dueño) que
  * conserva su `formato`. Resurge como «Por cubrir · <rol>» re-cogible (coger = retoma ESE rol).
  */
-function RolLibre({ tarea }: { tarea: Contenido }) {
+function RolLibre({ tarea }: { tarea: Publicacion }) {
   const queryClient = useQueryClient();
   const coger = useMutation({
-    mutationFn: () => api.cogerContenido(tarea.id),
+    mutationFn: () => api.cogerPublicacion(tarea.id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
       toast.success(`Cubres "${tarea.titulo}" (${etiquetaRol(tarea.formato)}).`);
@@ -229,7 +229,7 @@ export function TarjetaEventoLibre({
   sinMenu = false,
 }: {
   evento: EventoRota;
-  catalogos: CatalogosContenido | undefined;
+  catalogos: CatalogosPublicacion | undefined;
   /** Oculta el kebab «⋮» (las acciones siguen accesibles por click derecho/teclado). Lo usa
    *  el Panorama, donde Asignar/Editar/Borrar ya viven como iconos en la propia fila. */
   sinMenu?: boolean;
@@ -363,8 +363,8 @@ export function TarjetaTarea({
   enCobertura = false,
   sinMenu = false,
 }: {
-  tarea: Contenido;
-  catalogos: CatalogosContenido | undefined;
+  tarea: Publicacion;
+  catalogos: CatalogosPublicacion | undefined;
   /** Dentro de una cobertura: oculta «Soltar»/«Reasignar» (se gestionan a nivel de evento). */
   enCobertura?: boolean;
   /** Oculta el kebab «⋮» (acciones siguen por click derecho/teclado). Lo usa el Panorama. */
@@ -386,7 +386,7 @@ export function TarjetaTarea({
   };
 
   const coger = useMutation({
-    mutationFn: () => api.cogerContenido(tarea.id),
+    mutationFn: () => api.cogerPublicacion(tarea.id),
     onSuccess: () => {
       void invalidar();
       toast.success(`"${tarea.titulo}" es tuya: el equipo ya lo ve.`);
@@ -394,7 +394,7 @@ export function TarjetaTarea({
     onError: conError,
   });
   const soltar = useMutation({
-    mutationFn: () => api.soltarContenido(tarea.id),
+    mutationFn: () => api.soltarPublicacion(tarea.id),
     onSuccess: () => {
       void invalidar();
       // En cobertura soltar SOLO libera ESE rol: el partido SIGUE (reaparece como «Por
@@ -412,7 +412,7 @@ export function TarjetaTarea({
     onError: conError,
   });
   const asignar = useMutation({
-    mutationFn: (personaId: string) => api.asignarContenido(tarea.id, personaId),
+    mutationFn: (personaId: string) => api.asignarPublicacion(tarea.id, personaId),
     onSuccess: (res) => {
       setAsignarAbierto(false);
       void invalidar();
@@ -422,12 +422,12 @@ export function TarjetaTarea({
     onError: conError,
   });
   const cambiarEstado = useMutation({
-    mutationFn: (estado: string) => api.actualizarContenido(tarea.id, { estado }),
+    mutationFn: (estado: string) => api.actualizarPublicacion(tarea.id, { estado }),
     onSuccess: () => void invalidar(),
     onError: conError,
   });
   const borrar = useMutation({
-    mutationFn: () => api.eliminarContenido(tarea.id),
+    mutationFn: () => api.eliminarPublicacion(tarea.id),
     onSuccess: () => {
       setConfirmarBorrado(false);
       void invalidar();
@@ -627,7 +627,7 @@ export function TarjetaCobertura({
   sinMenu = false,
 }: {
   cobertura: Cobertura;
-  catalogos: CatalogosContenido | undefined;
+  catalogos: CatalogosPublicacion | undefined;
   /** Oculta el kebab «⋮» (acciones siguen por click derecho/teclado). Lo usa el Panorama. */
   sinMenu?: boolean;
 }) {
@@ -667,7 +667,7 @@ export function TarjetaCobertura({
     mutationFn: async () => {
       if (!evento) return;
       await api.eliminarEventoRota(evento.id);
-      await Promise.all(vinculadas.map((t) => api.eliminarContenido(t.id)));
+      await Promise.all(vinculadas.map((t) => api.eliminarPublicacion(t.id)));
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });

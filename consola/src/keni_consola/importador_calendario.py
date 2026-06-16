@@ -4,7 +4,7 @@ PROBLEMA QUE RESUELVE
 =====================
 El equipo planifica su calendario (temas + fechas + compromisos) en hojas de Excel/CSV. Hoy
 NO hay forma de meter ese plan en el tablero: habria que teclear cada item a mano. Este modulo
-parsea un archivo `.xlsx`/`.csv` y crea contenido del tablero (`repos.crear_contenido`), de modo
+parsea un archivo `.xlsx`/`.csv` y crea contenido del tablero (`repos.crear_publicacion`), de modo
 que el plan del equipo entra de golpe a la "lista viva" y se ordena con el resto de fuentes
 (Radar, RSS, alta manual). Es la pieza H1 de `docs/contexto/2026-05-31-lista-viva-angel.md`.
 
@@ -12,7 +12,7 @@ DOS CAPAS (como `radar_auto`):
   - SELECCION/PARSEO es PURO y testeable (`parsear`, `_filas_desde_tabla`): bytes -> filas
     normalizadas + lista de errores honesta (una fila mala se reporta, NO rompe la importacion).
   - ESCRITURA (`importar_a_tablero`) reutiliza el MISMO camino que `desde_radar` /
-    `radar_auto.promover_temas`: `repos.crear_contenido(origen='import-calendario', ...)`. Los
+    `radar_auto.promover_temas`: `repos.crear_publicacion(origen='import-calendario', ...)`. Los
     contenidos marcados "obligatorio" se etiquetan `compromiso` y los de la "evergreen list" del
     equipo se etiquetan `evergreen` (sin tocar el enum de `flujo`).
 
@@ -65,8 +65,8 @@ _MAX_TEXTO = 8000
 _SINONIMOS: dict[str, set[str]] = {
     "titulo": {"titulo", "tema", "asunto", "contenido", "title", "topic", "nombre", "post"},
     "fecha": {
-        "fecha", "dia", "date", "fecha objetivo", "fecha de publicacion",
-        "publicar", "publicacion", "cuando",
+        "fecha", "dia", "date", "fecha objetivo", "fecha de pieza",
+        "publicar", "pieza", "cuando",
     },
     "marca": {"marca", "cuenta", "brand", "cliente", "account"},
     "redes": {
@@ -572,7 +572,7 @@ def _clave(titulo: str, fecha: str) -> str:
 def claves_ya_importadas() -> set[str]:
     """Claves (titulo+fecha) de lo ya importado por este modulo, para no duplicar."""
     try:
-        items = repos.listar_contenido()
+        items = repos.listar_publicacion()
     except Exception:  # noqa: BLE001 -- un fallo de lectura no debe abortar la importacion
         return set()
     return {
@@ -608,7 +608,7 @@ def importar_a_tablero(
 ) -> dict[str, Any]:
     """Crea contenido del tablero a partir de filas ya parseadas. Devuelve un resumen.
 
-    Espeja `radar_auto.promover_temas`: `repos.crear_contenido(origen='import-calendario', ...)`
+    Espeja `radar_auto.promover_temas`: `repos.crear_publicacion(origen='import-calendario', ...)`
     + filas por plataforma + etiqueta `compromiso` cuando aplica. Dedup por (titulo+fecha).
     `marca_defecto` (id canonico) se aplica a las filas sin marca reconocida.
     """
@@ -625,7 +625,7 @@ def importar_a_tablero(
             omitidos.append({"titulo": fila.titulo, "motivo": "Ya importado (mismo título y fecha)."})
             continue
         ya.add(clave)
-        item = repos.crear_contenido(
+        item = repos.crear_publicacion(
             clase="contenido",
             flujo="",
             titulo=fila.titulo[:_MAX_TITULO],
@@ -637,7 +637,7 @@ def importar_a_tablero(
             origen=ORIGEN,
         )
         for red in fila.redes:
-            repos.crear_contenido_plataforma(contenido_id=item["id"], red=red)
+            repos.crear_pieza_fila(publicacion_id=item["id"], red=red)
         if fila.compromiso:
             if not etiqueta_compromiso_id:
                 etiqueta_compromiso_id = _id_etiqueta_compromiso()

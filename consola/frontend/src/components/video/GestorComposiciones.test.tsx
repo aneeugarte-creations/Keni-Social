@@ -2,7 +2,7 @@
  * Tests del GESTOR de composiciones de video (= gestor de transcripciones).
  *  - Lista las composiciones de la marca activa con su formato.
  *  - Muestra el ESTADO de subtítulos por fila (de `subtitulosDe`).
- *  - Refleja si la pieza ligada ya tiene su video o le falta (de `publicaciones`).
+ *  - Refleja si la pieza ligada ya tiene su video o le falta (de `piezas`).
  *  - "Abrir" invoca onAbrir con el id de la composición (reabrir en el editor).
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -25,7 +25,7 @@ vi.mock("@/components/comunes/confirmar", () => ({
 function comp(over: Partial<ComposicionResumen> = {}): ComposicionResumen {
   return {
     id: "comp-1",
-    contenido_id: "",
+    publicacion_id: "",
     marca: "unotv",
     marca_nombre: "UnoTV",
     titulo: "",
@@ -56,8 +56,8 @@ function renderGestor(onAbrir = vi.fn()) {
 }
 
 beforeEach(() => {
-  vi.spyOn(apiMod.api, "publicaciones").mockResolvedValue({
-    publicaciones: [],
+  vi.spyOn(apiMod.api, "piezas").mockResolvedValue({
+    piezas: [],
     paginacion: { total: 0, limite: 0, desplazamiento: 0 },
   } as never);
   vi.spyOn(apiMod.api.video, "subtitulosDe").mockResolvedValue({ subtitulo: null });
@@ -96,11 +96,11 @@ describe("GestorComposiciones", () => {
 
   it("refleja que falta el video en la pieza ligada (honestidad de producto)", async () => {
     vi.spyOn(apiMod.api.video, "listarComposiciones").mockResolvedValue({
-      composiciones: [comp({ id: "comp-pieza", contenido_id: "cont-1" })],
+      composiciones: [comp({ id: "comp-pieza", publicacion_id: "cont-1" })],
     });
     // La pieza ligada NO tiene video adjunto (video vacío).
-    vi.spyOn(apiMod.api, "publicaciones").mockResolvedValue({
-      publicaciones: [{ contenido_id: "cont-1", video: "" }],
+    vi.spyOn(apiMod.api, "piezas").mockResolvedValue({
+      piezas: [{ publicacion_id: "cont-1", video: "" }],
       paginacion: { total: 1, limite: 0, desplazamiento: 0 },
     } as never);
     renderGestor();
@@ -109,10 +109,10 @@ describe("GestorComposiciones", () => {
 
   it("refleja video adjunto cuando la pieza ligada ya tiene su mp4", async () => {
     vi.spyOn(apiMod.api.video, "listarComposiciones").mockResolvedValue({
-      composiciones: [comp({ id: "comp-pieza2", contenido_id: "cont-2" })],
+      composiciones: [comp({ id: "comp-pieza2", publicacion_id: "cont-2" })],
     });
-    vi.spyOn(apiMod.api, "publicaciones").mockResolvedValue({
-      publicaciones: [{ contenido_id: "cont-2", video: "render/abc.mp4" }],
+    vi.spyOn(apiMod.api, "piezas").mockResolvedValue({
+      piezas: [{ publicacion_id: "cont-2", video: "render/abc.mp4" }],
       paginacion: { total: 1, limite: 0, desplazamiento: 0 },
     } as never);
     renderGestor();

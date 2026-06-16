@@ -7,7 +7,7 @@
  *
  *  1. De las piezas cargadas se toman las que NECESITAN cadena (en revisión / aprobadas)
  *     y que AÚN no tienen nada en caché bajo `claveCadenaAprobacion(id)`.
- *  2. Esas ids "faltantes" se piden en UNA llamada (`GET /api/publicaciones/cadenas?ids=`)
+ *  2. Esas ids "faltantes" se piden en UNA llamada (`GET /api/piezas/cadenas?ids=`)
  *     y el resultado se REPARTE con `setQueryData` a las claves individuales existentes.
  *  3. Mientras el lote está en curso, `pendiente(id)` devuelve true: `PostFeed` mantiene su
  *     query individual DESHABILITADA para esas ids (si no, cada tarjeta dispararía su GET
@@ -22,14 +22,14 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 
 import { api } from "@/lib/api";
-import { claveCadenaAprobacion } from "@/pages/publicaciones/claves";
-import type { Publicacion } from "@/types";
+import { claveCadenaAprobacion } from "@/pages/piezas/claves";
+import type { Pieza } from "@/types";
 
-import { etapaDePublicacion } from "./etapa";
+import { etapaDePieza } from "./etapa";
 
 /** Las piezas cuya cadena importa (mismo gate que `PostFeed`): en revisión o ya programadas. */
-function necesitaCadena(p: Publicacion): boolean {
-  return p.estado === "en_revision" || etapaDePublicacion(p) === "programada";
+function necesitaCadena(p: Pieza): boolean {
+  return p.estado === "en_revision" || etapaDePieza(p) === "programada";
 }
 
 const NINGUNA: ReadonlySet<string> = new Set();
@@ -42,7 +42,7 @@ export const CadenasLoteContexto = React.createContext<{
   pendiente: (id: string) => boolean;
 } | null>(null);
 
-export function useCadenasLote(piezas: Publicacion[]): {
+export function useCadenasLote(piezas: Pieza[]): {
   /** true mientras la cadena de esa pieza viene en el lote en curso (no dispares tu GET). */
   pendiente: (id: string) => boolean;
 } {

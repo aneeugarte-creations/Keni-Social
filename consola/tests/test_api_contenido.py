@@ -1,4 +1,4 @@
-"""Tests de la API del TABLERO de contenido unificado (`/api/contenido`).
+"""Tests de la API del TABLERO de contenido unificado (`/api/publicaciones`).
 
 Cubren el CRUD del padre, las filas por plataforma (estado + checklist), el `vencido`
 derivado del deadline, la promocion desde el Radar y las validaciones (marca/red/estado/
@@ -53,7 +53,7 @@ def _id_usuario(nombre: str) -> str:
 
 def test_tablero_vacio_devuelve_catalogos(entorno):
     c = _cli()
-    cuerpo = c.get("/api/contenido").json()
+    cuerpo = c.get("/api/publicaciones").json()
     assert cuerpo["contenidos"] == []
     cat = cuerpo["catalogos"]
     assert {"importante", "evergreen", "evento"} <= set(cat["flujos"])
@@ -64,7 +64,7 @@ def test_tablero_vacio_devuelve_catalogos(entorno):
 def test_crear_contenido_con_plataformas(entorno):
     c = _cli()
     r = c.post(
-        "/api/contenido",
+        "/api/publicaciones",
         json={
             "titulo": "Sismo CDMX",
             "flujo": "importante",
@@ -88,7 +88,7 @@ def test_crear_con_formato_video_crea_cinco_redes(entorno):
     """`formato=video` crea las 5 redes (foto=3 + youtube + tiktok) con falta_video activo."""
     c = _cli()
     r = c.post(
-        "/api/contenido",
+        "/api/publicaciones",
         json={"titulo": "Clip", "formato": "video"},
         headers=_ORIGIN,
     )
@@ -104,19 +104,19 @@ def test_crear_con_formato_video_crea_cinco_redes(entorno):
 def test_crear_con_formato_foto_crea_tres_redes(entorno):
     c = _cli()
     cont = c.post(
-        "/api/contenido", json={"titulo": "Foto", "formato": "foto"}, headers=_ORIGIN
+        "/api/publicaciones", json={"titulo": "Foto", "formato": "foto"}, headers=_ORIGIN
     ).json()["contenido"]
     assert {p["red"] for p in cont["plataformas"]} == {"instagram", "x", "facebook"}
     assert all(not p["falta_video"] for p in cont["plataformas"])
 
 
 def test_flip_a_video_via_patch_contenido(entorno):
-    """PATCH /api/contenido con {formato:'video'} añade youtube+tiktok y devuelve el resumen."""
+    """PATCH /api/publicaciones con {formato:'video'} añade youtube+tiktok y devuelve el resumen."""
     c = _cli()
     cont = c.post(
-        "/api/contenido", json={"titulo": "Pieza", "formato": "foto"}, headers=_ORIGIN
+        "/api/publicaciones", json={"titulo": "Pieza", "formato": "foto"}, headers=_ORIGIN
     ).json()["contenido"]
-    r = c.patch(f"/api/contenido/{cont['id']}", json={"formato": "video"}, headers=_ORIGIN)
+    r = c.patch(f"/api/publicaciones/{cont['id']}", json={"formato": "video"}, headers=_ORIGIN)
     assert r.status_code == 200
     cuerpo = r.json()
     assert cuerpo["contenido"]["formato"] == "video"
@@ -130,15 +130,15 @@ def test_flip_a_foto_conserva_extra_con_trabajo_y_avisa(entorno):
     """video->foto con trabajo en youtube: se conserva, se reporta y la API avisa."""
     c = _cli()
     cont = c.post(
-        "/api/contenido", json={"titulo": "Pieza", "formato": "video"}, headers=_ORIGIN
+        "/api/publicaciones", json={"titulo": "Pieza", "formato": "video"}, headers=_ORIGIN
     ).json()["contenido"]
     yt = next(p for p in cont["plataformas"] if p["red"] == "youtube")
     c.patch(
-        f"/api/contenido/{cont['id']}/plataformas/{yt['id']}",
+        f"/api/publicaciones/{cont['id']}/plataformas/{yt['id']}",
         json={"copy": "Guion"},
         headers=_ORIGIN,
     )
-    r = c.patch(f"/api/contenido/{cont['id']}", json={"formato": "foto"}, headers=_ORIGIN)
+    r = c.patch(f"/api/publicaciones/{cont['id']}", json={"formato": "foto"}, headers=_ORIGIN)
     assert r.status_code == 200
     cuerpo = r.json()
     assert "youtube" in cuerpo["ajuste_formato"]["conservadas"]
@@ -149,12 +149,12 @@ def test_patch_plataforma_fija_video_y_limpia_falta_video(entorno):
     """Adjuntar {video} en una fila limpia falta_video (espejo de imagen/falta_imagen)."""
     c = _cli()
     cont = c.post(
-        "/api/contenido", json={"titulo": "Clip", "formato": "video"}, headers=_ORIGIN
+        "/api/publicaciones", json={"titulo": "Clip", "formato": "video"}, headers=_ORIGIN
     ).json()["contenido"]
     plat = next(p for p in cont["plataformas"] if p["red"] == "tiktok")
     assert plat["falta_video"] is True
     r = c.patch(
-        f"/api/contenido/{cont['id']}/plataformas/{plat['id']}",
+        f"/api/publicaciones/{cont['id']}/plataformas/{plat['id']}",
         json={"video": "videos/abc.mp4"},
         headers=_ORIGIN,
     )
@@ -167,15 +167,15 @@ def test_patch_plataforma_fija_video_y_limpia_falta_video(entorno):
 
 def test_listar_incluye_el_creado(entorno):
     c = _cli()
-    c.post("/api/contenido", json={"titulo": "Nota A", "flujo": "evergreen"}, headers=_ORIGIN)
-    cuerpo = c.get("/api/contenido?flujo=evergreen").json()
+    c.post("/api/publicaciones", json={"titulo": "Nota A", "flujo": "evergreen"}, headers=_ORIGIN)
+    cuerpo = c.get("/api/publicaciones?flujo=evergreen").json()
     assert [x["titulo"] for x in cuerpo["contenidos"]] == ["Nota A"]
 
 
 def test_deadline_vencido_se_marca(entorno):
     c = _cli()
     r = c.post(
-        "/api/contenido",
+        "/api/publicaciones",
         json={"titulo": "Atrasada", "fecha_entrega": "2000-01-01"},
         headers=_ORIGIN,
     )
@@ -185,11 +185,11 @@ def test_deadline_vencido_se_marca(entorno):
 def test_actualizar_plataforma_estado_y_checklist(entorno):
     c = _cli()
     cont = c.post(
-        "/api/contenido", json={"titulo": "C", "redes": ["x"]}, headers=_ORIGIN
+        "/api/publicaciones", json={"titulo": "C", "redes": ["x"]}, headers=_ORIGIN
     ).json()["contenido"]
     plat_id = cont["plataformas"][0]["id"]
     r = c.patch(
-        f"/api/contenido/{cont['id']}/plataformas/{plat_id}",
+        f"/api/publicaciones/{cont['id']}/plataformas/{plat_id}",
         json={"estado": "en_revision", "falta_copy": False, "copy": "¡Listo!"},
         headers=_ORIGIN,
     )
@@ -203,11 +203,11 @@ def test_actualizar_plataforma_estado_y_checklist(entorno):
 def test_estado_plataforma_invalido_se_rechaza(entorno):
     c = _cli()
     cont = c.post(
-        "/api/contenido", json={"titulo": "C", "redes": ["x"]}, headers=_ORIGIN
+        "/api/publicaciones", json={"titulo": "C", "redes": ["x"]}, headers=_ORIGIN
     ).json()["contenido"]
     plat_id = cont["plataformas"][0]["id"]
     r = c.patch(
-        f"/api/contenido/{cont['id']}/plataformas/{plat_id}",
+        f"/api/publicaciones/{cont['id']}/plataformas/{plat_id}",
         json={"estado": "inventado"},
         headers=_ORIGIN,
     )
@@ -216,33 +216,33 @@ def test_estado_plataforma_invalido_se_rechaza(entorno):
 
 def test_agregar_y_borrar_plataforma(entorno):
     c = _cli()
-    cont = c.post("/api/contenido", json={"titulo": "C"}, headers=_ORIGIN).json()["contenido"]
+    cont = c.post("/api/publicaciones", json={"titulo": "C"}, headers=_ORIGIN).json()["contenido"]
     r = c.post(
-        f"/api/contenido/{cont['id']}/plataformas", json={"red": "tiktok"}, headers=_ORIGIN
+        f"/api/publicaciones/{cont['id']}/plataformas", json={"red": "tiktok"}, headers=_ORIGIN
     )
     assert r.status_code == 200
     plat_id = r.json()["plataforma"]["id"]
-    assert c.request("DELETE", f"/api/contenido/{cont['id']}/plataformas/{plat_id}").status_code == 200
+    assert c.request("DELETE", f"/api/publicaciones/{cont['id']}/plataformas/{plat_id}").status_code == 200
 
 
 def test_crear_rechaza_marca_y_red_invalidas(entorno):
     c = _cli()
-    assert c.post("/api/contenido", json={"titulo": "X", "marca": "no-existe"}, headers=_ORIGIN).status_code == 400
-    assert c.post("/api/contenido", json={"titulo": "X", "redes": ["myspace"]}, headers=_ORIGIN).status_code == 400
+    assert c.post("/api/publicaciones", json={"titulo": "X", "marca": "no-existe"}, headers=_ORIGIN).status_code == 400
+    assert c.post("/api/publicaciones", json={"titulo": "X", "redes": ["myspace"]}, headers=_ORIGIN).status_code == 400
 
 
 def test_crear_sin_titulo_400(entorno):
     c = _cli()
-    assert c.post("/api/contenido", json={"flujo": "importante"}, headers=_ORIGIN).status_code == 400
+    assert c.post("/api/publicaciones", json={"flujo": "importante"}, headers=_ORIGIN).status_code == 400
 
 
 def test_asignar_responsable_real(entorno):
     c = _cli("ana")
     _cli("luis")
     luis = _id_usuario("luis")
-    cont = c.post("/api/contenido", json={"titulo": "C"}, headers=_ORIGIN).json()["contenido"]
+    cont = c.post("/api/publicaciones", json={"titulo": "C"}, headers=_ORIGIN).json()["contenido"]
     r = c.patch(
-        f"/api/contenido/{cont['id']}", json={"responsable_id": luis}, headers=_ORIGIN
+        f"/api/publicaciones/{cont['id']}", json={"responsable_id": luis}, headers=_ORIGIN
     )
     assert r.status_code == 200
     assert r.json()["contenido"]["responsable_nombre"] == "luis"
@@ -250,9 +250,9 @@ def test_asignar_responsable_real(entorno):
 
 def test_responsable_inexistente_se_rechaza(entorno):
     c = _cli()
-    cont = c.post("/api/contenido", json={"titulo": "C"}, headers=_ORIGIN).json()["contenido"]
+    cont = c.post("/api/publicaciones", json={"titulo": "C"}, headers=_ORIGIN).json()["contenido"]
     r = c.patch(
-        f"/api/contenido/{cont['id']}", json={"responsable_id": "fantasma"}, headers=_ORIGIN
+        f"/api/publicaciones/{cont['id']}", json={"responsable_id": "fantasma"}, headers=_ORIGIN
     )
     assert r.status_code == 400
 
@@ -260,7 +260,7 @@ def test_responsable_inexistente_se_rechaza(entorno):
 def test_desde_radar_crea_importante(entorno):
     c = _cli()
     r = c.post(
-        "/api/contenido/desde-radar",
+        "/api/publicaciones/desde-radar",
         json={"titulo": "Tendencia: Mundial", "redes": ["x", "instagram"], "prioridad": "alta"},
         headers=_ORIGIN,
     )
@@ -274,9 +274,9 @@ def test_desde_radar_crea_importante(entorno):
 
 def test_borrar_contenido(entorno):
     c = _cli()
-    cont = c.post("/api/contenido", json={"titulo": "C"}, headers=_ORIGIN).json()["contenido"]
-    assert c.request("DELETE", f"/api/contenido/{cont['id']}").status_code == 200
-    assert c.get("/api/contenido").json()["contenidos"] == []
+    cont = c.post("/api/publicaciones", json={"titulo": "C"}, headers=_ORIGIN).json()["contenido"]
+    assert c.request("DELETE", f"/api/publicaciones/{cont['id']}").status_code == 200
+    assert c.get("/api/publicaciones").json()["contenidos"] == []
 
 
 def test_adaptar_imagen_por_red_asigna_a_cada_plataforma(entorno, monkeypatch):
@@ -284,7 +284,7 @@ def test_adaptar_imagen_por_red_asigna_a_cada_plataforma(entorno, monkeypatch):
 
     c = _cli()
     cont = c.post(
-        "/api/contenido",
+        "/api/publicaciones",
         json={"titulo": "Sismo", "redes": ["x", "instagram"]},
         headers=_ORIGIN,
     ).json()["contenido"]
@@ -298,7 +298,7 @@ def test_adaptar_imagen_por_red_asigna_a_cada_plataforma(entorno, monkeypatch):
     )
 
     r = c.post(
-        f"/api/contenido/{cont['id']}/adaptar-imagen",
+        f"/api/publicaciones/{cont['id']}/adaptar-imagen",
         json={"imagen": "origen.png"},
         headers=_ORIGIN,
     )
@@ -310,21 +310,21 @@ def test_adaptar_imagen_por_red_asigna_a_cada_plataforma(entorno, monkeypatch):
     assert imgs["x"].startswith("adapt-")
     assert imgs["instagram"].startswith("adapt-")
     # Persistido: el tablero refleja las imágenes asignadas por plataforma.
-    tablero = c.get("/api/contenido").json()["contenidos"][0]
+    tablero = c.get("/api/publicaciones").json()["contenidos"][0]
     assert all(p["imagen"].startswith("adapt-") for p in tablero["plataformas"])
 
 
 def test_adaptar_imagen_sin_imagen_400(entorno):
     c = _cli()
     cont = c.post(
-        "/api/contenido", json={"titulo": "X", "redes": ["x"]}, headers=_ORIGIN
+        "/api/publicaciones", json={"titulo": "X", "redes": ["x"]}, headers=_ORIGIN
     ).json()["contenido"]
-    r = c.post(f"/api/contenido/{cont['id']}/adaptar-imagen", json={}, headers=_ORIGIN)
+    r = c.post(f"/api/publicaciones/{cont['id']}/adaptar-imagen", json={}, headers=_ORIGIN)
     assert r.status_code == 400
 
 
 # --------------------------------------------------------------------------- #
-# Puerta creativa del equipo: POST /api/contenido/aportar (Fase 1 / Flujo A)    #
+# Puerta creativa del equipo: POST /api/publicaciones/aportar (Fase 1 / Flujo A)    #
 # --------------------------------------------------------------------------- #
 
 # PNG minimo valido (1x1) para adjuntar como foto aportada por el equipo.
@@ -338,7 +338,7 @@ _PNG_1x1 = (
 def test_aportar_crea_con_origen_equipo(entorno):
     c = _cli()
     r = c.post(
-        "/api/contenido/aportar",
+        "/api/publicaciones/aportar",
         data={
             "titulo": "Gol de último minuto",
             "marca": "unotv",
@@ -367,14 +367,14 @@ def test_aportar_exige_marca(entorno):
     c = _cli()
     # Sin marca: la puerta creativa la EXIGE (sin voz no hay auto-generacion).
     r = c.post(
-        "/api/contenido/aportar",
+        "/api/publicaciones/aportar",
         data={"titulo": "Idea suelta", "material": "algo"},
         headers=_ORIGIN,
     )
     assert r.status_code == 400
     # Marca inexistente tambien se rechaza.
     r2 = c.post(
-        "/api/contenido/aportar",
+        "/api/publicaciones/aportar",
         data={"titulo": "Idea", "marca": "no-existe"},
         headers=_ORIGIN,
     )
@@ -386,7 +386,7 @@ def test_aportar_sin_titulo_ni_contenido_400(entorno):
     # El titulo es opcional, pero un alta SIN titulo y SIN nada que aportar (ni material, ni
     # enlace, ni imagen) no tiene de que generar copy: se rechaza.
     r = c.post(
-        "/api/contenido/aportar", data={"marca": "unotv"}, headers=_ORIGIN
+        "/api/publicaciones/aportar", data={"marca": "unotv"}, headers=_ORIGIN
     )
     assert r.status_code == 400
 
@@ -395,7 +395,7 @@ def test_aportar_sin_titulo_deriva_de_material(entorno):
     c = _cli()
     # Sin titulo explicito, se DERIVA de la 1a linea no vacia del material (rotulo del feed).
     r = c.post(
-        "/api/contenido/aportar",
+        "/api/publicaciones/aportar",
         data={
             "marca": "unotv",
             "material": "Remontada histórica en el clásico\nGanó 3-2 en el descuento.",
@@ -424,7 +424,7 @@ def test_aportar_desde_url_extrae_texto_y_deriva_titulo(entorno, monkeypatch):
     monkeypatch.setattr(extraccion_url, "validar_url", lambda u: (u, None))
     monkeypatch.setattr(extraccion_url, "_DESCARGADOR", lambda url: html)
     r = c.post(
-        "/api/contenido/aportar",
+        "/api/publicaciones/aportar",
         data={"marca": "unotv", "url": "https://ejemplo.mx/nota", "redes": "x"},
         headers=_ORIGIN,
     )
@@ -448,7 +448,7 @@ def test_aportar_url_ilegible_y_sin_mas_contenido_400(entorno, monkeypatch):
     monkeypatch.setattr(extraccion_url, "validar_url", lambda u: (u, None))
     monkeypatch.setattr(extraccion_url, "extraer_texto", _boom)
     r = c.post(
-        "/api/contenido/aportar",
+        "/api/publicaciones/aportar",
         data={"marca": "unotv", "url": "https://ejemplo.mx/nota"},
         headers=_ORIGIN,
     )
@@ -458,7 +458,7 @@ def test_aportar_url_ilegible_y_sin_mas_contenido_400(entorno, monkeypatch):
 def test_aportar_con_imagen_adjunta_se_guarda_como_foto(entorno):
     c = _cli()
     r = c.post(
-        "/api/contenido/aportar",
+        "/api/publicaciones/aportar",
         data={"titulo": "Foto de la rueda de prensa", "marca": "unotv", "redes": "x"},
         files={"imagen": ("foto.png", _PNG_1x1, "image/png")},
         headers=_ORIGIN,
@@ -473,7 +473,7 @@ def test_aportar_con_imagen_adjunta_se_guarda_como_foto(entorno):
 def test_aportar_sin_redes_usa_canonicas(entorno):
     c = _cli()
     r = c.post(
-        "/api/contenido/aportar",
+        "/api/publicaciones/aportar",
         data={"titulo": "Nota sin redes", "marca": "unotv", "intencion": "evergreen"},
         headers=_ORIGIN,
     )
@@ -489,7 +489,7 @@ def test_post_directo_crea_borradores_con_copy(entorno):
     """El alta directa deposita UNA pieza-borrador por red con el copy FINAL del equipo."""
     c = _cli()
     r = c.post(
-        "/api/contenido/post-directo",
+        "/api/publicaciones/post-directo",
         json={
             "titulo": "Arranque del Mundial",
             "copy": "Arranca el Mundial 2026 en CDMX 🎉",
@@ -507,18 +507,18 @@ def test_post_directo_crea_borradores_con_copy(entorno):
     assert all(p["copy"] == "Arranca el Mundial 2026 en CDMX 🎉" for p in cont["plataformas"])
     assert all(not p["falta_copy"] for p in cont["plataformas"])
     assert all(p["falta_imagen"] for p in cont["plataformas"])
-    # Y son PUBLICACIONES del feed (mismo motor que el copy generado), no checklist suelto.
-    pubs = c.get("/api/publicaciones").json()["publicaciones"]
+    # Y son PIEZAS del feed (mismo motor que el copy generado), no checklist suelto.
+    pubs = c.get("/api/piezas").json()["piezas"]
     assert {p["red"] for p in pubs} == {"x", "instagram"}
     assert all(p["contenido"] == "Arranca el Mundial 2026 en CDMX 🎉" for p in pubs)
-    assert all(p["contenido_id"] == cont["id"] for p in pubs)
+    assert all(p["publicacion_id"] == cont["id"] for p in pubs)
 
 
 def test_post_directo_deriva_titulo_y_redes_por_defecto(entorno):
     """Sin título usa la primera línea del copy; sin redes, las del formato foto."""
     c = _cli()
     r = c.post(
-        "/api/contenido/post-directo",
+        "/api/publicaciones/post-directo",
         json={"copy": "Última hora desde el estadio.\n\nMéxico gana 2-1.", "marca": "unotv"},
         headers=_ORIGIN,
     )
@@ -532,20 +532,20 @@ def test_post_directo_deriva_titulo_y_redes_por_defecto(entorno):
 def test_post_directo_validaciones_400(entorno):
     c = _cli()
     # Sin copy no hay post (es justo lo que diferencia esta alta).
-    r = c.post("/api/contenido/post-directo", json={"marca": "unotv"}, headers=_ORIGIN)
+    r = c.post("/api/publicaciones/post-directo", json={"marca": "unotv"}, headers=_ORIGIN)
     assert r.status_code == 400
     # La marca es obligatoria y debe existir.
-    r = c.post("/api/contenido/post-directo", json={"copy": "Hola"}, headers=_ORIGIN)
+    r = c.post("/api/publicaciones/post-directo", json={"copy": "Hola"}, headers=_ORIGIN)
     assert r.status_code == 400
     r = c.post(
-        "/api/contenido/post-directo",
+        "/api/publicaciones/post-directo",
         json={"copy": "Hola", "marca": "no-existe"},
         headers=_ORIGIN,
     )
     assert r.status_code == 400
-    # Una red desconocida (o el canal "web" del tablero) se rechaza: esto crea publicaciones.
+    # Una red desconocida (o el canal "web" del tablero) se rechaza: esto crea piezas.
     r = c.post(
-        "/api/contenido/post-directo",
+        "/api/publicaciones/post-directo",
         json={"copy": "Hola", "marca": "unotv", "redes": ["web"]},
         headers=_ORIGIN,
     )
@@ -567,7 +567,7 @@ def test_aportar_con_clip_transcribe_en_local(entorno, monkeypatch):
 
     c = _cli()
     r = c.post(
-        "/api/contenido/aportar",
+        "/api/publicaciones/aportar",
         data={"titulo": "Declaración del DT", "marca": "unotv", "redes": "x"},
         files={"clip": ("declaracion.mp4", _CLIP_FALSO, "video/mp4")},
         headers=_ORIGIN,
@@ -589,7 +589,7 @@ def test_aportar_clip_se_concatena_al_material(entorno, monkeypatch):
 
     c = _cli()
     r = c.post(
-        "/api/contenido/aportar",
+        "/api/publicaciones/aportar",
         data={"titulo": "T", "marca": "unotv", "material": "contexto escrito", "redes": "x"},
         files={"clip": ("a.m4a", _CLIP_FALSO, "audio/mp4")},
         headers=_ORIGIN,
@@ -604,7 +604,7 @@ def test_aportar_clip_formato_no_soportado_400(entorno):
     """Un fichero que no es vídeo/audio se rechaza con 400 (mensaje en español)."""
     c = _cli()
     r = c.post(
-        "/api/contenido/aportar",
+        "/api/publicaciones/aportar",
         data={"titulo": "T", "marca": "unotv", "redes": "x"},
         files={"clip": ("notas.txt", b"hola", "text/plain")},
         headers=_ORIGIN,
@@ -621,7 +621,7 @@ def test_aportar_clip_sin_habla_no_rompe(entorno, monkeypatch):
 
     c = _cli()
     r = c.post(
-        "/api/contenido/aportar",
+        "/api/publicaciones/aportar",
         data={"titulo": "Solo música", "marca": "unotv", "redes": "x"},
         files={"clip": ("clip.mp4", _CLIP_FALSO, "video/mp4")},
         headers=_ORIGIN,
@@ -638,10 +638,10 @@ def test_aportar_clip_sin_habla_no_rompe(entorno, monkeypatch):
 def test_coger_asigna_al_usuario(entorno):
     c = _cli("ana")
     cont = c.post(
-        "/api/contenido", json={"titulo": "Cubrir partido"}, headers=_ORIGIN
+        "/api/publicaciones", json={"titulo": "Cubrir partido"}, headers=_ORIGIN
     ).json()["contenido"]
     assert (cont.get("responsable_id") or "") == ""  # nace libre (sin rota)
-    r = c.post(f"/api/contenido/{cont['id']}/coger", headers=_ORIGIN)
+    r = c.post(f"/api/publicaciones/{cont['id']}/coger", headers=_ORIGIN)
     assert r.status_code == 200, r.text
     assert r.json()["contenido"]["responsable_nombre"] == "ana"
 
@@ -650,62 +650,62 @@ def test_coger_doble_da_409_sin_pisar(entorno):
     c_ana = _cli("ana")
     c_luis = _cli("luis")
     cont = c_ana.post(
-        "/api/contenido", json={"titulo": "Una sola"}, headers=_ORIGIN
+        "/api/publicaciones", json={"titulo": "Una sola"}, headers=_ORIGIN
     ).json()["contenido"]
-    r1 = c_luis.post(f"/api/contenido/{cont['id']}/coger", headers=_ORIGIN)
+    r1 = c_luis.post(f"/api/publicaciones/{cont['id']}/coger", headers=_ORIGIN)
     assert r1.status_code == 200
     assert r1.json()["contenido"]["responsable_nombre"] == "luis"
     # ana intenta coger lo que ya tiene luis: 409, sin pisar.
-    r2 = c_ana.post(f"/api/contenido/{cont['id']}/coger", headers=_ORIGIN)
+    r2 = c_ana.post(f"/api/publicaciones/{cont['id']}/coger", headers=_ORIGIN)
     assert r2.status_code == 409
     assert r2.json()["responsable_nombre"] == "luis"
 
 
 def test_coger_idempotente_si_ya_es_mia(entorno):
     c = _cli("ana")
-    cont = c.post("/api/contenido", json={"titulo": "Mía"}, headers=_ORIGIN).json()["contenido"]
-    assert c.post(f"/api/contenido/{cont['id']}/coger", headers=_ORIGIN).status_code == 200
-    assert c.post(f"/api/contenido/{cont['id']}/coger", headers=_ORIGIN).status_code == 200
+    cont = c.post("/api/publicaciones", json={"titulo": "Mía"}, headers=_ORIGIN).json()["contenido"]
+    assert c.post(f"/api/publicaciones/{cont['id']}/coger", headers=_ORIGIN).status_code == 200
+    assert c.post(f"/api/publicaciones/{cont['id']}/coger", headers=_ORIGIN).status_code == 200
 
 
 def test_soltar_libera_y_otro_puede_coger(entorno):
     c_ana = _cli("ana")
     c_luis = _cli("luis")
     cont = c_ana.post(
-        "/api/contenido", json={"titulo": "Para soltar"}, headers=_ORIGIN
+        "/api/publicaciones", json={"titulo": "Para soltar"}, headers=_ORIGIN
     ).json()["contenido"]
-    c_luis.post(f"/api/contenido/{cont['id']}/coger", headers=_ORIGIN)
-    r = c_luis.post(f"/api/contenido/{cont['id']}/soltar", headers=_ORIGIN)
+    c_luis.post(f"/api/publicaciones/{cont['id']}/coger", headers=_ORIGIN)
+    r = c_luis.post(f"/api/publicaciones/{cont['id']}/soltar", headers=_ORIGIN)
     assert r.status_code == 200
     assert (r.json()["contenido"].get("responsable_id") or "") == ""
     # Liberada: ahora ana sí puede cogerla.
-    assert c_ana.post(f"/api/contenido/{cont['id']}/coger", headers=_ORIGIN).status_code == 200
+    assert c_ana.post(f"/api/publicaciones/{cont['id']}/coger", headers=_ORIGIN).status_code == 200
 
 
 def test_soltar_ajeno_da_403(entorno):
     c_ana = _cli("ana")
     c_luis = _cli("luis")
     cont = c_ana.post(
-        "/api/contenido", json={"titulo": "De luis"}, headers=_ORIGIN
+        "/api/publicaciones", json={"titulo": "De luis"}, headers=_ORIGIN
     ).json()["contenido"]
-    c_luis.post(f"/api/contenido/{cont['id']}/coger", headers=_ORIGIN)
+    c_luis.post(f"/api/publicaciones/{cont['id']}/coger", headers=_ORIGIN)
     # ana (editor, no admin) no puede soltar lo de luis.
-    assert c_ana.post(f"/api/contenido/{cont['id']}/soltar", headers=_ORIGIN).status_code == 403
+    assert c_ana.post(f"/api/publicaciones/{cont['id']}/soltar", headers=_ORIGIN).status_code == 403
 
 
 def test_coger_inexistente_404(entorno):
     c = _cli()
-    assert c.post("/api/contenido/fantasma/coger", headers=_ORIGIN).status_code == 404
+    assert c.post("/api/publicaciones/fantasma/coger", headers=_ORIGIN).status_code == 404
 
 
 def test_soltar_admin_libera_lo_de_otro(entorno):
     c_luis = _cli("luis")
     c_admin = _cli_admin()
     cont = c_luis.post(
-        "/api/contenido", json={"titulo": "Balancear"}, headers=_ORIGIN
+        "/api/publicaciones", json={"titulo": "Balancear"}, headers=_ORIGIN
     ).json()["contenido"]
-    c_luis.post(f"/api/contenido/{cont['id']}/coger", headers=_ORIGIN)
-    r = c_admin.post(f"/api/contenido/{cont['id']}/soltar", headers=_ORIGIN)
+    c_luis.post(f"/api/publicaciones/{cont['id']}/coger", headers=_ORIGIN)
+    r = c_admin.post(f"/api/publicaciones/{cont['id']}/soltar", headers=_ORIGIN)
     assert r.status_code == 200, r.text
     assert (r.json()["contenido"].get("responsable_id") or "") == ""
 
@@ -713,10 +713,10 @@ def test_soltar_admin_libera_lo_de_otro(entorno):
 def test_soltar_ya_libre_idempotente(entorno):
     c = _cli("ana")
     cont = c.post(
-        "/api/contenido", json={"titulo": "Nadie la tiene"}, headers=_ORIGIN
+        "/api/publicaciones", json={"titulo": "Nadie la tiene"}, headers=_ORIGIN
     ).json()["contenido"]
     assert (cont.get("responsable_id") or "") == ""
-    r = c.post(f"/api/contenido/{cont['id']}/soltar", headers=_ORIGIN)
+    r = c.post(f"/api/publicaciones/{cont['id']}/soltar", headers=_ORIGIN)
     assert r.status_code == 200, r.text
     assert (r.json()["contenido"].get("responsable_id") or "") == ""
 
@@ -731,12 +731,12 @@ def test_patch_no_roba_ni_limpia_el_claim_de_otro(entorno):
     c_ana = _cli("ana")
     c_luis = _cli("luis")
     cont = c_ana.post(
-        "/api/contenido", json={"titulo": "Cogida"}, headers=_ORIGIN
+        "/api/publicaciones", json={"titulo": "Cogida"}, headers=_ORIGIN
     ).json()["contenido"]
-    c_luis.post(f"/api/contenido/{cont['id']}/coger", headers=_ORIGIN)
+    c_luis.post(f"/api/publicaciones/{cont['id']}/coger", headers=_ORIGIN)
     # ana (editor, no admin) intenta robársela para sí misma: 409 con quién la tiene.
     r = c_ana.patch(
-        f"/api/contenido/{cont['id']}",
+        f"/api/publicaciones/{cont['id']}",
         json={"responsable_id": _id_usuario("ana")},
         headers=_ORIGIN,
     )
@@ -744,12 +744,12 @@ def test_patch_no_roba_ni_limpia_el_claim_de_otro(entorno):
     assert r.json()["responsable_nombre"] == "luis"
     # Tampoco puede liberarla (eso es `soltar`, con su propia guarda).
     r2 = c_ana.patch(
-        f"/api/contenido/{cont['id']}", json={"responsable_id": ""}, headers=_ORIGIN
+        f"/api/publicaciones/{cont['id']}", json={"responsable_id": ""}, headers=_ORIGIN
     )
     assert r2.status_code == 409
     # No se pisó: sigue siendo de luis.
     pieza = next(
-        i for i in c_ana.get("/api/contenido").json()["contenidos"] if i["id"] == cont["id"]
+        i for i in c_ana.get("/api/publicaciones").json()["contenidos"] if i["id"] == cont["id"]
     )
     assert pieza["responsable_id"] == _id_usuario("luis")
 
@@ -760,21 +760,21 @@ def test_patch_holder_reasigna_o_limpia_lo_suyo(entorno):
     luis = _id_usuario("luis")
     # Pasar el testigo: ana reasigna SU pieza a luis.
     cont = c_ana.post(
-        "/api/contenido", json={"titulo": "Testigo"}, headers=_ORIGIN
+        "/api/publicaciones", json={"titulo": "Testigo"}, headers=_ORIGIN
     ).json()["contenido"]
-    c_ana.post(f"/api/contenido/{cont['id']}/coger", headers=_ORIGIN)
+    c_ana.post(f"/api/publicaciones/{cont['id']}/coger", headers=_ORIGIN)
     r = c_ana.patch(
-        f"/api/contenido/{cont['id']}", json={"responsable_id": luis}, headers=_ORIGIN
+        f"/api/publicaciones/{cont['id']}", json={"responsable_id": luis}, headers=_ORIGIN
     )
     assert r.status_code == 200, r.text
     assert r.json()["contenido"]["responsable_id"] == luis
     # Limpiar lo propio (equivalente a soltar) también está permitido.
     cont2 = c_ana.post(
-        "/api/contenido", json={"titulo": "Para limpiar"}, headers=_ORIGIN
+        "/api/publicaciones", json={"titulo": "Para limpiar"}, headers=_ORIGIN
     ).json()["contenido"]
-    c_ana.post(f"/api/contenido/{cont2['id']}/coger", headers=_ORIGIN)
+    c_ana.post(f"/api/publicaciones/{cont2['id']}/coger", headers=_ORIGIN)
     r2 = c_ana.patch(
-        f"/api/contenido/{cont2['id']}", json={"responsable_id": ""}, headers=_ORIGIN
+        f"/api/publicaciones/{cont2['id']}", json={"responsable_id": ""}, headers=_ORIGIN
     )
     assert r2.status_code == 200, r2.text
     assert (r2.json()["contenido"].get("responsable_id") or "") == ""
@@ -785,11 +785,11 @@ def test_patch_admin_reasigna_lo_de_otro(entorno):
     _cli("ana")
     c_admin = _cli_admin()
     cont = c_luis.post(
-        "/api/contenido", json={"titulo": "Balanceo"}, headers=_ORIGIN
+        "/api/publicaciones", json={"titulo": "Balanceo"}, headers=_ORIGIN
     ).json()["contenido"]
-    c_luis.post(f"/api/contenido/{cont['id']}/coger", headers=_ORIGIN)
+    c_luis.post(f"/api/publicaciones/{cont['id']}/coger", headers=_ORIGIN)
     r = c_admin.patch(
-        f"/api/contenido/{cont['id']}",
+        f"/api/publicaciones/{cont['id']}",
         json={"responsable_id": _id_usuario("ana")},
         headers=_ORIGIN,
     )
@@ -803,11 +803,11 @@ def test_patch_asignar_pieza_libre_sigue_abierto(entorno):
     _cli("luis")
     luis = _id_usuario("luis")
     cont = c_ana.post(
-        "/api/contenido", json={"titulo": "Libre"}, headers=_ORIGIN
+        "/api/publicaciones", json={"titulo": "Libre"}, headers=_ORIGIN
     ).json()["contenido"]
     assert (cont.get("responsable_id") or "") == ""
     r = c_ana.patch(
-        f"/api/contenido/{cont['id']}", json={"responsable_id": luis}, headers=_ORIGIN
+        f"/api/publicaciones/{cont['id']}", json={"responsable_id": luis}, headers=_ORIGIN
     )
     assert r.status_code == 200, r.text
     assert r.json()["contenido"]["responsable_id"] == luis
@@ -825,10 +825,10 @@ def test_asignar_admin_empuja_a_persona_libre(entorno):
     c_admin = _cli_admin()
     luis = _id_usuario("luis")
     cont = c_admin.post(
-        "/api/contenido", json={"titulo": "Reparto"}, headers=_ORIGIN
+        "/api/publicaciones", json={"titulo": "Reparto"}, headers=_ORIGIN
     ).json()["contenido"]
     r = c_admin.post(
-        f"/api/contenido/{cont['id']}/asignar",
+        f"/api/publicaciones/{cont['id']}/asignar",
         json={"responsable_id": luis},
         headers=_ORIGIN,
     )
@@ -844,11 +844,11 @@ def test_asignar_admin_reasigna_pisando_a_otro(entorno):
     c_admin = _cli_admin()
     ana = _id_usuario("ana")
     cont = c_luis.post(
-        "/api/contenido", json={"titulo": "Cambio de manos"}, headers=_ORIGIN
+        "/api/publicaciones", json={"titulo": "Cambio de manos"}, headers=_ORIGIN
     ).json()["contenido"]
-    c_luis.post(f"/api/contenido/{cont['id']}/coger", headers=_ORIGIN)
+    c_luis.post(f"/api/publicaciones/{cont['id']}/coger", headers=_ORIGIN)
     r = c_admin.post(
-        f"/api/contenido/{cont['id']}/asignar",
+        f"/api/publicaciones/{cont['id']}/asignar",
         json={"responsable_id": ana},
         headers=_ORIGIN,
     )
@@ -862,10 +862,10 @@ def test_asignar_no_admin_da_403(entorno):
     _cli("luis")
     luis = _id_usuario("luis")
     cont = c_ana.post(
-        "/api/contenido", json={"titulo": "Solo manager"}, headers=_ORIGIN
+        "/api/publicaciones", json={"titulo": "Solo manager"}, headers=_ORIGIN
     ).json()["contenido"]
     r = c_ana.post(
-        f"/api/contenido/{cont['id']}/asignar",
+        f"/api/publicaciones/{cont['id']}/asignar",
         json={"responsable_id": luis},
         headers=_ORIGIN,
     )
@@ -875,10 +875,10 @@ def test_asignar_no_admin_da_403(entorno):
 def test_asignar_persona_invalida_da_400(entorno):
     c_admin = _cli_admin()
     cont = c_admin.post(
-        "/api/contenido", json={"titulo": "Fantasma"}, headers=_ORIGIN
+        "/api/publicaciones", json={"titulo": "Fantasma"}, headers=_ORIGIN
     ).json()["contenido"]
     r = c_admin.post(
-        f"/api/contenido/{cont['id']}/asignar",
+        f"/api/publicaciones/{cont['id']}/asignar",
         json={"responsable_id": "no-existe"},
         headers=_ORIGIN,
     )
@@ -891,15 +891,15 @@ def test_asignar_sin_persona_da_400(entorno):
     c_admin = _cli_admin()
     luis = _id_usuario("luis")
     cont = c_admin.post(
-        "/api/contenido", json={"titulo": "Vacío"}, headers=_ORIGIN
+        "/api/publicaciones", json={"titulo": "Vacío"}, headers=_ORIGIN
     ).json()["contenido"]
     c_admin.post(
-        f"/api/contenido/{cont['id']}/asignar",
+        f"/api/publicaciones/{cont['id']}/asignar",
         json={"responsable_id": luis},
         headers=_ORIGIN,
     )
     r = c_admin.post(
-        f"/api/contenido/{cont['id']}/asignar", json={"responsable_id": ""}, headers=_ORIGIN
+        f"/api/publicaciones/{cont['id']}/asignar", json={"responsable_id": ""}, headers=_ORIGIN
     )
     assert r.status_code == 400
 
@@ -907,7 +907,7 @@ def test_asignar_sin_persona_da_400(entorno):
 def test_asignar_inexistente_da_404(entorno):
     c_admin = _cli_admin()
     r = c_admin.post(
-        "/api/contenido/fantasma/asignar",
+        "/api/publicaciones/fantasma/asignar",
         json={"responsable_id": _id_usuario("jefa")},
         headers=_ORIGIN,
     )
@@ -920,16 +920,16 @@ def test_asignar_notifica_al_asignado(entorno):
     c_admin = _cli_admin()
     luis = _id_usuario("luis")
     cont = c_admin.post(
-        "/api/contenido", json={"titulo": "Avísale"}, headers=_ORIGIN
+        "/api/publicaciones", json={"titulo": "Avísale"}, headers=_ORIGIN
     ).json()["contenido"]
     c_admin.post(
-        f"/api/contenido/{cont['id']}/asignar",
+        f"/api/publicaciones/{cont['id']}/asignar",
         json={"responsable_id": luis},
         headers=_ORIGIN,
     )
     notis = repos.listar_notificaciones(luis, None)
     assert any(
-        n["tipo"] == "asignacion" and n["contenido_id"] == cont["id"] for n in notis
+        n["tipo"] == "asignacion" and n["publicacion_id"] == cont["id"] for n in notis
     )
 
 
@@ -946,7 +946,7 @@ def _crear_evento(titulo: str = "Cruz Azul vs América", fecha: str = "2026-07-0
 def test_cubrir_evento_self_claim_crea_tarea_de_cobertura(entorno):
     c = _cli("ana")
     ev = _crear_evento()
-    r = c.post("/api/contenido/cubrir-evento", json={"evento_id": ev["id"]}, headers=_ORIGIN)
+    r = c.post("/api/publicaciones/cubrir-evento", json={"evento_id": ev["id"]}, headers=_ORIGIN)
     assert r.status_code == 200, r.text
     cont = r.json()["contenido"]
     assert cont["clase"] == "tarea"
@@ -960,13 +960,13 @@ def test_cubrir_evento_idempotente_por_persona(entorno):
     por (evento_id, responsable)."""
     c = _cli("ana")
     ev = _crear_evento()
-    r1 = c.post("/api/contenido/cubrir-evento", json={"evento_id": ev["id"]}, headers=_ORIGIN)
-    r2 = c.post("/api/contenido/cubrir-evento", json={"evento_id": ev["id"]}, headers=_ORIGIN)
+    r1 = c.post("/api/publicaciones/cubrir-evento", json={"evento_id": ev["id"]}, headers=_ORIGIN)
+    r2 = c.post("/api/publicaciones/cubrir-evento", json={"evento_id": ev["id"]}, headers=_ORIGIN)
     assert r1.status_code == 200 and r2.status_code == 200, r2.text
     assert r1.json()["contenido"]["id"] == r2.json()["contenido"]["id"]
     tareas = [
         x
-        for x in c.get("/api/contenido?clase=tarea").json()["contenidos"]
+        for x in c.get("/api/publicaciones?clase=tarea").json()["contenidos"]
         if x["evento_id"] == ev["id"]
     ]
     assert len(tareas) == 1
@@ -978,12 +978,12 @@ def test_cubrir_evento_otro_anade_cubridor(entorno):
     c_luis = _cli("luis")
     c_ana = _cli("ana")
     ev = _crear_evento()
-    r1 = c_luis.post("/api/contenido/cubrir-evento", json={"evento_id": ev["id"]}, headers=_ORIGIN)
-    r2 = c_ana.post("/api/contenido/cubrir-evento", json={"evento_id": ev["id"]}, headers=_ORIGIN)
+    r1 = c_luis.post("/api/publicaciones/cubrir-evento", json={"evento_id": ev["id"]}, headers=_ORIGIN)
+    r2 = c_ana.post("/api/publicaciones/cubrir-evento", json={"evento_id": ev["id"]}, headers=_ORIGIN)
     assert r1.status_code == 200 and r2.status_code == 200, r2.text
     tareas = [
         x
-        for x in c_ana.get("/api/contenido?clase=tarea").json()["contenidos"]
+        for x in c_ana.get("/api/publicaciones?clase=tarea").json()["contenidos"]
         if x["evento_id"] == ev["id"]
     ]
     assert len(tareas) == 2
@@ -996,7 +996,7 @@ def test_cubrir_evento_admin_asigna_a_otro_y_avisa(entorno):
     luis = _id_usuario("luis")
     ev = _crear_evento()
     r = c_admin.post(
-        "/api/contenido/cubrir-evento",
+        "/api/publicaciones/cubrir-evento",
         json={"evento_id": ev["id"], "responsable_id": luis},
         headers=_ORIGIN,
     )
@@ -1011,7 +1011,7 @@ def test_cubrir_evento_editor_no_asigna_a_otro_403(entorno):
     luis = _id_usuario("luis")
     ev = _crear_evento()
     r = c_ana.post(
-        "/api/contenido/cubrir-evento",
+        "/api/publicaciones/cubrir-evento",
         json={"evento_id": ev["id"], "responsable_id": luis},
         headers=_ORIGIN,
     )
@@ -1021,7 +1021,7 @@ def test_cubrir_evento_editor_no_asigna_a_otro_403(entorno):
 def test_cubrir_evento_inexistente_404(entorno):
     c = _cli("ana")
     r = c.post(
-        "/api/contenido/cubrir-evento", json={"evento_id": "fantasma"}, headers=_ORIGIN
+        "/api/publicaciones/cubrir-evento", json={"evento_id": "fantasma"}, headers=_ORIGIN
     )
     assert r.status_code == 404
 
@@ -1033,7 +1033,7 @@ def test_cubrir_evento_con_rol_persiste_el_formato(entorno):
     c = _cli("ana")
     ev = _crear_evento()
     r = c.post(
-        "/api/contenido/cubrir-evento",
+        "/api/publicaciones/cubrir-evento",
         json={"evento_id": ev["id"], "formato": "video"},
         headers=_ORIGIN,
     )
@@ -1041,7 +1041,7 @@ def test_cubrir_evento_con_rol_persiste_el_formato(entorno):
     assert r.json()["contenido"]["formato"] == "video"
 
     r2 = c.post(
-        "/api/contenido/cubrir-evento",
+        "/api/publicaciones/cubrir-evento",
         json={"evento_id": ev["id"], "formato": "live"},
         headers=_ORIGIN,
     )
@@ -1054,12 +1054,12 @@ def test_cubrir_evento_mismo_rol_idempotente(entorno):
     c = _cli("ana")
     ev = _crear_evento()
     r1 = c.post(
-        "/api/contenido/cubrir-evento",
+        "/api/publicaciones/cubrir-evento",
         json={"evento_id": ev["id"], "formato": "foto"},
         headers=_ORIGIN,
     )
     r2 = c.post(
-        "/api/contenido/cubrir-evento",
+        "/api/publicaciones/cubrir-evento",
         json={"evento_id": ev["id"], "formato": "foto"},
         headers=_ORIGIN,
     )
@@ -1067,7 +1067,7 @@ def test_cubrir_evento_mismo_rol_idempotente(entorno):
     assert r1.json()["contenido"]["id"] == r2.json()["contenido"]["id"]
     tareas = [
         x
-        for x in c.get("/api/contenido?clase=tarea").json()["contenidos"]
+        for x in c.get("/api/publicaciones?clase=tarea").json()["contenidos"]
         if x["evento_id"] == ev["id"]
     ]
     assert len(tareas) == 1
@@ -1079,12 +1079,12 @@ def test_cubrir_evento_dos_roles_misma_persona_dos_tareas(entorno):
     c = _cli("ana")
     ev = _crear_evento()
     r1 = c.post(
-        "/api/contenido/cubrir-evento",
+        "/api/publicaciones/cubrir-evento",
         json={"evento_id": ev["id"], "formato": "foto"},
         headers=_ORIGIN,
     )
     r2 = c.post(
-        "/api/contenido/cubrir-evento",
+        "/api/publicaciones/cubrir-evento",
         json={"evento_id": ev["id"], "formato": "video"},
         headers=_ORIGIN,
     )
@@ -1092,7 +1092,7 @@ def test_cubrir_evento_dos_roles_misma_persona_dos_tareas(entorno):
     assert r1.json()["contenido"]["id"] != r2.json()["contenido"]["id"]
     tareas = [
         x
-        for x in c.get("/api/contenido?clase=tarea").json()["contenidos"]
+        for x in c.get("/api/publicaciones?clase=tarea").json()["contenidos"]
         if x["evento_id"] == ev["id"]
     ]
     assert len(tareas) == 2
@@ -1104,7 +1104,7 @@ def test_cubrir_evento_rol_invalido_400(entorno):
     c = _cli("ana")
     ev = _crear_evento()
     r = c.post(
-        "/api/contenido/cubrir-evento",
+        "/api/publicaciones/cubrir-evento",
         json={"evento_id": ev["id"], "formato": "basura"},
         headers=_ORIGIN,
     )
@@ -1117,18 +1117,18 @@ def test_cubrir_evento_sin_rol_casa_cualquier_cobertura(entorno):
     c = _cli("ana")
     ev = _crear_evento()
     r1 = c.post(
-        "/api/contenido/cubrir-evento",
+        "/api/publicaciones/cubrir-evento",
         json={"evento_id": ev["id"], "formato": "video"},
         headers=_ORIGIN,
     )
     r2 = c.post(
-        "/api/contenido/cubrir-evento", json={"evento_id": ev["id"]}, headers=_ORIGIN
+        "/api/publicaciones/cubrir-evento", json={"evento_id": ev["id"]}, headers=_ORIGIN
     )
     assert r1.status_code == 200 and r2.status_code == 200, r2.text
     assert r1.json()["contenido"]["id"] == r2.json()["contenido"]["id"]
     tareas = [
         x
-        for x in c.get("/api/contenido?clase=tarea").json()["contenidos"]
+        for x in c.get("/api/publicaciones?clase=tarea").json()["contenidos"]
         if x["evento_id"] == ev["id"]
     ]
     assert len(tareas) == 1
@@ -1141,12 +1141,12 @@ def test_catalogos_usuarios_se_acotan_por_marca(entorno):
     _cli("luis")  # cobertura=True, sin marcas → no es del equipo de claro-sports
     auth.reemplazar_marcas_de_usuario(_id_usuario("ana"), ["claro-sports"])
 
-    con_marca = c.get("/api/contenido?clase=tarea&marca=claro-sports").json()["catalogos"]
+    con_marca = c.get("/api/publicaciones?clase=tarea&marca=claro-sports").json()["catalogos"]
     ids = {u["id"] for u in con_marca["usuarios"]}
     assert _id_usuario("ana") in ids
     assert _id_usuario("luis") not in ids
 
-    sin_marca = c.get("/api/contenido?clase=tarea").json()["catalogos"]
+    sin_marca = c.get("/api/publicaciones?clase=tarea").json()["catalogos"]
     ids_todas = {u["id"] for u in sin_marca["usuarios"]}
     assert {_id_usuario("ana"), _id_usuario("luis")} <= ids_todas
 
@@ -1162,7 +1162,7 @@ def _crear_tarea_propuesta(
 ) -> dict:
     """Crea una tarea SUELTA con fecha (propuesta de calendario) vía la API y la devuelve."""
     r = c.post(
-        "/api/contenido",
+        "/api/publicaciones",
         json={
             "clase": "tarea",
             "titulo": titulo,
@@ -1181,7 +1181,7 @@ def test_aceptar_promueve_tarea_a_evento_y_la_consume(entorno):
     # borra la tarea (se «mueve» al calendario, no queda duplicada en el tablero).
     c = _cli("ana")
     tarea = _crear_tarea_propuesta(c)
-    r = c.post(f"/api/contenido/{tarea['id']}/aceptar", headers=_ORIGIN)
+    r = c.post(f"/api/publicaciones/{tarea['id']}/aceptar", headers=_ORIGIN)
     assert r.status_code == 200, r.text
     cuerpo = r.json()
     assert cuerpo["aceptada"] is True
@@ -1192,7 +1192,7 @@ def test_aceptar_promueve_tarea_a_evento_y_la_consume(entorno):
     # El evento ya vive en la rota (calendario)...
     assert any(e["id"] == ev["id"] for e in repos.listar_eventos_rota())
     # ...y la tarea-propuesta se consumió (ya no está en el tablero).
-    ids = {x["id"] for x in c.get("/api/contenido?clase=tarea").json()["contenidos"]}
+    ids = {x["id"] for x in c.get("/api/publicaciones?clase=tarea").json()["contenidos"]}
     assert tarea["id"] not in ids
 
 
@@ -1200,11 +1200,11 @@ def test_aceptar_tarea_sin_fecha_da_409(entorno):
     # Sin fecha no es propuesta de calendario (un evento necesita fecha): 409, sin crear evento.
     c = _cli("ana")
     r = c.post(
-        "/api/contenido", json={"clase": "tarea", "titulo": "Editar el clip"}, headers=_ORIGIN
+        "/api/publicaciones", json={"clase": "tarea", "titulo": "Editar el clip"}, headers=_ORIGIN
     )
     tarea = r.json()["contenido"]
     antes = len(repos.listar_eventos_rota())
-    r2 = c.post(f"/api/contenido/{tarea['id']}/aceptar", headers=_ORIGIN)
+    r2 = c.post(f"/api/publicaciones/{tarea['id']}/aceptar", headers=_ORIGIN)
     assert r2.status_code == 409, r2.text
     assert len(repos.listar_eventos_rota()) == antes  # no se creó ningún evento
 
@@ -1214,13 +1214,13 @@ def test_aceptar_evento_existente_no_es_propuesta_da_409(entorno):
     c = _cli("ana")
     ev = _crear_evento()
     cob = c.post(
-        "/api/contenido/cubrir-evento", json={"evento_id": ev["id"]}, headers=_ORIGIN
+        "/api/publicaciones/cubrir-evento", json={"evento_id": ev["id"]}, headers=_ORIGIN
     ).json()["contenido"]
-    r = c.post(f"/api/contenido/{cob['id']}/aceptar", headers=_ORIGIN)
+    r = c.post(f"/api/publicaciones/{cob['id']}/aceptar", headers=_ORIGIN)
     assert r.status_code == 409, r.text
 
 
 def test_aceptar_inexistente_404(entorno):
     c = _cli("ana")
-    r = c.post("/api/contenido/fantasma/aceptar", headers=_ORIGIN)
+    r = c.post("/api/publicaciones/fantasma/aceptar", headers=_ORIGIN)
     assert r.status_code == 404

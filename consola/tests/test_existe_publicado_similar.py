@@ -13,8 +13,8 @@ from keni_consola import db, repos
 
 def _publicar(marca: str, titulo: str, *, url_fuente: str = "") -> str:
     """Crea un contenido de `marca` con una plataforma en estado 'publicado'. Devuelve id."""
-    c = db.crear_contenido(titulo=titulo, marca=marca, url_fuente=url_fuente)
-    db.crear_contenido_plataforma(contenido_id=c["id"], red="x", estado="publicado")
+    c = db.crear_publicacion(titulo=titulo, marca=marca, url_fuente=url_fuente)
+    db.crear_pieza_fila(publicacion_id=c["id"], red="x", estado="publicado")
     return c["id"]
 
 
@@ -51,8 +51,8 @@ def test_aislamiento_por_marca(entorno):
 
 def test_no_publicado_no_cuenta(entorno):
     """Contenido sin plataforma 'publicado' no dispara el dedup."""
-    c = db.crear_contenido(titulo="Borrador del América", marca="unotv")
-    db.crear_contenido_plataforma(contenido_id=c["id"], red="x", estado="borrador")
+    c = db.crear_publicacion(titulo="Borrador del América", marca="unotv")
+    db.crear_pieza_fila(publicacion_id=c["id"], red="x", estado="borrador")
     assert db.existe_publicado_similar("unotv", "Borrador del América") is False
 
 
@@ -70,10 +70,10 @@ def test_delegado_repos(entorno):
 # --------------------------------------------------------------------------- #
 
 def test_crear_contenido_persiste_url_fuente(entorno):
-    """`crear_contenido(url_fuente=...)` la guarda y se lee de vuelta."""
-    c = db.crear_contenido(titulo="Algo", marca="unotv", url_fuente="https://medio.com/nota")
+    """`crear_publicacion(url_fuente=...)` la guarda y se lee de vuelta."""
+    c = db.crear_publicacion(titulo="Algo", marca="unotv", url_fuente="https://medio.com/nota")
     assert c["url_fuente"] == "https://medio.com/nota"
-    leido = db.obtener_contenido(c["id"])
+    leido = db.obtener_publicacion(c["id"])
     assert leido is not None and leido["url_fuente"] == "https://medio.com/nota"
 
 

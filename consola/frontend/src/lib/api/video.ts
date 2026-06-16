@@ -22,15 +22,15 @@ export const apiVideo = {
     formatos: (signal?: AbortSignal) =>
       peticion<{ formatos: PresetFormatoVideo[] }>("/video/formatos", { signal }),
     /**
-     * Lista composiciones (filtro por `marca` y/o `contenido_id`). El `documento` viene YA
+     * Lista composiciones (filtro por `marca` y/o `publicacion_id`). El `documento` viene YA
      * parseado a objeto. Sirve al GESTOR de composiciones y al puente find-or-create por pieza.
      */
     listarComposiciones: (
-      filtros: { marca?: string; contenido_id?: string } = {},
+      filtros: { marca?: string; publicacion_id?: string } = {},
       signal?: AbortSignal,
     ) =>
       peticion<{ composiciones: ComposicionResumen[] }>(
-        `/video/composiciones${query({ marca: filtros.marca, contenido_id: filtros.contenido_id })}`,
+        `/video/composiciones${query({ marca: filtros.marca, publicacion_id: filtros.publicacion_id })}`,
         { signal },
       ),
     /**
@@ -40,7 +40,7 @@ export const apiVideo = {
     crearComposicion: (cuerpo: {
       marca: string;
       documento: ComposicionVideo;
-      contenido_id?: string;
+      publicacion_id?: string;
       titulo?: string;
       estado?: EstadoComposicion;
     }) => peticion<{ id: string }>("/video/composiciones", { metodo: "POST", json: cuerpo }),
