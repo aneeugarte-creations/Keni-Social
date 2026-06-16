@@ -14,7 +14,7 @@ símbolos privados que algún consumidor importa directamente), de modo que
                    admitir + veredicto léxico del copy para la vista de runs (`qa_lexico`).
   - `_redactar`  — REDACTAR (CD): lanza el copy de los temas con QA `no_verificado` sin copy
                    (+ los temas del news-pool sin copy).
-  - `_revisar`   — criba de calidad ADVISORY del copy (voz + coherencia), pre-avance.
+  - `_revisar`   — revisión de calidad ADVISORY del copy (voz + coherencia), pre-avance.
   - `_avance`    — pasa los borradores COMPLETOS (copy + arte) a la cola de revisión humana.
   - `_barrido`   — orquesta los DOS procesos (investigación / producción) bajo single-flight
                    y arranca sus hilos demonio.
