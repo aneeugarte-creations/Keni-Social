@@ -231,12 +231,12 @@ describe("GaleriaPlantillas — búsqueda y categorías", () => {
     expect(screen.getByText("General")).toBeInTheDocument();
   });
 
-  it("sin onCategorizar (modo selector) el badge no es un selector", () => {
+  it("sin onCategorizar (modo selector) el badge no abre selector", () => {
     render(<GaleriaPlantillas plantillas={[ULTIMA]} onCargar={vi.fn()} onCerrar={vi.fn()} />);
-    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Cambiar categoría")).not.toBeInTheDocument();
   });
 
-  it("con onCategorizar el badge permite cambiar la categoría", () => {
+  it("con onCategorizar el badge abre el selector y permite cambiar la categoría", () => {
     const onCategorizar = vi.fn();
     render(
       <GaleriaPlantillas
@@ -246,8 +246,47 @@ describe("GaleriaPlantillas — búsqueda y categorías", () => {
         onCerrar={vi.fn()}
       />,
     );
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "marcador" } });
+    fireEvent.click(screen.getByTitle("Cambiar categoría"));
+    fireEvent.click(screen.getByRole("option", { name: "Marcador" }));
     expect(onCategorizar).toHaveBeenCalledWith(expect.objectContaining({ id: "cat-1" }), "marcador");
+  });
+
+  it("el selector de categoría filtra el catálogo (acento-insensible)", () => {
+    render(
+      <GaleriaPlantillas
+        plantillas={[ULTIMA]}
+        onCargar={vi.fn()}
+        onCategorizar={vi.fn()}
+        onCerrar={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByTitle("Cambiar categoría"));
+    fireEvent.change(screen.getByPlaceholderText("Buscar o crear etiqueta…"), {
+      target: { value: "marc" },
+    });
+    expect(screen.getByRole("option", { name: "Marcador" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Efemérides" })).not.toBeInTheDocument();
+  });
+
+  it("el selector permite CREAR una etiqueta nueva escribiéndola (texto libre)", () => {
+    const onCategorizar = vi.fn();
+    render(
+      <GaleriaPlantillas
+        plantillas={[ULTIMA]}
+        onCargar={vi.fn()}
+        onCategorizar={onCategorizar}
+        onCerrar={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByTitle("Cambiar categoría"));
+    fireEvent.change(screen.getByPlaceholderText("Buscar o crear etiqueta…"), {
+      target: { value: "Promo especial" },
+    });
+    fireEvent.click(screen.getByRole("option", { name: /Crear «Promo especial»/ }));
+    expect(onCategorizar).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "cat-1" }),
+      "Promo especial",
+    );
   });
 });
 

@@ -3,8 +3,16 @@
 // tarjeta + rejilla MASONRY con carga perezosa por lotes. El catálogo y la normalización viven
 // en `lib/categoriasPlantilla.ts`.
 
-import { Search, Tag } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Check, ChevronDown, Plus, Search, Tag } from "lucide-react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
 
 import type { PlantillaDiseno } from "@/lib/api";
 import {
@@ -226,10 +234,233 @@ export function ChipsCategoria({
   );
 }
 
+/** Quita acentos y baja a minúsculas (para filtrar acento-insensible). */
+function _sinAcentos(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
 /**
- * Badge de categoría en la tarjeta. Con `onCambiar` (modo GESTIÓN) el badge es un selector: un
- * `<select>` nativo invisible encima (catálogo completo + el valor libre actual), así cambiar la
- * categoría de una plantilla existente es un clic, sin diálogo.
+ * Selector EDITABLE de categoría con el diseño de la plataforma (NO el `<select>` nativo del SO):
+ * un panel portaleado —para que no lo recorte el `overflow` de la galería— con buscador arriba que
+ * FILTRA el catálogo y, como la categoría es texto libre, permite CREAR una etiqueta nueva
+ * escribiéndola. Teclado completo (flechas/Enter/Esc) y cierre por clic-fuera/scroll. Mismos tokens
+ * visuales que `ui/select` (`bg-popover`, `border`, `shadow-md`, check de la activa).
+ */
+function SelectorCategoria({
+  slug,
+  etiqueta,
+  onCambiar,
+  children,
+}: {
+  slug: string;
+  etiqueta: string;
+  onCambiar: (valor: string) => void;
+  children: ReactNode;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [query, setQuery] = useState("");
+  const [activo, setActivo] = useState(0);
+  const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number; maxH: number } | null>(
+    null,
+  );
+  const refTrigger = useRef<HTMLButtonElement>(null);
+  const refPanel = useRef<HTMLDivElement>(null);
+  const refInput = useRef<HTMLInputElement>(null);
+
+  // Opciones: catálogo completo + el valor libre actual (si no está en el catálogo), filtradas por
+  // el buscador (acento-insensible, por etiqueta y por slug).
+  const opciones = useMemo(() => {
+    const enCatalogo = CATEGORIAS_PLANTILLA.some((c) => c.slug === slug);
+    const base = enCatalogo ? CATEGORIAS_PLANTILLA : [{ slug, etiqueta }, ...CATEGORIAS_PLANTILLA];
+    const q = _sinAcentos(query);
+    if (!q) return base;
+    const qSlug = normalizarCategoria(query);
+    return base.filter((c) => _sinAcentos(c.etiqueta).includes(q) || c.slug.includes(qSlug));
+  }, [slug, etiqueta, query]);
+
+  const queryTrim = query.trim();
+  const slugNuevo = normalizarCategoria(queryTrim);
+  const existe =
+    !slugNuevo ||
+    slugNuevo === slug ||
+    CATEGORIAS_PLANTILLA.some((c) => c.slug === slugNuevo);
+  const mostrarCrear = !!queryTrim && !existe;
+  // Lista navegable por teclado: opciones + (fila «Crear» si procede).
+  const navegables = mostrarCrear ? [...opciones.map((o) => o.slug), " crear"] : opciones.map((o) => o.slug);
+
+  function abrir() {
+    const r = refTrigger.current?.getBoundingClientRect();
+    if (!r) return;
+    const W = 240;
+    let left = r.left;
+    if (left + W > window.innerWidth - 8) left = window.innerWidth - W - 8;
+    if (left < 8) left = 8;
+    const abajo = window.innerHeight - r.bottom;
+    const arriba = r.top;
+    if (abajo >= 240 || abajo >= arriba) {
+      setPos({ left, top: r.bottom + 4, maxH: Math.max(180, abajo - 12) });
+    } else {
+      setPos({ left, bottom: window.innerHeight - r.top + 4, maxH: Math.max(180, arriba - 12) });
+    }
+    setQuery("");
+    setActivo(0);
+    setAbierto(true);
+  }
+  function cerrar() {
+    setAbierto(false);
+  }
+  function elegir(valor: string) {
+    onCambiar(valor);
+    cerrar();
+  }
+
+  // Reinicia el resaltado al cambiar el filtro.
+  useEffect(() => {
+    setActivo(0);
+  }, [query]);
+
+  // Enfoca el buscador al abrir.
+  useEffect(() => {
+    if (abierto) refInput.current?.focus();
+  }, [abierto]);
+
+  // Cierre por clic-fuera / scroll / resize mientras está abierto.
+  useEffect(() => {
+    if (!abierto) return;
+    const fuera = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (refPanel.current?.contains(t) || refTrigger.current?.contains(t)) return;
+      cerrar();
+    };
+    // El scroll DENTRO de la propia lista de opciones no debe cerrar (la lista desborda y se
+    // desplaza); solo cierra el scroll de la página/galería bajo el panel.
+    const alScroll = (e: Event) => {
+      if (e.target instanceof Node && refPanel.current?.contains(e.target)) return;
+      cerrar();
+    };
+    document.addEventListener("mousedown", fuera, true);
+    window.addEventListener("scroll", alScroll, true);
+    window.addEventListener("resize", cerrar);
+    return () => {
+      document.removeEventListener("mousedown", fuera, true);
+      window.removeEventListener("scroll", alScroll, true);
+      window.removeEventListener("resize", cerrar);
+    };
+  }, [abierto]);
+
+  function alTeclear(e: ReactKeyboardEvent) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActivo((i) => Math.min(i + 1, navegables.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActivo((i) => Math.max(i - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const sel = navegables[activo];
+      if (sel === " crear") elegir(queryTrim);
+      else if (sel) elegir(sel);
+      else if (mostrarCrear) elegir(queryTrim);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      cerrar();
+    }
+  }
+
+  const idxCrear = opciones.length; // posición de la fila «Crear» en la lista navegable
+
+  return (
+    <>
+      <button
+        ref={refTrigger}
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={abierto}
+        title="Cambiar categoría"
+        onClick={(e) => {
+          e.stopPropagation();
+          if (abierto) cerrar();
+          else abrir();
+        }}
+      >
+        {children}
+      </button>
+      {abierto &&
+        pos &&
+        createPortal(
+          <div
+            ref={refPanel}
+            role="listbox"
+            onClick={(e) => e.stopPropagation()}
+            className="fixed z-50 flex w-60 flex-col overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md"
+            style={{ left: pos.left, top: pos.top, bottom: pos.bottom, maxHeight: pos.maxH }}
+          >
+            <div className="relative border-b border-border p-1.5">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <input
+                ref={refInput}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={alTeclear}
+                placeholder="Buscar o crear etiqueta…"
+                className="h-8 w-full rounded-sm bg-transparent pl-7 pr-2 text-sm outline-none placeholder:text-muted-foreground"
+              />
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-1">
+              {opciones.map((c, i) => {
+                const sel = c.slug === slug;
+                return (
+                  <button
+                    key={c.slug}
+                    type="button"
+                    role="option"
+                    aria-selected={sel}
+                    onMouseEnter={() => setActivo(i)}
+                    onClick={() => elegir(c.slug)}
+                    className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm ${
+                      activo === i ? "bg-accent text-accent-foreground" : ""
+                    }`}
+                  >
+                    <Check className={`h-3.5 w-3.5 shrink-0 ${sel ? "opacity-100" : "opacity-0"}`} />
+                    <span className="truncate">{c.etiqueta}</span>
+                  </button>
+                );
+              })}
+              {mostrarCrear && (
+                <button
+                  type="button"
+                  role="option"
+                  onMouseEnter={() => setActivo(idxCrear)}
+                  onClick={() => elegir(queryTrim)}
+                  className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm ${
+                    activo === idxCrear ? "bg-accent text-accent-foreground" : ""
+                  }`}
+                >
+                  <Plus className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">
+                    Crear «{etiquetaCategoria(queryTrim)}»
+                  </span>
+                </button>
+              )}
+              {opciones.length === 0 && !mostrarCrear && (
+                <p className="px-2 py-1.5 text-sm text-muted-foreground">Sin coincidencias</p>
+              )}
+            </div>
+          </div>,
+          document.body,
+        )}
+    </>
+  );
+}
+
+/**
+ * Badge de categoría en la tarjeta. Con `onCambiar` (modo GESTIÓN) el badge es el disparador de un
+ * selector EDITABLE con el diseño de la plataforma ({@link SelectorCategoria}): elegir del catálogo
+ * o escribir una etiqueta nueva, sin el `<select>` nativo del SO.
  */
 export function BadgeCategoria({
   categoria,
@@ -248,27 +479,15 @@ export function BadgeCategoria({
     >
       <Tag className="h-2.5 w-2.5 shrink-0" />
       <span className="truncate">{etiqueta}</span>
+      {onCambiar && <ChevronDown className="h-2.5 w-2.5 shrink-0 opacity-60" />}
     </span>
   );
   if (!onCambiar) return badge;
-  const enCatalogo = CATEGORIAS_PLANTILLA.some((c) => c.slug === slug);
   return (
-    <span className="group/badge relative inline-flex min-w-0" title="Cambiar categoría">
-      {badge}
-      <select
-        aria-label={`Categoría: ${etiqueta}. Cambiar categoría`}
-        value={slug}
-        onChange={(e) => onCambiar(e.target.value)}
-        onClick={(e) => e.stopPropagation()}
-        className="absolute inset-0 cursor-pointer opacity-0"
-      >
-        {!enCatalogo && <option value={slug}>{etiqueta}</option>}
-        {CATEGORIAS_PLANTILLA.map((c) => (
-          <option key={c.slug} value={c.slug}>
-            {c.etiqueta}
-          </option>
-        ))}
-      </select>
+    <span className="group/badge inline-flex min-w-0">
+      <SelectorCategoria slug={slug} etiqueta={etiqueta} onCambiar={onCambiar}>
+        {badge}
+      </SelectorCategoria>
     </span>
   );
 }
