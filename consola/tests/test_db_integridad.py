@@ -219,7 +219,7 @@ def test_transicion_estado_sube_version(pg):
     c = db.crear_contenido(titulo="t")
     p = db.crear_contenido_plataforma(contenido_id=c["id"], red="x", estado="en_revision")
     v0 = db.obtener_contenido_plataforma(p["id"])["version"]
-    db.transicionar_estado_publicacion(p["id"], "en_revision", "aprobado")
+    db.transicionar_estado_publicacion(p["id"], "en_revision", "programado")
     v1 = db.obtener_contenido_plataforma(p["id"])["version"]
     assert v1 == v0 + 1
 

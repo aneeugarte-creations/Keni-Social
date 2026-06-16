@@ -368,7 +368,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         -- join (un indice parcial no puede). Se mantiene en sync en TODA escritura (insert + cambio
         -- de marca del padre). Las LECTURAS siguen tomando la marca de `c.marca` (parent), no de aqui.
         marca                 TEXT NOT NULL DEFAULT '',
-        estado                TEXT NOT NULL DEFAULT 'pendiente',
+        estado                TEXT NOT NULL DEFAULT 'borrador',
         falta_copy            INTEGER NOT NULL DEFAULT 1,
         falta_imagen          INTEGER NOT NULL DEFAULT 1,
         falta_revision        INTEGER NOT NULL DEFAULT 1,

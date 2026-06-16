@@ -405,7 +405,7 @@ def ajustar_plataformas_por_formato(
             # La plantilla del formato anterior ya no aplica: se limpia (el render la re-deriva).
             campos["plantilla_diseno_id"] = ""
             # Volver a BORRADOR: el cambio de formato invalida la revisión/aprobación/programación.
-            campos["estado"] = "pendiente"
+            campos["estado"] = "borrador"
             campos["falta_revision"] = True
             campos["falta_publicar"] = True
         db.actualizar_contenido_plataforma(plat["id"], campos)
