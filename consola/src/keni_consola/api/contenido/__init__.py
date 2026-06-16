@@ -33,6 +33,7 @@ from .plataformas import (
 from .post_directo import crear_post_directo
 from .radar import desde_radar
 from .tablero import (
+    aceptar,
     actualizar,
     asignar,
     borrar,
@@ -52,6 +53,7 @@ __all__ = [
     "coger",
     "soltar",
     "asignar",
+    "aceptar",
     "cubrir_evento",
     "metricas",
     "desde_radar",
@@ -86,6 +88,7 @@ RUTAS = [
     Route("/api/contenido/{contenido_id}/coger", coger, methods=["POST"]),
     Route("/api/contenido/{contenido_id}/soltar", soltar, methods=["POST"]),
     Route("/api/contenido/{contenido_id}/asignar", asignar, methods=["POST"]),
+    Route("/api/contenido/{contenido_id}/aceptar", aceptar, methods=["POST"]),
     Route("/api/contenido/{contenido_id}/plataformas", agregar_plataforma, methods=["POST"]),
     Route(
         "/api/contenido/{contenido_id}/plataformas/{plataforma_id}",

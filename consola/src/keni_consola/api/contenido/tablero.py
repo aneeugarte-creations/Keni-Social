@@ -510,6 +510,49 @@ async def asignar(request: Request) -> Response:
     return JSONResponse({"contenido": _contenido_a_dict(item, plataformas, etiquetas)})
 
 
+async def aceptar(request: Request) -> Response:
+    """POST /api/contenido/{id}/aceptar: PROMUEVE una tarea-propuesta al calendario de Turnos.
+
+    Una tarea SUELTA con FECHA (`clase='tarea'`, `fecha_objetivo` no vacío y SIN `evento_id`) es
+    una PROPUESTA de calendario: vive en la bandeja de notificaciones del calendario hasta que
+    alguien la acepta. Aceptarla CREA el evento en la rota (con su título/fecha/hora/detalle/marca)
+    y CONSUME la tarea (la borra): a partir de ahí se comporta como cualquier evento «Por cubrir».
+    Para rechazarla se usa el DELETE normal (`/api/contenido/{id}`), que no crea evento.
+
+    Requiere sesión; CUALQUIERA del equipo puede aceptar (modelo «la lista», pull). El alta del
+    evento y el borrado de la tarea son dos pasos: si el borrado fallara, quedaría la propuesta en
+    la bandeja (molesto, no pérdida de datos); el orden alta→borrado evita perder el evento.
+    """
+    contenido_id = request.path_params["contenido_id"]
+    autor = autor_de_peticion(request)
+    if not autor or not autor.get("id"):
+        return JSONResponse({"error": "Necesitas iniciar sesión."}, status_code=401)
+    actual = repos.obtener_contenido(contenido_id)
+    if actual is None:
+        return JSONResponse({"error": "Esa propuesta ya no existe."}, status_code=404)
+    es_propuesta = (
+        (actual.get("clase") or "") == CLASE_TAREA
+        and bool((actual.get("fecha_objetivo") or "").strip())
+        and not (actual.get("evento_id") or "").strip()
+    )
+    if not es_propuesta:
+        return JSONResponse(
+            {"error": "Solo una tarea con fecha (aún sin calendario) se puede aceptar al calendario."},
+            status_code=409,
+        )
+    evento = repos.crear_evento_rota(
+        actual.get("titulo") or "Evento",
+        fecha=(actual.get("fecha_objetivo") or "").strip(),
+        hora=(actual.get("hora_objetivo") or "").strip(),
+        contenido=actual.get("descripcion") or "",
+        prioridad=actual.get("prioridad") or "media",
+        marca=actual.get("marca") or "",
+    )
+    # Consumir la propuesta: ya vive como evento del calendario (no la dejamos duplicada en el tablero).
+    repos.borrar_contenido(contenido_id)
+    return JSONResponse({"aceptada": True, "evento": evento})
+
+
 def _rol_cobertura(valor: object) -> tuple[str | None, bool]:
     """Valida el ROL de cobertura (campo `formato`) que manda el cliente en cubrir-evento.
 

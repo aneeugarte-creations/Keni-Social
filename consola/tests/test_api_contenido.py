@@ -1149,3 +1149,78 @@ def test_catalogos_usuarios_se_acotan_por_marca(entorno):
     sin_marca = c.get("/api/contenido?clase=tarea").json()["catalogos"]
     ids_todas = {u["id"] for u in sin_marca["usuarios"]}
     assert {_id_usuario("ana"), _id_usuario("luis")} <= ids_todas
+
+
+# --------------------------------------------------------------------------- #
+# POST /{id}/aceptar: una TAREA con fecha (propuesta de calendario) se PROMUEVE #
+# al calendario de Turnos —crea el evento de la rota— y se consume la tarea.    #
+# --------------------------------------------------------------------------- #
+
+
+def _crear_tarea_propuesta(
+    c, *, titulo="La Velada del Año VI", fecha="2026-07-26", detalle="Estadio Santiago Bernabéu"
+) -> dict:
+    """Crea una tarea SUELTA con fecha (propuesta de calendario) vía la API y la devuelve."""
+    r = c.post(
+        "/api/contenido",
+        json={
+            "clase": "tarea",
+            "titulo": titulo,
+            "fecha_objetivo": fecha,
+            "descripcion": detalle,
+            "marca": "claro-sports",
+        },
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    return r.json()["contenido"]
+
+
+def test_aceptar_promueve_tarea_a_evento_y_la_consume(entorno):
+    # Una tarea con fecha (sin evento) es una PROPUESTA: aceptarla crea el evento en la rota y
+    # borra la tarea (se «mueve» al calendario, no queda duplicada en el tablero).
+    c = _cli("ana")
+    tarea = _crear_tarea_propuesta(c)
+    r = c.post(f"/api/contenido/{tarea['id']}/aceptar", headers=_ORIGIN)
+    assert r.status_code == 200, r.text
+    cuerpo = r.json()
+    assert cuerpo["aceptada"] is True
+    ev = cuerpo["evento"]
+    assert ev["titulo"] == "La Velada del Año VI"
+    assert ev["fecha"] == "2026-07-26"
+    assert ev["marca"] == "claro-sports"
+    # El evento ya vive en la rota (calendario)...
+    assert any(e["id"] == ev["id"] for e in repos.listar_eventos_rota())
+    # ...y la tarea-propuesta se consumió (ya no está en el tablero).
+    ids = {x["id"] for x in c.get("/api/contenido?clase=tarea").json()["contenidos"]}
+    assert tarea["id"] not in ids
+
+
+def test_aceptar_tarea_sin_fecha_da_409(entorno):
+    # Sin fecha no es propuesta de calendario (un evento necesita fecha): 409, sin crear evento.
+    c = _cli("ana")
+    r = c.post(
+        "/api/contenido", json={"clase": "tarea", "titulo": "Editar el clip"}, headers=_ORIGIN
+    )
+    tarea = r.json()["contenido"]
+    antes = len(repos.listar_eventos_rota())
+    r2 = c.post(f"/api/contenido/{tarea['id']}/aceptar", headers=_ORIGIN)
+    assert r2.status_code == 409, r2.text
+    assert len(repos.listar_eventos_rota()) == antes  # no se creó ningún evento
+
+
+def test_aceptar_evento_existente_no_es_propuesta_da_409(entorno):
+    # Una tarea de COBERTURA (con evento_id) NO es una propuesta: ya pertenece a un evento.
+    c = _cli("ana")
+    ev = _crear_evento()
+    cob = c.post(
+        "/api/contenido/cubrir-evento", json={"evento_id": ev["id"]}, headers=_ORIGIN
+    ).json()["contenido"]
+    r = c.post(f"/api/contenido/{cob['id']}/aceptar", headers=_ORIGIN)
+    assert r.status_code == 409, r.text
+
+
+def test_aceptar_inexistente_404(entorno):
+    c = _cli("ana")
+    r = c.post("/api/contenido/fantasma/aceptar", headers=_ORIGIN)
+    assert r.status_code == 404

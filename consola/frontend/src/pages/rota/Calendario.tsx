@@ -52,6 +52,7 @@ import {
 } from "./comun";
 import { DialogoAsignarTurnos } from "./DialogoAsignarTurnos";
 import { DialogFranjas } from "./Franjas";
+import { PropuestasCalendario } from "./PropuestasCalendario";
 import { CLAVE_TAREAS } from "@/pages/tareas/claves";
 import { agrupar } from "@/pages/tareas/tipos";
 
@@ -274,7 +275,19 @@ export function Calendario({
   // fuente que el Panorama) y NO de quién está de turno. Antes el calendario usaba la
   // cobertura DERIVADA de turnos (`evento.cobertura`): metía el evento bajo CADA persona
   // de la franja → salía duplicado y no coincidía con el Panorama. Ahora coinciden.
-  const tareas = tareasQ.data?.contenidos ?? [];
+  // Ref estable (no un literal nuevo por render) para no invalidar los memos que dependen de ella.
+  const tareas = React.useMemo(() => tareasQ.data?.contenidos ?? [], [tareasQ.data?.contenidos]);
+  // PROPUESTAS de calendario: tareas sueltas CON fecha (sin evento) aún sin terminar. No entran
+  // directas a la rejilla como un evento; esperan en la bandeja de notificaciones del calendario
+  // hasta que alguien las ACEPTA (se promueven a evento «Por cubrir»). Mismo criterio que el
+  // `aceptar` del backend (clase=tarea + fecha_objetivo + sin evento_id).
+  const propuestas = React.useMemo(
+    () =>
+      tareas.filter(
+        (t) => !t.evento_id && (t.fecha_objetivo || "").trim() !== "" && t.estado !== "hecha",
+      ),
+    [tareas],
+  );
   const cubridoresPorEvento = React.useMemo(() => {
     const m = new Map<string, CubridorEvento[]>();
     for (const c of agrupar(tareas, eventosCobertura).coberturas) {
@@ -333,6 +346,9 @@ export function Calendario({
           <AyudaLeyenda />
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {/* Bandeja de propuestas: tareas con fecha esperando entrar al calendario. Solo se
+              pinta si hay alguna; aceptar una la promueve a evento «Por cubrir». */}
+          <PropuestasCalendario propuestas={propuestas} />
           <BadgeEstadoSemana
             aprobada={Boolean(semana?.aprobada)}
             hayTurnos={turnos.length > 0}

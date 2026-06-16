@@ -8,6 +8,7 @@ import type {
   CuerpoCrearContenido,
   CuerpoCrearPostDirecto,
   CuerpoSugerirHora,
+  EventoRota,
   RespuestaContenido,
   RespuestaContenidoItem,
   RespuestaEtiquetasContenido,
@@ -77,6 +78,14 @@ export const apiContenido = {
       metodo: "POST",
       json: { evento_id: eventoId, responsable_id: responsableId, formato },
     }),
+  /** Promueve una tarea-PROPUESTA (tarea suelta con fecha) al calendario de Turnos: crea el
+   *  evento de la rota y consume la tarea. Es el «Aceptar» de la bandeja de notificaciones del
+   *  calendario. Para rechazarla se usa `eliminarContenido` (DELETE), que no crea evento. */
+  aceptarContenido: (contenidoId: string) =>
+    peticion<{ aceptada: boolean; evento: EventoRota }>(
+      `/contenido/${encodeURIComponent(contenidoId)}/aceptar`,
+      { metodo: "POST" },
+    ),
   agregarPlataforma: (contenidoId: string, red: string) =>
     peticion<RespuestaPlataforma>(
       `/contenido/${encodeURIComponent(contenidoId)}/plataformas`,
