@@ -57,3 +57,52 @@ def test_no_reintenta_errores_definitivos(monkeypatch):
     with pytest.raises(extraccion_url.ExtraccionError, match="404"):
         extraccion_url._descargar_real("https://x.test", reintentos=3)
     assert llamadas["n"] == 1  # un 4xx no se reintenta
+
+
+# --- Mensaje del intento real según el status (fake de httpx, sin red) --- #
+
+
+class _RespFalsa:
+    """Respuesta de `httpx` falsa: solo lo que toca `_un_intento_descarga` (status + cuerpo)."""
+
+    def __init__(self, status: int) -> None:
+        self.status_code = status
+        self.encoding = "utf-8"
+
+    def __enter__(self):  # `with cliente.stream(...) as respuesta:`
+        return self
+
+    def __exit__(self, *_a):
+        return False
+
+    def iter_bytes(self):
+        return iter([b"<html><body>ok</body></html>"])
+
+
+class _ClienteFalso:
+    def __init__(self, status: int) -> None:
+        self._status = status
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_a):
+        return False
+
+    def stream(self, _metodo, _url):
+        return _RespFalsa(self._status)
+
+
+def test_403_avisa_que_la_pagina_bloquea(monkeypatch):
+    """401/403/429 = la web bloquea la lectura automática: mensaje accionable, no críptico."""
+    monkeypatch.setattr(httpx, "Client", lambda **_k: _ClienteFalso(403))
+    with pytest.raises(extraccion_url.ExtraccionError, match="bloquea la lectura automática"):
+        extraccion_url._un_intento_descarga("https://x.test", None)
+    # (un 4xx es definitivo y NO se reintenta: lo cubre `test_no_reintenta_errores_definitivos`).
+
+
+def test_500_da_mensaje_generico(monkeypatch):
+    """Otros status (5xx) conservan el mensaje genérico de error de página."""
+    monkeypatch.setattr(httpx, "Client", lambda **_k: _ClienteFalso(500))
+    with pytest.raises(extraccion_url.ExtraccionError, match="respondió con un error"):
+        extraccion_url._un_intento_descarga("https://x.test", None)

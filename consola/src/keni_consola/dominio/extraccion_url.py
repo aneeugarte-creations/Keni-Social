@@ -43,6 +43,23 @@ _ESPERA_REINTENTO_SEG = (3.0, 8.0, 15.0)
 # Tope del texto extraido que se pasa a la skill (margen de sobra bajo `_MAX_TEXTO`=60k).
 _MAX_TEXTO_EXTRAIDO = 40_000
 
+# Cabeceras de NAVEGADOR REAL para la descarga. Muchos sitios (Cloudflare, portales de
+# noticias, anti-bot) devuelven 403 a cualquier User-Agent que se identifique como bot; el
+# viejo "compatible; KeniSocial/1.0" se bloqueaba justo así. Un UA de Chrome actual + `Accept`
+# / `Accept-Language` reduce esos 403 de raíz. NO sortea retos duros de Cloudflare ni bloqueos
+# por IP de datacenter: para esos casos el usuario pega el texto o sube el documento.
+_CABECERAS_NAVEGADOR = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36"
+    ),
+    "Accept": (
+        "text/html,application/xhtml+xml,application/xml;q=0.9,"
+        "image/avif,image/webp,image/apng,*/*;q=0.8"
+    ),
+    "Accept-Language": "es-MX,es;q=0.9,en;q=0.8",
+}
+
 # Hosts cuyo contenido principal es VIDEO/STREAMING: no se pueden "leer" como articulo.
 # La transcripcion es LOCAL (whisper, en `clip-a-copy` desde archivo), no desde URL
 # remota: aqui degradamos con honestidad en vez de inventar o mandar el video a terceros.
@@ -167,12 +184,18 @@ def _un_intento_descarga(url: str, timeout: float | None) -> str:
     reintenta (transitorio) o se rinde."""
     import httpx
 
-    cabeceras = {"User-Agent": "Mozilla/5.0 (compatible; KeniSocial/1.0; +operativo)"}
     with httpx.Client(
-        timeout=timeout or _TIMEOUT, follow_redirects=True, headers=cabeceras
+        timeout=timeout or _TIMEOUT, follow_redirects=True, headers=_CABECERAS_NAVEGADOR
     ) as cliente:
         with cliente.stream("GET", url) as respuesta:
             if respuesta.status_code != 200:
+                # 401/403/429: la web BLOQUEA la lectura automática (anti-bot, muro, rate-limit).
+                # No es un fallo nuestro y no se arregla reintentando: dile al usuario qué hacer.
+                if respuesta.status_code in (401, 403, 429):
+                    raise ExtraccionError(
+                        f"Esa página bloquea la lectura automática (HTTP {respuesta.status_code}). "
+                        "Pega el texto a mano o sube el documento."
+                    )
                 raise ExtraccionError(
                     f"La página respondió con un error (HTTP {respuesta.status_code})."
                 )
@@ -247,9 +270,10 @@ def _descargar_bytes_real(url: str) -> bytes:
     except ImportError as e:  # pragma: no cover -- httpx es dependencia transitiva
         raise ExtraccionError("Falta la librería para descargar imágenes.") from e
 
-    cabeceras = {"User-Agent": "Mozilla/5.0 (compatible; KeniSocial/1.0; +operativo)"}
     try:
-        with httpx.Client(timeout=_TIMEOUT, follow_redirects=True, headers=cabeceras) as cliente:
+        with httpx.Client(
+            timeout=_TIMEOUT, follow_redirects=True, headers=_CABECERAS_NAVEGADOR
+        ) as cliente:
             with cliente.stream("GET", url) as respuesta:
                 if respuesta.status_code != 200:
                     raise ExtraccionError(
