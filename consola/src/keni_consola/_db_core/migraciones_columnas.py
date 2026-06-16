@@ -411,6 +411,34 @@ def _migrar_columnas_turnos_rota(con: Any) -> None:
             con.execute(f"ALTER TABLE rota_turnos ADD COLUMN IF NOT EXISTS {columna} {tipo}")
 
 
+_COLUMNAS_CONFIG_FRANJAS_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    ("franjas", "TEXT NOT NULL DEFAULT ''"),
+)
+
+
+def _migrar_columnas_config_franjas(con: Any) -> None:
+    """Anade a `rota_config_franjas` la columna `franjas` (plantilla como lista JSON).
+
+    Antes la plantilla por defecto eran 4 columnas fijas (matutino/vespertino *_inicio/_fin):
+    no cabia una 3a franja (p. ej. "Nocturna"). Ahora la plantilla es una LISTA flexible en
+    JSON (`[{nombre,inicio,fin}, ...]`), tan extensible como las franjas de cada semana.
+
+    Idempotente y NO destructivo: una BD nueva ya la trae por el DDL declarativo; una vieja la
+    recibe con DEFAULT '' (vacio = "deriva la lista de matutino/vespertino al leer", asi las
+    marcas con rangos personalizados los conservan sin reescribir nada).
+    """
+    if not _COLUMNAS_CONFIG_FRANJAS_AMPLIADAS:
+        return
+    if not _tabla_existe(con, "rota_config_franjas"):
+        return
+    columnas = _columnas_existentes(con, "rota_config_franjas")
+    for columna, tipo in _COLUMNAS_CONFIG_FRANJAS_AMPLIADAS:
+        if columna not in columnas:
+            con.execute(
+                f"ALTER TABLE rota_config_franjas ADD COLUMN IF NOT EXISTS {columna} {tipo}"
+            )
+
+
 # GRID POR MARCA: tablas del grid de rota que reciben la columna `marca`. Cada marca tiene su
 # propia rejilla (franjas=columnas, turnos=celdas, coordinacion=coordinador por celda, swaps).
 _TABLAS_GRID_ROTA_MARCA: tuple[str, ...] = (

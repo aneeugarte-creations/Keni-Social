@@ -520,13 +520,17 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_rota_programas_activo ON rota_programas (activo)",
-    # Configuracion de FRANJAS (#185): los rangos horarios de matutino/vespertino son
-    # editoriales del equipo y se editan desde la UI. GRID POR MARCA: una fila POR MARCA —
-    # `id` guarda el id de la marca (antes era el singleton `id='default'`, reclavado a
-    # 'claro-sports' por `_asegurar_marca_grid_rota`). Si no existe, los endpoints devuelven
-    # los defaults del dominio.
-    # Aplica al endpoint `POST /api/rota/cobertura/asignar-franja` (que llama a
-    # `dominio.mapear_franja` con estos valores). Inicios INCLUSIVOS, finales EXCLUSIVOS.
+    # PLANTILLA de FRANJAS (#185): la lista de franjas con que se siembra cada semana NUEVA,
+    # editorial del equipo y editable desde la UI. GRID POR MARCA: una fila POR MARCA — `id`
+    # guarda el id de la marca (antes era el singleton `id='default'`, reclavado a
+    # 'claro-sports' por `_asegurar_marca_grid_rota`). Si no existe, se usan los defaults del
+    # dominio (Mañana 08-16, Tarde 16-24).
+    #   - `franjas`: fuente de verdad nueva — lista JSON `[{nombre,inicio,fin}, ...]` flexible
+    #     (2, 3 o N franjas: p. ej. añadir "Nocturna"). Vacia => derivar de matutino/vespertino.
+    #   - matutino_*/vespertino_*: columnas LEGADAS (modelo de 2 franjas fijas). Se conservan
+    #     para no perder rangos personalizados de marcas viejas y para el endpoint legado
+    #     `POST /api/rota/cobertura/asignar-franja` (`dominio.mapear_franja`). Inicios
+    #     INCLUSIVOS, finales EXCLUSIVOS.
     """
     CREATE TABLE IF NOT EXISTS rota_config_franjas (
         id                  TEXT PRIMARY KEY,
@@ -534,6 +538,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         matutino_fin        TEXT NOT NULL DEFAULT '16:00',
         vespertino_inicio   TEXT NOT NULL DEFAULT '16:00',
         vespertino_fin      TEXT NOT NULL DEFAULT '24:00',
+        franjas             TEXT NOT NULL DEFAULT '',
         actualizado         TEXT NOT NULL DEFAULT ''
     )
     """,

@@ -21,6 +21,7 @@ from ._comun import (
     _franja_para_hora_migracion,
     _parsear_hora_a_minutos,
     _tabla_existe,
+    resolver_franjas_plantilla,
 )
 
 # Defaults de franjas para la migracion (mismos que `rota.py`; los hardcodeamos aqui para
@@ -212,31 +213,45 @@ _NOMBRE_FRANJA_MANANA = NOMBRE_FRANJA_MANANA_DEFAULT
 _NOMBRE_FRANJA_TARDE = NOMBRE_FRANJA_TARDE_DEFAULT
 
 
-def _config_franjas_template(con: Any, marca: str = "") -> tuple[str, str, str, str]:
-    """Devuelve `(matutino_inicio, matutino_fin, vespertino_inicio, vespertino_fin)` para
-    inicializar las 2 franjas por defecto de una semana nueva.
+def _config_franjas_template(con: Any, marca: str = "") -> list[dict[str, str]]:
+    """Lista `[{nombre,inicio,fin}, ...]` de franjas-plantilla para sembrar una semana nueva.
 
-    GRID POR MARCA: la config de franjas es POR MARCA — `rota_config_franjas.id` guarda el id
-    de la marca (antes era el singleton `'default'`). Con `marca` leemos la fila de esa marca;
-    sin marca (legado / siembra pre-migracion) caemos al singleton `'default'`. Si no hay fila,
-    defaults del dominio (08-16 / 16-24).
+    La franja "Descanso" NO va en la lista: la anade SIEMPRE el llamador de la siembra.
+
+    GRID POR MARCA: la plantilla es POR MARCA — `rota_config_franjas.id` guarda el id de la
+    marca (antes era el singleton `'default'`). Fuente de verdad: la columna JSON `franjas`; si
+    esta vacia (o aun no existe —la siembra puede correr DURANTE la migracion, antes de la
+    0041—) se DERIVA de las columnas legadas matutino/vespertino. Sin fila/tabla: defaults del
+    dominio (Mañana 08-16, Tarde 16-24).
     """
-    mat_ini, mat_fin = "08:00", "16:00"
-    ves_ini, ves_fin = "16:00", "24:00"
+    defaults = ("08:00", "16:00", "16:00", "24:00")
     if not _tabla_existe(con, "rota_config_franjas"):
-        return mat_ini, mat_fin, ves_ini, ves_fin
+        return resolver_franjas_plantilla(
+            "", *defaults,
+            nombre_manana=_NOMBRE_FRANJA_MANANA, nombre_tarde=_NOMBRE_FRANJA_TARDE,
+        )
+    cols = _columnas_existentes(con, "rota_config_franjas")
+    proyeccion = "matutino_inicio, matutino_fin, vespertino_inicio, vespertino_fin"
+    if "franjas" in cols:
+        proyeccion = "franjas, " + proyeccion
     fila = con.execute(
-        "SELECT matutino_inicio, matutino_fin, vespertino_inicio, vespertino_fin "
-        "FROM rota_config_franjas WHERE id = ?",
+        f"SELECT {proyeccion} FROM rota_config_franjas WHERE id = ?",
         (marca or "default",),
     ).fetchone()
     if fila is None:
-        return mat_ini, mat_fin, ves_ini, ves_fin
-    return (
-        fila["matutino_inicio"] or mat_ini,
-        fila["matutino_fin"] or mat_fin,
-        fila["vespertino_inicio"] or ves_ini,
-        fila["vespertino_fin"] or ves_fin,
+        return resolver_franjas_plantilla(
+            "", *defaults,
+            nombre_manana=_NOMBRE_FRANJA_MANANA, nombre_tarde=_NOMBRE_FRANJA_TARDE,
+        )
+    franjas_json = fila["franjas"] if "franjas" in cols else ""
+    return resolver_franjas_plantilla(
+        franjas_json,
+        fila["matutino_inicio"] or defaults[0],
+        fila["matutino_fin"] or defaults[1],
+        fila["vespertino_inicio"] or defaults[2],
+        fila["vespertino_fin"] or defaults[3],
+        nombre_manana=_NOMBRE_FRANJA_MANANA,
+        nombre_tarde=_NOMBRE_FRANJA_TARDE,
     )
 
 
@@ -244,12 +259,14 @@ _NOMBRE_FRANJA_DESCANSO = "Descanso"
 
 
 def _inicializar_franjas_por_defecto_en(con: Any, lunes: str, marca: str = "") -> dict[str, str]:
-    """Inserta (Mañana, Tarde, Descanso) en `rota_franjas` para `(marca, lunes)` si no existen.
+    """Siembra las franjas de la PLANTILLA + "Descanso" en `rota_franjas` para `(marca, lunes)`.
 
-    Devuelve el mapa `{nombre -> id}` con las franjas vigentes (inicializadas o ya existentes) de
-    ESA marca. La franja "Descanso" se siembra con `es_descanso=true`, `inicio='00:00'`/
-    `fin='00:00'` (sin rango horario real: nadie cubre eventos en descanso) y un `orden` alto
-    (999) para que la UI la pinte siempre al final.
+    Las franjas de trabajo salen de la plantilla por marca (`_config_franjas_template`): una
+    LISTA flexible (por defecto Mañana 08-16 + Tarde 16-24, pero el equipo puede añadir
+    "Nocturna" u otras). Devuelve el mapa `{nombre -> id}` con las franjas vigentes
+    (inicializadas o ya existentes) de ESA marca. La franja "Descanso" se anade SIEMPRE con
+    `es_descanso=true`, `inicio='00:00'`/`fin='00:00'` (sin rango horario real: nadie cubre
+    eventos en descanso) y un `orden` alto (999) para que la UI la pinte siempre al final.
 
     GRID POR MARCA: cada marca tiene su propia rejilla. Detectamos si la columna `marca` ya
     existe (la migracion del modelo de turnos siembra ANTES de que exista; entonces caemos al
@@ -271,19 +288,17 @@ def _inicializar_franjas_por_defecto_en(con: Any, lunes: str, marca: str = "") -
             (lunes,),
         ).fetchall()
     por_nombre = {f["nombre"]: f["id"] for f in existentes}
-    if (
-        _NOMBRE_FRANJA_MANANA in por_nombre
-        and _NOMBRE_FRANJA_TARDE in por_nombre
-        and _NOMBRE_FRANJA_DESCANSO in por_nombre
-    ):
-        return por_nombre
-    mat_ini, mat_fin, ves_ini, ves_fin = _config_franjas_template(con, marca)
+    # La plantilla manda las franjas de trabajo (lista flexible: 2, 3 o N — p. ej. "Nocturna");
+    # "Descanso" se anade SIEMPRE al final (es estructural, no vive en la plantilla editable).
+    plantilla = _config_franjas_template(con, marca)
     # (nombre, inicio, fin, orden, es_descanso)
     inicial = [
-        (_NOMBRE_FRANJA_MANANA, mat_ini, mat_fin, 0, False),
-        (_NOMBRE_FRANJA_TARDE, ves_ini, ves_fin, 1, False),
-        (_NOMBRE_FRANJA_DESCANSO, "00:00", "00:00", 999, True),
+        (fr["nombre"], fr["inicio"], fr["fin"], i, False)
+        for i, fr in enumerate(plantilla)
     ]
+    inicial.append((_NOMBRE_FRANJA_DESCANSO, "00:00", "00:00", 999, True))
+    if all(nombre in por_nombre for nombre, *_ in inicial):
+        return por_nombre
     for nombre, inicio, fin, orden, es_descanso in inicial:
         if nombre in por_nombre:
             continue

@@ -462,3 +462,14 @@ def guardar_franjas_config(
     return db.guardar_franjas_config(
         matutino_inicio, matutino_fin, vespertino_inicio, vespertino_fin, marca
     )
+
+
+def obtener_plantilla_franjas(marca: str = "") -> dict[str, Any]:
+    return db.obtener_plantilla_franjas(marca)
+
+
+def guardar_plantilla_franjas(
+    franjas: list[dict[str, str]],
+    marca: str = "",
+) -> dict[str, Any]:
+    return db.guardar_plantilla_franjas(franjas, marca)

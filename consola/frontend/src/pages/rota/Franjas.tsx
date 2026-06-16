@@ -20,7 +20,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { ApiError, api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { CuerpoCrearFranjaSemana, FranjaSemana } from "@/types";
+import type {
+  CuerpoCrearFranjaSemana,
+  FranjaSemana,
+  PlantillaFranja,
+} from "@/types";
 
 // --- Dialog "Configurar franjas" (solo admin) -------------------------------
 
@@ -302,7 +306,12 @@ export function FormCrearFranjaSemana({
   );
 }
 
-/** CUERPO «Plantilla por defecto» del diálogo Franjas (sin su propio Dialog). */
+/** CUERPO «Plantilla por defecto» del diálogo Franjas (sin su propio Dialog).
+ *
+ * La plantilla es una LISTA flexible de franjas (igual de extensible que las de la semana): el
+ * equipo puede definir 2, 3 o N franjas — p. ej. añadir «Nocturna». Es el molde del que parten
+ * las semanas NUEVAS; «Descanso» la añade siempre la siembra, así que no se edita aquí. Se
+ * guarda toda la lista de una vez (PATCH que reemplaza la plantilla). */
 function CuerpoPlantillaFranjas({ onCerrar }: { onCerrar: () => void }) {
   const queryClient = useQueryClient();
   const { marcaActiva } = useMarcaActiva();
@@ -312,118 +321,127 @@ function CuerpoPlantillaFranjas({ onCerrar }: { onCerrar: () => void }) {
       api.obtenerConfigFranjas(marcaActiva ?? undefined, signal),
   });
   const inicial = q.data?.franjas;
-  const [matIni, setMatIni] = React.useState("");
-  const [matFin, setMatFin] = React.useState("");
-  const [vesIni, setVesIni] = React.useState("");
-  const [vesFin, setVesFin] = React.useState("");
+  const [filas, setFilas] = React.useState<PlantillaFranja[]>([]);
 
   React.useEffect(() => {
-    if (inicial) {
-      setMatIni(inicial.matutino_inicio);
-      setMatFin(inicial.matutino_fin);
-      setVesIni(inicial.vespertino_inicio);
-      setVesFin(inicial.vespertino_fin);
-    }
+    if (inicial) setFilas(inicial.map((f) => ({ ...f })));
   }, [inicial]);
 
+  const editar = (i: number, campo: keyof PlantillaFranja, valor: string) =>
+    setFilas((prev) =>
+      prev.map((f, j) => (j === i ? { ...f, [campo]: valor } : f)),
+    );
+  const quitar = (i: number) =>
+    setFilas((prev) => prev.filter((_, j) => j !== i));
+  const añadir = () =>
+    setFilas((prev) => [...prev, { nombre: "", inicio: "00:00", fin: "08:00" }]);
+
   const guardar = useMutation({
-    // GRID POR MARCA: la config es por marca; en "Todas" el backend responde 400 accionable.
+    // GRID POR MARCA: la plantilla es por marca; en "Todas" el backend responde 400 accionable.
     mutationFn: () =>
       api.guardarConfigFranjas(
         {
-          matutino_inicio: matIni,
-          matutino_fin: matFin,
-          vespertino_inicio: vesIni,
-          vespertino_fin: vesFin,
+          franjas: filas.map((f) => ({
+            nombre: f.nombre.trim(),
+            inicio: f.inicio.trim(),
+            fin: f.fin.trim(),
+          })),
         },
         marcaActiva ?? undefined,
       ),
     onSuccess: () => {
-      toast.success("Franjas guardadas.");
+      toast.success("Plantilla de franjas guardada.");
       void queryClient.invalidateQueries({ queryKey: ["rota"] });
       onCerrar();
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  const completas = filas.every(
+    (f) => f.nombre.trim() && f.inicio.trim() && f.fin.trim(),
+  );
   const sinCambios =
-    !!inicial &&
-    matIni === inicial.matutino_inicio &&
-    matFin === inicial.matutino_fin &&
-    vesIni === inicial.vespertino_inicio &&
-    vesFin === inicial.vespertino_fin;
-  const puedeGuardar =
-    matIni !== "" &&
-    matFin !== "" &&
-    vesIni !== "" &&
-    vesFin !== "" &&
-    !sinCambios;
+    !!inicial && JSON.stringify(filas) === JSON.stringify(inicial);
+  const puedeGuardar = filas.length > 0 && completas && !sinCambios;
 
   return (
     <>
       <p className="text-xs text-muted-foreground">
-        El MOLDE por defecto (mañana/tarde) del que parten las semanas nuevas.
-        No reescribe las franjas que una semana ya tiene.
+        El MOLDE del que parten las semanas nuevas: estas franjas se crean en cada
+        semana nueva. Puedes añadir las que quieras (p. ej. «Nocturna»). No
+        reescribe las franjas que una semana ya tiene; «Descanso» se añade sola.
       </p>
       {q.isPending ? (
         <Skeleton className="h-32 w-full rounded-md" />
       ) : q.isError ? (
         <BloqueError
-          titulo="No se pudo cargar la configuración"
+          titulo="No se pudo cargar la plantilla"
           mensaje={mensajeError(q.error)}
           onReintentar={() => void q.refetch()}
           cargando={q.isFetching}
         />
       ) : (
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3 rounded-md border bg-muted/30 p-3">
-            <div className="col-span-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Mañana
+        <div className="space-y-2">
+          {filas.map((f, i) => (
+            <div
+              // Índice como key: la lista es local y se reordena sólo al añadir/quitar al final.
+              key={i}
+              className="flex flex-wrap items-end gap-2 rounded border px-2 py-2"
+            >
+              <div className="min-w-32 flex-1">
+                <Label className="text-xs text-muted-foreground">Nombre</Label>
+                <Input
+                  value={f.nombre}
+                  onChange={(e) => editar(i, "nombre", e.target.value)}
+                  placeholder="Mañana"
+                  className="h-8"
+                />
+              </div>
+              <div className="w-24">
+                <Label className="text-xs text-muted-foreground">Inicio</Label>
+                <Input
+                  value={f.inicio}
+                  onChange={(e) => editar(i, "inicio", e.target.value)}
+                  placeholder="HH:MM"
+                  className="h-8"
+                />
+              </div>
+              <div className="w-24">
+                <Label className="text-xs text-muted-foreground">Fin</Label>
+                <Input
+                  value={f.fin}
+                  onChange={(e) => editar(i, "fin", e.target.value)}
+                  placeholder="HH:MM"
+                  className="h-8"
+                />
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-destructive"
+                onClick={() => quitar(i)}
+                disabled={filas.length <= 1}
+                title={
+                  filas.length <= 1
+                    ? "La plantilla necesita al menos una franja"
+                    : ""
+                }
+              >
+                Quitar
+              </Button>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="cf-mat-ini">Inicio</Label>
-              <Input
-                id="cf-mat-ini"
-                type="time"
-                value={matIni}
-                onChange={(e) => setMatIni(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="cf-mat-fin">Fin</Label>
-              <Input
-                id="cf-mat-fin"
-                type="time"
-                value={matFin}
-                onChange={(e) => setMatFin(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3 rounded-md border bg-muted/30 p-3">
-            <div className="col-span-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Tarde
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="cf-ves-ini">Inicio</Label>
-              <Input
-                id="cf-ves-ini"
-                type="time"
-                value={vesIni}
-                onChange={(e) => setVesIni(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="cf-ves-fin">Fin</Label>
-              <Input
-                id="cf-ves-fin"
-                type="time"
-                value={vesFin}
-                onChange={(e) => setVesFin(e.target.value)}
-              />
-            </div>
-          </div>
+          ))}
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-full border-dashed"
+            onClick={añadir}
+          >
+            <Plus className="h-4 w-4" /> Añadir franja
+          </Button>
           <p className="text-xs text-muted-foreground">
-            Lo que cae fuera se asigna a «descanso».
+            Horas en formato HH:MM (24:00 = medianoche del día siguiente). Lo que
+            cae fuera de toda franja se asigna a «descanso».
           </p>
         </div>
       )}
@@ -447,7 +465,8 @@ function CuerpoPlantillaFranjas({ onCerrar }: { onCerrar: () => void }) {
  * Diálogo «Franjas» UNIFICADO: una sola entrada (antes «Configurar franjas» + «Plantilla de
  * franjas», dos items que se confundían) con dos pestañas claras:
  *  - «Esta semana»: las franjas SOLO de la semana en vista (puntual).
- *  - «Plantilla por defecto»: el molde mañana/tarde global del que parten las semanas nuevas.
+ *  - «Plantilla por defecto»: la lista flexible de franjas (2, 3 o N) del que parten las
+ *    semanas nuevas; se puede añadir «Nocturna» u otras.
  */
 export function DialogFranjas({
   lunes,

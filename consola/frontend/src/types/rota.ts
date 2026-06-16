@@ -571,7 +571,11 @@ export interface CuerpoActualizarProgramaRota {
 
 // --- Configuración editorial de franjas (rangos horarios) ------------------
 
-/** Rangos vigentes de las dos franjas de trabajo (los usa la cobertura derivada). */
+/**
+ * Rangos vigentes de las dos franjas de trabajo LEGADAS (los usa el campo `franjas_config`
+ * vestigial de la cobertura derivada). La PLANTILLA editable es ahora una lista flexible
+ * (`PlantillaFranja[]`), no estas 2 ventanas fijas.
+ */
 export interface ConfigFranjas {
   matutino_inicio: string;
   matutino_fin: string;
@@ -580,15 +584,22 @@ export interface ConfigFranjas {
   actualizado?: string;
 }
 
-export interface RespuestaConfigFranjas {
-  franjas: ConfigFranjas;
+/** Una franja de la PLANTILLA por defecto (molde del que parten las semanas nuevas). */
+export interface PlantillaFranja {
+  nombre: string;
+  inicio: string;
+  fin: string;
 }
 
+/** Respuesta de `GET /api/rota/config/franjas`: la plantilla como lista flexible. */
+export interface RespuestaConfigFranjas {
+  franjas: PlantillaFranja[];
+  actualizado?: string;
+}
+
+/** Cuerpo de `PATCH /api/rota/config/franjas`: reemplaza la plantilla por esta lista. */
 export interface CuerpoGuardarConfigFranjas {
-  matutino_inicio: string;
-  matutino_fin: string;
-  vespertino_inicio: string;
-  vespertino_fin: string;
+  franjas: PlantillaFranja[];
 }
 
 /**

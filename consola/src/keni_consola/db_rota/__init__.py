@@ -52,7 +52,9 @@ from .ausencias import (
 from .config_franjas import (
     _COLS_CONFIG_FRANJAS,
     guardar_franjas_config,
+    guardar_plantilla_franjas,
     obtener_franjas_config,
+    obtener_plantilla_franjas,
 )
 from .coordinacion import (
     _COLS_COORDINACION,
@@ -232,7 +234,9 @@ __all__ = [
     # Config de franjas.
     "_COLS_CONFIG_FRANJAS",
     "guardar_franjas_config",
+    "guardar_plantilla_franjas",
     "obtener_franjas_config",
+    "obtener_plantilla_franjas",
     # Coordinacion.
     "_COLS_COORDINACION",
     "_SELECT_COORDINACION",

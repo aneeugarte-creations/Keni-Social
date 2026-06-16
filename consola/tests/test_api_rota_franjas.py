@@ -323,3 +323,166 @@ def test_cobertura_evento_con_solape_es_union(entorno):
     ).json()["evento"]["cobertura"]
     ids = {c_["miembro_id"] for c_ in cob}
     assert ids == {a["id"], b["id"]}
+
+
+# --------------------------------------------------------------------------- #
+# PLANTILLA de franjas (lista flexible): GET/PATCH /api/rota/config/franjas    #
+# y su efecto al sembrar una semana nueva.                                     #
+# --------------------------------------------------------------------------- #
+
+
+def test_config_franjas_get_default_es_lista(cliente):
+    """Sin fila guardada, GET devuelve la plantilla por defecto como LISTA (Mañana, Tarde).
+
+    "Descanso" NO va en la plantilla (la añade aparte la siembra de la semana)."""
+    r = cliente.get(f"/api/rota/config/franjas?marca={MARCA}")
+    assert r.status_code == 200, r.text
+    cuerpo = r.json()
+    franjas = cuerpo["franjas"]
+    assert isinstance(franjas, list)
+    assert [f["nombre"] for f in franjas] == ["Mañana", "Tarde"]
+    manana = franjas[0]
+    assert manana["inicio"] == "08:00" and manana["fin"] == "16:00"
+    assert franjas[1]["inicio"] == "16:00" and franjas[1]["fin"] == "24:00"
+
+
+def test_plantilla_franjas_guardar_y_releer(entorno):
+    """Admin PATCH una plantilla de 3 franjas (con Nocturna); GET la devuelve igual."""
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    cli = _cli_admin(app)
+    r = cli.patch(
+        f"/api/rota/config/franjas?marca={MARCA}",
+        json={
+            "franjas": [
+                {"nombre": "Mañana", "inicio": "08:00", "fin": "16:00"},
+                {"nombre": "Tarde", "inicio": "16:00", "fin": "24:00"},
+                {"nombre": "Nocturna", "inicio": "00:00", "fin": "08:00"},
+            ]
+        },
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    guardadas = r.json()["franjas"]
+    assert [f["nombre"] for f in guardadas] == ["Mañana", "Tarde", "Nocturna"]
+    # Releer por GET devuelve lo mismo (persistio en la columna JSON).
+    releidas = cli.get(f"/api/rota/config/franjas?marca={MARCA}").json()["franjas"]
+    noct = next(f for f in releidas if f["nombre"] == "Nocturna")
+    assert noct["inicio"] == "00:00" and noct["fin"] == "08:00"
+
+
+def test_plantilla_franjas_siembra_nocturna_en_semana_nueva(entorno):
+    """Tras guardar una plantilla con «Nocturna», una semana NUEVA se siembra con ella.
+
+    Es el objetivo del cambio: la plantilla flexible mete una 3a franja en cada semana nueva
+    (antes la plantilla eran 2 columnas fijas mañana/tarde y no cabia)."""
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    cli = _cli_admin(app)
+    cli.patch(
+        f"/api/rota/config/franjas?marca={MARCA}",
+        json={
+            "franjas": [
+                {"nombre": "Mañana", "inicio": "08:00", "fin": "16:00"},
+                {"nombre": "Tarde", "inicio": "16:00", "fin": "24:00"},
+                {"nombre": "Nocturna", "inicio": "00:00", "fin": "08:00"},
+            ]
+        },
+        headers=_ORIGIN,
+    )
+    # Primer GET de la semana => siembra desde la plantilla recien guardada.
+    franjas = cli.get(f"/api/rota/semana/{LUNES}/franjas?marca={MARCA}").json()["franjas"]
+    nombres = [f["nombre"] for f in franjas]
+    assert {"Mañana", "Tarde", "Nocturna", "Descanso"} == set(nombres)
+    noct = next(f for f in franjas if f["nombre"] == "Nocturna")
+    assert noct["inicio"] == "00:00" and noct["fin"] == "08:00"
+    assert noct["es_descanso"] is False
+    # "Descanso" sigue siendo la ultima (orden alto) y con su flag.
+    descanso = next(f for f in franjas if f["nombre"] == "Descanso")
+    assert descanso["es_descanso"] is True and descanso["orden"] == 999
+
+
+def test_plantilla_franjas_rechaza_descanso(entorno):
+    """«Descanso» es reservado (lo añade la siembra): no se admite en la plantilla -> 400."""
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    cli = _cli_admin(app)
+    r = cli.patch(
+        f"/api/rota/config/franjas?marca={MARCA}",
+        json={
+            "franjas": [
+                {"nombre": "Mañana", "inicio": "08:00", "fin": "16:00"},
+                {"nombre": "Descanso", "inicio": "00:00", "fin": "00:00"},
+            ]
+        },
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400, r.text
+
+
+def test_plantilla_franjas_rechaza_duplicados(entorno):
+    """Dos franjas con el mismo nombre (la siembra usa el nombre como clave) -> 400."""
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    cli = _cli_admin(app)
+    r = cli.patch(
+        f"/api/rota/config/franjas?marca={MARCA}",
+        json={
+            "franjas": [
+                {"nombre": "Mañana", "inicio": "08:00", "fin": "16:00"},
+                {"nombre": "mañana", "inicio": "16:00", "fin": "20:00"},
+            ]
+        },
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400, r.text
+
+
+def test_plantilla_franjas_rechaza_lista_vacia(entorno):
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    cli = _cli_admin(app)
+    r = cli.patch(
+        f"/api/rota/config/franjas?marca={MARCA}",
+        json={"franjas": []},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400, r.text
+
+
+def test_plantilla_franjas_rechaza_hora_invalida(entorno):
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    cli = _cli_admin(app)
+    r = cli.patch(
+        f"/api/rota/config/franjas?marca={MARCA}",
+        json={"franjas": [{"nombre": "Mala", "inicio": "25:00", "fin": "26:00"}]},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400, r.text
+
+
+def test_plantilla_franjas_rechaza_inicio_despues_de_fin(entorno):
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    cli = _cli_admin(app)
+    r = cli.patch(
+        f"/api/rota/config/franjas?marca={MARCA}",
+        json={"franjas": [{"nombre": "Rara", "inicio": "16:00", "fin": "08:00"}]},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400, r.text
+
+
+def test_plantilla_franjas_patch_no_admin_403(cliente):
+    """El cliente por defecto (token de mantenimiento) NO es admin con sesion -> 403."""
+    r = cliente.patch(
+        f"/api/rota/config/franjas?marca={MARCA}",
+        json={"franjas": [{"nombre": "Mañana", "inicio": "08:00", "fin": "16:00"}]},
+    )
+    assert r.status_code == 403
+
+
+def test_plantilla_franjas_patch_sin_marca_400(entorno):
+    """Editar la plantilla exige una marca concreta (no "Todas") -> 400."""
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    cli = _cli_admin(app)
+    r = cli.patch(
+        "/api/rota/config/franjas",
+        json={"franjas": [{"nombre": "Mañana", "inicio": "08:00", "fin": "16:00"}]},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400, r.text

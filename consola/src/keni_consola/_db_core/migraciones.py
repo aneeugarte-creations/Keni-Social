@@ -18,6 +18,7 @@ from ..tiempo import ahora_iso
 from ._comun import _log
 from .migraciones_columnas import (
     _COLUMNAS_APROBACIONES_AMPLIADAS,
+    _COLUMNAS_CONFIG_FRANJAS_AMPLIADAS,
     _COLUMNAS_CONTENIDO_AMPLIADAS,
     _COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS,
     _COLUMNAS_DAEMON_LATIDOS_AMPLIADAS,
@@ -38,6 +39,7 @@ from .migraciones_columnas import (
     _backfill_pesos_fuente,
     _migrar_columnas_aprobaciones,
     _migrar_columnas_campanias,
+    _migrar_columnas_config_franjas,
     _migrar_columnas_contenido,
     _migrar_columnas_contenido_plataforma,
     _migrar_columnas_daemon_latidos,
@@ -440,6 +442,17 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # "comercial", retirado). Corre tras 0014 (que ya añadió `marcas` a la tabla vieja). One-shot
     # e idempotente (RENAME solo si la vieja existe y la nueva no). Ver `_renombrar_comercial_campanias_a_campanias`.
     Migracion("0040-rename-campanias", _renombrar_comercial_campanias_a_campanias),
+    # PLANTILLA DE FRANJAS FLEXIBLE: columna `franjas` (lista JSON) en `rota_config_franjas`,
+    # para que la plantilla con que se siembra cada semana nueva sea una lista de N franjas (se
+    # puede añadir "Nocturna") en vez de 2 columnas fijas matutino/vespertino. One-shot e
+    # idempotente (ADD COLUMN IF NOT EXISTS); NO destructivo (vacío => deriva de las columnas
+    # legadas al leer, preservando rangos personalizados). Ver `_migrar_columnas_config_franjas`.
+    Migracion(
+        "0041-columnas-config-franjas",
+        _migrar_columnas_config_franjas,
+        re_aplicar_si_cambia=True,
+        datos=_COLUMNAS_CONFIG_FRANJAS_AMPLIADAS,
+    ),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.

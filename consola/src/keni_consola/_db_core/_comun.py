@@ -7,6 +7,7 @@ areas (refactor de pura reubicacion; sin cambio de comportamiento).
 """
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -33,6 +34,58 @@ def _tabla_existe(con: Any, tabla: str) -> bool:
         (tabla,),
     ).fetchone()
     return fila is not None
+
+
+def _parsear_lista_franjas(crudo: Any) -> list[dict[str, str]]:
+    """Parsea el JSON de `rota_config_franjas.franjas` a `[{nombre,inicio,fin}, ...]`.
+
+    Tolerante: devuelve `[]` si el valor esta vacio, no es una lista o trae basura (filas sin
+    nombre/inicio/fin se descartan). No lanza: lo usan tanto las migraciones como la lectura.
+    """
+    if not crudo:
+        return []
+    try:
+        datos = json.loads(crudo)
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(datos, list):
+        return []
+    salida: list[dict[str, str]] = []
+    for item in datos:
+        if not isinstance(item, dict):
+            continue
+        nombre = str(item.get("nombre", "")).strip()
+        inicio = str(item.get("inicio", "")).strip()
+        fin = str(item.get("fin", "")).strip()
+        if nombre and inicio and fin:
+            salida.append({"nombre": nombre, "inicio": inicio, "fin": fin})
+    return salida
+
+
+def resolver_franjas_plantilla(
+    franjas_json: Any,
+    matutino_inicio: str,
+    matutino_fin: str,
+    vespertino_inicio: str,
+    vespertino_fin: str,
+    *,
+    nombre_manana: str,
+    nombre_tarde: str,
+) -> list[dict[str, str]]:
+    """Lista de franjas-plantilla `[{nombre,inicio,fin}, ...]` para sembrar una semana nueva.
+
+    Fuente de verdad: la columna JSON `franjas`. Si esta vacia (fila previa a la columna, o
+    marca que nunca edito su plantilla con el editor de lista) se DERIVA de las columnas
+    legadas matutino/vespertino, asi una marca con rangos personalizados los conserva. La
+    franja "Descanso" NO va aqui: la anade SIEMPRE la siembra de la semana.
+    """
+    lista = _parsear_lista_franjas(franjas_json)
+    if lista:
+        return lista
+    return [
+        {"nombre": nombre_manana, "inicio": matutino_inicio, "fin": matutino_fin},
+        {"nombre": nombre_tarde, "inicio": vespertino_inicio, "fin": vespertino_fin},
+    ]
 
 
 def _parsear_hora_a_minutos(crudo: str) -> int | None:
