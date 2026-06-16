@@ -69,7 +69,7 @@ def test_limite_red_es_nullable():
 
 
 # --------------------------------------------------------------------------- #
-# Areas de churn ampliadas (#120): publicaciones, runs, comercial             #
+# Areas de churn ampliadas (#120): publicaciones, runs                         #
 # --------------------------------------------------------------------------- #
 
 
@@ -79,8 +79,6 @@ def test_churn_modelos_presentes():
     esperados = {
         "Paginacion", "MetricasRun",
         "Publicacion", "RespuestaPublicaciones", "RespuestaPublicacion",
-        "PublicacionComercial", "RespuestaPublicacionesComercial",
-        "RespuestaPublicacionComercial", "RespuestaRefrescarComercial",
     }
     assert esperados <= defs
 
@@ -97,18 +95,6 @@ def test_paginacion_envelope_requerido_en_listados():
     defs = esquema_json()["$defs"]
     assert "paginacion" in defs["RespuestaPublicaciones"]["required"]
     assert set(defs["Paginacion"]["required"]) == {"total", "limite", "desplazamiento"}
-
-
-def test_comercial_fuente_requerida_sin_flags_de_muestra():
-    """#124: `fuente` (procedencia) es REQUERIDA; no existe ningún flag de muestra."""
-    defs = esquema_json()["$defs"]
-    pub = defs["PublicacionComercial"]
-    assert "fuente" in pub["required"]
-    assert "es_muestra" not in pub["properties"]
-    # `serie` solo en detalle/alta => opcional.
-    assert "serie" not in pub.get("required", [])
-    resp = defs["RespuestaPublicacionesComercial"]
-    assert {"publicaciones", "fuente"} == set(resp["required"])
 
 
 def test_version_interno_no_aparece_en_ningun_modelo():

@@ -312,7 +312,6 @@ def test_fecha_nativa_tipos_aplicados(pg):
         assert _dtype(con, "jobs", "creado") == "timestamp with time zone"
         assert _dtype(con, "jobs", "claimed_at") == "timestamp with time zone"
         assert _dtype(con, "metricas_pieza_snapshots", "ts") == "timestamp with time zone"
-        assert _dtype(con, "comercial_snapshots", "ts") == "timestamp with time zone"
         assert _dtype(con, "eventos_internos", "creado") == "timestamp with time zone"
         assert _dtype(con, "gasto_ia", "dia") == "date"
     finally:

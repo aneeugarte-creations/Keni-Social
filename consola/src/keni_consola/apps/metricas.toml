@@ -10,27 +10,27 @@
 id = "metricas"
 etiqueta = "Analíticas"
 # Frase corta para la tarjeta del launcher (cajón de apps).
-descripcion = "Métricas, comercial y reportes"
+descripcion = "Métricas, campañas y reportes"
 icono = "BarChart3"
 flag_activacion = "KENI_APP_METRICAS"
 permisos = ["editor", "admin"]
 
 modulos_backend = [
   "metricas",
-  "comercial",
+  "campanias",
 ]
 
 rutas_frontend = [
   "/datos/analiticas",
   "/datos/analiticas/metricas",
-  "/datos/analiticas/comercial",
+  "/datos/analiticas/campanias",
 ]
 
 [[nav]]
 ruta = "/datos/analiticas"
 etiqueta = "Analíticas"
 icono = "BarChart3"
-descripcion = "Rendimiento de las cuentas y seguimiento de comercial. Pestañas Métricas / Comercial."
+descripcion = "Rendimiento de las cuentas y seguimiento de campañas. Pestañas Métricas / Campañas."
 # Bloque "datos": la medición cierra el loop (alimenta de vuelta qué producir); es
 # lectura, no un checkpoint de la operación diaria.
 grupo = "datos"

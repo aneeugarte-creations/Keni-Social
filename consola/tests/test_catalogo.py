@@ -68,7 +68,7 @@ def test_cada_app_lleva_descripcion_y_nav_para_la_tarjeta():
 
     # Descripción top-level (frase de la tarjeta) en cada app de catálogo.
     assert porid["produccion"]["descripcion"] == "Copy, clips, imágenes y verificación"
-    assert porid["metricas"]["descripcion"] == "Métricas, comercial y reportes"
+    assert porid["metricas"]["descripcion"] == "Métricas, campañas y reportes"
     assert porid["operacion"]["descripcion"] == "Rota, parrilla y publicación"
 
     # Cada app trae su nav (items con ruta/etiqueta/icono), ordenada.
