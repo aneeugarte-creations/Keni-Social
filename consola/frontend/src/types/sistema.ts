@@ -565,8 +565,9 @@ export interface LatidoDaemon {
   /** Nombre humano del daemon para el panel (cae al nombre crudo capitalizado si no está mapeado).
    *  Lo da el backend (`latidos.etiqueta_de`); el front ya no hardcodea el mapeo. */
   etiqueta: string;
-  /** Frase de una línea de PARA QUÉ SIRVE el daemon (`latidos.descripcion_de`); "" si no está
-   *  descrito. El panel la muestra bajo la etiqueta para no enseñar solo el nombre crudo. */
+  /** Frase de PARA QUÉ SIRVE el daemon (`latidos.descripcion_de`); "" si no está descrito.
+   *  La consumen tanto el panel (línea bajo la etiqueta) como el bloque de descripción de la
+   *  página de detalle: un solo campo, una sola fuente. */
   descripcion: string;
   /** Resumen del último barrido (qué hizo / nº items) o "" si no aportó: distingue de un vistazo
    *  "corre y TRABAJA" de "corre EN VACIO". Lo da el backend (`daemon_latidos.ultimo_resumen`). */
@@ -581,8 +582,6 @@ export interface LatidoDaemon {
    *  así el switch sigue encendido aunque la máquina esté apagada (estado `en_espera`). `null` =
    *  siempre-on (sin gate). Distinto de `activo` (efectivo = flag propio AND máquina). */
   gate_activo: boolean | null;
-  /** Qué hace EXACTAMENTE el daemon (bloque de descripción de la página de detalle); "" si no mapeado. */
-  descripcion: string;
   /** Ajustes del catálogo que gobiernan el daemon (editables in-place en su detalle); `[]` si ninguno. */
   ajustes: AjusteAdmin[];
 }

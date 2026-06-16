@@ -41,7 +41,6 @@ function latido(parcial: Partial<LatidoDaemon>): LatidoDaemon {
     prompts: [{ etiqueta: "Verificar", doc: "prompt/verificar" }],
     clave_gate: "KENI_INVESTIGACION",
     gate_activo: true,
-    descripcion: "",
     ajustes: [],
     ...parcial,
   };

@@ -150,9 +150,10 @@ def sonda_daemons() -> dict:
                 # NO hardcodear el nombre ni el mapeo de prompts en el front. Fuente única en
                 # `latidos`.
                 "etiqueta": latidos.etiqueta_de(f["daemon"]),
-                # `descripcion`: frase de una línea de PARA QUÉ SIRVE el daemon (fuente única
-                # en `latidos`), para que el panel no muestre solo el nombre crudo. El
-                # `ultimo_resumen` (qué hizo el último barrido) ya entra por `**f`.
+                # `descripcion`: frase de PARA QUÉ SIRVE el daemon (fuente única en `latidos`).
+                # La consumen tanto el panel (línea bajo el nombre) como el bloque de descripción
+                # de la página de detalle: un solo campo, una sola fuente. El `ultimo_resumen`
+                # (qué hizo el último barrido) ya entra por `**f`.
                 "descripcion": latidos.descripcion_de(f["daemon"]),
                 "prompts": latidos.prompts_de(f["daemon"]),
                 # `clave_gate`: la clave de ajuste (KENI_*) que enciende/apaga el daemon
@@ -164,10 +165,8 @@ def sonda_daemons() -> dict:
                 # ANDearlo con la maquina. Asi el switch se mantiene encendido aunque la maquina
                 # este apagada (estado "en_espera") y deja de rebotar a OFF. null = siempre-on.
                 "gate_activo": gate_activo,
-                # `descripcion`: qué hace EXACTAMENTE el daemon (bloque de la pagina de detalle).
                 # `ajustes`: sus knobs editables (catálogo serializado) para operarlo sin salir
                 # de su detalle. Fuente unica en `latidos`.
-                "descripcion": latidos.descripcion_de(f["daemon"]),
                 "ajustes": _ajustes_de(f["daemon"]),
             }
         )
