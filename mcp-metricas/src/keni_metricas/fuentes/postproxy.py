@@ -318,3 +318,78 @@ def probar(api_key: str) -> tuple[bool, str]:
     if ok:
         return True, "La API key de Postproxy funciona."
     return False, msg
+
+
+# Nombres de campo de Postproxy (crudos, varían por red) — alias defensivos.
+# Seguidores/suscriptores de la cuenta en el snapshot de stats.
+_ALIAS_SEGUIDORES: tuple[str, ...] = (
+    "followerCount", "followers_count", "follower_count", "fan_count",
+    "followersCount", "subscriberCount", "subscriber_count", "subscribers", "followers",
+)
+# Nº de publicaciones de la cuenta en el snapshot (media/tweets/vídeos/pines…).
+_ALIAS_POSTS: tuple[str, ...] = (
+    "media_count", "mediaCount", "tweet_count", "statuses_count", "video_count",
+    "videoCount", "pin_count", "postsCount", "posts_count", "post_count",
+)
+
+
+def _campo_num(stats: object, alias: tuple[str, ...]) -> int | None:
+    """Primer alias presente y numérico en un dict de `stats`; None si ninguno."""
+    if not isinstance(stats, dict):
+        return None
+    for clave in alias:
+        v = stats.get(clave)
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            return int(v)
+    return None
+
+
+def stats_perfil(api_key: str, perfil_id: str) -> tuple[bool, str, dict]:
+    """GET /profiles/:id/stats -> `(ok, mensaje, {seguidores, posts_totales, posts_dia})`.
+
+    Lee la serie temporal de snapshots (Postproxy captura ~cada 23 h) y deriva números
+    de cuenta: seguidores y posts del ÚLTIMO snapshot, y posts/día como el incremento
+    de posts entre el primer y último snapshot dividido por los días transcurridos. Si
+    falta el dato (la red no lo expone, o hay <2 snapshots), va a None (nunca inventa 0).
+    Parseo DEFENSIVO con alias por red. La api_key nunca aparece en el mensaje.
+    """
+    vacio = {"seguidores": None, "posts_totales": None, "posts_dia": None}
+    ok, msg = _verificar_api_key(api_key)
+    if not ok:
+        return False, msg, vacio
+    if not isinstance(perfil_id, str) or not perfil_id.strip():
+        return False, "Falta el identificador del perfil.", vacio
+    try:
+        codigo, cuerpo = _HACER_PETICION("GET", f"/profiles/{perfil_id.strip()}/stats", api_key)
+    except httpx.HTTPError:
+        return False, "No se pudo contactar con Postproxy.", vacio
+    if codigo != 200:
+        return False, _traducir_error(codigo, "leer las estadísticas"), vacio
+
+    data = cuerpo.get("data") if isinstance(cuerpo, dict) else None
+    fuente = data if isinstance(data, dict) else (cuerpo if isinstance(cuerpo, dict) else {})
+    registros = fuente.get("records")
+    if not isinstance(registros, list) or not registros:
+        return True, "Sin estadísticas todavía.", vacio
+
+    ult = registros[-1].get("stats") if isinstance(registros[-1], dict) else None
+    seguidores = _campo_num(ult, _ALIAS_SEGUIDORES)
+    posts = _campo_num(ult, _ALIAS_POSTS)
+
+    posts_dia: float | None = None
+    prim = registros[0] if isinstance(registros[0], dict) else {}
+    p0 = _campo_num(prim.get("stats"), _ALIAS_POSTS)
+    t0, t1 = _str(prim.get("recorded_at")), _str(registros[-1].get("recorded_at"))
+    if posts is not None and p0 is not None and t0 and t1:
+        try:
+            from datetime import datetime
+
+            d0 = datetime.fromisoformat(t0.replace("Z", "+00:00"))
+            d1 = datetime.fromisoformat(t1.replace("Z", "+00:00"))
+            dias = (d1 - d0).days
+            if dias > 0 and posts >= p0:
+                posts_dia = round((posts - p0) / dias, 1)
+        except ValueError:
+            posts_dia = None
+
+    return True, "OK", {"seguidores": seguidores, "posts_totales": posts, "posts_dia": posts_dia}

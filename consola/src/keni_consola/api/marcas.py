@@ -167,6 +167,158 @@ async def dashboard(request: Request) -> Response:
     return JSONResponse(cuerpo)
 
 
+# --------------------------------------------------------------------------- #
+# Monitor de NÚMEROS: seguidores / posts / posts-día por marca × red          #
+#                                                                             #
+# Es un monitor de CONTEO (no análisis): una lista plana, marca a marca, una  #
+# línea por cuenta (red) con sus números y una línea de sumatorio por marca.  #
+# La fuente es POSTPROXY (Marcas es de Postproxy; las métricas de Metricool    #
+# viven en Analíticas, no aquí): por cada cuenta conectada se leen sus         #
+# snapshots de Postproxy (seguidores y nº de posts de la cuenta) y se deriva   #
+# posts/día del incremento entre snapshots. Solo hay datos de las cuentas      #
+# CONECTADAS en Postproxy; el resto no aparece. Nunca casca: lo que falte va   #
+# a null (nunca inventa ceros).                                                #
+# --------------------------------------------------------------------------- #
+
+# Orden de pintado de las redes (catálogo Postproxy sin google_business).
+_ORDEN_REDES: tuple[str, ...] = _REDES_DASHBOARD
+
+
+def _numeros_marca(mid: str, etiqueta: str, api_key: str, grupo: str | None) -> dict:
+    """Números de UNA marca desde Postproxy: una fila por cuenta conectada + el total.
+
+    Por cada perfil del grupo: seguidores y posts (del último snapshot de Postproxy, vía
+    `stats_perfil`) y posts/día (incremento entre snapshots). `post_count` del perfil es
+    el respaldo de posts si el snapshot no lo trae. Si no hay api_key o grupo, la marca
+    sale sin cuentas (todo null). Nunca casca.
+    """
+    if not api_key or not grupo:
+        return {
+            "marca": mid,
+            "etiqueta": etiqueta,
+            "redes": [],
+            "total": {"seguidores": None, "posts_totales": None, "posts_dia": None},
+        }
+
+    try:
+        ok, _msg, perfiles = _pp_cliente.listar_perfiles(api_key, grupo)
+    except Exception:  # noqa: BLE001 -- defensivo: el endpoint nunca debe cascar
+        ok, perfiles = False, []
+    perfiles = perfiles if ok else []
+
+    # Una fila por cuenta (perfil), en el orden fijo de redes.
+    perfiles.sort(
+        key=lambda p: _ORDEN_REDES.index(p["platform"])
+        if p.get("platform") in _ORDEN_REDES
+        else len(_ORDEN_REDES)
+    )
+
+    redes: list[dict] = []
+    tot_seg = tot_posts = 0
+    suma_dia = 0.0
+    hay_seg = hay_posts = hay_dia = False
+    for perfil in perfiles:
+        plat = perfil.get("platform")
+        pid = perfil.get("id")
+        if not isinstance(plat, str) or not isinstance(pid, str):
+            continue
+        try:
+            _ok, _m, st = _pp_cliente.stats_perfil(api_key, pid)
+        except Exception:  # noqa: BLE001 -- defensivo
+            st = {"seguidores": None, "posts_totales": None, "posts_dia": None}
+        seg = st.get("seguidores")
+        posts = st.get("posts_totales")
+        if posts is None:
+            posts = perfil.get("post_count")  # respaldo: posts gestionados por Postproxy
+        dia = st.get("posts_dia")
+
+        if isinstance(seg, int):
+            tot_seg += seg
+            hay_seg = True
+        if isinstance(posts, int):
+            tot_posts += posts
+            hay_posts = True
+        if isinstance(dia, (int, float)):
+            suma_dia += dia
+            hay_dia = True
+        redes.append(
+            {
+                "plataforma": plat,
+                "seguidores": seg if isinstance(seg, int) else None,
+                "posts_totales": posts if isinstance(posts, int) else None,
+                "posts_dia": dia if isinstance(dia, (int, float)) else None,
+            }
+        )
+
+    return {
+        "marca": mid,
+        "etiqueta": etiqueta,
+        "redes": redes,
+        "total": {
+            "seguidores": tot_seg if hay_seg else None,
+            "posts_totales": tot_posts if hay_posts else None,
+            "posts_dia": (round(suma_dia, 1) if hay_dia else None),
+        },
+    }
+
+
+def _construir_numeros() -> dict:
+    """Monitor de números de TODAS las marcas (lista plana), desde Postproxy."""
+    from keni_shared import marcas as _marcas_catalogo
+
+    estado_pp = _conexiones.estado_postproxy()
+    pp_por_marca = {m["marca"]: m for m in estado_pp.get("marcas", [])}
+    api_key = _conexiones._postproxy_api_key(_conexiones._config_existente())
+
+    filas: list[dict] = []
+    tot_seg = tot_posts = 0
+    suma_dia = 0.0
+    hay_seg = hay_posts = hay_dia = False
+
+    for mid, etiqueta in _marcas_catalogo.opciones_metricas():
+        grupo = pp_por_marca.get(mid, {}).get("profile_group_id")
+        fila = _numeros_marca(mid, etiqueta, api_key, grupo)
+        filas.append(fila)
+        t = fila["total"]
+        if isinstance(t["seguidores"], int):
+            tot_seg += t["seguidores"]
+            hay_seg = True
+        if isinstance(t["posts_totales"], int):
+            tot_posts += t["posts_totales"]
+            hay_posts = True
+        if isinstance(t["posts_dia"], (int, float)):
+            suma_dia += t["posts_dia"]
+            hay_dia = True
+
+    return {
+        "generado_en": datetime.now(UTC).isoformat(timespec="seconds"),
+        "totales": {
+            "seguidores": tot_seg if hay_seg else None,
+            "posts_totales": tot_posts if hay_posts else None,
+            "posts_dia": (round(suma_dia, 1) if hay_dia else None),
+        },
+        "marcas": filas,
+    }
+
+
+async def numeros(request: Request) -> Response:
+    """GET /api/marcas/numeros: monitor de conteos por marca × red (Postproxy). SOLO ADMIN.
+
+    Una llamada a Postproxy por cuenta conectada (en threadpool, no bloquea el loop).
+    Nunca casca: lo que falte va a null. Solo aparecen las cuentas conectadas en Postproxy.
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    try:
+        cuerpo = await run_in_threadpool(_construir_numeros)
+    except Exception:  # noqa: BLE001 -- última red de seguridad: nunca un 500 crudo
+        return JSONResponse(
+            {"error": "No se pudo construir el monitor de marcas."}, status_code=500
+        )
+    return JSONResponse(cuerpo)
+
+
 RUTAS = [
     Route("/api/marcas", dashboard, methods=["GET"]),
+    Route("/api/marcas/numeros", numeros, methods=["GET"]),
 ]

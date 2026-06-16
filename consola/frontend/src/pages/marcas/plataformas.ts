@@ -35,6 +35,8 @@ const VISUAL: Record<string, VisualPlataforma> = {
   linkedin: { nombre: "LinkedIn", icono: Linkedin },
   youtube: { nombre: "YouTube", icono: Youtube },
   twitter: { nombre: "X (Twitter)", icono: Twitter },
+  // Métricas (Metricool) usa el id "x"; publicación (Postproxy) usa "twitter". Ambos → X.
+  x: { nombre: "X (Twitter)", icono: Twitter },
   threads: { nombre: "Threads", icono: AtSign },
   pinterest: { nombre: "Pinterest", icono: Hash },
   bluesky: { nombre: "Bluesky", icono: Cloud },

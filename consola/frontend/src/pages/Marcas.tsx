@@ -11,9 +11,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip } from "@/components/ui/tooltip";
 import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { MonitorNumeros } from "@/pages/marcas/MonitorNumeros";
 import { formatearNumero, iconoPlataforma, nombrePlataforma } from "@/pages/marcas/plataformas";
 import { tiempoRelativo } from "@/pages/publicaciones/meta";
 import type { CanalPublicacion, MarcaDashboard, RedMarca, TotalesMarcas } from "@/types";
@@ -312,13 +314,12 @@ function TarjetaMarca({ marca }: { marca: MarcaDashboard }) {
 }
 
 /**
- * Página MARCAS (admin): el centro de control de CONEXIONES de todas las marcas × redes.
- * Arriba, los totales de conexión; debajo, una tarjeta por marca donde se CONECTA cada
- * red en un par de clics (OAuth oficial de la red dentro de una ventana de Keni; el
- * equipo nunca sale a un tercero), se desconecta, se ve el estado real y se elige el
- * canal por el que publica. Las métricas de audiencia tienen su página en Analíticas.
+ * Panel de CONEXIONES (pestaña): una tarjeta por marca donde se CONECTA cada red en un
+ * par de clics (OAuth oficial de la red dentro de una ventana de Keni; el equipo nunca
+ * sale a un tercero), se desconecta, se ve el estado real y se elige el canal por el que
+ * publica. Las métricas de audiencia tienen su página en Analíticas.
  */
-export default function Marcas() {
+function PanelConexiones() {
   const queryClient = useQueryClient();
   const { data, isPending, isError, error, refetch, isFetching } = useQuery({
     queryKey: CLAVE_MARCAS,
@@ -339,10 +340,8 @@ export default function Marcas() {
   }, [queryClient]);
 
   return (
-    <>
-      <TituloPagina titulo="Marcas" icono={LayoutGrid} />
-      <div className="space-y-4">
-        {isPending ? (
+    <div className="space-y-4">
+      {isPending ? (
           <>
             <div className="grid grid-cols-3 gap-3">
               {Array.from({ length: 3 }).map((_, i) => (
@@ -384,7 +383,32 @@ export default function Marcas() {
             )}
           </>
         )}
-      </div>
+    </div>
+  );
+}
+
+/**
+ * Página MARCAS (admin). Dos pestañas:
+ *  - «Números»: el monitor de conteos (seguidores / posts / posts-día) por marca y red,
+ *    una lista plana con sumatorio por marca. Es lo que se ve por defecto.
+ *  - «Conexiones»: conectar/desconectar cada red (OAuth nativo) y elegir el canal.
+ */
+export default function Marcas() {
+  return (
+    <>
+      <TituloPagina titulo="Marcas" icono={LayoutGrid} />
+      <Tabs defaultValue="numeros" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="numeros">Números</TabsTrigger>
+          <TabsTrigger value="conexiones">Conexiones</TabsTrigger>
+        </TabsList>
+        <TabsContent value="numeros">
+          <MonitorNumeros />
+        </TabsContent>
+        <TabsContent value="conexiones">
+          <PanelConexiones />
+        </TabsContent>
+      </Tabs>
     </>
   );
 }

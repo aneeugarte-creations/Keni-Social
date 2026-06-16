@@ -67,3 +67,33 @@ export interface RespuestaMarcas {
   totales: TotalesMarcas;
   marcas: MarcaDashboard[];
 }
+
+// --- Monitor de NÚMEROS (`GET /api/marcas/numeros`) ------------------------ //
+
+/** Trío de conteos (seguidores / posts / posts-día); null = sin dato (no es 0). */
+export interface ConteoCuenta {
+  seguidores: number | null;
+  posts_totales: number | null;
+  posts_dia: number | null;
+}
+
+/** Una cuenta (marca × red) con sus números. */
+export interface NumerosRed extends ConteoCuenta {
+  plataforma: string;
+}
+
+/** Una marca del monitor: sus redes y el sumatorio. */
+export interface NumerosMarca {
+  marca: string;
+  etiqueta: string;
+  redes: NumerosRed[];
+  total: ConteoCuenta;
+  generado_en: string | null;
+}
+
+/** Respuesta de `GET /api/marcas/numeros`. */
+export interface RespuestaNumeros {
+  generado_en: string | null;
+  totales: ConteoCuenta;
+  marcas: NumerosMarca[];
+}

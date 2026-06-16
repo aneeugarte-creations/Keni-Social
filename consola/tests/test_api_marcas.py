@@ -153,3 +153,82 @@ def test_postproxy_caido_no_casca(entorno, monkeypatch):
     cs = next(m for m in cuerpo["marcas"] if m["marca"] == "claro_sports")
     assert all(red["conectado"] is False for red in cs["redes"])
     assert cuerpo["totales"]["redes_conectadas"] == 0
+
+
+# --------------------------------------------------------------------------- #
+# Monitor de NÚMEROS (`GET /api/marcas/numeros`): conteos POSTPROXY por cuenta  #
+# --------------------------------------------------------------------------- #
+def test_numeros_editor_403(entorno):
+    c = _cli_como("editor")
+    assert c.get("/api/marcas/numeros").status_code == 403
+
+
+def test_numeros_desde_postproxy(entorno, monkeypatch):
+    """Una fila por cuenta conectada (seguidores/posts/posts-día de Postproxy) + sumatorio."""
+    monkeypatch.setattr(conexiones, "_postproxy_api_key", lambda cfg: "PP_KEY")
+    monkeypatch.setattr(conexiones, "_config_existente", lambda: {})
+    monkeypatch.setattr(
+        conexiones, "estado_postproxy",
+        lambda: {"configurado": True, "pista": "····9999", "marcas": [
+            {"marca": "claro_sports", "etiqueta": "Claro Sports",
+             "profile_group_id": "g1", "canal": "postproxy"},
+            {"marca": "unotv", "etiqueta": "UnoTV", "profile_group_id": None, "canal": "metricool"}]},
+    )
+
+    def _perfiles(api_key, grupo):
+        if grupo == "g1":
+            return True, "ok", [
+                {"id": "p1", "name": "@claro", "platform": "instagram", "status": "active", "post_count": 99},
+                {"id": "p2", "name": "Claro FB", "platform": "facebook", "status": "active", "post_count": 30},
+            ]
+        return False, "sin grupo", []
+
+    def _stats(api_key, pid):
+        if pid == "p1":
+            return True, "ok", {"seguidores": 700, "posts_totales": 120, "posts_dia": 2.0}
+        return True, "ok", {"seguidores": 300, "posts_totales": None, "posts_dia": None}
+
+    monkeypatch.setattr(pp_cliente, "listar_perfiles", _perfiles)
+    monkeypatch.setattr(pp_cliente, "stats_perfil", _stats)
+
+    c = _cli_como("admin")
+    r = c.get("/api/marcas/numeros")
+    assert r.status_code == 200
+    cuerpo = r.json()
+    cs = next(m for m in cuerpo["marcas"] if m["marca"] == "claro_sports")
+    # Una línea por cuenta, en orden fijo (facebook antes que instagram).
+    assert [red["plataforma"] for red in cs["redes"]] == ["facebook", "instagram"]
+    ig = next(red for red in cs["redes"] if red["plataforma"] == "instagram")
+    assert ig["seguidores"] == 700
+    assert ig["posts_totales"] == 120
+    assert ig["posts_dia"] == 2.0
+    fb = next(red for red in cs["redes"] if red["plataforma"] == "facebook")
+    assert fb["seguidores"] == 300
+    assert fb["posts_totales"] == 30  # respaldo: post_count del perfil (snapshot sin posts)
+    assert fb["posts_dia"] is None
+    # Sumatorio de la marca.
+    assert cs["total"] == {"seguidores": 1000, "posts_totales": 150, "posts_dia": 2.0}
+    # Marca sin grupo: sin cuentas.
+    unotv = next(m for m in cuerpo["marcas"] if m["marca"] == "unotv")
+    assert unotv["redes"] == []
+    # Totales globales.
+    assert cuerpo["totales"]["seguidores"] == 1000
+    assert cuerpo["totales"]["posts_totales"] == 150
+
+
+def test_numeros_sin_api_key_vacio(entorno, monkeypatch):
+    """Sin api_key de Postproxy: ninguna cuenta, todo null, no casca."""
+    monkeypatch.setattr(conexiones, "_postproxy_api_key", lambda cfg: "")
+    monkeypatch.setattr(conexiones, "_config_existente", lambda: {})
+    monkeypatch.setattr(
+        conexiones, "estado_postproxy",
+        lambda: {"configurado": False, "pista": None, "marcas": [
+            {"marca": "claro_sports", "etiqueta": "Claro Sports", "profile_group_id": None}]},
+    )
+
+    c = _cli_como("admin")
+    r = c.get("/api/marcas/numeros")
+    assert r.status_code == 200
+    cuerpo = r.json()
+    assert cuerpo["totales"] == {"seguidores": None, "posts_totales": None, "posts_dia": None}
+    assert all(m["redes"] == [] for m in cuerpo["marcas"])
