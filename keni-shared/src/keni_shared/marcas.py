@@ -9,31 +9,36 @@ Cada marca tiene tres campos:
                   hablar con sus cuentas (p.ej. `claro_sports`). Solo se usa en la
                   FRONTERA con metricas (api/metricas.py, api/conexiones.py).
 
-El catalogo se carga de un paquete de cliente declarativo (`clientes/<cliente>.toml`,
-ver `keni_shared.cliente`), externalizado a configuracion (#135). Anadir un cliente
-nuevo = anadir/seleccionar un `.toml`, sin tocar este modulo.
+FUENTE UNICA, EDITABLE EN RUNTIME (CRUD desde la consola):
 
-El catalogo se materializa UNA vez al importar el modulo. Las funciones del modulo
-son puras sobre ese catalogo ya cargado.
+  1. Si existe un fichero EDITABLE (`KENI_MARCAS_CONFIG`, o `<KENI_DATA_DIR>/marcas.toml`),
+     ESE es el catalogo. La consola lo crea/edita por su API y todos los procesos que
+     comparten `/data` lo ven (se RECARGA solo cuando cambia su `mtime`; no hace falta
+     reiniciar). Forma: una lista de `[[marca]]` con id/etiqueta/id_metricas.
+  2. Si no existe, se usa el paquete de cliente declarativo (`clientes/<cliente>.toml`,
+     ver `keni_shared.cliente`) como SEMILLA. Sin configurar nada => las 5 marcas del
+     piloto (comportamiento historico).
+
+El catalogo se cachea y se reconstruye cuando cambia el fichero fuente (por `mtime`) o
+cuando alguien llama a `recargar()` (la consola lo hace tras cada escritura).
 
 USO TIPICO:
 
     from keni_shared import marcas
 
-    # Contenido (id canonico):
     marcas.opciones()                         # -> [("unotv", "UnoTV"), ...]
     marcas.etiqueta_de("claro-sports")        # -> "Claro Sports"
     marcas.es_marca("claro-sports")           # -> True
     marcas.id_metricas_de("claro-sports")     # -> "claro_sports"  (frontera)
-
-    # Frontera con metricas (id_metricas, guion_bajo):
-    marcas.opciones_metricas()                # -> [("unotv", "UnoTV"), ...]
-    marcas.etiqueta_por_id_metricas("nacion_gamer")  # -> "Nación Gamer"
+    marcas.opciones_metricas()                # -> [("unotv", "UnoTV"), ...]  (frontera)
 """
 
 from __future__ import annotations
 
+import os
+import tomllib
 from dataclasses import dataclass
+from pathlib import Path
 
 from .cliente import cargar_cliente
 
@@ -47,19 +52,129 @@ class Marca:
     id_metricas: str
 
 
-# Catalogo del cliente ACTIVO, en orden de presentacion estable (el del `.toml`).
-# `id` es la forma canonica (slug-guion); `id_metricas` la forma guion_bajo que
-# espera keni_metricas. Por defecto son las 5 marcas del cliente (`clientes/amx.toml`),
-# pero NO estan hardcodeadas aqui: se CARGAN del paquete de cliente (#135). El golf
-# es un sub-vertical editorial de Claro Sports, NO una marca propia.
-MARCAS: tuple[Marca, ...] = tuple(
-    Marca(id=m.id, etiqueta=m.etiqueta, id_metricas=m.id_metricas)
-    for m in cargar_cliente().marcas
-)
+# --------------------------------------------------------------------------- #
+# Fuente del catalogo: overlay editable bajo /data, o el paquete de cliente    #
+# --------------------------------------------------------------------------- #
 
-# Indices para acceso O(1). Construidos una sola vez al importar el modulo.
-_POR_ID: dict[str, Marca] = {m.id: m for m in MARCAS}
-_POR_ID_METRICAS: dict[str, Marca] = {m.id_metricas: m for m in MARCAS}
+
+def ruta_editable() -> Path | None:
+    """Ruta del fichero EDITABLE de marcas (CRUD), o None si no hay `/data` configurado.
+
+    Prioridad: env `KENI_MARCAS_CONFIG` (ruta absoluta) -> `<KENI_DATA_DIR>/marcas.toml`.
+    No exige que exista: solo dice DONDE viviria (la consola lo crea al primer CRUD).
+    """
+    if p := os.environ.get("KENI_MARCAS_CONFIG"):
+        return Path(p).expanduser()
+    if d := os.environ.get("KENI_DATA_DIR"):
+        return Path(d) / "marcas.toml"
+    return None
+
+
+def _ruta_activa() -> Path:
+    """El fichero que MANDA: el overlay editable si existe, si no el del cliente."""
+    edit = ruta_editable()
+    if edit is not None and edit.exists():
+        return edit
+    from .cliente import ruta_cliente
+
+    return ruta_cliente()
+
+
+def _semilla() -> tuple[Marca, ...]:
+    """Catalogo semilla del paquete de cliente (`clientes/<cliente>.toml`)."""
+    return tuple(
+        Marca(id=m.id, etiqueta=m.etiqueta, id_metricas=m.id_metricas)
+        for m in cargar_cliente().marcas
+    )
+
+
+def _parsear_overlay(ruta: Path) -> tuple[Marca, ...]:
+    """Lee el fichero editable `[[marca]]` (id/etiqueta/id_metricas). Defensivo y tolerante.
+
+    Ignora marcas incompletas o ids duplicados (primero gana): el catalogo nunca debe
+    cascar por un fichero a medias. Si no hay ninguna marca valida, cae a la semilla.
+    """
+    try:
+        datos = tomllib.loads(ruta.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return _semilla()
+    crudas = datos.get("marca")
+    if not isinstance(crudas, list):
+        return _semilla()
+    vistas: set[str] = set()
+    marcas: list[Marca] = []
+    for m in crudas:
+        if not isinstance(m, dict):
+            continue
+        mid = m.get("id")
+        etiqueta = m.get("etiqueta")
+        id_metricas = m.get("id_metricas")
+        if not (isinstance(mid, str) and mid.strip()):
+            continue
+        if mid in vistas:
+            continue
+        vistas.add(mid)
+        marcas.append(
+            Marca(
+                id=mid,
+                etiqueta=etiqueta if isinstance(etiqueta, str) and etiqueta.strip() else mid,
+                id_metricas=(
+                    id_metricas
+                    if isinstance(id_metricas, str) and id_metricas.strip()
+                    else mid.replace("-", "_")
+                ),
+            )
+        )
+    return tuple(marcas) if marcas else _semilla()
+
+
+@dataclass(frozen=True)
+class _Catalogo:
+    marcas: tuple[Marca, ...]
+    por_id: dict[str, Marca]
+    por_id_metricas: dict[str, Marca]
+
+
+# Cache del catalogo: (ruta fuente, mtime, catalogo). Se reconstruye al cambiar la
+# fuente o su mtime, o al llamar a `recargar()`.
+_cache: dict[str, object] = {"ruta": None, "mtime": None, "cat": None}
+
+
+def _estado() -> _Catalogo:
+    """Catalogo vigente, reconstruido si el fichero fuente cambio (por `mtime`)."""
+    ruta = _ruta_activa()
+    try:
+        mtime = ruta.stat().st_mtime
+    except OSError:
+        mtime = None
+    cat = _cache["cat"]
+    if cat is not None and _cache["ruta"] == ruta and _cache["mtime"] == mtime:
+        return cat  # type: ignore[return-value]
+
+    edit = ruta_editable()
+    if edit is not None and ruta == edit:
+        marcas = _parsear_overlay(ruta)
+    else:
+        marcas = _semilla()
+    nuevo = _Catalogo(
+        marcas=marcas,
+        por_id={m.id: m for m in marcas},
+        por_id_metricas={m.id_metricas: m for m in marcas},
+    )
+    _cache.update(ruta=ruta, mtime=mtime, cat=nuevo)
+    return nuevo
+
+
+def recargar() -> None:
+    """Fuerza la recarga del catalogo (la consola lo llama tras escribir el fichero)."""
+    cargar_cliente.cache_clear()
+    _cache.update(ruta=None, mtime=None, cat=None)
+
+
+def __getattr__(name: str):  # PEP 562: `marcas.MARCAS` sigue funcionando, y es VIVO.
+    if name == "MARCAS":
+        return _estado().marcas
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 # --------------------------------------------------------------------------- #
@@ -69,17 +184,17 @@ _POR_ID_METRICAS: dict[str, Marca] = {m.id_metricas: m for m in MARCAS}
 
 def marca_de(marca_id: str) -> Marca | None:
     """Devuelve la `Marca` con ese `id` canonico, o `None` si no existe."""
-    return _POR_ID.get(marca_id)
+    return _estado().por_id.get(marca_id)
 
 
 def es_marca(marca_id: str) -> bool:
     """True si `marca_id` es un id canonico conocido."""
-    return marca_id in _POR_ID
+    return marca_id in _estado().por_id
 
 
 def etiqueta_de(marca_id: str) -> str:
     """Nombre humano (con acentos) desde el `id` canonico; cae al propio id si no se conoce."""
-    marca = _POR_ID.get(marca_id)
+    marca = _estado().por_id.get(marca_id)
     return marca.etiqueta if marca is not None else marca_id
 
 
@@ -88,18 +203,23 @@ def id_metricas_de(marca_id: str) -> str:
 
     Es la traduccion de la FRONTERA con metricas. Cae al propio id si no se conoce.
     """
-    marca = _POR_ID.get(marca_id)
+    marca = _estado().por_id.get(marca_id)
     return marca.id_metricas if marca is not None else marca_id
 
 
 def ids() -> list[str]:
     """Lista de `id` canonicos de todas las marcas, en orden de presentacion."""
-    return [m.id for m in MARCAS]
+    return [m.id for m in _estado().marcas]
+
+
+def catalogo() -> list[Marca]:
+    """Catalogo completo (lista de `Marca`), en orden de presentacion. Para CRUD/edicion."""
+    return list(_estado().marcas)
 
 
 def opciones() -> list[tuple[str, str]]:
     """Pares `(id, etiqueta)` para poblar un <select> de la consola (todas las marcas)."""
-    return [(m.id, m.etiqueta) for m in MARCAS]
+    return [(m.id, m.etiqueta) for m in _estado().marcas]
 
 
 # --------------------------------------------------------------------------- #
@@ -109,15 +229,15 @@ def opciones() -> list[tuple[str, str]]:
 
 def marca_por_id_metricas(id_metricas: str) -> Marca | None:
     """Devuelve la `Marca` con ese `id_metricas` (guion_bajo), o `None` si no existe."""
-    return _POR_ID_METRICAS.get(id_metricas)
+    return _estado().por_id_metricas.get(id_metricas)
 
 
 def etiqueta_por_id_metricas(id_metricas: str) -> str:
     """Nombre humano (con acentos) desde el `id_metricas`; cae al propio id si no se conoce."""
-    marca = _POR_ID_METRICAS.get(id_metricas)
+    marca = _estado().por_id_metricas.get(id_metricas)
     return marca.etiqueta if marca is not None else id_metricas
 
 
 def opciones_metricas() -> list[tuple[str, str]]:
     """Pares `(id_metricas, etiqueta)` para los selects de Metricas/Config (frontera)."""
-    return [(m.id_metricas, m.etiqueta) for m in MARCAS]
+    return [(m.id_metricas, m.etiqueta) for m in _estado().marcas]

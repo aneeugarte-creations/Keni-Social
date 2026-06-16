@@ -33,7 +33,10 @@ export interface PostproxyMarca {
 
 /** Una marca con sus redes (estado + números) y su sumatorio. */
 export interface MarcaDashboard {
+  /** id_metricas: clave de Postproxy/canal (red, conectar, canal). */
   marca: string;
+  /** id canónico: clave del catálogo (editar/borrar la marca). */
+  id: string;
   etiqueta: string;
   /** Canal por el que la marca publica sus piezas. */
   canal_publicacion: CanalPublicacion;
@@ -47,4 +50,33 @@ export interface RespuestaMarcas {
   generado_en: string;
   totales: ConteoCuenta;
   marcas: MarcaDashboard[];
+}
+
+// --- CRUD del catálogo de marcas (fuente única editable) ------------------- //
+
+/** Una marca del catálogo editable. */
+export interface MarcaCatalogo {
+  id: string;
+  etiqueta: string;
+  id_metricas: string;
+}
+
+export interface RespuestaCatalogoMarcas {
+  marcas: MarcaCatalogo[];
+}
+
+export interface CuerpoCrearMarca {
+  etiqueta: string;
+  id?: string;
+  id_metricas?: string;
+}
+
+export interface CuerpoEditarMarca {
+  etiqueta?: string;
+  id_metricas?: string;
+}
+
+export interface RespuestaMarcaCatalogo {
+  marca: MarcaCatalogo;
+  mensaje: string;
 }

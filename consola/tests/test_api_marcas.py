@@ -77,6 +77,8 @@ def test_vista_unica_estado_mas_numeros(entorno, monkeypatch):
     cs = por_marca["claro_sports"]
     # Sin Metricool en la respuesta.
     assert "metricool" not in cs
+    # `marca` es el id_metricas (clave Postproxy); `id` es el canónico (clave del CRUD).
+    assert cs["id"] == "claro-sports"
     assert cs["canal_publicacion"] == "postproxy"
     assert cs["postproxy"] == {"conectado": True, "profile_group_id": "g1"}
     # Una fila por red del catálogo (10, sin google_business).
@@ -118,3 +120,63 @@ def test_sin_api_key_todo_null(entorno, monkeypatch):
     cuerpo = c.get("/api/marcas").json()
     assert cuerpo["totales"] == {"seguidores": None, "posts_totales": None, "posts_dia": None}
     assert all(r["conectado"] is False for m in cuerpo["marcas"] for r in m["redes"])
+
+
+# --------------------------------------------------------------------------- #
+# CRUD del catálogo de marcas (fuente única editable)                          #
+# --------------------------------------------------------------------------- #
+def test_catalogo_editor_403(entorno):
+    c = _cli_como("editor")
+    assert c.get("/api/marcas/catalogo").status_code == 403
+    assert c.post("/api/marcas/catalogo", json={"etiqueta": "X"}, headers=_ORIGIN).status_code == 403
+
+
+def test_catalogo_crud(entorno, monkeypatch, tmp_path):
+    from keni_shared import marcas as km
+
+    monkeypatch.setenv("KENI_MARCAS_CONFIG", str(tmp_path / "marcas.toml"))
+    km.recargar()
+    try:
+        c = _cli_como("admin")
+        # GET inicial: la semilla (amx) mientras no haya overlay.
+        r = c.get("/api/marcas/catalogo")
+        assert r.status_code == 200
+        assert "unotv" in [m["id"] for m in r.json()["marcas"]]
+
+        # Crear: id/id_metricas auto-derivados de la etiqueta.
+        r = c.post("/api/marcas/catalogo", json={"etiqueta": "Nueva Marca"}, headers=_ORIGIN)
+        assert r.status_code == 201, r.text
+        assert r.json()["marca"] == {"id": "nueva-marca", "etiqueta": "Nueva Marca", "id_metricas": "nueva_marca"}
+        # El catálogo (vivo) ya la incluye.
+        assert km.es_marca("nueva-marca")
+        assert "nueva-marca" in [m["id"] for m in c.get("/api/marcas/catalogo").json()["marcas"]]
+
+        # Duplicado: 409.
+        assert c.post("/api/marcas/catalogo", json={"etiqueta": "UnoTV", "id": "unotv"}, headers=_ORIGIN).status_code == 409
+
+        # Editar la etiqueta.
+        r = c.put("/api/marcas/catalogo/nueva-marca", json={"etiqueta": "Renombrada"}, headers=_ORIGIN)
+        assert r.status_code == 200 and r.json()["marca"]["etiqueta"] == "Renombrada"
+        assert km.etiqueta_de("nueva-marca") == "Renombrada"
+
+        # Borrar.
+        assert c.delete("/api/marcas/catalogo/nueva-marca", headers=_ORIGIN).status_code == 200
+        assert not km.es_marca("nueva-marca")
+        assert c.delete("/api/marcas/catalogo/no-existe", headers=_ORIGIN).status_code == 404
+    finally:
+        km.recargar()
+
+
+def test_catalogo_sin_data_dir_no_persiste(entorno, monkeypatch):
+    """Sin almacenamiento configurado (ni KENI_MARCAS_CONFIG ni KENI_DATA_DIR): 503 al crear."""
+    from keni_shared import marcas as km
+
+    monkeypatch.delenv("KENI_MARCAS_CONFIG", raising=False)
+    monkeypatch.delenv("KENI_DATA_DIR", raising=False)
+    km.recargar()
+    try:
+        c = _cli_como("admin")
+        r = c.post("/api/marcas/catalogo", json={"etiqueta": "X"}, headers=_ORIGIN)
+        assert r.status_code == 503
+    finally:
+        km.recargar()

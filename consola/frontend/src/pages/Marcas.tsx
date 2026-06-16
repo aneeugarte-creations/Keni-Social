@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { LayoutGrid, Loader2, Plus, RefreshCw, Unplug } from "lucide-react";
+import { LayoutGrid, Loader2, Pencil, Plus, RefreshCw, Trash2, Unplug } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -12,9 +12,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { DialogoBorrarMarca, DialogoMarca, type MarcaEditable } from "@/pages/marcas/DialogoMarca";
 import { iconoPlataforma, nombrePlataforma } from "@/pages/marcas/plataformas";
 import { tiempoRelativo } from "@/pages/publicaciones/meta";
 import type { CanalPublicacion, ConteoCuenta, MarcaDashboard, RedMarca } from "@/types";
+
+/** Convierte una marca del dashboard a la forma editable del catálogo (id/etiqueta/id_metricas). */
+function aEditable(m: MarcaDashboard): MarcaEditable {
+  return { id: m.id, etiqueta: m.etiqueta, id_metricas: m.marca };
+}
 
 const CLAVE_MARCAS = ["marcas", "dashboard"];
 
@@ -151,19 +157,47 @@ function BloqueMarca({
   onConectar,
   onDesconectar,
   onCanal,
+  onEditar,
+  onBorrar,
 }: {
   marca: MarcaDashboard;
   pendiente: string | null;
   onConectar: (marca: string, plataforma: string) => void;
   onDesconectar: (marca: string, red: RedMarca) => void;
   onCanal: (marca: string, canal: CanalPublicacion) => void;
+  onEditar: (marca: MarcaDashboard) => void;
+  onBorrar: (marca: MarcaDashboard) => void;
 }) {
   const conectadas = marca.redes.filter((r) => r.conectado && r.estado === "active").length;
   return (
     <>
       {/* Sumatorio de la marca + canal de publicación. */}
-      <tr className="border-b border-border bg-muted/40 font-medium">
-        <td className="py-2 pl-3 pr-2">{marca.etiqueta}</td>
+      <tr className="group border-b border-border bg-muted/40 font-medium">
+        <td className="py-2 pl-3 pr-2">
+          <span className="flex items-center gap-1.5">
+            {marca.etiqueta}
+            <Tooltip label="Editar marca">
+              <button
+                type="button"
+                onClick={() => onEditar(marca)}
+                className="rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+                aria-label={`Editar ${marca.etiqueta}`}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            </Tooltip>
+            <Tooltip label="Borrar marca">
+              <button
+                type="button"
+                onClick={() => onBorrar(marca)}
+                className="rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                aria-label={`Borrar ${marca.etiqueta}`}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </Tooltip>
+          </span>
+        </td>
         <CeldasNumero c={marca.total} />
         <td className="px-3 py-2 text-right">
           <SelectorCanal
@@ -216,6 +250,12 @@ function BloqueMarca({
 export default function Marcas() {
   const queryClient = useQueryClient();
   const [pendiente, setPendiente] = React.useState<string | null>(null);
+  // CRUD del catálogo: diálogo de crear/editar (null = crear) y de borrar.
+  const [editor, setEditor] = React.useState<{ abierto: boolean; marca: MarcaEditable | null }>({
+    abierto: false,
+    marca: null,
+  });
+  const [aBorrar, setABorrar] = React.useState<MarcaEditable | null>(null);
   const { data, isPending, isError, error, refetch, isFetching } = useQuery({
     queryKey: CLAVE_MARCAS,
     queryFn: ({ signal }) => api.getMarcas(signal),
@@ -304,10 +344,21 @@ export default function Marcas() {
             <p className="text-xs text-muted-foreground">
               {data.generado_en ? `Actualizado ${tiempoRelativo(data.generado_en)}` : "Marcas × redes"}
             </p>
-            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => void refetch()} disabled={isFetching}>
-              <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
-              Actualizar
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs"
+                onClick={() => setEditor({ abierto: true, marca: null })}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Añadir marca
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => void refetch()} disabled={isFetching}>
+                <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
+                Actualizar
+              </Button>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -335,6 +386,8 @@ export default function Marcas() {
                     onConectar={conectar}
                     onDesconectar={desconectar}
                     onCanal={cambiarCanal}
+                    onEditar={(m) => setEditor({ abierto: true, marca: aEditable(m) })}
+                    onBorrar={(m) => setABorrar(aEditable(m))}
                   />
                 ))}
               </tbody>
@@ -342,6 +395,13 @@ export default function Marcas() {
           </div>
         </Card>
       )}
+
+      <DialogoMarca
+        abierto={editor.abierto}
+        inicial={editor.marca}
+        onCerrar={() => setEditor({ abierto: false, marca: null })}
+      />
+      <DialogoBorrarMarca marca={aBorrar} onCerrar={() => setABorrar(null)} />
     </>
   );
 }

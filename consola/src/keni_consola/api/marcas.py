@@ -24,8 +24,11 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from keni_metricas.fuentes import postproxy as _pp_cliente
+from keni_shared import marcas as _km
+from keni_shared.io_atomico import escribir_atomico
 
 from .. import permisos
+from .._http_json import leer_json
 from . import conexiones as _conexiones
 
 # Mensaje de rechazo (mismo que conexiones: vista de estado de conexiones globales).
@@ -46,8 +49,13 @@ def _stats_perfil(api_key: str, perfil_id: str) -> dict:
     return st
 
 
-def _fila_marca(mid: str, etiqueta: str, api_key: str, pp_marca: dict) -> dict:
-    """Una marca: sus redes (estado + números) y el sumatorio. Todo desde Postproxy."""
+def _fila_marca(mid: str, id_canonico: str, etiqueta: str, api_key: str, pp_marca: dict) -> dict:
+    """Una marca: sus redes (estado + números) y el sumatorio. Todo desde Postproxy.
+
+    `mid` es el `id_metricas` (clave de Postproxy/canal); `id_canonico` es el `id` del
+    catálogo (clave del CRUD). Se exponen ambos: las acciones de red/canal usan `marca`
+    (=id_metricas) y las de editar/borrar la marca usan `id` (=canónico).
+    """
     grupo = pp_marca.get("profile_group_id")
     canal = pp_marca.get("canal") or "metricool"
 
@@ -119,6 +127,7 @@ def _fila_marca(mid: str, etiqueta: str, api_key: str, pp_marca: dict) -> dict:
 
     return {
         "marca": mid,
+        "id": id_canonico,
         "etiqueta": etiqueta,
         "canal_publicacion": canal,
         "postproxy": {"conectado": bool(grupo), "profile_group_id": grupo},
@@ -148,7 +157,9 @@ def _construir_dashboard() -> dict:
     hay_seg = hay_posts = hay_dia = False
 
     for mid, etiqueta in _marcas_catalogo.opciones_metricas():
-        fila = _fila_marca(mid, etiqueta, api_key, pp_por_marca.get(mid, {}))
+        m_obj = _marcas_catalogo.marca_por_id_metricas(mid)
+        id_canonico = m_obj.id if m_obj is not None else mid
+        fila = _fila_marca(mid, id_canonico, etiqueta, api_key, pp_por_marca.get(mid, {}))
         filas.append(fila)
         t = fila["total"]
         if isinstance(t["seguidores"], int):
@@ -189,6 +200,179 @@ async def dashboard(request: Request) -> Response:
     return JSONResponse(cuerpo)
 
 
+# --------------------------------------------------------------------------- #
+# CRUD del CATÁLOGO de marcas (fuente única editable). SOLO ADMIN (#153).      #
+#                                                                             #
+# La fuente única vive en un fichero editable bajo /data (`keni_shared.marcas`,
+# `ruta_editable()`). El CRUD lo reescribe ENTERO de forma atómica y recarga el
+# catálogo en caliente (`marcas.recargar()`); el resto de procesos lo ven por su
+# `mtime`. Crear una marca NO crea sus credenciales (eso se conecta luego en el
+# panel); borrarla NO toca sus credenciales (quedan inertes).
+# --------------------------------------------------------------------------- #
+
+import re as _re
+
+_MSG_CRUD_ADMIN = "Solo un administrador puede gestionar las marcas."
+_RE_ID = _re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+_RE_ID_METRICAS = _re.compile(r"^[a-z0-9]+(_[a-z0-9]+)*$")
+# Sin acentos en los ids: traducción mínima para auto-derivar el slug desde la etiqueta.
+_ACENTOS = str.maketrans("áàäâãéèëêíìïîóòöôõúùüûñç", "aaaaaeeeeiiiiooooouuuunc")
+
+
+def _slug(texto: str, sep: str) -> str:
+    """Normaliza a slug (`a-z0-9` + `sep`): minúsculas, sin acentos, separadores colapsados."""
+    base = texto.strip().lower().translate(_ACENTOS)
+    base = _re.sub(r"[^a-z0-9]+", sep, base)
+    return base.strip(sep)
+
+
+def _catalogo_actual() -> list[dict]:
+    """Catálogo vigente como lista de dicts {id, etiqueta, id_metricas}."""
+    return [
+        {"id": m.id, "etiqueta": m.etiqueta, "id_metricas": m.id_metricas}
+        for m in _km.catalogo()
+    ]
+
+
+def _serializar_marcas(marcas: list[dict]) -> str:
+    """Serializa el catálogo a TOML (`[[marca]]`). Escapa comillas/backslash en los valores."""
+    def esc(v: str) -> str:
+        return v.replace("\\", "\\\\").replace('"', '\\"')
+
+    cabecera = (
+        "# Catálogo de marcas de Keni — fuente única, editable desde la consola.\n"
+        "# Generado automáticamente; edítalo desde la página de Marcas, no a mano.\n"
+    )
+    bloques = []
+    for m in marcas:
+        bloques.append(
+            "[[marca]]\n"
+            f'id = "{esc(m["id"])}"\n'
+            f'etiqueta = "{esc(m["etiqueta"])}"\n'
+            f'id_metricas = "{esc(m["id_metricas"])}"\n'
+        )
+    return cabecera + "\n" + "\n".join(bloques)
+
+
+def _persistir(marcas: list[dict]) -> Response | None:
+    """Escribe el catálogo entero de forma atómica y recarga en caliente. None si OK."""
+    ruta = _km.ruta_editable()
+    if ruta is None:
+        return JSONResponse(
+            {"error": "El almacenamiento de marcas no está configurado (falta KENI_DATA_DIR)."},
+            status_code=503,
+        )
+    try:
+        escribir_atomico(ruta, _serializar_marcas(marcas), prefijo=".marcas-", sufijo=".toml.tmp")
+    except OSError:
+        return JSONResponse({"error": "No se pudo guardar el catálogo de marcas."}, status_code=500)
+    _km.recargar()
+    return None
+
+
+async def catalogo_listar(request: Request) -> Response:
+    """GET /api/marcas/catalogo: el catálogo editable (id, etiqueta, id_metricas). SOLO ADMIN."""
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_CRUD_ADMIN)
+    return JSONResponse({"marcas": _catalogo_actual()})
+
+
+async def catalogo_crear(request: Request) -> Response:
+    """POST /api/marcas/catalogo: crea una marca `{etiqueta, id?, id_metricas?}`. SOLO ADMIN.
+
+    `id` se auto-deriva de la etiqueta (slug-guion) si no viene; `id_metricas` del id
+    (guion_bajo) si no viene. Valida formato y unicidad de `id` e `id_metricas`.
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_CRUD_ADMIN)
+    datos = await leer_json(request)
+    etiqueta = datos.get("etiqueta")
+    if not isinstance(etiqueta, str) or not etiqueta.strip():
+        return JSONResponse({"error": "Falta el nombre (etiqueta) de la marca."}, status_code=400)
+    etiqueta = etiqueta.strip()
+    bruto_id = datos.get("id")
+    mid = _slug(bruto_id, "-") if isinstance(bruto_id, str) and bruto_id.strip() else _slug(etiqueta, "-")
+    bruto_im = datos.get("id_metricas")
+    id_metricas = (
+        _slug(bruto_im, "_") if isinstance(bruto_im, str) and bruto_im.strip() else mid.replace("-", "_")
+    )
+    if not _RE_ID.match(mid):
+        return JSONResponse({"error": "El id de la marca no es válido (usa minúsculas y guiones)."}, status_code=400)
+    if not _RE_ID_METRICAS.match(id_metricas):
+        return JSONResponse({"error": "El id_metricas no es válido (usa minúsculas y guiones_bajos)."}, status_code=400)
+
+    catalogo = _catalogo_actual()
+    if any(m["id"] == mid for m in catalogo):
+        return JSONResponse({"error": f"Ya existe una marca con id {mid!r}."}, status_code=409)
+    if any(m["id_metricas"] == id_metricas for m in catalogo):
+        return JSONResponse({"error": f"Ya existe una marca con id_metricas {id_metricas!r}."}, status_code=409)
+
+    nueva = {"id": mid, "etiqueta": etiqueta, "id_metricas": id_metricas}
+    if (err := _persistir([*catalogo, nueva])) is not None:
+        return err
+    return JSONResponse({"marca": nueva, "mensaje": f"Marca {etiqueta!r} creada."}, status_code=201)
+
+
+async def catalogo_editar(request: Request) -> Response:
+    """PUT /api/marcas/catalogo/{id}: edita `etiqueta` y/o `id_metricas` de una marca. SOLO ADMIN.
+
+    El `id` canónico NO se cambia (es la clave estable que referencia el contenido).
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_CRUD_ADMIN)
+    mid = request.path_params["id"]
+    catalogo = _catalogo_actual()
+    actual = next((m for m in catalogo if m["id"] == mid), None)
+    if actual is None:
+        return JSONResponse({"error": "Marca desconocida."}, status_code=404)
+    datos = await leer_json(request)
+
+    etiqueta = actual["etiqueta"]
+    if "etiqueta" in datos:
+        if not isinstance(datos["etiqueta"], str) or not datos["etiqueta"].strip():
+            return JSONResponse({"error": "El nombre (etiqueta) no puede quedar vacío."}, status_code=400)
+        etiqueta = datos["etiqueta"].strip()
+
+    id_metricas = actual["id_metricas"]
+    if "id_metricas" in datos:
+        cand = _slug(str(datos["id_metricas"] or ""), "_")
+        if not _RE_ID_METRICAS.match(cand):
+            return JSONResponse({"error": "El id_metricas no es válido."}, status_code=400)
+        if any(m["id_metricas"] == cand and m["id"] != mid for m in catalogo):
+            return JSONResponse({"error": f"Ya existe una marca con id_metricas {cand!r}."}, status_code=409)
+        id_metricas = cand
+
+    actualizado = {"id": mid, "etiqueta": etiqueta, "id_metricas": id_metricas}
+    nuevo = [actualizado if m["id"] == mid else m for m in catalogo]
+    if (err := _persistir(nuevo)) is not None:
+        return err
+    return JSONResponse({"marca": actualizado, "mensaje": "Marca actualizada."})
+
+
+async def catalogo_borrar(request: Request) -> Response:
+    """DELETE /api/marcas/catalogo/{id}: elimina una marca del catálogo. SOLO ADMIN.
+
+    No se permite borrar la ÚLTIMA marca (el catálogo no puede quedar vacío). No toca las
+    credenciales de la marca (quedan inertes en el config; conéctala de nuevo si la recreas).
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_CRUD_ADMIN)
+    mid = request.path_params["id"]
+    catalogo = _catalogo_actual()
+    if not any(m["id"] == mid for m in catalogo):
+        return JSONResponse({"error": "Marca desconocida."}, status_code=404)
+    if len(catalogo) <= 1:
+        return JSONResponse({"error": "No puedes borrar la última marca."}, status_code=400)
+    nuevo = [m for m in catalogo if m["id"] != mid]
+    if (err := _persistir(nuevo)) is not None:
+        return err
+    return JSONResponse({"mensaje": "Marca eliminada."})
+
+
 RUTAS = [
     Route("/api/marcas", dashboard, methods=["GET"]),
+    Route("/api/marcas/catalogo", catalogo_listar, methods=["GET"]),
+    Route("/api/marcas/catalogo", catalogo_crear, methods=["POST"]),
+    Route("/api/marcas/catalogo/{id}", catalogo_editar, methods=["PUT"]),
+    Route("/api/marcas/catalogo/{id}", catalogo_borrar, methods=["DELETE"]),
 ]
