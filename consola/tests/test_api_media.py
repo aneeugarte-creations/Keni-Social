@@ -125,6 +125,10 @@ def test_servir_imagen_subida(cliente):
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("image/png")
     assert r.content == _PNG_1x1
+    # Media content-addressed = inmutable: se sirve con caché agresiva para que el navegador no
+    # re-descargue cada foto/miniatura en cada apertura de la galería.
+    cache = r.headers["cache-control"]
+    assert "immutable" in cache and "max-age=31536000" in cache
 
 
 def test_servir_inexistente_404(cliente):

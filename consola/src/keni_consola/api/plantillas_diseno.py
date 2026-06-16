@@ -22,8 +22,10 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import threading
 import unicodedata
 
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -37,6 +39,21 @@ _MAX_NOMBRE = 120
 _MAX_LINEAS = 24
 _MAX_MUESTRA_TEXTO = 200  # tope del titular/pleca de muestra (solo overview de la galería)
 _TIPOS_VALIDOS = frozenset({"foto", "miniatura"})
+
+# El preview renderiza con un proceso Node (CPU + ~50 MiB/proc). Sin tope, una galería con N
+# plantillas SIN miniatura dispararía N renders a la vez (HTTP/2 multiplexa las peticiones del
+# navegador) y saturaría CPU/RAM del `back`. Semáforo de HILOS (por worker uvicorn) que se toma
+# DENTRO del threadpool: acota cuántos Node corren en paralelo sin ligarse a ningún event loop
+# (un `asyncio.Semaphore` a nivel de módulo se ligaría al primer loop y rompería en los tests).
+_MAX_PREVIEW_CONCURRENTE = 4
+_sem_preview = threading.BoundedSemaphore(_MAX_PREVIEW_CONCURRENTE)
+
+
+def _render_preview_bytes(doc: dict, bindings: dict[str, str]) -> bytes:
+    """Render del preview ACOTADO por `_sem_preview`. Corre en un hilo del threadpool (subprocess
+    Node), nunca en el event loop. Mira `estudio_imagen` por atributo para respetar el monkeypatch."""
+    with _sem_preview:
+        return estudio_imagen.renderizar_documento_bytes(doc, bindings=bindings)
 
 
 def _normalizar_categoria(valor: object) -> str:
@@ -361,9 +378,12 @@ async def preview(request: Request) -> Response:
         # literal de la capa (quitando el binding) para que igualmente se vea en la galería.
         if not etiqueta_muestra:
             doc = _revelar_pleca(doc)
-        datos = estudio_imagen.renderizar_documento_bytes(
+        # El render corre Node (subprocess): NO en el event loop —si no, bloquea al worker y las
+        # miniaturas de la galería entran de una en una—. Va por threadpool, acotado por `_sem_preview`.
+        datos = await run_in_threadpool(
+            _render_preview_bytes,
             doc,
-            bindings={"copy_in": titular_muestra or "TITULAR", "etiqueta_default": etiqueta_muestra},
+            {"copy_in": titular_muestra or "TITULAR", "etiqueta_default": etiqueta_muestra},
         )
     except (ValueError, TypeError) as e:
         return JSONResponse({"error": f"Documento inválido: {e}"}, status_code=422)

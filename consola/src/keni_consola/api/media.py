@@ -79,17 +79,27 @@ async def subir_video(request: Request) -> Response:
     return JSONResponse({"id": nombre, "url": f"/api/media/{nombre}"})
 
 
+# El media es CONTENT-ADDRESSED (el nombre = hash del contenido; nunca se reescribe bajo el mismo
+# nombre): un objeto es INMUTABLE. Por eso se sirve con caché agresiva y `immutable`, así el
+# navegador no lo revalida ni re-descarga (la galería con N miniaturas/fotos abre instantánea en
+# revisitas). 1 año = el tope práctico de `max-age`.
+_CACHE_MEDIA = "public, max-age=31536000, immutable"
+
+
 async def servir(request: Request) -> Response:
     """Sirve una imagen del almacen de media por nombre (404 si falta; anti-traversal).
 
     Camino backend-NEUTRAL: `media.leer_media` lee del disco (con anti-traversal) o del
     bucket S3 segun el backend activo, y devolvemos los bytes con el mime de la extension.
+    Cacheable inmutable: el nombre es content-addressed, el contenido nunca cambia.
     """
     nombre = request.path_params["nombre"]
     datos = media.leer_media(nombre)
     if datos is None:
         return JSONResponse({"error": "Esa imagen no existe."}, status_code=404)
-    return Response(datos, media_type=media.mime_de(nombre))
+    return Response(
+        datos, media_type=media.mime_de(nombre), headers={"Cache-Control": _CACHE_MEDIA}
+    )
 
 
 def lanzar_generacion_imagen(

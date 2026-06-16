@@ -372,3 +372,55 @@ def test_revelar_pleca_desvincula_solo_etiqueta_default():
     assert out["capas"][1]["binding"] == "copy_in"
     assert out["capas"][2]["binding"] is None
     assert out["capas"][3] == {"tipo": "imagen", "es_foto": True}
+
+
+# --------------------------------------------------------------------------- #
+# GET /{id}/preview: miniatura on-demand del diseño (render Node mockeado)      #
+# --------------------------------------------------------------------------- #
+
+
+def _crear_plantilla(cliente) -> str:
+    """Crea una plantilla mínima y devuelve su id."""
+    r = cliente.post("/api/plantillas-diseno", json={"marca": "unotv", "documento": _DOC})
+    assert r.status_code == 200, r.text
+    return r.json()["plantilla"]["id"]
+
+
+def test_preview_sirve_png_con_etag_y_cache(cliente, monkeypatch):
+    """El preview renderiza el documento a PNG (sin persistir) y lo sirve con ETag + Cache-Control."""
+    from keni_consola.dominio import estudio_imagen
+
+    # Render mockeado: NO lanza Node, devuelve bytes. El handler lo corre por threadpool/semáforo.
+    monkeypatch.setattr(estudio_imagen, "renderizar_documento_bytes", lambda *a, **k: b"PNG")
+    pid = _crear_plantilla(cliente)
+    r = cliente.get(f"/api/plantillas-diseno/{pid}/preview")
+    assert r.status_code == 200
+    assert r.content == b"PNG"
+    assert r.headers["content-type"].startswith("image/png")
+    assert r.headers.get("etag")
+    assert "max-age" in r.headers.get("cache-control", "")
+
+
+def test_preview_304_si_etag_coincide(cliente, monkeypatch):
+    """Con If-None-Match igual al ETag (la plantilla no cambió) -> 304 SIN recomponer (no toca Node)."""
+    from keni_consola.dominio import estudio_imagen
+
+    llamadas = {"n": 0}
+
+    def _render(*a, **k):
+        llamadas["n"] += 1
+        return b"PNG"
+
+    monkeypatch.setattr(estudio_imagen, "renderizar_documento_bytes", _render)
+    pid = _crear_plantilla(cliente)
+    r1 = cliente.get(f"/api/plantillas-diseno/{pid}/preview")
+    etag = r1.headers["etag"]
+    r2 = cliente.get(
+        f"/api/plantillas-diseno/{pid}/preview", headers={"If-None-Match": etag}
+    )
+    assert r2.status_code == 304
+    assert llamadas["n"] == 1  # el 304 NO recompuso
+
+
+def test_preview_404_si_no_existe(cliente):
+    assert cliente.get("/api/plantillas-diseno/noexiste/preview").status_code == 404
