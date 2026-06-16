@@ -376,8 +376,10 @@ def test_clave_gate_de_mapea_cada_daemon_gateado():
     assert latidos.clave_gate_de("patrones") == "KENI_PATRONES_AUTO"
     assert latidos.clave_gate_de("alertas_rendimiento") == "KENI_ALERTAS_RENDIMIENTO"
     assert latidos.clave_gate_de("vencimientos") == "KENI_EVENTOS_VENCIMIENTOS"
-    # Los loops del pipeline no tienen clave propia (varias etapas): toggle de fila = maestro.
-    assert latidos.clave_gate_de("investigacion") == "KENI_MAQUINA"
+    # Investigación tiene interruptor PROPIO (maestro virtual de sus etapas Recolectar/Verificar),
+    # independiente de Producción (antes ambos compartían KENI_MAQUINA). Producción sí usa el
+    # maestro de la máquina (su loop gatea solo con la máquina: el Avance corre incondicional).
+    assert latidos.clave_gate_de("investigacion") == "KENI_INVESTIGACION"
     assert latidos.clave_gate_de("produccion") == "KENI_MAQUINA"
 
 
@@ -400,6 +402,25 @@ def test_clave_gate_son_claves_reales_del_catalogo():
         )
 
 
+def test_ajustes_de_son_claves_reales_del_catalogo():
+    # Cada clave de AJUSTES (los knobs que la página de detalle ofrece editar) debe existir en el
+    # catálogo: si alguien renombra una env, este test cae antes de que el detalle muestre una fila muerta.
+    from keni_consola import ajustes_catalogo
+
+    for daemon, claves in latidos.AJUSTES.items():
+        for clave in claves:
+            assert ajustes_catalogo.por_clave(clave) is not None, (
+                f"ajuste {clave!r} de {daemon!r} no existe en el catálogo"
+            )
+
+
+def test_descripcion_de_mapeada_para_cada_daemon_clasificado():
+    # Todo daemon con etiqueta humana debería tener también descripción (la página de detalle la
+    # muestra). Un daemon sin descripción cae a "" (no rompe), pero queremos cobertura explícita.
+    for daemon in latidos.ETIQUETA:
+        assert latidos.descripcion_de(daemon), f"{daemon!r} sin descripción en latidos.DESCRIPCION"
+
+
 def test_endpoint_daemons_expone_clave_gate(entorno):
     # El endpoint añade `clave_gate` a cada daemon (contrato del toggle de fila): el front
     # lee aquí qué clave conmutar, o null si el daemon es siempre-on.
@@ -409,6 +430,39 @@ def test_endpoint_daemons_expone_clave_gate(entorno):
     por_nombre = {d["daemon"]: d for d in c.get("/api/sistema/daemons").json()["daemons"]}
     assert por_nombre["ingesta"]["clave_gate"] == "KENI_PIPELINE_RECOLECTAR"
     assert por_nombre["limpiador"]["clave_gate"] is None
+
+
+def test_endpoint_daemons_gate_activo_y_en_espera(entorno, monkeypatch):
+    # El switch refleja el flag PROPIO configurado (`gate_activo`), NO el efectivo. Con el flag ON
+    # (env) pero el barrido EFECTIVO apagado (activo=0, p. ej. la máquina off), el estado es
+    # "en_espera" (no "inactivo"): el switch sigue encendido en vez de rebotar.
+    monkeypatch.setenv("KENI_TRENDS", "1")  # interruptor propio de trends ON…
+    db.latido_ciclo("trends", activo=False, intervalo_seg=1800.0, tick_seg=60.0)  # …pero no corre.
+    c = _cli_admin()
+    por_nombre = {d["daemon"]: d for d in c.get("/api/sistema/daemons").json()["daemons"]}
+    assert por_nombre["trends"]["gate_activo"] is True
+    assert por_nombre["trends"]["estado"] == "en_espera"
+
+
+def test_endpoint_daemons_gate_off_es_inactivo(entorno, monkeypatch):
+    # Flag propio OFF (def) -> gate_activo False -> "inactivo" (apagado a propósito), no en_espera.
+    monkeypatch.delenv("KENI_TRENDS", raising=False)
+    db.latido_ciclo("trends", activo=False, intervalo_seg=1800.0, tick_seg=60.0)
+    c = _cli_admin()
+    por_nombre = {d["daemon"]: d for d in c.get("/api/sistema/daemons").json()["daemons"]}
+    assert por_nombre["trends"]["gate_activo"] is False
+    assert por_nombre["trends"]["estado"] == "inactivo"
+
+
+def test_endpoint_daemons_expone_descripcion_y_ajustes(entorno):
+    # Cada daemon trae su `descripcion` (qué hace) y sus `ajustes` (knobs del catálogo) para la
+    # página de detalle. trends: descripción no vacía + su ajuste KENI_TRENDS serializado.
+    db.latido_barrido("trends", ok=True, intervalo_seg=1800.0, tick_seg=60.0)
+    c = _cli_admin()
+    d = {x["daemon"]: x for x in c.get("/api/sistema/daemons").json()["daemons"]}["trends"]
+    assert d["descripcion"] and "tendencias" in d["descripcion"].lower()
+    claves = [a["clave"] for a in d["ajustes"]]
+    assert "KENI_TRENDS" in claves
 
 
 # --------------------------------------------------------------------------- #

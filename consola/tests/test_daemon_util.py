@@ -42,6 +42,45 @@ def test_activo_justo_en_proximo_corre():
     assert proximo == 220.0
 
 
+def test_intervalo_con_backoff_trabajo_vuelve_al_base():
+    # Un barrido con trabajo (o forzado) recupera el base, da igual cuánto se hubiera espaciado.
+    assert daemon_util.intervalo_con_backoff(
+        base=30.0, actual=120.0, hubo_trabajo=True, factor=2.0, max_seg=120.0
+    ) == 30.0
+
+
+def test_intervalo_con_backoff_vacio_crece_hasta_el_tope():
+    # Sin trabajo: parte del base y multiplica por factor en cada vacío, topado en max_seg.
+    i = daemon_util.intervalo_con_backoff(base=30.0, actual=None, hubo_trabajo=False, factor=2.0, max_seg=120.0)
+    assert i == 60.0  # 30 -> 60
+    i = daemon_util.intervalo_con_backoff(base=30.0, actual=i, hubo_trabajo=False, factor=2.0, max_seg=120.0)
+    assert i == 120.0  # 60 -> 120
+    i = daemon_util.intervalo_con_backoff(base=30.0, actual=i, hubo_trabajo=False, factor=2.0, max_seg=120.0)
+    assert i == 120.0  # topado: 120 -> 120
+
+
+def test_bucle_gateado_backoff_espacia_barridos_vacios(monkeypatch):
+    # Con backoff, tras un barrido SIN trabajo el siguiente `proximo` se programa al base*factor:
+    # un reloj que avanza menos que eso NO dispara un segundo barrido en la vuelta siguiente.
+    reloj = {"t": 1000.0}
+    monkeypatch.setattr(daemon_util.time, "monotonic", lambda: reloj["t"])
+    monkeypatch.setattr(daemon_util.time, "sleep", lambda _s: reloj.__setitem__("t", reloj["t"] + 1.0))
+    llamadas = []
+    daemon_util.bucle_gateado(
+        activo_fn=lambda: True,
+        intervalo_seg_fn=lambda: 10.0,
+        sweep_fn=lambda: llamadas.append(1) or [],  # devuelve [] => sin trabajo
+        trabajo_fn=lambda r: bool(r),
+        backoff_max_seg=80.0,
+        tick_seg=1.0,
+        log=_LOG,
+        _max_vueltas=5,
+    )
+    # 1er barrido en t=1000 (proximo=0). Tras vacío, proximo=1000+20=1020. El reloj solo avanza
+    # +1s/vuelta (sleep), así que en 5 vueltas no llega a 1020 => un solo barrido.
+    assert llamadas == [1]
+
+
 def test_bucle_gateado_no_corre_si_apagado():
     llamadas = []
     daemon_util.bucle_gateado(

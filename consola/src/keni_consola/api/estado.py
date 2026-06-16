@@ -175,6 +175,9 @@ def _chequeo_daemons() -> dict:
     atrasados = [str(d.get("daemon", "?")) for d in daemons if d.get("estado") == "atrasado"]
     con_error = [str(d.get("daemon", "?")) for d in daemons if d.get("estado") == "error"]
     inactivos = sum(1 for d in daemons if d.get("estado") == "inactivo")
+    # "en_espera" = interruptor propio ON pero la máquina apagada: no corre, pero NO es un fallo
+    # (igual que "inactivo", se menciona como información en el ok, no dispara aviso/error).
+    en_espera = sum(1 for d in daemons if d.get("estado") == "en_espera")
     if atrasados:
         return _chequeo(
             "maquina:daemons", "Daemons de fondo", "error",
@@ -192,13 +195,15 @@ def _chequeo_daemons() -> dict:
             admin=False,
             siguiente_paso="Mira el detalle del barrido en el panel Sistema (sección Daemons).",
         )
-    activos = len(daemons) - inactivos
+    activos = len(daemons) - inactivos - en_espera
     if not daemons:
         detalle = "Sin daemons registrados todavía (ninguno ha latido)."
     else:
         detalle = f"{activos} daemon(s) latiendo con normalidad."
         if inactivos:
             detalle += f" {inactivos} apagado(s) por ajuste (no es un problema)."
+        if en_espera:
+            detalle += f" {en_espera} en espera de la máquina (no es un problema)."
     return _chequeo("maquina:daemons", "Daemons de fondo", "ok", detalle, admin=False)
 
 

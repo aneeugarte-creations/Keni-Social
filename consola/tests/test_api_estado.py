@@ -275,6 +275,23 @@ def test_chequeo_daemons_inactivo_no_es_problema(entorno, sondas_sanas, monkeypa
     assert ch["siguiente_paso"] is None
 
 
+def test_chequeo_daemons_en_espera_no_es_problema(entorno, sondas_sanas, monkeypatch):
+    """Un daemon «en espera» (su interruptor ON pero la máquina apagada) NO es un fallo: el
+    chequeo queda ok y lo menciona como información, igual que «inactivo»."""
+    sonda = {
+        "daemons": [
+            {"daemon": "investigacion", "estado": "en_espera"},
+            {"daemon": "programador", "estado": "ok"},
+        ],
+        "error": None,
+    }
+    monkeypatch.setattr(api_sistema, "sonda_daemons", lambda: sonda)
+    ch = _chequeos(_cliente().get("/api/estado").json())["maquina:daemons"]
+    assert ch["estado"] == "ok"
+    assert "en espera" in ch["detalle"]
+    assert ch["siguiente_paso"] is None
+
+
 def test_chequeo_daemons_barrido_en_error_avisa(entorno, sondas_sanas, monkeypatch):
     sonda = {"daemons": [{"daemon": "alertas", "estado": "error"}], "error": None}
     monkeypatch.setattr(api_sistema, "sonda_daemons", lambda: sonda)

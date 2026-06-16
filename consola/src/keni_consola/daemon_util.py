@@ -47,6 +47,20 @@ def toca_ejecutar(activo: bool, ahora: float, proximo: float, intervalo: float) 
     return (False, proximo)
 
 
+def intervalo_con_backoff(
+    *, base: float, actual: float | None, hubo_trabajo: bool, factor: float, max_seg: float
+) -> float:
+    """Siguiente intervalo efectivo tras un barrido, con backoff cuando NO hubo trabajo (PURA).
+
+    Un barrido que HIZO algo (o forzado) vuelve al `base`; uno vacio multiplica el intervalo
+    `actual` por `factor` hasta el tope `max_seg`. Sin `actual` previo parte del `base`.
+    Determinista: depende solo de sus argumentos.
+    """
+    if hubo_trabajo:
+        return base
+    return min((actual or base) * factor, max_seg)
+
+
 def bucle_gateado(
     *,
     activo_fn: Callable[[], bool],
@@ -56,6 +70,9 @@ def bucle_gateado(
     log: logging.Logger,
     nombre: str | None = None,
     resumen_fn: Callable[[Any], str] | None = None,
+    trabajo_fn: Callable[[Any], bool] | None = None,
+    backoff_max_seg: float | None = None,
+    backoff_factor: float = 2.0,
     _max_vueltas: int | None = None,
 ) -> None:
     """Bucle GATEADO y responsivo: corre `sweep_fn` solo mientras `activo_fn()` sea True.
@@ -88,6 +105,15 @@ def bucle_gateado(
     responde 409 en ese caso; si el gate se apago entre medias, la solicitud espera a la
     reactivacion, cuyo primer barrido corre de inmediato de todos modos).
 
+    BACKOFF cuando no hay trabajo (opcional, `backoff_max_seg`): un daemon que barre en vacio
+    una y otra vez (p. ej. el pipeline con el pool seco) no necesita despertar a su cadencia
+    base; tras cada barrido SIN trabajo el intervalo se multiplica por `backoff_factor` hasta el
+    tope `backoff_max_seg`, y vuelve al base en cuanto un barrido HACE algo (o se fuerza). Asi el
+    coste ocioso cae sin perder reactividad: el primer barrido con trabajo recupera el ritmo. La
+    senal "hubo trabajo" la da `trabajo_fn(resultado)` (si no se pasa, se usa `bool(resultado)`);
+    un sweep que falla cuenta como SIN trabajo (no debe machacar tras un error). Sin
+    `backoff_max_seg` (def) el intervalo es siempre el base: comportamiento intacto.
+
     `_max_vueltas` (solo para tests) acota el numero de iteraciones del bucle; en
     produccion se deja en None (bucle infinito).
     """
@@ -96,18 +122,34 @@ def bucle_gateado(
     daemon = nombre or latidos.nombre_de_sweep(sweep_fn)
     proximo = 0.0  # 0.0 => si arranca ACTIVO, el primer barrido corre de inmediato.
     vueltas = 0
+    backoff_on = backoff_max_seg is not None
+    intervalo_actual: float | None = None  # intervalo efectivo con backoff; None hasta el 1er ciclo.
     while True:
         activo = activo_fn()
-        intervalo = intervalo_seg_fn()
+        base = intervalo_seg_fn()
+        if backoff_on:
+            # Arranque o reactivacion tras apagado: parte SIEMPRE del base (no arrastra el
+            # backoff de antes de apagar). Si no, conserva el intervalo backoffeado, reclampado
+            # por si el base cambio en caliente (nunca por debajo del base ni por encima del tope).
+            if intervalo_actual is None or not activo:
+                intervalo_actual = base
+            else:
+                intervalo_actual = max(base, min(intervalo_actual, backoff_max_seg))
+            intervalo = intervalo_actual
+        else:
+            intervalo = base
         correr, proximo = toca_ejecutar(activo, time.monotonic(), proximo, intervalo)
         # Barrido FORZADO: se consume SIEMPRE que el gate este ON (aunque tocara barrer ya:
         # ese barrido satisface la solicitud y no debe quedar otro colgado para el tick
         # siguiente). Best-effort: sin BD, `consumir_solicitud` devuelve False y no pasa nada.
-        if activo and latidos.consumir_solicitud(daemon):
+        forzado = activo and latidos.consumir_solicitud(daemon)
+        if forzado:
             correr = True
             proximo = time.monotonic() + intervalo
         if correr:
             t0 = time.monotonic()
+            resultado: Any = None
+            ok_barrido = False
             try:
                 # El sweep corre y deja su `resumen` en el historial (ver docstring): `resumen_fn`
                 # deriva el str de su resultado (conteos), o el propio str que devuelva el sweep, o
@@ -126,12 +168,30 @@ def bucle_gateado(
                     daemon, ok=True, intervalo_seg=intervalo, tick_seg=tick_seg,
                     duracion_ms=int((time.monotonic() - t0) * 1000), resumen=resumen,
                 )
+                ok_barrido = True
             except Exception as e:  # noqa: BLE001 -- un fallo de barrido no debe matar el hilo
                 log.exception("Fallo en el barrido del daemon gateado.")
                 latidos.barrido(
                     daemon, ok=False, intervalo_seg=intervalo, tick_seg=tick_seg,
                     duracion_ms=int((time.monotonic() - t0) * 1000), error=repr(e),
                 )
+            if backoff_on:
+                # ¿El barrido HIZO algo? Un barrido forzado o con trabajo recupera el base; uno
+                # vacio (o fallido) espacia el siguiente hasta el tope. `trabajo_fn` interpreta el
+                # resultado del sweep; sin ella, `bool(resultado)`. Reprograma `proximo` con el
+                # intervalo resultante (un dict/lista vacios cuentan como sin trabajo si hay `trabajo_fn`).
+                try:
+                    hubo = ok_barrido and (
+                        bool(trabajo_fn(resultado)) if trabajo_fn is not None else bool(resultado)
+                    )
+                except Exception:  # noqa: BLE001 -- interpretar el resultado nunca rompe el bucle
+                    hubo = False
+                intervalo_actual = intervalo_con_backoff(
+                    base=base, actual=intervalo_actual, hubo_trabajo=(forzado or hubo),
+                    factor=backoff_factor, max_seg=backoff_max_seg,
+                )
+                intervalo = intervalo_actual
+                proximo = time.monotonic() + intervalo_actual
         else:
             latidos.ciclo(daemon, activo=activo, intervalo_seg=intervalo, tick_seg=tick_seg)
         vueltas += 1

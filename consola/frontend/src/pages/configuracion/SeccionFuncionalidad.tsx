@@ -36,8 +36,11 @@ import { SeccionColapsable } from "./SeccionColapsable";
  *
  * `bloqueado` (solo bool): la fila se muestra APAGADA y deshabilitada porque otro control la
  * gobierna (p. ej. una excepción por marca cuyo maestro de etapa está OFF). `notaBloqueo` es la
- * etiqueta corta que explica por qué. No cambia el valor guardado: solo refleja que no aplica. */
-function FilaAjuste({
+ * etiqueta corta que explica por qué. No cambia el valor guardado: solo refleja que no aplica.
+ *
+ * Exportado: la página de detalle de un daemon (`AgenteDetalle`) reutiliza esta misma fila para
+ * editar in-place los ajustes que gobiernan ese daemon (mismo control por tipo, misma UX). */
+export function FilaAjuste({
   ajuste,
   onGuardar,
   guardando,

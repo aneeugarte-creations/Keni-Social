@@ -37,7 +37,10 @@ function latido(parcial: Partial<LatidoDaemon>): LatidoDaemon {
     gasta_tokens: true,
     etiqueta: "Investigación",
     prompts: [{ etiqueta: "Verificar", doc: "prompt/verificar" }],
-    clave_gate: "KENI_MAQUINA",
+    clave_gate: "KENI_INVESTIGACION",
+    gate_activo: true,
+    descripcion: "",
+    ajustes: [],
     ...parcial,
   };
 }
@@ -123,8 +126,46 @@ describe("AgenteDetalle", () => {
   });
 
   it("daemon sin gate se pinta como «Siempre activo»", async () => {
-    stubFetch({ daemons: [latido({ daemon: "limpiador", etiqueta: "Limpiador", clase: "sistema", motor: null, clave_gate: null, barrible: false, prompts: [] })], barridos: [] });
+    stubFetch({ daemons: [latido({ daemon: "limpiador", etiqueta: "Limpiador", clase: "sistema", motor: null, clave_gate: null, gate_activo: null, barrible: false, prompts: [] })], barridos: [] });
     renderEn("limpiador");
     expect(await screen.findByText("Siempre activo")).toBeInTheDocument();
+  });
+
+  it("muestra la descripción y los ajustes del daemon", async () => {
+    stubFetch({
+      daemons: [
+        latido({
+          descripcion: "Motor de reutilizar: verifica y admite.",
+          ajustes: [
+            {
+              clave: "KENI_INVESTIGACION",
+              tipo: "bool",
+              etiqueta: "Investigación",
+              ayuda: "Enciende la investigación.",
+              grupo: "maestros_investigacion",
+              peligroso: false,
+              valor: true,
+              fuente: "store",
+              defecto: false,
+            },
+          ],
+        }),
+      ],
+      barridos: [],
+    });
+    renderEn("investigacion");
+    expect(await screen.findByText("Qué hace")).toBeInTheDocument();
+    expect(screen.getByText("Motor de reutilizar: verifica y admite.")).toBeInTheDocument();
+    // Bloque de Ajustes con la fila del catálogo (reusa FilaAjuste).
+    expect(screen.getByText("Ajustes")).toBeInTheDocument();
+    expect(screen.getByText("Enciende la investigación.")).toBeInTheDocument();
+  });
+
+  it("«en espera» avisa de que la máquina está apagada", async () => {
+    stubFetch({ daemons: [latido({ estado: "en_espera", activo: false, gate_activo: true })], barridos: [] });
+    renderEn("investigacion");
+    expect(await screen.findByText(/la máquina de contenido está apagada/)).toBeInTheDocument();
+    // El switch sigue reflejando el flag propio (ON), no rebota a OFF.
+    expect(screen.getByRole("switch")).toBeChecked();
   });
 });

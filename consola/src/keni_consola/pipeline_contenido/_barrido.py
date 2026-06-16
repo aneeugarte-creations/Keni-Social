@@ -489,11 +489,19 @@ def ejecutar_ilustrar() -> list[dict[str, Any]]:
 # TICK del flujo continuo (constante, NO un ajuste): reaccionan al ESTADO cada pocos segundos.
 # En cuanto la verificación de una pieza termina, el siguiente tick de producción lanza su Copy. El volumen
 # NO lo pone el tick sino la ADMISIÓN (gate serial en curso por marca) + el backpressure de la
-# cola. Cada proceso tiene su propia constante para poder divergir sin tocar el otro; hoy ambos
-# son 15 s.
-_TICK_INVESTIGACION_SEGUNDOS = 15.0
-_TICK_PRODUCCION_SEGUNDOS = 15.0
+# cola. Cada proceso tiene su propia constante para poder divergir sin tocar el otro.
+#
+# CADENCIA BASE + BACKOFF (auditoría 2026-06): la base es 30 s (antes 15 s: despertaba ~5.760
+# veces/día por loop aunque no hubiera nada). Cuando el pool está seco, `bucle_gateado` espacia
+# el barrido vacío ×2 hasta `_BACKOFF_MAX_SEGUNDOS`, y vuelve a la base en cuanto un barrido HACE
+# algo (verifica/admite/redacta/avanza) o se fuerza desde el panel. Así el coste ocioso cae sin
+# perder reactividad: el primer barrido con trabajo recupera el ritmo.
+_TICK_INVESTIGACION_SEGUNDOS = 30.0
+_TICK_PRODUCCION_SEGUNDOS = 30.0
 _TICK_SEGUNDOS = _TICK_INVESTIGACION_SEGUNDOS  # alias retro: cadencia "del pipeline" = investigación.
+# Tope del backoff cuando se barre en vacío (5 ticks base): a partir de aquí el loop ocioso no
+# espacia más. 120 s mantiene la latencia de arranque acotada cuando vuelve a entrar trabajo.
+_BACKOFF_MAX_SEGUNDOS = 120.0
 
 
 def _intervalo_investigacion_segundos() -> float:
@@ -530,6 +538,18 @@ def _resumen_produccion(res: dict[str, Any]) -> str:
     return f"{copys} copy · {artes} arte(s) · {avances} avance(s) a revisión"
 
 
+def _trabajo_investigacion(res: dict[str, Any]) -> bool:
+    """¿El barrido de INVESTIGACIÓN hizo algo? (señal de backoff: verificó o admitió)."""
+    return bool(res) and bool((res.get("verificados") or []) or (res.get("temas") or []))
+
+
+def _trabajo_produccion(res: dict[str, Any]) -> bool:
+    """¿El barrido de PRODUCCIÓN hizo algo? (señal de backoff: copy, arte o avance)."""
+    return bool(res) and bool(
+        (res.get("lanzados") or []) or (res.get("artes") or []) or (res.get("avances") or [])
+    )
+
+
 def iniciar_pipeline(
     intervalo_segundos: float | None = None,
 ) -> tuple[threading.Thread, threading.Thread]:
@@ -560,6 +580,8 @@ def iniciar_pipeline(
             log=_log,
             nombre="investigacion",
             resumen_fn=_resumen_investigacion,
+            trabajo_fn=_trabajo_investigacion,
+            backoff_max_seg=_BACKOFF_MAX_SEGUNDOS,
         )
 
     def bucle_produccion() -> None:
@@ -570,6 +592,8 @@ def iniciar_pipeline(
             log=_log,
             nombre="produccion",
             resumen_fn=_resumen_produccion,
+            trabajo_fn=_trabajo_produccion,
+            backoff_max_seg=_BACKOFF_MAX_SEGUNDOS,
         )
 
     hilo_inv = threading.Thread(
@@ -582,7 +606,8 @@ def iniciar_pipeline(
     hilo_prod.start()
     estado = "ACTIVA" if config.maquina_activa() else "EN ESPERA (máquina apagada)"
     _log.info(
-        "Pipeline de contenido %s — investigación cada %.0fs, producción cada %.0fs (max/barrido=%d).",
-        estado, intervalo_inv, intervalo_prod, config.pipeline_max(),
+        "Pipeline de contenido %s — investigación cada %.0fs, producción cada %.0fs "
+        "(backoff hasta %.0fs en vacío; max/barrido=%d).",
+        estado, intervalo_inv, intervalo_prod, _BACKOFF_MAX_SEGUNDOS, config.pipeline_max(),
     )
     return hilo_inv, hilo_prod

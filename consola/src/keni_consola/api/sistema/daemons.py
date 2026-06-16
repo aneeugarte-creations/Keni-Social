@@ -14,7 +14,7 @@ from datetime import datetime
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from ... import db, latidos
+from ... import ajustes_catalogo, db, latidos
 from ..._http_json import _entero_query
 from ...tiempo import ahora_iso
 from ._comun import _es_admin, _logger, _rechazo_no_admin
@@ -38,17 +38,58 @@ def _edad_segundos(iso: str, ahora: datetime) -> float | None:
     return max(0.0, (ahora - dt).total_seconds())
 
 
+def _gate_configurado(clave: str | None) -> bool | None:
+    """Valor GUARDADO del flag propio de un daemon (lo que el switch del panel debe reflejar).
+
+    Es el on/off CONFIGURADO de su `clave_gate` (store > env > defecto, vía el catálogo de
+    ajustes), SIN ANDearlo con el maestro de la máquina: por eso el switch se mantiene encendido
+    aunque la máquina esté apagada (el daemon queda «en espera», no «apagado»). None si el daemon
+    no tiene gate (siempre-on) o su clave no es editable. Best-effort: ante cualquier fallo del
+    catálogo devuelve None (el front cae a usar `activo`)."""
+    if not clave:
+        return None
+    try:
+        ajuste = ajustes_catalogo.por_clave(clave)
+        if ajuste is None:
+            return None
+        valor, _fuente = ajustes_catalogo.valor_y_fuente(ajuste)
+        return bool(valor)
+    except Exception as e:  # noqa: BLE001 -- la sonda nunca se cae por leer un ajuste
+        _logger.debug("No se pudo leer el gate configurado de %r: %s", clave, e)
+        return None
+
+
+def _ajustes_de(daemon: str) -> list[dict]:
+    """Ajustes del catálogo que gobiernan el daemon, serializados para editar en su detalle.
+
+    Resuelve cada clave de `latidos.ajustes_de` contra el catálogo (a_dict = valor efectivo +
+    fuente + tipo/min/max/opciones). Salta en silencio las claves que no existan en el catálogo
+    (defensivo: nunca rompe la sonda). Mantiene el orden declarado en `latidos.AJUSTES`."""
+    salida: list[dict] = []
+    for clave in latidos.ajustes_de(daemon):
+        try:
+            ajuste = ajustes_catalogo.por_clave(clave)
+            if ajuste is not None:
+                salida.append(ajustes_catalogo.a_dict(ajuste))
+        except Exception as e:  # noqa: BLE001 -- una clave problemática no tumba la lista
+            _logger.debug("No se pudo serializar el ajuste %r de %r: %s", clave, daemon, e)
+    return salida
+
+
 def sonda_daemons() -> dict:
     """SONDA del estado de los daemons de fondo a partir de sus latidos persistidos.
 
     Devuelve `{daemons: [...], error}` donde cada entrada agrega al registro crudo de
     `daemon_latidos` la `edad_seg` del ultimo latido, el `umbral_atraso_seg` aplicado y
     un `estado` listo para pintar: "ok" (late y su ultimo barrido fue bien), "error"
-    (late pero su ultimo barrido fallo), "inactivo" (apagado por su toggle/gate) o
-    "atrasado" (deberia estar corriendo y no late: hilo muerto, proceso daemons caido o
-    BD inaccesible para el). CRITERIO: un daemon con el gate OFF (`activo=0` en su ultimo
-    latido) esta APAGADO A PROPOSITO — que no late no es un problema, asi que "inactivo"
-    manda sobre "atrasado"; solo un daemon que deberia estar activo puede salir atrasado.
+    (late pero su ultimo barrido fallo), "inactivo" (apagado por su toggle/gate), "en_espera"
+    (su interruptor PROPIO esta ON pero el maestro de la maquina esta OFF: no corre, pero no es
+    un fallo ni esta apagado) o "atrasado" (deberia estar corriendo y no late: hilo muerto,
+    proceso daemons caido o BD inaccesible para el). CRITERIO: el estado se juzga con DOS
+    señales — `gate_activo` (el flag PROPIO configurado, lo que refleja el switch) y `activo`
+    (efectivo: flag propio AND la maquina). Con el flag propio OFF -> "inactivo"; con el flag ON
+    pero sin correr -> "en_espera" (enmascarado por la maquina); solo un daemon que deberia estar
+    activo de verdad puede salir "atrasado".
     Las filas de daemons RETIRADOS (`latidos.RETIRADOS`, p. ej. renombrados en un deploy)
     se ignoran: nadie las actualizara jamas. Defensiva: un fallo de BD degrada a lista
     vacia con `error` legible, nunca propaga. La comparten el endpoint admin
@@ -66,8 +107,16 @@ def sonda_daemons() -> dict:
             continue
         edad = _edad_segundos(f["visto"], ahora)
         umbral = max(2.0 * f["tick_seg"], _UMBRAL_ATRASO_MIN_SEG) + _MARGEN_ATRASO_SEG
-        if not f["activo"]:
+        clave_gate = latidos.clave_gate_de(f["daemon"])
+        gate_activo = _gate_configurado(clave_gate)  # flag PROPIO configurado, o None (siempre-on)
+        if gate_activo is False:
+            # Su interruptor propio está APAGADO a propósito — que no late no es un problema.
             estado = "inactivo"
+        elif not f["activo"]:
+            # Efectivamente no corre. Si su flag propio está ON (gate_activo True), es la MÁQUINA
+            # la que lo enmascara => "en espera" (no apagado). Si no tiene flag propio (None) y aun
+            # así no está activo, es un siempre-on que no debería pasar por aquí: cae a "inactivo".
+            estado = "en_espera" if gate_activo is True else "inactivo"
         elif edad is None or edad > umbral:
             estado = "atrasado"
         elif f["ultimo_error"] and f["ultimo_error"] >= (f["ultimo_ok"] or ""):
@@ -106,7 +155,16 @@ def sonda_daemons() -> dict:
                 # desde su fila (toggle in-place; el front la pasa a POST /api/ajustes).
                 # null = SIEMPRE-ON sin toggle (limpiador/programador/metricas/...). Fuente
                 # unica en `latidos`, asi el front no hardcodea el mapeo daemon->clave.
-                "clave_gate": latidos.clave_gate_de(f["daemon"]),
+                "clave_gate": clave_gate,
+                # `gate_activo`: valor GUARDADO de ese flag propio (lo que el SWITCH refleja), SIN
+                # ANDearlo con la maquina. Asi el switch se mantiene encendido aunque la maquina
+                # este apagada (estado "en_espera") y deja de rebotar a OFF. null = siempre-on.
+                "gate_activo": gate_activo,
+                # `descripcion`: qué hace EXACTAMENTE el daemon (bloque de la pagina de detalle).
+                # `ajustes`: sus knobs editables (catálogo serializado) para operarlo sin salir
+                # de su detalle. Fuente unica en `latidos`.
+                "descripcion": latidos.descripcion_de(f["daemon"]),
+                "ajustes": _ajustes_de(f["daemon"]),
             }
         )
     return {"daemons": salida, "error": None}
@@ -192,11 +250,17 @@ async def daemons_barrer(request: Request) -> Response:
             status_code=409,
         )
     if not fila["activo"]:
+        # No corre de verdad: o su flag propio está OFF, o está «en espera» (flag ON pero la
+        # máquina apagada). En ambos casos el bucle no consumiría la solicitud, así que se rechaza.
+        en_espera = _gate_configurado(latidos.clave_gate_de(daemon)) is True
+        motivo = (
+            "está en espera (su interruptor está encendido pero la máquina de contenido está "
+            "apagada); enciende la máquina"
+            if en_espera
+            else "está apagado por su ajuste; enciéndelo"
+        )
         return JSONResponse(
-            {
-                "error": f"El daemon {daemon!r} está apagado por su ajuste; "
-                "enciéndelo antes de forzar un barrido."
-            },
+            {"error": f"El daemon {daemon!r} {motivo} antes de forzar un barrido."},
             status_code=409,
         )
     db.solicitar_barrido(daemon)

@@ -20,8 +20,10 @@ import {
   Coins,
   FileText,
   Hash,
+  Info,
   Pencil,
   Play,
+  SlidersHorizontal,
   XCircle,
 } from "lucide-react";
 import * as React from "react";
@@ -49,7 +51,7 @@ import { formatearFechaHora, tiempoRelativo } from "@/lib/fecha";
 import { duracion } from "@/lib/formato";
 import { INTERVALO_DETALLE_MS } from "@/lib/refresco";
 import { cn } from "@/lib/utils";
-import { useGuardarAjuste } from "@/pages/configuracion/SeccionFuncionalidad";
+import { FilaAjuste, useGuardarAjuste } from "@/pages/configuracion/SeccionFuncionalidad";
 import type { ClaseDaemon, EstadoDaemon, LatidoDaemon } from "@/types";
 
 // Cuántos barridos pedir al log (el back acota a su cota dura por daemon).
@@ -60,6 +62,7 @@ const ETIQUETA_ESTADO: Record<EstadoDaemon, string> = {
   error: "Error",
   inactivo: "Apagado por ajuste",
   atrasado: "Atrasado",
+  en_espera: "En espera (máquina apagada)",
 };
 const ETIQUETA_CLASE: Record<ClaseDaemon, string> = {
   ia: "IA",
@@ -85,6 +88,7 @@ function ChipEstado({ estado }: { estado: EstadoDaemon }) {
         estado === "ok" && "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
         estado === "error" && "bg-red-500/15 text-red-600 dark:text-red-400",
         estado === "atrasado" && "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+        estado === "en_espera" && "bg-sky-500/15 text-sky-600 dark:text-sky-400",
         estado === "inactivo" && "bg-muted text-muted-foreground",
       )}
     >
@@ -183,12 +187,14 @@ function Controles({ latido }: { latido: LatidoDaemon }) {
         <div className="p-4">
           <div className="pb-2 text-sm font-semibold text-muted-foreground">Controles</div>
           <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-            {/* Encendido IN-PLACE: Switch inline sobre la `clave_gate` */}
+            {/* Encendido IN-PLACE: Switch inline sobre la `clave_gate`. Refleja el flag PROPIO
+                configurado (`gate_activo`), no el efectivo: encenderlo con la máquina apagada se
+                queda ON (estado «en espera») en vez de rebotar. */}
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">Encendido:</span>
               {latido.clave_gate ? (
                 <Switch
-                  checked={latido.activo}
+                  checked={Boolean(latido.gate_activo)}
                   disabled={guardandoClave === latido.clave_gate}
                   onCheckedChange={(v) => onToggle(latido.clave_gate as string, v)}
                   aria-label={`Encender/apagar el daemon ${latido.daemon}`}
@@ -197,6 +203,12 @@ function Controles({ latido }: { latido: LatidoDaemon }) {
                 <span className="text-xs text-muted-foreground">Siempre activo</span>
               )}
             </div>
+            {latido.estado === "en_espera" && (
+              <p className="w-full text-xs text-sky-600 dark:text-sky-400">
+                Encendido, pero la máquina de contenido está apagada: no correrá hasta que la
+                enciendas.
+              </p>
+            )}
           </div>
         </div>
       </FilaConAcciones>
@@ -206,6 +218,52 @@ function Controles({ latido }: { latido: LatidoDaemon }) {
         onCerrar={() => setPromptAbierto(null)}
       />
     </>
+  );
+}
+
+/** Bloque de DESCRIPCIÓN: qué hace EXACTAMENTE el daemon (texto del backend, `latidos.descripcion_de`). */
+function DescripcionDaemon({ texto }: { texto: string }) {
+  if (!texto) return null;
+  return (
+    <Card>
+      <CardHeader className="p-4 pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Info className="h-4 w-4" aria-hidden="true" />
+          Qué hace
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-4 pt-0">
+        <p className="text-sm leading-relaxed text-muted-foreground">{texto}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** AJUSTES del daemon: sus knobs del catálogo, editables IN-PLACE (reusa `FilaAjuste`). Guardar
+ *  invalida la query de daemons para que el valor (y el estado/switch derivados) se refresquen. */
+function AjustesDaemon({ ajustes }: { ajustes: LatidoDaemon["ajustes"] }) {
+  const queryClient = useQueryClient();
+  const guardar = useGuardarAjuste();
+  if (!ajustes.length) return null;
+  const onGuardar = (cuerpo: { clave: string; valor?: boolean | number | string }) =>
+    guardar.mutate(cuerpo, {
+      onSuccess: () =>
+        void queryClient.invalidateQueries({ queryKey: ["sistema", "daemons"] }),
+    });
+  return (
+    <Card>
+      <CardHeader className="p-4 pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm text-muted-foreground">
+          <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+          Ajustes
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-4 pt-0">
+        {ajustes.map((a) => (
+          <FilaAjuste key={a.clave} ajuste={a} onGuardar={onGuardar} guardando={guardar.isPending} />
+        ))}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -452,7 +510,9 @@ export default function AgenteDetalle() {
         </CardContent>
       </Card>
 
+      <DescripcionDaemon texto={latido.descripcion} />
       <Controles latido={latido} />
+      <AjustesDaemon ajustes={latido.ajustes} />
       <LogBarridos daemon={latido.daemon} />
       <Analizar latido={latido} />
     </div>

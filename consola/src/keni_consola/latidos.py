@@ -159,13 +159,18 @@ def motor_de(daemon: str) -> str | None:
 #   - patrones           -> KENI_PATRONES_AUTO        (patrones_refresco: patrones_auto_activo)
 #   - alertas_rendimiento-> KENI_ALERTAS_RENDIMIENTO  (alertas_rendimiento_activas)
 #   - vencimientos       -> KENI_EVENTOS_VENCIMIENTOS (eventos_scanner: eventos_vencimientos_activos)
-#   - investigacion      -> KENI_MAQUINA   (loop pipeline: gate_maquina(alguna_etapa_investigacion_activa);
-#                                           su on/off real son varias claves de etapa —Recolectar/Verificar—
-#                                           sin una clave propia, así que el toggle de fila usa el MAESTRO)
+#   - investigacion      -> KENI_INVESTIGACION  (maestro virtual = sus etapas Recolectar+Verificar;
+#                                           el loop gatea con gate_maquina(alguna_etapa_investigacion_activa),
+#                                           que es True sii Recolectar o Verificar lo está. Interruptor PROPIO,
+#                                           independiente de Producción —antes ambos compartían KENI_MAQUINA—.)
 #   - produccion         -> KENI_MAQUINA   (loop pipeline: gate_maquina(alguna_etapa_produccion_activa),
-#                                           que siempre es True bajo la máquina => su único interruptor es el MAESTRO)
-# Los gateados de máquina (ingesta/trends/algoritmos) corren además bajo
+#                                           que siempre es True bajo la máquina => su único interruptor de loop
+#                                           ES el maestro de la máquina. Redactar/Ilustrar se gatean dentro.)
+# Los gateados de máquina (investigacion/ingesta/trends/algoritmos) corren además bajo
 # KENI_MAQUINA (AND), pero el toggle de SU fila gobierna su flag PROPIO; el maestro es otra fila.
+# Por eso la sonda separa `gate_activo` (valor guardado del flag propio: lo que el switch refleja)
+# de `activo` (efectivo: el flag propio AND la máquina): con la máquina apagada el switch sigue
+# encendido y el estado pasa a «en espera», en vez de rebotar a apagado.
 CLAVE_GATE = {
     "ingesta": "KENI_PIPELINE_RECOLECTAR",
     "trends": "KENI_TRENDS",
@@ -175,7 +180,7 @@ CLAVE_GATE = {
     "patrones": "KENI_PATRONES_AUTO",
     "alertas_rendimiento": "KENI_ALERTAS_RENDIMIENTO",
     "vencimientos": "KENI_EVENTOS_VENCIMIENTOS",
-    "investigacion": "KENI_MAQUINA",
+    "investigacion": "KENI_INVESTIGACION",
     "produccion": "KENI_MAQUINA",
 }
 
@@ -261,6 +266,139 @@ PROMPTS: dict[str, list[dict[str, str]]] = {
 def prompts_de(daemon: str) -> list[dict[str, str]]:
     """Prompts de la Biblioteca que gobiernan el agente IA; vacío si no es IA o no tiene."""
     return [dict(p) for p in PROMPTS.get(daemon, [])]
+
+
+# DESCRIPCIÓN de EXACTAMENTE lo que hace cada daemon: el bloque que la página de detalle
+# (`/maquina/agentes/{daemon}`) muestra para que cualquiera entienda el servicio sin leer código.
+# Fuente única (igual que ETIQUETA/PROMPTS), keyed por nombre canónico. Verificado contra el
+# sweep de cada módulo (auditoría 2026-06). Un daemon no mapeado cae a "" (la página lo omite).
+DESCRIPCION: dict[str, str] = {
+    "investigacion": (
+        "Motor de REUTILIZAR (mitad investigación). Cada barrido lee el pool de noticias ya "
+        "rankeado, caduca lo viejo, admite por marca las historias que superan los umbrales y "
+        "lanza la verificación de la fuente con IA (claude -p). Deja temas verificados listos "
+        "para que Producción escriba el copy. No publica ni escribe copy. Corre bajo la máquina "
+        "y sus etapas Recolectar/Verificar; en vacío espacia el barrido (backoff) y recupera el "
+        "ritmo en cuanto entra trabajo."
+    ),
+    "produccion": (
+        "Motor de CREAR borradores (a partir de lo verificado). Cada barrido redacta el copy de "
+        "los temas verificados (claude -p), genera la imagen por IA cuando toca y avanza los "
+        "borradores completos (copy + arte) a la cola de revisión humana. El AVANCE corre siempre "
+        "que la máquina esté encendida (así no quedan borradores atascados); Redactar e Ilustrar "
+        "se gatean por su propio interruptor. NUNCA publica: todo para en el gate humano."
+    ),
+    "ingesta": (
+        "Recolección persistente de noticias. Sondea en segundo plano los feeds RSS vencidos "
+        "(cadencia por feed/categoría, con backoff por feed que falla), ingiere agencias, agrupa "
+        "los artículos en historias, las re-puntúa y deduplica, fusiona semánticamente y traduce "
+        "lo extranjero, y caduca el pool. Solo lee fuentes públicas y persiste; no genera ni "
+        "publica. Alimenta el pool del que tira Investigación."
+    ),
+    "trends": (
+        "Tendencias de Google como fuente externa. Cada barrido descarga el RSS «trending now» "
+        "por geografía (def MX), parsea sus noticias y las inserta en el pool (deduplicadas). "
+        "Solo añade material al pool; no genera ni publica."
+    ),
+    "algoritmos": (
+        "Inteligencia de plataforma. Refresca los feeds que recogen cambios de algoritmo de las "
+        "redes y persiste las entradas clasificadas. Solo lectura; alimenta el contexto, no "
+        "produce contenido."
+    ),
+    "noticias_gc": (
+        "Limpieza del pool de noticias por RELEVANCIA. Purga las historias de una sola fuente con "
+        "score bajo, inactivas y nunca llevadas al tablero (más items sueltos viejos). Es "
+        "ortogonal a la caducidad por antigüedad (esa la hace Recolección). Conservador: con su "
+        "interruptor apagado no borra nada."
+    ),
+    "media_gc": (
+        "Limpieza de media suelta en el almacén (S3/Garage). Borra los objetos de imagen que "
+        "ninguna publicación referencia y son más viejos que el umbral de antigüedad, "
+        "re-verificando antes de borrar para no tocar nada en uso. Conservador: apagado por "
+        "defecto."
+    ),
+    "patrones": (
+        "Re-derivación de los patrones editoriales de cada marca. Cada N días vuelve a leer las "
+        "métricas reales de Metricool (mejores piezas) y reescribe el perfil de patrones "
+        "(formatos, voces medidas, engagement) por marca. La Voz y las Reglas (criterio humano) "
+        "no se tocan jamás."
+    ),
+    "alertas_rendimiento": (
+        "Vigilancia de rendimiento. Compara el engagement de cada pieza publicada contra el "
+        "umbral y emite una alerta interna cuando una rinde por debajo (idempotente por día). "
+        "Solo lee y emite eventos; no cambia contenido."
+    ),
+    "vencimientos": (
+        "Escáner de vencimientos del tablero. Detecta el contenido cuya fecha de entrega pasó sin "
+        "cerrarse y emite el evento `contenido.vencido` (idempotente). Solo señala; no mueve "
+        "piezas por sí mismo."
+    ),
+    "programador": (
+        "Programador de la parrilla. Cada minuto prepara las piezas programadas que vencen, "
+        "ejecuta el evergreen diario y recupera las aprobadas sin programar. En dry-run (def) "
+        "solo marca; con la publicación real encendida envía al scheduler de Metricool. SIEMPRE "
+        "activo: la publicación real es un interruptor aparte, no apaga el daemon."
+    ),
+    "comercial": (
+        "Captura comercial. Toma snapshots periódicos de las interacciones/visualizaciones de las "
+        "piezas activas para construir su serie temporal de rendimiento. Solo lee de Metricool y "
+        "persiste; degrada honestamente si no hay datos."
+    ),
+    "metricas": (
+        "Caché de métricas agregadas. Refresca en caliente los reportes por marca y rango desde "
+        "Metricool, para que el dashboard abra sin esperar. Solo lectura."
+    ),
+    "metricas_piezas": (
+        "Caché de métricas POR PIEZA. Recalcula el rendimiento individual de las piezas "
+        "publicadas recientes desde Metricool. Solo lectura; alimenta las vistas de pieza."
+    ),
+    "limpiador": (
+        "Reparador del sistema (siempre activo). Cierra como error/interrumpido las generaciones "
+        "colgadas en «ejecutando» cuyo proceso murió (reinicio/deploy/OOM), repara los temas del "
+        "pipeline atascados en verificación y purga registros viejos. Barre al arrancar y cada "
+        "pocos minutos para que nada quede «Generando…» para siempre."
+    ),
+}
+
+
+def descripcion_de(daemon: str) -> str:
+    """Descripción humana de qué hace EXACTAMENTE el daemon (para la página de detalle); "" si no mapeado."""
+    return DESCRIPCION.get(daemon, "")
+
+
+# AJUSTES (claves del catálogo) que GOBIERNAN cada daemon: lo que la página de detalle ofrece
+# editar in-place junto al toggle. La PRIMERA suele ser su `clave_gate` (encendido); el resto son
+# los knobs que afinan su comportamiento. Cada clave debe existir en `ajustes_catalogo` (un test lo
+# verifica); las que no existan ahí se ignoran al serializar (no rompen). Fuente única, como el
+# resto de la clasificación. Un daemon sin entrada (comercial/metricas/metricas_piezas/limpiador)
+# no expone ajustes: su comportamiento no tiene knobs de operación.
+AJUSTES: dict[str, list[str]] = {
+    "investigacion": [
+        "KENI_INVESTIGACION", "KENI_PIPELINE_RECOLECTAR", "KENI_PIPELINE_VERIFICAR",
+        "KENI_PIPELINE_MAX", "KENI_PIPELINE_EN_PROCESO_MAX",
+        "KENI_PROMOVER_MIN_SCORE", "KENI_PROMOVER_MIN_MARCA", "KENI_PROMOVER_MADURACION_MIN",
+    ],
+    "produccion": [
+        "KENI_PRODUCCION", "KENI_PIPELINE_ILUSTRAR",
+        "KENI_GENERACION_PAUSADA", "KENI_PRESUPUESTO_TOKENS_DIA", "KENI_ESFUERZO",
+    ],
+    "ingesta": ["KENI_PIPELINE_RECOLECTAR", "KENI_INGESTA_FILTRO"],
+    "trends": ["KENI_TRENDS"],
+    "algoritmos": ["KENI_ALGORITMOS_AUTO"],
+    "noticias_gc": [
+        "KENI_NOTICIAS_GC", "KENI_NOTICIAS_GC_SCORE_UMBRAL", "KENI_NOTICIAS_GC_INACTIVIDAD_HORAS",
+    ],
+    "media_gc": ["KENI_MEDIA_GC", "KENI_MEDIA_GC_ANTIGUEDAD_HORAS"],
+    "patrones": ["KENI_PATRONES_AUTO", "KENI_PERFIL_EDITORIAL_TTL_HORAS"],
+    "alertas_rendimiento": ["KENI_ALERTAS_RENDIMIENTO", "KENI_ALERTAS_UMBRAL_ENGAGEMENT"],
+    "vencimientos": ["KENI_EVENTOS_VENCIMIENTOS"],
+    "programador": ["KENI_PUBLICAR_REAL"],
+}
+
+
+def ajustes_de(daemon: str) -> list[str]:
+    """Claves de ajuste del catálogo que gobiernan el daemon (para editar en su detalle); [] si ninguna."""
+    return list(AJUSTES.get(daemon, []))
 
 
 # Mínimo entre DOS latidos de ciclo del mismo daemon (las de barrido no se throttlean:

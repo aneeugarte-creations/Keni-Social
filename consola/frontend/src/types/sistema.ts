@@ -503,8 +503,9 @@ export interface RespuestaProbarS3 {
 // iteración (`visto`) y cada barrido deja resultado (`ultimo_ok`/`ultimo_error`). El back
 // ya juzga el `estado` (umbral de atraso incluido); el front solo pinta.
 
-/** Estado agregado de un daemon, calculado por el back. */
-export type EstadoDaemon = "ok" | "error" | "inactivo" | "atrasado";
+/** Estado agregado de un daemon, calculado por el back. `en_espera` = su interruptor propio
+ *  está ON pero la máquina de contenido está apagada (no corre, pero no es un fallo). */
+export type EstadoDaemon = "ok" | "error" | "inactivo" | "atrasado" | "en_espera";
 
 /** Grupo (motor/papel) de un daemon para el dashboard de Workers, calculado por el back. */
 export type GrupoDaemon = "investigacion" | "produccion" | "flujo" | "infra";
@@ -570,6 +571,14 @@ export interface LatidoDaemon {
   /** Clave de ajuste (KENI_*) que enciende/apaga el daemon desde su fila (toggle in-place;
    *  pásala a `POST /api/ajustes`). `null` = SIEMPRE-ON sin toggle (limpiador/programador/…). */
   clave_gate: string | null;
+  /** Valor GUARDADO de ese flag propio (lo que el SWITCH refleja), SIN ANDearlo con la máquina:
+   *  así el switch sigue encendido aunque la máquina esté apagada (estado `en_espera`). `null` =
+   *  siempre-on (sin gate). Distinto de `activo` (efectivo = flag propio AND máquina). */
+  gate_activo: boolean | null;
+  /** Qué hace EXACTAMENTE el daemon (bloque de descripción de la página de detalle); "" si no mapeado. */
+  descripcion: string;
+  /** Ajustes del catálogo que gobiernan el daemon (editables in-place en su detalle); `[]` si ninguno. */
+  ajustes: AjusteAdmin[];
 }
 
 /** Un prompt de la Biblioteca que gobierna un agente IA (etiqueta visible + id de documento). */

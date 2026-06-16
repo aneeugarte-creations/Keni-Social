@@ -31,7 +31,8 @@ const PESO_ESTADO: Record<EstadoDaemon, number> = {
   atrasado: 0,
   error: 1,
   ok: 2,
-  inactivo: 3,
+  en_espera: 3,
+  inactivo: 4,
 };
 
 const ETIQUETA_ESTADO: Record<EstadoDaemon, string> = {
@@ -41,6 +42,8 @@ const ETIQUETA_ESTADO: Record<EstadoDaemon, string> = {
   // (mismo lenguaje que el 409 de «Barrer ahora»), no un fallo.
   inactivo: "Apagado por ajuste",
   atrasado: "Atrasado",
+  // Su interruptor propio está ON pero la máquina está apagada: no corre, pero no es un fallo.
+  en_espera: "En espera (máquina apagada)",
 };
 
 /** Chip de estado de daemon con color semántico (verde/rojo/gris/ámbar). Exportado para que
@@ -54,6 +57,7 @@ export function ChipEstadoDaemon({ estado }: { estado: EstadoDaemon }) {
         estado === "ok" && "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
         estado === "error" && "bg-red-500/15 text-red-600 dark:text-red-400",
         estado === "atrasado" && "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+        estado === "en_espera" && "bg-sky-500/15 text-sky-600 dark:text-sky-400",
         estado === "inactivo" && "bg-muted text-muted-foreground",
       )}
     >
@@ -153,8 +157,11 @@ function FilaDaemon({
           enciende/apaga al vuelo (POST /api/ajustes). Si no, es siempre-activo (sin toggle). */}
       <TableCell>
         {latido.clave_gate ? (
+          // El switch refleja el flag PROPIO configurado (`gate_activo`), NO el efectivo
+          // (`activo`): así encender mientras la máquina está apagada se queda encendido
+          // (estado «en espera») en vez de rebotar a OFF.
           <Switch
-            checked={latido.activo}
+            checked={Boolean(latido.gate_activo)}
             disabled={guardandoClave === latido.clave_gate}
             onCheckedChange={(v) => onToggle(latido.clave_gate as string, v)}
             aria-label={`Encender/apagar el daemon ${latido.daemon}`}
