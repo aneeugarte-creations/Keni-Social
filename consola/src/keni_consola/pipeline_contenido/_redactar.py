@@ -18,7 +18,7 @@ from ._comun import (
     ETAPA_REDACTAR,
     QA_SALTADA,
     TIPO_PIPELINE,
-    VERDICTO_NO_VERIFICADO,
+    VERIFICACION_NO_VERIFICADO,
     _copy_pendiente_leido,
     _log,
     _tiene_copy,
@@ -96,9 +96,9 @@ def lanzar_redactar_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | Non
         n_notas=n_notas,
         tipo_contenido=tipo_contenido,
         # La fuente pasó como `no_verificado` (verificación permisiva, sin verificación a fondo): las
-        # piezas heredan ese aviso (⚠️) en su veredicto, para que la parrilla y Pipelines lo
-        # muestren. Si el copy trajera un veredicto propio, ese manda; aquí da el por defecto.
-        veredicto_inicial=VERDICTO_NO_VERIFICADO,
+        # piezas heredan ese aviso (⚠️) en su verificación, para que la parrilla y Pipelines lo
+        # muestren. Si el copy trajera un verificación propio, ese manda; aquí da el por defecto.
+        revision_inicial=VERIFICACION_NO_VERIFICADO,
         # Dedup al ÉXITO: el post-procesado limpia `copy_pendiente` cuando los borradores ya
         # existen. Un copy fallido conserva la marca y el barrido lo reintenta.
         limpiar_pendiente=True,
@@ -125,7 +125,7 @@ def temas_para_redactar(marca: str | None = None) -> list[dict[str, Any]]:
     """
     listos: list[dict[str, Any]] = []
     for tema in temas_pipeline(marca):
-        if (tema.get("verificar_veredicto") or "") not in (VERDICTO_NO_VERIFICADO, QA_SALTADA):
+        if (tema.get("verificacion_fuente") or "") not in (VERIFICACION_NO_VERIFICADO, QA_SALTADA):
             continue
         if not (tema.get("copy_pendiente") or "").strip():
             continue

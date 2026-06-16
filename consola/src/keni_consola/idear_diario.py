@@ -89,7 +89,7 @@ def _reemitir(original: dict) -> dict | None:
                 imagen_fuente=p.get("imagen_fuente") or "",
                 foto=p.get("foto") or "",
                 video=p.get("video") or "",
-                veredicto=p.get("veredicto") or "",
+                revision=p.get("revision") or "",
                 falta_revision=False,
                 evergreen=True,
             )

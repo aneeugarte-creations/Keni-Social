@@ -1,8 +1,8 @@
 """QA — verificación de la FUENTE (pre-copy) + helper léxico de vista/detalle.
 
-Por cada TEMA nuevo sin veredicto, lanza un `claude -p` que evalúa la NOTA DE ORIGEN (no el copy:
-aún no existe) contra el DOCUMENTO de criterios de la Texto, y persiste un veredicto ESTRUCTURADO
-(`no_verificado`/`problema`) sobre el tema. El veredicto léxico (`qa_lexico`) es PURO y testeable.
+Por cada TEMA nuevo sin verificación, lanza un `claude -p` que evalúa la NOTA DE ORIGEN (no el copy:
+aún no existe) contra el DOCUMENTO de criterios de la Texto, y persiste un verificación ESTRUCTURADO
+(`no_verificado`/`problema`) sobre el tema. El verificación léxico (`qa_lexico`) es PURO y testeable.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ __all__ = [
 
 
 def qa_lexico(publicacion: dict[str, Any]) -> dict[str, Any]:
-    """Veredicto léxico de UN borrador (PURO, testeable): `{verdicto, observaciones:[..]}`.
+    """Verificación léxico de UN borrador (PURO, testeable): `{verificacion, observaciones:[..]}`.
 
     Comprobaciones DETERMINISTAS y baratas (no editorial; el gancho al prompt `qa-editorial`
     real es un TODO):
@@ -59,8 +59,8 @@ def qa_lexico(publicacion: dict[str, Any]) -> dict[str, Any]:
         observaciones.append(
             f"El copy supera el límite de {redes.nombre_por_id(red)} ({len(copy)}/{limite})."
         )
-    verdicto = "listo" if not observaciones else "revisar"
-    return {"verdicto": verdicto, "observaciones": observaciones}
+    verificacion = "listo" if not observaciones else "revisar"
+    return {"verificacion": verificacion, "observaciones": observaciones}
 
 
 def asegurar_documento_qa() -> str:
@@ -72,7 +72,7 @@ def asegurar_documento_qa() -> str:
       - si no, lo CREA con el cuerpo de la inicial `prompt/verificar` (verificación pre-copy). IDEMPOTENTE.
     Devuelve `PROMPT_QA_ID` si el documento queda disponible (creado o ya presente), o "" si no
     se pudo asegurar (best-effort: sin documento, la QA de la fuente no corre y el tema queda sin
-    veredicto, de modo que la fase CD no genera copy hasta que haya verificación).
+    verificación, de modo que la fase CD no genera copy hasta que haya verificación).
 
     Nota: la inicial del paquete ya trae un `prompt/verificar`; `cuerpo_efectivo` lo resuelve
     aunque no esté materializado en el store. Materializarlo aquí garantiza un documento EDITABLE
@@ -137,9 +137,9 @@ def lanzar_verificar_cluster(
     contenido de producción (ADR 0011 F3).
 
     Verificación la nota de origen del cluster (título + resumen + bloques de sus fuentes; usa los
-    cuerpos ARCHIVADOS del feed, sin fetch HTTP — la verificación es permisiva) y sella el veredicto en
-    `noticias_clusters.verificar_veredicto` (no en `contenido`: la pieza aún no existe). El barrido de
-    investigación admite luego solo las `no_verificado` (hereda el veredicto al contenido) y deja
+    cuerpos ARCHIVADOS del feed, sin fetch HTTP — la verificación es permisiva) y sella el verificación en
+    `noticias_clusters.verificacion_fuente` (no en `contenido`: la pieza aún no existe). El barrido de
+    investigación admite luego solo las `no_verificado` (hereda el verificación al contenido) y deja
     fuera las `problema`. ASÍNCRONO: marca el cluster `en_curso` y devuelve la generación; None si
     no se pudo lanzar (sin doc / sin marca / sin nota). `ColaLlenaError` se PROPAGA (corta la fase
     QA de esa marca). Runtime barato (Haiku/low/timeout corto, `_endurecer_qa_fuente`).
@@ -166,7 +166,7 @@ def lanzar_verificar_cluster(
     doc_id = _ref.asegurar_documento_qa()
     cuerpo = libtexto.cuerpo_efectivo(doc_id) if doc_id else None
     if not cuerpo:
-        return None  # sin documento de QA no hay verificación: el cluster queda sin veredicto.
+        return None  # sin documento de QA no hay verificación: el cluster queda sin verificación.
 
     titulo = titulo or dom_qa_titulo(nota)
     prompt = gen_dom.componer(
@@ -175,7 +175,7 @@ def lanzar_verificar_cluster(
         _contexto_qa_fuente(nota),
     )
     # Marca el cluster en curso ANTES de lanzar (la fase QA no lo re-lanza). Con el lanzador
-    # SÍNCRONO de los tests el `procesar` corre DURANTE `lanzar` y persiste el veredicto real;
+    # SÍNCRONO de los tests el `procesar` corre DURANTE `lanzar` y persiste el verificación real;
     # en prod (async) el orden es indiferente. El `procesar` lo sustituye por el real al fin.
     try:
         repos.marcar_cluster_qa(cid, QA_EN_CURSO)

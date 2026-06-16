@@ -24,7 +24,7 @@ function pub(overrides: Partial<Publicacion>): Publicacion {
     contenido: "copy",
     copy_in: "",
     estado: "borrador",
-    veredicto: "",
+    revision: "",
     autor_id: "u1",
     autor_nombre: "Ana",
     responsable_id: "",

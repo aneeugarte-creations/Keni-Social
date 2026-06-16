@@ -53,7 +53,7 @@ CWD_GENERACION = "generacion"
 PROC_COPY = "copy"
 PROC_DOCUMENTO = "documento"
 PROC_HASHTAGS = "hashtags"
-# QA de la FUENTE (pre-copy, rediseño QPC): verificación PERMISIVA de la nota de origen por TEMA. Persiste el veredicto estructurado (`no_verificado`/`problema`) + hallazgos
+# QA de la FUENTE (pre-copy, rediseño QPC): verificación PERMISIVA de la nota de origen por TEMA. Persiste el verificación estructurado (`no_verificado`/`problema`) + hallazgos
 # sobre el `contenido` (tema), para que CD genere copy SOLO de los `no_verificado`.
 PROC_QA_FUENTE = "qa-fuente"
 # Texto de prompts: post-procesado IDENTIDAD. Un prompt de la texto devuelve el
@@ -80,7 +80,7 @@ PROC_IMPORT_CALENDARIO = "import-calendario"
 # (arte sintético, coherencia imagen↔texto, sustancia, rigor, hashtags, voz) y VOTA el nivel
 # "Crítica IA" de la cadena. El worker baja el arte de S3 a un dir temporal (`prefetch_s3` +
 # `dir_temporal`, igual que la importación de parrilla) para que claude lo LEA. El post-procesado
-# parsea el veredicto JSON y, vía `repos`, aprueba el nivel IA (→ se programa sola) o lo rechaza
+# parsea el verificación JSON y, vía `repos`, aprueba el nivel IA (→ se programa sola) o lo rechaza
 # con un comentario sin resolver (→ frena y queda en el feed). Solo el `publicacion_id` viaja.
 PROC_CRITICA_IA = "critica-ia"
 
@@ -185,7 +185,7 @@ def construir_copy(
     imagen_fuente: str = "",
     fotos_notas: list[dict[str, str]] | None = None,
     tipo_contenido: str = "",
-    veredicto_inicial: str = "",
+    revision_inicial: str = "",
     url_fuente: str = "",
     limpiar_pendiente: bool = False,
     etiqueta_exito: str = "",
@@ -203,9 +203,9 @@ def construir_copy(
     salida del copy declara `tipo=carrusel` con `slides`, el post-procesado HORNEA una placa
     por slide (titular + su foto por número) y arma la pieza CARRUSEL. None/[] = sin catálogo
     (los slides salen como placa de solo texto si el modelo elige carrusel).
-    `veredicto_inicial` (pipeline QPC): veredicto por DEFECTO de cada borrador cuando la salida
+    `revision_inicial` (pipeline QPC): verificación por DEFECTO de cada borrador cuando la salida
     no trae uno propio (p. ej. `no_verificado` para que la pieza herede el aviso de la verificación de
-    la fuente). "" = comportamiento de hoy (el veredicto sale de la propia salida del copy).
+    la fuente). "" = comportamiento de hoy (el verificación sale de la propia salida del copy).
     `url_fuente` (RSS, trazabilidad): URL CANONICA de la nota de origen. Si viene, el post-
     procesado la PERSISTE en `contenido.url_fuente` del tema padre de cada borrador (dedup por
     URL). "" = no se toca (comportamiento de hoy).
@@ -231,7 +231,7 @@ def construir_copy(
         "imagen_fuente": imagen_fuente or "",
         "fotos_notas": [dict(f) for f in (fotos_notas or []) if isinstance(f, dict)],
         "tipo_contenido": tipo_contenido or "",
-        "veredicto_inicial": veredicto_inicial or "",
+        "revision_inicial": revision_inicial or "",
         "url_fuente": url_fuente or "",
         "limpiar_pendiente": bool(limpiar_pendiente),
         "etiqueta_exito": etiqueta_exito or "",
@@ -273,8 +273,8 @@ def construir_qa_fuente(
 ) -> dict[str, Any]:
     """Spec del post-procesado de la QA de la FUENTE (pre-copy).
 
-    El veredicto se sella en la HISTORIA (`cluster_id`, ADR 0011 F3): QA sobre la fuente antes de
-    materializar contenido (el worker sella `noticias_clusters.verificar_veredicto`).
+    El verificación se sella en la HISTORIA (`cluster_id`, ADR 0011 F3): QA sobre la fuente antes de
+    materializar contenido (el worker sella `noticias_clusters.verificacion_fuente`).
     """
     return {
         "kind": PROC_QA_FUENTE,
@@ -357,11 +357,11 @@ def construir_import_calendario(
 
 
 def construir_critica_ia(*, publicacion_id: str) -> dict[str, Any]:
-    """Spec del post-procesado de la CRÍTICA IA: parsea el veredicto y vota el nivel IA.
+    """Spec del post-procesado de la CRÍTICA IA: parsea el verificación y vota el nivel IA.
 
     `publicacion_id` es la pieza (`plataforma_id`) cuyo nivel "Crítica IA" se decide. El worker
     reconstruye el callback (que toca `repos`) vía `dominio.critica_ia`; no lleva más estado: la
-    pieza, su cadena y su contenido se releen frescos en el worker al aplicar el veredicto.
+    pieza, su cadena y su contenido se releen frescos en el worker al aplicar el verificación.
     """
     return {"kind": PROC_CRITICA_IA, "publicacion_id": publicacion_id}
 
@@ -541,7 +541,7 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
 
     if kind == PROC_CRITICA_IA:
         # Import perezoso: el factory toca BD (`repos`, `auto_programar`), no cabe en este modulo
-        # de dominio puro. Vota el nivel "Crítica IA" de la cadena segun el veredicto de claude.
+        # de dominio puro. Vota el nivel "Crítica IA" de la cadena segun el verificación de claude.
         from . import critica_ia as dom_critica
 
         return dom_critica.construir_procesar_critica_ia(
@@ -570,7 +570,7 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
             imagen_fuente=p.get("imagen_fuente", "") or "",
             fotos_notas=[f for f in (p.get("fotos_notas") or []) if isinstance(f, dict)],
             tipo_contenido=p.get("tipo_contenido", "") or "",
-            veredicto_inicial=p.get("veredicto_inicial", "") or "",
+            revision_inicial=p.get("revision_inicial", "") or "",
             url_fuente=p.get("url_fuente", "") or "",
         )
         fuente_id = p.get("fuente_id") or ""

@@ -59,7 +59,7 @@ _SELECT_PUBLICACION = (
     "cp.copy_in AS copy_in, "
     "cp.imagen AS imagen, cp.imagen_fuente AS imagen_fuente, cp.foto AS foto, "
     "cp.video AS video, cp.falta_video AS falta_video, "
-    "cp.veredicto AS veredicto, cp.revisor_id AS revisor_id, "
+    "cp.revision AS revision, cp.revisor_id AS revisor_id, "
     "cp.revisor_nombre AS revisor_nombre, cp.revisado_en AS revisado_en, "
     "cp.enviado_a_revision_en AS enviado_a_revision_en, cp.fecha_programada AS fecha_programada, "
     "cp.preparado_en AS preparado_en, cp.id_post_metricool AS id_post_metricool, "
@@ -96,7 +96,7 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
         "contenido": f["copy"] or "",
         "copy_in": f["copy_in"] or "",
         "estado": _ESTADO_PLAT_A_PUB.get(f["pestado"] or "pendiente", "borrador"),
-        "veredicto": f["veredicto"] or "",
+        "revision": f["revision"] or "",
         "autor_id": f["autor_id"] or "",
         "autor_nombre": f["autor_nombre"] or "",
         # REPARTO ("la lista"): quién tiene COGIDA la pieza. Vive en el `contenido` padre
@@ -172,7 +172,7 @@ def crear_publicacion(
     contenido: str = "",
     copy_in: str = "",
     estado: str = "borrador",
-    veredicto: str = "",
+    revision: str = "",
     fecha_programada: str = "",
     origen: str = "",
     imagen: str = "",
@@ -206,7 +206,7 @@ def crear_publicacion(
             contenido=contenido,
             copy_in=copy_in,
             estado=estado,
-            veredicto=veredicto,
+            revision=revision,
             fecha_programada=fecha_programada,
             origen=origen,
             imagen=imagen,
@@ -264,7 +264,7 @@ def _insertar_publicacion(
         imagen_fuente=imagen_fuente,
         # Si hay imagen de fuente (URL del artículo), la pieza YA tiene imagen.
         falta_imagen=False if imagen_fuente else None,
-        veredicto=campos.get("veredicto") or "",
+        revision=campos.get("revision") or "",
         fecha_programada=campos.get("fecha_programada") or "",
         evergreen=evergreen,
         es_publicacion=True,
@@ -288,7 +288,7 @@ def _publicacion_de_filas(
             "copy": plat["copy"], "copy_in": plat["copy_in"], "imagen": plat["imagen"],
             "imagen_fuente": plat["imagen_fuente"], "foto": plat["foto"],
             "video": plat["video"], "falta_video": plat["falta_video"],
-            "veredicto": plat["veredicto"], "revisor_id": plat["revisor_id"],
+            "revision": plat["revision"], "revisor_id": plat["revisor_id"],
             "revisor_nombre": plat["revisor_nombre"], "revisado_en": plat["revisado_en"],
             "enviado_a_revision_en": plat["enviado_a_revision_en"],
             "fecha_programada": plat["fecha_programada"],
@@ -339,7 +339,7 @@ def crear_publicaciones(lista: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 contenido=d.get("contenido", "") or "",
                 copy_in=d.get("copy_in", "") or "",
                 estado=d.get("estado", "borrador") or "borrador",
-                veredicto=d.get("veredicto", "") or "",
+                revision=d.get("revision", "") or "",
                 fecha_programada=d.get("fecha_programada", "") or "",
                 origen=d.get("origen", "") or "",
                 imagen=d.get("imagen", "") or "",
@@ -532,7 +532,7 @@ def obtener_publicacion(publicacion_id: str) -> dict[str, Any] | None:
 _CAMPOS_PUB_A_PLAT: dict[str, str] = {
     "contenido": "copy",
     "copy_in": "copy_in",
-    "veredicto": "veredicto",
+    "revision": "revision",
     # Flags de readiness DERIVADAS del contenido (copy/foto): el editor/espejo las recalcula y
     # persiste al editar para que la LISTA del feed (que las lee) no quede stale. Bool->int abajo.
     "falta_copy": "falta_copy",

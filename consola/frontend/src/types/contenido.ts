@@ -47,7 +47,7 @@ export interface ContenidoPlataforma {
   video: string;
   /** URL servible del video (análogo a imagen_url). "" si no hay. Ola F. */
   video_url: string;
-  veredicto: string;
+  revision: string;
   fecha_programada: string;
   hora_post: string;
   enlace: string;
@@ -370,7 +370,7 @@ export interface CuerpoActualizarPlataforma {
   enlace?: string;
   fecha_programada?: string;
   hora_post?: string;
-  veredicto?: string;
+  revision?: string;
   evergreen?: boolean;
   copy_in_exento?: boolean;
   /** Ola F: clave del asset de video; al enviarlo el backend limpia falta_video. */

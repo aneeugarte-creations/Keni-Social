@@ -52,7 +52,7 @@ describe("CadenaAprobacion · panel de estado (solo lectura)", () => {
     expect(screen.queryByText(/Faltan/i)).not.toBeInTheDocument();
   });
 
-  it("NO pinta el veredicto de IA (menos IA de cara al equipo): ni 'IA: …' ni el nivel QA", () => {
+  it("NO pinta el revision de IA (menos IA de cara al equipo): ni 'IA: …' ni el nivel QA", () => {
     // La cadena trae el nivel automático «QA Editorial» aprobado; NO debe pintarse como badge.
     const c = cadenaOK({
       niveles: [

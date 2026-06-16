@@ -11,7 +11,7 @@ símbolos privados que algún consumidor importa directamente), de modo que
   - `_admitir`   — ADMITIR (CI): promueve HISTORIAS (clusters) ya verificadas del pool rankeado
                    a temas SIN copy, con dedup, cupos por marca/plan y caducidad (TTL).
   - `_verificar` — VERIFICAR (QA): verifica la FUENTE de la HISTORIA (`claude -p`) ANTES de
-                   admitir + veredicto léxico del copy para la vista de runs (`qa_lexico`).
+                   admitir + verificación léxico del copy para la vista de runs (`qa_lexico`).
   - `_redactar`  — REDACTAR (CD): lanza el copy de los temas con QA `no_verificado` sin copy
                    (+ los temas del news-pool sin copy).
   - `_revisar`   — revisión de calidad ADVISORY del copy (voz + coherencia), pre-avance.
@@ -26,7 +26,7 @@ advisory lock (ver `_barrido`):
 
   • INVESTIGACIÓN — caducidad (TTL) -> VERIFICAR la fuente de las historias candidatas del pool
     (QA sobre el CLUSTER, pre-admisión, asíncrona vía `claude -p`) -> ADMITIR las verificadas
-    como temas (heredando su veredicto). La frontera "QA = investigación" vive en los datos: la
+    como temas (heredando su verificación). La frontera "QA = investigación" vive en los datos: la
     admisión solo promueve historias ya verificadas (`no_verificado`/`saltada`); las `problema`
     nunca se materializan (fail-closed).
   • PRODUCCIÓN — REDACTAR el copy de los temas verificados -> ILUSTRAR (etapa de arte) -> AVANCE
@@ -34,7 +34,7 @@ advisory lock (ver `_barrido`):
 
 ASINCRONÍA (DOS FASES)
 ======================
-La QA es asíncrona (`claude -p`): una historia verificada en un barrido NO tiene veredicto en
+La QA es asíncrona (`claude -p`): una historia verificada en un barrido NO tiene verificación en
 ESE mismo barrido; el `procesar` lo persiste en el cluster y la admisión de un barrido POSTERIOR
 la promueve. El estado vive en el cluster/tema: idempotente y auto-curativo.
 
@@ -42,7 +42,7 @@ SEGURO POR DISEÑO
 =================
 Cada etapa está GATEADA por su toggle bajo el maestro `KENI_MAQUINA` (apagar/encender en runtime
 sin reiniciar). NADA se publica solo: el borrador nace `borrador`, el AVANCE solo lo mueve a la
-cola de revisión HUMANA, y la publicación real sigue gated por `KENI_PUBLICAR_REAL`. El veredicto
+cola de revisión HUMANA, y la publicación real sigue gated por `KENI_PUBLICAR_REAL`. El verificación
 léxico (`qa_lexico`) es PURO y testeable.
 """
 
@@ -101,8 +101,8 @@ from ._comun import (
     QA_CADUCADA,
     TIPO_ACTIVIDAD,
     TIPO_PIPELINE,
-    VERDICTO_NO_VERIFICADO,
-    VERDICTO_PROBLEMA,
+    VERIFICACION_NO_VERIFICADO,
+    VERIFICACION_PROBLEMA,
     _autor_pipeline,
     _copy_pendiente_leido,
     _extraer_og_image,
@@ -192,8 +192,8 @@ __all__ = [
     "QA_EN_CURSO",
     "QA_SALTADA",
     "QA_CADUCADA",
-    "VERDICTO_NO_VERIFICADO",
-    "VERDICTO_PROBLEMA",
+    "VERIFICACION_NO_VERIFICADO",
+    "VERIFICACION_PROBLEMA",
     "_DIAS_DEDUP",
     "_FORMATO_PIPELINE",
     "_TITULO_QA",

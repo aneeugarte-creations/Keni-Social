@@ -44,8 +44,8 @@ __all__ = [
     "QA_EN_CURSO",
     "QA_SALTADA",
     "QA_CADUCADA",
-    "VERDICTO_NO_VERIFICADO",
-    "VERDICTO_PROBLEMA",
+    "VERIFICACION_NO_VERIFICADO",
+    "VERIFICACION_PROBLEMA",
     "_DEFAULT_QA_CRITERIOS",
     # og:image
     "_RE_OG_IMAGE",
@@ -130,26 +130,26 @@ _TITULO_QA = "Verificar"
 # la etapa se llama "Verificar", y la actividad debe llamarse igual para no desconcertar.
 _ETIQUETA_QA = "Verificar la fuente"
 
-# Veredicto SENTINEL que se persiste en el TEMA mientras su QA de la fuente (claude -p) está en
-# curso: la fase QA NO lo re-lanza (deja de estar "sin veredicto") y la vista Pipelines pinta la
-# etapa QA como "en curso". Al completar, el `procesar` lo sustituye por el veredicto real.
+# Verificacion SENTINEL que se persiste en el TEMA mientras su QA de la fuente (claude -p) está en
+# curso: la fase QA NO lo re-lanza (deja de estar "sin verificacion") y la vista Pipelines pinta la
+# etapa QA como "en curso". Al completar, el `procesar` lo sustituye por el verificacion real.
 QA_EN_CURSO = "en_curso"
 
-# Veredicto SENTINEL que se persiste cuando la etapa QA está DESACTIVADA para la marca (toggle
+# Verificacion SENTINEL que se persiste cuando la etapa QA está DESACTIVADA para la marca (toggle
 # `KENI_PIPELINE_VERIFICAR` off): no se lanza la verificación, pero el tema NO queda bloqueado: `temas_para_redactar` lo acepta
 # igual que un `no_verificado`, así el copy se genera sin verificación. La vista Pipelines pinta QA como
-# "saltada". Distinto de "sin veredicto" (que significaría "QA pendiente, aún por verificar").
+# "saltada". Distinto de "sin verificacion" (que significaría "QA pendiente, aún por verificar").
 QA_SALTADA = "saltada"
 
-# Veredicto TERMINAL de FRESCURA: el tema superó el TTL en curso (`KENI_PIPELINE_TEMA_TTL_HORAS`)
+# Verificacion TERMINAL de FRESCURA: el tema superó el TTL en curso (`KENI_PIPELINE_TEMA_TTL_HORAS`)
 # sin completar sus fases y CADUCA: sale del gate serial (libera hueco de admisión), no se verificación
 # ni genera copy. El pipeline es ventana deslizante sobre el ranking: lo de ayer no entra hoy.
 QA_CADUCADA = "caducada"
 
-# Veredictos ESTRUCTURADOS de la QA de la FUENTE (rediseño QPC), reexportados del dominio para
+# Verificaciones ESTRUCTURADAS de la QA de la FUENTE (rediseño QPC), reexportados del dominio para
 # que el sweep, la API y los tests compartan los literales sin acoplarse al módulo de dominio.
-VERDICTO_NO_VERIFICADO = dom_verificar.VERDICTO_NO_VERIFICADO  # ⚠️ OK para seguir (no verificado a fondo)
-VERDICTO_PROBLEMA = dom_verificar.VERDICTO_PROBLEMA  # ❗ algo de peso en contra: NO se genera copy
+VERIFICACION_NO_VERIFICADO = dom_verificar.VERIFICACION_NO_VERIFICADO  # ⚠️ OK para seguir (no verificado a fondo)
+VERIFICACION_PROBLEMA = dom_verificar.VERIFICACION_PROBLEMA  # ❗ algo de peso en contra: NO se genera copy
 
 # Criterios por defecto del documento QA que se CREA si aún no existe (idempotente). MISMO
 # cuerpo que la inicial `prompt/verificar` del paquete (último recurso si la inicial no se
@@ -171,7 +171,7 @@ un PROBLEMA cuando hay algo de PESO en contra (un dato claramente falso, un asun
 serio, una fuente no fiable o sensacionalista que no debería amplificarse). Ante la duda, DEJA
 PASAR: el copy generado llevará un aviso de "no verificado" y un humano lo revisará después.
 
-## Veredicto (ANTES del detalle)
+## Verificacion (ANTES del detalle)
 
 Empieza, arriba del todo, por una sola línea de semáforo:
 
@@ -489,13 +489,13 @@ def registrar_etapa(
 # admitir): en proceso + verificados-pendientes + saltados. Acotan cuanta verificación se lanza por tick (el mismo
 # `_ADMISION_QA` que usa `_barrido`); aqui se exponen para que el Monitor lea el admision sin
 # importar el barrido (el orquestador) desde la capa API.
-ADMISION_QA_ESTADOS = (QA_EN_CURSO, VERDICTO_NO_VERIFICADO, QA_SALTADA)
+ADMISION_QA_ESTADOS = (QA_EN_CURSO, VERIFICACION_NO_VERIFICADO, QA_SALTADA)
 
-# Veredictos que ADMITEN a producción (ADR 0011 F3): la historia pasó la verificación (`no_verificado`)
+# Verificaciones que ADMITEN a producción (ADR 0011 F3): la historia pasó la verificación (`no_verificado`)
 # o la QA estaba saltada para la marca. FUENTE ÚNICA del filtro OBLIGATORIO de la admisión: la
 # usa `promover_clusters_marca`/`clusters_para_promover` por defecto (no existe ya un camino que
 # promueva SIN verificar) y el barrido de investigación.
-VERIFICADAS_QA = (VERDICTO_NO_VERIFICADO, QA_SALTADA)
+VERIFICADAS_QA = (VERIFICACION_NO_VERIFICADO, QA_SALTADA)
 
 
 def admision_qa() -> dict[str, Any]:
@@ -646,7 +646,7 @@ def en_backoff(tema: dict[str, Any], campo: str) -> bool:
 
 
 def marcar_fallo_etapa(tema_id: str, etapa: str, motivo: str) -> None:
-    """Marca el tema con veredicto `problema` por fallo REPETIDO de una etapa (salida terminal).
+    """Marca el tema con verificacion `problema` por fallo REPETIDO de una etapa (salida terminal).
 
     El tema sale del cupo en curso (deja de reintentarse y de bloquear la admisión de su marca)
     y el fallo queda visible (❗) con un hallazgo de sistema. Mismo formato que la verificación QA.
@@ -659,7 +659,7 @@ def marcar_fallo_etapa(tema_id: str, etapa: str, motivo: str) -> None:
     }]
     try:
         repos.actualizar_contenido(tema_id, {
-            "verificar_veredicto": VERDICTO_PROBLEMA,
+            "verificacion_fuente": VERIFICACION_PROBLEMA,
             "verificar_hallazgos": json.dumps(hallazgos, ensure_ascii=False),
         })
         _log.warning("pipeline: tema %s marcado problema por fallo repetido de %s", tema_id, etapa)

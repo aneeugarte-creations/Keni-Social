@@ -2,7 +2,7 @@
 """analiza-video.py - reune SENALES para saber si un video es nuevo o ya circulaba antes.
 
 Resuelve el "pega el link y dime si es reciente o si ya salio hace anos" del equipo de
-redes. NO da el veredicto final: junta evidencia objetiva y se la pasa a la skill
+redes. NO da el dictamen final: junta evidencia objetiva y se la pasa a la skill
 (Claude) y al humano para que decidan. Pensado para el camino GRATIS (sin APIs de pago):
 
   1. Metadatos de la plataforma con yt-dlp  -> fecha de SUBIDA, autor, titulo, miniatura.
@@ -358,7 +358,7 @@ def fact_check(query: str | None) -> dict:
             "afirmacion": c.get("text"),
             "quien_lo_dijo": c.get("claimant"),
             "verificador": (rev.get("publisher") or {}).get("name"),
-            "veredicto": rev.get("textualRating"),
+            "dictamen": rev.get("textualRating"),
             "url": rev.get("url"),
             "fecha": rev.get("reviewDate") or c.get("claimDate"),
         })
@@ -1049,7 +1049,7 @@ def senales_ia_generativa(meta_ia: dict, ocr: dict) -> list[dict]:
 
 
 # --------------------------------------------------------------------------- #
-# Senales (pistas objetivas; el veredicto lo da la skill + el humano)         #
+# Senales (pistas objetivas; el dictamen lo da la skill + el humano)         #
 # --------------------------------------------------------------------------- #
 
 def construir_senales(meta: dict, ocr: dict, fc: dict) -> list[dict]:

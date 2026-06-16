@@ -9,7 +9,7 @@ subida, fechas/anos en pantalla (OCR) y enlaces de BUSQUEDA INVERSA listos para 
     "ejecutando"); el frontend SONDEA `GET /api/generaciones/{id}` y, al completar,
     recoge `resultado = {verificacion: <reporte>}`.
 
-NO da un veredicto automatico: junta evidencia y deja la confirmacion (busqueda
+NO da un dictamen automatico: junta evidencia y deja la confirmacion (busqueda
 inversa) al humano. Reutiliza la infra de generaciones en background (mismo sondeo
 que imagen): `lanzar_job_imagen` es el runner generico de un callable en un hilo.
 

@@ -252,7 +252,7 @@ export interface PipelinePieza {
   red: string;
   red_nombre: string;
   estado: string;
-  veredicto: string;
+  revision: string;
   falta_copy: boolean;
   falta_imagen: boolean;
   copy?: string;
@@ -275,10 +275,10 @@ export interface PipelineHallazgo {
   no_verificable?: boolean;
 }
 
-/** Veredicto ESTRUCTURADO de la verificación de la fuente (rediseño QPC, pre-copy):
+/** Verificación ESTRUCTURADA de la fuente (rediseño QPC, pre-copy):
  *  `no_verificado` (⚠️ apta, no verificada a fondo) o `problema` (❗ algo de peso: sin copy). */
 export interface PipelineQaFuente {
-  veredicto: string;
+  verificacion_fuente: string;
   no_verificado: boolean;
   problema: boolean;
   copy_omitido: boolean;
@@ -345,7 +345,7 @@ export interface Pipeline {
 }
 
 /** Un tema BLOQUEADO del pipeline (`GET /api/pipelines/problemas`): tras agotar reintentos
- *  (o una verificación de peso) queda con veredicto `problema` y SALE del flujo; esta forma lo hace
+ *  (o una verificación de peso) queda con verificacion `problema` y SALE del flujo; esta forma lo hace
  *  visible para que un humano decida (relanzar a mano / descartar). */
 export interface ProblemaPipeline {
   id: string;

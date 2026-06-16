@@ -50,10 +50,10 @@ def test_run_qa_no_verificado_con_copy(cliente):
 
     Orden NUEVO (rediseño QPC): ADMITIR -> Verificación de la fuente (VERIFICAR) -> Copy (REDACTAR) -> Aprobar.
     """
-    tema = _tema_pipeline("Tema apto", verificar_veredicto="no_verificado")
+    tema = _tema_pipeline("Tema apto", verificacion_fuente="no_verificado")
     repos.crear_contenido_plataforma(
         contenido_id=tema["id"], red="x", estado="borrador",
-        copy="Copy válido y corto.", veredicto="no_verificado",
+        copy="Copy válido y corto.", revision="no_verificado",
     )
     run = _run_por_titulo(cliente, "Tema apto")
     assert run is not None
@@ -74,7 +74,7 @@ def test_run_qa_no_verificado_con_copy(cliente):
 
 
 def test_run_sin_qa_todo_pendiente(cliente):
-    """Tema sin veredicto de VERIFICAR todavía: VERIFICAR y REDACTAR pendientes (la VERIFICAR va antes del copy)."""
+    """Tema sin verificacion de VERIFICAR todavía: VERIFICAR y REDACTAR pendientes (la VERIFICAR va antes del copy)."""
     tema = _tema_pipeline("Tema sin verificación")
     repos.crear_contenido_plataforma(
         contenido_id=tema["id"], red="x", estado="borrador", copy="",
@@ -92,7 +92,7 @@ def test_run_qa_problema_omite_copy(cliente):
         '{"resumen": "Dato falso", '
         '"hallazgos": [{"tipo": "dato", "gravedad": "error", "explicacion": "x"}]}'
     )
-    _tema_pipeline("Tema con problema", verificar_veredicto="problema", verificar_hallazgos=hallazgos)
+    _tema_pipeline("Tema con problema", verificacion_fuente="problema", verificar_hallazgos=hallazgos)
     run = _run_por_titulo(cliente, "Tema con problema")
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
     assert etapas["verificar"] == "revisar"
@@ -106,10 +106,10 @@ def test_run_qa_problema_omite_copy(cliente):
 def test_aprobacion_esperando_humano_es_pendiente(cliente):
     """Piezas EN REVISIÓN sin ninguna aprobada = la run espera al HUMANO: 'pendiente' (con el
     detalle 'En revisión'), no 'en_curso' — la máquina no está haciendo nada."""
-    tema = _tema_pipeline("Run en revisión", verificar_veredicto="no_verificado")
+    tema = _tema_pipeline("Run en revisión", verificacion_fuente="no_verificado")
     repos.crear_contenido_plataforma(
         contenido_id=tema["id"], red="x", estado="en_revision",
-        copy="Copy.", veredicto="no_verificado",
+        copy="Copy.", revision="no_verificado",
     )
     run = _run_por_titulo(cliente, "Run en revisión")
     ap = next(e for e in run["etapas"] if e["clave"] == "aprobar")
@@ -120,10 +120,10 @@ def test_aprobacion_esperando_humano_es_pendiente(cliente):
 
 def test_run_aprobado(cliente):
     """Pieza aprobada con VERIFICAR `no_verificado` -> aprobación ok y estado_global ok."""
-    tema = _tema_pipeline("Tema aprobado", verificar_veredicto="no_verificado")
+    tema = _tema_pipeline("Tema aprobado", verificacion_fuente="no_verificado")
     repos.crear_contenido_plataforma(
         contenido_id=tema["id"], red="x", estado="aprobado",
-        copy="Copy.", veredicto="no_verificado",
+        copy="Copy.", revision="no_verificado",
     )
     run = _run_por_titulo(cliente, "Tema aprobado")
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
@@ -138,10 +138,10 @@ def test_run_qa_saltada_genera_copy(cliente, monkeypatch):
         "keni_consola.ajustes.obtener",
         lambda clave: "0" if clave == config.clave_por_marca(config.ENV_PIPELINE_VERIFICAR, "unotv") else None,
     )
-    tema = _tema_pipeline("Tema sin VERIFICAR", verificar_veredicto="saltada")
+    tema = _tema_pipeline("Tema sin VERIFICAR", verificacion_fuente="saltada")
     repos.crear_contenido_plataforma(
         contenido_id=tema["id"], red="x", estado="borrador",
-        copy="Copy generado sin verificación.", veredicto="no_verificado",
+        copy="Copy generado sin verificación.", revision="no_verificado",
     )
     run = _run_por_titulo(cliente, "Tema sin VERIFICAR")
     assert run is not None
@@ -176,11 +176,11 @@ def test_marca_con_noticias_off_sigue_localizable(cliente, monkeypatch):
 def test_etapas_ejecutadas_no_se_repintan_con_toggles_off(cliente, monkeypatch):
     """Una run COMPLETADA pinta sus etapas por lo EJECUTADO aunque hoy TODOS los toggles estén
     apagados: encender/apagar interruptores no ilumina ni apaga la historia de las runs."""
-    tema = _tema_pipeline("Run histórica", verificar_veredicto="no_verificado")
+    tema = _tema_pipeline("Run histórica", verificacion_fuente="no_verificado")
     _historia_de(tema["id"], n_fuentes=3, n_items=4, score=0.8)
     repos.crear_contenido_plataforma(
         contenido_id=tema["id"], red="x", estado="aprobado",
-        copy="Copy hecho.", veredicto="no_verificado",
+        copy="Copy hecho.", revision="no_verificado",
     )
     for env in (config.ENV_PIPELINE_FUSIONAR, config.ENV_PRIORIZAR_PERFIL_IA,
                 config.ENV_PIPELINE_RECOLECTAR, config.ENV_PIPELINE_VERIFICAR,
@@ -191,14 +191,14 @@ def test_etapas_ejecutadas_no_se_repintan_con_toggles_off(cliente, monkeypatch):
     assert estados["fusionar"] == "ok"      # hay historia enlazada: la fusión corrió
     assert estados["priorizar"] == "ok"   # hay score: el encaje corrió
     assert estados["admitir"] == "ok"          # el tema existe: la selección corrió
-    assert estados["verificar"] == "ok"          # veredicto persistido: la verificación corrió
+    assert estados["verificar"] == "ok"          # verificacion persistido: la verificación corrió
     assert estados["redactar"] == "ok"          # hay copy persistido: la etapa corrió
 
 
 def test_run_caducada_se_pinta_cerrada(cliente):
     """Una run CADUCADA (TTL de frescura) queda CERRADA sin producto: Verificar 'saltada' con
     el motivo, Copy/Aprobar 'saltada' (no un 'pendiente' eterno) y estado_global 'ok'."""
-    _tema_pipeline("Run caducada", verificar_veredicto="caducada")
+    _tema_pipeline("Run caducada", verificacion_fuente="caducada")
     run = _run_por_titulo(cliente, "Run caducada")
     etapas = {e["clave"]: e for e in run["etapas"]}
     assert etapas["verificar"]["estado"] == "saltada"
@@ -301,11 +301,11 @@ def test_paginacion_envelope_y_offset(cliente):
 
 def test_etapa_actual_y_filtro_por_etapa(cliente):
     """`etapa_actual` = la etapa donde está parada; `?etapa=` filtra por ella."""
-    aprob = _tema_pipeline("Run aprobada", verificar_veredicto="no_verificado")
+    aprob = _tema_pipeline("Run aprobada", verificacion_fuente="no_verificado")
     repos.crear_contenido_plataforma(
-        contenido_id=aprob["id"], red="x", estado="aprobado", copy="C.", veredicto="no_verificado",
+        contenido_id=aprob["id"], red="x", estado="aprobado", copy="C.", revision="no_verificado",
     )
-    _tema_pipeline("Run en VERIFICAR")  # sin veredicto: la VERIFICAR queda 'pendiente'
+    _tema_pipeline("Run en VERIFICAR")  # sin verificacion: la VERIFICAR queda 'pendiente'
     en_qa = _run_por_titulo(cliente, "Run en VERIFICAR")
     assert en_qa["etapa_actual"] == "verificar"
     aprobada = _run_por_titulo(cliente, "Run aprobada")
@@ -427,7 +427,7 @@ def test_detalle_404(cliente):
 
 
 # --------------------------------------------------------------------------- #
-# GET /api/pipelines/problemas: temas bloqueados (veredicto `problema`)         #
+# GET /api/pipelines/problemas: temas bloqueados (verificacion `problema`)         #
 # --------------------------------------------------------------------------- #
 
 
@@ -443,9 +443,9 @@ def test_problemas_lista_temas_bloqueados(cliente):
         }],
     })
     _tema_pipeline(
-        "Tema bloqueado", verificar_veredicto="problema", verificar_hallazgos=hallazgos, copy_pendiente=pend,
+        "Tema bloqueado", verificacion_fuente="problema", verificar_hallazgos=hallazgos, copy_pendiente=pend,
     )
-    _tema_pipeline("Tema sano", verificar_veredicto="no_verificado")
+    _tema_pipeline("Tema sano", verificacion_fuente="no_verificado")
 
     r = cliente.get("/api/pipelines/problemas")
     assert r.status_code == 200
@@ -467,7 +467,7 @@ def test_problemas_verificacion_roja_es_validacion(cliente):
         "resumen": "Dato falso evidente",
         "hallazgos": [{"tipo": "dato", "gravedad": "error", "explicacion": "es falso"}],
     })
-    _tema_pipeline("Verificación roja", verificar_veredicto="problema", verificar_hallazgos=hallazgos)
+    _tema_pipeline("Verificación roja", verificacion_fuente="problema", verificar_hallazgos=hallazgos)
     p = cliente.get("/api/pipelines/problemas").json()["problemas"][0]
     assert p["etapa"] == "Verificar"
     assert p["error"] == "es falso"
@@ -475,8 +475,8 @@ def test_problemas_verificacion_roja_es_validacion(cliente):
 
 
 def test_problemas_filtra_por_marca_y_valida(cliente):
-    _tema_pipeline("P claro", marca="claro-sports", verificar_veredicto="problema")
-    _tema_pipeline("P uno", marca="unotv", verificar_veredicto="problema")
+    _tema_pipeline("P claro", marca="claro-sports", verificacion_fuente="problema")
+    _tema_pipeline("P uno", marca="unotv", verificacion_fuente="problema")
     titulos = {
         x["titulo"]
         for x in cliente.get("/api/pipelines/problemas?marca=claro-sports").json()["problemas"]
@@ -486,7 +486,7 @@ def test_problemas_filtra_por_marca_y_valida(cliente):
 
 
 def test_problemas_vacio_sin_bloqueados(cliente):
-    _tema_pipeline("Todo bien", verificar_veredicto="no_verificado")
+    _tema_pipeline("Todo bien", verificacion_fuente="no_verificado")
     body = cliente.get("/api/pipelines/problemas").json()
     assert body == {"problemas": [], "total": 0}
 

@@ -3,7 +3,7 @@
  *
  *  - `ChipMarca`: la marca de la historia como chip discreto; si la asignó el clasificador IA
  *    (`marca_clasificada_por_ia`), un mini-badge «IA» a su lado.
- *  - `BadgeVeredictoFuente`: el veredicto de VERIFICACIÓN de la fuente (`verificar_veredicto`):
+ *  - `BadgeVerificacionFuente`: la VERIFICACIÓN de la fuente (`verificacion_fuente`):
  *    'no_verificado' = la fuente pasó la verificación sin problemas (deja pasar a copy) → «Verificada»;
  *    'problema' = la verificación encontró un problema de peso → «Problema en la fuente». Nada si vacío.
  *
@@ -42,16 +42,16 @@ export function ChipMarca({ historia, className }: { historia: Historia; classNa
   );
 }
 
-/** Badge del VEREDICTO de verificación de la fuente (QA por historia, ADR 0011). Nada si vacío. */
-export function BadgeVeredictoFuente({
-  veredicto,
+/** Badge de la VERIFICACIÓN de la fuente (QA por historia, ADR 0011). Nada si vacío. */
+export function BadgeVerificacionFuente({
+  verificacion_fuente,
   className,
 }: {
-  veredicto?: string;
+  verificacion_fuente?: string;
   className?: string;
 }) {
-  if (!veredicto) return null;
-  if (veredicto === "problema") {
+  if (!verificacion_fuente) return null;
+  if (verificacion_fuente === "problema") {
     return (
       <Tooltip label="Problema detectado en la fuente" side="top">
         <Badge
@@ -60,7 +60,7 @@ export function BadgeVeredictoFuente({
             "gap-1 border border-destructive/30 bg-destructive/10 text-destructive",
             className,
           )}
-          data-testid="badge-veredicto-problema"
+          data-testid="badge-verificacion-problema"
         >
           <OctagonAlert className="h-3 w-3" aria-hidden="true" />
           Problema en la fuente
@@ -68,10 +68,10 @@ export function BadgeVeredictoFuente({
       </Tooltip>
     );
   }
-  if (veredicto === "no_verificado") {
+  if (verificacion_fuente === "no_verificado") {
     return (
       <Tooltip label="Fuente verificada, sin problemas" side="top">
-        <Badge variant="ok" className={cn("gap-1", className)} data-testid="badge-veredicto-verificada">
+        <Badge variant="ok" className={cn("gap-1", className)} data-testid="badge-verificacion-verificada">
           <ShieldCheck className="h-3 w-3" aria-hidden="true" />
           Verificada
         </Badge>

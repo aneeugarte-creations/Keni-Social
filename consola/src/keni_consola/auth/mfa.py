@@ -24,7 +24,7 @@ SEGURIDAD (no negociable):
     contrasena) y se comparan en tiempo constante; el codigo gastado se consume (un solo uso).
   - El sign_count se actualiza tras cada login; un contador que RETROCEDE se LOGUEA como aviso
     (posible clon) pero no tumba el login por si solo (muchos autenticadores reportan 0 y
-    nunca incrementan): solo es senal, no veredicto.
+    nunca incrementan): solo es senal, no dictamen.
 
 Este modulo NO toca la BD: la persistencia de credenciales (`webauthn_credenciales`) y de los
 recovery codes vive en `auth.usuarios`. La clave Fernet se le pasa como argumento desde la API

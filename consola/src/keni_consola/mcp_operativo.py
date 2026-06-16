@@ -741,7 +741,7 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
         """Lanza la verificación de un VIDEO viral (datarlo: nuevo vs reciclado): descarga
         metadatos, OCR de fechas en pantalla y enlaces de búsqueda inversa. Corre en
         segundo plano: devuelve una generación; sigue su avance con
-        `keni_estado_generacion` (el resultado junta la evidencia, el veredicto lo pone el
+        `keni_estado_generacion` (el resultado junta la evidencia, el dictamen lo pone el
         humano)."""
         cli = _cli()
         if cli is None:

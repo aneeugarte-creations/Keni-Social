@@ -4,7 +4,7 @@ Tras los dos OK humanos, este módulo ENCOLA un `claude -p` con visión que crit
 (arte sintético en marca periodística, coherencia imagen↔texto, sustancia, rigor factual,
 hashtags, voz) y VOTA el nivel "Crítica IA" de la cadena. El arte viaja por S3: el worker lo
 baja a un dir temporal (`prefetch_s3` + `dir_temporal`, igual que la importación de parrilla)
-para que claude lo LEA con la herramienta Read. El post-procesado parsea el veredicto JSON y
+para que claude lo LEA con la herramienta Read. El post-procesado parsea el revision JSON y
 aplica el voto vía `repos`:
 
   - `aprueba`  -> aprueba el nivel IA: la cadena queda completa y la pieza se programa sola.
@@ -185,8 +185,8 @@ def lanzar_para_publicacion(publicacion_id: str) -> dict[str, Any] | None:
 # --------------------------------------------------------------------------- #
 
 
-def _parsear_veredicto(salida: str) -> dict[str, Any] | None:
-    """Extrae el objeto JSON del veredicto de la salida de claude (o None si no es legible)."""
+def _parsear_revision(salida: str) -> dict[str, Any] | None:
+    """Extrae el objeto JSON del revision de la salida de claude (o None si no es legible)."""
     if not salida:
         return None
     texto = salida.strip()
@@ -206,33 +206,33 @@ def _parsear_veredicto(salida: str) -> dict[str, Any] | None:
     return datos if isinstance(datos, dict) else None
 
 
-def _resumen_nivel(veredicto: dict[str, Any] | None, decision: str) -> str:
+def _resumen_nivel(revision: dict[str, Any] | None, decision: str) -> str:
     """Comentario CORTO que se sella en el nivel de la cadena (lo ve la UI en el nivel IA)."""
     if decision == DECISION_APROBADO:
         return "Crítica IA: sin objeciones de bloqueo."
-    com = (veredicto or {}).get("comentario") if veredicto else ""
+    com = (revision or {}).get("comentario") if revision else ""
     return ("Crítica IA: " + (str(com).strip() or "pieza con problemas; revísala."))[:_MAX_COMENTARIO]
 
 
-def _texto_comentario(veredicto: dict[str, Any] | None) -> str:
+def _texto_comentario(revision: dict[str, Any] | None) -> str:
     """Comentario DETALLADO (sin resolver) que frena la programación y guía la corrección."""
-    if not veredicto:
+    if not revision:
         return (
-            "🤖 Crítica IA: no devolvió un veredicto legible; revisa la pieza a mano antes de "
+            "🤖 Crítica IA: no devolvió un revision legible; revisa la pieza a mano antes de "
             "programarla."
         )
     lineas = ["🤖 Crítica IA — esta pieza no debería salir tal cual:"]
-    com = str(veredicto.get("comentario") or "").strip()
+    com = str(revision.get("comentario") or "").strip()
     if com:
         lineas.append(com)
-    for p in veredicto.get("problemas") or []:
+    for p in revision.get("problemas") or []:
         if not isinstance(p, dict):
             continue
         sev = str(p.get("severidad") or "").strip()
         det = str(p.get("detalle") or "").strip()
         if det:
             lineas.append(f"• ({sev or 'media'}) {det}")
-    rec = str(veredicto.get("recomendacion_formato") or "").strip().lower()
+    rec = str(revision.get("recomendacion_formato") or "").strip().lower()
     if rec and rec not in ("foto", ""):
         lineas.append(f"• Recomendación de formato: {rec}.")
     return "\n".join(lineas)
@@ -260,18 +260,18 @@ def _reflejar_y_programar(publicacion_id: str) -> None:
             _log.exception("Crítica IA: auto-programación falló para %s.", publicacion_id)
 
 
-def aplicar_veredicto(publicacion_id: str, veredicto: dict[str, Any] | None) -> str | None:
-    """Vota el nivel "Crítica IA" de la pieza según `veredicto`. Devuelve la decisión o None.
+def aplicar_revision(publicacion_id: str, revision: dict[str, Any] | None) -> str | None:
+    """Vota el nivel "Crítica IA" de la pieza según `revision`. Devuelve la decisión o None.
 
     None si la cadena ya no tiene el nivel IA pendiente (cadena cambió / ya votado): no hace
-    nada. Si no hay veredicto legible, RECHAZA por seguridad (no se aprueba a ciegas).
+    nada. Si no hay revision legible, RECHAZA por seguridad (no se aprueba a ciegas).
     """
     cadena = repos.listar_aprobaciones(publicacion_id)
     nivel = colaboracion.nivel_critica_ia(cadena)
     if nivel is None or nivel.get("decision") != DECISION_PENDIENTE:
         return None
 
-    aprueba = bool(veredicto) and str(veredicto.get("veredicto") or "").strip().lower() == "aprueba"
+    aprueba = bool(revision) and str(revision.get("veredicto") or "").strip().lower() == "aprueba"
     decision = DECISION_APROBADO if aprueba else DECISION_RECHAZADO
     repos.actualizar_aprobacion(
         nivel["id"],
@@ -279,7 +279,7 @@ def aplicar_veredicto(publicacion_id: str, veredicto: dict[str, Any] | None) -> 
             "decision": decision,
             "decisor_id": colaboracion.DECISOR_CRITICA_ID,
             "decisor_nombre": colaboracion.DECISOR_CRITICA_NOMBRE,
-            "comentario": _resumen_nivel(veredicto, decision),
+            "comentario": _resumen_nivel(revision, decision),
             "decidido_en": ahora_iso(),
         },
     )
@@ -291,7 +291,7 @@ def aplicar_veredicto(publicacion_id: str, veredicto: dict[str, Any] | None) -> 
             repos.crear_comentario(
                 contenido_id=str((plat or {}).get("contenido_id", "") or ""),
                 plataforma_id=publicacion_id,
-                texto=_texto_comentario(veredicto),
+                texto=_texto_comentario(revision),
                 autor={
                     "id": colaboracion.DECISOR_CRITICA_ID,
                     "usuario": colaboracion.DECISOR_CRITICA_NOMBRE,
@@ -307,8 +307,8 @@ def construir_procesar_critica_ia(*, publicacion_id: str):  # noqa: ANN201
     """Devuelve el callback `procesar(salida, metricas) -> dict` del job de crítica (worker)."""
 
     def procesar(salida: str, _metricas: object) -> dict[str, object]:
-        veredicto = _parsear_veredicto(salida)
-        decision = aplicar_veredicto(publicacion_id, veredicto)
-        return {"critica_ia": {"decision": decision or "", "veredicto": veredicto or {}}}
+        revision = _parsear_revision(salida)
+        decision = aplicar_revision(publicacion_id, revision)
+        return {"critica_ia": {"decision": decision or "", "veredicto": revision or {}}}
 
     return procesar

@@ -78,7 +78,7 @@ async def actualizar_plataforma(request: Request) -> Response:
         "enlace",
         "fecha_programada",
         "hora_post",
-        "veredicto",
+        "revision",
     ):
         if clave in datos:
             v = datos.get(clave)

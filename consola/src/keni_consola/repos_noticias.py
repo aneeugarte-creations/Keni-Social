@@ -289,8 +289,8 @@ def marcar_cluster_marca_ia(cluster_id: str) -> None:
     return db.marcar_cluster_marca_ia(cluster_id)
 
 
-def marcar_cluster_qa(cluster_id: str, veredicto: str, hallazgos: str = "") -> None:
-    return db.marcar_cluster_qa(cluster_id, veredicto, hallazgos)
+def marcar_cluster_qa(cluster_id: str, verificacion: str, hallazgos: str = "") -> None:
+    return db.marcar_cluster_qa(cluster_id, verificacion, hallazgos)
 
 
 def contar_clusters_admision_qa(marca: str, estados: tuple[str, ...]) -> int:

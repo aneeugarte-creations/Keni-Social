@@ -32,7 +32,7 @@ const PUBLICACION = {
   contenido: "¡Increíble remontada!",
   copy_in: "",
   estado: "en_revision",
-  veredicto: "",
+  revision: "",
   autor_id: "u9",
   autor_nombre: "Yustine",
   responsable_id: "",

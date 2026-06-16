@@ -65,7 +65,7 @@ _SIMBOLO = {ESTADO_OK: "✓", ESTADO_FALLA: "✗", ESTADO_NA: "·"}
 
 
 def render_texto(reporte: ReporteEvals, *, verboso: bool = False) -> str:
-    """Reporte legible: una línea por caso (veredicto vs esperado) + detalle de las dimensiones
+    """Reporte legible: una línea por caso (dictamen vs esperado) + detalle de las dimensiones
     que fallan; con `verboso`, también las que pasan. Cierra con el score agregado."""
     lineas: list[str] = []
     lineas.append("HARNESS DE EVALS · calidad de la salida de IA (determinista, sin claude -p)")
@@ -74,7 +74,7 @@ def render_texto(reporte: ReporteEvals, *, verboso: bool = False) -> str:
         marca_ok = "OK " if r.cuadra else "‼  "
         lineas.append(
             f"{marca_ok}[{r.caso.id}] {r.caso.marca}/{r.caso.red} "
-            f"· espera={r.caso.espera} veredicto={r.veredicto}"
+            f"· espera={r.caso.espera} dictamen={r.dictamen}"
         )
         if r.caso.descripcion:
             lineas.append(f"      {r.caso.descripcion}")
@@ -84,7 +84,7 @@ def render_texto(reporte: ReporteEvals, *, verboso: bool = False) -> str:
                 lineas.append(f"      {_SIMBOLO.get(d.estado, '?')} {d.nombre}{avisos}")
         if not r.cuadra:
             lineas.append(
-                f"      → DISCREPANCIA: el caso esperaba '{r.caso.espera}' y salió '{r.veredicto}'"
+                f"      → DISCREPANCIA: el caso esperaba '{r.caso.espera}' y salió '{r.dictamen}'"
                 + (
                     f" (se esperaba que fallara en '{r.caso.falla_esperada_en}'; "
                     f"falló en {r.dimensiones_fallidas or 'ninguna'})"

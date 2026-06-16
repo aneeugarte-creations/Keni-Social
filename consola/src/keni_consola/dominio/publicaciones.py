@@ -192,7 +192,7 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         # a la publicacion. "" en piezas legadas o cuando la marca/red no lo genera.
         "copy_in": pub.get("copy_in") or "",
         "estado": pub["estado"],
-        "veredicto": pub["veredicto"],
+        "revision": pub["revision"],
         # Atribucion por usuario (#130 Fase 1): quien creo la pieza. "" en piezas
         # legadas/anonimas (la UI lo muestra como "desconocido").
         "autor_id": pub.get("autor_id") or "",
@@ -335,7 +335,7 @@ def crear_borrador(
     titulo: str = "",
     contenido: str = "",
     copy_in: str = "",
-    veredicto: str = "",
+    revision: str = "",
     origen: str = "",
     imagen: str = "",
     imagen_fuente: str = "",
@@ -360,7 +360,7 @@ def crear_borrador(
         contenido=contenido,
         copy_in=copy_in,
         estado="borrador",
-        veredicto=veredicto,
+        revision=revision,
         origen=origen,
         imagen=imagen,
         imagen_fuente=imagen_fuente,
@@ -379,7 +379,7 @@ def crear_borrador_en(
     titulo: str = "",
     contenido: str = "",
     copy_in: str = "",
-    veredicto: str = "",
+    revision: str = "",
     imagen: str = "",
     imagen_fuente: str = "",
     carrusel: str = "",
@@ -434,7 +434,7 @@ def crear_borrador_en(
             "falta_copy": falta_copy,
             "copy": contenido,
             "copy_in": copy_in,
-            "veredicto": veredicto,
+            "revision": revision,
             "evergreen": evergreen,
         }
         # La media del placeholder (foto/carrusel adjuntos al promover) se CONSERVA; la del
@@ -462,7 +462,7 @@ def crear_borrador_en(
             imagen=imagen,
             imagen_fuente=imagen_fuente,
             carrusel=carrusel,
-            veredicto=veredicto,
+            revision=revision,
             evergreen=evergreen,
             es_publicacion=True,
         )

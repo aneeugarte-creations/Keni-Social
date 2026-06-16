@@ -27,16 +27,16 @@ PROMPT_ID = "qa-editorial"
 _TIPOS = frozenset({"ortografia", "dato", "legal", "voz"})
 _GRAVEDADES = frozenset({"error", "aviso"})
 
-# Mapa del simbolo de semaforo (🟢/🟡/🔴) al verdicto interno estable, equivalente al
+# Mapa del simbolo de semaforo (🟢/🟡/🔴) al verificacion interno estable, equivalente al
 # ✅/⚠️/❌ del resto del producto (`stream._VEREDICTO_POR_SIMBOLO`).
-_VERDICTO_POR_SEMAFORO = {"🟢": "listo", "🟡": "revisar", "🔴": "no_publicar"}
+_VERIFICACION_POR_SEMAFORO = {"🟢": "listo", "🟡": "revisar", "🔴": "no_publicar"}
 
 # Tope defensivo de hallazgos que devolvemos (evita una salida abusiva del modelo).
 _MAX_HALLAZGOS = 200
 
 
-def _verdicto_de_texto(texto: str) -> str:
-    """Deriva el verdicto del informe: primero el semaforo 🟢/🟡/🔴, luego ✅/⚠️/❌.
+def _verificacion_de_texto(texto: str) -> str:
+    """Deriva el verificacion del informe: primero el semaforo 🟢/🟡/🔴, luego ✅/⚠️/❌.
 
     El prompt abre con la linea de semaforo (🟢/🟡/🔴); si por lo que sea saliera con los
     simbolos clasicos, `stream.derivar_verdicto` los cubre. Devuelve "" si no hay ninguno.
@@ -44,7 +44,7 @@ def _verdicto_de_texto(texto: str) -> str:
     for linea in texto.splitlines():
         if not linea.strip():
             continue
-        for simbolo, valor in _VERDICTO_POR_SEMAFORO.items():
+        for simbolo, valor in _VERIFICACION_POR_SEMAFORO.items():
             if simbolo in linea:
                 return valor
         return stream.derivar_verdicto(texto)
@@ -86,15 +86,15 @@ def parsear_informe(salida: str) -> dict[str, object]:
     """Parsea la salida del prompt en un INFORME estructurado para la UI.
 
     Localiza el ULTIMO bloque ```json cercado (igual criterio que `stream.parsear_salida`)
-    y mapea `veredicto`/`resumen`/`hallazgos`. El `informe_texto` es el documento legible
-    SIN ese bloque json y sin emojis del cuerpo (el verdicto se deriva ANTES de limpiar, asi
+    y mapea `verificación`/`resumen`/`hallazgos`. El `informe_texto` es el documento legible
+    SIN ese bloque json y sin emojis del cuerpo (el verificacion se deriva ANTES de limpiar, asi
     no se pierde el simbolo). Degradacion robusta: si no hay JSON valido, `hallazgos=[]` y el
     informe queda como el texto completo (el QA nunca se rompe por un formato inesperado).
 
-    Devuelve `{verdicto, resumen, hallazgos: [...], informe_texto}`.
+    Devuelve `{verificacion, resumen, hallazgos: [...], informe_texto}`.
     """
     salida = salida or ""
-    verdicto = _verdicto_de_texto(salida)
+    verificacion = _verificacion_de_texto(salida)
 
     coincidencias = list(stream._RE_BLOQUE_JSON.finditer(salida))
     datos: object = None
@@ -111,12 +111,12 @@ def parsear_informe(salida: str) -> dict[str, object]:
     hallazgos: list[dict[str, object]] = []
     resumen = ""
     if isinstance(datos, dict):
-        # El verdicto del JSON (semaforo) tiene prioridad si lo trae; si no, el de la 1a linea.
+        # El verificacion del JSON (semaforo) tiene prioridad si lo trae; si no, el de la 1a linea.
         v = datos.get("veredicto")
         if isinstance(v, str):
-            for simbolo, valor in _VERDICTO_POR_SEMAFORO.items():
+            for simbolo, valor in _VERIFICACION_POR_SEMAFORO.items():
                 if simbolo in v:
-                    verdicto = valor
+                    verificacion = valor
                     break
         r = datos.get("resumen")
         if isinstance(r, str):
@@ -129,7 +129,7 @@ def parsear_informe(salida: str) -> dict[str, object]:
                     hallazgos.append(limpio)
 
     return {
-        "verdicto": verdicto,
+        "verificacion_fuente": verificacion,
         "resumen": resumen,
         "hallazgos": hallazgos,
         "informe_texto": stream.quitar_emojis(texto_sin_json).strip(),
@@ -140,16 +140,16 @@ def parsear_informe(salida: str) -> dict[str, object]:
 # QA DE LA FUENTE (pre-copy, rediseño QPC): verificación PERMISIVA de la NOTA de origen #
 # --------------------------------------------------------------------------- #
 # El QA se movió a ANTES del copy y por PIEZA (tema/fuente), no por plataforma: verificar la nota
-# de origen antes de gastar tokens generando copy. Es PERMISIVO y devuelve un veredicto
+# de origen antes de gastar tokens generando copy. Es PERMISIVO y devuelve un verificación
 # ESTRUCTURADO con SOLO dos salidas: `no_verificado` (nada de peso en contra: seguir, la pieza
 # llevará ⚠️) o `problema` (algo de peso: NO generar copy, marcar ❗ con los hallazgos). Por
 # defecto `no_verificado` cuando hay duda (permisivo).
 
-VERDICTO_NO_VERIFICADO = "no_verificado"
-VERDICTO_PROBLEMA = "problema"
+VERIFICACION_NO_VERIFICADO = "no_verificado"
+VERIFICACION_PROBLEMA = "problema"
 
-# Mapa del veredicto editorial clásico (semáforo) al veredicto de FUENTE: solo el rojo
-# (`no_publicar`) cuenta como `problema`; verde/amarillo (o sin veredicto) -> `no_verificado`
+# Mapa del verificación editorial clásico (semáforo) al verificación de FUENTE: solo el rojo
+# (`no_publicar`) cuenta como `problema`; verde/amarillo (o sin verificación) -> `no_verificado`
 # (permisivo: ante la duda, deja pasar). Cubre que el prompt use el lenguaje de semáforo.
 _FUENTE_PROBLEMA_DESDE = frozenset({"no_publicar"})
 
@@ -159,8 +159,8 @@ _FUENTE_SLUG_APTA = "apta"
 _FUENTE_SLUG_PROBLEMA = "problema"
 
 
-def _slug_veredicto_fuente(salida: str) -> str:
-    """Veredicto del ÚLTIMO bloque ```json de la QA de FUENTE: "apta"/"problema" o "".
+def _slug_verificacion_fuente(salida: str) -> str:
+    """Verificación del ÚLTIMO bloque ```json de la QA de FUENTE: "apta"/"problema" o "".
 
     Acepta el slug ASCII del contrato y el emoji legado 🟢/🔴. Cualquier otro valor (o sin
     bloque/clave) devuelve "" y el llamante cae al camino permisivo. PURO, nunca lanza.
@@ -185,26 +185,26 @@ def _slug_veredicto_fuente(salida: str) -> str:
     return v if v in (_FUENTE_SLUG_APTA, _FUENTE_SLUG_PROBLEMA) else ""
 
 
-def parsear_verdicto_fuente(salida: str) -> dict[str, object]:
-    """Parsea la salida de la QA de la FUENTE en un veredicto ESTRUCTURADO permisivo.
+def parsear_verificacion_fuente(salida: str) -> dict[str, object]:
+    """Parsea la salida de la QA de la FUENTE en un verificación ESTRUCTURADO permisivo.
 
-    Reusa `parsear_informe` (mismo formato ```json con `veredicto`/`resumen`/`hallazgos`), pero
-    COLAPSA el veredicto a dos valores de FUENTE:
+    Reusa `parsear_informe` (mismo formato ```json con `verificación`/`resumen`/`hallazgos`), pero
+    COLAPSA el verificación a dos valores de FUENTE:
       - `problema` si el JSON dice "problema" (slug del contrato) o 🔴 legado / el informe
         deriva `no_publicar`, O trae algún hallazgo de gravedad `error` (algo de peso),
-      - `no_verificado` en cualquier otro caso (incluido sin veredicto / formato inesperado /
+      - `no_verificado` en cualquier otro caso (incluido sin verificación / formato inesperado /
         valor basura): PERMISIVO por diseño (ante la duda, deja pasar y la pieza llevará ⚠️).
 
-    Devuelve `{verdicto, resumen, hallazgos: [...], informe_texto}` (mismas claves que
-    `parsear_informe`, con `verdicto` ya colapsado a `no_verificado`/`problema`). PURO.
+    Devuelve `{verificacion, resumen, hallazgos: [...], informe_texto}` (mismas claves que
+    `parsear_informe`, con `verificacion` ya colapsado a `no_verificado`/`problema`). PURO.
     """
     informe = parsear_informe(salida)
-    crudo = str(informe.get("verdicto") or "")
+    crudo = str(informe.get("verificacion_fuente") or "")
     hallazgos = informe.get("hallazgos")
     hay_error = isinstance(hallazgos, list) and any(
         isinstance(h, dict) and h.get("gravedad") == "error" for h in hallazgos
     )
-    slug = _slug_veredicto_fuente(salida)
+    slug = _slug_verificacion_fuente(salida)
     if slug == _FUENTE_SLUG_PROBLEMA:
         es_problema = True
     elif slug == _FUENTE_SLUG_APTA:
@@ -212,7 +212,7 @@ def parsear_verdicto_fuente(salida: str) -> dict[str, object]:
         es_problema = hay_error
     else:
         es_problema = crudo in _FUENTE_PROBLEMA_DESDE or hay_error
-    informe["verdicto"] = VERDICTO_PROBLEMA if es_problema else VERDICTO_NO_VERIFICADO
+    informe["verificacion_fuente"] = VERIFICACION_PROBLEMA if es_problema else VERIFICACION_NO_VERIFICADO
     return informe
 
 
@@ -220,7 +220,7 @@ def serializar_hallazgos(informe: dict[str, object]) -> str:
     """Serializa los hallazgos (+resumen) del informe de fuente a JSON para persistir en el tema.
 
     Compacto y autocontenido (lo lee la UI/API tal cual): `{resumen, hallazgos:[...]}`. "" si no
-    hay nada que guardar (verdicto `no_verificado` sin hallazgos), para no engordar el registro.
+    hay nada que guardar (verificacion `no_verificado` sin hallazgos), para no engordar el registro.
     """
     hallazgos = informe.get("hallazgos") or []
     resumen = str(informe.get("resumen") or "")
@@ -236,37 +236,37 @@ def construir_procesar_qa_fuente(  # noqa: ANN201
     *,
     cluster_id: str = "",
 ):
-    """Callback de post-procesado de la QA de la FUENTE: persiste el veredicto donde toque.
+    """Callback de post-procesado de la QA de la FUENTE: persiste el verificación donde toque.
 
-    Parsea el veredicto estructurado (`parsear_verdicto_fuente`), registra el informe en el
-    historial (trazabilidad, sin piezas: esto SEÑALA, no publica) y ESCRIBE el veredicto +
+    Parsea el verificación estructurado (`parsear_verificacion_fuente`), registra el informe en el
+    historial (trazabilidad, sin piezas: esto SEÑALA, no publica) y ESCRIBE el verificación +
     hallazgos en el destino:
 
-    El veredicto se sella en la HISTORIA (`cluster_id`, ADR 0011 F3): QA sobre la fuente ANTES de
+    El verificación se sella en la HISTORIA (`cluster_id`, ADR 0011 F3): QA sobre la fuente ANTES de
     materializar contenido (`repos.marcar_cluster_qa`); la admisión solo promueve las verificadas.
     NO encadena copy (la pieza aún no existe; nace en la admisión).
 
-    Devuelve el veredicto/informe para el sondeo del frontend. Se reconstruye igual en el worker
+    Devuelve el verificación/informe para el sondeo del frontend. Se reconstruye igual en el worker
     (vía spec).
     """
     from .. import repos
 
     def procesar(salida: str, metricas: stream.MetricasRun | None) -> dict[str, object]:
-        informe = parsear_verdicto_fuente(salida)
+        informe = parsear_verificacion_fuente(salida)
         historial_id = repos.registrar_historial_prompt(
             PROMPT_ID, marca, str(informe.get("informe_texto") or ""), piezas=[], titulo=titulo,
             metricas=stream.metricas_a_dict(metricas), autor=autor,
         )
-        verdicto = str(informe.get("verdicto") or VERDICTO_NO_VERIFICADO)
-        # QA sobre la HISTORIA (cluster, pre-admisión, ADR 0011 F3): el veredicto vive en el
+        verificacion = str(informe.get("verificacion_fuente") or VERIFICACION_NO_VERIFICADO)
+        # QA sobre la HISTORIA (cluster, pre-admisión, ADR 0011 F3): el verificación vive en el
         # cluster. La admisión del barrido de investigación promueve las `no_verificado` (hereda
-        # el veredicto al contenido) y deja fuera las `problema`. NO se encadena copy aquí (la
+        # el verificación al contenido) y deja fuera las `problema`. NO se encadena copy aquí (la
         # pieza aún no existe; nace en la admisión).
         if cluster_id:
-            repos.marcar_cluster_qa(cluster_id, verdicto, serializar_hallazgos(informe))
+            repos.marcar_cluster_qa(cluster_id, verificacion, serializar_hallazgos(informe))
         return {
             "informe": informe,
-            "verdicto": verdicto,
+            "verificacion_fuente": verificacion,
             "historial_id": historial_id,
             "piezas": [],
             "publicaciones": [],

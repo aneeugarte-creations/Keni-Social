@@ -196,14 +196,14 @@ export function siguienteEstado(estado: string): EstadoPublicacion | null {
   return ORDEN_ESTADOS[i + 1];
 }
 
-// --- Veredictos ---
+// --- Revisiones ---
 
-export interface MetaVeredicto {
+export interface MetaRevision {
   nombre: string;
   variante: "ok" | "aviso" | "error";
 }
 
-export const META_VEREDICTOS: Record<Exclude<Veredicto, "">, MetaVeredicto> = {
+export const META_REVISIONES: Record<Exclude<Veredicto, "">, MetaRevision> = {
   listo: { nombre: "Listo", variante: "ok" },
   revisar: { nombre: "Revisar", variante: "aviso" },
   no_publicar: { nombre: "No publicar", variante: "error" },
@@ -212,7 +212,7 @@ export const META_VEREDICTOS: Record<Exclude<Veredicto, "">, MetaVeredicto> = {
 };
 
 /**
- * Insignia de un veredicto editorial. El veredicto de una PUBLICACIÓN es TEXTO LIBRE
+ * Insignia de un revision editorial. El revision de una PUBLICACIÓN es TEXTO LIBRE
  * (lo escribe el auto-verificador: "ok — confirmar marcador…", "marcar como rumor",
  * "pendiente resultado real…"); el enum cerrado solo cubría tres valores. Derivamos la
  * variante de un PREFIJO normalizado y conservamos el texto íntegro como `nombre`:
@@ -220,22 +220,22 @@ export const META_VEREDICTOS: Record<Exclude<Veredicto, "">, MetaVeredicto> = {
  *   - "marcar" / "revisar" / "pendiente"   → aviso
  *   - "ok" / "listo"                        → ok
  *   - resto (no vacío)                      → aviso (señala que hay que leerlo)
- * Devuelve `null` solo si el veredicto está vacío.
+ * Devuelve `null` solo si el revision está vacío.
  */
-export function metaVeredicto(veredicto: string): MetaVeredicto | null {
-  if (!veredicto) return null;
-  const canon = META_VEREDICTOS[veredicto as Exclude<Veredicto, "">];
+export function metaRevision(revision: string): MetaRevision | null {
+  if (!revision) return null;
+  const canon = META_REVISIONES[revision as Exclude<Veredicto, "">];
   if (canon) return canon;
-  const t = veredicto
+  const t = revision
     .trim()
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
-  let variante: MetaVeredicto["variante"] = "aviso";
+  let variante: MetaRevision["variante"] = "aviso";
   if (t.startsWith("no publicar") || t.startsWith("no_publicar")) variante = "error";
   else if (t.startsWith("ok") || t.startsWith("listo")) variante = "ok";
-  // El nombre conserva el texto íntegro del veredicto (la UI lo recorta/tooltipea).
-  return { nombre: veredicto, variante };
+  // El nombre conserva el texto íntegro del revision (la UI lo recorta/tooltipea).
+  return { nombre: revision, variante };
 }
 
 // Fechas/horas en hora CDMX: el formateo y la conversión del picker viven en

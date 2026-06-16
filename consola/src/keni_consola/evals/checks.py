@@ -3,7 +3,7 @@
 Cada dimensión es una función pura `(caso) -> ResultadoDimension` que NO inventa lógica de
 verificación: envuelve la maquinaria que ya corre en producción para que el eval mida EXACTAMENTE
 lo que el sistema mide. Si una edición de prompt degrada la salida por debajo de esos umbrales,
-el caso golden que dependía de ello cambia de veredicto y el harness lo caza.
+el caso golden que dependía de ello cambia de dictamen y el harness lo caza.
 
 Dimensiones (claves estables; se referencian en los casos y en el reporte):
   - `limite_red`  : tope técnico DURO de caracteres por red, por intervalo de hilo/carrusel.

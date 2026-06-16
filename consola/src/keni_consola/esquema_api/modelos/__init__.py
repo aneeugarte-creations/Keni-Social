@@ -101,7 +101,7 @@ from .publicaciones import (
     RespuestaColaAprobacion,
     RespuestaPublicacion,
     RespuestaPublicaciones,
-    Veredicto,
+    Revision,
 )
 
 __all__ = [
@@ -165,7 +165,7 @@ __all__ = [
     # Publicaciones.
     "EstadoPublicacion",
     "EtapaIa",
-    "Veredicto",
+    "Revision",
     "Publicacion",
     "RespuestaPublicaciones",
     "RespuestaPublicacion",

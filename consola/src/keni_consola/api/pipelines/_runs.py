@@ -13,8 +13,8 @@ from ...pipeline_contenido import (
     ORIGEN_PIPELINE,
     QA_CADUCADA,
     QA_SALTADA,
-    VERDICTO_NO_VERIFICADO,
-    VERDICTO_PROBLEMA,
+    VERIFICACION_NO_VERIFICADO,
+    VERIFICACION_PROBLEMA,
     qa_lexico,
 )
 from ._comun import (
@@ -53,7 +53,7 @@ def _etapa_off(env_flag: str, marca: str) -> bool:
     """Etapa desactivada para `marca`: la negación del resolver ÚNICO (`config.etapa_activa`).
 
     OJO: el toggle SOLO decide el estado de etapas FUTURAS (sin evidencia persistida en la
-    run). Una etapa que YA corrió se pinta por lo que dejó escrito (cluster, veredicto,
+    run). Una etapa que YA corrió se pinta por lo que dejó escrito (cluster, verificacion,
     copy, arte), no por el interruptor de hoy: encender/apagar un toggle no re-pinta la
     historia de las runs.
     """
@@ -61,7 +61,7 @@ def _etapa_off(env_flag: str, marca: str) -> bool:
 
 
 def _verificar_off(marca: str) -> bool:
-    """Etapa Verificar desactivada para `marca` (solo aplica a runs SIN veredicto persistido)."""
+    """Etapa Verificar desactivada para `marca` (solo aplica a runs SIN verificacion persistida)."""
     return _etapa_off(config.ENV_PIPELINE_VERIFICAR, marca)
 
 
@@ -81,7 +81,7 @@ def _pieza_de(plat: dict) -> dict:
         "red": plat.get("red", ""),
         "red_nombre": _red_nombre(plat.get("red", "")),
         "estado": plat.get("estado", "") or "pendiente",
-        "veredicto": plat.get("veredicto", "") or "",
+        "revision": plat.get("revision", "") or "",
         "falta_copy": bool(plat.get("falta_copy", True)),
         "falta_imagen": bool(plat.get("falta_imagen", True)),
     }
@@ -92,7 +92,7 @@ def _pieza_detalle(plat: dict) -> dict:
 
     Sobre la forma reducida añade el COPY generado (texto por red + copy-in), la imagen de
     la placa, las OBSERVACIONES de la verificación (recalculadas con la misma verificación léxica, para
-    mostrar el "por qué" del veredicto) y la traza de revisión humana (revisor + fechas).
+    mostrar el "por qué" de la revisión) y la traza de revisión humana (revisor + fechas).
     """
     base = _pieza_de(plat)
     copy = plat.get("copy", "") or ""
@@ -168,7 +168,7 @@ def _etapas_de_run(
     marca) las pintan como corridas sin grupo/score, no "saltada". Las togglables
     (Admitir/Verificar/Redactar/Ilustrar) están activas o "saltada"
     según su toggle por-marca; si activas, su estado se deriva del estado real (no de logs): el
-    `verificar_veredicto` del tema y las publicaciones por plataforma (auto-curativo). La etapa Verificar
+    `verificacion_fuente` del tema y las publicaciones por plataforma (auto-curativo). La etapa Verificar
     (verificación pre-copy) va ANTES del copy; un `problema` NO genera copy. Ilustrar exige `arte_ia`
     (evidencia de arte GENERADO: marcador/generación de arte de la run): una imagen de fuente
     propia en la pieza no enciende la etapa. Aprobar es el
@@ -192,27 +192,27 @@ def _etapas_de_run(
     creado = item.get("creado", "") or ""
     actualizado = item.get("actualizado", "") or ""
     total = len(piezas)
-    verificar_veredicto = (item.get("verificar_veredicto", "") or "").strip()
-    es_problema = verificar_veredicto == VERDICTO_PROBLEMA
+    verificacion_fuente = (item.get("verificacion_fuente", "") or "").strip()
+    es_problema = verificacion_fuente == VERIFICACION_PROBLEMA
 
     # --- Admitir: el tema EXISTE, luego Admitir CORRIÓ (evidencia, no toggle). --------
     ci_detalle = f"Del tablero · {item.get('origen') or ''}" if es_tablero else ""
     ci = {"clave": "admitir", "nombre": "Admitir", "estado": "ok", "detalle": ci_detalle, "ts": creado}
 
-    # --- Verificar: PRIMERO el veredicto persistido en el TEMA (lo que de verdad pasó); el
-    # toggle solo decide el estado de una run que AÚN no tiene veredicto (futuro).
-    if es_tablero and not verificar_veredicto:
+    # --- Verificar: PRIMERO la verificacion persistida en el TEMA (lo que de verdad pasó); el
+    # toggle solo decide el estado de una run que AÚN no tiene verificacion (futuro).
+    if es_tablero and not verificacion_fuente:
         # La verificación verifica la FUENTE de una noticia recolectada; un tema del tablero no la tiene.
         qa_estado, qa_detalle = _ESTADO_SALTADA, "No aplica: sin verificación (tema del tablero)"
-    elif verificar_veredicto == QA_SALTADA:
+    elif verificacion_fuente == QA_SALTADA:
         qa_estado, qa_detalle = _ESTADO_SALTADA, ""
-    elif verificar_veredicto == QA_CADUCADA:
+    elif verificacion_fuente == QA_CADUCADA:
         qa_estado, qa_detalle = _ESTADO_SALTADA, "Caducada: el pipeline priorizó lo fresco"
-    elif verificar_veredicto == VERDICTO_PROBLEMA:
+    elif verificacion_fuente == VERIFICACION_PROBLEMA:
         qa_estado, qa_detalle = "revisar", "Problema en la fuente"
-    elif verificar_veredicto == "en_curso":
+    elif verificacion_fuente == "en_curso":
         qa_estado, qa_detalle = "en_curso", ""
-    elif verificar_veredicto == VERDICTO_NO_VERIFICADO:
+    elif verificacion_fuente == VERIFICACION_NO_VERIFICADO:
         qa_estado, qa_detalle = "ok", "No verificado"
     elif _verificar_off(marca):
         qa_estado, qa_detalle = _ESTADO_SALTADA, ""
@@ -227,7 +227,7 @@ def _etapas_de_run(
         cd_estado, cd_detalle = "ok", f"{con_copy}/{total}"
     elif es_problema:
         cd_estado, cd_detalle = "pendiente", "Omitido"
-    elif verificar_veredicto == QA_CADUCADA:
+    elif verificacion_fuente == QA_CADUCADA:
         cd_estado, cd_detalle = _ESTADO_SALTADA, "Caducada"
     elif _redactar_off(marca):
         cd_estado, cd_detalle = _ESTADO_SALTADA, ""
@@ -241,7 +241,7 @@ def _etapas_de_run(
     con_arte = sum(1 for p in piezas if not p["falta_imagen"])
     if arte_ia:
         arte_estado, arte_detalle = "ok", f"{con_arte}/{total}"
-    elif verificar_veredicto == QA_CADUCADA:
+    elif verificacion_fuente == QA_CADUCADA:
         arte_estado, arte_detalle = _ESTADO_SALTADA, "Caducada"
     elif _ilustrar_off(marca):
         arte_estado, arte_detalle = _ESTADO_SALTADA, ""
@@ -260,7 +260,7 @@ def _etapas_de_run(
         # Esperando al HUMANO (piezas en revisión, ninguna aprobada aún): es "pendiente", no
         # "en curso" — la máquina no está haciendo nada.
         ap_estado, ap_detalle = "pendiente", "En revisión"
-    elif verificar_veredicto == QA_CADUCADA and not total:
+    elif verificacion_fuente == QA_CADUCADA and not total:
         # Run CADUCADA sin piezas: cerrada sin producto (no quede "pendiente" para siempre).
         ap_estado, ap_detalle = _ESTADO_SALTADA, "Caducada"
     else:

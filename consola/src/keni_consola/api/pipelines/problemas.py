@@ -7,12 +7,12 @@ from starlette.responses import JSONResponse, Response
 
 from ... import marcas, repos
 from ..._http_json import _entero_query
-from ...pipeline_contenido import ORIGEN_PIPELINE, VERDICTO_PROBLEMA, intentos_de
+from ...pipeline_contenido import ORIGEN_PIPELINE, VERIFICACION_PROBLEMA, intentos_de
 from ._comun import _LIMITE_DEF, _LIMITE_MAX, _marca_nombre, _qa_fuente_de
 
 
 def _problema_de(item: dict) -> dict:
-    """Forma pública de un tema BLOQUEADO (veredicto `problema`): qué falló, dónde y cuántas veces.
+    """Forma pública de un tema BLOQUEADO (verificacion `problema`): qué falló, dónde y cuántas veces.
 
     `etapa`/`error` salen del ÚLTIMO hallazgo: los fallos repetidos de etapa
     (`marcar_fallo_etapa`) dejan un hallazgo `tipo='sistema'` con la etapa en `fragmento`;
@@ -44,7 +44,7 @@ def _problema_de(item: dict) -> dict:
 async def problemas(request: Request) -> Response:
     """GET /api/pipelines/problemas?marca=&limite=50: temas BLOQUEADOS del pipeline (solo lectura).
 
-    Tras agotar sus reintentos (o una verificación 🔴 de peso), un tema queda con veredicto `problema`
+    Tras agotar sus reintentos (o una verificación 🔴 de peso), un tema queda con verificacion `problema`
     y SALE del flujo (no se reintenta ni cuenta en el cupo en curso): esta lista lo hace VISIBLE
     para que un humano decida (relanzar a mano / descartar). Recientes (por `actualizado`)
     primero. Aún sin UI propia: lo consume quien monitorea (curl / consola / vista futura).
@@ -62,7 +62,7 @@ async def problemas(request: Request) -> Response:
         it
         for it in repos.listar_contenido(marca=marca or None)
         if (it.get("origen") or "") == ORIGEN_PIPELINE
-        and (it.get("verificar_veredicto") or "").strip() == VERDICTO_PROBLEMA
+        and (it.get("verificacion_fuente") or "").strip() == VERIFICACION_PROBLEMA
     ]
     bloqueados.sort(
         key=lambda it: (it.get("actualizado") or it.get("creado") or "", it.get("id", "")),

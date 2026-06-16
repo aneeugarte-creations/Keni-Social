@@ -38,7 +38,7 @@ def crear_contenido(
     formato: str = "foto",
     id_post_metricool: str = "",
     senal_viralidad: int = 0,
-    verificar_veredicto: str = "",
+    verificacion_fuente: str = "",
     verificar_hallazgos: str = "",
     copy_pendiente: str = "",
     fecha_fuente: str = "",
@@ -71,7 +71,7 @@ def crear_contenido(
         formato=formato,
         id_post_metricool=id_post_metricool,
         senal_viralidad=senal_viralidad,
-        verificar_veredicto=verificar_veredicto,
+        verificacion_fuente=verificacion_fuente,
         verificar_hallazgos=verificar_hallazgos,
         copy_pendiente=copy_pendiente,
         fecha_fuente=fecha_fuente,
@@ -129,13 +129,13 @@ def ids_contenido_con_copy(marca: str | None = None) -> set[str]:
     return db.ids_contenido_con_copy(marca)
 
 
-def verificar_veredicto_por_contenido(contenido_ids: list[str]) -> dict[str, str]:
-    """Veredicto QA (Verificar la fuente) por contenido_id, en lote. Delegado en `db.py`."""
-    return db.verificar_veredicto_por_contenido(contenido_ids)
+def verificacion_fuente_por_contenido(contenido_ids: list[str]) -> dict[str, str]:
+    """Revision QA (Verificar la fuente) por contenido_id, en lote. Delegado en `db.py`."""
+    return db.verificacion_fuente_por_contenido(contenido_ids)
 
 
 def reparar_qa_en_curso_sueltos(umbral_iso: str) -> int:
-    """Resetea a "" los `verificar_veredicto='en_curso'` atascados (limpiador). Delegado en `db.py`."""
+    """Resetea a "" los `verificacion_fuente='en_curso'` atascados (limpiador). Delegado en `db.py`."""
     return db.reparar_qa_en_curso_sueltos(umbral_iso)
 
 
@@ -195,7 +195,7 @@ def crear_contenido_plataforma(
     imagen_fuente: str = "",
     foto: str = "",
     video: str = "",
-    veredicto: str = "",
+    revision: str = "",
     revisor_id: str = "",
     revisor_nombre: str = "",
     revisado_en: str = "",
@@ -235,7 +235,7 @@ def crear_contenido_plataforma(
         imagen_fuente=imagen_fuente,
         foto=foto,
         video=video,
-        veredicto=veredicto,
+        revision=revision,
         revisor_id=revisor_id,
         revisor_nombre=revisor_nombre,
         revisado_en=revisado_en,

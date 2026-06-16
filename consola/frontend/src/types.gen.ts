@@ -639,7 +639,7 @@ export interface Publicacion {
   contenido: string;
   copy_in: string;
   estado: "borrador" | "en_revision" | "aprobado" | "programado" | "publicado";
-  veredicto: string;
+  revision: string;
   autor_id: string;
   autor_nombre: string;
   responsable_id: string;

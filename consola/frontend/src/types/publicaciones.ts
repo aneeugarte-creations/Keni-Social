@@ -77,7 +77,7 @@ export interface CuerpoCrearPublicacion {
   contenido: string;
   estado?: EstadoPublicacion;
   fecha_programada?: string | null;
-  veredicto?: Veredicto;
+  revision?: Veredicto;
   origen?: string | null;
   /** Nombre del archivo de imagen adjunto (vacío para ninguna). */
   imagen?: string;

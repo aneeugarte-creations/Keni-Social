@@ -16,7 +16,7 @@ humano solo DECIDA, no corrija. Dos chequeos, ambos BARATOS y deterministas (sin
     largos para que el contraste signifique algo. CONSERVADOR a propósito: ante la duda, no avisa.
 
 ADVISORY y SAFE-by-default (mismo patrón que `dominio.copy.verificar_voz`): NUNCA bloquea el
-avance ni descarta la pieza. Si encuentra avisos, DEGRADA el veredicto del borrador
+avance ni descarta la pieza. Si encuentra avisos, DEGRADA el revision del borrador
 (`listo`→`revisar`, sólo un pase limpio) y deja una nota en el tema padre; el humano decide en la
 revisión con los avisos delante. Gateada por `KENI_PIPELINE_REVISAR` (def OFF): sin el toggle el
 avance no cambia ni un byte.
@@ -35,18 +35,18 @@ from ..dominio import dedup
 from ._comun import _log
 
 __all__ = [
-    "VEREDICTO_LISTO",
-    "VEREDICTO_REVISAR",
+    "REVISION_LISTO",
+    "REVISION_REVISAR",
     "avisos_voz",
     "avisos_coherencia",
     "avisos_calidad",
     "verificar_calidad_pieza",
 ]
 
-# Veredictos del copy relevantes para la degradación advisory: un pase LIMPIO ("listo") baja a
-# "revisar" si la verificación encuentra algo; cualquier otro veredicto ya pide ojos humanos y se respeta.
-VEREDICTO_LISTO = "listo"
-VEREDICTO_REVISAR = "revisar"
+# Revisiones del copy relevantes para la degradación advisory: un pase LIMPIO ("listo") baja a
+# "revisar" si la verificación encuentra algo; cualquier otro revision ya pide ojos humanos y se respeta.
+REVISION_LISTO = "listo"
+REVISION_REVISAR = "revisar"
 
 # --- Coherencia copy↔nota (heurística léxica conservadora) ------------------------------- #
 # Términos de CONTENIDO = tokens normalizados (sin acentos, alfanuméricos) de longitud >= 4: deja
@@ -122,18 +122,18 @@ def _nota_origen(contenido_id: str) -> str:
     return str((tema or {}).get("descripcion") or "").strip()
 
 
-def _degradar_veredicto(pub_id: str, veredicto_actual: object) -> None:
-    """Baja un veredicto LIMPIO (`listo`) a `revisar`; deja en paz cualquier otro. Best-effort.
+def _degradar_revision(pub_id: str, revision_actual: object) -> None:
+    """Baja un revision LIMPIO (`listo`) a `revisar`; deja en paz cualquier otro. Best-effort.
 
     Sólo se toca un pase limpio: un borrador que ya viene `revisar`/`no_publicar`/`no_verificado`
     ya pide ojos humanos, no hay que degradarlo. Un fallo de escritura no rompe el avance (la nota
     en el tema ya deja constancia)."""
-    if str(veredicto_actual or "").strip().lower() != VEREDICTO_LISTO:
+    if str(revision_actual or "").strip().lower() != REVISION_LISTO:
         return
     try:
-        repos.actualizar_publicacion(pub_id, {"veredicto": VEREDICTO_REVISAR})
+        repos.actualizar_publicacion(pub_id, {"revision": REVISION_REVISAR})
     except Exception:  # noqa: BLE001 -- la degradación es advisory; la nota ya avisa
-        _log.warning("calidad: no se pudo degradar el veredicto de la pieza %s", pub_id, exc_info=True)
+        _log.warning("calidad: no se pudo degradar el revision de la pieza %s", pub_id, exc_info=True)
 
 
 def _anotar(avisos: list[str], *, contenido_id: str, marca: str) -> None:
@@ -160,7 +160,7 @@ def verificar_calidad_pieza(pub: dict[str, Any]) -> list[str]:
     """Verificación ADVISORY de la CALIDAD del copy de UN borrador antes de su avance a revisión.
 
     Devuelve los avisos encontrados (vacío = copy dentro de calidad). Con avisos: DEGRADA el
-    veredicto del borrador (sólo un `listo` limpio → `revisar`) y deja una nota en el tema padre,
+    revision del borrador (sólo un `listo` limpio → `revisar`) y deja una nota en el tema padre,
     pero NO bloquea el avance (lo decide el llamante; el humano resuelve en la revisión). NUNCA
     lanza: cualquier fallo se loguea y se trata como "sin avisos" (el avance sigue su curso)."""
     marca = str(pub.get("marca") or "").strip()
@@ -177,6 +177,6 @@ def verificar_calidad_pieza(pub: dict[str, Any]) -> list[str]:
         return []
     if not avisos:
         return []
-    _degradar_veredicto(pub_id, pub.get("veredicto"))
+    _degradar_revision(pub_id, pub.get("revision"))
     _anotar(avisos, contenido_id=contenido_id, marca=marca)
     return avisos

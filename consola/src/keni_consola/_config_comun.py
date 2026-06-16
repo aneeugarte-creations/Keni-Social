@@ -305,7 +305,7 @@ ENV_AUTOGEN_ARTE_MAX = "KENI_AUTOGEN_ARTE_MAX"
 # adentro" revisa el copy generado: verificación de VOZ contra los patrones medidos de
 # la marca (`patrones_marca`) + chequeo barato de COHERENCIA con la nota de origen. ADVISORY y
 # SAFE-by-default (mismo patrón que `dominio.copy.verificar_voz`): NUNCA bloquea el avance ni
-# descarta la pieza; si detecta algo, DEGRADA el veredicto (`listo`→`revisar`) y deja una nota para
+# descarta la pieza; si detecta algo, DEGRADA la revision (`listo`→`revisar`) y deja una nota para
 # que el humano decida en la revisión. CONSERVADOR por defecto (OFF): sin el flag el avance no
 # cambia. Existe la verificación de la FUENTE (Verificar, pre-copy); esto es la verificación del COPY ya redactado.
 ENV_PIPELINE_REVISAR = "KENI_PIPELINE_REVISAR"
@@ -344,7 +344,7 @@ ENV_LIMPIADOR_INTERVALO_MIN = "KENI_LIMPIADOR_INTERVALO_MIN"
 ENV_QA_FUENTE_MODELO = "KENI_QA_FUENTE_MODELO"
 ENV_QA_FUENTE_ESFUERZO = "KENI_QA_FUENTE_ESFUERZO"
 ENV_QA_FUENTE_TIMEOUT = "KENI_QA_FUENTE_TIMEOUT"
-# Corrector de temas atascados `verificar_veredicto='en_curso'`: si el lanzamiento/generacion de la verificación
+# Corrector de temas atascados `verificacion_fuente='en_curso'`: si el lanzamiento/generacion de la verificación
 # muere sin finalizador, el tema quedaba excluido para siempre de la re-verificación (y contando en
 # el cupo en proceso). El limpiador resetea a "" los `en_curso` mas viejos que este TTL (minutos).
 ENV_QA_EN_CURSO_TTL_MIN = "KENI_QA_EN_CURSO_TTL_MIN"

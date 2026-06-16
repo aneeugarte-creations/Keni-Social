@@ -12,7 +12,7 @@ from ._base import Paginacion
 __all__ = [
     "EstadoPublicacion",
     "EtapaIa",
-    "Veredicto",
+    "Revision",
     "Publicacion",
     "RespuestaPublicaciones",
     "RespuestaPublicacion",
@@ -36,12 +36,12 @@ EtapaIa = Literal[
     "programada",
     "publicada",
 ]
-# Veredicto editorial de una pieza: TEXTO LIBRE. El auto-verificador (prompts de copy)
-# escribe veredictos legibles y matizados ("ok — confirmar marcador con el equipo",
+# Revision editorial de una pieza: TEXTO LIBRE. El auto-verificador (prompts de copy)
+# escribe revisiones legibles y matizados ("ok — confirmar marcador con el equipo",
 # "marcar claramente como rumor", "pendiente resultado real del partido"), no un enum
 # cerrado. La UI deriva la insignia (Listo/Revisar/No publicar) de un prefijo normalizado
-# (`meta.metaVeredicto`). "" = sin veredicto.
-Veredicto = str
+# (`meta.metaRevision`). "" = sin revision.
+Revision = str
 
 
 class Publicacion(TypedDict):
@@ -77,7 +77,7 @@ class Publicacion(TypedDict):
     # `contenido` que acompana a la publicacion. "" en piezas legadas o si no se genero.
     copy_in: str
     estado: EstadoPublicacion
-    veredicto: Veredicto
+    revision: Revision
     autor_id: str
     autor_nombre: str
     # REPARTO de trabajo ("la lista" de ClaroSports): quién tiene COGIDA la pieza. Vive en el

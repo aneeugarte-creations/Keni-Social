@@ -308,6 +308,46 @@ def _migrar_renombre_columnas_etapas(con: Any) -> None:
         con.execute("ALTER TABLE contenido DROP CONSTRAINT IF EXISTS ck_contenido_qa_veredicto")
 
 
+# ETAPAS CON NOMBRE PROPIO (limpieza de jerga `veredicto`/`verdicto`): el "veredicto" estaba
+# SOBRECARGADO entre dos etapas distintas, así que cada columna pasa a llamarse como SU etapa.
+# Cada tupla es (tabla, columna_vieja, columna_nueva), preservando los datos (RENAME COLUMN):
+#   - VERIFICAR (QA de la FUENTE, pre-copy): `verificar_veredicto` -> `verificacion_fuente` en
+#     `contenido` y `noticias_clusters` (NO se usa `verificacion` a secas: `noticias_clusters`
+#     ya tiene esa columna para la corroboración corroborada/unica_fuente/dudosa).
+#   - REVISAR (QA editorial del COPY ya redactado): `contenido_plataforma.veredicto` -> `revision`.
+# `verificar_hallazgos` NO se toca (no era jerga `veredicto`).
+_RENOMBRES_COLUMNAS_VEREDICTO: tuple[tuple[str, str, str], ...] = (
+    ("contenido", "verificar_veredicto", "verificacion_fuente"),
+    ("noticias_clusters", "verificar_veredicto", "verificacion_fuente"),
+    ("contenido_plataforma", "veredicto", "revision"),
+)
+
+
+def _migrar_renombre_columnas_veredicto(con: Any) -> None:
+    """Renombra las columnas de verdict legacy a su nombre por ETAPA (idempotente, preserva datos).
+
+    Por cada (tabla, viejo, nuevo) de `_RENOMBRES_COLUMNAS_VEREDICTO`: si la tabla existe y tiene
+    la columna VIEJA pero aún NO la nueva, `ALTER TABLE ... RENAME COLUMN` (Postgres conserva los
+    datos). Re-ejecutable: una vez renombrada, el guard la salta. Corre PRE-DDL (igual que el
+    renombre `qa_*`->`verificar_*`) para que el renombre ocurra ANTES de que las migraciones de
+    ADD COLUMN re-aplicables (0011/0019, cuya tupla directora ya apunta a `verificacion_fuente`)
+    re-evalúen: tras el renombre la columna nueva ya existe, así que NO crean una columna vacía
+    suelta. En una BD virgen las tablas aún no existen en PRE-DDL: el guard hace no-op y el DDL
+    declarativo las crea ya con el nombre nuevo. Además dropa el CHECK viejo
+    `ck_contenido_verificar_veredicto` (Postgres lo arrastra a la columna renombrada): la migración
+    `0029-checks-dominio`, re-aplicable, lo recrea con el nombre nuevo
+    (`ck_contenido_verificacion_fuente`); sin este DROP quedaría un constraint duplicado e inerte.
+    """
+    for tabla, viejo, nuevo in _RENOMBRES_COLUMNAS_VEREDICTO:
+        if not _tabla_existe(con, tabla):
+            continue
+        cols = _columnas_existentes(con, tabla)
+        if viejo in cols and nuevo not in cols:
+            con.execute(f"ALTER TABLE {tabla} RENAME COLUMN {viejo} TO {nuevo}")  # noqa: S608 -- allowlist fija
+    if _tabla_existe(con, "contenido"):
+        con.execute("ALTER TABLE contenido DROP CONSTRAINT IF EXISTS ck_contenido_verificar_veredicto")
+
+
 # Columnas que se anadieron a `rota_eventos` despues de su esquema original (ola B, #144).
 # Una BD creada antes no las tiene; `ALTER TABLE ... ADD COLUMN ... DEFAULT ...` es
 # retrocompatible (las filas viejas quedan con el valor por defecto, sin reescribir nada):
@@ -481,9 +521,9 @@ _COLUMNAS_CONTENIDO_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # sin señal (alta manual, RSS, o BD vieja): la pieza puntua como antes de la Fase 5.
     ("senal_viralidad", "INTEGER NOT NULL DEFAULT 0"),
     # QA de la FUENTE (pre-copy, rediseño QPC): el pipeline verifica la NOTA DE ORIGEN antes de
-    # generar copy. `verificar_veredicto` = "no_verificado" (⚠️ OK para seguir) o "problema" (❗ algo de
+    # generar copy. `verificacion_fuente` = "no_verificado" (⚠️ OK para seguir) o "problema" (❗ algo de
     # peso: NO se generó copy). `verificar_hallazgos` = JSON estructurado de lo encontrado. BD vieja -> "".
-    ("verificar_veredicto", "TEXT NOT NULL DEFAULT ''"),
+    ("verificacion_fuente", "TEXT NOT NULL DEFAULT ''"),
     ("verificar_hallazgos", "TEXT NOT NULL DEFAULT ''"),
     ("copy_pendiente", "TEXT NOT NULL DEFAULT ''"),
     # Fecha de la FUENTE de origen (pipeline): pubDate normalizado a ISO UTC. Las bases
@@ -809,8 +849,8 @@ _COLUMNAS_NOTICIAS_CLUSTERS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # producción (ADR 0011 F3): "no_verificado" (⚠️ apta, sigue a admisión) o "problema" (❗ no
     # se admite). `verificar_hallazgos` = JSON estructurado de lo encontrado. Hereda al `contenido` al
     # admitir, así la frontera "QA = investigación" queda alineada con el modelo de datos. BD
-    # vieja -> "" (sin veredicto: aún por verificar).
-    ("verificar_veredicto", "TEXT NOT NULL DEFAULT ''"),
+    # vieja -> "" (sin verificacion: aún por verificar).
+    ("verificacion_fuente", "TEXT NOT NULL DEFAULT ''"),
     ("verificar_hallazgos", "TEXT NOT NULL DEFAULT ''"),
 )
 

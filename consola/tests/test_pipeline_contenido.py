@@ -69,16 +69,16 @@ def _envejecer_intento(tema_id, campo):
 
 
 def _temas_sin_verdicto(marca=None):
-    """Temas del pipeline sin veredicto de QA (pendientes). Local del test: el barrido F3
+    """Temas del pipeline sin verificación de QA (pendientes). Local del test: el barrido F3
     selecciona por CLUSTER, así que el filtro por-tema ya no vive en producción."""
-    return [t for t in pc.temas_pipeline(marca) if not (t.get("verificar_veredicto") or "").strip()]
+    return [t for t in pc.temas_pipeline(marca) if not (t.get("verificacion_fuente") or "").strip()]
 
 
 def _inicializar_cluster(
     cid, *, marca="unotv", titulo="Historia X", score=0.5, estado="nuevo",
     resumen="México: el gobierno informa de seguridad en la CDMX", ultimo_visto=None,
     verificacion="corroborada", n_fuentes=2, categoria="mx", breaking=0,
-    verificar_veredicto="",
+    verificacion_fuente="",
 ):
     """Siembra un cluster del pool (Ola B) para los tests de promoción ADMITIR→tema.
 
@@ -86,10 +86,10 @@ def _inicializar_cluster(
     FRESCO (`ultimo_visto` ≈ ahora), corroborado y con encaje de marca unotv por el resumen.
     Los tests del propio umbral pasan valores que lo incumplen a propósito.
 
-    `verificar_veredicto`: estado de la verificación del cluster. Por defecto "" (sin verificar, el estado del que
+    `verificacion_fuente`: estado de la verificación del cluster. Por defecto "" (sin verificar, el estado del que
     parte Verificar en investigación). La ADMISIÓN solo promueve las VERIFICADAS, así que los tests
     que llaman DIRECTO a la promoción (sin pasar por la fase Verificar) deben inicializar el cluster ya
-    verificado (`VERDICTO_NO_VERIFICADO`) — es el camino real, no el atajo sin filtro.
+    verificado (`VERIFICACION_NO_VERIFICADO`) — es el camino real, no el atajo sin filtro.
     """
     from datetime import UTC, datetime
 
@@ -102,8 +102,8 @@ def _inicializar_cluster(
         or datetime.now(UTC).replace(tzinfo=None).isoformat(timespec="seconds"),
         "estado": estado, "verificacion": verificacion,
     })
-    if verificar_veredicto:
-        repos.marcar_cluster_qa(cid, verificar_veredicto)
+    if verificacion_fuente:
+        repos.marcar_cluster_qa(cid, verificacion_fuente)
     return repos.obtener_noticia_cluster(cid)
 
 
@@ -233,13 +233,13 @@ def test_en_backoff_puro_segun_intentos_y_timestamp():
 
 def test_qa_lexico_listo_sin_observaciones():
     r = pc.qa_lexico({"red": "x", "contenido": "Copy corto y válido."})
-    assert r["verdicto"] == "listo"
+    assert r["verificacion"] == "listo"
     assert r["observaciones"] == []
 
 
 def test_qa_lexico_copy_vacio():
     r = pc.qa_lexico({"red": "x", "contenido": "   "})
-    assert r["verdicto"] == "revisar"
+    assert r["verificacion"] == "revisar"
     assert any("vacío" in o for o in r["observaciones"])
 
 
@@ -247,7 +247,7 @@ def test_qa_lexico_supera_limite_de_red():
     limite = next(red.limite for red in redes.REDES if red.id == "x")
     assert limite is not None
     r = pc.qa_lexico({"red": "x", "contenido": "a" * (limite + 1)})
-    assert r["verdicto"] == "revisar"
+    assert r["verificacion"] == "revisar"
     assert any("límite" in o for o in r["observaciones"])
 
 
@@ -343,7 +343,7 @@ def test_redactar_pasa_fotos_notas_y_n_notas_al_copy(entorno, monkeypatch):
     ]
     tema = _tema_pipeline(
         titulo="Panel de conciertos",
-        verificar_veredicto=pc.VERDICTO_NO_VERIFICADO,
+        verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO,
         copy_pendiente=json.dumps({
             "nota": "Nota", "redes_ids": ["x", "instagram", "facebook"],
             "imagen": "https://casa.test/a.jpg",
@@ -364,7 +364,7 @@ def test_redactar_pendiente_viejo_sin_panel_no_ofrece_carrusel(entorno, monkeypa
     llamadas = _mock_lanzar_copy(monkeypatch)
     tema = _tema_pipeline(
         titulo="Pendiente legado",
-        verificar_veredicto=pc.VERDICTO_NO_VERIFICADO,
+        verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO,
         copy_pendiente=json.dumps({
             "nota": "Nota", "redes_ids": ["x"], "imagen": "https://casa.test/a.jpg",
         }),
@@ -404,15 +404,15 @@ def test_verificar_cluster_problema_no_se_admite(entorno, monkeypatch):
     # Un tick de investigación: Verificar (síncrona en test) marca el cluster, la admisión decide.
     res = pc._ejecutar_investigacion()
 
-    assert repos.obtener_noticia_cluster("c-malo")["verificar_veredicto"] == pc.VERDICTO_PROBLEMA
+    assert repos.obtener_noticia_cluster("c-malo")["verificacion_fuente"] == pc.VERIFICACION_PROBLEMA
     assert res["temas"] == []  # 'problema' NO cruza a producción
     assert pc.temas_pipeline() == []
-    # La historia sigue en el pool (visible con su veredicto), sin promover.
+    # La historia sigue en el pool (visible con su verificación), sin promover.
     assert repos.obtener_noticia_cluster("c-malo")["estado"] == "nuevo"
 
 
 def test_verificar_cluster_ok_se_admite_heredando_veredicto(entorno, monkeypatch):
-    """ADR 0011 F3: una historia que pasa Verificar se admite y el TEMA HEREDA el veredicto del cluster."""
+    """ADR 0011 F3: una historia que pasa Verificar se admite y el TEMA HEREDA el verificación del cluster."""
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_MAX", "5")
@@ -422,11 +422,11 @@ def test_verificar_cluster_ok_se_admite_heredando_veredicto(entorno, monkeypatch
 
     res = pc._ejecutar_investigacion()
 
-    assert repos.obtener_noticia_cluster("c-ok")["verificar_veredicto"] == pc.VERDICTO_NO_VERIFICADO
+    assert repos.obtener_noticia_cluster("c-ok")["verificacion_fuente"] == pc.VERIFICACION_NO_VERIFICADO
     assert len(res["temas"]) == 1
     tema = res["temas"][0]
     # El contenido nace VERIFICADO (frontera "Verificar = investigación" alineada en los datos).
-    assert repos.obtener_contenido(tema["id"])["verificar_veredicto"] == pc.VERDICTO_NO_VERIFICADO
+    assert repos.obtener_contenido(tema["id"])["verificacion_fuente"] == pc.VERIFICACION_NO_VERIFICADO
     assert repos.obtener_noticia_cluster("c-ok")["estado"] == "usado"
 
 
@@ -456,7 +456,7 @@ def test_copy_fallido_se_reintenta_tras_el_backoff(entorno, monkeypatch):
     """
     monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")
     llamadas = _mock_lanzar_copy(monkeypatch)
-    tema = _tema_pipeline(titulo="Reintento", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    tema = _tema_pipeline(titulo="Reintento", verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO)
 
     pc.ejecutar_redactar(autor=None)
     assert len(llamadas) == 1
@@ -480,18 +480,18 @@ def test_copy_fallido_se_reintenta_tras_el_backoff(entorno, monkeypatch):
 
 
 def test_verificar_no_relanza_tema_ya_verificado(entorno, monkeypatch):
-    """Un tema con veredicto ya no se re-verificación (idempotente)."""
-    _tema_pipeline(titulo="Ya verificado", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    """Un tema con verificación ya no se re-verificación (idempotente)."""
+    _tema_pipeline(titulo="Ya verificado", verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO)
     assert _temas_sin_verdicto() == []
 
 
 def test_temas_para_copy_devuelve_todos_los_listos(entorno):
     """FLUJO CONTINUO: REDACTAR ve TODOS los temas listos (verificados+pendiente de copy), sin ventana."""
     # Viejos no_verificado pero YA copiados (copy_pendiente vacío -> no pasan el filtro de Redactar).
-    _tema_pipeline(titulo="Viejo 1", id="v1", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente="")
-    _tema_pipeline(titulo="Viejo 2", id="v2", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente="")
-    _tema_pipeline(titulo="Nuevo A", id="n1", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
-    _tema_pipeline(titulo="Nuevo B", id="n2", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    _tema_pipeline(titulo="Viejo 1", id="v1", verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO, copy_pendiente="")
+    _tema_pipeline(titulo="Viejo 2", id="v2", verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO, copy_pendiente="")
+    _tema_pipeline(titulo="Nuevo A", id="n1", verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO)
+    _tema_pipeline(titulo="Nuevo B", id="n2", verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO)
     assert {t["id"] for t in pc.temas_para_redactar()} == {"n1", "n2"}
 
 
@@ -505,7 +505,7 @@ def test_redactar_sin_tope_lanza_todos_los_listos(entorno, monkeypatch):
     for i in range(4):
         _tema_pipeline(
             titulo=f"C{i}", id=f"tcd{i}",
-            verificar_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend,
+            verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO, copy_pendiente=pend,
         )
 
     lanzados = pc.ejecutar_redactar(autor=None)
@@ -520,13 +520,13 @@ def test_redactar_reintentos_agotados_marca_problema_sin_lanzar(entorno, monkeyp
     monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")
     llamadas = _mock_lanzar_copy(monkeypatch)
     pend = json.dumps({"nota": "n", "redes_ids": ["x"], "redactar_intentos": pc._MAX_INTENTOS_ETAPA})
-    tema = _tema_pipeline(titulo="Copy agotado", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend)
+    tema = _tema_pipeline(titulo="Copy agotado", verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO, copy_pendiente=pend)
 
     lanzados = pc.ejecutar_redactar(autor=None)
 
     assert lanzados == [] and llamadas == []
     refrescado = repos.obtener_contenido(tema["id"])
-    assert refrescado["verificar_veredicto"] == pc.VERDICTO_PROBLEMA
+    assert refrescado["verificacion_fuente"] == pc.VERIFICACION_PROBLEMA
     assert "falló" in (refrescado["verificar_hallazgos"] or "")
     assert pc.temas_en_proceso("unotv") == 0  # terminal: libera la admisión de su marca
 
@@ -537,7 +537,7 @@ def test_redactar_reintento_anota_intentos_acumulados(entorno, monkeypatch):
 
     monkeypatch.setenv("KENI_PIPELINE_REDACTAR", "1")
     llamadas = _mock_lanzar_copy(monkeypatch)
-    tema = _tema_pipeline(titulo="Suma intentos", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    tema = _tema_pipeline(titulo="Suma intentos", verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO)
 
     pc.ejecutar_redactar(autor=None)  # 1er intento (el copy mockeado "falla": no nace pieza)
     _envejecer_intento(tema["id"], "redactar_intentos")  # fuera del backoff: el barrido reintenta
@@ -569,7 +569,7 @@ def test_solo_noticias_promueve_cluster_qa_saltada_cd_no(entorno, monkeypatch):
     assert len(resumen["temas"]) == 1
     assert any(t["titulo"] == "Historia caliente" for t in pc.temas_pipeline())
     # Verificar desactivada: el tema queda 'saltada' (no se lanza verificación).
-    assert all((t.get("verificar_veredicto") or "") == pc.QA_SALTADA for t in pc.temas_pipeline())
+    assert all((t.get("verificacion_fuente") or "") == pc.QA_SALTADA for t in pc.temas_pipeline())
     # Redactar desactivada: no se genera copy aunque haya tema listo.
     assert llamadas == []
     # El cluster quedó marcado usado (no se re-promueve).
@@ -610,9 +610,9 @@ def test_promover_clusters_top_n_por_score(entorno, monkeypatch):
     """`promover_clusters_marca` promueve las top-N historias por score y las marca usado."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     # Verificadas (estado real tras Verificar): la admisión SIEMPRE verificación — solo promueve verificadas.
-    _inicializar_cluster("baja", titulo="Score bajo", score=0.1, verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
-    _inicializar_cluster("alta", titulo="Score alto", score=0.9, verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
-    _inicializar_cluster("media", titulo="Score medio", score=0.5, verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    _inicializar_cluster("baja", titulo="Score bajo", score=0.1, verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO)
+    _inicializar_cluster("alta", titulo="Score alto", score=0.9, verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO)
+    _inicializar_cluster("media", titulo="Score medio", score=0.5, verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO)
 
     temas = pc.promover_clusters_marca("unotv", maximo=2)
 
@@ -625,13 +625,13 @@ def test_promover_clusters_top_n_por_score(entorno, monkeypatch):
 
 
 def test_promover_clusters_marca_filtra_sin_verificar_por_defecto(entorno, monkeypatch):
-    """El filtro de Verificar es OBLIGATORIO por defecto (ADR 0011 F3): un cluster SIN verificar (veredicto
+    """El filtro de Verificar es OBLIGATORIO por defecto (ADR 0011 F3): un cluster SIN verificar (verificación
     '') NO se promueve aunque gane en score/umbral — no existe un camino que promueva sin verificar.
     """
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
-    _inicializar_cluster("sin_verificar", titulo="Aún sin Verificar", score=0.9)  # verificar_veredicto='' por defecto
+    _inicializar_cluster("sin_verificar", titulo="Aún sin Verificar", score=0.9)  # verificacion_fuente='' por defecto
     _inicializar_cluster("verificada", titulo="Ya verificada", score=0.5,
-                     verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
+                     verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO)
 
     temas = pc.promover_clusters_marca("unotv", maximo=5)  # SIN qa_estados: cae al filtro por defecto
 
@@ -778,16 +778,16 @@ def test_crear_tema_de_cluster_no_usa_imagen_de_feed_ajeno(entorno, monkeypatch)
 def test_temas_en_proceso_cuenta_pendientes_de_verificar_o_copy(entorno):
     """`temas_en_proceso` cuenta los temas sin terminar las fases de IA (Verificar pendiente o sin copy).
 
-    En proceso: veredicto ''/'en_curso' (Verificar pendiente) y 'no_verificado'/'saltada' SIN copy. NO en
+    En proceso: verificación ''/'en_curso' (Verificar pendiente) y 'no_verificado'/'saltada' SIN copy. NO en
     vuelo: 'problema' (terminal) ni 'no_verificado' que YA tiene copy en una pieza por plataforma.
     """
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
-    _tema_pipeline(titulo="Pendiente QA", verificar_veredicto="", copy_pendiente=pend)          # +1
-    _tema_pipeline(titulo="QA en curso", verificar_veredicto=pc.QA_EN_CURSO, copy_pendiente=pend)  # +1
-    _tema_pipeline(titulo="Apto sin copy", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend)  # +1
-    _tema_pipeline(titulo="Saltada sin copy", verificar_veredicto=pc.QA_SALTADA, copy_pendiente=pend)  # +1
-    _tema_pipeline(titulo="Problema", verificar_veredicto=pc.VERDICTO_PROBLEMA, copy_pendiente=pend)  # terminal: 0
-    con_copy = _tema_pipeline(titulo="Apto con copy", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend)
+    _tema_pipeline(titulo="Pendiente QA", verificacion_fuente="", copy_pendiente=pend)          # +1
+    _tema_pipeline(titulo="QA en curso", verificacion_fuente=pc.QA_EN_CURSO, copy_pendiente=pend)  # +1
+    _tema_pipeline(titulo="Apto sin copy", verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO, copy_pendiente=pend)  # +1
+    _tema_pipeline(titulo="Saltada sin copy", verificacion_fuente=pc.QA_SALTADA, copy_pendiente=pend)  # +1
+    _tema_pipeline(titulo="Problema", verificacion_fuente=pc.VERIFICACION_PROBLEMA, copy_pendiente=pend)  # terminal: 0
+    con_copy = _tema_pipeline(titulo="Apto con copy", verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO, copy_pendiente=pend)
     # Una pieza por plataforma CON copy -> ya pasó la etapa de copy: no cuenta como en proceso.
     repos.crear_contenido_plataforma(contenido_id=con_copy["id"], red="x", copy="Copy listo")
 
@@ -805,8 +805,8 @@ def test_caducidad_libera_el_gate_y_excluye_de_las_fases(entorno):
     from datetime import datetime, timedelta, timezone
 
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
-    _tema_pipeline(titulo="Atascado", verificar_veredicto="", copy_pendiente=pend)
-    _tema_pipeline(titulo="Apto viejo", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend)
+    _tema_pipeline(titulo="Atascado", verificacion_fuente="", copy_pendiente=pend)
+    _tema_pipeline(titulo="Apto viejo", verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO, copy_pendiente=pend)
     assert pc.temas_en_proceso("unotv") == 2
 
     futuro = datetime.now(timezone.utc) + timedelta(hours=25)  # > TTL (def 24 h)
@@ -817,7 +817,7 @@ def test_caducidad_libera_el_gate_y_excluye_de_las_fases(entorno):
     assert _temas_sin_verdicto() == []
     assert pc.temas_para_redactar() == []
     temas = {t["titulo"]: t for t in pc.temas_pipeline()}
-    assert temas["Atascado"]["verificar_veredicto"] == pc.QA_CADUCADA
+    assert temas["Atascado"]["verificacion_fuente"] == pc.QA_CADUCADA
     assert "Caducada" in (temas["Atascado"].get("notas") or "")
 
 
@@ -827,10 +827,10 @@ def test_caducidad_respeta_lo_fresco_y_lo_terminal(entorno):
     from datetime import datetime, timedelta, timezone
 
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
-    _tema_pipeline(titulo="Fresco", verificar_veredicto="", copy_pendiente=pend)
-    _tema_pipeline(titulo="Problema viejo", verificar_veredicto=pc.VERDICTO_PROBLEMA, copy_pendiente=pend)
+    _tema_pipeline(titulo="Fresco", verificacion_fuente="", copy_pendiente=pend)
+    _tema_pipeline(titulo="Problema viejo", verificacion_fuente=pc.VERIFICACION_PROBLEMA, copy_pendiente=pend)
     con_copy = _tema_pipeline(
-        titulo="Con copy", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend
+        titulo="Con copy", verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO, copy_pendiente=pend
     )
     repos.crear_contenido_plataforma(contenido_id=con_copy["id"], red="x", copy="Copy listo")
 
@@ -841,8 +841,8 @@ def test_caducidad_respeta_lo_fresco_y_lo_terminal(entorno):
     futuro = datetime.now(timezone.utc) + timedelta(hours=25)
     assert pc.caducar_temas_viejos(ahora=futuro) == 1
     temas = {t["titulo"]: t for t in pc.temas_pipeline()}
-    assert temas["Problema viejo"]["verificar_veredicto"] == pc.VERDICTO_PROBLEMA
-    assert temas["Con copy"]["verificar_veredicto"] == pc.VERDICTO_NO_VERIFICADO
+    assert temas["Problema viejo"]["verificacion_fuente"] == pc.VERIFICACION_PROBLEMA
+    assert temas["Con copy"]["verificacion_fuente"] == pc.VERIFICACION_NO_VERIFICADO
 
 
 def test_caducado_libera_hueco_para_lo_fresco_del_ranking(entorno, monkeypatch):
@@ -858,7 +858,7 @@ def test_caducado_libera_hueco_para_lo_fresco_del_ranking(entorno, monkeypatch):
     monkeypatch.delenv("KENI_PIPELINE_VERIFICAR", raising=False)
     monkeypatch.delenv("KENI_PIPELINE_REDACTAR", raising=False)
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
-    _tema_pipeline(titulo="Backlog vencido", verificar_veredicto="", copy_pendiente=pend)
+    _tema_pipeline(titulo="Backlog vencido", verificacion_fuente="", copy_pendiente=pend)
     _inicializar_cluster("hot", titulo="Lo fresco de hoy", score=0.9)
     # Con el backlog en proceso, el cupo (1) está agotado: no entra nada.
     assert pc._ejecutar_barrido()["temas"] == []
@@ -877,8 +877,8 @@ def test_admitir_serial_no_promueve_si_marca_llena(entorno, monkeypatch):
     monkeypatch.setenv("KENI_PIPELINE_EN_PROCESO_MAX", "2")
     # 2 temas en proceso (pendientes de Verificar) -> cupo 0 para unotv.
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
-    _tema_pipeline(titulo="En proceso 1", verificar_veredicto="", copy_pendiente=pend)
-    _tema_pipeline(titulo="En proceso 2", verificar_veredicto="", copy_pendiente=pend)
+    _tema_pipeline(titulo="En proceso 1", verificacion_fuente="", copy_pendiente=pend)
+    _tema_pipeline(titulo="En proceso 2", verificacion_fuente="", copy_pendiente=pend)
     _inicializar_cluster("hot", titulo="Historia caliente", score=0.9)
 
     res = pc._ejecutar_barrido()
@@ -895,8 +895,8 @@ def test_admitir_serial_promueve_solo_hasta_el_cupo(entorno, monkeypatch):
     monkeypatch.setenv("KENI_PIPELINE_EN_PROCESO_MAX", "3")
     # 2 en proceso -> cupo 1: solo entra 1 historia aunque haya 3 clusters y pipeline_max=3.
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
-    _tema_pipeline(titulo="En proceso 1", verificar_veredicto="", copy_pendiente=pend)
-    _tema_pipeline(titulo="En proceso 2", verificar_veredicto="", copy_pendiente=pend)
+    _tema_pipeline(titulo="En proceso 1", verificacion_fuente="", copy_pendiente=pend)
+    _tema_pipeline(titulo="En proceso 2", verificacion_fuente="", copy_pendiente=pend)
     _inicializar_cluster("c1", titulo="Hist 1", score=0.9)
     _inicializar_cluster("c2", titulo="Hist 2", score=0.8)
     _inicializar_cluster("c3", titulo="Hist 3", score=0.7)
@@ -920,7 +920,7 @@ def test_cupo_dia_corta_la_admision(entorno, monkeypatch):
     monkeypatch.setenv("KENI_CUPO_DIA", "1")
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
     t = _tema_pipeline(
-        titulo="Producido hoy", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend
+        titulo="Producido hoy", verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO, copy_pendiente=pend
     )
     repos.crear_contenido_plataforma(contenido_id=t["id"], red="x", copy="Copy listo")
     _inicializar_cluster("hot", titulo="Historia caliente", score=0.9)
@@ -998,9 +998,9 @@ def test_promocion_persiste_categoria_en_el_contenido(entorno, monkeypatch):
     # test_plan_sin_linea_breaking_compite_por_su_feed) y desplazaría a la nacional.
     monkeypatch.setenv("KENI_PLAN_DIA", "mx:1,breaking:1")
     _inicializar_cluster("cat1", titulo="Nacional persistida", score=0.9, categoria="mx",
-                     verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
+                     verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO)
     _inicializar_cluster("cat2", titulo="Urgente persistida", score=0.9, categoria="mx", breaking=1,
-                     verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
+                     verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO)
 
     temas = pc.promover_clusters_marca(
         "unotv", maximo=2, cupos_categoria={"mx": 1, "breaking": 1}
@@ -1088,7 +1088,7 @@ def test_plan_sin_linea_breaking_compite_por_su_feed(entorno, monkeypatch):
     cupo de su categoría de FEED."""
     monkeypatch.setenv("KENI_PLAN_DIA", "mx:1")
     _inicializar_cluster("brx", titulo="Ultima hora sin linea propia", score=0.9,
-                     categoria="mx", breaking=1, verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
+                     categoria="mx", breaking=1, verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO)
 
     elegidos = pc.clusters_para_promover("unotv", maximo=5, cupos_categoria={"mx": 1})
 
@@ -1098,8 +1098,8 @@ def test_plan_sin_linea_breaking_compite_por_su_feed(entorno, monkeypatch):
 def test_temas_para_copy_incluye_qa_saltada(entorno):
     """Un tema con Verificar 'saltada' fluye a Redactar igual que 'no_verificado'; un 'problema' no."""
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
-    _tema_pipeline(titulo="Saltada ok", verificar_veredicto=pc.QA_SALTADA, copy_pendiente=pend)
-    _tema_pipeline(titulo="Problema", verificar_veredicto=pc.VERDICTO_PROBLEMA, copy_pendiente=pend)
+    _tema_pipeline(titulo="Saltada ok", verificacion_fuente=pc.QA_SALTADA, copy_pendiente=pend)
+    _tema_pipeline(titulo="Problema", verificacion_fuente=pc.VERIFICACION_PROBLEMA, copy_pendiente=pend)
 
     titulos = {t["titulo"] for t in pc.temas_para_redactar()}
     assert "Saltada ok" in titulos
@@ -1223,11 +1223,11 @@ def test_ejecutar_arte_sin_proveedor_no_ilustra(entorno, monkeypatch):
 def test_clusters_para_promover_diversifica_titulos_casi_identicos(entorno):
     """Un macro-tema (dos historias casi idénticas) no se come todas las plazas del barrido."""
     _inicializar_cluster("dup1", titulo="Messi gana el premio en París", score=0.9,
-                     verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
+                     verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO)
     _inicializar_cluster("dup2", titulo="Messi gana el premio en París hoy", score=0.8,
-                     verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
+                     verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO)
     _inicializar_cluster("otra", titulo="Sismo de magnitud en la capital", score=0.5,
-                     verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
+                     verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO)
 
     elegidos = pc.clusters_para_promover("unotv", maximo=2)
 
@@ -1237,9 +1237,9 @@ def test_clusters_para_promover_diversifica_titulos_casi_identicos(entorno):
 def test_clusters_para_promover_suave_rellena_si_solo_hay_duplicados(entorno):
     """Si todo el pool es el mismo macro-tema, se rellena igual (nunca devuelve menos)."""
     _inicializar_cluster("dup1", titulo="Messi gana el premio en París", score=0.9,
-                     verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
+                     verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO)
     _inicializar_cluster("dup2", titulo="Messi gana el premio en París hoy", score=0.8,
-                     verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
+                     verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO)
     elegidos = pc.clusters_para_promover("unotv", maximo=2)
     assert {c["id"] for c in elegidos} == {"dup1", "dup2"}
 
@@ -1257,20 +1257,20 @@ def test_clusters_para_promover_respeta_el_umbral(entorno):
     # Todas VERIFICADAS (pasaron la verificación): así el ÚNICO discriminante de la promoción es el
     # umbral, no el filtro de Verificar (que ya verificó a todas por igual).
     _inicializar_cluster("apta", titulo="Sismo sacude la CDMX", score=0.9,
-                     verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
+                     verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO)
     # Sin encaje de marca: ni el título ni el resumen casan el vocabulario unotv.
     _inicializar_cluster(
         "irrelevante", titulo="Gossip de celebridades en Hollywood", score=0.8,
-        resumen="Rumores del espectáculo extranjero", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO,
+        resumen="Rumores del espectáculo extranjero", verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO,
     )
     # Verificación dudosa: jamás dispara producción automática, puntúe lo que puntúe.
     _inicializar_cluster("dudosa", titulo="Increíble suceso en México hoy", score=0.7,
-                     verificacion="dudosa", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
+                     verificacion="dudosa", verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO)
     # Vieja sin señales: su score persistido era alto, pero el umbral recalcula AHORA.
     _inicializar_cluster(
         "vieja", titulo="México: nota de hace una semana", score=0.95, n_fuentes=1,
         ultimo_visto=(datetime.now(UTC) - timedelta(days=7)).replace(tzinfo=None)
-        .isoformat(timespec="seconds"), verificar_veredicto=pc.VERDICTO_NO_VERIFICADO,
+        .isoformat(timespec="seconds"), verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO,
     )
 
     elegidos = pc.clusters_para_promover("unotv", maximo=4)
@@ -1283,10 +1283,10 @@ def test_promover_clusters_marca_no_promueve_bajo_umbral(entorno, monkeypatch):
     """El barrido ADMITIR deja en el pool (estado `nuevo`) lo que no supera el umbral: ni tema ni copy."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     _inicializar_cluster("apta", titulo="Sismo sacude la CDMX", score=0.9,
-                     verificar_veredicto=pc.VERDICTO_NO_VERIFICADO)
+                     verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO)
     _inicializar_cluster(
         "irrelevante", titulo="Gossip de celebridades en Hollywood", score=0.8,
-        resumen="Rumores del espectáculo extranjero", verificar_veredicto=pc.VERDICTO_NO_VERIFICADO,
+        resumen="Rumores del espectáculo extranjero", verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO,
     )
 
     temas = pc.promover_clusters_marca("unotv", maximo=2)
@@ -1374,8 +1374,8 @@ def test_reparar_qa_en_curso_sueltos_resetea_solo_viejos(entorno):
     """
     from keni_consola import db
 
-    atascada = _tema_pipeline(titulo="Atascada", verificar_veredicto=pc.QA_EN_CURSO)
-    vivo = _tema_pipeline(titulo="Vivo", verificar_veredicto=pc.QA_EN_CURSO)
+    atascada = _tema_pipeline(titulo="Atascada", verificacion_fuente=pc.QA_EN_CURSO)
+    vivo = _tema_pipeline(titulo="Vivo", verificacion_fuente=pc.QA_EN_CURSO)
     # Envejecemos el `actualizado` del atascada más allá del umbral (el del vivo queda reciente).
     con = db._conectar()
     try:
@@ -1390,8 +1390,8 @@ def test_reparar_qa_en_curso_sueltos_resetea_solo_viejos(entorno):
     n = repos.reparar_qa_en_curso_sueltos("2025-01-01T00:00:00")
 
     assert n == 1
-    assert (repos.obtener_contenido(atascada["id"])["verificar_veredicto"] or "") == ""  # a re-verificación
-    assert repos.obtener_contenido(vivo["id"])["verificar_veredicto"] == pc.QA_EN_CURSO  # intacto
+    assert (repos.obtener_contenido(atascada["id"])["verificacion_fuente"] or "") == ""  # a re-verificación
+    assert repos.obtener_contenido(vivo["id"])["verificacion_fuente"] == pc.QA_EN_CURSO  # intacto
 
 
 def _envejecer_actualizado(tema_id, fecha="2020-01-01T00:00:00"):
@@ -1411,15 +1411,15 @@ def test_limpiador_qa_atascada_re_verificacion_con_validacion_activa(entorno, mo
     from keni_consola import limpiador_generaciones
 
     monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")
-    atascada = _tema_pipeline(titulo="Atascada", verificar_veredicto=pc.QA_EN_CURSO)
-    vivo = _tema_pipeline(titulo="Vivo", verificar_veredicto=pc.QA_EN_CURSO)
+    atascada = _tema_pipeline(titulo="Atascada", verificacion_fuente=pc.QA_EN_CURSO)
+    vivo = _tema_pipeline(titulo="Vivo", verificacion_fuente=pc.QA_EN_CURSO)
     _envejecer_actualizado(atascada["id"])
 
     n = limpiador_generaciones._reparar_qa_en_curso()
 
     assert n == 1
-    assert (repos.obtener_contenido(atascada["id"])["verificar_veredicto"] or "") == ""  # a re-verificación
-    assert repos.obtener_contenido(vivo["id"])["verificar_veredicto"] == pc.QA_EN_CURSO  # intacto
+    assert (repos.obtener_contenido(atascada["id"])["verificacion_fuente"] or "") == ""  # a re-verificación
+    assert repos.obtener_contenido(vivo["id"])["verificacion_fuente"] == pc.QA_EN_CURSO  # intacto
 
 
 def test_limpiador_qa_atascada_saltada_con_validacion_apagada(entorno, monkeypatch):
@@ -1427,13 +1427,13 @@ def test_limpiador_qa_atascada_saltada_con_validacion_apagada(entorno, monkeypat
     from keni_consola import limpiador_generaciones
 
     monkeypatch.delenv("KENI_PIPELINE_VERIFICAR", raising=False)  # etapa off (def)
-    atascada = _tema_pipeline(titulo="Atascada sin QA", verificar_veredicto=pc.QA_EN_CURSO)
+    atascada = _tema_pipeline(titulo="Atascada sin QA", verificacion_fuente=pc.QA_EN_CURSO)
     _envejecer_actualizado(atascada["id"])
 
     n = limpiador_generaciones._reparar_qa_en_curso()
 
     assert n == 1
-    assert repos.obtener_contenido(atascada["id"])["verificar_veredicto"] == pc.QA_SALTADA
+    assert repos.obtener_contenido(atascada["id"])["verificacion_fuente"] == pc.QA_SALTADA
 
 
 def test_ejecutar_arte_fallo_masivo_emite_un_error_agregado(entorno, monkeypatch, caplog):

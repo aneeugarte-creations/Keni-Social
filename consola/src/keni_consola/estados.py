@@ -379,17 +379,17 @@ DECISION_PENDIENTE = "pendiente"
 DECISION_APROBADO = "aprobado"
 DECISION_RECHAZADO = "rechazado"
 
-# Veredictos validos de la QA DE LA FUENTE persistida en `contenido.verificar_veredicto` (verificación
+# Verificaciones validas de la QA DE LA FUENTE persistida en `contenido.verificacion_fuente` (verificación
 # pre-copy). Allowlist CANONICA para el CHECK de esquema (ADR 0012). "" = sin verificar / a
 # re-verificación. Los valores NO viven en este modulo dependency-free (son del pipeline/dominio);
 # se enumeran aqui como literales, con su origen, para no acoplar `estados` al pipeline:
 #   - "en_curso":      SENTINEL en curso            (`pipeline_contenido._comun.QA_EN_CURSO`)
 #   - "saltada":       QA desactivada para la marca (`pipeline_contenido._comun.QA_SALTADA`)
 #   - "caducada":      tema que supero el TTL       (`pipeline_contenido._comun.QA_CADUCADA`)
-#   - "no_verificado": apta para seguir (⚠️)        (`dominio.verificar_fuente.VERDICTO_NO_VERIFICADO`)
-#   - "problema":      algo de peso en contra (❗)   (`dominio.verificar_fuente.VERDICTO_PROBLEMA`)
-# Si se anade un veredicto nuevo en el pipeline, anadirlo AQUI (el CHECK lo rechazaria si no).
-VEREDICTOS_QA_CONTENIDO: tuple[str, ...] = (
+#   - "no_verificado": apta para seguir (⚠️)        (`dominio.verificar_fuente.VERIFICACION_NO_VERIFICADO`)
+#   - "problema":      algo de peso en contra (❗)   (`dominio.verificar_fuente.VERIFICACION_PROBLEMA`)
+# Si se anade un verificacion nuevo en el pipeline, anadirlo AQUI (el CHECK lo rechazaria si no).
+VERIFICACIONES_QA_CONTENIDO: tuple[str, ...] = (
     "",
     "en_curso",
     "saltada",

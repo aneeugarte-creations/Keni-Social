@@ -23,7 +23,7 @@ from ._comun import (
     _MAX_INTENTOS_ETAPA,
     QA_EN_CURSO,
     QA_SALTADA,
-    VERDICTO_NO_VERIFICADO,
+    VERIFICACION_NO_VERIFICADO,
     VERIFICADAS_QA,
     _log,
     anotar_intento,
@@ -96,7 +96,7 @@ def ejecutar_investigacion() -> dict[str, Any]:
 
     Recolecta del pool ya fusionado/rankeado, ADMITE por marca solo hasta llenar el cupo en
     curso (gate serial WIP) y lanza la VERIFICACIÓN de la fuente (`claude -p`) de lo admitido sin
-    veredicto. Best-effort. Devuelve `{temas, verificados}`.
+    verificacion. Best-effort. Devuelve `{temas, verificados}`.
 
     SINGLE-FLIGHT cross-proceso (advisory lock): el daemon de investigación y el disparo a
     demanda comparten este barrido; el dedup (`_claves_dedup_marca`) es leer-luego-escribir en
@@ -145,7 +145,7 @@ def ejecutar_barrido() -> dict[str, Any]:
 # Estados del ADMISION de verificación: clusters `nuevo` que ya entraron al circuito de QA y aún
 # no se admitieron (en proceso, verificados-pendientes o saltados). Acotan cuánta QA se lanza por
 # tick (presupuesto = tope en proceso − admision) para que la verificación no recorra todo el pool.
-_ADMISION_QA = (QA_EN_CURSO, VERDICTO_NO_VERIFICADO, QA_SALTADA)
+_ADMISION_QA = (QA_EN_CURSO, VERIFICACION_NO_VERIFICADO, QA_SALTADA)
 
 
 def _ejecutar_investigacion() -> dict[str, Any]:
@@ -154,10 +154,10 @@ def _ejecutar_investigacion() -> dict[str, Any]:
     Rediseño F3 (la frontera "QA = investigación" en los datos): la QA corre sobre la HISTORIA
     (cluster) ANTES de materializar contenido, y la admisión solo promueve las VERIFICADAS:
       0) FRESCURA: caduca los temas en curso (TTL) y resetea las QA de cluster `en_curso` atascadas.
-      1) QA: verifica las candidatas sin veredicto (top del ranking que pasan el umbral), acotada
-         por el admision. Asíncrona; persiste el veredicto en el cluster.
+      1) QA: verifica las candidatas sin verificacion (top del ranking que pasan el umbral), acotada
+         por el admision. Asíncrona; persiste el verificacion en el cluster.
       2) ADMISIÓN: promueve a tema (con copy pendiente) las historias ya verificadas, heredando
-         su veredicto al contenido. Las `problema` no se materializan.
+         su verificacion al contenido. Las `problema` no se materializan.
     """
     autor = _ref._autor_pipeline()
     maximo = config.pipeline_max()
@@ -177,7 +177,7 @@ def _ejecutar_investigacion() -> dict[str, Any]:
     # --- Fase ADMISIÓN · "Crear noticias": materializa las historias YA VERIFICADAS por marca. -
     # Etapa CI = toggle "Crear noticias" (`KENI_PIPELINE_RECOLECTAR`): si está OFF no entra nada. La
     # admisión consume el pool RANKEADO restringido a las verificadas (`no_verificado`/`saltada`),
-    # llena el cupo en curso (gate serial WIP) y los cupos del plan/diario, y HEREDA el veredicto
+    # llena el cupo en curso (gate serial WIP) y los cupos del plan/diario, y HEREDA el verificacion
     # del cluster al contenido (la pieza nace verificada y lista para copy).
     temas_nuevos: list[dict[str, Any]] = []
     for marca in marcas.ids():
@@ -229,14 +229,14 @@ def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[
     """Fase QA del proceso de INVESTIGACIÓN (ADR 0011 F3): verifica la FUENTE de las HISTORIAS
     candidatas ANTES de materializar contenido.
 
-    Por marca con admisión activa (`KENI_PIPELINE_RECOLECTAR`): toma las candidatas sin veredicto
+    Por marca con admisión activa (`KENI_PIPELINE_RECOLECTAR`): toma las candidatas sin verificacion
     que pasan el umbral (`clusters_pendientes_verificar`), acotadas por el presupuesto del ADMISION
     (`tope en proceso − admision`) para no verificar todo el pool. Si la Validación está activa, lanza
-    la verificación `claude -p` y marca el cluster `en_curso` (asíncrona: el veredicto lo persiste el
+    la verificación `claude -p` y marca el cluster `en_curso` (asíncrona: el verificacion lo persiste el
     `procesar` sobre el cluster). Si la Validación está OFF para la marca, marca el cluster
     `saltada` (sin `claude -p`) para que la admisión lo promueva igual. Best-effort por historia;
     `ColaLlenaError` corta la verificación de esa marca (el siguiente tick reintenta). Devuelve los
-    verificados (`{id, gen_id, verdicto}`).
+    verificados (`{id, gen_id, verificacion_fuente}`).
     """
     if autor is None:
         autor = _ref._autor_pipeline()
@@ -274,7 +274,7 @@ def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[
                 except Exception:  # noqa: BLE001 -- un fallo al marcar saltada no mata la fase
                     _log.exception("pipeline: fallo al marcar QA de cluster saltada (%s).", cid)
                 else:
-                    verificados.append({"id": cid, "gen_id": "", "verdicto": QA_SALTADA})
+                    verificados.append({"id": cid, "gen_id": "", "verificacion_fuente": QA_SALTADA})
                 continue
             try:
                 gen = lanzar_verificar_cluster(cluster, autor=autor)
@@ -285,7 +285,7 @@ def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[
                 _log.exception("pipeline: fallo la verificación de la fuente (QA) de la historia %s (marca %s).", cid, marca)
                 continue
             if gen is not None:
-                verificados.append({"id": cid, "gen_id": gen.get("id", "") if isinstance(gen, dict) else "", "verdicto": QA_EN_CURSO})
+                verificados.append({"id": cid, "gen_id": gen.get("id", "") if isinstance(gen, dict) else "", "verificacion_fuente": QA_EN_CURSO})
     return verificados
 
 
@@ -318,7 +318,7 @@ def _ejecutar_barrido() -> dict[str, Any]:
 
 # UN SOLO CAMINO DE QA (ADR 0011 F3): la verificación corre SOBRE EL CLUSTER, PRE-admisión
 # (`ejecutar_verificar_clusters`), nunca sobre el TEMA post-admisión. La FRONTERA queda nítida en código:
-# Investigación verifica la fuente ANTES de cruzar (cluster → veredicto) y la admisión solo
+# Investigación verifica la fuente ANTES de cruzar (cluster → verificacion) y la admisión solo
 # promueve las VERIFICADAS.
 
 

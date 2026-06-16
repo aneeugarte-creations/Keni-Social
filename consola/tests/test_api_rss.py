@@ -829,7 +829,7 @@ _PUB_BASE: dict = {
     "red": "x",
     "contenido": "cuerpo",
     "estado": "borrador",
-    "veredicto": "",
+    "revision": "",
     "fecha_creacion": "2026-05-19T10:00:00Z",
     "fecha_actualizacion": "2026-05-19T10:00:00Z",
     "fecha_programada": "",

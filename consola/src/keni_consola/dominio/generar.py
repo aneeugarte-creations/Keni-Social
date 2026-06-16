@@ -89,7 +89,7 @@ MAX_TEXTO = 200_000
 # POLÍTICA DE RED (`WebFetch`/`WebSearch`) POR FLUJO — revisada (regla del dueño):
 # el eje de riesgo NO es "copy vs investigación", sino la forma de la SALIDA y quién controla
 # el prompt. Un flujo de SALIDA ESTRUCTURADA (la digiere el software: piezas, hallazgos,
-# veredicto, sugerencias; al usuario solo se le muestra el resultado FINAL renderizado) contiene
+# revision, sugerencias; al usuario solo se le muestra el resultado FINAL renderizado) contiene
 # la exfiltración por el canal de salida aunque ingiera contenido no confiable: la salida CRUDA
 # del modelo nunca se expone literal. Solo sería ALTO riesgo un flujo donde el USUARIO controla
 # el prompt LIBREMENTE *y* la salida CRUDA se le devuelve VERBATIM. NINGÚN flujo de generación
@@ -754,7 +754,7 @@ def lanzar_copy(
     fotos_notas: list[dict[str, str]] | None = None,
     n_notas: int = 0,
     tipo_contenido: str = "",
-    veredicto_inicial: str = "",
+    revision_inicial: str = "",
     url_fuente: str = "",
     limpiar_pendiente: bool = False,
     etiqueta_exito: str = "",
@@ -764,7 +764,7 @@ def lanzar_copy(
     """Lanza una generación de COPY (piezas por red -> borradores). Camino unificado.
 
     Compone el prompt autocontenido (copy-desde-nota inicial + editorial + contexto + redes)
-    y lanza con el post-procesado de PIEZAS (parsea piezas/veredicto, registra historial,
+    y lanza con el post-procesado de PIEZAS (parsea piezas/revision, registra historial,
     AUTO-CREA borradores). `fuente_id`/`clave` (RSS): además marca el item del feed como usado
     al completar. El `procesar` se reconstruye del MISMO `spec` que usa el worker (sin duplicar).
 
@@ -815,7 +815,7 @@ def lanzar_copy(
         contenido_id=contenido_id or "",
         imagen_fuente=imagen_fuente or "", fotos_notas=fotos,
         tipo_contenido=tipo_contenido or "",
-        veredicto_inicial=veredicto_inicial or "",
+        revision_inicial=revision_inicial or "",
         url_fuente=url_fuente or "",
         # Dedup AL EXITO (pipeline/autogen): limpiar `copy_pendiente` / etiquetar `autogen`
         # cuando los borradores YA existen, no al encolar (un copy fallido se reintenta).
@@ -840,7 +840,7 @@ def lanzar_copy(
         procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
         procesar_spec=procesar_spec, dir_temporal=dir_temporal, autor=autor,
         endurecer=endurecer, clave_idem=clave_estable, contenido_id=contenido_id or "",
-        # Copy = SALIDA ESTRUCTURADA (se parsea a piezas/veredicto; el usuario no ve la salida
+        # Copy = SALIDA ESTRUCTURADA (se parsea a piezas/revision; el usuario no ve la salida
         # cruda) y el prompt auto-verifica: puede necesitar la web para corroborar datos. No se
         # veta la web por-callsite; queda la veta global `Bash Write Edit`.
     )

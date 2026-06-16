@@ -12,7 +12,7 @@ Uso:
 
 Códigos de salida:
     0  todos los casos cuadran con su expectativa golden (o sin --estricto)
-    1  con --estricto: hay al menos una discrepancia (un caso cambió de veredicto)
+    1  con --estricto: hay al menos una discrepancia (un caso cambió de dictamen)
     2  error de configuración (casos ilegibles / directorio inexistente)
 """
 

@@ -122,7 +122,7 @@ def ejecutar_avance() -> list[dict[str, Any]]:
     VERIFICACIÓN DE CALIDAD (ADVISORY, gateada por `KENI_PIPELINE_REVISAR`, def OFF): si el toggle está
     ON, ANTES de mover cada borrador se valida la CALIDAD de su copy (voz de marca + coherencia
     con la nota de origen, `_revisar`). Es safe-by-default: NO bloquea el avance —la pieza pasa a
-    revisión igual—, pero si la verificación encuentra algo DEGRADA su veredicto (`listo`→`revisar`) y
+    revisión igual—, pero si la verificación encuentra algo DEGRADA su revision (`listo`→`revisar`) y
     deja una nota, para que el humano decida con los avisos delante (IA hacia adentro: filtra la
     calidad, no corrige). Con el toggle OFF el avance no cambia.
     """
@@ -137,7 +137,7 @@ def ejecutar_avance() -> list[dict[str, Any]]:
     enviadas: list[dict[str, Any]] = []
     for pub in piezas_para_avance(pubs, ahora=ahora_iso()):
         # Verificación de calidad ADVISORY (no bloquea: marca/degrada y deja al humano decidir). Si
-        # marcó la pieza, el `pub` en memoria conserva el veredicto viejo, pero la transición de
+        # marcó la pieza, el `pub` en memoria conserva el revision viejo, pero la transición de
         # `_enviar` no lo toca (sólo el estado), así que la degradación ya persistida se respeta.
         if verificacion_calidad:
             _revisar.verificar_calidad_pieza(pub)

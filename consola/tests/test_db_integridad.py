@@ -124,7 +124,7 @@ def test_checks_creados(pg):
         "ck_contenido_plataforma_estado",
         "ck_contenido_aprobaciones_decision",
         "ck_usuarios_rol",
-        "ck_contenido_verificar_veredicto",
+        "ck_contenido_verificacion_fuente",
     ):
         assert ck in nombres
 
@@ -140,15 +140,15 @@ def test_check_rechaza_estado_invalido(pg):
         con.close()
 
 
-def test_check_verificar_veredicto_acepta_vacio_y_canonicos(pg):
+def test_check_verificacion_fuente_acepta_vacio_y_canonicos(pg):
     c = db.crear_contenido(titulo="t")
     con = _cruda()
     try:
         for v in ("", "en_curso", "no_verificado", "problema", "caducada", "saltada"):
-            con.execute("UPDATE contenido SET verificar_veredicto = ? WHERE id = ?", (v, c["id"]))
+            con.execute("UPDATE contenido SET verificacion_fuente = ? WHERE id = ?", (v, c["id"]))
             con.commit()
         with pytest.raises(motor_db.IntegrityError):
-            con.execute("UPDATE contenido SET verificar_veredicto = 'inventado' WHERE id = ?", (c["id"],))
+            con.execute("UPDATE contenido SET verificacion_fuente = 'inventado' WHERE id = ?", (c["id"],))
             con.commit()
     finally:
         con.close()

@@ -166,7 +166,7 @@ from .db_contenido import (  # noqa: F401
     reparar_qa_en_curso_sueltos,
     resumen_plan_por_categoria,
     titulos_recientes_marca,
-    verificar_veredicto_por_contenido,
+    verificacion_fuente_por_contenido,
 )
 from .db_editor import (  # noqa: F401
     ESTADOS_VIDEO_COMPOSICION,

@@ -108,7 +108,7 @@ async def _decidir(request: Request, decision: str) -> Response:
     # generico de cargo. Pasa la decision humana al SIGUIENTE par de ojos, no a la maquina.
     if colaboracion.es_nivel_critica_ia(nivel):
         return JSONResponse(
-            {"error": "La crítica IA decide este paso automáticamente; espera su veredicto."},
+            {"error": "La crítica IA decide este paso automáticamente; espera su decisión."},
             status_code=409,
         )
 

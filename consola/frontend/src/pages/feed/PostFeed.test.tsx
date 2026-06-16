@@ -28,7 +28,7 @@ function pub(over: Partial<Publicacion> = {}): Publicacion {
     contenido: "Copy ya redactado por la IA.",
     copy_in: "",
     estado: "pendiente",
-    veredicto: "",
+    revision: "",
     autor_id: "",
     autor_nombre: "",
     enviado_a_revision_en: "",

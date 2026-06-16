@@ -136,7 +136,7 @@ def test_url_match_aislado_por_marca(entorno):
 
 
 def test_cache_equivale_a_la_consulta_directa(entorno):
-    """`publicados_marca_cache` + `existe_publicado_similar_en_cache` da el mismo veredicto
+    """`publicados_marca_cache` + `existe_publicado_similar_en_cache` da el mismo dictamen
     que `existe_publicado_similar`, pero leyendo la BD UNA vez por marca (no por candidato)."""
     # URL con tracking REAL (`utm_*`): el canon lo quita, asi la nota publicada con tracking
     # cruza contra la misma URL limpia (lo que prueba la rama (b)). Un `utm=x` pelado NO es
@@ -149,14 +149,14 @@ def test_cache_equivale_a_la_consulta_directa(entorno):
     assert db.existe_publicado_similar_en_cache(cache, "Clima en CDMX mañana") is False
     # (b) por URL canonica (la señal mas fuerte)
     assert db.existe_publicado_similar_en_cache(cache, "Otro titulo", "https://uno.tv/nota") is True
-    # Mismo veredicto que el camino directo:
+    # Mismo dictamen que el camino directo:
     assert db.existe_publicado_similar("unotv", "el america GANA el clasico") is True
     assert db.existe_publicado_similar("unotv", "Clima en CDMX mañana") is False
 
 
 def test_cache_es_puro_y_no_toca_la_bd(entorno):
     """Cruzar candidatos contra el cache NO abre conexiones: publicar algo DESPUES de
-    construir el cache no cambia el veredicto (es un snapshot)."""
+    construir el cache no cambia el dictamen (es un snapshot)."""
     _publicar("unotv", "Primera nota publicada")
     cache = db.publicados_marca_cache("unotv")
     _publicar("unotv", "Segunda nota publicada despues del snapshot")

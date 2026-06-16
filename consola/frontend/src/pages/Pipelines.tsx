@@ -57,7 +57,7 @@ export const ESTADOS_FILTRO: { clave: string; nombre: string }[] = [
 ];
 
 /** Chip de la verificación de la fuente (rediseño QPC): ⚠️ "No verificado" o ❗ "QA: problema".
- *  Nada si aún no hay veredicto (verificación pendiente/en curso: lo cubre la tira de etapas). */
+ *  Nada si aún no hay verificacion (verificación pendiente/en curso: lo cubre la tira de etapas). */
 function BadgeQaFuente({ qa, className }: { qa?: PipelineQaFuente; className?: string }) {
   if (!qa) return null;
   if (qa.problema) {

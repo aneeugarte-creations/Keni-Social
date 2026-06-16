@@ -36,7 +36,7 @@ class PiezaPublicadaInmutable(Exception):
 # Campos EDITORIALES/VISUALES congelados una vez la pieza está `publicado` (cubre el
 # vocabulario de publicación —`contenido`— y el de plataforma —`copy`—). NO se congelan los
 # campos OPERATIVOS (estado, id_post_metricool, preparado_en, metadatos de revisión, flags
-# `falta_*`, veredicto): el barrido, la reconciliación y la auditoría siguen escribiéndolos.
+# `falta_*`, revision): el barrido, la reconciliación y la auditoría siguen escribiéndolos.
 _CAMPOS_CONGELADOS_PUBLICADO: frozenset[str] = frozenset({
     "contenido", "copy", "copy_in", "titulo",
     "imagen", "imagen_fuente", "video", "enlace",

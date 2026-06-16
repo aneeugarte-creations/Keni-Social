@@ -7,7 +7,7 @@
  *   - El desenlace: "Lista para publicar" (cadena aprobada) · "Rechazada" (vuelve a redacción) ·
  *     o cuántos OK faltan.
  *
- * NO se muestra el veredicto de la PRE-aprobación de IA (QA Editorial): de cara al equipo, menos
+ * NO se muestra el revision de la PRE-aprobación de IA (QA Editorial): de cara al equipo, menos
  * IA — el feed enseña solo decisiones humanas y lo que falta. El nivel QA sigue EXISTIENDO en la
  * cadena (lo filtramos de los "humanos"), solo no se pinta como badge.
  *
@@ -29,7 +29,7 @@ import { umbralDislikes } from "./aprobacion";
 import { TEXTO_AVISO, TEXTO_ERROR, TEXTO_OK } from "./formato";
 
 /** PRE-aprobación de IA (QA Editorial), por su etiqueta reservada: se EXCLUYE del conteo de OK
- *  humanos y no se pinta su veredicto (menos IA de cara al equipo). */
+ *  humanos y no se pinta su revision (menos IA de cara al equipo). */
 const ETIQUETA_QA = "qa editorial";
 const esNivelQA = (n: NivelAprobacion) => n.etiqueta.trim().toLowerCase() === ETIQUETA_QA;
 

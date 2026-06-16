@@ -62,6 +62,7 @@ from .migraciones_columnas import (
     _migrar_green_a_evergreen,
     _migrar_renombre_catalogo_media,
     _migrar_renombre_columnas_etapas,
+    _migrar_renombre_columnas_veredicto,
     _normalizar_timestamps_texto,
 )
 from .migraciones_integridad import (
@@ -260,6 +261,13 @@ MIGRACIONES_PRE_DDL: tuple[Migracion, ...] = (
     # nueva, crearian una columna vacia suelta (mismo motivo que el renombre green->evergreen).
     # One-shot pero idempotente (RENAME guardado por la existencia de la columna).
     Migracion("0037-renombre-columnas-etapas", _migrar_renombre_columnas_etapas),
+    # ETAPAS CON NOMBRE PROPIO (limpieza de jerga `veredicto`): renombra los verdict sobrecargados
+    # a su etapa: `verificar_veredicto` -> `verificacion_fuente` (VERIFICAR; en `contenido` y
+    # `noticias_clusters`) y `contenido_plataforma.veredicto` -> `revision` (REVISAR). PRE-DDL por
+    # el mismo motivo que 0037: debe correr ANTES de que las ADD COLUMN re-aplicables (0011/0019,
+    # cuya tupla ya apunta a `verificacion_fuente`) re-evaluen y creen una columna vacia suelta.
+    # One-shot pero idempotente (RENAME guardado por la existencia de la columna).
+    Migracion("0039-renombre-columnas-veredicto", _migrar_renombre_columnas_veredicto),
 )
 
 # POST-DDL: ALTER/backfill sobre tablas que el DDL ya garantiza (anaden columnas a BDs
@@ -379,7 +387,7 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # (anadir/quitar una relacion) cambia la huella y re-aplica la migracion una vez.
     Migracion("0028-fks-hub-contenido", _migrar_fks_hub, re_aplicar_si_cambia=True, datos=_FKS),
     # INTEGRIDAD (ADR 0012): CHECK de allowlist en los campos de estado (estado de contenido y
-    # de la fila por plataforma, decision de aprobacion, rol de usuario, verificar_veredicto), con
+    # de la fila por plataforma, decision de aprobacion, rol de usuario, verificacion_fuente), con
     # normalizacion previa de valores invalidos. Re-aplicable (idempotente): editar una
     # allowlist de dominio cambia la huella y re-normaliza + recrea el CHECK una vez.
     Migracion("0029-checks-dominio", _migrar_checks_dominio, re_aplicar_si_cambia=True),

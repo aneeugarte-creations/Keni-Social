@@ -30,7 +30,7 @@ from dataclasses import dataclass
 
 from .modelo import FALLA, PASA, CasoEval
 
-# Un juez: dado (caso) devuelve su veredicto ('pasa'/'falla'). Puede ser un wrapper de
+# Un juez: dado (caso) devuelve su dictamen ('pasa'/'falla'). Puede ser un wrapper de
 # `claude -p`, del crítico de producción, o un fake en tests.
 Juez = Callable[[CasoEval], str]
 
@@ -62,13 +62,13 @@ def acuerdo_con_humano(juez: Juez, casos: list[CasoEval]) -> AcuerdoJuez:
     cliente se vuelve una métrica de verdad. PURO: no llama al modelo, solo aplica el juez dado."""
     aciertos = fp = fn = 0
     for caso in casos:
-        veredicto = (juez(caso) or "").strip().lower()
+        dictamen = (juez(caso) or "").strip().lower()
         humano = caso.espera
-        if veredicto == humano:
+        if dictamen == humano:
             aciertos += 1
-        elif veredicto == PASA and humano == FALLA:
+        elif dictamen == PASA and humano == FALLA:
             fp += 1
-        elif veredicto == FALLA and humano == PASA:
+        elif dictamen == FALLA and humano == PASA:
             fn += 1
     return AcuerdoJuez(total=len(casos), aciertos=aciertos, falsos_positivos=fp, falsos_negativos=fn)
 

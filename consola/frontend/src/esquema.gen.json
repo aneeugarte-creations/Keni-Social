@@ -2106,7 +2106,7 @@
             "publicado"
           ]
         },
-        "veredicto": {
+        "revision": {
           "type": "string"
         },
         "autor_id": {
@@ -2243,7 +2243,7 @@
         "contenido",
         "copy_in",
         "estado",
-        "veredicto",
+        "revision",
         "autor_id",
         "autor_nombre",
         "responsable_id",

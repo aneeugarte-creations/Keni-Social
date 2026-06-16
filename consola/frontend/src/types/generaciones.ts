@@ -82,14 +82,14 @@ export interface FactCheckResultado {
   afirmacion?: string | null;
   quien_lo_dijo?: string | null;
   verificador?: string | null;
-  veredicto?: string | null;
+  dictamen?: string | null;
   url?: string | null;
   fecha?: string | null;
 }
 
 /**
  * Reporte del motor de verificación de video (`analiza-video.py`). Junta EVIDENCIA
- * para datar un video (nuevo vs reciclado); NO es un veredicto automático.
+ * para datar un video (nuevo vs reciclado); NO es un dictamen automático.
  */
 export interface ReporteVerificacion {
   entrada: string;
@@ -205,7 +205,7 @@ export interface HallazgoQaEditorial {
 }
 
 /**
- * Informe del QA editorial sobre el copy del community manager. Abre con un veredicto
+ * Informe del QA editorial sobre el copy del community manager. Abre con un dictamen
  * 🟢/🟡/🔴 (`verdicto`, igual codificación que el resto del producto) y lista los
  * hallazgos. NO reescribe el copy ni publica: es solo el informe.
  */

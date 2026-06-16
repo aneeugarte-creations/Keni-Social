@@ -20,7 +20,7 @@ def _pub(**kw: Any) -> dict[str, Any]:
         "red": "x",
         "contenido": "",
         "estado": "pendiente",
-        "veredicto": "",
+        "revision": "",
         "origen": "pipeline",
         "fecha_creacion": "",
         "fecha_actualizacion": "",

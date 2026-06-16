@@ -680,7 +680,7 @@ async def mfa_verify(request: Request) -> Response:
         return JSONResponse({"error": _MSG_MFA_CEREMONIA_KO}, status_code=401)
 
     # Aviso (no bloqueante) si el contador RETROCEDE: posible clon, pero muchos autenticadores
-    # reportan 0 y nunca incrementan, asi que no es veredicto. Igual actualizamos el contador.
+    # reportan 0 y nunca incrementan, asi que no es dictamen. Igual actualizamos el contador.
     if nuevo_sign_count and nuevo_sign_count < int(credencial.get("sign_count", 0) or 0):
         _logger.warning(
             "MFA verify: sign_count retrocedio para la credencial %s (posible clon).",

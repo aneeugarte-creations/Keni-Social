@@ -207,9 +207,9 @@ def verificar_voz(
     """Contrasta las piezas generadas contra el PERFIL DE PATRONES real de la marca.
 
     Devuelve `(verdicto_efectivo, avisos)`. El lint es determinista y ADVISORY: nunca
-    descarta piezas ni bloquea; si hay avisos y el modelo dijo `listo`, el veredicto se
+    descarta piezas ni bloquea; si hay avisos y el modelo dijo `listo`, el revision se
     DEGRADA a `revisar` (el humano decide con los avisos delante). Cualquier otro
-    veredicto (`revisar`, `no_publicar`, vacio/heredado) ya pide ojos humanos y se
+    revision (`revisar`, `no_publicar`, vacio/heredado) ya pide ojos humanos y se
     respeta. Best-effort: un fallo del lint nunca rompe el post-procesado.
     """
     try:
@@ -480,13 +480,13 @@ def crear_publicaciones_desde_piezas(
                 # el tema no existe (entonces caemos al borrador suelto).
                 creada = contrato_publicaciones.crear_borrador_en(
                     contenido_id, marca, red, titulo=titulo, contenido=contenido,
-                    copy_in=copy_in, veredicto=verdicto, imagen=imagen,
+                    copy_in=copy_in, revision=verdicto, imagen=imagen,
                     imagen_fuente=imagen_fuente, carrusel=carrusel_json,
                 )
             if creada is None:
                 creada = contrato_publicaciones.crear_borrador(
                     marca, red, titulo=titulo, contenido=contenido, copy_in=copy_in,
-                    veredicto=verdicto, origen=origen, autor=autor, imagen=imagen,
+                    revision=verdicto, origen=origen, autor=autor, imagen=imagen,
                     imagen_fuente=imagen_fuente, tipo_contenido=tipo_contenido,
                 )
             creadas.append(creada)
@@ -547,7 +547,7 @@ def construir_procesar_copy(
     imagen_fuente: str = "",
     fotos_notas: list[dict[str, str]] | None = None,
     tipo_contenido: str = "",
-    veredicto_inicial: str = "",
+    revision_inicial: str = "",
     url_fuente: str = "",
 ) -> generaciones.Procesar:
     """Callback de post-procesado de una generacion de PIEZAS (copy/RSS).
@@ -558,7 +558,7 @@ def construir_procesar_copy(
 
     `contenido_id` (lista viva): si apunta a un tema del tablero existente, cada borrador se
     ADJUNTA a ese `contenido` (cuelga de su tarjeta); sin el (default ""), borrador suelto.
-    `veredicto_inicial` (pipeline QPC): veredicto por DEFECTO de las piezas cuando la salida no
+    `revision_inicial` (pipeline QPC): revision por DEFECTO de las piezas cuando la salida no
     trae uno propio (p. ej. `no_verificado`, para heredar el aviso de la verificación de la fuente).
     `url_fuente` (RSS, trazabilidad): URL CANONICA de la nota de origen. Si viene, se PERSISTE en
     `contenido.url_fuente` del tema padre de cada borrador creado (dedup por URL). Best-effort:
@@ -578,8 +578,8 @@ def construir_procesar_copy(
             prompt_id, marca, parsed["resultado"], piezas=parsed["piezas"], titulo=titulo,
             metricas=stream.metricas_a_dict(metricas), autor=autor,
         )
-        # El veredicto de la salida manda; si viene vacío, cae al inicial (p. ej. no_verificado).
-        verdicto = (str(parsed["verdicto"]) or "").strip() or (veredicto_inicial or "")
+        # El revision de la salida manda; si viene vacío, cae al inicial (p. ej. no_verificado).
+        verdicto = (str(parsed["verdicto"]) or "").strip() or (revision_inicial or "")
         # Verificacion de VOZ contra los patrones medidos de la marca: con avisos, un
         # `listo` del modelo baja a `revisar` y la nota viaja al tema (el humano decide).
         verdicto, avisos_voz = verificar_voz(marca, parsed["piezas"], verdicto)

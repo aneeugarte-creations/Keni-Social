@@ -1,12 +1,12 @@
 """Tests de la Crítica IA (post-aprobación con visión): nivel final de la cadena del feed.
 
 Dos capas:
-  - PURAS (sin DB, corren siempre en CI): parseo del veredicto JSON, textos del comentario,
+  - PURAS (sin DB, corren siempre en CI): parseo del revision JSON, textos del comentario,
     elección del arte a prefetchear.
   - INTEGRACIÓN (fixture `entorno`, Postgres en CI): con `KENI_CRITICA_IA` ON, `enviar_a_revision`
     añade el nivel IA AL FINAL; los dos OK humanos NO programan (dejan la IA pendiente); nadie
     decide el nivel IA a mano; y el voto del crítico (aprueba → programa / rechaza → dislike +
-    comentario que frena) se aplica con `aplicar_veredicto`. El override `forzar` desbloquea.
+    comentario que frena) se aplica con `aplicar_revision`. El override `forzar` desbloquea.
 
 El encolado real del worker (`lanzar_para_publicacion`) se monkeypatchea en los tests de flujo:
 aquí probamos el cableado de la cadena y el efecto del voto, no la ejecución de `claude -p`.
@@ -32,27 +32,27 @@ _MARCA = "unotv"
 # --------------------------------------------------------------------------- #
 
 
-def test_parsear_veredicto_json_plano():
-    v = critica_ia._parsear_veredicto('{"veredicto": "aprueba", "problemas": []}')
+def test_parsear_revision_json_plano():
+    v = critica_ia._parsear_revision('{"veredicto": "aprueba", "problemas": []}')
     assert v == {"veredicto": "aprueba", "problemas": []}
 
 
-def test_parsear_veredicto_dentro_de_valla_de_codigo():
+def test_parsear_revision_dentro_de_valla_de_codigo():
     salida = 'Aquí va mi juicio:\n```json\n{"veredicto": "rechaza", "comentario": "arte falso"}\n```\n'
-    v = critica_ia._parsear_veredicto(salida)
+    v = critica_ia._parsear_revision(salida)
     assert v["veredicto"] == "rechaza"
     assert v["comentario"] == "arte falso"
 
 
-def test_parsear_veredicto_con_texto_alrededor():
-    v = critica_ia._parsear_veredicto('blah blah {"veredicto": "aprueba"} fin')
+def test_parsear_revision_con_texto_alrededor():
+    v = critica_ia._parsear_revision('blah blah {"veredicto": "aprueba"} fin')
     assert v == {"veredicto": "aprueba"}
 
 
-def test_parsear_veredicto_ilegible_es_none():
-    assert critica_ia._parsear_veredicto("") is None
-    assert critica_ia._parsear_veredicto("no hay json aquí") is None
-    assert critica_ia._parsear_veredicto("{roto") is None
+def test_parsear_revision_ilegible_es_none():
+    assert critica_ia._parsear_revision("") is None
+    assert critica_ia._parsear_revision("no hay json aquí") is None
+    assert critica_ia._parsear_revision("{roto") is None
 
 
 def test_texto_comentario_lista_problemas_y_recomendacion():
@@ -72,7 +72,7 @@ def test_texto_comentario_lista_problemas_y_recomendacion():
     assert "carrusel" in texto.lower()
 
 
-def test_texto_comentario_sin_veredicto_pide_revision_humana():
+def test_texto_comentario_sin_revision_pide_revision_humana():
     texto = critica_ia._texto_comentario(None)
     assert "revisa" in texto.lower()
 
@@ -183,9 +183,9 @@ def test_humano_no_puede_decidir_el_nivel_ia(entorno, monkeypatch):
     assert "crítica ia" in r.json()["error"].lower()
 
 
-def test_veredicto_aprueba_completa_la_cadena(entorno, monkeypatch):
+def test_revision_aprueba_completa_la_cadena(entorno, monkeypatch):
     pid, _ = _a_ia_pendiente(monkeypatch)
-    decision = critica_ia.aplicar_veredicto(pid, {"veredicto": "aprueba", "problemas": []})
+    decision = critica_ia.aplicar_revision(pid, {"veredicto": "aprueba", "problemas": []})
     assert decision == "aprobado"
     pub = repos.obtener_publicacion(pid)
     # Sin franja no se inventa fecha: queda aprobada (programar es ortogonal, ya cubierto aparte).
@@ -195,9 +195,9 @@ def test_veredicto_aprueba_completa_la_cadena(entorno, monkeypatch):
     assert ia["decisor_id"] == colaboracion.DECISOR_CRITICA_ID
 
 
-def test_veredicto_rechaza_deja_dislike_y_comentario_que_frena(entorno, monkeypatch):
+def test_revision_rechaza_deja_dislike_y_comentario_que_frena(entorno, monkeypatch):
     pid, _ = _a_ia_pendiente(monkeypatch)
-    decision = critica_ia.aplicar_veredicto(
+    decision = critica_ia.aplicar_revision(
         pid,
         {
             "veredicto": "rechaza",
@@ -216,16 +216,16 @@ def test_veredicto_rechaza_deja_dislike_y_comentario_que_frena(entorno, monkeypa
     assert repos.comentarios_sin_resolver(plat["contenido_id"], pid) >= 1
 
 
-def test_veredicto_ilegible_rechaza_por_seguridad(entorno, monkeypatch):
+def test_revision_ilegible_rechaza_por_seguridad(entorno, monkeypatch):
     pid, _ = _a_ia_pendiente(monkeypatch)
-    decision = critica_ia.aplicar_veredicto(pid, None)
+    decision = critica_ia.aplicar_revision(pid, None)
     assert decision == "rechazado"
     assert repos.obtener_publicacion(pid)["estado"] == "en_revision"
 
 
 def test_forzar_override_de_un_dislike_de_ia(entorno, monkeypatch):
     pid, _ = _a_ia_pendiente(monkeypatch)
-    critica_ia.aplicar_veredicto(
+    critica_ia.aplicar_revision(
         pid, {"veredicto": "rechaza", "comentario": "arte sintético"}
     )
     # Un coordinador FUERZA la pieza a pesar del dislike: queda aprobada y la objeción se cierra.

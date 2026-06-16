@@ -151,7 +151,7 @@ def _historia_a_dict(
     TRADUCCIÓN (Ola D): si la historia está `traducido`, se sirve `titulo`/`resumen` YA en ES
     (`titulo_es`/`resumen_es`) y se exponen `titulo_original`/`idioma`/`traducido` para que la UI
     pueda mostrar "traducido de {idioma}". Si no, se sirven los originales. `verificacion` expone
-    el veredicto de corroboración (corroborada / unica_fuente / dudosa).
+    la corroboración (corroborada / unica_fuente / dudosa).
     """
     from ...dominio import fuentes_pesos
 
@@ -212,10 +212,10 @@ def _historia_a_dict(
         "promovible_motivo": (umbral[1] if umbral else ""),
         "breaking": int(cluster.get("breaking") or 0),
         "verificacion": cluster.get("verificacion") or "unica_fuente",
-        # Etapas de INVESTIGACIÓN visibles por historia (ADR 0011): el veredicto de
+        # Etapas de INVESTIGACIÓN visibles por historia (ADR 0011): el verificacion de
         # VERIFICACIÓN (QA de la fuente, del contenido asociado; lo inyecta el llamante en
         # lote) y si la MARCA la asignó el clasificador IA.
-        "verificar_veredicto": cluster.get("verificar_veredicto") or "",
+        "verificacion_fuente": cluster.get("verificacion_fuente") or "",
         "marca_clasificada_por_ia": bool(cluster.get("marca_clasificada_por_ia")),
         "traducido": traducido,
         "idioma": cluster.get("idioma") or "",
@@ -276,17 +276,17 @@ async def listar_historias(request: Request) -> Response:
         limite=limite,
         desplazamiento=desplazamiento,
     )
-    # Estado REAL de cara al feed + veredicto QA (verificación). El QA vive en la HISTORIA
-    # (`noticias_clusters.verificar_veredicto`, ADR 0011 F3): la verificación corre sobre el cluster ANTES de
-    # admitir. Se prefiere el veredicto NATIVO del cluster y se cae al del `contenido` heredado
-    # (batch, evita N+1) solo para historias admitidas ANTES de F3 (cluster sin veredicto propio).
+    # Estado REAL de cara al feed + verificacion QA (verificación). El QA vive en la HISTORIA
+    # (`noticias_clusters.verificacion_fuente`, ADR 0011 F3): la verificación corre sobre el cluster ANTES de
+    # admitir. Se prefiere el verificacion NATIVO del cluster y se cae al del `contenido` heredado
+    # (batch, evita N+1) solo para historias admitidas ANTES de F3 (cluster sin verificacion propio).
     cids = [c.get("contenido_id") or "" for c in clusters]
     resumen_pieza = repos.estado_pieza_por_contenido(cids)
-    qa_map = repos.verificar_veredicto_por_contenido(cids)
+    qa_map = repos.verificacion_fuente_por_contenido(cids)
     vocab_memo: dict[str, frozenset[str]] = {}  # vocabulario por marca, 1 lectura por request
     historias = [
         _historia_a_dict(
-            {**c, "verificar_veredicto": (c.get("verificar_veredicto") or "") or qa_map.get(c.get("contenido_id") or "", "")},
+            {**c, "verificacion_fuente": (c.get("verificacion_fuente") or "") or qa_map.get(c.get("contenido_id") or "", "")},
             repos.items_de_cluster(c["id"], limite=_MAX_ENLACES_HISTORIA),
             pieza_estado=_pieza_estado(
                 c.get("estado") or "nuevo", c.get("contenido_id") or "", resumen_pieza
@@ -357,15 +357,15 @@ async def mesa(request: Request) -> Response:
 
     cids = [c.get("contenido_id") or "" for c in clusters]
     resumen_pieza = repos.estado_pieza_por_contenido(cids)
-    # Veredicto de verificación por historia: NATIVO del cluster (ADR 0011 F3), con fallback al
-    # contenido heredado para historias admitidas antes de F3 (cluster sin veredicto propio).
-    qa_map = repos.verificar_veredicto_por_contenido(cids)
+    # Verificacion de verificación por historia: NATIVO del cluster (ADR 0011 F3), con fallback al
+    # contenido heredado para historias admitidas antes de F3 (cluster sin verificacion propio).
+    qa_map = repos.verificacion_fuente_por_contenido(cids)
     vocab_memo: dict[str, frozenset[str]] = {}
 
     def _historias(lote: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return [
             _historia_a_dict(
-                {**c, "verificar_veredicto": (c.get("verificar_veredicto") or "") or qa_map.get(c.get("contenido_id") or "", "")},
+                {**c, "verificacion_fuente": (c.get("verificacion_fuente") or "") or qa_map.get(c.get("contenido_id") or "", "")},
                 repos.items_de_cluster(c["id"], limite=_MAX_ENLACES_HISTORIA),
                 pieza_estado=_pieza_estado(
                     c.get("estado") or "nuevo", c.get("contenido_id") or "", resumen_pieza
@@ -416,13 +416,13 @@ async def detalle_historia(request: Request) -> Response:
         return JSONResponse({"error": "Esa historia ya no existe."}, status_code=404)
     items = repos.items_de_cluster(cluster_id)
     cid = cluster.get("contenido_id") or ""
-    # Veredicto NATIVO del cluster (ADR 0011 F3: la QA corre sobre la historia); fallback al
-    # contenido heredado para historias admitidas antes de F3 (cluster sin veredicto propio).
-    verificar_veredicto = (cluster.get("verificar_veredicto") or "") or (
-        repos.verificar_veredicto_por_contenido([cid]).get(cid, "") if cid else ""
+    # Verificacion NATIVO del cluster (ADR 0011 F3: la QA corre sobre la historia); fallback al
+    # contenido heredado para historias admitidas antes de F3 (cluster sin verificacion propio).
+    verificacion_fuente = (cluster.get("verificacion_fuente") or "") or (
+        repos.verificacion_fuente_por_contenido([cid]).get(cid, "") if cid else ""
     )
     historia = _historia_a_dict(
-        {**cluster, "verificar_veredicto": verificar_veredicto}, items, pieza_estado=_pieza_estado_de(cluster),
+        {**cluster, "verificacion_fuente": verificacion_fuente}, items, pieza_estado=_pieza_estado_de(cluster),
         umbral=_evaluar_umbral(cluster, {}),
     )
     return JSONResponse({"historia": historia, "items": [_item_a_dict(it) for it in items]})

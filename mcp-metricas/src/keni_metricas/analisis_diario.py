@@ -234,7 +234,7 @@ def _frase_movimiento(m: dict) -> str:
 def render_markdown(analisis: dict) -> str:
     """Redacta el análisis a Markdown: lectura corta + piezas + siguiente paso.
 
-    El veredicto/lectura va arriba; el detalle después (principio UX #1). Si son
+    El dictamen va arriba; el detalle después (principio UX #1). Si son
     datos de muestra, antepone el banner (issue #131). Si no hay movimientos que
     narrar, lo dice con honestidad en vez de forzar una narrativa vacía.
     """

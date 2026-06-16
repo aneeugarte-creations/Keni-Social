@@ -27,7 +27,7 @@ function pub(over: Partial<Publicacion> = {}): Publicacion {
     contenido: "Copy.",
     copy_in: "",
     estado: "borrador",
-    veredicto: "",
+    revision: "",
     autor_id: "",
     autor_nombre: "",
     responsable_id: "",

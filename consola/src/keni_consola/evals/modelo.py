@@ -10,15 +10,15 @@ Un CASO es un fichero YAML versionado bajo `consola/evals/casos/` (uno por escen
       La Fiscalía de Jalisco informó la detención de un presunto responsable...
     copy: |                 # copy CANDIDATO a evaluar
       El presunto responsable fue detenido, informó la Fiscalía de Jalisco...
-    espera: pasa            # veredicto esperado del caso: pasa | falla
+    espera: pasa            # dictamen esperado del caso: pasa | falla
     # --- refinamientos OPCIONALES de la rúbrica ---
     prohibidos: ["culpable", "delincuente"]   # términos vetados (editorial); su presencia FALLA
     falla_esperada_en: voz                    # si espera=falla, qué dimensión DEBE cazarlo
     dimensiones: [limite_red, voz, coherencia, prohibidos, idioma]  # subconjunto a correr
 
 La rúbrica se expresa con CHECKS DETERMINISTAS (sin coste de IA), uno por DIMENSIÓN
-(`checks.DIMENSIONES`). El veredicto del caso es `falla` si CUALQUIER dimensión falla, si no
-`pasa`. El runner compara ese veredicto con `espera`: un caso "cuadra" cuando coinciden.
+(`checks.DIMENSIONES`). El dictamen del caso es `falla` si CUALQUIER dimensión falla, si no
+`pasa`. El runner compara ese dictamen con `espera`: un caso "cuadra" cuando coinciden.
 
 PURO: este módulo solo parsea/valida YAML; no corre checks ni toca BD/red.
 """
@@ -32,7 +32,7 @@ from typing import Any
 
 import yaml
 
-# Veredictos posibles de un caso (y de la expectativa declarada).
+# Dictámenes posibles de un caso (y de la expectativa declarada).
 PASA = "pasa"
 FALLA = "falla"
 
@@ -74,13 +74,13 @@ class ResultadoDimension:
 
 @dataclass
 class ResultadoCaso:
-    """Resultado de un caso: dimensiones + veredicto efectivo + si cuadra con lo esperado."""
+    """Resultado de un caso: dimensiones + dictamen efectivo + si cuadra con lo esperado."""
 
     caso: CasoEval
     dimensiones: list[ResultadoDimension] = field(default_factory=list)
 
     @property
-    def veredicto(self) -> str:
+    def dictamen(self) -> str:
         return FALLA if any(d.fallo for d in self.dimensiones) else PASA
 
     @property
@@ -89,9 +89,9 @@ class ResultadoCaso:
 
     @property
     def cuadra(self) -> bool:
-        """True si el veredicto coincide con `espera` Y (si se declaró) lo cazó la dimensión
+        """True si el dictamen coincide con `espera` Y (si se declaró) lo cazó la dimensión
         esperada. Así un caso "debe fallar" no cuadra por casualidad si falla por otra razón."""
-        if self.veredicto != self.caso.espera:
+        if self.dictamen != self.caso.espera:
             return False
         objetivo = self.caso.falla_esperada_en
         if self.caso.espera == FALLA and objetivo:
@@ -119,7 +119,7 @@ class ReporteEvals:
 
     @property
     def score(self) -> float:
-        """Fracción [0,1] de casos cuyo veredicto cuadra con la expectativa golden."""
+        """Fracción [0,1] de casos cuyo dictamen cuadra con la expectativa golden."""
         return (self.cuadran / self.total) if self.total else 1.0
 
     def a_dict(self) -> dict[str, Any]:
@@ -134,7 +134,7 @@ class ReporteEvals:
                     "marca": r.caso.marca,
                     "red": r.caso.red,
                     "espera": r.caso.espera,
-                    "veredicto": r.veredicto,
+                    "dictamen": r.dictamen,
                     "cuadra": r.cuadra,
                     "dimensiones": [
                         {"nombre": d.nombre, "estado": d.estado, "avisos": list(d.avisos)}

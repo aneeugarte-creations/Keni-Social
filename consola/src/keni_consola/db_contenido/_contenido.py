@@ -85,10 +85,10 @@ _COLS_CONTENIDO = (
     "formato",
     "id_post_metricool",
     "senal_viralidad",
-    # QA DE LA FUENTE (pre-copy): veredicto del verificado de la nota de origen antes de generar
+    # QA DE LA FUENTE (pre-copy): verificacion del verificado de la nota de origen antes de generar
     # copy. "no_verificado" (⚠️, OK para seguir, no verificado a fondo) o "problema" (❗, algo de
     # peso en contra: NO se generó copy). `verificar_hallazgos` es el JSON estructurado de hallazgos.
-    "verificar_veredicto",
+    "verificacion_fuente",
     "verificar_hallazgos",
     # Parámetros de lanzamiento de copy PENDIENTE (JSON): el sweep guarda aquí, al crear el tema
     # en CI, lo que la fase CD necesitará para lanzar el copy (redes, imagen ya resuelta, fuente,
@@ -142,9 +142,9 @@ _CAMPOS_EDITABLES_CONTENIDO: tuple[str, ...] = (
     # Editable para que el flujo de publicación pueda fijar el id de Metricool a nivel
     # pieza cuando esté disponible (Item C); hoy se rellena solo si el publicador lo pasa.
     "id_post_metricool",
-    # QA de la FUENTE: el sweep del pipeline persiste aquí el veredicto del verificado pre-copy
+    # QA de la FUENTE: el sweep del pipeline persiste aquí el verificacion del verificado pre-copy
     # (`no_verificado`/`problema`) y sus hallazgos estructurados (JSON) sobre la nota de origen.
-    "verificar_veredicto",
+    "verificacion_fuente",
     "verificar_hallazgos",
     # Parámetros de lanzamiento de copy pendiente (JSON): editable para que el sweep lo fije al
     # crear el tema y lo limpie ("") tras lanzar el copy en la fase CD.
@@ -205,7 +205,7 @@ def crear_contenido(
     formato: str = redes.FORMATO_FOTO,
     id_post_metricool: str = "",
     senal_viralidad: int = 0,
-    verificar_veredicto: str = "",
+    verificacion_fuente: str = "",
     verificar_hallazgos: str = "",
     copy_pendiente: str = "",
     fecha_fuente: str = "",
@@ -231,7 +231,7 @@ def crear_contenido(
         fecha_entrega=fecha_entrega, autor=autor, responsable=responsable, origen=origen,
         notas=notas, categoria=categoria, tipo_contenido=tipo_contenido, formato=formato,
         id_post_metricool=id_post_metricool, senal_viralidad=senal_viralidad,
-        verificar_veredicto=verificar_veredicto, verificar_hallazgos=verificar_hallazgos,
+        verificacion_fuente=verificacion_fuente, verificar_hallazgos=verificar_hallazgos,
         copy_pendiente=copy_pendiente, fecha_fuente=fecha_fuente, url_fuente=url_fuente,
         fuente_nombre=fuente_nombre, creado=creado, actualizado=actualizado, id=id,
     )
@@ -291,7 +291,7 @@ def _fila_contenido_nueva(**campos: Any) -> dict[str, Any]:
         # Señal de viralidad del Radar (Fase 5): >=0; defensivo ante valores no enteros.
         "senal_viralidad": _entero_no_negativo(campos.get("senal_viralidad") or 0),
         # QA de la fuente (pre-copy): suele nacer "" (lo fija el sweep tras verificar la nota).
-        "verificar_veredicto": campos.get("verificar_veredicto") or "",
+        "verificacion_fuente": campos.get("verificacion_fuente") or "",
         "verificar_hallazgos": campos.get("verificar_hallazgos") or "",
         "copy_pendiente": campos.get("copy_pendiente") or "",
         "fecha_fuente": campos.get("fecha_fuente") or "",
@@ -434,12 +434,12 @@ def ids_contenido_con_copy(marca: str | None = None) -> set[str]:
     return {f["cid"] for f in filas if f["cid"]}
 
 
-def verificar_veredicto_por_contenido(contenido_ids: list[str]) -> dict[str, str]:
-    """Veredicto de VERIFICACIÓN (QA de fuente) por `contenido_id`, en LOTE (sin N+1).
+def verificacion_fuente_por_contenido(contenido_ids: list[str]) -> dict[str, str]:
+    """Verificacion de la fuente (QA de fuente) por `contenido_id`, en LOTE (sin N+1).
 
     El QA corre sobre `contenido` (no sobre el cluster), así que la Mesa de Investigación lo
     trae por el `contenido_id` de cada historia para mostrar «verificada / problema». `{}` si
-    no hay ids; cada id sin fila o con veredicto vacío no aparece (el llamante cae a '').
+    no hay ids; cada id sin fila o con verificacion vacío no aparece (el llamante cae a '').
     """
     ids = [i for i in dict.fromkeys(contenido_ids) if i]
     if not ids:
@@ -448,16 +448,16 @@ def verificar_veredicto_por_contenido(contenido_ids: list[str]) -> dict[str, str
     con = _conectar()
     try:
         filas = con.execute(
-            f"SELECT id, verificar_veredicto FROM contenido WHERE id IN ({marcadores})",  # noqa: S608 -- marcadores
+            f"SELECT id, verificacion_fuente FROM contenido WHERE id IN ({marcadores})",  # noqa: S608 -- marcadores
             tuple(ids),
         ).fetchall()
     finally:
         con.close()
-    return {f["id"]: (f["verificar_veredicto"] or "") for f in filas if (f["verificar_veredicto"] or "")}
+    return {f["id"]: (f["verificacion_fuente"] or "") for f in filas if (f["verificacion_fuente"] or "")}
 
 
 def reparar_qa_en_curso_sueltos(umbral_iso: str) -> int:
-    """Devuelve a re-verificación (verificar_veredicto='') los temas COLGADOS en 'en_curso' mas viejos que `umbral_iso`.
+    """Devuelve a re-verificación (verificacion_fuente='') los temas COLGADOS en 'en_curso' mas viejos que `umbral_iso`.
 
     Limpieza del recolector: la fase QA marca el tema `en_curso` antes de lanzar la verificación; si
     la generacion muere sin finalizador, el sentinel quedaba para siempre (tema excluido de
@@ -471,8 +471,8 @@ def reparar_qa_en_curso_sueltos(umbral_iso: str) -> int:
             # `actualizado` es timestamptz (migracion 0033): `IS NOT NULL` sustituye al viejo
             # `<> ''` (el repo siempre lo escribe, asi que en la practica nunca es NULL); el
             # `< ?` compara nativo contra el umbral ISO (casteado a timestamptz).
-            "UPDATE contenido SET verificar_veredicto = '' "
-            "WHERE verificar_veredicto = 'en_curso' AND actualizado IS NOT NULL AND actualizado < ?",
+            "UPDATE contenido SET verificacion_fuente = '' "
+            "WHERE verificacion_fuente = 'en_curso' AND actualizado IS NOT NULL AND actualizado < ?",
             (umbral_iso,),
         )
         con.commit()

@@ -2,7 +2,7 @@
  * Tests de los badges de Investigación por historia en TarjetaHistoria (ADR 0011, C3):
  *   - La MARCA de la historia se pinta como chip (marca_nombre, con fallback a marca).
  *   - El mini-badge «IA» aparece solo si `marca_clasificada_por_ia`.
- *   - El VEREDICTO de verificación (`verificar_veredicto`) se pinta como badge solo si no está vacío:
+ *   - La VERIFICACIÓN de la fuente (`verificacion_fuente`) se pinta como badge solo si no está vacío:
  *     'no_verificado' → «Verificada»; 'problema' → «Problema en la fuente»; '' → nada.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -64,19 +64,19 @@ describe("TarjetaHistoria · badges de Investigación", () => {
     expect(screen.getByTestId("badge-marca-ia").textContent).toMatch(/IA/);
   });
 
-  it("no pinta veredicto cuando `verificar_veredicto` está vacío", () => {
-    renderTarjeta(historia({ verificar_veredicto: "" }));
-    expect(screen.queryByTestId("badge-veredicto-verificada")).toBeNull();
-    expect(screen.queryByTestId("badge-veredicto-problema")).toBeNull();
+  it("no pinta verificacion cuando `verificacion_fuente` está vacío", () => {
+    renderTarjeta(historia({ verificacion_fuente: "" }));
+    expect(screen.queryByTestId("badge-verificacion-verificada")).toBeNull();
+    expect(screen.queryByTestId("badge-verificacion-problema")).toBeNull();
   });
 
   it("'no_verificado' → badge «Verificada»", () => {
-    renderTarjeta(historia({ verificar_veredicto: "no_verificado" }));
-    expect(screen.getByTestId("badge-veredicto-verificada").textContent).toMatch(/Verificada/);
+    renderTarjeta(historia({ verificacion_fuente: "no_verificado" }));
+    expect(screen.getByTestId("badge-verificacion-verificada").textContent).toMatch(/Verificada/);
   });
 
   it("'problema' → badge «Problema en la fuente»", () => {
-    renderTarjeta(historia({ verificar_veredicto: "problema" }));
-    expect(screen.getByTestId("badge-veredicto-problema").textContent).toMatch(/Problema en la fuente/);
+    renderTarjeta(historia({ verificacion_fuente: "problema" }));
+    expect(screen.getByTestId("badge-verificacion-problema").textContent).toMatch(/Problema en la fuente/);
   });
 });

@@ -23,7 +23,7 @@ from ._comun import (
     QA_CADUCADA,
     QA_EN_CURSO,
     QA_SALTADA,
-    VERDICTO_NO_VERIFICADO,
+    VERIFICACION_NO_VERIFICADO,
     VERIFICADAS_QA,
     _limpiar_snippet,
     _log,
@@ -195,7 +195,7 @@ def clusters_para_promover(
     # pueden vivir lejos del top global del pool.
     limite = max(maximo * 4, maximo + 8) if cupos_categoria is None else max(maximo * 10, 80)
     # Con el filtro de QA las verificadas pueden vivir más abajo en el ranking (solo se verificó el
-    # top del admision): sobremuestrea más para no quedarte corto al filtrar por veredicto.
+    # top del admision): sobremuestrea más para no quedarte corto al filtrar por verificacion.
     limite = max(limite, 80)
     try:
         clusters, _total = repos.listar_noticia_clusters(
@@ -204,8 +204,8 @@ def clusters_para_promover(
     except Exception:  # noqa: BLE001 -- sin pool legible, esta marca no promueve nada
         _log.warning("pipeline: no se pudieron leer historias para promover (%s)", marca, exc_info=True)
         return []
-    # Filtro de QA OBLIGATORIO: solo cruzan las historias con un veredicto admitido.
-    clusters = [c for c in clusters if (c.get("verificar_veredicto") or "").strip() in qa_estados]
+    # Filtro de QA OBLIGATORIO: solo cruzan las historias con un verificacion admitido.
+    clusters = [c for c in clusters if (c.get("verificacion_fuente") or "").strip() in qa_estados]
     aptas: list[dict[str, Any]] = []
     bajo_umbral = 0
     for c in clusters:
@@ -259,7 +259,7 @@ def clusters_para_promover(
 
 
 def clusters_pendientes_verificar(marca: str, *, maximo: int) -> list[dict[str, Any]]:
-    """Top-N historias (`estado='nuevo'`) de la marca SIN verificar aún (`verificar_veredicto`==''), que
+    """Top-N historias (`estado='nuevo'`) de la marca SIN verificar aún (`verificacion_fuente`==''), que
     pasan el UMBRAL — las candidatas a las que lanzar la QA de la fuente (ADR 0011 F3).
 
     El umbral evita gastar `claude -p` verificando historias que jamás se admitirían (score/marca
@@ -281,7 +281,7 @@ def clusters_pendientes_verificar(marca: str, *, maximo: int) -> list[dict[str, 
         return []
     pendientes: list[dict[str, Any]] = []
     for c in clusters:
-        if (c.get("verificar_veredicto") or "").strip():
+        if (c.get("verificacion_fuente") or "").strip():
             continue  # ya verificada / en curso
         try:
             supera, _motivo = noticias_umbral.evaluar(c)
@@ -430,9 +430,9 @@ def crear_tema_de_cluster(
             formato=_FORMATO_PIPELINE,
             copy_pendiente=_copy_pendiente_de(trabajo, nota, redes_ids),
             # VERIFICACIÓN HEREDADA (ADR 0011 F3): la QA corrió sobre la HISTORIA antes de admitir;
-            # el tema NACE con el veredicto de su cluster (`no_verificado`/`saltada`), así la fase
+            # el tema NACE con el verificacion de su cluster (`no_verificado`/`saltada`), así la fase
             # de copy lo recoge de inmediato y la frontera "QA = investigación" queda en los datos.
-            verificar_veredicto=(cluster.get("verificar_veredicto") or "").strip(),
+            verificacion_fuente=(cluster.get("verificacion_fuente") or "").strip(),
             verificar_hallazgos=(cluster.get("verificar_hallazgos") or ""),
             # FECHA de la NOTA ORIGINAL: preferimos el `publicado_en` del item más reciente
             # (cuando el medio publicó la nota); si el medio no traía fecha, caemos al
@@ -462,7 +462,7 @@ def crear_tema_de_cluster(
 def _temas_en_proceso_de(marca: str) -> list[dict[str, Any]]:
     """Temas del pipeline de `marca` EN PROCESO (sin terminar las fases de IA). [] si falla.
 
-    En proceso = pendiente de QA (veredicto ''/'en_curso') O verificado-apto/saltado pero SIN copy aún.
+    En proceso = pendiente de QA (verificacion ''/'en_curso') O verificado-apto/saltado pero SIN copy aún.
     Compartido por el gate SERIAL (cuenta) y la CADUCIDAD (caduca los que superan el TTL): una
     sola definición de "en proceso" para ambos.
     """
@@ -480,10 +480,10 @@ def _temas_en_proceso_de(marca: str) -> list[dict[str, Any]]:
         con_copy = set()
     en_proceso: list[dict[str, Any]] = []
     for t in temas:
-        veredicto = (t.get("verificar_veredicto") or "").strip()
-        if veredicto in ("", QA_EN_CURSO):
+        verificacion = (t.get("verificacion_fuente") or "").strip()
+        if verificacion in ("", QA_EN_CURSO):
             en_proceso.append(t)  # pendiente de QA
-        elif veredicto in (VERDICTO_NO_VERIFICADO, QA_SALTADA) and (t.get("id") or "") not in con_copy:
+        elif verificacion in (VERIFICACION_NO_VERIFICADO, QA_SALTADA) and (t.get("id") or "") not in con_copy:
             en_proceso.append(t)  # verificado pero pendiente de copy
     return en_proceso
 
@@ -582,7 +582,7 @@ def caducar_temas_viejos(*, ahora: datetime | None = None) -> int:
     """FRESCURA (ventana deslizante): caduca los temas en curso que superaron el TTL.
 
     El pipeline no arrastra backlog: un tema que no completó sus fases (QA→copy) dentro de
-    `KENI_PIPELINE_TEMA_TTL_HORAS` (def 24 h) se marca `verificar_veredicto='caducada'` — sale del
+    `KENI_PIPELINE_TEMA_TTL_HORAS` (def 24 h) se marca `verificacion_fuente='caducada'` — sale del
     gate serial (libera hueco de admisión para lo fresco del ranking), la fase QA no lo verificación
     y la fase CD no le genera copy. Lo de ayer no entra hoy; hoy entra lo de hoy.
 
@@ -609,7 +609,7 @@ def caducar_temas_viejos(*, ahora: datetime | None = None) -> int:
                 repos.actualizar_contenido(
                     tema_id,
                     {
-                        "verificar_veredicto": QA_CADUCADA,
+                        "verificacion_fuente": QA_CADUCADA,
                         "notas": f"{previas}\n{nota}" if previas else nota,
                     },
                 )
@@ -623,7 +623,7 @@ def caducar_temas_viejos(*, ahora: datetime | None = None) -> int:
 
 
 def caducar_qa_clusters_en_curso(*, ahora: datetime | None = None) -> int:
-    """Limpiador de la verificación: resetea los clusters `verificar_veredicto='en_curso'` atascados (ADR 0011 F3).
+    """Limpiador de la verificación: resetea los clusters `verificacion_fuente='en_curso'` atascados (ADR 0011 F3).
 
     Si una QA de la fuente sobre un cluster muere (deploy/OOM/cuelgue), el cluster quedaría
     `en_curso` para siempre: ni se re-verificación ni se admite. Pasado el TTL de `en_curso` (el mismo
@@ -659,7 +659,7 @@ def promover_clusters_marca(
 
     Consume el pool ya fusionado/rankeado (Ola B). El filtro `qa_estados` (ADR 0011 F3) es
     OBLIGATORIO — por defecto las VERIFICADAS (`VERIFICADAS_QA`): la admisión SIEMPRE verificación, no
-    hay camino que promueva sin filtrar por veredicto. Devuelve los temas creados. Best-effort por
+    hay camino que promueva sin filtrar por verificacion. Devuelve los temas creados. Best-effort por
     historia.
     """
     clusters = clusters_para_promover(

@@ -121,7 +121,7 @@ async def historial_guardar(request: Request) -> Response:
     try:
         for red in sorted(redes_filtro):
             pub = dom_publicaciones.crear_borrador(
-                marca, red, titulo=titulo, contenido=entrada["resultado"], veredicto=verdicto,
+                marca, red, titulo=titulo, contenido=entrada["resultado"], revision=verdicto,
                 origen=historial_id, autor=autor,
             )
             creadas.append(pub)

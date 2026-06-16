@@ -70,7 +70,7 @@ function ListaChequeos({ chequeos }: { chequeos: ChequeoEstado[] }) {
 }
 
 /**
- * Temas BLOQUEADOS del pipeline (veredicto `problema`): salieron del flujo y nadie los
+ * Temas BLOQUEADOS del pipeline (verificacion `problema`): salieron del flujo y nadie los
  * reintenta solo. Compacto y plegable: una franja con el conteo; al abrir, tema + marca +
  * motivo, con enlace al detalle de su run para decidir (relanzar a mano / descartar).
  */

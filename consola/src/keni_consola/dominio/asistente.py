@@ -28,7 +28,7 @@ from . import generar
 _log = logging.getLogger("keni_consola.dominio.asistente")
 
 # Etiqueta de origen del historial: el asistente REUTILIZA la pipeline de copy por red
-# (piezas + veredicto + voz de marca). Solo cambia el TEXTO BASE (brief) y una instruccion
+# (piezas + revision + voz de marca). Solo cambia el TEXTO BASE (brief) y una instruccion
 # ADITIVA por modo; el resto es la generacion de copy de siempre.
 PROMPT_COPY = "copy-desde-nota"
 

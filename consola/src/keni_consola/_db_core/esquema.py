@@ -372,7 +372,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         id_post_metricool   TEXT NOT NULL DEFAULT '',
         senal_viralidad     INTEGER NOT NULL DEFAULT 0,
         espejo              INTEGER NOT NULL DEFAULT 1,
-        verificar_veredicto        TEXT NOT NULL DEFAULT '',
+        verificacion_fuente        TEXT NOT NULL DEFAULT '',
         verificar_hallazgos        TEXT NOT NULL DEFAULT '',
         copy_pendiente      TEXT NOT NULL DEFAULT '',
         fecha_fuente        TEXT NOT NULL DEFAULT '',
@@ -427,7 +427,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         -- espejo de `imagen`. "" = sin video adjunto. Lo usa el programador para publicar
         -- `TipoMedia.video` cuando la pieza es `formato='video'`.
         video                 TEXT NOT NULL DEFAULT '',
-        veredicto             TEXT NOT NULL DEFAULT '',
+        revision              TEXT NOT NULL DEFAULT '',
         revisor_id            TEXT NOT NULL DEFAULT '',
         revisor_nombre        TEXT NOT NULL DEFAULT '',
         revisado_en           TEXT NOT NULL DEFAULT '',
@@ -1303,7 +1303,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         primera_fuente_nombre TEXT NOT NULL DEFAULT '',
         fuentes_detalle TEXT NOT NULL DEFAULT '',
         marca_clasificada_por_ia INTEGER NOT NULL DEFAULT 0,
-        verificar_veredicto  TEXT NOT NULL DEFAULT '',
+        verificacion_fuente  TEXT NOT NULL DEFAULT '',
         verificar_hallazgos  TEXT NOT NULL DEFAULT '',
         creado        TEXT NOT NULL DEFAULT '',
         actualizado   TEXT NOT NULL DEFAULT ''

@@ -14,8 +14,8 @@ from ...estados import ORIGENES_AUTOGEN
 from ...pipeline_contenido import (
     ORIGEN_PIPELINE,
     TIPO_ACTIVIDAD,
-    VERDICTO_NO_VERIFICADO,
-    VERDICTO_PROBLEMA,
+    VERIFICACION_NO_VERIFICADO,
+    VERIFICACION_PROBLEMA,
 )
 
 # Orígenes de tema que el feed acepta como RUN: los del propio pipeline (recolección del pool) y
@@ -99,14 +99,14 @@ def _marca_nombre(marca: str) -> str:
 
 
 def _qa_fuente_de(item: dict) -> dict:
-    """Veredicto ESTRUCTURADO de la verificación de la fuente (rediseño QPC), para la UI.
+    """Verificacion ESTRUCTURADO de la verificación de la fuente (rediseño QPC), para la UI.
 
-    Lee el veredicto persistido en el TEMA (`verificar_veredicto`/`verificar_hallazgos`):
+    Lee el verificacion persistido en el TEMA (`verificacion_fuente`/`verificar_hallazgos`):
       - `no_verificado` (⚠️): apta, no verificada a fondo; las piezas llevan el aviso.
       - `problema` (❗): algo de peso; NO se generó copy. `hallazgos` trae el detalle.
     `hallazgos` se parsea del JSON guardado (`{resumen, hallazgos:[...]}`); [] si vacío/ilegible.
     """
-    veredicto = (item.get("verificar_veredicto", "") or "").strip()
+    verificacion = (item.get("verificacion_fuente", "") or "").strip()
     resumen = ""
     hallazgos: list[dict] = []
     crudo = (item.get("verificar_hallazgos", "") or "").strip()
@@ -121,10 +121,10 @@ def _qa_fuente_de(item: dict) -> dict:
             if isinstance(h, list):
                 hallazgos = [x for x in h if isinstance(x, dict)]
     return {
-        "veredicto": veredicto,
-        "no_verificado": veredicto == VERDICTO_NO_VERIFICADO,
-        "problema": veredicto == VERDICTO_PROBLEMA,
-        "copy_omitido": veredicto == VERDICTO_PROBLEMA,
+        "verificacion_fuente": verificacion,
+        "no_verificado": verificacion == VERIFICACION_NO_VERIFICADO,
+        "problema": verificacion == VERIFICACION_PROBLEMA,
+        "copy_omitido": verificacion == VERIFICACION_PROBLEMA,
         "resumen": resumen,
         "hallazgos": hallazgos,
     }

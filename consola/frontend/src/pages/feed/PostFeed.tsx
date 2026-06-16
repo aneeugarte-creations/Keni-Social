@@ -14,7 +14,7 @@
  *     rechazan la pieza. El override de FORZAR vive como botón discreto al pie del panel de
  *     estado (no escondido en un toast).
  *  4. Panel de ESTADO de la cadena (`CadenaAprobacion`, solo lectura): OK del equipo (cuántos y
- *     de quién) + lo que falta. Sin veredicto de IA (menos IA de cara al equipo). La acción vive en la fila.
+ *     de quién) + lo que falta. Sin revision de IA (menos IA de cara al equipo). La acción vive en la fila.
  *
  * Like/dislike/deshacer van por `aprobar`/`rechazar`/`deshacer` de `api/aprobacion`, que
  * forwardean al nivel ACTUAL de la cadena multinivel (respetando "otro par de ojos" y "dos
@@ -735,7 +735,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         <DialogoClonar publicacion={publicacion} onCerrar={() => setClonando(false)} />
       )}
 
-      {/* Panel de ESTADO (solo en revisión y con cadena): veredicto de IA + OK del equipo
+      {/* Panel de ESTADO (solo en revisión y con cadena): revision de IA + OK del equipo
           (cuántos y de quién) + lo que falta (comentarios sin resolver). El override de
           forzar ya NO es un botón de la tarjeta: se ofrece en el toast del primer OK
           (admin/coordinación), con su misma confirmación. Para piezas aprobadas sin panel,

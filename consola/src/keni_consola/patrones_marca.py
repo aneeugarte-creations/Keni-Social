@@ -10,7 +10,7 @@ pregunta) en un PERFIL JSON por marca. Ese perfil alimenta dos consumidores:
     dentro de las bandas reales de la marca, no de la intuición.
   - El VERIFICADOR de voz (`verificar_pieza`), un lint determinista que corre en el
     post-procesado del copy ANTES de la revisión humana: una pieza fuera de patrón no se
-    bloquea, se ANOTA y degrada el veredicto `listo` -> `revisar`.
+    bloquea, se ANOTA y degrada el revision `listo` -> `revisar`.
 
 El perfil es REGENERABLE (`keni_consola.patrones_derivar`, CLI + daemon opcional): la
 base viaja en el paquete (`patrones_inicial/<marca>.json`) y el runtime puede

@@ -30,7 +30,7 @@ export const apiPipelines = {
     ),
   pipelineDetalle: (id: string, signal?: AbortSignal) =>
     peticion<RespuestaPipelineDetalle>(`/pipelines/${encodeURIComponent(id)}`, { signal }),
-  // Temas BLOQUEADOS del pipeline (veredicto `problema`): fuera del flujo hasta que
+  // Temas BLOQUEADOS del pipeline (verificacion `problema`): fuera del flujo hasta que
   // un humano decida. Los consume la zona de estado del Monitor.
   pipelinesProblemas: (params: { marca?: string; limite?: number } = {}, signal?: AbortSignal) =>
     peticion<RespuestaProblemas>(

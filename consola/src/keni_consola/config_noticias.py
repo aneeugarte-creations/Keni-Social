@@ -772,7 +772,7 @@ def qa_fuente_timeout() -> int:
 
 
 def qa_en_curso_ttl_seg() -> int:
-    """TTL (s) del limpiador de temas `verificar_veredicto='en_curso'` sueltos (`KENI_QA_EN_CURSO_TTL_MIN`).
+    """TTL (s) del limpiador de temas `verificacion_fuente='en_curso'` sueltos (`KENI_QA_EN_CURSO_TTL_MIN`).
 
     Def 30 min (muy superior al timeout de la verificación, asi nunca toca una verificación viva). El recolector
     resetea a "" los `en_curso` mas viejos para que vuelvan a la re-verificación del barrido.
@@ -815,7 +815,7 @@ def revisar_activo() -> bool:
     Con el flag, antes de mover un borrador completo a la cola de revisión la IA "hacia adentro"
     verifica la VOZ del copy contra los patrones medidos de la marca (+ coherencia barata con la
     nota de origen). ADVISORY/safe-by-default: nunca bloquea ni descarta; si detecta algo, degrada
-    el veredicto (`listo`→`revisar`) y deja una nota para que el humano decida.
+    la revision (`listo`→`revisar`) y deja una nota para que el humano decida.
     """
     return _crudo(ENV_PIPELINE_REVISAR).lower() in _VERDADEROS
 

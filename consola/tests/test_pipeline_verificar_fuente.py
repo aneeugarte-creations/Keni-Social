@@ -3,11 +3,11 @@
 El equipo NO usa skills: la QA se hace adjuntando un DOCUMENTO de la Texto con los criterios.
 Regla del dueño: "si el documento existe, adjúntalo; si no existe, créalo y adjúntalo." La QA
 corre ANTES del copy y sobre la HISTORIA (cluster, ADR 0011 F3): verifica la NOTA de origen y
-persiste un veredicto ESTRUCTURADO (`no_verificado`/`problema`) en el cluster. Aquí cubrimos,
+persiste un verificación ESTRUCTURADO (`no_verificado`/`problema`) en el cluster. Aquí cubrimos,
 OFFLINE (mock de claude):
   - `asegurar_documento_qa` crea el documento si falta (idempotente).
   - `lanzar_verificar_cluster` enlaza una generación, deja el cluster `en_curso` y corre barato.
-  - el `procesar` (vía lanzador completo) persiste el veredicto estructurado sobre el cluster.
+  - el `procesar` (vía lanzador completo) persiste el verificación estructurado sobre el cluster.
 
 Usa la fixture `entorno` (Postgres aislado + Texto en tmp) y construye el cliente con un
 lanzador de generación inyectado (NUNCA se llama a `claude`).
@@ -68,11 +68,11 @@ def test_lanzar_qa_cluster_enlaza_generacion_y_marca_en_curso(entorno):
 
     # El cluster queda en_curso (no se re-lanzará en la fase Verificar) hasta que el procesar lo selle.
     actual = repos.obtener_noticia_cluster(cluster["id"])
-    assert (actual.get("verificar_veredicto") or "") == pc.QA_EN_CURSO
+    assert (actual.get("verificacion_fuente") or "") == pc.QA_EN_CURSO
 
 
 def test_qa_cluster_persiste_veredicto_no_verificado(entorno):
-    """Una verificación 🟢 sin hallazgos -> veredicto `no_verificado` persistido en el cluster."""
+    """Una verificación 🟢 sin hallazgos -> verificación `no_verificado` persistido en el cluster."""
     salida = (
         "🟢 Fuente apta.\n\n"
         '```json\n{"veredicto": "🟢", "resumen": "OK", "hallazgos": []}\n```\n'
@@ -82,11 +82,11 @@ def test_qa_cluster_persiste_veredicto_no_verificado(entorno):
     gen = pc.lanzar_verificar_cluster(cluster, autor=None)
     assert gen is not None
     actual = repos.obtener_noticia_cluster(cluster["id"])
-    assert (actual.get("verificar_veredicto") or "") == pc.VERDICTO_NO_VERIFICADO
+    assert (actual.get("verificacion_fuente") or "") == pc.VERIFICACION_NO_VERIFICADO
 
 
 def test_qa_cluster_persiste_veredicto_problema(entorno):
-    """Una verificación 🔴 con hallazgo de error -> veredicto `problema` + hallazgos persistidos."""
+    """Una verificación 🔴 con hallazgo de error -> verificación `problema` + hallazgos persistidos."""
     salida = (
         "🔴 Problema de peso.\n\n"
         '```json\n{"veredicto": "🔴", "resumen": "Dato falso", '
@@ -97,7 +97,7 @@ def test_qa_cluster_persiste_veredicto_problema(entorno):
     gen = pc.lanzar_verificar_cluster(cluster, autor=None)
     assert gen is not None
     actual = repos.obtener_noticia_cluster(cluster["id"])
-    assert (actual.get("verificar_veredicto") or "") == pc.VERDICTO_PROBLEMA
+    assert (actual.get("verificacion_fuente") or "") == pc.VERIFICACION_PROBLEMA
     assert "inventado" in (actual.get("verificar_hallazgos") or "")
 
 

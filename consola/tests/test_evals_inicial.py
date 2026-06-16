@@ -1,6 +1,6 @@
 """Red de regresión del harness de EVALS (artefacto: el hueco "no hay eval de calidad de IA").
 
-Garantiza que los casos golden INICIAL mantienen su veredicto esperado: un cambio que degrade
+Garantiza que los casos golden INICIAL mantienen su dictamen esperado: un cambio que degrade
 la MAQUINARIA DE VERIFICACIÓN (lint de `patrones_marca`, gate `_revisar`, límites de red) o los
 PERFILES MEDIDOS de marca (`patrones_inicial/*.json`) flipa algún caso y este test lo caza. NO
 toca BD ni red (determinista, barato) — corre en cualquier pipeline sin Postgres.
@@ -31,13 +31,13 @@ def test_hay_casos_inicial_de_ambos_signos():
 
 
 def test_casos_inicial_cuadran_todos():
-    """Veredicto efectivo == expectativa golden para TODOS los casos (score 100%).
+    """Dictamen efectivo == expectativa golden para TODOS los casos (score 100%).
 
     Esta es la afirmación central: las piezas marcadas `pasa` pasan los checks deterministas y
     las marcadas `falla` los fallan EN LA DIMENSIÓN declarada (`falla_esperada_en`)."""
     reporte = correr_casos(_casos())
     discrepancias = [
-        (r.caso.id, r.caso.espera, r.veredicto, r.dimensiones_fallidas)
+        (r.caso.id, r.caso.espera, r.dictamen, r.dimensiones_fallidas)
         for r in reporte.discrepancias
     ]
     assert reporte.score == 1.0, f"casos inicial que ya no cuadran: {discrepancias}"

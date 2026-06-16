@@ -114,7 +114,7 @@ def _validar_nueva(datos: dict[str, Any]) -> tuple[dict[str, Any] | None, str | 
     titulo = datos.get("titulo", "")
     contenido = datos.get("contenido", "")
     copy_in = datos.get("copy_in", "")
-    veredicto = datos.get("veredicto", "")
+    revision = datos.get("revision", "")
     fecha_programada = datos.get("fecha_programada", "")
     origen = datos.get("origen", "")
     imagen = datos.get("imagen", "")
@@ -122,7 +122,7 @@ def _validar_nueva(datos: dict[str, Any]) -> tuple[dict[str, Any] | None, str | 
         (titulo, "El título"),
         (contenido, "El contenido"),
         (copy_in, "El texto en imagen"),
-        (veredicto, "El veredicto"),
+        (revision, "El revision"),
         (fecha_programada, "La fecha programada"),
         (origen, "El origen"),
         (imagen, "La imagen"),
@@ -144,7 +144,7 @@ def _validar_nueva(datos: dict[str, Any]) -> tuple[dict[str, Any] | None, str | 
             "contenido": contenido,
             "copy_in": copy_in,
             "estado": estado,
-            "veredicto": veredicto,
+            "revision": revision,
             "fecha_programada": fecha_norm,
             "origen": origen.strip(),
             "imagen": imagen.strip(),
@@ -315,7 +315,7 @@ async def crear(request: Request) -> Response:
         contenido=entrada["contenido"],
         copy_in=entrada["copy_in"],
         estado=entrada["estado"],
-        veredicto=entrada["veredicto"],
+        revision=entrada["revision"],
         fecha_programada=entrada["fecha_programada"],
         origen=entrada["origen"],
         imagen=entrada["imagen"],
@@ -642,7 +642,7 @@ async def duplicar(request: Request) -> Response:
     """Duplica una publicacion como borrador, con overrides opcionales.
 
     `POST /api/publicaciones/{id}/duplicar` con JSON opcional `{red?, marca?, titulo?}`.
-    Copia contenido/copy_in/imagen/veredicto/hashtags; estado=borrador, fecha_programada=''.
+    Copia contenido/copy_in/imagen/revision/hashtags; estado=borrador, fecha_programada=''.
     -> `{publicacion}` | 404.
     """
     publicacion_id = request.path_params["publicacion_id"]
@@ -678,7 +678,7 @@ async def duplicar(request: Request) -> Response:
         contenido=original["contenido"],
         copy_in=original.get("copy_in", ""),
         estado="borrador",
-        veredicto=original["veredicto"],
+        revision=original["revision"],
         fecha_programada="",
         origen=original["origen"],
         imagen=original["imagen"],
