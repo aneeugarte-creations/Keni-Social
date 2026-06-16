@@ -132,12 +132,15 @@ describe("AgenteDetalle", () => {
     expect(await screen.findByText("Siempre activo")).toBeInTheDocument();
   });
 
-  it("muestra la descripción y los ajustes del daemon", async () => {
+  it("muestra la descripción y los ajustes, SIN duplicar el gate como ajuste", async () => {
     stubFetch({
       daemons: [
         latido({
+          clave_gate: "KENI_INVESTIGACION",
           descripcion: "Motor de reutilizar: verifica y admite.",
           ajustes: [
+            // El gate (KENI_INVESTIGACION) viene en la lista de ajustes del API, pero como ya es el
+            // toggle «Encendido» de Controles debe FILTRARSE del bloque de Ajustes (no duplicarse).
             {
               clave: "KENI_INVESTIGACION",
               tipo: "bool",
@@ -149,6 +152,18 @@ describe("AgenteDetalle", () => {
               fuente: "store",
               defecto: false,
             },
+            // Knob NO-gate: este sí debe pintarse en Ajustes.
+            {
+              clave: "KENI_PROMOVER_MIN_SCORE",
+              tipo: "int",
+              etiqueta: "Score mínimo para promover",
+              ayuda: "Umbral de score para admitir una historia.",
+              grupo: "maestros_investigacion",
+              peligroso: false,
+              valor: 60,
+              fuente: "store",
+              defecto: 50,
+            },
           ],
         }),
       ],
@@ -157,9 +172,12 @@ describe("AgenteDetalle", () => {
     renderEn("investigacion");
     expect(await screen.findByText("Qué hace")).toBeInTheDocument();
     expect(screen.getByText("Motor de reutilizar: verifica y admite.")).toBeInTheDocument();
-    // Bloque de Ajustes con la fila del catálogo (reusa FilaAjuste).
+    // Bloque de Ajustes con SOLO el knob no-gate (reusa FilaAjuste).
     expect(screen.getByText("Ajustes")).toBeInTheDocument();
-    expect(screen.getByText("Enciende la investigación.")).toBeInTheDocument();
+    expect(screen.getByText("Umbral de score para admitir una historia.")).toBeInTheDocument();
+    // El gate NO se repite como ajuste: su ayuda no aparece y solo hay UN switch (el «Encendido»).
+    expect(screen.queryByText("Enciende la investigación.")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("switch")).toHaveLength(1);
   });
 
   it("«en espera» avisa de que la máquina está apagada", async () => {

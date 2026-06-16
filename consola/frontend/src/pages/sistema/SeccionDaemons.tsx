@@ -117,12 +117,10 @@ function FilaDaemon({
       etiquetaAcciones={`Acciones de ${latido.daemon}`}
     >
       <TableCell>
-        {/* Nombre HUMANO (etiqueta) + para qué SIRVE (descripción) + nombre crudo en mono:
-            así el panel no muestra solo "ingesta"/"media_gc" sin contexto. */}
+        {/* Nombre HUMANO (etiqueta) + nombre crudo en mono. La DESCRIPCIÓN (para qué sirve) NO va
+            en la tabla: solo en la página de detalle (`/maquina/agentes/{daemon}`), para no repetir
+            la misma prosa en cada fila de Sistema y de los cockpits. */}
         <div className="font-medium">{latido.etiqueta}</div>
-        {latido.descripcion && (
-          <div className="text-xs text-muted-foreground">{latido.descripcion}</div>
-        )}
         <div className="font-mono text-[10px] text-muted-foreground/60">{latido.daemon}</div>
       </TableCell>
       <TableCell>

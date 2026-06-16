@@ -512,7 +512,9 @@ export default function AgenteDetalle() {
 
       <DescripcionDaemon texto={latido.descripcion} />
       <Controles latido={latido} />
-      <AjustesDaemon ajustes={latido.ajustes} />
+      {/* El gate (`clave_gate`) YA es el toggle «Encendido» de Controles; se filtra de los Ajustes
+          para no pintar su switch DOS veces (la 1ª clave de `ajustes` suele ser el propio gate). */}
+      <AjustesDaemon ajustes={latido.ajustes.filter((a) => a.clave !== latido.clave_gate)} />
       <LogBarridos daemon={latido.daemon} />
       <Analizar latido={latido} />
     </div>
