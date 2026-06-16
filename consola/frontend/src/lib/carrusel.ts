@@ -23,6 +23,9 @@ export interface SlideCarrusel {
   plantillaId?: string;
   /** Reencuadre de la foto: JSON `{"foco":[x,y],"zoom":z}` o "" (sin reencuadrar). */
   fotoEncuadre?: string;
+  /** "Sin placa": el slide es la foto cruda (sin plantilla encima), como el "quitar plantilla"
+   * de la portada. Ausente/false = lleva placa. */
+  sinPlaca?: boolean;
 }
 
 /**
@@ -59,6 +62,7 @@ export function parsearCarrusel(crudo: string | null | undefined): SlideCarrusel
     if (plantillaId) slide.plantillaId = plantillaId;
     const fotoEncuadre = String((el as { fotoEncuadre?: unknown }).fotoEncuadre ?? "").trim();
     if (fotoEncuadre) slide.fotoEncuadre = fotoEncuadre;
+    if ((el as { sinPlaca?: unknown }).sinPlaca === true) slide.sinPlaca = true;
     slides.push(slide);
   }
   return slides;
@@ -75,6 +79,7 @@ export function serializarCarrusel(slides: SlideCarrusel[]): string {
       if (s.titular?.trim()) out.titular = s.titular;
       if (s.plantillaId?.trim()) out.plantillaId = s.plantillaId;
       if (s.fotoEncuadre?.trim()) out.fotoEncuadre = s.fotoEncuadre;
+      if (s.sinPlaca) out.sinPlaca = true;
       return out;
     });
   return limpios.length ? JSON.stringify(limpios) : "";

@@ -52,11 +52,20 @@ describe("carrusel · parse/serialize", () => {
     ]);
   });
 
-  it("round-trip: parse(serialize(x)) preserva la procedencia", () => {
+  it("round-trip: parse(serialize(x)) preserva la procedencia (incl. sinPlaca)", () => {
     const slides: SlideCarrusel[] = [
       { tipo: "imagen", objeto: "artes/x.png", titular: "Clave", foto: "fotos/o.jpg" },
+      { tipo: "imagen", objeto: "fotos/cruda.jpg", foto: "fotos/cruda.jpg", sinPlaca: true },
     ];
     expect(parsearCarrusel(serializarCarrusel(slides))).toEqual(slides);
+  });
+
+  it("sinPlaca solo se adopta/emite cuando es true (false/ausente se omite)", () => {
+    expect(parsearCarrusel('[{"tipo":"imagen","objeto":"a","sinPlaca":false}]')).toEqual([
+      { tipo: "imagen", objeto: "a" },
+    ]);
+    const json = serializarCarrusel([{ tipo: "imagen", objeto: "a", sinPlaca: false }]);
+    expect(JSON.parse(json)).toEqual([{ tipo: "imagen", objeto: "a" }]);
   });
 
   it("vacío -> ''", () => {

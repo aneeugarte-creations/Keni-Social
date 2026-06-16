@@ -9,7 +9,7 @@ import { confirmar } from "@/components/comunes/confirmar";
 import { ContadorCaracteres } from "@/components/editor/ContadorCaracteres";
 import { HerramientasHashtags } from "@/components/hashtags/HerramientasHashtags";
 import { EditorCarrusel } from "@/components/media/EditorCarrusel";
-import { DialogoEditarSlide } from "@/components/media/DialogoEditarSlide";
+import { EditorCarruselLateral } from "@/components/media/EditorCarruselLateral";
 import { EditorImagen } from "@/components/media/EditorImagen";
 import { EditorPlacaInline } from "@/components/media/EditorPlacaInline";
 import { EditorVideo } from "@/components/media/EditorVideo";
@@ -80,8 +80,6 @@ export function DialogoEditar({
   const [videoUrl, setVideoUrl] = React.useState("");
   // CARRUSEL: slides EXTRA detrás de la portada (la portada es la placa de arriba).
   const [slides, setSlides] = React.useState<SlideCarrusel[]>([]);
-  // Índice del slide cuya PLACA se está editando en el diálogo aparte (null = ninguno).
-  const [slideEditando, setSlideEditando] = React.useState<number | null>(null);
   // --- Autoguardado --- //
   // La pieza se guarda SOLA al editar (debounced); no hay botón ni indicador de guardado.
   const cargandoRef = React.useRef(true); // true mientras se cargan los valores al abrir (no autoguarda)
@@ -479,7 +477,30 @@ export function DialogoEditar({
                 Estudio de video
               </button>
             </div>
-          ) : publicacion?.marca ? (
+          ) : publicacion?.marca && formato === "carrusel" ? (
+              // CARRUSEL: el MISMO editor de placa pero PAGINADO de lado (portada + slides), como
+              // el slideshow del feed pero editable. Cada slide edita foto/titular/plantilla.
+              <EditorCarruselLateral
+                marca={publicacion.marca}
+                publicacionId={publicacion.id}
+                plantillas={plantillas}
+                copy={contenido}
+                imagenFuente={publicacion.imagen_fuente}
+                portadaFotos={fotos}
+                onPortadaFotos={setFotos}
+                portadaCopyIn={copyIn}
+                onPortadaCopyIn={setCopyIn}
+                portadaPlantillaId={plantillaId}
+                onPortadaPlantillaId={(id) => {
+                  setPlantillaId(id);
+                  setPlacaOculta(false);
+                }}
+                portadaPlacaOculta={placaOculta}
+                onPortadaPlacaOculta={setPlacaOculta}
+                slides={slides}
+                onSlides={setSlides}
+              />
+            ) : publicacion?.marca ? (
               // SISTEMA ÚNICO: la plantilla del estudio se renderiza EN VIVO en el lienzo (con tu
               // foto + reencuadre + titular in-place). El selector (galería por marca) y "solo foto"
               // son nativos en la cabecera del editor.
@@ -513,36 +534,11 @@ export function DialogoEditar({
               />
             ) : null}
 
-          {/* CARRUSEL: los slides extra EN CRUDO detrás de la portada (la portada se edita
-              arriba con la placa de siempre). Subir/quitar/reordenar y "Hacer portada"
-              (intercambia la foto de la placa con ese slide); autoguardado normal. */}
-          {publicacion && formato === "carrusel" && (
-            <EditorCarrusel
-              slides={slides}
-              onCambio={setSlides}
-              idPrefijo="editar"
-              // "Editar placa": solo si la pieza tiene marca (hay plantillas). Abre el editor de
-              // placa del slide aparte; el slide guarda su procedencia para recomponerse.
-              onEditarPlaca={publicacion.marca ? (i) => setSlideEditando(i) : undefined}
-              onPortada={(i) => {
-                // SWAP portada <-> slide: la imagen del slide pasa al hueco 0 de la placa
-                // (sin reencuadre: se reencuadra en el editor de arriba) y la foto que era
-                // portada baja a ocupar ese mismo slot del carrusel (no se pierde nada).
-                const slide = slides[i];
-                if (!slide || slide.tipo !== "imagen") return;
-                const fotoActual = fotos[0]?.objeto ?? "";
-                const nuevasFotos = [...fotos];
-                nuevasFotos[0] = { objeto: slide.objeto, foco: null, zoom: 0 };
-                setFotos(nuevasFotos);
-                const nuevos = [...slides];
-                if (fotoActual) {
-                  nuevos[i] = { tipo: "imagen", objeto: fotoActual };
-                } else {
-                  nuevos.splice(i, 1);
-                }
-                setSlides(nuevos);
-              }}
-            />
+          {/* CARRUSEL SIN MARCA: sin placa que editar, los slides extra van EN CRUDO detrás de la
+              portada (lista de subir/quitar/reordenar). Las piezas CON marca usan el carrusel
+              lateral editable de arriba. */}
+          {publicacion && formato === "carrusel" && !publicacion.marca && (
+            <EditorCarrusel slides={slides} onCambio={setSlides} idPrefijo="editar" />
           )}
 
           <div className="space-y-1.5">
@@ -587,25 +583,6 @@ export function DialogoEditar({
             onCargar={(p) => elegirPlantilla(p.id)}
             onCerrar={() => setGaleriaPlantillas(false)}
             tipoFijo={tipoPlantilla}
-          />
-        )}
-
-        {/* Editor de la PLACA de un slide del carrusel (cambiar plantilla/titular/foto y
-            re-hornear). Al guardar fija el nuevo media + procedencia en ese slot. */}
-        {publicacion?.marca && slideEditando !== null && slides[slideEditando] && (
-          <DialogoEditarSlide
-            slide={slides[slideEditando]}
-            indice={slideEditando + 2}
-            marca={publicacion.marca}
-            publicacionId={publicacion.id}
-            plantillas={plantillas}
-            copy={contenido}
-            onCerrar={() => setSlideEditando(null)}
-            onGuardado={(actualizado) => {
-              setSlides((prev) =>
-                prev.map((s, k) => (k === slideEditando ? actualizado : s)),
-              );
-            }}
           />
         )}
       </DialogContent>

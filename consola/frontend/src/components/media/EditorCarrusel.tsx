@@ -4,14 +4,12 @@
  * La portada (slide 1) se edita arriba con la maquinaria de imagen de siempre (foto +
  * placa de marca); aquí se gestionan los slides EXTRA: subir imágenes/videos, REEMPLAZAR
  * el media de uno, quitarlos y reordenarlos. Cada slide se publica TAL CUAL (su PNG/MP4,
- * sin recomponer la placa), en este orden, en el post multi-media. En un carrusel editorial
- * cada slide ya es una placa horneada (`artes/…png`) CON su procedencia (foto+titular+plantilla):
- * con `onEditarPlaca` se puede "Editar placa" de un slide (cambiar plantilla/titular/foto y
- * re-hornear). Los slides crudos (sin procedencia) solo se reordenan/sustituyen/quitan. Reusado
- * por el editor de pieza (DialogoEditar) y los cajones Presidencia/Clips.
+ * sin recomponer la placa), en este orden, en el post multi-media. Reusado por los cajones
+ * Presidencia/Clips (slides crudos) y, en piezas SIN marca, por el editor de pieza. Las piezas
+ * CON marca editan el carrusel con `EditorCarruselLateral` (placa editable por slide).
  *
- * Las acciones de cada fila (editar placa/reemplazar/reordenar/quitar/portada) viven en el menú
- * "⋮" SIEMPRE visible, no escondidas tras click-derecho.
+ * Las acciones de cada fila (reemplazar/reordenar/quitar/portada) viven en el menú "⋮"
+ * SIEMPRE visible, no escondidas tras click-derecho.
  */
 import {
   ArrowDown,
@@ -20,7 +18,6 @@ import {
   ImagePlus,
   Loader2,
   RefreshCw,
-  SquarePen,
   Star,
   Trash2,
   Video,
@@ -32,7 +29,7 @@ import { Button } from "@/components/ui/button";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { api, mensajeError, urlMedia } from "@/lib/api";
-import { slidePlacaEditable, type SlideCarrusel } from "@/lib/carrusel";
+import type { SlideCarrusel } from "@/lib/carrusel";
 
 export function EditorCarrusel({
   slides,
@@ -43,7 +40,6 @@ export function EditorCarrusel({
   etiqueta,
   marcarPortada = false,
   onPortada,
-  onEditarPlaca,
 }: {
   slides: SlideCarrusel[];
   onCambio: (slides: SlideCarrusel[]) => void;
@@ -69,12 +65,6 @@ export function EditorCarrusel({
    * lista), el botón no se pinta.
    */
   onPortada?: (indice: number) => void;
-  /**
-   * "Editar placa": abre el editor de placa del slide `i` (cambiar plantilla/titular/foto y
-   * re-hornear). Solo se ofrece en slides de IMAGEN CON procedencia (`slidePlacaEditable`): los
-   * crudos no se pueden recomponer. Sin callback (cajones Presidencia/Clips), no se pinta.
-   */
-  onEditarPlaca?: (indice: number) => void;
 }) {
   const [subiendo, setSubiendo] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -203,14 +193,6 @@ export function EditorCarrusel({
         <ul className="space-y-1.5">
           {slides.map((s, i) => {
             const acciones: EntradaMenuContextual[] = [];
-            if (onEditarPlaca && slidePlacaEditable(s)) {
-              acciones.push({
-                etiqueta: "Editar placa",
-                icono: SquarePen,
-                onClick: () => onEditarPlaca(i),
-                deshabilitado: disabled || reemplazando !== null,
-              });
-            }
             acciones.push({
               etiqueta: "Reemplazar media",
               icono: RefreshCw,
