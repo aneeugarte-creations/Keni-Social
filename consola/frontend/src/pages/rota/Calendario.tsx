@@ -30,10 +30,11 @@ import { ImportarDocumentoParrilla } from "@/components/parrilla/ImportarDocumen
 import type {
   AusenciaRota,
   EventoRota,
+  FranjaSemana,
   TurnoRota,
 } from "@/types";
 
-import { CeldaDeRejilla, DialogCargaEquipo, DialogEditarEvento } from "./CalendarioPiezas";
+import { CeldaDeRejilla, cmsDeMarca, DialogCargaEquipo, DialogEditarEvento } from "./CalendarioPiezas";
 import {
   AyudaLeyenda,
   BadgeEstadoSemana,
@@ -44,7 +45,9 @@ import {
   ausenciaTocaDia,
   filtrarEquipoPorMarca,
   franjaIdParaHoraEvento,
+  franjasSolapan,
   presentacionFranja,
+  type ConflictoCandidato,
   type CubridorEvento,
   type ItemEventoCalendario,
 } from "./comun";
@@ -103,8 +106,10 @@ export function Calendario({
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: ["rota"] });
 
   // `equipo` para la edición avanzada del chip (DialogEditarTurno admite reasignar a
-  // cualquier miembro de la rota).
+  // cualquier miembro de la rota), y `cms` para el dropdown «Añadir turno» (solo CMs
+  // activos de la marca activa).
   const equipo = filtrarEquipoPorMarca(equipoQ.data?.equipo ?? [], marcaActiva);
+  const cms = cmsDeMarca(equipoQ.data?.equipo ?? [], marcaActiva);
   const semana = turnosQ.data;
   const turnos = React.useMemo(() => semana?.turnos ?? [], [semana?.turnos]);
   // Franjas vivas de la semana, ordenadas por `orden` (la franja Descanso suele ir al
@@ -226,6 +231,43 @@ export function Calendario({
     [ausenciasPorMiembro],
   );
 
+  // Turnos indexados por (miembro_id, fecha): base para detectar SOLAPES (la misma
+  // persona ya con un turno ese día en otra franja que comparte horas con la candidata).
+  const turnosPorMiembroFecha = React.useMemo(() => {
+    const m = new Map<string, TurnoRota[]>();
+    for (const t of turnos) {
+      const k = `${t.miembro_id}|${t.fecha}`;
+      const lista = m.get(k) ?? [];
+      lista.push(t);
+      m.set(k, lista);
+    }
+    return m;
+  }, [turnos]);
+  const franjaPorId = React.useMemo(() => {
+    const m = new Map<string, FranjaSemana>();
+    for (const f of franjasSemana) m.set(f.id, f);
+    return m;
+  }, [franjasSemana]);
+
+  // Aviso inline NO bloqueante al asignar: ¿la persona está de ausencia ese día, o ya
+  // tiene un turno que solapa? El admin lo ve en el dropdown y puede forzar igualmente.
+  const conflictoCandidato = React.useCallback(
+    (miembroId: string, fecha: string, franja: FranjaSemana): ConflictoCandidato => {
+      const ausencia = ausenciaDe(miembroId, fecha);
+      let solapa = false;
+      if (!franja.es_descanso) {
+        const susTurnos = turnosPorMiembroFecha.get(`${miembroId}|${fecha}`) ?? [];
+        solapa = susTurnos.some((t) => {
+          if (t.franja_id === franja.id) return false; // misma celda: no es un solape nuevo
+          const otra = franjaPorId.get(t.franja_id);
+          return Boolean(otra && !otra.es_descanso && franjasSolapan(franja, otra));
+        });
+      }
+      return { ausencia, solapa };
+    },
+    [ausenciaDe, turnosPorMiembroFecha, franjaPorId],
+  );
+
   // TITULARIDAD: quién COGIÓ cada evento, derivada de las tareas de cobertura (la MISMA
   // fuente que el Panorama) y NO de quién está de turno. Antes el calendario usaba la
   // cobertura DERIVADA de turnos (`evento.cobertura`): metía el evento bajo CADA persona
@@ -266,8 +308,8 @@ export function Calendario({
   const fin = semana?.fin ?? coberturaQ.data?.fin ?? dias[6] ?? "";
   const nCambiados = eventosCobertura.filter((e) => e.cambiado).length;
   // `editable` requiere admin + semana no aprobada. Los CMs no admin siempre ven la vista
-  // en solo-lectura. La edición que queda es inline en el chip de turno (click → menú
-  // Editar/Duplicar/Eliminar); la cobertura se asigna desde el Panorama, no aquí.
+  // en solo-lectura. La edición es inline: «Añadir turno» da de alta capacidad y el chip de
+  // turno abre su menú (Editar/Duplicar/Eliminar). La COBERTURA se asigna desde el Panorama.
   const editable = esAdmin && !semana?.aprobada;
   const cargando =
     coberturaQ.isPending ||
@@ -484,16 +526,25 @@ export function Calendario({
                             personasPorCelda.get(`${franja.id}|${fecha}`) ?? [];
                           const eventos =
                             eventosPorCelda.get(`${franja.id}|${fecha}`) ?? [];
+                          // CMs que se pueden añadir aquí: los de la marca que no estén ya
+                          // de turno en esta celda. La franja Descanso también admite alta
+                          // (turno de no-laboral explícito).
+                          const yaEnCelda = new Set(personas.map((t) => t.miembro_id));
+                          const cmsDisponibles = cms.filter((m) => !yaEnCelda.has(m.id));
                           return (
                             <CeldaDeRejilla
                               key={`${franja.id}-${fecha}`}
+                              lunes={lunes}
                               fecha={fecha}
+                              franja={franja}
                               personas={personas}
                               eventos={eventos}
                               equipo={equipo}
+                              cmsDisponibles={cmsDisponibles}
                               editable={editable}
                               finde={esFinDeSemana(fecha)}
                               ausenciaDe={ausenciaDe}
+                              conflictoCandidato={conflictoCandidato}
                               onEditarEvento={(e) => setEventoSeleccionado(e)}
                               onCambio={invalidar}
                             />

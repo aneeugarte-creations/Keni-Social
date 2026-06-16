@@ -1,18 +1,22 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import type {
+  AusenciaRota,
   EventoRota,
+  FranjaSemana,
+  MiembroRota,
   TurnoRota,
 } from "@/types";
 
 import {
   franjasSolapan,
+  type ConflictoCandidato,
   type ItemEventoCalendario,
 } from "../comun";
-import { CeldaDeRejilla } from "./celdas";
+import { CeldaDeRejilla, DropdownAnadirPersona } from "./celdas";
 
 vi.mock("sonner", () => ({
   toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), info: vi.fn() }),
@@ -21,6 +25,21 @@ vi.mock("sonner", () => ({
 function conProvider(ui: React.ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+}
+
+function franja(over: Partial<FranjaSemana> = {}): FranjaSemana {
+  return {
+    id: "f-manana",
+    lunes: "2026-06-15",
+    nombre: "Mañana",
+    inicio: "08:00",
+    fin: "14:00",
+    orden: 0,
+    es_descanso: false,
+    marca: "",
+    marca_nombre: "",
+    ...over,
+  };
 }
 
 function evento(over: Partial<EventoRota> = {}): EventoRota {
@@ -75,13 +94,17 @@ function renderCelda(
 ) {
   return conProvider(
     <CeldaDeRejilla
+      lunes="2026-06-15"
       fecha="2026-06-15"
+      franja={franja()}
       personas={over.personas ?? []}
       eventos={over.eventos ?? []}
       equipo={[]}
+      cmsDisponibles={[]}
       editable={over.editable ?? false}
       finde={false}
       ausenciaDe={() => undefined}
+      conflictoCandidato={() => ({ solapa: false })}
       onEditarEvento={vi.fn()}
       onCambio={vi.fn()}
     />,
@@ -137,6 +160,45 @@ describe("franjasSolapan — detección de solape horario", () => {
     expect(franjasSolapan({ inicio: "22:00", fin: "02:00" }, { inicio: "03:00", fin: "06:00" })).toBe(
       false,
     );
+  });
+});
+
+describe("DropdownAnadirPersona — avisos inline de conflicto", () => {
+  const cms: MiembroRota[] = [
+    { id: "m1", nombre: "Ana" },
+    { id: "m2", nombre: "Bruno" },
+  ];
+  const ausencia: AusenciaRota = {
+    id: "a1",
+    miembro_id: "m1",
+    miembro_nombre: "Ana",
+    tipo: "vacaciones",
+    desde: "2026-06-15",
+    hasta: "2026-06-20",
+    motivo: "",
+  };
+  const conflictoCandidato = (miembroId: string): ConflictoCandidato => {
+    if (miembroId === "m1") return { ausencia, solapa: false };
+    if (miembroId === "m2") return { ausencia: undefined, solapa: true };
+    return { solapa: false };
+  };
+
+  it("muestra «De ausencia ese día» y «Ya tiene turno» en las opciones", async () => {
+    conProvider(
+      <DropdownAnadirPersona
+        lunes="2026-06-15"
+        fecha="2026-06-15"
+        franja={franja()}
+        cmsDisponibles={cms}
+        conflictoCandidato={conflictoCandidato}
+        onCambio={vi.fn()}
+      />,
+    );
+    // Radix abre el Select con Enter (jsdom no emite pointerup reales); patrón de la suite.
+    fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
+    await screen.findByRole("option", { name: /Ana/ });
+    expect(screen.getByText("De ausencia ese día")).toBeInTheDocument();
+    expect(screen.getByText("Ya tiene turno")).toBeInTheDocument();
   });
 });
 
