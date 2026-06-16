@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BellRing,
   CalendarOff,
+  CalendarPlus,
   CheckCircle2,
   Loader2,
   Sunrise,
@@ -51,6 +52,7 @@ import {
   type CubridorEvento,
   type ItemEventoCalendario,
 } from "./comun";
+import { DialogoAsignarTurnos } from "./DialogoAsignarTurnos";
 import { DialogConfigFranjas, DialogFranjasDeSemana } from "./Franjas";
 import { CLAVE_TAREAS } from "@/pages/tareas/claves";
 import { agrupar } from "@/pages/tareas/tipos";
@@ -135,6 +137,9 @@ export function Calendario({
   // Resumen "Carga del equipo": antes vivía como panel colapsable bajo el calendario;
   // ahora se abre bajo demanda desde el menú "Más" (popup), para no alargar la vista.
   const [abrirCarga, setAbrirCarga] = React.useState(false);
+  // «Asignar turnos»: reparte la semana (persona → franja → días) desde la cabecera, sin ir
+  // celda por celda. Solo admin + semana en borrador (mismo gating que el resto de edición).
+  const [abrirAsignar, setAbrirAsignar] = React.useState(false);
 
   // Mutaciones de cabecera (de la antigua pestaña Turnos): aprobar / despublicar /
   // copiar semana anterior. Sin cambios funcionales — sólo migradas aquí.
@@ -345,6 +350,16 @@ export function Calendario({
                 <BellRing className="h-3.5 w-3.5" /> {nCambiados}
               </Badge>
             </Tooltip>
+          )}
+          {editable && (
+            <Button
+              variant="outline"
+              onClick={() => setAbrirAsignar(true)}
+              title="Reparte la semana: persona → franja → días"
+            >
+              <CalendarPlus className="h-4 w-4" />
+              Asignar turnos
+            </Button>
           )}
           {esAdmin && !semana?.aprobada && (
             <Button
@@ -571,6 +586,16 @@ export function Calendario({
       {abrirCarga && (
         <DialogCargaEquipo lunes={lunes} onCerrar={() => setAbrirCarga(false)} />
       )}
+
+      <DialogoAsignarTurnos
+        abierto={abrirAsignar}
+        onOpenChange={setAbrirAsignar}
+        lunes={lunes}
+        dias={dias}
+        franjas={franjasSemana}
+        cms={cms}
+        onCambio={invalidar}
+      />
     </div>
   );
 }
