@@ -422,5 +422,26 @@ def test_preview_304_si_etag_coincide(cliente, monkeypatch):
     assert llamadas["n"] == 1  # el 304 NO recompuso
 
 
+def test_preview_cachea_el_render(cliente, monkeypatch):
+    """El render se persiste en `previews/<huella>.png`: una 2ª petición (sin If-None-Match) se
+    sirve de la caché del almacén SIN volver a tocar Node. Es lo que hace rápida la galería de las
+    marcas cuyas plantillas no tienen `miniatura` guardada."""
+    from keni_consola.dominio import estudio_imagen
+
+    llamadas = {"n": 0}
+
+    def _render(*a, **k):
+        llamadas["n"] += 1
+        return b"PNG"
+
+    monkeypatch.setattr(estudio_imagen, "renderizar_documento_bytes", _render)
+    pid = _crear_plantilla(cliente)
+    r1 = cliente.get(f"/api/plantillas-diseno/{pid}/preview")
+    r2 = cliente.get(f"/api/plantillas-diseno/{pid}/preview")  # mismo contenido, sin condicional
+    assert r1.status_code == 200 and r2.status_code == 200
+    assert r1.content == b"PNG" and r2.content == b"PNG"
+    assert llamadas["n"] == 1  # la 2ª salió de la caché del almacén, no de Node
+
+
 def test_preview_404_si_no_existe(cliente):
     assert cliente.get("/api/plantillas-diseno/noexiste/preview").status_code == 404

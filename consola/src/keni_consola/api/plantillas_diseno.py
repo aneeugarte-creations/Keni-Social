@@ -48,12 +48,46 @@ _TIPOS_VALIDOS = frozenset({"foto", "miniatura"})
 _MAX_PREVIEW_CONCURRENTE = 4
 _sem_preview = threading.BoundedSemaphore(_MAX_PREVIEW_CONCURRENTE)
 
+# Carpeta de la CACHÉ del preview: 1 png por combinación documento+muestra. Reciclable (el
+# contenido se puede regenerar). La clave la fija la huella del contenido -> self-invalidante.
+_CARPETA_CACHE_PREVIEW = "previews"
 
-def _render_preview_bytes(doc: dict, bindings: dict[str, str]) -> bytes:
-    """Render del preview ACOTADO por `_sem_preview`. Corre en un hilo del threadpool (subprocess
-    Node), nunca en el event loop. Mira `estudio_imagen` por atributo para respetar el monkeypatch."""
+
+def _preview_bytes(
+    huella: str,
+    documento: str,
+    foto_muestra: str,
+    titular_muestra: str,
+    etiqueta_muestra: str,
+) -> bytes:
+    """Bytes del preview, de la CACHÉ o recién renderizados. Corre en threadpool (lee/escribe el
+    almacén S3-o-disco + subprocess Node), NUNCA en el event loop.
+
+    Si ya se renderizó esa combinación documento+muestra (`previews/<huella>.png`), la sirve sin
+    tocar Node —esto es lo que hace rápida la galería de marcas cuyas plantillas no tienen
+    `miniatura` guardada—. En cache-miss renderiza (acotado por `_sem_preview`) y persiste. La huella
+    la fija el contenido, así que cambiar el documento/muestra escribe una clave NUEVA (self-invalida).
+    """
+    clave = f"{_CARPETA_CACHE_PREVIEW}/{huella}.png"
+    cacheado = almacen_media.leer_objeto(clave)
+    if cacheado is not None:
+        return cacheado
+    doc = json.loads(documento) if isinstance(documento, str) else documento
+    doc = _hornear_muestra(doc, foto_muestra)
+    # Subtítulo/pleca: con texto de muestra propio se INYECTA (binding); sin él, se revela el
+    # literal de la capa (quitando el binding) para que igualmente se vea en la galería.
+    if not etiqueta_muestra:
+        doc = _revelar_pleca(doc)
     with _sem_preview:
-        return estudio_imagen.renderizar_documento_bytes(doc, bindings=bindings)
+        datos = estudio_imagen.renderizar_documento_bytes(
+            doc,
+            bindings={"copy_in": titular_muestra or "TITULAR", "etiqueta_default": etiqueta_muestra},
+        )
+    try:
+        almacen_media.guardar_objeto(clave, datos, content_type="image/png")
+    except Exception:  # noqa: BLE001 -- la caché es best-effort: un fallo al escribir no rompe el preview
+        pass
+    return datos
 
 
 def _normalizar_categoria(valor: object) -> str:
@@ -350,14 +384,18 @@ def _revelar_pleca(doc: dict) -> dict:
 
 
 async def preview(request: Request) -> Response:
-    """GET /api/plantillas-diseno/{id}/preview: MINIATURA on-demand del diseño (sin persistir).
+    """GET /api/plantillas-diseno/{id}/preview: MINIATURA on-demand del diseño (cacheada).
 
     Renderiza el DOCUMENTO de la plantilla (con su foto de muestra horneada en los huecos vacíos y el
     titular/subtítulo de muestra) a PNG. Es el RESPALDO de la galería cuando la plantilla no tiene
     `miniatura` guardada —p. ej. las creadas por API/agente, que no pasan por el guardado del estudio
-    (es ahí donde se genera la miniatura)—. Así se ven todas sin tener que abrir+editar cada una. ETag
-    por hash del documento + la muestra (foto y texto): cambiarla invalida la caché; cacheable (304 sin
-    recomponer si no cambió). 404 si no existe; 422 si el render falla.
+    (es ahí donde se genera la miniatura)—. Así se ven todas sin tener que abrir+editar cada una.
+
+    DOS niveles de caché por la misma huella (hash del documento + la muestra): el ETag para el 304
+    del navegador, y una caché PERSISTENTE en el almacén (`previews/<huella>.png`) para que cada
+    combinación se renderice con Node UNA sola vez (las siguientes peticiones —incl. tras expirar el
+    `max-age`— se sirven del almacén, sin Node). Cambiar el documento/muestra cambia la huella -> clave
+    nueva (self-invalida). 404 si no existe; 422 si el render falla.
     """
     item = repos.obtener_plantilla_diseno(request.path_params["plantilla_id"])
     if item is None:
@@ -367,23 +405,14 @@ async def preview(request: Request) -> Response:
     titular_muestra = item.get("titular_muestra") or ""
     etiqueta_muestra = item.get("etiqueta_muestra") or ""
     clave_etag = f"{documento}|{foto_muestra}|{titular_muestra}|{etiqueta_muestra}"
-    etag = '"' + hashlib.sha256(clave_etag.encode()).hexdigest()[:32] + '"'
+    huella = hashlib.sha256(clave_etag.encode()).hexdigest()[:32]
+    etag = f'"{huella}"'
     cache = "private, max-age=300"
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers={"ETag": etag, "Cache-Control": cache})
     try:
-        doc = json.loads(documento) if isinstance(documento, str) else documento
-        doc = _hornear_muestra(doc, foto_muestra)
-        # Subtítulo/pleca: con texto de muestra propio se INYECTA (binding); sin él, se revela el
-        # literal de la capa (quitando el binding) para que igualmente se vea en la galería.
-        if not etiqueta_muestra:
-            doc = _revelar_pleca(doc)
-        # El render corre Node (subprocess): NO en el event loop —si no, bloquea al worker y las
-        # miniaturas de la galería entran de una en una—. Va por threadpool, acotado por `_sem_preview`.
         datos = await run_in_threadpool(
-            _render_preview_bytes,
-            doc,
-            {"copy_in": titular_muestra or "TITULAR", "etiqueta_default": etiqueta_muestra},
+            _preview_bytes, huella, documento, foto_muestra, titular_muestra, etiqueta_muestra
         )
     except (ValueError, TypeError) as e:
         return JSONResponse({"error": f"Documento inválido: {e}"}, status_code=422)
