@@ -1,7 +1,7 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { GuionPartido, SemaforoCobertura } from "./tarjetas";
+import { SemaforoCobertura } from "./tarjetas";
 
 describe("SemaforoCobertura — fase del evento por su reloj maestro", () => {
   // AHORA fijo = 2026-06-14 00:00 UTC = 2026-06-13 18:00 CDMX (UTC-6).
@@ -43,49 +43,5 @@ describe("SemaforoCobertura — fase del evento por su reloj maestro", () => {
       render(<SemaforoCobertura fecha="2026-06-13" hora="18:30" compacto />);
       expect(screen.getByTitle("Empieza pronto")).toBeInTheDocument();
     });
-  });
-});
-
-describe("GuionPartido — checklist de referencia neutra (colapsable)", () => {
-  const abrir = () =>
-    fireEvent.click(screen.getByRole("button", { name: /guion del partido/i }));
-
-  it("va COLAPSADO por defecto: el encabezado se ve, las fases no hasta abrir", () => {
-    render(<GuionPartido />);
-    expect(screen.getByText("Guion del partido")).toBeInTheDocument();
-    expect(screen.queryByText("Antes")).toBeNull();
-    expect(screen.queryByText("Gráfico de matchday")).toBeNull();
-  });
-
-  it("el toggle EXPANDE y vuelve a COLAPSAR el guion", () => {
-    render(<GuionPartido />);
-    abrir();
-    expect(screen.getByText("Antes")).toBeInTheDocument();
-    expect(screen.getByText("Durante el partido")).toBeInTheDocument();
-    expect(screen.getByText("Después")).toBeInTheDocument();
-    expect(screen.getByText("Gráfico de matchday")).toBeInTheDocument();
-    abrir();
-    expect(screen.queryByText("Antes")).toBeNull();
-  });
-
-  it("expandido: entregables NEUTROS (sin marcadores de cubierto; la cobertura la dice RolesCubiertos)", () => {
-    render(<GuionPartido />);
-    abrir();
-    expect(screen.getByText("Partido normal")).toBeInTheDocument();
-    expect(screen.queryAllByLabelText("cubierto")).toHaveLength(0);
-  });
-
-  it("«solo imágenes» (tipo_cobertura) oculta la fase «Durante» (entregables de directo)", () => {
-    render(<GuionPartido tipoCobertura="imagenes" />);
-    abrir();
-    expect(screen.getByText("Antes")).toBeInTheDocument();
-    expect(screen.getByText("Después")).toBeInTheDocument();
-    expect(screen.queryByText("Durante el partido")).toBeNull();
-  });
-
-  it("«transmisión» mantiene el guion completo (incluida la fase «Durante»)", () => {
-    render(<GuionPartido tipoCobertura="transmision" />);
-    abrir();
-    expect(screen.getByText("Durante el partido")).toBeInTheDocument();
   });
 });

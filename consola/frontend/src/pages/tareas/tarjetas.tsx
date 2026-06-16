@@ -2,9 +2,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   CalendarClock,
   Check,
-  ChevronDown,
-  ChevronRight,
-  ClipboardList,
   Hand,
   Pencil,
   Play,
@@ -30,18 +27,12 @@ import { SesionContexto } from "@/hooks/sesion-contexto";
 import { api, mensajeError } from "@/lib/api";
 import { formatearFecha, minutosHastaEvento, posicionTemporal } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
-import type {
-  CatalogosContenido,
-  Contenido,
-  EventoRota,
-  TipoCoberturaEvento,
-} from "@/types";
+import type { CatalogosContenido, Contenido, EventoRota } from "@/types";
 
 import { AvatarPersona } from "./AvatarPersona";
 import { CLAVE_TAREAS } from "./claves";
 import { DialogoAsignar } from "./dialogos";
 import { IconoEvento } from "./icono-evento";
-import { PLANTILLA_DEFECTO, type PlantillaGuion } from "./guion";
 import { etiquetaRol, type RolCobertura, ROLES_COBERTURA, rolesCubiertos } from "./roles";
 import type { Cobertura } from "./tipos";
 
@@ -139,80 +130,6 @@ export function SemaforoCobertura({
       )}
       {texto}
     </Badge>
-  );
-}
-
-/**
- * GUION DEL PARTIDO dentro de la cobertura: el run-of-show por fases (Antes / Durante / Después)
- * como CHECKLIST DE REFERENCIA NEUTRA (mismo idioma visual del tablero: outline gris). NO es un
- * tablero de estado ni duplica la cobertura: cada entregable es un bullet NEUTRO con su etiqueta de
- * rol (Foto/Video/Texto/Live) que solo RECUERDA qué suele producirse en cada fase. El ÚNICO
- * indicador de qué roles están cubiertos es `RolesCubiertos` (el semáforo agregado), no el guion.
- *
- * Va COLAPSADO por defecto (toggle con chevron, estilo plataforma) para no separar el resumen
- * «Cubren:» de las tarjetas accionables. Respeta el `tipo_cobertura` del evento: en «solo imágenes»
- * (sin señal) oculta la fase «Durante» (entregables de directo: Live/Video) que no aplican; en
- * «transmisión»/desconocido pinta el guion completo. La plantilla por TAMAÑO de partido es un dial
- * preparado (`plantillaParaTipo`); hoy siempre usa el default ("Partido normal").
- */
-export function GuionPartido({
-  tipoCobertura,
-  plantilla = PLANTILLA_DEFECTO,
-}: {
-  tipoCobertura?: TipoCoberturaEvento | null;
-  plantilla?: PlantillaGuion;
-}) {
-  const [abierto, setAbierto] = React.useState(false);
-  // «Solo imágenes»: sin señal de directo → la fase «Durante» (Live/Video) no aplica; se oculta.
-  const fases =
-    tipoCobertura === "imagenes" ? plantilla.fases.filter((f) => f.id !== "vivo") : plantilla.fases;
-  return (
-    <section aria-label="Guion del partido" className="rounded-md border border-border bg-card/40">
-      <button
-        type="button"
-        onClick={() => setAbierto((v) => !v)}
-        aria-expanded={abierto}
-        className="flex w-full items-center gap-1.5 p-2.5 text-left"
-      >
-        {abierto ? (
-          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-        ) : (
-          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-        )}
-        <ClipboardList className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-        <span className="text-xs font-medium text-muted-foreground">Guion del partido</span>
-        <Badge variant="outline" className="ml-auto font-normal text-muted-foreground">
-          {plantilla.etiqueta}
-        </Badge>
-      </button>
-      {abierto && (
-        <div className="grid gap-2.5 px-2.5 pb-2.5 sm:grid-cols-3">
-          {fases.map((fase) => (
-            <div key={fase.id} className="space-y-1">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                {fase.etiqueta}
-              </p>
-              <ul className="space-y-0.5">
-                {fase.entregables.map((e) => (
-                  <li key={e.titulo} className="flex items-center gap-1.5 text-xs">
-                    <span
-                      className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/40"
-                      aria-hidden
-                    />
-                    <span className="truncate text-muted-foreground">{e.titulo}</span>
-                    {e.rol && (
-                      <span className="shrink-0 text-[10px] text-muted-foreground">
-                        · {etiquetaRol(e.rol)}
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
   );
 }
 
@@ -480,11 +397,13 @@ export function TarjetaTarea({
     mutationFn: () => api.soltarContenido(tarea.id),
     onSuccess: () => {
       void invalidar();
-      // En cobertura «Quitarme» SOLO libera mi rol: el partido SIGUE (reaparece como «Por
+      // En cobertura soltar SOLO libera ESE rol: el partido SIGUE (reaparece como «Por
       // cubrir» y se puede re-coger). NO borra nada — se deja MUY claro para no asustar.
       if (enCobertura) {
         toast.success(
-          `Te quitaste de "${tarea.titulo}". El partido sigue: vuelve como «Por cubrir».`,
+          esMia
+            ? `Te quitaste de "${tarea.titulo}". El partido sigue: vuelve como «Por cubrir».`
+            : `${tarea.responsable_nombre} ya no cubre "${tarea.titulo}": vuelve como «Por cubrir».`,
         );
       } else {
         toast.success(`"${tarea.titulo}" vuelve a estar libre.`);
@@ -631,6 +550,23 @@ export function TarjetaTarea({
             {tarea.prioridad}
           </Badge>
         )}
+        {/* Quitar a quien cubre (yo mismo o, si soy manager, a otra persona): suelta SU rol;
+            el partido sigue y el rol vuelve a «Por cubrir». Reemplaza el viejo chip «Cubren:». */}
+        {enCobertura && (esMia || esManager) && (
+          <button
+            type="button"
+            aria-label={esMia ? "Soltar (dejar de cubrir)" : `Quitar a ${tarea.responsable_nombre}`}
+            title={esMia ? "Soltar (dejar de cubrir)" : `Quitar a ${tarea.responsable_nombre}`}
+            disabled={soltar.isPending}
+            onClick={(e) => {
+              e.stopPropagation();
+              soltar.mutate();
+            }}
+            className="ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
         {!enCobertura && tarea.fecha_objetivo && (
           <span
             className={cn(
@@ -725,19 +661,6 @@ export function TarjetaCobertura({
     },
   });
 
-  // Quitar a un cubridor (× del chip): suelta SU pieza; el rol vuelve a «Por cubrir».
-  const soltar = useMutation({
-    mutationFn: (v: { id: string; nombre: string; rol: string }) => api.soltarContenido(v.id),
-    onSuccess: (_res, v) => {
-      void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
-      toast.success(`${v.nombre} ya no cubre (${etiquetaRol(v.rol)}); el rol vuelve a «Por cubrir».`);
-    },
-    onError: (e) => {
-      void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
-      toast.error(mensajeError(e));
-    },
-  });
-
   // Borrar el partido = cancelarlo: borra el evento Y sus tareas de cobertura (la fila se deriva
   // de esas tareas, no del evento; sin borrarlas el partido seguiría vivo sin dueño claro).
   const borrar = useMutation({
@@ -799,46 +722,17 @@ export function TarjetaCobertura({
       acciones={accionesCobertura}
       className="space-y-2"
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm text-muted-foreground">Cubren:</span>
-        {cobertura.cubridores.map((t) => {
-          const esMio = t.responsable_id === usuario?.id;
-          const puedeQuitar = esManager || esMio;
-          return (
-            <span
-              key={t.id}
-              className="inline-flex items-center gap-1 rounded-full border border-border bg-card py-0.5 pl-1 pr-2 text-sm"
-            >
-              <AvatarPersona id={t.responsable_id} nombre={t.responsable_nombre} size="sm" />
-              {t.responsable_nombre}
-              <span className="text-muted-foreground">· {etiquetaRol(t.formato)}</span>
-              {puedeQuitar && (
-                <button
-                  type="button"
-                  aria-label={esMio ? "Soltar (dejar de cubrir)" : `Quitar a ${t.responsable_nombre}`}
-                  title={esMio ? "Soltar (dejar de cubrir)" : `Quitar a ${t.responsable_nombre}`}
-                  disabled={soltar.isPending}
-                  onClick={() =>
-                    soltar.mutate({ id: t.id, nombre: t.responsable_nombre, rol: t.formato })
-                  }
-                  className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              )}
-            </span>
-          );
-        })}
-        {/* Semáforo agregado por rol del evento (qué roles están cubiertos). */}
-        <RolesCubiertos cubridores={cobertura.cubridores} />
-      </div>
-      {/* Guion del partido (run-of-show por fases): checklist de referencia neutra, colapsable. */}
-      <GuionPartido tipoCobertura={cobertura.tipoCobertura} />
-      <div className="space-y-2" data-no-primaria>
-        {cobertura.cubridores.map((t) => (
-          <TarjetaTarea key={t.id} tarea={t} catalogos={catalogos} enCobertura />
-        ))}
-      </div>
+      {/* Quién cubre: UNA fila por persona (avatar · nombre · rol · semáforo · ×). Antes cada
+          cubridor se pintaba DOS veces (chip «Cubren:» + tarjeta); ahora es una sola fila. El
+          rol cubierto agregado ya vive en la cabecera de la fila (RolesCubiertos), no se repite. */}
+      {cobertura.cubridores.length > 0 && (
+        <div className="space-y-2" data-no-primaria>
+          <span className="text-sm text-muted-foreground">Cubren:</span>
+          {cobertura.cubridores.map((t) => (
+            <TarjetaTarea key={t.id} tarea={t} catalogos={catalogos} enCobertura />
+          ))}
+        </div>
+      )}
       {/* Roles SOLTADOS (sin dueño) de este evento aún vivo: «Por cubrir · <rol>» re-cogibles. */}
       {cobertura.libres.length > 0 && (
         <div className="space-y-1.5" data-no-primaria>
