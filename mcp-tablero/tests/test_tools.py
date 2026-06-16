@@ -182,11 +182,11 @@ async def test_crear_contenido_arma_el_cuerpo():
 
 async def test_mover_pieza_devuelve_la_plataforma():
     cliente = ClienteFalso(
-        respuestas={"actualizar_plataforma": {"plataforma": {"id": "p1", "red": "x", "estado": "aprobado"}}}
+        respuestas={"actualizar_plataforma": {"plataforma": {"id": "p1", "red": "x", "estado": "en_revision"}}}
     )
-    out = await _llamar(cliente, "mover_pieza", contenido_id="c1", plataforma_id="p1", estado="aprobado")
-    assert out["plataforma"]["estado"] == "aprobado"
-    assert cliente.llamadas[0] == ("actualizar_plataforma", ("c1", "p1", {"estado": "aprobado"}), {})
+    out = await _llamar(cliente, "mover_pieza", contenido_id="c1", plataforma_id="p1", estado="en_revision")
+    assert out["plataforma"]["estado"] == "en_revision"
+    assert cliente.llamadas[0] == ("actualizar_plataforma", ("c1", "p1", {"estado": "en_revision"}), {})
 
 
 async def test_error_consola_sale_como_dict_error():
