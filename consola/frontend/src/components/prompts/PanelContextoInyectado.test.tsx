@@ -51,13 +51,13 @@ describe("PanelContextoInyectado", () => {
   it("muestra estado vacío cuando el prompt no inyecta contexto", async () => {
     marcasPrompts.mockResolvedValue({ marcas: [{ id: "unotv", nombre: "UnoTV" }] });
     contextoInyectado.mockResolvedValue({
-      prompt_id: "prompt/asistente/resumir",
+      prompt_id: "prompt/idear",
       inyecta: false,
       pipeline: null,
       marca: "unotv",
       adjuntos: [],
     });
-    renderPanel("prompt/asistente/resumir");
+    renderPanel("prompt/idear");
     await waitFor(() =>
       expect(screen.getByText("Este prompt no inyecta contexto editorial.")).toBeInTheDocument(),
     );

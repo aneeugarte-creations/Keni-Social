@@ -188,8 +188,7 @@ export const FASES_IMPORTACION: readonly FasePipeline[] = [
 
 /**
  * HERRAMIENTAS — prompts independientes que NO son una etapa de la máquina: la ideación evergreen,
- * la crítica IA, los hashtags, los envoltorios del copy y el asistente del editor. Mismo diseño;
- * abren su prompt.
+ * la crítica IA, los hashtags y los envoltorios del copy. Mismo diseño; abren su prompt.
  */
 export const FASES_HERRAMIENTAS: readonly FasePipeline[] = [
   { nombre: "Idear", es_ia: true, claves: [], ayuda: "Propone ideas de contenido evergreen para la marca", doc: "prompt/idear" },
@@ -198,9 +197,6 @@ export const FASES_HERRAMIENTAS: readonly FasePipeline[] = [
   { nombre: "Redes", es_ia: true, claves: [], ayuda: "Envoltorio: una pieza por red", doc: "prompt/envoltorios/redes" },
   { nombre: "Unificado", es_ia: true, claves: [], ayuda: "Envoltorio: el mismo copy para todas las redes", doc: "prompt/envoltorios/copy-unico" },
   { nombre: "Carrusel", es_ia: true, claves: [], ayuda: "Envoltorio: decisión de carrusel", doc: "prompt/envoltorios/carrusel" },
-  { nombre: "Limpio", es_ia: true, claves: [], ayuda: "Envoltorio: sin emojis", doc: "prompt/envoltorios/sin-emojis" },
-  { nombre: "Resumir", es_ia: true, claves: [], ayuda: "Asistente del editor: resumir texto", doc: "prompt/asistente/resumir" },
-  { nombre: "Variantes", es_ia: true, claves: [], ayuda: "Asistente del editor: generar variantes", doc: "prompt/asistente/variantes" },
 ];
 
 /** Las herramientas no tienen colas de daemon: el mapa va vacío (sin conteos por fila). */

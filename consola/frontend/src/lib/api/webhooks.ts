@@ -3,9 +3,7 @@
 import { peticion } from "./_core";
 import type {
   CuerpoActualizarWebhook,
-  CuerpoAsistentePublicacion,
   CuerpoCrearWebhook,
-  RespuestaGeneracion,
   RespuestaMensaje,
   RespuestaMetricasPublicacion,
   RespuestaPreviewPublicacion,
@@ -40,11 +38,4 @@ export const apiWebhooks = {
       `/publicaciones/${encodeURIComponent(publicacionId)}/preview`,
       { metodo: "POST", json: { texto }, signal },
     ),
-  /** Lanza el asistente IA sobre un contenido (genera/resume/3 variantes). */
-  asistentePublicacion: (publicacionId: string, cuerpo: CuerpoAsistentePublicacion) =>
-    peticion<RespuestaGeneracion>(
-      `/publicaciones/${encodeURIComponent(publicacionId)}/asistente`,
-      { metodo: "POST", json: cuerpo },
-    ),
-
 };

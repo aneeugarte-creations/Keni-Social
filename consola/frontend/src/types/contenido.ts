@@ -392,16 +392,6 @@ export interface RespuestaPreviewPublicacion {
   preview: string;
 }
 
-/** Modo del asistente IA del tablero. */
-export type ModoAsistentePublicacion = "generar" | "variantes" | "resumir";
-
-/** `POST /api/publicaciones/{id}/asistente`: lanza el asistente IA sobre un contenido. */
-export interface CuerpoAsistentePublicacion {
-  modo: ModoAsistentePublicacion;
-  /** Redes a generar; por defecto, las redes sociales del propio contenido. */
-  redes?: string[];
-}
-
 export interface CuerpoDesdeRadar {
   titulo: string;
   marca?: string;
