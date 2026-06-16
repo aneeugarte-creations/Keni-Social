@@ -20,11 +20,11 @@ from ._comun import (
     _FORMATO_PIPELINE,
     ETAPA_ADMITIR,
     ORIGEN_PIPELINE,
-    QA_CADUCADA,
-    QA_EN_CURSO,
-    QA_SALTADA,
+    VERIFICACION_CADUCADA,
+    VERIFICACION_EN_CURSO,
+    VERIFICACION_SALTADA,
     VERIFICACION_NO_VERIFICADO,
-    VERIFICADAS_QA,
+    VERIFICADAS_OK,
     _limpiar_snippet,
     _log,
     registrar_etapa,
@@ -44,7 +44,7 @@ __all__ = [
     "promover_clusters_marca",
     "temas_en_proceso",
     "caducar_temas_viejos",
-    "caducar_qa_clusters_en_curso",
+    "caducar_verificacion_clusters_en_curso",
     "_claves_dedup_marca",
     "_nota_de_cluster",
     "_fetch_cuerpo",
@@ -158,12 +158,12 @@ def _nota_de_cluster(
 
 def clusters_para_promover(
     marca: str, *, maximo: int, cupos_categoria: dict[str, int] | None = None,
-    qa_estados: tuple[str, ...] = VERIFICADAS_QA,
+    verificacion_estados: tuple[str, ...] = VERIFICADAS_OK,
 ) -> list[dict[str, Any]]:
     """Top-N historias (`estado='nuevo'`) de la marca por SCORE, con UMBRAL y DIVERSIDAD. Best-effort.
 
-    `qa_estados` (ADR 0011 F3): el filtro de QA es OBLIGATORIO — por defecto a las VERIFICADAS
-    (`VERIFICADAS_QA` = `no_verificado`/`saltada`), así la admisión SIEMPRE verificación: las `problema`
+    `verificacion_estados` (ADR 0011 F3): el filtro de QA es OBLIGATORIO — por defecto a las VERIFICADAS
+    (`VERIFICADAS_OK` = `no_verificado`/`saltada`), así la admisión SIEMPRE verificación: las `problema`
     y las aún sin verificar nunca se materializan como contenido (no existe un camino que promueva
     sin filtrar). Se puede ESTRECHAR a un subconjunto, nunca abrir a "todo": un conjunto vacío
     promueve cero (fail-closed), no todo.
@@ -205,7 +205,7 @@ def clusters_para_promover(
         _log.warning("pipeline: no se pudieron leer historias para promover (%s)", marca, exc_info=True)
         return []
     # Filtro de QA OBLIGATORIO: solo cruzan las historias con un verificacion admitido.
-    clusters = [c for c in clusters if (c.get("verificacion_fuente") or "").strip() in qa_estados]
+    clusters = [c for c in clusters if (c.get("verificacion_fuente") or "").strip() in verificacion_estados]
     aptas: list[dict[str, Any]] = []
     bajo_umbral = 0
     for c in clusters:
@@ -481,9 +481,9 @@ def _temas_en_proceso_de(marca: str) -> list[dict[str, Any]]:
     en_proceso: list[dict[str, Any]] = []
     for t in temas:
         verificacion = (t.get("verificacion_fuente") or "").strip()
-        if verificacion in ("", QA_EN_CURSO):
+        if verificacion in ("", VERIFICACION_EN_CURSO):
             en_proceso.append(t)  # pendiente de QA
-        elif verificacion in (VERIFICACION_NO_VERIFICADO, QA_SALTADA) and (t.get("id") or "") not in con_copy:
+        elif verificacion in (VERIFICACION_NO_VERIFICADO, VERIFICACION_SALTADA) and (t.get("id") or "") not in con_copy:
             en_proceso.append(t)  # verificado pero pendiente de copy
     return en_proceso
 
@@ -609,7 +609,7 @@ def caducar_temas_viejos(*, ahora: datetime | None = None) -> int:
                 repos.actualizar_contenido(
                     tema_id,
                     {
-                        "verificacion_fuente": QA_CADUCADA,
+                        "verificacion_fuente": VERIFICACION_CADUCADA,
                         "notas": f"{previas}\n{nota}" if previas else nota,
                     },
                 )
@@ -622,18 +622,18 @@ def caducar_temas_viejos(*, ahora: datetime | None = None) -> int:
     return caducados
 
 
-def caducar_qa_clusters_en_curso(*, ahora: datetime | None = None) -> int:
+def caducar_verificacion_clusters_en_curso(*, ahora: datetime | None = None) -> int:
     """Limpiador de la verificación: resetea los clusters `verificacion_fuente='en_curso'` atascados (ADR 0011 F3).
 
     Si una QA de la fuente sobre un cluster muere (deploy/OOM/cuelgue), el cluster quedaría
     `en_curso` para siempre: ni se re-verificación ni se admite. Pasado el TTL de `en_curso` (el mismo
-    que el limpiador de `contenido`, `config.qa_en_curso_ttl_seg`), vuelve a "" para re-verificar.
+    que el limpiador de `contenido`, `config.verificacion_en_curso_ttl_seg`), vuelve a "" para re-verificar.
     Corre al inicio del barrido de investigación. Best-effort; devuelve cuántos reparó.
     """
     momento = ahora or datetime.now(timezone.utc)
-    umbral = momento - timedelta(seconds=config.qa_en_curso_ttl_seg())
+    umbral = momento - timedelta(seconds=config.verificacion_en_curso_ttl_seg())
     try:
-        n = repos.reparar_qa_clusters_en_curso(umbral.astimezone(timezone.utc).isoformat())
+        n = repos.reparar_verificacion_clusters_en_curso(umbral.astimezone(timezone.utc).isoformat())
     except Exception:  # noqa: BLE001 -- la reparación es best-effort; nunca rompe el barrido
         _log.exception("pipeline: fallo el limpiador de QA de clusters en curso.")
         return 0
@@ -653,17 +653,17 @@ def _fecha_aware(crudo: str) -> datetime | None:
 
 def promover_clusters_marca(
     marca: str, *, maximo: int, cupos_categoria: dict[str, int] | None = None,
-    qa_estados: tuple[str, ...] = VERIFICADAS_QA,
+    verificacion_estados: tuple[str, ...] = VERIFICADAS_OK,
 ) -> list[dict[str, Any]]:
     """CI — promueve a temas las top-N historias rankeadas de una marca. Registra la etapa CI.
 
-    Consume el pool ya fusionado/rankeado (Ola B). El filtro `qa_estados` (ADR 0011 F3) es
-    OBLIGATORIO — por defecto las VERIFICADAS (`VERIFICADAS_QA`): la admisión SIEMPRE verificación, no
+    Consume el pool ya fusionado/rankeado (Ola B). El filtro `verificacion_estados` (ADR 0011 F3) es
+    OBLIGATORIO — por defecto las VERIFICADAS (`VERIFICADAS_OK`): la admisión SIEMPRE verificación, no
     hay camino que promueva sin filtrar por verificacion. Devuelve los temas creados. Best-effort por
     historia.
     """
     clusters = clusters_para_promover(
-        marca, maximo=maximo, cupos_categoria=cupos_categoria, qa_estados=qa_estados
+        marca, maximo=maximo, cupos_categoria=cupos_categoria, verificacion_estados=verificacion_estados
     )
     claves_vistas = _claves_dedup_marca(marca)
     temas: list[dict[str, Any]] = []

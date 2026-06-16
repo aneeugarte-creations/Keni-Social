@@ -55,7 +55,7 @@ PROC_DOCUMENTO = "documento"
 PROC_HASHTAGS = "hashtags"
 # QA de la FUENTE (pre-copy, rediseño QPC): verificación PERMISIVA de la nota de origen por TEMA. Persiste el verificación estructurado (`no_verificado`/`problema`) + hallazgos
 # sobre el `contenido` (tema), para que CD genere copy SOLO de los `no_verificado`.
-PROC_QA_FUENTE = "qa-fuente"
+PROC_VERIFICACION_FUENTE = "qa-fuente"
 # Texto de prompts: post-procesado IDENTIDAD. Un prompt de la texto devuelve el
 # texto markdown tal cual (ya queda en `salida` del registro); NO crea piezas/publicaciones.
 PROC_PROMPT = "prompt"
@@ -264,7 +264,7 @@ def construir_hashtags() -> dict[str, Any]:
     return {"kind": PROC_HASHTAGS}
 
 
-def construir_qa_fuente(
+def construir_verificacion_fuente(
     *,
     marca: str,
     titulo: str,
@@ -277,7 +277,7 @@ def construir_qa_fuente(
     materializar contenido (el worker sella `noticias_clusters.verificacion_fuente`).
     """
     return {
-        "kind": PROC_QA_FUENTE,
+        "kind": PROC_VERIFICACION_FUENTE,
         "marca": marca,
         "titulo": titulo,
         "autor": _autor_spec(autor),
@@ -548,8 +548,8 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
             publicacion_id=p["publicacion_id"]
         )
 
-    if kind == PROC_QA_FUENTE:
-        return dom_verificar.construir_procesar_qa_fuente(
+    if kind == PROC_VERIFICACION_FUENTE:
+        return dom_verificar.construir_procesar_verificacion_fuente(
             p["marca"], p.get("titulo", ""), autor=autor,
             cluster_id=p.get("cluster_id", "") or "",
         )

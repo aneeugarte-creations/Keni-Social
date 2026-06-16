@@ -270,16 +270,16 @@ def _migrar_green_a_evergreen(con: Any) -> None:
 # ETAPAS CON NOMBRE DE VERBO (Fase 2): las columnas de etapa legacy `qa_*` (la etapa "QA" pasó a
 # "Verificar" en todo el código) se renombran a `verificar_*` en las BDs productivas (piloto AMX),
 # preservando los datos (Postgres conserva los valores en un RENAME COLUMN). Cada tupla es
-# (tabla, columna_vieja, columna_nueva). `qa_veredicto`/`qa_hallazgos` viven tanto en `contenido`
+# (tabla, columna_vieja, columna_nueva). `verificacion_veredicto`/`verificacion_hallazgos` viven tanto en `contenido`
 # (verificación de la FUENTE pre-copy) como en `noticias_clusters` (verificación de la historia antes de
-# admitir): ambas se renombran. NO se tocan `qa_intentos`/`cd_intentos`: nunca fueron columnas,
+# admitir): ambas se renombran. NO se tocan `verificacion_intentos`/`cd_intentos`: nunca fueron columnas,
 # son claves dentro del JSON de `copy_pendiente` (ya renombradas en el código a `verificar_*`/
 # `redactar_intentos`).
 _RENOMBRES_COLUMNAS_ETAPAS: tuple[tuple[str, str, str], ...] = (
-    ("contenido", "qa_veredicto", "verificar_veredicto"),
-    ("contenido", "qa_hallazgos", "verificar_hallazgos"),
-    ("noticias_clusters", "qa_veredicto", "verificar_veredicto"),
-    ("noticias_clusters", "qa_hallazgos", "verificar_hallazgos"),
+    ("contenido", "verificacion_veredicto", "verificar_veredicto"),
+    ("contenido", "verificacion_hallazgos", "verificar_hallazgos"),
+    ("noticias_clusters", "verificacion_veredicto", "verificar_veredicto"),
+    ("noticias_clusters", "verificacion_hallazgos", "verificar_hallazgos"),
 )
 
 

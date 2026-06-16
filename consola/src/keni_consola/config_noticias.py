@@ -58,10 +58,10 @@ from ._config_comun import (
     ENV_PIPELINE_MAX,
     ENV_PIPELINE_RECOLECTAR,
     ENV_PIPELINE_VERIFICAR,
-    ENV_QA_EN_CURSO_TTL_MIN,
-    ENV_QA_FUENTE_ESFUERZO,
-    ENV_QA_FUENTE_MODELO,
-    ENV_QA_FUENTE_TIMEOUT,
+    ENV_VERIFICACION_EN_CURSO_TTL_MIN,
+    ENV_VERIFICACION_FUENTE_ESFUERZO,
+    ENV_VERIFICACION_FUENTE_MODELO,
+    ENV_VERIFICACION_FUENTE_TIMEOUT,
     ENV_PRIORIZAR_PERFIL_IA,
     ENV_RENDIMIENTO_MIN_PIEZAS,
     ENV_RENDIMIENTO_RANKING,
@@ -100,8 +100,8 @@ from ._config_comun import (
     PIPELINE_EN_PROCESO_MAX_DEF,
     PIPELINE_TEMA_TTL_HORAS_DEF,
     PIPELINE_MAX_DEF,
-    QA_EN_CURSO_TTL_MIN_DEF,
-    QA_FUENTE_TIMEOUT_DEF,
+    VERIFICACION_EN_CURSO_TTL_MIN_DEF,
+    VERIFICACION_FUENTE_TIMEOUT_DEF,
     RENDIMIENTO_MIN_PIEZAS_DEF,
     RENDIMIENTO_TOP_N_DEF,
     SCORE_BONUS_BREAKING_DEF,
@@ -737,47 +737,47 @@ def verificar_activo() -> bool:
     return _crudo(ENV_PIPELINE_VERIFICAR).lower() in _VERDADEROS
 
 
-def qa_fuente_modelo() -> str:
-    """Modelo de claude de la VERIFICACIÓN de la fuente (`KENI_QA_FUENTE_MODELO`, def "haiku").
+def verificacion_fuente_modelo() -> str:
+    """Modelo de claude de la VERIFICACIÓN de la fuente (`KENI_VERIFICACION_FUENTE_MODELO`, def "haiku").
 
     La verificación de Verificar es un filtro PERMISIVO (no redaccion): por defecto corre con un modelo
     rapido/economico. Mismas semanticas que `insumos_modelo`: var no fijada -> "haiku";
     fijada a "" -> sin `--model` (default de claude); fijada a un valor -> ese modelo.
     """
-    raw = os.environ.get(ENV_QA_FUENTE_MODELO)
+    raw = os.environ.get(ENV_VERIFICACION_FUENTE_MODELO)
     if raw is None:
         return "haiku"
     return raw.strip()
 
 
-def qa_fuente_esfuerzo() -> str:
-    """Esfuerzo (thinking) de la verificación de la fuente (`KENI_QA_FUENTE_ESFUERZO`, def "low").
+def verificacion_fuente_esfuerzo() -> str:
+    """Esfuerzo (thinking) de la verificación de la fuente (`KENI_VERIFICACION_FUENTE_ESFUERZO`, def "low").
 
     "" (explicito) = sin override (cae a la preferencia global). El valor se valida contra
     `preferencias.ESFUERZOS_VALIDOS` en el armado del argv (un valor invalido se ignora).
     """
-    raw = os.environ.get(ENV_QA_FUENTE_ESFUERZO)
+    raw = os.environ.get(ENV_VERIFICACION_FUENTE_ESFUERZO)
     if raw is None:
         return "low"
     return raw.strip()
 
 
-def qa_fuente_timeout() -> int:
-    """Wall-timeout (s) de la verificación de la fuente (`KENI_QA_FUENTE_TIMEOUT`, def 180, min 0).
+def verificacion_fuente_timeout() -> int:
+    """Wall-timeout (s) de la verificación de la fuente (`KENI_VERIFICACION_FUENTE_TIMEOUT`, def 180, min 0).
 
     0 = sin override (se usa el global `KENI_CLAUDE_TIMEOUT`). El override solo ENDURECE:
     el runner lo topa con `min(global, override)`.
     """
-    return _entero(ENV_QA_FUENTE_TIMEOUT, QA_FUENTE_TIMEOUT_DEF, minimo=0)
+    return _entero(ENV_VERIFICACION_FUENTE_TIMEOUT, VERIFICACION_FUENTE_TIMEOUT_DEF, minimo=0)
 
 
-def qa_en_curso_ttl_seg() -> int:
-    """TTL (s) del limpiador de temas `verificacion_fuente='en_curso'` sueltos (`KENI_QA_EN_CURSO_TTL_MIN`).
+def verificacion_en_curso_ttl_seg() -> int:
+    """TTL (s) del limpiador de temas `verificacion_fuente='en_curso'` sueltos (`KENI_VERIFICACION_EN_CURSO_TTL_MIN`).
 
     Def 30 min (muy superior al timeout de la verificación, asi nunca toca una verificación viva). El recolector
     resetea a "" los `en_curso` mas viejos para que vuelvan a la re-verificación del barrido.
     """
-    return _entero(ENV_QA_EN_CURSO_TTL_MIN, QA_EN_CURSO_TTL_MIN_DEF, minimo=5) * 60
+    return _entero(ENV_VERIFICACION_EN_CURSO_TTL_MIN, VERIFICACION_EN_CURSO_TTL_MIN_DEF, minimo=5) * 60
 
 
 def alguna_etapa_investigacion_activa() -> bool:

@@ -134,9 +134,9 @@ def verificacion_fuente_por_contenido(contenido_ids: list[str]) -> dict[str, str
     return db.verificacion_fuente_por_contenido(contenido_ids)
 
 
-def reparar_qa_en_curso_sueltos(umbral_iso: str) -> int:
+def reparar_verificacion_en_curso_sueltos(umbral_iso: str) -> int:
     """Resetea a "" los `verificacion_fuente='en_curso'` atascados (limpiador). Delegado en `db.py`."""
-    return db.reparar_qa_en_curso_sueltos(umbral_iso)
+    return db.reparar_verificacion_en_curso_sueltos(umbral_iso)
 
 
 def resumen_plan_por_categoria(marca: str, desde_iso: str) -> dict[str, dict[str, int]]:

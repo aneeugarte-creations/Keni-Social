@@ -36,28 +36,28 @@ _log = logging.getLogger("keni_consola.limpiador_generaciones")
 
 # TTL de la reparación de QA 'en_curso' ≈ 2× el wall-timeout real de la verificación: una colgada se detecta en
 # minutos, y una verificación VIVA nunca se toca (el doble del timeout deja margen de sobra al worker).
-_FACTOR_TTL_QA_EN_CURSO = 2
+_FACTOR_TTL_VERIFICACION_EN_CURSO = 2
 
 
-def _ttl_qa_en_curso_seg() -> int:
+def _ttl_verificacion_en_curso_seg() -> int:
     """TTL (s) de la reparación de temas `verificacion_fuente='en_curso'` sueltos.
 
-    El override explícito (`KENI_QA_EN_CURSO_TTL_MIN`) manda; sin él, se DERIVA del timeout
-    real de la verificación (`config.qa_fuente_timeout()`; si está a 0 —sin endurecer—, rige el
-    global `config.claude_timeout()`), x`_FACTOR_TTL_QA_EN_CURSO`. No duplica la constante.
+    El override explícito (`KENI_VERIFICACION_EN_CURSO_TTL_MIN`) manda; sin él, se DERIVA del timeout
+    real de la verificación (`config.verificacion_fuente_timeout()`; si está a 0 —sin endurecer—, rige el
+    global `config.claude_timeout()`), x`_FACTOR_TTL_VERIFICACION_EN_CURSO`. No duplica la constante.
     """
-    if (os.environ.get(config.ENV_QA_EN_CURSO_TTL_MIN) or "").strip():
-        return config.qa_en_curso_ttl_seg()
-    return _FACTOR_TTL_QA_EN_CURSO * (config.qa_fuente_timeout() or config.claude_timeout())
+    if (os.environ.get(config.ENV_VERIFICACION_EN_CURSO_TTL_MIN) or "").strip():
+        return config.verificacion_en_curso_ttl_seg()
+    return _FACTOR_TTL_VERIFICACION_EN_CURSO * (config.verificacion_fuente_timeout() or config.claude_timeout())
 
 
-def _reparar_qa_en_curso() -> int:
+def _reparar_verificacion_en_curso() -> int:
     """Reparación de temas del pipeline COLGADOS en `verificacion_fuente='en_curso'`. Devuelve cuántos tocó.
 
     La fase QA marca el tema `en_curso` ANTES de lanzar la verificación; si el lanzamiento o la
     generación mueren sin finalizador, el tema quedaba sin re-verificar PARA SIEMPRE
     y contando en `temas_en_proceso` (bloquea el cupo serial de su marca). Por cada colgado más
-    viejo que el TTL (`_ttl_qa_en_curso_seg`, vs `actualizado`):
+    viejo que el TTL (`_ttl_verificacion_en_curso_seg`, vs `actualizado`):
       - etapa Verificar ACTIVA para la marca -> se resetea a "" (re-verificación en el barrido);
       - APAGADA (`KENI_PIPELINE_VERIFICAR` off, global o `::marca`) -> se marca `saltada`
         (CD lo recoge sin re-verificar; re-verificar con la etapa apagada lo dejaría colgado otra vez).
@@ -65,14 +65,14 @@ def _reparar_qa_en_curso() -> int:
     job de QA en error; esto es la red para las muertes no limpias.
     """
     from . import repos
-    from .pipeline_contenido import ORIGEN_PIPELINE, QA_EN_CURSO, QA_SALTADA
+    from .pipeline_contenido import ORIGEN_PIPELINE, VERIFICACION_EN_CURSO, VERIFICACION_SALTADA
 
-    umbral = iso_utc(datetime.now(UTC) - timedelta(seconds=_ttl_qa_en_curso_seg()))
+    umbral = iso_utc(datetime.now(UTC) - timedelta(seconds=_ttl_verificacion_en_curso_seg()))
     tocados = 0
     for tema in repos.listar_contenido():
         if (tema.get("origen") or "") != ORIGEN_PIPELINE:
             continue
-        if (tema.get("verificacion_fuente") or "") != QA_EN_CURSO:
+        if (tema.get("verificacion_fuente") or "") != VERIFICACION_EN_CURSO:
             continue
         # `actualizado` lo refresca cada escritura, incluida la que puso `en_curso`: un
         # `en_curso` legítimo y reciente NUNCA se toca. Sin fecha no hay evidencia: se respeta.
@@ -82,7 +82,7 @@ def _reparar_qa_en_curso() -> int:
         tema_id = (tema.get("id") or "").strip()
         marca = tema.get("marca") or ""
         verificar_activa = config.etapa_activa(config.ENV_PIPELINE_VERIFICAR, marca)
-        nuevo = "" if verificar_activa else QA_SALTADA
+        nuevo = "" if verificar_activa else VERIFICACION_SALTADA
         try:
             repos.actualizar_contenido(tema_id, {"verificacion_fuente": nuevo})
         except Exception:  # noqa: BLE001 -- best-effort por tema; el resto de la reparación sigue
@@ -133,10 +133,10 @@ def ejecutar_barrido() -> int:
     except Exception:  # noqa: BLE001 -- reparación aditiva; un fallo no debe tumbar el barrido
         _log.warning("Limpiador de generaciones: fallo la reparación de lotes de cajón.", exc_info=True)
     # Cuarta reparación: temas del pipeline COLGADOS en `verificacion_fuente='en_curso'` (detalle en
-    # `_reparar_qa_en_curso`): TTL derivado del timeout real de la verificación (~2×) y, con la etapa
+    # `_reparar_verificacion_en_curso`): TTL derivado del timeout real de la verificación (~2×) y, con la etapa
     # de Validación apagada, el colgado pasa a `saltada` (CD lo recoge) en vez de re-verificarse.
     try:
-        z = _reparar_qa_en_curso()
+        z = _reparar_verificacion_en_curso()
         if z:
             _log.info(
                 "Limpiador de generaciones: %d tema(s) con QA 'en_curso' colgada reparado(s).", z

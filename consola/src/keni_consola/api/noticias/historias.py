@@ -282,11 +282,11 @@ async def listar_historias(request: Request) -> Response:
     # (batch, evita N+1) solo para historias admitidas ANTES de F3 (cluster sin verificacion propio).
     cids = [c.get("contenido_id") or "" for c in clusters]
     resumen_pieza = repos.estado_pieza_por_contenido(cids)
-    qa_map = repos.verificacion_fuente_por_contenido(cids)
+    verificacion_map = repos.verificacion_fuente_por_contenido(cids)
     vocab_memo: dict[str, frozenset[str]] = {}  # vocabulario por marca, 1 lectura por request
     historias = [
         _historia_a_dict(
-            {**c, "verificacion_fuente": (c.get("verificacion_fuente") or "") or qa_map.get(c.get("contenido_id") or "", "")},
+            {**c, "verificacion_fuente": (c.get("verificacion_fuente") or "") or verificacion_map.get(c.get("contenido_id") or "", "")},
             repos.items_de_cluster(c["id"], limite=_MAX_ENLACES_HISTORIA),
             pieza_estado=_pieza_estado(
                 c.get("estado") or "nuevo", c.get("contenido_id") or "", resumen_pieza
@@ -359,13 +359,13 @@ async def mesa(request: Request) -> Response:
     resumen_pieza = repos.estado_pieza_por_contenido(cids)
     # Verificacion de verificación por historia: NATIVO del cluster (ADR 0011 F3), con fallback al
     # contenido heredado para historias admitidas antes de F3 (cluster sin verificacion propio).
-    qa_map = repos.verificacion_fuente_por_contenido(cids)
+    verificacion_map = repos.verificacion_fuente_por_contenido(cids)
     vocab_memo: dict[str, frozenset[str]] = {}
 
     def _historias(lote: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return [
             _historia_a_dict(
-                {**c, "verificacion_fuente": (c.get("verificacion_fuente") or "") or qa_map.get(c.get("contenido_id") or "", "")},
+                {**c, "verificacion_fuente": (c.get("verificacion_fuente") or "") or verificacion_map.get(c.get("contenido_id") or "", "")},
                 repos.items_de_cluster(c["id"], limite=_MAX_ENLACES_HISTORIA),
                 pieza_estado=_pieza_estado(
                     c.get("estado") or "nuevo", c.get("contenido_id") or "", resumen_pieza

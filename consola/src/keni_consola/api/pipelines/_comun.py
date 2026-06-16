@@ -1,7 +1,7 @@
 """PIPELINES · constantes compartidas + utilidades de presentación.
 
 Hogar único de los catálogos/constantes del feed de Producción y de tres helpers que usan
-varios módulos del paquete (`_red_nombre`, `_marca_nombre`, `_qa_fuente_de`). No depende de
+varios módulos del paquete (`_red_nombre`, `_marca_nombre`, `_verificacion_fuente_de`). No depende de
 los módulos de endpoint (`feed`/`problemas`/`detalle`) ni del motor de etapas: es la base.
 """
 
@@ -98,7 +98,7 @@ def _marca_nombre(marca: str) -> str:
     return marcas.etiqueta_de(marca) if marca else ""
 
 
-def _qa_fuente_de(item: dict) -> dict:
+def _verificacion_fuente_de(item: dict) -> dict:
     """Verificacion ESTRUCTURADO de la verificación de la fuente (rediseño QPC), para la UI.
 
     Lee el verificacion persistido en el TEMA (`verificacion_fuente`/`verificar_hallazgos`):

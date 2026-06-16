@@ -289,16 +289,16 @@ def marcar_cluster_marca_ia(cluster_id: str) -> None:
     return db.marcar_cluster_marca_ia(cluster_id)
 
 
-def marcar_cluster_qa(cluster_id: str, verificacion: str, hallazgos: str = "") -> None:
-    return db.marcar_cluster_qa(cluster_id, verificacion, hallazgos)
+def marcar_cluster_verificacion(cluster_id: str, verificacion: str, hallazgos: str = "") -> None:
+    return db.marcar_cluster_verificacion(cluster_id, verificacion, hallazgos)
 
 
-def contar_clusters_admision_qa(marca: str, estados: tuple[str, ...]) -> int:
-    return db.contar_clusters_admision_qa(marca, estados)
+def contar_clusters_admision_verificacion(marca: str, estados: tuple[str, ...]) -> int:
+    return db.contar_clusters_admision_verificacion(marca, estados)
 
 
-def reparar_qa_clusters_en_curso(umbral_iso: str) -> int:
-    return db.reparar_qa_clusters_en_curso(umbral_iso)
+def reparar_verificacion_clusters_en_curso(umbral_iso: str) -> int:
+    return db.reparar_verificacion_clusters_en_curso(umbral_iso)
 
 
 def marcar_cluster_traducido(

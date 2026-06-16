@@ -173,7 +173,7 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
         # recalc (merge/fusión/rescore) sin el flag no borra el encaje IA ya hecho.
         "marca_clasificada_por_ia": 1 if cluster.get("marca_clasificada_por_ia") else 0,
         # Verificación (QA de la fuente) sobre la historia (ADR 0011 F3): valor del ALTA; en
-        # conflicto NO se pisa (está en `_NO_PISAR`), lo sella aparte `marcar_cluster_qa`. Así un
+        # conflicto NO se pisa (está en `_NO_PISAR`), lo sella aparte `marcar_cluster_verificacion`. Así un
         # recalc (merge/fusión/rescore) sin el verificacion no borra una QA ya hecha.
         "verificacion_fuente": cluster.get("verificacion_fuente") or "",
         "verificar_hallazgos": cluster.get("verificar_hallazgos") or "",
@@ -449,7 +449,7 @@ def marcar_cluster_marca_ia(cluster_id: str) -> None:
         con.close()
 
 
-def marcar_cluster_qa(cluster_id: str, verificacion: str, hallazgos: str = "") -> None:
+def marcar_cluster_verificacion(cluster_id: str, verificacion: str, hallazgos: str = "") -> None:
     """Sella la VERIFICACIÓN (QA de la fuente) de la HISTORIA (ADR 0011 F3).
 
     Escribe `verificacion_fuente` (+ `verificar_hallazgos`) en el cluster ANTES de materializar contenido de
@@ -471,7 +471,7 @@ def marcar_cluster_qa(cluster_id: str, verificacion: str, hallazgos: str = "") -
         con.close()
 
 
-def contar_clusters_admision_qa(marca: str, estados: tuple[str, ...]) -> int:
+def contar_clusters_admision_verificacion(marca: str, estados: tuple[str, ...]) -> int:
     """Cuántas HISTORIAS `nuevo` de la marca están en la ADMISIÓN de verificación (ADR 0011 F3).
 
     La admisión son los clusters aún sin promover (`estado='nuevo'`) cuyo `verificacion_fuente` está en
@@ -494,13 +494,13 @@ def contar_clusters_admision_qa(marca: str, estados: tuple[str, ...]) -> int:
     return int(fila["n"]) if fila is not None else 0
 
 
-def reparar_qa_clusters_en_curso(umbral_iso: str) -> int:
+def reparar_verificacion_clusters_en_curso(umbral_iso: str) -> int:
     """Resetea a "" el `verificacion_fuente='en_curso'` atascado de los clusters (limpiador de verificación).
 
     Si una QA de la fuente sobre un cluster se interrumpe (deploy/OOM/cuelgue), el cluster quedaría
     `en_curso` para siempre: ni se re-verificación ni se admite. Devuelve los `en_curso` más viejos que
     `umbral_iso` a "" para que el barrido los vuelva a verificar. Mismo patrón que
-    `reparar_qa_en_curso_sueltos` sobre `contenido`. Devuelve cuántos corrigió.
+    `reparar_verificacion_en_curso_sueltos` sobre `contenido`. Devuelve cuántos corrigió.
     """
     con = _conectar()
     try:

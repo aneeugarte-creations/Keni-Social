@@ -14,7 +14,7 @@ Endpoints:
          R-NO-LIMIT), conteo (pendientes/reclamados/terminados/activos), `procesando` (claude -p en proceso), slots
          libres, workers activos, listas `en_curso`/`esperando` (con etiqueta/tipo/marca/edad),
          desglose `por_proceso` (investigacion/produccion sobre la MISMA cola, ADR 0011), el
-         `admision_qa` (lo unico que Investigacion acota aparte) y el estado de los daemons de
+         `admision_verificacion` (lo unico que Investigacion acota aparte) y el estado de los daemons de
          fondo. Para "que ocurre AHORA en la cola".
   - `GET /api/actividad/cola/series?dias=`
       -> series por dia: `encolados` (de la tabla de jobs) y `resultados` (completados/errores/
@@ -278,9 +278,9 @@ async def cola(request: Request) -> Response:
     # verificación cabe en proceso por marca). Lazy import del helper del pipeline (evita acoplar la API al
     # orquestador) y best-effort: un fallo deja el admision vacio, nunca tumba el snapshot.
     try:
-        from ..pipeline_contenido import admision_qa as _admision_qa
+        from ..pipeline_contenido import admision_verificacion as _admision_verificacion
 
-        admision = _admision_qa()
+        admision = _admision_verificacion()
     except Exception:  # noqa: BLE001 -- el admision es observabilidad; su fallo no rompe el Monitor
         admision = {"en_proceso": 0, "tope_por_marca": 0, "marcas": []}
     # Listas para mostrar: respetan el switch GLOBAL de marca (la capacidad/los conteos no).
@@ -308,7 +308,7 @@ async def cola(request: Request) -> Response:
             # Desglose del pool compartido por proceso + admision de QA (Investigacion). La cola es
             # UNA; estos dos campos dejan ver los dos loops (ADR 0011) sobre esa misma cola.
             "por_proceso": por_proceso,
-            "admision_qa": admision,
+            "admision_verificacion": admision,
             "en_curso": en_curso,
             "esperando": esperando,
             "daemons": _daemons_estado(),

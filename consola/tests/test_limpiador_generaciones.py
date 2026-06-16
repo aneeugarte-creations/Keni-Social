@@ -84,22 +84,22 @@ def test_ttl_qa_en_curso_derivado_del_timeout_real(monkeypatch):
     from keni_consola import config
     from keni_consola import limpiador_generaciones as rg
 
-    monkeypatch.delenv(config.ENV_QA_EN_CURSO_TTL_MIN, raising=False)
-    monkeypatch.delenv("KENI_QA_FUENTE_TIMEOUT", raising=False)
-    assert rg._ttl_qa_en_curso_seg() == 2 * config.qa_fuente_timeout()  # def 2x180 = 360 s
+    monkeypatch.delenv(config.ENV_VERIFICACION_EN_CURSO_TTL_MIN, raising=False)
+    monkeypatch.delenv("KENI_VERIFICACION_FUENTE_TIMEOUT", raising=False)
+    assert rg._ttl_verificacion_en_curso_seg() == 2 * config.verificacion_fuente_timeout()  # def 2x180 = 360 s
 
-    monkeypatch.setenv("KENI_QA_FUENTE_TIMEOUT", "60")
-    assert rg._ttl_qa_en_curso_seg() == 120
+    monkeypatch.setenv("KENI_VERIFICACION_FUENTE_TIMEOUT", "60")
+    assert rg._ttl_verificacion_en_curso_seg() == 120
 
     # Verificación sin endurecer (timeout 0): rige el wall-timeout global de claude.
-    monkeypatch.setenv("KENI_QA_FUENTE_TIMEOUT", "0")
-    assert rg._ttl_qa_en_curso_seg() == 2 * config.claude_timeout()
+    monkeypatch.setenv("KENI_VERIFICACION_FUENTE_TIMEOUT", "0")
+    assert rg._ttl_verificacion_en_curso_seg() == 2 * config.claude_timeout()
 
 
 def test_ttl_qa_en_curso_respeta_el_override_explicito(monkeypatch):
-    """`KENI_QA_EN_CURSO_TTL_MIN` explicito manda sobre la derivacion."""
+    """`KENI_VERIFICACION_EN_CURSO_TTL_MIN` explicito manda sobre la derivacion."""
     from keni_consola import config
     from keni_consola import limpiador_generaciones as rg
 
-    monkeypatch.setenv(config.ENV_QA_EN_CURSO_TTL_MIN, "30")
-    assert rg._ttl_qa_en_curso_seg() == 30 * 60
+    monkeypatch.setenv(config.ENV_VERIFICACION_EN_CURSO_TTL_MIN, "30")
+    assert rg._ttl_verificacion_en_curso_seg() == 30 * 60

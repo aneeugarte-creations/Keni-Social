@@ -229,7 +229,7 @@ def serializar_hallazgos(informe: dict[str, object]) -> str:
     return json.dumps({"resumen": resumen, "hallazgos": hallazgos}, ensure_ascii=False)
 
 
-def construir_procesar_qa_fuente(  # noqa: ANN201
+def construir_procesar_verificacion_fuente(  # noqa: ANN201
     marca: str,
     titulo: str,
     autor: dict[str, str] | None = None,
@@ -243,7 +243,7 @@ def construir_procesar_qa_fuente(  # noqa: ANN201
     hallazgos en el destino:
 
     El verificación se sella en la HISTORIA (`cluster_id`, ADR 0011 F3): QA sobre la fuente ANTES de
-    materializar contenido (`repos.marcar_cluster_qa`); la admisión solo promueve las verificadas.
+    materializar contenido (`repos.marcar_cluster_verificacion`); la admisión solo promueve las verificadas.
     NO encadena copy (la pieza aún no existe; nace en la admisión).
 
     Devuelve el verificación/informe para el sondeo del frontend. Se reconstruye igual en el worker
@@ -263,7 +263,7 @@ def construir_procesar_qa_fuente(  # noqa: ANN201
         # el verificación al contenido) y deja fuera las `problema`. NO se encadena copy aquí (la
         # pieza aún no existe; nace en la admisión).
         if cluster_id:
-            repos.marcar_cluster_qa(cluster_id, verificacion, serializar_hallazgos(informe))
+            repos.marcar_cluster_verificacion(cluster_id, verificacion, serializar_hallazgos(informe))
         return {
             "informe": informe,
             "verificacion_fuente": verificacion,

@@ -456,7 +456,7 @@ def verificacion_fuente_por_contenido(contenido_ids: list[str]) -> dict[str, str
     return {f["id"]: (f["verificacion_fuente"] or "") for f in filas if (f["verificacion_fuente"] or "")}
 
 
-def reparar_qa_en_curso_sueltos(umbral_iso: str) -> int:
+def reparar_verificacion_en_curso_sueltos(umbral_iso: str) -> int:
     """Devuelve a re-verificación (verificacion_fuente='') los temas COLGADOS en 'en_curso' mas viejos que `umbral_iso`.
 
     Limpieza del recolector: la fase QA marca el tema `en_curso` antes de lanzar la verificación; si

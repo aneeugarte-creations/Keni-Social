@@ -86,7 +86,7 @@ def test_cola_snapshot_contrato(entorno):
         generaciones.PROCESO_INVESTIGACION, generaciones.PROCESO_PRODUCCION,
     }
     assert data["por_proceso"][generaciones.PROCESO_PRODUCCION]["pendientes"] >= 1
-    assert {"en_proceso", "tope_por_marca", "marcas"} <= set(data["admision_qa"])
+    assert {"en_proceso", "tope_por_marca", "marcas"} <= set(data["admision_verificacion"])
     # Daemons: lista no vacia con el limpiador SIEMPRE activo.
     porclave = {d["clave"]: d for d in data["daemons"]}
     assert "limpiador" in porclave

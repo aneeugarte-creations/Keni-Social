@@ -16,7 +16,7 @@ from ..estados import CLASE_CONTENIDO, ORIGENES_AUTOGEN
 from ._comun import (
     _FORMATO_PIPELINE,
     ETAPA_REDACTAR,
-    QA_SALTADA,
+    VERIFICACION_SALTADA,
     TIPO_PIPELINE,
     VERIFICACION_NO_VERIFICADO,
     _copy_pendiente_leido,
@@ -125,7 +125,7 @@ def temas_para_redactar(marca: str | None = None) -> list[dict[str, Any]]:
     """
     listos: list[dict[str, Any]] = []
     for tema in temas_pipeline(marca):
-        if (tema.get("verificacion_fuente") or "") not in (VERIFICACION_NO_VERIFICADO, QA_SALTADA):
+        if (tema.get("verificacion_fuente") or "") not in (VERIFICACION_NO_VERIFICADO, VERIFICACION_SALTADA):
             continue
         if not (tema.get("copy_pendiente") or "").strip():
             continue

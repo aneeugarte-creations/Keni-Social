@@ -21,10 +21,10 @@ from ..tiempo import hoy_utc
 from . import _admitir, _ref
 from ._comun import (
     _MAX_INTENTOS_ETAPA,
-    QA_EN_CURSO,
-    QA_SALTADA,
+    VERIFICACION_EN_CURSO,
+    VERIFICACION_SALTADA,
     VERIFICACION_NO_VERIFICADO,
-    VERIFICADAS_QA,
+    VERIFICADAS_OK,
     _log,
     anotar_intento,
     en_backoff,
@@ -145,7 +145,7 @@ def ejecutar_barrido() -> dict[str, Any]:
 # Estados del ADMISION de verificación: clusters `nuevo` que ya entraron al circuito de QA y aún
 # no se admitieron (en proceso, verificados-pendientes o saltados). Acotan cuánta QA se lanza por
 # tick (presupuesto = tope en proceso − admision) para que la verificación no recorra todo el pool.
-_ADMISION_QA = (QA_EN_CURSO, VERIFICACION_NO_VERIFICADO, QA_SALTADA)
+_ADMISION_VERIFICACION = (VERIFICACION_EN_CURSO, VERIFICACION_NO_VERIFICADO, VERIFICACION_SALTADA)
 
 
 def _ejecutar_investigacion() -> dict[str, Any]:
@@ -169,7 +169,7 @@ def _ejecutar_investigacion() -> dict[str, Any]:
     except Exception:  # noqa: BLE001 -- la caducidad es limpieza; nunca rompe el barrido
         _log.exception("pipeline: fallo la caducidad de temas en curso.")
     try:
-        _admitir.caducar_qa_clusters_en_curso()
+        _admitir.caducar_verificacion_clusters_en_curso()
     except Exception:  # noqa: BLE001 -- el limpiador de QA es limpieza; nunca rompe el barrido
         _log.exception("pipeline: fallo el limpiador de QA de clusters en curso.")
     # --- Fase QA (verificación de la FUENTE sobre la historia, pre-admisión). -----------------------
@@ -206,7 +206,7 @@ def _ejecutar_investigacion() -> dict[str, Any]:
         try:
             temas_nuevos.extend(promover_clusters_marca(
                 marca, maximo=min(maximo, cupo), cupos_categoria=cupos_cat,
-                qa_estados=VERIFICADAS_QA,
+                verificacion_estados=VERIFICADAS_OK,
             ))
         except Exception:  # noqa: BLE001 -- un fallo de una marca no rompe el barrido
             _log.exception("pipeline: fallo la admisión de historias (CI) de la marca %s", marca)
@@ -251,7 +251,7 @@ def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[
         # como la admisión). A medida que la admisión vacía verificadas (pasan a `usado`), el
         # admision encoge y se libera presupuesto para verificar la siguiente tanda.
         try:
-            admision = repos.contar_clusters_admision_qa(marca, _ADMISION_QA)
+            admision = repos.contar_clusters_admision_verificacion(marca, _ADMISION_VERIFICACION)
         except Exception:  # noqa: BLE001 -- sin contador fiable, no verificamos esta marca este tick
             _log.warning("pipeline: no se pudo contar el admision de QA (%s)", marca, exc_info=True)
             continue
@@ -270,11 +270,11 @@ def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[
                 continue
             if not validacion_on:
                 try:
-                    repos.marcar_cluster_qa(cid, QA_SALTADA)
+                    repos.marcar_cluster_verificacion(cid, VERIFICACION_SALTADA)
                 except Exception:  # noqa: BLE001 -- un fallo al marcar saltada no mata la fase
                     _log.exception("pipeline: fallo al marcar QA de cluster saltada (%s).", cid)
                 else:
-                    verificados.append({"id": cid, "gen_id": "", "verificacion_fuente": QA_SALTADA})
+                    verificados.append({"id": cid, "gen_id": "", "verificacion_fuente": VERIFICACION_SALTADA})
                 continue
             try:
                 gen = lanzar_verificar_cluster(cluster, autor=autor)
@@ -285,7 +285,7 @@ def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[
                 _log.exception("pipeline: fallo la verificación de la fuente (QA) de la historia %s (marca %s).", cid, marca)
                 continue
             if gen is not None:
-                verificados.append({"id": cid, "gen_id": gen.get("id", "") if isinstance(gen, dict) else "", "verificacion_fuente": QA_EN_CURSO})
+                verificados.append({"id": cid, "gen_id": gen.get("id", "") if isinstance(gen, dict) else "", "verificacion_fuente": VERIFICACION_EN_CURSO})
     return verificados
 
 

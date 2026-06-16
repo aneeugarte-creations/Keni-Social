@@ -39,14 +39,14 @@ __all__ = [
     "ETAPA_VERIFICAR",
     "_DIAS_DEDUP",
     "_FORMATO_PIPELINE",
-    "PROMPT_QA_ID",
-    "_TITULO_QA",
-    "QA_EN_CURSO",
-    "QA_SALTADA",
-    "QA_CADUCADA",
+    "PROMPT_VERIFICACION_ID",
+    "_TITULO_VERIFICACION",
+    "VERIFICACION_EN_CURSO",
+    "VERIFICACION_SALTADA",
+    "VERIFICACION_CADUCADA",
     "VERIFICACION_NO_VERIFICADO",
     "VERIFICACION_PROBLEMA",
-    "_DEFAULT_QA_CRITERIOS",
+    "_DEFAULT_VERIFICACION_CRITERIOS",
     # og:image
     "_RE_OG_IMAGE",
     "_RE_CONTENT",
@@ -63,9 +63,9 @@ __all__ = [
     "_limpiar_snippet",
     # actividad / autor / lecturas compartidas
     "registrar_etapa",
-    "ADMISION_QA_ESTADOS",
-    "VERIFICADAS_QA",
-    "admision_qa",
+    "ADMISION_VERIFICACION_ESTADOS",
+    "VERIFICADAS_OK",
+    "admision_verificacion",
     "_autor_pipeline",
     "_copy_pendiente_leido",
     "_tiene_copy",
@@ -123,28 +123,28 @@ _FORMATO_PIPELINE = redes.FORMATO_FOTO
 # créalo y adjúntalo." Apunta al prompt EDITABLE `prompt/verificar` (pestaña «Prompts»), cuyo
 # cuerpo base viaja en la inicial. El título DEBE sluggear al id (`crear` deriva el id del
 # slug del título): "Verificar" -> "prompt/verificar". DISTINTO de Revisar el COPY (`prompt/qa-editorial`).
-PROMPT_QA_ID = "prompt/verificar"
-_TITULO_QA = "Verificar"
+PROMPT_VERIFICACION_ID = "prompt/verificar"
+_TITULO_VERIFICACION = "Verificar"
 # Etiqueta HUMANA de la generación de la verificación (Actividad IA). DISTINTA del título del prompt
-# (`_TITULO_QA`="Verificar", que sluggea al id `prompt/verificar`): en la vista Pipelines
+# (`_TITULO_VERIFICACION`="Verificar", que sluggea al id `prompt/verificar`): en la vista Pipelines
 # la etapa se llama "Verificar", y la actividad debe llamarse igual para no desconcertar.
-_ETIQUETA_QA = "Verificar la fuente"
+_ETIQUETA_VERIFICACION = "Verificar la fuente"
 
 # Verificacion SENTINEL que se persiste en el TEMA mientras su QA de la fuente (claude -p) está en
 # curso: la fase QA NO lo re-lanza (deja de estar "sin verificacion") y la vista Pipelines pinta la
 # etapa QA como "en curso". Al completar, el `procesar` lo sustituye por el verificacion real.
-QA_EN_CURSO = "en_curso"
+VERIFICACION_EN_CURSO = "en_curso"
 
 # Verificacion SENTINEL que se persiste cuando la etapa QA está DESACTIVADA para la marca (toggle
 # `KENI_PIPELINE_VERIFICAR` off): no se lanza la verificación, pero el tema NO queda bloqueado: `temas_para_redactar` lo acepta
 # igual que un `no_verificado`, así el copy se genera sin verificación. La vista Pipelines pinta QA como
 # "saltada". Distinto de "sin verificacion" (que significaría "QA pendiente, aún por verificar").
-QA_SALTADA = "saltada"
+VERIFICACION_SALTADA = "saltada"
 
 # Verificacion TERMINAL de FRESCURA: el tema superó el TTL en curso (`KENI_PIPELINE_TEMA_TTL_HORAS`)
 # sin completar sus fases y CADUCA: sale del gate serial (libera hueco de admisión), no se verificación
 # ni genera copy. El pipeline es ventana deslizante sobre el ranking: lo de ayer no entra hoy.
-QA_CADUCADA = "caducada"
+VERIFICACION_CADUCADA = "caducada"
 
 # Verificaciones ESTRUCTURADAS de la QA de la FUENTE (rediseño QPC), reexportados del dominio para
 # que el sweep, la API y los tests compartan los literales sin acoplarse al módulo de dominio.
@@ -158,7 +158,7 @@ VERIFICACION_PROBLEMA = dom_verificar.VERIFICACION_PROBLEMA  # ❗ algo de peso 
 # PESO (dato falso evidente, problema legal/ético claro); ante la duda, `no_verificado`.
 # SEÑALA (no publica ni reescribe). El campo JSON `veredicto` va en slug ASCII
 # ("apta"|"problema"); el semáforo 🟢/🔴 queda como línea humana.
-_DEFAULT_QA_CRITERIOS = """\
+_DEFAULT_VERIFICACION_CRITERIOS = """\
 Eres el revisor editorial de AMX Contenido. Recibes en el bloque CONTEXTO la NOTA DE ORIGEN
 (título + resumen + enlace) de la que se generará copy para redes. Haces una VERIFICACIÓN PREVIA,
 ANTES de que se redacte el copy: decides si la fuente es apta para producir contenido. NO
@@ -487,18 +487,18 @@ def registrar_etapa(
 
 # Estados del ADMISION de verificacion (clusters `nuevo` ya en el circuito de Verificar y aun sin
 # admitir): en proceso + verificados-pendientes + saltados. Acotan cuanta verificación se lanza por tick (el mismo
-# `_ADMISION_QA` que usa `_barrido`); aqui se exponen para que el Monitor lea el admision sin
+# `_ADMISION_VERIFICACION` que usa `_barrido`); aqui se exponen para que el Monitor lea el admision sin
 # importar el barrido (el orquestador) desde la capa API.
-ADMISION_QA_ESTADOS = (QA_EN_CURSO, VERIFICACION_NO_VERIFICADO, QA_SALTADA)
+ADMISION_VERIFICACION_ESTADOS = (VERIFICACION_EN_CURSO, VERIFICACION_NO_VERIFICADO, VERIFICACION_SALTADA)
 
 # Verificaciones que ADMITEN a producción (ADR 0011 F3): la historia pasó la verificación (`no_verificado`)
 # o la QA estaba saltada para la marca. FUENTE ÚNICA del filtro OBLIGATORIO de la admisión: la
 # usa `promover_clusters_marca`/`clusters_para_promover` por defecto (no existe ya un camino que
 # promueva SIN verificar) y el barrido de investigación.
-VERIFICADAS_QA = (VERIFICACION_NO_VERIFICADO, QA_SALTADA)
+VERIFICADAS_OK = (VERIFICACION_NO_VERIFICADO, VERIFICACION_SALTADA)
 
 
-def admision_qa() -> dict[str, Any]:
+def admision_verificacion() -> dict[str, Any]:
     """Estado del ADMISION de Verificar (lo unico que Investigacion acota aparte de la cola compartida).
 
     Por cada marca con Recolectar activa, cuenta sus clusters en el admision y lo compara
@@ -513,7 +513,7 @@ def admision_qa() -> dict[str, Any]:
         if not config.etapa_activa(config.ENV_PIPELINE_RECOLECTAR, marca):
             continue
         try:
-            n = repos.contar_clusters_admision_qa(marca, ADMISION_QA_ESTADOS)
+            n = repos.contar_clusters_admision_verificacion(marca, ADMISION_VERIFICACION_ESTADOS)
         except Exception:  # noqa: BLE001 -- un conteo que falle no debe tumbar el Monitor
             continue
         total += n

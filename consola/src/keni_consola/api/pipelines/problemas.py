@@ -8,7 +8,7 @@ from starlette.responses import JSONResponse, Response
 from ... import marcas, repos
 from ..._http_json import _entero_query
 from ...pipeline_contenido import ORIGEN_PIPELINE, VERIFICACION_PROBLEMA, intentos_de
-from ._comun import _LIMITE_DEF, _LIMITE_MAX, _marca_nombre, _qa_fuente_de
+from ._comun import _LIMITE_DEF, _LIMITE_MAX, _marca_nombre, _verificacion_fuente_de
 
 
 def _problema_de(item: dict) -> dict:
@@ -19,7 +19,7 @@ def _problema_de(item: dict) -> dict:
     un 🔴 de la propia verificación (sin hallazgo de sistema) es un problema de "Verificar".
     `intentos` lee los contadores de reintento de `copy_pendiente` (qa/cd).
     """
-    qa = _qa_fuente_de(item)
+    qa = _verificacion_fuente_de(item)
     ultimo = qa["hallazgos"][-1] if qa["hallazgos"] else {}
     es_sistema = (ultimo.get("tipo") or "") == "sistema"
     marca = item.get("marca", "") or ""

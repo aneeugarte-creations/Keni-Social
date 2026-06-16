@@ -341,13 +341,13 @@ ENV_LIMPIADOR_INTERVALO_MIN = "KENI_LIMPIADOR_INTERVALO_MIN"
 # Verificar la FUENTE (verificación pre-copy del pipeline): es un filtro PERMISIVO, no redaccion, asi
 # que corre BARATO por defecto: modelo rapido (Haiku), esfuerzo bajo y timeout corto. Cada
 # una es configurable; vacia ("") = se usa el global correspondiente.
-ENV_QA_FUENTE_MODELO = "KENI_QA_FUENTE_MODELO"
-ENV_QA_FUENTE_ESFUERZO = "KENI_QA_FUENTE_ESFUERZO"
-ENV_QA_FUENTE_TIMEOUT = "KENI_QA_FUENTE_TIMEOUT"
+ENV_VERIFICACION_FUENTE_MODELO = "KENI_VERIFICACION_FUENTE_MODELO"
+ENV_VERIFICACION_FUENTE_ESFUERZO = "KENI_VERIFICACION_FUENTE_ESFUERZO"
+ENV_VERIFICACION_FUENTE_TIMEOUT = "KENI_VERIFICACION_FUENTE_TIMEOUT"
 # Corrector de temas atascados `verificacion_fuente='en_curso'`: si el lanzamiento/generacion de la verificación
 # muere sin finalizador, el tema quedaba excluido para siempre de la re-verificación (y contando en
 # el cupo en proceso). El limpiador resetea a "" los `en_curso` mas viejos que este TTL (minutos).
-ENV_QA_EN_CURSO_TTL_MIN = "KENI_QA_EN_CURSO_TTL_MIN"
+ENV_VERIFICACION_EN_CURSO_TTL_MIN = "KENI_VERIFICACION_EN_CURSO_TTL_MIN"
 
 # Recoleccion de basura (GC) de MEDIA SUELTA (Estudio de imagen, diseno §5). El Estudio
 # genera N variantes; las NO elegidas quedan como objetos sueltos en el almacen de media que
@@ -526,8 +526,8 @@ DB_POOL_MAX_DEF = 20
 CLAUDE_TIMEOUT_DEF = 600
 # Verificar la fuente: timeout corto (verificación permisiva con modelo rapido) y TTL del corrector de
 # temas `en_curso` sueltos (minutos; muy superior al timeout de la verificación).
-QA_FUENTE_TIMEOUT_DEF = 180
-QA_EN_CURSO_TTL_MIN_DEF = 30
+VERIFICACION_FUENTE_TIMEOUT_DEF = 180
+VERIFICACION_EN_CURSO_TTL_MIN_DEF = 30
 # Cadencia de sondeo de la cola por el worker (s). Bajo para que el job arranque casi
 # al instante tras encolarse (la UX de "Generar" no debe notar el desacoplo).
 WORKER_SONDEO_SEGUNDOS_DEF = 0.5
@@ -791,8 +791,8 @@ __all__ = [
     'ALGORITMOS_INTERVALO_HORAS_DEF',
     'AUTOGEN_ARTE_MAX_DEF',
     'CLAUDE_TIMEOUT_DEF',
-    'QA_EN_CURSO_TTL_MIN_DEF',
-    'QA_FUENTE_TIMEOUT_DEF',
+    'VERIFICACION_EN_CURSO_TTL_MIN_DEF',
+    'VERIFICACION_FUENTE_TIMEOUT_DEF',
     'CLUSTER_BREAKING_FUENTES_DEF',
     'BREAKING_EXTRA_DIA_DEF',
     'CLUSTER_BREAKING_PESO_DEF',
@@ -919,10 +919,10 @@ __all__ = [
     'ENV_PROGRAMADOR_INTERVALO_SEGUNDOS',
     'ENV_PUBLICAR_REAL',
     'ENV_PIPELINE_VERIFICAR',
-    'ENV_QA_EN_CURSO_TTL_MIN',
-    'ENV_QA_FUENTE_ESFUERZO',
-    'ENV_QA_FUENTE_MODELO',
-    'ENV_QA_FUENTE_TIMEOUT',
+    'ENV_VERIFICACION_EN_CURSO_TTL_MIN',
+    'ENV_VERIFICACION_FUENTE_ESFUERZO',
+    'ENV_VERIFICACION_FUENTE_MODELO',
+    'ENV_VERIFICACION_FUENTE_TIMEOUT',
     'ENV_RAIZ',
     'ENV_LIMPIADOR_INTERVALO_MIN',
     'ENV_RENDIMIENTO_MIN_PIEZAS',

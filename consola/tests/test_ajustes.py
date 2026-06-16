@@ -153,14 +153,14 @@ def test_migrar_claves_legado_mueve_global_y_por_marca(store):
     ajustes.guardar("KENI_QA::unotv", "1")
     ajustes.guardar("KENI_QA::claro-sports", "0")
     # Prefijo PARECIDO pero clave distinta (no es la etapa): NO se toca.
-    ajustes.guardar("KENI_QA_FUENTE_TIMEOUT", "120")
+    ajustes.guardar("KENI_VERIFICACION_FUENTE_TIMEOUT", "120")
     assert ajustes.migrar_claves_legado() == 3
     assert ajustes.obtener("KENI_PIPELINE_VERIFICAR") == "1"
     assert ajustes.obtener("KENI_PIPELINE_VERIFICAR::unotv") == "1"
     assert ajustes.obtener("KENI_PIPELINE_VERIFICAR::claro-sports") == "0"
     assert ajustes.obtener("KENI_QA") is None
     assert ajustes.obtener("KENI_QA::unotv") is None
-    assert ajustes.obtener("KENI_QA_FUENTE_TIMEOUT") == "120"
+    assert ajustes.obtener("KENI_VERIFICACION_FUENTE_TIMEOUT") == "120"
 
 
 def test_migrar_no_pisa_el_nombre_nuevo_pero_limpia_el_viejo(store):

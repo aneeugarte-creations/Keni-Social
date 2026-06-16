@@ -40,7 +40,7 @@ def _stub_investigacion(monkeypatch, *, categoria: str):
     """Stubea la fase de investigación para que admita UN tema con la `categoria` dada."""
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setattr(_barrido._admitir, "caducar_temas_viejos", lambda: None)
-    monkeypatch.setattr(_barrido._admitir, "caducar_qa_clusters_en_curso", lambda: None)
+    monkeypatch.setattr(_barrido._admitir, "caducar_verificacion_clusters_en_curso", lambda: None)
     monkeypatch.setattr(_barrido, "ejecutar_verificar_clusters", lambda *, autor=None: [])
     monkeypatch.setattr(_barrido._admitir, "temas_en_proceso", lambda marca: 0)
     monkeypatch.setattr(_barrido._admitir, "cupos_categoria_restantes", lambda marca: None)

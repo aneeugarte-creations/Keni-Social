@@ -137,7 +137,7 @@ export function PanelPipeline({
   fases: readonly FasePipeline[];
   /** Mapa tipo-de-job → clave de cola, para repartir los conteos por fase. */
   queuePorTipo: Record<string, string>;
-  /** Clave de cola cuya fase muestra el admision de verificación (`cola.admision_qa`). */
+  /** Clave de cola cuya fase muestra el admision de verificación (`cola.admision_verificacion`). */
   admisionEn?: string;
   /** Snapshot de la cola (conteos por fase). Sin él, las filas no muestran conteos. */
   cola?: ColaMonitor;
@@ -227,7 +227,7 @@ export function PanelPipeline({
           const conCola = e.queue !== undefined;
           const enCursoN = conCola ? (enCurso[e.queue!] ?? 0) : 0;
           const esperaN = conCola ? (esperando[e.queue!] ?? 0) : 0;
-          const admision = e.queue !== undefined && e.queue === admisionEn ? cola?.admision_qa : undefined;
+          const admision = e.queue !== undefined && e.queue === admisionEn ? cola?.admision_verificacion : undefined;
           return (
             <li key={e.nombre}>
               {/* Conector de flujo entre fases. */}

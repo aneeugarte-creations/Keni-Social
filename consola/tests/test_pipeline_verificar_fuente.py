@@ -5,7 +5,7 @@ Regla del dueño: "si el documento existe, adjúntalo; si no existe, créalo y a
 corre ANTES del copy y sobre la HISTORIA (cluster, ADR 0011 F3): verifica la NOTA de origen y
 persiste un verificación ESTRUCTURADO (`no_verificado`/`problema`) en el cluster. Aquí cubrimos,
 OFFLINE (mock de claude):
-  - `asegurar_documento_qa` crea el documento si falta (idempotente).
+  - `asegurar_documento_verificacion` crea el documento si falta (idempotente).
   - `lanzar_verificar_cluster` enlaza una generación, deja el cluster `en_curso` y corre barato.
   - el `procesar` (vía lanzador completo) persiste el verificación estructurado sobre el cluster.
 
@@ -44,18 +44,18 @@ def _cluster(
 
 def test_asegurar_documento_qa_lo_crea_si_falta(entorno):
     """El documento de criterios se CREA si no está en el store (idempotente)."""
-    assert libtexto.obtener(pc.PROMPT_QA_ID) is None
-    devuelto = pc.asegurar_documento_qa()
-    assert devuelto == pc.PROMPT_QA_ID
-    doc = libtexto.obtener(pc.PROMPT_QA_ID)
+    assert libtexto.obtener(pc.PROMPT_VERIFICACION_ID) is None
+    devuelto = pc.asegurar_documento_verificacion()
+    assert devuelto == pc.PROMPT_VERIFICACION_ID
+    doc = libtexto.obtener(pc.PROMPT_VERIFICACION_ID)
     assert doc is not None
     assert doc.cuerpo.strip()  # tiene criterios
-    # Es la verificación de la FUENTE (pre-copy), NO el QA de copy: `PROMPT_QA_ID` = prompt/verificar.
-    assert pc.PROMPT_QA_ID == "prompt/verificar"
+    # Es la verificación de la FUENTE (pre-copy), NO el QA de copy: `PROMPT_VERIFICACION_ID` = prompt/verificar.
+    assert pc.PROMPT_VERIFICACION_ID == "prompt/verificar"
     assert "VERIFICACIÓN PREVIA" in doc.cuerpo
     # Idempotente: una segunda llamada no duplica.
-    pc.asegurar_documento_qa()
-    docs = [d for d in libtexto.listar(tipo="prompt") if d.id == pc.PROMPT_QA_ID]
+    pc.asegurar_documento_verificacion()
+    docs = [d for d in libtexto.listar(tipo="prompt") if d.id == pc.PROMPT_VERIFICACION_ID]
     assert len(docs) == 1
 
 
@@ -68,7 +68,7 @@ def test_lanzar_qa_cluster_enlaza_generacion_y_marca_en_curso(entorno):
 
     # El cluster queda en_curso (no se re-lanzará en la fase Verificar) hasta que el procesar lo selle.
     actual = repos.obtener_noticia_cluster(cluster["id"])
-    assert (actual.get("verificacion_fuente") or "") == pc.QA_EN_CURSO
+    assert (actual.get("verificacion_fuente") or "") == pc.VERIFICACION_EN_CURSO
 
 
 def test_qa_cluster_persiste_veredicto_no_verificado(entorno):
@@ -109,20 +109,20 @@ def test_endurecer_qa_fuente_barato_por_defecto(monkeypatch):
     """
     from keni_consola.pipeline_contenido import _verificar
 
-    for var in ("KENI_QA_FUENTE_MODELO", "KENI_QA_FUENTE_ESFUERZO", "KENI_QA_FUENTE_TIMEOUT"):
+    for var in ("KENI_VERIFICACION_FUENTE_MODELO", "KENI_VERIFICACION_FUENTE_ESFUERZO", "KENI_VERIFICACION_FUENTE_TIMEOUT"):
         monkeypatch.delenv(var, raising=False)
-    assert _verificar._endurecer_qa_fuente() == {"modelo": "haiku", "esfuerzo": "low", "timeout": 180}
+    assert _verificar._endurecer_verificacion_fuente() == {"modelo": "haiku", "esfuerzo": "low", "timeout": 180}
 
     # Overrides por env: otro modelo / sin override (cae al global correspondiente).
-    monkeypatch.setenv("KENI_QA_FUENTE_MODELO", "sonnet")
-    monkeypatch.setenv("KENI_QA_FUENTE_TIMEOUT", "60")
-    endurecido = _verificar._endurecer_qa_fuente()
+    monkeypatch.setenv("KENI_VERIFICACION_FUENTE_MODELO", "sonnet")
+    monkeypatch.setenv("KENI_VERIFICACION_FUENTE_TIMEOUT", "60")
+    endurecido = _verificar._endurecer_verificacion_fuente()
     assert endurecido["modelo"] == "sonnet" and endurecido["timeout"] == 60
 
-    monkeypatch.setenv("KENI_QA_FUENTE_MODELO", "")
-    monkeypatch.setenv("KENI_QA_FUENTE_ESFUERZO", "")
-    monkeypatch.setenv("KENI_QA_FUENTE_TIMEOUT", "0")
-    assert _verificar._endurecer_qa_fuente() is None
+    monkeypatch.setenv("KENI_VERIFICACION_FUENTE_MODELO", "")
+    monkeypatch.setenv("KENI_VERIFICACION_FUENTE_ESFUERZO", "")
+    monkeypatch.setenv("KENI_VERIFICACION_FUENTE_TIMEOUT", "0")
+    assert _verificar._endurecer_verificacion_fuente() is None
 
 
 def test_qa_en_curso_ttl_configurable_con_minimo(monkeypatch):
@@ -132,12 +132,12 @@ def test_qa_en_curso_ttl_configurable_con_minimo(monkeypatch):
     """
     from keni_consola import config
 
-    monkeypatch.delenv("KENI_QA_EN_CURSO_TTL_MIN", raising=False)
-    assert config.qa_en_curso_ttl_seg() == 30 * 60  # def 30 min
-    monkeypatch.setenv("KENI_QA_EN_CURSO_TTL_MIN", "45")
-    assert config.qa_en_curso_ttl_seg() == 45 * 60
-    monkeypatch.setenv("KENI_QA_EN_CURSO_TTL_MIN", "1")
-    assert config.qa_en_curso_ttl_seg() == 5 * 60  # suelo
+    monkeypatch.delenv("KENI_VERIFICACION_EN_CURSO_TTL_MIN", raising=False)
+    assert config.verificacion_en_curso_ttl_seg() == 30 * 60  # def 30 min
+    monkeypatch.setenv("KENI_VERIFICACION_EN_CURSO_TTL_MIN", "45")
+    assert config.verificacion_en_curso_ttl_seg() == 45 * 60
+    monkeypatch.setenv("KENI_VERIFICACION_EN_CURSO_TTL_MIN", "1")
+    assert config.verificacion_en_curso_ttl_seg() == 5 * 60  # suelo
 
 
 def test_lanzar_qa_cluster_lanza_con_endurecer_barato(entorno, monkeypatch):

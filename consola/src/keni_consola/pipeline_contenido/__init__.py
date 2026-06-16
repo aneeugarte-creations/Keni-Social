@@ -11,7 +11,7 @@ símbolos privados que algún consumidor importa directamente), de modo que
   - `_admitir`   — ADMITIR (CI): promueve HISTORIAS (clusters) ya verificadas del pool rankeado
                    a temas SIN copy, con dedup, cupos por marca/plan y caducidad (TTL).
   - `_verificar` — VERIFICAR (QA): verifica la FUENTE de la HISTORIA (`claude -p`) ANTES de
-                   admitir + verificación léxico del copy para la vista de runs (`qa_lexico`).
+                   admitir + verificación léxico del copy para la vista de runs (`verificacion_lexica`).
   - `_redactar`  — REDACTAR (CD): lanza el copy de los temas con QA `no_verificado` sin copy
                    (+ los temas del news-pool sin copy).
   - `_revisar`   — revisión de calidad ADVISORY del copy (voz + coherencia), pre-avance.
@@ -43,7 +43,7 @@ SEGURO POR DISEÑO
 Cada etapa está GATEADA por su toggle bajo el maestro `KENI_MAQUINA` (apagar/encender en runtime
 sin reiniciar). NADA se publica solo: el borrador nace `borrador`, el AVANCE solo lo mueve a la
 cola de revisión HUMANA, y la publicación real sigue gated por `KENI_PUBLICAR_REAL`. El verificación
-léxico (`qa_lexico`) es PURO y testeable.
+léxico (`verificacion_lexica`) es PURO y testeable.
 """
 
 from __future__ import annotations
@@ -78,7 +78,7 @@ from ._barrido import (
 )
 from ._comun import (
     _BACKOFF_ETAPA_SEG,
-    _DEFAULT_QA_CRITERIOS,
+    _DEFAULT_VERIFICACION_CRITERIOS,
     _DIAS_DEDUP,
     _FETCH_ARTICULO,
     _FETCH_OG_IMAGE,
@@ -88,17 +88,17 @@ from ._comun import (
     _OG_TIMEOUT_S,
     _RE_CONTENT,
     _RE_OG_IMAGE,
-    _TITULO_QA,
-    _ETIQUETA_QA,
+    _TITULO_VERIFICACION,
+    _ETIQUETA_VERIFICACION,
     ETAPA_ILUSTRAR,
     ETAPA_REDACTAR,
     ETAPA_ADMITIR,
     ETAPA_VERIFICAR,
     ORIGEN_PIPELINE,
-    PROMPT_QA_ID,
-    QA_EN_CURSO,
-    QA_SALTADA,
-    QA_CADUCADA,
+    PROMPT_VERIFICACION_ID,
+    VERIFICACION_EN_CURSO,
+    VERIFICACION_SALTADA,
+    VERIFICACION_CADUCADA,
     TIPO_ACTIVIDAD,
     TIPO_PIPELINE,
     VERIFICACION_NO_VERIFICADO,
@@ -113,13 +113,13 @@ from ._comun import (
     _log,
     _tiene_copy,
     anotar_intento,
-    admision_qa,
+    admision_verificacion,
     en_backoff,
     intentos_de,
     marcar_fallo_etapa,
     registrar_etapa,
     temas_pipeline,
-    ADMISION_QA_ESTADOS,
+    ADMISION_VERIFICACION_ESTADOS,
 )
 from ._revisar import (
     avisos_calidad,
@@ -140,7 +140,7 @@ from ._admitir import (
     _copy_pendiente_de,
     _fetch_cuerpo,
     _nota_de_cluster,
-    caducar_qa_clusters_en_curso,
+    caducar_verificacion_clusters_en_curso,
     clusters_para_promover,
     clusters_pendientes_verificar,
     crear_tema_de_cluster,
@@ -149,11 +149,11 @@ from ._admitir import (
     temas_en_proceso,
 )
 from ._verificar import (
-    _contexto_qa_fuente,
-    asegurar_documento_qa,
-    dom_qa_titulo,
+    _contexto_verificacion_fuente,
+    asegurar_documento_verificacion,
+    dom_verificacion_titulo,
     lanzar_verificar_cluster,
-    qa_lexico,
+    verificacion_lexica,
 )
 
 # Superficie pública reexportada. Incluye los módulos/seams que la forma histórica del módulo
@@ -188,17 +188,17 @@ __all__ = [
     "ETAPA_REDACTAR",
     "ETAPA_VERIFICAR",
     "ETAPA_ILUSTRAR",
-    "PROMPT_QA_ID",
-    "QA_EN_CURSO",
-    "QA_SALTADA",
-    "QA_CADUCADA",
+    "PROMPT_VERIFICACION_ID",
+    "VERIFICACION_EN_CURSO",
+    "VERIFICACION_SALTADA",
+    "VERIFICACION_CADUCADA",
     "VERIFICACION_NO_VERIFICADO",
     "VERIFICACION_PROBLEMA",
     "_DIAS_DEDUP",
     "_FORMATO_PIPELINE",
-    "_TITULO_QA",
-    "_ETIQUETA_QA",
-    "_DEFAULT_QA_CRITERIOS",
+    "_TITULO_VERIFICACION",
+    "_ETIQUETA_VERIFICACION",
+    "_DEFAULT_VERIFICACION_CRITERIOS",
     # og:image (seams inyectables)
     "_RE_OG_IMAGE",
     "_RE_CONTENT",
@@ -214,8 +214,8 @@ __all__ = [
     "_limpiar_snippet",
     # actividad / autor / lecturas compartidas
     "registrar_etapa",
-    "admision_qa",
-    "ADMISION_QA_ESTADOS",
+    "admision_verificacion",
+    "ADMISION_VERIFICACION_ESTADOS",
     "_autor_pipeline",
     "_copy_pendiente_leido",
     "_tiene_copy",
@@ -236,15 +236,15 @@ __all__ = [
     "promover_clusters_marca",
     "temas_en_proceso",
     "caducar_temas_viejos",
-    "caducar_qa_clusters_en_curso",
+    "caducar_verificacion_clusters_en_curso",
     "_claves_dedup_marca",
     "_nota_de_cluster",
     "_fetch_cuerpo",
     # QA
-    "qa_lexico",
-    "asegurar_documento_qa",
-    "dom_qa_titulo",
-    "_contexto_qa_fuente",
+    "verificacion_lexica",
+    "asegurar_documento_verificacion",
+    "dom_verificacion_titulo",
+    "_contexto_verificacion_fuente",
     "lanzar_verificar_cluster",
     # CD
     "lanzar_redactar_de_tema",

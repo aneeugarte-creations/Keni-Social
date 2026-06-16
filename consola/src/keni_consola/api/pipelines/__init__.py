@@ -26,7 +26,7 @@ Endpoints (solo lectura):
       · `detalle.detalle`
 
 Estructura del paquete (extraído del monolito `pipelines.py`, ~1080 líneas):
-  - `_comun`    constantes compartidas + presentación (`_red_nombre`/`_marca_nombre`/`_qa_fuente_de`).
+  - `_comun`    constantes compartidas + presentación (`_red_nombre`/`_marca_nombre`/`_verificacion_fuente_de`).
   - `_runs`     motor de derivación de runs y sus 7 etapas (núcleo compartido por lista y detalle).
   - `_metricas` agregación de métricas por run + evidencia de pool / arte IA.
   - `feed` · `problemas` · `detalle`  los tres endpoints.

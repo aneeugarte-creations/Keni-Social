@@ -11,11 +11,11 @@ from __future__ import annotations
 from ... import config
 from ...pipeline_contenido import (
     ORIGEN_PIPELINE,
-    QA_CADUCADA,
-    QA_SALTADA,
+    VERIFICACION_CADUCADA,
+    VERIFICACION_SALTADA,
     VERIFICACION_NO_VERIFICADO,
     VERIFICACION_PROBLEMA,
-    qa_lexico,
+    verificacion_lexica,
 )
 from ._comun import (
     _ESTADO_SALTADA,
@@ -24,7 +24,7 @@ from ._comun import (
     _ETAPAS_IA,
     _METRICAS_CERO,
     _marca_nombre,
-    _qa_fuente_de,
+    _verificacion_fuente_de,
     _red_nombre,
 )
 
@@ -97,7 +97,7 @@ def _pieza_detalle(plat: dict) -> dict:
     base = _pieza_de(plat)
     copy = plat.get("copy", "") or ""
     imagen = plat.get("imagen", "") or ""
-    qa = qa_lexico({"red": base["red"], "contenido": copy})
+    qa = verificacion_lexica({"red": base["red"], "contenido": copy})
     return {
         **base,
         "copy": copy,
@@ -203,22 +203,22 @@ def _etapas_de_run(
     # toggle solo decide el estado de una run que AÚN no tiene verificacion (futuro).
     if es_tablero and not verificacion_fuente:
         # La verificación verifica la FUENTE de una noticia recolectada; un tema del tablero no la tiene.
-        qa_estado, qa_detalle = _ESTADO_SALTADA, "No aplica: sin verificación (tema del tablero)"
-    elif verificacion_fuente == QA_SALTADA:
-        qa_estado, qa_detalle = _ESTADO_SALTADA, ""
-    elif verificacion_fuente == QA_CADUCADA:
-        qa_estado, qa_detalle = _ESTADO_SALTADA, "Caducada: el pipeline priorizó lo fresco"
+        verificacion_estado, verificacion_detalle = _ESTADO_SALTADA, "No aplica: sin verificación (tema del tablero)"
+    elif verificacion_fuente == VERIFICACION_SALTADA:
+        verificacion_estado, verificacion_detalle = _ESTADO_SALTADA, ""
+    elif verificacion_fuente == VERIFICACION_CADUCADA:
+        verificacion_estado, verificacion_detalle = _ESTADO_SALTADA, "Caducada: el pipeline priorizó lo fresco"
     elif verificacion_fuente == VERIFICACION_PROBLEMA:
-        qa_estado, qa_detalle = "revisar", "Problema en la fuente"
+        verificacion_estado, verificacion_detalle = "revisar", "Problema en la fuente"
     elif verificacion_fuente == "en_curso":
-        qa_estado, qa_detalle = "en_curso", ""
+        verificacion_estado, verificacion_detalle = "en_curso", ""
     elif verificacion_fuente == VERIFICACION_NO_VERIFICADO:
-        qa_estado, qa_detalle = "ok", "No verificado"
+        verificacion_estado, verificacion_detalle = "ok", "No verificado"
     elif _verificar_off(marca):
-        qa_estado, qa_detalle = _ESTADO_SALTADA, ""
+        verificacion_estado, verificacion_detalle = _ESTADO_SALTADA, ""
     else:
-        qa_estado, qa_detalle = "pendiente", ""
-    qa = {"clave": "verificar", "nombre": "Verificar", "estado": qa_estado, "detalle": qa_detalle, "ts": ""}
+        verificacion_estado, verificacion_detalle = "pendiente", ""
+    qa = {"clave": "verificar", "nombre": "Verificar", "estado": verificacion_estado, "detalle": verificacion_detalle, "ts": ""}
 
     # --- Redactar: PRIMERO el copy persistido (≥1 pieza con copy = corrió, diga lo que diga el
     # toggle de hoy); 'problema'/'caducada' lo omiten; el toggle solo pinta el futuro.
@@ -227,7 +227,7 @@ def _etapas_de_run(
         cd_estado, cd_detalle = "ok", f"{con_copy}/{total}"
     elif es_problema:
         cd_estado, cd_detalle = "pendiente", "Omitido"
-    elif verificacion_fuente == QA_CADUCADA:
+    elif verificacion_fuente == VERIFICACION_CADUCADA:
         cd_estado, cd_detalle = _ESTADO_SALTADA, "Caducada"
     elif _redactar_off(marca):
         cd_estado, cd_detalle = _ESTADO_SALTADA, ""
@@ -241,7 +241,7 @@ def _etapas_de_run(
     con_arte = sum(1 for p in piezas if not p["falta_imagen"])
     if arte_ia:
         arte_estado, arte_detalle = "ok", f"{con_arte}/{total}"
-    elif verificacion_fuente == QA_CADUCADA:
+    elif verificacion_fuente == VERIFICACION_CADUCADA:
         arte_estado, arte_detalle = _ESTADO_SALTADA, "Caducada"
     elif _ilustrar_off(marca):
         arte_estado, arte_detalle = _ESTADO_SALTADA, ""
@@ -260,7 +260,7 @@ def _etapas_de_run(
         # Esperando al HUMANO (piezas en revisión, ninguna aprobada aún): es "pendiente", no
         # "en curso" — la máquina no está haciendo nada.
         ap_estado, ap_detalle = "pendiente", "En revisión"
-    elif verificacion_fuente == QA_CADUCADA and not total:
+    elif verificacion_fuente == VERIFICACION_CADUCADA and not total:
         # Run CADUCADA sin piezas: cerrada sin producto (no quede "pendiente" para siempre).
         ap_estado, ap_detalle = _ESTADO_SALTADA, "Caducada"
     else:
@@ -347,7 +347,7 @@ def _run_de(
         "etapa_actual": _etapa_actual(etapas),
         "etapas": etapas,
         # Verificación de la fuente (⚠️/❗ + hallazgos): la señal de Verificar pre-copy del tema.
-        "qa_fuente": _qa_fuente_de(item),
+        "qa_fuente": _verificacion_fuente_de(item),
         # Procedencia IA del tema (historia/cluster): None si se creó a mano o pre-priorización.
         "cluster": _cluster_publico(cluster),
         # Coste real de la run: la suma de sus generaciones (`contenido_id` correlacionado).

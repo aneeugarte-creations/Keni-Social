@@ -168,7 +168,7 @@ export interface ColaMonitor {
   /** Desglose del pool compartido por proceso (ADR 0011): los dos loops sobre la misma cola. */
   por_proceso?: Record<Proceso, ConteoProceso>;
   /** Estado del admision de QA (Investigación). */
-  admision_qa?: AdmisionQa;
+  admision_verificacion?: AdmisionQa;
   en_curso: ColaJob[];
   esperando: ColaJob[];
   daemons: ColaDaemon[];

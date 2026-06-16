@@ -11,7 +11,7 @@ la generación de Verificar mockeados), ni feeds reales (items canned). Cubre:
       copy y las piezas heredan el aviso ⚠️;
   (e) el cap por barrido (VERIFICAR y REDACTAR) se respeta.
 
-Las funciones PURAS (`qa_lexico`, `_extraer_og_image`) se prueban sin DB.
+Las funciones PURAS (`verificacion_lexica`, `_extraer_og_image`) se prueban sin DB.
 Los flujos con persistencia usan la fixture `entorno` (Postgres de pruebas; se salta si no hay).
 """
 
@@ -103,7 +103,7 @@ def _inicializar_cluster(
         "estado": estado, "verificacion": verificacion,
     })
     if verificacion_fuente:
-        repos.marcar_cluster_qa(cid, verificacion_fuente)
+        repos.marcar_cluster_verificacion(cid, verificacion_fuente)
     return repos.obtener_noticia_cluster(cid)
 
 
@@ -232,13 +232,13 @@ def test_en_backoff_puro_segun_intentos_y_timestamp():
 
 
 def test_qa_lexico_listo_sin_observaciones():
-    r = pc.qa_lexico({"red": "x", "contenido": "Copy corto y válido."})
+    r = pc.verificacion_lexica({"red": "x", "contenido": "Copy corto y válido."})
     assert r["verificacion"] == "listo"
     assert r["observaciones"] == []
 
 
 def test_qa_lexico_copy_vacio():
-    r = pc.qa_lexico({"red": "x", "contenido": "   "})
+    r = pc.verificacion_lexica({"red": "x", "contenido": "   "})
     assert r["verificacion"] == "revisar"
     assert any("vacío" in o for o in r["observaciones"])
 
@@ -246,7 +246,7 @@ def test_qa_lexico_copy_vacio():
 def test_qa_lexico_supera_limite_de_red():
     limite = next(red.limite for red in redes.REDES if red.id == "x")
     assert limite is not None
-    r = pc.qa_lexico({"red": "x", "contenido": "a" * (limite + 1)})
+    r = pc.verificacion_lexica({"red": "x", "contenido": "a" * (limite + 1)})
     assert r["verificacion"] == "revisar"
     assert any("límite" in o for o in r["observaciones"])
 
@@ -569,7 +569,7 @@ def test_solo_noticias_promueve_cluster_qa_saltada_cd_no(entorno, monkeypatch):
     assert len(resumen["temas"]) == 1
     assert any(t["titulo"] == "Historia caliente" for t in pc.temas_pipeline())
     # Verificar desactivada: el tema queda 'saltada' (no se lanza verificación).
-    assert all((t.get("verificacion_fuente") or "") == pc.QA_SALTADA for t in pc.temas_pipeline())
+    assert all((t.get("verificacion_fuente") or "") == pc.VERIFICACION_SALTADA for t in pc.temas_pipeline())
     # Redactar desactivada: no se genera copy aunque haya tema listo.
     assert llamadas == []
     # El cluster quedó marcado usado (no se re-promueve).
@@ -633,7 +633,7 @@ def test_promover_clusters_marca_filtra_sin_verificar_por_defecto(entorno, monke
     _inicializar_cluster("verificada", titulo="Ya verificada", score=0.5,
                      verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO)
 
-    temas = pc.promover_clusters_marca("unotv", maximo=5)  # SIN qa_estados: cae al filtro por defecto
+    temas = pc.promover_clusters_marca("unotv", maximo=5)  # SIN verificacion_estados: cae al filtro por defecto
 
     assert {t["titulo"] for t in temas} == {"Ya verificada"}  # la sin verificar NO cruza
     assert repos.obtener_noticia_cluster("sin_verificar")["estado"] == "nuevo"  # se queda en el pool
@@ -783,9 +783,9 @@ def test_temas_en_proceso_cuenta_pendientes_de_verificar_o_copy(entorno):
     """
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
     _tema_pipeline(titulo="Pendiente QA", verificacion_fuente="", copy_pendiente=pend)          # +1
-    _tema_pipeline(titulo="QA en curso", verificacion_fuente=pc.QA_EN_CURSO, copy_pendiente=pend)  # +1
+    _tema_pipeline(titulo="QA en curso", verificacion_fuente=pc.VERIFICACION_EN_CURSO, copy_pendiente=pend)  # +1
     _tema_pipeline(titulo="Apto sin copy", verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO, copy_pendiente=pend)  # +1
-    _tema_pipeline(titulo="Saltada sin copy", verificacion_fuente=pc.QA_SALTADA, copy_pendiente=pend)  # +1
+    _tema_pipeline(titulo="Saltada sin copy", verificacion_fuente=pc.VERIFICACION_SALTADA, copy_pendiente=pend)  # +1
     _tema_pipeline(titulo="Problema", verificacion_fuente=pc.VERIFICACION_PROBLEMA, copy_pendiente=pend)  # terminal: 0
     con_copy = _tema_pipeline(titulo="Apto con copy", verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO, copy_pendiente=pend)
     # Una pieza por plataforma CON copy -> ya pasó la etapa de copy: no cuenta como en proceso.
@@ -817,7 +817,7 @@ def test_caducidad_libera_el_gate_y_excluye_de_las_fases(entorno):
     assert _temas_sin_verdicto() == []
     assert pc.temas_para_redactar() == []
     temas = {t["titulo"]: t for t in pc.temas_pipeline()}
-    assert temas["Atascado"]["verificacion_fuente"] == pc.QA_CADUCADA
+    assert temas["Atascado"]["verificacion_fuente"] == pc.VERIFICACION_CADUCADA
     assert "Caducada" in (temas["Atascado"].get("notas") or "")
 
 
@@ -1098,7 +1098,7 @@ def test_plan_sin_linea_breaking_compite_por_su_feed(entorno, monkeypatch):
 def test_temas_para_copy_incluye_qa_saltada(entorno):
     """Un tema con Verificar 'saltada' fluye a Redactar igual que 'no_verificado'; un 'problema' no."""
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
-    _tema_pipeline(titulo="Saltada ok", verificacion_fuente=pc.QA_SALTADA, copy_pendiente=pend)
+    _tema_pipeline(titulo="Saltada ok", verificacion_fuente=pc.VERIFICACION_SALTADA, copy_pendiente=pend)
     _tema_pipeline(titulo="Problema", verificacion_fuente=pc.VERIFICACION_PROBLEMA, copy_pendiente=pend)
 
     titulos = {t["titulo"] for t in pc.temas_para_redactar()}
@@ -1369,13 +1369,13 @@ def test_reparar_qa_en_curso_sueltos_resetea_solo_viejos(entorno):
 
     Cierra el ATASCADA: si la verificación muere sin finalizador, el tema quedaba `en_curso` para
     siempre (sin re-verificar y contando en el cupo en proceso de su marca).
-    NOTA: el limpiador usa ahora su reparación PER-TEMA (`limpiador_generaciones._reparar_qa_en_curso`,
+    NOTA: el limpiador usa ahora su reparación PER-TEMA (`limpiador_generaciones._reparar_verificacion_en_curso`,
     con WARN por tema y destino según el toggle); esta primitiva SQL en lote sigue en repos.
     """
     from keni_consola import db
 
-    atascada = _tema_pipeline(titulo="Atascada", verificacion_fuente=pc.QA_EN_CURSO)
-    vivo = _tema_pipeline(titulo="Vivo", verificacion_fuente=pc.QA_EN_CURSO)
+    atascada = _tema_pipeline(titulo="Atascada", verificacion_fuente=pc.VERIFICACION_EN_CURSO)
+    vivo = _tema_pipeline(titulo="Vivo", verificacion_fuente=pc.VERIFICACION_EN_CURSO)
     # Envejecemos el `actualizado` del atascada más allá del umbral (el del vivo queda reciente).
     con = db._conectar()
     try:
@@ -1387,11 +1387,11 @@ def test_reparar_qa_en_curso_sueltos_resetea_solo_viejos(entorno):
     finally:
         con.close()
 
-    n = repos.reparar_qa_en_curso_sueltos("2025-01-01T00:00:00")
+    n = repos.reparar_verificacion_en_curso_sueltos("2025-01-01T00:00:00")
 
     assert n == 1
     assert (repos.obtener_contenido(atascada["id"])["verificacion_fuente"] or "") == ""  # a re-verificación
-    assert repos.obtener_contenido(vivo["id"])["verificacion_fuente"] == pc.QA_EN_CURSO  # intacto
+    assert repos.obtener_contenido(vivo["id"])["verificacion_fuente"] == pc.VERIFICACION_EN_CURSO  # intacto
 
 
 def _envejecer_actualizado(tema_id, fecha="2020-01-01T00:00:00"):
@@ -1411,15 +1411,15 @@ def test_limpiador_qa_atascada_re_verificacion_con_validacion_activa(entorno, mo
     from keni_consola import limpiador_generaciones
 
     monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")
-    atascada = _tema_pipeline(titulo="Atascada", verificacion_fuente=pc.QA_EN_CURSO)
-    vivo = _tema_pipeline(titulo="Vivo", verificacion_fuente=pc.QA_EN_CURSO)
+    atascada = _tema_pipeline(titulo="Atascada", verificacion_fuente=pc.VERIFICACION_EN_CURSO)
+    vivo = _tema_pipeline(titulo="Vivo", verificacion_fuente=pc.VERIFICACION_EN_CURSO)
     _envejecer_actualizado(atascada["id"])
 
-    n = limpiador_generaciones._reparar_qa_en_curso()
+    n = limpiador_generaciones._reparar_verificacion_en_curso()
 
     assert n == 1
     assert (repos.obtener_contenido(atascada["id"])["verificacion_fuente"] or "") == ""  # a re-verificación
-    assert repos.obtener_contenido(vivo["id"])["verificacion_fuente"] == pc.QA_EN_CURSO  # intacto
+    assert repos.obtener_contenido(vivo["id"])["verificacion_fuente"] == pc.VERIFICACION_EN_CURSO  # intacto
 
 
 def test_limpiador_qa_atascada_saltada_con_validacion_apagada(entorno, monkeypatch):
@@ -1427,13 +1427,13 @@ def test_limpiador_qa_atascada_saltada_con_validacion_apagada(entorno, monkeypat
     from keni_consola import limpiador_generaciones
 
     monkeypatch.delenv("KENI_PIPELINE_VERIFICAR", raising=False)  # etapa off (def)
-    atascada = _tema_pipeline(titulo="Atascada sin QA", verificacion_fuente=pc.QA_EN_CURSO)
+    atascada = _tema_pipeline(titulo="Atascada sin QA", verificacion_fuente=pc.VERIFICACION_EN_CURSO)
     _envejecer_actualizado(atascada["id"])
 
-    n = limpiador_generaciones._reparar_qa_en_curso()
+    n = limpiador_generaciones._reparar_verificacion_en_curso()
 
     assert n == 1
-    assert repos.obtener_contenido(atascada["id"])["verificacion_fuente"] == pc.QA_SALTADA
+    assert repos.obtener_contenido(atascada["id"])["verificacion_fuente"] == pc.VERIFICACION_SALTADA
 
 
 def test_ejecutar_arte_fallo_masivo_emite_un_error_agregado(entorno, monkeypatch, caplog):
