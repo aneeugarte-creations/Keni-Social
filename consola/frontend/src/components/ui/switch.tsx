@@ -1,10 +1,10 @@
 /**
  * Switch (toggle) accesible, sin dependencias externas: un `button role="switch"`.
  *
- * COLOR ÚNICO en toda la plataforma: encendido = gris neutro CLARO (`neutral-300`),
- * apagado = gris aún más claro (`bg-input`). El estado se lee sobre todo por la POSICIÓN
- * del pulgar; ningún switch va en negro ni en color de marca (decisión de diseño: todos
- * los «botones de deslizar» idénticos en cualquier pantalla).
+ * COLOR ÚNICO en toda la plataforma: la pista es SIEMPRE `bg-input` (el mismo gris claro
+ * de un switch apagado), encendido o apagado. El estado se lee por la POSICIÓN del pulgar;
+ * ningún switch va en negro ni en color de marca (decisión de diseño: todos los «botones
+ * de deslizar» idénticos en cualquier pantalla).
  */
 import { cn } from "@/lib/utils";
 
@@ -34,7 +34,7 @@ export function Switch({
         "relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         "disabled:cursor-not-allowed disabled:opacity-50",
-        checked ? "bg-neutral-300 dark:bg-neutral-600" : "bg-input",
+        "bg-input",
       )}
     >
       <span
