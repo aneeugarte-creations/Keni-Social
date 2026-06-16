@@ -254,29 +254,35 @@ export function DialogoCrearTarea({
                   {propuestos.length === 1 ? etiquetaTipo : `${etiquetaTipo}s`}. Revisa y acepta:
                 </p>
                 <div className="max-h-72 space-y-1.5 overflow-y-auto">
-                  {propuestos.map((op, i) => (
-                    <div
-                      key={`${op.titulo}-${i}`}
-                      className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"
-                    >
-                      {op.tipo === "crear_evento" ? (
-                        <CalendarDays className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      ) : (
-                        <ListChecks className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      )}
-                      {/* min-w-0 + flex-1: sin esto, un título largo con `truncate` (nowrap) NO
-                          encoge en el flex y estira la fila más allá del diálogo, empujando el botón
-                          «Aceptar y añadir» fuera de pantalla (había que deslizar a la derecha). */}
-                      <span className="min-w-0 flex-1 truncate font-medium">{op.titulo}</span>
-                      <span className="shrink-0 whitespace-nowrap text-muted-foreground">
-                        {op.tipo === "crear_evento"
-                          ? `${op.fecha ? formatearFecha(op.fecha) : ""}${op.hora ? ` · ${op.hora}` : ""}`
-                          : op.fecha_objetivo
-                            ? formatearFecha(op.fecha_objetivo)
-                            : ""}
-                      </span>
-                    </div>
-                  ))}
+                  {propuestos.map((op, i) => {
+                    const meta =
+                      op.tipo === "crear_evento"
+                        ? `${op.fecha ? formatearFecha(op.fecha) : ""}${op.hora ? ` · ${op.hora}` : ""}`
+                        : op.fecha_objetivo
+                          ? formatearFecha(op.fecha_objetivo)
+                          : "";
+                    return (
+                      <div
+                        key={`${op.titulo}-${i}`}
+                        className="flex items-start gap-2 rounded-md border border-border px-3 py-2 text-sm"
+                      >
+                        {op.tipo === "crear_evento" ? (
+                          <CalendarDays className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        ) : (
+                          <ListChecks className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        )}
+                        {/* El título ENVUELVE (no `truncate`) y la fecha cae debajo: al revisar se
+                            lee entero, y —sea cual sea su largo— la fila nunca crece a lo ancho ni
+                            obliga a deslizar el diálogo. `truncate` en flex era frágil (un título
+                            largo seguía estirando la fila más allá del diálogo). min-w-0 deja
+                            envolver dentro del flex; break-words parte tokens sin espacios. */}
+                        <div className="min-w-0 flex-1">
+                          <div className="break-words font-medium">{op.titulo}</div>
+                          {meta && <div className="text-xs text-muted-foreground">{meta}</div>}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </>
             )}
