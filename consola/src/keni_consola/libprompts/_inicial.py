@@ -42,14 +42,11 @@ _PROMPTS_OBSOLETOS: tuple[str, ...] = (
 )
 _SENTINELA_OBSOLETOS = ".prompts-obsoletos-v1"
 
-# OLA v2 de obsoletos: prompts retirados al eliminar features. El editor «asistente» del tablero
-# (modos resumir/variantes) era código MUERTO (ningún consumidor en el frontend), así que se borró
-# end-to-end y sus dos prompts ya no existen. El envoltorio «sin emojis» se INLINEÓ en el prompt de
-# `idear` (su único usuario), así que tampoco hace falta. El store en vivo ya pasó la v1 (sentinela
-# `.prompts-obsoletos-v1`), por eso esta ola lleva su PROPIO sentinela y lista. Idempotente.
+# OLA v2 de obsoletos: prompts retirados al eliminar features. El envoltorio «sin emojis» se
+# INLINEÓ en el prompt de `idear` (su único usuario), así que su prompt editable ya no hace falta.
+# El store en vivo ya pasó la v1 (sentinela `.prompts-obsoletos-v1`), por eso esta ola lleva su
+# PROPIO sentinela y lista. Idempotente.
 _PROMPTS_OBSOLETOS_V2: tuple[str, ...] = (
-    "prompt/asistente/resumir",
-    "prompt/asistente/variantes",
     "prompt/envoltorios/sin-emojis",
 )
 _SENTINELA_OBSOLETOS_V2 = ".prompts-obsoletos-v2"

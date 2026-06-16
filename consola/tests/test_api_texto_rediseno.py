@@ -90,7 +90,7 @@ def test_contexto_inyectado_lista_editoriales_del_prompt(cliente):
     assert cuerpo["inyecta"] is True and cuerpo["pipeline"] == "redactar"
     assert any(a["clase"] == "voz" for a in cuerpo["adjuntos"])
 
-    r2 = cliente.get("/api/prompts/prompt/hashtags/contexto", params={"marca": _MARCA})
+    r2 = cliente.get("/api/prompts/prompt/asistente/resumir/contexto", params={"marca": _MARCA})
     assert r2.status_code == 200
     assert r2.json()["inyecta"] is False and r2.json()["adjuntos"] == []
 
