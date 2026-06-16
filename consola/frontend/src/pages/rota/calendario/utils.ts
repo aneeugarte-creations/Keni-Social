@@ -10,23 +10,18 @@ import { filtrarEquipoPorMarca } from "../comun";
 // de la lista de CMs y de los chips de persona con menú.
 
 /**
- * Restringe el equipo a los community managers de la marca activa que cubren hoy.
+ * Equipo asignable a un turno de la marca activa: quienes cubren hoy.
  *
- * Aplica los tres filtros pedidos por la dirección:
+ * Espejo EXACTO de `_usuarios_asignables` del backend (el que alimenta los carriles por
+ * persona del Panorama/Cobertura): el dropdown «Añadir turno» debe ofrecer a TODAS las
+ * personas que aparecen ahí, no un subconjunto. Dos filtros:
  *  - `marcas.includes(marcaActiva)` (vertical correcta; "Todas"/`null` no filtra).
  *  - `cobertura === true` (la persona está disponible para cubrir hoy).
- *  - `cargo === "community_manager"` (los coordinadores quedan fuera; el coordinador de la rota
- *    coordina pero no se asigna a una franja).
  *
- * Si los tres filtros dejan la lista vacía (puede ocurrir en entornos donde el
- * seed de cargos del organigrama del cliente aún no se ha aplicado a la BD), degrada al
- * filtro por marca+cobertura para no romper la rejilla.
+ * Antes excluía por `cargo === "community_manager"` (dejaba al coordinador fuera de la
+ * grilla), pero eso rompía la paridad con el Panorama: el coordinador cubre y debe poder
+ * tener turno. El filtro por cargo se eliminó a petición de dirección.
  */
 export function cmsDeMarca(equipo: MiembroRota[], marcaActiva: string | null): MiembroRota[] {
-  const porMarca = filtrarEquipoPorMarca(equipo, marcaActiva).filter(
-    (m) => m.cobertura !== false,
-  );
-  const estrictos = porMarca.filter((m) => m.cargo === "community_manager");
-  if (estrictos.length > 0) return estrictos;
-  return porMarca;
+  return filtrarEquipoPorMarca(equipo, marcaActiva).filter((m) => m.cobertura !== false);
 }

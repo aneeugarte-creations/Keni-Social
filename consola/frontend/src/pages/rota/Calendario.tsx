@@ -108,8 +108,9 @@ export function Calendario({
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: ["rota"] });
 
   // `equipo` para la edición avanzada del chip (DialogEditarTurno admite reasignar a
-  // cualquier miembro de la rota), y `cms` para el dropdown «Añadir turno» (solo CMs
-  // activos de la marca activa).
+  // cualquier miembro de la rota), y `cms` para el dropdown «Añadir turno»: el equipo de
+  // cobertura de la marca activa (coordinadores incluidos), en paridad con los carriles por
+  // persona del Panorama.
   const equipo = filtrarEquipoPorMarca(equipoQ.data?.equipo ?? [], marcaActiva);
   const cms = cmsDeMarca(equipoQ.data?.equipo ?? [], marcaActiva);
   const semana = turnosQ.data;
