@@ -5,9 +5,10 @@
  *   1. Con marca activa, la vista por defecto es la MESA (GET /api/noticias/mesa):
  *      plan del día (chips + progreso), secciones por línea (última hora primero),
  *      tarjetas editoriales (frase de corroboración, ÚLTIMA HORA, prioridad).
- *   2. Acciones de la tarjeta: Empujar/Adelantar → usarHistoria; Descartar → descartarHistoria.
+ *   2. Acciones de la tarjeta: Empujar/Adelantar (click izquierdo, gated por confirmar()) →
+ *      usarHistoria; Descartar (menú contextual) → descartarHistoria.
  *   3. Pestañas: «En marcha» (estado=usado) y «Descartadas» (estado=descartado + Devolver
- *      al pool → restaurarHistoria).
+ *      al pool por click izquierdo confirmado → restaurarHistoria).
  *   4. «Fuera del plan» plegado por defecto; se expande al clic.
  *   5. AvisoSalud: una línea ámbar SOLO si hay fuentes con error (el detalle vive en Fuentes).
  *   6. Vista «Todas» (sin marca): lista plana clásica con filtros + selección múltiple +
@@ -230,6 +231,9 @@ beforeEach(() => {
     .spyOn(apiMod.api.noticias, "borrarHistoriasLote")
     .mockResolvedValue({ borradas: 1 });
   vi.spyOn(apiMod.api.noticias, "borrarTodasHistorias").mockResolvedValue({ borradas: 3 });
+  // Por defecto el usuario confirma: empujar/adelantar/devolver son click izquierdo
+  // gated por `confirmar()`. Los tests que necesiten cancelar lo sobrescriben.
+  vi.mocked(confirmar).mockResolvedValue(true);
 });
 
 afterEach(() => {
@@ -334,7 +338,7 @@ describe("Cobertura · Mesa — acciones de la tarjeta", () => {
     await waitFor(() => expect(mockDescartarHistoria).toHaveBeenCalledWith("h-1"));
   });
 
-  it("una promovible anuncia que sale sola al feed y el botón pasa a «Adelantar»", async () => {
+  it("una promovible anuncia que sale sola al feed y su confirmación de click izquierdo dice «Adelantar»", async () => {
     mockMesa.mockResolvedValue(
       mesaFixture({
         lineas: [
@@ -347,9 +351,16 @@ describe("Cobertura · Mesa — acciones de la tarjeta", () => {
     );
     renderConProviders(<Cobertura />);
     await waitFor(() => expect(screen.getByTestId("badge-sale-sola")).toBeTruthy());
+    // Empujar al feed ya NO es item de menú: es la acción de click izquierdo, gated por
+    // `confirmar()`. En una promovible, el texto de confirmar pasa a «Adelantar».
     const host = screen.getByTestId("historia-item").closest('[role="button"]');
-    fireEvent.contextMenu(host!);
-    expect(await screen.findByRole("menuitem", { name: /Adelantar/i })).toBeTruthy();
+    fireEvent.click(host!);
+    await waitFor(() =>
+      expect(confirmar).toHaveBeenCalledWith(
+        expect.objectContaining({ textoConfirmar: "Adelantar" }),
+      ),
+    );
+    await waitFor(() => expect(mockUsarHistoria).toHaveBeenCalled());
   });
 });
 
@@ -376,7 +387,7 @@ describe("Cobertura · pestañas de flujo", () => {
     expect(screen.queryByTestId("btn-empujar")).toBeNull();
   });
 
-  it("«Descartadas» ofrece «Devolver al pool» y llama a restaurarHistoria", async () => {
+  it("«Descartadas»: el click izquierdo confirma y llama a restaurarHistoria", async () => {
     mockHistorias.mockResolvedValue({
       historias: [
         historiaItem({ id: "h-desc", estado: "descartado", pieza_estado: "descartada" }),
@@ -391,10 +402,16 @@ describe("Cobertura · pestañas de flujo", () => {
         expect.anything(),
       ),
     );
+    // «Devolver al pool» ya NO es item de menú: es la acción de click izquierdo, gated
+    // por `confirmar()` (mockeado a true). Click en la tarjeta → restaurarHistoria.
     const card = await screen.findByTestId("historia-item");
     const host = card.closest('[role="button"]');
-    fireEvent.contextMenu(host!);
-    fireEvent.click(await screen.findByRole("menuitem", { name: /Devolver al pool/i }));
+    fireEvent.click(host!);
+    await waitFor(() =>
+      expect(confirmar).toHaveBeenCalledWith(
+        expect.objectContaining({ textoConfirmar: "Devolver" }),
+      ),
+    );
     await waitFor(() => expect(mockRestaurarHistoria).toHaveBeenCalledWith("h-desc"));
   });
 });

@@ -4,6 +4,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { confirmar } from "@/components/comunes/confirmar";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { AccionesPagina } from "@/components/layout/encabezado";
 import { ItemMenu, MenuAcciones } from "@/components/layout/MenuAcciones";
@@ -208,7 +209,16 @@ export default function Algoritmos() {
                       <TarjetaNoticia
                         key={n.id}
                         noticia={n}
-                        onProponer={(noticia) => proponer.mutate(noticia)}
+                        onProponer={async (noticia) => {
+                          // Click izquierdo no ejecuta a ciegas: confirma antes de proponer.
+                          if (
+                            await confirmar({
+                              mensaje: `¿Proponer "${noticia.titulo || "esta noticia"}" a Texto?`,
+                              textoConfirmar: "Proponer",
+                            })
+                          )
+                            proponer.mutate(noticia);
+                        }}
                         onArchivar={(noticia) => archivar.mutate(noticia)}
                         archivando={archivar.isPending}
                       />

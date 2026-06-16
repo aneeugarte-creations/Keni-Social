@@ -12,8 +12,6 @@ import {
   ExternalLink,
   Globe,
   Loader2,
-  Newspaper,
-  RotateCcw,
   ShieldAlert,
   Sparkles,
   Trash2,
@@ -22,6 +20,7 @@ import {
 import * as React from "react";
 import { toast } from "sonner";
 
+import { confirmar } from "@/components/comunes/confirmar";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { Badge } from "@/components/ui/badge";
@@ -116,39 +115,43 @@ export function TarjetaHistoria({
   const tieneEnlaces = historia.enlaces && historia.enlaces.length > 0;
   const esEnPool = piezaEstado === "en_pool";
 
-  // Acción primaria (click izq): empujar/adelantar en pool; restaurar en vista descartadas.
+  // Acción primaria (click izq): NO ejecuta sin más — abre un diálogo de confirmación
+  // antes de mutar (regla: el click izquierdo solo abre pop-ups, nunca ejecuta a ciegas).
+  // Empujar/adelantar en pool; restaurar en la vista de descartadas. Como esta acción
+  // vive en el click izquierdo, NO se duplica en el menú contextual (regla de dedup).
   const accionPrimaria =
     esEnPool && !enCurso
-      ? () => usarMut.mutate()
+      ? async () => {
+          if (
+            await confirmar({
+              mensaje: `¿${historia.promovible ? "Adelantar" : "Empujar"} "${historia.titulo || "esta historia"}" al feed?`,
+              textoConfirmar: historia.promovible ? "Adelantar" : "Empujar",
+            })
+          )
+            usarMut.mutate();
+        }
       : conRestaurar && esDescartada && !enCurso
-        ? () => restaurarMut.mutate()
+        ? async () => {
+            if (
+              await confirmar({
+                mensaje: `¿Devolver "${historia.titulo || "esta historia"}" al pool?`,
+                textoConfirmar: "Devolver",
+              })
+            )
+              restaurarMut.mutate();
+          }
         : undefined;
 
   // Menú contextual (click der / long-press / teclado): destructivas + secundarias.
+  // Empujar/adelantar y devolver al pool NO van aquí: son la acción de click izquierdo.
   const accionesMenu: EntradaMenuContextual[] = [
     ...(esEnPool
       ? [
-          {
-            etiqueta: historia.promovible ? "Adelantar al feed" : "Empujar al feed",
-            icono: Newspaper,
-            onClick: () => usarMut.mutate(),
-            deshabilitado: enCurso,
-          },
           {
             etiqueta: "Descartar",
             icono: Trash2,
             onClick: () => descartarMut.mutate(),
             destructivo: true,
-            deshabilitado: enCurso,
-          },
-        ]
-      : []),
-    ...(conRestaurar && esDescartada
-      ? [
-          {
-            etiqueta: "Devolver al pool",
-            icono: RotateCcw,
-            onClick: () => restaurarMut.mutate(),
             deshabilitado: enCurso,
           },
         ]

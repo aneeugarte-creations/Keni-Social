@@ -23,16 +23,16 @@ export function useMenuContextual() {
         setPos(origenBajoDisparador(ancla.getBoundingClientRect()));
         return;
       }
+      // Click derecho (contextmenu): monta el menú EN el cursor, no debajo del item.
+      // No filtres por `detail`: el evento `contextmenu` real llega con `detail === 0`
+      // en varios navegadores (Chrome), así que gatear en él hacía caer al anclado
+      // bajo el disparador. La rama sin `ancla` solo la dispara el click derecho.
       const evMouse = e as React.MouseEvent;
-      const tieneCoords =
-        typeof evMouse.clientX === "number" &&
-        (evMouse.clientX > 0 || evMouse.clientY > 0) &&
-        // detail 0 = activación por teclado sobre un botón; ignora sus coords (0,0).
-        (e.nativeEvent as MouseEvent).detail !== 0;
-      if (tieneCoords) {
+      if (e.type === "contextmenu" && typeof evMouse.clientX === "number") {
         setPos({ x: evMouse.clientX, y: evMouse.clientY });
         return;
       }
+      // Activación por teclado (Shift+F10 / tecla Menú) sin ancla: ancla al disparador.
       const el = e.currentTarget as HTMLElement;
       setPos(origenBajoDisparador(el.getBoundingClientRect()));
     },

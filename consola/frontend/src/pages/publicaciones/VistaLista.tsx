@@ -8,7 +8,6 @@ import {
   CalendarPlus,
   Copy,
   ImageIcon,
-  Pencil,
   Send,
   Sprout,
   Trash2,
@@ -146,7 +145,7 @@ function TarjetaPublicacion({
 
   // Acción primaria = editar. Las demás operaciones, condicionadas por estado, en el menú.
   const acciones: EntradaMenuContextual[] = [
-    { etiqueta: "Editar", icono: Pencil, onClick: () => onEditar(publicacion) },
+    // "Editar" es la acción de click izquierdo (onPrimaria): no se duplica en el menú.
     ...(proximo
       ? [
           {
@@ -155,9 +154,9 @@ function TarjetaPublicacion({
             onClick: () => avanzar.mutate(),
             deshabilitado: avanzar.isPending,
           },
+          { separador: true as const },
         ]
       : []),
-    { separador: true },
     // "Añadir a la cola" SOLO para piezas ya programadas (re-encolar). Programar
     // una pre-aprobación (borrador/en_revisión) saltaría la revisión: el camino de esas piezas
     // es el flujo de aprobación, que auto-programa al juntar los 2 OKs (auto_programar) con sus

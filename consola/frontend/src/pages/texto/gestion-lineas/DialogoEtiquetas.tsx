@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Loader2, Pencil, Plus, Tag, Trash2, X } from "lucide-react";
+import { Check, Loader2, Plus, Tag, Trash2, X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -266,12 +266,7 @@ export function DialogoEtiquetas({
                     kebab="nunca"
                     realce
                     acciones={[
-                      {
-                        etiqueta: "Editar",
-                        icono: Pencil,
-                        onClick: () => empezarEdicion(e),
-                      },
-                      { separador: true },
+                      // "Editar" es la acción de click izquierdo (onPrimaria): no se duplica aquí.
                       {
                         etiqueta: "Borrar etiqueta",
                         icono: Trash2,

@@ -16,7 +16,7 @@
  * tienen el maestro virtual del proceso lo indican con `heredada`.
  */
 import { useQuery } from "@tanstack/react-query";
-import { Bot, ChevronDown, Cog, SquarePen, Users } from "lucide-react";
+import { Bot, ChevronDown, Cog, Users } from "lucide-react";
 import * as React from "react";
 
 import { EditorPromptOverlay } from "@/components/biblioteca/EditorPromptOverlay";
@@ -208,15 +208,10 @@ export function PanelPipeline({
           const deEtapa = e.excepciones
             ? porMarca.filter((a) => a.clave.startsWith(`${e.excepciones!.base}::`))
             : [];
-          // Acciones de la fila: «Editar prompt» (primaria, abre al click) y «Excepciones».
+          // «Editar prompt» es la acción de click izquierdo (abre el overlay): NO se
+          // duplica en el menú contextual. El menú solo lleva las secundarias («Excepciones»).
+          const editarPrompt = doc ? () => setDocEditando(doc) : undefined;
           const acciones: ItemMenuContextual[] = [];
-          if (doc) {
-            acciones.push({
-              etiqueta: `Editar el prompt de ${e.nombre}`,
-              icono: SquarePen,
-              onClick: () => setDocEditando(doc),
-            });
-          }
           if (ajuste && e.excepciones && deEtapa.length > 0) {
             acciones.push({
               etiqueta: `Excepciones por marca de ${e.nombre}`,
@@ -239,7 +234,7 @@ export function PanelPipeline({
               <FilaConAcciones
                 como="div"
                 acciones={acciones}
-                onPrimaria={acciones[0]?.onClick}
+                onPrimaria={editarPrompt}
                 kebab="nunca"
                 realce
                 etiquetaAcciones={`Acciones de ${e.nombre}`}
