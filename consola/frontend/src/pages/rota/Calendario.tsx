@@ -445,10 +445,12 @@ export function Calendario({
         <Card className="overflow-hidden">
           <CardContent className="p-0">
             {/* Rejilla principal: 1 cabecera con días + 1 fila por franja viva.
-                `max-h-[calc(100vh-18rem)]` aprovecha el alto disponible con scroll interno
-                si la semana se sale de pantalla; `min-w-[56rem]` mantiene legibilidad. */}
-            <div className="overflow-auto" style={{ maxHeight: "calc(100dvh - 18rem)" }}>
-              <div className="min-w-[56rem]">
+                Altura FIJA `calc(100dvh-14rem)` (no `max-h`) para que la rejilla LLENE el alto
+                disponible: las franjas laborales crecen (`grow`) y reparten el hueco sobrante en
+                vez de dejar un vacío debajo. Si la semana es densa el contenido desborda y este
+                contenedor hace scroll interno. `min-w-[56rem]` mantiene legibilidad horizontal. */}
+            <div className="overflow-auto" style={{ height: "calc(100dvh - 14rem)" }}>
+              <div className="flex min-h-full min-w-[56rem] flex-col">
                 {/* Cabecera de días (sticky para que no se pierda al hacer scroll). */}
                 <div className="sticky top-0 z-10 grid grid-cols-[8rem_repeat(7,minmax(0,1fr))] gap-px border-b bg-background">
                   <div className="bg-background px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -500,8 +502,8 @@ export function Calendario({
                       <div
                         key={franja.id}
                         className={`grid grid-cols-[8rem_repeat(7,minmax(0,1fr))] gap-px ${
-                          idx > 0 ? "border-t-4 border-t-border" : ""
-                        }`}
+                          franja.es_descanso ? "" : "grow"
+                        } ${idx > 0 ? "border-t-4 border-t-border" : ""}`}
                       >
                         {/* Etiqueta de franja (sticky a la izquierda para scroll horizontal). */}
                         <div
