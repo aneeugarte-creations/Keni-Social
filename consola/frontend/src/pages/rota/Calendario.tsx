@@ -51,7 +51,7 @@ import {
   type ItemEventoCalendario,
 } from "./comun";
 import { DialogoAsignarTurnos } from "./DialogoAsignarTurnos";
-import { DialogConfigFranjas, DialogFranjasDeSemana } from "./Franjas";
+import { DialogFranjas } from "./Franjas";
 import { CLAVE_TAREAS } from "@/pages/tareas/claves";
 import { agrupar } from "@/pages/tareas/tipos";
 
@@ -128,11 +128,9 @@ export function Calendario({
 
   // Modal de edición rápida (chip click → edita el evento sin salir del calendario).
   const [eventoSeleccionado, setEventoSeleccionado] = React.useState<EventoRota | null>(null);
-  // Diálogos de franjas: antes los abrían sus propios botones (BotonConfigFranjas /
-  // BotonFranjasDeSemana). Tras la slimificación de la cabecera ahora se invocan desde
-  // el menú "Más", así que la apertura se gobierna desde aquí.
-  const [abrirFranjasSemana, setAbrirFranjasSemana] = React.useState(false);
-  const [abrirPlantillaFranjas, setAbrirPlantillaFranjas] = React.useState(false);
+  // Diálogo de franjas (unificado): un solo «Franjas» en el menú «Más» con dos pestañas
+  // (esta semana / plantilla por defecto). Antes eran dos items sueltos que se confundían.
+  const [abrirFranjas, setAbrirFranjas] = React.useState(false);
   // Resumen "Carga del equipo": antes vivía como panel colapsable bajo el calendario;
   // ahora se abre bajo demanda desde el menú "Más" (popup), para no alargar la vista.
   const [abrirCarga, setAbrirCarga] = React.useState(false);
@@ -398,8 +396,7 @@ export function Calendario({
             copiarPendiente={copiarAnterior.isPending}
             onAbrirAsignar={() => setAbrirAsignar(true)}
             onCopiarAnterior={() => copiarAnterior.mutate()}
-            onAbrirFranjasSemana={() => setAbrirFranjasSemana(true)}
-            onAbrirPlantillaFranjas={() => setAbrirPlantillaFranjas(true)}
+            onAbrirFranjas={() => setAbrirFranjas(true)}
             onAbrirCarga={() => setAbrirCarga(true)}
             onExportExcel={() => api.exportarRota("xlsx", { lunes, marca: marcaActiva ?? undefined })}
             onExportCsv={() => api.exportarRota("csv", { lunes, marca: marcaActiva ?? undefined })}
@@ -407,14 +404,8 @@ export function Calendario({
         </div>
       </div>
 
-      {abrirFranjasSemana && (
-        <DialogFranjasDeSemana
-          lunes={lunes}
-          onCerrar={() => setAbrirFranjasSemana(false)}
-        />
-      )}
-      {abrirPlantillaFranjas && (
-        <DialogConfigFranjas onCerrar={() => setAbrirPlantillaFranjas(false)} />
+      {abrirFranjas && (
+        <DialogFranjas lunes={lunes} onCerrar={() => setAbrirFranjas(false)} />
       )}
 
       {cargando ? (

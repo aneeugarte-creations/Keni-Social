@@ -1,9 +1,6 @@
 // Diálogos de FRANJAS (de la semana y plantilla global). Partido de pages/Rota.tsx.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Loader2,
-  Plus,
-} from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -13,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -24,15 +20,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { ApiError, api, mensajeError } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type {
-  CuerpoCrearFranjaSemana,
-  FranjaSemana,
-} from "@/types";
-
+import type { CuerpoCrearFranjaSemana, FranjaSemana } from "@/types";
 
 // --- Dialog "Configurar franjas" (solo admin) -------------------------------
 
-export function DialogFranjasDeSemana({
+/** CUERPO «Esta semana» del diálogo Franjas (sin su propio Dialog: lo envuelve `DialogFranjas`). */
+function CuerpoFranjasSemana({
   lunes,
   onCerrar,
 }: {
@@ -47,7 +40,9 @@ export function DialogFranjasDeSemana({
     queryFn: ({ signal }) =>
       api.listarFranjasSemana(lunes, marcaActiva ?? undefined, signal),
   });
-  const franjas = (q.data?.franjas ?? []).slice().sort((a, b) => a.orden - b.orden);
+  const franjas = (q.data?.franjas ?? [])
+    .slice()
+    .sort((a, b) => a.orden - b.orden);
 
   const invalidar = () => {
     void queryClient.invalidateQueries({ queryKey: claveLista });
@@ -66,34 +61,30 @@ export function DialogFranjasDeSemana({
   });
 
   return (
-    <Dialog open onOpenChange={(v) => !v && onCerrar()}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Franjas de esta semana ({lunes})</DialogTitle>
-          <DialogDescription>
-            Descanso indica turno no-laboral
-          </DialogDescription>
-        </DialogHeader>
-        {q.isPending ? (
-          <Skeleton className="h-32 w-full rounded-md" />
-        ) : (
-          <div className="space-y-2">
-            {franjas.map((f) => (
-              <FilaFranjaSemana key={f.id} franja={f} onCambio={invalidar} />
-            ))}
-            <FormCrearFranjaSemana
-              cargando={crear.isPending}
-              onCrear={(cuerpo) => crear.mutate(cuerpo)}
-            />
-          </div>
-        )}
-        <DialogFooter>
-          <Button variant="outline" onClick={onCerrar}>
-            Cerrar
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <>
+      <p className="text-xs text-muted-foreground">
+        Las franjas SOLO de la semana del {lunes} (puntual). «Descanso» = turno
+        no-laboral.
+      </p>
+      {q.isPending ? (
+        <Skeleton className="h-32 w-full rounded-md" />
+      ) : (
+        <div className="space-y-2">
+          {franjas.map((f) => (
+            <FilaFranjaSemana key={f.id} franja={f} onCambio={invalidar} />
+          ))}
+          <FormCrearFranjaSemana
+            cargando={crear.isPending}
+            onCrear={(cuerpo) => crear.mutate(cuerpo)}
+          />
+        </div>
+      )}
+      <DialogFooter>
+        <Button variant="outline" onClick={onCerrar}>
+          Cerrar
+        </Button>
+      </DialogFooter>
+    </>
   );
 }
 
@@ -128,7 +119,8 @@ export function FilaFranjaSemana({
   });
 
   const borrar = useMutation({
-    mutationFn: (forzar: boolean) => api.borrarFranjaSemana(franja.id, { forzar }),
+    mutationFn: (forzar: boolean) =>
+      api.borrarFranjaSemana(franja.id, { forzar }),
     onSuccess: (res) => {
       const sufijo =
         res.turnos_borrados && res.turnos_borrados > 0
@@ -139,7 +131,8 @@ export function FilaFranjaSemana({
     },
     onError: async (e) => {
       if (e instanceof ApiError && e.status === 409) {
-        const asociados = (e.cuerpo?.turnos_asociados as number | undefined) ?? 0;
+        const asociados =
+          (e.cuerpo?.turnos_asociados as number | undefined) ?? 0;
         if (
           await confirmar({
             mensaje: `Tiene ${asociados} turnos asociados. ¿Borrar también esos turnos?`,
@@ -280,7 +273,11 @@ export function FormCrearFranjaSemana({
       </div>
       <div className="w-24">
         <Label className="text-xs text-muted-foreground">Fin</Label>
-        <Input value={fin} onChange={(e) => setFin(e.target.value)} className="h-8" />
+        <Input
+          value={fin}
+          onChange={(e) => setFin(e.target.value)}
+          className="h-8"
+        />
       </div>
       <div className="w-20">
         <Label className="text-xs text-muted-foreground">Orden</Label>
@@ -305,12 +302,14 @@ export function FormCrearFranjaSemana({
   );
 }
 
-export function DialogConfigFranjas({ onCerrar }: { onCerrar: () => void }) {
+/** CUERPO «Plantilla por defecto» del diálogo Franjas (sin su propio Dialog). */
+function CuerpoPlantillaFranjas({ onCerrar }: { onCerrar: () => void }) {
   const queryClient = useQueryClient();
   const { marcaActiva } = useMarcaActiva();
   const q = useQuery({
     queryKey: ["rota", "config", "franjas", marcaActiva] as const,
-    queryFn: ({ signal }) => api.obtenerConfigFranjas(marcaActiva ?? undefined, signal),
+    queryFn: ({ signal }) =>
+      api.obtenerConfigFranjas(marcaActiva ?? undefined, signal),
   });
   const inicial = q.data?.franjas;
   const [matIni, setMatIni] = React.useState("");
@@ -354,87 +353,145 @@ export function DialogConfigFranjas({ onCerrar }: { onCerrar: () => void }) {
     vesIni === inicial.vespertino_inicio &&
     vesFin === inicial.vespertino_fin;
   const puedeGuardar =
-    matIni !== "" && matFin !== "" && vesIni !== "" && vesFin !== "" && !sinCambios;
+    matIni !== "" &&
+    matFin !== "" &&
+    vesIni !== "" &&
+    vesFin !== "" &&
+    !sinCambios;
 
   return (
-    <Dialog open onOpenChange={(o) => !o && onCerrar()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Configurar franjas</DialogTitle>
-        </DialogHeader>
-        {q.isPending ? (
-          <Skeleton className="h-32 w-full rounded-md" />
-        ) : q.isError ? (
-          <BloqueError
-            titulo="No se pudo cargar la configuración"
-            mensaje={mensajeError(q.error)}
-            onReintentar={() => void q.refetch()}
-            cargando={q.isFetching}
-          />
-        ) : (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3 rounded-md border bg-muted/30 p-3">
-              <div className="col-span-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Mañana
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="cf-mat-ini">Inicio</Label>
-                <Input
-                  id="cf-mat-ini"
-                  type="time"
-                  value={matIni}
-                  onChange={(e) => setMatIni(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="cf-mat-fin">Fin</Label>
-                <Input
-                  id="cf-mat-fin"
-                  type="time"
-                  value={matFin}
-                  onChange={(e) => setMatFin(e.target.value)}
-                />
-              </div>
+    <>
+      <p className="text-xs text-muted-foreground">
+        El MOLDE por defecto (mañana/tarde) del que parten las semanas nuevas.
+        No reescribe las franjas que una semana ya tiene.
+      </p>
+      {q.isPending ? (
+        <Skeleton className="h-32 w-full rounded-md" />
+      ) : q.isError ? (
+        <BloqueError
+          titulo="No se pudo cargar la configuración"
+          mensaje={mensajeError(q.error)}
+          onReintentar={() => void q.refetch()}
+          cargando={q.isFetching}
+        />
+      ) : (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3 rounded-md border bg-muted/30 p-3">
+            <div className="col-span-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Mañana
             </div>
-            <div className="grid grid-cols-2 gap-3 rounded-md border bg-muted/30 p-3">
-              <div className="col-span-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Tarde
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="cf-ves-ini">Inicio</Label>
-                <Input
-                  id="cf-ves-ini"
-                  type="time"
-                  value={vesIni}
-                  onChange={(e) => setVesIni(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="cf-ves-fin">Fin</Label>
-                <Input
-                  id="cf-ves-fin"
-                  type="time"
-                  value={vesFin}
-                  onChange={(e) => setVesFin(e.target.value)}
-                />
-              </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cf-mat-ini">Inicio</Label>
+              <Input
+                id="cf-mat-ini"
+                type="time"
+                value={matIni}
+                onChange={(e) => setMatIni(e.target.value)}
+              />
             </div>
-            <p className="text-xs text-muted-foreground">
-              Lo que cae fuera se asigna a «descanso».
-            </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="cf-mat-fin">Fin</Label>
+              <Input
+                id="cf-mat-fin"
+                type="time"
+                value={matFin}
+                onChange={(e) => setMatFin(e.target.value)}
+              />
+            </div>
           </div>
+          <div className="grid grid-cols-2 gap-3 rounded-md border bg-muted/30 p-3">
+            <div className="col-span-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Tarde
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cf-ves-ini">Inicio</Label>
+              <Input
+                id="cf-ves-ini"
+                type="time"
+                value={vesIni}
+                onChange={(e) => setVesIni(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="cf-ves-fin">Fin</Label>
+              <Input
+                id="cf-ves-fin"
+                type="time"
+                value={vesFin}
+                onChange={(e) => setVesFin(e.target.value)}
+              />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Lo que cae fuera se asigna a «descanso».
+          </p>
+        </div>
+      )}
+      <DialogFooter>
+        <Button variant="ghost" onClick={onCerrar}>
+          Cancelar
+        </Button>
+        <Button
+          onClick={() => guardar.mutate()}
+          disabled={!puedeGuardar || guardar.isPending}
+        >
+          {guardar.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+          Guardar
+        </Button>
+      </DialogFooter>
+    </>
+  );
+}
+
+/**
+ * Diálogo «Franjas» UNIFICADO: una sola entrada (antes «Configurar franjas» + «Plantilla de
+ * franjas», dos items que se confundían) con dos pestañas claras:
+ *  - «Esta semana»: las franjas SOLO de la semana en vista (puntual).
+ *  - «Plantilla por defecto»: el molde mañana/tarde global del que parten las semanas nuevas.
+ */
+export function DialogFranjas({
+  lunes,
+  onCerrar,
+}: {
+  lunes: string;
+  onCerrar: () => void;
+}) {
+  const [tab, setTab] = React.useState<"semana" | "plantilla">("semana");
+  return (
+    <Dialog open onOpenChange={(v) => !v && onCerrar()}>
+      <DialogContent className="gap-3 sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Franjas</DialogTitle>
+        </DialogHeader>
+        {/* Segmentado (píldora blanca sobre pista gris), como el resto de toggles del producto. */}
+        <div className="inline-flex w-fit rounded-md border border-border bg-muted p-0.5">
+          {(
+            [
+              ["semana", "Esta semana"],
+              ["plantilla", "Plantilla por defecto"],
+            ] as const
+          ).map(([clave, etiqueta]) => (
+            <button
+              key={clave}
+              type="button"
+              onClick={() => setTab(clave)}
+              className={cn(
+                "rounded-[5px] px-3 py-1 text-sm transition-colors",
+                tab === clave
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {etiqueta}
+            </button>
+          ))}
+        </div>
+        {tab === "semana" ? (
+          <CuerpoFranjasSemana lunes={lunes} onCerrar={onCerrar} />
+        ) : (
+          <CuerpoPlantillaFranjas onCerrar={onCerrar} />
         )}
-        <DialogFooter>
-          <Button variant="ghost" onClick={onCerrar}>
-            Cancelar
-          </Button>
-          <Button onClick={() => guardar.mutate()} disabled={!puedeGuardar || guardar.isPending}>
-            {guardar.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-            Guardar
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
-

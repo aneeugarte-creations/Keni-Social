@@ -297,8 +297,7 @@ export function MenuMasAcciones({
   semanaAprobada,
   onAbrirAsignar,
   onCopiarAnterior,
-  onAbrirFranjasSemana,
-  onAbrirPlantillaFranjas,
+  onAbrirFranjas,
   onAbrirCarga,
   onExportExcel,
   onExportCsv,
@@ -309,8 +308,8 @@ export function MenuMasAcciones({
   /** Abre «Asignar turnos» (reparto persona→franja→días + import). */
   onAbrirAsignar: () => void;
   onCopiarAnterior: () => void;
-  onAbrirFranjasSemana: () => void;
-  onAbrirPlantillaFranjas: () => void;
+  /** Abre el diálogo «Franjas» (pestañas: esta semana / plantilla por defecto). */
+  onAbrirFranjas: () => void;
   onAbrirCarga: () => void;
   onExportExcel: () => void;
   onExportCsv: () => void;
@@ -336,14 +335,9 @@ export function MenuMasAcciones({
       deshabilitado: copiarPendiente || semanaAprobada,
     });
     items.push({
-      etiqueta: "Configurar franjas",
-      icono: CalendarDays,
-      onClick: onAbrirFranjasSemana,
-    });
-    items.push({
-      etiqueta: "Plantilla de franjas",
+      etiqueta: "Franjas",
       icono: Clock,
-      onClick: onAbrirPlantillaFranjas,
+      onClick: onAbrirFranjas,
     });
     items.push({ separador: true });
   }
