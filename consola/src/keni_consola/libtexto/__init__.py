@@ -126,6 +126,8 @@ from ._inicial import (
     migrar_descripciones_editorial,
     migrar_nombres_biblioteca,
     obtener_inicial,
+    publicar_linea_base,
+    reformatear_prompts,
 )
 from ._variables import catalogo_variables
 from ._validacion import (
@@ -235,4 +237,6 @@ __all__ = [
     "migrar_nombres_biblioteca",
     "limpiar_prompts_obsoletos",
     "migrar_descripciones_editorial",
+    "reformatear_prompts",
+    "publicar_linea_base",
 ]

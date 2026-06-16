@@ -427,7 +427,7 @@ def test_paso_traducir_marca_clusters_y_guarda_es(monkeypatch):
     def _ejecutor_ok(prompt, _dir):
         import json as _json
         import re
-        cola = prompt.partition("Lista de ítems:")[2] or prompt
+        cola = prompt.partition("## Lista de ítems")[2] or prompt
         m = re.search(r"\[.*\]", cola, re.DOTALL)
         items = _json.loads(m.group(0)) if m else []
         return _json.dumps({"traducciones": [

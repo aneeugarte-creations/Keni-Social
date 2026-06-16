@@ -5,8 +5,34 @@ from __future__ import annotations
 from keni_consola import libtexto, inicializar
 
 
+def _silenciar_migraciones(monkeypatch):
+    """Deja en 0 (no-op) todas las migraciones de arranque salvo las que el test fija aparte."""
+    for nombre in (
+        "migrar_nombres_biblioteca",
+        "limpiar_prompts_obsoletos",
+        "migrar_descripciones_editorial",
+        "asegurar_linea_base",
+    ):
+        monkeypatch.setattr(libtexto, nombre, lambda: 0)
+
+
 def test_main_invoca_importar_inicial_y_devuelve_0(monkeypatch, capsys):
+    _silenciar_migraciones(monkeypatch)
     monkeypatch.setattr(libtexto, "importar_inicial", lambda: 7)
+    monkeypatch.setattr(libtexto, "reformatear_prompts", lambda: 0)
+    monkeypatch.setattr(libtexto, "publicar_linea_base", lambda: 0)
     rc = inicializar.main()
     assert rc == 0
     assert "7 documento" in capsys.readouterr().out
+
+
+def test_main_anuncia_reformato_y_publicacion(monkeypatch, capsys):
+    _silenciar_migraciones(monkeypatch)
+    monkeypatch.setattr(libtexto, "importar_inicial", lambda: 0)
+    monkeypatch.setattr(libtexto, "reformatear_prompts", lambda: 3)
+    monkeypatch.setattr(libtexto, "publicar_linea_base", lambda: 5)
+    rc = inicializar.main()
+    assert rc == 0
+    salida = capsys.readouterr().out
+    assert "3 prompt(s) reformateados" in salida
+    assert "5 documento(s) publicados" in salida

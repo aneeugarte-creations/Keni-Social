@@ -29,11 +29,23 @@ def main() -> int:
         print(f"Texto: {d} editorial(es) con descripcion/titulo de plantilla vieja corregidos.")
     n = libtexto.importar_inicial()
     print(f"Texto: {n} documento(s) base importados.")
+    # Reformato de los prompts del sistema (one-shot): propaga al store el cuerpo reformateado de la
+    # inicial RESPETANDO ediciones del equipo (solo pisa el prompt cuyo cuerpo casa con el viejo). Va
+    # ANTES de publicar para que la version "first commit" sea la reformateada.
+    r = libtexto.reformatear_prompts()
+    if r:
+        print(f"Texto: {r} prompt(s) reformateados en el store.")
     # Linea base en git: que cada doc inicial tenga HEAD (snapshot estable para los pipelines,
     # no el working copy que reescribe el autosave). Best-effort: 0 si el versionado esta off.
     b = libtexto.asegurar_linea_base()
     if b:
         print(f"Texto: {b} documento(s) versionados como linea base.")
+    # Publica una version inicial ("first commit") de cada doc activo sin puntero de produccion, para
+    # que la UI deje de mostrarlos "sin publicar". Idempotente (salta los ya publicados) y best-effort
+    # (necesita Postgres; 0 si no esta disponible).
+    p = libtexto.publicar_linea_base()
+    if p:
+        print(f"Texto: {p} documento(s) publicados como linea base (first commit).")
     return 0
 
 

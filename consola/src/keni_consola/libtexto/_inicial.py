@@ -6,6 +6,7 @@ diferencia del store, que es estado de usuario).
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 from ..io_atomico import escribir_atomico
@@ -27,6 +28,7 @@ __all__ = [
     "dir_inicial", "obtener_inicial", "cuerpo_efectivo", "cuerpo_inicial", "importar_inicial",
     "asegurar_linea_base",
     "migrar_nombres_biblioteca", "limpiar_prompts_obsoletos", "migrar_descripciones_editorial",
+    "reformatear_prompts", "publicar_linea_base",
 ]
 
 _PROMPTS_OBSOLETOS_BIBLIOTECA: tuple[str, ...] = (
@@ -120,6 +122,32 @@ _TITULOS_VIEJOS_EDITORIAL: tuple[tuple[str, str], ...] = (
     ("Tropicalización (México)", "Tropicalización MX"),
 )
 _SENTINELA_DESCRIPCIONES = ".descripciones-v1"
+
+# REFORMATO v1: los prompts del sistema se reescribieron a un formato más legible (párrafos, listas,
+# líneas en blanco alrededor de los `{{PLACEHOLDERS}}`). El store en vivo ya tiene esos prompts
+# (re-sembrados por la migración de nombres v2) byte-idénticos a la inicial VIEJA, así que la edición
+# del cuerpo NO les llega por `importar_inicial` (no pisa lo existente). Esta migración propaga el
+# cuerpo NUEVO al store RESPETANDO ediciones del equipo: reescribe un prompt solo si su cuerpo ACTUAL
+# casa EXACTO con el cuerpo VIEJO conocido (sha256 de abajo); si alguien lo editó, su hash no casa y se
+# deja intacto. One-shot por SENTINELA. El contenido viejo es recuperable (git del store). El sha256 es
+# del CUERPO (sin frontmatter), tal como lo devuelve `_leer(...).cuerpo` (con `strip("\n")`).
+_REFORMATO_PROMPTS_V1: tuple[tuple[str, str], ...] = (
+    ("prompt/clasificar-marca", "4cfd577a327cecb8425167d9c0fce9b036768851f8f5b81afeec60316b31202b"),
+    ("prompt/fusionar-verificar", "363f9f50a4d3290e0d934b2523ffafbfa0f4113eb7306e5a83e072f3cb687686"),
+    ("prompt/fusionar", "b62024530cc5b7fe5028f39523e19e063f2b5bab688acdf397495fcc980b670d"),
+    ("prompt/hashtags", "e7753ea75a397d2ce171e1cbb953ea14155f78a2897ee4746d515fcc02496474"),
+    ("prompt/importar/calendario", "4754721ac3c55d0e776fc50fdf96fb49c596e6add74972c138aab895cb041fd6"),
+    ("prompt/importar/parrilla", "62cb69f7c486ccb423675a6731da9d31a1437267c26d45af0548b1617731b9f8"),
+    ("prompt/priorizar", "ce8e944d3db9ac6bebe899fe8db44e162f300dd7d547229e3f9dc9b12eb60e1d"),
+    ("prompt/recibir/contexto", "715f4c8198a75a4c56f6335534c170400fa546781ea61e53a18f7360920ac968"),
+    ("prompt/recibir/corresponsales", "8ef5ac1f125634b84a4bf1ed27b67cfe589cc27459737d50881fd031ef122c7c"),
+    ("prompt/recibir/eventos-claro", "8f789eb9342a7a3c4582cd906744210c87fe6be98fe53cf9dac1d9c09eefb26e"),
+    ("prompt/recibir/notas", "615bd88267d639d10a2047164fd0acfbea674cc25eb344fe36e765b92f7420dc"),
+    ("prompt/recibir/portal", "ede0388ee3150481f9d9949fe00ac381215ea89147f5eed7178a1693f3363d6f"),
+    ("prompt/recibir/reporteros", "69f5e1271809e789e07c2183d336c594f5494389b1df2c1e840875fe8f5fb202"),
+    ("prompt/traducir", "7f1a14bef37042b33b90500c40d943113f3c173e0ef860710dd4587f3a3965f2"),
+)
+_SENTINELA_REFORMATO = ".reformato-prompts-v1"
 
 
 def dir_inicial() -> Path:
@@ -371,4 +399,80 @@ def limpiar_prompts_obsoletos() -> int:
             n += 1
     sentinela.parent.mkdir(parents=True, exist_ok=True)
     escribir_atomico(sentinela, "ok\n")
+    return n
+
+
+def reformatear_prompts(origen: Path | None = None) -> int:
+    """Propaga al store el REFORMATO de los prompts del sistema (ONE-SHOT por sentinela).
+
+    Reescribe cada prompt de `_REFORMATO_PROMPTS_V1` con su versión de la INICIAL nueva (frontmatter
+    + cuerpo reformateado) SOLO si el cuerpo ACTUAL del store casa EXACTO con el cuerpo VIEJO conocido
+    (sha256): así un prompt que el equipo haya editado NO se pisa (su hash no casa y se deja intacto).
+    Idempotente por sentinela: tras correr no vuelve a tocar el store. Devuelve cuántos reescribió.
+
+    Pensado para el DEPLOY (junto a las demás migraciones de `inicializar`), ANTES de `publicar_linea_base`,
+    para que la versión que se publica como "first commit" sea ya la reformateada.
+    """
+    base = origen or dir_inicial()
+    if not base.is_dir():
+        return 0
+    destino_raiz = raiz()
+    sentinela = destino_raiz / _SENTINELA_REFORMATO
+    if sentinela.exists():
+        return 0
+    n = 0
+    for doc_id, sha_viejo in _REFORMATO_PROMPTS_V1:
+        destino = destino_raiz.joinpath(*f"{doc_id}.md".split("/"))
+        if not destino.is_file():
+            continue
+        actual = _leer(destino)
+        if actual is None:
+            continue
+        if hashlib.sha256(actual.cuerpo.encode("utf-8")).hexdigest() != sha_viejo:
+            continue  # editado por el equipo: respetar
+        ruta_inicial = base.joinpath(*f"{doc_id}.md".split("/"))
+        try:
+            texto = ruta_inicial.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        escribir_atomico(destino, texto)
+        n += 1
+    sentinela.parent.mkdir(parents=True, exist_ok=True)
+    escribir_atomico(sentinela, "ok\n")
+    return n
+
+
+def publicar_linea_base(*, nota: str = "first commit") -> int:
+    """Publica una VERSIÓN inicial ("first commit") de cada doc activo que aún no tenga puntero.
+
+    El rediseño de la Biblioteca introdujo el modelo de PUBLICACIÓN (puntero de producción en
+    `texto_publicaciones`). Un store poblado ANTES de ese modelo tiene todos sus documentos SIN
+    puntero, así que la UI los muestra "sin publicar". Esto fija, para cada documento del store con
+    cuerpo no vacío y sin puntero, una versión inmutable (comiteando el working copy con `fijar_version`)
+    y crea su puntero de producción con `nota`. La papelera queda fuera (la excluye `listar`).
+
+    Idempotente: salta los documentos que YA tienen puntero (no re-publica). Best-effort: necesita BD
+    (`db.crear_texto_publicacion`) y versionado git; si cualquiera falla para un doc, se salta ese doc
+    sin abortar el resto (p. ej. arranque sin Postgres -> devuelve 0 sin romper). Devuelve cuántos
+    documentos publicó por primera vez.
+    """
+    from .. import db
+    from ._crud import listar
+    from ._publicacion import produccion_de
+    from ._versiones import fijar_version
+
+    n = 0
+    for doc in listar():
+        if not doc.cuerpo.strip():
+            continue
+        try:
+            if produccion_de(doc.id) is not None:
+                continue  # ya publicado: no re-publicar
+            sha = fijar_version(doc.id, nota=nota)
+            if not sha:
+                continue  # versionado apagado / sin repo
+            db.crear_texto_publicacion(doc_id=doc.id, sha=sha, autor="", nota=nota)
+            n += 1
+        except Exception:  # noqa: BLE001 -- best-effort: un doc no publicable no aborta el resto
+            continue
     return n

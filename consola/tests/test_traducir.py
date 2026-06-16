@@ -30,9 +30,9 @@ def _ejecutor_ok(prompt: str, dir_permitido: str) -> str:
     # Extrae el JSON de ítems del prompt para construir una respuesta coherente.
     import re
 
-    # Aísla la lista REAL de ítems (va tras "Lista de ítems:"); el prompt también
+    # Aísla la lista REAL de ítems (va tras "## Lista de ítems"); el prompt también
     # contiene un ejemplo con corchetes en las instrucciones que confundía al regex.
-    cola = prompt.partition("Lista de ítems:")[2] or prompt
+    cola = prompt.partition("## Lista de ítems")[2] or prompt
     m = re.search(r"\[.*\]", cola, re.DOTALL)
     if not m:
         return json.dumps({"traducciones": []})
@@ -63,9 +63,9 @@ def _ejecutor_respuesta_parcial(prompt: str, dir_permitido: str) -> str:
     """Solo devuelve traducción para el primer ítem."""
     import re
 
-    # Aísla la lista REAL de ítems (va tras "Lista de ítems:"); el prompt también
+    # Aísla la lista REAL de ítems (va tras "## Lista de ítems"); el prompt también
     # contiene un ejemplo con corchetes en las instrucciones que confundía al regex.
-    cola = prompt.partition("Lista de ítems:")[2] or prompt
+    cola = prompt.partition("## Lista de ítems")[2] or prompt
     m = re.search(r"\[.*\]", cola, re.DOTALL)
     if not m:
         return json.dumps({"traducciones": []})
