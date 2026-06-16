@@ -70,11 +70,9 @@ def verificar_publicacion_inmutable(
         if cambia:
             congelados.append(clave)
     if congelados:
-        raise PiezaPublicadaInmutable(
-            "Una pieza ya publicada es inmutable; no se puede cambiar "
-            + ", ".join(sorted(congelados))
-            + " (lo publicado no puede diferir de lo que salió)."
-        )
+        # Mensaje MÍNIMO de cara al usuario: con "Ya publicada" basta (el detalle de qué campo
+        # se congeló no aporta nada accionable; lo que salió a redes no se edita).
+        raise PiezaPublicadaInmutable("Ya publicada.")
 
 
 def conectar() -> Any:

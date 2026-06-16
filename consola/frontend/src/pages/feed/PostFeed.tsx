@@ -386,17 +386,15 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
     toast(motivoBloqueo);
   };
 
-  // Abre el editor. Si la pieza ya tiene aprobaciones, AVISA primero: editarla las pierde (vuelve a
-  // borrador y habrá que aprobarla de nuevo). Igual que reescribir un PR ya aprobado. En piezas
-  // YA PUBLICADAS el aviso es otro: lo que salió a la red no cambia desde aquí.
+  // Abre el editor. Una pieza YA PUBLICADA es inmutable: el editor abre en SOLO LECTURA (no hay
+  // nada que perder ni que confirmar), así que se abre directo. Si aún no salió pero ya tiene
+  // aprobaciones, AVISA primero: editarla las pierde (vuelve a borrador y habrá que aprobarla de
+  // nuevo). Igual que reescribir un PR ya aprobado.
   const abrirEditor = async () => {
-    if (tieneAprobaciones) {
+    if (tieneAprobaciones && etapa !== "publicada") {
       const ok = await confirmar({
         titulo: "Se perderán las aprobaciones",
-        mensaje:
-          etapa === "publicada"
-            ? "Esta pieza ya salió a la red. Editarla aquí solo cambia la copia interna y la devuelve a borrador. ¿Continuar?"
-            : "Volverá a borrador y necesitará nuevas aprobaciones. ¿Continuar?",
+        mensaje: "Volverá a borrador y necesitará nuevas aprobaciones. ¿Continuar?",
         textoConfirmar: "Editar de todas formas",
         textoCancelar: "Dejar como está",
       });

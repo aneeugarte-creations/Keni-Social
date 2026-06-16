@@ -26,6 +26,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { api, mensajeError } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { parsearCarrusel, serializarCarrusel, type SlideCarrusel } from "@/lib/carrusel";
 import { capasFotoDoc, type FotoCollage } from "@/lib/placa/docPieza";
 import {
@@ -243,6 +244,10 @@ export function DialogoEditar({
   }, [publicacion]);
 
   const limite = publicacion ? metaRed(publicacion.red).limite : null;
+  // Pieza ya `publicado`: SOLO LECTURA. Lo que salió a redes no puede diferir de lo mostrado, así
+  // que el back la congela (409). En vez de dejar editar y fallar, el editor abre inerte: no se
+  // autoguarda nada y los controles quedan deshabilitados (no hay PATCH que rechazar).
+  const publicada = publicacion?.estado === "publicado";
 
   // Persiste la pieza. NO cierra el diálogo: lo comparten el autoguardado y el cierre.
   const persistir = React.useCallback(async () => {
@@ -298,8 +303,9 @@ export function DialogoEditar({
     }
   }, [publicacion, fotos, copyIn, placaOculta, plantillaId, imagen, contenido, documentoSel, formato, slides]);
 
-  // Solo se autoguarda cuando hay contenido (el copy del post). Sin título: ya no lo exige.
-  const datosValidos = !!publicacion && contenido.trim().length > 0;
+  // Solo se autoguarda cuando hay contenido (el copy del post) y la pieza NO está publicada
+  // (publicada = inmutable: nada que persistir). Sin título: ya no lo exige.
+  const datosValidos = !!publicacion && contenido.trim().length > 0 && !publicada;
 
   // Autoguardado: persiste sin cerrar; coalesciona los cambios ocurridos durante un guardado en curso.
   const autoguardar = React.useCallback(async () => {
@@ -376,10 +382,23 @@ export function DialogoEditar({
               className="self-start"
             />
           )}
+          {/* Pieza ya publicada: aviso de SOLO LECTURA. Lo que salió a redes no se edita; el
+              editor abre para verla, con todos los controles inertes. */}
+          {publicada && (
+            <p className="self-start rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+              Ya publicada · solo lectura
+            </p>
+          )}
         </DialogHeader>
 
-        {/* Orden de edición: primero la IMAGEN/VIDEO, luego el CONTENIDO (copy) y al final los HASHTAGS. */}
-        <div className="space-y-4">
+        {/* Orden de edición: primero la IMAGEN/VIDEO, luego el CONTENIDO (copy) y al final los HASHTAGS.
+            Publicada = inerte: `pointer-events-none` neutraliza todos los controles (galería de
+            plantillas, formato, espejo, subir foto…) sin tener que cablear `disabled` en cada hijo;
+            el autoguardado ya está cortado aguas arriba, así que nada puede persistir. */}
+        <div
+          className={cn("space-y-4", publicada && "pointer-events-none opacity-70")}
+          aria-disabled={publicada || undefined}
+        >
           {/* Formato de la pieza (foto/video/carrusel): selector segmentado. */}
           {publicacion && (
             <div className="flex flex-wrap items-center gap-3">
@@ -530,6 +549,7 @@ export function DialogoEditar({
               id="editar-contenido"
               value={contenido}
               onChange={(e) => setContenido(e.target.value)}
+              readOnly={publicada}
               maxHeight={420}
               className="min-h-[10rem] font-mono text-sm"
             />

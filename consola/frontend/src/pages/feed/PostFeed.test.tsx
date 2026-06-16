@@ -531,14 +531,16 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     expect(screen.queryByRole("link", { name: /Programación/ })).not.toBeInTheDocument();
   });
 
-  it("editar una pieza PUBLICADA avisa con el mensaje específico (ya salió a la red)", async () => {
+  it("una pieza PUBLICADA abre el editor en SOLO LECTURA, sin confirmación previa", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response("{}", { status: 200 })),
     );
     renderPost(pub({ estado: "publicado", etapa_ia: "publicada" }));
     fireEvent.click(screen.getByRole("button", { name: /abrir para editar/i }));
-    expect(await screen.findByText(/ya salió a la red/i)).toBeInTheDocument();
+    // Inmutable: no hay diálogo de confirmación; el editor abre directo con el aviso de solo lectura.
+    expect(await screen.findByText(/solo lectura/i)).toBeInTheDocument();
+    expect(screen.queryByText(/se perderán las aprobaciones/i)).not.toBeInTheDocument();
   });
 
   it("el metadato del último OK trunca (no desborda la celda con nombres largos)", () => {

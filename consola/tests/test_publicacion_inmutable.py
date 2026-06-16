@@ -21,10 +21,12 @@ def _publicada(entorno, **campos) -> dict:
 
 
 def test_publicada_no_admite_cambio_de_plantilla(entorno):
-    """El caso del usuario: cambiar la plantilla de una pieza ya publicada se rechaza."""
+    """El caso del usuario: cambiar la plantilla de una pieza ya publicada se rechaza, con el
+    mensaje MÍNIMO ("Ya publicada"), sin enumerar el campo congelado."""
     pub = _publicada(entorno)
-    with pytest.raises(PiezaPublicadaInmutable):
+    with pytest.raises(PiezaPublicadaInmutable) as exc:
         repos.actualizar_publicacion(pub["id"], {"plantilla_diseno_id": "pl-otra"})
+    assert str(exc.value) == "Ya publicada."
 
 
 def test_publicada_no_admite_cambio_de_copy_ni_imagen(entorno):
