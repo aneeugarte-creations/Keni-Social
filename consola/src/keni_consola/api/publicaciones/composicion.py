@@ -126,6 +126,84 @@ async def aplicar_plantilla(request: Request) -> Response:
     return JSONResponse({"publicacion": _publicacion_a_dict(actualizada)})
 
 
+async def componer_slide(request: Request) -> Response:
+    """HORNEA la placa de UN slide del carrusel y devuelve su media id (igual que el generador).
+
+    `POST /api/publicaciones/{id}/componer-slide {foto?, titular?, plantilla_id?, foto_encuadre?}`:
+    compone la plantilla (la `plantilla_id` indicada, o la EFECTIVA de la marca) con la foto +
+    titular + reencuadre y guarda el PNG en la carpeta protegida `artes/` (los slides viven en el
+    campo `carrusel`, fuera del catálogo regenerable; el GC no la borra). Devuelve `{id, url}` para
+    que el SPA fije ese media como `objeto` del slide y guarde su PROCEDENCIA (foto+titular+
+    plantilla+encuadre) en el carrusel, de modo que el slide se pueda re-editar como placa.
+
+    A diferencia de `aplicar-plantilla` (que toca los campos de la PORTADA), esto NO persiste nada
+    en la pieza: solo produce el media del slide; el SPA lo guarda dentro del JSON `carrusel`.
+    Marca sin plantilla: cae a la foto cruda promovida a `artes/`. Sin foto NI plantilla -> 400.
+    -> `{id, url}` | 400 | 404 | 422.
+    """
+    from ... import almacen_media, media
+    from ...dominio import estudio_imagen, render_pieza
+
+    publicacion_id = request.path_params["publicacion_id"]
+    pub = repos.obtener_publicacion(publicacion_id)
+    if pub is None:
+        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+
+    datos = await leer_json(request)
+    foto = datos.get("foto")
+    foto = foto.strip() if isinstance(foto, str) else ""
+    titular_req = datos.get("titular")
+    titular = titular_req.strip() if isinstance(titular_req, str) else ""
+    if not foto and not titular:
+        return JSONResponse({"error": "El slide necesita una foto o un titular."}, status_code=400)
+
+    # Plantilla: la indicada explícitamente, o la EFECTIVA de la marca (la misma de la portada).
+    # `sin_plantilla` (como el "quitar plantilla" de la portada): el slide es la foto cruda.
+    sin_plantilla = bool(datos.get("sin_plantilla"))
+    plantilla_id = datos.get("plantilla_id")
+    plantilla_id = plantilla_id.strip() if isinstance(plantilla_id, str) else ""
+    plantilla: dict | None = None
+    if not sin_plantilla:
+        if plantilla_id:
+            plantilla = repos.obtener_plantilla_diseno(plantilla_id)
+            if plantilla is None:
+                return JSONResponse({"error": "Esa plantilla ya no existe."}, status_code=404)
+        else:
+            try:
+                plantilla = render_pieza._plantilla_efectiva({"marca": pub.get("marca") or ""})
+            except Exception:  # noqa: BLE001 -- sin plantilla legible: tratamos como marca sin placa
+                plantilla = None
+
+    enc_req = datos.get("foto_encuadre")
+    foto_encuadre = enc_req if isinstance(enc_req, str) else ""
+    foco, zoom = estudio_imagen.parsear_encuadre(foto_encuadre)
+
+    if plantilla is not None:
+        try:
+            bytes_png = await run_in_threadpool(
+                estudio_imagen.componer_desde_plantilla_bytes,
+                plantilla.get("documento") or "{}",
+                copy_in=titular,
+                foto=foto,
+                foco=foco,
+                zoom=zoom,
+            )
+            media_id = await run_in_threadpool(
+                media.guardar_bytes_contenido, bytes_png, ext="png", categoria="artes"
+            )
+        except estudio_imagen.EstudioError as e:
+            return JSONResponse({"error": str(e)}, status_code=422)
+    elif foto:
+        # Marca sin plantilla de estudio: el slide es la foto cruda, protegida en `artes/`.
+        media_id = await run_in_threadpool(almacen_media.promover_objeto, foto, "artes")
+    else:
+        return JSONResponse(
+            {"error": "La marca no tiene plantilla y el slide no trae foto."}, status_code=400
+        )
+
+    return JSONResponse({"id": media_id, "url": f"/api/media/{media_id}"})
+
+
 async def compuesta(request: Request) -> Response:
     """Sirve la imagen COMPUESTA de la pieza, renderizada ON-DEMAND y EFÍMERA (sin persistir).
 

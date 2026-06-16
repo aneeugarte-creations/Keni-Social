@@ -86,15 +86,16 @@ def _mock_componer_slide(monkeypatch, *, falla=()):
     """Parchea el seam de composición de slides (el real corre el renderer Node).
 
     Devuelve la lista de llamadas `(marca, titular, foto)`. Los titulares en `falla`
-    devuelven "" (slide incomponible).
+    devuelven un slide incomponible (`objeto=""`). El seam devuelve `{"objeto", "foto"}`:
+    `foto` espeja la foto fuente recibida (la procedencia que el slide persiste).
     """
     llamadas = []
 
     def fake(marca, titular, foto):
         llamadas.append((marca, titular, foto))
         if titular in falla:
-            return ""
-        return f"artes/slide-{len(llamadas)}.png"
+            return {"objeto": "", "foto": ""}
+        return {"objeto": f"artes/slide-{len(llamadas)}.png", "foto": foto or ""}
 
     monkeypatch.setattr(dom_copy, "_COMPONER_SLIDE", fake)
     return llamadas
@@ -140,6 +141,12 @@ def test_slides_carrusel_arman_pieza_carrusel_nidada(entorno, monkeypatch):
         assert [s["objeto"] for s in slides] == ["artes/slide-1.png", "artes/slide-2.png"]
         assert all(s["tipo"] == "imagen" for s in slides)
         assert str(creada.get("imagen") or "").startswith("artes/")
+        # PROCEDENCIA persistida por slide (para re-editar la placa): titular siempre; foto fuente
+        # solo si la sub-historia la traía (el slide A tenía foto; el B era placa de solo texto).
+        assert slides[0]["titular"] == "Concierto A"
+        assert slides[0]["foto"]  # foto fuente del slide A
+        assert slides[1]["titular"] == "Concierto B"
+        assert "foto" not in slides[1]  # sin foto fuente -> no se persiste el campo
 
 
 def test_carrusel_degrada_a_post_si_ningun_slide_compone(entorno, monkeypatch):

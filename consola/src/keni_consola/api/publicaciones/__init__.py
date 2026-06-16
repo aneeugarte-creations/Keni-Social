@@ -29,7 +29,7 @@ from ._comun import (
     _pierde_aprobaciones,
     _publicacion_a_dict,
 )
-from .composicion import aplicar_plantilla, compuesta, integrar_foto
+from .composicion import aplicar_plantilla, componer_slide, compuesta, integrar_foto
 from .crud import (
     _ESTADO_NOMBRE,
     _MARCAS,
@@ -84,6 +84,7 @@ __all__ = [
     # Composición
     "integrar_foto",
     "aplicar_plantilla",
+    "componer_slide",
     "compuesta",
     # Espejo
     "_propagar_espejo",
@@ -124,6 +125,7 @@ RUTAS = [
     Route("/api/publicaciones/{publicacion_id}/metricool", programar_metricool, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}/integrar-foto", integrar_foto, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}/aplicar-plantilla", aplicar_plantilla, methods=["POST"]),
+    Route("/api/publicaciones/{publicacion_id}/componer-slide", componer_slide, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}", detalle, methods=["GET"]),
     Route("/api/publicaciones/{publicacion_id}", actualizar, methods=["PUT"]),
     Route("/api/publicaciones/{publicacion_id}", borrar, methods=["DELETE"]),

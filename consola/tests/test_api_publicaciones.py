@@ -400,6 +400,54 @@ def test_aplicar_plantilla_persiste_receta_no_hornea(cliente, monkeypatch):
     assert pub["imagen_url"].split("?")[0] == f"/api/publicaciones/{pid}/compuesta"
 
 
+def test_componer_slide_hornea_y_devuelve_media(cliente, monkeypatch):
+    """componer-slide compone la placa del slide y devuelve su media id en `artes/` SIN tocar la
+    pieza (la procedencia la guarda el SPA dentro del JSON `carrusel`)."""
+    from keni_consola import media, repos
+    from keni_consola.dominio import estudio_imagen
+
+    monkeypatch.setattr(estudio_imagen, "componer_desde_plantilla_bytes", lambda *a, **k: b"png")
+    monkeypatch.setattr(
+        media, "guardar_bytes_contenido", lambda datos, ext="png", categoria="render": "artes/x.png"
+    )
+    plantilla = repos.crear_plantilla_diseno(
+        marca="unotv", nombre="P", categoria="post", documento="{}", miniatura="",
+    )
+    pid = _crear(cliente, marca="unotv").json()["publicacion"]["id"]
+    r = cliente.post(
+        f"/api/publicaciones/{pid}/componer-slide",
+        json={"plantilla_id": plantilla["id"], "foto": "f.jpg", "titular": "Clave 2"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json() == {"id": "artes/x.png", "url": "/api/media/artes/x.png"}
+    # NO toca la pieza: sigue sin imagen horneada propia.
+    assert cliente.get(f"/api/publicaciones/{pid}").json()["publicacion"]["imagen"] == ""
+
+
+def test_componer_slide_marca_sin_plantilla_promueve_foto(cliente, monkeypatch):
+    """Marca sin plantilla de estudio: el slide es la foto cruda, protegida en `artes/`."""
+    from keni_consola import almacen_media
+    from keni_consola.dominio import render_pieza
+
+    monkeypatch.setattr(render_pieza, "_plantilla_efectiva", lambda pub: None)
+    monkeypatch.setattr(almacen_media, "promover_objeto", lambda clave, cat: f"{cat}/{clave}")
+    pid = _crear(cliente, marca="piso-15").json()["publicacion"]["id"]
+    r = cliente.post(f"/api/publicaciones/{pid}/componer-slide", json={"foto": "cruda.jpg"})
+    assert r.status_code == 200, r.text
+    assert r.json()["id"] == "artes/cruda.jpg"
+
+
+def test_componer_slide_sin_foto_ni_titular_400(cliente):
+    pid = _crear(cliente).json()["publicacion"]["id"]
+    r = cliente.post(f"/api/publicaciones/{pid}/componer-slide", json={})
+    assert r.status_code == 400
+
+
+def test_componer_slide_404(cliente):
+    r = cliente.post("/api/publicaciones/noexiste/componer-slide", json={"titular": "x"})
+    assert r.status_code == 404
+
+
 def test_actualizar_estado_invalido_400(cliente):
     pid = _crear(cliente).json()["publicacion"]["id"]
     r = cliente.put(f"/api/publicaciones/{pid}", json={"estado": "archivado"})

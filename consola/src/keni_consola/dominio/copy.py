@@ -283,24 +283,30 @@ def _descargar_original_a_biblioteca(
     return objeto
 
 
-def _componer_slide_real(marca: str, titular: str, foto_url: str) -> str:
-    """HORNEA la placa de UN slide del carrusel editorial; devuelve su key de media ("" si falla).
+def _componer_slide_real(marca: str, titular: str, foto_url: str) -> dict[str, str]:
+    """HORNEA la placa de UN slide del carrusel editorial.
+
+    Devuelve `{"objeto": <media horneado o "">, "foto": <media de la foto fuente o "">}`. El
+    `objeto` es el PNG publicable; `foto` es la foto de fondo descargada a media — se persiste como
+    PROCEDENCIA del slide para poder RE-EDITARLO luego como placa (cambiar plantilla/titular/foto y
+    re-hornear). `objeto==""` => el slide no compuso y se omite.
 
     Compone la plantilla de estudio EFECTIVA de la marca (la MISMA del editor/portada) con el
     `titular` del slide como texto-en-imagen y, si la sub-historia traía foto propia, esa foto
     de fondo. El PNG va CONTENT-ADDRESSED a la carpeta protegida `artes` (el GC no la borra:
     los slides viven en el campo `carrusel` de la pieza, fuera del catálogo regenerable).
     Sin plantilla de estudio (marca sin placa), cae a la foto cruda promovida a `artes` (mismo
-    criterio que la portada sin receta); sin foto NI plantilla, "" (el slide se omite).
+    criterio que la portada sin receta); sin foto NI plantilla, vacío (el slide se omite).
     NUNCA lanza: el carrusel es un extra del copy, no debe romper el post-procesado.
     """
+    vacio = {"objeto": "", "foto": ""}
     if not (titular or "").strip() and not (foto_url or "").strip():
-        return ""
+        return vacio
     from .. import almacen_media, media
     from . import estudio_imagen, render_pieza
 
-    # Foto de la sub-historia (si la trae): se baja a media; el PNG horneado la lleva dentro,
-    # así que no hace falta catalogarla ni protegerla por separado.
+    # Foto de la sub-historia (si la trae): se baja a media. El PNG horneado la lleva dentro, pero
+    # además la guardamos como procedencia (`foto`) para poder recomponer el slide al re-editarlo.
     foto_key = ""
     if (foto_url or "").strip():
         try:
@@ -320,17 +326,20 @@ def _componer_slide_real(marca: str, titular: str, foto_url: str) -> str:
                 copy_in=(titular or "").strip(),
                 foto=foto_key,
             )
-            return media.guardar_bytes_contenido(datos, ext="png", categoria="artes")
+            return {
+                "objeto": media.guardar_bytes_contenido(datos, ext="png", categoria="artes"),
+                "foto": foto_key,
+            }
         except Exception:  # noqa: BLE001 -- render best-effort: este slide se omite
             _log.warning("copy: no se pudo componer el slide «%s»", (titular or "")[:60], exc_info=True)
-            return ""
+            return vacio
     # Marca sin plantilla de estudio: el slide solo vale si la sub-historia traía foto.
     if foto_key:
         try:
-            return almacen_media.promover_objeto(foto_key, "artes")
+            return {"objeto": almacen_media.promover_objeto(foto_key, "artes"), "foto": foto_key}
         except Exception:  # noqa: BLE001 -- sin promoción, mejor omitir que arriesgar el GC
-            return ""
-    return ""
+            return vacio
+    return vacio
 
 
 # Seam INYECTABLE (los tests lo parchean): la composición real corre el renderer Node.
@@ -408,19 +417,28 @@ def crear_publicaciones_desde_piezas(
     # En AMBOS el formato manda las redes (carrusel -> IG/FB; la pieza de X del copy unificado se omite).
     carrusel_json = ""
     if slides_carrusel and contenido_id:
-        objetos = [
-            obj
-            for s in slides_carrusel
-            if (obj := _COMPONER_SLIDE(
-                marca, str(s.get("titular") or ""), str(s.get("foto") or "")
-            ))
-        ]
-        if objetos:
+        slides_horneados: list[dict[str, str]] = []
+        for s in slides_carrusel:
+            titular = str(s.get("titular") or "")
+            res = _COMPONER_SLIDE(marca, titular, str(s.get("foto") or ""))
+            # Tolera un seam viejo que devolviera solo el media id (str).
+            objeto = res.get("objeto", "") if isinstance(res, dict) else (res or "")
+            if not objeto:
+                continue
+            slide: dict[str, str] = {"tipo": "imagen", "objeto": objeto}
+            # PROCEDENCIA del slide: con titular y/o foto fuente el editor puede re-componer su placa
+            # (cambiar plantilla/titular/foto). La plantilla NO se guarda: "" = la efectiva de la
+            # marca (la misma con la que se horneó), igual que la portada.
+            foto_fuente = res.get("foto", "") if isinstance(res, dict) else ""
+            if titular:
+                slide["titular"] = titular
+            if foto_fuente:
+                slide["foto"] = foto_fuente
+            slides_horneados.append(slide)
+        if slides_horneados:
             import json
 
-            carrusel_json = json.dumps(
-                [{"tipo": "imagen", "objeto": o} for o in objetos], ensure_ascii=False
-            )
+            carrusel_json = json.dumps(slides_horneados, ensure_ascii=False)
         else:
             _log.warning(
                 "copy: carrusel sin slides componibles; queda como sugerencia de formato — tema %s",

@@ -9,6 +9,7 @@ import { confirmar } from "@/components/comunes/confirmar";
 import { ContadorCaracteres } from "@/components/editor/ContadorCaracteres";
 import { HerramientasHashtags } from "@/components/hashtags/HerramientasHashtags";
 import { EditorCarrusel } from "@/components/media/EditorCarrusel";
+import { DialogoEditarSlide } from "@/components/media/DialogoEditarSlide";
 import { EditorImagen } from "@/components/media/EditorImagen";
 import { EditorPlacaInline } from "@/components/media/EditorPlacaInline";
 import { EditorVideo } from "@/components/media/EditorVideo";
@@ -77,8 +78,10 @@ export function DialogoEditar({
   const [formato, setFormato] = React.useState("foto");
   const [videoKey, setVideoKey] = React.useState("");
   const [videoUrl, setVideoUrl] = React.useState("");
-  // CARRUSEL: slides EXTRA en crudo detrás de la portada (la portada es la placa de arriba).
+  // CARRUSEL: slides EXTRA detrás de la portada (la portada es la placa de arriba).
   const [slides, setSlides] = React.useState<SlideCarrusel[]>([]);
+  // Índice del slide cuya PLACA se está editando en el diálogo aparte (null = ninguno).
+  const [slideEditando, setSlideEditando] = React.useState<number | null>(null);
   // --- Autoguardado --- //
   // La pieza se guarda SOLA al editar (debounced); no hay botón ni indicador de guardado.
   const cargandoRef = React.useRef(true); // true mientras se cargan los valores al abrir (no autoguarda)
@@ -518,6 +521,9 @@ export function DialogoEditar({
               slides={slides}
               onCambio={setSlides}
               idPrefijo="editar"
+              // "Editar placa": solo si la pieza tiene marca (hay plantillas). Abre el editor de
+              // placa del slide aparte; el slide guarda su procedencia para recomponerse.
+              onEditarPlaca={publicacion.marca ? (i) => setSlideEditando(i) : undefined}
               onPortada={(i) => {
                 // SWAP portada <-> slide: la imagen del slide pasa al hueco 0 de la placa
                 // (sin reencuadre: se reencuadra en el editor de arriba) y la foto que era
@@ -581,6 +587,25 @@ export function DialogoEditar({
             onCargar={(p) => elegirPlantilla(p.id)}
             onCerrar={() => setGaleriaPlantillas(false)}
             tipoFijo={tipoPlantilla}
+          />
+        )}
+
+        {/* Editor de la PLACA de un slide del carrusel (cambiar plantilla/titular/foto y
+            re-hornear). Al guardar fija el nuevo media + procedencia en ese slot. */}
+        {publicacion?.marca && slideEditando !== null && slides[slideEditando] && (
+          <DialogoEditarSlide
+            slide={slides[slideEditando]}
+            indice={slideEditando + 2}
+            marca={publicacion.marca}
+            publicacionId={publicacion.id}
+            plantillas={plantillas}
+            copy={contenido}
+            onCerrar={() => setSlideEditando(null)}
+            onGuardado={(actualizado) => {
+              setSlides((prev) =>
+                prev.map((s, k) => (k === slideEditando ? actualizado : s)),
+              );
+            }}
           />
         )}
       </DialogContent>

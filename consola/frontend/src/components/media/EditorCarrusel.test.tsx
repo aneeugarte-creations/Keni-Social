@@ -48,6 +48,38 @@ describe("EditorCarrusel · acciones por slide", () => {
     expect(screen.getByRole("menuitem", { name: "Subir" })).toBeDisabled();
   });
 
+  it("'Editar placa' solo aparece (con onEditarPlaca) en slides de imagen CON procedencia", () => {
+    const onEditarPlaca = vi.fn();
+    render(
+      <EditorCarrusel
+        slides={[
+          { tipo: "imagen", objeto: "artes/a.png", titular: "Clave" }, // con procedencia
+          { tipo: "imagen", objeto: "artes/b.png" }, // crudo: no editable como placa
+        ]}
+        onCambio={vi.fn()}
+        onEditarPlaca={onEditarPlaca}
+      />,
+    );
+    // Slide 0 (con titular): ofrece "Editar placa" y dispara el callback con su índice.
+    abrirMenu(0);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Editar placa" }));
+    expect(onEditarPlaca).toHaveBeenCalledWith(0);
+    // Slide 1 (crudo): NO ofrece "Editar placa".
+    abrirMenu(1);
+    expect(screen.queryByRole("menuitem", { name: "Editar placa" })).toBeNull();
+  });
+
+  it("sin onEditarPlaca no se ofrece 'Editar placa' aunque haya procedencia", () => {
+    render(
+      <EditorCarrusel
+        slides={[{ tipo: "imagen", objeto: "artes/a.png", titular: "Clave" }]}
+        onCambio={vi.fn()}
+      />,
+    );
+    abrirMenu(0);
+    expect(screen.queryByRole("menuitem", { name: "Editar placa" })).toBeNull();
+  });
+
   it("'Bajar' reordena: onCambio recibe la lista con los dos slides intercambiados", () => {
     const { onCambio } = renderEditor();
     abrirMenu(0);

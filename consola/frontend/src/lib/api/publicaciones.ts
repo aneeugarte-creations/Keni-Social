@@ -77,6 +77,25 @@ export const apiPublicaciones = {
       metodo: "POST",
       json: { plantilla_id: plantillaId, ...extra },
     }),
+  /**
+   * Hornea la PLACA de UN slide del carrusel (foto+titular+plantilla) y devuelve su media
+   * `{id, url}`. No toca la pieza: el SPA fija ese media como `objeto` del slide y guarda su
+   * procedencia en el JSON `carrusel`. `plantilla_id` ausente = la plantilla EFECTIVA de la marca.
+   */
+  componerSlide: (
+    id: string,
+    datos: {
+      foto?: string;
+      titular?: string;
+      plantilla_id?: string;
+      foto_encuadre?: string;
+      sin_plantilla?: boolean;
+    },
+  ) =>
+    peticion<{ id: string; url: string }>(
+      `/publicaciones/${encodeURIComponent(id)}/componer-slide`,
+      { metodo: "POST", json: datos, timeoutMs: 120_000 },
+    ),
 
   // --- Aprobación de PUBLICACIONES (#9): cola de revisión + decisión + programación ---
   // Programar NO es aprobación (es programación) y NO publica de verdad: el posteo real
