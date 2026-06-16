@@ -219,8 +219,11 @@ export function PantallaLogin() {
   return (
     <div className="flex min-h-dvh w-full items-center justify-center bg-white px-6">
       <div className="w-full max-w-sm">
-        <h1 className="mb-14 pl-[0.3em] text-center text-2xl font-light uppercase tracking-[0.3em] text-neutral-900">
-          KENI
+        <h1 className="mb-14 text-center text-2xl font-light uppercase text-neutral-900">
+          {/* El `tracking` añade espacio TRAS la última letra; con `text-center` eso descentra
+              el wordmark. Lo aislamos en un inline-block y anulamos ese sobrante con un margen
+              derecho negativo igual al tracking → KENI queda centrado EXACTO sobre el formulario. */}
+          <span className="inline-block tracking-[0.3em] [margin-right:-0.3em]">KENI</span>
         </h1>
         <form className="space-y-9" onSubmit={alEnviar} noValidate>
           <div className="space-y-3">
