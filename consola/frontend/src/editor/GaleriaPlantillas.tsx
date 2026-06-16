@@ -60,21 +60,6 @@ function agruparPlantillasPorMarca(plantillas: PlantillaDiseno[]): PlantillaDise
   );
 }
 
-/** Badge de tipo: pequeña etiqueta en el pie de la tarjeta, junto al nombre. */
-function BadgeTipo({ tipo }: { tipo: "foto" | "miniatura" }) {
-  return tipo === "miniatura" ? (
-    <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-violet-100 px-1 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
-      <Video className="h-2.5 w-2.5" />
-      Miniatura
-    </span>
-  ) : (
-    <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-sky-100 px-1 py-0.5 text-[10px] font-medium text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
-      <Image className="h-2.5 w-2.5" />
-      Foto
-    </span>
-  );
-}
-
 interface PropsContenido {
   plantillas: PlantillaDiseno[];
   onCargar: (p: PlantillaDiseno) => void;
@@ -325,11 +310,11 @@ export function ContenidoPlantillas({
               )}
             </div>
           </button>
-          {/* Pie: tipo + categoría (chips) + título, FUERA de la miniatura para no taparla. En
-              gestión la categoría abre el mini-editor (cambiar etiqueta y renombrar). Clic en el
-              título renombra inline; la miniatura de arriba abre la plantilla. */}
+          {/* Pie: categoría (chip) + título, FUERA de la miniatura para no taparla. El tipo NO se
+              repite por tarjeta: ya lo dice la pestaña Fotos/Miniaturas (la rejilla es siempre de un
+              solo tipo). En gestión la categoría abre el mini-editor (cambiar etiqueta y renombrar);
+              clic en el título renombra inline; la miniatura de arriba abre la plantilla. */}
           <div className="flex items-center gap-1 px-1.5 py-1">
-            <BadgeTipo tipo={p.tipo ?? "foto"} />
             <BadgeCategoria
               categoria={p.categoria}
               onCambiar={onCategorizar ? (slug) => onCategorizar(p, slug) : undefined}

@@ -97,25 +97,13 @@ describe("GaleriaPlantillas — filtro de tipo", () => {
     expect(screen.queryByTitle(`Cargar «${FOTO.nombre}»`)).not.toBeInTheDocument();
   });
 
-  it("muestra la etiqueta de tipo 'Foto' junto al nombre, fuera de la miniatura", () => {
+  it("NO repite la etiqueta de tipo por tarjeta (la pestaña ya dice Fotos/Miniaturas)", () => {
     render(
       <GaleriaPlantillas plantillas={[FOTO]} onCargar={vi.fn()} onCerrar={vi.fn()} />,
     );
-    expect(screen.getByText("Foto")).toBeInTheDocument();
-  });
-
-  it("muestra la etiqueta de tipo 'Miniatura' junto al nombre (con tipoFijo)", () => {
-    render(
-      <GaleriaPlantillas
-        plantillas={[MINIATURA]}
-        onCargar={vi.fn()}
-        onCerrar={vi.fn()}
-        tipoFijo="miniatura"
-      />,
-    );
-    expect(screen.getByText("Miniatura")).toBeInTheDocument();
-    // El selector de tipo NO aparece (tipoFijo lo oculta)
-    expect(screen.queryByText("Fotos")).not.toBeInTheDocument();
+    // La pestaña «Fotos» del filtro está; el chip «Foto» por tarjeta sería redundante y se quitó.
+    expect(screen.getByText("Fotos")).toBeInTheDocument();
+    expect(screen.queryByText("Foto")).not.toBeInTheDocument();
   });
 
   it("tipoFijo='miniatura' filtra directamente y oculta el selector", () => {
