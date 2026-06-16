@@ -380,20 +380,6 @@ export function DetalleDocumento({
           </Button>
         )}
         <Button
-          size="icon"
-          variant="ghost"
-          className="h-8 w-8"
-          aria-label={panelAbierto ? "Colapsar panel lateral" : "Abrir panel lateral"}
-          title={panelAbierto ? "Colapsar panel" : "Abrir panel"}
-          onClick={() => setPanelAbierto((v) => !v)}
-        >
-          {panelAbierto ? (
-            <PanelLeftClose className="h-4 w-4" />
-          ) : (
-            <PanelLeftOpen className="h-4 w-4" />
-          )}
-        </Button>
-        <Button
           ref={botonMenuRef}
           size="icon"
           variant="ghost"
@@ -467,21 +453,38 @@ export function DetalleDocumento({
       <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
         {panelAbierto ? (
           <aside className="flex w-full shrink-0 flex-col gap-2 lg:w-96">
-            <Tabs value={pestana} onValueChange={(v) => setPestana(v as PestanaPanel)}>
-              <TabsList className={`grid h-auto w-full gap-1 p-1 ${pipelineBase ? "grid-cols-3" : "grid-cols-2"}`}>
-                <TabsTrigger value="versiones" className="text-xs">
-                  Versiones
-                </TabsTrigger>
-                <TabsTrigger value="acerca" className="text-xs">
-                  Acerca de
-                </TabsTrigger>
-                {pipelineBase ? (
-                  <TabsTrigger value="compilado" className="text-xs">
-                    Compilado
+            <div className="flex items-center gap-1">
+              <Tabs
+                value={pestana}
+                onValueChange={(v) => setPestana(v as PestanaPanel)}
+                className="min-w-0 flex-1"
+              >
+                <TabsList className={`grid h-auto w-full gap-1 p-1 ${pipelineBase ? "grid-cols-3" : "grid-cols-2"}`}>
+                  <TabsTrigger value="versiones" className="text-xs">
+                    Versiones
                   </TabsTrigger>
-                ) : null}
-              </TabsList>
-            </Tabs>
+                  <TabsTrigger value="acerca" className="text-xs">
+                    Acerca de
+                  </TabsTrigger>
+                  {pipelineBase ? (
+                    <TabsTrigger value="compilado" className="text-xs">
+                      Compilado
+                    </TabsTrigger>
+                  ) : null}
+                </TabsList>
+              </Tabs>
+              {/* Colapsar va A LA PAR de las pestañas que oculta. */}
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 shrink-0"
+                aria-label="Colapsar panel lateral"
+                title="Colapsar panel"
+                onClick={() => setPanelAbierto(false)}
+              >
+                <PanelLeftClose className="h-4 w-4" />
+              </Button>
+            </div>
             <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border bg-muted/20 p-3">
               {pestana === "versiones" ? (
                 <PanelVersiones
@@ -508,7 +511,19 @@ export function DetalleDocumento({
               )}
             </div>
           </aside>
-        ) : null}
+        ) : (
+          // Panel colapsado: botón pequeño para reabrirlo (el editor ocupa el resto del ancho).
+          <Button
+            size="icon"
+            variant="outline"
+            className="h-8 w-8 shrink-0 self-start"
+            aria-label="Abrir panel lateral"
+            title="Abrir panel"
+            onClick={() => setPanelAbierto(true)}
+          >
+            <PanelLeftOpen className="h-4 w-4" />
+          </Button>
+        )}
 
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-md border border-border p-3">
           <EditorWysiwyg
