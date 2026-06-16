@@ -188,7 +188,8 @@ export const FASES_IMPORTACION: readonly FasePipeline[] = [
 
 /**
  * HERRAMIENTAS — prompts independientes que NO son una etapa de la máquina: la ideación evergreen,
- * la crítica IA, los hashtags y los envoltorios del copy. Mismo diseño; abren su prompt.
+ * la crítica IA, los hashtags, los envoltorios del copy y el asistente de copy (resumir/variantes,
+ * que dispara el agente vía la tool MCP `keni_generar_copy`). Mismo diseño; abren su prompt.
  */
 export const FASES_HERRAMIENTAS: readonly FasePipeline[] = [
   { nombre: "Idear", es_ia: true, claves: [], ayuda: "Propone ideas de contenido evergreen para la marca", doc: "prompt/idear" },
@@ -197,6 +198,8 @@ export const FASES_HERRAMIENTAS: readonly FasePipeline[] = [
   { nombre: "Redes", es_ia: true, claves: [], ayuda: "Envoltorio: una pieza por red", doc: "prompt/envoltorios/redes" },
   { nombre: "Unificado", es_ia: true, claves: [], ayuda: "Envoltorio: el mismo copy para todas las redes", doc: "prompt/envoltorios/copy-unico" },
   { nombre: "Carrusel", es_ia: true, claves: [], ayuda: "Envoltorio: decisión de carrusel", doc: "prompt/envoltorios/carrusel" },
+  { nombre: "Resumir", es_ia: true, claves: [], ayuda: "Asistente de copy IA (modo resumir) · vía agente/MCP", doc: "prompt/asistente/resumir" },
+  { nombre: "Variantes", es_ia: true, claves: [], ayuda: "Asistente de copy IA (modo variantes) · vía agente/MCP", doc: "prompt/asistente/variantes" },
 ];
 
 /** Las herramientas no tienen colas de daemon: el mapa va vacío (sin conteos por fila). */
