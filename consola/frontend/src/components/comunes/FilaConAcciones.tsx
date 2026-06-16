@@ -42,6 +42,12 @@ interface FilaConAccionesProps {
   className?: string;
   /** Clase aplicada a la celda/contenedor del kebab. */
   claseKebab?: string;
+  /**
+   * Clase aplicada al PROPIO botón del kebab (se fusiona con su estilo base). Para sobreescribir
+   * el color del icono cuando el kebab flota sobre fondos oscuros (ej. galería sobre la foto):
+   * el default `text-muted-foreground` desaparece sobre la imagen. Ej.: `text-white hover:text-white`.
+   */
+  claseBotonKebab?: string;
   /** Etiqueta accesible del botón kebab. */
   etiquetaKebab?: string;
   children: React.ReactNode;
@@ -66,6 +72,7 @@ export function FilaConAcciones({
   realce = false,
   className,
   claseKebab,
+  claseBotonKebab,
   etiquetaKebab = "Más acciones",
   children,
 }: FilaConAccionesProps) {
@@ -199,6 +206,7 @@ export function FilaConAcciones({
           accionUnica.destructivo
             ? "hover:bg-destructive/10 hover:text-destructive focus-visible:bg-destructive/10"
             : "hover:bg-accent hover:text-foreground focus-visible:bg-accent",
+          claseBotonKebab,
         )}
       >
         <Icono className="h-4 w-4" />
@@ -216,7 +224,11 @@ export function FilaConAcciones({
           e.stopPropagation();
           menu.abrirEn(e, kebabRef.current);
         }}
-        className={cn(claseControl, "hover:bg-accent hover:text-foreground focus-visible:bg-accent")}
+        className={cn(
+          claseControl,
+          "hover:bg-accent hover:text-foreground focus-visible:bg-accent",
+          claseBotonKebab,
+        )}
       >
         <MoreVertical className="h-4 w-4" />
       </button>

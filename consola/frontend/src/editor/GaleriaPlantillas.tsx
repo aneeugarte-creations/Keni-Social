@@ -282,6 +282,10 @@ export function ContenidoPlantillas({
           // Kebab «⋮» visible al hover (modo gestión): «Foto de muestra…», Duplicar, Borrar. En
           // modo SELECTOR no hay acciones, así que no aparece. Touch: long-press abre el mismo menú.
           kebab="hover"
+          // Flota sobre la miniatura (foto): el gris `text-muted-foreground` por defecto se pierde
+          // sobre imágenes oscuras. Blanco + sombra para que se vea sobre cualquier foto (clara u
+          // oscura); al hover del botón, velo oscuro en vez del fondo claro del tema.
+          claseBotonKebab="text-white hover:bg-black/30 hover:text-white focus-visible:bg-black/30 drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)]"
           realce
           onPrimaria={() => onCargar(p)}
           acciones={accionesMenuContextual}
