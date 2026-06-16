@@ -1,4 +1,4 @@
-import { Fingerprint, KeyRound, Loader2, LogIn, ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, Fingerprint, KeyRound, Loader2, LogIn, ShieldCheck } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ export function PantallaLogin() {
   const { iniciarSesion, verificarConPasskey, verificarConCodigo } = useSesion();
   const [usuario, setUsuario] = React.useState("");
   const [password, setPassword] = React.useState("");
+  const [verPassword, setVerPassword] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [enviando, setEnviando] = React.useState(false);
   // Paso 2 (MFA): cuando el backend pide segundo factor, mostramos la ceremonia de passkey en
@@ -217,54 +218,66 @@ export function PantallaLogin() {
 
   return (
     <div className="flex min-h-dvh w-full items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader className="space-y-1.5 text-center">
-          <CardTitle className="text-xl">KENI</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form className="space-y-4" onSubmit={alEnviar} noValidate>
-            <div className="space-y-1.5">
-              <Label htmlFor="login-usuario">Usuario</Label>
-              <Input
-                id="login-usuario"
-                name="username"
-                autoComplete="username"
-                autoFocus
-                value={usuario}
-                onChange={(e) => setUsuario(e.target.value)}
-                disabled={enviando}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="login-password">Contraseña</Label>
+      <div className="w-full max-w-sm">
+        <h1 className="mb-10 text-center text-6xl font-black tracking-tight text-foreground">
+          KENI
+        </h1>
+        <form className="space-y-4" onSubmit={alEnviar} noValidate>
+          <div className="space-y-1.5">
+            <Label htmlFor="login-usuario">Usuario</Label>
+            <Input
+              id="login-usuario"
+              name="username"
+              autoComplete="username"
+              autoFocus
+              value={usuario}
+              onChange={(e) => setUsuario(e.target.value)}
+              disabled={enviando}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="login-password">Contraseña</Label>
+            <div className="relative">
               <Input
                 id="login-password"
                 name="password"
-                type="password"
+                type={verPassword ? "text" : "password"}
                 autoComplete="current-password"
+                className="pr-10"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={enviando}
               />
+              <button
+                type="button"
+                tabIndex={-1}
+                onClick={() => setVerPassword((v) => !v)}
+                disabled={enviando}
+                aria-pressed={verPassword}
+                aria-label={verPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {verPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
             </div>
+          </div>
 
-            {error && (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
-              </p>
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
+
+          <Button type="submit" className="w-full" disabled={!puedeEnviar}>
+            {enviando ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <LogIn className="h-4 w-4" />
             )}
-
-            <Button type="submit" className="w-full" disabled={!puedeEnviar}>
-              {enviando ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <LogIn className="h-4 w-4" />
-              )}
-              Entrar
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+            Entrar
+          </Button>
+        </form>
+      </div>
     </div>
   );
 }
