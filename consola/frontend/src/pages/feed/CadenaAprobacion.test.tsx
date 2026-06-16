@@ -53,10 +53,10 @@ describe("CadenaAprobacion · panel de estado (solo lectura)", () => {
   });
 
   it("NO pinta el revision de IA (menos IA de cara al equipo): ni 'IA: …' ni el nivel verificación", () => {
-    // La cadena trae el nivel automático «verificación Editorial» aprobado; NO debe pintarse como badge.
+    // La cadena trae el nivel automático «revision» (revisión IA) aprobado; NO debe pintarse como badge.
     const c = cadenaOK({
       niveles: [
-        nivel({ id: "verificación", nivel: 0, etiqueta: "verificación Editorial", decision: "aprobado" }),
+        nivel({ id: "revision", nivel: 0, etiqueta: "revision", decision: "aprobado" }),
         nivel({ id: "n1", nivel: 1, etiqueta: "Edición", decision: "aprobado", decisor_id: "ana", decisor_nombre: "Ana" }),
         nivel({ id: "n2", nivel: 2, etiqueta: "Coordinación" }),
       ],
