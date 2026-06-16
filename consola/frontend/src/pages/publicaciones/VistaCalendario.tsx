@@ -556,11 +556,20 @@ function VistaMes({
   const celdas = celdasDelMes(ancla);
   const mesActual = ancla.getMonth();
   return (
-    // MÓVIL: 7 columnas no caben en 360-430px (celdas de ~50px, ilegibles). La cuadrícula
-    // conserva un ancho mínimo legible y scrollea en horizontal dentro de su contenedor;
-    // el `main` global clampa el eje X, así que el swipe queda acotado al calendario.
-    <div className="overflow-x-auto rounded-md border border-border">
-    <div className="grid min-w-[560px] grid-cols-7 gap-px bg-border">
+    // El mes entero CABE en pantalla sin scroll vertical: la rejilla se acota al alto del
+    // viewport (`calc(100dvh - …)`, idiom de la casa — cf. Turnos/parrilla) y las 6 semanas
+    // reparten ese alto con filas `minmax(0,1fr)`, en vez de celdas fijas de 5.5rem que se
+    // salían por abajo. `minHeight` es el suelo para pantallas cortas (ahí sí cede a scroll).
+    // MÓVIL: 7 columnas no caben en 360-430px; la cuadrícula conserva un ancho mínimo legible
+    // y scrollea en HORIZONTAL dentro de su contenedor (el `main` global clampa el eje X).
+    <div
+      className="overflow-x-auto rounded-md border border-border"
+      style={{ height: "calc(100dvh - 20rem)", minHeight: "22rem" }}
+    >
+    <div
+      className="grid h-full min-w-[560px] grid-cols-7 gap-px bg-border"
+      style={{ gridTemplateRows: "auto repeat(6, minmax(0, 1fr))" }}
+    >
       {DIAS_SEMANA.map((d) => (
         <div
           key={d}
@@ -583,7 +592,7 @@ function VistaMes({
             key={clave}
             onClick={() => onAbrirDia(dia)}
             className={cn(
-              "min-h-[5.5rem] space-y-1 bg-card p-1.5 text-left transition-colors hover:bg-accent/30",
+              "min-h-0 space-y-1 overflow-hidden bg-card p-1.5 text-left transition-colors hover:bg-accent/30",
               delMes && finde && "bg-amber-50/40 dark:bg-amber-950/10",
               !delMes && "bg-muted/30 text-muted-foreground",
             )}
