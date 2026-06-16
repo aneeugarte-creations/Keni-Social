@@ -275,7 +275,8 @@ def _plantilla() -> str:
 
 
 def _prompt_tareas(
-    *, ruta_doc: str | None, texto_documento: str | None, hoy: str | None
+    *, ruta_doc: str | None, texto_documento: str | None, hoy: str | None,
+    permitir_web: bool = False,
 ) -> str:
     """Prompt AUTOCONTENIDO (en código, sin plantilla editable) para el modo `tareas`: extrae
     ENCARGOS sueltos del equipo (`clase='tarea'`), no eventos. Reusa la misma lógica de FUENTE
@@ -283,7 +284,12 @@ def _prompt_tareas(
 
     Va por código (no por la Biblioteca como el de eventos) porque es nuevo y simple: así el
     camino de eventos —con su plantilla editable y tuneada— queda intacto.
-    """
+
+    `permitir_web=True` (FRASE escrita a mano en la pestaña Tarea): la frase NOMBRA un evento del
+    mundo real (sin fecha en el propio texto), igual que en eventos. Se pide IDENTIFICARLO y
+    DATARLO con la web (WebSearch/WebFetch) y volcar esa fecha en `fecha_objetivo`, en vez de
+    tratar el texto como un encargo cerrado. Misma identificación que el modo eventos; lo único
+    que cambia es la FORMA de salida (`crear_tarea` con `fecha_objetivo`, no `crear_evento`)."""
     ancla_hoy = (
         f"Hoy es {hoy} (zona horaria de Ciudad de México); resuelve cualquier fecha relativa o "
         "sin año respecto a hoy. "
@@ -309,7 +315,22 @@ def _prompt_tareas(
         "fechas: si no hay deadline explícito, OMITE `fecha_objetivo`. Devuelve "
         '`{"operaciones": []}` ÚNICAMENTE si no hay ninguna tarea.'
     )
-    if texto_documento is not None:
+    if texto_documento is not None and permitir_web:
+        # FRASE escrita a mano: NOMBRA un evento real. Identificarlo y datarlo con la web; la
+        # fecha resuelta va en `fecha_objetivo` para que la tarea quede fechada (igual que en
+        # eventos), no descartada por «no traer deadline».
+        fuente = (
+            f"{ancla_hoy}Lo que viene MÁS ABAJO es una FRASE o BÚSQUEDA escrita a mano que NOMBRA "
+            "un evento del mundo real (un combate, un concierto, un partido, un estreno, una "
+            "gala…), normalmente SIN su fecha. USA la búsqueda web (WebSearch) para IDENTIFICARLO "
+            "y AVERIGUAR su fecha exacta, hora, recinto/ciudad y de qué trata; si hace falta, abre "
+            "una fuente con WebFetch para confirmar la fecha. Crea UNA `crear_tarea` cuyo `titulo` "
+            "sea el evento, con su fecha real en `fecha_objetivo` (AAAA-MM-DD) y el recinto/ciudad "
+            "en `detalle`. Si el nombre es ambiguo o recurrente, prefiere la edición FUTURA más "
+            "próxima a hoy. Si tras buscar NO encuentras una fecha creíble, omite `fecha_objetivo`."
+        )
+        cola = f"\n\nFRASE A IDENTIFICAR:\n```\n{texto_documento}\n```{recordatorio}"
+    elif texto_documento is not None:
         fuente = (
             f"{ancla_hoy}{encuadre} El texto de la fuente está más abajo (ya transcrito). Trabaja "
             "EXCLUSIVAMENTE con ese texto; NO abras ni leas ningún fichero ni uses herramientas."
@@ -369,7 +390,8 @@ def componer_prompt(
     """
     if modo == "tareas":
         return _prompt_tareas(
-            ruta_doc=ruta_doc, texto_documento=texto_documento, hoy=hoy
+            ruta_doc=ruta_doc, texto_documento=texto_documento, hoy=hoy,
+            permitir_web=permitir_web,
         )
     lineas_miembros = "\n".join(
         f'  - id="{mid}" nombre="{nombre}"' for mid, nombre in ctx.miembros.items()
@@ -545,9 +567,10 @@ def lanzar_desde_texto(
 
     `permitir_web=True` (lo pasa el camino de FRASE escrita a mano, NO el de enlace ya extraído):
     el texto es el NOMBRE de un evento, no una transcripción; se habilita la web para que el
-    modelo lo IDENTIFIQUE y DATE online. Solo aplica al modo `eventos` (una tarea no se busca).
+    modelo lo IDENTIFIQUE y DATE online. Aplica a AMBOS modos (`eventos` y `tareas`): una frase
+    en la pestaña Tarea nombra el mismo evento real, solo cambia la forma de salida.
     """
-    web = permitir_web and modo == "eventos"
+    web = permitir_web
     ctx = construir_contexto_prompt(nombres_miembros=nombres_miembros)
     procesar_spec = jobspec.construir_parrilla_import(propuesta_id=propuesta_id)
     procesar = jobspec.reconstruir_procesar({"procesar": procesar_spec})

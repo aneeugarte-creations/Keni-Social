@@ -184,6 +184,30 @@ def test_prompt_modo_tareas_pide_crear_tarea_no_eventos():
     assert "editar clip" in p  # el texto fuente queda embebido
 
 
+def test_prompt_modo_tareas_con_web_identifica_el_evento_pero_emite_crear_tarea():
+    # FRASE escrita a mano en la pestaña Tarea (`permitir_web=True`): identifica el evento real con
+    # la web (igual que eventos) pero la salida sigue siendo `crear_tarea` con `fecha_objetivo`.
+    p = pij.componer_prompt(
+        ctx=_ctx(), texto_documento="la velada del año vi", modo="tareas", permitir_web=True
+    )
+    assert "crear_tarea" in p                  # forma de salida: tarea, no evento
+    assert "crear_evento" not in p
+    assert "WebSearch" in p                     # identifica/data el evento online
+    assert "fecha_objetivo" in p                # la fecha real va en el deadline de la tarea
+    assert "la velada del año vi" in p
+    # No arrastra el corte de transcripción cerrada que impedía buscar.
+    assert "NO abras ni leas ningún fichero ni uses herramientas" not in p
+
+
+def test_prompt_modo_tareas_sin_web_sigue_siendo_encargo_cerrado():
+    # Sin `permitir_web` (documento/enlace transcrito): el modo tareas NO menciona la web.
+    p = pij.componer_prompt(
+        ctx=_ctx(), texto_documento="editar clip, subir fotos", modo="tareas"
+    )
+    assert "WebSearch" not in p
+    assert "NO abras ni leas ningún fichero ni uses herramientas" in p
+
+
 # --------------------------------------------------------------------------- #
 # crear_turno                                                                 #
 # --------------------------------------------------------------------------- #
