@@ -40,6 +40,46 @@ async def pipelines_listar(request: Request) -> Response:
     return JSONResponse({"pipelines": items})
 
 
+# Prompt -> pipeline del registro cuyo conjunto editorial INYECTA ese prompt. Espejo en código de
+# qué etapa de generación es cada prompt (la atribución real vive en los call sites de `dominio/`);
+# se mantiene aquí, junto al preview, porque la pestaña «Contexto» del editor la consume. Un prompt
+# que no aparece NO inyecta contexto editorial (envoltorios, asistente, recibir/importar, traducir,
+# fusionar, clasificar, hashtags, ilustrar): la pestaña muestra estado vacío.
+_PIPELINE_EDITORIAL_POR_PROMPT: dict[str, str] = {
+    "prompt/redactar": "redactar",
+    "prompt/verificar": "verificar",
+    "prompt/idear": "idear",
+    "prompt/priorizar": "priorizar",
+    "prompt/critica": "redactar",  # la crítica de pieza usa el mismo conjunto que redactar (adjuntos_copy)
+}
+
+
+async def contexto_inyectado(request: Request) -> Response:
+    """`GET /api/prompts/{doc_id}/contexto?marca=` -> los editoriales que ese prompt INYECTA.
+
+    "Lo que inyectas es lo que ves", per-prompt: la inyección editorial es por marca+pipeline, así que
+    la pestaña pide una marca (la UI ofrece selector). Reutiliza el MISMO compositor que la generación
+    real (`previsualizar_pipeline`). Forma: `{prompt_id, inyecta, pipeline, marca, adjuntos}`, donde
+    `adjuntos` es `[{id, titulo, clase, prioridad}]` en orden de ensamblaje. Si el prompt no inyecta
+    contexto (`inyecta=false`), `adjuntos` va vacío.
+    """
+    doc_id = request.path_params["doc_id"]
+    marca = request.query_params.get("marca") or ""
+    pipeline = _PIPELINE_EDITORIAL_POR_PROMPT.get(doc_id)
+    if pipeline is None:
+        return JSONResponse(
+            {"prompt_id": doc_id, "inyecta": False, "pipeline": None, "marca": marca, "adjuntos": []}
+        )
+    prev = libprompts.previsualizar_pipeline(pipeline, marca)
+    return JSONResponse({
+        "prompt_id": doc_id,
+        "inyecta": True,
+        "pipeline": pipeline,
+        "marca": marca,
+        "adjuntos": prev["adjuntos"],
+    })
+
+
 async def pipeline_preview(request: Request) -> Response:
     """`GET /api/prompts/pipelines/{pid}/preview?marca=&contexto=` -> prompt ENSAMBLADO.
 

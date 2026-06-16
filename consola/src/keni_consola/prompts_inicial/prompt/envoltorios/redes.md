@@ -1,5 +1,5 @@
 ---
-titulo: "Envoltorio: piezas por red"
+titulo: "Redes"
 descripcion: "Instrucción aditiva del copy POR RED (Texto manual y flujos que piden una pieza por red): limita las redes pedidas, ancla sus límites técnicos y fija el bloque json de piezas. El código rellena {{ETIQUETAS}}, {{LIMITES}} e {{IDS_JSON}} desde el catálogo de redes y sus límites."
 tipo: prompt
 carpeta: "envoltorios"

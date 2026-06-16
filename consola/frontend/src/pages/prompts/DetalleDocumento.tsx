@@ -26,6 +26,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { PanelAcerca } from "@/components/prompts/PanelAcerca";
+import { PanelContextoInyectado } from "@/components/prompts/PanelContextoInyectado";
 import { DialogPublicar } from "@/components/prompts/DialogPublicar";
 import { LectorProsa } from "@/components/prompts/LectorProsa";
 import { PanelVersiones } from "@/components/prompts/PanelVersiones";
@@ -362,6 +363,10 @@ export function DetalleDocumento({
       /* almacenamiento no disponible: el estado vive solo en memoria */
     }
   }, [panelAbierto]);
+  // Pestaña del panel lateral (solo prompts, solo con el panel expandido): «Versiones» (historial) o
+  // «Contexto» (los editoriales que el prompt inyecta). Al cambiar de doc se vuelve a Versiones.
+  const [pestanaPanel, setPestanaPanel] = React.useState<"versiones" | "contexto">("versiones");
+  React.useEffect(() => setPestanaPanel("versiones"), [docId]);
 
   if (docQuery.isPending || !borrador) {
     return (
@@ -545,27 +550,54 @@ export function DetalleDocumento({
               !ocultarCabecera && "min-h-0 flex-1 overflow-y-auto",
             )}
           >
-            <PanelVersiones
-              docId={borrador.id}
-              produccionSha={produccion?.sha ?? null}
-              sinPublicar={sinPublicar}
-              esAdmin={esAdmin}
-              colapsado={!panelAbierto}
-              onPublicar={() => setPublicarAbierto(true)}
-              onVerVersion={setPreviewSha}
-              versionActiva={previewSha}
-              onBorradorActualizado={() => {
-                // Vuelve a editar el borrador (cierra cualquier preview de versión).
-                setPreviewSha(null);
-                // Fuerza la RE-SINCRONIZACIÓN del borrador con el cuerpo cargado.
-                sincronizado.current = null;
-                qc.invalidateQueries({ queryKey: ["prompts-doc", docId] });
-                qc.invalidateQueries({ queryKey: ["prompts-maquina"] });
-                if (borrador.tipo !== "prompt") {
-                  qc.invalidateQueries({ queryKey: claveEstrategiaBase });
-                }
-              }}
-            />
+            {/* Pestañas Versiones | Contexto: solo en prompts y solo con el panel expandido (colapsado
+                es un raíl de iconos, sin sitio para pestañas). El editorial no inyecta nada. */}
+            {panelAbierto && esPrompt ? (
+              <div role="tablist" aria-label="Panel lateral" className="mb-2 flex items-center gap-1">
+                {(["versiones", "contexto"] as const).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    role="tab"
+                    aria-selected={pestanaPanel === p}
+                    onClick={() => setPestanaPanel(p)}
+                    className={cn(
+                      "rounded-md px-2 py-1 text-xs font-semibold uppercase tracking-wide transition-colors",
+                      pestanaPanel === p
+                        ? "bg-accent text-foreground"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {p === "versiones" ? "Versiones" : "Contexto"}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            {panelAbierto && esPrompt && pestanaPanel === "contexto" ? (
+              <PanelContextoInyectado docId={borrador.id} />
+            ) : (
+              <PanelVersiones
+                docId={borrador.id}
+                produccionSha={produccion?.sha ?? null}
+                sinPublicar={sinPublicar}
+                esAdmin={esAdmin}
+                colapsado={!panelAbierto}
+                onPublicar={() => setPublicarAbierto(true)}
+                onVerVersion={setPreviewSha}
+                versionActiva={previewSha}
+                onBorradorActualizado={() => {
+                  // Vuelve a editar el borrador (cierra cualquier preview de versión).
+                  setPreviewSha(null);
+                  // Fuerza la RE-SINCRONIZACIÓN del borrador con el cuerpo cargado.
+                  sincronizado.current = null;
+                  qc.invalidateQueries({ queryKey: ["prompts-doc", docId] });
+                  qc.invalidateQueries({ queryKey: ["prompts-maquina"] });
+                  if (borrador.tipo !== "prompt") {
+                    qc.invalidateQueries({ queryKey: claveEstrategiaBase });
+                  }
+                }}
+              />
+            )}
           </div>
           {/* Un solo toggle al PIE: `‹` colapsa (no oculta, deja el raíl); `›` expande. */}
           <Button

@@ -1,5 +1,5 @@
 ---
-titulo: "Recibir: notas y links (Claro Sports)"
+titulo: "Notas"
 descripcion: "Parsea un volcado heterogéneo de WhatsApp (notas, links, tweets, PDFs) al pool."
 tipo: prompt
 carpeta: "recibir"

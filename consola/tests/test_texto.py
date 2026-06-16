@@ -366,6 +366,60 @@ def test_migrar_descripciones_editorial_corrige_plantillas_y_respeta_ediciones()
     assert libprompts.migrar_descripciones_editorial() == 0  # sentinela: no repite
 
 
+def test_migrar_titulos_prompts_renombra_y_respeta_ediciones():
+    # Los prompts del sistema con el título VIEJO conocido pasan a una palabra; los editados por el
+    # equipo (su título ya no casa) se respetan; el cuerpo no se toca. Idempotente por sentinela.
+    from keni_consola.libprompts._rutas import raiz
+
+    base = raiz() / "prompt"
+    base.mkdir(parents=True, exist_ok=True)
+    (base / "fusionar-verificar.md").write_text(
+        '---\ntitulo: "Fusionar · verificar"\ntipo: prompt\n---\nCUERPO COTEJAR',
+        encoding="utf-8",
+    )
+    (base / "critica.md").write_text(
+        '---\ntitulo: "Mi título propio"\ntipo: prompt\n---\nCUERPO CRITICA',
+        encoding="utf-8",
+    )
+
+    n = libprompts.migrar_titulos_prompts()
+    assert n == 1  # solo el que casa el título viejo
+    renombrado = libprompts.obtener("prompt/fusionar-verificar")
+    assert renombrado is not None and renombrado.titulo == "Cotejar"
+    assert renombrado.cuerpo.strip() == "CUERPO COTEJAR"  # el cuerpo no se toca
+    editado = libprompts.obtener("prompt/critica")
+    assert editado is not None and editado.titulo == "Mi título propio"  # respetado
+    assert libprompts.migrar_titulos_prompts() == 0  # sentinela: no repite
+
+
+def test_migrar_alcance_editorial_propaga_pipelines_y_respeta_ediciones():
+    # El campo `pipelines` de la inicial se propaga al store SOLO si el doc no acota todavía
+    # (pipelines vacío); un doc que el equipo ya acotó se respeta. Idempotente por sentinela.
+    from keni_consola.libprompts._rutas import raiz
+
+    base = raiz() / "editorial" / "rrss" / "unotv"
+    base.mkdir(parents=True, exist_ok=True)
+    # voz sin acotar -> recibe el alcance de la inicial (redactar/idear/priorizar).
+    (base / "voz.md").write_text(
+        '---\ntitulo: "Voz · UnoTV"\ntipo: editorial\nclase: voz\nmarcas: [unotv]\n---\nvoz',
+        encoding="utf-8",
+    )
+    # marca ya acotada por el equipo -> se respeta (no se pisa).
+    (base / "marca.md").write_text(
+        '---\ntitulo: "Marca · UnoTV"\ntipo: editorial\nclase: marca\nmarcas: [unotv]\n'
+        "pipelines: [redactar]\n---\nmarca",
+        encoding="utf-8",
+    )
+
+    n = libprompts.migrar_alcance_editorial()
+    assert n >= 1  # al menos voz se acota (las globales de la inicial no existen en este store)
+    voz = libprompts.obtener("editorial/rrss/unotv/voz")
+    assert voz is not None and "idear" in voz.pipelines and "redactar" in voz.pipelines
+    marca = libprompts.obtener("editorial/rrss/unotv/marca")
+    assert marca is not None and marca.pipelines == ["redactar"]  # respetado
+    assert libprompts.migrar_alcance_editorial() == 0  # sentinela: no repite
+
+
 # --------------------------------------------------------------------------- #
 # Renombre del almacén de documentos: …/prompts -> …/texto (idempotente)    #
 # --------------------------------------------------------------------------- #

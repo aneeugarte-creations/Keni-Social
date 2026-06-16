@@ -4,6 +4,7 @@ descripcion: "Base común de formato; cada marca añade sus excepciones."
 tipo: editorial
 clase: plataforma
 marcas: []
+pipelines: [redactar]
 creado: 2026-05-31T00:00:00+00:00
 actualizado: 2026-06-09T00:00:00+00:00
 ---

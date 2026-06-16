@@ -1,5 +1,5 @@
 ---
-titulo: "Recibir: indicaciones y correcciones (Claro Sports)"
+titulo: "Contexto"
 descripcion: "Parsea indicaciones/correcciones editoriales como guía; NUNCA se publican."
 tipo: prompt
 carpeta: "recibir"

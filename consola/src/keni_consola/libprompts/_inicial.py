@@ -29,7 +29,7 @@ __all__ = [
     "asegurar_linea_base",
     "migrar_nombres_prompts", "limpiar_prompts_obsoletos", "migrar_descripciones_editorial",
     "reformatear_prompts", "publicar_linea_base", "migrar_contrato_salida", "migrar_redactar_v1",
-    "migrar_parrilla_v1",
+    "migrar_parrilla_v1", "migrar_titulos_prompts", "migrar_alcance_editorial",
 ]
 
 _PROMPTS_OBSOLETOS: tuple[str, ...] = (
@@ -152,6 +152,33 @@ _SENTINELA_REFORMATO = ".reformato-prompts-v1"
 _SENTINELA_CONTRATO = ".contrato-salida-v1"
 _SENTINELA_REDACTAR = ".redactar-contrato-v1"
 _SENTINELA_PARRILLA = ".parrilla-contrato-v1"
+
+# TÍTULOS de una palabra agrupados por etapa: los prompts del sistema pasan a un título de UNA
+# palabra (la carpeta da el contexto de etapa: `recibir/Notas`, `importar/Parrilla`, …). El store en
+# vivo ya tiene los títulos VIEJOS; esta migración los renombra IN PLACE solo si el título actual casa
+# EXACTO con el viejo conocido (una edición del equipo deja de casar y se respeta) y RE-PUBLICA el doc
+# para no dejarlo "sin publicar". `(id, titulo_viejo, titulo_nuevo)`. One-shot por sentinela.
+_TITULOS_UNA_PALABRA: tuple[tuple[str, str, str], ...] = (
+    ("prompt/clasificar-marca", "Clasificar marca", "Clasificar"),
+    ("prompt/critica", "Crítica IA (pre-publicación)", "Crítica"),
+    ("prompt/envoltorios/carrusel", "Envoltorio: decisión de carrusel", "Carrusel"),
+    ("prompt/envoltorios/copy-unico", "Envoltorio: copy unificado", "Unificado"),
+    ("prompt/envoltorios/redes", "Envoltorio: piezas por red", "Redes"),
+    ("prompt/envoltorios/sin-emojis", "Envoltorio: sin emojis", "Limpio"),
+    ("prompt/fusionar-verificar", "Fusionar · verificar", "Cotejar"),
+    ("prompt/importar/calendario", "Importar calendario", "Calendario"),
+    ("prompt/importar/parrilla", "Importar parrilla", "Parrilla"),
+    ("prompt/recibir/contexto", "Recibir: indicaciones y correcciones (Claro Sports)", "Contexto"),
+    ("prompt/recibir/corresponsales", "Recibir: corresponsales", "Corresponsales"),
+    ("prompt/recibir/eventos-claro", "Recibir: eventos Claro Sports", "Eventos"),
+    ("prompt/recibir/notas", "Recibir: notas y links (Claro Sports)", "Notas"),
+    ("prompt/recibir/portal", "Recibir: portal/SMS", "Portal"),
+    ("prompt/recibir/reporteros", "Recibir: reporteros", "Reporteros"),
+    ("prompt/asistente/resumir", "Asistente · resumir", "Resumir"),
+    ("prompt/asistente/variantes", "Asistente · variantes", "Variantes"),
+)
+_SENTINELA_TITULOS = ".titulos-prompts-v1"
+_SENTINELA_ALCANCE = ".alcance-editorial-v1"
 
 
 def dir_inicial() -> Path:
@@ -609,6 +636,92 @@ def migrar_parrilla_v1() -> int:
                     nota="parrilla: contrato de salida a código",
                 )
         except Exception:  # noqa: BLE001 -- best-effort: no debe abortar la inicialización
+            pass
+    sentinela.parent.mkdir(parents=True, exist_ok=True)
+    escribir_atomico(sentinela, "ok\n")
+    return n
+
+
+def migrar_titulos_prompts() -> int:
+    """Renombra los prompts del sistema a un título de UNA palabra (ONE-SHOT por sentinela).
+
+    Por cada `(id, viejo, nuevo)` de `_TITULOS_UNA_PALABRA`, si el doc del store conserva el título
+    VIEJO conocido, lo reescribe IN PLACE (solo el `titulo`; el cuerpo intacto) y RE-PUBLICA esa
+    versión para no dejarlo "sin publicar". Si el equipo ya cambió el título, no casa y se respeta.
+    Idempotente; best-effort (la re-publicación necesita BD). Devuelve cuántos renombró.
+    """
+    import dataclasses
+
+    from .. import db
+    from ._versiones import fijar_version
+
+    destino_raiz = raiz()
+    sentinela = destino_raiz / _SENTINELA_TITULOS
+    if sentinela.exists():
+        return 0
+    n = 0
+    for doc_id, viejo, nuevo in _TITULOS_UNA_PALABRA:
+        ruta = destino_raiz.joinpath(*f"{doc_id}.md".split("/"))
+        if not ruta.is_file():
+            continue
+        doc = _leer(ruta)
+        if doc is None or doc.titulo.strip() != viejo:
+            continue  # ausente o editado por el equipo: respetar
+        nuevo_doc = dataclasses.replace(doc, titulo=nuevo, actualizado=_ahora_iso())
+        escribir_atomico(ruta, _serializar(nuevo_doc))
+        n += 1
+        try:  # re-publica el doc con el título nuevo para no dejarlo "sin publicar"
+            sha = fijar_version(doc_id, nota="título de una palabra")
+            if sha:
+                db.crear_texto_publicacion(doc_id=doc_id, sha=sha, autor="", nota="título de una palabra")
+        except Exception:  # noqa: BLE001 -- best-effort: sin BD se queda "sin publicar", no rompe
+            pass
+    sentinela.parent.mkdir(parents=True, exist_ok=True)
+    escribir_atomico(sentinela, "ok\n")
+    return n
+
+
+def migrar_alcance_editorial() -> int:
+    """Acota el auto-adjunto editorial: propaga al store el campo `pipelines` de cada seed editorial.
+
+    Fin del "sobre-prompteo": un editorial sin `pipelines` se inyectaba en TODAS las etapas. La inicial
+    nueva declara, por pilar, en qué pipelines aplica (marca→todas; voz→redactar/idear/priorizar;
+    plataforma/tropicalización→redactar; reglas→redactar/verificar; imagen→redactar). Esta migración
+    copia ese alcance al store SOLO si el doc del store aún no acota (su `pipelines` está vacío): así se
+    respeta cualquier acotación que el equipo ya hubiera puesto, y `patrones` (ya en `[redactar]`) se
+    deja intacto. RE-PUBLICA los que toca. ONE-SHOT por sentinela; best-effort. Devuelve cuántos tocó.
+    """
+    import dataclasses
+
+    from .. import db
+    from ._versiones import fijar_version
+
+    base = dir_inicial()
+    base_editorial = base / "editorial"
+    destino_raiz = raiz()
+    sentinela = destino_raiz / _SENTINELA_ALCANCE
+    if sentinela.exists() or not base_editorial.is_dir():
+        return 0
+    n = 0
+    for ruta_inicial in sorted(base_editorial.rglob("*.md")):
+        rel = ruta_inicial.relative_to(base)
+        seed = obtener_inicial(rel.with_suffix("").as_posix())
+        if seed is None or not seed.pipelines:
+            continue  # la inicial no acota este doc: nada que propagar
+        ruta = destino_raiz.joinpath(*rel.parts)
+        if not ruta.is_file():
+            continue
+        doc = _leer(ruta)
+        if doc is None or doc.pipelines:
+            continue  # ausente o ya acotado por el equipo: respetar
+        nuevo_doc = dataclasses.replace(doc, pipelines=list(seed.pipelines), actualizado=_ahora_iso())
+        escribir_atomico(ruta, _serializar(nuevo_doc))
+        n += 1
+        try:  # re-publica con el alcance nuevo para no dejarlo "sin publicar"
+            sha = fijar_version(doc.id, nota="alcance editorial por pipeline")
+            if sha:
+                db.crear_texto_publicacion(doc_id=doc.id, sha=sha, autor="", nota="alcance editorial por pipeline")
+        except Exception:  # noqa: BLE001 -- best-effort: sin BD se queda "sin publicar", no rompe
             pass
     sentinela.parent.mkdir(parents=True, exist_ok=True)
     escribir_atomico(sentinela, "ok\n")

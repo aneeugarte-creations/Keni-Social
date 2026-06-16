@@ -1,5 +1,5 @@
 ---
-titulo: "Recibir: reporteros"
+titulo: "Reporteros"
 descripcion: "Parsea la agenda de coberturas de reporteros al pool de noticias."
 tipo: prompt
 carpeta: "recibir"

@@ -1,5 +1,5 @@
 ---
-titulo: "Importar calendario"
+titulo: "Calendario"
 descripcion: "Lee un calendario de contenido (.xlsx/CSV) y lo convierte en piezas."
 tipo: prompt
 carpeta: "importacion"

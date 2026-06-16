@@ -4,6 +4,7 @@ descripcion: "Qué cubre y su posicionamiento; referencia del copy."
 tipo: editorial
 clase: marca
 marcas: [unotv]
+pipelines: [redactar, verificar, idear, priorizar]
 creado: 2026-05-31T00:00:00+00:00
 actualizado: 2026-06-09T00:00:00+00:00
 ---

@@ -81,6 +81,17 @@ PIPELINES: dict[str, dict[str, str]] = {
         "prompt_defecto": "prompt/idear",
         "rol": "idear",
     },
+    # `priorizar` (Investigación) deriva el perfil de keywords de una marca desde su línea
+    # editorial. Es pipeline de primera clase para que su inyección se ACOTE (campo `pipelines`)
+    # como las demás —antes tragaba TODO el editorial de la marca— y para que la pestaña «Contexto»
+    # del prompt lo resuelva igual que al resto. `rol=""`: no rebindeable (no es base de un motor de
+    # generación de copy), cae siempre a su `prompt_defecto`.
+    "priorizar": {
+        "titulo": "Priorizar",
+        "descripcion": "Deriva el perfil de keywords de la marca desde su línea editorial.",
+        "prompt_defecto": "prompt/priorizar",
+        "rol": "",
+    },
 }
 
 # Clases editoriales GLOBALES: aplican a TODAS las marcas (no llevan `marcas` propias).

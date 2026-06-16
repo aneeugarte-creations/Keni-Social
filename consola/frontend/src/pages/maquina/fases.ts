@@ -39,6 +39,15 @@ export const FASES_INVESTIGACION: readonly FasePipeline[] = [
     ayuda: "Agrupa las notas parecidas del mismo evento",
   },
   {
+    // Cotejo previo a la fusión: corre por grupo propuesto ANTES de fundir. Seguidora del flag de
+    // Fusionar (solo el maestro en `claves`): no pinta switch propio, su recorrido lo gobierna Fusionar.
+    nombre: "Cotejar",
+    es_ia: true,
+    claves: [MAESTRO_INVESTIGACION],
+    ayuda: "Verifica cada grupo propuesto antes de fundir",
+    doc: "prompt/fusionar-verificar",
+  },
+  {
     nombre: "Fusionar",
     es_ia: true,
     claves: ["KENI_PIPELINE_FUSIONAR", MAESTRO_INVESTIGACION],
@@ -152,6 +161,16 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
       nota: "Apagar «Publicar» en una marca la deja en simulación (sin postear).",
     },
   },
+  {
+    // Taller evergreen: ideación atemporal por marca, al margen del flujo de noticias. Seguidora del
+    // maestro de Producción (sin switch propio); inyecta el contexto editorial de la marca.
+    nombre: "Idear",
+    es_ia: true,
+    claves: [MAESTRO_PRODUCCION],
+    ayuda: "Propone ideas de contenido evergreen para la marca",
+    doc: "prompt/idear",
+    contextoMarca: true,
+  },
 ];
 
 /** Tipo de job → fase con cola (Producción). */
@@ -160,3 +179,37 @@ export const QUEUE_PRODUCCION: Record<string, string> = {
   autogen: "redactar",
   imagen: "ilustrar",
 };
+
+/**
+ * IMPORTACIÓN — las herramientas de material recibido del equipo (recibir/* + importar/*). No son
+ * un flujo de daemon: son prompts que se lanzan a mano sobre lo que llega. Se listan con el MISMO
+ * diseño que Investigación/Producción (filas que abren su prompt); sin switches ni colas.
+ */
+export const FASES_IMPORTACION: readonly FasePipeline[] = [
+  { nombre: "Contexto", es_ia: true, claves: [], ayuda: "Indicaciones y correcciones del equipo", doc: "prompt/recibir/contexto" },
+  { nombre: "Notas", es_ia: true, claves: [], ayuda: "Notas y links de Claro Sports", doc: "prompt/recibir/notas" },
+  { nombre: "Portal", es_ia: true, claves: [], ayuda: "Material recibido por portal/SMS", doc: "prompt/recibir/portal" },
+  { nombre: "Corresponsales", es_ia: true, claves: [], ayuda: "Aportes de corresponsales", doc: "prompt/recibir/corresponsales" },
+  { nombre: "Reporteros", es_ia: true, claves: [], ayuda: "Aportes de reporteros", doc: "prompt/recibir/reporteros" },
+  { nombre: "Eventos", es_ia: true, claves: [], ayuda: "Eventos de Claro Sports", doc: "prompt/recibir/eventos-claro" },
+  { nombre: "Calendario", es_ia: true, claves: [], ayuda: "Importa un calendario de contenido", doc: "prompt/importar/calendario" },
+  { nombre: "Parrilla", es_ia: true, claves: [], ayuda: "Importa una rota/parrilla a eventos", doc: "prompt/importar/parrilla" },
+];
+
+/**
+ * HERRAMIENTAS — prompts independientes que NO son una etapa de la máquina: la crítica IA, los
+ * hashtags, los envoltorios del copy y el asistente del editor. Mismo diseño; abren su prompt.
+ */
+export const FASES_HERRAMIENTAS: readonly FasePipeline[] = [
+  { nombre: "Crítica", es_ia: true, claves: [], ayuda: "Crítica con visión antes de publicar", doc: "prompt/critica" },
+  { nombre: "Hashtags", es_ia: true, claves: [], ayuda: "Sugerencias de hashtags por marca/red", doc: "prompt/hashtags" },
+  { nombre: "Redes", es_ia: true, claves: [], ayuda: "Envoltorio: una pieza por red", doc: "prompt/envoltorios/redes" },
+  { nombre: "Unificado", es_ia: true, claves: [], ayuda: "Envoltorio: el mismo copy para todas las redes", doc: "prompt/envoltorios/copy-unico" },
+  { nombre: "Carrusel", es_ia: true, claves: [], ayuda: "Envoltorio: decisión de carrusel", doc: "prompt/envoltorios/carrusel" },
+  { nombre: "Limpio", es_ia: true, claves: [], ayuda: "Envoltorio: sin emojis", doc: "prompt/envoltorios/sin-emojis" },
+  { nombre: "Resumir", es_ia: true, claves: [], ayuda: "Asistente del editor: resumir texto", doc: "prompt/asistente/resumir" },
+  { nombre: "Variantes", es_ia: true, claves: [], ayuda: "Asistente del editor: generar variantes", doc: "prompt/asistente/variantes" },
+];
+
+/** Las herramientas no tienen colas de daemon: el mapa va vacío (sin conteos por fila). */
+export const QUEUE_VACIA: Record<string, string> = {};

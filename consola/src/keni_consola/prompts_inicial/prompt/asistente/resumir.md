@@ -1,5 +1,5 @@
 ---
-titulo: "Asistente · resumir"
+titulo: "Resumir"
 descripcion: "Instrucción aditiva del modo «resumir» del asistente del tablero: condensa la nota en un copy breve y directo por red. Se anexa al prompt de copy."
 tipo: prompt
 carpeta: "asistente"

@@ -4,6 +4,7 @@ descripcion: "Reglas del texto en imagen (placa) y del arte. Se usa al generar c
 tipo: editorial
 clase: reglas
 marcas: []
+pipelines: [redactar]
 creado: 2026-05-31T00:00:00+00:00
 actualizado: 2026-05-31T00:00:00+00:00
 ---

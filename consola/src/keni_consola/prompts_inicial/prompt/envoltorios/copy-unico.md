@@ -1,5 +1,5 @@
 ---
-titulo: "Envoltorio: copy unificado"
+titulo: "Unificado"
 descripcion: "Esqueleto de la instrucción del copy UNIFICADO del pipeline (un texto + un texto-en-imagen para todas las redes). El código rellena {{MODO_PUBLICACION}}, {{ETIQUETAS}}, {{VERSIONES}} (dos versiones si se mezclan redes amplias y estrechas; una si no) y {{CIERRE_JSON}} (forma exacta del bloque json, con la decisión de carrusel si procede)."
 tipo: prompt
 carpeta: "envoltorios"

@@ -82,6 +82,16 @@ def test_editoriales_filtra_por_pipeline():
     assert "editorial/solo-copy" not in ids_verificacion
 
 
+def test_editoriales_acota_priorizar():
+    # `priorizar` es pipeline de primera clase: un editorial acotado a [redactar] NO entra en
+    # priorizar; uno acotado a [redactar, priorizar] sí. Antes priorizar tragaba TODO (sin filtro).
+    libprompts.crear("Voz", tipo="editorial", clase="voz", marcas=["unotv"], cuerpo="v", pipelines=["redactar", "priorizar"])
+    libprompts.crear("Plataformas", tipo="editorial", clase="plataforma", cuerpo="p", pipelines=["redactar"])
+    ids = {d.id for d in libprompts.editoriales_de_marca("unotv", pipeline="priorizar")}
+    assert "editorial/voz" in ids
+    assert "editorial/plataformas" not in ids
+
+
 def test_editoriales_ordena_por_prioridad():
     libprompts.crear("Reglas A", tipo="editorial", clase="reglas", cuerpo="a", prioridad=10)
     libprompts.crear("Tropi B", tipo="editorial", clase="tropicalizacion", cuerpo="b", prioridad=-5)

@@ -4,6 +4,7 @@ descripcion: "Líneas rojas comunes a todas las marcas."
 tipo: editorial
 clase: reglas
 marcas: []
+pipelines: [redactar, verificar]
 creado: 2026-05-31T00:00:00+00:00
 actualizado: 2026-06-09T00:00:00+00:00
 ---

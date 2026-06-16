@@ -1,5 +1,5 @@
 ---
-titulo: "Importar parrilla"
+titulo: "Parrilla"
 descripcion: "Extrae eventos (y turnos, si los hay) de cualquier fuente para importarlos a la lista."
 tipo: prompt
 carpeta: "importacion"

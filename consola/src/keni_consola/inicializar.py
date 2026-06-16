@@ -51,6 +51,16 @@ def main() -> int:
     pa = libprompts.migrar_parrilla_v1()
     if pa:
         print("Texto: parrilla re-sembrada (contrato de salida a codigo) y publicada.")
+    # Titulos de una palabra agrupados por etapa: renombra los prompts del sistema (in place, solo si
+    # el titulo casa con el viejo conocido) y re-publica. One-shot.
+    tp = libprompts.migrar_titulos_prompts()
+    if tp:
+        print(f"Texto: {tp} prompt(s) renombrados a titulo de una palabra.")
+    # Alcance editorial: propaga el campo `pipelines` de la inicial al store (acota el auto-adjunto a
+    # las etapas donde aplica; fin del sobre-prompteo) y re-publica. One-shot.
+    ae = libprompts.migrar_alcance_editorial()
+    if ae:
+        print(f"Texto: {ae} editorial(es) acotados por pipeline.")
     # Linea base en git: que cada doc inicial tenga HEAD (snapshot estable para los pipelines,
     # no el working copy que reescribe el autosave). Best-effort: 0 si el versionado esta off.
     b = libprompts.asegurar_linea_base()

@@ -1,5 +1,5 @@
 ---
-titulo: "Envoltorio: decisión de carrusel"
+titulo: "Carrusel"
 descripcion: "Bloque que se añade al copy unificado cuando la historia agrupa 2+ notas: el modelo decide entre post y carrusel editorial. El código rellena {{N_NOTAS}}, {{MAX_SLIDES}} y {{CATALOGO_FOTOS}} (catálogo numerado de fotos propias)."
 tipo: prompt
 carpeta: "envoltorios"

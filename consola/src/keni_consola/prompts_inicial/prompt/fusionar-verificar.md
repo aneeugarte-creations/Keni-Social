@@ -1,5 +1,5 @@
 ---
-titulo: "Fusionar · verificar"
+titulo: "Cotejar"
 descripcion: "Comprueba que un grupo de historias agrupadas para fusionar es realmente el mismo evento."
 tipo: prompt
 carpeta: "noticias"

@@ -1,5 +1,5 @@
 ---
-titulo: "Crítica IA (pre-publicación)"
+titulo: "Crítica"
 descripcion: "Crítico editorial con visión que revisa una pieza ya aprobada por el equipo ANTES de programarla: autenticidad del arte, coherencia imagen↔texto, sustancia, rigor y voz de marca. Vota el nivel «Crítica IA» de la cadena."
 tipo: prompt
 carpeta: ""

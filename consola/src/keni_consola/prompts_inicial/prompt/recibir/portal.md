@@ -1,5 +1,5 @@
 ---
-titulo: "Recibir: portal/SMS"
+titulo: "Portal"
 descripcion: "Parsea lo recibido del portal/SMS al pool de noticias."
 tipo: prompt
 carpeta: "recibir"

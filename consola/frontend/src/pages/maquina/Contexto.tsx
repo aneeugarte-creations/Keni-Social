@@ -1,17 +1,17 @@
 /**
  * Contexto (`/maquina/contexto`) — la página ÚNICA de la máquina: el pipeline de cada motor ES la
- * estructura de la página. Dos pestañas, Investigación y Producción; en cada una, las fases en orden
- * de flujo como filas desplegables. De cada fase cuelga TODO lo suyo —su prompt, el contexto editorial
- * que inyecta y sus logs en vivo— y su interruptor on/off. Sustituye a los dos cockpits de pipeline y
- * a la antigua Prompts/Texto: aquí se ve qué SABE y qué HACE cada máquina, en un solo sitio.
+ * estructura de la página. Cuatro pestañas: Investigación y Producción (los motores, con sus fases
+ * desplegables, interruptor on/off y logs en vivo), Importación (las herramientas de material
+ * recibido del equipo) y Herramientas (prompts independientes: crítica, hashtags, envoltorios,
+ * asistente). De cada fase cuelga su prompt y el contexto editorial que inyecta. Sustituye a los dos
+ * cockpits de pipeline y a la antigua página plana «Todos los documentos»: cada prompt se alcanza por
+ * su etapa, y los editoriales por la pestaña «Contexto» del propio prompt.
  *
- * El menú «⋮» trae los ajustes del motor de la pestaña activa (Investigación: ajustes del motor;
- * Producción: máquina de contenido + imagen IA + sistema) y un puente a Agentes (cómputo). Bajo el
- * pipeline, los daemons clase=maquina del motor («Servicios», solo admin).
+ * El menú «⋮» (solo en los motores) trae los ajustes del motor de la pestaña activa y un puente a
+ * Agentes (cómputo). Bajo el pipeline, los daemons clase=maquina del motor («Servicios», solo admin).
  */
 import { useQuery } from "@tanstack/react-query";
-import { FileText, Layers, ListChecks } from "lucide-react";
-import * as React from "react";
+import { Layers, ListChecks } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { AccionesPagina, TituloPagina } from "@/components/layout/encabezado";
@@ -20,7 +20,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api } from "@/lib/api";
 import { INTERVALO_VIVO_MS } from "@/lib/refresco";
-import { PromptsDocumentos } from "@/pages/maquina/PromptsDocumentos";
 import {
   PanelAjustes,
   PanelInvestigacion,
@@ -28,18 +27,22 @@ import {
 } from "@/pages/configuracion/SeccionFuncionalidad";
 import { SeccionImagen } from "@/pages/configuracion/SeccionImagen";
 import {
+  FASES_HERRAMIENTAS,
+  FASES_IMPORTACION,
   FASES_INVESTIGACION,
   FASES_PRODUCCION,
   MAESTRO_INVESTIGACION,
   MAESTRO_PRODUCCION,
   QUEUE_INVESTIGACION,
   QUEUE_PRODUCCION,
+  QUEUE_VACIA,
   slugFase,
 } from "@/pages/maquina/fases";
 import { ServiciosMaquina } from "@/pages/maquina/ServiciosMaquina";
 import { type FasePipeline, PanelPipeline } from "@/pages/monitor/PanelPipeline";
 
-type Proceso = "investigacion" | "produccion";
+type Proceso = "investigacion" | "produccion" | "importacion" | "herramientas";
+const PROCESOS: readonly Proceso[] = ["investigacion", "produccion", "importacion", "herramientas"];
 
 // Grupos del catálogo que gobiernan CÓMO se produce (jobs, limpieza, alertas): se ajustan desde el
 // drawer del propio Contexto (la misma página que vigila sus efectos).
@@ -50,10 +53,12 @@ export default function Contexto() {
   const esAdmin = usuario?.rol === "admin";
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const proceso: Proceso =
-    searchParams.get("proceso") === "produccion" ? "produccion" : "investigacion";
+  const param = searchParams.get("proceso");
+  const proceso: Proceso = PROCESOS.includes(param as Proceso) ? (param as Proceso) : "investigacion";
   const abrirAjustes = searchParams.get("tab") === "ajustes";
-  const [promptsAbierta, setPromptsAbierta] = React.useState(false);
+  // Solo los dos MOTORES tienen ajustes/servicios/cola; Importación y Herramientas son catálogos de
+  // prompts que se lanzan a mano (sin daemon).
+  const esMotor = proceso === "investigacion" || proceso === "produccion";
   const cambiarProceso = (valor: string) =>
     setSearchParams(
       (prev) => {
@@ -67,6 +72,7 @@ export default function Contexto() {
     queryKey: ["actividad", "cola", "todas"],
     queryFn: ({ signal }) => api.cola({}, signal),
     refetchInterval: INTERVALO_VIVO_MS,
+    enabled: esMotor,
   });
 
   // El drawer de ⋮ depende de la pestaña activa: ajustes del motor que se está mirando.
@@ -88,28 +94,29 @@ export default function Contexto() {
   return (
     <>
       <TituloPagina titulo="Contexto" icono={Layers} />
-      <AccionesPagina>
-        <MenuAcciones
-          ajustesTitulo={proceso === "produccion" ? "Ajustes de producción" : "Ajustes de investigación"}
-          ajustesAbiertoInicial={abrirAjustes}
-          ajustes={ajustes}
-        >
-          <ItemMenu icono={FileText} onClick={() => setPromptsAbierta(true)}>
-            Todos los documentos
-          </ItemMenu>
-          <ItemMenu
-            icono={ListChecks}
-            onClick={() => navigate(`/maquina/computo?proceso=${proceso}`)}
+      {esMotor ? (
+        <AccionesPagina>
+          <MenuAcciones
+            ajustesTitulo={proceso === "produccion" ? "Ajustes de producción" : "Ajustes de investigación"}
+            ajustesAbiertoInicial={abrirAjustes}
+            ajustes={ajustes}
           >
-            Ver cómputo
-          </ItemMenu>
-        </MenuAcciones>
-      </AccionesPagina>
+            <ItemMenu
+              icono={ListChecks}
+              onClick={() => navigate(`/maquina/computo?proceso=${proceso}`)}
+            >
+              Ver cómputo
+            </ItemMenu>
+          </MenuAcciones>
+        </AccionesPagina>
+      ) : null}
 
       <Tabs value={proceso} onValueChange={cambiarProceso}>
         <TabsList>
           <TabsTrigger value="investigacion">Investigación</TabsTrigger>
           <TabsTrigger value="produccion">Producción</TabsTrigger>
+          <TabsTrigger value="importacion">Importación</TabsTrigger>
+          <TabsTrigger value="herramientas">Herramientas</TabsTrigger>
         </TabsList>
 
         <TabsContent value="investigacion" className="mt-4">
@@ -142,12 +149,27 @@ export default function Contexto() {
           />
           {esAdmin && <ServiciosMaquina motor="produccion" />}
         </TabsContent>
-      </Tabs>
 
-      <PromptsDocumentos
-        abierto={promptsAbierta}
-        onCerrar={() => setPromptsAbierta(false)}
-      />
+        {/* Importación y Herramientas: catálogos de prompts independientes (sin daemon). Mismo diseño
+            de filas; clicar abre el prompt en el editor (overlay), sin subpágina de fase. */}
+        <TabsContent value="importacion" className="mt-4">
+          <PanelPipeline
+            titulo="Importación — material recibido del equipo"
+            fases={FASES_IMPORTACION}
+            queuePorTipo={QUEUE_VACIA}
+            esAdmin={esAdmin}
+          />
+        </TabsContent>
+
+        <TabsContent value="herramientas" className="mt-4">
+          <PanelPipeline
+            titulo="Herramientas — prompts de apoyo (no son etapa de la máquina)"
+            fases={FASES_HERRAMIENTAS}
+            queuePorTipo={QUEUE_VACIA}
+            esAdmin={esAdmin}
+          />
+        </TabsContent>
+      </Tabs>
     </>
   );
 }

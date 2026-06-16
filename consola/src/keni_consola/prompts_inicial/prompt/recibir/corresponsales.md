@@ -1,5 +1,5 @@
 ---
-titulo: "Recibir: corresponsales"
+titulo: "Corresponsales"
 descripcion: "Parsea lo recibido de corresponsales (\"así vamos\") al pool de noticias."
 tipo: prompt
 carpeta: "recibir"

@@ -132,6 +132,14 @@ def main() -> int:
         pa = libprompts.migrar_parrilla_v1()
         if pa:
             print("Texto: parrilla re-sembrada (contrato de salida a codigo) y publicada.")
+        # Titulos de una palabra agrupados por etapa (one-shot, in place, re-publica).
+        tp = libprompts.migrar_titulos_prompts()
+        if tp:
+            print(f"Texto: {tp} prompt(s) renombrados a titulo de una palabra.")
+        # Alcance editorial: propaga el campo `pipelines` al store (acota el auto-adjunto; re-publica).
+        ae = libprompts.migrar_alcance_editorial()
+        if ae:
+            print(f"Texto: {ae} editorial(es) acotados por pipeline.")
         # Linea base en git: cada doc inicializado con HEAD (snapshot estable para los pipelines).
         b = libprompts.asegurar_linea_base()
         if b:

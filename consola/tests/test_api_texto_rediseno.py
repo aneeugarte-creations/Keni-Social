@@ -72,9 +72,27 @@ def test_pipelines_listar(cliente):
     r = cliente.get("/api/prompts/pipelines")
     assert r.status_code == 200
     ids = {p["id"] for p in r.json()["pipelines"]}
-    assert {"redactar", "verificar", "idear"} <= ids
+    assert {"redactar", "verificar", "idear", "priorizar"} <= ids
     copy = next(p for p in r.json()["pipelines"] if p["id"] == "redactar")
     assert copy["prompt_base_id"] == "prompt/redactar"
+
+
+def test_contexto_inyectado_lista_editoriales_del_prompt(cliente):
+    # La pestaña «Contexto»: para un prompt que inyecta (redactar), lista los editoriales que entran
+    # para la marca; para uno que no inyecta (asistente), `inyecta=false` y `adjuntos` vacío.
+    cliente.post("/api/prompts", json={
+        "titulo": "Voz", "tipo": "editorial", "clase": "voz", "marcas": [_MARCA],
+        "cuerpo": "tono", "pipelines": ["redactar"],
+    })
+    r = cliente.get(f"/api/prompts/prompt/redactar/contexto", params={"marca": _MARCA})
+    assert r.status_code == 200
+    cuerpo = r.json()
+    assert cuerpo["inyecta"] is True and cuerpo["pipeline"] == "redactar"
+    assert any(a["clase"] == "voz" for a in cuerpo["adjuntos"])
+
+    r2 = cliente.get("/api/prompts/prompt/asistente/resumir/contexto", params={"marca": _MARCA})
+    assert r2.status_code == 200
+    assert r2.json()["inyecta"] is False and r2.json()["adjuntos"] == []
 
 
 def test_pipeline_preview_ensambla(cliente):

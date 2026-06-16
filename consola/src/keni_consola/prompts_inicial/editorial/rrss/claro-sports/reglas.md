@@ -4,6 +4,7 @@ descripcion: "Límites editoriales al generar copy."
 tipo: editorial
 clase: reglas
 marcas: [claro-sports]
+pipelines: [redactar, verificar]
 creado: 2026-05-31T00:00:00+00:00
 actualizado: 2026-06-09T00:00:00+00:00
 ---

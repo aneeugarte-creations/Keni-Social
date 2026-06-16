@@ -1,5 +1,5 @@
 ---
-titulo: "Clasificar marca"
+titulo: "Clasificar"
 descripcion: "Reparte las noticias entrantes SIN marca (Tendencias/agencias) entre las marcas del grupo por temática; ante la duda cae a la marca de noticias generales."
 tipo: prompt
 carpeta: ""

@@ -75,7 +75,7 @@ def _docs_de_marca(marca: str) -> list[Any]:
     try:
         from .. import libprompts
 
-        docs = libprompts.editoriales_de_marca(marca)
+        docs = libprompts.editoriales_de_marca(marca, pipeline="priorizar")
     except Exception:  # noqa: BLE001 -- sin libprompts, no hay perfil
         return []
     propios = [d for d in docs if marca in getattr(d, "marcas", []) or marca in (getattr(d, "carpeta", "") or "").split("/")]

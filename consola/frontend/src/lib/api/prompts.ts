@@ -7,6 +7,7 @@ import type {
   CuerpoLanzarTexto,
   CuerpoPublicarTexto,
   CuerpoResolverSolicitud,
+  RespuestaContextoInyectado,
   RespuestaTexto,
   RespuestaDocumento,
   RespuestaEditoriales,
@@ -70,6 +71,9 @@ export const apiPrompts = {
   // --- Las tres máquinas (flujo GLOBAL de etapas en orden real de ejecución) ---
   maquinaPrompts: (signal?: AbortSignal) =>
     peticion<RespuestaMaquinaTexto>("/prompts/maquina", { signal }),
+  /** Editoriales que un prompt INYECTA para una marca (pestaña «Contexto» del editor). */
+  contextoInyectado: (id: string, marca?: string, signal?: AbortSignal) =>
+    peticion<RespuestaContextoInyectado>(`/prompts/${id}/contexto${query({ marca })}`, { signal }),
   // --- Variables del catálogo (`{{NOMBRE}}` que la consola sustituye al inyectar) ---
   variablesPrompts: (signal?: AbortSignal) =>
     peticion<RespuestaVariablesTexto>("/prompts/variables", { signal }),

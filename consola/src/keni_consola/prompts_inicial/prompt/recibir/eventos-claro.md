@@ -1,5 +1,5 @@
 ---
-titulo: "Recibir: eventos Claro Sports"
+titulo: "Eventos"
 descripcion: "Parsea la agenda de eventos de Claro Sports al pool de noticias."
 tipo: prompt
 carpeta: "recibir"

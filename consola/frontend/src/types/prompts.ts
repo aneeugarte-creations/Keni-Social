@@ -83,7 +83,27 @@ export interface PreviewPipeline {
   prompt_base_id: string;
   falta_base: boolean;
   prompt_efectivo: string;
-  adjuntos: { id: string; titulo: string; clase: string; prioridad: number }[];
+  adjuntos: AdjuntoInyectado[];
+}
+
+/** Un documento editorial que un prompt INYECTA (forma de `adjuntos`, en orden de ensamblaje). */
+export interface AdjuntoInyectado {
+  id: string;
+  titulo: string;
+  clase: string;
+  prioridad: number;
+}
+
+/**
+ * `GET /api/prompts/{id}/contexto?marca=`: los editoriales que ese prompt inyecta para una marca.
+ * `inyecta=false` (con `adjuntos` vacío y `pipeline=null`) si el prompt no lleva contexto editorial.
+ */
+export interface RespuestaContextoInyectado {
+  prompt_id: string;
+  inyecta: boolean;
+  pipeline: string | null;
+  marca: string;
+  adjuntos: AdjuntoInyectado[];
 }
 
 /** Versión PUBLICADA (en producción) de un documento: la que sirven los pipelines. */
