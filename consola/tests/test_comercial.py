@@ -189,11 +189,3 @@ def test_reporte_lleva_procedencia_y_volumen(entorno, monkeypatch):
     md = comercial.render_markdown_reporte(rep)
     assert "Datos de muestra" not in md
     assert "Visualizaciones" in md
-
-
-def test_iniciar_captura_programada_arranca_hilo(entorno):
-    """El scheduler arranca un hilo demonio y captura al menos una vez."""
-    comercial.registrar(URL, estado="activa", publicado=_hace_dias(2))
-    hilo = comercial.iniciar_captura_programada(intervalo_segundos=3600)
-    assert hilo.daemon is True
-    assert hilo.is_alive()

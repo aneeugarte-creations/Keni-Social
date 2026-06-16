@@ -267,12 +267,10 @@ def _arrancar_capturando(monkeypatch, capsys):
     monkeypatch.setattr(entry.uvicorn, "run", lambda *a, **k: None)
     # webbrowser.open: capturamos la URL que se abriria (no debe llevar el token, #150).
     monkeypatch.setattr(entry.webbrowser, "open", lambda u: abierto.setdefault("url", u))
-    # Los hilos de fondo (captura/programador/worker) no deben arrancar en el test.
-    import keni_consola.comercial as comercial
+    # Los hilos de fondo (programador/worker) no deben arrancar en el test.
     import keni_consola.programador as programador
     import keni_consola.worker as worker
 
-    monkeypatch.setattr(comercial, "iniciar_captura_programada", lambda: None)
     monkeypatch.setattr(programador, "iniciar_programador", lambda: None)
     monkeypatch.setattr(worker, "iniciar_worker_inproceso", lambda: None)
     # `entry.main()` arranca ~19 daemons de fondo. Si sus BUCLES barren la BD compartida, los

@@ -7,7 +7,6 @@ Pensado para el deploy HOSTED: ahi el `back` corre `uvicorn keni_consola.app:cre
 solo procesa la cola de jobs. Sin un proceso como este, los hilos demonio de fondo
 NO correrian en produccion. Este proceso aparte los mantiene vivos:
 
-  - captura comercial (snapshots de interacciones),
   - programador de publicaciones (DRY-RUN salvo `KENI_PUBLICAR_REAL=1`),
   - scanner de vencimientos (emite `contenido.vencido` a los webhooks),
   - refresco de metricas por cuenta y POR PIEZA (cache caliente desde Metricool),
@@ -52,7 +51,6 @@ def main() -> int:
 
     from .alertas_rendimiento import iniciar_alertas_rendimiento
     from .algoritmos_refresco import iniciar_refresco_algoritmos
-    from .comercial import iniciar_captura_programada
     from .eventos_scanner import iniciar_scanner_vencimientos
     from .recolectar_daemon import iniciar_ingesta
     from .media_gc_daemon import iniciar_media_gc
@@ -65,7 +63,6 @@ def main() -> int:
     from .limpiador_generaciones import iniciar_limpiador
     from .trends_daemon import iniciar_trends
 
-    iniciar_captura_programada()
     iniciar_programador()  # DRY-RUN salvo KENI_PUBLICAR_REAL=1: nunca publica solo.
     iniciar_scanner_vencimientos()
     iniciar_refresco_metricas()

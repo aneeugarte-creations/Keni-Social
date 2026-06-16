@@ -45,7 +45,9 @@ _ALIAS = {
 # (`api.sistema.sonda_daemons`) las IGNORA para no pintar falsos "atrasado".
 #   - "pipeline": el hilo único del pipeline se partió en "investigacion" + "produccion"
 #     (cada loop late con su propio nombre); la fila vieja quedó suelta.
-RETIRADOS = frozenset({"pipeline"})
+#   - "comercial": el apartado Comercial (snapshots) se retiró; su daemon de captura ya no
+#     existe, así que su fila vieja en `daemon_latidos` (BD hosted) no la actualiza nadie.
+RETIRADOS = frozenset({"pipeline", "comercial"})
 
 # Daemons cuyo bucle corre sobre `daemon_util.bucle_gateado` y por tanto CONSUMEN el flag
 # `barrido_solicitado` (POST /api/sistema/daemons/{daemon}/barrer): para ellos «Barrer ahora»

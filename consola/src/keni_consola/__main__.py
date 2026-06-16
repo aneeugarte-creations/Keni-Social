@@ -131,13 +131,6 @@ def main() -> int:
     except Exception:  # noqa: BLE001 -- la inicializacion nunca debe impedir el arranque
         pass
 
-    # Captura programada del apartado Comercial: un hilo demonio que va tomando
-    # snapshots de las piezas activas (interacciones/alcance) aunque nadie mire.
-    # Vive aqui (servidor real) y NO en `crear_app`, para no arrancarlo en los tests.
-    from .comercial import iniciar_captura_programada
-
-    iniciar_captura_programada()
-
     # Programador de publicaciones (#9, Fase 3): un hilo demonio que, al vencer la
     # `fecha_programada` de una pieza `programado`, la PREPARA en dry-run (estampa
     # `preparado_en`). Por defecto NO publica: el posteo real (vía Metricool) esta gated por

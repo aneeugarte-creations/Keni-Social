@@ -29,14 +29,12 @@ Postgres (via `db`), igual que el resto de la consola.
 from __future__ import annotations
 
 import logging
-import threading
-import time
 from datetime import datetime
 from typing import Any
 
 from keni_metricas import servicio
 
-from . import config, marcas, metricas_pieza, redes, repos
+from . import marcas, metricas_pieza, redes, repos
 from .tiempo import ahora_iso, iso_utc
 
 _log = logging.getLogger("keni_consola.comercial")
@@ -497,56 +495,3 @@ def _render_campania_md(rep: dict[str, Any]) -> str:
 # --------------------------------------------------------------------------- #
 
 
-def _intervalo_segundos() -> float:
-    """Intervalo de la captura programada en segundos (configurable por entorno).
-
-    `KENI_COMERCIAL_INTERVALO_SEGUNDOS` (util para demo/tests) tiene prioridad sobre
-    `KENI_COMERCIAL_INTERVALO_HORAS`. Por defecto, `INTERVALO_HORAS_DEF` horas.
-    """
-    seg = config.comercial_intervalo_segundos()
-    if seg is not None:
-        return seg
-    horas = config.comercial_intervalo_horas()
-    if horas is not None:
-        return max(60.0, horas * 3600.0)
-    return INTERVALO_HORAS_DEF * 3600.0
-
-
-def iniciar_captura_programada(
-    intervalo_segundos: float | None = None,
-) -> threading.Thread:
-    """Arranca un hilo demonio que captura snapshots de las piezas activas en bucle.
-
-    Pensado para el servidor real (`__main__`), NO para `crear_app`: los tests crean
-    la app sin arrancar esto. Cada operacion de `db` abre/cierra su propia conexion
-    SQLite, asi que correr en un hilo aparte es seguro. El hilo es daemon: muere al
-    cerrar el proceso. Captura una vez al arrancar y luego cada `intervalo`.
-    """
-    intervalo = intervalo_segundos if intervalo_segundos is not None else _intervalo_segundos()
-
-    def bucle() -> None:
-        from . import latidos  # import tardio: solo lo paga el hilo del servidor real
-
-        while True:
-            t0 = time.monotonic()
-            try:
-                n = capturar_pendientes()
-                if n:
-                    _log.info("Captura comercial: %d pieza(s) actualizada(s).", n)
-                latidos.barrido(
-                    "comercial", ok=True, intervalo_seg=intervalo, tick_seg=intervalo,
-                    duracion_ms=int((time.monotonic() - t0) * 1000),
-                    resumen=(f"{n} snapshot(s) capturado(s)" if n else "sin novedad"),
-                )
-            except Exception as e:  # noqa: BLE001 -- un fallo de captura no debe matar el hilo
-                _log.exception("Fallo en la captura comercial programada.")
-                latidos.barrido(
-                    "comercial", ok=False, intervalo_seg=intervalo, tick_seg=intervalo,
-                    duracion_ms=int((time.monotonic() - t0) * 1000), error=repr(e),
-                )
-            time.sleep(intervalo)
-
-    hilo = threading.Thread(target=bucle, name="comercial-captura", daemon=True)
-    hilo.start()
-    _log.info("Captura comercial programada cada %.0f s.", intervalo)
-    return hilo
