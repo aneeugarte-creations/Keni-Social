@@ -63,7 +63,9 @@ const CMS: MiembroRota[] = [{ id: "u-luis", nombre: "Luis" }];
 const DIAS = ["2026-06-15", "2026-06-16", "2026-06-17", "2026-06-18", "2026-06-19", "2026-06-20", "2026-06-21"];
 
 describe("DialogoAsignarTurnos (render)", () => {
-  it("«Asignar» está deshabilitado hasta elegir persona y franja", () => {
+  it("«Asignar» está deshabilitado hasta elegir persona y franja; ofrece import automático", () => {
+    // El diálogo embebe «Importar documento» (su badge sondea propuestas pendientes).
+    vi.spyOn(apiMod.api, "propuestasParrilla").mockResolvedValue({ propuestas: [] } as never);
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
@@ -80,5 +82,7 @@ describe("DialogoAsignarTurnos (render)", () => {
     );
     expect(screen.getByText("Asignar turnos")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Asignar" })).toBeDisabled();
+    // La vía automática (import) está disponible dentro del mismo diálogo.
+    expect(screen.getByRole("button", { name: /Importar documento/ })).toBeInTheDocument();
   });
 });

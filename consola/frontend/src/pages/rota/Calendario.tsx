@@ -27,7 +27,6 @@ import {
   esFinDeSemana,
   lunesSiguiente,
 } from "@/lib/rota-calendario";
-import { ImportarDocumentoParrilla } from "@/components/parrilla/ImportarDocumentoParrilla";
 import type {
   AusenciaRota,
   EventoRota,
@@ -401,9 +400,8 @@ export function Calendario({
               Despublicar
             </Button>
           )}
-          {esAdmin && (
-            <ImportarDocumentoParrilla onAplicado={invalidar} />
-          )}
+          {/* «Importar documento» ya no es un botón suelto aquí: vive dentro de «Asignar
+              turnos» como su vía automática (ver DialogoAsignarTurnos). */}
           <MenuMasAcciones
             esAdmin={esAdmin}
             semanaAprobada={Boolean(semana?.aprobada)}

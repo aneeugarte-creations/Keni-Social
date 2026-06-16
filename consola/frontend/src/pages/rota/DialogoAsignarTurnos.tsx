@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { CalendarPlus, Loader2 } from "lucide-react";
+import { CalendarPlus, Loader2, Sparkles } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ImportarDocumentoParrilla } from "@/components/parrilla/ImportarDocumentoParrilla";
 import { ApiError, api, mensajeError } from "@/lib/api";
 import { diaCorto } from "@/lib/rota-calendario";
 import type { FranjaSemana, MiembroRota } from "@/types";
@@ -154,10 +155,34 @@ export function DialogoAsignarTurnos({
         <DialogHeader>
           <DialogTitle>Asignar turnos</DialogTitle>
         </DialogHeader>
+
+        {/* AUTOMÁTICO: subir un documento (parrilla/Excel/foto) → Keni propone los turnos
+            (y eventos), se revisan y se aplican. Antes era un botón suelto en la cabecera del
+            calendario; ahora vive aquí como la vía RÁPIDA de «Asignar turnos». */}
+        <div className="space-y-2 rounded-lg border border-dashed border-border p-3">
+          <div className="flex items-center gap-1.5 text-sm font-medium">
+            <Sparkles className="h-4 w-4 text-primary" />
+            Automático: de un documento
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Sube una parrilla, un Excel o una foto: Keni propone los turnos y los revisas antes de aplicar.
+          </p>
+          <ImportarDocumentoParrilla
+            onAplicado={() => {
+              onCambio();
+              onOpenChange(false);
+            }}
+          />
+        </div>
+
+        <div className="relative py-0.5 text-center text-xs text-muted-foreground">
+          — o a mano —
+        </div>
+
         <p className="text-xs text-muted-foreground">
-          Reparte la semana: elige quién trabaja, en qué franja y qué días. Repítelo por persona
-          (p. ej. uno a Mañana, otro a Tarde). Esto es la CAPACIDAD; quién cubre cada evento se
-          decide en Panorama.
+          Reparte la semana a mano: elige quién trabaja, en qué franja y qué días. Repítelo por
+          persona (p. ej. uno a Mañana, otro a Tarde). Esto es la CAPACIDAD; quién cubre cada
+          evento se decide en Panorama.
         </p>
 
         <div className="grid grid-cols-2 gap-3">
