@@ -219,7 +219,7 @@ export function PantallaLogin() {
   return (
     <div className="flex min-h-dvh w-full items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm">
-        <h1 className="mb-10 text-center text-6xl font-black tracking-tight text-foreground">
+        <h1 className="mb-10 pl-[0.18em] text-center text-6xl font-light tracking-[0.18em] text-foreground">
           KENI
         </h1>
         <form className="space-y-4" onSubmit={alEnviar} noValidate>
