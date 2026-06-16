@@ -38,10 +38,11 @@ export function AppShell() {
   const location = useLocation();
   const [menuAbierto, setMenuAbierto] = React.useState(false);
 
-  // Editor de contenido (Imagen / Vídeo): la barra superior se viste con el degradado naranja de
-  // marca (estilo Canva) y su cromo pasa a blanco. El degradado y el recoloreado del cromo viven
-  // en `.topbar-editor` (index.css), acotados a esta cabecera; los menús desplegables, que se
-  // pintan inline dentro de la barra, restauran sus tokens allí para seguir siendo legibles.
+  // Editor de contenido (Imagen / Vídeo): la barra superior comparte la MISMA superficie clara
+  // que el resto de la app (sin degradado de marca). Lo único propio del editor es el LAYOUT de la
+  // barra —el carril de herramientas CENTRADO entre título y contexto—, que pinta la rama `enEditor`
+  // del JSX más abajo; el color/cromo es idéntico (decisión de diseño: chrome sobrio, el naranja
+  // queda como acento puntual, no como campo).
   const enEditor =
     location.pathname.startsWith("/contenido/imagen") ||
     location.pathname.startsWith("/contenido/video");
@@ -149,11 +150,9 @@ export function AppShell() {
         <header
           className={cn(
             "relative z-30 flex h-12 shrink-0 items-center gap-3 px-4 lg:px-6",
-            // El borde inferior solo FUERA del editor: bajo el degradado naranja el hairline
-            // (oscuro en el esquema en negro) se veía como una línea pegada a la barra.
-            enEditor
-              ? "topbar-editor"
-              : "border-b border-border bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60",
+            // Cromo unificado en TODA la app, editor incluido: blanco translúcido + hairline
+            // inferior + cromo oscuro por defecto. Ya no hay banda naranja en el editor.
+            "border-b border-border bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60",
           )}
         >
           <Button
