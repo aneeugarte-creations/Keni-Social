@@ -269,7 +269,7 @@ _CONTRATO_SALIDA = (
 )
 
 
-# La plantilla del prompt vive en la Biblioteca de Texto como prompt EDITABLE (pestaña
+# La plantilla del prompt vive en la Prompts de Texto como prompt EDITABLE (pestaña
 # «Prompts»). Los fragmentos calculados (fuente/reglas según el modo, roster, slots, esquema y la
 # cola con el documento embebido) se insertan en sus marcadores `{{...}}`. Si el store fallara,
 # la red es la INICIAL del paquete (fuente única, sin texto duplicado aquí).
@@ -278,13 +278,13 @@ _PROMPT_ID = "prompt/importar/parrilla"
 
 def _plantilla() -> str:
     """Cuerpo EFECTIVO de la plantilla (store del equipo > inicial del paquete)."""
-    from .. import libtexto
+    from .. import libprompts
 
     try:
-        cuerpo = (libtexto.cuerpo_efectivo(_PROMPT_ID) or "").strip()
+        cuerpo = (libprompts.cuerpo_efectivo(_PROMPT_ID) or "").strip()
     except Exception:  # noqa: BLE001 -- nunca dejar la importación sin prompt por un fallo de lectura
         cuerpo = ""
-    return cuerpo or libtexto.cuerpo_inicial(_PROMPT_ID).strip()
+    return cuerpo or libprompts.cuerpo_inicial(_PROMPT_ID).strip()
 
 
 def _prompt_tareas(
@@ -295,7 +295,7 @@ def _prompt_tareas(
     ENCARGOS sueltos del equipo (`clase='tarea'`), no eventos. Reusa la misma lógica de FUENTE
     (texto embebido vs fichero leído) que el modo eventos, pero pide `crear_tarea`.
 
-    Va por código (no por la Biblioteca como el de eventos) porque es nuevo y simple: así el
+    Va por código (no por la Prompts como el de eventos) porque es nuevo y simple: así el
     camino de eventos —con su plantilla editable y tuneada— queda intacto.
 
     `permitir_web=True` (FRASE escrita a mano en la pestaña Tarea): la frase NOMBRA un evento del

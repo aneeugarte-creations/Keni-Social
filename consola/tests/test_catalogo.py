@@ -25,7 +25,7 @@ _SIDEBAR_BLOQUES = [
     # el tablero de Tareas vive dentro de Turnos como «Cobertura», sin entrada propia).
     ["Investigación", "Feed", "Programación", "Turnos"],
     # "Contenido": DOS páginas planas por tipo de contenido — Imagen (editor por capas + IA) y
-    # Video (estudio de video). La página «Texto»/Biblioteca se retiró: los prompts viven en cada
+    # Video (estudio de video). La página «Texto»/Prompts se retiró: los prompts viven en cada
     # fase del pipeline en «Contexto».
     ["Imagen", "Video"],
     # "Máquina": «Contexto» (la máquina en una página — el pipeline de cada motor como estructura,

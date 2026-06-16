@@ -30,7 +30,7 @@ import { api, mensajeError, urlMedia } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { Arte, TipoArte } from "@/types";
 
-/** Carpetas de la biblioteca (filtro por `tipo`). "" = todas. */
+/** Carpetas de la prompts (filtro por `tipo`). "" = todas. */
 const CARPETAS: ReadonlyArray<{ id: TipoArte | ""; etiqueta: string }> = [
   { id: "", etiqueta: "Todas" },
   { id: "original", etiqueta: "Originales" },

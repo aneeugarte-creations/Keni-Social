@@ -1,6 +1,6 @@
-"""Perfil editorial por marca: keywords/temas DERIVADOS de la línea editorial (libtexto) con Haiku.
+"""Perfil editorial por marca: keywords/temas DERIVADOS de la línea editorial (libprompts) con Haiku.
 
-Un agente Haiku lee los docs editoriales de la marca (`libtexto.editoriales_de_marca`)
+Un agente Haiku lee los docs editoriales de la marca (`libprompts.editoriales_de_marca`)
 y devuelve sus temas/keywords; se cachea en disco (dir de texto) y se refresca cuando
 cambia la editorial (hash) o caduca (TTL). La priorización usa `palabras(marca)` (match léxico, SIN
 coste por-cluster: el Haiku solo corre en el refresco, acotado por marca y TTL).
@@ -40,9 +40,9 @@ _MAX_CHARS_EDITORIAL = 6000
 def _ruta_cache() -> Path | None:
     """Ruta del JSON de perfiles (bajo el dir de texto). None si no se puede resolver."""
     try:
-        from .. import libtexto
+        from .. import libprompts
 
-        return libtexto.raiz() / "perfiles_editoriales.json"
+        return libprompts.raiz() / "perfiles_editoriales.json"
     except Exception:  # noqa: BLE001 -- sin dir de texto no hay cache (se cae a inicial)
         return None
 
@@ -73,10 +73,10 @@ def _guardar(data: dict[str, Any]) -> None:
 def _docs_de_marca(marca: str) -> list[Any]:
     """Docs editoriales ESPECÍFICOS de la marca (excluye globales: definen el perfil propio)."""
     try:
-        from .. import libtexto
+        from .. import libprompts
 
-        docs = libtexto.editoriales_de_marca(marca)
-    except Exception:  # noqa: BLE001 -- sin libtexto, no hay perfil
+        docs = libprompts.editoriales_de_marca(marca)
+    except Exception:  # noqa: BLE001 -- sin libprompts, no hay perfil
         return []
     propios = [d for d in docs if marca in getattr(d, "marcas", []) or marca in (getattr(d, "carpeta", "") or "").split("/")]
     return propios or docs
@@ -102,13 +102,13 @@ _PROMPT_ID = "prompt/priorizar"
 
 def _plantilla() -> str:
     """Cuerpo EFECTIVO de la plantilla (store del equipo > inicial del paquete)."""
-    from .. import libtexto
+    from .. import libprompts
 
     try:
-        cuerpo = (libtexto.cuerpo_efectivo(_PROMPT_ID) or "").strip()
+        cuerpo = (libprompts.cuerpo_efectivo(_PROMPT_ID) or "").strip()
     except Exception:  # noqa: BLE001 -- nunca dejar el perfil sin prompt por un fallo de lectura
         cuerpo = ""
-    return cuerpo or libtexto.cuerpo_inicial(_PROMPT_ID).strip()
+    return cuerpo or libprompts.cuerpo_inicial(_PROMPT_ID).strip()
 
 
 def _construir_prompt(marca: str, texto_editorial: str) -> str:

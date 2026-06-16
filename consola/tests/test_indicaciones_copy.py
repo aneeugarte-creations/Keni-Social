@@ -150,7 +150,7 @@ def test_componer_copy_sin_bd_no_rompe_ni_inyecta(monkeypatch, tmp_path):
     for var in ("POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB",
                 "POSTGRES_HOST", "POSTGRES_PORT"):
         monkeypatch.delenv(var, raising=False)
-    monkeypatch.setenv("KENI_TEXTO_DIR", str(tmp_path / "texto"))  # no tocar el store real
+    monkeypatch.setenv("KENI_PROMPTS_DIR", str(tmp_path / "texto"))  # no tocar el store real
 
     prompt = generar.componer_copy(
         "HAZ EL COPY", marca="claro-sports", contexto="Nota", redes_ids=["x"]

@@ -55,7 +55,7 @@ import re
 import threading
 from typing import Any
 
-from .. import config, daemon_util, generaciones, libtexto, marcas, redes, repos
+from .. import config, daemon_util, generaciones, libprompts, marcas, redes, repos
 from ..dominio import dedup, jobspec
 from ..dominio import generar as gen_dom
 from ..dominio import verificar_fuente as dom_verificar
@@ -172,7 +172,7 @@ __all__ = [
     "marcas",
     "redes",
     "repos",
-    "libtexto",
+    "libprompts",
     "dedup",
     "gen_dom",
     "jobspec",

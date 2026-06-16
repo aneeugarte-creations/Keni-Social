@@ -1,15 +1,15 @@
 """Los prompts FALLBACK de cada módulo salen de la INICIAL del paquete, no de strings duplicados.
 
 PURO, sin Postgres: se apunta el store de la Texto a un tmp VACÍO y se hace reventar
-`libtexto.cuerpo_efectivo` (lectura del store rota); cada módulo debe resolver su plantilla
-desde `libtexto.cuerpo_inicial` (el .md que viaja en `texto_inicial/`).
+`libprompts.cuerpo_efectivo` (lectura del store rota); cada módulo debe resolver su plantilla
+desde `libprompts.cuerpo_inicial` (el .md que viaja en `prompts_inicial/`).
 """
 
 from __future__ import annotations
 
 import pytest
 
-from keni_consola import importador_calendario, libtexto
+from keni_consola import importador_calendario, libprompts
 from keni_consola.dominio import (
     asistente,
     clasificador_marca,
@@ -26,7 +26,7 @@ from keni_consola.dominio import (
 def _inicial(prompt_id: str) -> str:
     from keni_consola.prompts_contratos import resolver_contrato
 
-    doc = libtexto.obtener_inicial(prompt_id)
+    doc = libprompts.obtener_inicial(prompt_id)
     assert doc is not None, f"falta la inicial {prompt_id}"
     # El cuerpo efectivo (lo que componen los módulos) resuelve el contrato de salida; el helper
     # debe espejarlo para comparar `plantilla()` (resuelta) con la inicial.
@@ -36,12 +36,12 @@ def _inicial(prompt_id: str) -> str:
 @pytest.fixture
 def store_roto(monkeypatch, tmp_path):
     """Store vacío + lectura efectiva reventando: solo queda la INICIAL del paquete."""
-    monkeypatch.setenv("KENI_TEXTO_DIR", str(tmp_path / "texto"))
+    monkeypatch.setenv("KENI_PROMPTS_DIR", str(tmp_path / "texto"))
 
     def boom(_prompt_id: str) -> str:
         raise RuntimeError("store roto (simulado)")
 
-    monkeypatch.setattr(libtexto, "cuerpo_efectivo", boom)
+    monkeypatch.setattr(libprompts, "cuerpo_efectivo", boom)
 
 
 # (función _plantilla, id del seed del que debe salir el fallback)
@@ -56,7 +56,7 @@ _CASOS = [
 ]
 
 # Ids de prompt que el CÓDIGO espera encontrar en la inicial (la inicial es la única fuente).
-# Si alguien borra un .md de `texto_inicial/`, este test lo caza ANTES del deploy: sin la inicial,
+# Si alguien borra un .md de `prompts_inicial/`, este test lo caza ANTES del deploy: sin la inicial,
 # la generación se quedaría sin ese prompt y degradaría a vacío. CONTRATO inicial↔código.
 _IDS_INICIAL_OBLIGATORIA = [
     generar.PROMPT_ENVOLTORIO_SIN_EMOJIS,
@@ -73,7 +73,7 @@ _IDS_INICIAL_OBLIGATORIA = [
 def test_inicial_cubre_todos_los_prompts_que_el_codigo_espera():
     """La inicial provee CADA prompt cuyo `_FALLBACK_*` se eliminó (cobertura inicial↔código)."""
     for pid in _IDS_INICIAL_OBLIGATORIA:
-        doc = libtexto.obtener_inicial(pid)
+        doc = libprompts.obtener_inicial(pid)
         assert doc is not None and doc.cuerpo.strip(), f"falta o está vacía la inicial {pid}"
 
 
@@ -90,9 +90,9 @@ def test_envoltorios_y_modos_resuelven_desde_la_inicial(store_roto):
 
 
 def test_cuerpo_inicial_lee_el_paquete_y_nunca_lanza():
-    assert "traducciones" in libtexto.cuerpo_inicial("prompt/traducir")
-    assert libtexto.cuerpo_inicial("prompt/no-existe") == ""
-    assert libtexto.cuerpo_inicial("") == ""
+    assert "traducciones" in libprompts.cuerpo_inicial("prompt/traducir")
+    assert libprompts.cuerpo_inicial("prompt/no-existe") == ""
+    assert libprompts.cuerpo_inicial("") == ""
 
 
 def test_fallback_de_cada_modulo_resuelve_desde_la_inicial(store_roto):

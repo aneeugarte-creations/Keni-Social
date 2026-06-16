@@ -28,7 +28,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import almacen_media, libtexto, marcas, media, repos
+from .. import almacen_media, libprompts, marcas, media, repos
 from .._http_json import leer_json
 from ..seguridad import autor_de_peticion
 from .media import lanzar_generacion_imagen
@@ -39,7 +39,7 @@ _log = logging.getLogger("keni_consola.artes")
 # llamada al proveedor), asi que se acota para evitar ráfagas/abuso. 1..4 basta para
 # comparar variaciones de un mismo prompt.
 _MAX_ALTERNATIVAS = 4
-# Prompt base del arte en la Biblioteca (mismo id que la directiva del generador): si el
+# Prompt base del arte en la Prompts (mismo id que la directiva del generador): si el
 # usuario no escribe nada, se usa el cuerpo efectivo de este prompt como tema a ilustrar.
 _PROMPT_ARTE_ID = "prompt/ilustrar"
 # Moneda del coste medio por imagen (el proveedor reporta el coste en USD).
@@ -201,12 +201,12 @@ async def borrar(request: Request) -> Response:
     return JSONResponse({"mensaje": "Arte quitado de la galería."})
 
 
-def _prompt_arte_biblioteca() -> str:
-    """Cuerpo efectivo del prompt de arte de la Biblioteca; "" si no hay (nunca lanza)."""
+def _prompt_arte_almacen() -> str:
+    """Cuerpo efectivo del prompt de arte de la Prompts; "" si no hay (nunca lanza)."""
     try:
-        return (libtexto.cuerpo_efectivo(_PROMPT_ARTE_ID) or "").strip()
-    except Exception:  # noqa: BLE001 -- sin biblioteca no rompemos el lanzamiento
-        _log.warning("No se pudo leer el prompt de arte de la biblioteca.", exc_info=True)
+        return (libprompts.cuerpo_efectivo(_PROMPT_ARTE_ID) or "").strip()
+    except Exception:  # noqa: BLE001 -- sin prompts no rompemos el lanzamiento
+        _log.warning("No se pudo leer el prompt de arte de la prompts.", exc_info=True)
         return ""
 
 
@@ -239,7 +239,7 @@ async def generar_arte(request: Request) -> Response:
     Cuerpo JSON:
       - `marca`   (obligatoria): marca del catálogo único.
       - `prompt`  (opcional): tema a ilustrar; si falta, se usa el prompt de arte de la
-                   Biblioteca (`prompt/ilustrar`).
+                   Prompts (`prompt/ilustrar`).
       - `modelo`  (opcional): id de un modelo de `GET /api/conexiones/imagen` (`modelos`);
                    si falta, el modelo configurado por defecto.
       - `n`       (opcional, def 1): nº de alternativas, 1..`_MAX_ALTERNATIVAS` (4).
@@ -275,7 +275,7 @@ async def generar_arte(request: Request) -> Response:
         )
 
     prompt = datos.get("prompt")
-    prompt = prompt.strip() if isinstance(prompt, str) and prompt.strip() else _prompt_arte_biblioteca()
+    prompt = prompt.strip() if isinstance(prompt, str) and prompt.strip() else _prompt_arte_almacen()
     if not prompt:
         return JSONResponse(
             {"error": "Falta el texto (prompt) para generar el arte."}, status_code=400

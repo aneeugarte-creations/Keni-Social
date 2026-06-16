@@ -7,7 +7,7 @@ al pool (`ingesta.noticia_item_de_insumo` los excluye y empujar responde 400),
 pero la promesa del producto es que GUÍEN la generación: este módulo los lee
 (los VIGENTES) y los compone como bloque de texto que `generar.componer_copy`
 inyecta en TODOS los copys de la marca (lanzamientos reales Y previsualización
-de la Biblioteca: "lo que lanzas es lo que previsualizas").
+de la Prompts: "lo que lanzas es lo que previsualizas").
 
 VIGENTE = ítem del cajón `contexto` con `tipo="contexto"`, de la marca pedida o
 sin marca, con fecha en los últimos `VENTANA_DIAS` días. Las indicaciones son

@@ -213,8 +213,8 @@ def test_generar_arte_ok_n_imagenes(entorno, monkeypatch):
     assert abs(cm["por_imagen"] - 0.02) < 1e-9
 
 
-def test_generar_arte_sin_prompt_usa_biblioteca(entorno, monkeypatch):
-    """Sin `prompt` cae al prompt de arte de la Biblioteca (cuerpo efectivo no vacio)."""
+def test_generar_arte_sin_prompt_usa_prompts(entorno, monkeypatch):
+    """Sin `prompt` cae al prompt de arte de la Prompts (cuerpo efectivo no vacio)."""
     cli = _cli_arte(monkeypatch)
     r = cli.post("/api/artes/generar", json={"marca": "unotv"})
     assert r.status_code == 200

@@ -202,12 +202,12 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <Navigate to="/contenido/imagen" replace /> },
           // CONTENIDO = TRES páginas planas por tipo: Imagen · Video · Texto. El nombre de la
-          // página coincide con su ruta y con su API (`/api/imagen`, `/api/video`, `/api/texto`).
+          // página coincide con su ruta y con su API (`/api/imagen`, `/api/video`, `/api/prompts`).
           // Página IMAGEN: editor profesional por capas (Konva); diseña/edita el Documento.
           { path: "imagen", element: <Imagen /> },
           // Página VIDEO: subida + preview (motor de edición próximamente).
           { path: "video", element: <Video /> },
-          // Página TEXTO/Biblioteca: RETIRADA. Los prompts viven en cada fase del pipeline en
+          // Página TEXTO/Prompts: RETIRADA. Los prompts viven en cada fase del pipeline en
           // «Contexto» (Máquina) y el contexto editorial se inyecta desde ahí. Todo
           // `/contenido/texto*` (incl. la vieja pestaña de algoritmos) redirige a Contexto.
           { path: "texto", element: <Navigate to="/maquina/contexto" replace /> },

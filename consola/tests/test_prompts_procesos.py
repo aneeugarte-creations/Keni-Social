@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from keni_consola import libtexto, prompts_procesos as pp
+from keni_consola import libprompts, prompts_procesos as pp
 
 
 def _ids_seed_prompt() -> set[str]:
     """Ids de TODOS los prompts que viajan en la inicial del paquete (derivados de la ruta)."""
-    base = libtexto.dir_inicial() / "prompt"
+    base = libprompts.dir_inicial() / "prompt"
     return {
         "prompt/" + p.relative_to(base).with_suffix("").as_posix()
         for p in base.rglob("*.md")
@@ -40,7 +40,7 @@ def test_procesos_de_desconocido_es_vacio():
 
 
 def test_catalogo_cubre_los_prompts_inyectados():
-    # Los prompts que migramos a la Biblioteca DEBEN estar catalogados: la transparencia exige ver
+    # Los prompts que migramos a la Prompts DEBEN estar catalogados: la transparencia exige ver
     # a qué proceso se inyectan. Si cableas un prompt nuevo, añádelo también a `prompts_procesos`.
     esperados = {
         "prompt/ilustrar",

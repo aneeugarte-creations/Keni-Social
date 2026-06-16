@@ -1,4 +1,4 @@
-"""Reformato (one-shot) + publicación de línea base ("first commit") de la Biblioteca.
+"""Reformato (one-shot) + publicación de línea base ("first commit") de la Prompts.
 
   - `reformatear_prompts`: propaga al store el cuerpo reformateado de la inicial SOLO si el cuerpo
     actual casa EXACTO con el viejo conocido (respeta ediciones del equipo); idempotente por
@@ -16,8 +16,8 @@ import shutil
 
 import pytest
 
-from keni_consola import libtexto
-from keni_consola.libtexto import _inicial
+from keni_consola import libprompts
+from keni_consola.libprompts import _inicial
 
 
 def _escribir(ruta, titulo, cuerpo):
@@ -35,7 +35,7 @@ def _escribir(ruta, titulo, cuerpo):
 
 
 def test_reformatear_pisa_solo_lo_no_editado_y_es_idempotente(monkeypatch, tmp_path):
-    monkeypatch.setenv("KENI_TEXTO_DIR", str(tmp_path / "texto"))
+    monkeypatch.setenv("KENI_PROMPTS_DIR", str(tmp_path / "texto"))
     store = tmp_path / "texto"
     inicial = tmp_path / "inicial"
 
@@ -56,23 +56,23 @@ def test_reformatear_pisa_solo_lo_no_editado_y_es_idempotente(monkeypatch, tmp_p
         (("prompt/demo", sha_viejo_demo), ("prompt/otro", sha_no_casa)),
     )
 
-    n = libtexto.reformatear_prompts(origen=inicial)
+    n = libprompts.reformatear_prompts(origen=inicial)
     assert n == 1  # solo demo (otro está editado: se respeta)
-    assert libtexto.obtener("prompt/demo").cuerpo == cuerpo_nuevo
-    assert libtexto.obtener("prompt/otro").cuerpo == "EDITADO por el equipo"
+    assert libprompts.obtener("prompt/demo").cuerpo == cuerpo_nuevo
+    assert libprompts.obtener("prompt/otro").cuerpo == "EDITADO por el equipo"
 
     # Idempotente: el sentinela impide una segunda pasada (no vuelve a pisar ediciones futuras).
-    assert libtexto.reformatear_prompts(origen=inicial) == 0
+    assert libprompts.reformatear_prompts(origen=inicial) == 0
 
 
 def test_reformatear_no_crea_docs_que_no_existen_en_el_store(monkeypatch, tmp_path):
-    monkeypatch.setenv("KENI_TEXTO_DIR", str(tmp_path / "texto"))
+    monkeypatch.setenv("KENI_PROMPTS_DIR", str(tmp_path / "texto"))
     inicial = tmp_path / "inicial"
     _escribir(inicial / "prompt" / "demo.md", "Demo", "nuevo")
     monkeypatch.setattr(_inicial, "_REFORMATO_PROMPTS_V1", (("prompt/demo", "deadbeef"),))
     # El store no tiene `prompt/demo`: la migración solo PISA lo existente, no siembra.
-    assert libtexto.reformatear_prompts(origen=inicial) == 0
-    assert libtexto.obtener("prompt/demo") is None
+    assert libprompts.reformatear_prompts(origen=inicial) == 0
+    assert libprompts.obtener("prompt/demo") is None
 
 
 def test_mapa_reformato_real_apunta_a_prompts_reales_con_hash_viejo():
@@ -80,7 +80,7 @@ def test_mapa_reformato_real_apunta_a_prompts_reales_con_hash_viejo():
     cuerpo VIEJO — es decir, DISTINTO del cuerpo reformateado que hoy vive en la inicial. Si alguien
     pegara por error el hash NUEVO, el gate no dispararía nunca y este test lo caza."""
     for doc_id, sha_viejo in _inicial._REFORMATO_PROMPTS_V1:
-        doc = libtexto.obtener_inicial(doc_id)
+        doc = libprompts.obtener_inicial(doc_id)
         assert doc is not None, f"{doc_id} no existe en la inicial"
         assert len(sha_viejo) == 64 and all(c in "0123456789abcdef" for c in sha_viejo)
         sha_actual = hashlib.sha256(doc.cuerpo.encode("utf-8")).hexdigest()
@@ -100,24 +100,24 @@ def entorno_pub(monkeypatch, tmp_path, pg):
     if shutil.which("git") is None:
         pytest.skip("git no disponible")
     monkeypatch.setenv("KENI_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("KENI_TEXTO_DIR", str(tmp_path / "texto"))
-    monkeypatch.setenv("KENI_TEXTO_GIT", "1")
+    monkeypatch.setenv("KENI_PROMPTS_DIR", str(tmp_path / "texto"))
+    monkeypatch.setenv("KENI_PROMPTS_GIT", "1")
     yield
 
 
 def test_publicar_linea_base_publica_y_es_idempotente(entorno_pub):
-    p = libtexto.crear("Prompt uno", cuerpo="contenido del prompt")
-    e = libtexto.crear("Editorial uno", tipo="editorial", clase="marca", cuerpo="contenido editorial")
-    vacio = libtexto.crear("Vacío", cuerpo="")  # sin cuerpo: NO debe publicarse
+    p = libprompts.crear("Prompt uno", cuerpo="contenido del prompt")
+    e = libprompts.crear("Editorial uno", tipo="editorial", clase="marca", cuerpo="contenido editorial")
+    vacio = libprompts.crear("Vacío", cuerpo="")  # sin cuerpo: NO debe publicarse
 
-    n = libtexto.publicar_linea_base(nota="first commit")
+    n = libprompts.publicar_linea_base(nota="first commit")
     assert n == 2  # prompt + editorial; el vacío se ignora
 
     for d in (p, e):
-        pub = libtexto.produccion_de(d.id)
+        pub = libprompts.produccion_de(d.id)
         assert pub is not None and pub["nota"] == "first commit"
-        assert libtexto.estado_publicacion(d.id)["sin_publicar"] is False
-    assert libtexto.produccion_de(vacio.id) is None
+        assert libprompts.estado_publicacion(d.id)["sin_publicar"] is False
+    assert libprompts.produccion_de(vacio.id) is None
 
     # Idempotente: una segunda pasada no re-publica nada.
-    assert libtexto.publicar_linea_base() == 0
+    assert libprompts.publicar_linea_base() == 0

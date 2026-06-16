@@ -6,7 +6,7 @@
  *   · su ICONO de tipo — 🤖 (LLM) / ⚙ (determinista) —,
  *   · su INTERRUPTOR (on/off) — el toggle ES el indicador de estado; no hay puntos de color —,
  *   · sus CONTEOS de cola (en curso · en cola) donde la fase tiene trabajos,
- *   · «Editar prompt» (las fases con prompt abren su doc de la Biblioteca en un overlay) y las
+ *   · «Editar prompt» (las fases con prompt abren su doc de la Prompts en un overlay) y las
  *     «Excepciones por marca», en el menú de la fila.
  * En la cabecera, el maestro «Máquina» (`KENI_MAQUINA`): apagado, nada automático corre.
  *
@@ -19,7 +19,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Bot, ChevronDown, ChevronRight, Cog, Users } from "lucide-react";
 import * as React from "react";
 
-import { EditorPromptOverlay } from "@/components/biblioteca/EditorPromptOverlay";
+import { EditorPromptOverlay } from "@/components/prompts/EditorPromptOverlay";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { ItemMenuContextual } from "@/components/comunes/MenuContextual";
 import {
@@ -51,7 +51,7 @@ export interface FasePipeline {
   claves: readonly string[];
   /** Qué hace la fase. */
   ayuda: string;
-  /** Doc de la Biblioteca cuyo prompt alimenta la fase («Editar prompt»). */
+  /** Doc de la Prompts cuyo prompt alimenta la fase («Editar prompt»). */
   doc?: string;
   /** Clave de cola de la fase (índice en los conteos): muestra sus en curso/en cola. */
   queue?: string;

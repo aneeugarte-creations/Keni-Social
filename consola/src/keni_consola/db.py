@@ -417,7 +417,7 @@ from .db_rota import (  # noqa: F401
     obtener_turno_rota,
     quitar_coordinador_rota,
 )
-from .db_texto_pub import (  # noqa: F401
+from .db_prompts_pub import (  # noqa: F401
     ESTADO_SOLICITUD_ABIERTA,
     ESTADO_SOLICITUD_APROBADA,
     ESTADO_SOLICITUD_RECHAZADA,

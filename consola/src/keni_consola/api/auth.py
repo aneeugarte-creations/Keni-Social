@@ -477,7 +477,7 @@ async def me(request: Request) -> Response:
                 "id": usuario["id"],
                 "usuario": usuario["usuario"],
                 "rol": usuario["rol"],
-                # `es_admin` (rediseño de la Biblioteca): bool plano para que el frontend
+                # `es_admin` (rediseño de la Prompts): bool plano para que el frontend
                 # gatee acciones de admin (publicar a producción, aprobar solicitudes) sin
                 # re-derivar el rol. Fuente única: `permisos.es_admin`.
                 "es_admin": permisos.es_admin(request),

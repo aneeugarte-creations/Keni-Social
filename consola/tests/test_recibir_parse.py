@@ -12,12 +12,12 @@ from keni_consola.dominio import ingesta as dom_ingesta
 from keni_consola.dominio import recibir_parse as ip
 
 # --------------------------------------------------------------------------- #
-# Prompts por cajón (Biblioteca editable + fallback)                           #
+# Prompts por cajón (Prompts editable + fallback)                           #
 # --------------------------------------------------------------------------- #
 
 
 def test_prompt_archivo_inserta_ruta_y_contrato_json():
-    # El prompt del cajón sale de la Biblioteca (inicial del paquete): inserta la RUTA donde
+    # El prompt del cajón sale de la Prompts (inicial del paquete): inserta la RUTA donde
     # estaba el marcador (que NO debe quedar crudo) y conserva el contrato JSON {"items": [...]}.
     prompt = ip.construir_prompt_archivo("portal", "/tmp/insumo.txt")
     assert "/tmp/insumo.txt" in prompt
@@ -34,12 +34,12 @@ def test_prompt_texto_incrusta_contenido():
 def test_fallback_de_cajon_sale_de_la_inicial(monkeypatch):
     # Red de seguridad: si la lectura del store falla, el prompt sale de la INICIAL del
     # paquete (sin strings duplicados en el código) y conserva el contrato JSON parseable.
-    from keni_consola import libtexto
+    from keni_consola import libprompts
 
     def boom(_pid):
         raise RuntimeError("store roto")
 
-    monkeypatch.setattr(libtexto, "cuerpo_efectivo", boom)
+    monkeypatch.setattr(libprompts, "cuerpo_efectivo", boom)
     fb = ip._prompt_de_cajon("eventos_claro", "/x")
     assert '{"items"' in fb and "/x" in fb
 

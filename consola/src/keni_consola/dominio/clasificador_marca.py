@@ -32,10 +32,10 @@ Ejecutor = Callable[[str, str], str]
 # Tope de caracteres de titulo+resumen al prompt (protege contra notas larguísimas).
 _MAX_CHARS = 600
 
-# El prompt vive en la Biblioteca de Texto como documento EDITABLE (pestaña «Prompts», doc
+# El prompt vive en la Prompts de Texto como documento EDITABLE (pestaña «Prompts», doc
 # `prompt/clasificar-marca`): el equipo lo ajusta sin tocar código. Las variables
 # {{MARCAS}}, {{MARCA_FALLBACK}} y {{NOTICIA}} se sustituyen aquí al componer la llamada. La
-# INICIAL del paquete (`texto_inicial/prompt/clasificar-marca.md`) es la ÚNICA fuente del
+# INICIAL del paquete (`prompts_inicial/prompt/clasificar-marca.md`) es la ÚNICA fuente del
 # texto: no hay copia duplicada en código (el test inicial↔código garantiza que existe).
 _PROMPT_ID = "prompt/clasificar-marca"
 
@@ -43,20 +43,20 @@ _PROMPT_ID = "prompt/clasificar-marca"
 def _plantilla() -> str:
     """Cuerpo EFECTIVO del prompt (publicado > store del equipo > INICIAL del paquete).
 
-    Import diferido de `libtexto` (evita ciclos). `cuerpo_efectivo` ya cae a la inicial cuando
+    Import diferido de `libprompts` (evita ciclos). `cuerpo_efectivo` ya cae a la inicial cuando
     el doc no está en el store; `cuerpo_inicial` es la red final si la lectura del store
     revienta (NUNCA lanza). "" solo si faltara la inicial (camino inalcanzable: lo cubre el
     test inicial↔código), y se avisa.
     """
-    from .. import libtexto
+    from .. import libprompts
 
     try:
-        cuerpo = (libtexto.cuerpo_efectivo(_PROMPT_ID) or "").strip()
+        cuerpo = (libprompts.cuerpo_efectivo(_PROMPT_ID) or "").strip()
     except Exception:  # noqa: BLE001 -- best-effort: caemos a la inicial del paquete
         cuerpo = ""
-    cuerpo = cuerpo or libtexto.cuerpo_inicial(_PROMPT_ID).strip()
+    cuerpo = cuerpo or libprompts.cuerpo_inicial(_PROMPT_ID).strip()
     if not cuerpo:
-        _log.warning("clasificar_marca: %s no está en la Biblioteca ni en la inicial.", _PROMPT_ID)
+        _log.warning("clasificar_marca: %s no está en la Prompts ni en la inicial.", _PROMPT_ID)
     return cuerpo
 
 

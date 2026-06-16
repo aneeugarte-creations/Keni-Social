@@ -9,7 +9,7 @@ import { apiConfig } from "./config";
 import { apiActividad } from "./actividad";
 import { apiPipelines } from "./pipelines";
 import { apiGeneraciones } from "./generaciones";
-import { apiTexto } from "./texto";
+import { apiPrompts } from "./prompts";
 import { apiLimites } from "./limites";
 import { apiPublicaciones } from "./publicaciones";
 import { apiMedia } from "./media";
@@ -55,7 +55,7 @@ export const api = {
   ...apiActividad,
   ...apiPipelines,
   ...apiGeneraciones,
-  ...apiTexto,
+  ...apiPrompts,
   ...apiLimites,
   ...apiPublicaciones,
   ...apiMedia,

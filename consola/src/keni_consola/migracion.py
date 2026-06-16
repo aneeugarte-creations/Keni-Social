@@ -142,9 +142,9 @@ def migrar(*, solo_db: bool = False, solo_media: bool = False, dry_run: bool = F
     resumen = ResumenMigracion()
     if not solo_media:
         if not dry_run:
-            from . import libtexto
+            from . import libprompts
 
-            resumen.dir_texto_migrado = libtexto.migrar_dir_legacy()
+            resumen.dir_texto_migrado = libprompts.migrar_dir_legacy()
         resumen.db_lista = asegurar_esquema(dry_run=dry_run)
     if not solo_db:
         copiados, saltados = migrar_media(dry_run=dry_run)
@@ -156,7 +156,7 @@ def migrar(*, solo_db: bool = False, solo_media: bool = False, dry_run: bool = F
 def _imprimir_resumen(resumen: ResumenMigracion, *, dry_run: bool) -> None:
     prefijo = "[dry-run] " if dry_run else ""
     if resumen.dir_texto_migrado:
-        print(f"{prefijo}Texto: almacén renombrado …/biblioteca -> …/texto.")
+        print(f"{prefijo}Prompts: almacén renombrado …/texto -> …/prompts.")
     if resumen.db_lista:
         print(f"{prefijo}DB: esquema Postgres asegurado (idempotente; ADR 0004).")
     if resumen.objetos_media_copiados or resumen.objetos_media_saltados:

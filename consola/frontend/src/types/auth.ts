@@ -139,7 +139,7 @@ export interface UsuarioSesion {
    */
   debe_inscribir_mfa?: boolean;
   /**
-   * `true` => puede PUBLICAR a producción en la Biblioteca de Prompts (los demás solo
+   * `true` => puede PUBLICAR a producción en el almacén de prompts (los demás solo
    * solicitan). Lo añade el backend del flujo de publicación; mientras no llegue, la UI
    * cae al rol clásico (`rol === "admin"`). Ver `useEsAdmin`.
    */

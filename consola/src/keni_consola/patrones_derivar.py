@@ -11,7 +11,7 @@ Modos de salida (combinables):
              inyecta el pipeline de copy). Es el modo de PRODUCCIÓN (re-derivación
              periódica sin tocar git).
   --inicial  reescribe los ficheros del PAQUETE (`patrones_inicial/*.json` y
-             `texto_inicial/editorial/rrss/<marca>/patrones.md`): para versionar en git
+             `prompts_inicial/editorial/rrss/<marca>/patrones.md`): para versionar en git
              una nueva foto de los patrones (lo corre una persona/agente y commitea).
 
 Fuente de piezas:
@@ -166,7 +166,7 @@ def escribir_inicial(perfil: dict[str, object], marca_keni: str, *, ahora: str) 
     """Escribe perfil JSON + doc generado en el PAQUETE (para commitear). Devuelve rutas."""
     base = Path(__file__).resolve().parent
     ruta_json = patrones_marca.dir_perfiles_inicial() / f"{marca_keni}.json"
-    ruta_doc = base / "texto_inicial" / "editorial" / "rrss" / marca_keni / "patrones.md"
+    ruta_doc = base / "prompts_inicial" / "editorial" / "rrss" / marca_keni / "patrones.md"
     ruta_json.parent.mkdir(parents=True, exist_ok=True)
     ruta_doc.parent.mkdir(parents=True, exist_ok=True)
     escribir_atomico(ruta_json, json.dumps(perfil, ensure_ascii=False, indent=1) + "\n")
@@ -184,7 +184,7 @@ def aplicar_store(perfil: dict[str, object], marca_keni: str, *, ahora: str) -> 
     está (es un doc generado, de dueño máquina; el humano edita Voz/Reglas, no este).
     Devuelve el id del documento en el store.
     """
-    from . import libtexto
+    from . import libprompts
 
     dir_data = patrones_marca.dir_perfiles_data()
     dir_data.mkdir(parents=True, exist_ok=True)
@@ -193,11 +193,11 @@ def aplicar_store(perfil: dict[str, object], marca_keni: str, *, ahora: str) -> 
     )
     doc_id = f"editorial/rrss/{marca_keni}/patrones"
     cuerpo = patrones_marca.renderizar_doc(perfil, cat_marcas.etiqueta_de(marca_keni))
-    if libtexto.obtener(doc_id) is None:
+    if libprompts.obtener(doc_id) is None:
         # `crear` deriva el slug del título: "Patrones" -> ".../patrones", el MISMO id
         # con el que importa la base (`patrones.md`); así crear-primero e
         # inicializar-después convergen en un único documento.
-        doc = libtexto.crear(
+        doc = libprompts.crear(
             "Patrones",
             tipo="editorial",
             carpeta=f"rrss/{marca_keni}",
@@ -207,7 +207,7 @@ def aplicar_store(perfil: dict[str, object], marca_keni: str, *, ahora: str) -> 
         )
         return doc.id
     # Solo el cuerpo: sin `titulo` el doc no se mueve de ruta (el id es estable).
-    libtexto.guardar(doc_id, cuerpo=cuerpo)
+    libprompts.guardar(doc_id, cuerpo=cuerpo)
     return doc_id
 
 

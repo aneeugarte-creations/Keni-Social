@@ -24,7 +24,7 @@ import logging
 import re
 from typing import Any
 
-from .. import libtexto, repos
+from .. import libprompts, repos
 from ..estados import ESTADO_EVERGREEN_PROPUESTA
 from . import generar
 
@@ -127,13 +127,13 @@ def lanzar_propuesta(
     `procesar` solo desde el spec (no recibe el id). Es un enlace de trazabilidad opcional; las
     ideas se crean igual. Wirearlo requeriria que el worker inyecte el gen_id al `procesar`.
     """
-    cuerpo = libtexto.cuerpo_efectivo(libtexto.prompt_base_de("idear"))
+    cuerpo = libprompts.cuerpo_efectivo(libprompts.prompt_base_de("idear"))
     if cuerpo is None:
-        raise libtexto.TextoError(
+        raise libprompts.PromptsError(
             "No está disponible el prompt de brainstorming. Reinstala la Consola."
         )
     prompt = generar.componer(
-        cuerpo, libtexto.editoriales_de_marca(marca, pipeline="idear"), contexto, sin_emojis=True
+        cuerpo, libprompts.editoriales_de_marca(marca, pipeline="idear"), contexto, sin_emojis=True
     )
     # Import perezoso del jobspec para no acoplar; el spec NO lleva la generacion_id real (la
     # crea `generar.lanzar`), pero el worker la inyecta al reconstruir el procesar.

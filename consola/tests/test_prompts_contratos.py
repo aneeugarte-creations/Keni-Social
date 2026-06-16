@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from keni_consola import libtexto
+from keni_consola import libprompts
 from keni_consola.prompts_contratos import (
     CONTRATO_POR_PROMPT,
     PLACEHOLDER,
@@ -24,7 +24,7 @@ from keni_consola.prompts_contratos import (
 
 @pytest.fixture(autouse=True)
 def _store_tmp(monkeypatch, tmp_path):
-    monkeypatch.setenv("KENI_TEXTO_DIR", str(tmp_path / "texto"))
+    monkeypatch.setenv("KENI_PROMPTS_DIR", str(tmp_path / "texto"))
 
 
 def test_resolver_contrato_rellena_y_es_noop_sin_placeholder():
@@ -50,13 +50,13 @@ def test_parrilla_tiene_contrato_inyectado_desde_codigo():
 @pytest.mark.parametrize("prompt_id", list(CONTRATO_POR_PROMPT))
 def test_editable_termina_en_placeholder_y_efectivo_resuelve(prompt_id: str):
     contrato = CONTRATO_POR_PROMPT[prompt_id]
-    crudo = libtexto.obtener_inicial(prompt_id)
+    crudo = libprompts.obtener_inicial(prompt_id)
     assert crudo is not None, f"falta la inicial {prompt_id}"
     cuerpo_editable = crudo.cuerpo
     # Editable: termina en el placeholder y NO lleva ya el contrato inline.
     assert cuerpo_editable.rstrip().endswith(PLACEHOLDER), prompt_id
     assert contrato not in cuerpo_editable, prompt_id
     # Efectivo (composición): contrato resuelto al final, sin placeholder.
-    efectivo = libtexto.cuerpo_inicial(prompt_id)
+    efectivo = libprompts.cuerpo_inicial(prompt_id)
     assert PLACEHOLDER not in efectivo, prompt_id
     assert efectivo.rstrip().endswith(contrato.rstrip()), prompt_id

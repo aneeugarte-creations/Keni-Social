@@ -32,7 +32,7 @@ import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
-import { EditorPromptOverlay } from "@/components/biblioteca/EditorPromptOverlay";
+import { EditorPromptOverlay } from "@/components/prompts/EditorPromptOverlay";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

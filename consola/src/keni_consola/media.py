@@ -150,7 +150,7 @@ _MODELO_DEFECTO = "openai/gpt-5-image-mini"
 # NO queremos: en la consola el titular y la marca se componen DESPUES, de forma determinista,
 # encima de una foto limpia. Los generadores puros (Nano Banana/Gemini) lo respetan sin dano.
 #
-# El TEXTO de esta directiva vive en la Biblioteca de Texto como prompt EDITABLE
+# El TEXTO de esta directiva vive en la Prompts de Texto como prompt EDITABLE
 # (`_SISTEMA_IMAGEN_ID`): el equipo lo ajusta desde el estudio sin tocar codigo. El paquete trae la version base; `_FALLBACK` abajo es una red defensiva por si la lectura fallara.
 _SISTEMA_IMAGEN_ID = "prompt/ilustrar"
 _SISTEMA_IMAGEN_FALLBACK = (
@@ -162,17 +162,17 @@ _SISTEMA_IMAGEN_FALLBACK = (
 
 
 def _sistema_imagen() -> str:
-    """Directiva de SISTEMA del generador de imagen, leida de la Biblioteca (editable).
+    """Directiva de SISTEMA del generador de imagen, leida de la Prompts (editable).
 
     Resuelve el cuerpo EFECTIVO del prompt `_SISTEMA_IMAGEN_ID` (store del equipo > base del
-    paquete). Import diferido de `libtexto` (evita ciclos; igual que `config`/`secretos`). Si la
+    paquete). Import diferido de `libprompts` (evita ciclos; igual que `config`/`secretos`). Si la
     lectura fallara o viniera vacia, cae al `_SISTEMA_IMAGEN_FALLBACK` para no quedarnos sin la
     directiva (sin ella los modelos GPT devuelven texto/infografia).
     """
     try:
-        from . import libtexto
+        from . import libprompts
 
-        cuerpo = (libtexto.cuerpo_efectivo(_SISTEMA_IMAGEN_ID) or "").strip()
+        cuerpo = (libprompts.cuerpo_efectivo(_SISTEMA_IMAGEN_ID) or "").strip()
     except Exception:  # noqa: BLE001 -- nunca dejar la generacion sin directiva por un fallo de lectura
         cuerpo = ""
     return cuerpo or _SISTEMA_IMAGEN_FALLBACK
@@ -685,7 +685,7 @@ def _proveedor_openrouter(prompt: str, modelo: str = "") -> SalidaImagen:
     de `_modelo()` si viene vacío). Pide `usage.include` para que el gateway devuelva el
     COSTE real de la llamada (`usage.cost`, USD): así el lanzador puede dejarlo en el
     ledger y estimar el coste por imagen (0.0 si el proveedor no lo reporta).
-    Antepone un mensaje de SISTEMA (`_sistema_imagen()`, editable en la Biblioteca) que fuerza
+    Antepone un mensaje de SISTEMA (`_sistema_imagen()`, editable en la Prompts) que fuerza
     salida de imagen y prohibe infografia/texto incrustado: sin el,
     los modelos GPT-5 Image responden TEXTO ante prompts noticiosos en vez de la imagen.
     `follow_redirects=False`: un 3xx a otro host no debe reenviar el Bearer (anti-SSRF).

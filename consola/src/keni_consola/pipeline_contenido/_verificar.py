@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .. import config, generaciones, libtexto, marcas, redes, repos
+from .. import config, generaciones, libprompts, marcas, redes, repos
 from ..dominio import generar as gen_dom
 from ..dominio import jobspec
 from ..dominio import verificar_fuente as dom_verificar
@@ -79,17 +79,17 @@ def asegurar_documento_verificacion() -> str:
     por el equipo (la regla pide un documento real, adjuntable y versionado).
     """
     try:
-        if libtexto.obtener(PROMPT_VERIFICACION_ID) is not None:
+        if libprompts.obtener(PROMPT_VERIFICACION_ID) is not None:
             return PROMPT_VERIFICACION_ID
         # No está en el store: si la inicial lo trae, ya hay cuerpo efectivo; aun así CREAMOS el
         # documento del store para que sea editable/adjuntable (la regla pide un doc real).
         # `PROMPT_VERIFICACION_ID` = `prompt/verificar`: la verificación pre-copy vive como prompt EDITABLE en la
-        # Biblioteca (inicial del paquete); la constante es el último recurso si faltara.
-        cuerpo_inicial = libtexto.cuerpo_efectivo(PROMPT_VERIFICACION_ID)
+        # Prompts (inicial del paquete); la constante es el último recurso si faltara.
+        cuerpo_inicial = libprompts.cuerpo_efectivo(PROMPT_VERIFICACION_ID)
         cuerpo = cuerpo_inicial or _DEFAULT_VERIFICACION_CRITERIOS
-        doc = libtexto.crear(_TITULO_VERIFICACION, tipo="prompt", cuerpo=cuerpo)
+        doc = libprompts.crear(_TITULO_VERIFICACION, tipo="prompt", cuerpo=cuerpo)
         # `crear` deriva el id del slug del título: "Verificar" -> "prompt/verificar".
-        return doc.id if doc.id == PROMPT_VERIFICACION_ID else (PROMPT_VERIFICACION_ID if libtexto.obtener(PROMPT_VERIFICACION_ID) else doc.id)
+        return doc.id if doc.id == PROMPT_VERIFICACION_ID else (PROMPT_VERIFICACION_ID if libprompts.obtener(PROMPT_VERIFICACION_ID) else doc.id)
     except Exception:  # noqa: BLE001 -- asegurar el doc es best-effort
         _log.warning("pipeline: no se pudo asegurar el documento de verificación", exc_info=True)
         return ""
@@ -164,14 +164,14 @@ def lanzar_verificar_cluster(
         return None
 
     doc_id = _ref.asegurar_documento_verificacion()
-    cuerpo = libtexto.cuerpo_efectivo(doc_id) if doc_id else None
+    cuerpo = libprompts.cuerpo_efectivo(doc_id) if doc_id else None
     if not cuerpo:
         return None  # sin documento de verificación no hay verificación: el cluster queda sin verificación.
 
     titulo = titulo or dom_verificacion_titulo(nota)
     prompt = gen_dom.componer(
         cuerpo,
-        libtexto.editoriales_de_marca(marca, pipeline="verificar"),
+        libprompts.editoriales_de_marca(marca, pipeline="verificar"),
         _contexto_verificacion_fuente(nota),
     )
     # Marca el cluster en curso ANTES de lanzar (la fase verificación no lo re-lanza). Con el lanzador

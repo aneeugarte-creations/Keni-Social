@@ -16,9 +16,9 @@ _CANDIDATAS = [("unotv", "UnoTV"), ("claro-sports", "Claro Sports"), ("nacion-ga
 
 @pytest.fixture(autouse=True)
 def _texto_tmp(monkeypatch, tmp_path):
-    # El prompt sale ahora de la Biblioteca de Texto: aislar el store en tmp para que ningún
+    # El prompt sale ahora de la Prompts de Texto: aislar el store en tmp para que ningún
     # test lea el store REAL (sin store, `cuerpo_efectivo` cae a la inicial del paquete).
-    monkeypatch.setenv("KENI_TEXTO_DIR", str(tmp_path / "texto"))
+    monkeypatch.setenv("KENI_PROMPTS_DIR", str(tmp_path / "texto"))
     return tmp_path
 
 
@@ -151,11 +151,11 @@ def test_clasificar_marca_ia_wiring_usa_candidatas_validas(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# El prompt vive en la Biblioteca (prompt/clasificar-marca)                 #
+# El prompt vive en la Prompts (prompt/clasificar-marca)                 #
 # --------------------------------------------------------------------------- #
 
 
-def test_prompt_sale_de_la_biblioteca_y_sustituye_variables():
+def test_prompt_sale_de_la_prompts_y_sustituye_variables():
     # Sin store, el cuerpo EFECTIVO es la inicial del paquete: las variables {{MARCAS}},
     # {{MARCA_FALLBACK}} y {{NOTICIA}} no pueden quedar crudas en la llamada a la IA.
     ej = _ejecutor_que_devuelve('{"marca": "unotv"}')
@@ -170,12 +170,12 @@ def test_prompt_sale_de_la_biblioteca_y_sustituye_variables():
     assert "Titular X" in p and "Resumen Y" in p  # la noticia (JSON)
 
 
-def test_prompt_editado_en_la_biblioteca_gana():
+def test_prompt_editado_en_la_prompts_gana():
     # El equipo edita el doc en el store: la siguiente clasificación usa SU texto.
-    from keni_consola import libtexto
+    from keni_consola import libprompts
 
-    libtexto.importar_inicial()
-    libtexto.guardar(
+    libprompts.importar_inicial()
+    libprompts.guardar(
         "prompt/clasificar-marca",
         cuerpo="PERSONALIZADO\n{{MARCAS}}\nfallback={{MARCA_FALLBACK}}\n{{NOTICIA}}",
     )
@@ -189,7 +189,7 @@ def test_prompt_editado_en_la_biblioteca_gana():
 
 
 def test_sin_doc_ni_inicial_degrada_pero_sigue_clasificando(monkeypatch, tmp_path):
-    monkeypatch.setenv("KENI_TEXTO_INICIAL", str(tmp_path / "inicial-vacia"))
+    monkeypatch.setenv("KENI_PROMPTS_INICIAL", str(tmp_path / "inicial-vacia"))
     ej = _ejecutor_que_devuelve('{"marca": "claro-sports"}')
     marca = clasificador_marca.clasificar_marca(
         "Gol agónico", "", _CANDIDATAS, fallback="unotv", ejecutor=ej,

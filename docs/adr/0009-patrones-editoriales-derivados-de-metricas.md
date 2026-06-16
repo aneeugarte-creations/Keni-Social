@@ -4,7 +4,7 @@
 - **Fecha:** 2026-06-10
 - **Decisores:** equipo keni-social
 - **Componente:** `keni-consola` (`patrones_marca.py`, `patrones_derivar.py`, `patrones_refresco.py`, `dominio/copy.py`, `texto_inicial/editorial/rrss/*/patrones.md`, `patrones_inicial/*.json`)
-- **Relación:** consume la API de Metricool vía `keni_metricas` (ADR 0005 §B: B es la fuente única de métricas). Sigue el patrón inicial/store de la Biblioteca de Texto.
+- **Relación:** consume la API de Metricool vía `keni_metricas` (ADR 0005 §B: B es la fuente única de métricas). Sigue el patrón inicial/store de la Prompts de Texto.
 
 ---
 

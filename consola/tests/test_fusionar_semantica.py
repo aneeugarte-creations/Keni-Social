@@ -155,7 +155,7 @@ def test_paso_fusion_gateado_off_no_hace_nada(entorno, monkeypatch):
 
 
 def test_construir_prompt_inserta_historias_y_contrato():
-    # La plantilla viene de la Biblioteca (inicial): la lista JSON sustituye al marcador (que NO
+    # La plantilla viene de la Prompts (inicial): la lista JSON sustituye al marcador (que NO
     # debe quedar crudo) y se conserva el contrato JSON {"grupos": [...]}.
     p = fusionar_semantica._construir_prompt('[{"id":"a"}]')
     assert '[{"id":"a"}]' in p

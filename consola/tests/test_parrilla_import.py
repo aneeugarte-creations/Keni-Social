@@ -442,12 +442,12 @@ def test_no_dedup_eventos_distintos_misma_fecha():
 
 
 # --------------------------------------------------------------------------- #
-# componer_prompt: plantilla editable (Biblioteca) + fragmentos calculados     #
+# componer_prompt: plantilla editable (Prompts) + fragmentos calculados     #
 # --------------------------------------------------------------------------- #
 
 
 def test_componer_prompt_inserta_fragmentos_ambos_modos():
-    # La plantilla viene de la Biblioteca (inicial); roster, esquema y la fuente/cola se insertan
+    # La plantilla viene de la Prompts (inicial); roster, esquema y la fuente/cola se insertan
     # en sus marcadores, que NO deben quedar crudos. Modo TEXTO: el documento va embebido al final.
     p_txt = pij.componer_prompt(ctx=_ctx(), texto_documento="### HOJA: A\nfila")
     assert "Luis" in p_txt and "Ana" in p_txt          # roster (miembros)

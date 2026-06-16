@@ -4,7 +4,7 @@ PROBLEMA QUE CIERRA
 ===================
 La propuesta de valor de keni-social es "auto-verificación / más IA hacia adentro": el
 sistema genera copy y lo filtra para que el humano solo DECIDA. Pero los prompts de la
-Biblioteca son EDITABLES EN VIVO (pestaña «Prompts», `libtexto`) sin ninguna red de
+Prompts son EDITABLES EN VIVO (pestaña «Prompts», `libprompts`) sin ninguna red de
 regresión: con varios agentes (+ el humano) tocándolos en paralelo, un cambio que degrade
 voz / tono / formato se despliega sin que NADA lo cace. Este paquete es esa red: un set de
 CASOS GOLDEN versionados + un RUNNER determinista que contrasta cada copy candidato contra

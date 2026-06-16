@@ -20,8 +20,8 @@ import { Markdown } from "tiptap-markdown";
 
 import type { Editor } from "@tiptap/react";
 
-import { ChipVariable } from "@/components/biblioteca/chip-variable";
-import { useVariables } from "@/hooks/use-biblioteca";
+import { ChipVariable } from "@/components/prompts/chip-variable";
+import { useVariables } from "@/hooks/use-prompts";
 import { cn } from "@/lib/utils";
 import type { VariableCatalogo } from "@/types";
 
@@ -51,7 +51,7 @@ function aMarkdown(editor: Editor): string {
 
 // Estilo del contenido editable (no hay plugin `prose`): mapeo elemento->clases coherente
 // con el tema, vía selectores hijos de Tailwind sobre el área `.tiptap` (contentEditable).
-// Exportado: `LectorProsa` (Biblioteca) lo reutiliza para que lectura y edición se vean igual.
+// Exportado: `LectorProsa` (Prompts) lo reutiliza para que lectura y edición se vean igual.
 export const ESTILO_CONTENIDO = cn(
   "[&_.tiptap]:min-h-[300px] [&_.tiptap]:outline-none [&_.tiptap]:text-sm [&_.tiptap]:leading-relaxed",
   "[&_h1]:mb-2 [&_h1]:mt-3 [&_h1]:text-xl [&_h1]:font-bold",
@@ -79,7 +79,7 @@ export function EditorWysiwyg({
   onContenido: (markdown: string) => void;
   placeholder?: string;
   /**
-   * Activa los chips de variables `{{NOMBRE}}` de la Biblioteca (nodo atómico + tooltip
+   * Activa los chips de variables `{{NOMBRE}}` de la Prompts (nodo atómico + tooltip
    * del catálogo + autocompletado al teclear `{{`). Se lee UNA vez al montar (las
    * extensiones del editor se fijan en la creación): si necesitas alternarlo, re-monta
    * el componente con `key`. Los demás usos del editor no cargan nada de esto.

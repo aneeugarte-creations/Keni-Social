@@ -46,7 +46,7 @@ def _generacion_publica(gen_id: str) -> dict | None:
 
 
 def _prompts_plantilla() -> dict[str, str]:
-    """Plantilla (texto) del prompt de cada etapa IA, desde la Biblioteca de Texto (editable).
+    """Plantilla (texto) del prompt de cada etapa IA, desde la Prompts de Texto (editable).
 
     Permite que la UI enseñe SIEMPRE el prompt de entrada de una etapa IA, aunque aún no haya
     corrido (entonces es la plantilla; cuando corre, se prefiere el prompt REAL de la generación).
@@ -55,10 +55,10 @@ def _prompts_plantilla() -> dict[str, str]:
     out: dict[str, str] = {}
     for code, pid in _PROMPT_POR_ETAPA.items():
         try:
-            from ... import libtexto
+            from ... import libprompts
 
-            cuerpo = (libtexto.cuerpo_efectivo(pid) or "").strip()
-        except Exception:  # noqa: BLE001 -- sin Biblioteca legible, esa etapa no trae plantilla
+            cuerpo = (libprompts.cuerpo_efectivo(pid) or "").strip()
+        except Exception:  # noqa: BLE001 -- sin Prompts legible, esa etapa no trae plantilla
             cuerpo = ""
         if cuerpo:
             out[code] = cuerpo

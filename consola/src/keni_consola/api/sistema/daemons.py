@@ -145,7 +145,7 @@ def sonda_daemons() -> dict:
                 # ADITIVO (no toca grupo/gasta_tokens/clave_gate/barrible).
                 "clase": latidos.clase_de(f["daemon"]),
                 "motor": latidos.motor_de(f["daemon"]),
-                # `etiqueta` (nombre humano del daemon) y `prompts` (los docs de la Biblioteca que
+                # `etiqueta` (nombre humano del daemon) y `prompts` (los docs de la Prompts que
                 # gobiernan un agente IA, [] si no es IA): lo que necesita la página Agentes para
                 # NO hardcodear el nombre ni el mapeo de prompts en el front. Fuente única en
                 # `latidos`.

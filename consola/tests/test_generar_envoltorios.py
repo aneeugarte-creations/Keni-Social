@@ -1,13 +1,13 @@
-"""Tests de envoltorios de copy en la Biblioteca (`prompt/envoltorios/*`). PURO, sin BD.
+"""Tests de envoltorios de copy en la Prompts (`prompt/envoltorios/*`). PURO, sin BD.
 
-Regla de producto: TODOS los prompts de IA se gestionan desde la Biblioteca. Estos tests
+Regla de producto: TODOS los prompts de IA se gestionan desde la Prompts. Estos tests
 verifican la generación de envoltorios del dominio:
 
   - Salida byte-idéntica: con la inicial sin editar, cada instrucción compuesta es la
     esperada. Si la inicial o el ensamblaje divergen, esto revienta.
   - La INICIAL es la ÚNICA fuente del texto: solo «sin emojis» conserva un respaldo MÍNIMO,
     `INSTRUCCION_SIN_EMOJIS`.
-  - Un doc EDITADO en el store gana (el texto sale de la Biblioteca, los valores del código).
+  - Un doc EDITADO en el store gana (el texto sale de la Prompts, los valores del código).
   - Sin doc NI inicial, los envoltorios estructurales degradan a vacío con warning (camino
     inalcanzable: lo cubre el test de cobertura inicial↔código).
 """
@@ -16,14 +16,14 @@ from __future__ import annotations
 
 import pytest
 
-from keni_consola import libtexto
+from keni_consola import libprompts
 from keni_consola.dominio import generar
 
 
 @pytest.fixture(autouse=True)
 def _store_tmp(monkeypatch, tmp_path):
-    """Store de la Biblioteca FALSO y VACÍO en tmp: el cuerpo efectivo cae a la INICIAL."""
-    monkeypatch.setenv("KENI_TEXTO_DIR", str(tmp_path / "texto"))
+    """Store de la Prompts FALSO y VACÍO en tmp: el cuerpo efectivo cae a la INICIAL."""
+    monkeypatch.setenv("KENI_PROMPTS_DIR", str(tmp_path / "texto"))
 
 
 # --------------------------------------------------------------------------- #
@@ -96,13 +96,13 @@ def test_sin_emojis_inicial_coincide_con_su_fallback_minimo():
     seguir coincidiendo con su inicial. Los envoltorios estructurales (redes/carrusel/copy
     unificado) ya no tienen copia en código; su byte-exactitud la fijan los tests de ORO."""
     assert (
-        libtexto.cuerpo_inicial(generar.PROMPT_ENVOLTORIO_SIN_EMOJIS).strip()
+        libprompts.cuerpo_inicial(generar.PROMPT_ENVOLTORIO_SIN_EMOJIS).strip()
         == generar.INSTRUCCION_SIN_EMOJIS
     )
 
 
 # --------------------------------------------------------------------------- #
-# El doc de la Biblioteca GANA; los valores los sigue poniendo el código       #
+# El doc de la Prompts GANA; los valores los sigue poniendo el código       #
 # --------------------------------------------------------------------------- #
 
 
@@ -111,7 +111,7 @@ def test_doc_editado_gana_y_se_sustituyen_variables(monkeypatch):
         generar.PROMPT_ENVOLTORIO_REDES: "Solo estas redes: {{ETIQUETAS}} ({{LIMITES}}) ids {{IDS_JSON}}.",
         generar.PROMPT_ENVOLTORIO_SIN_EMOJIS: "Nada de emojis, por favor.",
     }
-    monkeypatch.setattr(libtexto, "cuerpo_efectivo", lambda pid: editados.get(pid))
+    monkeypatch.setattr(libprompts, "cuerpo_efectivo", lambda pid: editados.get(pid))
     assert generar.instruccion_sin_emojis() == "Nada de emojis, por favor."
     instr = generar.instruccion_redes(["x"])
     assert instr == 'Solo estas redes: X (X máx 25000 caracteres) ids "x".'
@@ -122,7 +122,7 @@ def test_doc_editado_de_carrusel_y_copy_unico(monkeypatch):
         generar.PROMPT_ENVOLTORIO_CARRUSEL: "Panel de {{N_NOTAS}} (máx {{MAX_SLIDES}}). {{CATALOGO_FOTOS}}",
         generar.PROMPT_ENVOLTORIO_COPY_UNICO: "[{{MODO_PUBLICACION}}|{{ETIQUETAS}}|{{VERSIONES}}|{{CIERRE_JSON}}]",
     }
-    monkeypatch.setattr(libtexto, "cuerpo_efectivo", lambda pid: editados.get(pid))
+    monkeypatch.setattr(libprompts, "cuerpo_efectivo", lambda pid: editados.get(pid))
     instr = generar.instruccion_copy_unico(["facebook"], n_notas=3)
     # El esqueleto editado gana; el código sigue montando modo/versiones/cierre.
     assert instr.startswith("[ TAL CUAL|Facebook|Escribe UN SOLO copy")
@@ -139,17 +139,17 @@ def test_doc_editado_de_carrusel_y_copy_unico(monkeypatch):
 
 
 @pytest.fixture
-def biblioteca_rota(monkeypatch, tmp_path):
+def prompts_roto(monkeypatch, tmp_path):
     """Ni store ni inicial: `cuerpo_efectivo` revienta y la inicial apunta a un dir vacío."""
 
     def boom(_pid: str) -> str:
         raise RuntimeError("store roto (simulado)")
 
-    monkeypatch.setattr(libtexto, "cuerpo_efectivo", boom)
-    monkeypatch.setenv("KENI_TEXTO_INICIAL", str(tmp_path / "inicial-vacia"))
+    monkeypatch.setattr(libprompts, "cuerpo_efectivo", boom)
+    monkeypatch.setenv("KENI_PROMPTS_INICIAL", str(tmp_path / "inicial-vacia"))
 
 
-def test_sin_doc_ni_inicial_degrada_con_warning(biblioteca_rota, caplog):
+def test_sin_doc_ni_inicial_degrada_con_warning(prompts_roto, caplog):
     """«sin emojis» conserva su fallback mínimo en código; los envoltorios estructurales
     (sin copia en código) degradan a vacío. Todos dejan warning. El test de cobertura
     inicial↔código garantiza que la inicial SIEMPRE está, así que esto no pasa en producción."""

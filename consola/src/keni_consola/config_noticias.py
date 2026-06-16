@@ -570,7 +570,7 @@ def noticias_retencion_horas() -> int:
 
 
 # --------------------------------------------------------------------------- #
-# Perfil editorial por marca (Haiku desde libtexto) — Fase 2                    #
+# Perfil editorial por marca (Haiku desde libprompts) — Fase 2                    #
 # --------------------------------------------------------------------------- #
 
 

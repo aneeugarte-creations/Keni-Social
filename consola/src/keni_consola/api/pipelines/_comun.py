@@ -52,7 +52,7 @@ _ETAPA_CLAVES = frozenset(clave for clave, _ in _ETAPAS)
 # Etapas que SON una llamada a un LLM (la UI las marca "IA" y enseña prompt+proceso+resultado).
 # Admitir (crea el tema en BD) y Aprobar (humana) NO lo son.
 _ETAPAS_IA = frozenset({"fusionar", "priorizar", "verificar", "redactar", "ilustrar"})
-# Prompt de la Biblioteca de Texto que usa cada etapa IA (código de etapa → id editable). Permite
+# Prompt de la Prompts de Texto que usa cada etapa IA (código de etapa → id editable). Permite
 # enseñar el PROMPT de entrada SIEMPRE, aunque la etapa aún no haya corrido (plantilla).
 _PROMPT_POR_ETAPA = {
     "FUSIONAR": "prompt/fusionar",

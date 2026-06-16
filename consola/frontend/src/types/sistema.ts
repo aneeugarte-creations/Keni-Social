@@ -572,7 +572,7 @@ export interface LatidoDaemon {
   /** Resumen del último barrido (qué hizo / nº items) o "" si no aportó: distingue de un vistazo
    *  "corre y TRABAJA" de "corre EN VACIO". Lo da el backend (`daemon_latidos.ultimo_resumen`). */
   ultimo_resumen: string;
-  /** Prompts de la Biblioteca que gobiernan este agente IA (lo que el panel ofrece editar
+  /** Prompts de la Prompts que gobiernan este agente IA (lo que el panel ofrece editar
    *  in-place); `[]` si no es IA. Lo da el backend (`latidos.prompts_de`). */
   prompts: PromptDaemon[];
   /** Clave de ajuste (KENI_*) que enciende/apaga el daemon desde su fila (toggle in-place;
@@ -586,7 +586,7 @@ export interface LatidoDaemon {
   ajustes: AjusteAdmin[];
 }
 
-/** Un prompt de la Biblioteca que gobierna un agente IA (etiqueta visible + id de documento). */
+/** Un prompt de la Prompts que gobierna un agente IA (etiqueta visible + id de documento). */
 export interface PromptDaemon {
   etiqueta: string;
   doc: string;

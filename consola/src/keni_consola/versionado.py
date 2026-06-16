@@ -1,13 +1,13 @@
 """Versionado de la Texto con git (historial · diff · rollback · atribucion).
 
-La Texto es files-as-truth: cada documento es un `.md` bajo `libtexto.raiz()`. Este
+La Texto es files-as-truth: cada documento es un `.md` bajo `libprompts.raiz()`. Este
 modulo envuelve cada escritura con un commit en un repo git DEDICADO a esa raiz, de modo que
 el historial, el diff y el rollback salen gratis y `git log` da la ATRIBUCION (quien/cuando
 cambio que). Es la opcion acordada en el rediseno: ligera y coherente con files-as-truth.
 
 PRINCIPIO: es BEST-EFFORT y NO CRITICO. El guardado del documento ya ocurrio (atomico) ANTES
 de llamar aqui; si git no esta disponible o un comando falla, solo se deja rastro en el log y
-la operacion del usuario NUNCA se rompe. Se puede desactivar con `KENI_TEXTO_GIT=0`.
+la operacion del usuario NUNCA se rompe. Se puede desactivar con `KENI_PROMPTS_GIT=0`.
 
 El repo se inicializa de forma perezosa en la raiz de la texto (no en `/data` entero),
 asi que solo versiona documentos. La papelera (`.papelera/`) queda fuera (`.gitignore`).
@@ -31,8 +31,12 @@ _AUTOR_DEFECTO = ("Consola Keni", "consola@keni.local")
 
 
 def _habilitado() -> bool:
-    """True si el versionado git esta activo (env `KENI_TEXTO_GIT` != '0') y git existe."""
-    if os.environ.get("KENI_TEXTO_GIT", "1").strip() == "0":
+    """True si el versionado git esta activo (env `KENI_PROMPTS_GIT` != '0') y git existe.
+
+    Back-compat: si `KENI_PROMPTS_GIT` no esta, cae al nombre legacy `KENI_TEXTO_GIT`.
+    """
+    crudo = os.environ.get("KENI_PROMPTS_GIT") or os.environ.get("KENI_TEXTO_GIT", "1")
+    if crudo.strip() == "0":
         return False
     return _git_disponible()
 
@@ -49,9 +53,9 @@ def _git_disponible() -> bool:
 
 def _base() -> Path:
     """Raiz del repo git = raiz de la texto (import perezoso para evitar ciclo)."""
-    from . import libtexto
+    from . import libprompts
 
-    return libtexto.raiz()
+    return libprompts.raiz()
 
 
 def _git(base: Path, *args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
@@ -134,7 +138,7 @@ def registrar(
         _log.debug("versionado best-effort fallo (%s): %s", mensaje, exc)
 
 
-def linea_base(mensaje: str = "linea base de la Biblioteca") -> int:
+def linea_base(mensaje: str = "linea base de la Prompts") -> int:
     """Registra UN commit con los `.md` del store que aun no esten versionados.
 
     Garantiza que todo documento tenga un HEAD git, para que el modelo de publicacion sirva su
@@ -244,7 +248,7 @@ def shas_documentos() -> dict[str, str]:
 
     Version POR LOTE de `sha_documento`: UNA sola llamada a git (`log --name-only` sobre
     el historial completo del repo de la Texto, que es pequeno) en vez de un subproceso
-    por documento. La usan el listado de la Biblioteca y el endpoint de la maquina.
+    por documento. La usan el listado de la Prompts y el endpoint de la maquina.
     {} si el versionado esta apagado o no hay repo. Los ficheros borrados/renombrados
     pueden aparecer con su ultima ruta; los consumidores cruzan contra los docs vivos.
     """

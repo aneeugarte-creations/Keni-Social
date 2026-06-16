@@ -8,7 +8,7 @@ import type { BarridoDaemon, LatidoDaemon } from "@/types";
 
 // El editor de prompt arrastra DetalleDocumento (cadena de imports pesada e irrelevante para
 // esta página): lo stubeamos a un nodo vacío. El overlay solo se monta al abrirlo.
-vi.mock("@/components/biblioteca/EditorPromptOverlay", () => ({
+vi.mock("@/components/prompts/EditorPromptOverlay", () => ({
   EditorPromptOverlay: () => null,
 }));
 

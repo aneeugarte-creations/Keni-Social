@@ -64,9 +64,9 @@ def test_refrescar_deriva_si_el_perfil_esta_viejo(tmp_path, monkeypatch):
     # El runtime quedó actualizado (generado reciente) y el doc del store existe.
     datos = json.loads((tmp_path / "unotv.json").read_text(encoding="utf-8"))
     assert datos["redes"]["facebook"]["muestras"] == 120
-    from keni_consola import libtexto
+    from keni_consola import libprompts
 
-    assert libtexto.obtener("editorial/rrss/unotv/patrones") is not None
+    assert libprompts.obtener("editorial/rrss/unotv/patrones") is not None
 
 
 def test_refrescar_sin_runtime_deriva(tmp_path, monkeypatch):

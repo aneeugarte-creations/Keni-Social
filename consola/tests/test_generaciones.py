@@ -7,7 +7,7 @@ Cubre:
     token (`text_delta`), turnos por `message_start`, `thinking` ignorado.
   - Store de generaciones (crear/obtener/actualizar/listar) aislado en tmp.
   - Endpoints `GET /api/generaciones` y `GET /api/generaciones/{id}`.
-  - El POST a `/api/texto/lanzar` (prompt salida=piezas) con el lanzador por defecto
+  - El POST a `/api/prompts/lanzar` (prompt salida=piezas) con el lanzador por defecto
     (noop) deja la generacion en `ejecutando` (no bloquea, sin resultado todavia) y sondeable.
   - El lanzador de imagen completa la generacion con su `resultado`.
 """
@@ -540,10 +540,10 @@ def test_ejecutar_lanza_en_background_y_queda_ejecutando(entorno):
     El copy ya no se lanza por el motor de skills (retirado), sino desde la Texto: un
     prompt `salida=piezas` lanzado con redes encola un trabajo de COPY en background.
     """
-    from keni_consola import libtexto
+    from keni_consola import libprompts
 
-    prompt = libtexto.crear("Copy desde nota", tipo="prompt", cuerpo="Convierte la nota.")
-    ruta = libtexto._ruta_de_id(prompt.id)
+    prompt = libprompts.crear("Copy desde nota", tipo="prompt", cuerpo="Convierte la nota.")
+    ruta = libprompts._ruta_de_id(prompt.id)
     ruta.write_text(
         ruta.read_text(encoding="utf-8").replace("tipo: prompt", "tipo: prompt\nsalida: piezas"),
         encoding="utf-8",
@@ -551,7 +551,7 @@ def test_ejecutar_lanza_en_background_y_queda_ejecutando(entorno):
 
     cli = _cliente()  # lanzador de generacion por defecto = noop (no claude)
     r = cli.post(
-        "/api/texto/lanzar",
+        "/api/prompts/lanzar",
         json={"prompt_id": prompt.id, "marca": _MARCA, "redes": ["x"],
               "target": {"tipo": "contenido", "valor": "una nota"}},
     )

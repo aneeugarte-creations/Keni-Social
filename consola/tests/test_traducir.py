@@ -174,7 +174,7 @@ def test_texto_largo_no_rompe():
 
 
 def test_construir_prompt_inserta_items_y_contrato():
-    # La plantilla viene de la Biblioteca (inicial): la lista JSON sustituye al marcador (que
+    # La plantilla viene de la Prompts (inicial): la lista JSON sustituye al marcador (que
     # NO debe quedar crudo) y se conserva el contrato JSON {"traducciones": [...]}.
     p = traducir._construir_prompt('[{"id":"1","titulo":"Hi"}]')
     assert '[{"id":"1","titulo":"Hi"}]' in p

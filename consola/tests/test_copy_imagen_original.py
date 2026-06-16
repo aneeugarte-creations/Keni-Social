@@ -1,4 +1,4 @@
-"""La foto ORIGINAL de fuente propia se CATALOGA en la Biblioteca y se inyecta a la pieza.
+"""La foto ORIGINAL de fuente propia se CATALOGA en la Prompts y se inyecta a la pieza.
 
 Cuando `crear_publicaciones_desde_piezas` recibe `imagen_fuente` (og:image de un RSS de marca
 propia), descarga la foto, la promueve a la carpeta protegida `artes`, la registra en el
@@ -45,7 +45,7 @@ def test_imagen_fuente_se_cataloga_como_original_y_se_inyecta(entorno, monkeypat
     imagen = str(creadas[0].get("imagen") or "")
     assert imagen.startswith("artes/")
 
-    # Y queda CATALOGADA en la Biblioteca con tipo="original" y marca de la pieza.
+    # Y queda CATALOGADA en la Prompts con tipo="original" y marca de la pieza.
     catalogo = repos.listar_media_catalogo()
     fila = next((c for c in catalogo if (c.get("objeto") or "") == imagen), None)
     assert fila is not None

@@ -98,6 +98,6 @@ export * from "./buzon";
 export * from "./campanias";
 export * from "./auth";
 export * from "./catalogo";
-export * from "./texto";
+export * from "./prompts";
 export * from "./noticias";
 export * from "./marcas";

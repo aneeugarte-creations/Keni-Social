@@ -10,7 +10,7 @@ ningun test toque el disco real del usuario:
   - `KENI_CONSOLA_PREFERENCIAS`-> preferencias (esfuerzo de generacion) aisladas en tmp
   - `KENI_CONSOLA_SUGERENCIAS`-> buzon de sugerencias (JSON local) aislado en tmp
   - `KENI_METRICAS_CONFIG` -> archivo inexistente + `KENI_METRICAS_FUENTE=muestra` => fuente de muestra
-  - `KENI_TEXTO_DIR`  -> almacen de la Texto (prompts) FALSO en tmp (no toca el real)
+  - `KENI_PROMPTS_DIR`  -> almacen de la Texto (prompts) FALSO en tmp (no toca el real)
 
 PERSISTENCIA OPERACIONAL (ADR 0004): la Consola persiste en Postgres. La fixture `entorno`
 fija `DATABASE_URL` apuntando al Postgres de pruebas (env `KENI_TEST_DATABASE_URL`) y
@@ -58,9 +58,9 @@ def _versionado_git_desactivado(monkeypatch):
 
     El versionado (commit por guardado) es BEST-EFFORT en produccion, pero en la suite cada
     `crear`/`guardar` lanzaria subprocesos git: lento y ruidoso. Lo apagamos por defecto; los
-    tests que lo EJERCITAN lo reactivan con `monkeypatch.setenv('KENI_TEXTO_GIT', '1')`.
+    tests que lo EJERCITAN lo reactivan con `monkeypatch.setenv('KENI_PROMPTS_GIT', '1')`.
     """
-    monkeypatch.setenv("KENI_TEXTO_GIT", "0")
+    monkeypatch.setenv("KENI_PROMPTS_GIT", "0")
 
 
 @pytest.fixture(autouse=True)
@@ -219,7 +219,7 @@ def entorno(monkeypatch, tmp_path):
     monkeypatch.setenv("KENI_CONSOLA_GENERACIONES", str(tmp_path / "generaciones"))
     # Almacen de la Texto (prompts + linea editorial) aislado en tmp: ningun test
     # debe leer/escribir el store real (~/.config/keni-social/texto).
-    monkeypatch.setenv("KENI_TEXTO_DIR", str(tmp_path / "texto"))
+    monkeypatch.setenv("KENI_PROMPTS_DIR", str(tmp_path / "texto"))
     try:
         yield tmp_path
     finally:

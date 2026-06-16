@@ -1,6 +1,6 @@
 /**
  * Lanzador manual de ARTE (gemelo «rico» de «Generar copy»): genera N imágenes a mano para
- * una marca a partir del prompt de la etapa Ilustrar de la Biblioteca (`prompt/ilustrar`, editable) con un
+ * una marca a partir del prompt de la etapa Ilustrar de la Prompts (`prompt/ilustrar`, editable) con un
  * modelo de imagen y un nº de alternativas elegidos. DEJA CLARO QUE TIENE COSTE: estima el
  * gasto con el coste medio por imagen del modelo («~$X por imagen × N»). Lanza con
  * `POST /api/artes/generar`, sondea cada generación devuelta (`GET /api/generaciones/{id}`)
@@ -36,7 +36,7 @@ import { MENSAJE_MARCA_REQUERIDA, useMarcaActiva } from "@/hooks/marca-activa-co
 import { api, mensajeError, urlMedia } from "@/lib/api";
 import type { Generacion } from "@/types";
 
-/** Doc de la Biblioteca con el prompt de Ilustrar (mismo id que la directiva del generador). */
+/** Doc de la Prompts con el prompt de Ilustrar (mismo id que la directiva del generador). */
 const PROMPT_ILUSTRAR_ID = "prompt/ilustrar";
 /** Tope de alternativas por lanzamiento (espejo de `_MAX_ALTERNATIVAS` en el backend). */
 const MAX_ALTERNATIVAS = 4;
@@ -68,9 +68,9 @@ export function PanelLanzarArte({
   const marcaBase = marcaForzada ?? marcaActiva;
   const marca = marcaBase && marcas.some((m) => m.id === marcaBase) ? marcaBase : "";
 
-  // ── Prompt de arte de la Biblioteca: precargado y EDITABLE (el usuario puede escribir el suyo). ──
+  // ── Prompt de arte de la Prompts: precargado y EDITABLE (el usuario puede escribir el suyo). ──
   const promptQuery = useQuery({
-    queryKey: ["texto-doc", PROMPT_ILUSTRAR_ID],
+    queryKey: ["prompts-doc", PROMPT_ILUSTRAR_ID],
     queryFn: ({ signal }) => api.documento(PROMPT_ILUSTRAR_ID, signal),
     enabled: open,
   });
@@ -185,7 +185,7 @@ export function PanelLanzarArte({
           </div>
         ) : null}
 
-        {/* Prompt de arte (Biblioteca), precargado y editable. */}
+        {/* Prompt de arte (Prompts), precargado y editable. */}
         <div className="space-y-1">
           <Label>Prompt de arte (editable)</Label>
           <AutoTextarea
@@ -196,12 +196,12 @@ export function PanelLanzarArte({
             }}
             maxHeight={260}
             placeholder={
-              promptQuery.isPending ? "Cargando el prompt de la Biblioteca…" : "Describe el arte a generar…"
+              promptQuery.isPending ? "Cargando el prompt de la Prompts…" : "Describe el arte a generar…"
             }
             className="min-h-[120px] w-full text-sm"
           />
           <p className="text-xs text-muted-foreground">
-            Parte del prompt de la Biblioteca (<code>prompt/ilustrar</code>); escríbelo a tu gusto.
+            Parte del prompt de la Prompts (<code>prompt/ilustrar</code>); escríbelo a tu gusto.
           </p>
         </div>
 

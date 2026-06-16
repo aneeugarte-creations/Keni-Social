@@ -1,10 +1,10 @@
-"""Catálogo: a qué PROCESO(S) se inyecta cada prompt de la Biblioteca.
+"""Catálogo: a qué PROCESO(S) se inyecta cada prompt de la Prompts.
 
 Fuente única para la transparencia "¿a qué proceso se inyecta este prompt?" que muestra el
 estudio de texto (pestaña «Prompts»). El mapeo vive en CÓDIGO a propósito: es propiedad de qué
 módulo inyecta el prompt en un agente, no del contenido editable; así no se desincroniza cuando
 el equipo edita el documento. Cuando se cablea un prompt nuevo (lectura por
-`libtexto.cuerpo_efectivo`), se añade aquí su entrada.
+`libprompts.cuerpo_efectivo`), se añade aquí su entrada.
 
 Las claves son los IDs de documento (`prompt/...`); los valores, etiquetas legibles del/los
 proceso(s) donde el prompt se inyecta a la IA. `procesos_de` devuelve [] para los no catalogados.

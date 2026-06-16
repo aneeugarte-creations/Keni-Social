@@ -37,7 +37,7 @@ MODOS: tuple[str, ...] = ("generar", "variantes", "resumir")
 
 # Modos que ANEXAN una instruccion aditiva al prompt de copy (el prompt mantiene su voz de
 # marca, tropicalizacion y auto-verificacion). `generar` no anade nada extra. El TEXTO de cada
-# instruccion vive SOLO en la Biblioteca/inicial (docs EDITABLES `prompt/asistente/<modo>`):
+# instruccion vive SOLO en la Prompts/inicial (docs EDITABLES `prompt/asistente/<modo>`):
 # no hay copia duplicada en codigo (el test inicial↔codigo garantiza que existe).
 _MODOS_CON_INSTRUCCION: frozenset[str] = frozenset({"variantes", "resumir"})
 
@@ -45,23 +45,23 @@ _MODOS_CON_INSTRUCCION: frozenset[str] = frozenset({"variantes", "resumir"})
 def _instruccion_modo(modo: str) -> str:
     """Instruccion aditiva EFECTIVA del modo (publicado > store > INICIAL del paquete).
 
-    Solo los modos con instruccion ("variantes"/"resumir") leen la Biblioteca; "generar" no
-    anade nada. Import diferido de `libtexto` (evita ciclos). `cuerpo_efectivo` ya cae a la
+    Solo los modos con instruccion ("variantes"/"resumir") leen la Prompts; "generar" no
+    anade nada. Import diferido de `libprompts` (evita ciclos). `cuerpo_efectivo` ya cae a la
     inicial; `cuerpo_inicial` es la red final si el store revienta (NUNCA lanza). "" solo si
     faltara la inicial (camino inalcanzable: lo cubre el test inicial↔codigo), y se avisa.
     """
     if modo not in _MODOS_CON_INSTRUCCION:
         return ""
     doc_id = f"prompt/asistente/{modo}"
-    from .. import libtexto
+    from .. import libprompts
 
     try:
-        cuerpo = (libtexto.cuerpo_efectivo(doc_id) or "").strip()
+        cuerpo = (libprompts.cuerpo_efectivo(doc_id) or "").strip()
     except Exception:  # noqa: BLE001 -- best-effort: caemos a la inicial del paquete
         cuerpo = ""
-    cuerpo = cuerpo or libtexto.cuerpo_inicial(doc_id).strip()
+    cuerpo = cuerpo or libprompts.cuerpo_inicial(doc_id).strip()
     if not cuerpo:
-        _log.warning("asistente: %s no está en la Biblioteca ni en la inicial.", doc_id)
+        _log.warning("asistente: %s no está en la Prompts ni en la inicial.", doc_id)
     return cuerpo
 
 

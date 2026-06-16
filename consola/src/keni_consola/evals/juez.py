@@ -77,10 +77,10 @@ def generar_copy_live(caso: CasoEval, ejecutor: EjecutorLLM) -> str:
     """HOOK de evals LIVE: genera copy REAL para la nota de origen del caso con `ejecutor`.
 
     NO se implementa el ensamblado del prompt aquí para no duplicar `dominio.generar` /
-    `biblioteca`: cuando se cablee, debe componer el prompt EXACTAMENTE como producción
-    (Biblioteca de Prompts + contexto editorial de la marca) y devolver la salida cruda para
+    `prompts`: cuando se cablee, debe componer el prompt EXACTAMENTE como producción
+    (almacén de prompts + contexto editorial de la marca) y devolver la salida cruda para
     pasarla por los checks deterministas. De momento es un punto de extensión explícito."""
     raise NotImplementedError(
-        "evals live: cablear el ensamblado de prompt de producción (biblioteca + voz de marca) "
+        "evals live: cablear el ensamblado de prompt de producción (prompts + voz de marca) "
         "y reusar el ejecutor de claude -p. Ver consola/evals/README.md §Modo live."
     )

@@ -11,7 +11,7 @@ estado.
 
 Reemplaza al antiguo "sistema de skills" (carpetas `SKILL.md` + `keni.yaml` con formularios) por
 un **almacén único de documentos markdown** editables (`texto.py`, files-as-truth bajo
-`KENI_TEXTO_DIR`) y un **lanzador NEUTRO** (`dominio/generar.py`) que es el único punto de
+`KENI_PROMPTS_DIR`) y un **lanzador NEUTRO** (`dominio/generar.py`) que es el único punto de
 arranque de `claude -p`.
 
 Cada documento es un `.md` con frontmatter YAML + cuerpo; conviven dos `tipo`:

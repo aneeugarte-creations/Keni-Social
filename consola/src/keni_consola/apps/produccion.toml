@@ -29,7 +29,7 @@ permisos = ["editor", "admin"]
 modulos_backend = [
   "actividad",
   "produccion",
-  "texto",
+  "prompts",
   "bloques",
   "imagen",
   "generaciones",
@@ -122,7 +122,7 @@ grupo = "contenido"
 grupo_orden = 20
 orden = 20
 
-# (La página «Texto»/Biblioteca se RETIRÓ del bloque Contenido: los prompts viven ahora dentro de
+# (La página «Texto»/Prompts se RETIRÓ del bloque Contenido: los prompts viven ahora dentro de
 # cada fase del pipeline en «Contexto» —Máquina—, y el contexto editorial se inyecta desde ahí.
 # `/contenido/texto*` redirige a `/maquina/contexto`.)
 

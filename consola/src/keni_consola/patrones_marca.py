@@ -15,7 +15,7 @@ pregunta) en un PERFIL JSON por marca. Ese perfil alimenta dos consumidores:
 El perfil es REGENERABLE (`keni_consola.patrones_derivar`, CLI + daemon opcional): la
 base viaja en el paquete (`patrones_inicial/<marca>.json`) y el runtime puede
 sobrescribirla bajo el dir de datos (`<dir_config>/patrones/<marca>.json`), misma
-filosofía base/store que `libtexto`. Sin perfil para una marca/red el verificador
+filosofía base/store que `libprompts`. Sin perfil para una marca/red el verificador
 NO inventa: devuelve sin avisos (degradación honesta).
 
 Capas: este módulo es PURO (texto + dicts); no importa `dominio` ni toca red/BD.
@@ -309,7 +309,7 @@ def dir_perfiles_data() -> Path:
     """Dir de perfiles del RUNTIME (`<dir_config>/patrones`): lo escribe la re-derivación.
 
     Override por `KENI_PATRONES_DIR` (tests). Gana sobre la base, igual que el
-    store de texto gana sobre `texto_inicial`.
+    store de texto gana sobre `prompts_inicial`.
     """
     import os
 

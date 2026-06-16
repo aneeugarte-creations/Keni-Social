@@ -7,7 +7,7 @@ evita que se desincronice cuando el equipo edita el prompt, igual que `prompts_p
 
 Modelo: el cuerpo editable del prompt TERMINA en el placeholder `{{CONTRATO_SALIDA}}`; la
 composición lo rellena con el contrato real (`resolver_contrato`) justo antes de enviar al modelo,
-así el contrato va SIEMPRE al FINAL del prompt (tras la prosa y los datos). En la Biblioteca el
+así el contrato va SIEMPRE al FINAL del prompt (tras la prosa y los datos). En la Prompts el
 contrato NO se puede editar (el editor oculta el placeholder del final y pinta el contrato
 read-only en un bloque aparte). `contrato_de` devuelve `None` para los
 prompts NO estructurados (su salida es prosa para una persona: `prompt/ilustrar`,

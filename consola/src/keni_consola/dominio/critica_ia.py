@@ -98,9 +98,9 @@ def _contexto_editorial(marca: str) -> str:
 
 def _componer_prompt(*, pub: dict[str, Any], marca: str, red: str, ruta_arte: str) -> str:
     """Renderiza el prompt inicial `prompt/critica` con los datos de la pieza + contexto editorial."""
-    from .. import libtexto
+    from .. import libprompts
 
-    cuerpo = libtexto.cuerpo_efectivo(PROMPT_CRITICA) or libtexto.cuerpo_inicial(PROMPT_CRITICA)
+    cuerpo = libprompts.cuerpo_efectivo(PROMPT_CRITICA) or libprompts.cuerpo_inicial(PROMPT_CRITICA)
     if ruta_arte:
         arte = (
             "Hay una imagen adjunta. LÉELA con la herramienta Read en esta ruta y JÚZGALA "

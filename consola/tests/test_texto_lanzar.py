@@ -1,6 +1,6 @@
 """Tests de la primitiva de lanzamiento de prompts de la texto (dominio puro).
 
-Aisla `KENI_TEXTO_DIR` y `KENI_CONSOLA_GENERACIONES` en tmp e INTERCEPTA
+Aisla `KENI_PROMPTS_DIR` y `KENI_CONSOLA_GENERACIONES` en tmp e INTERCEPTA
 `generaciones.encolar_job_claude` (no toca la cola ni `claude`). Verifica la composicion
 del prompt (prompt + linea editorial + contexto), el registro de generacion (tipo "prompt")
 y la validacion de marca.
@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import pytest
 
-from keni_consola import libtexto, generaciones, marcas
-from keni_consola.dominio import texto_lanzar, jobspec
+from keni_consola import libprompts, generaciones, marcas
+from keni_consola.dominio import prompts_lanzar, jobspec
 
 _MARCA = marcas.opciones()[0][0]
 
@@ -19,7 +19,7 @@ _MARCA = marcas.opciones()[0][0]
 @pytest.fixture(autouse=True)
 def _entorno_tmp(monkeypatch, tmp_path):
     monkeypatch.setenv("KENI_DATA_DIR", str(tmp_path))  # aisla dir_config() (cwd_generacion)
-    monkeypatch.setenv("KENI_TEXTO_DIR", str(tmp_path / "texto"))
+    monkeypatch.setenv("KENI_PROMPTS_DIR", str(tmp_path / "texto"))
     monkeypatch.setenv("KENI_CONSOLA_GENERACIONES", str(tmp_path / "generaciones"))
     return tmp_path
 
@@ -47,7 +47,7 @@ def test_componer_incluye_solo_secciones_presentes():
     solo = generar.componer("Haz X", [], "")
     assert solo == "Haz X"
 
-    ed = libtexto.crear("Voz", tipo="editorial", clase="voz", marcas=[_MARCA], cuerpo="tono cercano")
+    ed = libprompts.crear("Voz", tipo="editorial", clase="voz", marcas=[_MARCA], cuerpo="tono cercano")
     con_todo = generar.componer("Haz X", [ed], "una nota")
     assert "Haz X" in con_todo
     assert "LÍNEA EDITORIAL" in con_todo and "tono cercano" in con_todo
@@ -62,7 +62,7 @@ def test_componer_orden_estable_primero_contexto_al_final():
     del bloque editorial y rompía el prefijo común)."""
     from keni_consola.dominio import generar
 
-    ed = libtexto.crear(
+    ed = libprompts.crear(
         "Voz", tipo="editorial", clase="voz", marcas=[_MARCA], cuerpo="tono cercano"
     )
     final = generar.componer(
@@ -107,11 +107,11 @@ def test_componer_filtra_adjuntos_sin_texto():
     """Un editorial "esqueleto" (solo headings) no se inyecta: no aporta y gasta tokens."""
     from keni_consola.dominio import generar
 
-    vacio = libtexto.crear(
+    vacio = libprompts.crear(
         "Esqueleto", tipo="editorial", clase="voz", marcas=[_MARCA],
         cuerpo="# Tono\n\n## Qué evitar\n",
     )
-    lleno = libtexto.crear(
+    lleno = libprompts.crear(
         "Voz real", tipo="editorial", clase="voz", marcas=[_MARCA], cuerpo="tono cercano"
     )
     final = generar.componer("Haz X", [vacio, lleno], "")
@@ -129,10 +129,10 @@ def test_componer_filtra_adjuntos_sin_texto():
 
 
 def test_lanzar_prompt_de_texto_compone_y_encola(encolado):
-    prompt = libtexto.crear("Genera copy", tipo="prompt", cuerpo="Convierte la nota en copy.")
-    ed = libtexto.crear("Plataformas", tipo="editorial", clase="plataforma", cuerpo="máx 280 caracteres")
+    prompt = libprompts.crear("Genera copy", tipo="prompt", cuerpo="Convierte la nota en copy.")
+    ed = libprompts.crear("Plataformas", tipo="editorial", clase="plataforma", cuerpo="máx 280 caracteres")
 
-    reg = texto_lanzar.lanzar(
+    reg = prompts_lanzar.lanzar(
         prompt_id=prompt.id, marca=_MARCA, adjuntos_ids=[ed.id], bloque_contexto="Nota: gol en el 90'",
     )
 
@@ -152,46 +152,46 @@ def test_lanzar_prompt_de_texto_compone_y_encola(encolado):
 
 
 def test_lanzar_texto_ad_hoc(encolado):
-    reg = texto_lanzar.lanzar(texto="Resume esto en 3 puntos", marca=_MARCA)
+    reg = prompts_lanzar.lanzar(texto="Resume esto en 3 puntos", marca=_MARCA)
     assert reg["tipo"] == "prompt"
     assert "Resume esto en 3 puntos" in encolado["prompt"]
 
 
 def test_lanzar_marca_invalida_lanza(encolado):
-    p = libtexto.crear("P", tipo="prompt", cuerpo="x")
-    with pytest.raises(libtexto.TextoError):
-        texto_lanzar.lanzar(prompt_id=p.id, marca="marca-inexistente")
+    p = libprompts.crear("P", tipo="prompt", cuerpo="x")
+    with pytest.raises(libprompts.PromptsError):
+        prompts_lanzar.lanzar(prompt_id=p.id, marca="marca-inexistente")
     assert encolado == {}  # no se encolo nada
 
 
 def test_lanzar_sin_prompt_ni_texto_lanza():
-    with pytest.raises(libtexto.TextoError):
-        texto_lanzar.lanzar(marca=_MARCA)
+    with pytest.raises(libprompts.PromptsError):
+        prompts_lanzar.lanzar(marca=_MARCA)
 
 
 def test_lanzar_prompt_inexistente_lanza():
-    with pytest.raises(libtexto.TextoError):
-        texto_lanzar.lanzar(prompt_id="prompt/no-existe", marca=_MARCA)
+    with pytest.raises(libprompts.PromptsError):
+        prompts_lanzar.lanzar(prompt_id="prompt/no-existe", marca=_MARCA)
 
 
 def test_lanzar_prompt_piezas_con_redes_crea_spec_copy(encolado):
     """Un prompt salida=piezas + redes lanza con el post-procesado de COPY (no identidad)."""
-    prompt = libtexto.crear(
+    prompt = libprompts.crear(
         "Copy desde nota", tipo="prompt", cuerpo="Convierte la nota en copy por red."
     )
     # `crear` no fija `salida`; lo escribimos como lo haria el editor de la Texto.
-    libtexto.guardar(prompt.id, cuerpo=prompt.cuerpo)
-    doc = libtexto.obtener(prompt.id)
+    libprompts.guardar(prompt.id, cuerpo=prompt.cuerpo)
+    doc = libprompts.obtener(prompt.id)
     # Forzamos salida=piezas via el almacen (el frontmatter lo soporta).
-    ruta = libtexto._ruta_de_id(prompt.id)
+    ruta = libprompts._ruta_de_id(prompt.id)
     ruta.write_text(
         ruta.read_text(encoding="utf-8").replace("tipo: prompt", "tipo: prompt\nsalida: piezas"),
         encoding="utf-8",
     )
-    assert libtexto.obtener(prompt.id).salida == "piezas"
+    assert libprompts.obtener(prompt.id).salida == "piezas"
 
     redes_ids = ["instagram", "x"]
-    reg = texto_lanzar.lanzar(
+    reg = prompts_lanzar.lanzar(
         prompt_id=prompt.id, marca=_MARCA, redes_ids=redes_ids,
         bloque_contexto="Nota: gol en el 90'",
     )
@@ -219,13 +219,13 @@ def test_lanzar_piezas_titulo_contenido_titula_los_borradores(encolado):
     Evita que el borrador se titule con la 1ª línea del bloque (en una URL, el AVISO de
     extracción automática). Sin `titulo_contenido` el `titulo_dado` queda "" (se deriva).
     """
-    prompt = libtexto.crear("Copy desde nota", tipo="prompt", cuerpo="copy por red")
-    ruta = libtexto._ruta_de_id(prompt.id)
+    prompt = libprompts.crear("Copy desde nota", tipo="prompt", cuerpo="copy por red")
+    ruta = libprompts._ruta_de_id(prompt.id)
     ruta.write_text(
         ruta.read_text(encoding="utf-8").replace("tipo: prompt", "tipo: prompt\nsalida: piezas"),
         encoding="utf-8",
     )
-    texto_lanzar.lanzar(
+    prompts_lanzar.lanzar(
         prompt_id=prompt.id, marca=_MARCA, redes_ids=["x"],
         bloque_contexto="AVISO: extraído automáticamente…\n\nCuerpo de la nota.",
         titulo_contenido="  Ni volcán ni géiser: expertos de la UNAM  ",
@@ -237,8 +237,8 @@ def test_lanzar_piezas_titulo_contenido_titula_los_borradores(encolado):
 
 def _prompt_piezas(titulo: str = "Copy desde nota"):
     """Crea un prompt y lo marca `salida: piezas` (como haría el editor de la Texto)."""
-    doc = libtexto.crear(titulo, tipo="prompt", cuerpo="Convierte la nota en copy por red.")
-    ruta = libtexto._ruta_de_id(doc.id)
+    doc = libprompts.crear(titulo, tipo="prompt", cuerpo="Convierte la nota en copy por red.")
+    ruta = libprompts._ruta_de_id(doc.id)
     ruta.write_text(
         ruta.read_text(encoding="utf-8").replace("tipo: prompt", "tipo: prompt\nsalida: piezas"),
         encoding="utf-8",
@@ -270,7 +270,7 @@ def test_lanzar_piezas_inyecta_indicaciones_vigentes_de_la_marca(entorno, encola
     )
     prompt = _prompt_piezas()
 
-    texto_lanzar.lanzar(
+    prompts_lanzar.lanzar(
         prompt_id=prompt.id, marca="claro-sports", redes_ids=["x"],
         bloque_contexto="Nota: gol en el 90'",
     )
@@ -285,7 +285,7 @@ def test_lanzar_piezas_inyecta_indicaciones_vigentes_de_la_marca(entorno, encola
 
     # Otra marca SIN indicaciones vigentes: el prompt de MODO PIEZAS no cambia ni un byte.
     encolado.clear()
-    texto_lanzar.lanzar(
+    prompts_lanzar.lanzar(
         prompt_id=prompt.id, marca="unotv", redes_ids=["x"],
         bloque_contexto="Nota: gol en el 90'",
     )
@@ -294,13 +294,13 @@ def test_lanzar_piezas_inyecta_indicaciones_vigentes_de_la_marca(entorno, encola
 
 def test_lanzar_prompt_piezas_sin_redes_cae_a_identidad(encolado):
     """Sin redes, un prompt salida=piezas usa el camino IDENTIDAD (no crea borradores)."""
-    prompt = libtexto.crear("Copy", tipo="prompt", cuerpo="haz copy")
-    ruta = libtexto._ruta_de_id(prompt.id)
+    prompt = libprompts.crear("Copy", tipo="prompt", cuerpo="haz copy")
+    ruta = libprompts._ruta_de_id(prompt.id)
     ruta.write_text(
         ruta.read_text(encoding="utf-8").replace("tipo: prompt", "tipo: prompt\nsalida: piezas"),
         encoding="utf-8",
     )
-    reg = texto_lanzar.lanzar(prompt_id=prompt.id, marca=_MARCA)
+    reg = prompts_lanzar.lanzar(prompt_id=prompt.id, marca=_MARCA)
     assert reg["tipo"] == "prompt"
     assert encolado["spec"]["procesar"]["kind"] == jobspec.PROC_PROMPT
     # El camino IDENTIDAD NO endurece la web: puede enrutar prompts de INVESTIGACIÓN
@@ -326,7 +326,7 @@ def test_lanzar_copy_adjunta_reglas_de_imagen_y_sin_hardcode_de_emojis(encolado)
 
 
 def test_previsualizar_copy_compone_igual_que_lanzar_copy(encolado):
-    """Previsualización FIEL: la Biblioteca muestra el MISMO prompt que recibe `claude -p`
+    """Previsualización FIEL: la Prompts muestra el MISMO prompt que recibe `claude -p`
     (misma composición: adjuntos de copy + instrucción de redes), salvo el nonce del
     envoltorio anti-inyección del contexto."""
     import re
@@ -336,7 +336,7 @@ def test_previsualizar_copy_compone_igual_que_lanzar_copy(encolado):
     generar.lanzar_copy(
         marca=_MARCA, contexto="Nota: gol en el 90'", redes_ids=["x"], titulo="Copy",
     )
-    prev = libtexto.previsualizar_pipeline("redactar", _MARCA, "Nota: gol en el 90'", redes_ids=["x"])
+    prev = libprompts.previsualizar_pipeline("redactar", _MARCA, "Nota: gol en el 90'", redes_ids=["x"])
 
     sin_nonce = lambda s: re.sub(r"contenido_usuario_[0-9a-f]+", "contenido_usuario_NONCE", s)  # noqa: E731
     assert sin_nonce(prev["prompt_efectivo"]) == sin_nonce(encolado["prompt"])

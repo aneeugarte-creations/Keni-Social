@@ -3,7 +3,7 @@
  * estructura de la página. Dos pestañas, Investigación y Producción; en cada una, las fases en orden
  * de flujo como filas desplegables. De cada fase cuelga TODO lo suyo —su prompt, el contexto editorial
  * que inyecta y sus logs en vivo— y su interruptor on/off. Sustituye a los dos cockpits de pipeline y
- * a la antigua Biblioteca/Texto: aquí se ve qué SABE y qué HACE cada máquina, en un solo sitio.
+ * a la antigua Prompts/Texto: aquí se ve qué SABE y qué HACE cada máquina, en un solo sitio.
  *
  * El menú «⋮» trae los ajustes del motor de la pestaña activa (Investigación: ajustes del motor;
  * Producción: máquina de contenido + imagen IA + sistema) y un puente a Agentes (cómputo). Bajo el
@@ -20,7 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api } from "@/lib/api";
 import { INTERVALO_VIVO_MS } from "@/lib/refresco";
-import { BibliotecaDocumentos } from "@/pages/maquina/BibliotecaDocumentos";
+import { PromptsDocumentos } from "@/pages/maquina/PromptsDocumentos";
 import {
   PanelAjustes,
   PanelInvestigacion,
@@ -53,7 +53,7 @@ export default function Contexto() {
   const proceso: Proceso =
     searchParams.get("proceso") === "produccion" ? "produccion" : "investigacion";
   const abrirAjustes = searchParams.get("tab") === "ajustes";
-  const [bibliotecaAbierta, setBibliotecaAbierta] = React.useState(false);
+  const [promptsAbierta, setPromptsAbierta] = React.useState(false);
   const cambiarProceso = (valor: string) =>
     setSearchParams(
       (prev) => {
@@ -94,7 +94,7 @@ export default function Contexto() {
           ajustesAbiertoInicial={abrirAjustes}
           ajustes={ajustes}
         >
-          <ItemMenu icono={FileText} onClick={() => setBibliotecaAbierta(true)}>
+          <ItemMenu icono={FileText} onClick={() => setPromptsAbierta(true)}>
             Todos los documentos
           </ItemMenu>
           <ItemMenu
@@ -144,9 +144,9 @@ export default function Contexto() {
         </TabsContent>
       </Tabs>
 
-      <BibliotecaDocumentos
-        abierto={bibliotecaAbierta}
-        onCerrar={() => setBibliotecaAbierta(false)}
+      <PromptsDocumentos
+        abierto={promptsAbierta}
+        onCerrar={() => setPromptsAbierta(false)}
       />
     </>
   );

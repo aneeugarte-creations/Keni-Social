@@ -1355,8 +1355,8 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     """,
     "CREATE INDEX IF NOT EXISTS idx_video_subtitulos_composicion ON video_subtitulos (composicion_id)",
     "CREATE INDEX IF NOT EXISTS idx_video_subtitulos_estado ON video_subtitulos (estado)",
-    # PUBLICACIONES de la Biblioteca de Texto (rediseno "version publicada"): cada fila es un
-    # acto de PUBLICAR un documento (`doc_id` de libtexto) fijando un `sha` git inmutable. La
+    # PUBLICACIONES de la Prompts de Texto (rediseno "version publicada"): cada fila es un
+    # acto de PUBLICAR un documento (`doc_id` de libprompts) fijando un `sha` git inmutable. La
     # fila MAS RECIENTE por doc_id (creado DESC, id DESC) es el puntero de PRODUCCION vigente;
     # el resto queda como audit log (quien publico que y cuando). Sin filas para un doc, los
     # pipelines caen a la working copy (migracion suave). Timestamps ISO con MICROSEGUNDOS

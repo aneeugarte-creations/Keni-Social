@@ -384,7 +384,7 @@ def test_me_incluye_creado_y_ultimo_acceso_para_mi_cuenta(entorno):
 def test_me_incluye_es_admin_segun_rol(entorno):
     """`me` expone `es_admin` (bool plano): True solo para una sesión con rol admin.
 
-    Lo usa el frontend del rediseño de la Biblioteca para gatear publicar/aprobar.
+    Lo usa el frontend del rediseño de la Prompts para gatear publicar/aprobar.
     """
     _crear("edi", CLAVE, "editor")
     _crear("root", CLAVE, "admin")

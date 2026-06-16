@@ -1,6 +1,6 @@
 """Instrucciones por MODO del asistente del tablero (`dominio.asistente`). PURO, sin BD.
 
-Las instrucciones aditivas de los modos `variantes`/`resumir` viven SOLO en la Biblioteca/
+Las instrucciones aditivas de los modos `variantes`/`resumir` viven SOLO en la Prompts/
 inicial (`prompt/asistente/<modo>`, editables).
 Solo se cubre la composición del texto base (el lanzamiento delega en `dominio.generar`,
 cubierto en sus propios tests).
@@ -15,8 +15,8 @@ from keni_consola.dominio import asistente
 
 @pytest.fixture(autouse=True)
 def _texto_tmp(monkeypatch, tmp_path):
-    # Aislar el store de la Biblioteca: sin store, `cuerpo_efectivo` cae a la inicial del paquete.
-    monkeypatch.setenv("KENI_TEXTO_DIR", str(tmp_path / "texto"))
+    # Aislar el store de la Prompts: sin store, `cuerpo_efectivo` cae a la inicial del paquete.
+    monkeypatch.setenv("KENI_PROMPTS_DIR", str(tmp_path / "texto"))
     return tmp_path
 
 
@@ -40,11 +40,11 @@ def test_instruccion_del_modo_sale_de_la_inicial(modo, esperado):
     assert esperado in base
 
 
-def test_instruccion_editada_en_biblioteca_gana():
-    from keni_consola import libtexto
+def test_instruccion_editada_en_prompts_gana():
+    from keni_consola import libprompts
 
-    libtexto.importar_inicial()
-    libtexto.guardar("prompt/asistente/resumir", cuerpo="RESUME EN UNA LÍNEA.")
+    libprompts.importar_inicial()
+    libprompts.guardar("prompt/asistente/resumir", cuerpo="RESUME EN UNA LÍNEA.")
     base = asistente.construir_texto_base(
         modo="resumir", titulo="T", descripcion="D", notas=""
     )
@@ -56,7 +56,7 @@ def test_sin_doc_ni_inicial_degrada_sin_instruccion(monkeypatch, tmp_path):
     # La inicial es la única fuente. Sin doc NI inicial, el modo degrada a SIN instrucción aditiva.
     # El test de cobertura inicial↔código garantiza que la inicial SIEMPRE está,
     # así que este camino es inalcanzable en producción.
-    monkeypatch.setenv("KENI_TEXTO_INICIAL", str(tmp_path / "inicial-vacia"))
+    monkeypatch.setenv("KENI_PROMPTS_INICIAL", str(tmp_path / "inicial-vacia"))
     base = asistente.construir_texto_base(
         modo="variantes", titulo="T", descripcion="D", notas=""
     )

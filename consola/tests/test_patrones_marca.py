@@ -261,13 +261,13 @@ def test_aplicar_store_crea_y_actualiza_doc(tmp_path, monkeypatch):
     perfil = patrones_marca.derivar_perfil(_lote_contraste(), "unotv", generado="t")
     doc_id = patrones_derivar.aplicar_store(perfil, "unotv", ahora="2026-06-10T00:00:00+00:00")
     assert doc_id == "editorial/rrss/unotv/patrones"
-    from keni_consola import libtexto
+    from keni_consola import libprompts
 
-    doc = libtexto.obtener(doc_id)
+    doc = libprompts.obtener(doc_id)
     assert doc is not None and "Patrones medidos" in doc.cuerpo
     assert doc.pipelines == ["redactar"]
     # Segunda aplicación: ACTUALIZA el cuerpo sin mover el documento (id estable).
     perfil2 = dict(perfil, piezas=999)
     assert patrones_derivar.aplicar_store(perfil2, "unotv", ahora="t2") == doc_id
-    assert "999" in libtexto.obtener(doc_id).cuerpo
+    assert "999" in libprompts.obtener(doc_id).cuerpo
     assert (tmp_path / "patrones" / "unotv.json").is_file()

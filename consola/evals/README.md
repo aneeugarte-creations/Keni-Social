@@ -1,7 +1,7 @@
 # Evals de calidad de la salida de IA
 
 Red de regresión para la propuesta de valor de keni-social ("auto-verificación / más IA hacia
-adentro"). Los prompts de la Biblioteca son **editables en vivo** sin red que los respalde: con
+adentro"). Los prompts de la Prompts son **editables en vivo** sin red que los respalde: con
 varios agentes (+ el humano) tocándolos en paralelo, un cambio que degrade voz/tono/formato se
 despliega sin que nada lo cace. Este harness es esa red **en la capa medible**.
 
@@ -83,7 +83,7 @@ de "no rompas lo medible" a "mide tu acuerdo con el criterio humano real".
 deterministas (por eso no van en CI):
 
 1. **Evals live**: `generar_copy_live(caso, ejecutor)` — generar copy REAL con `claude -p` desde
-   la nota de origen del caso (componiendo el prompt EXACTAMENTE como producción: Biblioteca de
+   la nota de origen del caso (componiendo el prompt EXACTAMENTE como producción: Prompts de
    Prompts + contexto editorial de la marca) y pasarlo por los checks deterministas. Mide la
    regresión de extremo a extremo, prompt incluido.
 2. **Calibración del juez LLM**: `acuerdo_con_humano(juez, casos)` — mide cuánto coincide un juez

@@ -18,18 +18,18 @@ import secrets
 from pathlib import Path
 from typing import Any
 
-from .. import generaciones, libtexto, limites_plataforma, marcas, redes
+from .. import generaciones, libprompts, limites_plataforma, marcas, redes
 from . import jobspec
 
 _log = logging.getLogger("keni_consola.generar")
 
 # --------------------------------------------------------------------------- #
-# Envoltorios (instrucciones aditivas) — TEXTO en la Biblioteca, LÓGICA aquí    #
+# Envoltorios (instrucciones aditivas) — TEXTO en la Prompts, LÓGICA aquí    #
 # --------------------------------------------------------------------------- #
 #
-# Regla de producto: TODOS los prompts de IA se gestionan desde la Biblioteca. Los textos de
+# Regla de producto: TODOS los prompts de IA se gestionan desde la Prompts. Los textos de
 # los envoltorios que `componer` concatena al prompt base viven como prompts EDITABLES en
-# `prompt/envoltorios/*` (INICIAL en `texto_inicial/`, ÚNICA fuente del texto); el código
+# `prompt/envoltorios/*` (INICIAL en `prompts_inicial/`, ÚNICA fuente del texto); el código
 # conserva la LÓGICA (cuándo se inyecta cada bloque, qué valor lleva cada `{{VARIABLE}}` —
 # límites de red, ids válidos, catálogo de fotos…). El ORDEN de concatenación de `componer` NO cambia
 # (prompt caching: estable-primero); solo de dónde sale el texto.
@@ -42,21 +42,21 @@ PROMPT_ENVOLTORIO_COPY_UNICO = "prompt/envoltorios/copy-unico"
 def _plantilla_envoltorio(doc_id: str, fallback: str = "") -> str:
     """Cuerpo EFECTIVO del envoltorio: versión publicada > store > INICIAL > `fallback`.
 
-    La INICIAL del paquete (`texto_inicial/`) es la fuente del texto; `cuerpo_efectivo` ya cae
+    La INICIAL del paquete (`prompts_inicial/`) es la fuente del texto; `cuerpo_efectivo` ya cae
     a ella cuando el doc no está en el store, y `cuerpo_inicial` es la red final si la lectura
     del store revienta (NUNCA lanza). `fallback` es un respaldo MÍNIMO en código (por defecto
     "", solo lo usa «sin emojis»): para los envoltorios estructurales (redes/carrusel/copy
     unificado) NO hay copia en código, así que sin inicial quedan vacíos (con warning). El test
     de cobertura inicial↔código garantiza que ese camino degradado es inalcanzable en la práctica."""
     try:
-        cuerpo = (libtexto.cuerpo_efectivo(doc_id) or "").strip()
+        cuerpo = (libprompts.cuerpo_efectivo(doc_id) or "").strip()
     except Exception:  # noqa: BLE001 -- nunca dejar una generación sin envoltorio por un fallo de lectura
         cuerpo = ""
     if not cuerpo:
-        cuerpo = libtexto.cuerpo_inicial(doc_id).strip()
+        cuerpo = libprompts.cuerpo_inicial(doc_id).strip()
     if not cuerpo:
         _log.warning(
-            "envoltorio %s no disponible en la Biblioteca ni en la inicial; uso el respaldo (%r)",
+            "envoltorio %s no disponible en la Prompts ni en la inicial; uso el respaldo (%r)",
             doc_id, fallback[:40],
         )
         return fallback
@@ -66,13 +66,13 @@ def _plantilla_envoltorio(doc_id: str, fallback: str = "") -> str:
 # Instrucción ADITIVA de estilo, OPT-IN por flujo (la usan flujos cuya salida nunca debe
 # llevar emojis, p. ej. evergreen/termómetro). Su política de emojis vive en el prompt
 # (`copy-desde-nota` §4) + la editorial adjunta de la marca, la única fuente. El texto
-# EDITABLE vive en la Biblioteca (`PROMPT_ENVOLTORIO_SIN_EMOJIS`); esta constante es el
+# EDITABLE vive en la Prompts (`PROMPT_ENVOLTORIO_SIN_EMOJIS`); esta constante es el
 # fallback (== inicial).
 INSTRUCCION_SIN_EMOJIS = "No uses emojis en el copy."
 
 
 def instruccion_sin_emojis() -> str:
-    """Texto del envoltorio "sin emojis" (Biblioteca; fallback al respaldo en código)."""
+    """Texto del envoltorio "sin emojis" (Prompts; fallback al respaldo en código)."""
     return _plantilla_envoltorio(PROMPT_ENVOLTORIO_SIN_EMOJIS, INSTRUCCION_SIN_EMOJIS)
 
 # Delimitador XML que envuelve el contenido NO confiable (nota/transcripción/ítem RSS del
@@ -108,8 +108,8 @@ def _aviso_contenido_usuario(tag: str) -> str:
     instrucciones. Defensa contra prompt-injection (el contenido viene de la nota del
     usuario o de feeds RSS, no confiable).
 
-    A PROPÓSITO NO vive en la Biblioteca (excepción a la regla "todos los prompts en la
-    Biblioteca"): es DEFENSA de seguridad acoplada al nonce por llamada, no texto editorial;
+    A PROPÓSITO NO vive en la Prompts (excepción a la regla "todos los prompts en la
+    Prompts"): es DEFENSA de seguridad acoplada al nonce por llamada, no texto editorial;
     un texto editable podría desincronizarse del mecanismo (tag/nonce) y abrir la puerta a
     inyecciones. Se queda en código junto al mecanismo que protege.
     """
@@ -187,7 +187,7 @@ def instruccion_redes(redes_ids: list[str]) -> str:
     """Instrucción ADITIVA: limita las redes, ancla sus límites técnicos (desde el código)
     y pide el bloque json con las piezas por red (contrato, incluidas piezas compuestas).
 
-    El TEXTO vive SOLO en la Biblioteca/inicial (`PROMPT_ENVOLTORIO_REDES`); los VALORES de
+    El TEXTO vive SOLO en la Prompts/inicial (`PROMPT_ENVOLTORIO_REDES`); los VALORES de
     las variables los sigue calculando el código desde sus fuentes (`redes`, `limites_plataforma`)."""
     plantilla = _plantilla_envoltorio(PROMPT_ENVOLTORIO_REDES)
     return (
@@ -220,7 +220,7 @@ def _bloque_decision_carrusel(n_notas: int, fotos_notas: list[dict[str, str]]) -
     de fotos de fuente propia (con el título de su nota) para que el modelo asigne a cada
     slide la foto de SU sub-historia por número; 0 = slide sin foto (placa solo de texto).
 
-    El TEXTO vive en la Biblioteca (`PROMPT_ENVOLTORIO_CARRUSEL`); el catálogo de fotos
+    El TEXTO vive en la Prompts (`PROMPT_ENVOLTORIO_CARRUSEL`); el catálogo de fotos
     (`{{CATALOGO_FOTOS}}`) lo monta el código. Devuelve el bloque SIN espacio inicial (el
     llamante lo une con " ", igual que antes byte a byte). La LÓGICA condicional (solo se
     ofrece con 2+ notas) se queda en `instruccion_copy_unico`.
@@ -244,11 +244,11 @@ def _bloque_decision_carrusel(n_notas: int, fotos_notas: list[dict[str, str]]) -
     )
 
 
-# ESQUELETO común del copy unificado: vive en la Biblioteca/inicial
+# ESQUELETO común del copy unificado: vive en la Prompts/inicial
 # (`prompt/envoltorios/copy-unico`). Las partes ESTRUCTURALMENTE CONDICIONALES (qué versiones
 # se piden, la forma exacta del bloque json) las monta el código en
 # `{{MODO_PUBLICACION}}`/`{{VERSIONES}}`/`{{CIERRE_JSON}}` desde los sub-bloques de abajo; la
-# Biblioteca aporta el texto, el código decide cuál va.
+# Prompts aporta el texto, el código decide cuál va.
 
 # Sub-bloque `{{VERSIONES}}` cuando se MEZCLAN redes amplias y estrechas: DOS versiones del
 # mismo mensaje (`texto` + `texto_corto`).
@@ -307,7 +307,7 @@ def instruccion_copy_unico(
     de fotos propias para asignar foto a cada slide). Con 0/1 notas, la sugerencia es solo post vs
     carrusel (sin slides: las fotos del carrusel las pone el equipo después).
 
-    El ESQUELETO del texto vive en la Biblioteca (`PROMPT_ENVOLTORIO_COPY_UNICO`); la rama
+    El ESQUELETO del texto vive en la Prompts (`PROMPT_ENVOLTORIO_COPY_UNICO`); la rama
     elegida (doble/única, con/sin carrusel) la decide el código y va ya montada en
     `{{VERSIONES}}`/`{{CIERRE_JSON}}`. La composición resultante es byte-idéntica a la
     versión hardcodeada previa."""
@@ -384,7 +384,7 @@ def cuerpo_sin_texto(cuerpo: str) -> bool:
     return True
 def componer(
     cuerpo_prompt: str,
-    adjuntos: list[libtexto.Documento],
+    adjuntos: list[libprompts.Documento],
     bloque_contexto: str,
     *,
     sin_emojis: bool = False,
@@ -420,12 +420,12 @@ def componer(
     if sin_emojis:
         partes.append(instruccion_sin_emojis())
     if adjuntos:
-        # MODELO DE PUBLICACION (rediseno de la Biblioteca): los pipelines inyectan la
+        # MODELO DE PUBLICACION (rediseno de la Prompts): los pipelines inyectan la
         # version PUBLICADA de cada adjunto editorial (sha fijado por un admin), no la
         # working copy. Sin puntero (o sin BD/git) el doc queda intacto: fallback suave.
         # Este es el UNICO punto de ensamblaje de adjuntos (lo cruzan lanzamientos reales
         # Y la previsualizacion: "lo que inyectas es lo que ves").
-        adjuntos = libtexto.aplicar_produccion(adjuntos)
+        adjuntos = libprompts.aplicar_produccion(adjuntos)
         # Filtra documentos sin texto efectivo (solo headings): no aportan y gastan tokens.
         bloques = [
             f"## {d.titulo}\n\n{d.cuerpo.strip()}" for d in adjuntos if not cuerpo_sin_texto(d.cuerpo)
@@ -676,7 +676,7 @@ def lanzar_arte(
 PROMPT_COPY = "prompt/redactar"
 
 
-def adjuntos_copy(marca: str) -> list[libtexto.Documento]:
+def adjuntos_copy(marca: str) -> list[libprompts.Documento]:
     """Adjuntos editoriales del pipeline de COPY: línea editorial de la marca + reglas de imagen.
 
     Las reglas de imagen (`editorial/reglas/imagen`) no entran por el auto-adjunto clásico
@@ -684,14 +684,14 @@ def adjuntos_copy(marca: str) -> list[libtexto.Documento]:
     sobre la placa), así que se adjuntan aquí. Best-effort: store o, si no, inicial; si el
     documento falta o está vacío, no se adjunta y el lanzamiento NO se rompe.
     """
-    adjuntos = list(libtexto.editoriales_de_marca(marca, pipeline="redactar"))
+    adjuntos = list(libprompts.editoriales_de_marca(marca, pipeline="redactar"))
     # Perezoso para no ciclar: `estudio_imagen` importa este módulo al cargarse.
     from .estudio_imagen import REGLAS_IMAGEN
 
     if any(d.id == REGLAS_IMAGEN for d in adjuntos):
         return adjuntos
     try:
-        doc = libtexto.obtener(REGLAS_IMAGEN) or libtexto.obtener_inicial(REGLAS_IMAGEN)
+        doc = libprompts.obtener(REGLAS_IMAGEN) or libprompts.obtener_inicial(REGLAS_IMAGEN)
     except Exception:  # noqa: BLE001 -- las reglas de imagen son un extra; nunca rompen el copy
         doc = None
     if doc is not None and not cuerpo_sin_texto(doc.cuerpo):
@@ -710,7 +710,7 @@ def componer_copy(
 ) -> str:
     """Composición ÚNICA del prompt de copy (la usan `lanzar_copy` y la previsualización).
 
-    "Lo que lanzas es lo que previsualizas": la Biblioteca (`libtexto.previsualizar_pipeline`)
+    "Lo que lanzas es lo que previsualizas": la Prompts (`libprompts.previsualizar_pipeline`)
     pasa por AQUÍ, así el prompt mostrado es el mismo que recibe `claude -p`. El pipeline de
     copy pide copy UNIFICADO (un texto+copy_in para todas las redes), también en la preview.
     `n_notas` (historias que agrupan varias notas): con 2+, la instrucción ofrece al modelo
@@ -790,10 +790,10 @@ def lanzar_copy(
     # Resolucion por REGISTRO: si el caller no rebindea (usa el id por defecto), el pipeline
     # "copy" decide su prompt base (que puede haberse re-bindeado en la Texto sin tocar
     # codigo). Si el caller pasa un prompt_id distinto, se respeta tal cual.
-    prompt_efectivo = libtexto.prompt_base_de("redactar") if prompt_id == PROMPT_COPY else prompt_id
-    cuerpo = libtexto.cuerpo_efectivo(prompt_efectivo)
+    prompt_efectivo = libprompts.prompt_base_de("redactar") if prompt_id == PROMPT_COPY else prompt_id
+    cuerpo = libprompts.cuerpo_efectivo(prompt_efectivo)
     if cuerpo is None:
-        raise libtexto.TextoError("No está disponible el prompt de copy. Reinstala la Consola.")
+        raise libprompts.PromptsError("No está disponible el prompt de copy. Reinstala la Consola.")
     fotos = [
         {"titulo": str(f.get("titulo") or ""), "imagen": str(f.get("imagen") or "").strip()}
         for f in (fotos_notas or [])

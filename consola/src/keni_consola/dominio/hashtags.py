@@ -12,10 +12,10 @@ _log = logging.getLogger("keni_consola.dominio.hashtags")
 # Caracteres validos dentro de un hashtag (letras Unicode, digitos y _). Sin espacios.
 _RE_TAG = re.compile(r"#?([\wÀ-ɏ]+)", re.UNICODE)
 
-# El prompt vive en la Biblioteca de Texto como documento EDITABLE (pestaña «Prompts», doc
+# El prompt vive en la Prompts de Texto como documento EDITABLE (pestaña «Prompts», doc
 # `prompt/hashtags`): el equipo lo ajusta sin tocar código. Las variables {{RED}}, {{MARCA}}
 # y {{TEXTO}} se sustituyen aquí al componer la llamada. La INICIAL del paquete
-# (`texto_inicial/prompt/hashtags.md`) es la ÚNICA fuente del texto: no hay copia duplicada
+# (`prompts_inicial/prompt/hashtags.md`) es la ÚNICA fuente del texto: no hay copia duplicada
 # en código (el test de cobertura inicial↔código garantiza que la inicial existe).
 _PROMPT_ID = "prompt/hashtags"
 
@@ -23,20 +23,20 @@ _PROMPT_ID = "prompt/hashtags"
 def _plantilla() -> str:
     """Cuerpo EFECTIVO del prompt (publicado > store del equipo > INICIAL del paquete).
 
-    Import diferido de `libtexto` (evita ciclos). `cuerpo_efectivo` ya cae a la inicial cuando
+    Import diferido de `libprompts` (evita ciclos). `cuerpo_efectivo` ya cae a la inicial cuando
     el doc no está en el store; `cuerpo_inicial` es la red final si la lectura del store
     revienta (NUNCA lanza). "" solo si faltara la inicial (camino inalcanzable: lo cubre el
     test inicial↔código), y se avisa.
     """
-    from .. import libtexto
+    from .. import libprompts
 
     try:
-        cuerpo = (libtexto.cuerpo_efectivo(_PROMPT_ID) or "").strip()
+        cuerpo = (libprompts.cuerpo_efectivo(_PROMPT_ID) or "").strip()
     except Exception:  # noqa: BLE001 -- best-effort: caemos a la inicial del paquete
         cuerpo = ""
-    cuerpo = cuerpo or libtexto.cuerpo_inicial(_PROMPT_ID).strip()
+    cuerpo = cuerpo or libprompts.cuerpo_inicial(_PROMPT_ID).strip()
     if not cuerpo:
-        _log.warning("hashtags: %s no está en la Biblioteca ni en la inicial.", _PROMPT_ID)
+        _log.warning("hashtags: %s no está en la Prompts ni en la inicial.", _PROMPT_ID)
     return cuerpo
 
 
@@ -54,7 +54,7 @@ def normalizar_tag(crudo: str) -> str | None:
 
 
 def construir_prompt_sugerencia(texto: str, marca: str, red: str | None = None) -> str:
-    """Prompt para pedir hashtags (plantilla editable de la Biblioteca + sustitución).
+    """Prompt para pedir hashtags (plantilla editable de la Prompts + sustitución).
 
     El texto viaja como argumento (sin shell). Sin red destino, {{RED}} se rellena con el
     genérico «redes sociales» (la plantilla queda gramatical en ambos casos).

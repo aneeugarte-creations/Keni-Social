@@ -1,7 +1,7 @@
 /**
  * DetalleFase — el panel inline que se despliega bajo una fila del pipeline en la página
  * «Contexto». Reúne, para UNA fase, todo lo suyo en tres pestañas:
- *   · Prompt   — el documento de la Biblioteca que alimenta la fase, en el editor completo
+ *   · Prompt   — el documento de la Prompts que alimenta la fase, en el editor completo
  *     (Versiones / Compilado / Publicar). Solo si la fase tiene prompt.
  *   · Contexto — el contexto editorial de la marca que la fase inyecta. En Investigación, las
  *     líneas de contenido y los orígenes que clasifican/priorizan; en Producción, la estrategia
@@ -15,7 +15,7 @@
 import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
 
-import { EditorPromptOverlay } from "@/components/biblioteca/EditorPromptOverlay";
+import { EditorPromptOverlay } from "@/components/prompts/EditorPromptOverlay";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,9 +24,9 @@ import { api } from "@/lib/api";
 import { tiempoRelativo } from "@/lib/fecha";
 import type { FasePipeline } from "@/pages/monitor/PanelPipeline";
 import { GestionHashtags } from "@/pages/publicaciones/GestionHashtags";
-import { DetalleDocumento } from "@/pages/texto/DetalleDocumento";
-import { EstrategiaMarca } from "@/pages/texto/estrategia/EstrategiaMarca";
-import { PanelClase } from "@/pages/texto/gestion-lineas/PanelClase";
+import { DetalleDocumento } from "@/pages/prompts/DetalleDocumento";
+import { EstrategiaMarca } from "@/pages/prompts/estrategia/EstrategiaMarca";
+import { PanelClase } from "@/pages/prompts/gestion-lineas/PanelClase";
 import type { ColaJob, ColaMonitor } from "@/types";
 
 type Proceso = "investigacion" | "produccion";
@@ -215,8 +215,8 @@ export function DetalleFase({
 
   // El flujo de la máquina alimenta la pestaña «Uso» del editor de prompt.
   const maquinaQuery = useQuery({
-    queryKey: ["texto-maquina"],
-    queryFn: ({ signal }) => api.maquinaTexto(signal),
+    queryKey: ["prompts-maquina"],
+    queryFn: ({ signal }) => api.maquinaPrompts(signal),
     enabled: !!fase.doc,
   });
 

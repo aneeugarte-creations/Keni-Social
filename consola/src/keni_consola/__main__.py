@@ -101,43 +101,43 @@ def main() -> int:
     # y los prompts base al store si aun no estan. Idempotente; no pisa lo que el equipo edite.
     # Vive aqui (servidor real), NO en `crear_app`, para no tocar el estado real en los tests.
     try:
-        from . import libtexto
+        from . import libprompts
 
-        m = libtexto.migrar_nombres_biblioteca()
+        m = libprompts.migrar_nombres_prompts()
         if m:
             print(f"Texto: {m} documento(s) migrados al nuevo esquema de nombres.")
-        o = libtexto.limpiar_prompts_obsoletos()
+        o = libprompts.limpiar_prompts_obsoletos()
         if o:
             print(f"Texto: {o} prompt(s) obsoleto(s) eliminados del store.")
-        d = libtexto.migrar_descripciones_editorial()
+        d = libprompts.migrar_descripciones_editorial()
         if d:
             print(f"Texto: {d} editorial(es) con descripcion/titulo de plantilla vieja corregidos.")
-        n = libtexto.importar_inicial()
+        n = libprompts.importar_inicial()
         if n:
             print(f"Texto: {n} documento(s) base importados.")
         # Reformato (one-shot): propaga al store el cuerpo reformateado de los prompts del sistema,
         # respetando ediciones del equipo. Antes de publicar, para que el "first commit" sea el nuevo.
-        r = libtexto.reformatear_prompts()
+        r = libprompts.reformatear_prompts()
         if r:
             print(f"Texto: {r} prompt(s) reformateados en el store.")
         # Saca el contrato de salida del cuerpo editable a un placeholder gestionado por codigo
         # (`{{CONTRATO_SALIDA}}`); el editor lo muestra read-only. One-shot, re-publica los que toca.
-        cs = libtexto.migrar_contrato_salida()
+        cs = libprompts.migrar_contrato_salida()
         if cs:
             print(f"Texto: {cs} prompt(s) con el contrato de salida movido a placeholder.")
         # redactar: re-siembra simplificado + contrato y publica (quedo fuera de la migracion de contrato).
-        rd = libtexto.migrar_redactar_v1()
+        rd = libprompts.migrar_redactar_v1()
         if rd:
             print("Texto: redactar re-sembrado (simplificado + contrato) y publicado.")
-        pa = libtexto.migrar_parrilla_v1()
+        pa = libprompts.migrar_parrilla_v1()
         if pa:
             print("Texto: parrilla re-sembrada (contrato de salida a codigo) y publicada.")
         # Linea base en git: cada doc inicializado con HEAD (snapshot estable para los pipelines).
-        b = libtexto.asegurar_linea_base()
+        b = libprompts.asegurar_linea_base()
         if b:
             print(f"Texto: {b} documento(s) versionados como linea base.")
         # Publica una version inicial ("first commit") de cada doc sin puntero (best-effort: necesita BD).
-        p = libtexto.publicar_linea_base()
+        p = libprompts.publicar_linea_base()
         if p:
             print(f"Texto: {p} documento(s) publicados como linea base (first commit).")
     except Exception:  # noqa: BLE001 -- la inicializacion nunca debe impedir el arranque

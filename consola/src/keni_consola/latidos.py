@@ -251,11 +251,11 @@ def etiqueta_de(daemon: str) -> str:
     return ETIQUETA.get(daemon) or (daemon[:1].upper() + daemon[1:])
 
 
-# PROMPTS de la Biblioteca que gobiernan cada agente IA (clase=ia): lo que el panel ofrece editar
+# PROMPTS de la Prompts que gobiernan cada agente IA (clase=ia): lo que el panel ofrece editar
 # in-place (cada uno abre su doc en el editor). Cada entrada es {etiqueta, doc}, con `doc` = id del
-# documento en la Biblioteca. SOLO los daemons IA tienen prompt (el resto no corre `claude -p`).
+# documento en la Prompts. SOLO los daemons IA tienen prompt (el resto no corre `claude -p`).
 # Fuente única en el backend, en sintonía con las etapas IA de los cockpits (Verificar/Redactar/
-# Ilustrar); un test verifica que cada `doc` existe en la Biblioteca.
+# Ilustrar); un test verifica que cada `doc` existe en la Prompts.
 PROMPTS: dict[str, list[dict[str, str]]] = {
     "investigacion": [{"etiqueta": "Verificar", "doc": "prompt/verificar"}],
     "produccion": [
@@ -266,7 +266,7 @@ PROMPTS: dict[str, list[dict[str, str]]] = {
 
 
 def prompts_de(daemon: str) -> list[dict[str, str]]:
-    """Prompts de la Biblioteca que gobiernan el agente IA; vacío si no es IA o no tiene."""
+    """Prompts de la Prompts que gobiernan el agente IA; vacío si no es IA o no tiene."""
     return [dict(p) for p in PROMPTS.get(daemon, [])]
 
 

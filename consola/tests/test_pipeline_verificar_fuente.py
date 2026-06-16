@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from keni_consola import libtexto, repos
+from keni_consola import libprompts, repos
 from keni_consola import pipeline_contenido as pc
 
 from .conftest import _cliente, lanzador_generacion_completa
@@ -44,10 +44,10 @@ def _cluster(
 
 def test_asegurar_documento_verificacion_lo_crea_si_falta(entorno):
     """El documento de criterios se CREA si no está en el store (idempotente)."""
-    assert libtexto.obtener(pc.PROMPT_VERIFICACION_ID) is None
+    assert libprompts.obtener(pc.PROMPT_VERIFICACION_ID) is None
     devuelto = pc.asegurar_documento_verificacion()
     assert devuelto == pc.PROMPT_VERIFICACION_ID
-    doc = libtexto.obtener(pc.PROMPT_VERIFICACION_ID)
+    doc = libprompts.obtener(pc.PROMPT_VERIFICACION_ID)
     assert doc is not None
     assert doc.cuerpo.strip()  # tiene criterios
     # Es la verificación de la FUENTE (pre-copy), NO el verificación de copy: `PROMPT_VERIFICACION_ID` = prompt/verificar.
@@ -55,7 +55,7 @@ def test_asegurar_documento_verificacion_lo_crea_si_falta(entorno):
     assert "VERIFICACIÓN PREVIA" in doc.cuerpo
     # Idempotente: una segunda llamada no duplica.
     pc.asegurar_documento_verificacion()
-    docs = [d for d in libtexto.listar(tipo="prompt") if d.id == pc.PROMPT_VERIFICACION_ID]
+    docs = [d for d in libprompts.listar(tipo="prompt") if d.id == pc.PROMPT_VERIFICACION_ID]
     assert len(docs) == 1
 
 

@@ -113,7 +113,7 @@ export interface RespuestaArte {
 export interface CuerpoGenerarArte {
   /** Marca del catálogo único (obligatoria). */
   marca: string;
-  /** Tema a ilustrar; si falta, se usa el prompt de Ilustrar de la Biblioteca (`prompt/ilustrar`). */
+  /** Tema a ilustrar; si falta, se usa el prompt de Ilustrar de la Prompts (`prompt/ilustrar`). */
   prompt?: string;
   /** Id de un modelo de `GET /api/conexiones/imagen`; si falta, el configurado por defecto. */
   modelo?: string;

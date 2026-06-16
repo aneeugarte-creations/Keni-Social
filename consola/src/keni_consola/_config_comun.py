@@ -115,8 +115,10 @@ ENV_CLAUDE_SKIP_PERMISSIONS = "KENI_CLAUDE_SKIP_PERMISSIONS"
 # prompt-injection: la generacion de copy no necesita ejecutar comandos ni navegar.
 ENV_CLAUDE_DISALLOWED_TOOLS = "KENI_CLAUDE_DISALLOWED_TOOLS"
 
-# Texto de prompts + linea editorial (almacen unico de documentos markdown).
-ENV_TEXTO_DIR = "KENI_TEXTO_DIR"
+# Almacen de prompts + linea editorial (almacen unico de documentos markdown).
+ENV_PROMPTS_DIR = "KENI_PROMPTS_DIR"
+# Nombre legacy de la env var (back-compat): se lee como fallback de `KENI_PROMPTS_DIR`.
+ENV_PROMPTS_DIR_LEGACY = "KENI_TEXTO_DIR"
 
 # Programadores en segundo plano.
 ENV_COMERCIAL_INTERVALO_SEGUNDOS = "KENI_COMERCIAL_INTERVALO_SEGUNDOS"
@@ -818,7 +820,8 @@ __all__ = [
     'ENV_AUTOGEN_ARTE_MAX',
     'ENV_AUTO_PREAPROBACION',
     'ENV_AUTO_PROGRAMAR',
-    'ENV_TEXTO_DIR',
+    'ENV_PROMPTS_DIR',
+    'ENV_PROMPTS_DIR_LEGACY',
     'ENV_CLAUDE_DISALLOWED_TOOLS',
     'ENV_CLAUDE_MAX_TURNS',
     'ENV_CLAUDE_MAX_USD',

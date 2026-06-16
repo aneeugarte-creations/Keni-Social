@@ -168,7 +168,7 @@ def topics_sin_arte(
 def prompt_arte(item: dict[str, Any]) -> str:
     """Mensaje de USUARIO (el TEMA a ilustrar) para el generador de imagen del auto-arte.
 
-    La DIRECTIVA del generador (foto realista, sin texto/placas; "Arte" en la Biblioteca) viaja
+    La DIRECTIVA del generador (foto realista, sin texto/placas; "Arte" en la Prompts) viaja
     en el mensaje de SISTEMA, que `media.generar_imagen` añade automáticamente; aquí solo aportamos
     el tema, a partir del título + descripción. "" si no hay título (nada que ilustrar).
     """

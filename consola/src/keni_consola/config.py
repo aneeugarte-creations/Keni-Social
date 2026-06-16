@@ -53,8 +53,8 @@ CATALOGO de variables (todas opcionales salvo que se diga). Agrupadas por area:
     - KENI_CLAUDE_MAX_TURNS       tope de turnos (--max-turns)       def sin tope
     - KENI_CLAUDE_SKIP_PERMISSIONS  saltar permisos (--dangerously-skip-permissions)  def ON
 
-  Texto de prompts + linea editorial (`texto`, `dominio.texto_lanzar`):
-    - KENI_TEXTO_DIR         almacen de documentos markdown     def <dir_config>/texto
+  Texto de prompts + linea editorial (`texto`, `dominio.prompts_lanzar`):
+    - KENI_PROMPTS_DIR         almacen de documentos markdown     def <dir_config>/texto
 
   Programadores en segundo plano (`comercial`, `programador`):
     - KENI_COMERCIAL_INTERVALO_SEGUNDOS  intervalo captura (s)       prioridad sobre horas
@@ -258,8 +258,9 @@ from ._config_comun import (  # noqa: F401
     ENV_SECRETOS,
     ENV_SESION_HORAS,
     ENV_SESION_MAX_HORAS,
+    ENV_PROMPTS_DIR,
+    ENV_PROMPTS_DIR_LEGACY,
     ENV_SUGERENCIAS,
-    ENV_TEXTO_DIR,
     ENV_TOKEN,
     ENV_TRAD_LOTE,
     ENV_TRAD_MIN_SCORE,
@@ -539,8 +540,8 @@ from .config_programadores import (  # noqa: F401
     trends_geos,
     trends_intervalo_min,
 )
-from .config_texto import (  # noqa: F401
-    texto_dir,
+from .config_prompts import (  # noqa: F401
+    prompts_dir,
 )
 from .config_video import (  # noqa: F401
     ffmpeg_bin,

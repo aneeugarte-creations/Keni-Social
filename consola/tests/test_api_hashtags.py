@@ -153,14 +153,14 @@ def test_sugerir_sin_salida_devuelve_lista_vacia(entorno):
 
 
 # --------------------------------------------------------------------------- #
-# El prompt de sugerencia vive en la Biblioteca (prompt/hashtags). PURO.       #
+# El prompt de sugerencia vive en la Prompts (prompt/hashtags). PURO.       #
 # --------------------------------------------------------------------------- #
 
 
-def test_prompt_sugerencia_sale_de_la_biblioteca_y_sustituye(monkeypatch, tmp_path):
+def test_prompt_sugerencia_sale_de_la_prompts_y_sustituye(monkeypatch, tmp_path):
     # Store aislado y vacío => el cuerpo efectivo es la INICIAL del paquete; las variables
     # {{RED}}, {{MARCA}} y {{TEXTO}} no pueden quedar crudas.
-    monkeypatch.setenv("KENI_TEXTO_DIR", str(tmp_path / "texto"))
+    monkeypatch.setenv("KENI_PROMPTS_DIR", str(tmp_path / "texto"))
     p = hashtags.construir_prompt_sugerencia("resumen del partido", "unotv", "instagram")
     for marcador in ("{{RED}}", "{{MARCA}}", "{{TEXTO}}"):
         assert marcador not in p
@@ -168,17 +168,17 @@ def test_prompt_sugerencia_sale_de_la_biblioteca_y_sustituye(monkeypatch, tmp_pa
 
 
 def test_prompt_sugerencia_sin_red_usa_generico(monkeypatch, tmp_path):
-    monkeypatch.setenv("KENI_TEXTO_DIR", str(tmp_path / "texto"))
+    monkeypatch.setenv("KENI_PROMPTS_DIR", str(tmp_path / "texto"))
     p = hashtags.construir_prompt_sugerencia("texto base", "unotv")
     assert "redes sociales" in p and "{{RED}}" not in p
 
 
-def test_prompt_sugerencia_editado_en_biblioteca_gana(monkeypatch, tmp_path):
-    monkeypatch.setenv("KENI_TEXTO_DIR", str(tmp_path / "texto"))
-    from keni_consola import libtexto
+def test_prompt_sugerencia_editado_en_prompts_gana(monkeypatch, tmp_path):
+    monkeypatch.setenv("KENI_PROMPTS_DIR", str(tmp_path / "texto"))
+    from keni_consola import libprompts
 
-    libtexto.importar_inicial()
-    libtexto.guardar("prompt/hashtags", cuerpo="MIO: {{MARCA}} / {{RED}}\n{{TEXTO}}")
+    libprompts.importar_inicial()
+    libprompts.guardar("prompt/hashtags", cuerpo="MIO: {{MARCA}} / {{RED}}\n{{TEXTO}}")
     p = hashtags.construir_prompt_sugerencia("cuerpo", "unotv", "tiktok")
     assert p == "MIO: unotv / TikTok\ncuerpo"
 
@@ -187,7 +187,7 @@ def test_prompt_sugerencia_sin_doc_ni_inicial_degrada(monkeypatch, tmp_path):
     # Ya no hay copia del prompt en código (la inicial es la única fuente). Sin doc NI inicial
     # la plantilla queda vacía y la sustitución sobre "" da "". El test de cobertura inicial↔
     # código garantiza que la inicial SIEMPRE está (camino inalcanzable en producción).
-    monkeypatch.setenv("KENI_TEXTO_DIR", str(tmp_path / "texto"))
-    monkeypatch.setenv("KENI_TEXTO_INICIAL", str(tmp_path / "inicial-vacia"))
+    monkeypatch.setenv("KENI_PROMPTS_DIR", str(tmp_path / "texto"))
+    monkeypatch.setenv("KENI_PROMPTS_INICIAL", str(tmp_path / "inicial-vacia"))
     p = hashtags.construir_prompt_sugerencia("texto base", "unotv", "instagram")
     assert p == ""  # sin plantilla no hay prompt; nunca quedan marcadores crudos

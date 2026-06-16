@@ -60,11 +60,11 @@ Ejecutor = Callable[[str, str], str]
 
 _LISTA_MARCAS = ", ".join(etiqueta for _id, etiqueta in marcas.opciones()) or "(ninguna)"
 
-# Los prompts por cajón viven en la Biblioteca de Texto como prompts EDITABLES (carpeta
+# Los prompts por cajón viven en la Prompts de Texto como prompts EDITABLES (carpeta
 # `insumos`, visibles en la pestaña «Prompts»), no hardcodeados. La RUTA del archivo a leer se
 # inserta donde el equipo ponga el marcador `_MARCA_RUTA`. Si la lectura del store fallara, la
-# red es la INICIAL del paquete (`libtexto.cuerpo_inicial`), no un texto duplicado aquí. El
-# cajón usa "_" (p.ej. `eventos_claro`); el id de Biblioteca usa "-".
+# red es la INICIAL del paquete (`libprompts.cuerpo_inicial`), no un texto duplicado aquí. El
+# cajón usa "_" (p.ej. `eventos_claro`); el id de Prompts usa "-".
 _PROMPT_INSUMO_IDS: dict[str, str] = {
     "portal": "prompt/recibir/portal",
     "corresponsales": "prompt/recibir/corresponsales",
@@ -77,20 +77,20 @@ _MARCA_RUTA = "{{RUTA}}"
 
 
 def _prompt_de_cajon(cajon: str, ruta: str) -> str:
-    """Prompt EFECTIVO del cajón (Biblioteca: store del equipo > inicial del paquete).
+    """Prompt EFECTIVO del cajón (Prompts: store del equipo > inicial del paquete).
 
     Inserta `ruta` donde esté `_MARCA_RUTA`; si el equipo quitó el marcador, adjunta la ruta al
-    final para no perderla. Import diferido de `libtexto` (evita ciclos); si el store fallara,
+    final para no perderla. Import diferido de `libprompts` (evita ciclos); si el store fallara,
     cae a la INICIAL del paquete (fuente única del prompt, sin duplicados en el código).
     """
-    from .. import libtexto
+    from .. import libprompts
 
     try:
-        plantilla = (libtexto.cuerpo_efectivo(_PROMPT_INSUMO_IDS[cajon]) or "").strip()
+        plantilla = (libprompts.cuerpo_efectivo(_PROMPT_INSUMO_IDS[cajon]) or "").strip()
     except Exception:  # noqa: BLE001 -- nunca dejar el parseo sin prompt por un fallo de lectura
         plantilla = ""
     if not plantilla:
-        plantilla = libtexto.cuerpo_inicial(_PROMPT_INSUMO_IDS[cajon]).strip()
+        plantilla = libprompts.cuerpo_inicial(_PROMPT_INSUMO_IDS[cajon]).strip()
     if _MARCA_RUTA in plantilla:
         return plantilla.replace(_MARCA_RUTA, ruta)
     return f"{plantilla}\n\nArchivo a leer: {ruta}"

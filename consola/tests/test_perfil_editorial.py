@@ -113,7 +113,7 @@ def test_palabras_sin_cache_es_vacio(monkeypatch, tmp_path):
 
 
 def test_construir_prompt_inserta_marca_editorial_y_contrato():
-    # Plantilla de la Biblioteca (inicial): se sustituyen marca y línea editorial; ningún
+    # Plantilla de la Prompts (inicial): se sustituyen marca y línea editorial; ningún
     # marcador `{{...}}` queda crudo y se conserva el contrato JSON {"keywords": [...]}.
     p = pe._construir_prompt("unotv", "Cubrimos política y deportes.")
     assert "unotv" in p

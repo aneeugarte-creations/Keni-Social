@@ -31,7 +31,7 @@ from typing import Any
 from ... import (
     formatos_red,
     generaciones,
-    libtexto,
+    libprompts,
     marca_assets,
     marcas,
     media,
