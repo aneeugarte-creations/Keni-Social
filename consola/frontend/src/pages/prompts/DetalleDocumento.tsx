@@ -364,9 +364,21 @@ export function DetalleDocumento({
     }
   }, [panelAbierto]);
   // Pestaña del panel lateral (solo prompts, solo con el panel expandido): «Versiones» (historial) o
-  // «Contexto» (los editoriales que el prompt inyecta). Al cambiar de doc se vuelve a Versiones.
-  const [pestanaPanel, setPestanaPanel] = React.useState<"versiones" | "contexto">("versiones");
+  // «Editorial» (los editoriales que el prompt inyecta). Al cambiar de doc se vuelve a Versiones.
+  const [pestanaPanel, setPestanaPanel] = React.useState<"versiones" | "editorial">("versiones");
   React.useEffect(() => setPestanaPanel("versiones"), [docId]);
+
+  // ¿El prompt inyecta editorial? El booleano `inyecta` es independiente de la marca (lo decide el
+  // pipeline del prompt), así que se consulta SIN marca: solo entonces tiene sentido la pestaña
+  // «Editorial». Si no inyecta, ni se pinta la pestaña ni se ofrece como destino.
+  const inyectaQuery = useQuery({
+    queryKey: ["prompts-contexto-inyecta", docId],
+    queryFn: ({ signal }) => api.contextoInyectado(docId, undefined, signal),
+    enabled: esPrompt,
+  });
+  const inyectaEditorial = inyectaQuery.data?.inyecta === true;
+  // Si el prompt no inyecta (o aún no se sabe), la pestaña «Editorial» no existe: cae a Versiones.
+  const pestanaActiva = pestanaPanel === "editorial" && !inyectaEditorial ? "versiones" : pestanaPanel;
 
   if (docQuery.isPending || !borrador) {
     return (
@@ -558,30 +570,33 @@ export function DetalleDocumento({
               panelAbierto ? "p-3" : "p-1",
             )}
           >
-            {/* Pestañas Versiones | Contexto: solo en prompts y solo con el panel expandido (colapsado
-                es un raíl de iconos, sin sitio para pestañas). El editorial no inyecta nada. */}
+            {/* Pestañas Versiones | Editorial: solo en prompts y solo con el panel expandido (colapsado
+                es un raíl de iconos, sin sitio para pestañas). La pestaña «Editorial» solo aparece si el
+                prompt INYECTA editorial; si no, se muestra únicamente «Versiones» (sin pestaña vacía). */}
             {panelAbierto && esPrompt ? (
               <div role="tablist" aria-label="Panel lateral" className="mb-2 flex items-center gap-1">
-                {(["versiones", "contexto"] as const).map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    role="tab"
-                    aria-selected={pestanaPanel === p}
-                    onClick={() => setPestanaPanel(p)}
-                    className={cn(
-                      "rounded-md px-2 py-1 text-xs font-semibold uppercase tracking-wide transition-colors",
-                      pestanaPanel === p
-                        ? "bg-accent text-foreground"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {p === "versiones" ? "Versiones" : "Contexto"}
-                  </button>
-                ))}
+                {(inyectaEditorial ? (["versiones", "editorial"] as const) : (["versiones"] as const)).map(
+                  (p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      role="tab"
+                      aria-selected={pestanaActiva === p}
+                      onClick={() => setPestanaPanel(p)}
+                      className={cn(
+                        "rounded-md px-2 py-1 text-xs font-semibold uppercase tracking-wide transition-colors",
+                        pestanaActiva === p
+                          ? "bg-accent text-foreground"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {p === "versiones" ? "Versiones" : "Editorial"}
+                    </button>
+                  ),
+                )}
               </div>
             ) : null}
-            {panelAbierto && esPrompt && pestanaPanel === "contexto" ? (
+            {panelAbierto && esPrompt && pestanaActiva === "editorial" ? (
               <div className={cn("min-h-0 flex-1", !ocultarCabecera && "overflow-y-auto")}>
                 <PanelContextoInyectado docId={borrador.id} />
               </div>
