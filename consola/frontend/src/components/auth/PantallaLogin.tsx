@@ -226,7 +226,7 @@ export function PantallaLogin() {
           <div className="space-y-3">
             <Label
               htmlFor="login-usuario"
-              className="text-sm font-light text-neutral-400"
+              className="text-xs font-light text-neutral-900"
             >
               Usuario
             </Label>
@@ -244,7 +244,7 @@ export function PantallaLogin() {
           <div className="space-y-3">
             <Label
               htmlFor="login-password"
-              className="text-sm font-light text-neutral-400"
+              className="text-xs font-light text-neutral-900"
             >
               Contraseña
             </Label>
@@ -281,8 +281,9 @@ export function PantallaLogin() {
 
           <Button
             type="submit"
+            variant="outline"
             disabled={!puedeEnviar}
-            className="mt-3 h-11 w-full rounded-none bg-neutral-900 text-xs uppercase tracking-[0.28em] text-white shadow-none transition-colors hover:bg-neutral-700"
+            className="mt-3 h-11 w-full rounded-none border-neutral-300 text-xs uppercase tracking-[0.28em] text-neutral-900 shadow-none"
           >
             {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : "Entrar"}
           </Button>
