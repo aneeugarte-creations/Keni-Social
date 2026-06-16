@@ -36,6 +36,7 @@ from .config import FUENTES_VALIDAS, ConfigInvalida
 from .fuentes.base import CuentaNoEncontrada
 from .schema import (
     RANGOS_DIAS,
+    RANGOS_PRECALENTAR,
     RANGOS_PRESET_UI,
     AnaliticaPiezas,
     CeldaCrosstab,
@@ -71,6 +72,7 @@ FUENTES_DISPONIBLES: tuple[str, ...] = tuple(sorted(FUENTES_VALIDAS))
 __all__ = [
     "RANGOS_VALIDOS",
     "RANGOS_PRESET_UI",
+    "RANGOS_PRECALENTAR",
     "FUENTES_DISPONIBLES",
     "ConfigInvalida",
     "CuentaNoEncontrada",

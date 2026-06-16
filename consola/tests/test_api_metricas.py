@@ -124,7 +124,7 @@ def test_opciones_trae_marcas_y_rangos(cliente):
     data = r.json()
     assert data["marcas"]
     ids_rango = {x["id"] for x in data["rangos"]}
-    assert {"semana", "mes"} <= ids_rango
+    assert {"semana", "mes", "anio"} <= ids_rango  # "Último año" se ofrece en el menu
     # "7d"/"30d" son identicos a "semana"/"mes" (mismas ventanas rodantes): no se OFRECEN
     # en el menu aunque sigan siendo tokens de entrada validos (lo cubre test_comparar/_validar).
     assert {"7d", "30d"}.isdisjoint(ids_rango)

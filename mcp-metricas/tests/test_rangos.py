@@ -22,6 +22,16 @@ def test_preset_rodante_sigue_funcionando():
     assert desde == date(2026, 5, 23)
 
 
+def test_preset_anio_son_365_dias_rodantes():
+    from datetime import timedelta
+
+    desde, hasta, dias = resolver_rango("anio", HOY)
+    assert hasta == HOY
+    assert dias == 365  # cabe en MAX_DIAS_RANGO (366)
+    assert desde == HOY - timedelta(days=364)
+    assert etiqueta_rango("anio") == "Último año"
+
+
 def test_mes_concreto():
     desde, hasta, dias = resolver_rango("mes:2026-05", HOY)
     assert desde == date(2026, 5, 1)

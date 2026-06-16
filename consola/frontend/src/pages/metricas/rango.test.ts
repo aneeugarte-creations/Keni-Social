@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { hoyCDMX } from "@/lib/fecha";
 
-import { parComparable } from "./rango";
+import { diasDePeriodo, parComparable } from "./rango";
 
 vi.mock("@/lib/fecha", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/fecha")>();
@@ -101,6 +101,17 @@ describe("parComparable — presets y rangos", () => {
       rangoB: "mes",
       enCurso: false,
     });
+  });
+
+  it("preset rodante (anio = 365 días): A adyacente de la MISMA duración", () => {
+    // Sin fechas hardcodeadas (sensibles a bisiestos): basta con que dure 365 días y
+    // que su periodo anterior tenga exactamente la misma longitud (garantía de la guarda).
+    expect(diasDePeriodo("anio")).toBe(365);
+    const par = parComparable("anio");
+    expect(par).not.toBeNull();
+    expect(par!.rangoB).toBe("anio");
+    expect(par!.enCurso).toBe(false);
+    expect(diasDePeriodo(par!.rangoA)).toBe(365);
   });
 
   it("un rango personalizado que invade el futuro se recorta a hoy antes de derivar A", () => {

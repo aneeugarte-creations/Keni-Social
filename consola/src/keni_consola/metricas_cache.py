@@ -446,8 +446,12 @@ def _combos_a_refrescar(prioritario: tuple[str, str | None] | None) -> list[tupl
     """Lista de combos `(rango, marca)` del barrido, con el prioritario primero.
 
     Marcas = "todas" (None) + las que la fuente activa puede servir
-    (`servicio.cuentas_disponibles`); rangos = `servicio.RANGOS_VALIDOS` + los tokens
+    (`servicio.cuentas_disponibles`); rangos = `servicio.RANGOS_PRECALENTAR` + los tokens
     de mes recientes (en curso y anterior). Se evita duplicar el combo prioritario.
+
+    Se precalienta solo RANGOS_PRECALENTAR (no todo RANGOS_VALIDOS): excluye los
+    duplicados "7d"/"30d" y el costoso "anio". Esos rangos siguen siendo validos; si
+    alguien los pide se rellenan en caliente (lazy fill), no antes en cada ciclo.
     """
     marcas: list[str | None] = [None]
     for cid, _nombre in servicio.cuentas_disponibles():
@@ -465,7 +469,7 @@ def _combos_a_refrescar(prioritario: tuple[str, str | None] | None) -> list[tupl
 
     if prioritario is not None:
         _add(prioritario[0], prioritario[1])
-    for rango in [*servicio.RANGOS_VALIDOS, *_tokens_meses_recientes()]:
+    for rango in [*servicio.RANGOS_PRECALENTAR, *_tokens_meses_recientes()]:
         for marca in marcas:
             _add(rango, marca)
     return combos

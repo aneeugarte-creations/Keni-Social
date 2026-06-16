@@ -481,8 +481,10 @@ class CorrelacionSeguidores(BaseModel):
 # --- Rangos -----------------------------------------------------------------
 
 # Rangos RODANTES: ventana de N dias que TERMINA hoy (incluido). El mapa da los
-# dias de cada uno; `resolver_rango` los resuelve como (hoy-(N-1), hoy).
-RANGOS_DIAS: dict[str, int] = {"semana": 7, "7d": 7, "mes": 30, "30d": 30}
+# dias de cada uno; `resolver_rango` los resuelve como (hoy-(N-1), hoy). "anio" son
+# 365 dias (cabe en MAX_DIAS_RANGO=366); es caro de calcular, asi que NO se precalienta
+# (ver RANGOS_PRECALENTAR): se rellena en caliente la primera vez que alguien lo pide.
+RANGOS_DIAS: dict[str, int] = {"semana": 7, "7d": 7, "mes": 30, "30d": 30, "anio": 365}
 
 # Rango ANCLADO al calendario: la ultima semana natural CERRADA (lunes->domingo
 # inmediatamente anterior a la semana en curso, domingo incluido). A diferencia de
@@ -502,7 +504,15 @@ RANGOS_VALIDOS: tuple[str, ...] = (*RANGOS_DIAS.keys(), RANGO_SEMANA_CERRADA)
 # ventanas rodantes de 7 y 30 dias que terminan hoy) y mostrar los duplicados solo
 # confundia. "semana_cerrada" tampoco se ofrece aqui (lo usa el reporte del lunes, no
 # el selector general).
-RANGOS_PRESET_UI: tuple[str, ...] = ("semana", "mes")
+RANGOS_PRESET_UI: tuple[str, ...] = ("semana", "mes", "anio")
+
+# Rangos que el daemon PRECALIENTA en cada ciclo (`metricas_cache._combos_a_refrescar`).
+# Es deliberadamente mas estrecho que RANGOS_VALIDOS: solo las ventanas rodantes baratas
+# y de uso frecuente. Excluye los duplicados "7d"/"30d" (identicos a "semana"/"mes": no
+# tiene sentido pagar dos veces la misma consulta) y "anio" (365 dias por cuenta cada
+# ciclo seria un derroche de API; se rellena en caliente al primer uso). Lo que no esta
+# aqui sigue siendo valido: simplemente se calcula on-demand (lazy fill) en vez de antes.
+RANGOS_PRECALENTAR: tuple[str, ...] = ("semana", "mes")
 
 
 def semana_cerrada(hoy: date | None = None) -> tuple[date, date]:
@@ -574,7 +584,7 @@ def resolver_rango(rango: str, hoy: date | None = None) -> tuple[date, date, int
     """Convierte un rango en `(desde, hasta, dias)`.
 
     Acepta:
-      - Rangos RODANTES ('semana'|'7d'|'mes'|'30d'): ventana de N dias que termina HOY.
+      - Rangos RODANTES ('semana'|'7d'|'mes'|'30d'|'anio'): ventana de N dias que termina HOY.
       - Rango ANCLADO ('semana_cerrada'): ultima semana natural cerrada (lunes->domingo).
       - Mes concreto ('mes:AAAA-MM'): primer..ultimo dia de ese mes.
       - Rango personalizado ('rango:AAAA-MM-DD_AAAA-MM-DD'): fechas exactas (cap MAX_DIAS_RANGO).
@@ -609,6 +619,7 @@ _ETIQUETAS_PRESET: dict[str, str] = {
     "7d": "Últimos 7 días",
     "mes": "Último mes",
     "30d": "Últimos 30 días",
+    "anio": "Último año",
     RANGO_SEMANA_CERRADA: "Semana cerrada",
 }
 

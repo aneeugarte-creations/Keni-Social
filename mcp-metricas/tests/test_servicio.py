@@ -35,6 +35,15 @@ def muestra(monkeypatch, tmp_path):
 def test_rangos_validos_expone_los_del_schema(muestra):
     assert "semana" in servicio.RANGOS_VALIDOS
     assert "mes" in servicio.RANGOS_VALIDOS
+    assert "anio" in servicio.RANGOS_VALIDOS  # "Último año" es un rango valido de entrada
+
+
+def test_precalentar_es_subconjunto_estrecho_de_validos(muestra):
+    # El daemon precalienta solo las ventanas rodantes baratas: ni los duplicados
+    # "7d"/"30d" ni el costoso "anio" (se rellenan en caliente al primer uso).
+    assert servicio.RANGOS_PRECALENTAR == ("semana", "mes")
+    assert {"7d", "30d", "anio"}.isdisjoint(servicio.RANGOS_PRECALENTAR)
+    assert set(servicio.RANGOS_PRECALENTAR) <= set(servicio.RANGOS_VALIDOS)
 
 
 def test_fuentes_disponibles(muestra):

@@ -51,7 +51,7 @@ export function partesRango(token: string): { desde: string; hasta: string } | n
 
 /**
  * Días de cada preset (mismo mapa que `RANGOS_DIAS` del backend + semana_cerrada).
- * Los rodantes (semana/7d/mes/30d) son ventanas que terminan HOY; `semana_cerrada`
+ * Los rodantes (semana/7d/mes/30d/anio) son ventanas que terminan HOY; `semana_cerrada`
  * es la última semana natural cerrada (lunes→domingo), también de 7 días.
  */
 const PRESETS_DIAS: Record<string, number> = {
@@ -59,6 +59,7 @@ const PRESETS_DIAS: Record<string, number> = {
   "7d": 7,
   mes: 30,
   "30d": 30,
+  anio: 365,
   semana_cerrada: 7,
 };
 
