@@ -83,11 +83,11 @@ describe("Contexto · la máquina en una página", () => {
     expect(screen.queryByText("Agrupar")).not.toBeInTheDocument();
   });
 
-  it("en la pestaña Producción muestra sus fases (incl. Idear)", () => {
+  it("en la pestaña Producción muestra sus fases, sin Idear (que es un taller evergreen, no una etapa lineal tras Publicar)", () => {
     renderContexto("/maquina/contexto?proceso=produccion");
     expect(screen.getByText("Redactar")).toBeInTheDocument();
     expect(screen.getByText("Publicar")).toBeInTheDocument();
-    expect(screen.getByText("Idear")).toBeInTheDocument();
+    expect(screen.queryByText("Idear")).not.toBeInTheDocument();
     // «Revisar» ya NO es una fila: corre dentro de Redactar (sin prompt/logs/toggle propios).
     expect(screen.queryByText("Revisar")).not.toBeInTheDocument();
   });
@@ -98,9 +98,10 @@ describe("Contexto · la máquina en una página", () => {
     expect(screen.getByText("Notas")).toBeInTheDocument();
   });
 
-  it("la pestaña Herramientas lista los prompts de apoyo", () => {
+  it("la pestaña Herramientas lista los prompts de apoyo (incl. Idear, el taller evergreen)", () => {
     renderContexto("/maquina/contexto?proceso=herramientas");
     expect(screen.getByText("Crítica")).toBeInTheDocument();
     expect(screen.getByText("Hashtags")).toBeInTheDocument();
+    expect(screen.getByText("Idear")).toBeInTheDocument();
   });
 });

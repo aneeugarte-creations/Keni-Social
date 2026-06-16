@@ -147,6 +147,8 @@ describe("PanelPipeline · solo las filas con contenido son clicables", () => {
     expect(
       within(fila).getByRole("switch", { name: /Publicar \(switch de la fase Publicar\)/ }),
     ).toBeInTheDocument();
+    // …y su aviso rojo de precaución (postea de verdad, no en simulación).
+    expect(within(fila).getByText("Publica de verdad")).toBeInTheDocument();
   });
 
   it("ninguna fila vacía: ya no se pintan Agrupar (Investigación) ni Revisar (Producción)", () => {

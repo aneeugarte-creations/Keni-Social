@@ -21,6 +21,7 @@ import * as React from "react";
 
 import { EditorPromptOverlay } from "@/components/prompts/EditorPromptOverlay";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import { Badge } from "@/components/ui/badge";
 import type { ItemMenuContextual } from "@/components/comunes/MenuContextual";
 import {
   Dialog,
@@ -67,6 +68,9 @@ export interface FasePipeline {
   /** Clave de etapa del feed de runs (`GET /api/pipelines?etapa=`): la pestaña «Logs» del detalle
    *  lista el HISTÓRICO real de runs paradas en esta etapa. Sin ella, Logs solo muestra la cola viva. */
   etapa?: string;
+  /** Aviso ROJO junto al nombre de la fase: la marca como acción de RIESGO real (p. ej. Publicar
+   *  postea de verdad, no en simulación). Se pinta como Badge destructivo en la fila. */
+  precaucion?: string;
 }
 
 function contar(jobs: ColaJob[], queuePorTipo: Record<string, string>): Record<string, number> {
@@ -149,6 +153,7 @@ export function FilaFasePipeline({
   esIa,
   nombre,
   ayuda,
+  precaucion,
   derecha,
   onPrimaria,
   acciones = [],
@@ -157,6 +162,8 @@ export function FilaFasePipeline({
   esIa: boolean;
   nombre: string;
   ayuda?: React.ReactNode;
+  /** Aviso ROJO junto al nombre: marca la fase como acción de riesgo real (p. ej. Publicar). */
+  precaucion?: string;
   derecha?: React.ReactNode;
   onPrimaria?: () => void;
   acciones?: ItemMenuContextual[];
@@ -180,6 +187,11 @@ export function FilaFasePipeline({
             <Cog className="h-4 w-4 shrink-0 text-muted-foreground" aria-label="determinista" />
           )}
           <span className="truncate">{nombre}</span>
+          {precaucion && (
+            <Badge variant="error" className="shrink-0 px-1.5 py-0 text-[10px] font-medium">
+              {precaucion}
+            </Badge>
+          )}
         </div>
         {ayuda != null && (
           <p className="mt-0.5 truncate text-xs text-muted-foreground">{ayuda}</p>
@@ -372,6 +384,7 @@ export function PanelPipeline({
               <FilaFasePipeline
                 esIa={e.es_ia}
                 nombre={e.nombre}
+                precaucion={e.precaucion}
                 ayuda={
                   <>
                     {e.ayuda}

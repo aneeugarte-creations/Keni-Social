@@ -155,20 +155,11 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
     es_ia: false,
     claves: ["KENI_PUBLICAR_REAL"],
     ayuda: "Postea de verdad en el programador (apagado: simulación)",
+    precaucion: "Publica de verdad",
     excepciones: {
       base: "KENI_PUBLICAR_REAL",
       nota: "Apagar «Publicar» en una marca la deja en simulación (sin postear).",
     },
-  },
-  {
-    // Taller evergreen: ideación atemporal por marca, al margen del flujo de noticias. Seguidora del
-    // maestro de Producción (sin switch propio); inyecta el contexto editorial de la marca.
-    nombre: "Idear",
-    es_ia: true,
-    claves: [MAESTRO_PRODUCCION],
-    ayuda: "Propone ideas de contenido evergreen para la marca",
-    doc: "prompt/idear",
-    contextoMarca: true,
   },
 ];
 
@@ -196,10 +187,12 @@ export const FASES_IMPORTACION: readonly FasePipeline[] = [
 ];
 
 /**
- * HERRAMIENTAS — prompts independientes que NO son una etapa de la máquina: la crítica IA, los
- * hashtags, los envoltorios del copy y el asistente del editor. Mismo diseño; abren su prompt.
+ * HERRAMIENTAS — prompts independientes que NO son una etapa de la máquina: la ideación evergreen,
+ * la crítica IA, los hashtags, los envoltorios del copy y el asistente del editor. Mismo diseño;
+ * abren su prompt.
  */
 export const FASES_HERRAMIENTAS: readonly FasePipeline[] = [
+  { nombre: "Idear", es_ia: true, claves: [], ayuda: "Propone ideas de contenido evergreen para la marca", doc: "prompt/idear" },
   { nombre: "Crítica", es_ia: true, claves: [], ayuda: "Crítica con visión antes de publicar", doc: "prompt/critica" },
   { nombre: "Hashtags", es_ia: true, claves: [], ayuda: "Sugerencias de hashtags por marca/red", doc: "prompt/hashtags" },
   { nombre: "Redes", es_ia: true, claves: [], ayuda: "Envoltorio: una pieza por red", doc: "prompt/envoltorios/redes" },
