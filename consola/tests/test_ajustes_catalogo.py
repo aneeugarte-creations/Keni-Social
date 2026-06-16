@@ -235,7 +235,7 @@ def test_noticias_reparto_en_secciones(store):
             config.ENV_RENDIMIENTO_RANKING,
         },
         # Umbral de auto-producción (dominio.agrupar.evaluar_umbral): umbrales que deciden
-        # qué historias del pool disparan QA+copy automáticos (coste real de tokens).
+        # qué historias del pool disparan verificación+copy automáticos (coste real de tokens).
         "noticias_produccion": {
             config.ENV_PROMOVER_MIN_SCORE,
             config.ENV_PROMOVER_MIN_MARCA,

@@ -34,7 +34,7 @@ from .tiempo import iso_utc
 
 _log = logging.getLogger("keni_consola.limpiador_generaciones")
 
-# TTL de la reparación de QA 'en_curso' ≈ 2× el wall-timeout real de la verificación: una colgada se detecta en
+# TTL de la reparación de verificación 'en_curso' ≈ 2× el wall-timeout real de la verificación: una colgada se detecta en
 # minutos, y una verificación VIVA nunca se toca (el doble del timeout deja margen de sobra al worker).
 _FACTOR_TTL_VERIFICACION_EN_CURSO = 2
 
@@ -54,7 +54,7 @@ def _ttl_verificacion_en_curso_seg() -> int:
 def _reparar_verificacion_en_curso() -> int:
     """Reparación de temas del pipeline COLGADOS en `verificacion_fuente='en_curso'`. Devuelve cuántos tocó.
 
-    La fase QA marca el tema `en_curso` ANTES de lanzar la verificación; si el lanzamiento o la
+    La fase verificación marca el tema `en_curso` ANTES de lanzar la verificación; si el lanzamiento o la
     generación mueren sin finalizador, el tema quedaba sin re-verificar PARA SIEMPRE
     y contando en `temas_en_proceso` (bloquea el cupo serial de su marca). Por cada colgado más
     viejo que el TTL (`_ttl_verificacion_en_curso_seg`, vs `actualizado`):
@@ -62,7 +62,7 @@ def _reparar_verificacion_en_curso() -> int:
       - APAGADA (`KENI_PIPELINE_VERIFICAR` off, global o `::marca`) -> se marca `saltada`
         (CD lo recoge sin re-verificar; re-verificar con la etapa apagada lo dejaría colgado otra vez).
     WARN por tema (tema_id + marca + destino). El worker además repara en caliente al cerrar un
-    job de QA en error; esto es la red para las muertes no limpias.
+    job de verificación en error; esto es la red para las muertes no limpias.
     """
     from . import repos
     from .pipeline_contenido import ORIGEN_PIPELINE, VERIFICACION_EN_CURSO, VERIFICACION_SALTADA
@@ -87,13 +87,13 @@ def _reparar_verificacion_en_curso() -> int:
             repos.actualizar_contenido(tema_id, {"verificacion_fuente": nuevo})
         except Exception:  # noqa: BLE001 -- best-effort por tema; el resto de la reparación sigue
             _log.warning(
-                "Limpiador de generaciones: no se pudo reparar la QA colgada del tema %s.",
+                "Limpiador de generaciones: no se pudo reparar la verificación colgada del tema %s.",
                 tema_id, exc_info=True,
             )
             continue
         tocados += 1
         _log.warning(
-            "Limpiador de generaciones: QA 'en_curso' colgada del tema %s (marca %s) -> %s.",
+            "Limpiador de generaciones: verificación 'en_curso' colgada del tema %s (marca %s) -> %s.",
             tema_id, marca, "re-verificación" if verificar_activa else "saltada",
         )
     return tocados
@@ -139,10 +139,10 @@ def ejecutar_barrido() -> int:
         z = _reparar_verificacion_en_curso()
         if z:
             _log.info(
-                "Limpiador de generaciones: %d tema(s) con QA 'en_curso' colgada reparado(s).", z
+                "Limpiador de generaciones: %d tema(s) con verificación 'en_curso' colgada reparado(s).", z
             )
     except Exception:  # noqa: BLE001 -- reparación aditiva; un fallo no debe tumbar el barrido
-        _log.warning("Limpiador de generaciones: fallo la reparación de QA en_curso.", exc_info=True)
+        _log.warning("Limpiador de generaciones: fallo la reparación de verificación en_curso.", exc_info=True)
     return n
 
 

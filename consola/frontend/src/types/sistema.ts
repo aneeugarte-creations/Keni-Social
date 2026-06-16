@@ -89,7 +89,7 @@ export interface ColaJob {
   etiqueta: string;
   tipo: string;
   marca: string;
-  /** A qué loop pertenece el job: investigación (verificación/QA) o producción (copy/arte). */
+  /** A qué loop pertenece el job: investigación (verificación/verificación) o producción (copy/arte). */
   proceso: Proceso;
   gen_estado: string;
   fase: string;
@@ -146,8 +146,8 @@ export interface ConteoProceso {
   pendientes: number;
 }
 
-/** Admisión de QA: el único límite que Investigación acota aparte de la cola compartida. */
-export interface AdmisionQa {
+/** Admisión de verificación: el único límite que Investigación acota aparte de la cola compartida. */
+export interface AdmisionVerificacion {
   /** Clusters en el admision de verificación (en proceso + pendientes + saltados), sumados. */
   en_proceso: number;
   /** Tope en proceso POR MARCA (cuánta verificación cabe a la vez por marca). */
@@ -167,8 +167,8 @@ export interface ColaMonitor {
   workers_activos: string[];
   /** Desglose del pool compartido por proceso (ADR 0011): los dos loops sobre la misma cola. */
   por_proceso?: Record<Proceso, ConteoProceso>;
-  /** Estado del admision de QA (Investigación). */
-  admision_verificacion?: AdmisionQa;
+  /** Estado del admision de verificación (Investigación). */
+  admision_verificacion?: AdmisionVerificacion;
   en_curso: ColaJob[];
   esperando: ColaJob[];
   daemons: ColaDaemon[];
@@ -234,7 +234,7 @@ export interface ProduccionDia {
 
 // --- Pipelines (vista estilo GitLab del pipeline de contenido CI/CD) ---
 
-/** Una etapa de una run del pipeline (CI/CD/QA/Aprobación). */
+/** Una etapa de una run del pipeline (CI/CD/verificación/Aprobación). */
 export interface PipelineEtapa {
   clave: string;
   nombre: string;
@@ -277,7 +277,7 @@ export interface PipelineHallazgo {
 
 /** Verificación ESTRUCTURADA de la fuente (rediseño QPC, pre-copy):
  *  `no_verificado` (⚠️ apta, no verificada a fondo) o `problema` (❗ algo de peso: sin copy). */
-export interface PipelineQaFuente {
+export interface PipelineVerificacionFuente {
   verificacion_fuente: string;
   no_verificado: boolean;
   problema: boolean;
@@ -334,7 +334,7 @@ export interface Pipeline {
   etapa_actual: string;
   etapas: PipelineEtapa[];
   /** Verificación de la fuente (⚠️/❗ + hallazgos). `null` en items sueltos. */
-  qa_fuente?: PipelineQaFuente | null;
+  verificacion?: PipelineVerificacionFuente | null;
   /** Procedencia IA (historia/cluster) del tema. `null` si no nació de una historia. */
   cluster?: PipelineCluster | null;
   /** Tokens/coste/duración sumados de sus generaciones. Opcional (backs previos). */
@@ -388,7 +388,7 @@ export interface RespuestaPipelines {
 }
 
 /** El STREAM (proceso de pensamiento de `claude -p`) de la generación de una etapa.
- *  Lo expone el detalle del pipeline por código de etapa (CI/CD/QA): `salida` es el texto
+ *  Lo expone el detalle del pipeline por código de etapa (CI/CD/verificación): `salida` es el texto
  *  del agente en vivo; `fase`/`estado` dicen en qué punto va (razonando/escribiendo/...). */
 export interface PipelineGeneracion {
   id: string;
@@ -404,7 +404,7 @@ export interface PipelineGeneracion {
 export interface RespuestaPipelineDetalle {
   pipeline: Pipeline;
   actividad: PipelineActividad[];
-  /** Stream del agente por código de etapa ("FUSION"/"EDITORIAL"/"QA"/"CD"/"ARTE"). {} si no hay. */
+  /** Stream del agente por código de etapa ("FUSION"/"EDITORIAL"/"verificación"/"CD"/"ARTE"). {} si no hay. */
   generaciones_por_etapa?: Record<string, PipelineGeneracion>;
   /** Plantilla del prompt de cada etapa IA (para enseñar el prompt de entrada aunque no haya
    *  corrido aún; cuando corre, se prefiere el prompt real de la generación). */

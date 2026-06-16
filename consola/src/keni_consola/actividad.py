@@ -3,7 +3,7 @@
 La "verdad" de lo que la IA produce vive en DOS registros SEPARADOS:
 
   - GENERACIONES (`generaciones.py`): los TRABAJOS de IA de la consola (copy, rss,
-    autogen, hashtags, imagen, verificacion, qa-editorial, prompt). Cada uno trae su
+    autogen, hashtags, imagen, verificacion, revision, prompt). Cada uno trae su
     `tipo`, `marca`, `etiqueta`, `estado`, `fecha_inicio` y `metricas`.
   - RUNS (`agentes.py`): las ejecuciones de un prompt en la carpeta de un agente
     (`<raiz>/<marca>/runs/<id>.yaml`). Traen `prompt`, `estado`, `fecha_inicio` y
@@ -116,10 +116,10 @@ _URL_RESULTADO_POR_TIPO = {
     "copy": "/operacion/feed/lista",
     "rss": "/operacion/feed/lista",
     "imagen": "/contenido/estudio",
-    # La página Revisión (QA editorial + verificación) se retiró: la aprobación vive en línea
-    # en el Feed, así que los resultados de QA/verificación enlazan ahí.
+    # La página Revisión (revisión editorial + verificación) se retiró: la aprobación vive en línea
+    # en el Feed, así que los resultados de verificación/verificación enlazan ahí.
     "verificacion": "/operacion/feed",
-    "qa-editorial": "/operacion/feed",
+    "revision": "/operacion/feed",
     # Nuevos tipos asíncronos (Ola 6+ y calendario):
     # "insumos" NO enlaza: navegar al cajón pierde el resultado del parseo. La fila de
     # Actividad abre el VISOR EN VIVO (popup con stream + prompt + métricas), que SÍ muestra

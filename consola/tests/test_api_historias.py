@@ -532,25 +532,25 @@ def test_historias_umbral_no_promovible_explica_por_que(cliente):
 
 
 # --------------------------------------------------------------------------- #
-# Etapas de Investigación visibles por historia (ADR 0011): QA + marca por IA  #
+# Etapas de Investigación visibles por historia (ADR 0011): verificación + marca por IA  #
 # --------------------------------------------------------------------------- #
 
 
 def test_historia_expone_verificacion_fuente_y_marca_por_ia(cliente):
-    """La historia trae el verificacion QA de su contenido (verificación) y si la marca fue IA."""
+    """La historia trae el verificacion verificación de su contenido (verificación) y si la marca fue IA."""
     cont = repos.crear_contenido(
         clase="contenido", titulo="Tema verificado", marca="unotv", categoria="mx",
         verificacion_fuente="no_verificado",
     )
-    _inicializar_cluster("h-qa", marca="unotv")
-    repos.actualizar_noticia_cluster("h-qa", estado="usado", contenido_id=cont["id"])
-    repos.marcar_cluster_marca_ia("h-qa")
+    _inicializar_cluster("h-verificación", marca="unotv")
+    repos.actualizar_noticia_cluster("h-verificación", estado="usado", contenido_id=cont["id"])
+    repos.marcar_cluster_marca_ia("h-verificación")
 
     h = next(
         x for x in cliente.get("/api/noticias/historias", params={"marca": "unotv"}).json()["historias"]
-        if x["id"] == "h-qa"
+        if x["id"] == "h-verificación"
     )
-    assert h["verificacion_fuente"] == "no_verificado"  # verificacion QA del contenido asociado (batch)
+    assert h["verificacion_fuente"] == "no_verificado"  # verificacion verificación del contenido asociado (batch)
     assert h["marca_clasificada_por_ia"] is True
 
 
@@ -564,9 +564,9 @@ def test_historia_sin_contenido_ni_ia_trae_campos_vacios(cliente):
     assert h["marca_clasificada_por_ia"] is False
 
 
-def test_historia_expone_qa_nativo_del_cluster_sin_contenido(cliente):
-    """ADR 0011 F3: la QA vive en la HISTORIA. Una 'problema' SIN contenido (no se materializó)
-    expone su verificacion igual — así la Mesa de Investigación la muestra ❗, no como 'sin QA'."""
+def test_historia_expone_verificacion_nativo_del_cluster_sin_contenido(cliente):
+    """ADR 0011 F3: la verificación vive en la HISTORIA. Una 'problema' SIN contenido (no se materializó)
+    expone su verificacion igual — así la Mesa de Investigación la muestra ❗, no como 'sin verificación'."""
     _inicializar_cluster("h-prob", marca="unotv")
     repos.marcar_cluster_verificacion("h-prob", "problema", '{"resumen": "dato falso"}')
 
@@ -581,7 +581,7 @@ def test_historia_expone_qa_nativo_del_cluster_sin_contenido(cliente):
     assert det["verificacion_fuente"] == "problema"
 
 
-def test_marcar_cluster_qa_persiste_y_no_se_pisa_en_recalc(entorno):
+def test_marcar_cluster_verificacion_persiste_y_no_se_pisa_en_recalc(entorno):
     """ADR 0011 F3: `marcar_cluster_verificacion` sella el verificacion en la historia y un recalc (upsert) sin
     verificacion NO lo borra (`verificacion_fuente`/`verificar_hallazgos` en `_NO_PISAR`)."""
     _inicializar_cluster("h-v", marca="unotv")

@@ -113,7 +113,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   // Cadena AÚN en curso (lote anti-N+1 o query individual sin aterrizar): el tooltip/toast del
   // like lo dice tal cual, sin inventarse un "espera tu turno" que todavía no consta.
   const cadenaCargando = enRevision && !cadena && !cadenaQuery.isError;
-  // OK HUMANOS ya dados (decisor con id propio, no el reservado "auto" del QA/pre-aprobación). Si
+  // OK HUMANOS ya dados (decisor con id propio, no el reservado "auto" del verificación/pre-aprobación). Si
   // los hay, editar el contenido los PERDERÁ (el backend resetea a borrador), así que avisamos.
   const aprobacionesHumanas = (cadena?.niveles ?? []).filter(
     (n) => n.decision === "aprobado" && n.decisor_id !== "" && n.decisor_id !== "auto",

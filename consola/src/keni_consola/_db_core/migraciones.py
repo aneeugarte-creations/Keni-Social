@@ -428,7 +428,7 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # suelta en BDs ya creadas. One-shot e idempotente (`DROP TABLE IF EXISTS`).
     Migracion("0036-drop-sugerencias-editoriales", _drop_tabla_sugerencias_editoriales),
     # ETAPAS CON NOMBRE DE VERBO (Fase 2): reescribe los MARCADORES de etapa persistidos en
-    # `generaciones_indice.payload->>'etiqueta'` con los prefijos viejos (CI/QA/CD/ARTE) y las
+    # `generaciones_indice.payload->>'etiqueta'` con los prefijos viejos (CI/verificación/CD/ARTE) y las
     # frases del pool ("Fusión de historias"/"Encaje editorial") a sus verbos nuevos (ADMITIR/
     # VERIFICAR/REDACTAR/ILUSTRAR, Fusionar/Priorizar). One-shot e idempotente (solo reescribe
     # las filas que aun tengan el prefijo/frase viejo). Ver `_migrar_etiquetas_etapas_verbos`.

@@ -60,7 +60,7 @@ export function metaZona(zonaId: string): MetaZona {
 /**
  * Cargos que, en una CABEZA de área (reporta directo a la raíz), la colocan en la zona
  * TRANSVERSAL en lugar de en una marca: coordinaciones que cruzan verticales (YouTube,
- * operativa), fotografía/QA y roles de staff. El director es la raíz (zona Dirección), no
+ * operativa), fotografía/verificación y roles de staff. El director es la raíz (zona Dirección), no
  * una cabeza de área, así que su presencia aquí es solo defensiva.
  */
 const CARGOS_TRANSVERSALES = new Set<CargoUsuario>([
@@ -68,7 +68,7 @@ const CARGOS_TRANSVERSALES = new Set<CargoUsuario>([
   "coordinador_youtube",
   "coordinador_operativo",
   "coordinador_invitados",
-  "fotografia_qa",
+  "fotografia_revision",
   "editor_video",
   "disenador",
   "estrategia",

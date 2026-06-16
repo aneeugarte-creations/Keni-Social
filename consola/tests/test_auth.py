@@ -176,7 +176,7 @@ def test_inicializar_equipo_asigna_marcas_del_organigrama(entorno):
 
 
 def test_inicializar_equipo_marca_puede_coordinar_para_los_tres(entorno):
-    """El seed pone `puede_coordinar=True` para el coordinador de redes, fotografía/QA y la coordinadora operativa; False para el resto.
+    """El seed pone `puede_coordinar=True` para el coordinador de redes, fotografía/verificación y la coordinadora operativa; False para el resto.
 
     Es el listado canonico de candidatos a coordinador (ola "coord"). Los tres se
     sobreescriben INCONDICIONALMENTE; el resto del equipo queda con el default `False`.
@@ -206,7 +206,7 @@ def test_inicializar_equipo_respeta_puede_coordinar_personalizado(entorno):
 
 
 def test_inicializar_equipo_corrige_puede_coordinar_de_los_tres(entorno):
-    """Si el coordinador de redes, fotografía/QA o la coordinadora operativa tienen `puede_coordinar=False` por error, el seed lo restaura.
+    """Si el coordinador de redes, fotografía/verificación o la coordinadora operativa tienen `puede_coordinar=False` por error, el seed lo restaura.
 
     Los tres son los canonicos (`_USUARIOS_PUEDE_COORDINAR_FORZADO`): el seed los
     sobreescribe INCONDICIONALMENTE a True tras cada deploy.
@@ -1002,7 +1002,7 @@ def test_catalogo_cargos_incluye_los_nuevos(entorno):
         "editorial_youtube",
         "coordinador_invitados",
         "coordinador_operativo",
-        "fotografia_qa",
+        "fotografia_revision",
         "editor_video",
         "disenador",
     ):

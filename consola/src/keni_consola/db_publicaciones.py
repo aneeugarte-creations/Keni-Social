@@ -68,7 +68,7 @@ _SELECT_PUBLICACION = (
     "cp.evergreen AS evergreen, cp.copy_in_exento AS copy_in_exento, "
     "cp.placa_oculta AS placa_oculta, cp.plantilla_diseno_id AS plantilla_diseno_id, "
     "cp.foto_encuadre AS foto_encuadre, cp.fotos AS fotos, cp.carrusel AS carrusel, "
-    "cp.qa_auto_hash AS qa_auto_hash, cp.actualizado AS pactualizado, "
+    "cp.verificar_auto_hash AS verificar_auto_hash, cp.actualizado AS pactualizado, "
     "c.id AS cid, c.titulo AS titulo, c.marca AS marca, c.autor_id AS autor_id, "
     "c.autor_nombre AS autor_nombre, "
     "c.responsable_id AS responsable_id, c.responsable_nombre AS responsable_nombre, "
@@ -146,7 +146,7 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
         "video": f["video"] or "",
         "falta_video": bool(f["falta_video"]),
         "evergreen": bool(f["evergreen"]),
-        # Auto-avance: exencion de copy-in + hash del copy con QA auto lanzada.
+        # Auto-avance: exencion de copy-in + hash del copy con verificación auto lanzada.
         "copy_in_exento": bool(f["copy_in_exento"]),
         # "Quitar plantilla": publicar solo la foto, sin la placa de marca encima.
         "placa_oculta": bool(f["placa_oculta"]),
@@ -160,7 +160,7 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
         # CARRUSEL: slides EXTRA en crudo (JSON `[{tipo,objeto}, …]`, orden de publicación).
         # La portada del carrusel es la imagen compuesta de siempre (foto + placa).
         "carrusel": f["carrusel"] or "",
-        "qa_auto_hash": f["qa_auto_hash"] or "",
+        "verificar_auto_hash": f["verificar_auto_hash"] or "",
     }
 
 
@@ -302,7 +302,7 @@ def _publicacion_de_filas(
             "plantilla_diseno_id": plat["plantilla_diseno_id"],
             "foto_encuadre": plat["foto_encuadre"], "fotos": plat["fotos"],
             "carrusel": plat["carrusel"],
-            "qa_auto_hash": plat["qa_auto_hash"], "pactualizado": plat["actualizado"],
+            "verificar_auto_hash": plat["verificar_auto_hash"], "pactualizado": plat["actualizado"],
             "cid": padre["id"], "titulo": padre["titulo"], "marca": padre["marca"],
             "autor_id": padre["autor_id"], "autor_nombre": padre["autor_nombre"],
             "responsable_id": padre.get("responsable_id"),

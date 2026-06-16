@@ -152,7 +152,7 @@ ENV_CONSOLA_URL_PUBLICA = "KENI_CONSOLA_URL_PUBLICA"
 # enciende; sin el (o falsy), la cadena nace toda `pendiente` como hasta ahora.
 ENV_AUTO_PREAPROBACION = "KENI_AUTO_PREAPROBACION"
 
-# Gate de gobernanza "minimo N aprobaciones" (item A QA/aprobaciones). Antes de PROGRAMAR una
+# Gate de gobernanza "minimo N aprobaciones" (item A verificación/aprobaciones). Antes de PROGRAMAR una
 # pieza se exige que su cadena de aprobacion acumule al menos N niveles aprobados (defecto 2:
 # "cuatro ojos" reales). `KENI_MIN_APROBACIONES=0` desactiva el gate; valor invalido -> def.
 ENV_MIN_APROBACIONES = "KENI_MIN_APROBACIONES"

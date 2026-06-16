@@ -207,13 +207,13 @@ def _historia_a_dict(
         "score_razon": cluster.get("score_razon") or "",
         "score_desglose": cluster.get("score_desglose") or {},
         # UMBRAL de producción automática (la MISMA evaluación que la promoción CI): si esta
-        # historia dispararía QA+copy solos, y el porqué (o el porqué no), legible.
+        # historia dispararía verificación+copy solos, y el porqué (o el porqué no), legible.
         "promovible": bool(umbral[0]) if umbral else False,
         "promovible_motivo": (umbral[1] if umbral else ""),
         "breaking": int(cluster.get("breaking") or 0),
         "verificacion": cluster.get("verificacion") or "unica_fuente",
         # Etapas de INVESTIGACIÓN visibles por historia (ADR 0011): el verificacion de
-        # VERIFICACIÓN (QA de la fuente, del contenido asociado; lo inyecta el llamante en
+        # VERIFICACIÓN (verificación de la fuente, del contenido asociado; lo inyecta el llamante en
         # lote) y si la MARCA la asignó el clasificador IA.
         "verificacion_fuente": cluster.get("verificacion_fuente") or "",
         "marca_clasificada_por_ia": bool(cluster.get("marca_clasificada_por_ia")),
@@ -276,7 +276,7 @@ async def listar_historias(request: Request) -> Response:
         limite=limite,
         desplazamiento=desplazamiento,
     )
-    # Estado REAL de cara al feed + verificacion QA (verificación). El QA vive en la HISTORIA
+    # Estado REAL de cara al feed + verificacion verificación (verificación). El verificación vive en la HISTORIA
     # (`noticias_clusters.verificacion_fuente`, ADR 0011 F3): la verificación corre sobre el cluster ANTES de
     # admitir. Se prefiere el verificacion NATIVO del cluster y se cae al del `contenido` heredado
     # (batch, evita N+1) solo para historias admitidas ANTES de F3 (cluster sin verificacion propio).
@@ -416,7 +416,7 @@ async def detalle_historia(request: Request) -> Response:
         return JSONResponse({"error": "Esa historia ya no existe."}, status_code=404)
     items = repos.items_de_cluster(cluster_id)
     cid = cluster.get("contenido_id") or ""
-    # Verificacion NATIVO del cluster (ADR 0011 F3: la QA corre sobre la historia); fallback al
+    # Verificacion NATIVO del cluster (ADR 0011 F3: la verificación corre sobre la historia); fallback al
     # contenido heredado para historias admitidas antes de F3 (cluster sin verificacion propio).
     verificacion_fuente = (cluster.get("verificacion_fuente") or "") or (
         repos.verificacion_fuente_por_contenido([cid]).get(cid, "") if cid else ""

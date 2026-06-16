@@ -89,7 +89,7 @@ export default function GeneracionDetalle() {
         estado_global: estado as Pipeline["estado_global"],
         etapa_actual: "",
         etapas: etapa ? [etapa] : [],
-        qa_fuente: null,
+        verificacion: null,
         cluster: null,
         piezas: [],
       }

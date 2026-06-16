@@ -50,7 +50,7 @@ def editoriales_de_marca(marca: str, *, pipeline: str | None = None) -> list[Doc
       - ESTADO: solo se adjuntan documentos `activo` (un `borrador`/`archivado` no inyecta).
       - PIPELINE (opcional): si se pasa, un doc se incluye solo si NO acota pipelines
         (`pipelines == []`, aplica a todos -> comportamiento clasico) o si incluye `pipeline`.
-        Asi un editorial puede entrar en `copy` pero no en `qa`, sin romper a los docs viejos
+        Asi un editorial puede entrar en `copy` pero no en `verificación`, sin romper a los docs viejos
         (que no declaran `pipelines` y siguen aplicando a todo).
 
     Orden: por `prioridad` (menor primero), luego PILAR (orden de `PILARES_EDITORIALES`,

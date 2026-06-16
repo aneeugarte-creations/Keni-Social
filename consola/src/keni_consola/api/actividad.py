@@ -2,7 +2,7 @@
 
 Reune los DOS registros donde vive la "verdad" de lo que la IA produce —las
 GENERACIONES (`generaciones.py`: copy, rss, autogen, hashtags, imagen, verificacion,
-qa-editorial, prompt) y los RUNS de agente (`agentes.py`)— y sirve sus AGREGADOS. La normalizacion/mezcla/agregacion es DOMINIO PURO
+revision, prompt) y los RUNS de agente (`agentes.py`)— y sirve sus AGREGADOS. La normalizacion/mezcla/agregacion es DOMINIO PURO
 (`consola.actividad`); aqui solo se LEEN ambos orígenes (via `generaciones.listar(...)`
 y el dominio `agentes`, NUNCA por HTTP) y se sirven.
 
@@ -50,7 +50,7 @@ _MSG_SOLO_ADMIN = "Solo un administrador puede operar la cola de generación."
 
 
 def _es_marcador_pipeline(gen: dict) -> bool:
-    """True si la generación es un MARCADOR de etapa del pipeline (CI/CD/QA) — fuera de Actividad.
+    """True si la generación es un MARCADOR de etapa del pipeline (CI/CD/verificación) — fuera de Actividad.
 
     Los marcadores no son trabajo con coste (el trabajo real es la generación de copy
     `tipo='pipeline'`, que SÍ se muestra). Excluye el tipo propio `pipeline_etapa` y, por
@@ -165,7 +165,7 @@ def _item_job(job: dict, ahora: datetime) -> dict:
         "etiqueta": reg.get("etiqueta") or "",
         "tipo": reg.get("tipo") or "",
         "marca": reg.get("marca") or "",
-        # Proceso (ADR 0011): investigacion (verificación/QA) | produccion (copy/arte). La cola es
+        # Proceso (ADR 0011): investigacion (verificación/verificación) | produccion (copy/arte). La cola es
         # COMPARTIDA; esto solo clasifica cada job para desglosar el pool por proceso.
         "proceso": generaciones.proceso_de(reg),
         "gen_estado": reg.get("estado") or "",
@@ -259,7 +259,7 @@ async def cola(request: Request) -> Response:
     en_proceso = [_item_job(j, ahora) for j in filas]
     # Desglose del pool COMPARTIDO por proceso (ADR 0011): se calcula sobre TODOS los jobs en
     # vuelo (global, como los KPIs de capacidad), ANTES de acotar las listas por marca. La cola y
-    # el pool son UNICOS; esto solo dice cuanto del trabajo en proceso es Investigacion (verificación/QA)
+    # el pool son UNICOS; esto solo dice cuanto del trabajo en proceso es Investigacion (verificación/verificación)
     # y cuanto Produccion (copy/arte), para poder vigilar los dos loops sobre la misma cola.
     por_proceso = {
         proc: {
@@ -274,7 +274,7 @@ async def cola(request: Request) -> Response:
         }
         for proc in (generaciones.PROCESO_INVESTIGACION, generaciones.PROCESO_PRODUCCION)
     }
-    # ADMISION de QA: el unico limite que Investigacion acota aparte de la cola compartida (cuanta
+    # ADMISION de verificación: el unico limite que Investigacion acota aparte de la cola compartida (cuanta
     # verificación cabe en proceso por marca). Lazy import del helper del pipeline (evita acoplar la API al
     # orquestador) y best-effort: un fallo deja el admision vacio, nunca tumba el snapshot.
     try:
@@ -305,7 +305,7 @@ async def cola(request: Request) -> Response:
             "procesando": reclamados,  # claude -p en proceso (acotado por max_jobs)
             "slots_libres": max(0, max_jobs - reclamados),
             "workers_activos": workers,
-            # Desglose del pool compartido por proceso + admision de QA (Investigacion). La cola es
+            # Desglose del pool compartido por proceso + admision de verificación (Investigacion). La cola es
             # UNA; estos dos campos dejan ver los dos loops (ADR 0011) sobre esa misma cola.
             "por_proceso": por_proceso,
             "admision_verificacion": admision,
@@ -357,7 +357,7 @@ def _resultados_por_dia(dias: int) -> list[dict]:
     lado de SALIDA de la cola; el endpoint que lo usa se sondea con poca frecuencia (no es el
     snapshot en vivo), asi que el escaneo completo es aceptable.
 
-    EXCLUYE los MARCADORES de etapa (`pipeline_etapa`, CI/QA/CD a coste 0): son trazabilidad, no
+    EXCLUYE los MARCADORES de etapa (`pipeline_etapa`, CI/verificación/CD a coste 0): son trazabilidad, no
     trabajo con tokens, y antes inflaban "completados" a miles (la serie no cuadraba ni con los
     encolados ni con el gasto). Igual que el feed de Actividad, aqui solo cuentan generaciones
     REALES. Cada generacion se clasifica en su proceso (investigacion/produccion) con su gasto.

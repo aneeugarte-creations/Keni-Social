@@ -48,11 +48,11 @@ def _migrar_columnas_noticias_algoritmo(con: Any) -> None:
 
 
 def _migrar_columnas_contenido_plataforma(con: Any) -> None:
-    """Anade `copy_in_exento` y `qa_auto_hash` a `contenido_plataforma` (idempotente).
+    """Anade `copy_in_exento` y `verificar_auto_hash` a `contenido_plataforma` (idempotente).
 
     Columnas del auto-avance (Flujo: "dale el OK" automatico): `copy_in_exento` marca una
     pieza como exenta de copy-in (imagen dramatica/autoexplicativa que no lo necesita);
-    `qa_auto_hash` guarda el hash del copy para el que se lanzo la QA automatica, para no
+    `verificar_auto_hash` guarda el hash del copy para el que se lanzo la verificación automatica, para no
     relanzarla en cada barrido. `ADD COLUMN IF NOT EXISTS` es seguro y no-op si ya estan.
     """
     if not _tabla_existe(con, "contenido_plataforma"):
@@ -63,10 +63,10 @@ def _migrar_columnas_contenido_plataforma(con: Any) -> None:
             "ALTER TABLE contenido_plataforma "
             "ADD COLUMN IF NOT EXISTS copy_in_exento INTEGER NOT NULL DEFAULT 0"
         )
-    if "qa_auto_hash" not in cols:
+    if "verificar_auto_hash" not in cols:
         con.execute(
             "ALTER TABLE contenido_plataforma "
-            "ADD COLUMN IF NOT EXISTS qa_auto_hash TEXT NOT NULL DEFAULT ''"
+            "ADD COLUMN IF NOT EXISTS verificar_auto_hash TEXT NOT NULL DEFAULT ''"
         )
     # `placa_oculta`: la pieza se publica SOLO con la foto, sin la plantilla/placa de marca
     # encima ("quitar plantilla" del editor). Persiste la elección entre reaperturas.
@@ -267,7 +267,7 @@ def _migrar_green_a_evergreen(con: Any) -> None:
         )
 
 
-# ETAPAS CON NOMBRE DE VERBO (Fase 2): las columnas de etapa legacy `qa_*` (la etapa "QA" pasó a
+# ETAPAS CON NOMBRE DE VERBO (Fase 2): las columnas de etapa legacy `qa_*` (la etapa "verificación" pasó a
 # "Verificar" en todo el código) se renombran a `verificar_*` en las BDs productivas (piloto AMX),
 # preservando los datos (Postgres conserva los valores en un RENAME COLUMN). Cada tupla es
 # (tabla, columna_vieja, columna_nueva). `verificacion_veredicto`/`verificacion_hallazgos` viven tanto en `contenido`
@@ -280,6 +280,7 @@ _RENOMBRES_COLUMNAS_ETAPAS: tuple[tuple[str, str, str], ...] = (
     ("contenido", "verificacion_hallazgos", "verificar_hallazgos"),
     ("noticias_clusters", "verificacion_veredicto", "verificar_veredicto"),
     ("noticias_clusters", "verificacion_hallazgos", "verificar_hallazgos"),
+    ("contenido_plataforma", "qa_auto_hash", "verificar_auto_hash"),
 )
 
 
@@ -311,10 +312,10 @@ def _migrar_renombre_columnas_etapas(con: Any) -> None:
 # ETAPAS CON NOMBRE PROPIO (limpieza de jerga `veredicto`/`verdicto`): el "veredicto" estaba
 # SOBRECARGADO entre dos etapas distintas, así que cada columna pasa a llamarse como SU etapa.
 # Cada tupla es (tabla, columna_vieja, columna_nueva), preservando los datos (RENAME COLUMN):
-#   - VERIFICAR (QA de la FUENTE, pre-copy): `verificar_veredicto` -> `verificacion_fuente` en
+#   - VERIFICAR (verificación de la FUENTE, pre-copy): `verificar_veredicto` -> `verificacion_fuente` en
 #     `contenido` y `noticias_clusters` (NO se usa `verificacion` a secas: `noticias_clusters`
 #     ya tiene esa columna para la corroboración corroborada/unica_fuente/dudosa).
-#   - REVISAR (QA editorial del COPY ya redactado): `contenido_plataforma.veredicto` -> `revision`.
+#   - REVISAR (revisión editorial del COPY ya redactado): `contenido_plataforma.veredicto` -> `revision`.
 # `verificar_hallazgos` NO se toca (no era jerga `veredicto`).
 _RENOMBRES_COLUMNAS_VEREDICTO: tuple[tuple[str, str, str], ...] = (
     ("contenido", "verificar_veredicto", "verificacion_fuente"),
@@ -520,7 +521,7 @@ _COLUMNAS_CONTENIDO_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # priorizacion (`priorizacion.peso_viralidad`) la use al ordenar la lista del dia. 0 =
     # sin señal (alta manual, RSS, o BD vieja): la pieza puntua como antes de la Fase 5.
     ("senal_viralidad", "INTEGER NOT NULL DEFAULT 0"),
-    # QA de la FUENTE (pre-copy, rediseño QPC): el pipeline verifica la NOTA DE ORIGEN antes de
+    # verificación de la FUENTE (pre-copy, rediseño QPC): el pipeline verifica la NOTA DE ORIGEN antes de
     # generar copy. `verificacion_fuente` = "no_verificado" (⚠️ OK para seguir) o "problema" (❗ algo de
     # peso: NO se generó copy). `verificar_hallazgos` = JSON estructurado de lo encontrado. BD vieja -> "".
     ("verificacion_fuente", "TEXT NOT NULL DEFAULT ''"),
@@ -845,10 +846,10 @@ _COLUMNAS_NOTICIAS_CLUSTERS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # Encaje de marca por IA (ADR 0011): 1 si la marca de la historia la asignó el
     # clasificador Haiku (breaking sin marca), 0 si vino de los items / vocabulario.
     ("marca_clasificada_por_ia", "INTEGER NOT NULL DEFAULT 0"),
-    # VERIFICACIÓN (QA de la fuente) sobre la HISTORIA, ANTES de materializar contenido de
+    # VERIFICACIÓN (verificación de la fuente) sobre la HISTORIA, ANTES de materializar contenido de
     # producción (ADR 0011 F3): "no_verificado" (⚠️ apta, sigue a admisión) o "problema" (❗ no
     # se admite). `verificar_hallazgos` = JSON estructurado de lo encontrado. Hereda al `contenido` al
-    # admitir, así la frontera "QA = investigación" queda alineada con el modelo de datos. BD
+    # admitir, así la frontera "verificación = investigación" queda alineada con el modelo de datos. BD
     # vieja -> "" (sin verificacion: aún por verificar).
     ("verificacion_fuente", "TEXT NOT NULL DEFAULT ''"),
     ("verificar_hallazgos", "TEXT NOT NULL DEFAULT ''"),
@@ -964,11 +965,11 @@ def _backfill_gasto_ia_proceso(con: Any) -> None:
 # viejos. El código ya ESCRIBE los verbos nuevos y los LECTORES (Actividad IA / Pipelines) casan
 # por el prefijo nuevo, así que las filas legadas dejaron de casar. Estos backfills reescriben el
 # prefijo SOLO en las filas que aún lo tengan. Dos formas:
-#   - PREFIJOS de etapa (anclados al inicio): "CI · "/"QA · "/"CD · "/"ARTE · ".
+#   - PREFIJOS de etapa (anclados al inicio): "CI · "/"verificación · "/"CD · "/"ARTE · ".
 #   - FRASES del pool (en cualquier parte de la etiqueta): "Fusión de historias"/"Encaje editorial".
 _PREFIJOS_ETIQUETA_ETAPAS: tuple[tuple[str, str], ...] = (
     ("CI · ", "ADMITIR · "),
-    ("QA · ", "VERIFICAR · "),
+    ("verificación · ", "VERIFICAR · "),
     ("CD · ", "REDACTAR · "),
     ("ARTE · ", "ILUSTRAR · "),
 )

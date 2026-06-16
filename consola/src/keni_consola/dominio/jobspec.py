@@ -49,13 +49,13 @@ PRIORIDAD_URGENTE = 20
 # dir writable sin skills (el corpus editorial va DENTRO del prompt, no se descubre por cwd).
 CWD_GENERACION = "generacion"
 
-# Kinds de post-procesado (`procesar`). Mapean a las fabricas de `dominio.copy`/`qa`/`hashtags`.
+# Kinds de post-procesado (`procesar`). Mapean a las fabricas de `dominio.copy`/`verificación`/`hashtags`.
 PROC_COPY = "copy"
 PROC_DOCUMENTO = "documento"
 PROC_HASHTAGS = "hashtags"
-# QA de la FUENTE (pre-copy, rediseño QPC): verificación PERMISIVA de la nota de origen por TEMA. Persiste el verificación estructurado (`no_verificado`/`problema`) + hallazgos
+# verificación de la FUENTE (pre-copy, rediseño QPC): verificación PERMISIVA de la nota de origen por TEMA. Persiste el verificación estructurado (`no_verificado`/`problema`) + hallazgos
 # sobre el `contenido` (tema), para que CD genere copy SOLO de los `no_verificado`.
-PROC_VERIFICACION_FUENTE = "qa-fuente"
+PROC_VERIFICACION_FUENTE = "verificacion-fuente"
 # Texto de prompts: post-procesado IDENTIDAD. Un prompt de la texto devuelve el
 # texto markdown tal cual (ya queda en `salida` del registro); NO crea piezas/publicaciones.
 PROC_PROMPT = "prompt"
@@ -271,9 +271,9 @@ def construir_verificacion_fuente(
     autor: dict[str, str] | None = None,
     cluster_id: str = "",
 ) -> dict[str, Any]:
-    """Spec del post-procesado de la QA de la FUENTE (pre-copy).
+    """Spec del post-procesado de la verificación de la FUENTE (pre-copy).
 
-    El verificación se sella en la HISTORIA (`cluster_id`, ADR 0011 F3): QA sobre la fuente antes de
+    El verificación se sella en la HISTORIA (`cluster_id`, ADR 0011 F3): verificación sobre la fuente antes de
     materializar contenido (el worker sella `noticias_clusters.verificacion_fuente`).
     """
     return {

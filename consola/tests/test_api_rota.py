@@ -149,7 +149,7 @@ def test_equipo_incluye_marcas_de_cada_miembro(cliente):
 def test_equipo_incluye_puede_coordinar_tras_inicializar(cliente):
     """`/api/rota/equipo?todos=1` expone `puede_coordinar` por miembro (ola "coord").
 
-    Tras `inicializar_equipo`, los tres canónicos (el coordinador de redes, fotografía/QA y la coordinadora operativa) quedan con
+    Tras `inicializar_equipo`, los tres canónicos (el coordinador de redes, fotografía/verificación y la coordinadora operativa) quedan con
     `puede_coordinar=True`; el resto del equipo de redes queda en `False`. El frontend
     necesita este campo para listar candidatos a coordinador por celda en el
     calendario (sin él, el dropdown muestra "Sin candidatos").

@@ -1,6 +1,6 @@
 """Barrido del pipeline en DOS procesos independientes (ADR 0011 F3) + daemons.
 
-  • INVESTIGACIÓN — caducidad + CI (admisión) → QA de la fuente. Recolecta del pool rankeado,
+  • INVESTIGACIÓN — caducidad + CI (admisión) → verificación de la fuente. Recolecta del pool rankeado,
     admite por marca y verifica. Loop propio (gate Selección/Validación, lock
     `pipeline_investigacion`).
   • PRODUCCIÓN — CD (copy) → arte → avance a revisión. Convierte la historia verificada en
@@ -54,7 +54,7 @@ __all__ = [
 ]
 
 # DOS PROCESOS (ADR 0011 F3): el espinazo noticia→pieza son DOS loops independientes, no uno.
-#   • INVESTIGACIÓN — caducidad + CI (admisión) + QA (verificación de la fuente). Recolecta, admite y
+#   • INVESTIGACIÓN — caducidad + CI (admisión) + verificación (verificación de la fuente). Recolecta, admite y
 #     VERIFICA. Su gate es `alguna_etapa_investigacion_activa` (Selección/Validación) bajo la
 #     máquina; su lock es `pipeline_investigacion`.
 #   • PRODUCCIÓN — CD (copy) + arte + avance a revisión. Convierte la historia verificada en
@@ -92,7 +92,7 @@ def _despertar_daemon(daemon: str) -> None:
 
 
 def ejecutar_investigacion() -> dict[str, Any]:
-    """Un TICK del proceso de INVESTIGACIÓN: caducidad + CI (admisión) → QA de la fuente.
+    """Un TICK del proceso de INVESTIGACIÓN: caducidad + CI (admisión) → verificación de la fuente.
 
     Recolecta del pool ya fusionado/rankeado, ADMITE por marca solo hasta llenar el cupo en
     curso (gate serial WIP) y lanza la VERIFICACIÓN de la fuente (`claude -p`) de lo admitido sin
@@ -142,8 +142,8 @@ def ejecutar_barrido() -> dict[str, Any]:
     return {**inv, **prod}
 
 
-# Estados del ADMISION de verificación: clusters `nuevo` que ya entraron al circuito de QA y aún
-# no se admitieron (en proceso, verificados-pendientes o saltados). Acotan cuánta QA se lanza por
+# Estados del ADMISION de verificación: clusters `nuevo` que ya entraron al circuito de verificación y aún
+# no se admitieron (en proceso, verificados-pendientes o saltados). Acotan cuánta verificación se lanza por
 # tick (presupuesto = tope en proceso − admision) para que la verificación no recorra todo el pool.
 _ADMISION_VERIFICACION = (VERIFICACION_EN_CURSO, VERIFICACION_NO_VERIFICADO, VERIFICACION_SALTADA)
 
@@ -151,10 +151,10 @@ _ADMISION_VERIFICACION = (VERIFICACION_EN_CURSO, VERIFICACION_NO_VERIFICADO, VER
 def _ejecutar_investigacion() -> dict[str, Any]:
     """Cuerpo de INVESTIGACIÓN (ya bajo el single-flight de `ejecutar_investigacion`).
 
-    Rediseño F3 (la frontera "QA = investigación" en los datos): la QA corre sobre la HISTORIA
+    Rediseño F3 (la frontera "verificación = investigación" en los datos): la verificación corre sobre la HISTORIA
     (cluster) ANTES de materializar contenido, y la admisión solo promueve las VERIFICADAS:
-      0) FRESCURA: caduca los temas en curso (TTL) y resetea las QA de cluster `en_curso` atascadas.
-      1) QA: verifica las candidatas sin verificacion (top del ranking que pasan el umbral), acotada
+      0) FRESCURA: caduca los temas en curso (TTL) y resetea las verificación de cluster `en_curso` atascadas.
+      1) verificación: verifica las candidatas sin verificacion (top del ranking que pasan el umbral), acotada
          por el admision. Asíncrona; persiste el verificacion en el cluster.
       2) ADMISIÓN: promueve a tema (con copy pendiente) las historias ya verificadas, heredando
          su verificacion al contenido. Las `problema` no se materializan.
@@ -163,16 +163,16 @@ def _ejecutar_investigacion() -> dict[str, Any]:
     maximo = config.pipeline_max()
     # --- Fase 0 · FRESCURA. ------------------------------------------------------------------
     # VENTANA DESLIZANTE sobre el ranking: lo que no se completó a tiempo caduca y libera su hueco
-    # (temas en curso); y una QA de cluster que murió (en_curso atascada) se resetea para re-verificar.
+    # (temas en curso); y una verificación de cluster que murió (en_curso atascada) se resetea para re-verificar.
     try:
         _admitir.caducar_temas_viejos()
     except Exception:  # noqa: BLE001 -- la caducidad es limpieza; nunca rompe el barrido
         _log.exception("pipeline: fallo la caducidad de temas en curso.")
     try:
         _admitir.caducar_verificacion_clusters_en_curso()
-    except Exception:  # noqa: BLE001 -- el limpiador de QA es limpieza; nunca rompe el barrido
-        _log.exception("pipeline: fallo el limpiador de QA de clusters en curso.")
-    # --- Fase QA (verificación de la FUENTE sobre la historia, pre-admisión). -----------------------
+    except Exception:  # noqa: BLE001 -- el limpiador de verificación es limpieza; nunca rompe el barrido
+        _log.exception("pipeline: fallo el limpiador de verificación de clusters en curso.")
+    # --- Fase verificación (verificación de la FUENTE sobre la historia, pre-admisión). -----------------------
     verificados = ejecutar_verificar_clusters(autor=autor)
     # --- Fase ADMISIÓN · "Crear noticias": materializa las historias YA VERIFICADAS por marca. -
     # Etapa CI = toggle "Crear noticias" (`KENI_PIPELINE_RECOLECTAR`): si está OFF no entra nada. La
@@ -213,7 +213,7 @@ def _ejecutar_investigacion() -> dict[str, Any]:
             continue
     if temas_nuevos or verificados:
         _log.info(
-            "investigación: %d verificado(s) (QA), %d tema(s) admitido(s) (CI).",
+            "investigación: %d verificado(s) (verificación), %d tema(s) admitido(s) (CI).",
             len(verificados), len(temas_nuevos),
         )
     # PRIORIDAD (no sólo polling): una ÚLTIMA HORA recién admitida no debe esperar al siguiente
@@ -226,7 +226,7 @@ def _ejecutar_investigacion() -> dict[str, Any]:
 
 
 def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
-    """Fase QA del proceso de INVESTIGACIÓN (ADR 0011 F3): verifica la FUENTE de las HISTORIAS
+    """Fase verificación del proceso de INVESTIGACIÓN (ADR 0011 F3): verifica la FUENTE de las HISTORIAS
     candidatas ANTES de materializar contenido.
 
     Por marca con admisión activa (`KENI_PIPELINE_RECOLECTAR`): toma las candidatas sin verificacion
@@ -243,7 +243,7 @@ def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[
     verificados: list[dict[str, Any]] = []
     en_proceso_max = config.pipeline_en_proceso_max()
     for marca in marcas.ids():
-        # La QA solo tiene sentido si la admisión de la marca está activa (solo verificamos lo que
+        # La verificación solo tiene sentido si la admisión de la marca está activa (solo verificamos lo que
         # admitiríamos). El override por marca de Selección excluye la marca aquí también.
         if not config.etapa_activa(config.ENV_PIPELINE_RECOLECTAR, marca):
             continue
@@ -253,7 +253,7 @@ def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[
         try:
             admision = repos.contar_clusters_admision_verificacion(marca, _ADMISION_VERIFICACION)
         except Exception:  # noqa: BLE001 -- sin contador fiable, no verificamos esta marca este tick
-            _log.warning("pipeline: no se pudo contar el admision de QA (%s)", marca, exc_info=True)
+            _log.warning("pipeline: no se pudo contar el admision de verificación (%s)", marca, exc_info=True)
             continue
         presupuesto = en_proceso_max - admision
         if presupuesto <= 0:
@@ -272,17 +272,17 @@ def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[
                 try:
                     repos.marcar_cluster_verificacion(cid, VERIFICACION_SALTADA)
                 except Exception:  # noqa: BLE001 -- un fallo al marcar saltada no mata la fase
-                    _log.exception("pipeline: fallo al marcar QA de cluster saltada (%s).", cid)
+                    _log.exception("pipeline: fallo al marcar verificación de cluster saltada (%s).", cid)
                 else:
                     verificados.append({"id": cid, "gen_id": "", "verificacion_fuente": VERIFICACION_SALTADA})
                 continue
             try:
                 gen = lanzar_verificar_cluster(cluster, autor=autor)
             except generaciones.ColaLlenaError as e:
-                _log.info("pipeline: QA en pausa por admisión (%s); el resto entra en el próximo tick.", e)
+                _log.info("pipeline: verificación en pausa por admisión (%s); el resto entra en el próximo tick.", e)
                 break
-            except Exception:  # noqa: BLE001 -- un fallo por historia no debe matar la fase QA
-                _log.exception("pipeline: fallo la verificación de la fuente (QA) de la historia %s (marca %s).", cid, marca)
+            except Exception:  # noqa: BLE001 -- un fallo por historia no debe matar la fase verificación
+                _log.exception("pipeline: fallo la verificación de la fuente (verificación) de la historia %s (marca %s).", cid, marca)
                 continue
             if gen is not None:
                 verificados.append({"id": cid, "gen_id": gen.get("id", "") if isinstance(gen, dict) else "", "verificacion_fuente": VERIFICACION_EN_CURSO})
@@ -316,18 +316,18 @@ def _ejecutar_barrido() -> dict[str, Any]:
     return {**inv, **prod}
 
 
-# UN SOLO CAMINO DE QA (ADR 0011 F3): la verificación corre SOBRE EL CLUSTER, PRE-admisión
+# UN SOLO CAMINO DE verificación (ADR 0011 F3): la verificación corre SOBRE EL CLUSTER, PRE-admisión
 # (`ejecutar_verificar_clusters`), nunca sobre el TEMA post-admisión. La FRONTERA queda nítida en código:
 # Investigación verifica la fuente ANTES de cruzar (cluster → verificacion) y la admisión solo
 # promueve las VERIFICADAS.
 
 
 def ejecutar_redactar(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
-    """Fase CD (etapa de Redactar): genera copy de los temas con QA `no_verificado` y sin copy aún,
+    """Fase CD (etapa de Redactar): genera copy de los temas con verificación `no_verificado` y sin copy aún,
     Y de los temas del news-pool (orígenes de noticias) que aún no tienen copy.
 
     DOS fuentes de temas, una sola ruta de copy (la etapa de Redactar es el ÚNICO motor):
-      1) temas del propio pipeline (origen `pipeline`) cuya QA salió `no_verificado`
+      1) temas del propio pipeline (origen `pipeline`) cuya verificación salió `no_verificado`
          (`temas_para_redactar` → `lanzar_redactar_de_tema`),
       2) temas que las FUENTES de noticias metieron al tablero sin copy
          (`temas_autogen_sin_copy` → `autogen_redactar.lanzar_para_topic`).
@@ -357,7 +357,7 @@ def ejecutar_redactar(*, autor: dict[str, str] | None = None) -> list[dict[str, 
                 f"La generación de copy falló {_MAX_INTENTOS_ETAPA} veces.",
             )
             continue
-        # Backoff creciente entre intentos (1/4/16 min): mismo rationale que en la fase QA.
+        # Backoff creciente entre intentos (1/4/16 min): mismo rationale que en la fase verificación.
         if en_backoff(tema, "redactar_intentos"):
             continue
         try:
@@ -487,7 +487,7 @@ def ejecutar_ilustrar() -> list[dict[str, Any]]:
 
 
 # TICK del flujo continuo (constante, NO un ajuste): reaccionan al ESTADO cada pocos segundos.
-# En cuanto la QA de una pieza termina, el siguiente tick de producción lanza su Copy. El volumen
+# En cuanto la verificación de una pieza termina, el siguiente tick de producción lanza su Copy. El volumen
 # NO lo pone el tick sino la ADMISIÓN (gate serial en curso por marca) + el backpressure de la
 # cola. Cada proceso tiene su propia constante para poder divergir sin tocar el otro; hoy ambos
 # son 15 s.

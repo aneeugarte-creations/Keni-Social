@@ -1,6 +1,6 @@
-"""CD — creación de contenido: lanza copy de los temas con QA `no_verificado`.
+"""CD — creación de contenido: lanza copy de los temas con verificación `no_verificado`.
 
-Por cada tema cuya QA de la fuente salió `no_verificado` y que aún no tiene copy, lanza la
+Por cada tema cuya verificación de la fuente salió `no_verificado` y que aún no tiene copy, lanza la
 generación por el camino PROBADO (`dominio.generar.lanzar_copy`) con los parámetros que CI guardó
 en `copy_pendiente`. Incluye también la selección del news-pool (orígenes autogen) que la etapa
 de Redactar del pipeline redacta (fundido de `autogen_redactar`).
@@ -35,7 +35,7 @@ __all__ = [
 
 
 def lanzar_redactar_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | None) -> dict[str, Any] | None:
-    """CD — lanza la generación de copy de UN tema cuya QA de la fuente salió `no_verificado`.
+    """CD — lanza la generación de copy de UN tema cuya verificación de la fuente salió `no_verificado`.
 
     Reutiliza el lanzador PROBADO `dominio.generar.lanzar_copy` con los parámetros que CI guardó
     en `copy_pendiente` (nota, redes, imagen ya resuelta, fuente, clave). El borrador resultante
@@ -79,7 +79,7 @@ def lanzar_redactar_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | Non
     clave = (pend.get("clave") or "").strip() or None
     gen = gen_dom.lanzar_copy(
         # `pipeline`: la generación REAL (claude -p) queda etiquetada como pipeline y reporta
-        # sus tokens/coste/tiempo en Actividad IA (el resto del flujo —CI/QA— no cuesta).
+        # sus tokens/coste/tiempo en Actividad IA (el resto del flujo —CI/verificación— no cuesta).
         tipo=TIPO_PIPELINE,
         marca=marca,
         contexto=nota,
@@ -116,11 +116,11 @@ def lanzar_redactar_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | Non
 
 
 def temas_para_redactar(marca: str | None = None) -> list[dict[str, Any]]:
-    """Temas listos para CD: QA `no_verificado` (o `saltada`), con `copy_pendiente` y SIN copy aún.
+    """Temas listos para CD: verificación `no_verificado` (o `saltada`), con `copy_pendiente` y SIN copy aún.
 
     La guarda de DOS niveles (copy_pendiente no vacío + sin piezas) hace la fase CD idempotente:
     un tema cuyo copy ya se lanzó no se relanza aunque su `copy_pendiente` no se hubiera limpiado.
-    Un tema con QA `saltada` (etapa QA desactivada para la marca) fluye a CD igual que uno
+    Un tema con verificación `saltada` (etapa verificación desactivada para la marca) fluye a CD igual que uno
     `no_verificado`; un `problema` sí bloquea.
     """
     listos: list[dict[str, Any]] = []
@@ -141,7 +141,7 @@ def temas_autogen_sin_copy() -> list[dict[str, Any]]:
     """Temas del news-pool/tablero sin copy que la etapa de Redactar debe redactar.
 
     La etapa de Redactar del pipeline es el ÚNICO motor de copy: además de los temas que el propio
-    pipeline ingiere (origen `pipeline`, vía QA→CD), también redacta los temas que las FUENTES
+    pipeline ingiere (origen `pipeline`, vía verificación→CD), también redacta los temas que las FUENTES
     de noticias meten al tablero (`estados.ORIGENES_AUTOGEN`: import-calendario, radar-auto,
     radar, rss, equipo) y que aún no tienen copy. La selección vive en esta función; en
     `autogen_redactar` solo el LANZADOR `lanzar_para_topic` + el dedup por etiqueta. Reglas:
@@ -186,7 +186,7 @@ def temas_autogen_sin_copy() -> list[dict[str, Any]]:
 
 
 # --------------------------------------------------------------------------- #
-# Encadenado por EVENTOS (QA -> copy -> arte), sin esperar al siguiente barrido #
+# Encadenado por EVENTOS (verificación -> copy -> arte), sin esperar al siguiente barrido #
 # --------------------------------------------------------------------------- #
 
 

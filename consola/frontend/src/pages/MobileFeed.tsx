@@ -1,7 +1,7 @@
 /**
  * FEED MÓVIL para revisores (`/feed`).
  *
- * Visión (#qa-movil-feed): el equipo (revisores/productores/editores) revisa en el
+ * Visión (#verificación-movil-feed): el equipo (revisores/productores/editores) revisa en el
  * móvil un FEED tipo red social —una columna, tarjetas a ancho completo— en vez de
  * la consola completa de administración (que opera una sola persona). Aquí se
  * APRUEBA, RECHAZA, COMENTA y CREA; nada de sidebar ni navegación lateral.

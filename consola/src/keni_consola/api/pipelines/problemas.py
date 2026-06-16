@@ -17,10 +17,10 @@ def _problema_de(item: dict) -> dict:
     `etapa`/`error` salen del ÚLTIMO hallazgo: los fallos repetidos de etapa
     (`marcar_fallo_etapa`) dejan un hallazgo `tipo='sistema'` con la etapa en `fragmento`;
     un 🔴 de la propia verificación (sin hallazgo de sistema) es un problema de "Verificar".
-    `intentos` lee los contadores de reintento de `copy_pendiente` (qa/cd).
+    `intentos` lee los contadores de reintento de `copy_pendiente` (verificación/cd).
     """
-    qa = _verificacion_fuente_de(item)
-    ultimo = qa["hallazgos"][-1] if qa["hallazgos"] else {}
+    verificación = _verificacion_fuente_de(item)
+    ultimo = verificación["hallazgos"][-1] if verificación["hallazgos"] else {}
     es_sistema = (ultimo.get("tipo") or "") == "sistema"
     marca = item.get("marca", "") or ""
     return {
@@ -30,12 +30,12 @@ def _problema_de(item: dict) -> dict:
         "marca_nombre": _marca_nombre(marca),
         "etapa": (ultimo.get("fragmento") or "") if es_sistema else "Verificar",
         "intentos": {
-            "qa": intentos_de(item, "verificar_intentos"),
+            "verificación": intentos_de(item, "verificar_intentos"),
             "cd": intentos_de(item, "redactar_intentos"),
         },
-        "error": str(ultimo.get("explicacion") or "") or qa["resumen"],
-        "resumen": qa["resumen"],
-        "hallazgos": qa["hallazgos"],
+        "error": str(ultimo.get("explicacion") or "") or verificación["resumen"],
+        "resumen": verificación["resumen"],
+        "hallazgos": verificación["hallazgos"],
         "creado": item.get("creado", "") or "",
         "actualizado": item.get("actualizado", "") or "",
     }

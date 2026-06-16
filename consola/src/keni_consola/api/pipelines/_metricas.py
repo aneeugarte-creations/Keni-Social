@@ -36,7 +36,7 @@ def _metricas_por_run(gens: list[dict], ids_runs: set[str]) -> dict[str, dict]:
     tokens_in+tokens_out -> tokens, total_cost_usd -> coste_usd. Los marcadores de etapa
     (sin coste) no suman.
     """
-    # gen_id -> contenido_id según los marcadores de etapa (CD/QA/ARTE).
+    # gen_id -> contenido_id según los marcadores de etapa (CD/verificación/ARTE).
     cid_por_gen: dict[str, str] = {}
     for g in gens:
         if not _es_marcador_pipeline(g):

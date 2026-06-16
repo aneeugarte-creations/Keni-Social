@@ -31,7 +31,7 @@ const RUN = {
     { clave: "redactar", nombre: "Redactar", estado: "ok", detalle: "1/1", ts: "", es_ia: true },
     { clave: "aprobar", nombre: "Aprobar", estado: "pendiente", detalle: "", ts: "", es_ia: false },
   ],
-  qa_fuente: null,
+  verificacion: null,
   cluster: null,
   metricas: { items: 2, tokens: 5000, coste_usd: 0.05, duration_ms: 12000 },
   piezas: [],
@@ -52,7 +52,7 @@ const SUELTA = {
   etapas: [
     { clave: "trabajo", nombre: "insumos", estado: "ok", detalle: "", ts: "", es_ia: true },
   ],
-  qa_fuente: null,
+  verificacion: null,
   cluster: null,
   metricas: { items: 1, tokens: 12345, coste_usd: 0.038, duration_ms: 4200 },
   piezas: [],

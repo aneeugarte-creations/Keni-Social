@@ -161,7 +161,7 @@ function TarjetaPublicacion({
     // "Añadir a la cola" SOLO para piezas APROBADAS o ya programadas (re-encolar). Programar
     // una pre-aprobación (borrador/en_revisión) saltaría la revisión: el camino de esas piezas
     // es el flujo de aprobación, que auto-programa al aprobarse (auto_programar) con sus gates
-    // (mínimo de OKs + QA). Así el botón no es un footgun de un clic en la pantalla diaria. Una
+    // (mínimo de OKs + verificación). Así el botón no es un footgun de un clic en la pantalla diaria. Una
     // publicada es terminal (su post ya salió): tampoco se re-encola.
     ...(publicacion.estado === "aprobado" || publicacion.estado === "programado"
       ? [

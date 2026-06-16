@@ -2,7 +2,7 @@
 
 El historial es el registro DURADERO de las generaciones de copy/documento (lo escribe el
 post-procesado vía `repos.registrar_historial_prompt`). Lo consumen TODAS las generaciones
-(copy, termómetro, QA…), por eso vive en su propio módulo NEUTRO.
+(copy, termómetro, verificación…), por eso vive en su propio módulo NEUTRO.
 
   - `POST /api/prompts/historial/{id}/guardar`  -> crea publicaciones (borradores) desde la
                                                   entrada (una por pieza, o una con `red`).

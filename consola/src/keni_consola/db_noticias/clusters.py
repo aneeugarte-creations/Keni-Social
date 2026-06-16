@@ -104,7 +104,7 @@ def _fila_a_noticia_cluster(fila: Any) -> dict[str, Any]:
         "fuentes_detalle": _detalle_fuentes_a_lista(fila["fuentes_detalle"]),
         # Encaje de marca por IA (ADR 0011): la marca la asignó el clasificador Haiku.
         "marca_clasificada_por_ia": bool(fila["marca_clasificada_por_ia"]),
-        # Verificación (QA de la fuente) sobre la HISTORIA (ADR 0011 F3): verificacion +
+        # Verificación (verificación de la fuente) sobre la HISTORIA (ADR 0011 F3): verificacion +
         # hallazgos; la admisión solo materializa contenido de las verificadas.
         "verificacion_fuente": fila["verificacion_fuente"] or "",
         "verificar_hallazgos": fila["verificar_hallazgos"] or "",
@@ -172,9 +172,9 @@ def upsert_noticia_cluster(cluster: dict[str, Any]) -> dict[str, Any]:
         # `_NO_PISAR`), lo sella aparte `marcar_cluster_marca_ia` — como `traducido`. Así un
         # recalc (merge/fusión/rescore) sin el flag no borra el encaje IA ya hecho.
         "marca_clasificada_por_ia": 1 if cluster.get("marca_clasificada_por_ia") else 0,
-        # Verificación (QA de la fuente) sobre la historia (ADR 0011 F3): valor del ALTA; en
+        # Verificación (verificación de la fuente) sobre la historia (ADR 0011 F3): valor del ALTA; en
         # conflicto NO se pisa (está en `_NO_PISAR`), lo sella aparte `marcar_cluster_verificacion`. Así un
-        # recalc (merge/fusión/rescore) sin el verificacion no borra una QA ya hecha.
+        # recalc (merge/fusión/rescore) sin el verificacion no borra una verificación ya hecha.
         "verificacion_fuente": cluster.get("verificacion_fuente") or "",
         "verificar_hallazgos": cluster.get("verificar_hallazgos") or "",
         "creado": cluster.get("creado") or ahora,
@@ -450,7 +450,7 @@ def marcar_cluster_marca_ia(cluster_id: str) -> None:
 
 
 def marcar_cluster_verificacion(cluster_id: str, verificacion: str, hallazgos: str = "") -> None:
-    """Sella la VERIFICACIÓN (QA de la fuente) de la HISTORIA (ADR 0011 F3).
+    """Sella la VERIFICACIÓN (verificación de la fuente) de la HISTORIA (ADR 0011 F3).
 
     Escribe `verificacion_fuente` (+ `verificar_hallazgos`) en el cluster ANTES de materializar contenido de
     producción: la admisión solo promueve las verificadas (`no_verificado`/`saltada`) y hereda
@@ -475,8 +475,8 @@ def contar_clusters_admision_verificacion(marca: str, estados: tuple[str, ...]) 
     """Cuántas HISTORIAS `nuevo` de la marca están en la ADMISIÓN de verificación (ADR 0011 F3).
 
     La admisión son los clusters aún sin promover (`estado='nuevo'`) cuyo `verificacion_fuente` está en
-    `estados` (p. ej. en_curso + verificadas-pendientes). Acota cuánta QA se lanza por tick para
-    que la verificación no recorra todo el pool: el presupuesto de QA = tope en curso − admisión.
+    `estados` (p. ej. en_curso + verificadas-pendientes). Acota cuánta verificación se lanza por tick para
+    que la verificación no recorra todo el pool: el presupuesto de verificación = tope en curso − admisión.
     0 ante cualquier fallo o `estados` vacío.
     """
     if not estados:
@@ -497,7 +497,7 @@ def contar_clusters_admision_verificacion(marca: str, estados: tuple[str, ...]) 
 def reparar_verificacion_clusters_en_curso(umbral_iso: str) -> int:
     """Resetea a "" el `verificacion_fuente='en_curso'` atascado de los clusters (limpiador de verificación).
 
-    Si una QA de la fuente sobre un cluster se interrumpe (deploy/OOM/cuelgue), el cluster quedaría
+    Si una verificación de la fuente sobre un cluster se interrumpe (deploy/OOM/cuelgue), el cluster quedaría
     `en_curso` para siempre: ni se re-verificación ni se admite. Devuelve los `en_curso` más viejos que
     `umbral_iso` a "" para que el barrido los vuelva a verificar. Mismo patrón que
     `reparar_verificacion_en_curso_sueltos` sobre `contenido`. Devuelve cuántos corrigió.

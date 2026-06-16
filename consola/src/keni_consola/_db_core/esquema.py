@@ -447,7 +447,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         -- imagen compuesta de siempre). JSON array `[{"tipo":"imagen"|"video","objeto":id}, …]`
         -- en el ORDEN de publicación; "" = sin slides extra (o pieza de otro formato).
         carrusel              TEXT NOT NULL DEFAULT '',
-        qa_auto_hash          TEXT NOT NULL DEFAULT '',
+        verificar_auto_hash          TEXT NOT NULL DEFAULT '',
         hora_post             TEXT NOT NULL DEFAULT '',
         creado                TEXT NOT NULL DEFAULT '',
         actualizado           TEXT NOT NULL DEFAULT '',
@@ -618,7 +618,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_rota_swaps_fechas ON rota_swaps_turno (fecha_a, fecha_b)",
     # COORDINADOR POR TURNO (ola "coord"): cada celda del calendario (fecha, franja_id) puede
     # tener UN coordinador asignado, INDEPENDIENTE del turno de CM. Los candidatos son los
-    # usuarios con `puede_coordinar=true` (hoy el coordinador de redes, fotografía/QA y la coordinadora operativa; lo decide el admin desde
+    # usuarios con `puede_coordinar=true` (hoy el coordinador de redes, fotografía/verificación y la coordinadora operativa; lo decide el admin desde
     # /usuarios). UNIQUE(fecha, franja_id): una celda = un coordinador. La tabla es nueva
     # (no hay migracion historica). Borrar un turno o cambiar franja NO borra la coordinacion.
     """
@@ -749,7 +749,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # medio por imagen POR MODELO; legados/claude => '' (cae a la media global). Idempotente.
     "ALTER TABLE gasto_ia ADD COLUMN IF NOT EXISTS modelo TEXT NOT NULL DEFAULT ''",
     # PROCESO de la maquina (ADR 0011): 'investigacion' | 'produccion'. Permite desglosar el
-    # gasto de la suscripcion por loop (cuanto se va en verificación/QA vs copy/arte). Se rellena EN
+    # gasto de la suscripcion por loop (cuanto se va en verificación/verificación vs copy/arte). Se rellena EN
     # VIVO al registrar el cierre (proceso ya conocido del job / `generaciones.proceso_de`).
     # DEFAULT 'produccion' (la maquina de contenido): las filas existentes quedan en produccion
     # al instante y la migracion 0035 REFINA las de investigacion desde `generaciones_indice`.

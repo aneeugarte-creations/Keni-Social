@@ -9,7 +9,7 @@ MISMOS gates que la programación manual (`api.aprobacion.programar`):
     (`config.min_aprobaciones`). Al cerrarse la cadena lo cumple por definición; el barrido de
     piezas ya-aprobadas también lo comprueba. Una pieza `aprobado` SIN cadena (atajo admin) no
     tiene nada que contar y pasa el gate.
-  - Gate B (QA): cero comentarios sin resolver (una objeción pendiente bloquea programar).
+  - Gate B (verificación): cero comentarios sin resolver (una objeción pendiente bloquea programar).
   - Debe existir una franja aplicable a su (marca, red). Si no hay hueco, la pieza se queda
     `aprobado` (no se inventa fecha): saldrá programada en cuanto se configure una franja.
 
@@ -55,7 +55,7 @@ def programar_si_aprobada(publicacion_id: str) -> dict[str, Any] | None:
         if not cumple:
             return None
 
-    # Gate B (QA): un comentario sin resolver es una objeción pendiente; no programar.
+    # Gate B (verificación): un comentario sin resolver es una objeción pendiente; no programar.
     plat = repos.obtener_contenido_plataforma(publicacion_id)
     if repos.comentarios_sin_resolver((plat or {}).get("contenido_id", "") or "", publicacion_id):
         return None

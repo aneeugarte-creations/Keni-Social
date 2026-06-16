@@ -45,7 +45,7 @@ def _run_por_titulo(cliente, titulo: str) -> dict | None:
     return next((x for x in r.json()["pipelines"] if x["titulo"] == titulo), None)
 
 
-def test_run_qa_no_verificado_con_copy(cliente):
+def test_run_verificacion_no_verificado_con_copy(cliente):
     """Tema con VERIFICAR `no_verificado` + copy en borrador: ADMITIR/VERIFICAR/REDACTAR ok, aprobación pendiente.
 
     Orden NUEVO (rediseño QPC): ADMITIR -> Verificación de la fuente (VERIFICAR) -> Copy (REDACTAR) -> Aprobar.
@@ -69,11 +69,11 @@ def test_run_qa_no_verificado_con_copy(cliente):
     assert run["estado_global"] == "pendiente"
     assert run["cluster"] is None
     # La verificación de la fuente surface el aviso ⚠️.
-    assert run["qa_fuente"]["no_verificado"] is True
-    assert run["qa_fuente"]["problema"] is False
+    assert run["verificacion"]["no_verificado"] is True
+    assert run["verificacion"]["problema"] is False
 
 
-def test_run_sin_qa_todo_pendiente(cliente):
+def test_run_sin_verificacion_todo_pendiente(cliente):
     """Tema sin verificacion de VERIFICAR todavía: VERIFICAR y REDACTAR pendientes (la VERIFICAR va antes del copy)."""
     tema = _tema_pipeline("Tema sin verificación")
     repos.crear_contenido_plataforma(
@@ -86,7 +86,7 @@ def test_run_sin_qa_todo_pendiente(cliente):
     assert etapas["redactar"] == "pendiente"
 
 
-def test_run_qa_problema_omite_copy(cliente):
+def test_run_verificacion_problema_omite_copy(cliente):
     """VERIFICAR `problema` -> etapa VERIFICAR 'revisar', REDACTAR pendiente (copy omitido) y ❗ con hallazgos."""
     hallazgos = (
         '{"resumen": "Dato falso", '
@@ -97,10 +97,10 @@ def test_run_qa_problema_omite_copy(cliente):
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
     assert etapas["verificar"] == "revisar"
     assert etapas["redactar"] == "pendiente"
-    qa = run["qa_fuente"]
-    assert qa["problema"] is True
-    assert qa["copy_omitido"] is True
-    assert qa["hallazgos"] and qa["hallazgos"][0]["tipo"] == "dato"
+    verificación = run["verificacion"]
+    assert verificación["problema"] is True
+    assert verificación["copy_omitido"] is True
+    assert verificación["hallazgos"] and verificación["hallazgos"][0]["tipo"] == "dato"
 
 
 def test_aprobacion_esperando_humano_es_pendiente(cliente):
@@ -131,7 +131,7 @@ def test_run_aprobado(cliente):
     assert run["estado_global"] == "ok"
 
 
-def test_run_qa_saltada_genera_copy(cliente, monkeypatch):
+def test_run_verificacion_saltada_genera_copy(cliente, monkeypatch):
     """VERIFICAR desactivada para la marca (`KENI_PIPELINE_VERIFICAR::unotv=0`): etapa VERIFICAR 'saltada' y el copy se genera
     igual (REDACTAR 'ok'). 'saltada' no bloquea: el estado_global lo marca la aprobación pendiente."""
     monkeypatch.setattr(
@@ -311,9 +311,9 @@ def test_etapa_actual_y_filtro_por_etapa(cliente):
     aprobada = _run_por_titulo(cliente, "Run aprobada")
     assert aprobada["etapa_actual"] == ""  # todo ok/saltada: no está parada en ninguna
 
-    titulos_qa = {x["titulo"] for x in cliente.get("/api/pipelines?etapa=verificar").json()["pipelines"]}
-    assert "Run en VERIFICAR" in titulos_qa
-    assert "Run aprobada" not in titulos_qa
+    titulos_verificacion = {x["titulo"] for x in cliente.get("/api/pipelines?etapa=verificar").json()["pipelines"]}
+    assert "Run en VERIFICAR" in titulos_verificacion
+    assert "Run aprobada" not in titulos_verificacion
 
 
 def test_filtro_por_estado_global_e_invalido_se_ignora(cliente):
@@ -340,7 +340,7 @@ def test_detalle_run(cliente):
         "fusionar", "priorizar", "admitir", "verificar", "redactar", "ilustrar", "aprobar"
     ]
     assert "actividad" in body
-    assert "qa_fuente" in body["pipeline"]
+    assert "verificacion" in body["pipeline"]
     # El detalle trae las piezas COMPLETAS: el copy real + observaciones de la validación.
     pieza = body["pipeline"]["piezas"][0]
     assert pieza["copy"] == "Copy."
@@ -455,7 +455,7 @@ def test_problemas_lista_temas_bloqueados(cliente):
     assert p["titulo"] == "Tema bloqueado"
     assert p["marca"] == "unotv" and p["marca_nombre"]
     assert p["etapa"] == "Redactar"  # el hallazgo de sistema trae la etapa que agotó reintentos
-    assert p["intentos"] == {"qa": 1, "cd": 3}
+    assert p["intentos"] == {"verificación": 1, "cd": 3}
     assert "falló 3 veces" in p["error"]
     assert p["hallazgos"] and p["hallazgos"][0]["tipo"] == "sistema"
     assert p["creado"] and p["actualizado"]
@@ -471,7 +471,7 @@ def test_problemas_verificacion_roja_es_validacion(cliente):
     p = cliente.get("/api/pipelines/problemas").json()["problemas"][0]
     assert p["etapa"] == "Verificar"
     assert p["error"] == "es falso"
-    assert p["intentos"] == {"qa": 0, "cd": 0}  # sin copy_pendiente no hay contadores
+    assert p["intentos"] == {"verificación": 0, "cd": 0}  # sin copy_pendiente no hay contadores
 
 
 def test_problemas_filtra_por_marca_y_valida(cliente):

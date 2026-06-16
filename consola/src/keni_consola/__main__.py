@@ -197,7 +197,7 @@ def main() -> int:
     # MÁQUINA DE CONTENIDO (Flujo C): el pipeline es el núcleo de la auto-producción. Si está
     # activo (`KENI_PIPELINE_REDACTAR`, bajo el maestro `KENI_MAQUINA`), cada N horas ingiere del news-pool,
     # genera copy (etapa de Redactar) y arte (etapa de Ilustrar, `KENI_PIPELINE_ILUSTRAR`) y valida los
-    # borradores recientes (QA), registrando cada etapa en "Actividad IA". Deja borradores en la
+    # borradores recientes (verificación), registrando cada etapa en "Actividad IA". Deja borradores en la
     # cola de revision; NO publica solo. SAFE BY DEFAULT: sin el flag no barre. Vive aqui (servidor
     # real), NO en `crear_app`, para no arrancarlo en los tests.
     from .pipeline_contenido import iniciar_pipeline

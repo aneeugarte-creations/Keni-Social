@@ -387,7 +387,7 @@ def test_comercial_intervalo_horas_crudo(limpio):
 def test_pipeline_admision_default_y_clamp(limpio):
     """Los DOS knobs de admisión del flujo continuo: ajustables por env, default y clamp min 1.
 
-    Los topes por etapa (QA/Copy/autogen/revisar) y el intervalo del barrido YA NO EXISTEN:
+    Los topes por etapa (verificación/Copy/autogen/revisar) y el intervalo del barrido YA NO EXISTEN:
     el volumen lo regula la admisión (estos dos) + el backpressure de la cola.
     """
     assert config.pipeline_max() == 3

@@ -12,7 +12,7 @@ export const ETIQUETAS_TIPO_GENERACION: Record<string, string> = {
   rss: "RSS",
   imagen: "Imagen",
   verificacion: "Verificar",
-  "qa-editorial": "QA editorial",
+  "revision": "revisión editorial",
   autogen: "Auto-copy",
   run: "Run",
   pipeline: "Pipeline",

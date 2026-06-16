@@ -273,7 +273,7 @@ export function DialogoEditar({
     if (formato === "carrusel") {
       cuerpo.carrusel = serializarCarrusel(slides);
     }
-    // El estado, la fecha y evergreen NO se tocan aquí: el flujo los gestiona solo (autogen → QA →
+    // El estado, la fecha y evergreen NO se tocan aquí: el flujo los gestiona solo (autogen → verificación →
     // me gusta → auto-programar). PATCH parcial: lo no enviado queda intacto.
     const { publicacion: actualizada } = await api.actualizarPublicacion(publicacion.id, cuerpo);
     // AUTO-AVANCE: una pieza autogenerada/editada que YA tiene todo el contenido entra sola a

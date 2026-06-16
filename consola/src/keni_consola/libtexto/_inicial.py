@@ -54,7 +54,7 @@ _SENTINELA_OBSOLETOS = ".prompts-obsoletos-v1"
 # store fresco las dos olas se aplican de una sola pasada. Idempotente por el sentinela v2.
 _RENOMBRES_PROMPT_BIBLIOTECA: tuple[tuple[str, str], ...] = (
     ("prompt/copy-desde-nota", "prompt/copy"),
-    ("prompt/qa-fuente", "prompt/validacion"),
+    ("prompt/verificacion-fuente", "prompt/validacion"),
     ("prompt/brainstorming-evergreen", "prompt/evergreen"),
     ("prompt/imagen/arte-noticia", "prompt/arte"),
     ("prompt/imagen/ilustracion-fondo", "prompt/arte-ilustracion"),

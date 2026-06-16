@@ -17,7 +17,7 @@ import type {
   PipelineGeneracion,
   PipelineHallazgo,
   PipelineMetricas,
-  PipelineQaFuente,
+  PipelineVerificacionFuente,
 } from "@/types";
 
 // Verificación por corroboración (Ola D) -> etiqueta corta para los chips de procedencia IA.
@@ -56,23 +56,23 @@ export const ESTADOS_FILTRO: { clave: string; nombre: string }[] = [
   { clave: "ok", nombre: "Completado" },
 ];
 
-/** Chip de la verificación de la fuente (rediseño QPC): ⚠️ "No verificado" o ❗ "QA: problema".
+/** Chip de la verificación de la fuente (rediseño QPC): ⚠️ "No verificado" o ❗ "verificación: problema".
  *  Nada si aún no hay verificacion (verificación pendiente/en curso: lo cubre la tira de etapas). */
-function BadgeQaFuente({ qa, className }: { qa?: PipelineQaFuente; className?: string }) {
-  if (!qa) return null;
-  if (qa.problema) {
+function BadgeVerificacionFuente({ verificación, className }: { verificación?: PipelineVerificacionFuente; className?: string }) {
+  if (!verificación) return null;
+  if (verificación.problema) {
     return (
       <Badge
         variant="secondary"
         className={cn("gap-1 border border-destructive/30 bg-destructive/10 text-destructive", className)}
-        title={qa.resumen || "La verificación encontró un problema; sin copy."}
+        title={verificación.resumen || "La verificación encontró un problema; sin copy."}
       >
         <OctagonAlert className="h-3 w-3" aria-hidden="true" />
         Problema
       </Badge>
     );
   }
-  if (qa.no_verificado) {
+  if (verificación.no_verificado) {
     return (
       <Badge
         variant="secondary"
@@ -265,7 +265,7 @@ function FilaPipeline({ run, onAbrir }: { run: Pipeline; onAbrir: ((run: Pipelin
               </Badge>
             )}
             <ChipEstado estado={run.estado_global} />
-            <BadgeQaFuente qa={run.qa_fuente ?? undefined} />
+            <BadgeVerificacionFuente verificación={run.verificacion ?? undefined} />
             {run.cluster && (
               <Badge
                 variant="outline"
@@ -422,15 +422,15 @@ function ContenidoEtapa({
     );
   }
   if (clave === "verificar") {
-    const qa = run.qa_fuente;
+    const verificación = run.verificacion;
     return (
       <div className="space-y-2">
         <BloqueIA gen={generacion} plantilla={plantilla} />
-        {qa && (qa.no_verificado || qa.problema) && (
+        {verificación && (verificación.no_verificado || verificación.problema) && (
           <div className="space-y-2 rounded-md border p-2">
-            <BadgeQaFuente qa={qa} />
-            {qa.resumen && <p className="text-xs text-foreground/90">{qa.resumen}</p>}
-            <ListaHallazgos hallazgos={qa.hallazgos} />
+            <BadgeVerificacionFuente verificación={verificación} />
+            {verificación.resumen && <p className="text-xs text-foreground/90">{verificación.resumen}</p>}
+            <ListaHallazgos hallazgos={verificación.hallazgos} />
           </div>
         )}
       </div>

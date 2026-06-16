@@ -7,7 +7,7 @@
  *    'no_verificado' = la fuente pasó la verificación sin problemas (deja pasar a copy) → «Verificada»;
  *    'problema' = la verificación encontró un problema de peso → «Problema en la fuente». Nada si vacío.
  *
- *  Línea visual calcada de los badges de Pipelines (`BadgeQaFuente`): discretos, sin saturar la
+ *  Línea visual calcada de los badges de Pipelines (`BadgeVerificacionFuente`): discretos, sin saturar la
  *  tarjeta.
  */
 import { OctagonAlert, ShieldCheck, Sparkles } from "lucide-react";
@@ -42,7 +42,7 @@ export function ChipMarca({ historia, className }: { historia: Historia; classNa
   );
 }
 
-/** Badge de la VERIFICACIÓN de la fuente (QA por historia, ADR 0011). Nada si vacío. */
+/** Badge de la VERIFICACIÓN de la fuente (verificación por historia, ADR 0011). Nada si vacío. */
 export function BadgeVerificacionFuente({
   verificacion_fuente,
   className,

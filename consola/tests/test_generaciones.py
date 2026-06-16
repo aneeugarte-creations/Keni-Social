@@ -133,7 +133,7 @@ def test_argv_disallowed_tools_endurecible_por_env(entorno, monkeypatch):
 # no confiable. Sería ALTO riesgo solo un flujo donde el USUARIO controla el prompt LIBREMENTE
 # *y* la salida CRUDA se le devuelve VERBATIM; NINGÚN flujo de generación cumple ese par (todos
 # parsean la salida a artefactos). Por eso NINGÚN flujo veta la web por-callsite: queda solo la
-# veta GLOBAL `Bash Write Edit`. Los flujos de QA/verificación y el copy con auto-verificación
+# veta GLOBAL `Bash Write Edit`. Los flujos de verificación/verificación y el copy con auto-verificación
 # legítimamente PUEDEN leer una fuente para corroborar datos; no se les limita.
 
 
@@ -157,7 +157,7 @@ def test_argv_un_endurecer_de_red_seguiria_uniendose_a_lo_global(entorno, monkey
 
 
 def test_argv_flujos_de_generacion_conservan_la_web(entorno, monkeypatch):
-    # Los flujos de generación (copy/QA/hashtags/evergreen/sugerencias) NO pasan ya `endurecer`:
+    # Los flujos de generación (copy/verificación/hashtags/evergreen/sugerencias) NO pasan ya `endurecer`:
     # comparten este constructor de argv SIN veto de red, así que la web sigue disponible
     # (Bash/Write/Edit vetadas por defecto, Web NO).
     monkeypatch.delenv("KENI_CLAUDE_DISALLOWED_TOOLS", raising=False)

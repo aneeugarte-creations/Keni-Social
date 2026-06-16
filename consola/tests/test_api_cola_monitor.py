@@ -81,7 +81,7 @@ def test_cola_snapshot_contrato(entorno):
     # Cada job en proceso trae su `proceso` (ADR 0011); un `tipo='copy'` es produccion.
     job = next(j for j in esperando if j["gen_id"] == gen_id)
     assert job["proceso"] == generaciones.PROCESO_PRODUCCION
-    # Desglose del pool compartido por proceso + admision de QA (contrato del Monitor de 2 loops).
+    # Desglose del pool compartido por proceso + admision de verificación (contrato del Monitor de 2 loops).
     assert set(data["por_proceso"]) == {
         generaciones.PROCESO_INVESTIGACION, generaciones.PROCESO_PRODUCCION,
     }

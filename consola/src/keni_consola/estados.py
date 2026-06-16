@@ -65,8 +65,8 @@ ROL_EDITOR = "editor"
 # vertical/funcion que la version "plana" no capturaba (un `coordinador` real puede ser
 # de redes, YouTube u operativo; gerencia de podcast es `gerente_podcast`; la creativa de
 # Fundación/el creativo de vertical son `creativo_vertical` de Fundacion/Nacion Gamer;
-# editorial de YouTube es `editorial_youtube`; fotografía/QA
-# combina fotografia con QA). Los valores VIEJOS se conservan tal cual por retrocompat.
+# editorial de YouTube es `editorial_youtube`; fotografía/verificación
+# combina fotografia con verificación). Los valores VIEJOS se conservan tal cual por retrocompat.
 CARGOS_USUARIO: tuple[str, ...] = (
     # Catalogo original (retrocompat):
     "director",
@@ -87,7 +87,7 @@ CARGOS_USUARIO: tuple[str, ...] = (
     "editorial_youtube",        # editorial enfocada a YouTube
     "coordinador_invitados",    # coordinacion de invitados (uso futuro)
     "coordinador_operativo",    # coordinacion operativa
-    "fotografia_qa",            # fotografia + QA editorial
+    "fotografia_revision",            # fotografia + revisión editorial
     "editor_video",             # edicion de video (uso futuro)
     "disenador",                # diseno grafico (uso futuro)
 )
@@ -379,12 +379,12 @@ DECISION_PENDIENTE = "pendiente"
 DECISION_APROBADO = "aprobado"
 DECISION_RECHAZADO = "rechazado"
 
-# Verificaciones validas de la QA DE LA FUENTE persistida en `contenido.verificacion_fuente` (verificación
+# Verificaciones validas de la verificación DE LA FUENTE persistida en `contenido.verificacion_fuente` (verificación
 # pre-copy). Allowlist CANONICA para el CHECK de esquema (ADR 0012). "" = sin verificar / a
 # re-verificación. Los valores NO viven en este modulo dependency-free (son del pipeline/dominio);
 # se enumeran aqui como literales, con su origen, para no acoplar `estados` al pipeline:
 #   - "en_curso":      SENTINEL en curso            (`pipeline_contenido._comun.VERIFICACION_EN_CURSO`)
-#   - "saltada":       QA desactivada para la marca (`pipeline_contenido._comun.VERIFICACION_SALTADA`)
+#   - "saltada":       verificación desactivada para la marca (`pipeline_contenido._comun.VERIFICACION_SALTADA`)
 #   - "caducada":      tema que supero el TTL       (`pipeline_contenido._comun.VERIFICACION_CADUCADA`)
 #   - "no_verificado": apta para seguir (⚠️)        (`dominio.verificar_fuente.VERIFICACION_NO_VERIFICADO`)
 #   - "problema":      algo de peso en contra (❗)   (`dominio.verificar_fuente.VERIFICACION_PROBLEMA`)

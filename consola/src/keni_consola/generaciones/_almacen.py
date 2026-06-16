@@ -262,14 +262,14 @@ def _publico(datos: dict[str, Any], gen_id: str) -> dict[str, Any]:
         # (`tipo='pipeline'`) lo sellan para que la vista Pipelines ate cada etapa a su run.
         # Ausente en registros legados/normales => "" (lo filtra `_cuerpo`, así no engorda).
         "contenido_id": _str("contenido_id"),
-        # Generación correlacionada (opcional): un MARCADOR de etapa del pipeline (CD/QA)
+        # Generación correlacionada (opcional): un MARCADOR de etapa del pipeline (CD/verificación)
         # apunta con `gen_id` a la generación REAL de `claude -p` de esa etapa, para que la
         # vista Pipelines pueda mostrar su STREAM (el proceso de pensamiento del agente).
         # Ausente en registros legados/normales => "" (lo filtra `_cuerpo`, así no engorda).
         "gen_id": _str("gen_id"),
         "etiqueta": _str("etiqueta"),
         # Proceso de la maquina (ADR 0011): "investigacion" | "produccion". Se SELLA al lanzar
-        # (QA/Haiku del pool -> investigacion; copy/arte/manual -> produccion) para medir cada
+        # (verificación/Haiku del pool -> investigacion; copy/arte/manual -> produccion) para medir cada
         # loop por separado en el Monitor. Ausente en registros previos => "" (lo filtra
         # `_cuerpo`, no engorda; `generaciones.proceso_de` lo deduce de tipo/etiqueta al leer).
         "proceso": _str("proceso"),

@@ -122,7 +122,7 @@ def arg_skip_permisos() -> list[str]:
 
     POR QUÉ: en modo `-p` (headless) NO hay forma interactiva de aprobar el permiso de una
     herramienta. SIN esto, en cuanto un flujo necesita una tool (WebFetch para corroborar
-    datos en investigación/QA, o Read de un fichero pasado por `--add-dir`), `claude` se
+    datos en investigación/verificación, o Read de un fichero pasado por `--add-dir`), `claude` se
     cuelga pidiendo un permiso que nadie puede conceder. NO tiene NADA que ver con "skills":
     NO usamos el motor de skills de Claude Code (`.claude/skills`) —el contexto se inyecta
     EXPLÍCITAMENTE en el prompt desde la Texto de Prompts— y el cwd de generación es
@@ -150,7 +150,7 @@ def arg_tools_restringidas() -> list[str]:
     defecto `Bash`/`Write`/`Edit` —los vectores de mayor impacto (ejecucion de comandos,
     escritura de ficheros)— que NINGUN flujo de generacion necesita. Web (`WebFetch`/
     `WebSearch`) y `Read` NO se vetan por defecto: los prompts de investigacion
-    (`brief-tendencias`) y la verificacion/QA usan web para corroborar
+    (`brief-tendencias`) y la verificacion/verificación usan web para corroborar
     datos, y comparten este constructor de argv. Asi, aunque el contenido de usuario/RSS
     inyectado intente abrir una shell o escribir, `claude` lo rechaza. La lista es configurable
     (`config.claude_disallowed_tools`); un operador puede endurecerla.

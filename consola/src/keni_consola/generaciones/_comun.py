@@ -86,7 +86,7 @@ MOTIVO_INTERRUMPIDO = "interrumpido"
 
 # Tipos de trabajo (para que el frontend sepa como renderizar el resultado).
 TIPOS = (
-    "copy", "rss", "hashtags", "imagen", "verificacion", "qa-editorial", "prompt",
+    "copy", "rss", "hashtags", "imagen", "verificacion", "revision", "prompt",
     "parrilla-import", "insumos", "import-calendario",
     # Taller EVERGREEN / brainstorming: `evergreen-ideas` = la PROPUESTA de ideas evergreen (IA);
     # `evergreen` = el copy de una idea APROBADA (pieza `flujo='evergreen'` del tablero).
@@ -112,7 +112,7 @@ def proceso_de(reg: dict[str, Any]) -> str:
 
     Si el registro trae `proceso` valido (sellado al lanzar tras ADR 0011), lo usa. Para
     registros PREVIOS al sello, lo deduce: la verificación de la fuente (Verificar) y los marcadores
-    CI/QA son Investigacion; el copy del pipeline y los marcadores CD/ARTE son Produccion; el
+    CI/verificación son Investigacion; el copy del pipeline y los marcadores CD/ARTE son Produccion; el
     resto (copy manual, imagen, hashtags, video, prompt, evergreen...) es Produccion (la maquina
     de contenido). Defensivo: nunca lanza; default Produccion ante lo desconocido.
     """

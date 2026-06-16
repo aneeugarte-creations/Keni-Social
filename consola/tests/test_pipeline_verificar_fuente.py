@@ -1,7 +1,7 @@
-"""Tests de la QA de la FUENTE (pre-copy) por DOCUMENTO de Texto del pipeline.
+"""Tests de la verificación de la FUENTE (pre-copy) por DOCUMENTO de Texto del pipeline.
 
-El equipo NO usa skills: la QA se hace adjuntando un DOCUMENTO de la Texto con los criterios.
-Regla del dueño: "si el documento existe, adjúntalo; si no existe, créalo y adjúntalo." La QA
+El equipo NO usa skills: la verificación se hace adjuntando un DOCUMENTO de la Texto con los criterios.
+Regla del dueño: "si el documento existe, adjúntalo; si no existe, créalo y adjúntalo." La verificación
 corre ANTES del copy y sobre la HISTORIA (cluster, ADR 0011 F3): verifica la NOTA de origen y
 persiste un verificación ESTRUCTURADO (`no_verificado`/`problema`) en el cluster. Aquí cubrimos,
 OFFLINE (mock de claude):
@@ -24,13 +24,13 @@ from .conftest import _cliente, lanzador_generacion_completa
 
 
 def _cluster(
-    cid: str = "c-qa",
+    cid: str = "c-verificación",
     *,
     marca: str = "unotv",
-    titulo: str = "Historia QA",
+    titulo: str = "Historia verificación",
     resumen: str = "México: el gobierno informa de seguridad en la CDMX",
 ) -> dict:
-    """Siembra un cluster del pool (sin items): la nota de QA = título + resumen."""
+    """Siembra un cluster del pool (sin items): la nota de verificación = título + resumen."""
     repos.upsert_noticia_cluster({
         "id": cid, "titulo": titulo, "resumen": resumen, "marca": marca,
         "categoria": "mx", "geo": "MX", "clave": f"t:{cid}", "n_items": 1,
@@ -42,7 +42,7 @@ def _cluster(
     return repos.obtener_noticia_cluster(cid)
 
 
-def test_asegurar_documento_qa_lo_crea_si_falta(entorno):
+def test_asegurar_documento_verificacion_lo_crea_si_falta(entorno):
     """El documento de criterios se CREA si no está en el store (idempotente)."""
     assert libtexto.obtener(pc.PROMPT_VERIFICACION_ID) is None
     devuelto = pc.asegurar_documento_verificacion()
@@ -50,7 +50,7 @@ def test_asegurar_documento_qa_lo_crea_si_falta(entorno):
     doc = libtexto.obtener(pc.PROMPT_VERIFICACION_ID)
     assert doc is not None
     assert doc.cuerpo.strip()  # tiene criterios
-    # Es la verificación de la FUENTE (pre-copy), NO el QA de copy: `PROMPT_VERIFICACION_ID` = prompt/verificar.
+    # Es la verificación de la FUENTE (pre-copy), NO el verificación de copy: `PROMPT_VERIFICACION_ID` = prompt/verificar.
     assert pc.PROMPT_VERIFICACION_ID == "prompt/verificar"
     assert "VERIFICACIÓN PREVIA" in doc.cuerpo
     # Idempotente: una segunda llamada no duplica.
@@ -59,7 +59,7 @@ def test_asegurar_documento_qa_lo_crea_si_falta(entorno):
     assert len(docs) == 1
 
 
-def test_lanzar_qa_cluster_enlaza_generacion_y_marca_en_curso(entorno):
+def test_lanzar_verificacion_cluster_enlaza_generacion_y_marca_en_curso(entorno):
     """`lanzar_verificar_cluster` lanza una generación y deja el cluster en_curso (lanzador noop)."""
     cliente = _cliente()  # noqa: F841 -- el lanzador noop deja la generación en `ejecutando`
     cluster = _cluster()
@@ -71,7 +71,7 @@ def test_lanzar_qa_cluster_enlaza_generacion_y_marca_en_curso(entorno):
     assert (actual.get("verificacion_fuente") or "") == pc.VERIFICACION_EN_CURSO
 
 
-def test_qa_cluster_persiste_veredicto_no_verificado(entorno):
+def test_verificacion_cluster_persiste_veredicto_no_verificado(entorno):
     """Una verificación 🟢 sin hallazgos -> verificación `no_verificado` persistido en el cluster."""
     salida = (
         "🟢 Fuente apta.\n\n"
@@ -85,7 +85,7 @@ def test_qa_cluster_persiste_veredicto_no_verificado(entorno):
     assert (actual.get("verificacion_fuente") or "") == pc.VERIFICACION_NO_VERIFICADO
 
 
-def test_qa_cluster_persiste_veredicto_problema(entorno):
+def test_verificacion_cluster_persiste_veredicto_problema(entorno):
     """Una verificación 🔴 con hallazgo de error -> verificación `problema` + hallazgos persistidos."""
     salida = (
         "🔴 Problema de peso.\n\n"
@@ -101,7 +101,7 @@ def test_qa_cluster_persiste_veredicto_problema(entorno):
     assert "inventado" in (actual.get("verificar_hallazgos") or "")
 
 
-def test_endurecer_qa_fuente_barato_por_defecto(monkeypatch):
+def test_endurecer_verificacion_fuente_barato_por_defecto(monkeypatch):
     """La verificación de la fuente corre BARATA por defecto: Haiku + esfuerzo low + timeout 180 s.
 
     Es un filtro PERMISIVO (no redacción): no necesita el modelo/esfuerzo/timeout globales.
@@ -125,7 +125,7 @@ def test_endurecer_qa_fuente_barato_por_defecto(monkeypatch):
     assert _verificar._endurecer_verificacion_fuente() is None
 
 
-def test_qa_en_curso_ttl_configurable_con_minimo(monkeypatch):
+def test_verificacion_en_curso_ttl_configurable_con_minimo(monkeypatch):
     """El TTL del reparador de `en_curso` atascada es configurable, con suelo de 5 min.
 
     El suelo evita que un TTL absurdo resetee QAs VIVAS (debe superar el timeout de la verificación).
@@ -140,7 +140,7 @@ def test_qa_en_curso_ttl_configurable_con_minimo(monkeypatch):
     assert config.verificacion_en_curso_ttl_seg() == 5 * 60  # suelo
 
 
-def test_lanzar_qa_cluster_lanza_con_endurecer_barato(entorno, monkeypatch):
+def test_lanzar_verificacion_cluster_lanza_con_endurecer_barato(entorno, monkeypatch):
     """`lanzar_verificar_cluster` pasa el `endurecer` barato (modelo/esfuerzo/timeout) al lanzador."""
     from keni_consola.pipeline_contenido import _verificar
 
@@ -149,13 +149,13 @@ def test_lanzar_qa_cluster_lanza_con_endurecer_barato(entorno, monkeypatch):
 
     def _fake_lanzar(**kw):
         capturado.update(kw)
-        return {"id": "gen-qa-c1"}
+        return {"id": "gen-verificación-c1"}
 
     monkeypatch.setattr(_verificar.gen_dom, "lanzar", _fake_lanzar)
     cluster = _cluster()
 
     gen = pc.lanzar_verificar_cluster(cluster, autor=None)
 
-    assert gen is not None and gen["id"] == "gen-qa-c1"
+    assert gen is not None and gen["id"] == "gen-verificación-c1"
     assert capturado["tipo"] == "pipeline"  # trabajo de la máquina: un solo tipo en Actividad
     assert capturado["endurecer"] == {"modelo": "haiku", "esfuerzo": "low", "timeout": 180}

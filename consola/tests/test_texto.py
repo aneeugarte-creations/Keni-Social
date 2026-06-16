@@ -224,7 +224,7 @@ def test_importar_inicial_puebla_y_es_idempotente():
     assert libtexto.importar_inicial() == 0
 
 
-def test_inicial_trae_prompt_qa_fuente_editable():
+def test_inicial_trae_prompt_verificacion_fuente_editable():
     # La verificación pre-copy de la FUENTE es un prompt EDITABLE de la Biblioteca cuyo cuerpo efectivo
     # lo trae la inicial del paquete (visible en «Prompts»).
     cuerpo = libtexto.cuerpo_efectivo("prompt/verificar")
@@ -277,7 +277,7 @@ def test_migrar_nombres_biblioteca_renombra_refresca_y_preserva():
     # equipo que NO está en la inicial (termometro). La migración renombra/refresca sin pisar esos.
     from keni_consola.libtexto._rutas import raiz
     (raiz() / "prompt").mkdir(parents=True, exist_ok=True)
-    (raiz() / "prompt" / "qa-fuente.md").write_text("---\ntitulo: QA fuente\n---\nVIEJO", encoding="utf-8")
+    (raiz() / "prompt" / "verificacion-fuente.md").write_text("---\ntitulo: verificación fuente\n---\nVIEJO", encoding="utf-8")
     (raiz() / "prompt" / "termometro-mundial.md").write_text("---\ntitulo: Termometro\n---\ndel equipo", encoding="utf-8")
     (raiz() / "editorial" / "rrss" / "unotv").mkdir(parents=True, exist_ok=True)
     (raiz() / "editorial" / "rrss" / "unotv" / "patrones.md").write_text(
@@ -286,7 +286,7 @@ def test_migrar_nombres_biblioteca_renombra_refresca_y_preserva():
     n = libtexto.migrar_nombres_biblioteca()
     assert n > 0
     # El id viejo desaparece; el nuevo existe con el título nuevo.
-    assert libtexto.obtener("prompt/qa-fuente") is None
+    assert libtexto.obtener("prompt/verificacion-fuente") is None
     val = libtexto.obtener("prompt/verificar")
     assert val is not None and val.titulo == "Verificar"
     # patrones (script) y termometro (equipo) NO se pisan.
@@ -304,11 +304,11 @@ def test_inicializar_migra_antes_de_importar_sin_duplicar():
     from keni_consola.libtexto._rutas import raiz
 
     (raiz() / "prompt").mkdir(parents=True, exist_ok=True)
-    (raiz() / "prompt" / "qa-fuente.md").write_text("---\ntitulo: QA fuente\n---\nVIEJO", encoding="utf-8")
+    (raiz() / "prompt" / "verificacion-fuente.md").write_text("---\ntitulo: verificación fuente\n---\nVIEJO", encoding="utf-8")
     inicializar.main()
     ids = {d.id for d in libtexto.listar(tipo="prompt")}
     assert "prompt/verificar" in ids
-    assert "prompt/qa-fuente" not in ids  # el viejo NO sobrevive (no se duplica)
+    assert "prompt/verificacion-fuente" not in ids  # el viejo NO sobrevive (no se duplica)
 
 
 def test_limpiar_prompts_obsoletos_borra_y_es_idempotente():

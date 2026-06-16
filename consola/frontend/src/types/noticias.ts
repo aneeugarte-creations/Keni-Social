@@ -169,7 +169,7 @@ export interface Historia {
   /** Timeline cronológico de outlets (el primero abrió la historia). */
   fuentes?: FuenteHistoria[];
   // ── Etapas de Investigación visibles por historia (ADR 0011) ─────────────
-  /** Verificación de la fuente (QA de la fuente) del contenido asociado, si lo hay:
+  /** Verificación de la fuente (verificación de la fuente) del contenido asociado, si lo hay:
    *  'no_verificado' | 'problema' | ''. Vacío si la historia aún no se promovió/verificó. */
   verificacion_fuente?: string;
   /** true si la MARCA de la historia la asignó el clasificador IA (breaking sin marca). */

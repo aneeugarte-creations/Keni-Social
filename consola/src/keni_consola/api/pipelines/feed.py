@@ -73,7 +73,7 @@ def _item_de_actividad(it: dict) -> dict:
         "estado_global": estado,
         "etapa_actual": "",
         "etapas": [etapa],
-        "qa_fuente": None,
+        "verificacion": None,
         "cluster": None,
         "metricas": {"items": 1, **{k: v for k, v in it["metricas"].items() if k != "num_turns"}},
         "piezas": [],

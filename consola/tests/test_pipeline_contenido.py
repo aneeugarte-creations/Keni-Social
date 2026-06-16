@@ -27,11 +27,11 @@ from .conftest import _cliente, lanzador_generacion_completa
 _URL_OK = "https://ejemplo.test/feed.xml"
 
 # Salidas canned de Verificar la fuente (semáforo + bloque json estructurado).
-_QA_OK = (
+_VERIFICACION_OK = (
     "🟢 Fuente apta.\n\n"
     '```json\n{"veredicto": "🟢", "resumen": "Sin problemas de peso", "hallazgos": []}\n```\n'
 )
-_QA_PROBLEMA = (
+_VERIFICACION_PROBLEMA = (
     "🔴 Problema de peso.\n\n"
     '```json\n{"veredicto": "🔴", "resumen": "Dato falso evidente", '
     '"hallazgos": [{"tipo": "dato", "gravedad": "error", "fragmento": "x", '
@@ -69,7 +69,7 @@ def _envejecer_intento(tema_id, campo):
 
 
 def _temas_sin_verdicto(marca=None):
-    """Temas del pipeline sin verificación de QA (pendientes). Local del test: el barrido F3
+    """Temas del pipeline sin verificación de verificación (pendientes). Local del test: el barrido F3
     selecciona por CLUSTER, así que el filtro por-tema ya no vive en producción."""
     return [t for t in pc.temas_pipeline(marca) if not (t.get("verificacion_fuente") or "").strip()]
 
@@ -231,19 +231,19 @@ def test_en_backoff_puro_segun_intentos_y_timestamp():
     assert pc.en_backoff({"id": "t", "copy_pendiente": ""}, "verificar_intentos") is False
 
 
-def test_qa_lexico_listo_sin_observaciones():
+def test_verificacion_lexica_listo_sin_observaciones():
     r = pc.verificacion_lexica({"red": "x", "contenido": "Copy corto y válido."})
     assert r["verificacion"] == "listo"
     assert r["observaciones"] == []
 
 
-def test_qa_lexico_copy_vacio():
+def test_verificacion_lexica_copy_vacio():
     r = pc.verificacion_lexica({"red": "x", "contenido": "   "})
     assert r["verificacion"] == "revisar"
     assert any("vacío" in o for o in r["observaciones"])
 
 
-def test_qa_lexico_supera_limite_de_red():
+def test_verificacion_lexica_supera_limite_de_red():
     limite = next(red.limite for red in redes.REDES if red.id == "x")
     assert limite is not None
     r = pc.verificacion_lexica({"red": "x", "contenido": "a" * (limite + 1)})
@@ -397,7 +397,7 @@ def test_verificar_cluster_problema_no_se_admite(entorno, monkeypatch):
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_MAX", "5")
-    cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_QA_PROBLEMA))  # noqa: F841
+    cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_VERIFICACION_PROBLEMA))  # noqa: F841
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     _inicializar_cluster("c-malo", titulo="Historia dudosa", score=0.8)
 
@@ -416,7 +416,7 @@ def test_verificar_cluster_ok_se_admite_heredando_veredicto(entorno, monkeypatch
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_MAX", "5")
-    cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_QA_OK))  # noqa: F841
+    cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_VERIFICACION_OK))  # noqa: F841
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     _inicializar_cluster("c-ok", titulo="Historia verificada", score=0.8)
 
@@ -435,7 +435,7 @@ def test_verificar_cluster_acotada_por_el_admision(entorno, monkeypatch):
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_EN_PROCESO_MAX", "1")  # admision de 1
-    cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_QA_OK))  # noqa: F841
+    cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_VERIFICACION_OK))  # noqa: F841
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
     for i in range(3):
         _inicializar_cluster(f"c{i}", titulo=f"Historia {i}", score=0.9 - i * 0.1)
@@ -553,7 +553,7 @@ def test_redactar_reintento_anota_intentos_acumulados(entorno, monkeypatch):
 # --------------------------------------------------------------------------- #
 
 
-def test_solo_noticias_promueve_cluster_qa_saltada_cd_no(entorno, monkeypatch):
+def test_solo_noticias_promueve_cluster_verificacion_saltada_cd_no(entorno, monkeypatch):
     """Solo «Crear noticias» ON: ADMITIR promueve la historia top, Verificar la marca 'saltada', Redactar no copia."""
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.delenv("KENI_PIPELINE_VERIFICAR", raising=False)        # Verificar off -> etapa saltada
@@ -782,8 +782,8 @@ def test_temas_en_proceso_cuenta_pendientes_de_verificar_o_copy(entorno):
     vuelo: 'problema' (terminal) ni 'no_verificado' que YA tiene copy en una pieza por plataforma.
     """
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
-    _tema_pipeline(titulo="Pendiente QA", verificacion_fuente="", copy_pendiente=pend)          # +1
-    _tema_pipeline(titulo="QA en curso", verificacion_fuente=pc.VERIFICACION_EN_CURSO, copy_pendiente=pend)  # +1
+    _tema_pipeline(titulo="Pendiente verificación", verificacion_fuente="", copy_pendiente=pend)          # +1
+    _tema_pipeline(titulo="verificación en curso", verificacion_fuente=pc.VERIFICACION_EN_CURSO, copy_pendiente=pend)  # +1
     _tema_pipeline(titulo="Apto sin copy", verificacion_fuente=pc.VERIFICACION_NO_VERIFICADO, copy_pendiente=pend)  # +1
     _tema_pipeline(titulo="Saltada sin copy", verificacion_fuente=pc.VERIFICACION_SALTADA, copy_pendiente=pend)  # +1
     _tema_pipeline(titulo="Problema", verificacion_fuente=pc.VERIFICACION_PROBLEMA, copy_pendiente=pend)  # terminal: 0
@@ -1095,7 +1095,7 @@ def test_plan_sin_linea_breaking_compite_por_su_feed(entorno, monkeypatch):
     assert [c["id"] for c in elegidos] == ["brx"]
 
 
-def test_temas_para_copy_incluye_qa_saltada(entorno):
+def test_temas_para_copy_incluye_verificacion_saltada(entorno):
     """Un tema con Verificar 'saltada' fluye a Redactar igual que 'no_verificado'; un 'problema' no."""
     pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
     _tema_pipeline(titulo="Saltada ok", verificacion_fuente=pc.VERIFICACION_SALTADA, copy_pendiente=pend)
@@ -1364,7 +1364,7 @@ def test_encadenar_arte_tras_copy_respeta_gates(entorno, monkeypatch):
     assert pc.encadenar_ilustrar_tras_redactar(tema["id"]) is None
 
 
-def test_reparar_qa_en_curso_sueltos_resetea_solo_viejos(entorno):
+def test_reparar_verificacion_en_curso_sueltos_resetea_solo_viejos(entorno):
     """El reparador devuelve a re-verificación ('') SOLO los `en_curso` más viejos que el umbral.
 
     Cierra el ATASCADA: si la verificación muere sin finalizador, el tema quedaba `en_curso` para
@@ -1406,7 +1406,7 @@ def _envejecer_actualizado(tema_id, fecha="2020-01-01T00:00:00"):
         con.close()
 
 
-def test_limpiador_qa_atascada_re_verificacion_con_validacion_activa(entorno, monkeypatch):
+def test_limpiador_verificacion_atascada_re_verificacion_con_validacion_activa(entorno, monkeypatch):
     """El reparación del limpiador devuelve a re-verificación ('') SOLO los `en_curso` atascadas (per-tema)."""
     from keni_consola import limpiador_generaciones
 
@@ -1422,12 +1422,12 @@ def test_limpiador_qa_atascada_re_verificacion_con_validacion_activa(entorno, mo
     assert repos.obtener_contenido(vivo["id"])["verificacion_fuente"] == pc.VERIFICACION_EN_CURSO  # intacto
 
 
-def test_limpiador_qa_atascada_saltada_con_validacion_apagada(entorno, monkeypatch):
+def test_limpiador_verificacion_atascada_saltada_con_validacion_apagada(entorno, monkeypatch):
     """Con la etapa de Verificar APAGADA, el atascada pasa a 'saltada' (REDACTAR lo recoge), no a re-verificación."""
     from keni_consola import limpiador_generaciones
 
     monkeypatch.delenv("KENI_PIPELINE_VERIFICAR", raising=False)  # etapa off (def)
-    atascada = _tema_pipeline(titulo="Atascada sin QA", verificacion_fuente=pc.VERIFICACION_EN_CURSO)
+    atascada = _tema_pipeline(titulo="Atascada sin verificación", verificacion_fuente=pc.VERIFICACION_EN_CURSO)
     _envejecer_actualizado(atascada["id"])
 
     n = limpiador_generaciones._reparar_verificacion_en_curso()

@@ -85,14 +85,14 @@ _COLS_CONTENIDO = (
     "formato",
     "id_post_metricool",
     "senal_viralidad",
-    # QA DE LA FUENTE (pre-copy): verificacion del verificado de la nota de origen antes de generar
+    # verificación DE LA FUENTE (pre-copy): verificacion del verificado de la nota de origen antes de generar
     # copy. "no_verificado" (⚠️, OK para seguir, no verificado a fondo) o "problema" (❗, algo de
     # peso en contra: NO se generó copy). `verificar_hallazgos` es el JSON estructurado de hallazgos.
     "verificacion_fuente",
     "verificar_hallazgos",
     # Parámetros de lanzamiento de copy PENDIENTE (JSON): el sweep guarda aquí, al crear el tema
     # en CI, lo que la fase CD necesitará para lanzar el copy (redes, imagen ya resuelta, fuente,
-    # clave) SOLO si la QA de la fuente sale `no_verificado`. "" tras lanzar (o si no aplica).
+    # clave) SOLO si la verificación de la fuente sale `no_verificado`. "" tras lanzar (o si no aplica).
     "copy_pendiente",
     # FECHA DE LA FUENTE (pipeline automático): pubDate/updated del item de origen (RSS/
     # noticia), normalizada a ISO UTC. La pieza la conserva para mostrar en la Consola
@@ -142,7 +142,7 @@ _CAMPOS_EDITABLES_CONTENIDO: tuple[str, ...] = (
     # Editable para que el flujo de publicación pueda fijar el id de Metricool a nivel
     # pieza cuando esté disponible (Item C); hoy se rellena solo si el publicador lo pasa.
     "id_post_metricool",
-    # QA de la FUENTE: el sweep del pipeline persiste aquí el verificacion del verificado pre-copy
+    # verificación de la FUENTE: el sweep del pipeline persiste aquí el verificacion del verificado pre-copy
     # (`no_verificado`/`problema`) y sus hallazgos estructurados (JSON) sobre la nota de origen.
     "verificacion_fuente",
     "verificar_hallazgos",
@@ -290,7 +290,7 @@ def _fila_contenido_nueva(**campos: Any) -> dict[str, Any]:
         "id_post_metricool": campos.get("id_post_metricool") or "",
         # Señal de viralidad del Radar (Fase 5): >=0; defensivo ante valores no enteros.
         "senal_viralidad": _entero_no_negativo(campos.get("senal_viralidad") or 0),
-        # QA de la fuente (pre-copy): suele nacer "" (lo fija el sweep tras verificar la nota).
+        # verificación de la fuente (pre-copy): suele nacer "" (lo fija el sweep tras verificar la nota).
         "verificacion_fuente": campos.get("verificacion_fuente") or "",
         "verificar_hallazgos": campos.get("verificar_hallazgos") or "",
         "copy_pendiente": campos.get("copy_pendiente") or "",
@@ -435,9 +435,9 @@ def ids_contenido_con_copy(marca: str | None = None) -> set[str]:
 
 
 def verificacion_fuente_por_contenido(contenido_ids: list[str]) -> dict[str, str]:
-    """Verificacion de la fuente (QA de fuente) por `contenido_id`, en LOTE (sin N+1).
+    """Verificacion de la fuente (verificación de fuente) por `contenido_id`, en LOTE (sin N+1).
 
-    El QA corre sobre `contenido` (no sobre el cluster), así que la Mesa de Investigación lo
+    El verificación corre sobre `contenido` (no sobre el cluster), así que la Mesa de Investigación lo
     trae por el `contenido_id` de cada historia para mostrar «verificada / problema». `{}` si
     no hay ids; cada id sin fila o con verificacion vacío no aparece (el llamante cae a '').
     """
@@ -459,7 +459,7 @@ def verificacion_fuente_por_contenido(contenido_ids: list[str]) -> dict[str, str
 def reparar_verificacion_en_curso_sueltos(umbral_iso: str) -> int:
     """Devuelve a re-verificación (verificacion_fuente='') los temas COLGADOS en 'en_curso' mas viejos que `umbral_iso`.
 
-    Limpieza del recolector: la fase QA marca el tema `en_curso` antes de lanzar la verificación; si
+    Limpieza del recolector: la fase verificación marca el tema `en_curso` antes de lanzar la verificación; si
     la generacion muere sin finalizador, el sentinel quedaba para siempre (tema excluido de
     sin re-verificar y contando en `temas_en_proceso`). Compara contra `actualizado` (lo refresca
     cada escritura, incluida la que puso `en_curso`): un `en_curso` legitimo y reciente NUNCA

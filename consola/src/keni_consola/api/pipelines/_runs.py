@@ -97,13 +97,13 @@ def _pieza_detalle(plat: dict) -> dict:
     base = _pieza_de(plat)
     copy = plat.get("copy", "") or ""
     imagen = plat.get("imagen", "") or ""
-    qa = verificacion_lexica({"red": base["red"], "contenido": copy})
+    verificación = verificacion_lexica({"red": base["red"], "contenido": copy})
     return {
         **base,
         "copy": copy,
         "copy_in": plat.get("copy_in", "") or "",
         "imagen_url": f"/api/media/{imagen}" if imagen else "",
-        "observaciones": qa["observaciones"],
+        "observaciones": verificación["observaciones"],
         "revisor_nombre": plat.get("revisor_nombre", "") or "",
         "revisado_en": plat.get("revisado_en", "") or "",
         "enviado_a_revision_en": plat.get("enviado_a_revision_en", "") or "",
@@ -218,7 +218,7 @@ def _etapas_de_run(
         verificacion_estado, verificacion_detalle = _ESTADO_SALTADA, ""
     else:
         verificacion_estado, verificacion_detalle = "pendiente", ""
-    qa = {"clave": "verificar", "nombre": "Verificar", "estado": verificacion_estado, "detalle": verificacion_detalle, "ts": ""}
+    verificación = {"clave": "verificar", "nombre": "Verificar", "estado": verificacion_estado, "detalle": verificacion_detalle, "ts": ""}
 
     # --- Redactar: PRIMERO el copy persistido (≥1 pieza con copy = corrió, diga lo que diga el
     # toggle de hoy); 'problema'/'caducada' lo omiten; el toggle solo pinta el futuro.
@@ -270,7 +270,7 @@ def _etapas_de_run(
         "detalle": ap_detalle, "ts": actualizado if ap_estado == "ok" else "",
     }
 
-    etapas = [fusion, editorial, ci, qa, cd, arte, aprobacion]
+    etapas = [fusion, editorial, ci, verificación, cd, arte, aprobacion]
     for e in etapas:
         e["es_ia"] = e["clave"] in _ETAPAS_IA
     return etapas
@@ -294,7 +294,7 @@ def _estado_global(etapas: list[dict]) -> str:
 def _etapa_actual(etapas: list[dict]) -> str:
     """Clave de la etapa donde la run está «parada» (la 1ª no-{ok,saltada}); "" si todas hechas.
 
-    Es lo que filtra `?etapa=`: «enséñame todo lo que espera en Aprobación / en QA». Coherente
+    Es lo que filtra `?etapa=`: «enséñame todo lo que espera en Aprobación / en verificación». Coherente
     con `_estado_global`, que toma el estado de esa misma etapa. "" cuando todo está ok/saltada.
     """
     for etapa in etapas:
@@ -347,7 +347,7 @@ def _run_de(
         "etapa_actual": _etapa_actual(etapas),
         "etapas": etapas,
         # Verificación de la fuente (⚠️/❗ + hallazgos): la señal de Verificar pre-copy del tema.
-        "qa_fuente": _verificacion_fuente_de(item),
+        "verificacion": _verificacion_fuente_de(item),
         # Procedencia IA del tema (historia/cluster): None si se creó a mano o pre-priorización.
         "cluster": _cluster_publico(cluster),
         # Coste real de la run: la suma de sus generaciones (`contenido_id` correlacionado).

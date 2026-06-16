@@ -96,7 +96,7 @@ def test_normalizar_generacion_resultado_url_por_tipo():
         "rss": "/operacion/feed/lista",
         "imagen": "/contenido/estudio",
         "verificacion": "/operacion/feed",
-        "qa-editorial": "/operacion/feed",
+        "revision": "/operacion/feed",
     }
     for tipo, url in casos.items():
         item = actividad.normalizar_generacion(_gen(tipo=tipo))

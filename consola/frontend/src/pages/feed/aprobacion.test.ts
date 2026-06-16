@@ -85,13 +85,13 @@ describe("elegibilidadOK · quién puede dar el OK (me gusta)", () => {
     expect(e.motivo).toMatch(/ya diste tu ok/i);
   });
 
-  it("si el nivel que toca es el de IA (QA), el OK humano espera", () => {
+  it("si el nivel que toca es el de IA (verificación), el OK humano espera", () => {
     const c = cadenaOK({
       niveles: [
-        nivel({ id: "qa", nivel: 1, etiqueta: "QA Editorial" }),
+        nivel({ id: "verificación", nivel: 1, etiqueta: "verificación Editorial" }),
         nivel({ id: "n2", nivel: 2, etiqueta: "Edición" }),
       ],
-      nivel_actual: "qa",
+      nivel_actual: "verificación",
     });
     const e = elegibilidadOK(c, { id: "u1", rol: "editor" }, "autorX");
     expect(e.puedeDar).toBe(false);
@@ -105,10 +105,10 @@ describe("umbralDislikes / esDislikeDecisivo · cuándo el dislike rechaza la pi
     expect(umbralDislikes({ niveles: [nivel({ id: "n1" })] })).toBe(1);
   });
 
-  it("el nivel de IA (QA Editorial) no cuenta como humano para el umbral", () => {
+  it("el nivel de IA (verificación Editorial) no cuenta como humano para el umbral", () => {
     const c = {
       niveles: [
-        nivel({ id: "qa", etiqueta: "QA Editorial" }),
+        nivel({ id: "verificación", etiqueta: "verificación Editorial" }),
         nivel({ id: "n1", nivel: 2, etiqueta: "Edición" }),
       ],
     };

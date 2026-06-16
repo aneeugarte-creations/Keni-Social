@@ -88,13 +88,13 @@ def test_editoriales_excluye_no_activos():
 def test_editoriales_filtra_por_pipeline():
     # Global sin pipelines declarados -> aplica a TODOS (retrocompat).
     libtexto.crear("Plataformas", tipo="editorial", clase="plataforma", cuerpo="p")
-    # Acotado a copy: NO debe entrar en qa.
+    # Acotado a copy: NO debe entrar en verificación.
     libtexto.crear("Solo copy", tipo="editorial", clase="reglas", cuerpo="c", pipelines=["redactar"])
     ids_copy = {d.id for d in libtexto.editoriales_de_marca("unotv", pipeline="redactar")}
-    ids_qa = {d.id for d in libtexto.editoriales_de_marca("unotv", pipeline="verificar")}
-    assert "editorial/plataformas" in ids_copy and "editorial/plataformas" in ids_qa
+    ids_verificacion = {d.id for d in libtexto.editoriales_de_marca("unotv", pipeline="verificar")}
+    assert "editorial/plataformas" in ids_copy and "editorial/plataformas" in ids_verificacion
     assert "editorial/solo-copy" in ids_copy
-    assert "editorial/solo-copy" not in ids_qa
+    assert "editorial/solo-copy" not in ids_verificacion
 
 
 def test_editoriales_ordena_por_prioridad():
@@ -171,7 +171,7 @@ def test_previsualizar_pipeline_copy_es_fiel_al_lanzamiento():
 
 
 def test_previsualizar_pipeline_sin_prompt_base():
-    # Sin store ni inicial del prompt de qa -> falta_base True (no revienta).
+    # Sin store ni inicial del prompt de verificación -> falta_base True (no revienta).
     prev = libtexto.previsualizar_pipeline("verificar", "unotv")
     assert "falta_base" in prev
 

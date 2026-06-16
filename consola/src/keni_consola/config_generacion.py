@@ -67,7 +67,7 @@ def claude_skip_permisos() -> bool:
 #   - `Bash` —el vector de MAYOR impacto: ejecucion de comandos arbitrarios, lectura/
 #     exfiltracion de secretos de `/data` y del entorno—.
 #   - `Write` y `Edit` —escritura/edicion de ficheros en disco—. NINGUN flujo de generacion
-#     (copy-desde-nota, QA, hashtags, evergreen, sugerencias, NI el prompt de
+#     (copy-desde-nota, verificación, hashtags, evergreen, sugerencias, NI el prompt de
 #     investigacion `brief-tendencias`) escribe ficheros: su salida es
 #     SIEMPRE texto que parsea el post-procesado. Vetarlas cierra un vector de persistencia/
 #     manipulacion del cwd sin afectar a ningun flujo legitimo (defensa en profundidad).
@@ -76,7 +76,7 @@ def claude_skip_permisos() -> bool:
 # lo usa para confirmar frescura, y comparten este mismo constructor de argv. El riesgo
 # residual de Web en el flujo copy-desde-nota lo cubre el delimitador con NONCE
 # `<contenido_usuario_…>` (ver `dominio.generar.envolver_contenido_usuario`). Vetar Web SOLO
-# en los flujos de copy/RSS/autogen/QA (que no la necesitan) exige `endurecer` por-callsite en
+# en los flujos de copy/RSS/autogen/verificación (que no la necesitan) exige `endurecer` por-callsite en
 # cada lanzador (`api/hashtags`, `api/verificar_fuente`, `dominio/evergreen`,
 # `autogen_redactar`, `pipeline_contenido`, `dominio/texto_lanzar`...): queda PENDIENTE de
 # revision humana, porque esos lanzadores son de otros modulos (no de este endurecimiento).

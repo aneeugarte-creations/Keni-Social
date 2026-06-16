@@ -130,7 +130,7 @@ def ids_contenido_con_copy(marca: str | None = None) -> set[str]:
 
 
 def verificacion_fuente_por_contenido(contenido_ids: list[str]) -> dict[str, str]:
-    """Revision QA (Verificar la fuente) por contenido_id, en lote. Delegado en `db.py`."""
+    """Revision verificación (Verificar la fuente) por contenido_id, en lote. Delegado en `db.py`."""
     return db.verificacion_fuente_por_contenido(contenido_ids)
 
 
@@ -212,7 +212,7 @@ def crear_contenido_plataforma(
     foto_encuadre: str = "",
     fotos: str = "",
     carrusel: str = "",
-    qa_auto_hash: str = "",
+    verificar_auto_hash: str = "",
     hora_post: str = "",
     creado: str = "",
     actualizado: str = "",
@@ -252,7 +252,7 @@ def crear_contenido_plataforma(
         foto_encuadre=foto_encuadre,
         fotos=fotos,
         carrusel=carrusel,
-        qa_auto_hash=qa_auto_hash,
+        verificar_auto_hash=verificar_auto_hash,
         hora_post=hora_post,
         creado=creado,
         actualizado=actualizado,

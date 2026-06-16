@@ -85,7 +85,7 @@ const QUEUE_POR_TIPO: Record<string, string> = {
   insumos: "recolectar",
   pipeline: "verificar",
   verificacion: "verificar",
-  "qa-editorial": "verificar",
+  "revision": "verificar",
 };
 
 export function FlujoInvestigacion({

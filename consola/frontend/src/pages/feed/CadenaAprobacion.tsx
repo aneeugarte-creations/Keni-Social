@@ -7,8 +7,8 @@
  *   - El desenlace: "Lista para publicar" (cadena aprobada) · "Rechazada" (vuelve a redacción) ·
  *     o cuántos OK faltan.
  *
- * NO se muestra el revision de la PRE-aprobación de IA (QA Editorial): de cara al equipo, menos
- * IA — el feed enseña solo decisiones humanas y lo que falta. El nivel QA sigue EXISTIENDO en la
+ * NO se muestra el revision de la PRE-aprobación de IA (verificación Editorial): de cara al equipo, menos
+ * IA — el feed enseña solo decisiones humanas y lo que falta. El nivel verificación sigue EXISTIENDO en la
  * cadena (lo filtramos de los "humanos"), solo no se pinta como badge.
  *
  * SÍ se muestra, en cambio, el estado de la CRÍTICA IA (nivel automático AL FINAL, tras los dos
@@ -28,10 +28,10 @@ import type { CadenaAprobacion as TCadena, NivelAprobacion } from "@/types";
 import { umbralDislikes } from "./aprobacion";
 import { TEXTO_AVISO, TEXTO_ERROR, TEXTO_OK } from "./formato";
 
-/** PRE-aprobación de IA (QA Editorial), por su etiqueta reservada: se EXCLUYE del conteo de OK
+/** PRE-aprobación de IA (verificación Editorial), por su etiqueta reservada: se EXCLUYE del conteo de OK
  *  humanos y no se pinta su revision (menos IA de cara al equipo). */
-const ETIQUETA_QA = "qa editorial";
-const esNivelQA = (n: NivelAprobacion) => n.etiqueta.trim().toLowerCase() === ETIQUETA_QA;
+const ETIQUETA_REVISION = "revision";
+const esNivelRevision = (n: NivelAprobacion) => n.etiqueta.trim().toLowerCase() === ETIQUETA_REVISION;
 
 /** CRÍTICA IA (nivel automático AL FINAL): se reconoce por su cargo reservado (espejo del backend
  *  `colaboracion.CARGO_IA_CRITICO`). Se EXCLUYE del conteo humano, pero SÍ se muestra su estado. */
@@ -39,8 +39,8 @@ const CARGO_IA_CRITICO = "ia-critico";
 const esCriticaIA = (n: NivelAprobacion) =>
   (n.cargo_requerido ?? "").trim().toLowerCase() === CARGO_IA_CRITICO;
 
-/** Cualquier nivel AUTOMÁTICO (pre-aprobación QA o crítica final): fuera del conteo de OK humanos. */
-const esNivelAutomatico = (n: NivelAprobacion) => esNivelQA(n) || esCriticaIA(n);
+/** Cualquier nivel AUTOMÁTICO (pre-aprobación verificación o crítica final): fuera del conteo de OK humanos. */
+const esNivelAutomatico = (n: NivelAprobacion) => esNivelRevision(n) || esCriticaIA(n);
 
 export function CadenaAprobacion({
   cadena,

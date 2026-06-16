@@ -3,7 +3,7 @@
 PROBLEMA QUE RESUELVE
 =====================
 El panel lista el pool jerarquizado completo, pero PROMOVER una historia a tema dispara la
-cadena QA→copy (`claude -p` ×2: coste real de tokens de la suscripción). Antes la promoción
+cadena verificación→copy (`claude -p` ×2: coste real de tokens de la suscripción). Antes la promoción
 CI cogía el top-N por score SIN umbral: con un pool lleno de basura, esa basura se promovía igual
 (garbage in → tokens out). Este módulo concentra la decisión «¿esta historia merece
 producción automática?» para que la promoción (pipeline), el panel (API `promovible`) y

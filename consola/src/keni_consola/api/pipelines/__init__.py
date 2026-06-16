@@ -2,7 +2,7 @@
 
 Cada `contenido` con `origen='pipeline'` (los que produce el daemon
 `pipeline_contenido`) es una RUN: el recorrido de UNA pieza por las etapas
-CI (Ingesta) → CD (Copy + placa) → QA (Validación) → Aprobación, con un estado por
+CI (Ingesta) → CD (Copy + placa) → verificación (Validación) → Aprobación, con un estado por
 etapa derivado del ESTADO REAL de la pieza y sus publicaciones por plataforma (no solo
 de los logs: robusto y auto-curativo). El detalle por run añade el LOG de actividad de
 las etapas (las generaciones-marcador `tipo='pipeline'` correlacionadas por `contenido_id`).

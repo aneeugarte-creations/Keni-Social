@@ -1,6 +1,6 @@
-"""Constantes, seams y helpers COMPARTIDOS del pipeline de contenido (CI→QA→CD).
+"""Constantes, seams y helpers COMPARTIDOS del pipeline de contenido (CI→verificación→CD).
 
-Núcleo común a las distintas etapas (ingesta, QA, copy, barrido): constantes del flujo,
+Núcleo común a las distintas etapas (ingesta, verificación, copy, barrido): constantes del flujo,
 los seams inyectables de `og:image`, el sello de ACTIVIDAD por etapa (`registrar_etapa`), el
 autor de los lanzamientos y los lectores de temas/copy que más de una etapa comparte. Vive
 aparte para que los módulos de etapa no se importen entre sí (evita ciclos): todos dependen
@@ -81,19 +81,19 @@ __all__ = [
 _log = logging.getLogger("keni_consola.pipeline_contenido")
 
 # Origen reservado de los BORRADORES producidos por el pipeline (en el `contenido` padre que
-# los NIDA). La dedup de la pasada QA y la UI distinguen lo del pipeline de lo manual/otro auto.
+# los NIDA). La dedup de la pasada verificación y la UI distinguen lo del pipeline de lo manual/otro auto.
 ORIGEN_PIPELINE = "pipeline"
 
-# `tipo` con el que se sellan los MARCADORES de etapa (CI/CD/QA): registros `generaciones`
+# `tipo` con el que se sellan los MARCADORES de etapa (CI/CD/verificación): registros `generaciones`
 # ligeros SIN coste (no llaman a `claude`). Llevan tipo PROPIO `pipeline_etapa` para que la
 # vista "Actividad IA" los EXCLUYA (no son trabajo con tokens/coste; serían irrelevantes a 0). El
-# trabajo REAL con coste (verificación QA, copy, arte, fusión/encaje del pool) se sella
+# trabajo REAL con coste (verificación verificación, copy, arte, fusión/encaje del pool) se sella
 # `tipo='pipeline'` (TIPO_PIPELINE) y SÍ aparece en Actividad con sus tokens/coste/tiempo: TODO
 # lo que lanza la máquina es UN solo tipo; lo manual (copy a mano, imagen del Estudio) conserva
 # su tipo propio. La vista Pipelines lee los marcadores por `contenido_id`. La ETAPA viaja en la
 # `etiqueta` ("ADMITIR · ..."/"REDACTAR · ..."/"VERIFICAR · ...").
 TIPO_ACTIVIDAD = "pipeline_etapa"
-# `tipo` ÚNICO de toda generación REAL que lanza el pipeline (verificación QA, copy, arte, Haiku del
+# `tipo` ÚNICO de toda generación REAL que lanza el pipeline (verificación verificación, copy, arte, Haiku del
 # pool): trabajo con tokens/coste/tiempo, identificable y medible en Actividad como `pipeline`.
 TIPO_PIPELINE = "pipeline"
 
@@ -102,7 +102,7 @@ ETAPA_REDACTAR = "REDACTAR"
 ETAPA_VERIFICAR = "VERIFICAR"
 ETAPA_ILUSTRAR = "ILUSTRAR"
 
-# FLUJO CONTINUO: el pipeline NO tiene topes por etapa (verificaciones QA/copies/autogen/revisados). El
+# FLUJO CONTINUO: el pipeline NO tiene topes por etapa (verificaciones verificación/copies/autogen/revisados). El
 # volumen lo regula la ADMISIÓN (`config.pipeline_max()` + el gate serial WIP
 # `config.pipeline_en_proceso_max()`, editables en el Monitor) y el backpressure de la cola.
 
@@ -122,7 +122,7 @@ _FORMATO_PIPELINE = redes.FORMATO_FOTO
 # Texto con los criterios. Regla del dueño: "si el documento existe, adjúntalo; si no existe,
 # créalo y adjúntalo." Apunta al prompt EDITABLE `prompt/verificar` (pestaña «Prompts»), cuyo
 # cuerpo base viaja en la inicial. El título DEBE sluggear al id (`crear` deriva el id del
-# slug del título): "Verificar" -> "prompt/verificar". DISTINTO de Revisar el COPY (`prompt/qa-editorial`).
+# slug del título): "Verificar" -> "prompt/verificar". DISTINTO de Revisar el COPY (`prompt/revision`).
 PROMPT_VERIFICACION_ID = "prompt/verificar"
 _TITULO_VERIFICACION = "Verificar"
 # Etiqueta HUMANA de la generación de la verificación (Actividad IA). DISTINTA del título del prompt
@@ -130,15 +130,15 @@ _TITULO_VERIFICACION = "Verificar"
 # la etapa se llama "Verificar", y la actividad debe llamarse igual para no desconcertar.
 _ETIQUETA_VERIFICACION = "Verificar la fuente"
 
-# Verificacion SENTINEL que se persiste en el TEMA mientras su QA de la fuente (claude -p) está en
-# curso: la fase QA NO lo re-lanza (deja de estar "sin verificacion") y la vista Pipelines pinta la
-# etapa QA como "en curso". Al completar, el `procesar` lo sustituye por el verificacion real.
+# Verificacion SENTINEL que se persiste en el TEMA mientras su verificación de la fuente (claude -p) está en
+# curso: la fase verificación NO lo re-lanza (deja de estar "sin verificacion") y la vista Pipelines pinta la
+# etapa verificación como "en curso". Al completar, el `procesar` lo sustituye por el verificacion real.
 VERIFICACION_EN_CURSO = "en_curso"
 
-# Verificacion SENTINEL que se persiste cuando la etapa QA está DESACTIVADA para la marca (toggle
+# Verificacion SENTINEL que se persiste cuando la etapa verificación está DESACTIVADA para la marca (toggle
 # `KENI_PIPELINE_VERIFICAR` off): no se lanza la verificación, pero el tema NO queda bloqueado: `temas_para_redactar` lo acepta
-# igual que un `no_verificado`, así el copy se genera sin verificación. La vista Pipelines pinta QA como
-# "saltada". Distinto de "sin verificacion" (que significaría "QA pendiente, aún por verificar").
+# igual que un `no_verificado`, así el copy se genera sin verificación. La vista Pipelines pinta verificación como
+# "saltada". Distinto de "sin verificacion" (que significaría "verificación pendiente, aún por verificar").
 VERIFICACION_SALTADA = "saltada"
 
 # Verificacion TERMINAL de FRESCURA: el tema superó el TTL en curso (`KENI_PIPELINE_TEMA_TTL_HORAS`)
@@ -146,14 +146,14 @@ VERIFICACION_SALTADA = "saltada"
 # ni genera copy. El pipeline es ventana deslizante sobre el ranking: lo de ayer no entra hoy.
 VERIFICACION_CADUCADA = "caducada"
 
-# Verificaciones ESTRUCTURADAS de la QA de la FUENTE (rediseño QPC), reexportados del dominio para
+# Verificaciones ESTRUCTURADAS de la verificación de la FUENTE (rediseño QPC), reexportados del dominio para
 # que el sweep, la API y los tests compartan los literales sin acoplarse al módulo de dominio.
 VERIFICACION_NO_VERIFICADO = dom_verificar.VERIFICACION_NO_VERIFICADO  # ⚠️ OK para seguir (no verificado a fondo)
 VERIFICACION_PROBLEMA = dom_verificar.VERIFICACION_PROBLEMA  # ❗ algo de peso en contra: NO se genera copy
 
-# Criterios por defecto del documento QA que se CREA si aún no existe (idempotente). MISMO
+# Criterios por defecto del documento verificación que se CREA si aún no existe (idempotente). MISMO
 # cuerpo que la inicial `prompt/verificar` del paquete (último recurso si la inicial no se
-# pudiera leer; si tocas uno, toca el otro). REDISEÑO: la QA es PRE-COPY y verifica la NOTA DE
+# pudiera leer; si tocas uno, toca el otro). REDISEÑO: la verificación es PRE-COPY y verifica la NOTA DE
 # ORIGEN (no el copy, que aún no existe). Es PERMISIVA: solo levanta `problema` ante algo de
 # PESO (dato falso evidente, problema legal/ético claro); ante la duda, `no_verificado`.
 # SEÑALA (no publica ni reescribe). El campo JSON `veredicto` va en slug ASCII
@@ -437,14 +437,14 @@ _FETCH_ARTICULO = _fetch_articulo_real
 
 
 # --------------------------------------------------------------------------- #
-# Actividad (etapas CI/CD/QA como generaciones-marcador)                       #
+# Actividad (etapas CI/CD/verificación como generaciones-marcador)                       #
 # --------------------------------------------------------------------------- #
 
 
 def registrar_etapa(
     etapa: str, marca: str, detalle: str, contenido_id: str = "", gen_id: str = ""
 ) -> dict[str, Any] | None:
-    """Sella una entrada de ACTIVIDAD de una etapa del pipeline (CI/CD/QA). Best-effort.
+    """Sella una entrada de ACTIVIDAD de una etapa del pipeline (CI/CD/verificación). Best-effort.
 
     Crea una generación-marcador `completado` (sin `claude`): `tipo='pipeline'` y la etapa +
     detalle en la `etiqueta` ("ADMITIR · Recolectar...", etc.). La vista "Actividad IA" la muestra
@@ -452,16 +452,16 @@ def registrar_etapa(
     None y se loguea): la actividad es trazabilidad, no parte crítica del flujo.
 
     `contenido_id` (opcional, def "") CORRELACIONA la etapa con la RUN (el `contenido` padre
-    del pipeline) para la vista Pipelines (`/api/pipelines/{id}`). CD/QA lo pasan (la etapa va
+    del pipeline) para la vista Pipelines (`/api/pipelines/{id}`). CD/verificación lo pasan (la etapa va
     sobre un tema concreto); CI es brand-level y lo deja vacío. Es ADITIVO: vacío no engorda el
     registro (lo filtra `generaciones._cuerpo`) y los registros previos lo traen como "".
 
     `gen_id` (opcional, def "") apunta a la GENERACIÓN REAL de `claude -p` que ejecutó esa
-    etapa (CD = copy, QA = revisión editorial). La vista Pipelines lo resuelve para mostrar el
+    etapa (CD = copy, verificación = revisión editorial). La vista Pipelines lo resuelve para mostrar el
     STREAM del agente (su proceso de pensamiento). CI no lanza `claude`, así que lo deja vacío.
     """
     etiqueta = f"{etapa} · {detalle}".strip()
-    # Frontera ADR 0011: Admitir (CI) y Verificar (QA) son INVESTIGACION; Redactar (CD) e Ilustrar son
+    # Frontera ADR 0011: Admitir (CI) y Verificar (verificación) son INVESTIGACION; Redactar (CD) e Ilustrar son
     # PRODUCCION. Se sella en el marcador para clasificarlo sin reparsear la etiqueta.
     proceso = (
         generaciones.PROCESO_INVESTIGACION
@@ -492,7 +492,7 @@ def registrar_etapa(
 ADMISION_VERIFICACION_ESTADOS = (VERIFICACION_EN_CURSO, VERIFICACION_NO_VERIFICADO, VERIFICACION_SALTADA)
 
 # Verificaciones que ADMITEN a producción (ADR 0011 F3): la historia pasó la verificación (`no_verificado`)
-# o la QA estaba saltada para la marca. FUENTE ÚNICA del filtro OBLIGATORIO de la admisión: la
+# o la verificación estaba saltada para la marca. FUENTE ÚNICA del filtro OBLIGATORIO de la admisión: la
 # usa `promover_clusters_marca`/`clusters_para_promover` por defecto (no existe ya un camino que
 # promueva SIN verificar) y el barrido de investigación.
 VERIFICADAS_OK = (VERIFICACION_NO_VERIFICADO, VERIFICACION_SALTADA)
@@ -552,7 +552,7 @@ def _autor_pipeline() -> dict[str, str] | None:
 
 
 # --------------------------------------------------------------------------- #
-# Lecturas de temas compartidas entre etapas (QA y CD)                         #
+# Lecturas de temas compartidas entre etapas (verificación y CD)                         #
 # --------------------------------------------------------------------------- #
 
 
@@ -571,7 +571,7 @@ def _copy_pendiente_leido(tema: dict[str, Any]) -> dict[str, Any]:
 
 
 # REINTENTOS ACOTADOS por etapa (flujo continuo): con el tick corto, una etapa que falla se
-# relanzaría cada pocos segundos para siempre (bucle de tokens). Cada lanzamiento de QA/Copy
+# relanzaría cada pocos segundos para siempre (bucle de tokens). Cada lanzamiento de verificación/Copy
 # anota su intento en `copy_pendiente` (JSON, sin migración de esquema); al agotarlos, el tema
 # se marca `problema` con un hallazgo de sistema: SALE del cupo en curso (in=out se sostiene)
 # y queda visible en Pipelines/tablero como fallo, para que un humano decida.
@@ -649,7 +649,7 @@ def marcar_fallo_etapa(tema_id: str, etapa: str, motivo: str) -> None:
     """Marca el tema con verificacion `problema` por fallo REPETIDO de una etapa (salida terminal).
 
     El tema sale del cupo en curso (deja de reintentarse y de bloquear la admisión de su marca)
-    y el fallo queda visible (❗) con un hallazgo de sistema. Mismo formato que la verificación QA.
+    y el fallo queda visible (❗) con un hallazgo de sistema. Mismo formato que la verificación verificación.
     """
     import json
 

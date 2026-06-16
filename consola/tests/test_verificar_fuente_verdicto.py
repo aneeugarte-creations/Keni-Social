@@ -1,4 +1,4 @@
-"""Tests del verificacion de la QA de la FUENTE (`dominio.verificar_fuente.parsear_verificacion_fuente`).
+"""Tests del verificacion de la verificación de la FUENTE (`dominio.verificar_fuente.parsear_verificacion_fuente`).
 
 PURO (sin Postgres ni claude). El contrato del prompt pide el campo JSON `verificacion` en slug
 ASCII ("apta" | "problema"); el parser acepta TAMBIÉN el emoji legado 🟢/🔴 (piezas en proceso

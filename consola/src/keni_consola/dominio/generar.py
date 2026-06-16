@@ -95,8 +95,8 @@ MAX_TEXTO = 200_000
 # el prompt LIBREMENTE *y* la salida CRUDA se le devuelve VERBATIM. NINGÚN flujo de generación
 # de la consola cumple ese par (todos parsean la salida a artefactos estructurados), así que
 # NO se veta la web por-callsite: queda solo la veta GLOBAL `Bash Write Edit`
-# (`config.CLAUDE_DISALLOWED_TOOLS_DEF`), que SÍ aplica a todos. Los flujos de QA/verificación
-# (`qa-editorial`, `qa-fuente`, auto-QA) y de copy con auto-verificación legítimamente PUEDEN
+# (`config.CLAUDE_DISALLOWED_TOOLS_DEF`), que SÍ aplica a todos. Los flujos de verificación/verificación
+# (`revision`, `verificacion-fuente`, auto-verificación) y de copy con auto-verificación legítimamente PUEDEN
 # leer una fuente para corroborar datos; no se les limita. Un operador puede endurecer la web
 # de forma global con `KENI_CLAUDE_DISALLOWED_TOOLS` si lo desea.
 
@@ -521,7 +521,7 @@ def lanzar(
         # viajaba en el `procesar_spec` y el registro quedaba sin atar (runs a cero).
         "contenido_id": contenido_id or "",
         # Proceso de la maquina (ADR 0011): por defecto PRODUCCION (la maquina de contenido:
-        # copy/arte/manual). La verificación QA de la fuente lo pasa "investigacion" (motor de noticias).
+        # copy/arte/manual). La verificación verificación de la fuente lo pasa "investigacion" (motor de noticias).
         "proceso": proceso or generaciones.PROCESO_PRODUCCION,
         **_autor_campos(autor),
     })
@@ -539,7 +539,7 @@ def lanzar(
         dir_temporal=str(dir_temporal) if dir_temporal is not None else None,
         prefetch_s3=prefetch_s3,
         endurecer=endurecer,
-        # PRIORIDAD de despacho: el lote de FONDO (pipeline/autogen/QA de la fuente) cede el
+        # PRIORIDAD de despacho: el lote de FONDO (pipeline/autogen/verificación de la fuente) cede el
         # paso a los lanzamientos manuales del equipo (API/MCP) en la cola del worker.
         # `urgente` (solo fondo): el tema viene de una curación humana urgente (p. ej. una
         # breaking empujada desde el panel) y adelanta al lote de fondo SIN pisar lo manual.

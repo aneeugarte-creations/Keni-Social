@@ -1,10 +1,10 @@
-"""Dominio QA EDITORIAL: parseo del informe de revisión de copy (PURO, sin HTTP).
+"""Dominio verificación EDITORIAL: parseo del informe de revisión de copy (PURO, sin HTTP).
 
 Extraido de `api/verificar_fuente.py` para que el WORKER de generacion (#130 Fase 2) reconstruya
-el post-procesado de un job de QA SIN importar de `api/` (corre fuera del proceso del back).
+el post-procesado de un job de verificación SIN importar de `api/` (corre fuera del proceso del back).
 `api/verificar_fuente.py` reexporta estas funciones, asi que su contrato HTTP no cambia.
 
-Frontera del producto: el QA SEÑALA (devuelve un informe con hallazgos), NO publica ni
+Frontera del producto: el verificación SEÑALA (devuelve un informe con hallazgos), NO publica ni
 reescribe. Aqui solo vive el PARSEO de la salida del prompt en ese informe estructurado.
 """
 
@@ -14,14 +14,14 @@ import json
 
 from . import stream
 
-# ETIQUETA DE ORIGEN del historial para las runs de QA (columna `origen` de
+# ETIQUETA DE ORIGEN del historial para las runs de verificación (columna `origen` de
 # `registrar_historial_prompt`), NO un id de prompt de la Biblioteca. Por eso NO lleva el
 # prefijo `prompt/` ni se cataloga en `prompts_procesos.py` ni se resuelve con
-# `libtexto.cuerpo_efectivo`: es un tipo INTERNO no editable. El prompt REAL de la QA de la
+# `libtexto.cuerpo_efectivo`: es un tipo INTERNO no editable. El prompt REAL de la verificación de la
 # fuente vive en la Biblioteca como `prompt/verificar` (lo resuelve `pipeline_contenido`).
 # Es un valor ESTABLE: se persiste como `origen` en filas de historial en producción; cambiarlo
 # partiría los datos históricos. Se conserva el nombre del constante por compatibilidad.
-PROMPT_ID = "qa-editorial"
+PROMPT_ID = "revision"
 
 # Valores permitidos del informe estructurado (defensa: ignoramos cualquier otro).
 _TIPOS = frozenset({"ortografia", "dato", "legal", "voz"})
@@ -89,7 +89,7 @@ def parsear_informe(salida: str) -> dict[str, object]:
     y mapea `verificación`/`resumen`/`hallazgos`. El `informe_texto` es el documento legible
     SIN ese bloque json y sin emojis del cuerpo (el verificacion se deriva ANTES de limpiar, asi
     no se pierde el simbolo). Degradacion robusta: si no hay JSON valido, `hallazgos=[]` y el
-    informe queda como el texto completo (el QA nunca se rompe por un formato inesperado).
+    informe queda como el texto completo (el verificación nunca se rompe por un formato inesperado).
 
     Devuelve `{verificacion, resumen, hallazgos: [...], informe_texto}`.
     """
@@ -137,9 +137,9 @@ def parsear_informe(salida: str) -> dict[str, object]:
 
 
 # --------------------------------------------------------------------------- #
-# QA DE LA FUENTE (pre-copy, rediseño QPC): verificación PERMISIVA de la NOTA de origen #
+# verificación DE LA FUENTE (pre-copy, rediseño QPC): verificación PERMISIVA de la NOTA de origen #
 # --------------------------------------------------------------------------- #
-# El QA se movió a ANTES del copy y por PIEZA (tema/fuente), no por plataforma: verificar la nota
+# El verificación se movió a ANTES del copy y por PIEZA (tema/fuente), no por plataforma: verificar la nota
 # de origen antes de gastar tokens generando copy. Es PERMISIVO y devuelve un verificación
 # ESTRUCTURADO con SOLO dos salidas: `no_verificado` (nada de peso en contra: seguir, la pieza
 # llevará ⚠️) o `problema` (algo de peso: NO generar copy, marcar ❗ con los hallazgos). Por
@@ -160,7 +160,7 @@ _FUENTE_SLUG_PROBLEMA = "problema"
 
 
 def _slug_verificacion_fuente(salida: str) -> str:
-    """Verificación del ÚLTIMO bloque ```json de la QA de FUENTE: "apta"/"problema" o "".
+    """Verificación del ÚLTIMO bloque ```json de la verificación de FUENTE: "apta"/"problema" o "".
 
     Acepta el slug ASCII del contrato y el emoji legado 🟢/🔴. Cualquier otro valor (o sin
     bloque/clave) devuelve "" y el llamante cae al camino permisivo. PURO, nunca lanza.
@@ -186,7 +186,7 @@ def _slug_verificacion_fuente(salida: str) -> str:
 
 
 def parsear_verificacion_fuente(salida: str) -> dict[str, object]:
-    """Parsea la salida de la QA de la FUENTE en un verificación ESTRUCTURADO permisivo.
+    """Parsea la salida de la verificación de la FUENTE en un verificación ESTRUCTURADO permisivo.
 
     Reusa `parsear_informe` (mismo formato ```json con `verificación`/`resumen`/`hallazgos`), pero
     COLAPSA el verificación a dos valores de FUENTE:
@@ -236,13 +236,13 @@ def construir_procesar_verificacion_fuente(  # noqa: ANN201
     *,
     cluster_id: str = "",
 ):
-    """Callback de post-procesado de la QA de la FUENTE: persiste el verificación donde toque.
+    """Callback de post-procesado de la verificación de la FUENTE: persiste el verificación donde toque.
 
     Parsea el verificación estructurado (`parsear_verificacion_fuente`), registra el informe en el
     historial (trazabilidad, sin piezas: esto SEÑALA, no publica) y ESCRIBE el verificación +
     hallazgos en el destino:
 
-    El verificación se sella en la HISTORIA (`cluster_id`, ADR 0011 F3): QA sobre la fuente ANTES de
+    El verificación se sella en la HISTORIA (`cluster_id`, ADR 0011 F3): verificación sobre la fuente ANTES de
     materializar contenido (`repos.marcar_cluster_verificacion`); la admisión solo promueve las verificadas.
     NO encadena copy (la pieza aún no existe; nace en la admisión).
 
@@ -258,7 +258,7 @@ def construir_procesar_verificacion_fuente(  # noqa: ANN201
             metricas=stream.metricas_a_dict(metricas), autor=autor,
         )
         verificacion = str(informe.get("verificacion_fuente") or VERIFICACION_NO_VERIFICADO)
-        # QA sobre la HISTORIA (cluster, pre-admisión, ADR 0011 F3): el verificación vive en el
+        # verificación sobre la HISTORIA (cluster, pre-admisión, ADR 0011 F3): el verificación vive en el
         # cluster. La admisión del barrido de investigación promueve las `no_verificado` (hereda
         # el verificación al contenido) y deja fuera las `problema`. NO se encadena copy aquí (la
         # pieza aún no existe; nace en la admisión).

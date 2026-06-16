@@ -52,11 +52,11 @@ describe("CadenaAprobacion · panel de estado (solo lectura)", () => {
     expect(screen.queryByText(/Faltan/i)).not.toBeInTheDocument();
   });
 
-  it("NO pinta el revision de IA (menos IA de cara al equipo): ni 'IA: …' ni el nivel QA", () => {
-    // La cadena trae el nivel automático «QA Editorial» aprobado; NO debe pintarse como badge.
+  it("NO pinta el revision de IA (menos IA de cara al equipo): ni 'IA: …' ni el nivel verificación", () => {
+    // La cadena trae el nivel automático «verificación Editorial» aprobado; NO debe pintarse como badge.
     const c = cadenaOK({
       niveles: [
-        nivel({ id: "qa", nivel: 0, etiqueta: "QA Editorial", decision: "aprobado" }),
+        nivel({ id: "verificación", nivel: 0, etiqueta: "verificación Editorial", decision: "aprobado" }),
         nivel({ id: "n1", nivel: 1, etiqueta: "Edición", decision: "aprobado", decisor_id: "ana", decisor_nombre: "Ana" }),
         nivel({ id: "n2", nivel: 2, etiqueta: "Coordinación" }),
       ],
@@ -64,7 +64,7 @@ describe("CadenaAprobacion · panel de estado (solo lectura)", () => {
     renderCadena(c);
     expect(screen.queryByText(/^IA:/)).not.toBeInTheDocument();
     expect(screen.queryByText("IA: lista")).not.toBeInTheDocument();
-    // El nivel QA se excluye del conteo de OK humanos: siguen siendo 1/2 (Ana + Coordinación).
+    // El nivel verificación se excluye del conteo de OK humanos: siguen siendo 1/2 (Ana + Coordinación).
     expect(screen.getByText("1/2")).toBeInTheDocument();
   });
 

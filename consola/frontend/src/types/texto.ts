@@ -29,7 +29,7 @@ export interface DocumentoTexto {
   etiquetas?: string[];
   /** Pipelines a los que se ata el doc (atribución). [] = aplica a todos los pipelines. */
   pipelines?: string[];
-  /** Solo prompt: rol que ata el prompt a un pipeline (copy | qa | evergreen | arte | ""). */
+  /** Solo prompt: rol que ata el prompt a un pipeline (copy | verificación | evergreen | arte | ""). */
   rol?: string;
   /** Orden de ensamblaje del auto-adjunto (menor = antes). */
   prioridad?: number;

@@ -236,7 +236,7 @@ async def enviar_a_revision(request: Request) -> Response:
     # plataforma (la publicacion ES esa fila: su id es el `plataforma_id`).
     plat = repos.obtener_contenido_plataforma(publicacion_id)
     # Monta la cadena por defecto del flujo "dale el OK": dos niveles humanos (Edición +
-    # Coordinación = los dos OK) y, si el flag lo activa, el nivel automatico "QA Editorial"
+    # Coordinación = los dos OK) y, si el flag lo activa, el nivel automatico "verificación Editorial"
     # (la aprobacion de IA) delante. SIN exigir cargo (`con_cargos=False`): cualquiera del
     # equipo da su OK, salvo el autor. La RECREA (cadena fresca toda `pendiente`) a proposito:
     # re-enviar a revision tras un rechazo debe arrancar limpio, no heredar decisiones viejas.
@@ -479,7 +479,7 @@ async def programar(request: Request) -> Response:
                 {"error": f"Faltan aprobaciones: {aprobados} de {minimo}."}, status_code=409
             )
 
-    # GATE B (QA editorial): un comentario sin resolver es una objecion pendiente; bloquea
+    # GATE B (revisión editorial): un comentario sin resolver es una objecion pendiente; bloquea
     # programar hasta que el equipo lo cierre. Se cuentan los del item entero + los de esta red.
     plat = repos.obtener_contenido_plataforma(publicacion_id)
     pendientes = repos.comentarios_sin_resolver(

@@ -11,7 +11,7 @@ export type TipoGeneracion =
   | "hashtags"
   | "imagen"
   | "verificacion"
-  | "qa-editorial";
+  | "revision";
 
 /** Estado del ciclo de vida de una generación. */
 export type EstadoGeneracion = "ejecutando" | "completado" | "error";
@@ -55,8 +55,8 @@ export interface ResultadoGeneracion {
   imagenes?: ImagenGenerada[];
   // verificacion (workflow propio: datar un video)
   verificacion?: ReporteVerificacion;
-  // qa-editorial (workflow propio: revisar el copy ya escrito por el community)
-  informe?: InformeQaEditorial;
+  // revision (workflow propio: revisar el copy ya escrito por el community)
+  informe?: InformeRevision;
   // import-calendario (importación AGNÓSTICA por IA en el worker)
   creados?: number;
   omitidos?: { titulo: string; motivo: string }[];
@@ -181,13 +181,13 @@ export interface CuerpoVerificar {
   contexto?: string;
 }
 
-// --- QA editorial (revisar el copy YA escrito por el community, ficha F3 / #143) ---
+// --- revisión editorial (revisar el copy YA escrito por el community, ficha F3 / #143) ---
 
-/** Tipo de hallazgo del QA editorial: qué dimensión se incumple. */
-export type TipoHallazgoQa = "ortografia" | "dato" | "legal" | "voz";
+/** Tipo de hallazgo del revisión editorial: qué dimensión se incumple. */
+export type TipoHallazgoRevision = "ortografia" | "dato" | "legal" | "voz";
 
 /** Gravedad de un hallazgo: `error` baja a 🔴; `aviso` baja (a lo sumo) a 🟡. */
-export type GravedadHallazgoQa = "error" | "aviso";
+export type GravedadHallazgoRevision = "error" | "aviso";
 
 /**
  * Un hallazgo de la revisión editorial: SEÑALA un problema en el copy ajeno con su
@@ -195,9 +195,9 @@ export type GravedadHallazgoQa = "error" | "aviso";
  * acepta o ignora; nunca se aplica sola). Si `no_verificable`, es un dato que no se
  * pudo comprobar contra la fuente: no se afirma erróneo ni se inventa el correcto.
  */
-export interface HallazgoQaEditorial {
-  tipo: TipoHallazgoQa;
-  gravedad: GravedadHallazgoQa;
+export interface HallazgoRevision {
+  tipo: TipoHallazgoRevision;
+  gravedad: GravedadHallazgoRevision;
   fragmento: string;
   explicacion: string;
   sugerencia: string;
@@ -205,14 +205,14 @@ export interface HallazgoQaEditorial {
 }
 
 /**
- * Informe del QA editorial sobre el copy del community manager. Abre con un dictamen
+ * Informe del revisión editorial sobre el copy del community manager. Abre con un dictamen
  * 🟢/🟡/🔴 (`verdicto`, igual codificación que el resto del producto) y lista los
  * hallazgos. NO reescribe el copy ni publica: es solo el informe.
  */
-export interface InformeQaEditorial {
+export interface InformeRevision {
   verdicto: Veredicto;
   resumen: string;
-  hallazgos: HallazgoQaEditorial[];
+  hallazgos: HallazgoRevision[];
   /** El informe legible completo (Markdown), por si se quiere leer/copiar entero. */
   informe_texto: string;
 }

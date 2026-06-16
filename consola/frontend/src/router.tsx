@@ -59,7 +59,7 @@ const Economia = lazy(() => import("@/pages/maquina/Economia"));
 // trabajos sueltos), antes embebida en Agentes. Es el feed de Producción como página propia.
 const Actividad = lazy(() => import("@/pages/Produccion"));
 
-// Feed móvil para revisores (#qa-movil-feed): superficie tipo red social, una
+// Feed móvil para revisores (#verificación-movil-feed): superficie tipo red social, una
 // columna, SIN sidebar. Vive FUERA del AppShell (layout propio) y se llega por
 // enlace directo (no se registra en el catálogo de apps).
 const MobileFeed = lazy(() => import("@/pages/MobileFeed"));
@@ -189,7 +189,7 @@ export const router = createBrowserRouter([
               { path: "*", element: <Navigate to="/operacion/feed" replace /> },
             ],
           },
-          // La página "Revisión" (QA editorial + verificación + Carril Rápido) se retiró por
+          // La página "Revisión" (revisión editorial + verificación + Carril Rápido) se retiró por
           // obsoleta: la aprobación vive ahora en línea en el Feed. Sus rutas redirigen al Feed.
           { path: "revision", element: <Navigate to="/operacion/feed" replace /> },
           { path: "revision/*", element: <Navigate to="/operacion/feed" replace /> },

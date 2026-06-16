@@ -75,11 +75,11 @@ def test_almacen_vacio_no_rompe(almacen):
 
 
 # --------------------------------------------------------------------------- #
-# TTL del reparación de QA 'en_curso' (derivado del timeout real; sin BD)            #
+# TTL del reparación de verificación 'en_curso' (derivado del timeout real; sin BD)            #
 # --------------------------------------------------------------------------- #
 
 
-def test_ttl_qa_en_curso_derivado_del_timeout_real(monkeypatch):
+def test_ttl_verificacion_en_curso_derivado_del_timeout_real(monkeypatch):
     """Sin override, el TTL es ~2x el wall-timeout REAL de la verificación (no 30 min fijos)."""
     from keni_consola import config
     from keni_consola import limpiador_generaciones as rg
@@ -96,7 +96,7 @@ def test_ttl_qa_en_curso_derivado_del_timeout_real(monkeypatch):
     assert rg._ttl_verificacion_en_curso_seg() == 2 * config.claude_timeout()
 
 
-def test_ttl_qa_en_curso_respeta_el_override_explicito(monkeypatch):
+def test_ttl_verificacion_en_curso_respeta_el_override_explicito(monkeypatch):
     """`KENI_VERIFICACION_EN_CURSO_TTL_MIN` explicito manda sobre la derivacion."""
     from keni_consola import config
     from keni_consola import limpiador_generaciones as rg

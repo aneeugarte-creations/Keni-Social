@@ -33,7 +33,7 @@ export type CargoUsuario =
   | "editorial_youtube"
   | "coordinador_invitados"
   | "coordinador_operativo"
-  | "fotografia_qa"
+  | "fotografia_revision"
   | "editor_video"
   | "disenador"
   | "";
@@ -59,7 +59,7 @@ export const ETIQUETA_CARGO: Record<Exclude<CargoUsuario, "">, string> = {
   editorial_youtube: "Editorial YouTube",
   coordinador_invitados: "Coordinador de invitados",
   coordinador_operativo: "Coordinador operativo",
-  fotografia_qa: "Fotografía + QA",
+  fotografia_revision: "Fotografía + verificación",
   editor_video: "Editor de video",
   disenador: "Diseñador",
 };
@@ -80,7 +80,7 @@ export const CARGOS_ORDENADOS: Exclude<CargoUsuario, "">[] = [
   "creativo_vertical",
   "editorial_youtube",
   "redactor",
-  "fotografia_qa",
+  "fotografia_revision",
   "editor_video",
   "disenador",
   // Catalogo legado (al final):

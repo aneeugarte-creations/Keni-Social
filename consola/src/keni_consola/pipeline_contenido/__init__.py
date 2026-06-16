@@ -10,9 +10,9 @@ símbolos privados que algún consumidor importa directamente), de modo que
   - `_ref`       — proxy perezoso al paquete para honrar el monkeypatch de seams en los tests.
   - `_admitir`   — ADMITIR (CI): promueve HISTORIAS (clusters) ya verificadas del pool rankeado
                    a temas SIN copy, con dedup, cupos por marca/plan y caducidad (TTL).
-  - `_verificar` — VERIFICAR (QA): verifica la FUENTE de la HISTORIA (`claude -p`) ANTES de
+  - `_verificar` — VERIFICAR (verificación): verifica la FUENTE de la HISTORIA (`claude -p`) ANTES de
                    admitir + verificación léxico del copy para la vista de runs (`verificacion_lexica`).
-  - `_redactar`  — REDACTAR (CD): lanza el copy de los temas con QA `no_verificado` sin copy
+  - `_redactar`  — REDACTAR (CD): lanza el copy de los temas con verificación `no_verificado` sin copy
                    (+ los temas del news-pool sin copy).
   - `_revisar`   — revisión de calidad ADVISORY del copy (voz + coherencia), pre-avance.
   - `_avance`    — pasa los borradores COMPLETOS (copy + arte) a la cola de revisión humana.
@@ -25,8 +25,8 @@ El espinazo noticia->pieza son DOS loops independientes, cada uno con su gate, c
 advisory lock (ver `_barrido`):
 
   • INVESTIGACIÓN — caducidad (TTL) -> VERIFICAR la fuente de las historias candidatas del pool
-    (QA sobre el CLUSTER, pre-admisión, asíncrona vía `claude -p`) -> ADMITIR las verificadas
-    como temas (heredando su verificación). La frontera "QA = investigación" vive en los datos: la
+    (verificación sobre el CLUSTER, pre-admisión, asíncrona vía `claude -p`) -> ADMITIR las verificadas
+    como temas (heredando su verificación). La frontera "verificación = investigación" vive en los datos: la
     admisión solo promueve historias ya verificadas (`no_verificado`/`saltada`); las `problema`
     nunca se materializan (fail-closed).
   • PRODUCCIÓN — REDACTAR el copy de los temas verificados -> ILUSTRAR (etapa de arte) -> AVANCE
@@ -34,7 +34,7 @@ advisory lock (ver `_barrido`):
 
 ASINCRONÍA (DOS FASES)
 ======================
-La QA es asíncrona (`claude -p`): una historia verificada en un barrido NO tiene verificación en
+La verificación es asíncrona (`claude -p`): una historia verificada en un barrido NO tiene verificación en
 ESE mismo barrido; el `procesar` lo persiste en el cluster y la admisión de un barrido POSTERIOR
 la promueve. El estado vive en el cluster/tema: idempotente y auto-curativo.
 
@@ -240,7 +240,7 @@ __all__ = [
     "_claves_dedup_marca",
     "_nota_de_cluster",
     "_fetch_cuerpo",
-    # QA
+    # verificación
     "verificacion_lexica",
     "asegurar_documento_verificacion",
     "dom_verificacion_titulo",

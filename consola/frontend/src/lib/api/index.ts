@@ -19,7 +19,7 @@ import { apiMarcaActivos } from "./marcaActivos";
 import { apiPlantillasDiseno } from "./plantillasDiseno";
 import { apiBloques } from "./bloques";
 import { apiPlantillasMarca } from "./plantillasMarca";
-import { apiQa } from "./qa";
+import { apiRevision } from "./revision";
 import { apiHashtags } from "./hashtags";
 import { apiFuentes } from "./fuentes";
 import { apiAlgoritmos } from "./algoritmos";
@@ -65,7 +65,7 @@ export const api = {
   ...apiPlantillasDiseno,
   ...apiBloques,
   ...apiPlantillasMarca,
-  ...apiQa,
+  ...apiRevision,
   ...apiHashtags,
   ...apiFuentes,
   ...apiAlgoritmos,

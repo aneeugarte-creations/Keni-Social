@@ -82,7 +82,7 @@ def cadena_simple() -> list[str]:
     Defecto razonable para una PUBLICACION suelta: DOS niveles `pendiente` ("Edición" y
     "Coordinación") = los dos OK del equipo que la pieza necesita. Cada uno lo da una persona
     distinta (nunca el autor, salvo admin); con los dos, la pieza pasa sola a `aprobado`. Si
-    el QA editorial actua como aprobador automatico, el llamante antepone el nivel de IA.
+    el revisión editorial actua como aprobador automatico, el llamante antepone el nivel de IA.
     Expresado sobre el mismo modelo multinivel (cadena vacia = sin aprobacion; cadena de N
     = N niveles).
     """
@@ -137,19 +137,19 @@ def contar_aprobados(cadena: list[dict[str, Any]]) -> int:
     Es la metrica que alimenta el GATE de gobernanza "minimo N aprobaciones" (item A): una
     pieza no se puede PROGRAMAR si no acumula al menos `MINIMO_APROBACIONES` niveles aprobados,
     aunque su estado editorial ya sea `aprobado` (p. ej. una cadena simple de 1 solo nivel).
-    Cuenta TODOS los niveles aprobados, incluidos los automaticos (QA / pre-aprobacion): son
+    Cuenta TODOS los niveles aprobados, incluidos los automaticos (verificación / pre-aprobacion): son
     aprobaciones validas y trazables. No distingue humano vs auto aqui (eso lo deja a la UI).
     """
     return sum(1 for n in cadena if n.get("decision") == DECISION_APROBADO)
 
 
 def contar_aprobaciones_humanas(cadena: list[dict[str, Any]]) -> int:
-    """Cuenta los niveles aprobados por una PERSONA (excluye QA / pre-aprobacion automatica).
+    """Cuenta los niveles aprobados por una PERSONA (excluye verificación / pre-aprobacion automatica).
 
     Es la metrica de "aprobaciones reales que se perderian" al editar el contenido de una pieza:
     solo cuentan los OK HUMANOS (decisor con id propio, no el reservado AUTO ni vacio). La usa el
     RESET de aprobaciones-al-editar para resetear solo cuando hay un OK humano que perder, sin
-    churnar piezas que apenas llevan el QA automatico.
+    churnar piezas que apenas llevan el verificación automatico.
     """
     return sum(
         1
@@ -200,7 +200,7 @@ def deshacer_decision(
     El llamante aplica `CAMPOS_NIVEL_PENDIENTE` al `nivel_id` para devolver ese nivel a
     `pendiente` (quitar el OK o el dislike del revisor). Reglas:
       - Solo se deshace la decision PROPIA (un nivel cuyo `decisor_id` sea el del revisor; los
-        automaticos AUTO/QA no se deshacen). Sin sesion (`decisor_id` vacio) no hay nada que
+        automaticos AUTO/verificación no se deshacen). Sin sesion (`decisor_id` vacio) no hay nada que
         deshacer.
       - Como la cadena se decide POR ORDEN, solo se permite deshacer si NO hay un nivel
         SUPERIOR ya decidido por alguien: deshacer uno inferior dejaria un hueco. En el flujo

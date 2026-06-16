@@ -9,9 +9,9 @@ Cada persona tiene:
   - `cobertura` : True si entra en la rota de turnos. Solo los community/content managers
                   + redactor + creativo de vertical de Nacion Gamer + editorial YT cubren;
                   directivos, gerencia podcast, coordinacion de redes/operativa, fotografia
-                  + QA, creativo de Fundacion y coordinacion de YouTube NO cubren.
+                  + verificación, creativo de Fundacion y coordinacion de YouTube NO cubren.
   - `puede_coordinar` : True si es candidato a coordinador por celda en el calendario
-                  (ola "coord"). Hoy: el coordinador de redes, fotografía/QA y la
+                  (ola "coord"). Hoy: el coordinador de redes, fotografía/verificación y la
                   coordinadora operativa. El admin puede ampliar la lista
                   desde /usuarios marcando el flag a quien quiera.
   - `marcas`    : ids canonicos de las VERTICALES a las que pertenece (relacion N:M en la
@@ -20,7 +20,7 @@ Cada persona tiene:
   - `nombre`    : nombre HUMANO real (organigrama). Lo que se pinta en las tarjetas.
   - `manager`   : `usuario` (login) del SUPERIOR al que reporta ("" = raiz; solo la dirección).
                   Define el ARBOL del organigrama. Ortogonal a `marcas`: la coordinadora
-                  operativa y fotografía/QA trabajan en Claro Sports pero reportan a la
+                  operativa y fotografía/verificación trabajan en Claro Sports pero reportan a la
                   dirección, no al coordinador de redes.
 
 `nombre`/`manager_id` se rellenan SOLO si estan vacios (segunda pasada), para no pisar lo
@@ -56,12 +56,12 @@ PASSWORD_INICIAL = "cambiar"
 # son los content managers; editorial de YouTube refuerza WhatsApp UnoTV pero entra en
 # cobertura; el creativo de vertical cubre Nacion Gamer).
 # `puede_coordinar=True` (ola "coord"): candidato a coordinador por celda. Hoy son tres
-# (el coordinador de redes, fotografía/QA y la coordinadora operativa); el admin lo decide desde /usuarios.
+# (el coordinador de redes, fotografía/verificación y la coordinadora operativa); el admin lo decide desde /usuarios.
 #
 # `nombre` (organigrama): nombre HUMANO real para pintar las tarjetas. `manager` es el
 # `usuario` (login) del SUPERIOR al que reporta segun el organigrama dictado por la dirección
 # ("" = raiz; solo la dirección). Regla clave de la dirección: "estar debajo de alguien != reportarle"
-# -> la coordinadora operativa y fotografía/QA trabajan en Claro Sports pero REPORTAN a la
+# -> la coordinadora operativa y fotografía/verificación trabajan en Claro Sports pero REPORTAN a la
 # dirección, no al coordinador de redes; el coordinador de YouTube
 # coordina YouTube de las tres verticales y reporta a la dirección; editorial de YouTube reporta al coordinador de YouTube.
 # Las marcas (vertical de trabajo) y la linea de reporte (manager) son ORTOGONALES.
@@ -91,7 +91,7 @@ EQUIPO_AMX: tuple[
      "Daiana", "diana"),
     ("mariana", ROL_EDITOR, "coordinador_operativo", False, True, ("claro-sports",),
      "Mariana de León", "bernardo"),
-    ("ale", ROL_EDITOR, "fotografia_qa", False, True, ("claro-sports",),
+    ("ale", ROL_EDITOR, "fotografia_revision", False, True, ("claro-sports",),
      "Alejandra (Ale)", "bernardo"),
     ("jonathan", ROL_EDITOR, "creativo_vertical", True, False, ("nacion-gamer",),
      "Jonathan", "diana"),
@@ -106,7 +106,7 @@ EQUIPO_AMX: tuple[
 
 # Usuarios cuyo `puede_coordinar` se sobreescribe INCONDICIONALMENTE en cada seed (ola
 # "coord"). Es el listado canonico que pide el negocio: el coordinador de redes (admin de redes
-# ClaroSports), fotografía/QA, la coordinadora operativa. El resto se rellena
+# ClaroSports), fotografía/verificación, la coordinadora operativa. El resto se rellena
 # correctivamente solo si nadie lo ha tocado (ver `inicializar_equipo`).
 _USUARIOS_PUEDE_COORDINAR_FORZADO: frozenset[str] = frozenset({"elias", "ale", "mariana"})
 
@@ -128,7 +128,7 @@ def inicializar_equipo() -> None:
       lo haya cambiado a un cargo del NUEVO catalogo se respeta), y se REEMPLAZA el
       conjunto de marcas N:M para reflejar el organigrama vigente.
     - `puede_coordinar` (ola "coord"): para los 3 usuarios canonicos (el coordinador de
-      redes, fotografía/QA y la coordinadora operativa) se sobreescribe INCONDICIONALMENTE en cada seed (garantiza el estado
+      redes, fotografía/verificación y la coordinadora operativa) se sobreescribe INCONDICIONALMENTE en cada seed (garantiza el estado
       deseado tras el deploy aunque el admin lo hubiera editado). Para el resto, solo
       se rellena correctivamente si nadie lo ha tocado (es decir, si difiere del seed Y
       el valor actual es el default `False`); asi un admin que lo haya activado a mano
