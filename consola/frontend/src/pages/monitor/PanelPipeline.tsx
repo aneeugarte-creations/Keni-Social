@@ -59,6 +59,12 @@ export interface FasePipeline {
   excepciones?: { base: string; nota: string };
   /** Nota cuando el switch gobierna un flag COMPARTIDO (fase sin flag propio). */
   heredada?: string;
+  /** `true` si la fase inyecta el CONTEXTO editorial de la marca (voz, líneas, tropicalización,
+   *  reglas): la pestaña «Contexto» del detalle muestra la estrategia de marca. */
+  contextoMarca?: boolean;
+  /** Clave de etapa del feed de runs (`GET /api/pipelines?etapa=`): la pestaña «Logs» del detalle
+   *  lista el HISTÓRICO real de runs paradas en esta etapa. Sin ella, Logs solo muestra la cola viva. */
+  etapa?: string;
 }
 
 function contar(jobs: ColaJob[], queuePorTipo: Record<string, string>): Record<string, number> {
@@ -140,6 +146,7 @@ export function PanelPipeline({
   cola,
   esAdmin = true,
   chip,
+  renderDetalle,
 }: {
   /** Título de la cabecera del panel. */
   titulo: string;
@@ -155,11 +162,26 @@ export function PanelPipeline({
   esAdmin?: boolean;
   /** Indicador opcional en la cabecera (p. ej. jobs en curso del proceso). */
   chip?: React.ReactNode;
+  /** Si se pasa, cada fila es DESPLEGABLE: el click izquierdo expande/colapsa un panel inline
+   *  con el detalle de la fase (Prompt · Contexto · Logs) en vez de abrir el overlay de prompt.
+   *  Es el modo de la página «Contexto» (el pipeline como esqueleto de la página). */
+  renderDetalle?: (fase: FasePipeline) => React.ReactNode;
 }) {
   // Doc abierto en el overlay «Editar prompt» (in-place, sin sacarte del cockpit).
   const [docEditando, setDocEditando] = React.useState<string | null>(null);
   // Fase cuyo diálogo de «Excepciones por marca» está abierto (o null).
   const [excepNombre, setExcepNombre] = React.useState<string | null>(null);
+  // Modo «Contexto»: nombres de fase con el detalle inline desplegado.
+  const [expandidas, setExpandidas] = React.useState<ReadonlySet<string>>(() => new Set());
+  const expandible = renderDetalle !== undefined;
+  const alternarExpandida = React.useCallback((nombre: string) => {
+    setExpandidas((prev) => {
+      const s = new Set(prev);
+      if (s.has(nombre)) s.delete(nombre);
+      else s.add(nombre);
+      return s;
+    });
+  }, []);
 
   // Catálogo de ajustes (solo admin: /api/ajustes devuelve 403 a un editor). Misma queryKey que
   // Configuración/drawer → React Query dedupe (cero peticiones extra).
@@ -241,6 +263,7 @@ export function PanelPipeline({
           const enCursoN = conCola ? (enCurso[e.queue!] ?? 0) : 0;
           const esperaN = conCola ? (esperando[e.queue!] ?? 0) : 0;
           const admision = e.queue !== undefined && e.queue === admisionEn ? cola?.admision_verificacion : undefined;
+          const abierta = expandible && expandidas.has(e.nombre);
           return (
             <li key={e.nombre}>
               {/* Conector de flujo entre fases. */}
@@ -252,7 +275,7 @@ export function PanelPipeline({
               <FilaConAcciones
                 como="div"
                 acciones={acciones}
-                onPrimaria={editarPrompt}
+                onPrimaria={expandible ? () => alternarExpandida(e.nombre) : editarPrompt}
                 kebab="nunca"
                 realce
                 etiquetaAcciones={`Acciones de ${e.nombre}`}
@@ -290,6 +313,15 @@ export function PanelPipeline({
                       ariaLabel={`${ajuste.etiqueta} (switch de la fase ${e.nombre})`}
                     />
                   )}
+                  {expandible && (
+                    <ChevronDown
+                      className={cn(
+                        "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+                        abierta && "rotate-180",
+                      )}
+                      aria-hidden
+                    />
+                  )}
                 </div>
                 {ajuste && e.excepciones && deEtapa.length > 0 && (
                   <DialogoExcepciones
@@ -303,6 +335,12 @@ export function PanelPipeline({
                   />
                 )}
               </FilaConAcciones>
+              {/* Detalle inline de la fase (modo «Contexto»): Prompt · Contexto · Logs. */}
+              {abierta && (
+                <div className="mt-1.5 rounded-lg border border-border/60 bg-muted/20 p-3">
+                  {renderDetalle!(e)}
+                </div>
+              )}
             </li>
           );
         })}

@@ -15,10 +15,6 @@ import { Loader2 } from "lucide-react";
 // <Suspense> que muestra el fallback mientras carga vive en el AppShell.
 const Imagen = lazy(() => import("@/pages/Imagen"));
 const Video = lazy(() => import("@/pages/Video"));
-const Texto = lazy(() => import("@/pages/Texto"));
-const EstrategiaMarcas = lazy(() =>
-  import("@/pages/texto/GestionLineas").then((m) => ({ default: m.GestionLineas })),
-);
 
 // Sub-paginas de cada hub. Los hubs no tienen componente wrapper propio: la
 // ruta-padre se deja sin `element` y react-router renderiza `<Outlet/>` por defecto;
@@ -44,7 +40,9 @@ const GeneracionDetalle = lazy(() => import("@/pages/GeneracionDetalle"));
 // (Investigación · Producción, esqueletos por ahora) y la Cola compartida (la vista global
 // del worker/cola).
 const CockpitInvestigacion = lazy(() => import("@/pages/maquina/CockpitInvestigacion"));
-const CockpitProduccion = lazy(() => import("@/pages/maquina/CockpitProduccion"));
+// «Contexto» (`/maquina/contexto`): la página única de la máquina — el pipeline de cada motor como
+// estructura, con cada fase desplegable a Prompt · Contexto · Logs y su on/off.
+const Contexto = lazy(() => import("@/pages/maquina/Contexto"));
 // Detalle de UN daemon (`/maquina/agentes/:agente`): su estado y log por barrido; lo abren las
 // tablas de daemons (Sistema + cockpits). La LISTA «Agentes» se retiró: los dos agentes IA son
 // los dos cockpits (su on/off y prompts viven ahí; su salud, en el doctor).
@@ -207,26 +205,14 @@ export const router = createBrowserRouter([
           { path: "imagen", element: <Imagen /> },
           // Página VIDEO: subida + preview (motor de edición próximamente).
           { path: "video", element: <Video /> },
-          // Página TEXTO (antes "Texto"): prompts + línea editorial con filtros.
-          {
-            path: "texto",
-            children: [
-              { index: true, element: <Navigate to="documentos" replace /> },
-              { path: "documentos", element: <Texto /> },
-              { path: "estrategia", element: <EstrategiaMarcas /> },
-              // Algoritmos: inteligencia de plataforma. Es un INPUT de investigación, así que se
-              // RELOCALIZÓ al cockpit de Investigación; la ruta vieja redirige a su pestaña.
-              {
-                path: "algoritmos",
-                element: <Navigate to="/maquina/investigacion?seccion=algoritmos" replace />,
-              },
-            ],
-          },
-          // Compatibilidad: los paths antiguos (estudio/editor/texto) redirigen a los nuevos.
+          // Página TEXTO/Biblioteca: RETIRADA. Los prompts viven en cada fase del pipeline en
+          // «Contexto» (Máquina) y el contexto editorial se inyecta desde ahí. Todo
+          // `/contenido/texto*` (incl. la vieja pestaña de algoritmos) redirige a Contexto.
+          { path: "texto", element: <Navigate to="/maquina/contexto" replace /> },
+          { path: "texto/*", element: <Navigate to="/maquina/contexto" replace /> },
+          // Compatibilidad: los paths antiguos (estudio/editor) redirigen a Imagen.
           { path: "estudio", element: <Navigate to="/contenido/imagen" replace /> },
           { path: "editor", element: <Navigate to="/contenido/imagen" replace /> },
-          { path: "texto", element: <RedirigirPrefijo a="/contenido/texto" /> },
-          { path: "texto/*", element: <RedirigirPrefijo a="/contenido/texto" /> },
         ],
       },
 
@@ -352,8 +338,10 @@ export const router = createBrowserRouter([
         path: "maquina",
         children: [
           { index: true, element: <Navigate to="/maquina/computo" replace /> },
+          { path: "contexto", element: <Contexto /> },
           { path: "investigacion", element: <CockpitInvestigacion /> },
-          { path: "produccion", element: <CockpitProduccion /> },
+          // El cockpit de Producción se fusionó en «Contexto» (su pipeline + ajustes); redirige allí.
+          { path: "produccion", element: <Navigate to="/maquina/contexto?proceso=produccion" replace /> },
           // La LISTA «Agentes» se retiró (redundante con los dos cockpits): redirige al hub.
           { path: "agentes", element: <Navigate to="/maquina/computo" replace /> },
           // Detalle de UN daemon (`:agente` = nombre): lo abren las tablas de daemons.
@@ -379,7 +367,7 @@ export const router = createBrowserRouter([
       // investigación/motor de noticias, conexiones (Metricool + imagen IA), sistema y
       // esfuerzo viven en el drawer de ajustes de la máquina; publicación → Programación;
       // apariencia → Mi cuenta. La ruta vieja redirige al drawer (cockpit de Producción).
-      { path: "configuracion", element: <Navigate to="/maquina/produccion?tab=ajustes" replace /> },
+      { path: "configuracion", element: <Navigate to="/maquina/contexto?proceso=produccion&tab=ajustes" replace /> },
       { path: "sugerencias", element: <Sugerencias /> },
       // Webhooks salientes: solo admin (el backend devuelve 403 si no; la pagina avisa
       // al entrar por URL directa). Gestionar webhooks = abrir la red de salida.

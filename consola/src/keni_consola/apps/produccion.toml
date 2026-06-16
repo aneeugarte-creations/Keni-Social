@@ -81,6 +81,7 @@ rutas_frontend = [
   # Sección «Máquina»: dos cockpits de trabajo (Investigación/Producción) + el hub «sala de
   # máquinas» (Agentes y sus pestañas Cómputo/Economía/Actividad).
   "/maquina",
+  "/maquina/contexto",
   "/maquina/investigacion",
   "/maquina/produccion",
   "/maquina/agentes",
@@ -121,14 +122,9 @@ grupo = "contenido"
 grupo_orden = 20
 orden = 20
 
-[[nav]]
-ruta = "/contenido/texto"
-etiqueta = "Texto"
-icono = "Type"
-descripcion = "Prompts y línea editorial, estrategia de marcas e inteligencia de plataforma. Pestañas Documentos / Estrategia / Algoritmos."
-grupo = "contenido"
-grupo_orden = 20
-orden = 30
+# (La página «Texto»/Biblioteca se RETIRÓ del bloque Contenido: los prompts viven ahora dentro de
+# cada fase del pipeline en «Contexto» —Máquina—, y el contexto editorial se inyecta desde ahí.
+# `/contenido/texto*` redirige a `/maquina/contexto`.)
 
 # Consolidación de navegación: cada motor sale UNA sola vez, en el bloque «Máquina».
 # Las entradas viejas del bloque «datos» (Investigación `/datos/investigacion` y Producción
@@ -144,29 +140,31 @@ orden = 30
 # (Antes existía una entrada "Activos" propia; se fusionó como pestaña "Plantillas"
 # de la página Texto y dejó de ser una entrada de nav.)
 
-# ===== Sección MÁQUINA (la máquina de generación, fase 2A) =====
-# Bloque VISUAL propio (`maquina`, grupo_orden 25: entre Contenido y Datos): la máquina de
-# generación como UNA sección con dos cockpits de igual peso —Investigación (descubre/verifica)
-# y Producción (genera copy/arte)— y la COLA compartida (la vista global del worker/cola que
-# ambos motores comparten, relocalizada del antiguo Monitor). Los cockpits son esqueletos en
-# 2A; los rellenan 2B/2C.
+# Cockpit OPERATIVO de Investigación: el pool de noticias que el equipo revisa a diario (Noticias,
+# Fuentes, Algoritmos, Contenidos). Es trabajo cotidiano, así que su entrada vive en el bloque
+# «Operación», ENCIMA del Feed (orden 10 < Feed 20). El pipeline de investigación (recolectar→
+# verificar) NO vive aquí: se enciende y se vigila en «Contexto» (Máquina).
 [[nav]]
 ruta = "/maquina/investigacion"
 etiqueta = "Investigación"
 icono = "Search"
-descripcion = "Cockpit del motor de INVESTIGACIÓN: descubre y verifica noticias que alimentan la máquina. En construcción (fase siguiente)."
+descripcion = "El pool de noticias que alimenta la máquina: Noticias, Fuentes, Algoritmos y Contenidos. El pipeline (descubrir/verificar) se controla en Contexto."
+grupo = "operacion"
+grupo_orden = 10
+orden = 10
+
+# ===== Sección MÁQUINA: Contexto + Agentes =====
+# Bloque VISUAL propio (`maquina`, grupo_orden 25: entre Contenido y Datos). La máquina como UNA
+# página —«Contexto»— donde el pipeline de cada motor es la estructura (fases con prompt, contexto
+# y logs + on/off), más «Agentes» (la sala de máquinas: cómputo, economía y la traza).
+[[nav]]
+ruta = "/maquina/contexto"
+etiqueta = "Contexto"
+icono = "Layers"
+descripcion = "La máquina en una página: el pipeline de Investigación y Producción como estructura — cada fase con su prompt, el contexto editorial que inyecta, sus logs y su interruptor on/off."
 grupo = "maquina"
 grupo_orden = 25
 orden = 10
-
-[[nav]]
-ruta = "/maquina/produccion"
-etiqueta = "Producción"
-icono = "Wand2"
-descripcion = "Cockpit del motor de PRODUCCIÓN: genera copy y arte publicable. Aloja la tira de etapas y el drawer de ajustes de la máquina. En construcción (fase siguiente)."
-grupo = "maquina"
-grupo_orden = 25
-orden = 20
 
 [[nav]]
 ruta = "/maquina/computo"

@@ -19,22 +19,19 @@ from keni_consola.apps import registro
 # Estructura ESPERADA del sidebar: 3 bloques agrupados por MOMENTO DEL FLUJO, en este
 # orden, con encabezado visible. El bloque es VISUAL y se desacopla del dueño de la app.
 _SIDEBAR_BLOQUES = [
-    # "Operación": los checkpoints que el equipo toca cada día — el Feed (red social interna +
-    # lista de contenido), la Programación (calendario de publicaciones, por marca) y los Turnos
-    # (rota de cobertura del equipo, por marca; el tablero de Tareas vive integrado como pestaña
-    # «Cobertura» dentro de Turnos, sin entrada propia de nav). La página "Revisión" se retiró
-    # por obsoleta (la aprobación vive en línea en el Feed).
-    ["Feed", "Programación", "Turnos"],
-    # "Contenido": TRES páginas planas por tipo de contenido (sin hub con pestañas) —
-    # Imagen (editor de imagen por capas + IA), Video (estudio de video) y Texto (la
-    # Texto: prompts + línea editorial + plantillas).
-    ["Imagen", "Video", "Texto"],
-    # "Máquina": dos cockpits de trabajo de igual peso (Investigación: descubre/verifica;
-    # Producción: genera copy/arte) — que SON los dos agentes IA — + la entrada «Agentes», el hub
-    # «sala de máquinas» (su Cómputo/cola en vivo, y en pestañas hermanas in-page la Economía
-    # —coste— y la Actividad —la traza—). No hay lista de agentes aparte: el on/off y los prompts
-    # viven en los cockpits; su salud, en el doctor.
-    ["Investigación", "Producción", "Agentes"],
+    # "Operación": los checkpoints que el equipo toca cada día. Investigación (el pool de noticias
+    # que el equipo revisa: Noticias/Fuentes/Algoritmos/Contenidos) abre el bloque, ENCIMA del Feed;
+    # luego el Feed (red social interna + lista), la Programación (calendario) y los Turnos (rota;
+    # el tablero de Tareas vive dentro de Turnos como «Cobertura», sin entrada propia).
+    ["Investigación", "Feed", "Programación", "Turnos"],
+    # "Contenido": DOS páginas planas por tipo de contenido — Imagen (editor por capas + IA) y
+    # Video (estudio de video). La página «Texto»/Biblioteca se retiró: los prompts viven en cada
+    # fase del pipeline en «Contexto».
+    ["Imagen", "Video"],
+    # "Máquina": «Contexto» (la máquina en una página — el pipeline de cada motor como estructura,
+    # con prompt/contexto/logs y on/off por fase) + «Agentes» (la sala de máquinas: Cómputo/cola en
+    # vivo y, en pestañas hermanas, Economía —coste— y Actividad —la traza—).
+    ["Contexto", "Agentes"],
     # "Datos": lo que alimenta o refleja la automatización. Solo queda Analíticas (la medición
     # que cierra el loop); la aporta `metricas.toml`.
     ["Analíticas"],
@@ -79,7 +76,9 @@ def test_cada_app_lleva_descripcion_y_nav_para_la_tarjeta():
 
     # La ruta primaria (primer item) de cada app: `nav` viene ordenada por bloque de
     # flujo (grupo_orden, orden).
-    assert porid["produccion"]["nav"][0]["ruta"] == "/contenido/imagen"
+    # La 1ª entrada de `produccion` por bloque de flujo es ahora Investigación (operación 10/10),
+    # por delante de Imagen (contenido 20/10).
+    assert porid["produccion"]["nav"][0]["ruta"] == "/maquina/investigacion"
     assert porid["metricas"]["nav"][0]["ruta"] == "/datos/analiticas"
     # La app "operacion" aporta TRES entradas (Feed, Programación, Turnos); la 1ª por orden es
     # Feed (el tablero de Tareas ya no tiene entrada: vive dentro de Turnos como «Cobertura»).
@@ -103,10 +102,12 @@ def test_iconos_de_nav_son_strings_lucide():
     assert iconos["/operacion/feed"] == "LayoutGrid"
     assert iconos["/operacion/programacion"] == "CalendarDays"
     assert iconos["/operacion/turnos"] == "CalendarClock"
-    # Los motores de la máquina viven en el bloque «Máquina» (una sola entrada cada uno);
-    # las viejas entradas «datos» (/datos/investigacion, /datos/produccion) se retiraron del menú.
+    # Investigación (el cockpit operativo del pool) vive en «Operación»; «Contexto» (el pipeline de
+    # ambos motores) en «Máquina». La vieja entrada «Producción» se retiró (su pipeline está en
+    # Contexto); `/maquina/produccion` redirige a `/maquina/contexto`.
     assert iconos["/maquina/investigacion"] == "Search"
-    assert iconos["/maquina/produccion"] == "Wand2"
+    assert iconos["/maquina/contexto"] == "Layers"
+    assert "/maquina/produccion" not in iconos
     # El hub de la sala de máquinas se llama «Agentes» (icono Bot), ruta /maquina/computo.
     assert iconos["/maquina/computo"] == "Bot"
     # No hay entrada de nav con ruta /maquina/agentes (la lista se retiró; solo existe el detalle).
@@ -141,7 +142,7 @@ def test_shell_no_es_app_ni_aporta_nav():
     cat = registro.catalogo(_entorno())
     assert "shell" not in [a["id"] for a in cat["apps"]]
     primer_bloque = cat["navegacion"][0]["items"]
-    assert primer_bloque[0]["ruta"] == "/operacion/feed"
+    assert primer_bloque[0]["ruta"] == "/maquina/investigacion"
     rutas = [i["ruta"] for g in cat["navegacion"] for i in g["items"]]
     assert "/panel" not in rutas
 
