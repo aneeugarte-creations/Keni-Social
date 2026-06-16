@@ -346,6 +346,11 @@ export interface PlantillaDiseno {
    * fotón). Independiente por plantilla; configurable desde la galería y el editor. */
   foto_muestra: string;
   foto_muestra_url: string;
+  /** Texto de muestra de la plantilla para el OVERVIEW de la galería: titular (`copy_in`) y
+   * subtítulo/pleca (`etiqueta_default`). Vacío => fallback ("TITULAR" para el titular; el texto
+   * literal de la capa para la pleca). No entra al documento editable. */
+  titular_muestra: string;
+  etiqueta_muestra: string;
   lineas: string[];
   activo: boolean;
   /** Entra en la ROTACIÓN automática de la marca (cada post nuevo se lleva la siguiente del grupo). */

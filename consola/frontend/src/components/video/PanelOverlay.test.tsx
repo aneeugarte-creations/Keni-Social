@@ -77,6 +77,8 @@ function plantilla(): PlantillaDiseno {
     miniatura_url: "",
     foto_muestra: "",
     foto_muestra_url: "",
+    titular_muestra: "",
+    etiqueta_muestra: "",
     lineas: [],
     activo: true,
     rotar: false,

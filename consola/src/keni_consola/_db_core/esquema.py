@@ -827,6 +827,9 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # en los huecos `es_foto` vacíos al generar la miniatura/preview, para que la GALERÍA se vea «tal
     # cual quedaría». NO entra al documento editable: el editor arranca con el hueco vacío (la muestra
     # solo aparece al pulsar el fotón). Independiente por plantilla; configurable desde galería y editor.
+    # `titular_muestra`/`etiqueta_muestra` son el TEXTO de muestra por plantilla (titular `copy_in` y
+    # pleca/subtítulo `etiqueta_default`): el overview los inyecta en vez del "TITULAR" genérico / del
+    # literal de la pleca. Vacío => fallback ("TITULAR" para el titular; el texto literal para la pleca).
     # `tipo` ("foto" | "miniatura") es un eje ORTOGONAL a `categoria`: foto = plantilla para
     # fotos/imagenes; miniatura = portada/thumbnail de video. Las BDs existentes reciben el
     # DEFAULT "foto" via `_migrar_columnas_plantillas_diseno`.
@@ -840,6 +843,8 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         documento    TEXT NOT NULL DEFAULT '{}',
         miniatura    TEXT NOT NULL DEFAULT '',
         foto_muestra TEXT NOT NULL DEFAULT '',
+        titular_muestra  TEXT NOT NULL DEFAULT '',
+        etiqueta_muestra TEXT NOT NULL DEFAULT '',
         lineas       TEXT NOT NULL DEFAULT '[]',
         activo       INTEGER NOT NULL DEFAULT 1,
         rotar        INTEGER NOT NULL DEFAULT 0,

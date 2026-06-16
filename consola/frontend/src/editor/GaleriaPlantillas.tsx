@@ -89,10 +89,10 @@ interface PropsContenido {
   /** Si se omite, el badge de categoría es solo informativo (modo SELECTOR). */
   onCategorizar?: (p: PlantillaDiseno, categoria: string) => void;
   /**
-   * Si se pasa (modo GESTIÓN), cada tarjeta ofrece «Foto de muestra…»: asignar una foto
-   * representativa a ESA plantilla que se hornea en su miniatura/preview, para que la galería se vea
-   * «tal cual quedaría». No entra al documento editable. Es la PUERTA de galería al mismo
-   * `foto_muestra` que el fotón del editor.
+   * Si se pasa (modo GESTIÓN), cada tarjeta ofrece «Foto y texto de muestra…»: asignar a ESA plantilla
+   * una foto + titular + subtítulo representativos que se hornean en su miniatura/preview, para que la
+   * galería se vea «tal cual quedaría». No entra al documento editable. Es la PUERTA de galería a la
+   * misma muestra que el fotón del editor.
    */
   onFotoMuestra?: (p: PlantillaDiseno) => void;
   /**
@@ -228,8 +228,9 @@ export function ContenidoPlantillas({
   const tarjeta = (p: PlantillaDiseno) => {
     const accionesMenuContextual: EntradaMenuContextual[] = [];
     if (onFotoMuestra) {
+      const tieneMuestra = p.foto_muestra || p.titular_muestra || p.etiqueta_muestra;
       accionesMenuContextual.push({
-        etiqueta: p.foto_muestra ? "Cambiar foto de muestra…" : "Foto de muestra…",
+        etiqueta: tieneMuestra ? "Editar muestra…" : "Foto y texto de muestra…",
         icono: ImagePlus,
         onClick: () => onFotoMuestra(p),
       });

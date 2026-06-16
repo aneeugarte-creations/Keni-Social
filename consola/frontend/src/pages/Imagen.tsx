@@ -44,6 +44,9 @@ import { prepararDocumento } from "@/lib/placa/docPieza";
 
 type TipoPlantilla = "foto" | "miniatura";
 
+// Muestra de una plantilla para el OVERVIEW de la galería (no entra al documento): foto + texto.
+type MuestraVals = { foto?: string; titular?: string; etiqueta?: string };
+
 // Todo post es 4:5 (1080×1350). El tamaño se puede ajustar en «Ajustes del lienzo».
 const DIMS_DEFECTO: Documento["formato"] = { w: 1080, h: 1350, safe_top: 60, safe_bottom: 96 };
 
@@ -480,27 +483,27 @@ export default function Imagen() {
     };
   }, [activa, qc]);
 
-  // Genera la miniatura (render best-effort) del documento actual. Inyecta un titular de muestra:
-  // las capas con `binding:"copy_in"` renderizan ese texto en vez de quedar vacías (sin esto, la
-  // miniatura de la galería sale SIN titular, porque su texto sale del binding, no del literal).
-  // Si la plantilla tiene `fotoMuestra`, la HORNEA en los huecos vacíos (galería «tal cual quedaría»);
-  // sin muestra, los huecos quedan grises. El documento editable NO se toca (solo esta copia).
-  const miniaturaDe = async (documento: Documento, fotoMuestra = ""): Promise<string> => {
-    let doc = fotoMuestra ? conFotoEnHuecosVacios(documento, fotoMuestra) : documento;
-    // Revela el subtítulo/pleca (binding `etiqueta_default`) con su texto literal: el binding llega
-    // vacío en el overview y el render omitiría la capa, así que la desvinculamos para que se vea en
-    // la galería. El titular (`copy_in`) sigue con el placeholder "TITULAR".
-    doc = conTextosHorneados(doc, (c) => (c.binding === "etiqueta_default" ? c.texto : null));
+  // Genera la miniatura (render best-effort) del documento con la MUESTRA de la galería horneada:
+  //  - foto: la `foto_muestra` en los huecos `es_foto` vacíos (sin ella, grises).
+  //  - titular (`copy_in`): el texto de muestra o "TITULAR" (sin esto saldría vacío: sale del binding).
+  //  - subtítulo/pleca (`etiqueta_default`): el texto de muestra si lo hay; si no, se REVELA el literal
+  //    de la capa (el binding llega vacío en el overview y el render omitiría la capa).
+  // El documento editable NO se toca (solo esta copia).
+  const miniaturaDe = async (documento: Documento, m: MuestraVals = {}): Promise<string> => {
+    let doc = m.foto ? conFotoEnHuecosVacios(documento, m.foto) : documento;
+    if (!m.etiqueta) doc = conTextosHorneados(doc, (c) => (c.binding === "etiqueta_default" ? c.texto : null));
     try {
-      return (await api.imagenRender(doc, { copy_in: "TITULAR", etiqueta_default: "" })).id;
+      return (await api.imagenRender(doc, { copy_in: m.titular || "TITULAR", etiqueta_default: m.etiqueta || "" })).id;
     } catch {
       return "";
     }
   };
 
-  // Objeto de la foto de muestra ACTUAL de una plantilla (de la caché de la query), o "".
-  const fotoMuestraDe = (plantillaId: string): string =>
-    plantillasQ.data?.plantillas.find((p) => p.id === plantillaId)?.foto_muestra ?? "";
+  // Muestra ACTUAL de una plantilla (de la caché de la query): foto + titular + subtítulo.
+  const muestraActualDe = (plantillaId: string): MuestraVals => {
+    const p = plantillasQ.data?.plantillas.find((x) => x.id === plantillaId);
+    return { foto: p?.foto_muestra || "", titular: p?.titular_muestra || "", etiqueta: p?.etiqueta_muestra || "" };
+  };
 
   // GUARDAR: si la pestaña ya está atada a una plantilla, la sobrescribe (sin pedir nombre);
   // si no, abre «Guardar como».
@@ -510,9 +513,9 @@ export default function Imagen() {
       if (!pestanaActiva.plantillaId) throw new Error("__sin_plantilla__");
       const documento = storeActivo.getState().documento;
       if (!documento.capas.some((c) => c.tipo === "imagen" && c.es_foto)) throw new Error("__sin_hueco__");
-      // Hornea la muestra ya asignada a la plantilla (si la hay) para que la miniatura no pierda la
-      // foto de la galería al re-guardar el diseño.
-      const miniatura = await miniaturaDe(documento, fotoMuestraDe(pestanaActiva.plantillaId));
+      // Hornea la muestra ya asignada a la plantilla (foto + texto) para que la miniatura no la pierda
+      // al re-guardar el diseño.
+      const miniatura = await miniaturaDe(documento, muestraActualDe(pestanaActiva.plantillaId));
       return api.actualizarPlantillaDiseno(pestanaActiva.plantillaId, { documento, miniatura });
     },
     onSuccess: () => {
@@ -589,15 +592,24 @@ export default function Imagen() {
     return (await api.mediaDesdeUrl(src)).id;
   };
 
-  // PUERTA COMPARTIDA (galería + fotón del editor): fija/limpia la `foto_muestra` de una plantilla y
-  // regenera su miniatura horneada. `documento` es el que se hornea (el de la plantilla en galería; el
-  // del lienzo en el editor). El hueco del documento editable NO se toca.
+  // PUERTA COMPARTIDA (galería + fotón del editor): fija la MUESTRA de una plantilla (foto + texto) y
+  // regenera su miniatura horneada. `foto`: null = no se tocó (conserva la actual); string = nueva
+  // ("" la quita). `titular`/`etiqueta`: texto de muestra ("" = fallback). `documento` es el que se
+  // hornea (el de la plantilla en galería; el del lienzo en el editor). El documento editable NO se toca.
   const fijarMuestra = useMutation({
-    mutationFn: async ({ plantillaId, documento, src }: { plantillaId: string; documento: Documento; src: string }) => {
-      const objeto = await subirMuestra(src);
-      const miniatura = await miniaturaDe(documento, objeto);
+    mutationFn: async ({ plantillaId, documento, foto, titular, etiqueta }: {
+      plantillaId: string;
+      documento: Documento;
+      foto: string | null;
+      titular: string;
+      etiqueta: string;
+    }) => {
+      const objeto = foto === null ? muestraActualDe(plantillaId).foto || "" : await subirMuestra(foto);
+      const miniatura = await miniaturaDe(documento, { foto: objeto, titular, etiqueta });
       return api.actualizarPlantillaDiseno(plantillaId, {
         foto_muestra: objeto,
+        titular_muestra: titular,
+        etiqueta_muestra: etiqueta,
         // Si el render falla ("") conservamos la miniatura anterior en vez de borrarla.
         ...(miniatura ? { miniatura } : {}),
       });
@@ -605,7 +617,7 @@ export default function Imagen() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["plantillas-diseno"] });
       setMuestraDe(null);
-      toast.success("Foto de muestra actualizada.");
+      toast.success("Muestra actualizada.");
     },
     onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "No se pudo fijar la muestra."),
   });
@@ -935,14 +947,22 @@ export default function Imagen() {
             // (sin hueco no autoguarda a servidor ni deja Guardar).
             avisaHueco={!!pestanaActiva.plantillaId}
             // PUERTA EDITOR de la foto de muestra: solo si la pestaña edita una plantilla. El fotón
-            // de «Vista con muestra» persiste lo que se sube/pega como `foto_muestra` de ESA plantilla
-            // (se hornea en la galería) sobre el documento actual del lienzo.
+            // de «Vista con muestra» persiste la FOTO que se sube/pega como muestra de ESA plantilla
+            // (el texto de muestra se conserva: se edita desde el ⋮ de la galería).
             onFotoMuestra={
               pestanaActiva.plantillaId
                 ? (src) => {
                     const plantillaId = pestanaActiva.plantillaId;
-                    if (plantillaId)
-                      fijarMuestra.mutate({ plantillaId, documento: storeActivo.getState().documento, src });
+                    if (plantillaId) {
+                      const cur = muestraActualDe(plantillaId);
+                      fijarMuestra.mutate({
+                        plantillaId,
+                        documento: storeActivo.getState().documento,
+                        foto: src,
+                        titular: cur.titular || "",
+                        etiqueta: cur.etiqueta || "",
+                      });
+                    }
                   }
                 : undefined
             }
@@ -974,16 +994,22 @@ export default function Imagen() {
         )}
       </div>
 
-      {/* Diálogo de FOTO DE MUESTRA (puerta de galería): asigna/quita la muestra de una plantilla
-          sin abrir el editor. `key` reinicia el estado al cambiar de plantilla. */}
+      {/* Diálogo de MUESTRA (puerta de galería): foto + texto de la plantilla, sin abrir el editor.
+          `key` reinicia el estado al cambiar de plantilla. */}
       {muestraDe && (
         <DialogoFotoMuestra
           key={muestraDe.id}
           plantilla={muestraDe}
           aplicando={fijarMuestra.isPending}
           onCerrar={() => setMuestraDe(null)}
-          onAplicar={(src) =>
-            fijarMuestra.mutate({ plantillaId: muestraDe.id, documento: muestraDe.documento as Documento, src })
+          onAplicar={({ foto, titular, etiqueta }) =>
+            fijarMuestra.mutate({
+              plantillaId: muestraDe.id,
+              documento: muestraDe.documento as Documento,
+              foto,
+              titular,
+              etiqueta,
+            })
           }
         />
       )}

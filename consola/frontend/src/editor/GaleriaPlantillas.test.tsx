@@ -55,6 +55,8 @@ const FOTO: PlantillaDiseno = {
   miniatura_url: "",
   foto_muestra: "",
   foto_muestra_url: "",
+  titular_muestra: "",
+  etiqueta_muestra: "",
   lineas: [],
   activo: true,
   rotar: false,
@@ -575,24 +577,31 @@ describe("ContenidoPlantillas — agrupación por marca y «Lienzo en blanco»",
 describe("ContenidoPlantillas — foto de muestra", () => {
   const gestion = { onDuplicar: vi.fn(), onBorrar: vi.fn() };
 
-  it("ofrece «Foto de muestra…» en el kebab de la tarjeta y lo invoca con la plantilla", async () => {
+  it("ofrece «Foto y texto de muestra…» en el kebab de la tarjeta y lo invoca con la plantilla", async () => {
     const onFotoMuestra = vi.fn();
     render(<ContenidoPlantillas plantillas={[FOTO]} onCargar={vi.fn()} onFotoMuestra={onFotoMuestra} {...gestion} />);
     fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: /^Foto de muestra/ }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Foto y texto de muestra/ }));
     expect(onFotoMuestra).toHaveBeenCalledWith(FOTO);
   });
 
-  it("con foto_muestra ya asignada la entrada dice «Cambiar foto de muestra…»", async () => {
+  it("con muestra ya asignada la entrada dice «Editar muestra…»", async () => {
     const conMuestra: PlantillaDiseno = { ...FOTO, foto_muestra: "plantillas/m.jpg", foto_muestra_url: "/api/media/plantillas/m.jpg" };
     render(<ContenidoPlantillas plantillas={[conMuestra]} onCargar={vi.fn()} onFotoMuestra={vi.fn()} {...gestion} />);
     fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
-    expect(await screen.findByRole("menuitem", { name: /Cambiar foto de muestra/ })).toBeInTheDocument();
+    expect(await screen.findByRole("menuitem", { name: /Editar muestra/ })).toBeInTheDocument();
   });
 
-  it("en modo selector (sin acciones de gestión) no hay kebab ni «foto de muestra»", () => {
+  it("con solo titular_muestra (sin foto) también dice «Editar muestra…»", async () => {
+    const conTitular: PlantillaDiseno = { ...FOTO, titular_muestra: "LEO MESSI" };
+    render(<ContenidoPlantillas plantillas={[conTitular]} onCargar={vi.fn()} onFotoMuestra={vi.fn()} {...gestion} />);
+    fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
+    expect(await screen.findByRole("menuitem", { name: /Editar muestra/ })).toBeInTheDocument();
+  });
+
+  it("en modo selector (sin acciones de gestión) no hay kebab ni «muestra»", () => {
     render(<ContenidoPlantillas plantillas={[FOTO]} onCargar={vi.fn()} />);
     expect(screen.queryByRole("button", { name: "Más acciones" })).toBeNull();
-    expect(screen.queryByRole("menuitem", { name: /foto de muestra/i })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: /muestra/i })).toBeNull();
   });
 });

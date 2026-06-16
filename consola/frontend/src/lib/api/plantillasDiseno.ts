@@ -28,10 +28,11 @@ export const apiPlantillasDiseno = {
     lineas?: string[];
   }) => peticion<{ plantilla: PlantillaDiseno }>("/plantillas-diseno", { metodo: "POST", json: cuerpo }),
   // Actualiza una plantilla existente (PATCH): «Guardar» sobre la plantilla ya creada.
-  // `foto_muestra: ""` limpia la muestra (la galería vuelve a huecos grises).
+  // Muestra de la galería: `foto_muestra`/`titular_muestra`/`etiqueta_muestra`; `""` en cada uno limpia
+  // ese campo (foto -> huecos grises; titular -> "TITULAR"; pleca -> el texto literal de la capa).
   actualizarPlantillaDiseno: (
     id: string,
-    cuerpo: { nombre?: string; categoria?: string; tipo?: "foto" | "miniatura"; documento?: unknown; miniatura?: string; foto_muestra?: string; lineas?: string[]; activo?: boolean; rotar?: boolean },
+    cuerpo: { nombre?: string; categoria?: string; tipo?: "foto" | "miniatura"; documento?: unknown; miniatura?: string; foto_muestra?: string; titular_muestra?: string; etiqueta_muestra?: string; lineas?: string[]; activo?: boolean; rotar?: boolean },
   ) => peticion<{ plantilla: PlantillaDiseno }>(`/plantillas-diseno/${encodeURIComponent(id)}`, { metodo: "PATCH", json: cuerpo }),
   borrarPlantillaDiseno: (id: string) =>
     peticion<{ mensaje: string }>(`/plantillas-diseno/${encodeURIComponent(id)}`, { metodo: "DELETE" }),

@@ -185,6 +185,17 @@ def _migrar_columnas_plantillas_diseno(con: Any) -> None:
         con.execute(
             "ALTER TABLE plantillas_diseno ADD COLUMN IF NOT EXISTS foto_muestra TEXT NOT NULL DEFAULT ''"
         )
+    # `titular_muestra`/`etiqueta_muestra`: TEXTO de muestra por plantilla (titular + pleca/subtítulo)
+    # que el overview pinta en vez del genérico. Las existentes reciben "" (fallback al comportamiento
+    # previo: "TITULAR" y el literal de la pleca).
+    if "titular_muestra" not in cols:
+        con.execute(
+            "ALTER TABLE plantillas_diseno ADD COLUMN IF NOT EXISTS titular_muestra TEXT NOT NULL DEFAULT ''"
+        )
+    if "etiqueta_muestra" not in cols:
+        con.execute(
+            "ALTER TABLE plantillas_diseno ADD COLUMN IF NOT EXISTS etiqueta_muestra TEXT NOT NULL DEFAULT ''"
+        )
     # `categoria` pasa de DEFAULT 'post' a 'general' (el fallback del catálogo de categorías).
     # Solo cambia el DEFAULT (metadato): las filas existentes NO se reescriben (el legado "post"
     # se trata como "general" en API y frontend). Idempotente.

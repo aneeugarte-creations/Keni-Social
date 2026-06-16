@@ -35,6 +35,7 @@ from ..seguridad import autor_de_peticion
 
 _MAX_NOMBRE = 120
 _MAX_LINEAS = 24
+_MAX_MUESTRA_TEXTO = 200  # tope del titular/pleca de muestra (solo overview de la galería)
 _TIPOS_VALIDOS = frozenset({"foto", "miniatura"})
 
 
@@ -74,6 +75,12 @@ def _promover_foto_muestra(valor: object) -> str:
     no efímero en `fotos/`). Idempotente vía `promover_objeto`."""
     objeto = valor.strip() if isinstance(valor, str) else ""
     return almacen_media.promover_objeto(objeto, "plantillas") if objeto else ""
+
+
+def _texto_muestra(valor: object) -> str:
+    """Normaliza un texto de muestra (titular/pleca del overview): str recortado a `_MAX_MUESTRA_TEXTO`,
+    o "" (que en el render cae al fallback: "TITULAR" para el titular, el literal para la pleca)."""
+    return valor.strip()[:_MAX_MUESTRA_TEXTO] if isinstance(valor, str) else ""
 
 
 def _plantilla_a_dict(item: dict) -> dict:
@@ -175,6 +182,8 @@ async def crear(request: Request) -> Response:
         # La miniatura es un asset REUSABLE de la plantilla: a la carpeta `plantillas/`.
         miniatura = almacen_media.promover_objeto(miniatura, "plantillas")
     foto_muestra = _promover_foto_muestra(datos.get("foto_muestra"))
+    titular_muestra = _texto_muestra(datos.get("titular_muestra"))
+    etiqueta_muestra = _texto_muestra(datos.get("etiqueta_muestra"))
     lineas = _normalizar_lineas(datos.get("lineas"))
 
     plantilla = repos.crear_plantilla_diseno(
@@ -185,6 +194,8 @@ async def crear(request: Request) -> Response:
         documento=json.dumps(doc_ok, ensure_ascii=False),
         miniatura=miniatura,
         foto_muestra=foto_muestra,
+        titular_muestra=titular_muestra,
+        etiqueta_muestra=etiqueta_muestra,
         lineas=json.dumps(lineas, ensure_ascii=False),
         rotar=bool(datos.get("rotar")),
         autor=autor_de_peticion(request),
@@ -239,6 +250,10 @@ async def actualizar(request: Request) -> Response:
     if "foto_muestra" in datos:
         # "" limpia la muestra (huecos grises de nuevo); cualquier objeto se promueve a `plantillas/`.
         campos["foto_muestra"] = _promover_foto_muestra(datos.get("foto_muestra"))
+    if "titular_muestra" in datos:
+        campos["titular_muestra"] = _texto_muestra(datos.get("titular_muestra"))
+    if "etiqueta_muestra" in datos:
+        campos["etiqueta_muestra"] = _texto_muestra(datos.get("etiqueta_muestra"))
     if "lineas" in datos:
         campos["lineas"] = json.dumps(_normalizar_lineas(datos.get("lineas")), ensure_ascii=False)
     if "activo" in datos:
@@ -320,11 +335,11 @@ def _revelar_pleca(doc: dict) -> dict:
 async def preview(request: Request) -> Response:
     """GET /api/plantillas-diseno/{id}/preview: MINIATURA on-demand del diseño (sin persistir).
 
-    Renderiza el DOCUMENTO de la plantilla (con su `foto_muestra` horneada en los huecos vacíos, un
-    titular de ejemplo y el subtítulo/pleca con su texto) a PNG. Es el RESPALDO de la galería cuando la plantilla no tiene `miniatura`
-    guardada —p. ej. las creadas por API/agente, que no pasan por el guardado del estudio (es ahí
-    donde se genera la miniatura)—. Así se ven todas sin tener que abrir+editar cada una. ETag por
-    hash del documento + `foto_muestra` (cambiar la muestra invalida la caché); cacheable (304 sin
+    Renderiza el DOCUMENTO de la plantilla (con su foto de muestra horneada en los huecos vacíos y el
+    titular/subtítulo de muestra) a PNG. Es el RESPALDO de la galería cuando la plantilla no tiene
+    `miniatura` guardada —p. ej. las creadas por API/agente, que no pasan por el guardado del estudio
+    (es ahí donde se genera la miniatura)—. Así se ven todas sin tener que abrir+editar cada una. ETag
+    por hash del documento + la muestra (foto y texto): cambiarla invalida la caché; cacheable (304 sin
     recomponer si no cambió). 404 si no existe; 422 si el render falla.
     """
     item = repos.obtener_plantilla_diseno(request.path_params["plantilla_id"])
@@ -332,16 +347,23 @@ async def preview(request: Request) -> Response:
         return JSONResponse({"error": "Esa plantilla no existe."}, status_code=404)
     documento = item.get("documento") or "{}"
     foto_muestra = item.get("foto_muestra") or ""
-    etag = '"' + hashlib.sha256(f"{documento}|{foto_muestra}".encode()).hexdigest()[:32] + '"'
+    titular_muestra = item.get("titular_muestra") or ""
+    etiqueta_muestra = item.get("etiqueta_muestra") or ""
+    clave_etag = f"{documento}|{foto_muestra}|{titular_muestra}|{etiqueta_muestra}"
+    etag = '"' + hashlib.sha256(clave_etag.encode()).hexdigest()[:32] + '"'
     cache = "private, max-age=300"
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers={"ETag": etag, "Cache-Control": cache})
     try:
         doc = json.loads(documento) if isinstance(documento, str) else documento
         doc = _hornear_muestra(doc, foto_muestra)
-        doc = _revelar_pleca(doc)  # el subtítulo (etiqueta_default) se ve con su texto en la galería
+        # Subtítulo/pleca: con texto de muestra propio se INYECTA (binding); sin él, se revela el
+        # literal de la capa (quitando el binding) para que igualmente se vea en la galería.
+        if not etiqueta_muestra:
+            doc = _revelar_pleca(doc)
         datos = estudio_imagen.renderizar_documento_bytes(
-            doc, bindings={"copy_in": "TITULAR", "etiqueta_default": ""}
+            doc,
+            bindings={"copy_in": titular_muestra or "TITULAR", "etiqueta_default": etiqueta_muestra},
         )
     except (ValueError, TypeError) as e:
         return JSONResponse({"error": f"Documento inválido: {e}"}, status_code=422)

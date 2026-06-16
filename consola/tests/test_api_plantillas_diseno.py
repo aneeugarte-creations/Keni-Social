@@ -319,6 +319,24 @@ def test_patch_foto_muestra_set_y_limpia(cliente):
     assert r2.json()["plantilla"]["foto_muestra_url"] == ""
 
 
+def test_texto_muestra_round_trip_y_patch(cliente):
+    """`titular_muestra`/`etiqueta_muestra` (texto del overview) se crean, persisten y editan; `""` limpia."""
+    p = cliente.post("/api/plantillas-diseno", json={
+        "marca": "unotv", "documento": _DOC,
+        "titular_muestra": "CRISTIANO RONALDO", "etiqueta_muestra": "1945-2026",
+    }).json()["plantilla"]
+    assert p["titular_muestra"] == "CRISTIANO RONALDO"
+    assert p["etiqueta_muestra"] == "1945-2026"
+    # Por defecto, vacíos.
+    vacia = cliente.post("/api/plantillas-diseno", json={"marca": "unotv", "documento": _DOC}).json()["plantilla"]
+    assert vacia["titular_muestra"] == "" and vacia["etiqueta_muestra"] == ""
+
+    r = cliente.patch(f"/api/plantillas-diseno/{p['id']}", json={"titular_muestra": "LEO MESSI", "etiqueta_muestra": ""})
+    assert r.status_code == 200
+    assert r.json()["plantilla"]["titular_muestra"] == "LEO MESSI"
+    assert r.json()["plantilla"]["etiqueta_muestra"] == ""
+
+
 def test_hornear_muestra_solo_rellena_huecos_vacios():
     """`_hornear_muestra` pone la muestra en los huecos `es_foto` VACÍOS y no toca el resto."""
     from keni_consola.api.plantillas_diseno import _hornear_muestra
