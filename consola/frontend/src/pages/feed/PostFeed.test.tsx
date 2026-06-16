@@ -337,10 +337,11 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     expect(screen.queryByRole("button", { name: /forzar/i })).not.toBeInTheDocument();
   });
 
-  it("orden de gates: el autor con comentarios sin resolver recibe el motivo de elegibilidad", async () => {
-    // Cadena con nivel humano pendiente + 2 comentarios sin resolver, pero el usuario u1 es el
-    // AUTOR: el toast explica que no puede dar OK a su pieza, NO le manda a resolver comentarios
-    // de un OK que no puede dar.
+  it("el autor SÍ puede dar OK; con comentarios sin resolver, el like le manda a resolverlos", async () => {
+    // Tras fase3 el autor NO está bloqueado de dar uno de los dos OK (espeja el backend: solo
+    // "ya diste tu OK" bloquea, y los dos OK los dan personas distintas). Con la cadena en un
+    // nivel humano pendiente y comentarios sin resolver, el botón es «Dale tu OK» y pulsarlo te
+    // manda a resolver los comentarios antes de aprobar (ya NO hay gate de "tu propia pieza").
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string | URL) => {
@@ -379,9 +380,9 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     renderPost(pub({ estado: "en_revision", etapa_ia: "lista_para_revisar", autor_id: "u1" }));
     // Espera a que la cadena cargue (el aviso de comentarios aparece en el panel).
     expect(await screen.findByText(/Resuelve 2 comentarios/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Me gusta: no disponible" }));
-    expect(toast).toHaveBeenCalledWith(expect.stringMatching(/tu propia pieza/i));
-    expect(toast).not.toHaveBeenCalledWith(expect.stringMatching(/Resuelve/));
+    fireEvent.click(screen.getByRole("button", { name: "Dale tu OK" }));
+    expect(toast).toHaveBeenCalledWith(expect.stringMatching(/Resuelve 2 comentarios/));
+    expect(toast).not.toHaveBeenCalledWith(expect.stringMatching(/tu propia pieza/i));
   });
 
   it("cadena que falla (500): franja con «Reintentar» y el like explica el error, no el turno", async () => {
