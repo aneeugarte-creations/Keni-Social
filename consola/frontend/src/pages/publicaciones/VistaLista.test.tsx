@@ -79,7 +79,7 @@ function renderLista(
           publicaciones={publicaciones}
           onEditar={vi.fn()}
           onDuplicar={vi.fn()}
-          onConfigurarCadencia={vi.fn()}
+          onConfigurarHorarios={vi.fn()}
         />
       </MemoryRouter>
     </QueryClientProvider>

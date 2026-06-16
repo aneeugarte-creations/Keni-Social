@@ -201,50 +201,6 @@ export interface CuerpoCrearFranja {
   categoria?: string;
 }
 
-// --- Cadencia por red (margen entre posts) ---
-
-/**
- * Una cadencia: scheduling por margen mínimo entre publicaciones de una red,
- * dentro de una ventana horaria y unos días, opcionalmente acotada a marca/red.
- */
-export interface Cadencia {
-  id: string;
-  /** Marca asociada (`""` si aplica a todas). */
-  marca: string;
-  marca_nombre: string;
-  /** Red asociada (`""` si aplica a todas). */
-  red: string;
-  red_nombre: string;
-  /** Minutos mínimos entre posts. */
-  margen_min: number;
-  /** Hora de inicio de la ventana, formato "HH:MM". */
-  hora_inicio: string;
-  /** Hora de fin de la ventana, formato "HH:MM". */
-  hora_fin: string;
-  /** Días activos: 0=lunes .. 6=domingo. */
-  dias: number[];
-  activo: boolean;
-}
-
-export interface RespuestaCadencias {
-  cadencias: Cadencia[];
-}
-
-export interface RespuestaCadencia {
-  cadencia: Cadencia;
-}
-
-/** Cuerpo para crear o actualizar (UPSERT por marca+red) una cadencia. */
-export interface CuerpoGuardarCadencia {
-  marca?: string;
-  red?: string;
-  margen_min: number;
-  hora_inicio: string;
-  hora_fin: string;
-  dias: number[];
-  activo?: boolean;
-}
-
 /** Respuesta del borrado batch (`POST /api/publicaciones/borrar-lote`). */
 export interface RespuestaBorrarLotePublicaciones {
   /** Cuántas se borraron de verdad. */

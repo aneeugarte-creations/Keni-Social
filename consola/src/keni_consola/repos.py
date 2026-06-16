@@ -168,14 +168,11 @@ from .repos_editor import (  # noqa: F401
 )
 from .repos_hashtags_franjas import (  # noqa: F401
     actualizar_grupo_hashtags,
-    borrar_cadencia,
     borrar_franja,
     borrar_grupo_hashtags,
     contar_grupos_hashtags,
     crear_franja,
     crear_grupo_hashtags,
-    guardar_cadencia,
-    listar_cadencias,
     listar_franjas,
     listar_grupos_hashtags,
     obtener_grupo_hashtags,

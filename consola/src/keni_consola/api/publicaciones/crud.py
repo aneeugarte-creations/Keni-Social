@@ -88,7 +88,7 @@ def _normalizar_fecha_programada(valor: str) -> tuple[str | None, str | None]:
     except ValueError:
         return None, "La fecha programada no es válida (usa AAAA-MM-DDTHH:MM)."
     # `iso_utc` canoniza a segundos; el canon de parrilla es a MINUTOS (lo que generan
-    # franjas/cadencias y el picker de la UI): truncamos el sufijo ":SS".
+    # las franjas y el picker de la UI): truncamos el sufijo ":SS".
     return iso_utc(dt)[:16], None
 
 

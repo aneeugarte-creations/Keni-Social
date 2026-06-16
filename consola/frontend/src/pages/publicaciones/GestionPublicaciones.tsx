@@ -95,10 +95,10 @@ export function faltaMarcaAsignada(
  */
 export function GestionPublicaciones({
   modo,
-  onConfigurarCadencia,
+  onConfigurarHorarios,
 }: {
   modo: "lista" | "calendario";
-  onConfigurarCadencia?: () => void;
+  onConfigurarHorarios?: () => void;
 }) {
   const { marcaActiva } = useMarcaActiva();
   const calendario = modo === "calendario";
@@ -133,7 +133,7 @@ export function GestionPublicaciones({
       calendario={calendario}
       opciones={opcionesQuery.data}
       marcaActiva={marcaActiva}
-      onConfigurarCadencia={onConfigurarCadencia}
+      onConfigurarHorarios={onConfigurarHorarios}
     />
   );
 }
@@ -142,12 +142,12 @@ function Cuerpo({
   calendario,
   opciones,
   marcaActiva,
-  onConfigurarCadencia,
+  onConfigurarHorarios,
 }: {
   calendario: boolean;
   opciones: OpcionesPublicaciones;
   marcaActiva: string | null;
-  onConfigurarCadencia?: () => void;
+  onConfigurarHorarios?: () => void;
 }) {
   // RED y LÍNEA las mandan los selectores GLOBALES de la topbar (la elegibilidad de
   // línea por marca y su reseteo viven en el provider). La MARCA, el switch de marca.
@@ -393,7 +393,7 @@ function Cuerpo({
             publicaciones={publicaciones}
             onEditar={setEditando}
             onDuplicar={setDuplicando}
-            onConfigurarCadencia={onConfigurarCadencia ?? (() => {})}
+            onConfigurarHorarios={onConfigurarHorarios ?? (() => {})}
           />
           {hayMas && (
             <div className="mt-4 flex flex-col items-center gap-1">

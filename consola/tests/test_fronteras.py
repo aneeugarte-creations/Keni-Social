@@ -65,7 +65,7 @@ SEAMS_PERMITIDOS: frozenset[tuple[str, str]] = frozenset(
         ("historial", "publicaciones"),
         # Seam (produccion lee la agenda de C): el panel "Producción del día"
         # (`api/produccion.py`) muestra la cola de programación con el PRÓXIMO HUECO por
-        # red, y ese cálculo (franjas + cadencias + ocupados) vive en
+        # red, y ese cálculo (franjas + ocupados) vive en
         # `api.publicaciones.calcular_hueco_para` — la MISMA función del encolado manual y
         # de la auto-programación, a propósito: si el panel calculara sus huecos aparte,
         # mentiría en cuanto divergieran. SOLO LECTURA (no muta nada de C).

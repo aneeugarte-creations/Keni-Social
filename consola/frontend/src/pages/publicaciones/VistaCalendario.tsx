@@ -237,7 +237,7 @@ function PildoraPub({
  *  - `dia`: detalle de un día (todas sus piezas, editar/desprogramar).
  *
  * Reprogramar/desprogramar usan `api.actualizarPublicacion` (horas en CDMX vía `@/lib/fecha`).
- * (El reparto automático por cadencia de cada red es trabajo del motor de producción, aparte.)
+ * (El reparto automático por las franjas de horario es trabajo del motor de producción, aparte.)
  */
 export function VistaCalendario({
   publicaciones,
@@ -249,7 +249,7 @@ export function VistaCalendario({
 }: {
   publicaciones: Publicacion[];
   onEditar: (p: Publicacion) => void;
-  /** Reservado: marca activa (la usará la cadencia por red). */
+  /** Reservado: marca activa (la usarán las franjas de horario por red). */
   marca?: string | null;
   /**
    * Ancla del calendario CONTROLADA por el padre (mes/semana/día visible). La página la
@@ -399,7 +399,7 @@ export function VistaCalendario({
   }
 
   // OJO: SIN early-return cuando no hay programadas — el panel de programación lleva más
-  // que las piezas (rejilla del mes, navegación, y arriba el plan por línea y la cadencia):
+  // que las piezas (rejilla del mes, navegación, y arriba el plan por línea y los horarios):
   // debe verse siempre. El vacío se señala con un aviso inline sobre la rejilla.
 
   // --- Cabecera: toggle de vista + navegación contextual ------------------------------------

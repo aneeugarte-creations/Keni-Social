@@ -29,7 +29,7 @@ export function MenuAcciones({
   /** Contenido del panel de ajustes. Si se pasa, el "⋮" muestra la entrada «Ajustes». */
   ajustes?: React.ReactNode;
   ajustesTitulo?: string;
-  /** Abre el panel ya desplegado al montar (deep-links, p. ej. `?cadencia=1`). */
+  /** Abre el panel ya desplegado al montar (deep-links, p. ej. `?horarios=1`). */
   ajustesAbiertoInicial?: boolean;
 }) {
   const [abierto, setAbierto] = React.useState(false);

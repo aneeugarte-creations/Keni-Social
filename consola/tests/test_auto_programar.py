@@ -113,31 +113,6 @@ def test_categoria_usa_sus_horarios_del_plan(cliente, ahora_fijo):
     assert actualizada["fecha_programada"] == "2026-05-20T14:45"
 
 
-def test_horario_de_linea_gana_a_la_cadencia(cliente, ahora_fijo):
-    """Una pieza CON línea usa los horarios de su línea aunque exista una cadencia general.
-
-    Regresión real: una cadencia «todas las redes» creada a mano (ventana en UTC) pisaba los
-    horarios del plan y mandó una pieza nacional a las 3 a. m.
-    """
-    # Cadencia general de la marca (todas las redes), ventana amplia: SIN la precedencia de
-    # línea, el hueco saldría de aquí (mié 10:00 -> 10:30 con margen 30).
-    cliente.post(
-        "/api/cadencias",
-        json={"marca": "unotv", "margen_min": 30, "hora_inicio": "06:00",
-              "hora_fin": "22:00", "dias": [0, 1, 2, 3, 4, 5, 6]},
-    )
-    # Horario de la línea mx: miércoles 15:45.
-    cliente.post(
-        "/api/franjas",
-        json={"dia_semana": 2, "hora": "15:45", "marca": "unotv", "categoria": "mx"},
-    )
-    pid = _crear_aprobada(cliente)
-    _vincular_cluster(pid, categoria="mx")
-    actualizada = auto_programar.programar_si_aprobada(pid)
-    assert actualizada is not None
-    assert actualizada["fecha_programada"] == "2026-05-20T15:45"  # la línea, no la cadencia
-
-
 def test_redes_de_un_tema_comparten_hora(cliente, ahora_fijo):
     """El hueco se ocupa POR (marca, red): piezas del mismo tema en redes distintas salen a
     la MISMA hora (espejo del índice de unicidad de slot por marca+red+fecha)."""

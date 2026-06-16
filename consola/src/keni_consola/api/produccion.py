@@ -204,7 +204,7 @@ async def dia(request: Request) -> Response:
     programadas.sort(key=lambda p: p["fecha_programada"])
     proximos_huecos: list[dict[str, str]] = []
     if marca:
-        # Import perezoso: reusa el cálculo del encolado manual (franjas + cadencias).
+        # Import perezoso: reusa el cálculo del encolado manual (franjas de horario).
         from .publicaciones import calcular_hueco_para
 
         for red in _REDES_HUECO:

@@ -1020,7 +1020,7 @@ def _migrar_etiquetas_etapas_verbos(con: Any) -> None:
 # `fecha_programada`), la mezcla rompia el orden. El canon es UTC SIN offset; aqui se
 # normalizan los valores YA almacenados (idempotente: tras normalizar, ningun patron casa).
 # Cada par es (tabla, columna, longitud_canon): 19 = segundos ("...THH:MM:SS"), 16 =
-# minutos ("...THH:MM", el canon de `fecha_programada`, que generan franjas/cadencias/UI).
+# minutos ("...THH:MM", el canon de `fecha_programada`, que generan las franjas de horario/UI).
 _COLUMNAS_TS_CANON: tuple[tuple[str, str, int], ...] = (
     # OJO: `contenido.creado`/`actualizado`, `metricas_pieza_snapshots.ts` y
     # `comercial_snapshots.ts` YA NO van aqui: la migracion 0033 las convirtio a tipos NATIVOS

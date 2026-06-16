@@ -57,12 +57,12 @@ function TarjetaPublicacion({
   publicacion,
   onEditar,
   onDuplicar,
-  onConfigurarCadencia,
+  onConfigurarHorarios,
 }: {
   publicacion: Publicacion;
   onEditar: (p: Publicacion) => void;
   onDuplicar: (p: Publicacion) => void;
-  onConfigurarCadencia: () => void;
+  onConfigurarHorarios: () => void;
 }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -94,10 +94,10 @@ function TarjetaPublicacion({
       );
     },
     onError: (e) => {
-      // 400 = sin cadencia/franjas: avisamos y ofrecemos configurar la cadencia.
+      // 400 = sin franjas de horario: avisamos y ofrecemos configurar los horarios.
       if (e instanceof ApiError && e.status === 400) {
         toast.error(e.message, {
-          action: { label: "Configurar cadencia", onClick: onConfigurarCadencia },
+          action: { label: "Configurar horarios", onClick: onConfigurarHorarios },
         });
         return;
       }
@@ -338,12 +338,12 @@ export function VistaLista({
   publicaciones,
   onEditar,
   onDuplicar,
-  onConfigurarCadencia,
+  onConfigurarHorarios,
 }: {
   publicaciones: Publicacion[];
   onEditar: (p: Publicacion) => void;
   onDuplicar: (p: Publicacion) => void;
-  onConfigurarCadencia: () => void;
+  onConfigurarHorarios: () => void;
 }) {
   const queryClient = useQueryClient();
   const [seleccionadas, setSeleccionadas] = React.useState<Set<string>>(() => new Set());
@@ -393,7 +393,7 @@ export function VistaLista({
           publicacion={p}
           onEditar={onEditar}
           onDuplicar={onDuplicar}
-          onConfigurarCadencia={onConfigurarCadencia}
+          onConfigurarHorarios={onConfigurarHorarios}
         />
       </div>
     </div>

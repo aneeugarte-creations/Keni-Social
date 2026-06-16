@@ -19,7 +19,7 @@ viejos con "+00:00"/microsegundos los normaliza la migración idempotente de
 
 EXCEPCIONES documentadas:
   - `fecha_programada` usa precisión de MINUTOS (`YYYY-MM-DDTHH:MM`), porque es el
-    formato que generan las franjas/cadencias y el picker de la UI; su canon vive en
+    formato que generan las franjas de horario y el picker de la UI; su canon vive en
     `api/publicaciones._normalizar_fecha_programada`.
   - Algunas columnas `creado` de DESEMPATE (fuentes_rss/fuentes_algoritmo/
     evergreen_ideas/lotes e items de insumos) usan naive-UTC

@@ -1,4 +1,4 @@
-"""Programacion de piezas: calculo de HUECOS (franjas/cadencias) y encolado.
+"""Programacion de piezas: calculo de HUECOS (franjas) y encolado.
 
 Reune la categoria de plan de una pieza, el calculo del proximo hueco futuro respetando la
 unicidad de slot, el endpoint `encolar` y el helper de encolado con backstop de unicidad +
@@ -15,7 +15,6 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from ... import repos
-from ...dominio import cadencia as dom_cadencia
 from ...estados import ESTADO_PUBLICADO
 from ...motor_db import IntegrityError
 from .. import franjas as api_franjas
@@ -56,10 +55,10 @@ _BREAKING_BUSQUEDA_MIN = 240
 def calcular_hueco_para(
     pub: dict[str, Any], ahora: datetime | None = None
 ) -> str | None:
-    """Calcula el proximo hueco futuro para `pub` segun cadencias/franjas configuradas.
+    """Calcula el proximo hueco futuro para `pub` segun las franjas configuradas.
 
     Devuelve el datetime ISO ('YYYY-MM-DDTHH:MM') del hueco, o None si no hay NINGUNA
-    cadencia/franja aplicable a la (marca, red) de la publicacion. `ahora` se puede inyectar
+    franja aplicable a la (marca, red) de la publicacion. `ahora` se puede inyectar
     para tests; por defecto es `datetime.now()`. Los huecos ya ocupados por OTRAS
     publicaciones `programado` de la MISMA (marca, red) se evitan — espejo del indice de
     unicidad de slot (`idx_parrilla_slot_uniq`, por marca+red+fecha): las piezas de un MISMO
@@ -67,8 +66,7 @@ def calcular_hueco_para(
 
     CATEGORÍA del plan: una pieza BREAKING no espera franja (se programa a ahora+margen, en
     el primer minuto libre); el resto usa PRIMERO los horarios de SU línea (franjas con su
-    categoría — ganan a cualquier cadencia), después la cadencia de la (marca, red) y por
-    último las franjas genéricas.
+    categoría) y, si no tiene franja propia, las franjas genéricas.
     """
     if ahora is None:
         ahora = datetime.now()
@@ -107,8 +105,7 @@ def calcular_hueco_para(
             cand += timedelta(minutes=1)
         return None  # parrilla patológicamente saturada
     # 1) HORARIOS DE LA LÍNEA (preferentes): si la pieza tiene categoría y su línea tiene
-    # franjas propias, ESOS son sus horarios — una cadencia general no debe pisarlos (una
-    # cadencia "todas las redes" creada a mano mandó una pieza nacional a las 3 a. m.).
+    # franjas propias, ESOS son sus horarios.
     aplican = api_franjas.franjas_aplicables(
         repos.listar_franjas(), pub["marca"], pub["red"], categoria
     )
@@ -117,11 +114,7 @@ def calcular_hueco_para(
     )
     if de_linea:
         return api_franjas.proximo_hueco(aplican, ahora, ocupados_mr)
-    # 2) CADENCIA por margen: para piezas sin línea (o líneas sin horario propio).
-    cad = dom_cadencia.cadencia_aplicable(repos.listar_cadencias(), pub["marca"], pub["red"])
-    if cad is not None:
-        return dom_cadencia.proximo_hueco_cadencia(cad, ahora, ocupados_mr)
-    # 3) Franjas-caja genéricas.
+    # 2) Franjas-caja genéricas.
     if not aplican:
         return None
     return api_franjas.proximo_hueco(aplican, ahora, ocupados_mr)
@@ -150,7 +143,7 @@ async def encolar(request: Request) -> Response:
     actualizada, hubo_hueco = _encolar_en_hueco_libre(pub)
     if not hubo_hueco:
         return JSONResponse(
-            {"error": "No hay cadencia ni franjas configuradas para esta marca/red."},
+            {"error": "No hay franjas de horario configuradas para esta marca/red."},
             status_code=400,
         )
     if actualizada is None:  # carrera: borrada entre el obtener y el actualizar
@@ -175,7 +168,7 @@ def _encolar_en_hueco_libre(
     `idx_parrilla_slot_uniq` impide que dos piezas queden programadas en el mismo (red, fecha):
     si entre el cálculo del hueco y la escritura otra pieza ya tomó ese slot, el UPDATE lanza
     una IntegrityError (carrera de doble-reserva); aquí RECALCULAMOS el siguiente hueco y
-    reintentamos (bucle acotado). `hubo_hueco=False` => no hay cadencia/franja aplicable (None,
+    reintentamos (bucle acotado). `hubo_hueco=False` => no hay franja aplicable (None,
     sin tocar nada). `None` con `hubo_hueco=True` => la pieza se borró en la carrera (o el CAS de
     `estado_esperado` no aplicó: ver abajo).
 

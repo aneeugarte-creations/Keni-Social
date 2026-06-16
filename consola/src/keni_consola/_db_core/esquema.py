@@ -1150,24 +1150,11 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # El índice único de idempotencia ahora incluye `categoria` (dos franjas a la misma hora
     # con categorías distintas son legítimas): retira el viejo antes de crear el nuevo.
     "DROP INDEX IF EXISTS idx_franjas_editoriales_uniq",
-    # CADENCIA por (marca?, red?): scheduling por MARGEN entre posts (sustituye a las
-    # franjas-caja para alto volumen). margen_min = minutos entre posts; hora_inicio/fin =
-    # ventana activa 24h; dias = CSV "0..6" (0=lunes). UNIQUE(marca, red): una cadencia por
-    # par. `marca=''`/`red=''` = comodín (aplica a todas). Ver `dominio/cadencia.py`.
-    """
-    CREATE TABLE IF NOT EXISTS cadencias (
-        id           TEXT PRIMARY KEY,
-        marca        TEXT NOT NULL DEFAULT '',
-        red          TEXT NOT NULL DEFAULT '',
-        margen_min   INTEGER NOT NULL DEFAULT 60,
-        hora_inicio  TEXT NOT NULL DEFAULT '08:00',
-        hora_fin     TEXT NOT NULL DEFAULT '22:00',
-        dias         TEXT NOT NULL DEFAULT '0,1,2,3,4,5,6',
-        activo       INTEGER NOT NULL DEFAULT 1,
-        UNIQUE (marca, red)
-    )
-    """,
-    "CREATE INDEX IF NOT EXISTS idx_cadencias_marca ON cadencias (marca)",
+    # CADENCIA por margen (scheduling automático por MARGEN entre posts) RETIRADA: la
+    # programación trabaja solo por franjas/huecos de horario. Se dropea la tabla huérfana
+    # (idempotente; no afecta a BDs nuevas que ya no la crean).
+    "DROP INDEX IF EXISTS idx_cadencias_marca",
+    "DROP TABLE IF EXISTS cadencias",
     # Fuentes de INTELIGENCIA DE PLATAFORMA (blogs oficiales + agregadores) que cubren
     # cambios de algoritmo y tendencias por red. DISTINTAS de `fuentes_rss` (contenido de
     # marca para generar copy): estas alimentan la pagina Algoritmos y el panel, y proponen
