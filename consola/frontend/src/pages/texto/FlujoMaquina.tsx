@@ -134,7 +134,7 @@ export function FlujoMaquina({
 
   if (cargando || !maquina) {
     return (
-      <div className="mx-auto w-full max-w-2xl space-y-3" data-testid="maquina-cargando">
+      <div className="w-full space-y-3" data-testid="maquina-cargando">
         <Skeleton className="h-12 w-2/3" />
         {[0, 1, 2, 3].map((i) => (
           <Skeleton key={i} className="h-16 w-full" />
@@ -144,7 +144,7 @@ export function FlujoMaquina({
   }
 
   return (
-    <div className="mx-auto w-full max-w-2xl">
+    <div className="w-full">
       {/* ───────── Cabecera de la máquina ───────── */}
       <header className="flex flex-wrap items-end justify-between gap-2 border-b border-border pb-4">
         <div className="min-w-0">
