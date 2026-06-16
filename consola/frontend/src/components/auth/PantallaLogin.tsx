@@ -271,7 +271,9 @@ export function PantallaLogin() {
                 aria-label={verPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
                 className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-neutral-400 transition-colors hover:text-neutral-900 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {verPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                {/* El icono refleja el ESTADO actual: oculta = ojo tachado (EyeOff), visible =
+                    ojo abierto (Eye). Así por defecto se ve claramente que la contraseña NO se ve. */}
+                {verPassword ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
               </button>
             </div>
           </div>
