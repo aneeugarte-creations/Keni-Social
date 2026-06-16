@@ -495,6 +495,14 @@ RANGO_SEMANA_CERRADA = "semana_cerrada"
 # deportes y la API los validan contra este conjunto.
 RANGOS_VALIDOS: tuple[str, ...] = (*RANGOS_DIAS.keys(), RANGO_SEMANA_CERRADA)
 
+# Presets OFRECIDOS en el desplegable de la UI (en orden de aparicion). Es un
+# subconjunto de los validos: "7d" sigue siendo un token de ENTRADA aceptado (compat
+# de estado persistido, MCP y comparador) pero NO se ofrece en el menu, porque resuelve
+# EXACTAMENTE a lo mismo que "semana" (la misma ventana rodante de 7 dias que termina
+# hoy) y mostrar ambos solo confundia. "semana_cerrada" tampoco se ofrece aqui (lo usa
+# el reporte del lunes, no el selector general).
+RANGOS_PRESET_UI: tuple[str, ...] = ("semana", "mes", "30d")
+
 
 def semana_cerrada(hoy: date | None = None) -> tuple[date, date]:
     """Lunes->domingo de la ultima semana NATURAL cerrada (domingo incluido).

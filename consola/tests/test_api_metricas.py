@@ -125,6 +125,9 @@ def test_opciones_trae_marcas_y_rangos(cliente):
     assert data["marcas"]
     ids_rango = {x["id"] for x in data["rangos"]}
     assert {"semana", "mes"} <= ids_rango
+    # "7d" es identico a "semana" (misma ventana rodante): no se OFRECE en el menu
+    # aunque siga siendo un token de entrada valido (lo cubre test_comparar/_validar).
+    assert "7d" not in ids_rango
 
 
 def test_export_json_incluye_fuente(cliente):

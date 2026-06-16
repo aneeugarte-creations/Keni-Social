@@ -36,6 +36,7 @@ from .config import FUENTES_VALIDAS, ConfigInvalida
 from .fuentes.base import CuentaNoEncontrada
 from .schema import (
     RANGOS_DIAS,
+    RANGOS_PRESET_UI,
     AnaliticaPiezas,
     CeldaCrosstab,
     CeldaDesglose,
@@ -69,6 +70,7 @@ FUENTES_DISPONIBLES: tuple[str, ...] = tuple(sorted(FUENTES_VALIDAS))
 # Excepciones de dominio que la Consola captura (re-export para no importar internals).
 __all__ = [
     "RANGOS_VALIDOS",
+    "RANGOS_PRESET_UI",
     "FUENTES_DISPONIBLES",
     "ConfigInvalida",
     "CuentaNoEncontrada",
