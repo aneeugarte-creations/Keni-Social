@@ -74,11 +74,12 @@ const MISMO_DIA: PiezaListado[] = [
 ];
 
 /** Filas de DATOS de la tabla (las que tienen celdas `td`), en orden de pintado.
- *  La fila ya no tiene role="button": el control accesible es el BOTÓN del título. */
+ *  Modelo item-first: cada fila es un `tr` accionable (role="button"), no role="row";
+ *  las seleccionamos directamente del DOM (los `tr` con celdas dentro del `tbody`). */
 function filasDatos() {
-  return screen
-    .getAllByRole("row")
-    .filter((f) => within(f).queryAllByRole("cell").length > 0);
+  return Array.from(document.querySelectorAll<HTMLTableRowElement>("tbody tr")).filter(
+    (f) => f.querySelectorAll("td").length > 0,
+  );
 }
 
 describe("PiezasConsolidada", () => {
@@ -173,15 +174,31 @@ describe("PiezasConsolidada", () => {
     expect(screen.queryByLabelText("Filtrar por marca")).not.toBeInTheDocument();
   });
 
-  it("abre el detalle al activar el botón del título (control accesible)", async () => {
+  it("abre el detalle con click izquierdo sobre la fila (modelo item-first)", async () => {
     vi.spyOn(api, "metricasPiezasListado").mockResolvedValue(resp(MISMO_DIA));
     const espia = vi.spyOn(api, "metricasPiezaHistorico").mockResolvedValue(HISTORICO_VACIO);
     renderConProviders(<PiezasConsolidada marcaActual="__todas__" rangoActual="mes" marcas={MARCAS} />);
     await screen.findByText("Noticia local");
 
-    expect(screen.queryByRole("button", { name: /Ver detalle de/ })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Noticia local" }));
+    // La fila es el control accionable (role="button"); su click izquierdo abre el detalle.
+    const fila = filasDatos().find((f) => within(f).queryByText("Noticia local"));
+    expect(fila).toBeDefined();
+    expect(fila).toHaveAttribute("role", "button");
+    fireEvent.click(fila!);
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     await waitFor(() => expect(espia).toHaveBeenCalledWith({ id: "p2" }, expect.anything()));
+  });
+
+  it("'Abrir en la red' vive en el menú contextual (click derecho), no como icono suelto", async () => {
+    vi.spyOn(api, "metricasPiezasListado").mockResolvedValue(resp(MISMO_DIA));
+    renderConProviders(<PiezasConsolidada marcaActual="__todas__" rangoActual="mes" marcas={MARCAS} />);
+    await screen.findByText("Noticia local");
+
+    // Ya no hay icono/enlace suelto "Abrir la pieza en la red" en la fila.
+    expect(screen.queryByLabelText("Abrir la pieza en la red")).not.toBeInTheDocument();
+
+    const fila = filasDatos().find((f) => within(f).queryByText("Noticia local"))!;
+    fireEvent.contextMenu(fila);
+    expect(await screen.findByRole("menuitem", { name: "Abrir en la red" })).toBeInTheDocument();
   });
 });

@@ -35,6 +35,8 @@ import {
 import * as React from "react";
 
 import { marcaParam } from "@/components/comunes/selectores";
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SeccionColapsable } from "./SeccionColapsable";
@@ -476,31 +478,33 @@ function FilaPieza({
     pieza.formato ? nombreFormato(pieza.formato) : "",
   ].filter(Boolean);
 
+  // Modelo item-first: click izquierdo sobre la fila abre el detalle (primaria); el
+  // resto vive en el menú (click derecho · long-press · teclado). "Abrir en la red"
+  // —antes un icono suelto— pasa al menú.
+  const acciones: EntradaMenuContextual[] = [];
+  const urlPieza = pieza.url;
+  if (urlPieza) {
+    acciones.push({
+      etiqueta: "Abrir en la red",
+      icono: ExternalLink,
+      onClick: () => window.open(urlPieza, "_blank", "noopener,noreferrer"),
+    });
+  }
+
   return (
-    <TableRow onClick={onAbrir} className="cursor-pointer">
+    <FilaConAcciones
+      como="tr"
+      onPrimaria={onAbrir}
+      acciones={acciones}
+      etiquetaAcciones={`Acciones de ${titulo}`}
+      kebab="nunca"
+    >
       <TableCell className="max-w-[20rem]">
-        <button
-          type="button"
-          onClick={onAbrir}
-          className="block max-w-full truncate text-left font-medium underline-offset-4 hover:underline focus-visible:underline focus-visible:outline-none"
-          title={titulo}
-        >
+        <span className="block max-w-full truncate font-medium" title={titulo}>
           {titulo}
-        </button>
+        </span>
         <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
           <span>{partes.join(" · ")}</span>
-          {pieza.url ? (
-            <a
-              href={pieza.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center underline-offset-4 hover:underline"
-              aria-label="Abrir la pieza en la red"
-            >
-              <ExternalLink className="h-3 w-3" aria-hidden="true" />
-            </a>
-          ) : null}
           {pieza.rendimiento_relativo != null && (
             <Badge
               variant={pieza.rendimiento_relativo >= 1 ? "ok" : "error"}
@@ -532,6 +536,6 @@ function FilaPieza({
           </TableCell>
         );
       })}
-    </TableRow>
+    </FilaConAcciones>
   );
 }

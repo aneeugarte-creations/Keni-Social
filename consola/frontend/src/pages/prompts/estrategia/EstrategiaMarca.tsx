@@ -293,7 +293,7 @@ function TarjetaExtra({
     <button
       type="button"
       onClick={() => extra.docId && onAbrir(extra.docId)}
-      className="flex w-full items-center gap-2.5 rounded-md border border-border bg-card px-3 py-2 text-left shadow-sm transition-colors hover:border-keni/40 hover:bg-muted/40"
+      className="flex w-full items-center gap-2.5 rounded-md border border-border bg-card px-3 py-2 text-left shadow-sm transition-colors hover:border-keni-300 focus-visible:border-keni-300 hover:bg-muted/40"
       title={`${extra.tituloDoc || extra.titulo} — abrir documento`}
     >
       <Icono className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
