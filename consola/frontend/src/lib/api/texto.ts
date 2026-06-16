@@ -7,7 +7,6 @@ import type {
   CuerpoLanzarTexto,
   CuerpoPublicarTexto,
   CuerpoResolverSolicitud,
-  PreviewPipeline,
   RespuestaTexto,
   RespuestaDocumento,
   RespuestaEditoriales,
@@ -17,7 +16,6 @@ import type {
   RespuestaMarcasTexto,
   RespuestaMensaje,
   RespuestaPapelera,
-  RespuestaPipelinesTexto,
   RespuestaResolverSolicitud,
   RespuestaSolicitudesTexto,
   RespuestaSolicitudTexto,
@@ -69,14 +67,6 @@ export const apiTexto = {
     }),
   editorialesTexto: (marca: string, pipeline?: string, signal?: AbortSignal) =>
     peticion<RespuestaEditoriales>(`/texto/editoriales${query({ marca, pipeline })}`, { signal }),
-  // --- Pipelines: registro + preview del prompt ensamblado (atribución) ---
-  pipelinesTexto: (signal?: AbortSignal) =>
-    peticion<RespuestaPipelinesTexto>("/texto/pipelines", { signal }),
-  previewPipeline: (pipeline: string, marca: string, contexto?: string, signal?: AbortSignal) =>
-    peticion<PreviewPipeline>(
-      `/texto/pipelines/${pipeline}/preview${query({ marca, contexto })}`,
-      { signal },
-    ),
   // --- Las tres máquinas (flujo GLOBAL de etapas en orden real de ejecución) ---
   maquinaTexto: (signal?: AbortSignal) =>
     peticion<RespuestaMaquinaTexto>("/texto/maquina", { signal }),

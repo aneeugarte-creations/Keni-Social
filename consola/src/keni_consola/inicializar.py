@@ -41,6 +41,11 @@ def main() -> int:
     cs = libtexto.migrar_contrato_salida()
     if cs:
         print(f"Texto: {cs} prompt(s) con el contrato de salida movido a placeholder.")
+    # redactar: re-siembra la version simplificada + contrato y la publica (quedo fuera de la
+    # migracion de contrato porque su contrato no era un substring limpio). One-shot.
+    rd = libtexto.migrar_redactar_v1()
+    if rd:
+        print("Texto: redactar re-sembrado (simplificado + contrato) y publicado.")
     # Linea base en git: que cada doc inicial tenga HEAD (snapshot estable para los pipelines,
     # no el working copy que reescribe el autosave). Best-effort: 0 si el versionado esta off.
     b = libtexto.asegurar_linea_base()

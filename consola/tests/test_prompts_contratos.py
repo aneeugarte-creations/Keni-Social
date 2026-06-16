@@ -32,11 +32,11 @@ def test_resolver_contrato_rellena_y_es_noop_sin_placeholder():
     # Sin placeholder: intacto (migración suave).
     assert resolver_contrato("prompt/traducir", "cuerpo sin placeholder") == "cuerpo sin placeholder"
     # Con placeholder pero prompt NO estructurado: limpia el placeholder.
-    assert PLACEHOLDER not in resolver_contrato("prompt/redactar", "x\n\n" + PLACEHOLDER)
+    assert PLACEHOLDER not in resolver_contrato("prompt/ilustrar", "x\n\n" + PLACEHOLDER)
 
 
 def test_contrato_de_none_para_no_estructurados():
-    for pid in ("prompt/redactar", "prompt/ilustrar", "prompt/hashtags", "prompt/importar/parrilla"):
+    for pid in ("prompt/ilustrar", "prompt/hashtags", "prompt/importar/parrilla", "prompt/asistente/resumir"):
         assert contrato_de(pid) is None, pid
 
 

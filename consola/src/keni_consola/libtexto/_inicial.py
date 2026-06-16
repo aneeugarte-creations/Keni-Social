@@ -28,7 +28,7 @@ __all__ = [
     "dir_inicial", "obtener_inicial", "cuerpo_efectivo", "cuerpo_inicial", "importar_inicial",
     "asegurar_linea_base",
     "migrar_nombres_biblioteca", "limpiar_prompts_obsoletos", "migrar_descripciones_editorial",
-    "reformatear_prompts", "publicar_linea_base", "migrar_contrato_salida",
+    "reformatear_prompts", "publicar_linea_base", "migrar_contrato_salida", "migrar_redactar_v1",
 ]
 
 _PROMPTS_OBSOLETOS_BIBLIOTECA: tuple[str, ...] = (
@@ -149,6 +149,7 @@ _REFORMATO_PROMPTS_V1: tuple[tuple[str, str], ...] = (
 )
 _SENTINELA_REFORMATO = ".reformato-prompts-v1"
 _SENTINELA_CONTRATO = ".contrato-salida-v1"
+_SENTINELA_REDACTAR = ".redactar-contrato-v1"
 
 
 def dir_inicial() -> Path:
@@ -535,6 +536,41 @@ def migrar_contrato_salida() -> int:
             if sha:
                 db.crear_texto_publicacion(doc_id=doc_id, sha=sha, autor="", nota="contrato de salida")
         except Exception:  # noqa: BLE001 -- best-effort: sin BD se queda "sin publicar", no rompe
+            pass
+    sentinela.parent.mkdir(parents=True, exist_ok=True)
+    escribir_atomico(sentinela, "ok\n")
+    return n
+
+
+def migrar_redactar_v1() -> int:
+    """Re-siembra `redactar` (simplificado + contrato al placeholder) en el store y lo publica.
+
+    `redactar` quedó FUERA de `migrar_contrato_salida` (su contrato no era un substring limpio) y su
+    working copy en el store es la versión vieja (con el ejemplo largo y el contrato inline). Esto lo
+    pone al día desde la inicial NUEVA (cuerpo simplificado + `{{CONTRATO_SALIDA}}`) y lo publica, para
+    que el editor lo muestre con su bloque read-only y el modelo use la versión nueva. ONE-SHOT por
+    sentinela. Best-effort (la publicación necesita BD). Devuelve 1 si lo migró, 0 si no.
+    """
+    from .. import db
+    from ._versiones import fijar_version
+
+    destino_raiz = raiz()
+    sentinela = destino_raiz / _SENTINELA_REDACTAR
+    if sentinela.exists():
+        return 0
+    n = 0
+    ruta = destino_raiz / "prompt" / "redactar.md"
+    ruta_inicial = dir_inicial() / "prompt" / "redactar.md"
+    if ruta.is_file() and ruta_inicial.is_file():
+        try:
+            escribir_atomico(ruta, ruta_inicial.read_text(encoding="utf-8"))
+            n = 1
+            sha = fijar_version("prompt/redactar", nota="redactar simplificado + contrato")
+            if sha:
+                db.crear_texto_publicacion(
+                    doc_id="prompt/redactar", sha=sha, autor="", nota="redactar simplificado + contrato"
+                )
+        except Exception:  # noqa: BLE001 -- best-effort: no debe abortar la inicialización
             pass
     sentinela.parent.mkdir(parents=True, exist_ok=True)
     escribir_atomico(sentinela, "ok\n")

@@ -6,7 +6,6 @@
  * COLAPSABLE (estado en localStorage; colapsado el editor ocupa todo el ancho) con pestañas:
  *   - Versiones (PanelVersiones: publicado ↔ tu borrador, diff ancho, traer/descartar),
  *   - Acerca de (PanelAcerca: en prosa, qué es el doc y dónde entra en el pipeline),
- *   - Compilado (solo prompts base de pipeline: el prompt ENSAMBLADO que verá el modelo).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -25,7 +24,6 @@ import { toast } from "sonner";
 
 import { PanelAcerca } from "@/components/biblioteca/PanelAcerca";
 import { DialogPublicar } from "@/components/biblioteca/DialogPublicar";
-import { PanelCompilado } from "@/components/biblioteca/PanelCompilado";
 import { PanelVersiones } from "@/components/biblioteca/PanelVersiones";
 import { confirmar } from "@/components/comunes/confirmar";
 import { MenuFlotante } from "@/components/comunes/MenuContextual";
@@ -46,7 +44,7 @@ import { componerCuerpoTexto, quitarContratoSalida, separarFrontmatter } from ".
 /** Clave de persistencia del estado abierto/colapsado del panel lateral. */
 const CLAVE_PANEL = "keni.biblioteca.panel-abierto";
 
-type PestanaPanel = "versiones" | "acerca" | "compilado";
+type PestanaPanel = "versiones" | "acerca";
 
 export function DetalleDocumento({
   docId,
@@ -288,23 +286,7 @@ export function DetalleDocumento({
     }
   }, [panelAbierto]);
 
-  // ── Compilado: solo prompts BASE de un pipeline del registro. ──
-  const pipelinesQuery = useQuery({
-    queryKey: ["texto-pipelines"],
-    queryFn: ({ signal }) => api.pipelinesTexto(signal),
-    enabled: esPrompt,
-    staleTime: 5 * 60_000,
-  });
-  const pipelineBase = React.useMemo(
-    () => (pipelinesQuery.data?.pipelines ?? []).find((p) => p.prompt_base_id === doc?.id),
-    [pipelinesQuery.data, doc?.id],
-  );
-
   const [pestana, setPestana] = React.useState<PestanaPanel>("versiones");
-  React.useEffect(() => {
-    // Si desaparece la pestaña compilado (cambio de doc), vuelve a versiones.
-    if (pestana === "compilado" && !pipelineBase) setPestana("versiones");
-  }, [pestana, pipelineBase]);
 
   if (docQuery.isPending || !borrador) {
     return (
@@ -462,18 +444,13 @@ export function DetalleDocumento({
                 onValueChange={(v) => setPestana(v as PestanaPanel)}
                 className="min-w-0 flex-1"
               >
-                <TabsList className={`grid h-auto w-full gap-1 p-1 ${pipelineBase ? "grid-cols-3" : "grid-cols-2"}`}>
+                <TabsList className="grid h-auto w-full grid-cols-2 gap-1 p-1">
                   <TabsTrigger value="versiones" className="text-xs">
                     Versiones
                   </TabsTrigger>
                   <TabsTrigger value="acerca" className="text-xs">
                     Acerca de
                   </TabsTrigger>
-                  {pipelineBase ? (
-                    <TabsTrigger value="compilado" className="text-xs">
-                      Compilado
-                    </TabsTrigger>
-                  ) : null}
                 </TabsList>
               </Tabs>
               {/* Colapsar va A LA PAR de las pestañas que oculta. */}
@@ -511,8 +488,6 @@ export function DetalleDocumento({
                     }
                   }}
                 />
-              ) : pestana === "compilado" && pipelineBase ? (
-                <PanelCompilado pipelineId={pipelineBase.id} />
               ) : (
                 <PanelAcerca doc={borrador} maquina={maquina} />
               )}

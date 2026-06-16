@@ -11,8 +11,9 @@ así el contrato va SIEMPRE al FINAL del prompt (tras la prosa y los datos). En 
 contrato NO se puede editar (el editor oculta el placeholder del final y pinta el contrato
 read-only en un bloque aparte). `contrato_de` devuelve `None` para los
 prompts NO estructurados (su salida es prosa para una persona: `prompt/ilustrar`,
-`prompt/redactar`, `prompt/asistente/*`, envoltorios…) o los que ya inyectan su contrato por
-otro placeholder (`prompt/importar/parrilla` con `{{ESQUEMA_JSON}}`, `prompt/hashtags` no-JSON).
+`prompt/asistente/*`, envoltorios…) o los que ya inyectan su contrato por otro placeholder
+(`prompt/importar/parrilla` con `{{ESQUEMA_JSON}}`, `prompt/hashtags` no-JSON). `prompt/redactar`
+SÍ tiene contrato (las formas `{texto, copy_in}` / `{piezas}` que lee el parser).
 """
 
 from __future__ import annotations
@@ -38,6 +39,7 @@ CONTRATO_POR_PROMPT: dict[str, str] = {
     'prompt/recibir/eventos-claro': 'Devuelve EXCLUSIVAMENTE un objeto JSON `{"items": [ ... ]}`.',
     'prompt/recibir/reporteros': 'Devuelve EXCLUSIVAMENTE un objeto JSON `{"items": [ ... ]}`.',
     'prompt/importar/calendario': 'Devuelve EXCLUSIVAMENTE un objeto JSON con la forma `{"filas": [ ... ]}`, sin ningún texto adicional ni explicación.',
+    'prompt/redactar': 'Al FINAL de toda tu respuesta, añade un único bloque de código cercado ```json con la forma EXACTA que pida la instrucción del lanzamiento:\n\n- **Copy unificado** (un solo objeto, NO un array por red): el mismo `texto` y `copy_in` se reutilizan en todas las redes pedidas. Incluye siempre `copy_in` (`""` si no lleva imagen).\n\n```json\n{"texto": "<el copy, igual para todas las redes>", "copy_in": "<texto en la imagen>"}\n```\n\n- **Variante por red**: `{"piezas": [{"red": "<id>", "texto": "…", "copy_in": "…"}, …]}` con exactamente UNA pieza por red pedida (nunca dos de la misma), usando como `<id>` únicamente los ids exactos de la instrucción. **Piezas compuestas**: el almacén guarda UN solo `texto` por red, así que un **hilo** va numerado DENTRO de `texto` (un tuit por párrafo con prefijo `1/n `, cada tuit dentro del límite de la red) y un **carrusel** con las slides separadas por una línea con solo `---`. Si propones hilo/carrusel, esa ES la pieza de la red.',
 }
 
 

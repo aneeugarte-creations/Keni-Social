@@ -124,6 +124,7 @@ from ._inicial import (
     migrar_contrato_salida,
     migrar_descripciones_editorial,
     migrar_nombres_biblioteca,
+    migrar_redactar_v1,
     obtener_inicial,
     publicar_linea_base,
     reformatear_prompts,
@@ -235,4 +236,5 @@ __all__ = [
     "reformatear_prompts",
     "publicar_linea_base",
     "migrar_contrato_salida",
+    "migrar_redactar_v1",
 ]
