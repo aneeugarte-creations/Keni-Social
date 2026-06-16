@@ -5,9 +5,11 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
+import type { AsaRecorte } from "../recorte";
 import { documentoVacio, nuevaCapaMarco } from "../documento";
 import { crearStoreEditor } from "../store";
 import { RecorteCajaOverlay } from "./RecorteCajaOverlay";
+import { etiquetaAsa } from "./tiradoresRecorte";
 
 function montar(rotacion = 0) {
   const store = crearStoreEditor(documentoVacio({ w: 1080, h: 1080, safe_top: 0, safe_bottom: 0 }, "t"));
@@ -20,8 +22,8 @@ describe("RecorteCajaOverlay", () => {
   it("pinta los 8 tiradores (4 esquinas + 4 lados)", () => {
     montar();
     expect(screen.getAllByRole("button")).toHaveLength(8);
-    for (const a of ["nw", "n", "ne", "e", "se", "s", "sw", "w"]) {
-      expect(screen.getByRole("button", { name: `Recortar borde ${a}` })).toBeInTheDocument();
+    for (const a of ["nw", "n", "ne", "e", "se", "s", "sw", "w"] as AsaRecorte[]) {
+      expect(screen.getByRole("button", { name: etiquetaAsa(a) })).toBeInTheDocument();
     }
   });
 

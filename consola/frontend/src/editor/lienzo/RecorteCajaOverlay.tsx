@@ -9,6 +9,7 @@ import { type PointerEvent as PointerEventReact, useRef } from "react";
 import type { Capa } from "../documento";
 import { type AsaRecorte, type CajaRecorte, recortarCajaRotada } from "../recorte";
 import type { StoreEditor } from "../store";
+import { asasMarco, claseTirador, etiquetaAsa } from "./tiradoresRecorte";
 
 export function RecorteCajaOverlay({
   capa,
@@ -58,17 +59,6 @@ export function RecorteCajaOverlay({
 
   const W = capa.w * escala;
   const H = capa.h * escala;
-  // 8 tiradores (4 esquinas + 4 lados) en coords RELATIVAS al recuadro.
-  const asas: { asa: AsaRecorte; x: number; y: number; cursor: string }[] = [
-    { asa: "nw", x: 0, y: 0, cursor: "nwse-resize" },
-    { asa: "n", x: W / 2, y: 0, cursor: "ns-resize" },
-    { asa: "ne", x: W, y: 0, cursor: "nesw-resize" },
-    { asa: "e", x: W, y: H / 2, cursor: "ew-resize" },
-    { asa: "se", x: W, y: H, cursor: "nwse-resize" },
-    { asa: "s", x: W / 2, y: H, cursor: "ns-resize" },
-    { asa: "sw", x: 0, y: H, cursor: "nesw-resize" },
-    { asa: "w", x: 0, y: H / 2, cursor: "ew-resize" },
-  ];
 
   return (
     // Contenedor sobre el recuadro; sin eventos (los clics fuera del recuadro siguen llegando al
@@ -92,15 +82,15 @@ export function RecorteCajaOverlay({
         className="absolute inset-0 ring-2 ring-primary"
         style={{ boxShadow: "0 0 0 9999px rgba(0,0,0,0.45)" }}
       />
-      {asas.map((a) => (
+      {asasMarco(W, H).map((a) => (
         <div
           key={a.asa}
           role="button"
-          aria-label={`Recortar borde ${a.asa}`}
+          aria-label={etiquetaAsa(a.asa)}
           onPointerDown={onDown(a.asa)}
           onPointerMove={onMove}
           onPointerUp={onUp}
-          className="pointer-events-auto absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 touch-none rounded-sm border border-primary bg-background shadow"
+          className={claseTirador(a.asa)}
           style={{ left: a.x, top: a.y, cursor: a.cursor }}
         />
       ))}

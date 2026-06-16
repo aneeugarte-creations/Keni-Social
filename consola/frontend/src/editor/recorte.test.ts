@@ -12,6 +12,7 @@ import {
   moverAsa,
   recortarCaja,
   recortarCajaRotada,
+  recortarMarcoFoto,
   recorteLateral,
   vistaRecorte,
 } from "./recorte";
@@ -365,5 +366,63 @@ describe("recortarCajaRotada (recorte a lo largo de los ejes locales del objeto)
     expect(r.w).toBe(170);
     expect(r.x).toBeCloseTo(100, 6);
     expect(r.y).toBeCloseTo(130, 6);
+  });
+});
+
+describe("recortarMarcoFoto (tiradores del marco en el modo recorte de foto)", () => {
+  type Rect = { x: number; y: number; w: number; h: number };
+  // Caso canónico: caja == foto (cover, fuente completa). Caja y foto en px del documento.
+  const m = (extra: { caja?: Rect; img?: Rect; flipH?: boolean; flipV?: boolean } = {}) => ({
+    caja: { x: 0, y: 0, w: 400, h: 300 },
+    img: { x: 0, y: 0, w: 400, h: 300 },
+    ...extra,
+  });
+
+  it("'mover' no es un gesto de marco (lo cubre el pan)", () => {
+    expect(recortarMarcoFoto(m(), "mover", 10, 10)).toBeNull();
+  });
+
+  it("borde derecho hacia dentro recorta ese lado (caja y crop), zoom 1", () => {
+    const r = recortarMarcoFoto(m(), "e", -100, 0)!;
+    expect(r).toMatchObject({ x: 0, y: 0, w: 300, h: 300, zoom: 1 });
+    expect(r.crop).toEqual({ cx: 0, cy: 0, cw: 0.75, ch: 1 });
+  });
+
+  it("borde superior baja el origen y compensa cy/ch", () => {
+    const r = recortarMarcoFoto(m(), "n", 0, 75)!;
+    expect(r).toMatchObject({ x: 0, y: 75, w: 400, h: 225 });
+    expect(r.crop).toEqual({ cx: 0, cy: 0.25, cw: 1, ch: 0.75 });
+  });
+
+  it("una esquina mueve los DOS bordes que la tocan", () => {
+    const r = recortarMarcoFoto(m(), "se", -100, -75)!;
+    expect(r).toMatchObject({ x: 0, y: 0, w: 300, h: 225 });
+    expect(r.crop).toEqual({ cx: 0, cy: 0, cw: 0.75, ch: 0.75 });
+  });
+
+  it("hacia fuera des-recorta hasta el material y ahí se clava (clamp)", () => {
+    // Foto más ancha que la caja (80px ocultos a cada lado): arrastrar 'w' mucho a la izquierda
+    // revela hasta el borde del material y se clava.
+    const r = recortarMarcoFoto(m({ img: { x: -80, y: 0, w: 480, h: 300 } }), "w", -999, 0)!;
+    expect(r.x).toBeCloseTo(-80);
+    expect(r.w).toBeCloseTo(480);
+    expect(r.crop.cx).toBeCloseTo(0);
+    expect(r.crop.cw).toBeCloseTo(1);
+  });
+
+  it("respeta el tamaño mínimo al recortar a fondo", () => {
+    const r = recortarMarcoFoto(m(), "e", -9999, 0)!;
+    expect(r.w).toBeGreaterThanOrEqual(MIN_LADO_PX);
+    expect(r.crop.cw).toBeGreaterThanOrEqual(MIN_CROP - 1e-9);
+  });
+
+  it("con flipH, recortar el borde derecho (pantalla) recorta el lado IZQUIERDO de la fuente", () => {
+    const r = recortarMarcoFoto(m({ flipH: true }), "e", -100, 0)!;
+    expect(r.w).toBe(300);
+    expect(r.crop).toEqual({ cx: 0.25, cy: 0, cw: 0.75, ch: 1 });
+  });
+
+  it("sin foto (img sin tamaño) no hay gesto", () => {
+    expect(recortarMarcoFoto(m({ img: { x: 0, y: 0, w: 0, h: 0 } }), "e", -10, 0)).toBeNull();
   });
 });

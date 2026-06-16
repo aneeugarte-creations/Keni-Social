@@ -1,7 +1,7 @@
 /**
  * Tests de ACCESIBILIDAD del overlay de recorte (CropOverlay):
  *  - El contenedor es un `role="group"` con nombre («Recorte de imagen»).
- *  - La superficie de arrastre y los 4 tiradores de esquina son `role="button"` con aria-label
+ *  - La superficie de arrastre (pan) y los 8 tiradores del marco son `role="button"` con aria-label
  *    (gestos de puntero sin texto visible: sin label serían invisibles para el lector).
  * La imagen se simula mockeando `useImagen` (en jsdom no hay carga real de imágenes).
  */
@@ -31,18 +31,20 @@ describe("CropOverlay — accesibilidad", () => {
     expect(screen.getByRole("group", { name: "Recorte de imagen" })).toBeInTheDocument();
   });
 
-  it("la superficie de arrastre y los tiradores de esquina tienen nombre accesible", () => {
+  it("la superficie de arrastre (pan) y los 8 tiradores del marco tienen nombre accesible", () => {
     montar();
     expect(screen.getByRole("button", { name: "Mover la imagen dentro del marco" })).toBeInTheDocument();
-    for (const esquina of [
-      "superior izquierda",
-      "superior derecha",
-      "inferior derecha",
-      "inferior izquierda",
+    for (const etiqueta of [
+      "Recortar desde la esquina superior izquierda",
+      "Recortar desde el borde superior",
+      "Recortar desde la esquina superior derecha",
+      "Recortar desde el borde derecho",
+      "Recortar desde la esquina inferior derecha",
+      "Recortar desde el borde inferior",
+      "Recortar desde la esquina inferior izquierda",
+      "Recortar desde el borde izquierdo",
     ]) {
-      expect(
-        screen.getByRole("button", { name: `Escalar la imagen desde la esquina ${esquina}` }),
-      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: etiqueta })).toBeInTheDocument();
     }
   });
 });

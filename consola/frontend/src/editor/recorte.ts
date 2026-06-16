@@ -203,6 +203,55 @@ export function recorteLateral(g: GestoLateral, lado: LadoCaja, borde: number): 
   return { x: nx, y: ny, w: nw, h: nh, crop, zoom: 1, foco: [0.5, 0.5] };
 }
 
+// ── Recorte de MARCO de FOTO (modo Recortar estilo Canva: tiradores sobre el marco) ─────────────
+// En el MODO RECORTE de una IMAGEN, arrastrar un tirador del MARCO mueve ESE borde de la caja y
+// COMPENSA el crop para que los píxeles visibles no se muevan ni cambien de escala — igual que
+// `recorteLateral` pero con CUALQUIER combinación de bordes (también esquinas) y con DELTAS (px del
+// documento) sobre una instantánea del inicio del gesto. La caja se ACOTA al material original (no se
+// puede recortar "fuera" de la foto). El resultado queda en forma canónica (crop = lo visible, zoom 1,
+// foco centrado): mismo contrato y export que `recorteLateral`. La rotación NO entra aquí (el modo
+// recorte de imagen exige rotación 0, `sinRotacion`).
+
+export interface MarcoFoto {
+  caja: CajaRecorte; // caja de la capa al INICIO del gesto (px del documento)
+  // Rect de la foto ORIGINAL COMPLETA, en px del documento y con el flip YA aplicado a su POSICIÓN
+  // (lo que se ve en pantalla). El crop se mapea contra él deshaciendo el flip con flipH/flipV.
+  img: CajaRecorte;
+  flipH?: boolean;
+  flipV?: boolean;
+}
+
+export function recortarMarcoFoto(m: MarcoFoto, asa: AsaRecorte, dx: number, dy: number): ResultadoLateral | null {
+  const { caja: c, img: I } = m;
+  if (!(I.w > 0) || !(I.h > 0) || !(c.w > 0) || !(c.h > 0) || asa === "mover") return null;
+  const matR = I.x + I.w; // bordes del material original
+  const matB = I.y + I.h;
+  const minW = Math.min(c.w, Math.max(MIN_LADO_PX, MIN_CROP * I.w));
+  const minH = Math.min(c.h, Math.max(MIN_LADO_PX, MIN_CROP * I.h));
+  let l = c.x;
+  let t = c.y;
+  let r = c.x + c.w;
+  let b = c.y + c.h;
+  const oeste = asa === "nw" || asa === "w" || asa === "sw";
+  const este = asa === "ne" || asa === "e" || asa === "se";
+  const norte = asa === "nw" || asa === "n" || asa === "ne";
+  const sur = asa === "sw" || asa === "s" || asa === "se";
+  // Mueve SOLO el/los borde(s) del asa, acotado: hacia dentro al mínimo, hacia fuera al material.
+  if (oeste) l = Math.max(I.x, Math.min(r - minW, c.x + dx));
+  if (este) r = Math.min(matR, Math.max(l + minW, c.x + c.w + dx));
+  if (norte) t = Math.max(I.y, Math.min(b - minH, c.y + dy));
+  if (sur) b = Math.min(matB, Math.max(t + minH, c.y + c.h + dy));
+  const nx = l;
+  const ny = t;
+  const nw = r - l;
+  const nh = b - t;
+  // Crop = sub-rect de la FUENTE visible en la caja nueva (deshace el flip a coords de contenido).
+  const cxc = m.flipH ? matR - (nx + nw) : nx - I.x;
+  const cyc = m.flipV ? matB - (ny + nh) : ny - I.y;
+  const crop = clampCrop({ cx: cxc / I.w, cy: cyc / I.h, cw: nw / I.w, ch: nh / I.h });
+  return { x: nx, y: ny, w: nw, h: nh, crop, zoom: 1, foco: [0.5, 0.5] };
+}
+
 // Punto en coords LOCALES de una capa (origen = su esquina sup. izq., ejes girados `rot`°, como el
 // nodo Konva) -> coords del DOCUMENTO, y la inversa (para proyectar el puntero sobre la capa).
 export function localADoc(x0: number, y0: number, rot: number, px: number, py: number): { x: number; y: number } {

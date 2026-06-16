@@ -1,11 +1,10 @@
-// Capa HTML sobre la imagen en MODO RECORTE estilo Canva: el MARCO (la caja de la capa en el
-// lienzo) queda FIJO y se ve la imagen ORIGINAL COMPLETA — nítida dentro del marco, ATENUADA
-// fuera — posicionada exactamente donde el render la pinta (misma geometría que el lienzo/export).
-// Arrastrar la imagen REENCUADRA (mueve cx/cy del crop); la rueda y los tiradores de esquina
-// ESCALAN la imagen dentro del marco (cambian cw/ch alrededor de un ancla). El crop sigue siendo
-// {cx,cy,cw,ch} normalizado sobre la fuente: NUNCA destruye píxeles. Todo gesto cuenta como UN
-// paso de deshacer (como el reencuadre). Confirmar/cancelar viven fuera (banner Hecho/Cancelar +
-// Enter/Esc en el Lienzo).
+// Capa HTML sobre la imagen en MODO RECORTE estilo Canva: se ve la imagen ORIGINAL COMPLETA —nítida
+// dentro del marco, ATENUADA fuera— y los 8 tiradores van SOBRE EL MARCO (como en Canva). Arrastrar
+// un tirador del marco REDIMENSIONA EL RECORTE: mueve ese borde de la caja y compensa el crop para
+// que los píxeles no se muevan (= recortar/des-recortar desde ese borde, hasta el material). Arrastrar
+// la IMAGEN la reencuadra (mueve cx/cy del crop) y la rueda hace ZOOM dentro del marco. El crop sigue
+// siendo {cx,cy,cw,ch} normalizado sobre la fuente: NUNCA destruye píxeles. Todo gesto cuenta como UN
+// paso de deshacer. Confirmar/cancelar viven fuera (banner Hecho/Cancelar + Enter/Esc en el Lienzo).
 
 import {
   type PointerEvent as PointerEventReact,
@@ -16,13 +15,12 @@ import {
 
 import type { Capa, CapaImagen, Crop } from "../documento";
 import { fotoMuestra } from "../muestra";
-import { escalarCrop, moverAsa, vistaRecorte } from "../recorte";
+import { type AsaRecorte, type CajaRecorte, escalarCrop, moverAsa, recortarMarcoFoto, vistaRecorte } from "../recorte";
 import type { StoreEditor } from "../store";
 import { useImagen } from "../useImagen";
+import { asasMarco, claseTirador, etiquetaAsa } from "./tiradoresRecorte";
 
 const SIN_CROP: Crop = { cx: 0, cy: 0, cw: 1, ch: 1 };
-
-type Esquina = "nw" | "ne" | "se" | "sw";
 
 export function CropOverlay({
   capa,
@@ -42,14 +40,14 @@ export function CropOverlay({
   const imgReal = useImagen(capa.objeto || null);
   // Imagen EFECTIVA: la foto real del hueco o, si está vacío y la muestra está activa, la de muestra.
   const img = imgReal ?? (muestraFoto && capa.es_foto ? fotoMuestra(() => redibujar()) : null);
-  const contRef = useRef<HTMLDivElement | null>(null);
   const gestoActivo = useRef(false);
   const finZoom = useRef<number | undefined>(undefined);
-  // Gesto en curso: MOVER la imagen (pan del crop) o ESCALAR desde una esquina. Se parte del crop
-  // del inicio del gesto (los deltas no se acumulan sobre estados intermedios).
+  // Gesto en curso: PAN de la imagen (mueve cx/cy del crop) o MARCO (redimensiona el recorte desde un
+  // borde). Se parte de la instantánea del inicio del gesto (los deltas no se acumulan sobre estados
+  // intermedios).
   const drag = useRef<
-    | { modo: "mover"; crop: Crop; px: number; py: number; fw: number; fh: number }
-    | { modo: "esquina"; crop: Crop; ax: number; ay: number; ancX: number; ancY: number; px: number; py: number }
+    | { modo: "pan"; crop: Crop; px: number; py: number; fw: number; fh: number }
+    | { modo: "marco"; asa: AsaRecorte; caja: CajaRecorte; img: CajaRecorte; flipH: boolean; flipV: boolean; px: number; py: number }
     | null
   >(null);
 
@@ -73,33 +71,41 @@ export function CropOverlay({
   };
   const actual = () => store.getState().documento.capas.find((c) => c.id === capa.id) as CapaImagen | undefined;
 
-  const onDownMover = (e: PointerEventReact) => {
+  // Arrastrar la IMAGEN: pan (mover el contenido a la derecha = mover el crop a la IZQUIERDA en la
+  // fuente). El delta en fracciones es directo: la imagen completa mide fw×fh px de pantalla.
+  const onDownPan = (e: PointerEventReact) => {
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
     comenzar();
     const c = actual();
     if (!c || !v || fW <= 0 || fH <= 0) return;
-    drag.current = { modo: "mover", crop: c.crop ?? SIN_CROP, px: e.clientX, py: e.clientY, fw: fW, fh: fH };
+    drag.current = { modo: "pan", crop: c.crop ?? SIN_CROP, px: e.clientX, py: e.clientY, fw: fW, fh: fH };
   };
 
-  const onDownEsquina = (esq: Esquina) => (e: PointerEventReact) => {
+  // Arrastrar un tirador del MARCO: redimensiona el recorte desde ese borde (caja + crop compensado).
+  const onDownMarco = (asa: AsaRecorte) => (e: PointerEventReact) => {
     e.stopPropagation();
-    e.currentTarget.setPointerCapture(e.pointerId);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* jsdom / navegadores sin pointer capture: el gesto sigue por los listeners del contenedor */
+    }
     comenzar();
     const c = actual();
-    const cont = contRef.current;
-    if (!c || !v || !cont || fW <= 0 || fH <= 0) return;
-    // Ancla = la esquina OPUESTA de la imagen (fracciones 0/1 de la fuente), como Canva.
-    const ax = esq === "ne" || esq === "se" ? 0 : 1;
-    const ay = esq === "se" || esq === "sw" ? 0 : 1;
-    const rect = cont.getBoundingClientRect();
+    if (!c || !img || !(img.width > 0) || !(img.height > 0)) return;
+    const vv = vistaRecorte(img.width, img.height, c.w, c.h, c.ajuste, c.foco, c.zoom, c.crop);
+    if (!(vv.fw > 0) || !(vv.fh > 0)) return;
+    // Rect de la foto completa en px del documento, con el flip aplicado a su posición (como en
+    // pantalla); `recortarMarcoFoto` mapea el crop deshaciendo el flip.
+    const ix = c.flip_h ? c.w - vv.fx - vv.fw : vv.fx;
+    const iy = c.flip_v ? c.h - vv.fy - vv.fh : vv.fy;
     drag.current = {
-      modo: "esquina",
-      crop: c.crop ?? SIN_CROP,
-      ax,
-      ay,
-      ancX: rect.left + fL + ax * fW,
-      ancY: rect.top + fT + ay * fH,
+      modo: "marco",
+      asa,
+      caja: { x: c.x, y: c.y, w: c.w, h: c.h },
+      img: { x: c.x + ix, y: c.y + iy, w: vv.fw, h: vv.fh },
+      flipH: !!c.flip_h,
+      flipV: !!c.flip_v,
       px: e.clientX,
       py: e.clientY,
     };
@@ -108,19 +114,20 @@ export function CropOverlay({
   const onMove = (e: PointerEventReact) => {
     const d = drag.current;
     if (!d) return;
-    if (d.modo === "mover") {
-      // Arrastre de la imagen: mover el contenido a la derecha = mover el crop a la IZQUIERDA en la
-      // fuente. El delta en fracciones es directo: la imagen completa mide fw×fh px de pantalla.
+    if (d.modo === "pan") {
       const dfx = -(e.clientX - d.px) / d.fw;
       const dfy = -(e.clientY - d.py) / d.fh;
       store.getState().actualizar(capa.id, { crop: moverAsa(d.crop, "mover", dfx, dfy) } as Partial<Capa>, false);
       return;
     }
-    // Esquina: factor proporcional = cuánto se aleja el puntero del ancla respecto al inicio.
-    const rx = d.px - d.ancX !== 0 ? (e.clientX - d.ancX) / (d.px - d.ancX) : 1;
-    const ry = d.py - d.ancY !== 0 ? (e.clientY - d.ancY) / (d.py - d.ancY) : 1;
-    const f = Math.max(0.05, rx, ry);
-    store.getState().actualizar(capa.id, { crop: escalarCrop(d.crop, f, d.ax, d.ay) } as Partial<Capa>, false);
+    const dx = (e.clientX - d.px) / escala;
+    const dy = (e.clientY - d.py) / escala;
+    const r = recortarMarcoFoto({ caja: d.caja, img: d.img, flipH: d.flipH, flipV: d.flipV }, d.asa, dx, dy);
+    if (r) {
+      store
+        .getState()
+        .actualizar(capa.id, { x: r.x, y: r.y, w: r.w, h: r.h, crop: r.crop, zoom: r.zoom, foco: r.foco } as Partial<Capa>, false);
+    }
   };
 
   const onUp = () => {
@@ -147,19 +154,8 @@ export function CropOverlay({
     }, 350);
   };
 
-  // Tiradores de ESQUINA sobre la imagen completa (escala proporcional, ancla en la opuesta).
-  const esquinas: { esq: Esquina; x: number; y: number; cursor: string; etiqueta: string }[] = v
-    ? [
-        { esq: "nw", x: fL, y: fT, cursor: "nwse-resize", etiqueta: "Escalar la imagen desde la esquina superior izquierda" },
-        { esq: "ne", x: fL + fW, y: fT, cursor: "nesw-resize", etiqueta: "Escalar la imagen desde la esquina superior derecha" },
-        { esq: "se", x: fL + fW, y: fT + fH, cursor: "nwse-resize", etiqueta: "Escalar la imagen desde la esquina inferior derecha" },
-        { esq: "sw", x: fL, y: fT + fH, cursor: "nesw-resize", etiqueta: "Escalar la imagen desde la esquina inferior izquierda" },
-      ]
-    : [];
-
   return (
     <div
-      ref={contRef}
       role="group"
       aria-label="Recorte de imagen"
       onPointerMove={onMove}
@@ -199,24 +195,25 @@ export function CropOverlay({
           <div
             role="button"
             aria-label="Mover la imagen dentro del marco"
-            onPointerDown={onDownMover}
+            onPointerDown={onDownPan}
             className="absolute cursor-move"
             style={{ left: fL, top: fT, width: fW, height: fH }}
           />
-          {/* Tiradores de esquina (círculo estilo Canva): escalan la imagen dentro del marco. */}
-          {esquinas.map((a) => (
+          {/* Tiradores del MARCO (estilo Canva): redimensionan el recorte desde ese borde. Encima de
+              la superficie de pan para que agarrar un borde no inicie un arrastre de imagen. */}
+          {asasMarco(W, H).map((a) => (
             <div
-              key={a.esq}
+              key={a.asa}
               role="button"
-              aria-label={a.etiqueta}
-              onPointerDown={onDownEsquina(a.esq)}
-              className="absolute h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary bg-background shadow"
+              aria-label={etiquetaAsa(a.asa)}
+              onPointerDown={onDownMarco(a.asa)}
+              className={claseTirador(a.asa)}
               style={{ left: a.x, top: a.y, cursor: a.cursor }}
             />
           ))}
         </>
       )}
-      {/* MARCO del recorte: la caja de la capa, fija en el lienzo. */}
+      {/* MARCO del recorte: la caja de la capa. */}
       <div className="pointer-events-none absolute inset-0 ring-2 ring-primary" />
     </div>
   );
