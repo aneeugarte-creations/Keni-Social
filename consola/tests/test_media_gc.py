@@ -1,7 +1,7 @@
 """Tests OFFLINE de la GC de media suelta (`dominio.media_gc` + daemon).
 
 Mockean `almacen_media.listar_objetos`/`borrar_objeto` y los repos de referencias
-(`listar_publicaciones`, `listar_publicaciones_comerciales`, `listar_media_catalogo`),
+(`listar_publicaciones`, `listar_media_catalogo`),
 asi NO necesitan Postgres ni almacen real. Verifican la definicion CONSERVADORA de suelto:
 no borra referenciados, ni catalogados, ni recientes (umbral); SI borra el suelto viejo; y
 `dry_run` no toca nada. Mas un test de que el daemon respeta el gate (`KENI_MEDIA_GC` off).
@@ -44,11 +44,8 @@ _NUEVO = _AHORA - 1 * 3600.0
 
 @pytest.fixture
 def repos_vacios(monkeypatch):
-    """Por defecto: sin publicaciones, sin comerciales, sin texto (todo suelto)."""
+    """Por defecto: sin publicaciones ni catálogo de media (todo suelto)."""
     monkeypatch.setattr(media_gc.repos, "listar_publicaciones", lambda *a, **k: [])
-    monkeypatch.setattr(
-        media_gc.repos, "listar_publicaciones_comerciales", lambda *a, **k: []
-    )
     monkeypatch.setattr(media_gc.repos, "listar_media_catalogo", lambda *a, **k: [])
 
 
@@ -71,26 +68,19 @@ def _captura_borrados(monkeypatch):
 # --------------------------------------------------------------------------- #
 
 
-def test_referencias_unen_publicaciones_y_comerciales(monkeypatch):
+def test_referencias_unen_publicaciones(monkeypatch):
     monkeypatch.setattr(
         media_gc.repos, "listar_publicaciones",
         lambda *a, **k: [{"imagen": "pub.png"}, {"imagen": ""}, {"imagen": "  "}],
     )
-    monkeypatch.setattr(
-        media_gc.repos, "listar_publicaciones_comerciales",
-        lambda *a, **k: [{"imagen": "com.png"}, {"url": "https://x"}],  # url no aporta
-    )
     # Sin catalogo-media: solo cuentan las publicaciones.
     monkeypatch.setattr(media_gc.repos, "listar_media_catalogo", lambda *a, **k: [])
-    assert media_gc.referencias_vivas() == {"pub.png", "com.png"}
+    assert media_gc.referencias_vivas() == {"pub.png"}
 
 
 def test_catalogo_media_es_red_de_seguridad_opcional_si_existe(monkeypatch):
     # Si el repo de catalogo-media existe, sus objetos se suman (red de seguridad).
     monkeypatch.setattr(media_gc.repos, "listar_publicaciones", lambda *a, **k: [])
-    monkeypatch.setattr(
-        media_gc.repos, "listar_publicaciones_comerciales", lambda *a, **k: []
-    )
     monkeypatch.setattr(
         media_gc.repos, "listar_media_catalogo",
         lambda *a, **k: [{"objeto": "cat.png"}, {"objeto": ""}],
@@ -102,9 +92,6 @@ def test_gc_no_falla_si_catalogo_media_no_existe(monkeypatch):
     # Cuando se elimine `api/catalogo_media.py`, el repo perdera la funcion: el GC NO debe
     # fallar; simplemente no consulta esa fuente (se basa solo en publicaciones).
     monkeypatch.setattr(media_gc.repos, "listar_publicaciones", lambda *a, **k: [])
-    monkeypatch.setattr(
-        media_gc.repos, "listar_publicaciones_comerciales", lambda *a, **k: []
-    )
     monkeypatch.delattr(media_gc.repos, "listar_media_catalogo", raising=False)
     assert media_gc.referencias_vivas() == set()
     # Y un suelto viejo se borra igual (sin la red de seguridad de catalogo-media).
@@ -120,7 +107,6 @@ def test_protege_foto_cruda_de_publicacion(monkeypatch):
         media_gc.repos, "listar_publicaciones",
         lambda *a, **k: [{"imagen": "", "foto": "foto-cruda.jpg"}],
     )
-    monkeypatch.setattr(media_gc.repos, "listar_publicaciones_comerciales", lambda *a, **k: [])
     monkeypatch.setattr(media_gc.repos, "listar_media_catalogo", lambda *a, **k: [])
     assert "foto-cruda.jpg" in media_gc.referencias_vivas()
     # Y un GC viejo NO la borra aunque `imagen` esté vacío.
@@ -134,7 +120,6 @@ def test_protege_recursos_de_marca_y_plantillas(monkeypatch):
     # Logos/tipografías (activos de marca) y media_id de plantillas del estudio son originales
     # del render: no se borran.
     monkeypatch.setattr(media_gc.repos, "listar_publicaciones", lambda *a, **k: [])
-    monkeypatch.setattr(media_gc.repos, "listar_publicaciones_comerciales", lambda *a, **k: [])
     monkeypatch.setattr(media_gc.repos, "listar_media_catalogo", lambda *a, **k: [])
     monkeypatch.setattr(
         media_gc.repos, "listar_marca_activos",
@@ -169,7 +154,6 @@ def test_protege_fotos_de_collage(monkeypatch):
             {"id": "pub2", "imagen": "", "foto": "", "fotos": ""},  # sin collage
         ],
     )
-    monkeypatch.setattr(media_gc.repos, "listar_publicaciones_comerciales", lambda *a, **k: [])
     monkeypatch.setattr(media_gc.repos, "listar_media_catalogo", lambda *a, **k: [])
     monkeypatch.delattr(media_gc.repos, "listar_documento_versiones", raising=False)
 
@@ -189,7 +173,6 @@ def test_protege_collage_json_malformado(monkeypatch):
         media_gc.repos, "listar_publicaciones",
         lambda *a, **k: [{"id": "pub1", "imagen": "", "foto": "", "fotos": "invalid json"}],
     )
-    monkeypatch.setattr(media_gc.repos, "listar_publicaciones_comerciales", lambda *a, **k: [])
     monkeypatch.setattr(media_gc.repos, "listar_media_catalogo", lambda *a, **k: [])
     monkeypatch.delattr(media_gc.repos, "listar_documento_versiones", raising=False)
 
@@ -221,7 +204,6 @@ def test_protege_documento_versiones_render_objeto(monkeypatch):
         media_gc.repos, "listar_publicaciones",
         lambda *a, **k: [{"id": "pid1", "contenido_id": "cid1", "imagen": "", "foto": ""}],
     )
-    monkeypatch.setattr(media_gc.repos, "listar_publicaciones_comerciales", lambda *a, **k: [])
     monkeypatch.setattr(media_gc.repos, "listar_media_catalogo", lambda *a, **k: [])
     monkeypatch.setattr(media_gc.repos, "listar_documento_versiones", _listar_docs)
 
@@ -267,7 +249,6 @@ def test_protege_documento_versiones_media_del_documento(monkeypatch):
         media_gc.repos, "listar_publicaciones",
         lambda *a, **k: [{"id": "pid1", "contenido_id": "cid1", "imagen": "", "foto": ""}],
     )
-    monkeypatch.setattr(media_gc.repos, "listar_publicaciones_comerciales", lambda *a, **k: [])
     monkeypatch.setattr(media_gc.repos, "listar_media_catalogo", lambda *a, **k: [])
     monkeypatch.setattr(media_gc.repos, "listar_documento_versiones", _listar_docs)
 
@@ -309,7 +290,6 @@ def test_documento_versiones_malformado_es_ignorado(monkeypatch):
         media_gc.repos, "listar_publicaciones",
         lambda *a, **k: [{"id": "pid1", "contenido_id": "cid1", "imagen": "", "foto": ""}],
     )
-    monkeypatch.setattr(media_gc.repos, "listar_publicaciones_comerciales", lambda *a, **k: [])
     monkeypatch.setattr(media_gc.repos, "listar_media_catalogo", lambda *a, **k: [])
     monkeypatch.setattr(media_gc.repos, "listar_documento_versiones", _listar_docs)
 
@@ -326,9 +306,6 @@ def test_documento_versiones_malformado_es_ignorado(monkeypatch):
 def test_no_borra_referenciado_por_publicacion(monkeypatch):
     monkeypatch.setattr(
         media_gc.repos, "listar_publicaciones", lambda *a, **k: [{"imagen": "viva.png"}]
-    )
-    monkeypatch.setattr(
-        media_gc.repos, "listar_publicaciones_comerciales", lambda *a, **k: []
     )
     monkeypatch.setattr(media_gc.repos, "listar_media_catalogo", lambda *a, **k: [])
     # "viva.png" es VIEJA pero referenciada: NO debe borrarse.
@@ -375,9 +352,6 @@ def test_borra_el_suelto_viejo(monkeypatch, repos_vacios):
 def test_mezcla_solo_borra_el_suelto_viejo(monkeypatch):
     monkeypatch.setattr(
         media_gc.repos, "listar_publicaciones", lambda *a, **k: [{"imagen": "viva.png"}]
-    )
-    monkeypatch.setattr(
-        media_gc.repos, "listar_publicaciones_comerciales", lambda *a, **k: []
     )
     monkeypatch.setattr(
         media_gc.repos, "listar_media_catalogo", lambda *a, **k: [{"objeto": "cat.png"}]

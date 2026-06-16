@@ -73,9 +73,6 @@ def test_reexporta_constantes_publicas():
     # Las constantes de dominio se reexportan desde el modulo neutro `estados`.
     assert repos.ESTADOS_TAREA == estados.ESTADOS_TAREA
     assert repos.ESTADOS_PUBLICACION == estados.ESTADOS_PUBLICACION
-    assert repos.ESTADOS_COMERCIAL == estados.ESTADOS_COMERCIAL
-    assert repos.ESTADO_COMERCIAL_ACTIVA == estados.ESTADO_COMERCIAL_ACTIVA
-    assert repos.METRICAS_COMERCIAL == estados.METRICAS_COMERCIAL
 
 
 # --------------------------------------------------------------------------- #
@@ -103,12 +100,11 @@ def test_publicaciones_persisten_en_postgres_no_en_yaml(entorno, monkeypatch):
 # --------------------------------------------------------------------------- #
 
 
-def test_delega_en_db_comercial(entorno):
-    # El comercial vive en Postgres: escribir por repos -> leer por db.
-    pub = repos.crear_publicacion_comercial("https://x.com/a/1", titulo="Pieza", marca="unotv")
-    assert db.obtener_publicacion_comercial(pub["id"])["titulo"] == "Pieza"
-    repos.registrar_snapshot_comercial(pub["id"], "2026-05-25T10:00:00", 10, 100)
-    assert db.ultimo_snapshot_comercial(pub["id"])["interacciones"] == 10
+def test_delega_en_db_campania(entorno):
+    # Las campañas viven en Postgres: escribir por repos -> leer por db.
+    cam = repos.crear_campania_comercial(marcas=["unotv"], nombre="Camp", hashtags=["x"])
+    assert db.obtener_campania_comercial(cam["id"])["nombre"] == "Camp"
+    assert repos.borrar_campania_comercial(cam["id"]) is True
 
 
 def test_delega_en_db_publicaciones(entorno):

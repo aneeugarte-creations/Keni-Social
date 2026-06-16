@@ -276,17 +276,3 @@ def test_listar_snapshots_piezas_capada(pg, monkeypatch):
     assert [s["ts"] for s in filas] == tss[-4:]
     # `limite=0` devuelve todo el conjunto filtrado.
     assert len(db.listar_snapshots_piezas(marca="m", limite=0)) == 15
-
-
-def test_serie_comercial_capada_con_ultimo_punto(pg, monkeypatch):
-    # Misma cota para la serie comercial: cap por defecto, último punto garantizado; `limite=0`
-    # devuelve la serie completa (la usa el cruce de objetivo, que recorre TODO el histórico).
-    monkeypatch.setenv("KENI_METRICAS_SERIE_MAX", "5")
-    pub = repos.crear_publicacion_comercial(id_post_metricool="POST-1", marca="m", red="r")
-    tss = [f"2026-06-01T{h:02d}:00:00" for h in range(12)]
-    for i, ts in enumerate(tss):
-        db.registrar_snapshot_comercial(pub["id"], ts, interacciones=i, alcance=i)
-    serie = db.listar_snapshots_comerciales(pub["id"])
-    assert len(serie) == 5
-    assert [s["ts"] for s in serie] == tss[-5:]
-    assert len(db.listar_snapshots_comerciales(pub["id"], limite=0)) == 12

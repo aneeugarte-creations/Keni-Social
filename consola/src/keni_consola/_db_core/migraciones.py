@@ -18,8 +18,6 @@ from ..tiempo import ahora_iso
 from ._comun import _log
 from .migraciones_columnas import (
     _COLUMNAS_APROBACIONES_AMPLIADAS,
-    _COLUMNAS_COMERCIAL_PUBLICACIONES_AMPLIADAS,
-    _COLUMNAS_COMERCIAL_SNAPSHOTS_AMPLIADAS,
     _COLUMNAS_CONTENIDO_AMPLIADAS,
     _COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS,
     _COLUMNAS_DAEMON_LATIDOS_AMPLIADAS,
@@ -40,7 +38,6 @@ from .migraciones_columnas import (
     _backfill_pesos_fuente,
     _migrar_columnas_aprobaciones,
     _migrar_columnas_campanias,
-    _migrar_columnas_comercial,
     _migrar_columnas_contenido,
     _migrar_columnas_contenido_plataforma,
     _migrar_columnas_daemon_latidos,
@@ -70,6 +67,7 @@ from .migraciones_integridad import (
     _COLUMNAS_JSONB,
     _FKS,
     _drop_tabla_sugerencias_editoriales,
+    _drop_tablas_comercial_snapshots,
     _migrar_checks_dominio,
     _migrar_fks_hub,
     _migrar_indice_generaciones,
@@ -297,15 +295,6 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
         re_aplicar_si_cambia=True,
         datos=_COLUMNAS_APROBACIONES_AMPLIADAS,
     ),
-    Migracion(
-        "0013-columnas-comercial",
-        _migrar_columnas_comercial,
-        re_aplicar_si_cambia=True,
-        datos=(
-            _COLUMNAS_COMERCIAL_PUBLICACIONES_AMPLIADAS,
-            _COLUMNAS_COMERCIAL_SNAPSHOTS_AMPLIADAS,
-        ),
-    ),
     Migracion("0014-columnas-campanias", _migrar_columnas_campanias, re_aplicar_si_cambia=True),
     Migracion(
         "0015-columnas-swaps",
@@ -433,6 +422,11 @@ MIGRACIONES_POST_DDL: tuple[Migracion, ...] = (
     # VERIFICAR/REDACTAR/ILUSTRAR, Fusionar/Priorizar). One-shot e idempotente (solo reescribe
     # las filas que aun tengan el prefijo/frase viejo). Ver `_migrar_etiquetas_etapas_verbos`.
     Migracion("0038-etiquetas-etapas-verbos", _migrar_etiquetas_etapas_verbos),
+    # LIMPIEZA: el apartado "Comercial" (seguimiento por snapshots) se retiró por completo
+    # (daemon de captura, endpoints, repos, DDL); lo reemplazó "Campañas" (hashtags sobre
+    # métricas vivas). Esta migración elimina sus tablas sueltas en BDs ya creadas. One-shot e
+    # idempotente (`DROP TABLE IF EXISTS`). `comercial_campanias` (vivas) NO se toca.
+    Migracion("0039-drop-comercial-snapshots", _drop_tablas_comercial_snapshots),
 )
 
 # Vista unica y ordenada (PRE + POST), util para tests/inspeccion.

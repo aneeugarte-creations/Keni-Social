@@ -147,7 +147,7 @@ def borrar_video_composicion(composicion_id: str) -> bool:
     """Borra una composicion de video y sus subtitulos asociados; True si existia, False si no.
 
     `video_subtitulos` no tiene FK declarada (mismo estilo que el resto del esquema), asi que la
-    limpieza de la pista de subtitulos es explicita, igual que `borrar_publicacion_comercial`.
+    limpieza de la pista de subtitulos es explicita (borrado en cascada manual).
     """
     con = _conectar()
     try:

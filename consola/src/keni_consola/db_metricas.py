@@ -13,15 +13,9 @@ from ._db_comun import (
     uuid,
 )
 from ._db_json import a_json_dict
-from .db_comercial import (
-    SELECT_SNAPSHOT as _SELECT_SNAPSHOT,
-)
-from .db_comercial import (
-    fila_a_snapshot as _fila_a_snapshot,
-)
 
 # --- Tope de puntos de las series temporales (Item: límite/downsampling) ----- #
-# Las series de métricas (`listar_snapshots_comerciales`, `serie_pieza`,
+# Las series de métricas (`serie_pieza`,
 # `listar_snapshots_piezas`) alimentan gráficas; con meses de snapshots cada 4 h crecerían sin
 # cota. Tope por DEFECTO de puntos devueltos, configurable por `KENI_METRICAS_SERIE_MAX` (entero;
 # mín 2 para que siempre quepa una recta). DECISIÓN: cuando la serie excede el tope, se devuelven
@@ -44,54 +38,6 @@ def _tope_serie_metricas(limite: int | None) -> int | None:
     if limite is None:
         return config._entero("KENI_METRICAS_SERIE_MAX", _METRICAS_SERIE_MAX_DEF, minimo=2)
     return limite if limite > 0 else None
-
-
-def listar_snapshots_comerciales(
-    publicacion_id: str, *, limite: int | None = None
-) -> list[dict[str, Any]]:
-    """Serie temporal de una publicacion (mas antiguo primero), lista para graficar.
-
-    Acotada por DEFECTO a los últimos `KENI_METRICAS_SERIE_MAX` puntos (el dato más reciente
-    SIEMPRE entra; ver `_tope_serie_metricas`). `limite<=0` devuelve la serie COMPLETA (para
-    callers que recorren todo el histórico, p. ej. el cruce de objetivo comercial).
-    """
-    tope = _tope_serie_metricas(limite)
-    con = _conectar()
-    try:
-        if tope is None:
-            filas = con.execute(
-                f"SELECT {_SELECT_SNAPSHOT} FROM comercial_snapshots "
-                "WHERE publicacion_id = ? ORDER BY ts ASC",
-                (publicacion_id,),
-            ).fetchall()
-        else:
-            # Trae los N más recientes (DESC + LIMIT, barato con el índice por ts) y reinvierte a
-            # ASC: el orden de graficado, con el último punto garantizado dentro del recorte.
-            filas = con.execute(
-                f"SELECT {_SELECT_SNAPSHOT} FROM comercial_snapshots "
-                "WHERE publicacion_id = ? ORDER BY ts DESC LIMIT ?",
-                (publicacion_id, tope),
-            ).fetchall()
-            filas = list(reversed(filas))
-    finally:
-        con.close()
-    return [_fila_a_snapshot(f) for f in filas]
-
-
-def ultimo_snapshot_comercial(publicacion_id: str) -> dict[str, Any] | None:
-    """El snapshot mas reciente de una publicacion (None si aun no tiene)."""
-    con = _conectar()
-    try:
-        fila = con.execute(
-            f"SELECT {_SELECT_SNAPSHOT} FROM comercial_snapshots "
-            "WHERE publicacion_id = ? ORDER BY ts DESC LIMIT 1",
-            (publicacion_id,),
-        ).fetchone()
-    finally:
-        con.close()
-    if fila is None:
-        return None
-    return _fila_a_snapshot(fila)
 
 
 

@@ -40,49 +40,6 @@ def arrancar_persistencia() -> None:
 # todos validos en Postgres 16. Los ids son TEXT generados por la app (uuid), no
 # autoincrementales: no hay `AUTOINCREMENT`/`SERIAL`.
 _DDL_ESQUEMA: tuple[str, ...] = (
-    """
-    CREATE TABLE IF NOT EXISTS comercial_publicaciones (
-        id                   TEXT PRIMARY KEY,
-        url                  TEXT NOT NULL DEFAULT '',
-        id_post_metricool    TEXT NOT NULL DEFAULT '',
-        titulo               TEXT NOT NULL DEFAULT '',
-        marca                TEXT NOT NULL DEFAULT '',
-        cliente              TEXT NOT NULL DEFAULT '',
-        campania             TEXT NOT NULL DEFAULT '',
-        red                  TEXT NOT NULL DEFAULT '',
-        formato              TEXT NOT NULL DEFAULT '',
-        metrica_objetivo     TEXT NOT NULL DEFAULT 'interacciones',
-        objetivo             INTEGER NOT NULL DEFAULT 0,
-        estado               TEXT NOT NULL DEFAULT 'activa',
-        publicado            TEXT NOT NULL DEFAULT '',
-        notas                TEXT NOT NULL DEFAULT '',
-        aviso_en             TEXT NOT NULL DEFAULT '',
-        fecha_creacion       TEXT NOT NULL DEFAULT '',
-        fecha_actualizacion  TEXT NOT NULL DEFAULT ''
-    )
-    """,
-    """
-    CREATE TABLE IF NOT EXISTS comercial_snapshots (
-        id              TEXT PRIMARY KEY,
-        publicacion_id  TEXT NOT NULL,
-        ts              timestamptz NOT NULL,
-        interacciones   INTEGER NOT NULL DEFAULT 0,
-        visualizaciones INTEGER NOT NULL DEFAULT 0,
-        alcance         INTEGER NOT NULL DEFAULT 0,
-        likes                          INTEGER NOT NULL DEFAULT 0,
-        comentarios                    INTEGER NOT NULL DEFAULT 0,
-        compartidos                    INTEGER NOT NULL DEFAULT 0,
-        guardados                      INTEGER NOT NULL DEFAULT 0,
-        video_views                    INTEGER NOT NULL DEFAULT 0,
-        tiempo_medio_vis_s             INTEGER NOT NULL DEFAULT 0,
-        clics_enlace                   INTEGER NOT NULL DEFAULT 0,
-        seguidores_netos_atribuidos    INTEGER NOT NULL DEFAULT 0
-    )
-    """,
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_comercial_snapshots_pub_ts "
-    "ON comercial_snapshots (publicacion_id, ts)",
-    "CREATE INDEX IF NOT EXISTS idx_comercial_snapshots_pub "
-    "ON comercial_snapshots (publicacion_id)",
     # Campañas comerciales: agrupan piezas por uno o varios HASHTAGS configurables, y
     # pueden abarcar VARIAS marcas (multimarca). Definen un filtro (marcas + hashtags) y
     # la analítica se computa AL VUELO sobre el listado de piezas del periodo

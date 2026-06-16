@@ -38,18 +38,6 @@ ESTADOS_PUBLICACION: tuple[str, ...] = (
     ESTADO_PUBLICADO,
 )
 
-# Estados del seguimiento comercial: activa (se captura), pausada (se detuvo la
-# pauta), cerrada (KPI entregado / reporte hecho). Operacional; vive en SQLite.
-ESTADOS_COMERCIAL: tuple[str, ...] = ("activa", "pausada", "cerrada")
-
-# Solo las activas entran en la captura programada.
-ESTADO_COMERCIAL_ACTIVA = "activa"
-
-# Metricas que un objetivo/umbral comercial puede seguir (misma forma que el resto
-# del producto). `visualizaciones` e `interacciones` vienen del post real de Metricool;
-# `alcance` solo en modo muestra (Metricool no lo da por pieza).
-METRICAS_COMERCIAL: tuple[str, ...] = ("interacciones", "visualizaciones", "alcance")
-
 # Roles de usuario (auth multiusuario, #130). `admin` gestiona usuarios y todo lo
 # demas; `editor` usa la consola pero NO toca /api/usuarios.
 ROLES_USUARIO: tuple[str, ...] = ("admin", "editor")

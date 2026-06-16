@@ -70,7 +70,6 @@ _FKS: tuple[tuple[str, str, str, str, str], ...] = (
     ("documento_versiones", "contenido_id", "contenido", "id", "CASCADE"),
     ("video_subtitulos", "composicion_id", "video_composiciones", "id", "CASCADE"),
     ("insumos_item", "lote_id", "insumos_lote", "id", "CASCADE"),
-    ("comercial_snapshots", "publicacion_id", "comercial_publicaciones", "id", "CASCADE"),
 )
 
 
@@ -298,6 +297,20 @@ def _drop_tabla_sugerencias_editoriales(con: Any) -> None:
     con.execute("DROP TABLE IF EXISTS sugerencias_editoriales")
 
 
+def _drop_tablas_comercial_snapshots(con: Any) -> None:
+    """Elimina las tablas del seguimiento por SNAPSHOTS del antiguo apartado Comercial.
+
+    El apartado "Comercial" (selección de un post real de Metricool + captura periódica de
+    snapshots + reporte) se retiró: lo reemplazó "Campañas" (filtro por hashtag sobre
+    métricas vivas). Su daemon de captura, endpoints, repos y DDL se borraron; quedan sueltas
+    `comercial_publicaciones` y `comercial_snapshots` en BDs ya creadas. Idempotente
+    (`DROP TABLE IF EXISTS`); los índices y la FK caen con la tabla. `comercial_campanias`
+    (las campañas, vivas) NO se toca. One-shot por BD: el DDL declarativo ya no las crea.
+    """
+    con.execute("DROP TABLE IF EXISTS comercial_snapshots")
+    con.execute("DROP TABLE IF EXISTS comercial_publicaciones")
+
+
 # --------------------------------------------------------------------------- #
 # Bloque 6: TIPOS — fechas TEXT -> tipos NATIVOS de Postgres (timestamptz/date) #
 # --------------------------------------------------------------------------- #
@@ -326,7 +339,6 @@ _COLUMNAS_FECHA_NATIVA: tuple[tuple[str, str, str, bool], ...] = (
     ("jobs", "creado", "timestamptz", True),
     ("jobs", "claimed_at", "timestamptz", True),
     ("metricas_pieza_snapshots", "ts", "timestamptz", False),
-    ("comercial_snapshots", "ts", "timestamptz", False),
     ("eventos_internos", "creado", "timestamptz", True),
     ("gasto_ia", "dia", "date", True),
 )

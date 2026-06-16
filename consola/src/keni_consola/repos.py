@@ -25,17 +25,14 @@ Uso en las features:
 # `repos.<algo>` / `from .repos import X` siguen funcionando sin cambios.
 
 from ._repos_comun import (  # noqa: F401
-    ESTADO_COMERCIAL_ACTIVA,
     ESTADO_ROTA_APROBADO,
     ESTADO_ROTA_PROPUESTO,
     ESTADO_SWAP_PROPUESTO,
-    ESTADOS_COMERCIAL,
     ESTADOS_PIEZA,
     ESTADOS_PUBLICACION,
     ESTADOS_ROTA,
     ESTADOS_SWAP,
     ESTADOS_TAREA,
-    METRICAS_COMERCIAL,
     NOMBRE_FRANJA_MANANA_DEFAULT,
     NOMBRE_FRANJA_TARDE_DEFAULT,
     TIPOS_AUSENCIA,
@@ -61,19 +58,10 @@ from .repos_colaboracion import (  # noqa: F401
 )
 from .repos_comercial import (  # noqa: F401
     actualizar_campania_comercial,
-    actualizar_publicacion_comercial,
     borrar_campania_comercial,
-    borrar_publicacion_comercial,
     crear_campania_comercial,
-    crear_publicacion_comercial,
     listar_campanias_comerciales,
-    listar_publicaciones_comerciales,
-    listar_snapshots_comerciales,
-    marcar_aviso_comercial,
     obtener_campania_comercial,
-    obtener_publicacion_comercial,
-    registrar_snapshot_comercial,
-    ultimo_snapshot_comercial,
 )
 from .repos_contenido import (  # noqa: F401
     actualizar_contenido,

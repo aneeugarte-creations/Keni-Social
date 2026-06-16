@@ -1,13 +1,13 @@
 """Tests del backend POSTGRES de la capa operacional (`db.py` + `auth/` + `motor_db`).
 
-Estos tests cubren la paridad funcional basica (CRUD de tareas, comercial + serie
-temporal con ON CONFLICT, rota, auth, cola de jobs concurrente) sobre el Postgres de
-pruebas, y las migraciones de columnas idempotentes. SKIP si no hay Postgres (ver `_postgres.py`).
+Estos tests cubren la paridad funcional basica (CRUD de tareas, rota, auth, cola de jobs
+concurrente) sobre el Postgres de pruebas, y las migraciones de columnas idempotentes.
+SKIP si no hay Postgres (ver `_postgres.py`).
 """
 
 from __future__ import annotations
 
-from keni_consola import auth, db, db_comercial, motor_db
+from keni_consola import auth, db, motor_db
 
 # La fixture `pg` (activa Postgres o salta) se autodescubre via `pytest_plugins` en
 # conftest (`tests._postgres`); no se importa aqui (evita falsos F811).
@@ -21,133 +21,6 @@ from keni_consola import auth, db, db_comercial, motor_db
 def test_esquema_se_crea_on_demand(pg):
     # La primera operacion crea el esquema en Postgres y devuelve vacio.
     assert db.listar_swaps_turno() == []
-
-
-# --------------------------------------------------------------------------- #
-# Comercial + snapshots (INSERT OR IGNORE -> ON CONFLICT DO NOTHING)          #
-# --------------------------------------------------------------------------- #
-
-
-def test_comercial_crud_y_filtros(pg):
-    pub = db.crear_publicacion_comercial(
-        "https://x/1", titulo="P1", cliente="amx", campania="c1", objetivo=100
-    )
-    assert pub["objetivo"] == 100
-    assert len(db.listar_publicaciones_comerciales(cliente="amx")) == 1
-    assert db.listar_publicaciones_comerciales(cliente="otro") == []
-    act = db.actualizar_publicacion_comercial(pub["id"], {"objetivo": 200, "estado": "pausada"})
-    assert act["objetivo"] == 200 and act["estado"] == "pausada"
-    assert db.borrar_publicacion_comercial(pub["id"]) is True
-
-
-def test_snapshots_idempotentes_on_conflict(pg):
-    pub = db.crear_publicacion_comercial("https://x/2")
-    assert db.registrar_snapshot_comercial(pub["id"], "2026-01-01T00:00:00", 10, 100) is True
-    # Mismo ts: el indice UNIQUE -> ON CONFLICT DO NOTHING -> no inserta (False).
-    assert db.registrar_snapshot_comercial(pub["id"], "2026-01-01T00:00:00", 99, 999) is False
-    serie = db.listar_snapshots_comerciales(pub["id"])
-    assert len(serie) == 1 and serie[0]["interacciones"] == 10
-    ultimo = db.ultimo_snapshot_comercial(pub["id"])
-    assert ultimo["alcance"] == 100
-
-
-def test_marcar_aviso_solo_primera_vez(pg):
-    pub = db.crear_publicacion_comercial("https://x/3")
-    db.marcar_aviso_comercial(pub["id"], "2026-01-02T10:00:00")
-    db.marcar_aviso_comercial(pub["id"], "2026-09-09T10:00:00")  # idempotente: no re-marca
-    assert db.obtener_publicacion_comercial(pub["id"])["aviso_en"] == "2026-01-02T10:00:00"
-
-
-def test_snapshot_metricas_granulares_se_guardan_y_leen(pg):
-    """Un snapshot con el desglose granular por pieza (likes/comentarios/.../formato) se
-    persiste y se relee con esos campos; ausentes -> 0 defensivo (sin ceros falsos: la UI
-    distingue 'sin dato' por interacciones/encontrado)."""
-    pub = db.crear_publicacion_comercial("https://x/g", formato="reel")
-    assert pub["formato"] == "reel"
-    granulares = {
-        "likes": 50,
-        "comentarios": 7,
-        "compartidos": 3,
-        "guardados": 4,
-        "video_views": 900,
-        "tiempo_medio_vis_s": 12,
-        "clics_enlace": 5,
-        # `seguidores_netos_atribuidos` ausente a proposito -> debe leerse como 0.
-    }
-    assert db.registrar_snapshot_comercial(
-        pub["id"], "2026-02-01T00:00:00", 60, 1000, visualizaciones=900, granulares=granulares
-    ) is True
-    ultimo = db.ultimo_snapshot_comercial(pub["id"])
-    assert ultimo["likes"] == 50
-    assert ultimo["comentarios"] == 7
-    assert ultimo["compartidos"] == 3
-    assert ultimo["guardados"] == 4
-    assert ultimo["video_views"] == 900
-    assert ultimo["tiempo_medio_vis_s"] == 12
-    assert ultimo["clics_enlace"] == 5
-    assert ultimo["seguidores_netos_atribuidos"] == 0  # ausente -> 0
-    # Y siguen las base.
-    assert ultimo["interacciones"] == 60 and ultimo["visualizaciones"] == 900
-    serie = db.listar_snapshots_comerciales(pub["id"])
-    assert len(serie) == 1 and serie[0]["likes"] == 50
-
-
-def test_snapshot_sin_granulares_defaultea_a_cero(pg):
-    """Compat: registrar un snapshot SIN `granulares` (firma legada) deja el desglose en 0."""
-    pub = db.crear_publicacion_comercial("https://x/g2")
-    assert pub["formato"] == ""  # formato no provisto -> vacio
-    assert db.registrar_snapshot_comercial(pub["id"], "2026-02-02T00:00:00", 10, 100) is True
-    ultimo = db.ultimo_snapshot_comercial(pub["id"])
-    for campo in db_comercial._METRICAS_GRANULARES_SNAPSHOT:
-        assert ultimo[campo] == 0
-
-
-def test_migracion_columnas_comercial_granulares_bd_vieja(pg):
-    """Una BD hosted con `comercial_snapshots`/`comercial_publicaciones` creadas ANTES de la
-    ola de metricas granulares (sin likes/.../formato) debe ALTERarse al crear el esquema,
-    de forma idempotente, sin perder los datos previos."""
-    con = motor_db.conectar_cruda()
-    con.execute("DROP TABLE IF EXISTS comercial_snapshots")
-    con.execute("DROP TABLE IF EXISTS comercial_publicaciones")
-    # Esquema legado: publicaciones sin `formato`; snapshots con solo las 3 metricas base.
-    con.execute(
-        "CREATE TABLE comercial_publicaciones (id TEXT PRIMARY KEY, url TEXT NOT NULL DEFAULT '', "
-        "id_post_metricool TEXT NOT NULL DEFAULT '', titulo TEXT NOT NULL DEFAULT '', "
-        "marca TEXT NOT NULL DEFAULT '', cliente TEXT NOT NULL DEFAULT '', "
-        "campania TEXT NOT NULL DEFAULT '', red TEXT NOT NULL DEFAULT '', "
-        "metrica_objetivo TEXT NOT NULL DEFAULT 'interacciones', objetivo INTEGER NOT NULL DEFAULT 0, "
-        "estado TEXT NOT NULL DEFAULT 'activa', publicado TEXT NOT NULL DEFAULT '', "
-        "notas TEXT NOT NULL DEFAULT '', aviso_en TEXT NOT NULL DEFAULT '', "
-        "fecha_creacion TEXT NOT NULL DEFAULT '', fecha_actualizacion TEXT NOT NULL DEFAULT '')"
-    )
-    con.execute(
-        "CREATE TABLE comercial_snapshots (id TEXT PRIMARY KEY, publicacion_id TEXT NOT NULL, "
-        "ts TEXT NOT NULL, interacciones INTEGER NOT NULL DEFAULT 0, "
-        "visualizaciones INTEGER NOT NULL DEFAULT 0, alcance INTEGER NOT NULL DEFAULT 0)"
-    )
-    con.execute(
-        "INSERT INTO comercial_publicaciones (id, titulo) VALUES ('viejo', 'Pieza legada')"
-    )
-    con.execute(
-        "INSERT INTO comercial_snapshots (id, publicacion_id, ts, interacciones) "
-        "VALUES ('s1', 'viejo', '2026-01-01T00:00:00', 42)"
-    )
-    con.commit()
-    con.close()
-
-    # La primera operacion `db.*` crea/migra el esquema (ALTER ... ADD COLUMN IF NOT EXISTS).
-    legada = db.obtener_publicacion_comercial("viejo")
-    assert legada is not None
-    assert legada["titulo"] == "Pieza legada"
-    assert legada["formato"] == ""
-    # El snapshot ganará las columnas granulares inicializadas en 0.
-    ultimo = db.ultimo_snapshot_comercial("viejo")
-    assert ultimo["interacciones"] == 42
-    for campo in db_comercial._METRICAS_GRANULARES_SNAPSHOT:
-        assert ultimo[campo] == 0
-    # Idempotente: re-crear el esquema no falla (las columnas ya existen).
-    db._esquemas_asegurados.clear()
-    assert db.obtener_publicacion_comercial("viejo") is not None
 
 
 # --------------------------------------------------------------------------- #

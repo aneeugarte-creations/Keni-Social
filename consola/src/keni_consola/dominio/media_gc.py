@@ -208,7 +208,7 @@ def _refs_documento_versiones() -> set[str]:
       - Los media originales (imagenes, logos, fondos) que las capas del documento
         referenciaban (el restore de la versión no podría renderizar).
 
-    Itera sobre TODAS las publicaciones (normales + comerciales) y acumula referencias
+    Itera sobre TODAS las publicaciones y acumula referencias
     desde todas sus versiones. Defensivo y opcional: si el repo de versiones no existe
     o falla, continúa sin tumbar el GC.
     """
@@ -221,10 +221,8 @@ def _refs_documento_versiones() -> set[str]:
 
     try:
         publicaciones = repos.listar_publicaciones()
-        comerciales = repos.listar_publicaciones_comerciales()
-        todas = publicaciones + comerciales
 
-        for pub in todas:
+        for pub in publicaciones:
             contenido_id = pub.get("contenido_id", "")
             plataforma_id = pub.get("id", "")
             if not contenido_id or not plataforma_id:
@@ -258,9 +256,7 @@ def referencias_vivas() -> set[str]:
     """Conjunto de nombres de objeto REFERENCIADOS (NO borrables).
 
     Une:
-      - el `imagen` de TODAS las publicaciones normales (sin filtro de estado/marca),
-      - el `imagen` de las publicaciones comerciales (HOY no tienen ese campo: el `.get`
-        devuelve None y no aporta nada; se incluye por si se anade en el futuro),
+      - el `imagen` de TODAS las publicaciones (sin filtro de estado/marca),
       - el `foto` cruda (render on-demand; CRÍTICO),
       - las fotos de collage (`fotos` JSON array),
       - el PNG renderizado + media del documento en TODAS las versiones del editor,
@@ -273,16 +269,12 @@ def referencias_vivas() -> set[str]:
     """
     vivas: set[str] = set()
     publicaciones = repos.listar_publicaciones()
-    comerciales = repos.listar_publicaciones_comerciales()
     vivas |= _imagenes_de(publicaciones)
-    vivas |= _imagenes_de(comerciales)
     # Con render on-demand la FOTO cruda ya no está horneada en `imagen`: protégela también, o
     # el GC borraría el original del que el render compone.
     vivas |= _fotos_de(publicaciones)
-    vivas |= _fotos_de(comerciales)
     # Fotos de collage: varias fotos en huecos distintos, almacenadas como JSON array.
     vivas |= _fotos_de_collage(publicaciones)
-    vivas |= _fotos_de_collage(comerciales)
     # Originales que alimentan el render: plantillas del estudio (miniatura + media_id) y
     # activos de marca (logos, tipografías). Defensivo y opcional.
     vivas |= _objetos_recursos_marca()

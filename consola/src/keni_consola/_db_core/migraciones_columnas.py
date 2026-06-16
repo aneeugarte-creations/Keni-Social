@@ -595,49 +595,6 @@ def _migrar_columnas_aprobaciones(con: Any) -> None:
             )
 
 
-# Columnas ampliadas del apartado comercial. Las bases creadas antes del paso a
-# "monitorizar el post real de Metricool" no tienen `id_post_metricool` (la pieza se
-# identificaba por `url`) ni `visualizaciones` en los snapshots (solo interacciones/
-# alcance, de la curva sintetica). El Postgres hosted persiste entre despliegues:
-# sin estos ALTER, una BD vieja reventaria al leer/escribir las columnas nuevas.
-#
-# Ola "metricas granulares por pieza": el snapshot pasa de 3 metricas (interacciones/
-# visualizaciones/alcance) a capturar tambien el desglose que la fuente (Metricool, via
-# `servicio.construir_metricas_pieza`) expone por pieza: likes, comentarios, compartidos,
-# guardados, video_views, tiempo medio de visualizacion (s), clics de enlace y seguidores
-# netos atribuidos. El `formato` (reel/foto/carrusel/video/link/texto) es propiedad ESTATICA
-# de la pieza, no del snapshot: vive en `comercial_publicaciones`. Las columnas nacen con
-# DEFAULT 0 / '' para alinear con las existentes (un dato ausente -> 0, sin ceros falsos en
-# la UI, que distingue "sin dato" por `interacciones`/`encontrado`).
-_COLUMNAS_COMERCIAL_PUBLICACIONES_AMPLIADAS: tuple[tuple[str, str], ...] = (
-    ("id_post_metricool", "TEXT NOT NULL DEFAULT ''"),
-    ("formato", "TEXT NOT NULL DEFAULT ''"),
-)
-_COLUMNAS_COMERCIAL_SNAPSHOTS_AMPLIADAS: tuple[tuple[str, str], ...] = (
-    ("visualizaciones", "INTEGER NOT NULL DEFAULT 0"),
-    ("likes", "INTEGER NOT NULL DEFAULT 0"),
-    ("comentarios", "INTEGER NOT NULL DEFAULT 0"),
-    ("compartidos", "INTEGER NOT NULL DEFAULT 0"),
-    ("guardados", "INTEGER NOT NULL DEFAULT 0"),
-    ("video_views", "INTEGER NOT NULL DEFAULT 0"),
-    ("tiempo_medio_vis_s", "INTEGER NOT NULL DEFAULT 0"),
-    ("clics_enlace", "INTEGER NOT NULL DEFAULT 0"),
-    ("seguidores_netos_atribuidos", "INTEGER NOT NULL DEFAULT 0"),
-)
-
-
-def _migrar_columnas_comercial(con: Any) -> None:
-    """Anade al apartado comercial las columnas que una BD vieja no tuviera (idempotente)."""
-    for tabla, ampliadas in (
-        ("comercial_publicaciones", _COLUMNAS_COMERCIAL_PUBLICACIONES_AMPLIADAS),
-        ("comercial_snapshots", _COLUMNAS_COMERCIAL_SNAPSHOTS_AMPLIADAS),
-    ):
-        columnas = _columnas_existentes(con, tabla)
-        for columna, tipo in ampliadas:
-            if columna not in columnas:
-                con.execute(f"ALTER TABLE {tabla} ADD COLUMN IF NOT EXISTS {columna} {tipo}")
-
-
 def _migrar_columnas_campanias(con: Any) -> None:
     """Migra `comercial_campanias` de marca ÚNICA a `marcas` (multimarca). Idempotente.
 

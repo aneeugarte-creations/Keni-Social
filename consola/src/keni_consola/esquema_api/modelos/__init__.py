@@ -31,18 +31,6 @@ from ._base import (
     Paginacion,
     RespuestaMensaje,
 )
-from .comercial import (
-    ActualComercial,
-    EstadoComercial,
-    MetricaComercial,
-    PostSeleccionableComercial,
-    PublicacionComercial,
-    RespuestaPostsComercial,
-    RespuestaPublicacionComercial,
-    RespuestaPublicacionesComercial,
-    RespuestaRefrescarComercial,
-    SnapshotComercial,
-)
 from .estado import (
     NivelEstado,
     RespuestaEstado,
@@ -170,17 +158,6 @@ __all__ = [
     "RespuestaPublicaciones",
     "RespuestaPublicacion",
     "RespuestaColaAprobacion",
-    # Comercial.
-    "EstadoComercial",
-    "MetricaComercial",
-    "ActualComercial",
-    "SnapshotComercial",
-    "PostSeleccionableComercial",
-    "RespuestaPostsComercial",
-    "PublicacionComercial",
-    "RespuestaPublicacionesComercial",
-    "RespuestaPublicacionComercial",
-    "RespuestaRefrescarComercial",
     # Respuestas genericas.
     "RespuestaMensaje",
     "ErrorApi",
@@ -254,15 +231,6 @@ MODELOS = [
     # Aprobacion de equipo (#9, Fase 3).
     RespuestaColaAprobacion,
     # Generaciones: DEFERIDAS (ver bloque arriba). Se mantienen a mano en types.ts.
-    # Comercial (#124: procedencia en `fuente`).
-    ActualComercial,
-    SnapshotComercial,
-    PostSeleccionableComercial,
-    RespuestaPostsComercial,
-    PublicacionComercial,
-    RespuestaPublicacionesComercial,
-    RespuestaPublicacionComercial,
-    RespuestaRefrescarComercial,
     RespuestaMensaje,
     ErrorApi,
 ]
@@ -272,6 +240,6 @@ MODELOS = [
 # `modelos.metricas`, ...). Se eliminan del namespace para preservar EXACTAMENTE la
 # superficie publica historica (cuando `modelos` era un unico fichero): el `dir()` no
 # debe ganar nombres de submodulo. Los modelos ya estan re-exportados arriba por nombre.
-for _submodulo in ("_base", "comercial", "config", "estado", "limites", "metricas", "publicaciones"):
+for _submodulo in ("_base", "config", "estado", "limites", "metricas", "publicaciones"):
     globals().pop(_submodulo, None)
 del _submodulo
