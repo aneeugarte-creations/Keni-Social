@@ -4,6 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import {
   BellRing,
   CalendarDays,
+  CalendarPlus,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -294,6 +295,7 @@ export function AyudaLeyenda() {
 export function MenuMasAcciones({
   esAdmin,
   semanaAprobada,
+  onAbrirAsignar,
   onCopiarAnterior,
   onAbrirFranjasSemana,
   onAbrirPlantillaFranjas,
@@ -304,6 +306,8 @@ export function MenuMasAcciones({
 }: {
   esAdmin: boolean;
   semanaAprobada: boolean;
+  /** Abre «Asignar turnos» (reparto persona→franja→días + import). */
+  onAbrirAsignar: () => void;
   onCopiarAnterior: () => void;
   onAbrirFranjasSemana: () => void;
   onAbrirPlantillaFranjas: () => void;
@@ -315,6 +319,16 @@ export function MenuMasAcciones({
   const items: EntradaMenuContextual[] = [];
 
   if (esAdmin) {
+    // «Asignar turnos» encabeza el menú (acción principal de edición); solo en borrador
+    // —misma puerta que el resto de la edición de la rota—.
+    if (!semanaAprobada) {
+      items.push({
+        etiqueta: "Asignar turnos",
+        icono: CalendarPlus,
+        onClick: onAbrirAsignar,
+      });
+      items.push({ separador: true });
+    }
     items.push({
       etiqueta: copiarPendiente ? "Copiando…" : "Copiar anterior",
       icono: Copy,

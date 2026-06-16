@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BellRing,
   CalendarOff,
-  CalendarPlus,
   CheckCircle2,
   Loader2,
   Sunrise,
@@ -351,16 +350,7 @@ export function Calendario({
               </Badge>
             </Tooltip>
           )}
-          {editable && (
-            <Button
-              variant="outline"
-              onClick={() => setAbrirAsignar(true)}
-              title="Reparte la semana: persona → franja → días"
-            >
-              <CalendarPlus className="h-4 w-4" />
-              Asignar turnos
-            </Button>
-          )}
+          {/* «Asignar turnos» se movió al menú «…» (MenuMasAcciones) para aligerar la cabecera. */}
           {esAdmin && !semana?.aprobada && (
             <Button
               variant="secondary"
@@ -406,6 +396,7 @@ export function Calendario({
             esAdmin={esAdmin}
             semanaAprobada={Boolean(semana?.aprobada)}
             copiarPendiente={copiarAnterior.isPending}
+            onAbrirAsignar={() => setAbrirAsignar(true)}
             onCopiarAnterior={() => copiarAnterior.mutate()}
             onAbrirFranjasSemana={() => setAbrirFranjasSemana(true)}
             onAbrirPlantillaFranjas={() => setAbrirPlantillaFranjas(true)}
