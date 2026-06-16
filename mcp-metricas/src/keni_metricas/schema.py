@@ -496,12 +496,13 @@ RANGO_SEMANA_CERRADA = "semana_cerrada"
 RANGOS_VALIDOS: tuple[str, ...] = (*RANGOS_DIAS.keys(), RANGO_SEMANA_CERRADA)
 
 # Presets OFRECIDOS en el desplegable de la UI (en orden de aparicion). Es un
-# subconjunto de los validos: "7d" sigue siendo un token de ENTRADA aceptado (compat
-# de estado persistido, MCP y comparador) pero NO se ofrece en el menu, porque resuelve
-# EXACTAMENTE a lo mismo que "semana" (la misma ventana rodante de 7 dias que termina
-# hoy) y mostrar ambos solo confundia. "semana_cerrada" tampoco se ofrece aqui (lo usa
-# el reporte del lunes, no el selector general).
-RANGOS_PRESET_UI: tuple[str, ...] = ("semana", "mes", "30d")
+# subconjunto de los validos: "7d" y "30d" siguen siendo tokens de ENTRADA aceptados
+# (compat de estado persistido, MCP y comparador) pero NO se ofrecen en el menu, porque
+# resuelven EXACTAMENTE a lo mismo que "semana" y "mes" respectivamente (las mismas
+# ventanas rodantes de 7 y 30 dias que terminan hoy) y mostrar los duplicados solo
+# confundia. "semana_cerrada" tampoco se ofrece aqui (lo usa el reporte del lunes, no
+# el selector general).
+RANGOS_PRESET_UI: tuple[str, ...] = ("semana", "mes")
 
 
 def semana_cerrada(hoy: date | None = None) -> tuple[date, date]:

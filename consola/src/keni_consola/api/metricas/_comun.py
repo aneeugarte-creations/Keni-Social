@@ -78,9 +78,10 @@ def _gate_marca_metricas(
 # Rangos validos: contrato de la fachada (no se importa el schema directamente).
 RANGOS_VALIDOS = servicio.RANGOS_VALIDOS
 
-# Presets ofrecidos en el desplegable (subconjunto de los validos: sin "7d", que es
-# identico a "semana"). Solo lo usa `opciones` para poblar el selector; la validacion
-# de entrada sigue contra RANGOS_VALIDOS, asi "7d" se acepta aunque no se ofrezca.
+# Presets ofrecidos en el desplegable (subconjunto de los validos: sin "7d"/"30d",
+# identicos a "semana"/"mes"). Solo lo usa `opciones` para poblar el selector; la
+# validacion de entrada sigue contra RANGOS_VALIDOS, asi "7d"/"30d" se aceptan aunque
+# no se ofrezcan.
 RANGOS_PRESET_UI = servicio.RANGOS_PRESET_UI
 
 

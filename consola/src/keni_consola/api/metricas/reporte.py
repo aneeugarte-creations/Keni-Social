@@ -420,8 +420,8 @@ async def opciones(request: Request) -> Response:
     # del SPA, no recorta el catalogo.
     pares = marcas.opciones_metricas()
     marcas_lista = [{"id": mid, "nombre": etiqueta} for mid, etiqueta in pares]
-    # Solo los presets OFRECIDOS (sin "7d", duplicado exacto de "semana"); la validacion
-    # de entrada sigue aceptando RANGOS_VALIDOS, asi un "7d" persistido no rompe.
+    # Solo los presets OFRECIDOS (sin "7d"/"30d", duplicados exactos de "semana"/"mes");
+    # la validacion de entrada sigue aceptando RANGOS_VALIDOS, asi un token persistido no rompe.
     rangos = [{"id": r, "etiqueta": _etiqueta_rango(r)} for r in RANGOS_PRESET_UI]
     return JSONResponse({"marcas": marcas_lista, "rangos": rangos})
 
