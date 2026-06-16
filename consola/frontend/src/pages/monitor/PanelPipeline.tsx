@@ -70,8 +70,17 @@ function contar(jobs: ColaJob[], queuePorTipo: Record<string, string>): Record<s
   return c;
 }
 
-/** Switch de UN ajuste bool con su PROPIA mutación (el «guardando» es de este control). */
-function SwitchAjuste({ ajuste, ariaLabel }: { ajuste: AjusteAdmin; ariaLabel: string }) {
+/** Switch de UN ajuste bool con su PROPIA mutación (el «guardando» es de este control).
+ *  `tono` se pasa al Switch: el maestro «Máquina» va en `estado` (verde on / rojo off). */
+function SwitchAjuste({
+  ajuste,
+  ariaLabel,
+  tono,
+}: {
+  ajuste: AjusteAdmin;
+  ariaLabel: string;
+  tono?: "neutro" | "estado";
+}) {
   const guardar = useGuardarAjuste();
   return (
     <Switch
@@ -79,6 +88,7 @@ function SwitchAjuste({ ajuste, ariaLabel }: { ajuste: AjusteAdmin; ariaLabel: s
       disabled={guardar.isPending}
       onCheckedChange={(v) => guardar.mutate({ clave: ajuste.clave, valor: v })}
       aria-label={ariaLabel}
+      tono={tono}
     />
   );
 }
@@ -186,13 +196,21 @@ export function PanelPipeline({
           {chip}
           {maquina && (
             <label className="flex items-center gap-2 text-sm">
-              <span className={cn(maquinaOn ? "text-muted-foreground" : "text-destructive")}>
+              <span className="text-muted-foreground">
                 Máquina
-                <span className="ml-1.5 text-xs">{maquinaOn ? "· encendida" : "· apagada"}</span>
+                <span
+                  className={cn(
+                    "ml-1.5 text-xs font-medium",
+                    maquinaOn ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400",
+                  )}
+                >
+                  · {maquinaOn ? "on" : "off"}
+                </span>
               </span>
               <SwitchAjuste
                 ajuste={maquina}
                 ariaLabel="Máquina (interruptor general de toda la auto-producción)"
+                tono="estado"
               />
             </label>
           )}
