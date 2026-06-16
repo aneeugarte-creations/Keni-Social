@@ -24,6 +24,9 @@ def main() -> int:
     o = libprompts.limpiar_prompts_obsoletos()
     if o:
         print(f"Texto: {o} prompt(s) obsoleto(s) eliminados del store.")
+    o2 = libprompts.limpiar_prompts_obsoletos_v2()
+    if o2:
+        print(f"Texto: {o2} prompt(s) obsoleto(s) (ola v2) eliminados del store.")
     d = libprompts.migrar_descripciones_editorial()
     if d:
         print(f"Texto: {d} editorial(es) con descripcion/titulo de plantilla vieja corregidos.")

@@ -60,7 +60,6 @@ def test_catalogo_cubre_los_prompts_inyectados():
         "prompt/envoltorios/redes",
         "prompt/envoltorios/copy-unico",
         "prompt/envoltorios/carrusel",
-        "prompt/envoltorios/sin-emojis",
     }
     faltan = esperados - set(pp.PROCESOS_POR_PROMPT)
     assert not faltan, f"prompts inyectados sin catalogar: {faltan}"

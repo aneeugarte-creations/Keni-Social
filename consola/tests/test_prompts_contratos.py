@@ -36,7 +36,7 @@ def test_resolver_contrato_rellena_y_es_noop_sin_placeholder():
 
 
 def test_contrato_de_none_para_no_estructurados():
-    for pid in ("prompt/ilustrar", "prompt/hashtags", "prompt/asistente/resumir", "prompt/asistente/variantes"):
+    for pid in ("prompt/ilustrar", "prompt/hashtags", "prompt/envoltorios/redes", "prompt/envoltorios/carrusel"):
         assert contrato_de(pid) is None, pid
 
 

@@ -31,7 +31,7 @@ from ... import (
     transcripcion,
 )
 from ..._http_json import leer_json
-from ...dominio import asistente, estudio_imagen, eventos, jobspec, placeholders
+from ...dominio import estudio_imagen, eventos, jobspec, placeholders
 from ...estados import (
     CLASES_PUBLICACION,
     ESTADOS_PUBLICACION,
@@ -61,7 +61,6 @@ __all__ = [
     "rutas",
     "transcripcion",
     "leer_json",
-    "asistente",
     "estudio_imagen",
     "eventos",
     "jobspec",

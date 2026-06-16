@@ -27,7 +27,8 @@ from ._rutas import raiz
 __all__ = [
     "dir_inicial", "obtener_inicial", "cuerpo_efectivo", "cuerpo_inicial", "importar_inicial",
     "asegurar_linea_base",
-    "migrar_nombres_prompts", "limpiar_prompts_obsoletos", "migrar_descripciones_editorial",
+    "migrar_nombres_prompts", "limpiar_prompts_obsoletos", "limpiar_prompts_obsoletos_v2",
+    "migrar_descripciones_editorial",
     "reformatear_prompts", "publicar_linea_base", "migrar_contrato_salida", "migrar_redactar_v1",
     "migrar_parrilla_v1", "migrar_titulos_prompts", "migrar_alcance_editorial",
     "migrar_descripciones_prompt",
@@ -40,6 +41,18 @@ _PROMPTS_OBSOLETOS: tuple[str, ...] = (
     "prompt/editorial/sugerencias-plataforma",
 )
 _SENTINELA_OBSOLETOS = ".prompts-obsoletos-v1"
+
+# OLA v2 de obsoletos: prompts retirados al eliminar features. El editor «asistente» del tablero
+# (modos resumir/variantes) era código MUERTO (ningún consumidor en el frontend), así que se borró
+# end-to-end y sus dos prompts ya no existen. El envoltorio «sin emojis» se INLINEÓ en el prompt de
+# `idear` (su único usuario), así que tampoco hace falta. El store en vivo ya pasó la v1 (sentinela
+# `.prompts-obsoletos-v1`), por eso esta ola lleva su PROPIO sentinela y lista. Idempotente.
+_PROMPTS_OBSOLETOS_V2: tuple[str, ...] = (
+    "prompt/asistente/resumir",
+    "prompt/asistente/variantes",
+    "prompt/envoltorios/sin-emojis",
+)
+_SENTINELA_OBSOLETOS_V2 = ".prompts-obsoletos-v2"
 
 # Migración ONE-SHOT del rediseño de nombres/ids de la Prompts: el store en vivo ya tiene los
 # docs del sistema con ids/títulos VIEJOS, y `importar_inicial` no pisa lo existente, así que los
@@ -479,6 +492,27 @@ def limpiar_prompts_obsoletos() -> int:
         return 0
     n = 0
     for pid in _PROMPTS_OBSOLETOS:
+        ruta = destino_raiz.joinpath(*f"{pid}.md".split("/"))
+        if ruta.is_file():
+            ruta.unlink()
+            n += 1
+    sentinela.parent.mkdir(parents=True, exist_ok=True)
+    escribir_atomico(sentinela, "ok\n")
+    return n
+
+
+def limpiar_prompts_obsoletos_v2() -> int:
+    """Borra del store la OLA v2 de prompts obsoletos (`_PROMPTS_OBSOLETOS_V2`).
+
+    El store en vivo ya pasó la v1 (sentinela aparte), así que esta ola usa su PROPIO sentinela.
+    ONE-SHOT por sentinela. Idempotente; no toca nada más del store. Devuelve cuántos borró.
+    """
+    destino_raiz = raiz()
+    sentinela = destino_raiz / _SENTINELA_OBSOLETOS_V2
+    if sentinela.exists():
+        return 0
+    n = 0
+    for pid in _PROMPTS_OBSOLETOS_V2:
         ruta = destino_raiz.joinpath(*f"{pid}.md".split("/"))
         if ruta.is_file():
             ruta.unlink()

@@ -33,7 +33,6 @@ _log = logging.getLogger("keni_consola.generar")
 # conserva la LÓGICA (cuándo se inyecta cada bloque, qué valor lleva cada `{{VARIABLE}}` —
 # límites de red, ids válidos, catálogo de fotos…). El ORDEN de concatenación de `componer` NO cambia
 # (prompt caching: estable-primero); solo de dónde sale el texto.
-PROMPT_ENVOLTORIO_SIN_EMOJIS = "prompt/envoltorios/sin-emojis"
 PROMPT_ENVOLTORIO_REDES = "prompt/envoltorios/redes"
 PROMPT_ENVOLTORIO_CARRUSEL = "prompt/envoltorios/carrusel"
 PROMPT_ENVOLTORIO_COPY_UNICO = "prompt/envoltorios/copy-unico"
@@ -45,9 +44,9 @@ def _plantilla_envoltorio(doc_id: str, fallback: str = "") -> str:
     La INICIAL del paquete (`prompts_inicial/`) es la fuente del texto; `cuerpo_efectivo` ya cae
     a ella cuando el doc no está en el store, y `cuerpo_inicial` es la red final si la lectura
     del store revienta (NUNCA lanza). `fallback` es un respaldo MÍNIMO en código (por defecto
-    "", solo lo usa «sin emojis»): para los envoltorios estructurales (redes/carrusel/copy
-    unificado) NO hay copia en código, así que sin inicial quedan vacíos (con warning). El test
-    de cobertura inicial↔código garantiza que ese camino degradado es inalcanzable en la práctica."""
+    ""): para los envoltorios estructurales (redes/carrusel/copy unificado) NO hay copia en
+    código, así que sin inicial quedan vacíos (con warning). El test de cobertura inicial↔código
+    garantiza que ese camino degradado es inalcanzable en la práctica."""
     try:
         cuerpo = (libprompts.cuerpo_efectivo(doc_id) or "").strip()
     except Exception:  # noqa: BLE001 -- nunca dejar una generación sin envoltorio por un fallo de lectura
@@ -62,18 +61,6 @@ def _plantilla_envoltorio(doc_id: str, fallback: str = "") -> str:
         return fallback
     return cuerpo
 
-
-# Instrucción ADITIVA de estilo, OPT-IN por flujo (la usan flujos cuya salida nunca debe
-# llevar emojis, p. ej. evergreen/termómetro). Su política de emojis vive en el prompt
-# (`copy-desde-nota` §4) + la editorial adjunta de la marca, la única fuente. El texto
-# EDITABLE vive en la Prompts (`PROMPT_ENVOLTORIO_SIN_EMOJIS`); esta constante es el
-# fallback (== inicial).
-INSTRUCCION_SIN_EMOJIS = "No uses emojis en el copy."
-
-
-def instruccion_sin_emojis() -> str:
-    """Texto del envoltorio "sin emojis" (Prompts; fallback al respaldo en código)."""
-    return _plantilla_envoltorio(PROMPT_ENVOLTORIO_SIN_EMOJIS, INSTRUCCION_SIN_EMOJIS)
 
 # Delimitador XML que envuelve el contenido NO confiable (nota/transcripción/ítem RSS del
 # usuario). Es la frontera explícita instrucciones↔datos del prompt. El nombre BASE del tag;
@@ -387,7 +374,6 @@ def componer(
     adjuntos: list[libprompts.Documento],
     bloque_contexto: str,
     *,
-    sin_emojis: bool = False,
     redes_ids: list[str] | None = None,
     copy_unico: bool = False,
     n_notas: int = 0,
@@ -396,11 +382,9 @@ def componer(
 ) -> str:
     """Arma el prompt final autocontenido: prompt + editorial adjunta + contexto.
 
-    `sin_emojis`/`redes_ids` son ADITIVOS y OPT-IN: por defecto NO se añaden, para que un
-    prompt cualquiera de la Texto no quede forzado a "sin emojis" ni al bloque de piezas
-    por red. `redes_ids` lo activan las features de copy; `sin_emojis` lo activan flujos
-    cuya salida nunca lleva emojis (evergreen/termómetro), NO el copy (su política de
-    emojis vive en el propio prompt + editorial).
+    `redes_ids` es ADITIVO y OPT-IN: por defecto NO se añade el bloque de piezas por red,
+    para que un prompt cualquiera de la Texto no quede forzado a él. Lo activan las features
+    de copy.
 
     `copy_unico` (solo copy-desde-nota): cuando es True, en vez de pedir una pieza por red
     (`instruccion_redes`) pide UN SOLO copy + copy_in reutilizado en todas (`instruccion_copy_unico`).
@@ -417,8 +401,6 @@ def componer(
     # ANTES del bloque editorial y rompía el prefijo común). El contenido del prompt es el
     # mismo; solo cambia el orden de los bloques.
     partes: list[str] = [cuerpo_prompt.strip()]
-    if sin_emojis:
-        partes.append(instruccion_sin_emojis())
     if adjuntos:
         # MODELO DE PIEZA (rediseno de la Prompts): los pipelines inyectan la
         # version PUBLICADA de cada adjunto editorial (sha fijado por un admin), no la

@@ -5,8 +5,7 @@ verifican la generación de envoltorios del dominio:
 
   - Salida byte-idéntica: con la inicial sin editar, cada instrucción compuesta es la
     esperada. Si la inicial o el ensamblaje divergen, esto revienta.
-  - La INICIAL es la ÚNICA fuente del texto: solo «sin emojis» conserva un respaldo MÍNIMO,
-    `INSTRUCCION_SIN_EMOJIS`.
+  - La INICIAL es la ÚNICA fuente del texto (ya no hay copia en código de los envoltorios).
   - Un doc EDITADO en el store gana (el texto sale de la Prompts, los valores del código).
   - Sin doc NI inicial, los envoltorios estructurales degradan a vacío con warning (camino
     inalcanzable: lo cubre el test de cobertura inicial↔código).
@@ -30,8 +29,6 @@ def _store_tmp(monkeypatch, tmp_path):
 # Literales de ORO: salida EXACTA del código hardcodeado previo a la migración #
 # --------------------------------------------------------------------------- #
 
-_GOLD_SIN_EMOJIS = 'No uses emojis en el copy.'
-
 _GOLD_REDES_X_FB = 'Genera el copy SOLO para estas redes: X, Facebook. Límites técnicos de caracteres (no los excedas): X máx 25000 caracteres, Facebook sin tope técnico. Mantén tu formato y tu auto-verificación habituales. Además, al FINAL de toda tu respuesta, añade un único bloque de código cercado ```json con esta forma exacta: {"piezas": [{"red": "<id>", "texto": "<copy de esa red>", "copy_in": "<texto que va DENTRO de la imagen>"}, ...]}, usando como <id> únicamente estos valores: "x", "facebook". Incluye exactamente UNA pieza por cada red pedida (nunca dos de la misma red). Si la pieza de una red es un HILO o un CARRUSEL, va numerada DENTRO de su "texto": en un hilo, un tuit por párrafo con prefijo "1/n ", "2/n "… y cada tuit dentro del límite de la red; en un carrusel, las slides separadas por una línea con solo "---". El `copy_in` es el texto que va SOBRE la imagen (titular/claim corto), distinto del `texto` que la acompaña; respeta la línea editorial de texto-en-imagen de la marca adjunta, sale siempre sin emojis y deja "" si la pieza no lleva imagen.'  # noqa: E501 -- literal de ORO byte-exacto
 
 _GOLD_CU_MIXTO = 'Este copy se publicará TAL CUAL en estas redes: Instagram, X, Facebook. Escribe UN SOLO copy que sirva igual para todas (NO una variante por red) y UN SOLO texto-en-imagen. Para que valga en todas, el copy no excede el límite técnico más estricto de esas redes: 2200 caracteres. NO añadas hashtags: el equipo los pone aparte por grupos donde corresponde. Mantén tu formato y tu auto-verificación habituales. Además, al FINAL de toda tu respuesta, añade un único bloque de código cercado ```json con esta forma exacta: {"texto": "<el copy>", "copy_in": "<texto que va DENTRO de la imagen: titular/claim corto, sin emojis; \\"\\" si no lleva imagen>", "tipo": "<post|carrusel>"}. El `copy_in` es el texto SOBRE la imagen (en un carrusel, el titular PARAGUAS de la PORTADA), distinto del `texto`; respeta la línea editorial de texto-en-imagen de la marca adjunta. DECIDE además el `tipo` de salida y decláralo en el json: "post" para un único post de foto (lo normal), o "carrusel" si el tema es un EXPLAINER o una LISTA de varios elementos (p. ej. "cuántos son y dónde están", varias claves, pasos o datos) que luciría mejor repartido en varias tarjetas que en una sola foto. Ante la duda, "post". NO incluyas "slides": las fotos de cada tarjeta las añade el equipo después.'  # noqa: E501 -- literal de ORO byte-exacto
@@ -52,10 +49,6 @@ _FOTOS = [
 # --------------------------------------------------------------------------- #
 # Regresión de oro: inicial sin editar => composición byte-idéntica a la previa #
 # --------------------------------------------------------------------------- #
-
-
-def test_oro_sin_emojis_byte_identico():
-    assert generar.instruccion_sin_emojis() == _GOLD_SIN_EMOJIS
 
 
 def test_oro_instruccion_redes_byte_identica():
@@ -87,21 +80,6 @@ def test_oro_copy_unico_con_carrusel_byte_identico():
 
 
 # --------------------------------------------------------------------------- #
-# La INICIAL es la ÚNICA fuente del texto (ya no hay _FALLBACK_* duplicado)     #
-# --------------------------------------------------------------------------- #
-
-
-def test_sin_emojis_inicial_coincide_con_su_fallback_minimo():
-    """«sin emojis» conserva un respaldo MÍNIMO en código (`INSTRUCCION_SIN_EMOJIS`): debe
-    seguir coincidiendo con su inicial. Los envoltorios estructurales (redes/carrusel/copy
-    unificado) ya no tienen copia en código; su byte-exactitud la fijan los tests de ORO."""
-    assert (
-        libprompts.cuerpo_inicial(generar.PROMPT_ENVOLTORIO_SIN_EMOJIS).strip()
-        == generar.INSTRUCCION_SIN_EMOJIS
-    )
-
-
-# --------------------------------------------------------------------------- #
 # El doc de la Prompts GANA; los valores los sigue poniendo el código       #
 # --------------------------------------------------------------------------- #
 
@@ -109,10 +87,8 @@ def test_sin_emojis_inicial_coincide_con_su_fallback_minimo():
 def test_doc_editado_gana_y_se_sustituyen_variables(monkeypatch):
     editados = {
         generar.PROMPT_ENVOLTORIO_REDES: "Solo estas redes: {{ETIQUETAS}} ({{LIMITES}}) ids {{IDS_JSON}}.",
-        generar.PROMPT_ENVOLTORIO_SIN_EMOJIS: "Nada de emojis, por favor.",
     }
     monkeypatch.setattr(libprompts, "cuerpo_efectivo", lambda pid: editados.get(pid))
-    assert generar.instruccion_sin_emojis() == "Nada de emojis, por favor."
     instr = generar.instruccion_redes(["x"])
     assert instr == 'Solo estas redes: X (X máx 25000 caracteres) ids "x".'
 
@@ -150,11 +126,10 @@ def prompts_roto(monkeypatch, tmp_path):
 
 
 def test_sin_doc_ni_inicial_degrada_con_warning(prompts_roto, caplog):
-    """«sin emojis» conserva su fallback mínimo en código; los envoltorios estructurales
-    (sin copia en código) degradan a vacío. Todos dejan warning. El test de cobertura
-    inicial↔código garantiza que la inicial SIEMPRE está, así que esto no pasa en producción."""
+    """Los envoltorios estructurales (sin copia en código) degradan a vacío con warning. El
+    test de cobertura inicial↔código garantiza que la inicial SIEMPRE está, así que esto no
+    pasa en producción."""
     with caplog.at_level("WARNING", logger="keni_consola.generar"):
-        assert generar.instruccion_sin_emojis() == _GOLD_SIN_EMOJIS  # respaldo mínimo seguro
         assert generar.instruccion_redes(["x", "facebook"]) == ""
         assert generar.instruccion_copy_unico(["instagram", "x", "facebook"]) == ""
     assert any("envoltorio" in r.message for r in caplog.records)

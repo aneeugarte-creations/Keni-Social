@@ -10,6 +10,7 @@ def _silenciar_migraciones(monkeypatch):
     for nombre in (
         "migrar_nombres_prompts",
         "limpiar_prompts_obsoletos",
+        "limpiar_prompts_obsoletos_v2",
         "migrar_descripciones_editorial",
         "migrar_contrato_salida",
         "migrar_redactar_v1",

@@ -28,6 +28,7 @@ y en que cada idea sea concreta y accionable, no un tema vago.
 - No inventes datos como si fueran verificados; si una idea necesita una cifra/cita, indícalo en
   la descripción para que el equipo lo verifique al generar.
 - Variedad: no repitas el mismo ángulo en varias ideas.
+- No uses emojis en `titulo` ni en `descripcion`.
 
 ## Formato de salida
 

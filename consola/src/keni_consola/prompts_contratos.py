@@ -11,7 +11,7 @@ así el contrato va SIEMPRE al FINAL del prompt (tras la prosa y los datos). En 
 contrato NO se puede editar (el editor oculta el placeholder del final y pinta el contrato
 read-only en un bloque aparte). `contrato_de` devuelve `None` para los
 prompts NO estructurados (su salida es prosa para una persona: `prompt/ilustrar`,
-`prompt/asistente/*`, envoltorios…) o los que ya inyectan su contrato por otro placeholder
+envoltorios…) o los que ya inyectan su contrato por otro placeholder
 (`prompt/importar/parrilla` con `{{ESQUEMA_JSON}}`, `prompt/hashtags` no-JSON). `prompt/redactar`
 SÍ tiene contrato (las formas `{texto, copy_in}` / `{piezas}` que lee el parser).
 """

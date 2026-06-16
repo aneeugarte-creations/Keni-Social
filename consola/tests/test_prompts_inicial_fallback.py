@@ -11,7 +11,6 @@ import pytest
 
 from keni_consola import importador_calendario, libprompts
 from keni_consola.dominio import (
-    asistente,
     clasificador_marca,
     fusionar_semantica,
     generar,
@@ -59,14 +58,11 @@ _CASOS = [
 # Si alguien borra un .md de `prompts_inicial/`, este test lo caza ANTES del deploy: sin la inicial,
 # la generación se quedaría sin ese prompt y degradaría a vacío. CONTRATO inicial↔código.
 _IDS_INICIAL_OBLIGATORIA = [
-    generar.PROMPT_ENVOLTORIO_SIN_EMOJIS,
     generar.PROMPT_ENVOLTORIO_REDES,
     generar.PROMPT_ENVOLTORIO_CARRUSEL,
     generar.PROMPT_ENVOLTORIO_COPY_UNICO,
     hashtags._PROMPT_ID,
     clasificador_marca._PROMPT_ID,
-    "prompt/asistente/variantes",
-    "prompt/asistente/resumir",
 ]
 
 
@@ -77,16 +73,14 @@ def test_inicial_cubre_todos_los_prompts_que_el_codigo_espera():
         assert doc is not None and doc.cuerpo.strip(), f"falta o está vacía la inicial {pid}"
 
 
-def test_envoltorios_y_modos_resuelven_desde_la_inicial(store_roto):
-    """Con el store roto, los envoltorios de `generar` y las instrucciones del asistente
-    resuelven su texto desde la INICIAL del paquete (no de un string duplicado en código)."""
+def test_envoltorios_resuelven_desde_la_inicial(store_roto):
+    """Con el store roto, los envoltorios de `generar` resuelven su texto desde la INICIAL del
+    paquete (no de un string duplicado en código)."""
     for doc_id in (
-        generar.PROMPT_ENVOLTORIO_SIN_EMOJIS, generar.PROMPT_ENVOLTORIO_REDES,
+        generar.PROMPT_ENVOLTORIO_REDES,
         generar.PROMPT_ENVOLTORIO_CARRUSEL, generar.PROMPT_ENVOLTORIO_COPY_UNICO,
     ):
         assert generar._plantilla_envoltorio(doc_id) == _inicial(doc_id), doc_id
-    for modo in ("variantes", "resumir"):
-        assert asistente._instruccion_modo(modo) == _inicial(f"prompt/asistente/{modo}"), modo
 
 
 def test_cuerpo_inicial_lee_el_paquete_y_nunca_lanza():

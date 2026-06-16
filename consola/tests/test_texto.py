@@ -246,8 +246,6 @@ def test_inicial_trae_los_prompts_migrados_del_codigo():
     casos = {
         "prompt/clasificar-marca": ("{{MARCAS}}", "{{MARCA_FALLBACK}}", "{{NOTICIA}}"),
         "prompt/hashtags": ("{{MARCA}}", "{{RED}}", "{{TEXTO}}"),
-        "prompt/asistente/variantes": (),
-        "prompt/asistente/resumir": (),
     }
     for doc_id, marcadores in casos.items():
         cuerpo = libprompts.cuerpo_efectivo(doc_id)
@@ -321,6 +319,30 @@ def test_limpiar_prompts_obsoletos_borra_y_es_idempotente():
     assert n >= 1
     assert libprompts.obtener("prompt/arte-sistema") is None
     assert libprompts.limpiar_prompts_obsoletos() == 0  # sentinela: no repite
+
+
+def test_limpiar_prompts_obsoletos_v2_borra_y_es_idempotente():
+    # Ola v2: el editor «asistente» (muerto) y el envoltorio «sin emojis» (inlineado en idear) se
+    # retiran del store al desplegar; one-shot, sentinela aparte del de la v1.
+    from keni_consola.libprompts._rutas import raiz
+
+    (raiz() / "prompt" / "asistente").mkdir(parents=True, exist_ok=True)
+    (raiz() / "prompt" / "envoltorios").mkdir(parents=True, exist_ok=True)
+    (raiz() / "prompt" / "asistente" / "resumir.md").write_text(
+        "---\ntitulo: X\n---\nv", encoding="utf-8"
+    )
+    (raiz() / "prompt" / "asistente" / "variantes.md").write_text(
+        "---\ntitulo: X\n---\nv", encoding="utf-8"
+    )
+    (raiz() / "prompt" / "envoltorios" / "sin-emojis.md").write_text(
+        "---\ntitulo: X\n---\nv", encoding="utf-8"
+    )
+    n = libprompts.limpiar_prompts_obsoletos_v2()
+    assert n == 3
+    assert libprompts.obtener("prompt/asistente/resumir") is None
+    assert libprompts.obtener("prompt/asistente/variantes") is None
+    assert libprompts.obtener("prompt/envoltorios/sin-emojis") is None
+    assert libprompts.limpiar_prompts_obsoletos_v2() == 0  # sentinela: no repite
 
 
 def test_migrar_descripciones_editorial_corrige_plantillas_y_respeta_ediciones():

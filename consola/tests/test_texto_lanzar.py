@@ -66,16 +66,15 @@ def test_componer_orden_estable_primero_contexto_al_final():
         "Voz", tipo="editorial", clase="voz", marcas=[_MARCA], cuerpo="tono cercano"
     )
     final = generar.componer(
-        "Haz X", [ed], "la nota variable", sin_emojis=True, redes_ids=["x"],
+        "Haz X", [ed], "la nota variable", redes_ids=["x"],
     )
     i_cuerpo = final.index("Haz X")
-    i_emojis = final.index(generar.INSTRUCCION_SIN_EMOJIS)
     i_editorial = final.index("tono cercano")
     i_redes = final.index("Genera el copy SOLO para estas redes")
     i_contexto = final.index("la nota variable")
-    assert i_cuerpo < i_emojis < i_editorial < i_redes < i_contexto
+    assert i_cuerpo < i_editorial < i_redes < i_contexto
     # El contexto del usuario es el ÚLTIMO bloque del prompt.
-    assert i_contexto > max(i_cuerpo, i_emojis, i_editorial, i_redes)
+    assert i_contexto > max(i_cuerpo, i_editorial, i_redes)
 
 
 def test_instruccion_redes_ancla_limites_desde_el_codigo():
@@ -203,10 +202,8 @@ def test_lanzar_prompt_piezas_con_redes_crea_spec_copy(encolado):
     # El prompt compuesto pide el bloque json de piezas por red, con sus límites técnicos.
     assert "piezas" in encolado["prompt"]
     assert "máx 25000 caracteres" in encolado["prompt"]
-    # La política de emojis vive en el prompt/priorizar, NO en un hardcode del lanzamiento.
-    from keni_consola.dominio import generar
-
-    assert generar.INSTRUCCION_SIN_EMOJIS not in encolado["prompt"]
+    # La política de emojis vive en el prompt de copy + editorial, NO en un hardcode del lanzamiento.
+    assert "No uses emojis en el copy." not in encolado["prompt"]
     # El camino COPY (piezas) es SALIDA ESTRUCTURADA (se parsea a piezas por red; el usuario no
     # ve la salida cruda), así que NO veta la web por-callsite. El `endurecer` del spec queda en
     # None; la única veta es la GLOBAL `Bash Write Edit` (en `_argv_claude`).
@@ -319,7 +316,7 @@ def test_lanzar_copy_adjunta_reglas_de_imagen_y_sin_hardcode_de_emojis(encolado)
     )
     final = encolado["prompt"]
     assert "Reglas de imagen" in final  # título del adjunto `editorial/reglas/imagen`
-    assert generar.INSTRUCCION_SIN_EMOJIS not in final
+    assert "No uses emojis en el copy." not in final
     # Modo UNIFICADO: el tope viene del límite más estricto de las redes pedidas (X = 25000).
     assert "más estricto" in final and "25000 caracteres" in final
     assert "UN SOLO copy" in final
