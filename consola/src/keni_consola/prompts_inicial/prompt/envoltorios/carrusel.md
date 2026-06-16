@@ -1,6 +1,6 @@
 ---
 titulo: "Carrusel"
-descripcion: "Bloque que se añade al copy unificado cuando la historia agrupa 2+ notas: el modelo decide entre post y carrusel editorial. El código rellena {{N_NOTAS}}, {{MAX_SLIDES}} y {{CATALOGO_FOTOS}} (catálogo numerado de fotos propias)."
+descripcion: "Envoltorio que deja al modelo elegir entre post y carrusel."
 tipo: prompt
 carpeta: "envoltorios"
 creado: 2026-06-11T00:00:00+00:00

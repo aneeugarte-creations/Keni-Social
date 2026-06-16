@@ -392,6 +392,36 @@ def test_migrar_titulos_prompts_renombra_y_respeta_ediciones():
     assert libprompts.migrar_titulos_prompts() == 0  # sentinela: no repite
 
 
+def test_migrar_descripciones_prompt_acorta_y_respeta_ediciones():
+    # Los prompts del sistema con la descripción VIEJA larga conocida pasan al one-liner; los que el
+    # equipo ya editó (su descripción no casa) se respetan; el cuerpo no se toca. Idempotente.
+    from keni_consola.libprompts._rutas import raiz
+
+    base = raiz() / "prompt" / "envoltorios"
+    base.mkdir(parents=True, exist_ok=True)
+    (base / "sin-emojis.md").write_text(
+        '---\ntitulo: "Limpio"\ndescripcion: "Instrucción aditiva opt-in que se inyecta tras el '
+        "prompt base en flujos cuya salida nunca lleva emojis (evergreen/termómetro). El copy NO la "
+        'usa: su política de emojis vive en el prompt de copy y la editorial de la marca."\n'
+        "tipo: prompt\n---\nNo uses emojis en el copy.",
+        encoding="utf-8",
+    )
+    (base / "redes.md").write_text(
+        '---\ntitulo: "Redes"\ndescripcion: "Mi descripción propia"\ntipo: prompt\n---\nCUERPO REDES',
+        encoding="utf-8",
+    )
+
+    n = libprompts.migrar_descripciones_prompt()
+    assert n == 1  # solo el que casa la descripción vieja
+    acortado = libprompts.obtener("prompt/envoltorios/sin-emojis")
+    assert acortado is not None
+    assert acortado.descripcion == "Envoltorio opt-in para flujos sin emojis (evergreen/termómetro)."
+    assert acortado.cuerpo.strip() == "No uses emojis en el copy."  # el cuerpo no se toca
+    editado = libprompts.obtener("prompt/envoltorios/redes")
+    assert editado is not None and editado.descripcion == "Mi descripción propia"  # respetado
+    assert libprompts.migrar_descripciones_prompt() == 0  # sentinela: no repite
+
+
 def test_migrar_alcance_editorial_propaga_pipelines_y_respeta_ediciones():
     # El campo `pipelines` de la inicial se propaga al store SOLO si el doc no acota todavía
     # (pipelines vacío); un doc que el equipo ya acotó se respeta. Idempotente por sentinela.

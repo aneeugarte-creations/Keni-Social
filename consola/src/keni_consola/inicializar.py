@@ -56,6 +56,11 @@ def main() -> int:
     tp = libprompts.migrar_titulos_prompts()
     if tp:
         print(f"Texto: {tp} prompt(s) renombrados a titulo de una palabra.")
+    # Descripciones de prompt acortadas: reescribe las descripciones infladas (in place, solo si la
+    # descripcion casa con la vieja conocida) y re-publica. One-shot.
+    dp = libprompts.migrar_descripciones_prompt()
+    if dp:
+        print(f"Texto: {dp} prompt(s) con descripcion acortada.")
     # Alcance editorial: propaga el campo `pipelines` de la inicial al store (acota el auto-adjunto a
     # las etapas donde aplica; fin del sobre-prompteo) y re-publica. One-shot.
     ae = libprompts.migrar_alcance_editorial()

@@ -1,6 +1,6 @@
 ---
 titulo: "Unificado"
-descripcion: "Esqueleto de la instrucción del copy UNIFICADO del pipeline (un texto + un texto-en-imagen para todas las redes). El código rellena {{MODO_PUBLICACION}}, {{ETIQUETAS}}, {{VERSIONES}} (dos versiones si se mezclan redes amplias y estrechas; una si no) y {{CIERRE_JSON}} (forma exacta del bloque json, con la decisión de carrusel si procede)."
+descripcion: "Envoltorio del copy unificado: un texto para todas las redes."
 tipo: prompt
 carpeta: "envoltorios"
 creado: 2026-06-11T00:00:00+00:00

@@ -15,6 +15,7 @@ def _silenciar_migraciones(monkeypatch):
         "migrar_redactar_v1",
         "migrar_parrilla_v1",
         "migrar_titulos_prompts",
+        "migrar_descripciones_prompt",
         "migrar_alcance_editorial",
         "asegurar_linea_base",
     ):

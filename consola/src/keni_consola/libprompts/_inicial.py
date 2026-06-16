@@ -30,6 +30,7 @@ __all__ = [
     "migrar_nombres_prompts", "limpiar_prompts_obsoletos", "migrar_descripciones_editorial",
     "reformatear_prompts", "publicar_linea_base", "migrar_contrato_salida", "migrar_redactar_v1",
     "migrar_parrilla_v1", "migrar_titulos_prompts", "migrar_alcance_editorial",
+    "migrar_descripciones_prompt",
 ]
 
 _PROMPTS_OBSOLETOS: tuple[str, ...] = (
@@ -179,6 +180,45 @@ _TITULOS_UNA_PALABRA: tuple[tuple[str, str, str], ...] = (
 )
 _SENTINELA_TITULOS = ".titulos-prompts-v1"
 _SENTINELA_ALCANCE = ".alcance-editorial-v1"
+
+# DESCRIPCIONES de prompt acortadas: varios prompts del sistema (envoltorios, asistente) traían una
+# `descripcion` más LARGA que su propio cuerpo, así que el panel "Acerca de" mostraba más descripción
+# que prompt. La inicial ya las acortó a un one-liner; el store en vivo conserva la descripción VIEJA.
+# Esta migración la reescribe IN PLACE solo si la descripción actual casa EXACTO con la vieja conocida
+# (una edición del equipo deja de casar y se respeta) y RE-PUBLICA el doc para no dejarlo "sin publicar".
+# `(id, descripcion_vieja, descripcion_nueva)`. One-shot por sentinela; espejo de `migrar_titulos_prompts`.
+_DESCRIPCIONES_PROMPT: tuple[tuple[str, str, str], ...] = (
+    ("prompt/asistente/resumir",
+     "Instrucción aditiva del modo «resumir» del asistente del tablero: condensa la nota en un copy "
+     "breve y directo por red. Se anexa al prompt de copy.",
+     "Modo «resumir» del asistente: condensa la nota en un copy breve."),
+    ("prompt/asistente/variantes",
+     "Instrucción aditiva del modo «variantes» del asistente del tablero: pide tres alternativas de "
+     "copy para que el community manager elija. Se anexa al prompt de copy.",
+     "Modo «variantes» del asistente: propone tres alternativas de copy."),
+    ("prompt/envoltorios/carrusel",
+     "Bloque que se añade al copy unificado cuando la historia agrupa 2+ notas: el modelo decide entre "
+     "post y carrusel editorial. El código rellena {{N_NOTAS}}, {{MAX_SLIDES}} y {{CATALOGO_FOTOS}} "
+     "(catálogo numerado de fotos propias).",
+     "Envoltorio que deja al modelo elegir entre post y carrusel."),
+    ("prompt/envoltorios/copy-unico",
+     "Esqueleto de la instrucción del copy UNIFICADO del pipeline (un texto + un texto-en-imagen para "
+     "todas las redes). El código rellena {{MODO_PUBLICACION}}, {{ETIQUETAS}}, {{VERSIONES}} (dos "
+     "versiones si se mezclan redes amplias y estrechas; una si no) y {{CIERRE_JSON}} (forma exacta del "
+     "bloque json, con la decisión de carrusel si procede).",
+     "Envoltorio del copy unificado: un texto para todas las redes."),
+    ("prompt/envoltorios/redes",
+     "Instrucción aditiva del copy POR RED (Texto manual y flujos que piden una pieza por red): limita "
+     "las redes pedidas, ancla sus límites técnicos y fija el bloque json de piezas. El código rellena "
+     "{{ETIQUETAS}}, {{LIMITES}} e {{IDS_JSON}} desde el catálogo de redes y sus límites.",
+     "Envoltorio del copy por red: una pieza por cada red pedida."),
+    ("prompt/envoltorios/sin-emojis",
+     "Instrucción aditiva opt-in que se inyecta tras el prompt base en flujos cuya salida nunca lleva "
+     "emojis (evergreen/termómetro). El copy NO la usa: su política de emojis vive en el prompt de copy "
+     "y la editorial de la marca.",
+     "Envoltorio opt-in para flujos sin emojis (evergreen/termómetro)."),
+)
+_SENTINELA_DESCRIPCIONES_PROMPT = ".descripciones-prompt-v1"
 
 
 def dir_inicial() -> Path:
@@ -674,6 +714,45 @@ def migrar_titulos_prompts() -> int:
             sha = fijar_version(doc_id, nota="título de una palabra")
             if sha:
                 db.crear_texto_publicacion(doc_id=doc_id, sha=sha, autor="", nota="título de una palabra")
+        except Exception:  # noqa: BLE001 -- best-effort: sin BD se queda "sin publicar", no rompe
+            pass
+    sentinela.parent.mkdir(parents=True, exist_ok=True)
+    escribir_atomico(sentinela, "ok\n")
+    return n
+
+
+def migrar_descripciones_prompt() -> int:
+    """Acorta las descripciones infladas de prompts del sistema (ONE-SHOT por sentinela).
+
+    Por cada `(id, vieja, nueva)` de `_DESCRIPCIONES_PROMPT`, si el doc del store conserva la
+    descripción VIEJA conocida, la reescribe IN PLACE (solo la `descripcion`; el cuerpo intacto) y
+    RE-PUBLICA esa versión para no dejarlo "sin publicar". Si el equipo ya cambió la descripción, no
+    casa y se respeta. Idempotente; best-effort (la re-publicación necesita BD). Devuelve cuántos tocó.
+    """
+    import dataclasses
+
+    from .. import db
+    from ._versiones import fijar_version
+
+    destino_raiz = raiz()
+    sentinela = destino_raiz / _SENTINELA_DESCRIPCIONES_PROMPT
+    if sentinela.exists():
+        return 0
+    n = 0
+    for doc_id, viejo, nuevo in _DESCRIPCIONES_PROMPT:
+        ruta = destino_raiz.joinpath(*f"{doc_id}.md".split("/"))
+        if not ruta.is_file():
+            continue
+        doc = _leer(ruta)
+        if doc is None or doc.descripcion.strip() != viejo:
+            continue  # ausente o editado por el equipo: respetar
+        nuevo_doc = dataclasses.replace(doc, descripcion=nuevo, actualizado=_ahora_iso())
+        escribir_atomico(ruta, _serializar(nuevo_doc))
+        n += 1
+        try:  # re-publica el doc con la descripción nueva para no dejarlo "sin publicar"
+            sha = fijar_version(doc_id, nota="descripción acortada")
+            if sha:
+                db.crear_texto_publicacion(doc_id=doc_id, sha=sha, autor="", nota="descripción acortada")
         except Exception:  # noqa: BLE001 -- best-effort: sin BD se queda "sin publicar", no rompe
             pass
     sentinela.parent.mkdir(parents=True, exist_ok=True)

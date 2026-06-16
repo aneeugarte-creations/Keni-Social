@@ -1,6 +1,6 @@
 ---
 titulo: "Variantes"
-descripcion: "Instrucción aditiva del modo «variantes» del asistente del tablero: pide tres alternativas de copy para que el community manager elija. Se anexa al prompt de copy."
+descripcion: "Modo «variantes» del asistente: propone tres alternativas de copy."
 tipo: prompt
 carpeta: "asistente"
 creado: 2026-06-11T00:00:00+00:00

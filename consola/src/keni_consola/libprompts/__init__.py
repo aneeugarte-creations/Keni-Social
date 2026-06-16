@@ -124,6 +124,7 @@ from ._inicial import (
     migrar_alcance_editorial,
     migrar_contrato_salida,
     migrar_descripciones_editorial,
+    migrar_descripciones_prompt,
     migrar_nombres_prompts,
     migrar_parrilla_v1,
     migrar_redactar_v1,
@@ -243,4 +244,5 @@ __all__ = [
     "migrar_parrilla_v1",
     "migrar_titulos_prompts",
     "migrar_alcance_editorial",
+    "migrar_descripciones_prompt",
 ]

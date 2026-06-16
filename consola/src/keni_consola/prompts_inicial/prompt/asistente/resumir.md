@@ -1,6 +1,6 @@
 ---
 titulo: "Resumir"
-descripcion: "Instrucción aditiva del modo «resumir» del asistente del tablero: condensa la nota en un copy breve y directo por red. Se anexa al prompt de copy."
+descripcion: "Modo «resumir» del asistente: condensa la nota en un copy breve."
 tipo: prompt
 carpeta: "asistente"
 creado: 2026-06-11T00:00:00+00:00
