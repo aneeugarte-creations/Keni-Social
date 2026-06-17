@@ -624,13 +624,13 @@ def test_dos_loops_investigacion_y_produccion_separan_fases(entorno, monkeypatch
     assert len(inv["temas"]) == 1
     assert any(t["titulo"] == "Historia caliente" for t in pc.temas_pipeline())
 
-    # PRODUCCIÓN: copy + Ilustrar + avance. Solo expone {lanzados, artes, avances}.
+    # PRODUCCIÓN: copy + hashtags + Ilustrar + avance. Solo expone {lanzados, sugeridos, artes, avances}.
     prod = pc._ejecutar_produccion()
-    assert set(prod) == {"lanzados", "artes", "avances"}
+    assert set(prod) == {"lanzados", "sugeridos", "artes", "avances"}
 
     # El combinado es la unión de las claves de ambos procesos.
     combinado = pc._ejecutar_barrido()
-    assert set(combinado) == {"temas", "verificados", "lanzados", "artes", "avances"}
+    assert set(combinado) == {"temas", "verificados", "lanzados", "sugeridos", "artes", "avances"}
 
 
 def test_promover_clusters_top_n_por_score(entorno, monkeypatch):

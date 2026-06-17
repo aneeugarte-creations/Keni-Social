@@ -40,6 +40,9 @@ PROCESOS_POR_PROMPT: dict[str, list[str]] = {
     # Pipeline de contenido
     "prompt/verificar": ["Investigación · Verificar la fuente (antes del copy)"],
     "prompt/redactar": ["Producción · Redactar copy desde la nota"],
+    "prompt/sugerir-hashtags": [
+        "Producción · Sugerir hashtags de la biblioteca de la marca (etapa tras Redactar)",
+    ],
     "prompt/critica": [
         "Aprobar · crítica IA con visión (vota el nivel «Crítica IA» antes de programar)",
     ],

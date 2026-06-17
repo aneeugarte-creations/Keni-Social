@@ -792,10 +792,10 @@ def test_resumen_fn_formatea_dict_de_conteos():
         {"feeds": 0, "items_nuevos": 0, "agrupar": {"clusters_nuevos": 0}}
     ) == "sin novedad"
     assert pc_barrido._resumen_produccion(
-        {"lanzados": [1, 2], "artes": [1], "avances": []}
-    ) == "2 copy · 1 arte(s) · 0 avance(s) a revisión"
+        {"lanzados": [1, 2], "sugeridos": [1], "artes": [1], "avances": []}
+    ) == "2 copy · 1 hashtags · 1 arte(s) · 0 avance(s) a revisión"
     assert pc_barrido._resumen_produccion(
-        {"lanzados": [], "artes": [], "avances": []}
+        {"lanzados": [], "sugeridos": [], "artes": [], "avances": []}
     ) == "sin novedad"
 
 
