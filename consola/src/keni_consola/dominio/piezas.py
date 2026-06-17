@@ -454,9 +454,8 @@ def crear_borrador_en(
             campos["falta_imagen"] = False
         if imagen_fuente:
             campos["imagen_fuente"] = imagen_fuente
-            # Con foto real ya no falta imagen; con solo la URL de fuente, también se considera
-            # provista (referencia del artículo). `foto` manda si ambas vienen.
-            campos["falta_imagen"] = False
+            # `imagen_fuente` a secas es la URL del artículo (referencia), NO la foto de la pieza:
+            # no limpia "Falta imagen". Solo `foto` (descargada arriba) cuenta y ya lo hizo.
         if carrusel:
             campos["carrusel"] = carrusel
         plat = repos.actualizar_pieza_fila(hueco["id"], campos) or hueco
@@ -468,8 +467,9 @@ def crear_borrador_en(
             # DERIVADO del copy real (no `False` fijo): un copy vacío => falta_copy=True. Evita el
             # drift "copy listo" sin copy que mentía en el label del feed y el gate de auto-avance.
             falta_copy=falta_copy,
-            # Con foto real (og:image descargada) o imagen de fuente (URL del artículo) la pieza YA tiene imagen.
-            falta_imagen=False if (imagen_fuente or foto) else None,
+            # Solo la foto real (og:image descargada) cuenta como imagen; `imagen_fuente` a secas
+            # es la URL del artículo (referencia) y NO limpia "Falta imagen".
+            falta_imagen=False if foto else None,
             copy=contenido,
             copy_in=copy_in,
             imagen=imagen,

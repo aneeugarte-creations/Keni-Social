@@ -252,8 +252,10 @@ def _insertar_publicacion_con_pieza(
         imagen=campos.get("imagen") or "",
         imagen_fuente=imagen_fuente,
         foto=foto,
-        # Con foto real (og:image descargada) o imagen de fuente (URL del artículo), la pieza YA tiene imagen.
-        falta_imagen=False if (imagen_fuente or foto) else None,
+        # Solo la foto real (og:image descargada a media) cuenta como imagen y limpia el flag;
+        # un `imagen_fuente` a secas es la URL del artículo (referencia), no la foto de la pieza
+        # —y si la descarga la rechazó por basura/diminuta, `foto` queda "" y la pieza SÍ falta imagen.
+        falta_imagen=False if foto else None,
         revision=campos.get("revision") or "",
         fecha_programada=campos.get("fecha_programada") or "",
         evergreen=evergreen,
