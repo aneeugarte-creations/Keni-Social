@@ -541,6 +541,7 @@ def test_endpoint_daemons_expone_etiqueta_y_prompts(entorno):
     assert por_nombre["produccion"]["etiqueta"] == "Producción"
     assert por_nombre["produccion"]["prompts"] == [
         {"etiqueta": "Redactar", "doc": "prompt/redactar"},
+        {"etiqueta": "Sugerir hashtags", "doc": "prompt/sugerir-hashtags"},
         {"etiqueta": "Ilustrar", "doc": "prompt/ilustrar"},
     ]
     assert por_nombre["ingesta"]["etiqueta"] == "Recolección de noticias"

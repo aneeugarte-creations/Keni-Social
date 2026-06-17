@@ -802,18 +802,21 @@ def test_promover_usa_titulo_es_del_cluster_traducido(entorno, monkeypatch):
     """ADMITIR usa el título TRADUCIDO (`titulo_es`) del cluster, no el original en inglés, para
     que el tema (y el breaking que sale al feed) no salga en inglés."""
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    # Historia EXTRANJERA pero relevante para MX: la TRADUCCIÓN (`*_es`) es la que lleva el encaje
+    # de marca, así que supera el umbral por su texto en español, no por el original en inglés.
     _inicializar_cluster(
-        "en-trad", titulo="Federal Reserve holds rates steady",
-        titulo_es="La Reserva Federal mantiene las tasas sin cambios",
-        resumen="US central bank decision", resumen_es="Decisión del banco central de EE. UU.",
+        "en-trad", titulo="Fed decision shakes Mexican markets",
+        titulo_es="La decisión de la Fed sacude los mercados de México",
+        resumen="US rate move hits emerging markets",
+        resumen_es="El gobierno de México sigue de cerca el impacto de la decisión en la economía del país",
         score=0.9, idioma="en", traducido=1, verificacion_fuente=pc.VERIFICACION_VERIFICADO,
     )
 
     temas = pc.promover_clusters_marca("unotv", maximo=2)
 
     assert len(temas) == 1
-    assert temas[0]["titulo"] == "La Reserva Federal mantiene las tasas sin cambios"
-    assert "Federal Reserve" not in (temas[0].get("descripcion") or "")[:80]  # la nota arranca en ES
+    assert temas[0]["titulo"] == "La decisión de la Fed sacude los mercados de México"
+    assert "Fed decision shakes" not in (temas[0].get("descripcion") or "")[:80]  # la nota arranca en ES
 
 
 def test_promover_clusters_top_n_por_score(entorno, monkeypatch):

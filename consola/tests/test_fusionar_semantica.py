@@ -172,9 +172,10 @@ def test_proponer_macro_eventos_reutiliza_tema_macro_existente():
 
     def ej(prompt, _carpeta):
         # El payload (lista JSON de historias) viene embebido en el prompt; cada item trae su
-        # `tema_macro`. Reutilizamos la etiqueta existente como tema de la familia.
-        ini, fin = prompt.index("["), prompt.rindex("]") + 1
-        items = json.loads(prompt[ini:fin])
+        # `tema_macro`. Reutilizamos la etiqueta existente como tema de la familia. El payload es la
+        # PRIMERA estructura JSON del prompt; `raw_decode` la lee y descarta el contrato de salida
+        # (que trae sus propios `[...]` de ejemplo) que viene detrás.
+        items, _ = json.JSONDecoder().raw_decode(prompt[prompt.index("["):])
         existente = next((it["tema_macro"] for it in items if it.get("tema_macro")), "")
         assert all("tema_macro" in it for it in items)  # el payload SIEMPRE lleva la etiqueta
         return json.dumps({"familias": [{"tema": existente, "ids": ["x", "y"]}]})
