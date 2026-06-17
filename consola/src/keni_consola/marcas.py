@@ -14,13 +14,16 @@ from __future__ import annotations
 
 from keni_shared.marcas import (  # noqa: F401  (reexport: la fuente es keni_shared)
     Marca,
+    catalogo,
     es_marca,
+    es_noticias,
     etiqueta_de,
     etiqueta_por_id_metricas,
     id_metricas_de,
     ids,
     marca_de,
     marca_por_id_metricas,
+    noticias,
     opciones,
     opciones_metricas,
 )
@@ -39,13 +42,16 @@ def __getattr__(name: str):  # PEP 562
 __all__ = [
     "MARCAS",
     "Marca",
+    "catalogo",
     "es_marca",
+    "es_noticias",
     "etiqueta_de",
     "etiqueta_por_id_metricas",
     "id_metricas_de",
     "ids",
     "marca_de",
     "marca_por_id_metricas",
+    "noticias",
     "opciones",
     "opciones_metricas",
 ]
