@@ -1,8 +1,8 @@
 /**
  * PanelAgentes · agentes independientes en CAJAS por tipo (no un pipeline).
  *
- * Importación y Herramientas NO son una secuencia: se agrupan por tipo y entre agentes NO hay
- * conector (↓). Este test fija ambas cosas: una caja por grupo y cada agente como su fila.
+ * Herramientas NO es una secuencia: se agrupa por tipo y entre agentes NO hay conector (↓). Este
+ * test fija que hay una caja por grupo, con sus agentes (columnas) dentro y solo dentro.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
@@ -23,7 +23,6 @@ function renderPanel(grupos: readonly GrupoAgentes[]) {
 const GRUPOS: readonly GrupoAgentes[] = [
   {
     titulo: "Recibir",
-    descripcion: "Material que llega del equipo",
     fases: [
       { nombre: "Notas", es_ia: true, claves: [], ayuda: "Notas y links", doc: "prompt/recibir/notas" },
       { nombre: "Portal", es_ia: true, claves: [], ayuda: "Portal/SMS", doc: "prompt/recibir/portal" },
@@ -45,10 +44,11 @@ describe("PanelAgentes", () => {
     expect(screen.getByRole("heading", { name: "Recibir" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Importar" })).toBeInTheDocument();
 
-    // Cada agente del tipo «Recibir» cuelga de su caja.
-    const cajaRecibir = screen.getByRole("heading", { name: "Recibir" }).closest("div")!.parentElement!;
+    // Cada agente cuelga de SU caja (y solo de la suya): «Recibir» trae Notas/Portal, no Parrilla.
+    const cajaRecibir = screen.getByRole("heading", { name: "Recibir" }).closest("div")!;
     expect(within(cajaRecibir).getByText("Notas")).toBeInTheDocument();
     expect(within(cajaRecibir).getByText("Portal")).toBeInTheDocument();
+    expect(within(cajaRecibir).queryByText("Parrilla")).not.toBeInTheDocument();
 
     // No es una secuencia: ningún conector (los chevron del pipeline llevan aria-hidden); aquí no hay
     // <ol> de fases. La superficie es la caja, no el pipeline.

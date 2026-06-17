@@ -159,9 +159,7 @@ export const QUEUE_PRODUCCION: Record<string, string> = {
 export interface GrupoAgentes {
   /** El TIPO de agente (título de la caja). */
   titulo: string;
-  /** Qué cubre el tipo (nota breve bajo el título). */
-  descripcion?: string;
-  /** Los agentes del tipo; cada uno abre su prompt. */
+  /** Los agentes del tipo; cada uno abre su prompt (su descripción vive en su subpágina). */
   fases: readonly FasePipeline[];
 }
 
@@ -174,7 +172,6 @@ export interface GrupoAgentes {
 export const GRUPOS_HERRAMIENTAS: readonly GrupoAgentes[] = [
   {
     titulo: "Recibir",
-    descripcion: "Material que llega del equipo, portales y corresponsales",
     fases: [
       { nombre: "Contexto", es_ia: true, claves: [], ayuda: "Indicaciones y correcciones del equipo", doc: "prompt/recibir/contexto" },
       { nombre: "Notas", es_ia: true, claves: [], ayuda: "Notas y links de Claro Sports", doc: "prompt/recibir/notas" },
@@ -186,7 +183,6 @@ export const GRUPOS_HERRAMIENTAS: readonly GrupoAgentes[] = [
   },
   {
     titulo: "Importar",
-    descripcion: "Calendarios y parrillas a la mesa de eventos",
     fases: [
       { nombre: "Calendario", es_ia: true, claves: [], ayuda: "Importa un calendario de contenido", doc: "prompt/importar/calendario" },
       { nombre: "Parrilla", es_ia: true, claves: [], ayuda: "Importa una rota/parrilla a eventos", doc: "prompt/importar/parrilla" },
@@ -194,17 +190,14 @@ export const GRUPOS_HERRAMIENTAS: readonly GrupoAgentes[] = [
   },
   {
     titulo: "Ideación",
-    descripcion: "Propone contenido evergreen para la marca",
     fases: [{ nombre: "Idear", es_ia: true, claves: [], ayuda: "Propone ideas de contenido evergreen para la marca", doc: "prompt/idear" }],
   },
   {
     titulo: "Crítica",
-    descripcion: "Revisa con visión antes de publicar",
     fases: [{ nombre: "Crítica", es_ia: true, claves: [], ayuda: "Crítica con visión antes de publicar", doc: "prompt/critica" }],
   },
   {
     titulo: "Envoltorios",
-    descripcion: "Adapta el copy aprobado al formato de cada red",
     fases: [
       { nombre: "Redes", es_ia: true, claves: [], ayuda: "Envoltorio: una pieza por red", doc: "prompt/envoltorios/redes" },
       { nombre: "Unificado", es_ia: true, claves: [], ayuda: "Envoltorio: el mismo copy para todas las redes", doc: "prompt/envoltorios/copy-unico" },
