@@ -343,6 +343,28 @@ def test_limpiar_prompts_obsoletos_v2_borra_y_es_idempotente():
     assert libprompts.limpiar_prompts_obsoletos_v2() == 0  # sentinela: no repite
 
 
+def test_limpiar_editoriales_duplicados_borra_no_canonico_y_conserva_marca():
+    # Borra los editoriales no-canónicos de `_EDITORIALES_DUPLICADOS` y conserva el `marca.md`
+    # canónico de la marca. One-shot por sentinela.
+    from keni_consola.libprompts._rutas import raiz
+
+    base = raiz() / "editorial" / "rrss" / "unotv"
+    base.mkdir(parents=True, exist_ok=True)
+    (base / "identidad-unotv.md").write_text(
+        "---\ntitulo: Identidad · UnoTV\ntipo: editorial\nclase: marca\nmarcas: [unotv]\n---\nx",
+        encoding="utf-8",
+    )
+    (base / "marca.md").write_text(
+        "---\ntitulo: Identidad · UnoTV\ntipo: editorial\nclase: marca\nmarcas: [unotv]\n---\nx",
+        encoding="utf-8",
+    )
+    n = libprompts.limpiar_editoriales_duplicados()
+    assert n == 1
+    assert libprompts.obtener("editorial/rrss/unotv/identidad-unotv") is None
+    assert libprompts.obtener("editorial/rrss/unotv/marca") is not None  # el canónico permanece
+    assert libprompts.limpiar_editoriales_duplicados() == 0  # sentinela: no repite
+
+
 def test_migrar_descripciones_editorial_corrige_plantillas_y_respeta_ediciones():
     # Las descripciones-plantilla se corrigen en el store; cualquier descripción editada por el
     # equipo NO casa con la plantilla y se respeta. El título de los globales pierde el paréntesis

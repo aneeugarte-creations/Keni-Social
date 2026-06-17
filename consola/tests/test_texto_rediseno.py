@@ -118,10 +118,8 @@ def test_editoriales_scoping_por_carpeta():
 
 
 def test_plataforma_reglas_por_marca_no_cruzan_a_otras_marcas():
-    # Una versión POR-MARCA de una clase "global" (plataforma/reglas) NO debe inyectarse en OTRA
-    # marca: antes `es_editorial_global` daba por global toda clase plataforma/reglas, así que el
-    # formato/reglas de Claro Sports entraban en el copy de UnoTV. Ahora solo las versiones GLOBALES
-    # (sin marca / bajo `global/`) aplican a todas.
+    # Una versión POR-MARCA de una clase "global" (plataforma/reglas) solo aplica a SU marca; las
+    # versiones GLOBALES (sin marca / bajo `global/`) aplican a todas.
     libprompts.crear("Formato Claro", tipo="editorial", clase="plataforma", marcas=["claro-sports"], cuerpo="f")
     libprompts.crear("Reglas Claro", tipo="editorial", clase="reglas", marcas=["claro-sports"], cuerpo="r")
     libprompts.crear("Formato común", tipo="editorial", clase="plataforma", carpeta="rrss/global", cuerpo="g")

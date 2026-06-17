@@ -33,9 +33,8 @@ def es_editorial_global(doc: Documento) -> bool:
     Un doc es GLOBAL si cuelga de una carpeta global (`global`, `comun`, ...) o si su clase es
     global (`plataforma`/`tropicalizacion`/`reglas`) Y NO está atado a una marca concreta. Una
     versión POR-MARCA de esas clases (p. ej. `editorial/rrss/claro-sports/plataformas` con
-    `marcas=[claro-sports]`, o cualquier doc bajo `rrss/<marca>/`) es ESPECÍFICA, no global: sin
-    esta distinción se inyectaban el formato y las reglas de TODAS las marcas en el copy de cada
-    una (clase plataforma/reglas se daba por global a secas). Mismo criterio que el auto-adjunto.
+    `marcas=[claro-sports]`, o cualquier doc bajo `rrss/<marca>/`) es ESPECÍFICA de su marca, no
+    global. Mismo criterio que el auto-adjunto (`editoriales_de_marca`).
     """
     segmentos = doc.carpeta.split("/") if doc.carpeta else []
     if any(s in _CARPETAS_GLOBALES for s in segmentos):

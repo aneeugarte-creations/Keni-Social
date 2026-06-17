@@ -28,6 +28,7 @@ __all__ = [
     "dir_inicial", "obtener_inicial", "cuerpo_efectivo", "cuerpo_inicial", "importar_inicial",
     "asegurar_linea_base",
     "migrar_nombres_prompts", "limpiar_prompts_obsoletos", "limpiar_prompts_obsoletos_v2",
+    "limpiar_editoriales_duplicados",
     "migrar_descripciones_editorial",
     "reformatear_prompts", "publicar_linea_base", "migrar_contrato_salida", "migrar_redactar_v1",
     "migrar_parrilla_v1", "migrar_titulos_prompts", "migrar_alcance_editorial",
@@ -56,6 +57,14 @@ _PROMPTS_OBSOLETOS_V2: tuple[str, ...] = (
     "prompt/hashtags",
 )
 _SENTINELA_OBSOLETOS_V2 = ".prompts-obsoletos-v2"
+
+# Editoriales con id no-canónico que duplican su `<marca>/marca.md`: se retiran del store en vivo
+# (el canónico conserva el contenido). El canónico de cada marca es `editorial/rrss/<marca>/marca`.
+# ONE-SHOT por sentinela propio.
+_EDITORIALES_DUPLICADOS: tuple[str, ...] = (
+    "editorial/rrss/unotv/identidad-unotv",
+)
+_SENTINELA_EDITORIALES_DUP = ".editoriales-dup-v1"
 
 # Migración ONE-SHOT del rediseño de nombres/ids de la Prompts: el store en vivo ya tiene los
 # docs del sistema con ids/títulos VIEJOS, y `importar_inicial` no pisa lo existente, así que los
@@ -506,6 +515,25 @@ def limpiar_prompts_obsoletos_v2() -> int:
     n = 0
     for pid in _PROMPTS_OBSOLETOS_V2:
         ruta = destino_raiz.joinpath(*f"{pid}.md".split("/"))
+        if ruta.is_file():
+            ruta.unlink()
+            n += 1
+    sentinela.parent.mkdir(parents=True, exist_ok=True)
+    escribir_atomico(sentinela, "ok\n")
+    return n
+
+
+def limpiar_editoriales_duplicados() -> int:
+    """Borra del store los editoriales no-canónicos de `_EDITORIALES_DUPLICADOS` (su `marca.md`
+    canónico permanece). ONE-SHOT por sentinela. Idempotente. Devuelve cuántos borró.
+    """
+    destino_raiz = raiz()
+    sentinela = destino_raiz / _SENTINELA_EDITORIALES_DUP
+    if sentinela.exists():
+        return 0
+    n = 0
+    for did in _EDITORIALES_DUPLICADOS:
+        ruta = destino_raiz.joinpath(*f"{did}.md".split("/"))
         if ruta.is_file():
             ruta.unlink()
             n += 1

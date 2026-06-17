@@ -120,6 +120,7 @@ from ._inicial import (
     cuerpo_inicial,
     dir_inicial,
     importar_inicial,
+    limpiar_editoriales_duplicados,
     limpiar_prompts_obsoletos,
     limpiar_prompts_obsoletos_v2,
     migrar_alcance_editorial,
