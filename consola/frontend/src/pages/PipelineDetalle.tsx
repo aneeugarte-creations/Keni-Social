@@ -15,7 +15,7 @@ import type { PipelineActividad, PipelineGeneracion, RespuestaPipelineDetalle } 
 
 import { ChipEstado, ETAPA_A_EVENTO, MetricasPipeline, PanelEtapa, TiraEtapas } from "./Pipelines";
 import { tiempoRelativo } from "@/lib/fecha";
-import { INTERVALO_DETALLE_MS } from "@/lib/refresco";
+import { INTERVALO_DETALLE_MS, INTERVALO_VIVO_MS } from "@/lib/refresco";
 
 export default function PipelineDetalle() {
   const { id } = useParams<{ id: string }>();
@@ -24,7 +24,15 @@ export default function PipelineDetalle() {
     queryKey: ["pipelines", "detalle", id],
     queryFn: ({ signal }) => api.pipelineDetalle(id as string, signal),
     enabled: !!id,
-    refetchInterval: INTERVALO_DETALLE_MS,
+    // Mientras una etapa IA está EJECUTANDO, sondeamos rápido para aflorar su `salida` en vivo
+    // (el worker la persiste cada ~0.4 s); en reposo, el intervalo normal del detalle.
+    refetchInterval: (query) => {
+      const d = query.state.data as RespuestaPipelineDetalle | undefined;
+      const corriendo = Object.values(d?.generaciones_por_etapa ?? {}).some(
+        (g) => g?.estado === "ejecutando",
+      );
+      return corriendo ? INTERVALO_VIVO_MS : INTERVALO_DETALLE_MS;
+    },
     placeholderData: (prev) => prev,
   });
   const datos = q.data as RespuestaPipelineDetalle | undefined;
@@ -82,9 +90,10 @@ export default function PipelineDetalle() {
             <TiraEtapas etapas={run.etapas} />
           </div>
 
-          {/* Cada etapa expandida: entrada → salida. */}
+          {/* Cada etapa expandida: entrada → salida. Las etapas que NO corrieron («saltada») no
+              se listan (ni su in/out vacío): solo se ve lo que de verdad pasó. */}
           <div className="space-y-2">
-            {run.etapas.map((e) => (
+            {run.etapas.filter((e) => e.estado !== "saltada").map((e) => (
               <PanelEtapa
                 key={e.clave}
                 etapa={e}

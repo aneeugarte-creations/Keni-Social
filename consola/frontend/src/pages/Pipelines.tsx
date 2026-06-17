@@ -181,39 +181,43 @@ function Punto({ estado }: { estado: string }) {
   );
 }
 
-/** Tira horizontal de etapas, estilo pipeline de GitLab. Los procesos de IA (`es_ia`) se pintan
- *  como ETAPAS (cajas 🤖, unidas por →); los de software (Admitir, Aprobar) como FRONTERAS: una
- *  línea separadora ⚙ que marca el límite entre etapas IA, no un paso de cómputo más. */
+/** Tira horizontal de etapas, estilo pipeline de GitLab. Los procesos de IA (`es_ia`) son ETAPAS
+ *  (cajas 🤖); los de software (Admitir, Aprobar) son FRONTERAS (⚙, línea con etiqueta). Una etapa
+ *  que NO corrió («saltada») NO se pinta: conserva su RANURA como un tramo de línea (el conector se
+ *  alarga), para que las etapas visibles queden alineadas entre runs (comparativa visual). El
+ *  backend devuelve SIEMPRE las mismas etapas en orden, así que cada ranura es la misma columna. */
 export function TiraEtapas({ etapas }: { etapas: PipelineEtapa[] }) {
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {etapas.map((e, i) =>
-        e.es_ia ? (
-          <React.Fragment key={e.clave}>
-            {i > 0 && <span className="text-muted-foreground/40">→</span>}
-            <div
-              className={cn(
-                "flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs",
-                aspectoEstado(e.estado).clase || "text-muted-foreground",
-              )}
-              title={e.detalle}
-            >
-              <Punto estado={e.estado} />
-              <Bot className="h-3 w-3" aria-label="IA" />
-              <span className="font-medium">{e.nombre}</span>
-            </div>
-          </React.Fragment>
+    <div className="flex items-center gap-1.5">
+      {etapas.map((e) =>
+        e.estado === "saltada" ? (
+          // No corrió: hueco con la línea conectora (mantiene la posición de las demás).
+          <span key={e.clave} className="h-px min-w-[14px] flex-1 bg-border" aria-hidden="true" />
         ) : (
-          // Frontera: proceso de software (no IA). Línea separadora con su etiqueta, sin caja ni →.
-          <span
-            key={e.clave}
-            className="mx-0.5 flex items-center gap-1 border-l border-dashed border-muted-foreground/40 pl-2 text-[11px] uppercase tracking-wide text-muted-foreground"
-            title={e.detalle}
-          >
-            <Cog className="h-3 w-3" aria-label="software" />
-            {e.nombre}
-            <Punto estado={e.estado} />
-          </span>
+          <div key={e.clave} className="flex min-w-0 flex-1 items-center justify-center">
+            {e.es_ia ? (
+              <div
+                className={cn(
+                  "flex min-w-0 items-center gap-1.5 rounded-md border px-2 py-1 text-xs",
+                  aspectoEstado(e.estado).clase || "text-muted-foreground",
+                )}
+                title={e.detalle}
+              >
+                <Punto estado={e.estado} />
+                <Bot className="h-3 w-3 shrink-0" aria-label="IA" />
+                <span className="truncate font-medium">{e.nombre}</span>
+              </div>
+            ) : (
+              <span
+                className="flex min-w-0 items-center gap-1 border-l border-dashed border-muted-foreground/40 pl-2 text-[11px] uppercase tracking-wide text-muted-foreground"
+                title={e.detalle}
+              >
+                <Cog className="h-3 w-3 shrink-0" aria-label="software" />
+                <span className="truncate">{e.nombre}</span>
+                <Punto estado={e.estado} />
+              </span>
+            )}
+          </div>
         ),
       )}
     </div>
@@ -327,11 +331,12 @@ function EventosEtapa({ eventos }: { eventos: PipelineActividad[] }) {
   );
 }
 
-/** Bloque de TRANSPARENCIA de una etapa IA: el PROMPT de entrada (real si corrió; plantilla si
- *  no), el RAZONAMIENTO (proceso de pensamiento, stream del agente) y el RESULTADO. Se enseña
- *  SIEMPRE en etapas IA, aunque aún no se haya ejecutado (entonces el prompt es la plantilla y el
- *  proceso/resultado quedan "pendiente"). `gen` es la generación real (si existe). */
+/** Bloque de TRANSPARENCIA de una etapa IA: el PROMPT de entrada, el RAZONAMIENTO (stream del
+ *  agente, token a token mientras corre) y el RESULTADO. Solo se enseña si la etapa CORRIÓ o está
+ *  corriendo (`gen` existe); si aún no ha corrido NO se pinta un in/out vacío. */
 function BloqueIA({ gen, plantilla }: { gen?: PipelineGeneracion; plantilla?: string }) {
+  // Sin generación real, la etapa no ha corrido: no enseñamos in/out (ni la plantilla suelta).
+  if (!gen) return null;
   const enCurso = gen?.estado === "ejecutando";
   const salida = (gen?.salida ?? "").trim();
   const prompt = (gen?.prompt || plantilla || "").trim();
