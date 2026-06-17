@@ -364,6 +364,58 @@ def _imagen_de_cluster(items: list[dict[str, Any]]) -> str:
     return ""
 
 
+def _fotos_notas_de_familia(
+    familia_con_items: list[tuple[dict[str, Any], list[dict[str, Any]]]],
+) -> list[dict[str, str]]:
+    """Catálogo de fotos del carrusel de un MACRO-EVENTO: UNA entrada por SUB-HISTORIA.
+
+    Misma forma que `_fotos_notas_de_cluster` (`{titulo, imagen}`), pero el catálogo lo numeran
+    las sub-historias, no las fuentes: cada slide es un ÁNGULO del gran evento. `titulo` es el
+    representativo de la sub-historia (su cluster, o el primer item) e `imagen` su foto PROPIA
+    representativa (la primera de `_fotos_notas_de_cluster`) o "" si la sub-historia no tiene
+    fuente propia (slide de solo texto: no usamos foto de un medio ajeno).
+    """
+    fotos: list[dict[str, str]] = []
+    for cluster, items in familia_con_items:
+        titulo = (cluster.get("titulo") or "").strip()
+        if not titulo and items:
+            titulo = (items[0].get("titulo") or "").strip()
+        propias = _fotos_notas_de_cluster(items)
+        fotos.append({
+            "titulo": titulo[:300],
+            "imagen": propias[0]["imagen"] if propias else "",
+        })
+    return fotos
+
+
+def _nota_de_familia(
+    tema_macro: str,
+    familia_con_items: list[tuple[dict[str, Any], list[dict[str, Any]]]],
+    cuerpos_por_cluster: dict[str, dict[str, str]],
+) -> str:
+    """Nota de partida del copy de un MACRO-EVENTO: un encabezado de cobertura + un bloque por sub-historia.
+
+    PURA. El encabezado declara que es la COBERTURA del gran evento «{tema_macro}» y que cada
+    SUB-HISTORIA es un ÁNGULO/slide distinto del mismo evento (que el modelo no las mezcle); luego
+    anexa, por sub-historia, el bloque de `_nota_de_cluster` (medio·título·url·resumen·cuerpo de
+    sus fuentes). `cuerpos_por_cluster` mapea `cluster_id -> {url: cuerpo}`.
+    """
+    encabezado = (
+        f"COBERTURA del macro-evento «{tema_macro}». Cada SUB-HISTORIA a continuación es un "
+        "ÁNGULO distinto (un slide del carrusel) del MISMO gran evento: sintetiza cada una en su "
+        "propia placa, sin mezclarlas ni repetir datos entre slides."
+    )
+    bloques = [encabezado]
+    for cluster, items in familia_con_items:
+        titulo = (cluster.get("titulo") or "").strip()
+        resumen = (cluster.get("resumen") or "").strip()
+        cuerpos = cuerpos_por_cluster.get(cluster.get("id") or "", {})
+        bloque = _nota_de_cluster(titulo, resumen, items, cuerpos)
+        if bloque:
+            bloques.append(bloque)
+    return "\n\n===\n\n".join(bloques).strip()
+
+
 def crear_tema_de_cluster(
     cluster: dict[str, Any], items: list[dict[str, Any]], *, claves_vistas: set[str] | None = None
 ) -> dict[str, Any] | None:
@@ -384,6 +436,32 @@ def crear_tema_de_cluster(
     if not titulo:
         return None
     cid = cluster.get("id") or ""
+    # MACRO-EVENTO (Fase B): si la historia pertenece a un gran evento, toda la FAMILIA se promueve
+    # como UN solo carrusel (un slide por sub-historia), no una pieza por sub-historia.
+    tema_macro = (cluster.get("tema_macro") or "").strip()
+    if tema_macro:
+        try:
+            familia = repos.clusters_por_tema_macro(tema_macro, marca, solo_nuevos=True)
+        except Exception:  # noqa: BLE001 -- sin familia legible, cae a la ruta por-cluster normal
+            _log.warning(
+                "pipeline: no se pudo leer la familia del macro-evento «%s» (%s)",
+                tema_macro[:60], marca, exc_info=True,
+            )
+            familia = None
+        if familia is not None:
+            ids_familia = {(c.get("id") or "") for c in familia}
+            if cid and cid not in ids_familia:
+                # Otra promoción de la familia ya absorbió esta sub-historia: no dupliques pieza.
+                _log.info(
+                    "pipeline: historia ya absorbida por su macro-evento «%s» (%s)",
+                    tema_macro[:60], marca,
+                )
+                return None
+            if len(familia) >= 2:
+                return _crear_carrusel_de_familia(
+                    tema_macro, marca, familia, claves_vistas=claves_vistas
+                )
+            # len(familia) < 2: solo queda esta sub-historia viva -> ruta por-cluster normal.
     # Dedup: la historia ya se trabajó hace poco para esta marca -> no se crea otro tema.
     if claves_vistas is not None and dedup.es_duplicado(titulo, claves_vistas):
         if cid:
@@ -456,6 +534,94 @@ def crear_tema_de_cluster(
             repos.marcar_items_cluster_usados(cid, tema["id"])
         except Exception:  # noqa: BLE001 -- el marcado es dedup; un fallo no rompe el barrido
             _log.warning("pipeline: no se pudo marcar la historia usada (%s)", cid, exc_info=True)
+    return tema
+
+
+def _crear_carrusel_de_familia(
+    tema_macro: str, marca: str, familia: list[dict[str, Any]], *,
+    claves_vistas: set[str] | None = None,
+) -> dict[str, Any] | None:
+    """CI — promueve TODA la familia de un MACRO-EVENTO como UN solo tema CARRUSEL (Fase B).
+
+    Un slide por SUB-HISTORIA (cluster de la familia), ABSORBIENDO a los hermanos: el evento es el
+    título, la nota cruza los ángulos y `n_notas` (= nº de sub-historias, ≥2) habilita el carrusel en
+    la fase CD. Marca toda la familia `usado` enlazada a la pieza para que ningún hermano se promueva
+    por separado (sin carruseles duplicados; la familia consume UN cupo). None si no se pudo crear.
+    """
+    familia = familia[:_MAX_FOTOS_CLUSTER]
+    familia_con_items: list[tuple[dict[str, Any], list[dict[str, Any]]]] = []
+    cuerpos_por_cluster: dict[str, dict[str, str]] = {}
+    for c in familia:
+        cid_f = c.get("id") or ""
+        items_f = repos.items_de_cluster(cid_f, limite=_MAX_ENLACES_CLUSTER)
+        familia_con_items.append((c, items_f))
+        cuerpos = dict(repos.cuerpos_de_cluster(cid_f))
+        for it in items_f[:_MAX_ENLACES_CLUSTER]:
+            url = (it.get("url") or "").strip()
+            if url and not cuerpos.get(url):
+                if cuerpo := _fetch_cuerpo(url):
+                    cuerpos[url] = cuerpo
+        cuerpos_por_cluster[cid_f] = cuerpos
+    cluster_lead, items_lead = familia_con_items[0]
+    resumen_lead = (cluster_lead.get("resumen") or "").strip()
+    fotos_notas_familia = _fotos_notas_de_familia(familia_con_items)
+    nota = _nota_de_familia(tema_macro, familia_con_items, cuerpos_por_cluster)[: gen_dom.MAX_TEXTO]
+    redes_ids = list(redes.redes_de_formato(_FORMATO_PIPELINE))
+    imagen = _imagen_de_cluster(items_lead)
+    # `n_notas` = nº de SUB-HISTORIAS (≥2): habilita el output CARRUSEL (una placa por ángulo)
+    # en la fase CD; `fotos_notas` numera la foto propia de cada sub-historia para asignarla a su slide.
+    trabajo = {
+        "fuente": {}, "item": {"clave": ""}, "imagen": imagen,
+        "fotos_notas": fotos_notas_familia,
+        "n_notas": len(fotos_notas_familia) or len(familia),
+    }
+    url_fuente = (items_lead[0].get("url_canonica") if items_lead else "") or ""
+    try:
+        tema = repos.crear_publicacion(
+            clase="contenido",
+            # El EVENTO es el título de la pieza (cada sub-historia es un slide, no un tema).
+            titulo=tema_macro[:300],
+            descripcion=nota[:5000],
+            marca=marca,
+            origen=ORIGEN_PIPELINE,
+            categoria=categoria_efectiva(cluster_lead),
+            fecha_objetivo=hoy_utc().isoformat(),
+            formato=_FORMATO_PIPELINE,
+            copy_pendiente=_copy_pendiente_de(trabajo, nota, redes_ids),
+            verificacion_fuente=(cluster_lead.get("verificacion_fuente") or "").strip(),
+            verificar_hallazgos=(cluster_lead.get("verificar_hallazgos") or ""),
+            fecha_fuente=((items_lead[0].get("publicado_en") if items_lead else "") or "")
+            or (cluster_lead.get("primer_visto") or ""),
+            url_fuente=url_fuente,
+            fuente_nombre=(((items_lead[0].get("fuente_nombre") if items_lead else "") or "").strip()),
+        )
+    except Exception:  # noqa: BLE001 -- sin tema, el macro-evento no produce nada (no rompe el barrido)
+        _log.warning(
+            "pipeline: no se pudo crear el carrusel del macro-evento «%s» (%s)",
+            tema_macro[:60], marca, exc_info=True,
+        )
+        return None
+    _auto_etiquetar_linea(tema, tema_macro, resumen_lead)
+    if claves_vistas is not None and (clave := dedup.clave(tema_macro)):
+        claves_vistas.add(clave)
+    # ABSORBE TODA la familia: cada hermano queda `usado` enlazado a esta pieza (best-effort por
+    # cluster; un fallo no aborta el barrido).
+    for c in familia:
+        cid_f = c.get("id") or ""
+        if not cid_f:
+            continue
+        try:
+            repos.actualizar_noticia_cluster(cid_f, estado="usado", publicacion_id=tema["id"])
+            repos.marcar_items_cluster_usados(cid_f, tema["id"])
+        except Exception:  # noqa: BLE001 -- el marcado es dedup; un fallo no rompe el barrido
+            _log.warning(
+                "pipeline: no se pudo absorber la sub-historia %s al macro-evento (%s)",
+                cid_f, marca, exc_info=True,
+            )
+    _log.info(
+        "pipeline: macro-evento «%s» -> carrusel de %d sub-historias (%s)",
+        tema_macro[:60], len(familia), marca,
+    )
     return tema
 
 

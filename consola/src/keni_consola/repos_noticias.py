@@ -267,6 +267,12 @@ def clusters_recientes(ventana_h: int, marca: str | None = None) -> list[dict[st
     return db.clusters_recientes(ventana_h, marca)
 
 
+def clusters_por_tema_macro(
+    tema_macro: str, marca: str, *, solo_nuevos: bool = True
+) -> list[dict[str, Any]]:
+    return db.clusters_por_tema_macro(tema_macro, marca, solo_nuevos=solo_nuevos)
+
+
 def items_de_cluster(cluster_id: str, *, limite: int = 200) -> list[dict[str, Any]]:
     return db.items_de_cluster(cluster_id, limite=limite)
 

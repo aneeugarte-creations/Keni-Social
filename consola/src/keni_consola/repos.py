@@ -216,6 +216,7 @@ from .repos_noticias import (  # noqa: F401
     cluster_por_url_canonica,
     clusters_extranjeros_sin_traducir,
     clusters_por_contenidos,
+    clusters_por_tema_macro,
     clusters_recientes,
     contar_clusters_admision_verificacion,
     contar_fuentes_algoritmo,

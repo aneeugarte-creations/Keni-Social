@@ -506,6 +506,35 @@ def marcar_clusters_tema_macro(ids: list[str], tema: str) -> int:
         con.close()
 
 
+def clusters_por_tema_macro(
+    tema_macro: str, marca: str, *, solo_nuevos: bool = True
+) -> list[dict[str, Any]]:
+    """Clusters de `marca` que comparten el MACRO-EVENTO `tema_macro` (Fase B), rankeados.
+
+    La familia de un gran evento (p. ej. "Cumbre del G7"): varias HISTORIAS distintas con el
+    mismo `tema_macro`, SIN fusionar. `solo_nuevos` acota a las aún no promovidas
+    (`estado='nuevo'`) — la fuente de verdad para la carrera de promoción, que crea UN solo
+    carrusel para toda la familia. Orden `score DESC, ultimo_visto DESC`. `tema_macro` vacío -> [].
+    """
+    tema_macro = (tema_macro or "").strip()
+    if not tema_macro:
+        return []
+    condiciones = ["tema_macro = ?", "marca = ?"]
+    params: list[Any] = [tema_macro, marca]
+    if solo_nuevos:
+        condiciones.append("estado = 'nuevo'")
+    where = " WHERE " + " AND ".join(condiciones)
+    con = _conectar()
+    try:
+        filas = con.execute(  # noqa: S608 -- condiciones de allowlist; valores parametrizados
+            f"{_SELECT_NOTICIA_CLUSTER}{where} ORDER BY score DESC, ultimo_visto DESC, id DESC",
+            tuple(params),
+        ).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_noticia_cluster(f) for f in filas]
+
+
 def contar_clusters_admision_verificacion(marca: str, estados: tuple[str, ...]) -> int:
     """Cuántas HISTORIAS `nuevo` de la marca están en la ADMISIÓN de verificación (ADR 0011 F3).
 

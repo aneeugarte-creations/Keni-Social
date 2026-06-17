@@ -255,6 +255,131 @@ def test_verificacion_lexica_supera_limite_de_red():
 
 
 # --------------------------------------------------------------------------- #
+# MACRO-EVENTO (Fase B): UN carrusel para toda la familia (mock de repos, sin DB)#
+# --------------------------------------------------------------------------- #
+
+
+def _fake_repos_familia(monkeypatch, *, familia, items_por_cid):
+    """Parchea `_admitir.repos` (+ helpers de etiquetado/marca/redes) para probar la rama macro.
+
+    Sin Postgres: `clusters_por_tema_macro` devuelve `familia`, `items_de_cluster` el lote por id,
+    `crear_publicacion` captura kwargs y `actualizar_noticia_cluster`/`marcar_items_cluster_usados`
+    registran la absorción. Devuelve el registro de llamadas.
+    """
+    from types import SimpleNamespace
+
+    from keni_consola.pipeline_contenido import _admitir
+
+    reg: dict = {"crear": [], "actualizar": [], "marcar_items": []}
+
+    def crear_publicacion(**kw):
+        reg["crear"].append(kw)
+        return {"id": "tema-macro-1"}
+
+    def actualizar_noticia_cluster(cid, *, estado=None, publicacion_id=None):
+        reg["actualizar"].append((cid, estado, publicacion_id))
+        return None
+
+    def marcar_items_cluster_usados(cid, publicacion_id):
+        reg["marcar_items"].append((cid, publicacion_id))
+
+    fake = SimpleNamespace(
+        clusters_por_tema_macro=lambda tema, marca, *, solo_nuevos=True: list(familia),
+        items_de_cluster=lambda cid, *, limite=200: list(items_por_cid.get(cid, [])),
+        cuerpos_de_cluster=lambda cid, *, limite=200: {},
+        obtener_fuente_rss=lambda fid: {"propia": True},
+        crear_publicacion=crear_publicacion,
+        actualizar_noticia_cluster=actualizar_noticia_cluster,
+        marcar_items_cluster_usados=marcar_items_cluster_usados,
+    )
+    monkeypatch.setattr(_admitir, "repos", fake)
+    monkeypatch.setattr(_admitir.marcas, "es_marca", lambda m: True)
+    monkeypatch.setattr(_admitir.redes, "redes_de_formato", lambda formato: ["x"])
+    monkeypatch.setattr(_admitir, "_auto_etiquetar_linea", lambda *a, **k: None)
+    return reg
+
+
+def _cluster_familia(cid, *, score, tema_macro="Mundial 2026"):
+    return {
+        "id": cid, "marca": "unotv", "titulo": f"Ángulo {cid}", "tema_macro": tema_macro,
+        "resumen": f"Resumen de {cid}", "categoria": "mx", "breaking": 0,
+        "verificacion_fuente": "no_verificado", "verificar_hallazgos": "",
+        "primer_visto": "2026-06-01T00:00:00+00:00", "score": score,
+    }
+
+
+def _item_propio(cid):
+    return {
+        "url": f"https://casa.test/{cid}", "url_canonica": f"https://casa.test/{cid}",
+        "fuente_id": f"f-{cid}", "fuente_nombre": "Casa", "titulo": f"Nota {cid}",
+        "resumen": f"Cuerpo de {cid}", "imagen": f"https://casa.test/{cid}.jpg",
+        "publicado_en": "2026-06-10T00:00:00+00:00",
+    }
+
+
+def test_macro_evento_crea_un_solo_carrusel_y_absorbe_la_familia(monkeypatch):
+    """La familia de un macro-evento se promueve como UNA pieza carrusel que absorbe a los hermanos."""
+    from keni_consola.pipeline_contenido import _admitir
+
+    familia = [
+        _cluster_familia("c1", score=0.9),
+        _cluster_familia("c2", score=0.8),
+        _cluster_familia("c3", score=0.7),
+    ]
+    items_por_cid = {c["id"]: [_item_propio(c["id"])] for c in familia}
+    reg = _fake_repos_familia(monkeypatch, familia=familia, items_por_cid=items_por_cid)
+
+    tema = _admitir.crear_tema_de_cluster(familia[0], items_por_cid["c1"], claves_vistas=set())
+
+    assert tema == {"id": "tema-macro-1"}
+    # UNA sola publicación, titulada por el EVENTO.
+    assert len(reg["crear"]) == 1
+    kw = reg["crear"][0]
+    assert kw["titulo"] == "Mundial 2026"
+    # Carrusel: n_notas = nº de sub-historias (3) en el copy_pendiente.
+    pend = json.loads(kw["copy_pendiente"])
+    assert pend["n_notas"] == 3
+    assert len(pend["fotos_notas"]) == 3
+    # Absorción: las 3 sub-historias quedan usado + enlazadas a la pieza.
+    assert {c for c, _e, _p in reg["actualizar"]} == {"c1", "c2", "c3"}
+    assert all(estado == "usado" and pid == "tema-macro-1" for _c, estado, pid in reg["actualizar"])
+    assert {c for c, _p in reg["marcar_items"]} == {"c1", "c2", "c3"}
+
+
+def test_macro_evento_guarda_de_carrera_cluster_ya_absorbido(monkeypatch):
+    """Si el cluster pasado NO está en la familia fresca (ya absorbido), no se crea pieza duplicada."""
+    from keni_consola.pipeline_contenido import _admitir
+
+    # La familia fresca solo tiene c2/c3: c1 ya fue absorbido por una promoción anterior.
+    familia = [_cluster_familia("c2", score=0.8), _cluster_familia("c3", score=0.7)]
+    items_por_cid = {c["id"]: [_item_propio(c["id"])] for c in familia}
+    reg = _fake_repos_familia(monkeypatch, familia=familia, items_por_cid=items_por_cid)
+
+    c1 = _cluster_familia("c1", score=0.9)
+    tema = _admitir.crear_tema_de_cluster(c1, [_item_propio("c1")], claves_vistas=set())
+
+    assert tema is None
+    assert reg["crear"] == []  # ninguna publicación nueva
+
+
+def test_clusters_por_tema_macro_filtra_marca_estado_y_ordena(entorno):
+    """`clusters_por_tema_macro`: misma marca + tema_macro, `solo_nuevos`, orden por score desc."""
+    _inicializar_cluster("m1", titulo="A", score=0.9, estado="nuevo")
+    _inicializar_cluster("m2", titulo="B", score=0.7, estado="nuevo")
+    _inicializar_cluster("m3", titulo="C", score=0.8, estado="usado")
+    _inicializar_cluster("m4", titulo="D", score=0.6, estado="nuevo", marca="claro-sports")
+    _inicializar_cluster("otro", titulo="E", score=0.95, estado="nuevo")
+    repos.marcar_clusters_tema_macro(["m1", "m2", "m3", "m4"], "Mundial 2026")
+
+    nuevos = repos.clusters_por_tema_macro("Mundial 2026", "unotv", solo_nuevos=True)
+    assert [c["id"] for c in nuevos] == ["m1", "m2"]  # m3 usado fuera; m4 otra marca; orden score desc
+
+    todos = repos.clusters_por_tema_macro("Mundial 2026", "unotv", solo_nuevos=False)
+    assert [c["id"] for c in todos] == ["m1", "m3", "m2"]  # incluye el usado, score desc
+    assert repos.clusters_por_tema_macro("", "unotv") == []
+
+
+# --------------------------------------------------------------------------- #
 # (a) GATEADO OFF por defecto -> el barrido NO produce nada                    #
 # --------------------------------------------------------------------------- #
 
