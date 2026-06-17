@@ -39,6 +39,7 @@ modulos_backend = [
   "imagenes",
   "marca_activos",
   "plantillas_diseno",
+  "etiquetas_plantilla",
   "plantillas_marca",
   "verificaciones",
   "reciclaje",
