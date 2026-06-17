@@ -27,18 +27,18 @@ import {
 } from "@/pages/configuracion/SeccionFuncionalidad";
 import { SeccionImagen } from "@/pages/configuracion/SeccionImagen";
 import {
-  FASES_HERRAMIENTAS,
-  FASES_IMPORTACION,
   FASES_INVESTIGACION,
   FASES_PRODUCCION,
+  GRUPOS_HERRAMIENTAS,
+  GRUPOS_IMPORTACION,
   MAESTRO_INVESTIGACION,
   MAESTRO_PRODUCCION,
   QUEUE_INVESTIGACION,
   QUEUE_PRODUCCION,
-  QUEUE_VACIA,
   slugFase,
 } from "@/pages/maquina/fases";
 import { ServiciosMaquina } from "@/pages/maquina/ServiciosMaquina";
+import { PanelAgentes } from "@/pages/monitor/PanelAgentes";
 import {
   ControlesMaquina,
   type FasePipeline,
@@ -159,22 +159,14 @@ export default function Contexto() {
           {esAdmin && <ServiciosMaquina motor="produccion" />}
         </TabsContent>
 
-        {/* Importación y Herramientas: catálogos de prompts independientes (sin daemon). Mismo diseño
-            de filas; clicar abre el prompt en el editor (overlay), sin subpágina de fase. */}
+        {/* Importación y Herramientas: agentes independientes (sin daemon). NO son un pipeline: se
+            agrupan en CAJAS por tipo (sin conectores); clicar abre el prompt en el editor (overlay). */}
         <TabsContent value="importacion" className="mt-4">
-          <PanelPipeline
-            fases={FASES_IMPORTACION}
-            queuePorTipo={QUEUE_VACIA}
-            esAdmin={esAdmin}
-          />
+          <PanelAgentes grupos={GRUPOS_IMPORTACION} esAdmin={esAdmin} />
         </TabsContent>
 
         <TabsContent value="herramientas" className="mt-4">
-          <PanelPipeline
-            fases={FASES_HERRAMIENTAS}
-            queuePorTipo={QUEUE_VACIA}
-            esAdmin={esAdmin}
-          />
+          <PanelAgentes grupos={GRUPOS_HERRAMIENTAS} esAdmin={esAdmin} />
         </TabsContent>
       </Tabs>
     </>

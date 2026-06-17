@@ -152,33 +152,70 @@ export const QUEUE_PRODUCCION: Record<string, string> = {
 };
 
 /**
- * IMPORTACIÓN — las herramientas de material recibido del equipo (recibir/* + importar/*). No son
- * un flujo de daemon: son prompts que se lanzan a mano sobre lo que llega. Se listan con el MISMO
- * diseño que Investigación/Producción (filas que abren su prompt); sin switches ni colas.
+ * Un GRUPO de agentes INDEPENDIENTES (Importación, Herramientas): prompts que se lanzan a mano y NO
+ * forman un pipeline. Se pintan como una CAJA por tipo (`PanelAgentes`), no como una secuencia con
+ * conectores: cada caja agrupa los agentes de un mismo tipo y deja claro que son autónomos.
  */
-export const FASES_IMPORTACION: readonly FasePipeline[] = [
-  { nombre: "Contexto", es_ia: true, claves: [], ayuda: "Indicaciones y correcciones del equipo", doc: "prompt/recibir/contexto" },
-  { nombre: "Notas", es_ia: true, claves: [], ayuda: "Notas y links de Claro Sports", doc: "prompt/recibir/notas" },
-  { nombre: "Portal", es_ia: true, claves: [], ayuda: "Material recibido por portal/SMS", doc: "prompt/recibir/portal" },
-  { nombre: "Corresponsales", es_ia: true, claves: [], ayuda: "Aportes de corresponsales", doc: "prompt/recibir/corresponsales" },
-  { nombre: "Reporteros", es_ia: true, claves: [], ayuda: "Aportes de reporteros", doc: "prompt/recibir/reporteros" },
-  { nombre: "Eventos", es_ia: true, claves: [], ayuda: "Eventos de Claro Sports", doc: "prompt/recibir/eventos-claro" },
-  { nombre: "Calendario", es_ia: true, claves: [], ayuda: "Importa un calendario de contenido", doc: "prompt/importar/calendario" },
-  { nombre: "Parrilla", es_ia: true, claves: [], ayuda: "Importa una rota/parrilla a eventos", doc: "prompt/importar/parrilla" },
+export interface GrupoAgentes {
+  /** El TIPO de agente (título de la caja). */
+  titulo: string;
+  /** Qué cubre el tipo (nota breve bajo el título). */
+  descripcion?: string;
+  /** Los agentes del tipo; cada uno abre su prompt. */
+  fases: readonly FasePipeline[];
+}
+
+/**
+ * IMPORTACIÓN — los agentes de material recibido del equipo, en dos tipos: «Recibir» (lo que llega
+ * del equipo y los corresponsales) e «Importar» (calendarios/parrillas a la mesa de eventos). No son
+ * un flujo de daemon: cada uno se lanza a mano sobre lo que llega.
+ */
+export const GRUPOS_IMPORTACION: readonly GrupoAgentes[] = [
+  {
+    titulo: "Recibir",
+    descripcion: "Material que llega del equipo, portales y corresponsales",
+    fases: [
+      { nombre: "Contexto", es_ia: true, claves: [], ayuda: "Indicaciones y correcciones del equipo", doc: "prompt/recibir/contexto" },
+      { nombre: "Notas", es_ia: true, claves: [], ayuda: "Notas y links de Claro Sports", doc: "prompt/recibir/notas" },
+      { nombre: "Portal", es_ia: true, claves: [], ayuda: "Material recibido por portal/SMS", doc: "prompt/recibir/portal" },
+      { nombre: "Corresponsales", es_ia: true, claves: [], ayuda: "Aportes de corresponsales", doc: "prompt/recibir/corresponsales" },
+      { nombre: "Reporteros", es_ia: true, claves: [], ayuda: "Aportes de reporteros", doc: "prompt/recibir/reporteros" },
+      { nombre: "Eventos", es_ia: true, claves: [], ayuda: "Eventos de Claro Sports", doc: "prompt/recibir/eventos-claro" },
+    ],
+  },
+  {
+    titulo: "Importar",
+    descripcion: "Calendarios y parrillas a la mesa de eventos",
+    fases: [
+      { nombre: "Calendario", es_ia: true, claves: [], ayuda: "Importa un calendario de contenido", doc: "prompt/importar/calendario" },
+      { nombre: "Parrilla", es_ia: true, claves: [], ayuda: "Importa una rota/parrilla a eventos", doc: "prompt/importar/parrilla" },
+    ],
+  },
 ];
 
 /**
- * HERRAMIENTAS — prompts independientes que NO son una etapa de la máquina: la ideación evergreen,
- * la crítica IA y los envoltorios del copy. Mismo diseño; abren su prompt. (No incluye hashtags ni
- * el asistente de copy: solo se lanzaban por MCP/sin UI propia y se retiraron.)
+ * HERRAMIENTAS — agentes independientes que NO son una etapa de la máquina, en tres tipos: la
+ * ideación evergreen, la crítica IA y los envoltorios del copy. Cada uno abre su prompt. (No incluye
+ * hashtags ni el asistente de copy: solo se lanzaban por MCP/sin UI propia y se retiraron.)
  */
-export const FASES_HERRAMIENTAS: readonly FasePipeline[] = [
-  { nombre: "Idear", es_ia: true, claves: [], ayuda: "Propone ideas de contenido evergreen para la marca", doc: "prompt/idear" },
-  { nombre: "Crítica", es_ia: true, claves: [], ayuda: "Crítica con visión antes de publicar", doc: "prompt/critica" },
-  { nombre: "Redes", es_ia: true, claves: [], ayuda: "Envoltorio: una pieza por red", doc: "prompt/envoltorios/redes" },
-  { nombre: "Unificado", es_ia: true, claves: [], ayuda: "Envoltorio: el mismo copy para todas las redes", doc: "prompt/envoltorios/copy-unico" },
-  { nombre: "Carrusel", es_ia: true, claves: [], ayuda: "Envoltorio: decisión de carrusel", doc: "prompt/envoltorios/carrusel" },
+export const GRUPOS_HERRAMIENTAS: readonly GrupoAgentes[] = [
+  {
+    titulo: "Ideación",
+    descripcion: "Propone contenido evergreen para la marca",
+    fases: [{ nombre: "Idear", es_ia: true, claves: [], ayuda: "Propone ideas de contenido evergreen para la marca", doc: "prompt/idear" }],
+  },
+  {
+    titulo: "Crítica",
+    descripcion: "Revisa con visión antes de publicar",
+    fases: [{ nombre: "Crítica", es_ia: true, claves: [], ayuda: "Crítica con visión antes de publicar", doc: "prompt/critica" }],
+  },
+  {
+    titulo: "Envoltorios",
+    descripcion: "Adapta el copy aprobado al formato de cada red",
+    fases: [
+      { nombre: "Redes", es_ia: true, claves: [], ayuda: "Envoltorio: una pieza por red", doc: "prompt/envoltorios/redes" },
+      { nombre: "Unificado", es_ia: true, claves: [], ayuda: "Envoltorio: el mismo copy para todas las redes", doc: "prompt/envoltorios/copy-unico" },
+      { nombre: "Carrusel", es_ia: true, claves: [], ayuda: "Envoltorio: decisión de carrusel", doc: "prompt/envoltorios/carrusel" },
+    ],
+  },
 ];
-
-/** Las herramientas no tienen colas de daemon: el mapa va vacío (sin conteos por fila). */
-export const QUEUE_VACIA: Record<string, string> = {};
