@@ -630,12 +630,22 @@ services:
     # da "too many clients". Subimos a 200 y shared_buffers a ~25% del mem_limit (2GB). El
     # arreglo de fondo (pool de conexiones) sigue pendiente: con pool, 200 sobra. Si bajas
     # DB_MEM_LIMIT, baja shared_buffers en proporcion.
+    # pg_stat_statements: telemetria de queries (top por tiempo total/medio) para diagnosticar
+    # latencia en prod. Va en shared_preload_libraries (solo se carga al arranque); ademas hay
+    # que crear la extension una vez (CREATE EXTENSION pg_stat_statements). track=top mide las
+    # sentencias de nivel superior (no las anidadas en funciones), suficiente y mas barato.
     command:
       - postgres
       - -c
       - max_connections=200
       - -c
       - shared_buffers=2GB
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.max=10000
+      - -c
+      - pg_stat_statements.track=top
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
