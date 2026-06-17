@@ -1,11 +1,15 @@
-"""Sugerir hashtags (etapa de producción, tras Redactar): propone hashtags para una pieza
+"""Sugerir hashtags (etapa de producción, tras Redactar): propone hashtags para un CONTENIDO
 que aún no los lleva, sin tocar el copy.
 
-Cuando una pieza recién redactada NO tiene hashtags (`falta_hashtags`), esta etapa ENCOLA un
-`claude -p` READ-ONLY que, a partir del copy + la voz de la marca, elige los hashtags más
-relevantes SOLO de la `hashtags_biblioteca` de la marca (los que de verdad usa en redes). El
-post-procesado filtra la salida contra esa misma biblioteca, la acota a la cantidad típica de la
-red (`cantidad_sugerida`) y la persiste en `pieza.hashtags_sugeridos` (JSON, cada tag con '#').
+Los hashtags son GEMELOS en todas las redes de un contenido: se calculan UNA vez por contenido
+(`publicacion_id`), NO por pieza, y se escriben idénticos en todas sus piezas. Así X e Instagram
+nunca divergen. Cuando un contenido recién redactado NO tiene hashtags (`falta_hashtags`), esta
+etapa ENCOLA un `claude -p` READ-ONLY que, a partir del copy + la voz de la marca, elige de la
+`hashtags_biblioteca` de la marca los más relevantes al tema. El post-procesado ARMA la lista
+final: los FIJOS de la marca (su firma: nombre/portal — van siempre, no los elige la IA porque no
+dependen del tema), los temáticos que propuso la IA, y relleno por frecuencia hasta la cantidad
+típica; todo del pool de la marca. Se persiste en `pieza.hashtags_sugeridos` (JSON, cada tag con
+'#') de cada pieza gemela.
 
 El humano tiene la última palabra: el feed muestra esa sugerencia en GRIS junto al copy para
 aceptarla (se inyecta) o descartarla de un clic; nada se publica ni se reescribe solo. Gateado
@@ -93,17 +97,19 @@ def _contexto_editorial(marca: str) -> str:
 
 
 def _componer_prompt(
-    *, pub: dict[str, Any], marca: str, red: str, candidatos: list[str], cantidad: int
+    *, copy: str, marca: str, redes: list[str], candidatos: list[str], cantidad: int
 ) -> str:
-    """Renderiza `prompt/sugerir-hashtags` con el copy, la red y la biblioteca de la marca."""
+    """Renderiza `prompt/sugerir-hashtags` con el copy, las redes y la biblioteca de la marca."""
     from .. import libprompts
+    from .. import redes as cat_redes
 
     cuerpo = libprompts.cuerpo_efectivo(PROMPT_SUGERIR) or libprompts.cuerpo_inicial(PROMPT_SUGERIR)
     lista = " ".join(f"#{c}" for c in candidatos[:_MAX_CANDIDATOS]) or "(la marca no tiene biblioteca)"
+    nombres_red = ", ".join(cat_redes.nombre_por_id(r) or r for r in redes) or "sus redes"
     sust = {
         "{{MARCA}}": marcas.etiqueta_de(marca) or marca or "la marca",
-        "{{RED}}": str(red or "la red"),
-        "{{COPY}}": str(pub.get("contenido") or "").strip() or "(sin copy)",
+        "{{REDES}}": nombres_red,
+        "{{COPY}}": str(copy or "").strip() or "(sin copy)",
         "{{CANTIDAD}}": str(cantidad),
         "{{CANDIDATOS}}": lista,
     }
@@ -112,45 +118,49 @@ def _componer_prompt(
     return cuerpo + _contexto_editorial(marca)
 
 
-def lanzar_para_publicacion(pieza_id: str) -> dict[str, Any] | None:
-    """ENCOLA la sugerencia de hashtags de una pieza si toca. None si no aplica.
+def cantidad_contenido(marca: str, redes: list[str]) -> int:
+    """CUÁNTOS hashtags sugerir para un CONTENIDO: el máximo entre sus redes (la sugerencia es
+    gemela, así que una sola cantidad la gobierna). 0 si NINGUNA red de la marca usa hashtags."""
+    return max((hashtags_biblioteca.cantidad_sugerida(marca, r) for r in redes), default=0)
 
-    No aplica si: el flag está OFF; la pieza no existe; ya lleva hashtags (`falta_hashtags`
-    False); la red de la marca no usa hashtags (`cantidad_sugerida` 0); o ya tiene una sugerencia
-    calculada. Idempotente por la clave `sugerir-hashtags:{id}` (no relanza con uno en curso).
+
+def lanzar_para_contenido(publicacion_id: str, twins: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """ENCOLA UNA sugerencia de hashtags para un contenido (todas sus piezas gemelas). None si no aplica.
+
+    `twins` son las piezas BORRADOR del contenido (mismas del barrido). No aplica si: el flag está
+    OFF; ninguna pieza existe; el copy ya lleva hashtags (`falta_hashtags` False en todas); ya hay
+    una sugerencia calculada en alguna; la marca no usa hashtags en ninguna red (`cantidad` 0); o la
+    marca no tiene biblioteca. Idempotente por la clave `sugerir-hashtags:{publicacion_id}`.
     """
-    if not config.sugerir_hashtags_activo():
+    if not config.sugerir_hashtags_activo() or not twins:
         return None
-    pub = repos.obtener_pieza(pieza_id)
-    if pub is None:
+    if not any(falta_hashtags(t) for t in twins):
         return None
-    if not falta_hashtags(pub):
+    if any(_sugeridos_actuales(t) for t in twins):
         return None
-    if _sugeridos_actuales(pub):
-        return None
-    marca = str(pub.get("marca") or "")
-    red = str(pub.get("red") or "")
-    cantidad = hashtags_biblioteca.cantidad_sugerida(marca, red)
+    marca = str(twins[0].get("marca") or "")
+    redes = sorted({str(t.get("red") or "") for t in twins if t.get("red")})
+    cantidad = cantidad_contenido(marca, redes)
     if cantidad <= 0:
         return None
     candidatos = hashtags_biblioteca.candidatos(marca)
     if not candidatos:
         return None
 
-    procesar_spec = jobspec.construir_sugerir_hashtags(pieza_id=pieza_id)
+    copy = next((str(t.get("contenido") or "") for t in twins if str(t.get("contenido") or "").strip()), "")
+    procesar_spec = jobspec.construir_sugerir_hashtags(publicacion_id=publicacion_id)
     procesar = jobspec.reconstruir_procesar({"procesar": procesar_spec})
-    prompt = _componer_prompt(pub=pub, marca=marca, red=red, candidatos=candidatos, cantidad=cantidad)
-    plat = repos.obtener_pieza_fila(pieza_id) or {}
+    prompt = _componer_prompt(copy=copy, marca=marca, redes=redes, candidatos=candidatos, cantidad=cantidad)
     return generar.lanzar(
         tipo="sugerir-hashtags",
-        titulo=f"Sugerir hashtags · {pub.get('titulo', '') or 'pieza'}",
+        titulo=f"Sugerir hashtags · {twins[0].get('titulo', '') or 'contenido'}",
         marca=marca,
         prompt=prompt,
         procesar=procesar,
         procesar_spec=procesar_spec,
         endurecer=_endurecer(),
-        clave_idem=f"sugerir-hashtags:{pieza_id}",
-        publicacion_id=str(plat.get("publicacion_id", "") or ""),
+        clave_idem=f"sugerir-hashtags:{publicacion_id}",
+        publicacion_id=publicacion_id,
     )
 
 
@@ -188,46 +198,68 @@ def _normalizar(tag: str) -> str:
     return f"#{cuerpo}" if cuerpo else ""
 
 
-def depurar(propuestos: list[str], *, marca: str, cantidad: int) -> list[str]:
-    """Filtra los hashtags propuestos a los que están en la biblioteca, dedup y acota a `cantidad`.
+def ensamblar(propuestos: list[str], *, marca: str, cantidad: int) -> list[str]:
+    """ARMA la sugerencia final del contenido, hasta `cantidad`, toda del pool de la marca:
 
-    La biblioteca es la FUENTE de verdad: un hashtag que la IA invente (fuera de la lista) se
-    descarta. Compara por el cuerpo sin '#' en minúscula. Preserva el orden de la propuesta.
+      1. FIJOS de la marca (su firma: nombre/portal) — SIEMPRE, no dependen del tema; se reserva
+         al menos un hueco para algo temático cuando hay sitio.
+      2. Temáticos que propuso la IA, en su orden de relevancia (los de fuera del pool se descartan).
+      3. Relleno por frecuencia (los más usados de la marca) hasta llegar a la cantidad típica.
+
+    Dedup por el cuerpo sin '#' en minúscula. Garantiza que la firma esté y que el cupo se llene
+    aunque la IA devuelva poco o nada usable (era el bug: copy sin hashtags y sugerencia vacía).
     """
-    permitidos = set(hashtags_biblioteca.candidatos(marca))
+    if cantidad <= 0:
+        return []
+    pool = hashtags_biblioteca.candidatos(marca)
+    permitidos = set(pool)
     salida: list[str] = []
     vistos: set[str] = set()
-    for tag in propuestos:
-        norm = _normalizar(tag)
-        cuerpo = norm.lstrip("#")
-        if not cuerpo or cuerpo in vistos or cuerpo not in permitidos:
-            continue
+
+    def add(crudo: str) -> None:
+        cuerpo = str(crudo or "").strip().lstrip("#").strip().lower()
+        if not cuerpo or cuerpo in vistos or cuerpo not in permitidos or len(salida) >= cantidad:
+            return
         vistos.add(cuerpo)
-        salida.append(norm)
-        if len(salida) >= cantidad:
-            break
+        salida.append(f"#{cuerpo}")
+
+    fijos = hashtags_biblioteca.fijos(marca)
+    reserva_tematica = 1 if cantidad >= 2 else 0
+    for cuerpo in fijos[: max(0, cantidad - reserva_tematica)]:
+        add(cuerpo)
+    for tag in propuestos:
+        add(tag)
+    for cuerpo in pool:
+        add(cuerpo)
     return salida
 
 
-def aplicar_sugerencia(pieza_id: str, propuestos: list[str]) -> list[str]:
-    """Persiste la sugerencia depurada en `pieza.hashtags_sugeridos`. Devuelve la lista guardada."""
-    pub = repos.obtener_pieza(pieza_id)
-    if pub is None:
+def aplicar_sugerencia(publicacion_id: str, propuestos: list[str]) -> list[str]:
+    """Arma la sugerencia del contenido y la escribe IDÉNTICA en todas sus piezas BORRADOR (gemelas).
+
+    Los hashtags son gemelos entre redes: se calcula una vez (cantidad = máximo entre las redes del
+    contenido) y se persiste el mismo JSON en cada pieza. Devuelve la lista guardada ([] si no toca).
+    """
+    filas = repos.listar_piezas_fila(publicacion_id=publicacion_id) or []
+    borradores = [f for f in filas if str(f.get("estado") or "") == "borrador"]
+    if not borradores:
         return []
-    marca = str(pub.get("marca") or "")
-    red = str(pub.get("red") or "")
-    cantidad = hashtags_biblioteca.cantidad_sugerida(marca, red)
-    lista = depurar(propuestos, marca=marca, cantidad=cantidad) if cantidad > 0 else []
-    repos.actualizar_pieza(pieza_id, {"hashtags_sugeridos": json.dumps(lista, ensure_ascii=False)})
+    marca = str(borradores[0].get("marca") or "")
+    redes = sorted({str(f.get("red") or "") for f in borradores if f.get("red")})
+    cantidad = cantidad_contenido(marca, redes)
+    lista = ensamblar(propuestos, marca=marca, cantidad=cantidad)
+    payload = json.dumps(lista, ensure_ascii=False)
+    for f in borradores:
+        repos.actualizar_pieza(str(f.get("id") or ""), {"hashtags_sugeridos": payload})
     return lista
 
 
-def construir_procesar_sugerir_hashtags(*, pieza_id: str):  # noqa: ANN201
+def construir_procesar_sugerir_hashtags(*, publicacion_id: str):  # noqa: ANN201
     """Devuelve el callback `procesar(salida, metricas) -> dict` del job (corre en el worker)."""
 
     def procesar(salida: str, _metricas: object) -> dict[str, object]:
         propuestos = _parsear_hashtags(salida)
-        guardados = aplicar_sugerencia(pieza_id, propuestos)
+        guardados = aplicar_sugerencia(publicacion_id, propuestos)
         return {"sugerir_hashtags": {"hashtags": guardados}}
 
     return procesar

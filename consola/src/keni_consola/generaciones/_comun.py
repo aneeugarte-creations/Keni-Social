@@ -88,6 +88,9 @@ MOTIVO_INTERRUMPIDO = "interrumpido"
 TIPOS = (
     "copy", "rss", "hashtags", "imagen", "verificacion", "revision", "prompt",
     "parrilla-import", "insumos", "import-calendario",
+    # Sugerir hashtags (tras Redactar): propone los hashtags GEMELOS de un contenido sin copy
+    # etiquetado. Trabajo de fondo de la máquina de contenido (Producción), como el resto.
+    "sugerir-hashtags",
     # Taller EVERGREEN / brainstorming: `evergreen-ideas` = la PROPUESTA de ideas evergreen (IA);
     # `evergreen` = el copy de una idea APROBADA (pieza `flujo='evergreen'` del tablero).
     "evergreen-ideas", "evergreen",

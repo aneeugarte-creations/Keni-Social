@@ -155,6 +155,7 @@ describe("Producción (feed unificado: runs del pipeline + actividad suelta)", (
     expect(etiquetaTipoGeneracion("imagen")).toBe("Imagen");
     expect(etiquetaTipoGeneracion("insumos")).toBe("Cajones del día");
     expect(etiquetaTipoGeneracion("import-calendario")).toBe("Importar calendario");
+    expect(etiquetaTipoGeneracion("sugerir-hashtags")).toBe("Sugerir hashtags");
     // Fallback para tipos desconocidos
     expect(etiquetaTipoGeneracion("desconocido")).toBe("desconocido");
   });

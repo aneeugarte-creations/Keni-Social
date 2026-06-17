@@ -48,6 +48,20 @@ def test_red_desconocida_usa_el_defecto():
     assert hb.cantidad_sugerida("unotv", "x") == hb.CANTIDAD_DEFECTO
 
 
+def test_fijos_son_la_firma_de_la_marca_y_estan_en_el_pool():
+    # La firma (nombre/portal) que va casi en cada post: la etapa la inyecta siempre.
+    fijos = {
+        "unotv": ["unotv", "portalunotv"],
+        "claro-sports": ["portalclarosports"],
+    }
+    for marca, esperado in fijos.items():
+        assert hb.fijos(marca) == esperado, marca
+        # Cada fijo está en el pool de candidatos (si no, la etapa nunca lo añadiría).
+        pool = set(hb.candidatos(marca))
+        assert all(f in pool for f in hb.fijos(marca)), marca
+
+
 def test_marca_sin_biblioteca_no_sugiere():
     assert hb.candidatos("marca-inexistente") == []
+    assert hb.fijos("marca-inexistente") == []
     assert hb.cantidad_sugerida("marca-inexistente", "instagram") == 0

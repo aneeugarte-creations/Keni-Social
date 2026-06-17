@@ -363,13 +363,14 @@ def construir_critica_ia(*, pieza_id: str) -> dict[str, Any]:
     return {"kind": PROC_CRITICA_IA, "pieza_id": pieza_id}
 
 
-def construir_sugerir_hashtags(*, pieza_id: str) -> dict[str, Any]:
-    """Spec del post-procesado de SUGERIR HASHTAGS: filtra la salida y la guarda en la pieza.
+def construir_sugerir_hashtags(*, publicacion_id: str) -> dict[str, Any]:
+    """Spec del post-procesado de SUGERIR HASHTAGS: filtra la salida y la guarda en el CONTENIDO.
 
-    `pieza_id` es la pieza cuyos `hashtags_sugeridos` se proponen. El worker reconstruye el
-    callback (que toca `repos`) vía `dominio.sugerir_hashtags`; la pieza se relee fresca al aplicar.
+    `publicacion_id` es el contenido (no la pieza): los hashtags son GEMELOS en todas sus redes,
+    así que la sugerencia se calcula UNA vez y se escribe idéntica en todas sus piezas. El worker
+    reconstruye el callback (que toca `repos`) vía `dominio.sugerir_hashtags`.
     """
-    return {"kind": PROC_SUGERIR_HASHTAGS, "pieza_id": pieza_id}
+    return {"kind": PROC_SUGERIR_HASHTAGS, "publicacion_id": publicacion_id}
 
 
 def construir(
@@ -554,7 +555,7 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
         from . import sugerir_hashtags as dom_sugerir
 
         return dom_sugerir.construir_procesar_sugerir_hashtags(
-            pieza_id=p["pieza_id"]
+            publicacion_id=p["publicacion_id"]
         )
 
     if kind == PROC_VERIFICACION_FUENTE:

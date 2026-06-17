@@ -14,6 +14,7 @@ export const ETIQUETAS_TIPO_GENERACION: Record<string, string> = {
   verificacion: "Verificar",
   "revision": "revisión editorial",
   autogen: "Auto-copy",
+  "sugerir-hashtags": "Sugerir hashtags",
   run: "Run",
   pipeline: "Pipeline",
   insumos: "Cajones del día",

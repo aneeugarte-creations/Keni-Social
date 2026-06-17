@@ -1,16 +1,17 @@
 """Etapa de SUGERIR HASHTAGS del pipeline (tras Redactar, antes de Ilustrar).
 
-El pipeline redacta el copy SIN hashtags (el copy unificado nunca los lleva). Esta etapa, para
-cada borrador recién redactado que aún no tiene hashtags (`falta_hashtags`), ENCOLA una sugerencia
-`claude -p` READ-ONLY (`dominio.sugerir_hashtags`) que elige los más relevantes de la biblioteca de
-la marca y los guarda en `pieza.hashtags_sugeridos`. NO toca el copy: el feed mostrará la
-sugerencia en gris para que un humano la acepte/rechace de un clic.
+El pipeline redacta el copy SIN hashtags (el copy unificado nunca los lleva). Esta etapa trabaja
+por CONTENIDO, no por pieza: los hashtags son GEMELOS en todas las redes de un contenido, así que
+agrupa las piezas borrador por `publicacion_id` y, para cada contenido al que le faltan hashtags,
+ENCOLA UNA sola sugerencia `claude -p` READ-ONLY (`dominio.sugerir_hashtags`). El post-procesado
+arma la lista (fijos de la marca + temáticos de la IA + relleno) y la escribe IDÉNTICA en todas las
+piezas del contenido. NO toca el copy: el feed la muestra en gris para aceptar/rechazar de un clic.
 
-REGLAS DE SELECCIÓN (`piezas_para_sugerir_hashtags`, pura):
-  - Estado `borrador` y con copy ya redactado (`contenido` no vacío).
-  - SIN hashtags en el copy (`falta_hashtags`): si ya los lleva, no se sugiere nada.
-  - La red de la marca usa hashtags (`cantidad_sugerida > 0`; p. ej. YouTube no).
-  - Aún sin sugerencia calculada (`hashtags_sugeridos` vacío): idempotencia barata por tick.
+REGLAS DE SELECCIÓN (`contenidos_para_sugerir_hashtags`, pura):
+  - Agrupa las piezas `borrador` con copy ya redactado (`contenido` no vacío) por `publicacion_id`.
+  - El contenido entra si a alguna de sus piezas le FALTAN hashtags (`falta_hashtags`) y ninguna
+    tiene ya una sugerencia calculada (idempotencia barata por tick).
+  - La marca usa hashtags en alguna de las redes del contenido (`cantidad_contenido > 0`).
 
 Gateada por `KENI_PIPELINE_SUGERIR_HASHTAGS` (def ON) bajo el maestro `KENI_MAQUINA`.
 """
@@ -21,15 +22,15 @@ import json
 import logging
 from typing import Any
 
-from .. import config, hashtags_biblioteca, repos
+from .. import config, repos
 from ..dominio import sugerir_hashtags as dom_sugerir
 
-__all__ = ["ejecutar_sugerir_hashtags", "piezas_para_sugerir_hashtags"]
+__all__ = ["ejecutar_sugerir_hashtags", "contenidos_para_sugerir_hashtags"]
 
 _log = logging.getLogger("keni_consola.pipeline_contenido")
 
-# Cap de sugerencias encoladas por barrido: acota el trabajo de un tick (el daemon barre cada
-# pocos segundos, así que un backlog se drena en minutos igualmente).
+# Cap de contenidos encolados por barrido: acota el trabajo de un tick (el daemon barre cada pocos
+# segundos, así que un backlog se drena en minutos igualmente).
 _MAX_POR_BARRIDO = 50
 
 
@@ -47,35 +48,46 @@ def _ya_tiene_sugerencia(pub: dict[str, Any]) -> bool:
     return False
 
 
-def piezas_para_sugerir_hashtags(
+def contenidos_para_sugerir_hashtags(
     pubs: list[dict[str, Any]], *, maximo: int = _MAX_POR_BARRIDO
-) -> list[dict[str, Any]]:
-    """Filtra los borradores que necesitan sugerencia de hashtags (PURA; reglas en el módulo)."""
-    elegidas: list[dict[str, Any]] = []
+) -> list[tuple[str, list[dict[str, Any]]]]:
+    """Agrupa los borradores por contenido y devuelve `(publicacion_id, twins)` de los que necesitan
+    sugerencia de hashtags (PURA; reglas en el módulo). Preserva el orden de aparición del primero."""
+    por_contenido: dict[str, list[dict[str, Any]]] = {}
+    orden: list[str] = []
     for pub in pubs:
-        if pub.get("estado") != "borrador":
+        if pub.get("estado") != "borrador" or not str(pub.get("contenido") or "").strip():
             continue
-        if not str(pub.get("contenido") or "").strip():
+        pid = str(pub.get("publicacion_id") or "")
+        if not pid:
             continue
-        if not dom_sugerir.falta_hashtags(pub):
+        if pid not in por_contenido:
+            por_contenido[pid] = []
+            orden.append(pid)
+        por_contenido[pid].append(pub)
+
+    elegidos: list[tuple[str, list[dict[str, Any]]]] = []
+    for pid in orden:
+        twins = por_contenido[pid]
+        if not any(dom_sugerir.falta_hashtags(t) for t in twins):
             continue
-        if _ya_tiene_sugerencia(pub):
+        if any(_ya_tiene_sugerencia(t) for t in twins):
             continue
-        if hashtags_biblioteca.cantidad_sugerida(
-            str(pub.get("marca") or ""), str(pub.get("red") or "")
-        ) <= 0:
+        marca = str(twins[0].get("marca") or "")
+        redes = [str(t.get("red") or "") for t in twins if t.get("red")]
+        if dom_sugerir.cantidad_contenido(marca, redes) <= 0:
             continue
-        elegidas.append(pub)
-        if len(elegidas) >= maximo:
+        elegidos.append((pid, twins))
+        if len(elegidos) >= maximo:
             break
-    return elegidas
+    return elegidos
 
 
 def ejecutar_sugerir_hashtags() -> list[dict[str, Any]]:
-    """Etapa de Sugerir hashtags del barrido (tras Redactar): encola sugerencias para los
-    borradores sin hashtags. Gateada por `KENI_PIPELINE_SUGERIR_HASHTAGS` + máquina.
+    """Etapa de Sugerir hashtags del barrido (tras Redactar): encola UNA sugerencia por contenido
+    al que le faltan hashtags. Gateada por `KENI_PIPELINE_SUGERIR_HASHTAGS` + máquina.
 
-    Best-effort: un fallo por pieza se loguea y se sigue. Devuelve las generaciones encoladas.
+    Best-effort: un fallo por contenido se loguea y se sigue. Devuelve las generaciones encoladas.
     """
     if not config.gate_maquina(config.sugerir_hashtags_activo)():
         return []
@@ -85,13 +97,13 @@ def ejecutar_sugerir_hashtags() -> list[dict[str, Any]]:
         _log.exception("pipeline: no se pudieron leer los borradores para sugerir hashtags.")
         return []
     encoladas: list[dict[str, Any]] = []
-    for pub in piezas_para_sugerir_hashtags(pubs):
+    for pid, twins in contenidos_para_sugerir_hashtags(pubs):
         try:
-            gen = dom_sugerir.lanzar_para_publicacion(pub["id"])
-        except Exception:  # noqa: BLE001 -- una pieza que falla no aborta la etapa
+            gen = dom_sugerir.lanzar_para_contenido(pid, twins)
+        except Exception:  # noqa: BLE001 -- un contenido que falla no aborta la etapa
             _log.exception(
-                "pipeline: falló la sugerencia de hashtags de la pieza %s (marca %s).",
-                pub.get("id", ""), pub.get("marca", ""),
+                "pipeline: falló la sugerencia de hashtags del contenido %s (marca %s).",
+                pid, (twins[0].get("marca", "") if twins else ""),
             )
             continue
         if gen:

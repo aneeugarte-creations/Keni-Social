@@ -56,6 +56,15 @@ ADOPCION_MINIMA = 0.25
 # Tope de sugerencias por pieza (ninguna red real supera 5; deja margen).
 MAX_SUGERENCIAS = 8
 
+# Hashtags FIJOS de la marca (su firma: nombre/portal/lema) que van casi en cada post y NO dependen
+# del tema. La etapa los inyecta SIEMPRE (no los elige la IA por relevancia, que se los saltaba). Se
+# detectan por DATOS, no a mano: un tag es fijo si lo usa una fracción enorme de los posts de la
+# marca (`ADOPCION_FIJO`), o si es el handle de la marca (su slug / "portal"+slug) con uso sólido
+# (`FIJO_HANDLE_MIN`). Se cap­ean a `MAX_FIJOS` para dejar sitio a los temáticos.
+ADOPCION_FIJO = 0.40
+FIJO_HANDLE_MIN = 0.15
+MAX_FIJOS = 2
+
 # Salida de `med.sql` (percentile_cont(0.5) de #hashtags por post, y adopción) sobre
 # la ventana anual por marca. med_users = mediana entre los posts que SÍ etiquetan.
 #   marca -> red -> (posts, adopcion, med_all, med_users)
@@ -100,8 +109,29 @@ def cantidad_red(stats: tuple[int, float, int, int]) -> int:
     return max(0, min(MAX_SUGERENCIAS, med_users))
 
 
-def procesar(filas: list[tuple[str, str, int]]) -> dict[str, dict]:
-    """De (marca, tag, n) crudas a {marca: biblioteca}. Pliega, fusiona, umbral, ordena."""
+def handles_de(marca: str) -> set[str]:
+    """Tags que son el HANDLE de la marca: su slug sin separadores y "portal"+slug (p. ej.
+    `claro-sports` -> {clarosports, portalclarosports}; `unotv` -> {unotv, portalunotv})."""
+    plano = "".join(c for c in marca.lower() if c.isalnum())
+    return {plano, f"portal{plano}"} if plano else set()
+
+
+def fijos_de(marca: str, adopcion: dict[str, float]) -> list[str]:
+    """FIJOS de la marca por DATOS: muy usados (`ADOPCION_FIJO`) o el handle con uso sólido
+    (`FIJO_HANDLE_MIN`). Plegados, ordenados por adopción desc, capados a `MAX_FIJOS`."""
+    handles = handles_de(marca)
+    cand: dict[str, float] = {}
+    for tag, adop in adopcion.items():
+        plg = plegar(tag)
+        if adop >= ADOPCION_FIJO or (plg in handles and adop >= FIJO_HANDLE_MIN):
+            cand[plg] = max(cand.get(plg, 0.0), adop)
+    return [t for t, _ in sorted(cand.items(), key=lambda kv: -kv[1])[:MAX_FIJOS]]
+
+
+def procesar(
+    filas: list[tuple[str, str, int]], adopcion: dict[str, dict[str, float]]
+) -> dict[str, dict]:
+    """De (marca, tag, n) crudas a {marca: biblioteca}. Pliega, fusiona, umbral, ordena, marca fijos."""
     # marca -> tag_plegado -> {grafia: n} (para elegir la grafía más usada)
     crudo: dict[str, dict[str, dict[str, int]]] = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
     for marca, tag, n in filas:
@@ -110,13 +140,23 @@ def procesar(filas: list[tuple[str, str, int]]) -> dict[str, dict]:
     bibliotecas: dict[str, dict] = {}
     for marca, plegados in crudo.items():
         hashtags: list[dict] = []
-        for grafias in plegados.values():
+        forma_de_plegado: dict[str, str] = {}
+        for plg, grafias in plegados.items():
             total = sum(grafias.values())
+            forma = max(grafias.items(), key=lambda kv: (kv[1], -len(kv[0])))[0]
+            forma_de_plegado[plg] = forma
             if total < UMBRAL:
                 continue
-            forma = max(grafias.items(), key=lambda kv: (kv[1], -len(kv[0])))[0]
             hashtags.append({"tag": forma, "n": total})
         hashtags.sort(key=lambda h: (-h["n"], h["tag"]))
+
+        # Fijos en la grafía de la biblioteca (forma más usada); solo los que están en el pool.
+        en_pool = {h["tag"] for h in hashtags}
+        fijos = [
+            forma_de_plegado.get(plg, plg)
+            for plg in fijos_de(marca, adopcion.get(marca, {}))
+            if forma_de_plegado.get(plg, plg) in en_pool
+        ]
 
         stats = ESTADISTICAS_RED.get(marca, {})
         conteo_por_red = {red: cantidad_red(s) for red, s in stats.items()}
@@ -126,6 +166,7 @@ def procesar(filas: list[tuple[str, str, int]]) -> dict[str, dict]:
             "umbral": UMBRAL,
             "fuente": "metricas_cache (Metricool)",
             "conteo_por_red": conteo_por_red,
+            "fijos": fijos,
             "estadisticas_por_red": {
                 red: {"posts": p, "adopcion": a, "mediana": m, "mediana_con_uso": mu}
                 for red, (p, a, m, mu) in stats.items()
@@ -146,15 +187,35 @@ def leer_tsv(texto: str) -> list[tuple[str, str, int]]:
     return filas
 
 
+def leer_adopcion(ruta: Path | None) -> dict[str, dict[str, float]]:
+    """Lee la adopción por tag (`marca|tag|adopcion`) de `adop.sql`. {} si no se pasa archivo.
+
+    Sin este archivo no se marcan fijos (la biblioteca sigue siendo válida, solo sin firma fija).
+    """
+    adop: dict[str, dict[str, float]] = defaultdict(dict)
+    if ruta is None or not ruta.is_file():
+        return adop
+    for linea in ruta.read_text(encoding="utf-8").splitlines():
+        linea = linea.strip()
+        if not linea:
+            continue
+        marca, tag, valor = linea.split("|")
+        adop[marca][tag] = float(valor)
+    return adop
+
+
 def main() -> int:
+    ruta_adop = Path(sys.argv[1]) if len(sys.argv) > 1 else None
+    adopcion = leer_adopcion(ruta_adop)
     filas = leer_tsv(sys.stdin.read())
-    bibliotecas = procesar(filas)
+    bibliotecas = procesar(filas, adopcion)
     DESTINO.mkdir(parents=True, exist_ok=True)
     for marca, biblioteca in bibliotecas.items():
         ruta = DESTINO / f"{marca}.json"
         ruta.write_text(json.dumps(biblioteca, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print(
-            f"{marca}: {len(biblioteca['hashtags'])} hashtags (>= {UMBRAL}) -> {ruta.name}",
+            f"{marca}: {len(biblioteca['hashtags'])} hashtags (>= {UMBRAL}), "
+            f"fijos={biblioteca['fijos']} -> {ruta.name}",
             file=sys.stderr,
         )
     return 0

@@ -7,7 +7,8 @@ del historial real (Metricool). Los datos viven como semilla versionada en `dato
 
 `conteo_por_red` fija CUÁNTOS hashtags sugerir por red (la mediana histórica entre los posts que
 etiquetan; 0 en redes que apenas usan hashtags, p. ej. YouTube). `candidatos` da la lista (sin
-'#') de la que la IA elige los relevantes al copy.
+'#') de la que la IA elige los relevantes al copy. `fijos` son la FIRMA de la marca (nombre/portal),
+que van casi en cada post y la etapa inyecta SIEMPRE (no dependen del tema, así que no los elige la IA).
 """
 
 from __future__ import annotations
@@ -42,6 +43,21 @@ def candidatos(marca: str) -> list[str]:
     salida: list[str] = []
     for h in hashtags:
         tag = str((h or {}).get("tag") or "").strip().lower().lstrip("#")
+        if tag:
+            salida.append(tag)
+    return salida
+
+
+def fijos(marca: str) -> list[str]:
+    """Hashtags FIJOS de la marca (su firma: nombre/portal/lema), en minúscula SIN '#'. [] si no hay.
+
+    Van casi en cada post y NO dependen del tema, así que la etapa los inyecta SIEMPRE (la IA solo
+    elige los temáticos). Salen del historial: muy adoptados o el handle de la marca.
+    """
+    crudos = biblioteca(marca).get("fijos") or []
+    salida: list[str] = []
+    for c in crudos:
+        tag = str(c or "").strip().lower().lstrip("#")
         if tag:
             salida.append(tag)
     return salida
