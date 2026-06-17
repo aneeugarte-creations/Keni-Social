@@ -3,7 +3,7 @@ import * as React from "react";
 
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api } from "@/lib/api";
-import type { MarcaDisponible } from "@/types";
+import type { MarcaDisponible, MarcaOpcion } from "@/types";
 
 import {
   claveMarcaActiva,
@@ -54,7 +54,7 @@ export function MarcaActivaProvider({ children }: { children: React.ReactNode })
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),
     staleTime: Infinity,
   });
-  const catalogo = React.useMemo<MarcaDisponible[]>(
+  const catalogo = React.useMemo<MarcaOpcion[]>(
     () => catalogoQuery.data?.marcas ?? [],
     [catalogoQuery.data],
   );
@@ -119,6 +119,13 @@ export function MarcaActivaProvider({ children }: { children: React.ReactNode })
     return catalogo.find((m) => m.id === marcaActiva)?.nombre ?? marcaActiva;
   }, [marcaActiva, catalogo]);
 
+  // ¿La marca activa es de NOTICIAS? Solo se oculta el panel de Noticias cuando el catálogo
+  // marca la activa como 'propio' (contenido propio); "Todas" (null) y los casos sin dato → sí.
+  const marcaActivaEsNoticias = React.useMemo<boolean>(() => {
+    if (marcaActiva === null) return true;
+    return catalogo.find((m) => m.id === marcaActiva)?.tipo !== "propio";
+  }, [marcaActiva, catalogo]);
+
   const valor = React.useMemo<ValorMarcaActiva>(() => {
     const enMarcaPrimaria = marcaActiva === (marcaPrimaria ?? null);
     const esMultiMarca = marcasParaSwitch.length > 1 || (esAdmin && marcasParaSwitch.length >= 1);
@@ -128,6 +135,7 @@ export function MarcaActivaProvider({ children }: { children: React.ReactNode })
       enMarcaPrimaria,
       esMultiMarca,
       puedeTodas: esAdmin,
+      marcaActivaEsNoticias,
       marcasParaSwitch,
       nombreActiva,
       cambiarMarca,
@@ -138,6 +146,7 @@ export function MarcaActivaProvider({ children }: { children: React.ReactNode })
     marcaPrimaria,
     marcasParaSwitch,
     esAdmin,
+    marcaActivaEsNoticias,
     nombreActiva,
     cambiarMarca,
     volverAPrimaria,

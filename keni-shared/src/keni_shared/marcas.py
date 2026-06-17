@@ -40,16 +40,19 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from .cliente import cargar_cliente
+from .cliente import cargar_cliente, normalizar_tipo
 
 
 @dataclass(frozen=True)
 class Marca:
-    """Una marca editorial. Ver el docstring del modulo para los tres campos."""
+    """Una marca editorial. Ver el docstring del modulo para los campos."""
 
     id: str
     etiqueta: str
     id_metricas: str
+    # 'noticias' (pasa por la cadena de investigación) o 'propio' (contenido propio que se
+    # salta la investigación). Defecto 'noticias' si el catálogo no lo declara.
+    tipo: str = "noticias"
 
 
 # --------------------------------------------------------------------------- #
@@ -83,7 +86,7 @@ def _ruta_activa() -> Path:
 def _semilla() -> tuple[Marca, ...]:
     """Catalogo semilla del paquete de cliente (`clientes/<cliente>.toml`)."""
     return tuple(
-        Marca(id=m.id, etiqueta=m.etiqueta, id_metricas=m.id_metricas)
+        Marca(id=m.id, etiqueta=m.etiqueta, id_metricas=m.id_metricas, tipo=m.tipo)
         for m in cargar_cliente().marcas
     )
 
@@ -123,6 +126,7 @@ def _parsear_overlay(ruta: Path) -> tuple[Marca, ...]:
                     if isinstance(id_metricas, str) and id_metricas.strip()
                     else mid.replace("-", "_")
                 ),
+                tipo=normalizar_tipo(m.get("tipo")),
             )
         )
     return tuple(marcas) if marcas else _semilla()
@@ -210,6 +214,22 @@ def id_metricas_de(marca_id: str) -> str:
 def ids() -> list[str]:
     """Lista de `id` canonicos de todas las marcas, en orden de presentacion."""
     return [m.id for m in _estado().marcas]
+
+
+def noticias() -> list[str]:
+    """Ids de las marcas de NOTICIAS (`tipo='noticias'`), en orden de presentacion.
+
+    Es el conjunto que recorre la cadena de investigación (recolección, clasificación de
+    marca, agrupado, admisión, Mesa de Noticias). Las de contenido propio (`tipo='propio'`)
+    se excluyen: se saltan la investigación por completo.
+    """
+    return [m.id for m in _estado().marcas if m.tipo == "noticias"]
+
+
+def es_noticias(marca_id: str) -> bool:
+    """True si `marca_id` es una marca de NOTICIAS (existe y `tipo='noticias'`)."""
+    marca = _estado().por_id.get(marca_id)
+    return marca is not None and marca.tipo == "noticias"
 
 
 def catalogo() -> list[Marca]:

@@ -105,11 +105,13 @@ export function Sidebar({
   // Gating por marca (multitenant): algunas entradas (p. ej. Calendario, solo Claro Sports)
   // se ocultan cuando la marca activa del switch global es otra. Se filtran los ítems y se
   // descartan los bloques que queden vacíos. "Todas" (marcaActiva null, admin) ve todo.
-  const { marcaActiva } = useMarcaActiva();
+  const { marcaActiva, marcaActivaEsNoticias } = useMarcaActiva();
   const bloques = (catalogoQuery.data?.navegacion ?? [])
     .map((bloque) => ({
       ...bloque,
-      items: bloque.items.filter((item) => rutaVisibleParaMarca(item.ruta, marcaActiva)),
+      items: bloque.items.filter((item) =>
+        rutaVisibleParaMarca(item.ruta, marcaActiva, marcaActivaEsNoticias),
+      ),
     }))
     .filter((bloque) => bloque.items.length > 0);
 

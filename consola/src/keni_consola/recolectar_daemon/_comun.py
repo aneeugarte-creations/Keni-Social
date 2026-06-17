@@ -140,13 +140,14 @@ def _registrar_actividad_ia(marca: str, etiqueta: str, salida: str, *, prompt: s
 def _clasificar_marca_ia(cluster: dict[str, Any]) -> str:
     """Asigna marca a un BREAKING sin marca con Haiku. '' si no hay candidatas válidas.
 
-    Las candidatas son `config.marcas_activas()` (validadas contra el catálogo); el fallback
-    es `config.marca_noticias()` (o la primera candidata). Best-effort: cualquier fallo del
-    clasificador devuelve el fallback. Sella la actividad IA (coste visible en Producción).
+    Las candidatas son `config.marcas_activas()` restringidas a marcas de NOTICIAS
+    (`marcas.es_noticias`: el contenido propio nunca recibe clasificación automática); el
+    fallback es `config.marca_noticias()` (o la primera candidata). Best-effort: cualquier
+    fallo del clasificador devuelve el fallback. Sella la actividad IA (coste visible en Producción).
     """
     from ..dominio import clasificador_marca
 
-    activas = [m for m in config.marcas_activas() if marcas.es_marca(m)]
+    activas = [m for m in config.marcas_activas() if marcas.es_noticias(m)]
     if not activas:
         return ""
     fallback = config.marca_noticias()

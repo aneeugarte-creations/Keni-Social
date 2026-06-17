@@ -32,9 +32,9 @@ export function EncabezadoSeccion({
   refAcciones?: (el: HTMLElement | null) => void;
 }) {
   const { pathname } = useLocation();
-  const { marcaActiva } = useMarcaActiva();
+  const { marcaActiva, marcaActivaEsNoticias } = useMarcaActiva();
   const pestanas = pestanasDeRuta(pathname)?.filter((p) =>
-    rutaVisibleParaMarca(p.ruta, marcaActiva),
+    rutaVisibleParaMarca(p.ruta, marcaActiva, marcaActivaEsNoticias),
   );
   // Hub solo si quedan 2+ pestañas tras el gating por marca (si no, no hay nada que conmutar).
   const hayTabs = !!pestanas && pestanas.length >= 2;

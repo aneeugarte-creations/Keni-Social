@@ -50,6 +50,9 @@ class _MarcaCruda:
     id: str
     etiqueta: str
     id_metricas: str
+    # 'noticias' (pasa por la cadena de investigación) o 'propio' (contenido propio que se
+    # salta la investigación: no se le clasifican historias ni aparece en el panel de Noticias).
+    tipo: str
 
 
 @dataclass(frozen=True)
@@ -79,6 +82,11 @@ def _exigir_str(valor: object, contexto: str) -> str:
     return valor
 
 
+def normalizar_tipo(valor: object) -> str:
+    """Normaliza el `tipo` de una marca a 'noticias' (defecto) o 'propio'. Tolerante."""
+    return "propio" if isinstance(valor, str) and valor.strip().lower() == "propio" else "noticias"
+
+
 def _parsear_marca(idx: int, m: object) -> _MarcaCruda:
     n = f"#{idx + 1}"
     if not isinstance(m, dict):
@@ -88,6 +96,7 @@ def _parsear_marca(idx: int, m: object) -> _MarcaCruda:
         id=_exigir_str(m.get("id"), f"un 'id' en la marca {etiqueta_n}"),
         etiqueta=_exigir_str(m.get("etiqueta"), f"una 'etiqueta' en la marca {etiqueta_n}"),
         id_metricas=_exigir_str(m.get("id_metricas"), f"un 'id_metricas' en la marca {etiqueta_n}"),
+        tipo=normalizar_tipo(m.get("tipo")),
     )
 
 

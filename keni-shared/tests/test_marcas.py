@@ -68,3 +68,19 @@ def test_caidas_a_id_cuando_desconocido():
     assert marcas.id_metricas_de("zzz") == "zzz"
     assert marcas.marca_de("zzz") is None
     assert marcas.marca_por_id_metricas("zzz") is None
+
+
+def test_tipo_separa_noticias_de_contenido_propio():
+    # Las 3 del piloto que pasan por investigación vs las 2 de contenido propio.
+    assert marcas.noticias() == ["unotv", "claro-sports", "nacion-gamer"]
+    assert marcas.es_noticias("unotv")
+    assert marcas.es_noticias("claro-sports")
+    assert not marcas.es_noticias("piso-15")
+    assert not marcas.es_noticias("fundacion")
+    # `tipo` viaja en el catálogo.
+    assert marcas.marca_de("unotv").tipo == "noticias"
+    assert marcas.marca_de("piso-15").tipo == "propio"
+
+
+def test_es_noticias_falso_para_marca_desconocida():
+    assert not marcas.es_noticias("zzz")

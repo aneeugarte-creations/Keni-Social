@@ -25,6 +25,7 @@ from starlette.routing import Route
 
 from keni_metricas.fuentes import postproxy as _pp_cliente
 from keni_shared import marcas as _km
+from keni_shared.cliente import normalizar_tipo
 from keni_shared.io_atomico import escribir_atomico
 
 from .. import permisos
@@ -227,9 +228,9 @@ def _slug(texto: str, sep: str) -> str:
 
 
 def _catalogo_actual() -> list[dict]:
-    """Catálogo vigente como lista de dicts {id, etiqueta, id_metricas}."""
+    """Catálogo vigente como lista de dicts {id, etiqueta, id_metricas, tipo}."""
     return [
-        {"id": m.id, "etiqueta": m.etiqueta, "id_metricas": m.id_metricas}
+        {"id": m.id, "etiqueta": m.etiqueta, "id_metricas": m.id_metricas, "tipo": m.tipo}
         for m in _km.catalogo()
     ]
 
@@ -250,6 +251,7 @@ def _serializar_marcas(marcas: list[dict]) -> str:
             f'id = "{esc(m["id"])}"\n'
             f'etiqueta = "{esc(m["etiqueta"])}"\n'
             f'id_metricas = "{esc(m["id_metricas"])}"\n'
+            f'tipo = "{esc(normalizar_tipo(m.get("tipo")))}"\n'
         )
     return cabecera + "\n" + "\n".join(bloques)
 
@@ -307,7 +309,7 @@ async def catalogo_crear(request: Request) -> Response:
     if any(m["id_metricas"] == id_metricas for m in catalogo):
         return JSONResponse({"error": f"Ya existe una marca con id_metricas {id_metricas!r}."}, status_code=409)
 
-    nueva = {"id": mid, "etiqueta": etiqueta, "id_metricas": id_metricas}
+    nueva = {"id": mid, "etiqueta": etiqueta, "id_metricas": id_metricas, "tipo": normalizar_tipo(datos.get("tipo"))}
     if (err := _persistir([*catalogo, nueva])) is not None:
         return err
     return JSONResponse({"marca": nueva, "mensaje": f"Marca {etiqueta!r} creada."}, status_code=201)
@@ -342,7 +344,8 @@ async def catalogo_editar(request: Request) -> Response:
             return JSONResponse({"error": f"Ya existe una marca con id_metricas {cand!r}."}, status_code=409)
         id_metricas = cand
 
-    actualizado = {"id": mid, "etiqueta": etiqueta, "id_metricas": id_metricas}
+    tipo = normalizar_tipo(datos["tipo"]) if "tipo" in datos else actual.get("tipo", "noticias")
+    actualizado = {"id": mid, "etiqueta": etiqueta, "id_metricas": id_metricas, "tipo": tipo}
     nuevo = [actualizado if m["id"] == mid else m for m in catalogo]
     if (err := _persistir(nuevo)) is not None:
         return err

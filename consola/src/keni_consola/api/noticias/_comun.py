@@ -20,17 +20,18 @@ _LIMITE_MAX = 200
 _MAX_TITULO = 300
 _MAX_TEXTO = 8000
 
-_MARCAS_IDS = {m[0] for m in marcas.opciones()}
-
-
 def _validar_marca(valor: Any) -> tuple[str | None, str | None]:
-    """`(marca, None)` o `(None, error)`. '' / None = todas (no filtra)."""
+    """`(marca, None)` o `(None, error)`. '' / None = todas (no filtra).
+
+    Solo admite marcas de NOTICIAS (`marcas.es_noticias`): las de contenido propio
+    (p. ej. piso-15/fundación) se saltan la investigación y no tienen panel de Noticias.
+    """
     if valor is None:
         return "", None
     if not isinstance(valor, str):
         return None, "La marca debe ser texto."
     valor = valor.strip()
-    if valor and valor not in _MARCAS_IDS:
+    if valor and not marcas.es_noticias(valor):
         return None, "Marca no permitida."
     return valor, None
 

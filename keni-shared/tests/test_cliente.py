@@ -58,6 +58,18 @@ def test_cliente_por_defecto_es_amx_con_las_5_marcas():
     ]
     assert cuentas_mod.CUENTA_DEPORTES_PRINCIPAL == "claro_sports"
     assert cuentas_mod.CUENTAS_DEPORTES_HERMANAS == ("claro_sports_tv", "csport_golf")
+    # `tipo` del catálogo: noticias vs contenido propio.
+    tipos = {m.id: m.tipo for m in cli.marcas}
+    assert tipos["unotv"] == "noticias"
+    assert tipos["piso-15"] == "propio"
+    assert tipos["fundacion"] == "propio"
+
+
+def test_tipo_de_marca_defecto_noticias_cuando_falta(monkeypatch, restaurar_cliente_amx):
+    # El cliente demo no declara `tipo` en sus marcas -> defecto 'noticias' (back-compat).
+    monkeypatch.setenv("KENI_CLIENTE_CONFIG", str(CLIENTE_DEMO))
+    _recargar()
+    assert all(m.tipo == "noticias" for m in cliente_mod.cargar_cliente().marcas)
 
 
 def test_seleccionar_otro_cliente_cambia_marcas_sin_tocar_codigo(

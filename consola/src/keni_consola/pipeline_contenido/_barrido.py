@@ -159,7 +159,7 @@ def _ejecutar_portal() -> dict[str, Any]:
     """
     temas: list[dict[str, Any]] = []
     maximo = config.pipeline_max()
-    for marca in marcas.ids():
+    for marca in marcas.noticias():
         if not config.etapa_activa(config.ENV_PIPELINE_RECOLECTAR, marca):
             continue
         try:
@@ -222,7 +222,7 @@ def _ejecutar_investigacion() -> dict[str, Any]:
     # llena el cupo en curso (gate serial WIP) y los cupos del plan/diario, y HEREDA el verificacion
     # del cluster al contenido (la pieza nace verificada y lista para copy).
     temas_nuevos: list[dict[str, Any]] = []
-    for marca in marcas.ids():
+    for marca in marcas.noticias():
         # FUENTE ÚNICA de verdad (config.etapa_activa): maestro global ON y marca no excluida.
         if not config.etapa_activa(config.ENV_PIPELINE_RECOLECTAR, marca):
             continue
@@ -288,7 +288,7 @@ def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[
         autor = _ref._autor_pipeline()
     verificados: list[dict[str, Any]] = []
     en_proceso_max = config.pipeline_en_proceso_max()
-    for marca in marcas.ids():
+    for marca in marcas.noticias():
         # La verificación solo tiene sentido si la admisión de la marca está activa (solo verificamos lo que
         # admitiríamos). El override por marca de Selección excluye la marca aquí también.
         if not config.etapa_activa(config.ENV_PIPELINE_RECOLECTAR, marca):

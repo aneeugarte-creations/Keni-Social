@@ -805,7 +805,7 @@ def caducar_temas_viejos(*, ahora: datetime | None = None) -> int:
     momento = ahora or datetime.now(timezone.utc)
     ttl = timedelta(hours=config.pipeline_tema_ttl_horas())
     caducados = 0
-    for marca in marcas.ids():
+    for marca in marcas.noticias():
         for tema in _temas_en_proceso_de(marca):
             creado = _fecha_aware(str(tema.get("creado") or ""))
             if creado is None or momento - creado < ttl:

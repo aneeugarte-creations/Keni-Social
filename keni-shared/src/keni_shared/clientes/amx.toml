@@ -28,26 +28,32 @@ nombre = "AMX Contenido"
 id = "unotv"
 etiqueta = "UnoTV"
 id_metricas = "unotv"
+tipo = "noticias"
 
 [[marca]]
 id = "claro-sports"
 etiqueta = "Claro Sports"
 id_metricas = "claro_sports"
+tipo = "noticias"
 
 [[marca]]
 id = "nacion-gamer"
 etiqueta = "Nación Gamer"
 id_metricas = "nacion_gamer"
+tipo = "noticias"
 
+# Contenido propio: se saltan la cadena de investigación (sin panel de Noticias).
 [[marca]]
 id = "piso-15"
 etiqueta = "Piso 15"
 id_metricas = "piso_15"
+tipo = "propio"
 
 [[marca]]
 id = "fundacion"
 etiqueta = "Fundación"
 id_metricas = "fundacion"
+tipo = "propio"
 
 [cuentas]
 # Cuenta principal del reporte de deportes (su id_metricas). Coincide con la marca

@@ -146,7 +146,10 @@ def test_catalogo_crud(entorno, monkeypatch, tmp_path):
         # Crear: id/id_metricas auto-derivados de la etiqueta.
         r = c.post("/api/marcas/catalogo", json={"etiqueta": "Nueva Marca"}, headers=_ORIGIN)
         assert r.status_code == 201, r.text
-        assert r.json()["marca"] == {"id": "nueva-marca", "etiqueta": "Nueva Marca", "id_metricas": "nueva_marca"}
+        # `tipo` por defecto 'noticias' (una marca nueva pasa por investigación salvo que se diga lo contrario).
+        assert r.json()["marca"] == {
+            "id": "nueva-marca", "etiqueta": "Nueva Marca", "id_metricas": "nueva_marca", "tipo": "noticias",
+        }
         # El catálogo (vivo) ya la incluye.
         assert km.es_marca("nueva-marca")
         assert "nueva-marca" in [m["id"] for m in c.get("/api/marcas/catalogo").json()["marcas"]]
@@ -154,10 +157,16 @@ def test_catalogo_crud(entorno, monkeypatch, tmp_path):
         # Duplicado: 409.
         assert c.post("/api/marcas/catalogo", json={"etiqueta": "UnoTV", "id": "unotv"}, headers=_ORIGIN).status_code == 409
 
-        # Editar la etiqueta.
+        # Editar la etiqueta. El `tipo` se PRESERVA al no tocarlo (round-trip no lo borra).
         r = c.put("/api/marcas/catalogo/nueva-marca", json={"etiqueta": "Renombrada"}, headers=_ORIGIN)
         assert r.status_code == 200 and r.json()["marca"]["etiqueta"] == "Renombrada"
+        assert r.json()["marca"]["tipo"] == "noticias"
         assert km.etiqueta_de("nueva-marca") == "Renombrada"
+
+        # Cambiar el tipo a contenido propio (se salta la investigación).
+        r = c.put("/api/marcas/catalogo/nueva-marca", json={"tipo": "propio"}, headers=_ORIGIN)
+        assert r.status_code == 200 and r.json()["marca"]["tipo"] == "propio"
+        assert not km.es_noticias("nueva-marca")
 
         # Borrar.
         assert c.delete("/api/marcas/catalogo/nueva-marca", headers=_ORIGIN).status_code == 200

@@ -41,6 +41,12 @@ export interface ValorMarcaActiva {
   esMultiMarca: boolean;
   /** `true` si la persona puede elegir la vista agregada "Todas" (solo admin). */
   puedeTodas: boolean;
+  /**
+   * `true` si la marca activa es de NOTICIAS (pasa por investigación). `false` para marcas de
+   * contenido propio (`tipo='propio'`): la UI oculta el panel de Noticias. "Todas" (null) → true.
+   * Opcional: ausente se trata como noticias (default seguro); el provider siempre lo provee.
+   */
+  marcaActivaEsNoticias?: boolean;
   /** Opciones del switch, con nombre legible (las marcas del perfil, o todas si admin). */
   marcasParaSwitch: MarcaDisponible[];
   /** Nombre legible de la marca activa, o `null` para "Todas". */

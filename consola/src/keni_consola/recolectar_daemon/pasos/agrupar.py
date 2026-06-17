@@ -155,8 +155,10 @@ def paso_agrupar() -> dict[str, Any]:
                 # marca. Se le asigna la marca cuyo vocabulario mejor casa (sobre umbral);
                 # si ninguna pasa, queda sin marca como antes (honesto).
                 if vocabularios is None:
+                    # Solo marcas de NOTICIAS: el contenido propio (p. ej. piso-15/fundación) se
+                    # salta la investigación, así que su vocabulario no compite por estas historias.
                     vocabularios = {
-                        m: _palabras_relevancia(m, perfil_activo) for m in marcas.ids()
+                        m: _palabras_relevancia(m, perfil_activo) for m in marcas.noticias()
                     }
                 marca_c = agrupar.marca_por_vocabulario(recalc, vocabularios)
                 if not marca_c:

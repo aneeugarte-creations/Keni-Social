@@ -63,6 +63,12 @@ def test_marca_invalida_400(cliente):
     assert cliente.get("/api/noticias", params={"marca": "no-existe"}).status_code == 400
 
 
+def test_marca_contenido_propio_rechazada(cliente):
+    # piso-15/fundación son contenido propio (no noticias): el panel de Noticias las rechaza.
+    assert cliente.get("/api/noticias", params={"marca": "piso-15"}).status_code == 400
+    assert cliente.get("/api/noticias", params={"marca": "fundacion"}).status_code == 400
+
+
 def test_filtra_por_estado(cliente):
     # Ya NO se filtra por categoría (el eje es marca/línea editorial): solo estado.
     _inicializar(fuente_id="a", clave="k1", categoria="internacional")

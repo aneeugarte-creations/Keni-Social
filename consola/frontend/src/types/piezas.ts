@@ -1,6 +1,15 @@
 import type { MarcaDisponible, Pieza } from "../types.gen";
 import type { Veredicto } from "./comun";
 
+/**
+ * Marca del selector con su `tipo` editorial: 'noticias' (pasa por investigación) o 'propio'
+ * (contenido propio, sin panel de Noticias). Lo entrega `/api/piezas/opciones`; las de tipo
+ * 'propio' ocultan el panel de Noticias. `tipo` es opcional por compatibilidad.
+ */
+export interface MarcaOpcion extends MarcaDisponible {
+  tipo?: "noticias" | "propio";
+}
+
 /** Resultado de programar una pieza en Metricool (preview dry-run o publicación real). */
 export interface ResultadoProgramarMetricool {
   ok: boolean;
@@ -59,7 +68,7 @@ export interface LineaEditorialOpcion {
 export interface OpcionesPiezas {
   redes: RedPieza[];
   estados: EstadoOpcion[];
-  marcas: MarcaDisponible[];
+  marcas: MarcaOpcion[];
   /** Líneas editoriales (etiquetas verticales) para el filtro de Lista/Calendario/Feed. */
   lineas: LineaEditorialOpcion[];
   /**
