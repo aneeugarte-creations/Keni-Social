@@ -6,7 +6,6 @@ import type {
   CuerpoCrearWebhook,
   RespuestaMensaje,
   RespuestaMetricasPublicacion,
-  RespuestaPreviewPublicacion,
   RespuestaProbarWebhook,
   RespuestaWebhook,
   RespuestaWebhooks,
@@ -32,10 +31,4 @@ export const apiWebhooks = {
   /** Rendimiento real (Metricool) por pieza publicada del tablero. Mapa por `pieza.id`. */
   metricasPublicacion: (signal?: AbortSignal) =>
     peticion<RespuestaMetricasPublicacion>("/publicaciones/metricas", { signal }),
-  /** Previsualiza un copy con sus variables `{...}` ya sustituidas (no persiste). */
-  previewPublicacion: (publicacionId: string, texto: string, signal?: AbortSignal) =>
-    peticion<RespuestaPreviewPublicacion>(
-      `/publicaciones/${encodeURIComponent(publicacionId)}/preview`,
-      { metodo: "POST", json: { texto }, signal },
-    ),
 };

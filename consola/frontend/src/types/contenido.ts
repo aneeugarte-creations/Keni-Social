@@ -387,11 +387,6 @@ export interface RespuestaPlataforma {
   plataforma: PublicacionPlataforma;
 }
 
-/** `POST /api/publicaciones/{id}/preview`: copy con sus variables `{...}` ya sustituidas. */
-export interface RespuestaPreviewPublicacion {
-  preview: string;
-}
-
 export interface CuerpoDesdeRadar {
   titulo: string;
   marca?: string;
