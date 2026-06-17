@@ -59,6 +59,7 @@ const PIEZA = {
   fecha_fuente: "",
   fuente_original: "",
   origen: "",
+  categoria: "",
   imagen: "",
   imagen_url: "",
   evergreen: false,
