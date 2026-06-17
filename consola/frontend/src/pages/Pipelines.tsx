@@ -33,7 +33,7 @@ export { ChipEstado };
 
 // Etapa (clave) -> código de etapa de los eventos de actividad (la traza Fusionar/Priorizar/Verificar/Redactar/Ilustrar).
 export const ETAPA_A_EVENTO: Record<string, string> = {
-  fusionar: "FUSIONAR", priorizar: "PRIORIZAR", admitir: "ADMITIR", verificar: "VERIFICAR", redactar: "REDACTAR", ilustrar: "ILUSTRAR",
+  fusionar: "FUSIONAR", priorizar: "PRIORIZAR", admitir: "ADMITIR", verificar: "VERIFICAR", redactar: "REDACTAR", ilustrar: "ILUSTRAR", critica: "CRITICA",
 };
 
 // Catálogo de etapas para el filtro `?etapa=` (espeja `_ETAPAS` del back, en orden de flujo).
@@ -45,6 +45,7 @@ export const ETAPAS_FILTRO: { clave: string; nombre: string }[] = [
   { clave: "redactar", nombre: "Redactar" },
   { clave: "ilustrar", nombre: "Ilustrar" },
   { clave: "aprobar", nombre: "Aprobar" },
+  { clave: "critica", nombre: "Crítica" },
 ];
 // Valores del filtro `?estado=` (el `estado_global` de la run). Nombres = los del chip
 // único (`aspectoEstado`): el filtro y el badge dicen lo mismo.
@@ -180,31 +181,41 @@ function Punto({ estado }: { estado: string }) {
   );
 }
 
-/** Tira horizontal de etapas (Verificar · Redactar · Ilustrar · Aprobar), estilo pipeline de GitLab.
- *  Cada etapa marca su tipo con un icono: 🤖 (Bot) si es IA, ⚙ (Cog) si es determinista. */
+/** Tira horizontal de etapas, estilo pipeline de GitLab. Los procesos de IA (`es_ia`) se pintan
+ *  como ETAPAS (cajas 🤖, unidas por →); los de software (Admitir, Aprobar) como FRONTERAS: una
+ *  línea separadora ⚙ que marca el límite entre etapas IA, no un paso de cómputo más. */
 export function TiraEtapas({ etapas }: { etapas: PipelineEtapa[] }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      {etapas.map((e, i) => (
-        <React.Fragment key={e.clave}>
-          <div
-            className={cn(
-              "flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs",
-              aspectoEstado(e.estado).clase || "text-muted-foreground",
-            )}
+      {etapas.map((e, i) =>
+        e.es_ia ? (
+          <React.Fragment key={e.clave}>
+            {i > 0 && <span className="text-muted-foreground/40">→</span>}
+            <div
+              className={cn(
+                "flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs",
+                aspectoEstado(e.estado).clase || "text-muted-foreground",
+              )}
+              title={e.detalle}
+            >
+              <Punto estado={e.estado} />
+              <Bot className="h-3 w-3" aria-label="IA" />
+              <span className="font-medium">{e.nombre}</span>
+            </div>
+          </React.Fragment>
+        ) : (
+          // Frontera: proceso de software (no IA). Línea separadora con su etiqueta, sin caja ni →.
+          <span
+            key={e.clave}
+            className="mx-0.5 flex items-center gap-1 border-l border-dashed border-muted-foreground/40 pl-2 text-[11px] uppercase tracking-wide text-muted-foreground"
             title={e.detalle}
           >
+            <Cog className="h-3 w-3" aria-label="software" />
+            {e.nombre}
             <Punto estado={e.estado} />
-            {e.es_ia ? (
-              <Bot className="h-3 w-3" aria-label="IA" />
-            ) : (
-              <Cog className="h-3 w-3 text-muted-foreground" aria-label="determinista" />
-            )}
-            <span className="font-medium">{e.nombre}</span>
-          </div>
-          {i < etapas.length - 1 && <span className="text-muted-foreground/40">→</span>}
-        </React.Fragment>
-      ))}
+          </span>
+        ),
+      )}
     </div>
   );
 }
@@ -448,9 +459,9 @@ function PublicacionEtapa({
       </div>
     );
   }
-  if (clave === "trabajo") {
-    // Trabajo SUELTO (item `clase="actividad"` del feed): todo el trabajo es UNA etapa IA;
-    // su contenido es el bloque entrada/salida de la generación, sin piezas ni verificación.
+  if (clave === "trabajo" || clave === "critica") {
+    // Trabajo SUELTO (item `clase="actividad"`) o Crítica IA (revisión con visión en la cadena
+    // de aprobación): el contenido es el bloque entrada/salida (prompt + razonamiento + resultado).
     return <BloqueIA gen={generacion} plantilla={plantilla} />;
   }
   // aprobar — gate HUMANO (no IA).
@@ -469,9 +480,9 @@ function PublicacionEtapa({
   );
 }
 
-/** Panel INDEPENDIENTE y plegable de una etapa: cabecera siempre visible (nombre + estado)
- *  y, al desplegar, el detalle COMPLETO de lo ocurrido en ese paso. Cada panel se abre/cierra
- *  por su cuenta (estado local propio). */
+/** Panel de una etapa. Los procesos de IA (`es_ia`) son ETAPAS plegables con su detalle COMPLETO
+ *  (prompt + razonamiento + resultado). Los de software (Admitir/Aprobar) son FRONTERAS: una banda
+ *  separadora fina, sin desplegar IA, con su dato propio inline (no son cómputo IA). */
 export function PanelEtapa({
   etapa,
   run,
@@ -488,6 +499,26 @@ export function PanelEtapa({
   defaultOpen: boolean;
 }) {
   const [open, setOpen] = React.useState(defaultOpen);
+  if (!etapa.es_ia) {
+    // FRONTERA: límite de software (Admitir = Sistema/BD, Aprobar = humano). Banda fina con
+    // su estado y su dato propio inline; NO se despliega como una etapa IA.
+    return (
+      <div className="rounded-md border border-dashed bg-muted/20 px-3 py-2">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <Cog className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <span className="font-medium">{etapa.nombre}</span>
+          <Badge variant="outline" className="text-[10px] text-muted-foreground">
+            {etapa.clave === "aprobar" ? "Humano" : "Sistema"}
+          </Badge>
+          <ChipEstado estado={etapa.estado} />
+          {etapa.detalle && <span className="text-muted-foreground">· {etapa.detalle}</span>}
+        </div>
+        <div className="mt-2">
+          <PublicacionEtapa clave={etapa.clave} estado={etapa.estado} run={run} generacion={generacion} plantilla={plantilla} />
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="rounded-lg border">
       <button

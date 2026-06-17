@@ -59,13 +59,13 @@ def test_run_verificacion_no_verificado_con_copy(cliente):
     run = _run_por_titulo(cliente, "Tema apto")
     assert run is not None
     assert [e["clave"] for e in run["etapas"]] == [
-        "fusionar", "priorizar", "admitir", "verificar", "redactar", "ilustrar", "aprobar"
+        "fusionar", "priorizar", "admitir", "verificar", "redactar", "ilustrar", "aprobar", "critica"
     ]
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
     # Sin cluster -> Fusionar/Priorizar saltadas; Ilustrar saltada (toggle off). Ninguna bloquea.
     assert etapas == {
         "fusionar": "saltada", "priorizar": "saltada", "admitir": "ok", "verificar": "ok",
-        "redactar": "ok", "ilustrar": "saltada", "aprobar": "pendiente",
+        "redactar": "ok", "ilustrar": "saltada", "aprobar": "pendiente", "critica": "saltada",
     }
     assert run["estado_global"] == "pendiente"
     assert run["cluster"] is None
@@ -149,7 +149,7 @@ def test_run_verificacion_saltada_genera_copy(cliente, monkeypatch):
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
     assert etapas == {
         "fusionar": "saltada", "priorizar": "saltada", "admitir": "ok", "verificar": "saltada",
-        "redactar": "ok", "ilustrar": "saltada", "aprobar": "pendiente",
+        "redactar": "ok", "ilustrar": "saltada", "aprobar": "pendiente", "critica": "saltada",
     }
     assert run["estado_global"] == "pendiente"
 
@@ -338,7 +338,7 @@ def test_detalle_run(cliente):
     body = d.json()
     assert body["pipeline"]["id"] == tema["id"]
     assert [e["clave"] for e in body["pipeline"]["etapas"]] == [
-        "fusionar", "priorizar", "admitir", "verificar", "redactar", "ilustrar", "aprobar"
+        "fusionar", "priorizar", "admitir", "verificar", "redactar", "ilustrar", "aprobar", "critica"
     ]
     assert "actividad" in body
     assert "verificacion" in body["pipeline"]
@@ -418,9 +418,24 @@ def test_etapas_marcan_ia_y_detalle_trae_prompts(cliente):
     ia = {e["clave"]: e["es_ia"] for e in run["etapas"]}
     assert ia["fusionar"] is True and ia["priorizar"] is True
     assert ia["verificar"] is True and ia["redactar"] is True and ia["ilustrar"] is True
+    assert ia["critica"] is True
     assert ia["admitir"] is False and ia["aprobar"] is False
     body = cliente.get(f"/api/pipelines/{tema['id']}").json()
     assert isinstance(body["prompts_por_etapa"], dict)
+
+
+def test_critica_etapa_gateada_por_flag(cliente, monkeypatch):
+    """La etapa Crítica (nivel IA de la cadena de aprobación) cuelga del flag `KENI_CRITICA_IA`:
+    OFF -> 'saltada' (Desactivada); ON pero sin evidencia de que corriera -> 'pendiente'. Es IA."""
+    _tema_pipeline("Tema crítica", verificacion_fuente="verificado")
+    etapas = {e["clave"]: e for e in _run_por_titulo(cliente, "Tema crítica")["etapas"]}
+    assert etapas["critica"]["es_ia"] is True
+    assert etapas["critica"]["estado"] == "saltada"
+    assert etapas["critica"]["detalle"] == "Desactivada"
+    # Con el flag encendido y sin job critica-ia correlacionado: pendiente (aún no corrió).
+    monkeypatch.setattr(config, "critica_ia_activa", lambda: True)
+    etapas_on = {e["clave"]: e for e in _run_por_titulo(cliente, "Tema crítica")["etapas"]}
+    assert etapas_on["critica"]["estado"] == "pendiente"
 
 
 def test_detalle_404(cliente):

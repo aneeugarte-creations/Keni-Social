@@ -36,6 +36,7 @@ from ._metricas import (
     _metricas_por_run,
     _pool_por_marca,
     _runs_con_arte_ia,
+    _runs_con_critica_ia,
 )
 from ._runs import _run_de
 
@@ -196,6 +197,7 @@ async def listar(request: Request) -> Response:
     pool_fusion = _marcas_con_pool(gens, _PREFIJO_POOL_FUSION)
     pool_editorial = _marcas_con_pool(gens, _PREFIJO_POOL_EDITORIAL)
     arte_ia_runs = _runs_con_arte_ia(gens)
+    critica_ia_runs = _runs_con_critica_ia(gens)
     # Una sola lectura de TODAS las plataformas, agrupadas por contenido (evita N consultas).
     por_contenido: dict[str, list[dict]] = {}
     for plat in repos.listar_piezas_fila():
@@ -221,6 +223,7 @@ async def listar(request: Request) -> Response:
             pool_fusion=(it.get("marca", "") or "") in pool_fusion,
             pool_editorial=(it.get("marca", "") or "") in pool_editorial,
             arte_ia=(it.get("id", "") or "") in arte_ia_runs,
+            critica_ia=(it.get("id", "") or "") in critica_ia_runs,
         )
         for it in runs_items
     ]

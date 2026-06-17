@@ -46,13 +46,14 @@ _ETAPAS = (
     ("redactar", "Redactar"),
     ("ilustrar", "Ilustrar"),
     ("aprobar", "Aprobar"),
+    ("critica", "Crítica"),
 )
 # Claves válidas para el filtro `?etapa=` (la etapa donde la run está parada). Catálogo de
 # `_ETAPAS`, sin duplicar la fuente de verdad.
 _ETAPA_CLAVES = frozenset(clave for clave, _ in _ETAPAS)
 # Etapas que SON una llamada a un LLM (la UI las marca "IA" y enseña prompt+proceso+resultado).
-# Admitir (crea el tema en BD) y Aprobar (humana) NO lo son.
-_ETAPAS_IA = frozenset({"fusionar", "priorizar", "verificar", "redactar", "ilustrar"})
+# Admitir (crea el tema en BD) y Aprobar (humana) NO lo son: la UI las pinta como FRONTERAS.
+_ETAPAS_IA = frozenset({"fusionar", "priorizar", "verificar", "redactar", "ilustrar", "critica"})
 # Prompt de la Prompts de Texto que usa cada etapa IA (código de etapa → id editable). Permite
 # enseñar el PROMPT de entrada SIEMPRE, aunque la etapa aún no haya corrido (plantilla).
 _PROMPT_POR_ETAPA = {
@@ -61,6 +62,7 @@ _PROMPT_POR_ETAPA = {
     "VERIFICAR": "prompt/verificar",
     "REDACTAR": "prompt/redactar",
     "ILUSTRAR": "prompt/ilustrar",
+    "CRITICA": "prompt/critica",
 }
 # Valores válidos del filtro `?estado=` (el `estado_global` de la run).
 _ESTADOS_GLOBAL = frozenset({"ok", "en_curso", "pendiente", "revisar", "fallo"})

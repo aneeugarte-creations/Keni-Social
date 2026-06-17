@@ -160,6 +160,7 @@ def _etapas_de_run(
     pool_fusion: bool = False,
     pool_editorial: bool = False,
     arte_ia: bool = False,
+    critica_ia: bool = False,
 ) -> list[dict]:
     """Deriva las 7 etapas de una run: Fusionar + Priorizar (pool) + Admitir/Verificar/Redactar/Ilustrar
     (toggles) + Aprobar (humana).
@@ -273,7 +274,18 @@ def _etapas_de_run(
         "detalle": ap_detalle, "ts": actualizado if ap_estado == "ok" else "",
     }
 
-    etapas = [fusion, editorial, ci, verificación, cd, arte, aprobacion]
+    # --- Crítica IA: nivel opcional de la cadena de aprobación (tras los OK humanos), gateado
+    # por `KENI_CRITICA_IA`. OFF -> "saltada" (Desactivada). ON -> "ok" si hay evidencia de que
+    # corrió (job `critica-ia`), "pendiente" mientras no. Corre DESPUÉS de Aprobar.
+    if not config.critica_ia_activa():
+        cr_estado, cr_detalle = _ESTADO_SALTADA, "Desactivada"
+    elif critica_ia:
+        cr_estado, cr_detalle = "ok", ""
+    else:
+        cr_estado, cr_detalle = "pendiente", ""
+    critica = {"clave": "critica", "nombre": "Crítica", "estado": cr_estado, "detalle": cr_detalle, "ts": ""}
+
+    etapas = [fusion, editorial, ci, verificación, cd, arte, aprobacion, critica]
     for e in etapas:
         e["es_ia"] = e["clave"] in _ETAPAS_IA
     return etapas
@@ -316,6 +328,7 @@ def _run_de(
     pool_fusion: bool = False,
     pool_editorial: bool = False,
     arte_ia: bool = False,
+    critica_ia: bool = False,
 ) -> dict:
     """Construye el objeto `run` de un contenido del pipeline y sus piezas por plataforma.
 
@@ -332,6 +345,7 @@ def _run_de(
     etapas = _etapas_de_run(
         item, base, cluster,
         pool_fusion=pool_fusion, pool_editorial=pool_editorial, arte_ia=arte_ia,
+        critica_ia=critica_ia,
     )
     marca = item.get("marca", "") or ""
     # `origen` real de la pieza padre (la fuente RSS que la recolectó): contexto de la etapa Admitir.

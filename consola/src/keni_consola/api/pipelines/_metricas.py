@@ -117,6 +117,20 @@ def _runs_con_arte_ia(gens: list[dict]) -> set[str]:
     return out
 
 
+def _runs_con_critica_ia(gens: list[dict]) -> set[str]:
+    """Ids de contenido con EVIDENCIA de que la Crítica IA corrió (job `tipo='critica-ia'`).
+
+    El crítico con visión se lanza POR PIEZA en la cadena de aprobación; su generación sella el
+    `publicacion_id` del tema padre (= id de la run). Su presencia es la evidencia de que la etapa
+    Crítica corrió, igual que el arte IA lo es para Ilustrar.
+    """
+    return {
+        cid
+        for g in gens
+        if (g.get("tipo") or "") == "critica-ia" and (cid := g.get("publicacion_id") or "")
+    }
+
+
 def _marcas_con_pool(gens: list[dict], prefijo: str) -> set[str]:
     """Marcas con alguna generación de POOL (tipo `pipeline`, etiqueta con `prefijo`).
 
