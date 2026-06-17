@@ -198,9 +198,10 @@ async def listar(request: Request) -> Response:
     pool_editorial = _marcas_con_pool(gens, _PREFIJO_POOL_EDITORIAL)
     arte_ia_runs = _runs_con_arte_ia(gens)
     critica_ia_runs = _runs_con_critica_ia(gens)
-    # Una sola lectura de TODAS las plataformas, agrupadas por contenido (evita N consultas).
+    # Una sola lectura de las plataformas (acotada a la marca enfocada), agrupada por contenido
+    # (evita N consultas). Solo se consultan piezas de las runs listadas, todas de esta marca.
     por_contenido: dict[str, list[dict]] = {}
-    for plat in repos.listar_piezas_fila():
+    for plat in repos.listar_piezas_fila(marca=marca or None):
         por_contenido.setdefault(plat.get("publicacion_id", ""), []).append(plat)
     # Una sola lectura de las HISTORIAS (clusters) de estos temas (procedencia IA; evita N consultas).
     clusters = repos.clusters_por_contenidos([it.get("id", "") or "" for it in runs_items])

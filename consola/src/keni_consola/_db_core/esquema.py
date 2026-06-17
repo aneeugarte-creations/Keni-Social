@@ -424,6 +424,8 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_pieza_contenido ON pieza (publicacion_id)",
     "CREATE INDEX IF NOT EXISTS idx_pieza_red ON pieza (red)",
     "CREATE INDEX IF NOT EXISTS idx_pieza_estado ON pieza (estado)",
+    # Filtro caliente del feed/colas: estado + marca (denormalizada en `pieza`).
+    "CREATE INDEX IF NOT EXISTS idx_pieza_estado_marca ON pieza (estado, marca)",
     "CREATE INDEX IF NOT EXISTS idx_pieza_programada ON pieza (fecha_programada)",
     # OLA COLABORACION (inspirada en Planable: internal notes, version history, multi-level
     # approval). Tres tablas APENDIDAS al modelo `contenido`/`pieza`, sin

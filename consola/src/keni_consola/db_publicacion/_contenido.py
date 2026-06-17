@@ -330,11 +330,14 @@ def listar_publicacion(
     estado: str | None = None,
     desde: str | None = None,
     hasta: str | None = None,
+    creado_desde: str | None = None,
 ) -> list[dict[str, Any]]:
     """Items del tablero (padres), filtros combinables (AND). Orden estable.
 
-    `desde`/`hasta` acotan por `fecha_objetivo` (ISO inclusivo). El resto filtran texto
-    EXACTO. Sin filtros, devuelve el tablero completo del equipo.
+    `desde`/`hasta` acotan por `fecha_objetivo` (ISO inclusivo). `creado_desde` acota por
+    `creado` (ISO inclusivo): la JORNADA del día pide solo lo creado desde su inicio en vez de
+    traer el histórico y filtrarlo en memoria. El resto filtran texto EXACTO. Sin filtros,
+    devuelve el tablero completo del equipo.
     """
     clausulas: list[str] = []
     params: list[Any] = []
@@ -359,6 +362,9 @@ def listar_publicacion(
     if hasta:
         clausulas.append("fecha_objetivo <= ?")
         params.append(hasta)
+    if creado_desde:
+        clausulas.append("creado >= ?")
+        params.append(creado_desde)
     sql = _SELECT_PUBLICACION
     if clausulas:
         sql += " WHERE " + " AND ".join(clausulas)

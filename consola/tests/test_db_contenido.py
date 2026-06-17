@@ -61,6 +61,17 @@ def test_listar_contenido_filtra_y_ordena_por_prioridad(entorno):
     assert all(c["flujo"] == "importante" for c in importantes)
 
 
+def test_listar_contenido_filtra_por_creado_desde(entorno):
+    """`creado_desde` acota en SQL por `creado` (la jornada del día), sin traer el histórico."""
+    db.crear_publicacion(titulo="Vieja", creado="2020-01-01T00:00:00")
+    db.crear_publicacion(titulo="Hoy", creado="2030-06-01T10:00:00")
+
+    recientes = db.listar_publicacion(creado_desde="2030-01-01T00:00:00")
+    titulos = {c["titulo"] for c in recientes}
+    assert "Hoy" in titulos
+    assert "Vieja" not in titulos
+
+
 def test_plataforma_autodeduce_checklist_de_copy_e_imagen(entorno):
     """Si llega copy/imagen, el checklist 'falta_*' se apaga solo."""
     c = db.crear_publicacion(flujo="evento", titulo="Partido")

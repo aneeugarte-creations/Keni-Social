@@ -47,6 +47,11 @@ from .colaboracion import montar_cadena_aprobacion
 
 _log = logging.getLogger("keni_consola.api.aprobacion")
 
+# Tope de seguridad de la cola de revisión: `en_revision` es un estado transitorio (el equipo lo
+# vacía revisando), así que la cola real es pequeña; el cap solo acota un estado patológico para
+# que la serialización nunca recorra el histórico entero. No trunca en operación normal.
+_CAP_COLA = 500
+
 
 def _rol_de_peticion(request: Request) -> str | None:
     """Rol del usuario de la sesion (None si entro por token de bootstrap / sin sesion)."""
@@ -212,7 +217,7 @@ async def cola(request: Request) -> Response:
     (quien envio) y `enviado_a_revision_en` (cuando), para que el equipo vea que espera
     revision y desde cuando. Lectura: sin cambios respecto al flujo legado.
     """
-    pendientes = repos.listar_piezas(estado=ESTADO_EN_REVISION)
+    pendientes = repos.listar_piezas(estado=ESTADO_EN_REVISION, limite=_CAP_COLA)
     # FOCO POR DEFECTO (no es restriccion): la cola se ENFOCA en las marcas preferentes de la
     # sesion para reducir la mezcla de contexto. No bloquea: cualquiera puede revisar piezas de
     # cualquier marca (las verá filtrando por esa marca). Sin preferencia (admin/token/sin

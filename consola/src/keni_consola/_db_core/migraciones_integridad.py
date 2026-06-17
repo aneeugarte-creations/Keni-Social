@@ -305,6 +305,18 @@ def _migrar_indice_generaciones(con: Any) -> None:
     )
 
 
+def _migrar_indice_pieza_estado_marca(con: Any) -> None:
+    """Indice compuesto `(estado, marca)` en `pieza` (BDs ya creadas; rendimiento).
+
+    El feed y las colas filtran por estado + marca (la marca esta denormalizada en `pieza`);
+    el DDL declarativo ya trae este indice para BDs virgenes y esta migracion lo garantiza en
+    las hosted existentes. Aditivo e idempotente (`CREATE INDEX IF NOT EXISTS`).
+    """
+    con.execute(
+        "CREATE INDEX IF NOT EXISTS idx_pieza_estado_marca ON pieza (estado, marca)"
+    )
+
+
 def _migrar_tabla_daemon_barridos(con: Any) -> None:
     """Crea la tabla `daemon_barridos` y su indice (BDs ya creadas; observabilidad).
 

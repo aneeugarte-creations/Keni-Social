@@ -97,12 +97,11 @@ async def dia(request: Request) -> Response:
     # el monitor vuelve a 0, igual que el contador del plan de la Mesa y Admitir.
     desde_iso = inicio_dia_cdmx_iso_utc(ahora)
 
-    # Temas (contenido padre) CREADOS en la ventana + sus filas por red.
-    items = [
-        it
-        for it in repos.listar_publicacion(clase="contenido", marca=marca or None)
-        if str(it.get("creado") or "") >= desde_iso
-    ]
+    # Temas (contenido padre) CREADOS en la ventana + sus filas por red. El corte por `creado`
+    # se empuja a SQL (`creado_desde`): la jornada trae solo lo del día, no el histórico.
+    items = repos.listar_publicacion(
+        clase="contenido", marca=marca or None, creado_desde=desde_iso
+    )
     filas = repos.listar_piezas_fila(marca=marca or None)
     filas_por_item: dict[str, list[dict[str, Any]]] = {}
     for f in filas:

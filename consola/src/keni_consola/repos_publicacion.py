@@ -93,6 +93,7 @@ def listar_publicacion(
     estado: str | None = None,
     desde: str | None = None,
     hasta: str | None = None,
+    creado_desde: str | None = None,
 ) -> list[dict[str, Any]]:
     """Lista items del tablero (padres), filtros combinables. Delegado en `db.py`."""
     return db.listar_publicacion(
@@ -104,6 +105,7 @@ def listar_publicacion(
         estado=estado,
         desde=desde,
         hasta=hasta,
+        creado_desde=creado_desde,
     )
 
 
