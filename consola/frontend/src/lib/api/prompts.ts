@@ -4,14 +4,12 @@ import { peticion, query } from "./_core";
 import type {
   CuerpoCrearDocumento,
   CuerpoGuardarDocumento,
-  CuerpoLanzarTexto,
   CuerpoPublicarTexto,
   CuerpoResolverSolicitud,
   RespuestaContextoInyectado,
   RespuestaTexto,
   RespuestaDocumento,
   RespuestaEditoriales,
-  RespuestaGeneracion,
   RespuestaHistorialTexto,
   RespuestaMaquinaTexto,
   RespuestaMarcasTexto,
@@ -108,32 +106,4 @@ export const apiPrompts = {
     peticion<ValidacionEditorial>(`/prompts/validacion${query({ marca })}`, { signal }),
   marcasPrompts: (signal?: AbortSignal) =>
     peticion<RespuestaMarcasTexto>("/prompts/marcas", { signal }),
-  lanzarPrompts: (cuerpo: CuerpoLanzarTexto) =>
-    peticion<RespuestaGeneracion>("/prompts/lanzar", { metodo: "POST", json: cuerpo }),
-  lanzarPromptsArchivo: (
-    archivo: File,
-    marca: string,
-    opts: {
-      prompt_id?: string;
-      texto?: string;
-      titulo?: string;
-      adjuntos?: string[];
-      redes?: string[];
-    } = {},
-  ) => {
-    const form = new FormData();
-    form.set("archivo", archivo);
-    form.set("marca", marca);
-    if (opts.prompt_id) form.set("prompt_id", opts.prompt_id);
-    if (opts.texto) form.set("texto", opts.texto);
-    if (opts.titulo) form.set("titulo", opts.titulo);
-    for (const a of opts.adjuntos ?? []) form.append("adjuntos", a);
-    for (const r of opts.redes ?? []) form.append("redes", r);
-    return peticion<RespuestaGeneracion>("/prompts/lanzar-archivo", {
-      metodo: "POST",
-      form,
-      timeoutMs: 120_000,
-    });
-  },
-
 };

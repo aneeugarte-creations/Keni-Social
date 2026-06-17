@@ -56,6 +56,10 @@ export interface FasePipeline {
   ayuda: string;
   /** Doc de la Prompts cuyo prompt alimenta la fase («Editar prompt»). */
   doc?: string;
+  /** Sub-prompts que esta fase INYECTA en su propio prompt (no son etapas ni se lanzan solos):
+   *  el detalle de la fase los lista para editarlos. P. ej. los envoltorios de red dentro de
+   *  Redactar. Cada uno abre su doc en el overlay. */
+  subPrompts?: readonly { nombre: string; doc: string; ayuda: string }[];
   /** Clave de cola de la fase (índice en los conteos): muestra sus en curso/en cola. */
   queue?: string;
   /** Clave BASE de los toggles por marca (grupo `automatizacion_marca_*`) + nota de alcance. */

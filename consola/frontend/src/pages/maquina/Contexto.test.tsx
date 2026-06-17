@@ -84,11 +84,13 @@ describe("Contexto · la máquina en una página", () => {
     expect(screen.queryByText("Agrupar")).not.toBeInTheDocument();
   });
 
-  it("en la pestaña Producción muestra sus fases (Redactar/Sugerir hashtags/Ilustrar), sin Aprobar/Publicar ni Idear", () => {
+  it("en la pestaña Producción muestra sus fases (Redactar/Sugerir hashtags/Ilustrar/Crítica), sin Aprobar/Publicar ni Idear", () => {
     renderContexto("/maquina/contexto?proceso=produccion");
     expect(screen.getByText("Redactar")).toBeInTheDocument();
     expect(screen.getByText("Sugerir hashtags")).toBeInTheDocument();
     expect(screen.getByText("Ilustrar")).toBeInTheDocument();
+    // «Crítica» (nivel IA de la cadena de aprobación) vive ahora como fase de Producción.
+    expect(screen.getByText("Crítica")).toBeInTheDocument();
     // «Aprobar» y «Publicar» ya NO son fases del flujo: el OK humano y la salida a redes
     // viven en la página de programación/feed, no en este mapa de la máquina.
     expect(screen.queryByText("Aprobar")).not.toBeInTheDocument();
@@ -98,16 +100,17 @@ describe("Contexto · la máquina en una página", () => {
     expect(screen.queryByText("Revisar")).not.toBeInTheDocument();
   });
 
-  it("la pestaña Herramientas reúne TODOS los agentes independientes (material recibido + apoyo)", () => {
+  it("la pestaña Herramientas reúne los agentes independientes (material recibido + ideación)", () => {
     renderContexto("/maquina/contexto?proceso=herramientas");
     // Material recibido (antes en «Importación»): ahora en cajas dentro de Herramientas.
     expect(screen.getByText("Parrilla")).toBeInTheDocument();
     expect(screen.getByText("Notas")).toBeInTheDocument();
-    // Herramientas de copy: ideación, crítica y envoltorios. («Crítica» es a la vez el tipo de la
-    // caja y el nombre de su único agente, de ahí los dos nodos.)
-    expect(screen.getAllByText("Crítica").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("Carrusel")).toBeInTheDocument();
+    // Ideación evergreen.
     expect(screen.getByText("Idear")).toBeInTheDocument();
+    // Crítica y envoltorios YA NO viven aquí: pertenecen a una fase (Crítica = nivel IA de la
+    // cadena de aprobación; envoltorios = sub-prompts de Redactar).
+    expect(screen.queryByText("Carrusel")).not.toBeInTheDocument();
+    expect(screen.queryByText("Envoltorios")).not.toBeInTheDocument();
     // Hashtags (suggest) y el asistente de copy se retiraron (solo MCP/sin UI).
     expect(screen.queryByText("Hashtags")).not.toBeInTheDocument();
   });

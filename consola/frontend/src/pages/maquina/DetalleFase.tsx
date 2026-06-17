@@ -339,6 +339,33 @@ export function DetalleFase({
               ocultarCabecera
               onAccionesPublicar={reportarAcciones}
             />
+            {/* Sub-prompts que esta fase INYECTA en su prompt (no son etapas ni se lanzan solos):
+                p. ej. los envoltorios de red dentro de Redactar. Se editan en el overlay. */}
+            {fase.subPrompts && fase.subPrompts.length > 0 ? (
+              <Card className="mt-4 p-3">
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Sub-prompts inyectados
+                </p>
+                <p className="mb-2 text-xs text-muted-foreground">
+                  Fragmentos que esta fase compone dentro de su prompt según el caso. No se lanzan
+                  por separado; edítalos aquí.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {fase.subPrompts.map((sp) => (
+                    <Button
+                      key={sp.doc}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      title={sp.ayuda}
+                      onClick={() => setDocContexto(sp.doc)}
+                    >
+                      {sp.nombre}
+                    </Button>
+                  ))}
+                </div>
+              </Card>
+            ) : null}
           </TabsContent>
         ) : null}
 

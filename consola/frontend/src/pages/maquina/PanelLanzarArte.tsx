@@ -7,9 +7,8 @@
  * y pinta las N imágenes resultantes (servidas en `/api/media/{id}`), cada una con su modelo
  * y su coste real.
  *
- * Reutiliza las primitivas del lanzador de copy (`PanelLanzar`): mismo diálogo, AutoTextarea,
- * selectores y patrón de sondeo. La marca llega del switch GLOBAL salvo que el cockpit imponga
- * una `marcaForzada` (su selector LOCAL), igual que `PanelLanzar`.
+ * La marca llega del switch GLOBAL salvo que el cockpit imponga una `marcaForzada` (su
+ * selector LOCAL).
  */
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Coins, ImageOff, Loader2, Pencil, Sparkles } from "lucide-react";

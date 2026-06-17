@@ -128,6 +128,14 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
       base: MAESTRO_PRODUCCION,
       nota: "Apagar «Producción» en una marca la deja sin copy automático.",
     },
+    // Los envoltorios NO son agentes sueltos: son fragmentos que `generar.componer()` inyecta
+    // en este prompt según las redes pedidas (una pieza por red / copy único / decisión de
+    // carrusel). Cuelgan de Redactar para editarlos donde se usan.
+    subPrompts: [
+      { nombre: "Redes", doc: "prompt/envoltorios/redes", ayuda: "Una pieza por red" },
+      { nombre: "Unificado", doc: "prompt/envoltorios/copy-unico", ayuda: "El mismo copy para todas las redes" },
+      { nombre: "Carrusel", doc: "prompt/envoltorios/carrusel", ayuda: "Decisión de carrusel" },
+    ],
   },
   {
     nombre: "Sugerir hashtags",
@@ -152,6 +160,17 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
       base: "KENI_PIPELINE_ILUSTRAR",
       nota: "Apagar «Ilustrar» en una marca la deja sin imagen por IA.",
     },
+  },
+  {
+    // Nivel de revisión IA de la pieza terminada, gateado por `KENI_CRITICA_IA` (OFF por
+    // defecto): corre DENTRO de la cadena de aprobación (tras los OK humanos), no encola etapa
+    // propia. Seguidora del maestro de Producción: no pinta switch granular; su prompt sí se edita.
+    nombre: "Crítica",
+    es_ia: true,
+    claves: [MAESTRO_PRODUCCION],
+    ayuda: "Revisa con visión la pieza terminada en la cadena de aprobación (gateada por KENI_CRITICA_IA, OFF por defecto)",
+    doc: "prompt/critica",
+    heredada: "Gateada por KENI_CRITICA_IA; corre en la cadena de aprobación.",
   },
 ];
 
@@ -178,10 +197,14 @@ export interface GrupoAgentes {
 }
 
 /**
- * HERRAMIENTAS — TODOS los agentes independientes que NO son una etapa de la máquina, agrupados por
- * tipo: el material recibido del equipo («Recibir», «Importar») y las herramientas de copy («Ideación»,
- * «Crítica», «Envoltorios»). Cada uno se lanza a mano y abre su prompt. (No incluye hashtags ni el
- * asistente de copy: solo se lanzaban por MCP/sin UI propia y se retiraron.)
+ * HERRAMIENTAS — los agentes/prompts INDEPENDIENTES que NO son una etapa de la máquina ni un
+ * fragmento inyectado en otra fase: el material que llega del equipo («Recibir», «Importar») y la
+ * ideación evergreen. Cada uno se dispara desde su propio flujo (cajones del día, importación de
+ * archivo, taller evergreen) y aquí se edita su prompt.
+ *
+ * Lo que NO vive aquí porque pertenece a una fase: la «Crítica» (nivel IA de la cadena de
+ * aprobación, fase seguidora de Producción) y los «Envoltorios» de red (fragmentos que Redactar
+ * inyecta en su prompt: cuelgan de esa fase como `subPrompts`).
  */
 export const GRUPOS_HERRAMIENTAS: readonly GrupoAgentes[] = [
   {
@@ -208,19 +231,5 @@ export const GRUPOS_HERRAMIENTAS: readonly GrupoAgentes[] = [
     titulo: "Ideación",
     descripcion: "Propone contenido evergreen para la marca",
     fases: [{ nombre: "Idear", es_ia: true, claves: [], ayuda: "Propone ideas de contenido evergreen para la marca", doc: "prompt/idear" }],
-  },
-  {
-    titulo: "Crítica",
-    descripcion: "Revisa con visión antes de publicar",
-    fases: [{ nombre: "Crítica", es_ia: true, claves: [], ayuda: "Crítica con visión antes de publicar", doc: "prompt/critica" }],
-  },
-  {
-    titulo: "Envoltorios",
-    descripcion: "Adapta el copy aprobado al formato de cada red",
-    fases: [
-      { nombre: "Redes", es_ia: true, claves: [], ayuda: "Envoltorio: una pieza por red", doc: "prompt/envoltorios/redes" },
-      { nombre: "Unificado", es_ia: true, claves: [], ayuda: "Envoltorio: el mismo copy para todas las redes", doc: "prompt/envoltorios/copy-unico" },
-      { nombre: "Carrusel", es_ia: true, claves: [], ayuda: "Envoltorio: decisión de carrusel", doc: "prompt/envoltorios/carrusel" },
-    ],
   },
 ];

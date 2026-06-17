@@ -295,21 +295,3 @@ export interface CuerpoGuardarDocumento {
   /** Revisión base (ETag) que cargó el cliente: el backend devuelve 409 si cambió debajo. */
   rev?: string;
 }
-
-/** Target sobre el que se lanza un prompt. */
-export interface TargetLanzamiento {
-  tipo: "ninguno" | "contenido" | "url" | "area";
-  valor?: string;
-}
-
-export interface CuerpoLanzarTexto {
-  prompt_id?: string;
-  texto?: string;
-  titulo?: string;
-  marca: string;
-  /** Ids de documentos editoriales a adjuntar. */
-  adjuntos?: string[];
-  target?: TargetLanzamiento;
-  /** Solo prompts salida=piezas: redes objetivo del copy (ids de red). */
-  redes?: string[];
-}
