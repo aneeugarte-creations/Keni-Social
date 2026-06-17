@@ -29,7 +29,7 @@ import { PanelLineasPlan } from "@/pages/piezas/PanelLineasPlan";
  * franjas" de la lista de contenido).
  */
 export default function CalendarioPublicacion() {
-  const { marcaActiva, nombreActiva } = useMarcaActiva();
+  const { marcaActiva } = useMarcaActiva();
   const [importarAbierto, setImportarAbierto] = React.useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   // Deep-link `?horarios=1` (lo usa el aviso «sin franjas» de la lista de contenido): abre el
@@ -97,7 +97,7 @@ export default function CalendarioPublicacion() {
           junto a la parrilla que alimenta. Solo con marca activa y plan configurado. */}
       {marcaActiva && (
         <div className="mb-4">
-          <PanelLineasPlan marca={marcaActiva} nombre={nombreActiva ?? marcaActiva} />
+          <PanelLineasPlan marca={marcaActiva} />
         </div>
       )}
 

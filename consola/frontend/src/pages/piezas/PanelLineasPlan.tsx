@@ -6,7 +6,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Target } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/lib/api";
 import { ETIQUETA_LINEA } from "@/lib/lineas";
@@ -17,7 +16,7 @@ import { cn } from "@/lib/utils";
 export { ETIQUETA_LINEA };
 
 /** Producción del día por LÍNEA del plan (producido vs objetivo), para la marca activa. */
-export function PanelLineasPlan({ marca, nombre }: { marca: string; nombre: string }) {
+export function PanelLineasPlan({ marca }: { marca: string }) {
   const produccion = useQuery({
     queryKey: ["produccion", "dia", marca],
     queryFn: ({ signal }) => api.produccionDia(marca, signal),
@@ -31,9 +30,6 @@ export function PanelLineasPlan({ marca, nombre }: { marca: string; nombre: stri
         <CardTitle className="flex items-center gap-2 text-sm">
           <Target className="h-4 w-4 text-emerald-600" />
           Producción del día por línea
-          <Badge variant="outline" className="text-[10px]">
-            {nombre}
-          </Badge>
         </CardTitle>
       </CardHeader>
       <CardContent className="p-4 pt-2">
