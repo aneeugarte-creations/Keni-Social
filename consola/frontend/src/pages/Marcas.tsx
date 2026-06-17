@@ -200,7 +200,7 @@ function BloqueMarca({
         return (
           <tr key={red.plataforma} className="border-b border-border last:border-0">
             <td className="py-1.5 pl-8 pr-2">
-              <span className="flex items-center gap-2 text-muted-foreground">
+              <span className="flex min-w-0 items-center gap-2 text-muted-foreground">
                 <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", clasesPunto(red))} aria-hidden="true" />
                 <Icono className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                 {nombrePlataforma(red.plataforma)}
@@ -349,7 +349,7 @@ export default function Marcas() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-xs text-muted-foreground">
-                  <th className="py-2 pl-3 pr-2 text-left font-medium">Cuenta</th>
+                  <th className="w-full py-2 pl-3 pr-2 text-left font-medium">Cuenta</th>
                   <th className="w-32 px-3 py-2 text-right font-medium">Seguidores</th>
                   <th className="w-28 px-3 py-2 text-right font-medium">Posts</th>
                   <th className="w-24 px-3 py-2 text-right font-medium">Posts/día</th>
