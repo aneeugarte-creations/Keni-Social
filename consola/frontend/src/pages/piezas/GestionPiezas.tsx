@@ -25,12 +25,28 @@ import { CLAVE_PIEZAS } from "@/pages/piezas/claves";
 import { DialogoEditar } from "@/pages/piezas/DialogoEditar";
 import { VistaCalendario, rangoVisibleCalendario } from "@/pages/piezas/VistaCalendario";
 import { VistaLista } from "@/pages/piezas/VistaLista";
+import {
+  PanelFiltrosLimpieza,
+  type FiltrosLimpieza,
+} from "@/pages/piezas/PanelFiltrosLimpieza";
 import type { FiltrosPiezas, OpcionesPiezas, Pieza } from "@/types";
 
 const TAM_PAGINA = 30;
 
-/** Filtros base de la LISTA (sin paginación): marca/red/línea/estado activos. */
-type FiltrosBase = Pick<FiltrosPiezas, "marca" | "red" | "linea" | "estado" | "origen">;
+/** Filtros base de la LISTA (sin paginación): globales + los de limpieza por lotes. */
+type FiltrosBase = Pick<
+  FiltrosPiezas,
+  | "marca"
+  | "red"
+  | "linea"
+  | "estado"
+  | "origen"
+  | "categoria"
+  | "tipo"
+  | "fuente"
+  | "fase"
+  | "antiguedad_h"
+>;
 
 /**
  * Parámetros de UNA página del FEED (lista, keyset/scroll infinito). La 1ª página llega con
@@ -153,6 +169,10 @@ function Cuerpo({
   // línea por marca y su reseteo viven en el provider). La MARCA, el switch de marca.
   const { red, linea } = useFiltrosPublicacion();
   const [editando, setEditando] = React.useState<Pieza | null>(null);
+  // Filtros de LIMPIEZA por lotes (solo en modo lista): antigüedad/fase/tipo/categoría/fuente.
+  // Acotan la lista —y por tanto lo que la selección múltiple borra— para barrer lo viejo o
+  // incompleto sin tocar lo completado.
+  const [limpieza, setLimpieza] = React.useState<FiltrosLimpieza>({});
 
   // `usuario` solo para avisar al editor sin marca asignada (abajo). El reparto de TAREAS
   // (coger/asignar) se mudó a su propia página (/operacion/tareas): el Feed es SOLO piezas.
@@ -183,12 +203,14 @@ function Cuerpo({
     );
   };
 
-  const filtrosBase = {
+  const filtrosBase: FiltrosBase = {
     marca: marcaActiva ?? undefined,
     red: red === FILTRO_TODOS ? undefined : red,
     linea: linea === FILTRO_TODOS ? undefined : linea,
     estado: estadoVista,
     origen: origenVista,
+    // Los filtros de limpieza solo aplican a la LISTA (el calendario es la programación).
+    ...(calendario ? {} : limpieza),
   };
   // Conteos exactos para los badges de las pestañas (mismos que el feed; ver vistas.tsx).
   const { conteoVista } = useConteosFeed(filtrosBase);
@@ -241,6 +263,11 @@ function Cuerpo({
       filtrosBase.linea ?? "",
       estadoVista ?? "todos",
       origenVista ?? "",
+      limpieza.antiguedad_h ?? "",
+      limpieza.fase ?? "",
+      limpieza.tipo ?? "",
+      limpieza.categoria ?? "",
+      limpieza.fuente ?? "",
     ],
     // Primera página: sin cursor (pero con `feed: "1"` para activar el modo keyset).
     initialPageParam: "",
@@ -328,6 +355,11 @@ function Cuerpo({
             </TabsList>
           </Tabs>
         </div>
+      )}
+      {/* Filtros de LIMPIEZA por lotes (antigüedad/fase/tipo/categoría/fuente): acotan la lista
+          —y lo que la selección múltiple borra— para barrer lo viejo o incompleto. Solo lista. */}
+      {!calendario && (
+        <PanelFiltrosLimpieza valor={limpieza} onCambio={setLimpieza} piezas={piezas} />
       )}
       {calendarioTruncado && (
         <div
