@@ -224,17 +224,19 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     }
   });
 
-  it("muestra 3 pestañas-vista del mismo feed EN ORDEN (Pendientes · Publicadas · Todas), sin 'En preparación'", async () => {
+  it("muestra 4 pestañas-vista del mismo feed EN ORDEN (Pendientes · Publicadas · Todas · Portal), sin 'En preparación'", async () => {
     stubFetch();
     renderFeed();
-    // 3 vistas-partición por estado. Es un hub: la barra son las PESTAÑAS, sin título de
-    // página propio. El nombre accesible se compone del DOM (etiqueta completa + conteo en
-    // piezas), no de un aria-label que pise el número: por eso se matchea por regex.
+    // 4 vistas: 3 partición por estado + «Portal» (transversal, por origen). Es un hub: la
+    // barra son las PESTAÑAS, sin título de página propio. El nombre accesible se compone del
+    // DOM (etiqueta completa + conteo en piezas), no de un aria-label que pise el número: por
+    // eso se matchea por regex.
     const pestanas = await screen.findAllByRole("tab");
     expect(pestanas.map((t) => t.textContent)).toEqual([
       expect.stringContaining("Pendientes"),
       expect.stringContaining("Publicadas"),
       expect.stringContaining("Todas"),
+      expect.stringContaining("Portal"),
     ]);
     expect(screen.queryByRole("tab", { name: /En preparación/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /Por aprobar/ })).not.toBeInTheDocument();
