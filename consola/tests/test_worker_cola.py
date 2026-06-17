@@ -711,7 +711,7 @@ def test_worker_procesa_job_encolado_end_to_end(entorno, monkeypatch):
 
     g = generaciones.obtener(gen["id"])
     assert g["estado"] == generaciones.ESTADO_COMPLETADO
-    assert g["resultado"] == {}  # PROC_PROMPT es identidad: el texto va en `salida`
+    assert g["resultado"] is None  # PROC_PROMPT es identidad: sin resultado estructurado (el texto va en `salida`; `_publico` colapsa {} -> None)
     assert "texto markdown" in (g.get("salida") or "")
     # La cola COMPARTIDA quedo drenada (el job paso a `terminado`, libera capacidad).
     assert repos.contar_jobs_activos() == 0
@@ -808,7 +808,7 @@ def test_worker_inproceso_procesa_un_job(entorno, monkeypatch, pool_limpio):
     pool_limpio(worker.iniciar_worker_inproceso())
     assert _esperar_terminal(gen["id"]) == generaciones.ESTADO_COMPLETADO
     g = generaciones.obtener(gen["id"])
-    assert g["resultado"] == {}  # PROC_PROMPT es identidad: el texto va en `salida`
+    assert g["resultado"] is None  # PROC_PROMPT es identidad: sin resultado estructurado (el texto va en `salida`; `_publico` colapsa {} -> None)
     assert "texto markdown" in (g.get("salida") or "")
 
 

@@ -190,13 +190,10 @@ async def proponer(request: Request) -> Response:
     contexto = contexto.strip()[:_MAX_CONTEXTO] if isinstance(contexto, str) else ""
 
     autor = autor_de_peticion(request)
-    try:
-        gen = dom_idear.lanzar_propuesta(marca=marca, contexto=contexto, autor=autor)
-    except generaciones.ColaLlenaError:
-        return JSONResponse(
-            {"error": "Hay demasiadas generaciones en curso; inténtalo en unos segundos."},
-            status_code=429,
-        )
+    # `proponer` no crea NADA antes de encolar (solo valida): deja propagar `ColaLlenaError`
+    # al manejador CENTRAL (`_manejar_cola_llena`), que responde 429 + `Retry-After` consistente.
+    # No la atrapamos aquí (no hay efecto que limpiar, a diferencia de `generar_pieza`).
+    gen = dom_idear.lanzar_propuesta(marca=marca, contexto=contexto, autor=autor)
     return JSONResponse({"generacion": gen})
 
 
