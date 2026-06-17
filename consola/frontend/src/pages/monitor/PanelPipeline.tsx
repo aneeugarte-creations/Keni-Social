@@ -76,6 +76,10 @@ export interface FasePipeline {
   /** Aviso ROJO junto al nombre de la fase: la marca como acción de RIESGO real (p. ej. Publicar
    *  postea de verdad, no en simulación). Se pinta como Badge destructivo en la fila. */
   precaucion?: string;
+  /** Abre una ETAPA distinta del flujo: en vez del conector ↓, la fila lleva encima un divisor con
+   *  esta etiqueta. Marca que lo que sigue NO corre en la secuencia automática anterior (p. ej.
+   *  «Cadena de aprobación»: la Crítica IA corre tras los OK humanos, no justo tras Ilustrar). */
+  seccion?: string;
 }
 
 function contar(jobs: ColaJob[], queuePorTipo: Record<string, string>): Record<string, number> {
@@ -395,12 +399,22 @@ export function PanelPipeline({
           const admision = e.queue !== undefined && e.queue === admisionEn ? cola?.admision_verificacion : undefined;
           return (
             <li key={e.nombre}>
-              {/* Conector de flujo entre fases. */}
-              {i > 0 && (
-                <div className="flex justify-center py-1" aria-hidden="true">
-                  <ChevronDown className="h-4 w-4 text-muted-foreground/40" />
-                </div>
-              )}
+              {/* Entre fases: un conector ↓ (misma secuencia) o, si la fase abre una etapa distinta
+                  (`seccion`), un divisor etiquetado que rompe la lectura secuencial. */}
+              {i > 0 &&
+                (e.seccion ? (
+                  <div className="flex items-center gap-2 py-2">
+                    <div className="h-px flex-1 bg-border" />
+                    <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                      {e.seccion}
+                    </span>
+                    <div className="h-px flex-1 bg-border" />
+                  </div>
+                ) : (
+                  <div className="flex justify-center py-1" aria-hidden="true">
+                    <ChevronDown className="h-4 w-4 text-muted-foreground/40" />
+                  </div>
+                ))}
               <FilaFasePipeline
                 esIa={e.es_ia}
                 nombre={e.nombre}

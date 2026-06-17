@@ -173,12 +173,14 @@ export const FASES_PRODUCCION: readonly FasePipeline[] = [
   },
   {
     // Nivel de revisión IA de la pieza terminada: corre DENTRO de la cadena de aprobación (tras
-    // los OK humanos), no encola etapa propia. Switch propio (`KENI_CRITICA_IA`), OFF por defecto.
+    // los OK humanos, NO justo tras Ilustrar), no encola etapa propia. Switch propio
+    // (`KENI_CRITICA_IA`), OFF por defecto. `seccion` la separa de la secuencia automática anterior.
     nombre: "Crítica",
     es_ia: true,
     claves: ["KENI_CRITICA_IA", MAESTRO_PRODUCCION],
-    ayuda: "Revisa con visión la pieza terminada en la cadena de aprobación, antes de auto-programar",
+    ayuda: "Tras los dos OK humanos, revisa con visión la pieza terminada antes de auto-programar",
     doc: "prompt/critica",
+    seccion: "Cadena de aprobación",
   },
 ];
 

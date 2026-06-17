@@ -90,8 +90,10 @@ describe("Contexto · la máquina en una página", () => {
     expect(screen.getByText("Redactar")).toBeInTheDocument();
     expect(screen.getByText("Sugerir hashtags")).toBeInTheDocument();
     expect(screen.getByText("Ilustrar")).toBeInTheDocument();
-    // «Crítica» (nivel IA de la cadena de aprobación) vive ahora como fase de Producción.
+    // «Crítica» (nivel IA de la cadena de aprobación) vive ahora como fase de Producción, separada
+    // de la secuencia automática por un divisor que deja claro CUÁNDO corre.
     expect(screen.getByText("Crítica")).toBeInTheDocument();
+    expect(screen.getByText("Cadena de aprobación")).toBeInTheDocument();
     // «Aprobar» y «Publicar» ya NO son fases del flujo: el OK humano y la salida a redes
     // viven en la página de programación/feed, no en este mapa de la máquina.
     expect(screen.queryByText("Aprobar")).not.toBeInTheDocument();
