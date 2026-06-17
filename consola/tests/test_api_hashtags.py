@@ -1,15 +1,11 @@
-"""Tests de la API Hashtags (/api/hashtags). OFFLINE: el runner se mockea, NUNCA
-se llama a `claude` real.
+"""Tests de la API Hashtags (/api/hashtags): grupos reutilizables de hashtags por marca.
 
-Cubre: CRUD de grupos, validaciones (nombre/marca/hashtags), normalizacion de tags,
-sugerencia con runner mock y parseo tolerante.
+Cubre: CRUD de grupos, validaciones (nombre/marca/hashtags) y normalizacion de tags.
 """
 
 from __future__ import annotations
 
 from keni_consola.api import hashtags
-
-from .conftest import _cliente, lanzador_generacion_completa
 
 # --------------------------------------------------------------------------- #
 # CRUD                                                                        #
@@ -76,118 +72,15 @@ def test_borrar(cliente):
 
 
 # --------------------------------------------------------------------------- #
-# parsear_hashtags (funcion pura, tolerante)                                  #
+# _normalizar_tag (funcion pura)                                              #
 # --------------------------------------------------------------------------- #
 
 
-def test_parsear_extrae_tags_con_almohadilla():
-    out = hashtags.parsear_hashtags("Aquí van: #Gol #Liga y #Gol de nuevo")
-    assert out == ["#Gol", "#Liga"]  # dedup preservando orden
+def test_normalizar_tag_antepone_almohadilla():
+    assert hashtags._normalizar_tag("gol") == "#gol"
+    assert hashtags._normalizar_tag("#liga") == "#liga"
 
 
-def test_parsear_fallback_por_lineas():
-    out = hashtags.parsear_hashtags("gol\nliga\nmundial")
-    assert out == ["#gol", "#liga", "#mundial"]
-
-
-def test_parsear_vacio_devuelve_lista_vacia():
-    assert hashtags.parsear_hashtags("") == []
-    assert hashtags.parsear_hashtags("   \n  ") == []
-
-
-# --------------------------------------------------------------------------- #
-# POST /api/hashtags/sugerir (runner mockeado)                                #
-# --------------------------------------------------------------------------- #
-
-
-def test_sugerir_con_generacion_mock(entorno):
-    cli = _cliente(lanzar_generacion=lanzador_generacion_completa("#gol\n#liga\n#mundial"))
-    r = cli.post(
-        "/api/hashtags/sugerir", json={"texto": "resumen del partido", "marca": "unotv"}
-    )
-    assert r.status_code == 200
-    gen = r.json()["generacion"]
-    assert gen["tipo"] == "hashtags"
-    assert gen["resultado"]["hashtags"] == ["#gol", "#liga", "#mundial"]
-
-
-def test_sugerir_con_red(entorno):
-    capturado = {}
-    base = lanzador_generacion_completa("#x #y")
-
-    def lanzar(gen_id, *, prompt, cwd, procesar, dir_temporal=None):  # noqa: ANN001
-        capturado["prompt"] = prompt
-        base(gen_id, prompt=prompt, cwd=cwd, procesar=procesar, dir_temporal=dir_temporal)
-
-    r = _cliente(lanzar_generacion=lanzar).post(
-        "/api/hashtags/sugerir",
-        json={"texto": "t", "marca": "unotv", "red": "instagram"},
-    )
-    assert r.status_code == 200
-    assert "Instagram" in capturado["prompt"]
-
-
-def test_sugerir_red_invalida_400(entorno):
-    r = _cliente().post(
-        "/api/hashtags/sugerir", json={"texto": "t", "marca": "unotv", "red": "myspace"}
-    )
-    assert r.status_code == 400
-
-
-def test_sugerir_marca_invalida_400(entorno):
-    r = _cliente().post("/api/hashtags/sugerir", json={"texto": "t", "marca": "marca_falsa"})
-    assert r.status_code == 400
-
-
-def test_sugerir_sin_texto_400(entorno):
-    r = _cliente().post("/api/hashtags/sugerir", json={"marca": "unotv"})
-    assert r.status_code == 400
-
-
-def test_sugerir_sin_salida_devuelve_lista_vacia(entorno):
-    # Salida sin nada utilizable (solo espacios) => hashtags vacios al completar.
-    cli = _cliente(lanzar_generacion=lanzador_generacion_completa("   \n   "))
-    r = cli.post("/api/hashtags/sugerir", json={"texto": "t", "marca": "unotv"})
-    assert r.status_code == 200
-    assert r.json()["generacion"]["resultado"]["hashtags"] == []
-
-
-# --------------------------------------------------------------------------- #
-# El prompt de sugerencia vive en la Prompts (prompt/hashtags). PURO.       #
-# --------------------------------------------------------------------------- #
-
-
-def test_prompt_sugerencia_sale_de_la_prompts_y_sustituye(monkeypatch, tmp_path):
-    # Store aislado y vacío => el cuerpo efectivo es la INICIAL del paquete; las variables
-    # {{RED}}, {{MARCA}} y {{TEXTO}} no pueden quedar crudas.
-    monkeypatch.setenv("KENI_PROMPTS_DIR", str(tmp_path / "texto"))
-    p = hashtags.construir_prompt_sugerencia("resumen del partido", "unotv", "instagram")
-    for marcador in ("{{RED}}", "{{MARCA}}", "{{TEXTO}}"):
-        assert marcador not in p
-    assert "Instagram" in p and "unotv" in p and "resumen del partido" in p
-
-
-def test_prompt_sugerencia_sin_red_usa_generico(monkeypatch, tmp_path):
-    monkeypatch.setenv("KENI_PROMPTS_DIR", str(tmp_path / "texto"))
-    p = hashtags.construir_prompt_sugerencia("texto base", "unotv")
-    assert "redes sociales" in p and "{{RED}}" not in p
-
-
-def test_prompt_sugerencia_editado_en_prompts_gana(monkeypatch, tmp_path):
-    monkeypatch.setenv("KENI_PROMPTS_DIR", str(tmp_path / "texto"))
-    from keni_consola import libprompts
-
-    libprompts.importar_inicial()
-    libprompts.guardar("prompt/hashtags", cuerpo="MIO: {{MARCA}} / {{RED}}\n{{TEXTO}}")
-    p = hashtags.construir_prompt_sugerencia("cuerpo", "unotv", "tiktok")
-    assert p == "MIO: unotv / TikTok\ncuerpo"
-
-
-def test_prompt_sugerencia_sin_doc_ni_inicial_degrada(monkeypatch, tmp_path):
-    # Ya no hay copia del prompt en código (la inicial es la única fuente). Sin doc NI inicial
-    # la plantilla queda vacía y la sustitución sobre "" da "". El test de cobertura inicial↔
-    # código garantiza que la inicial SIEMPRE está (camino inalcanzable en producción).
-    monkeypatch.setenv("KENI_PROMPTS_DIR", str(tmp_path / "texto"))
-    monkeypatch.setenv("KENI_PROMPTS_INICIAL", str(tmp_path / "inicial-vacia"))
-    p = hashtags.construir_prompt_sugerencia("texto base", "unotv", "instagram")
-    assert p == ""  # sin plantilla no hay prompt; nunca quedan marcadores crudos
+def test_normalizar_tag_vacio_es_none():
+    assert hashtags._normalizar_tag("   ") is None
+    assert hashtags._normalizar_tag("") is None

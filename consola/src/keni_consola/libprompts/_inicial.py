@@ -44,10 +44,16 @@ _SENTINELA_OBSOLETOS = ".prompts-obsoletos-v1"
 
 # OLA v2 de obsoletos: prompts retirados al eliminar features. El envoltorio «sin emojis» se
 # INLINEÓ en el prompt de `idear` (su único usuario), así que su prompt editable ya no hace falta.
+# El asistente del tablero (modos «resumir»/«variantes») y la sugerencia de hashtags se retiraron
+# al eliminar su superficie MCP/web: sus prompts editables (`prompt/asistente/*`, `prompt/hashtags`)
+# ya no se inyectan en ningún proceso, así que se borran del store en vivo.
 # El store en vivo ya pasó la v1 (sentinela `.prompts-obsoletos-v1`), por eso esta ola lleva su
 # PROPIO sentinela y lista. Idempotente.
 _PROMPTS_OBSOLETOS_V2: tuple[str, ...] = (
     "prompt/envoltorios/sin-emojis",
+    "prompt/asistente/resumir",
+    "prompt/asistente/variantes",
+    "prompt/hashtags",
 )
 _SENTINELA_OBSOLETOS_V2 = ".prompts-obsoletos-v2"
 
@@ -147,7 +153,6 @@ _REFORMATO_PROMPTS_V1: tuple[tuple[str, str], ...] = (
     ("prompt/clasificar-marca", "4cfd577a327cecb8425167d9c0fce9b036768851f8f5b81afeec60316b31202b"),
     ("prompt/fusionar-verificar", "363f9f50a4d3290e0d934b2523ffafbfa0f4113eb7306e5a83e072f3cb687686"),
     ("prompt/fusionar", "b62024530cc5b7fe5028f39523e19e063f2b5bab688acdf397495fcc980b670d"),
-    ("prompt/hashtags", "e7753ea75a397d2ce171e1cbb953ea14155f78a2897ee4746d515fcc02496474"),
     ("prompt/importar/calendario", "4754721ac3c55d0e776fc50fdf96fb49c596e6add74972c138aab895cb041fd6"),
     ("prompt/importar/parrilla", "62cb69f7c486ccb423675a6731da9d31a1437267c26d45af0548b1617731b9f8"),
     ("prompt/priorizar", "ce8e944d3db9ac6bebe899fe8db44e162f300dd7d547229e3f9dc9b12eb60e1d"),
@@ -185,27 +190,17 @@ _TITULOS_UNA_PALABRA: tuple[tuple[str, str, str], ...] = (
     ("prompt/recibir/notas", "Recibir: notas y links (Claro Sports)", "Notas"),
     ("prompt/recibir/portal", "Recibir: portal/SMS", "Portal"),
     ("prompt/recibir/reporteros", "Recibir: reporteros", "Reporteros"),
-    ("prompt/asistente/resumir", "Asistente · resumir", "Resumir"),
-    ("prompt/asistente/variantes", "Asistente · variantes", "Variantes"),
 )
 _SENTINELA_TITULOS = ".titulos-prompts-v1"
 _SENTINELA_ALCANCE = ".alcance-editorial-v1"
 
-# DESCRIPCIONES de prompt acortadas: varios prompts del sistema (envoltorios, asistente) traían una
+# DESCRIPCIONES de prompt acortadas: varios prompts del sistema (envoltorios) traían una
 # `descripcion` más LARGA que su propio cuerpo, así que el panel "Acerca de" mostraba más descripción
 # que prompt. La inicial ya las acortó a un one-liner; el store en vivo conserva la descripción VIEJA.
 # Esta migración la reescribe IN PLACE solo si la descripción actual casa EXACTO con la vieja conocida
 # (una edición del equipo deja de casar y se respeta) y RE-PUBLICA el doc para no dejarlo "sin publicar".
 # `(id, descripcion_vieja, descripcion_nueva)`. One-shot por sentinela; espejo de `migrar_titulos_prompts`.
 _DESCRIPCIONES_PROMPT: tuple[tuple[str, str, str], ...] = (
-    ("prompt/asistente/resumir",
-     "Instrucción aditiva del modo «resumir» del asistente del tablero: condensa la nota en un copy "
-     "breve y directo por red. Se anexa al prompt de copy.",
-     "Modo «resumir» del asistente: condensa la nota en un copy breve."),
-    ("prompt/asistente/variantes",
-     "Instrucción aditiva del modo «variantes» del asistente del tablero: pide tres alternativas de "
-     "copy para que el community manager elija. Se anexa al prompt de copy.",
-     "Modo «variantes» del asistente: propone tres alternativas de copy."),
     ("prompt/envoltorios/carrusel",
      "Bloque que se añade al copy unificado cuando la historia agrupa 2+ notas: el modelo decide entre "
      "post y carrusel editorial. El código rellena {{N_NOTAS}}, {{MAX_SLIDES}} y {{CATALOGO_FOTOS}} "

@@ -1,8 +1,8 @@
 """API Generaciones: sondeo de los trabajos de IA en segundo plano.
 
-Toda generacion (copy, RSS->copy, hashtags, imagen) se lanza desde su endpoint de
-siempre (`/api/prompts/lanzar`, `/api/rss/generar`, `/api/hashtags/sugerir`,
-`/api/media/generar`), que ahora responde de INMEDIATO con un registro de generacion
+Toda generacion (copy, RSS->copy, imagen) se lanza desde su endpoint de
+siempre (`/api/prompts/lanzar`, `/api/rss/generar`, `/api/media/generar`), que ahora
+responde de INMEDIATO con un registro de generacion
 `{estado: "ejecutando"}` en vez de bloquear. El frontend SONDEA aqui hasta el estado
 terminal:
 

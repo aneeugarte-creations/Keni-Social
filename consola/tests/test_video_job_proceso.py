@@ -5,7 +5,7 @@ Cubre:
   - el worker, al reclamar un job de proceso, despacha al EJECUTOR (monkeypatcheado) y NO toca
     el camino claude.
   - los STUBS de la BASE marcan la generacion en ERROR (sin crashear el worker).
-  - el camino claude sigue intacto (un job de hashtags se reconstruye como siempre).
+  - el camino claude sigue intacto (un job de prompt se reconstruye como siempre).
 """
 
 from __future__ import annotations
@@ -118,9 +118,9 @@ def test_worker_ejecutor_que_revienta_marca_error(entorno, monkeypatch):
 
 
 def test_camino_claude_sigue_intacto(entorno):
-    """Un job claude (hashtags) NO se trata como proceso: su spec NO es kind de proceso."""
-    spec = jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags())
+    """Un job claude (prompt) NO se trata como proceso: su spec NO es kind de proceso."""
+    spec = jobspec.construir(prompt="p", procesar=jobspec.construir_prompt_lib())
     assert jobspec.es_kind_proceso(spec) is False
-    # `procesar` sigue reconstruyendose como siempre.
+    # `procesar` sigue reconstruyendose como siempre (identidad para el prompt de la Texto).
     procesar = jobspec.reconstruir_procesar(spec)
-    assert procesar("#uno #dos", None) == {"hashtags": ["#uno", "#dos"]}
+    assert procesar("texto markdown", None) == {}

@@ -380,20 +380,6 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
         return await cli.patch(f"/api/publicaciones/{publicacion_id}", cuerpo)
 
     @mcp.tool()
-    async def keni_generar_copy(
-        publicacion_id: str, modo: str = "generar", redes: list[str] | None = None
-    ) -> dict:
-        """Lanza la generación de copy por IA para una pieza (asistente editorial). `modo` ∈
-        {generar,variantes,resumir}. Requiere que la pieza tenga marca y al menos una red.
-        Devuelve la generación con su id; sigue su avance con `keni_estado_generacion`."""
-        cli = _cli()
-        if cli is None:
-            return {"error": _MSG_NO_INIT}
-        return await cli.post(
-            f"/api/publicaciones/{publicacion_id}/asistente", {"modo": modo, "redes": redes or []}
-        )
-
-    @mcp.tool()
     async def keni_estado_generacion(generacion_id: str) -> dict:
         """Estado y resultado de un trabajo de IA (copy/imagen) por su id: `estado`
         (ejecutando|completado|error), porcentaje y, si terminó, el `resultado` (piezas/copy)."""

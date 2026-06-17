@@ -20,7 +20,6 @@ from __future__ import annotations
 from starlette.routing import Route
 
 from .aportar import aportar
-from .asistente import asistente_ia, previsualizar
 from .etiquetas import asignar_etiqueta, quitar_etiqueta
 from .importar import importar
 from .metricas import metricas
@@ -60,8 +59,6 @@ __all__ = [
     "aportar",
     "crear_post_directo",
     "importar",
-    "previsualizar",
-    "asistente_ia",
     "adaptar_imagen",
     "agregar_plataforma",
     "actualizar_plataforma",
@@ -80,8 +77,6 @@ RUTAS = [
     Route("/api/publicaciones/cubrir-evento", cubrir_evento, methods=["POST"]),
     Route("/api/publicaciones/post-directo", crear_post_directo, methods=["POST"]),
     Route("/api/publicaciones/importar", importar, methods=["POST"]),
-    Route("/api/publicaciones/{publicacion_id}/preview", previsualizar, methods=["POST"]),
-    Route("/api/publicaciones/{publicacion_id}/asistente", asistente_ia, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}/adaptar-imagen", adaptar_imagen, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}", actualizar, methods=["PATCH"]),
     Route("/api/publicaciones/{publicacion_id}", borrar, methods=["DELETE"]),

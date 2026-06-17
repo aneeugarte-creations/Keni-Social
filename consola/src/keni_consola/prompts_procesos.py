@@ -55,10 +55,6 @@ PROCESOS_POR_PROMPT: dict[str, list[str]] = {
     "prompt/envoltorios/carrusel": [
         "Pipeline de copy · decisión de carrusel (historias que agrupan 2+ notas)",
     ],
-    # De LANZAMIENTO MANUAL (no se inyectan en un proceso de fondo; se ejecutan a demanda).
-    "prompt/hashtags": ["Herramienta · sugerencia de hashtags"],
-    "prompt/asistente/variantes": ["Asistente del editor · modo variantes"],
-    "prompt/asistente/resumir": ["Asistente del editor · modo resumir"],
 }
 
 

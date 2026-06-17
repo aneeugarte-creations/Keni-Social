@@ -48,8 +48,8 @@ _ENCOLAR_REAL = generaciones.encolar_job_claude
 
 
 def test_encolar_reclamar_terminar(entorno):
-    gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
-    spec = jobspec.construir(prompt="hola", procesar=jobspec.construir_hashtags())
+    gen = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "X"})
+    spec = jobspec.construir(prompt="hola", procesar=jobspec.construir_prompt_lib())
     job_id = cola.encolar(gen["id"], spec)
     assert job_id
 
@@ -57,7 +57,7 @@ def test_encolar_reclamar_terminar(entorno):
     assert clavado is not None
     assert clavado["gen_id"] == gen["id"]
     assert clavado["spec"]["prompt"] == "hola"
-    assert clavado["spec"]["procesar"]["kind"] == jobspec.PROC_HASHTAGS
+    assert clavado["spec"]["procesar"]["kind"] == jobspec.PROC_PROMPT
 
     # Ya no quedan pendientes (el unico job fue clavado).
     assert cola.reclamar("w2") is None
@@ -70,8 +70,8 @@ def test_reclamar_vacia_devuelve_none(entorno):
 
 
 def test_encolar_idempotente_por_gen_id(entorno):
-    gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
-    spec = jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags())
+    gen = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "X"})
+    spec = jobspec.construir(prompt="p", procesar=jobspec.construir_prompt_lib())
     cola.encolar(gen["id"], spec)
     cola.encolar(gen["id"], spec)  # mismo gen_id: no duplica
     primero = cola.reclamar()
@@ -90,7 +90,7 @@ def test_gate_cola_fondo_siempre_encola_sin_tope(entorno, monkeypatch):
     def _encolar_fondo():
         gen = generaciones.crear({"tipo": "pipeline", "marca": _MARCA, "etiqueta": "X"})
         spec = jobspec.construir(
-            prompt="p", procesar=jobspec.construir_hashtags(),
+            prompt="p", procesar=jobspec.construir_prompt_lib(),
             prioridad=jobspec.PRIORIDAD_PIPELINE,
         )
         return cola.encolar(gen["id"], spec)  # no debe lanzar ColaLlenaError jamas
@@ -112,14 +112,14 @@ def test_gate_cola_manual_siempre_encola_y_va_primero(entorno, monkeypatch):
     for i in range(5):
         gen = generaciones.crear({"tipo": "pipeline", "marca": _MARCA, "etiqueta": f"F{i}"})
         spec = jobspec.construir(
-            prompt="p", procesar=jobspec.construir_hashtags(),
+            prompt="p", procesar=jobspec.construir_prompt_lib(),
             prioridad=jobspec.PRIORIDAD_PIPELINE,
         )
         cola.encolar(gen["id"], spec)
 
     # Manual con la cola cargada: ENTRA igual (sin ColaLlenaError)...
     gen_manual = generaciones.crear({"tipo": "copy", "marca": _MARCA, "etiqueta": "Manual"})
-    spec_manual = jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags())
+    spec_manual = jobspec.construir(prompt="p", procesar=jobspec.construir_prompt_lib())
     assert cola.encolar(gen_manual["id"], spec_manual)
 
     # ...y el siguiente reclamo lo despacha PRIMERO (prioridad manual > pipeline).
@@ -140,7 +140,7 @@ def test_gate_cola_no_satura_tras_muchos_ciclos(entorno, monkeypatch):
     for i in range(20):  # muchos ciclos, muy por encima de cualquier antiguo tope
         gen = generaciones.crear({"tipo": "pipeline", "marca": _MARCA, "etiqueta": f"X{i}"})
         spec = jobspec.construir(
-            prompt="p", procesar=jobspec.construir_hashtags(),
+            prompt="p", procesar=jobspec.construir_prompt_lib(),
             prioridad=jobspec.PRIORIDAD_PIPELINE,
         )
         job_id = cola.encolar(gen["id"], spec)  # no debe lanzar ColaLlenaError nunca
@@ -158,12 +158,12 @@ def test_reclamar_respeta_prioridad_manual_antes_que_pipeline(entorno):
     """
     g_fondo = generaciones.crear({"tipo": "pipeline", "marca": _MARCA, "etiqueta": "Fondo"})
     spec_fondo = jobspec.construir(
-        prompt="fondo", procesar=jobspec.construir_hashtags(),
+        prompt="fondo", procesar=jobspec.construir_prompt_lib(),
         prioridad=jobspec.PRIORIDAD_PIPELINE,
     )
     cola.encolar(g_fondo["id"], spec_fondo)
-    g_manual = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "Manual"})
-    spec_manual = jobspec.construir(prompt="manual", procesar=jobspec.construir_hashtags())
+    g_manual = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "Manual"})
+    spec_manual = jobspec.construir(prompt="manual", procesar=jobspec.construir_prompt_lib())
     cola.encolar(g_manual["id"], spec_manual)
 
     primero = cola.reclamar("w")
@@ -176,7 +176,7 @@ def test_jobspec_prioridad_roundtrip_y_default_puro():
     # PURO (sin DB): la prioridad viaja DENTRO del spec y sobrevive al round-trip; un spec
     # VIEJO (sin el campo) o de PROCESO (render/ASR, iniciado por una persona) cae a MANUAL.
     spec = jobspec.construir(
-        prompt="p", procesar=jobspec.construir_hashtags(),
+        prompt="p", procesar=jobspec.construir_prompt_lib(),
         prioridad=jobspec.PRIORIDAD_PIPELINE,
     )
     vuelto = jobspec.deserializar(jobspec.serializar(spec))
@@ -184,7 +184,7 @@ def test_jobspec_prioridad_roundtrip_y_default_puro():
     assert jobspec.prioridad({}) == jobspec.PRIORIDAD_MANUAL  # spec viejo sin campo
     assert jobspec.prioridad({"prioridad": "no-numero"}) == jobspec.PRIORIDAD_MANUAL
     # El default de `construir` es MANUAL (los seams que no fijan prioridad no degradan a nadie).
-    assert jobspec.prioridad(jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags())) \
+    assert jobspec.prioridad(jobspec.construir(prompt="p", procesar=jobspec.construir_prompt_lib())) \
         == jobspec.PRIORIDAD_MANUAL
 
 
@@ -195,14 +195,14 @@ def test_encolar_gen_id_con_fila_terminada_resucita_el_job(entorno):
     corria jamas (p. ej. el reintento de un copy del pipeline que fallo). Ahora la fila se
     REVIVE a `pendiente` con el spec nuevo; una fila VIVA sigue intacta (idempotencia).
     """
-    gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
-    spec1 = jobspec.construir(prompt="v1", procesar=jobspec.construir_hashtags())
+    gen = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "X"})
+    spec1 = jobspec.construir(prompt="v1", procesar=jobspec.construir_prompt_lib())
     j1 = cola.encolar(gen["id"], spec1)
     assert cola.reclamar("w") is not None
     cola.terminar(j1)
     assert repos.contar_jobs_activos() == 0
 
-    spec2 = jobspec.construir(prompt="v2", procesar=jobspec.construir_hashtags())
+    spec2 = jobspec.construir(prompt="v2", procesar=jobspec.construir_prompt_lib())
     cola.encolar(gen["id"], spec2)  # fila `terminado`: debe resucitar, no devolver el viejo
     clavado = cola.reclamar("w2")
     assert clavado is not None
@@ -215,8 +215,8 @@ def test_reclama_job_suelto_de_worker_muerto(entorno):
 
     Un job recien reclamado (worker vivo) NO se re-reclama: solo al pasar el umbral.
     """
-    gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
-    cola.encolar(gen["id"], jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags()))
+    gen = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "X"})
+    cola.encolar(gen["id"], jobspec.construir(prompt="p", procesar=jobspec.construir_prompt_lib()))
     primero = cola.reclamar("worker-muerto")
     assert primero is not None
     # Recien reclamado: un segundo worker NO lo roba (el primero podria seguir vivo).
@@ -243,8 +243,8 @@ def test_reclamar_separa_carriles_proceso_e_inferencia(entorno):
     un job de INFERENCIA (claude, sin kind raiz) solo el carril `solo_proceso=False`. Asi un video
     largo no ocupa un slot del copy manual (head-of-line eliminado).
     """
-    g_inf = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "Inf"})
-    cola.encolar(g_inf["id"], jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags()))
+    g_inf = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "Inf"})
+    cola.encolar(g_inf["id"], jobspec.construir(prompt="p", procesar=jobspec.construir_prompt_lib()))
     g_proc = generaciones.crear({"tipo": "render-video", "marca": _MARCA, "etiqueta": "Vid"})
     cola.encolar(g_proc["id"], jobspec.construir_proceso(jobspec.PROC_RENDER_VIDEO, {"x": 1}))
 
@@ -286,8 +286,8 @@ def test_reclamar_pendiente_no_lee_yaml_de_generacion(entorno, monkeypatch):
         db_jobs, "_gen_ya_terminal",
         lambda gid: (llamadas.__setitem__("n", llamadas["n"] + 1), real(gid))[1],
     )
-    gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
-    cola.encolar(gen["id"], jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags()))
+    gen = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "X"})
+    cola.encolar(gen["id"], jobspec.construir(prompt="p", procesar=jobspec.construir_prompt_lib()))
     clavado = cola.reclamar("w")
     assert clavado is not None and clavado["gen_id"] == gen["id"]
     assert llamadas["n"] == 0, "clavar un pendiente no debe leer el YAML de generacion"
@@ -300,8 +300,8 @@ def test_suelto_con_registro_terminal_se_cierra_sin_relanzar(entorno):
     terminal (su post-procesado ya corrio antes de que el worker muriera), el job se marca
     `terminado` y `reclamar` pasa al siguiente, SIN devolverlo (evita el borrador duplicado).
     """
-    gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
-    cola.encolar(gen["id"], jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags()))
+    gen = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "X"})
+    cola.encolar(gen["id"], jobspec.construir(prompt="p", procesar=jobspec.construir_prompt_lib()))
     primero = cola.reclamar("w1")
     assert primero is not None
     # El registro alcanza un estado TERMINAL (el post-procesado ya corrio) y el worker MUERE
@@ -335,8 +335,8 @@ def test_suelto_agota_intentos_y_se_descarta(entorno, monkeypatch):
     (libera el cupo) y deja el registro en error claro con motivo `interrumpido`.
     """
     monkeypatch.setenv("KENI_JOBS_MAX_INTENTOS", "2")
-    gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
-    cola.encolar(gen["id"], jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags()))
+    gen = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "X"})
+    cola.encolar(gen["id"], jobspec.construir(prompt="p", procesar=jobspec.construir_prompt_lib()))
 
     primero = cola.reclamar("w1")  # intento 1
     assert primero is not None
@@ -355,8 +355,8 @@ def test_suelto_agota_intentos_y_se_descarta(entorno, monkeypatch):
 def test_reencolar_resetea_intentos(entorno, monkeypatch):
     """El reintento ADMIN (`reencolar_job`) resetea el contador: vuelve a tener sus intentos."""
     monkeypatch.setenv("KENI_JOBS_MAX_INTENTOS", "1")
-    gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
-    cola.encolar(gen["id"], jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags()))
+    gen = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "X"})
+    cola.encolar(gen["id"], jobspec.construir(prompt="p", procesar=jobspec.construir_prompt_lib()))
     primero = cola.reclamar("w1")  # unico intento permitido
     _envejecer_claim(primero["id"])
     assert cola.reclamar("w2") is None  # descartado (agoto su unico intento)
@@ -369,7 +369,7 @@ def test_reencolar_resetea_intentos(entorno, monkeypatch):
 def test_spec_corrupto_se_reclama_con_spec_none(entorno):
     # spec que NO es un objeto job: un JSON valido NO-objeto (p. ej. un numero) se recibe
     # con spec=None y se marca en error.
-    gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
+    gen = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "X"})
     repos.encolar_job(gen["id"], "123")
     clavado = cola.reclamar()
     assert clavado is not None and clavado["spec"] is None
@@ -443,10 +443,12 @@ def test_jobspec_copy_fotos_notas_roundtrip_puro():
     assert sin["fotos_notas"] == []
 
 
-def test_reconstruir_procesar_hashtags(entorno):
-    spec = jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags())
+def test_reconstruir_procesar_prompt_es_identidad(entorno):
+    # El post-procesado IDENTIDAD (prompt de la Texto) no crea artefactos: el texto ya queda en
+    # `salida` del registro.
+    spec = jobspec.construir(prompt="p", procesar=jobspec.construir_prompt_lib())
     procesar = jobspec.reconstruir_procesar(spec)
-    assert procesar("#uno #dos", None) == {"hashtags": ["#uno", "#dos"]}
+    assert procesar("texto markdown", None) == {}
 
 
 def test_reconstruir_procesar_copy_crea_publicaciones(entorno):
@@ -657,11 +659,11 @@ def _fake_lanzar_proc_factory(lineas: list[str]):
     return _fake
 
 
-_LINEAS_OK_HASHTAGS = [
+_LINEAS_OK_TEXTO = [
     '{"type": "stream_event", "event": {"type": "message_start", "message": {}}}',
     '{"type": "stream_event", "event": {"type": "content_block_delta", "index": 0, '
-    '"delta": {"type": "text_delta", "text": "#uno\\n#dos"}}}',
-    '{"type": "result", "subtype": "success", "result": "#uno\\n#dos", '
+    '"delta": {"type": "text_delta", "text": "texto markdown"}}}',
+    '{"type": "result", "subtype": "success", "result": "texto markdown", '
     '"usage": {"input_tokens": 1, "output_tokens": 1}}',
 ]
 
@@ -687,16 +689,16 @@ def test_worker_procesa_job_encolado_end_to_end(entorno, monkeypatch):
     """Encolar -> el worker clava y corre `claude` (mockeado) -> el registro completa.
 
     Es el camino del desacoplo entero, salvo el binario real: el back encola (via el gate de
-    cola COMPARTIDO), el worker reclama, reconstruye el `procesar` de hashtags desde el spec y
-    corre el runner #137; el registro queda `completado` con el resultado parseado.
+    cola COMPARTIDO), el worker reclama, reconstruye el `procesar` IDENTIDAD (prompt) desde el
+    spec y corre el runner #137; el registro queda `completado` con el texto en `salida`.
     """
     monkeypatch.setattr(generaciones.shutil, "which", lambda _n: "/usr/bin/claude")
     monkeypatch.setattr(
-        generaciones.runner, "lanzar_proc", _fake_lanzar_proc_factory(_LINEAS_OK_HASHTAGS)
+        generaciones.runner, "lanzar_proc", _fake_lanzar_proc_factory(_LINEAS_OK_TEXTO)
     )
 
-    gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "Tags"})
-    spec = jobspec.construir(prompt="sugiere", procesar=jobspec.construir_hashtags())
+    gen = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "Tags"})
+    spec = jobspec.construir(prompt="sugiere", procesar=jobspec.construir_prompt_lib())
     # El encolado pasa el gate de cola COMPARTIDO (como el endpoint real).
     _ENCOLAR_REAL(
         gen["id"], prompt="sugiere", cwd=entorno, procesar=lambda s, m: {}, spec=spec
@@ -709,7 +711,8 @@ def test_worker_procesa_job_encolado_end_to_end(entorno, monkeypatch):
 
     g = generaciones.obtener(gen["id"])
     assert g["estado"] == generaciones.ESTADO_COMPLETADO
-    assert g["resultado"] == {"hashtags": ["#uno", "#dos"]}
+    assert g["resultado"] == {}  # PROC_PROMPT es identidad: el texto va en `salida`
+    assert "texto markdown" in (g.get("salida") or "")
     # La cola COMPARTIDA quedo drenada (el job paso a `terminado`, libera capacidad).
     assert repos.contar_jobs_activos() == 0
 
@@ -721,7 +724,7 @@ def test_worker_spec_corrupto_marca_error_y_libera_cupo(entorno):
     El worker marca el registro en error y `cola.terminar` saca el job de la cola, asi su
     cupo (que ocupaba como `pendiente`) se libera y no satura el gate compartido.
     """
-    gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
+    gen = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "X"})
     repos.encolar_job(gen["id"], "123")  # JSON valido pero NO un objeto job (spec=None)
     job = cola.reclamar()
     worker.procesar_job(job, "w")
@@ -745,9 +748,9 @@ def test_reclamacion_concurrente_no_doble_ejecuta(entorno):
     """
     encolados = []
     for _ in range(12):
-        gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
+        gen = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "X"})
         repos.encolar_job(gen["id"], jobspec.serializar(
-            jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags())
+            jobspec.construir(prompt="p", procesar=jobspec.construir_prompt_lib())
         ))
         encolados.append(gen["id"])
 
@@ -791,11 +794,11 @@ def test_worker_inproceso_procesa_un_job(entorno, monkeypatch, pool_limpio):
     """
     monkeypatch.setattr(generaciones.shutil, "which", lambda _n: "/usr/bin/claude")
     monkeypatch.setattr(
-        generaciones.runner, "lanzar_proc", _fake_lanzar_proc_factory(_LINEAS_OK_HASHTAGS)
+        generaciones.runner, "lanzar_proc", _fake_lanzar_proc_factory(_LINEAS_OK_TEXTO)
     )
 
-    gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "Tags"})
-    spec = jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags())
+    gen = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "Tags"})
+    spec = jobspec.construir(prompt="p", procesar=jobspec.construir_prompt_lib())
     _ENCOLAR_REAL(
         gen["id"], prompt="p", cwd=entorno, procesar=lambda s, m: {}, spec=spec
     )
@@ -805,7 +808,8 @@ def test_worker_inproceso_procesa_un_job(entorno, monkeypatch, pool_limpio):
     pool_limpio(worker.iniciar_worker_inproceso())
     assert _esperar_terminal(gen["id"]) == generaciones.ESTADO_COMPLETADO
     g = generaciones.obtener(gen["id"])
-    assert g["resultado"] == {"hashtags": ["#uno", "#dos"]}
+    assert g["resultado"] == {}  # PROC_PROMPT es identidad: el texto va en `salida`
+    assert "texto markdown" in (g.get("salida") or "")
 
 
 # --------------------------------------------------------------------------- #
@@ -854,8 +858,8 @@ def test_cancelacion_cross_proceso_mata_el_arbol(entorno, monkeypatch):
     # Vigia rapido para que el test no espere mucho.
     monkeypatch.setattr(worker, "_SONDEO_CANCELACION_S", 0.1)
 
-    gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "Cancelable"})
-    spec = jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags())
+    gen = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "Cancelable"})
+    spec = jobspec.construir(prompt="p", procesar=jobspec.construir_prompt_lib())
     _ENCOLAR_REAL(
         gen["id"], prompt="p", cwd=entorno, procesar=lambda s, m: {}, spec=spec
     )
@@ -936,7 +940,7 @@ def test_esperar_terminal_despierta_por_senal_sin_sondear_disco(entorno, monkeyp
 
     monkeypatch.setattr(generaciones, "obtener", _obtener_contado)
 
-    gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
+    gen = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "X"})
     hilo = threading.Thread(target=worker._esperar_terminal, args=(gen["id"],), daemon=True)
     hilo.start()
     # Deja al waiter bloqueado en la señal un tiempo MAYOR que el viejo sondeo de 0.2 s: si
@@ -986,8 +990,8 @@ def test_cancelar_job_pendiente_no_lanza_claude(entorno, monkeypatch):
         generaciones.runner, "lanzar_proc",
         lambda *a, **k: pytest.fail("no debe lanzar claude para un job cancelado"),
     )
-    gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
-    spec = jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags())
+    gen = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "X"})
+    spec = jobspec.construir(prompt="p", procesar=jobspec.construir_prompt_lib())
     _ENCOLAR_REAL(
         gen["id"], prompt="p", cwd=entorno, procesar=lambda s, m: {}, spec=spec
     )
@@ -1045,8 +1049,8 @@ def test_reinicio_back_no_mata_job_en_proceso(entorno, monkeypatch):
     monkeypatch.setattr(generaciones.runner, "lanzar_proc", _fake_lanzar)
 
     cli = _cliente()  # "back" #1
-    gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
-    spec = jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags())
+    gen = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "X"})
+    spec = jobspec.construir(prompt="p", procesar=jobspec.construir_prompt_lib())
     _ENCOLAR_REAL(
         gen["id"], prompt="p", cwd=entorno, procesar=lambda s, m: {}, spec=spec
     )
@@ -1076,7 +1080,7 @@ def test_reinicio_back_no_mata_job_en_proceso(entorno, monkeypatch):
 
 def test_spec_no_se_puede_encolar_sin_spec(entorno):
     """`encolar_job_claude` exige un spec (defensa: sin spec el worker no reconstruye)."""
-    gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
+    gen = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "X"})
     with pytest.raises(ValueError):
         _ENCOLAR_REAL(
             gen["id"], prompt="p", cwd=entorno, procesar=lambda s, m: {}, spec=None
@@ -1128,7 +1132,7 @@ def _fake_lanzar_proc_lento_factory(sleep_s: float):
     """`runner.lanzar_proc` fake: subproceso python que DUERME `sleep_s` y emite OK.
 
     Mide solapamiento: si N jobs corren EN PARALELO, el tiempo total ≈ sleep_s; si corren
-    en serie, ≈ N × sleep_s. Emite el mismo NDJSON OK de hashtags tras dormir.
+    en serie, ≈ N × sleep_s. Emite el mismo NDJSON OK de texto tras dormir.
     """
     import subprocess as _sp
 
@@ -1171,8 +1175,8 @@ def test_worker_inproceso_corre_jobs_en_paralelo(entorno, monkeypatch, pool_limp
 
     gens = []
     for _ in range(n):
-        gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
-        spec = jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags())
+        gen = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "X"})
+        spec = jobspec.construir(prompt="p", procesar=jobspec.construir_prompt_lib())
         _ENCOLAR_REAL(
             gen["id"], prompt="p", cwd=entorno, procesar=lambda s, m: {}, spec=spec
         )
@@ -1216,8 +1220,8 @@ def test_pool_detener_reencola_los_en_proceso_para_el_worker_post_deploy(entorno
 
     gens = []
     for _ in range(n):
-        gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
-        spec = jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags())
+        gen = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "X"})
+        spec = jobspec.construir(prompt="p", procesar=jobspec.construir_prompt_lib())
         _ENCOLAR_REAL(
             gen["id"], prompt="p", cwd=entorno, procesar=lambda s, m: {}, spec=spec
         )

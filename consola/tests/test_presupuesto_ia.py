@@ -51,7 +51,7 @@ def _cerrar(gen_id: str, *, tokens_in: int = 0, tokens_out: int = 0, coste: floa
 def _encolar(prioridad: int) -> str:
     gen_id = _gen()
     spec = jobspec.construir(
-        prompt="p", procesar=jobspec.construir_hashtags(), prioridad=prioridad
+        prompt="p", procesar=jobspec.construir_prompt_lib(), prioridad=prioridad
     )
     return cola.encolar(gen_id, spec)
 
@@ -358,7 +358,7 @@ def test_limpiador_respeta_generaciones_con_job_pendiente(entorno):
     viejo = (datetime.now() - timedelta(hours=3)).isoformat(timespec="seconds")
 
     encolada = _gen()
-    cola.encolar(encolada, jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags()))
+    cola.encolar(encolada, jobspec.construir(prompt="p", procesar=jobspec.construir_prompt_lib()))
     generaciones.actualizar(encolada, {"fecha_inicio": viejo})  # mas vieja que el TTL
 
     atascada = _gen()  # vieja y SIN job en cola: atascada de verdad
@@ -378,20 +378,20 @@ def test_prompt_excesivo_se_rechaza(entorno, monkeypatch):
     """Un prompt por encima del tope DURO se rechaza al encolar (antes de gastar tokens)."""
     monkeypatch.setenv("KENI_PROMPT_MAX_CHARS", "100")
     gen_id = _gen()
-    spec = jobspec.construir(prompt="x" * 101, procesar=jobspec.construir_hashtags())
+    spec = jobspec.construir(prompt="x" * 101, procesar=jobspec.construir_prompt_lib())
     with pytest.raises(generaciones.PromptExcesivoError):
         cola.encolar(gen_id, spec)
     # Es subclase de ColaLlenaError: 429 claro sin handlers nuevos.
     assert issubclass(generaciones.PromptExcesivoError, generaciones.ColaLlenaError)
     # En el limite exacto (o con el tope a 0 = sin tope) SI encola.
-    assert cola.encolar(gen_id, jobspec.construir(prompt="x" * 100, procesar=jobspec.construir_hashtags()))
+    assert cola.encolar(gen_id, jobspec.construir(prompt="x" * 100, procesar=jobspec.construir_prompt_lib()))
 
 
 def test_prompt_chars_se_sella_y_llega_al_ledger(entorno):
     """El encolado sella `prompt_chars` en el registro y el cierre lo vuelca al ledger."""
     gen_id = _gen()
     prompt = "hola " * 100  # 500 chars
-    spec = jobspec.construir(prompt=prompt, procesar=jobspec.construir_hashtags())
+    spec = jobspec.construir(prompt=prompt, procesar=jobspec.construir_prompt_lib())
     _ENCOLAR_REAL(
         gen_id, prompt=prompt, cwd=__import__("pathlib").Path("."),
         procesar=jobspec.reconstruir_procesar(spec), spec=spec,

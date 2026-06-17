@@ -1,41 +1,45 @@
-"""API Hashtags: grupos de hashtags (CRUD) + sugerencia por IA.
+"""API Hashtags: grupos de hashtags (CRUD).
 
-El SPA gestiona grupos reutilizables de hashtags por marca y, opcionalmente, pide
-sugerencias de hashtags a partir de un texto. Persistencia en SQLite (`consola.db`).
+El SPA gestiona grupos reutilizables de hashtags por marca. Persistencia en SQLite
+(`consola.db`).
 
 SEGURIDAD / VALIDACION (reusa las fuentes de verdad):
   - `marca` (si viene) SOLO del catalogo unico (`consola.marcas`, por su id canonico).
-  - `red` (en sugerir, si viene) SOLO una red canonica (`consola.redes`).
   - Cada hashtag se normaliza con `#` inicial; SQL parametrizado en `consola.db`.
-  - La sugerencia corre como TRABAJO de IA en background (`consola.generaciones`): el
-    endpoint responde `{generacion}` y el frontend sondea hasta `resultado={hashtags}`.
-    En tests NUNCA se llama a `claude` real (se inyecta `lanzar_generacion`).
 """
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import marcas, redes, repos
+from .. import marcas, repos
 from .._http_json import leer_json
-from ..dominio import generar as gen_dom
-from ..dominio import hashtags as dom_hashtags
-from ..dominio import jobspec
-from ..seguridad import autor_de_peticion
 
 # Marcas validas: TODAS las del catalogo unico (por su id canonico). Mismo criterio
 # que piezas.
 _MARCAS: tuple[tuple[str, str], ...] = tuple(marcas.opciones())
 _MARCAS_IDS = {m[0] for m in _MARCAS}
 
-# Prompt + parseo de la sugerencia viven AHORA en el dominio (`dominio.hashtags`), para
-# que el WORKER de generacion los reconstruya sin importar de `api/` (#130 Fase 2). Aqui
-# se reexportan por compat de referencias (el dominio del job apunta al mismo parseo).
-_normalizar_tag = dom_hashtags.normalizar_tag
+# Caracteres validos dentro de un hashtag (letras Unicode, digitos y _). Sin espacios.
+_RE_TAG = re.compile(r"#?([\wÀ-ɏ]+)", re.UNICODE)
+
+
+def _normalizar_tag(crudo: str) -> str | None:
+    """Normaliza un hashtag a `#xxx` (un solo token). None si queda vacio."""
+    if not isinstance(crudo, str):
+        return None
+    crudo = crudo.strip()
+    if not crudo:
+        return None
+    m = _RE_TAG.search(crudo)
+    if m is None:
+        return None
+    return f"#{m.group(1)}"
 
 
 def _normalizar_lista_tags(crudas: Any) -> list[str] | None:
@@ -67,12 +71,6 @@ def _grupo_a_dict(grupo: dict[str, Any]) -> dict[str, Any]:
         "marca_nombre": marcas.etiqueta_de(grupo["marca"]) if grupo["marca"] else "",
         "hashtags": grupo["hashtags"],
     }
-
-
-# Sugerencia por IA: el prompt + el parseo viven en `dominio.hashtags` (para el worker).
-# Se reexportan aqui para no romper los call sites (tests/otros modulos los referencian).
-construir_prompt_sugerencia = dom_hashtags.construir_prompt_sugerencia
-parsear_hashtags = dom_hashtags.parsear_hashtags
 
 
 # --------------------------------------------------------------------------- #
@@ -161,52 +159,9 @@ async def borrar(request: Request) -> Response:
     return JSONResponse({"mensaje": "Grupo de hashtags borrado."})
 
 
-async def sugerir(request: Request) -> Response:
-    """Sugiere hashtags por IA, EN SEGUNDO PLANO `{texto, marca, red?}` -> `{generacion}`.
-
-    Lanza un trabajo de claude (tipo "hashtags") que no bloquea; el frontend sondea
-    `GET /api/generaciones/{id}` y, al completarse, recoge `resultado = {hashtags:[..]}`.
-    """
-    datos = await leer_json(request)
-    texto = datos.get("texto")
-    marca = datos.get("marca")
-    if not isinstance(texto, str) or not texto.strip():
-        return JSONResponse({"error": "Falta el texto para sugerir hashtags."}, status_code=400)
-    if not isinstance(marca, str) or marca not in _MARCAS_IDS:
-        return JSONResponse({"error": "Marca no permitida."}, status_code=400)
-    red = datos.get("red")
-    if red is not None:
-        if not isinstance(red, str) or not redes.es_red(red):
-            return JSONResponse({"error": "Red no permitida."}, status_code=400)
-    else:
-        red = None
-
-    prompt = construir_prompt_sugerencia(texto.strip(), marca, red)
-
-    # Atribucion por usuario (#130 Fase 1): la generacion la dispara el usuario actual.
-    # ENCOLA via el lanzador NEUTRO (cwd sin skills); el worker reconstruye el parseo de
-    # hashtags desde el `spec` (`jobspec.construir_hashtags`).
-    autor = autor_de_peticion(request)
-    procesar_spec = jobspec.construir_hashtags()
-    gen = gen_dom.lanzar(
-        tipo="hashtags",
-        titulo="Hashtags",
-        marca=marca,
-        prompt=prompt,
-        procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
-        procesar_spec=procesar_spec,
-        autor=autor,
-        # Hashtags = SALIDA ESTRUCTURADA (se parsea a `{hashtags:[..]}`; el usuario no ve la
-        # salida cruda): bajo riesgo de exfiltración por el canal de salida. No se veta la web
-        # por-callsite; queda la veta global `Bash Write Edit`.
-    )
-    return JSONResponse({"generacion": gen})
-
-
 RUTAS = [
     Route("/api/hashtags", listar, methods=["GET"]),
     Route("/api/hashtags", crear, methods=["POST"]),
-    Route("/api/hashtags/sugerir", sugerir, methods=["POST"]),
     Route("/api/hashtags/{grupo_id}", actualizar, methods=["PUT"]),
     Route("/api/hashtags/{grupo_id}", borrar, methods=["DELETE"]),
 ]

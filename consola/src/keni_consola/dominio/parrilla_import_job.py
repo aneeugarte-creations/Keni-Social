@@ -65,7 +65,6 @@ _TOOLS_VETADAS: tuple[str, ...] = (
     "mcp__keni-social__keni_enviar_a_revision",
     "mcp__keni-social__keni_aprobar",
     "mcp__keni-social__keni_rechazar",
-    "mcp__keni-social__keni_generar_copy",
 )
 
 # Herramientas de LECTURA de ficheros: solo se permiten cuando el documento se lee como FICHERO

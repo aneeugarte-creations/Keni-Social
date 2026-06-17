@@ -53,7 +53,7 @@ def _cli_token() -> TestClient:
 def _encolar(etiqueta: str = "Copy de nota", marca: str = _MARCA) -> str:
     """Crea una generacion + encola su job (pendiente). Devuelve el gen_id."""
     gen = generaciones.crear({"tipo": "copy", "marca": marca, "etiqueta": etiqueta})
-    spec = jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags())
+    spec = jobspec.construir(prompt="p", procesar=jobspec.construir_prompt_lib())
     cola.encolar(gen["id"], spec)
     return gen["id"]
 
@@ -150,7 +150,7 @@ def test_cola_jobs_traen_prioridad(entorno):
     la usa para señalar qué espera "por delante" en la cola.
     """
     gen = generaciones.crear({"tipo": "copy", "marca": _MARCA, "etiqueta": "Manual prioritario"})
-    spec = jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags(), prioridad=10)
+    spec = jobspec.construir(prompt="p", procesar=jobspec.construir_prompt_lib(), prioridad=10)
     cola.encolar(gen["id"], spec)
     data = _cli_token().get("/api/actividad/cola").json()
     job = next(j for j in data["esperando"] if j["gen_id"] == gen["id"])
@@ -251,7 +251,7 @@ def test_lanzar_urgente_encola_con_prioridad_breaking(entorno, monkeypatch):
         specs[gen_id] = spec or {}
 
     monkeypatch.setattr(dom_generar.generaciones, "encolar_job_claude", captura)
-    spec_proc = jobspec.construir_hashtags()
+    spec_proc = jobspec.construir_prompt_lib()
     comunes = dict(
         titulo="t", marca=_MARCA, prompt="p",
         procesar=jobspec.reconstruir_procesar({"procesar": spec_proc}),

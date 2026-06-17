@@ -4,7 +4,7 @@ Compone el prompt final (cuerpo del prompt + línea editorial adjunta + contexto
 redes), crea el registro de generación y lo ENCOLA reutilizando la infra de `generaciones`
 (`encolar_job_claude` + worker + sondeo). El post-procesado (parsear piezas, crear
 borradores, etc.) llega como `procesar` + `procesar_spec` (kinds de `jobspec`, fábricas en
-`dominio.copy`/`dominio.verificar_fuente`/`dominio.hashtags`).
+`dominio.copy`/`dominio.verificar_fuente`).
 
 Los prompts son AUTOCONTENIDOS: la línea editorial y la entrada van DENTRO del prompt, así
 que `claude` corre con un cwd NEUTRO (`jobspec.CWD_GENERACION`).

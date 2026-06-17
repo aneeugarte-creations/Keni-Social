@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import Any
 
 from . import copy as dom_copy
-from . import hashtags as dom_hashtags
 from . import verificar_fuente as dom_verificar
 
 # Versiona el spec por si su forma cambia (un worker viejo no debe malinterpretar uno nuevo).
@@ -52,7 +51,6 @@ CWD_GENERACION = "generacion"
 # Kinds de post-procesado (`procesar`). Mapean a las fabricas de `dominio.copy`/`verificación`/`hashtags`.
 PROC_COPY = "copy"
 PROC_DOCUMENTO = "documento"
-PROC_HASHTAGS = "hashtags"
 # verificación de la FUENTE (pre-copy, rediseño QPC): verificación PERMISIVA de la nota de origen por TEMA. Persiste el verificación estructurado (`no_verificado`/`problema`) + hallazgos
 # sobre el `contenido` (tema), para que CD genere copy SOLO de los `no_verificado`.
 PROC_VERIFICACION_FUENTE = "verificacion-fuente"
@@ -257,11 +255,6 @@ def construir_documento(
         "con_imagenes": bool(con_imagenes),
         "autor": _autor_spec(autor),
     }
-
-
-def construir_hashtags() -> dict[str, Any]:
-    """Spec del post-procesado de HASHTAGS (parsea los hashtags de la salida)."""
-    return {"kind": PROC_HASHTAGS}
 
 
 def construir_verificacion_fuente(
@@ -497,11 +490,6 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
         # Identidad: el texto markdown ya queda en `salida` del registro; no hay artefactos.
         def procesar(_salida: str, _metricas: object) -> dict[str, object]:
             return {}
-        return procesar
-
-    if kind == PROC_HASHTAGS:
-        def procesar(salida: str, _metricas: object) -> dict[str, object]:
-            return {"hashtags": dom_hashtags.parsear_hashtags(salida)}
         return procesar
 
     if kind == PROC_PARRILLA_IMPORT:

@@ -765,7 +765,7 @@ def test_lanzar_sella_contenido_id_en_el_registro(cliente, monkeypatch):
     monkeypatch.setattr(
         dom_generar.generaciones, "encolar_job_claude", lambda *a, **k: None
     )
-    spec_proc = jobspec.construir_hashtags()
+    spec_proc = jobspec.construir_prompt_lib()
     gen = dom_generar.lanzar(
         tipo="pipeline", titulo="t", marca="unotv", prompt="p",
         procesar=jobspec.reconstruir_procesar({"procesar": spec_proc}),

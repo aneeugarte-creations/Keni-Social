@@ -169,7 +169,7 @@ def test_tools_registradas(entorno):
     esperadas = {
         "keni_contexto", "keni_metricas_opciones",
         "keni_listar_publicaciones", "keni_crear_publicacion", "keni_actualizar_publicacion",
-        "keni_generar_copy", "keni_estado_generacion", "keni_listar_generaciones",
+        "keni_estado_generacion", "keni_listar_generaciones",
         "keni_listar_piezas", "keni_detalle_pieza",
         "keni_cola_aprobacion", "keni_enviar_a_revision", "keni_aprobar", "keni_rechazar",
         "keni_metricas_reporte", "keni_metricas_analisis", "keni_metricas_piezas",

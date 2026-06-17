@@ -17,7 +17,6 @@ en un modulo, se anade aqui su entrada. Origen = el proceso/modulo que la sustit
   - `dominio/parrilla_import_job.py` -> {{FUENTE}} {{MIEMBROS}} {{SLOTS}} {{REGLA_FUENTE}}
                                         {{ESQUEMA_JSON}} {{COLA_FUENTE}}
   - `dominio/clasificador_marca.py` -> {{MARCAS}} {{MARCA_FALLBACK}} {{NOTICIA}}
-  - `dominio/hashtags.py`          -> {{RED}} {{MARCA}} {{TEXTO}}
   - `dominio/generar.py`             -> {{ETIQUETAS}} {{LIMITES}} {{IDS_JSON}} (envoltorio
                                         de redes); {{N_NOTAS}} {{MAX_SLIDES}}
                                         {{CATALOGO_FOTOS}} (decisión de carrusel);
@@ -39,9 +38,9 @@ _CATALOGO: tuple[dict[str, str], ...] = (
     # --- Priorizar (Investigacion): perfil de keywords por marca (prompt/priorizar) ---
     {
         "nombre": "MARCA",
-        "descripcion": "Id de la marca para la que se compone el prompt (perfil editorial o hashtags).",
+        "descripcion": "Id de la marca para la que se compone el prompt (perfil editorial).",
         "ejemplo": "unotv",
-        "origen": "Priorizar · perfil de keywords por marca (prompt/priorizar) y sugerencia de hashtags (prompt/hashtags)",
+        "origen": "Priorizar · perfil de keywords por marca (prompt/priorizar)",
     },
     {
         "nombre": "MAX_KEYWORDS",
@@ -137,19 +136,6 @@ _CATALOGO: tuple[dict[str, str], ...] = (
         "descripcion": "Transcripción del documento embebida al final del prompt (vacía si se lee por ruta).",
         "ejemplo": "DOCUMENTO (transcripción):\n```\nLUNES Ana 9-14…\n```",
         "origen": "Importar rota/parrilla (prompt/importar/parrilla)",
-    },
-    # --- Herramienta: sugerencia de hashtags (prompt/hashtags) ---
-    {
-        "nombre": "RED",
-        "descripcion": "Nombre de la red destino de los hashtags («redes sociales» si no se especifica una).",
-        "ejemplo": "Instagram",
-        "origen": "Herramienta · sugerencia de hashtags (prompt/hashtags)",
-    },
-    {
-        "nombre": "TEXTO",
-        "descripcion": "Texto de la pieza a partir del cual se sugieren los hashtags.",
-        "ejemplo": "La selección mexicana arranca su gira esta noche…",
-        "origen": "Herramienta · sugerencia de hashtags (prompt/hashtags)",
     },
     # --- Envoltorios del copy (dominio/generar.py, prompt/envoltorios/*) ---
     {

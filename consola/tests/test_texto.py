@@ -245,9 +245,7 @@ def test_inicial_trae_los_prompts_migrados_del_codigo():
     # el módulo que los inyecta).
     casos = {
         "prompt/clasificar-marca": ("{{MARCAS}}", "{{MARCA_FALLBACK}}", "{{NOTICIA}}"),
-        "prompt/hashtags": ("{{MARCA}}", "{{RED}}", "{{TEXTO}}"),
-        "prompt/asistente/variantes": (),
-        "prompt/asistente/resumir": (),
+        "prompt/priorizar": ("{{MARCA}}", "{{MAX_KEYWORDS}}", "{{EDITORIAL}}"),
     }
     for doc_id, marcadores in casos.items():
         cuerpo = libprompts.cuerpo_efectivo(doc_id)
@@ -265,11 +263,11 @@ def test_importar_inicial_materializa_docs_nuevos_en_store_existente():
     assert libprompts.importar_inicial() > 0
     # Simula el store viejo: aún no tenía uno de los docs nuevos, y otro está editado.
     (raiz() / "prompt" / "clasificar-marca.md").unlink()
-    libprompts.guardar("prompt/hashtags", cuerpo="EDITADO POR EL EQUIPO")
+    libprompts.guardar("prompt/priorizar", cuerpo="EDITADO POR EL EQUIPO")
     assert libprompts.importar_inicial() == 1  # solo el que faltaba
     cuerpo = libprompts.cuerpo_efectivo("prompt/clasificar-marca")
     assert cuerpo and "{{MARCAS}}" in cuerpo
-    assert libprompts.obtener("prompt/hashtags").cuerpo.strip() == "EDITADO POR EL EQUIPO"
+    assert libprompts.obtener("prompt/priorizar").cuerpo.strip() == "EDITADO POR EL EQUIPO"
 
 
 def test_migrar_nombres_prompts_renombra_refresca_y_preserva():
@@ -324,17 +322,24 @@ def test_limpiar_prompts_obsoletos_borra_y_es_idempotente():
 
 
 def test_limpiar_prompts_obsoletos_v2_borra_y_es_idempotente():
-    # Ola v2: el envoltorio «sin emojis» (inlineado en idear) se retira del store al desplegar;
-    # one-shot, sentinela aparte del de la v1.
+    # Ola v2: el envoltorio «sin emojis» (inlineado en idear), el asistente del tablero
+    # (`prompt/asistente/*`) y la sugerencia de hashtags (`prompt/hashtags`) se retiran del store
+    # al desplegar (su superficie MCP/web se eliminó); one-shot, sentinela aparte del de la v1.
     from keni_consola.libprompts._rutas import raiz
 
     (raiz() / "prompt" / "envoltorios").mkdir(parents=True, exist_ok=True)
     (raiz() / "prompt" / "envoltorios" / "sin-emojis.md").write_text(
         "---\ntitulo: X\n---\nv", encoding="utf-8"
     )
+    (raiz() / "prompt" / "asistente").mkdir(parents=True, exist_ok=True)
+    for pid in ("asistente/resumir", "asistente/variantes", "hashtags"):
+        (raiz() / "prompt" / f"{pid}.md").write_text("---\ntitulo: X\n---\nv", encoding="utf-8")
     n = libprompts.limpiar_prompts_obsoletos_v2()
-    assert n == 1
+    assert n == 4
     assert libprompts.obtener("prompt/envoltorios/sin-emojis") is None
+    assert libprompts.obtener("prompt/asistente/resumir") is None
+    assert libprompts.obtener("prompt/asistente/variantes") is None
+    assert libprompts.obtener("prompt/hashtags") is None
     assert libprompts.limpiar_prompts_obsoletos_v2() == 0  # sentinela: no repite
 
 

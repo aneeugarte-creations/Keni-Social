@@ -716,7 +716,7 @@ def test_reintenta_fallo_transitorio_y_completa(entorno, monkeypatch):
         generaciones.runner, "lanzar_proc",
         _fake_lanzar_factory_por_intento([[_ERR_TRANSITORIO], [_OK_START, _OK_RESULT]], llamadas),
     )
-    gid = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})["id"]
+    gid = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "X"})["id"]
     _LANZAR_CLAUDE_REAL(gid, prompt="p", cwd=entorno, procesar=lambda s, m: {"ok": True})
     assert _esperar_terminal(gid, timeout=15) == generaciones.ESTADO_COMPLETADO
     assert llamadas["n"] == 2, "debio reintentar UNA vez tras el fallo transitorio"
@@ -735,7 +735,7 @@ def test_no_reintenta_error_de_contenido(entorno, monkeypatch):
         generaciones.runner, "lanzar_proc",
         _fake_lanzar_factory_por_intento([[_ERR_CONTENIDO]], llamadas),
     )
-    gid = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})["id"]
+    gid = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "X"})["id"]
     _LANZAR_CLAUDE_REAL(gid, prompt="p", cwd=entorno, procesar=lambda s, m: {"ok": True})
     assert _esperar_terminal(gid, timeout=15) == generaciones.ESTADO_ERROR
     assert llamadas["n"] == 1, "un error de contenido no debe reintentarse"
@@ -756,7 +756,7 @@ def test_reintento_respeta_el_tope(entorno, monkeypatch):
         generaciones.runner, "lanzar_proc",
         _fake_lanzar_factory_por_intento([[_ERR_TRANSITORIO]], llamadas),
     )
-    gid = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})["id"]
+    gid = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "X"})["id"]
     _LANZAR_CLAUDE_REAL(gid, prompt="p", cwd=entorno, procesar=lambda s, m: {"ok": True})
     assert _esperar_terminal(gid, timeout=15) == generaciones.ESTADO_ERROR
     assert llamadas["n"] == 3, "1 intento + 2 reintentos (tope KENI_GEN_REINTENTOS)"
@@ -781,7 +781,7 @@ def test_lanzar_job_claude_no_rechaza_por_tope_de_cola(entorno, monkeypatch):
     for _ in range(5):
         runner.admitir()
     try:
-        gid = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})["id"]
+        gid = generaciones.crear({"tipo": "prompt", "marca": _MARCA, "etiqueta": "X"})["id"]
         # NO debe lanzar ColaLlenaError: la cola no tiene tope; el job arranca y completa.
         _LANZAR_CLAUDE_REAL(gid, prompt="hola", cwd=entorno, procesar=lambda s, m: {"ok": True})
         assert _esperar_terminal(gid, timeout=15) == generaciones.ESTADO_COMPLETADO
@@ -960,8 +960,8 @@ def test_endpoint_responde_429_si_la_cola_esta_llena(entorno):
 
     cli = _cliente(lanzar_generacion=_lanzador_cola_llena)
     r = cli.post(
-        "/api/hashtags/sugerir",
-        json={"texto": "una nota larga para sugerir", "marca": _MARCA},
+        "/api/evergreen/proponer",
+        json={"marca": _MARCA},
     )
     assert r.status_code == 429
     assert "Retry-After" in r.headers
@@ -984,7 +984,7 @@ def test_cola_llena_no_deja_cadaver_en_actividad(entorno, monkeypatch):
     with pytest.raises(runner.ColaLlenaError):
         gen_dom.lanzar(
             tipo="pipeline", titulo="Verificar de la fuente", marca=_MARCA, prompt="p",
-            procesar=lambda salida, metricas: {}, procesar_spec=jobspec.construir_hashtags(),
+            procesar=lambda salida, metricas: {}, procesar_spec=jobspec.construir_prompt_lib(),
         )
     # El registro del intento se BORRÓ: la Actividad queda limpia (mismo conteo que antes).
     assert generaciones.contar() == antes
