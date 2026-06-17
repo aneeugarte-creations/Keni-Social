@@ -363,6 +363,7 @@ def _filtros_publicacion(
     responsable: str | None = None,
     desde: str | None = None,
     hasta: str | None = None,
+    origen: str | None = None,
 ) -> tuple[str, list[Any]]:
     """Construye la cláusula WHERE adicional (tras `es_publicacion=1`) y sus parámetros.
 
@@ -390,6 +391,11 @@ def _filtros_publicacion(
     if red:
         clausulas.append("cp.red = ?")
         params.append(red)
+    # ORIGEN del contenido padre (la pestaña «Portal» del feed pide `origen='portal'`): el
+    # contenido `c` ya está en el JOIN del SELECT, así que se filtra directo (sin denormalizar).
+    if origen:
+        clausulas.append("c.origen = ?")
+        params.append(origen)
     # Línea editorial = etiqueta de clase `vertical` asignada al `contenido` padre. Se filtra
     # con un EXISTS sobre la tabla puente (no JOIN, para no duplicar filas si hubiera varias).
     if linea:
@@ -441,6 +447,7 @@ def listar_piezas(
     responsable: str | None = None,
     desde: str | None = None,
     hasta: str | None = None,
+    origen: str | None = None,
     *,
     limite: int | None = None,
     desplazamiento: int | None = None,
@@ -457,7 +464,7 @@ def listar_piezas(
         nuevas al principio (no desplaza páginas), ideal para el feed social.
     """
     extra, params = _filtros_publicacion(
-        marca, red, estado, evergreen, linea, responsable, desde, hasta
+        marca, red, estado, evergreen, linea, responsable, desde, hasta, origen
     )
     if cursor is not None:
         # Keyset sobre la tupla (creado, id) en orden DESC: la página siguiente son las filas
@@ -493,10 +500,11 @@ def contar_piezas(
     responsable: str | None = None,
     desde: str | None = None,
     hasta: str | None = None,
+    origen: str | None = None,
 ) -> int:
     """Total de piezas que casan los filtros (para el `total` de paginación)."""
     extra, params = _filtros_publicacion(
-        marca, red, estado, evergreen, linea, responsable, desde, hasta
+        marca, red, estado, evergreen, linea, responsable, desde, hasta, origen
     )
     sql = (
         "SELECT COUNT(*) AS n FROM pieza cp "

@@ -20,6 +20,7 @@ from ._comun import (
     _FORMATO_PIPELINE,
     ETAPA_ADMITIR,
     ORIGEN_PIPELINE,
+    ORIGEN_PORTAL,
     VERIFICACION_CADUCADA,
     VERIFICACION_EN_CURSO,
     VERIFICACION_SALTADA,
@@ -176,7 +177,8 @@ def clusters_para_promover(
     (`claude -p`: coste real de tokens), así que antes de competir por plaza cada candidata debe
     superar el umbral — verificación no dudosa, score recalculado ≥ `KENI_PROMOVER_MIN_SCORE` y
     encaje con el vocabulario de la marca ≥ `KENI_PROMOVER_MIN_MARCA` (exentas las curadas por
-    el equipo y las breaking corroboradas). Las que no lo superan se quedan `nuevo` en el pool
+    el equipo y las breaking corroboradas). La FUENTE PROPIA se OMITE aquí: la admite el canal
+    Portal aparte (directo, sin umbral ni verificación). Las que no lo superan se quedan `nuevo` en el pool
     (visibles en el panel con su motivo; el humano puede usarlas a mano y la caducidad las
     expira sola). Se loguea cuántas quedaron bajo el umbral: la verificación es auditable.
 
@@ -208,7 +210,13 @@ def clusters_para_promover(
     clusters = [c for c in clusters if (c.get("verificacion_fuente") or "").strip() in verificacion_estados]
     aptas: list[dict[str, Any]] = []
     bajo_umbral = 0
+    cache_propia: dict[str, bool] = {}
     for c in clusters:
+        # FUENTE PROPIA (portal del cliente): NO la maneja investigación — la admite DIRECTO el
+        # daemon Portal (canal aparte, sin umbral ni verificación). Aquí se omite para no admitirla
+        # dos veces.
+        if _es_fuente_propia(c.get("primera_fuente") or "", cache_propia):
+            continue
         try:
             supera, motivo = noticias_umbral.evaluar(c)
         except Exception:  # noqa: BLE001 -- ante un fallo del umbral, NO se promueve (fail-closed:
@@ -263,9 +271,11 @@ def clusters_pendientes_verificar(marca: str, *, maximo: int) -> list[dict[str, 
     pasan el UMBRAL — las candidatas a las que lanzar la verificación de la fuente (ADR 0011 F3).
 
     El umbral evita gastar `claude -p` verificando historias que jamás se admitirían (score/marca
-    bajo umbral). Las ya `en_curso`/`no_verificado`/`saltada`/`problema` quedan fuera (su verificación ya
-    corrió o está en curso). Ordenadas por score (el pool ya viene rankeado); se recorta a
-    `maximo` (el presupuesto del admision de verificación). Best-effort: [] ante fallo o maximo<=0.
+    bajo umbral). OMITE la FUENTE PROPIA (portal del cliente): no pasa por la fase Verificar —la
+    admite DIRECTO el canal Portal (sin verificación). Las ya `en_curso`/`no_verificado`/`saltada`/
+    `problema` quedan fuera (su verificación ya corrió o está en curso). Ordenadas por score (el
+    pool ya viene rankeado); se recorta a `maximo` (el presupuesto del admision de verificación).
+    Best-effort: [] ante fallo o maximo<=0.
     """
     if maximo <= 0:
         return []
@@ -280,15 +290,20 @@ def clusters_pendientes_verificar(marca: str, *, maximo: int) -> list[dict[str, 
         _log.warning("pipeline: no se pudieron leer historias para verificación (%s)", marca, exc_info=True)
         return []
     pendientes: list[dict[str, Any]] = []
+    cache_propia: dict[str, bool] = {}
     for c in clusters:
         if (c.get("verificacion_fuente") or "").strip():
             continue  # ya verificada / en curso
+        # FUENTE PROPIA: la maneja el canal Portal (directo, sin verificación) -> se omite aquí.
+        if _es_fuente_propia(c.get("primera_fuente") or "", cache_propia):
+            continue
         try:
             supera, _motivo = noticias_umbral.evaluar(c)
         except Exception:  # noqa: BLE001 -- fail-closed: ante fallo del umbral no se verificación
             continue
-        if supera:
-            pendientes.append(c)
+        if not supera:
+            continue
+        pendientes.append(c)
         if len(pendientes) >= maximo:
             break
     return pendientes
@@ -417,7 +432,8 @@ def _nota_de_familia(
 
 
 def crear_tema_de_cluster(
-    cluster: dict[str, Any], items: list[dict[str, Any]], *, claves_vistas: set[str] | None = None
+    cluster: dict[str, Any], items: list[dict[str, Any]], *, claves_vistas: set[str] | None = None,
+    portal: bool = False,
 ) -> dict[str, Any] | None:
     """CI — promueve una HISTORIA (cluster rankeado) a tema del pipeline SIN copy. Marca el cluster usado.
 
@@ -426,6 +442,10 @@ def crear_tema_de_cluster(
     resumen + enlaces corroborantes de sus items) en vez de un único item RSS. La dedup contra el
     contenido reciente de la marca evita re-promover una historia que ya está en el tablero. None
     si se omite (sin marca/título válidos o duplicado), marcando el cluster usado igualmente.
+
+    `portal`: canal PORTAL (marca propia). El tema nace con `origen='portal'` y verificación
+    `saltada` (va DIRECTO a producción, sin pasar por la fase Verificar) y aparece en la pestaña
+    Portal del feed. El resto (nota, imagen de la fuente, copy_pendiente, dedup) es idéntico.
     """
     marca = (cluster.get("marca") or "").strip()
     if not marca or not marcas.es_marca(marca):
@@ -500,7 +520,7 @@ def crear_tema_de_cluster(
             titulo=titulo[:300],
             descripcion=nota[:5000],
             marca=marca,
-            origen=ORIGEN_PIPELINE,
+            origen=ORIGEN_PORTAL if portal else ORIGEN_PIPELINE,
             # LÍNEA del plan con la que nació ('breaking' si lo era): queda EN la pieza
             # (estable frente al GC del pool); la leen el conteo del plan y los horarios.
             categoria=categoria_efectiva(cluster),
@@ -510,7 +530,7 @@ def crear_tema_de_cluster(
             # VERIFICACIÓN HEREDADA (ADR 0011 F3): la verificación corrió sobre la HISTORIA antes de admitir;
             # el tema NACE con el verificacion de su cluster (`no_verificado`/`saltada`), así la fase
             # de copy lo recoge de inmediato y la frontera "verificación = investigación" queda en los datos.
-            verificacion_fuente=(cluster.get("verificacion_fuente") or "").strip(),
+            verificacion_fuente=(VERIFICACION_SALTADA if portal else (cluster.get("verificacion_fuente") or "").strip()),
             verificar_hallazgos=(cluster.get("verificar_hallazgos") or ""),
             # FECHA de la NOTA ORIGINAL: preferimos el `publicado_en` del item más reciente
             # (cuando el medio publicó la nota); si el medio no traía fecha, caemos al
@@ -848,6 +868,61 @@ def promover_clusters_marca(
         f"Promoción de historias — {marcas.etiqueta_de(marca)}: {len(temas)} temas "
         f"de {len(clusters)} historias rankeadas",
     )
+    return temas
+
+
+def clusters_portal(marca: str, *, maximo: int) -> list[dict[str, Any]]:
+    """Historias (`estado='nuevo'`) de la marca de FUENTE PROPIA, para el canal PORTAL.
+
+    SIN umbral ni verificación: el portal del cliente es first-party y se auto-produce TODO. Lee el
+    pool rankeado y se queda con las cuyo origen primario es una fuente `propia=1`. Ordenadas por
+    score (el pool ya viene rankeado); recortadas a `maximo`. Best-effort: [] ante fallo o maximo<=0.
+    """
+    if maximo <= 0:
+        return []
+    limite = max(maximo * 4, 80)
+    try:
+        clusters, _total = repos.listar_noticia_clusters(marca=marca, estado="nuevo", limite=limite)
+    except Exception:  # noqa: BLE001 -- sin pool legible, esta marca no aporta al Portal este tick
+        _log.warning("portal: no se pudieron leer historias propias (%s)", marca, exc_info=True)
+        return []
+    cache_propia: dict[str, bool] = {}
+    propias: list[dict[str, Any]] = []
+    for c in clusters:
+        if _es_fuente_propia(c.get("primera_fuente") or "", cache_propia):
+            propias.append(c)
+            if len(propias) >= maximo:
+                break
+    return propias
+
+
+def promover_portal(marca: str, *, maximo: int) -> list[dict[str, Any]]:
+    """Canal PORTAL — admite DIRECTO las historias de fuente propia de `marca` como temas
+    `origen='portal'` (sin umbral ni verificación, ver `crear_tema_de_cluster(portal=True)`).
+
+    Reusa la misma creación de tema que el pipeline (nota del cluster, imagen de la fuente,
+    `copy_pendiente`, dedup), solo que el tema nace `origen='portal'`/`saltada` y va DIRECTO a
+    producción. Registra la etapa. Devuelve los temas creados. Best-effort por historia.
+    """
+    clusters = clusters_portal(marca, maximo=maximo)
+    if not clusters:
+        return []
+    claves_vistas = _claves_dedup_marca(marca)
+    temas: list[dict[str, Any]] = []
+    for cluster in clusters:
+        try:
+            items = repos.items_de_cluster(cluster.get("id") or "", limite=_MAX_ENLACES_CLUSTER)
+            tema = crear_tema_de_cluster(cluster, items, claves_vistas=claves_vistas, portal=True)
+        except Exception:  # noqa: BLE001 -- una historia problemática no aborta el barrido del Portal
+            _log.exception("portal: fallo al admitir una historia propia (%s)", marca)
+            continue
+        if tema:
+            temas.append(tema)
+    if temas:
+        registrar_etapa(
+            ETAPA_ADMITIR, marca,
+            f"Portal — {marcas.etiqueta_de(marca)}: {len(temas)} temas de fuente propia",
+        )
     return temas
 
 

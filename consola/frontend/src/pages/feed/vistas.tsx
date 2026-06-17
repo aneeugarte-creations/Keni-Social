@@ -6,7 +6,7 @@
  * que ambas superficies enseñen el MISMO trabajo con el MISMO vocabulario.
  */
 import { useQuery } from "@tanstack/react-query";
-import { Clock, LayoutGrid, Send, type LucideIcon } from "lucide-react";
+import { Clock, LayoutGrid, Newspaper, Send, type LucideIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { FILTRO_TODOS } from "@/hooks/filtros-contenido-contexto";
@@ -40,7 +40,7 @@ export const TOPE_PAGINAS_PIEZA = 3 * PAGINAS_POR_LOTE;
  * —el pipeline mueve sola toda pieza completa a la cola de revisión—, así que los borradores
  * son transitorios y caen en "Pendientes" (no son `publicado`) mientras existen.
  */
-export type Vista = "pendiente" | "publicado" | "todo";
+export type Vista = "pendiente" | "publicado" | "todo" | "portal";
 
 export interface VistaFeed {
   id: Vista;
@@ -90,6 +90,21 @@ export const VISTAS: VistaFeed[] = [
       texto: "Esperando piezas del equipo.",
     },
   },
+  {
+    // PORTAL: el «echo» del portal del cliente a redes — los auto-producidos de fuente PROPIA
+    // (cross-marca), separados del flujo normal porque el portal produce mucho. Se filtra por
+    // ORIGEN en servidor (`?origen=portal`, ver `ORIGEN_SERVIDOR_DE_VISTA`), transversal al estado,
+    // así que el predicado de cliente no acota más (la consulta ya trae solo lo del Portal).
+    id: "portal",
+    etiqueta: "Portal",
+    etiquetaCorta: "Portal",
+    icono: Newspaper,
+    filtra: () => true,
+    vacio: {
+      titulo: "El Portal está vacío",
+      texto: "Aún no hay piezas auto-producidas de las fuentes propias.",
+    },
+  },
 ];
 
 /**
@@ -111,6 +126,21 @@ export const ESTADO_SERVIDOR_DE_VISTA: Record<Vista, "pendiente" | "publicado" |
   pendiente: "pendiente",
   publicado: "publicado",
   todo: undefined,
+  // Portal NO particiona por estado: trae sus piezas en CUALQUIER estado, filtradas por ORIGEN.
+  portal: undefined,
+};
+
+/**
+ * CONSULTA DEDICADA por ORIGEN: la pestaña «Portal» filtra en SERVIDOR por `?origen=portal` (los
+ * auto-producidos de fuente propia, cross-marca), transversal al estado. El resto de vistas no
+ * filtran por origen (ven todos los orígenes). Los consumidores del feed pasan este valor a
+ * `api.piezas({ origen })` junto al `estado` de la vista.
+ */
+export const ORIGEN_SERVIDOR_DE_VISTA: Record<Vista, string | undefined> = {
+  pendiente: undefined,
+  publicado: undefined,
+  todo: undefined,
+  portal: "portal",
 };
 
 /**
@@ -175,9 +205,18 @@ export function useConteosFeed(filtros: {
     staleTime: 30_000,
     ...refrescoEnVivo,
   });
+  // Conteo del PORTAL: total exacto de piezas de origen `portal` (cualquier estado), para el badge.
+  const conteoPortal = useQuery({
+    queryKey: claveConteo("origen:portal"),
+    queryFn: ({ signal }) =>
+      api.piezas({ marca, red, linea, responsable, origen: "portal", limite: "1" }, signal),
+    staleTime: 30_000,
+    ...refrescoEnVivo,
+  });
   const totalPendiente = conteoPendiente.data?.paginacion?.total;
   const totalPublicado = conteoPublicado.data?.paginacion?.total;
   const totalRevision = conteoRevision.data?.paginacion?.total;
+  const totalPortal = conteoPortal.data?.paginacion?.total;
   // El badge solo se pinta con su número RESUELTO (nada de parpadeos de 0 mientras carga).
   const conteoVista: Record<Vista, number | undefined> = {
     pendiente: totalPendiente,
@@ -186,6 +225,7 @@ export function useConteosFeed(filtros: {
       totalPendiente != null && totalPublicado != null
         ? totalPendiente + totalPublicado
         : undefined,
+    portal: totalPortal,
   };
   return { totalRevision, conteoVista };
 }

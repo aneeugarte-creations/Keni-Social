@@ -211,7 +211,7 @@ def _feed_pagina_defecto() -> int:
 
 
 async def listar(request: Request) -> Response:
-    """Listado de piezas con filtros `?marca=&red=&estado=&evergreen=` y paginacion.
+    """Listado de piezas con filtros `?marca=&red=&estado=&evergreen=&origen=` y paginacion.
 
     Envelope RETROCOMPATIBLE: mantiene la clave `piezas` (las paginas que solo
     desestructuran esa clave siguen funcionando) y AÑADE `paginacion:{total, limite,
@@ -244,6 +244,9 @@ async def listar(request: Request) -> Response:
     # piezas SIN fecha quedan fuera del rango (ver `_filtros_publicacion`).
     desde = qp.get("desde") or None
     hasta = qp.get("hasta") or None
+    # ORIGEN del contenido padre: la pestaña «Portal» del feed pide `?origen=portal` (los
+    # auto-producidos de fuente propia, cross-marca). Transversal al estado.
+    origen = qp.get("origen") or None
     evergreen = _parsear_bool_query(qp.get("evergreen"))
     limite, desplazamiento = paginacion_query(request)
     cursor = cursor_query(request)
@@ -272,12 +275,12 @@ async def listar(request: Request) -> Response:
     limite = tope if limite is None else min(limite, tope)
     pubs = repos.listar_piezas(
         marca=marca_efectiva, red=red, estado=estado, evergreen=evergreen, linea=linea,
-        responsable=responsable, desde=desde, hasta=hasta,
+        responsable=responsable, desde=desde, hasta=hasta, origen=origen,
         limite=limite, desplazamiento=desplazamiento, cursor=cursor,
     )
     total = repos.contar_piezas(
         marca=marca_efectiva, red=red, estado=estado, evergreen=evergreen, linea=linea,
-        responsable=responsable, desde=desde, hasta=hasta,
+        responsable=responsable, desde=desde, hasta=hasta, origen=origen,
     )
     # SEÑAL DE SIGUIENTE PÁGINA (solo modo feed/keyset, incluida la 1ª página): si la página vino
     # LLENA (tantas filas como `limite`), asumimos que puede haber más y emitimos el cursor de la

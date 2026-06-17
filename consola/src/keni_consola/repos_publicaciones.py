@@ -69,6 +69,7 @@ def listar_piezas(
     responsable: str | None = None,
     desde: str | None = None,
     hasta: str | None = None,
+    origen: str | None = None,
     *,
     limite: int | None = None,
     desplazamiento: int | None = None,
@@ -76,6 +77,7 @@ def listar_piezas(
 ) -> list[dict[str, Any]]:
     # `responsable` ("la lista"): "" = piezas libres (por coger); otro valor = de ese usuario.
     # `desde`/`hasta` (ISO): rango de `fecha_programada` para el calendario (sin fecha = fuera).
+    # `origen`: origen del contenido padre (la pestaña «Portal» del feed pide `origen='portal'`).
     return db.listar_piezas(
         marca=marca,
         red=red,
@@ -85,6 +87,7 @@ def listar_piezas(
         responsable=responsable,
         desde=desde,
         hasta=hasta,
+        origen=origen,
         limite=limite,
         desplazamiento=desplazamiento,
         cursor=cursor,
@@ -100,10 +103,11 @@ def contar_piezas(
     responsable: str | None = None,
     desde: str | None = None,
     hasta: str | None = None,
+    origen: str | None = None,
 ) -> int:
     return db.contar_piezas(
         marca=marca, red=red, estado=estado, evergreen=evergreen, linea=linea,
-        responsable=responsable, desde=desde, hasta=hasta,
+        responsable=responsable, desde=desde, hasta=hasta, origen=origen,
     )
 
 

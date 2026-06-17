@@ -97,6 +97,7 @@ from ._comun import (
     ETAPA_ADMITIR,
     ETAPA_VERIFICAR,
     ORIGEN_PIPELINE,
+    ORIGEN_PORTAL,
     PROMPT_VERIFICACION_ID,
     VERIFICACION_EN_CURSO,
     VERIFICACION_SALTADA,
@@ -185,6 +186,7 @@ __all__ = [
     "_log",
     # constantes de flujo
     "ORIGEN_PIPELINE",
+    "ORIGEN_PORTAL",
     "TIPO_ACTIVIDAD",
     "TIPO_PIPELINE",
     "ETAPA_ADMITIR",

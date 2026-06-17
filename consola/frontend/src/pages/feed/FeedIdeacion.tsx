@@ -49,6 +49,7 @@ import { CadenasLoteContexto, useCadenasLote } from "./use-cadenas-lote";
 import {
   PublicacionPestanaVista,
   ESTADO_SERVIDOR_DE_VISTA,
+  ORIGEN_SERVIDOR_DE_VISTA,
   PAGINAS_POR_LOTE,
   TOPE_PAGINAS_PIEZA,
   useConteosFeed,
@@ -206,6 +207,8 @@ export default function FeedIdeacion() {
   // CONSULTA DEDICADA por estado (ver `ESTADO_SERVIDOR_DE_VISTA` en vistas.tsx): "Pendientes" y
   // "Publicadas" llegan filtradas del servidor (pseudo-estados); "Todas" comparte el listado base.
   const estadoServidor = ESTADO_SERVIDOR_DE_VISTA[vista];
+  // ORIGEN del servidor (la pestaña «Portal» = `origen='portal'`, transversal al estado).
+  const origenServidor = ORIGEN_SERVIDOR_DE_VISTA[vista];
 
   // SCROLL INFINITO (feed social): primera página pequeña (instantánea) por keyset `creado DESC`
   // y más al hacer scroll (sentinel + IntersectionObserver). El backend devuelve
@@ -219,6 +222,7 @@ export default function FeedIdeacion() {
       linea,
       // "todos" identifica la vista "Todas" (sin `estado`); las otras dos van por pseudo-estado.
       estadoServidor ?? "todos",
+      origenServidor ?? "",
     ],
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam, signal }) =>
@@ -228,6 +232,7 @@ export default function FeedIdeacion() {
           red: red === FILTRO_TODOS ? undefined : red,
           linea: linea === FILTRO_TODOS ? undefined : linea,
           estado: estadoServidor,
+          origen: origenServidor,
           // `feed=1` activa el keyset desde la 1ª página (que va sin cursor); `cursor` encadena
           // las siguientes. Así la primera carga es pequeña/instantánea y trae `cursor_siguiente`.
           feed: "1",

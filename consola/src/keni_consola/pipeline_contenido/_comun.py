@@ -32,6 +32,7 @@ __all__ = [
     "_log",
     # constantes de flujo
     "ORIGEN_PIPELINE",
+    "ORIGEN_PORTAL",
     "TIPO_ACTIVIDAD",
     "TIPO_PIPELINE",
     "ETAPA_ADMITIR",
@@ -85,6 +86,13 @@ _log = logging.getLogger("keni_consola.pipeline_contenido")
 # Origen reservado de los BORRADORES producidos por el pipeline (en el `contenido` padre que
 # los NIDA). La dedup de la pasada verificación y la UI distinguen lo del pipeline de lo manual/otro auto.
 ORIGEN_PIPELINE = "pipeline"
+
+# Origen del canal PORTAL: temas auto-producidos a partir de fuentes RSS de MARCA PROPIA (el portal
+# del cliente). Van DIRECTOS a producción —sin verificación (nacen `saltada`)— con la imagen de la
+# propia fuente, y aparecen en la pestaña «Portal» del feed (cross-marca), aparte del flujo normal.
+# La producción los redacta igual que los del pipeline (ver `temas_pipeline`); el resto del ciclo
+# (aprobación/programación) es idéntico al de cualquier pieza.
+ORIGEN_PORTAL = "portal"
 
 # `tipo` con el que se sellan los MARCADORES de etapa (CI/CD/verificación): registros `generaciones`
 # ligeros SIN coste (no llaman a `claude`). Llevan tipo PROPIO `pipeline_etapa` para que la
@@ -675,14 +683,16 @@ def _tiene_copy(tema_id: str) -> bool:
 
 
 def temas_pipeline(marca: str | None = None) -> list[dict[str, Any]]:
-    """TODOS los temas del pipeline (origen `pipeline`), en orden FIFO. [] si la lectura falla.
+    """TODOS los temas auto-producidos (origen `pipeline` o `portal`), en orden FIFO. [] si falla.
 
-    NO recorta: el volumen lo acota la ADMISIÓN (gate serial en curso por marca), así que aquí
-    solo puede haber, como mucho, lo admitido. `listar_publicacion` ya ordena por prioridad y
-    `fecha_objetivo/creado ASC`, así que el más antiguo PENDIENTE se atiende primero (justo).
+    La producción (Redactar/Ilustrar/avance) trata IGUAL los del pipeline normal y los del canal
+    PORTAL (marca propia): ambos se redactan y siguen el ciclo. NO recorta: el volumen lo acota la
+    ADMISIÓN (gate serial en curso por marca), así que aquí solo puede haber, como mucho, lo
+    admitido. `listar_publicacion` ya ordena por prioridad y `fecha_objetivo/creado ASC`, así que el
+    más antiguo PENDIENTE se atiende primero (justo).
     """
     try:
         items = repos.listar_publicacion(marca=marca)
     except Exception:  # noqa: BLE001 -- sin temas legibles, el barrido no hace nada
         return []
-    return [it for it in items if (it.get("origen") or "") == ORIGEN_PIPELINE]
+    return [it for it in items if (it.get("origen") or "") in (ORIGEN_PIPELINE, ORIGEN_PORTAL)]

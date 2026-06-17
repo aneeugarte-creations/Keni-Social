@@ -68,6 +68,7 @@ BARRIBLES = frozenset({
     "alertas_rendimiento",
     "investigacion",
     "produccion",
+    "portal",
 })
 
 # GRUPO ("motor"/papel) de cada daemon: clasifica los daemons para el dashboard de
@@ -80,7 +81,7 @@ BARRIBLES = frozenset({
 # Un daemon registrado que NO esté en ningún conjunto cae a "infra" por defecto (ver
 # `grupo_de`): al añadir un daemon nuevo, clasifícalo aquí o asume que se pinta como infra.
 GRUPO_INVESTIGACION = frozenset({"ingesta", "trends", "algoritmos", "investigacion"})
-GRUPO_PRODUCCION = frozenset({"produccion"})
+GRUPO_PRODUCCION = frozenset({"produccion", "portal"})
 GRUPO_FLUJO = frozenset({"comercial"})
 GRUPO_INFRA = frozenset({
     "metricas",
@@ -120,6 +121,7 @@ GASTA_TOKENS = frozenset({"investigacion", "produccion"})
 _CLASE_MOTOR: dict[str, tuple[str, str | None]] = {
     "investigacion": ("ia", "investigacion"),
     "produccion": ("ia", "produccion"),
+    "portal": ("maquina", "produccion"),
     "ingesta": ("maquina", "investigacion"),
     "trends": ("maquina", "investigacion"),
     "algoritmos": ("maquina", "investigacion"),

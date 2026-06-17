@@ -44,6 +44,8 @@ __all__ = [
     "_ejecutar_investigacion",
     "ejecutar_produccion",
     "_ejecutar_produccion",
+    "ejecutar_portal",
+    "_ejecutar_portal",
     "ejecutar_verificar_clusters",
     "ejecutar_redactar",
     "ejecutar_sugerir_hashtags",
@@ -52,6 +54,7 @@ __all__ = [
     "_intervalo_segundos",
     "_intervalo_investigacion_segundos",
     "_intervalo_produccion_segundos",
+    "_intervalo_portal_segundos",
     "iniciar_pipeline",
 ]
 
@@ -67,11 +70,13 @@ __all__ = [
 # (combinado) sigue existiendo para el disparo a demanda y los tests: corre los dos en orden.
 _LOCK_INVESTIGACION = "pipeline_investigacion"
 _LOCK_PRODUCCION = "pipeline_produccion"
+_LOCK_PORTAL = "pipeline_portal"
 
 # Nombres de los DOS loops en `daemon_latidos` (= los que `iniciar_pipeline` arranca y que
 # `latidos.BARRIBLES` declara): el destino del barrido FORZADO cross-proceso.
 _DAEMON_INVESTIGACION = "investigacion"
 _DAEMON_PRODUCCION = "produccion"
+_DAEMON_PORTAL = "portal"
 
 # Categoría del plan con la que nace una última hora (ver `_admitir.categoria_efectiva`).
 _CATEGORIA_BREAKING = "breaking"
@@ -129,6 +134,41 @@ def ejecutar_produccion() -> dict[str, Any]:
             _log.debug("producción: otro barrido en curso; se omite este.")
             return {"lanzados": [], "sugeridos": [], "artes": [], "avances": []}
         return _ejecutar_produccion()
+
+
+def ejecutar_portal() -> dict[str, Any]:
+    """Un TICK del canal PORTAL: admite DIRECTO las historias de fuente PROPIA como temas
+    `origen='portal'` (sin umbral ni verificación). La producción normal las redacta luego
+    (`temas_pipeline` las incluye). Single-flight con su propio lock (`pipeline_portal`),
+    independiente de investigación/producción. Devuelve `{temas}`."""
+    from .. import db
+
+    with db.lock_barrido(_LOCK_PORTAL) as ok:
+        if not ok:
+            _log.debug("portal: otro barrido en curso; se omite este.")
+            return {"temas": []}
+        return _ejecutar_portal()
+
+
+def _ejecutar_portal() -> dict[str, Any]:
+    """Cuerpo del canal PORTAL (bajo el single-flight de `ejecutar_portal`).
+
+    Por marca con Recolectar activo, admite las historias de fuente PROPIA del pool como temas
+    `origen='portal'`/`saltada` (cross-marca: TODO el contenido propio va al Portal, sin pasar por
+    verificación). Best-effort por marca. Despierta producción si admitió algo. Devuelve `{temas}`.
+    """
+    temas: list[dict[str, Any]] = []
+    maximo = config.pipeline_max()
+    for marca in marcas.ids():
+        if not config.etapa_activa(config.ENV_PIPELINE_RECOLECTAR, marca):
+            continue
+        try:
+            temas.extend(_admitir.promover_portal(marca, maximo=maximo))
+        except Exception:  # noqa: BLE001 -- una marca problemática no aborta el barrido del Portal
+            _log.exception("portal: fallo admitiendo la marca %s", marca)
+    if temas:
+        _despertar_daemon(_DAEMON_PRODUCCION)  # hay copy nuevo que redactar
+    return {"temas": temas}
 
 
 def ejecutar_barrido() -> dict[str, Any]:
@@ -240,12 +280,9 @@ def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[
     auto-produce sin verificar). Best-effort por historia; `ColaLlenaError` corta la verificación de
     esa marca (el siguiente tick reintenta). Devuelve los verificados (`{id, gen_id, verificacion_fuente}`).
 
-    FAST PATH de MARCA PROPIA: una historia cuyo ORIGEN es el portal propio (su fuente primaria
-    tiene `fuentes_rss.propia=1`) YA viene verificada por la REDACCIÓN del portal; se SALTA la
-    verificación `claude -p` (se marca `saltada`) y la admisión la promueve igual —directa al feed—,
-    también con la Validación OFF para la marca. Las historias de fuentes AJENAS de la misma marca
-    sí pasan por verificación. El interruptor es el propio flag `propia` del feed (`propia=0` la
-    re-mete en la cola de verificación).
+    MARCA PROPIA: las historias de fuente propia (`fuentes_rss.propia=1`) NO pasan por aquí —
+    `clusters_pendientes_verificar` ya las omite—: las admite DIRECTO el canal Portal (sin
+    verificación), aparte. Esta fase solo verifica las historias de fuentes AJENAS.
     """
     if autor is None:
         autor = _ref._autor_pipeline()
@@ -271,23 +308,9 @@ def ejecutar_verificar_clusters(*, autor: dict[str, str] | None = None) -> list[
         if not pendientes:
             continue
         validacion_on = config.etapa_activa(config.ENV_PIPELINE_VERIFICAR, marca)
-        # Cache por barrido del lookup `fuentes_rss.propia` (memoiza por fuente_id; ver `_es_fuente_propia`).
-        cache_propia: dict[str, bool] = {}
         for cluster in pendientes:
             cid = (cluster.get("id") or "").strip()
             if not cid:
-                continue
-            # FAST PATH de marca PROPIA: si la fuente PRIMARIA de la historia es del portal propio,
-            # ya viene verificada por su redacción -> se marca `saltada` (sin `claude -p`) y la
-            # admisión la promueve directa al feed, también con la Validación OFF.
-            es_propia = _admitir._es_fuente_propia(cluster.get("primera_fuente") or "", cache_propia)
-            if es_propia:
-                try:
-                    repos.marcar_cluster_verificacion(cid, VERIFICACION_SALTADA)
-                except Exception:  # noqa: BLE001 -- un fallo al marcar saltada no mata la fase
-                    _log.exception("pipeline: fallo al marcar verificación de cluster saltada (%s).", cid)
-                else:
-                    verificados.append({"id": cid, "gen_id": "", "verificacion_fuente": VERIFICACION_SALTADA})
                 continue
             # Validación OFF para la marca: la historia AJENA NO se verifica ni se admite; queda sin
             # verificar en el pool para que el humano la decida (nada ajeno se auto-produce sin verificar).
@@ -535,6 +558,11 @@ def _intervalo_produccion_segundos() -> float:
     return _TICK_PRODUCCION_SEGUNDOS
 
 
+def _intervalo_portal_segundos() -> float:
+    """Cadencia del tick del canal PORTAL (constante; el volumen lo regula el cap por barrido)."""
+    return _TICK_PRODUCCION_SEGUNDOS
+
+
 def _intervalo_segundos() -> float:
     """Alias retro de la cadencia del flujo continuo (= investigación)."""
     return _TICK_SEGUNDOS
@@ -573,10 +601,21 @@ def _trabajo_produccion(res: dict[str, Any]) -> bool:
     )
 
 
+def _resumen_portal(res: dict[str, Any]) -> str:
+    """Resumen corto del barrido del canal PORTAL para el historial (temas de fuente propia)."""
+    n = len(res.get("temas") or [])
+    return f"{n} tema(s) de Portal" if n else "sin novedad"
+
+
+def _trabajo_portal(res: dict[str, Any]) -> bool:
+    """¿El barrido del PORTAL hizo algo? (señal de backoff: admitió temas de fuente propia)."""
+    return bool(res) and bool(res.get("temas") or [])
+
+
 def iniciar_pipeline(
     intervalo_segundos: float | None = None,
-) -> tuple[threading.Thread, threading.Thread]:
-    """Arranca los DOS hilos demonio del pipeline de contenido (ADR 0011 F3, GATEADOS EN VIVO).
+) -> tuple[threading.Thread, threading.Thread, threading.Thread]:
+    """Arranca los TRES hilos demonio del pipeline de contenido (ADR 0011 F3, GATEADOS EN VIVO).
 
     Pensado para el servidor real (`daemons`/`__main__`), NO para `crear_app` (los tests no lo
     arrancan, igual que el resto de daemons). Arranca un hilo por proceso:
@@ -585,14 +624,19 @@ def iniciar_pipeline(
       • PRODUCCIÓN — gate `alguna_etapa_produccion_activa` (siempre True bajo la máquina: el
         AVANCE de borradores completos a revisión corre incondicional, así nunca se duerme con
         la máquina ON). Copy/Arte se auto-gatean dentro del barrido por su propio toggle.
+      • PORTAL — gate Recolectar bajo la máquina: admite DIRECTO las historias de fuente propia
+        como temas `origen='portal'` (sin umbral ni verificación); la producción las redacta.
     Apagar/encender en runtime aplica sin reiniciar. Los hilos son daemon; un fallo de barrido se
-    loguea y NO los mata. Devuelve `(hilo_investigacion, hilo_produccion)`.
+    loguea y NO los mata. Devuelve `(hilo_investigacion, hilo_produccion, hilo_portal)`.
     """
     intervalo_inv = (
         intervalo_segundos if intervalo_segundos is not None else _intervalo_investigacion_segundos()
     )
     intervalo_prod = (
         intervalo_segundos if intervalo_segundos is not None else _intervalo_produccion_segundos()
+    )
+    intervalo_portal = (
+        intervalo_segundos if intervalo_segundos is not None else _intervalo_portal_segundos()
     )
 
     def bucle_investigacion() -> None:
@@ -619,18 +663,35 @@ def iniciar_pipeline(
             backoff_max_seg=_BACKOFF_MAX_SEGUNDOS,
         )
 
+    def bucle_portal() -> None:
+        daemon_util.bucle_gateado(
+            activo_fn=config.gate_maquina(config.recolectar_activo),
+            intervalo_seg_fn=lambda: intervalo_portal,
+            sweep_fn=ejecutar_portal,
+            log=_log,
+            nombre="portal",
+            resumen_fn=_resumen_portal,
+            trabajo_fn=_trabajo_portal,
+            backoff_max_seg=_BACKOFF_MAX_SEGUNDOS,
+        )
+
     hilo_inv = threading.Thread(
         target=bucle_investigacion, name="pipeline-investigacion-daemon", daemon=True
     )
     hilo_prod = threading.Thread(
         target=bucle_produccion, name="pipeline-produccion-daemon", daemon=True
     )
+    hilo_portal = threading.Thread(
+        target=bucle_portal, name="pipeline-portal-daemon", daemon=True
+    )
     hilo_inv.start()
     hilo_prod.start()
+    hilo_portal.start()
     estado = "ACTIVA" if config.maquina_activa() else "EN ESPERA (máquina apagada)"
     _log.info(
-        "Pipeline de contenido %s — investigación cada %.0fs, producción cada %.0fs "
-        "(backoff hasta %.0fs en vacío; max/barrido=%d).",
-        estado, intervalo_inv, intervalo_prod, _BACKOFF_MAX_SEGUNDOS, config.pipeline_max(),
+        "Pipeline de contenido %s — investigación cada %.0fs, producción cada %.0fs, "
+        "portal cada %.0fs (backoff hasta %.0fs en vacío; max/barrido=%d).",
+        estado, intervalo_inv, intervalo_prod, intervalo_portal, _BACKOFF_MAX_SEGUNDOS,
+        config.pipeline_max(),
     )
-    return hilo_inv, hilo_prod
+    return hilo_inv, hilo_prod, hilo_portal

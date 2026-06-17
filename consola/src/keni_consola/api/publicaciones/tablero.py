@@ -91,7 +91,8 @@ async def listar(request: Request) -> Response:
 
     Filtros opcionales por query: `clase`, `flujo`, `marca` (workspace), `evento_id`
     (cobertura de un evento de la rota), `responsable_id`, `estado`, `desde`, `hasta`
-    (por `fecha_objetivo`), `etiqueta` (id de una etiqueta).
+    (por `fecha_objetivo`), `etiqueta` (id de una etiqueta), `origen` (p. ej. la pestaña
+    «Portal» = `origen='portal'`, los auto-producidos de fuente propia cross-marca).
     """
     q = request.query_params
     items = repos.listar_publicacion(
@@ -115,6 +116,11 @@ async def listar(request: Request) -> Response:
     if etiqueta_id:
         con_etiqueta = repos.ids_contenido_con_etiqueta(etiqueta_id)
         items = [it for it in items if it["id"] in con_etiqueta]
+    # Filtro por ORIGEN (la pestaña «Portal» pide `?origen=portal`): acota en memoria a los temas
+    # de ese origen (los del canal Portal = auto-producidos de fuente propia).
+    origen = q.get("origen") or None
+    if origen:
+        items = [it for it in items if (it.get("origen") or "") == origen]
     # Una sola lectura de las plataformas y etiquetas, agrupadas por contenido. Si el GET
     # acota por `?marca=` (workspace), el filtro se empuja al SQL via la marca denormalizada
     # de `pieza`.

@@ -15,6 +15,7 @@ import { api, mensajeError } from "@/lib/api";
 import {
   PublicacionPestanaVista,
   ESTADO_SERVIDOR_DE_VISTA,
+  ORIGEN_SERVIDOR_DE_VISTA,
   useConteosFeed,
   VISTAS,
   vistaDesdeParam,
@@ -29,7 +30,7 @@ import type { FiltrosPiezas, OpcionesPiezas, Pieza } from "@/types";
 const TAM_PAGINA = 30;
 
 /** Filtros base de la LISTA (sin paginación): marca/red/línea/estado activos. */
-type FiltrosBase = Pick<FiltrosPiezas, "marca" | "red" | "linea" | "estado">;
+type FiltrosBase = Pick<FiltrosPiezas, "marca" | "red" | "linea" | "estado" | "origen">;
 
 /**
  * Parámetros de UNA página del FEED (lista, keyset/scroll infinito). La 1ª página llega con
@@ -169,6 +170,8 @@ function Cuerpo({
   const [searchParams, setSearchParams] = useSearchParams();
   const vista = vistaDesdeParam(searchParams.get("vista"), "pendiente");
   const estadoVista = calendario ? undefined : ESTADO_SERVIDOR_DE_VISTA[vista];
+  // ORIGEN del servidor (la pestaña «Portal»); en modo calendario no se filtra por origen.
+  const origenVista = calendario ? undefined : ORIGEN_SERVIDOR_DE_VISTA[vista];
   const cambiarVista = (v: Vista) => {
     setSearchParams(
       (prev) => {
@@ -185,6 +188,7 @@ function Cuerpo({
     red: red === FILTRO_TODOS ? undefined : red,
     linea: linea === FILTRO_TODOS ? undefined : linea,
     estado: estadoVista,
+    origen: origenVista,
   };
   // Conteos exactos para los badges de las pestañas (mismos que el feed; ver vistas.tsx).
   const { conteoVista } = useConteosFeed(filtrosBase);
@@ -236,6 +240,7 @@ function Cuerpo({
       filtrosBase.red ?? "",
       filtrosBase.linea ?? "",
       estadoVista ?? "todos",
+      origenVista ?? "",
     ],
     // Primera página: sin cursor (pero con `feed: "1"` para activar el modo keyset).
     initialPageParam: "",

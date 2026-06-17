@@ -91,8 +91,8 @@ def _inicializar_cluster(
     que llaman DIRECTO a la promoción (sin pasar por la fase Verificar) deben inicializar el cluster ya
     verificado (`VERIFICACION_VERIFICADO`) — es el camino real, no el atajo sin filtro.
 
-    `primera_fuente`: id de la fuente PRIMARIA de la historia (para el fast path de marca propia,
-    que mira si esa fuente es `propia`). Por defecto "" (sin fuente -> no es propia).
+    `primera_fuente`: id de la fuente PRIMARIA de la historia (el canal Portal mira si esa fuente
+    es `propia`). Por defecto "" (sin fuente -> no es propia).
     """
     from datetime import UTC, datetime
 
@@ -575,12 +575,9 @@ def test_verificar_cluster_acotada_por_el_admision(entorno, monkeypatch):
     assert verificados[0]["id"] == "c0"
 
 
-def test_fast_path_marca_propia_salta_verificacion(entorno, monkeypatch):
-    """FAST PATH marca PROPIA: una historia cuya fuente PRIMARIA es del portal propio se marca
-    `saltada` (sin `claude -p`) AUNQUE la Validación esté ON; las de fuentes AJENAS sí se verifican.
-
-    El equipo editorial del portal ya hizo la investigación, así que estas piezas van directas
-    a producción/feed; el flag `propia` del feed es el interruptor."""
+def test_verificar_clusters_omite_fuente_propia(entorno, monkeypatch):
+    """La fase Verificar OMITE las historias de fuente PROPIA (las maneja el canal Portal aparte):
+    quedan sin verificar (''); solo las AJENAS pasan por verificación."""
     monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
     monkeypatch.setenv("KENI_PIPELINE_VERIFICAR", "1")  # Validación ON para la marca
     monkeypatch.setenv("KENI_PIPELINE_EN_PROCESO_MAX", "5")
@@ -593,10 +590,32 @@ def test_fast_path_marca_propia_salta_verificacion(entorno, monkeypatch):
 
     pc.ejecutar_verificar_clusters(autor=None)
 
-    # La PROPIA salta la verificación (fast path), pese a que la Validación está ON.
-    assert repos.obtener_noticia_cluster("c-propia")["verificacion_fuente"] == pc.VERIFICACION_SALTADA
-    # La AJENA pasa por `claude -p` (lanzador síncrono de tests -> no_verificado).
+    # La PROPIA no la toca Verificar (la maneja el canal Portal): sigue sin verificar.
+    assert (repos.obtener_noticia_cluster("c-propia").get("verificacion_fuente") or "") == ""
+    # La AJENA pasa por `claude -p` (lanzador síncrono de tests -> verificado).
     assert repos.obtener_noticia_cluster("c-ajena")["verificacion_fuente"] == pc.VERIFICACION_VERIFICADO
+
+
+def test_portal_admite_fuente_propia_directo(entorno, monkeypatch):
+    """Canal PORTAL: admite DIRECTO la historia de fuente PROPIA como tema `origen='portal'`/`saltada`
+    aunque su score sea muy BAJO (sin umbral ni verificación); la AJENA no entra al Portal."""
+    monkeypatch.setenv("KENI_PIPELINE_RECOLECTAR", "1")
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    propia = repos.crear_fuente_rss("Portal propio", _URL_OK, marca="unotv", propia=True)
+    ajena = repos.crear_fuente_rss("Tercero", "https://otro.test/feed.xml", marca="unotv")
+    _inicializar_cluster("c-propia", titulo="Nota del portal", score=0.05, primera_fuente=propia["id"])
+    _inicializar_cluster("c-ajena", titulo="Nota de tercero", score=0.05, primera_fuente=ajena["id"])
+
+    res = pc.ejecutar_portal()
+
+    titulos = [t["titulo"] for t in res["temas"]]
+    assert "Nota del portal" in titulos and "Nota de tercero" not in titulos
+    tema = next(t for t in pc.temas_pipeline() if t["titulo"] == "Nota del portal")
+    assert tema["origen"] == pc.ORIGEN_PORTAL
+    assert tema["verificacion_fuente"] == pc.VERIFICACION_SALTADA  # directo, sin verificar
+    # La propia queda `usado` (no se re-admite); la ajena sigue en el pool.
+    assert repos.obtener_noticia_cluster("c-propia")["estado"] == "usado"
+    assert repos.obtener_noticia_cluster("c-ajena")["estado"] == "nuevo"
 
 
 def test_copy_fallido_se_reintenta_tras_el_backoff(entorno, monkeypatch):

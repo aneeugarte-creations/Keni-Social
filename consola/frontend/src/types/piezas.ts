@@ -166,6 +166,8 @@ export interface FiltrosPiezas {
   marca?: string;
   red?: string;
   estado?: string;
+  /** Origen del contenido padre (la pestaña «Portal» del feed pide `origen='portal'`). */
+  origen?: string;
   /** Id de la línea editorial (etiqueta vertical) por la que filtrar. */
   linea?: string;
   /**
