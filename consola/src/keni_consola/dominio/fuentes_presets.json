@@ -4,11 +4,11 @@
     "nombre": "UnoTV — Portal Nacional",
     "url": "https://unotv.com/feed/nacional.xml",
     "categoria": "mx",
-    "marca_sugerida": "unotv",
+    "marca_sugerida": "",
     "linea_sugerida": "Noticias México",
     "idioma": "es",
     "region": "MX",
-    "descripcion": "Sección nacional del portal de UnoTV (fuente propia)."
+    "descripcion": "Portal de noticias de UnoTV (fuente de casa, compartida: la relevancia reparte cada nota a su marca)."
   },
   {
     "id": "unotv-internacional",
@@ -548,5 +548,16 @@
     "idioma": "es",
     "region": "MX",
     "descripcion": "Cultura, arte y estilo de vida en español de México (contenido completo)."
+  },
+  {
+    "id": "fundacion-unotv-deportes",
+    "nombre": "UnoTV — Deportes",
+    "url": "https://www.unotv.com/feed/deportes.xml",
+    "categoria": "otros-deportes",
+    "marca_sugerida": "fundacion",
+    "linea_sugerida": "Deporte social",
+    "idioma": "es",
+    "region": "MX",
+    "descripcion": "Sección de deportes de UnoTV (fuente de casa, MX nativo); la relevancia surte el ángulo de deporte social y Mundial."
   }
 ]
