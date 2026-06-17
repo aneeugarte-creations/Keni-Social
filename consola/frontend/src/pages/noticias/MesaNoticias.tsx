@@ -10,7 +10,7 @@
  */
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Loader2, Newspaper, Target } from "lucide-react";
+import { ChevronDown, ChevronRight, Layers, Loader2, Newspaper, Target } from "lucide-react";
 import * as React from "react";
 import { Link } from "react-router-dom";
 
@@ -21,7 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api, mensajeError } from "@/lib/api";
 import { etiquetaLinea } from "@/lib/lineas";
 import { cn } from "@/lib/utils";
-import type { MesaLinea, RespuestaMesa } from "@/types";
+import type { Historia, MesaLinea, RespuestaMesa } from "@/types";
 
 import { TarjetaHistoria } from "./TarjetaHistoria";
 
@@ -82,6 +82,95 @@ function BarraPlanDia({ data, nombre }: { data: RespuestaMesa; nombre: string | 
   );
 }
 
+// ── Agrupamiento por macro-evento ──────────────────────────────────────────────
+
+/**
+ * Un bloque de la lista: o una historia suelta (sin `tema_macro`), o un grupo de
+ * sub-historias que comparten el mismo macro-evento.
+ */
+export type BloqueLista =
+  | { tipo: "suelta"; historia: Historia }
+  | { tipo: "grupo"; tema: string; historias: Historia[] };
+
+/**
+ * Reparte la lista en bloques conservando el orden de ranking: las historias sin
+ * macro-evento quedan sueltas en su sitio; las que comparten `tema_macro` se juntan en
+ * un grupo anclado en la POSICIÓN de la primera que aparece (no se reordena el resto).
+ * Un macro con una sola historia NO forma grupo: se muestra suelta (con su badge).
+ */
+export function agruparPorMacro(historias: Historia[]): BloqueLista[] {
+  const conteo = new Map<string, number>();
+  for (const h of historias) {
+    const t = h.tema_macro?.trim();
+    if (t) conteo.set(t, (conteo.get(t) ?? 0) + 1);
+  }
+  const bloques: BloqueLista[] = [];
+  const indiceGrupo = new Map<string, number>();
+  for (const h of historias) {
+    const t = h.tema_macro?.trim();
+    if (t && (conteo.get(t) ?? 0) > 1) {
+      const yaVisto = indiceGrupo.get(t);
+      if (yaVisto === undefined) {
+        indiceGrupo.set(t, bloques.length);
+        bloques.push({ tipo: "grupo", tema: t, historias: [h] });
+      } else {
+        (bloques[yaVisto] as { historias: Historia[] }).historias.push(h);
+      }
+    } else {
+      bloques.push({ tipo: "suelta", historia: h });
+    }
+  }
+  return bloques;
+}
+
+/**
+ * Renderiza una lista de historias agrupando las que comparten macro-evento bajo un
+ * sub-encabezado con su nombre y un conteo ("Cumbre del G7 · 4 historias").
+ */
+function ListaHistorias({
+  historias,
+  clave,
+}: {
+  historias: Historia[];
+  clave: readonly unknown[];
+}) {
+  const bloques = React.useMemo(() => agruparPorMacro(historias), [historias]);
+  return (
+    <div className="space-y-2">
+      {bloques.map((b) =>
+        b.tipo === "suelta" ? (
+          <TarjetaHistoria key={b.historia.id} historia={b.historia} clavesAInvalidar={[clave]} />
+        ) : (
+          <div
+            key={`macro:${b.tema}`}
+            className="space-y-2 rounded-lg border border-keni-200 bg-keni-50/40 p-2"
+            data-testid="grupo-macro"
+            data-tema-macro={b.tema}
+          >
+            <div className="flex items-center gap-1.5 px-1 text-xs font-semibold text-keni-700">
+              <Layers className="h-3.5 w-3.5" />
+              <span>{b.tema}</span>
+              <span className="font-normal tabular-nums text-muted-foreground">
+                · {b.historias.length} historias
+              </span>
+            </div>
+            <div className="space-y-2">
+              {b.historias.map((h) => (
+                <TarjetaHistoria
+                  key={h.id}
+                  historia={h}
+                  clavesAInvalidar={[clave]}
+                  ocultarTemaMacro
+                />
+              ))}
+            </div>
+          </div>
+        ),
+      )}
+    </div>
+  );
+}
+
 // ── Sección por línea ─────────────────────────────────────────────────────────
 
 function SeccionLinea({
@@ -117,11 +206,7 @@ function SeccionLinea({
       {linea.historias.length === 0 ? (
         <p className="text-xs text-muted-foreground">Sin candidatas por ahora.</p>
       ) : (
-        <div className="space-y-2">
-          {linea.historias.map((h) => (
-            <TarjetaHistoria key={h.id} historia={h} clavesAInvalidar={[clave]} />
-          ))}
-        </div>
+        <ListaHistorias historias={linea.historias} clave={clave} />
       )}
     </section>
   );
@@ -218,10 +303,8 @@ export function MesaNoticias({ marca, nombre }: { marca: string; nombre: string 
             Fuera del plan · {fuera.en_pool} candidata{fuera.en_pool !== 1 ? "s" : ""}
           </button>
           {fueraAbierto && (
-            <div className="mt-2 space-y-2">
-              {fuera.historias.map((h) => (
-                <TarjetaHistoria key={h.id} historia={h} clavesAInvalidar={[clave]} />
-              ))}
+            <div className="mt-2">
+              <ListaHistorias historias={fuera.historias} clave={clave} />
             </div>
           )}
         </section>

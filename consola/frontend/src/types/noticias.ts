@@ -183,6 +183,12 @@ export interface Historia {
   titulo_original?: string;
   /** Código de idioma del cluster antes de traducir (p. ej. 'en', 'pt'). */
   idioma?: string;
+  /**
+   * Nombre del MACRO-EVENTO al que pertenece la historia (p. ej. "Cumbre del G7").
+   * Cuando varias historias comparten el mismo valor son sub-historias de un mismo gran
+   * evento y la UI las agrupa. '' o ausente = sin macro-evento (se muestra suelta).
+   */
+  tema_macro?: string;
 }
 
 /** Respuesta paginada de `GET /api/noticias/historias`. */
