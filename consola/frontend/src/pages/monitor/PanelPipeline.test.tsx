@@ -50,8 +50,6 @@ vi.mock("@/lib/api", () => ({
             aj("KENI_PRODUCCION", "Producción"),
             aj("KENI_PIPELINE_REDACTAR", "Redactar"),
             aj("KENI_PIPELINE_ILUSTRAR", "Ilustrar"),
-            aj("KENI_AUTO_PREAPROBACION", "Aprobar"),
-            aj("KENI_PUBLICAR_REAL", "Publicar"),
           ],
         },
       ],
@@ -127,28 +125,22 @@ describe("PanelPipeline · toggles independientes", () => {
 });
 
 describe("PanelPipeline · solo las filas con contenido son clicables", () => {
-  it("una fila con contenido (Redactar) navega; una con solo toggle (Publicar) no es clicable pero mantiene su switch", async () => {
+  it("las fases con contenido (Redactar, Ilustrar) son clicables y navegan a su detalle", async () => {
     const onAbrir = renderProduccion();
-    // Espera a que el catálogo cargue (Publicar pinta su switch).
+    // Espera a que el catálogo cargue (Redactar pinta su switch).
     expect(
-      await screen.findByRole("switch", { name: /Publicar \(switch de la fase Publicar\)/ }),
+      await screen.findByRole("switch", { name: /Redactar \(switch de la fase Redactar\)/ }),
     ).toBeInTheDocument();
 
     // Redactar tiene prompt + contexto + cola + etapa: su fila es clicable (role button) y navega.
-    const redactar = within(filaDe("Redactar")).getByRole("button");
-    redactar.click();
+    within(filaDe("Redactar")).getByRole("button").click();
     expect(onAbrir).toHaveBeenCalledTimes(1);
     expect(onAbrir.mock.calls[0][0].nombre).toBe("Redactar");
 
-    // Publicar solo tiene su switch (sin prompt/contexto/logs/cola): su fila NO es clicable…
-    const fila = filaDe("Publicar");
-    expect(within(fila).queryByRole("button")).not.toBeInTheDocument();
-    // …pero sigue mostrando su interruptor.
-    expect(
-      within(fila).getByRole("switch", { name: /Publicar \(switch de la fase Publicar\)/ }),
-    ).toBeInTheDocument();
-    // …y su aviso rojo de precaución (postea de verdad, no en simulación).
-    expect(within(fila).getByText("Publica de verdad")).toBeInTheDocument();
+    // Ilustrar también tiene prompt + cola + etapa: igualmente clicable y navega.
+    within(filaDe("Ilustrar")).getByRole("button").click();
+    expect(onAbrir).toHaveBeenCalledTimes(2);
+    expect(onAbrir.mock.calls[1][0].nombre).toBe("Ilustrar");
   });
 
   it("ninguna fila vacía: ya no se pintan Agrupar (Investigación) ni Revisar (Producción)", () => {
