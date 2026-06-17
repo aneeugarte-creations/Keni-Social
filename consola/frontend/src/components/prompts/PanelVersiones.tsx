@@ -257,7 +257,7 @@ export function PanelVersiones({
                 )}
               >
                 <span className="block h-2 w-2 shrink-0 rounded-full bg-keni" aria-hidden />
-                <span className="min-w-0 flex-1 truncate font-medium">Tu borrador</span>
+                <span className="min-w-0 flex-1 truncate text-sm font-medium">Tu borrador</span>
                 <Badge variant="aviso" className="shrink-0 rounded-full px-2">
                   Cambios sin publicar
                 </Badge>
@@ -304,7 +304,7 @@ export function PanelVersiones({
                   )}
                   aria-label={esEnVivo ? "En vivo" : undefined}
                 />
-                <span className="min-w-0 flex-1 truncate font-medium" title={v.sha_corto}>
+                <span className="min-w-0 flex-1 truncate text-sm font-medium" title={v.sha_corto}>
                   {nombre}
                 </span>
                 <span
