@@ -372,5 +372,49 @@
     "idioma": "es",
     "region": "MX",
     "descripcion": "Feed de FOX Sports México (RSS verificado)."
+  },
+  {
+    "id": "fundacion-good-news",
+    "nombre": "Good News Network",
+    "url": "https://www.goodnewsnetwork.org/feed/",
+    "categoria": "internacional",
+    "marca_sugerida": "fundacion",
+    "linea_sugerida": "Buenas noticias",
+    "idioma": "en",
+    "region": "GLOBAL",
+    "descripcion": "Buenas noticias e historias de superación (contenido completo; se traduce y tropicaliza a MX)."
+  },
+  {
+    "id": "fundacion-mongabay",
+    "nombre": "Mongabay — Medio ambiente",
+    "url": "https://news.mongabay.com/feed/",
+    "categoria": "internacional",
+    "marca_sugerida": "fundacion",
+    "linea_sugerida": "Medio ambiente",
+    "idioma": "en",
+    "region": "GLOBAL",
+    "descripcion": "Periodismo de conservación y medio ambiente (contenido completo; se traduce a MX)."
+  },
+  {
+    "id": "fundacion-muy-interesante",
+    "nombre": "Muy Interesante",
+    "url": "https://muyinteresante.okdiario.com/feed/",
+    "categoria": "entretenimiento",
+    "marca_sugerida": "fundacion",
+    "linea_sugerida": "Ciencia y curiosidad",
+    "idioma": "es",
+    "region": "ES",
+    "descripcion": "Divulgación de ciencia, salud y curiosidad en español, formato asombro (contenido completo)."
+  },
+  {
+    "id": "fundacion-xataka-mx",
+    "nombre": "Xataka México",
+    "url": "https://www.xataka.com.mx/index.xml",
+    "categoria": "mx",
+    "marca_sugerida": "fundacion",
+    "linea_sugerida": "Tecnología y educación digital",
+    "idioma": "es",
+    "region": "MX",
+    "descripcion": "Tecnología y cultura digital en español de México (contenido completo)."
   }
 ]
