@@ -1,8 +1,10 @@
 /**
  * Tests del agrupamiento por macro-evento en la Mesa (`agruparPorMacro`):
  *   - Sin `tema_macro` → todo suelto, en su orden.
- *   - Macro compartido por ≥2 historias → un grupo anclado en la posición de la primera.
- *   - Macro con UNA sola historia → suelta (no forma grupo redundante).
+ *   - Macro compartido por ≥2 historias → un grupo (caja con sub-encabezado) anclado en la
+ *     posición de la primera.
+ *   - Macro con UNA sola historia → suelta: tarjeta normal, sin caja (y, sin badge suelto en
+ *     la tarjeta, sin ninguna marca visual de macro-evento).
  *   - El orden de ranking del resto NO se altera.
  */
 import { describe, expect, it } from "vitest";
@@ -59,13 +61,16 @@ describe("agruparPorMacro", () => {
     expect(bloques[2]).toMatchObject({ tipo: "suelta" });
   });
 
-  it("un macro con UNA sola historia no forma grupo (queda suelta)", () => {
+  it("un macro con UNA sola historia no forma caja: queda suelta (tarjeta normal, sin grupo)", () => {
     const bloques = agruparPorMacro([
       historia("a", { tema_macro: "Evento solitario" }),
       historia("b"),
     ]);
     expect(bloques).toHaveLength(2);
+    // Sin hermanas en la sección NO se crea ningún bloque "grupo" para el macro-evento:
+    // la historia con tema_macro se pinta como una tarjeta suelta más (sin caja).
     expect(bloques.every((b) => b.tipo === "suelta")).toBe(true);
+    expect(bloques.some((b) => b.tipo === "grupo")).toBe(false);
   });
 
   it("varios macros distintos cada uno con sus sub-historias", () => {

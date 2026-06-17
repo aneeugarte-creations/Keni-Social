@@ -37,11 +37,11 @@ function historia(overrides: Partial<Historia> = {}): Historia {
   };
 }
 
-function renderTarjeta(h: Historia, props: { ocultarTemaMacro?: boolean } = {}) {
+function renderTarjeta(h: Historia) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <TarjetaHistoria historia={h} clavesAInvalidar={[["x"]]} {...props} />
+      <TarjetaHistoria historia={h} clavesAInvalidar={[["x"]]} />
     </QueryClientProvider>,
   );
 }
@@ -86,18 +86,8 @@ describe("TarjetaHistoria · badges de Investigación", () => {
     expect(screen.getByTestId("badge-verificacion-rechazada").textContent).toMatch(/Rechazada en la fuente/);
   });
 
-  it("pinta el badge de macro-evento cuando `tema_macro` viene", () => {
+  it("nunca pinta un badge suelto de macro-evento, ni siquiera con `tema_macro` (la caja de grupo lo cubre)", () => {
     renderTarjeta(historia({ tema_macro: "Cumbre del G7" }));
-    expect(screen.getByTestId("badge-tema-macro").textContent).toMatch(/Cumbre del G7/);
-  });
-
-  it("no pinta el badge de macro-evento sin `tema_macro`", () => {
-    renderTarjeta(historia());
-    expect(screen.queryByTestId("badge-tema-macro")).toBeNull();
-  });
-
-  it("oculta el badge de macro-evento con `ocultarTemaMacro` (ya está en el sub-encabezado)", () => {
-    renderTarjeta(historia({ tema_macro: "Cumbre del G7" }), { ocultarTemaMacro: true });
     expect(screen.queryByTestId("badge-tema-macro")).toBeNull();
   });
 });

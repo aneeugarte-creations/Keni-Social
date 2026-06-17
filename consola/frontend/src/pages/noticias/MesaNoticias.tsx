@@ -96,7 +96,7 @@ export type BloqueLista =
  * Reparte la lista en bloques conservando el orden de ranking: las historias sin
  * macro-evento quedan sueltas en su sitio; las que comparten `tema_macro` se juntan en
  * un grupo anclado en la POSICIÓN de la primera que aparece (no se reordena el resto).
- * Un macro con una sola historia NO forma grupo: se muestra suelta (con su badge).
+ * Un macro con una sola historia NO forma grupo: se muestra como tarjeta suelta normal.
  */
 export function agruparPorMacro(historias: Historia[]): BloqueLista[] {
   const conteo = new Map<string, number>();
@@ -156,12 +156,7 @@ function ListaHistorias({
             </div>
             <div className="space-y-2">
               {b.historias.map((h) => (
-                <TarjetaHistoria
-                  key={h.id}
-                  historia={h}
-                  clavesAInvalidar={[clave]}
-                  ocultarTemaMacro
-                />
+                <TarjetaHistoria key={h.id} historia={h} clavesAInvalidar={[clave]} />
               ))}
             </div>
           </div>

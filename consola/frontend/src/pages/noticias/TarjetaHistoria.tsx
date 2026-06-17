@@ -11,7 +11,6 @@ import {
   Clock,
   ExternalLink,
   Globe,
-  Layers,
   Loader2,
   ShieldAlert,
   Sparkles,
@@ -52,11 +51,6 @@ export interface PropsTarjetaHistoria {
   onToggleSeleccion?: (checked: boolean) => void;
   /** Vista Descartadas: ofrece "Devolver al pool" en vez de Empujar/Descartar. */
   conRestaurar?: boolean;
-  /**
-   * Oculta el badge de macro-evento (`tema_macro`) cuando la tarjeta ya vive bajo un
-   * sub-encabezado de grupo que muestra el nombre del macro-evento (evita duplicarlo).
-   */
-  ocultarTemaMacro?: boolean;
 }
 
 const COLOR_PRIORIDAD: Record<string, string> = {
@@ -71,7 +65,6 @@ export function TarjetaHistoria({
   seleccionada,
   onToggleSeleccion,
   conRestaurar = false,
-  ocultarTemaMacro = false,
 }: PropsTarjetaHistoria) {
   const queryClient = useQueryClient();
   const [expandida, setExpandida] = React.useState(false);
@@ -307,20 +300,6 @@ export function TarjetaHistoria({
           {/* Fila de meta: marca + resultado de verificación + prioridad + traducción */}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <ChipMarca historia={historia} />
-
-            {/* Macro-evento: marca que esta historia es sub-historia de un gran evento. */}
-            {!ocultarTemaMacro && historia.tema_macro && (
-              <Tooltip label={`Parte del macro-evento «${historia.tema_macro}»`} side="top">
-                <Badge
-                  variant="outline"
-                  className="gap-1 text-xs border-keni-300 text-keni-700"
-                  data-testid="badge-tema-macro"
-                >
-                  <Layers className="h-3 w-3" />
-                  {historia.tema_macro}
-                </Badge>
-              </Tooltip>
-            )}
 
             <BadgeVerificacionFuente verificacion_fuente={historia.verificacion_fuente} />
 
