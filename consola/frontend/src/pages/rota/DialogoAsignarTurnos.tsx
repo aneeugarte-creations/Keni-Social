@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -59,6 +60,20 @@ function ChipDia({
   );
 }
 
+/**
+ * ¿`s` es una hora "HH:MM" válida? Acepta 00:00–23:59 y «24:00» (fin exclusivo), igual que
+ * el backend (`_hhmm_valido`): una franja puede acabar en «24:00», así que el prefijado debe
+ * darla por buena. Permite cruce de medianoche (no exige inicio<fin).
+ */
+function esHoraValida(s: string): boolean {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(s.trim());
+  if (!m) return false;
+  const h = Number(m[1]);
+  const mm = Number(m[2]);
+  if (h === 24) return mm === 0;
+  return h >= 0 && h <= 23 && mm >= 0 && mm <= 59;
+}
+
 export interface ResumenAsignacion {
   creados: number;
   /** 409 sin `requiere_override`: ya había un turno de esa persona en esa fecha/franja. */
@@ -78,11 +93,15 @@ export async function asignarDiasTurno(
   miembroId: string,
   franjaId: string,
   fechas: string[],
+  /** Horario a medida ("HH:MM"); vacío = el turno hereda las horas de la franja. */
+  inicio = "",
+  fin = "",
 ): Promise<ResumenAsignacion> {
   const r: ResumenAsignacion = { creados: 0, yaEstaba: 0, sabados: 0, fallos: 0 };
+  const horas = inicio && fin ? { inicio, fin } : {};
   for (const fecha of fechas) {
     try {
-      await api.crearTurno({ lunes, fecha, miembro_id: miembroId, franja_id: franjaId });
+      await api.crearTurno({ lunes, fecha, miembro_id: miembroId, franja_id: franjaId, ...horas });
       r.creados++;
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
@@ -134,6 +153,9 @@ export function DialogoAsignarTurnos({
   );
   const [persona, setPersona] = React.useState("");
   const [franjaId, setFranjaId] = React.useState("");
+  // Horario del turno: arranca con el de la franja (fijo) y es editable (a medida).
+  const [inicio, setInicio] = React.useState("");
+  const [fin, setFin] = React.useState("");
   const [diasSel, setDiasSel] = React.useState<Set<string>>(() => new Set());
 
   // Al abrir (o al cambiar de semana) arranca sin días: el usuario ELIGE los que quiere
@@ -150,10 +172,36 @@ export function DialogoAsignarTurnos({
       return n;
     });
 
+  const franjaSel = franjasLaborales.find((f) => f.id === franjaId);
+
+  // Al elegir franja, el horario se prefija con el SUYO (fijo); el usuario lo edita si esa
+  // persona trabaja otras horas (a medida). Así «fijo o no» es un solo control, sin jerga.
+  const elegirFranja = (id: string) => {
+    setFranjaId(id);
+    const f = franjasLaborales.find((x) => x.id === id);
+    if (f) {
+      setInicio(f.inicio);
+      setFin(f.fin);
+    }
+  };
+
+  const horasValidas = esHoraValida(inicio) && esHoraValida(fin);
+  // Hay override si el horario difiere del de la franja; si coincide, el turno hereda (no se
+  // congela, así editar la franja luego propaga). Sin franja elegida no aplica.
+  const horasAMedida =
+    !!franjaSel && horasValidas && (inicio !== franjaSel.inicio || fin !== franjaSel.fin);
+
   const asignar = useMutation({
     mutationFn: async () => {
       const fechas = dias.filter((d) => diasSel.has(d));
-      const resumen = await asignarDiasTurno(lunes, persona, franjaId, fechas);
+      const resumen = await asignarDiasTurno(
+        lunes,
+        persona,
+        franjaId,
+        fechas,
+        horasAMedida ? inicio : "",
+        horasAMedida ? fin : "",
+      );
       return {
         ...resumen,
         persona_nombre: cms.find((m) => m.id === persona)?.nombre ?? "",
@@ -181,7 +229,7 @@ export function DialogoAsignarTurnos({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const incompleto = !persona || !franjaId || diasSel.size === 0;
+  const incompleto = !persona || !franjaId || diasSel.size === 0 || !horasValidas;
 
   return (
     <Dialog open={abierto} onOpenChange={onOpenChange}>
@@ -237,7 +285,7 @@ export function DialogoAsignarTurnos({
           </div>
           <div className="space-y-1.5">
             <Label>Franja</Label>
-            <Select value={franjaId} onValueChange={setFranjaId}>
+            <Select value={franjaId} onValueChange={elegirFranja}>
               <SelectTrigger>
                 <SelectValue placeholder="Elige…" />
               </SelectTrigger>
@@ -251,6 +299,51 @@ export function DialogoAsignarTurnos({
             </Select>
           </div>
         </div>
+
+        {/* Horario del turno: prefijado con el de la franja (FIJO) y editable (A MEDIDA).
+            Si lo cambias, esos días llevan tus horas; si lo dejas, heredan las de la franja. */}
+        {franjaId && (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label>Horario</Label>
+              {horasAMedida && franjaSel && (
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+                  onClick={() => {
+                    setInicio(franjaSel.inicio);
+                    setFin(franjaSel.fin);
+                  }}
+                >
+                  Volver al de la franja
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                value={inicio}
+                onChange={(e) => setInicio(e.target.value)}
+                placeholder="08:00"
+                className="w-24 tabular-nums"
+                aria-label="Hora de inicio"
+              />
+              <span className="text-muted-foreground">–</span>
+              <Input
+                value={fin}
+                onChange={(e) => setFin(e.target.value)}
+                placeholder="16:00"
+                className="w-24 tabular-nums"
+                aria-label="Hora de fin"
+              />
+              <span className="text-xs text-muted-foreground">
+                {horasAMedida ? "a medida" : "fijo (de la franja)"}
+              </span>
+            </div>
+            {!horasValidas && (
+              <p className="text-xs text-destructive">Usa HH:MM (24h), p. ej. 08:00.</p>
+            )}
+          </div>
+        )}
 
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">

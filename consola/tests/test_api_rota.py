@@ -411,6 +411,63 @@ def test_crear_turno_basico(cliente):
     assert turno["nota_relevo"] == "Pendiente clip del 2T"
     # Semana derivada del lunes que contiene LUNES1.
     assert turno["semana"] == LUNES1
+    # Sin horas propias el turno HEREDA las de su franja (Mañana por defecto 08:00–16:00).
+    assert turno["horario_propio"] is False
+    assert (turno["inicio"], turno["fin"]) == ("08:00", "16:00")
+
+
+def test_crear_turno_con_horario_a_medida(cliente):
+    """El turno puede llevar HORAS PROPIAS que sobrescriben las de su franja: el caso de
+    Elías (una persona con horario distinto ese día). `horario_propio` lo marca como cambiado.
+    """
+    equipo = _crear_equipo(1)
+    r = cliente.post(
+        "/api/rota/turnos",
+        json={
+            "fecha": LUNES1,
+            "miembro_id": equipo[0]["id"],
+            "franja": "matutino",
+            "inicio": "07:00",
+            "fin": "15:00",
+        },
+    )
+    assert r.status_code == 201, r.text
+    turno = r.json()["turno"]
+    assert (turno["inicio"], turno["fin"]) == ("07:00", "15:00")
+    assert turno["horario_propio"] is True
+
+
+def test_crear_turno_hora_a_medida_invalida_400(cliente):
+    equipo = _crear_equipo(1)
+    r = cliente.post(
+        "/api/rota/turnos",
+        json={
+            "fecha": LUNES1,
+            "miembro_id": equipo[0]["id"],
+            "franja": "matutino",
+            "inicio": "9am",
+            "fin": "15:00",
+        },
+    )
+    assert r.status_code == 400
+
+
+def test_actualizar_turno_horario_a_medida_y_vuelta_a_heredar(cliente):
+    """PATCH pone horas a medida (admite cruce de medianoche) y, con inicio/fin '', vuelve a
+    heredar de la franja."""
+    equipo = _crear_equipo(1)
+    turno = _crear_turno(LUNES1, LUNES1, equipo[0])
+    r = cliente.patch(
+        f"/api/rota/turnos/{turno['id']}", json={"inicio": "17:00", "fin": "01:00"}
+    )
+    assert r.status_code == 200, r.text
+    t = r.json()["turno"]
+    assert (t["inicio"], t["fin"]) == ("17:00", "01:00")  # cruza medianoche: válido
+    assert t["horario_propio"] is True
+    # Vaciar las horas vuelve a heredar las de la franja.
+    r2 = cliente.patch(f"/api/rota/turnos/{turno['id']}", json={"inicio": "", "fin": ""})
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["turno"]["horario_propio"] is False
 
 
 def test_crear_turno_con_lunes_explicito(cliente):
@@ -1095,6 +1152,34 @@ def test_copiar_semana_replica_turnos_con_offset(cliente):
     assert (SAB2, luis["id"], "descanso") in fechas_franjas
     assert (SAB2, tescu["id"], "matutino") in fechas_franjas
     assert all(t["estado"] == "propuesto" for t in semana2["turnos"])
+
+
+def test_copiar_semana_preserva_horario_a_medida(cliente):
+    """Copiar arrastra el HORARIO PROPIO del turno, no solo su franja. Regresión: al añadir
+    las columnas inicio/fin a `rota_turnos`, el clon de `copiar_turnos_rota` no las incluía y
+    el INSERT reventaba (KeyError) tumbando toda la copia.
+    """
+    equipo = _crear_equipo(1)
+    repos.crear_turno_rota(
+        LUNES1,
+        "2026-05-25",
+        miembro_id=equipo[0]["id"],
+        miembro_nombre=equipo[0]["usuario"],
+        franja="matutino",
+        inicio="07:00",
+        fin="15:00",
+        marca=MARCA,
+    )
+    r = cliente.post(
+        "/api/rota/copiar-semana",
+        json={"de_lunes": LUNES1, "a_lunes": LUNES2, "marca": MARCA},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["copiados"] == 1
+    semana2 = cliente.get(f"/api/rota/turnos?lunes={LUNES2}&marca={MARCA}").json()
+    clon = semana2["turnos"][0]
+    assert (clon["inicio"], clon["fin"]) == ("07:00", "15:00")
+    assert clon["horario_propio"] is True
 
 
 def test_copiar_semana_misma_origen_destino_400(cliente):
