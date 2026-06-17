@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import * as apiMod from "@/lib/api";
@@ -84,5 +84,47 @@ describe("DialogoAsignarTurnos (render)", () => {
     expect(screen.getByRole("button", { name: "Asignar" })).toBeDisabled();
     // La vía automática (import) está disponible dentro del mismo diálogo.
     expect(screen.getByRole("button", { name: /Importar documento/ })).toBeInTheDocument();
+  });
+
+  it("arranca sin días marcados; los atajos y cada chip mueven el conteo del botón", () => {
+    // Los chips de día y los atajos son <button> planos (no Selects de Radix), así que sí
+    // se pueden ejercitar en jsdom. El botón «Asignar» lleva el conteo: es el aviso que
+    // hacía falta para que «elijo 6 y solo pone 2» no pase desapercibido.
+    vi.spyOn(apiMod.api, "propuestasParrilla").mockResolvedValue({ propuestas: [] } as never);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <DialogoAsignarTurnos
+          abierto
+          onOpenChange={vi.fn()}
+          lunes="2026-06-15"
+          dias={DIAS}
+          franjas={FRANJAS}
+          cms={CMS}
+          onCambio={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+    // Arranca vacío: 7 chips, ninguno marcado, y el botón sin conteo.
+    const chips = screen.getAllByRole("checkbox");
+    expect(chips).toHaveLength(7);
+    chips.forEach((c) => expect(c).toHaveAttribute("aria-checked", "false"));
+    expect(screen.getByRole("button", { name: "Asignar" })).toBeInTheDocument();
+
+    // «Toda la semana» marca los 7 y el botón lo refleja.
+    fireEvent.click(screen.getByRole("button", { name: "Toda la semana" }));
+    expect(screen.getByRole("button", { name: "Asignar 7 días" })).toBeInTheDocument();
+
+    // «L–V» deja 5.
+    fireEvent.click(screen.getByRole("button", { name: "L–V" }));
+    expect(screen.getByRole("button", { name: "Asignar 5 días" })).toBeInTheDocument();
+
+    // Destildar un día baja a 4 (singular/plural correctos al llegar a 1).
+    fireEvent.click(screen.getAllByRole("checkbox")[0]!);
+    expect(screen.getByRole("button", { name: "Asignar 4 días" })).toBeInTheDocument();
+
+    // «Ninguno» limpia y el conteo desaparece.
+    fireEvent.click(screen.getByRole("button", { name: "Ninguno" }));
+    expect(screen.getByRole("button", { name: "Asignar" })).toBeInTheDocument();
   });
 });

@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { CalendarPlus, Loader2, Sparkles } from "lucide-react";
+import { CalendarPlus, Check, Loader2, Sparkles } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -21,10 +21,43 @@ import {
 } from "@/components/ui/select";
 import { ImportarDocumentoParrilla } from "@/components/parrilla/ImportarDocumentoParrilla";
 import { ApiError, api, mensajeError } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { diaCorto } from "@/lib/rota-calendario";
 import type { FranjaSemana, MiembroRota } from "@/types";
 
-import { ChipToggle } from "./comun";
+/**
+ * Pastilla de un día (selección múltiple). El estado SELECCIONADO es inconfundible —
+ * relleno sólido + check— frente al no-seleccionado —contorno y texto apagado—: con los
+ * grises de plataforma (secondary ~95% vs background ~98%) un toggle sutil era invisible y
+ * el usuario no veía qué días quedaban marcados.
+ */
+function ChipDia({
+  activo,
+  onClick,
+  children,
+}: {
+  activo: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={activo}
+      onClick={onClick}
+      className={cn(
+        "inline-flex h-8 items-center gap-1 rounded-md border px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+        activo
+          ? "border-foreground bg-foreground font-medium text-background"
+          : "border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground",
+      )}
+    >
+      {activo && <Check className="h-3.5 w-3.5" />}
+      {children}
+    </button>
+  );
+}
 
 export interface ResumenAsignacion {
   creados: number;
@@ -101,11 +134,12 @@ export function DialogoAsignarTurnos({
   );
   const [persona, setPersona] = React.useState("");
   const [franjaId, setFranjaId] = React.useState("");
-  const [diasSel, setDiasSel] = React.useState<Set<string>>(() => new Set(dias));
+  const [diasSel, setDiasSel] = React.useState<Set<string>>(() => new Set());
 
-  // Al abrir (o al cambiar de semana) parte de «toda la semana» seleccionada.
+  // Al abrir (o al cambiar de semana) arranca sin días: el usuario ELIGE los que quiere
+  // (clic = añade). Los atajos «L–V» / «Toda la semana» cubren los casos masivos de un toque.
   React.useEffect(() => {
-    if (abierto) setDiasSel(new Set(dias));
+    if (abierto) setDiasSel(new Set());
   }, [abierto, dias]);
 
   const toggleDia = (fecha: string) =>
@@ -220,8 +254,23 @@ export function DialogoAsignarTurnos({
 
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <Label>Días</Label>
+            <Label className="flex items-baseline gap-1.5">
+              Días
+              {diasSel.size > 0 && (
+                <span className="text-xs font-normal text-muted-foreground">
+                  {diasSel.size} elegido{diasSel.size === 1 ? "" : "s"}
+                </span>
+              )}
+            </Label>
             <div className="flex items-center gap-1.5 text-xs">
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-foreground hover:underline"
+                onClick={() => setDiasSel(new Set(dias.slice(0, 5)))}
+              >
+                L–V
+              </button>
+              <span className="text-muted-foreground/40">·</span>
               <button
                 type="button"
                 className="text-muted-foreground hover:text-foreground hover:underline"
@@ -233,17 +282,17 @@ export function DialogoAsignarTurnos({
               <button
                 type="button"
                 className="text-muted-foreground hover:text-foreground hover:underline"
-                onClick={() => setDiasSel(new Set(dias.slice(0, 5)))}
+                onClick={() => setDiasSel(new Set())}
               >
-                L–V
+                Ninguno
               </button>
             </div>
           </div>
           <div className="flex flex-wrap gap-1.5">
             {dias.map((fecha) => (
-              <ChipToggle key={fecha} activo={diasSel.has(fecha)} onClick={() => toggleDia(fecha)}>
+              <ChipDia key={fecha} activo={diasSel.has(fecha)} onClick={() => toggleDia(fecha)}>
                 <span className="capitalize">{diaCorto(fecha)}</span> {fecha.slice(8, 10)}
-              </ChipToggle>
+              </ChipDia>
             ))}
           </div>
         </div>
@@ -262,7 +311,11 @@ export function DialogoAsignarTurnos({
             ) : (
               <CalendarPlus className="mr-1 h-4 w-4" />
             )}
-            {asignar.isPending ? "Asignando…" : "Asignar"}
+            {asignar.isPending
+              ? "Asignando…"
+              : diasSel.size > 0
+                ? `Asignar ${diasSel.size} día${diasSel.size === 1 ? "" : "s"}`
+                : "Asignar"}
           </Button>
         </DialogFooter>
       </DialogContent>
